@@ -1,0 +1,20 @@
+{
+  "biome": "reef",
+  "commonName": "Blue tang",
+  "id": "blue-tang",
+  "lifecycle": {
+    "ammoniaPerBioloadPerHour": 0.004,
+    "ammoniaTolerance": 0.1,
+    "bioload": 3,
+    "birthSizeM": 0.02,
+    "diet": ["nori", "algae-wafer", "flakes"],
+    "growthPerDay": 0.0009,
+    "healthLossPerHourStarving": 0.007,
+    "healthRecoveryPerHour": 0.004,
+    "hungerPerHour": 0.0055,
+    "lifespanDays": 3650,
+    "maxSizeM": 0.3,
+    "starvationHungerThreshold": 0.75
+  },
+  "scientificName": "Paracanthurus hepatus"
+}

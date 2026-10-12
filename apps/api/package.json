@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@aquarium/shared": "workspace:*",
+    "@aquarium/sim": "workspace:*",
     "@better-auth/passkey": "1.7.7",
     "@fastify/static": "10.1.6",
     "better-auth": "1.7.7",

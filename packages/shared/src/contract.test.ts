@@ -86,6 +86,14 @@ const species = {
   },
 };
 
+describe('error codes', () => {
+  it('has distinct codes for oversized and unsupported bodies', () => {
+    for (const code of ['payload_too_large', 'unsupported_media_type']) {
+      expect(apiErrorSchema.safeParse({ error: { code, message: 'x' } }).success).toBe(true);
+    }
+  });
+});
+
 describe('auth', () => {
   it('accepts a valid sign-up and rejects bad email, short password and extra keys', () => {
     const ok = { email: 'a@bas.lu', password: 'correct horse', name: 'Al' };
@@ -273,6 +281,15 @@ describe('species and presets', () => {
     expect(speciesSchema.safeParse({ ...species, locomotion }).success).toBe(false);
   });
 
+  it('rejects a birth size above the maximum size', () => {
+    const lifecycle = { ...species.lifecycle, birthSizeM: 0.05, maxSizeM: 0.04 };
+    const result = speciesSchema.safeParse({ ...species, lifecycle });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.path).toEqual(['lifecycle', 'birthSizeM']);
+    const equal = { ...species.lifecycle, birthSizeM: 0.04, maxSizeM: 0.04 };
+    expect(speciesSchema.safeParse({ ...species, lifecycle: equal }).success).toBe(true);
+  });
+
   it('requires lifespan, birth size and a non-empty diet', () => {
     const bad = (patch: object) =>
       speciesSchema.safeParse({ ...species, lifecycle: { ...species.lifecycle, ...patch } })
@@ -338,7 +355,13 @@ describe('memorial and water', () => {
     expect(memorialSchema.safeParse({ ...memorial, diedAt: 'yesterday' }).success).toBe(false);
   });
   it('validates water parameters', () => {
-    const params = { filterRemovalPerHour: 0.2, foodDecayMinutes: 60, nitratePerHour: 0.05 };
+    const params = {
+      filterRemovalPerHour: 0.2,
+      foodDecayMinutes: 60,
+      nitratePerHour: 0.05,
+      ammoniaPerPortion: 0.1,
+      algaePerHour: 0.001,
+    };
     expect(waterParametersSchema.safeParse(params).success).toBe(true);
     expect(waterParametersSchema.safeParse({ ...params, foodDecayMinutes: 0 }).success).toBe(false);
   });

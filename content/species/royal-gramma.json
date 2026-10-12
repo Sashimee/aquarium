@@ -1,0 +1,20 @@
+{
+  "biome": "reef",
+  "commonName": "Royal gramma",
+  "id": "royal-gramma",
+  "lifecycle": {
+    "ammoniaPerBioloadPerHour": 0.004,
+    "ammoniaTolerance": 0.12,
+    "bioload": 0.6,
+    "birthSizeM": 0.015,
+    "diet": ["flakes", "brine-shrimp", "pellets"],
+    "growthPerDay": 0.0002,
+    "healthLossPerHourStarving": 0.0085,
+    "healthRecoveryPerHour": 0.004,
+    "hungerPerHour": 0.0068,
+    "lifespanDays": 1825,
+    "maxSizeM": 0.08,
+    "starvationHungerThreshold": 0.75
+  },
+  "scientificName": "Gramma loreto"
+}

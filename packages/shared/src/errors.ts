@@ -9,6 +9,8 @@ export const errorCodeSchema = z.enum([
   'rate_limited',
   'email_not_verified',
   'feeding_rejected',
+  'payload_too_large',
+  'unsupported_media_type',
   'internal',
 ]);
 export type ErrorCode = z.infer<typeof errorCodeSchema>;

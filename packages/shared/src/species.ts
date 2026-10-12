@@ -59,20 +59,25 @@ export const renderSchema = z.strictObject({
   finMask: z.boolean(),
 });
 
-export const lifecycleSchema = z.strictObject({
-  hungerPerHour: rate,
-  healthLossPerHourStarving: rate,
-  healthRecoveryPerHour: rate,
-  starvationHungerThreshold: unitSchema.default(0.75),
-  ammoniaTolerance: rate,
-  birthSizeM: positive,
-  maxSizeM: positive,
-  growthPerDay: rate,
-  lifespanDays: positive,
-  diet: z.array(foodTypeSchema).min(1),
-  bioload: positive,
-  ammoniaPerBioloadPerHour: rate,
-});
+export const lifecycleSchema = z
+  .strictObject({
+    hungerPerHour: rate,
+    healthLossPerHourStarving: rate,
+    healthRecoveryPerHour: rate,
+    starvationHungerThreshold: unitSchema.default(0.75),
+    ammoniaTolerance: rate,
+    birthSizeM: positive,
+    maxSizeM: positive,
+    growthPerDay: rate,
+    lifespanDays: positive,
+    diet: z.array(foodTypeSchema).min(1),
+    bioload: positive,
+    ammoniaPerBioloadPerHour: rate,
+  })
+  .refine((l) => l.birthSizeM <= l.maxSizeM, {
+    message: 'birthSizeM must not exceed maxSizeM',
+    path: ['birthSizeM'],
+  });
 export type SpeciesLifecycle = z.infer<typeof lifecycleSchema>;
 
 export const speciesSchema = z.strictObject({
@@ -86,6 +91,17 @@ export const speciesSchema = z.strictObject({
   lifecycle: lifecycleSchema,
 });
 export type Species = z.infer<typeof speciesSchema>;
+
+export const speciesSummarySchema = z.strictObject({
+  id: slugSchema,
+  commonName: z.string().min(1),
+  scientificName: z.string().min(1),
+  biome: biomeSchema,
+  lifecycle: lifecycleSchema,
+});
+export type SpeciesSummary = z.infer<typeof speciesSummarySchema>;
+
+export const speciesListSchema = z.array(speciesSummarySchema);
 
 export const presetLayoutSchema = z.strictObject({
   id: slugSchema,
