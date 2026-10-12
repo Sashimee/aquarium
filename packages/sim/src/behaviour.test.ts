@@ -496,7 +496,11 @@ describe('behaviour traits', () => {
   const base = neonTetra;
   const withTraits = (traits: string[], extra: Partial<SpeciesInput['behaviour']> = {}) => ({
     ...base,
-    behaviour: { ...base.behaviour, ...extra, traits },
+    behaviour: {
+      ...base.behaviour,
+      ...extra,
+      traits: traits as SpeciesInput['behaviour']['traits'],
+    },
   });
 
   it('rejects an unknown trait and names the known ones', () => {
