@@ -1,6 +1,6 @@
 import type { User } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
-import { guardRoute, parseRoute, redirectFor, routePath } from './router';
+import { guardRoute, parseRoute, carryQuery, redirectFor, routePath } from './router';
 
 const user: User = {
   id: 'u1',
@@ -90,5 +90,34 @@ describe('redirectFor', () => {
   });
   it('treats a trailing slash as the same URL', () => {
     expect(redirectFor('/sessions/', user)).toBeNull();
+  });
+});
+
+describe('redirectFor query handling', () => {
+  it('does not touch a URL whose route is already right, whatever its query', () => {
+    expect(redirectFor('/?backend=webgl2&tier=low', null)).toBeNull();
+    expect(redirectFor('/?backend=webgl2&tier=low', user)).toBeNull();
+    expect(redirectFor('/sign-in?backend=webgl2', null)).toBeNull();
+  });
+  it('keeps engine options and the hash when the path changes', () => {
+    expect(redirectFor('/sessions?backend=webgl2&tier=low#x', null)).toBe(
+      '/sign-in?backend=webgl2&tier=low#x',
+    );
+    expect(redirectFor('/sign-up?adaptive=0', user)).toBe('/?adaptive=0');
+  });
+  it('keeps engine options when a failed verification is moved to the landing page', () => {
+    expect(redirectFor('/?backend=webgl2&error=TOKEN_EXPIRED', null)).toBe(
+      '/verify-email?backend=webgl2&error=TOKEN_EXPIRED',
+    );
+  });
+});
+
+describe('carryQuery', () => {
+  it('carries the query to a bare path, minus the verification error', () => {
+    expect(carryQuery('/', '?backend=webgl2&error=x')).toBe('/?backend=webgl2');
+    expect(carryQuery('/sign-in', '')).toBe('/sign-in');
+  });
+  it('leaves destinations that bring their own query alone', () => {
+    expect(carryQuery('/verify-email?error=x', '?backend=webgl2')).toBe('/verify-email?error=x');
   });
 });

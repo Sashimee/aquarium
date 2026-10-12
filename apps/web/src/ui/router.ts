@@ -52,22 +52,42 @@ export function guardRoute(route: Route, user: User | null): Route {
   return route;
 }
 
-function canonicalHref(href: string): string {
-  const url = new URL(href, 'http://localhost');
-  return (url.pathname.replace(/\/+$/, '') || '/') + url.search;
+function trimmedPath(pathname: string): string {
+  return pathname.replace(/\/+$/, '') || '/';
 }
 
-/** The URL the address bar should show for `href`, or null when it already does. */
+/**
+ * Where the address bar should go for `href`, or null when the route already matches its path.
+ * Query parameters the router does not own (the engine's ?backend= and friends) and the hash
+ * survive the move.
+ */
 export function redirectFor(href: string, user: User | null): string | null {
   const raw = parseRoute(href);
   if (raw.name === 'not-found') return null;
-  const target = routePath(guardRoute(raw, user));
-  return target === canonicalHref(href) ? null : target;
+  const targetRoute = guardRoute(raw, user);
+  const target = new URL(routePath(targetRoute), 'http://localhost');
+  const url = new URL(href, 'http://localhost');
+  if (trimmedPath(url.pathname) === target.pathname) return null;
+  const params = new URLSearchParams(url.search);
+  if (targetRoute.name !== 'verify-email') params.delete('error');
+  for (const [key, value] of target.searchParams) params.set(key, value);
+  const query = params.toString();
+  return target.pathname + (query ? `?${query}` : '') + url.hash;
+}
+
+/** Keeps the current query string on in-app navigation unless the destination brings its own. */
+export function carryQuery(path: string, currentSearch: string): string {
+  if (path.includes('?') || path.includes('#')) return path;
+  const params = new URLSearchParams(currentSearch);
+  params.delete('error');
+  const query = params.toString();
+  return query ? `${path}?${query}` : path;
 }
 
 const NAVIGATE_EVENT = 'aquarium:navigate';
 
-export function navigate(path: string, replace = false): void {
+export function navigate(destination: string, replace = false): void {
+  const path = carryQuery(destination, window.location.search);
   if (path === window.location.pathname + window.location.search) return;
   if (replace) window.history.replaceState(null, '', path);
   else window.history.pushState(null, '', path);

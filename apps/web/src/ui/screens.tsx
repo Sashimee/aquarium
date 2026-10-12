@@ -207,7 +207,7 @@ function ResendButton({
         {sent
           ? 'If that address has an account, a new link is on its way.'
           : justSent && waiting
-            ? 'We just sent a verification link. Check your inbox and spam folder.'
+            ? 'A verification link should be on its way. Check your inbox and spam folder.'
             : ''}
       </p>
       <FormError
@@ -226,6 +226,11 @@ export function SignInScreen() {
   const submission = useSubmission();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [unverified, setUnverified] = useState(false);
+  const failureCode = submission.failure?.code;
+  useEffect(() => {
+    if (failureCode === 'email_not_verified') setUnverified(true);
+  }, [failureCode]);
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -262,7 +267,7 @@ export function SignInScreen() {
           {submission.busy ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
-      {submission.failure?.code === 'email_not_verified' && <ResendButton email={email} justSent />}
+      {unverified && <ResendButton email={email} justSent />}
       <p className="alt">
         New here? <Link to="/sign-up">Create an account</Link>
       </p>
@@ -357,15 +362,17 @@ export function VerifyEmailScreen({ error }: { error: string | null }) {
     return (
       <Panel title="That link did not work">
         <p>The verification link is invalid or has expired. Enter your email to get a new one.</p>
-        <Field
-          label="Email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          value={email}
-          onChange={setEmail}
-        />
-        <ResendButton email={email} />
+        <form onSubmit={(e) => e.preventDefault()} noValidate>
+          <Field
+            label="Email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={setEmail}
+          />
+          <ResendButton email={email} inForm />
+        </form>
       </Panel>
     );
   }
