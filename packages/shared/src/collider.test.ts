@@ -4,7 +4,7 @@ import {
   colliderBoundingSphere,
   colliderListSchema,
   colliderSchema,
-  hullVolume,
+  maxTetrahedronVolume,
 } from './collider.js';
 
 const tetra = [
@@ -45,6 +45,16 @@ describe('collider schema', () => {
     expect(Object.keys(c).sort()).toEqual(['a', 'b', 'hard', 'id', 'kind', 'radius']);
   });
 
+  it('restricts ids to a safe charset', () => {
+    const sphere = { kind: 'sphere', hard: true, center: [0, 0, 0], radius: 0.1 };
+    for (const id of ['rock_1.a:b-c', 'A'.repeat(64)]) {
+      expect(colliderSchema.safeParse({ ...sphere, id }).success).toBe(true);
+    }
+    for (const id of ['a b', 'a/b', '<x>', 'ü', 'A'.repeat(65)]) {
+      expect(colliderSchema.safeParse({ ...sphere, id }).success).toBe(false);
+    }
+  });
+
   it('rejects non-finite and out-of-range numbers', () => {
     const sphere = { id: 's', kind: 'sphere', hard: true, center: [0, 0, 0], radius: 0.1 };
     expect(colliderSchema.safeParse({ ...sphere, radius: NaN }).success).toBe(false);
@@ -72,17 +82,17 @@ describe('hull validation', () => {
   const hull = (vertices: unknown, extra: object = {}) =>
     colliderSchema.safeParse({ id: 'h', kind: 'hull', hard: true, vertices, ...extra });
 
-  it('measures volume, zero for flat and collinear sets', () => {
-    expect(hullVolume(tetra as [number, number, number][])).toBeCloseTo(0.1 ** 3 / 6, 12);
+  it('measures tetrahedron volume, zero for flat and collinear sets', () => {
+    expect(maxTetrahedronVolume(tetra as [number, number, number][])).toBeCloseTo(0.1 ** 3 / 6, 12);
     expect(
-      hullVolume([
+      maxTetrahedronVolume([
         [0, 0, 0],
         [1, 0, 0],
         [0, 1, 0],
         [1, 1, 0],
       ]),
     ).toBe(0);
-    expect(hullVolume([])).toBe(0);
+    expect(maxTetrahedronVolume([])).toBe(0);
   });
 
   it('rejects coplanar, collinear and coincident vertices', () => {
@@ -120,10 +130,15 @@ describe('hull validation', () => {
     expect(hull([...tetra.slice(0, 3), [0, 0, NaN]]).success).toBe(false);
   });
 
-  it('checks optional planes: groups of four with unit normals', () => {
-    expect(hull(tetra, { planes: [0, 1, 0, 0.1] }).success).toBe(true);
-    expect(hull(tetra, { planes: [0, 1, 0] }).success).toBe(false);
-    expect(hull(tetra, { planes: [0, 2, 0, 0.1] }).success).toBe(false);
+  it('rejects a precomputed planes field', () => {
+    expect(hull(tetra, { planes: [0, 1, 0, 0.1] }).success).toBe(false);
+  });
+
+  it('scales the degeneracy threshold with the hull size', () => {
+    const scaled = (k: number) => tetra.map((v) => v.map((c) => c * k));
+    expect(hull(scaled(10)).success).toBe(true);
+    expect(hull(scaled(0.01)).success).toBe(true);
+    expect(hull([...tetra.slice(0, 3), [0.03, 0.03, 1e-9]]).success).toBe(false);
   });
 });
 

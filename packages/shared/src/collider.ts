@@ -3,12 +3,13 @@ import { z } from 'zod';
 /**
  * Collision proxies in tank space (see tankSpace.ts), the one format the web scene exports and
  * the sim consumes. The sphere, box and capsule members use the field names of the sim's
- * `DecorShape` (`hard` is its `solid`), and the hull carries what the scene's `HullCollider`
- * is built from. Hard colliders are never penetrated; soft ones (plants) only push fish aside.
+ * `DecorShape` (`hard` is its `solid`), and a hull is its vertices only; consumers derive
+ * half-spaces from them. The scene emits the corners of its 54-direction k-DOP, and rebuilding
+ * with the same fit reproduces the same planes, since each corner set attains every support
+ * distance. Hard colliders are never penetrated; soft ones (plants) only push fish aside.
  */
 
 export const MAX_HULL_VERTICES = 256;
-export const MAX_HULL_PLANES = 128;
 export const MAX_COLLIDERS = 1024;
 
 const coordinate = z.number().finite().min(-100).max(100);
@@ -17,7 +18,9 @@ export const point3Schema = z.tuple([coordinate, coordinate, coordinate]);
 export type Point3 = z.infer<typeof point3Schema>;
 
 const base = {
-  id: z.string().min(1).max(128),
+  id: z
+    .string()
+    .regex(/^[A-Za-z0-9_.:-]{1,64}$/, 'id must be 1-64 characters of A-Z a-z 0-9 _ . : -'),
   hard: z.boolean(),
 };
 
@@ -61,10 +64,10 @@ export const capsuleColliderSchema = z.strictObject({
   radius: length,
 });
 
-const HULL_VOLUME_EPSILON = 1e-9;
+const HULL_RELATIVE_VOLUME_EPSILON = 1e-6;
 
-/** Largest tetrahedron volume found among the points; zero means collinear or coplanar. */
-export function hullVolume(vertices: readonly Point3[]): number {
+/** Volume of a large tetrahedron spanned by the points (not the hull volume); zero means collinear or coplanar. */
+export function maxTetrahedronVolume(vertices: readonly Point3[]): number {
   const first = vertices[0];
   if (!first) return 0;
   const sub = (p: Point3, q: Point3): Point3 => [p[0] - q[0], p[1] - q[1], p[2] - q[2]];
@@ -104,6 +107,16 @@ export function hullVolume(vertices: readonly Point3[]): number {
   return bestHeight / 6;
 }
 
+function hullExtent(vertices: readonly Point3[]): number {
+  const first = vertices[0];
+  if (!first) return 0;
+  let extent = 0;
+  for (const p of vertices) {
+    extent = Math.max(extent, Math.hypot(p[0] - first[0], p[1] - first[1], p[2] - first[2]));
+  }
+  return extent;
+}
+
 export const hullColliderSchema = z
   .strictObject({
     ...base,
@@ -113,33 +126,15 @@ export const hullColliderSchema = z
       .min(4)
       .max(MAX_HULL_VERTICES)
       .describe('points whose convex hull is the collider'),
-    planes: z
-      .array(z.number().finite().min(-100).max(100))
-      .max(MAX_HULL_PLANES * 4)
-      .refine((p) => p.length % 4 === 0, 'planes must be groups of n.x, n.y, n.z, d')
-      .optional()
-      .describe('optional precomputed half-spaces n . p <= d with unit n; same solid as the hull'),
   })
   .superRefine((h, ctx) => {
-    if (hullVolume(h.vertices) <= HULL_VOLUME_EPSILON) {
+    const extent = hullExtent(h.vertices);
+    if (maxTetrahedronVolume(h.vertices) <= HULL_RELATIVE_VOLUME_EPSILON * extent ** 3) {
       ctx.addIssue({
         code: 'custom',
         path: ['vertices'],
         message: 'hull is degenerate: vertices are collinear, coplanar or coincident',
       });
-    }
-    const p = h.planes;
-    if (!p) return;
-    for (let i = 0; i < p.length; i += 4) {
-      const len = Math.hypot(p[i] ?? 0, p[i + 1] ?? 0, p[i + 2] ?? 0);
-      if (Math.abs(len - 1) > 1e-3) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['planes', i],
-          message: `plane ${i / 4} normal must be unit length, got ${len}`,
-        });
-        return;
-      }
     }
   });
 
