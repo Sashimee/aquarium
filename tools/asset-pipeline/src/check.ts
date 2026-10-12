@@ -1,0 +1,241 @@
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { join, posix, relative, sep } from 'node:path';
+import {
+  FIN_ID_ATTRIBUTE,
+  FIN_MASK_ATTRIBUTE,
+  LOD_COUNT,
+  assetIndexSchema,
+  type AssetIndex,
+  type OutputAsset,
+} from './index-schema.ts';
+import {
+  ALLOWED_LICENCES,
+  isAllowedShareAlike,
+  licenceRank,
+  manifestSchema,
+  validateManifest,
+  PENDING_STATUS,
+  type Manifest,
+  type ManifestAsset,
+} from './manifest.ts';
+
+export const BUDGET_BYTES = 150 * 1000 * 1000;
+
+export interface CheckInput {
+  manifest: Manifest;
+  credits: string;
+  index: AssetIndex;
+  assetsDir: string;
+  repoRoot: string;
+}
+
+export function readGlbJson(buffer: Uint8Array): {
+  meshes?: { primitives: { attributes: Record<string, number> }[] }[];
+} {
+  const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  if (buffer.byteLength < 20 || view.getUint32(0, true) !== 0x46546c67) {
+    throw new Error('not a GLB (bad magic)');
+  }
+  const jsonLength = view.getUint32(12, true);
+  if (view.getUint32(16, true) !== 0x4e4f534a) throw new Error('first GLB chunk is not JSON');
+  return JSON.parse(new TextDecoder().decode(buffer.subarray(20, 20 + jsonLength)));
+}
+
+function listFiles(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...listFiles(full));
+    else out.push(full);
+  }
+  return out;
+}
+
+function sha256File(path: string): string {
+  return createHash('sha256').update(readFileSync(path)).digest('hex');
+}
+
+function effectiveLicenceProblems(
+  asset: OutputAsset,
+  byId: Map<string, ManifestAsset>,
+  problems: string[],
+): void {
+  const at = `asset ${asset.kind}/${asset.id}`;
+  const known: string[] = [];
+  if (
+    asset.sources.length === 0 &&
+    asset.origin !== 'procedural' &&
+    asset.origin !== 'procedural-loft'
+  ) {
+    problems.push(`${at}: has no manifest sources and is not marked procedural`);
+  }
+  for (const sourceId of asset.sources) {
+    const source = byId.get(sourceId);
+    if (!source) {
+      problems.push(`${at}: source "${sourceId}" is not in assets/manifest.json`);
+      continue;
+    }
+    if (source.status === PENDING_STATUS) {
+      problems.push(`${at}: source "${sourceId}" is still ${PENDING_STATUS}`);
+    }
+    const licenceOk =
+      (ALLOWED_LICENCES as readonly string[]).includes(source.licence) ||
+      isAllowedShareAlike(source);
+    if (!licenceOk)
+      problems.push(`${at}: source "${sourceId}" has disallowed licence ${source.licence}`);
+    if (licenceOk) known.push(source.licence);
+  }
+  if (
+    asset.origin === 'procedural' ||
+    (asset.origin === 'procedural-loft' && asset.sources.length === 0)
+  ) {
+    if (asset.licence !== 'CC0-1.0') {
+      problems.push(
+        `${at}: procedural asset without sources must be CC0-1.0 (got ${asset.licence})`,
+      );
+    }
+    return;
+  }
+  if (known.length === 0 || known.length !== asset.sources.length) return;
+  const strictest = Math.max(...known.map((l) => licenceRank(l) ?? 0));
+  const acceptable = known.filter((l) => licenceRank(l) === strictest);
+  if (!acceptable.includes(asset.licence)) {
+    problems.push(
+      `${at}: licence ${asset.licence} is weaker than its sources require (${acceptable.join(' or ')})`,
+    );
+  }
+}
+
+const TEXTURE_ONLY_KINDS: readonly string[] = ['substrate', 'hdri'];
+
+function lodProblems(asset: OutputAsset, assetsDir: string, problems: string[]): void {
+  const at = `${asset.kind} ${asset.id}`;
+  if (asset.lods.length !== LOD_COUNT) {
+    problems.push(`${at}: needs ${LOD_COUNT} LODs, index lists ${asset.lods.length}`);
+  }
+  for (let i = 0; i < LOD_COUNT; i++) {
+    const lod = asset.lods[i];
+    const expected = `${asset.kind}/${asset.id}/lod${i}.glb`;
+    if (!lod || lod.file !== expected) {
+      problems.push(`${at}: LOD ${i} must be ${expected}`);
+      continue;
+    }
+    const path = join(assetsDir, lod.file);
+    if (!existsSync(path)) {
+      problems.push(`${at}: ${lod.file} is missing`);
+      continue;
+    }
+    try {
+      const json = readGlbJson(readFileSync(path));
+      const primitives = (json.meshes ?? []).flatMap((m) => m.primitives);
+      if (primitives.length === 0) problems.push(`${at}: ${lod.file} has no mesh primitives`);
+      for (const attr of asset.kind === 'fish' ? [FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE] : []) {
+        if (primitives.some((p) => p.attributes[attr] === undefined)) {
+          problems.push(`${at}: ${lod.file} lacks vertex attribute ${attr}`);
+        }
+      }
+    } catch (error) {
+      problems.push(`${at}: ${lod.file} is unreadable: ${(error as Error).message}`);
+    }
+    const previous = asset.lods[i - 1];
+    if (previous && lod.triangles >= previous.triangles) {
+      problems.push(`${at}: LOD ${i} (${lod.triangles} tris) is not lighter than LOD ${i - 1}`);
+    }
+  }
+}
+
+function fishProblems(asset: OutputAsset, repoRoot: string, problems: string[]): void {
+  const at = `fish ${asset.id}`;
+  if (!asset.fish) {
+    problems.push(`${at}: index entry has no fish block (fin mask, standard length)`);
+    return;
+  }
+  if (!existsSync(join(repoRoot, 'tools', 'asset-pipeline', asset.fish.debugRender))) {
+    problems.push(`${at}: debug render ${asset.fish.debugRender} is missing`);
+  }
+}
+
+export function checkAssets(input: CheckInput): string[] {
+  const { manifest, credits, index, assetsDir, repoRoot } = input;
+  const problems = validateManifest(manifest, credits);
+  const byId = new Map(manifest.assets.map((a) => [a.id, a]));
+
+  const listed = new Map<string, string>();
+  const seenAssets = new Set<string>();
+  for (const asset of index.assets) {
+    const key = `${asset.kind}/${asset.id}`;
+    if (seenAssets.has(key)) problems.push(`index lists ${key} twice`);
+    seenAssets.add(key);
+    effectiveLicenceProblems(asset, byId, problems);
+    if (!TEXTURE_ONLY_KINDS.includes(asset.kind)) lodProblems(asset, assetsDir, problems);
+    if (asset.kind === 'fish') fishProblems(asset, repoRoot, problems);
+
+    for (const file of asset.files) {
+      if (!file.file.startsWith(`${asset.kind}/${asset.id}/`)) {
+        problems.push(`${key}: file ${file.file} is outside the asset directory`);
+      }
+      const previous = listed.get(file.file);
+      if (previous !== undefined && previous !== key) {
+        problems.push(`file ${file.file} is claimed by both ${previous} and ${key}`);
+      }
+      listed.set(file.file, key);
+      const path = join(assetsDir, file.file);
+      if (!existsSync(path)) {
+        problems.push(`${key}: ${file.file} is listed in index.json but missing on disk`);
+      } else if (statSync(path).size !== file.bytes || sha256File(path) !== file.sha256) {
+        problems.push(
+          `${key}: ${file.file} differs from index.json (rebuild with pnpm build:assets)`,
+        );
+      }
+    }
+    const referenced = [
+      ...asset.lods.map((l) => l.file),
+      ...asset.textures.flatMap((t) => [t.variants['1k'].file, t.variants['2k'].file]),
+    ];
+    const owned = new Set(asset.files.map((f) => f.file));
+    for (const file of referenced) {
+      if (!owned.has(file)) problems.push(`${key}: ${file} is referenced but not in files[]`);
+    }
+  }
+
+  let total = 0;
+  let assetBytes = 0;
+  if (existsSync(assetsDir)) {
+    for (const path of listFiles(assetsDir)) {
+      const rel = relative(assetsDir, path).split(sep).join(posix.sep);
+      const size = statSync(path).size;
+      total += size;
+      if (rel === 'index.json') continue;
+      assetBytes += size;
+      if (!listed.has(rel)) {
+        problems.push(`assets/${rel} is not part of any asset in index.json (not in the manifest)`);
+      }
+    }
+  }
+  if (total > BUDGET_BYTES) {
+    problems.push(
+      `asset total ${(total / 1e6).toFixed(1)} MB exceeds the ${BUDGET_BYTES / 1e6} MB budget`,
+    );
+  }
+  if (index.totalBytes !== assetBytes) {
+    problems.push(
+      `index.json totalBytes ${index.totalBytes} does not match the files on disk (rebuild with pnpm build:assets)`,
+    );
+  }
+  return problems;
+}
+
+export function loadCheckInput(repoRoot: string): CheckInput {
+  const assetsDir = join(repoRoot, 'apps', 'web', 'public', 'assets');
+  const manifest = manifestSchema.parse(
+    JSON.parse(readFileSync(join(repoRoot, 'assets', 'manifest.json'), 'utf8')),
+  );
+  const credits = readFileSync(join(repoRoot, 'CREDITS.md'), 'utf8');
+  const indexPath = join(assetsDir, 'index.json');
+  if (!existsSync(indexPath)) {
+    throw new Error(`${indexPath} is missing; run pnpm build:assets`);
+  }
+  const index = assetIndexSchema.parse(JSON.parse(readFileSync(indexPath, 'utf8')));
+  return { manifest, credits, index, assetsDir, repoRoot };
+}
