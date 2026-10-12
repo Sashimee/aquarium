@@ -22,6 +22,8 @@ interface PhotoSource {
   crop: { left: number; top: number; width: number; height: number };
   snoutPixel: [number, number];
   tailPixel: [number, number];
+  /** Crop-space rectangle of body colour inside the fish; its mean colours every fin membrane. */
+  finSwatch: { left: number; top: number; width: number; height: number };
 }
 
 interface SyntheticSource {
@@ -57,9 +59,54 @@ function smooth(edge0: number, edge1: number, x: number): number {
   return t * t * (3 - 2 * t);
 }
 
-export async function loadTexture(
-  recipe: LoftFishRecipe,
-): Promise<{ image: Rgba; project: Projection; sources: string[] }> {
+const SWATCH_ROWS = 16;
+
+/** Adds a flat strip of the swatch's mean colour under the photo; body coordinates stay above it via `bodyVMax`. */
+export function appendSwatch(
+  photo: Rgba,
+  swatch: PhotoSource['finSwatch'],
+): { image: Rgba; finUv: [number, number]; bodyVMax: number } {
+  if (
+    swatch.left < 0 ||
+    swatch.top < 0 ||
+    swatch.left + swatch.width > photo.width ||
+    swatch.top + swatch.height > photo.height ||
+    swatch.width < 1 ||
+    swatch.height < 1
+  )
+    throw new Error(
+      `fin swatch ${JSON.stringify(swatch)} lies outside the ${photo.width}x${photo.height} crop`,
+    );
+  const sum = [0, 0, 0];
+  for (let y = swatch.top; y < swatch.top + swatch.height; y++)
+    for (let x = swatch.left; x < swatch.left + swatch.width; x++)
+      sum.forEach((total, c) => {
+        sum[c] = total + (photo.data[(y * photo.width + x) * 4 + c] ?? 0);
+      });
+  const area = swatch.width * swatch.height;
+  const mean = sum.map((total) => Math.round(total / area));
+  const height = photo.height + SWATCH_ROWS;
+  const data = new Uint8Array(photo.width * height * 4);
+  data.set(photo.data);
+  for (let y = photo.height; y < height; y++)
+    for (let x = 0; x < photo.width; x++) {
+      const o = (y * photo.width + x) * 4;
+      for (let c = 0; c < 3; c++) data[o + c] = mean[c] ?? 0;
+      data[o + 3] = 255;
+    }
+  return {
+    image: { width: photo.width, height, data },
+    finUv: [0.5, (photo.height + SWATCH_ROWS / 2) / height],
+    bodyVMax: (photo.height - 1) / height,
+  };
+}
+
+export async function loadTexture(recipe: LoftFishRecipe): Promise<{
+  image: Rgba;
+  project: Projection;
+  finUv?: [number, number];
+  sources: string[];
+}> {
   const length = 1;
   const { spec } = recipe;
   const first = spec.sections.at(0);
@@ -71,8 +118,9 @@ export async function loadTexture(
 
   if (source.kind === 'photo') {
     const full = await decodeImage(readFileSync(join(RAW_ROOT, source.sourceId, source.file)));
-    const image = await cropImage(full, source.crop);
-    const project = sideProjection({
+    const cropped = await cropImage(full, source.crop);
+    const { image, finUv, bodyVMax } = appendSwatch(cropped, source.finSwatch);
+    const projectBody = sideProjection({
       standardLengthM: length,
       snoutY,
       tailY,
@@ -80,7 +128,11 @@ export async function loadTexture(
       tailPixel: source.tailPixel,
       crop: source.crop,
     });
-    return { image, project, sources: [source.sourceId] };
+    const project: Projection = (behind, y) => {
+      const [u, v] = projectBody(behind, y);
+      return [u, Math.min(1, Math.max(0, v)) * bodyVMax];
+    };
+    return { image, project, finUv, sources: [source.sourceId] };
   }
 
   const pixelsPerLength = Math.hypot(
@@ -152,6 +204,7 @@ export const LOFT_FISH_RECIPES: LoftFishRecipe[] = [
       crop: { left: 185, top: 247, width: 826, height: 345 },
       snoutPixel: [915, 485],
       tailPixel: [419, 438],
+      finSwatch: { left: 260, top: 170, width: 240, height: 50 },
     },
     spec: {
       roundness: 2.5,
@@ -285,6 +338,7 @@ export const LOFT_FISH_RECIPES: LoftFishRecipe[] = [
       crop: { left: 833, top: 167, width: 1800, height: 1600 },
       snoutPixel: [943, 1293],
       tailPixel: [1983, 1107],
+      finSwatch: { left: 380, top: 860, width: 180, height: 400 },
     },
     spec: {
       roundness: 2.2,
@@ -352,9 +406,10 @@ export function loftFishPart(
   recipe: LoftFishRecipe,
   standardLengthM: number,
   project: Projection,
+  finUv?: [number, number],
 ): Part {
   const scaled: Projection = (behind, y) => project(behind / standardLengthM, y / standardLengthM);
-  return loftFish({ ...recipe.spec, standardLengthM }, scaled, recipe.id);
+  return loftFish({ ...recipe.spec, standardLengthM }, scaled, recipe.id, finUv);
 }
 
 export async function buildLoftFish(
@@ -364,8 +419,8 @@ export async function buildLoftFish(
   const fromSpecies = speciesLengthM(ctx.repoRoot, recipe.species);
   const standardLengthM = fromSpecies ?? recipe.fallbackLengthM;
   if (recipe.texture.kind === 'photo') ctx.verifySource(recipe.texture.sourceId);
-  const { image, project, sources } = await loadTexture(recipe);
-  const part = loftFishPart(recipe, standardLengthM, project);
+  const { image, project, finUv, sources } = await loadTexture(recipe);
+  const part = loftFishPart(recipe, standardLengthM, project, finUv);
 
   const material: MaterialDef = {
     name: recipe.id,
