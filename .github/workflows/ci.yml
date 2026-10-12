@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [dev]
+  push:
+    branches: [dev]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: aquarium
+          POSTGRES_PASSWORD: aquarium
+          POSTGRES_DB: aquarium_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aquarium"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://aquarium:aquarium@localhost:5432/aquarium_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm run --if-present assets:check
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+        if: hashFiles('e2e/**') != ''
+      - run: pnpm run --if-present e2e
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: aquarium:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Container turns healthy and serves noindex
+        run: |
+          docker run -d --name aq -p 3000:3000 -e SITE_INDEXABLE=false aquarium:ci
+          for i in $(seq 1 30); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' aq)" = healthy ] && break
+            sleep 2
+          done
+          docker inspect -f '{{.State.Health.Status}}' aq | grep -qx healthy || { docker logs aq; exit 1; }
+          for path in / /api/health; do
+            curl -fsS -D headers.txt -o /dev/null "http://127.0.0.1:3000$path"
+            grep -i '^x-robots-tag: noindex, nofollow' headers.txt
+          done
+          curl -fsS http://127.0.0.1:3000/robots.txt | grep -x 'Disallow: /'
