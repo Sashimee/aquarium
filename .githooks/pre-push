@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# main has no server-side protection on a free private repo, so this hook is the guard.
+set -euo pipefail
+
+zero=0000000000000000000000000000000000000000
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  if [[ "$remote_ref" == refs/heads/main || "$remote_ref" == refs/heads/master ]]; then
+    if [[ "$local_sha" == "$zero" ]]; then
+      echo "pre-push: refusing to delete $remote_ref" >&2
+      exit 1
+    fi
+    if git rev-parse --verify -q refs/remotes/origin/dev >/dev/null; then
+      git fetch -q origin dev
+      if ! git merge-base --is-ancestor "$local_sha" refs/remotes/origin/dev; then
+        echo "pre-push: main may only move to a commit already merged into origin/dev" >&2
+        exit 1
+      fi
+    elif [[ "$remote_sha" != "$zero" ]]; then
+      echo "pre-push: origin/dev is missing; main only moves from dev" >&2
+      exit 1
+    fi
+  fi
+
+  if [[ "$local_sha" != "$zero" && "$remote_sha" != "$zero" ]]; then
+    if ! git cat-file -e "$remote_sha" 2>/dev/null || ! git merge-base --is-ancestor "$remote_sha" "$local_sha"; then
+      echo "pre-push: refusing non-fast-forward push to $remote_ref (force-push is not allowed)" >&2
+      exit 1
+    fi
+  fi
+done
