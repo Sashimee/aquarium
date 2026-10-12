@@ -1,0 +1,289 @@
+import { FIN_IDS, type FinName } from './index-schema.ts';
+import { boundsOf } from './geometry.ts';
+import { AXES, clamp, cross, percentile, type AxisName, type Vec3 } from './math.ts';
+import {
+  createGrid,
+  fillSolid,
+  open,
+  rasteriseSurface,
+  squaredDistance,
+  toCell,
+  voxelIndex,
+} from './voxel.ts';
+
+export interface Axes {
+  forward: AxisName;
+  up: AxisName;
+}
+
+export interface FinHints {
+  /** Fraction of body length, measured from the snout, where the caudal peduncle ends. Taken from the opened body core when omitted. */
+  peduncleFromSnout?: number;
+  /** Ventral fins ahead of this fraction of body length (from the snout) are pelvic, behind it anal. */
+  analFromSnout?: number;
+  /** Range of body length from the snout where lateral protrusions count as pectoral fins. */
+  pectoralRange?: [number, number];
+  /** Voxels per longest bounding-box edge. */
+  resolution?: number;
+  /** Opening ball radius in voxels; structures thinner than twice this are fins. */
+  openingRadius?: number;
+  /** Distance from the body core, in voxels, beyond which a vertex counts as fin. */
+  finThresholdVoxels?: number;
+  /** Fins to leave unclassified, for species whose fin is part of the body mesh. */
+  skip?: FinName[];
+}
+
+export interface FinResult {
+  mask: Float32Array<ArrayBuffer>;
+  id: Float32Array<ArrayBuffer>;
+  zSnout: number;
+  zPeduncle: number;
+  zTail: number;
+}
+
+export function orient(positions: Float32Array, normals: Float32Array | null, axes: Axes): void {
+  const forward = AXES[axes.forward]!;
+  const up = AXES[axes.up]!;
+  const side = cross(up, forward);
+  const apply = (array: Float32Array): void => {
+    for (let i = 0; i < array.length; i += 3) {
+      const x = array[i]!;
+      const y = array[i + 1]!;
+      const z = array[i + 2]!;
+      array[i] = x * side[0] + y * side[1] + z * side[2];
+      array[i + 1] = x * up[0] + y * up[1] + z * up[2];
+      array[i + 2] = x * forward[0] + y * forward[1] + z * forward[2];
+    }
+  };
+  apply(positions);
+  if (normals) apply(normals);
+}
+
+export function medianX(positions: Float32Array): number {
+  const xs = new Float32Array(positions.length / 3);
+  for (let i = 0; i < xs.length; i++) xs[i] = positions[i * 3]!;
+  xs.sort();
+  return percentile(xs, 0.5);
+}
+
+function sorted(values: number[]): Float64Array {
+  return Float64Array.from(values).sort();
+}
+
+function medianFilter(values: number[], radius: number): number[] {
+  return values.map((_, i) => {
+    const window: number[] = [];
+    for (let k = Math.max(0, i - radius); k <= Math.min(values.length - 1, i + radius); k++)
+      window.push(values[k]!);
+    return percentile(sorted(window), 0.5);
+  });
+}
+
+function fillGaps(values: (number | null)[]): number[] {
+  const known = values.map((v, i) => (v === null ? -1 : i)).filter((i) => i >= 0);
+  if (known.length === 0) throw new Error('classifyFins: the body core is empty');
+  return values.map((v, i) => {
+    if (v !== null) return v;
+    let lo = -1;
+    let hi = -1;
+    for (const k of known) {
+      if (k < i) lo = k;
+      if (k > i && hi < 0) hi = k;
+    }
+    if (lo < 0) return values[hi]!;
+    if (hi < 0) return values[lo]!;
+    const t = (i - lo) / (hi - lo);
+    return values[lo]! * (1 - t) + values[hi]! * t;
+  });
+}
+
+/**
+ * Separates the rigid body from the fins by morphological opening of the voxelised solid: anything thinner than the
+ * opening ball (fin membranes) disappears from the core, and the distance from the core is the fin mask.
+ */
+export function classifyFins(
+  positions: Float32Array,
+  indices: ArrayLike<number>,
+  hints: FinHints = {},
+): FinResult {
+  const count = positions.length / 3;
+  const { min, max } = boundsOf(positions);
+  const zs = new Float32Array(count);
+  for (let i = 0; i < count; i++) zs[i] = positions[i * 3 + 2]!;
+  const zSorted = Float32Array.from(zs).sort();
+  const zTail = percentile(zSorted, 0.002);
+  const zSnout = percentile(zSorted, 0.998);
+  const length = zSnout - zTail;
+
+  const size =
+    Math.max(max[0] - min[0], max[1] - min[1], max[2] - min[2]) / (hints.resolution ?? 120);
+  const radius = hints.openingRadius ?? 3;
+  const grid = createGrid(min, max, size, radius + 3);
+  rasteriseSurface(grid, positions, indices);
+  const solid = fillSolid(grid);
+  const core = open(grid, solid, radius);
+  const distance2 = squaredDistance(grid, core);
+
+  const slices = grid.nz;
+  const sliceTop: (number | null)[] = new Array(slices).fill(null);
+  const sliceBottom: (number | null)[] = new Array(slices).fill(null);
+  const sliceSide: (number | null)[] = new Array(slices).fill(null);
+  let coreMinZ = Infinity;
+  for (let z = 0; z < slices; z++) {
+    let yLo = Infinity;
+    let yHi = -Infinity;
+    let xHi = 0;
+    for (let y = 0; y < grid.ny; y++)
+      for (let x = 0; x < grid.nx; x++) {
+        if (!core[voxelIndex(grid, x, y, z)]) continue;
+        yLo = Math.min(yLo, y);
+        yHi = Math.max(yHi, y + 1);
+        xHi = Math.max(xHi, Math.abs(grid.origin[0] + (x + 0.5) * size) + size / 2);
+      }
+    if (yHi < 0) continue;
+    sliceTop[z] = grid.origin[1] + yHi * size;
+    sliceBottom[z] = grid.origin[1] + yLo * size;
+    sliceSide[z] = xHi;
+    coreMinZ = Math.min(coreMinZ, grid.origin[2] + z * size);
+  }
+  if (!Number.isFinite(coreMinZ)) {
+    throw new Error(
+      'classifyFins: the opened body core is empty; the mesh is probably not watertight, lower openingRadius or raise resolution',
+    );
+  }
+  const top = medianFilter(fillGaps(sliceTop), 1);
+  const bottom = medianFilter(fillGaps(sliceBottom), 1);
+  const side = medianFilter(fillGaps(sliceSide), 1);
+  const at = (series: number[], z: number): number =>
+    series[clamp(toCell(grid, z, 2), 0, slices - 1)]!;
+
+  const zPeduncle =
+    hints.peduncleFromSnout !== undefined
+      ? zSnout - hints.peduncleFromSnout * length
+      : Math.max(zTail, coreMinZ);
+  const analFrom = hints.analFromSnout ?? 0.5;
+  const [pectLo, pectHi] = hints.pectoralRange ?? [0.1, 0.55];
+  const skip = new Set(hints.skip ?? []);
+  const finThreshold = (hints.finThresholdVoxels ?? 1.5) * size;
+
+  const kind = new Uint8Array(count);
+  const reachDistance = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    const x = Math.abs(positions[i * 3]!);
+    const y = positions[i * 3 + 1]!;
+    const z = zs[i]!;
+    if (z < zPeduncle) {
+      if (!skip.has('caudal')) {
+        kind[i] = FIN_IDS.caudal;
+        reachDistance[i] = zPeduncle - z;
+      }
+      continue;
+    }
+    const cx = clamp(toCell(grid, positions[i * 3]!, 0), 0, grid.nx - 1);
+    const cy = clamp(toCell(grid, y, 1), 0, grid.ny - 1);
+    const cz = clamp(toCell(grid, z, 2), 0, grid.nz - 1);
+    const d = Math.sqrt(distance2[voxelIndex(grid, cx, cy, cz)]!) * size;
+    if (d <= finThreshold) continue;
+    const t = at(top, z);
+    const b = at(bottom, z);
+    const w = at(side, z);
+    const centre = (t + b) / 2;
+    const half = (t - b) / 2;
+    const fromSnout = (zSnout - z) / length;
+    const exceedLateral = x - w;
+    const exceedVertical = Math.abs(y - centre) - half;
+    let fin: FinName;
+    if (
+      exceedLateral > exceedVertical &&
+      fromSnout >= pectLo &&
+      fromSnout <= pectHi &&
+      y - centre > -0.7 * half
+    ) {
+      fin = 'pectoral';
+    } else if (y >= centre) {
+      fin = 'dorsal';
+    } else {
+      fin = fromSnout < analFrom ? 'pelvic' : 'anal';
+    }
+    if (skip.has(fin)) continue;
+    kind[i] = FIN_IDS[fin];
+    reachDistance[i] = d;
+  }
+
+  const reach = new Map<number, number>();
+  for (const id of Object.values(FIN_IDS)) {
+    const ds: number[] = [];
+    for (let i = 0; i < count; i++) if (kind[i] === id) ds.push(reachDistance[i]!);
+    if (ds.length > 0) reach.set(id, Math.max(percentile(sorted(ds), 0.97), 1e-9));
+  }
+
+  const mask = new Float32Array(count);
+  const id = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    const k = kind[i]!;
+    if (k === 0) continue;
+    const m = clamp(reachDistance[i]! / reach.get(k)!, 0, 1);
+    if (m <= 0) continue;
+    mask[i] = m;
+    id[i] = k;
+  }
+  return { mask, id, zSnout, zPeduncle, zTail };
+}
+
+export function bodyCentreOfMass(
+  positions: Float32Array,
+  indices: ArrayLike<number>,
+  id: Float32Array,
+): Vec3 {
+  let total = 0;
+  const sum: Vec3 = [0, 0, 0];
+  for (let t = 0; t < indices.length; t += 3) {
+    const a = indices[t]!;
+    const b = indices[t + 1]!;
+    const c = indices[t + 2]!;
+    if (id[a] !== 0 || id[b] !== 0 || id[c] !== 0) continue;
+    const ax = positions[a * 3]!;
+    const ay = positions[a * 3 + 1]!;
+    const az = positions[a * 3 + 2]!;
+    const e1: Vec3 = [
+      positions[b * 3]! - ax,
+      positions[b * 3 + 1]! - ay,
+      positions[b * 3 + 2]! - az,
+    ];
+    const e2: Vec3 = [
+      positions[c * 3]! - ax,
+      positions[c * 3 + 1]! - ay,
+      positions[c * 3 + 2]! - az,
+    ];
+    const n = cross(e1, e2);
+    const area = Math.hypot(n[0], n[1], n[2]) / 2;
+    total += area;
+    sum[0] += (area * (ax + positions[b * 3]! + positions[c * 3]!)) / 3;
+    sum[1] += (area * (ay + positions[b * 3 + 1]! + positions[c * 3 + 1]!)) / 3;
+    sum[2] += (area * (az + positions[b * 3 + 2]! + positions[c * 3 + 2]!)) / 3;
+  }
+  if (total === 0)
+    throw new Error('bodyCentreOfMass: no body triangles; fin classification claimed every vertex');
+  return [sum[0] / total, sum[1] / total, sum[2] / total];
+}
+
+export const FIN_DEBUG_COLORS: Record<number, Vec3> = {
+  0: [0.72, 0.72, 0.74],
+  1: [1, 0.25, 0.2],
+  2: [0.2, 0.85, 0.3],
+  3: [0.25, 0.5, 1],
+  4: [1, 0.85, 0.2],
+  5: [0.9, 0.3, 0.9],
+};
+
+export function finDebugColors(mask: Float32Array, id: Float32Array): Float32Array {
+  const colors = new Float32Array(mask.length * 3);
+  for (let i = 0; i < mask.length; i++) {
+    const base = FIN_DEBUG_COLORS[id[i]!] ?? FIN_DEBUG_COLORS[0]!;
+    const k = id[i]! === 0 ? 1 : 0.45 + 0.55 * mask[i]!;
+    colors[i * 3] = base[0] * k;
+    colors[i * 3 + 1] = base[1] * k;
+    colors[i * 3 + 2] = base[2] * k;
+  }
+  return colors;
+}
