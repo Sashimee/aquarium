@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { idSchema, timestampSchema } from './common.js';
+import { causeOfDeathSchema } from './tank.js';
 
 export const foodTypeSchema = z.enum([
   'flakes',
@@ -50,11 +51,32 @@ export const careEventKindSchema = z.enum([
   'death',
 ]);
 
-export const careEventSchema = z.strictObject({
+const eventBase = {
   id: idSchema,
   tankId: idSchema,
-  kind: careEventKindSchema,
-  payload: z.record(z.string(), z.unknown()),
   at: timestampSchema,
-});
+};
+
+const emptyPayload = z.strictObject({});
+
+export const careEventSchema = z.discriminatedUnion('kind', [
+  z.strictObject({
+    ...eventBase,
+    kind: z.literal('feed'),
+    payload: z.strictObject({ food: foodTypeSchema, portion: z.number().positive().max(10) }),
+  }),
+  z.strictObject({ ...eventBase, kind: z.literal('water_change'), payload: emptyPayload }),
+  z.strictObject({ ...eventBase, kind: z.literal('gravel_vacuum'), payload: emptyPayload }),
+  z.strictObject({ ...eventBase, kind: z.literal('algae_scrape'), payload: emptyPayload }),
+  z.strictObject({
+    ...eventBase,
+    kind: z.literal('ate'),
+    payload: z.strictObject({ fishId: idSchema, portion: z.number().positive().max(10) }),
+  }),
+  z.strictObject({
+    ...eventBase,
+    kind: z.literal('death'),
+    payload: z.strictObject({ fishId: idSchema, cause: causeOfDeathSchema }),
+  }),
+]);
 export type CareEvent = z.infer<typeof careEventSchema>;

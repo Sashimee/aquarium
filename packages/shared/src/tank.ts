@@ -12,8 +12,16 @@ export const waterSchema = z.strictObject({
   ammonia: z.number().nonnegative(),
   nitrate: z.number().nonnegative(),
   algae: unitSchema,
+  uneatenFood: z.number().nonnegative().describe('portions of food on the substrate or drifting'),
 });
 export type Water = z.infer<typeof waterSchema>;
+
+export const waterParametersSchema = z.strictObject({
+  filterRemovalPerHour: z.number().nonnegative(),
+  foodDecayMinutes: z.number().positive(),
+  nitratePerHour: z.number().nonnegative(),
+});
+export type WaterParameters = z.infer<typeof waterParametersSchema>;
 
 export const fishStatusSchema = z.enum(['alive', 'dead']);
 export const causeOfDeathSchema = z.enum(['starvation', 'ammonia', 'old_age', 'unknown']);
@@ -24,7 +32,7 @@ export const fishSchema = z.strictObject({
   species: slugSchema,
   name: z.string().trim().min(1).max(40),
   bornAt: timestampSchema,
-  size: z.number().positive(),
+  size: z.number().positive().describe('body length in metres'),
   hunger: unitSchema,
   health: unitSchema,
   status: fishStatusSchema,

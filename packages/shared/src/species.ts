@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { foodTypeSchema } from './events.js';
 import { biomeSchema, decorLayoutSchema, slugSchema, unitSchema } from './common.js';
 
 const positive = z.number().positive();
@@ -14,34 +15,41 @@ export const gaitSchema = z.enum(['burst-and-coast', 'cruise', 'hover', 'forage'
 export const zoneSchema = z.enum(['surface', 'mid', 'bottom']);
 
 export const behaviourSchema = z.strictObject({
-  schooling: z.strictObject({
-    minGroup: z.int().min(1),
-    topologicalNeighbours: z.int().min(1).max(12),
-    tightenWhenStartled: z.boolean(),
-  }),
+  schooling: z
+    .strictObject({
+      minGroup: z.int().min(1),
+      topologicalNeighbours: z.int().min(1).max(12),
+      tightenWhenStartled: z.boolean(),
+    })
+    .optional(),
   territorial: z.boolean(),
   preferredZone: zoneSchema,
   depthBand: z
     .tuple([unitSchema, unitSchema])
     .refine(([lo, hi]) => lo <= hi, 'depthBand must be [low, high]'),
-  perceptionRange: positive,
+  perceptionRangeM: positive,
   perceptionFovDeg: z.number().min(1).max(360),
   curiosity: unitSchema,
   boldness: unitSchema,
   traits: z.array(z.string().min(1)).default([]),
 });
 
-export const locomotionSchema = z.strictObject({
-  swimmingMode: swimmingModeSchema,
-  gait: gaitSchema,
-  maxSpeed: positive,
-  cruiseSpeed: positive,
-  mass: positive,
-  maxTurnRateDegPerS: positive,
-  maxPitchDeg: z.number().min(0).max(90),
-  strouhal: z.number().min(0.2).max(0.4).default(0.3),
-  bodyLength: positive,
-});
+export const locomotionSchema = z
+  .strictObject({
+    swimmingMode: swimmingModeSchema,
+    gait: gaitSchema,
+    maxSpeedMps: positive,
+    cruiseSpeedMps: positive,
+    massKg: positive,
+    maxTurnRateDegPerS: positive,
+    maxPitchDeg: z.number().min(0).max(90),
+    strouhal: z.number().min(0.2).max(0.4).default(0.3),
+    bodyLengthM: positive,
+  })
+  .refine((l) => l.cruiseSpeedMps <= l.maxSpeedMps, {
+    message: 'cruiseSpeedMps must not exceed maxSpeedMps',
+    path: ['cruiseSpeedMps'],
+  });
 
 export const renderSchema = z.strictObject({
   modelId: z.string().min(1),
@@ -57,13 +65,13 @@ export const lifecycleSchema = z.strictObject({
   healthRecoveryPerHour: rate,
   starvationHungerThreshold: unitSchema.default(0.75),
   ammoniaTolerance: rate,
-  maxSize: positive,
+  birthSizeM: positive,
+  maxSizeM: positive,
   growthPerDay: rate,
+  lifespanDays: positive,
+  diet: z.array(foodTypeSchema).min(1),
   bioload: positive,
   ammoniaPerBioloadPerHour: rate,
-  foodDecayMinutes: positive,
-  filterRemovalPerHour: rate,
-  nitratePerHour: rate,
 });
 export type SpeciesLifecycle = z.infer<typeof lifecycleSchema>;
 
