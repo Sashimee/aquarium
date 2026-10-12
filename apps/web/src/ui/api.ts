@@ -1,11 +1,16 @@
 import {
   apiErrorSchema,
+  creditsSchema,
+  dataExportSchema,
+  privacyPolicySchema,
   emailSchema,
   sessionListSchema,
   signInRequestSchema,
   signUpRequestSchema,
   userSchema,
+  type Credits,
   type ErrorCode,
+  type PrivacyPolicy,
   type SessionInfo,
   type SignInRequest,
   type SignUpRequest,
@@ -112,6 +117,10 @@ export interface ApiClient {
   me(): Promise<User | null>;
   sessions(): Promise<SessionInfo[]>;
   revokeSession(sessionId: string): Promise<void>;
+  privacy(): Promise<PrivacyPolicy>;
+  credits(): Promise<Credits>;
+  exportData(): Promise<{ filename: string; text: string }>;
+  deleteAccount(password: string): Promise<void>;
 }
 
 export function createApiClient(fetcher: Fetcher = (i, init) => fetch(i, init)): ApiClient {
@@ -198,6 +207,38 @@ export function createApiClient(fetcher: Fetcher = (i, init) => fetch(i, init)):
     },
     async revokeSession(sessionId) {
       await post('/api/sessions/revoke', { sessionId });
+    },
+    async privacy() {
+      const res = await send('/api/privacy');
+      if (!res.ok) throw await toError(res);
+      return parsed(res, privacyPolicySchema);
+    },
+    async credits() {
+      const res = await send('/api/credits');
+      if (!res.ok) throw await toError(res);
+      return parsed(res, creditsSchema);
+    },
+    async exportData() {
+      const res = await send('/api/me/export');
+      if (!res.ok) throw await toError(res);
+      const text = await res.text();
+      let body: unknown;
+      try {
+        body = JSON.parse(text);
+      } catch {
+        body = undefined;
+      }
+      if (!dataExportSchema.safeParse(body).success) {
+        throw new ApiRequestError(
+          res.status,
+          'unexpected_response',
+          'The server sent an export this version of the app cannot read. Reload the page.',
+        );
+      }
+      return { filename: 'aquarium-data.json', text };
+    },
+    async deleteAccount(password) {
+      await post('/api/me/delete', password.length > 0 ? { password } : {});
     },
   };
 }

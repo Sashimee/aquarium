@@ -279,6 +279,17 @@ describe('privacy and credits', () => {
       ).not.toThrow();
     });
 
+    it('accepts http and https URLs only', () => {
+      for (const url of ['http://example.com/a', 'https://example.com/a']) {
+        expect(build({ author_url: url, source_url: url, licence_url: url })).not.toThrow();
+      }
+      for (const field of ['author_url', 'source_url', 'licence_url']) {
+        for (const url of ['javascript:alert(1)', 'data:text/html,x', 'vbscript:msgbox(1)']) {
+          expect(build({ [field]: url })).toThrow();
+        }
+      }
+    });
+
     it('rejects anything else, loudly', () => {
       for (const licence of ['CC-BY-NC-4.0', 'CC-BY-ND-4.0', 'CC-BY-2.0', 'CC-BY-SA-4.0', 'MIT']) {
         expect(build({ licence })).toThrow(/not allowed/);

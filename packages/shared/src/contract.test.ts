@@ -10,6 +10,7 @@ import {
   waterParametersSchema,
   createTankRequestSchema,
   fishSchema,
+  httpUrlSchema,
   presetLayoutSchema,
   revokeSessionRequestSchema,
   sessionInfoSchema,
@@ -403,5 +404,18 @@ describe('memorial and water', () => {
     };
     expect(waterParametersSchema.safeParse(params).success).toBe(true);
     expect(waterParametersSchema.safeParse({ ...params, foodDecayMinutes: 0 }).success).toBe(false);
+  });
+});
+
+describe('httpUrlSchema', () => {
+  it('accepts http and https', () => {
+    expect(httpUrlSchema.safeParse('http://example.com/a').success).toBe(true);
+    expect(httpUrlSchema.safeParse('https://example.com/a').success).toBe(true);
+  });
+
+  it('rejects javascript:, data: and vbscript:', () => {
+    for (const url of ['javascript:alert(1)', 'data:text/html,x', 'vbscript:msgbox(1)']) {
+      expect(httpUrlSchema.safeParse(url).success).toBe(false);
+    }
   });
 });

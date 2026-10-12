@@ -1,6 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { creditsSchema, slugSchema, type Credits, type CreditEntry } from '@aquarium/shared';
+import {
+  creditsSchema,
+  httpUrlSchema,
+  slugSchema,
+  type Credits,
+  type CreditEntry,
+} from '@aquarium/shared';
 import { z } from 'zod';
 
 const BUNDLED = import.meta.url.endsWith('/src/credits.ts')
@@ -13,10 +19,10 @@ const manifestAssetSchema = z.looseObject({
   kind: z.string().min(1),
   title: z.string().min(1),
   author: z.string().min(1),
-  author_url: z.url(),
-  source_url: z.url(),
+  author_url: httpUrlSchema,
+  source_url: httpUrlSchema,
   licence: z.string().min(1),
-  licence_url: z.url(),
+  licence_url: httpUrlSchema,
   species: slugSchema.optional(),
   modifications: z.array(z.string()),
   status: z.string(),
