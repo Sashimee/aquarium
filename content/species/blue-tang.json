@@ -1,4 +1,14 @@
 {
+  "behaviour": {
+    "boldness": 0.6,
+    "curiosity": 0.5,
+    "depthBand": [0.2, 0.9],
+    "perceptionFovDeg": 300,
+    "perceptionRangeM": 0.8,
+    "preferredZone": "mid",
+    "territorial": false,
+    "traits": []
+  },
   "biome": "reef",
   "commonName": "Blue tang",
   "id": "blue-tang",
@@ -15,6 +25,17 @@
     "lifespanDays": 3650,
     "maxSizeM": 0.3,
     "starvationHungerThreshold": 0.75
+  },
+  "locomotion": {
+    "bodyLengthM": 0.2,
+    "cruiseSpeedMps": 0.25,
+    "gait": "cruise",
+    "massKg": 0.25,
+    "maxPitchDeg": 30,
+    "maxSpeedMps": 1.2,
+    "maxTurnRateDegPerS": 240,
+    "strouhal": 0.3,
+    "swimmingMode": "labriform"
   },
   "scientificName": "Paracanthurus hepatus"
 }

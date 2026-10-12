@@ -1,4 +1,19 @@
 {
+  "behaviour": {
+    "boldness": 0.4,
+    "curiosity": 0.3,
+    "depthBand": [0, 0.2],
+    "perceptionFovDeg": 300,
+    "perceptionRangeM": 0.25,
+    "preferredZone": "bottom",
+    "schooling": {
+      "minGroup": 4,
+      "tightenWhenStartled": false,
+      "topologicalNeighbours": 5
+    },
+    "territorial": false,
+    "traits": ["shoal", "air-gulp"]
+  },
   "biome": "freshwater",
   "commonName": "Bronze corydoras",
   "id": "bronze-corydoras",
@@ -15,6 +30,17 @@
     "lifespanDays": 1825,
     "maxSizeM": 0.065,
     "starvationHungerThreshold": 0.75
+  },
+  "locomotion": {
+    "bodyLengthM": 0.06,
+    "cruiseSpeedMps": 0.05,
+    "gait": "forage",
+    "massKg": 0.005,
+    "maxPitchDeg": 75,
+    "maxSpeedMps": 0.5,
+    "maxTurnRateDegPerS": 360,
+    "strouhal": 0.3,
+    "swimmingMode": "subcarangiform"
   },
   "scientificName": "Corydoras aeneus"
 }

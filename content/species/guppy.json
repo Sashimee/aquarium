@@ -1,4 +1,19 @@
 {
+  "behaviour": {
+    "boldness": 0.5,
+    "curiosity": 0.7,
+    "depthBand": [0.5, 0.95],
+    "perceptionFovDeg": 300,
+    "perceptionRangeM": 0.3,
+    "preferredZone": "surface",
+    "schooling": {
+      "minGroup": 3,
+      "tightenWhenStartled": true,
+      "topologicalNeighbours": 6
+    },
+    "territorial": false,
+    "traits": ["shoal"]
+  },
   "biome": "freshwater",
   "commonName": "Guppy",
   "id": "guppy",
@@ -15,6 +30,17 @@
     "lifespanDays": 730,
     "maxSizeM": 0.05,
     "starvationHungerThreshold": 0.75
+  },
+  "locomotion": {
+    "bodyLengthM": 0.035,
+    "cruiseSpeedMps": 0.08,
+    "gait": "cruise",
+    "massKg": 0.0004,
+    "maxPitchDeg": 30,
+    "maxSpeedMps": 0.45,
+    "maxTurnRateDegPerS": 450,
+    "strouhal": 0.3,
+    "swimmingMode": "subcarangiform"
   },
   "scientificName": "Poecilia reticulata"
 }
