@@ -8,6 +8,7 @@ import { connect, runMigrations, type Database } from './db/index.ts';
 import { createClock, type Clock } from './clock.ts';
 import { createMailer, DEFAULT_MAIL_LIMITS, type MailLimits } from './mail.ts';
 import { loadCatalog } from './species.ts';
+import type { LegalLimits } from './legal.ts';
 import type { CareLimits } from './tanks.ts';
 
 export const APP_ORIGIN = 'https://fish.test';
@@ -42,6 +43,7 @@ export interface HarnessOptions {
   authLimits?: AuthRateLimits;
   limited?: boolean;
   careLimits?: CareLimits;
+  legalLimits?: LegalLimits;
   testHooks?: boolean;
 }
 
@@ -136,6 +138,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     clock,
     testHooks: opts.testHooks ?? true,
     ...(opts.careLimits ? { careLimits: opts.careLimits } : {}),
+    ...(opts.legalLimits ? { legalLimits: opts.legalLimits } : {}),
     logger: false,
   });
   await app.ready();
