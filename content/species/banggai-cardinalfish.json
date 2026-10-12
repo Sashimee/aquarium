@@ -1,0 +1,20 @@
+{
+  "biome": "reef",
+  "commonName": "Banggai cardinalfish",
+  "id": "banggai-cardinalfish",
+  "lifecycle": {
+    "ammoniaPerBioloadPerHour": 0.001,
+    "ammoniaTolerance": 0.12,
+    "bioload": 0.6,
+    "birthSizeM": 0.012,
+    "diet": ["brine-shrimp", "pellets", "flakes"],
+    "growthPerDay": 0.00023,
+    "healthLossPerHourStarving": 0.0085,
+    "healthRecoveryPerHour": 0.004,
+    "hungerPerHour": 0.0068,
+    "lifespanDays": 1825,
+    "maxSizeM": 0.08,
+    "starvationHungerThreshold": 0.75
+  },
+  "scientificName": "Pterapogon kauderni"
+}

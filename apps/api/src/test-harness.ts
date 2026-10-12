@@ -5,7 +5,10 @@ import type { FastifyInstance } from 'fastify';
 import { buildApp } from './app.ts';
 import { createAuth, DEFAULT_AUTH_RATE_LIMITS, type AuthRateLimits } from './auth.ts';
 import { connect, runMigrations, type Database } from './db/index.ts';
+import { createClock, type Clock } from './clock.ts';
 import { createMailer, DEFAULT_MAIL_LIMITS, type MailLimits } from './mail.ts';
+import { loadCatalog } from './species.ts';
+import type { CareLimits } from './tanks.ts';
 
 export const APP_ORIGIN = 'https://fish.test';
 
@@ -27,6 +30,7 @@ export interface Harness {
   app: FastifyInstance;
   database: Database;
   outbox: SentMail[];
+  clock: Clock;
   dropDatabase(): Promise<void>;
   close(): Promise<void>;
 }
@@ -37,6 +41,8 @@ export interface HarnessOptions {
   mailLimits?: MailLimits;
   authLimits?: AuthRateLimits;
   limited?: boolean;
+  careLimits?: CareLimits;
+  testHooks?: boolean;
 }
 
 function baseUrl(): URL {
@@ -117,6 +123,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
         ? DEFAULT_AUTH_RATE_LIMITS
         : { signIn: GENEROUS, signUp: GENEROUS, sendVerification: GENEROUS }),
   });
+  const clock = createClock();
   const app = buildApp({
     indexable: opts.indexable ?? false,
     webRoot: opts.webRoot ?? '/nonexistent',
@@ -125,6 +132,10 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     database,
     auth,
     mailer,
+    species: loadCatalog(),
+    clock,
+    testHooks: opts.testHooks ?? true,
+    ...(opts.careLimits ? { careLimits: opts.careLimits } : {}),
     logger: false,
   });
   await app.ready();
@@ -133,6 +144,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     app,
     database,
     outbox,
+    clock,
     dropDatabase: testDb.drop,
     async close() {
       await app.close();

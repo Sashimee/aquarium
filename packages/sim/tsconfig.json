@@ -6,6 +6,6 @@
     "allowImportingTsExtensions": true,
     "erasableSyntaxOnly": true
   },
-  "include": ["src", "scripts"],
-  "exclude": ["src/**/*.test.ts"]
+  "include": ["src", "scripts", "lifecycle"],
+  "exclude": ["src/**/*.test.ts", "lifecycle/**/*.test.ts"]
 }

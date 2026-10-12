@@ -6,16 +6,19 @@ import {
   signUpRequestSchema,
   sessionListSchema,
   userSchema,
-  type ApiError,
-  type ErrorCode,
 } from '@aquarium/shared';
 import { fromNodeHeaders } from 'better-auth/node';
 import { and, desc, eq, gt, sql } from 'drizzle-orm';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { z, ZodError } from 'zod';
 import { AUTH_BASE_PATH, type Auth } from './auth.ts';
+import { createClock, type Clock } from './clock.ts';
 import { schema, type Database } from './db/index.ts';
+import { apiError } from './errors.ts';
 import type { Mailer } from './mail.ts';
+import { RateLimiter } from './rate-limit.ts';
+import type { SpeciesCatalog } from './species.ts';
+import { DEFAULT_CARE_LIMITS, registerTankRoutes, type CareLimits } from './tanks.ts';
 
 export interface AppOptions {
   indexable: boolean;
@@ -25,6 +28,10 @@ export interface AppOptions {
   database: Database;
   auth: Auth;
   mailer: Mailer;
+  species: SpeciesCatalog;
+  clock?: Clock;
+  careLimits?: CareLimits;
+  testHooks?: boolean;
   logger?: boolean;
 }
 
@@ -65,6 +72,13 @@ const STATIC_EXTENSIONS = new Set([
   'html',
 ]);
 
+const advanceTimeRequestSchema = z.strictObject({
+  minutes: z
+    .number()
+    .positive()
+    .max(60 * 24 * 365),
+});
+
 const signUpBodySchema = signUpRequestSchema.extend({
   callbackURL: z.string().max(2048).optional(),
 });
@@ -79,14 +93,6 @@ function parseJson(raw: string | undefined): unknown {
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const BLOCKED_AUTH_PATHS = new Set([`${AUTH_BASE_PATH}/list-sessions`]);
-
-function apiError(
-  code: ErrorCode,
-  message: string,
-  issues?: ApiError['error']['issues'],
-): ApiError {
-  return { error: { code, message, ...(issues ? { issues } : {}) } };
-}
 
 function normalizedPathname(url: string): string {
   const raw = url.split('?')[0] ?? '/';
@@ -108,6 +114,7 @@ function isStaticAsset(pathname: string): boolean {
 
 export function buildApp(opts: AppOptions): FastifyInstance {
   const { indexable, webRoot, appOrigin, database, auth, mailer, logger = true } = opts;
+  const clock = opts.clock ?? createClock();
   const app = Fastify({
     trustProxy: opts.trustedProxies,
     rewriteUrl: (req) => (req.url ?? '/').replace(/^\/{2,}/, '/'),
@@ -121,6 +128,16 @@ export function buildApp(opts: AppOptions): FastifyInstance {
           },
         }
       : false,
+  });
+
+  app.removeAllContentTypeParsers();
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
+    if (body === '') return done(null, undefined);
+    try {
+      done(null, JSON.parse(body as string));
+    } catch {
+      done(Object.assign(new Error('Body must be valid JSON.'), { statusCode: 400 }), undefined);
+    }
   });
 
   app.addHook('onSend', async (_req, reply) => {
@@ -154,10 +171,9 @@ export function buildApp(opts: AppOptions): FastifyInstance {
       return reply
         .code(status)
         .send(
-          apiError(
-            'validation_failed',
-            status === 413 ? 'Body too large.' : 'Unsupported content type.',
-          ),
+          status === 413
+            ? apiError('payload_too_large', 'Body too large.')
+            : apiError('unsupported_media_type', 'Unsupported content type.'),
         );
     }
     if (status !== undefined && status >= 400 && status < 500) {
@@ -296,6 +312,24 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     }
     return reply.code(204).send();
   });
+
+  registerTankRoutes({
+    app,
+    database,
+    species: opts.species,
+    clock,
+    limiter: new RateLimiter(),
+    limits: opts.careLimits ?? DEFAULT_CARE_LIMITS,
+    currentUser: async (req) => (await currentSession(req))?.user ?? null,
+  });
+
+  if (opts.testHooks) {
+    app.post('/api/test/advance-time', async (req, reply) => {
+      const { minutes } = advanceTimeRequestSchema.parse(req.body);
+      clock.advance(minutes * 60_000);
+      return reply.code(204).send();
+    });
+  }
 
   const root = resolve(webRoot);
   const hasWeb = existsSync(resolve(root, 'index.html'));

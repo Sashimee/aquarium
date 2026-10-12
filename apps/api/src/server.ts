@@ -3,6 +3,7 @@ import { createAuth } from './auth.ts';
 import { loadConfig } from './config.ts';
 import { connect, runMigrations } from './db/index.ts';
 import { createMailer, createSmtpTransport } from './mail.ts';
+import { loadCatalog } from './species.ts';
 
 const config = loadConfig(process.env);
 
@@ -23,6 +24,8 @@ const app = buildApp({
   database,
   auth,
   mailer,
+  species: loadCatalog(),
+  testHooks: config.testHooks,
 });
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {

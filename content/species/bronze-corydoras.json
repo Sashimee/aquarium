@@ -1,0 +1,20 @@
+{
+  "biome": "freshwater",
+  "commonName": "Bronze corydoras",
+  "id": "bronze-corydoras",
+  "lifecycle": {
+    "ammoniaPerBioloadPerHour": 0.001,
+    "ammoniaTolerance": 0.25,
+    "bioload": 0.4,
+    "birthSizeM": 0.015,
+    "diet": ["pellets", "algae-wafer", "bloodworms"],
+    "growthPerDay": 0.00017,
+    "healthLossPerHourStarving": 0.0085,
+    "healthRecoveryPerHour": 0.004,
+    "hungerPerHour": 0.007,
+    "lifespanDays": 1825,
+    "maxSizeM": 0.065,
+    "starvationHungerThreshold": 0.75
+  },
+  "scientificName": "Corydoras aeneus"
+}
