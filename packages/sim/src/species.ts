@@ -1,4 +1,4 @@
-import type { Species } from '@aquarium/shared';
+import { traitSchema, type Species } from '@aquarium/shared';
 import { DEG } from './math.ts';
 
 export type SpeciesInput = Pick<Species, 'id' | 'behaviour' | 'locomotion'>;
@@ -16,15 +16,7 @@ export const DRAG_COEFFICIENT_L2 = 0.02;
  * Species-specific behaviours the shared schema has no field for, named in `behaviour.traits`.
  * See BEHAVIOUR.md for what each one switches on.
  */
-export const TRAITS = [
-  'shoal',
-  'air-gulp',
-  'glass-grazer',
-  'rock-grazer',
-  'anemone-host',
-  'cave-dweller',
-  'flare-display',
-] as const;
+export const TRAITS = traitSchema.options;
 export type Trait = (typeof TRAITS)[number];
 
 /** Where a fish returns to: a scene anchor, a self-chosen mid-water station, or nowhere. */
