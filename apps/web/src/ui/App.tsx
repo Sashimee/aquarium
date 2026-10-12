@@ -9,9 +9,12 @@ import {
   useRoute,
 } from './context';
 import {
+  CreditsScreen,
   Link,
   NotFoundScreen,
+  PrivacyScreen,
   SessionsScreen,
+  SettingsScreen,
   SignInScreen,
   SignUpScreen,
   VerifyEmailScreen,
@@ -55,6 +58,7 @@ function AccountMenu() {
     <nav aria-label="Account" className="account">
       <span>{user.name}</span>
       <Link to="/sessions">Sessions</Link>
+      <Link to="/settings">Settings</Link>
       <button
         type="button"
         onClick={() => {
@@ -117,6 +121,12 @@ function Screen() {
       return <VerifyEmailScreen error={route.error} />;
     case 'sessions':
       return status === 'loading' ? null : <SessionsScreen />;
+    case 'settings':
+      return status === 'loading' ? null : <SettingsScreen />;
+    case 'privacy':
+      return <PrivacyScreen />;
+    case 'credits':
+      return <CreditsScreen />;
     case 'not-found':
       return <NotFoundScreen />;
   }
@@ -156,6 +166,12 @@ export function App() {
         <Screen />
       </div>
       <TankReport />
+      <footer className="legal-links">
+        <nav aria-label="Legal">
+          <Link to="/privacy">Privacy</Link>
+          <Link to="/credits">Credits</Link>
+        </nav>
+      </footer>
     </div>
   );
 }

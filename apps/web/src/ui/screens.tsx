@@ -1,4 +1,4 @@
-import type { SessionInfo } from '@aquarium/shared';
+import type { Credits, PrivacyPolicy, SessionInfo } from '@aquarium/shared';
 import {
   useCallback,
   useEffect,
@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { ApiRequestError, ClientValidationError, type FieldErrors } from './api';
 import { useApi, useAuth } from './context';
+import { deleteErrorMessage, downloadText, rateLimitMessage } from './legal';
 import { navigate } from './router';
 
 export function Link({
@@ -35,11 +36,19 @@ export function Link({
   );
 }
 
-function Panel({ title, children }: { title: string; children: ReactNode }) {
+function Panel({
+  title,
+  children,
+  wide = false,
+}: {
+  title: string;
+  children: ReactNode;
+  wide?: boolean;
+}) {
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => heading.current?.focus(), [title]);
   return (
-    <main className="panel" aria-labelledby="panel-title">
+    <main className={wide ? 'panel wide' : 'panel'} aria-labelledby="panel-title">
       <h1 id="panel-title" ref={heading} tabIndex={-1}>
         {title}
       </h1>
@@ -488,6 +497,259 @@ export function NotFoundScreen() {
   return (
     <Panel title="Nothing here">
       <p>That page does not exist.</p>
+      <p className="alt">
+        <Link to="/">Back to the tank</Link>
+      </p>
+    </Panel>
+  );
+}
+
+function useLoaded<T>(load: () => Promise<T>): { data: T | null; error: string | null } {
+  const [data, setData] = useState<T | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    load().then(
+      (value) => {
+        if (live) setData(value);
+      },
+      (cause: unknown) => {
+        console.error(cause);
+        if (live) setError(cause instanceof Error ? cause.message : 'Could not load this page.');
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [load]);
+  return { data, error };
+}
+
+export function PrivacyView({ policy }: { policy: PrivacyPolicy }) {
+  return (
+    <>
+      <p className="hint">
+        Version {policy.version}, updated {policy.updatedAt}. Controller: {policy.controller}.
+        Contact: <a href={`mailto:${policy.contact}`}>{policy.contact}</a>.
+      </p>
+      {policy.sections.map((section) => (
+        <section key={section.id} aria-labelledby={`privacy-${section.id}`}>
+          <h2 id={`privacy-${section.id}`}>{section.title}</h2>
+          {section.paragraphs.map((text) => (
+            <p key={text}>{text}</p>
+          ))}
+          {section.id === 'cookies' && (
+            <ul className="cookies">
+              {policy.cookies.map((cookie) => (
+                <li key={cookie.name}>
+                  <code>{cookie.name}</code>
+                  <p>{cookie.purpose}</p>
+                  <p className="hint">
+                    {cookie.lifetime} {cookie.attributes}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ))}
+    </>
+  );
+}
+
+export function PrivacyScreen() {
+  const api = useApi();
+  const load = useCallback(() => api.privacy(), [api]);
+  const { data, error } = useLoaded(load);
+  return (
+    <Panel title="Privacy" wide>
+      <FormError message={error} />
+      {data && <PrivacyView policy={data} />}
+      {!data && !error && <p role="status">Loading…</p>}
+      <p className="alt">
+        <Link to="/">Back to the tank</Link>
+      </p>
+    </Panel>
+  );
+}
+
+export function CreditsView({ credits }: { credits: Credits }) {
+  return (
+    <>
+      <p>{credits.shareAlikeNotice}</p>
+      <ul className="credits">
+        {credits.entries.map((entry) => (
+          <li key={entry.id}>
+            <h2>
+              <a href={entry.sourceUrl} rel="noopener noreferrer">
+                {entry.title}
+              </a>
+              {entry.referenceOnly && <span className="badge">Reference only</span>}
+              {entry.shareAlike && <span className="badge">ShareAlike</span>}
+            </h2>
+            <p>
+              By{' '}
+              <a href={entry.authorUrl} rel="noopener noreferrer">
+                {entry.author}
+              </a>
+              , licensed{' '}
+              <a href={entry.licenceUrl} rel="noopener noreferrer">
+                {entry.licence}
+              </a>
+              .
+            </p>
+            <p className="hint">{entry.attribution}</p>
+            {entry.referenceOnly && (
+              <p className="hint">Used for reference only; not shipped in the app.</p>
+            )}
+            {entry.modifications.length > 0 && (
+              <>
+                <p className="hint">Modifications:</p>
+                <ul>
+                  {entry.modifications.map((m) => (
+                    <li key={m}>{m}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+export function CreditsScreen() {
+  const api = useApi();
+  const load = useCallback(() => api.credits(), [api]);
+  const { data, error } = useLoaded(load);
+  return (
+    <Panel title="Credits" wide>
+      <FormError message={error} />
+      {data && <CreditsView credits={data} />}
+      {!data && !error && <p role="status">Loading…</p>}
+      <p className="alt">
+        <Link to="/">Back to the tank</Link>
+      </p>
+    </Panel>
+  );
+}
+
+export function SettingsScreen() {
+  const api = useApi();
+  const auth = useAuth();
+  const exporting = useSubmission();
+  const deleting = useSubmission();
+  const [confirming, setConfirming] = useState(false);
+  const [password, setPassword] = useState('');
+  const [exported, setExported] = useState(false);
+
+  const onExport = () => {
+    setExported(false);
+    void exporting
+      .run(async () => {
+        try {
+          const file = await api.exportData();
+          downloadText(file.filename, file.text);
+        } catch (cause) {
+          if (cause instanceof ApiRequestError && cause.code === 'rate_limited') {
+            throw new ApiRequestError(
+              cause.status,
+              cause.code,
+              rateLimitMessage(cause, 'export'),
+              {},
+              cause.retryAfterSeconds,
+            );
+          }
+          throw cause;
+        }
+      })
+      .then((ok) => setExported(ok));
+  };
+
+  const onDelete = (e: FormEvent) => {
+    e.preventDefault();
+    void deleting
+      .run(async () => {
+        try {
+          await api.deleteAccount(password);
+        } catch (cause) {
+          if (cause instanceof ApiRequestError) {
+            throw new ApiRequestError(
+              cause.status,
+              cause.code,
+              deleteErrorMessage(cause, password.length > 0),
+              cause.fields,
+              cause.retryAfterSeconds,
+            );
+          }
+          throw cause;
+        }
+      })
+      .then(async (ok) => {
+        if (!ok) return;
+        await auth.refresh();
+        navigate('/');
+      });
+  };
+
+  return (
+    <Panel title="Settings">
+      <section aria-labelledby="export-title">
+        <h2 id="export-title">Your data</h2>
+        <p>Download everything we store about you as a JSON file.</p>
+        <button type="button" disabled={exporting.busy} onClick={onExport}>
+          {exporting.busy ? 'Preparing…' : 'Export my data'}
+        </button>
+        <p role="status" className="hint">
+          {exported ? 'Your download has started.' : ''}
+        </p>
+        <FormError message={exporting.error} />
+      </section>
+      <section aria-labelledby="delete-title">
+        <h2 id="delete-title">Delete account</h2>
+        <p>
+          This permanently deletes your account, tanks, fish and memorials. It cannot be undone.
+        </p>
+        {!confirming ? (
+          <button type="button" className="danger" onClick={() => setConfirming(true)}>
+            Delete account
+          </button>
+        ) : (
+          <form onSubmit={onDelete} noValidate>
+            <div className="field">
+              <label htmlFor="delete-password">Password</label>
+              <input
+                id="delete-password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <p className="hint">
+                Enter your password to confirm. If you only use a passkey, leave this empty; you
+                must have signed in within the last 5 minutes.
+              </p>
+            </div>
+            <FormError message={deleting.error} />
+            <button type="submit" className="danger" disabled={deleting.busy}>
+              {deleting.busy ? 'Deleting…' : 'Permanently delete my account'}
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              disabled={deleting.busy}
+              onClick={() => {
+                setConfirming(false);
+                setPassword('');
+              }}
+            >
+              Cancel
+            </button>
+          </form>
+        )}
+      </section>
       <p className="alt">
         <Link to="/">Back to the tank</Link>
       </p>

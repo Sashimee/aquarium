@@ -248,3 +248,41 @@
     transform: translateY(0.5rem);
   }
 }
+
+.panel.wide {
+  width: min(44rem, 100%);
+}
+
+.credits,
+.cookies {
+  list-style: none;
+  padding: 0;
+}
+
+.credits > li,
+.cookies > li {
+  padding: 0.6rem 0;
+  border-top: 1px solid var(--edge);
+}
+
+.credits h2 {
+  font-size: 1rem;
+  margin: 0 0 0.25rem;
+}
+
+#ui button.danger {
+  background: #8f1d1d;
+  color: #fff;
+  border-color: transparent;
+}
+
+.legal-links {
+  position: absolute;
+  right: 0.75rem;
+  bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+.legal-links nav {
+  display: flex;
+  gap: 1rem;
+}
