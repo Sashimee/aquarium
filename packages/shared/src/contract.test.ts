@@ -10,6 +10,7 @@ import {
   waterParametersSchema,
   createTankRequestSchema,
   fishSchema,
+  httpUrlSchema,
   presetLayoutSchema,
   revokeSessionRequestSchema,
   sessionInfoSchema,
@@ -318,6 +319,45 @@ describe('species and presets', () => {
         .success,
     ).toBe(false);
   });
+
+  it('validates substrate, plant patches and the current of a full preset', () => {
+    const preset = {
+      id: 'planted-20',
+      name: 'Planted 20',
+      biome: 'freshwater',
+      decor: [],
+      substrate: { assetId: 'coast-sand-01', tileMeters: 0.5 },
+      plantPatches: [
+        {
+          id: 'carpet',
+          assetId: 'staurogyne-repens',
+          center: [0, 0.1],
+          radius: 0.2,
+          count: 12,
+          scale: [0.8, 1.2],
+          seed: 7,
+        },
+      ],
+      current: { direction: [1, 0], speed: 0.04, gustPeriodS: 9, gustDepth: 0.4 },
+    };
+    const parsed = presetLayoutSchema.parse(preset);
+    expect(parsed.substrate?.tint).toEqual([1, 1, 1]);
+    expect(presetLayoutSchema.parse({ ...preset, plantPatches: undefined }).plantPatches).toEqual(
+      [],
+    );
+    expect(
+      presetLayoutSchema.safeParse({
+        ...preset,
+        current: { ...preset.current, direction: [0, 0] },
+      }).success,
+    ).toBe(false);
+    expect(
+      presetLayoutSchema.safeParse({
+        ...preset,
+        plantPatches: [{ ...preset.plantPatches[0], count: 0 }],
+      }).success,
+    ).toBe(false);
+  });
 });
 
 describe('decor bounds', () => {
@@ -364,5 +404,18 @@ describe('memorial and water', () => {
     };
     expect(waterParametersSchema.safeParse(params).success).toBe(true);
     expect(waterParametersSchema.safeParse({ ...params, foodDecayMinutes: 0 }).success).toBe(false);
+  });
+});
+
+describe('httpUrlSchema', () => {
+  it('accepts http and https', () => {
+    expect(httpUrlSchema.safeParse('http://example.com/a').success).toBe(true);
+    expect(httpUrlSchema.safeParse('https://example.com/a').success).toBe(true);
+  });
+
+  it('rejects javascript:, data: and vbscript:', () => {
+    for (const url of ['javascript:alert(1)', 'data:text/html,x', 'vbscript:msgbox(1)']) {
+      expect(httpUrlSchema.safeParse(url).success).toBe(false);
+    }
   });
 });
