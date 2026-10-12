@@ -21,6 +21,8 @@ export const SnapshotField = {
 export const SNAPSHOT_STRIDE = 10;
 
 export interface Snapshot {
+  /** Bumped by every re-init; ticks restart at 0 within a new epoch. */
+  readonly epoch: number;
   readonly tick: number;
   /** Simulation seconds at this tick. */
   readonly time: number;
@@ -90,14 +92,29 @@ export class SnapshotInterpolator {
     this.delaySeconds = delaySeconds;
   }
 
-  /** Returns the snapshot that dropped out of the window, so its buffer can be recycled. */
+  /**
+   * Returns the snapshot that dropped out of the window, so its buffer can be recycled. A snapshot
+   * from a newer epoch starts a fresh window and the old pair is dropped unreturned: the worker
+   * cleared its buffer pool at re-init, so recycling them would gain nothing.
+   */
   push(snapshot: Snapshot, arrivalMs: number): Snapshot | null {
-    if (this.latest !== null && snapshot.tick <= this.latest.tick) return snapshot;
+    const latest = this.latest;
+    if (latest !== null) {
+      if (snapshot.epoch < latest.epoch) return snapshot;
+      if (snapshot.epoch > latest.epoch) this.reset();
+      else if (snapshot.tick <= latest.tick) return snapshot;
+    }
     const evicted = this.previous;
     this.previous = this.latest;
     this.latest = snapshot;
     this.latestArrivalMs = arrivalMs;
     return evicted;
+  }
+
+  reset(): void {
+    this.previous = null;
+    this.latest = null;
+    this.latestArrivalMs = 0;
   }
 
   renderTime(nowMs: number): number {

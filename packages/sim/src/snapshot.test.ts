@@ -21,8 +21,8 @@ function fish(x: number, yaw: number, speed: number, state: FishState): Float32A
   return out;
 }
 
-function snap(tick: number, data: Float32Array): Snapshot {
-  return { tick, time: tick / 30, data };
+function snap(tick: number, data: Float32Array, epoch = 1): Snapshot {
+  return { epoch, tick, time: tick / 30, data };
 }
 
 describe('interpolateSnapshots', () => {
@@ -100,5 +100,34 @@ describe('SnapshotInterpolator', () => {
     expect(interp.push(s2, 66)).toBe(s0);
     const stale = snap(1, fish(9, 0, 0, FishState.Cruise));
     expect(interp.push(stale, 70)).toBe(stale);
+  });
+
+  it('starts a fresh window after a re-init restarts ticks at 0', () => {
+    const interp = new SnapshotInterpolator(1 / 30);
+    const out = new Float32Array(SNAPSHOT_STRIDE);
+    interp.push(snap(0, fish(0, 0, 0, FishState.Cruise), 1), 0);
+    interp.push(snap(40, fish(4, 0, 0, FishState.Cruise), 1), 33);
+
+    const fresh = snap(0, fish(7, 0, 0, FishState.Cruise), 2);
+    expect(interp.push(fresh, 100)).toBeNull();
+    interp.sample(100, out);
+    expect(out[SnapshotField.PosX]).toBe(7);
+
+    expect(interp.push(snap(1, fish(8, 0, 0, FishState.Cruise), 2), 133)).toBeNull();
+    interp.sample(133 + 1000 / 60, out);
+    expect(out[SnapshotField.PosX]).toBeCloseTo(7.5, 5);
+
+    const late = snap(41, fish(9, 0, 0, FishState.Cruise), 1);
+    expect(interp.push(late, 140)).toBe(late);
+    expect(interp.push(snap(2, fish(9, 0, 0, FishState.Cruise), 2), 166)).toBe(fresh);
+  });
+
+  it('forgets everything on reset', () => {
+    const interp = new SnapshotInterpolator(1 / 30);
+    interp.push(snap(5, fish(1, 0, 0, FishState.Cruise)), 0);
+    interp.reset();
+    expect(interp.sample(0, new Float32Array(SNAPSHOT_STRIDE))).toBe(false);
+    expect(interp.renderTime(1000)).toBe(0);
+    expect(interp.push(snap(0, fish(2, 0, 0, FishState.Cruise)), 10)).toBeNull();
   });
 });

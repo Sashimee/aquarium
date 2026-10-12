@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { createSimHost, SimClient, type SimHost } from './bridge.ts';
+import { createSimHost, SimClient, type SimHost, type SimHostOptions } from './bridge.ts';
 import { benchmarkConfig } from './fixtures.ts';
-import { SNAPSHOT_STRIDE, SnapshotField, type Snapshot } from './snapshot.ts';
+import { SNAPSHOT_STRIDE, SnapshotField, SnapshotInterpolator, type Snapshot } from './snapshot.ts';
 import { STEP_HZ, World } from './world.ts';
 
 interface Harness {
@@ -13,9 +13,9 @@ interface Harness {
 
 const open: Harness[] = [];
 
-function connect(): Harness {
+function connect(options?: SimHostOptions): Harness {
   const channel = new MessageChannel();
-  const host = createSimHost(channel.port1);
+  const host = createSimHost(channel.port1, options);
   const client = new SimClient(channel.port2);
   const harness = { host, client, hostPort: channel.port1, clientPort: channel.port2 };
   open.push(harness);
@@ -118,6 +118,50 @@ describe('sim worker bridge', () => {
     const bad = nextError(client);
     client.step(0);
     expect(await bad).toMatch(/positive integer/);
+  });
+
+  it('tags a re-init with a new epoch so the interpolator restarts cleanly', async () => {
+    const { client } = connect();
+    const interp = new SnapshotInterpolator(1 / 30);
+    client.onSnapshot((s) => interp.push(s, performance.now()));
+    const out = new Float32Array(benchmarkConfig(1).fish.length * SNAPSHOT_STRIDE);
+
+    const firstInitial = nextSnapshot(client);
+    const firstReady = await client.init(benchmarkConfig(1));
+    await firstInitial;
+    const stepped = nextSnapshot(client);
+    client.step(30);
+    const before = await stepped;
+    expect(before.epoch).toBe(firstReady.epoch);
+    expect(before.tick).toBe(30);
+
+    const initial = nextSnapshot(client);
+    const secondReady = await client.init(benchmarkConfig(2));
+    expect(secondReady.epoch).toBeGreaterThan(firstReady.epoch);
+    const restarted = await initial;
+    expect(restarted.epoch).toBe(secondReady.epoch);
+    expect(restarted.tick).toBe(0);
+
+    const next = nextSnapshot(client);
+    client.step(1);
+    const one = await next;
+    expect(interp.sample(performance.now() + 1000, out)).toBe(true);
+    expect(out[0]).toBeCloseTo(one.data[0] ?? NaN, 6);
+  });
+
+  it('reports a failure inside the running clock instead of dying silently', async () => {
+    let calls = 0;
+    const { client } = connect({
+      now: () => {
+        calls++;
+        if (calls > 1) throw new Error('clock exploded');
+        return 0;
+      },
+    });
+    await client.init(benchmarkConfig(1));
+    const failed = nextError(client);
+    client.start();
+    expect(await failed).toBe('clock exploded');
   });
 
   it('rejects init when the config is invalid', async () => {

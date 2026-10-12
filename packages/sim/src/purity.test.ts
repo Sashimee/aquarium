@@ -27,4 +27,14 @@ describe('packages/sim purity', () => {
     );
     expect(text).not.toMatch(/\bMath\.random\b|\bDate\.now\b/);
   });
+
+  // The bridge owns the wall clock that paces steps; everything it drives must not read one.
+  const deterministic = files.filter((f) => !f.endsWith('bridge.ts'));
+
+  it.each(deterministic)('%s reads no clock and no ambient randomness', (file) => {
+    const text = readFileSync(file, 'utf8');
+    expect(text).not.toMatch(
+      /\bMath\.random\b|\bDate\.now\b|\bnew\s+Date\s*\(|\bperformance\.now\b|\bcrypto\.(getRandomValues|randomUUID)\b/,
+    );
+  });
 });

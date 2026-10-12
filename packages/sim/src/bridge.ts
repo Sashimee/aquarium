@@ -10,6 +10,7 @@ export type SimCommand =
 
 export interface SimReady {
   readonly type: 'ready';
+  readonly epoch: number;
   readonly fishIds: readonly string[];
   readonly stride: number;
   readonly stepHz: number;
@@ -19,6 +20,7 @@ export type SimEvent =
   | SimReady
   | {
       readonly type: 'snapshot';
+      readonly epoch: number;
       readonly tick: number;
       readonly time: number;
       readonly buffer: ArrayBuffer;
@@ -41,7 +43,9 @@ function messageType(data: unknown, allowed: ReadonlySet<string>): string {
     const type = (data as { type: unknown }).type;
     if (typeof type === 'string' && allowed.has(type)) return type;
   }
-  throw new TypeError(`unexpected sim bridge message: ${JSON.stringify(data)}`);
+  const text = JSON.stringify(data) ?? String(data);
+  const shown = text.length > 200 ? `${text.slice(0, 200)}…` : text;
+  throw new TypeError(`unexpected sim bridge message: ${shown}`);
 }
 
 export interface SimHostOptions {
@@ -64,6 +68,7 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let last = 0;
   let backlog = 0;
+  let epoch = 0;
 
   const send = (event: SimEvent, transfer: ArrayBuffer[] = []): void => {
     port.postMessage(event, transfer);
@@ -75,7 +80,7 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
     while (buffer !== undefined && buffer.byteLength !== bytes) buffer = pool.pop();
     buffer ??= new ArrayBuffer(bytes);
     w.writeSnapshot(new Float32Array(buffer));
-    send({ type: 'snapshot', tick: w.tick, time: w.time, buffer }, [buffer]);
+    send({ type: 'snapshot', epoch, tick: w.tick, time: w.time, buffer }, [buffer]);
   };
 
   const stop = (): void => {
@@ -83,21 +88,31 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
     timer = null;
   };
 
+  const sendError = (error: unknown): void => {
+    send({ type: 'error', message: error instanceof Error ? error.message : String(error) });
+  };
+
   const loop = (): void => {
     timer = null;
     const w = world;
     if (w === null) return;
-    const t = now();
-    backlog += t - last;
-    last = t;
-    let steps = 0;
-    while (backlog >= stepMs && steps < maxCatchUp) {
-      w.step();
-      backlog -= stepMs;
-      steps++;
+    try {
+      const t = now();
+      backlog += t - last;
+      last = t;
+      let steps = 0;
+      while (backlog >= stepMs && steps < maxCatchUp) {
+        w.step();
+        backlog -= stepMs;
+        steps++;
+      }
+      if (backlog >= stepMs) backlog = 0;
+      if (steps > 0) emitSnapshot(w);
+    } catch (error) {
+      // A throw here would escape the timer unseen; report it and stay stopped until "start".
+      sendError(error);
+      return;
     }
-    if (backlog >= stepMs) backlog = 0;
-    if (steps > 0) emitSnapshot(w);
     timer = setTimeout(loop, Math.max(0, stepMs - backlog));
   };
 
@@ -107,8 +122,10 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
         stop();
         world = new World(command.config);
         pool.length = 0;
+        epoch++;
         send({
           type: 'ready',
+          epoch,
           fishIds: world.fishIds,
           stride: SNAPSHOT_STRIDE,
           stepHz: STEP_HZ,
@@ -147,7 +164,7 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
       messageType(event.data, COMMAND_TYPES);
       handle(event.data as SimCommand);
     } catch (error) {
-      send({ type: 'error', message: error instanceof Error ? error.message : String(error) });
+      sendError(error);
     }
   };
   port.addEventListener('message', listener);
@@ -240,6 +257,7 @@ export class SimClient {
         return;
       case 'snapshot': {
         const snapshot: Snapshot = {
+          epoch: event.epoch,
           tick: event.tick,
           time: event.time,
           data: new Float32Array(event.buffer),

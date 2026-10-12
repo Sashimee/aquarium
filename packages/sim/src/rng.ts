@@ -16,7 +16,12 @@ function splitmix32(seed: number): () => number {
   };
 }
 
-/** sfc32. Integer-only, so the sequence is bit-identical on every JS engine. */
+/**
+ * sfc32. The integer core and the arithmetic-only helpers (`nextUint32`, `next`, `range`,
+ * `signed`) are bit-identical on every JS engine. `gaussian`, like `World` itself, goes through
+ * `Math.log`/`sqrt`/`cos`, whose last bits the spec leaves to the engine, so those results repeat
+ * exactly only on the same engine.
+ */
 export class Rng {
   private a = 0;
   private b = 0;
