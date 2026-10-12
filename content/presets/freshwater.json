@@ -1,0 +1,141 @@
+{
+  "id": "freshwater",
+  "name": "Nature aquarium",
+  "biome": "freshwater",
+  "substrate": {
+    "assetId": "coast-sand-01",
+    "accentAssetId": "clean-pebbles",
+    "tint": [0.55, 0.5, 0.45],
+    "tileMeters": 0.35
+  },
+  "decor": [
+    {
+      "assetId": "driftwood-branch",
+      "position": [-0.2, 0.085, 0.0],
+      "rotationY": 0.4,
+      "scale": 1.1
+    },
+    {
+      "assetId": "dead-quiver-trunk",
+      "position": [-0.42, 0.092, -0.12],
+      "rotationY": 1.1,
+      "scale": 0.65
+    },
+    {
+      "assetId": "dead-tree-trunk-02",
+      "position": [-0.02, 0.045, 0.14],
+      "rotationY": 0.15,
+      "scale": 0.7
+    },
+    {
+      "assetId": "boulder-01",
+      "position": [0.3, 0.086, -0.04],
+      "rotationY": 1.0,
+      "scale": 0.85
+    },
+    {
+      "assetId": "boulder-01",
+      "position": [0.46, 0.068, 0.08],
+      "rotationY": -0.6,
+      "scale": 0.55
+    },
+    {
+      "assetId": "coast-rocks-05",
+      "position": [0.12, 0.055, 0.12],
+      "rotationY": 0.3,
+      "scale": 0.7
+    },
+    {
+      "assetId": "java-fern",
+      "position": [-0.3, 0.17, -0.05],
+      "rotationY": 0.6,
+      "scale": 0.7
+    },
+    {
+      "assetId": "java-fern",
+      "position": [-0.14, 0.2, -0.04],
+      "rotationY": 2.1,
+      "scale": 0.6
+    }
+  ],
+  "plantPatches": [
+    {
+      "id": "carpet-left",
+      "assetId": "staurogyne-repens",
+      "center": [-0.3, 0.12],
+      "radius": 0.2,
+      "count": 70,
+      "scale": [0.7, 1.0],
+      "seed": 101
+    },
+    {
+      "id": "carpet-right",
+      "assetId": "staurogyne-repens",
+      "center": [0.32, 0.14],
+      "radius": 0.18,
+      "count": 55,
+      "scale": [0.7, 1.0],
+      "seed": 102
+    },
+    {
+      "id": "vallisneria-left",
+      "assetId": "vallisneria",
+      "center": [-0.5, 0.05],
+      "radius": 0.1,
+      "count": 14,
+      "scale": [0.6, 0.9],
+      "seed": 201
+    },
+    {
+      "id": "vallisneria-right",
+      "assetId": "vallisneria",
+      "center": [0.04, -0.12],
+      "radius": 0.1,
+      "count": 14,
+      "scale": [0.6, 0.9],
+      "seed": 202
+    },
+    {
+      "id": "stems-back",
+      "assetId": "water-plant",
+      "center": [0.05, -0.18],
+      "radius": 0.22,
+      "count": 40,
+      "scale": [0.9, 1.3],
+      "seed": 301
+    },
+    {
+      "id": "stems-mid",
+      "assetId": "universal-plant",
+      "center": [-0.1, -0.12],
+      "radius": 0.14,
+      "count": 14,
+      "scale": [0.6, 0.85],
+      "seed": 302
+    },
+    {
+      "id": "pond-weed",
+      "assetId": "pond-weed",
+      "center": [0.17, -0.15],
+      "radius": 0.1,
+      "count": 16,
+      "scale": [0.6, 0.9],
+      "seed": 303
+    },
+    {
+      "id": "lotus",
+      "assetId": "red-tiger-lotus",
+      "center": [0.4, 0.1],
+      "radius": 0.05,
+      "count": 3,
+      "scale": [0.6, 0.8],
+      "seed": 401
+    }
+  ],
+  "current": {
+    "direction": [1, 0.12],
+    "speed": 0.05,
+    "gustPeriodS": 8,
+    "gustDepth": 0.45
+  }
+}
