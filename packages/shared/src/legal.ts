@@ -59,15 +59,17 @@ export const privacyPolicySchema = z.strictObject({
 });
 export type PrivacyPolicy = z.infer<typeof privacyPolicySchema>;
 
+export const httpUrlSchema = z.url({ protocol: /^https?$/ });
+
 export const creditEntrySchema = z.strictObject({
   id: z.string().min(1),
   kind: z.string().min(1),
   title: z.string().min(1),
   author: z.string().min(1),
-  authorUrl: z.url(),
-  sourceUrl: z.url(),
+  authorUrl: httpUrlSchema,
+  sourceUrl: httpUrlSchema,
   licence: z.string().min(1),
-  licenceUrl: z.url(),
+  licenceUrl: httpUrlSchema,
   attribution: z.string().min(1),
   shareAlike: z.boolean(),
   referenceOnly: z.boolean(),
