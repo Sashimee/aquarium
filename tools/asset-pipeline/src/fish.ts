@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { speciesSchema } from '@aquarium/shared';
 import { buildDocument, emitAsset, type LodPlan } from './emit.ts';
+import { seatEyes, type EyePlacement } from './eyes.ts';
 import {
   bodyCentreOfMass,
   classifyFins,
@@ -26,6 +27,8 @@ export interface FishRecipe {
   skinPose?: SkinPose;
   dropMeshes?: RegExp;
   keepMaterial: RegExp;
+  /** Eyeballs that live in their own mesh: baked separately, re-seated on the head and kept out of fin classification. */
+  eyes?: { meshes: RegExp; placement: EyePlacement };
   fallbackLengthM: number;
   /** Multiplies the species-JSON length, for sexes or morphs that differ from the species value. */
   lengthFactor?: number;
@@ -60,6 +63,8 @@ export function speciesLengthM(repoRoot: string, species: string): number | null
 
 export interface NormaliseInput {
   parts: Part[];
+  /** Rigid parts, such as eyes, that follow the body transform but never take part in fin classification. */
+  attachments?: Part[];
   hints?: FinHints | undefined;
   standardLengthM: number;
 }
@@ -88,22 +93,24 @@ function slicePart(
 /** Centres on the body, classifies fins across all parts together, scales the standard length to metres and bakes the fin attributes. */
 export function normaliseFish(input: NormaliseInput): Part[] {
   const welded = input.parts.map(weldPart);
+  const attachments = (input.attachments ?? []).map(weldPart);
   const merged = mergeParts(welded, welded[0]!.material);
   const xShift = medianX(merged.positions);
-  for (const part of [merged, ...welded]) {
+  for (const part of [merged, ...welded, ...attachments]) {
     for (let i = 0; i < part.positions.length; i += 3)
       part.positions[i] = part.positions[i]! - xShift;
   }
 
   const fins = classifyFins(merged.positions, merged.indices, input.hints);
   const scale = input.standardLengthM / (fins.zSnout - fins.zPeduncle);
-  for (let i = 0; i < merged.positions.length; i++)
-    merged.positions[i] = merged.positions[i]! * scale;
+  for (const part of [merged, ...attachments])
+    for (let i = 0; i < part.positions.length; i++) part.positions[i] = part.positions[i]! * scale;
   const centre = bodyCentreOfMass(merged.positions, merged.indices, fins.id);
-  for (let i = 0; i < merged.positions.length; i += 3) {
-    merged.positions[i + 1] = merged.positions[i + 1]! - centre[1];
-    merged.positions[i + 2] = merged.positions[i + 2]! - centre[2];
-  }
+  for (const part of [merged, ...attachments])
+    for (let i = 0; i < part.positions.length; i += 3) {
+      part.positions[i + 1] = part.positions[i + 1]! - centre[1];
+      part.positions[i + 2] = part.positions[i + 2]! - centre[2];
+    }
   merged.extra[FIN_MASK_ATTRIBUTE] = fins.mask;
   merged.extra[FIN_ID_ATTRIBUTE] = fins.id;
 
@@ -117,6 +124,12 @@ export function normaliseFish(input: NormaliseInput): Part[] {
     out.push(split);
     vertex += vertices;
     index += part.indices.length;
+  }
+  for (const part of attachments) {
+    const vertices = part.positions.length / 3;
+    part.extra[FIN_MASK_ATTRIBUTE] = new Float32Array(vertices);
+    part.extra[FIN_ID_ATTRIBUTE] = new Float32Array(vertices);
+    out.push(part);
   }
   return out;
 }
@@ -165,6 +178,19 @@ export function fishInfo(
   };
 }
 
+async function bakeEyes(
+  recipe: FishRecipe,
+  eyeMeshes: RegExp,
+  materials: Set<string>,
+): Promise<Part[]> {
+  const doc = await readGltf(recipe.sourceId, 'gltf/scene.gltf');
+  bakeToWorldSpace(doc, (name) => !eyeMeshes.test(name), recipe.skinPose ?? 'bind');
+  const parts = extractParts(doc).filter((p) => materials.has(p.material));
+  if (parts.length === 0) throw new Error(`${recipe.id}: no mesh matches the eyes ${eyeMeshes}`);
+  for (const part of parts) orient(part.positions, part.normals, recipe.axes);
+  return parts;
+}
+
 export async function buildSourceFish(recipe: FishRecipe, ctx: FishContext): Promise<OutputAsset> {
   ctx.verifySource(recipe.sourceId);
   const doc = await readGltf(recipe.sourceId, 'gltf/scene.gltf');
@@ -186,11 +212,22 @@ export async function buildSourceFish(recipe: FishRecipe, ctx: FishContext): Pro
   if (parts.length === 0)
     throw new Error(`${recipe.id}: no geometry uses ${[...names].join(', ')}`);
   for (const part of parts) orient(part.positions, part.normals, recipe.axes);
+  const eyeParts = recipe.eyes ? await bakeEyes(recipe, recipe.eyes.meshes, names) : [];
+  if (recipe.eyes) {
+    const eyes = mergeParts(eyeParts, eyeParts[0]!.material);
+    seatEyes(eyes, parts, recipe.eyes.placement);
+    eyeParts.splice(0, eyeParts.length, eyes);
+  }
 
   const fromSpecies = speciesLengthM(ctx.repoRoot, recipe.species);
   const standardLengthM =
     fromSpecies !== null ? fromSpecies * (recipe.lengthFactor ?? 1) : recipe.fallbackLengthM;
-  const normalised = normaliseFish({ parts, hints: recipe.hints, standardLengthM });
+  const normalised = normaliseFish({
+    parts,
+    attachments: eyeParts,
+    hints: recipe.hints,
+    standardLengthM,
+  });
 
   const materials = await Promise.all(
     sourceMaterials.map((m) => materialDefFrom(m, { roughness: recipe.roughness ?? 0.45 })),
