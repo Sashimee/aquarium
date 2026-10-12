@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+.git
+.github
+.claude
+.env*
+coverage
+playwright-report
+test-results
+RESUME.md
+*.log
