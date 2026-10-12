@@ -1,6 +1,6 @@
 # Credits
 
-Assets are used under CC0 or CC-BY. CC-BY assets require the attribution below. The in-app `/credits` page is generated from `assets/manifest.json`.
+Assets are used under CC0, CC-BY or (reference photos only) CC-BY-SA. The in-app `/credits` page is generated from `assets/manifest.json`.
 
 ## CC-BY
 
@@ -29,7 +29,17 @@ Assets are used under CC0 or CC-BY. CC-BY assets require the attribution below. 
 | Gramma loreto 365520074.jpg (`wm-gramma-365520074`)                          | cello caruso-turiello | [source](https://commons.wikimedia.org/wiki/File:Gramma_loreto_365520074.jpg)                       | [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/) |
 | Gelbe Segelflossendoktor Zebrasoma flavescens.jpg (`wm-yellowtang-holleday`) | Holger Krisp          | [source](https://commons.wikimedia.org/wiki/File:Gelbe_Segelflossendoktor_Zebrasoma_flavescens.jpg) | [CC-BY-3.0](https://creativecommons.org/licenses/by/3.0/) |
 
-Entries with status `selected-pending-download` are listed because they are selected; remove any the pipeline drops.
+## CC-BY-SA (reference photos for procedural loft textures)
+
+ShareAlike applies to any texture derived from these photos: such derived textures are released under the same licence and attributed here.
+
+| Photo                                                  | Author                       | Source                                                                         | Licence                                                         |
+| ------------------------------------------------------ | ---------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------- |
+| Pterapogon kauderni 10zz.jpg (`wm-banggai-stang-10zz`) | David J. Stang               | [source](https://commons.wikimedia.org/wiki/File:Pterapogon_kauderni_10zz.jpg) | [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
+| Pterapogon kauderni 8zz.jpg (`wm-banggai-stang-8zz`)   | David J. Stang               | [source](https://commons.wikimedia.org/wiki/File:Pterapogon_kauderni_8zz.jpg)  | [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
+| Corydoras aeneus 01.jpg (`wm-cory-aeneus-gabs-01`)     | Gabriel Resende Veiga (GABS) | [source](https://commons.wikimedia.org/wiki/File:Corydoras_aeneus_01.jpg)      | [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
+| Corydoras aeneus 03.jpg (`wm-cory-aeneus-gabs-03`)     | Gabriel Resende Veiga (GABS) | [source](https://commons.wikimedia.org/wiki/File:Corydoras_aeneus_03.jpg)      | [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
+| Gramma loreto 01.jpg (`wm-gramma-loreto-llez`)         | H. Zell (Llez)               | [source](https://commons.wikimedia.org/wiki/File:Gramma_loreto_01.jpg)         | [CC-BY-SA-3.0](https://creativecommons.org/licenses/by-sa/3.0/) |
 
 ## CC0 (no attribution required, listed as a courtesy)
 

@@ -4,24 +4,24 @@ Curated for T05 (#5), checked 2026-10-12. Ranks are by fit for a photorealistic 
 
 ## Status and caveats
 
-- Sketchfab downloads need an authenticated API token, which this environment does not have. Every Sketchfab asset below is **selected but not downloaded** (`status: selected-pending-download`, `sha256: null` in the manifest). Licence, author, face count and downloadable flag were verified from the model record (Sketchfab API `/v3/models/<uid>`, the same data the page shows). To finish: put a Sketchfab token at `~/.config/aquarium/sketchfab.token` (mode 600), download each into `~/.cache/aquarium-assets/raw/<asset-id>/`, and fill `sha256`.
+- All Sketchfab assets are downloaded (glTF zip plus extracted files, own directory each) and hashed. Licence, author and downloadable flag were verified from the model record (Sketchfab API `/v3/models/<uid>`, the same data the page shows). Face counts, textures and rig state below were re-measured from the downloaded glTF.
 - Poly Haven and Wikimedia assets are downloaded and hashed; Poly Haven md5 values were verified against the API.
 - Smithsonian 3D (3d.si.edu) blocks non-browser access, so its CC0 corals are taken through the Smithsonian Sketchfab account.
-- Polycounts are from Sketchfab metadata; textures and rig state must be confirmed after download.
+- Manifest `sha256` for a Sketchfab asset is the aggregate over `files[]`; the zip sha256 is in `notes`.
 
 ## Fallback (procedural loft)
 
 | Species | Reason | Reference photos |
 |---|---|---|
 | Blue tang, yellow tang | Sketchfab picks are weak; auditor decides | `wm-bluetang-244215093`, `wm-bluetang-holleday`, `wm-yellowtang-holleday` |
-| Bronze corydoras | only candidate is inaccurate | `wm-cory-aeneus-ack210`, `wm-cory-aeneus-ark` |
-| Royal gramma | no model exists | `wm-gramma-257593001`, `wm-gramma-365520074` |
-| Banggai cardinalfish | only wrong-species models | `wm-banggai-53953454`, `wm-banggai-holleday` |
+| Bronze corydoras | only candidate is inaccurate | `wm-cory-aeneus-ack210`, `wm-cory-aeneus-ark`, `wm-cory-aeneus-gabs-01`, `wm-cory-aeneus-gabs-03` (CC BY-SA) |
+| Royal gramma | no model exists | `wm-gramma-257593001`, `wm-gramma-365520074`, `wm-gramma-loreto-llez` (CC BY-SA) |
+| Banggai cardinalfish | only wrong-species models | `wm-banggai-53953454`, `wm-banggai-holleday`, `wm-banggai-stang-8zz`, `wm-banggai-stang-10zz` (CC BY-SA) |
 | Anemone (host) | no photoreal free model | procedural TSL |
 
-## CC-BY-SA (not used, for Alex to decide)
+## CC-BY-SA (allowed for reference photos only)
 
-Higher-quality reference photos exist only under CC BY-SA and were not used: Corydoras aeneus 01/02/03 (User:GABS, 4.0), Gramma loreto 01 (User:Llez, 3.0), Pterapogon kauderni 8zz/9zz (David J. Stang, 4.0). No CC-BY-SA 3D models were selected.
+Alex approved CC BY-SA for three reference-photo sets (issue #29), used only as fallback references for the procedural loft species: Corydoras aeneus (`wm-cory-aeneus-gabs-01`, `-03`; Gabriel Resende Veiga, CC BY-SA 4.0), Gramma loreto (`wm-gramma-loreto-llez`; H. Zell, CC BY-SA 3.0) and Pterapogon kauderni (`wm-banggai-stang-8zz`, `-10zz`; David J. Stang, CC BY-SA 4.0). ShareAlike applies to any texture derived from them, so the pipeline must keep such textures separately attributed and under the same licence; the CC0 and CC-BY references remain the safer first choice. Full attribution is in `CREDITS.md`. No CC-BY-SA 3D models were selected, and other CC-BY-SA photos (for example further Commons yellow tang shots) remain unused.
 
 ## Species candidates
 
@@ -40,7 +40,7 @@ Higher-quality reference photos exist only under CC BY-SA and were not used: Cor
 
 | # | Candidate | Author | Licence | Faces | Texture | Anatomy | Verdict |
 |---|---|---|---|---|---|---|---|
-| 1 | [Low poly Angel Fish](https://sketchfab.com/3d-models/e03ff546c39b441b993048a3787952fb) ([render](https://media.sketchfab.com/models/e03ff546c39b441b993048a3787952fb/thumbnails/71a387ded3204c88b77d2ad8f6211150/d13112702cfc458d95bdd007f3578b7f.jpeg)) | Sarath K | CC-BY 4.0 | 3,104 | hand-painted marbled, 4 colourways | good silhouette, filaments | PICK |
+| 1 | [Low poly Angel Fish](https://sketchfab.com/3d-models/e03ff546c39b441b993048a3787952fb) ([render](https://media.sketchfab.com/models/e03ff546c39b441b993048a3787952fb/thumbnails/71a387ded3204c88b77d2ad8f6211150/d13112702cfc458d95bdd007f3578b7f.jpeg)) | Sarath K | CC-BY 4.0 | 3,088 | hand-painted marbled, four colourways in one file, unlit materials | good silhouette, filaments | PICK |
 | 2 | [SIT253 Angelfish](https://sketchfab.com/3d-models/5726e45c8a8d4dc2ad9f6165f4d522f4) ([render](https://media.sketchfab.com/models/5726e45c8a8d4dc2ad9f6165f4d522f4/thumbnails/a2a4d92df9024b6f9896bb234c6d6c42/e3a06b632dbc4d488dc1f15c8e7c547c.jpeg)) | sipsen | CC-BY 4.0 | 1,508 | flat shaded | marine angelfish, wrong species | reject |
 | 3 | [Angelfish](https://sketchfab.com/3d-models/8191be1e978e43719943231d57546aa5) ([render](https://media.sketchfab.com/models/8191be1e978e43719943231d57546aa5/thumbnails/de0cbbb9bfb64505b62861de401dc95e/0bbb71fe93234523833147280dda6f0d.jpeg)) | NormanH | CC-BY 4.0 | 9,120 | glossy gold/blue | marine angelfish, wrong species | reject |
 
@@ -54,7 +54,7 @@ Only one usable freshwater angelfish exists on Sketchfab under an allowed licenc
 |---|---|---|---|---|---|---|---|
 | 1 | [Bronze Corydora](https://sketchfab.com/3d-models/80db835f3bb7420aae1763c4f52122e8) ([render](https://media.sketchfab.com/models/80db835f3bb7420aae1763c4f52122e8/thumbnails/86eb9683c992438c9091264a3bc8078b/3013004618de4400907ef31b8213322f.jpeg)) | Something fishy | CC-BY 4.0 | 45,920 | blotchy | blobby body, oversized barbels, wrong fins | reject: accuracy |
 
-Reference photos for the texture projection (in manifest, downloaded): `wm-cory-aeneus-ack210` (CC0, Andrew Keller, lateral view) and `wm-cory-aeneus-ark` (CC BY 3.0, Ark pl wiki).
+Reference photos for the texture projection (in manifest, downloaded): `wm-cory-aeneus-ack210` (CC0, Andrew Keller, lateral view) and `wm-cory-aeneus-ark` (CC BY 3.0, Ark pl wiki). Higher-resolution CC BY-SA extras: `wm-cory-aeneus-gabs-01` (4231x2821) and `wm-cory-aeneus-gabs-03` (5184x3456).
 
 ### Betta (Betta splendens)
 
@@ -119,7 +119,7 @@ The reviewer found the pick weak: small tail and cartoon eye. Fallback reference
 
 No Sketchfab model with an allowed licence exists (searches `gramma`, `Gramma loreto`, `royal gramma` returned nothing relevant).
 
-Reference photos (in manifest, downloaded): `wm-gramma-257593001` (CC BY 4.0, Dan Schofield) and `wm-gramma-365520074` (CC BY 4.0, cello caruso-turiello). Key traits for the loft: purple front half, yellow rear half, black dorsal spot, long pelvic fins.
+Reference photos (in manifest, downloaded): `wm-gramma-257593001` (CC BY 4.0, Dan Schofield) and `wm-gramma-365520074` (CC BY 4.0, cello caruso-turiello); CC BY-SA extra `wm-gramma-loreto-llez` (H. Zell, 4400x3168). Key traits for the loft: purple front half, yellow rear half, black dorsal spot, long pelvic fins.
 
 ### Banggai cardinalfish (Pterapogon kauderni)
 
@@ -130,15 +130,15 @@ Reference photos (in manifest, downloaded): `wm-gramma-257593001` (CC BY 4.0, Da
 | 1 | [Cardinalfish](https://sketchfab.com/3d-models/b5fa632cca7b4400a61f4b5183cc1d41) ([render](https://media.sketchfab.com/models/b5fa632cca7b4400a61f4b5183cc1d41/thumbnails/384b9df09f6440559d4c0fd143776e27/b120e026ad144fd880e993f441ee6276.jpeg)) | viettextures | CC-BY 4.0 | 43,072 | good | a yellow-striped cardinalfish, wrong species | reject: species |
 | 2 | [Amboina Cardinalfish (CC0 scan)](https://sketchfab.com/3d-models/3d8aa2c1f7674c84bf0758e17409abcd) ([render](https://media.sketchfab.com/models/3d8aa2c1f7674c84bf0758e17409abcd/thumbnails/117f9b70cc0d4a278a224baef3c397f2/242ef43981404775a8648f6956b4d948.jpeg)) | ffish.asia / floraZia.com | CC0 | 216,246 | specimen photogrammetry, dull | real anatomy, wrong species | body-shape reference only, not in manifest |
 
-Reference photos (in manifest, downloaded): `wm-banggai-53953454` (CC BY 4.0, Dan Schofield, watermark in corner, crop it) and `wm-banggai-holleday` (CC BY 3.0, Holger Krisp). Key traits: tall first dorsal and long anal fin, deeply forked tail, three black bars, white spots.
+Reference photos (in manifest, downloaded): `wm-banggai-53953454` (CC BY 4.0, Dan Schofield, watermark in corner, crop it) and `wm-banggai-holleday` (CC BY 3.0, Holger Krisp); CC BY-SA extras `wm-banggai-stang-8zz` and `wm-banggai-stang-10zz` (David J. Stang, 1000 px wide). Key traits: tall first dorsal and long anal fin, deeply forked tail, three black bars, white spots.
 
 ## Environment assets
 
 | Role | Asset | Author | Licence | Faces | Notes |
 |---|---|---|---|---|---|
-| Plants | [Aquariumplants (Java Fern, Vallisneria etc)](https://sketchfab.com/3d-models/f34fac656a364f8eaeab0918179d6df6) ([render](https://media.sketchfab.com/models/f34fac656a364f8eaeab0918179d6df6/thumbnails/d526331749ca4e16b2e9f7dc0da248f7/cea607bc09354350b90e3c6e3edbc04a.jpeg)) | Nullified | CC-BY 4.0 | 130,862 | split per plant and decimate; picked |
+| Plants | [Aquariumplants (Java Fern, Vallisneria etc)](https://sketchfab.com/3d-models/f34fac656a364f8eaeab0918179d6df6) ([render](https://media.sketchfab.com/models/f34fac656a364f8eaeab0918179d6df6/thumbnails/d526331749ca4e16b2e9f7dc0da248f7/cea607bc09354350b90e3c6e3edbc04a.jpeg)) | Nullified | CC-BY 4.0 | 130,860 | split per plant and decimate; picked |
 | Plants | [Pond Weed](https://sketchfab.com/3d-models/b34ed521c5bb45ca9191b6213e1830d6) ([render](https://media.sketchfab.com/models/b34ed521c5bb45ca9191b6213e1830d6/thumbnails/b6441940c5b44fce84e08434d8695268/1e2fa5b9038445b8807adae30cb66333.jpeg)) | Valery.Li | CC-BY 4.0 | 7,549 | stem plant; picked |
-| Plants | [Water plant](https://sketchfab.com/3d-models/b536fec3648f485087c8dd280e749502) ([render](https://media.sketchfab.com/models/b536fec3648f485087c8dd280e749502/thumbnails/42d4291e40874e7abf43c7e5a0536318/9653234729014971a6985a86e143f722.jpeg)) | Nataly | CC-BY 4.0 | 6,076 | Egeria-like stem; picked |
+| Plants | [Water plant](https://sketchfab.com/3d-models/b536fec3648f485087c8dd280e749502) ([render](https://media.sketchfab.com/models/b536fec3648f485087c8dd280e749502/thumbnails/42d4291e40874e7abf43c7e5a0536318/9653234729014971a6985a86e143f722.jpeg)) | Nataly | CC-BY 4.0 | 6,076 | Egeria-like stem; picked, but the file has no texture images (flat colour), so it needs a leaf texture |
 | Driftwood | [Real Aquarium Wood 3D scan](https://sketchfab.com/3d-models/c53807eff7c4427faacfde6c1b581532) ([render](https://media.sketchfab.com/models/c53807eff7c4427faacfde6c1b581532/thumbnails/63107294e53b4ef3b3ffef05669487cb/eb987f75d8484cfd962fbc5f8df9a702.jpeg)) | grafi | CC-BY 4.0 | 40,000 | best driftwood; picked |
 | Driftwood | Poly Haven `dead_quiver_trunk`, `dead_tree_trunk_02` | Poly Haven artists | CC0 | 17,978 / 83,128 | extras, downloaded |
 | Rock | Poly Haven `boulder_01` | Rico Cilliers | CC0 | 66,122 | freshwater rockwork, downloaded |
@@ -151,3 +151,27 @@ Reference photos (in manifest, downloaded): `wm-banggai-53953454` (CC BY 4.0, Da
 | HDRI | Poly Haven `kloofendal_48d_partly_cloudy_puresky`, `studio_small_09` | Greg Zaal, Jarod Guest / Sergej Majboroda | CC0 | n/a | 2k .hdr, downloaded |
 
 Poly Haven licence verified on the asset page (https://polyhaven.com/a/boulder_01 shows CC0) and https://polyhaven.com/license.
+
+## Downloaded-file check (Sketchfab)
+
+Measured from each downloaded `scene.gltf`. Rigged means the glTF has at least one skin; the clips are what the author shipped and are not the swim cycles we need.
+
+| Asset | Triangles | Textures | Skins / joints | Clips |
+|---|---|---|---|---|
+| Neon tetra (`sketchfab-2fabf5db`) | 1,498 | 3 images, largest 1024x1024 | 1 / 30 | 1 |
+| Angelfish (`sketchfab-e03ff546`) | 3,088 | 4 images, largest 2048x2048 | 0 / 0 | 0 |
+| Betta (`sketchfab-f4eeb7f5`) | 10,668 | 3 images, largest 2048x2048 | 1 / 53 | 1 |
+| Guppy male (`sketchfab-21e14e4b`) | 1,689 | 3 images, largest 2048x2048 | 1 / 44 | 1 |
+| Guppy female (`sketchfab-feab250d`) | 6,548 | 4 images, largest 2048x2048 | 1 / 191 | 2 |
+| Clownfish (`sketchfab-47ba2679`) | 1,606 | 3 images, largest 2048x2048 | 0 / 0 | 0 |
+| Blue tang (`sketchfab-00dac50e`) | 3,688 | 4 images, largest 2048x2048 | 0 / 0 | 0 |
+| Yellow tang (`sketchfab-5750f70a`) | 1,184 | 1 images, largest 1024x1024 | 0 / 0 | 0 |
+| Plants (set) (`sketchfab-f34fac65`) | 130,860 | 5 images, largest 4096x4096 | 0 / 0 | 0 |
+| Pond weed (`sketchfab-b34ed521`) | 7,549 | 9 images, largest 512x512 | 0 / 0 | 0 |
+| Water plant (`sketchfab-b536fec3`) | 6,076 | none | 1 / 30 | 1 |
+| Driftwood scan (`sketchfab-c53807ef`) | 40,000 | 3 images, largest 4096x4096 | 0 / 0 | 0 |
+| Acropora palmata (`sketchfab-8cb98631`) | 100,000 | 3 images, largest 2048x2048 | 0 / 0 | 0 |
+| Brain coral (`sketchfab-4ea44ce7`) | 40,002 | 2 images, largest 8192x8192 | 0 / 0 | 0 |
+| Reef coral piece (`sketchfab-f2542a86`) | 22,057 | 1 images, largest 2048x2048 | 0 / 0 | 0 |
+
+Effect on the picks: none of the picks flipped. The neon tetra, betta and both guppies ship skeletons (30, 53, 44 and 191 joints) that the pipeline can reuse or replace with a spine rig; the clownfish, both tangs and the angelfish are unrigged static meshes and need the procedural spine rig. The angelfish uses unlit materials, the water plant has no textures, and the brain coral is 8192x8192 and must be downscaled. Blue and yellow tang stay as weak candidates for the auditor to weigh against the loft fallback.

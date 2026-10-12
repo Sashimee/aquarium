@@ -5,7 +5,8 @@
   "rules": [
     "sha256 is null if and only if status is selected-pending-download.",
     "files[] is optional. When present, sha256 is the aggregate: sha256 of the lines '<file sha256>  <path>' sorted by path, joined with \\n, with no trailing newline (utf-8).",
-    "rigged is null until a downloaded file confirms it."
+    "rigged is null until a downloaded file confirms it.",
+    "CC-BY-SA entries are allowed only for reference photos, per Alex's decision on issue #29; ShareAlike applies to any texture derived from them."
   ],
   "assets": [
     {
@@ -18,13 +19,40 @@
       "licence": "CC-BY-4.0",
       "licence_url": "https://creativecommons.org/licenses/by/4.0/",
       "checked_at": "2026-10-12",
-      "sha256": null,
+      "sha256": "5a3fff10ec56e9d3470eab1d7d3bda48c844dd2923d3fcaf098f3a540aedc5cb",
       "polycount": 40002,
-      "textures": "see source page; confirm on download",
-      "rigged": null,
-      "notes": "Photogrammetry brain coral (Platygyra), realistic colour, 40k faces; decimate for instancing.",
+      "textures": "braincor_1_8k_04k_u1_v1_baseColor.jpeg 8192x8192, braincor_1_8k_04k_u1_v1_normal.jpeg 8192x8192",
+      "rigged": false,
+      "notes": "Photogrammetry brain coral (Platygyra), realistic colour, 40k faces; decimate for instancing. Verified from the downloaded glTF: 40002 triangles, not rigged (no skins). Zip sha256 32df051e2ffd9e5cf4f8a0d451d53609a3eaa5c83aaf7c1a772700d4721f2f32; sha256 is the aggregate over files[]. Textures are 8192x8192 (base colour and normal): downscale to 2048 or less.",
       "modifications": [],
-      "status": "selected-pending-download"
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "gltf/license.txt",
+          "sha256": "520c1f9ef3e8f718b27dd9163f59284e9dc75dd9c9c9f5992bb53d6c38000f63",
+          "bytes": 696
+        },
+        {
+          "path": "gltf/scene.bin",
+          "sha256": "59af6cb621c0b39174ce73f127b84acc82832d70492f828935804a914192fb4c",
+          "bytes": 1913904
+        },
+        {
+          "path": "gltf/scene.gltf",
+          "sha256": "76ca5c72aeb8acab7868e165da6b33fe3b492b1ccd1806481dcbb409a5fcea24",
+          "bytes": 5180
+        },
+        {
+          "path": "gltf/textures/braincor_1_8k_04k_u1_v1_baseColor.jpeg",
+          "sha256": "3b9224155874f9a00eeb68e2ad525f7cb133a7d4385e538d2fb45b6b465c5a29",
+          "bytes": 24204644
+        },
+        {
+          "path": "gltf/textures/braincor_1_8k_04k_u1_v1_normal.jpeg",
+          "sha256": "0e874a120bc1ff7e800a55f97db3832764c6a0c84333b69b2e6d318616d45294",
+          "bytes": 31887182
+        }
+      ]
     },
     {
       "id": "sketchfab-8cb98631",
@@ -36,13 +64,45 @@
       "licence": "CC0-1.0",
       "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
       "checked_at": "2026-10-12",
-      "sha256": null,
+      "sha256": "e0b53643d418b2826682025fff40f5da3ed81f7b05538ff19ae28b56d7fc8e2d",
       "polycount": 100000,
-      "textures": "see source page; confirm on download",
-      "rigged": null,
-      "notes": "Smithsonian scan, Acropora palmata skeleton (bleached). Includes a museum plinth to crop; needs a colour tint pass for live coral.",
+      "textures": "default_baseColor.jpeg 2048x2048, default_metallicRoughness.png 2048x2048, default_normal.jpeg 2048x2048",
+      "rigged": false,
+      "notes": "Smithsonian scan, Acropora palmata skeleton (bleached). Includes a museum plinth to crop; needs a colour tint pass for live coral. Verified from the downloaded glTF: 100000 triangles, not rigged (no skins). Zip sha256 665b2b65c2392060df79608d2a08305cec4337182bd60a5f3a1767b9d0df76f6; sha256 is the aggregate over files[]. Contains a museum plinth to crop.",
       "modifications": [],
-      "status": "selected-pending-download"
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "gltf/license.txt",
+          "sha256": "f61b018c449871b4d55a791649af81d3f287b58468db80ec1c64488690842271",
+          "bytes": 371
+        },
+        {
+          "path": "gltf/scene.bin",
+          "sha256": "e49f21f020d2bb00351d64d09194a5389af73ba4dca7d357bd0c7399b693d9fc",
+          "bytes": 4812288
+        },
+        {
+          "path": "gltf/scene.gltf",
+          "sha256": "338d647a3869e8df3bb4c28cf870f6678758d916fb71f77b6976c2d7f7d61f42",
+          "bytes": 5384
+        },
+        {
+          "path": "gltf/textures/default_baseColor.jpeg",
+          "sha256": "1b34c96b8f7c2383a615addf7a38be023aa453b206c39c0720d1336198d6c4cd",
+          "bytes": 1306956
+        },
+        {
+          "path": "gltf/textures/default_metallicRoughness.png",
+          "sha256": "7e4dae9e748acb0c4e8bc666e962ff19024ffdc9bcfde81ee86734b7bde4afd9",
+          "bytes": 2258755
+        },
+        {
+          "path": "gltf/textures/default_normal.jpeg",
+          "sha256": "bf42ae04f7addd5d89bf471885916cad55600b6776538dd5ad01d911ea3fc1c8",
+          "bytes": 4609321
+        }
+      ]
     },
     {
       "id": "sketchfab-f2542a86",
@@ -54,13 +114,35 @@
       "licence": "CC-BY-4.0",
       "licence_url": "https://creativecommons.org/licenses/by/4.0/",
       "checked_at": "2026-10-12",
-      "sha256": null,
+      "sha256": "b5e708de67d882221e2dbac33f4cef43814763a1cc2559efa43f699c0a94ebba",
       "polycount": 22057,
-      "textures": "see source page; confirm on download",
-      "rigged": null,
-      "notes": "Photogrammetry reef-plate scan with blue branching coral on live rock (title says anemone but it is an Acropora-type coral); usable as a reef focal piece.",
+      "textures": "default_baseColor.jpeg 2048x2048",
+      "rigged": false,
+      "notes": "Photogrammetry reef-plate scan with blue branching coral on live rock (title says anemone but it is an Acropora-type coral); usable as a reef focal piece. Verified from the downloaded glTF: 22057 triangles, not rigged (no skins). Zip sha256 3be7ebe502866b45bca990d069a4a5b95f6a1b2b3fd31501828dfe79e00bd987; sha256 is the aggregate over files[].",
       "modifications": [],
-      "status": "selected-pending-download"
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "gltf/license.txt",
+          "sha256": "694a175d062b9430944f2efb31e370fefcc08f78991e626e2603766470bee61b",
+          "bytes": 712
+        },
+        {
+          "path": "gltf/scene.bin",
+          "sha256": "9caad822e641542867deeaaf4c17ec086f096b19b206de5dc0b5d193c6561964",
+          "bytes": 1293644
+        },
+        {
+          "path": "gltf/scene.gltf",
+          "sha256": "0789da771ad1d09e9fb49a122c05d62fd9516dfd609042f1347f8e0f4d7a85b7",
+          "bytes": 4141
+        },
+        {
+          "path": "gltf/textures/default_baseColor.jpeg",
+          "sha256": "8b2539ae3a2d6da703749636f8ee958f5bb996c27e976dacffb61e699b8a9f15",
+          "bytes": 3646522
+        }
+      ]
     },
     {
       "id": "polyhaven-lambis_shell",
@@ -207,13 +289,45 @@
       "licence": "CC-BY-4.0",
       "licence_url": "https://creativecommons.org/licenses/by/4.0/",
       "checked_at": "2026-10-12",
-      "sha256": null,
+      "sha256": "31f7403fad38931c686a8973ae11de2aa2cec9e3bb25544bf169a6cf37282817",
       "polycount": 40000,
-      "textures": "see source page; confirm on download",
-      "rigged": null,
-      "notes": "Photogrammetry scan of real aquarium root wood: the best driftwood candidate. 40k faces, needs decimation to about 15k with baked normal map.",
+      "textures": "material_0_diffuse.png 4096x4096, material_0_specularGlossiness.png 4096x4096, material_0_normal.png 4096x4096",
+      "rigged": false,
+      "notes": "Photogrammetry scan of real aquarium root wood: the best driftwood candidate. 40k faces, needs decimation to about 15k with baked normal map. Verified from the downloaded glTF: 40000 triangles, not rigged (no skins). Zip sha256 ca115b8b75db69b54d90ac8d109222b18fe998c2d76ab341854982c91fd525d0; sha256 is the aggregate over files[].",
       "modifications": [],
-      "status": "selected-pending-download"
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "gltf/license.txt",
+          "sha256": "cefb68aa931ba364820286aa6abc8385c1250c818e0ac147584569f9006c63d3",
+          "bytes": 724
+        },
+        {
+          "path": "gltf/scene.bin",
+          "sha256": "6018d134439a37b38acea7fb5d6cff564f101fec7e2c1b4eeca819d18ee79cd1",
+          "bytes": 2102304
+        },
+        {
+          "path": "gltf/scene.gltf",
+          "sha256": "01a87085ebebaacd39c129cb4454a46161d9388194b7857429c4cc26eb8324c0",
+          "bytes": 4992
+        },
+        {
+          "path": "gltf/textures/material_0_diffuse.png",
+          "sha256": "628c035cd5e4f03a546066e97270ebffc1afe0658a930470496e88cae79d09b8",
+          "bytes": 11019523
+        },
+        {
+          "path": "gltf/textures/material_0_normal.png",
+          "sha256": "e3c2c541a6a54eb7ec3a01d77e10d780714c2e80f389a9af84bd0c2dcf4a7339",
+          "bytes": 8241260
+        },
+        {
+          "path": "gltf/textures/material_0_specularGlossiness.png",
+          "sha256": "00062944bc0929f3e3d5fd55e2be984fa9e7abfef732e417bb260cdea7c39f3d",
+          "bytes": 3847663
+        }
+      ]
     },
     {
       "id": "sketchfab-00dac50e",
@@ -226,13 +340,50 @@
       "licence": "CC-BY-4.0",
       "licence_url": "https://creativecommons.org/licenses/by/4.0/",
       "checked_at": "2026-10-12",
-      "sha256": null,
+      "sha256": "d9f998eecd122036894df687a2311d86813f6d15b6910dc40655d45db5eea2a1",
       "polycount": 3688,
-      "textures": "see source page; confirm on download",
-      "rigged": null,
-      "notes": "Palette-surgeonfish pattern and body outline are right. Texture is somewhat flat/painted; pipeline should add scale normal detail. Tail needs a thin-fin treatment.",
+      "textures": "Fish_baseColor.jpeg 2048x2048, Fish_metallicRoughness.png 2048x2048, Fish_emissive.jpeg 2048x2048, Fish_normal.png 2048x2048",
+      "rigged": false,
+      "notes": "Palette-surgeonfish pattern and body outline are right. Texture is somewhat flat/painted; pipeline should add scale normal detail. Tail needs a thin-fin treatment. Verified from the downloaded glTF: 3688 triangles, not rigged (no skins). Zip sha256 7dfc5580bf46af29f9ed1c1faee50240961cc026ea56f74f25279a15ec313ded; sha256 is the aggregate over files[].",
       "modifications": [],
-      "status": "selected-pending-download"
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "gltf/license.txt",
+          "sha256": "892a2ba94e45fea8a14d5373741848895bb68c57e60b0f3b1ad4c94a67d7ef08",
+          "bytes": 696
+        },
+        {
+          "path": "gltf/scene.bin",
+          "sha256": "74d36dbef2f7fbaefc1b6d63a2046890b5796324961c4b568fa024f07945d6f5",
+          "bytes": 144528
+        },
+        {
+          "path": "gltf/scene.gltf",
+          "sha256": "035cb207fb29bb39a0b994a4622b8fba5be933d03a2f30d3beaca14be240b055",
+          "bytes": 5187
+        },
+        {
+          "path": "gltf/textures/Fish_baseColor.jpeg",
+          "sha256": "2b4679a16f4c171c3628059ec2e435c6e7d7a188696f2afe1756f355714e2699",
+          "bytes": 1455378
+        },
+        {
+          "path": "gltf/textures/Fish_emissive.jpeg",
+          "sha256": "d1a77e8d38602635e6ec0850819f15919df3fffd613f625f5b40f48daafad9b4",
+          "bytes": 49436
+        },
+        {
+          "path": "gltf/textures/Fish_metallicRoughness.png",
+          "sha256": "902da037f3a5fd2e58f84fc7acf6d780430df39f346d31b21c91c3668297bff9",
+          "bytes": 3292705
+        },
+        {
+          "path": "gltf/textures/Fish_normal.png",
+          "sha256": "21b5c969bdaf20a95cedca409d2b07a8a0421200a6ecb9668e75535833b8c328",
+          "bytes": 7308836
+        }
+      ]
     },
     {
       "id": "sketchfab-21e14e4b",
@@ -245,13 +396,45 @@
       "licence": "CC-BY-4.0",
       "licence_url": "https://creativecommons.org/licenses/by/4.0/",
       "checked_at": "2026-10-12",
-      "sha256": null,
+      "sha256": "c3975da4104981537a955fc27e08d1729444b3d252a855e67f6b704a212586b7",
       "polycount": 1689,
-      "textures": "see source page; confirm on download",
-      "rigged": null,
-      "notes": "Male blue-speckled fancy guppy, low poly with high-quality texture. Pair with the female.",
+      "textures": "Material.001_baseColor.png 2048x2048, Material.001_metallicRoughness.png 2048x2048, Material.001_clearcoat.png 2048x2048",
+      "rigged": true,
+      "notes": "Male blue-speckled fancy guppy, low poly with high-quality texture. Pair with the female. Verified from the downloaded glTF: 1689 triangles, rigged: 1 skin(s), 44 joints, 1 animation clip(s). Zip sha256 c0ad595d353bf9b1278dd83aec5d0a05f836b5642d82f55c7633756c23744ec4; sha256 is the aggregate over files[].",
       "modifications": [],
-      "status": "selected-pending-download"
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "gltf/license.txt",
+          "sha256": "afaf8c5997a33694f255c9341e6b572938ecebf6e4e5a2b46e115024f2799a50",
+          "bytes": 656
+        },
+        {
+          "path": "gltf/scene.bin",
+          "sha256": "31412c93ef24c2fe45cc55ffd1ba110829f3019ce3470e089681fc35cc52ebef",
+          "bytes": 111868
+        },
+        {
+          "path": "gltf/scene.gltf",
+          "sha256": "39aaa3b936e0aa6ffa25329c3f05f18663b8b5e7160d1b23631e7fa5fd80ca8b",
+          "bytes": 66709
+        },
+        {
+          "path": "gltf/textures/Material.001_baseColor.png",
+          "sha256": "925038657c5ff0cf556f0b83ffe9186ae6204f5f02b8e09b5fe7d4fb2332167a",
+          "bytes": 2859519
+        },
+        {
+          "path": "gltf/textures/Material.001_clearcoat.png",
+          "sha256": "87b7b1c4b78993c288e19444b60fd1b5b861c03fef28042736ee8a79f340a49c",
+          "bytes": 875327
+        },
+        {
+          "path": "gltf/textures/Material.001_metallicRoughness.png",
+          "sha256": "7588f3cb58038fcb356b2ac9adb57cfbabdaada68058ee7fefb75012e3c6f89f",
+          "bytes": 1939472
+        }
+      ]
     },
     {
       "id": "sketchfab-2fabf5db",
@@ -264,13 +447,45 @@
       "licence": "CC-BY-4.0",
       "licence_url": "https://creativecommons.org/licenses/by/4.0/",
       "checked_at": "2026-10-12",
-      "sha256": null,
+      "sha256": "2ee4346df359c035bb6336a9d99c9397bc6213524ef6c12162ac6fb779ad46f7",
       "polycount": 1498,
-      "textures": "see source page; confirm on download",
-      "rigged": null,
-      "notes": "Realistic PBR-style texture with correct blue/red lateral stripes. Has 1 animation clip in Sketchfab metadata.",
+      "textures": "Paracheirodon_innesi_baseColor.png 1024x1024, Paracheirodon_innesi_metallicRoughness.png 1024x1024, Paracheirodon_innesi_normal.png 1024x1024",
+      "rigged": true,
+      "notes": "Realistic PBR-style texture with correct blue/red lateral stripes. Has 1 animation clip in Sketchfab metadata. Verified from the downloaded glTF: 1498 triangles, rigged: 1 skin(s), 30 joints, 1 animation clip(s). Zip sha256 51193102379d7df5c14826ac2fd739023f024648f5d55d45c31363ef1bee4ce1; sha256 is the aggregate over files[].",
       "modifications": [],
-      "status": "selected-pending-download"
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "gltf/license.txt",
+          "sha256": "8fda83eccb6be7dbeb0d51b577d6ff039b8fddc299b75d81077eeaf6367f9b67",
+          "bytes": 748
+        },
+        {
+          "path": "gltf/scene.bin",
+          "sha256": "11f1b78341a1e8d3869250aa3ddb3100080a7ee26288d750d9a3916e0d0a1b68",
+          "bytes": 102940
+        },
+        {
+          "path": "gltf/scene.gltf",
+          "sha256": "04df54fabe1a2a99f2666f3368f56100b18ddfd04a14cb75c5aef0e75ffeb2f5",
+          "bytes": 48178
+        },
+        {
+          "path": "gltf/textures/Paracheirodon_innesi_baseColor.png",
+          "sha256": "258753e8af1d0d52160608338f2948d65aceb3beced70c9ca86011931111f80e",
+          "bytes": 887139
+        },
+        {
+          "path": "gltf/textures/Paracheirodon_innesi_metallicRoughness.png",
+          "sha256": "c67e94abc0933a9dcbffceaa01a1fc2827b8e725e86f26473176f9da4ebb3529",
+          "bytes": 401497
+        },
+        {
+          "path": "gltf/textures/Paracheirodon_innesi_normal.png",
+          "sha256": "0d8798b13f620a439c2f6d8cba0cd3ba7a1eedc26da98ffd0029b3c8bb86122a",
+          "bytes": 423681
+        }
+      ]
     },
     {
       "id": "sketchfab-47ba2679",
@@ -283,13 +498,45 @@
       "licence": "CC-BY-4.0",
       "licence_url": "https://creativecommons.org/licenses/by/4.0/",
       "checked_at": "2026-10-12",
-      "sha256": null,
+      "sha256": "d53b46a0268992c00d0f6688d8edb707329e2976df0c08c33f51dbaeac4eda11",
       "polycount": 1606,
-      "textures": "see source page; confirm on download",
-      "rigged": null,
-      "notes": "Good ocellaris proportions and black fin edging; PBR textures from Substance Painter.",
+      "textures": "wire_028149177_baseColor.jpeg 2048x2048, wire_028149177_metallicRoughness.png 2048x2048, wire_028149177_normal.png 2048x2048",
+      "rigged": false,
+      "notes": "Good ocellaris proportions and black fin edging; PBR textures from Substance Painter. Verified from the downloaded glTF: 1606 triangles, not rigged (no skins). Zip sha256 0912de58f4a39e7ef419b8b5a17ae343fc38fdadf72eae5b5138e30b43c22f65; sha256 is the aggregate over files[].",
       "modifications": [],
-      "status": "selected-pending-download"
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "gltf/license.txt",
+          "sha256": "4a87e81ddc654559ed8bd5616f420eb08168e0f3251fc13b1ea63a9edd46eabb",
+          "bytes": 660
+        },
+        {
+          "path": "gltf/scene.bin",
+          "sha256": "2d6b64784d43f4d20b6ed3e341545255904b3882c7525a2f0ac8489a4a71af47",
+          "bytes": 62616
+        },
+        {
+          "path": "gltf/scene.gltf",
+          "sha256": "bfe24fa71e02a690dddbd8678846978b8b488dd4c0b1f2e612e4236230a3c1f8",
+          "bytes": 4686
+        },
+        {
+          "path": "gltf/textures/wire_028149177_baseColor.jpeg",
+          "sha256": "068028af6a6baa346ae8fa2cb7fc526715dce2d218ab1f25e404d00bcb13fef6",
+          "bytes": 904260
+        },
+        {
+          "path": "gltf/textures/wire_028149177_metallicRoughness.png",
+          "sha256": "3712ab3cf26a3e6460b07be1ac0d117852a938be8e28d5a5713eb76346c07a9d",
+          "bytes": 2971095
+        },
+        {
+          "path": "gltf/textures/wire_028149177_normal.png",
+          "sha256": "4922754438649ae1f184d467dc880bddfb63142b23e9d8dc673619bdfc942657",
+          "bytes": 2022909
+        }
+      ]
     },
     {
       "id": "sketchfab-5750f70a",
@@ -302,13 +549,35 @@
       "licence": "CC-BY-4.0",
       "licence_url": "https://creativecommons.org/licenses/by/4.0/",
       "checked_at": "2026-10-12",
-      "sha256": null,
+      "sha256": "12859b5650d8c11c4ab22be12dbcba34d97b853dfcbd5d5b6ffaadfc30a8df2c",
       "polycount": 1184,
-      "textures": "see source page; confirm on download",
-      "rigged": null,
-      "notes": "Reasonable Zebrasoma-like body and snout; slightly stout and soft detail. Single texture.",
+      "textures": "Material.001_baseColor.png 1024x1024",
+      "rigged": false,
+      "notes": "Reasonable Zebrasoma-like body and snout; slightly stout and soft detail. Single texture. Verified from the downloaded glTF: 1184 triangles, not rigged (no skins). Zip sha256 f045455640d22701a26f408ae72dc1c9d1d1e4638e66979d9a0469c56ae0ff29; sha256 is the aggregate over files[].",
       "modifications": [],
-      "status": "selected-pending-download"
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "gltf/license.txt",
+          "sha256": "7e67ce99e6b31b1bb4532bd2eec07d56c6b5263f4344c6db0434214a6b4006aa",
+          "bytes": 704
+        },
+        {
+          "path": "gltf/scene.bin",
+          "sha256": "b6ab710e416756a861e9270bb3e9e6675caac49d7fd10f134f658e21152bdd0f",
+          "bytes": 34144
+        },
+        {
+          "path": "gltf/scene.gltf",
+          "sha256": "a5e7d5136edc6ec24690f159ecf41d8e04335f626b05d5574a7ef5d4bc2f61f7",
+          "bytes": 5611
+        },
+        {
+          "path": "gltf/textures/Material.001_baseColor.png",
+          "sha256": "550da96f626d1659baf73ccc7cc97d5840eb6bc42fc3220058175bd0bf8c7f57",
+          "bytes": 1011972
+        }
+      ]
     },
     {
       "id": "sketchfab-e03ff546",
@@ -321,13 +590,50 @@
       "licence": "CC-BY-4.0",
       "licence_url": "https://creativecommons.org/licenses/by/4.0/",
       "checked_at": "2026-10-12",
-      "sha256": null,
-      "polycount": 3104,
-      "textures": "see source page; confirm on download",
-      "rigged": null,
-      "notes": "Hand-painted marbled Pterophyllum with long ventral filaments. The scene holds 4 colourways; split into separate meshes and keep the best 1-2. Fins are thin cards: needs fin-mask bake.",
+      "sha256": "fc2100581fe83944ba01337b20a657d25d276614f85f5bb92a439b7e7fb41112",
+      "polycount": 3088,
+      "textures": "texture_1_baseColor.png 2048x2048, texture_2_baseColor.png 2048x2048, texture_3_baseColor.png 2048x2048, texture_4_baseColor.png 2048x2048",
+      "rigged": false,
+      "notes": "Hand-painted marbled Pterophyllum with long ventral filaments. The scene holds 4 colourways; split into separate meshes and keep the best 1-2. Fins are thin cards: needs fin-mask bake. Verified from the downloaded glTF: 3088 triangles, not rigged (no skins). Zip sha256 d89dc3439b61316c6ecee07842037de18f069c7353239982ea34082aef671d0e; sha256 is the aggregate over files[]. Four colourways, one material and texture each; unlit materials (KHR_materials_unlit) must be replaced with PBR.",
       "modifications": [],
-      "status": "selected-pending-download"
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "gltf/license.txt",
+          "sha256": "1fcc4d6bbba48c5b3b3f115b6e6309cd28eaa8bb697f9fdbf3c9ade769fa27a1",
+          "bytes": 714
+        },
+        {
+          "path": "gltf/scene.bin",
+          "sha256": "24bc89bff80b805c53c5afaba9dc25c7ff0927ca98e7b41db8486c62c8ff0c63",
+          "bytes": 102176
+        },
+        {
+          "path": "gltf/scene.gltf",
+          "sha256": "1f8bfa568d1831c7417f7287dd94eec8c387d144c4109a38f46006bbc1f1a542",
+          "bytes": 11786
+        },
+        {
+          "path": "gltf/textures/texture_1_baseColor.png",
+          "sha256": "40bec99f72fa9034f70b43eef31b9e576f5f70d549c2af97688ce3205c53f5cd",
+          "bytes": 1569558
+        },
+        {
+          "path": "gltf/textures/texture_2_baseColor.png",
+          "sha256": "09c66ebf5c03b67d62e4d9620bde369e3acdfa5c4e87d3da052b6891e5092599",
+          "bytes": 1866735
+        },
+        {
+          "path": "gltf/textures/texture_3_baseColor.png",
+          "sha256": "bd99f419520e9fb39a8f35df1578072e9c7c70b93bfafa19bc4be65590940265",
+          "bytes": 2257194
+        },
+        {
+          "path": "gltf/textures/texture_4_baseColor.png",
+          "sha256": "3860ee82ba8a695ccea950ded7e6f52a492a40f15bf4437595f65d1982f43831",
+          "bytes": 1726365
+        }
+      ]
     },
     {
       "id": "sketchfab-f4eeb7f5",
@@ -340,13 +646,45 @@
       "licence": "CC-BY-4.0",
       "licence_url": "https://creativecommons.org/licenses/by/4.0/",
       "checked_at": "2026-10-12",
-      "sha256": null,
+      "sha256": "9dcc79b9cf1578b4f9bbfbf3a0eb181df90de7682a50aeabcdc27fddd78b1326",
       "polycount": 10668,
-      "textures": "see source page; confirm on download",
-      "rigged": null,
-      "notes": "Halfmoon male with detailed fin rays and scale texture. Highest-quality betta found. Fin vertex weights need checking for the spine wave.",
+      "textures": "BETTA_baseColor.png 2048x2048, BETTA_metallicRoughness.png 2048x2048, BETTA_normal.png 2048x2048",
+      "rigged": true,
+      "notes": "Halfmoon male with detailed fin rays and scale texture. Highest-quality betta found. Fin vertex weights need checking for the spine wave. Verified from the downloaded glTF: 10668 triangles, rigged: 1 skin(s), 53 joints, 1 animation clip(s). Zip sha256 c20b1d5fb832fd3e096f5c03e5c45d7bc566867c2f175596e020ce8df3694d71; sha256 is the aggregate over files[].",
       "modifications": [],
-      "status": "selected-pending-download"
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "gltf/license.txt",
+          "sha256": "c816546b50116b5bb38aee98cb53cfec5a22b365f5938126fd53343d48df781c",
+          "bytes": 676
+        },
+        {
+          "path": "gltf/scene.bin",
+          "sha256": "22ae657789131c6007690648ace6c638e4c50fa78a167064d6105b4943fbb2ce",
+          "bytes": 627212
+        },
+        {
+          "path": "gltf/scene.gltf",
+          "sha256": "8c3302e5e4b95aefc4b0558944be298a61a909c88efb2ae2a92e66769a7c99ce",
+          "bytes": 80077
+        },
+        {
+          "path": "gltf/textures/BETTA_baseColor.png",
+          "sha256": "1b28fe95164c92f7b284a2a4e72aff377de180ebc87e9d17030e3ee3cbf3a775",
+          "bytes": 4713613
+        },
+        {
+          "path": "gltf/textures/BETTA_metallicRoughness.png",
+          "sha256": "397ac7254000846dbf9f39f03279a9e1f155016525a675ecb44982f3000dac45",
+          "bytes": 368127
+        },
+        {
+          "path": "gltf/textures/BETTA_normal.png",
+          "sha256": "92c12d5f88242346268523f31cd6b5f88b27c259c5c3615be140a15374dd389a",
+          "bytes": 3699588
+        }
+      ]
     },
     {
       "id": "sketchfab-feab250d",
@@ -359,13 +697,50 @@
       "licence": "CC-BY-4.0",
       "licence_url": "https://creativecommons.org/licenses/by/4.0/",
       "checked_at": "2026-10-12",
-      "sha256": null,
+      "sha256": "aa3a109da2879d9ff35a6967bd9d01248fccbe52233dac37960f1ddf788349af",
       "polycount": 6548,
-      "textures": "see source page; confirm on download",
-      "rigged": null,
-      "notes": "Female guppy (sexual dimorphism with the male). 2 animation clips in metadata.",
+      "textures": "Guppy_skin_F_diffuse.png 2048x2048, Guppy_skin_F_specularGlossiness.png 2048x2048, Guppy_Layer1_F_diffuse.png 2048x2048, Guppy_Heart_F_diffuse.png 2048x2048",
+      "rigged": true,
+      "notes": "Female guppy (sexual dimorphism with the male). Verified from the downloaded glTF: 6548 triangles, rigged: 1 skin(s), 191 joints, 2 animation clip(s). Zip sha256 bd1d932f4796f8969217a9ca8ee5d5d53df8fe5261f08572a5885f1e8fd3ab99; sha256 is the aggregate over files[].",
       "modifications": [],
-      "status": "selected-pending-download"
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "gltf/license.txt",
+          "sha256": "5a6bff887353ef46bd6cc1c616cfb20b27a4e9e6f06291f7fb83fe1b843f82bd",
+          "bytes": 652
+        },
+        {
+          "path": "gltf/scene.bin",
+          "sha256": "0c1d7e1c7b17720344c55a2c5b088b2d7281a33dcd60873a0f6f99947f674007",
+          "bytes": 2225116
+        },
+        {
+          "path": "gltf/scene.gltf",
+          "sha256": "c9ea3f6bc7246219e6f1992672212736c81c785e6024873a307bfb9d899f8b26",
+          "bytes": 720512
+        },
+        {
+          "path": "gltf/textures/Guppy_Heart_F_diffuse.png",
+          "sha256": "b01e742d4fae145e9cec76eddc62e39da3ba1b95afddd1bac631a36c701cf91d",
+          "bytes": 2443586
+        },
+        {
+          "path": "gltf/textures/Guppy_Layer1_F_diffuse.png",
+          "sha256": "800444a6640587941f050db3a3041a824151b6f5c552d0f479f68e93dc288559",
+          "bytes": 2720840
+        },
+        {
+          "path": "gltf/textures/Guppy_skin_F_diffuse.png",
+          "sha256": "d23c479f4ecdd86f9025a67af6eae17de6c9acfdeaff60309e52a81f883d7101",
+          "bytes": 4230549
+        },
+        {
+          "path": "gltf/textures/Guppy_skin_F_specularGlossiness.png",
+          "sha256": "ccbc1dd3662af08b698818d4b006c1e9bcce58bf3619abb3c0d3965831447ba7",
+          "bytes": 4542527
+        }
+      ]
     },
     {
       "id": "polyhaven-kloofendal_48d_partly_cloudy_puresky",
@@ -427,13 +802,75 @@
       "licence": "CC-BY-4.0",
       "licence_url": "https://creativecommons.org/licenses/by/4.0/",
       "checked_at": "2026-10-12",
-      "sha256": null,
+      "sha256": "ca36cb69451e50adf5695e5fbe2bde7b189c144de3aa1a6ca8e7990d2bfb637d",
       "polycount": 7549,
-      "textures": "see source page; confirm on download",
-      "rigged": null,
-      "notes": "Stem plant (pond weed type) clumps; good for background planting.",
+      "textures": "FrondStem_Mat_diffuse.png 128x512, FrondStem_Mat_specularGlossiness.png 128x512, FrondStem_Mat_normal.png 128x512, PondWeedLeaflets_Mat_diffuse.png 512x512, PondWeedLeaflets_Mat_specularGlossiness.png 512x512, PondWeedLeaflets_Mat_normal.png 512x512, PondWeed_Med_Mat_diffuse.png 256x2048, PondWeed_Med_Mat_specularGlossiness.png 256x2048, PondWeed_Med_Mat_normal.png 256x2048",
+      "rigged": false,
+      "notes": "Stem plant (pond weed type) clumps; good for background planting. Verified from the downloaded glTF: 7549 triangles, not rigged (no skins). Zip sha256 0e7ab1b00314e7cb87a82acc3d4e43fa60bc293ac19e9076b823cf91bd3c607a; sha256 is the aggregate over files[].",
       "modifications": [],
-      "status": "selected-pending-download"
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "gltf/license.txt",
+          "sha256": "7c2acf528e99f46278f8c05f9923ee086fb4646a59e1f0e30da575bdedb0c00b",
+          "bytes": 660
+        },
+        {
+          "path": "gltf/scene.bin",
+          "sha256": "b545ef1185e3a4402ad223ac9696a0f0439ce3896ceaa3412ec25f1d97b93bc7",
+          "bytes": 733956
+        },
+        {
+          "path": "gltf/scene.gltf",
+          "sha256": "0e8c535cca239a2ecfdf9cf5b221bcdcd5342b1496801012d95b09742f7cec9b",
+          "bytes": 14840
+        },
+        {
+          "path": "gltf/textures/FrondStem_Mat_diffuse.png",
+          "sha256": "a1a426583c676642587f7588fa648857581d2b1e9241e555c04ae523fe90ff12",
+          "bytes": 74756
+        },
+        {
+          "path": "gltf/textures/FrondStem_Mat_normal.png",
+          "sha256": "65986f97414865f4c9722d23bb1138b416303dc9adcb71d62d513b5c47783bb4",
+          "bytes": 74357
+        },
+        {
+          "path": "gltf/textures/FrondStem_Mat_specularGlossiness.png",
+          "sha256": "a1a426583c676642587f7588fa648857581d2b1e9241e555c04ae523fe90ff12",
+          "bytes": 74756
+        },
+        {
+          "path": "gltf/textures/PondWeedLeaflets_Mat_diffuse.png",
+          "sha256": "bf4f5a387ed67d4a80b8f3075d37a16e3e2be5ec60c157118f4e427a3f375ddd",
+          "bytes": 374772
+        },
+        {
+          "path": "gltf/textures/PondWeedLeaflets_Mat_normal.png",
+          "sha256": "4103458b0cb3182aa67e23f0b304209bc595a8ddad840df7f34c849d9641a2eb",
+          "bytes": 302064
+        },
+        {
+          "path": "gltf/textures/PondWeedLeaflets_Mat_specularGlossiness.png",
+          "sha256": "69897aecd3fa2e3818feb8d3680f59a45005d68c4bd7dbf1d3c0dbb3aa1bd9bb",
+          "bytes": 317264
+        },
+        {
+          "path": "gltf/textures/PondWeed_Med_Mat_diffuse.png",
+          "sha256": "174e29d9e6de3ae5ff40d64400323f0796c6ffc98a465764c9fee4ad91f464cd",
+          "bytes": 530576
+        },
+        {
+          "path": "gltf/textures/PondWeed_Med_Mat_normal.png",
+          "sha256": "02e75db1b8bf6e1ecb9a2128b443ecb977e71789506a0f9a2437269a264d9595",
+          "bytes": 398951
+        },
+        {
+          "path": "gltf/textures/PondWeed_Med_Mat_specularGlossiness.png",
+          "sha256": "fa3ab4e77426fbd072224574f687b77038efd8629dc138c2d110d7657f298acb",
+          "bytes": 358525
+        }
+      ]
     },
     {
       "id": "sketchfab-b536fec3",
@@ -445,13 +882,30 @@
       "licence": "CC-BY-4.0",
       "licence_url": "https://creativecommons.org/licenses/by/4.0/",
       "checked_at": "2026-10-12",
-      "sha256": null,
+      "sha256": "a5788aa27758fcf19cb37c498b64b0adbd2fb11cf3efeca1d42535268297e5a9",
       "polycount": 6076,
-      "textures": "see source page; confirm on download",
-      "rigged": null,
-      "notes": "Single Elodea/Egeria-like stem with leaf whorls, 1 animation in metadata. Instance many with sway in shader.",
+      "textures": "none (flat material colour)",
+      "rigged": true,
+      "notes": "Single Elodea/Egeria-like stem with leaf whorls, 1 animation in metadata. Instance many with sway in shader. Verified from the downloaded glTF: 6076 triangles, rigged: 1 skin(s), 30 joints, 1 animation clip(s). Zip sha256 94fa5bb65e953b7c0b7d39203adac31f26e7334133130995cd63357f4feaebea; sha256 is the aggregate over files[]. No texture images: flat material colour only.",
       "modifications": [],
-      "status": "selected-pending-download"
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "gltf/license.txt",
+          "sha256": "a7a20964eb6306e06da87931e2b4efedaacdc957a7f7afdf6801e909ac20bfd4",
+          "bytes": 652
+        },
+        {
+          "path": "gltf/ltf.bin",
+          "sha256": "37c027d78070defa00bf7c3c69a27aca62a6d7bcc2d607ff1d484026c1f5731e",
+          "bytes": 1022880
+        },
+        {
+          "path": "gltf/scene.gltf",
+          "sha256": "2668ed78c776afaf60fa7ea01b2d76cfe1e52c2bdb63a65f72ea5f8a534b38d7",
+          "bytes": 65897
+        }
+      ]
     },
     {
       "id": "sketchfab-f34fac65",
@@ -463,13 +917,55 @@
       "licence": "CC-BY-4.0",
       "licence_url": "https://creativecommons.org/licenses/by/4.0/",
       "checked_at": "2026-10-12",
-      "sha256": null,
-      "polycount": 130862,
-      "textures": "see source page; confirm on download",
-      "rigged": null,
-      "notes": "Set of aquarium plants (java fern, vallisneria, broadleaf, bromeliad-like with flower). 130k faces: split per plant and decimate to LOD0 under 8k each for instancing.",
+      "sha256": "9e1e82931ca805d1b9fd0c14a386f946859d73e7d3ca2f04554525cf9f81401a",
+      "polycount": 130860,
+      "textures": "tripo_mat_d6ac9413_baseColor.jpeg 4096x4096, tripo_mat_46d92b9d_baseColor.jpeg 4096x4096, Material.001_baseColor.jpeg 2048x2048, tripo_mat_426602b4_baseColor.jpeg 4096x4096, tripo_mat_c7bb0dda_baseColor.jpeg 4096x4096",
+      "rigged": false,
+      "notes": "Set of aquarium plants (java fern, vallisneria, broadleaf, bromeliad-like with flower). 130k faces: split per plant and decimate to LOD0 under 8k each for instancing. Verified from the downloaded glTF: 130860 triangles, not rigged (no skins). Zip sha256 dbc5f7f014815de1bcc4b96ee78c52aa5336285c4fcb00173880fac203dbf2fe; sha256 is the aggregate over files[]. Five materials, four of them 4096x4096: split per plant and downscale.",
       "modifications": [],
-      "status": "selected-pending-download"
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "gltf/license.txt",
+          "sha256": "7c080c9cf97f52881170a242055ecd9cfaabff9ce090ae059241cc76ea146891",
+          "bytes": 786
+        },
+        {
+          "path": "gltf/scene.bin",
+          "sha256": "62fe5bdc0107a41ae65444ab35dca1973ea3a342978bb1439053d2c1d1ce5022",
+          "bytes": 5016912
+        },
+        {
+          "path": "gltf/scene.gltf",
+          "sha256": "1a1a02b8fe1fbede80ef4d27827cdc1a60a57bc9d89b352120abb2b7ae9ab6f3",
+          "bytes": 15935
+        },
+        {
+          "path": "gltf/textures/Material.001_baseColor.jpeg",
+          "sha256": "3e23f5b43c168a3d57e0ea0ef4801e7085b37478f5bd7b0c66e37dd3626de3df",
+          "bytes": 2771173
+        },
+        {
+          "path": "gltf/textures/tripo_mat_426602b4_baseColor.jpeg",
+          "sha256": "81b31f0ed287a531da8c057115c81ca2be8c47ff83105e4a5b12ca0774911396",
+          "bytes": 3933131
+        },
+        {
+          "path": "gltf/textures/tripo_mat_46d92b9d_baseColor.jpeg",
+          "sha256": "d52b5ff273a81bea5b26986de948958d2753dfdd2de3d9bb24d206755a731028",
+          "bytes": 3689429
+        },
+        {
+          "path": "gltf/textures/tripo_mat_c7bb0dda_baseColor.jpeg",
+          "sha256": "5f3a75dbbc076fe74d12510160899b7f3ee7862ec9a06c8cc4f6aa5390decb18",
+          "bytes": 4204245
+        },
+        {
+          "path": "gltf/textures/tripo_mat_d6ac9413_baseColor.jpeg",
+          "sha256": "1a1dcc7fe99d0bddd4abc015d474601fa720bf6cc61704cc93911d076bb70e2d",
+          "bytes": 3628600
+        }
+      ]
     },
     {
       "id": "wm-angelfish-a742578",
@@ -525,6 +1021,44 @@
       "textures": "photo 3000x2000",
       "rigged": false,
       "notes": "High resolution (3000x2000) side-on shot for texture projection. Download: https://upload.wikimedia.org/wikipedia/commons/f/fe/Banggai-Kardinalbarsch_Pterapogon_kauderni.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "wm-banggai-stang-10zz",
+      "kind": "reference-photo",
+      "species": "banggai-cardinalfish",
+      "title": "Pterapogon kauderni 10zz.jpg",
+      "author": "David J. Stang",
+      "author_url": "https://commons.wikimedia.org/wiki/File:Pterapogon_kauderni_10zz.jpg",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Pterapogon_kauderni_10zz.jpg",
+      "licence": "CC-BY-SA-4.0",
+      "licence_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "checked_at": "2026-10-12",
+      "sha256": "a2a1b0dd60d5dc3016e6fcb2f3b1e4f72b91fe54acac6fef1cb7b8351dc0b06b",
+      "polycount": null,
+      "textures": "photo 1000x853",
+      "rigged": false,
+      "notes": "Second reference for the fallback loft texture. ShareAlike: any texture derived from this photo must be released under the same CC BY-SA licence, so keep derived loft textures in a separately attributed asset. Alex approved CC BY-SA for this reference set on issue #29. Download: https://upload.wikimedia.org/wikipedia/commons/4/45/Pterapogon_kauderni_10zz.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "wm-banggai-stang-8zz",
+      "kind": "reference-photo",
+      "species": "banggai-cardinalfish",
+      "title": "Pterapogon kauderni 8zz.jpg",
+      "author": "David J. Stang",
+      "author_url": "https://commons.wikimedia.org/wiki/File:Pterapogon_kauderni_8zz.jpg",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Pterapogon_kauderni_8zz.jpg",
+      "licence": "CC-BY-SA-4.0",
+      "licence_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "checked_at": "2026-10-12",
+      "sha256": "b75d1ea966522f20d0d2a743af06a865e9ede5954e8cc3015a6face3e2363221",
+      "polycount": null,
+      "textures": "photo 1000x667",
+      "rigged": false,
+      "notes": "Reference for the fallback loft texture. ShareAlike: any texture derived from this photo must be released under the same CC BY-SA licence, so keep derived loft textures in a separately attributed asset. Alex approved CC BY-SA for this reference set on issue #29. Download: https://upload.wikimedia.org/wikipedia/commons/a/ad/Pterapogon_kauderni_8zz.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
       "modifications": [],
       "status": "downloaded"
     },
@@ -605,6 +1139,44 @@
       "status": "downloaded"
     },
     {
+      "id": "wm-cory-aeneus-gabs-01",
+      "kind": "reference-photo",
+      "species": "bronze-corydoras",
+      "title": "Corydoras aeneus 01.jpg",
+      "author": "Gabriel Resende Veiga (GABS)",
+      "author_url": "https://commons.wikimedia.org/wiki/User:GABS",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Corydoras_aeneus_01.jpg",
+      "licence": "CC-BY-SA-4.0",
+      "licence_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "checked_at": "2026-10-12",
+      "sha256": "51b4e5b10979dbe430e5f47d76ee13d813ef8c75077da0c413a5304c315086f9",
+      "polycount": null,
+      "textures": "photo 4231x2821",
+      "rigged": false,
+      "notes": "Lateral reference for the fallback loft texture. ShareAlike: any texture derived from this photo must be released under the same CC BY-SA licence, so keep derived loft textures in a separately attributed asset. Alex approved CC BY-SA for this reference set on issue #29. Download: https://upload.wikimedia.org/wikipedia/commons/f/f9/Corydoras_aeneus_01.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "wm-cory-aeneus-gabs-03",
+      "kind": "reference-photo",
+      "species": "bronze-corydoras",
+      "title": "Corydoras aeneus 03.jpg",
+      "author": "Gabriel Resende Veiga (GABS)",
+      "author_url": "https://commons.wikimedia.org/wiki/User:GABS",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Corydoras_aeneus_03.jpg",
+      "licence": "CC-BY-SA-4.0",
+      "licence_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "checked_at": "2026-10-12",
+      "sha256": "930a5f65dee5ac802bda34705a5f1854ea1416203bf87af3a741286e83b28f0c",
+      "polycount": null,
+      "textures": "photo 5184x3456",
+      "rigged": false,
+      "notes": "Second angle (5184x3456) for the fallback loft texture. ShareAlike: any texture derived from this photo must be released under the same CC BY-SA licence, so keep derived loft textures in a separately attributed asset. Alex approved CC BY-SA for this reference set on issue #29. Download: https://upload.wikimedia.org/wikipedia/commons/1/18/Corydoras_aeneus_03.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
       "id": "wm-gramma-257593001",
       "kind": "reference-photo",
       "species": "royal-gramma",
@@ -639,6 +1211,25 @@
       "textures": "photo 2048x1365",
       "rigged": false,
       "notes": "Alternative lateral reference. Download: https://upload.wikimedia.org/wikipedia/commons/e/eb/Gramma_loreto_365520074.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "wm-gramma-loreto-llez",
+      "kind": "reference-photo",
+      "species": "royal-gramma",
+      "title": "Gramma loreto 01.jpg",
+      "author": "H. Zell (Llez)",
+      "author_url": "https://commons.wikimedia.org/wiki/User:Llez",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Gramma_loreto_01.jpg",
+      "licence": "CC-BY-SA-3.0",
+      "licence_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+      "checked_at": "2026-10-12",
+      "sha256": "2fe80f78c707185f9a61de785cdf2cf215fb76186c4cf2623ccd5c30a27dbb7e",
+      "polycount": null,
+      "textures": "photo 4400x3168",
+      "rigged": false,
+      "notes": "Lateral reference for the fallback loft texture (purple front, yellow rear). ShareAlike: any texture derived from this photo must be released under the same CC BY-SA licence, so keep derived loft textures in a separately attributed asset. Alex approved CC BY-SA for this reference set on issue #29. Download: https://upload.wikimedia.org/wikipedia/commons/b/bc/Gramma_loreto_01.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
       "modifications": [],
       "status": "downloaded"
     },
