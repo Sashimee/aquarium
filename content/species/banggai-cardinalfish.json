@@ -1,4 +1,19 @@
 {
+  "behaviour": {
+    "boldness": 0.3,
+    "curiosity": 0.4,
+    "depthBand": [0.2, 0.7],
+    "perceptionFovDeg": 300,
+    "perceptionRangeM": 0.4,
+    "preferredZone": "mid",
+    "schooling": {
+      "minGroup": 3,
+      "tightenWhenStartled": true,
+      "topologicalNeighbours": 6
+    },
+    "territorial": false,
+    "traits": ["shoal"]
+  },
   "biome": "reef",
   "commonName": "Banggai cardinalfish",
   "id": "banggai-cardinalfish",
@@ -15,6 +30,17 @@
     "lifespanDays": 1825,
     "maxSizeM": 0.08,
     "starvationHungerThreshold": 0.75
+  },
+  "locomotion": {
+    "bodyLengthM": 0.06,
+    "cruiseSpeedMps": 0.03,
+    "gait": "hover",
+    "massKg": 0.008,
+    "maxPitchDeg": 30,
+    "maxSpeedMps": 0.4,
+    "maxTurnRateDegPerS": 300,
+    "strouhal": 0.3,
+    "swimmingMode": "labriform"
   },
   "scientificName": "Pterapogon kauderni"
 }

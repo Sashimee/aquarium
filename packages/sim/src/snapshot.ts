@@ -2,6 +2,15 @@ export const FishState = {
   Cruise: 0,
   School: 1,
   Avoid: 2,
+  Startle: 3,
+  Rest: 4,
+  Forage: 5,
+  Gulp: 6,
+  Graze: 7,
+  Display: 8,
+  Host: 9,
+  Shelter: 10,
+  Station: 11,
 } as const;
 export type FishState = (typeof FishState)[keyof typeof FishState];
 
@@ -17,8 +26,10 @@ export const SnapshotField = {
   Speed: 7,
   YawRate: 8,
   State: 9,
+  /** Caudal thrust as a fraction of the maximum, 0 while coasting; drives the tail beat. */
+  Thrust: 10,
 } as const;
-export const SNAPSHOT_STRIDE = 10;
+export const SNAPSHOT_STRIDE = 11;
 
 export interface Snapshot {
   /** Bumped by every re-init; ticks restart at 0 within a new epoch. */
@@ -75,6 +86,8 @@ export function interpolateSnapshots(
       out[o + f] = av + ((b[o + f] ?? 0) - av) * t;
     }
     out[o + 9] = (t < 0.5 ? a[o + 9] : b[o + 9]) ?? 0;
+    const thrust = a[o + 10] ?? 0;
+    out[o + 10] = thrust + ((b[o + 10] ?? 0) - thrust) * t;
   }
 }
 

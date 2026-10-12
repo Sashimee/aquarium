@@ -1,4 +1,14 @@
 {
+  "behaviour": {
+    "boldness": 0.4,
+    "curiosity": 0.5,
+    "depthBand": [0.1, 0.6],
+    "perceptionFovDeg": 300,
+    "perceptionRangeM": 0.4,
+    "preferredZone": "bottom",
+    "territorial": true,
+    "traits": ["cave-dweller"]
+  },
   "biome": "reef",
   "commonName": "Royal gramma",
   "id": "royal-gramma",
@@ -15,6 +25,17 @@
     "lifespanDays": 1825,
     "maxSizeM": 0.08,
     "starvationHungerThreshold": 0.75
+  },
+  "locomotion": {
+    "bodyLengthM": 0.07,
+    "cruiseSpeedMps": 0.04,
+    "gait": "hover",
+    "massKg": 0.006,
+    "maxPitchDeg": 60,
+    "maxSpeedMps": 0.5,
+    "maxTurnRateDegPerS": 360,
+    "strouhal": 0.3,
+    "swimmingMode": "labriform"
   },
   "scientificName": "Gramma loreto"
 }

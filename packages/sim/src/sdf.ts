@@ -22,22 +22,31 @@ export function assertTankDimensions(tank: TankDimensions): void {
   }
 }
 
+export interface TankSdfOptions {
+  /** Leave out the substrate, e.g. for a bottom feeder's steering. */
+  readonly floor?: boolean;
+  /** Leave out the water surface, e.g. for an air-gulping dart. */
+  readonly surface?: boolean;
+}
+
 /** Interior of the glass box: floor (substrate top), four panes and the water surface. */
 export class TankSdf implements Sdf {
   private readonly hx: number;
   private readonly hz: number;
   private readonly top: number;
+  private readonly bottom: number;
 
-  constructor(tank: TankDimensions) {
+  constructor(tank: TankDimensions, options: TankSdfOptions = {}) {
     assertTankDimensions(tank);
     this.hx = tank.width / 2;
     this.hz = tank.depth / 2;
-    this.top = tank.height;
+    this.top = options.surface === false ? Infinity : tank.height;
+    this.bottom = options.floor === false ? -Infinity : 0;
   }
 
   sample(x: number, y: number, z: number, normal: Float64Array): number {
     const cx = clampTo(x, -this.hx, this.hx);
-    const cy = clampTo(y, 0, this.top);
+    const cy = clampTo(y, this.bottom, this.top);
     const cz = clampTo(z, -this.hz, this.hz);
     if (cx !== x || cy !== y || cz !== z) {
       // Outside the water (e.g. a look-ahead probe): the exact distance back to the box, so
@@ -60,7 +69,7 @@ export class TankSdf implements Sdf {
       d = right;
       nx = -1;
     }
-    const floor = y;
+    const floor = y - this.bottom;
     if (floor < d) {
       d = floor;
       nx = 0;

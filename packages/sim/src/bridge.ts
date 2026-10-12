@@ -1,3 +1,5 @@
+import type { Anchor, Stimulus } from './behaviour.ts';
+import type { DecorCollider } from './decor.ts';
 import { SNAPSHOT_STRIDE, type Snapshot } from './snapshot.ts';
 import { STEP_HZ, World, type WorldConfig } from './world.ts';
 
@@ -6,7 +8,11 @@ export type SimCommand =
   | { readonly type: 'start' }
   | { readonly type: 'stop' }
   | { readonly type: 'step'; readonly steps: number }
-  | { readonly type: 'recycle'; readonly buffer: ArrayBuffer };
+  | { readonly type: 'recycle'; readonly buffer: ArrayBuffer }
+  | { readonly type: 'startle'; readonly stimulus: Stimulus }
+  | { readonly type: 'light'; readonly level: number }
+  | { readonly type: 'decor'; readonly colliders: readonly DecorCollider[] }
+  | { readonly type: 'anchors'; readonly anchors: readonly Anchor[] };
 
 export interface SimReady {
   readonly type: 'ready';
@@ -35,7 +41,17 @@ export interface MessagePortLike {
   start?(): void;
 }
 
-const COMMAND_TYPES = new Set(['init', 'start', 'stop', 'step', 'recycle']);
+const COMMAND_TYPES = new Set([
+  'init',
+  'start',
+  'stop',
+  'step',
+  'recycle',
+  'startle',
+  'light',
+  'decor',
+  'anchors',
+]);
 const EVENT_TYPES = new Set(['ready', 'snapshot', 'error']);
 
 function messageType(data: unknown, allowed: ReadonlySet<string>): string {
@@ -116,6 +132,11 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
     timer = setTimeout(loop, Math.max(0, stepMs - backlog));
   };
 
+  const requireWorld = (type: SimCommand['type']): World => {
+    if (world === null) throw new Error(`sim: "${type}" before "init"`);
+    return world;
+  };
+
   const handle = (command: SimCommand): void => {
     switch (command.type) {
       case 'init': {
@@ -155,6 +176,18 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
       }
       case 'recycle':
         if (pool.length < 8) pool.push(command.buffer);
+        return;
+      case 'startle':
+        requireWorld(command.type).startle(command.stimulus);
+        return;
+      case 'light':
+        requireWorld(command.type).setLight(command.level);
+        return;
+      case 'decor':
+        requireWorld(command.type).setDecor(command.colliders);
+        return;
+      case 'anchors':
+        requireWorld(command.type).setAnchors(command.anchors);
         return;
     }
   };
@@ -216,6 +249,25 @@ export class SimClient {
 
   step(steps: number): void {
     this.send({ type: 'step', steps });
+  }
+
+  /** A glass tap or a fast pointer at `stimulus.position`; nearby fish may C-start. */
+  startle(stimulus: Stimulus): void {
+    this.send({ type: 'startle', stimulus });
+  }
+
+  /** 0 = lights off (night rest), 1 = full day. */
+  setLight(level: number): void {
+    this.send({ type: 'light', level });
+  }
+
+  /** Replaces the decor colliders; only moved, added or removed ones are rebuilt in the field. */
+  setDecor(colliders: readonly DecorCollider[]): void {
+    this.send({ type: 'decor', colliders });
+  }
+
+  setAnchors(anchors: readonly Anchor[]): void {
+    this.send({ type: 'anchors', anchors });
   }
 
   /** Hands a snapshot's buffer back to the worker; the snapshot must not be read afterwards. */

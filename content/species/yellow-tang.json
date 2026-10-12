@@ -1,4 +1,14 @@
 {
+  "behaviour": {
+    "boldness": 0.6,
+    "curiosity": 0.5,
+    "depthBand": [0.15, 0.85],
+    "perceptionFovDeg": 300,
+    "perceptionRangeM": 0.7,
+    "preferredZone": "mid",
+    "territorial": false,
+    "traits": ["rock-grazer"]
+  },
   "biome": "reef",
   "commonName": "Yellow tang",
   "id": "yellow-tang",
@@ -15,6 +25,17 @@
     "lifespanDays": 3650,
     "maxSizeM": 0.2,
     "starvationHungerThreshold": 0.75
+  },
+  "locomotion": {
+    "bodyLengthM": 0.15,
+    "cruiseSpeedMps": 0.2,
+    "gait": "cruise",
+    "massKg": 0.12,
+    "maxPitchDeg": 30,
+    "maxSpeedMps": 1.0,
+    "maxTurnRateDegPerS": 270,
+    "strouhal": 0.3,
+    "swimmingMode": "labriform"
   },
   "scientificName": "Zebrasoma flavescens"
 }
