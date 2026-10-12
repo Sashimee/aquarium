@@ -37,6 +37,9 @@ const CDOM_SLOPE = 0.014;
  */
 const BOUNDARY_TOLERANCE = 0.005;
 
+/** Absorption scale and turbidity can both reach 0, which would make the albedo 0/0. */
+const MIN_EXTINCTION = 1e-6;
+
 export interface WaterQuality {
   /** CDOM absorption at 440 nm (1/m): ~0 for reef water, 0.1-0.5 for tannin-stained water. */
   cdom440: number;
@@ -104,7 +107,7 @@ export class WaterMedium {
 
   /** Light scattered into the view ray along a segment with transmittance `t`. */
   inScatter(t: Node<'vec3'>): Node<'vec3'> {
-    const albedo = this.extinction().reciprocal().mul(this.scattering);
+    const albedo = max(this.extinction(), vec3(MIN_EXTINCTION)).reciprocal().mul(this.scattering);
     return albedo.mul(this.inScatterRadiance).mul(t.oneMinus());
   }
 

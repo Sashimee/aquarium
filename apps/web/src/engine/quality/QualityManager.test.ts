@@ -10,6 +10,7 @@ function setup(options: Partial<QualityOptions> = {}) {
   const announced: EngineEvents['quality:tier-changed'][] = [];
   events.on('quality:tier-changed', (e) => announced.push(e));
   const quality = new QualityManager(events, {
+    gpuTiming: true,
     pinned: null,
     adaptive: true,
     targetMs: TARGET,
@@ -79,6 +80,36 @@ describe('QualityManager', () => {
     const { quality } = setup();
     quality.start(0);
     feed(quality, 1000 / 30, null, 0, 2400);
+    expect(quality.timingSignal).toBe('frame');
+    expect(quality.tier).toBe('low');
+  });
+
+  it('uses gpu timing on a GPU-bound device whose timestamps arrive every third frame', () => {
+    const { quality } = setup();
+    quality.start(0);
+    let frame = 0;
+    for (let t = 0; t <= 2400; t += 50) {
+      quality.sample(50, frame++ % 3 === 0 ? 14 : null, t);
+    }
+    expect(quality.timingSignal).toBe('gpu');
+    expect(quality.tier).toBe('medium');
+  });
+
+  it('needs a minimum number of gpu samples before trusting them', () => {
+    const { quality } = setup({ minGpuSamples: 50 });
+    quality.start(0);
+    let frame = 0;
+    for (let t = 0; t <= 2400; t += TARGET) {
+      quality.sample(1000 / 30, frame++ % 3 === 0 ? 5 : null, t);
+    }
+    expect(quality.timingSignal).toBe('frame');
+    expect(quality.tier).toBe('low');
+  });
+
+  it('ignores gpu samples when the backend reports no timer support', () => {
+    const { quality } = setup({ gpuTiming: false });
+    quality.start(0);
+    feed(quality, 1000 / 30, 5, 0, 2400);
     expect(quality.timingSignal).toBe('frame');
     expect(quality.tier).toBe('low');
   });

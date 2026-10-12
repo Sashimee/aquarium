@@ -1,5 +1,6 @@
 import {
   EquirectangularReflectionMapping,
+  LoadingManager,
   PMREMGenerator,
   type Scene,
   type Texture,
@@ -30,9 +31,9 @@ export function installRoomLighting(
   onError: (message: string, cause: unknown) => void,
 ): RoomLighting {
   const pmrem = new PMREMGenerator(renderer);
-  const room = new RoomEnvironment();
-  const roomTarget = pmrem.fromScene(room, 0.04);
-  room.dispose();
+  const studio = new RoomEnvironment();
+  const roomTarget = pmrem.fromScene(studio, 0.04);
+  studio.dispose();
   pmrem.dispose();
 
   scene.environment = roomTarget.texture;
@@ -41,9 +42,11 @@ export function installRoomLighting(
   scene.backgroundIntensity = 0.6;
 
   let hdri: Texture | null = null;
+  let room: typeof roomTarget | null = roomTarget;
   let disposed = false;
+  const manager = new LoadingManager();
 
-  new HDRLoader()
+  new HDRLoader(manager)
     .loadAsync(hdriUrl)
     .then((texture) => {
       if (disposed) {
@@ -54,6 +57,8 @@ export function installRoomLighting(
       hdri = texture;
       scene.environment = texture;
       scene.background = texture;
+      room?.dispose();
+      room = null;
     })
     .catch((cause: unknown) => {
       if (!disposed) onError(`Could not load the room HDRI from ${hdriUrl}`, cause);
@@ -62,8 +67,10 @@ export function installRoomLighting(
   return {
     dispose() {
       disposed = true;
+      manager.abort();
       hdri?.dispose();
-      roomTarget.dispose();
+      room?.dispose();
+      room = null;
     },
   };
 }

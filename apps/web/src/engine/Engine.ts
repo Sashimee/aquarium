@@ -8,8 +8,9 @@ import {
   Scene,
   WebGPURenderer,
 } from 'three/webgpu';
-import { installRoomLighting, DEFAULT_HDRI_URL, type RoomLighting } from './environment';
+import { installRoomLighting, DEFAULT_HDRI_URL } from './environment';
 import { EventBus, type BackendKind, type EngineEvents, type EngineEventBus } from './events';
+import { buildOrRelease, DisposeStack } from './lifecycle';
 import type { EngineOptions } from './options';
 import { QualityManager } from './quality/QualityManager';
 import { DEFAULT_TANK, type TankDimensions, waterBounds } from './tank/dimensions';
@@ -39,28 +40,48 @@ function targetFrameMs(): number {
   return 1000 / (coarse ? 30 : 60);
 }
 
-async function createRenderer(options: EngineOptions): Promise<{
-  renderer: WebGPURenderer;
-  backend: BackendKind;
-}> {
-  const renderer = new WebGPURenderer({
+/** The part of the renderer the start-up path needs, so failures can be tested without a GPU. */
+export interface StartableRenderer {
+  init(): Promise<unknown>;
+  dispose(): Promise<void> | void;
+  readonly backend: object;
+}
+
+export type RendererFactory<R extends StartableRenderer> = (
+  parameters: ConstructorParameters<typeof WebGPURenderer>[0],
+) => R;
+
+/**
+ * Creates and initialises the renderer, registering its disposal on `cleanup` before
+ * anything can fail, so a rejected init() or a refused backend still frees the device.
+ */
+export async function initRenderer<R extends StartableRenderer>(
+  options: EngineOptions,
+  cleanup: DisposeStack,
+  create: RendererFactory<R>,
+  devicePixelRatio: number,
+): Promise<{ renderer: R; backend: BackendKind }> {
+  const renderer = create({
     forceWebGL: options.backend === 'webgl',
-    antialias: window.devicePixelRatio < 2,
+    antialias: devicePixelRatio < 2,
     trackTimestamp: true,
     powerPreference: 'high-performance',
   });
+  cleanup.add(() => renderer.dispose());
   await renderer.init();
   const backend: BackendKind = 'isWebGPUBackend' in renderer.backend ? 'webgpu' : 'webgl2';
   if (options.backend === 'webgpu' && backend !== 'webgpu') {
-    renderer.dispose();
     throw new Error('WebGPU was requested with ?backend=webgpu but is not available here');
   }
+  return { renderer, backend };
+}
+
+function configureRenderer(renderer: WebGPURenderer): void {
   renderer.toneMapping = AgXToneMapping;
   renderer.toneMappingExposure = 1;
   renderer.outputColorSpace = SRGBColorSpace;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = PCFShadowMap;
-  return { renderer, backend };
 }
 
 export class Engine {
@@ -75,23 +96,36 @@ export class Engine {
   readonly quality: QualityManager;
 
   private readonly frameCallbacks = new Set<FrameCallback>();
-  private readonly resizeObserver: ResizeObserver;
-  private readonly roomLighting: RoomLighting;
   private lastFrameAt: number | null = null;
   private gpuMs: number | null = null;
   private readonly gpuTiming: boolean;
   private lastGpuMs: number | null = null;
   private gpuPending = false;
   private stats = { frames: 0, frameMsSum: 0, since: 0 };
-  private disposed = false;
 
+  /** Everything is released through `cleanup`, both on dispose() and on a failed start. */
   static async create(container: HTMLElement, config: EngineConfig): Promise<Engine> {
     const events = config.events ?? new EventBus<EngineEvents>();
     try {
-      const { renderer, backend } = await createRenderer(config.options);
-      const engine = new Engine(container, renderer, backend, events, config);
-      await engine.warmUp();
-      return engine;
+      return await buildOrRelease(
+        async (cleanup) => {
+          const { renderer, backend } = await initRenderer(
+            config.options,
+            cleanup,
+            (parameters) => new WebGPURenderer(parameters),
+            window.devicePixelRatio,
+          );
+          configureRenderer(renderer);
+          const engine = new Engine(container, renderer, backend, events, config, cleanup);
+          await engine.warmUp();
+          return engine;
+        },
+        (error) =>
+          events.emit('engine:error', {
+            message: 'Cleanup after a failed start failed',
+            cause: error,
+          }),
+      );
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
       events.emit('engine:error', { message: `Engine start failed: ${message}`, cause });
@@ -105,44 +139,56 @@ export class Engine {
     readonly backend: BackendKind,
     readonly events: EngineEventBus,
     config: EngineConfig,
+    private readonly cleanup: DisposeStack,
   ) {
     const dimensions = config.tank ?? DEFAULT_TANK;
     this.gpuTiming = renderer.hasFeature('timestamp-query');
     this.quality = new QualityManager(events, {
+      gpuTiming: this.gpuTiming,
       pinned: config.options.tier,
       adaptive: config.options.adaptive,
       targetMs: targetFrameMs(),
     });
 
     container.appendChild(renderer.domElement);
+    cleanup.add(() => renderer.domElement.remove());
     renderer.domElement.style.display = 'block';
     renderer.domElement.style.width = '100%';
     renderer.domElement.style.height = '100%';
 
     this.medium = new WaterMedium(waterBounds(dimensions), config.water ?? DEFAULT_WATER);
     this.tank = new Tank(dimensions, this.medium);
+    cleanup.add(() => this.tank.dispose());
     this.scene.add(this.tank.group);
     this.scene.fogNode = this.medium.fogNode();
 
     this.caustics = new Caustics(this.medium);
+    cleanup.add(() => this.caustics.dispose());
     this.caustics.bake(renderer);
     this.setupHood(dimensions);
+    cleanup.add(() => this.hood.shadow.dispose());
 
     this.camera.position.set(0, 0.35, 1.6);
     this.camera.lookAt(0, 0.25, 0);
 
-    this.roomLighting = installRoomLighting(
+    const roomLighting = installRoomLighting(
       renderer,
       this.scene,
       config.hdriUrl ?? DEFAULT_HDRI_URL,
-      (message, cause) => events.emit('engine:error', { message, cause }),
+      (message, cause) => this.reportError(message, cause),
     );
+    cleanup.add(() => roomLighting.dispose());
 
     this.registerQualityFeatures();
 
-    this.resizeObserver = new ResizeObserver(() => this.resize());
-    this.resizeObserver.observe(container);
+    const resizeObserver = new ResizeObserver(() => this.resize());
+    cleanup.add(() => resizeObserver.disconnect());
+    resizeObserver.observe(container);
     this.resize();
+  }
+
+  get disposed(): boolean {
+    return this.cleanup.isDisposed;
   }
 
   /** Called once per rendered frame before the scene is drawn. */
@@ -156,6 +202,7 @@ export class Engine {
     const now = performance.now();
     this.stats.since = now;
     this.quality.start(now);
+    this.cleanup.add(() => this.renderer.setAnimationLoop(null));
     void this.renderer.setAnimationLoop((t) => this.frame(t));
     this.events.emit('engine:ready', {
       backend: this.backend,
@@ -164,18 +211,13 @@ export class Engine {
     });
   }
 
-  dispose(): void {
-    if (this.disposed) return;
-    this.disposed = true;
-    void this.renderer.setAnimationLoop(null);
-    this.resizeObserver.disconnect();
+  async dispose(): Promise<void> {
     this.frameCallbacks.clear();
-    this.roomLighting.dispose();
-    this.tank.dispose();
-    this.caustics.dispose();
-    this.hood.shadow.dispose();
-    this.renderer.dispose();
-    this.renderer.domElement.remove();
+    await this.cleanup.dispose();
+  }
+
+  private reportError(message: string, cause: unknown): void {
+    if (!this.disposed) this.events.emit('engine:error', { message, cause });
   }
 
   private setupHood(d: TankDimensions): void {
@@ -270,7 +312,7 @@ export class Engine {
         }
       })
       .catch((cause: unknown) => {
-        this.events.emit('engine:error', { message: 'GPU timestamp query failed', cause });
+        this.reportError('GPU timestamp query failed', cause);
       })
       .finally(() => {
         this.gpuPending = false;

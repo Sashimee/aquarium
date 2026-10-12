@@ -6,6 +6,8 @@ import { TIER_SETTINGS, type Tier, type TierChangeReason, type TierSettings } fr
 export type ApplyTier = (settings: Readonly<TierSettings>, tier: Tier) => void;
 
 export interface QualityOptions {
+  /** Whether the backend can time GPU work (timestamp queries). */
+  gpuTiming: boolean;
   /** Pins the tier: no probe, no adaptation. */
   pinned: Tier | null;
   adaptive: boolean;
@@ -14,6 +16,11 @@ export interface QualityOptions {
   probeMs?: number;
   /** Frames right after start-up include pipeline compiles and are not representative. */
   warmupMs?: number;
+  /**
+   * GPU timestamps the probe needs before trusting them. Only one resolve is in flight
+   * at a time, so on a GPU-bound device results arrive every few frames.
+   */
+  minGpuSamples?: number;
 }
 
 type Phase =
@@ -33,6 +40,7 @@ export class QualityManager {
   private readonly probeTier: Tier;
   private readonly probeMs: number;
   private readonly warmupMs: number;
+  private readonly minGpuSamples: number;
   private signal: TimingSignal | null = null;
 
   constructor(
@@ -43,6 +51,7 @@ export class QualityManager {
     this.probeTier = options.probeTier ?? 'high';
     this.probeMs = options.probeMs ?? 2000;
     this.warmupMs = options.warmupMs ?? 300;
+    this.minGpuSamples = options.minGpuSamples ?? 10;
     this.current = options.pinned ?? this.probeTier;
   }
 
@@ -120,8 +129,8 @@ export class QualityManager {
   }
 
   private finishProbe(phase: Extract<Phase, { kind: 'probing' }>, nowMs: number): void {
-    // Without timer queries every gpu sample is missing, so half the frames is a safe bar.
-    const signal: TimingSignal = phase.gpu.length >= phase.frame.length / 2 ? 'gpu' : 'frame';
+    const signal: TimingSignal =
+      this.options.gpuTiming && phase.gpu.length >= this.minGpuSamples ? 'gpu' : 'frame';
     this.signal = signal;
     const result = selectInitialTier({
       samples: signal === 'gpu' ? phase.gpu : phase.frame,

@@ -41,9 +41,9 @@ async function boot(): Promise<void> {
   if (import.meta.env.DEV) {
     const { createDevPanel } = await import('./engine/devPanel');
     createDevPanel(engine);
+    Object.assign(window, { engine });
   }
 
-  Object.assign(window, { engine });
   engine.start();
 }
 

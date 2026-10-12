@@ -20,8 +20,20 @@ export interface EngineEvents {
 
 type Handler<T> = (payload: T) => void;
 
+export type HandlerErrorReporter = (error: unknown, type: PropertyKey) => void;
+
+/** Rethrows outside the emit call so it still surfaces as an uncaught error. */
+const rethrowLater: HandlerErrorReporter = (error) => {
+  queueMicrotask(() => {
+    throw error;
+  });
+};
+
 export class EventBus<Events extends object> {
   private readonly handlers = new Map<keyof Events, Set<Handler<never>>>();
+
+  /** A throwing handler is reported here and does not stop the other handlers or the emitter. */
+  constructor(private readonly onHandlerError: HandlerErrorReporter = rethrowLater) {}
 
   on<K extends keyof Events>(type: K, handler: Handler<Events[K]>): () => void {
     let set = this.handlers.get(type);
@@ -51,7 +63,13 @@ export class EventBus<Events extends object> {
   emit<K extends keyof Events>(type: K, payload: Events[K]): void {
     const set = this.handlers.get(type);
     if (!set) return;
-    for (const handler of [...set] as Handler<Events[K]>[]) handler(payload);
+    for (const handler of [...set] as Handler<Events[K]>[]) {
+      try {
+        handler(payload);
+      } catch (error) {
+        this.onHandlerError(error, type);
+      }
+    }
   }
 
   listenerCount(type: keyof Events): number {

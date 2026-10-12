@@ -62,6 +62,41 @@ describe('EventBus', () => {
     expect(calls).toEqual(['first', 'second', 'second']);
   });
 
+  it('a throwing handler is reported and does not stop the others or the emitter', () => {
+    const reported: [unknown, PropertyKey][] = [];
+    const bus = new EventBus<TestEvents>((error, type) => reported.push([error, type]));
+    const boom = new Error('boom');
+    const after = vi.fn();
+    bus.on('ping', () => {
+      throw boom;
+    });
+    bus.on('ping', after);
+    expect(() => bus.emit('ping', { n: 3 })).not.toThrow();
+    expect(after).toHaveBeenCalledWith({ n: 3 });
+    expect(reported).toEqual([[boom, 'ping']]);
+  });
+
+  it('rethrows handler errors asynchronously by default', async () => {
+    const bus = new EventBus<TestEvents>();
+    const boom = new Error('late boom');
+    bus.on('other', () => {
+      throw boom;
+    });
+    const thrown = new Promise<unknown>((resolve) => {
+      const original = globalThis.queueMicrotask;
+      globalThis.queueMicrotask = (task) => {
+        globalThis.queueMicrotask = original;
+        try {
+          task();
+        } catch (error) {
+          resolve(error);
+        }
+      };
+    });
+    expect(() => bus.emit('other', 'x')).not.toThrow();
+    await expect(thrown).resolves.toBe(boom);
+  });
+
   it('clear() removes all handlers', () => {
     const bus = new EventBus<TestEvents>();
     bus.on('ping', vi.fn());
