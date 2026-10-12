@@ -12,5 +12,9 @@ export default tseslint.config(
       globals: { ...globals.node, ...globals.browser },
     },
   },
+  {
+    files: ['tools/asset-pipeline/**/*.ts'],
+    rules: { '@typescript-eslint/no-non-null-assertion': 'off' },
+  },
   prettier,
 );
