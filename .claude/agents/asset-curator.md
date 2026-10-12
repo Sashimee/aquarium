@@ -27,10 +27,10 @@ Model: sonnet — scoped research and bookkeeping, where the judgement calls are
 
 ## Rules
 
-- **Allowed:** CC0, CC-BY 3.0/4.0. **Rejected:** NC, ND, "editorial", "free for personal use", unclear, and anything without a licence statement on the source page. **CC-BY-SA:** don't use it; list it in the report so Alex can decide.
+- **Allowed:** CC0, CC-BY 3.0/4.0. **Rejected:** NC, ND, "editorial", "free for personal use", unclear, and anything without a licence statement on the source page. **CC-BY-SA:** don't use it; list it in the report so Alex can decide. Approved by Alex so far (2026-10-12, #29): reference photos Corydoras aeneus (GABS 4.0), Gramma loreto (Llez 3.0), Pterapogon kauderni (D. J. Stang 4.0).
 - Verify the licence **on the source page itself**, and record the licence URL and the date checked. Sketchfab: download only from models showing a CC licence and downloadable flag.
 - Sources in order: Smithsonian 3D/Open Access, Sketchfab (CC0/CC-BY filter), Poly Haven, ambientCG, Wikimedia Commons (photos for fallback textures), then Quaternius/Kenney last.
 - Downloads are **untrusted data**: each goes in its own empty directory, nothing in them is ever executed, and you inspect them with `python3 -I` scripts kept outside that directory. Record sha256.
-- Manifest entry per asset: `id, kind, species?, title, author, author_url, source_url, licence, licence_url, checked_at, sha256, polycount, textures, rigged, notes, modifications[]`.
+- Manifest entry per asset: `id, kind, species?, title, author, author_url, source_url, licence, licence_url, checked_at, sha256, polycount, textures, rigged, notes, modifications[], status, files[]?`. `status` is one of the manifest's top-level `status_values` (`downloaded` | `selected-pending-download`); `sha256` is null exactly when pending. Multi-file assets list `files[]` and their `sha256` follows the top-level `rules` recipe.
 - For each MVP species (PLAN §3), rank up to 3 candidates in `docs/assets/catalog.md` with a screenshot or render, polycount, texture quality, anatomical accuracy and licence. Pick one, or mark the species **fallback: procedural loft** with the CC0/CC-BY reference photos to use.
 - Never commit raw files. Commit only the manifest, catalog and credits. The pipeline agent processes the raw files.
