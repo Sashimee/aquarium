@@ -12,8 +12,11 @@ export function parseRoute(href: string): Route {
   const url = new URL(href, 'http://localhost');
   const path = url.pathname.replace(/\/+$/, '') || '/';
   switch (path) {
-    case '/':
-      return { name: 'home' };
+    case '/': {
+      // Better Auth sends failed verifications to the bare callback root with ?error=.
+      const error = url.searchParams.get('error');
+      return error ? { name: 'verify-email', error } : { name: 'home' };
+    }
     case '/sign-in':
       return { name: 'sign-in' };
     case '/sign-up':
@@ -47,6 +50,19 @@ export function guardRoute(route: Route, user: User | null): Route {
   if (route.name === 'sessions' && !user) return { name: 'sign-in' };
   if ((route.name === 'sign-in' || route.name === 'sign-up') && user) return { name: 'home' };
   return route;
+}
+
+function canonicalHref(href: string): string {
+  const url = new URL(href, 'http://localhost');
+  return (url.pathname.replace(/\/+$/, '') || '/') + url.search;
+}
+
+/** The URL the address bar should show for `href`, or null when it already does. */
+export function redirectFor(href: string, user: User | null): string | null {
+  const raw = parseRoute(href);
+  if (raw.name === 'not-found') return null;
+  const target = routePath(guardRoute(raw, user));
+  return target === canonicalHref(href) ? null : target;
 }
 
 const NAVIGATE_EVENT = 'aquarium:navigate';

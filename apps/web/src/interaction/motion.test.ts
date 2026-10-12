@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { normaliseWheel } from './domInput';
+import { normaliseWheel, startsGesture } from './domInput';
 import { watchReducedMotion, type MotionSource } from './motion';
 
 function source(matches: boolean) {
@@ -41,5 +41,15 @@ describe('normaliseWheel', () => {
     expect(normaliseWheel(100, 0)).toBe(1);
     expect(normaliseWheel(3, 1)).toBeCloseTo(0.48);
     expect(normaliseWheel(-1, 2)).toBe(-8);
+  });
+});
+
+describe('startsGesture', () => {
+  it('lets touch and pen through and limits the mouse to the primary button', () => {
+    expect(startsGesture('touch', 0)).toBe(true);
+    expect(startsGesture('pen', 5)).toBe(true);
+    expect(startsGesture('mouse', 0)).toBe(true);
+    expect(startsGesture('mouse', 1)).toBe(false);
+    expect(startsGesture('mouse', 2)).toBe(false);
   });
 });

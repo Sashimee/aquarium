@@ -1,7 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CameraMode } from '../interaction/camera';
-import { useAuth, useBridge, useCameraMode, useEngineReady, useRoute } from './context';
-import { guardRoute, navigate, routePath } from './router';
+import {
+  useAuth,
+  useBridge,
+  useCameraMode,
+  useEngineReady,
+  useRedirect,
+  useRoute,
+} from './context';
 import {
   Link,
   NotFoundScreen,
@@ -98,13 +104,7 @@ function TankReport() {
 
 function Screen() {
   const route = useRoute();
-  const { user, status } = useAuth();
-
-  useEffect(() => {
-    if (status === 'loading') return;
-    const target = guardRoute(route, user);
-    if (target !== route) navigate(routePath(target), true);
-  }, [route, status, user]);
+  const { status } = useAuth();
 
   switch (route.name) {
     case 'home':
@@ -123,8 +123,16 @@ function Screen() {
 }
 
 export function App() {
+  useRedirect();
   const route = useRoute();
   const modal = route.name !== 'home';
+  const previous = useRef(route.name);
+  useEffect(() => {
+    if (route.name === 'home' && previous.current !== 'home') {
+      document.getElementById('tank')?.focus();
+    }
+    previous.current = route.name;
+  }, [route.name]);
   return (
     <div className="shell">
       <a

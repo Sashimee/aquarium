@@ -12,8 +12,16 @@ import {
 import type { EngineEvents, EventBus } from '../engine/events';
 import type { CameraMode } from '../interaction/camera';
 import type { InteractionEvents } from '../interaction/events';
-import { createApiClient, type ApiClient } from './api';
-import { currentHref, guardRoute, parseRoute, subscribeToLocation, type Route } from './router';
+import { ApiRequestError, createApiClient, type ApiClient } from './api';
+import {
+  currentHref,
+  guardRoute,
+  navigate,
+  parseRoute,
+  redirectFor,
+  subscribeToLocation,
+  type Route,
+} from './router';
 
 export interface UiBridge {
   engine: EventBus<EngineEvents>;
@@ -93,7 +101,15 @@ function AuthProvider({ children }: { children: ReactNode }) {
       refresh,
       async signIn(input) {
         await api.signIn(input);
-        await refresh();
+        const signedIn = await api.me();
+        if (!signedIn) {
+          throw new ApiRequestError(
+            401,
+            'unauthenticated',
+            'You were signed in, but the session was not kept. Check that your browser accepts cookies and try again.',
+          );
+        }
+        setUser(signedIn);
       },
       signUp: (input) => api.signUp(input),
       async signOut() {
@@ -130,4 +146,15 @@ export function useRoute(): Route {
   const href = useSyncExternalStore(subscribeToLocation, currentHref);
   const route = parseRoute(href);
   return status === 'loading' ? route : guardRoute(route, user);
+}
+
+/** Makes the address bar match what the guarded route renders. */
+export function useRedirect(): void {
+  const { user, status } = useAuth();
+  const href = useSyncExternalStore(subscribeToLocation, currentHref);
+  useEffect(() => {
+    if (status === 'loading') return;
+    const target = redirectFor(href, user);
+    if (target) navigate(target, true);
+  }, [href, status, user]);
 }

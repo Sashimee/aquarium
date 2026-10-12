@@ -22,6 +22,7 @@ export class ApiRequestError extends Error {
     readonly code: ErrorCode | 'network' | 'unexpected_response',
     message: string,
     readonly fields: FieldErrors = {},
+    readonly retryAfterSeconds: number | null = null,
   ) {
     super(message);
     this.name = 'ApiRequestError';
@@ -76,6 +77,8 @@ function errorCodeFor(status: number, rawCode: unknown): ErrorCode {
 
 /** Accepts both our `{error:{code,message,issues}}` envelope and Better Auth's `{code,message}`. */
 async function toError(res: Response): Promise<ApiRequestError> {
+  const header = Number.parseInt(res.headers.get('retry-after') ?? '', 10);
+  const retryAfter = Number.isFinite(header) && header > 0 ? header : null;
   let body: unknown;
   try {
     body = await res.json();
@@ -85,14 +88,20 @@ async function toError(res: Response): Promise<ApiRequestError> {
   const own = apiErrorSchema.safeParse(body);
   if (own.success) {
     const { code, message, issues } = own.data.error;
-    return new ApiRequestError(res.status, code, message, issuesToFields(issues ?? []));
+    return new ApiRequestError(res.status, code, message, issuesToFields(issues ?? []), retryAfter);
   }
   const loose = body as { code?: unknown; message?: unknown } | null;
   const message =
     typeof loose?.message === 'string' && loose.message.length > 0
       ? loose.message
       : `Request failed (${res.status}).`;
-  return new ApiRequestError(res.status, errorCodeFor(res.status, loose?.code), message);
+  return new ApiRequestError(
+    res.status,
+    errorCodeFor(res.status, loose?.code),
+    message,
+    {},
+    retryAfter,
+  );
 }
 
 export interface ApiClient {
@@ -161,7 +170,7 @@ export function createApiClient(fetcher: Fetcher = (i, init) => fetch(i, init)):
     },
     async signIn(input) {
       const body = validate(signInRequestSchema, input);
-      await post('/api/auth/sign-in/email', body);
+      await post('/api/auth/sign-in/email', { ...body, callbackURL: VERIFY_CALLBACK_PATH });
     },
     async signOut() {
       await post('/api/auth/sign-out', {});

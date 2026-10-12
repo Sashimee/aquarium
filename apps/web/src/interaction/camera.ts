@@ -214,6 +214,7 @@ export class CameraRig {
   }
 
   update(dtSeconds: number): void {
+    if (!Number.isFinite(dtSeconds)) return;
     const dt = clamp(dtSeconds, 0, MAX_DT);
     if (this.modeValue === 'focus') this.refreshFocus();
     const goal = this.goal();
@@ -265,8 +266,9 @@ export class CameraRig {
     const target = this.modeValue === 'focus' ? this.focusLast : this.orbitTarget;
     const distance = this.modeValue === 'focus' ? this.focusDistance : this.distance;
     const o = sphericalOffset(this.yaw, this.pitch, distance);
+    const eye = { x: target.x + o.x, y: Math.max(EYE_FLOOR, target.y + o.y), z: target.z + o.z };
     return {
-      eye: { x: target.x + o.x, y: Math.max(EYE_FLOOR, target.y + o.y), z: target.z + o.z },
+      eye: this.modeValue === 'focus' && this.insideGlass(target) ? this.clampDive(eye) : eye,
       look: target,
     };
   }
@@ -277,6 +279,11 @@ export class CameraRig {
       min: { x: -b.halfLength, y: 0, z: -b.halfDepth },
       max: { x: b.halfLength, y: b.height, z: b.halfDepth },
     };
+  }
+
+  private insideGlass(p: Vec3): boolean {
+    const { min, max } = this.glassBox();
+    return p.x > min.x && p.x < max.x && p.y > min.y && p.y < max.y && p.z > min.z && p.z < max.z;
   }
 
   /** Keeps the orbit eye outside the glass however the view is angled. */

@@ -21,6 +21,11 @@ export function normaliseWheel(deltaY: number, deltaMode: number): number {
   return pixels / NOTCH_PX;
 }
 
+/** Only the primary button drives the camera; the others stay free for tools. */
+export function startsGesture(pointerType: string, button: number): boolean {
+  return pointerType !== 'mouse' || button === 0;
+}
+
 function kindOf(pointerType: string): PointerKind {
   return pointerType === 'touch' || pointerType === 'pen' ? pointerType : 'mouse';
 }
@@ -44,7 +49,13 @@ export function attachPointerInput(
   };
 
   const down = (e: PointerEvent) => {
-    element.setPointerCapture(e.pointerId);
+    if (!startsGesture(e.pointerType, e.button)) return;
+    try {
+      element.setPointerCapture(e.pointerId);
+    } catch (cause) {
+      // The pointer can vanish between the event and the call; the gesture still works uncaptured.
+      if (!(cause instanceof DOMException && cause.name === 'InvalidStateError')) throw cause;
+    }
     recognizer.pointerDown(sample(e));
   };
   const move = (e: PointerEvent) => recognizer.pointerMove(sample(e));

@@ -95,7 +95,7 @@ interface Submission {
   error: string | null;
   fields: FieldErrors;
   failure: ApiRequestError | null;
-  run(action: () => Promise<void>): Promise<boolean>;
+  run(action: () => Promise<void>, options?: { rethrow?: boolean }): Promise<boolean>;
 }
 
 function useSubmission(): Submission {
@@ -111,7 +111,7 @@ function useSubmission(): Submission {
     };
   }, []);
 
-  const run = useCallback(async (action: () => Promise<void>) => {
+  const run = useCallback(async (action: () => Promise<void>, options?: { rethrow?: boolean }) => {
     setBusy(true);
     setError(null);
     setFields({});
@@ -132,6 +132,7 @@ function useSubmission(): Submission {
         console.error(cause);
         setError('Something went wrong. Try again.');
       }
+      if (options?.rethrow) throw cause;
       return false;
     } finally {
       if (alive.current) setBusy(false);
@@ -148,26 +149,74 @@ function FormError({ message }: { message: string | null }) {
   );
 }
 
-function ResendButton({ email }: { email: string }) {
+export const RESEND_COOLDOWN_SECONDS = 60;
+
+function useCountdown(initial: number): [number, (seconds: number) => void] {
+  const [remaining, setRemaining] = useState(initial);
+  const active = remaining > 0;
+  useEffect(() => {
+    if (!active) return;
+    const timer = setInterval(() => setRemaining((n) => Math.max(0, n - 1)), 1000);
+    return () => clearInterval(timer);
+  }, [active]);
+  return [remaining, setRemaining];
+}
+
+/** `justSent` means the server already mailed a link, so its per-address cooldown is running. */
+function ResendButton({
+  email,
+  justSent = false,
+  inForm = false,
+}: {
+  email: string;
+  justSent?: boolean;
+  inForm?: boolean;
+}) {
   const api = useApi();
   const submission = useSubmission();
   const [sent, setSent] = useState(false);
+  const [remaining, setRemaining] = useCountdown(justSent ? RESEND_COOLDOWN_SECONDS : 0);
+
+  const resend = async () => {
+    try {
+      await submission.run(() => api.resendVerification(email), { rethrow: true });
+      setSent(true);
+      setRemaining(RESEND_COOLDOWN_SECONDS);
+    } catch (cause) {
+      if (cause instanceof ApiRequestError && cause.code === 'rate_limited') {
+        setRemaining(cause.retryAfterSeconds ?? RESEND_COOLDOWN_SECONDS);
+      }
+    }
+  };
+
+  const waiting = remaining > 0;
   return (
     <>
       <button
-        type="button"
+        type={inForm ? 'submit' : 'button'}
         className="secondary"
-        disabled={submission.busy || email.length === 0}
-        onClick={() => {
-          void submission.run(() => api.resendVerification(email)).then((ok) => setSent(ok));
+        disabled={submission.busy || waiting || email.length === 0}
+        onClick={(e) => {
+          e.preventDefault();
+          void resend();
         }}
       >
-        Send the verification email again
+        {waiting ? `Send again in ${remaining}s` : 'Send the verification email again'}
       </button>
-      <p role="status" className="hint" hidden={!sent}>
-        {sent ? 'If that address has an account, a new link is on its way.' : ''}
+      <p role="status" className="hint">
+        {sent
+          ? 'If that address has an account, a new link is on its way.'
+          : justSent && waiting
+            ? 'We just sent a verification link. Check your inbox and spam folder.'
+            : ''}
       </p>
-      <FormError message={submission.error} />
+      <FormError
+        message={
+          submission.failure?.code === 'rate_limited'
+            ? 'A verification email went out a moment ago. Please wait before asking for another.'
+            : submission.error
+        }
+      />
     </>
   );
 }
@@ -213,7 +262,7 @@ export function SignInScreen() {
           {submission.busy ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
-      {submission.failure?.code === 'email_not_verified' && <ResendButton email={email} />}
+      {submission.failure?.code === 'email_not_verified' && <ResendButton email={email} justSent />}
       <p className="alt">
         New here? <Link to="/sign-up">Create an account</Link>
       </p>
@@ -245,7 +294,7 @@ export function SignUpScreen() {
           We sent a verification link to <strong>{sentTo}</strong>. Open it to finish creating your
           account, then sign in.
         </p>
-        <ResendButton email={sentTo} />
+        <ResendButton email={sentTo} justSent />
         <p className="alt">
           <Link to="/sign-in">Go to sign in</Link>
         </p>

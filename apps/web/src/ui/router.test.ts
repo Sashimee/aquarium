@@ -1,6 +1,6 @@
 import type { User } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
-import { guardRoute, parseRoute, routePath } from './router';
+import { guardRoute, parseRoute, redirectFor, routePath } from './router';
 
 const user: User = {
   id: 'u1',
@@ -66,5 +66,29 @@ describe('guardRoute', () => {
       name: 'verify-email',
       error: null,
     });
+  });
+});
+
+describe('redirectFor', () => {
+  it('moves a signed-out visitor from /sessions to /sign-in', () => {
+    expect(redirectFor('/sessions', null)).toBe('/sign-in');
+    expect(redirectFor('/sessions', user)).toBeNull();
+  });
+  it('moves a signed-in user from the entry forms to /', () => {
+    expect(redirectFor('/sign-in', user)).toBe('/');
+    expect(redirectFor('/sign-up', user)).toBe('/');
+    expect(redirectFor('/sign-in', null)).toBeNull();
+  });
+  it('normalises failed verification redirects to the landing page', () => {
+    expect(redirectFor('/?error=TOKEN_EXPIRED', null)).toBe('/verify-email?error=TOKEN_EXPIRED');
+    expect(redirectFor('/verify-email?error=TOKEN_EXPIRED', null)).toBeNull();
+  });
+  it('leaves home and unknown paths alone', () => {
+    expect(redirectFor('/', null)).toBeNull();
+    expect(redirectFor('/', user)).toBeNull();
+    expect(redirectFor('/nope', user)).toBeNull();
+  });
+  it('treats a trailing slash as the same URL', () => {
+    expect(redirectFor('/sessions/', user)).toBeNull();
   });
 });

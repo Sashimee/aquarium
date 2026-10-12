@@ -5,6 +5,7 @@ import { DEFAULT_TANK } from './engine/tank/dimensions';
 import { CameraRig } from './interaction/camera';
 import { bindCameraControls } from './interaction/controls';
 import type { InteractionEvents } from './interaction/events';
+import { onPageTeardown } from './interaction/pageLifecycle';
 import { watchReducedMotion } from './interaction/motion';
 import { mountUi } from './ui/mount';
 
@@ -75,16 +76,12 @@ async function boot(): Promise<void> {
   });
   engine.onFrame((deltaS) => rig.update(deltaS));
 
-  window.addEventListener(
-    'pagehide',
-    () => {
-      stopMotionWatch();
-      unbindControls();
-      stopRequests();
-      engine.dispose().catch((cause: unknown) => console.error('Engine dispose failed', cause));
-    },
-    { once: true },
-  );
+  onPageTeardown(window, () => {
+    stopMotionWatch();
+    unbindControls();
+    stopRequests();
+    engine.dispose().catch((cause: unknown) => console.error('Engine dispose failed', cause));
+  });
 
   if (import.meta.env.DEV) {
     const { createDevPanel } = await import('./engine/devPanel');

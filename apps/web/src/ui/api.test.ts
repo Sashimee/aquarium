@@ -42,6 +42,25 @@ describe('api client', () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
+  it('sends the verification callback on sign-in so the re-sent mail lands on the landing page', async () => {
+    const fetcher = vi.fn().mockResolvedValue(json({}));
+    await createApiClient(fetcher).signIn({ email: 'a@bas.lu', password: 'x' });
+    const [, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toMatchObject({ callbackURL: '/verify-email' });
+  });
+
+  it('exposes retry-after on rate limited responses', async () => {
+    const res = () =>
+      new Response(JSON.stringify({ error: { code: 'rate_limited', message: 'Slow' } }), {
+        status: 429,
+        headers: { 'retry-after': '42' },
+      });
+    const error = (await createApiClient(vi.fn().mockResolvedValue(res()))
+      .resendVerification('a@bas.lu')
+      .catch((e) => e)) as ApiRequestError;
+    expect(error.retryAfterSeconds).toBe(42);
+  });
+
   it('maps Better Auth unverified-email errors to email_not_verified', async () => {
     const fetcher = vi
       .fn()

@@ -218,6 +218,51 @@ describe('CameraRig focus', () => {
   });
 });
 
+describe('CameraRig robustness', () => {
+  it('ignores NaN and infinite frame times instead of corrupting the view', () => {
+    const cam = fakeCamera();
+    const rig = new CameraRig(cam, BOUNDS);
+    rig.update(NaN);
+    rig.update(Infinity);
+    rig.update(-1);
+    rig.update(0.016);
+    expect(Number.isFinite(cam.pos.x + cam.pos.y + cam.pos.z)).toBe(true);
+  });
+
+  it('converges to the same view whether time arrives in small or large steps', () => {
+    const run = (step: number) => {
+      const cam = fakeCamera();
+      const rig = new CameraRig(cam, BOUNDS);
+      rig.setOrbit(1.2, 0.3, 2);
+      for (let t = 0; t < 2; t += step) rig.update(step);
+      return cam.pos;
+    };
+    const fine = run(1 / 120);
+    const coarse = run(1 / 20);
+    expect(coarse.x).toBeCloseTo(fine.x, 2);
+    expect(coarse.y).toBeCloseTo(fine.y, 2);
+    expect(coarse.z).toBeCloseTo(fine.z, 2);
+  });
+
+  it('keeps a follow camera in the water when the fish hugs the glass or the substrate', () => {
+    const cam = fakeCamera();
+    const rig = new CameraRig(cam, BOUNDS, { reducedMotion: true });
+    for (const fish of [
+      { x: 0, y: 0.3, z: 0.24 },
+      { x: 0.59, y: 0.3, z: 0 },
+      { x: 0, y: 0.12, z: 0 },
+    ]) {
+      rig.focusOn(() => fish);
+      for (const yaw of [0, 1.5, 3, -1.5]) {
+        rig.setOrbit(yaw, 0.2, 1);
+        rig.update(0.016);
+        expect(insideGlass(cam.pos)).toBe(true);
+        expect(cam.pos.y).toBeGreaterThanOrEqual(BOUNDS.floor);
+      }
+    }
+  });
+});
+
 describe('CameraRig dive', () => {
   it('puts the eye inside the water, continuing the current view direction', () => {
     const cam = fakeCamera();
