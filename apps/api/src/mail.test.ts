@@ -31,15 +31,10 @@ function section(raw: string, type: 'text/plain' | 'text/html'): { head: string;
 
 function decodePart(raw: string, type: 'text/plain' | 'text/html'): string {
   const { head, body } = section(raw, type);
-  if (/Content-Transfer-Encoding: base64/i.test(head)) {
-    return Buffer.from(body.replace(/\s+/g, ''), 'base64').toString('utf8');
+  if (!/Content-Transfer-Encoding: base64/i.test(head)) {
+    throw new Error(`${type} part is not base64 encoded`);
   }
-  if (/Content-Transfer-Encoding: quoted-printable/i.test(head)) {
-    return body
-      .replace(/=\n/g, '')
-      .replace(/=([0-9A-F]{2})/gi, (_, h: string) => String.fromCharCode(parseInt(h, 16)));
-  }
-  return body;
+  return Buffer.from(body.replace(/\s+/g, ''), 'base64').toString('utf8');
 }
 
 describe('verification mail', () => {
@@ -52,14 +47,14 @@ describe('verification mail', () => {
 
   it('puts the exact URL alone on its own line in the text part', async () => {
     const text = decodePart(await rawMessage(URL_WITH_AMP), 'text/plain');
-    expect(text.split('\n')).toContain(URL_WITH_AMP);
+    expect(text.split('\n')).toContain(`<${URL_WITH_AMP}>`);
   });
 
   it('keeps a 300+ char URL with ampersands unbroken in the text part', async () => {
     expect(URL_WITH_AMP.length).toBeGreaterThan(300);
     const raw = await rawMessage(URL_WITH_AMP);
     expect(section(raw, 'text/plain').head).toMatch(/Content-Transfer-Encoding: base64/i);
-    expect(decodePart(raw, 'text/plain')).toContain(`\n${URL_WITH_AMP}\n`);
+    expect(decodePart(raw, 'text/plain')).toContain(`\n<${URL_WITH_AMP}>\n`);
   });
 
   it('html href unescapes to the exact URL, as button and as visible link', async () => {

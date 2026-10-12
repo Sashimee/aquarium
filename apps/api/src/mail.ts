@@ -32,9 +32,9 @@ export function escapeHtml(value: string): string {
 
 export function verificationMessage(url: string): { text: string; html: string } {
   const safe = escapeHtml(url);
-  const text = `Confirm your email address to start your aquarium:\n\n${url}\n\nIf you did not sign up, ignore this message.\n`;
+  const text = `Confirm your email address to start your aquarium:\n\n<${url}>\n\nIf you did not sign up, ignore this message.\n`;
   const html = `<!doctype html>
-<html><body style="margin:0;padding:24px;background:#f4f7f9;font-family:Arial,Helvetica,sans-serif;color:#12202b">
+<html lang="en"><head><meta charset="utf-8"><meta name="color-scheme" content="light"><title>Verify your Aquarium account</title></head><body style="margin:0;padding:24px;background:#f4f7f9;font-family:Arial,Helvetica,sans-serif;color:#12202b">
 <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:8px;padding:24px">
 <h1 style="font-size:20px;margin:0 0 16px">Welcome to your Aquarium</h1>
 <p style="font-size:15px;line-height:1.5;margin:0 0 24px">Confirm your email address to start your aquarium.</p>
