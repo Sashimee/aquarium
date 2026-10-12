@@ -319,6 +319,45 @@ describe('species and presets', () => {
         .success,
     ).toBe(false);
   });
+
+  it('validates substrate, plant patches and the current of a full preset', () => {
+    const preset = {
+      id: 'planted-20',
+      name: 'Planted 20',
+      biome: 'freshwater',
+      decor: [],
+      substrate: { assetId: 'coast-sand-01', tileMeters: 0.5 },
+      plantPatches: [
+        {
+          id: 'carpet',
+          assetId: 'staurogyne-repens',
+          center: [0, 0.1],
+          radius: 0.2,
+          count: 12,
+          scale: [0.8, 1.2],
+          seed: 7,
+        },
+      ],
+      current: { direction: [1, 0], speed: 0.04, gustPeriodS: 9, gustDepth: 0.4 },
+    };
+    const parsed = presetLayoutSchema.parse(preset);
+    expect(parsed.substrate?.tint).toEqual([1, 1, 1]);
+    expect(presetLayoutSchema.parse({ ...preset, plantPatches: undefined }).plantPatches).toEqual(
+      [],
+    );
+    expect(
+      presetLayoutSchema.safeParse({
+        ...preset,
+        current: { ...preset.current, direction: [0, 0] },
+      }).success,
+    ).toBe(false);
+    expect(
+      presetLayoutSchema.safeParse({
+        ...preset,
+        plantPatches: [{ ...preset.plantPatches[0], count: 0 }],
+      }).success,
+    ).toBe(false);
+  });
 });
 
 describe('decor bounds', () => {

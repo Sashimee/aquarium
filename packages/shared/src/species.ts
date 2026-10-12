@@ -103,10 +103,45 @@ export type SpeciesSummary = z.infer<typeof speciesSummarySchema>;
 
 export const speciesListSchema = z.array(speciesSummarySchema);
 
+const metres = z.number().min(-5).max(5);
+
+export const presetSubstrateSchema = z.strictObject({
+  assetId: slugSchema,
+  accentAssetId: slugSchema.optional(),
+  tint: z.tuple([unitSchema, unitSchema, unitSchema]).default([1, 1, 1]),
+  tileMeters: z.number().min(0.05).max(5),
+});
+export type PresetSubstrate = z.infer<typeof presetSubstrateSchema>;
+
+export const plantPatchSchema = z.strictObject({
+  id: slugSchema,
+  assetId: slugSchema,
+  center: z.tuple([metres, metres]).describe('x, z in metres, tank space'),
+  radius: z.number().positive().max(5),
+  count: z.int().min(1).max(500).describe('instances at the highest quality tier'),
+  scale: z.tuple([z.number().min(0.05).max(10), z.number().min(0.05).max(10)]),
+  seed: z.int().min(0).max(0xffffffff),
+});
+export type PlantPatch = z.infer<typeof plantPatchSchema>;
+
+export const presetCurrentSchema = z.strictObject({
+  direction: z
+    .tuple([z.number().min(-1).max(1), z.number().min(-1).max(1)])
+    .refine(([x, z]) => x !== 0 || z !== 0, 'direction must not be zero')
+    .describe('horizontal flow direction (x, z), normalised on load'),
+  speed: z.number().min(0).max(1).describe('mean filter flow in m/s'),
+  gustPeriodS: z.number().min(1).max(120),
+  gustDepth: unitSchema,
+});
+export type PresetCurrent = z.infer<typeof presetCurrentSchema>;
+
 export const presetLayoutSchema = z.strictObject({
   id: slugSchema,
   name: z.string().min(1),
   biome: biomeSchema,
   decor: decorLayoutSchema,
+  substrate: presetSubstrateSchema.optional(),
+  plantPatches: z.array(plantPatchSchema).max(64).default([]),
+  current: presetCurrentSchema.optional(),
 });
 export type PresetLayout = z.infer<typeof presetLayoutSchema>;
