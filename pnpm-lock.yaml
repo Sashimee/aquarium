@@ -245,6 +245,9 @@ importers:
       '@aquarium/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@aquarium/sim':
+        specifier: workspace:*
+        version: link:../../packages/sim
       react:
         specifier: 19.3.0
         version: 19.3.0

@@ -2,6 +2,7 @@ import { Engine } from './engine/Engine';
 import { EventBus, type EngineEvents } from './engine/events';
 import { parseEngineOptions } from './engine/options';
 import { DEFAULT_TANK } from './engine/tank/dimensions';
+import { FishSystem } from './fish/FishSystem';
 import { CameraRig } from './interaction/camera';
 import { bindCameraControls } from './interaction/controls';
 import type { InteractionEvents } from './interaction/events';
@@ -76,10 +77,19 @@ async function boot(): Promise<void> {
   });
   engine.onFrame((deltaS) => rig.update(deltaS));
 
+  const fish = FishSystem.create(engine, {
+    tank: DEFAULT_TANK,
+    assetRoot: `${import.meta.env.BASE_URL}assets/`,
+  }).catch((cause: unknown) => {
+    events.emit('engine:error', { message: 'Fish failed to start', cause });
+    return null;
+  });
+
   onPageTeardown(window, () => {
     stopMotionWatch();
     unbindControls();
     stopRequests();
+    void fish.then((system) => system?.dispose());
     engine.dispose().catch((cause: unknown) => console.error('Engine dispose failed', cause));
   });
 
