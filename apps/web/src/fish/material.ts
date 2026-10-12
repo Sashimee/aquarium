@@ -217,8 +217,7 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
     const finAmount = smoothstep(0.08, 0.5, fin.x);
 
     const sample = source.map !== null ? texture(source.map) : vec4(1);
-    let base: Node<'vec3'> = sample.rgb.mul(color(source.color)).mul(tint);
-    if (profile.finTint !== null) base = mix(base, vec3(...profile.finTint), finAmount);
+    const base = sample.rgb.mul(color(source.color)).mul(tint);
     const grey = vec3(luminance(base).mul(0.8).add(0.06));
     const albedo = mix(base, grey, pale.mul(0.85)).toVar();
     this.colorNode = albedo;

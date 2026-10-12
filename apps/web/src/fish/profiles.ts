@@ -11,11 +11,6 @@ export interface FishRenderProfile {
   readonly finTransmission: number;
   /** How strongly the colours pale at night, 0..1. */
   readonly nightPaling: number;
-  /**
-   * Replaces the fin texture with this linear colour, scaled by the fin mask. Set for models whose
-   * fin texels are unusable (#46: the lofted fins sample photo background).
-   */
-  readonly finTint: readonly [number, number, number] | null;
   /** Per-fish brightness and hue variation, 0..1. */
   readonly tintVariation: number;
 }
@@ -28,7 +23,6 @@ const DEFAULTS: FishRenderProfile = {
   roughness: 0.4,
   finTransmission: 0.4,
   nightPaling: 0.4,
-  finTint: null,
   tintVariation: 0.08,
 };
 
@@ -61,7 +55,6 @@ export const FISH_RENDER_PROFILES: Readonly<Record<string, FishRenderProfile>> =
     filmThicknessNm: [380, 520],
     finTransmission: 0.55,
     nightPaling: 0.2,
-    finTint: [0.32, 0.27, 0.2],
   },
   betta: {
     ...DEFAULTS,
@@ -84,7 +77,6 @@ export const FISH_RENDER_PROFILES: Readonly<Record<string, FishRenderProfile>> =
     assetId: 'banggai-cardinalfish',
     iridescence: 0.15,
     finTransmission: 0.5,
-    finTint: [0.22, 0.22, 0.24],
   },
   'ocellaris-clownfish': { ...DEFAULTS, assetId: 'ocellaris-clownfish', iridescence: 0.1 },
   'royal-gramma': { ...DEFAULTS, assetId: 'royal-gramma', iridescence: 0.2 },
