@@ -1,24 +1,39 @@
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Engine } from './engine/Engine';
 import { EventBus, type EngineEvents } from './engine/events';
 import { parseEngineOptions } from './engine/options';
+import { DEFAULT_TANK } from './engine/tank/dimensions';
+import { CameraRig } from './interaction/camera';
+import { bindCameraControls } from './interaction/controls';
+import type { InteractionEvents } from './interaction/events';
+import { watchReducedMotion } from './interaction/motion';
+import { mountUi } from './ui/mount';
 
 function showFatal(container: HTMLElement, message: string): void {
   const box = document.createElement('pre');
   box.className = 'fatal';
+  box.setAttribute('role', 'alert');
   box.textContent = message;
   container.replaceChildren(box);
 }
 
+function requireElement(id: string): HTMLElement {
+  const element = document.getElementById(id);
+  if (!element) throw new Error(`index.html is missing the #${id} element`);
+  return element;
+}
+
 async function boot(): Promise<void> {
-  const container = document.getElementById('app');
-  if (!container) throw new Error('index.html is missing the #app element');
+  const container = requireElement('app');
+  const uiRoot = requireElement('ui');
 
   const events = new EventBus<EngineEvents>();
+  const interaction = new EventBus<InteractionEvents>();
   events.on('engine:error', ({ message, cause }) => console.error(message, cause));
   events.on('quality:tier-changed', ({ from, to, reason }) =>
     console.info(`quality tier ${from ?? '(start)'} -> ${to} (${reason})`),
   );
+
+  mountUi(uiRoot, { engine: events, interaction });
 
   let engine: Engine;
   try {
@@ -31,12 +46,45 @@ async function boot(): Promise<void> {
     return;
   }
 
-  // Interim camera until the camera system (T07) replaces it.
-  const controls = new OrbitControls(engine.camera, engine.renderer.domElement);
-  controls.target.set(0, 0.25, 0);
-  controls.enableDamping = true;
-  controls.update();
-  engine.onFrame(() => controls.update());
+  const canvas = engine.renderer.domElement;
+  canvas.id = 'tank';
+  canvas.tabIndex = 0;
+  canvas.setAttribute('role', 'application');
+  canvas.setAttribute(
+    'aria-label',
+    'Aquarium view. Arrow keys orbit, plus and minus zoom, Escape leaves dive mode.',
+  );
+
+  const rig = new CameraRig(
+    engine.camera,
+    {
+      halfLength: DEFAULT_TANK.length / 2,
+      halfDepth: DEFAULT_TANK.depth / 2,
+      height: DEFAULT_TANK.height,
+      waterTop: DEFAULT_TANK.height - DEFAULT_TANK.freeboard,
+      floor: DEFAULT_TANK.substrateBack + 0.05,
+    },
+    { onModeChange: (mode) => interaction.emit('camera:mode-changed', { mode }) },
+  );
+
+  const stopMotionWatch = watchReducedMotion((reduced) => rig.setReducedMotion(reduced));
+  const unbindControls = bindCameraControls(canvas, rig);
+  const stopRequests = interaction.on('camera:request-mode', ({ mode }) => {
+    if (mode === 'dive') rig.dive();
+    else if (mode === 'orbit') rig.exit();
+  });
+  engine.onFrame((deltaS) => rig.update(deltaS));
+
+  window.addEventListener(
+    'pagehide',
+    () => {
+      stopMotionWatch();
+      unbindControls();
+      stopRequests();
+      engine.dispose().catch((cause: unknown) => console.error('Engine dispose failed', cause));
+    },
+    { once: true },
+  );
 
   if (import.meta.env.DEV) {
     const { createDevPanel } = await import('./engine/devPanel');
