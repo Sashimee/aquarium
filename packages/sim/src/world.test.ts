@@ -1,0 +1,340 @@
+import { describe, expect, it } from 'vitest';
+
+// Long simulations: well under a second locally, but shared CI runners can be several times slower.
+const LONG = 60_000;
+import {
+  ARCHETYPES,
+  benchmarkConfig,
+  blueTang,
+  neonTetra,
+  REEF_TANK,
+  SHOW_TANK,
+  spawnMany,
+} from './fixtures.ts';
+import { TankSdf, type TankDimensions } from './sdf.ts';
+import { SNAPSHOT_STRIDE } from './snapshot.ts';
+import { toSimSpecies } from './species.ts';
+import { STEERING, World, type WorldConfig } from './world.ts';
+
+function stateOf(w: World): Float64Array[] {
+  return [w.position, w.yaw, w.pitch, w.roll, w.speed, w.yawRate, w.pitchRate].map(
+    (a) => new Float64Array(a),
+  );
+}
+
+function run(config: WorldConfig, steps: number): World {
+  const w = new World(config);
+  for (let t = 0; t < steps; t++) w.step();
+  return w;
+}
+
+function at(a: ArrayLike<number>, i: number): number {
+  const v = a[i];
+  if (v === undefined) throw new RangeError(`index ${i} out of range`);
+  return v;
+}
+
+function shoalClusters(w: World, members: number[], linkM: number): number[] {
+  const parent = members.map((_, k) => k);
+  const root = (k: number): number => {
+    while (at(parent, k) !== k) k = at(parent, k);
+    return k;
+  };
+  members.forEach((i, a) => {
+    for (let b = a + 1; b < members.length; b++) {
+      const j = at(members, b);
+      const d = Math.hypot(
+        at(w.position, i * 3) - at(w.position, j * 3),
+        at(w.position, i * 3 + 1) - at(w.position, j * 3 + 1),
+        at(w.position, i * 3 + 2) - at(w.position, j * 3 + 2),
+      );
+      if (d < linkM) parent[root(a)] = root(b);
+    }
+  });
+  const sizes = new Map<number, number>();
+  members.forEach((_, k) => sizes.set(root(k), (sizes.get(root(k)) ?? 0) + 1));
+  return [...sizes.values()];
+}
+
+describe('World determinism', { timeout: LONG }, () => {
+  it('reproduces the trajectory bit for bit from the same seed', () => {
+    const a = run(benchmarkConfig(3), 1000);
+    const b = run(benchmarkConfig(3), 1000);
+    expect(stateOf(a)).toEqual(stateOf(b));
+    expect(a.contacts).toBe(b.contacts);
+    expect(Array.from(a.state)).toEqual(Array.from(b.state));
+  });
+
+  it('diverges for a different seed', () => {
+    const a = run(benchmarkConfig(3), 50);
+    const b = run(benchmarkConfig(4), 50);
+    expect(a.position).not.toEqual(b.position);
+  });
+
+  it('advances a fixed 1/30 s per step', () => {
+    const w = run(benchmarkConfig(1), 90);
+    expect(w.tick).toBe(90);
+    expect(w.time).toBeCloseTo(3, 12);
+  });
+});
+
+describe('World containment', { timeout: LONG }, () => {
+  const cases: { name: string; tank: TankDimensions }[] = [];
+  for (const sp of ARCHETYPES) {
+    cases.push({ name: `${sp.id} in the reef tank`, tank: REEF_TANK });
+    if (sp !== blueTang) cases.push({ name: `${sp.id} in the show tank`, tank: SHOW_TANK });
+  }
+
+  it.each(cases)('never penetrates a wall over 10 000 steps: $name', ({ name, tank }) => {
+    const id = name.split(' ')[0] ?? '';
+    const w = new World({ seed: 11, tank, species: ARCHETYPES, fish: spawnMany(id, 12) });
+    const sdf = new TankSdf(tank);
+    const nrm = new Float64Array(3);
+    let worst = Infinity;
+    for (let t = 0; t < 10_000; t++) {
+      w.step();
+      for (let i = 0; i < w.count; i++) {
+        const o = i * 3;
+        const clearance =
+          sdf.sample(at(w.position, o), at(w.position, o + 1), at(w.position, o + 2), nrm) -
+          at(w.radius, i);
+        worst = Math.min(worst, clearance);
+      }
+    }
+    expect(worst).toBeGreaterThanOrEqual(-1e-9);
+    // The hard constraint is a backstop; steering should keep it almost idle.
+    expect(w.contacts / (w.count * 10_000)).toBeLessThan(1e-3);
+  });
+
+  it('keeps the mixed 60-fish community off the glass', () => {
+    const w = run(benchmarkConfig(2), 10_000);
+    expect(w.contacts / (w.count * 10_000)).toBeLessThan(1e-3);
+  });
+});
+
+describe('World kinematic limits', { timeout: LONG }, () => {
+  it('respects per-species turn rate, pitch, speed and bank limits', () => {
+    const w = new World(benchmarkConfig(5));
+    const worst = { yawRate: 0, pitchRate: 0, pitch: 0, speed: 0, roll: 0, minSpeed: Infinity };
+    for (let t = 0; t < 3000; t++) {
+      w.step();
+      for (let i = 0; i < w.count; i++) {
+        const sp = w.speciesOf(i);
+        const vmax = (sp.maxSpeed * at(w.bodyLength, i)) / sp.bodyLength;
+        worst.yawRate = Math.max(worst.yawRate, Math.abs(at(w.yawRate, i)) / sp.maxTurnRate);
+        worst.pitchRate = Math.max(worst.pitchRate, Math.abs(at(w.pitchRate, i)) / sp.maxTurnRate);
+        worst.pitch = Math.max(worst.pitch, Math.abs(at(w.pitch, i)) / sp.maxPitch);
+        worst.speed = Math.max(worst.speed, at(w.speed, i) / vmax);
+        worst.roll = Math.max(worst.roll, Math.abs(at(w.roll, i)) / STEERING.maxBankRad);
+        worst.minSpeed = Math.min(worst.minSpeed, at(w.speed, i));
+      }
+    }
+    expect(worst.yawRate).toBeLessThanOrEqual(1 + 1e-12);
+    expect(worst.pitchRate).toBeLessThanOrEqual(1 + 1e-12);
+    expect(worst.pitch).toBeLessThanOrEqual(1 + 1e-12);
+    expect(worst.speed).toBeLessThanOrEqual(1 + 1e-12);
+    expect(worst.roll).toBeLessThanOrEqual(1 + 1e-12);
+    expect(worst.minSpeed).toBeGreaterThanOrEqual(0);
+  });
+
+  it('banks into the turn (left turn lowers the left flank)', () => {
+    const w = new World(benchmarkConfig(6));
+    let sxy = 0;
+    let sxx = 0;
+    let syy = 0;
+    for (let t = 0; t < 2000; t++) {
+      w.step();
+      for (let i = 0; i < w.count; i++) {
+        // Positive roll lowers the right flank, so a left (positive) turn should roll negative.
+        const expected = -Math.tanh(
+          (at(w.speed, i) * at(w.yawRate, i)) / STEERING.bankReferenceAccel,
+        );
+        const roll = at(w.roll, i);
+        sxy += expected * roll;
+        sxx += expected * expected;
+        syy += roll * roll;
+      }
+    }
+    // Roll lags the turn by the bank smoothing time, so expect strong but not perfect agreement.
+    expect(sxy / Math.sqrt(sxx * syy)).toBeGreaterThan(0.6);
+  });
+
+  it('steers a lone tang along the reef glass without flip-flopping or stalling', () => {
+    let hardFlips = 0;
+    let stalled = 0;
+    let samples = 0;
+    for (const seed of [1, 2, 3]) {
+      const w = new World({
+        seed,
+        tank: REEF_TANK,
+        species: ARCHETYPES,
+        fish: spawnMany('blue-tang', 1),
+      });
+      const { maxTurnRate: maxTurn, cruiseSpeed } = toSimSpecies(blueTang);
+      let lastHardSign = 0;
+      for (let t = 0; t < 10_000; t++) {
+        w.step();
+        if (t < 300) continue;
+        const turn = at(w.yawRate, 0);
+        if (Math.abs(turn) > 0.3 * maxTurn) {
+          const sign = Math.sign(turn);
+          if (lastHardSign !== 0 && sign !== lastHardSign) hardFlips++;
+          lastHardSign = sign;
+        }
+        // Speed lags the target, so a fish told to stop at each pane only sinks to a crawl.
+        if (at(w.speed, 0) < 0.3 * cruiseSpeed) stalled++;
+        samples++;
+      }
+    }
+    expect((hardFlips / samples) * 30).toBeLessThan(0.3);
+    expect(stalled / samples).toBeLessThan(0.01);
+  });
+
+  it('scales speed limits with an individual body length', () => {
+    const w = new World({
+      seed: 1,
+      tank: REEF_TANK,
+      species: [neonTetra],
+      fish: [{ id: 'fry', species: 'neon-tetra', bodyLengthM: 0.0175 }],
+    });
+    const sp = toSimSpecies(neonTetra);
+    for (let t = 0; t < 2000; t++) {
+      w.step();
+      expect(at(w.speed, 0)).toBeLessThanOrEqual(sp.maxSpeed / 2 + 1e-12);
+    }
+    expect(at(w.radius, 0)).toBeCloseTo(0.0175 * STEERING.collisionRadiusBodyLengths, 12);
+  });
+});
+
+describe('World schooling', { timeout: LONG }, () => {
+  it('holds tetra shoals within literature bands for spacing and local alignment', () => {
+    const w = new World(benchmarkConfig(1));
+    const tetras: number[] = [];
+    for (let i = 0; i < w.count; i++) if (w.speciesOf(i).id === 'neon-tetra') tetras.push(i);
+    const k = toSimSpecies(neonTetra).neighbours;
+    let nnd = 0;
+    let localPol = 0;
+    let isolated = 0;
+    let samples = 0;
+    let clusters = 0;
+    let largestShare = 0;
+    let snapshots = 0;
+    for (let t = 0; t < 6000; t++) {
+      w.step();
+      if (t < 600 || t % 15 !== 0) continue;
+      const linked = shoalClusters(w, tetras, 4 * toSimSpecies(neonTetra).bodyLength);
+      clusters += linked.length;
+      largestShare += Math.max(...linked) / tetras.length;
+      snapshots++;
+      for (const i of tetras) {
+        const byDistance = tetras
+          .filter((j) => j !== i)
+          .map((j) => ({
+            j,
+            d: Math.hypot(
+              at(w.position, i * 3) - at(w.position, j * 3),
+              at(w.position, i * 3 + 1) - at(w.position, j * 3 + 1),
+              at(w.position, i * 3 + 2) - at(w.position, j * 3 + 2),
+            ),
+          }))
+          .sort((a, b) => a.d - b.d)
+          .slice(0, k);
+        const bl = at(w.bodyLength, i);
+        const nearestBl = (byDistance[0]?.d ?? Infinity) / bl;
+        nnd += nearestBl;
+        if (nearestBl > 4) isolated++;
+        let hx = Math.sin(at(w.yaw, i));
+        let hz = Math.cos(at(w.yaw, i));
+        for (const { j } of byDistance) {
+          hx += Math.sin(at(w.yaw, j));
+          hz += Math.cos(at(w.yaw, j));
+        }
+        localPol += Math.hypot(hx, hz) / (byDistance.length + 1);
+        samples++;
+      }
+    }
+    // Pitcher & Partridge 1979: nearest neighbour ≈ 1 body length in cruising schools.
+    expect(nnd / samples).toBeGreaterThan(0.5);
+    expect(nnd / samples).toBeLessThan(2);
+    expect(localPol / samples).toBeGreaterThan(0.7);
+    expect(isolated / samples).toBeLessThan(0.05);
+    expect(clusters / snapshots).toBeLessThanOrEqual(3);
+    expect(largestShare / snapshots).toBeGreaterThanOrEqual(0.5);
+  });
+});
+
+describe('World depth band', { timeout: LONG }, () => {
+  it('keeps each species mostly inside its preferred band', () => {
+    const w = new World(benchmarkConfig(4));
+    const inside = new Float64Array(w.species.length);
+    const total = new Float64Array(w.species.length);
+    for (let t = 0; t < 6000; t++) {
+      w.step();
+      if (t < 600) continue;
+      for (let i = 0; i < w.count; i++) {
+        const sp = w.speciesOf(i);
+        const s = at(w.speciesIndex, i);
+        const y = at(w.position, i * 3 + 1) / w.tank.height;
+        total[s] = at(total, s) + 1;
+        if (y >= sp.depthLow - 0.05 && y <= sp.depthHigh + 0.05) inside[s] = at(inside, s) + 1;
+      }
+    }
+    w.species.forEach((sp, s) => {
+      expect(at(inside, s) / at(total, s), sp.id).toBeGreaterThan(0.85);
+    });
+  });
+});
+
+describe('World snapshot', () => {
+  it('writes position, unit quaternion, speed, yaw rate and state per fish', () => {
+    const w = run(benchmarkConfig(1), 30);
+    const out = new Float32Array(w.count * SNAPSHOT_STRIDE);
+    w.writeSnapshot(out);
+    for (let i = 0; i < w.count; i++) {
+      const o = i * SNAPSHOT_STRIDE;
+      expect(at(out, o)).toBeCloseTo(at(w.position, i * 3), 5);
+      expect(at(out, o + 1)).toBeCloseTo(at(w.position, i * 3 + 1), 5);
+      expect(Math.hypot(...out.subarray(o + 3, o + 7))).toBeCloseTo(1, 5);
+      expect(at(out, o + 7)).toBeCloseTo(at(w.speed, i), 5);
+      expect(at(out, o + 8)).toBeCloseTo(at(w.yawRate, i), 5);
+      expect(at(out, o + 9)).toBe(at(w.state, i));
+    }
+  });
+
+  it('refuses a buffer that is too small', () => {
+    const w = new World(benchmarkConfig(1));
+    expect(() => w.writeSnapshot(new Float32Array(5))).toThrow(/needs 600/);
+  });
+});
+
+describe('World config validation', () => {
+  const base = { seed: 1, tank: REEF_TANK, species: [neonTetra] };
+
+  it('rejects unknown species, duplicate ids and fish that do not fit', () => {
+    expect(() => new World({ ...base, fish: [{ id: 'a', species: 'nemo' }] })).toThrow(
+      /unknown species "nemo"/,
+    );
+    expect(
+      () =>
+        new World({
+          ...base,
+          fish: [
+            { id: 'a', species: 'neon-tetra' },
+            { id: 'a', species: 'neon-tetra' },
+          ],
+        }),
+    ).toThrow(/unique/);
+    expect(
+      () => new World({ ...base, fish: [{ id: 'a', species: 'neon-tetra', bodyLengthM: 2 }] }),
+    ).toThrow(/does not fit/);
+    expect(
+      () => new World({ ...base, fish: [{ id: 'a', species: 'neon-tetra', bodyLengthM: 0 }] }),
+    ).toThrow(/positive/);
+  });
+
+  it('handles an empty tank', () => {
+    const w = new World({ ...base, fish: [] });
+    w.step();
+    expect(w.count).toBe(0);
+  });
+});

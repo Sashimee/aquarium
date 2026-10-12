@@ -256,7 +256,11 @@ importers:
         specifier: 4.6.6
         version: 4.6.6
 
-  packages/sim: {}
+  packages/sim:
+    dependencies:
+      '@aquarium/shared':
+        specifier: workspace:*
+        version: link:../shared
 
 packages:
 
