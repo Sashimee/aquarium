@@ -20,7 +20,7 @@ export const tankFloorSchema = z.strictObject({
   max: z.number().finite(),
   nx: z.int().min(2).max(512),
   nz: z.int().min(2).max(512),
-  heights: z.array(z.number().finite()),
+  heights: z.array(z.number().finite()).max(512 * 512),
 });
 export type TankFloor = z.infer<typeof tankFloorSchema>;
 
@@ -43,7 +43,15 @@ export const tankSpaceSchema = z
       issue(['glass'], 'glass is thicker than the tank allows');
     }
     const waterTop = t.height - t.freeboard;
-    if (waterTop <= t.glass) issue(['freeboard'], 'water surface must lie above the bottom glass');
+    if (t.width / 2 - t.glass - t.inset <= 0) {
+      issue(['inset'], 'glass and inset leave no water along x');
+    }
+    if (t.depth / 2 - t.glass - t.inset <= 0) {
+      issue(['inset'], 'glass and inset leave no water along z');
+    }
+    if (waterTop <= t.glass + t.inset) {
+      issue(['freeboard'], 'water surface must lie above the bottom glass plus inset');
+    }
     const { floor } = t;
     if (floor.heights.length !== floor.nx * floor.nz) {
       issue(['floor', 'heights'], `expected nx * nz = ${floor.nx * floor.nz} samples`);
@@ -118,10 +126,11 @@ export function sampleFloor(space: TankSpace, x: number, z: number): number {
   return near * (1 - fv) + far * fv;
 }
 
-/** Slope of the substrate, [dh/dx, dh/dz], within the bilinear cell containing (x, z). */
+/** Slope of the substrate, [dh/dx, dh/dz], in the bilinear cell containing (x, z); 0 outside the footprint, where the height is constant. */
 export function sampleFloorSlope(space: TankSpace, x: number, z: number): [number, number] {
   const { nx, nz, heights } = space.floor;
   const [hx, hz] = innerHalf(space);
+  if (Math.abs(x) > hx || Math.abs(z) > hz) return [0, 0];
   const { i, j, fu, fv } = floorCell(space, x, z);
   const at = (a: number, b: number): number => heights[b * nx + a] as number;
   const cellX = (2 * hx) / (nx - 1);
@@ -176,7 +185,11 @@ export function createTankSpace(
   });
 }
 
-/** A y in the sim's old frame (0 at the substrate top) as tank space, over the footprint point. */
+/**
+ * A y in the sim's old frame (0 at the substrate top) as tank space. Only for heights measured
+ * from the substrate: the water surface and the glass are not offset by the floor, so never
+ * convert them with this.
+ */
 export function legacyYToTankSpace(space: TankSpace, x: number, z: number, y: number): number {
   return y + sampleFloor(space, x, z);
 }

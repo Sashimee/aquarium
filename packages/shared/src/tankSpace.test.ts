@@ -59,6 +59,11 @@ describe('tank space', () => {
     expect(dz).toBeCloseTo(0.2, 9);
   });
 
+  it('has no slope outside the footprint', () => {
+    expect(sampleFloorSlope(ramp, 5, 0)).toEqual([0, 0]);
+    expect(sampleFloorSlope(ramp, 0, -5)).toEqual([0, 0]);
+  });
+
   it('converts between the sim frame and tank space', () => {
     const y = legacyYToTankSpace(ramp, 0.2, 0.1, 0);
     expect(y).toBeCloseTo(sampleFloor(ramp, 0.2, 0.1), 12);
@@ -94,6 +99,25 @@ describe('tank space validation', () => {
   it('rejects a substrate below the glass or above the water', () => {
     expect(() => createTankSpace(params, () => 0.0)).toThrow();
     expect(() => createTankSpace(params, () => 0.48)).toThrow();
+  });
+
+  it('rejects an inverted water box', () => {
+    expect(bad((t) => ({ ...t, inset: 0.05, glass: 0.05, depth: 0.1, width: 1.2 }))).toBe(false);
+    expect(bad((t) => ({ ...t, width: 0.04, glass: 0.015, inset: 0.01 }))).toBe(false);
+    expect(bad((t) => ({ ...t, depth: 0.04, glass: 0.015, inset: 0.01 }))).toBe(false);
+    const r = tankSpaceSchema.safeParse({
+      ...JSON.parse(JSON.stringify(flat)),
+      freeboard: 0.4895,
+      floor: {
+        ...flat.floor,
+        min: 0.0105,
+        max: 0.0105,
+        heights: flat.floor.heights.map(() => 0.0105),
+      },
+    });
+    expect(r.error?.issues.map((i) => i.message)).toContain(
+      'water surface must lie above the bottom glass plus inset',
+    );
   });
 
   it('rejects impossible glass and freeboard', () => {
