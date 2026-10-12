@@ -2,7 +2,10 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "lib": ["ES2023", "WebWorker"],
-    "types": []
+    "types": [],
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true
   },
-  "include": ["src"]
+  "include": ["src", "scripts"],
+  "exclude": ["src/**/*.test.ts"]
 }
