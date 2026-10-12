@@ -1,4 +1,14 @@
 {
+  "behaviour": {
+    "boldness": 0.7,
+    "curiosity": 0.5,
+    "depthBand": [0.1, 0.7],
+    "perceptionFovDeg": 300,
+    "perceptionRangeM": 0.4,
+    "preferredZone": "mid",
+    "territorial": true,
+    "traits": ["anemone-host"]
+  },
   "biome": "reef",
   "commonName": "Ocellaris clownfish",
   "id": "ocellaris-clownfish",
@@ -15,6 +25,17 @@
     "lifespanDays": 3650,
     "maxSizeM": 0.09,
     "starvationHungerThreshold": 0.75
+  },
+  "locomotion": {
+    "bodyLengthM": 0.08,
+    "cruiseSpeedMps": 0.08,
+    "gait": "hover",
+    "massKg": 0.01,
+    "maxPitchDeg": 30,
+    "maxSpeedMps": 0.6,
+    "maxTurnRateDegPerS": 360,
+    "strouhal": 0.3,
+    "swimmingMode": "labriform"
   },
   "scientificName": "Amphiprion ocellaris"
 }

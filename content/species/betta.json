@@ -1,4 +1,14 @@
 {
+  "behaviour": {
+    "boldness": 0.8,
+    "curiosity": 0.7,
+    "depthBand": [0.55, 1],
+    "perceptionFovDeg": 300,
+    "perceptionRangeM": 0.4,
+    "preferredZone": "surface",
+    "territorial": true,
+    "traits": ["flare-display"]
+  },
   "biome": "freshwater",
   "commonName": "Betta",
   "id": "betta",
@@ -15,6 +25,17 @@
     "lifespanDays": 1460,
     "maxSizeM": 0.065,
     "starvationHungerThreshold": 0.75
+  },
+  "locomotion": {
+    "bodyLengthM": 0.06,
+    "cruiseSpeedMps": 0.04,
+    "gait": "hover",
+    "massKg": 0.004,
+    "maxPitchDeg": 35,
+    "maxSpeedMps": 0.4,
+    "maxTurnRateDegPerS": 300,
+    "strouhal": 0.3,
+    "swimmingMode": "subcarangiform"
   },
   "scientificName": "Betta splendens"
 }

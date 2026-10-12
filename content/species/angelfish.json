@@ -1,4 +1,14 @@
 {
+  "behaviour": {
+    "boldness": 0.5,
+    "curiosity": 0.6,
+    "depthBand": [0.35, 0.85],
+    "perceptionFovDeg": 300,
+    "perceptionRangeM": 0.5,
+    "preferredZone": "mid",
+    "territorial": false,
+    "traits": []
+  },
   "biome": "freshwater",
   "commonName": "Angelfish",
   "id": "angelfish",
@@ -15,6 +25,17 @@
     "lifespanDays": 3650,
     "maxSizeM": 0.15,
     "starvationHungerThreshold": 0.75
+  },
+  "locomotion": {
+    "bodyLengthM": 0.12,
+    "cruiseSpeedMps": 0.06,
+    "gait": "hover",
+    "massKg": 0.03,
+    "maxPitchDeg": 25,
+    "maxSpeedMps": 0.6,
+    "maxTurnRateDegPerS": 180,
+    "strouhal": 0.3,
+    "swimmingMode": "labriform"
   },
   "scientificName": "Pterophyllum scalare"
 }

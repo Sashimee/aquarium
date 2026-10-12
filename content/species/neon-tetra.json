@@ -1,4 +1,19 @@
 {
+  "behaviour": {
+    "boldness": 0.3,
+    "curiosity": 0.4,
+    "depthBand": [0.25, 0.7],
+    "perceptionFovDeg": 300,
+    "perceptionRangeM": 0.3,
+    "preferredZone": "mid",
+    "schooling": {
+      "minGroup": 6,
+      "tightenWhenStartled": true,
+      "topologicalNeighbours": 7
+    },
+    "territorial": false,
+    "traits": []
+  },
   "biome": "freshwater",
   "commonName": "Neon tetra",
   "id": "neon-tetra",
@@ -15,6 +30,17 @@
     "lifespanDays": 1460,
     "maxSizeM": 0.035,
     "starvationHungerThreshold": 0.75
+  },
+  "locomotion": {
+    "bodyLengthM": 0.035,
+    "cruiseSpeedMps": 0.12,
+    "gait": "burst-and-coast",
+    "massKg": 0.0005,
+    "maxPitchDeg": 30,
+    "maxSpeedMps": 0.5,
+    "maxTurnRateDegPerS": 540,
+    "strouhal": 0.3,
+    "swimmingMode": "carangiform"
   },
   "scientificName": "Paracheirodon innesi"
 }

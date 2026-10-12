@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { createSimHost, SimClient, type SimHost, type SimHostOptions } from './bridge.ts';
-import { benchmarkConfig } from './fixtures.ts';
+import { benchmarkConfig, REEF_ANCHORS, REEF_DECOR } from './fixtures.ts';
 import { SNAPSHOT_STRIDE, SnapshotField, SnapshotInterpolator, type Snapshot } from './snapshot.ts';
 import { STEP_HZ, World } from './world.ts';
 
@@ -118,6 +118,57 @@ describe('sim worker bridge', () => {
     const bad = nextError(client);
     client.step(0);
     expect(await bad).toMatch(/positive integer/);
+  });
+
+  it('applies startle, light, decor and anchor commands exactly as a local world would', async () => {
+    const { client } = connect();
+    const config = benchmarkConfig(3);
+    await client.init(config);
+    const local = new World(config);
+    const stimulus = { position: [0, 0.3, 0.29] as const, intensity: 1 };
+    const decor = REEF_DECOR.filter((c) => c.id !== 'rock-left');
+    const anchors = REEF_ANCHORS.filter((a) => a.kind === 'cave');
+
+    client.startle(stimulus);
+    client.setLight(0.2);
+    client.setDecor(decor);
+    client.setAnchors(anchors);
+    const pending = new Promise<Snapshot>((resolve) => {
+      const off = client.onSnapshot((snapshot) => {
+        if (snapshot.tick !== 45) return;
+        off();
+        resolve(snapshot);
+      });
+    });
+    client.step(45);
+    const remote = await pending;
+
+    local.startle(stimulus);
+    local.setLight(0.2);
+    local.setDecor(decor);
+    local.setAnchors(anchors);
+    for (let t = 0; t < 45; t++) local.step();
+    const expected = new Float32Array(local.count * SNAPSHOT_STRIDE);
+    local.writeSnapshot(expected);
+    expect(Array.from(remote.data)).toEqual(Array.from(expected));
+  });
+
+  it('reports scene commands before init and invalid scene values as errors', async () => {
+    const { client } = connect();
+    const early = nextError(client);
+    client.setLight(1);
+    expect(await early).toMatch(/"light" before "init"/);
+
+    await client.init(benchmarkConfig(1));
+    const dark = nextError(client);
+    client.setLight(2);
+    expect(await dark).toMatch(/light level/);
+    const tap = nextError(client);
+    client.startle({ position: [0, 0.2, 0], intensity: 3 });
+    expect(await tap).toMatch(/intensity/);
+    const twins = nextError(client);
+    client.setDecor([...REEF_DECOR, ...REEF_DECOR.slice(0, 1)]);
+    expect(await twins).toMatch(/unique/);
   });
 
   it('tags a re-init with a new epoch so the interpolator restarts cleanly', async () => {

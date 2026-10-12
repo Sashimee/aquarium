@@ -44,6 +44,18 @@ describe('interpolateSnapshots', () => {
     expect(out[SnapshotField.State]).toBe(FishState.Avoid);
   });
 
+  it('lerps thrust so the tail beat eases between steps', () => {
+    const a = fish(0, 0, 0.1, FishState.Cruise);
+    const b = fish(0, 0, 0.1, FishState.Startle);
+    a[SnapshotField.Thrust] = 0;
+    b[SnapshotField.Thrust] = 1;
+    const out = new Float32Array(SNAPSHOT_STRIDE);
+    interpolateSnapshots(a, b, 0.25, out);
+    expect(out[SnapshotField.Thrust]).toBeCloseTo(0.25, 6);
+    interpolateSnapshots(a, b, 1, out);
+    expect(out[SnapshotField.Thrust]).toBe(1);
+  });
+
   it('takes the short way round when the quaternions are in opposite hemispheres', () => {
     const a = fish(0, Math.PI - 0.1, 0, FishState.Cruise);
     const b = fish(0, -Math.PI + 0.1, 0, FishState.Cruise);

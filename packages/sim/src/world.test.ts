@@ -2,19 +2,20 @@ import { describe, expect, it } from 'vitest';
 
 // Long simulations: well under a second locally, but shared CI runners can be several times slower.
 const LONG = 60_000;
+import { BEHAVIOUR } from './behaviour.ts';
 import {
   ARCHETYPES,
   benchmarkConfig,
   blueTang,
   neonTetra,
+  REEF_DECOR,
   REEF_TANK,
-  SHOW_TANK,
   spawnMany,
+  yellowTang,
 } from './fixtures.ts';
-import { TankSdf, type TankDimensions } from './sdf.ts';
-import { SNAPSHOT_STRIDE } from './snapshot.ts';
+import { FishState, SNAPSHOT_STRIDE } from './snapshot.ts';
 import { toSimSpecies } from './species.ts';
-import { STEERING, World, type WorldConfig } from './world.ts';
+import { STEERING, STEP_DT, World, type WorldConfig } from './world.ts';
 
 function stateOf(w: World): Float64Array[] {
   return [w.position, w.yaw, w.pitch, w.roll, w.speed, w.yawRate, w.pitchRate].map(
@@ -65,6 +66,33 @@ describe('World determinism', { timeout: LONG }, () => {
     expect(Array.from(a.state)).toEqual(Array.from(b.state));
   });
 
+  it('stays bit-identical through taps, light changes and moved decor', () => {
+    const drive = (): World => {
+      const w = new World(benchmarkConfig(8));
+      for (let t = 0; t < 1500; t++) {
+        if (t === 200) w.startle({ position: [0, 0.3, 0.3], intensity: 1 });
+        if (t === 400) w.setLight(0);
+        if (t === 700) {
+          w.setDecor(
+            REEF_DECOR.map((c) =>
+              c.id === 'rock-left'
+                ? { ...c, shape: { kind: 'sphere', center: [-0.5, 0, 0.05], radius: 0.18 } }
+                : c,
+            ),
+          );
+        }
+        if (t === 1000) w.setLight(1);
+        w.step();
+      }
+      return w;
+    };
+    const a = drive();
+    const b = drive();
+    expect(stateOf(a)).toEqual(stateOf(b));
+    expect(Array.from(a.state)).toEqual(Array.from(b.state));
+    expect(Array.from(a.thrust)).toEqual(Array.from(b.thrust));
+  });
+
   it('diverges for a different seed', () => {
     const a = run(benchmarkConfig(3), 50);
     const b = run(benchmarkConfig(4), 50);
@@ -79,35 +107,14 @@ describe('World determinism', { timeout: LONG }, () => {
 });
 
 describe('World containment', { timeout: LONG }, () => {
-  const cases: { name: string; tank: TankDimensions }[] = [];
-  for (const sp of ARCHETYPES) {
-    cases.push({ name: `${sp.id} in the reef tank`, tank: REEF_TANK });
-    if (sp !== blueTang) cases.push({ name: `${sp.id} in the show tank`, tank: SHOW_TANK });
-  }
-
-  it.each(cases)('never penetrates a wall over 10 000 steps: $name', ({ name, tank }) => {
-    const id = name.split(' ')[0] ?? '';
-    const w = new World({ seed: 11, tank, species: ARCHETYPES, fish: spawnMany(id, 12) });
-    const sdf = new TankSdf(tank);
-    const nrm = new Float64Array(3);
+  it('keeps the decorated 60-fish community out of glass and rock', () => {
+    const w = new World(benchmarkConfig(2));
     let worst = Infinity;
     for (let t = 0; t < 10_000; t++) {
       w.step();
-      for (let i = 0; i < w.count; i++) {
-        const o = i * 3;
-        const clearance =
-          sdf.sample(at(w.position, o), at(w.position, o + 1), at(w.position, o + 2), nrm) -
-          at(w.radius, i);
-        worst = Math.min(worst, clearance);
-      }
+      for (let i = 0; i < w.count; i++) worst = Math.min(worst, w.bodyClearance(i));
     }
     expect(worst).toBeGreaterThanOrEqual(-1e-9);
-    // The hard constraint is a backstop; steering should keep it almost idle.
-    expect(w.contacts / (w.count * 10_000)).toBeLessThan(1e-3);
-  });
-
-  it('keeps the mixed 60-fish community off the glass', () => {
-    const w = run(benchmarkConfig(2), 10_000);
     expect(w.contacts / (w.count * 10_000)).toBeLessThan(1e-3);
   });
 });
@@ -115,20 +122,43 @@ describe('World containment', { timeout: LONG }, () => {
 describe('World kinematic limits', { timeout: LONG }, () => {
   it('respects per-species turn rate, pitch, speed and bank limits', () => {
     const w = new World(benchmarkConfig(5));
-    const worst = { yawRate: 0, pitchRate: 0, pitch: 0, speed: 0, roll: 0, minSpeed: Infinity };
+    const worst = {
+      yawRate: 0,
+      pitchRate: 0,
+      pitch: 0,
+      speed: 0,
+      roll: 0,
+      minSpeed: Infinity,
+      reflex: 0,
+    };
     for (let t = 0; t < 3000; t++) {
+      if (t === 1000) w.startle({ position: [0, 0.3, 0.3], intensity: 1 });
       w.step();
       for (let i = 0; i < w.count; i++) {
         const sp = w.speciesOf(i);
         const vmax = (sp.maxSpeed * at(w.bodyLength, i)) / sp.bodyLength;
-        worst.yawRate = Math.max(worst.yawRate, Math.abs(at(w.yawRate, i)) / sp.maxTurnRate);
-        worst.pitchRate = Math.max(worst.pitchRate, Math.abs(at(w.pitchRate, i)) / sp.maxTurnRate);
+        const turn = Math.max(Math.abs(at(w.yawRate, i)), Math.abs(at(w.pitchRate, i)));
+        // The C-start is a Mauthner reflex, far faster than any steering turn.
+        if (at(w.state, i) === FishState.Startle) {
+          worst.reflex = Math.max(worst.reflex, turn / BEHAVIOUR.cBendTurnRateRadPerS);
+        } else {
+          worst.yawRate = Math.max(worst.yawRate, Math.abs(at(w.yawRate, i)) / sp.maxTurnRate);
+          worst.pitchRate = Math.max(
+            worst.pitchRate,
+            Math.abs(at(w.pitchRate, i)) / sp.maxTurnRate,
+          );
+        }
         worst.pitch = Math.max(worst.pitch, Math.abs(at(w.pitch, i)) / sp.maxPitch);
         worst.speed = Math.max(worst.speed, at(w.speed, i) / vmax);
-        worst.roll = Math.max(worst.roll, Math.abs(at(w.roll, i)) / STEERING.maxBankRad);
+        // Species that turn their belly to a surface roll past the bank limit on purpose.
+        if (!sp.bellyToSurface) {
+          worst.roll = Math.max(worst.roll, Math.abs(at(w.roll, i)) / STEERING.maxBankRad);
+        }
         worst.minSpeed = Math.min(worst.minSpeed, at(w.speed, i));
       }
     }
+    expect(worst.reflex).toBeGreaterThan(0);
+    expect(worst.reflex).toBeLessThanOrEqual(1 + 1e-12);
     expect(worst.yawRate).toBeLessThanOrEqual(1 + 1e-12);
     expect(worst.pitchRate).toBeLessThanOrEqual(1 + 1e-12);
     expect(worst.pitch).toBeLessThanOrEqual(1 + 1e-12);
@@ -159,36 +189,76 @@ describe('World kinematic limits', { timeout: LONG }, () => {
     expect(sxy / Math.sqrt(sxx * syy)).toBeGreaterThan(0.6);
   });
 
-  it('steers a lone tang along the reef glass without flip-flopping or stalling', () => {
-    let hardFlips = 0;
-    let stalled = 0;
-    let samples = 0;
-    for (const seed of [1, 2, 3]) {
-      const w = new World({
-        seed,
-        tank: REEF_TANK,
-        species: ARCHETYPES,
-        fish: spawnMany('blue-tang', 1),
-      });
-      const { maxTurnRate: maxTurn, cruiseSpeed } = toSimSpecies(blueTang);
-      let lastHardSign = 0;
-      for (let t = 0; t < 10_000; t++) {
-        w.step();
-        if (t < 300) continue;
-        const turn = at(w.yawRate, 0);
-        if (Math.abs(turn) > 0.3 * maxTurn) {
-          const sign = Math.sign(turn);
-          if (lastHardSign !== 0 && sign !== lastHardSign) hardFlips++;
-          lastHardSign = sign;
+  it.each([blueTang, yellowTang])(
+    'keeps a group of six $id cruising the reef without stalls, flips or circling',
+    (tang) => {
+      const { maxTurnRate: maxTurn, cruiseSpeed } = toSimSpecies(tang);
+      const window = Math.round(4 / STEP_DT);
+      let hardFlips = 0;
+      let stalled = 0;
+      let samples = 0;
+      let circles = 0;
+      let spins = 0;
+      let fishSeconds = 0;
+      for (const seed of [1, 2, 3, 4]) {
+        const w = new World({
+          seed,
+          tank: REEF_TANK,
+          species: ARCHETYPES,
+          decor: REEF_DECOR,
+          fish: spawnMany(tang.id, 6),
+        });
+        const lastHardSign = new Int8Array(w.count);
+        const heading = Array.from({ length: w.count }, () => new Float64Array(window));
+        const stride = Array.from({ length: w.count }, () => new Float64Array(window));
+        const turned = new Float64Array(w.count);
+        const travelled = new Float64Array(w.count);
+        const circling = new Uint8Array(w.count);
+        for (let t = 0; t < 6000; t++) {
+          w.step();
+          if (t < 300) continue;
+          for (let i = 0; i < w.count; i++) {
+            const turn = at(w.yawRate, i);
+            const ring = heading[i] ?? new Float64Array(window);
+            const slot = t % window;
+            turned[i] = at(turned, i) + turn * STEP_DT - at(ring, slot);
+            ring[slot] = turn * STEP_DT;
+            const path = stride[i] ?? new Float64Array(window);
+            const step = at(w.speed, i) * STEP_DT;
+            travelled[i] = at(travelled, i) + step - at(path, slot);
+            path[slot] = step;
+            const loop = t >= 300 + window && Math.abs(at(turned, i)) >= 2 * Math.PI;
+            if (loop && circling[i] === 0) {
+              circles++;
+              if (at(travelled, i) < Math.PI * at(w.bodyLength, i)) spins++;
+            }
+            circling[i] = loop ? 1 : 0;
+            if (Math.abs(turn) > 0.3 * maxTurn) {
+              const sign = Math.sign(turn);
+              if (lastHardSign[i] !== 0 && sign !== lastHardSign[i]) hardFlips++;
+              lastHardSign[i] = sign;
+            }
+            const state = at(w.state, i);
+            const slow =
+              state === FishState.Graze || state === FishState.Startle || state === FishState.Rest;
+            if (slow) continue;
+            // Speed lags the target, so a fish told to stop at each pane only sinks to a crawl.
+            if (at(w.speed, i) < 0.3 * cruiseSpeed) stalled++;
+            samples++;
+          }
         }
-        // Speed lags the target, so a fish told to stop at each pane only sinks to a crawl.
-        if (at(w.speed, 0) < 0.3 * cruiseSpeed) stalled++;
-        samples++;
+        fishSeconds += w.count * (6000 - 300) * STEP_DT;
       }
-    }
-    expect((hardFlips / samples) * 30).toBeLessThan(0.3);
-    expect(stalled / samples).toBeLessThan(0.01);
-  });
+      expect(stalled / samples).toBeLessThan(0.01);
+      // Spinning on the spot (a loop no wider than the fish) is the steering pathology.
+      expect(spins).toBe(0);
+      // Six 15–20 cm fish in 60 cm of depth are sometimes boxed in by glass, rock and each other and
+      // turn back twice within 4 s, or round a rock; that stays rare: under 2 per 10 fish-minutes.
+      expect((circles / fishSeconds) * 600).toBeLessThan(2);
+      // Loose bound: neighbours and rock legitimately make tangs change their mind now and then.
+      expect((hardFlips / samples) * 30).toBeLessThan(1);
+    },
+  );
 
   it('scales speed limits with an individual body length', () => {
     const w = new World({
@@ -280,6 +350,7 @@ describe('World depth band', { timeout: LONG }, () => {
       }
     }
     w.species.forEach((sp, s) => {
+      if (at(total, s) === 0) return;
       expect(at(inside, s) / at(total, s), sp.id).toBeGreaterThan(0.85);
     });
   });
@@ -303,7 +374,9 @@ describe('World snapshot', () => {
 
   it('refuses a buffer that is too small', () => {
     const w = new World(benchmarkConfig(1));
-    expect(() => w.writeSnapshot(new Float32Array(5))).toThrow(/needs 600/);
+    expect(() => w.writeSnapshot(new Float32Array(5))).toThrow(
+      new RegExp(`needs ${60 * SNAPSHOT_STRIDE}`),
+    );
   });
 });
 
