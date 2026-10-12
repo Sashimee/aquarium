@@ -1,0 +1,428 @@
+import type { Material, MeshStandardNodeMaterial, Texture } from 'three/webgpu';
+import type { DecorItem, PlantPatch, PresetLayout } from '@aquarium/shared';
+import type { Engine } from '../engine/Engine';
+import type { Tier, TierSettings } from '../engine/quality/tiers';
+import { substrateHeight } from '../engine/tank/substrate';
+import { AssetCatalog, ModelLibrary, type ModelLod } from './assets';
+import { ColliderField, type CapsuleCollider, type Collider } from './colliders';
+import { CurrentField, type CurrentParameters } from './current';
+import { fitCollider, Hardscape, HARDSCAPE_KINDS } from './hardscape';
+import type { SceneOptions } from './options';
+import { ColliderOverlay } from './overlay';
+import { MAX_TILT_RAD as MAX_PLANT_TILT, scatterPatch, type Extent } from './placement';
+import { RebuildQueue } from './rebuildQueue';
+import { PlantGroup, maxSway, type PlantEntry } from './plants';
+import { createSubstrateMaterial, type SubstrateLayers } from './substrate';
+
+const DEFAULT_CURRENT: CurrentParameters = {
+  direction: [1, 0],
+  speed: 0.04,
+  gustPeriodS: 9,
+  gustDepth: 0.4,
+};
+
+const PLANT_LOD: Readonly<Record<Tier, ModelLod>> = { low: 2, medium: 1, high: 1, ultra: 0 };
+const HARDSCAPE_LOD: Readonly<Record<Tier, ModelLod>> = { low: 2, medium: 1, high: 0, ultra: 0 };
+// Collision geometry is read once at build time, so it never pays for a tier's large textures.
+const COLLISION_TEXTURE_SIZE = 1024;
+const WALL_MARGIN = 0.005;
+const BLOCKED_CLEARANCE = 0.005;
+const MIN_COLLIDER_PLANT_HEIGHT = 0.15;
+
+interface SubstrateInstall {
+  readonly material: MeshStandardNodeMaterial;
+  readonly textures: readonly Texture[];
+  readonly textureSize: 1024 | 2048;
+}
+
+interface VisualKey {
+  readonly plantLod: ModelLod;
+  readonly hardscapeLod: ModelLod;
+  readonly textureSize: 1024 | 2048;
+}
+
+function keyFor(tier: Tier, settings: Readonly<TierSettings>): VisualKey {
+  return {
+    plantLod: PLANT_LOD[tier],
+    hardscapeLod: HARDSCAPE_LOD[tier],
+    textureSize: settings.textureSize,
+  };
+}
+
+function sameKey(a: VisualKey, b: VisualKey): boolean {
+  return (
+    a.plantLod === b.plantLod &&
+    a.hardscapeLod === b.hardscapeLod &&
+    a.textureSize === b.textureSize
+  );
+}
+
+/**
+ * A planted tank built from a preset: textured substrate, hardscape, instanced swaying plants
+ * and the colliders the sim reads. Everything tier-dependent is rebuilt or thinned in `applyTier`.
+ */
+export class TankScene {
+  readonly current = new CurrentField();
+  readonly overlay: ColliderOverlay;
+  readonly colliders: ColliderField;
+
+  private hardscape: Hardscape | null = null;
+  private plantGroups: PlantGroup[] = [];
+  private installedKey: VisualKey | null = null;
+  private readonly queue: RebuildQueue<VisualKey>;
+  private substrate: SubstrateInstall | null = null;
+  private readonly placeholderSubstrate: Material | Material[];
+  private disposed = false;
+  private readonly releases: (() => void)[] = [];
+
+  private constructor(
+    private readonly engine: Engine,
+    private readonly library: ModelLibrary,
+    private readonly preset: PresetLayout,
+    private readonly colliderData: readonly Collider[],
+    private readonly plantEntries: ReadonlyMap<string, PlantEntry[]>,
+    private readonly hardItems: readonly { item: DecorItem; kind: string }[],
+    options: SceneOptions,
+  ) {
+    this.queue = new RebuildQueue(
+      sameKey,
+      (key, isStale) => this.rebuildVisuals(key, isStale),
+      (cause) =>
+        engine.events.emit('engine:error', {
+          message: 'Could not switch scene models to the new quality tier',
+          cause,
+        }),
+    );
+    this.placeholderSubstrate = engine.tank.substrate.material;
+    this.colliders = new ColliderField(colliderData);
+    this.overlay = new ColliderOverlay(colliderData);
+    this.overlay.visible = options.colliders;
+    engine.scene.add(this.overlay.group);
+  }
+
+  static async create(
+    engine: Engine,
+    preset: PresetLayout,
+    options: SceneOptions,
+  ): Promise<TankScene> {
+    const catalog = await AssetCatalog.fetch();
+    const library = new ModelLibrary(engine.renderer, catalog);
+    try {
+      const scene = await TankScene.build(engine, library, catalog, preset, options);
+      return scene;
+    } catch (error) {
+      await library.dispose();
+      throw error;
+    }
+  }
+
+  private static async build(
+    engine: Engine,
+    library: ModelLibrary,
+    catalog: AssetCatalog,
+    preset: PresetLayout,
+    options: SceneOptions,
+  ): Promise<TankScene> {
+    const settings = engine.quality.settings;
+    const tier = engine.quality.tier;
+    const dimensions = engine.tank.dimensions;
+
+    const hardItems: { item: DecorItem; kind: string }[] = [];
+    const layoutPlants: DecorItem[] = [];
+    for (const item of preset.decor) {
+      const kind = catalog.get(item.assetId).kind;
+      if (HARDSCAPE_KINDS.has(kind)) hardItems.push({ item, kind });
+      else if (kind === 'plant') layoutPlants.push(item);
+      else throw new Error(`Preset item "${item.assetId}" is a ${kind}, which a tank cannot hold`);
+    }
+    for (const patch of preset.plantPatches) {
+      if (catalog.get(patch.assetId).kind !== 'plant') {
+        throw new Error(`Plant patch "${patch.id}" uses ${patch.assetId}, which is not a plant`);
+      }
+    }
+    if (preset.substrate) {
+      catalog.get(preset.substrate.assetId);
+      if (preset.substrate.accentAssetId) catalog.get(preset.substrate.accentAssetId);
+    }
+
+    const colliders: Collider[] = [];
+    for (const { item, kind } of hardItems) {
+      const geometries = await library.collisionGeometry(item.assetId, COLLISION_TEXTURE_SIZE);
+      colliders.push(...fitCollider(kind, geometries, item));
+    }
+    const hard = new ColliderField(colliders);
+
+    const { length, depth, glass } = dimensions;
+    const extent: Extent = {
+      halfLength: length / 2 - glass - WALL_MARGIN,
+      halfDepth: depth / 2 - glass - WALL_MARGIN,
+    };
+    const ground = (x: number, z: number) => substrateHeight(dimensions, x, z);
+    const normal = new Float64Array(3);
+    const blocked = (x: number, y: number, z: number) =>
+      hard.hard(x, y + 0.02, z, normal) < BLOCKED_CLEARANCE;
+
+    const plantEntries = new Map<string, PlantEntry[]>();
+    const entriesFor = (assetId: string) => {
+      let list = plantEntries.get(assetId);
+      if (!list) plantEntries.set(assetId, (list = []));
+      return list;
+    };
+
+    for (const patch of preset.plantPatches) {
+      const bounds = catalog.get(patch.assetId).bounds;
+      const reach = plantReach(patch.assetId, bounds, preset.current ?? DEFAULT_CURRENT);
+      const instances = scatterPatch(patch, ground, blocked, extent, reach);
+      if (instances.length < patch.count) {
+        console.warn(
+          `Plant patch "${patch.id}" fitted ${instances.length} of ${patch.count} plants; move it clear of hardscape and glass`,
+        );
+      }
+      const list = entriesFor(patch.assetId);
+      instances.forEach((instance, i) =>
+        list.push({ ...instance, rank: i / Math.max(1, instances.length) }),
+      );
+      const soft = softPatchCollider(patch, instances, catalog.get(patch.assetId).bounds?.max[1]);
+      if (soft) colliders.push(soft);
+    }
+    for (const item of layoutPlants) {
+      entriesFor(item.assetId).push({
+        x: item.position[0],
+        y: item.position[1],
+        z: item.position[2],
+        yaw: item.rotationY,
+        tiltX: 0,
+        tiltZ: 0,
+        scale: item.scale,
+        tone: 1,
+        rank: -1,
+      });
+      const entry = catalog.get(item.assetId);
+      const height = (entry.bounds?.max[1] ?? 0) * item.scale;
+      const half = Math.max(entry.bounds?.max[0] ?? 0.05, entry.bounds?.max[2] ?? 0.05);
+      if (height >= MIN_COLLIDER_PLANT_HEIGHT) {
+        colliders.push(
+          plantCapsule(
+            item.position[0],
+            item.position[1],
+            item.position[2],
+            height,
+            half * item.scale * 0.5,
+          ),
+        );
+      }
+    }
+
+    const scene = new TankScene(
+      engine,
+      library,
+      preset,
+      colliders,
+      plantEntries,
+      hardItems,
+      options,
+    );
+    scene.current.configure(preset.current ?? DEFAULT_CURRENT);
+    scene.releases.push(engine.onFrame((deltaS) => scene.current.advance(deltaS)));
+    const key = keyFor(tier, settings);
+    await scene.rebuildVisuals(key, () => false);
+    scene.queue.adopt(key);
+    scene.releases.push(engine.quality.register('scene', (s, t) => scene.applyTier(t, s)));
+    return scene;
+  }
+
+  get colliderList(): readonly Collider[] {
+    return this.colliderData;
+  }
+
+  get plantCount(): number {
+    return this.plantGroups.reduce((n, g) => n + g.visible, 0);
+  }
+
+  get plantCapacity(): number {
+    return this.plantGroups.reduce((n, g) => n + g.total, 0);
+  }
+
+  groundHeight(x: number, z: number): number {
+    return substrateHeight(this.engine.tank.dimensions, x, z);
+  }
+
+  /** Resolves when any quality-triggered rebuild has finished. */
+  async settled(): Promise<void> {
+    await this.queue.settled();
+  }
+
+  private applyTier(tier: Tier, settings: Readonly<TierSettings>): void {
+    if (this.disposed) return;
+    for (const group of this.plantGroups) group.setDensity(settings.plantDensity);
+    this.queue.request(keyFor(tier, settings));
+  }
+
+  private async loadSubstrate(textureSize: 1024 | 2048): Promise<SubstrateInstall | null> {
+    const spec = this.preset.substrate;
+    if (!spec) return null;
+    const textures: Texture[] = [];
+    const anisotropy = Math.min(8, this.engine.renderer.getMaxAnisotropy());
+    const load = async (assetId: string, role: string): Promise<Texture> => {
+      const texture = await this.library.loadTexture(assetId, role, textureSize, anisotropy);
+      textures.push(texture);
+      return texture;
+    };
+    const loadSet = async (assetId: string): Promise<SubstrateLayers['base']> => ({
+      baseColor: await load(assetId, 'baseColor'),
+      normal: await load(assetId, 'normal'),
+      arm: await load(assetId, 'occlusionRoughnessMetal'),
+    });
+    try {
+      const layers: SubstrateLayers = {
+        base: await loadSet(spec.assetId),
+        accent: spec.accentAssetId ? await loadSet(spec.accentAssetId) : null,
+      };
+      const material = createSubstrateMaterial(layers, spec, this.engine.tank.dimensions);
+      return { material, textures, textureSize };
+    } catch (error) {
+      for (const texture of textures) this.library.releaseTexture(texture);
+      throw error;
+    }
+  }
+
+  private discardSubstrate(install: SubstrateInstall): void {
+    install.material.dispose();
+    for (const texture of install.textures) this.library.releaseTexture(texture);
+  }
+
+  /**
+   * Builds the models for `key` and installs them unless a newer tier was requested meanwhile
+   * (`generation` is stale) or the scene was disposed; a dropped build frees what it made.
+   */
+  private async rebuildVisuals(key: VisualKey, isStale: () => boolean): Promise<boolean> {
+    const hardscape = new Hardscape();
+    const groups: PlantGroup[] = [];
+    let substrate: SubstrateInstall | null = null;
+    try {
+      if (!this.substrate || this.substrate.textureSize !== key.textureSize) {
+        substrate = await this.loadSubstrate(key.textureSize);
+      }
+      for (const { item } of this.hardItems) {
+        const entry = this.library.catalog.get(item.assetId);
+        const model = await this.library.load(item.assetId, key.hardscapeLod, key.textureSize);
+        hardscape.add(entry, model, item);
+      }
+      for (const [assetId, entries] of this.plantEntries) {
+        const model = await this.library.load(assetId, key.plantLod, key.textureSize);
+        groups.push(new PlantGroup(assetId, model, entries, this.current));
+      }
+    } catch (error) {
+      hardscape.dispose();
+      for (const group of groups) group.dispose();
+      if (substrate) this.discardSubstrate(substrate);
+      throw error;
+    }
+    if (this.disposed || isStale()) {
+      hardscape.dispose();
+      for (const group of groups) group.dispose();
+      if (substrate) this.discardSubstrate(substrate);
+      await this.evictUnused();
+      return false;
+    }
+    this.hardscape?.dispose();
+    for (const group of this.plantGroups) group.dispose();
+    this.hardscape = hardscape;
+    this.plantGroups = groups;
+    this.engine.scene.add(hardscape.group);
+    for (const group of groups) {
+      group.setDensity(this.engine.quality.settings.plantDensity);
+      this.engine.scene.add(group.object);
+    }
+    if (substrate) {
+      const previous = this.substrate;
+      this.engine.tank.substrate.material = substrate.material;
+      this.substrate = substrate;
+      if (previous) this.discardSubstrate(previous);
+    }
+    this.installedKey = key;
+    await this.evictUnused();
+    return true;
+  }
+
+  private async evictUnused(): Promise<void> {
+    const key = this.installedKey;
+    const keep = new Set<string>();
+    if (key) {
+      for (const { item } of this.hardItems) {
+        keep.add(this.library.modelKey(item.assetId, key.hardscapeLod, key.textureSize));
+      }
+      for (const assetId of this.plantEntries.keys()) {
+        keep.add(this.library.modelKey(assetId, key.plantLod, key.textureSize));
+      }
+    }
+    await this.library.retainOnly(keep);
+  }
+
+  async dispose(): Promise<void> {
+    this.disposed = true;
+    for (const release of this.releases) release();
+    this.releases.length = 0;
+    await this.queue.stop();
+    this.hardscape?.dispose();
+    for (const group of this.plantGroups) group.dispose();
+    this.overlay.dispose();
+    if (this.substrate) {
+      this.engine.tank.substrate.material = this.placeholderSubstrate;
+      this.discardSubstrate(this.substrate);
+      this.substrate = null;
+    }
+    await this.library.dispose();
+  }
+}
+
+function plantReach(
+  assetId: string,
+  bounds: { readonly min: readonly number[]; readonly max: readonly number[] } | undefined,
+  current: CurrentParameters,
+): (scale: number) => number {
+  const height = bounds?.max[1] ?? 0.2;
+  const half = bounds
+    ? Math.max(
+        Math.abs(bounds.min[0] ?? 0),
+        Math.abs(bounds.max[0] ?? 0),
+        Math.abs(bounds.min[2] ?? 0),
+        Math.abs(bounds.max[2] ?? 0),
+      )
+    : 0.1;
+  const lean = Math.sin(MAX_PLANT_TILT) * height;
+  return (scale) => (half + lean + maxSway(assetId, height, current)) * scale;
+}
+
+function plantCapsule(
+  x: number,
+  y: number,
+  z: number,
+  height: number,
+  radius: number,
+): CapsuleCollider {
+  const r = Math.max(0.04, radius);
+  return {
+    kind: 'capsule',
+    hard: false,
+    a: [x, y + r, z],
+    b: [x, y + Math.max(r, height * 0.8), z],
+    radius: r,
+  };
+}
+
+function softPatchCollider(
+  patch: PlantPatch,
+  instances: readonly { x: number; y: number; z: number; scale: number }[],
+  assetHeight: number | undefined,
+): CapsuleCollider | null {
+  if (instances.length === 0 || assetHeight === undefined) return null;
+  const meanScale = (patch.scale[0] + patch.scale[1]) / 2;
+  const height = assetHeight * meanScale;
+  if (height < MIN_COLLIDER_PLANT_HEIGHT) return null;
+  const n = instances.length;
+  const x = instances.reduce((s, p) => s + p.x, 0) / n;
+  const y = instances.reduce((s, p) => s + p.y, 0) / n;
+  const z = instances.reduce((s, p) => s + p.z, 0) / n;
+  return plantCapsule(x, y, z, height, patch.radius * 0.7);
+}

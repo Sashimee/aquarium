@@ -8,6 +8,7 @@ import { bindCameraControls } from './interaction/controls';
 import type { InteractionEvents } from './interaction/events';
 import { onPageTeardown } from './interaction/pageLifecycle';
 import { watchReducedMotion } from './interaction/motion';
+import { mountPresetWhenTierKnown, type TankScene } from './scene';
 import { mountUi } from './ui/mount';
 
 function showFatal(container: HTMLElement, message: string): void {
@@ -77,9 +78,16 @@ async function boot(): Promise<void> {
   });
   engine.onFrame((deltaS) => rig.update(deltaS));
 
+  let tankScene: TankScene | null = null;
+  mountPresetWhenTierKnown(engine, 'freshwater', window.location.search, (scene) => {
+    tankScene = scene;
+    if (import.meta.env.DEV) Object.assign(window, { tankScene });
+  });
+
   const stopFish = startDemoFish(engine, DEFAULT_TANK, `${import.meta.env.BASE_URL}assets/`);
 
   onPageTeardown(window, () => {
+    tankScene?.dispose().catch((cause: unknown) => console.error('Scene dispose failed', cause));
     stopMotionWatch();
     unbindControls();
     stopRequests();
