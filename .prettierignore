@@ -2,3 +2,5 @@ pnpm-lock.yaml
 .claude/
 docs/
 CLAUDE.md
+apps/web/public/assets/
+tools/asset-pipeline/debug/

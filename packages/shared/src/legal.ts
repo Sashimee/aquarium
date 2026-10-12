@@ -83,9 +83,7 @@ export const creditsSchema = z.strictObject({
 });
 export type Credits = z.infer<typeof creditsSchema>;
 
-// TODO(alex): replace with the legal name and postal address of the controller (GDPR Art. 13(1)(a)) before production.
-export const PRIVACY_CONTROLLER = 'Operator of fish.bas.lu (legal name to be added)';
-// TODO(alex): confirm this address is monitored for data-subject requests, or replace it, before production.
+export const PRIVACY_CONTROLLER = 'Alexandre Baskewitsch';
 export const PRIVACY_CONTACT = 'fish@bas.lu';
 
 export const PRIVACY_POLICY: PrivacyPolicy = privacyPolicySchema.parse({

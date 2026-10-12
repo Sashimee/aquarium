@@ -1,0 +1,3970 @@
+{
+  "version": 1,
+  "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; every texture has both files.",
+  "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Anemone tentacle sway is \"_sway\" (0 base, 1 tip).",
+  "totalBytes": 122289528,
+  "assets": [
+    {
+      "id": "angelfish",
+      "kind": "fish",
+      "species": "angelfish",
+      "origin": "model",
+      "sources": [
+        "sketchfab-e03ff546"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "merged meshes, dropped skeleton, animation and unused attributes",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "baked fin mask and fin id vertex attributes",
+        "colour and normal maps re-encoded to KTX2 at 1k and 2k",
+        "kept one of four colourways, KHR_materials_unlit replaced by PBR"
+      ],
+      "bounds": {
+        "min": [
+          -0.03932,
+          -0.135139,
+          -0.109631
+        ],
+        "max": [
+          0.03932,
+          0.085167,
+          0.052773
+        ]
+      },
+      "lods": [
+        {
+          "file": "fish/angelfish/lod0.glb",
+          "bytes": 12844,
+          "sha256": "a18aab3cf3d73fa66aa9d9c6ef97c551eda03b43891f1b67d46cb14d12d62e0d",
+          "triangles": 772,
+          "vertices": 407
+        },
+        {
+          "file": "fish/angelfish/lod1.glb",
+          "bytes": 7408,
+          "sha256": "42e357257590e2976c9c16a365bc307198b32e5afc130212aab8217074adc9f3",
+          "triangles": 308,
+          "vertices": 169
+        },
+        {
+          "file": "fish/angelfish/lod2.glb",
+          "bytes": 5416,
+          "sha256": "31cde6d6384a7ebbef0e419e5852dedb0738675d43160bfcd9ebfc6fc41c31bf",
+          "triangles": 148,
+          "vertices": 84
+        }
+      ],
+      "textures": [
+        {
+          "name": "angelfish_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "fish/angelfish/textures/angelfish_basecolor_1k.ktx2",
+              "bytes": 104587,
+              "sha256": "3355e344114a9deb24b77d11ea431d042fbc5d7a58c4f7ac1b775776248eddb1",
+              "size": 1024
+            },
+            "2k": {
+              "file": "fish/angelfish/textures/angelfish_basecolor_2k.ktx2",
+              "bytes": 293119,
+              "sha256": "81f693b00d10a3d798ec4e1cb1ce33c114de2b637df7a53e5562a864e19541a3",
+              "size": 2048
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "fish/angelfish/lod0.glb",
+          "bytes": 12844,
+          "sha256": "a18aab3cf3d73fa66aa9d9c6ef97c551eda03b43891f1b67d46cb14d12d62e0d"
+        },
+        {
+          "file": "fish/angelfish/lod1.glb",
+          "bytes": 7408,
+          "sha256": "42e357257590e2976c9c16a365bc307198b32e5afc130212aab8217074adc9f3"
+        },
+        {
+          "file": "fish/angelfish/lod2.glb",
+          "bytes": 5416,
+          "sha256": "31cde6d6384a7ebbef0e419e5852dedb0738675d43160bfcd9ebfc6fc41c31bf"
+        },
+        {
+          "file": "fish/angelfish/textures/angelfish_basecolor_1k.ktx2",
+          "bytes": 104587,
+          "sha256": "3355e344114a9deb24b77d11ea431d042fbc5d7a58c4f7ac1b775776248eddb1"
+        },
+        {
+          "file": "fish/angelfish/textures/angelfish_basecolor_2k.ktx2",
+          "bytes": 293119,
+          "sha256": "81f693b00d10a3d798ec4e1cb1ce33c114de2b637df7a53e5562a864e19541a3"
+        }
+      ],
+      "fish": {
+        "standardLengthM": 0.12,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "finMask": {
+          "maskAttribute": "_FIN_MASK",
+          "idAttribute": "_FIN_ID",
+          "ids": {
+            "caudal": 1,
+            "dorsal": 2,
+            "anal": 3,
+            "pectoral": 4,
+            "pelvic": 5
+          }
+        },
+        "debugRender": "debug/angelfish.png"
+      }
+    },
+    {
+      "id": "banggai-cardinalfish",
+      "kind": "fish",
+      "species": "banggai-cardinalfish",
+      "origin": "procedural-loft",
+      "sources": [
+        "wm-banggai-holleday"
+      ],
+      "licence": "CC-BY-3.0",
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "Pterapogon kauderni by Holger Krisp (CC-BY-3.0), side view projected onto the loft",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
+      "bounds": {
+        "min": [
+          -0.018435,
+          -0.030547,
+          -0.062198
+        ],
+        "max": [
+          0.018435,
+          0.040009,
+          0.031602
+        ]
+      },
+      "lods": [
+        {
+          "file": "fish/banggai-cardinalfish/lod0.glb",
+          "bytes": 34824,
+          "sha256": "56b58718d6cd96287c322b65c8fdac0f258ebda0da41865a58fe952f9f73e355",
+          "triangles": 3264,
+          "vertices": 1778
+        },
+        {
+          "file": "fish/banggai-cardinalfish/lod1.glb",
+          "bytes": 17696,
+          "sha256": "67859e3cfdddd21f3f95496ef0f9239449be332d938d72f6a3f4a88a5893a668",
+          "triangles": 1306,
+          "vertices": 727
+        },
+        {
+          "file": "fish/banggai-cardinalfish/lod2.glb",
+          "bytes": 9384,
+          "sha256": "356bc7f1083fdfb24fda3ffa0307786451a0e47c5371815081eee4b9a0e7710c",
+          "triangles": 489,
+          "vertices": 289
+        }
+      ],
+      "textures": [
+        {
+          "name": "banggai-cardinalfish_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "fish/banggai-cardinalfish/textures/banggai-cardinalfish_basecolor_1k.ktx2",
+              "bytes": 88355,
+              "sha256": "f8b1d8ffc89c574ae03484dae2888c0e1d7cadf0776d30b4f935aefcf945c713",
+              "size": 1024
+            },
+            "2k": {
+              "file": "fish/banggai-cardinalfish/textures/banggai-cardinalfish_basecolor_2k.ktx2",
+              "bytes": 161693,
+              "sha256": "367047ec7618b12f84e43cc34b651260e3b9eb458403160de2dea2cd1657c682",
+              "size": 1024
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "fish/banggai-cardinalfish/lod0.glb",
+          "bytes": 34824,
+          "sha256": "56b58718d6cd96287c322b65c8fdac0f258ebda0da41865a58fe952f9f73e355"
+        },
+        {
+          "file": "fish/banggai-cardinalfish/lod1.glb",
+          "bytes": 17696,
+          "sha256": "67859e3cfdddd21f3f95496ef0f9239449be332d938d72f6a3f4a88a5893a668"
+        },
+        {
+          "file": "fish/banggai-cardinalfish/lod2.glb",
+          "bytes": 9384,
+          "sha256": "356bc7f1083fdfb24fda3ffa0307786451a0e47c5371815081eee4b9a0e7710c"
+        },
+        {
+          "file": "fish/banggai-cardinalfish/textures/banggai-cardinalfish_basecolor_1k.ktx2",
+          "bytes": 88355,
+          "sha256": "f8b1d8ffc89c574ae03484dae2888c0e1d7cadf0776d30b4f935aefcf945c713"
+        },
+        {
+          "file": "fish/banggai-cardinalfish/textures/banggai-cardinalfish_basecolor_2k.ktx2",
+          "bytes": 161693,
+          "sha256": "367047ec7618b12f84e43cc34b651260e3b9eb458403160de2dea2cd1657c682"
+        }
+      ],
+      "fish": {
+        "standardLengthM": 0.07,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "finMask": {
+          "maskAttribute": "_FIN_MASK",
+          "idAttribute": "_FIN_ID",
+          "ids": {
+            "caudal": 1,
+            "dorsal": 2,
+            "anal": 3,
+            "pectoral": 4,
+            "pelvic": 5
+          }
+        },
+        "debugRender": "debug/banggai-cardinalfish.png"
+      }
+    },
+    {
+      "id": "betta",
+      "kind": "fish",
+      "species": "betta",
+      "origin": "model",
+      "sources": [
+        "sketchfab-f4eeb7f5"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "merged meshes, dropped skeleton, animation and unused attributes",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "baked fin mask and fin id vertex attributes",
+        "colour and normal maps re-encoded to KTX2 at 1k and 2k"
+      ],
+      "bounds": {
+        "min": [
+          -0.011675,
+          -0.069397,
+          -0.093426
+        ],
+        "max": [
+          0.011675,
+          0.032883,
+          0.02667
+        ]
+      },
+      "lods": [
+        {
+          "file": "fish/betta/lod0.glb",
+          "bytes": 112416,
+          "sha256": "703057f65daa05f1e015ec7b7f9a2546861c17e66056f6b3be762e4da1b95c8a",
+          "triangles": 10656,
+          "vertices": 5815
+        },
+        {
+          "file": "fish/betta/lod1.glb",
+          "bytes": 53984,
+          "sha256": "45e9d076eba7ed4a5021def640690487660bb46f4bd666b62e92b9697a78562f",
+          "triangles": 4255,
+          "vertices": 2454
+        },
+        {
+          "file": "fish/betta/lod2.glb",
+          "bytes": 26660,
+          "sha256": "61aa45800cb51261b371a700f2cfc6ea59e9ad50b96a45b9ac3352ee1cc5a145",
+          "triangles": 1597,
+          "vertices": 1008
+        }
+      ],
+      "textures": [
+        {
+          "name": "betta_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "fish/betta/textures/betta_basecolor_1k.ktx2",
+              "bytes": 169866,
+              "sha256": "2a0cf3c3fd6d2710bf494d6ad996c9c616ebe4eaa471846dd83813c0ee02edf3",
+              "size": 1024
+            },
+            "2k": {
+              "file": "fish/betta/textures/betta_basecolor_2k.ktx2",
+              "bytes": 587781,
+              "sha256": "b32b610e6a21f97dbbb3cb54bb70621e542bf809d3ccc829613226073e193e6d",
+              "size": 2048
+            }
+          }
+        },
+        {
+          "name": "betta_normal",
+          "role": "normal",
+          "codec": "uastc",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "fish/betta/textures/betta_normal_1k.ktx2",
+              "bytes": 718757,
+              "sha256": "856a7875b612eae2754433c3e537843782b480dcf22dfd26b12017e2fbdabc43",
+              "size": 1024
+            },
+            "2k": {
+              "file": "fish/betta/textures/betta_normal_2k.ktx2",
+              "bytes": 2587521,
+              "sha256": "bb350afaf5f7c91bf1d48678628692b3ff5830f635cf32dd42f2814dfebe1608",
+              "size": 2048
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "fish/betta/lod0.glb",
+          "bytes": 112416,
+          "sha256": "703057f65daa05f1e015ec7b7f9a2546861c17e66056f6b3be762e4da1b95c8a"
+        },
+        {
+          "file": "fish/betta/lod1.glb",
+          "bytes": 53984,
+          "sha256": "45e9d076eba7ed4a5021def640690487660bb46f4bd666b62e92b9697a78562f"
+        },
+        {
+          "file": "fish/betta/lod2.glb",
+          "bytes": 26660,
+          "sha256": "61aa45800cb51261b371a700f2cfc6ea59e9ad50b96a45b9ac3352ee1cc5a145"
+        },
+        {
+          "file": "fish/betta/textures/betta_basecolor_1k.ktx2",
+          "bytes": 169866,
+          "sha256": "2a0cf3c3fd6d2710bf494d6ad996c9c616ebe4eaa471846dd83813c0ee02edf3"
+        },
+        {
+          "file": "fish/betta/textures/betta_basecolor_2k.ktx2",
+          "bytes": 587781,
+          "sha256": "b32b610e6a21f97dbbb3cb54bb70621e542bf809d3ccc829613226073e193e6d"
+        },
+        {
+          "file": "fish/betta/textures/betta_normal_1k.ktx2",
+          "bytes": 718757,
+          "sha256": "856a7875b612eae2754433c3e537843782b480dcf22dfd26b12017e2fbdabc43"
+        },
+        {
+          "file": "fish/betta/textures/betta_normal_2k.ktx2",
+          "bytes": 2587521,
+          "sha256": "bb350afaf5f7c91bf1d48678628692b3ff5830f635cf32dd42f2814dfebe1608"
+        }
+      ],
+      "fish": {
+        "standardLengthM": 0.055,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "finMask": {
+          "maskAttribute": "_FIN_MASK",
+          "idAttribute": "_FIN_ID",
+          "ids": {
+            "caudal": 1,
+            "dorsal": 2,
+            "anal": 3,
+            "pectoral": 4,
+            "pelvic": 5
+          }
+        },
+        "debugRender": "debug/betta.png"
+      }
+    },
+    {
+      "id": "blue-tang",
+      "kind": "fish",
+      "species": "blue-tang",
+      "origin": "model",
+      "sources": [
+        "sketchfab-00dac50e"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "merged meshes, dropped skeleton, animation and unused attributes",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "baked fin mask and fin id vertex attributes",
+        "colour and normal maps re-encoded to KTX2 at 1k and 2k"
+      ],
+      "bounds": {
+        "min": [
+          -0.06697,
+          -0.073656,
+          -0.117844
+        ],
+        "max": [
+          0.06697,
+          0.087894,
+          0.093226
+        ]
+      },
+      "lods": [
+        {
+          "file": "fish/blue-tang/lod0.glb",
+          "bytes": 46608,
+          "sha256": "ea7d71ce125df9269e26b65126de68feae8350a4e5f85ff0e07f2d5ec952893e",
+          "triangles": 3688,
+          "vertices": 2089
+        },
+        {
+          "file": "fish/blue-tang/lod1.glb",
+          "bytes": 23428,
+          "sha256": "243ccc1359ac0b40e7cffd6a157f3aeebc5e55c83cf07fa617fcd15ba34177fe",
+          "triangles": 1474,
+          "vertices": 896
+        },
+        {
+          "file": "fish/blue-tang/lod2.glb",
+          "bytes": 12068,
+          "sha256": "f7f5ba90b06a4c403e01121e1021d20eff92ce1fb07e7e67fce33198cff43943",
+          "triangles": 552,
+          "vertices": 358
+        }
+      ],
+      "textures": [
+        {
+          "name": "blue-tang_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "fish/blue-tang/textures/blue-tang_basecolor_1k.ktx2",
+              "bytes": 126379,
+              "sha256": "0a3a59cfc5cdb4fed0ef646b042326ab3efd9fa8133f57ab3483bc4137fa83b8",
+              "size": 1024
+            },
+            "2k": {
+              "file": "fish/blue-tang/textures/blue-tang_basecolor_2k.ktx2",
+              "bytes": 409199,
+              "sha256": "dd5888ea9307bc633c1204c305f9d36c5d54ff9b0608708d43b60b628a8b4269",
+              "size": 2048
+            }
+          }
+        },
+        {
+          "name": "blue-tang_normal",
+          "role": "normal",
+          "codec": "uastc",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "fish/blue-tang/textures/blue-tang_normal_1k.ktx2",
+              "bytes": 1186006,
+              "sha256": "0b2ad39a4992777cf1d8cc89b499c599db519546f4178bb7178119883ba2c632",
+              "size": 1024
+            },
+            "2k": {
+              "file": "fish/blue-tang/textures/blue-tang_normal_2k.ktx2",
+              "bytes": 4393518,
+              "sha256": "a59277449eb5ed97f214458c42e19e747a583e8c8513256602ab599d2729bc65",
+              "size": 2048
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "fish/blue-tang/lod0.glb",
+          "bytes": 46608,
+          "sha256": "ea7d71ce125df9269e26b65126de68feae8350a4e5f85ff0e07f2d5ec952893e"
+        },
+        {
+          "file": "fish/blue-tang/lod1.glb",
+          "bytes": 23428,
+          "sha256": "243ccc1359ac0b40e7cffd6a157f3aeebc5e55c83cf07fa617fcd15ba34177fe"
+        },
+        {
+          "file": "fish/blue-tang/lod2.glb",
+          "bytes": 12068,
+          "sha256": "f7f5ba90b06a4c403e01121e1021d20eff92ce1fb07e7e67fce33198cff43943"
+        },
+        {
+          "file": "fish/blue-tang/textures/blue-tang_basecolor_1k.ktx2",
+          "bytes": 126379,
+          "sha256": "0a3a59cfc5cdb4fed0ef646b042326ab3efd9fa8133f57ab3483bc4137fa83b8"
+        },
+        {
+          "file": "fish/blue-tang/textures/blue-tang_basecolor_2k.ktx2",
+          "bytes": 409199,
+          "sha256": "dd5888ea9307bc633c1204c305f9d36c5d54ff9b0608708d43b60b628a8b4269"
+        },
+        {
+          "file": "fish/blue-tang/textures/blue-tang_normal_1k.ktx2",
+          "bytes": 1186006,
+          "sha256": "0b2ad39a4992777cf1d8cc89b499c599db519546f4178bb7178119883ba2c632"
+        },
+        {
+          "file": "fish/blue-tang/textures/blue-tang_normal_2k.ktx2",
+          "bytes": 4393518,
+          "sha256": "a59277449eb5ed97f214458c42e19e747a583e8c8513256602ab599d2729bc65"
+        }
+      ],
+      "fish": {
+        "standardLengthM": 0.2,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "finMask": {
+          "maskAttribute": "_FIN_MASK",
+          "idAttribute": "_FIN_ID",
+          "ids": {
+            "caudal": 1,
+            "dorsal": 2,
+            "anal": 3,
+            "pectoral": 4,
+            "pelvic": 5
+          }
+        },
+        "debugRender": "debug/blue-tang.png"
+      }
+    },
+    {
+      "id": "bronze-corydoras",
+      "kind": "fish",
+      "species": "bronze-corydoras",
+      "origin": "procedural-loft",
+      "sources": [
+        "wm-cory-aeneus-ack210"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "Female Bronze Corydoras by Andrew Keller (CC0), side view projected onto the loft",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
+      "bounds": {
+        "min": [
+          -0.016903,
+          -0.014099,
+          -0.052025
+        ],
+        "max": [
+          0.016903,
+          0.016404,
+          0.029225
+        ]
+      },
+      "lods": [
+        {
+          "file": "fish/bronze-corydoras/lod0.glb",
+          "bytes": 33176,
+          "sha256": "aec9280f1587fdd7b961705783d1e2274dc2f3d1a04c1667c8434a7fd35b5f1d",
+          "triangles": 3144,
+          "vertices": 1700
+        },
+        {
+          "file": "fish/bronze-corydoras/lod1.glb",
+          "bytes": 17088,
+          "sha256": "940aac565e3e3c675b6d2a00523e75d61b20b4c17c018bd636b6980d68ad9b45",
+          "triangles": 1258,
+          "vertices": 693
+        },
+        {
+          "file": "fish/bronze-corydoras/lod2.glb",
+          "bytes": 8956,
+          "sha256": "4fec1992ca1ce874280501be45261165abbfccf3d1916f37d1394343c5f7241c",
+          "triangles": 472,
+          "vertices": 272
+        }
+      ],
+      "textures": [
+        {
+          "name": "bronze-corydoras_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "fish/bronze-corydoras/textures/bronze-corydoras_basecolor_1k.ktx2",
+              "bytes": 33573,
+              "sha256": "ac07298e1ead5329acceea3c147b5971e2d0c99c05e326de88ab84601f6e0e53",
+              "size": 512
+            },
+            "2k": {
+              "file": "fish/bronze-corydoras/textures/bronze-corydoras_basecolor_2k.ktx2",
+              "bytes": 33573,
+              "sha256": "ac07298e1ead5329acceea3c147b5971e2d0c99c05e326de88ab84601f6e0e53",
+              "size": 512
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "fish/bronze-corydoras/lod0.glb",
+          "bytes": 33176,
+          "sha256": "aec9280f1587fdd7b961705783d1e2274dc2f3d1a04c1667c8434a7fd35b5f1d"
+        },
+        {
+          "file": "fish/bronze-corydoras/lod1.glb",
+          "bytes": 17088,
+          "sha256": "940aac565e3e3c675b6d2a00523e75d61b20b4c17c018bd636b6980d68ad9b45"
+        },
+        {
+          "file": "fish/bronze-corydoras/lod2.glb",
+          "bytes": 8956,
+          "sha256": "4fec1992ca1ce874280501be45261165abbfccf3d1916f37d1394343c5f7241c"
+        },
+        {
+          "file": "fish/bronze-corydoras/textures/bronze-corydoras_basecolor_1k.ktx2",
+          "bytes": 33573,
+          "sha256": "ac07298e1ead5329acceea3c147b5971e2d0c99c05e326de88ab84601f6e0e53"
+        },
+        {
+          "file": "fish/bronze-corydoras/textures/bronze-corydoras_basecolor_2k.ktx2",
+          "bytes": 33573,
+          "sha256": "ac07298e1ead5329acceea3c147b5971e2d0c99c05e326de88ab84601f6e0e53"
+        }
+      ],
+      "fish": {
+        "standardLengthM": 0.065,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "finMask": {
+          "maskAttribute": "_FIN_MASK",
+          "idAttribute": "_FIN_ID",
+          "ids": {
+            "caudal": 1,
+            "dorsal": 2,
+            "anal": 3,
+            "pectoral": 4,
+            "pelvic": 5
+          }
+        },
+        "debugRender": "debug/bronze-corydoras.png"
+      }
+    },
+    {
+      "id": "guppy-female",
+      "kind": "fish",
+      "species": "guppy",
+      "origin": "model",
+      "sources": [
+        "sketchfab-feab250d"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "merged meshes, dropped skeleton, animation and unused attributes",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "baked fin mask and fin id vertex attributes",
+        "colour and normal maps re-encoded to KTX2 at 1k and 2k"
+      ],
+      "bounds": {
+        "min": [
+          -0.008271,
+          -0.014796,
+          -0.035148
+        ],
+        "max": [
+          0.008271,
+          0.014994,
+          0.018983
+        ]
+      },
+      "lods": [
+        {
+          "file": "fish/guppy-female/lod0.glb",
+          "bytes": 77800,
+          "sha256": "b228f3bf422f4b0b7470efef5b47048a06a082121847c9ea429a516a9857767d",
+          "triangles": 5948,
+          "vertices": 3389
+        },
+        {
+          "file": "fish/guppy-female/lod1.glb",
+          "bytes": 38916,
+          "sha256": "bd10d1125bc3391706fc4a1f98bfeda3e7b488811fee802e2c83e4de30f1d88c",
+          "triangles": 2379,
+          "vertices": 1401
+        },
+        {
+          "file": "fish/guppy-female/lod2.glb",
+          "bytes": 22600,
+          "sha256": "bd45fa8e98ccf0b45c6d3485ef72e42e0d78de13060dd736e4c5ab70ab4f2838",
+          "triangles": 945,
+          "vertices": 616
+        }
+      ],
+      "textures": [
+        {
+          "name": "guppy-female_guppy-skin-f_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "fish/guppy-female/textures/guppy-female_guppy-skin-f_basecolor_1k.ktx2",
+              "bytes": 242399,
+              "sha256": "d328be21d430728a3bda06d9e865a316b8b02d80582c7fb38a77ecd5a362a205",
+              "size": 1024
+            },
+            "2k": {
+              "file": "fish/guppy-female/textures/guppy-female_guppy-skin-f_basecolor_2k.ktx2",
+              "bytes": 879747,
+              "sha256": "2df71db7b12983489537a63babd677db4ccaae777bed751dcf458e63721a8a6f",
+              "size": 2048
+            }
+          }
+        },
+        {
+          "name": "guppy-female_guppy-layer1-f_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "fish/guppy-female/textures/guppy-female_guppy-layer1-f_basecolor_1k.ktx2",
+              "bytes": 129084,
+              "sha256": "bbf5bb4bb0058c477ff47cf6bfea5148036c21715850437a42f28ead1897a813",
+              "size": 1024
+            },
+            "2k": {
+              "file": "fish/guppy-female/textures/guppy-female_guppy-layer1-f_basecolor_2k.ktx2",
+              "bytes": 477000,
+              "sha256": "88269425d145805b4dfe4a23d11c2c2e2494a5a04d0869416b907bf03b56b2a6",
+              "size": 2048
+            }
+          }
+        },
+        {
+          "name": "guppy-female_guppy-layer2-f_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "fish/guppy-female/textures/guppy-female_guppy-layer2-f_basecolor_1k.ktx2",
+              "bytes": 129084,
+              "sha256": "bbf5bb4bb0058c477ff47cf6bfea5148036c21715850437a42f28ead1897a813",
+              "size": 1024
+            },
+            "2k": {
+              "file": "fish/guppy-female/textures/guppy-female_guppy-layer2-f_basecolor_2k.ktx2",
+              "bytes": 477000,
+              "sha256": "88269425d145805b4dfe4a23d11c2c2e2494a5a04d0869416b907bf03b56b2a6",
+              "size": 2048
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "fish/guppy-female/lod0.glb",
+          "bytes": 77800,
+          "sha256": "b228f3bf422f4b0b7470efef5b47048a06a082121847c9ea429a516a9857767d"
+        },
+        {
+          "file": "fish/guppy-female/lod1.glb",
+          "bytes": 38916,
+          "sha256": "bd10d1125bc3391706fc4a1f98bfeda3e7b488811fee802e2c83e4de30f1d88c"
+        },
+        {
+          "file": "fish/guppy-female/lod2.glb",
+          "bytes": 22600,
+          "sha256": "bd45fa8e98ccf0b45c6d3485ef72e42e0d78de13060dd736e4c5ab70ab4f2838"
+        },
+        {
+          "file": "fish/guppy-female/textures/guppy-female_guppy-layer1-f_basecolor_1k.ktx2",
+          "bytes": 129084,
+          "sha256": "bbf5bb4bb0058c477ff47cf6bfea5148036c21715850437a42f28ead1897a813"
+        },
+        {
+          "file": "fish/guppy-female/textures/guppy-female_guppy-layer1-f_basecolor_2k.ktx2",
+          "bytes": 477000,
+          "sha256": "88269425d145805b4dfe4a23d11c2c2e2494a5a04d0869416b907bf03b56b2a6"
+        },
+        {
+          "file": "fish/guppy-female/textures/guppy-female_guppy-layer2-f_basecolor_1k.ktx2",
+          "bytes": 129084,
+          "sha256": "bbf5bb4bb0058c477ff47cf6bfea5148036c21715850437a42f28ead1897a813"
+        },
+        {
+          "file": "fish/guppy-female/textures/guppy-female_guppy-layer2-f_basecolor_2k.ktx2",
+          "bytes": 477000,
+          "sha256": "88269425d145805b4dfe4a23d11c2c2e2494a5a04d0869416b907bf03b56b2a6"
+        },
+        {
+          "file": "fish/guppy-female/textures/guppy-female_guppy-skin-f_basecolor_1k.ktx2",
+          "bytes": 242399,
+          "sha256": "d328be21d430728a3bda06d9e865a316b8b02d80582c7fb38a77ecd5a362a205"
+        },
+        {
+          "file": "fish/guppy-female/textures/guppy-female_guppy-skin-f_basecolor_2k.ktx2",
+          "bytes": 879747,
+          "sha256": "2df71db7b12983489537a63babd677db4ccaae777bed751dcf458e63721a8a6f"
+        }
+      ],
+      "fish": {
+        "standardLengthM": 0.04,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "finMask": {
+          "maskAttribute": "_FIN_MASK",
+          "idAttribute": "_FIN_ID",
+          "ids": {
+            "caudal": 1,
+            "dorsal": 2,
+            "anal": 3,
+            "pectoral": 4,
+            "pelvic": 5
+          }
+        },
+        "debugRender": "debug/guppy-female.png"
+      }
+    },
+    {
+      "id": "guppy-male",
+      "kind": "fish",
+      "species": "guppy",
+      "origin": "model",
+      "sources": [
+        "sketchfab-21e14e4b"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "merged meshes, dropped skeleton, animation and unused attributes",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "baked fin mask and fin id vertex attributes",
+        "colour and normal maps re-encoded to KTX2 at 1k and 2k"
+      ],
+      "bounds": {
+        "min": [
+          -0.002222,
+          -0.019052,
+          -0.036125
+        ],
+        "max": [
+          0.002222,
+          0.010762,
+          0.012285
+        ]
+      },
+      "lods": [
+        {
+          "file": "fish/guppy-male/lod0.glb",
+          "bytes": 16704,
+          "sha256": "6957525450b13a28b583fa01b8a743ddaf557aa9f9a038b161ccfeb8e22bf1ae",
+          "triangles": 1233,
+          "vertices": 616
+        },
+        {
+          "file": "fish/guppy-male/lod1.glb",
+          "bytes": 9224,
+          "sha256": "eade13dcc41bd1ea5a6fe4dd43c1d6349b82784e23614f37673b4ee5cf06ef76",
+          "triangles": 491,
+          "vertices": 254
+        },
+        {
+          "file": "fish/guppy-male/lod2.glb",
+          "bytes": 5820,
+          "sha256": "536d7106bb0457d605259efaa5f1eb941ec3ab276fc5b85adf662051e44360fe",
+          "triangles": 184,
+          "vertices": 99
+        }
+      ],
+      "textures": [
+        {
+          "name": "guppy-male_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "fish/guppy-male/textures/guppy-male_basecolor_1k.ktx2",
+              "bytes": 158459,
+              "sha256": "8a5b7c1aba10ce7b7f72fc5cf2a80c37f8b2df25bfa67c268be356e84779391a",
+              "size": 1024
+            },
+            "2k": {
+              "file": "fish/guppy-male/textures/guppy-male_basecolor_2k.ktx2",
+              "bytes": 479074,
+              "sha256": "80ae7e3c7a1b33045b1cc827df5d4bedc1bbd1493ee3f439c725e83c471825bd",
+              "size": 2048
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "fish/guppy-male/lod0.glb",
+          "bytes": 16704,
+          "sha256": "6957525450b13a28b583fa01b8a743ddaf557aa9f9a038b161ccfeb8e22bf1ae"
+        },
+        {
+          "file": "fish/guppy-male/lod1.glb",
+          "bytes": 9224,
+          "sha256": "eade13dcc41bd1ea5a6fe4dd43c1d6349b82784e23614f37673b4ee5cf06ef76"
+        },
+        {
+          "file": "fish/guppy-male/lod2.glb",
+          "bytes": 5820,
+          "sha256": "536d7106bb0457d605259efaa5f1eb941ec3ab276fc5b85adf662051e44360fe"
+        },
+        {
+          "file": "fish/guppy-male/textures/guppy-male_basecolor_1k.ktx2",
+          "bytes": 158459,
+          "sha256": "8a5b7c1aba10ce7b7f72fc5cf2a80c37f8b2df25bfa67c268be356e84779391a"
+        },
+        {
+          "file": "fish/guppy-male/textures/guppy-male_basecolor_2k.ktx2",
+          "bytes": 479074,
+          "sha256": "80ae7e3c7a1b33045b1cc827df5d4bedc1bbd1493ee3f439c725e83c471825bd"
+        }
+      ],
+      "fish": {
+        "standardLengthM": 0.025,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "finMask": {
+          "maskAttribute": "_FIN_MASK",
+          "idAttribute": "_FIN_ID",
+          "ids": {
+            "caudal": 1,
+            "dorsal": 2,
+            "anal": 3,
+            "pectoral": 4,
+            "pelvic": 5
+          }
+        },
+        "debugRender": "debug/guppy-male.png"
+      }
+    },
+    {
+      "id": "neon-tetra",
+      "kind": "fish",
+      "species": "neon-tetra",
+      "origin": "model",
+      "sources": [
+        "sketchfab-2fabf5db"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "merged meshes, dropped skeleton, animation and unused attributes",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "baked fin mask and fin id vertex attributes",
+        "colour and normal maps re-encoded to KTX2 at 1k and 2k"
+      ],
+      "bounds": {
+        "min": [
+          -0.006174,
+          -0.011266,
+          -0.032466
+        ],
+        "max": [
+          0.006174,
+          0.011962,
+          0.01498
+        ]
+      },
+      "lods": [
+        {
+          "file": "fish/neon-tetra/lod0.glb",
+          "bytes": 25348,
+          "sha256": "223968b9d1a49e4fd226b0d8d127f28b40fbc7232ae0b4a1e1e2eb32dedda6b6",
+          "triangles": 1498,
+          "vertices": 929
+        },
+        {
+          "file": "fish/neon-tetra/lod1.glb",
+          "bytes": 15776,
+          "sha256": "1ba8ac761f575a000e302f3a7d40617564820cd6403fb4e135338d403ffe30dd",
+          "triangles": 659,
+          "vertices": 461
+        },
+        {
+          "file": "fish/neon-tetra/lod2.glb",
+          "bytes": 11520,
+          "sha256": "e62fcbfd5af0468e2f7e51b2400ee9e8a11db629d663030ce1eb34405a247b37",
+          "triangles": 340,
+          "vertices": 261
+        }
+      ],
+      "textures": [
+        {
+          "name": "neon-tetra_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "fish/neon-tetra/textures/neon-tetra_basecolor_1k.ktx2",
+              "bytes": 162858,
+              "sha256": "ca866206cc24ac99c8549ed12ee2b96543ef15526aae8885a535d77f2f26fc3f",
+              "size": 1024
+            },
+            "2k": {
+              "file": "fish/neon-tetra/textures/neon-tetra_basecolor_2k.ktx2",
+              "bytes": 162858,
+              "sha256": "ca866206cc24ac99c8549ed12ee2b96543ef15526aae8885a535d77f2f26fc3f",
+              "size": 1024
+            }
+          }
+        },
+        {
+          "name": "neon-tetra_normal",
+          "role": "normal",
+          "codec": "uastc",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "fish/neon-tetra/textures/neon-tetra_normal_1k.ktx2",
+              "bytes": 612199,
+              "sha256": "ea125b89ca59e742ec7c00ba2262f24f8a590048b04f7428f61024e56ef366a8",
+              "size": 1024
+            },
+            "2k": {
+              "file": "fish/neon-tetra/textures/neon-tetra_normal_2k.ktx2",
+              "bytes": 612199,
+              "sha256": "ea125b89ca59e742ec7c00ba2262f24f8a590048b04f7428f61024e56ef366a8",
+              "size": 1024
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "fish/neon-tetra/lod0.glb",
+          "bytes": 25348,
+          "sha256": "223968b9d1a49e4fd226b0d8d127f28b40fbc7232ae0b4a1e1e2eb32dedda6b6"
+        },
+        {
+          "file": "fish/neon-tetra/lod1.glb",
+          "bytes": 15776,
+          "sha256": "1ba8ac761f575a000e302f3a7d40617564820cd6403fb4e135338d403ffe30dd"
+        },
+        {
+          "file": "fish/neon-tetra/lod2.glb",
+          "bytes": 11520,
+          "sha256": "e62fcbfd5af0468e2f7e51b2400ee9e8a11db629d663030ce1eb34405a247b37"
+        },
+        {
+          "file": "fish/neon-tetra/textures/neon-tetra_basecolor_1k.ktx2",
+          "bytes": 162858,
+          "sha256": "ca866206cc24ac99c8549ed12ee2b96543ef15526aae8885a535d77f2f26fc3f"
+        },
+        {
+          "file": "fish/neon-tetra/textures/neon-tetra_basecolor_2k.ktx2",
+          "bytes": 162858,
+          "sha256": "ca866206cc24ac99c8549ed12ee2b96543ef15526aae8885a535d77f2f26fc3f"
+        },
+        {
+          "file": "fish/neon-tetra/textures/neon-tetra_normal_1k.ktx2",
+          "bytes": 612199,
+          "sha256": "ea125b89ca59e742ec7c00ba2262f24f8a590048b04f7428f61024e56ef366a8"
+        },
+        {
+          "file": "fish/neon-tetra/textures/neon-tetra_normal_2k.ktx2",
+          "bytes": 612199,
+          "sha256": "ea125b89ca59e742ec7c00ba2262f24f8a590048b04f7428f61024e56ef366a8"
+        }
+      ],
+      "fish": {
+        "standardLengthM": 0.032,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "finMask": {
+          "maskAttribute": "_FIN_MASK",
+          "idAttribute": "_FIN_ID",
+          "ids": {
+            "caudal": 1,
+            "dorsal": 2,
+            "anal": 3,
+            "pectoral": 4,
+            "pelvic": 5
+          }
+        },
+        "debugRender": "debug/neon-tetra.png"
+      }
+    },
+    {
+      "id": "ocellaris-clownfish",
+      "kind": "fish",
+      "species": "ocellaris-clownfish",
+      "origin": "model",
+      "sources": [
+        "sketchfab-47ba2679"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "merged meshes, dropped skeleton, animation and unused attributes",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "baked fin mask and fin id vertex attributes",
+        "colour and normal maps re-encoded to KTX2 at 1k and 2k"
+      ],
+      "bounds": {
+        "min": [
+          -0.015704,
+          -0.027629,
+          -0.072021
+        ],
+        "max": [
+          0.015704,
+          0.026918,
+          0.037359
+        ]
+      },
+      "lods": [
+        {
+          "file": "fish/ocellaris-clownfish/lod0.glb",
+          "bytes": 23776,
+          "sha256": "45e26aaf536192b2080333728b67697c9cb87d0beed285954f959b3b2a7b36e6",
+          "triangles": 1606,
+          "vertices": 903
+        },
+        {
+          "file": "fish/ocellaris-clownfish/lod1.glb",
+          "bytes": 12932,
+          "sha256": "026e89e889dca72353511c351d1619edeb0b3669e05870585a4388bc3a99d483",
+          "triangles": 642,
+          "vertices": 388
+        },
+        {
+          "file": "fish/ocellaris-clownfish/lod2.glb",
+          "bytes": 7580,
+          "sha256": "1baa11ce51890bc5db43ff635fa91d03508a7e7275eff20c785884853d58b1f7",
+          "triangles": 240,
+          "vertices": 161
+        }
+      ],
+      "textures": [
+        {
+          "name": "ocellaris-clownfish_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "fish/ocellaris-clownfish/textures/ocellaris-clownfish_basecolor_1k.ktx2",
+              "bytes": 132791,
+              "sha256": "6c4785decb6d00623c01b0eb00f81ae6980341104fb91010752cc4dfbba40603",
+              "size": 1024
+            },
+            "2k": {
+              "file": "fish/ocellaris-clownfish/textures/ocellaris-clownfish_basecolor_2k.ktx2",
+              "bytes": 404435,
+              "sha256": "5713c62541839129bd0f7895de0f02a5f73097801b79c5da80054185047e08e2",
+              "size": 2048
+            }
+          }
+        },
+        {
+          "name": "ocellaris-clownfish_normal",
+          "role": "normal",
+          "codec": "uastc",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "fish/ocellaris-clownfish/textures/ocellaris-clownfish_normal_1k.ktx2",
+              "bytes": 897581,
+              "sha256": "6af058deae788275cce5124b49e396e645f3a83e5cdf97db5e9c0d75669f3255",
+              "size": 1024
+            },
+            "2k": {
+              "file": "fish/ocellaris-clownfish/textures/ocellaris-clownfish_normal_2k.ktx2",
+              "bytes": 3075756,
+              "sha256": "0ae68307ef76efca89fe52f640f7c41e9fcd296c26f50631a829d497630afcc0",
+              "size": 2048
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "fish/ocellaris-clownfish/lod0.glb",
+          "bytes": 23776,
+          "sha256": "45e26aaf536192b2080333728b67697c9cb87d0beed285954f959b3b2a7b36e6"
+        },
+        {
+          "file": "fish/ocellaris-clownfish/lod1.glb",
+          "bytes": 12932,
+          "sha256": "026e89e889dca72353511c351d1619edeb0b3669e05870585a4388bc3a99d483"
+        },
+        {
+          "file": "fish/ocellaris-clownfish/lod2.glb",
+          "bytes": 7580,
+          "sha256": "1baa11ce51890bc5db43ff635fa91d03508a7e7275eff20c785884853d58b1f7"
+        },
+        {
+          "file": "fish/ocellaris-clownfish/textures/ocellaris-clownfish_basecolor_1k.ktx2",
+          "bytes": 132791,
+          "sha256": "6c4785decb6d00623c01b0eb00f81ae6980341104fb91010752cc4dfbba40603"
+        },
+        {
+          "file": "fish/ocellaris-clownfish/textures/ocellaris-clownfish_basecolor_2k.ktx2",
+          "bytes": 404435,
+          "sha256": "5713c62541839129bd0f7895de0f02a5f73097801b79c5da80054185047e08e2"
+        },
+        {
+          "file": "fish/ocellaris-clownfish/textures/ocellaris-clownfish_normal_1k.ktx2",
+          "bytes": 897581,
+          "sha256": "6af058deae788275cce5124b49e396e645f3a83e5cdf97db5e9c0d75669f3255"
+        },
+        {
+          "file": "fish/ocellaris-clownfish/textures/ocellaris-clownfish_normal_2k.ktx2",
+          "bytes": 3075756,
+          "sha256": "0ae68307ef76efca89fe52f640f7c41e9fcd296c26f50631a829d497630afcc0"
+        }
+      ],
+      "fish": {
+        "standardLengthM": 0.08,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "finMask": {
+          "maskAttribute": "_FIN_MASK",
+          "idAttribute": "_FIN_ID",
+          "ids": {
+            "caudal": 1,
+            "dorsal": 2,
+            "anal": 3,
+            "pectoral": 4,
+            "pelvic": 5
+          }
+        },
+        "debugRender": "debug/ocellaris-clownfish.png"
+      }
+    },
+    {
+      "id": "royal-gramma",
+      "kind": "fish",
+      "species": "royal-gramma",
+      "origin": "procedural-loft",
+      "sources": [],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "colour map painted procedurally; the only side-view photograph is CC-BY-SA and is not reused",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
+      "bounds": {
+        "min": [
+          -0.013362,
+          -0.020434,
+          -0.044941
+        ],
+        "max": [
+          0.013362,
+          0.019298,
+          0.028259
+        ]
+      },
+      "lods": [
+        {
+          "file": "fish/royal-gramma/lod0.glb",
+          "bytes": 33544,
+          "sha256": "24d5940b081234fcae2fdbb779afb1ead53e6171d8c9dc1b54373efac0c18b91",
+          "triangles": 3144,
+          "vertices": 1700
+        },
+        {
+          "file": "fish/royal-gramma/lod1.glb",
+          "bytes": 17316,
+          "sha256": "23bd0585b1993257216a60f8da460e6b57f5e072887f644da431a1536345fa46",
+          "triangles": 1257,
+          "vertices": 698
+        },
+        {
+          "file": "fish/royal-gramma/lod2.glb",
+          "bytes": 9052,
+          "sha256": "6726e6f39e9111b8929c621636594eeb197f534f175edd6bbdb95bde7340a3d2",
+          "triangles": 471,
+          "vertices": 277
+        }
+      ],
+      "textures": [
+        {
+          "name": "royal-gramma_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "fish/royal-gramma/textures/royal-gramma_basecolor_1k.ktx2",
+              "bytes": 13741,
+              "sha256": "5cb178b3e9118acf85c220e369c97ee020ef058a42e8bab8dd0750b8a61066a1",
+              "size": 1024
+            },
+            "2k": {
+              "file": "fish/royal-gramma/textures/royal-gramma_basecolor_2k.ktx2",
+              "bytes": 13741,
+              "sha256": "5cb178b3e9118acf85c220e369c97ee020ef058a42e8bab8dd0750b8a61066a1",
+              "size": 1024
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "fish/royal-gramma/lod0.glb",
+          "bytes": 33544,
+          "sha256": "24d5940b081234fcae2fdbb779afb1ead53e6171d8c9dc1b54373efac0c18b91"
+        },
+        {
+          "file": "fish/royal-gramma/lod1.glb",
+          "bytes": 17316,
+          "sha256": "23bd0585b1993257216a60f8da460e6b57f5e072887f644da431a1536345fa46"
+        },
+        {
+          "file": "fish/royal-gramma/lod2.glb",
+          "bytes": 9052,
+          "sha256": "6726e6f39e9111b8929c621636594eeb197f534f175edd6bbdb95bde7340a3d2"
+        },
+        {
+          "file": "fish/royal-gramma/textures/royal-gramma_basecolor_1k.ktx2",
+          "bytes": 13741,
+          "sha256": "5cb178b3e9118acf85c220e369c97ee020ef058a42e8bab8dd0750b8a61066a1"
+        },
+        {
+          "file": "fish/royal-gramma/textures/royal-gramma_basecolor_2k.ktx2",
+          "bytes": 13741,
+          "sha256": "5cb178b3e9118acf85c220e369c97ee020ef058a42e8bab8dd0750b8a61066a1"
+        }
+      ],
+      "fish": {
+        "standardLengthM": 0.06,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "finMask": {
+          "maskAttribute": "_FIN_MASK",
+          "idAttribute": "_FIN_ID",
+          "ids": {
+            "caudal": 1,
+            "dorsal": 2,
+            "anal": 3,
+            "pectoral": 4,
+            "pelvic": 5
+          }
+        },
+        "debugRender": "debug/royal-gramma.png"
+      }
+    },
+    {
+      "id": "yellow-tang",
+      "kind": "fish",
+      "species": "yellow-tang",
+      "origin": "model",
+      "sources": [
+        "sketchfab-5750f70a"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "merged meshes, dropped skeleton, animation and unused attributes",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "baked fin mask and fin id vertex attributes",
+        "colour and normal maps re-encoded to KTX2 at 1k and 2k"
+      ],
+      "bounds": {
+        "min": [
+          -0.017612,
+          -0.055417,
+          -0.119656
+        ],
+        "max": [
+          0.017612,
+          0.071187,
+          0.079271
+        ]
+      },
+      "lods": [
+        {
+          "file": "fish/yellow-tang/lod0.glb",
+          "bytes": 16948,
+          "sha256": "795837c798373a6e63e8ca288778eb8ae53102105e2c20641ab4fa0f105d78f6",
+          "triangles": 1184,
+          "vertices": 623
+        },
+        {
+          "file": "fish/yellow-tang/lod1.glb",
+          "bytes": 9508,
+          "sha256": "f8da0cc2af7ff279c03e17a181867e3fbe74744af24ed9260f9ce8ad3f4d51a0",
+          "triangles": 473,
+          "vertices": 261
+        },
+        {
+          "file": "fish/yellow-tang/lod2.glb",
+          "bytes": 5932,
+          "sha256": "0a2a10e0772b4cf134f3946c3a5a73b2c15ac6bc0e758248e3ede01a71b94e3c",
+          "triangles": 178,
+          "vertices": 108
+        }
+      ],
+      "textures": [
+        {
+          "name": "yellow-tang_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "fish/yellow-tang/textures/yellow-tang_basecolor_1k.ktx2",
+              "bytes": 124003,
+              "sha256": "3250ec20cbd210bfc63e2740c78c40bf24a15440b289f7bdc6f7a6798cfde51d",
+              "size": 1024
+            },
+            "2k": {
+              "file": "fish/yellow-tang/textures/yellow-tang_basecolor_2k.ktx2",
+              "bytes": 124003,
+              "sha256": "3250ec20cbd210bfc63e2740c78c40bf24a15440b289f7bdc6f7a6798cfde51d",
+              "size": 1024
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "fish/yellow-tang/lod0.glb",
+          "bytes": 16948,
+          "sha256": "795837c798373a6e63e8ca288778eb8ae53102105e2c20641ab4fa0f105d78f6"
+        },
+        {
+          "file": "fish/yellow-tang/lod1.glb",
+          "bytes": 9508,
+          "sha256": "f8da0cc2af7ff279c03e17a181867e3fbe74744af24ed9260f9ce8ad3f4d51a0"
+        },
+        {
+          "file": "fish/yellow-tang/lod2.glb",
+          "bytes": 5932,
+          "sha256": "0a2a10e0772b4cf134f3946c3a5a73b2c15ac6bc0e758248e3ede01a71b94e3c"
+        },
+        {
+          "file": "fish/yellow-tang/textures/yellow-tang_basecolor_1k.ktx2",
+          "bytes": 124003,
+          "sha256": "3250ec20cbd210bfc63e2740c78c40bf24a15440b289f7bdc6f7a6798cfde51d"
+        },
+        {
+          "file": "fish/yellow-tang/textures/yellow-tang_basecolor_2k.ktx2",
+          "bytes": 124003,
+          "sha256": "3250ec20cbd210bfc63e2740c78c40bf24a15440b289f7bdc6f7a6798cfde51d"
+        }
+      ],
+      "fish": {
+        "standardLengthM": 0.16,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "finMask": {
+          "maskAttribute": "_FIN_MASK",
+          "idAttribute": "_FIN_ID",
+          "ids": {
+            "caudal": 1,
+            "dorsal": 2,
+            "anal": 3,
+            "pectoral": 4,
+            "pelvic": 5
+          }
+        },
+        "debugRender": "debug/yellow-tang.png"
+      }
+    },
+    {
+      "id": "host-anemone",
+      "kind": "anemone",
+      "origin": "procedural",
+      "sources": [],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "generated procedurally: columnar body with five rings of tapered tentacles, deterministic seed",
+        "origin at the centre of the foot, scaled to a 0.3 m spread",
+        "_SWAY vertex attribute: 0 at the foot and column, rising to 1 at each tentacle tip",
+        "colour gradient texture generated procedurally"
+      ],
+      "bounds": {
+        "min": [
+          -0.144585,
+          0,
+          -0.152236
+        ],
+        "max": [
+          0.155415,
+          0.150579,
+          0.142587
+        ]
+      },
+      "lods": [
+        {
+          "file": "anemone/host-anemone/lod0.glb",
+          "bytes": 103988,
+          "sha256": "43c5cfa4d50940347bf985dd7d908936392db8b4d1057b7ddb5ed68ee99128d3",
+          "triangles": 10680,
+          "vertices": 5806
+        },
+        {
+          "file": "anemone/host-anemone/lod1.glb",
+          "bytes": 64596,
+          "sha256": "9c61728a24fa7ba8b233ad1b3e09147270413076d4ef7d4f33cd9ee9f6c7cc9f",
+          "triangles": 5340,
+          "vertices": 3136
+        },
+        {
+          "file": "anemone/host-anemone/lod2.glb",
+          "bytes": 32568,
+          "sha256": "e697d5ca10b8d3fc7bb3b3750c3880ca1d40cd968aaf6c053cea00f89d9a8ef0",
+          "triangles": 2136,
+          "vertices": 1438
+        }
+      ],
+      "textures": [
+        {
+          "name": "host-anemone_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "anemone/host-anemone/textures/host-anemone_basecolor_1k.ktx2",
+              "bytes": 1042,
+              "sha256": "676338329887530f4723120450ba9b43fb00e101edca5daeba13e2a17013e39a",
+              "size": 256
+            },
+            "2k": {
+              "file": "anemone/host-anemone/textures/host-anemone_basecolor_2k.ktx2",
+              "bytes": 1042,
+              "sha256": "676338329887530f4723120450ba9b43fb00e101edca5daeba13e2a17013e39a",
+              "size": 256
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "anemone/host-anemone/lod0.glb",
+          "bytes": 103988,
+          "sha256": "43c5cfa4d50940347bf985dd7d908936392db8b4d1057b7ddb5ed68ee99128d3"
+        },
+        {
+          "file": "anemone/host-anemone/lod1.glb",
+          "bytes": 64596,
+          "sha256": "9c61728a24fa7ba8b233ad1b3e09147270413076d4ef7d4f33cd9ee9f6c7cc9f"
+        },
+        {
+          "file": "anemone/host-anemone/lod2.glb",
+          "bytes": 32568,
+          "sha256": "e697d5ca10b8d3fc7bb3b3750c3880ca1d40cd968aaf6c053cea00f89d9a8ef0"
+        },
+        {
+          "file": "anemone/host-anemone/textures/host-anemone_basecolor_1k.ktx2",
+          "bytes": 1042,
+          "sha256": "676338329887530f4723120450ba9b43fb00e101edca5daeba13e2a17013e39a"
+        },
+        {
+          "file": "anemone/host-anemone/textures/host-anemone_basecolor_2k.ktx2",
+          "bytes": 1042,
+          "sha256": "676338329887530f4723120450ba9b43fb00e101edca5daeba13e2a17013e39a"
+        }
+      ]
+    },
+    {
+      "id": "java-fern",
+      "kind": "plant",
+      "origin": "model",
+      "sources": [
+        "sketchfab-f34fac65"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.3 m",
+        "LOD0 capped at 12000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "split out of a six-plant scene, 4096 px texture downscaled"
+      ],
+      "bounds": {
+        "min": [
+          -0.15,
+          0,
+          -0.149807
+        ],
+        "max": [
+          0.15,
+          0.187478,
+          0.149807
+        ]
+      },
+      "lods": [
+        {
+          "file": "plant/java-fern/lod0.glb",
+          "bytes": 223896,
+          "sha256": "71216189dfc880e574b52d44c4dd4875ae9cca739e7170b851c3b43359f60311",
+          "triangles": 12000,
+          "vertices": 11989
+        },
+        {
+          "file": "plant/java-fern/lod1.glb",
+          "bytes": 92376,
+          "sha256": "53e229ede2d89a78b3d83f287515a2d2d10dcfee6362e4106da0f68a5ee42972",
+          "triangles": 4199,
+          "vertices": 4661
+        },
+        {
+          "file": "plant/java-fern/lod2.glb",
+          "bytes": 31848,
+          "sha256": "18b633df8df120d1cb6ae9562d2be4a5b81ca7c5d19ad699c142746fdbe90b81",
+          "triangles": 1430,
+          "vertices": 1458
+        }
+      ],
+      "textures": [
+        {
+          "name": "java-fern_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "plant/java-fern/textures/java-fern_basecolor_1k.ktx2",
+              "bytes": 152879,
+              "sha256": "1345992af66bd7b58b43aff81719652c8407c55ea74bc161216e7738ab74b975",
+              "size": 1024
+            },
+            "2k": {
+              "file": "plant/java-fern/textures/java-fern_basecolor_2k.ktx2",
+              "bytes": 543740,
+              "sha256": "dc480c139bd46057d658b9092803ad17cb910c84585d005f783439357ad8b324",
+              "size": 2048
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "plant/java-fern/lod0.glb",
+          "bytes": 223896,
+          "sha256": "71216189dfc880e574b52d44c4dd4875ae9cca739e7170b851c3b43359f60311"
+        },
+        {
+          "file": "plant/java-fern/lod1.glb",
+          "bytes": 92376,
+          "sha256": "53e229ede2d89a78b3d83f287515a2d2d10dcfee6362e4106da0f68a5ee42972"
+        },
+        {
+          "file": "plant/java-fern/lod2.glb",
+          "bytes": 31848,
+          "sha256": "18b633df8df120d1cb6ae9562d2be4a5b81ca7c5d19ad699c142746fdbe90b81"
+        },
+        {
+          "file": "plant/java-fern/textures/java-fern_basecolor_1k.ktx2",
+          "bytes": 152879,
+          "sha256": "1345992af66bd7b58b43aff81719652c8407c55ea74bc161216e7738ab74b975"
+        },
+        {
+          "file": "plant/java-fern/textures/java-fern_basecolor_2k.ktx2",
+          "bytes": 543740,
+          "sha256": "dc480c139bd46057d658b9092803ad17cb910c84585d005f783439357ad8b324"
+        }
+      ]
+    },
+    {
+      "id": "pond-weed",
+      "kind": "plant",
+      "origin": "model",
+      "sources": [
+        "sketchfab-b34ed521"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.25 m",
+        "LOD0 capped at 12000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "KHR_materials_pbrSpecularGlossiness converted to metallic-roughness, alpha cut-out kept"
+      ],
+      "bounds": {
+        "min": [
+          -0.085171,
+          0,
+          -0.109278
+        ],
+        "max": [
+          0.085171,
+          0.25,
+          0.109278
+        ]
+      },
+      "lods": [
+        {
+          "file": "plant/pond-weed/lod0.glb",
+          "bytes": 144304,
+          "sha256": "047feddc42cbf4b7df231376505c6caeaa6593dca88121c95e7d36af0b25012c",
+          "triangles": 7549,
+          "vertices": 7132
+        },
+        {
+          "file": "plant/pond-weed/lod1.glb",
+          "bytes": 56928,
+          "sha256": "a4cecdb4f0e6d1908364db462f9e47417951f8bfabfa00e8bb4d474814d873cd",
+          "triangles": 2641,
+          "vertices": 2571
+        },
+        {
+          "file": "plant/pond-weed/lod2.glb",
+          "bytes": 30152,
+          "sha256": "891ff9669c93d0964b5668ad6b755ea47d4883301048870c97dd887b39a79cf4",
+          "triangles": 960,
+          "vertices": 1228
+        }
+      ],
+      "textures": [
+        {
+          "name": "pond-weed_frondstem-mat_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "plant/pond-weed/textures/pond-weed_frondstem-mat_basecolor_1k.ktx2",
+              "bytes": 11473,
+              "sha256": "568d50d9ad56889d0b836a7ad556ff648793c7fe1e9ce8644700e6fb155b79e4",
+              "size": 512
+            },
+            "2k": {
+              "file": "plant/pond-weed/textures/pond-weed_frondstem-mat_basecolor_2k.ktx2",
+              "bytes": 11473,
+              "sha256": "568d50d9ad56889d0b836a7ad556ff648793c7fe1e9ce8644700e6fb155b79e4",
+              "size": 512
+            }
+          }
+        },
+        {
+          "name": "pond-weed_frondstem-mat_normal",
+          "role": "normal",
+          "codec": "uastc",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "plant/pond-weed/textures/pond-weed_frondstem-mat_normal_1k.ktx2",
+              "bytes": 78257,
+              "sha256": "331b667302576eeecbd4dee1561cca47ef10c30470217e2b995cd145a3cbfbcf",
+              "size": 512
+            },
+            "2k": {
+              "file": "plant/pond-weed/textures/pond-weed_frondstem-mat_normal_2k.ktx2",
+              "bytes": 78257,
+              "sha256": "331b667302576eeecbd4dee1561cca47ef10c30470217e2b995cd145a3cbfbcf",
+              "size": 512
+            }
+          }
+        },
+        {
+          "name": "pond-weed_pondweedleaflets-mat_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "plant/pond-weed/textures/pond-weed_pondweedleaflets-mat_basecolor_1k.ktx2",
+              "bytes": 50679,
+              "sha256": "d7d68b44f4e8554e656efd5253d3243351bb5becb4db8a2da1c145c917c76f66",
+              "size": 512
+            },
+            "2k": {
+              "file": "plant/pond-weed/textures/pond-weed_pondweedleaflets-mat_basecolor_2k.ktx2",
+              "bytes": 50679,
+              "sha256": "d7d68b44f4e8554e656efd5253d3243351bb5becb4db8a2da1c145c917c76f66",
+              "size": 512
+            }
+          }
+        },
+        {
+          "name": "pond-weed_pondweedleaflets-mat_normal",
+          "role": "normal",
+          "codec": "uastc",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "plant/pond-weed/textures/pond-weed_pondweedleaflets-mat_normal_1k.ktx2",
+              "bytes": 246627,
+              "sha256": "ad575dca388d456e28416f1afb226402bb5d54673ae6ff47211fbaec48bdc08e",
+              "size": 512
+            },
+            "2k": {
+              "file": "plant/pond-weed/textures/pond-weed_pondweedleaflets-mat_normal_2k.ktx2",
+              "bytes": 246627,
+              "sha256": "ad575dca388d456e28416f1afb226402bb5d54673ae6ff47211fbaec48bdc08e",
+              "size": 512
+            }
+          }
+        },
+        {
+          "name": "pond-weed_pondweed-med-mat_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "plant/pond-weed/textures/pond-weed_pondweed-med-mat_basecolor_1k.ktx2",
+              "bytes": 34637,
+              "sha256": "ba414f8ed6340f073d0a183961da5e76c7eca36724ebf9febaf487543720cbb1",
+              "size": 1024
+            },
+            "2k": {
+              "file": "plant/pond-weed/textures/pond-weed_pondweed-med-mat_basecolor_2k.ktx2",
+              "bytes": 100630,
+              "sha256": "664a764c1232f30cd6d4b7ddffd159413a9a3e7371a7e94063a2ee2916112650",
+              "size": 2048
+            }
+          }
+        },
+        {
+          "name": "pond-weed_pondweed-med-mat_normal",
+          "role": "normal",
+          "codec": "uastc",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "plant/pond-weed/textures/pond-weed_pondweed-med-mat_normal_1k.ktx2",
+              "bytes": 127143,
+              "sha256": "6fcd86cc66f19b9c5ce4bab5672ade6b47646a3cc63651f71b44d0e965106823",
+              "size": 1024
+            },
+            "2k": {
+              "file": "plant/pond-weed/textures/pond-weed_pondweed-med-mat_normal_2k.ktx2",
+              "bytes": 464031,
+              "sha256": "25525845f1cf95889c07fc819bd6eddfec9ce2688986c8292b13c846142b54a3",
+              "size": 2048
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "plant/pond-weed/lod0.glb",
+          "bytes": 144304,
+          "sha256": "047feddc42cbf4b7df231376505c6caeaa6593dca88121c95e7d36af0b25012c"
+        },
+        {
+          "file": "plant/pond-weed/lod1.glb",
+          "bytes": 56928,
+          "sha256": "a4cecdb4f0e6d1908364db462f9e47417951f8bfabfa00e8bb4d474814d873cd"
+        },
+        {
+          "file": "plant/pond-weed/lod2.glb",
+          "bytes": 30152,
+          "sha256": "891ff9669c93d0964b5668ad6b755ea47d4883301048870c97dd887b39a79cf4"
+        },
+        {
+          "file": "plant/pond-weed/textures/pond-weed_frondstem-mat_basecolor_1k.ktx2",
+          "bytes": 11473,
+          "sha256": "568d50d9ad56889d0b836a7ad556ff648793c7fe1e9ce8644700e6fb155b79e4"
+        },
+        {
+          "file": "plant/pond-weed/textures/pond-weed_frondstem-mat_basecolor_2k.ktx2",
+          "bytes": 11473,
+          "sha256": "568d50d9ad56889d0b836a7ad556ff648793c7fe1e9ce8644700e6fb155b79e4"
+        },
+        {
+          "file": "plant/pond-weed/textures/pond-weed_frondstem-mat_normal_1k.ktx2",
+          "bytes": 78257,
+          "sha256": "331b667302576eeecbd4dee1561cca47ef10c30470217e2b995cd145a3cbfbcf"
+        },
+        {
+          "file": "plant/pond-weed/textures/pond-weed_frondstem-mat_normal_2k.ktx2",
+          "bytes": 78257,
+          "sha256": "331b667302576eeecbd4dee1561cca47ef10c30470217e2b995cd145a3cbfbcf"
+        },
+        {
+          "file": "plant/pond-weed/textures/pond-weed_pondweed-med-mat_basecolor_1k.ktx2",
+          "bytes": 34637,
+          "sha256": "ba414f8ed6340f073d0a183961da5e76c7eca36724ebf9febaf487543720cbb1"
+        },
+        {
+          "file": "plant/pond-weed/textures/pond-weed_pondweed-med-mat_basecolor_2k.ktx2",
+          "bytes": 100630,
+          "sha256": "664a764c1232f30cd6d4b7ddffd159413a9a3e7371a7e94063a2ee2916112650"
+        },
+        {
+          "file": "plant/pond-weed/textures/pond-weed_pondweed-med-mat_normal_1k.ktx2",
+          "bytes": 127143,
+          "sha256": "6fcd86cc66f19b9c5ce4bab5672ade6b47646a3cc63651f71b44d0e965106823"
+        },
+        {
+          "file": "plant/pond-weed/textures/pond-weed_pondweed-med-mat_normal_2k.ktx2",
+          "bytes": 464031,
+          "sha256": "25525845f1cf95889c07fc819bd6eddfec9ce2688986c8292b13c846142b54a3"
+        },
+        {
+          "file": "plant/pond-weed/textures/pond-weed_pondweedleaflets-mat_basecolor_1k.ktx2",
+          "bytes": 50679,
+          "sha256": "d7d68b44f4e8554e656efd5253d3243351bb5becb4db8a2da1c145c917c76f66"
+        },
+        {
+          "file": "plant/pond-weed/textures/pond-weed_pondweedleaflets-mat_basecolor_2k.ktx2",
+          "bytes": 50679,
+          "sha256": "d7d68b44f4e8554e656efd5253d3243351bb5becb4db8a2da1c145c917c76f66"
+        },
+        {
+          "file": "plant/pond-weed/textures/pond-weed_pondweedleaflets-mat_normal_1k.ktx2",
+          "bytes": 246627,
+          "sha256": "ad575dca388d456e28416f1afb226402bb5d54673ae6ff47211fbaec48bdc08e"
+        },
+        {
+          "file": "plant/pond-weed/textures/pond-weed_pondweedleaflets-mat_normal_2k.ktx2",
+          "bytes": 246627,
+          "sha256": "ad575dca388d456e28416f1afb226402bb5d54673ae6ff47211fbaec48bdc08e"
+        }
+      ]
+    },
+    {
+      "id": "red-tiger-lotus",
+      "kind": "plant",
+      "origin": "model",
+      "sources": [
+        "sketchfab-f34fac65"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.3 m",
+        "LOD0 capped at 12000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "split out of a six-plant scene"
+      ],
+      "bounds": {
+        "min": [
+          -0.15,
+          0,
+          -0.141617
+        ],
+        "max": [
+          0.15,
+          0.186884,
+          0.141617
+        ]
+      },
+      "lods": [
+        {
+          "file": "plant/red-tiger-lotus/lod0.glb",
+          "bytes": 177304,
+          "sha256": "da026104c9be7699cddfc58d9df6025f48907784238b8c2bac68ccaf7c458c4b",
+          "triangles": 9874,
+          "vertices": 9374
+        },
+        {
+          "file": "plant/red-tiger-lotus/lod1.glb",
+          "bytes": 77392,
+          "sha256": "9d0c8a906aec0a5ed63373058482d136b51ed549d3bfc6460c57c0ff6609c3bc",
+          "triangles": 3456,
+          "vertices": 3914
+        },
+        {
+          "file": "plant/red-tiger-lotus/lod2.glb",
+          "bytes": 27044,
+          "sha256": "83b174b6293e719f685e09294978ceeba5094f66646e3ca46c1dbc79e429f7a9",
+          "triangles": 1182,
+          "vertices": 1220
+        }
+      ],
+      "textures": [
+        {
+          "name": "red-tiger-lotus_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "plant/red-tiger-lotus/textures/red-tiger-lotus_basecolor_1k.ktx2",
+              "bytes": 191072,
+              "sha256": "af313052215df4afea224361e7d2c851f528aec81837e987ebc5110dd3b605c3",
+              "size": 1024
+            },
+            "2k": {
+              "file": "plant/red-tiger-lotus/textures/red-tiger-lotus_basecolor_2k.ktx2",
+              "bytes": 658891,
+              "sha256": "86a6bbdff7ca18120351bcad893aec3745501430a9032fb5404e5db91030652c",
+              "size": 2048
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "plant/red-tiger-lotus/lod0.glb",
+          "bytes": 177304,
+          "sha256": "da026104c9be7699cddfc58d9df6025f48907784238b8c2bac68ccaf7c458c4b"
+        },
+        {
+          "file": "plant/red-tiger-lotus/lod1.glb",
+          "bytes": 77392,
+          "sha256": "9d0c8a906aec0a5ed63373058482d136b51ed549d3bfc6460c57c0ff6609c3bc"
+        },
+        {
+          "file": "plant/red-tiger-lotus/lod2.glb",
+          "bytes": 27044,
+          "sha256": "83b174b6293e719f685e09294978ceeba5094f66646e3ca46c1dbc79e429f7a9"
+        },
+        {
+          "file": "plant/red-tiger-lotus/textures/red-tiger-lotus_basecolor_1k.ktx2",
+          "bytes": 191072,
+          "sha256": "af313052215df4afea224361e7d2c851f528aec81837e987ebc5110dd3b605c3"
+        },
+        {
+          "file": "plant/red-tiger-lotus/textures/red-tiger-lotus_basecolor_2k.ktx2",
+          "bytes": 658891,
+          "sha256": "86a6bbdff7ca18120351bcad893aec3745501430a9032fb5404e5db91030652c"
+        }
+      ]
+    },
+    {
+      "id": "staurogyne-repens",
+      "kind": "plant",
+      "origin": "model",
+      "sources": [
+        "sketchfab-f34fac65"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.25 m",
+        "LOD0 capped at 12000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "split out of a six-plant scene, 4096 px texture downscaled; the duplicate \"Staurogyne Repens2\" mesh is not shipped"
+      ],
+      "bounds": {
+        "min": [
+          -0.125,
+          0,
+          -0.122928
+        ],
+        "max": [
+          0.125,
+          0.095133,
+          0.122928
+        ]
+      },
+      "lods": [
+        {
+          "file": "plant/staurogyne-repens/lod0.glb",
+          "bytes": 197052,
+          "sha256": "a657c333bcf1242cb36e3bd616d92679c58dc9d61c53d530f4946713324e5a36",
+          "triangles": 11999,
+          "vertices": 10576
+        },
+        {
+          "file": "plant/staurogyne-repens/lod1.glb",
+          "bytes": 85668,
+          "sha256": "da53f0dceea4e8e083e2104c48cf469340f2238536ff2038ac46378d1194e0cc",
+          "triangles": 4199,
+          "vertices": 4349
+        },
+        {
+          "file": "plant/staurogyne-repens/lod2.glb",
+          "bytes": 31304,
+          "sha256": "cea2c10f80a1b692793d60c56e01e67d9c0e7468e61537dfe372c8ccfa1c57a2",
+          "triangles": 1437,
+          "vertices": 1436
+        }
+      ],
+      "textures": [
+        {
+          "name": "staurogyne-repens_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "plant/staurogyne-repens/textures/staurogyne-repens_basecolor_1k.ktx2",
+              "bytes": 154671,
+              "sha256": "acb9c2c286a7d8274082c911ec17b1df0f5d53ed42560f7b5ecd9e6710c19fe3",
+              "size": 1024
+            },
+            "2k": {
+              "file": "plant/staurogyne-repens/textures/staurogyne-repens_basecolor_2k.ktx2",
+              "bytes": 548819,
+              "sha256": "ef8412a629680a2f8388be15fee5cf12c22ffb34db485c0d0756a1cba3026b95",
+              "size": 2048
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "plant/staurogyne-repens/lod0.glb",
+          "bytes": 197052,
+          "sha256": "a657c333bcf1242cb36e3bd616d92679c58dc9d61c53d530f4946713324e5a36"
+        },
+        {
+          "file": "plant/staurogyne-repens/lod1.glb",
+          "bytes": 85668,
+          "sha256": "da53f0dceea4e8e083e2104c48cf469340f2238536ff2038ac46378d1194e0cc"
+        },
+        {
+          "file": "plant/staurogyne-repens/lod2.glb",
+          "bytes": 31304,
+          "sha256": "cea2c10f80a1b692793d60c56e01e67d9c0e7468e61537dfe372c8ccfa1c57a2"
+        },
+        {
+          "file": "plant/staurogyne-repens/textures/staurogyne-repens_basecolor_1k.ktx2",
+          "bytes": 154671,
+          "sha256": "acb9c2c286a7d8274082c911ec17b1df0f5d53ed42560f7b5ecd9e6710c19fe3"
+        },
+        {
+          "file": "plant/staurogyne-repens/textures/staurogyne-repens_basecolor_2k.ktx2",
+          "bytes": 548819,
+          "sha256": "ef8412a629680a2f8388be15fee5cf12c22ffb34db485c0d0756a1cba3026b95"
+        }
+      ]
+    },
+    {
+      "id": "universal-plant",
+      "kind": "plant",
+      "origin": "model",
+      "sources": [
+        "sketchfab-f34fac65"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.3 m",
+        "LOD0 capped at 12000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "split out of a six-plant scene, 4096 px texture downscaled"
+      ],
+      "bounds": {
+        "min": [
+          -0.143899,
+          0,
+          -0.15
+        ],
+        "max": [
+          0.143899,
+          0.241502,
+          0.15
+        ]
+      },
+      "lods": [
+        {
+          "file": "plant/universal-plant/lod0.glb",
+          "bytes": 235076,
+          "sha256": "f64282aa59ad9206aacdbac41feb781f5662bb518ea9e3b918ad9dda5bac9b14",
+          "triangles": 12000,
+          "vertices": 12615
+        },
+        {
+          "file": "plant/universal-plant/lod1.glb",
+          "bytes": 93452,
+          "sha256": "5cc12bfde50edf566f8c173032092013b6453259b75a4fa507bc1976f03c055c",
+          "triangles": 4200,
+          "vertices": 4683
+        },
+        {
+          "file": "plant/universal-plant/lod2.glb",
+          "bytes": 31740,
+          "sha256": "aaa80594f1e4e6cebeab947878b9394234498a56894a988d294a0e216e4ab981",
+          "triangles": 1432,
+          "vertices": 1442
+        }
+      ],
+      "textures": [
+        {
+          "name": "universal-plant_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "plant/universal-plant/textures/universal-plant_basecolor_1k.ktx2",
+              "bytes": 165692,
+              "sha256": "7d3df6a644076a87dfe5e699ca5af8623deacc007d0731e9307237b0572cd47a",
+              "size": 1024
+            },
+            "2k": {
+              "file": "plant/universal-plant/textures/universal-plant_basecolor_2k.ktx2",
+              "bytes": 547518,
+              "sha256": "036a4b00203e3bbc1fe3af7f9224cc0d6a4dfdce886fa258c5343e0b478b20de",
+              "size": 2048
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "plant/universal-plant/lod0.glb",
+          "bytes": 235076,
+          "sha256": "f64282aa59ad9206aacdbac41feb781f5662bb518ea9e3b918ad9dda5bac9b14"
+        },
+        {
+          "file": "plant/universal-plant/lod1.glb",
+          "bytes": 93452,
+          "sha256": "5cc12bfde50edf566f8c173032092013b6453259b75a4fa507bc1976f03c055c"
+        },
+        {
+          "file": "plant/universal-plant/lod2.glb",
+          "bytes": 31740,
+          "sha256": "aaa80594f1e4e6cebeab947878b9394234498a56894a988d294a0e216e4ab981"
+        },
+        {
+          "file": "plant/universal-plant/textures/universal-plant_basecolor_1k.ktx2",
+          "bytes": 165692,
+          "sha256": "7d3df6a644076a87dfe5e699ca5af8623deacc007d0731e9307237b0572cd47a"
+        },
+        {
+          "file": "plant/universal-plant/textures/universal-plant_basecolor_2k.ktx2",
+          "bytes": 547518,
+          "sha256": "036a4b00203e3bbc1fe3af7f9224cc0d6a4dfdce886fa258c5343e0b478b20de"
+        }
+      ]
+    },
+    {
+      "id": "vallisneria",
+      "kind": "plant",
+      "origin": "model",
+      "sources": [
+        "sketchfab-f34fac65"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.35 m",
+        "LOD0 capped at 12000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "split out of a six-plant scene, 4096 px texture downscaled"
+      ],
+      "bounds": {
+        "min": [
+          -0.141321,
+          0,
+          -0.175
+        ],
+        "max": [
+          0.141321,
+          0.327569,
+          0.175
+        ]
+      },
+      "lods": [
+        {
+          "file": "plant/vallisneria/lod0.glb",
+          "bytes": 225692,
+          "sha256": "2ebd8f930e73342354c061a6712a20accdc85c895d020e8888773bf405452e92",
+          "triangles": 12000,
+          "vertices": 12095
+        },
+        {
+          "file": "plant/vallisneria/lod1.glb",
+          "bytes": 92984,
+          "sha256": "51e962f13fa106a1ce332723562f1e7d9fb9967a1848c4c2a9cf0cbf8f72ef26",
+          "triangles": 4200,
+          "vertices": 4697
+        },
+        {
+          "file": "plant/vallisneria/lod2.glb",
+          "bytes": 32692,
+          "sha256": "603a105bda219aa43dbe9903dad1b1d4a3465189baf9fd224c8f856b36de63c3",
+          "triangles": 1439,
+          "vertices": 1497
+        }
+      ],
+      "textures": [
+        {
+          "name": "vallisneria_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "plant/vallisneria/textures/vallisneria_basecolor_1k.ktx2",
+              "bytes": 159900,
+              "sha256": "d3f055fcfd06193d047cd5f8b101ec4bae19a57a2e6e8f454ba61178348556eb",
+              "size": 1024
+            },
+            "2k": {
+              "file": "plant/vallisneria/textures/vallisneria_basecolor_2k.ktx2",
+              "bytes": 520461,
+              "sha256": "ac656c3c3fbf4c36ba364e59bed2e188a25b55f09249297db7ee1ac04fac09c9",
+              "size": 2048
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "plant/vallisneria/lod0.glb",
+          "bytes": 225692,
+          "sha256": "2ebd8f930e73342354c061a6712a20accdc85c895d020e8888773bf405452e92"
+        },
+        {
+          "file": "plant/vallisneria/lod1.glb",
+          "bytes": 92984,
+          "sha256": "51e962f13fa106a1ce332723562f1e7d9fb9967a1848c4c2a9cf0cbf8f72ef26"
+        },
+        {
+          "file": "plant/vallisneria/lod2.glb",
+          "bytes": 32692,
+          "sha256": "603a105bda219aa43dbe9903dad1b1d4a3465189baf9fd224c8f856b36de63c3"
+        },
+        {
+          "file": "plant/vallisneria/textures/vallisneria_basecolor_1k.ktx2",
+          "bytes": 159900,
+          "sha256": "d3f055fcfd06193d047cd5f8b101ec4bae19a57a2e6e8f454ba61178348556eb"
+        },
+        {
+          "file": "plant/vallisneria/textures/vallisneria_basecolor_2k.ktx2",
+          "bytes": 520461,
+          "sha256": "ac656c3c3fbf4c36ba364e59bed2e188a25b55f09249297db7ee1ac04fac09c9"
+        }
+      ]
+    },
+    {
+      "id": "water-plant",
+      "kind": "plant",
+      "origin": "model",
+      "sources": [
+        "sketchfab-b536fec3"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.35 m",
+        "LOD0 capped at 12000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "source has a flat colour only; a procedural leaf texture was painted"
+      ],
+      "bounds": {
+        "min": [
+          -0.020513,
+          0,
+          -0.021049
+        ],
+        "max": [
+          0.020513,
+          0.35,
+          0.021049
+        ]
+      },
+      "lods": [
+        {
+          "file": "plant/water-plant/lod0.glb",
+          "bytes": 172932,
+          "sha256": "8cd1189f0dd2c20d4f92a1d4464b17af77d77929d0a170468e331b70fc53dbe3",
+          "triangles": 6076,
+          "vertices": 12511
+        },
+        {
+          "file": "plant/water-plant/lod1.glb",
+          "bytes": 62488,
+          "sha256": "67ee8ec7abd2b820cae38fe31eacaf3eb7b16b712b279ef44cf5ba0a4c5bff13",
+          "triangles": 2126,
+          "vertices": 3823
+        },
+        {
+          "file": "plant/water-plant/lod2.glb",
+          "bytes": 21092,
+          "sha256": "c701ef3135d3379f2e87afe66c80c9a258d5fc17ba672f93794df42bfe71b7a8",
+          "triangles": 728,
+          "vertices": 1064
+        }
+      ],
+      "textures": [
+        {
+          "name": "water-plant_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "plant/water-plant/textures/water-plant_basecolor_1k.ktx2",
+              "bytes": 4835,
+              "sha256": "570021de52e22ad0ff814475f25611ec133523eb2005b360272831a93169098c",
+              "size": 256
+            },
+            "2k": {
+              "file": "plant/water-plant/textures/water-plant_basecolor_2k.ktx2",
+              "bytes": 4835,
+              "sha256": "570021de52e22ad0ff814475f25611ec133523eb2005b360272831a93169098c",
+              "size": 256
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "plant/water-plant/lod0.glb",
+          "bytes": 172932,
+          "sha256": "8cd1189f0dd2c20d4f92a1d4464b17af77d77929d0a170468e331b70fc53dbe3"
+        },
+        {
+          "file": "plant/water-plant/lod1.glb",
+          "bytes": 62488,
+          "sha256": "67ee8ec7abd2b820cae38fe31eacaf3eb7b16b712b279ef44cf5ba0a4c5bff13"
+        },
+        {
+          "file": "plant/water-plant/lod2.glb",
+          "bytes": 21092,
+          "sha256": "c701ef3135d3379f2e87afe66c80c9a258d5fc17ba672f93794df42bfe71b7a8"
+        },
+        {
+          "file": "plant/water-plant/textures/water-plant_basecolor_1k.ktx2",
+          "bytes": 4835,
+          "sha256": "570021de52e22ad0ff814475f25611ec133523eb2005b360272831a93169098c"
+        },
+        {
+          "file": "plant/water-plant/textures/water-plant_basecolor_2k.ktx2",
+          "bytes": 4835,
+          "sha256": "570021de52e22ad0ff814475f25611ec133523eb2005b360272831a93169098c"
+        }
+      ]
+    },
+    {
+      "id": "acropora-palmata",
+      "kind": "coral",
+      "origin": "model",
+      "sources": [
+        "sketchfab-8cb98631"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.35 m",
+        "LOD0 capped at 20000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "museum plinth cropped off"
+      ],
+      "bounds": {
+        "min": [
+          -0.175,
+          0,
+          -0.140315
+        ],
+        "max": [
+          0.175,
+          0.257488,
+          0.140315
+        ]
+      },
+      "lods": [
+        {
+          "file": "coral/acropora-palmata/lod0.glb",
+          "bytes": 234012,
+          "sha256": "59befb7f377fd1b49b80e7f3c7d5b50afcd56c24217ffb34e0a6ac508f710e0f",
+          "triangles": 19999,
+          "vertices": 12739
+        },
+        {
+          "file": "coral/acropora-palmata/lod1.glb",
+          "bytes": 93948,
+          "sha256": "91df7e7ff2302ac77b2311f44e5709d6bae9634b0ba85ae7d15b962f2e5025c9",
+          "triangles": 7000,
+          "vertices": 4862
+        },
+        {
+          "file": "coral/acropora-palmata/lod2.glb",
+          "bytes": 38680,
+          "sha256": "75264a7d8bea9790eae3f1c81a804fa5bb23b2c321984b0558b25f94fb17208d",
+          "triangles": 2400,
+          "vertices": 1845
+        }
+      ],
+      "textures": [
+        {
+          "name": "acropora-palmata_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "coral/acropora-palmata/textures/acropora-palmata_basecolor_1k.ktx2",
+              "bytes": 175527,
+              "sha256": "d375701f76f2421e69f5757ff1456f7859e844dd8039aa68e206cd76e25983ee",
+              "size": 1024
+            },
+            "2k": {
+              "file": "coral/acropora-palmata/textures/acropora-palmata_basecolor_2k.ktx2",
+              "bytes": 643538,
+              "sha256": "759c28cecf3c54af6691f92f419edefef2a55e09a15ebd6fa7df0f855e5ca26a",
+              "size": 2048
+            }
+          }
+        },
+        {
+          "name": "acropora-palmata_normal",
+          "role": "normal",
+          "codec": "uastc",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "coral/acropora-palmata/textures/acropora-palmata_normal_1k.ktx2",
+              "bytes": 1293504,
+              "sha256": "54d0ad4d97fd4d5a45c77d14ae1611a26313d4d7ba4b412b62f730d41e3f0152",
+              "size": 1024
+            },
+            "2k": {
+              "file": "coral/acropora-palmata/textures/acropora-palmata_normal_2k.ktx2",
+              "bytes": 5077245,
+              "sha256": "e64e43ea20ad19e09eb0e46b057b67c433f62161d3a0fa410383f3078deca7a3",
+              "size": 2048
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "coral/acropora-palmata/lod0.glb",
+          "bytes": 234012,
+          "sha256": "59befb7f377fd1b49b80e7f3c7d5b50afcd56c24217ffb34e0a6ac508f710e0f"
+        },
+        {
+          "file": "coral/acropora-palmata/lod1.glb",
+          "bytes": 93948,
+          "sha256": "91df7e7ff2302ac77b2311f44e5709d6bae9634b0ba85ae7d15b962f2e5025c9"
+        },
+        {
+          "file": "coral/acropora-palmata/lod2.glb",
+          "bytes": 38680,
+          "sha256": "75264a7d8bea9790eae3f1c81a804fa5bb23b2c321984b0558b25f94fb17208d"
+        },
+        {
+          "file": "coral/acropora-palmata/textures/acropora-palmata_basecolor_1k.ktx2",
+          "bytes": 175527,
+          "sha256": "d375701f76f2421e69f5757ff1456f7859e844dd8039aa68e206cd76e25983ee"
+        },
+        {
+          "file": "coral/acropora-palmata/textures/acropora-palmata_basecolor_2k.ktx2",
+          "bytes": 643538,
+          "sha256": "759c28cecf3c54af6691f92f419edefef2a55e09a15ebd6fa7df0f855e5ca26a"
+        },
+        {
+          "file": "coral/acropora-palmata/textures/acropora-palmata_normal_1k.ktx2",
+          "bytes": 1293504,
+          "sha256": "54d0ad4d97fd4d5a45c77d14ae1611a26313d4d7ba4b412b62f730d41e3f0152"
+        },
+        {
+          "file": "coral/acropora-palmata/textures/acropora-palmata_normal_2k.ktx2",
+          "bytes": 5077245,
+          "sha256": "e64e43ea20ad19e09eb0e46b057b67c433f62161d3a0fa410383f3078deca7a3"
+        }
+      ]
+    },
+    {
+      "id": "blue-sea-anemone",
+      "kind": "coral",
+      "origin": "model",
+      "sources": [
+        "sketchfab-f2542a86"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.3 m",
+        "LOD0 capped at 15000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "KHR_materials_specular dropped"
+      ],
+      "bounds": {
+        "min": [
+          -0.15,
+          0,
+          -0.149517
+        ],
+        "max": [
+          0.15,
+          0.241899,
+          0.149517
+        ]
+      },
+      "lods": [
+        {
+          "file": "coral/blue-sea-anemone/lod0.glb",
+          "bytes": 398204,
+          "sha256": "f7bacfe2f47bb1d611f801c483256f1dbaa2c734e80aeebc3b8a16a3f168431a",
+          "triangles": 14998,
+          "vertices": 21773
+        },
+        {
+          "file": "coral/blue-sea-anemone/lod1.glb",
+          "bytes": 125580,
+          "sha256": "9c7d727dcb2a743786b1c6ed8020e387038470af266e39aa9cbce514cedc9acc",
+          "triangles": 5250,
+          "vertices": 6312
+        },
+        {
+          "file": "coral/blue-sea-anemone/lod2.glb",
+          "bytes": 38776,
+          "sha256": "b04af0e46d25bd00cd23b8ad3ef52d33653e814c121abea47f9774892f277d08",
+          "triangles": 1780,
+          "vertices": 1790
+        }
+      ],
+      "textures": [
+        {
+          "name": "blue-sea-anemone_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "coral/blue-sea-anemone/textures/blue-sea-anemone_basecolor_1k.ktx2",
+              "bytes": 200277,
+              "sha256": "a2e166bc2193b868a61602871b254e791bec4911cff684d73af4a2231a721239",
+              "size": 1024
+            },
+            "2k": {
+              "file": "coral/blue-sea-anemone/textures/blue-sea-anemone_basecolor_2k.ktx2",
+              "bytes": 703794,
+              "sha256": "381779204365c35d2022f3fe5307c068ae58c2ce137204695d17937372dee746",
+              "size": 2048
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "coral/blue-sea-anemone/lod0.glb",
+          "bytes": 398204,
+          "sha256": "f7bacfe2f47bb1d611f801c483256f1dbaa2c734e80aeebc3b8a16a3f168431a"
+        },
+        {
+          "file": "coral/blue-sea-anemone/lod1.glb",
+          "bytes": 125580,
+          "sha256": "9c7d727dcb2a743786b1c6ed8020e387038470af266e39aa9cbce514cedc9acc"
+        },
+        {
+          "file": "coral/blue-sea-anemone/lod2.glb",
+          "bytes": 38776,
+          "sha256": "b04af0e46d25bd00cd23b8ad3ef52d33653e814c121abea47f9774892f277d08"
+        },
+        {
+          "file": "coral/blue-sea-anemone/textures/blue-sea-anemone_basecolor_1k.ktx2",
+          "bytes": 200277,
+          "sha256": "a2e166bc2193b868a61602871b254e791bec4911cff684d73af4a2231a721239"
+        },
+        {
+          "file": "coral/blue-sea-anemone/textures/blue-sea-anemone_basecolor_2k.ktx2",
+          "bytes": 703794,
+          "sha256": "381779204365c35d2022f3fe5307c068ae58c2ce137204695d17937372dee746"
+        }
+      ]
+    },
+    {
+      "id": "brain-coral",
+      "kind": "coral",
+      "origin": "model",
+      "sources": [
+        "sketchfab-4ea44ce7"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.25 m",
+        "LOD0 capped at 20000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "8192 px textures downscaled"
+      ],
+      "bounds": {
+        "min": [
+          -0.077296,
+          0,
+          -0.080494
+        ],
+        "max": [
+          0.077296,
+          0.25,
+          0.080494
+        ]
+      },
+      "lods": [
+        {
+          "file": "coral/brain-coral/lod0.glb",
+          "bytes": 260000,
+          "sha256": "1e9127058b4d61a5e497026178c9659ecdeda8a1201911edbf9841f4549787de",
+          "triangles": 20000,
+          "vertices": 14182
+        },
+        {
+          "file": "coral/brain-coral/lod1.glb",
+          "bytes": 107912,
+          "sha256": "56bbccc285f0814f81544c858caf41f3e9843eceb2106579cc448ab225ddda38",
+          "triangles": 7000,
+          "vertices": 5629
+        },
+        {
+          "file": "coral/brain-coral/lod2.glb",
+          "bytes": 45516,
+          "sha256": "818186c882fa3eff796315722236d77d998416f7aaa71988c2af6d8c8aaabc7a",
+          "triangles": 2400,
+          "vertices": 2207
+        }
+      ],
+      "textures": [
+        {
+          "name": "brain-coral_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "coral/brain-coral/textures/brain-coral_basecolor_1k.ktx2",
+              "bytes": 190164,
+              "sha256": "60810eb1d11bfdc8a80582551a2a76050002d5a81017f6a1eca2b146f884aeb1",
+              "size": 1024
+            },
+            "2k": {
+              "file": "coral/brain-coral/textures/brain-coral_basecolor_2k.ktx2",
+              "bytes": 696895,
+              "sha256": "51b0614423b599f8acdb9894bf4c1b0ea7b9b92dc92f535b3594a6750bbc1cf8",
+              "size": 2048
+            }
+          }
+        },
+        {
+          "name": "brain-coral_normal",
+          "role": "normal",
+          "codec": "uastc",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "coral/brain-coral/textures/brain-coral_normal_1k.ktx2",
+              "bytes": 1247989,
+              "sha256": "7ea83f159296bd1ddbe8995836b5594bfb18a96f582c09eff8871c426e0bf56e",
+              "size": 1024
+            },
+            "2k": {
+              "file": "coral/brain-coral/textures/brain-coral_normal_2k.ktx2",
+              "bytes": 4652254,
+              "sha256": "e547864aae255d53d665f7290a1a8bf6e361b98b23a877327fb989f9a0c29957",
+              "size": 2048
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "coral/brain-coral/lod0.glb",
+          "bytes": 260000,
+          "sha256": "1e9127058b4d61a5e497026178c9659ecdeda8a1201911edbf9841f4549787de"
+        },
+        {
+          "file": "coral/brain-coral/lod1.glb",
+          "bytes": 107912,
+          "sha256": "56bbccc285f0814f81544c858caf41f3e9843eceb2106579cc448ab225ddda38"
+        },
+        {
+          "file": "coral/brain-coral/lod2.glb",
+          "bytes": 45516,
+          "sha256": "818186c882fa3eff796315722236d77d998416f7aaa71988c2af6d8c8aaabc7a"
+        },
+        {
+          "file": "coral/brain-coral/textures/brain-coral_basecolor_1k.ktx2",
+          "bytes": 190164,
+          "sha256": "60810eb1d11bfdc8a80582551a2a76050002d5a81017f6a1eca2b146f884aeb1"
+        },
+        {
+          "file": "coral/brain-coral/textures/brain-coral_basecolor_2k.ktx2",
+          "bytes": 696895,
+          "sha256": "51b0614423b599f8acdb9894bf4c1b0ea7b9b92dc92f535b3594a6750bbc1cf8"
+        },
+        {
+          "file": "coral/brain-coral/textures/brain-coral_normal_1k.ktx2",
+          "bytes": 1247989,
+          "sha256": "7ea83f159296bd1ddbe8995836b5594bfb18a96f582c09eff8871c426e0bf56e"
+        },
+        {
+          "file": "coral/brain-coral/textures/brain-coral_normal_2k.ktx2",
+          "bytes": 4652254,
+          "sha256": "e547864aae255d53d665f7290a1a8bf6e361b98b23a877327fb989f9a0c29957"
+        }
+      ]
+    },
+    {
+      "id": "dead-quiver-trunk",
+      "kind": "driftwood",
+      "origin": "model",
+      "sources": [
+        "polyhaven-dead_quiver_trunk"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.5 m",
+        "LOD0 capped at 15000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness"
+      ],
+      "bounds": {
+        "min": [
+          -0.038422,
+          0,
+          -0.03361
+        ],
+        "max": [
+          0.038422,
+          0.5,
+          0.03361
+        ]
+      },
+      "lods": [
+        {
+          "file": "driftwood/dead-quiver-trunk/lod0.glb",
+          "bytes": 148900,
+          "sha256": "797f0dcc3cce7f8e9138eaffd3365de58fc37704b476056752a7665b2d4d49c5",
+          "triangles": 15000,
+          "vertices": 7836
+        },
+        {
+          "file": "driftwood/dead-quiver-trunk/lod1.glb",
+          "bytes": 56140,
+          "sha256": "d08aa151af35d818cadb809a4058e593eb36ca7d63249e1d7b27910c5044481c",
+          "triangles": 5250,
+          "vertices": 2783
+        },
+        {
+          "file": "driftwood/dead-quiver-trunk/lod2.glb",
+          "bytes": 22416,
+          "sha256": "b43c5d576e455dd608ba65c9cc616330dcc0f4bfe785668904427b5832cafd72",
+          "triangles": 1800,
+          "vertices": 992
+        }
+      ],
+      "textures": [
+        {
+          "name": "dead-quiver-trunk_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "driftwood/dead-quiver-trunk/textures/dead-quiver-trunk_basecolor_1k.ktx2",
+              "bytes": 176067,
+              "sha256": "7f88890c409e84b5a3d0051d69957deaacd8705e6d90c9fa2b91baae116185a7",
+              "size": 1024
+            },
+            "2k": {
+              "file": "driftwood/dead-quiver-trunk/textures/dead-quiver-trunk_basecolor_2k.ktx2",
+              "bytes": 642417,
+              "sha256": "fd8dbdb02a6e9d3efcd8d2fa3446977d6beedcd591b145ce63e30551f7331450",
+              "size": 2048
+            }
+          }
+        },
+        {
+          "name": "dead-quiver-trunk_normal",
+          "role": "normal",
+          "codec": "uastc",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "driftwood/dead-quiver-trunk/textures/dead-quiver-trunk_normal_1k.ktx2",
+              "bytes": 1143292,
+              "sha256": "6723685e9223423c990045fe0c3563974d7c54c7633e9129313a6596bf1c6562",
+              "size": 1024
+            },
+            "2k": {
+              "file": "driftwood/dead-quiver-trunk/textures/dead-quiver-trunk_normal_2k.ktx2",
+              "bytes": 4336010,
+              "sha256": "817a557182fb0d1d3ce3c654ea2cd6ea02c411e331c43dbe46c50df573130ece",
+              "size": 2048
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "driftwood/dead-quiver-trunk/lod0.glb",
+          "bytes": 148900,
+          "sha256": "797f0dcc3cce7f8e9138eaffd3365de58fc37704b476056752a7665b2d4d49c5"
+        },
+        {
+          "file": "driftwood/dead-quiver-trunk/lod1.glb",
+          "bytes": 56140,
+          "sha256": "d08aa151af35d818cadb809a4058e593eb36ca7d63249e1d7b27910c5044481c"
+        },
+        {
+          "file": "driftwood/dead-quiver-trunk/lod2.glb",
+          "bytes": 22416,
+          "sha256": "b43c5d576e455dd608ba65c9cc616330dcc0f4bfe785668904427b5832cafd72"
+        },
+        {
+          "file": "driftwood/dead-quiver-trunk/textures/dead-quiver-trunk_basecolor_1k.ktx2",
+          "bytes": 176067,
+          "sha256": "7f88890c409e84b5a3d0051d69957deaacd8705e6d90c9fa2b91baae116185a7"
+        },
+        {
+          "file": "driftwood/dead-quiver-trunk/textures/dead-quiver-trunk_basecolor_2k.ktx2",
+          "bytes": 642417,
+          "sha256": "fd8dbdb02a6e9d3efcd8d2fa3446977d6beedcd591b145ce63e30551f7331450"
+        },
+        {
+          "file": "driftwood/dead-quiver-trunk/textures/dead-quiver-trunk_normal_1k.ktx2",
+          "bytes": 1143292,
+          "sha256": "6723685e9223423c990045fe0c3563974d7c54c7633e9129313a6596bf1c6562"
+        },
+        {
+          "file": "driftwood/dead-quiver-trunk/textures/dead-quiver-trunk_normal_2k.ktx2",
+          "bytes": 4336010,
+          "sha256": "817a557182fb0d1d3ce3c654ea2cd6ea02c411e331c43dbe46c50df573130ece"
+        }
+      ]
+    },
+    {
+      "id": "dead-tree-trunk-02",
+      "kind": "driftwood",
+      "origin": "model",
+      "sources": [
+        "polyhaven-dead_tree_trunk_02"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.6 m",
+        "LOD0 capped at 15000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness"
+      ],
+      "bounds": {
+        "min": [
+          -0.3,
+          0,
+          -0.078205
+        ],
+        "max": [
+          0.3,
+          0.156255,
+          0.078205
+        ]
+      },
+      "lods": [
+        {
+          "file": "driftwood/dead-tree-trunk-02/lod0.glb",
+          "bytes": 173276,
+          "sha256": "6224134ea9b4735517b311e8d7289cc4365c1c447e2fdad321564844f5ce9cd1",
+          "triangles": 15000,
+          "vertices": 9319
+        },
+        {
+          "file": "driftwood/dead-tree-trunk-02/lod1.glb",
+          "bytes": 70188,
+          "sha256": "e03a359428fcfc5688455fd4221ffa0eb4360aa5c93a8fc7b729c108ce120e25",
+          "triangles": 5244,
+          "vertices": 3559
+        },
+        {
+          "file": "driftwood/dead-tree-trunk-02/lod2.glb",
+          "bytes": 28972,
+          "sha256": "ea7841b6258f00b84c7f03baeaaa8502b230a7971077601a36e7ed543db635b5",
+          "triangles": 1800,
+          "vertices": 1324
+        }
+      ],
+      "textures": [
+        {
+          "name": "dead-tree-trunk-02_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "driftwood/dead-tree-trunk-02/textures/dead-tree-trunk-02_basecolor_1k.ktx2",
+              "bytes": 193888,
+              "sha256": "208a830cc052b9b0b0435ec3831716822349d28e125062de183583b31dec0845",
+              "size": 1024
+            },
+            "2k": {
+              "file": "driftwood/dead-tree-trunk-02/textures/dead-tree-trunk-02_basecolor_2k.ktx2",
+              "bytes": 727911,
+              "sha256": "b3dcef75e272b1abe9210949fce076939b09efd2ffc0548a8f8f3d9751f4be96",
+              "size": 2048
+            }
+          }
+        },
+        {
+          "name": "dead-tree-trunk-02_normal",
+          "role": "normal",
+          "codec": "uastc",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "driftwood/dead-tree-trunk-02/textures/dead-tree-trunk-02_normal_1k.ktx2",
+              "bytes": 1359267,
+              "sha256": "f9b9d2e9e47e3696ef807cd01859b9c2c5dca790a710fe64f1f4b1ea8ba8a762",
+              "size": 1024
+            },
+            "2k": {
+              "file": "driftwood/dead-tree-trunk-02/textures/dead-tree-trunk-02_normal_2k.ktx2",
+              "bytes": 5398476,
+              "sha256": "82aa7ba8636d20538263985cfcff1853777dd8967adc43051303b8e8bdb3dc7a",
+              "size": 2048
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "driftwood/dead-tree-trunk-02/lod0.glb",
+          "bytes": 173276,
+          "sha256": "6224134ea9b4735517b311e8d7289cc4365c1c447e2fdad321564844f5ce9cd1"
+        },
+        {
+          "file": "driftwood/dead-tree-trunk-02/lod1.glb",
+          "bytes": 70188,
+          "sha256": "e03a359428fcfc5688455fd4221ffa0eb4360aa5c93a8fc7b729c108ce120e25"
+        },
+        {
+          "file": "driftwood/dead-tree-trunk-02/lod2.glb",
+          "bytes": 28972,
+          "sha256": "ea7841b6258f00b84c7f03baeaaa8502b230a7971077601a36e7ed543db635b5"
+        },
+        {
+          "file": "driftwood/dead-tree-trunk-02/textures/dead-tree-trunk-02_basecolor_1k.ktx2",
+          "bytes": 193888,
+          "sha256": "208a830cc052b9b0b0435ec3831716822349d28e125062de183583b31dec0845"
+        },
+        {
+          "file": "driftwood/dead-tree-trunk-02/textures/dead-tree-trunk-02_basecolor_2k.ktx2",
+          "bytes": 727911,
+          "sha256": "b3dcef75e272b1abe9210949fce076939b09efd2ffc0548a8f8f3d9751f4be96"
+        },
+        {
+          "file": "driftwood/dead-tree-trunk-02/textures/dead-tree-trunk-02_normal_1k.ktx2",
+          "bytes": 1359267,
+          "sha256": "f9b9d2e9e47e3696ef807cd01859b9c2c5dca790a710fe64f1f4b1ea8ba8a762"
+        },
+        {
+          "file": "driftwood/dead-tree-trunk-02/textures/dead-tree-trunk-02_normal_2k.ktx2",
+          "bytes": 5398476,
+          "sha256": "82aa7ba8636d20538263985cfcff1853777dd8967adc43051303b8e8bdb3dc7a"
+        }
+      ]
+    },
+    {
+      "id": "driftwood-branch",
+      "kind": "driftwood",
+      "origin": "model",
+      "sources": [
+        "sketchfab-c53807ef"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.4 m",
+        "LOD0 capped at 15000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "KHR_materials_pbrSpecularGlossiness converted to metallic-roughness, 4096 px textures downscaled"
+      ],
+      "bounds": {
+        "min": [
+          -0.2,
+          0,
+          -0.10615
+        ],
+        "max": [
+          0.2,
+          0.141136,
+          0.10615
+        ]
+      },
+      "lods": [
+        {
+          "file": "driftwood/driftwood-branch/lod0.glb",
+          "bytes": 280700,
+          "sha256": "20cee31f554518d167273cf0a85344c508c4a25f24b1be17740b56be7a48ece9",
+          "triangles": 15000,
+          "vertices": 15122
+        },
+        {
+          "file": "driftwood/driftwood-branch/lod1.glb",
+          "bytes": 107152,
+          "sha256": "a6e665c8dc6112bd68f1bff5b7a353e80d1e763d3e67e02134d19d01cc06fdff",
+          "triangles": 5250,
+          "vertices": 5429
+        },
+        {
+          "file": "driftwood/driftwood-branch/lod2.glb",
+          "bytes": 38832,
+          "sha256": "9d0acb1bff2fdf8213c123109ff1304e92464876168efc6ccdaeff9225fc4d5c",
+          "triangles": 1800,
+          "vertices": 1815
+        }
+      ],
+      "textures": [
+        {
+          "name": "driftwood-branch_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "driftwood/driftwood-branch/textures/driftwood-branch_basecolor_1k.ktx2",
+              "bytes": 84418,
+              "sha256": "9c5a14775ed6d9a0690a0bda074a9a1441f953a6801f9b06e65d08a5e428939c",
+              "size": 1024
+            },
+            "2k": {
+              "file": "driftwood/driftwood-branch/textures/driftwood-branch_basecolor_2k.ktx2",
+              "bytes": 297994,
+              "sha256": "2ed43de12b3faaa95c4b4aa1e12f18c76b8844c2d43d4e2aebdb3b15c0b26225",
+              "size": 2048
+            }
+          }
+        },
+        {
+          "name": "driftwood-branch_normal",
+          "role": "normal",
+          "codec": "uastc",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "driftwood/driftwood-branch/textures/driftwood-branch_normal_1k.ktx2",
+              "bytes": 517396,
+              "sha256": "87c83d29773beb00a5bfbfd4eae303953dfc84edbcc647ffb6a1aa54966098a5",
+              "size": 1024
+            },
+            "2k": {
+              "file": "driftwood/driftwood-branch/textures/driftwood-branch_normal_2k.ktx2",
+              "bytes": 1994122,
+              "sha256": "a044628ab0a96ce665a8d4eeace05bc8b93e046814744770fdf3ee67dfba410a",
+              "size": 2048
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "driftwood/driftwood-branch/lod0.glb",
+          "bytes": 280700,
+          "sha256": "20cee31f554518d167273cf0a85344c508c4a25f24b1be17740b56be7a48ece9"
+        },
+        {
+          "file": "driftwood/driftwood-branch/lod1.glb",
+          "bytes": 107152,
+          "sha256": "a6e665c8dc6112bd68f1bff5b7a353e80d1e763d3e67e02134d19d01cc06fdff"
+        },
+        {
+          "file": "driftwood/driftwood-branch/lod2.glb",
+          "bytes": 38832,
+          "sha256": "9d0acb1bff2fdf8213c123109ff1304e92464876168efc6ccdaeff9225fc4d5c"
+        },
+        {
+          "file": "driftwood/driftwood-branch/textures/driftwood-branch_basecolor_1k.ktx2",
+          "bytes": 84418,
+          "sha256": "9c5a14775ed6d9a0690a0bda074a9a1441f953a6801f9b06e65d08a5e428939c"
+        },
+        {
+          "file": "driftwood/driftwood-branch/textures/driftwood-branch_basecolor_2k.ktx2",
+          "bytes": 297994,
+          "sha256": "2ed43de12b3faaa95c4b4aa1e12f18c76b8844c2d43d4e2aebdb3b15c0b26225"
+        },
+        {
+          "file": "driftwood/driftwood-branch/textures/driftwood-branch_normal_1k.ktx2",
+          "bytes": 517396,
+          "sha256": "87c83d29773beb00a5bfbfd4eae303953dfc84edbcc647ffb6a1aa54966098a5"
+        },
+        {
+          "file": "driftwood/driftwood-branch/textures/driftwood-branch_normal_2k.ktx2",
+          "bytes": 1994122,
+          "sha256": "a044628ab0a96ce665a8d4eeace05bc8b93e046814744770fdf3ee67dfba410a"
+        }
+      ]
+    },
+    {
+      "id": "boulder-01",
+      "kind": "rock",
+      "origin": "model",
+      "sources": [
+        "polyhaven-boulder_01"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.35 m",
+        "LOD0 capped at 15000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness"
+      ],
+      "bounds": {
+        "min": [
+          -0.12163,
+          0,
+          -0.175
+        ],
+        "max": [
+          0.12163,
+          0.191954,
+          0.175
+        ]
+      },
+      "lods": [
+        {
+          "file": "rock/boulder-01/lod0.glb",
+          "bytes": 257580,
+          "sha256": "6a2f0ad7bace8cefb9dda56a2636210d8e47024631d76290f85331469c16ba8e",
+          "triangles": 15000,
+          "vertices": 13827
+        },
+        {
+          "file": "rock/boulder-01/lod1.glb",
+          "bytes": 86780,
+          "sha256": "4c10ea7bd9a5679893ff6ede7d0d1802334bc9b42680b6c1c771f7077038a3f1",
+          "triangles": 5250,
+          "vertices": 4345
+        },
+        {
+          "file": "rock/boulder-01/lod2.glb",
+          "bytes": 31564,
+          "sha256": "8ae3df084a1d8cc6eefd1515cfa20ecb89b6b9764d7728a318aacebac65ca14f",
+          "triangles": 1800,
+          "vertices": 1437
+        }
+      ],
+      "textures": [
+        {
+          "name": "boulder-01_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "rock/boulder-01/textures/boulder-01_basecolor_1k.ktx2",
+              "bytes": 198101,
+              "sha256": "ac22812a2002f7d6413284e9d0b33865c3330b9c6cb1771543ab2243770c9711",
+              "size": 1024
+            },
+            "2k": {
+              "file": "rock/boulder-01/textures/boulder-01_basecolor_2k.ktx2",
+              "bytes": 752325,
+              "sha256": "d6c63e74af70d271a399c52563becfc4d6ff85d2f8dc5c0c4071a4238b3cad36",
+              "size": 2048
+            }
+          }
+        },
+        {
+          "name": "boulder-01_normal",
+          "role": "normal",
+          "codec": "uastc",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "rock/boulder-01/textures/boulder-01_normal_1k.ktx2",
+              "bytes": 1357817,
+              "sha256": "522be13dd44340f5cdcea7dd514c4bcd6b0beaacf9cc144f2c6db8f01d80be82",
+              "size": 1024
+            },
+            "2k": {
+              "file": "rock/boulder-01/textures/boulder-01_normal_2k.ktx2",
+              "bytes": 5414680,
+              "sha256": "d8e0c672b235b93c49010b0d6d6698aedb1e2dbb096f27091a158c4c41819d0e",
+              "size": 2048
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "rock/boulder-01/lod0.glb",
+          "bytes": 257580,
+          "sha256": "6a2f0ad7bace8cefb9dda56a2636210d8e47024631d76290f85331469c16ba8e"
+        },
+        {
+          "file": "rock/boulder-01/lod1.glb",
+          "bytes": 86780,
+          "sha256": "4c10ea7bd9a5679893ff6ede7d0d1802334bc9b42680b6c1c771f7077038a3f1"
+        },
+        {
+          "file": "rock/boulder-01/lod2.glb",
+          "bytes": 31564,
+          "sha256": "8ae3df084a1d8cc6eefd1515cfa20ecb89b6b9764d7728a318aacebac65ca14f"
+        },
+        {
+          "file": "rock/boulder-01/textures/boulder-01_basecolor_1k.ktx2",
+          "bytes": 198101,
+          "sha256": "ac22812a2002f7d6413284e9d0b33865c3330b9c6cb1771543ab2243770c9711"
+        },
+        {
+          "file": "rock/boulder-01/textures/boulder-01_basecolor_2k.ktx2",
+          "bytes": 752325,
+          "sha256": "d6c63e74af70d271a399c52563becfc4d6ff85d2f8dc5c0c4071a4238b3cad36"
+        },
+        {
+          "file": "rock/boulder-01/textures/boulder-01_normal_1k.ktx2",
+          "bytes": 1357817,
+          "sha256": "522be13dd44340f5cdcea7dd514c4bcd6b0beaacf9cc144f2c6db8f01d80be82"
+        },
+        {
+          "file": "rock/boulder-01/textures/boulder-01_normal_2k.ktx2",
+          "bytes": 5414680,
+          "sha256": "d8e0c672b235b93c49010b0d6d6698aedb1e2dbb096f27091a158c4c41819d0e"
+        }
+      ]
+    },
+    {
+      "id": "coast-rocks-05",
+      "kind": "rock",
+      "origin": "model",
+      "sources": [
+        "polyhaven-coast_rocks_05"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.4 m",
+        "LOD0 capped at 15000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "771k-triangle scan decimated"
+      ],
+      "bounds": {
+        "min": [
+          -0.2,
+          0,
+          -0.185588
+        ],
+        "max": [
+          0.2,
+          0.131794,
+          0.185588
+        ]
+      },
+      "lods": [
+        {
+          "file": "rock/coast-rocks-05/lod0.glb",
+          "bytes": 176012,
+          "sha256": "abacc53bdfdb6b788fbea66c1b928bb7e7a9525d12676570945f0d6bc89b27e5",
+          "triangles": 14999,
+          "vertices": 9228
+        },
+        {
+          "file": "rock/coast-rocks-05/lod1.glb",
+          "bytes": 69576,
+          "sha256": "ecd71dc9a7c3bf3fb0b851bbaf72bc1ac0921490462a8da20ba8a26b8555107c",
+          "triangles": 5249,
+          "vertices": 3450
+        },
+        {
+          "file": "rock/coast-rocks-05/lod2.glb",
+          "bytes": 28332,
+          "sha256": "b4cfd38b2599ac2dc80c1012f399180ff16ec25decb982f9b0750284a94a2c2d",
+          "triangles": 1798,
+          "vertices": 1278
+        }
+      ],
+      "textures": [
+        {
+          "name": "coast-rocks-05_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "rock/coast-rocks-05/textures/coast-rocks-05_basecolor_1k.ktx2",
+              "bytes": 189231,
+              "sha256": "160c199126b3254c56463a1d9279ef8b3c304779c67bf535c25cd25562f0d559",
+              "size": 1024
+            },
+            "2k": {
+              "file": "rock/coast-rocks-05/textures/coast-rocks-05_basecolor_2k.ktx2",
+              "bytes": 718548,
+              "sha256": "424d09f6afd10b04fead4037c06388953dcf3302d5189386f11151b450f4a7a4",
+              "size": 2048
+            }
+          }
+        },
+        {
+          "name": "coast-rocks-05_normal",
+          "role": "normal",
+          "codec": "uastc",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "rock/coast-rocks-05/textures/coast-rocks-05_normal_1k.ktx2",
+              "bytes": 1363768,
+              "sha256": "d5b10ccb533d771a3b3529a48f470af45424f4a09b42db02d1561fca94413762",
+              "size": 1024
+            },
+            "2k": {
+              "file": "rock/coast-rocks-05/textures/coast-rocks-05_normal_2k.ktx2",
+              "bytes": 5425864,
+              "sha256": "4aab05df5eb8c566fb39d8234f817da8d0095cae975faf4e89478770cbb45ed6",
+              "size": 2048
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "rock/coast-rocks-05/lod0.glb",
+          "bytes": 176012,
+          "sha256": "abacc53bdfdb6b788fbea66c1b928bb7e7a9525d12676570945f0d6bc89b27e5"
+        },
+        {
+          "file": "rock/coast-rocks-05/lod1.glb",
+          "bytes": 69576,
+          "sha256": "ecd71dc9a7c3bf3fb0b851bbaf72bc1ac0921490462a8da20ba8a26b8555107c"
+        },
+        {
+          "file": "rock/coast-rocks-05/lod2.glb",
+          "bytes": 28332,
+          "sha256": "b4cfd38b2599ac2dc80c1012f399180ff16ec25decb982f9b0750284a94a2c2d"
+        },
+        {
+          "file": "rock/coast-rocks-05/textures/coast-rocks-05_basecolor_1k.ktx2",
+          "bytes": 189231,
+          "sha256": "160c199126b3254c56463a1d9279ef8b3c304779c67bf535c25cd25562f0d559"
+        },
+        {
+          "file": "rock/coast-rocks-05/textures/coast-rocks-05_basecolor_2k.ktx2",
+          "bytes": 718548,
+          "sha256": "424d09f6afd10b04fead4037c06388953dcf3302d5189386f11151b450f4a7a4"
+        },
+        {
+          "file": "rock/coast-rocks-05/textures/coast-rocks-05_normal_1k.ktx2",
+          "bytes": 1363768,
+          "sha256": "d5b10ccb533d771a3b3529a48f470af45424f4a09b42db02d1561fca94413762"
+        },
+        {
+          "file": "rock/coast-rocks-05/textures/coast-rocks-05_normal_2k.ktx2",
+          "bytes": 5425864,
+          "sha256": "4aab05df5eb8c566fb39d8234f817da8d0095cae975faf4e89478770cbb45ed6"
+        }
+      ]
+    },
+    {
+      "id": "lambis-shell",
+      "kind": "decor",
+      "origin": "model",
+      "sources": [
+        "polyhaven-lambis_shell"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.15 m",
+        "LOD0 capped at 15000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness"
+      ],
+      "bounds": {
+        "min": [
+          -0.075,
+          0,
+          -0.040082
+        ],
+        "max": [
+          0.075,
+          0.050019,
+          0.040082
+        ]
+      },
+      "lods": [
+        {
+          "file": "decor/lambis-shell/lod0.glb",
+          "bytes": 139880,
+          "sha256": "850605277939927e7f4c150a654d2cc20628e91ecacdfe369f5031a8d3a7570d",
+          "triangles": 12498,
+          "vertices": 7361
+        },
+        {
+          "file": "decor/lambis-shell/lod1.glb",
+          "bytes": 57396,
+          "sha256": "8ab5108a9602e4ce3d3af8e3177bbe252949d536609cece6a1ea830279ac03c3",
+          "triangles": 4374,
+          "vertices": 2841
+        },
+        {
+          "file": "decor/lambis-shell/lod2.glb",
+          "bytes": 24520,
+          "sha256": "a97df665abbc3e7ad7f62ca35c9fa85d989be018ea073083edaa5fa9fa10c691",
+          "triangles": 1500,
+          "vertices": 1108
+        }
+      ],
+      "textures": [
+        {
+          "name": "lambis-shell_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "decor/lambis-shell/textures/lambis-shell_basecolor_1k.ktx2",
+              "bytes": 204041,
+              "sha256": "6c5b1720ae7485e6959ac031e4d605d155242b2f98644105063566625a23d8c0",
+              "size": 1024
+            },
+            "2k": {
+              "file": "decor/lambis-shell/textures/lambis-shell_basecolor_2k.ktx2",
+              "bytes": 737405,
+              "sha256": "41288fbc9c9016ffc193aace24bc69a6e09b4912fb32a6a7adacd339ebd7a25d",
+              "size": 2048
+            }
+          }
+        },
+        {
+          "name": "lambis-shell_normal",
+          "role": "normal",
+          "codec": "uastc",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "decor/lambis-shell/textures/lambis-shell_normal_1k.ktx2",
+              "bytes": 1260469,
+              "sha256": "a9a6add897087af5f1f8faee401f836d7d3618308501fd449766f29d8e3d4efa",
+              "size": 1024
+            },
+            "2k": {
+              "file": "decor/lambis-shell/textures/lambis-shell_normal_2k.ktx2",
+              "bytes": 4810539,
+              "sha256": "8cc54d6f5a89fa33d4153b30cda448ff79c37b2679ee7d5d7510551d6760c7e3",
+              "size": 2048
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "decor/lambis-shell/lod0.glb",
+          "bytes": 139880,
+          "sha256": "850605277939927e7f4c150a654d2cc20628e91ecacdfe369f5031a8d3a7570d"
+        },
+        {
+          "file": "decor/lambis-shell/lod1.glb",
+          "bytes": 57396,
+          "sha256": "8ab5108a9602e4ce3d3af8e3177bbe252949d536609cece6a1ea830279ac03c3"
+        },
+        {
+          "file": "decor/lambis-shell/lod2.glb",
+          "bytes": 24520,
+          "sha256": "a97df665abbc3e7ad7f62ca35c9fa85d989be018ea073083edaa5fa9fa10c691"
+        },
+        {
+          "file": "decor/lambis-shell/textures/lambis-shell_basecolor_1k.ktx2",
+          "bytes": 204041,
+          "sha256": "6c5b1720ae7485e6959ac031e4d605d155242b2f98644105063566625a23d8c0"
+        },
+        {
+          "file": "decor/lambis-shell/textures/lambis-shell_basecolor_2k.ktx2",
+          "bytes": 737405,
+          "sha256": "41288fbc9c9016ffc193aace24bc69a6e09b4912fb32a6a7adacd339ebd7a25d"
+        },
+        {
+          "file": "decor/lambis-shell/textures/lambis-shell_normal_1k.ktx2",
+          "bytes": 1260469,
+          "sha256": "a9a6add897087af5f1f8faee401f836d7d3618308501fd449766f29d8e3d4efa"
+        },
+        {
+          "file": "decor/lambis-shell/textures/lambis-shell_normal_2k.ktx2",
+          "bytes": 4810539,
+          "sha256": "8cc54d6f5a89fa33d4153b30cda448ff79c37b2679ee7d5d7510551d6760c7e3"
+        }
+      ]
+    },
+    {
+      "id": "clean-pebbles",
+      "kind": "substrate",
+      "origin": "texture-set",
+      "sources": [
+        "polyhaven-clean_pebbles"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "tileable PBR set re-encoded to KTX2 at 1k and 2k: base colour, GL normal map, ARM (occlusion, roughness, metalness)",
+        "displacement and roughness maps not shipped"
+      ],
+      "lods": [],
+      "textures": [
+        {
+          "name": "clean-pebbles_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "substrate/clean-pebbles/textures/clean-pebbles_basecolor_1k.ktx2",
+              "bytes": 174526,
+              "sha256": "c5cb97d4ffad57c2f8f8c6d021b849342262f66c0ddb4df4ee6bc2d7cd8e2d84",
+              "size": 1024
+            },
+            "2k": {
+              "file": "substrate/clean-pebbles/textures/clean-pebbles_basecolor_2k.ktx2",
+              "bytes": 666559,
+              "sha256": "a4ae54c92aaa4cdcfe4c5a028bdb2cbf2fbf1369b6396c7ce8c23e09fa66eda5",
+              "size": 2048
+            }
+          }
+        },
+        {
+          "name": "clean-pebbles_normal",
+          "role": "normal",
+          "codec": "uastc",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "substrate/clean-pebbles/textures/clean-pebbles_normal_1k.ktx2",
+              "bytes": 1364777,
+              "sha256": "bb25a4a4118d9456ca0f0f431f1efa8c4936702224726f9eead1e671f0b8c6ee",
+              "size": 1024
+            },
+            "2k": {
+              "file": "substrate/clean-pebbles/textures/clean-pebbles_normal_2k.ktx2",
+              "bytes": 5382048,
+              "sha256": "26d52d6de5db0e1610cfb03f9edc50ed6b34a0aa8a2789213d6d780e9201b130",
+              "size": 2048
+            }
+          }
+        },
+        {
+          "name": "clean-pebbles_arm",
+          "role": "occlusionRoughnessMetal",
+          "codec": "etc1s",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "substrate/clean-pebbles/textures/clean-pebbles_arm_1k.ktx2",
+              "bytes": 138498,
+              "sha256": "eec80a464a9f5df9150a190f83cd0e8610830f0576839fe7870eef5872f9aaa5",
+              "size": 1024
+            },
+            "2k": {
+              "file": "substrate/clean-pebbles/textures/clean-pebbles_arm_2k.ktx2",
+              "bytes": 576335,
+              "sha256": "ac1b0ef7b711dd56e92e4d815e6570c7b6335617e78fd9c44de94b61ecb75ad7",
+              "size": 2048
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "substrate/clean-pebbles/textures/clean-pebbles_arm_1k.ktx2",
+          "bytes": 138498,
+          "sha256": "eec80a464a9f5df9150a190f83cd0e8610830f0576839fe7870eef5872f9aaa5"
+        },
+        {
+          "file": "substrate/clean-pebbles/textures/clean-pebbles_arm_2k.ktx2",
+          "bytes": 576335,
+          "sha256": "ac1b0ef7b711dd56e92e4d815e6570c7b6335617e78fd9c44de94b61ecb75ad7"
+        },
+        {
+          "file": "substrate/clean-pebbles/textures/clean-pebbles_basecolor_1k.ktx2",
+          "bytes": 174526,
+          "sha256": "c5cb97d4ffad57c2f8f8c6d021b849342262f66c0ddb4df4ee6bc2d7cd8e2d84"
+        },
+        {
+          "file": "substrate/clean-pebbles/textures/clean-pebbles_basecolor_2k.ktx2",
+          "bytes": 666559,
+          "sha256": "a4ae54c92aaa4cdcfe4c5a028bdb2cbf2fbf1369b6396c7ce8c23e09fa66eda5"
+        },
+        {
+          "file": "substrate/clean-pebbles/textures/clean-pebbles_normal_1k.ktx2",
+          "bytes": 1364777,
+          "sha256": "bb25a4a4118d9456ca0f0f431f1efa8c4936702224726f9eead1e671f0b8c6ee"
+        },
+        {
+          "file": "substrate/clean-pebbles/textures/clean-pebbles_normal_2k.ktx2",
+          "bytes": 5382048,
+          "sha256": "26d52d6de5db0e1610cfb03f9edc50ed6b34a0aa8a2789213d6d780e9201b130"
+        }
+      ]
+    },
+    {
+      "id": "coast-sand-01",
+      "kind": "substrate",
+      "origin": "texture-set",
+      "sources": [
+        "polyhaven-coast_sand_01"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "tileable PBR set re-encoded to KTX2 at 1k and 2k: base colour, GL normal map, ARM (occlusion, roughness, metalness)",
+        "displacement and roughness maps not shipped"
+      ],
+      "lods": [],
+      "textures": [
+        {
+          "name": "coast-sand-01_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "substrate/coast-sand-01/textures/coast-sand-01_basecolor_1k.ktx2",
+              "bytes": 173087,
+              "sha256": "3d40472a6f5026fb5b9e5609e2223ef83054c5ae9a322f145dc2098e7bdf0ba9",
+              "size": 1024
+            },
+            "2k": {
+              "file": "substrate/coast-sand-01/textures/coast-sand-01_basecolor_2k.ktx2",
+              "bytes": 698213,
+              "sha256": "bdf679fc9807058c760866596de7b3f4dba1456215e7f2ee5afa3c970777b149",
+              "size": 2048
+            }
+          }
+        },
+        {
+          "name": "coast-sand-01_normal",
+          "role": "normal",
+          "codec": "uastc",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "substrate/coast-sand-01/textures/coast-sand-01_normal_1k.ktx2",
+              "bytes": 1344626,
+              "sha256": "a4338f58629adf120c6e6d2d8d6584b2b5aae3e2992954f4dac4557bb0ae3ff4",
+              "size": 1024
+            },
+            "2k": {
+              "file": "substrate/coast-sand-01/textures/coast-sand-01_normal_2k.ktx2",
+              "bytes": 5346370,
+              "sha256": "dbe1f2d9dcb85120018ce011f591a1af90877d8a4bd08e5923a6d158acc6e9e4",
+              "size": 2048
+            }
+          }
+        },
+        {
+          "name": "coast-sand-01_arm",
+          "role": "occlusionRoughnessMetal",
+          "codec": "etc1s",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "substrate/coast-sand-01/textures/coast-sand-01_arm_1k.ktx2",
+              "bytes": 116398,
+              "sha256": "1f38f9d73352e3c6aa05829377d7b8faa5e492f7e312932dc1c1a317125ee27a",
+              "size": 1024
+            },
+            "2k": {
+              "file": "substrate/coast-sand-01/textures/coast-sand-01_arm_2k.ktx2",
+              "bytes": 480931,
+              "sha256": "d771802ca6fb324a499ee4eedd33a085dfbc76d5258ad50b9cc2930c9fae7bc9",
+              "size": 2048
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "substrate/coast-sand-01/textures/coast-sand-01_arm_1k.ktx2",
+          "bytes": 116398,
+          "sha256": "1f38f9d73352e3c6aa05829377d7b8faa5e492f7e312932dc1c1a317125ee27a"
+        },
+        {
+          "file": "substrate/coast-sand-01/textures/coast-sand-01_arm_2k.ktx2",
+          "bytes": 480931,
+          "sha256": "d771802ca6fb324a499ee4eedd33a085dfbc76d5258ad50b9cc2930c9fae7bc9"
+        },
+        {
+          "file": "substrate/coast-sand-01/textures/coast-sand-01_basecolor_1k.ktx2",
+          "bytes": 173087,
+          "sha256": "3d40472a6f5026fb5b9e5609e2223ef83054c5ae9a322f145dc2098e7bdf0ba9"
+        },
+        {
+          "file": "substrate/coast-sand-01/textures/coast-sand-01_basecolor_2k.ktx2",
+          "bytes": 698213,
+          "sha256": "bdf679fc9807058c760866596de7b3f4dba1456215e7f2ee5afa3c970777b149"
+        },
+        {
+          "file": "substrate/coast-sand-01/textures/coast-sand-01_normal_1k.ktx2",
+          "bytes": 1344626,
+          "sha256": "a4338f58629adf120c6e6d2d8d6584b2b5aae3e2992954f4dac4557bb0ae3ff4"
+        },
+        {
+          "file": "substrate/coast-sand-01/textures/coast-sand-01_normal_2k.ktx2",
+          "bytes": 5346370,
+          "sha256": "dbe1f2d9dcb85120018ce011f591a1af90877d8a4bd08e5923a6d158acc6e9e4"
+        }
+      ]
+    },
+    {
+      "id": "coast-sand-04",
+      "kind": "substrate",
+      "origin": "texture-set",
+      "sources": [
+        "polyhaven-coast_sand_04"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "tileable PBR set re-encoded to KTX2 at 1k and 2k: base colour, GL normal map, ARM (occlusion, roughness, metalness)",
+        "displacement and roughness maps not shipped"
+      ],
+      "lods": [],
+      "textures": [
+        {
+          "name": "coast-sand-04_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "substrate/coast-sand-04/textures/coast-sand-04_basecolor_1k.ktx2",
+              "bytes": 173363,
+              "sha256": "e09a37f041093b16c4807c155485b401a3c05393e83ff86360e4210c418379ce",
+              "size": 1024
+            },
+            "2k": {
+              "file": "substrate/coast-sand-04/textures/coast-sand-04_basecolor_2k.ktx2",
+              "bytes": 687866,
+              "sha256": "3cf9c80280e2c3f002f75a09ad0d1900e3767cc2798f187b24c2c7712d249c55",
+              "size": 2048
+            }
+          }
+        },
+        {
+          "name": "coast-sand-04_normal",
+          "role": "normal",
+          "codec": "uastc",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "substrate/coast-sand-04/textures/coast-sand-04_normal_1k.ktx2",
+              "bytes": 1356319,
+              "sha256": "00fbae6d20c23b0dd118e0dfeebe4a41fab3a511ebd9a2ba8caf96de95c3e544",
+              "size": 1024
+            },
+            "2k": {
+              "file": "substrate/coast-sand-04/textures/coast-sand-04_normal_2k.ktx2",
+              "bytes": 5395894,
+              "sha256": "0d419f1405b5183a824b79dbfb89fc0e5ae84e30da6e7dcbc396e6d0bcfbe9d3",
+              "size": 2048
+            }
+          }
+        },
+        {
+          "name": "coast-sand-04_arm",
+          "role": "occlusionRoughnessMetal",
+          "codec": "etc1s",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "substrate/coast-sand-04/textures/coast-sand-04_arm_1k.ktx2",
+              "bytes": 120986,
+              "sha256": "652af07325ec12b783e619dfe4cc01c3f6886755e214c8ef4196461c2190eac5",
+              "size": 1024
+            },
+            "2k": {
+              "file": "substrate/coast-sand-04/textures/coast-sand-04_arm_2k.ktx2",
+              "bytes": 517546,
+              "sha256": "897f9631528ec217cfd0b7f728adc3a62be46c7e207d2a53d98a8384b52e0c37",
+              "size": 2048
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "substrate/coast-sand-04/textures/coast-sand-04_arm_1k.ktx2",
+          "bytes": 120986,
+          "sha256": "652af07325ec12b783e619dfe4cc01c3f6886755e214c8ef4196461c2190eac5"
+        },
+        {
+          "file": "substrate/coast-sand-04/textures/coast-sand-04_arm_2k.ktx2",
+          "bytes": 517546,
+          "sha256": "897f9631528ec217cfd0b7f728adc3a62be46c7e207d2a53d98a8384b52e0c37"
+        },
+        {
+          "file": "substrate/coast-sand-04/textures/coast-sand-04_basecolor_1k.ktx2",
+          "bytes": 173363,
+          "sha256": "e09a37f041093b16c4807c155485b401a3c05393e83ff86360e4210c418379ce"
+        },
+        {
+          "file": "substrate/coast-sand-04/textures/coast-sand-04_basecolor_2k.ktx2",
+          "bytes": 687866,
+          "sha256": "3cf9c80280e2c3f002f75a09ad0d1900e3767cc2798f187b24c2c7712d249c55"
+        },
+        {
+          "file": "substrate/coast-sand-04/textures/coast-sand-04_normal_1k.ktx2",
+          "bytes": 1356319,
+          "sha256": "00fbae6d20c23b0dd118e0dfeebe4a41fab3a511ebd9a2ba8caf96de95c3e544"
+        },
+        {
+          "file": "substrate/coast-sand-04/textures/coast-sand-04_normal_2k.ktx2",
+          "bytes": 5395894,
+          "sha256": "0d419f1405b5183a824b79dbfb89fc0e5ae84e30da6e7dcbc396e6d0bcfbe9d3"
+        }
+      ]
+    },
+    {
+      "id": "kloofendal-48d-partly-cloudy-puresky",
+      "kind": "hdri",
+      "origin": "passthrough",
+      "sources": [
+        "polyhaven-kloofendal_48d_partly_cloudy_puresky"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "copied unchanged (Radiance .hdr, 2k)"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "hdri/kloofendal-48d-partly-cloudy-puresky/kloofendal_48d_partly_cloudy_puresky_2k.hdr",
+          "bytes": 5451493,
+          "sha256": "5244534e9cf5b606f2ff513aa00ddb161b0a4826ffd88a0d3bd03ac29247d198"
+        }
+      ]
+    },
+    {
+      "id": "studio-small-09",
+      "kind": "hdri",
+      "origin": "passthrough",
+      "sources": [
+        "polyhaven-studio_small_09"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "copied unchanged (Radiance .hdr, 2k)"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "hdri/studio-small-09/studio_small_09_2k.hdr",
+          "bytes": 6312947,
+          "sha256": "36724313c0fc66dab126ff90f081b85a0b1ef47be65eda1417bd20b033f0573f"
+        }
+      ]
+    }
+  ]
+}
