@@ -4,8 +4,10 @@ RUN corepack enable
 WORKDIR /repo
 
 FROM base AS build
+COPY pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm fetch
 COPY . .
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --offline
 RUN pnpm build
 RUN mkdir -p apps/web/dist
 RUN pnpm --filter @aquarium/api --prod deploy /out/api

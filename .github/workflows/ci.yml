@@ -6,9 +6,12 @@ on:
   push:
     branches: [dev]
 
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
@@ -81,4 +84,8 @@ jobs:
             sleep 2
           done
           docker inspect -f '{{.State.Health.Status}}' aq | grep -qx healthy || { docker logs aq; exit 1; }
-          curl -sI http://127.0.0.1:3000/ | grep -i '^x-robots-tag: noindex, nofollow'
+          for path in / /api/health; do
+            curl -fsS -D headers.txt -o /dev/null "http://127.0.0.1:3000$path"
+            grep -i '^x-robots-tag: noindex, nofollow' headers.txt
+          done
+          curl -fsS http://127.0.0.1:3000/robots.txt | grep -x 'Disallow: /'
