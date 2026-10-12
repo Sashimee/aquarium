@@ -15,6 +15,8 @@ import { AUTH_BASE_PATH, type Auth } from './auth.ts';
 import { createClock, type Clock } from './clock.ts';
 import { schema, type Database } from './db/index.ts';
 import { apiError } from './errors.ts';
+import { loadCredits } from './credits.ts';
+import { DEFAULT_LEGAL_LIMITS, registerLegalRoutes, type LegalLimits } from './legal.ts';
 import type { Mailer } from './mail.ts';
 import { RateLimiter } from './rate-limit.ts';
 import type { SpeciesCatalog } from './species.ts';
@@ -31,6 +33,7 @@ export interface AppOptions {
   species: SpeciesCatalog;
   clock?: Clock;
   careLimits?: CareLimits;
+  legalLimits?: LegalLimits;
   testHooks?: boolean;
   logger?: boolean;
 }
@@ -313,12 +316,24 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     return reply.code(204).send();
   });
 
+  const limiter = new RateLimiter();
+
+  registerLegalRoutes({
+    app,
+    database,
+    auth,
+    credits: loadCredits(),
+    limiter: new RateLimiter(),
+    limits: opts.legalLimits ?? DEFAULT_LEGAL_LIMITS,
+    currentSession,
+  });
+
   registerTankRoutes({
     app,
     database,
     species: opts.species,
     clock,
-    limiter: new RateLimiter(),
+    limiter,
     limits: opts.careLimits ?? DEFAULT_CARE_LIMITS,
     currentUser: async (req) => (await currentSession(req))?.user ?? null,
   });
