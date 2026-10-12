@@ -285,4 +285,8 @@
 .legal-links nav {
   display: flex;
   gap: 1rem;
+  padding: 0.35rem 0.8rem;
+  background: var(--surface);
+  border: 1px solid var(--edge);
+  border-radius: 0.7rem;
 }

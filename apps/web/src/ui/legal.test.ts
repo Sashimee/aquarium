@@ -1,7 +1,10 @@
-import { PRIVACY_POLICY } from '@aquarium/shared';
+import { PRIVACY_POLICY, type Credits } from '@aquarium/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { ApiRequestError, createApiClient } from './api';
-import { deleteErrorMessage, rateLimitMessage } from './legal';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { deleteErrorMessage, rateLimitMessage, safeHref } from './legal';
+import { CreditsView } from './screens';
 import { guardRoute, parseRoute } from './router';
 
 function json(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
@@ -14,7 +17,7 @@ function json(body: unknown, status = 200, headers: Record<string, string> = {})
 const apiError = (status: number, code: string, headers: Record<string, string> = {}) =>
   json({ error: { code, message: 'x' } }, status, headers);
 
-const credits = {
+const credits: Credits = {
   generatedFrom: 'assets/manifest.json',
   shareAlikeNotice: 'notice',
   entries: [
@@ -108,10 +111,42 @@ describe('error messages', () => {
     expect(rateLimitMessage(err('rate_limited'), 'export')).toContain('Wait a little');
   });
 
-  it('tells a wrong password from a stale passkey session', () => {
-    expect(deleteErrorMessage(err('forbidden'), true)).toBe('That password is not correct.');
-    expect(deleteErrorMessage(err('forbidden'), false)).toContain('sign in again');
-    expect(deleteErrorMessage(err('rate_limited', 120), true)).toContain('2 minutes');
-    expect(deleteErrorMessage(err('internal'), true)).toBe('server text');
+  it('shows the server message for deletion failures, whatever the account type', () => {
+    expect(deleteErrorMessage(err('forbidden'))).toBe('server text');
+    expect(deleteErrorMessage(err('rate_limited', 120))).toContain('2 minutes');
+    const empty = new ApiRequestError(500, 'internal', '');
+    expect(deleteErrorMessage(empty)).toContain('Could not delete');
+  });
+});
+
+describe('safeHref', () => {
+  it('allows only http and https', () => {
+    expect(safeHref('https://example.com/a')).toBe('https://example.com/a');
+    expect(safeHref('http://example.com')).toBe('http://example.com');
+    expect(safeHref('javascript:alert(1)')).toBeNull();
+    expect(safeHref('data:text/html,<script>1</script>')).toBeNull();
+    expect(safeHref('vbscript:x')).toBeNull();
+    expect(safeHref('not a url')).toBeNull();
+  });
+});
+
+describe('CreditsView', () => {
+  it('renders hostile URLs as plain text', () => {
+    const [base] = credits.entries;
+    if (!base) throw new Error('fixture has no entry');
+    const entry = {
+      ...base,
+      sourceUrl: 'javascript:alert(1)',
+      authorUrl: 'data:text/html,x',
+      licenceUrl: 'https://creativecommons.org/licenses/by/4.0/',
+    };
+    const html = renderToStaticMarkup(
+      createElement(CreditsView, { credits: { ...credits, entries: [entry] } }),
+    );
+    expect(html).not.toContain('javascript:');
+    expect(html).not.toContain('data:text');
+    expect(html).toContain('href="https://creativecommons.org/licenses/by/4.0/"');
+    expect(html).toContain('Fish');
+    expect(html).toContain('Ann');
   });
 });

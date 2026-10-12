@@ -11,7 +11,7 @@ import {
 } from 'react';
 import { ApiRequestError, ClientValidationError, type FieldErrors } from './api';
 import { useApi, useAuth } from './context';
-import { deleteErrorMessage, downloadText, rateLimitMessage } from './legal';
+import { deleteErrorMessage, downloadText, rateLimitMessage, safeHref } from './legal';
 import { navigate } from './router';
 
 export function Link({
@@ -504,6 +504,17 @@ export function NotFoundScreen() {
   );
 }
 
+function ExternalLink({ href, children }: { href: string; children: ReactNode }) {
+  const safe = safeHref(href);
+  return safe ? (
+    <a href={safe} rel="noopener noreferrer">
+      {children}
+    </a>
+  ) : (
+    <>{children}</>
+  );
+}
+
 function useLoaded<T>(load: () => Promise<T>): { data: T | null; error: string | null } {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -535,8 +546,8 @@ export function PrivacyView({ policy }: { policy: PrivacyPolicy }) {
       {policy.sections.map((section) => (
         <section key={section.id} aria-labelledby={`privacy-${section.id}`}>
           <h2 id={`privacy-${section.id}`}>{section.title}</h2>
-          {section.paragraphs.map((text) => (
-            <p key={text}>{text}</p>
+          {section.paragraphs.map((text, index) => (
+            <p key={index}>{text}</p>
           ))}
           {section.id === 'cookies' && (
             <ul className="cookies">
@@ -581,22 +592,13 @@ export function CreditsView({ credits }: { credits: Credits }) {
         {credits.entries.map((entry) => (
           <li key={entry.id}>
             <h2>
-              <a href={entry.sourceUrl} rel="noopener noreferrer">
-                {entry.title}
-              </a>
+              <ExternalLink href={entry.sourceUrl}>{entry.title}</ExternalLink>
               {entry.referenceOnly && <span className="badge">Reference only</span>}
               {entry.shareAlike && <span className="badge">ShareAlike</span>}
             </h2>
             <p>
-              By{' '}
-              <a href={entry.authorUrl} rel="noopener noreferrer">
-                {entry.author}
-              </a>
-              , licensed{' '}
-              <a href={entry.licenceUrl} rel="noopener noreferrer">
-                {entry.licence}
-              </a>
-              .
+              By <ExternalLink href={entry.authorUrl}>{entry.author}</ExternalLink>, licensed{' '}
+              <ExternalLink href={entry.licenceUrl}>{entry.licence}</ExternalLink>.
             </p>
             <p className="hint">{entry.attribution}</p>
             {entry.referenceOnly && (
@@ -606,8 +608,8 @@ export function CreditsView({ credits }: { credits: Credits }) {
               <>
                 <p className="hint">Modifications:</p>
                 <ul>
-                  {entry.modifications.map((m) => (
-                    <li key={m}>{m}</li>
+                  {entry.modifications.map((m, index) => (
+                    <li key={index}>{m}</li>
                   ))}
                 </ul>
               </>
@@ -641,6 +643,10 @@ export function SettingsScreen() {
   const exporting = useSubmission();
   const deleting = useSubmission();
   const [confirming, setConfirming] = useState(false);
+  const passwordInput = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (confirming) passwordInput.current?.focus();
+  }, [confirming]);
   const [password, setPassword] = useState('');
   const [exported, setExported] = useState(false);
 
@@ -678,7 +684,7 @@ export function SettingsScreen() {
             throw new ApiRequestError(
               cause.status,
               cause.code,
-              deleteErrorMessage(cause, password.length > 0),
+              deleteErrorMessage(cause),
               cause.fields,
               cause.retryAfterSeconds,
             );
@@ -721,6 +727,7 @@ export function SettingsScreen() {
               <label htmlFor="delete-password">Password</label>
               <input
                 id="delete-password"
+                ref={passwordInput}
                 name="password"
                 type="password"
                 autoComplete="current-password"

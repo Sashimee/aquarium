@@ -8,14 +8,20 @@ export function rateLimitMessage(error: ApiRequestError, what: string): string {
   return `Too many ${what} requests. Try again in about ${span}.`;
 }
 
-export function deleteErrorMessage(error: ApiRequestError, passwordGiven: boolean): string {
+export function deleteErrorMessage(error: ApiRequestError): string {
   if (error.code === 'rate_limited') return rateLimitMessage(error, 'deletion');
-  if (error.code === 'forbidden') {
-    return passwordGiven
-      ? 'That password is not correct.'
-      : 'This account needs a fresh sign-in. Sign out, sign in again with your passkey, then retry within 5 minutes.';
+  return error.message.length > 0
+    ? error.message
+    : 'Could not delete the account. Try again, or sign in again first.';
+}
+
+export function safeHref(url: string): string | null {
+  try {
+    const { protocol } = new URL(url);
+    return protocol === 'http:' || protocol === 'https:' ? url : null;
+  } catch {
+    return null;
   }
-  return error.message;
 }
 
 export function downloadText(filename: string, text: string): void {
@@ -26,5 +32,5 @@ export function downloadText(filename: string, text: string): void {
   document.body.append(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
