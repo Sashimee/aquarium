@@ -17,7 +17,7 @@ your tanks across devices.
 
 | Topic | Decision |
 |---|---|
-| Fish assets | **Free only: CC0 or CC-BY (3.0/4.0).** No NC, no ND. CC-BY-SA only after asking. Every CC-BY asset is credited in-app at `/credits` and in `CREDITS.md`. |
+| Fish assets | **Free only: CC0 or CC-BY (3.0/4.0).** No NC, no ND. CC-BY-SA only after asking. **Approved by Alex 2026-10-12 (#29):** CC-BY-SA reference photos for fallback textures by these authors only: Corydoras aeneus (Gabriel Resende Veiga / GABS), Gramma loreto (H. Zell / Llez), Pterapogon kauderni (David J. Stang); textures derived from them ship as CC-BY-SA with attribution. Every CC-BY and CC-BY-SA asset is credited in-app at `/credits` and in `CREDITS.md`. |
 | Biome | **Both, switchable**: planted freshwater and tropical reef. One user can own one of each, and the schema allows more later. |
 | Gameplay | **Full sim plus persistence**: feeding, play, decorating, growth, water quality, and **fish can die** from realistic neglect or overfeeding. |
 | Accounts | **User accounts**: passkeys first, plus email and password. Verification and reset mails go via `mailrelay` from `fish@bas.lu`. |
@@ -176,7 +176,7 @@ curator records which species use the fallback, and the auditor judges them.
 untrusted, never executed). `assets/manifest.json` records source URL, author, licence, licence
 URL, sha256 and the modifications made. Only processed `.glb`/`.ktx2` files are committed under
 `apps/web/public/assets/` (target total < 150 MB; no Git LFS). The build fails if an asset is
-missing from the manifest or carries a licence outside CC0 / CC-BY.
+missing from the manifest or carries a licence outside CC0 / CC-BY, except CC-BY-SA entries covered by an Alex approval recorded in §1 and in the manifest `rules`.
 
 ## 4. Delivery: tasks, owners, dependencies, waves
 
