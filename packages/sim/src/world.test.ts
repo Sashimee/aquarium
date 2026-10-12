@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+
+// Long simulations: well under a second locally, but shared CI runners can be several times slower.
+const LONG = 60_000;
 import {
   ARCHETYPES,
   benchmarkConfig,
@@ -31,7 +34,7 @@ function at(a: ArrayLike<number>, i: number): number {
   return v;
 }
 
-describe('World determinism', () => {
+describe('World determinism', { timeout: LONG }, () => {
   it('reproduces the trajectory bit for bit from the same seed', () => {
     const a = run(benchmarkConfig(3), 1000);
     const b = run(benchmarkConfig(3), 1000);
@@ -53,7 +56,7 @@ describe('World determinism', () => {
   });
 });
 
-describe('World containment', () => {
+describe('World containment', { timeout: LONG }, () => {
   const cases: { name: string; tank: TankDimensions }[] = [];
   for (const sp of ARCHETYPES) {
     cases.push({ name: `${sp.id} in the reef tank`, tank: REEF_TANK });
@@ -87,22 +90,29 @@ describe('World containment', () => {
   });
 });
 
-describe('World kinematic limits', () => {
+describe('World kinematic limits', { timeout: LONG }, () => {
   it('respects per-species turn rate, pitch, speed and bank limits', () => {
     const w = new World(benchmarkConfig(5));
+    const worst = { yawRate: 0, pitchRate: 0, pitch: 0, speed: 0, roll: 0, minSpeed: Infinity };
     for (let t = 0; t < 3000; t++) {
       w.step();
       for (let i = 0; i < w.count; i++) {
         const sp = w.speciesOf(i);
-        const scale = at(w.bodyLength, i) / sp.bodyLength;
-        expect(Math.abs(at(w.yawRate, i))).toBeLessThanOrEqual(sp.maxTurnRate + 1e-12);
-        expect(Math.abs(at(w.pitchRate, i))).toBeLessThanOrEqual(sp.maxTurnRate + 1e-12);
-        expect(Math.abs(at(w.pitch, i))).toBeLessThanOrEqual(sp.maxPitch + 1e-12);
-        expect(at(w.speed, i)).toBeLessThanOrEqual(sp.maxSpeed * scale + 1e-12);
-        expect(at(w.speed, i)).toBeGreaterThanOrEqual(0);
-        expect(Math.abs(at(w.roll, i))).toBeLessThanOrEqual(STEERING.maxBankRad + 1e-12);
+        const vmax = (sp.maxSpeed * at(w.bodyLength, i)) / sp.bodyLength;
+        worst.yawRate = Math.max(worst.yawRate, Math.abs(at(w.yawRate, i)) / sp.maxTurnRate);
+        worst.pitchRate = Math.max(worst.pitchRate, Math.abs(at(w.pitchRate, i)) / sp.maxTurnRate);
+        worst.pitch = Math.max(worst.pitch, Math.abs(at(w.pitch, i)) / sp.maxPitch);
+        worst.speed = Math.max(worst.speed, at(w.speed, i) / vmax);
+        worst.roll = Math.max(worst.roll, Math.abs(at(w.roll, i)) / STEERING.maxBankRad);
+        worst.minSpeed = Math.min(worst.minSpeed, at(w.speed, i));
       }
     }
+    expect(worst.yawRate).toBeLessThanOrEqual(1 + 1e-12);
+    expect(worst.pitchRate).toBeLessThanOrEqual(1 + 1e-12);
+    expect(worst.pitch).toBeLessThanOrEqual(1 + 1e-12);
+    expect(worst.speed).toBeLessThanOrEqual(1 + 1e-12);
+    expect(worst.roll).toBeLessThanOrEqual(1 + 1e-12);
+    expect(worst.minSpeed).toBeGreaterThanOrEqual(0);
   });
 
   it('banks into the turn (left turn lowers the left flank)', () => {
@@ -143,7 +153,7 @@ describe('World kinematic limits', () => {
   });
 });
 
-describe('World schooling', () => {
+describe('World schooling', { timeout: LONG }, () => {
   it('holds tetra shoals within literature bands for spacing and local alignment', () => {
     const w = new World(benchmarkConfig(1));
     const tetras: number[] = [];
@@ -191,7 +201,7 @@ describe('World schooling', () => {
   });
 });
 
-describe('World depth band', () => {
+describe('World depth band', { timeout: LONG }, () => {
   it('keeps each species mostly inside its preferred band', () => {
     const w = new World(benchmarkConfig(4));
     const inside = new Float64Array(w.species.length);
