@@ -25,8 +25,8 @@ const PLANT_LOD: Readonly<Record<Tier, ModelLod>> = { low: 2, medium: 1, high: 1
 const HARDSCAPE_LOD: Readonly<Record<Tier, ModelLod>> = { low: 2, medium: 1, high: 0, ultra: 0 };
 // Collision geometry is read once at build time, so it never pays for a tier's large textures.
 const COLLISION_TEXTURE_SIZE = 1024;
-const WALL_MARGIN = 0.03;
-const BLOCKED_CLEARANCE = 0.03;
+const WALL_MARGIN = 0.005;
+const BLOCKED_CLEARANCE = 0.005;
 const MIN_COLLIDER_PLANT_HEIGHT = 0.15;
 
 interface SubstrateInstall {
@@ -173,6 +173,11 @@ export class TankScene {
       const bounds = catalog.get(patch.assetId).bounds;
       const reach = plantReach(patch.assetId, bounds, preset.current ?? DEFAULT_CURRENT);
       const instances = scatterPatch(patch, ground, blocked, extent, reach);
+      if (instances.length < patch.count) {
+        console.warn(
+          `Plant patch "${patch.id}" fitted ${instances.length} of ${patch.count} plants; move it clear of hardscape and glass`,
+        );
+      }
       const list = entriesFor(patch.assetId);
       instances.forEach((instance, i) =>
         list.push({ ...instance, rank: i / Math.max(1, instances.length) }),
