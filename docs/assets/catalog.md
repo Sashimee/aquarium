@@ -152,6 +152,50 @@ Reference photos (in manifest, downloaded): `wm-banggai-53953454` (CC BY 4.0, Da
 
 Poly Haven licence verified on the asset page (https://polyhaven.com/a/boulder_01 shows CC0) and https://polyhaven.com/license.
 
+## Reef additions (issue #79)
+
+Checked 2026-10-13. Licence, author and downloadable flag from the Sketchfab API model record; ambientCG licence from the asset page. Renders are Sketchfab thumbnails (linked, not committed). Picks are downloaded and in the manifest; other candidates are listed only.
+
+### Live-rock arch (about 0.3 m, coralline pink/purple)
+
+**Decision: pick `sketchfab-4db2b936`**, with caveats below.
+
+| # | Candidate | Author | Licence | Faces | Texture | Anatomy | Verdict |
+|---|---|---|---|---|---|---|---|
+| 1 | [Archway Rock Formation](https://sketchfab.com/3d-models/4db2b936751a4aa89af6b2afeca05248) ([render](https://media.sketchfab.com/models/4db2b936751a4aa89af6b2afeca05248/thumbnails/329398d1ab494aa6baeb9e1a728033a1/96c404fa99eb4cdbaf691a386652c6d6.jpeg)) | NE14ABJ | CC-BY 4.0 | 6,920 | 1024 PBR, grey with a faint pink cast | a true low arch, smooth sculpt, not porous | PICK |
+| 2 | [Underwater rock Tunnel](https://sketchfab.com/3d-models/f9bfa9f385554e12b8652a20c27e93c3) ([render](https://media.sketchfab.com/models/f9bfa9f385554e12b8652a20c27e93c3/thumbnails/6c0b82b84a474bbe96ca18130c20befd/232de355e09d48db9bf27e4844c5c963.jpeg)) | vapor_ | CC-BY 4.0 | 10,646 | green algae look, tagged aquarium | tunnel-like lump, no clear arch | reject |
+| 3 | [Rock arch formation](https://sketchfab.com/3d-models/b4cb27574f2e442592252ce50611c5c8) ([render](https://media.sketchfab.com/models/b4cb27574f2e442592252ce50611c5c8/thumbnails/e28ba1ff94b042a9bfd2000ec73808d6/b6269b847d7d4aa984530ba8987099c7.jpeg)) | bfxfactory01 | CC-BY 4.0 | 33,468 | none (white clay), AI-generated (Rodin) | good arch shape | reject: untextured and AI-generated |
+
+No CC0/CC-BY model of real porous live rock exists on Sketchfab (searches: live rock, reef rock, porous rock, coral rock, coralline). The pick therefore supplies the arch silhouette only; the pipeline has to add the pink/purple coralline tint and a procedural pore normal/occlusion layer. Poly Haven `coast_rocks_05` (already registered) is the porous-surface reference.
+
+### SPS (table or digitate Acropora)
+
+**Decision: pick `sketchfab-9ff5270c` (Acropora cytherea, table)**
+
+| # | Candidate | Author | Licence | Faces | Texture | Anatomy | Verdict |
+|---|---|---|---|---|---|---|---|
+| 1 | [Madrepora cytherea](https://sketchfab.com/3d-models/9ff5270cafce4ceab61ce84c41c26faa) ([render](https://media.sketchfab.com/models/9ff5270cafce4ceab61ce84c41c26faa/thumbnails/29dc243172cf44e6a537da6a87a85e0e/abec6518317c41cc9fdc6c35fcb7efc5.jpeg)) | Smithsonian | CC0 | 100,000 | 2048 scan, bleached skeleton on plinth | classic table, accurate | PICK |
+| 2 | [Madrepora hyacinthus](https://sketchfab.com/3d-models/5e8f3939400d4753bcb8e4a43819473c) ([render](https://media.sketchfab.com/models/5e8f3939400d4753bcb8e4a43819473c/thumbnails/3a425a65111a468f9bfc6cc22a79000e/5a7baa6c1a494e3ca857da153c55e662.jpeg)) | Smithsonian | CC0 | 100,000 | 2048 scan, bleached | upright branching, reads as digitate | alternate, not downloaded |
+| 3 | [Tabulate Acropora spp. 8 2014](https://sketchfab.com/3d-models/1364b7bac06544f6972d7b81b5b87542) ([render](https://media.sketchfab.com/models/1364b7bac06544f6972d7b81b5b87542/thumbnails/8e159a57f2b54a01a8da508b5577bd0e/640x360.jpeg)) | renataferrari | CC-BY 4.0 | 85,984 | live colour, blobby field photogrammetry | table, low detail | alternate, not downloaded |
+
+All Smithsonian corals are bleached skeletons with a museum plinth: crop the plinth and tint.
+
+### LPS (hammer or torch)
+
+**Decision: no suitable model exists.** Searches for Euphyllia, torch, hammer, frogspawn, Catalaphyllia, Plerogyra, Physogyra, Caulastrea, Lobophyllia, Acanthastrea, Cynarina, Galaxea and Blastomussa returned nothing under CC0 or CC-BY except hobbyist/fantasy pieces (Brian Trepanier's 0.9 to 2.2M-face art reefs, neonatus.exe "Frogspawn" game assets). Euphyllia needs soft tentacles that no skeleton scan gives; the recommended route is a procedural TSL/loft coral (as for the anemone), with Euphyllia photos from Wikimedia if a texture reference is wanted.
+
+Registered as LPS stand-ins so the scene has some large-polyp coral meanwhile; neither is a hammer or torch:
+
+| # | Candidate | Author | Licence | Faces | Texture | Anatomy | Verdict |
+|---|---|---|---|---|---|---|---|
+| 1 | [Fungia scutaria (Mushroom coral)](https://sketchfab.com/3d-models/e72cb3bdfd504df3a31d38721f1f8a86) ([render](https://media.sketchfab.com/models/e72cb3bdfd504df3a31d38721f1f8a86/thumbnails/f81f16177d5947438a9877f9759f9960/720x405.jpeg)) | Phelpst | CC-BY 4.0 | 178,319 | vertex colours, live green/yellow | plate coral, sculpted not scanned | stand-in (downloaded) |
+| 2 | [Goniopora columna](https://sketchfab.com/3d-models/6b652ae52c4d4232b26cfb5b900f7d8a) ([render](https://media.sketchfab.com/models/6b652ae52c4d4232b26cfb5b900f7d8a/thumbnails/3addc83289f94e90a480fd7e5fa54912/1c345d33cf5449fab005bd85ff017d43.jpeg)) | Smithsonian | CC0 | 100,000 | 2048 scan, bleached skeleton | flowerpot-coral colony, only 0.1 m, no polyps | stand-in (downloaded) |
+| 3 | [Coral: Eusmilia fastigata](https://sketchfab.com/3d-models/b20e7b87618e4fab97453fd65febc6c3) ([render](https://media.sketchfab.com/models/b20e7b87618e4fab97453fd65febc6c3/thumbnails/7c127c1fafe249419a661efc842265d9/d1fdc9d94de6438a9ba7ca4daf315a05.jpeg)) | Digital Atlas of Ancient Life | CC0 | 251,756 | scan, skeleton | Caribbean flower coral (LPS), heavy | not downloaded |
+
+### Pale aragonite sand
+
+**Decision: pick `ambientcg-Ground101`** (CC0, 2K PBR, tagged beige/white/fine). Poly Haven's sand textures (`sand_01..03`, `dense_sand`, `coast_sand_01..05`, `playground_sand`, `aerial_sand`) all read brown or grey. ambientCG Ground092A/B, 096A/B and 027 are pale as well but strongly rippled or pitted, which looks wrong tiled on a tank floor.
+
 ## Downloaded-file check (Sketchfab)
 
 Measured from each downloaded `scene.gltf`. Rigged means the glTF has at least one skin; the clips are what the author shipped and are not the swim cycles we need.
@@ -173,5 +217,9 @@ Measured from each downloaded `scene.gltf`. Rigged means the glTF has at least o
 | Acropora palmata (`sketchfab-8cb98631`) | 100,000 | 3 images, largest 2048x2048 | 0 / 0 | 0 |
 | Brain coral (`sketchfab-4ea44ce7`) | 40,002 | 2 images, largest 8192x8192 | 0 / 0 | 0 |
 | Reef coral piece (`sketchfab-f2542a86`) | 22,057 | 1 images, largest 2048x2048 | 0 / 0 | 0 |
+| Archway rock (`sketchfab-4db2b936`) | 6,920 | 3 images, largest 1024x1024 | 0 / 0 | 0 |
+| Table coral (`sketchfab-9ff5270c`) | 100,000 | 3 images, largest 2048x2048 | 0 / 0 | 0 |
+| Goniopora (`sketchfab-6b652ae5`) | 100,000 | 3 images, largest 2048x2048 | 0 / 0 | 0 |
+| Fungia (`sketchfab-e72cb3bd`) | 178,319 | none (vertex colours) | 0 / 0 | 0 |
 
 Effect on the picks: none of the picks flipped. The neon tetra, betta and both guppies ship skeletons (30, 53, 44 and 191 joints) that the pipeline can reuse or replace with a spine rig; the clownfish, both tangs and the angelfish are unrigged static meshes and need the procedural spine rig. The angelfish uses unlit materials, the water plant has no textures, and the brain coral is 8192x8192 and must be downscaled. Blue and yellow tang stay as weak candidates for the auditor to weigh against the loft fallback.

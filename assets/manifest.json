@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-10-12",
+  "generated_at": "2026-10-13",
   "status_values": ["downloaded", "selected-pending-download"],
   "rules": [
     "sha256 is null if and only if status is selected-pending-download.",
@@ -1474,6 +1474,236 @@
           "path": "coast_sand_04_rough_2k.jpg",
           "sha256": "392c34ec2b154a614074fd9eafd25ad7dfa253c2d60c00bb28bcdad272410da2",
           "bytes": 2037593
+        }
+      ]
+    },
+    {
+      "id": "sketchfab-4db2b936",
+      "kind": "rock",
+      "title": "Archway Rock Formation",
+      "author": "NE14ABJ",
+      "author_url": "https://sketchfab.com/NE14ABJ",
+      "source_url": "https://sketchfab.com/3d-models/4db2b936751a4aa89af6b2afeca05248",
+      "licence": "CC-BY-4.0",
+      "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+      "checked_at": "2026-10-13",
+      "sha256": "477ecdfcec3ae0f3f19c22d88857f1fb7e4e8ad664f41ae005b136dcba5103c9",
+      "polycount": 6920,
+      "textures": "Material_baseColor.jpeg 1024x1024, Material_metallicRoughness.png 1024x1024, Material_normal.png 1024x1024",
+      "rigged": false,
+      "notes": "Reef arch candidate (issue #79). Sculpted grey-pink rock arch, about 40 x 13.6 x 13.5 units as authored (long axis X, Y up); scale about 0.0075 for a 0.3 m span. Smooth sculpt with no pore detail: needs a coralline pink/purple tint and a procedural porous normal/occlusion layer. Verified from the downloaded glTF: 6920 triangles, not rigged (no skins). Zip sha256 9ab29ee5e8806b0e9f2dcfe96f288f2442d76eee95cf092ac42ab173156d0f8d; sha256 is the aggregate over files[].",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "license.txt",
+          "sha256": "6cd1b11a98eb9d6eacd997b3c7c10eb44de58ffdd677ce8b9aa057bad8cd4f42",
+          "bytes": 704
+        },
+        {
+          "path": "scene.bin",
+          "sha256": "379bc81ebc9902d8e1f3c11ff90051144563aefbf196d08bedbd64181bddfa8e",
+          "bytes": 607200
+        },
+        {
+          "path": "scene.gltf",
+          "sha256": "d1e87f0910ad97983de93ae955c56f08c23c35e1e4ab526debee6ec77b6e7bd6",
+          "bytes": 8082
+        },
+        {
+          "path": "textures/Material_baseColor.jpeg",
+          "sha256": "6864a156f64855c38fbd1621ea1e4f84b4d64beb11f5c9f4d0e323622f6d553f",
+          "bytes": 305775
+        },
+        {
+          "path": "textures/Material_metallicRoughness.png",
+          "sha256": "f9abef3d121eb14a905bc9b595bf18ab537a94e1a00619b68d76196a53b70b6a",
+          "bytes": 1280455
+        },
+        {
+          "path": "textures/Material_normal.png",
+          "sha256": "eedde9574fbcb8db1e64fb4e8fab151afc83f14a2a1a3ed90cc21feb2c855d68",
+          "bytes": 1787728
+        }
+      ]
+    },
+    {
+      "id": "sketchfab-9ff5270c",
+      "kind": "coral",
+      "title": "Madrepora cytherea",
+      "author": "The Smithsonian Institution",
+      "author_url": "https://sketchfab.com/Smithsonian",
+      "source_url": "https://sketchfab.com/3d-models/9ff5270cafce4ceab61ce84c41c26faa",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-13",
+      "sha256": "3810722834007a5883a7d1e163ee860d74d00050627d5c0346f9c054bc6797f8",
+      "polycount": 100000,
+      "textures": "default_baseColor.jpeg 2048x2048, default_metallicRoughness.png 2048x2048, default_normal.jpeg 2048x2048",
+      "rigged": false,
+      "notes": "SPS table coral (Acropora cytherea) scan for issue #79: bleached skeleton on a museum plinth, 0.63 x 0.34 x 0.41 m including plinth. Two primitives sharing one material (81199 + 18801 triangles); crop the plinth, decimate to about 25k, tint for live coral and scale to a 0.30 to 0.35 m footprint (factor about 0.5). Verified from the downloaded glTF: 100000 triangles, not rigged (no skins). Zip sha256 1e1b5f7cfbd68bcd11b390ed4f830325ee9480288b5d22ec656eba1f1592b76d; sha256 is the aggregate over files[].",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "license.txt",
+          "sha256": "61b6b7e13658a5369eece27399db2cc531abc7d46141e0dfe02a5e54b26d414a",
+          "bytes": 375
+        },
+        {
+          "path": "scene.bin",
+          "sha256": "db5e874c7a4cb7540465ed6739d0aae737193e9e7ecbe678fa4ade8320be5b19",
+          "bytes": 6512064
+        },
+        {
+          "path": "scene.gltf",
+          "sha256": "272dcdac310dfd768163b8906fac9ce900877fd553d4115f4975694ab00afcd1",
+          "bytes": 7999
+        },
+        {
+          "path": "textures/default_baseColor.jpeg",
+          "sha256": "3de064d9131491df4ca5cfe5a8106b17f8a79843d5bcfe2c2e63e94ead20a97a",
+          "bytes": 1889870
+        },
+        {
+          "path": "textures/default_metallicRoughness.png",
+          "sha256": "16f05336d173815fdef2e3c01c5960619c19b7dfadd2f9812e5d4e1516d158cd",
+          "bytes": 2902343
+        },
+        {
+          "path": "textures/default_normal.jpeg",
+          "sha256": "f01b96124fd9a9703c6ad3fb566bcb7634b062f79a81f7ff864f2bc96712b4c6",
+          "bytes": 5667808
+        }
+      ]
+    },
+    {
+      "id": "sketchfab-6b652ae5",
+      "kind": "coral",
+      "title": "Goniopora columna",
+      "author": "The Smithsonian Institution",
+      "author_url": "https://sketchfab.com/Smithsonian",
+      "source_url": "https://sketchfab.com/3d-models/6b652ae52c4d4232b26cfb5b900f7d8a",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-13",
+      "sha256": "c23347f0f62bfa8ee5467fa0bce9105f1d8812316edb7a54ec673ce078d187f3",
+      "polycount": 100000,
+      "textures": "default_baseColor.jpeg 2048x2048, default_metallicRoughness.png 2048x2048, default_normal.jpeg 2048x2048",
+      "rigged": false,
+      "notes": "LPS stand-in for issue #79 (no hammer or torch model exists under an allowed licence): Goniopora (flowerpot coral) skeleton on a museum plinth, 0.10 x 0.14 x 0.10 m including plinth. Crop the plinth, tint for live coral, scale about 2.5 to 3 for a 0.25 to 0.30 m colony; polyps would have to be added procedurally. Verified from the downloaded glTF: 100000 triangles, not rigged (no skins). Zip sha256 bc85ed0e4f64b91c2ad2c7d76d00e551580cebf6138b2097f636b8df8d5ee538; sha256 is the aggregate over files[].",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "license.txt",
+          "sha256": "987491c5e889998bb05c42c45196e7975c4ec534c2ae850a082bc744dac41765",
+          "bytes": 373
+        },
+        {
+          "path": "scene.bin",
+          "sha256": "0efe58cecaea56e82da7f660b24640107cbb3d735e110125c79cfebcd7bd0110",
+          "bytes": 4770944
+        },
+        {
+          "path": "scene.gltf",
+          "sha256": "0ab44e3f5069f02a3fe27543d4b631ee779fbe4dd7aa5bb793f7e7a9a886b10f",
+          "bytes": 5410
+        },
+        {
+          "path": "textures/default_baseColor.jpeg",
+          "sha256": "d050b4370b21b4b2bc2f0cda7a1e35be27997f61eb6d31cf770bcfb71a118c75",
+          "bytes": 1343754
+        },
+        {
+          "path": "textures/default_metallicRoughness.png",
+          "sha256": "7a88723e1c6751aea3f50f07a71b28c68753ac7fd75b7107866aba18134b81a9",
+          "bytes": 1930413
+        },
+        {
+          "path": "textures/default_normal.jpeg",
+          "sha256": "a2fed767248c9fe5e32227f08ef1382759aa0f0eb0700f7e108a9efcef41113e",
+          "bytes": 3723883
+        }
+      ]
+    },
+    {
+      "id": "sketchfab-e72cb3bd",
+      "kind": "coral",
+      "title": "Fungia scutaria (Mushroom coral)",
+      "author": "Phelpst",
+      "author_url": "https://sketchfab.com/Phelpst",
+      "source_url": "https://sketchfab.com/3d-models/e72cb3bdfd504df3a31d38721f1f8a86",
+      "licence": "CC-BY-4.0",
+      "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+      "checked_at": "2026-10-13",
+      "sha256": "41a91b9e71159027b82b06d1056aadcb1bf1b166f48edee9d4e7e0f2c010fcb0",
+      "polycount": 178319,
+      "textures": "none (COLOR_0 vertex colours only)",
+      "rigged": false,
+      "notes": "LPS stand-in for issue #79 (plate/mushroom coral, a sculpted model based on Hawaiian colour morphs, not a scan): two primitives (117896 + 60423 triangles) with vertex colours and one material, about 60 x 27 x 72 units as authored (no plinth). Decimate to about 20k and bake the vertex colours to a texture; scale about 0.003 for a 0.20 m disc. Not a hammer or torch coral. Verified from the downloaded glTF: 178319 triangles, not rigged (no skins). Zip sha256 977187b94aacafa0535bd072739f9df056bb37ed814855f885d59e7774de9fd4; sha256 is the aggregate over files[].",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "license.txt",
+          "sha256": "d446a1244a41aa9b5b584c9ac2f816104b865bcc121b6b4235abd255615bfb5c",
+          "bytes": 740
+        },
+        {
+          "path": "scene.bin",
+          "sha256": "00159100e26aabaa709818a3e584894ad27578f9a03e735936a9e97a14f6199b",
+          "bytes": 7242708
+        },
+        {
+          "path": "scene.gltf",
+          "sha256": "4e53a113a776222c05e65a04fd435f2f41c05596a55442efdc13d3d9a54042fa",
+          "bytes": 5543
+        }
+      ]
+    },
+    {
+      "id": "ambientcg-Ground101",
+      "kind": "substrate",
+      "title": "Ground 101",
+      "author": "ambientCG",
+      "author_url": "https://ambientcg.com/a/Ground101",
+      "source_url": "https://ambientcg.com/a/Ground101",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-13",
+      "sha256": "78e8044d7c9b8b31f436be7d49ce6ec8f2fef7e0d1a711bbe860e24a621803b1",
+      "polycount": null,
+      "textures": "PBR jpg 2048x2048: Color, NormalGL, Roughness, AmbientOcclusion, Displacement",
+      "rigged": false,
+      "notes": "Pale, fine-grained sand (tags beige, white, light, fine) as the aragonite reef substrate for issue #79; coast_sand_04 reads brown under reef light. Licence stated as CC0 on the asset page FAQ and https://docs.ambientcg.com/license/. Zip sha256 a070b33c3513a2b62940cc704b5cde26c50d814e46ca5ad0f4002c44e5d3a9f3 (Ground101_2K-JPG.zip); the raw directory also holds the unlisted .blend/.usdc/.mtlx/.tres/NormalDX files from the zip. sha256 is the aggregate over files[].",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "Ground101_2K-JPG_AmbientOcclusion.jpg",
+          "sha256": "af8afb814a3dc2362389e396a1fa0edb188bff85c7c8d9c4f0b3e718e005a88c",
+          "bytes": 1042203
+        },
+        {
+          "path": "Ground101_2K-JPG_Color.jpg",
+          "sha256": "eb3042a16f675dddedcd74accc2576d86b29d8f135c8031e6b840e46750bdf6e",
+          "bytes": 3570964
+        },
+        {
+          "path": "Ground101_2K-JPG_Displacement.jpg",
+          "sha256": "294bdfa7ecf4f22f7c5c4ba94e985e5f76adb8bbdac8063a29950fab3dc7c383",
+          "bytes": 994022
+        },
+        {
+          "path": "Ground101_2K-JPG_NormalGL.jpg",
+          "sha256": "cb6e2ea68ba2cbc8ba3a2ecd2fd7718c2c0f36b57011571fc0877979c87d21f4",
+          "bytes": 5772291
+        },
+        {
+          "path": "Ground101_2K-JPG_Roughness.jpg",
+          "sha256": "aaf71a394d6b65728b224e708a4e484afdc0426557128ce36bb7bbbc184400ee",
+          "bytes": 2819394
         }
       ]
     }
