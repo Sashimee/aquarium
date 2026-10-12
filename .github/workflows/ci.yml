@@ -78,7 +78,20 @@ jobs:
           cache-to: type=gha,mode=max
       - name: Container turns healthy and serves noindex
         run: |
-          docker run -d --name aq -p 3000:3000 -e SITE_INDEXABLE=false aquarium:ci
+          docker network create aqnet
+          docker run -d --name aqdb --network aqnet \
+            -e POSTGRES_USER=aquarium -e POSTGRES_PASSWORD=aquarium -e POSTGRES_DB=aquarium \
+            --health-cmd "pg_isready -U aquarium" --health-interval 2s --health-retries 30 postgres:17
+          for i in $(seq 1 30); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' aqdb)" = healthy ] && break
+            sleep 2
+          done
+          docker run -d --name aq --network aqnet -p 3000:3000 \
+            -e SITE_INDEXABLE=false \
+            -e DATABASE_URL=postgres://aquarium:aquarium@aqdb:5432/aquarium \
+            -e BETTER_AUTH_SECRET=ciSecretciSecretciSecretciSecretciSecret0123 \
+            -e APP_URL=https://ci.example.test \
+            aquarium:ci
           for i in $(seq 1 30); do
             [ "$(docker inspect -f '{{.State.Health.Status}}' aq)" = healthy ] && break
             sleep 2

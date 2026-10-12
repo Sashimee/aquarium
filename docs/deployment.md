@@ -20,7 +20,8 @@ Never print the token or any env value.
 ## Environment variables
 
 Set in the Dokploy app, never in the repo: `DATABASE_URL`, `BETTER_AUTH_SECRET`, `APP_URL`, `SMTP_HOST`,
-`SMTP_PORT`, `MAIL_FROM`, `SITE_INDEXABLE`, `NODE_ENV`.
+`SMTP_PORT`, `MAIL_FROM` (must be `@bas.lu`), `SITE_INDEXABLE`, `NODE_ENV`. Optional: `TRUSTED_PROXIES` (comma-separated
+IPs/CIDRs of the reverse proxy, default private ranges) so rate limits key on the real client IP.
 
 Local copies of generated secrets live in `~/.config/aquarium/<env>.<name>` (mode 600):
 `dev.db_password`, `dev.BETTER_AUTH_SECRET`, `prod.db_password`, `prod.BETTER_AUTH_SECRET`.
@@ -30,8 +31,8 @@ Generate new ones with `LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 48`.
 
 `Dockerfile` is multi-stage: `pnpm install --frozen-lockfile`, `pnpm build`, `pnpm deploy --prod` of the API,
 then a `node:24-slim` runtime as the non-root `node` user on port 3000. `WEB_DIST` points at the built web
-app; the API serves it with SPA fallback. Migrations run at start once the API has them (T06); a failed
-migration must abort start.
+app; the API serves it with SPA fallback. The API is bundled to `apps/api/dist/server.js`. Migrations (`apps/api/drizzle`) run at start before listen; a failed
+migration aborts start.
 
 The `HEALTHCHECK` hits `/api/health`.
 
