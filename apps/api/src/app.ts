@@ -1,11 +1,12 @@
 import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { extname, resolve } from 'node:path';
 import fastifyStatic from '@fastify/static';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 
 export interface AppOptions {
   indexable: boolean;
   webRoot: string;
+  logger?: boolean;
 }
 
 const HELLO_PAGE = `<!doctype html>
@@ -13,8 +14,16 @@ const HELLO_PAGE = `<!doctype html>
 <body><h1>Aquarium</h1><p>Coming soon.</p></body></html>`;
 
 // TODO(backend-engineer): T06 replaces this placeholder; keep the noindex and health contract.
-export function buildApp({ indexable, webRoot }: AppOptions): FastifyInstance {
-  const app = Fastify({ logger: true });
+export function buildApp({ indexable, webRoot, logger = true }: AppOptions): FastifyInstance {
+  const app = Fastify({
+    logger: logger
+      ? {
+          serializers: {
+            req: (req: FastifyRequest) => ({ method: req.method, url: req.url }),
+          },
+        }
+      : false,
+  });
 
   app.addHook('onSend', async (_req, reply) => {
     if (!indexable) reply.header('x-robots-tag', 'noindex, nofollow');
@@ -29,12 +38,14 @@ export function buildApp({ indexable, webRoot }: AppOptions): FastifyInstance {
 
   const root = resolve(webRoot);
   const hasWeb = existsSync(resolve(root, 'index.html'));
-  if (hasWeb) void app.register(fastifyStatic, { root });
+  if (hasWeb) void app.register(fastifyStatic, { root, dotfiles: 'ignore' });
 
   app.setNotFoundHandler(async (req, reply) => {
-    if (req.url.startsWith('/api/') || req.method !== 'GET') {
-      return reply.code(404).send({ error: 'not_found' });
-    }
+    const pathname = req.url.split('?')[0] ?? '/';
+    const isApi = pathname === '/api' || pathname.startsWith('/api/');
+    const isRead = req.method === 'GET' || req.method === 'HEAD';
+    if (isApi || !isRead) return reply.code(404).send({ error: 'not_found' });
+    if (extname(pathname) !== '') return reply.code(404).send('Not found');
     return hasWeb ? reply.sendFile('index.html') : reply.type('text/html').send(HELLO_PAGE);
   });
 
