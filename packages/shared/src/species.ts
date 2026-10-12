@@ -14,6 +14,17 @@ export const swimmingModeSchema = z.enum([
 export const gaitSchema = z.enum(['burst-and-coast', 'cruise', 'hover', 'forage']);
 export const zoneSchema = z.enum(['surface', 'mid', 'bottom']);
 
+export const traitSchema = z.enum([
+  'shoal',
+  'air-gulp',
+  'glass-grazer',
+  'rock-grazer',
+  'anemone-host',
+  'cave-dweller',
+  'flare-display',
+]);
+export type Trait = z.infer<typeof traitSchema>;
+
 export const behaviourSchema = z.strictObject({
   schooling: z
     .strictObject({
@@ -31,7 +42,47 @@ export const behaviourSchema = z.strictObject({
   perceptionFovDeg: z.number().min(1).max(360),
   curiosity: unitSchema,
   boldness: unitSchema,
-  traits: z.array(z.string().min(1)).default([]),
+  traits: z.array(traitSchema).default([]),
+  airGulp: z.strictObject({ perHour: z.number().positive().max(120) }).optional(),
+  grazing: z
+    .strictObject({
+      meanIntervalS: z.number().positive().max(3600),
+      minS: z.number().positive().max(60).optional(),
+      maxS: z.number().positive().max(60).optional(),
+    })
+    .refine((g) => g.minS === undefined || g.maxS === undefined || g.minS <= g.maxS, {
+      message: 'minS must not exceed maxS',
+      path: ['minS'],
+    })
+    .optional(),
+  flare: z
+    .strictObject({
+      minS: z.number().positive().max(60),
+      maxS: z.number().positive().max(60),
+    })
+    .refine((f) => f.minS <= f.maxS, { message: 'minS must not exceed maxS', path: ['minS'] })
+    .optional(),
+  station: z
+    .strictObject({
+      radiusBodyLengths: z.number().positive().max(20),
+      restationMinS: z.number().positive().max(600).optional(),
+      restationMaxS: z.number().positive().max(600).optional(),
+    })
+    .refine(
+      (s) =>
+        s.restationMinS === undefined ||
+        s.restationMaxS === undefined ||
+        s.restationMinS <= s.restationMaxS,
+      { message: 'restationMinS must not exceed restationMaxS', path: ['restationMinS'] },
+    )
+    .optional(),
+  refuge: z.strictObject({ afterStartleS: z.number().positive().max(600) }).optional(),
+  excursion: z
+    .strictObject({
+      meanIntervalS: z.number().positive().max(600),
+      leashBodyLengths: z.number().positive().max(20).optional(),
+    })
+    .optional(),
 });
 
 export const locomotionSchema = z
