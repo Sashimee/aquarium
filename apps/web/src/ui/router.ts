@@ -6,6 +6,9 @@ export type Route =
   | { name: 'sign-up' }
   | { name: 'verify-email'; error: string | null }
   | { name: 'sessions' }
+  | { name: 'settings' }
+  | { name: 'privacy' }
+  | { name: 'credits' }
   | { name: 'not-found' };
 
 export function parseRoute(href: string): Route {
@@ -23,6 +26,12 @@ export function parseRoute(href: string): Route {
       return { name: 'sign-up' };
     case '/sessions':
       return { name: 'sessions' };
+    case '/settings':
+      return { name: 'settings' };
+    case '/privacy':
+      return { name: 'privacy' };
+    case '/credits':
+      return { name: 'credits' };
     case '/verify-email':
       return { name: 'verify-email', error: url.searchParams.get('error') };
     default:
@@ -47,7 +56,7 @@ export function routePath(route: Route): string {
 
 /** Signed-out visitors cannot reach account pages; signed-in users skip the entry forms. */
 export function guardRoute(route: Route, user: User | null): Route {
-  if (route.name === 'sessions' && !user) return { name: 'sign-in' };
+  if ((route.name === 'sessions' || route.name === 'settings') && !user) return { name: 'sign-in' };
   if ((route.name === 'sign-in' || route.name === 'sign-up') && user) return { name: 'home' };
   return route;
 }
