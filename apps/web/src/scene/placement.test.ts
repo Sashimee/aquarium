@@ -73,3 +73,22 @@ describe('mulberry32', () => {
     }
   });
 });
+
+describe('scatterPatch glass clearance', () => {
+  const edge: PlantPatch = { ...patch, center: [0.45, 0.18], radius: 0.2, count: 40 };
+
+  it('keeps the whole plant, not just the root, inside the extent', () => {
+    const reach = (scale: number) => 0.1 * scale;
+    const plants = scatterPatch(edge, flat, open, extent, reach);
+    expect(plants.length).toBeGreaterThan(0);
+    for (const p of plants) {
+      expect(Math.abs(p.x) + reach(p.scale)).toBeLessThanOrEqual(extent.halfLength + 1e-9);
+      expect(Math.abs(p.z) + reach(p.scale)).toBeLessThanOrEqual(extent.halfDepth + 1e-9);
+    }
+  });
+
+  it('lets roots reach the wall when no reach is given', () => {
+    const plants = scatterPatch(edge, flat, open, extent);
+    expect(plants.some((p) => Math.abs(p.z) > extent.halfDepth - 0.05)).toBe(true);
+  });
+});

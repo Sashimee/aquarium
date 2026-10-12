@@ -321,6 +321,11 @@ export class ColliderField {
     return this.sampleList(this.hardList, x, y, z, normal);
   }
 
+  /** Structurally the sim's `Sdf`: the hard colliders fish may not enter. */
+  sample(x: number, y: number, z: number, normal: Float64Array): number {
+    return this.hard(x, y, z, normal);
+  }
+
   soft(x: number, y: number, z: number, normal: Float64Array): number {
     return this.sampleList(this.softList, x, y, z, normal);
   }

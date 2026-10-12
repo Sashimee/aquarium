@@ -86,3 +86,15 @@ describe('transformPoints', () => {
     expect(Array.from(transformPoints([1, 1, 1], m))).toEqual([3, 4, 5]);
   });
 });
+
+describe('ColliderField as an Sdf', () => {
+  it('samples the hard colliders only', () => {
+    const field = new ColliderField([
+      { kind: 'capsule', hard: true, a: [0, 0.1, 0], b: [0, 0.3, 0], radius: 0.05 },
+      { kind: 'capsule', hard: false, a: [0.3, 0.1, 0], b: [0.3, 0.3, 0], radius: 0.05 },
+    ]);
+    const normal = new Float64Array(3);
+    expect(field.sample(0, 0.2, 0, normal)).toBeLessThan(0);
+    expect(field.sample(0.3, 0.2, 0, normal)).toBeGreaterThan(0.2);
+  });
+});

@@ -12,14 +12,18 @@ import {
   type MeshStandardMaterial,
 } from 'three/webgpu';
 import { float, fract, instanceIndex, positionGeometry, positionLocal, sin, vec3 } from 'three/tsl';
-import type { CurrentField } from './current';
+import {
+  FLUTTER_HZ,
+  MEANDER_AMPLITUDE,
+  type CurrentField,
+  type CurrentParameters,
+} from './current';
 import type { LoadedModel } from './assets';
 import type { PlantInstance } from './placement';
 
 /** Seconds of current a leaf tip leans into; the bend grows with the square of the height. */
 const SWAY_SECONDS = 1.2;
 const FLUTTER_METRES = 0.004;
-const FLUTTER_HZ = 0.9;
 
 /** How much each species yields to the current: carpets and ferns hold still, ribbons stream. */
 const STIFFNESS: Readonly<Record<string, number>> = {
@@ -35,6 +39,21 @@ const STIFFNESS: Readonly<Record<string, number>> = {
 export interface PlantEntry extends PlantInstance {
   /** Position in the patch's thinning order, 0 first to 1 last; layout plants use -1. */
   readonly rank: number;
+}
+
+/** Furthest a plant of unit scale and the given height leans, bounded over the whole gust cycle. */
+export function maxSway(assetId: string, height: number, current: CurrentParameters): number {
+  const forward = current.speed * (1 + current.gustDepth);
+  const sideways = current.speed * current.gustDepth * MEANDER_AMPLITUDE;
+  const lean = Math.hypot(forward, sideways) * SWAY_SECONDS * swayGain(assetId) * (height / 0.3);
+  return lean + FLUTTER_METRES * 1.6;
+}
+
+/** Number of entries shown at `density`: those whose thinning rank is below it; layout plants (-1) always show. */
+export function visibleAtDensity(entries: readonly { readonly rank: number }[], density: number) {
+  let count = 0;
+  for (const entry of entries) if (entry.rank < density) count++;
+  return count;
 }
 
 export function swayGain(assetId: string): number {
@@ -67,7 +86,7 @@ function createSwayMaterial(
   const flow = current.velocityNode(positionLocal);
   const phase = fract(sin(float(instanceIndex).mul(12.9898)).mul(43758.5453));
   const flutter = sin(
-    current.elapsed
+    current.flutterElapsed
       .mul(FLUTTER_HZ * Math.PI * 2)
       .add(phase.mul(6.2832))
       .add(stem.mul(5)),
@@ -137,8 +156,7 @@ export class PlantGroup {
 
   /** Shows the plants whose thinning rank is below `density`; layout plants (rank -1) always show. */
   setDensity(density: number): void {
-    let count = 0;
-    for (const entry of this.sorted) if (entry.rank < density) count++;
+    const count = visibleAtDensity(this.sorted, density);
     for (const mesh of this.meshes) mesh.count = count;
   }
 

@@ -14,11 +14,19 @@ export interface CurrentParameters {
 const TWO_PI = Math.PI * 2;
 const GUST_WAVENUMBER = 9;
 const MEANDER_RATIO = 0.6;
-const MEANDER_AMPLITUDE = 0.35;
+export const MEANDER_AMPLITUDE = 0.35;
 const MEANDER_WAVENUMBER = 7;
 const MEANDER_HEIGHT_PHASE = 3;
 const VERTICAL_RATIO = 0.08;
 const VERTICAL_WAVENUMBER = 11;
+
+export const FLUTTER_HZ = 0.9;
+const FLUTTER_PERIOD_S = 1 / FLUTTER_HZ;
+
+/** Three gust periods hold a whole number of meander periods (3 / 0.6 = 5). */
+export function wrapPeriodS(p: CurrentParameters): number {
+  return 3 * p.gustPeriodS;
+}
 
 export function normaliseDirection(direction: readonly [number, number]): [number, number] {
   const length = Math.hypot(direction[0], direction[1]);
@@ -61,6 +69,7 @@ export class CurrentField {
   readonly gustPeriodS = uniform(9);
   readonly gustDepth = uniform(0.4);
   readonly elapsed = uniform(0);
+  readonly flutterElapsed = uniform(0);
 
   private params: CurrentParameters = {
     direction: [1, 0],
@@ -85,11 +94,17 @@ export class CurrentField {
     this.speed.value = parameters.speed;
     this.gustPeriodS.value = parameters.gustPeriodS;
     this.gustDepth.value = parameters.gustDepth;
+    this.advance(0);
   }
 
+  /**
+   * Time is wrapped so float32 shader arithmetic stays precise after long uptime. The gust and
+   * meander both repeat every `wrapPeriodS`, so the wrap is invisible.
+   */
   advance(deltaS: number): void {
-    this.timeS += deltaS;
+    this.timeS = (this.timeS + deltaS) % wrapPeriodS(this.params);
     this.elapsed.value = this.timeS;
+    this.flutterElapsed.value = this.timeS % FLUTTER_PERIOD_S;
   }
 
   sample(x: number, y: number, z: number, out: Float64Array | number[]): void {

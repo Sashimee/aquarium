@@ -28,11 +28,14 @@ export function mulberry32(seed: number): () => number {
   };
 }
 
-const MAX_TILT_RAD = 0.1;
+export const MAX_TILT_RAD = 0.1;
 const ROOT_DEPTH = 0.004;
 const ATTEMPTS_PER_PLANT = 40;
 
 /**
+ * `reach(scale)` is how far a plant of that scale extends horizontally from its root, including
+ * its sway, so the whole plant stays inside `extent` and never touches the glass.
+ *
  * Dart-throws `patch.count` plants into a disc, keeping a spacing that shrinks if the disc is too
  * crowded to honour. The result is ordered so that any prefix is also evenly spread, which is how
  * the quality tier thins a patch without moving the survivors.
@@ -42,6 +45,7 @@ export function scatterPatch(
   ground: (x: number, z: number) => number,
   blocked: (x: number, y: number, z: number) => boolean,
   extent: Extent,
+  reach: (scale: number) => number = () => 0,
 ): PlantInstance[] {
   const rng = mulberry32(patch.seed);
   const [cx, cz] = patch.center;
@@ -54,17 +58,19 @@ export function scatterPatch(
   while (placed.length < patch.count) {
     const r = patch.radius * Math.sqrt(rng());
     const a = rng() * Math.PI * 2;
-    const x = Math.min(extent.halfLength, Math.max(-extent.halfLength, cx + Math.cos(a) * r));
-    const z = Math.min(extent.halfDepth, Math.max(-extent.halfDepth, cz + Math.sin(a) * r));
-    const y = ground(x, z) - ROOT_DEPTH;
-    const crowded = placed.some((p) => Math.hypot(p.x - x, p.z - z) < spacing);
-    const rejected = crowded || blocked(x, y, z);
-    // Draw the per-plant values even for rejected darts so a prefix does not depend on them.
     const yaw = rng() * Math.PI * 2;
     const tiltX = (rng() - 0.5) * 2 * MAX_TILT_RAD;
     const tiltZ = (rng() - 0.5) * 2 * MAX_TILT_RAD;
     const scale = minScale + (maxScale - minScale) * rng();
     const tone = 0.88 + 0.2 * rng();
+    const margin = reach(scale);
+    const limitX = Math.max(0, extent.halfLength - margin);
+    const limitZ = Math.max(0, extent.halfDepth - margin);
+    const x = Math.min(limitX, Math.max(-limitX, cx + Math.cos(a) * r));
+    const z = Math.min(limitZ, Math.max(-limitZ, cz + Math.sin(a) * r));
+    const y = ground(x, z) - ROOT_DEPTH;
+    const crowded = placed.some((p) => Math.hypot(p.x - x, p.z - z) < spacing);
+    const rejected = crowded || blocked(x, y, z);
     if (rejected) {
       failures++;
       if (failures >= ATTEMPTS_PER_PLANT) {

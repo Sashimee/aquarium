@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { normaliseDirection, sampleCurrent, type CurrentParameters } from './current';
+import {
+  CurrentField,
+  normaliseDirection,
+  sampleCurrent,
+  wrapPeriodS,
+  type CurrentParameters,
+} from './current';
 
 const params: CurrentParameters = {
   direction: [1, 0],
@@ -56,5 +62,31 @@ describe('normaliseDirection', () => {
 
   it('rejects a zero direction', () => {
     expect(() => normaliseDirection([0, 0])).toThrow(RangeError);
+  });
+});
+
+describe('CurrentField time', () => {
+  it('stays bounded and continuous across the wrap', () => {
+    const field = new CurrentField();
+    field.configure(params);
+    const wrap = wrapPeriodS(params);
+    const before = [0, 0, 0];
+    field.advance(wrap - 0.01);
+    field.sample(0.1, 0.1, 0.1, before);
+    field.advance(0.02);
+    expect(field.time).toBeLessThan(0.05);
+    const after = [0, 0, 0];
+    field.sample(0.1, 0.1, 0.1, after);
+    for (let i = 0; i < 3; i++) expect(after[i]).toBeCloseTo(before[i] ?? 0, 3);
+    field.advance(1e6);
+    expect(field.time).toBeLessThan(wrap);
+  });
+
+  it('is periodic over the wrap period', () => {
+    const a = [0, 0, 0];
+    const b = [0, 0, 0];
+    sampleCurrent(params, 0.2, 0.15, -0.1, 3.3, a);
+    sampleCurrent(params, 0.2, 0.15, -0.1, 3.3 + wrapPeriodS(params), b);
+    for (let i = 0; i < 3; i++) expect(b[i]).toBeCloseTo(a[i] ?? 0, 9);
   });
 });

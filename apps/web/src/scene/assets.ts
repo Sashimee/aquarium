@@ -115,15 +115,24 @@ export class ModelLibrary {
     this.gltf.setMeshoptDecoder(MeshoptDecoder);
   }
 
-  load(assetId: string, lod: ModelLod, textureSize: 1024 | 2048): Promise<LoadedModel> {
+  private lodFile(assetId: string, lod: ModelLod): string {
     const entry = this.catalog.get(assetId);
     const lodEntry = entry.lods[lod] ?? entry.lods[entry.lods.length - 1];
     if (!lodEntry) throw new Error(`Asset "${assetId}" has no LODs`);
-    const key = `${lodEntry.file}@${textureSize}`;
+    return lodEntry.file;
+  }
+
+  modelKey(assetId: string, lod: ModelLod, textureSize: 1024 | 2048): string {
+    return `${this.lodFile(assetId, lod)}@${textureSize}`;
+  }
+
+  load(assetId: string, lod: ModelLod, textureSize: 1024 | 2048): Promise<LoadedModel> {
+    const file = this.lodFile(assetId, lod);
+    const key = `${file}@${textureSize}`;
     let pending = this.cache.get(key);
     if (!pending) {
       pending = this.enter(textureSize)
-        .then(() => this.gltf.loadAsync(`${ASSET_BASE}${lodEntry.file}`))
+        .then(() => this.gltf.loadAsync(`${ASSET_BASE}${file}`))
         .finally(() => this.leave())
         .then((gltf) => {
           gltf.scene.updateMatrixWorld(true);
@@ -133,10 +142,10 @@ export class ModelLibrary {
             const geometry = object.geometry.clone();
             geometry.applyMatrix4(object.matrixWorld);
             const material = Array.isArray(object.material) ? object.material[0] : object.material;
-            if (!material) throw new Error(`${lodEntry.file}: mesh without a material`);
+            if (!material) throw new Error(`${file}: mesh without a material`);
             primitives.push({ geometry, material: material as MeshStandardMaterial });
           });
-          if (primitives.length === 0) throw new Error(`${lodEntry.file} contains no meshes`);
+          if (primitives.length === 0) throw new Error(`${file} contains no meshes`);
           return { primitives };
         });
       this.cache.set(key, pending);
@@ -198,21 +207,43 @@ export class ModelLibrary {
     for (const wake of waiters) wake();
   }
 
+  /** Frees every cached model whose key is not in `keep`, so a tier change drops the old tier's set. */
+  async retainOnly(keep: ReadonlySet<string>): Promise<void> {
+    const stale = [...this.cache].filter(([key]) => !keep.has(key));
+    for (const [key] of stale) this.cache.delete(key);
+    const settled = await Promise.allSettled(stale.map(([, pending]) => pending));
+    const resources = new Set<Texture | Material | BufferGeometry>();
+    for (const result of settled) {
+      if (result.status === 'fulfilled') collectResources(result.value, resources);
+    }
+    for (const resource of resources) resource.dispose();
+  }
+
+  /** Frees one texture loaded through `loadTexture`. */
+  releaseTexture(texture: Texture): void {
+    const index = this.textures.indexOf(texture);
+    if (index >= 0) this.textures.splice(index, 1);
+    texture.dispose();
+  }
+
   async dispose(): Promise<void> {
     const models = await Promise.allSettled(this.cache.values());
     const seen = new Set<Texture | Material | BufferGeometry>();
     for (const result of models) {
-      if (result.status !== 'fulfilled') continue;
-      for (const { geometry, material } of result.value.primitives) {
-        seen.add(geometry);
-        seen.add(material);
-        for (const value of Object.values(material)) if (value instanceof Texture) seen.add(value);
-      }
+      if (result.status === 'fulfilled') collectResources(result.value, seen);
     }
     for (const item of seen) item.dispose();
     for (const texture of this.textures) texture.dispose();
     this.textures.length = 0;
     this.cache.clear();
     this.ktx2.dispose();
+  }
+}
+
+function collectResources(model: LoadedModel, out: Set<Texture | Material | BufferGeometry>): void {
+  for (const { geometry, material } of model.primitives) {
+    out.add(geometry);
+    out.add(material);
+    for (const value of Object.values(material)) if (value instanceof Texture) out.add(value);
   }
 }

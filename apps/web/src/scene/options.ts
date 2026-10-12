@@ -7,7 +7,8 @@ export function parseSceneOptions(search: string): SceneOptions {
   const params = new URLSearchParams(search);
   const colliders = params.get('colliders');
   if (colliders !== null && colliders !== '0' && colliders !== '1') {
-    throw new Error(`Unknown ?colliders=${colliders}; use 0 or 1`);
+    console.warn(`Ignoring ?colliders=${colliders}; use 0 or 1`);
+    return { colliders: false };
   }
   return { colliders: colliders === '1' };
 }
