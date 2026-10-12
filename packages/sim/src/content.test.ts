@@ -128,3 +128,47 @@ describe('every shipped species in its decorated tank', { timeout: LONG }, () =>
     },
   );
 });
+
+describe('a mixed community left alone', { timeout: LONG }, () => {
+  const species = roster.map((r) => r.species);
+  const reef = [
+    ...spawnMany('ocellaris-clownfish', 2),
+    ...spawnMany('banggai-cardinalfish', 8),
+    ...spawnMany('royal-gramma', 1),
+    ...spawnMany('yellow-tang', 1),
+  ];
+  const freshwater = [
+    ...spawnMany('betta', 1),
+    ...spawnMany('angelfish', 2),
+    ...spawnMany('bronze-corydoras', 6),
+    ...spawnMany('neon-tetra', 20),
+    ...spawnMany('guppy', 6),
+  ];
+
+  it.each([
+    { name: 'reef', fish: reef, reef: true },
+    { name: 'clownfish pair', fish: reef.slice(0, 2), reef: true },
+    { name: 'freshwater', fish: freshwater, reef: false },
+  ])('$name: territorial chases set off no escape responses', ({ fish, reef: isReef }) => {
+    const minutes = 10;
+    const w = new World({
+      seed: 3,
+      tank: isReef ? REEF_TANK : SHOW_TANK,
+      species,
+      decor: isReef ? REEF_DECOR : SHOW_DECOR,
+      anchors: isReef ? REEF_ANCHORS : [],
+      fish,
+    });
+    const last = new Float64Array(w.behaviour.startledAt);
+    let onsets = 0;
+    for (let t = 0; t < minutes * 60 * 30; t++) {
+      w.step();
+      for (let i = 0; i < w.count; i++) {
+        const tick = w.behaviour.startledAt[i] ?? -1;
+        if (tick !== last[i]) onsets++;
+        last[i] = tick;
+      }
+    }
+    expect(onsets / minutes).toBeLessThan(0.5);
+  });
+});

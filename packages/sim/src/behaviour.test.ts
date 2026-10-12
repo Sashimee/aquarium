@@ -203,6 +203,41 @@ describe('territoriality', { timeout: LONG }, () => {
     }
     expect(display).toBeGreaterThan(100);
     expect(near / display).toBeGreaterThan(0.9);
+    expect(Array.from(w.behaviour.startledAt)).toEqual([-1, -1]);
+  });
+
+  it('a charged rival swims off at a moderate pace instead of fast-starting', () => {
+    const w = showTank(spawnMany(betta.id, 2), 6);
+    const sp = toSimSpecies(betta);
+    const cap = Math.min(sp.maxSpeed, BEHAVIOUR.yieldCruiseFactor * sp.cruiseSpeed);
+    const yieldTicks = Math.round(BEHAVIOUR.yieldS / STEP_DT);
+    const gaps: number[] = [];
+    let yields = 0;
+    let fastest = 0;
+    const started = new Float64Array(w.count).fill(-1);
+    const gapAtStart = new Float64Array(w.count);
+    const gap = () => distanceTo(w, 0, [at(w.position, 3), at(w.position, 4), at(w.position, 5)]);
+    for (let t = 0; t < 9000; t++) {
+      const before = Array.from(w.behaviour.yieldTimer);
+      w.step();
+      for (let i = 0; i < w.count; i++) {
+        const left = at(w.behaviour.yieldTimer, i);
+        if (left > at(before, i)) {
+          yields++;
+          started[i] = t;
+          gapAtStart[i] = gap();
+        }
+        // Speed the fish already had when it was charged takes a moment to bleed off.
+        if (left > 0 && left < BEHAVIOUR.yieldS - 0.5) fastest = Math.max(fastest, at(w.speed, i));
+        if (at(started, i) >= 0 && t - at(started, i) === yieldTicks) {
+          gaps.push(gap() - at(gapAtStart, i));
+        }
+      }
+    }
+    expect(yields).toBeGreaterThan(2);
+    expect(Array.from(w.behaviour.startledAt)).toEqual([-1, -1]);
+    expect(fastest).toBeLessThanOrEqual(cap * 1.05);
+    expect(median(gaps)).toBeGreaterThan(0.5 * sp.bodyLength);
   });
 });
 

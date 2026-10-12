@@ -1,4 +1,4 @@
-import { Behaviour, BEHAVIOUR, type Anchor, type Stimulus } from './behaviour.ts';
+import { Behaviour, BEHAVIOUR, type Anchor, type Plan, type Stimulus } from './behaviour.ts';
 import { DecorField, UnionSdf, type DecorCollider } from './decor.ts';
 import { clamp, DEG, quatFromYawPitchRoll, wrapAngle } from './math.ts';
 import { pairwiseDistanceSq, selectNearest } from './neighbours.ts';
@@ -56,6 +56,16 @@ export const STEERING = {
   spawnAttempts: 200,
   tiltClearanceThickness: 1.5,
   detourS: 1.5,
+  minTurnRadiusBodyLengths: 0.4,
+  pivotTurnRateRadPerS: 1,
+  crampedClearanceBodyLengths: 0.15,
+  narrowingFlipRatio: 0.7,
+  pinnedProgressFraction: 0.2,
+  backOutAfterS: 0.3,
+  backOutSpeedFraction: 0.5,
+  backOutBodyLengths: 0.3,
+  backOutMaxBodyLengths: 1.5,
+  backOutAlignedRad: 30 * DEG,
 } as const;
 
 export interface FishSpawn {
@@ -128,6 +138,9 @@ export class World {
   private readonly gaitTimer: Float64Array;
   private readonly detourSign: Int8Array;
   private readonly detourTimer: Float64Array;
+  private readonly cramped: Uint8Array;
+  private readonly wedged: Float64Array;
+  private readonly reverseLeft: Float64Array;
   private readonly wanderTurn: Float64Array;
   private readonly wanderPitch: Float64Array;
   /** Horizontal unit slide direction along the wall being avoided; zero when disengaged. */
@@ -200,6 +213,9 @@ export class World {
     this.gaitTimer = new Float64Array(n);
     this.detourSign = new Int8Array(n);
     this.detourTimer = new Float64Array(n);
+    this.cramped = new Uint8Array(n);
+    this.wedged = new Float64Array(n);
+    this.reverseLeft = new Float64Array(n);
     this.mass = new Float64Array(n);
     this.drag = new Float64Array(n);
     this.maxSpeed = new Float64Array(n);
@@ -543,7 +559,11 @@ export class World {
     const sdf = this.steerSdf[(plan.floor ? 1 : 0) + (plan.surface ? 2 : 0)] ?? this.sceneSdf;
     const dHere = sdf.sample(px, py, pz, nh);
     const verticalHere = Math.abs(nh[1] ?? 0);
-    const probe = 0.5 * length + v * STEERING.avoidLookaheadS + v / sp.maxTurnRate;
+    const nose = (BEHAVIOUR.bodySampleOffsets[0] ?? 0) * length;
+    const noseRoom =
+      sdf.sample(px + fx * nose, py + fy * nose, pz + fz * nose, np) - (this.thickness[i] ?? 0);
+    this.cramped[i] = noseRoom < length * STEERING.crampedClearanceBodyLengths ? 1 : 0;
+    const probe = 0.5 * length + v * STEERING.avoidLookaheadS + v / this.turnRateLimit(i, sp, plan);
     const dProbe = sdf.sample(px + fx * probe, py + fy * probe, pz + fz * probe, np);
     const probeMargin = radius + length * STEERING.avoidMarginBodyLengths * comfort;
     // Only a path that closes on a surface is a threat; a probe that is merely near a wall the
@@ -613,7 +633,19 @@ export class World {
           // Within one engagement the slide direction stays continuous as the wall normal turns
           // (pane to corner to next pane); only a fresh engagement picks a side from the heading.
           const reference = px0 !== 0 || pz0 !== 0 ? tx * px0 + tz * pz0 : fx * tx + fz * tz;
-          const side = Math.abs(reference) > 1e-6 ? Math.sign(reference) : nextWt >= 0 ? 1 : -1;
+          let side = Math.abs(reference) > 1e-6 ? Math.sign(reference) : nextWt >= 0 ? 1 : -1;
+          // A slide that runs into a narrowing slot (glass on one flank, rock closing in on the
+          // other) only wedges the fish deeper; once its snout is cramped it turns back to where
+          // the gap opens.
+          if (this.cramped[i] === 1) {
+            const ahead = sdf.sample(px + tx * side * nose, py, pz + tz * side * nose, scratch);
+            const behind = sdf.sample(px - tx * side * nose, py, pz - tz * side * nose, scratch);
+            if (ahead < STEERING.narrowingFlipRatio * behind) {
+              side = -side;
+              px0 = 0;
+              pz0 = 0;
+            }
+          }
           tx *= side;
           tz *= side;
           if (px0 === 0 && pz0 === 0) {
@@ -697,6 +729,20 @@ export class World {
     if (!plan.surface) this.capTilt(i, this.tank.height - py, 1);
   }
 
+  /**
+   * A cruising fish turns on an arc of a few tenths of its length, not on the spot; only a
+   * hovering fish pivots, and slowly. Foraging, grazing and station-keeping are slow, deliberate
+   * manoeuvres and keep the full rate, as does a fish whose snout is about to touch something.
+   */
+  private turnRateLimit(i: number, sp: SimSpecies, plan: Plan): number {
+    if (plan.state !== FishState.Cruise || plan.seekWeight > 0 || this.cramped[i] === 1) {
+      return sp.maxTurnRate;
+    }
+    const radius = STEERING.minTurnRadiusBodyLengths * (this.bodyLength[i] ?? 1);
+    const arc = (this.speed[i] ?? 0) / radius;
+    return Math.min(sp.maxTurnRate, Math.max(arc, STEERING.pivotTurnRateRadPerS));
+  }
+
   private capTilt(i: number, clearance: number, verticality: number): void {
     const half = (BEHAVIOUR.bodySampleOffsets[0] ?? 0) * (this.bodyLength[i] ?? 0) * verticality;
     const room = clearance - (this.thickness[i] ?? 0) * STEERING.tiltClearanceThickness;
@@ -719,6 +765,10 @@ export class World {
 
     const yaw = this.yaw[i] ?? 0;
     const pitch = this.pitch[i] ?? 0;
+    if (!reflex && (this.reverseLeft[i] ?? 0) > 0) {
+      this.reverse(i, sp, plan, yaw, pitch);
+      return;
+    }
     let yawError = wrapAngle((this.targetYaw[i] ?? 0) - yaw);
     const detour = (this.detourTimer[i] ?? 0) - dt;
     this.detourTimer[i] = Math.max(0, detour);
@@ -732,7 +782,8 @@ export class World {
       yawRate = clamp(yawError / dt, -wmax, wmax);
       pitchRate = clamp(((this.targetPitch[i] ?? 0) - pitch) / dt, -wmax, wmax);
     } else {
-      const yawCmd = clamp(yawError * gain, -wmax, wmax);
+      const wTurn = this.turnRateLimit(i, sp, plan);
+      const yawCmd = clamp(yawError * gain, -wTurn, wTurn);
       yawRate = (this.yawRate[i] ?? 0) + (yawCmd - (this.yawRate[i] ?? 0)) * smooth;
       const pitchCmd = clamp(((this.targetPitch[i] ?? 0) - pitch) * gain, -wmax, wmax);
       pitchRate = (this.pitchRate[i] ?? 0) + (pitchCmd - (this.pitchRate[i] ?? 0)) * smooth;
@@ -806,7 +857,10 @@ export class World {
 
     const nrm = this.normal;
     const into = this.constrainBody(i, fx, fy, fz, nrm);
-    if (into === null) return;
+    if (into === null) {
+      this.wedged[i] = 0;
+      return;
+    }
     this.contacts++;
     this.contactCount[i] = (this.contactCount[i] ?? 0) + 1;
     if (!(this.bodyClearance(i) >= -PENETRATION_EPSILON)) {
@@ -828,8 +882,74 @@ export class World {
         Math.cos(yaw) * Math.cos(pitch),
         nrm,
       );
+      this.pinned(i);
+      return;
     }
+    const moved = Math.hypot(
+      (this.position[o] ?? 0) - (prev[0] ?? 0),
+      (this.position[o + 1] ?? 0) - (prev[1] ?? 0),
+      (this.position[o + 2] ?? 0) - (prev[2] ?? 0),
+    );
+    if (moved < STEERING.pinnedProgressFraction * (this.cruiseSpeed[i] ?? 0) * dt) this.pinned(i);
+    else this.wedged[i] = 0;
     if (into < 0) this.speed[i] = nextV * Math.max(0, 1 + into);
+  }
+
+  /**
+   * Neither turning nor going on gets the fish anywhere: it has nosed into a crevice narrower than
+   * its length, and after a moment it backs out on its pectoral fins, the way it came in.
+   */
+  private pinned(i: number): void {
+    const wedged = (this.wedged[i] ?? 0) + STEP_DT;
+    this.wedged[i] = wedged;
+    if (wedged < STEERING.backOutAfterS) return;
+    this.wedged[i] = 0;
+    this.detourTimer[i] = 0;
+    this.reverseLeft[i] = STEERING.backOutMaxBodyLengths * (this.bodyLength[i] ?? 0);
+  }
+
+  /**
+   * Backs straight out of a crevice on the pectoral fins, pivoting toward the wanted heading
+   * only where the body has room to, until it has regained some room and faces a way out;
+   * stopping as soon as it is free would just send it nose-first back into the same slot.
+   */
+  private reverse(i: number, sp: SimSpecies, plan: Plan, yaw: number, pitch: number): void {
+    const o = i * 3;
+    const dt = STEP_DT;
+    const prev = this.previous;
+    this.speed[i] = 0;
+    this.pitchRate[i] = 0;
+    const wTurn = this.turnRateLimit(i, sp, plan);
+    const yawRate = clamp(wrapAngle((this.targetYaw[i] ?? 0) - yaw) / dt, -wTurn, wTurn);
+    this.yaw[i] = wrapAngle(yaw + yawRate * dt);
+    this.yawRate[i] = yawRate;
+    if (!(this.bodyClearance(i) >= -PENETRATION_EPSILON)) {
+      this.yaw[i] = yaw;
+      this.yawRate[i] = 0;
+    }
+    const step = STEERING.backOutSpeedFraction * (this.cruiseSpeed[i] ?? 0) * dt;
+    const cp = Math.cos(pitch);
+    const heading = this.yaw[i] ?? 0;
+    prev[0] = this.position[o] ?? 0;
+    prev[1] = this.position[o + 1] ?? 0;
+    prev[2] = this.position[o + 2] ?? 0;
+    this.position[o] = (prev[0] ?? 0) - Math.sin(heading) * cp * step;
+    this.position[o + 1] = (prev[1] ?? 0) - Math.sin(pitch) * step;
+    this.position[o + 2] = (prev[2] ?? 0) - Math.cos(heading) * cp * step;
+    const fx = Math.sin(heading) * cp;
+    const fz = Math.cos(heading) * cp;
+    if (this.constrainBody(i, fx, Math.sin(pitch), fz, this.normal) !== null) this.contacts++;
+    if (!(this.bodyClearance(i) >= -PENETRATION_EPSILON)) {
+      this.position.set(prev, o);
+      this.reverseLeft[i] = 0;
+      return;
+    }
+    const left = Math.max(0, (this.reverseLeft[i] ?? 0) - step);
+    const length = this.bodyLength[i] ?? 0;
+    const backed = (STEERING.backOutMaxBodyLengths - STEERING.backOutBodyLengths) * length;
+    const aligned =
+      Math.abs(wrapAngle((this.targetYaw[i] ?? 0) - heading)) < STEERING.backOutAlignedRad;
+    this.reverseLeft[i] = left <= backed && aligned ? 0 : left;
   }
 
   /**

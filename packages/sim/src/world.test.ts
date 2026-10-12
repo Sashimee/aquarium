@@ -117,6 +117,57 @@ describe('World containment', { timeout: LONG }, () => {
     expect(worst).toBeGreaterThanOrEqual(-1e-9);
     expect(w.contacts / (w.count * 10_000)).toBeLessThan(1e-3);
   });
+
+  it('backs a fish out of a dead-end crevice too narrow to turn in', () => {
+    // A 4.5 cm slot between the back glass and a rock, closed at +x: a 15 cm tang fits lengthwise
+    // but cannot turn round inside it.
+    const back = -REEF_TANK.depth / 2;
+    const w = new World({
+      seed: 1,
+      tank: REEF_TANK,
+      species: ARCHETYPES,
+      decor: [
+        {
+          id: 'slot-wall',
+          solid: true,
+          shape: {
+            kind: 'box',
+            center: [0.01, 0.15, back + 0.075],
+            halfExtents: [0.11, 0.15, 0.03],
+          },
+        },
+        {
+          id: 'slot-end',
+          solid: true,
+          shape: {
+            kind: 'box',
+            center: [0.14, 0.15, back + 0.03],
+            halfExtents: [0.02, 0.15, 0.03],
+          },
+        },
+      ],
+      fish: spawnMany(yellowTang.id, 1),
+    });
+    w.position.set([0, 0.15, back + 0.0225], 0);
+    w.yaw[0] = Math.PI / 2;
+    w.pitch[0] = 0;
+    expect(w.bodyClearance(0)).toBeGreaterThanOrEqual(0);
+    let worst = Infinity;
+    let turned = 0;
+    let freedAt = -1;
+    for (let t = 0; t < 600; t++) {
+      w.step();
+      worst = Math.min(worst, w.bodyClearance(0));
+      if (freedAt >= 0) continue;
+      turned += Math.abs(at(w.yawRate, 0)) * STEP_DT;
+      if (at(w.position, 0) < -0.1 - 0.5 * at(w.bodyLength, 0)) freedAt = t;
+    }
+    expect(worst).toBeGreaterThanOrEqual(-1e-9);
+    expect(freedAt).toBeGreaterThanOrEqual(0);
+    expect(freedAt * STEP_DT).toBeLessThan(5);
+    // Backing out, not thrashing: it does not try to spin round inside the slot.
+    expect(turned).toBeLessThan(2 * Math.PI);
+  });
 });
 
 describe('World kinematic limits', { timeout: LONG }, () => {
@@ -132,7 +183,18 @@ describe('World kinematic limits', { timeout: LONG }, () => {
       reflex: 0,
     };
     for (let t = 0; t < 3000; t++) {
-      if (t === 1000) w.startle({ position: [0, 0.3, 0.3], intensity: 1 });
+      // Each tap is a coin flip per fish; tapping beside several guarantees a reflex to measure.
+      if (t === 1000) {
+        for (let i = 0; i < 6; i++) {
+          const o = i * 3;
+          const position = [
+            at(w.position, o),
+            at(w.position, o + 1),
+            at(w.position, o + 2),
+          ] as const;
+          w.startle({ position, intensity: 1 });
+        }
+      }
       w.step();
       for (let i = 0; i < w.count; i++) {
         const sp = w.speciesOf(i);
@@ -189,16 +251,46 @@ describe('World kinematic limits', { timeout: LONG }, () => {
     expect(sxy / Math.sqrt(sxx * syy)).toBeGreaterThan(0.6);
   });
 
+  it('steers a lone tang along the reef glass without flip-flopping or stalling', () => {
+    let hardFlips = 0;
+    let stalled = 0;
+    let samples = 0;
+    for (const seed of [1, 2, 3]) {
+      const w = new World({
+        seed,
+        tank: REEF_TANK,
+        species: ARCHETYPES,
+        fish: spawnMany('blue-tang', 1),
+      });
+      const { maxTurnRate: maxTurn, cruiseSpeed } = toSimSpecies(blueTang);
+      let lastHardSign = 0;
+      for (let t = 0; t < 10_000; t++) {
+        w.step();
+        if (t < 300) continue;
+        const turn = at(w.yawRate, 0);
+        if (Math.abs(turn) > 0.3 * maxTurn) {
+          const sign = Math.sign(turn);
+          if (lastHardSign !== 0 && sign !== lastHardSign) hardFlips++;
+          lastHardSign = sign;
+        }
+        // Speed lags the target, so a fish told to stop at each pane only sinks to a crawl.
+        if (at(w.speed, 0) < 0.3 * cruiseSpeed) stalled++;
+        samples++;
+      }
+    }
+    expect((hardFlips / samples) * 30).toBeLessThan(0.3);
+    expect(stalled / samples).toBeLessThan(0.01);
+  });
+
   it.each([blueTang, yellowTang])(
-    'keeps a group of six $id cruising the reef without stalls, flips or circling',
+    'keeps a group of six $id cruising the reef without stalls, flips or tight circling',
     (tang) => {
       const { maxTurnRate: maxTurn, cruiseSpeed } = toSimSpecies(tang);
       const window = Math.round(4 / STEP_DT);
       let hardFlips = 0;
       let stalled = 0;
       let samples = 0;
-      let circles = 0;
-      let spins = 0;
+      const loopRadii: number[] = [];
       let fishSeconds = 0;
       for (const seed of [1, 2, 3, 4]) {
         const w = new World({
@@ -209,30 +301,38 @@ describe('World kinematic limits', { timeout: LONG }, () => {
           fish: spawnMany(tang.id, 6),
         });
         const lastHardSign = new Int8Array(w.count);
-        const heading = Array.from({ length: w.count }, () => new Float64Array(window));
-        const stride = Array.from({ length: w.count }, () => new Float64Array(window));
-        const turned = new Float64Array(w.count);
-        const travelled = new Float64Array(w.count);
-        const circling = new Uint8Array(w.count);
+        const yawRing = Array.from({ length: w.count }, () => new Float64Array(window));
+        const pathRing = Array.from({ length: w.count }, () => new Float64Array(window));
+        const yawSum = new Float64Array(w.count);
+        const pathSum = new Float64Array(w.count);
+        const tightest = new Float64Array(w.count).fill(Infinity);
         for (let t = 0; t < 6000; t++) {
           w.step();
-          if (t < 300) continue;
           for (let i = 0; i < w.count; i++) {
             const turn = at(w.yawRate, i);
-            const ring = heading[i] ?? new Float64Array(window);
-            const slot = t % window;
-            turned[i] = at(turned, i) + turn * STEP_DT - at(ring, slot);
-            ring[slot] = turn * STEP_DT;
-            const path = stride[i] ?? new Float64Array(window);
-            const step = at(w.speed, i) * STEP_DT;
-            travelled[i] = at(travelled, i) + step - at(path, slot);
-            path[slot] = step;
-            const loop = t >= 300 + window && Math.abs(at(turned, i)) >= 2 * Math.PI;
-            if (loop && circling[i] === 0) {
-              circles++;
-              if (at(travelled, i) < Math.PI * at(w.bodyLength, i)) spins++;
+            yawSum[i] = at(yawSum, i) + turn * STEP_DT;
+            pathSum[i] = at(pathSum, i) + at(w.speed, i) * STEP_DT;
+            const yaws = yawRing[i] ?? new Float64Array(window);
+            const paths = pathRing[i] ?? new Float64Array(window);
+            yaws[t % window] = at(yawSum, i);
+            paths[t % window] = at(pathSum, i);
+            if (t < 300) continue;
+            // A loop is the shortest stretch of the last 4 s over which the fish turned a full
+            // circle; its path length over 2π is the loop's radius.
+            let radius = Infinity;
+            for (let k = 1; k < window; k++) {
+              const s = (t - k) % window;
+              if (Math.abs(at(yawSum, i) - at(yaws, s)) >= 2 * Math.PI) {
+                radius = (at(pathSum, i) - at(paths, s)) / (2 * Math.PI) / at(w.bodyLength, i);
+                break;
+              }
             }
-            circling[i] = loop ? 1 : 0;
+            if (radius < Infinity) {
+              tightest[i] = Math.min(at(tightest, i), radius);
+            } else if (at(tightest, i) < Infinity) {
+              loopRadii.push(at(tightest, i));
+              tightest[i] = Infinity;
+            }
             if (Math.abs(turn) > 0.3 * maxTurn) {
               const sign = Math.sign(turn);
               if (lastHardSign[i] !== 0 && sign !== lastHardSign[i]) hardFlips++;
@@ -247,14 +347,16 @@ describe('World kinematic limits', { timeout: LONG }, () => {
             samples++;
           }
         }
+        for (const r of tightest) if (r < Infinity) loopRadii.push(r);
         fishSeconds += w.count * (6000 - 300) * STEP_DT;
       }
       expect(stalled / samples).toBeLessThan(0.01);
-      // Spinning on the spot (a loop no wider than the fish) is the steering pathology.
-      expect(spins).toBe(0);
+      // A cruising fish turns on an arc of at least ~0.4 body lengths (Domenici & Blake 1997);
+      // tighter loops are a fish chasing its own tail.
+      expect(loopRadii.filter((r) => r < 0.35)).toEqual([]);
       // Six 15–20 cm fish in 60 cm of depth are sometimes boxed in by glass, rock and each other and
       // turn back twice within 4 s, or round a rock; that stays rare: under 2 per 10 fish-minutes.
-      expect((circles / fishSeconds) * 600).toBeLessThan(2);
+      expect((loopRadii.length / fishSeconds) * 600).toBeLessThan(2);
       // Loose bound: neighbours and rock legitimately make tangs change their mind now and then.
       expect((hardFlips / samples) * 30).toBeLessThan(1);
     },

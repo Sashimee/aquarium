@@ -91,6 +91,7 @@ export const BEHAVIOUR = {
   grazeMaxS: 4,
   grazeApproachTimeoutS: 8,
   grazeStandoffBodyLengths: 0.3,
+  grazeBackRoomBodyLengths: 0.5,
   grazeComfort: 0.2,
   grazeSpeedFactor: 0.25,
   glassStandoffThickness: 1.3,
@@ -103,6 +104,7 @@ export const BEHAVIOUR = {
 
   territoryCheckS: 0.5,
   intruderSizeRatio: 0.7,
+  intruderMaxSizeRatio: 1.5,
   territoryBodyLengths: 4,
   anchorTerritoryBodyLengths: 3,
   approachS: 3,
@@ -112,7 +114,10 @@ export const BEHAVIOUR = {
   chargeSpeedFraction: 0.7,
   cooldownMinS: 5,
   cooldownMaxS: 15,
-  chargeStartleProbability: 0.7,
+  chargeYieldProbability: 0.7,
+  yieldS: 1.5,
+  yieldCruiseFactor: 2.5,
+  maxQueuedStimuli: 16,
 
   /** Fish body as a chain of spheres along the spine, in body lengths. */
   bodyThicknessBodyLengths: 0.12,
@@ -278,6 +283,8 @@ export class Behaviour {
   private readonly territoryTimer: Float64Array;
   private readonly territoryCheck: Float64Array;
   private readonly territoryCooldown: Float64Array;
+  readonly yieldTimer: Float64Array;
+  private readonly yieldYaw: Float64Array;
   readonly territoryTarget: Int32Array;
 
   private readonly gulpPhase: Uint8Array;
@@ -335,6 +342,8 @@ export class Behaviour {
     this.territoryTimer = new Float64Array(n);
     this.territoryCheck = new Float64Array(n);
     this.territoryCooldown = new Float64Array(n);
+    this.yieldTimer = new Float64Array(n);
+    this.yieldYaw = new Float64Array(n);
     this.territoryTarget = new Int32Array(n).fill(-1);
     this.gulpPhase = new Uint8Array(n);
     this.gulpTimer = new Float64Array(n);
@@ -418,6 +427,8 @@ export class Behaviour {
     if (stimulus.intensity < 0 || stimulus.intensity > 1) {
       throw new RangeError(`startle: intensity must be within [0, 1], got ${stimulus.intensity}`);
     }
+    // Taps queued while the host is stopped are stale by the time it runs again; keep the newest.
+    if (this.stimuli.length >= BEHAVIOUR.maxQueuedStimuli) this.stimuli.shift();
     this.stimuli.push(stimulus);
   }
 
@@ -682,6 +693,10 @@ export class Behaviour {
       this.planStartle(i, sp, plan);
       return;
     }
+    if (at(this.yieldTimer, i) > 0) {
+      this.planYield(i, plan);
+      return;
+    }
     if (sp.territorial) this.updateTerritory(i, sp);
     if (at(this.territoryPhase, i) !== TerritoryPhase.Idle) {
       this.planTerritory(i, sp, plan);
@@ -705,6 +720,27 @@ export class Behaviour {
     if (rest > 0.5 && (plan.state === FishState.Cruise || plan.state === FishState.Station)) {
       plan.state = FishState.Rest;
     }
+  }
+
+  private planYield(i: number, plan: Plan): void {
+    this.yieldTimer[i] = at(this.yieldTimer, i) - DT;
+    const yaw = at(this.yieldYaw, i);
+    const speed = Math.min(
+      at(this.host.maxSpeed, i),
+      BEHAVIOUR.yieldCruiseFactor * at(this.host.cruiseSpeed, i),
+    );
+    plan.continuous = true;
+    plan.speedCap = speed;
+    plan.align = 0;
+    plan.cohesion = 0;
+    plan.wander *= 0.3;
+    plan.seek(
+      at(this.host.position, i * 3) + Math.sin(yaw),
+      at(this.host.position, i * 3 + 1),
+      at(this.host.position, i * 3 + 2) + Math.cos(yaw),
+      speed,
+      0.3,
+    );
   }
 
   private planStartle(i: number, sp: SimSpecies, plan: Plan): void {
@@ -794,12 +830,21 @@ export class Behaviour {
     const { position, bodyLength, speciesIndex, count } = this.host;
     const [cx, cy, cz, r] = this.territoryCentre(i, sp);
     const own = at(speciesIndex, i);
+    const home = at(this.anchor, i);
     const minLength = BEHAVIOUR.intruderSizeRatio * at(bodyLength, i);
+    const maxLength = BEHAVIOUR.intruderMaxSizeRatio * at(bodyLength, i);
     let best = -1;
     let bestD = r;
     for (let j = 0; j < count; j++) {
       if (j === i) continue;
-      if (at(speciesIndex, j) !== own && at(bodyLength, j) < minLength) continue;
+      if (at(speciesIndex, j) === own) {
+        // A mate sharing the anemone or cave is a partner, not a rival.
+        if (home >= 0 && at(this.anchor, j) === home) continue;
+      } else {
+        const lj = at(bodyLength, j);
+        if (lj < minLength || lj > maxLength) continue;
+      }
+      if (at(this.yieldTimer, j) > 0 || at(this.startlePhase, j) !== StartlePhase.None) continue;
       const d = Math.hypot(
         at(position, j * 3) - cx,
         at(position, j * 3 + 1) - cy,
@@ -877,9 +922,11 @@ export class Behaviour {
     plan.continuous = true;
     plan.seek(jx, jy, jz, BEHAVIOUR.chargeSpeedFraction * vmax, 0.2);
     if (d < 0.6 * (li + lj)) {
-      if (this.canStartle(j) && rng.next() < BEHAVIOUR.chargeStartleProbability) {
-        const away = Math.atan2(jx - px, jz - pz);
-        this.schedule(j, this.host.tick + 1, wrapAngle(away + 0.3 * rng.gaussian()), 0);
+      // A chased rival swims off; it is not a predator strike, so no C-start and no relay.
+      if (rng.next() < BEHAVIOUR.chargeYieldProbability) {
+        this.yieldTimer[j] = BEHAVIOUR.yieldS;
+        this.yieldYaw[j] = wrapAngle(Math.atan2(jx - px, jz - pz) + 0.3 * rng.gaussian());
+        if (at(this.territoryPhase, j) !== TerritoryPhase.Idle) this.endTerritory(j);
       }
       this.endTerritory(i);
     } else if (left <= 0) {
@@ -1351,7 +1398,13 @@ export class Behaviour {
     if (Math.hypot(gx - px, gy - py, gz - pz) > length) this.grazePhase[i] = GrazePhase.None;
     plan.state = FishState.Graze;
     plan.speedFloor = 0;
-    plan.speedCap = BEHAVIOUR.grazeSpeedFactor * cruise;
+    // The heading is held, so creeping on once the spot is abeam only drives the snout into
+    // whatever lies beyond it (often the back glass); the fish stops and pecks instead.
+    const ex = gx - px;
+    const ez = gz - pz;
+    const ahead = ex * at(this.host.forward, o) + ez * at(this.host.forward, o + 2);
+    const toward = clamp(ahead / Math.max(Math.hypot(ex, gy - py, ez), 1e-9), 0, 1);
+    plan.speedCap = BEHAVIOUR.grazeSpeedFactor * cruise * toward;
     plan.seek(gx, gy, gz, BEHAVIOUR.grazeSpeedFactor * cruise, 0.5);
     // Chasing a point at pecking speed overshoots it and orbits, and pivoting on the spot swings
     // the tail into the rock; the fish keeps the heading it arrived with, already facing the rock.
@@ -1390,13 +1443,23 @@ export class Behaviour {
       if (Math.abs(d) > 1e-3) continue;
       field.sample(x, y, z, n3);
       const nx = at(n3, 0);
+      const ny = at(n3, 1);
       const nz = at(n3, 2);
       // Only a face the fish is already swimming toward; grazing the far side means a U-turn.
       if (nx * fx + nz * fz > 0.3) continue;
       const gx = x + nx * standoff;
-      const gy = y + at(n3, 1) * standoff;
+      const gy = y + ny * standoff;
       const gz = z + nz * standoff;
       if (sceneSdf.sample(gx, gy, gz, n3) < thickness * 1.2) continue;
+      // The body trails back from the rock along its normal; a spot hemmed in by glass or a
+      // second rock behind leaves no room to back off and turn away after the bout.
+      const back = standoff + BEHAVIOUR.grazeBackRoomBodyLengths * length;
+      if (
+        sceneSdf.sample(x + nx * back, y + ny * back, z + nz * back, n3) <
+        BEHAVIOUR.grazeBackRoomBodyLengths * length
+      ) {
+        continue;
+      }
       if (gy > tank.height - 2 * length) continue;
       const dist = Math.hypot(gx - px, gy - py, gz - pz);
       // Doubling back to a spot behind costs a U-turn; a forager picks what lies ahead.
