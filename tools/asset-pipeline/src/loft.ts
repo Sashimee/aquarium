@@ -282,8 +282,13 @@ export function vertexNormals(
   return normals;
 }
 
-/** Closed-form lofted fish: +Z forward, +Y up, origin at the body centre of mass, fin mask and id baked analytically. */
-export function loftFish(spec: LoftSpec, project: Projection, material: string): Part {
+/** Closed-form lofted fish: +Z forward, +Y up, origin at the body centre of mass, fin mask and id baked analytically. With `finUv` every fin vertex samples that one texel: the photo behind a fin is background, not membrane. */
+export function loftFish(
+  spec: LoftSpec,
+  project: Projection,
+  material: string,
+  finUv?: [number, number],
+): Part {
   const length = spec.standardLengthM;
   const builder = new MeshBuilder();
   addBody(builder, spec, length);
@@ -297,6 +302,11 @@ export function loftFish(spec: LoftSpec, project: Projection, material: string):
   const count = mask.length;
   const uvs = new Float32Array(count * 2);
   for (let i = 0; i < count; i++) {
+    if (finUv && id[i] !== 0) {
+      uvs[i * 2] = finUv[0];
+      uvs[i * 2 + 1] = finUv[1];
+      continue;
+    }
     const [u, v] = project(length - positions[i * 3 + 2]!, positions[i * 3 + 1]!);
     uvs[i * 2] = clamp(u, 0, 1);
     uvs[i * 2 + 1] = clamp(v, 0, 1);
