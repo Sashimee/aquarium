@@ -25,4 +25,4 @@ Review with `gh pr view <n>`, `gh pr diff <n>` and `gh pr checks <n>`. Check the
 
 ## Verdict
 
-`gh pr review <n> --approve --body "<summary>"` or `gh pr review <n> --request-changes --body "<numbered findings with file:line and why>"`. Approve only if there are no correctness or security findings left. Style nits don't block. Report the verdict and the findings.
+Every PR is authored by the same GitHub account you review with, so `--approve` and `--request-changes` are refused. Post `gh pr review <n> --comment --body "<verdict>"` whose first line is exactly `APPROVED` or `CHANGES REQUESTED`, followed by numbered findings with file:line and why. The orchestrator gates merges on that first line. Approve only if there are no correctness or security findings left. Style nits don't block. Report the verdict and the findings.
