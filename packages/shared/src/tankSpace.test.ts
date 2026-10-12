@@ -60,8 +60,16 @@ describe('tank space', () => {
   });
 
   it('has no slope outside the footprint', () => {
-    expect(sampleFloorSlope(ramp, 5, 0)).toEqual([0, 0]);
-    expect(sampleFloorSlope(ramp, 0, -5)).toEqual([0, 0]);
+    expect(sampleFloorSlope(ramp, 5, 5)).toEqual([0, 0]);
+  });
+
+  it('zeroes only the axis that is outside the footprint', () => {
+    const [dxA, dzA] = sampleFloorSlope(ramp, 5, 0);
+    expect(dxA).toBe(0);
+    expect(dzA).toBeCloseTo(0.2, 9);
+    const [dxB, dzB] = sampleFloorSlope(ramp, 0, -5);
+    expect(dxB).toBeCloseTo(0.1, 9);
+    expect(dzB).toBe(0);
   });
 
   it('converts between the sim frame and tank space', () => {
@@ -102,7 +110,15 @@ describe('tank space validation', () => {
   });
 
   it('rejects an inverted water box', () => {
-    expect(bad((t) => ({ ...t, inset: 0.05, glass: 0.05, depth: 0.1, width: 1.2 }))).toBe(false);
+    const onlyInset = tankSpaceSchema.safeParse({
+      ...JSON.parse(JSON.stringify(flat)),
+      depth: 0.2,
+      glass: 0.05,
+      inset: 0.05,
+    });
+    expect(onlyInset.error?.issues.map((i) => i.message)).toEqual([
+      'glass and inset leave no water along z',
+    ]);
     expect(bad((t) => ({ ...t, width: 0.04, glass: 0.015, inset: 0.01 }))).toBe(false);
     expect(bad((t) => ({ ...t, depth: 0.04, glass: 0.015, inset: 0.01 }))).toBe(false);
     const r = tankSpaceSchema.safeParse({
