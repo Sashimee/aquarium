@@ -2,7 +2,7 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; every texture has both files.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Anemone tentacle sway is \"_sway\" (0 base, 1 tip).",
-  "totalBytes": 122274738,
+  "totalBytes": 122287634,
   "assets": [
     {
       "id": "angelfish",
@@ -866,7 +866,8 @@
         "merged meshes, dropped skeleton, animation and unused attributes",
         "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
         "baked fin mask and fin id vertex attributes",
-        "colour and normal maps re-encoded to KTX2 at 1k and 2k"
+        "colour and normal maps re-encoded to KTX2 at 1k and 2k",
+        "eyeballs kept from their own mesh and re-seated on the head, outside fin classification"
       ],
       "bounds": {
         "min": [
@@ -883,24 +884,24 @@
       "lods": [
         {
           "file": "fish/guppy-male/lod0.glb",
-          "bytes": 16704,
-          "sha256": "6957525450b13a28b583fa01b8a743ddaf557aa9f9a038b161ccfeb8e22bf1ae",
-          "triangles": 1233,
-          "vertices": 616
+          "bytes": 22140,
+          "sha256": "86d249a51b81f8762e9f3684941b419a6f9a04db46691537738641b6ccc1d29f",
+          "triangles": 1561,
+          "vertices": 784
         },
         {
           "file": "fish/guppy-male/lod1.glb",
-          "bytes": 9224,
-          "sha256": "eade13dcc41bd1ea5a6fe4dd43c1d6349b82784e23614f37673b4ee5cf06ef76",
-          "triangles": 491,
-          "vertices": 254
+          "bytes": 12956,
+          "sha256": "01c984c7046ef6b87192feaf71f71fdcb118cfc04d047c8c9f9ff27812517de4",
+          "triangles": 641,
+          "vertices": 333
         },
         {
           "file": "fish/guppy-male/lod2.glb",
-          "bytes": 5820,
-          "sha256": "536d7106bb0457d605259efaa5f1eb941ec3ab276fc5b85adf662051e44360fe",
-          "triangles": 184,
-          "vertices": 99
+          "bytes": 9548,
+          "sha256": "f6b41d81aeb85a65b39fb9cc350ccea3ffbeca347588af3efebda3ba8c739f57",
+          "triangles": 334,
+          "vertices": 178
         }
       ],
       "textures": [
@@ -928,18 +929,18 @@
       "files": [
         {
           "file": "fish/guppy-male/lod0.glb",
-          "bytes": 16704,
-          "sha256": "6957525450b13a28b583fa01b8a743ddaf557aa9f9a038b161ccfeb8e22bf1ae"
+          "bytes": 22140,
+          "sha256": "86d249a51b81f8762e9f3684941b419a6f9a04db46691537738641b6ccc1d29f"
         },
         {
           "file": "fish/guppy-male/lod1.glb",
-          "bytes": 9224,
-          "sha256": "eade13dcc41bd1ea5a6fe4dd43c1d6349b82784e23614f37673b4ee5cf06ef76"
+          "bytes": 12956,
+          "sha256": "01c984c7046ef6b87192feaf71f71fdcb118cfc04d047c8c9f9ff27812517de4"
         },
         {
           "file": "fish/guppy-male/lod2.glb",
-          "bytes": 5820,
-          "sha256": "536d7106bb0457d605259efaa5f1eb941ec3ab276fc5b85adf662051e44360fe"
+          "bytes": 9548,
+          "sha256": "f6b41d81aeb85a65b39fb9cc350ccea3ffbeca347588af3efebda3ba8c739f57"
         },
         {
           "file": "fish/guppy-male/textures/guppy-male_basecolor_1k.ktx2",
