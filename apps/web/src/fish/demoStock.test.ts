@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_TANK, WATER_INSET } from '../engine/tank/dimensions';
-import { DEMO_COUNTS, DEMO_SPECIES, demoTank } from './demoStock';
+import { DEMO_COUNTS, DEMO_MAX_LENGTH_M, DEMO_SPECIES, demoTank } from './demoStock';
 
 describe('demoTank', () => {
   it('spawns the demo counts with unique ids for known species', () => {
@@ -31,6 +31,18 @@ describe('demoTank', () => {
     for (const spawn of config.fish) {
       const base = lengths.get(spawn.species) ?? Number.NaN;
       expect(Math.abs((spawn.bodyLengthM ?? Number.NaN) / base - 1)).toBeLessThanOrEqual(0.08);
+    }
+  });
+
+  it('never spawns a fish longer than its species grows in content', () => {
+    for (const species of DEMO_SPECIES) {
+      expect(DEMO_MAX_LENGTH_M[species.id], species.id).toBeGreaterThan(0);
+    }
+    for (let seed = 0; seed < 50; seed++) {
+      for (const spawn of demoTank(DEFAULT_TANK, seed).config.fish) {
+        const max = DEMO_MAX_LENGTH_M[spawn.species] ?? Number.NaN;
+        expect(spawn.bodyLengthM ?? Number.NaN).toBeLessThanOrEqual(max);
+      }
     }
   });
 

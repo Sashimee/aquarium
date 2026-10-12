@@ -79,6 +79,23 @@ function textures(material: MeshStandardMaterial): Texture[] {
   return Object.values(material).filter((v): v is Texture => v instanceof Texture);
 }
 
+/** Frees a glTF scene that never became a LOD; it only references its own materials. */
+function disposeScene(root: Object3D): void {
+  root.traverse((object) => {
+    if (!(object instanceof Mesh)) return;
+    object.geometry.dispose();
+    const materials: Material[] = Array.isArray(object.material)
+      ? object.material
+      : [object.material];
+    for (const material of materials) {
+      if (material instanceof MeshStandardMaterial) {
+        for (const texture of textures(material)) texture.dispose();
+      }
+      material.dispose();
+    }
+  });
+}
+
 /** Groups a LOD's primitives by material and merges each group into one geometry. */
 function collectParts(
   root: Object3D,
@@ -144,9 +161,19 @@ export class FishAssetLoader {
     if (entry === undefined) throw new Error(`fish asset "${assetId}" is not in assets/index.json`);
     const shared = new Map<string, MeshStandardMaterial>();
     const lods: FishPart[][] = [];
-    for (const file of entry.lodFiles) {
-      const gltf = await this.gltf.loadAsync(`${this.root}${file}`);
-      lods.push(collectParts(gltf.scene, `fish ${file}`, shared));
+    try {
+      for (const file of entry.lodFiles) {
+        const gltf = await this.gltf.loadAsync(`${this.root}${file}`);
+        try {
+          lods.push(collectParts(gltf.scene, `fish ${file}`, shared));
+        } catch (cause) {
+          disposeScene(gltf.scene);
+          throw cause;
+        }
+      }
+    } catch (cause) {
+      disposeFishModel({ entry, lods });
+      throw cause;
     }
     return { entry, lods };
   }

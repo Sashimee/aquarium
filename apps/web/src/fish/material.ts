@@ -18,6 +18,7 @@ import {
   cross,
   dot,
   float,
+  frameId,
   instancedDynamicBufferAttribute,
   interleavedGradientNoise,
   luminance,
@@ -52,9 +53,16 @@ export interface FishLighting {
   readonly lightRadiance: UniformNode<'color', Color>;
 }
 
+/**
+ * How fin membranes let the background through:
+ * - `cutout`: opaque inside the alpha silhouette, no back-lighting;
+ * - `coverage`: alpha-to-coverage, which needs an MSAA target and degrades to a cutout without;
+ * - `stochastic`: animated screen-door, only for a pipeline with a temporal resolve.
+ */
+export type FinRendering = 'cutout' | 'coverage' | 'stochastic';
+
 export interface FishMaterialFeatures {
-  /** Screen-door fin translucency and back-lit fins; off falls back to a cutout. */
-  readonly finTranslucency: boolean;
+  readonly fins: FinRendering;
   readonly iridescence: boolean;
   readonly clearcoat: boolean;
 }
@@ -79,6 +87,10 @@ const PELVIC_AMPLITUDE = 0.015;
 /** Guanine (n ≈ 1.83) platelets are the reflectors in fish iridophores (Land 1972). */
 const GUANINE_IOR = 1.83;
 const FIN_OPACITY_FLOOR = 0.2;
+/** Below this alpha a texel is outside the fin silhouette in every mode. */
+const SILHOUETTE_ALPHA = 0.1;
+/** Golden-ratio-like step that decorrelates consecutive frames of the noise (Jimenez 2014). */
+const FRAME_NOISE_STEP = 5.588238;
 
 function idIs(id: Node<'float'>, value: number): Node<'float'> {
   return step(value - 0.5, id).mul(step(id, value + 0.5));
@@ -90,13 +102,13 @@ function rotateByQuat(q: Node<'vec4'>, v: Node<'vec3'>): Node<'vec3'> {
 }
 
 /**
- * Fin translucency is a screen-door: a pixel survives when its alpha beats interleaved gradient
- * noise (Jimenez 2014). That is order independent, so the batched fish need no sorting against each
- * other, the glass or the water, and shadows get the same coverage. The per-fish offset keeps two
- * overlapping fins from sharing a pattern; TAA on ultra resolves the dither into real blending.
+ * A pixel survives when its alpha beats interleaved gradient noise (Jimenez 2014). The pattern
+ * moves every frame so a temporal resolve averages it into a blend; without one it is raw stipple.
+ * The per-fish offset keeps two overlapping fins from sharing a pattern.
  */
 function screenDoor(alpha: Node<'float'>, seed: Node<'float'>): Node<'bool'> {
-  const pixel = screenCoordinate.xy.add(vec2(seed.mul(61.3), seed.mul(29.7)).floor());
+  const frame = float(frameId).mod(64).mul(FRAME_NOISE_STEP);
+  const pixel = screenCoordinate.xy.add(vec2(seed.mul(61.3), seed.mul(29.7)).floor()).add(frame);
   return alpha.greaterThan(interleavedGradientNoise(pixel));
 }
 
@@ -108,6 +120,7 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
   readonly deformedPosition: Node<'vec3'>;
   private readonly deformedNormal: Node<'vec3'>;
   private readonly config: FishMaterialConfig;
+  private readonly instanceNodes = new Map<number, Node<'vec4'>>();
 
   constructor(config: FishMaterialConfig) {
     super();
@@ -132,16 +145,22 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
     this.castShadowPositionNode = positionLocal.add(
       rotateByQuat(orientation, position.sub(positionGeometry).mul(scale)),
     );
-    this.setFeatures({ finTranslucency: true, iridescence: true, clearcoat: true });
+    this.setFeatures({ fins: 'coverage', iridescence: true, clearcoat: true });
   }
 
+  /** One node per slot: each call would otherwise add its own vertex attribute. */
   private instanceVec4(offset: number): Node<'vec4'> {
-    return instancedDynamicBufferAttribute(
-      this.config.instances.buffer,
-      'vec4',
-      INSTANCE_STRIDE,
-      offset,
-    );
+    let node = this.instanceNodes.get(offset);
+    if (node === undefined) {
+      node = instancedDynamicBufferAttribute(
+        this.config.instances.buffer,
+        'vec4',
+        INSTANCE_STRIDE,
+        offset,
+      );
+      this.instanceNodes.set(offset, node);
+    }
+    return node;
   }
 
   private buildDeformation(): { position: Node<'vec3'>; normal: Node<'vec3'> } {
@@ -195,7 +214,7 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
       .mul(mask)
       .mul(side)
       .mul(PELVIC_AMPLITUDE * zLen)
-      .mul(sin(finPhase.mul(1.3).add(1)));
+      .mul(sin(finPhase.add(1)));
 
     const dx = body.add(bend).add(caudal).add(median).add(pectoralOut).add(pelvic);
     const position = vec3(p.x.add(dx), p.y, p.z.add(pectoralRow)).toVar('fishPosition');
@@ -224,20 +243,23 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
 
     const textureAlpha = sample.a.mul(source.opacity);
     const hasAlpha = source.transparent || source.alphaTest > 0;
-    const cutoff = source.alphaTest > 0 ? source.alphaTest : 0.5;
-    if (features.finTranslucency && (hasAlpha || profile.finTransmission > 0)) {
-      // Source alpha is only trusted as coverage on the body, where BLEND models often carry
-      // half-transparent skin texels; the membrane look comes from the fin mask.
-      const bodyAlpha = smoothstep(0.02, 0.1, textureAlpha);
-      const finAlpha = textureAlpha.mul(
-        float(1).sub(finAmount.mul(profile.finTransmission * (1 - FIN_OPACITY_FLOOR))),
-      );
-      this.maskNode = screenDoor(mix(bodyAlpha, finAlpha, finAmount), seed);
-    } else {
-      this.maskNode = hasAlpha ? textureAlpha.greaterThan(cutoff) : null;
-    }
+    const silhouette = hasAlpha
+      ? textureAlpha.greaterThan(source.alphaTest > 0 ? source.alphaTest : SILHOUETTE_ALPHA)
+      : null;
+    const translucent = features.fins !== 'cutout' && (hasAlpha || profile.finTransmission > 0);
+    // Source alpha is only trusted as coverage on the body, where BLEND models often carry
+    // half-transparent skin texels; the membrane look comes from the fin mask.
+    const bodyAlpha = smoothstep(0.02, 0.1, textureAlpha);
+    const finAlpha = textureAlpha.mul(
+      float(1).sub(finAmount.mul(profile.finTransmission * (1 - FIN_OPACITY_FLOOR))),
+    );
+    const coverage = mix(bodyAlpha, finAlpha, finAmount);
+    this.alphaToCoverage = translucent && features.fins === 'coverage';
+    this.opacityNode = this.alphaToCoverage ? coverage : null;
+    this.maskNode =
+      translucent && features.fins === 'stochastic' ? screenDoor(coverage, seed) : silhouette;
 
-    if (features.finTranslucency && profile.finTransmission > 0) {
+    if (features.fins !== 'cutout' && profile.finTransmission > 0) {
       const toEye = normalize(cameraPosition.sub(positionWorld));
       const l = lighting.lightDirection;
       const diffuse = abs(dot(normalWorld, l)).mul(0.3);

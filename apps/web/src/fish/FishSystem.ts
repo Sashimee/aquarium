@@ -14,16 +14,18 @@ import {
   SnapshotField,
   SnapshotInterpolator,
   STEP_DT,
+  type SimReady,
   type SpeciesInput,
+  type WorldConfig,
 } from '@aquarium/sim';
 import type { Engine } from '../engine/Engine';
 import type { Tier, TierSettings } from '../engine/quality/tiers';
 import type { TankDimensions } from '../engine/tank/dimensions';
 import { disposeFishModel, FishAssetLoader, type FishModel } from './assets';
 import { demoTank } from './demoStock';
-import { FishInstanceData } from './instances';
+import { FishInstanceData, type InstanceValues } from './instances';
 import { selectLod, type LodThresholds } from './lod';
-import { FishMaterial, type FishMaterialFeatures } from './material';
+import { FishMaterial, type FinRendering, type FishMaterialFeatures } from './material';
 import { renderProfile, type FishRenderProfile } from './profiles';
 import { SWIM_MODES, SwimState } from './swim';
 
@@ -32,6 +34,7 @@ export interface FishSystemOptions {
   /** Folder holding `index.json` and the fish GLBs, with a trailing slash. */
   readonly assetRoot: string;
   readonly seed?: number;
+  readonly signal: AbortSignal;
 }
 
 interface LodBatch {
@@ -62,12 +65,18 @@ interface FishRuntime {
   condition: number;
 }
 
-const FEATURES_BY_TIER: Readonly<Record<Tier, FishMaterialFeatures>> = {
-  low: { finTranslucency: false, iridescence: false, clearcoat: false },
-  medium: { finTranslucency: true, iridescence: false, clearcoat: true },
-  high: { finTranslucency: true, iridescence: true, clearcoat: true },
-  ultra: { finTranslucency: true, iridescence: true, clearcoat: true },
-};
+/**
+ * No tier has a temporal resolve yet (T15), so translucent fins use alpha-to-coverage, which needs
+ * the MSAA the engine only enables below DPR 2; without it they fall back to the cutout.
+ */
+function featuresFor(tier: Tier, msaa: boolean): FishMaterialFeatures {
+  const fins: FinRendering = tier !== 'low' && msaa ? 'coverage' : 'cutout';
+  return {
+    fins,
+    iridescence: tier === 'high' || tier === 'ultra',
+    clearcoat: tier !== 'low',
+  };
+}
 
 /** LOD levels near enough for their self-shadowing to read. */
 const SHADOW_LODS = 2;
@@ -75,10 +84,35 @@ const SHADOW_LODS = 2;
 function sameFeatures(a: FishMaterialFeatures | null, b: FishMaterialFeatures): boolean {
   return (
     a !== null &&
-    a.finTranslucency === b.finTranslucency &&
+    a.fins === b.fins &&
     a.iridescence === b.iridescence &&
     a.clearcoat === b.clearcoat
   );
+}
+
+/** A worker whose script fails to load never answers `init`, so its error event settles it. */
+function initSim(
+  client: SimClient,
+  worker: Worker,
+  config: WorldConfig,
+  signal: AbortSignal,
+): Promise<SimReady> {
+  return new Promise((resolve, reject) => {
+    const settle = (finish: () => void): void => {
+      worker.removeEventListener('error', onError);
+      signal.removeEventListener('abort', onAbort);
+      finish();
+    };
+    const onError = (event: ErrorEvent): void =>
+      settle(() => reject(new Error(`Fish sim worker failed to start: ${event.message}`)));
+    const onAbort = (): void => settle(() => reject(signal.reason));
+    worker.addEventListener('error', onError);
+    signal.addEventListener('abort', onAbort);
+    client.init(config).then(
+      (ready) => settle(() => resolve(ready)),
+      (cause: unknown) => settle(() => reject(cause)),
+    );
+  });
 }
 
 /**
@@ -102,8 +136,29 @@ export class FishSystem {
   private readonly position = new Vector3();
   private readonly quaternion = new Quaternion();
   private readonly scale = new Vector3();
+  private readonly values: InstanceValues = {
+    qx: 0,
+    qy: 0,
+    qz: 0,
+    qw: 1,
+    scale: 1,
+    phase: 0,
+    amplitude: 0,
+    curvature: 0,
+    finPhase: 0,
+    pale: 0,
+    seed: 0,
+    filmThickness: 0,
+    tint: [1, 1, 1],
+  };
 
+  /**
+   * Rejects with `signal.reason` once `signal` aborts, after releasing whatever was already loaded,
+   * so a page torn down mid-load never builds onto a disposed engine.
+   */
   static async create(engine: Engine, options: FishSystemOptions): Promise<FishSystem> {
+    const { signal } = options;
+    signal.throwIfAborted();
     const seed = options.seed ?? Math.floor(Math.random() * 0x7fffffff);
     const demo = demoTank(options.tank, seed);
     const loader = new FishAssetLoader(engine.renderer, options.assetRoot);
@@ -115,6 +170,10 @@ export class FishSystem {
           models.set(species.id, model);
         }),
       );
+      if (signal.aborted) {
+        for (const model of models.values()) disposeFishModel(model);
+        signal.throwIfAborted();
+      }
       results.forEach((result, i) => {
         if (result.status === 'rejected') {
           engine.events.emit('engine:error', {
@@ -137,14 +196,14 @@ export class FishSystem {
       client.dispose();
       worker.terminate();
     });
-    worker.addEventListener('error', (event) =>
-      engine.events.emit('engine:error', { message: `Fish sim worker failed: ${event.message}` }),
-    );
-    client.onError((message) =>
-      engine.events.emit('engine:error', { message: `Fish sim: ${message}` }),
-    );
     try {
-      const ready = await client.init(demo.config);
+      const ready = await initSim(client, worker, demo.config, signal);
+      worker.addEventListener('error', (event) =>
+        engine.events.emit('engine:error', { message: `Fish sim worker failed: ${event.message}` }),
+      );
+      client.onError((message) =>
+        engine.events.emit('engine:error', { message: `Fish sim: ${message}` }),
+      );
       system.build(engine, ready.fishIds, demo.config.species, demo.config.fish, models, seed);
     } catch (cause) {
       const owned = new Set(system.batches.map((b) => b.model));
@@ -304,7 +363,7 @@ export class FishSystem {
   }
 
   private applyFeatures(tier: Tier): void {
-    const features = FEATURES_BY_TIER[tier];
+    const features = featuresFor(tier, this.engine.renderer.samples > 1);
     if (sameFeatures(this.features, features)) return;
     this.features = features;
     for (const batch of this.batches) {
@@ -363,21 +422,21 @@ export class FishSystem {
       this.scale.setScalar(fish.scale);
       this.matrix.compose(this.position, this.quaternion, this.scale);
       lod.matrices.set(this.matrix.elements, slot * 16);
-      lod.instances.write(slot, {
-        qx: this.quaternion.x,
-        qy: this.quaternion.y,
-        qz: this.quaternion.z,
-        qw: this.quaternion.w,
-        scale: fish.scale,
-        phase: fish.swim.phase,
-        amplitude: fish.swim.amplitude,
-        curvature: fish.swim.curvature * fish.scale,
-        finPhase: fish.swim.finPhase,
-        pale: Math.max(fish.condition, this.night * fish.batch.profile.nightPaling),
-        seed: fish.seed,
-        filmThickness: fish.filmThickness,
-        tint: fish.tint,
-      });
+      const v = this.values;
+      v.qx = this.quaternion.x;
+      v.qy = this.quaternion.y;
+      v.qz = this.quaternion.z;
+      v.qw = this.quaternion.w;
+      v.scale = fish.scale;
+      v.phase = fish.swim.phase;
+      v.amplitude = fish.swim.amplitude;
+      v.curvature = fish.swim.curvature * fish.scale;
+      v.finPhase = fish.swim.finPhase;
+      v.pale = Math.max(fish.condition, this.night * fish.batch.profile.nightPaling);
+      v.seed = fish.seed;
+      v.filmThickness = fish.filmThickness;
+      v.tint = fish.tint;
+      lod.instances.write(slot, v);
     }
 
     for (const batch of this.batches) {
