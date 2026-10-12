@@ -126,11 +126,10 @@ export function sampleFloor(space: TankSpace, x: number, z: number): number {
   return near * (1 - fv) + far * fv;
 }
 
-/** Slope of the substrate, [dh/dx, dh/dz], in the bilinear cell containing (x, z); 0 outside the footprint, where the height is constant. */
+/** Slope of the substrate, [dh/dx, dh/dz], in the bilinear cell containing (x, z); each axis is 0 where the point is outside the footprint on that axis, because the height is constant there. */
 export function sampleFloorSlope(space: TankSpace, x: number, z: number): [number, number] {
   const { nx, nz, heights } = space.floor;
   const [hx, hz] = innerHalf(space);
-  if (Math.abs(x) > hx || Math.abs(z) > hz) return [0, 0];
   const { i, j, fu, fv } = floorCell(space, x, z);
   const at = (a: number, b: number): number => heights[b * nx + a] as number;
   const cellX = (2 * hx) / (nx - 1);
@@ -139,7 +138,7 @@ export function sampleFloorSlope(space: TankSpace, x: number, z: number): [numbe
     ((at(i + 1, j) - at(i, j)) * (1 - fv) + (at(i + 1, j + 1) - at(i, j + 1)) * fv) / cellX;
   const dz =
     ((at(i, j + 1) - at(i, j)) * (1 - fu) + (at(i + 1, j + 1) - at(i + 1, j)) * fu) / cellZ;
-  return [dx, dz];
+  return [Math.abs(x) > hx ? 0 : dx, Math.abs(z) > hz ? 0 : dz];
 }
 
 export interface TankSpaceParams {
