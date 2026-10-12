@@ -39,6 +39,11 @@ export const STEERING = {
   proximityBodyLengths: 0.25,
   avoidGradientBodyLengths: 0.5,
   avoidPriority: 0.5,
+  avoidReleaseThreshold: 0.15,
+  avoidMemoryS: 1.5,
+  avoidClosingGain: 2,
+  avoidMinSpeedFraction: 0.5,
+  headingHoldFraction: 0.1,
   intentSmoothingS: 0.15,
   turnGainPerS: 6,
   turnSmoothingS: 0.1,
@@ -95,8 +100,9 @@ export class World {
   private readonly cruiseSpeed: Float64Array;
   private readonly wanderTurn: Float64Array;
   private readonly wanderPitch: Float64Array;
-  /** Committed escape turn (+1 left, −1 right, 0 none) so a head-on approach cannot dither. */
-  private readonly avoidSide: Int8Array;
+  /** Horizontal unit slide direction along the wall being avoided; zero when disengaged. */
+  private readonly avoidTangent: Float64Array;
+  private readonly avoidMemory: Float64Array;
   private readonly intent: Float64Array;
   private readonly targetYaw: Float64Array;
   private readonly targetPitch: Float64Array;
@@ -142,7 +148,8 @@ export class World {
     this.cruiseSpeed = new Float64Array(n);
     this.wanderTurn = new Float64Array(n);
     this.wanderPitch = new Float64Array(n);
-    this.avoidSide = new Int8Array(n);
+    this.avoidTangent = new Float64Array(n * 2);
+    this.avoidMemory = new Float64Array(n);
     this.intent = new Float64Array(n * 3);
     this.targetYaw = new Float64Array(n);
     this.targetPitch = new Float64Array(n);
@@ -359,7 +366,10 @@ export class World {
     const probe = 0.5 * length + v * STEERING.avoidLookaheadS + v / sp.maxTurnRate;
     const dProbe = this.sdf.sample(px + fx * probe, py + fy * probe, pz + fz * probe, np);
     const probeMargin = radius + length * STEERING.avoidMarginBodyLengths;
-    const aProbe = clamp((probeMargin - dProbe) / (probeMargin - radius), 0, 1);
+    // Only a path that closes on a surface is a threat; a probe that is merely near a wall the
+    // fish runs parallel to (common for large fish in a narrow tank) is left to the proximity term.
+    const closing = clamp(((dHere - dProbe) / probe) * STEERING.avoidClosingGain, 0, 1);
+    const aProbe = clamp((probeMargin - dProbe) / (probeMargin - radius), 0, 1) * closing;
     const aHere = clamp((clearance - dHere) / (clearance - radius), 0, 1);
     const a = Math.max(aHere, aProbe);
     if (a > 0) {
@@ -396,16 +406,20 @@ export class World {
         // makes the heading jitter. Guarantee a committed slide along the pane instead.
         const hl = Math.hypot(nx, nz);
         if (hl > 0.2) {
-          let tx = -nz / hl;
-          let tz = nx / hl;
-          let side = this.avoidSide[i] ?? 0;
-          if (side === 0) {
-            const along = fx * tx + fz * tz;
-            side = Math.abs(along) > 1e-6 ? Math.sign(along) : nextWt >= 0 ? 1 : -1;
-            this.avoidSide[i] = side;
-          }
+          const ux = nx / hl;
+          const uz = nz / hl;
+          let tx = -uz;
+          let tz = ux;
+          const px0 = this.avoidTangent[i * 2] ?? 0;
+          const pz0 = this.avoidTangent[i * 2 + 1] ?? 0;
+          // Within one engagement the slide direction stays continuous as the wall normal turns
+          // (pane to corner to next pane); only a fresh engagement picks a side from the heading.
+          const reference = px0 !== 0 || pz0 !== 0 ? tx * px0 + tz * pz0 : fx * tx + fz * tz;
+          const side = Math.abs(reference) > 1e-6 ? Math.sign(reference) : nextWt >= 0 ? 1 : -1;
           tx *= side;
           tz *= side;
+          this.avoidTangent[i * 2] = tx;
+          this.avoidTangent[i * 2 + 1] = tz;
           const shortfall = cruise * a * hl - (dx * tx + dz * tz);
           if (shortfall > 0) {
             dx += tx * shortfall;
@@ -414,8 +428,19 @@ export class World {
         }
       }
       if (a > 0.25) state = FishState.Avoid;
+    }
+    // The slide direction outlives a brief release so the fish keeps rounding a corner the same
+    // way, but it is forgotten soon after, so a side chosen at one pane never steers the fish at
+    // the next encounter.
+    if (a >= STEERING.avoidReleaseThreshold) {
+      this.avoidMemory[i] = STEERING.avoidMemoryS;
     } else {
-      this.avoidSide[i] = 0;
+      const left = (this.avoidMemory[i] ?? 0) - dt;
+      this.avoidMemory[i] = left;
+      if (left <= 0) {
+        this.avoidTangent[i * 2] = 0;
+        this.avoidTangent[i * 2 + 1] = 0;
+      }
     }
     this.state[i] = state;
 
@@ -429,16 +454,17 @@ export class World {
     this.intent[o + 2] = dz;
 
     const mag = Math.hypot(dx, dy, dz);
-    if (mag < 1e-9) {
-      this.targetYaw[i] = yaw;
-      this.targetPitch[i] = 0;
-      this.targetSpeed[i] = 0;
+    // Fish do not stop and pirouette to dodge glass; they keep way on and turn along it.
+    const minSpeed = a > 0 ? cruise * STEERING.avoidMinSpeedFraction * a : 0;
+    // A near-zero desired velocity has no meaningful direction; keep the current goal heading.
+    if (mag < cruise * STEERING.headingHoldFraction) {
+      this.targetSpeed[i] = Math.max(mag, minSpeed);
       return;
     }
     const cosAhead = (dx * fx + dy * fy + dz * fz) / mag;
     this.targetYaw[i] = Math.atan2(dx, dz);
     this.targetPitch[i] = clamp(Math.atan2(dy, Math.hypot(dx, dz)), -sp.maxPitch, sp.maxPitch);
-    this.targetSpeed[i] = clamp(mag * (0.5 + 0.5 * cosAhead), 0, vmax);
+    this.targetSpeed[i] = clamp(Math.max(mag * (0.5 + 0.5 * cosAhead), minSpeed), 0, vmax);
   }
 
   private integrate(i: number): void {

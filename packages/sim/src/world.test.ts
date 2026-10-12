@@ -34,6 +34,28 @@ function at(a: ArrayLike<number>, i: number): number {
   return v;
 }
 
+function shoalClusters(w: World, members: number[], linkM: number): number[] {
+  const parent = members.map((_, k) => k);
+  const root = (k: number): number => {
+    while (at(parent, k) !== k) k = at(parent, k);
+    return k;
+  };
+  members.forEach((i, a) => {
+    for (let b = a + 1; b < members.length; b++) {
+      const j = at(members, b);
+      const d = Math.hypot(
+        at(w.position, i * 3) - at(w.position, j * 3),
+        at(w.position, i * 3 + 1) - at(w.position, j * 3 + 1),
+        at(w.position, i * 3 + 2) - at(w.position, j * 3 + 2),
+      );
+      if (d < linkM) parent[root(a)] = root(b);
+    }
+  });
+  const sizes = new Map<number, number>();
+  members.forEach((_, k) => sizes.set(root(k), (sizes.get(root(k)) ?? 0) + 1));
+  return [...sizes.values()];
+}
+
 describe('World determinism', { timeout: LONG }, () => {
   it('reproduces the trajectory bit for bit from the same seed', () => {
     const a = run(benchmarkConfig(3), 1000);
@@ -137,6 +159,37 @@ describe('World kinematic limits', { timeout: LONG }, () => {
     expect(sxy / Math.sqrt(sxx * syy)).toBeGreaterThan(0.6);
   });
 
+  it('steers a lone tang along the reef glass without flip-flopping or stalling', () => {
+    let hardFlips = 0;
+    let stalled = 0;
+    let samples = 0;
+    for (const seed of [1, 2, 3]) {
+      const w = new World({
+        seed,
+        tank: REEF_TANK,
+        species: ARCHETYPES,
+        fish: spawnMany('blue-tang', 1),
+      });
+      const { maxTurnRate: maxTurn, cruiseSpeed } = toSimSpecies(blueTang);
+      let lastHardSign = 0;
+      for (let t = 0; t < 10_000; t++) {
+        w.step();
+        if (t < 300) continue;
+        const turn = at(w.yawRate, 0);
+        if (Math.abs(turn) > 0.3 * maxTurn) {
+          const sign = Math.sign(turn);
+          if (lastHardSign !== 0 && sign !== lastHardSign) hardFlips++;
+          lastHardSign = sign;
+        }
+        // Speed lags the target, so a fish told to stop at each pane only sinks to a crawl.
+        if (at(w.speed, 0) < 0.3 * cruiseSpeed) stalled++;
+        samples++;
+      }
+    }
+    expect((hardFlips / samples) * 30).toBeLessThan(0.3);
+    expect(stalled / samples).toBeLessThan(0.01);
+  });
+
   it('scales speed limits with an individual body length', () => {
     const w = new World({
       seed: 1,
@@ -163,9 +216,16 @@ describe('World schooling', { timeout: LONG }, () => {
     let localPol = 0;
     let isolated = 0;
     let samples = 0;
+    let clusters = 0;
+    let largestShare = 0;
+    let snapshots = 0;
     for (let t = 0; t < 6000; t++) {
       w.step();
       if (t < 600 || t % 15 !== 0) continue;
+      const linked = shoalClusters(w, tetras, 4 * toSimSpecies(neonTetra).bodyLength);
+      clusters += linked.length;
+      largestShare += Math.max(...linked) / tetras.length;
+      snapshots++;
       for (const i of tetras) {
         const byDistance = tetras
           .filter((j) => j !== i)
@@ -198,6 +258,8 @@ describe('World schooling', { timeout: LONG }, () => {
     expect(nnd / samples).toBeLessThan(2);
     expect(localPol / samples).toBeGreaterThan(0.7);
     expect(isolated / samples).toBeLessThan(0.05);
+    expect(clusters / snapshots).toBeLessThanOrEqual(3);
+    expect(largestShare / snapshots).toBeGreaterThanOrEqual(0.5);
   });
 });
 
