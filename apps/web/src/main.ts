@@ -7,6 +7,7 @@ import { bindCameraControls } from './interaction/controls';
 import type { InteractionEvents } from './interaction/events';
 import { onPageTeardown } from './interaction/pageLifecycle';
 import { watchReducedMotion } from './interaction/motion';
+import { mountPreset, type TankScene } from './scene';
 import { mountUi } from './ui/mount';
 
 function showFatal(container: HTMLElement, message: string): void {
@@ -76,7 +77,15 @@ async function boot(): Promise<void> {
   });
   engine.onFrame((deltaS) => rig.update(deltaS));
 
+  let tankScene: TankScene | null = null;
+  try {
+    tankScene = await mountPreset(engine, 'freshwater', window.location.search);
+  } catch (cause) {
+    console.error('Could not build the freshwater preset', cause);
+  }
+
   onPageTeardown(window, () => {
+    tankScene?.dispose().catch((cause: unknown) => console.error('Scene dispose failed', cause));
     stopMotionWatch();
     unbindControls();
     stopRequests();
@@ -86,7 +95,7 @@ async function boot(): Promise<void> {
   if (import.meta.env.DEV) {
     const { createDevPanel } = await import('./engine/devPanel');
     createDevPanel(engine);
-    Object.assign(window, { engine });
+    Object.assign(window, { engine, tankScene });
   }
 
   engine.start();
