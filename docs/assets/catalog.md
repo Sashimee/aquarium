@@ -13,6 +13,7 @@ Curated for T05 (#5), checked 2026-10-12. Ranks are by fit for a photorealistic 
 
 | Species | Reason | Reference photos |
 |---|---|---|
+| Blue tang, yellow tang | Sketchfab picks are weak; auditor decides | `wm-bluetang-244215093`, `wm-bluetang-holleday`, `wm-yellowtang-holleday` |
 | Bronze corydoras | only candidate is inaccurate | `wm-cory-aeneus-ack210`, `wm-cory-aeneus-ark` |
 | Royal gramma | no model exists | `wm-gramma-257593001`, `wm-gramma-365520074` |
 | Banggai cardinalfish | only wrong-species models | `wm-banggai-53953454`, `wm-banggai-holleday` |
@@ -43,11 +44,11 @@ Higher-quality reference photos exist only under CC BY-SA and were not used: Cor
 | 2 | [SIT253 Angelfish](https://sketchfab.com/3d-models/5726e45c8a8d4dc2ad9f6165f4d522f4) ([render](https://media.sketchfab.com/models/5726e45c8a8d4dc2ad9f6165f4d522f4/thumbnails/a2a4d92df9024b6f9896bb234c6d6c42/e3a06b632dbc4d488dc1f15c8e7c547c.jpeg)) | sipsen | CC-BY 4.0 | 1,508 | flat shaded | marine angelfish, wrong species | reject |
 | 3 | [Angelfish](https://sketchfab.com/3d-models/8191be1e978e43719943231d57546aa5) ([render](https://media.sketchfab.com/models/8191be1e978e43719943231d57546aa5/thumbnails/de0cbbb9bfb64505b62861de401dc95e/0bbb71fe93234523833147280dda6f0d.jpeg)) | NormanH | CC-BY 4.0 | 9,120 | glossy gold/blue | marine angelfish, wrong species | reject |
 
-Only one usable freshwater angelfish exists on Sketchfab under an allowed licence. Fallback if the auditor rejects it: procedural loft using the CC BY 4.0 photo `Pterophyllum scalare A742578.jpg` (Rjcastillo, Commons).
+Only one usable freshwater angelfish exists on Sketchfab under an allowed licence. Fallback if the auditor rejects it: procedural loft using `wm-angelfish-a742578` (CC BY 4.0, Rjcastillo; in manifest).
 
 ### Bronze corydoras (Corydoras aeneus)
 
-**Decision: **fallback: procedural loft****
+**Decision: fallback: procedural loft**
 
 | # | Candidate | Author | Licence | Faces | Texture | Anatomy | Verdict |
 |---|---|---|---|---|---|---|---|
@@ -89,7 +90,9 @@ Anemone host: no photoreal anemone with a free licence was found, so the **anemo
 
 ### Blue tang (Paracanthurus hepatus)
 
-**Decision: pick `sketchfab-00dac50e`**
+**Decision: Sketchfab pick `sketchfab-00dac50e` kept as candidate; fallback: procedural loft recorded, visual auditor decides**
+
+The reviewer found the pick weak: deep disc body, palette marking drawn as stripes, undersized caudal. Fallback references (in manifest, downloaded): `wm-bluetang-244215093` (CC0, Jean-Paul Boerekamps) and `wm-bluetang-holleday` (CC BY 3.0, Holger Krisp).
 
 | # | Candidate | Author | Licence | Faces | Texture | Anatomy | Verdict |
 |---|---|---|---|---|---|---|---|
@@ -99,7 +102,9 @@ Anemone host: no photoreal anemone with a free licence was found, so the **anemo
 
 ### Yellow tang (Zebrasoma flavescens)
 
-**Decision: pick `sketchfab-5750f70a`**
+**Decision: Sketchfab pick `sketchfab-5750f70a` kept as candidate; fallback: procedural loft recorded, visual auditor decides**
+
+The reviewer found the pick weak: small tail and cartoon eye. Fallback reference (in manifest, downloaded): `wm-yellowtang-holleday` (CC BY 3.0, Holger Krisp); the other Commons yellow tang photos are CC BY-SA.
 
 | # | Candidate | Author | Licence | Faces | Texture | Anatomy | Verdict |
 |---|---|---|---|---|---|---|---|
@@ -109,7 +114,7 @@ Anemone host: no photoreal anemone with a free licence was found, so the **anemo
 
 ### Royal gramma (Gramma loreto)
 
-**Decision: **fallback: procedural loft****
+**Decision: fallback: procedural loft**
 
 
 No Sketchfab model with an allowed licence exists (searches `gramma`, `Gramma loreto`, `royal gramma` returned nothing relevant).
@@ -118,12 +123,12 @@ Reference photos (in manifest, downloaded): `wm-gramma-257593001` (CC BY 4.0, Da
 
 ### Banggai cardinalfish (Pterapogon kauderni)
 
-**Decision: **fallback: procedural loft****
+**Decision: fallback: procedural loft**
 
 | # | Candidate | Author | Licence | Faces | Texture | Anatomy | Verdict |
 |---|---|---|---|---|---|---|---|
 | 1 | [Cardinalfish](https://sketchfab.com/3d-models/b5fa632cca7b4400a61f4b5183cc1d41) ([render](https://media.sketchfab.com/models/b5fa632cca7b4400a61f4b5183cc1d41/thumbnails/384b9df09f6440559d4c0fd143776e27/b120e026ad144fd880e993f441ee6276.jpeg)) | viettextures | CC-BY 4.0 | 43,072 | good | a yellow-striped cardinalfish, wrong species | reject: species |
-| 2 | [Amboina Cardinalfish (CC0 scan)](https://sketchfab.com/3d-models/3d8aa2c1f7674c84bf0758e17409abcd) ([render](https://media.sketchfab.com/models/3d8aa2c1f7674c84bf0758e17409abcd/thumbnails/117f9b70cc0d4a278a224baef3c397f2/242ef43981404775a8648f6956b4d948.jpeg)) | ffish.asia / floraZia.com | CC0 | 216,246 | specimen photogrammetry, dull | real anatomy, wrong species | body-shape reference only |
+| 2 | [Amboina Cardinalfish (CC0 scan)](https://sketchfab.com/3d-models/3d8aa2c1f7674c84bf0758e17409abcd) ([render](https://media.sketchfab.com/models/3d8aa2c1f7674c84bf0758e17409abcd/thumbnails/117f9b70cc0d4a278a224baef3c397f2/242ef43981404775a8648f6956b4d948.jpeg)) | ffish.asia / floraZia.com | CC0 | 216,246 | specimen photogrammetry, dull | real anatomy, wrong species | body-shape reference only, not in manifest |
 
 Reference photos (in manifest, downloaded): `wm-banggai-53953454` (CC BY 4.0, Dan Schofield, watermark in corner, crop it) and `wm-banggai-holleday` (CC BY 3.0, Holger Krisp). Key traits: tall first dorsal and long anal fin, deeply forked tail, three black bars, white spots.
 
