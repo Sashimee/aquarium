@@ -11,7 +11,7 @@ import {
 } from 'react';
 import type { EngineEvents, EventBus } from '../engine/events';
 import type { CameraMode } from '../interaction/camera';
-import type { InteractionEvents } from '../interaction/events';
+import type { InteractionEvents, PlayTool } from '../interaction/events';
 import { ApiRequestError, createApiClient, type ApiClient } from './api';
 import {
   currentHref,
@@ -48,6 +48,13 @@ export function useCameraMode(): CameraMode {
   const [mode, setMode] = useState<CameraMode>('orbit');
   useEffect(() => interaction.on('camera:mode-changed', (e) => setMode(e.mode)), [interaction]);
   return mode;
+}
+
+export function usePlayTool(): PlayTool {
+  const { interaction } = useBridge();
+  const [tool, setTool] = useState<PlayTool>('tap');
+  useEffect(() => interaction.on('play:tool-changed', (e) => setTool(e.tool)), [interaction]);
+  return tool;
 }
 
 export function useEngineReady(): EngineEvents['engine:ready'] | null {

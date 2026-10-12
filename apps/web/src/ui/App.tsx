@@ -8,6 +8,7 @@ import {
   useRedirect,
   useRoute,
 } from './context';
+import { PlayControls } from './PlayControls';
 import {
   CreditsScreen,
   Link,
@@ -160,6 +161,7 @@ export function App() {
           Aquarium
         </Link>
         <CameraControls />
+        <PlayControls />
         <AccountMenu />
       </header>
       <div className={modal ? 'stage modal' : 'stage'}>
