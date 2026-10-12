@@ -1,0 +1,20 @@
+{
+  "biome": "freshwater",
+  "commonName": "Angelfish",
+  "id": "angelfish",
+  "lifecycle": {
+    "ammoniaPerBioloadPerHour": 0.001,
+    "ammoniaTolerance": 0.25,
+    "bioload": 1.2,
+    "birthSizeM": 0.02,
+    "diet": ["flakes", "pellets", "bloodworms"],
+    "growthPerDay": 0.0004,
+    "healthLossPerHourStarving": 0.0078,
+    "healthRecoveryPerHour": 0.004,
+    "hungerPerHour": 0.0062,
+    "lifespanDays": 3650,
+    "maxSizeM": 0.15,
+    "starvationHungerThreshold": 0.75
+  },
+  "scientificName": "Pterophyllum scalare"
+}

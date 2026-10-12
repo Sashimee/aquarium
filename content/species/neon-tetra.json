@@ -1,0 +1,20 @@
+{
+  "biome": "freshwater",
+  "commonName": "Neon tetra",
+  "id": "neon-tetra",
+  "lifecycle": {
+    "ammoniaPerBioloadPerHour": 0.001,
+    "ammoniaTolerance": 0.2,
+    "bioload": 0.2,
+    "birthSizeM": 0.012,
+    "diet": ["flakes", "pellets", "bloodworms"],
+    "growthPerDay": 0.00008,
+    "healthLossPerHourStarving": 0.0093,
+    "healthRecoveryPerHour": 0.004,
+    "hungerPerHour": 0.0078,
+    "lifespanDays": 1460,
+    "maxSizeM": 0.035,
+    "starvationHungerThreshold": 0.75
+  },
+  "scientificName": "Paracheirodon innesi"
+}

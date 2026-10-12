@@ -20,11 +20,14 @@ export const waterParametersSchema = z.strictObject({
   filterRemovalPerHour: z.number().nonnegative(),
   foodDecayMinutes: z.number().positive(),
   nitratePerHour: z.number().nonnegative(),
+  ammoniaPerPortion: z.number().nonnegative(),
+  algaePerHour: z.number().nonnegative(),
 });
 export type WaterParameters = z.infer<typeof waterParametersSchema>;
 
 export const fishStatusSchema = z.enum(['alive', 'dead']);
 export const causeOfDeathSchema = z.enum(['starvation', 'ammonia', 'old_age', 'unknown']);
+export type CauseOfDeath = z.infer<typeof causeOfDeathSchema>;
 
 export const fishSchema = z.strictObject({
   id: idSchema,
@@ -52,6 +55,21 @@ export const memorialSchema = z.strictObject({
 });
 export type Memorial = z.infer<typeof memorialSchema>;
 
+export const awaySummarySchema = z.strictObject({
+  elapsedMinutes: z.int().nonnegative(),
+  capped: z.boolean(),
+  deaths: z.array(
+    z.strictObject({
+      fishId: idSchema,
+      name: z.string(),
+      species: slugSchema,
+      cause: causeOfDeathSchema,
+      diedAt: timestampSchema,
+    }),
+  ),
+});
+export type AwaySummary = z.infer<typeof awaySummarySchema>;
+
 export const tankSchema = z.strictObject({
   id: idSchema,
   name: z.string().trim().min(1).max(60),
@@ -61,6 +79,7 @@ export const tankSchema = z.strictObject({
   lastTickAt: timestampSchema,
   fish: z.array(fishSchema),
   memorials: z.array(memorialSchema),
+  away: awaySummarySchema.optional(),
 });
 export type Tank = z.infer<typeof tankSchema>;
 
@@ -83,3 +102,5 @@ export const addFishRequestSchema = z.strictObject({
   name: z.string().trim().min(1).max(40),
 });
 export type AddFishRequest = z.infer<typeof addFishRequestSchema>;
+
+export const tankListSchema = z.array(tankSchema);

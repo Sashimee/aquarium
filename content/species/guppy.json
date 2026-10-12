@@ -1,0 +1,20 @@
+{
+  "biome": "freshwater",
+  "commonName": "Guppy",
+  "id": "guppy",
+  "lifecycle": {
+    "ammoniaPerBioloadPerHour": 0.001,
+    "ammoniaTolerance": 0.3,
+    "bioload": 0.25,
+    "birthSizeM": 0.01,
+    "diet": ["flakes", "pellets", "bloodworms"],
+    "growthPerDay": 0.00015,
+    "healthLossPerHourStarving": 0.01,
+    "healthRecoveryPerHour": 0.004,
+    "hungerPerHour": 0.0085,
+    "lifespanDays": 730,
+    "maxSizeM": 0.05,
+    "starvationHungerThreshold": 0.75
+  },
+  "scientificName": "Poecilia reticulata"
+}

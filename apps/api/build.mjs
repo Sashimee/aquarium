@@ -1,9 +1,18 @@
 import { spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { build, context } from 'esbuild';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 const runtimeDeps = Object.keys(pkg.dependencies).filter((name) => !name.startsWith('@aquarium/'));
+
+const speciesDir = new URL('../../content/species/', import.meta.url);
+const species = readdirSync(speciesDir)
+  .filter((name) => name.endsWith('.json'))
+  .sort()
+  .map((name) => JSON.parse(readFileSync(new URL(name, speciesDir), 'utf8')));
+if (species.length === 0) throw new Error('content/species has no species files.');
+mkdirSync(new URL('./dist/', import.meta.url), { recursive: true });
+writeFileSync(new URL('./dist/species.json', import.meta.url), JSON.stringify(species));
 
 const options = {
   entryPoints: ['src/server.ts'],

@@ -37,6 +37,7 @@ export interface Config {
   port: number;
   webRoot: string;
   trustedProxies: string[];
+  testHooks: boolean;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv): Config {
@@ -67,6 +68,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     indexable: e.SITE_INDEXABLE === 'true',
     port: e.PORT,
     webRoot: e.WEB_DIST,
+    testHooks: e.NODE_ENV === 'test',
     trustedProxies: e.TRUSTED_PROXIES
       ? e.TRUSTED_PROXIES.split(',')
           .map((s) => s.trim())

@@ -15,6 +15,13 @@ describe('loadConfig', () => {
     expect(c.indexable).toBe(false);
   });
 
+  it('enables test hooks only when NODE_ENV is exactly test', () => {
+    expect(loadConfig({ ...valid, NODE_ENV: 'test' }).testHooks).toBe(true);
+    for (const NODE_ENV of ['production', 'development', 'Test', undefined]) {
+      expect(loadConfig({ ...valid, ...(NODE_ENV ? { NODE_ENV } : {}) }).testHooks).toBe(false);
+    }
+  });
+
   it('only treats SITE_INDEXABLE=true as indexable', () => {
     expect(loadConfig({ ...valid, SITE_INDEXABLE: 'true' }).indexable).toBe(true);
     expect(loadConfig({ ...valid, SITE_INDEXABLE: 'TRUE' }).indexable).toBe(false);

@@ -1,0 +1,20 @@
+{
+  "biome": "reef",
+  "commonName": "Yellow tang",
+  "id": "yellow-tang",
+  "lifecycle": {
+    "ammoniaPerBioloadPerHour": 0.001,
+    "ammoniaTolerance": 0.1,
+    "bioload": 2,
+    "birthSizeM": 0.02,
+    "diet": ["nori", "algae-wafer", "flakes"],
+    "growthPerDay": 0.0006,
+    "healthLossPerHourStarving": 0.007,
+    "healthRecoveryPerHour": 0.004,
+    "hungerPerHour": 0.0055,
+    "lifespanDays": 3650,
+    "maxSizeM": 0.2,
+    "starvationHungerThreshold": 0.75
+  },
+  "scientificName": "Zebrasoma flavescens"
+}
