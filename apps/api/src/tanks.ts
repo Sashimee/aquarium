@@ -39,13 +39,15 @@ import type { SpeciesCatalog } from './species.ts';
 
 export interface CareLimits {
   feed: Limit;
+  care: Limit;
   ate: Limit;
   addFish: Limit;
 }
 
 export const DEFAULT_CARE_LIMITS: CareLimits = {
   feed: { max: 20, windowMs: 10 * 60_000 },
-  ate: { max: 60, windowMs: 60_000 },
+  care: { max: 60, windowMs: 10 * 60_000 },
+  ate: { max: 30, windowMs: 60_000 },
   addFish: { max: 20, windowMs: 60 * 60_000 },
 };
 
@@ -71,6 +73,9 @@ export interface TankRouteDeps {
 type Tx = Parameters<Parameters<Database['db']['transaction']>[0]>[0];
 type TankRow = typeof schema.tanks.$inferSelect;
 type FishRow = typeof schema.fish.$inferSelect;
+
+const feedPayloadSchema = z.looseObject({ portion: z.number().positive() });
+const atePayloadSchema = z.looseObject({ fishId: idSchema, portion: z.number().positive() });
 
 const tankParamsSchema = z.strictObject({ tankId: idSchema });
 const fishParamsSchema = z.strictObject({ tankId: idSchema, fishId: idSchema });
@@ -176,9 +181,10 @@ async function lockAndTick(
     .update(schema.tanks)
     .set({ water: result.state.water, lastTickAt: advancedTo, updatedAt: new Date(now) })
     .where(eq(schema.tanks.id, tank.id));
-  if (result.deaths.length > 0) {
+  const recentDeaths = result.deaths.filter((d) => d.diedAtMs >= now - EVENT_RETENTION_MS);
+  if (recentDeaths.length > 0) {
     await tx.insert(schema.events).values(
-      result.deaths.map((d) => ({
+      recentDeaths.map((d) => ({
         tankId: tank.id,
         at: new Date(d.diedAtMs),
         kind: 'death' as const,
@@ -273,10 +279,10 @@ async function render(tx: Tx, ticked: Ticked, fishRows = ticked.fishRows): Promi
 export function registerTankRoutes(deps: TankRouteDeps): void {
   const { app, database, species, clock, limiter, limits } = deps;
 
-  async function authorize(req: FastifyRequest): Promise<SessionUser> {
+  async function authorize(req: FastifyRequest, requireVerified = true): Promise<SessionUser> {
     const user = await deps.currentUser(req);
     if (!user) throw new HttpError(401, apiError('unauthenticated', 'Sign in required.'));
-    if (!user.emailVerified) {
+    if (requireVerified && !user.emailVerified) {
       throw new HttpError(
         403,
         apiError('email_not_verified', 'Verify your email address before using your tank.'),
@@ -317,7 +323,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
   app.get(
     '/api/species',
     guarded(async (req) => {
-      await authorize(req);
+      await authorize(req, false);
       return speciesListSchema.parse([...species.values()]);
     }),
   );
@@ -392,6 +398,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       const user = await authorize(req);
       const { tankId } = tankParamsSchema.parse(req.params);
       const body = updateTankRequestSchema.parse(req.body);
+      throttle(user.id, 'care');
       return withTank(user, tankId, async (tx, ticked) => {
         const [row] = await tx
           .update(schema.tanks)
@@ -497,7 +504,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       const user = await authorize(req);
       const { tankId } = tankParamsSchema.parse(req.params);
       const action: CareAction = careActionSchema.parse(req.body);
-      if (action.type === 'feed') throttle(user.id, 'feed');
+      throttle(user.id, action.type === 'feed' ? 'feed' : 'care');
       const result = await withTank(user, tankId, async (tx, ticked) => {
         const applied = applyCare(ticked.state, action, ticked.tank.biome);
         if (!applied.ok) {
@@ -542,15 +549,12 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
         let eatenInWindow = 0;
         const eatenByFishInWindow = new Map<string, number>();
         for (const e of recent) {
-          const payload = e.payload as { portion?: number; fishId?: string };
-          const portion = payload.portion ?? 0;
-          if (e.kind === 'feed') fedInWindow += portion;
-          else if (payload.fishId) {
+          if (e.kind === 'feed') {
+            fedInWindow += feedPayloadSchema.parse(e.payload).portion;
+          } else {
+            const { fishId, portion } = atePayloadSchema.parse(e.payload);
             eatenInWindow += portion;
-            eatenByFishInWindow.set(
-              payload.fishId,
-              (eatenByFishInWindow.get(payload.fishId) ?? 0) + portion,
-            );
+            eatenByFishInWindow.set(fishId, (eatenByFishInWindow.get(fishId) ?? 0) + portion);
           }
         }
         const reports = body.reports.map((r) => ({
@@ -569,12 +573,14 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           throw new HttpError(422, apiError('feeding_rejected', applied.reason));
         }
         const fishRows = await persistState(tx, ticked.tank, ticked.fishRows, applied.value);
+        const perFish = new Map<string, number>();
+        for (const r of reports) perFish.set(r.fishId, (perFish.get(r.fishId) ?? 0) + r.portion);
         await tx.insert(schema.events).values(
-          reports.map((r) => ({
+          [...perFish].map(([fishId, portion]) => ({
             tankId,
-            at: new Date(Math.min(r.atMs, nowMs)),
+            at: new Date(nowMs),
             kind: 'ate' as const,
-            payload: { fishId: r.fishId, portion: r.portion },
+            payload: { fishId, portion },
           })),
         );
         const tank = { ...ticked.tank, water: applied.value.water };

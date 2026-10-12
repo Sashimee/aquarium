@@ -30,9 +30,11 @@ export const careActionSchema = z.discriminatedUnion('type', [
 ]);
 export type CareAction = z.infer<typeof careActionSchema>;
 
+export const MIN_ATE_PORTION = 0.01;
+
 export const ateReportSchema = z.strictObject({
   fishId: idSchema,
-  portion: z.number().positive().max(10),
+  portion: z.number().min(MIN_ATE_PORTION).max(10),
   at: timestampSchema,
 });
 export type AteReport = z.infer<typeof ateReportSchema>;

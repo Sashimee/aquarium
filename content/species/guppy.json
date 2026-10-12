@@ -3,7 +3,7 @@
   "commonName": "Guppy",
   "id": "guppy",
   "lifecycle": {
-    "ammoniaPerBioloadPerHour": 0.004,
+    "ammoniaPerBioloadPerHour": 0.001,
     "ammoniaTolerance": 0.3,
     "bioload": 0.25,
     "birthSizeM": 0.01,

@@ -346,6 +346,7 @@ describe('care actions and feeding validation', () => {
     h = await createHarness({
       careLimits: {
         feed: { max: 6, windowMs: 60_000 },
+        care: { max: 5, windowMs: 60_000 },
         ate: { max: 4, windowMs: 60_000 },
         addFish: { max: 100, windowMs: 60_000 },
       },
@@ -432,6 +433,52 @@ describe('care actions and feeding validation', () => {
     expect(last.statusCode).toBe(429);
     expect(apiErrorSchema.parse(last.json()).error.code).toBe('rate_limited');
     expect(last.headers['retry-after']).toBeUndefined();
+  });
+
+  it('measures the eating window by server receive time, so backdating cannot evade the per-fish cap', async () => {
+    const { cookie, tank, fishId } = await setup();
+    await feed(cookie, tank.id, 5);
+    await feed(cookie, tank.id, 5);
+    const backdated = new Date(h.clock.now() - 119 * 60_000).toISOString();
+    expect((await ate(cookie, tank.id, fishId, 2, backdated)).statusCode).toBe(200);
+    await advance(h, 2);
+    const again = await ate(cookie, tank.id, fishId, 2, backdated);
+    expect(again.statusCode).toBe(422);
+    expect(apiErrorSchema.parse(again.json()).error.code).toBe('feeding_rejected');
+  });
+
+  it('stores one aggregated event per fish per batch and rejects negligible portions', async () => {
+    const { cookie, tank, fishId } = await setup();
+    await feed(cookie, tank.id, 5);
+    const at = new Date(h.clock.now()).toISOString();
+    const reports = Array.from({ length: 150 }, () => ({ fishId, portion: 0.01, at }));
+    const res = await call(h, cookie, 'POST', `/api/tanks/${tank.id}/ate`, { reports });
+    expect(res.statusCode).toBe(200);
+    const rows = await h.database.db
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.tankId, tank.id));
+    const eaten = rows.filter((r) => r.kind === 'ate');
+    expect(eaten).toHaveLength(1);
+    expect((eaten[0]?.payload as { portion: number }).portion).toBeCloseTo(1.5);
+    const tiny = await call(h, cookie, 'POST', `/api/tanks/${tank.id}/ate`, {
+      reports: [{ fishId, portion: 1e-12, at }],
+    });
+    expect(tiny.statusCode).toBe(400);
+  });
+
+  it('rate-limits non-feed care actions and tank updates together', async () => {
+    const { cookie, tank } = await setup();
+    const codes: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      codes.push(
+        i % 2
+          ? (await call(h, cookie, 'PATCH', `/api/tanks/${tank.id}`, { name: `n${i}` })).statusCode
+          : (await call(h, cookie, 'POST', `/api/tanks/${tank.id}/care`, { type: 'algae_scrape' }))
+              .statusCode,
+      );
+    }
+    expect(codes).toEqual([200, 200, 200, 200, 200, 429]);
   });
 
   it('rate-limits ate batches per user', async () => {

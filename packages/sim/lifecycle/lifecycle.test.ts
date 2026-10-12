@@ -11,6 +11,7 @@ import {
   hasCapacityFor,
   MAX_CATCH_UP_MS,
   STEP_MS,
+  TANK_BIOLOAD_CAPACITY,
   type LifecycleFish,
   type LifecycleState,
   type SpeciesTable,
@@ -154,6 +155,64 @@ describe('one visit a day keeps a tank healthy', () => {
       expect(f.health).toBe(1);
     }
     expect(state.water.ammonia).toBeLessThan(0.1);
+  });
+});
+
+describe('a tank stocked to capacity at full size under perfect daily care', () => {
+  const stocks: Array<[string, Array<[string, number]>]> = [
+    ['60 neon tetras', [['neon-tetra', 60]]],
+    [
+      'reef: 5 clownfish, 1 yellow tang, 1 blue tang',
+      [
+        ['ocellaris-clownfish', 5],
+        ['yellow-tang', 1],
+        ['blue-tang', 1],
+      ],
+    ],
+    ['reef: 4 blue tangs', [['blue-tang', 4]]],
+    ['freshwater: 10 angelfish', [['angelfish', 10]]],
+  ];
+
+  it.each(stocks)('%s has no deaths in 30 days', (_name, groups) => {
+    const fish = groups.flatMap(([id, count]) =>
+      Array.from({ length: count }, (_, i) =>
+        fishOf(`${id}-${i}`, id, { size: species.get(id)?.maxSizeM ?? 0 }),
+      ),
+    );
+    const capacity = fish.reduce((sum, f) => sum + (species.get(f.species)?.bioload ?? 0), 0);
+    expect(capacity).toBeLessThanOrEqual(TANK_BIOLOAD_CAPACITY);
+    expect(capacity).toBeGreaterThan(TANK_BIOLOAD_CAPACITY - 3.1);
+    let state = tank(fish);
+    let now = T0;
+    for (let day = 0; day < 30; day++) {
+      state = {
+        water: { ...state.water, uneatenFood: state.water.uneatenFood + 1 },
+        fish: state.fish.map((f) => ({ ...f, hunger: 0 })),
+      };
+      const changed = applyCare(state, { type: 'water_change' }, 'freshwater');
+      if (!changed.ok) throw new Error(changed.reason);
+      const r = catchUp({
+        state: changed.value,
+        fromMs: now,
+        toMs: now + DAY,
+        species,
+        params: DEFAULT_WATER_PARAMETERS,
+        graceEndsAtMs: NO_GRACE,
+        vacationFeeder: false,
+      });
+      expect(r.deaths).toEqual([]);
+      state = r.state;
+      now += DAY;
+    }
+    expect(state.fish.every((f) => f.alive && f.health === 1)).toBe(true);
+  });
+
+  it('keeps bioload-only ammonia below the most sensitive tolerance with margin', () => {
+    const lowest = Math.min(...[...species.values()].map((s) => s.ammoniaTolerance));
+    const worst = Math.max(...[...species.values()].map((s) => s.ammoniaPerBioloadPerHour));
+    const equilibrium =
+      (TANK_BIOLOAD_CAPACITY * worst) / DEFAULT_WATER_PARAMETERS.filterRemovalPerHour;
+    expect(equilibrium).toBeLessThan(lowest * 0.75);
   });
 });
 
@@ -368,7 +427,7 @@ describe('carcass bioload', () => {
     const r = run(tank([dead]), 2 * DAY);
     const empty = run(tank([]), 2 * DAY);
     expect(empty.state.water.ammonia).toBe(0);
-    expect(r.state.water.ammonia).toBeGreaterThan(0.05);
+    expect(r.state.water.ammonia).toBeGreaterThan(0.01);
   });
 });
 
