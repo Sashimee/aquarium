@@ -6,3 +6,4 @@ export * from './tank.js';
 export * from './events.js';
 export * from './legal.js';
 export * from './collider.js';
+export * from './tankSpace.js';

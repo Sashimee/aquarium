@@ -4,9 +4,10 @@ import { z } from 'zod';
  * Collision proxies in tank space (see tankSpace.ts), the one format the web scene exports and
  * the sim consumes. The sphere, box and capsule members use the field names of the sim's
  * `DecorShape` (`hard` is its `solid`), and a hull is its vertices only; consumers derive
- * half-spaces from them. The scene emits the corners of its 54-direction k-DOP, and rebuilding
- * with the same fit reproduces the same planes, since each corner set attains every support
- * distance. Hard colliders are never penetrated; soft ones (plants) only push fish aside.
+ * half-spaces from them. The scene emits the corners of its 54-direction k-DOP and rebuilds its
+ * own planes from those same vertices with `fitHull`, as the sim does, so both sides evaluate
+ * identical planes (rebuilding from the corners matches the original k-DOP only up to
+ * rounding). Hard colliders are never penetrated; soft ones (plants) only push fish aside.
  */
 
 export const MAX_HULL_VERTICES = 256;
