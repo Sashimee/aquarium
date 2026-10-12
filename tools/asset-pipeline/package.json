@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "build:assets": "node src/cli.ts build",
-    "assets:check": "node src/cli.ts check"
+    "build:assets": "node --import ./src/ts-resolve.mjs src/cli.ts build",
+    "assets:check": "node --import ./src/ts-resolve.mjs src/cli.ts check"
   },
   "dependencies": {
     "@aquarium/shared": "workspace:*",

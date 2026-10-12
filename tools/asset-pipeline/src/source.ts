@@ -1,4 +1,6 @@
-import { join } from 'node:path';
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
+import { isAbsolute, join, relative, resolve } from 'node:path';
 import {
   Accessor,
   Document,
@@ -11,11 +13,108 @@ import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { transformMesh } from '@gltf-transform/functions';
 import { IDENTITY, multiply, type Mat4 } from './math.ts';
 
-export const RAW_ROOT = join(process.env['HOME'] ?? '', '.cache', 'aquarium-assets', 'raw');
+export function homeDir(): string {
+  const home = process.env['HOME'];
+  if (!home)
+    throw new Error('HOME is not set; the raw assets live in $HOME/.cache/aquarium-assets/raw');
+  return home;
+}
 
-export async function readGltf(path: string): Promise<Document> {
+export const RAW_ROOT = join(homeDir(), '.cache', 'aquarium-assets', 'raw');
+
+interface GltfJson {
+  images?: { uri?: string }[];
+  buffers?: { uri?: string }[];
+}
+
+/** Rejects a glTF whose image or buffer URIs point outside the asset's own raw directory. */
+export function assertSelfContainedGltf(gltfPath: string, rawDir: string): void {
+  const json = JSON.parse(readFileSync(gltfPath, 'utf8')) as GltfJson;
+  const base = realpathSync(rawDir);
+  const gltfDir = resolve(gltfPath, '..');
+  const uris = [...(json.images ?? []), ...(json.buffers ?? [])]
+    .map((entry) => entry.uri)
+    .filter((uri): uri is string => typeof uri === 'string' && !uri.startsWith('data:'));
+  for (const uri of uris) {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(uri);
+    } catch {
+      throw new Error(`${gltfPath}: URI "${uri}" is not valid percent-encoding`);
+    }
+    if (
+      /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(decoded) ||
+      isAbsolute(decoded) ||
+      /^[/\\]/.test(decoded)
+    ) {
+      throw new Error(`${gltfPath}: URI "${uri}" is absolute or has a scheme; refusing to read it`);
+    }
+    if (decoded.split(/[/\\]/).includes('..')) {
+      throw new Error(`${gltfPath}: URI "${uri}" contains ".."; refusing to read it`);
+    }
+    const target = resolve(gltfDir, decoded);
+    const real = existsSync(target) ? realpathSync(target) : target;
+    const rel = relative(base, real);
+    if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) {
+      throw new Error(`${gltfPath}: URI "${uri}" resolves outside ${rawDir}`);
+    }
+  }
+}
+
+export async function readGltf(sourceId: string, relativePath: string): Promise<Document> {
+  const rawDir = join(RAW_ROOT, sourceId);
+  const path = join(rawDir, relativePath);
+  assertSelfContainedGltf(path, rawDir);
   const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
   return io.read(path);
+}
+
+export interface ManifestSource {
+  id: string;
+  sha256: string | null;
+  files?: { path: string; sha256: string }[] | undefined;
+}
+
+function sha256File(path: string): string {
+  return createHash('sha256').update(readFileSync(path)).digest('hex');
+}
+
+/** Checks the raw files of a source against the manifest hashes; throws on any mismatch or missing file. */
+export function verifyRawSource(
+  source: ManifestSource,
+  aggregate: (files: { path: string; sha256: string }[]) => string,
+  rawRoot: string = RAW_ROOT,
+): void {
+  const dir = join(rawRoot, source.id);
+  if (!existsSync(dir)) throw new Error(`${source.id}: ${dir} is missing; download it first`);
+  if (source.sha256 === null)
+    throw new Error(`${source.id}: manifest has no sha256 (still pending download)`);
+  if (source.files) {
+    for (const file of source.files) {
+      const path = join(dir, file.path);
+      if (!existsSync(path)) throw new Error(`${source.id}: ${file.path} is missing from ${dir}`);
+      if (sha256File(path) !== file.sha256) {
+        throw new Error(
+          `${source.id}: ${file.path} does not match the manifest sha256; re-download it`,
+        );
+      }
+    }
+    if (aggregate(source.files) !== source.sha256) {
+      throw new Error(`${source.id}: manifest files[] do not add up to its aggregate sha256`);
+    }
+    return;
+  }
+  const present = readdirSync(dir);
+  if (present.length !== 1) {
+    throw new Error(
+      `${source.id}: manifest has no files[], so ${dir} must hold exactly one file (found ${present.length})`,
+    );
+  }
+  if (sha256File(join(dir, present[0]!)) !== source.sha256) {
+    throw new Error(
+      `${source.id}: ${present[0]} does not match the manifest sha256; re-download it`,
+    );
+  }
 }
 
 function mat4FromAccessor(accessor: Accessor, index: number): Mat4 {

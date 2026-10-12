@@ -12,7 +12,7 @@ import {
 import {
   ALLOWED_LICENCES,
   isAllowedShareAlike,
-  isShareAlike,
+  licenceRank,
   manifestSchema,
   validateManifest,
   PENDING_STATUS,
@@ -62,7 +62,7 @@ function effectiveLicenceProblems(
   problems: string[],
 ): void {
   const at = `asset ${asset.kind}/${asset.id}`;
-  let shareAlike = false;
+  const known: string[] = [];
   if (
     asset.sources.length === 0 &&
     asset.origin !== 'procedural' &&
@@ -84,35 +84,39 @@ function effectiveLicenceProblems(
       isAllowedShareAlike(source);
     if (!licenceOk)
       problems.push(`${at}: source "${sourceId}" has disallowed licence ${source.licence}`);
-    if (isShareAlike(source.licence)) shareAlike = true;
+    if (licenceOk) known.push(source.licence);
   }
-  if (shareAlike && !isShareAlike(asset.licence)) {
+  if (
+    asset.origin === 'procedural' ||
+    (asset.origin === 'procedural-loft' && asset.sources.length === 0)
+  ) {
+    if (asset.licence !== 'CC0-1.0') {
+      problems.push(
+        `${at}: procedural asset without sources must be CC0-1.0 (got ${asset.licence})`,
+      );
+    }
+    return;
+  }
+  if (known.length === 0 || known.length !== asset.sources.length) return;
+  const strictest = Math.max(...known.map((l) => licenceRank(l) ?? 0));
+  const acceptable = known.filter((l) => licenceRank(l) === strictest);
+  if (!acceptable.includes(asset.licence)) {
     problems.push(
-      `${at}: derived from a CC-BY-SA source, so its licence must be CC-BY-SA (got ${asset.licence})`,
+      `${at}: licence ${asset.licence} is weaker than its sources require (${acceptable.join(' or ')})`,
     );
-  }
-  if (!shareAlike && isShareAlike(asset.licence)) {
-    problems.push(`${at}: declares ${asset.licence} without a CC-BY-SA source`);
   }
 }
 
-function fishProblems(
-  asset: OutputAsset,
-  assetsDir: string,
-  repoRoot: string,
-  problems: string[],
-): void {
-  const at = `fish ${asset.id}`;
-  if (!asset.fish) {
-    problems.push(`${at}: index entry has no fish block (fin mask, standard length)`);
-    return;
-  }
+const TEXTURE_ONLY_KINDS: readonly string[] = ['substrate', 'hdri'];
+
+function lodProblems(asset: OutputAsset, assetsDir: string, problems: string[]): void {
+  const at = `${asset.kind} ${asset.id}`;
   if (asset.lods.length !== LOD_COUNT) {
     problems.push(`${at}: needs ${LOD_COUNT} LODs, index lists ${asset.lods.length}`);
   }
   for (let i = 0; i < LOD_COUNT; i++) {
     const lod = asset.lods[i];
-    const expected = `fish/${asset.id}/lod${i}.glb`;
+    const expected = `${asset.kind}/${asset.id}/lod${i}.glb`;
     if (!lod || lod.file !== expected) {
       problems.push(`${at}: LOD ${i} must be ${expected}`);
       continue;
@@ -126,7 +130,7 @@ function fishProblems(
       const json = readGlbJson(readFileSync(path));
       const primitives = (json.meshes ?? []).flatMap((m) => m.primitives);
       if (primitives.length === 0) problems.push(`${at}: ${lod.file} has no mesh primitives`);
-      for (const attr of [FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE]) {
+      for (const attr of asset.kind === 'fish' ? [FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE] : []) {
         if (primitives.some((p) => p.attributes[attr] === undefined)) {
           problems.push(`${at}: ${lod.file} lacks vertex attribute ${attr}`);
         }
@@ -138,6 +142,14 @@ function fishProblems(
     if (previous && lod.triangles >= previous.triangles) {
       problems.push(`${at}: LOD ${i} (${lod.triangles} tris) is not lighter than LOD ${i - 1}`);
     }
+  }
+}
+
+function fishProblems(asset: OutputAsset, repoRoot: string, problems: string[]): void {
+  const at = `fish ${asset.id}`;
+  if (!asset.fish) {
+    problems.push(`${at}: index entry has no fish block (fin mask, standard length)`);
+    return;
   }
   if (!existsSync(join(repoRoot, 'tools', 'asset-pipeline', asset.fish.debugRender))) {
     problems.push(`${at}: debug render ${asset.fish.debugRender} is missing`);
@@ -156,7 +168,8 @@ export function checkAssets(input: CheckInput): string[] {
     if (seenAssets.has(key)) problems.push(`index lists ${key} twice`);
     seenAssets.add(key);
     effectiveLicenceProblems(asset, byId, problems);
-    if (asset.kind === 'fish') fishProblems(asset, assetsDir, repoRoot, problems);
+    if (!TEXTURE_ONLY_KINDS.includes(asset.kind)) lodProblems(asset, assetsDir, problems);
+    if (asset.kind === 'fish') fishProblems(asset, repoRoot, problems);
 
     for (const file of asset.files) {
       if (!file.file.startsWith(`${asset.kind}/${asset.id}/`)) {

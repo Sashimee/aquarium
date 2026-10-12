@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { speciesSchema } from '@aquarium/shared';
 import { buildDocument, emitAsset, type LodPlan } from './emit.ts';
 import {
   bodyCentreOfMass,
@@ -13,7 +14,7 @@ import {
 import { FIN_ID_ATTRIBUTE, FIN_IDS, FIN_MASK_ATTRIBUTE, type OutputAsset } from './index-schema.ts';
 import { extractParts, materialDefFrom, mergeParts, weldPart, type Part } from './parts.ts';
 import { renderSheet } from './raster.ts';
-import { RAW_ROOT, bakeToWorldSpace, readGltf, type SkinPose } from './source.ts';
+import { bakeToWorldSpace, readGltf, type SkinPose } from './source.ts';
 
 export const FISH_LOD_PLAN: LodPlan = { ratios: [1, 0.4, 0.15], minTriangles: 150 };
 
@@ -37,19 +38,24 @@ export interface FishContext {
   repoRoot: string;
   outRoot: string;
   licenceOf(sourceId: string): string;
+  /** Throws unless the raw files of the source match the manifest hashes. */
+  verifySource(sourceId: string): void;
 }
 
+const speciesFileSchema = speciesSchema.partial({
+  behaviour: true,
+  locomotion: true,
+  render: true,
+});
+
+/** Standard length in metres from content/species/<species>.json, or null while the file has no locomotion block yet. */
 export function speciesLengthM(repoRoot: string, species: string): number | null {
   const path = join(repoRoot, 'content', 'species', `${species}.json`);
   if (!existsSync(path)) return null;
-  const json = JSON.parse(readFileSync(path, 'utf8')) as { locomotion?: { bodyLengthM?: unknown } };
-  const length = json.locomotion?.bodyLengthM;
-  if (typeof length !== 'number' || !(length > 0)) {
-    throw new Error(
-      `${path}: locomotion.bodyLengthM must be a positive number (standard length in metres)`,
-    );
-  }
-  return length;
+  const parsed = speciesFileSchema.safeParse(JSON.parse(readFileSync(path, 'utf8')));
+  if (!parsed.success)
+    throw new Error(`${path} does not match the species schema: ${parsed.error.message}`);
+  return parsed.data.locomotion?.bodyLengthM ?? null;
 }
 
 export interface NormaliseInput {
@@ -160,7 +166,8 @@ export function fishInfo(
 }
 
 export async function buildSourceFish(recipe: FishRecipe, ctx: FishContext): Promise<OutputAsset> {
-  const doc = await readGltf(join(RAW_ROOT, recipe.sourceId, 'gltf', 'scene.gltf'));
+  ctx.verifySource(recipe.sourceId);
+  const doc = await readGltf(recipe.sourceId, 'gltf/scene.gltf');
   const dropMesh = recipe.dropMeshes;
   bakeToWorldSpace(
     doc,

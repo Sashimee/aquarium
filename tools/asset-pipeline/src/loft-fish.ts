@@ -10,6 +10,7 @@ import {
 } from './fish.ts';
 import { loftFish, sideProjection, type LoftSpec, type Projection } from './loft.ts';
 import type { MaterialDef, Part } from './parts.ts';
+import { strictestLicence } from './manifest.ts';
 import { RAW_ROOT } from './source.ts';
 import { cropImage, decodeImage, type Rgba } from './textures.ts';
 import type { OutputAsset } from './index-schema.ts';
@@ -61,8 +62,9 @@ export async function loadTexture(
 ): Promise<{ image: Rgba; project: Projection; sources: string[] }> {
   const length = 1;
   const { spec } = recipe;
-  const first = spec.sections[0]!;
-  const last = spec.sections[spec.sections.length - 1]!;
+  const first = spec.sections.at(0);
+  const last = spec.sections.at(-1);
+  if (!first || !last) throw new Error(`${recipe.id}: loft needs at least one section`);
   const snoutY = ((first.top + first.bottom) / 2) * length;
   const tailY = ((last.top + last.bottom) / 2) * length;
   const source = recipe.texture;
@@ -361,6 +363,7 @@ export async function buildLoftFish(
 ): Promise<OutputAsset> {
   const fromSpecies = speciesLengthM(ctx.repoRoot, recipe.species);
   const standardLengthM = fromSpecies ?? recipe.fallbackLengthM;
+  if (recipe.texture.kind === 'photo') ctx.verifySource(recipe.texture.sourceId);
   const { image, project, sources } = await loadTexture(recipe);
   const part = loftFishPart(recipe, standardLengthM, project);
 
@@ -376,7 +379,7 @@ export async function buildLoftFish(
   };
   const debugRender = await writeDebugRender(ctx.repoRoot, recipe.id, [part]);
   const built = buildDocument(recipe.id, [part], [material]);
-  const licence = sources.length > 0 ? ctx.licenceOf(sources[0]!) : 'CC0-1.0';
+  const licence = strictestLicence(sources.map((id) => ctx.licenceOf(id)));
   return emitAsset({
     outRoot: ctx.outRoot,
     kind: 'fish',

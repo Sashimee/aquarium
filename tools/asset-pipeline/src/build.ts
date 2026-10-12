@@ -12,7 +12,8 @@ import {
   type AssetIndex,
   type OutputAsset,
 } from './index-schema.ts';
-import { manifestSchema } from './manifest.ts';
+import { aggregateSha256, manifestSchema } from './manifest.ts';
+import { verifyRawSource } from './source.ts';
 import { ENVIRONMENT_RECIPES, FISH_RECIPES, HDRI_RECIPES, SUBSTRATE_RECIPES } from './recipes.ts';
 
 export interface BuildOptions {
@@ -76,9 +77,18 @@ export async function build(options: BuildOptions): Promise<void> {
     JSON.parse(readFileSync(join(repoRoot, 'assets', 'manifest.json'), 'utf8')),
   );
   const licences = new Map(manifest.assets.map((a) => [a.id, a.licence]));
+  const byId = new Map(manifest.assets.map((a) => [a.id, a]));
+  const verified = new Set<string>();
   const ctx: FishContext = {
     repoRoot,
     outRoot,
+    verifySource: (sourceId) => {
+      if (verified.has(sourceId)) return;
+      const source = byId.get(sourceId);
+      if (!source) throw new Error(`${sourceId} is not in assets/manifest.json`);
+      verifyRawSource(source, aggregateSha256);
+      verified.add(sourceId);
+    },
     licenceOf: (sourceId) => {
       const licence = licences.get(sourceId);
       if (!licence) throw new Error(`${sourceId} is not in assets/manifest.json`);

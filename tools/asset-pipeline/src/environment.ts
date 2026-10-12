@@ -13,7 +13,7 @@ import {
   type TextureEntry,
 } from './emit.ts';
 import type { FishContext } from './fish.ts';
-import { sha256, writeFileTracked } from './glb.ts';
+import { writeFileTracked } from './glb.ts';
 import type { AssetKind, OutputAsset } from './index-schema.ts';
 import {
   extractParts,
@@ -164,8 +164,8 @@ export async function buildEnvironment(
   recipe: EnvironmentRecipe,
   ctx: FishContext,
 ): Promise<OutputAsset> {
-  const path = join(RAW_ROOT, recipe.sourceId, recipe.gltf ?? 'gltf/scene.gltf');
-  const doc = await readGltf(path);
+  ctx.verifySource(recipe.sourceId);
+  const doc = await readGltf(recipe.sourceId, recipe.gltf ?? 'gltf/scene.gltf');
   const dropMesh = recipe.dropMeshes;
   bakeToWorldSpace(
     doc,
@@ -232,6 +232,7 @@ export async function buildSubstrate(
   recipe: SubstrateRecipe,
   ctx: FishContext,
 ): Promise<OutputAsset> {
+  ctx.verifySource(recipe.sourceId);
   const dir = join(RAW_ROOT, recipe.sourceId);
   const load = async (suffix: string): Promise<Rgba> =>
     decodeImage(readFileSync(join(dir, `${recipe.prefix}_${suffix}_2k.jpg`)));
@@ -281,9 +282,9 @@ export interface HdriRecipe {
 }
 
 export function buildHdri(recipe: HdriRecipe, ctx: FishContext): OutputAsset {
+  ctx.verifySource(recipe.sourceId);
   const bytes = readFileSync(join(RAW_ROOT, recipe.sourceId, recipe.file));
   const file = writeFileTracked(ctx.outRoot, `hdri/${recipe.id}/${recipe.file}`, bytes);
-  if (file.sha256 !== sha256(bytes)) throw new Error(`${recipe.id}: hash mismatch after copy`);
   return {
     id: recipe.id,
     kind: 'hdri',

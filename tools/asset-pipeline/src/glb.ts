@@ -75,7 +75,8 @@ export async function writeGlb(doc: Document): Promise<Uint8Array> {
   const buffers = json.buffers ?? [];
   const main = buffers.find((b) => b.uri && resources[b.uri]);
   if (!main?.uri) throw new Error('writeGlb: document produced no binary buffer');
-  const bin = resources[main.uri]!;
+  const bin = resources[main.uri];
+  if (!bin) throw new Error('writeGlb: binary buffer resource is missing');
   delete main.uri;
   return packGlb(json, bin);
 }

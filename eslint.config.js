@@ -13,7 +13,10 @@ export default tseslint.config(
     },
   },
   {
-    files: ['tools/asset-pipeline/**/*.ts'],
+    files: [
+      'tools/asset-pipeline/src/{anemone,emit,environment,fins,fish,geometry,loft,lod,math,parts,raster,source,voxel}.ts',
+      'tools/asset-pipeline/src/geometry.test.ts',
+    ],
     rules: { '@typescript-eslint/no-non-null-assertion': 'off' },
   },
   prettier,

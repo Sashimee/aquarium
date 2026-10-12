@@ -4,7 +4,22 @@ import { z } from 'zod';
 export const ALLOWED_LICENCES = ['CC0-1.0', 'CC-BY-3.0', 'CC-BY-4.0'] as const;
 export const SHARE_ALIKE_LICENCES = ['CC-BY-SA-3.0', 'CC-BY-SA-4.0'] as const;
 export const SHARE_ALIKE_KIND = 'reference-photo';
-export const SHARE_ALIKE_AUTHORS = ['Gabriel Resende Veiga', 'H. Zell', 'David J. Stang'] as const;
+/** CC-BY-SA is approved for exactly these reference photos (Corydoras aeneus, Gramma loreto, Pterapogon kauderni) and nothing else. */
+export const SHARE_ALIKE_ALLOWLIST: readonly { id: string; species: string; author: string }[] = [
+  {
+    id: 'wm-cory-aeneus-gabs-01',
+    species: 'bronze-corydoras',
+    author: 'Gabriel Resende Veiga (GABS)',
+  },
+  {
+    id: 'wm-cory-aeneus-gabs-03',
+    species: 'bronze-corydoras',
+    author: 'Gabriel Resende Veiga (GABS)',
+  },
+  { id: 'wm-gramma-loreto-llez', species: 'royal-gramma', author: 'H. Zell (Llez)' },
+  { id: 'wm-banggai-stang-8zz', species: 'banggai-cardinalfish', author: 'David J. Stang' },
+  { id: 'wm-banggai-stang-10zz', species: 'banggai-cardinalfish', author: 'David J. Stang' },
+];
 
 const sha256Schema = z.string().regex(/^[0-9a-f]{64}$/, 'must be 64 lowercase hex characters');
 
@@ -57,8 +72,35 @@ export function isAllowedShareAlike(asset: ManifestAsset): boolean {
   return (
     isShareAlike(asset.licence) &&
     asset.kind === SHARE_ALIKE_KIND &&
-    SHARE_ALIKE_AUTHORS.some((name) => asset.author.includes(name))
+    SHARE_ALIKE_ALLOWLIST.some(
+      (entry) =>
+        entry.id === asset.id && entry.species === asset.species && entry.author === asset.author,
+    )
   );
+}
+
+const LICENCE_RANK: Record<string, number> = {
+  'CC0-1.0': 0,
+  'CC-BY-3.0': 1,
+  'CC-BY-4.0': 1,
+  'CC-BY-SA-3.0': 2,
+  'CC-BY-SA-4.0': 2,
+};
+
+export function licenceRank(licence: string): number | undefined {
+  return LICENCE_RANK[licence];
+}
+
+/** The most restrictive of the source licences; CC0 when there are none. Throws on a licence the project does not know. */
+export function strictestLicence(licences: readonly string[]): string {
+  let best = 'CC0-1.0';
+  for (const licence of licences) {
+    const rank = licenceRank(licence);
+    if (rank === undefined)
+      throw new Error(`unknown licence "${licence}"; only CC0 and CC-BY(-SA) are allowed`);
+    if (rank > (licenceRank(best) ?? 0)) best = licence;
+  }
+  return best;
 }
 
 export function requiresCredit(licence: string): boolean {
@@ -98,7 +140,7 @@ export function validateManifest(manifest: Manifest, credits: string): string[] 
     if (!licenceOk) {
       problems.push(
         isShareAlike(asset.licence)
-          ? `${at}: ${asset.licence} is only allowed for ${SHARE_ALIKE_KIND} entries by ${SHARE_ALIKE_AUTHORS.join(', ')} (author "${asset.author}", kind "${asset.kind}")`
+          ? `${at}: ${asset.licence} is only allowed for the approved ${SHARE_ALIKE_KIND} ids (${SHARE_ALIKE_ALLOWLIST.map((e) => e.id).join(', ')}); got "${asset.id}" (kind "${asset.kind}", author "${asset.author}")`
           : `${at}: licence "${asset.licence}" is not CC0-1.0, CC-BY-3.0 or CC-BY-4.0`,
       );
     }

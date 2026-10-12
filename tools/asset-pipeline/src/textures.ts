@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { encodeToKTX2 } from 'ktx2-encoder';
 import sharp from 'sharp';
+import { homeDir } from './source.ts';
 
 export type TextureCodec = 'etc1s' | 'uastc';
 export type ColorSpace = 'srgb' | 'linear';
@@ -34,7 +35,7 @@ export type Tier = keyof typeof TIER_SIZES;
 const ENCODER_VERSION = 'ktx2-encoder@0.6.0:etc1s-q128-c2:uastc-l1-zstd:v1';
 
 export function cacheDir(): string {
-  const dir = join(process.env['HOME'] ?? '', '.cache', 'aquarium-assets', 'pipeline-cache');
+  const dir = join(homeDir(), '.cache', 'aquarium-assets', 'pipeline-cache');
   mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -103,7 +104,8 @@ export async function cropImage(
 
 export function hasMeaningfulAlpha(image: Rgba, threshold = 250): boolean {
   let transparent = 0;
-  for (let i = 3; i < image.data.length; i += 4) if (image.data[i]! < threshold) transparent++;
+  for (let i = 3; i < image.data.length; i += 4)
+    if ((image.data[i] ?? 255) < threshold) transparent++;
   return transparent / (image.data.length / 4) > 0.002;
 }
 

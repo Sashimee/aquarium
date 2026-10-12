@@ -74,28 +74,33 @@ describe('validateManifest', () => {
     );
   });
 
-  it('allows CC-BY-SA only for allowlisted authors of reference photos', () => {
-    const sa = { licence: 'CC-BY-SA-4.0', author: 'H. Zell' };
-    const credits = '`src-a` H. Zell `src-b` Jane Doe';
-    expect(
-      validateManifest(manifestOf(manifestAsset({ ...sa, kind: 'reference-photo' })), credits),
-    ).toEqual([]);
-    expect(
-      validateManifest(manifestOf(manifestAsset({ ...sa, kind: 'model' })), credits).join('\n'),
-    ).toContain('only allowed for reference-photo');
-    expect(
-      validateManifest(
-        manifestOf(
-          manifestAsset({
-            licence: 'CC-BY-SA-4.0',
-            kind: 'reference-photo',
-            id: 'src-b',
-            author: 'Jane Doe',
-          }),
-        ),
+  describe('CC-BY-SA allowlist', () => {
+    const approved = {
+      id: 'wm-gramma-loreto-llez',
+      kind: 'reference-photo',
+      species: 'royal-gramma',
+      author: 'H. Zell (Llez)',
+      licence: 'CC-BY-SA-3.0',
+    };
+    const credits = '`wm-gramma-loreto-llez` H. Zell (Llez) `src-a` Jane Doe';
+
+    it('accepts exactly the approved reference photos', () => {
+      expect(validateManifest(manifestOf(manifestAsset(approved)), credits)).toEqual([]);
+    });
+
+    it.each([
+      ['another id by the same author', { id: 'src-a' }],
+      ['another species', { species: 'betta' }],
+      ['a model instead of a photo', { kind: 'model' }],
+      ['an author that only contains the approved name', { author: 'H. Zell (Llez) and friends' }],
+      ['a different author', { author: 'Jane Doe' }],
+    ])('rejects %s', (_label, override) => {
+      const problems = validateManifest(
+        manifestOf(manifestAsset({ ...approved, ...override })),
         credits,
-      ).join('\n'),
-    ).toContain('only allowed for reference-photo');
+      );
+      expect(problems.join('\n')).toContain('only allowed for the approved reference-photo ids');
+    });
   });
 
   it('enforces status values, hash nullability and the aggregate recipe', () => {
@@ -178,8 +183,8 @@ describe('checkAssets', () => {
     const lodCount = options.lodCount ?? 3;
     const lods = Array.from({ length: lodCount }, (_, i) => ({
       ...put(`fish/tetra/lod${i}.glb`, glb(attributes)),
-      triangles: triangles[i]!,
-      vertices: triangles[i]! * 2,
+      triangles: triangles[i] ?? 0,
+      vertices: (triangles[i] ?? 0) * 2,
     }));
     return {
       id: 'tetra',
@@ -248,14 +253,53 @@ describe('checkAssets', () => {
     expect(checkAssets(inputFor([asset], manifest, '`src-a` Jane Doe'))).toEqual([]);
   });
 
-  it('fails a model asset derived from a CC-BY-SA photo', () => {
+  it('fails an asset derived from a CC-BY-SA source that is not approved', () => {
     const manifest = manifestOf(
       manifestAsset({ licence: 'CC-BY-SA-4.0', author: 'H. Zell', kind: 'model' }),
     );
     const asset = { ...fishAsset(), licence: 'CC-BY-SA-4.0' };
     expect(checkAssets(inputFor([asset], manifest, '`src-a` H. Zell')).join('\n')).toContain(
-      'only allowed for reference-photo',
+      'disallowed licence',
     );
+  });
+
+  it('fails an output whose licence is weaker than its sources', () => {
+    const manifest = manifestOf(manifestAsset({ licence: 'CC-BY-4.0' }));
+    const asset = { ...fishAsset(), licence: 'CC0-1.0' };
+    expect(checkAssets(inputFor([asset], manifest, '`src-a` Jane Doe')).join('\n')).toContain(
+      'weaker than its sources require',
+    );
+  });
+
+  it('takes the strictest licence across several sources', () => {
+    const manifest = manifestOf(
+      manifestAsset(),
+      manifestAsset({ id: 'src-b', licence: 'CC-BY-4.0' }),
+    );
+    const credits = '`src-b` Jane Doe';
+    const base = { ...fishAsset(), sources: ['src-a', 'src-b'] };
+    expect(
+      checkAssets(inputFor([{ ...base, licence: 'CC0-1.0' }], manifest, credits)).join('\n'),
+    ).toContain('weaker than its sources require');
+    expect(checkAssets(inputFor([{ ...base, licence: 'CC-BY-4.0' }], manifest, credits))).toEqual(
+      [],
+    );
+  });
+
+  it('rejects a non-commercial source', () => {
+    const manifest = manifestOf(manifestAsset({ licence: 'CC-BY-NC-4.0' }));
+    const asset = { ...fishAsset(), licence: 'CC-BY-NC-4.0' };
+    expect(checkAssets(inputFor([asset], manifest)).join('\n')).toContain('disallowed licence');
+  });
+
+  it('requires a procedural asset without sources to be CC0', () => {
+    const asset: OutputAsset = {
+      ...fishAsset(),
+      sources: [],
+      origin: 'procedural',
+      licence: 'CC-BY-4.0',
+    };
+    expect(checkAssets(inputFor([asset])).join('\n')).toContain('must be CC0-1.0');
   });
 
   it('requires a procedural origin for assets without sources', () => {
@@ -280,7 +324,8 @@ describe('checkAssets', () => {
 
   it('fails a total over the budget', () => {
     const input = inputFor([fishAsset()]);
-    const asset = input.index.assets[0]!;
+    const [asset] = input.index.assets;
+    if (!asset) throw new Error('fixture has no asset');
     const filler = { file: 'fish/tetra/filler.bin', bytes: BUDGET_BYTES, sha256: DIGEST };
     writeFileSync(join(assetsDir, filler.file), new Uint8Array(BUDGET_BYTES));
     const problems = checkAssets({
