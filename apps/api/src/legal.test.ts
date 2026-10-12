@@ -12,6 +12,7 @@ import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildCredits, loadCredits, UNRECORDED_MODIFICATION } from './credits.ts';
 import { schema } from './db/index.ts';
+import { pruneExpired } from './maintenance.ts';
 import { APP_ORIGIN, createHarness, type Harness } from './test-harness.ts';
 
 const PASSWORD = 'correct horse battery';
@@ -119,13 +120,40 @@ describe('privacy and credits', () => {
     expect(policy.cookies.map((c) => c.name)).toContain('__Secure-better-auth.session_token');
   });
 
-  it('documents the cookie the auth layer actually sets', async () => {
-    const { cookie } = await account(h);
-    const names = cookie.split('; ').map((c) => c.split('=')[0]);
+  it('documents exactly the cookies Better Auth can set', async () => {
+    const ctx = await h.auth.$context;
+    const possible = [
+      ctx.authCookies.sessionToken.name,
+      ctx.authCookies.dontRememberToken.name,
+      ctx.createAuthCookie('better-auth-passkey').name,
+    ].sort();
     const documented = privacyPolicySchema
       .parse((await h.app.inject('/api/privacy')).json())
-      .cookies.map((c) => c.name);
-    for (const name of names) expect(documented).toContain(name);
+      .cookies.map((c) => c.name)
+      .sort();
+    expect(documented).toEqual(possible);
+
+    const { cookie } = await account(h);
+    for (const name of cookie.split('; ').map((c) => c.split('=')[0])) {
+      expect(documented).toContain(name);
+    }
+  });
+
+  it('names the controller and contact, and covers the required disclosures', async () => {
+    const policy = privacyPolicySchema.parse((await h.app.inject('/api/privacy')).json());
+    expect(policy.controller).not.toBe('');
+    expect(policy.contact).toBe('fish@bas.lu');
+    const text = policy.sections.flatMap((s) => s.paragraphs).join('\n');
+    for (const term of [
+      'AAGUID',
+      'IP address',
+      'user-agent',
+      'reverse proxy',
+      'mail relay',
+      'Backup',
+    ]) {
+      expect(text).toContain(term);
+    }
   });
 
   it('generates credits from the manifest, including the approved CC-BY-SA photos', async () => {
@@ -161,7 +189,12 @@ describe('privacy and credits', () => {
     expect(bySpecies('banggai-cardinalfish')[0]?.author).toBe('David J. Stang');
     expect(credits.entries.filter((e) => e.licence === 'CC-BY-3.0').length).toBeGreaterThan(0);
     expect(credits.shareAlikeNotice).toMatch(/BY-SA/);
-    for (const e of credits.entries) expect(e.modifications.length).toBeGreaterThan(0);
+    for (const e of credits.entries) {
+      expect(e.referenceOnly).toBe(e.kind === 'reference-photo');
+      if (e.licence === 'CC0-1.0' || e.referenceOnly) expect(e.modifications).toEqual([]);
+      else expect(e.modifications.length).toBeGreaterThan(0);
+    }
+    expect(sa.every((e) => e.referenceOnly)).toBe(true);
     expect(credits.entries.slice(0, sa.length).every((e) => e.shareAlike)).toBe(true);
   });
 
@@ -189,6 +222,8 @@ describe('privacy and credits', () => {
       assets: [
         { ...base, id: 'a', modifications: ['decimated to 5k triangles'] },
         { ...base, id: 'b', modifications: [] },
+        { ...base, id: 'c', licence: 'CC0-1.0', modifications: [] },
+        { ...base, id: 'd', kind: 'reference-photo', modifications: [] },
       ],
     });
     expect(credits.entries.find((e) => e.id === 'a')?.modifications).toEqual([
@@ -197,6 +232,64 @@ describe('privacy and credits', () => {
     expect(credits.entries.find((e) => e.id === 'b')?.modifications).toEqual([
       UNRECORDED_MODIFICATION,
     ]);
+    expect(credits.entries.find((e) => e.id === 'c')?.modifications).toEqual([]);
+    expect(credits.entries.find((e) => e.id === 'd')).toMatchObject({
+      modifications: [],
+      referenceOnly: true,
+    });
+  });
+
+  describe('licence rule', () => {
+    const entry = {
+      id: 'x',
+      kind: 'fish',
+      title: 'T',
+      author: 'A',
+      author_url: 'https://example.com/a',
+      source_url: 'https://example.com/s',
+      licence: 'CC-BY-4.0',
+      licence_url: 'https://creativecommons.org/licenses/by/4.0/',
+      modifications: [],
+      status: 'downloaded',
+    };
+    const photo = {
+      ...entry,
+      kind: 'reference-photo',
+      licence: 'CC-BY-SA-4.0',
+      species: 'bronze-corydoras',
+      author: 'Gabriel Resende Veiga (GABS)',
+    };
+    const build = (a: object) => () => buildCredits({ assets: [{ ...entry, ...a }] });
+
+    it('accepts CC0, CC-BY 3.0/4.0 and the approved CC-BY-SA reference photos', () => {
+      for (const licence of ['CC0-1.0', 'CC-BY-3.0', 'CC-BY-4.0']) {
+        expect(build({ licence })).not.toThrow();
+      }
+      expect(build(photo)).not.toThrow();
+      expect(
+        build({
+          ...photo,
+          species: 'royal-gramma',
+          author: 'H. Zell (Llez)',
+          licence: 'CC-BY-SA-3.0',
+        }),
+      ).not.toThrow();
+      expect(
+        build({ ...photo, species: 'banggai-cardinalfish', author: 'David J. Stang' }),
+      ).not.toThrow();
+    });
+
+    it('rejects anything else, loudly', () => {
+      for (const licence of ['CC-BY-NC-4.0', 'CC-BY-ND-4.0', 'CC-BY-2.0', 'CC-BY-SA-4.0', 'MIT']) {
+        expect(build({ licence })).toThrow(/not allowed/);
+      }
+      expect(build({ ...photo, kind: 'fish' })).toThrow(/not allowed/);
+      expect(build({ ...photo, author: 'Someone Else' })).toThrow(/not allowed/);
+      expect(build({ ...photo, species: 'neon-tetra' })).toThrow(/not allowed/);
+      expect(
+        build({ ...photo, status: 'selected-pending-download', licence: 'CC-BY-NC-4.0' }),
+      ).toThrow(/not allowed/);
+    });
   });
 });
 
@@ -390,6 +483,33 @@ describe('account deletion', () => {
     expect(signIn.cookies).toHaveLength(0);
   });
 
+  it("removes the user's passkey challenge rows and leaves other users' rows", async () => {
+    const alice = await account(h);
+    const bob = await account(h);
+    const row = (id: string, userId: string) => ({
+      id,
+      identifier: `token-${id}`,
+      value: JSON.stringify({
+        type: 'registration',
+        expectedChallenge: 'c',
+        userData: { id: userId, name: 'n', displayName: 'n' },
+        context: null,
+      }),
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    await h.database.db
+      .insert(schema.verification)
+      .values([row('v-alice', alice.userId), row('v-bob', bob.userId)]);
+
+    expect(
+      (await call(h, alice.cookie, 'POST', '/api/me/delete', { password: PASSWORD })).statusCode,
+    ).toBe(204);
+
+    const left = (await h.database.db.select().from(schema.verification)).map((v) => v.id);
+    expect(left).not.toContain('v-alice');
+    expect(left).toContain('v-bob');
+  });
+
   it('lets a passkey-only user delete with a fresh session, but not a stale one', async () => {
     const dave = await account(h);
     await h.database.db.delete(schema.account).where(eq(schema.account.userId, dave.userId));
@@ -435,5 +555,40 @@ describe('account deletion rate limit', () => {
     const blocked = await call(h, eve.cookie, 'POST', '/api/me/delete', { password: PASSWORD });
     expect(blocked.statusCode).toBe(429);
     expect((await counts(h, eve.userId)).users).toBe(1);
+  });
+
+  it('keeps the limit when other routes with shorter windows are busy', async () => {
+    const frank = await account(h);
+    for (let i = 0; i < 3; i++) {
+      await call(h, frank.cookie, 'POST', '/api/me/delete', { password: 'guess guess 1' });
+    }
+    await populate(h, frank.cookie);
+    for (let i = 0; i < 25; i++) {
+      await call(h, frank.cookie, 'POST', '/api/tanks', { name: 'x', biome: 'freshwater' });
+    }
+    const blocked = await call(h, frank.cookie, 'POST', '/api/me/delete', { password: PASSWORD });
+    expect(blocked.statusCode).toBe(429);
+  });
+});
+
+describe('maintenance', () => {
+  let h: Harness;
+  beforeAll(async () => {
+    h = await createHarness();
+  });
+  afterAll(() => h.close());
+
+  it('prunes expired sessions and keeps live ones', async () => {
+    const gina = await account(h);
+    await h.database.db.insert(schema.session).values({
+      id: 'expired-session',
+      token: 'expired-token',
+      userId: gina.userId,
+      expiresAt: new Date(Date.now() - 1000),
+      updatedAt: new Date(),
+    });
+    const { sessions } = await pruneExpired(h.database);
+    expect(sessions).toBe(1);
+    expect((await counts(h, gina.userId)).sessions).toBe(1);
   });
 });

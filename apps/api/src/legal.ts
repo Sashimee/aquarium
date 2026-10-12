@@ -4,7 +4,7 @@ import {
   deleteAccountRequestSchema,
   type Credits,
 } from '@aquarium/shared';
-import { and, asc, eq, or } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Auth } from './auth.ts';
 import { schema, type Database } from './db/index.ts';
@@ -199,12 +199,7 @@ export function registerLegalRoutes(deps: LegalDeps): void {
     await db.transaction(async (tx) => {
       await tx
         .delete(schema.verification)
-        .where(
-          or(
-            eq(schema.verification.identifier, current.user.email),
-            eq(schema.verification.value, userId),
-          ),
-        );
+        .where(sql`${schema.verification.value} like ${`%"userData":{"id":"${userId}"%`}`);
       await tx.delete(schema.user).where(eq(schema.user.id, userId));
     });
 

@@ -34,4 +34,17 @@ describe('RateLimiter', () => {
     now = 10_000;
     expect(limiter.consume('k', limit)).toBe(0);
   });
+
+  it("sweeps each key by its own window, not the caller's", () => {
+    let now = 0;
+    const limiter = new RateLimiter(() => now);
+    const long = { max: 2, windowMs: 3_600_000 };
+    const short = { max: 1000, windowMs: 1000 };
+    limiter.consume('long', long);
+    limiter.consume('long', long);
+    expect(limiter.consume('long', long)).toBeGreaterThan(0);
+    now = 61_000;
+    for (let i = 0; i < 1100; i++) limiter.consume(`short-${i}`, short);
+    expect(limiter.consume('long', long)).toBeGreaterThan(0);
+  });
 });

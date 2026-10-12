@@ -3,6 +3,7 @@ import { createAuth } from './auth.ts';
 import { loadConfig } from './config.ts';
 import { connect, runMigrations } from './db/index.ts';
 import { createMailer, createSmtpTransport } from './mail.ts';
+import { startMaintenance } from './maintenance.ts';
 import { loadCatalog } from './species.ts';
 
 const config = loadConfig(process.env);
@@ -28,8 +29,11 @@ const app = buildApp({
   testHooks: config.testHooks,
 });
 
+const stopMaintenance = startMaintenance(database);
+
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
+    stopMaintenance();
     void app.close().then(() => database.close());
   });
 }

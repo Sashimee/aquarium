@@ -4,7 +4,7 @@ export interface Limit {
 }
 
 export class RateLimiter {
-  private readonly hits = new Map<string, number[]>();
+  private readonly hits = new Map<string, { times: number[]; windowMs: number }>();
   private readonly now: () => number;
 
   constructor(now: () => number = Date.now) {
@@ -14,28 +14,28 @@ export class RateLimiter {
   /** Records a hit and returns 0, or returns the seconds until a hit would be allowed without recording. */
   consume(key: string, { max, windowMs }: Limit): number {
     const now = this.now();
-    const recent = (this.hits.get(key) ?? []).filter((t) => now - t < windowMs);
+    const recent = (this.hits.get(key)?.times ?? []).filter((t) => now - t < windowMs);
     if (recent.length >= max) {
-      this.hits.set(key, recent);
+      this.hits.set(key, { times: recent, windowMs });
       const oldest = recent[0] ?? now;
       return Math.max(1, Math.ceil((oldest + windowMs - now) / 1000));
     }
     recent.push(now);
-    this.hits.set(key, recent);
-    this.sweep(now, windowMs);
+    this.hits.set(key, { times: recent, windowMs });
+    this.sweep(now);
     return 0;
   }
 
   remaining(key: string, { max, windowMs }: Limit): number {
     const now = this.now();
-    const recent = (this.hits.get(key) ?? []).filter((t) => now - t < windowMs);
+    const recent = (this.hits.get(key)?.times ?? []).filter((t) => now - t < windowMs);
     if (recent.length < max) return 0;
     return Math.max(1, Math.ceil(((recent[0] ?? now) + windowMs - now) / 1000));
   }
 
-  private sweep(now: number, windowMs: number): void {
+  private sweep(now: number): void {
     if (this.hits.size < 1000) return;
-    for (const [key, times] of this.hits) {
+    for (const [key, { times, windowMs }] of this.hits) {
       const last = times[times.length - 1];
       if (last === undefined || now - last >= windowMs) this.hits.delete(key);
     }

@@ -3,7 +3,7 @@ import nodemailer from 'nodemailer';
 import pg from 'pg';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from './app.ts';
-import { createAuth, DEFAULT_AUTH_RATE_LIMITS, type AuthRateLimits } from './auth.ts';
+import { createAuth, type Auth, DEFAULT_AUTH_RATE_LIMITS, type AuthRateLimits } from './auth.ts';
 import { connect, runMigrations, type Database } from './db/index.ts';
 import { createClock, type Clock } from './clock.ts';
 import { createMailer, DEFAULT_MAIL_LIMITS, type MailLimits } from './mail.ts';
@@ -29,6 +29,7 @@ export interface SentMail {
 
 export interface Harness {
   app: FastifyInstance;
+  auth: Auth;
   database: Database;
   outbox: SentMail[];
   clock: Clock;
@@ -145,6 +146,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
 
   return {
     app,
+    auth,
     database,
     outbox,
     clock,

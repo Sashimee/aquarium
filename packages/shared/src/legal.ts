@@ -50,6 +50,7 @@ export const privacySectionSchema = z.strictObject({
 export const privacyPolicySchema = z.strictObject({
   version: z.string(),
   updatedAt: z.iso.date(),
+  controller: z.string().min(1),
   contact: z.email(),
   sections: z.array(privacySectionSchema).min(1),
   cookies: z.array(privacyCookieSchema).min(1),
@@ -69,6 +70,7 @@ export const creditEntrySchema = z.strictObject({
   licenceUrl: z.url(),
   attribution: z.string().min(1),
   shareAlike: z.boolean(),
+  referenceOnly: z.boolean(),
   species: slugSchema.nullable(),
   modifications: z.array(z.string()),
 });
@@ -81,10 +83,16 @@ export const creditsSchema = z.strictObject({
 });
 export type Credits = z.infer<typeof creditsSchema>;
 
+// TODO(alex): replace with the legal name and postal address of the controller (GDPR Art. 13(1)(a)) before production.
+export const PRIVACY_CONTROLLER = 'Operator of fish.bas.lu (legal name to be added)';
+// TODO(alex): confirm this address is monitored for data-subject requests, or replace it, before production.
+export const PRIVACY_CONTACT = 'fish@bas.lu';
+
 export const PRIVACY_POLICY: PrivacyPolicy = privacyPolicySchema.parse({
   version: '2026-10-13',
   updatedAt: '2026-10-13',
-  contact: 'fish@bas.lu',
+  controller: PRIVACY_CONTROLLER,
+  contact: PRIVACY_CONTACT,
   analytics: false,
   thirdPartyTracking: false,
   cookies: [
@@ -97,9 +105,17 @@ export const PRIVACY_POLICY: PrivacyPolicy = privacyPolicySchema.parse({
       essential: true,
     },
     {
-      name: '__Secure-better-auth-passkey',
+      name: '__Secure-better-auth.better-auth-passkey',
       purpose: 'Holds the one-time challenge while you register or use a passkey.',
-      lifetime: 'A few minutes, only during a passkey sign-in or registration.',
+      lifetime: '5 minutes at most, only during a passkey sign-in or registration.',
+      attributes: 'HttpOnly, Secure, SameSite=Lax, first-party only.',
+      essential: true,
+    },
+    {
+      name: '__Secure-better-auth.dont_remember',
+      purpose:
+        'Set only if you sign in with "remember me" turned off; makes the session end when you close the browser.',
+      lifetime: 'Browser session.',
       attributes: 'HttpOnly, Secure, SameSite=Lax, first-party only.',
       essential: true,
     },
@@ -109,18 +125,19 @@ export const PRIVACY_POLICY: PrivacyPolicy = privacyPolicySchema.parse({
       id: 'who',
       title: 'Who runs this site',
       paragraphs: [
-        'Aquarium is a personal hobby project hosted in the European Union. The operator is the controller of the personal data described here. Questions and requests about your data go to the contact address on this page.',
+        'Aquarium is a personal hobby project hosted in the European Union. The controller of the personal data described here is named in the controller field of this page. Questions and requests about your data go to the contact address on this page.',
       ],
     },
     {
       id: 'data',
       title: 'What we store',
       paragraphs: [
-        'Account: your email address, display name, a salted hash of your password (never the password itself), and any passkeys you register (public key and device label only).',
-        'Sessions: for every signed-in browser, a session record with its creation and expiry time, IP address and browser user-agent, so you can review and revoke sessions.',
+        'Account: your email address, display name and a salted hash of your password (never the password itself).',
+        'Passkeys you register: credential ID, public key, signature counter, device type, backed-up flag, transports, AAGUID (authenticator model identifier), the label you give it and its creation time. No biometric data ever leaves your device.',
+        'Sessions: for every signed-in browser, a session record with its creation and expiry time, IP address and browser user-agent, so you can review and revoke sessions. Session records are kept until they expire (30 days after your last activity) and are then deleted by an hourly cleanup, or immediately when you sign out, revoke them or delete your account.',
         'Game data: your tanks, fish, their care history and memorials of fish that have died.',
         'Email: verification mail is sent from fish@bas.lu through the operator mail relay. Nothing else is mailed to you.',
-        'Server logs record the request method and path without query strings, never email addresses, passwords or tokens.',
+        "Server logs of this application record the request method and path without query strings, never email addresses, passwords or tokens. The hosting platform's reverse proxy keeps standard access logs (including IP addresses) and the mail relay logs delivery of verification mail (including the recipient address); both are operated by the same operator and kept only as long as needed for security and troubleshooting.",
       ],
     },
     {
@@ -143,7 +160,7 @@ export const PRIVACY_POLICY: PrivacyPolicy = privacyPolicySchema.parse({
       title: 'How long we keep it',
       paragraphs: [
         'Account and game data are kept until you delete your account. Care events older than 90 days are pruned.',
-        'Deleting your account removes your user record, sessions, sign-in methods, passkeys, tanks, fish, care history and memorials from the database immediately. Routine database backups, if any, expire on their normal schedule.',
+        'Deleting your account removes your user record, sessions, sign-in methods, passkeys, tanks, fish, care history and memorials from the database immediately. Backup retention is to be defined before production; until then, deleted data may persist in backups no longer than that period.',
       ],
     },
     {

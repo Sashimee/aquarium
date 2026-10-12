@@ -323,7 +323,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     database,
     auth,
     credits: loadCredits(),
-    limiter,
+    limiter: new RateLimiter(),
     limits: opts.legalLimits ?? DEFAULT_LEGAL_LIMITS,
     currentSession,
   });
