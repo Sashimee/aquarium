@@ -390,8 +390,27 @@ export class Behaviour {
     const { tank } = this.host;
     const ids = new Set<string>();
     for (const a of anchors) {
+      if (typeof a.id !== 'string' || a.id === '') {
+        throw new RangeError(`anchor id must be a non-empty string, got ${String(a.id)}`);
+      }
       if (ids.has(a.id)) throw new Error(`anchor ids must be unique, "${a.id}" repeats`);
       ids.add(a.id);
+      if (a.kind !== 'anemone' && a.kind !== 'cave') {
+        throw new RangeError(
+          `anchor "${a.id}": kind must be "anemone" or "cave", got ${String(a.kind)}`,
+        );
+      }
+      if (!Array.isArray(a.position) || a.position.length !== 3) {
+        throw new RangeError(`anchor "${a.id}": position must be an [x, y, z] array`);
+      }
+      if (a.facing !== undefined) {
+        const f = a.facing;
+        const valid =
+          Array.isArray(f) && f.length === 3 && f.every(Number.isFinite) && Math.hypot(...f) > 1e-9;
+        if (!valid) {
+          throw new RangeError(`anchor "${a.id}": facing must be a finite, non-zero [x, y, z]`);
+        }
+      }
       const [x, y, z] = a.position;
       const inside =
         Math.abs(x) < tank.width / 2 && y > 0 && y < tank.height && Math.abs(z) < tank.depth / 2;

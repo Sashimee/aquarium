@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BEHAVIOUR } from './behaviour.ts';
+import { BEHAVIOUR, type Anchor } from './behaviour.ts';
 import {
   ARCHETYPES,
   angelfish,
@@ -242,6 +242,31 @@ describe('territoriality', { timeout: LONG }, () => {
 });
 
 describe('anchored species', { timeout: LONG }, () => {
+  it('rejects anchors a forged or corrupt scene message could carry', () => {
+    const w = reefTank(spawnMany(clownfish.id, 2));
+    const forged = (value: unknown): Anchor => value as Anchor;
+    const base = { id: 'a', kind: 'anemone', position: [0, 0.1, 0], radius: 0.05 };
+    expect(() => w.setAnchors([forged({ ...base, id: 3 })])).toThrow(/non-empty string/);
+    expect(() => w.setAnchors([forged({ ...base, kind: 'reef' })])).toThrow(
+      /anchor "a": kind must be "anemone" or "cave"/,
+    );
+    expect(() => w.setAnchors([forged({ ...base, position: 'here' })])).toThrow(
+      /anchor "a": position must be an \[x, y, z\] array/,
+    );
+    for (const facing of [
+      [0, 0, 0],
+      [0, Number.NaN, 1],
+      [1, 0],
+    ]) {
+      expect(() => w.setAnchors([forged({ ...base, kind: 'cave', facing })])).toThrow(
+        /anchor "a": facing must be a finite, non-zero/,
+      );
+    }
+    expect(() =>
+      w.setAnchors([forged({ ...base, kind: 'cave', facing: [0, 0, 2] })]),
+    ).not.toThrow();
+  });
+
   it('clownfish stay leashed to their anemone and host in it', () => {
     const w = reefTank(spawnMany(clownfish.id, 2), 7);
     const anemone = anchorOf('anemone');

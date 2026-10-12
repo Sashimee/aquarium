@@ -130,6 +130,33 @@ describe('decor primitives', () => {
     ];
     for (const c of bad) expect(() => compileCollider(c)).toThrow(`decor "${c.id}"`);
   });
+
+  it('rejects colliders that only a bad cast or a corrupt message could produce', () => {
+    // The bridge receives decor from the main thread, where the types are only a promise.
+    const forged = (value: unknown): DecorCollider => value as DecorCollider;
+    const sphere = { kind: 'sphere', center: [0, 0, 0], radius: 0.1 };
+    expect(() =>
+      compileCollider(forged({ id: 'cone', solid: true, shape: { kind: 'cone', radius: 1 } })),
+    ).toThrow(/decor "cone": unknown shape kind "cone"/);
+    expect(() => compileCollider(forged({ id: 'hollow', solid: true }))).toThrow(
+      /decor "hollow": shape must be an object/,
+    );
+    expect(() => compileCollider(forged({ id: 7, solid: true, shape: sphere }))).toThrow(
+      /id must be a non-empty string/,
+    );
+    expect(() => compileCollider(forged({ id: 'maybe', solid: 'yes', shape: sphere }))).toThrow(
+      /decor "maybe": solid must be true or false/,
+    );
+    expect(() =>
+      compileCollider(
+        forged({
+          id: 'slab',
+          solid: true,
+          shape: { kind: 'box', center: [0, 0, 0], halfExtents: 1 },
+        }),
+      ),
+    ).toThrow(/decor "slab": halfExtents must be an \[x, y, z\] array/);
+  });
 });
 
 describe('DecorField', () => {
@@ -197,6 +224,29 @@ describe('DecorField', () => {
     expect(() => field.remove(['ghost'])).toThrow('"ghost"');
     expect(() => new DecorField(SHOW_TANK, 0)).toThrow('reach');
     expect(() => new DecorField(SHOW_TANK, Number.NaN)).toThrow('reach');
+  });
+
+  it('leaves the field untouched when any collider in an update is bad', () => {
+    const field = new DecorField(SHOW_TANK, 0.1);
+    const stone = SHOW_DECOR.find((c) => c.id === 'stone');
+    if (!stone) throw new Error('fixture lost its stone');
+    field.set([stone]);
+    const before = field.sample(0.35, 0.15, 0.05, n);
+    const moved: DecorCollider = {
+      ...stone,
+      shape: { kind: 'sphere', center: [-0.35, 0, 0.05], radius: 0.12 },
+    };
+    const bad: DecorCollider = {
+      id: 'bad',
+      solid: true,
+      shape: { kind: 'sphere', center: [0, 0, 0], radius: -1 },
+    };
+    expect(() => field.upsert([moved, bad])).toThrow('decor "bad"');
+    expect(() => field.set([moved, bad])).toThrow('decor "bad"');
+    expect(field.sample(0.35, 0.15, 0.05, n)).toBe(before);
+    // The rejected update must not have been remembered as applied.
+    expect(field.upsert([moved])).toBeGreaterThan(0);
+    expect(field.sample(0.35, 0.15, 0.05, n)).toBeGreaterThan(before);
   });
 
   it('unions with the tank walls by nearest surface', () => {
@@ -308,5 +358,21 @@ describe('World decor', () => {
   it('rejects duplicate collider ids', () => {
     const w = settled([]);
     expect(() => w.setDecor([...SHOW_DECOR, ...SHOW_DECOR.slice(0, 1)])).toThrow('unique');
+  });
+
+  it('applies a decor update all or nothing', () => {
+    const w = settled(SHOW_DECOR);
+    const probe = (): number => w.sceneSdf.sample(0.35, 0.15, 0.05, n);
+    const before = probe();
+    const rest = SHOW_DECOR.filter((c) => c.id !== 'stone');
+    const badPlant: DecorCollider = {
+      id: 'bad-plant',
+      solid: false,
+      shape: { kind: 'capsule', a: [0, 0, 0], b: [0, Number.NaN, 0], radius: 0.02 },
+    };
+    expect(() => w.setDecor([...rest, badPlant])).toThrow('decor "bad-plant"');
+    expect(probe()).toBe(before);
+    expect(w.setDecor(rest)).toBeGreaterThan(0);
+    expect(probe()).toBeGreaterThan(before);
   });
 });

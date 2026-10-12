@@ -1,5 +1,5 @@
 import { Behaviour, BEHAVIOUR, type Anchor, type Plan, type Stimulus } from './behaviour.ts';
-import { DecorField, UnionSdf, type DecorCollider } from './decor.ts';
+import { compileCollider, DecorField, UnionSdf, type DecorCollider } from './decor.ts';
 import { clamp, DEG, quatFromYawPitchRoll, wrapAngle } from './math.ts';
 import { pairwiseDistanceSq, selectNearest } from './neighbours.ts';
 import { Rng } from './rng.ts';
@@ -278,6 +278,8 @@ export class World {
     for (const c of colliders) {
       if (ids.has(c.id)) throw new Error(`decor collider ids must be unique, "${c.id}" repeats`);
       ids.add(c.id);
+      // Validated up front, so a bad collider leaves both fields as they were.
+      compileCollider(c);
     }
     return (
       this.hardDecor.set(colliders.filter((c) => c.solid)) +

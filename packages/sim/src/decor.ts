@@ -49,6 +49,9 @@ function positive(v: number, what: string, id: string): number {
 }
 
 function point(p: Point3, what: string, id: string): Point3 {
+  if (!Array.isArray(p) || p.length !== 3) {
+    throw new RangeError(`decor "${id}": ${what} must be an [x, y, z] array`);
+  }
   return [
     finite(p[0], `${what}[0]`, id),
     finite(p[1], `${what}[1]`, id),
@@ -266,6 +269,15 @@ class CapsulePrimitive implements Primitive {
 
 export function compileCollider(collider: DecorCollider): Primitive {
   const { id, shape } = collider;
+  if (typeof id !== 'string' || id === '') {
+    throw new RangeError(`decor collider id must be a non-empty string, got ${String(id)}`);
+  }
+  if (typeof collider.solid !== 'boolean') {
+    throw new RangeError(`decor "${id}": solid must be true or false`);
+  }
+  if (typeof shape !== 'object' || shape === null) {
+    throw new RangeError(`decor "${id}": shape must be an object`);
+  }
   switch (shape.kind) {
     case 'sphere': {
       const [x, y, z] = point(shape.center, 'center', id);
@@ -273,6 +285,7 @@ export function compileCollider(collider: DecorCollider): Primitive {
     }
     case 'box': {
       const [x, y, z] = point(shape.center, 'center', id);
+      point(shape.halfExtents, 'halfExtents', id);
       const hx = positive(shape.halfExtents[0], 'halfExtents[0]', id);
       const hy = positive(shape.halfExtents[1], 'halfExtents[1]', id);
       const hz = positive(shape.halfExtents[2], 'halfExtents[2]', id);
@@ -287,6 +300,12 @@ export function compileCollider(collider: DecorCollider): Primitive {
       const [ax, ay, az] = point(shape.a, 'a', id);
       const [bx, by, bz] = point(shape.b, 'b', id);
       return new CapsulePrimitive(id, ax, ay, az, bx, by, bz, positive(shape.radius, 'radius', id));
+    }
+    default: {
+      const unknown: never = shape;
+      throw new RangeError(
+        `decor "${id}": unknown shape kind ${JSON.stringify((unknown as { kind?: unknown }).kind)}; expected sphere, box or capsule`,
+      );
     }
   }
 }
@@ -336,13 +355,16 @@ export class DecorField implements Sdf {
 
   /** Adds or replaces colliders and returns how many grid cells were rebuilt; unchanged ones are skipped. */
   upsert(colliders: readonly DecorCollider[]): number {
-    let touched = 0;
+    // Compile everything first, so a bad collider leaves the field exactly as it was.
+    const changed: { id: string; key: string; primitive: Primitive }[] = [];
     for (const c of colliders) {
-      const key = JSON.stringify(c.shape);
-      if (this.shapeKey.get(c.id) === key) continue;
       const primitive = compileCollider(c);
-      this.shapeKey.set(c.id, key);
-      const existing = this.slotOf.get(c.id);
+      const key = JSON.stringify(c.shape);
+      if (this.shapeKey.get(c.id) !== key) changed.push({ id: c.id, key, primitive });
+    }
+    let touched = 0;
+    for (const { id, key, primitive } of changed) {
+      const existing = this.slotOf.get(id);
       if (existing !== undefined) {
         const old = this.slots[existing];
         if (old) touched += this.bin(old, existing, false);
@@ -351,9 +373,10 @@ export class DecorField implements Sdf {
       } else {
         const slot = this.free.pop() ?? this.slots.length;
         this.slots[slot] = primitive;
-        this.slotOf.set(c.id, slot);
+        this.slotOf.set(id, slot);
         touched += this.bin(primitive, slot, true);
       }
+      this.shapeKey.set(id, key);
     }
     return touched;
   }
@@ -377,6 +400,7 @@ export class DecorField implements Sdf {
   set(colliders: readonly DecorCollider[]): number {
     const keep = new Set(colliders.map((c) => c.id));
     if (keep.size !== colliders.length) throw new Error('decor collider ids must be unique');
+    for (const c of colliders) compileCollider(c);
     const gone = [...this.slotOf.keys()].filter((id) => !keep.has(id));
     return this.remove(gone) + this.upsert(colliders);
   }

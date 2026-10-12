@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import type { Anchor } from './behaviour.ts';
 import { createSimHost, SimClient, type SimHost, type SimHostOptions } from './bridge.ts';
+import type { DecorCollider } from './decor.ts';
 import { benchmarkConfig, REEF_ANCHORS, REEF_DECOR } from './fixtures.ts';
 import { SNAPSHOT_STRIDE, SnapshotField, SnapshotInterpolator, type Snapshot } from './snapshot.ts';
 import { STEP_HZ, World } from './world.ts';
@@ -169,6 +171,14 @@ describe('sim worker bridge', () => {
     const twins = nextError(client);
     client.setDecor([...REEF_DECOR, ...REEF_DECOR.slice(0, 1)]);
     expect(await twins).toMatch(/unique/);
+    const cone = nextError(client);
+    const forgedDecor = { id: 'cone', solid: true, shape: { kind: 'cone' } } as unknown;
+    client.setDecor([forgedDecor as DecorCollider]);
+    expect(await cone).toMatch(/decor "cone": unknown shape kind/);
+    const reefless = nextError(client);
+    const forgedAnchor = { id: 'x', kind: 'reef', position: [0, 0.1, 0], radius: 0.05 } as unknown;
+    client.setAnchors([forgedAnchor as Anchor]);
+    expect(await reefless).toMatch(/anchor "x": kind must be/);
   });
 
   it('tags a re-init with a new epoch so the interpolator restarts cleanly', async () => {
