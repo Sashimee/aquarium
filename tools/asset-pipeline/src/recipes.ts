@@ -40,6 +40,13 @@ export const FISH_RECIPES: FishRecipe[] = [
     skinPose: 'rest',
     dropMeshes: /^Circle\.00[123]$/,
     keepMaterial: /^Material\.001$/,
+    eyes: {
+      meshes: /^Circle\.001(_0)?$/,
+      placement: { fromSnout: 0.07, height: 0.6, sink: 0.5, scale: 0.5 },
+    },
+    modifications: [
+      'eyeballs kept from their own mesh and re-seated on the head, outside fin classification',
+    ],
     fallbackLengthM: 0.025,
     lengthFactor: 0.625,
   },

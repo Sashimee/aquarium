@@ -3,7 +3,7 @@ import { classifyFins, bodyCentreOfMass, orient } from './fins.ts';
 import { boundsOf } from './geometry.ts';
 import { FIN_ID_ATTRIBUTE, FIN_IDS, FIN_MASK_ATTRIBUTE, SWAY_ATTRIBUTE } from './index-schema.ts';
 import { loftFish, signedVolume, sideProjection } from './loft.ts';
-import { LOFT_FISH_RECIPES } from './loft-fish.ts';
+import { LOFT_FISH_RECIPES, appendSwatch } from './loft-fish.ts';
 import { compactPart, normaliseToBase } from './environment.ts';
 import { anemonePart } from './anemone.ts';
 import {
@@ -223,6 +223,31 @@ describe('loftFish', () => {
     expect(b.max[2] - b.min[2]).toBeCloseTo((a.max[2] - a.min[2]) * 2, 4);
   });
 
+  it('points every fin vertex at the fin swatch and leaves the body projected', () => {
+    const swatch: [number, number] = [0.5, 0.875];
+    const withSwatch = loftFish(
+      { ...recipe.spec, standardLengthM },
+      () => [0.25, 0.75],
+      'skin',
+      swatch,
+    );
+    const id = withSwatch.extra[FIN_ID_ATTRIBUTE]!;
+    let fins = 0;
+    let body = 0;
+    for (let i = 0; i < count; i++) {
+      const uv = [withSwatch.uvs[i * 2], withSwatch.uvs[i * 2 + 1]];
+      if (id[i] === 0) {
+        expect(uv).toEqual([0.25, 0.75]);
+        body++;
+      } else {
+        expect(uv).toEqual(swatch);
+        fins++;
+      }
+    }
+    expect(fins).toBeGreaterThan(100);
+    expect(body).toBeGreaterThan(100);
+  });
+
   it('clamps projected texture coordinates to the unit square', () => {
     const outside = loftFish({ ...recipe.spec, standardLengthM }, () => [-3, 7], 'skin');
     for (const value of outside.uvs) expect(value === 0 || value === 1).toBe(true);
@@ -343,5 +368,34 @@ describe('anemonePart', () => {
         tips++;
       }
     expect(tipHeight / tips).toBeGreaterThan(0.03);
+  });
+});
+
+describe('appendSwatch', () => {
+  const photo = {
+    width: 4,
+    height: 2,
+    data: Uint8Array.from(
+      Array.from({ length: 8 }, (_, i) => (i < 4 ? [10, 20, 30, 255] : [30, 60, 90, 255])).flat(),
+    ),
+  };
+
+  it('fills the strip with the mean swatch colour and keeps the photo rows intact', () => {
+    const { image, finUv, bodyVMax } = appendSwatch(photo, {
+      left: 0,
+      top: 0,
+      width: 4,
+      height: 2,
+    });
+    expect(image.height).toBeGreaterThan(photo.height);
+    expect(Array.from(image.data.subarray(0, photo.data.length))).toEqual(Array.from(photo.data));
+    const strip = (photo.height + 1) * photo.width * 4;
+    expect(Array.from(image.data.subarray(strip, strip + 4))).toEqual([20, 40, 60, 255]);
+    expect(finUv[1]).toBeGreaterThan(bodyVMax);
+    expect(finUv[1]).toBeLessThan(1);
+  });
+
+  it('rejects a swatch outside the crop', () => {
+    expect(() => appendSwatch(photo, { left: 2, top: 0, width: 4, height: 1 })).toThrow(/outside/);
   });
 });
