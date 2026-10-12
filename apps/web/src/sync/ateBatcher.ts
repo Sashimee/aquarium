@@ -20,6 +20,7 @@ export class AteBatcher {
   private readonly pending = new Map<string, { portion: number; at: Date }>();
   private handle: unknown = null;
   private flushing = false;
+  private disposed = false;
   private readonly intervalMs: number;
   private readonly maxPerBatch: number;
   private readonly now: () => Date;
@@ -40,16 +41,24 @@ export class AteBatcher {
   }
 
   add(fishId: string, portion: number): void {
-    if (!(portion > 0)) return;
+    this.queue(fishId, portion, this.now());
+  }
+
+  private queue(fishId: string, portion: number, at: Date): void {
+    if (this.disposed || !(portion > 0)) return;
     const entry = this.pending.get(fishId);
-    if (entry) entry.portion += portion;
-    else this.pending.set(fishId, { portion, at: this.now() });
+    if (entry) {
+      entry.portion += portion;
+      if (at < entry.at) entry.at = at;
+    } else {
+      this.pending.set(fishId, { portion, at });
+    }
     this.schedule();
   }
 
   /** Sends everything queued; rejects if the sender does, after re-queueing that batch. */
   async flushNow(): Promise<void> {
-    if (this.flushing) return;
+    if (this.flushing || this.disposed) return;
     this.cancelTimer();
     this.flushing = true;
     try {
@@ -59,7 +68,7 @@ export class AteBatcher {
         try {
           await this.options.flush(batch);
         } catch (cause) {
-          for (const r of batch) this.add(r.fishId, r.portion);
+          for (const r of batch) this.queue(r.fishId, r.portion, new Date(r.at));
           throw cause;
         }
       }
@@ -69,6 +78,7 @@ export class AteBatcher {
   }
 
   dispose(): void {
+    this.disposed = true;
     this.cancelTimer();
     this.pending.clear();
   }
@@ -89,6 +99,7 @@ export class AteBatcher {
   }
 
   private schedule(): void {
+    if (this.disposed) return;
     if (this.handle !== null) return;
     this.handle = this.timers.setTimeout(() => {
       this.handle = null;

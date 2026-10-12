@@ -236,6 +236,31 @@ describe('PlayController feeding', () => {
     expect(Math.max(...xs)).toBeLessThan(0.35);
   });
 
+  it('hand-feeds the food selected in the UI, not the last one fed', () => {
+    const t = makeController(downRay());
+    t.events.emit('feed:select', { food: 'nori' });
+    t.controller.setTool('feed');
+    t.controller.tap(0, 0);
+    expect(t.seen.dropped).toHaveBeenCalledWith(expect.objectContaining({ food: 'nori' }));
+    expect(t.food.particles.every((p) => p.food === 'nori')).toBe(true);
+  });
+
+  it('ignores hand-feed taps that miss the water and keeps the feed gate unspent', () => {
+    const t = makeController(downRay(2, 0));
+    t.controller.setTool('feed');
+    t.controller.tap(0, 0);
+    t.setRay(frontRay());
+    t.controller.tap(0, 0);
+    t.setRay(null);
+    t.controller.tap(0, 0);
+    expect(t.food.count).toBe(0);
+    expect(t.seen.dropped).not.toHaveBeenCalled();
+    expect(t.seen.rejected).not.toHaveBeenCalled();
+    t.setRay(downRay());
+    t.controller.tap(0, 0);
+    expect(t.seen.dropped).toHaveBeenCalledTimes(1);
+  });
+
   it('refuses repeat feeds inside the cooldown', () => {
     const t = makeController();
     t.events.emit('feed:request', { food: 'flakes', portion: 1 });

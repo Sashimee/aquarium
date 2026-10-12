@@ -1,5 +1,5 @@
 import { foodTypeSchema, type FoodType } from '@aquarium/shared';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PlayTool } from '../interaction/events';
 import { useBridge, usePlayTool } from './context';
 
@@ -24,14 +24,35 @@ export function PlayControls() {
   const tool = usePlayTool();
   const [food, setFood] = useState<FoodType>('flakes');
   const [message, setMessage] = useState('');
+  const [ready, setReady] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // A live region only speaks when its text changes, so clear it first to repeat a message.
+  const announce = useCallback((text: string) => {
+    if (timer.current) clearTimeout(timer.current);
+    setMessage('');
+    timer.current = setTimeout(() => setMessage(text), 60);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    interaction.emit('feed:select', { food });
+  }, [interaction, food, ready]);
 
   useEffect(() => {
     const offs = [
+      interaction.on('play:ready', () => setReady(true)),
       interaction.on('feed:dropped', ({ food: f }) =>
-        setMessage(`Fed ${FOOD_LABEL[f].toLowerCase()}.`),
+        announce(`Fed ${FOOD_LABEL[f].toLowerCase()}.`),
       ),
       interaction.on('feed:rejected', ({ reason, retryAfterMs }) =>
-        setMessage(
+        announce(
           reason === 'tank-full'
             ? 'There is too much uneaten food in the tank. Wait for the fish to finish.'
             : `Feeding too often. Try again in ${Math.ceil(retryAfterMs / 1000)} seconds.`,
@@ -39,7 +60,7 @@ export function PlayControls() {
       ),
     ];
     return () => offs.forEach((off) => off());
-  }, [interaction]);
+  }, [interaction, announce]);
 
   return (
     <div role="group" aria-label="Play and feed" className="play-controls">
@@ -54,7 +75,11 @@ export function PlayControls() {
           </option>
         ))}
       </select>
-      <button type="button" onClick={() => interaction.emit('feed:request', { food, portion: 1 })}>
+      <button
+        type="button"
+        disabled={!ready}
+        onClick={() => interaction.emit('feed:request', { food, portion: 1 })}
+      >
         Feed
       </button>
       {TOOLS.map((t) => (
@@ -62,13 +87,14 @@ export function PlayControls() {
           key={t.tool}
           type="button"
           aria-pressed={tool === t.tool}
+          disabled={!ready}
           onClick={() => interaction.emit('play:request-tool', { tool: t.tool })}
         >
           {t.label}
         </button>
       ))}
       <span role="status" aria-live="polite" className="play-message">
-        {message}
+        {ready ? message : 'The tank is still loading.'}
       </span>
     </div>
   );

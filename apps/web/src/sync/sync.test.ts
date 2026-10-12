@@ -104,4 +104,34 @@ describe('AteBatcher', () => {
     expect(flush).toHaveBeenCalledTimes(2);
     expect(batcher.size).toBe(0);
   });
+
+  it('keeps the original timestamp when a batch is retried', async () => {
+    const flush = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue(undefined);
+    let clock = new Date('2026-01-01T00:00:00Z');
+    const batcher = new AteBatcher({ flush, timers: timers().api, now: () => clock });
+    batcher.add(FISH_A, 0.4);
+    clock = new Date('2026-01-01T00:05:00Z');
+    await expect(batcher.flushNow()).rejects.toThrow('offline');
+    batcher.add(FISH_A, 0.1);
+    await batcher.flushNow();
+    expect(flush.mock.calls[1]?.[0]).toEqual([
+      { fishId: FISH_A, portion: 0.5, at: '2026-01-01T00:00:00.000Z' },
+    ]);
+  });
+
+  it('stops retrying and accepting reports after dispose', async () => {
+    const flush = vi.fn().mockRejectedValue(new Error('offline'));
+    const t = timers();
+    const batcher = new AteBatcher({ flush, timers: t.api });
+    batcher.add(FISH_A, 0.4);
+    const pending = batcher.flushNow();
+    batcher.dispose();
+    await expect(pending).rejects.toThrow('offline');
+    expect(batcher.size).toBe(0);
+    expect(t.queue).toHaveLength(0);
+    batcher.add(FISH_B, 0.4);
+    await batcher.flushNow();
+    expect(batcher.size).toBe(0);
+    expect(flush).toHaveBeenCalledTimes(1);
+  });
 });

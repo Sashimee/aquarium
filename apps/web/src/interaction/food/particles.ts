@@ -47,6 +47,8 @@ export class FoodField {
   private readonly list: FoodParticle[] = [];
   private nextId = 1;
   private readonly flow = new Float64Array(3);
+  private readonly packSim = new Float64Array(3);
+  private packed = new Float32Array(0);
 
   constructor(
     private readonly env: FoodEnvironment,
@@ -134,9 +136,14 @@ export class FoodField {
 
   /** Packs `[id, x, y, z, typeIndex]` per particle for the sim, positions mapped by `toSim`. */
   pack(toSim: (x: number, y: number, z: number, out: Float64Array) => void): Float32Array {
-    const result = new Float32Array(this.list.length * FOOD_STRIDE);
-    const sim = new Float64Array(3);
-    this.list.forEach((p, i) => {
+    const length = this.list.length * FOOD_STRIDE;
+    // Reused while the count is steady; bridges copy it (postMessage without transfer).
+    if (this.packed.length !== length) this.packed = new Float32Array(length);
+    const result = this.packed;
+    const sim = this.packSim;
+    for (let i = 0; i < this.list.length; i++) {
+      const p = this.list[i];
+      if (!p) continue;
       toSim(p.x, p.y, p.z, sim);
       const o = i * FOOD_STRIDE;
       result[o] = p.id;
@@ -144,7 +151,7 @@ export class FoodField {
       result[o + 2] = sim[1] ?? 0;
       result[o + 3] = sim[2] ?? 0;
       result[o + 4] = foodTypeIndex(p.food);
-    });
+    }
     return result;
   }
 

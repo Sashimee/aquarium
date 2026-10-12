@@ -9,6 +9,10 @@ export interface InteractionEvents {
   'camera:mode-changed': { mode: CameraMode };
   'play:request-tool': { tool: PlayTool };
   'play:tool-changed': { tool: PlayTool };
+  /** The food chosen in the UI; hand-feed drops this one. */
+  'feed:select': { food: FoodType };
+  /** The tank scene is built and the play tools work. */
+  'play:ready': Record<string, never>;
   'feed:request': { food: FoodType; portion: number };
   /** Food went into the water; the persistence layer posts the feed action. */
   'feed:dropped': { food: FoodType; portion: number; particles: number };

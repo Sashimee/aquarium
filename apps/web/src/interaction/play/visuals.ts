@@ -46,6 +46,7 @@ export class PlayVisuals {
   private readonly scale = new Vector3();
   private readonly color = new Color();
   private readonly normal = new Vector3();
+  private readonly sway = { dx: 0, dz: 0 };
 
   constructor() {
     const foodGeometry = new SphereGeometry(1, 8, 6);
@@ -121,7 +122,9 @@ export class PlayVisuals {
     const list = field.particles;
     this.food.count = list.length;
     this.quat.identity();
-    list.forEach((p, i) => {
+    for (let i = 0; i < list.length; i++) {
+      const p = list[i];
+      if (!p) continue;
       const profile = FOOD_PROFILES[p.food];
       const remaining =
         p.settledS < 0 ? 1 : Math.min(1, Math.max(0, (profile.decayS - p.settledS) / FADE_TAIL_S));
@@ -131,7 +134,7 @@ export class PlayVisuals {
       this.matrix.compose(this.pos, this.quat, this.scale);
       this.food.setMatrixAt(i, this.matrix);
       this.food.setColorAt(i, this.color.setHex(FOOD_COLORS[p.food]));
-    });
+    }
     this.food.instanceMatrix.needsUpdate = true;
     if (this.food.instanceColor) this.food.instanceColor.needsUpdate = true;
   }
@@ -140,28 +143,32 @@ export class PlayVisuals {
     const list = field.bubbles;
     this.bubbles.count = list.length;
     this.quat.identity();
-    list.forEach((b, i) => {
-      const w = BubbleField.wobble(b);
-      this.pos.set(b.x + w.dx, b.y, b.z + w.dz);
+    for (let i = 0; i < list.length; i++) {
+      const b = list[i];
+      if (!b) continue;
+      BubbleField.wobble(b, this.sway);
+      this.pos.set(b.x + this.sway.dx, b.y, b.z + this.sway.dz);
       this.scale.set(b.radius, b.radius, b.radius);
       this.matrix.compose(this.pos, this.quat, this.scale);
       this.bubbles.setMatrixAt(i, this.matrix);
-    });
+    }
     this.bubbles.instanceMatrix.needsUpdate = true;
   }
 
   private drawRipples(field: RippleField): void {
     const list = field.ripples;
-    this.rings.forEach((ring, i) => {
+    for (let i = 0; i < this.rings.length; i++) {
+      const ring = this.rings[i];
+      if (!ring) continue;
       const r = list[i];
       ring.visible = r !== undefined;
-      if (!r) return;
+      if (!r) continue;
       const radius = RippleField.radius(r);
       ring.position.set(r.origin.x, r.origin.y, r.origin.z);
       this.normal.set(r.normal.x, r.normal.y, r.normal.z);
       ring.quaternion.setFromUnitVectors(Z_AXIS, this.normal);
       ring.scale.set(radius, radius, 1);
       ring.material.opacity = RippleField.opacity(r);
-    });
+    }
   }
 }

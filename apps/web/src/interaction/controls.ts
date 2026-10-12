@@ -73,12 +73,14 @@ export function bindCameraControls(
     if (e.altKey || e.ctrlKey || e.metaKey) return;
     if (applyCameraKey(rig, e.key)) e.preventDefault();
   };
-  const local = (e: PointerEvent) => {
+  const onDown = (e: PointerEvent) => {
     const rect = element.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    handlers.pointerDown?.(e.clientX - rect.left, e.clientY - rect.top);
   };
-  const onDown = (e: PointerEvent) => handlers.pointerDown?.(local(e).x, local(e).y);
-  const onMove = (e: PointerEvent) => handlers.pointerMove?.(local(e).x, local(e).y);
+  const onMove = (e: PointerEvent) => {
+    const rect = element.getBoundingClientRect();
+    handlers.pointerMove?.(e.clientX - rect.left, e.clientY - rect.top);
+  };
   const onUp = () => handlers.pointerUp?.();
   const onLeave = () => handlers.pointerLeave?.();
   element.addEventListener('keydown', onKey);

@@ -45,19 +45,24 @@ const DEFAULT_PORTION = 1;
 
 export class PlayController {
   private activeTool: PlayTool = 'tap';
-  private lastFood: FoodType = 'flakes';
+  private selectedFood: FoodType = 'flakes';
   private pressed = false;
   private wandPoint: Vec3 | null = null;
   private wandCarry = 0;
   private readonly intensity = new TapIntensity();
   private readonly sim = new Float64Array(3);
-  private readonly stopRequests: () => void;
+  private readonly stopListening: (() => void)[];
 
   constructor(private readonly deps: PlayDeps) {
-    this.stopRequests = deps.events.on('feed:request', ({ food, portion }) => {
-      this.lastFood = food;
-      this.feed(food, portion, null);
-    });
+    this.stopListening = [
+      deps.events.on('feed:select', ({ food }) => {
+        this.selectedFood = food;
+      }),
+      deps.events.on('feed:request', ({ food, portion }) => {
+        this.selectedFood = food;
+        this.feed(food, portion, null);
+      }),
+    ];
   }
 
   get tool(): PlayTool {
@@ -84,7 +89,10 @@ export class PlayController {
     if (!ray) return;
     if (this.activeTool === 'feed') {
       const hit = pickPlaneY(ray.origin, ray.dir, this.deps.max.y);
-      if (hit) this.feed(this.lastFood, DEFAULT_PORTION, hit);
+      const { min, max } = this.deps;
+      if (hit && hit.x >= min.x && hit.x <= max.x && hit.z >= min.z && hit.z <= max.z) {
+        this.feed(this.selectedFood, DEFAULT_PORTION, hit);
+      }
       return;
     }
     if (this.activeTool === 'tap') this.tapGlass(ray);
@@ -138,7 +146,7 @@ export class PlayController {
   }
 
   dispose(): void {
-    this.stopRequests();
+    for (const stop of this.stopListening) stop();
     this.deps.setLaserDot(null);
   }
 

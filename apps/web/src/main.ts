@@ -73,7 +73,9 @@ async function boot(): Promise<void> {
   const stopMotionWatch = watchReducedMotion((reduced) => rig.setReducedMotion(reduced));
   let play: PlaySystem | null = null;
   const unbindControls = bindCameraControls(canvas, rig, {
-    tap: (e) => play?.controller.tap(e.x, e.y),
+    tap: (e) => {
+      if (e.button === 0) play?.controller.tap(e.x, e.y);
+    },
     claimDrag: () => play?.controller.claimsDrag ?? false,
     pointerDown: (x, y) => play?.controller.pointerDown(x, y),
     pointerMove: (x, y) => play?.controller.pointerMove(x, y),

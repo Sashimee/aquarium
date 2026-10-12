@@ -89,6 +89,8 @@ export function createPlaySystem(
     visuals.update(food, bubbles, ripples);
   });
 
+  interaction.emit('play:ready', {});
+
   return {
     controller,
     food,

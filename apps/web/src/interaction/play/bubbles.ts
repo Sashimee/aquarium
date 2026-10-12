@@ -52,8 +52,9 @@ export class BubbleField {
   }
 
   /** Horizontal sway so a column of bubbles does not rise as a straight line. */
-  static wobble(b: Bubble): { dx: number; dz: number } {
+  static wobble(b: Bubble, out: { dx: number; dz: number }): void {
     const a = b.ageS * WOBBLE_HZ * Math.PI * 2 + b.phase;
-    return { dx: Math.sin(a) * WOBBLE_AMPLITUDE_M, dz: Math.cos(a * 0.8) * WOBBLE_AMPLITUDE_M };
+    out.dx = Math.sin(a) * WOBBLE_AMPLITUDE_M;
+    out.dz = Math.cos(a * 0.8) * WOBBLE_AMPLITUDE_M;
   }
 }
