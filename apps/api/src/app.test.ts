@@ -2,23 +2,52 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { buildApp } from './app.ts';
+import type { FastifyInstance } from 'fastify';
+import { createHarness, type Harness } from './test-harness.ts';
 
 const NOINDEX = 'noindex, nofollow';
 let dist: string;
+let plain: Harness;
+let spa: Harness;
+let indexable: Harness;
 
-beforeAll(() => {
+beforeAll(async () => {
   dist = mkdtempSync(join(tmpdir(), 'aquarium-dist-'));
   mkdirSync(join(dist, 'assets'));
   writeFileSync(join(dist, 'index.html'), '<!doctype html><title>spa</title>');
   writeFileSync(join(dist, 'assets', 'app.js'), 'console.log(1)');
   writeFileSync(join(dist, '.env'), 'SECRET=1');
+  [plain, spa, indexable] = await Promise.all([
+    createHarness(),
+    createHarness({ webRoot: dist }),
+    createHarness({ webRoot: dist, indexable: true }),
+  ]);
 });
 
-afterAll(() => rmSync(dist, { recursive: true, force: true }));
+afterAll(async () => {
+  await Promise.all([plain.close(), spa.close(), indexable.close()]);
+  rmSync(dist, { recursive: true, force: true });
+});
 
-const noDist = () => buildApp({ indexable: false, webRoot: '/nonexistent', logger: false });
-const withDist = (indexable = false) => buildApp({ indexable, webRoot: dist, logger: false });
+const noDist = (): FastifyInstance => plain.app;
+const withDist = (isIndexable = false): FastifyInstance => (isIndexable ? indexable.app : spa.app);
+
+describe('health', () => {
+  it('reports ok while the database answers', async () => {
+    const res = await plain.app.inject('/api/health');
+    expect(res.json()).toEqual({ status: 'ok' });
+  });
+
+  it('reports 503 when the database is gone', async () => {
+    const broken = await createHarness();
+    await broken.database.pool.end();
+    const res = await broken.app.inject('/api/health');
+    expect(res.statusCode).toBe(503);
+    expect(res.headers['x-robots-tag']).toBe(NOINDEX);
+    await broken.app.close();
+    await broken.dropDatabase();
+  });
+});
 
 describe('without a web build', () => {
   it('serves health', async () => {
@@ -50,12 +79,33 @@ describe('with a web build', () => {
 
   it('returns JSON 404 for anything under /api', async () => {
     const app = withDist();
-    for (const url of ['/api', '/api?x=1', '/api/', '/api/nope', '/api/nope?x=1']) {
+    const urls = [
+      '/api',
+      '/api?x=1',
+      '/api/',
+      '/api/nope',
+      '/api/nope?x=1',
+      '/api%2fnope',
+      '/api%2Fnope',
+      '//api/nope',
+      '///api',
+      '/%61pi/nope',
+    ];
+    for (const url of urls) {
       const res = await app.inject(url);
       expect(res.statusCode, url).toBe(404);
       expect(res.headers['content-type'], url).toContain('application/json');
     }
     expect((await app.inject({ method: 'HEAD', url: '/api/nope' })).statusCode).toBe(404);
+  });
+
+  it('serves the SPA for routes whose last segment contains a dot', async () => {
+    const app = withDist();
+    for (const url of ['/tank/v1.2', '/tank/a.b.c', '/u/mr.fish']) {
+      const res = await app.inject(url);
+      expect(res.statusCode, url).toBe(200);
+      expect(res.body, url).toContain('<title>spa</title>');
+    }
   });
 
   it('returns 404 for missing files with an extension', async () => {

@@ -8,11 +8,30 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "start": "node src/server.ts",
-    "dev": "node --watch src/server.ts"
+    "build": "node build.mjs",
+    "start": "node --enable-source-maps dist/server.js",
+    "dev": "node build.mjs --dev",
+    "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
+    "@aquarium/shared": "workspace:*",
+    "@better-auth/passkey": "1.7.7",
     "@fastify/static": "10.1.6",
-    "fastify": "5.12.5"
-  }
+    "better-auth": "1.7.7",
+    "drizzle-orm": "0.45.4",
+    "fastify": "5.12.5",
+    "nodemailer": "10.1.0",
+    "pg": "8.23.1",
+    "zod": "4.6.6"
+  },
+  "devDependencies": {
+    "@types/nodemailer": "8.0.2",
+    "@types/pg": "8.23.1",
+    "drizzle-kit": "0.31.11",
+    "esbuild": "0.28.2"
+  },
+  "files": [
+    "dist",
+    "drizzle"
+  ]
 }
