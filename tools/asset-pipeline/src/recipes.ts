@@ -58,7 +58,7 @@ export const FISH_RECIPES: FishRecipe[] = [
     sourceId: 'sketchfab-47ba2679',
     axes: { forward: '+z', up: '+y' },
     keepMaterial: /^wire_/,
-    hints: { openingRadius: 7 },
+    hints: { openingRadius: 7, shellPectorals: true },
     fallbackLengthM: 0.08,
   },
   {
