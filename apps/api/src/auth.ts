@@ -66,7 +66,7 @@ export function createAuth({
       autoSignInAfterVerification: true,
       sendVerificationEmail: async ({ user, url }) => {
         try {
-          await mailer.sendVerification(user.email, user.name, url);
+          await mailer.sendVerification(user.email, url);
         } catch (err) {
           if (err instanceof MailThrottledError) return;
           console.error('verification mail failed:', err instanceof Error ? err.name : 'unknown');
@@ -78,6 +78,8 @@ export function createAuth({
       updateAge: 60 * 60 * 24,
     },
     advanced: {
+      // Better Auth skips origin/callbackURL checks under NODE_ENV=test unless this is explicit.
+      disableOriginCheck: false,
       useSecureCookies: secure,
       defaultCookieAttributes: { httpOnly: true, sameSite: 'lax', secure },
       // The Fastify layer overwrites x-forwarded-for with the proxy-validated client IP.

@@ -27,7 +27,7 @@ export function createSmtpTransport(host: string, port: number): Transporter {
 
 export interface Mailer {
   /** Throws MailThrottledError when the recipient is inside the verification cooldown or hourly cap. */
-  sendVerification(to: string, name: string, url: string): Promise<void>;
+  sendVerification(to: string, url: string): Promise<void>;
   /** Consumes one per-IP slot for mail-triggering endpoints; returns retry-after seconds or 0. */
   consumeIp(ip: string): number;
   peekVerificationCooldown(to: string): number;
@@ -45,7 +45,7 @@ export function createMailer(
   const key = (to: string) => to.trim().toLowerCase();
 
   return {
-    async sendVerification(to, name, url) {
+    async sendVerification(to, url) {
       const k = key(to);
       const wait = cooldown.consume(k, limits.verificationCooldown);
       if (wait > 0) throw new MailThrottledError(wait);
@@ -55,7 +55,7 @@ export function createMailer(
         from,
         to,
         subject: 'Verify your Aquarium account',
-        text: `Hi ${name},\n\nConfirm your email address to start your aquarium:\n${url}\n\nIf you did not sign up, ignore this message.\n`,
+        text: `Confirm your email address to start your aquarium:\n${url}\n\nIf you did not sign up, ignore this message.\n`,
       });
     },
     consumeIp: (address) => ip.consume(address, limits.perIpSignup),

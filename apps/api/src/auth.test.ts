@@ -398,3 +398,73 @@ describe('passkey plugin', () => {
     expect(res.json<{ rp: { id: string } }>().rp.id).toBe('fish.test');
   });
 });
+
+describe('input and origin checks', () => {
+  let h: Harness;
+  beforeAll(async () => {
+    h = await createHarness();
+  });
+  afterAll(() => h.close());
+
+  it('rejects oversized names, unknown fields and bad JSON at sign-up without sending mail', async () => {
+    const email = nextEmail();
+    const bodies: object[] = [
+      { email, password: PASSWORD, name: 'x'.repeat(9000) },
+      { email, password: PASSWORD, name: 'ok', extra: 'field' },
+      { email: 'not-an-email', password: PASSWORD, name: 'ok' },
+    ];
+    for (const payload of bodies) {
+      const res = await h.app.inject({
+        method: 'POST',
+        url: '/api/auth/sign-up/email',
+        headers: jsonHeaders,
+        payload,
+      });
+      expect(res.statusCode).toBe(400);
+      expect(apiErrorSchema.parse(res.json()).error.code).toBe('validation_failed');
+    }
+    const bad = await h.app.inject({
+      method: 'POST',
+      url: '/api/auth/sign-up/email',
+      headers: jsonHeaders,
+      payload: '{nope',
+    });
+    expect(bad.statusCode).toBe(400);
+    expect(h.outbox.filter((m) => m.to === email)).toHaveLength(0);
+  });
+
+  it('keeps the user-supplied name out of the verification mail', async () => {
+    const email = nextEmail();
+    const res = await h.app.inject({
+      method: 'POST',
+      url: '/api/auth/sign-up/email',
+      headers: jsonHeaders,
+      payload: { email, password: PASSWORD, name: 'Visit http://phish.example now' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(h.outbox.find((m) => m.to === email)?.text).not.toContain('phish.example');
+  });
+
+  it('rejects a foreign Origin even under NODE_ENV=test', async () => {
+    const res = await h.app.inject({
+      method: 'POST',
+      url: '/api/auth/sign-in/email',
+      headers: { 'content-type': 'application/json', origin: 'https://evil.example' },
+      payload: { email: 'a@bas.lu', password: 'whatever password' },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it.each(['https://evil.example/', '//evil.example/', '/\\evil.example'])(
+    'rejects callbackURL %s',
+    async (callbackURL) => {
+      const res = await h.app.inject({
+        method: 'POST',
+        url: '/api/auth/sign-up/email',
+        headers: jsonHeaders,
+        payload: { email: nextEmail(), password: PASSWORD, name: 'Cb', callbackURL },
+      });
+      expect(res.statusCode).toBe(403);
+    },
+  );
+});

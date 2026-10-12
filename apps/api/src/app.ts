@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import fastifyStatic from '@fastify/static';
 import {
   revokeSessionRequestSchema,
+  signUpRequestSchema,
   sessionListSchema,
   userSchema,
   type ApiError,
@@ -11,7 +12,7 @@ import {
 import { fromNodeHeaders } from 'better-auth/node';
 import { and, desc, eq, gt, sql } from 'drizzle-orm';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
-import { ZodError } from 'zod';
+import { z, ZodError } from 'zod';
 import { AUTH_BASE_PATH, type Auth } from './auth.ts';
 import { schema, type Database } from './db/index.ts';
 import type { Mailer } from './mail.ts';
@@ -63,6 +64,18 @@ const STATIC_EXTENSIONS = new Set([
   'exr',
   'html',
 ]);
+
+const signUpBodySchema = signUpRequestSchema.extend({
+  callbackURL: z.string().max(2048).optional(),
+});
+
+function parseJson(raw: string | undefined): unknown {
+  try {
+    return JSON.parse(raw ?? '');
+  } catch {
+    throw new ZodError([{ code: 'custom', path: [], message: 'Body must be valid JSON.' }]);
+  }
+}
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const BLOCKED_AUTH_PATHS = new Set([`${AUTH_BASE_PATH}/list-sessions`]);
@@ -137,6 +150,16 @@ export function buildApp(opts: AppOptions): FastifyInstance {
       );
     }
     const status = (err as { statusCode?: number }).statusCode;
+    if (status === 413 || status === 415) {
+      return reply
+        .code(status)
+        .send(
+          apiError(
+            'validation_failed',
+            status === 413 ? 'Body too large.' : 'Unsupported content type.',
+          ),
+        );
+    }
     if (status !== undefined && status >= 400 && status < 500) {
       return reply.code(status).send(apiError('validation_failed', 'Malformed request.'));
     }
@@ -182,6 +205,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
         const raw = typeof req.body === 'string' ? req.body : undefined;
 
         if (req.method === 'POST' && pathname === `${AUTH_BASE_PATH}/sign-up/email`) {
+          signUpBodySchema.parse(parseJson(raw));
           const wait = mailer.consumeIp(req.ip);
           if (wait > 0) return tooMany(reply, wait);
         }
