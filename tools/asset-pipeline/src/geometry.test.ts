@@ -125,6 +125,35 @@ describe('classifyFins', () => {
   });
 });
 
+describe('classifyFins with shellPectorals', () => {
+  const body = ellipsoid([0.12, 0.16, 0.5]);
+  const bodyVertices = body.positions.length / 3;
+  const fin = box([0.1, -0.05, 0.1], [0.108, 0.07, 0.3]);
+  const fish = join(body, fin);
+  const hints = { resolution: 140, shellPectorals: true };
+  const result = classifyFins(fish.positions, fish.indices, hints);
+  const finVertices = Array.from({ length: fin.positions.length / 3 }, (_, k) => bodyVertices + k);
+
+  it('marks a detached shell on the flank as a pectoral fin', () => {
+    for (const i of finVertices) expect(result.id[i]).toBe(FIN_IDS.pectoral);
+  });
+
+  it('ramps the mask from the root to the far edge', () => {
+    const values = finVertices.map((i) => result.mask[i]!);
+    expect(Math.min(...values)).toBeLessThan(0.2);
+    expect(Math.max(...values)).toBeCloseTo(1, 5);
+  });
+
+  it('leaves the connected body unmarked', () => {
+    for (let i = 0; i < bodyVertices; i++) expect(result.id[i]).not.toBe(FIN_IDS.pectoral);
+  });
+
+  it('does nothing without the hint', () => {
+    const plain = classifyFins(fish.positions, fish.indices, { resolution: 140 });
+    expect(finVertices.some((i) => plain.id[i] !== FIN_IDS.pectoral)).toBe(true);
+  });
+});
+
 describe('orient', () => {
   it('rotates a -X forward, +Z up model onto +Z forward, +Y up', () => {
     const positions = Float32Array.from([-1, 0, 0, 0, 0, 2]);

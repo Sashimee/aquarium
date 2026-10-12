@@ -2,7 +2,7 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; every texture has both files.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Anemone tentacle sway is \"_sway\" (0 base, 1 tip).",
-  "totalBytes": 122287634,
+  "totalBytes": 122287774,
   "assets": [
     {
       "id": "angelfish",
@@ -1144,36 +1144,36 @@
       "bounds": {
         "min": [
           -0.015704,
-          -0.027629,
-          -0.072021
+          -0.027796,
+          -0.071933
         ],
         "max": [
           0.015704,
-          0.026918,
-          0.037359
+          0.026751,
+          0.037447
         ]
       },
       "lods": [
         {
           "file": "fish/ocellaris-clownfish/lod0.glb",
-          "bytes": 23776,
-          "sha256": "45e26aaf536192b2080333728b67697c9cb87d0beed285954f959b3b2a7b36e6",
+          "bytes": 23908,
+          "sha256": "ae28ca04803e271ff51817aad3cf3ae4662825caa966c0d956479c134589649d",
           "triangles": 1606,
           "vertices": 903
         },
         {
           "file": "fish/ocellaris-clownfish/lod1.glb",
-          "bytes": 12932,
-          "sha256": "026e89e889dca72353511c351d1619edeb0b3669e05870585a4388bc3a99d483",
+          "bytes": 12912,
+          "sha256": "0c05389fae5e4edff586f860139abd10d7474f740d549f502fd9a84ba6dd54c6",
           "triangles": 642,
-          "vertices": 388
+          "vertices": 390
         },
         {
           "file": "fish/ocellaris-clownfish/lod2.glb",
-          "bytes": 7580,
-          "sha256": "1baa11ce51890bc5db43ff635fa91d03508a7e7275eff20c785884853d58b1f7",
+          "bytes": 7608,
+          "sha256": "d5f6bba6c85b51175b64f2c6c8fd27d63148d89878126c089fce9237792a0a26",
           "triangles": 240,
-          "vertices": 161
+          "vertices": 163
         }
       ],
       "textures": [
@@ -1221,18 +1221,18 @@
       "files": [
         {
           "file": "fish/ocellaris-clownfish/lod0.glb",
-          "bytes": 23776,
-          "sha256": "45e26aaf536192b2080333728b67697c9cb87d0beed285954f959b3b2a7b36e6"
+          "bytes": 23908,
+          "sha256": "ae28ca04803e271ff51817aad3cf3ae4662825caa966c0d956479c134589649d"
         },
         {
           "file": "fish/ocellaris-clownfish/lod1.glb",
-          "bytes": 12932,
-          "sha256": "026e89e889dca72353511c351d1619edeb0b3669e05870585a4388bc3a99d483"
+          "bytes": 12912,
+          "sha256": "0c05389fae5e4edff586f860139abd10d7474f740d549f502fd9a84ba6dd54c6"
         },
         {
           "file": "fish/ocellaris-clownfish/lod2.glb",
-          "bytes": 7580,
-          "sha256": "1baa11ce51890bc5db43ff635fa91d03508a7e7275eff20c785884853d58b1f7"
+          "bytes": 7608,
+          "sha256": "d5f6bba6c85b51175b64f2c6c8fd27d63148d89878126c089fce9237792a0a26"
         },
         {
           "file": "fish/ocellaris-clownfish/textures/ocellaris-clownfish_basecolor_1k.ktx2",

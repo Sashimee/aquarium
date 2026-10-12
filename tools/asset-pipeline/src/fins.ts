@@ -29,6 +29,8 @@ export interface FinHints {
   openingRadius?: number;
   /** Distance from the body core, in voxels, beyond which a vertex counts as fin. */
   finThresholdVoxels?: number;
+  /** Treat small pieces detached from the body on the flank as pectoral fins (sources that model them as flush shells). */
+  shellPectorals?: boolean;
   /** Fins to leave unclassified, for species whose fin is part of the body mesh. */
   skip?: FinName[];
 }
@@ -95,6 +97,99 @@ function fillGaps(values: (number | null)[]): number[] {
     const t = (i - lo) / (hi - lo);
     return values[lo]! * (1 - t) + values[hi]! * t;
   });
+}
+
+interface ShellFinContext {
+  zSnout: number;
+  length: number;
+  pectoralRange: [number, number];
+  /** Half width of the body core at a z position. */
+  halfWidthAt(z: number): number;
+  /** Detached pieces larger than this fraction of all vertices are not fins. */
+  maxShare?: number;
+}
+
+function connectedComponents(count: number, indices: ArrayLike<number>): Int32Array {
+  const parent = Int32Array.from({ length: count }, (_, i) => i);
+  const find = (v: number): number => {
+    let x = v;
+    while (parent[x] !== x) {
+      parent[x] = parent[parent[x]!]!;
+      x = parent[x]!;
+    }
+    return x;
+  };
+  for (let t = 0; t < indices.length; t += 3) {
+    const a = find(indices[t]!);
+    parent[find(indices[t + 1]!)] = a;
+    parent[find(indices[t + 2]!)] = a;
+  }
+  const root = new Int32Array(count);
+  for (let i = 0; i < count; i++) root[i] = find(i);
+  return root;
+}
+
+function distance(positions: Float32Array, a: number, b: number): number {
+  return Math.hypot(
+    positions[a * 3]! - positions[b * 3]!,
+    positions[a * 3 + 1]! - positions[b * 3 + 1]!,
+    positions[a * 3 + 2]! - positions[b * 3 + 2]!,
+  );
+}
+
+/**
+ * Some sources model the paired fins as thin shells lying flush against the body, which no volumetric test can tell
+ * from the body. A small piece that is not connected to the body, sits out on the flank and lies within the pectoral
+ * range is a pectoral fin; its mask ramps from the edge that touches the body to the far tip.
+ */
+function markShellPectorals(
+  positions: Float32Array,
+  indices: ArrayLike<number>,
+  mask: Float32Array,
+  id: Float32Array,
+  context: ShellFinContext,
+): number {
+  const count = positions.length / 3;
+  const root = connectedComponents(count, indices);
+  const members = new Map<number, number[]>();
+  for (let i = 0; i < count; i++) {
+    const list = members.get(root[i]!);
+    if (list) list.push(i);
+    else members.set(root[i]!, [i]);
+  }
+  let bodyRoot = -1;
+  let bodySize = 0;
+  for (const [r, list] of members) {
+    if (list.length > bodySize) {
+      bodySize = list.length;
+      bodyRoot = r;
+    }
+  }
+  const body = members.get(bodyRoot) ?? [];
+  const maxShare = context.maxShare ?? 0.1;
+  let marked = 0;
+
+  for (const [r, list] of members) {
+    if (r === bodyRoot || list.length > maxShare * count) continue;
+    const cx = list.reduce((s, i) => s + Math.abs(positions[i * 3]!), 0) / list.length;
+    const cz = list.reduce((s, i) => s + positions[i * 3 + 2]!, 0) / list.length;
+    const fromSnout = (context.zSnout - cz) / context.length;
+    if (fromSnout < context.pectoralRange[0] || fromSnout > context.pectoralRange[1]) continue;
+    if (cx < 0.6 * context.halfWidthAt(cz)) continue;
+
+    const gaps = list.map((i) => Math.min(...body.map((j) => distance(positions, i, j))));
+    const nearest = Math.min(...gaps);
+    const cutoff = nearest + 0.25 * (Math.max(...gaps) - nearest);
+    const anchors = list.filter((_, k) => gaps[k]! <= cutoff);
+    const ranges = list.map((i) => Math.min(...anchors.map((a) => distance(positions, i, a))));
+    const reach = Math.max(...ranges, 1e-9);
+    list.forEach((i, k) => {
+      id[i] = FIN_IDS.pectoral;
+      mask[i] = clamp(ranges[k]! / reach, 0, 1);
+    });
+    marked += list.length;
+  }
+  return marked;
 }
 
 /**
@@ -226,6 +321,14 @@ export function classifyFins(
     if (m <= 0) continue;
     mask[i] = m;
     id[i] = k;
+  }
+  if (hints.shellPectorals && !skip.has('pectoral')) {
+    markShellPectorals(positions, indices, mask, id, {
+      zSnout,
+      length,
+      pectoralRange: [pectLo, pectHi],
+      halfWidthAt: (z) => at(side, z),
+    });
   }
   return { mask, id, zSnout, zPeduncle, zTail };
 }
