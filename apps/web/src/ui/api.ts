@@ -36,18 +36,32 @@ import {
 export const VERIFY_CALLBACK_PATH = '/verify-email';
 export const RESET_REDIRECT_PATH = '/reset-password';
 
+export const REQUEST_TIMEOUT_MS = 15_000;
+export const SLOW_REQUEST_TIMEOUT_MS = 60_000;
+
 export type FieldErrors = Partial<Record<string, string>>;
 
 export class ApiRequestError extends Error {
   constructor(
     readonly status: number,
-    readonly code: ErrorCode | 'network' | 'unexpected_response',
+    readonly code: ErrorCode | 'network' | 'timeout' | 'unexpected_response',
     message: string,
     readonly fields: FieldErrors = {},
     readonly retryAfterSeconds: number | null = null,
   ) {
     super(message);
     this.name = 'ApiRequestError';
+  }
+}
+
+export class ApiTimeoutError extends ApiRequestError {
+  constructor(readonly timeoutMs: number) {
+    super(
+      0,
+      'timeout',
+      'The server did not answer in time. Your tank is safe; try again in a moment.',
+    );
+    this.name = 'ApiTimeoutError';
   }
 }
 
@@ -167,16 +181,35 @@ function passkeyFailure(cause: unknown, doing: string): ApiRequestError {
   );
 }
 
-export function createApiClient(fetcher: Fetcher = (i, init) => fetch(i, init)): ApiClient {
-  async function send(path: string, init: RequestInit = {}): Promise<Response> {
-    let res: Response;
+export interface ApiClientOptions {
+  /** Aborts every request the client makes, e.g. on teardown. */
+  signal?: AbortSignal;
+}
+
+export function createApiClient(
+  fetcher: Fetcher = (i, init) => fetch(i, init),
+  options: ApiClientOptions = {},
+): ApiClient {
+  async function send(
+    path: string,
+    init: RequestInit = {},
+    timeoutMs: number = REQUEST_TIMEOUT_MS,
+  ): Promise<Response> {
+    const timeout = new AbortController();
+    const timer = setTimeout(() => timeout.abort(), timeoutMs);
+    const callerSignals = [init.signal, options.signal].filter(
+      (candidate): candidate is AbortSignal => candidate != null,
+    );
+    const signal = AbortSignal.any([...callerSignals, timeout.signal]);
     try {
-      res = await fetcher(path, {
+      return await fetcher(path, {
         credentials: 'same-origin',
         ...init,
+        signal,
         headers: { accept: 'application/json', ...init.headers },
       });
     } catch (cause) {
+      if (timeout.signal.aborted) throw new ApiTimeoutError(timeoutMs);
       throw new ApiRequestError(
         0,
         'network',
@@ -184,16 +217,25 @@ export function createApiClient(fetcher: Fetcher = (i, init) => fetch(i, init)):
           ? 'The request was cancelled.'
           : 'Could not reach the server. Check your connection and try again.',
       );
+    } finally {
+      clearTimeout(timer);
     }
-    return res;
   }
 
-  async function post(path: string, body: unknown): Promise<Response> {
-    const res = await send(path, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+  async function post(
+    path: string,
+    body: unknown,
+    timeoutMs: number = REQUEST_TIMEOUT_MS,
+  ): Promise<Response> {
+    const res = await send(
+      path,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+      timeoutMs,
+    );
     if (!res.ok) throw await toError(res);
     return res;
   }
@@ -345,7 +387,7 @@ export function createApiClient(fetcher: Fetcher = (i, init) => fetch(i, init)):
       return parsed(res, creditsSchema);
     },
     async exportData() {
-      const res = await post('/api/me/export', {});
+      const res = await post('/api/me/export', {}, SLOW_REQUEST_TIMEOUT_MS);
       const text = await res.text();
       let body: unknown;
       try {
