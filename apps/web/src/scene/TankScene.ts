@@ -602,11 +602,9 @@ export function plantReach(
 ): (scale: number) => number {
   const height = bounds?.max[1] ?? FALLBACK_PLANT_HEIGHT;
   const half = bounds
-    ? Math.max(
-        Math.abs(bounds.min[0] ?? 0),
-        Math.abs(bounds.max[0] ?? 0),
-        Math.abs(bounds.min[2] ?? 0),
-        Math.abs(bounds.max[2] ?? 0),
+    ? Math.hypot(
+        Math.max(Math.abs(bounds.min[0] ?? 0), Math.abs(bounds.max[0] ?? 0)),
+        Math.max(Math.abs(bounds.min[2] ?? 0), Math.abs(bounds.max[2] ?? 0)),
       )
     : 0.1;
   const lean = Math.sin(MAX_PLANT_TILT) * height;
