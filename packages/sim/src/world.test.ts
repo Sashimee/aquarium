@@ -76,7 +76,7 @@ describe('World determinism', { timeout: LONG }, () => {
           w.setDecor(
             REEF_DECOR.map((c) =>
               c.id === 'rock-left'
-                ? { ...c, shape: { kind: 'sphere', center: [-0.5, 0, 0.05], radius: 0.18 } }
+                ? { id: c.id, hard: c.hard, kind: 'sphere', center: [-0.5, 0, 0.05], radius: 0.18 }
                 : c,
             ),
           );
@@ -129,21 +129,21 @@ describe('World containment', { timeout: LONG }, () => {
       decor: [
         {
           id: 'slot-wall',
-          solid: true,
-          shape: {
-            kind: 'box',
-            center: [0.01, 0.15, back + 0.075],
-            halfExtents: [0.11, 0.15, 0.03],
-          },
+          hard: true,
+          kind: 'box',
+          center: [0.01, 0.15, back + 0.075],
+          halfExtents: [0.11, 0.15, 0.03],
+          rotationY: 0,
+          rounding: 0,
         },
         {
           id: 'slot-end',
-          solid: true,
-          shape: {
-            kind: 'box',
-            center: [0.14, 0.15, back + 0.03],
-            halfExtents: [0.02, 0.15, 0.03],
-          },
+          hard: true,
+          kind: 'box',
+          center: [0.14, 0.15, back + 0.03],
+          halfExtents: [0.02, 0.15, 0.03],
+          rotationY: 0,
+          rounding: 0,
         },
       ],
       fish: spawnMany(yellowTang.id, 1),
@@ -446,7 +446,7 @@ describe('World depth band', { timeout: LONG }, () => {
       for (let i = 0; i < w.count; i++) {
         const sp = w.speciesOf(i);
         const s = at(w.speciesIndex, i);
-        const y = at(w.position, i * 3 + 1) / w.tank.height;
+        const y = at(w.position, i * 3 + 1) / w.basin.height;
         total[s] = at(total, s) + 1;
         if (y >= sp.depthLow - 0.05 && y <= sp.depthHigh + 0.05) inside[s] = at(inside, s) + 1;
       }

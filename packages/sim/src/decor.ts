@@ -1,4 +1,6 @@
-import type { Sdf, TankDimensions } from './sdf.ts';
+import { colliderSchema, type Collider } from '@aquarium/shared';
+import { basinOf, type Basin, type TankDimensions } from './basin.ts';
+import type { Sdf } from './sdf.ts';
 
 export type Point3 = readonly [number, number, number];
 
@@ -8,21 +10,26 @@ export type DecorShape =
       readonly kind: 'box';
       readonly center: Point3;
       readonly halfExtents: Point3;
-      /** Yaw about +Y, same convention as fish yaw: +Z turns towards +X. */
       readonly rotationY?: number;
-      /** Edge radius, included in `halfExtents`. */
       readonly rounding?: number;
     }
   | { readonly kind: 'capsule'; readonly a: Point3; readonly b: Point3; readonly radius: number };
 
 /**
- * One collision proxy of a decor item, in tank space. Solid colliders (rock, driftwood, glass
- * ornaments) are never penetrated; non-solid ones (plants) only push fish aside.
+ * The nested collider format the sim took before the shared `Collider` contract; `solid` is
+ * `hard`. Still accepted by `compileCollider` because apps/web's decorate mode emits it.
  */
 export interface DecorCollider {
   readonly id: string;
   readonly solid: boolean;
   readonly shape: DecorShape;
+}
+
+function flattenDecorCollider(collider: unknown): unknown {
+  if (typeof collider !== 'object' || collider === null || !('shape' in collider)) return collider;
+  const { shape, solid, ...rest } = collider as Record<string, unknown>;
+  if (typeof shape !== 'object' || shape === null) return collider;
+  return { ...rest, hard: solid, ...shape };
 }
 
 interface Primitive {
@@ -34,29 +41,6 @@ interface Primitive {
   readonly maxY: number;
   readonly maxZ: number;
   sample(x: number, y: number, z: number, normal: Float64Array): number;
-}
-
-function finite(v: number, what: string, id: string): number {
-  if (!Number.isFinite(v)) throw new RangeError(`decor "${id}": ${what} must be finite, got ${v}`);
-  return v;
-}
-
-function positive(v: number, what: string, id: string): number {
-  if (!(Number.isFinite(v) && v > 0)) {
-    throw new RangeError(`decor "${id}": ${what} must be a positive number of metres, got ${v}`);
-  }
-  return v;
-}
-
-function point(p: Point3, what: string, id: string): Point3 {
-  if (!Array.isArray(p) || p.length !== 3) {
-    throw new RangeError(`decor "${id}": ${what} must be an [x, y, z] array`);
-  }
-  return [
-    finite(p[0], `${what}[0]`, id),
-    finite(p[1], `${what}[1]`, id),
-    finite(p[2], `${what}[2]`, id),
-  ];
 }
 
 class SpherePrimitive implements Primitive {
@@ -267,47 +251,135 @@ class CapsulePrimitive implements Primitive {
   }
 }
 
-export function compileCollider(collider: DecorCollider): Primitive {
-  const { id, shape } = collider;
-  if (typeof id !== 'string' || id === '') {
-    throw new RangeError(`decor collider id must be a non-empty string, got ${String(id)}`);
+const HULL_SPIRAL_DIRECTIONS = 48;
+
+/**
+ * The 54 fixed directions of the scene's k-DOP hulls: the six axes, then a golden-angle spiral.
+ * Must match `fitHull` in apps/web/src/scene/colliders.ts direction for direction, so the planes
+ * rebuilt from a hull's vertices are the planes the scene uses.
+ */
+const HULL_DIRECTIONS: Float64Array = (() => {
+  const out = [1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1];
+  const golden = Math.PI * (3 - Math.sqrt(5));
+  for (let i = 0; i < HULL_SPIRAL_DIRECTIONS; i++) {
+    const y = 1 - (2 * (i + 0.5)) / HULL_SPIRAL_DIRECTIONS;
+    const r = Math.sqrt(1 - y * y);
+    out.push(Math.cos(golden * i) * r, y, Math.sin(golden * i) * r);
   }
-  if (typeof collider.solid !== 'boolean') {
-    throw new RangeError(`decor "${id}": solid must be true or false`);
+  return Float64Array.from(out);
+})();
+
+/**
+ * The support plane of `vertices` along each k-DOP direction, packed as `nx, ny, nz, d`: the hull
+ * is every point with `n . p <= d`. Never smaller than the vertices' convex hull.
+ */
+export function fitHull(vertices: readonly Point3[]): Float64Array {
+  if (vertices.length < 4) throw new RangeError('fitHull needs at least 4 vertices');
+  const planes = new Float64Array((HULL_DIRECTIONS.length / 3) * 4);
+  for (let k = 0, p = 0; k < HULL_DIRECTIONS.length; k += 3, p += 4) {
+    const nx = HULL_DIRECTIONS[k] ?? 0;
+    const ny = HULL_DIRECTIONS[k + 1] ?? 0;
+    const nz = HULL_DIRECTIONS[k + 2] ?? 0;
+    let d = -Infinity;
+    for (const v of vertices) d = Math.max(d, nx * v[0] + ny * v[1] + nz * v[2]);
+    planes[p] = nx;
+    planes[p + 1] = ny;
+    planes[p + 2] = nz;
+    planes[p + 3] = d;
   }
-  if (typeof shape !== 'object' || shape === null) {
-    throw new RangeError(`decor "${id}": shape must be an object`);
+  return planes;
+}
+
+/**
+ * A convex k-DOP. Inside, the largest plane distance is the exact depth; outside it never exceeds
+ * the true distance, so avoidance only errs towards caution past edges and corners.
+ */
+class HullPrimitive implements Primitive {
+  readonly minX: number;
+  readonly minY: number;
+  readonly minZ: number;
+  readonly maxX: number;
+  readonly maxY: number;
+  readonly maxZ: number;
+  readonly id: string;
+  private readonly planes: Float64Array;
+
+  constructor(id: string, vertices: readonly Point3[]) {
+    this.id = id;
+    const p = fitHull(vertices);
+    this.planes = p;
+    // The first six directions are the axes, so their planes are the vertices' bounding box.
+    this.maxX = p[3] ?? 0;
+    this.minX = -(p[7] ?? 0);
+    this.maxY = p[11] ?? 0;
+    this.minY = -(p[15] ?? 0);
+    this.maxZ = p[19] ?? 0;
+    this.minZ = -(p[23] ?? 0);
   }
-  switch (shape.kind) {
-    case 'sphere': {
-      const [x, y, z] = point(shape.center, 'center', id);
-      return new SpherePrimitive(id, x, y, z, positive(shape.radius, 'radius', id));
-    }
-    case 'box': {
-      const [x, y, z] = point(shape.center, 'center', id);
-      point(shape.halfExtents, 'halfExtents', id);
-      const hx = positive(shape.halfExtents[0], 'halfExtents[0]', id);
-      const hy = positive(shape.halfExtents[1], 'halfExtents[1]', id);
-      const hz = positive(shape.halfExtents[2], 'halfExtents[2]', id);
-      const rounding = finite(shape.rounding ?? 0, 'rounding', id);
-      if (rounding < 0 || rounding > Math.min(hx, hy, hz)) {
-        throw new RangeError(`decor "${id}": rounding must be within [0, smallest half extent]`);
+
+  sample(x: number, y: number, z: number, normal: Float64Array): number {
+    const p = this.planes;
+    let best = -Infinity;
+    let at = 0;
+    for (let k = 0; k < p.length; k += 4) {
+      const d = (p[k] ?? 0) * x + (p[k + 1] ?? 0) * y + (p[k + 2] ?? 0) * z - (p[k + 3] ?? 0);
+      if (d > best) {
+        best = d;
+        at = k;
       }
-      const rotation = finite(shape.rotationY ?? 0, 'rotationY', id);
-      return new BoxPrimitive(id, x, y, z, hx, hy, hz, rotation, rounding);
     }
-    case 'capsule': {
-      const [ax, ay, az] = point(shape.a, 'a', id);
-      const [bx, by, bz] = point(shape.b, 'b', id);
-      return new CapsulePrimitive(id, ax, ay, az, bx, by, bz, positive(shape.radius, 'radius', id));
-    }
-    default: {
-      const unknown: never = shape;
-      throw new RangeError(
-        `decor "${id}": unknown shape kind ${JSON.stringify((unknown as { kind?: unknown }).kind)}; expected sphere, box or capsule`,
-      );
-    }
+    normal[0] = p[at] ?? 0;
+    normal[1] = p[at + 1] ?? 0;
+    normal[2] = p[at + 2] ?? 0;
+    return best;
   }
+}
+
+/**
+ * Validates one collider in the shared format, or the nested `DecorCollider` one (it may come
+ * from another thread), and builds its distance function.
+ */
+export function compileCollider(collider: Collider | DecorCollider): Primitive {
+  const parsed = colliderSchema.safeParse(flattenDecorCollider(collider));
+  if (!parsed.success) {
+    const raw: unknown = collider;
+    const id =
+      typeof raw === 'object' && raw !== null && 'id' in raw ? JSON.stringify(raw.id) : '(no id)';
+    const issues = parsed.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`);
+    throw new RangeError(`decor ${id}: ${issues.join('; ')}`);
+  }
+  const c = parsed.data;
+  switch (c.kind) {
+    case 'sphere':
+      return new SpherePrimitive(c.id, c.center[0], c.center[1], c.center[2], c.radius);
+    case 'box':
+      return new BoxPrimitive(
+        c.id,
+        c.center[0],
+        c.center[1],
+        c.center[2],
+        c.halfExtents[0],
+        c.halfExtents[1],
+        c.halfExtents[2],
+        c.rotationY,
+        c.rounding,
+      );
+    case 'capsule':
+      return new CapsulePrimitive(c.id, ...c.a, ...c.b, c.radius);
+    case 'hull':
+      return new HullPrimitive(c.id, c.vertices);
+  }
+}
+
+interface DecorChange {
+  readonly id: string;
+  readonly key: string;
+  readonly primitive: Primitive;
+}
+
+export interface DecorPlan {
+  readonly gone: readonly string[];
+  readonly changed: readonly DecorChange[];
 }
 
 /**
@@ -323,6 +395,7 @@ export class DecorField implements Sdf {
   private readonly ny: number;
   private readonly nz: number;
   private readonly ox: number;
+  private readonly oy: number;
   private readonly oz: number;
   private readonly cells: number[][];
   private readonly slots: (Primitive | null)[] = [];
@@ -331,17 +404,19 @@ export class DecorField implements Sdf {
   private readonly free: number[] = [];
   private readonly scratch = new Float64Array(3);
 
-  constructor(tank: TankDimensions, reach: number, cellSize = 0.05) {
+  constructor(tank: Basin | TankDimensions, reach: number, cellSize = 0.05) {
     if (!(reach > 0 && Number.isFinite(reach))) {
       throw new RangeError(`DecorField reach must be a positive number of metres, got ${reach}`);
     }
+    const basin = basinOf(tank);
     this.reach = reach;
     this.cell = cellSize;
-    this.nx = Math.max(1, Math.ceil(tank.width / cellSize));
-    this.ny = Math.max(1, Math.ceil(tank.height / cellSize));
-    this.nz = Math.max(1, Math.ceil(tank.depth / cellSize));
-    this.ox = -tank.width / 2;
-    this.oz = -tank.depth / 2;
+    this.nx = Math.max(1, Math.ceil(basin.width / cellSize));
+    this.ny = Math.max(1, Math.ceil(basin.height / cellSize));
+    this.nz = Math.max(1, Math.ceil(basin.depth / cellSize));
+    this.ox = basin.minX;
+    this.oy = basin.minY;
+    this.oz = basin.minZ;
     this.cells = Array.from({ length: this.nx * this.ny * this.nz }, () => []);
   }
 
@@ -354,14 +429,40 @@ export class DecorField implements Sdf {
   }
 
   /** Adds or replaces colliders and returns how many grid cells were rebuilt; unchanged ones are skipped. */
-  upsert(colliders: readonly DecorCollider[]): number {
-    // Compile everything first, so a bad collider leaves the field exactly as it was.
-    const changed: { id: string; key: string; primitive: Primitive }[] = [];
+  upsert(colliders: readonly Collider[]): number {
+    return this.apply({ gone: [], changed: this.compileChanged(colliders) });
+  }
+
+  /**
+   * Validates `colliders` without touching the field and returns what `apply` must do to make the
+   * field hold exactly them. A collider identical to the one already held under its id was
+   * validated when it went in, so only new and changed ones are compiled.
+   */
+  plan(colliders: readonly Collider[]): DecorPlan {
+    const keep = new Set(colliders.map((c) => c.id));
+    if (keep.size !== colliders.length) throw new Error('decor collider ids must be unique');
+    const changed = this.compileChanged(colliders);
+    const gone = [...this.slotOf.keys()].filter((id) => !keep.has(id));
+    return { gone, changed };
+  }
+
+  /** Carries out a `plan` made against this field's current contents; returns cells rebuilt. */
+  apply(plan: DecorPlan): number {
+    return this.remove(plan.gone) + this.place(plan.changed);
+  }
+
+  private compileChanged(colliders: readonly Collider[]): DecorChange[] {
+    const changed: DecorChange[] = [];
     for (const c of colliders) {
-      const primitive = compileCollider(c);
-      const key = JSON.stringify(c.shape);
-      if (this.shapeKey.get(c.id) !== key) changed.push({ id: c.id, key, primitive });
+      const key = JSON.stringify(c);
+      if (this.shapeKey.get(c.id) !== key) {
+        changed.push({ id: c.id, key, primitive: compileCollider(c) });
+      }
     }
+    return changed;
+  }
+
+  private place(changed: readonly DecorChange[]): number {
     let touched = 0;
     for (const { id, key, primitive } of changed) {
       const existing = this.slotOf.get(id);
@@ -397,17 +498,13 @@ export class DecorField implements Sdf {
   }
 
   /** Makes the field hold exactly `colliders`, touching only what changed. */
-  set(colliders: readonly DecorCollider[]): number {
-    const keep = new Set(colliders.map((c) => c.id));
-    if (keep.size !== colliders.length) throw new Error('decor collider ids must be unique');
-    for (const c of colliders) compileCollider(c);
-    const gone = [...this.slotOf.keys()].filter((id) => !keep.has(id));
-    return this.remove(gone) + this.upsert(colliders);
+  set(colliders: readonly Collider[]): number {
+    return this.apply(this.plan(colliders));
   }
 
   sample(x: number, y: number, z: number, normal: Float64Array): number {
     let ix = Math.floor((x - this.ox) / this.cell);
-    let iy = Math.floor(y / this.cell);
+    let iy = Math.floor((y - this.oy) / this.cell);
     let iz = Math.floor((z - this.oz) / this.cell);
     ix = ix < 0 ? 0 : ix >= this.nx ? this.nx - 1 : ix;
     iy = iy < 0 ? 0 : iy >= this.ny ? this.ny - 1 : iy;
@@ -441,8 +538,8 @@ export class DecorField implements Sdf {
     const r = this.reach;
     const x0 = Math.max(0, Math.floor((p.minX - r - this.ox) / this.cell));
     const x1 = Math.min(this.nx - 1, Math.floor((p.maxX + r - this.ox) / this.cell));
-    const y0 = Math.max(0, Math.floor((p.minY - r) / this.cell));
-    const y1 = Math.min(this.ny - 1, Math.floor((p.maxY + r) / this.cell));
+    const y0 = Math.max(0, Math.floor((p.minY - r - this.oy) / this.cell));
+    const y1 = Math.min(this.ny - 1, Math.floor((p.maxY + r - this.oy) / this.cell));
     const z0 = Math.max(0, Math.floor((p.minZ - r - this.oz) / this.cell));
     const z1 = Math.min(this.nz - 1, Math.floor((p.maxZ + r - this.oz) / this.cell));
     let touched = 0;

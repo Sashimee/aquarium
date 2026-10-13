@@ -198,5 +198,8 @@ export const mailLimitHits = pgTable(
     key: text('key').notNull(),
     at: timestamptz('at').notNull().defaultNow(),
   },
-  (t) => [index('mail_limit_hits_key_at_idx').on(t.key, t.at)],
+  (t) => [
+    index('mail_limit_hits_key_at_idx').on(t.key, t.at),
+    index('mail_limit_hits_at_idx').on(t.at),
+  ],
 );

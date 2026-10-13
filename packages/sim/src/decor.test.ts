@@ -1,5 +1,6 @@
+import type { Collider } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
-import { compileCollider, DecorField, UnionSdf, type DecorCollider } from './decor.ts';
+import { compileCollider, DecorField, fitHull, UnionSdf, type Point3 } from './decor.ts';
 import { ARCHETYPES, REEF_DECOR, REEF_TANK, SHOW_DECOR, SHOW_TANK, spawnMany } from './fixtures.ts';
 import { Rng } from './rng.ts';
 import { TankSdf } from './sdf.ts';
@@ -16,7 +17,7 @@ function at(a: ArrayLike<number>, i: number): number {
   return v;
 }
 
-function bruteForce(colliders: readonly DecorCollider[], reach: number) {
+function bruteForce(colliders: readonly Collider[], reach: number) {
   const primitives = colliders.map(compileCollider);
   return (x: number, y: number, z: number, normal: Float64Array): number => {
     let best = reach;
@@ -57,11 +58,42 @@ function expectSameField(
 }
 
 describe('decor primitives', () => {
+  it('accepts the nested DecorCollider format as the same shape', () => {
+    const box = () => ({
+      kind: 'box' as const,
+      center: [0.1, 0.2, 0] as [number, number, number],
+      halfExtents: [0.1, 0.05, 0.08] as [number, number, number],
+      rotationY: 0.4,
+      rounding: 0.02,
+    });
+    const nested = compileCollider({ id: 'decor:p1', solid: true, shape: box() });
+    const flat = compileCollider({ id: 'decor:p1', hard: true, ...box() });
+    const nn = new Float64Array(3);
+    const probes: [number, number, number][] = [
+      [0.1, 0.2, 0],
+      [0.3, 0.25, 0.1],
+      [0, 0.1, -0.2],
+    ];
+    for (const [x, y, z] of probes) {
+      expect(nested.sample(x, y, z, nn)).toBe(flat.sample(x, y, z, n));
+      expect(Array.from(nn)).toEqual(Array.from(n));
+    }
+    expect(() =>
+      compileCollider({
+        id: 'decor:p2',
+        solid: true,
+        shape: { ...box(), halfExtents: [0, 1, 1] },
+      }),
+    ).toThrow(/decor "decor:p2": halfExtents/);
+  });
+
   it('measures exact distances to spheres, boxes and capsules', () => {
     const sphere = compileCollider({
       id: 's',
-      solid: true,
-      shape: { kind: 'sphere', center: [0, 0.2, 0], radius: 0.1 },
+      hard: true,
+      kind: 'sphere',
+      center: [0, 0.2, 0],
+      radius: 0.1,
     });
     expect(sphere.sample(0, 0.35, 0, n)).toBeCloseTo(0.05, 12);
     expect(Array.from(n)).toEqual([0, 1, 0]);
@@ -69,8 +101,12 @@ describe('decor primitives', () => {
 
     const box = compileCollider({
       id: 'b',
-      solid: true,
-      shape: { kind: 'box', center: [0, 0.1, 0], halfExtents: [0.2, 0.05, 0.05] },
+      hard: true,
+      kind: 'box',
+      center: [0, 0.1, 0],
+      halfExtents: [0.2, 0.05, 0.05],
+      rotationY: 0,
+      rounding: 0,
     });
     expect(box.sample(0.1, 0.1, 0, n)).toBeCloseTo(-0.05, 12);
     expect(box.sample(0.3, 0.1, 0, n)).toBeCloseTo(0.1, 12);
@@ -78,21 +114,24 @@ describe('decor primitives', () => {
 
     const turned = compileCollider({
       id: 't',
-      solid: true,
-      shape: {
-        kind: 'box',
-        center: [0, 0.1, 0],
-        halfExtents: [0.2, 0.05, 0.05],
-        rotationY: Math.PI / 2,
-      },
+      hard: true,
+      kind: 'box',
+      center: [0, 0.1, 0],
+      halfExtents: [0.2, 0.05, 0.05],
+      rotationY: Math.PI / 2,
+      rounding: 0,
     });
     expect(turned.sample(0.1, 0.1, 0, n)).toBeCloseTo(0.05, 12);
     expect(turned.sample(0, 0.1, 0.1, n)).toBeCloseTo(-0.05, 12);
 
     const rounded = compileCollider({
       id: 'r',
-      solid: true,
-      shape: { kind: 'box', center: [0, 0, 0], halfExtents: [0.1, 0.1, 0.1], rounding: 0.02 },
+      hard: true,
+      kind: 'box',
+      center: [0, 0, 0],
+      halfExtents: [0.1, 0.1, 0.1],
+      rotationY: 0,
+      rounding: 0.02,
     });
     expect(rounded.sample(0.2, 0, 0, n)).toBeCloseTo(0.1, 12);
     const corner = rounded.sample(0.2, 0.2, 0, n);
@@ -100,62 +139,199 @@ describe('decor primitives', () => {
 
     const capsule = compileCollider({
       id: 'c',
-      solid: false,
-      shape: { kind: 'capsule', a: [0, 0, 0], b: [0, 0.2, 0], radius: 0.03 },
+      hard: false,
+      kind: 'capsule',
+      a: [0, 0, 0],
+      b: [0, 0.2, 0],
+      radius: 0.03,
     });
     expect(capsule.sample(0.1, 0.1, 0, n)).toBeCloseTo(0.07, 12);
     expect(Array.from(n)).toEqual([1, 0, 0]);
     expect(capsule.sample(0, 0.3, 0, n)).toBeCloseTo(0.07, 12);
   });
 
-  it('rejects malformed shapes with the collider id in the message', () => {
-    const bad: DecorCollider[] = [
-      { id: 'neg', solid: true, shape: { kind: 'sphere', center: [0, 0, 0], radius: -1 } },
-      { id: 'nan', solid: true, shape: { kind: 'sphere', center: [Number.NaN, 0, 0], radius: 1 } },
+  it('measures a hull as its k-DOP: exact inside, never beyond the true distance outside', () => {
+    const corners: [number, number, number][] = [];
+    for (const x of [-0.1, 0.1]) {
+      for (const y of [0.1, 0.3]) for (const z of [-0.05, 0.05]) corners.push([x, y, z]);
+    }
+    const hull = compileCollider({ id: 'h', hard: true, kind: 'hull', vertices: corners });
+    const box = compileCollider({
+      id: 'b',
+      hard: true,
+      kind: 'box',
+      center: [0, 0.2, 0],
+      halfExtents: [0.1, 0.1, 0.05],
+      rotationY: 0,
+      rounding: 0,
+    });
+    const rng = new Rng(11);
+    for (let k = 0; k < 2000; k++) {
+      const x = rng.signed() * 0.3;
+      const y = rng.range(-0.1, 0.5);
+      const z = rng.signed() * 0.3;
+      const dh = hull.sample(x, y, z, n);
+      const db = box.sample(x, y, z, m);
+      if (db <= 0) {
+        expect(dh).toBeCloseTo(db, 12);
+      } else {
+        expect(dh).toBeGreaterThan(0);
+        expect(dh).toBeLessThanOrEqual(db + 1e-12);
+      }
+      expect(Math.hypot(at(n, 0), at(n, 1), at(n, 2))).toBeCloseTo(1, 12);
+    }
+    expect(hull.sample(0, 0.2, 0.2, n)).toBeCloseTo(0.15, 12);
+    expect(Array.from(n)).toEqual([0, 0, 1]);
+  });
+
+  it('fits hull planes the way the scene does: axes first, every plane touching the points', () => {
+    const rng = new Rng(5);
+    const points: Point3[] = Array.from({ length: 40 }, () => [
+      rng.signed() * 0.2,
+      rng.range(0, 0.3),
+      rng.signed() * 0.1,
+    ]);
+    const planes = fitHull(points);
+    expect(planes.length).toBe(54 * 4);
+    const xs = points.map((p) => p[0]);
+    const ys = points.map((p) => p[1]);
+    const zs = points.map((p) => p[2]);
+    expect(Array.from(planes.subarray(0, 24))).toEqual(
+      [
+        1,
+        0,
+        0,
+        Math.max(...xs),
+        -1,
+        0,
+        0,
+        -Math.min(...xs),
+        0,
+        1,
+        0,
+        Math.max(...ys),
+        0,
+        -1,
+        0,
+        -Math.min(...ys),
+        0,
+        0,
+        1,
+        Math.max(...zs),
+        0,
+        0,
+        -1,
+        -Math.min(...zs),
+      ].map((v) => (Object.is(v, -0) ? 0 : v)),
+    );
+    for (let k = 0; k < planes.length; k += 4) {
+      const nx = at(planes, k);
+      const ny = at(planes, k + 1);
+      const nz = at(planes, k + 2);
+      expect(Math.hypot(nx, ny, nz)).toBeCloseTo(1, 12);
+      const support = Math.max(...points.map((p) => nx * p[0] + ny * p[1] + nz * p[2]));
+      expect(at(planes, k + 3)).toBe(support);
+    }
+    // The 48 spiral directions run from the north pole to the south pole.
+    expect(at(planes, 25)).toBeCloseTo(1 - 1 / 48, 12);
+    expect(at(planes, planes.length - 3)).toBeCloseTo(-1 + 1 / 48, 12);
+    expect(() => fitHull(points.slice(0, 3))).toThrow('at least 4');
+  });
+
+  it('rejects malformed colliders with the collider id and the bad field in the message', () => {
+    const bad: { collider: Collider; field: string }[] = [
       {
-        id: 'round',
-        solid: true,
-        shape: { kind: 'box', center: [0, 0, 0], halfExtents: [0.1, 0.1, 0.1], rounding: 0.2 },
+        collider: { id: 'neg', hard: true, kind: 'sphere', center: [0, 0, 0], radius: -1 },
+        field: 'radius',
       },
       {
-        id: 'flat',
-        solid: true,
-        shape: { kind: 'box', center: [0, 0, 0], halfExtents: [0.1, 0, 0.1] },
+        collider: { id: 'nan', hard: true, kind: 'sphere', center: [Number.NaN, 0, 0], radius: 1 },
+        field: 'center.0',
       },
       {
-        id: 'inf',
-        solid: true,
-        shape: { kind: 'capsule', a: [0, 0, 0], b: [0, Infinity, 0], radius: 0.1 },
+        collider: {
+          id: 'round',
+          hard: true,
+          kind: 'box',
+          center: [0, 0, 0],
+          halfExtents: [0.1, 0.1, 0.1],
+          rotationY: 0,
+          rounding: 0.2,
+        },
+        field: 'rounding',
+      },
+      {
+        collider: {
+          id: 'flat',
+          hard: true,
+          kind: 'box',
+          center: [0, 0, 0],
+          halfExtents: [0.1, 0, 0.1],
+          rotationY: 0,
+          rounding: 0,
+        },
+        field: 'halfExtents.1',
+      },
+      {
+        collider: {
+          id: 'inf',
+          hard: true,
+          kind: 'capsule',
+          a: [0, 0, 0],
+          b: [0, Infinity, 0],
+          radius: 0.1,
+        },
+        field: 'b.1',
+      },
+      {
+        collider: {
+          id: 'sheet',
+          hard: true,
+          kind: 'hull',
+          vertices: [
+            [0, 0, 0],
+            [1, 0, 0],
+            [0, 0, 1],
+            [1, 0, 1],
+          ],
+        },
+        field: 'vertices',
       },
     ];
-    for (const c of bad) expect(() => compileCollider(c)).toThrow(`decor "${c.id}"`);
+    for (const { collider, field } of bad) {
+      expect(() => compileCollider(collider)).toThrow(`decor "${collider.id}": ${field}`);
+    }
   });
 
   it('rejects colliders that only a bad cast or a corrupt message could produce', () => {
     // The bridge receives decor from the main thread, where the types are only a promise.
-    const forged = (value: unknown): DecorCollider => value as DecorCollider;
-    const sphere = { kind: 'sphere', center: [0, 0, 0], radius: 0.1 };
+    const forged = (value: unknown): Collider => value as Collider;
     expect(() =>
-      compileCollider(forged({ id: 'cone', solid: true, shape: { kind: 'cone', radius: 1 } })),
-    ).toThrow(/decor "cone": unknown shape kind "cone"/);
-    expect(() => compileCollider(forged({ id: 'hollow', solid: true }))).toThrow(
-      /decor "hollow": shape must be an object/,
-    );
-    expect(() => compileCollider(forged({ id: 7, solid: true, shape: sphere }))).toThrow(
-      /id must be a non-empty string/,
-    );
-    expect(() => compileCollider(forged({ id: 'maybe', solid: 'yes', shape: sphere }))).toThrow(
-      /decor "maybe": solid must be true or false/,
-    );
+      compileCollider(forged({ id: 'cone', hard: true, kind: 'cone', radius: 1 })),
+    ).toThrow(/decor "cone": kind/);
+    expect(() =>
+      compileCollider(
+        forged({ id: 7, hard: true, kind: 'sphere', center: [0, 0, 0], radius: 0.1 }),
+      ),
+    ).toThrow(/decor 7: id/);
+    expect(() =>
+      compileCollider(
+        forged({ id: 'maybe', hard: 'yes', kind: 'sphere', center: [0, 0, 0], radius: 0.1 }),
+      ),
+    ).toThrow(/decor "maybe": hard/);
     expect(() =>
       compileCollider(
         forged({
-          id: 'slab',
-          solid: true,
-          shape: { kind: 'box', center: [0, 0, 0], halfExtents: 1 },
+          id: 'old',
+          solid: 'yes',
+          shape: { kind: 'sphere', center: [0, 0, 0], radius: 0.1 },
         }),
       ),
-    ).toThrow(/decor "slab": halfExtents must be an \[x, y, z\] array/);
+    ).toThrow(/decor "old": hard/);
+    expect(() => compileCollider(forged({ id: 'flat', solid: true, shape: null }))).toThrow(
+      /decor "flat"/,
+    );
+    expect(() => compileCollider(forged(null))).toThrow(/decor \(no id\)/);
   });
 });
 
@@ -169,9 +345,7 @@ describe('DecorField', () => {
 
   it('reports the reach, not a nearer distance, where no collider is close', () => {
     const field = new DecorField(REEF_TANK, 0.1);
-    field.set([
-      { id: 's', solid: true, shape: { kind: 'sphere', center: [0, 0.3, 0], radius: 0.05 } },
-    ]);
+    field.set([{ id: 's', hard: true, kind: 'sphere', center: [0, 0.3, 0], radius: 0.05 }]);
     expect(field.sample(0.6, 0.3, 0, n)).toBe(0.1);
     expect(field.sample(0, 0.3, 0.12, n)).toBeCloseTo(0.07, 12);
   });
@@ -181,14 +355,11 @@ describe('DecorField', () => {
     const full = field.set(REEF_DECOR);
     expect(full).toBeGreaterThan(0);
     expect(field.set(REEF_DECOR)).toBe(0);
-    expect(field.set(REEF_DECOR.map((c) => ({ ...c, shape: { ...c.shape } })))).toBe(0);
+    expect(field.set(REEF_DECOR.map((c) => structuredClone(c)))).toBe(0);
 
-    const moved = REEF_DECOR.map((c) =>
+    const moved: Collider[] = REEF_DECOR.map((c) =>
       c.id === 'cave-west'
-        ? {
-            ...c,
-            shape: { kind: 'sphere' as const, center: [-0.3, 0.1, 0.1] as const, radius: 0.05 },
-          }
+        ? { id: c.id, hard: c.hard, kind: 'sphere', center: [-0.3, 0.1, 0.1], radius: 0.05 }
         : c,
     );
     const touched = field.set(moved);
@@ -232,15 +403,8 @@ describe('DecorField', () => {
     if (!stone) throw new Error('fixture lost its stone');
     field.set([stone]);
     const before = field.sample(0.35, 0.15, 0.05, n);
-    const moved: DecorCollider = {
-      ...stone,
-      shape: { kind: 'sphere', center: [-0.35, 0, 0.05], radius: 0.12 },
-    };
-    const bad: DecorCollider = {
-      id: 'bad',
-      solid: true,
-      shape: { kind: 'sphere', center: [0, 0, 0], radius: -1 },
-    };
+    const moved: Collider = { ...stone, kind: 'sphere', center: [-0.35, 0, 0.05], radius: 0.12 };
+    const bad: Collider = { id: 'bad', hard: true, kind: 'sphere', center: [0, 0, 0], radius: -1 };
     expect(() => field.upsert([moved, bad])).toThrow('decor "bad"');
     expect(() => field.set([moved, bad])).toThrow('decor "bad"');
     expect(field.sample(0.35, 0.15, 0.05, n)).toBe(before);
@@ -251,9 +415,7 @@ describe('DecorField', () => {
 
   it('unions with the tank walls by nearest surface', () => {
     const field = new DecorField(SHOW_TANK, 0.2);
-    field.set([
-      { id: 's', solid: true, shape: { kind: 'sphere', center: [0, 0.25, 0], radius: 0.05 } },
-    ]);
+    field.set([{ id: 's', hard: true, kind: 'sphere', center: [0, 0.25, 0], radius: 0.05 }]);
     const scene = new UnionSdf([new TankSdf(SHOW_TANK), field]);
     expect(scene.sample(0, 0.25, 0.1, n)).toBeCloseTo(0.05, 12);
     expect(at(n, 2)).toBeCloseTo(1, 12);
@@ -263,7 +425,7 @@ describe('DecorField', () => {
 });
 
 describe('World decor', () => {
-  function settled(decor: readonly DecorCollider[]): World {
+  function settled(decor: readonly Collider[]): World {
     const w = new World({
       seed: 4,
       tank: SHOW_TANK,
@@ -297,14 +459,12 @@ describe('World decor', () => {
     const w = settled([]);
     const i = mostCentral(w);
     const o = i * 3;
-    const rock: DecorCollider = {
+    const rock: Collider = {
       id: 'dropped',
-      solid: true,
-      shape: {
-        kind: 'sphere',
-        center: [at(w.position, o) + 0.005, at(w.position, o + 1), at(w.position, o + 2)],
-        radius: 0.03,
-      },
+      hard: true,
+      kind: 'sphere',
+      center: [at(w.position, o) + 0.005, at(w.position, o + 1), at(w.position, o + 2)],
+      radius: 0.03,
     };
     expect(w.setDecor([rock])).toBeGreaterThan(0);
     expect(w.bodyClearance(i)).toBeLessThan(0);
@@ -326,10 +486,13 @@ describe('World decor', () => {
     const o = i * 3;
     const x = at(w.position, o);
     const z = at(w.position, o + 2);
-    const plant: DecorCollider = {
+    const plant: Collider = {
       id: 'reed',
-      solid: false,
-      shape: { kind: 'capsule', a: [x, 0, z], b: [x, SHOW_TANK.height * 0.9, z], radius: 0.02 },
+      hard: false,
+      kind: 'capsule',
+      a: [x, 0, z],
+      b: [x, SHOW_TANK.height * 0.9, z],
+      radius: 0.02,
     };
     const reed = compileCollider(plant);
     const contactsBefore = w.contacts;
@@ -365,10 +528,13 @@ describe('World decor', () => {
     const probe = (): number => w.sceneSdf.sample(0.35, 0.15, 0.05, n);
     const before = probe();
     const rest = SHOW_DECOR.filter((c) => c.id !== 'stone');
-    const badPlant: DecorCollider = {
+    const badPlant: Collider = {
       id: 'bad-plant',
-      solid: false,
-      shape: { kind: 'capsule', a: [0, 0, 0], b: [0, Number.NaN, 0], radius: 0.02 },
+      hard: false,
+      kind: 'capsule',
+      a: [0, 0, 0],
+      b: [0, Number.NaN, 0],
+      radius: 0.02,
     };
     expect(() => w.setDecor([...rest, badPlant])).toThrow('decor "bad-plant"');
     expect(probe()).toBe(before);

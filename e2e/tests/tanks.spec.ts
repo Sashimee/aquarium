@@ -1,5 +1,4 @@
-import { expect } from '@playwright/test';
-import { test } from '../support/test.ts';
+import { expect, test } from '@playwright/test';
 import { createFirstTank, openTank, registerVerifiedUser, savedTanks } from '../support/app.ts';
 
 test('switching tanks swaps the fish and keeps both saved', async ({ page }) => {

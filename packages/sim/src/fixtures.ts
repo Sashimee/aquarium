@@ -1,7 +1,8 @@
+import { createTankSpace, type Collider, type TankSpace } from '@aquarium/shared';
+import { basinOf, type Basin, type TankDimensions } from './basin.ts';
 import type { Anchor } from './behaviour.ts';
-import type { DecorCollider } from './decor.ts';
 import { FOOD_PARTICLES, FOOD_STRIDE, FOOD_TYPES, type AteEvent } from './food.ts';
-import type { Sdf, TankDimensions } from './sdf.ts';
+import type { Sdf } from './sdf.ts';
 import type { SpeciesInput } from './species.ts';
 import type { FishSpawn, WorldConfig } from './world.ts';
 
@@ -264,53 +265,62 @@ export const SHOW_TANK = { width: 1.2, height: 0.5, depth: 0.4 } as const;
 /** Tangs need a long, deep tank; a 20 cm fish in 40 cm of depth spends its life avoiding glass. */
 export const REEF_TANK = { width: 1.8, height: 0.6, depth: 0.6 } as const;
 
+/**
+ * The web scene's default freshwater tank in tank space: 1.2 × 0.5 × 0.5 m outside, 1 cm glass,
+ * and sand banked from 4 cm at the front pane to 10 cm at the back.
+ */
+export const SLOPED_SPACE: TankSpace = createTankSpace(
+  { width: 1.2, depth: 0.5, height: 0.5, glass: 0.01, freeboard: 0.03, nx: 16, nz: 8 },
+  (_x, z) => 0.01 + 0.04 + (0.1 - 0.04) * ((0.24 - z) / 0.48),
+);
+
 /** Live rock, a three-stone cave and an anemone over the reef tank's sand. */
-export const REEF_DECOR: readonly DecorCollider[] = [
-  {
-    id: 'rock-left',
-    solid: true,
-    shape: { kind: 'sphere', center: [-0.55, 0, -0.1], radius: 0.2 },
-  },
+export const REEF_DECOR: readonly Collider[] = [
+  { id: 'rock-left', hard: true, kind: 'sphere', center: [-0.55, 0, -0.1], radius: 0.2 },
   {
     id: 'rock-right',
-    solid: true,
-    shape: {
-      kind: 'box',
-      center: [0.55, 0.1, -0.12],
-      halfExtents: [0.18, 0.1, 0.1],
-      rotationY: 0.3,
-      rounding: 0.03,
-    },
+    hard: true,
+    kind: 'box',
+    center: [0.55, 0.1, -0.12],
+    halfExtents: [0.18, 0.1, 0.1],
+    rotationY: 0.3,
+    rounding: 0.03,
   },
   {
     id: 'cave-west',
-    solid: true,
-    shape: { kind: 'box', center: [0.05, 0.06, -0.18], halfExtents: [0.03, 0.06, 0.07] },
+    hard: true,
+    kind: 'box',
+    center: [0.05, 0.06, -0.18],
+    halfExtents: [0.03, 0.06, 0.07],
+    rotationY: 0,
+    rounding: 0,
   },
   {
     id: 'cave-east',
-    solid: true,
-    shape: { kind: 'box', center: [0.25, 0.06, -0.18], halfExtents: [0.03, 0.06, 0.07] },
+    hard: true,
+    kind: 'box',
+    center: [0.25, 0.06, -0.18],
+    halfExtents: [0.03, 0.06, 0.07],
+    rotationY: 0,
+    rounding: 0,
   },
   {
     id: 'cave-roof',
-    solid: true,
-    shape: {
-      kind: 'box',
-      center: [0.15, 0.135, -0.18],
-      halfExtents: [0.15, 0.015, 0.09],
-      rounding: 0.01,
-    },
+    hard: true,
+    kind: 'box',
+    center: [0.15, 0.135, -0.18],
+    halfExtents: [0.15, 0.015, 0.09],
+    rotationY: 0,
+    rounding: 0.01,
   },
-  {
-    id: 'anemone',
-    solid: false,
-    shape: { kind: 'sphere', center: [-0.2, 0.03, 0.08], radius: 0.07 },
-  },
+  { id: 'anemone', hard: false, kind: 'sphere', center: [-0.2, 0.03, 0.08], radius: 0.07 },
   {
     id: 'sea-grass',
-    solid: false,
-    shape: { kind: 'capsule', a: [0.7, 0, 0.2], b: [0.7, 0.3, 0.2], radius: 0.03 },
+    hard: false,
+    kind: 'capsule',
+    a: [0.7, 0, 0.2],
+    b: [0.7, 0.3, 0.2],
+    radius: 0.03,
   },
 ];
 
@@ -320,22 +330,31 @@ export const REEF_ANCHORS: readonly Anchor[] = [
 ];
 
 /** Driftwood, a stone and a stand of plants in the freshwater show tank. */
-export const SHOW_DECOR: readonly DecorCollider[] = [
+export const SHOW_DECOR: readonly Collider[] = [
   {
     id: 'driftwood',
-    solid: true,
-    shape: { kind: 'capsule', a: [-0.4, 0.03, -0.05], b: [0.1, 0.18, -0.12], radius: 0.035 },
+    hard: true,
+    kind: 'capsule',
+    a: [-0.4, 0.03, -0.05],
+    b: [0.1, 0.18, -0.12],
+    radius: 0.035,
   },
-  { id: 'stone', solid: true, shape: { kind: 'sphere', center: [0.35, 0, 0.05], radius: 0.12 } },
+  { id: 'stone', hard: true, kind: 'sphere', center: [0.35, 0, 0.05], radius: 0.12 },
   {
     id: 'vallisneria-1',
-    solid: false,
-    shape: { kind: 'capsule', a: [-0.45, 0, 0.12], b: [-0.45, 0.35, 0.12], radius: 0.025 },
+    hard: false,
+    kind: 'capsule',
+    a: [-0.45, 0, 0.12],
+    b: [-0.45, 0.35, 0.12],
+    radius: 0.025,
   },
   {
     id: 'vallisneria-2',
-    solid: false,
-    shape: { kind: 'capsule', a: [-0.35, 0, 0.14], b: [-0.33, 0.32, 0.14], radius: 0.025 },
+    hard: false,
+    kind: 'capsule',
+    a: [-0.35, 0, 0.14],
+    b: [-0.33, 0.32, 0.14],
+    radius: 0.025,
   },
 ];
 
@@ -397,14 +416,14 @@ const SINK_MPS: Readonly<Record<FoodName, number>> = {
  * vanishes once fish have eaten all of it.
  */
 export class FoodRain {
-  private readonly tank: TankDimensions;
+  private readonly basin: Basin;
   private readonly particles: Particle[] = [];
   private nextId = 1;
   private readonly normal = new Float64Array(3);
   eaten = 0;
 
-  constructor(tank: TankDimensions) {
-    this.tank = tank;
+  constructor(tank: Basin | TankDimensions) {
+    this.basin = basinOf(tank);
   }
 
   get count(): number {
@@ -427,13 +446,13 @@ export class FoodRain {
 
   /** Scatters `count` particles on a sunflower spiral of `radius` at the surface around (x, z). */
   sprinkle(type: FoodName, count: number, x: number, z: number, radius: number, floatS = 0): void {
-    const { width, height, depth } = this.tank;
+    const { minX, maxX, minZ, maxZ, maxY } = this.basin;
     for (let k = 0; k < count; k++) {
       const r = radius * Math.sqrt((k + 0.5) / count);
       const a = k * 2.399963;
-      const px = Math.max(-width / 2, Math.min(width / 2, x + r * Math.cos(a)));
-      const pz = Math.max(-depth / 2, Math.min(depth / 2, z + r * Math.sin(a)));
-      this.place(type, px, height, pz, floatS * (1 + (k % 5) / 5));
+      const px = Math.max(minX, Math.min(maxX, x + r * Math.cos(a)));
+      const pz = Math.max(minZ, Math.min(maxZ, z + r * Math.sin(a)));
+      this.place(type, px, maxY, pz, floatS * (1 + (k % 5) / 5));
     }
   }
 

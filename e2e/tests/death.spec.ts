@@ -1,5 +1,4 @@
-import { expect } from '@playwright/test';
-import { test } from '../support/test.ts';
+import { expect, test } from '@playwright/test';
 import {
   advanceServerClock,
   createFirstTank,

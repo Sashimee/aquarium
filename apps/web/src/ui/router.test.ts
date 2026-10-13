@@ -121,3 +121,34 @@ describe('carryQuery', () => {
     expect(carryQuery('/verify-email?error=x', '?backend=webgl2')).toBe('/verify-email?error=x');
   });
 });
+
+describe('password reset routes', () => {
+  it('reads the token and the error from the reset link', () => {
+    expect(parseRoute('/forgot-password')).toEqual({ name: 'forgot-password' });
+    expect(parseRoute('/reset-password?token=abc')).toEqual({
+      name: 'reset-password',
+      token: 'abc',
+      error: null,
+    });
+    expect(parseRoute('/reset-password?error=INVALID_TOKEN')).toEqual({
+      name: 'reset-password',
+      token: null,
+      error: 'INVALID_TOKEN',
+    });
+  });
+
+  it('keeps the error and token when the route is already right', () => {
+    expect(redirectFor('/reset-password?error=INVALID_TOKEN', null)).toBeNull();
+    expect(redirectFor('/reset-password?token=abc', user)).toBeNull();
+    expect(redirectFor('/forgot-password', user)).toBeNull();
+  });
+
+  it('does not carry the reset token into other routes', () => {
+    expect(carryQuery('/sign-in', '?token=abc&backend=webgl')).toBe('/sign-in?backend=webgl');
+  });
+
+  it('round-trips through routePath', () => {
+    const route = { name: 'reset-password', token: 'a b', error: null } as const;
+    expect(parseRoute(routePath(route))).toEqual(route);
+  });
+});

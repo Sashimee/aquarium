@@ -1,5 +1,4 @@
-import { expect } from '@playwright/test';
-import { test } from '../support/test.ts';
+import { expect, test } from '@playwright/test';
 import { createFirstTank, openTank, registerVerifiedUser, savedTanks } from '../support/app.ts';
 
 test('shop, acclimation bag and the three chores', async ({ page }) => {
@@ -15,6 +14,9 @@ test('shop, acclimation bag and the three chores', async ({ page }) => {
   await expect(bag).toContainText('Pip');
   expect((await savedTanks(page))[0]?.fish).toMatchObject([{ name: 'Pip', status: 'alive' }]);
 
+  await bag.getByRole('button', { name: 'Release Pip now' }).click();
+  await expect(bag).toBeHidden();
+
   await page.getByRole('button', { name: 'Feed', exact: true }).click();
   await expect.poll(async () => (await savedTanks(page))[0]?.water.uneatenFood).toBeGreaterThan(0);
 
@@ -27,7 +29,4 @@ test('shop, acclimation bag and the three chores', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Scrape the glass' }).click();
   await expect(status).toContainText('The glass is clear.');
-
-  await bag.getByRole('button', { name: 'Release Pip now' }).click();
-  await expect(bag).toBeHidden();
 });

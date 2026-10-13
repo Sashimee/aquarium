@@ -1,3 +1,5 @@
+import { basinOf, type Basin, type TankDimensions } from './basin.ts';
+
 /**
  * Signed distance to the nearest surface a fish may not cross: positive in free water, negative
  * inside geometry. `sample` writes the unit gradient (pointing into free water) to `normal`.
@@ -6,21 +8,7 @@ export interface Sdf {
   sample(x: number, y: number, z: number, normal: Float64Array): number;
 }
 
-/** Tank space: metres, floor centre at the origin, +Y up to the water surface. */
-export interface TankDimensions {
-  readonly width: number;
-  readonly height: number;
-  readonly depth: number;
-}
-
-export function assertTankDimensions(tank: TankDimensions): void {
-  for (const key of ['width', 'height', 'depth'] as const) {
-    const v = tank[key];
-    if (!Number.isFinite(v) || v <= 0) {
-      throw new RangeError(`tank.${key} must be a positive number of metres, got ${v}`);
-    }
-  }
-}
+export { assertTankDimensions, type TankDimensions } from './basin.ts';
 
 export interface TankSdfOptions {
   /** Leave out the substrate, e.g. for a bottom feeder's steering. */
@@ -29,66 +17,89 @@ export interface TankSdfOptions {
   readonly surface?: boolean;
 }
 
-/** Interior of the glass box: floor (substrate top), four panes and the water surface. */
+/**
+ * Interior of the glass box: the substrate heightfield, four panes and the water surface. The
+ * distance to the substrate is its height over the local tangent plane, exact on a planar patch
+ * and close on the gently curved bilinear cells of a sand slope.
+ */
 export class TankSdf implements Sdf {
-  private readonly hx: number;
-  private readonly hz: number;
+  private readonly basin: Basin;
+  private readonly floor: boolean;
   private readonly top: number;
-  private readonly bottom: number;
+  private readonly slope = new Float64Array(2);
 
-  constructor(tank: TankDimensions, options: TankSdfOptions = {}) {
-    assertTankDimensions(tank);
-    this.hx = tank.width / 2;
-    this.hz = tank.depth / 2;
-    this.top = options.surface === false ? Infinity : tank.height;
-    this.bottom = options.floor === false ? -Infinity : 0;
+  constructor(tank: Basin | TankDimensions, options: TankSdfOptions = {}) {
+    this.basin = basinOf(tank);
+    this.floor = options.floor !== false;
+    this.top = options.surface === false ? Infinity : this.basin.maxY;
   }
 
   sample(x: number, y: number, z: number, normal: Float64Array): number {
-    const cx = clampTo(x, -this.hx, this.hx);
-    const cy = clampTo(y, this.bottom, this.top);
-    const cz = clampTo(z, -this.hz, this.hz);
-    if (cx !== x || cy !== y || cz !== z) {
-      // Outside the water (e.g. a look-ahead probe): the exact distance back to the box, so
-      // the gradient points diagonally inwards past a corner instead of flipping between panes.
-      const ox = cx - x;
-      const oy = cy - y;
-      const oz = cz - z;
-      const len = Math.hypot(ox, oy, oz);
-      normal[0] = ox / len;
-      normal[1] = oy / len;
-      normal[2] = oz / len;
+    const { minX, maxX, minZ, maxZ } = this.basin;
+    let floor = Infinity;
+    let fx = 0;
+    let fy = 1;
+    let fz = 0;
+    if (this.floor) {
+      const g = this.basin.groundWithSlope(x, z, this.slope);
+      const sx = this.slope[0] ?? 0;
+      const sz = this.slope[1] ?? 0;
+      if (sx === 0 && sz === 0) {
+        floor = y - g;
+      } else {
+        const s = Math.sqrt(1 + sx * sx + sz * sz);
+        floor = (y - g) / s;
+        fx = -sx / s;
+        fy = 1 / s;
+        fz = -sz / s;
+      }
+    }
+    const ox = x < minX ? minX - x : x > maxX ? maxX - x : 0;
+    const oy = y > this.top ? this.top - y : 0;
+    const oz = z < minZ ? minZ - z : z > maxZ ? maxZ - z : 0;
+    if (ox !== 0 || oy !== 0 || oz !== 0 || floor < 0) {
+      // Outside the water (e.g. a look-ahead probe): the distance back to it, so the gradient
+      // points diagonally inwards past a corner instead of flipping between panes.
+      const under = floor < 0 ? -floor : 0;
+      const vx = ox + fx * under;
+      const vy = oy + fy * under;
+      const vz = oz + fz * under;
+      const len = Math.hypot(vx, vy, vz);
+      normal[0] = vx / len;
+      normal[1] = vy / len;
+      normal[2] = vz / len;
       return -len;
     }
-    let d = x + this.hx;
+    let d = x - minX;
     let nx = 1;
     let ny = 0;
     let nz = 0;
-    const right = this.hx - x;
+    const right = maxX - x;
     if (right < d) {
       d = right;
       nx = -1;
     }
-    const floor = y - this.bottom;
     if (floor < d) {
       d = floor;
-      nx = 0;
-      ny = 1;
+      nx = fx;
+      ny = fy;
+      nz = fz;
     }
     const surface = this.top - y;
     if (surface < d) {
       d = surface;
       nx = 0;
       ny = -1;
+      nz = 0;
     }
-    const back = z + this.hz;
+    const back = z - minZ;
     if (back < d) {
       d = back;
       nx = 0;
       ny = 0;
       nz = 1;
     }
-    const front = this.hz - z;
+    const front = maxZ - z;
     if (front < d) {
       d = front;
       nx = 0;
@@ -126,10 +137,6 @@ export function smoothGradient(
   } else {
     sdf.sample(x, y, z, out);
   }
-}
-
-function clampTo(v: number, lo: number, hi: number): number {
-  return v < lo ? lo : v > hi ? hi : v;
 }
 
 const MAX_PROJECTIONS = 6;

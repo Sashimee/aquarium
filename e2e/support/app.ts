@@ -1,5 +1,6 @@
 import { expect, type Page } from '@playwright/test';
-import { APP_URL, SINK_URL } from './env.ts';
+
+const APP_URL = `http://localhost:${process.env['E2E_PORT'] ?? 4317}`;
 
 export const PASSWORD = 'a long enough passphrase 9';
 export const SCENE_TIMEOUT_MS = 180_000;
@@ -19,7 +20,7 @@ interface SinkMessage {
 }
 
 async function outboxFor(email: string): Promise<SinkMessage[]> {
-  const res = await fetch(`${SINK_URL}/outbox`);
+  const res = await fetch(`${APP_URL}/__e2e/outbox`);
   const all = (await res.json()) as SinkMessage[];
   return all.filter((m) => m.to.toLowerCase() === email.toLowerCase());
 }
@@ -94,5 +95,5 @@ export async function advanceServerClock(page: Page, minutes: number): Promise<v
     data: { minutes },
     headers: { origin: APP_URL },
   });
-  expect(res.status(), 'advance-time (the API must run with NODE_ENV=test)').toBe(204);
+  expect(res.status(), 'advance-time (the e2e server enables test hooks)').toBe(204);
 }

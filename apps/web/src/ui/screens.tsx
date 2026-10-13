@@ -36,7 +36,7 @@ export function Link({
   );
 }
 
-function Panel({
+export function Panel({
   title,
   children,
   wide = false,
@@ -57,7 +57,7 @@ function Panel({
   );
 }
 
-function Field(props: {
+export function Field(props: {
   label: string;
   name: string;
   type: 'text' | 'email' | 'password';
@@ -99,7 +99,7 @@ function Field(props: {
   );
 }
 
-interface Submission {
+export interface Submission {
   busy: boolean;
   error: string | null;
   fields: FieldErrors;
@@ -107,7 +107,7 @@ interface Submission {
   run(action: () => Promise<void>, options?: { rethrow?: boolean }): Promise<boolean>;
 }
 
-function useSubmission(): Submission {
+export function useSubmission(): Submission {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fields, setFields] = useState<FieldErrors>({});
@@ -150,7 +150,7 @@ function useSubmission(): Submission {
   return { busy, error, fields, failure, run };
 }
 
-function FormError({ message }: { message: string | null }) {
+export function FormError({ message }: { message: string | null }) {
   return (
     <p role="alert" className="form-error" hidden={!message}>
       {message}
@@ -286,7 +286,17 @@ export function SignInScreen() {
       >
         Sign in with a passkey
       </button>
+      {submission.failure?.status === 401 && (
+        <p role="note" className="hint" id="sign-in-hint">
+          Wrong email or password? If you verified your address on a different device or browser
+          than the one you signed up with, your password was not kept. Use{' '}
+          <Link to="/forgot-password">Forgot password</Link> to set a new one.
+        </p>
+      )}
       {unverified && <ResendButton email={email} justSent />}
+      <p className="alt">
+        <Link to="/forgot-password">Forgot password?</Link>
+      </p>
       <p className="alt">
         New here? <Link to="/sign-up">Create an account</Link>
       </p>
@@ -317,6 +327,11 @@ export function SignUpScreen() {
         <p>
           We sent a verification link to <strong>{sentTo}</strong>. Open it to finish creating your
           account, then sign in.
+        </p>
+        <p className="hint">
+          Open the link in this same browser. If you open it on another device, your password will
+          not carry over and you will need to set one with{' '}
+          <Link to="/forgot-password">Forgot password</Link>.
         </p>
         <ResendButton email={sentTo} justSent />
         <p className="alt">
