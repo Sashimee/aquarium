@@ -79,39 +79,45 @@ describe('shutdown', () => {
     harness = undefined;
   });
 
-  it('keeps the pool open until a pending task that uses it has finished', async () => {
+  it('keeps the pool open for tasks pending or queued during app.close()', async () => {
     harness = await createHarness();
     const { database } = harness;
     const tasks = createBackgroundTasks();
     const gate = deferred();
-    let result = 0;
-    tasks.run(
-      gate.promise.then(async () => {
-        const rows = await database.db.execute(sql`select 1 as one`);
-        result = Number(rows.rows[0]?.['one']);
-      }),
-    );
+    const late = deferred();
+    const results: number[] = [];
+    const query = async () => {
+      const rows = await database.db.execute(sql`select 1 as one`);
+      results.push(Number(rows.rows[0]?.['one']));
+    };
+    tasks.run(gate.promise.then(query));
 
     const order: string[] = [];
     const done = shutdown({
       stopMaintenance: () => order.push('maintenance'),
       closeApp: async () => {
         order.push('app');
+        await new Promise((r) => setTimeout(r, 10));
+        tasks.run(late.promise.then(query));
       },
       tasks,
       closeDatabase: async () => {
         order.push('db');
         await database.close();
       },
-      drainTimeoutMs: 5000,
+      budgetMs: 5000,
     });
     await new Promise((r) => setTimeout(r, 30));
     expect(order).toEqual(['maintenance', 'app']);
 
     gate.resolve();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(order).toEqual(['maintenance', 'app']);
+
+    late.resolve();
     await done;
     expect(order).toEqual(['maintenance', 'app', 'db']);
-    expect(result).toBe(1);
+    expect(results).toEqual([1, 1]);
   });
 
   it('logs the abandoned count on timeout, then still closes the database', async () => {
@@ -125,10 +131,27 @@ describe('shutdown', () => {
       closeApp: async () => {},
       tasks,
       closeDatabase,
-      drainTimeoutMs: 30,
+      budgetMs: 30,
     });
     expect(closeDatabase).toHaveBeenCalledOnce();
     expect(logged).toHaveBeenCalledWith(expect.stringContaining('abandoned 1 background task'));
+    never.resolve();
+  });
+
+  it('spends one budget across app.close() and the drain', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const tasks = createBackgroundTasks();
+    const never = deferred();
+    tasks.run(never.promise);
+    const startedAt = Date.now();
+    await shutdown({
+      stopMaintenance: () => {},
+      closeApp: () => new Promise((r) => setTimeout(r, 150)),
+      tasks,
+      closeDatabase: async () => {},
+      budgetMs: 200,
+    });
+    expect(Date.now() - startedAt).toBeLessThan(400);
     never.resolve();
   });
 });
