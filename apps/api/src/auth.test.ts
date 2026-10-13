@@ -390,6 +390,53 @@ describe('sessions', () => {
     expect(res.statusCode).toBe(404);
   });
 
+  it('keeps the session token out of every auth response body', async () => {
+    const email = nextEmail();
+    const signedUp = await signUp(h.app, email);
+    const verify = await verifyFrom(h, email, signedUp);
+    const cookie = cookieJar(verify);
+    const sessionCookie = verify.cookies.find((c) => c.name.endsWith('session_token'));
+    const token = decodeURIComponent(sessionCookie?.value ?? '').split('.')[0] ?? '';
+    expect(token.length).toBeGreaterThan(10);
+
+    const signedIn = await h.app.inject({
+      method: 'POST',
+      url: '/api/auth/sign-in/email',
+      headers: jsonHeaders,
+      payload: { email, password: PASSWORD },
+    });
+    expect(signedIn.statusCode).toBe(200);
+    const signInCookie = cookieJar(signedIn);
+    const signInToken = decodeURIComponent(
+      signedIn.cookies.find((c) => c.name.endsWith('session_token'))?.value ?? '',
+    ).split('.')[0] as string;
+    expect(signInToken.length).toBeGreaterThan(10);
+
+    const got = await h.app.inject({ url: '/api/auth/get-session', headers: { cookie } });
+    expect(got.statusCode).toBe(200);
+    expect(got.json<{ user: { email: string } }>().user.email).toBe(email);
+
+    const bodies = [signedUp.body, verify.body, signedIn.body, got.body];
+    for (const body of bodies) {
+      expect(body).not.toContain(token);
+      expect(body).not.toContain(signInToken);
+      expect(body).not.toContain('"token"');
+    }
+    const me = await h.app.inject({ url: '/api/me', headers: { cookie: signInCookie } });
+    expect(me.statusCode).toBe(200);
+  });
+
+  it('does not expose revoke-session, which takes a token', async () => {
+    const { cookie } = await verifiedSession(h);
+    const res = await h.app.inject({
+      method: 'POST',
+      url: '/api/auth/revoke-session',
+      headers: { ...jsonHeaders, cookie },
+      payload: { token: 'x' },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
   it('revokes another session, which then stops authenticating', async () => {
     const { email, cookie: first } = await verifiedSession(h);
     const second = await signIn(email, 'second-device');
