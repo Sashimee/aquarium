@@ -13,13 +13,31 @@ import type { SpriteEffect } from './sprites';
 
 /** The parts of the engine the effects draw into. */
 export interface EffectsHost {
-  readonly renderer: WebGPURenderer;
   readonly scene: Scene;
   readonly camera: PerspectiveCamera;
   readonly medium: WaterMedium;
   readonly caustics: Caustics;
-  readonly tank: Tank;
-  readonly quality: QualityManager;
+  readonly tank: Pick<Tank, 'waterBounds' | 'setVelocityPassthrough'>;
+  readonly quality: Pick<QualityManager, 'register'>;
+}
+
+/** A built post pipeline for one combination of settings. */
+export interface Post {
+  readonly temporal: boolean;
+  render(): void;
+  dispose(): void;
+}
+
+export type PostFactory = (
+  scene: Scene,
+  camera: PerspectiveCamera,
+  shafts: WaterShafts,
+  settings: PostSettings,
+) => Post;
+
+export function postPipelineFactory(renderer: WebGPURenderer): PostFactory {
+  return (scene, camera, shafts, settings) =>
+    new PostPipeline(renderer, scene, camera, shafts, settings);
 }
 
 /**
@@ -30,19 +48,27 @@ export class Effects {
   private readonly particulates: SpriteEffect;
   private readonly bubbles: SpriteEffect;
   private readonly shafts: WaterShafts;
-  private post: PostPipeline | null = null;
+  private post: Post | null = null;
   private postKey = '';
   private settings: Readonly<TierSettings> | null = null;
   private focus = false;
   private readonly unregister: () => void;
 
-  constructor(private readonly host: EffectsHost) {
+  constructor(
+    private readonly host: EffectsHost,
+    private readonly createPost: PostFactory,
+  ) {
     const { medium, caustics, tank, scene, camera } = host;
     this.particulates = createParticulates(medium, caustics, tank.waterBounds);
     this.bubbles = createBubbles(medium, tank.waterBounds);
     this.shafts = new WaterShafts(camera, medium, caustics);
     scene.add(this.particulates.sprite, this.bubbles.sprite);
-    this.unregister = host.quality.register('effects', (s) => this.apply(s));
+    try {
+      this.unregister = host.quality.register('effects', (s) => this.apply(s));
+    } catch (error) {
+      this.disposeParts();
+      throw error;
+    }
   }
 
   setFocusMode(on: boolean): void {
@@ -60,12 +86,7 @@ export class Effects {
 
   dispose(): void {
     this.unregister();
-    this.post?.dispose();
-    this.post = null;
-    for (const { sprite, material } of [this.particulates, this.bubbles]) {
-      sprite.removeFromParent();
-      material.dispose();
-    }
+    this.disposeParts();
   }
 
   private apply(settings: Readonly<TierSettings>): void {
@@ -85,19 +106,22 @@ export class Effects {
     };
     const key = needsPost(wanted) ? postSettingsKey(wanted) : '';
     if (key === this.postKey) return;
-    this.postKey = key;
+    const next =
+      key === '' ? null : this.createPost(this.host.scene, this.host.camera, this.shafts, wanted);
     this.post?.dispose();
-    this.post =
-      key === ''
-        ? null
-        : new PostPipeline(
-            this.host.renderer,
-            this.host.scene,
-            this.host.camera,
-            this.shafts,
-            wanted,
-          );
-    this.setVelocityPassthrough(this.post?.temporal ?? false);
+    this.post = next;
+    this.postKey = key;
+    this.setVelocityPassthrough(next?.temporal ?? false);
+  }
+
+  private disposeParts(): void {
+    this.post?.dispose();
+    this.post = null;
+    this.setVelocityPassthrough(false);
+    for (const { sprite, material } of [this.particulates, this.bubbles]) {
+      sprite.removeFromParent();
+      material.dispose();
+    }
   }
 
   /** Additive sprites must add nothing to the velocity attachment TRAA reads. */

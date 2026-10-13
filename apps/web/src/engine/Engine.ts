@@ -9,7 +9,7 @@ import {
   WebGPURenderer,
 } from 'three/webgpu';
 import { daylightAt, minuteOfDay } from './daylight';
-import type { Effects } from './effects';
+import { EffectsSlot } from './effectsSlot';
 import { installRoomLighting, DEFAULT_HDRI_URL } from './environment';
 import { EventBus, type BackendKind, type EngineEvents, type EngineEventBus } from './events';
 import { buildOrRelease, DisposeStack } from './lifecycle';
@@ -110,8 +110,7 @@ export class Engine {
   private daylightAnnounced = false;
   private readonly scratch = new Color();
   private readonly roomBackgroundIntensity: number;
-  private effects: Effects | null = null;
-  private focusMode = false;
+  private readonly effects = new EffectsSlot((message, cause) => this.reportError(message, cause));
   private readonly frameCallbacks = new Set<FrameCallback>();
   private lastFrameAt: number | null = null;
   private gpuMs: number | null = null;
@@ -219,8 +218,7 @@ export class Engine {
 
   /** Depth of field follows the focus camera, on tiers that allow it. */
   setFocusMode(on: boolean): void {
-    this.focusMode = on;
-    this.effects?.setFocusMode(on);
+    this.effects.setFocusMode(on);
   }
 
   /** Called once per rendered frame before the scene is drawn. */
@@ -330,15 +328,10 @@ export class Engine {
   /** The effects are a separate chunk; without them every tier still renders, just plainer. */
   private async loadEffects(): Promise<void> {
     try {
-      const { Effects } = await import('./effects');
+      const { Effects, postPipelineFactory } = await import('./effects');
       if (this.disposed) return;
-      const effects = new Effects(this);
-      this.effects = effects;
-      this.cleanup.add(() => {
-        this.effects = null;
-        effects.dispose();
-      });
-      effects.setFocusMode(this.focusMode);
+      this.effects.attach(new Effects(this, postPipelineFactory(this.renderer)));
+      this.cleanup.add(() => this.effects.dispose());
     } catch (cause) {
       this.reportError('Render effects failed to load; continuing without them', cause);
     }
@@ -360,7 +353,7 @@ export class Engine {
     for (const callback of this.frameCallbacks) callback(deltaS, nowMs);
     this.updateDaylight(nowMs);
     this.updateHoodUniforms();
-    if (this.effects?.render() !== true) this.renderer.render(this.scene, this.camera);
+    if (!this.effects.render()) this.renderer.render(this.scene, this.camera);
     this.pollGpuTime();
 
     if (frameMs > 0) {

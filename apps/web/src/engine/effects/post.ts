@@ -76,8 +76,32 @@ export class PostPipeline {
     shafts: WaterShafts,
     settings: PostSettings,
   ) {
+    this.temporal = settings.chain === 'taa-bloom';
+    this.pipeline = new RenderPipeline(renderer);
+    try {
+      this.pipeline.outputNode = this.build(scene, camera, shafts, settings);
+    } catch (error) {
+      this.dispose();
+      throw error;
+    }
+  }
+
+  render(): void {
+    this.pipeline.render();
+  }
+
+  dispose(): void {
+    for (const node of this.owned.splice(0)) node.dispose();
+    this.pipeline.dispose();
+  }
+
+  private build(
+    scene: Scene,
+    camera: PerspectiveCamera,
+    shafts: WaterShafts,
+    settings: PostSettings,
+  ): Node {
     const { chain } = settings;
-    this.temporal = chain === 'taa-bloom';
     const scenePass = pass(scene, camera, this.temporal ? { samples: 0 } : undefined);
     this.owned.push(scenePass);
     if (this.temporal) scenePass.setMRT(mrt({ output, velocity }));
@@ -105,28 +129,18 @@ export class PostPipeline {
       image = blur;
     }
 
-    this.pipeline = new RenderPipeline(renderer);
     if (this.temporal) {
       const resolve = traa(image, depth, scenePass.getTextureNode('velocity'), camera);
       this.owned.push(resolve);
-      this.pipeline.outputNode = resolve;
-    } else if (chain === 'smaa' || chain === 'smaa-bloom') {
+      return resolve;
+    }
+    if (chain === 'smaa' || chain === 'smaa-bloom') {
       const aa = smaa(renderOutput(image));
       this.owned.push(aa);
       this.pipeline.outputColorTransform = false;
-      this.pipeline.outputNode = aa;
-    } else {
-      this.pipeline.outputNode = image;
+      return aa;
     }
-  }
-
-  render(): void {
-    this.pipeline.render();
-  }
-
-  dispose(): void {
-    for (const node of this.owned.splice(0)) node.dispose();
-    this.pipeline.dispose();
+    return image;
   }
 }
 
