@@ -59,6 +59,43 @@ describe('health', () => {
   });
 });
 
+describe('security headers', () => {
+  const urls = ['/', '/api/health', '/assets/app.js', '/api/nope'];
+
+  it.each(urls)('sets the full set on %s', async (url) => {
+    const res = await withDist().inject(url);
+    const csp = String(res.headers['content-security-policy']);
+    expect(csp).toContain("default-src 'self'");
+    expect(csp).toContain("script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval';");
+    expect(csp).not.toMatch(/script-src[^;]*'unsafe-inline'/);
+    expect(csp).toContain("worker-src 'self' blob:");
+    expect(csp).toContain("img-src 'self' data: blob:");
+    expect(csp).toContain("frame-ancestors 'none'");
+    expect(csp).not.toContain('polyhaven');
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(res.headers['referrer-policy']).toBe('strict-origin-when-cross-origin');
+    expect(res.headers['permissions-policy']).toBe('camera=(), microphone=(), geolocation=()');
+    expect(res.headers['cross-origin-opener-policy']).toBe('same-origin');
+    expect(res.headers['strict-transport-security']).toBe('max-age=31536000; includeSubDomains');
+  });
+
+  it('sets them on the hello page when there is no web build', async () => {
+    const res = await noDist().inject('/');
+    expect(res.headers['content-security-policy']).toBeDefined();
+  });
+
+  it('omits HSTS when APP_URL is plain http', async () => {
+    const http = await createHarness({ appOrigin: 'http://localhost:3000' });
+    try {
+      const res = await http.app.inject('/api/health');
+      expect(res.headers['strict-transport-security']).toBeUndefined();
+      expect(res.headers['content-security-policy']).toBeDefined();
+    } finally {
+      await http.close();
+    }
+  });
+});
+
 describe('without a web build', () => {
   it('serves health', async () => {
     expect((await noDist().inject('/api/health')).statusCode).toBe(200);

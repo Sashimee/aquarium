@@ -36,6 +36,7 @@ export interface AppOptions {
   legalLimits?: LegalLimits;
   testHooks?: boolean;
   logger?: boolean;
+  logStream?: { write(chunk: string): void };
 }
 
 const HELLO_PAGE = `<!doctype html>
@@ -108,6 +109,21 @@ function normalizedPathname(url: string): string {
   return '/' + decoded.replace(/^\/+/, '').replace(/\/{2,}/g, '/');
 }
 
+const TOKEN_PATH_PREFIXES = [`${AUTH_BASE_PATH}/reset-password/`, `${AUTH_BASE_PATH}/callback/`];
+const TOKEN_LIKE_SEGMENT = /^(?=.*\d)[A-Za-z0-9_-]{20,}$/;
+
+export function redactUrl(url: string): string {
+  const path = '/' + (url.split('?')[0] ?? '').replace(/^\/+/, '');
+  const lower = path.toLowerCase();
+  const prefix = TOKEN_PATH_PREFIXES.find((p) => lower.startsWith(p));
+  if (prefix) return `${path.slice(0, prefix.length)}[redacted]`;
+  if (!lower.startsWith(`${AUTH_BASE_PATH}/`)) return path;
+  return path
+    .split('/')
+    .map((seg) => (TOKEN_LIKE_SEGMENT.test(seg) ? '[redacted]' : seg))
+    .join('/');
+}
+
 function isStaticAsset(pathname: string): boolean {
   if (pathname.startsWith('/assets/')) return true;
   const last = pathname.split('/').pop() ?? '';
@@ -123,10 +139,11 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     rewriteUrl: (req) => (req.url ?? '/').replace(/^\/{2,}/, '/'),
     logger: logger
       ? {
+          ...(opts.logStream ? { stream: opts.logStream } : {}),
           serializers: {
             req: (req: FastifyRequest) => ({
               method: req.method,
-              url: req.url.split('?')[0] ?? '',
+              url: redactUrl(req.url),
             }),
           },
         }
@@ -143,7 +160,10 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     }
   });
 
+  const secure = new URL(appOrigin).protocol === 'https:';
   app.addHook('onSend', async (_req, reply) => {
+    reply.headers(SECURITY_HEADERS);
+    if (secure) reply.header('strict-transport-security', HSTS);
     if (!indexable) reply.header('x-robots-tag', 'noindex, nofollow');
   });
 
@@ -375,6 +395,33 @@ export function buildApp(opts: AppOptions): FastifyInstance {
 
   return app;
 }
+
+// wasm-unsafe-eval: meshopt and basis transcoders. unsafe-eval: the basis transcoder is an emscripten
+// embind module that calls new Function, and KTX2Loader runs it in a blob: worker, which inherits the
+// document's policy (verified: without it every KTX2 load throws EvalError). worker-src blob: same loader. img-src blob: the account export download. style-src unsafe-inline: React style= attributes.
+export const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval'",
+  "worker-src 'self' blob:",
+  "connect-src 'self'",
+  "img-src 'self' data: blob:",
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join('; ');
+
+const HSTS = 'max-age=31536000; includeSubDomains';
+
+const SECURITY_HEADERS = {
+  'content-security-policy': CONTENT_SECURITY_POLICY,
+  'x-content-type-options': 'nosniff',
+  'referrer-policy': 'strict-origin-when-cross-origin',
+  'permissions-policy': 'camera=(), microphone=(), geolocation=()',
+  'cross-origin-opener-policy': 'same-origin',
+};
 
 // Vite emits content-hashed bundles flat in assets/; models and textures copied from public/ live in
 // subdirectories under stable names, so they must stay revalidatable.
