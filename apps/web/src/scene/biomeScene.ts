@@ -3,15 +3,15 @@ import type { EventBus } from '../engine/events';
 import type { InteractionEvents } from '../interaction/events';
 
 /**
- * The biome the scene should show: the loaded saved tank's, or `fallback` (from `?biome=`) once
- * the session resets to the demo tank. A tank unloaded for a switch keeps its biome until the next
- * one loads, because the session awaits the old tank's report flush in between and falling back
- * there would build the fallback preset only to tear it down again. Create it before the UI
- * mounts, since the bus drops events nobody listens to and the session can load a tank before the
- * engine is up.
+ * The biome the scene should show: the last loaded saved tank's, or `fallback` (from `?biome=`)
+ * once the session says no saved tank is coming (`tank:none`). An unload alone changes nothing:
+ * on a switch the session awaits the old tank's report flush before the next one loads, and
+ * falling back there would build the fallback preset only to tear it down again. Create it before
+ * the UI mounts, since the bus drops events nobody listens to and the session can load a tank
+ * before the engine is up.
  */
 export class TankBiome implements BiomeSource {
-  private loaded: { readonly tankId: string | null; readonly biome: Biome } | null = null;
+  private loaded: Biome | null = null;
   private readonly listeners = new Set<(biome: Biome) => void>();
   private readonly unsubscribe: (() => void)[];
 
@@ -20,16 +20,11 @@ export class TankBiome implements BiomeSource {
     readonly fallback: Biome,
   ) {
     this.unsubscribe = [
-      interaction.on('tank:loaded', ({ tankId, biome }) => {
-        this.loaded = { tankId, biome };
+      interaction.on('tank:loaded', ({ biome }) => {
+        this.loaded = biome;
         this.notify();
       }),
-      interaction.on('tank:unloaded', ({ tankId, reason }) => {
-        if (this.loaded === null || this.loaded.tankId !== tankId) return;
-        if (reason === 'switch') {
-          this.loaded = { tankId: null, biome: this.loaded.biome };
-          return;
-        }
+      interaction.on('tank:none', () => {
         this.loaded = null;
         this.notify();
       }),
@@ -37,7 +32,7 @@ export class TankBiome implements BiomeSource {
   }
 
   get current(): Biome {
-    return this.loaded?.biome ?? this.fallback;
+    return this.loaded ?? this.fallback;
   }
 
   onChange(listener: (biome: Biome) => void): () => void {

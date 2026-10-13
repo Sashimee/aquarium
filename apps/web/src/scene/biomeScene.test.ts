@@ -62,9 +62,10 @@ function harness(url: Biome, options: { gate?: boolean; failing?: Biome } = {}) 
     timeoutMs: 90_000,
   });
   const load = (tankId: string, biome: Biome) =>
-    interaction.emit('tank:loaded', { tankId, biome, fish: [] });
+    interaction.emit('tank:loaded', { tankId, biome, fish: [], decorLayout: [] });
   const unload = (tankId: string, reason: 'switch' | 'reset' = 'reset') =>
     interaction.emit('tank:unloaded', { tankId, reason });
+  const none = () => interaction.emit('tank:none', {});
   return {
     interaction,
     tankBiome,
@@ -77,6 +78,7 @@ function harness(url: Biome, options: { gate?: boolean; failing?: Biome } = {}) 
     scenes,
     load,
     unload,
+    none,
   };
 }
 
@@ -87,38 +89,37 @@ afterEach(() => {
 });
 
 describe('TankBiome', () => {
-  it('follows the loaded tank and falls back to the URL biome when it unloads', () => {
-    const { tankBiome, load, unload } = harness('freshwater');
+  it('follows the loaded tank and falls back to the URL biome once no tank is coming', () => {
+    const { tankBiome, load, none } = harness('freshwater');
     const seen: Biome[] = [];
     tankBiome.onChange((b) => seen.push(b));
     expect(tankBiome.current).toBe('freshwater');
     load('t1', 'reef');
     expect(tankBiome.current).toBe('reef');
-    unload('someone-else');
-    expect(tankBiome.current).toBe('reef');
-    unload('t1');
+    none();
     expect(tankBiome.current).toBe('freshwater');
     expect(seen).toEqual(['reef', 'freshwater']);
   });
 
-  it('keeps the loaded biome through an unload for a switch', () => {
+  it('never changes the biome on an unload, whatever the reason', () => {
     const { tankBiome, load, unload } = harness('freshwater');
     const seen: Biome[] = [];
     tankBiome.onChange((b) => seen.push(b));
     load('t1', 'reef');
     unload('t1', 'switch');
+    expect(tankBiome.current).toBe('reef');
+    unload('t1', 'reset');
     expect(tankBiome.current).toBe('reef');
     load('t2', 'freshwater');
     expect(tankBiome.current).toBe('freshwater');
     expect(seen).toEqual(['reef', 'freshwater']);
   });
 
-  it('falls back on sign-out after a completed switch', () => {
-    const { tankBiome, load, unload } = harness('freshwater');
+  it('falls back when no tank comes after a switch already unloaded the last one', () => {
+    const { tankBiome, load, unload, none } = harness('freshwater');
     load('t1', 'reef');
     unload('t1', 'switch');
-    load('t2', 'reef');
-    unload('t2');
+    none();
     expect(tankBiome.current).toBe('freshwater');
   });
 
@@ -250,18 +251,49 @@ describe('BiomeScene', () => {
       expect(shownNames(h.root)).toEqual(['freshwater']);
       h.session.dispose();
     });
+
+    it('goes back to the URL biome on sign-out during a switch flush', async () => {
+      const h = withSession([reefA, reefB]);
+      await h.session.setUser(verified);
+      await h.scenes.settled();
+      h.interaction.emit('food:ate', { eaten: [{ fishId: FISH_1, portion: 0.3 }] });
+      const switching = h.session.select(TANK_B);
+      await h.session.setUser(null);
+      await switching;
+      await h.scenes.settled();
+      expect(h.tankBiome.current).toBe('freshwater');
+      expect(shownNames(h.root)).toEqual(['freshwater']);
+      h.session.dispose();
+    });
+
+    it('goes back to the URL biome when a reload fails, and stays there on sign-out', async () => {
+      const h = withSession([reefA]);
+      await h.session.setUser(verified);
+      await h.scenes.settled();
+      expect(shownNames(h.root)).toEqual(['reef']);
+      h.api.tanks.mockRejectedValue(new Error('network down'));
+      await h.session.setUser(verified);
+      expect(h.session.getState().phase).toBe('offline');
+      await h.scenes.settled();
+      expect(shownNames(h.root)).toEqual(['freshwater']);
+      await h.session.setUser(null);
+      await h.scenes.settled();
+      expect(h.tankBiome.current).toBe('freshwater');
+      expect(shownNames(h.root)).toEqual(['freshwater']);
+      h.session.dispose();
+    });
   });
 
   it('round-trips freshwater -> reef -> freshwater without leaking scene objects', async () => {
-    const { scenes, root, built, mounted, unmounted, load, unload } = harness('freshwater');
+    const { scenes, root, built, mounted, unmounted, load, none } = harness('freshwater');
     await scenes.settled();
     load('t1', 'reef');
     await scenes.settled();
-    unload('t1');
+    none();
     await scenes.settled();
     load('t2', 'reef');
     await scenes.settled();
-    unload('t2');
+    none();
     await scenes.settled();
     expect(mounted).toEqual(['freshwater', 'reef', 'freshwater', 'reef', 'freshwater']);
     expect(unmounted).toEqual(['freshwater', 'reef', 'freshwater', 'reef']);
@@ -281,7 +313,7 @@ describe('BiomeScene', () => {
     await vi.waitFor(() => expect(h.mounted).toEqual(['freshwater']));
     h.load('t1', 'reef');
     await vi.waitFor(() => expect(h.gates).toHaveLength(2));
-    h.unload('t1');
+    h.none();
     h.gates[1]?.release();
     await vi.waitFor(() => expect(h.gates).toHaveLength(3));
     expect(h.gates[2]?.biome).toBe('freshwater');
@@ -329,7 +361,7 @@ describe('BiomeScene', () => {
   });
 
   it('reports a failed build once and recovers on the next biome change', async () => {
-    const { scenes, root, errors, mounted, load, unload } = harness('freshwater', {
+    const { scenes, root, errors, mounted, load, none } = harness('freshwater', {
       failing: 'reef',
     });
     await scenes.settled();
@@ -337,7 +369,7 @@ describe('BiomeScene', () => {
     await scenes.settled();
     expect(errors).toEqual(['Could not build the reef preset']);
     expect(root.children).toHaveLength(0);
-    unload('t1');
+    none();
     await scenes.settled();
     expect(mounted).toEqual(['freshwater', 'freshwater']);
     expect(shownNames(root)).toEqual(['freshwater']);

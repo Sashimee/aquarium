@@ -46,6 +46,16 @@ describe('anemone hosting data', () => {
     expect(anemoneReach(entry, item, calm)).toBeGreaterThan(0.15 * item.scale);
   });
 
+  it('counts a rotated corner in its reach', () => {
+    const square: CatalogEntry = {
+      ...entry,
+      bounds: { min: [-0.1, 0, -0.1], max: [0.1, 0.15, 0.1] },
+    };
+    const still = { direction: [1, 0] as const, speed: 0, gustPeriodS: 8, gustDepth: 0 };
+    const turned = { ...item, scale: 1, rotationY: Math.PI / 4 };
+    expect(anemoneReach(square, turned, still)).toBeGreaterThan(Math.hypot(0.1, 0.1));
+  });
+
   it('refuses an anemone asset without bounds', () => {
     expect(() => anemoneAnchor('a', { id: 'x', kind: 'anemone', lods: [] }, item)).toThrow(
       /no bounds/,

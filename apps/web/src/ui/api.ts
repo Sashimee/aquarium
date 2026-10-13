@@ -18,6 +18,7 @@ import {
   userSchema,
   type AteReport,
   type CareAction,
+  type DecorLayout,
   type Credits,
   type CreateTankRequest,
   type AddFishRequest,
@@ -140,6 +141,7 @@ export interface ApiClient {
   tank(tankId: string): Promise<Tank>;
   createTank(input: CreateTankRequest): Promise<Tank>;
   renameTank(tankId: string, name: string): Promise<Tank>;
+  saveDecorLayout(tankId: string, layout: DecorLayout): Promise<Tank>;
   addFish(tankId: string, input: AddFishRequest): Promise<Tank>;
   netFish(tankId: string, fishId: string): Promise<Tank>;
   care(tankId: string, action: CareAction): Promise<Tank>;
@@ -294,6 +296,10 @@ export function createApiClient(fetcher: Fetcher = (i, init) => fetch(i, init)):
     },
     async renameTank(tankId, name) {
       const body = validate(updateTankRequestSchema, { name });
+      return parsed(await patch(`/api/tanks/${encodeURIComponent(tankId)}`, body), tankSchema);
+    },
+    async saveDecorLayout(tankId, layout) {
+      const body = validate(updateTankRequestSchema, { decorLayout: layout });
       return parsed(await patch(`/api/tanks/${encodeURIComponent(tankId)}`, body), tankSchema);
     },
     async addFish(tankId, input) {

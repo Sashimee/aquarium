@@ -11,7 +11,12 @@ import {
 } from 'react';
 import type { EngineEvents, EventBus } from '../engine/events';
 import type { CameraMode } from '../interaction/camera';
-import type { InteractionEvents, PlayTool } from '../interaction/events';
+import type {
+  DecorViewState,
+  InteractionEvents,
+  PlayTool,
+  SaveStatus,
+} from '../interaction/events';
 import { ApiRequestError, createApiClient, type ApiClient } from './api';
 import {
   currentHref,
@@ -55,6 +60,23 @@ export function usePlayTool(): PlayTool {
   const [tool, setTool] = useState<PlayTool>('tap');
   useEffect(() => interaction.on('play:tool-changed', (e) => setTool(e.tool)), [interaction]);
   return tool;
+}
+
+export function useDecorState(): DecorViewState | null {
+  const { interaction } = useBridge();
+  const [state, setState] = useState<DecorViewState | null>(null);
+  useEffect(() => interaction.on('decor:state', setState), [interaction]);
+  return state;
+}
+
+export function useDecorSaveState(): { status: SaveStatus; message: string | null } {
+  const { interaction } = useBridge();
+  const [state, setState] = useState<{ status: SaveStatus; message: string | null }>({
+    status: 'idle',
+    message: null,
+  });
+  useEffect(() => interaction.on('decor:save-state', setState), [interaction]);
+  return state;
 }
 
 export function useEngineReady(): EngineEvents['engine:ready'] | null {

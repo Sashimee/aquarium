@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { CameraMode } from '../interaction/camera';
-import { useAuth, useBridge, useCameraMode, useRedirect, useRoute } from './context';
+import { useAuth, useBridge, useCameraMode, useDecorState, useRedirect, useRoute } from './context';
 import { LifeStatus } from './LifeStatus';
 import { PlayControls } from './PlayControls';
 import { useSessionState } from './session';
@@ -29,6 +29,32 @@ function CameraControls() {
         Dive
       </button>
     </div>
+  );
+}
+
+function DecorToggle() {
+  const { interaction } = useBridge();
+  const active = useDecorState()?.active ?? false;
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={() => interaction.emit('decor:request-mode', { active: !active })}
+    >
+      Decorate
+    </button>
+  );
+}
+
+const DecorPanel = lazy(() => import('./DecorPanel'));
+
+function DecorEditor() {
+  const active = useDecorState()?.active ?? false;
+  if (!active) return null;
+  return (
+    <Suspense fallback={null}>
+      <DecorPanel />
+    </Suspense>
   );
 }
 
@@ -114,6 +140,7 @@ export function App() {
   const route = useRoute();
   const modal = route.name !== 'home';
   const [panelOpen, setPanelOpen] = useState(false);
+  const decorating = useDecorState()?.active ?? false;
   const previous = useRef(route.name);
   useEffect(() => {
     if (route.name === 'home' && previous.current !== 'home') {
@@ -138,7 +165,8 @@ export function App() {
           Aquarium
         </Link>
         <CameraControls />
-        <PlayControls />
+        {decorating ? null : <PlayControls />}
+        <DecorToggle />
         <button
           type="button"
           aria-expanded={panelOpen}
@@ -161,6 +189,7 @@ export function App() {
           <TankPanel open onClose={() => setPanelOpen(false)} />
         </Suspense>
       )}
+      <DecorEditor />
       <LifeDialogs onReview={() => setPanelOpen(true)} />
       <div className={modal ? 'stage modal' : 'stage'}>
         <Screen />

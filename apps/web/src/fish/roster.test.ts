@@ -10,7 +10,7 @@ const DEMO: readonly FishSpawn[] = [
 
 function loaded(fish = [fishFixture(FISH_1), fishFixture(FISH_2)]): TankRoster {
   const roster = new TankRoster(DEMO);
-  roster.load({ tankId: TANK_A, biome: 'freshwater', fish });
+  roster.load({ tankId: TANK_A, biome: 'freshwater', decorLayout: [], fish });
   return roster;
 }
 
@@ -51,7 +51,12 @@ describe('TankRoster', () => {
     const roster = loaded();
     const first = simId(roster, FISH_1);
     roster.unload({ tankId: TANK_A, reason: 'switch' });
-    roster.load({ tankId: TANK_A, biome: 'freshwater', fish: [fishFixture(FISH_1)] });
+    roster.load({
+      tankId: TANK_A,
+      biome: 'freshwater',
+      decorLayout: [],
+      fish: [fishFixture(FISH_1)],
+    });
     expect(simId(roster, FISH_1)).not.toBe(first);
     expect(roster.get(first)).toBeUndefined();
   });
@@ -81,6 +86,7 @@ describe('TankRoster', () => {
     roster.load({
       tankId: TANK_B,
       biome: 'reef',
+      decorLayout: [],
       fish: [fishFixture(FISH_3, { tankId: TANK_B, species: 'ocellaris-clownfish' })],
     });
     expect([...roster.entries()].map((f) => f.serverId)).toEqual([FISH_3]);
@@ -198,7 +204,12 @@ describe('TankRoster', () => {
     it('drops bites from the previous tank after a switch', () => {
       const roster = loaded();
       const stale = simId(roster, FISH_1);
-      roster.load({ tankId: TANK_B, biome: 'freshwater', fish: [fishFixture(FISH_3)] });
+      roster.load({
+        tankId: TANK_B,
+        biome: 'freshwater',
+        decorLayout: [],
+        fish: [fishFixture(FISH_3)],
+      });
       expect(roster.translateAte([{ fishId: stale, foodId: 1, portion: 0.1 }])).toEqual([]);
     });
 

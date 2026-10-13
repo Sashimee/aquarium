@@ -5,12 +5,14 @@ import { DEFAULT_TANK } from './engine/tank/dimensions';
 import { queueTankEvents, startFish } from './fish/start';
 import { CameraRig } from './interaction/camera';
 import { bindCameraControls } from './interaction/controls';
+import { FeederLayer } from './interaction/decor/feederLayer';
+import { SceneDecor } from './interaction/decor/sceneDecor';
 import type { InteractionEvents } from './interaction/events';
 import { onPageTeardown } from './interaction/pageLifecycle';
 import { watchReducedMotion } from './interaction/motion';
 import { PlayChoices } from './interaction/play/choices';
 import { createPlaySystem, type PlaySystem } from './interaction/play/system';
-import { mountBiomeScene, parseBiome, TankBiome } from './scene';
+import { mountBiomeScene, parseBiome, TankBiome, type TankScene } from './scene';
 import { mountUi } from './ui/mount';
 import { FeedGate } from './sync/feedGate';
 
@@ -42,6 +44,16 @@ async function boot(): Promise<void> {
   const tankEvents = queueTankEvents(interaction);
   const tankBiome = new TankBiome(interaction, parseBiome(window.location.search));
   const playChoices = new PlayChoices(interaction);
+  const sceneDecor = new SceneDecor<TankScene>(
+    interaction,
+    () =>
+      import('./interaction/decor/system').then(
+        ({ createDecorSystem }) =>
+          (scene, initial) =>
+            createDecorSystem(engine, scene, interaction, initial, new FeederLayer()),
+      ),
+    (message, cause) => console.error(message, cause),
+  );
   mountUi(uiRoot, { engine: events, interaction });
 
   let engine: Engine;
@@ -54,6 +66,7 @@ async function boot(): Promise<void> {
     tankEvents.stop();
     tankBiome.stop();
     playChoices.stop();
+    sceneDecor.dispose();
     showFatal(container, cause instanceof Error ? cause.message : String(cause));
     return;
   }
@@ -83,13 +96,28 @@ async function boot(): Promise<void> {
   let play: PlaySystem | null = null;
   const unbindControls = bindCameraControls(canvas, rig, {
     tap: (e) => {
-      if (e.button === 0) play?.controller.tap(e.x, e.y);
+      if (e.button !== 0) return;
+      if (sceneDecor.system?.active) sceneDecor.system.tap(e.x, e.y);
+      else play?.controller.tap(e.x, e.y);
     },
-    claimDrag: () => play?.controller.claimsDrag ?? false,
-    pointerDown: (x, y) => play?.controller.pointerDown(x, y),
-    pointerMove: (x, y) => play?.controller.pointerMove(x, y),
-    pointerUp: () => play?.controller.pointerUp(),
-    pointerLeave: () => play?.controller.pointerLeave(),
+    claimDrag: () =>
+      sceneDecor.system?.active
+        ? sceneDecor.system.claimsDrag
+        : (play?.controller.claimsDrag ?? false),
+    pointerDown: (x, y) =>
+      sceneDecor.system?.active
+        ? sceneDecor.system.pointerDown(x, y)
+        : play?.controller.pointerDown(x, y),
+    pointerMove: (x, y) =>
+      sceneDecor.system?.active
+        ? sceneDecor.system.pointerMove(x, y)
+        : play?.controller.pointerMove(x, y),
+    pointerUp: () =>
+      sceneDecor.system?.active ? sceneDecor.system.pointerUp() : play?.controller.pointerUp(),
+    pointerLeave: () => {
+      if (sceneDecor.system?.active) sceneDecor.system.pointerUp();
+      else play?.controller.pointerLeave();
+    },
   });
   const stopRequests = interaction.on('camera:request-mode', ({ mode }) => {
     if (mode === 'dive') rig.dive();
@@ -111,9 +139,11 @@ async function boot(): Promise<void> {
       fish.setAnchors(scene.anchors);
       play = createPlaySystem(engine, scene, interaction, fish.sim, feedGate);
       playChoices.applyTo(play.controller);
+      sceneDecor.mount(scene);
       if (import.meta.env.DEV) Object.assign(window, { tankScene: scene });
     },
     unmounting() {
+      sceneDecor.unmount();
       play?.dispose();
       play = null;
       fish.setAnchors([]);
@@ -122,6 +152,7 @@ async function boot(): Promise<void> {
 
   onPageTeardown(window, () => {
     scenes.dispose().catch((cause: unknown) => console.error('Scene dispose failed', cause));
+    sceneDecor.dispose();
     tankBiome.stop();
     playChoices.stop();
     stopMotionWatch();

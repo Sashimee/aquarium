@@ -117,8 +117,16 @@ export function createAuth({
         await internalAdapter.deleteUserSessions(user.id);
         if (!holdsSignupProof(request, user.id)) await dropUnverifiedCredential(user.id);
       },
-      sendVerificationEmail: ({ user, url }) =>
-        throttleSafe(() => mailer.sendVerification(user.email, url), 'verification'),
+      sendVerificationEmail: ({ user, url }, request) =>
+        throttleSafe(async () => {
+          // Sign-up and resend consume the IP budget in the HTTP layer; sign-in only learns it
+          // owes a mail here, after the password checked out.
+          if (request && new URL(request.url).pathname === `${AUTH_BASE_PATH}/sign-in/email`) {
+            const ip = request.headers.get('x-forwarded-for');
+            if ((await mailer.consumeIp(ip ?? 'unknown')) > 0) return;
+          }
+          await mailer.sendVerification(user.email, url);
+        }, 'verification'),
     },
     hooks: {
       after: createAuthMiddleware(async (ctx) => {

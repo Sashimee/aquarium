@@ -1,6 +1,7 @@
 import { apiErrorSchema, sessionListSchema, userSchema } from '@aquarium/shared';
 import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { postgresHitStore } from './rate-limit.ts';
 import { APP_ORIGIN, createHarness, type Harness } from './test-harness.ts';
 
 const PASSWORD = 'correct horse battery';
@@ -424,6 +425,7 @@ describe('mail abuse limits', () => {
         perRecipient: { max: 100, windowMs: 3_600_000 },
         verificationCooldown: { max: 1, windowMs: 60_000 },
         perIpSignup: { max: 100, windowMs: 3_600_000 },
+        global: { max: 1000, windowMs: 3_600_000 },
       },
     });
     const email = nextEmail();
@@ -449,6 +451,7 @@ describe('mail abuse limits', () => {
         perRecipient: { max: 2, windowMs: 3_600_000 },
         verificationCooldown: { max: 100, windowMs: 1000 },
         perIpSignup: { max: 100, windowMs: 3_600_000 },
+        global: { max: 1000, windowMs: 3_600_000 },
       },
     });
     const email = nextEmail();
@@ -471,6 +474,7 @@ describe('mail abuse limits', () => {
         perRecipient: { max: 100, windowMs: 3_600_000 },
         verificationCooldown: { max: 100, windowMs: 1000 },
         perIpSignup: { max: 3, windowMs: 3_600_000 },
+        global: { max: 1000, windowMs: 3_600_000 },
       },
     });
     const statuses: number[] = [];
@@ -488,12 +492,144 @@ describe('mail abuse limits', () => {
     await h.close();
   });
 
+  it('counts mail-triggering sign-ins to unverified accounts against the per-IP budget', async () => {
+    const h = await createHarness({
+      mailLimits: {
+        perRecipient: { max: 100, windowMs: 3_600_000 },
+        verificationCooldown: { max: 100, windowMs: 1000 },
+        perIpSignup: { max: 2, windowMs: 3_600_000 },
+        global: { max: 1000, windowMs: 3_600_000 },
+      },
+    });
+    const emails = Array.from({ length: 6 }, () => nextEmail());
+    for (const [i, email] of emails.entries()) {
+      await signUp(h.app, email, { 'x-forwarded-for': `203.0.113.${i + 1}` });
+    }
+    h.outbox.length = 0;
+
+    const statuses: number[] = [];
+    for (const email of emails) {
+      const res = await h.app.inject({
+        method: 'POST',
+        url: '/api/auth/sign-in/email',
+        remoteAddress: '127.0.0.1',
+        headers: { ...jsonHeaders, 'x-forwarded-for': '198.51.100.9' },
+        payload: { email, password: PASSWORD },
+      });
+      statuses.push(res.statusCode);
+    }
+    expect(statuses).toEqual([403, 403, 403, 403, 403, 403]);
+    expect(h.outbox).toHaveLength(2);
+
+    const elsewhere = await h.app.inject({
+      method: 'POST',
+      url: '/api/auth/sign-in/email',
+      remoteAddress: '127.0.0.1',
+      headers: { ...jsonHeaders, 'x-forwarded-for': '198.51.100.10' },
+      payload: { email: emails[0], password: PASSWORD },
+    });
+    expect(elsewhere.statusCode).toBe(403);
+    expect(h.outbox).toHaveLength(3);
+    await h.close();
+  });
+
+  it('does not charge the per-IP budget for sign-ins that send no mail', async () => {
+    const h = await createHarness({
+      mailLimits: {
+        perRecipient: { max: 100, windowMs: 3_600_000 },
+        verificationCooldown: { max: 100, windowMs: 1000 },
+        perIpSignup: { max: 2, windowMs: 3_600_000 },
+        global: { max: 1000, windowMs: 3_600_000 },
+      },
+    });
+    const { email } = await verifiedSession(h);
+    const statuses: number[] = [];
+    for (let i = 0; i < 4; i++) {
+      const res = await h.app.inject({
+        method: 'POST',
+        url: '/api/auth/sign-in/email',
+        headers: jsonHeaders,
+        payload: { email, password: PASSWORD },
+      });
+      statuses.push(res.statusCode);
+    }
+    expect(statuses).toEqual([200, 200, 200, 200]);
+    await h.close();
+  });
+
+  it('shares one recipient budget across plus-tags and gmail dots', async () => {
+    const h = await createHarness({
+      mailLimits: {
+        perRecipient: { max: 2, windowMs: 3_600_000 },
+        verificationCooldown: { max: 100, windowMs: 1000 },
+        perIpSignup: { max: 100, windowMs: 3_600_000 },
+        global: { max: 1000, windowMs: 3_600_000 },
+      },
+    });
+    for (const email of ['v.ictim@gmail.com', 'victim+1@gmail.com', 'Victim+2@googlemail.com']) {
+      await signUp(h.app, email);
+    }
+    expect(h.outbox.map((m) => m.to)).toEqual(['v.ictim@gmail.com', 'victim+1@gmail.com']);
+    await h.close();
+  });
+
+  it('stops all mail at the global cap and logs it once', async () => {
+    const logs: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((m: unknown) => {
+      logs.push(String(m));
+    });
+    const h = await createHarness({
+      mailLimits: {
+        perRecipient: { max: 100, windowMs: 3_600_000 },
+        verificationCooldown: { max: 100, windowMs: 1000 },
+        perIpSignup: { max: 100, windowMs: 3_600_000 },
+        global: { max: 3, windowMs: 3_600_000 },
+      },
+    });
+    for (let i = 0; i < 6; i++) {
+      await signUp(h.app, nextEmail(), { 'x-forwarded-for': `203.0.113.${i + 1}` });
+    }
+    spy.mockRestore();
+    expect(h.outbox).toHaveLength(3);
+    expect(logs.filter((m) => m.includes('global mail cap'))).toHaveLength(1);
+    await h.close();
+  });
+
+  it('keeps limiter state across a restart because it lives in Postgres', async () => {
+    const h = await createHarness({
+      mailLimits: {
+        perRecipient: { max: 100, windowMs: 3_600_000 },
+        verificationCooldown: { max: 100, windowMs: 1000 },
+        perIpSignup: { max: 100, windowMs: 3_600_000 },
+        global: { max: 2, windowMs: 3_600_000 },
+      },
+    });
+    await signUp(h.app, nextEmail());
+    await signUp(h.app, nextEmail());
+    const store = postgresHitStore(h.database, 'testsecrettestsecrettestsecret0123456789');
+    expect(await store.consume('global', { max: 2, windowMs: 3_600_000 })).toBeGreaterThan(0);
+    const rows = await h.database.pool.query('select key from mail_limit_hits');
+    expect(rows.rows.every((r: { key: string }) => /^[0-9a-f]{64}$/.test(r.key))).toBe(true);
+    await h.close();
+  });
+
+  it('refuses mail instead of sending it unmetered when the limiter store fails', async () => {
+    const h = await createHarness();
+    await h.database.pool.query('drop table mail_limit_hits');
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await signUp(h.app, nextEmail());
+    spy.mockRestore();
+    expect(h.outbox).toHaveLength(0);
+    await h.close();
+  });
+
   it('ignores a spoofed x-forwarded-for from an untrusted peer', async () => {
     const h = await createHarness({
       mailLimits: {
         perRecipient: { max: 100, windowMs: 3_600_000 },
         verificationCooldown: { max: 100, windowMs: 1000 },
         perIpSignup: { max: 2, windowMs: 3_600_000 },
+        global: { max: 1000, windowMs: 3_600_000 },
       },
     });
     const statuses: number[] = [];

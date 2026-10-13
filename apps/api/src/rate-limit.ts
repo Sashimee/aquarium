@@ -1,6 +1,70 @@
+import { createHmac } from 'node:crypto';
+import { and, eq, gt, lte, sql } from 'drizzle-orm';
+import { schema, type Database } from './db/index.ts';
+
 export interface Limit {
   max: number;
   windowMs: number;
+}
+
+export interface HitStore {
+  /** Records a hit and returns 0, or returns the seconds until a hit would be allowed without recording. */
+  consume(key: string, limit: Limit): Promise<number>;
+  remaining(key: string, limit: Limit): Promise<number>;
+}
+
+export function memoryHitStore(now?: () => number): HitStore {
+  const limiter = new RateLimiter(now);
+  return {
+    consume: async (key, limit) => limiter.consume(key, limit),
+    remaining: async (key, limit) => limiter.remaining(key, limit),
+  };
+}
+
+// Keys are hashed so the table never holds addresses or IPs. A per-key advisory lock serialises
+// concurrent callers, so the count-then-insert cannot overshoot the limit across instances.
+export function postgresHitStore({ db }: Database, secret: string): HitStore {
+  const hashed = (key: string) => createHmac('sha256', secret).update(key).digest('hex');
+  const windowSeconds = ({ windowMs }: Limit) => windowMs / 1000;
+  const cutoff = (limit: Limit) => sql`now() - make_interval(secs => ${windowSeconds(limit)})`;
+  const stats = {
+    count: sql<number>`count(*)::int`,
+    oldest: sql<number>`extract(epoch from min(${schema.mailLimitHits.at}))::float8`,
+    now: sql<number>`extract(epoch from now())::float8`,
+  };
+  const retryAfter = (oldest: number, now: number, limit: Limit) =>
+    Math.max(1, Math.ceil(oldest + windowSeconds(limit) - now));
+
+  return {
+    consume: (key, limit) =>
+      db.transaction(async (tx) => {
+        const k = hashed(key);
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${k}, 0))`);
+        await tx
+          .delete(schema.mailLimitHits)
+          .where(and(eq(schema.mailLimitHits.key, k), lte(schema.mailLimitHits.at, cutoff(limit))));
+        const [row] = await tx
+          .select(stats)
+          .from(schema.mailLimitHits)
+          .where(eq(schema.mailLimitHits.key, k));
+        if (row && row.count >= limit.max) return retryAfter(row.oldest, row.now, limit);
+        await tx.insert(schema.mailLimitHits).values({ key: k });
+        return 0;
+      }),
+    async remaining(key, limit) {
+      const [row] = await db
+        .select(stats)
+        .from(schema.mailLimitHits)
+        .where(
+          and(
+            eq(schema.mailLimitHits.key, hashed(key)),
+            gt(schema.mailLimitHits.at, cutoff(limit)),
+          ),
+        );
+      if (!row || row.count < limit.max) return 0;
+      return retryAfter(row.oldest, row.now, limit);
+    },
+  };
 }
 
 export class RateLimiter {

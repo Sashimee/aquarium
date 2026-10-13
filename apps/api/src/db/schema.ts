@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  bigserial,
   boolean,
   doublePrecision,
   index,
@@ -188,4 +189,14 @@ export const memorials = pgTable(
     cause: causeOfDeathEnum('cause').notNull(),
   },
   (t) => [index('memorials_tank_id_idx').on(t.tankId)],
+);
+
+export const mailLimitHits = pgTable(
+  'mail_limit_hits',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    key: text('key').notNull(),
+    at: timestamptz('at').notNull().defaultNow(),
+  },
+  (t) => [index('mail_limit_hits_key_at_idx').on(t.key, t.at)],
 );
