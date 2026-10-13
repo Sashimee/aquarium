@@ -2,7 +2,7 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; every texture has both files.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Anemone tentacle sway is \"_sway\" (0 base, 1 tip).",
-  "totalBytes": 45254352,
+  "totalBytes": 62159969,
   "assets": [
     {
       "id": "angelfish",
@@ -59,20 +59,21 @@
         {
           "name": "angelfish_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "fish/angelfish/textures/angelfish_basecolor_1k.ktx2",
               "bytes": 104587,
               "sha256": "3355e344114a9deb24b77d11ea431d042fbc5d7a58c4f7ac1b775776248eddb1",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "fish/angelfish/textures/angelfish_basecolor_2k.ktx2",
               "bytes": 293119,
               "sha256": "81f693b00d10a3d798ec4e1cb1ce33c114de2b637df7a53e5562a864e19541a3",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         }
@@ -181,20 +182,21 @@
         {
           "name": "banggai-cardinalfish_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "fish/banggai-cardinalfish/textures/banggai-cardinalfish_basecolor_1k.ktx2",
               "bytes": 87500,
               "sha256": "cf92c823e404f5ea28e5b33da8402e678860fc7e1fc875316506d8f35f3f75fd",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "fish/banggai-cardinalfish/textures/banggai-cardinalfish_basecolor_2k.ktx2",
               "bytes": 160142,
               "sha256": "3141b06909086908a7355b8931c3c299b128b7e79b6db2922585287947481f5a",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             }
           }
         }
@@ -302,40 +304,42 @@
         {
           "name": "betta_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "fish/betta/textures/betta_basecolor_1k.ktx2",
               "bytes": 169866,
               "sha256": "2a0cf3c3fd6d2710bf494d6ad996c9c616ebe4eaa471846dd83813c0ee02edf3",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "fish/betta/textures/betta_basecolor_2k.ktx2",
               "bytes": 587781,
               "sha256": "b32b610e6a21f97dbbb3cb54bb70621e542bf809d3ccc829613226073e193e6d",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         },
         {
           "name": "betta_normal",
           "role": "normal",
-          "codec": "etc1s",
           "colorSpace": "linear",
           "variants": {
             "1k": {
               "file": "fish/betta/textures/betta_normal_1k.ktx2",
               "bytes": 54979,
               "sha256": "4fb8d65b328cbcf4abe2ac809ac240383888f1b441100efb02f7ba58e69721b9",
-              "size": 512
+              "size": 512,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "fish/betta/textures/betta_normal_2k.ktx2",
-              "bytes": 162622,
-              "sha256": "83633a33bb6070b7dffb876dd0699211c639f6019983f79873434724260fcc2a",
-              "size": 1024
+              "bytes": 718757,
+              "sha256": "856a7875b612eae2754433c3e537843782b480dcf22dfd26b12017e2fbdabc43",
+              "size": 1024,
+              "codec": "uastc"
             }
           }
         }
@@ -373,8 +377,8 @@
         },
         {
           "file": "fish/betta/textures/betta_normal_2k.ktx2",
-          "bytes": 162622,
-          "sha256": "83633a33bb6070b7dffb876dd0699211c639f6019983f79873434724260fcc2a"
+          "bytes": 718757,
+          "sha256": "856a7875b612eae2754433c3e537843782b480dcf22dfd26b12017e2fbdabc43"
         }
       ],
       "fish": {
@@ -453,40 +457,42 @@
         {
           "name": "blue-tang_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "fish/blue-tang/textures/blue-tang_basecolor_1k.ktx2",
               "bytes": 126379,
               "sha256": "0a3a59cfc5cdb4fed0ef646b042326ab3efd9fa8133f57ab3483bc4137fa83b8",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "fish/blue-tang/textures/blue-tang_basecolor_2k.ktx2",
               "bytes": 409199,
               "sha256": "dd5888ea9307bc633c1204c305f9d36c5d54ff9b0608708d43b60b628a8b4269",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         },
         {
           "name": "blue-tang_normal",
           "role": "normal",
-          "codec": "etc1s",
           "colorSpace": "linear",
           "variants": {
             "1k": {
               "file": "fish/blue-tang/textures/blue-tang_normal_1k.ktx2",
               "bytes": 93692,
               "sha256": "02da52ef079bb865bd6de50dc7b753fc6a7a4a29c839450aa038790d1ed61b43",
-              "size": 512
+              "size": 512,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "fish/blue-tang/textures/blue-tang_normal_2k.ktx2",
-              "bytes": 256738,
-              "sha256": "e19ed6065b6782ca324a870006c8f1a01daa40d2bcedc9d4131a56bcf6ae6a46",
-              "size": 1024
+              "bytes": 1186006,
+              "sha256": "0b2ad39a4992777cf1d8cc89b499c599db519546f4178bb7178119883ba2c632",
+              "size": 1024,
+              "codec": "uastc"
             }
           }
         }
@@ -524,8 +530,8 @@
         },
         {
           "file": "fish/blue-tang/textures/blue-tang_normal_2k.ktx2",
-          "bytes": 256738,
-          "sha256": "e19ed6065b6782ca324a870006c8f1a01daa40d2bcedc9d4131a56bcf6ae6a46"
+          "bytes": 1186006,
+          "sha256": "0b2ad39a4992777cf1d8cc89b499c599db519546f4178bb7178119883ba2c632"
         }
       ],
       "fish": {
@@ -605,20 +611,21 @@
         {
           "name": "bronze-corydoras_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "fish/bronze-corydoras/textures/bronze-corydoras_basecolor_1k.ktx2",
               "bytes": 32811,
               "sha256": "f05d56859e416c569b1082dab406aa0764169e088fa51df9bd372ec7aa60eb3e",
-              "size": 512
+              "size": 512,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "fish/bronze-corydoras/textures/bronze-corydoras_basecolor_2k.ktx2",
               "bytes": 32811,
               "sha256": "f05d56859e416c569b1082dab406aa0764169e088fa51df9bd372ec7aa60eb3e",
-              "size": 512
+              "size": 512,
+              "codec": "etc1s"
             }
           }
         }
@@ -726,60 +733,63 @@
         {
           "name": "guppy-female_guppy-skin-f_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "fish/guppy-female/textures/guppy-female_guppy-skin-f_basecolor_1k.ktx2",
               "bytes": 242399,
               "sha256": "d328be21d430728a3bda06d9e865a316b8b02d80582c7fb38a77ecd5a362a205",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "fish/guppy-female/textures/guppy-female_guppy-skin-f_basecolor_2k.ktx2",
               "bytes": 879747,
               "sha256": "2df71db7b12983489537a63babd677db4ccaae777bed751dcf458e63721a8a6f",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         },
         {
           "name": "guppy-female_guppy-layer1-f_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "fish/guppy-female/textures/guppy-female_guppy-layer1-f_basecolor_1k.ktx2",
               "bytes": 129084,
               "sha256": "bbf5bb4bb0058c477ff47cf6bfea5148036c21715850437a42f28ead1897a813",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "fish/guppy-female/textures/guppy-female_guppy-layer1-f_basecolor_2k.ktx2",
               "bytes": 477000,
               "sha256": "88269425d145805b4dfe4a23d11c2c2e2494a5a04d0869416b907bf03b56b2a6",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         },
         {
           "name": "guppy-female_guppy-layer2-f_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "fish/guppy-female/textures/guppy-female_guppy-layer2-f_basecolor_1k.ktx2",
               "bytes": 129084,
               "sha256": "bbf5bb4bb0058c477ff47cf6bfea5148036c21715850437a42f28ead1897a813",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "fish/guppy-female/textures/guppy-female_guppy-layer2-f_basecolor_2k.ktx2",
               "bytes": 477000,
               "sha256": "88269425d145805b4dfe4a23d11c2c2e2494a5a04d0869416b907bf03b56b2a6",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         }
@@ -908,20 +918,21 @@
         {
           "name": "guppy-male_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "fish/guppy-male/textures/guppy-male_basecolor_1k.ktx2",
               "bytes": 158459,
               "sha256": "8a5b7c1aba10ce7b7f72fc5cf2a80c37f8b2df25bfa67c268be356e84779391a",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "fish/guppy-male/textures/guppy-male_basecolor_2k.ktx2",
               "bytes": 479074,
               "sha256": "80ae7e3c7a1b33045b1cc827df5d4bedc1bbd1493ee3f439c725e83c471825bd",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         }
@@ -1029,40 +1040,42 @@
         {
           "name": "neon-tetra_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "fish/neon-tetra/textures/neon-tetra_basecolor_1k.ktx2",
               "bytes": 162858,
               "sha256": "ca866206cc24ac99c8549ed12ee2b96543ef15526aae8885a535d77f2f26fc3f",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "fish/neon-tetra/textures/neon-tetra_basecolor_2k.ktx2",
               "bytes": 162858,
               "sha256": "ca866206cc24ac99c8549ed12ee2b96543ef15526aae8885a535d77f2f26fc3f",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             }
           }
         },
         {
           "name": "neon-tetra_normal",
           "role": "normal",
-          "codec": "etc1s",
           "colorSpace": "linear",
           "variants": {
             "1k": {
               "file": "fish/neon-tetra/textures/neon-tetra_normal_1k.ktx2",
               "bytes": 24729,
               "sha256": "61318404e7960aaff878a8c343e94576dd8d46b42c0d5ac05288f08e43972604",
-              "size": 512
+              "size": 512,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "fish/neon-tetra/textures/neon-tetra_normal_2k.ktx2",
-              "bytes": 69462,
-              "sha256": "cce9e11a50288f0f00a46774e86410fb90f320af1936208925955caba367e560",
-              "size": 1024
+              "bytes": 612199,
+              "sha256": "ea125b89ca59e742ec7c00ba2262f24f8a590048b04f7428f61024e56ef366a8",
+              "size": 1024,
+              "codec": "uastc"
             }
           }
         }
@@ -1100,8 +1113,8 @@
         },
         {
           "file": "fish/neon-tetra/textures/neon-tetra_normal_2k.ktx2",
-          "bytes": 69462,
-          "sha256": "cce9e11a50288f0f00a46774e86410fb90f320af1936208925955caba367e560"
+          "bytes": 612199,
+          "sha256": "ea125b89ca59e742ec7c00ba2262f24f8a590048b04f7428f61024e56ef366a8"
         }
       ],
       "fish": {
@@ -1180,40 +1193,42 @@
         {
           "name": "ocellaris-clownfish_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "fish/ocellaris-clownfish/textures/ocellaris-clownfish_basecolor_1k.ktx2",
               "bytes": 132791,
               "sha256": "6c4785decb6d00623c01b0eb00f81ae6980341104fb91010752cc4dfbba40603",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "fish/ocellaris-clownfish/textures/ocellaris-clownfish_basecolor_2k.ktx2",
               "bytes": 404435,
               "sha256": "5713c62541839129bd0f7895de0f02a5f73097801b79c5da80054185047e08e2",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         },
         {
           "name": "ocellaris-clownfish_normal",
           "role": "normal",
-          "codec": "etc1s",
           "colorSpace": "linear",
           "variants": {
             "1k": {
               "file": "fish/ocellaris-clownfish/textures/ocellaris-clownfish_normal_1k.ktx2",
               "bytes": 58890,
               "sha256": "ea32970561555709e579dbee832b28a9e9062f216c8b958fa2bc5a4e11b6c342",
-              "size": 512
+              "size": 512,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "fish/ocellaris-clownfish/textures/ocellaris-clownfish_normal_2k.ktx2",
-              "bytes": 160308,
-              "sha256": "cc8056f0701e35670da194d6a44c94d64622bb04718058c93e8ab10422fdf2a2",
-              "size": 1024
+              "bytes": 897581,
+              "sha256": "6af058deae788275cce5124b49e396e645f3a83e5cdf97db5e9c0d75669f3255",
+              "size": 1024,
+              "codec": "uastc"
             }
           }
         }
@@ -1251,8 +1266,8 @@
         },
         {
           "file": "fish/ocellaris-clownfish/textures/ocellaris-clownfish_normal_2k.ktx2",
-          "bytes": 160308,
-          "sha256": "cc8056f0701e35670da194d6a44c94d64622bb04718058c93e8ab10422fdf2a2"
+          "bytes": 897581,
+          "sha256": "6af058deae788275cce5124b49e396e645f3a83e5cdf97db5e9c0d75669f3255"
         }
       ],
       "fish": {
@@ -1330,20 +1345,21 @@
         {
           "name": "royal-gramma_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "fish/royal-gramma/textures/royal-gramma_basecolor_1k.ktx2",
               "bytes": 13741,
               "sha256": "5cb178b3e9118acf85c220e369c97ee020ef058a42e8bab8dd0750b8a61066a1",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "fish/royal-gramma/textures/royal-gramma_basecolor_2k.ktx2",
               "bytes": 13741,
               "sha256": "5cb178b3e9118acf85c220e369c97ee020ef058a42e8bab8dd0750b8a61066a1",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             }
           }
         }
@@ -1451,20 +1467,21 @@
         {
           "name": "yellow-tang_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "fish/yellow-tang/textures/yellow-tang_basecolor_1k.ktx2",
               "bytes": 124003,
               "sha256": "3250ec20cbd210bfc63e2740c78c40bf24a15440b289f7bdc6f7a6798cfde51d",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "fish/yellow-tang/textures/yellow-tang_basecolor_2k.ktx2",
               "bytes": 124003,
               "sha256": "3250ec20cbd210bfc63e2740c78c40bf24a15440b289f7bdc6f7a6798cfde51d",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             }
           }
         }
@@ -1569,20 +1586,21 @@
         {
           "name": "host-anemone_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "anemone/host-anemone/textures/host-anemone_basecolor_1k.ktx2",
               "bytes": 1042,
               "sha256": "676338329887530f4723120450ba9b43fb00e101edca5daeba13e2a17013e39a",
-              "size": 256
+              "size": 256,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "anemone/host-anemone/textures/host-anemone_basecolor_2k.ktx2",
               "bytes": 1042,
               "sha256": "676338329887530f4723120450ba9b43fb00e101edca5daeba13e2a17013e39a",
-              "size": 256
+              "size": 256,
+              "codec": "etc1s"
             }
           }
         }
@@ -1669,20 +1687,21 @@
         {
           "name": "java-fern_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "plant/java-fern/textures/java-fern_basecolor_1k.ktx2",
               "bytes": 152879,
               "sha256": "1345992af66bd7b58b43aff81719652c8407c55ea74bc161216e7738ab74b975",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "plant/java-fern/textures/java-fern_basecolor_2k.ktx2",
               "bytes": 543740,
               "sha256": "dc480c139bd46057d658b9092803ad17cb910c84585d005f783439357ad8b324",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         }
@@ -1769,120 +1788,126 @@
         {
           "name": "pond-weed_frondstem-mat_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "plant/pond-weed/textures/pond-weed_frondstem-mat_basecolor_1k.ktx2",
               "bytes": 11473,
               "sha256": "568d50d9ad56889d0b836a7ad556ff648793c7fe1e9ce8644700e6fb155b79e4",
-              "size": 512
+              "size": 512,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "plant/pond-weed/textures/pond-weed_frondstem-mat_basecolor_2k.ktx2",
               "bytes": 11473,
               "sha256": "568d50d9ad56889d0b836a7ad556ff648793c7fe1e9ce8644700e6fb155b79e4",
-              "size": 512
+              "size": 512,
+              "codec": "etc1s"
             }
           }
         },
         {
           "name": "pond-weed_frondstem-mat_normal",
           "role": "normal",
-          "codec": "etc1s",
           "colorSpace": "linear",
           "variants": {
             "1k": {
               "file": "plant/pond-weed/textures/pond-weed_frondstem-mat_normal_1k.ktx2",
               "bytes": 16884,
               "sha256": "1d86e74d79b15927e73aa1548852f6cb07f7ca04087fe45a9ae2a6e77e7aac3c",
-              "size": 512
+              "size": 512,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "plant/pond-weed/textures/pond-weed_frondstem-mat_normal_2k.ktx2",
-              "bytes": 16884,
-              "sha256": "1d86e74d79b15927e73aa1548852f6cb07f7ca04087fe45a9ae2a6e77e7aac3c",
-              "size": 512
+              "bytes": 78257,
+              "sha256": "331b667302576eeecbd4dee1561cca47ef10c30470217e2b995cd145a3cbfbcf",
+              "size": 512,
+              "codec": "uastc"
             }
           }
         },
         {
           "name": "pond-weed_pondweedleaflets-mat_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "plant/pond-weed/textures/pond-weed_pondweedleaflets-mat_basecolor_1k.ktx2",
               "bytes": 50679,
               "sha256": "d7d68b44f4e8554e656efd5253d3243351bb5becb4db8a2da1c145c917c76f66",
-              "size": 512
+              "size": 512,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "plant/pond-weed/textures/pond-weed_pondweedleaflets-mat_basecolor_2k.ktx2",
               "bytes": 50679,
               "sha256": "d7d68b44f4e8554e656efd5253d3243351bb5becb4db8a2da1c145c917c76f66",
-              "size": 512
+              "size": 512,
+              "codec": "etc1s"
             }
           }
         },
         {
           "name": "pond-weed_pondweedleaflets-mat_normal",
           "role": "normal",
-          "codec": "etc1s",
           "colorSpace": "linear",
           "variants": {
             "1k": {
               "file": "plant/pond-weed/textures/pond-weed_pondweedleaflets-mat_normal_1k.ktx2",
               "bytes": 60277,
               "sha256": "54db6a190df877dc5ffa5870b7768e90fcab9a0c49b51c1a3cc02fbbaf28bb5d",
-              "size": 512
+              "size": 512,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "plant/pond-weed/textures/pond-weed_pondweedleaflets-mat_normal_2k.ktx2",
-              "bytes": 60277,
-              "sha256": "54db6a190df877dc5ffa5870b7768e90fcab9a0c49b51c1a3cc02fbbaf28bb5d",
-              "size": 512
+              "bytes": 246627,
+              "sha256": "ad575dca388d456e28416f1afb226402bb5d54673ae6ff47211fbaec48bdc08e",
+              "size": 512,
+              "codec": "uastc"
             }
           }
         },
         {
           "name": "pond-weed_pondweed-med-mat_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "plant/pond-weed/textures/pond-weed_pondweed-med-mat_basecolor_1k.ktx2",
               "bytes": 34637,
               "sha256": "ba414f8ed6340f073d0a183961da5e76c7eca36724ebf9febaf487543720cbb1",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "plant/pond-weed/textures/pond-weed_pondweed-med-mat_basecolor_2k.ktx2",
               "bytes": 100630,
               "sha256": "664a764c1232f30cd6d4b7ddffd159413a9a3e7371a7e94063a2ee2916112650",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         },
         {
           "name": "pond-weed_pondweed-med-mat_normal",
           "role": "normal",
-          "codec": "etc1s",
           "colorSpace": "linear",
           "variants": {
             "1k": {
               "file": "plant/pond-weed/textures/pond-weed_pondweed-med-mat_normal_1k.ktx2",
               "bytes": 11362,
               "sha256": "3da6a54599d42dbc1ad82c6f8c3179bb504a99abf25461881e6fc35f09192e44",
-              "size": 512
+              "size": 512,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "plant/pond-weed/textures/pond-weed_pondweed-med-mat_normal_2k.ktx2",
-              "bytes": 33582,
-              "sha256": "e4144ac8315d891a032c7a60b423b53ccc1257d5b6091bd4671f9ac726e965a7",
-              "size": 1024
+              "bytes": 127143,
+              "sha256": "6fcd86cc66f19b9c5ce4bab5672ade6b47646a3cc63651f71b44d0e965106823",
+              "size": 1024,
+              "codec": "uastc"
             }
           }
         }
@@ -1920,8 +1945,8 @@
         },
         {
           "file": "plant/pond-weed/textures/pond-weed_frondstem-mat_normal_2k.ktx2",
-          "bytes": 16884,
-          "sha256": "1d86e74d79b15927e73aa1548852f6cb07f7ca04087fe45a9ae2a6e77e7aac3c"
+          "bytes": 78257,
+          "sha256": "331b667302576eeecbd4dee1561cca47ef10c30470217e2b995cd145a3cbfbcf"
         },
         {
           "file": "plant/pond-weed/textures/pond-weed_pondweed-med-mat_basecolor_1k.ktx2",
@@ -1940,8 +1965,8 @@
         },
         {
           "file": "plant/pond-weed/textures/pond-weed_pondweed-med-mat_normal_2k.ktx2",
-          "bytes": 33582,
-          "sha256": "e4144ac8315d891a032c7a60b423b53ccc1257d5b6091bd4671f9ac726e965a7"
+          "bytes": 127143,
+          "sha256": "6fcd86cc66f19b9c5ce4bab5672ade6b47646a3cc63651f71b44d0e965106823"
         },
         {
           "file": "plant/pond-weed/textures/pond-weed_pondweedleaflets-mat_basecolor_1k.ktx2",
@@ -1960,8 +1985,8 @@
         },
         {
           "file": "plant/pond-weed/textures/pond-weed_pondweedleaflets-mat_normal_2k.ktx2",
-          "bytes": 60277,
-          "sha256": "54db6a190df877dc5ffa5870b7768e90fcab9a0c49b51c1a3cc02fbbaf28bb5d"
+          "bytes": 246627,
+          "sha256": "ad575dca388d456e28416f1afb226402bb5d54673ae6ff47211fbaec48bdc08e"
         }
       ]
     },
@@ -2019,20 +2044,21 @@
         {
           "name": "red-tiger-lotus_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "plant/red-tiger-lotus/textures/red-tiger-lotus_basecolor_1k.ktx2",
               "bytes": 191072,
               "sha256": "af313052215df4afea224361e7d2c851f528aec81837e987ebc5110dd3b605c3",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "plant/red-tiger-lotus/textures/red-tiger-lotus_basecolor_2k.ktx2",
               "bytes": 658891,
               "sha256": "86a6bbdff7ca18120351bcad893aec3745501430a9032fb5404e5db91030652c",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         }
@@ -2119,20 +2145,21 @@
         {
           "name": "staurogyne-repens_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "plant/staurogyne-repens/textures/staurogyne-repens_basecolor_1k.ktx2",
               "bytes": 154671,
               "sha256": "acb9c2c286a7d8274082c911ec17b1df0f5d53ed42560f7b5ecd9e6710c19fe3",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "plant/staurogyne-repens/textures/staurogyne-repens_basecolor_2k.ktx2",
               "bytes": 548819,
               "sha256": "ef8412a629680a2f8388be15fee5cf12c22ffb34db485c0d0756a1cba3026b95",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         }
@@ -2219,20 +2246,21 @@
         {
           "name": "universal-plant_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "plant/universal-plant/textures/universal-plant_basecolor_1k.ktx2",
               "bytes": 165692,
               "sha256": "7d3df6a644076a87dfe5e699ca5af8623deacc007d0731e9307237b0572cd47a",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "plant/universal-plant/textures/universal-plant_basecolor_2k.ktx2",
               "bytes": 547518,
               "sha256": "036a4b00203e3bbc1fe3af7f9224cc0d6a4dfdce886fa258c5343e0b478b20de",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         }
@@ -2319,20 +2347,21 @@
         {
           "name": "vallisneria_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "plant/vallisneria/textures/vallisneria_basecolor_1k.ktx2",
               "bytes": 159900,
               "sha256": "d3f055fcfd06193d047cd5f8b101ec4bae19a57a2e6e8f454ba61178348556eb",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "plant/vallisneria/textures/vallisneria_basecolor_2k.ktx2",
               "bytes": 520461,
               "sha256": "ac656c3c3fbf4c36ba364e59bed2e188a25b55f09249297db7ee1ac04fac09c9",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         }
@@ -2419,20 +2448,21 @@
         {
           "name": "water-plant_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "plant/water-plant/textures/water-plant_basecolor_1k.ktx2",
               "bytes": 4835,
               "sha256": "570021de52e22ad0ff814475f25611ec133523eb2005b360272831a93169098c",
-              "size": 256
+              "size": 256,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "plant/water-plant/textures/water-plant_basecolor_2k.ktx2",
               "bytes": 4835,
               "sha256": "570021de52e22ad0ff814475f25611ec133523eb2005b360272831a93169098c",
-              "size": 256
+              "size": 256,
+              "codec": "etc1s"
             }
           }
         }
@@ -2521,40 +2551,42 @@
         {
           "name": "acropora-cytherea_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "coral/acropora-cytherea/textures/acropora-cytherea_basecolor_1k.ktx2",
               "bytes": 196888,
               "sha256": "2f3899626bc88eb9b63321ef305afa21449ddef0f6e24e243cdf9058e14544eb",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "coral/acropora-cytherea/textures/acropora-cytherea_basecolor_2k.ktx2",
               "bytes": 731553,
               "sha256": "7b08f6c837353d386f9d58bfc2f3905172351bfdf772fd3f76dbaf85def83b75",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         },
         {
           "name": "acropora-cytherea_normal",
           "role": "normal",
-          "codec": "etc1s",
           "colorSpace": "linear",
           "variants": {
             "1k": {
               "file": "coral/acropora-cytherea/textures/acropora-cytherea_normal_1k.ktx2",
               "bytes": 105885,
               "sha256": "20ae1433f715f037d9df79dcb6522730ee0cfe327a7c78ba6b11c53a3dcced47",
-              "size": 512
+              "size": 512,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "coral/acropora-cytherea/textures/acropora-cytherea_normal_2k.ktx2",
-              "bytes": 307595,
-              "sha256": "1527dd7b6f97af7fec384fb1f06eb40ecf8c82c2c72ab624ced01d5d151e1572",
-              "size": 1024
+              "bytes": 1352223,
+              "sha256": "be6fd4ad3ffa52e511c482dbac2c533f46b755b080252830f88e9e31344c5ef3",
+              "size": 1024,
+              "codec": "uastc"
             }
           }
         }
@@ -2592,8 +2624,8 @@
         },
         {
           "file": "coral/acropora-cytherea/textures/acropora-cytherea_normal_2k.ktx2",
-          "bytes": 307595,
-          "sha256": "1527dd7b6f97af7fec384fb1f06eb40ecf8c82c2c72ab624ced01d5d151e1572"
+          "bytes": 1352223,
+          "sha256": "be6fd4ad3ffa52e511c482dbac2c533f46b755b080252830f88e9e31344c5ef3"
         }
       ]
     },
@@ -2651,40 +2683,42 @@
         {
           "name": "acropora-palmata_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "coral/acropora-palmata/textures/acropora-palmata_basecolor_1k.ktx2",
               "bytes": 175527,
               "sha256": "d375701f76f2421e69f5757ff1456f7859e844dd8039aa68e206cd76e25983ee",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "coral/acropora-palmata/textures/acropora-palmata_basecolor_2k.ktx2",
               "bytes": 643538,
               "sha256": "759c28cecf3c54af6691f92f419edefef2a55e09a15ebd6fa7df0f855e5ca26a",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         },
         {
           "name": "acropora-palmata_normal",
           "role": "normal",
-          "codec": "etc1s",
           "colorSpace": "linear",
           "variants": {
             "1k": {
               "file": "coral/acropora-palmata/textures/acropora-palmata_normal_1k.ktx2",
               "bytes": 95124,
               "sha256": "41da314e485c06c59219fc796171557880620aa1709198a49f932a6126b4bc69",
-              "size": 512
+              "size": 512,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "coral/acropora-palmata/textures/acropora-palmata_normal_2k.ktx2",
-              "bytes": 263615,
-              "sha256": "0465aaf2d85b3af042d489175819e849e1c6a07f06cfeb46f5b1081ea37d6781",
-              "size": 1024
+              "bytes": 1293504,
+              "sha256": "54d0ad4d97fd4d5a45c77d14ae1611a26313d4d7ba4b412b62f730d41e3f0152",
+              "size": 1024,
+              "codec": "uastc"
             }
           }
         }
@@ -2722,8 +2756,8 @@
         },
         {
           "file": "coral/acropora-palmata/textures/acropora-palmata_normal_2k.ktx2",
-          "bytes": 263615,
-          "sha256": "0465aaf2d85b3af042d489175819e849e1c6a07f06cfeb46f5b1081ea37d6781"
+          "bytes": 1293504,
+          "sha256": "54d0ad4d97fd4d5a45c77d14ae1611a26313d4d7ba4b412b62f730d41e3f0152"
         }
       ]
     },
@@ -2781,20 +2815,21 @@
         {
           "name": "blue-sea-anemone_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "coral/blue-sea-anemone/textures/blue-sea-anemone_basecolor_1k.ktx2",
               "bytes": 200277,
               "sha256": "a2e166bc2193b868a61602871b254e791bec4911cff684d73af4a2231a721239",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "coral/blue-sea-anemone/textures/blue-sea-anemone_basecolor_2k.ktx2",
               "bytes": 703794,
               "sha256": "381779204365c35d2022f3fe5307c068ae58c2ce137204695d17937372dee746",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         }
@@ -2881,40 +2916,42 @@
         {
           "name": "brain-coral_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "coral/brain-coral/textures/brain-coral_basecolor_1k.ktx2",
               "bytes": 190164,
               "sha256": "60810eb1d11bfdc8a80582551a2a76050002d5a81017f6a1eca2b146f884aeb1",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "coral/brain-coral/textures/brain-coral_basecolor_2k.ktx2",
               "bytes": 696895,
               "sha256": "51b0614423b599f8acdb9894bf4c1b0ea7b9b92dc92f535b3594a6750bbc1cf8",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         },
         {
           "name": "brain-coral_normal",
           "role": "normal",
-          "codec": "etc1s",
           "colorSpace": "linear",
           "variants": {
             "1k": {
               "file": "coral/brain-coral/textures/brain-coral_normal_1k.ktx2",
               "bytes": 95586,
               "sha256": "f9af1010e8ed7b06620b3b4bc3910d3f3379e96c66598fcab822cc089d2cba8e",
-              "size": 512
+              "size": 512,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "coral/brain-coral/textures/brain-coral_normal_2k.ktx2",
-              "bytes": 254803,
-              "sha256": "b1f7d717f11e9e3e0c6369613fb3c780759453f3c6ed7b882dfa71cd01ee8484",
-              "size": 1024
+              "bytes": 1247989,
+              "sha256": "7ea83f159296bd1ddbe8995836b5594bfb18a96f582c09eff8871c426e0bf56e",
+              "size": 1024,
+              "codec": "uastc"
             }
           }
         }
@@ -2952,8 +2989,8 @@
         },
         {
           "file": "coral/brain-coral/textures/brain-coral_normal_2k.ktx2",
-          "bytes": 254803,
-          "sha256": "b1f7d717f11e9e3e0c6369613fb3c780759453f3c6ed7b882dfa71cd01ee8484"
+          "bytes": 1247989,
+          "sha256": "7ea83f159296bd1ddbe8995836b5594bfb18a96f582c09eff8871c426e0bf56e"
         }
       ]
     },
@@ -3010,40 +3047,42 @@
         {
           "name": "dead-quiver-trunk_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "driftwood/dead-quiver-trunk/textures/dead-quiver-trunk_basecolor_1k.ktx2",
               "bytes": 176067,
               "sha256": "7f88890c409e84b5a3d0051d69957deaacd8705e6d90c9fa2b91baae116185a7",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "driftwood/dead-quiver-trunk/textures/dead-quiver-trunk_basecolor_2k.ktx2",
               "bytes": 642417,
               "sha256": "fd8dbdb02a6e9d3efcd8d2fa3446977d6beedcd591b145ce63e30551f7331450",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         },
         {
           "name": "dead-quiver-trunk_normal",
           "role": "normal",
-          "codec": "etc1s",
           "colorSpace": "linear",
           "variants": {
             "1k": {
               "file": "driftwood/dead-quiver-trunk/textures/dead-quiver-trunk_normal_1k.ktx2",
               "bytes": 68327,
               "sha256": "dd144858f382f060a5060624f15303f03b446400aac5eb5c5710255e59848026",
-              "size": 512
+              "size": 512,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "driftwood/dead-quiver-trunk/textures/dead-quiver-trunk_normal_2k.ktx2",
-              "bytes": 199645,
-              "sha256": "4d6e18ae1f9dc234a8adfb2a9bb3e4afcfb516032146bc80dc92a0b60660ff8b",
-              "size": 1024
+              "bytes": 1143292,
+              "sha256": "6723685e9223423c990045fe0c3563974d7c54c7633e9129313a6596bf1c6562",
+              "size": 1024,
+              "codec": "uastc"
             }
           }
         }
@@ -3081,8 +3120,8 @@
         },
         {
           "file": "driftwood/dead-quiver-trunk/textures/dead-quiver-trunk_normal_2k.ktx2",
-          "bytes": 199645,
-          "sha256": "4d6e18ae1f9dc234a8adfb2a9bb3e4afcfb516032146bc80dc92a0b60660ff8b"
+          "bytes": 1143292,
+          "sha256": "6723685e9223423c990045fe0c3563974d7c54c7633e9129313a6596bf1c6562"
         }
       ]
     },
@@ -3139,40 +3178,42 @@
         {
           "name": "dead-tree-trunk-02_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "driftwood/dead-tree-trunk-02/textures/dead-tree-trunk-02_basecolor_1k.ktx2",
               "bytes": 193888,
               "sha256": "208a830cc052b9b0b0435ec3831716822349d28e125062de183583b31dec0845",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "driftwood/dead-tree-trunk-02/textures/dead-tree-trunk-02_basecolor_2k.ktx2",
               "bytes": 727911,
               "sha256": "b3dcef75e272b1abe9210949fce076939b09efd2ffc0548a8f8f3d9751f4be96",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         },
         {
           "name": "dead-tree-trunk-02_normal",
           "role": "normal",
-          "codec": "etc1s",
           "colorSpace": "linear",
           "variants": {
             "1k": {
               "file": "driftwood/dead-tree-trunk-02/textures/dead-tree-trunk-02_normal_1k.ktx2",
               "bytes": 108139,
               "sha256": "5ab380d8c790382d555991a9bd2d378fb0f1d61069870a7e3e6ef01eda6d7e2e",
-              "size": 512
+              "size": 512,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "driftwood/dead-tree-trunk-02/textures/dead-tree-trunk-02_normal_2k.ktx2",
-              "bytes": 313974,
-              "sha256": "f623c960237e7f7168f9ff2e27fa483fff4eec5170295f571bd6ac4cbff77b96",
-              "size": 1024
+              "bytes": 1359267,
+              "sha256": "f9b9d2e9e47e3696ef807cd01859b9c2c5dca790a710fe64f1f4b1ea8ba8a762",
+              "size": 1024,
+              "codec": "uastc"
             }
           }
         }
@@ -3210,8 +3251,8 @@
         },
         {
           "file": "driftwood/dead-tree-trunk-02/textures/dead-tree-trunk-02_normal_2k.ktx2",
-          "bytes": 313974,
-          "sha256": "f623c960237e7f7168f9ff2e27fa483fff4eec5170295f571bd6ac4cbff77b96"
+          "bytes": 1359267,
+          "sha256": "f9b9d2e9e47e3696ef807cd01859b9c2c5dca790a710fe64f1f4b1ea8ba8a762"
         }
       ]
     },
@@ -3269,40 +3310,42 @@
         {
           "name": "driftwood-branch_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "driftwood/driftwood-branch/textures/driftwood-branch_basecolor_1k.ktx2",
               "bytes": 84418,
               "sha256": "9c5a14775ed6d9a0690a0bda074a9a1441f953a6801f9b06e65d08a5e428939c",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "driftwood/driftwood-branch/textures/driftwood-branch_basecolor_2k.ktx2",
               "bytes": 297994,
               "sha256": "2ed43de12b3faaa95c4b4aa1e12f18c76b8844c2d43d4e2aebdb3b15c0b26225",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         },
         {
           "name": "driftwood-branch_normal",
           "role": "normal",
-          "codec": "etc1s",
           "colorSpace": "linear",
           "variants": {
             "1k": {
               "file": "driftwood/driftwood-branch/textures/driftwood-branch_normal_1k.ktx2",
               "bytes": 43675,
               "sha256": "88810099beab0e42484ce1cf968f4962cc799df43a2e2196f37151a4d25ddcf6",
-              "size": 512
+              "size": 512,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "driftwood/driftwood-branch/textures/driftwood-branch_normal_2k.ktx2",
-              "bytes": 135260,
-              "sha256": "b52b4ae78dbbdc1391becb5cbcb42df0afd2b9656b1781e187318ec6e1bc8247",
-              "size": 1024
+              "bytes": 517396,
+              "sha256": "87c83d29773beb00a5bfbfd4eae303953dfc84edbcc647ffb6a1aa54966098a5",
+              "size": 1024,
+              "codec": "uastc"
             }
           }
         }
@@ -3340,8 +3383,8 @@
         },
         {
           "file": "driftwood/driftwood-branch/textures/driftwood-branch_normal_2k.ktx2",
-          "bytes": 135260,
-          "sha256": "b52b4ae78dbbdc1391becb5cbcb42df0afd2b9656b1781e187318ec6e1bc8247"
+          "bytes": 517396,
+          "sha256": "87c83d29773beb00a5bfbfd4eae303953dfc84edbcc647ffb6a1aa54966098a5"
         }
       ]
     },
@@ -3398,40 +3441,42 @@
         {
           "name": "boulder-01_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "rock/boulder-01/textures/boulder-01_basecolor_1k.ktx2",
               "bytes": 198101,
               "sha256": "ac22812a2002f7d6413284e9d0b33865c3330b9c6cb1771543ab2243770c9711",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "rock/boulder-01/textures/boulder-01_basecolor_2k.ktx2",
               "bytes": 752325,
               "sha256": "d6c63e74af70d271a399c52563becfc4d6ff85d2f8dc5c0c4071a4238b3cad36",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         },
         {
           "name": "boulder-01_normal",
           "role": "normal",
-          "codec": "etc1s",
           "colorSpace": "linear",
           "variants": {
             "1k": {
               "file": "rock/boulder-01/textures/boulder-01_normal_1k.ktx2",
               "bytes": 107935,
               "sha256": "ed883a8a462d020592544419c3afb9ad0e4a1a65899d83e65e402e4504f936c7",
-              "size": 512
+              "size": 512,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "rock/boulder-01/textures/boulder-01_normal_2k.ktx2",
-              "bytes": 310836,
-              "sha256": "d84bb1f6a464cdff5a2436753f3e6388c8a4d99acb67349cea64827481eb8d71",
-              "size": 1024
+              "bytes": 1357817,
+              "sha256": "522be13dd44340f5cdcea7dd514c4bcd6b0beaacf9cc144f2c6db8f01d80be82",
+              "size": 1024,
+              "codec": "uastc"
             }
           }
         }
@@ -3469,8 +3514,8 @@
         },
         {
           "file": "rock/boulder-01/textures/boulder-01_normal_2k.ktx2",
-          "bytes": 310836,
-          "sha256": "d84bb1f6a464cdff5a2436753f3e6388c8a4d99acb67349cea64827481eb8d71"
+          "bytes": 1357817,
+          "sha256": "522be13dd44340f5cdcea7dd514c4bcd6b0beaacf9cc144f2c6db8f01d80be82"
         }
       ]
     },
@@ -3528,40 +3573,42 @@
         {
           "name": "coast-rocks-05_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "rock/coast-rocks-05/textures/coast-rocks-05_basecolor_1k.ktx2",
               "bytes": 189231,
               "sha256": "160c199126b3254c56463a1d9279ef8b3c304779c67bf535c25cd25562f0d559",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "rock/coast-rocks-05/textures/coast-rocks-05_basecolor_2k.ktx2",
               "bytes": 718548,
               "sha256": "424d09f6afd10b04fead4037c06388953dcf3302d5189386f11151b450f4a7a4",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         },
         {
           "name": "coast-rocks-05_normal",
           "role": "normal",
-          "codec": "etc1s",
           "colorSpace": "linear",
           "variants": {
             "1k": {
               "file": "rock/coast-rocks-05/textures/coast-rocks-05_normal_1k.ktx2",
               "bytes": 117122,
               "sha256": "7e17352dfb337bb50b05391c1b062cc39155af62ba592a0326dafe5e7aff03dc",
-              "size": 512
+              "size": 512,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "rock/coast-rocks-05/textures/coast-rocks-05_normal_2k.ktx2",
-              "bytes": 333572,
-              "sha256": "c9c39d1f831bd16f421f1bd25364cc5df11ca035084c5afc6a4a739ada08d409",
-              "size": 1024
+              "bytes": 1363768,
+              "sha256": "d5b10ccb533d771a3b3529a48f470af45424f4a09b42db02d1561fca94413762",
+              "size": 1024,
+              "codec": "uastc"
             }
           }
         }
@@ -3599,8 +3646,8 @@
         },
         {
           "file": "rock/coast-rocks-05/textures/coast-rocks-05_normal_2k.ktx2",
-          "bytes": 333572,
-          "sha256": "c9c39d1f831bd16f421f1bd25364cc5df11ca035084c5afc6a4a739ada08d409"
+          "bytes": 1363768,
+          "sha256": "d5b10ccb533d771a3b3529a48f470af45424f4a09b42db02d1561fca94413762"
         }
       ]
     },
@@ -3660,40 +3707,42 @@
         {
           "name": "reef-arch_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "rock/reef-arch/textures/reef-arch_basecolor_1k.ktx2",
               "bytes": 186318,
               "sha256": "7b6d2f8fde718362de2bbc36931eb929c503e55fa52688e01ac7f5867d5659ce",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "rock/reef-arch/textures/reef-arch_basecolor_2k.ktx2",
               "bytes": 668411,
               "sha256": "c370954d2409f08e392966a3c3a6283281bef6a5335479d19ccf7fc5d7832680",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         },
         {
           "name": "reef-arch_normal",
           "role": "normal",
-          "codec": "etc1s",
           "colorSpace": "linear",
           "variants": {
             "1k": {
               "file": "rock/reef-arch/textures/reef-arch_normal_1k.ktx2",
               "bytes": 97754,
               "sha256": "635a19836bd75731259596469a34c328df35ec3511a0114613c71c17fae00f14",
-              "size": 512
+              "size": 512,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "rock/reef-arch/textures/reef-arch_normal_2k.ktx2",
-              "bytes": 267811,
-              "sha256": "2c9acda8aff17c4b61fbee9d26a2f159932358f1429cf296e2fcaebc2542c0b1",
-              "size": 1024
+              "bytes": 1327029,
+              "sha256": "c20713a76ab451c459e77136a7d9c0d56f43dde2eb2abf639e8587b06c71c77a",
+              "size": 1024,
+              "codec": "uastc"
             }
           }
         }
@@ -3731,8 +3780,8 @@
         },
         {
           "file": "rock/reef-arch/textures/reef-arch_normal_2k.ktx2",
-          "bytes": 267811,
-          "sha256": "2c9acda8aff17c4b61fbee9d26a2f159932358f1429cf296e2fcaebc2542c0b1"
+          "bytes": 1327029,
+          "sha256": "c20713a76ab451c459e77136a7d9c0d56f43dde2eb2abf639e8587b06c71c77a"
         }
       ]
     },
@@ -3789,40 +3838,42 @@
         {
           "name": "lambis-shell_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "decor/lambis-shell/textures/lambis-shell_basecolor_1k.ktx2",
               "bytes": 204041,
               "sha256": "6c5b1720ae7485e6959ac031e4d605d155242b2f98644105063566625a23d8c0",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "decor/lambis-shell/textures/lambis-shell_basecolor_2k.ktx2",
               "bytes": 737405,
               "sha256": "41288fbc9c9016ffc193aace24bc69a6e09b4912fb32a6a7adacd339ebd7a25d",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         },
         {
           "name": "lambis-shell_normal",
           "role": "normal",
-          "codec": "etc1s",
           "colorSpace": "linear",
           "variants": {
             "1k": {
               "file": "decor/lambis-shell/textures/lambis-shell_normal_1k.ktx2",
               "bytes": 88801,
               "sha256": "207c3ad3dd5551122ddb40e24561fc4c513d2f0e9d9a9258a9dd1a9d9a51f61c",
-              "size": 512
+              "size": 512,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "decor/lambis-shell/textures/lambis-shell_normal_2k.ktx2",
-              "bytes": 235384,
-              "sha256": "87ff47dc555d2cdbc863c1aec10546ae6e0b2f054527ffd95f13696a6632ddec",
-              "size": 1024
+              "bytes": 1260469,
+              "sha256": "a9a6add897087af5f1f8faee401f836d7d3618308501fd449766f29d8e3d4efa",
+              "size": 1024,
+              "codec": "uastc"
             }
           }
         }
@@ -3860,8 +3911,8 @@
         },
         {
           "file": "decor/lambis-shell/textures/lambis-shell_normal_2k.ktx2",
-          "bytes": 235384,
-          "sha256": "87ff47dc555d2cdbc863c1aec10546ae6e0b2f054527ffd95f13696a6632ddec"
+          "bytes": 1260469,
+          "sha256": "a9a6add897087af5f1f8faee401f836d7d3618308501fd449766f29d8e3d4efa"
         }
       ]
     },
@@ -3882,60 +3933,63 @@
         {
           "name": "clean-pebbles_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "substrate/clean-pebbles/textures/clean-pebbles_basecolor_1k.ktx2",
               "bytes": 174526,
               "sha256": "c5cb97d4ffad57c2f8f8c6d021b849342262f66c0ddb4df4ee6bc2d7cd8e2d84",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "substrate/clean-pebbles/textures/clean-pebbles_basecolor_2k.ktx2",
               "bytes": 666559,
               "sha256": "a4ae54c92aaa4cdcfe4c5a028bdb2cbf2fbf1369b6396c7ce8c23e09fa66eda5",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         },
         {
           "name": "clean-pebbles_normal",
           "role": "normal",
-          "codec": "etc1s",
           "colorSpace": "linear",
           "variants": {
             "1k": {
               "file": "substrate/clean-pebbles/textures/clean-pebbles_normal_1k.ktx2",
               "bytes": 116948,
               "sha256": "94b16b42ae8672511cb7c6bda4c60a778d8853f7f45c32e26a7f731314ca8dbc",
-              "size": 512
+              "size": 512,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "substrate/clean-pebbles/textures/clean-pebbles_normal_2k.ktx2",
-              "bytes": 337127,
-              "sha256": "b202e51d2c384af4c822223b4d0e8e66c3b009ab6e0b9a6710390675265298f5",
-              "size": 1024
+              "bytes": 1364777,
+              "sha256": "bb25a4a4118d9456ca0f0f431f1efa8c4936702224726f9eead1e671f0b8c6ee",
+              "size": 1024,
+              "codec": "uastc"
             }
           }
         },
         {
           "name": "clean-pebbles_arm",
           "role": "occlusionRoughnessMetal",
-          "codec": "etc1s",
           "colorSpace": "linear",
           "variants": {
             "1k": {
               "file": "substrate/clean-pebbles/textures/clean-pebbles_arm_1k.ktx2",
               "bytes": 138498,
               "sha256": "eec80a464a9f5df9150a190f83cd0e8610830f0576839fe7870eef5872f9aaa5",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "substrate/clean-pebbles/textures/clean-pebbles_arm_2k.ktx2",
               "bytes": 576335,
               "sha256": "ac1b0ef7b711dd56e92e4d815e6570c7b6335617e78fd9c44de94b61ecb75ad7",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         }
@@ -3968,8 +4022,8 @@
         },
         {
           "file": "substrate/clean-pebbles/textures/clean-pebbles_normal_2k.ktx2",
-          "bytes": 337127,
-          "sha256": "b202e51d2c384af4c822223b4d0e8e66c3b009ab6e0b9a6710390675265298f5"
+          "bytes": 1364777,
+          "sha256": "bb25a4a4118d9456ca0f0f431f1efa8c4936702224726f9eead1e671f0b8c6ee"
         }
       ]
     },
@@ -3990,60 +4044,63 @@
         {
           "name": "coast-sand-01_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "substrate/coast-sand-01/textures/coast-sand-01_basecolor_1k.ktx2",
               "bytes": 173087,
               "sha256": "3d40472a6f5026fb5b9e5609e2223ef83054c5ae9a322f145dc2098e7bdf0ba9",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "substrate/coast-sand-01/textures/coast-sand-01_basecolor_2k.ktx2",
               "bytes": 698213,
               "sha256": "bdf679fc9807058c760866596de7b3f4dba1456215e7f2ee5afa3c970777b149",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         },
         {
           "name": "coast-sand-01_normal",
           "role": "normal",
-          "codec": "etc1s",
           "colorSpace": "linear",
           "variants": {
             "1k": {
               "file": "substrate/coast-sand-01/textures/coast-sand-01_normal_1k.ktx2",
               "bytes": 99025,
               "sha256": "84a497d5f8e4aa90d0f38cc4354a8056c79fe4bd1e6c0b5f2b4e254ce1f44925",
-              "size": 512
+              "size": 512,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "substrate/coast-sand-01/textures/coast-sand-01_normal_2k.ktx2",
-              "bytes": 281693,
-              "sha256": "4730ae75a4dc07da7d1f013d5e60368bdee4bcc25424e40823c2984d2666d5c9",
-              "size": 1024
+              "bytes": 1344626,
+              "sha256": "a4338f58629adf120c6e6d2d8d6584b2b5aae3e2992954f4dac4557bb0ae3ff4",
+              "size": 1024,
+              "codec": "uastc"
             }
           }
         },
         {
           "name": "coast-sand-01_arm",
           "role": "occlusionRoughnessMetal",
-          "codec": "etc1s",
           "colorSpace": "linear",
           "variants": {
             "1k": {
               "file": "substrate/coast-sand-01/textures/coast-sand-01_arm_1k.ktx2",
               "bytes": 116398,
               "sha256": "1f38f9d73352e3c6aa05829377d7b8faa5e492f7e312932dc1c1a317125ee27a",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "substrate/coast-sand-01/textures/coast-sand-01_arm_2k.ktx2",
               "bytes": 480931,
               "sha256": "d771802ca6fb324a499ee4eedd33a085dfbc76d5258ad50b9cc2930c9fae7bc9",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         }
@@ -4076,8 +4133,8 @@
         },
         {
           "file": "substrate/coast-sand-01/textures/coast-sand-01_normal_2k.ktx2",
-          "bytes": 281693,
-          "sha256": "4730ae75a4dc07da7d1f013d5e60368bdee4bcc25424e40823c2984d2666d5c9"
+          "bytes": 1344626,
+          "sha256": "a4338f58629adf120c6e6d2d8d6584b2b5aae3e2992954f4dac4557bb0ae3ff4"
         }
       ]
     },
@@ -4098,60 +4155,63 @@
         {
           "name": "coast-sand-04_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "substrate/coast-sand-04/textures/coast-sand-04_basecolor_1k.ktx2",
               "bytes": 173363,
               "sha256": "e09a37f041093b16c4807c155485b401a3c05393e83ff86360e4210c418379ce",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "substrate/coast-sand-04/textures/coast-sand-04_basecolor_2k.ktx2",
               "bytes": 687866,
               "sha256": "3cf9c80280e2c3f002f75a09ad0d1900e3767cc2798f187b24c2c7712d249c55",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         },
         {
           "name": "coast-sand-04_normal",
           "role": "normal",
-          "codec": "etc1s",
           "colorSpace": "linear",
           "variants": {
             "1k": {
               "file": "substrate/coast-sand-04/textures/coast-sand-04_normal_1k.ktx2",
               "bytes": 100414,
               "sha256": "e7888dab71aa1c233511f7d364f5c26b204d6abe4fa5a105622c5e8dfb6e93ea",
-              "size": 512
+              "size": 512,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "substrate/coast-sand-04/textures/coast-sand-04_normal_2k.ktx2",
-              "bytes": 293314,
-              "sha256": "72f5d713bb990b403d9bb6c46ff3c695ab907e548d159675482be6ce01755162",
-              "size": 1024
+              "bytes": 1356319,
+              "sha256": "00fbae6d20c23b0dd118e0dfeebe4a41fab3a511ebd9a2ba8caf96de95c3e544",
+              "size": 1024,
+              "codec": "uastc"
             }
           }
         },
         {
           "name": "coast-sand-04_arm",
           "role": "occlusionRoughnessMetal",
-          "codec": "etc1s",
           "colorSpace": "linear",
           "variants": {
             "1k": {
               "file": "substrate/coast-sand-04/textures/coast-sand-04_arm_1k.ktx2",
               "bytes": 120986,
               "sha256": "652af07325ec12b783e619dfe4cc01c3f6886755e214c8ef4196461c2190eac5",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "substrate/coast-sand-04/textures/coast-sand-04_arm_2k.ktx2",
               "bytes": 517546,
               "sha256": "897f9631528ec217cfd0b7f728adc3a62be46c7e207d2a53d98a8384b52e0c37",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         }
@@ -4184,8 +4244,8 @@
         },
         {
           "file": "substrate/coast-sand-04/textures/coast-sand-04_normal_2k.ktx2",
-          "bytes": 293314,
-          "sha256": "72f5d713bb990b403d9bb6c46ff3c695ab907e548d159675482be6ce01755162"
+          "bytes": 1356319,
+          "sha256": "00fbae6d20c23b0dd118e0dfeebe4a41fab3a511ebd9a2ba8caf96de95c3e544"
         }
       ]
     },
@@ -4206,60 +4266,63 @@
         {
           "name": "reef-sand_basecolor",
           "role": "baseColor",
-          "codec": "etc1s",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
               "file": "substrate/reef-sand/textures/reef-sand_basecolor_1k.ktx2",
               "bytes": 119240,
               "sha256": "4364299127afc652f105006b7e48032dbb7e1542f360b883a1ab248f657295ce",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "substrate/reef-sand/textures/reef-sand_basecolor_2k.ktx2",
               "bytes": 476920,
               "sha256": "0b5e9bab90581ba87e489a32c531afa49ac8cb5a8eb014a8236d406896fe9010",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         },
         {
           "name": "reef-sand_normal",
           "role": "normal",
-          "codec": "etc1s",
           "colorSpace": "linear",
           "variants": {
             "1k": {
               "file": "substrate/reef-sand/textures/reef-sand_normal_1k.ktx2",
               "bytes": 40100,
               "sha256": "764c8a7ca962fff634f53478f7fb5e588a20bc5ee42046199a1a608cd060b9ef",
-              "size": 512
+              "size": 512,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "substrate/reef-sand/textures/reef-sand_normal_2k.ktx2",
-              "bytes": 173965,
-              "sha256": "420ea03f42d09986159dc0fdb944c08da6bf55818ceacec92bd0a36545f3e50f",
-              "size": 1024
+              "bytes": 1219038,
+              "sha256": "0bef8fce2e18059e6187511dc607b8290e3ace0797c1b8dfa519ee29e3c1363a",
+              "size": 1024,
+              "codec": "uastc"
             }
           }
         },
         {
           "name": "reef-sand_arm",
           "role": "occlusionRoughnessMetal",
-          "codec": "etc1s",
           "colorSpace": "linear",
           "variants": {
             "1k": {
               "file": "substrate/reef-sand/textures/reef-sand_arm_1k.ktx2",
               "bytes": 111046,
               "sha256": "5eaf523df577c0382d3c86a3bddaf2c15e9631045595ef7fb06f38df8ad07a1c",
-              "size": 1024
+              "size": 1024,
+              "codec": "etc1s"
             },
             "2k": {
               "file": "substrate/reef-sand/textures/reef-sand_arm_2k.ktx2",
               "bytes": 429890,
               "sha256": "0c24f779878e9bd4826100d2785d6cf0448146ebb36dd4c8484f9939c1d43c6f",
-              "size": 2048
+              "size": 2048,
+              "codec": "etc1s"
             }
           }
         }
@@ -4292,8 +4355,8 @@
         },
         {
           "file": "substrate/reef-sand/textures/reef-sand_normal_2k.ktx2",
-          "bytes": 173965,
-          "sha256": "420ea03f42d09986159dc0fdb944c08da6bf55818ceacec92bd0a36545f3e50f"
+          "bytes": 1219038,
+          "sha256": "0bef8fce2e18059e6187511dc607b8290e3ace0797c1b8dfa519ee29e3c1363a"
         }
       ]
     },

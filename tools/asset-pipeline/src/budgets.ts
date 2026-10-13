@@ -14,8 +14,16 @@ export type BudgetGroup = keyof typeof TIER_BUDGETS;
 /** Brotli JS plus the Basis transcoder, which the asset files do not include. */
 export const CODE_RESERVE_BYTES = 1.5 * 1000 * 1000;
 
-/** The environment map `Engine` fetches on every tier. */
-export const DEFAULT_HDRI_ID = 'studio-small-09';
+/** Same shape as `ID_PATTERN` in apps/web/src/scene/euphyllia.ts: generated at runtime, no files. */
+export const PROCEDURAL_ASSET_ID = /^euphyllia-(hammer|torch)-(0|[1-9]\d{0,8})$/;
+
+/** The environment map `Engine` fetches on every tier, as `hdri/<id>/<file>` under the asset base. */
+export interface HdriRef {
+  id: string;
+  file: string;
+}
+
+const HDRI_URL_SOURCE = ['apps', 'web', 'src', 'engine', 'environment.ts'];
 
 export interface PresetRef {
   id: string;
@@ -26,6 +34,7 @@ export interface PresetRef {
 export interface BudgetInput {
   index: AssetIndex;
   presets: PresetRef[];
+  hdri: HdriRef;
   speciesBiome: ReadonlyMap<string, string>;
 }
 
@@ -46,7 +55,19 @@ function readJsonDir<T>(dir: string, schema: z.ZodType<T>): T[] {
     .map((name) => schema.parse(JSON.parse(readFileSync(join(dir, name), 'utf8'))));
 }
 
-export function loadBudgetContent(repoRoot: string): Pick<BudgetInput, 'presets' | 'speciesBiome'> {
+export function parseHdriUrl(source: string): HdriRef {
+  const match = /export const DEFAULT_HDRI_URL = `[^`]*?hdri\/([^/`]+)\/([^/`]+)`/.exec(source);
+  if (!match)
+    throw new Error(
+      `${HDRI_URL_SOURCE.join('/')}: DEFAULT_HDRI_URL no longer has the form \`\${ASSET_BASE}hdri/<id>/<file>\`; update parseHdriUrl in tools/asset-pipeline/src/budgets.ts`,
+    );
+  const [, id = '', name = ''] = match;
+  return { id, file: `hdri/${id}/${name}` };
+}
+
+export function loadBudgetContent(
+  repoRoot: string,
+): Pick<BudgetInput, 'presets' | 'speciesBiome' | 'hdri'> {
   const presets = readJsonDir(join(repoRoot, 'content', 'presets'), presetSchema).map((p) => ({
     id: p.id,
     biome: p.biome,
@@ -61,10 +82,15 @@ export function loadBudgetContent(repoRoot: string): Pick<BudgetInput, 'presets'
   const speciesBiome = new Map(
     readJsonDir(join(repoRoot, 'content', 'species'), speciesSchema).map((s) => [s.id, s.biome]),
   );
-  return { presets, speciesBiome };
+  const hdri = parseHdriUrl(readFileSync(join(repoRoot, ...HDRI_URL_SOURCE), 'utf8'));
+  return { presets, speciesBiome, hdri };
 }
 
-function filesToFetch(asset: OutputAsset, slots: readonly ('1k' | '2k')[]): Map<string, number> {
+function filesToFetch(
+  asset: OutputAsset,
+  slots: readonly ('1k' | '2k')[],
+  only?: string,
+): Map<string, number> {
   const sizeOf = new Map(asset.files.map((f) => [f.file, f.bytes]));
   const wanted = new Map<string, number>();
   const add = (file: string): void => {
@@ -73,10 +99,15 @@ function filesToFetch(asset: OutputAsset, slots: readonly ('1k' | '2k')[]): Map<
       throw new Error(`${asset.kind}/${asset.id}: ${file} is not in files[]`);
     wanted.set(file, bytes);
   };
-  // Fish swap LOD with distance, so all of them can be fetched; everything else loads one.
-  for (const lod of asset.kind === 'fish' ? asset.lods : asset.lods.slice(0, 1)) add(lod.file);
+  // Fish swap LOD with distance, so all of them can be fetched; everything else loads LOD0 for
+  // rendering and the last LOD for collision geometry.
+  const first = asset.lods[0];
+  const last = asset.lods.at(-1);
+  const lods = asset.kind === 'fish' ? asset.lods : first && last ? [first, last] : [];
+  for (const lod of lods) add(lod.file);
+  if (only !== undefined) add(only);
   for (const texture of asset.textures) for (const slot of slots) add(texture.variants[slot].file);
-  if (asset.kind === 'hdri') for (const f of asset.files) add(f.file);
+
   return wanted;
 }
 
@@ -92,12 +123,20 @@ export function presetDownloadBytes(
   const slots = group === 'desktop' ? (['1k', '2k'] as const) : (['1k'] as const);
   const byKey = new Map(input.index.assets.map((a) => [a.id, a]));
   const assets: OutputAsset[] = [];
-  const hdri = byKey.get(DEFAULT_HDRI_ID);
-  if (hdri) assets.push(hdri);
+  const hdri = byKey.get(input.hdri.id);
+  if (!hdri || hdri.kind !== 'hdri')
+    throw new Error(
+      `HDRI "${input.hdri.id}" loaded by apps/web is not an hdri asset in index.json; rebuild the assets or fix DEFAULT_HDRI_URL`,
+    );
+  if (!hdri.files.some((f) => f.file === input.hdri.file))
+    throw new Error(`HDRI file ${input.hdri.file} is not in index.json ${hdri.id}.files`);
+  const fetched = new Map<string, number>(filesToFetch(hdri, slots, input.hdri.file));
   for (const id of preset.assetIds) {
     const asset = byKey.get(id);
-    // Procedural decor (e.g. Euphyllia) has no files to download.
-    if (!asset) continue;
+    if (!asset) {
+      if (PROCEDURAL_ASSET_ID.test(id)) continue;
+      throw new Error(`preset ${preset.id} uses unknown asset "${id}" that is not in index.json`);
+    }
     assets.push(asset);
   }
   for (const asset of input.index.assets) {
@@ -108,7 +147,6 @@ export function presetDownloadBytes(
     )
       assets.push(asset);
   }
-  const fetched = new Map<string, number>();
   for (const asset of assets)
     for (const [file, bytes] of filesToFetch(asset, slots)) fetched.set(file, bytes);
   return [...fetched.values()].reduce((sum, bytes) => sum + bytes, 0);

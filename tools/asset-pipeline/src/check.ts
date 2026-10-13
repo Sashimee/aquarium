@@ -29,7 +29,7 @@ export interface CheckInput {
   index: AssetIndex;
   assetsDir: string;
   repoRoot: string;
-  content?: Pick<BudgetInput, 'presets' | 'speciesBiome'>;
+  content?: Pick<BudgetInput, 'presets' | 'speciesBiome' | 'hdri'>;
 }
 
 export function readGlbJson(buffer: Uint8Array): {

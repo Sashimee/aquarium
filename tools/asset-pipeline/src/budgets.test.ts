@@ -2,7 +2,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   CODE_RESERVE_BYTES,
-  DEFAULT_HDRI_ID,
+  parseHdriUrl,
   TIER_BUDGETS,
   budgetProblems,
   loadBudgetContent,
@@ -11,18 +11,20 @@ import {
 } from './budgets.ts';
 import type { AssetIndex, OutputAsset } from './index-schema.ts';
 
+const HDRI = { id: 'studio-small-09', file: 'hdri/studio-small-09/env.hdr' };
 const DIGEST = 'b'.repeat(64);
 
 function entry(file: string, bytes: number) {
   return { file, bytes, sha256: DIGEST };
 }
 
-function variant(file: string, bytes: number) {
-  return { ...entry(file, bytes), size: 1024 };
+function variant(file: string, bytes: number, codec: 'etc1s' | 'uastc') {
+  return { ...entry(file, bytes), size: 1024, codec };
 }
 
 function textured(id: string, kind: OutputAsset['kind'], low: number, high: number): OutputAsset {
   const lod = { ...entry(`${kind}/${id}/lod0.glb`, 1000), triangles: 10, vertices: 10 };
+  const lod2 = { ...entry(`${kind}/${id}/lod2.glb`, 200), triangles: 2, vertices: 2 };
   const lod1 = { ...entry(`${kind}/${id}/lod1.glb`, 500), triangles: 5, vertices: 5 };
   const lowFile = `${kind}/${id}/textures/${id}_normal_1k.ktx2`;
   const highFile = `${kind}/${id}/textures/${id}_normal_2k.ktx2`;
@@ -33,26 +35,25 @@ function textured(id: string, kind: OutputAsset['kind'], low: number, high: numb
     sources: [],
     licence: 'CC0-1.0',
     modifications: [],
-    lods: [lod, lod1],
+    lods: [lod, lod1, lod2],
     textures: [
       {
         name: `${id}_normal`,
         role: 'normal',
-        codec: 'etc1s',
         colorSpace: 'linear',
-        variants: { '1k': variant(lowFile, low), '2k': variant(highFile, high) },
+        variants: { '1k': variant(lowFile, low, 'etc1s'), '2k': variant(highFile, high, 'uastc') },
       },
     ],
-    files: [lod, lod1, entry(lowFile, low), entry(highFile, high)].map(
+    files: [lod, lod1, lod2, entry(lowFile, low), entry(highFile, high)].map(
       ({ file, bytes, sha256 }) => ({ file, bytes, sha256 }),
     ),
   };
 }
 
 function hdri(bytes: number): OutputAsset {
-  const file = entry(`hdri/${DEFAULT_HDRI_ID}/env.hdr`, bytes);
+  const file = entry(HDRI.file, bytes);
   return {
-    id: DEFAULT_HDRI_ID,
+    id: HDRI.id,
     kind: 'hdri',
     origin: 'passthrough',
     sources: [],
@@ -74,6 +75,7 @@ function inputOf(assets: OutputAsset[]): BudgetInput {
   };
   return {
     index,
+    hdri: HDRI,
     presets: [{ id: 'tank', biome: 'freshwater', assetIds: ['rock'] }],
     speciesBiome: new Map([
       ['tetra', 'freshwater'],
@@ -85,24 +87,49 @@ function inputOf(assets: OutputAsset[]): BudgetInput {
 describe('presetDownloadBytes', () => {
   it('counts the HDRI, one LOD and the slot textures of mobile', () => {
     const input = inputOf([hdri(2000), textured('rock', 'rock', 300, 9000)]);
-    expect(presetDownloadBytes(input, input.presets[0]!, 'mobile')).toBe(2000 + 1000 + 300);
+    expect(presetDownloadBytes(input, input.presets[0]!, 'mobile')).toBe(2000 + 1000 + 200 + 300);
   });
 
   it('counts both texture slots on desktop while collision still loads the low set', () => {
     const input = inputOf([hdri(2000), textured('rock', 'rock', 300, 9000)]);
-    expect(presetDownloadBytes(input, input.presets[0]!, 'desktop')).toBe(2000 + 1000 + 300 + 9000);
+    expect(presetDownloadBytes(input, input.presets[0]!, 'desktop')).toBe(
+      2000 + 1000 + 200 + 300 + 9000,
+    );
   });
 
   it('adds every LOD of the fish whose species lives in the preset biome only', () => {
     const tetra = { ...textured('tetra', 'fish', 100, 400), species: 'tetra' };
     const tang = { ...textured('tang', 'fish', 100, 400), species: 'tang' };
     const input = inputOf([hdri(0), textured('rock', 'rock', 0, 0), tetra, tang]);
-    expect(presetDownloadBytes(input, input.presets[0]!, 'mobile')).toBe(1000 + 1500 + 100);
+    expect(presetDownloadBytes(input, input.presets[0]!, 'mobile')).toBe(1000 + 200 + 1700 + 100);
   });
 
-  it('skips ids without files because they are procedural', () => {
+  it('skips procedural Euphyllia ids', () => {
     const input = inputOf([hdri(2000)]);
+    input.presets[0]!.assetIds = ['euphyllia-hammer-3', 'euphyllia-torch-8'];
     expect(presetDownloadBytes(input, input.presets[0]!, 'mobile')).toBe(2000);
+  });
+
+  it('throws on an asset id that is neither in the index nor procedural', () => {
+    const input = inputOf([hdri(2000)]);
+    expect(() => presetDownloadBytes(input, input.presets[0]!, 'mobile')).toThrow(
+      /unknown asset "rock"/,
+    );
+  });
+
+  it('throws when the HDRI the web app loads is not in the index', () => {
+    const input = inputOf([textured('rock', 'rock', 1, 1)]);
+    expect(() => presetDownloadBytes(input, input.presets[0]!, 'mobile')).toThrow(
+      /HDRI "studio-small-09"/,
+    );
+  });
+
+  it('throws when the HDRI file is not one of the indexed files', () => {
+    const input = {
+      ...inputOf([hdri(5), textured('rock', 'rock', 1, 1)]),
+      hdri: { ...HDRI, file: 'hdri/studio-small-09/other.hdr' },
+    };
+    expect(() => presetDownloadBytes(input, input.presets[0]!, 'mobile')).toThrow(/other\.hdr/);
   });
 });
 
@@ -127,9 +154,26 @@ describe('budgetProblems', () => {
   });
 });
 
+describe('parseHdriUrl', () => {
+  it('reads the id and file from the web constant', () => {
+    expect(
+      parseHdriUrl('export const DEFAULT_HDRI_URL = `${ASSET_BASE}hdri/kloof/kloof_1k.hdr`;'),
+    ).toEqual({ id: 'kloof', file: 'hdri/kloof/kloof_1k.hdr' });
+  });
+
+  it('fails loudly when the constant changes shape', () => {
+    expect(() => parseHdriUrl('export const DEFAULT_HDRI_URL = somethingElse;')).toThrow(
+      /DEFAULT_HDRI_URL/,
+    );
+  });
+});
+
 describe('the committed presets', () => {
   it('load with their biome and asset ids', () => {
-    const { presets, speciesBiome } = loadBudgetContent(resolve(import.meta.dirname, '../../..'));
+    const { presets, speciesBiome, hdri } = loadBudgetContent(
+      resolve(import.meta.dirname, '../../..'),
+    );
+    expect(hdri.id).toBe('studio-small-09');
     expect(presets.map((p) => p.biome).sort()).toEqual(['freshwater', 'reef']);
     expect(presets.every((p) => p.assetIds.length > 1)).toBe(true);
     expect(speciesBiome.get('neon-tetra')).toBe('freshwater');

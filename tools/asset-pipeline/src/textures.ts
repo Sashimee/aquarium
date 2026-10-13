@@ -26,6 +26,7 @@ export interface TextureSpec {
 
 export interface EncodedVariant {
   size: number;
+  codec: TextureCodec;
   bytes: Uint8Array;
 }
 
@@ -36,6 +37,10 @@ export type Tier = keyof typeof TIER_SIZES;
  * The '1k' slot is what low/medium tiers fetch and the '2k' slot what high/ultra fetch. Normal maps
  * are capped lower than colour because their payload is the bulk of the download budget
  * (PLAN section 2.7); the real edge length is recorded per variant in index.json.
+ *
+ * Codec split for normals: ETC1S cannot hold a normal's chroma across 4x4 block edges (1.9 to 3.6
+ * times the in-block angular error), so the desktop slot is UASTC and only the small mobile slot
+ * stays ETC1S.
  */
 export const NORMAL_TIER_SIZES = { '1k': 512, '2k': 1024 } as const;
 
@@ -43,8 +48,12 @@ export function tierMaxDim(tier: Tier, role: TextureRole): number {
   return role === 'normal' ? NORMAL_TIER_SIZES[tier] : TIER_SIZES[tier];
 }
 
+export function tierCodec(codec: TextureCodec, role: TextureRole, tier: Tier): TextureCodec {
+  return role === 'normal' && tier === '2k' ? 'uastc' : codec;
+}
+
 const ENCODER_VERSION = 'ktx2-encoder@0.6.0:etc1s-q128-c2:uastc-l1-zstd:v1';
-const NORMAL_ENCODER_VERSION = 'normal:etc1s-q255-c2-normalmap:v2';
+const NORMAL_ENCODER_VERSION = 'normal:etc1s-q255-c2-normalmap:uastc-l1-normalmap:v3';
 
 export function cacheDir(): string {
   const dir = join(homeDir(), '.cache', 'aquarium-assets', 'pipeline-cache');
@@ -175,7 +184,12 @@ export async function encodeTiers(spec: TextureSpec): Promise<Record<Tier, Encod
   const out = {} as Record<Tier, EncodedVariant>;
   for (const tier of Object.keys(TIER_SIZES) as Tier[]) {
     const image = await resizeImage(spec.image, tierMaxDim(tier, spec.role));
-    out[tier] = { size: Math.max(image.width, image.height), bytes: await encodeKtx2(image, spec) };
+    const codec = tierCodec(spec.codec, spec.role, tier);
+    out[tier] = {
+      size: Math.max(image.width, image.height),
+      codec,
+      bytes: await encodeKtx2(image, { ...spec, codec }),
+    };
   }
   return out;
 }
