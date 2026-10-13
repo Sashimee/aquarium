@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { brotliCompressSync, constants, gzipSync } from 'node:zlib';
 
 const COMPRESSIBLE = new Set([
@@ -26,7 +27,7 @@ function* walk(dir) {
   }
 }
 
-const root = resolve(process.argv[2] ?? new URL('../web/dist', import.meta.url).pathname);
+const root = resolve(process.argv[2] ?? fileURLToPath(new URL('../web/dist', import.meta.url)));
 if (!statSync(root, { throwIfNoEntry: false })?.isDirectory()) {
   throw new Error(`${root} does not exist. Build the web app first, or pass the dist directory.`);
 }

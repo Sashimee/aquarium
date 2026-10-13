@@ -1,9 +1,11 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { brotliCompressSync, brotliDecompressSync, gunzipSync, gzipSync } from 'node:zlib';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
+import { staticCacheControl } from './app.ts';
 import { createHarness, type Harness } from './test-harness.ts';
 
 const NOINDEX = 'noindex, nofollow';
@@ -93,6 +95,35 @@ describe('with a web build', () => {
     const identity = await app.inject({ url });
     expect(identity.headers['content-encoding']).toBeUndefined();
     expect(identity.body).toBe(BUNDLE);
+  });
+
+  it('honours q-values and q=0 refusals', async () => {
+    const res = await withDist().inject({
+      url: '/assets/index-C7vUOBtl.js',
+      headers: { 'accept-encoding': 'br;q=0, gzip' },
+    });
+    expect(res.headers['content-encoding']).toBe('gzip');
+  });
+
+  it('answers Range requests on uncompressed files with 206', async () => {
+    const res = await withDist().inject({
+      url: '/assets/fish/tetra.glb',
+      headers: { range: 'bytes=0-1' },
+    });
+    expect(res.statusCode).toBe(206);
+    expect(res.body).toBe('gl');
+  });
+
+  it('never marks a file from apps/web/public immutable, in place or flattened into assets/', () => {
+    const publicDir = fileURLToPath(new URL('../../web/public', import.meta.url));
+    const files = readdirSync(publicDir, { recursive: true, withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => relative(publicDir, join(entry.parentPath, entry.name)));
+    expect(files.length).toBeGreaterThan(0);
+    for (const file of files) {
+      expect(staticCacheControl(file), file).not.toContain('immutable');
+      expect(staticCacheControl(join('assets', basename(file))), file).not.toContain('immutable');
+    }
   });
 
   it('caches by how stable the file name is', async () => {

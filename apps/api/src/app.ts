@@ -378,9 +378,9 @@ export function buildApp(opts: AppOptions): FastifyInstance {
 
 // Vite emits content-hashed bundles flat in assets/; models and textures copied from public/ live in
 // subdirectories under stable names, so they must stay revalidatable.
-const HASHED_ASSET = /^assets\/[^/]+-[A-Za-z0-9_-]{8,}\.[a-z0-9]+$/;
+const HASHED_ASSET = /^assets\/[^/]+-[A-Za-z0-9_]{8}\.[a-z0-9]+$/;
 
-function staticCacheControl(relPath: string): string {
+export function staticCacheControl(relPath: string): string {
   const file = relPath
     .split(sep)
     .join('/')
