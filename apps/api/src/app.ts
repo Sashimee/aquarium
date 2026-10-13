@@ -27,7 +27,7 @@ import { apiError } from './errors.ts';
 import { loadCredits } from './credits.ts';
 import { DEFAULT_LEGAL_LIMITS, registerLegalRoutes, type LegalLimits } from './legal.ts';
 import type { IpAdmission, Mailer } from './mail.ts';
-import { RateLimiter } from './rate-limit.ts';
+import { memoryHitStore, RateLimiter, type Limit, type ResettableHitStore } from './rate-limit.ts';
 import type { SpeciesCatalog } from './species.ts';
 import { DEFAULT_CARE_LIMITS, registerTankRoutes, type CareLimits } from './tanks.ts';
 
@@ -39,6 +39,7 @@ export interface AppOptions {
   database: Database;
   auth: Auth;
   mailer: Mailer;
+  signInThrottle?: { store: ResettableHitStore; limit: Limit };
   species: SpeciesCatalog;
   clock?: Clock;
   careLimits?: CareLimits;
@@ -115,6 +116,8 @@ function parseJson(raw: string | undefined): unknown {
     throw new ZodError([{ code: 'custom', path: [], message: 'Body must be valid JSON.' }]);
   }
 }
+
+export const DEFAULT_SIGN_IN_THROTTLE: Limit = { max: 10, windowMs: 15 * 60_000 };
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const BLOCKED_AUTH_PATHS = new Set([
@@ -212,6 +215,10 @@ function isStaticAsset(pathname: string): boolean {
 export function buildApp(opts: AppOptions): FastifyInstance {
   const { indexable, webRoot, appOrigin, database, auth, mailer, logger = true } = opts;
   const clock = opts.clock ?? createClock();
+  const signInThrottle = opts.signInThrottle ?? {
+    store: memoryHitStore(),
+    limit: DEFAULT_SIGN_IN_THROTTLE,
+  };
   const app = Fastify({
     trustProxy: opts.trustedProxies,
     rewriteUrl: (req) => (req.url ?? '/').replace(/^\/{2,}/, '/'),
@@ -343,6 +350,17 @@ export function buildApp(opts: AppOptions): FastifyInstance {
           if (admission.wait > 0) return tooMany(reply, admission.wait);
         }
 
+        // A slot is taken before the password is checked, so concurrent guesses cannot all slip
+        // under the cap; a sign-in that gets past the password check gives the slots back. The key
+        // is the email as typed, never the account, so the 429 is the same for unknown addresses.
+        let failureKey: string | undefined;
+        if (req.method === 'POST' && pathname === `${AUTH_BASE_PATH}/sign-in/email`) {
+          const { email } = signInBodySchema.parse(parseJson(raw));
+          failureKey = `signin-fail:${email.trim().toLowerCase()}`;
+          const wait = await signInThrottle.store.consume(failureKey, signInThrottle.limit);
+          if (wait > 0) return tooMany(reply, wait);
+        }
+
         const headers = new Headers();
         for (const [name, value] of Object.entries(req.headers)) {
           if (value === undefined || name === 'x-forwarded-for' || name === 'content-length')
@@ -358,6 +376,10 @@ export function buildApp(opts: AppOptions): FastifyInstance {
           ...(req.method === 'POST' && raw !== undefined ? { body: raw } : {}),
         });
         const res = await mailer.runAdmitted(admission, () => auth.handler(request));
+        // 403 is "email not verified", which Better Auth only raises after the password matched.
+        if (failureKey && (res.status === 200 || res.status === 403)) {
+          await signInThrottle.store.reset(failureKey);
+        }
 
         reply.code(res.status);
         res.headers.forEach((value, name) => {

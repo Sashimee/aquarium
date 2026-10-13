@@ -2,11 +2,12 @@ import { randomBytes } from 'node:crypto';
 import nodemailer from 'nodemailer';
 import pg from 'pg';
 import type { FastifyInstance } from 'fastify';
-import { buildApp } from './app.ts';
+import { buildApp, DEFAULT_SIGN_IN_THROTTLE } from './app.ts';
+import type { Limit } from './rate-limit.ts';
 import { createAuth, type Auth, DEFAULT_AUTH_RATE_LIMITS, type AuthRateLimits } from './auth.ts';
 import { connect, runMigrations, type Database } from './db/index.ts';
 import { createClock, type Clock } from './clock.ts';
-import { createMailer, DEFAULT_MAIL_LIMITS, type MailLimits } from './mail.ts';
+import { createMailer, DEFAULT_MAIL_LIMITS, type Mailer, type MailLimits } from './mail.ts';
 import { postgresHitStore, type HitStore } from './rate-limit.ts';
 import { loadCatalog } from './species.ts';
 import type { LegalLimits } from './legal.ts';
@@ -33,6 +34,7 @@ export interface Harness {
   app: FastifyInstance;
   auth: Auth;
   database: Database;
+  mailer: Mailer;
   outbox: SentMail[];
   clock: Clock;
   settleMail(): Promise<void>;
@@ -48,6 +50,7 @@ export interface HarnessOptions {
   wrapMailStore?: (store: HitStore) => HitStore;
   authLimits?: AuthRateLimits;
   limited?: boolean;
+  signInThrottle?: Limit;
   careLimits?: CareLimits;
   legalLimits?: LegalLimits;
   testHooks?: boolean;
@@ -161,6 +164,10 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     database,
     auth,
     mailer,
+    signInThrottle: {
+      store: postgresHitStore(database, 'testsecrettestsecrettestsecret0123456789'),
+      limit: opts.signInThrottle ?? { max: 10_000, windowMs: DEFAULT_SIGN_IN_THROTTLE.windowMs },
+    },
     species: loadCatalog(),
     clock,
     testHooks: opts.testHooks ?? true,
@@ -175,6 +182,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     app,
     auth,
     database,
+    mailer,
     outbox,
     clock,
     holdMail() {
