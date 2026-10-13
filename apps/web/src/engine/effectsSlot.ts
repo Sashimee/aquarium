@@ -1,7 +1,7 @@
 /** What the engine needs from the lazily loaded render effects. */
 export interface FrameEffects {
-  /** Draws the frame; false when the current tier draws straight to the canvas. */
-  render(): boolean;
+  /** Draws the whole frame, restoring the renderer state it changed even when it throws. */
+  render(): void;
   setFocusMode(on: boolean): void;
   dispose(): void;
 }
@@ -39,7 +39,12 @@ export class EffectsSlot {
   render(): boolean {
     const effects = this.effects;
     if (effects === null) return false;
-    return this.guard(() => effects.render()) ?? false;
+    return (
+      this.guard(() => {
+        effects.render();
+        return true;
+      }) ?? false
+    );
   }
 
   dispose(): void {

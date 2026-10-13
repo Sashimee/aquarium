@@ -8,11 +8,13 @@ import type { WaterMedium } from '../water/medium';
 import { createBubbles } from './bubbles';
 import { createParticulates } from './particulates';
 import { needsPost, PostPipeline, postSettingsKey, type PostSettings } from './post';
+import { captureRenderState, type RenderStateTarget } from './renderState';
 import { WaterShafts } from './shafts';
 import type { SpriteEffect } from './sprites';
 
 /** The parts of the engine the effects draw into. */
 export interface EffectsHost {
+  readonly renderer: RenderStateTarget & Pick<WebGPURenderer, 'render'>;
   readonly scene: Scene;
   readonly camera: PerspectiveCamera;
   readonly medium: WaterMedium;
@@ -52,6 +54,8 @@ export class Effects {
   private postKey = '';
   private settings: Readonly<TierSettings> | null = null;
   private focus = false;
+  /** A tier change that failed; thrown from the next frame so the engine drops the effects. */
+  private failure: { cause: unknown } | null = null;
   private readonly unregister: () => void;
 
   constructor(
@@ -76,12 +80,24 @@ export class Effects {
     if (this.settings !== null) this.configurePost(this.settings);
   }
 
-  /** Renders the frame through the post pipeline; false when this tier draws straight to the canvas. */
-  render(): boolean {
-    if (this.post === null) return false;
-    this.shafts.update();
-    this.post.render();
-    return true;
+  /**
+   * Draws the frame, through the post pipeline when the tier has one. The sprites are drawn here
+   * too, so a failure in their materials reaches the caller instead of a later plain render.
+   */
+  render(): void {
+    if (this.failure !== null) throw this.failure.cause;
+    const { renderer, scene, camera } = this.host;
+    const restore = captureRenderState(renderer, scene, camera);
+    try {
+      if (this.post === null) {
+        renderer.render(scene, camera);
+      } else {
+        this.shafts.update();
+        this.post.render();
+      }
+    } finally {
+      restore();
+    }
   }
 
   dispose(): void {
@@ -89,7 +105,20 @@ export class Effects {
     this.disposeParts();
   }
 
+  /** The first application throws to the constructor; later tier changes fail the next frame. */
   private apply(settings: Readonly<TierSettings>): void {
+    if (this.settings === null) {
+      this.applySettings(settings);
+      return;
+    }
+    try {
+      this.applySettings(settings);
+    } catch (cause) {
+      this.failure = { cause };
+    }
+  }
+
+  private applySettings(settings: Readonly<TierSettings>): void {
     this.settings = settings;
     this.particulates.sprite.count = settings.particleCount;
     this.particulates.sprite.visible = settings.particleCount > 0;
@@ -115,13 +144,12 @@ export class Effects {
   }
 
   private disposeParts(): void {
+    const sprites = [this.particulates, this.bubbles];
+    for (const { sprite } of sprites) sprite.removeFromParent();
     this.post?.dispose();
     this.post = null;
     this.setVelocityPassthrough(false);
-    for (const { sprite, material } of [this.particulates, this.bubbles]) {
-      sprite.removeFromParent();
-      material.dispose();
-    }
+    for (const { material } of sprites) material.dispose();
   }
 
   /** Additive sprites must add nothing to the velocity attachment TRAA reads. */

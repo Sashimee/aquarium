@@ -8,12 +8,10 @@ class FakeEffects implements FrameEffects {
   renderError: Error | null = null;
   focusError: Error | null = null;
   disposeError: Error | null = null;
-  drawsFrame = true;
 
-  render(): boolean {
+  render(): void {
     this.renders += 1;
     if (this.renderError !== null) throw this.renderError;
-    return this.drawsFrame;
   }
 
   setFocusMode(on: boolean): void {
@@ -41,13 +39,12 @@ describe('EffectsSlot', () => {
     expect(reports).toEqual([]);
   });
 
-  it('passes through whether the effects drew the frame', () => {
+  it('lets attached effects draw every frame', () => {
     const { slot } = setup();
     const effects = new FakeEffects();
     slot.attach(effects);
     expect(slot.render()).toBe(true);
-    effects.drawsFrame = false;
-    expect(slot.render()).toBe(false);
+    expect(slot.render()).toBe(true);
     expect(effects.renders).toBe(2);
   });
 
