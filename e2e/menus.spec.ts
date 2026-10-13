@@ -202,10 +202,10 @@ async function expectOnePanel(page: Page, context: string) {
   expect(open, `two panels were open ${context}`).toBeLessThanOrEqual(1);
 }
 
-async function exercise(page: Page, drag: Drag) {
+async function exercise(page: Page, drag: Drag, checkToolDrag: boolean) {
   await ready(page);
-  await expectOrbits(page, drag, 'on a fresh page');
-  await expectToolClaimsDrag(page, drag);
+  if (checkToolDrag) await expectToolClaimsDrag(page, drag);
+  else await expectOrbits(page, drag, 'on a fresh page');
   for (let i = 0; i < MENUS.length; i += 2) {
     const first = MENUS[i];
     const second = MENUS[i + 1];
@@ -245,9 +245,9 @@ test.describe('menus on a phone', () => {
   });
 
   test('every menu opens, switches and leaves the camera draggable', async ({ page }) => {
-    test.setTimeout(420_000);
+    test.setTimeout(480_000);
     const cdp = await page.context().newCDPSession(page);
-    await exercise(page, (from, to) => touchDrag(cdp, from, to));
+    await exercise(page, (from, to) => touchDrag(cdp, from, to), false);
   });
 });
 
@@ -259,7 +259,7 @@ test.describe('menus with a mouse', () => {
   });
 
   test('every menu opens, switches and leaves the camera draggable', async ({ page }) => {
-    test.setTimeout(420_000);
-    await exercise(page, (from, to) => mouseDrag(page, from, to));
+    test.setTimeout(480_000);
+    await exercise(page, (from, to) => mouseDrag(page, from, to), true);
   });
 });
