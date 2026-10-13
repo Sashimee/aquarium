@@ -50,7 +50,6 @@ export const DEFAULT_CURRENT: CurrentParameters = {
 
 const PLANT_LOD: Readonly<Record<Tier, ModelLod>> = { low: 2, medium: 1, high: 1, ultra: 0 };
 const HARDSCAPE_LOD: Readonly<Record<Tier, ModelLod>> = { low: 2, medium: 1, high: 0, ultra: 0 };
-// Collision geometry is read once at build time, so it never pays for a tier's large textures.
 const WALL_MARGIN = 0.005;
 const BLOCKED_CLEARANCE = 0.005;
 const MIN_COLLIDER_PLANT_HEIGHT = 0.15;
