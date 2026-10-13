@@ -71,8 +71,16 @@ export interface InteractionEvents {
   };
   /** The server's layout changed outside this tab's own edits (another device). */
   'tank:decor': { tankId: string; layout: DecorLayout };
-  /** The active saved tank went away (switch or sign-out); drop its fish. */
-  'tank:unloaded': { tankId: string };
+  /**
+   * The active saved tank went away; drop its fish. `switch` means another saved tank is on its
+   * way (a switch, a new tank or a reload); `reset` means signed out or unverified.
+   */
+  'tank:unloaded': { tankId: string; reason: 'switch' | 'reset' };
+  /**
+   * No saved tank is coming: signed out, unverified, or the tank list failed to load. Sent even
+   * when nothing was loaded, since a switch may already have unloaded the last tank.
+   */
+  'tank:none': Record<string, never>;
   /** A fish joined. `acclimate` means it starts in a floating bag until `tank:fish-released`. */
   'tank:fish-added': { tankId: string; fish: Fish; acclimate: boolean };
   'tank:fish-released': { tankId: string; fishId: string };

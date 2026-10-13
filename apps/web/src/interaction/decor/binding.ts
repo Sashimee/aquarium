@@ -45,11 +45,13 @@ export class SavedDecor {
         this.latest = { ...this.latest, layout };
         this.show();
       }),
-      interaction.on('tank:unloaded', () => {
+      interaction.on('tank:unloaded', ({ reason }) => {
         this.loadedTankId = null;
         this.latest = null;
-        this.show();
+        // The next tank's layout follows a switch; rearranging to the preset in between would flash.
+        if (reason !== 'switch') this.show();
       }),
+      interaction.on('tank:none', () => this.show()),
     ];
   }
 

@@ -6,14 +6,15 @@ import { queueTankEvents, startFish } from './fish/start';
 import { CameraRig } from './interaction/camera';
 import { bindCameraControls } from './interaction/controls';
 import { FeederLayer } from './interaction/decor/feederLayer';
-import type { SavedTank } from './interaction/decor/binding';
-import type { DecorSystem } from './interaction/decor/system';
+import { SceneDecor } from './interaction/decor/sceneDecor';
 import type { InteractionEvents } from './interaction/events';
 import { onPageTeardown } from './interaction/pageLifecycle';
 import { watchReducedMotion } from './interaction/motion';
+import { PlayChoices } from './interaction/play/choices';
 import { createPlaySystem, type PlaySystem } from './interaction/play/system';
-import { mountPresetWhenTierKnown, parseBiome, type TankScene } from './scene';
+import { mountBiomeScene, parseBiome, TankBiome, type TankScene } from './scene';
 import { mountUi } from './ui/mount';
+import { FeedGate } from './sync/feedGate';
 
 function showFatal(container: HTMLElement, message: string): void {
   const box = document.createElement('pre');
@@ -40,20 +41,19 @@ async function boot(): Promise<void> {
     console.info(`quality tier ${from ?? '(start)'} -> ${to} (${reason})`),
   );
 
-  let savedTank: SavedTank | null = null;
-  const watchTank = [
-    interaction.on('tank:loaded', ({ tankId, biome, decorLayout }) => {
-      savedTank = { tankId, biome, layout: decorLayout };
-    }),
-    interaction.on('tank:decor', ({ layout }) => {
-      if (savedTank) savedTank = { ...savedTank, layout };
-    }),
-    interaction.on('tank:unloaded', () => {
-      savedTank = null;
-    }),
-  ];
-
   const tankEvents = queueTankEvents(interaction);
+  const tankBiome = new TankBiome(interaction, parseBiome(window.location.search));
+  const playChoices = new PlayChoices(interaction);
+  const sceneDecor = new SceneDecor<TankScene>(
+    interaction,
+    () =>
+      import('./interaction/decor/system').then(
+        ({ createDecorSystem }) =>
+          (scene, initial) =>
+            createDecorSystem(engine, scene, interaction, initial, new FeederLayer()),
+      ),
+    (message, cause) => console.error(message, cause),
+  );
   mountUi(uiRoot, { engine: events, interaction });
 
   let engine: Engine;
@@ -64,6 +64,9 @@ async function boot(): Promise<void> {
     });
   } catch (cause) {
     tankEvents.stop();
+    tankBiome.stop();
+    playChoices.stop();
+    sceneDecor.dispose();
     showFatal(container, cause instanceof Error ? cause.message : String(cause));
     return;
   }
@@ -91,21 +94,28 @@ async function boot(): Promise<void> {
 
   const stopMotionWatch = watchReducedMotion((reduced) => rig.setReducedMotion(reduced));
   let play: PlaySystem | null = null;
-  let decor: DecorSystem | null = null;
   const unbindControls = bindCameraControls(canvas, rig, {
     tap: (e) => {
       if (e.button !== 0) return;
-      if (decor?.active) decor.tap(e.x, e.y);
+      if (sceneDecor.system?.active) sceneDecor.system.tap(e.x, e.y);
       else play?.controller.tap(e.x, e.y);
     },
-    claimDrag: () => (decor?.active ? decor.claimsDrag : (play?.controller.claimsDrag ?? false)),
+    claimDrag: () =>
+      sceneDecor.system?.active
+        ? sceneDecor.system.claimsDrag
+        : (play?.controller.claimsDrag ?? false),
     pointerDown: (x, y) =>
-      decor?.active ? decor.pointerDown(x, y) : play?.controller.pointerDown(x, y),
+      sceneDecor.system?.active
+        ? sceneDecor.system.pointerDown(x, y)
+        : play?.controller.pointerDown(x, y),
     pointerMove: (x, y) =>
-      decor?.active ? decor.pointerMove(x, y) : play?.controller.pointerMove(x, y),
-    pointerUp: () => (decor?.active ? decor.pointerUp() : play?.controller.pointerUp()),
+      sceneDecor.system?.active
+        ? sceneDecor.system.pointerMove(x, y)
+        : play?.controller.pointerMove(x, y),
+    pointerUp: () =>
+      sceneDecor.system?.active ? sceneDecor.system.pointerUp() : play?.controller.pointerUp(),
     pointerLeave: () => {
-      if (decor?.active) decor.pointerUp();
+      if (sceneDecor.system?.active) sceneDecor.system.pointerUp();
       else play?.controller.pointerLeave();
     },
   });
@@ -115,38 +125,36 @@ async function boot(): Promise<void> {
   });
   engine.onFrame((deltaS) => rig.update(deltaS));
 
-  const biome = parseBiome(window.location.search);
   const fish = startFish(engine, {
     tank: DEFAULT_TANK,
     assetRoot: `${import.meta.env.BASE_URL}assets/`,
-    biome,
+    biome: tankBiome.fallback,
     interaction,
     tankEvents,
   });
 
-  let tankScene: TankScene | null = null;
-  let tornDown = false;
-  mountPresetWhenTierKnown(engine, biome, window.location.search, (scene) => {
-    tankScene = scene;
-    fish.setAnchors(scene.anchors);
-    play = createPlaySystem(engine, scene, interaction, fish.sim);
-    import('./interaction/decor/system').then(
-      ({ createDecorSystem }) => {
-        if (tornDown) return;
-        watchTank.forEach((off) => off());
-        decor = createDecorSystem(engine, scene, interaction, savedTank, new FeederLayer());
-      },
-      (cause: unknown) => console.error('Decor failed to load', cause),
-    );
-    if (import.meta.env.DEV) Object.assign(window, { tankScene });
+  const feedGate = new FeedGate();
+  const scenes = mountBiomeScene(engine, tankBiome, window.location.search, {
+    mounted(scene) {
+      fish.setAnchors(scene.anchors);
+      play = createPlaySystem(engine, scene, interaction, fish.sim, feedGate);
+      playChoices.applyTo(play.controller);
+      sceneDecor.mount(scene);
+      if (import.meta.env.DEV) Object.assign(window, { tankScene: scene });
+    },
+    unmounting() {
+      sceneDecor.unmount();
+      play?.dispose();
+      play = null;
+      fish.setAnchors([]);
+    },
   });
 
   onPageTeardown(window, () => {
-    play?.dispose();
-    decor?.dispose();
-    watchTank.forEach((off) => off());
-    tornDown = true;
-    tankScene?.dispose().catch((cause: unknown) => console.error('Scene dispose failed', cause));
+    scenes.dispose().catch((cause: unknown) => console.error('Scene dispose failed', cause));
+    sceneDecor.dispose();
+    tankBiome.stop();
+    playChoices.stop();
     stopMotionWatch();
     unbindControls();
     stopRequests();

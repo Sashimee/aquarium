@@ -281,7 +281,7 @@ describe('DecorMode', () => {
     h.bus.emit('decor:command', { type: 'add', assetId: 'boulder-01' });
     await settle();
     const savedForA = h.layouts.length;
-    h.bus.emit('tank:unloaded', { tankId: 't1' });
+    h.bus.emit('tank:unloaded', { tankId: 't1', reason: 'switch' });
     expect(h.mode.active).toBe(false);
     expect(h.modes).toEqual([true, false]);
     expect(h.layouts).toHaveLength(savedForA);
