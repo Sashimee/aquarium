@@ -5,6 +5,9 @@ import fastifyStatic from '@fastify/static';
 import {
   revokeSessionRequestSchema,
   signUpRequestSchema,
+  signInRequestSchema,
+  updateUserRequestSchema,
+  changePasswordRequestSchema,
   sessionListSchema,
   userSchema,
 } from '@aquarium/shared';
@@ -93,6 +96,18 @@ const signUpBodySchema = signUpRequestSchema.extend({
   callbackURL: z.string().max(2048).optional(),
 });
 
+const signInBodySchema = signInRequestSchema.extend({
+  callbackURL: z.string().max(2048).optional(),
+  rememberMe: z.boolean().optional(),
+});
+
+const BODY_SCHEMAS = new Map<string, z.ZodType>([
+  [`${AUTH_BASE_PATH}/sign-up/email`, signUpBodySchema],
+  [`${AUTH_BASE_PATH}/sign-in/email`, signInBodySchema],
+  [`${AUTH_BASE_PATH}/update-user`, updateUserRequestSchema],
+  [`${AUTH_BASE_PATH}/change-password`, changePasswordRequestSchema],
+]);
+
 function parseJson(raw: string | undefined): unknown {
   try {
     return JSON.parse(raw ?? '');
@@ -105,6 +120,23 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const BLOCKED_AUTH_PATHS = new Set([
   `${AUTH_BASE_PATH}/list-sessions`,
   `${AUTH_BASE_PATH}/revoke-session`,
+  `${AUTH_BASE_PATH}/revoke-sessions`,
+  `${AUTH_BASE_PATH}/revoke-other-sessions`,
+  `${AUTH_BASE_PATH}/change-email`,
+  `${AUTH_BASE_PATH}/delete-user`,
+  `${AUTH_BASE_PATH}/delete-user/callback`,
+  `${AUTH_BASE_PATH}/account-info`,
+  `${AUTH_BASE_PATH}/get-access-token`,
+  `${AUTH_BASE_PATH}/refresh-token`,
+  `${AUTH_BASE_PATH}/link-social`,
+  `${AUTH_BASE_PATH}/unlink-account`,
+  `${AUTH_BASE_PATH}/list-accounts`,
+  `${AUTH_BASE_PATH}/sign-in/social`,
+  `${AUTH_BASE_PATH}/update-session`,
+  `${AUTH_BASE_PATH}/verify-password`,
+  `${AUTH_BASE_PATH}/passkey/delete-passkey`,
+  `${AUTH_BASE_PATH}/passkey/list-user-passkeys`,
+  `${AUTH_BASE_PATH}/passkey/update-passkey`,
 ]);
 
 // Better Auth echoes the session token in get-session, sign-in, sign-up and passkey bodies. The
@@ -119,8 +151,26 @@ export function stripTokens(value: unknown): unknown {
   );
 }
 
+// Better Auth resolves the request through the WHATWG URL parser, which collapses dot segments
+// (also percent-encoded) and treats a backslash as a slash. Path-based rules here compare a literal
+// string, so any path the parser would rewrite is refused instead of being matched differently.
+function hasAmbiguousPath(url: string): boolean {
+  if (url.includes('#')) return true;
+  const raw = url.split('?')[0] ?? '';
+  if (raw.includes('\\') || raw.includes('//')) return true;
+  return raw.split('/').some((segment) => {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(segment);
+    } catch {
+      return true;
+    }
+    return decoded === '.' || decoded === '..' || decoded.includes('/') || decoded.includes('\\');
+  });
+}
+
 function normalizedPathname(url: string): string {
-  const raw = url.split('?')[0] ?? '/';
+  const raw = url.split('?')[0]?.split('#')[0] ?? '/';
   let decoded: string;
   try {
     decoded = decodeURIComponent(raw);
@@ -267,30 +317,36 @@ export function buildApp(opts: AppOptions): FastifyInstance {
       method: ['GET', 'POST'],
       url: `${AUTH_BASE_PATH}/*`,
       handler: async (req, reply) => {
+        if (hasAmbiguousPath(req.url)) {
+          return reply.code(404).send(apiError('not_found', 'Not found.'));
+        }
         const pathname = normalizedPathname(req.url);
         if (BLOCKED_AUTH_PATHS.has(pathname)) {
           return reply.code(404).send(apiError('not_found', 'Not found.'));
         }
-        const raw = typeof req.body === 'string' ? req.body : undefined;
+        let raw = typeof req.body === 'string' ? req.body : undefined;
         let admission: IpAdmission = { wait: 0, mailBlockedFor: 0 };
 
+        const bodySchema = req.method === 'POST' ? BODY_SCHEMAS.get(pathname) : undefined;
+        if (bodySchema) raw = JSON.stringify(bodySchema.parse(parseJson(raw)));
+
         if (req.method === 'POST' && pathname === `${AUTH_BASE_PATH}/sign-up/email`) {
-          signUpBodySchema.parse(parseJson(raw));
-          admission = await mailer.consumeIp(req.ip);
+          admission = await mailer.consumeIp(req.ip, { chargeGlobal: true });
           if (admission.wait > 0) return tooMany(reply, admission.wait);
         }
         if (req.method === 'POST' && pathname === `${AUTH_BASE_PATH}/request-password-reset`) {
-          admission = await mailer.consumeIp(req.ip);
+          admission = await mailer.consumeIp(req.ip, { chargeGlobal: true });
           if (admission.wait > 0) return tooMany(reply, admission.wait);
         }
         if (req.method === 'POST' && pathname === `${AUTH_BASE_PATH}/send-verification-email`) {
-          admission = await mailer.consumeIp(req.ip);
+          admission = await mailer.consumeIp(req.ip, { chargeGlobal: true });
           if (admission.wait > 0) return tooMany(reply, admission.wait);
         }
 
         const headers = new Headers();
         for (const [name, value] of Object.entries(req.headers)) {
-          if (value === undefined || name === 'x-forwarded-for') continue;
+          if (value === undefined || name === 'x-forwarded-for' || name === 'content-length')
+            continue;
           if (Array.isArray(value)) value.forEach((v) => headers.append(name, v));
           else headers.set(name, value);
         }

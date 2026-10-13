@@ -2,6 +2,7 @@ import { safeError } from './safe-error.ts';
 import { passkey } from '@better-auth/passkey';
 import { betterAuth } from 'better-auth';
 import { createAuthMiddleware, createEmailVerificationToken } from 'better-auth/api';
+import { eq } from 'drizzle-orm';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import type { Config } from './config.ts';
@@ -101,6 +102,7 @@ export function createAuth({
         );
       },
     },
+    verification: { storeIdentifier: 'hashed' },
     database: drizzleAdapter(database.db, {
       provider: 'pg',
       schema: {
@@ -118,6 +120,9 @@ export function createAuth({
       maxPasswordLength: MAX_PASSWORD_LENGTH,
       revokeSessionsOnPasswordReset: true,
       onPasswordReset: async ({ user }) => {
+        // Reset rows are the only verification rows whose value is a bare user id, and hashed
+        // identifiers rule out matching on the `reset-password:` prefix.
+        await database.db.delete(schema.verification).where(eq(schema.verification.value, user.id));
         if (user.emailVerified) return;
         const { internalAdapter } = await auth.$context;
         await internalAdapter.updateUser(user.id, { emailVerified: true });

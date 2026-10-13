@@ -17,6 +17,18 @@ export const signInRequestSchema = z.strictObject({
 });
 export type SignInRequest = z.infer<typeof signInRequestSchema>;
 
+export const updateUserRequestSchema = z.strictObject({
+  name: signUpRequestSchema.shape.name,
+});
+export type UpdateUserRequest = z.infer<typeof updateUserRequestSchema>;
+
+export const changePasswordRequestSchema = z.strictObject({
+  currentPassword: z.string().min(1).max(128),
+  newPassword: passwordSchema,
+  revokeOtherSessions: z.boolean().optional(),
+});
+export type ChangePasswordRequest = z.infer<typeof changePasswordRequestSchema>;
+
 export const userSchema = z.strictObject({
   id: authIdSchema,
   email: emailSchema,

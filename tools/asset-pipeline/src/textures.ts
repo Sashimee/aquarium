@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { encodeToKTX2 } from 'ktx2-encoder';
 import sharp from 'sharp';
@@ -139,12 +139,96 @@ function cacheKey(image: Rgba, spec: Pick<TextureSpec, 'codec' | 'colorSpace' | 
     .digest('hex');
 }
 
+const KTX2_IDENTIFIER = [0xab, 0x4b, 0x54, 0x58, 0x20, 0x32, 0x30, 0xbb, 0x0d, 0x0a, 0x1a, 0x0a];
+const KTX2_HEADER_BYTES = 80;
+const KTX2_LEVEL_INDEX_BYTES = 24;
+
+/** True when the bytes carry the KTX2 identifier and every mip level they declare lies inside the file. */
+export function isCompleteKtx2(bytes: Uint8Array): boolean {
+  if (bytes.byteLength < KTX2_HEADER_BYTES) return false;
+  if (KTX2_IDENTIFIER.some((byte, i) => bytes[i] !== byte)) return false;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const levels = Math.max(1, view.getUint32(40, true));
+  const indexEnd = KTX2_HEADER_BYTES + levels * KTX2_LEVEL_INDEX_BYTES;
+  if (bytes.byteLength < indexEnd) return false;
+  for (let level = 0; level < levels; level++) {
+    const at = KTX2_HEADER_BYTES + level * KTX2_LEVEL_INDEX_BYTES;
+    const end = Number(view.getBigUint64(at, true) + view.getBigUint64(at + 8, true));
+    if (end > bytes.byteLength) return false;
+  }
+  return true;
+}
+
+/** The `KTXmapRange` scale basisu stores when it had to rescale an HDR image; 1 when absent. three ignores it. */
+export function ktx2MapRangeScale(bytes: Uint8Array): number {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let at = view.getUint32(56, true);
+  const end = at + view.getUint32(60, true);
+  while (at + 4 <= end) {
+    const length = view.getUint32(at, true);
+    const entry = bytes.subarray(at + 4, at + 4 + length);
+    const split = entry.indexOf(0);
+    if (new TextDecoder().decode(entry.subarray(0, split)) === 'KTXmapRange') {
+      return view.getFloat32(at + 4 + split + 1, true);
+    }
+    at += 4 + Math.ceil(length / 4) * 4;
+  }
+  return 1;
+}
+
+function readCachedKtx2(path: string): Uint8Array | null {
+  if (!existsSync(path)) return null;
+  const bytes = new Uint8Array(readFileSync(path));
+  return isCompleteKtx2(bytes) ? bytes : null;
+}
+
+function writeCachedKtx2(path: string, bytes: Uint8Array): void {
+  const partial = `${path}.${process.pid}.tmp`;
+  writeFileSync(partial, bytes);
+  renameSync(partial, path);
+}
+
+const HDR_ENCODER_VERSION = 'ktx2-encoder@0.6.0:uastc-hdr-q1-zstd-nomips:v1';
+
+/** Encodes a Radiance .hdr (equirectangular) to a UASTC HDR 4x4 KTX2 that KTX2Loader transcodes to BC6H or RGBA16F. */
+export async function encodeHdrKtx2(hdr: Uint8Array): Promise<Uint8Array> {
+  const digest = createHash('sha256').update(HDR_ENCODER_VERSION).update(hdr).digest('hex');
+  const path = join(cacheDir(), `${digest}.ktx2`);
+  const cached = readCachedKtx2(path);
+  if (cached && ktx2MapRangeScale(cached) === 1) return cached;
+  const log = console.log;
+  console.log = () => undefined;
+  try {
+    const bytes = await encodeToKTX2(new Uint8Array(hdr), {
+      isHDR: true,
+      imageType: 'hdr',
+      isUASTC: true,
+      isKTX2File: true,
+      generateMipmap: false,
+      needSupercompression: true,
+      hdrQualityLevel: 1,
+    });
+    if (!isCompleteKtx2(bytes)) throw new Error('HDR KTX2 encoder returned an incomplete file');
+    const scale = ktx2MapRangeScale(bytes);
+    if (scale !== 1) {
+      throw new Error(
+        `HDR KTX2 carries KTXmapRange scale ${scale}, which three ignores and would darken the map; clamp the source to the half-float range first`,
+      );
+    }
+    writeCachedKtx2(path, bytes);
+    return bytes;
+  } finally {
+    console.log = log;
+  }
+}
+
 async function encodeKtx2(
   image: Rgba,
   spec: Pick<TextureSpec, 'codec' | 'colorSpace' | 'role'>,
 ): Promise<Uint8Array> {
   const path = join(cacheDir(), `${cacheKey(image, spec)}.ktx2`);
-  if (existsSync(path)) return new Uint8Array(readFileSync(path));
+  const cached = readCachedKtx2(path);
+  if (cached) return cached;
   const imageDecoder = async () => ({ width: image.width, height: image.height, data: image.data });
   const log = console.log;
   console.log = () => undefined;
@@ -173,7 +257,7 @@ async function encodeKtx2(
             isKTX2File: true,
             imageDecoder,
           });
-    writeFileSync(path, bytes);
+    writeCachedKtx2(path, bytes);
     return bytes;
   } finally {
     console.log = log;

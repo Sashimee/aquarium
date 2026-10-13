@@ -106,6 +106,40 @@ describe('global mail cap', () => {
     expect(sent.filter((to) => to === 'victim@bas.lu')).toHaveLength(2);
   });
 
+  it('logs the cap again after the window frees, including caps reached by charged requests', async () => {
+    let now = 0;
+    const logs: string[] = [];
+    const transport = nodemailer.createTransport({ jsonTransport: true });
+    transport.sendMail = (async () => undefined) as unknown as typeof transport.sendMail;
+    const mailer = createMailer(transport, 'fish@bas.lu', {
+      store: memoryHitStore(() => now),
+      log: (m) => logs.push(m),
+      limits: {
+        perRecipient: { max: 100, windowMs: 3_600_000 },
+        verificationCooldown: { max: 100, windowMs: 1000 },
+        perIpSignup: { max: 100, windowMs: 3_600_000 },
+        global: { max: 2, windowMs: 60_000 },
+      },
+    });
+    const capEvents = () => logs.filter((m) => m.includes('mail_global_cap_reached')).length;
+    for (let round = 1; round <= 2; round++) {
+      expect((await mailer.consumeIp('203.0.113.1', { chargeGlobal: true })).mailBlockedFor).toBe(
+        0,
+      );
+      expect((await mailer.consumeIp('203.0.113.1', { chargeGlobal: true })).mailBlockedFor).toBe(
+        0,
+      );
+      expect(capEvents()).toBe(round - 1);
+      for (let i = 0; i < 3; i++) {
+        expect(
+          (await mailer.consumeIp('203.0.113.1', { chargeGlobal: true })).mailBlockedFor,
+        ).toBeGreaterThan(0);
+      }
+      expect(capEvents()).toBe(round);
+      now += 61_000;
+    }
+  });
+
   it('leaves the IP slot available when the global cap refuses', async () => {
     let now = 0;
     const transport = nodemailer.createTransport({ jsonTransport: true });
@@ -117,6 +151,7 @@ describe('global mail cap', () => {
         perRecipient: { max: 100, windowMs: 3_600_000 },
         verificationCooldown: { max: 100, windowMs: 1000 },
         perIpSignup: { max: 2, windowMs: 3_600_000 },
+        perIpRequests: { max: 100, windowMs: 3_600_000 },
         global: { max: 1, windowMs: 60_000 },
       },
     });

@@ -21,9 +21,9 @@
     "ammoniaPerBioloadPerHour": 0.001,
     "ammoniaTolerance": 0.3,
     "bioload": 0.25,
-    "birthSizeM": 0.01,
+    "birthSizeM": 0.008,
     "diet": ["flakes", "pellets", "bloodworms"],
-    "growthPerDay": 0.00015,
+    "growthPerDay": 0.00016,
     "healthLossPerHourStarving": 0.01,
     "healthRecoveryPerHour": 0.004,
     "hungerPerHour": 0.0085,
@@ -32,7 +32,7 @@
     "starvationHungerThreshold": 0.75
   },
   "locomotion": {
-    "bodyLengthM": 0.035,
+    "bodyLengthM": 0.027,
     "cruiseSpeedMps": 0.08,
     "gait": "cruise",
     "massKg": 0.0004,

@@ -19,8 +19,10 @@ import { qualityProfile } from './quality/profile';
 import { QualityManager } from './quality/QualityManager';
 import { renderPixelRatio } from './quality/tiers';
 import { DEFAULT_TANK, type TankDimensions, waterBounds } from './tank/dimensions';
+import { meanSubstrateHeight } from './tank/substrate';
 import { Tank } from './tank/Tank';
 import { Caustics } from './water/caustics';
+import { InteriorLight } from './water/interior';
 import { WaterMedium, type WaterQuality } from './water/medium';
 
 export type FrameCallback = (deltaS: number, nowMs: number) => void;
@@ -42,7 +44,7 @@ const HOOD_COLOR = new Color(1, 0.97, 0.92);
 /** At the water surface; the hood's spread leaves about three quarters of it on average below. */
 const HOOD_INTENSITY = 4;
 /** The hood's blue "moonlight" channel, left on through the night. */
-const MOONLIGHT = new Color(0.012, 0.03, 0.09);
+const MOONLIGHT = new Color(0.04, 0.14, 0.9);
 /** Room light at night relative to the day, from a lamp somewhere in the room. */
 const ROOM_AT_NIGHT = 0.15;
 const DAYLIGHT_INTERVAL_MS = 1000;
@@ -102,10 +104,13 @@ export class Engine {
   readonly camera = new PerspectiveCamera(40, 1, 0.05, 50);
   readonly medium: WaterMedium;
   readonly caustics: Caustics;
+  readonly interior: InteriorLight;
   readonly tank: Tank;
   readonly hood = new DirectionalLight(HOOD_COLOR, HOOD_INTENSITY);
   /** Room light reaching the water from outside the hood, for in-scatter. */
   readonly ambientScatter = new Color(0.02, 0.03, 0.034);
+  /** Linear albedo of the substrate, for the hood light it throws back: the dark freshwater sand. */
+  readonly substrateAlbedo = new Color(0.13, 0.09, 0.055);
   readonly quality: QualityManager;
 
   private readonly clock: number | null;
@@ -191,19 +196,30 @@ export class Engine {
       this.scene,
       config.hdriUrl ?? DEFAULT_HDRI_URL,
       (message, cause) => this.reportError(message, cause),
-      (environment) => this.tank.setSky(environment),
+      (environment) => {
+        this.tank.setSky(environment);
+        this.interior.setRoom(environment);
+      },
     );
     cleanup.add(() => roomLighting.dispose());
     this.roomBackgroundIntensity = this.scene.backgroundIntensity;
 
     this.medium = new WaterMedium(waterBounds(dimensions), config.water ?? DEFAULT_WATER);
-    this.tank = new Tank(dimensions, this.medium, roomLighting.initial);
+    this.caustics = new Caustics(this.medium);
+    cleanup.add(() => this.caustics.dispose());
+    this.interior = new InteriorLight(
+      this.medium,
+      this.caustics,
+      roomLighting.initial,
+      this.substrateAlbedo,
+      meanSubstrateHeight(dimensions),
+    );
+    this.tank = new Tank(dimensions, this.medium, roomLighting.initial, this.interior);
     cleanup.add(() => this.tank.dispose());
     this.scene.add(this.tank.group);
     this.scene.fogNode = this.medium.fogNode();
+    this.scene.environmentNode = this.interior.environmentNode();
 
-    this.caustics = new Caustics(this.medium);
-    cleanup.add(() => this.caustics.dispose());
     this.caustics.bake(renderer);
     this.setupHood(dimensions);
     cleanup.add(() => this.hood.shadow.dispose());
@@ -306,7 +322,8 @@ export class Engine {
 
   /**
    * The hood colour and intensity are the daytime setting (a preset may change them); the
-   * photoperiod fades them into the moonlight channel and dims the room around the tank.
+   * photoperiod fades them into the moonlight channel and dims the room around the tank. The
+   * room's level is in the environment node, so `scene.environmentIntensity` stays a plain gain.
    */
   private updateHoodUniforms(): void {
     const hood = this.hood;
@@ -318,12 +335,11 @@ export class Engine {
       .add(this.scratch.copy(MOONLIGHT).multiplyScalar(1 - day));
     this.caustics.lightDirection.value.copy(hood.position).sub(hood.target.position).normalize();
     const room = ROOM_AT_NIGHT + (1 - ROOM_AT_NIGHT) * day;
-    this.scene.environmentIntensity = room;
+    this.interior.roomLevel.value = room;
     this.scene.backgroundIntensity = this.roomBackgroundIntensity * room;
-    this.medium.inScatterRadiance.value
-      .copy(radiance)
-      .multiplyScalar(1 / (4 * Math.PI))
-      .add(this.scratch.copy(this.ambientScatter).multiplyScalar(room));
+    this.medium.hoodInScatter.value.copy(radiance).multiplyScalar(1 / (4 * Math.PI));
+    this.medium.roomInScatter.value.copy(this.ambientScatter).multiplyScalar(room);
+    this.interior.update();
   }
 
   private registerQualityFeatures(): void {

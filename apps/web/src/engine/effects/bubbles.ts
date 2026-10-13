@@ -75,7 +75,7 @@ export function createBubbles(medium: WaterMedium, bounds: Box3): SpriteEffect {
   const popping = smoothstep(height - POP_ZONE_M, height, y);
   material.scaleNode = radius.mul(2).mul(popping.mul(0.4).add(1));
 
-  const light = medium.inScatterRadiance.mul(4 * Math.PI);
+  const light = medium.inScatterRadiance(medium.boxMax.y.sub(centre.y)).mul(4 * Math.PI);
   const toCamera = medium.transmittance(medium.pathToFragment(centre));
   const radiance = vertexStage(light.mul(toCamera).mul(popping.oneMinus()));
   const r = length(uv().sub(0.5)).mul(2);
