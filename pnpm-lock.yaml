@@ -257,6 +257,9 @@ importers:
       '@aquarium/sim':
         specifier: workspace:*
         version: link:../../packages/sim
+      '@simplewebauthn/browser':
+        specifier: 13.3.0
+        version: 13.3.0
       react:
         specifier: 19.3.0
         version: 19.3.0

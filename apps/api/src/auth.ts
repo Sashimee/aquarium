@@ -1,3 +1,4 @@
+import { safeError } from './safe-error.ts';
 import { passkey } from '@better-auth/passkey';
 import { betterAuth } from 'better-auth';
 import { createAuthMiddleware, createEmailVerificationToken } from 'better-auth/api';
@@ -30,6 +31,7 @@ export interface AuthDeps {
   database: Database;
   mailer: Mailer;
   rateLimits?: AuthRateLimits;
+  runInBackground?: (task: Promise<void>) => void;
 }
 
 export function createAuth({
@@ -37,6 +39,7 @@ export function createAuth({
   database,
   mailer,
   rateLimits = DEFAULT_AUTH_RATE_LIMITS,
+  runInBackground = () => {},
 }: AuthDeps) {
   const origin = config.appUrl.origin;
   const secure = config.appUrl.protocol === 'https:';
@@ -82,7 +85,19 @@ export function createAuth({
     basePath: AUTH_BASE_PATH,
     secret: config.authSecret,
     trustedOrigins: [origin],
-    logger: { level: 'error' },
+    // better-call prints unhandled errors with console.error, driver params included. Rethrowing
+    // sends them to the Fastify error handler, which logs through safeError.
+    onAPIError: { throw: true },
+    logger: {
+      level: 'error',
+      log: (level, message, ...args) => {
+        const detail = args.map((arg) => safeError(arg));
+        console.error(
+          `[Better Auth] ${level}: ${message}`,
+          ...detail.map((d) => JSON.stringify(d)),
+        );
+      },
+    },
     database: drizzleAdapter(database.db, {
       provider: 'pg',
       schema: {
@@ -104,8 +119,11 @@ export function createAuth({
         const { internalAdapter } = await auth.$context;
         await internalAdapter.updateUser(user.id, { emailVerified: true });
       },
-      sendResetPassword: ({ user, url }) =>
-        throttleSafe(() => mailer.sendPasswordReset(user.email, url), 'reset'),
+      // Better Auth awaits this for known accounts only, so awaiting the SMTP send would make the
+      // response time reveal whether the address is registered. throttleSafe never rejects.
+      sendResetPassword: async ({ user, url }) => {
+        runInBackground(throttleSafe(() => mailer.sendPasswordReset(user.email, url), 'reset'));
+      },
       onExistingUserSignUp: async ({ user }) => {
         if (user.emailVerified) return;
         const token = await createEmailVerificationToken(config.authSecret, user.email);

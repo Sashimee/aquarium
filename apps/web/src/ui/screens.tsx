@@ -276,6 +276,16 @@ export function SignInScreen() {
           {submission.busy ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
+      <button
+        type="button"
+        className="secondary"
+        disabled={submission.busy}
+        onClick={() => {
+          void submission.run(() => auth.signInWithPasskey()).then((ok) => ok && navigate('/'));
+        }}
+      >
+        Sign in with a passkey
+      </button>
       {submission.failure?.status === 401 && (
         <p role="note" className="hint" id="sign-in-hint">
           Wrong email or password? If you verified your address on a different device or browser
@@ -656,6 +666,8 @@ export function SettingsScreen() {
   const api = useApi();
   const auth = useAuth();
   const exporting = useSubmission();
+  const passkey = useSubmission();
+  const [passkeyAdded, setPasskeyAdded] = useState(false);
   const deleting = useSubmission();
   const [confirming, setConfirming] = useState(false);
   const passwordInput = useRef<HTMLInputElement>(null);
@@ -716,6 +728,24 @@ export function SettingsScreen() {
 
   return (
     <Panel title="Settings">
+      <section aria-labelledby="passkey-title">
+        <h2 id="passkey-title">Passkeys</h2>
+        <p>Sign in with this device instead of a password.</p>
+        <button
+          type="button"
+          disabled={passkey.busy}
+          onClick={() => {
+            setPasskeyAdded(false);
+            void passkey.run(() => api.addPasskey()).then(setPasskeyAdded);
+          }}
+        >
+          {passkey.busy ? 'Waiting for your device…' : 'Add a passkey'}
+        </button>
+        <p role="status" className="hint">
+          {passkeyAdded ? 'Passkey added.' : ''}
+        </p>
+        <FormError message={passkey.error} />
+      </section>
       <section aria-labelledby="export-title">
         <h2 id="export-title">Your data</h2>
         <p>Download everything we store about you as a JSON file.</p>
