@@ -186,6 +186,38 @@ export interface ApiClientOptions {
   signal?: AbortSignal;
 }
 
+function whenAborted(signal: AbortSignal): Promise<never> {
+  return new Promise((_resolve, reject) => {
+    const fail = () => reject(new DOMException('aborted', 'AbortError'));
+    if (signal.aborted) fail();
+    else signal.addEventListener('abort', fail, { once: true });
+  });
+}
+
+function combineSignals(signals: AbortSignal[]): { signal: AbortSignal; dispose(): void } {
+  const [only] = signals;
+  if (signals.length === 1 && only !== undefined) return { signal: only, dispose() {} };
+  if (typeof AbortSignal.any === 'function') {
+    return { signal: AbortSignal.any(signals), dispose() {} };
+  }
+  // AbortSignal.any needs Chrome 116 / Firefox 124 / Safari 17.4.
+  const controller = new AbortController();
+  const abort = (event: Event) => controller.abort((event.target as AbortSignal).reason);
+  for (const signal of signals) {
+    if (signal.aborted) {
+      controller.abort(signal.reason);
+      break;
+    }
+    signal.addEventListener('abort', abort, { once: true });
+  }
+  return {
+    signal: controller.signal,
+    dispose() {
+      for (const signal of signals) signal.removeEventListener('abort', abort);
+    },
+  };
+}
+
 export function createApiClient(
   fetcher: Fetcher = (i, init) => fetch(i, init),
   options: ApiClientOptions = {},
@@ -200,13 +232,20 @@ export function createApiClient(
     const callerSignals = [init.signal, options.signal].filter(
       (candidate): candidate is AbortSignal => candidate != null,
     );
-    const signal = AbortSignal.any([...callerSignals, timeout.signal]);
+    const combined = combineSignals([...callerSignals, timeout.signal]);
     try {
-      return await fetcher(path, {
+      const res = await fetcher(path, {
         credentials: 'same-origin',
         ...init,
-        signal,
+        signal: combined.signal,
         headers: { accept: 'application/json', ...init.headers },
+      });
+      // Buffered here so the timer also bounds a body that stalls after the headers.
+      const bytes = await Promise.race([res.arrayBuffer(), whenAborted(timeout.signal)]);
+      return new Response(bytes.byteLength > 0 ? bytes : null, {
+        status: res.status,
+        statusText: res.statusText,
+        headers: res.headers,
       });
     } catch (cause) {
       if (timeout.signal.aborted) throw new ApiTimeoutError(timeoutMs);
@@ -219,6 +258,7 @@ export function createApiClient(
       );
     } finally {
       clearTimeout(timer);
+      combined.dispose();
     }
   }
 

@@ -18,7 +18,7 @@ import type {
   PlayTool,
   SaveStatus,
 } from '../interaction/events';
-import { ApiRequestError, ApiTimeoutError, createApiClient, type ApiClient } from './api';
+import { ApiRequestError, createApiClient, type ApiClient } from './api';
 import {
   currentHref,
   guardRoute,
@@ -162,11 +162,7 @@ function AuthProvider({ children }: { children: ReactNode }) {
         setUser(signedIn);
       },
       async signOut() {
-        try {
-          await api.signOut();
-        } catch (cause) {
-          if (!(cause instanceof ApiTimeoutError)) throw cause;
-        }
+        await api.signOut();
         setUser(null);
       },
     }),

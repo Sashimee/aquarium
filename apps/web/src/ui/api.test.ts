@@ -1,5 +1,5 @@
 import type { DecorLayout } from '@aquarium/shared';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ApiRequestError,
   ApiTimeoutError,
@@ -332,5 +332,76 @@ describe('api client timeouts', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('bounds a body that stalls after the headers and reports a timeout', async () => {
+    vi.useFakeTimers();
+    try {
+      const stalled = () =>
+        Promise.resolve(
+          new Response(new ReadableStream({ start() {} }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+        );
+      const result = createApiClient(stalled)
+        .tanks()
+        .catch((e: unknown) => e);
+      await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+      expect(await result).toBeInstanceOf(ApiTimeoutError);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('leaves no timer behind after a success or a network failure', async () => {
+    vi.useFakeTimers();
+    try {
+      await createApiClient(vi.fn().mockResolvedValue(json([]))).tanks();
+      expect(vi.getTimerCount()).toBe(0);
+      await createApiClient(vi.fn().mockRejectedValue(new TypeError('offline')))
+        .tanks()
+        .catch(() => undefined);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  describe('without AbortSignal.any', () => {
+    const original = AbortSignal.any;
+    beforeEach(() => {
+      Reflect.deleteProperty(AbortSignal, 'any');
+    });
+    afterEach(() => {
+      AbortSignal.any = original;
+    });
+
+    it('works with no caller signal', async () => {
+      await expect(createApiClient(vi.fn().mockResolvedValue(json([]))).tanks()).resolves.toEqual(
+        [],
+      );
+    });
+
+    it('still honours a caller abort and the timeout when signals are combined by hand', async () => {
+      vi.useFakeTimers();
+      try {
+        const caller = new AbortController();
+        const aborted = createApiClient(neverResolves, { signal: caller.signal })
+          .tanks()
+          .catch((e: unknown) => e);
+        caller.abort();
+        expect(await aborted).toMatchObject({ code: 'network' });
+
+        const timedOut = createApiClient(neverResolves, { signal: new AbortController().signal })
+          .tanks()
+          .catch((e: unknown) => e);
+        await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+        expect(await timedOut).toBeInstanceOf(ApiTimeoutError);
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 });
