@@ -21,6 +21,8 @@ export interface IpAdmission {
   wait: number;
   /** Seconds the global cap is spent for, or 0. While positive the IP slot was not charged and no mail may go out for this request. */
   mailBlockedFor: number;
+  /** The request already took its one global slot, so sending must not take another. */
+  globalCharged?: boolean;
 }
 
 export class MailThrottledError extends Error {
@@ -82,8 +84,12 @@ export interface Mailer {
   sendVerification(to: string, url: string): Promise<void>;
   /** Same limits as sendVerification, tracked separately so one flow cannot starve the other. */
   sendPasswordReset(to: string, url: string): Promise<void>;
-  /** Charges one flat per-IP slot per mail-triggering request, whatever the recipient; not charged while the global cap is spent. */
-  consumeIp(ip: string): Promise<IpAdmission>;
+  /**
+   * Charges one flat per-IP slot per mail-triggering request, whatever the recipient; not charged while the global cap is spent.
+   * With chargeGlobal the request also takes exactly one global slot up front, whether or not a mail follows,
+   * so the global counter cannot reveal if the address has an account.
+   */
+  consumeIp(ip: string, options?: { chargeGlobal?: boolean }): Promise<IpAdmission>;
   /** Mail sent inside `work` honours the admission: a request admitted without an IP charge sends nothing. */
   runAdmitted<T>(admission: IpAdmission, work: () => Promise<T>): Promise<T>;
 }
@@ -178,6 +184,13 @@ export function createMailer(
       throw new MailThrottledError(admission.mailBlockedFor);
     }
     const k = recipientKey(to);
+    if (admission?.globalCharged) {
+      const wait = await consume(`${flow}:cooldown:${k}`, limits.verificationCooldown);
+      if (wait > 0) throw new MailThrottledError(wait);
+      const capped = await consume(`recipient:${k}`, limits.perRecipient);
+      if (capped > 0) throw new MailThrottledError(capped);
+      return;
+    }
     // Peek first so a spent global cap refuses without using up the recipient's own budget.
     const spent = await guarded(() => store.remaining('global', limits.global));
     if (spent.wait > 0) return refuseGlobal(spent.wait, spent.answered);
@@ -215,14 +228,18 @@ export function createMailer(
     // The charge is flat per request: refunding it for a recipient or cooldown refusal would let the
     // IP's 429 behaviour reveal whether the address has an account. Only the shared global counter,
     // which does not depend on the address, may skip it.
-    async consumeIp(address) {
+    async consumeIp(address, { chargeGlobal = false } = {}) {
       const key = `ip:${address}`;
       const spent = await guarded(() => store.remaining('global', limits.global));
       if (spent.answered && spent.wait > 0) {
         const wait = await failClosed(() => store.remaining(key, limits.perIpSignup));
         return { wait, mailBlockedFor: spent.wait };
       }
-      return { wait: await consume(key, limits.perIpSignup), mailBlockedFor: 0 };
+      const wait = await consume(key, limits.perIpSignup);
+      if (!chargeGlobal || wait > 0) return { wait, mailBlockedFor: 0 };
+      const taken = await guarded(() => store.consume('global', limits.global));
+      if (taken.wait > 0) return { wait: 0, mailBlockedFor: taken.wait };
+      return { wait: 0, mailBlockedFor: 0, globalCharged: true };
     },
     runAdmitted: (admission, work) => admissions.run(admission, work),
   };

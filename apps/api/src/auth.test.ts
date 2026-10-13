@@ -715,6 +715,46 @@ describe('mail abuse limits', () => {
     await h.close();
   });
 
+  it('spends the global budget on a reset for an unknown address like on a known one (#199)', async () => {
+    const attackerMailArrives = async (targetRegistered: boolean) => {
+      const h = await createHarness({
+        mailLimits: {
+          perRecipient: { max: 100, windowMs: 3_600_000 },
+          verificationCooldown: { max: 100, windowMs: 1000 },
+          perIpSignup: { max: 100, windowMs: 3_600_000 },
+          global: { max: 5, windowMs: 3_600_000 },
+        },
+      });
+      try {
+        const target = nextEmail();
+        let spent = 0;
+        if (targetRegistered) {
+          await signUp(h.app, target);
+          spent++;
+        }
+        for (; spent < 4; spent++) {
+          await signUp(h.app, nextEmail(), { 'x-forwarded-for': `203.0.113.${spent + 1}` });
+        }
+        await h.app.inject({
+          method: 'POST',
+          url: '/api/auth/request-password-reset',
+          headers: jsonHeaders,
+          payload: { email: target, redirectTo: '/' },
+        });
+        await h.settleMail();
+        const attacker = nextEmail();
+        await signUp(h.app, attacker, { 'x-forwarded-for': '198.51.100.9' });
+        await h.settleMail();
+        return h.outbox.some((m) => m.to === attacker);
+      } finally {
+        await h.close();
+      }
+    };
+
+    expect(await attackerMailArrives(true)).toBe(false);
+    expect(await attackerMailArrives(false)).toBe(false);
+  });
+
   it('keeps limiter state across a restart because it lives in Postgres', async () => {
     const h = await createHarness({
       mailLimits: {
