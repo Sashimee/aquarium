@@ -196,21 +196,18 @@ function at(values: ArrayLike<number>, i: number): number {
 
 describe('step budget', () => {
   it(
-    'steps 60 fish well inside the desktop and throttled budgets',
+    'steps 60 fish inside the budget relative to the reference workload',
     () => {
       const { meanMs, last } = fastestMeanMs(() => [swimming(1), reference()]);
       const [swim] = last;
       expect(swim.count).toBe(60);
-      process.stderr.write(
-        `RATIO swim ${(at(meanMs, 0) / at(meanMs, 1)).toFixed(3)} sim ${at(meanMs, 0).toFixed(4)}\n`,
-      );
       expect(at(meanMs, 0) / at(meanMs, 1)).toBeLessThan(SWIMMING_LIMIT);
     },
     TEST_TIMEOUT_MS,
   );
 
   it(
-    'stays inside the budget with a few hundred food particles in the water',
+    'stays inside the relative budget with a few hundred food particles in the water',
     () => {
       const { meanMs, last } = fastestMeanMs(() => [
         feeding(school(2), 250, (rain, t) => {
@@ -222,9 +219,6 @@ describe('step budget', () => {
       const [fed] = last;
       expect(fed.particleSteps / (WARMUP_STEPS + TIMED_STEPS)).toBeGreaterThan(200);
       expect(fed.eaten).toBeGreaterThan(0);
-      process.stderr.write(
-        `RATIO feed ${(at(meanMs, 0) / at(meanMs, 1)).toFixed(3)} sim ${at(meanMs, 0).toFixed(4)}\n`,
-      );
       expect(at(meanMs, 0) / at(meanMs, 1)).toBeLessThan(FEEDING_LIMIT);
     },
     TEST_TIMEOUT_MS,
@@ -244,7 +238,6 @@ describe('step budget', () => {
       const [sparse, dense] = last;
       const particleRatio = dense.particleSteps / sparse.particleSteps;
       expect(particleRatio).toBeGreaterThan(10);
-      process.stderr.write(`RATIO dense ${(at(meanMs, 1) / at(meanMs, 0)).toFixed(3)}\n`);
       expect(at(meanMs, 1) / at(meanMs, 0)).toBeLessThan(9);
     },
     TEST_TIMEOUT_MS,
