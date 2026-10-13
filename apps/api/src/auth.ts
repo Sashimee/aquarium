@@ -192,7 +192,8 @@ export function createAuth({
       useSecureCookies: secure,
       defaultCookieAttributes: { httpOnly: true, sameSite: 'lax', secure },
       // The Fastify layer overwrites x-forwarded-for with the proxy-validated client IP.
-      ipAddress: { ipAddressHeaders: ['x-forwarded-for'] },
+      // Pinned to match ipBucket's /64 grouping in mail.ts, so a Better Auth default change cannot split them.
+      ipAddress: { ipAddressHeaders: ['x-forwarded-for'], ipv6Subnet: 64 },
     },
     rateLimit: {
       enabled: true,
