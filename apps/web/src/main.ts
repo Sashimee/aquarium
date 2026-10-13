@@ -5,8 +5,9 @@ import { DEFAULT_TANK } from './engine/tank/dimensions';
 import { queueTankEvents, startFish } from './fish/start';
 import { CameraRig } from './interaction/camera';
 import { bindCameraControls } from './interaction/controls';
-import { SavedDecor } from './interaction/decor/binding';
-import { createDecorSystem, type DecorSystem } from './interaction/decor/system';
+import { FeederLayer } from './interaction/decor/feederLayer';
+import type { SavedTank } from './interaction/decor/binding';
+import type { DecorSystem } from './interaction/decor/system';
 import type { InteractionEvents } from './interaction/events';
 import { onPageTeardown } from './interaction/pageLifecycle';
 import { watchReducedMotion } from './interaction/motion';
@@ -39,7 +40,18 @@ async function boot(): Promise<void> {
     console.info(`quality tier ${from ?? '(start)'} -> ${to} (${reason})`),
   );
 
-  const savedDecor = new SavedDecor(interaction, (message, cause) => console.error(message, cause));
+  let savedTank: SavedTank | null = null;
+  const watchTank = [
+    interaction.on('tank:loaded', ({ tankId, biome, decorLayout }) => {
+      savedTank = { tankId, biome, layout: decorLayout };
+    }),
+    interaction.on('tank:decor', ({ layout }) => {
+      if (savedTank) savedTank = { ...savedTank, layout };
+    }),
+    interaction.on('tank:unloaded', () => {
+      savedTank = null;
+    }),
+  ];
 
   const tankEvents = queueTankEvents(interaction);
   mountUi(uiRoot, { engine: events, interaction });
@@ -113,18 +125,27 @@ async function boot(): Promise<void> {
   });
 
   let tankScene: TankScene | null = null;
+  let tornDown = false;
   mountPresetWhenTierKnown(engine, biome, window.location.search, (scene) => {
     tankScene = scene;
     fish.setAnchors(scene.anchors);
     play = createPlaySystem(engine, scene, interaction, fish.sim);
-    decor = createDecorSystem(engine, scene, interaction, savedDecor);
+    import('./interaction/decor/system').then(
+      ({ createDecorSystem }) => {
+        if (tornDown) return;
+        watchTank.forEach((off) => off());
+        decor = createDecorSystem(engine, scene, interaction, savedTank, new FeederLayer());
+      },
+      (cause: unknown) => console.error('Decor failed to load', cause),
+    );
     if (import.meta.env.DEV) Object.assign(window, { tankScene });
   });
 
   onPageTeardown(window, () => {
     play?.dispose();
     decor?.dispose();
-    savedDecor.dispose();
+    watchTank.forEach((off) => off());
+    tornDown = true;
     tankScene?.dispose().catch((cause: unknown) => console.error('Scene dispose failed', cause));
     stopMotionWatch();
     unbindControls();

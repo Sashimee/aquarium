@@ -10,6 +10,7 @@ import catalog from '../../../public/assets/index.json';
 import { layoutKey } from './key';
 import { hasVacationFeeder } from './layout';
 import { VACATION_FEEDER_ASSET_ID } from './spec';
+import { FeederLayer } from './feederLayer';
 import { DecorWorld, type DecorScenePort } from './world';
 
 const preset: DecorItem[] = [item('boulder-01', -0.3, 0), item('coast-rocks-05', 0.3, 0.05)];
@@ -42,8 +43,9 @@ function setup() {
   const colliders: (readonly DecorCollider[])[] = [];
   bus.on('decor:colliders', (e) => colliders.push(e.colliders));
   const { scene, hard, moves } = fakeScene();
-  const world = new DecorWorld(scene, bus);
-  return { bus, world, hard, moves, colliders };
+  const feeders = new FeederLayer();
+  const world = new DecorWorld(scene, bus, feeders);
+  return { bus, world, feeders, hard, moves, colliders };
 }
 
 describe('DecorWorld', () => {
@@ -72,23 +74,23 @@ describe('DecorWorld', () => {
   });
 
   it('keeps the vacation feeder out of the hardscape but in the layout and colliders', async () => {
-    const { world, hard, colliders } = setup();
+    const { world, feeders, hard, colliders } = setup();
     const feeder = item(VACATION_FEEDER_ASSET_ID, 0, 0.1);
     await world.showSaved([plant, ...preset, feeder]);
     expect(hard.at(-1)).toEqual(preset);
     expect(must(colliders.at(-1)).map((c) => c.id)).toContain('decor:p3');
-    expect(world.group.children).toHaveLength(1);
+    expect(feeders.group.children).toHaveLength(1);
     const layout = world.layout();
     expect(hasVacationFeeder(layout)).toBe(true);
     expect(layout).toHaveLength(4);
   });
 
   it('removes the feeder visual when the feeder goes', async () => {
-    const { world } = setup();
+    const { world, feeders } = setup();
     await world.showSaved([item(VACATION_FEEDER_ASSET_ID, 0, 0.1), ...preset]);
-    expect(world.group.children).toHaveLength(1);
+    expect(feeders.group.children).toHaveLength(1);
     await world.showSaved(preset);
-    expect(world.group.children).toHaveLength(0);
+    expect(feeders.group.children).toHaveLength(0);
   });
 
   it('previews a move on the scene piece with the right index', async () => {
@@ -128,7 +130,7 @@ describe('DecorWorld', () => {
         return Promise.resolve();
       },
     };
-    const world = new DecorWorld(slow, bus);
+    const world = new DecorWorld(slow, bus, new FeederLayer());
     const first = world.show(world.pieces);
     const second = world.show(world.pieces.slice(0, 1));
     await settle();
@@ -162,6 +164,20 @@ describe('SavedDecor', () => {
     await settle();
     expect(hard.at(-1)).toEqual([layout[1]]);
     expect(report).not.toHaveBeenCalled();
+  });
+
+  it('shows a tank that loaded before it existed', async () => {
+    const { bus, world, hard } = setup();
+    const layout = [item('boulder-01', 0.1, 0.1)];
+    const saved = new SavedDecor(bus, vi.fn(), {
+      tankId: 't1',
+      biome: 'freshwater',
+      layout,
+    });
+    expect(saved.tankId).toBe('t1');
+    saved.attach(world);
+    await settle();
+    expect(hard.at(-1)).toEqual(layout);
   });
 
   it('leaves the demo tank alone when nothing was ever customised', () => {
@@ -226,7 +242,7 @@ describe('SavedDecor', () => {
     };
     const report = vi.fn();
     const saved = new SavedDecor(bus, report);
-    saved.attach(new DecorWorld(failing, bus));
+    saved.attach(new DecorWorld(failing, bus, new FeederLayer()));
     bus.emit('tank:loaded', {
       tankId: 't1',
       biome: 'freshwater',

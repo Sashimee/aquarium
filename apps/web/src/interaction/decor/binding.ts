@@ -8,6 +8,12 @@ import type { DecorWorld } from './world';
  * every visit. It listens from boot, because a tank usually loads before its scene is built,
  * and shows the latest layout once `attach` hands it the world.
  */
+export interface SavedTank {
+  readonly tankId: string;
+  readonly biome: string;
+  readonly layout: DecorLayout;
+}
+
 export class SavedDecor {
   private world: DecorWorld | null = null;
   private latest: { biome: string; layout: DecorLayout } | null = null;
@@ -19,7 +25,12 @@ export class SavedDecor {
   constructor(
     interaction: EventBus<InteractionEvents>,
     private readonly report: (message: string, cause: unknown) => void,
+    initial: SavedTank | null = null,
   ) {
+    if (initial) {
+      this.loadedTankId = initial.tankId;
+      this.latest = { biome: initial.biome, layout: initial.layout };
+    }
     this.offs = [
       interaction.on('decor:mode-changed', ({ active }) => {
         this.editing = active;

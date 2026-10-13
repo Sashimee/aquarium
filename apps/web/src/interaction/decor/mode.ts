@@ -1,8 +1,6 @@
-import { Raycaster, Vector2 } from 'three/webgpu';
 import type { Engine } from '../../engine/Engine';
 import type { EventBus } from '../../engine/events';
 import { WATER_INSET } from '../../engine/tank/dimensions';
-import type { Vec3 } from '../camera';
 import type {
   DecorCommand,
   DecorPaletteEntry,
@@ -13,6 +11,7 @@ import type {
 import type { SavedDecor } from './binding';
 import { DecorEditor } from './editor';
 import type { Piece } from './layout';
+import { perspectiveRay } from './ray';
 import { describeRejection } from './rules';
 import type { DecorWorld } from './world';
 
@@ -40,8 +39,6 @@ export class DecorMode {
   private stopCommands: (() => void) | null = null;
   private tankId: string | null = null;
   private wasBusy = false;
-  private readonly raycaster = new Raycaster();
-  private readonly ndc = new Vector2();
   private readonly now: () => number;
 
   constructor(private readonly deps: DecorModeDeps) {
@@ -261,11 +258,7 @@ export class DecorMode {
     const w = canvas.clientWidth;
     const h = canvas.clientHeight;
     if (w === 0 || h === 0) return null;
-    this.ndc.set((x / w) * 2 - 1, -(y / h) * 2 + 1);
-    this.raycaster.setFromCamera(this.ndc, engine.camera);
-    const { origin, direction } = this.raycaster.ray;
-    const dir: Vec3 = { x: direction.x, y: direction.y, z: direction.z };
-    return { origin: { x: origin.x, y: origin.y, z: origin.z }, dir };
+    return perspectiveRay(engine.camera, (x / w) * 2 - 1, -(y / h) * 2 + 1);
   }
 
   private emptyState(): DecorViewState {

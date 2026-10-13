@@ -2,9 +2,10 @@ import type { Engine } from '../../engine/Engine';
 import type { EventBus } from '../../engine/events';
 import type { InteractionEvents } from '../events';
 import { watchReducedMotion } from '../motion';
-import type { SavedDecor } from './binding';
+import { SavedDecor, type SavedTank } from './binding';
 import type { DecorMode } from './mode';
-import type { DecorScenePort, DecorWorld } from './world';
+import type { FeederLayer } from './feederLayer';
+import { DecorWorld, type DecorScenePort } from './world';
 
 export interface DecorSystem {
   readonly active: boolean;
@@ -16,25 +17,23 @@ export interface DecorSystem {
   dispose(): void;
 }
 
-/** The decor chunks are fetched once the engine is up, so they stay out of the initial bundle. */
+/** The saved layouts are shown from the start; the editor itself is fetched when decorating is first asked for. */
 export function createDecorSystem(
   engine: Engine,
   scene: DecorScenePort,
   interaction: EventBus<InteractionEvents>,
-  saved: SavedDecor,
+  initial: SavedTank | null,
+  feeders: FeederLayer,
 ): DecorSystem {
-  let disposed = false;
-  let world: DecorWorld | null = null;
-  const loadingWorld = import('./world').then(({ DecorWorld: World }) => {
-    if (disposed) return null;
-    world = new World(scene, interaction);
-    engine.scene.add(world.group);
-    saved.attach(world);
-    return world;
-  });
-  loadingWorld.catch((cause: unknown) =>
-    engine.events.emit('engine:error', { message: 'Decor', cause }),
+  const saved = new SavedDecor(
+    interaction,
+    (message, cause) => console.error(message, cause),
+    initial,
   );
+  let disposed = false;
+  const world = new DecorWorld(scene, interaction, feeders);
+  engine.scene.add(feeders.group);
+  saved.attach(world);
 
   let reduced = false;
   const stopMotion = watchReducedMotion((value) => {
@@ -45,18 +44,9 @@ export function createDecorSystem(
 
   const ensureMode = async (): Promise<DecorMode> => {
     if (mode) return mode;
-    loading ??= Promise.all([import('./mode'), loadingWorld]).then(
-      ([{ DecorMode: Mode }, ready]) => {
-        if (ready)
-          mode = new Mode({
-            engine,
-            world: ready,
-            saved,
-            interaction,
-            reducedMotion: () => reduced,
-          });
-      },
-    );
+    loading ??= import('./mode').then(({ DecorMode: Mode }) => {
+      mode = new Mode({ engine, world, saved, interaction, reducedMotion: () => reduced });
+    });
     await loading;
     if (!mode) throw new Error('Decorate mode failed to load. Reload the page and try again.');
     return mode;
@@ -90,9 +80,9 @@ export function createDecorSystem(
     dispose() {
       disposed = true;
       stopRequests();
+      saved.dispose();
       stopMotion();
       mode?.dispose();
-      if (world) engine.scene.remove(world.group);
     },
   };
 }

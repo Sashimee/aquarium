@@ -12,6 +12,7 @@ import catalog from '../../../public/assets/index.json';
 import { item, must } from './fixtures';
 import { DecorMode } from './mode';
 import { VACATION_FEEDER_ASSET_ID } from './spec';
+import { FeederLayer } from './feederLayer';
 import { DecorWorld, type DecorScenePort } from './world';
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -48,7 +49,7 @@ function harness(layout: DecorItem[], biome: 'freshwater' | 'reef' = 'freshwater
     },
     moveHardDecor: () => undefined,
   };
-  const world = new DecorWorld(scene, bus);
+  const world = new DecorWorld(scene, bus, new FeederLayer());
   const saved = new SavedDecor(bus, () => undefined);
   saved.attach(world);
 

@@ -1,8 +1,8 @@
-import { BoxGeometry, Group, Mesh, MeshStandardNodeMaterial } from 'three/webgpu';
 import type { Biome, DecorItem, DecorLayout } from '@aquarium/shared';
 import type { EventBus } from '../../engine/events';
 import type { CatalogEntry } from '../../scene/assets';
 import type { InteractionEvents } from '../events';
+import type { FeederLayer } from './feederLayer';
 import { collidersFor } from './colliders';
 import { layoutKey } from './key';
 import { composeLayout, numberPieces, splitLayout, type Piece } from './layout';
@@ -21,28 +21,13 @@ export interface DecorScenePort {
   moveHardDecor(index: number, item: DecorItem): void;
 }
 
-const FEEDER_SIZE = FEEDER_SPEC.box;
-
 /**
  * The placed pieces as the scene, the sim and the server see them. Applying a saved layout and
  * editing both go through here so the three never disagree.
  */
 export class DecorWorld {
-  readonly group = new Group();
   readonly specs: ReadonlyMap<string, DecorSpec>;
   private current: readonly Piece[];
-  private readonly feeders = new Map<string, Mesh>();
-  private readonly feederGeometry = new BoxGeometry(
-    FEEDER_SIZE.max[0] - FEEDER_SIZE.min[0],
-    FEEDER_SIZE.max[1] - FEEDER_SIZE.min[1],
-    FEEDER_SIZE.max[2] - FEEDER_SIZE.min[2],
-  );
-  private readonly feederMaterial = new MeshStandardNodeMaterial({
-    color: 0xe8e4d8,
-    roughness: 0.6,
-    transparent: true,
-    opacity: 0.92,
-  });
   private applied: Promise<void> = Promise.resolve();
   private unmanaged: readonly DecorItem[];
   private presetLayoutKey: string;
@@ -50,8 +35,8 @@ export class DecorWorld {
   constructor(
     private readonly scene: DecorScenePort,
     private readonly interaction: EventBus<InteractionEvents>,
+    private readonly feeders: Pick<FeederLayer, 'sync' | 'dispose'>,
   ) {
-    this.group.name = 'decor-extras';
     this.specs = specsFromCatalog(scene.catalogEntries());
     this.unmanaged = scene.fixedDecor;
     this.current = numberPieces(scene.presetHardDecor);
@@ -106,9 +91,8 @@ export class DecorWorld {
     const index = this.current.findIndex((p) => p.id === piece.id);
     if (index === -1) return;
     this.current = this.current.map((p, i) => (i === index ? piece : p));
-    const feeder = this.feeders.get(piece.id);
-    if (feeder) {
-      this.placeFeeder(feeder, piece.item);
+    if (piece.item.assetId === FEEDER_SPEC.assetId) {
+      this.syncFeeders();
       return;
     }
     const hardIndex = this.current
@@ -126,38 +110,10 @@ export class DecorWorld {
   }
 
   dispose(): void {
-    this.group.removeFromParent();
-    this.feederGeometry.dispose();
-    this.feederMaterial.dispose();
-    this.feeders.clear();
+    this.feeders.dispose();
   }
 
   private syncFeeders(): void {
-    const wanted = new Map(
-      this.current.filter((p) => p.item.assetId === FEEDER_SPEC.assetId).map((p) => [p.id, p]),
-    );
-    for (const [id, mesh] of this.feeders) {
-      if (wanted.has(id)) continue;
-      mesh.removeFromParent();
-      this.feeders.delete(id);
-    }
-    for (const [id, piece] of wanted) {
-      let mesh = this.feeders.get(id);
-      if (!mesh) {
-        mesh = new Mesh(this.feederGeometry, this.feederMaterial);
-        mesh.name = 'vacation-feeder';
-        mesh.castShadow = true;
-        this.feeders.set(id, mesh);
-        this.group.add(mesh);
-      }
-      this.placeFeeder(mesh, piece.item);
-    }
-  }
-
-  private placeFeeder(mesh: Mesh, item: DecorItem): void {
-    const lift = (FEEDER_SIZE.max[1] - FEEDER_SIZE.min[1]) / 2;
-    mesh.position.set(item.position[0], item.position[1] + lift * item.scale, item.position[2]);
-    mesh.rotation.y = item.rotationY;
-    mesh.scale.setScalar(item.scale);
+    this.feeders.sync(this.current.filter((p) => p.item.assetId === FEEDER_SPEC.assetId));
   }
 }
