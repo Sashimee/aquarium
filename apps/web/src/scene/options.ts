@@ -1,3 +1,5 @@
+import { biomeSchema, type Biome } from '@aquarium/shared';
+
 export interface SceneOptions {
   /** `?colliders=1` shows the collider wireframes. */
   colliders: boolean;
@@ -11,4 +13,14 @@ export function parseSceneOptions(search: string): SceneOptions {
     return { colliders: false };
   }
   return { colliders: colliders === '1' };
+}
+
+/** `?biome=reef` picks the preset; anything else, including a typo, falls back to freshwater. */
+export function parseBiome(search: string): Biome {
+  const value = new URLSearchParams(search).get('biome');
+  if (value === null) return 'freshwater';
+  const parsed = biomeSchema.safeParse(value);
+  if (parsed.success) return parsed.data;
+  console.warn(`Ignoring ?biome=${value}; use freshwater or reef`);
+  return 'freshwater';
 }

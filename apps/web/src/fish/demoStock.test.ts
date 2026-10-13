@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { speciesSchema } from '@aquarium/shared';
 import { DEFAULT_TANK, WATER_INSET } from '../engine/tank/dimensions';
 import { DEMO_COUNTS, DEMO_MAX_LENGTH_M, DEMO_SPECIES, demoTank } from './demoStock';
 
@@ -43,6 +44,18 @@ describe('demoTank', () => {
         const max = DEMO_MAX_LENGTH_M[spawn.species] ?? Number.NaN;
         expect(spawn.bodyLengthM ?? Number.NaN).toBeLessThanOrEqual(max);
       }
+    }
+  });
+
+  it('passes each species diet from content to the sim', () => {
+    const files = import.meta.glob('../../../../content/species/*.json', {
+      eager: true,
+      import: 'default',
+    });
+    for (const species of DEMO_SPECIES) {
+      const raw = files[`../../../../content/species/${species.id}.json`];
+      const content = speciesSchema.partial({ render: true }).parse(raw);
+      expect(species, species.id).toMatchObject({ lifecycle: { diet: content.lifecycle.diet } });
     }
   });
 

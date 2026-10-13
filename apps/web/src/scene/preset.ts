@@ -1,7 +1,8 @@
 import { presetLayoutSchema, type Biome, type PresetLayout } from '@aquarium/shared';
 import freshwater from '../../../../content/presets/freshwater.json';
+import reef from '../../../../content/presets/reef.json';
 
-const SOURCES: Readonly<Partial<Record<Biome, unknown>>> = { freshwater };
+const SOURCES: Readonly<Partial<Record<Biome, unknown>>> = { freshwater, reef };
 
 export function parsePreset(source: unknown, label: string): PresetLayout {
   const result = presetLayoutSchema.safeParse(source);
