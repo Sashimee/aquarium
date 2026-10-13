@@ -91,6 +91,7 @@ export interface AuthState {
   user: User | null;
   signIn(input: SignInRequest): Promise<void>;
   signUp(input: SignUpRequest): Promise<void>;
+  signInWithPasskey(): Promise<void>;
   signOut(): Promise<void>;
   refresh(): Promise<void>;
 }
@@ -141,6 +142,18 @@ function AuthProvider({ children }: { children: ReactNode }) {
         setUser(signedIn);
       },
       signUp: (input) => api.signUp(input),
+      async signInWithPasskey() {
+        await api.signInWithPasskey();
+        const signedIn = await api.me();
+        if (!signedIn) {
+          throw new ApiRequestError(
+            401,
+            'unauthenticated',
+            'You were signed in, but the session was not kept. Check that your browser accepts cookies and try again.',
+          );
+        }
+        setUser(signedIn);
+      },
       async signOut() {
         await api.signOut();
         setUser(null);

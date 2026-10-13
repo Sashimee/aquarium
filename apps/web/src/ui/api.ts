@@ -128,6 +128,8 @@ export interface ApiClient {
   signUp(input: SignUpRequest): Promise<void>;
   signIn(input: SignInRequest): Promise<void>;
   signOut(): Promise<void>;
+  addPasskey(): Promise<void>;
+  signInWithPasskey(): Promise<void>;
   resendVerification(email: string): Promise<void>;
   me(): Promise<User | null>;
   sessions(): Promise<SessionInfo[]>;
@@ -146,6 +148,19 @@ export interface ApiClient {
   netFish(tankId: string, fishId: string): Promise<Tank>;
   care(tankId: string, action: CareAction): Promise<Tank>;
   reportAte(tankId: string, reports: readonly AteReport[]): Promise<Tank>;
+}
+
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function passkeyFailure(cause: unknown, doing: string): ApiRequestError {
+  const reason = cause instanceof Error && cause.message ? ` (${cause.message})` : '';
+  return new ApiRequestError(
+    400,
+    'validation_failed',
+    `The passkey was not ${doing}${reason}. Try again, or use your password.`,
+  );
 }
 
 export function createApiClient(fetcher: Fetcher = (i, init) => fetch(i, init)): ApiClient {
@@ -218,6 +233,56 @@ export function createApiClient(fetcher: Fetcher = (i, init) => fetch(i, init)):
     },
     async signOut() {
       await post('/api/auth/sign-out', {});
+    },
+    async addPasskey() {
+      const res = await send('/api/auth/passkey/generate-register-options');
+      if (!res.ok) throw await toError(res);
+      const optionsJSON: unknown = await res.json().catch(() => null);
+      if (!isJsonObject(optionsJSON)) {
+        throw new ApiRequestError(
+          res.status,
+          'unexpected_response',
+          'The server sent passkey options this version of the app cannot read. Reload the page.',
+        );
+      }
+      const { startRegistration } = await import('@simplewebauthn/browser');
+      let credential;
+      try {
+        credential = await startRegistration({
+          optionsJSON: optionsJSON as unknown as Parameters<
+            typeof startRegistration
+          >[0]['optionsJSON'],
+        });
+      } catch (cause) {
+        throw passkeyFailure(cause, 'created');
+      }
+      const { clientExtensionResults: _ignored, ...response } = credential;
+      await post('/api/auth/passkey/verify-registration', { response });
+    },
+    async signInWithPasskey() {
+      const res = await send('/api/auth/passkey/generate-authenticate-options');
+      if (!res.ok) throw await toError(res);
+      const optionsJSON: unknown = await res.json().catch(() => null);
+      if (!isJsonObject(optionsJSON)) {
+        throw new ApiRequestError(
+          res.status,
+          'unexpected_response',
+          'The server sent passkey options this version of the app cannot read. Reload the page.',
+        );
+      }
+      const { startAuthentication } = await import('@simplewebauthn/browser');
+      let credential;
+      try {
+        credential = await startAuthentication({
+          optionsJSON: optionsJSON as unknown as Parameters<
+            typeof startAuthentication
+          >[0]['optionsJSON'],
+        });
+      } catch (cause) {
+        throw passkeyFailure(cause, 'used');
+      }
+      const { clientExtensionResults: _ignored, ...response } = credential;
+      await post('/api/auth/passkey/verify-authentication', { response });
     },
     async resendVerification(email) {
       const valid = emailSchema.safeParse(email);
