@@ -14,6 +14,15 @@ const nextEmail = () => `t06-${Date.now()}-${counter++}@bas.lu`;
 
 const jsonHeaders = { 'content-type': 'application/json', origin: APP_ORIGIN };
 
+const median = (xs: number[]) => [...xs].sort((x, y) => x - y)[Math.floor(xs.length / 2)] ?? 0;
+
+// Samples are taken interleaved so host load hits both sets alike; the allowed gap scales
+// with the observed latency instead of an absolute bound a loaded host can break.
+function expectSimilarMedians(a: number[], b: number[]) {
+  const base = Math.min(median(a), median(b));
+  expect(Math.abs(median(a) - median(b))).toBeLessThan(15 + 0.25 * base);
+}
+
 function cookieJar(res: LightMyRequestResponse): string {
   return res.cookies.map((c) => `${c.name}=${c.value}`).join('; ');
 }
@@ -161,7 +170,6 @@ describe('unverified sign-up takeover (#114)', () => {
   });
 
   it('responds to a repeat sign-up in about the time of a fresh one', async () => {
-    const median = (xs: number[]) => [...xs].sort((x, y) => x - y)[Math.floor(xs.length / 2)] ?? 0;
     const time = async (email: string) => {
       const start = performance.now();
       await signUpWith(email, ATTACKER_PASSWORD);
@@ -169,13 +177,22 @@ describe('unverified sign-up takeover (#114)', () => {
     };
     const fresh: number[] = [];
     const repeat: number[] = [];
-    for (let i = 0; i < 5; i++) {
+    await time(nextEmail());
+    for (let i = 0; i < 10; i++) {
       const email = nextEmail();
-      fresh.push(await time(email));
-      repeat.push(await time(email));
+      const first = await time(email);
+      const second = await time(email);
+      fresh.push(first);
+      repeat.push(second);
+      const other = nextEmail();
+      await signUpWith(other, ATTACKER_PASSWORD);
+      const secondRepeat = await time(other);
+      const secondFresh = await time(nextEmail());
+      repeat.push(secondRepeat);
+      fresh.push(secondFresh);
     }
-    expect(Math.abs(median(repeat) - median(fresh))).toBeLessThan(150);
-  });
+    expectSimilarMedians(repeat, fresh);
+  }, 30_000);
 
   it('lets the owner set a password by reset, revoking sessions, and leaves verified accounts intact', async () => {
     const email = nextEmail();
@@ -551,8 +568,9 @@ describe('mail abuse limits', () => {
         headers: jsonHeaders,
         payload: { email, callbackURL: '/' },
       });
+      const ms = performance.now() - start;
       await h.settleMail();
-      return { res, ms: performance.now() - start };
+      return { res, ms };
     };
     const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const cooledRes = await resend(cooled);
@@ -567,14 +585,13 @@ describe('mail abuse limits', () => {
     expect(h.outbox.length).toBe(mailsBefore);
     expect(h.outbox.filter((m) => m.to === cooled)).toHaveLength(1);
 
-    const median = (xs: number[]) => [...xs].sort((x, y) => x - y)[Math.floor(xs.length / 2)] ?? 0;
     const cooledMs: number[] = [];
     const unknownMs: number[] = [];
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 9; i++) {
       cooledMs.push((await resend(cooled)).ms);
       unknownMs.push((await resend(nextEmail())).ms);
     }
-    expect(Math.abs(median(cooledMs) - median(unknownMs))).toBeLessThan(150);
+    expectSimilarMedians(cooledMs, unknownMs);
     expect(h.outbox.length).toBe(mailsBefore);
     await h.close();
   }, 20_000);
@@ -980,7 +997,7 @@ describe('mail abuse limits', () => {
       return { h, hits, arm: () => (spentOnce = true) };
     }
 
-    it('sends no sign-up mail and charges nothing when the cap frees before the mail step', async () => {
+    it('sends no sign-up mail and charges one hit when the cap frees before the mail step', async () => {
       const { h, hits, arm } = await harnessWithFlakyCap();
       const before = await hits();
       arm();
@@ -991,7 +1008,7 @@ describe('mail abuse limits', () => {
       await h.close();
     });
 
-    it('sends no reset mail and charges nothing when the cap frees before the mail step', async () => {
+    it('sends no reset mail and charges one hit when the cap frees before the mail step', async () => {
       const { h, hits, arm } = await harnessWithFlakyCap();
       const email = nextEmail();
       await signUp(h.app, email);
