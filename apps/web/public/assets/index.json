@@ -2,7 +2,7 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; every texture has both files.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Anemone tentacle sway is \"_sway\" (0 base, 1 tip).",
-  "totalBytes": 57313377,
+  "totalBytes": 57313117,
   "assets": [
     {
       "id": "angelfish",
@@ -146,34 +146,34 @@
       "bounds": {
         "min": [
           -0.010797,
-          -0.017892,
-          -0.03643
+          -0.018606,
+          -0.035525
         ],
         "max": [
           0.010797,
-          0.023434,
-          0.01851
+          0.022539,
+          0.019415
         ]
       },
       "lods": [
         {
           "file": "fish/banggai-cardinalfish/lod0.glb",
-          "bytes": 31508,
-          "sha256": "362a1829a7baa6aae816cb19fe0988050bccdc19b9efb80bf7ce6f5da84b94d0",
+          "bytes": 31292,
+          "sha256": "61d0ea64eb9a1470a21d51617dd65a396e29c24e511e2cbcf08190cc62ae27a7",
           "triangles": 3264,
           "vertices": 1778
         },
         {
           "file": "fish/banggai-cardinalfish/lod1.glb",
           "bytes": 15980,
-          "sha256": "00a74f88bbc50f2d11d12e4950ccb4865f0e65c348c100fcf9ce8d4565fa0f19",
-          "triangles": 1306,
-          "vertices": 727
+          "sha256": "46827dd2c6c2a0f4be7d3553f14ee3323a8743934c34c80ef53f17de12c168d7",
+          "triangles": 1305,
+          "vertices": 724
         },
         {
           "file": "fish/banggai-cardinalfish/lod2.glb",
-          "bytes": 8568,
-          "sha256": "b3f4217c59f3346adb344a5f6f171972d11697878af5665a39cca7a3e2cd62bd",
+          "bytes": 8524,
+          "sha256": "a1df3c53820684328a184df3f7ae8d9c0147e4008f61f8454e862459ca68b37a",
           "triangles": 489,
           "vertices": 288
         }
@@ -204,18 +204,18 @@
       "files": [
         {
           "file": "fish/banggai-cardinalfish/lod0.glb",
-          "bytes": 31508,
-          "sha256": "362a1829a7baa6aae816cb19fe0988050bccdc19b9efb80bf7ce6f5da84b94d0"
+          "bytes": 31292,
+          "sha256": "61d0ea64eb9a1470a21d51617dd65a396e29c24e511e2cbcf08190cc62ae27a7"
         },
         {
           "file": "fish/banggai-cardinalfish/lod1.glb",
           "bytes": 15980,
-          "sha256": "00a74f88bbc50f2d11d12e4950ccb4865f0e65c348c100fcf9ce8d4565fa0f19"
+          "sha256": "46827dd2c6c2a0f4be7d3553f14ee3323a8743934c34c80ef53f17de12c168d7"
         },
         {
           "file": "fish/banggai-cardinalfish/lod2.glb",
-          "bytes": 8568,
-          "sha256": "b3f4217c59f3346adb344a5f6f171972d11697878af5665a39cca7a3e2cd62bd"
+          "bytes": 8524,
+          "sha256": "a1df3c53820684328a184df3f7ae8d9c0147e4008f61f8454e862459ca68b37a"
         },
         {
           "file": "fish/banggai-cardinalfish/textures/banggai-cardinalfish_basecolor_1k.ktx2",

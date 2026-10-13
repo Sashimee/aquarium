@@ -337,19 +337,19 @@ export const LOFT_FISH_RECIPES: LoftFishRecipe[] = [
       file: 'Banggai-Kardinalbarsch_Pterapogon_kauderni.jpg',
       crop: { left: 833, top: 167, width: 1800, height: 1600 },
       snoutPixel: [943, 1293],
-      tailPixel: [1983, 1107],
+      tailPixel: [1983, 1142],
       finSwatch: { left: 380, top: 860, width: 180, height: 400 },
     },
     spec: {
       roundness: 2.2,
       sections: [
         { t: 0, top: 0.22, bottom: 0.14, halfWidth: 0.02 },
-        { t: 0.06, top: 0.32, bottom: 0.08, halfWidth: 0.06 },
-        { t: 0.2, top: 0.46, bottom: 0, halfWidth: 0.12 },
-        { t: 0.4, top: 0.46, bottom: 0, halfWidth: 0.13 },
-        { t: 0.6, top: 0.4, bottom: 0.03, halfWidth: 0.1 },
-        { t: 0.8, top: 0.31, bottom: 0.08, halfWidth: 0.07 },
-        { t: 1, top: 0.23, bottom: 0.1, halfWidth: 0.05 },
+        { t: 0.06, top: 0.272, bottom: 0.11, halfWidth: 0.06 },
+        { t: 0.2, top: 0.358, bottom: -0.028, halfWidth: 0.12 },
+        { t: 0.4, top: 0.408, bottom: -0.072, halfWidth: 0.13 },
+        { t: 0.6, top: 0.398, bottom: -0.053, halfWidth: 0.1 },
+        { t: 0.8, top: 0.295, bottom: 0.058, halfWidth: 0.07 },
+        { t: 1, top: 0.238, bottom: 0.092, halfWidth: 0.05 },
       ],
       fins: [
         {
