@@ -1,4 +1,5 @@
 import { traitSchema, type Species } from '@aquarium/shared';
+import { BEHAVIOUR } from './behaviour.ts';
 import { FOOD_TYPES } from './food.ts';
 import { DEG } from './math.ts';
 
@@ -61,7 +62,35 @@ export interface SimSpecies {
   readonly bellyToSurface: boolean;
   /** Preference weight per `FOOD_TYPES` index, 1 for the first diet entry and 0 off the diet. */
   readonly foodPreference: readonly number[];
+  readonly gulpsPerHour: number;
+  readonly grazeMeanIntervalS: number;
+  readonly grazeMinS: number;
+  readonly grazeMaxS: number;
+  readonly flareMinS: number;
+  readonly flareMaxS: number;
+  readonly stationRadiusBodyLengths: number;
+  readonly restationMinS: number;
+  readonly restationMaxS: number;
+  readonly shelterAfterStartleS: number;
+  readonly excursionMeanIntervalS: number;
+  readonly hostLeashBodyLengths: number;
 }
+
+type TraitParams = Pick<
+  SimSpecies,
+  | 'gulpsPerHour'
+  | 'grazeMeanIntervalS'
+  | 'grazeMinS'
+  | 'grazeMaxS'
+  | 'flareMinS'
+  | 'flareMaxS'
+  | 'stationRadiusBodyLengths'
+  | 'restationMinS'
+  | 'restationMaxS'
+  | 'shelterAfterStartleS'
+  | 'excursionMeanIntervalS'
+  | 'hostLeashBodyLengths'
+>;
 
 function parseTraits(id: string, traits: readonly string[]): ReadonlySet<Trait> {
   const known = new Set<string>(TRAITS);
@@ -110,6 +139,116 @@ function requirePositive(value: number, field: string, id: string): number {
     throw new RangeError(`species "${id}": ${field} must be a positive number, got ${value}`);
   }
   return value;
+}
+
+function requireOrdered(min: number, max: number, field: string, id: string): void {
+  if (min > max) {
+    throw new RangeError(
+      `species "${id}": behaviour.${field} min ${min} exceeds max ${max} after filling in defaults`,
+    );
+  }
+}
+
+/**
+ * Reads the optional per-trait parameter objects over the `BEHAVIOUR` defaults. An object the
+ * sim would never read fails loading like an unknown trait does, rather than being ignored.
+ * Which objects are read follows the branch order of `Behaviour.planDefault`: forage gait, then
+ * glass grazing, then a home (anchor or station), then free swimming.
+ */
+function parseTraitParams(
+  id: string,
+  behaviour: SpeciesInput['behaviour'],
+  traits: ReadonlySet<Trait>,
+  gait: Gait,
+  home: HomeKind,
+): TraitParams {
+  const { airGulp, grazing, flare, station, refuge, excursion } = behaviour;
+  const forager = gait === 'forage';
+  const homed = !forager && !traits.has('glass-grazer') && home !== 'none';
+  const free = !forager && !traits.has('glass-grazer') && home === 'none';
+  const owners: [string, unknown, boolean, string][] = [
+    ['airGulp', airGulp, forager && traits.has('air-gulp'), 'trait "air-gulp" and gait "forage"'],
+    [
+      'grazing',
+      grazing,
+      free && traits.has('rock-grazer'),
+      'trait "rock-grazer" on a species with no home and a gait other than "hover" or "forage"',
+    ],
+    ['flare', flare, traits.has('flare-display'), 'trait "flare-display"'],
+    [
+      'station',
+      station,
+      homed,
+      'gait "hover" or an anemone or cave home, without gait "forage" or trait "glass-grazer"',
+    ],
+    ['refuge', refuge, traits.has('cave-dweller'), 'trait "cave-dweller"'],
+    [
+      'excursion',
+      excursion,
+      homed && traits.has('anemone-host'),
+      'trait "anemone-host" without gait "forage" or trait "glass-grazer"',
+    ],
+  ];
+  for (const [field, value, active, needs] of owners) {
+    if (value !== undefined && !active) {
+      throw new RangeError(`species "${id}": behaviour.${field} is set but needs ${needs}`);
+    }
+  }
+  const params: TraitParams = {
+    gulpsPerHour: requirePositive(
+      airGulp?.perHour ?? BEHAVIOUR.gulpsPerHour,
+      'behaviour.airGulp.perHour',
+      id,
+    ),
+    grazeMeanIntervalS: requirePositive(
+      grazing?.meanIntervalS ?? BEHAVIOUR.grazeMeanIntervalS,
+      'behaviour.grazing.meanIntervalS',
+      id,
+    ),
+    grazeMinS: requirePositive(grazing?.minS ?? BEHAVIOUR.grazeMinS, 'behaviour.grazing.minS', id),
+    grazeMaxS: requirePositive(grazing?.maxS ?? BEHAVIOUR.grazeMaxS, 'behaviour.grazing.maxS', id),
+    flareMinS: requirePositive(flare?.minS ?? BEHAVIOUR.flareMinS, 'behaviour.flare.minS', id),
+    flareMaxS: requirePositive(flare?.maxS ?? BEHAVIOUR.flareMaxS, 'behaviour.flare.maxS', id),
+    stationRadiusBodyLengths: requirePositive(
+      station?.radiusBodyLengths ?? BEHAVIOUR.stationRadiusBodyLengths,
+      'behaviour.station.radiusBodyLengths',
+      id,
+    ),
+    restationMinS: requirePositive(
+      station?.restationMinS ?? BEHAVIOUR.restationMinS,
+      'behaviour.station.restationMinS',
+      id,
+    ),
+    restationMaxS: requirePositive(
+      station?.restationMaxS ?? BEHAVIOUR.restationMaxS,
+      'behaviour.station.restationMaxS',
+      id,
+    ),
+    shelterAfterStartleS: requirePositive(
+      refuge?.afterStartleS ?? BEHAVIOUR.shelterAfterStartleS,
+      'behaviour.refuge.afterStartleS',
+      id,
+    ),
+    excursionMeanIntervalS: requirePositive(
+      excursion?.meanIntervalS ?? BEHAVIOUR.excursionMeanIntervalS,
+      'behaviour.excursion.meanIntervalS',
+      id,
+    ),
+    hostLeashBodyLengths: requirePositive(
+      excursion?.leashBodyLengths ?? BEHAVIOUR.hostLeashBodyLengths,
+      'behaviour.excursion.leashBodyLengths',
+      id,
+    ),
+  };
+  requireOrdered(params.grazeMinS, params.grazeMaxS, 'grazing.minS/maxS', id);
+  requireOrdered(params.flareMinS, params.flareMaxS, 'flare.minS/maxS', id);
+  requireOrdered(
+    params.restationMinS,
+    params.restationMaxS,
+    'station.restationMinS/restationMaxS',
+    id,
+  );
+  return params;
 }
 
 export function toSimSpecies(input: SpeciesInput): SimSpecies {
@@ -174,5 +313,6 @@ export function toSimSpecies(input: SpeciesInput): SimSpecies {
     flare: traits.has('flare-display'),
     bellyToSurface: traits.has('glass-grazer') || traits.has('cave-dweller'),
     foodPreference: parseDiet(id, input.lifecycle.diet),
+    ...parseTraitParams(id, behaviour, traits, loco.gait, home),
   };
 }

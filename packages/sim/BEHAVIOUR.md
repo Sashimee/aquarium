@@ -27,6 +27,22 @@ open to correction.
   `behaviour.traits` (`TRAITS` in `src/species.ts`): `shoal`, `air-gulp`, `glass-grazer`,
   `rock-grazer`, `anemone-host`, `cave-dweller`, `flare-display`. An unknown or conflicting
   trait fails species loading. `gait: hover` gives a fish a self-chosen station.
+- **Per-trait parameters:** a species can override some of those defaults with optional
+  `behaviour` objects, read by `toSimSpecies`. A field left out keeps the `BEHAVIOUR` default.
+  `airGulp.perHour` → `gulpsPerHour` (needs `air-gulp` and `gait: forage`);
+  `grazing.meanIntervalS`/`minS`/`maxS` → `grazeMeanIntervalS`/`grazeMinS`/`grazeMaxS` (needs
+  `rock-grazer` on a free swimmer: no home, gait neither `hover` nor `forage`); `flare.minS`/`maxS`
+  → `flareMinS`/`flareMaxS` (needs `flare-display`); `station.radiusBodyLengths`/`restationMinS`/
+  `restationMaxS` → `stationRadiusBodyLengths`/`restationMinS`/`restationMaxS` (needs a home:
+  `gait: hover`, `anemone-host` or `cave-dweller`, because an anemone or cave fish placed without
+  its anchor holds a self-chosen station instead); `refuge.afterStartleS` → `shelterAfterStartleS`
+  (needs `cave-dweller`); `excursion.meanIntervalS`/`leashBodyLengths` →
+  `excursionMeanIntervalS`/`hostLeashBodyLengths` (needs `anemone-host`). `station` and `excursion`
+  also need a gait other than `forage` and no `glass-grazer`, since those behaviours take
+  precedence over a home. `refuge` does not: every `cave-dweller` holds off feeding for
+  `shelterAfterStartleS` after a startle, whatever its gait. Species loading **rejects** an object the sim would never read,
+  because it would otherwise be ignored silently and a warning in a worker is easy to miss. It also rejects a min/max pair that is out of order after
+  the merge, such as `grazing: { minS: 50 }` against the default `grazeMaxS` of 4.
 - **Feeding:** every feeding tunable is in `FEEDING` (`src/feeding.ts`). Food arrives each tick
   as `[id, x, y, z, typeIndex]` float32 records (`FOOD_STRIDE = 5`), `typeIndex` in the order of
   the shared `foodTypeSchema` (`FOOD_TYPES`). The sim never moves food; it reports
@@ -139,5 +155,5 @@ fields: where a fish feeds comes from its `depthBand` and `gait`, what it eats f
 
 Area-restricted search after a find, learning which food is good, and food type affecting the
 strike (suction versus biting) are not modelled. Following a finger or laser pointer on the glass (curiosity) and
-memory of feeding spots are not modelled yet (#72). Per-species tuning of the behaviour constants (flare timing, graze
-interval, gulp rate) uses shared defaults until the species schema has fields for them.
+memory of feeding spots are not modelled yet (#72). Behaviour constants outside the per-trait
+parameter objects are shared by every species.

@@ -396,10 +396,10 @@ export class Behaviour {
       const si = at(this.host.speciesIndex, i);
       this.restTau[i] = BEHAVIOUR.restTauS * (1 + BEHAVIOUR.restTauJitter * rng.signed());
       this.territoryCheck[i] = rng.range(0, BEHAVIOUR.territoryCheckS);
-      this.grazeNext[i] = rng.range(0, BEHAVIOUR.grazeMeanIntervalS);
+      this.grazeNext[i] = rng.range(0, sp.grazeMeanIntervalS);
       this.crawlSign[i] = rng.next() < 0.5 ? -1 : 1;
       this.forageTimer[i] = rng.range(BEHAVIOUR.moveMinS, BEHAVIOUR.moveMaxS);
-      this.excursionTimer[i] = rng.range(0, 2 * BEHAVIOUR.excursionMeanIntervalS);
+      this.excursionTimer[i] = rng.range(0, 2 * sp.excursionMeanIntervalS);
       if (sp.home === 'station' && sp.schooling) {
         this.groupSize[si] = at(this.groupSize, si) + 1;
         if (at(this.groupLeader, si) < 0) this.groupLeader[si] = i;
@@ -570,7 +570,8 @@ export class Behaviour {
       this.groupTimer[s] = left;
       if (left > 0) continue;
       this.chooseStation(leader, this.groupHome, s * 3);
-      this.groupTimer[s] = this.host.rng.range(BEHAVIOUR.restationMinS, BEHAVIOUR.restationMaxS);
+      const sp = this.speciesOf(leader);
+      this.groupTimer[s] = this.host.rng.range(sp.restationMinS, sp.restationMaxS);
     }
   }
 
@@ -578,7 +579,7 @@ export class Behaviour {
     const sp = this.speciesOf(i);
     if (sp.home === 'none') return;
     this.chooseStation(i, this.home, i * 3);
-    this.homeTimer[i] = this.host.rng.range(BEHAVIOUR.restationMinS, BEHAVIOUR.restationMaxS);
+    this.homeTimer[i] = this.host.rng.range(sp.restationMinS, sp.restationMaxS);
   }
 
   /**
@@ -694,7 +695,7 @@ export class Behaviour {
     this.gulpPhase[i] = GulpPhase.None;
     if (this.grazePhase[i] !== GrazePhase.Roam) this.grazePhase[i] = GrazePhase.None;
     this.excursion[i] = 0;
-    if (sp.home === 'cave') this.shelterTimer[i] = BEHAVIOUR.shelterAfterStartleS;
+    if (sp.home === 'cave') this.shelterTimer[i] = sp.shelterAfterStartleS;
     this.relay(i, yaw, pitch);
   }
 
@@ -1055,7 +1056,7 @@ export class Behaviour {
       if (d < 1.5 * (li + lj)) {
         if (sp.flare) {
           this.territoryPhase[i] = TerritoryPhase.Flare;
-          this.territoryTimer[i] = rng.range(BEHAVIOUR.flareMinS, BEHAVIOUR.flareMaxS);
+          this.territoryTimer[i] = rng.range(sp.flareMinS, sp.flareMaxS);
         } else {
           this.territoryPhase[i] = TerritoryPhase.Charge;
           this.territoryTimer[i] = BEHAVIOUR.chargeS;
@@ -1133,7 +1134,7 @@ export class Behaviour {
     const si = at(this.host.speciesIndex, i);
     if (sp.schooling && at(this.groupLeader, si) >= 0) {
       const size = at(this.groupSize, si);
-      const radius = BEHAVIOUR.stationRadiusBodyLengths * length + 0.5 * length * Math.sqrt(size);
+      const radius = sp.stationRadiusBodyLengths * length + 0.5 * length * Math.sqrt(size);
       const o = si * 3;
       this.holdStation(
         i,
@@ -1156,7 +1157,7 @@ export class Behaviour {
       at(this.home, o),
       at(this.home, o + 1),
       at(this.home, o + 2),
-      BEHAVIOUR.stationRadiusBodyLengths * length,
+      sp.stationRadiusBodyLengths * length,
       FishState.Station,
     );
   }
@@ -1188,7 +1189,7 @@ export class Behaviour {
         );
         if (left <= 0) {
           this.excursion[i] = 0;
-          this.excursionTimer[i] = this.host.rng.range(0, 2 * BEHAVIOUR.excursionMeanIntervalS);
+          this.excursionTimer[i] = this.host.rng.range(0, 2 * sp.excursionMeanIntervalS);
         }
         return;
       }
@@ -1201,7 +1202,7 @@ export class Behaviour {
         ax,
         ay,
         az,
-        a.radius + BEHAVIOUR.hostLeashBodyLengths * length,
+        a.radius + sp.hostLeashBodyLengths * length,
         FishState.Host,
       );
       return;
@@ -1286,7 +1287,7 @@ export class Behaviour {
     );
     const y = clamp(a.position[1] + rise, basin.ground(x, z) + margin, basin.maxY - margin);
     if (sceneSdf.sample(x, y, z, this.n3) < margin) {
-      this.excursionTimer[i] = rng.range(0, BEHAVIOUR.excursionMeanIntervalS);
+      this.excursionTimer[i] = rng.range(0, this.speciesOf(i).excursionMeanIntervalS);
       return;
     }
     const o = i * 3;
@@ -1337,7 +1338,7 @@ export class Behaviour {
     plan.bandHi = ground + BEHAVIOUR.forageBandHighBodyLengths * length;
     plan.state = FishState.Forage;
     if (sp.airGulp) {
-      const p = 1 - Math.exp(-(BEHAVIOUR.gulpsPerHour / 3600) * DT);
+      const p = 1 - Math.exp(-(sp.gulpsPerHour / 3600) * DT);
       if (rng.next() < p) {
         this.gulpPhase[i] = GulpPhase.Ascend;
         this.gulpTimer[i] = BEHAVIOUR.gulpTimeoutS;
@@ -1512,12 +1513,13 @@ export class Behaviour {
   /** Tangs graze turf algae on rock in short pecking bouts (Montgomery et al. 1989). */
   private planGrazeBout(i: number, plan: Plan, rest: number): boolean {
     const { rng } = this.host;
+    const sp = this.speciesOf(i);
     const phase = at(this.grazePhase, i);
     if (phase === GrazePhase.None) {
       const next = at(this.grazeNext, i) - DT;
       this.grazeNext[i] = next;
       if (next > 0 || rest > 0.5) return false;
-      this.grazeNext[i] = -Math.log(1 - rng.next()) * BEHAVIOUR.grazeMeanIntervalS;
+      this.grazeNext[i] = -Math.log(1 - rng.next()) * sp.grazeMeanIntervalS;
       if (!this.pickGrazeSpot(i)) return false;
       this.grazePhase[i] = GrazePhase.Approach;
       this.grazeTimer[i] = BEHAVIOUR.grazeApproachTimeoutS;
@@ -1548,7 +1550,7 @@ export class Behaviour {
       const ahead = ex * at(this.host.forward, o) + ez * at(this.host.forward, o + 2);
       if (d < 0.5 * length) {
         this.grazePhase[i] = GrazePhase.Graze;
-        this.grazeTimer[i] = rng.range(BEHAVIOUR.grazeMinS, BEHAVIOUR.grazeMaxS);
+        this.grazeTimer[i] = rng.range(sp.grazeMinS, sp.grazeMaxS);
         this.grazeYaw[i] = at(this.host.yaw, i);
       } else if (left <= 0) {
         this.grazePhase[i] = GrazePhase.None;

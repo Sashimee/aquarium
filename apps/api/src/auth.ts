@@ -146,7 +146,8 @@ export function createAuth({
           // owes a mail here, after the password checked out.
           if (request && new URL(request.url).pathname === `${AUTH_BASE_PATH}/sign-in/email`) {
             const ip = request.headers.get('x-forwarded-for');
-            if ((await mailer.consumeIp(ip ?? 'unknown')) > 0) return;
+            const admission = await mailer.consumeIp(ip ?? 'unknown');
+            if (admission.wait > 0 || admission.mailBlockedFor > 0) return;
           }
           await mailer.sendVerification(user.email, url);
         }, 'verification'),
