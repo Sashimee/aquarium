@@ -30,6 +30,27 @@ describe('tintImage', () => {
     expect([...out.data.slice(last, last + 4)]).toEqual([200, 100, 50, 255]);
   });
 
+  it('stretches contrast over the lit pixels only when ignoreBelow is set', () => {
+    const size = 64;
+    const data = new Uint8Array(size * size * 4);
+    for (let i = 0; i < size * size; i++) {
+      const v = i % size < 32 ? 0 : 128 + (i % size);
+      data.set([v, v, v, 255], i * 4);
+    }
+    const image: Rgba = { width: size, height: size, data };
+    const plain = tintImage(image, tint);
+    const stretched = tintImage(image, { ...tint, ignoreBelow: 0.1 });
+    const at = (img: Rgba, x: number): number => img.data[x * 4]!;
+    expect(at(stretched, 33)).toBeLessThan(at(plain, 33));
+    expect(at(stretched, 63)).toBe(200);
+  });
+
+  it('rejects an image with no pixel above ignoreBelow', () => {
+    expect(() => tintImage(solid(8, [0, 0, 0]), { ...tint, ignoreBelow: 0.5 })).toThrow(
+      'ignoreBelow',
+    );
+  });
+
   it('is deterministic', () => {
     const a = tintImage(gradient(64), { ...tint, ramps: [ramp, { ...ramp, mid: [0, 200, 0] }] });
     const b = tintImage(gradient(64), { ...tint, ramps: [ramp, { ...ramp, mid: [0, 200, 0] }] });

@@ -163,7 +163,9 @@ export const ENVIRONMENT_RECIPES: EnvironmentRecipe[] = [
     sourceId: 'sketchfab-4ea44ce7',
     longestM: 0.25,
     maxTriangles: 20000,
-    modifications: ['8192 px textures downscaled'],
+    clipBelowFraction: 0.37,
+    keepUncroppedScale: true,
+    modifications: ['8192 px textures downscaled', 'rock base slab cropped off'],
   },
   {
     id: 'acropora-palmata',
@@ -172,7 +174,19 @@ export const ENVIRONMENT_RECIPES: EnvironmentRecipe[] = [
     longestM: 0.35,
     maxTriangles: 20000,
     clipBelowFraction: 0.19,
-    modifications: ['museum plinth cropped off'],
+    tint: {
+      ramps: [
+        { dark: [96, 36, 6], mid: [214, 108, 22], light: [255, 206, 96] },
+        { dark: [24, 84, 20], mid: [104, 184, 36], light: [206, 244, 112] },
+      ],
+      mottleCells: 260,
+      seed: 31,
+      ignoreBelow: 0.08,
+    },
+    modifications: [
+      'museum plinth cropped off',
+      'bleached skeleton recoloured by luminance to saturated live amber and lime tissue, with mottled patches',
+    ],
   },
   {
     id: 'reef-arch',
@@ -206,15 +220,16 @@ export const ENVIRONMENT_RECIPES: EnvironmentRecipe[] = [
     material: { roughness: 0.75 },
     tint: {
       ramps: [
-        { dark: [64, 42, 26], mid: [146, 104, 62], light: [214, 176, 122] },
-        { dark: [58, 54, 30], mid: [130, 118, 64], light: [196, 184, 122] },
+        { dark: [44, 18, 120], mid: [128, 56, 220], light: [226, 150, 255] },
+        { dark: [16, 64, 120], mid: [36, 140, 220], light: [140, 226, 255] },
       ],
       mottleCells: 300,
       seed: 23,
+      ignoreBelow: 0.08,
     },
     modifications: [
       'museum plinth cropped off',
-      'bleached skeleton recoloured by luminance to live tan, brown and olive tones',
+      'bleached skeleton recoloured by luminance to saturated live violet and blue tissue, with mottled patches',
       'baked metallicRoughness map dropped',
     ],
   },
