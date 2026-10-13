@@ -1,5 +1,6 @@
 import { VACATION_FEEDER_ASSET_ID } from '@aquarium/sim/lifecycle';
 import type { CatalogEntry } from '../../scene/assets';
+import { heightScale } from '../../scene/coralStyle';
 import { HARDSCAPE_KINDS } from '../../scene/hardscape';
 
 export type Vec3Tuple = readonly [number, number, number];
@@ -32,6 +33,10 @@ function isMovableKind(kind: string): kind is Exclude<DecorKind, 'feeder'> {
   return HARDSCAPE_KINDS.has(kind);
 }
 
+function scaleHeight(v: Vec3Tuple, k: number): Vec3Tuple {
+  return [v[0], v[1] * k, v[2]];
+}
+
 export function specsFromCatalog(entries: Iterable<CatalogEntry>): Map<string, DecorSpec> {
   const specs = new Map<string, DecorSpec>([[FEEDER_SPEC.assetId, FEEDER_SPEC]]);
   for (const entry of entries) {
@@ -40,7 +45,10 @@ export function specsFromCatalog(entries: Iterable<CatalogEntry>): Map<string, D
       assetId: entry.id,
       kind: entry.kind,
       label: humanize(entry.id),
-      box: entry.bounds,
+      box: {
+        min: scaleHeight(entry.bounds.min, heightScale(entry.id)),
+        max: scaleHeight(entry.bounds.max, heightScale(entry.id)),
+      },
     });
   }
   return specs;
