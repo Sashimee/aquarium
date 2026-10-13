@@ -1,3 +1,4 @@
+import { depthOfFieldFollowsCamera } from './engine/cameraFocus';
 import { Engine } from './engine/Engine';
 import { EventBus, type EngineEvents } from './engine/events';
 import { parseEngineOptions } from './engine/options';
@@ -80,6 +81,7 @@ async function boot(): Promise<void> {
     'Aquarium view. Arrow keys orbit, plus and minus zoom, Escape leaves dive mode.',
   );
 
+  const followFocus = depthOfFieldFollowsCamera(engine);
   const rig = new CameraRig(
     engine.camera,
     {
@@ -89,7 +91,12 @@ async function boot(): Promise<void> {
       waterTop: DEFAULT_TANK.height - DEFAULT_TANK.freeboard,
       floor: DEFAULT_TANK.substrateBack + 0.05,
     },
-    { onModeChange: (mode) => interaction.emit('camera:mode-changed', { mode }) },
+    {
+      onModeChange: (mode) => {
+        followFocus(mode);
+        interaction.emit('camera:mode-changed', { mode });
+      },
+    },
   );
 
   const stopMotionWatch = watchReducedMotion((reduced) => rig.setReducedMotion(reduced));

@@ -275,6 +275,25 @@ describe('Effects', () => {
     expect(built.at(-1)?.settings.depthOfField).toBe(true);
   });
 
+  it('keeps the focus mode across tier changes and has no depth of field on low', () => {
+    const { host, createPost, built, quality } = setup('high');
+    const effects = new Effects(host, createPost);
+    effects.setFocusMode(true);
+    expect(built.at(-1)?.settings.depthOfField).toBe(true);
+
+    quality.setTier('low', 0);
+    const lowBuilds = built.length;
+    expect(built.at(-1)?.disposed).toBe(1);
+    effects.setFocusMode(false);
+    effects.setFocusMode(true);
+    expect(built).toHaveLength(lowBuilds);
+
+    quality.setTier('medium', 0);
+    expect(built.at(-1)?.settings.depthOfField).toBe(true);
+    effects.setFocusMode(false);
+    expect(built.at(-1)?.settings.depthOfField).toBe(false);
+  });
+
   it('turns velocity passthrough on only for a temporal pipeline, and off when disposed', () => {
     const { host, createPost, passthrough, scene, quality, built } = setup('ultra');
     const effects = new Effects(host, createPost);
