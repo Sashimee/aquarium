@@ -2,7 +2,7 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; every texture has both files.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Anemone tentacle sway is \"_sway\" (0 base, 1 tip).",
-  "totalBytes": 57312673,
+  "totalBytes": 57313377,
   "assets": [
     {
       "id": "angelfish",
@@ -268,36 +268,36 @@
       "bounds": {
         "min": [
           -0.00934,
-          -0.052114,
+          -0.05309,
           -0.051842
         ],
         "max": [
           0.00934,
-          0.022753,
+          0.024818,
           0.021336
         ]
       },
       "lods": [
         {
           "file": "fish/betta/lod0.glb",
-          "bytes": 112288,
-          "sha256": "77a8ca20bd14273f21baf6d5139674f4a8b5dff47a89a58a92697ddefffee968",
+          "bytes": 112360,
+          "sha256": "065abb27bb198af518c8b6abd70558109a2cdf3683de662713cfdab27db98786",
           "triangles": 10656,
           "vertices": 5815
         },
         {
           "file": "fish/betta/lod1.glb",
-          "bytes": 53904,
-          "sha256": "969f7a43e4b05d6e80fbeb7a65d956e680ea5209ef3629a2ddfc047f81b40817",
-          "triangles": 4257,
-          "vertices": 2449
+          "bytes": 54376,
+          "sha256": "91a939dd350745be33cf4c379bc2286f1932b2dec160966ef7c1139f80e6c2b4",
+          "triangles": 4256,
+          "vertices": 2458
         },
         {
           "file": "fish/betta/lod2.glb",
-          "bytes": 26648,
-          "sha256": "ac5815bc23283a5c94db356d73dabe80f8dbed52664ddc8eab1975f74a3bbb9c",
-          "triangles": 1597,
-          "vertices": 1003
+          "bytes": 26716,
+          "sha256": "14d755ffc9b4215f38092d590385645fbe60b749cba416682f56e6f2d73d2068",
+          "triangles": 1596,
+          "vertices": 1004
         }
       ],
       "textures": [
@@ -347,18 +347,18 @@
       "files": [
         {
           "file": "fish/betta/lod0.glb",
-          "bytes": 112288,
-          "sha256": "77a8ca20bd14273f21baf6d5139674f4a8b5dff47a89a58a92697ddefffee968"
+          "bytes": 112360,
+          "sha256": "065abb27bb198af518c8b6abd70558109a2cdf3683de662713cfdab27db98786"
         },
         {
           "file": "fish/betta/lod1.glb",
-          "bytes": 53904,
-          "sha256": "969f7a43e4b05d6e80fbeb7a65d956e680ea5209ef3629a2ddfc047f81b40817"
+          "bytes": 54376,
+          "sha256": "91a939dd350745be33cf4c379bc2286f1932b2dec160966ef7c1139f80e6c2b4"
         },
         {
           "file": "fish/betta/lod2.glb",
-          "bytes": 26648,
-          "sha256": "ac5815bc23283a5c94db356d73dabe80f8dbed52664ddc8eab1975f74a3bbb9c"
+          "bytes": 26716,
+          "sha256": "14d755ffc9b4215f38092d590385645fbe60b749cba416682f56e6f2d73d2068"
         },
         {
           "file": "fish/betta/textures/betta_basecolor_1k.ktx2",
@@ -1016,24 +1016,24 @@
       "lods": [
         {
           "file": "fish/neon-tetra/lod0.glb",
-          "bytes": 25044,
-          "sha256": "8362bfab57735ee612bc36a186359b802e54eebf666bd71122a89a8edc92ac49",
+          "bytes": 25040,
+          "sha256": "3311c49fd38120c9653a1667c8a3b5152c7c03a582a44adb0a59935f15334758",
           "triangles": 1498,
           "vertices": 929
         },
         {
           "file": "fish/neon-tetra/lod1.glb",
-          "bytes": 15632,
-          "sha256": "9dc18cc7ebce5a4e867b040e559880db20103f94ee6a41be93a8aa4b458636e5",
+          "bytes": 15724,
+          "sha256": "0f68714da359784a0b97e3ece247332d06aff2faf86c688f254d52b702ca78b4",
           "triangles": 659,
-          "vertices": 461
+          "vertices": 463
         },
         {
           "file": "fish/neon-tetra/lod2.glb",
-          "bytes": 11556,
-          "sha256": "0509eb767dce24d7fc2eb9c1b4fc8b03d11d3784789d9c59e7cb3117164a1c5c",
+          "bytes": 11560,
+          "sha256": "774578d0b8c67ed077f5f41a631dfbed6de3e099f8bc3ac9641b2049cd6fff0f",
           "triangles": 341,
-          "vertices": 264
+          "vertices": 265
         }
       ],
       "textures": [
@@ -1083,18 +1083,18 @@
       "files": [
         {
           "file": "fish/neon-tetra/lod0.glb",
-          "bytes": 25044,
-          "sha256": "8362bfab57735ee612bc36a186359b802e54eebf666bd71122a89a8edc92ac49"
+          "bytes": 25040,
+          "sha256": "3311c49fd38120c9653a1667c8a3b5152c7c03a582a44adb0a59935f15334758"
         },
         {
           "file": "fish/neon-tetra/lod1.glb",
-          "bytes": 15632,
-          "sha256": "9dc18cc7ebce5a4e867b040e559880db20103f94ee6a41be93a8aa4b458636e5"
+          "bytes": 15724,
+          "sha256": "0f68714da359784a0b97e3ece247332d06aff2faf86c688f254d52b702ca78b4"
         },
         {
           "file": "fish/neon-tetra/lod2.glb",
-          "bytes": 11556,
-          "sha256": "0509eb767dce24d7fc2eb9c1b4fc8b03d11d3784789d9c59e7cb3117164a1c5c"
+          "bytes": 11560,
+          "sha256": "774578d0b8c67ed077f5f41a631dfbed6de3e099f8bc3ac9641b2049cd6fff0f"
         },
         {
           "file": "fish/neon-tetra/textures/neon-tetra_basecolor_1k.ktx2",
