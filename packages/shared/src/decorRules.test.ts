@@ -20,18 +20,24 @@ describe('decor rules', () => {
     );
   });
 
-  it('covers every catalog asset a layout can hold in at least one biome', () => {
-    const index = read('apps/web/public/assets/index.json') as {
-      assets: { id: string; kind: string }[];
-    };
-    const decorKinds = new Set(['rock', 'driftwood', 'decor', 'coral', 'anemone', 'plant']);
-    const missing = index.assets
-      .filter((a) => decorKinds.has(a.kind))
+  const NOT_DECOR = new Set(['fish', 'substrate', 'hdri']);
+  const unclassified = (assets: { id: string; kind: string }[]) =>
+    assets
+      .filter((a) => !NOT_DECOR.has(a.kind))
       .filter(
         (a) => !isDecorAssetForBiome('freshwater', a.id) && !isDecorAssetForBiome('reef', a.id),
       )
       .map((a) => a.id);
-    expect(missing).toEqual([]);
+
+  it('covers every catalog asset a layout can hold in at least one biome', () => {
+    const index = read('apps/web/public/assets/index.json') as {
+      assets: { id: string; kind: string }[];
+    };
+    expect(unclassified(index.assets)).toEqual([]);
+  });
+
+  it('flags an unclassified asset of a kind it has never seen', () => {
+    expect(unclassified([{ id: 'ship-wreck', kind: 'ornament' }])).toEqual(['ship-wreck']);
   });
 
   it('keeps euphyllia ids reef-only', () => {
