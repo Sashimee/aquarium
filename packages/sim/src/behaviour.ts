@@ -787,6 +787,7 @@ export class Behaviour {
       this.planGulp(i, plan);
       return;
     }
+    if (this.planShelter(i, sp, plan)) return;
     if (sp.gait === 'forage') {
       this.planForage(i, sp, plan);
     } else if (sp.grazer === 'glass') {
@@ -1207,21 +1208,6 @@ export class Behaviour {
       );
       return;
     }
-    if (rest > 0.5 || at(this.shelterTimer, i) > 0) {
-      plan.comfort = BEHAVIOUR.shelterComfort;
-      const [tx, ty, tz] = this.approach(i, a);
-      this.holdStation(
-        i,
-        plan,
-        tx,
-        ty,
-        tz,
-        Math.max(0.6 * a.radius, 0.5 * length),
-        FishState.Shelter,
-      );
-      if (plan.state === FishState.Shelter) this.bellyToSurface(i, sp, plan);
-      return;
-    }
     let mx = ax;
     let my = ay;
     let mz = az;
@@ -1247,15 +1233,49 @@ export class Behaviour {
     this.bellyToSurface(i, sp, plan);
   }
 
+  /** A cave-dweller hides in its cave at rest and after a startle, whatever its gait. */
+  private planShelter(i: number, sp: SimSpecies, plan: Plan): boolean {
+    const a = this.anchors[at(this.anchor, i)];
+    if (a?.kind !== 'cave') return false;
+    if (at(this.rest, i) <= 0.5 && at(this.shelterTimer, i) <= 0) return false;
+    plan.comfort = BEHAVIOUR.shelterComfort;
+    const length = at(this.host.bodyLength, i);
+    let entryY = a.position[1];
+    if (sp.gait === 'forage' || sp.grazer === 'glass') {
+      // Substrate fish shelter on the cave floor, as plecos and corydoras lie under cover. They
+      // stay down there on the way in too: rising to the mouth's mid-height off the sand pins
+      // them against the floor and the cave wall.
+      const { basin, position } = this.host;
+      const mid = 0.5 * (BEHAVIOUR.forageBandLowBodyLengths + BEHAVIOUR.forageBandHighBodyLengths);
+      const ground = basin.ground(at(position, i * 3), at(position, i * 3 + 2));
+      plan.floor = false;
+      plan.bandLo = ground + BEHAVIOUR.forageBandLowBodyLengths * length;
+      plan.bandHi = ground + BEHAVIOUR.forageBandHighBodyLengths * length;
+      entryY = basin.ground(a.position[0], a.position[2]) + mid * length;
+    }
+    const [tx, ty, tz] = this.approach(i, a, entryY);
+    this.holdStation(
+      i,
+      plan,
+      tx,
+      ty,
+      tz,
+      Math.max(0.6 * a.radius, 0.5 * length),
+      FishState.Shelter,
+    );
+    if (plan.state === FishState.Shelter) this.bellyToSurface(i, sp, plan);
+    return true;
+  }
+
   /**
    * Where to swim to reach an anchor: straight to it, except that a cave is entered through its
    * mouth, so a fish beside or behind the rock first goes round to the front.
    */
-  private approach(i: number, a: Anchor): Point3 {
-    const [ax, ay, az] = a.position;
+  private approach(i: number, a: Anchor, ay = a.position[1]): Point3 {
+    const [ax, , az] = a.position;
     const f = a.facing;
     const fl = f === undefined ? 0 : Math.hypot(f[0], f[1], f[2]);
-    if (a.kind !== 'cave' || f === undefined || fl < 1e-9) return a.position;
+    if (a.kind !== 'cave' || f === undefined || fl < 1e-9) return [ax, ay, az];
     const ux = f[0] / fl;
     const uy = f[1] / fl;
     const uz = f[2] / fl;
@@ -1264,7 +1284,8 @@ export class Behaviour {
     const rz = at(this.host.position, i * 3 + 2) - az;
     const along = rx * ux + ry * uy + rz * uz;
     const lateral = Math.hypot(rx - along * ux, ry - along * uy, rz - along * uz);
-    if (Math.hypot(rx, ry, rz) <= a.radius || (along > 0 && lateral < a.radius)) return a.position;
+    if (Math.hypot(rx, ry, rz) <= a.radius || (along > 0 && lateral < a.radius))
+      return [ax, ay, az];
     const out = a.radius + BEHAVIOUR.caveMouthBodyLengths * at(this.host.bodyLength, i);
     return [ax + ux * out, ay + uy * out, az + uz * out];
   }
