@@ -479,6 +479,7 @@ describe('feeding AI', { timeout: LONG }, () => {
     });
     const bites = events.filter((e) => e.foodId === nori);
     expect(bites.length).toBeGreaterThan(5);
+    expect(new Set(bites.map((b) => b.fishId)).size).toBe(w.count);
     for (const b of bites) expect(b.portion).toBeLessThanOrEqual(FEEDING.grazeBitePortion + 1e-12);
     expect(grazing).toBeGreaterThan(300);
   });
@@ -548,8 +549,9 @@ describe('feeding AI', { timeout: LONG }, () => {
     for (let i = 0; i < w.count; i++) expect(at(w.behaviour.startledAt, i)).toBe(-1);
   });
 
-  it('keeps every fish out of glass and rock through repeated feedings', () => {
-    for (const seed of [1, 2]) {
+  it.each([1, 2, 3, 4, 5, 6, 7, 8])(
+    'keeps every fish out of glass and rock through repeated feedings (seed %i)',
+    (seed) => {
       const w = new World(benchmarkConfig(seed));
       const rain = new FoodRain(REEF_TANK);
       let worst = Infinity;
@@ -563,8 +565,8 @@ describe('feeding AI', { timeout: LONG }, () => {
       }
       expect(worst).toBeGreaterThanOrEqual(-1e-9);
       expect(w.contacts / (w.count * 10_000)).toBeLessThan(2e-3);
-    }
-  });
+    },
+  );
 
   it('turns on the cruising arc while chasing food', () => {
     const w = new World(benchmarkConfig(8));
