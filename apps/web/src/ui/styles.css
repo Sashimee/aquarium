@@ -72,9 +72,17 @@
   color: var(--ink);
 }
 
-.camera-controls {
+.camera-controls,
+.play-controls {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 0.25rem;
+}
+
+.play-controls select {
+  font: inherit;
+  min-height: 2.5rem;
 }
 
 .account {

@@ -10,6 +10,9 @@ describe('step budget', () => {
     const steps = 1500;
     const start = performance.now();
     for (let t = 0; t < steps; t++) w.step();
-    expect((performance.now() - start) / steps).toBeLessThan(2);
+    const mean = (performance.now() - start) / steps;
+    expect(mean).toBeLessThan(2);
+    // A 4x CPU throttle scales script time about linearly; its budget is 4 ms.
+    expect(4 * mean).toBeLessThan(4);
   });
 });

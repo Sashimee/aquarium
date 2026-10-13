@@ -7,6 +7,7 @@ import { bindCameraControls } from './interaction/controls';
 import type { InteractionEvents } from './interaction/events';
 import { onPageTeardown } from './interaction/pageLifecycle';
 import { watchReducedMotion } from './interaction/motion';
+import { createPlaySystem, type PlaySystem } from './interaction/play/system';
 import { mountPresetWhenTierKnown, parseBiome, type TankScene } from './scene';
 import { mountUi } from './ui/mount';
 
@@ -70,7 +71,17 @@ async function boot(): Promise<void> {
   );
 
   const stopMotionWatch = watchReducedMotion((reduced) => rig.setReducedMotion(reduced));
-  const unbindControls = bindCameraControls(canvas, rig);
+  let play: PlaySystem | null = null;
+  const unbindControls = bindCameraControls(canvas, rig, {
+    tap: (e) => {
+      if (e.button === 0) play?.controller.tap(e.x, e.y);
+    },
+    claimDrag: () => play?.controller.claimsDrag ?? false,
+    pointerDown: (x, y) => play?.controller.pointerDown(x, y),
+    pointerMove: (x, y) => play?.controller.pointerMove(x, y),
+    pointerUp: () => play?.controller.pointerUp(),
+    pointerLeave: () => play?.controller.pointerLeave(),
+  });
   const stopRequests = interaction.on('camera:request-mode', ({ mode }) => {
     if (mode === 'dive') rig.dive();
     else if (mode === 'orbit') rig.exit();
@@ -84,11 +95,13 @@ async function boot(): Promise<void> {
     window.location.search,
     (scene) => {
       tankScene = scene;
+      play = createPlaySystem(engine, scene, interaction);
       if (import.meta.env.DEV) Object.assign(window, { tankScene });
     },
   );
 
   onPageTeardown(window, () => {
+    play?.dispose();
     tankScene?.dispose().catch((cause: unknown) => console.error('Scene dispose failed', cause));
     stopMotionWatch();
     unbindControls();

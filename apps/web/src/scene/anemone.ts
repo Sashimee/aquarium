@@ -23,7 +23,11 @@ const WAVE_METRES = 0.012;
 const LEAN_SECONDS = 0.35;
 const TWO_PI = Math.PI * 2;
 
-/** The scene point a species is drawn to; the shape `packages/sim` takes in `setAnchors`. */
+/**
+ * The scene point a species is drawn to; the shape `packages/sim` takes in `setAnchors`. Heights
+ * here are measured from the bottom glass, while the sim measures from the substrate (#64), so
+ * whoever wires `setAnchors` must convert.
+ */
 export interface SceneAnchor {
   readonly id: string;
   readonly kind: 'anemone' | 'cave';
@@ -122,7 +126,13 @@ export class AnemoneGroup {
     this.object.name = `anemone:${entry.id}`;
     const matrix: Matrix4 = decorMatrix(item);
     for (const { geometry, material: source } of model.primitives) {
-      const material = createAnemoneMaterial(source, geometry, item, current);
+      let material: MeshStandardNodeMaterial;
+      try {
+        material = createAnemoneMaterial(source, geometry, item, current);
+      } catch (error) {
+        for (const earlier of this.materials) earlier.dispose();
+        throw error;
+      }
       this.materials.push(material);
       const mesh = new Mesh(geometry, material);
       mesh.name = `${entry.id}:${source.name}`;
