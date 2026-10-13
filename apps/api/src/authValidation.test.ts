@@ -2,6 +2,7 @@ import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { DEFAULT_MAIL_LIMITS } from './mail.ts';
 import { APP_ORIGIN, createHarness, type Harness } from './test-harness.ts';
 
 const PASSWORD = 'correct horse battery';
@@ -173,7 +174,7 @@ describe('Better Auth body validation (#118)', () => {
     expect((await stored(email)).name).toBe('Bob');
   });
 
-  it.each(BLOCKED)('returns 404 for %s', async (method, path) => {
+  it.each(BLOCKED)('returns 404 for %s %s', async (method, path) => {
     const { cookie } = await verifiedSession(h);
     const res = await h.app.inject({
       method,
@@ -182,6 +183,55 @@ describe('Better Auth body validation (#118)', () => {
       ...(method === 'POST' ? { payload: '{}' } : {}),
     });
     expect(res.statusCode).toBe(404);
+  });
+
+  describe('reset and resend bodies', () => {
+    const cases = [
+      ['request-password-reset', 'redirectTo'],
+      ['send-verification-email', 'callbackURL'],
+    ] as const;
+
+    it.each(cases)('rejects bad %s bodies before Better Auth runs', async (path, field) => {
+      const before = h.outbox.length;
+      for (const body of [
+        {},
+        { email: 'nope' },
+        { email: `${'x'.repeat(250)}@bas.lu` },
+        { email: nextEmail(), [field]: 'x'.repeat(3000) },
+        { email: nextEmail(), extra: 1 },
+      ]) {
+        const res = await post(h.app, `/api/auth/${path}`, body);
+        expect(res.statusCode, JSON.stringify(body).slice(0, 40)).toBe(400);
+        expect(res.json()).toMatchObject({ error: { code: 'validation_failed' } });
+      }
+      const malformed = await h.app.inject({
+        method: 'POST',
+        url: `/api/auth/${path}`,
+        headers: jsonHeaders,
+        payload: '{nope',
+      });
+      expect(malformed.statusCode).toBe(400);
+      await h.settleMail();
+      expect(h.outbox.length).toBe(before);
+    });
+
+    it.each(cases)('accepts a good %s body and still rate-limits it', async (path, field) => {
+      const limited = await createHarness({
+        mailLimits: { ...DEFAULT_MAIL_LIMITS, perIpSignup: { max: 2, windowMs: 60_000 } },
+      });
+      try {
+        const body = { email: nextEmail(), [field]: '/' };
+        const statuses: number[] = [];
+        for (let i = 0; i < 4; i++) {
+          statuses.push((await post(limited.app, `/api/auth/${path}`, body)).statusCode);
+        }
+        expect(statuses[0]).toBe(200);
+        expect(statuses).toContain(429);
+      } finally {
+        await limited.close();
+        await limited.dropDatabase();
+      }
+    });
   });
 
   describe('fragment in the request path', () => {
