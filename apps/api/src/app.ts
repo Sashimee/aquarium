@@ -271,9 +271,6 @@ export function buildApp(opts: AppOptions): FastifyInstance {
         if (req.method === 'POST' && pathname === `${AUTH_BASE_PATH}/send-verification-email`) {
           admission = await mailer.consumeIp(req.ip);
           if (admission.wait > 0) return tooMany(reply, admission.wait);
-          const email = recipientOf(raw);
-          const cooldown = email ? await mailer.peekVerificationCooldown(email) : 0;
-          if (cooldown > 0) return tooMany(reply, cooldown);
         }
 
         const headers = new Headers();
@@ -459,17 +456,6 @@ function originOf(referer: string | undefined): string | undefined {
   if (!referer) return undefined;
   try {
     return new URL(referer).origin;
-  } catch {
-    return undefined;
-  }
-}
-
-function recipientOf(raw: string | undefined): string | undefined {
-  if (!raw) return undefined;
-  try {
-    const body: unknown = JSON.parse(raw);
-    const email = (body as { email?: unknown } | null)?.email;
-    return typeof email === 'string' ? email : undefined;
   } catch {
     return undefined;
   }

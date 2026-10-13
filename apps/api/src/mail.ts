@@ -86,7 +86,6 @@ export interface Mailer {
   consumeIp(ip: string): Promise<IpAdmission>;
   /** Mail sent inside `work` honours the admission: a request admitted without an IP charge sends nothing. */
   runAdmitted<T>(admission: IpAdmission, work: () => Promise<T>): Promise<T>;
-  peekVerificationCooldown(to: string): Promise<number>;
 }
 
 export interface MailerOptions {
@@ -226,9 +225,5 @@ export function createMailer(
       return { wait: await consume(key, limits.perIpSignup), mailBlockedFor: 0 };
     },
     runAdmitted: (admission, work) => admissions.run(admission, work),
-    peekVerificationCooldown: (to) =>
-      failClosed(() =>
-        store.remaining(`verify:cooldown:${recipientKey(to)}`, limits.verificationCooldown),
-      ),
   };
 }
