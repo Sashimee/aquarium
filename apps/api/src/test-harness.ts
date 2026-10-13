@@ -48,6 +48,7 @@ export interface HarnessOptions {
   careLimits?: CareLimits;
   legalLimits?: LegalLimits;
   testHooks?: boolean;
+  appOrigin?: string;
 }
 
 function baseUrl(): URL {
@@ -116,7 +117,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
   const auth = createAuth({
     config: {
       authSecret: 'testsecrettestsecrettestsecret0123456789',
-      appUrl: new URL(APP_ORIGIN),
+      appUrl: new URL(opts.appOrigin ?? APP_ORIGIN),
       trustedProxies: ['127.0.0.1'],
     },
     database,
@@ -136,7 +137,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
   const app = buildApp({
     indexable: opts.indexable ?? false,
     webRoot: opts.webRoot ?? '/nonexistent',
-    appOrigin: APP_ORIGIN,
+    appOrigin: opts.appOrigin ?? APP_ORIGIN,
     trustedProxies: ['127.0.0.1'],
     database,
     auth,
