@@ -122,7 +122,9 @@ export function createAuth({
       revokeSessionsOnPasswordReset: true,
       onPasswordReset: async ({ user }) => {
         // Reset rows are the only verification rows whose value is a bare user id, and hashed
-        // identifiers rule out matching on the `reset-password:` prefix.
+        // identifiers rule out matching on the `reset-password:` prefix. Delete-account
+        // confirmation, magic-link or email-OTP would also store bare ids and need excluding here;
+        // resetTokens.test.ts pins which flows write them.
         await database.db.delete(schema.verification).where(eq(schema.verification.value, user.id));
         if (user.emailVerified) return;
         const { internalAdapter } = await auth.$context;
