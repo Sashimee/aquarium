@@ -157,3 +157,11 @@ export function halve(image: RgbeImage): RgbeImage {
       }
   return { width, height, pixels };
 }
+
+export function flipVertical(image: RgbeImage): RgbeImage {
+  const row = image.width * 3;
+  const pixels = new Float32Array(image.pixels.length);
+  for (let y = 0; y < image.height; y++)
+    pixels.set(image.pixels.subarray(y * row, (y + 1) * row), (image.height - 1 - y) * row);
+  return { width: image.width, height: image.height, pixels };
+}

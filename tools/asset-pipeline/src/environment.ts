@@ -25,8 +25,8 @@ import {
   type Part,
 } from './parts.ts';
 import { RAW_ROOT, bakeToWorldSpace, readGltf, type SkinPose } from './source.ts';
-import { decodeRgbe, encodeRgbe, halve } from './rgbe.ts';
-import { decodeImage, type Rgba } from './textures.ts';
+import { decodeRgbe, encodeRgbe, flipVertical, halve } from './rgbe.ts';
+import { decodeImage, encodeHdrKtx2, type Rgba } from './textures.ts';
 
 export interface EnvironmentRecipe {
   id: string;
@@ -362,33 +362,39 @@ export async function buildSubstrate(
 export interface HdriRecipe {
   id: string;
   sourceId: string;
+  /** Radiance .hdr inside the raw directory. */
   file: string;
-  /** Output name and the number of 2x2 downsamples applied to the source. */
-  derived?: { file: string; halvings: number; label: string };
+  /** Output name, `.ktx2`. */
+  output: string;
+  /** Number of 2x2 downsamples applied to the source before encoding. */
+  halvings?: number;
 }
 
-export function buildHdri(recipe: HdriRecipe, ctx: FishContext): OutputAsset {
+export async function buildHdri(recipe: HdriRecipe, ctx: FishContext): Promise<OutputAsset> {
   ctx.verifySource(recipe.sourceId);
   const source = readFileSync(join(RAW_ROOT, recipe.sourceId, recipe.file));
-  const { derived } = recipe;
-  let bytes: Uint8Array = source;
-  if (derived) {
-    let image = decodeRgbe(source);
-    for (let i = 0; i < derived.halvings; i++) image = halve(image);
-    bytes = encodeRgbe(image);
-  }
+  const halvings = recipe.halvings ?? 0;
+  let image = decodeRgbe(source);
+  for (let i = 0; i < halvings; i++) image = halve(image);
+  // Compressed textures cannot flipY at upload and the equirect lookup expects the first row at v = 1.
+  const hdr = encodeRgbe(flipVertical(image));
   const file = writeFileTracked(
     ctx.outRoot,
-    `hdri/${recipe.id}/${derived?.file ?? recipe.file}`,
-    bytes,
+    `hdri/${recipe.id}/${recipe.output}`,
+    await encodeHdrKtx2(hdr),
   );
   return {
     id: recipe.id,
     kind: 'hdri',
-    origin: derived ? 'texture-set' : 'passthrough',
+    origin: 'texture-set',
     sources: [recipe.sourceId],
     licence: ctx.licenceOf(recipe.sourceId),
-    modifications: [derived ? derived.label : 'copied unchanged (Radiance .hdr, 2k)'],
+    modifications: [
+      ...(halvings > 0
+        ? [`downsampled ${2 ** halvings}x with a 2x2 box filter in linear light`]
+        : []),
+      'equirectangular Radiance .hdr flipped vertically (compressed textures cannot flipY at upload) and re-encoded as KTX2 UASTC HDR 4x4 with Zstandard supercompression, no mipmaps; KTX2Loader transcodes it to BC6H or RGBA16F',
+    ],
     lods: [],
     textures: [],
     files: [file],

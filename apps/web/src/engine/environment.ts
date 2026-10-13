@@ -6,12 +6,12 @@ import {
   type Texture,
   type WebGPURenderer,
 } from 'three/webgpu';
-import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
+import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { ASSET_BASE } from '../scene/assets';
+import { ASSET_BASE, rewriteAssetUrl } from '../scene/assets';
 
 /** Manifest entry `polyhaven-studio_small_09` (CC0, Sergej Majboroda), served from our own origin. */
-export const DEFAULT_HDRI_URL = `${ASSET_BASE}hdri/studio-small-09/studio_small_09_1k.hdr`;
+export const DEFAULT_HDRI_URL = `${ASSET_BASE}hdri/studio-small-09/studio_small_09_1k.ktx2`;
 
 export interface RoomLighting {
   /** The procedural studio installed at once; `onChange` reports the swap to the HDRI. */
@@ -45,8 +45,16 @@ export function installRoomLighting(
   let room: typeof roomTarget | null = roomTarget;
   let disposed = false;
   const manager = new LoadingManager();
+  manager.setURLModifier((url) => rewriteAssetUrl(url, 1024));
+  const loader = new KTX2Loader(manager).setTranscoderPath('basis/').detectSupport(renderer);
+  let loaderDisposed = false;
+  const releaseLoader = (): void => {
+    if (loaderDisposed) return;
+    loaderDisposed = true;
+    loader.dispose();
+  };
 
-  new HDRLoader(manager)
+  loader
     .loadAsync(hdriUrl)
     .then((texture) => {
       if (disposed) {
@@ -63,13 +71,15 @@ export function installRoomLighting(
     })
     .catch((cause: unknown) => {
       if (!disposed) onError(`Could not load the room HDRI from ${hdriUrl}`, cause);
-    });
+    })
+    .finally(releaseLoader);
 
   return {
     initial: roomTarget.texture,
     dispose() {
       disposed = true;
       manager.abort();
+      releaseLoader();
       hdri?.dispose();
       room?.dispose();
       room = null;
