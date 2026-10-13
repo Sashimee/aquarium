@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TIER_SETTINGS } from '../engine/quality/tiers';
 import { maxSway, visibleAtDensity } from './plants';
+import { DEFAULT_CURRENT, plantReach } from './TankScene';
 
 describe('visibleAtDensity', () => {
   const ranked = Array.from({ length: 20 }, (_, i) => ({ rank: i / 20 }));
@@ -38,5 +39,23 @@ describe('maxSway', () => {
 
   it('is smaller for stiff plants', () => {
     expect(maxSway('java-fern', 0.3, current)).toBeLessThan(maxSway('vallisneria', 0.3, current));
+  });
+});
+
+describe('plantReach', () => {
+  const bounds = { min: [-0.05, 0, -0.05], max: [0.05, 0.4, 0.05] };
+
+  it('adds the shader lean in world units, unaffected by instance scale', () => {
+    const reach = plantReach('vallisneria', bounds, DEFAULT_CURRENT);
+    const sway = maxSway('vallisneria', 0.4, DEFAULT_CURRENT);
+    expect(sway).toBeGreaterThan(0);
+    expect(reach(0)).toBeCloseTo(sway, 9);
+    expect(reach(0.5) - reach(0)).toBeGreaterThan(0);
+  });
+
+  it('keeps a half-scale plant as far from the glass as its full sway needs', () => {
+    const reach = plantReach('vallisneria', bounds, DEFAULT_CURRENT);
+    const sway = maxSway('vallisneria', 0.4, DEFAULT_CURRENT);
+    expect(reach(0.5)).toBeGreaterThanOrEqual(sway + 0.05 * 0.5);
   });
 });
