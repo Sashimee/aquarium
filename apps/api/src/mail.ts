@@ -173,8 +173,11 @@ export function createMailer(
   const admit = async (flow: 'verify' | 'reset', to: string) => {
     // The cap may have freed since consumeIp skipped the IP charge; sending now would be unmetered per IP.
     const admission = admissions.getStore();
-    if (admission && admission.mailBlockedFor > 0)
-      return refuseGlobal(admission.mailBlockedFor, true);
+    if (admission && admission.mailBlockedFor > 0) {
+      const now = await guarded(() => store.remaining('global', limits.global));
+      if (now.wait > 0) return refuseGlobal(now.wait, now.answered);
+      throw new MailThrottledError(admission.mailBlockedFor);
+    }
     const k = recipientKey(to);
     // Peek first so a spent global cap refuses without using up the recipient's own budget.
     const spent = await guarded(() => store.remaining('global', limits.global));

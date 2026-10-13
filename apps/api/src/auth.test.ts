@@ -738,6 +738,111 @@ describe('mail abuse limits', () => {
     await h.close();
   });
 
+  describe('request admitted while the global cap is spent', () => {
+    const limits = {
+      perRecipient: { max: 100, windowMs: 3_600_000 },
+      verificationCooldown: { max: 100, windowMs: 1000 },
+      perIpSignup: { max: 100, windowMs: 3_600_000 },
+      global: { max: 1000, windowMs: 3_600_000 },
+    };
+
+    async function harnessWithFlakyCap() {
+      let spentOnce = false;
+      const h = await createHarness({
+        mailLimits: limits,
+        wrapMailStore: (store) => ({
+          consume: (key, limit) => store.consume(key, limit),
+          remaining: async (key, limit) => {
+            if (key === 'global' && spentOnce) {
+              spentOnce = false;
+              return 30;
+            }
+            return store.remaining(key, limit);
+          },
+        }),
+      });
+      const hits = async () =>
+        Number(
+          (await h.database.pool.query('select count(*)::int as n from mail_limit_hits')).rows[0].n,
+        );
+      return { h, hits, arm: () => (spentOnce = true) };
+    }
+
+    it('sends no sign-up mail and charges nothing when the cap frees before the mail step', async () => {
+      const { h, hits, arm } = await harnessWithFlakyCap();
+      const before = await hits();
+      arm();
+      expect((await signUp(h.app, nextEmail())).statusCode).toBe(200);
+      await h.settleMail();
+      expect(h.outbox).toHaveLength(0);
+      expect(await hits()).toBe(before);
+      await h.close();
+    });
+
+    it('sends no reset mail and charges nothing when the cap frees before the mail step', async () => {
+      const { h, hits, arm } = await harnessWithFlakyCap();
+      const email = nextEmail();
+      await signUp(h.app, email);
+      h.outbox.length = 0;
+      const before = await hits();
+      arm();
+      const res = await h.app.inject({
+        method: 'POST',
+        url: '/api/auth/request-password-reset',
+        headers: jsonHeaders,
+        payload: { email, redirectTo: '/' },
+      });
+      expect(res.statusCode).toBe(200);
+      await h.settleMail();
+      expect(h.outbox).toHaveLength(0);
+      expect(await hits()).toBe(before);
+      await h.close();
+    });
+  });
+
+  it('gives a known and an unknown address the same per-IP 429 sequence', async () => {
+    const h = await createHarness({
+      mailLimits: {
+        perRecipient: { max: 1, windowMs: 3_600_000 },
+        verificationCooldown: { max: 100, windowMs: 1000 },
+        perIpSignup: { max: 3, windowMs: 3_600_000 },
+        global: { max: 1000, windowMs: 3_600_000 },
+      },
+    });
+    const known = nextEmail();
+    await h.app.inject({
+      method: 'POST',
+      url: '/api/auth/sign-up/email',
+      remoteAddress: '127.0.0.1',
+      headers: { ...jsonHeaders, 'x-forwarded-for': '203.0.113.1' },
+      payload: { email: known, password: PASSWORD, name: 'Tester' },
+    });
+    const sequence = async (ip: string, url: string, email: string) => {
+      const statuses: number[] = [];
+      for (let i = 0; i < 5; i++) {
+        const res = await h.app.inject({
+          method: 'POST',
+          url,
+          remoteAddress: '127.0.0.1',
+          headers: { ...jsonHeaders, 'x-forwarded-for': ip },
+          payload: { email, callbackURL: '/', redirectTo: '/' },
+        });
+        statuses.push(res.statusCode);
+      }
+      return statuses;
+    };
+    for (const [n, url] of [
+      '/api/auth/send-verification-email',
+      '/api/auth/request-password-reset',
+    ].entries()) {
+      const forKnown = await sequence(`203.0.113.${10 + n}`, url, known);
+      const forUnknown = await sequence(`203.0.113.${20 + n}`, url, nextEmail());
+      expect(forKnown).toEqual([200, 200, 200, 429, 429]);
+      expect(forUnknown).toEqual(forKnown);
+    }
+    await h.close();
+  });
+
   it('refuses mail instead of sending it unmetered when the limiter store fails', async () => {
     const h = await createHarness();
     await h.database.pool.query('drop table mail_limit_hits');

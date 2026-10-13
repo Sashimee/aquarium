@@ -181,30 +181,6 @@ describe('global mail cap', () => {
     expect(sent).toEqual(['a@bas.lu', 'b@bas.lu']);
   });
 
-  it('charges the IP slot the same for an unknown, cooled-down and capped recipient', async () => {
-    const transport = nodemailer.createTransport({ jsonTransport: true });
-    transport.sendMail = (async () => undefined) as unknown as typeof transport.sendMail;
-    const mailer = createMailer(transport, 'fish@bas.lu', {
-      store: memoryHitStore(() => 0),
-      log: () => undefined,
-      limits: {
-        perRecipient: { max: 1, windowMs: 3_600_000 },
-        verificationCooldown: { max: 1, windowMs: 60_000 },
-        perIpSignup: { max: 3, windowMs: 3_600_000 },
-        global: { max: 100, windowMs: 3_600_000 },
-      },
-    });
-    await mailer.sendVerification('known@bas.lu', 'https://x.test/a');
-    const waits: number[] = [];
-    for (const to of ['known@bas.lu', 'nobody@bas.lu', 'known@bas.lu', 'nobody@bas.lu']) {
-      const admission = await mailer.consumeIp('203.0.113.9');
-      waits.push(admission.wait);
-      if (admission.wait > 0) continue;
-      await mailer.sendVerification(to, 'https://x.test/a').catch(() => undefined);
-    }
-    expect(waits.map((w) => w > 0)).toEqual([false, false, false, true]);
-  });
-
   it('refuses mail without logging the cap event when the store throws', async () => {
     const logs: string[] = [];
     const transport = nodemailer.createTransport({ jsonTransport: true });
