@@ -2,10 +2,12 @@ import type { Biome } from '@aquarium/shared';
 import type { Engine } from '../engine/Engine';
 import { parseSceneOptions } from './options';
 import { loadPreset } from './preset';
+import { BiomeScene, type TankBiome } from './biomeScene';
 import { TankScene } from './TankScene';
 
 export { TankScene } from './TankScene';
 export { parseBiome } from './options';
+export { BiomeScene, TankBiome } from './biomeScene';
 export type { SceneAnchor } from './anemone';
 export { CurrentField, sampleCurrent, type CurrentParameters } from './current';
 export { ColliderField, type Collider } from './colliders';
@@ -19,38 +21,25 @@ export function mountPreset(engine: Engine, biome: Biome, search: string): Promi
 }
 
 /**
- * Loads the preset in the background once the quality tier is known, so a device fetches only
- * the models of its own tier. Call before `engine.start()`: the tier is announced by that call
- * (pinned) or when the start-up probe ends. If neither happens in time it loads at the current
- * tier, and a build that outlives its timeout is disposed instead of attached late.
+ * Shows the preset of `biome.current` and rebuilds it in place whenever that changes. The first
+ * build waits until the quality tier is known, so a device fetches only the models of its own
+ * tier: call before `engine.start()`, since the tier is announced by that call (pinned) or when
+ * the start-up probe ends. If neither happens in time it loads at the current tier.
  */
-export function mountPresetWhenTierKnown(
+export function mountBiomeScene(
   engine: Engine,
-  biome: Biome,
+  biome: TankBiome,
   search: string,
-  onMounted: (scene: TankScene) => void,
-): void {
-  const run = async (): Promise<void> => {
-    await tierKnown(engine);
-    const build = mountPreset(engine, biome, search);
-    let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      engine.events.emit('engine:error', {
-        message: `The ${biome} preset did not finish loading in ${BUILD_TIMEOUT_MS / 1000} s; showing the empty tank`,
-      });
-    }, BUILD_TIMEOUT_MS);
-    try {
-      const scene = await build;
-      if (timedOut) await scene.dispose();
-      else onMounted(scene);
-    } finally {
-      clearTimeout(timer);
-    }
-  };
-  run().catch((cause: unknown) =>
-    engine.events.emit('engine:error', { message: `Could not build the ${biome} preset`, cause }),
-  );
+  hooks: { mounted(scene: TankScene): void; unmounting(scene: TankScene): void },
+): BiomeScene<TankScene> {
+  return new BiomeScene<TankScene>(biome, {
+    ready: tierKnown(engine),
+    build: (b) => mountPreset(engine, b, search),
+    mounted: hooks.mounted,
+    unmounting: hooks.unmounting,
+    onError: (message, cause) => engine.events.emit('engine:error', { message, cause }),
+    timeoutMs: BUILD_TIMEOUT_MS,
+  });
 }
 
 function tierKnown(engine: Engine): Promise<void> {
