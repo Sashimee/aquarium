@@ -68,7 +68,7 @@ export interface NormaliseInput {
   attachments?: Part[];
   hints?: FinHints | undefined;
   standardLengthM: number;
-  recipeId?: string;
+  recipeId: string;
 }
 
 function slicePart(
