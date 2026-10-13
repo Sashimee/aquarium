@@ -328,12 +328,14 @@ export class Engine {
   private updateHoodUniforms(): void {
     const hood = this.hood;
     const day = this.daylightLevel;
+    const casting = this.scratch.copy(hood.color).multiplyScalar(hood.intensity * day);
     const radiance = this.caustics.lightRadiance.value;
     radiance
-      .copy(hood.color)
-      .multiplyScalar(hood.intensity * day)
-      .add(this.scratch.copy(MOONLIGHT).multiplyScalar(1 - day));
+      .copy(MOONLIGHT)
+      .multiplyScalar(1 - day)
+      .add(casting);
     this.caustics.lightDirection.value.copy(hood.position).sub(hood.target.position).normalize();
+    this.caustics.updateContrast(casting, this.substrateAlbedo);
     const room = ROOM_AT_NIGHT + (1 - ROOM_AT_NIGHT) * day;
     this.interior.roomLevel.value = room;
     this.scene.backgroundIntensity = this.roomBackgroundIntensity * room;
