@@ -315,7 +315,7 @@ export class TankScene {
     return this.presetHard;
   }
 
-  /** Plants and anemones from the preset, which stay where they are. */
+  /** Plants, anemones and procedural corals from the preset, which stay where they are. */
   get fixedDecor(): readonly DecorItem[] {
     return fixedDecorOf(this.preset.decor, this.library.catalog);
   }

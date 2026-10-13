@@ -10,7 +10,7 @@ export function hasVacationFeeder(layout: readonly DecorItem[]): boolean {
   return layout.some((i) => i.assetId === VACATION_FEEDER_ASSET_ID);
 }
 
-/** Items the player can move: the ones with a spec. Plants and anemones stay where the preset put them. */
+/** Items the player can move: the ones with a spec. Plants, anemones and procedural corals stay where the preset put them. */
 export function splitLayout(
   layout: readonly DecorItem[],
   specs: ReadonlyMap<string, DecorSpec>,
