@@ -1,4 +1,4 @@
-import { buildApp } from './app.ts';
+import { buildApp, DEFAULT_SIGN_IN_THROTTLE } from './app.ts';
 import { createBackgroundTasks, shutdown } from './background.ts';
 import { createAuth } from './auth.ts';
 import { loadConfig } from './config.ts';
@@ -38,6 +38,10 @@ const app = buildApp({
   database,
   auth,
   mailer,
+  signInThrottle: {
+    store: postgresHitStore(database, config.authSecret),
+    limit: DEFAULT_SIGN_IN_THROTTLE,
+  },
   species: loadCatalog(),
   testHooks: config.testHooks,
 });
