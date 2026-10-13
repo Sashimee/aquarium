@@ -38,12 +38,19 @@ import {
   vec4,
 } from 'three/tsl';
 import type { CausticMethod } from '../quality/tiers';
-import { lattice, PATTERN, PATTERN_GAIN, tiledFrequency } from './causticPattern';
+import {
+  BAKE,
+  BAKED_GAIN,
+  FOCUS_BAKE,
+  HASH_WRAP,
+  lattice,
+  PATTERN,
+  PATTERN_GAIN,
+  tiledFrequency,
+} from './causticPattern';
 import type { WaterMedium } from './medium';
 
 const TAU = Math.PI * 2;
-const BAKE_PERIOD_CELLS = 10;
-const BAKE_SIZE = 512;
 /** The floor is seen at a grazing angle; isotropic mips would blur the filaments away along it. */
 const BAKE_ANISOTROPY = 8;
 const DISPERSION = 0.015;
@@ -54,14 +61,23 @@ const DRIFT = [0.17, 0.1] as const;
 /** The low tier's second sample of the baked tile is turned and scaled so the two never line up. */
 const BAKED_TURN = 0.61;
 const BAKED_SCALE = 0.73;
+/** The baked focus field slides as its first octave does live, in cells per unit of animation time. */
+const BAKED_FOCUS_DRIFT = [
+  PATTERN.focusRate / PATTERN.focusOctaves[0].scale,
+  (-0.6 * PATTERN.focusRate) / PATTERN.focusOctaves[0].scale,
+] as const;
 /**
- * The low tier sees the tile minified, at a grazing angle across the floor, where the thinnest
- * filaments would average away in its mips: it bakes them no sharper than half-focused.
+ * Mip bias of the baked tile: sharper than trilinear, since the low tier renders below native
+ * resolution and its filaments would otherwise average away; softer where the light is defocused.
  */
-const BAKED_FOCUS = 0.5;
-/** Mip bias of the baked tile: a little sharper than trilinear, softer where the light is defocused. */
-const BAKED_BIAS = -0.5;
-const BAKED_DEFOCUS_BLUR = 1.2;
+const BAKED_BIAS = -1;
+const BAKED_DEFOCUS_BLUR = 0.6;
+/**
+ * The low tier's share of the contrast left where the light is defocused. Its tile is already
+ * baked half-defocused, and a phone's small view of the floor often lies inside one defocused
+ * patch, where the full swing would leave no net at all.
+ */
+const BAKED_DEFOCUSED_CONTRAST = 0.65;
 /** Default contrast of the net: a multi-LED hood, whose emitters' nets partly fill each other in. */
 const BASE_STRENGTH = 0.7;
 /** Luminance of the dark freshwater sand, the substrate `BASE_STRENGTH` is set for. */
@@ -76,7 +92,7 @@ const hash22 = (p: Node<'vec2'>): Node<'vec2'> =>
   fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))).mul(43758.5453));
 
 const wrapCell = (id: Node<'vec2'>, period: number | null): Node<'vec2'> =>
-  period === null ? id : mod(id, period);
+  mod(id, period ?? HASH_WRAP);
 
 function valueNoise(p: Node<'vec2'>, period: number | null): Node<'float'> {
   const cell = floor(p).toVar();
@@ -188,12 +204,14 @@ export function castingShare(castingLuminance: number, totalLuminance: number): 
 }
 
 /**
- * How far the caustics swing the light about its mean on a surface.
+ * How far the caustics swing the light about its mean.
  *
  * The frame has one exposure, where an eye looking at white sand adapts to it. With perceived
  * brightness going as the square root of luminance (Stevens), a filament's perceived step is
  * about half the contrast times the square root of the floor's luminance; holding that at the
- * dark sand's level scales the contrast by the square root of the luminance ratio.
+ * dark sand's level scales the contrast by the square root of the luminance ratio. The caustics
+ * are in the hood light's colour, so the reduction applies to everything it lights, fish, rock
+ * and coral as well as the sand: on reef sand that is about 0.42 of the dark-sand contrast.
  */
 export function causticContrast(
   strength: number,
@@ -210,11 +228,15 @@ export function causticContrast(
  * fish) receives them, and the light's shadow map masks them.
  */
 export class Caustics {
-  /** The net's contrast in full daylight on dark sand; `contrast` is what the surfaces get. */
-  readonly strength = uniform(BASE_STRENGTH);
+  /**
+   * The net's contrast in full daylight on dark sand. Not a uniform: the shaders only see it
+   * through `contrast` and `shaftContrast`, which `setHood` gates by the main channel.
+   */
+  readonly strength = { value: BASE_STRENGTH };
+  /** What the lit surfaces get; see `causticContrast`. */
   readonly contrast = uniform(0);
-  /** See `castingShare`. */
-  readonly castingShare = uniform(0);
+  /** What the light shafts get: the strength times the casting share, without the substrate term. */
+  readonly shaftContrast = uniform(0);
   readonly cellsPerMetre = uniform(13);
   readonly speed = uniform(0.55);
   readonly method = uniform(METHOD_ID.layered, 'int');
@@ -222,11 +244,20 @@ export class Caustics {
   readonly lightDirection = uniform(new Vector3(0, 1, 0));
   readonly lightRadiance = uniform(new Color(1, 1, 1));
 
-  private readonly bakeTarget = new RenderTarget(BAKE_SIZE, BAKE_SIZE, {
+  private readonly casting = new Color();
+  private readonly bakeTarget = new RenderTarget(BAKE.size, BAKE.size, {
     type: HalfFloatType,
     generateMipmaps: true,
     anisotropy: BAKE_ANISOTROPY,
     minFilter: LinearMipmapLinearFilter,
+    magFilter: LinearFilter,
+    wrapS: RepeatWrapping,
+    wrapT: RepeatWrapping,
+    depthBuffer: false,
+  });
+  private readonly focusTarget = new RenderTarget(FOCUS_BAKE.size, FOCUS_BAKE.size, {
+    generateMipmaps: false,
+    minFilter: LinearFilter,
     magFilter: LinearFilter,
     wrapS: RepeatWrapping,
     wrapT: RepeatWrapping,
@@ -244,35 +275,56 @@ export class Caustics {
   }
 
   /**
-   * Call once per frame, after `lightRadiance` is set: `casting` is the part of it from the hood
-   * channel that casts caustics.
+   * Call once per frame. The hood's main channel, `main` at `intensity`, fades with `day` into its
+   * `moonlight` channel; only the main channel casts caustics (see `castingShare`).
    */
-  updateContrast(casting: Color, substrateAlbedo: Color): void {
-    const share = castingShare(luminance(casting), luminance(this.lightRadiance.value));
-    this.castingShare.value = share;
+  setHood(
+    main: Color,
+    intensity: number,
+    moonlight: Color,
+    day: number,
+    substrateAlbedo: Color,
+  ): void {
+    const casting = this.casting.copy(main).multiplyScalar(intensity * day);
+    const radiance = this.lightRadiance.value
+      .copy(moonlight)
+      .multiplyScalar(1 - day)
+      .add(casting);
+    const share = castingShare(luminance(casting), luminance(radiance));
     this.contrast.value = causticContrast(this.strength.value, share, luminance(substrateAlbedo));
+    this.shaftContrast.value = this.strength.value * share;
   }
 
-  /** Renders one tileable frame of the procedural pattern for the low tier. */
+  /** Renders the low tier's tiles: one frame of a net, and the focus field. */
   bake(renderer: Renderer): void {
-    const material = new NodeMaterial();
-    material.fragmentNode = Fn(() => {
-      const q = uv().mul(BAKE_PERIOD_CELLS).toVar();
+    const netTile = Fn(() => {
+      const q = uv().mul(BAKE.periodCells).toVar();
       const t = float(0);
-      const focus = focusField(q, t, BAKE_PERIOD_CELLS);
-      return vec4(vec3(net(q, t, focus.mul(BAKED_FOCUS), BAKE_PERIOD_CELLS)), 1);
+      const focus = focusField(q, t, BAKE.periodCells);
+      return vec4(vec3(net(q, t, focus.mul(BAKE.focus), BAKE.periodCells)), 1);
     })();
-    const quad = new QuadMesh(material);
+    const focusTile = Fn(() => {
+      const q = uv().mul(FOCUS_BAKE.periodCells);
+      return vec4(vec3(focusField(q, float(0), FOCUS_BAKE.periodCells)), 1);
+    })();
     const previous = renderer.getRenderTarget();
-    renderer.setRenderTarget(this.bakeTarget);
-    quad.render(renderer);
+    for (const [node, target] of [
+      [netTile, this.bakeTarget],
+      [focusTile, this.focusTarget],
+    ] as const) {
+      const material = new NodeMaterial();
+      material.fragmentNode = node;
+      renderer.setRenderTarget(target);
+      new QuadMesh(material).render(renderer);
+      material.dispose();
+    }
     renderer.setRenderTarget(previous);
-    material.dispose();
     this.baked = true;
   }
 
   dispose(): void {
     this.bakeTarget.dispose();
+    this.focusTarget.dispose();
   }
 
   /**
@@ -281,9 +333,9 @@ export class Caustics {
    * called from non-uniform control flow.
    */
   bakedAt(surfacePoint: Node<'vec2'>, scale: number): Node<'float'> {
-    const cells = surfacePoint.mul(this.cellsPerMetre.mul(scale / BAKE_PERIOD_CELLS));
-    const drift = vec2(DRIFT[0], DRIFT[1]).mul(time.mul(this.speed).div(BAKE_PERIOD_CELLS));
-    return texture(this.bakeTarget.texture, cells.add(drift)).level(float(1)).r.mul(PATTERN_GAIN);
+    const cells = surfacePoint.mul(this.cellsPerMetre.mul(scale / BAKE.periodCells));
+    const drift = fract(vec2(DRIFT[0], DRIFT[1]).mul(time.mul(this.speed).div(BAKE.periodCells)));
+    return texture(this.bakeTarget.texture, cells.add(drift)).level(float(1)).r.mul(BAKED_GAIN);
   }
 
   /**
@@ -332,47 +384,74 @@ export class Caustics {
       const { depth, inWater, slant, light } = this.reach(p);
       const surfacePoint = p.xz.add(this.lightDirection.xz.mul(slant));
       const t = time.mul(this.speed).toVar();
-      const q = surfacePoint.mul(this.cellsPerMetre).add(vec2(DRIFT[0], DRIFT[1]).mul(t)).toVar();
-      const focus = focusField(q, t, null).toVar();
-
-      const tiled = q.div(BAKE_PERIOD_CELLS).toVar();
-      const blur = focus.oneMinus().mul(BAKED_DEFOCUS_BLUR).add(BAKED_BIAS);
-      const turned = vec2(
-        dot(tiled, vec2(Math.cos(BAKED_TURN), -Math.sin(BAKED_TURN))),
-        dot(tiled, vec2(Math.sin(BAKED_TURN), Math.cos(BAKED_TURN))),
-      );
-      const bakedA = texture(this.bakeTarget.texture, tiled).bias(blur).r;
-      const bakedB = texture(
-        this.bakeTarget.texture,
-        turned.mul(BAKED_SCALE).add(vec2(-0.011, 0.019).mul(t)).add(0.37),
-      ).bias(blur).r;
-      const bakedPattern = mix(bakedB, bakedA, PATTERN.layerWeights[0]).toVar();
-
+      const cells = surfacePoint.mul(this.cellsPerMetre).toVar();
+      const drift = vec2(DRIFT[0], DRIFT[1]).mul(t).toVar();
+      const focus = float(0).toVar();
+      const defocused = float(PATTERN.defocusedContrast).toVar();
       const pattern = vec3(1).toVar();
+
       If(this.method.equal(METHOD_ID.texture), () => {
-        pattern.assign(vec3(bakedPattern));
-      })
-        .ElseIf(this.method.equal(METHOD_ID.single), () => {
+        focus.assign(this.bakedFocus(cells, t));
+        defocused.assign(BAKED_DEFOCUSED_CONTRAST);
+        pattern.assign(vec3(this.bakedPattern(cells, drift, t, focus)));
+      }).Else(() => {
+        const q = cells.add(drift).toVar();
+        focus.assign(focusField(q, t, null));
+        If(this.method.equal(METHOD_ID.single), () => {
           pattern.assign(vec3(net(q, t, focus, null)));
         })
-        .ElseIf(this.method.equal(METHOD_ID.layered), () => {
-          pattern.assign(vec3(layeredPattern(q, t, focus)));
-        })
-        .Else(() => {
-          pattern.assign(
-            vec3(
-              layeredPattern(q.mul(1 - DISPERSION), t, focus),
-              layeredPattern(q, t, focus),
-              layeredPattern(q.mul(1 + DISPERSION), t, focus),
-            ),
-          );
-        });
+          .ElseIf(this.method.equal(METHOD_ID.layered), () => {
+            pattern.assign(vec3(layeredPattern(q, t, focus)));
+          })
+          .Else(() => {
+            pattern.assign(
+              vec3(
+                layeredPattern(q.mul(1 - DISPERSION), t, focus),
+                layeredPattern(q, t, focus),
+                layeredPattern(q.mul(1 + DISPERSION), t, focus),
+              ),
+            );
+          });
+        pattern.mulAssign(PATTERN_GAIN);
+      });
 
       const formed = smoothstep(0, 0.06, depth);
-      const patch = mix(PATTERN.defocusedContrast, 1, focus);
+      const patch = mix(defocused, 1, focus);
       const amount = this.contrast.mul(patch).mul(formed).mul(inWater);
-      const caustic = max(pattern.mul(PATTERN_GAIN).sub(1).mul(amount).add(1), 0);
+      const caustic = max(pattern.sub(1).mul(amount).add(1), 0);
       return caustic.mul(light);
     })();
+  }
+
+  /**
+   * The baked focus field at `cells`. Only the drift, the same at every pixel, is wrapped to the
+   * tile: wrapping the per-pixel coordinate would break the derivatives the mip choice needs.
+   */
+  private bakedFocus(cells: Node<'vec2'>, t: Node<'float'>): Node<'float'> {
+    const drift = fract(
+      vec2(BAKED_FOCUS_DRIFT[0], BAKED_FOCUS_DRIFT[1]).mul(t.div(FOCUS_BAKE.periodCells)),
+    );
+    return texture(this.focusTarget.texture, cells.div(FOCUS_BAKE.periodCells).add(drift)).r;
+  }
+
+  /** Two taps of the baked net, the second turned and scaled so the two tiles never line up. */
+  private bakedPattern(
+    cells: Node<'vec2'>,
+    drift: Node<'vec2'>,
+    t: Node<'float'>,
+    focus: Node<'float'>,
+  ): Node<'float'> {
+    const blur = focus.oneMinus().mul(BAKED_DEFOCUS_BLUR).add(BAKED_BIAS).toVar();
+    const turn = (p: Node<'vec2'>): Node<'vec2'> =>
+      vec2(
+        dot(p, vec2(Math.cos(BAKED_TURN), -Math.sin(BAKED_TURN))),
+        dot(p, vec2(Math.sin(BAKED_TURN), Math.cos(BAKED_TURN))),
+      ).mul(BAKED_SCALE);
+    const tile = cells.div(BAKE.periodCells).toVar();
+    const tileDrift = drift.div(BAKE.periodCells).toVar();
+    const a = texture(this.bakeTarget.texture, tile.add(fract(tileDrift))).bias(blur).r;
+    const driftB = fract(turn(tileDrift).add(vec2(-0.011, 0.019).mul(t)).add(0.37));
+    const b = texture(this.bakeTarget.texture, turn(tile).add(driftB)).bias(blur).r;
+    return mix(b, a, PATTERN.layerWeights[0]).mul(BAKED_GAIN);
   }
 }

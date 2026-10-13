@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Box3, Color, Vector3 } from 'three/webgpu';
 import { Caustics, castingShare, causticContrast } from './caustics';
+import { daylightAt, parseClock } from '../daylight';
 import { WaterMedium } from './medium';
 
 const DARK_SAND = 0.08;
@@ -55,42 +56,54 @@ describe('causticContrast', () => {
   });
 });
 
-describe('Caustics.updateContrast', () => {
+describe('Caustics.setHood', () => {
   const darkSand = new Color(0.13, 0.09, 0.055);
+  const reefSand = new Color(0.75, 0.7, 0.6);
+  const hood = new Color(1, 0.97, 0.92);
   const moonlight = new Color(0.04, 0.14, 0.9);
+  const at = (clock: string): number => daylightAt(parseClock(clock));
 
-  it('is the main channel share of the hood light, zero with only the moonlight on', () => {
+  it('switches the caustics and the shafts off at night, with only the moonlight lit', () => {
     const c = caustics();
-    const main = new Color(4, 3.9, 3.7);
-    c.lightRadiance.value.copy(main);
-    c.updateContrast(main, darkSand);
-    expect(c.contrast.value).toBeCloseTo(c.strength.value, 10);
-    expect(c.castingShare.value).toBe(1);
-
-    c.lightRadiance.value.copy(moonlight);
-    c.updateContrast(new Color(0, 0, 0), darkSand);
+    c.setHood(hood, 4, moonlight, at('23:00'), darkSand);
     expect(c.contrast.value).toBe(0);
-    expect(c.castingShare.value).toBe(0);
-
-    c.lightRadiance.value.copy(main).multiplyScalar(0.05).add(moonlight);
-    c.updateContrast(main.clone().multiplyScalar(0.05), darkSand);
-    expect(c.contrast.value).toBeGreaterThan(0);
-    expect(c.contrast.value).toBeLessThan(c.strength.value);
+    expect(c.shaftContrast.value).toBe(0);
+    expect(c.lightRadiance.value.equals(moonlight)).toBe(true);
   });
 
-  it('reduces only the surface contrast on bright sand, not the casting share', () => {
+  it('gives the full strength at noon on dark sand, to the surfaces and the shafts', () => {
     const c = caustics();
-    c.lightRadiance.value.setRGB(4, 3.9, 3.7);
-    c.updateContrast(c.lightRadiance.value, new Color(0.75, 0.7, 0.6));
-    expect(c.castingShare.value).toBe(1);
+    c.setHood(hood, 4, moonlight, at('12:00'), darkSand);
+    expect(c.contrast.value).toBeCloseTo(c.strength.value, 10);
+    expect(c.shaftContrast.value).toBeCloseTo(c.strength.value, 10);
+    expect(c.lightRadiance.value.equals(hood.clone().multiplyScalar(4))).toBe(true);
+  });
+
+  it('fades both through dusk, as the moonlight takes over', () => {
+    const c = caustics();
+    const dusk = ['20:10', '20:25', '20:40', '20:55'].map((clock) => {
+      c.setHood(hood, 4, moonlight, at(clock), darkSand);
+      return [c.contrast.value, c.shaftContrast.value] as const;
+    });
+    for (let k = 1; k < dusk.length; k++) {
+      expect(dusk[k]?.[0]).toBeLessThan(dusk[k - 1]?.[0] ?? NaN);
+      expect(dusk[k]?.[1]).toBeLessThan(dusk[k - 1]?.[1] ?? NaN);
+    }
+    expect(dusk[dusk.length - 1]?.[0]).toBeGreaterThan(0);
+  });
+
+  it('lowers the surface contrast on bright sand but not the shafts', () => {
+    const c = caustics();
+    c.setHood(hood, 4, moonlight, at('12:00'), reefSand);
     expect(c.contrast.value).toBeLessThan(0.5 * c.strength.value);
+    expect(c.shaftContrast.value).toBeCloseTo(c.strength.value, 10);
   });
 
   it('follows changes to the strength from the dev panel', () => {
     const c = caustics();
     c.strength.value = 0.3;
-    c.lightRadiance.value.setRGB(4, 3.9, 3.7);
-    c.updateContrast(c.lightRadiance.value, darkSand);
+    c.setHood(hood, 4, moonlight, at('12:00'), darkSand);
     expect(c.contrast.value).toBeCloseTo(0.3, 10);
+    expect(c.shaftContrast.value).toBeCloseTo(0.3, 10);
   });
 });

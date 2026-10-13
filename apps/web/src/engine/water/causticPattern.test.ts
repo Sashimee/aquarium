@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { cellEdge, focusAt, layeredAt, netAt, PATTERN_GAIN } from './causticPattern';
+import {
+  BAKE,
+  BAKED_GAIN,
+  bakedTileAt,
+  cellEdge,
+  focusAt,
+  HASH_WRAP,
+  layeredAt,
+  netAt,
+  PATTERN_GAIN,
+} from './causticPattern';
 
 function random(seed: number): () => number {
   let state = seed;
@@ -112,6 +122,28 @@ describe('caustic pattern', () => {
         period,
       );
       expect(across).toBeCloseTo(here, 6);
+    }
+  });
+
+  it('normalises the baked tile, as baked, to unit mean', () => {
+    const n = BAKE.size;
+    let sum = 0;
+    for (let j = 0; j < n; j++) {
+      for (let i = 0; i < n; i++) {
+        sum += bakedTileAt(((i + 0.5) / n) * BAKE.periodCells, ((j + 0.5) / n) * BAKE.periodCells);
+      }
+    }
+    expect((sum / (n * n)) * BAKED_GAIN).toBeCloseTo(1, 2);
+  });
+
+  it('keeps hashing bounded cell ids however far the net has drifted', () => {
+    const rnd = random(13);
+    for (let k = 0; k < 200; k++) {
+      const x = rnd() * HASH_WRAP;
+      const y = rnd() * HASH_WRAP;
+      const t = rnd() * 100;
+      const far = 1000 * HASH_WRAP;
+      expect(cellEdge(x + far, y - far, t)).toBeCloseTo(cellEdge(x, y, t), 6);
     }
   });
 });

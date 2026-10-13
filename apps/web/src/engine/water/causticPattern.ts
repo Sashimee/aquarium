@@ -45,9 +45,36 @@ export const PATTERN = {
  */
 export const PATTERN_GAIN = 41.6;
 
+/**
+ * Untiled cell ids wrap at this before they are hashed. The net drifts, so its ids grow for as
+ * long as the tab is open, and a `fract(sin)` hash of a large argument degrades into visible
+ * structure on mobile GPUs. 289 cells is over 20 m at the default density, so the repeat is never
+ * in view.
+ */
+export const HASH_WRAP = 289;
+
+/** The low tier's baked tile of one net. */
+export const BAKE = {
+  periodCells: 10,
+  size: 512,
+  /**
+   * The low tier sees the tile minified, at a grazing angle across the floor, where the thinnest
+   * filaments would average away in its mips: it bakes them no sharper than half-focused.
+   */
+  focus: 0.5,
+} as const;
+
+/** 1 / mean of the baked tile, measured over its texels; it is not the live pattern's mean. */
+export const BAKED_GAIN = 37.22;
+
+/** The low tier's baked focus field: a larger tile, since its patches span several cells. */
+export const FOCUS_BAKE = { periodCells: 64, size: 128 } as const;
+
 const fract = (x: number): number => x - Math.floor(x);
-const wrap = (i: number, period: number | null): number =>
-  period === null ? i : ((i % period) + period) % period;
+const wrap = (i: number, period: number | null): number => {
+  const p = period ?? HASH_WRAP;
+  return ((i % p) + p) % p;
+};
 const smoothstep = (a: number, b: number, x: number): number => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
@@ -190,4 +217,10 @@ export function layeredAt(x: number, y: number, t: number, focus: number): numbe
     focus,
   );
   return near * PATTERN.layerWeights[0] + far * PATTERN.layerWeights[1];
+}
+
+/** The baked tile's value at cell coordinates (x, y) of the tile. */
+export function bakedTileAt(x: number, y: number): number {
+  const period = BAKE.periodCells;
+  return netAt(x, y, 0, focusAt(x, y, 0, period) * BAKE.focus, period);
 }
