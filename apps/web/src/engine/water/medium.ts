@@ -1,4 +1,5 @@
 import { Box3, Color, Vector3, type Node } from 'three/webgpu';
+import { AIR_IOR, WATER_IOR } from './optics';
 import {
   abs,
   cameraPosition,
@@ -6,8 +7,11 @@ import {
   length,
   max,
   min,
+  mix,
   output,
   positionWorld,
+  refract,
+  sign,
   step,
   uniform,
   vec3,
@@ -113,31 +117,56 @@ export class WaterMedium {
 
   /**
    * Ray/box slab test from the camera to `target`. Returns the distance to the target
-   * and the entry/exit distances of the water box along that ray.
+   * and the entry/exit distances of the water box along that ray. Post-processing passes the
+   * scene camera's position as `eye`, since `cameraPosition` there is the quad's camera.
    */
-  raySegment(target: Node<'vec3'> = positionWorld) {
-    const delta = target.sub(cameraPosition).toVar();
+  raySegment(target: Node<'vec3'> = positionWorld, eye: Node<'vec3'> = cameraPosition) {
+    const delta = target.sub(eye).toVar();
     const dist = length(delta).toVar();
-    const dir = delta.div(max(dist, 1e-6));
+    const dir = delta.div(max(dist, 1e-6)).toVar();
     const invDir = step(vec3(0), dir)
       .mul(2)
       .sub(1)
       .div(max(abs(dir), 1e-6))
       .toVar();
-    const t0 = this.boxMin.sub(cameraPosition).mul(invDir);
-    const t1 = this.boxMax.sub(cameraPosition).mul(invDir);
+    const t0 = this.boxMin.sub(eye).mul(invDir);
+    const t1 = this.boxMax.sub(eye).mul(invDir);
     const tMin = min(t0, t1).toVar();
     const tMax = max(t0, t1).toVar();
     const tNear = max(max(tMin.x, tMin.y), tMin.z);
     const tFar = min(min(tMax.x, tMax.y), tMax.z).toVar();
-    return { dist, tNear, tFar };
+    return { dist, dir, tMin, tNear, tFar };
   }
 
-  /** Length of the camera ray inside water up to the fragment, 0 if the fragment lies beyond the box. */
-  pathToFragment(): Node<'float'> {
-    const { dist, tNear, tFar } = this.raySegment();
+  /**
+   * The view ray's direction once it is in the water. From outside it is bent at the face it
+   * entered through; the glass is a parallel plate, so only the air-water indices matter.
+   */
+  waterRayDirection(target: Node<'vec3'> = positionWorld): Node<'vec3'> {
+    const { dir, tMin, tNear } = this.raySegment(target);
+    const onX = step(max(tMin.y, tMin.z), tMin.x);
+    const onY = step(max(tMin.x, tMin.z), tMin.y).mul(onX.oneMinus());
+    const onZ = onX.oneMinus().mul(onY.oneMinus());
+    const entryNormal = vec3(onX, onY, onZ).mul(sign(dir)).negate();
+    const bent = refract(dir, entryNormal, AIR_IOR / WATER_IOR);
+    return mix(bent, dir, step(tNear, 0));
+  }
+
+  /** Length of the camera ray inside water up to `target`, 0 if the target lies beyond the box. */
+  pathToFragment(target: Node<'vec3'> = positionWorld): Node<'float'> {
+    const { dist, tNear, tFar } = this.raySegment(target);
     const inside = step(dist, tFar.add(BOUNDARY_TOLERANCE));
     return max(min(tFar, dist).sub(max(tNear, 0)), 0).mul(inside);
+  }
+
+  /** Distance from `origin` inside the water box to where a ray along `dir` leaves it. */
+  exitDistance(origin: Node<'vec3'>, dir: Node<'vec3'>): Node<'float'> {
+    const wall = mix(this.boxMin, this.boxMax, step(vec3(0), dir));
+    const t = wall
+      .sub(origin)
+      .mul(sign(dir))
+      .div(max(abs(dir), 1e-6));
+    return max(min(min(t.x, t.y), t.z), 0);
   }
 
   /** Length of the camera ray through the whole box, for fragments on its far faces. */
