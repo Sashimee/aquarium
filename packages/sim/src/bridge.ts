@@ -250,6 +250,7 @@ export class SimClient {
     reject: (error: Error) => void;
   } | null = null;
   private readonly listener = (event: MessageEvent): void => this.receive(event.data);
+  private epoch = 0;
 
   constructor(port: MessagePortLike) {
     this.port = port;
@@ -351,6 +352,7 @@ export class SimClient {
     const event = data as SimEvent;
     switch (event.type) {
       case 'ready':
+        this.epoch = event.epoch;
         this.pendingInit?.resolve(event);
         this.pendingInit = null;
         return;
@@ -365,6 +367,9 @@ export class SimClient {
         return;
       }
       case 'ate':
+        // A world being replaced by `init` may still report bites on food the caller has
+        // already reset; only the current world's are passed on.
+        if (this.pendingInit !== null || event.epoch !== this.epoch) return;
         for (const l of this.ateListeners) l(event.events, event);
         return;
       case 'error': {

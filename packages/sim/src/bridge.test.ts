@@ -273,6 +273,46 @@ describe('sim worker bridge', () => {
     expect(Array.from(snapshot.data)).toEqual(Array.from(data));
   });
 
+  it('drops ate events from a world that a pending or completed init replaced', async () => {
+    let deliver: ((event: MessageEvent) => void) | null = null;
+    const client = new SimClient({
+      postMessage: () => undefined,
+      addEventListener: (_type, listener) => {
+        deliver = listener;
+      },
+      removeEventListener: () => undefined,
+    });
+    const post = (data: unknown): void => deliver?.({ data } as MessageEvent);
+    const ready = (epoch: number): unknown => ({
+      type: 'ready',
+      epoch,
+      fishIds: [],
+      stride: SNAPSHOT_STRIDE,
+      stepHz: STEP_HZ,
+    });
+    const ate = (epoch: number, foodId: number): unknown => ({
+      type: 'ate',
+      epoch,
+      tick: 1,
+      events: [{ fishId: 'f', foodId, portion: 0.025 }],
+    });
+    const seen: number[] = [];
+    client.onAte((events) => seen.push(...events.map((e) => e.foodId)));
+
+    const first = client.init(benchmarkConfig(1));
+    post(ate(0, 1));
+    post(ready(1));
+    await first;
+    post(ate(1, 2));
+    const second = client.init(benchmarkConfig(1));
+    post(ate(1, 3));
+    post(ready(2));
+    await second;
+    post(ate(1, 4));
+    post(ate(2, 5));
+    expect(seen).toEqual([2, 5]);
+  });
+
   it('tags a re-init with a new epoch so the interpolator restarts cleanly', async () => {
     const { client } = connect();
     const interp = new SnapshotInterpolator(1 / 30);
