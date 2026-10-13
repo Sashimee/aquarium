@@ -15,6 +15,13 @@
       "when": 1791854495014,
       "tag": "0001_mail_limit_hits",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791866596759,
+      "tag": "0002_mail_limit_hits_at_idx",
+      "breakpoints": true
     }
   ]
 }
