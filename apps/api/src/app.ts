@@ -102,7 +102,22 @@ function parseJson(raw: string | undefined): unknown {
 }
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-const BLOCKED_AUTH_PATHS = new Set([`${AUTH_BASE_PATH}/list-sessions`]);
+const BLOCKED_AUTH_PATHS = new Set([
+  `${AUTH_BASE_PATH}/list-sessions`,
+  `${AUTH_BASE_PATH}/revoke-session`,
+]);
+
+// Better Auth echoes the session token in get-session, sign-in, sign-up and passkey bodies. The
+// same value is the HttpOnly cookie, so any key named token is dropped before JS can read it.
+export function stripTokens(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stripTokens);
+  if (value === null || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => key !== 'token')
+      .map(([key, inner]) => [key, stripTokens(inner)]),
+  );
+}
 
 function normalizedPathname(url: string): string {
   const raw = url.split('?')[0] ?? '/';
@@ -296,7 +311,10 @@ export function buildApp(opts: AppOptions): FastifyInstance {
         });
         const cookies = res.headers.getSetCookie();
         if (cookies.length > 0) reply.header('set-cookie', cookies);
-        return reply.send(Buffer.from(await res.arrayBuffer()));
+        const payload = Buffer.from(await res.arrayBuffer());
+        const isJson = (res.headers.get('content-type') ?? '').toLowerCase().includes('json');
+        if (!isJson || payload.length === 0) return reply.send(payload);
+        return reply.send(JSON.stringify(stripTokens(JSON.parse(payload.toString('utf8')))));
       },
     });
   });

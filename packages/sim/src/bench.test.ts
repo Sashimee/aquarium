@@ -8,10 +8,18 @@ import { World, type WorldConfig } from './world.ts';
 const REPLAYS = 5;
 const WARMUP_STEPS = 150;
 const TIMED_STEPS = 300;
-// 2 ms per step on desktop, and 4 ms under a 4x CPU throttle, which scales script time about
-// linearly: the tighter of the two is 1 ms unthrottled.
-const BUDGET_MS = Math.min(2, 4 / 4);
 const TEST_TIMEOUT_MS = 120_000;
+
+// A slower machine (a shared CI runner) is still slower on an idle core, so the sim is timed
+// against a fixed reference workload stepped in turn with it, and the gate is on their ratio. The
+// limits are the ratios measured on the desktop the 2 ms / 4 ms-at-4x-throttle budgets were set
+// on (Ryzen 5 7600X, Node 24: 1.12 swimming, 2.4 feeding), times 1.4 for how differently other
+// CPUs and V8 builds weigh the sim's mix of work against the reference's. A sim twice as slow is
+// still well past the limit. The absolute budgets are gated by `pnpm --filter @aquarium/sim bench`.
+const HEADROOM = 1.4;
+const SWIMMING_LIMIT = 1.12 * HEADROOM;
+const FEEDING_LIMIT = 2.4 * HEADROOM;
+const REFERENCE_PASSES = 20;
 
 interface Scenario {
   /** Advances one step and returns the milliseconds the sim spent on it. */
@@ -29,9 +37,78 @@ function school(seed: number, fish = 60): WorldConfig {
   return { ...config, fish: config.fish.slice(0, fish) };
 }
 
-function swimming(seed: number): Scenario {
+interface Swimming extends Scenario {
+  readonly count: number;
+}
+
+function swimming(seed: number): Swimming {
   const world = new World(school(seed));
-  return { step: () => timed(() => world.step()) };
+  return { count: world.count, step: () => timed(() => world.step()) };
+}
+
+const REFERENCE_POINTS = 60;
+const REFERENCE_NEIGHBOURS = 7;
+
+/**
+ * A topological-neighbour flocking pass written independently of the sim, so a regression in the
+ * sim's code cannot slow it too: every point finds its nearest few and turns and moves with trig
+ * and square roots, the same mix of work as a sim step.
+ */
+function flockPass(pos: Float64Array, heading: Float64Array, nearest: Float64Array): void {
+  const n = REFERENCE_POINTS;
+  const k = REFERENCE_NEIGHBOURS;
+  for (let i = 0; i < n; i++) {
+    const ix = pos[i * 3] ?? 0;
+    const iy = pos[i * 3 + 1] ?? 0;
+    const iz = pos[i * 3 + 2] ?? 0;
+    let found = 0;
+    let cx = 0;
+    let cy = 0;
+    let cz = 0;
+    for (let j = 0; j < n; j++) {
+      if (j === i) continue;
+      const dx = (pos[j * 3] ?? 0) - ix;
+      const dy = (pos[j * 3 + 1] ?? 0) - iy;
+      const dz = (pos[j * 3 + 2] ?? 0) - iz;
+      const d = dx * dx + dy * dy + dz * dz;
+      if (found === k && d >= (nearest[k - 1] ?? Infinity)) continue;
+      let slot = found < k ? found++ : k - 1;
+      while (slot > 0 && (nearest[slot - 1] ?? Infinity) > d) {
+        nearest[slot] = nearest[slot - 1] ?? Infinity;
+        slot--;
+      }
+      nearest[slot] = d;
+      cx += dx;
+      cy += dy;
+      cz += dz;
+    }
+    const len = Math.sqrt(cx * cx + cy * cy + cz * cz) + 1e-9;
+    const h = (heading[i] ?? 0) + 0.1 * Math.sin(Math.atan2(cx, cz) - (heading[i] ?? 0));
+    heading[i] = h;
+    pos[i * 3] = Math.max(-0.5, Math.min(0.5, ix + 0.003 * (Math.sin(h) + cx / len)));
+    pos[i * 3 + 1] = Math.max(-0.5, Math.min(0.5, iy + (0.003 * cy) / len));
+    pos[i * 3 + 2] = Math.max(-0.5, Math.min(0.5, iz + 0.003 * (Math.cos(h) + cz / len)));
+  }
+}
+
+// Timed here rather than through `timed`, whose call site sees every scenario's closures: how V8
+// inlines a megamorphic call shifted the reference's cost by up to 30% between runs.
+function reference(): Scenario {
+  const pos = new Float64Array(REFERENCE_POINTS * 3);
+  const heading = new Float64Array(REFERENCE_POINTS);
+  const nearest = new Float64Array(REFERENCE_NEIGHBOURS);
+  let lcg = 12345;
+  for (let i = 0; i < pos.length; i++) {
+    lcg = (Math.imul(lcg, 1103515245) + 12345) >>> 0;
+    pos[i] = lcg / 2 ** 32 - 0.5;
+  }
+  return {
+    step(): number {
+      const t0 = performance.now();
+      for (let p = 0; p < REFERENCE_PASSES; p++) flockPass(pos, heading, nearest);
+      return performance.now() - t0;
+    },
+  };
 }
 
 interface Feeding extends Scenario {
@@ -39,14 +116,14 @@ interface Feeding extends Scenario {
   readonly eaten: number;
 }
 
-/**
- * Feeds again whenever fewer than `cap` particles are in the water. Only the sim's share is timed
- * (taking the food buffer and stepping), not the stand-in for gameplay moving the food.
- */
 function flakes(count: number): (rain: FoodRain, tick: number) => void {
   return (rain, t) => rain.sprinkle('flakes', count, 0.4 * Math.sin(t), 0.1 * Math.cos(t), 0.5, 3);
 }
 
+/**
+ * Feeds again whenever fewer than `cap` particles are in the water. Only the sim's share is timed
+ * (taking the food buffer and stepping), not the stand-in for gameplay moving the food.
+ */
 function feeding(
   config: WorldConfig,
   cap: number,
@@ -88,20 +165,20 @@ function feeding(
  * returns each one's mean over the timed steps of its fastest replay of every step, with the last
  * replay's scenarios.
  */
-function fastestMeanMs<S extends Scenario>(
-  make: () => readonly S[],
-): { meanMs: number[]; last: readonly S[] } {
+function fastestMeanMs<const S extends readonly Scenario[]>(
+  make: () => S,
+): { meanMs: number[]; last: S } {
   let fastest: Float64Array[] = [];
-  let last: readonly S[] = [];
+  let last = make();
   for (let replay = 0; replay < REPLAYS; replay++) {
-    last = make();
+    if (replay > 0) last = make();
     if (replay === 0) fastest = last.map(() => new Float64Array(TIMED_STEPS).fill(Infinity));
     for (let t = 0; t < WARMUP_STEPS; t++) for (const s of last) s.step();
     for (let t = 0; t < TIMED_STEPS; t++) {
       last.forEach((s, i) => {
         const best = fastest[i];
         if (best === undefined) throw new Error(`scenario ${i} appeared after the first replay`);
-        best[t] = Math.min(best[t] ?? Infinity, s.step());
+        best[t] = Math.min(at(best, t), s.step());
       });
     }
   }
@@ -111,7 +188,7 @@ function fastestMeanMs<S extends Scenario>(
   };
 }
 
-function at(values: readonly number[], i: number): number {
+function at(values: ArrayLike<number>, i: number): number {
   const v = values[i];
   if (v === undefined) throw new Error(`no measurement ${i}`);
   return v;
@@ -119,29 +196,30 @@ function at(values: readonly number[], i: number): number {
 
 describe('step budget', () => {
   it(
-    'steps 60 fish well inside the desktop and throttled budgets',
+    'steps 60 fish inside the budget relative to the reference workload',
     () => {
-      expect(new World(school(1)).count).toBe(60);
-      const { meanMs } = fastestMeanMs(() => [swimming(1)]);
-      expect(at(meanMs, 0)).toBeLessThan(BUDGET_MS);
+      const { meanMs, last } = fastestMeanMs(() => [swimming(1), reference()]);
+      const [swim] = last;
+      expect(swim.count).toBe(60);
+      expect(at(meanMs, 0) / at(meanMs, 1)).toBeLessThan(SWIMMING_LIMIT);
     },
     TEST_TIMEOUT_MS,
   );
 
   it(
-    'stays inside the budget with a few hundred food particles in the water',
+    'stays inside the relative budget with a few hundred food particles in the water',
     () => {
       const { meanMs, last } = fastestMeanMs(() => [
         feeding(school(2), 250, (rain, t) => {
           flakes(240)(rain, t);
           rain.sprinkle('pellets', 60, -0.3, 0, 0.3);
         }),
+        reference(),
       ]);
       const [fed] = last;
-      if (fed === undefined) throw new Error('the feeding scenario did not run');
       expect(fed.particleSteps / (WARMUP_STEPS + TIMED_STEPS)).toBeGreaterThan(200);
       expect(fed.eaten).toBeGreaterThan(0);
-      expect(at(meanMs, 0)).toBeLessThan(BUDGET_MS);
+      expect(at(meanMs, 0) / at(meanMs, 1)).toBeLessThan(FEEDING_LIMIT);
     },
     TEST_TIMEOUT_MS,
   );
@@ -158,7 +236,6 @@ describe('step budget', () => {
         feeding(school(3, 8), 700, flakes(300)),
       ]);
       const [sparse, dense] = last;
-      if (sparse === undefined || dense === undefined) throw new Error('a scenario did not run');
       const particleRatio = dense.particleSteps / sparse.particleSteps;
       expect(particleRatio).toBeGreaterThan(10);
       expect(at(meanMs, 1) / at(meanMs, 0)).toBeLessThan(9);
