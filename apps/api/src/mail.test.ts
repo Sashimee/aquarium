@@ -70,6 +70,15 @@ describe('verification mail', () => {
     expect(html).toContain(`>${escapeHtml(URL_WITH_AMP)}</a>`);
   });
 
+  it('tells the user to open the link in the same browser, in both parts', async () => {
+    const raw = await rawMessage(URL_WITH_AMP);
+    for (const type of ['text/plain', 'text/html'] as const) {
+      const body = decodePart(raw, type);
+      expect(body).toContain('Open the link in the same browser you signed up in.');
+      expect(body).toContain('set one with Forgot password instead.');
+    }
+  });
+
   it('escapes html metacharacters', () => {
     expect(escapeHtml(`a&b<c>"d'`)).toBe('a&amp;b&lt;c&gt;&quot;d&#39;');
   });
