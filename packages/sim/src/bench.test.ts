@@ -13,12 +13,12 @@ const TEST_TIMEOUT_MS = 120_000;
 // A slower machine (a shared CI runner) is still slower on an idle core, so the sim is timed
 // against a fixed reference workload stepped in turn with it, and the gate is on their ratio. The
 // limits are the ratios measured on the desktop the 2 ms / 4 ms-at-4x-throttle budgets were set
-// on (Ryzen 5 7600X, Node 24: 1.15 swimming, 1.95 feeding), times 1.4 for how differently other
+// on (Ryzen 5 7600X, Node 24: 1.12 swimming, 2.4 feeding), times 1.4 for how differently other
 // CPUs and V8 builds weigh the sim's mix of work against the reference's. A sim twice as slow is
 // still well past the limit. The absolute budgets are gated by `pnpm --filter @aquarium/sim bench`.
 const HEADROOM = 1.4;
-const SWIMMING_LIMIT = 1.15 * HEADROOM;
-const FEEDING_LIMIT = 1.95 * HEADROOM;
+const SWIMMING_LIMIT = 1.12 * HEADROOM;
+const FEEDING_LIMIT = 2.4 * HEADROOM;
 const REFERENCE_PASSES = 20;
 
 interface Scenario {
@@ -46,61 +46,68 @@ function swimming(seed: number): Swimming {
   return { count: world.count, step: () => timed(() => world.step()) };
 }
 
+const REFERENCE_POINTS = 60;
+const REFERENCE_NEIGHBOURS = 7;
+
 /**
  * A topological-neighbour flocking pass written independently of the sim, so a regression in the
- * sim's code cannot slow it too: 60 points each find their 7 nearest and turn and move with trig
- * and square roots, the same mix of work as a sim step, at about the same cost.
+ * sim's code cannot slow it too: every point finds its nearest few and turns and moves with trig
+ * and square roots, the same mix of work as a sim step.
  */
+function flockPass(pos: Float64Array, heading: Float64Array, nearest: Float64Array): void {
+  const n = REFERENCE_POINTS;
+  const k = REFERENCE_NEIGHBOURS;
+  for (let i = 0; i < n; i++) {
+    const ix = pos[i * 3] ?? 0;
+    const iy = pos[i * 3 + 1] ?? 0;
+    const iz = pos[i * 3 + 2] ?? 0;
+    let found = 0;
+    let cx = 0;
+    let cy = 0;
+    let cz = 0;
+    for (let j = 0; j < n; j++) {
+      if (j === i) continue;
+      const dx = (pos[j * 3] ?? 0) - ix;
+      const dy = (pos[j * 3 + 1] ?? 0) - iy;
+      const dz = (pos[j * 3 + 2] ?? 0) - iz;
+      const d = dx * dx + dy * dy + dz * dz;
+      if (found === k && d >= (nearest[k - 1] ?? Infinity)) continue;
+      let slot = found < k ? found++ : k - 1;
+      while (slot > 0 && (nearest[slot - 1] ?? Infinity) > d) {
+        nearest[slot] = nearest[slot - 1] ?? Infinity;
+        slot--;
+      }
+      nearest[slot] = d;
+      cx += dx;
+      cy += dy;
+      cz += dz;
+    }
+    const len = Math.sqrt(cx * cx + cy * cy + cz * cz) + 1e-9;
+    const h = (heading[i] ?? 0) + 0.1 * Math.sin(Math.atan2(cx, cz) - (heading[i] ?? 0));
+    heading[i] = h;
+    pos[i * 3] = Math.max(-0.5, Math.min(0.5, ix + 0.003 * (Math.sin(h) + cx / len)));
+    pos[i * 3 + 1] = Math.max(-0.5, Math.min(0.5, iy + (0.003 * cy) / len));
+    pos[i * 3 + 2] = Math.max(-0.5, Math.min(0.5, iz + 0.003 * (Math.cos(h) + cz / len)));
+  }
+}
+
+// Timed here rather than through `timed`, whose call site sees every scenario's closures: how V8
+// inlines a megamorphic call shifted the reference's cost by up to 30% between runs.
 function reference(): Scenario {
-  const n = 60;
-  const k = 7;
-  const pos = new Float64Array(n * 3);
-  const heading = new Float64Array(n);
-  const nearest = new Float64Array(k);
+  const pos = new Float64Array(REFERENCE_POINTS * 3);
+  const heading = new Float64Array(REFERENCE_POINTS);
+  const nearest = new Float64Array(REFERENCE_NEIGHBOURS);
   let lcg = 12345;
   for (let i = 0; i < pos.length; i++) {
     lcg = (Math.imul(lcg, 1103515245) + 12345) >>> 0;
     pos[i] = lcg / 2 ** 32 - 0.5;
   }
-  const pass = (): void => {
-    for (let i = 0; i < n; i++) {
-      const ix = pos[i * 3] ?? 0;
-      const iy = pos[i * 3 + 1] ?? 0;
-      const iz = pos[i * 3 + 2] ?? 0;
-      let found = 0;
-      let cx = 0;
-      let cy = 0;
-      let cz = 0;
-      for (let j = 0; j < n; j++) {
-        if (j === i) continue;
-        const dx = (pos[j * 3] ?? 0) - ix;
-        const dy = (pos[j * 3 + 1] ?? 0) - iy;
-        const dz = (pos[j * 3 + 2] ?? 0) - iz;
-        const d = dx * dx + dy * dy + dz * dz;
-        if (found === k && d >= (nearest[k - 1] ?? Infinity)) continue;
-        let slot = found < k ? found++ : k - 1;
-        while (slot > 0 && (nearest[slot - 1] ?? Infinity) > d) {
-          nearest[slot] = nearest[slot - 1] ?? Infinity;
-          slot--;
-        }
-        nearest[slot] = d;
-        cx += dx;
-        cy += dy;
-        cz += dz;
-      }
-      const len = Math.sqrt(cx * cx + cy * cy + cz * cz) + 1e-9;
-      const h = (heading[i] ?? 0) + 0.1 * Math.sin(Math.atan2(cx, cz) - (heading[i] ?? 0));
-      heading[i] = h;
-      pos[i * 3] = Math.max(-0.5, Math.min(0.5, ix + 0.003 * (Math.sin(h) + cx / len)));
-      pos[i * 3 + 1] = Math.max(-0.5, Math.min(0.5, iy + (0.003 * cy) / len));
-      pos[i * 3 + 2] = Math.max(-0.5, Math.min(0.5, iz + 0.003 * (Math.cos(h) + cz / len)));
-    }
-  };
   return {
-    step: () =>
-      timed(() => {
-        for (let p = 0; p < REFERENCE_PASSES; p++) pass();
-      }),
+    step(): number {
+      const t0 = performance.now();
+      for (let p = 0; p < REFERENCE_PASSES; p++) flockPass(pos, heading, nearest);
+      return performance.now() - t0;
+    },
   };
 }
 
