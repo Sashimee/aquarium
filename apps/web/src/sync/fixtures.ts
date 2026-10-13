@@ -75,6 +75,7 @@ export function recordBus() {
   const types: (keyof InteractionEvents)[] = [
     'tank:loaded',
     'tank:unloaded',
+    'tank:none',
     'tank:fish-added',
     'tank:fish-released',
     'tank:fish-died',

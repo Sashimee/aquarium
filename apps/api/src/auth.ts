@@ -99,6 +99,11 @@ export function createAuth({
       minPasswordLength: MIN_PASSWORD_LENGTH,
       maxPasswordLength: MAX_PASSWORD_LENGTH,
       revokeSessionsOnPasswordReset: true,
+      onPasswordReset: async ({ user }) => {
+        if (user.emailVerified) return;
+        const { internalAdapter } = await auth.$context;
+        await internalAdapter.updateUser(user.id, { emailVerified: true });
+      },
       sendResetPassword: ({ user, url }) =>
         throttleSafe(() => mailer.sendPasswordReset(user.email, url), 'reset'),
       onExistingUserSignUp: async ({ user }) => {

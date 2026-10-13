@@ -86,7 +86,7 @@ describe('who gets a saved tank', () => {
     const { rec, session } = setup();
     await session.setUser(verified);
     await session.setUser(null);
-    expect(rec.of('tank:unloaded')).toEqual([{ tankId: TANK_A }]);
+    expect(rec.of('tank:unloaded')).toEqual([{ tankId: TANK_A, reason: 'reset' }]);
     expect(session.getState()).toMatchObject({ phase: 'anonymous', tanks: [], activeId: null });
   });
 });
@@ -398,7 +398,7 @@ describe('sign-out safety', () => {
     expect(api.tank).not.toHaveBeenCalled();
     expect(session.getState()).toMatchObject({ phase: 'anonymous', tanks: [], activeId: null });
     expect(rec.of('tank:loaded').map((e) => (e as { tankId: string }).tankId)).toEqual([TANK_A]);
-    expect(rec.of('tank:unloaded')).toEqual([{ tankId: TANK_A }]);
+    expect(rec.of('tank:unloaded')).toEqual([{ tankId: TANK_A, reason: 'reset' }]);
   });
 
   it('keeps the new load when signing out and straight back in', async () => {
@@ -475,7 +475,7 @@ describe('tank switcher and naming', () => {
     await session.setUser(verified);
     api.tank.mockResolvedValue({ ...second, lastTickAt: '2026-02-01T12:00:00.000Z' });
     await session.select(TANK_B);
-    expect(rec.of('tank:unloaded')).toEqual([{ tankId: TANK_A }]);
+    expect(rec.of('tank:unloaded')).toEqual([{ tankId: TANK_A, reason: 'switch' }]);
     expect(rec.of('tank:loaded').map((e) => (e as { tankId: string }).tankId)).toEqual([
       TANK_A,
       TANK_B,
@@ -498,7 +498,7 @@ describe('tank switcher and naming', () => {
     expect(await session.createTank('Reef', 'reef')).toBe(true);
     expect(session.getState().activeId).toBe(TANK_B);
     expect(session.getState().tanks).toHaveLength(2);
-    expect(rec.of('tank:unloaded')).toEqual([{ tankId: TANK_A }]);
+    expect(rec.of('tank:unloaded')).toEqual([{ tankId: TANK_A, reason: 'switch' }]);
   });
 
   it('surfaces the tank limit and stays on the current tank', async () => {
@@ -519,7 +519,7 @@ describe('tank switcher and naming', () => {
     const pickC = session.select(TANK_C);
     await Promise.all([pickB, pickC]);
     expect(session.getState()).toMatchObject({ activeId: TANK_C, busy: false });
-    expect(rec.of('tank:unloaded')).toEqual([{ tankId: TANK_A }]);
+    expect(rec.of('tank:unloaded')).toEqual([{ tankId: TANK_A, reason: 'switch' }]);
     expect(rec.of('tank:loaded').map((e) => (e as { tankId: string }).tankId)).toEqual([
       TANK_A,
       TANK_C,
@@ -554,7 +554,7 @@ describe('tank switcher and naming', () => {
 
     expect(session.getState()).toMatchObject({ activeId: TANK_B, busy: false });
     expect(session.getState().notice).toMatch(/feeding reports .* dropped/);
-    expect(rec.of('tank:unloaded')).toEqual([{ tankId: TANK_A }]);
+    expect(rec.of('tank:unloaded')).toEqual([{ tankId: TANK_A, reason: 'switch' }]);
     const calls = api.reportAte.mock.calls.length;
     await new Promise((r) => setTimeout(r, 40));
     expect(api.reportAte.mock.calls.length).toBe(calls);
@@ -574,7 +574,7 @@ describe('tank switcher and naming', () => {
     expect(session.getState()).toMatchObject({ phase: 'anonymous', tanks: [], activeId: null });
     expect(storage.setItem).not.toHaveBeenCalled();
     expect(rec.of('tank:loaded').map((e) => (e as { tankId: string }).tankId)).toEqual([TANK_A]);
-    expect(rec.of('tank:unloaded')).toEqual([{ tankId: TANK_A }]);
+    expect(rec.of('tank:unloaded')).toEqual([{ tankId: TANK_A, reason: 'reset' }]);
   });
 
   it('leaves exactly one tank live when a create finishes during a reload', async () => {
@@ -714,5 +714,41 @@ describe('decor layout', () => {
     await vi.advanceTimersByTimeAsync(700);
     expect(rec.of('decor:save-state').at(-1)).toEqual({ status: 'saved', message: null });
     session.dispose();
+  });
+});
+
+describe('telling the scene no saved tank is coming', () => {
+  it('says so on sign-out and for unverified accounts, loaded tank or not', async () => {
+    const { rec, session } = setup();
+    await session.setUser(null);
+    expect(rec.of('tank:none')).toHaveLength(1);
+    await session.setUser(verified);
+    expect(rec.of('tank:none')).toHaveLength(1);
+    await session.setUser({ emailVerified: false });
+    expect(rec.of('tank:none')).toHaveLength(2);
+  });
+
+  it('says so when the account has no tanks', async () => {
+    const { rec, session } = setup([]);
+    await session.setUser(verified);
+    expect(session.getState().phase).toBe('ready');
+    expect(rec.of('tank:loaded')).toEqual([]);
+    expect(rec.of('tank:none')).toHaveLength(1);
+  });
+
+  it('says so when the tank list cannot be loaded after a tank was shown', async () => {
+    const { api, rec, session } = setup();
+    await session.setUser(verified);
+    api.tanks.mockRejectedValue(apiError(0, 'network'));
+    await session.load();
+    expect(session.getState().phase).toBe('offline');
+    expect(rec.of('tank:unloaded')).toEqual([{ tankId: TANK_A, reason: 'switch' }]);
+    expect(rec.of('tank:none')).toHaveLength(1);
+  });
+
+  it('stays quiet while a saved tank loads', async () => {
+    const { rec, session } = setup();
+    await session.setUser(verified);
+    expect(rec.of('tank:none')).toEqual([]);
   });
 });
