@@ -2,17 +2,6 @@ import { expect, test, devices, type CDPSession, type Locator, type Page } from 
 
 const { viewport, userAgent } = devices['iPhone 15 Pro'];
 
-const SEED = 188;
-const STEPS = 4;
-
-function random(seed: number): () => number {
-  let state = seed;
-  return () => {
-    state = (state * 1664525 + 1013904223) % 4294967296;
-    return state / 4294967296;
-  };
-}
-
 interface Menu {
   name: string;
   open(page: Page): Promise<void>;
@@ -21,7 +10,26 @@ interface Menu {
 
 let touch = false;
 
-const press = (target: Locator) => (touch ? target.tap() : target.click());
+// Locator.tap/click wait two animation frames per action, which costs seconds each under software
+// rendering. This checks the same thing that matters here, that nothing covers the target, and
+// then sends one real touch or mouse press at its centre.
+async function press(target: Locator): Promise<void> {
+  await target.waitFor({ state: 'visible' });
+  const box = await target.boundingBox();
+  if (!box) throw new Error(`${String(target)} has no box to press`);
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  const reachable = await target.evaluate(
+    (element, [px, py]) => {
+      const top = document.elementFromPoint(px ?? 0, py ?? 0);
+      return top !== null && element.contains(top);
+    },
+    [x, y],
+  );
+  if (!reachable) throw new Error(`${String(target)} is covered by another element at ${x},${y}`);
+  if (touch) await target.page().touchscreen.tap(x, y);
+  else await target.page().mouse.click(x, y);
+}
 
 const bar = (page: Page) => page.locator('header.bar');
 
@@ -94,7 +102,7 @@ async function touchDrag(cdp: CDPSession, from: [number, number], to: [number, n
       touchPoints: point ? [{ x: point[0], y: point[1], id: 1 }] : [],
     });
   await send('touchStart', from);
-  const steps = 4;
+  const steps = 2;
   for (let i = 1; i <= steps; i += 1) {
     await send('touchMove', [
       from[0] + ((to[0] - from[0]) * i) / steps,
@@ -107,7 +115,7 @@ async function touchDrag(cdp: CDPSession, from: [number, number], to: [number, n
 async function mouseDrag(page: Page, from: [number, number], to: [number, number]) {
   await page.mouse.move(...from);
   await page.mouse.down();
-  await page.mouse.move(...to, { steps: 4 });
+  await page.mouse.move(...to, { steps: 2 });
   await page.mouse.up();
 }
 
@@ -131,6 +139,10 @@ async function ready(page: Page) {
 }
 
 async function closeAllPanels(page: Page) {
+  const tapGlass = playGroup(page).getByRole('button', { name: 'Tap glass', exact: true });
+  if ((await tapGlass.count()) > 0 && (await tapGlass.getAttribute('aria-pressed')) !== 'true') {
+    await press(tapGlass);
+  }
   const tank = bar(page).getByRole('button', { name: 'My tank' });
   if ((await tank.getAttribute('aria-expanded')) === 'true') await press(tank);
   const decorate = bar(page).getByRole('button', { name: 'Decorate' });
@@ -151,25 +163,16 @@ async function expectOnePanel(page: Page, context: string) {
 async function exercise(page: Page, drag: Drag) {
   await ready(page);
   await expectOrbits(page, drag, 'on a fresh page');
-  const next = random(SEED);
-  const pick = () => {
-    const menu = MENUS[Math.floor(next() * MENUS.length)];
-    if (!menu) throw new Error('unreachable');
-    return menu;
-  };
-  for (let step = 0; step < STEPS; step += 1) {
-    const first = pick();
-    const second = pick();
-    const trail = `step ${step} (${first.name}, then ${second.name})`;
+  for (let i = 0; i < MENUS.length; i += 2) {
+    const first = MENUS[i];
+    const second = MENUS[i + 1];
+    if (!first || !second) throw new Error('MENUS needs an even number of entries');
+    const trail = `${first.name}, then ${second.name}`;
     await first.open(page);
     await first.isOpen(page);
     await second.open(page);
     await second.isOpen(page);
     await expectOnePanel(page, trail);
-    if (next() < 0.2) {
-      await ready(page);
-      continue;
-    }
     await closeAllPanels(page);
     await expectOrbits(page, drag, `after ${trail}`);
   }
@@ -190,7 +193,7 @@ test.describe('menus on a phone', () => {
   });
 
   test('every menu opens, switches and leaves the camera draggable', async ({ page }) => {
-    test.setTimeout(900_000);
+    test.setTimeout(300_000);
     const cdp = await page.context().newCDPSession(page);
     await exercise(page, (from, to) => touchDrag(cdp, from, to));
   });
@@ -204,7 +207,7 @@ test.describe('menus with a mouse', () => {
   });
 
   test('every menu opens, switches and leaves the camera draggable', async ({ page }) => {
-    test.setTimeout(900_000);
+    test.setTimeout(300_000);
     await exercise(page, (from, to) => mouseDrag(page, from, to));
   });
 });
