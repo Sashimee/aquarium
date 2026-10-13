@@ -31,6 +31,8 @@ export interface FinHints {
   finThresholdVoxels?: number;
   /** Treat small pieces detached from the body on the flank as pectoral fins (sources that model them as flush shells). */
   shellPectorals?: boolean;
+  /** Uniform scale of the caudal fin about its root, for sources whose tail is out of proportion to the body. */
+  caudalScale?: number;
   /** Fins to leave unclassified, for species whose fin is part of the body mesh. */
   skip?: FinName[];
 }
@@ -331,6 +333,26 @@ export function classifyFins(
     });
   }
   return { mask, id, zSnout, zPeduncle, zTail };
+}
+
+/** Scales the caudal fin uniformly about the centre of the peduncle; the fin id and mask are unchanged, so the swim deformation still follows the fin. */
+export function scaleCaudal(positions: Float32Array, fins: FinResult, factor: number): void {
+  const bandEnd = fins.zPeduncle + 0.03 * (fins.zSnout - fins.zTail);
+  let yBody = 0;
+  let n = 0;
+  for (let i = 0; i < fins.id.length; i++) {
+    const z = positions[i * 3 + 2]!;
+    if (fins.id[i] !== 0 || z < fins.zPeduncle || z > bandEnd) continue;
+    yBody += positions[i * 3 + 1]!;
+    n++;
+  }
+  const yRoot = n > 0 ? yBody / n : 0;
+  for (let i = 0; i < fins.id.length; i++) {
+    if (fins.id[i] !== FIN_IDS.caudal) continue;
+    positions[i * 3] = positions[i * 3]! * factor;
+    positions[i * 3 + 1] = yRoot + (positions[i * 3 + 1]! - yRoot) * factor;
+    positions[i * 3 + 2] = fins.zPeduncle + (positions[i * 3 + 2]! - fins.zPeduncle) * factor;
+  }
 }
 
 export function bodyCentreOfMass(

@@ -9,6 +9,7 @@ export const FISH_RECIPES: FishRecipe[] = [
     axes: { forward: '+z', up: '+y' },
     skinPose: 'rest',
     keepMaterial: /Paracheirodon/,
+    hints: { resolution: 200, openingRadius: 2, caudalScale: 0.76 },
     fallbackLengthM: 0.032,
   },
   {
@@ -29,7 +30,7 @@ export const FISH_RECIPES: FishRecipe[] = [
     skinPose: 'rest',
     dropMeshes: /^Cube/,
     keepMaterial: /^BETTA$/,
-    hints: { analFromSnout: 0.25 },
+    hints: { analFromSnout: 0.25, caudalScale: 0.56 },
     fallbackLengthM: 0.055,
   },
   {
@@ -74,6 +75,7 @@ export const FISH_RECIPES: FishRecipe[] = [
     sourceId: 'sketchfab-00dac50e',
     axes: { forward: '-x', up: '+y' },
     keepMaterial: /^Fish$/,
+    hints: { peduncleFromSnout: 0.86 },
     fallbackLengthM: 0.2,
   },
   {
