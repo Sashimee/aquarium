@@ -63,6 +63,7 @@ function decodeView(view: GlbBufferView | undefined, bin: Uint8Array): Uint8Arra
   return target;
 }
 
+const UNSIGNED_SHORT = 5123;
 const UNSIGNED_INT = 5125;
 
 async function readMesh(file: string): Promise<Soup> {
@@ -84,15 +85,17 @@ async function readMesh(file: string): Promise<Soup> {
     const idx = decodeView(json.bufferViews[accessor.bufferView], bin);
     const base = positions.length / 3;
     positions.push(...new Float32Array(pos.buffer, pos.byteOffset, pos.byteLength / 4));
+    if (accessor.componentType !== UNSIGNED_SHORT && accessor.componentType !== UNSIGNED_INT) {
+      throw new Error(`${file} index componentType ${accessor.componentType} is not 5123 or 5125`);
+    }
     const wide = accessor.componentType === UNSIGNED_INT;
-    const size = wide ? 4 : 2;
     const offset = idx.byteOffset + (accessor.byteOffset ?? 0);
+    if ((accessor.byteOffset ?? 0) + accessor.count * (wide ? 4 : 2) > idx.byteLength) {
+      throw new Error(`${file} index accessor overruns its buffer view`);
+    }
     const view = wide
       ? new Uint32Array(idx.buffer, offset, accessor.count)
       : new Uint16Array(idx.buffer, offset, accessor.count);
-    if ((accessor.byteOffset ?? 0) + accessor.count * size > idx.byteLength) {
-      throw new Error(`${file} index accessor overruns its buffer view`);
-    }
     for (const i of view) indices.push(base + i);
   }
   if (indices.length === 0) throw new Error(`${file} has no primitive`);
@@ -494,6 +497,29 @@ describe('reef Euphyllia sway clears rock and coral', () => {
     };
     const obstacles = await loadObstacles(preset.decor);
     const report = clippingReport([moved], obstacles, current, 6);
-    expect(report.some((line) => line.includes('into brain-coral'))).toBe(true);
+    expect(
+      report.some((line) => /into brain-coral: [1-9]\d* vertices, [1-9]\d* edges/.test(line)),
+    ).toBe(true);
+  }, 300_000);
+
+  it('reports edges slicing a thin palmata blade without any vertex touching it', async () => {
+    const blade = preset.decor.find((d) => d.assetId === 'acropora-palmata');
+    const torch = preset.decor.find((d) => parseEuphylliaId(d.assetId)?.variant === 'torch');
+    if (!blade || !torch)
+      throw new Error('reef preset needs an acropora-palmata and a torch colony');
+    const moved = {
+      ...torch,
+      position: [
+        blade.position[0],
+        blade.position[1] + 0.03,
+        blade.position[2] + 0.1,
+      ] as DecorItem['position'],
+    };
+    const obstacles = (await loadObstacles(preset.decor)).filter(
+      (o) => o.id === 'acropora-palmata',
+    );
+    const report = clippingReport([moved], obstacles, current, 6);
+    expect(report).toHaveLength(1);
+    expect(report[0]).toMatch(/into acropora-palmata: 0 vertices, [1-9]\d* edges/);
   }, 300_000);
 });
