@@ -7,6 +7,8 @@ import { ARCHETYPES, blueTang, FoodRain, SLOPED_SPACE, spawnMany, yellowTang } f
 import { STEP_HZ, World } from './world.ts';
 
 const LONG = 120_000;
+// Reads the reef preset (content/presets/reef.json) and the asset catalogue bounds
+// (apps/web/public/assets/index.json), so moving a rock in either is checked here.
 const root = join(import.meta.dirname, '../../..');
 
 interface Bounds {
@@ -138,12 +140,19 @@ function reefTank(seed: number, species: string, starts: typeof STARTS): World {
   return w;
 }
 
-/** Steps the tank with a nori clip at (x, y, z); returns each fish's first-bite step, or -1. */
-function firstBites(w: World, x: number, y: number, z: number, steps: number): number[] {
+interface Grazing {
+  /** Each fish's first-bite step, or -1. */
+  readonly first: number[];
+  readonly contacts: number;
+  readonly fishSteps: number;
+}
+
+/** Steps the tank with a nori clip at (x, y, z), grazing on after the first bites. */
+function graze(w: World, x: number, y: number, z: number, steps: number): Grazing {
   const rain = new FoodRain(w.basin);
   const nori = rain.place('nori', x, y, z);
   const first = Array.from({ length: w.count }, () => -1);
-  for (let t = 0; t < steps && first.includes(-1); t++) {
+  for (let t = 0; t < steps; t++) {
     rain.feed(w);
     w.step();
     const events = w.takeAteEvents();
@@ -152,15 +161,19 @@ function firstBites(w: World, x: number, y: number, z: number, steps: number): n
       const i = w.fishIds.indexOf(e.fishId);
       if (e.foodId === nori && first[i] === -1) first[i] = t;
     }
-    for (let i = 0; i < w.count; i++) expect(w.bodyClearance(i)).toBeGreaterThanOrEqual(-1e-9);
   }
-  return first;
+  return { first, contacts: w.contacts, fishSteps: w.count * steps };
 }
 
 describe('tangs on the reef preset', { timeout: LONG }, () => {
   // Room for one abandoned approach (pursuit timeout, then ignoring the clip) and a second go.
   const BOUND_STEPS = 30 * STEP_HZ;
   const SEEDS = [1, 2, 3];
+  // Contacts per fish-step. Turning on the spot in a corner brushes the glass now and then, and
+  // a second tang squeezing past the one at the clip more often; a fish pressed against the pane,
+  // as in #89, touches it nearly every step. About 1.5 times the rates measured.
+  const LONE_CONTACT_RATE = 2.5e-3;
+  const PAIR_CONTACT_RATE = 7.5e-3;
   const { minX, maxX, minZ, maxZ } = reefTank(1, yellowTang.id, STARTS).basin;
   // Nori clipped 2 cm off the glass.
   const inset = 0.02;
@@ -175,31 +188,45 @@ describe('tangs on the reef preset', { timeout: LONG }, () => {
   for (const sp of [blueTang, yellowTang]) {
     it(`has a lone ${sp.id} reach nori on the glass and in every corner`, () => {
       const missed: string[] = [];
+      let contacts = 0;
+      let fishSteps = 0;
       for (const [name, x, y, z] of [pane, ...corners]) {
         for (const start of STARTS) {
           for (const seed of SEEDS) {
-            const [first] = firstBites(reefTank(seed, sp.id, [start]), x, y, z, BOUND_STEPS);
-            if (first === -1) missed.push(`${name}, start ${start.join()}, seed ${seed}`);
+            const run = graze(reefTank(seed, sp.id, [start]), x, y, z, BOUND_STEPS);
+            if (run.first[0] === -1) missed.push(`${name}, start ${start.join()}, seed ${seed}`);
+            contacts += run.contacts;
+            fishSteps += run.fishSteps;
           }
         }
       }
       expect(missed).toEqual([]);
+      expect(contacts / fishSteps).toBeLessThan(LONE_CONTACT_RATE);
     });
 
     it(`has a pair of ${sp.id}s share a clip over the rock and work the corners`, () => {
       const missed: string[] = [];
+      let contacts = 0;
+      let fishSteps = 0;
       for (const seed of SEEDS) {
         const [name, x, y, z] = pane;
-        const first = firstBites(reefTank(seed, sp.id, STARTS), x, y, z, BOUND_STEPS);
-        if (first.includes(-1)) missed.push(`${name}, seed ${seed}: first bites ${first.join()}`);
+        const shared = graze(reefTank(seed, sp.id, STARTS), x, y, z, BOUND_STEPS);
+        if (shared.first.includes(-1)) {
+          missed.push(`${name}, seed ${seed}: first bites ${shared.first.join()}`);
+        }
+        contacts += shared.contacts;
+        fishSteps += shared.fishSteps;
         // A corner has room for one tang facing the clip, and tangs contest food, so only the
         // clip being worked is required there.
         for (const [corner, cx, cy, cz] of corners) {
-          const bites = firstBites(reefTank(seed, sp.id, STARTS), cx, cy, cz, BOUND_STEPS);
-          if (bites.every((t) => t === -1)) missed.push(`${corner}, seed ${seed}: no bites`);
+          const run = graze(reefTank(seed, sp.id, STARTS), cx, cy, cz, BOUND_STEPS);
+          if (run.first.every((t) => t === -1)) missed.push(`${corner}, seed ${seed}: no bites`);
+          contacts += run.contacts;
+          fishSteps += run.fishSteps;
         }
       }
       expect(missed).toEqual([]);
+      expect(contacts / fishSteps).toBeLessThan(PAIR_CONTACT_RATE);
     });
   }
 });

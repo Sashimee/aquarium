@@ -168,6 +168,11 @@ export interface BehaviourHost {
   /** Hard decor alone, or null when the tank is bare. */
   readonly decorSdf: Sdf | null;
   readonly food: FoodStore;
+  /**
+   * Whether fish `i`, holding station beside the glass or rock at (x, y, z), has a level disc
+   * of its own length clear to turn round in.
+   */
+  canTurnAt(i: number, x: number, y: number, z: number): boolean;
 }
 
 /** One fish's intent for this step, consumed by steering and integration. */
@@ -849,7 +854,9 @@ export class Behaviour {
       plan.floor = false;
       if (d < 2 * length) plan.pitch = Math.max(BEHAVIOUR.siftPitchRad, -sp.maxPitch);
     }
-    plan.arrival = (FEEDING.mouthBodyLengths + 0.75 * FEEDING.biteReachBodyLengths) * length;
+    if (f.grazes(k)) {
+      plan.arrival = (FEEDING.mouthBodyLengths + 0.75 * FEEDING.biteReachBodyLengths) * length;
+    }
     if (handling) {
       plan.speedCap = FEEDING.grazeSpeedFactor * cruise;
       plan.seek(fx, ty, fz, FEEDING.grazeSpeedFactor * cruise, 0.5);

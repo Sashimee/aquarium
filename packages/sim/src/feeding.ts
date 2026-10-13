@@ -24,6 +24,7 @@ export const FEEDING = {
   grazeBitePortion: 0.01,
   pursuitTimeoutS: 6,
   ignoreS: 10,
+  reachChecks: 3,
   pursuitSpeedFraction: 0.6,
   leashBodyLengths: 5,
   followNeighbours: 6,
@@ -88,6 +89,8 @@ export class Feeding {
   private readonly claimDist = new Float64Array(MAX_FOOD_PARTICLES * MAX_FEEDERS);
   private readonly claimCount = new Uint8Array(MAX_FOOD_PARTICLES);
   private readonly candidates = new Int32Array(MAX_FOOD_PARTICLES);
+  private readonly unreachable = new Int32Array(FEEDING.reachChecks);
+  private unreachableCount = 0;
   /** Score of the particle the last `choose` returned. */
   private chosenScore = 0;
   private readonly buried = new Uint8Array(MAX_FOOD_PARTICLES);
@@ -263,6 +266,31 @@ export class Feeding {
    * skipped. Returns the particle index or -1, and leaves its score in `chosenScore`.
    */
   private choose(i: number, contested: boolean): number {
+    const { food, bodyLength, basin } = this.host;
+    this.unreachableCount = 0;
+    for (;;) {
+      const k = this.best(i, contested);
+      if (k < 0) return -1;
+      const y = feedingHeight(
+        at(food.position, k * 3 + 1),
+        at(bodyLength, i),
+        at(food.ground, k),
+        basin.maxY,
+      );
+      if (this.host.canTurnAt(i, at(food.position, k * 3), y, at(food.position, k * 3 + 2))) {
+        return k;
+      }
+      // Food at the blind end of a slot too narrow to turn in: a fish that noses in after it
+      // can neither turn nor see the way back, so it is passed over like food it cannot see.
+      if (this.unreachableCount === FEEDING.reachChecks) {
+        this.chosenScore = 0;
+        return -1;
+      }
+      this.unreachable[this.unreachableCount++] = k;
+    }
+  }
+
+  private best(i: number, contested: boolean): number {
     const { food, position, forward } = this.host;
     this.chosenScore = 0;
     const sp = this.host.species[at(this.host.speciesIndex, i)];
@@ -283,6 +311,7 @@ export class Feeding {
       const k = at(this.candidates, m);
       const id = at(food.id, k);
       if (id === at(this.ignoreId, i) || this.buried[k] === 1) continue;
+      if (this.unreachable.subarray(0, this.unreachableCount).includes(k)) continue;
       const preference = at(sp.foodPreference, at(food.type, k));
       if (preference <= 0 || food.remaining(k) <= EMPTY) continue;
       const x = at(food.position, k * 3);
