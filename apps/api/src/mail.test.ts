@@ -105,4 +105,28 @@ describe('global mail cap', () => {
     await mailer.sendPasswordReset('victim@bas.lu', 'https://x.test/v');
     expect(sent.filter((to) => to === 'victim@bas.lu')).toHaveLength(2);
   });
+
+  it('refuses mail without logging the cap event when the store throws', async () => {
+    const logs: string[] = [];
+    const transport = nodemailer.createTransport({ jsonTransport: true });
+    let sent = 0;
+    transport.sendMail = (async () => {
+      sent++;
+    }) as unknown as typeof transport.sendMail;
+    const broken = {
+      consume: () => Promise.reject(new Error('db down')),
+      remaining: () => Promise.reject(new Error('db down')),
+    };
+    const mailer = createMailer(transport, 'fish@bas.lu', {
+      store: broken,
+      log: (m) => logs.push(m),
+    });
+    await expect(mailer.sendVerification('a@bas.lu', 'https://x.test/a')).rejects.toThrow(
+      MailThrottledError,
+    );
+    expect(sent).toBe(0);
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toContain('mail limiter unavailable');
+    expect(logs.some((m) => m.includes('mail_global_cap_reached'))).toBe(false);
+  });
 });

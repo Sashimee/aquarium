@@ -21,8 +21,9 @@ export function memoryHitStore(now?: () => number): HitStore {
   };
 }
 
-// Keys are hashed with a key derived from the secret (label "mail-limit") so the table never holds addresses or IPs. A per-key advisory lock serialises
-// concurrent callers, so the count-then-insert cannot overshoot the limit across instances.
+// Keys are hashed with a key derived from the secret (label "mail-limit") so the table never holds
+// addresses or IPs. A per-key advisory lock serialises concurrent callers, so the count-then-insert
+// cannot overshoot the limit across instances.
 export function postgresHitStore({ db }: Database, secret: string): HitStore {
   const hmacKey = Buffer.from(hkdfSync('sha256', secret, '', 'mail-limit', 32));
   const hashed = (key: string) => createHmac('sha256', hmacKey).update(key).digest('hex');
