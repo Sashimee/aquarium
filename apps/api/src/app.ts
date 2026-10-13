@@ -228,6 +228,10 @@ export function buildApp(opts: AppOptions): FastifyInstance {
           const wait = mailer.consumeIp(req.ip);
           if (wait > 0) return tooMany(reply, wait);
         }
+        if (req.method === 'POST' && pathname === `${AUTH_BASE_PATH}/request-password-reset`) {
+          const wait = mailer.consumeIp(req.ip);
+          if (wait > 0) return tooMany(reply, wait);
+        }
         if (req.method === 'POST' && pathname === `${AUTH_BASE_PATH}/send-verification-email`) {
           const wait = mailer.consumeIp(req.ip);
           if (wait > 0) return tooMany(reply, wait);

@@ -39,6 +39,119 @@ async function verifiedSession(h: Harness, email = nextEmail()) {
   return { email, cookie, verify };
 }
 
+describe('unverified sign-up takeover (#114)', () => {
+  let h: Harness;
+  beforeAll(async () => {
+    h = await createHarness();
+  });
+  afterAll(() => h.close());
+
+  const ATTACKER_PASSWORD = 'attacker-pass-123';
+  const VICTIM_PASSWORD = 'victim-pass-1234';
+
+  const signInWith = (email: string, password: string) =>
+    h.app.inject({
+      method: 'POST',
+      url: '/api/auth/sign-in/email',
+      headers: jsonHeaders,
+      payload: { email, password },
+    });
+
+  const signUpWith = (email: string, password: string) =>
+    h.app.inject({
+      method: 'POST',
+      url: '/api/auth/sign-up/email',
+      headers: jsonHeaders,
+      payload: { email, password, name: 'Someone', callbackURL: '/' },
+    });
+
+  const requestReset = (email: string) =>
+    h.app.inject({
+      method: 'POST',
+      url: '/api/auth/request-password-reset',
+      headers: jsonHeaders,
+      payload: { email, redirectTo: '/' },
+    });
+
+  function resetToken(email: string): string {
+    const mail = [...h.outbox].reverse().find((m) => m.to === email && /reset/i.test(m.subject));
+    if (!mail) throw new Error('no reset mail for recipient');
+    const token = /reset-password\/([A-Za-z0-9]+)/.exec(mail.text)?.[1];
+    if (!token) throw new Error('no reset token in mail');
+    return token;
+  }
+
+  it('does not let the pre-verification password work after the real owner verifies', async () => {
+    const email = nextEmail();
+    expect((await signUpWith(email, ATTACKER_PASSWORD)).statusCode).toBe(200);
+    const second = await signUpWith(email, VICTIM_PASSWORD);
+    expect(second.statusCode).toBe(200);
+    expect(second.cookies).toHaveLength(0);
+
+    const verify = await h.app.inject(verificationPath(h, email));
+    expect(verify.statusCode).toBe(302);
+
+    expect((await signInWith(email, ATTACKER_PASSWORD)).statusCode).toBe(401);
+    expect((await signInWith(email, VICTIM_PASSWORD)).statusCode).toBe(401);
+  });
+
+  it('answers a repeat sign-up like a fresh one and mails the address again', async () => {
+    const email = nextEmail();
+    const first = await signUpWith(email, ATTACKER_PASSWORD);
+    const second = await signUpWith(email, VICTIM_PASSWORD);
+    expect(second.statusCode).toBe(first.statusCode);
+    expect(Object.keys(second.json())).toEqual(Object.keys(first.json()));
+    expect(h.outbox.filter((m) => m.to === email)).toHaveLength(2);
+  });
+
+  it('drops the pre-verification password when verification is re-requested directly', async () => {
+    const email = nextEmail();
+    await signUpWith(email, ATTACKER_PASSWORD);
+    const resend = await h.app.inject({
+      method: 'POST',
+      url: '/api/auth/send-verification-email',
+      headers: jsonHeaders,
+      payload: { email, callbackURL: '/' },
+    });
+    expect(resend.statusCode).toBe(200);
+    await h.app.inject(verificationPath(h, email));
+    expect((await signInWith(email, ATTACKER_PASSWORD)).statusCode).toBe(401);
+  });
+
+  it('lets the owner set a password by reset, revoking sessions, and leaves verified accounts intact', async () => {
+    const email = nextEmail();
+    await signUpWith(email, ATTACKER_PASSWORD);
+    await signUpWith(email, VICTIM_PASSWORD);
+    const verify = await h.app.inject(verificationPath(h, email));
+    const ownerCookie = cookieJar(verify);
+
+    expect((await requestReset(email)).statusCode).toBe(200);
+    const reset = await h.app.inject({
+      method: 'POST',
+      url: '/api/auth/reset-password',
+      headers: jsonHeaders,
+      payload: { newPassword: VICTIM_PASSWORD, token: resetToken(email) },
+    });
+    expect(reset.statusCode).toBe(200);
+
+    expect(
+      (await h.app.inject({ url: '/api/me', headers: { cookie: ownerCookie } })).statusCode,
+    ).toBe(401);
+    expect((await signInWith(email, ATTACKER_PASSWORD)).statusCode).toBe(401);
+    expect((await signInWith(email, VICTIM_PASSWORD)).statusCode).toBe(200);
+
+    await signUpWith(email, ATTACKER_PASSWORD);
+    expect((await signInWith(email, VICTIM_PASSWORD)).statusCode).toBe(200);
+    expect((await signInWith(email, ATTACKER_PASSWORD)).statusCode).toBe(401);
+  });
+
+  it('answers a reset request for an unknown address the same way and sends nothing', async () => {
+    const email = nextEmail();
+    expect((await requestReset(email)).statusCode).toBe(200);
+    expect(h.outbox.filter((m) => m.to === email)).toHaveLength(0);
+  });
+});
+
 describe('email + password', () => {
   let h: Harness;
   beforeAll(async () => {
@@ -353,6 +466,7 @@ describe('mail abuse limits', () => {
         signIn: { window: 60, max: 3 },
         signUp: { window: 60, max: 100 },
         sendVerification: { window: 60, max: 100 },
+        passwordReset: { window: 60, max: 100 },
       },
     });
     const statuses: number[] = [];
