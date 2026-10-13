@@ -484,6 +484,36 @@ describe('feeding AI', { timeout: LONG }, () => {
     expect(grazing).toBeGreaterThan(300);
   });
 
+  it('lets two tangs graze one clip side by side, closer than they otherwise keep apart', () => {
+    const w = new World({
+      seed: 4,
+      tank: REEF_TANK,
+      species: ARCHETYPES,
+      decor: REEF_DECOR,
+      anchors: REEF_ANCHORS,
+      fish: spawnMany(yellowTang.id, 2),
+    });
+    const rain = new FoodRain(REEF_TANK);
+    const nori = rain.place('nori', 0.85, 0.35, 0);
+    const zone =
+      0.5 * (at(w.bodyLength, 0) + at(w.bodyLength, 1)) * STEERING.separationZoneBodyLengths;
+    let closest = Infinity;
+    const events = feedFor(w, rain, 2700, () => {
+      if (w.state[0] !== FishState.Feed || w.state[1] !== FishState.Feed) return;
+      closest = Math.min(
+        closest,
+        Math.hypot(
+          at(w.position, 0) - at(w.position, 3),
+          at(w.position, 1) - at(w.position, 4),
+          at(w.position, 2) - at(w.position, 5),
+        ),
+      );
+    });
+    const biters = new Set(events.filter((e) => e.foodId === nori).map((e) => e.fishId));
+    expect(biters.size).toBe(2);
+    expect(closest).toBeLessThan(zone);
+  });
+
   it('has a betta take flakes floating at the surface', () => {
     const w = tank([{ id: 'b', species: betta.id }], 2);
     const rain = new FoodRain(SHOW_TANK);
