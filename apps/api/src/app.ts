@@ -8,6 +8,7 @@ import {
   signInRequestSchema,
   updateUserRequestSchema,
   changePasswordRequestSchema,
+  emailSchema,
   sessionListSchema,
   userSchema,
 } from '@aquarium/shared';
@@ -102,11 +103,19 @@ const signInBodySchema = signInRequestSchema.extend({
   rememberMe: z.boolean().optional(),
 });
 
+const mailRequestBodySchema = z.strictObject({
+  email: emailSchema,
+  callbackURL: z.string().max(2048).optional(),
+  redirectTo: z.string().max(2048).optional(),
+});
+
 const BODY_SCHEMAS = new Map<string, z.ZodType>([
   [`${AUTH_BASE_PATH}/sign-up/email`, signUpBodySchema],
   [`${AUTH_BASE_PATH}/sign-in/email`, signInBodySchema],
   [`${AUTH_BASE_PATH}/update-user`, updateUserRequestSchema],
   [`${AUTH_BASE_PATH}/change-password`, changePasswordRequestSchema],
+  [`${AUTH_BASE_PATH}/request-password-reset`, mailRequestBodySchema],
+  [`${AUTH_BASE_PATH}/send-verification-email`, mailRequestBodySchema],
 ]);
 
 function parseJson(raw: string | undefined): unknown {
@@ -546,10 +555,9 @@ export function buildApp(opts: AppOptions): FastifyInstance {
 }
 
 // unsafe-eval: the basis transcoder is an emscripten module that calls new Function, and KTX2Loader
-// runs it in a blob: worker that inherits this policy. wasm-unsafe-eval: meshopt and the
-// basis transcoder. worker-src and
-// img-src blob: the same loader and the account export download. style-src unsafe-inline: the
-// inline <style> in index.html and React style= attributes.
+// runs it in a blob: worker that inherits this policy. wasm-unsafe-eval: meshopt and the basis
+// transcoder. worker-src and img-src blob: the same loader and the account export download.
+// style-src unsafe-inline: the inline <style> in index.html and React style= attributes.
 export const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval'",
