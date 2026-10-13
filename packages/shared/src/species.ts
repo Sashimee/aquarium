@@ -64,7 +64,7 @@ export const behaviourSchema = z.strictObject({
     .optional(),
   station: z
     .strictObject({
-      radiusBodyLengths: z.number().positive().max(20),
+      radiusBodyLengths: z.number().positive().max(20).describe('in standard lengths'),
       restationMinS: z.number().positive().max(600).optional(),
       restationMaxS: z.number().positive().max(600).optional(),
     })
@@ -80,7 +80,7 @@ export const behaviourSchema = z.strictObject({
   excursion: z
     .strictObject({
       meanIntervalS: z.number().positive().max(600),
-      leashBodyLengths: z.number().positive().max(20).optional(),
+      leashBodyLengths: z.number().positive().max(20).optional().describe('in standard lengths'),
     })
     .optional(),
 });
@@ -95,7 +95,9 @@ export const locomotionSchema = z
     maxTurnRateDegPerS: positive,
     maxPitchDeg: z.number().min(0).max(90),
     strouhal: z.number().min(0.2).max(0.4).default(0.3),
-    bodyLengthM: positive,
+    bodyLengthM: positive.describe(
+      'standard length (snout to caudal peduncle, fin excluded) in metres of the fish the speeds and mass describe; the renderer scales the model so its standard length matches',
+    ),
   })
   .refine((l) => l.cruiseSpeedMps <= l.maxSpeedMps, {
     message: 'cruiseSpeedMps must not exceed maxSpeedMps',
@@ -117,9 +119,11 @@ export const lifecycleSchema = z
     healthRecoveryPerHour: rate,
     starvationHungerThreshold: unitSchema.default(0.75),
     ammoniaTolerance: rate,
-    birthSizeM: positive,
-    maxSizeM: positive,
-    growthPerDay: rate,
+    birthSizeM: positive.describe('standard length in metres when bought or born'),
+    maxSizeM: positive.describe(
+      'adult maximum standard length in metres; the drawn total length is this times the model total/standard length ratio',
+    ),
+    growthPerDay: rate.describe('standard length gained per day, in metres'),
     lifespanDays: positive,
     diet: z.array(foodTypeSchema).min(1),
     bioload: positive,
