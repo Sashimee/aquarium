@@ -23,7 +23,7 @@ import {
 } from '@aquarium/sim';
 import type { Engine } from '../engine/Engine';
 import type { EventBus } from '../engine/events';
-import type { Tier, TierSettings } from '../engine/quality/tiers';
+import { TIER_SETTINGS, type Tier, type TierSettings } from '../engine/quality/tiers';
 import { waterBounds, type TankDimensions } from '../engine/tank/dimensions';
 import type { InteractionEvents } from '../interaction/events';
 import { disposeFishModel, FishAssetLoader, type FishModel } from './assets';
@@ -116,11 +116,17 @@ interface Layout {
 }
 
 /**
- * No tier has a temporal resolve yet (T15), so translucent fins use alpha-to-coverage, which needs
- * the MSAA the engine only enables below DPR 2; without it they fall back to the cutout.
+ * Translucent fins dither under the temporal resolve, which averages the pattern into a blend.
+ * Elsewhere they use alpha-to-coverage, which needs the MSAA the engine only enables below DPR 2;
+ * without it they fall back to the cutout.
  */
 function featuresFor(tier: Tier, msaa: boolean): FishMaterialFeatures {
-  const fins: FinRendering = tier !== 'low' && msaa ? 'coverage' : 'cutout';
+  const temporal = TIER_SETTINGS[tier].postChain === 'taa-bloom';
+  const fins: FinRendering = temporal
+    ? 'stochastic'
+    : tier !== 'low' && msaa
+      ? 'coverage'
+      : 'cutout';
   return {
     fins,
     iridescence: tier === 'high' || tier === 'ultra',
@@ -225,6 +231,7 @@ export class FishSystem {
   private shadows: Readonly<TierSettings> | null = null;
   private features: FishMaterialFeatures | null = null;
   private night = 0;
+  private light = 1;
   private disposed = false;
 
   private readonly matrix = new Matrix4();
@@ -351,7 +358,9 @@ export class FishSystem {
       }),
       engine.quality.register('fish-materials', (_s, tier) => this.applyFeatures(tier)),
       engine.onFrame((deltaS, nowMs) => this.update(deltaS, nowMs)),
+      engine.events.on('engine:daylight', ({ level }) => this.setDaylight(level)),
     );
+    this.setDaylight(engine.daylight);
   }
 
   /** Applies a saved-tank event; see `InteractionEvents` for the contract. */
@@ -445,9 +454,11 @@ export class FishSystem {
     if (fishId !== null) this.options.interaction.emit('net:tap', { fishId });
   }
 
-  /** 0 day .. 1 night; fish pale by their species' night sensitivity. */
-  setNight(amount: number): void {
-    this.night = Math.min(1, Math.max(0, amount));
+  /** Fish pale at night by their species' sensitivity, and the sim lets them rest. */
+  private setDaylight(level: number): void {
+    this.light = level;
+    this.night = 1 - level;
+    if (!this.disposed && this.simReady) this.sim.setLight(level);
   }
 
   dispose(): void {
@@ -713,6 +724,7 @@ export class FishSystem {
     const ready = await initSim(this.sim, this.worker, config, this.lifetime.signal);
     if (this.disposed) return;
     this.simReady = true;
+    this.sim.setLight(this.light);
     this.simRevision = revision;
     this.pendingLayout = { epoch: ready.epoch, ids: ready.fishIds };
     this.sim.start();

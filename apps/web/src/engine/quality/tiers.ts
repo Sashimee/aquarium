@@ -15,10 +15,16 @@ export interface TierSettings {
   /** 0 disables shadow casting entirely. */
   shadowMapSize: number;
   postChain: PostChain;
+  /** Water light shafts: ray-marched in-scatter of the caustic pattern. */
   godRays: boolean;
+  /** Blurs what is off the focal plane in focus mode. */
+  depthOfField: boolean;
   causticMethod: CausticMethod;
   causticLayers: 1 | 2;
+  /** Suspended particulates drifting in the water. */
   particleCount: number;
+  /** Bubbles in the airstone column. */
+  bubbleCount: number;
   fishLod: { midDistance: number; impostorDistance: number };
   plantDensity: number;
   textureSize: 1024 | 2048;
@@ -31,9 +37,11 @@ export const TIER_SETTINGS: Readonly<Record<Tier, Readonly<TierSettings>>> = {
     shadowMapSize: 0,
     postChain: 'none',
     godRays: false,
+    depthOfField: false,
     causticMethod: 'texture',
     causticLayers: 1,
     particleCount: 150,
+    bubbleCount: 12,
     fishLod: { midDistance: 0.6, impostorDistance: 1.6 },
     plantDensity: 0.4,
     textureSize: 1024,
@@ -44,9 +52,11 @@ export const TIER_SETTINGS: Readonly<Record<Tier, Readonly<TierSettings>>> = {
     shadowMapSize: 1024,
     postChain: 'smaa',
     godRays: false,
+    depthOfField: true,
     causticMethod: 'procedural',
     causticLayers: 1,
     particleCount: 400,
+    bubbleCount: 24,
     fishLod: { midDistance: 0.9, impostorDistance: 2.4 },
     plantDensity: 0.7,
     textureSize: 1024,
@@ -57,9 +67,11 @@ export const TIER_SETTINGS: Readonly<Record<Tier, Readonly<TierSettings>>> = {
     shadowMapSize: 2048,
     postChain: 'smaa-bloom',
     godRays: true,
+    depthOfField: true,
     causticMethod: 'procedural',
     causticLayers: 2,
     particleCount: 900,
+    bubbleCount: 40,
     fishLod: { midDistance: 1.4, impostorDistance: 3.5 },
     plantDensity: 1,
     textureSize: 2048,
@@ -70,9 +82,11 @@ export const TIER_SETTINGS: Readonly<Record<Tier, Readonly<TierSettings>>> = {
     shadowMapSize: 4096,
     postChain: 'taa-bloom',
     godRays: true,
+    depthOfField: true,
     causticMethod: 'procedural-dispersion',
     causticLayers: 2,
     particleCount: 1600,
+    bubbleCount: 64,
     fishLod: { midDistance: 2, impostorDistance: 5 },
     plantDensity: 1,
     textureSize: 2048,

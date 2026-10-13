@@ -3,47 +3,40 @@
   "name": "Reef aquarium",
   "biome": "reef",
   "substrate": {
-    "assetId": "coast-sand-04",
-    "accentAssetId": "coast-sand-01",
-    "tint": [0.95, 0.93, 0.88],
+    "assetId": "reef-sand",
+    "tint": [1, 1, 1],
     "tileMeters": 0.4
   },
   "decor": [
     {
-      "assetId": "boulder-01",
-      "position": [-0.44, 0.072, -0.04],
+      "assetId": "reef-arch",
+      "position": [-0.22, 0.098, -0.1],
       "rotationY": 0.1,
-      "scale": 0.85
+      "scale": 1.7
     },
     {
-      "assetId": "boulder-01",
-      "position": [-0.08, 0.068, -0.04],
-      "rotationY": -0.5,
-      "scale": 0.85
-    },
-    {
-      "assetId": "coast-rocks-05",
-      "position": [-0.26, 0.215, -0.04],
-      "rotationY": 0.1,
-      "scale": 0.95
-    },
-    {
-      "assetId": "boulder-01",
-      "position": [0.2, 0.074, -0.06],
-      "rotationY": 1.2,
-      "scale": 0.7
-    },
-    {
-      "assetId": "boulder-01",
-      "position": [0.47, 0.075, -0.06],
-      "rotationY": 0.1,
-      "scale": 0.7
-    },
-    {
-      "assetId": "coast-rocks-05",
-      "position": [0.335, 0.19, -0.06],
+      "assetId": "reef-arch",
+      "position": [0.3, 0.097, -0.1],
       "rotationY": -0.15,
-      "scale": 0.8
+      "scale": 1.7
+    },
+    {
+      "assetId": "boulder-01",
+      "position": [-0.47, 0.1, -0.09],
+      "rotationY": 0.3,
+      "scale": 0.7
+    },
+    {
+      "assetId": "boulder-01",
+      "position": [0.04, 0.093, -0.07],
+      "rotationY": -0.5,
+      "scale": 0.75
+    },
+    {
+      "assetId": "boulder-01",
+      "position": [0.45, 0.097, -0.1],
+      "rotationY": 1.2,
+      "scale": 0.6
     },
     {
       "assetId": "host-anemone",
@@ -52,7 +45,7 @@
       "scale": 0.55
     },
     {
-      "assetId": "acropora-palmata",
+      "assetId": "acropora-cytherea",
       "position": [0.1, 0.068, 0.06],
       "rotationY": 0.4,
       "scale": 0.85

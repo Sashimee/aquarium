@@ -6,6 +6,7 @@ import {
   CustomBlending,
   Group,
   Mesh,
+  MeshBasicNodeMaterial,
   MeshPhysicalNodeMaterial,
   MeshStandardNodeMaterial,
   NodeMaterial,
@@ -13,35 +14,58 @@ import {
   OneMinusSrcAlphaFactor,
   PlaneGeometry,
   SrcColorFactor,
+  Vector3,
   ZeroFactor,
   type Box3,
   type Material,
   type Node,
+  type PMREMNode,
+  type Texture,
+  type UniformNode,
 } from 'three/webgpu';
 import {
   abs,
+  backgroundIntensity,
   cameraViewMatrix,
+  color,
   cos,
   dot,
   float,
+  Fn,
+  If,
+  mix,
+  mrt,
+  mx_fractal_noise_float,
+  mx_worley_noise_float,
   normalView,
+  normalWorldGeometry,
   normalize,
   output,
+  pmremTexture,
   positionViewDirection,
   positionWorld,
   pow,
+  reflect,
+  refract,
+  saturate,
+  smoothstep,
+  step,
   time,
   transformNormalByViewMatrix,
   uniform,
+  vec2,
   vec3,
   vec4,
 } from 'three/tsl';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { WaterMedium } from '../water/medium';
+import { AIR_IOR, fresnelDielectric, WATER_IOR } from '../water/optics';
 import { type TankDimensions, validateTank, waterBounds } from './dimensions';
 import { createSubstrateGeometry, createSubstrateMaterial } from './substrate';
 
 const GLASS_F0 = 0.04;
+/** Ripples spread the room seen through Snell's window a little. */
+const SURFACE_ROUGHNESS = 0.08;
 const WATER_F0 = 0.02;
 
 /** Schlick Fresnel against the shading normal. */
@@ -63,19 +87,82 @@ function premultipliedBlend(material: Material): void {
   material.premultipliedAlpha = false;
 }
 
+/** Linear albedo of a diatom/green-algae film and of green spot algae (Coleochaete). */
+const ALGAE_FILM = new Color(0.1, 0.13, 0.035);
+const ALGAE_SPOT = new Color(0.035, 0.16, 0.025);
+/** Irradiance on the glass relative to the medium's in-scatter radiance (4π sr over a cosine). */
+const ALGAE_IRRADIANCE_GAIN = 4;
+
 /**
- * The faces of a pane only reflect: diffuse is black and the output is premultiplied,
- * so the reflection adds on top while the scene behind is kept by (1 - F).
+ * Algae growing on the inside of the glass, below the waterline: a mottled film that thickens
+ * with `amount` and, past about a third, hard green spots. Composited over the pane's
+ * premultiplied output, so it occludes what is behind it.
  */
-function createGlassFaceMaterial(medium: WaterMedium): MeshStandardNodeMaterial {
+function overlayAlgae(
+  pane: Node<'vec4'>,
+  amount: UniformNode<'float', number>,
+  medium: WaterMedium,
+): Node<'vec4'> {
+  return Fn(() => {
+    const result = vec4(pane).toVar();
+    If(amount.greaterThan(0), () => {
+      const p = positionWorld;
+      const onPane = vec2(p.x.add(p.z), p.y);
+      const below = step(p.y, medium.boxMax.y).mul(step(medium.boxMin.y, p.y));
+      const mottle = mx_fractal_noise_float(vec3(onPane.mul(7), 0.5), 3, 2, 0.5)
+        .mul(0.5)
+        .add(0.5);
+      const film = smoothstep(
+        amount.oneMinus().mul(0.8),
+        amount.oneMinus().mul(0.8).add(0.35),
+        mottle,
+      ).mul(amount.mul(0.7).add(0.1));
+      const spots = smoothstep(0.11, 0.06, mx_worley_noise_float(vec3(onPane.mul(45), 2.5), 1, 0))
+        .mul(smoothstep(0.3, 0.8, amount))
+        .mul(step(0.35, mottle));
+      const cover = saturate(film.add(spots)).mul(below).toVar();
+      const albedo = mix(color(ALGAE_FILM), color(ALGAE_SPOT), saturate(spots));
+      const lit = albedo.mul(medium.inScatterRadiance).mul(ALGAE_IRRADIANCE_GAIN);
+      result.assign(
+        vec4(pane.rgb.mul(cover.oneMinus()).add(lit.mul(cover)), mix(pane.a, float(1), cover)),
+      );
+    });
+    return result;
+  })();
+}
+
+/**
+ * The faces of a pane only reflect: diffuse is black and the output is premultiplied, so the
+ * reflection adds on top while the scene behind is kept by (1 - F). A face towards the water is
+ * seen through it, where the parallel plate acts as a water-air boundary: past the critical angle
+ * (48.6°) it reflects totally, which is why side panes look silvered from the front. What they
+ * mirror is the water across the tank and the room beyond it, dimmed by that path.
+ */
+function createGlassFaceMaterial(
+  medium: WaterMedium,
+  centre: Vector3,
+  algae: UniformNode<'float', number>,
+  sky: Texture,
+): { material: MeshStandardNodeMaterial; skyNode: PMREMNode } {
   const material = new MeshStandardNodeMaterial({ roughness: 0.03, metalness: 0 });
   material.name = 'glass-face';
   material.colorNode = vec3(0);
   material.opacityNode = schlick(GLASS_F0);
   premultipliedBlend(material);
   material.fog = false;
-  material.outputNode = medium.applyPremultiplied(output);
-  return material;
+
+  const towardsWater = step(dot(normalWorldGeometry, positionWorld.sub(vec3(centre))), 0);
+  const inWater = medium.waterRayDirection().toVar();
+  const cosWater = abs(dot(inWater, normalWorldGeometry));
+  const reflectance = fresnelDielectric(cosWater, WATER_IOR / AIR_IOR).toVar();
+  const mirrored = reflect(inWater, normalWorldGeometry).toVar();
+  const across = medium.transmittance(medium.exitDistance(positionWorld, mirrored)).toVar();
+  const skyNode = pmremTexture(sky, mirrored, float(SURFACE_ROUGHNESS));
+  const mirroredScene = medium.inScatter(across).add(skyNode.mul(backgroundIntensity).mul(across));
+  const inner = vec4(mirroredScene.mul(reflectance), reflectance);
+  const pane = mix(output, inner, towardsWater);
+  material.outputNode = medium.applyPremultiplied(overlayAlgae(pane, algae, medium));
+  return { material, skyNode };
 }
 
 /** Light travelling along the pane gives float glass its green edge. */
@@ -111,7 +198,7 @@ function boxGroups(box: BoxGeometry, groups: readonly number[]): BufferGeometry 
 }
 
 /** Calm-surface ripples from the filter outflow: four travelling waves, analytic slope. */
-function rippleNormalView(amplitude: Node<'float'>): Node<'vec3'> {
+function rippleNormalWorld(amplitude: Node<'float'>): Node<'vec3'> {
   const waves: [number, number, number, number][] = [
     [0.8, 0.6, 31, 1.7],
     [-0.5, 0.86, 47, 2.3],
@@ -129,8 +216,32 @@ function rippleNormalView(amplitude: Node<'float'>): Node<'vec3'> {
     slopeX = slopeX.add(weight.mul(dx));
     slopeZ = slopeZ.add(weight.mul(dz));
   }
-  const worldNormal = normalize(vec3(slopeX.negate(), 1, slopeZ.negate()));
-  return transformNormalByViewMatrix(worldNormal, cameraViewMatrix);
+  return normalize(vec3(slopeX.negate(), 1, slopeZ.negate()));
+}
+
+/**
+ * The underside of the surface seen from the water: inside Snell's window (a 97° cone) the room
+ * shows through, compressed towards the rim; outside it total internal reflection mirrors the
+ * water back.
+ */
+function createSurfaceUndersideMaterial(
+  medium: WaterMedium,
+  normal: Node<'vec3'>,
+  sky: Texture,
+): { material: MeshBasicNodeMaterial; skyNode: PMREMNode } {
+  const material = new MeshBasicNodeMaterial();
+  material.name = 'water-surface-underside';
+  material.side = BackSide;
+  material.fog = false;
+  const view = medium.waterRayDirection().toVar();
+  const reflectance = fresnelDielectric(abs(dot(view, normal)), WATER_IOR / AIR_IOR).toVar();
+  const mirroredWater = medium.inScatter(vec3(0));
+  // Past the critical angle refract() returns zero, where the reflectance is 1 anyway.
+  const toRoom = refract(view, normal.negate(), WATER_IOR / AIR_IOR).add(vec3(0, 1e-4, 0));
+  const skyNode = pmremTexture(sky, toRoom, float(SURFACE_ROUGHNESS));
+  const room = skyNode.mul(backgroundIntensity);
+  material.outputNode = medium.applyPremultiplied(vec4(mix(room, mirroredWater, reflectance), 1));
+  return { material, skyNode };
 }
 
 export class Tank {
@@ -138,11 +249,18 @@ export class Tank {
   readonly waterBounds: Box3;
   readonly substrate: Mesh;
   readonly rippleAmplitude = uniform(0.12);
+  /** 0 clean glass .. 1 neglected for weeks. */
+  readonly algae = uniform(0);
+  private readonly skyNodes: PMREMNode[] = [];
   private readonly disposables: { dispose(): void }[] = [];
+  /** Blended materials and the velocity each must write to leave the attachment unchanged. */
+  private readonly blended: [NodeMaterial, Node<'vec4'>][] = [];
 
+  /** `sky` is the room environment, seen from below through Snell's window. */
   constructor(
     readonly dimensions: TankDimensions,
     medium: WaterMedium,
+    sky: Texture,
   ) {
     validateTank(dimensions);
     this.group.name = 'tank';
@@ -156,10 +274,32 @@ export class Tank {
     this.substrate.castShadow = true;
     this.group.add(this.substrate);
 
-    this.addGlass(medium);
+    this.addGlass(medium, sky);
     this.addWaterVolume(medium);
-    this.addWaterSurface(medium);
+    this.addWaterSurface(medium, sky);
     this.addStand();
+  }
+
+  setSky(texture: Texture): void {
+    for (const node of this.skyNodes) node.value = texture;
+  }
+
+  /**
+   * Under TRAA the scene pass has a velocity attachment, and blending applies to it as well:
+   * these outputs make every blended pass leave the velocity the opaque scene wrote.
+   */
+  setVelocityPassthrough(on: boolean): void {
+    for (const [material, keep] of this.blended) {
+      material.mrtNode = on ? mrt({ velocity: keep }) : null;
+      material.needsUpdate = true;
+    }
+  }
+
+  setAlgae(amount: number): void {
+    if (!(amount >= 0 && amount <= 1)) {
+      throw new RangeError(`Tank.setAlgae: amount must be within [0, 1], got ${amount}`);
+    }
+    this.algae.value = amount;
   }
 
   dispose(): void {
@@ -176,7 +316,7 @@ export class Tank {
   }
 
   /** All panes share two draws: the reflective faces and the green cut edges. */
-  private addGlass(medium: WaterMedium): void {
+  private addGlass(medium: WaterMedium, sky: Texture): void {
     const { length: l, depth: d, height: h, glass: g } = this.dimensions;
     const panes: {
       size: [number, number, number];
@@ -203,8 +343,16 @@ export class Tank {
       );
       box.dispose();
     }
+    const { material: faceMaterial, skyNode } = createGlassFaceMaterial(
+      medium,
+      this.waterBounds.getCenter(new Vector3()),
+      this.algae,
+      sky,
+    );
+    this.skyNodes.push(skyNode);
+    this.blended.push([faceMaterial, vec4(0)]);
     const parts: [string, BufferGeometry[], Material][] = [
-      ['glass-faces', faces, createGlassFaceMaterial(medium)],
+      ['glass-faces', faces, faceMaterial],
       ['glass-edges', edges, createGlassEdgeMaterial()],
     ];
     for (const [name, geometries, material] of parts) {
@@ -229,7 +377,7 @@ export class Tank {
     const geometry = new BoxGeometry(size.x, size.y, size.z);
     this.disposables.push(geometry);
 
-    const absorb = new NodeMaterial();
+    const absorb = new MeshBasicNodeMaterial();
     absorb.name = 'water-volume-absorb';
     absorb.side = BackSide;
     absorb.transparent = true;
@@ -240,9 +388,10 @@ export class Tank {
     absorb.blendDst = SrcColorFactor;
     absorb.blendSrcAlpha = ZeroFactor;
     absorb.blendDstAlpha = OneFactor;
-    absorb.fragmentNode = vec4(medium.volumeTransmittance(), 1);
+    absorb.outputNode = vec4(medium.volumeTransmittance(), 1);
+    this.blended.push([absorb, vec4(1)]);
 
-    const scatter = new NodeMaterial();
+    const scatter = new MeshBasicNodeMaterial();
     scatter.name = 'water-volume-scatter';
     scatter.side = BackSide;
     scatter.transparent = true;
@@ -253,7 +402,8 @@ export class Tank {
     scatter.blendDst = OneFactor;
     scatter.blendSrcAlpha = ZeroFactor;
     scatter.blendDstAlpha = OneFactor;
-    scatter.fragmentNode = vec4(medium.volumeInScatter(), 0);
+    scatter.outputNode = vec4(medium.volumeInScatter(), 0);
+    this.blended.push([scatter, vec4(0)]);
 
     [absorb, scatter].forEach((material, i) => {
       const mesh = this.track(new Mesh(geometry, material));
@@ -264,16 +414,18 @@ export class Tank {
     });
   }
 
-  private addWaterSurface(medium: WaterMedium): void {
+  private addWaterSurface(medium: WaterMedium, sky: Texture): void {
     const size = this.waterBounds.getSize(this.waterBounds.max.clone());
     const material = new MeshPhysicalNodeMaterial({ roughness: 0.02, metalness: 0, ior: 1.333 });
     material.name = 'water-surface';
     material.colorNode = vec3(0);
-    material.normalNode = rippleNormalView(this.rippleAmplitude.mul(0.01));
+    const normal = rippleNormalWorld(this.rippleAmplitude.mul(0.01));
+    material.normalNode = transformNormalByViewMatrix(normal, cameraViewMatrix);
     material.opacityNode = schlick(WATER_F0);
     premultipliedBlend(material);
     material.fog = false;
     material.outputNode = medium.applyPremultiplied(output);
+    this.blended.push([material, vec4(0)]);
 
     const mesh = this.track(new Mesh(new PlaneGeometry(size.x, size.z), material));
     mesh.name = 'water-surface';
@@ -281,6 +433,15 @@ export class Tank {
     mesh.position.set(0, this.waterBounds.max.y, 0);
     mesh.renderOrder = 1;
     this.group.add(mesh);
+
+    const below = createSurfaceUndersideMaterial(medium, normal, sky);
+    const underside = this.track(new Mesh(mesh.geometry, below.material));
+    underside.name = 'water-surface-underside';
+    underside.rotation.copy(mesh.rotation);
+    underside.position.copy(mesh.position);
+    underside.renderOrder = 1;
+    this.group.add(underside);
+    this.skyNodes.push(below.skyNode);
   }
 
   private addStand(): void {
