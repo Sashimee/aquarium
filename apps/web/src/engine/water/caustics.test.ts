@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { Box3, Color, Vector3 } from 'three/webgpu';
+import { Box3, Color, ConstNode, TextureNode, VarNode, Vector3, type Node } from 'three/webgpu';
+import { float, uniform, vec2 } from 'three/tsl';
 import { Caustics, castingShare, causticContrast } from './caustics';
 import { daylightAt, parseClock } from '../daylight';
+import { BAKE } from './causticPattern';
 import { WaterMedium } from './medium';
 
 const DARK_SAND = 0.08;
@@ -105,5 +107,45 @@ describe('Caustics.setHood', () => {
     c.setHood(hood, 4, moonlight, at('12:00'), darkSand);
     expect(c.contrast.value).toBeCloseTo(0.3, 10);
     expect(c.shaftContrast.value).toBeCloseTo(0.3, 10);
+  });
+});
+
+describe('the baked caustics', () => {
+  const meanLevel = Math.log2(BAKE.size);
+
+  /**
+   * The samples of the baked net tile in `node`'s graph: `level N` at an explicit mip, `bias` at a
+   * biased per-pixel one. The unsampled texture nodes the samples are cloned from are left out.
+   */
+  function netTileTaps(node: Node): string[] {
+    const taps: string[] = [];
+    node.traverse((n) => {
+      if (!(n instanceof TextureNode) || n.value.width !== BAKE.size) return;
+      let level = n.levelNode;
+      while (level instanceof VarNode) level = level.node;
+      if (level instanceof ConstNode) taps.push(`level ${String(level.value)}`);
+      else if (n.biasNode) taps.push('bias');
+    });
+    return taps;
+  }
+
+  // The GPU's fp32 `sin` makes its baked tile differ from any CPU replica, so a constant gain
+  // measured on the CPU would leave a device-dependent brightness offset.
+  it('normalises the tile by the mean of what the GPU baked, its 1x1 mip', () => {
+    const c = caustics();
+    const pattern = c.bakedPattern(uniform(vec2(3, 4)), uniform(vec2(0, 0)), float(1), float(0.5));
+    const taps = netTileTaps(pattern);
+    expect(taps.filter((tap) => tap === 'bias')).toHaveLength(2);
+    expect(taps).toContain(`level ${meanLevel}`);
+  });
+
+  it('normalises the tile the same way where the shafts sample it', () => {
+    const taps = netTileTaps(caustics().bakedAt(uniform(vec2(0.2, 0.1)), 0.45));
+    expect(taps).toContain('level 1');
+    expect(taps).toContain(`level ${meanLevel}`);
+  });
+
+  it('has a 1x1 mip to read the mean from', () => {
+    expect(Number.isInteger(meanLevel)).toBe(true);
   });
 });

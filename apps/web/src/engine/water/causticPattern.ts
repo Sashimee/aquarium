@@ -64,9 +64,6 @@ export const BAKE = {
   focus: 0.5,
 } as const;
 
-/** 1 / mean of the baked tile, measured over its texels; it is not the live pattern's mean. */
-export const BAKED_GAIN = 37.22;
-
 /** The low tier's baked focus field: a larger tile, since its patches span several cells. */
 export const FOCUS_BAKE = { periodCells: 64, size: 128 } as const;
 
@@ -217,10 +214,4 @@ export function layeredAt(x: number, y: number, t: number, focus: number): numbe
     focus,
   );
   return near * PATTERN.layerWeights[0] + far * PATTERN.layerWeights[1];
-}
-
-/** The baked tile's value at cell coordinates (x, y) of the tile. */
-export function bakedTileAt(x: number, y: number): number {
-  const period = BAKE.periodCells;
-  return netAt(x, y, 0, focusAt(x, y, 0, period) * BAKE.focus, period);
 }

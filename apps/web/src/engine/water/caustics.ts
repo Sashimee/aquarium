@@ -40,7 +40,6 @@ import {
 import type { CausticMethod } from '../quality/tiers';
 import {
   BAKE,
-  BAKED_GAIN,
   FOCUS_BAKE,
   HASH_WRAP,
   lattice,
@@ -78,6 +77,12 @@ const BAKED_DEFOCUS_BLUR = 0.6;
  * patch, where the full swing would leave no net at all.
  */
 const BAKED_DEFOCUSED_CONTRAST = 0.65;
+/**
+ * The baked tile's 1x1 mip, which holds its mean. The tile is normalised by what the GPU actually
+ * baked: the `fract(sin)` hashes amplify fp32 rounding in `sin` 43758-fold, so each GPU bakes a
+ * different random tile, whose mean no CPU-measured constant matches.
+ */
+const BAKE_MEAN_LEVEL = Math.log2(BAKE.size);
 /** Default contrast of the net: a multi-LED hood, whose emitters' nets partly fill each other in. */
 const BASE_STRENGTH = 0.7;
 /** Luminance of the dark freshwater sand, the substrate `BASE_STRENGTH` is set for. */
@@ -335,7 +340,13 @@ export class Caustics {
   bakedAt(surfacePoint: Node<'vec2'>, scale: number): Node<'float'> {
     const cells = surfacePoint.mul(this.cellsPerMetre.mul(scale / BAKE.periodCells));
     const drift = fract(vec2(DRIFT[0], DRIFT[1]).mul(time.mul(this.speed).div(BAKE.periodCells)));
-    return texture(this.bakeTarget.texture, cells.add(drift)).level(float(1)).r.mul(BAKED_GAIN);
+    return texture(this.bakeTarget.texture, cells.add(drift))
+      .level(float(1))
+      .r.div(this.bakedMean());
+  }
+
+  private bakedMean(): Node<'float'> {
+    return texture(this.bakeTarget.texture, vec2(0.5)).level(float(BAKE_MEAN_LEVEL)).r;
   }
 
   /**
@@ -391,7 +402,7 @@ export class Caustics {
       const pattern = vec3(1).toVar();
 
       If(this.method.equal(METHOD_ID.texture), () => {
-        focus.assign(this.bakedFocus(cells, t));
+        focus.assign(this.bakedFocus(cells, drift, t));
         defocused.assign(BAKED_DEFOCUSED_CONTRAST);
         pattern.assign(vec3(this.bakedPattern(cells, drift, t, focus)));
       }).Else(() => {
@@ -424,18 +435,24 @@ export class Caustics {
   }
 
   /**
-   * The baked focus field at `cells`. Only the drift, the same at every pixel, is wrapped to the
-   * tile: wrapping the per-pixel coordinate would break the derivatives the mip choice needs.
+   * The baked focus field at `cells`, carried along with the net's `drift` as the live field is.
+   * Only the drift, the same at every pixel, is wrapped to the tile: wrapping the per-pixel
+   * coordinate would break the derivatives the mip choice needs.
    */
-  private bakedFocus(cells: Node<'vec2'>, t: Node<'float'>): Node<'float'> {
-    const drift = fract(
-      vec2(BAKED_FOCUS_DRIFT[0], BAKED_FOCUS_DRIFT[1]).mul(t.div(FOCUS_BAKE.periodCells)),
+  private bakedFocus(cells: Node<'vec2'>, drift: Node<'vec2'>, t: Node<'float'>): Node<'float'> {
+    const slide = fract(
+      drift
+        .add(vec2(BAKED_FOCUS_DRIFT[0], BAKED_FOCUS_DRIFT[1]).mul(t))
+        .div(FOCUS_BAKE.periodCells),
     );
-    return texture(this.focusTarget.texture, cells.div(FOCUS_BAKE.periodCells).add(drift)).r;
+    return texture(this.focusTarget.texture, cells.div(FOCUS_BAKE.periodCells).add(slide)).r;
   }
 
-  /** Two taps of the baked net, the second turned and scaled so the two tiles never line up. */
-  private bakedPattern(
+  /**
+   * Two taps of the baked net with unit mean, the second turned and scaled so the two tiles never
+   * line up.
+   */
+  bakedPattern(
     cells: Node<'vec2'>,
     drift: Node<'vec2'>,
     t: Node<'float'>,
@@ -452,6 +469,6 @@ export class Caustics {
     const a = texture(this.bakeTarget.texture, tile.add(fract(tileDrift))).bias(blur).r;
     const driftB = fract(turn(tileDrift).add(vec2(-0.011, 0.019).mul(t)).add(0.37));
     const b = texture(this.bakeTarget.texture, turn(tile).add(driftB)).bias(blur).r;
-    return mix(b, a, PATTERN.layerWeights[0]).mul(BAKED_GAIN);
+    return mix(b, a, PATTERN.layerWeights[0]).div(this.bakedMean());
   }
 }
