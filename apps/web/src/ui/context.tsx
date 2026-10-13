@@ -62,10 +62,23 @@ export function usePlayTool(): PlayTool {
   return tool;
 }
 
+const lastDecorState = new WeakMap<object, DecorViewState>();
+
+// The editor panel mounts after its lazy chunk loads, once the state event it needs has already
+// fired, so a late subscriber starts from the last state seen rather than from nothing.
 export function useDecorState(): DecorViewState | null {
   const { interaction } = useBridge();
-  const [state, setState] = useState<DecorViewState | null>(null);
-  useEffect(() => interaction.on('decor:state', setState), [interaction]);
+  const [state, setState] = useState<DecorViewState | null>(
+    () => lastDecorState.get(interaction) ?? null,
+  );
+  useEffect(
+    () =>
+      interaction.on('decor:state', (next) => {
+        lastDecorState.set(interaction, next);
+        setState(next);
+      }),
+    [interaction],
+  );
   return state;
 }
 
@@ -91,6 +104,7 @@ export interface AuthState {
   user: User | null;
   signIn(input: SignInRequest): Promise<void>;
   signUp(input: SignUpRequest): Promise<void>;
+  signInWithPasskey(): Promise<void>;
   signOut(): Promise<void>;
   refresh(): Promise<void>;
 }
@@ -141,6 +155,18 @@ function AuthProvider({ children }: { children: ReactNode }) {
         setUser(signedIn);
       },
       signUp: (input) => api.signUp(input),
+      async signInWithPasskey() {
+        await api.signInWithPasskey();
+        const signedIn = await api.me();
+        if (!signedIn) {
+          throw new ApiRequestError(
+            401,
+            'unauthenticated',
+            'You were signed in, but the session was not kept. Check that your browser accepts cookies and try again.',
+          );
+        }
+        setUser(signedIn);
+      },
       async signOut() {
         await api.signOut();
         setUser(null);
