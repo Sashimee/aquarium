@@ -24,6 +24,8 @@ import {
 } from './euphyllia';
 import { ColliderField, type CapsuleCollider, type Collider } from './colliders';
 import { CurrentField, type CurrentParameters } from './current';
+import { uniform } from 'three/tsl';
+import { fluorescenceLevel } from './coralStyle';
 import { fitCollider, Hardscape, HARDSCAPE_KINDS } from './hardscape';
 import { applyBiomeLighting } from './lighting';
 import type { SceneOptions } from './options';
@@ -101,6 +103,7 @@ export class TankScene {
   readonly overlay: ColliderOverlay;
   readonly colliders: ColliderField;
 
+  private readonly fluorescence = uniform(0);
   private hardscape: Hardscape | null = null;
   private anemones: AnemoneGroup[] = [];
   private euphyllias: EuphylliaGroup[] = [];
@@ -296,6 +299,11 @@ export class TankScene {
     );
     scene.current.configure(preset.current ?? DEFAULT_CURRENT);
     scene.releases.push(engine.onFrame((deltaS) => scene.current.advance(deltaS)));
+    scene.releases.push(
+      engine.onFrame(() => {
+        scene.fluorescence.value = fluorescenceLevel(engine.interior.actinicExcitation);
+      }),
+    );
     const key = keyFor(tier, settings);
     await scene.rebuildVisuals(key, () => false);
     scene.queue.adopt(key);
@@ -339,7 +347,7 @@ export class TankScene {
         );
       }
     }
-    const hardscape = new Hardscape();
+    const hardscape = new Hardscape(this.preset.biome, this.fluorescence);
     for (const { item } of next) {
       const entry = catalog.get(item.assetId);
       const model = await this.library.load(item.assetId, key.hardscapeLod, key.textureSize);
@@ -431,7 +439,7 @@ export class TankScene {
    * (`generation` is stale) or the scene was disposed; a dropped build frees what it made.
    */
   private async rebuildVisuals(key: VisualKey, isStale: () => boolean): Promise<boolean> {
-    const hardscape = new Hardscape();
+    const hardscape = new Hardscape(this.preset.biome, this.fluorescence);
     const groups: PlantGroup[] = [];
     const anemones: AnemoneGroup[] = [];
     const euphyllias: EuphylliaGroup[] = [];

@@ -1,4 +1,4 @@
-import { Color, type Node, type PMREMNode, type Texture } from 'three/webgpu';
+import { Color, type Node, type PMREMNode, type Texture, type UniformNode } from 'three/webgpu';
 import { float, mix, pmremTexture, positionWorld, uniform, vec3 } from 'three/tsl';
 import type { Caustics } from './caustics';
 import type { WaterMedium } from './medium';
@@ -26,14 +26,39 @@ export class InteriorLight {
   /** The room's brightness relative to the day: its lamps at night. */
   readonly roomLevel = uniform(1);
   /** Linear albedo of the substrate, which colours the hood light it throws back. */
-  readonly substrateAlbedo = uniform(new Color(0.5, 0.45, 0.35));
+  readonly substrateAlbedo: UniformNode<'color', Color>;
+  /**
+   * The substrate's bounce depends on uniforms only, so it is found once per frame here: as a node
+   * it would run in each of the environment lookups three builds per material.
+   */
+  readonly substrateBounce = uniform(new Color());
+  /** Blue channel of the hood light at the substrate, which excites fluorescent tissue: the actinic by day and the moonlight at night. */
+  actinicExcitation = 0;
   private readonly roomNodes: PMREMNode[] = [];
 
+  /**
+   * `substrateAlbedo` is read, not copied, so later changes to it are followed. `sandHeight` is
+   * the mean height of the substrate's top, where the bounce leaves it.
+   */
   constructor(
     private readonly medium: WaterMedium,
     private readonly caustics: Caustics,
     private room: Texture,
-  ) {}
+    substrateAlbedo: Color,
+    private readonly sandHeight: number,
+  ) {
+    this.substrateAlbedo = uniform(substrateAlbedo);
+  }
+
+  /** Call once per frame, after the hood and water uniforms are set. */
+  update(): void {
+    const depth = this.medium.boxMax.value.y - this.sandHeight;
+    this.caustics.hoodLightAtDepth(depth, this.substrateBounce.value);
+    this.actinicExcitation = this.substrateBounce.value.b;
+    this.substrateBounce.value
+      .multiply(this.substrateAlbedo.value)
+      .multiplyScalar(SUBSTRATE_BOUNCE / Math.PI);
+  }
 
   setRoom(texture: Texture): void {
     this.room = texture;
@@ -64,11 +89,7 @@ export class InteriorLight {
     const inWater = medium.submerged(p);
     const throughGlass = medium.transmittance(medium.boxMax.z.sub(p.z)).mul(ROOM_THROUGH_GLASS);
     const roomShare = mix(vec3(1), throughGlass, inWater);
-    const floor = vec3(p.x, medium.boxMin.y, p.z);
-    const bounce = this.caustics
-      .hoodLight(floor)
-      .mul(this.substrateAlbedo)
-      .mul(inWater.mul(SUBSTRATE_BOUNCE / Math.PI));
+    const bounce = this.substrateBounce.mul(inWater);
     return room.mul(this.roomLevel).mul(roomShare).add(bounce);
   }
 }

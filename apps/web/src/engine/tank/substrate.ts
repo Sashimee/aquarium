@@ -18,6 +18,11 @@ export function substrateHeight(d: TankDimensions, x: number, z: number): number
   return d.glass + d.substrateFront + (d.substrateBack - d.substrateFront) * eased + dunes;
 }
 
+/** Mean of `substrateHeight` over the floor: the slope's smoothstep and the dunes average out. */
+export function meanSubstrateHeight(d: TankDimensions): number {
+  return d.glass + (d.substrateFront + d.substrateBack) / 2;
+}
+
 function topSurface(d: TankDimensions, nx: number, nz: number): BufferGeometry {
   const halfL = d.length / 2 - d.glass;
   const halfD = d.depth / 2 - d.glass;

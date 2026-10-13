@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { decodeRgbe, encodeRgbe, halve, type RgbeImage } from './rgbe.ts';
+import {
+  clampPixels,
+  decodeRgbe,
+  encodeRgbe,
+  flipVertical,
+  halve,
+  type RgbeImage,
+} from './rgbe.ts';
 
 function gradient(width: number, height: number): RgbeImage {
   const pixels = new Float32Array(width * height * 3);
@@ -48,6 +55,26 @@ describe('rgbe', () => {
     const half = halve(image);
     expect([half.width, half.height]).toEqual([1, 1]);
     expect(half.pixels[0]).toBe(4);
+  });
+
+  it('flips rows top to bottom and back', () => {
+    const image = gradient(8, 3);
+    const flipped = flipVertical(image);
+    expect(flipped.pixels.subarray(0, 24)).toEqual(image.pixels.subarray(48, 72));
+    expect(flipped.pixels.subarray(24, 48)).toEqual(image.pixels.subarray(24, 48));
+    expect(flipVertical(flipped).pixels).toEqual(image.pixels);
+  });
+
+  it('clamps channels above the limit and counts the pixels it changed', () => {
+    const image: RgbeImage = {
+      width: 2,
+      height: 1,
+      pixels: Float32Array.from([1, 2, 3, 70000, 5, 80000]),
+    };
+    const { image: out, clamped } = clampPixels(image, 65504);
+    expect(clamped).toBe(1);
+    expect([...out.pixels]).toEqual([1, 2, 3, 65504, 5, 65504]);
+    expect(clampPixels(out, 65504).clamped).toBe(0);
   });
 
   it('rejects input that is not Radiance', () => {

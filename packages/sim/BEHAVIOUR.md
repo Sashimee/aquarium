@@ -17,6 +17,11 @@ open to correction.
   pitch raises the nose, positive roll lowers the right flank (`quatFromYawPitchRoll`).
 - **`depthBand`:** `[low, high]` as fractions of the water column measured from the substrate:
   0 is the sand under the fish and 1 is the surface, so on sloped sand the band follows the slope.
+- **Body length (BL, L):** standard length, snout to caudal peduncle, as in `bodyLengthM`,
+  `birthSizeM`, `maxSizeM` and every `*BodyLengths` parameter. The renderer scales each model so
+  its standard length matches, and the caudal fin adds the rest of the total length. `maxSizeM`
+  is FishBase's adult maximum, converted from TL with its length-length relationship where it
+  only gives TL; `src/sizes.test.ts` holds the sources.
 - **Step:** fixed 30 Hz (`STEP_HZ`). All randomness comes from the seeded sfc32 `Rng`, so the
   same seed and inputs reproduce the same trajectory bit for bit on one JS engine.
 - **Snapshot:** `Float32Array`, `SNAPSHOT_STRIDE = 11` floats per fish: position xyz,

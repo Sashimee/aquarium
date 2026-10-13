@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_TANK, validateTank, WATER_INSET, waterBounds } from './dimensions';
-import { substrateHeight } from './substrate';
+import { meanSubstrateHeight, substrateHeight } from './substrate';
 
 describe('validateTank', () => {
   it('accepts the default tank', () => {
@@ -43,5 +43,23 @@ describe('substrateHeight', () => {
         expect(y).toBeLessThan(top);
       }
     }
+  });
+});
+
+describe('meanSubstrateHeight', () => {
+  it('is the average of the substrate top over the floor', () => {
+    const tank = { ...DEFAULT_TANK, substrateFront: 0.03, substrateBack: 0.12 };
+    const halfL = tank.length / 2 - tank.glass;
+    const halfD = tank.depth / 2 - tank.glass;
+    const n = 400;
+    let sum = 0;
+    for (let j = 0; j < n; j++) {
+      const z = -halfD + (2 * halfD * (j + 0.5)) / n;
+      for (let i = 0; i < n; i++) {
+        sum += substrateHeight(tank, -halfL + (2 * halfL * (i + 0.5)) / n, z);
+      }
+    }
+    expect(meanSubstrateHeight(tank)).toBeCloseTo(sum / (n * n), 3);
+    expect(meanSubstrateHeight(tank)).toBeGreaterThan(waterBounds(tank).min.y);
   });
 });
