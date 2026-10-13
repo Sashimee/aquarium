@@ -387,6 +387,27 @@ describe('DecorField', () => {
     );
   });
 
+  it('takes a widened reach back to exactly the field a fresh build gives', () => {
+    const field = new DecorField(REEF_TANK, 0.1);
+    field.set(REEF_DECOR);
+    const fresh = new DecorField(REEF_TANK, 0.1);
+    fresh.set(REEF_DECOR);
+
+    expect(field.widen(0.25)).toBeGreaterThan(0);
+    expect(field.cellEntries).toBeGreaterThan(fresh.cellEntries);
+    expect(field.restoreReach(0.1)).toBeGreaterThan(0);
+    expect(field.reach).toBe(0.1);
+    // Samples clamp at the reach, so stale wide-reach entries would only show up as extra work.
+    expect(field.cellEntries).toBe(fresh.cellEntries);
+    expectSameField(
+      (x, y, z, o) => field.sample(x, y, z, o),
+      (x, y, z, o) => fresh.sample(x, y, z, o),
+      REEF_TANK,
+      4,
+    );
+    expect(field.restoreReach(0.1)).toBe(0);
+  });
+
   it('fails loudly on duplicate ids, unknown removals and a bad reach', () => {
     const field = new DecorField(SHOW_TANK, 0.1);
     const stone = SHOW_DECOR.find((c) => c.id === 'stone');

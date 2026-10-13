@@ -199,6 +199,7 @@ interface Spot {
   readonly yaw: number;
 }
 const MAX_BODY_PUSHES = 8;
+const STATION_MEMO = 8;
 
 const NO_ATE_EVENTS: readonly AteEvent[] = Object.freeze([]);
 
@@ -213,6 +214,8 @@ export class World {
   contacts = 0;
   /** Fish-steps spent inside a plant (soft contact). */
   plantContacts = 0;
+  /** Stand-off spots tested for room to face the food from; the bearing search behind them is cached. */
+  stationChecks = 0;
 
   private _position: Float64Array;
   private _yaw: Float64Array;
@@ -259,6 +262,13 @@ export class World {
   /** Horizontal spot where the fish last had to back out, avoided while its timer runs. */
   private deadEnd: Float64Array;
   private deadEndTimer: Float64Array;
+  /**
+   * Per fish, the last stand-off ring search: `[epoch, sdf, foodX, foodY, foodZ, arrival, side,
+   * bearing]`, where bearing is NaN when the station stays straight out from the surface. Valid
+   * while its epoch is `stationEpoch`, which moves on whenever hard decor or the fish set changes.
+   */
+  private stationMemo: Float64Array;
+  private stationEpoch = 1;
   private wanderTurn: Float64Array;
   private wanderPitch: Float64Array;
   /** Horizontal unit slide direction along the wall being avoided; zero when disengaged. */
@@ -423,6 +433,7 @@ export class World {
     this.scrapeHits = new Uint16Array(n);
     this.deadEnd = new Float64Array(n * 2);
     this.deadEndTimer = new Float64Array(n);
+    this.stationMemo = new Float64Array(n * STATION_MEMO);
     this.mass = new Float64Array(n);
     this.drag = new Float64Array(n);
     this._maxSpeed = new Float64Array(n);
@@ -493,6 +504,7 @@ export class World {
     // Both plans validate before either field changes, so a bad collider leaves both as they were.
     const hard = this.hardDecor.plan(colliders.filter((c) => c.hard));
     const soft = this.softDecor.plan(colliders.filter((c) => !c.hard));
+    if (hard.gone.length > 0 || hard.changed.length > 0) this.stationEpoch++;
     return this.hardDecor.apply(hard) + this.softDecor.apply(soft);
   }
 
@@ -741,6 +753,8 @@ export class World {
     this.scrapeHits = edit.array(this.scrapeHits);
     this.deadEnd = edit.array(this.deadEnd, 2);
     this.deadEndTimer = edit.array(this.deadEndTimer);
+    this.stationMemo = edit.array(this.stationMemo, STATION_MEMO);
+    this.stationEpoch++;
     this.mass = edit.array(this.mass);
     this.drag = edit.array(this.drag);
     this._maxSpeed = edit.array(this.maxSpeed);
@@ -931,7 +945,8 @@ export class World {
     this.deadEndTimer[i] = deadEndLeft;
     const nh = this.normal;
     const np = this.probeNormal;
-    const sdf = this.steerSdf[(plan.floor ? 1 : 0) + (plan.surface ? 2 : 0)] ?? this.sceneSdf;
+    const sdfMask = (plan.floor ? 1 : 0) + (plan.surface ? 2 : 0);
+    const sdf = this.steerSdf[sdfMask] ?? this.sceneSdf;
     const nose = (BEHAVIOUR.bodySampleOffsets[0] ?? 0) * length;
     let seekX = plan.seekX;
     const seekY = plan.seekY;
@@ -980,19 +995,11 @@ export class World {
             }
           }
         }
-        // Straight out from the surface, rock beside the food (a wedge tip) can stand between the
-        // station and the food; a fish parked there cannot turn its mouth to it (#258). Work round
-        // the food, toward the fish's side first, to the nearest spot where it fits facing it.
-        if (!placed && this.stationRoom(i, sdf, plan, seekY, base) < room) {
-          const toward = off >= 0 ? 1 : -1;
-          const step = Math.PI / STEERING.standOffRingSteps;
-          for (let k = 2; k <= 2 * STEERING.standOffRingSteps; k++) {
-            const h = base + (k % 2 === 0 ? toward : -toward) * (k >> 1) * step;
-            if (this.stationRoom(i, sdf, plan, seekY, h) >= room) {
-              seekX = plan.seekX + Math.sin(h) * plan.arrival;
-              seekZ = plan.seekZ + Math.cos(h) * plan.arrival;
-              break;
-            }
+        if (!placed) {
+          const h = this.ringStation(i, sdf, sdfMask, plan, seekY, base, off >= 0 ? 1 : -1, room);
+          if (!Number.isNaN(h)) {
+            seekX = plan.seekX + Math.sin(h) * plan.arrival;
+            seekZ = plan.seekZ + Math.cos(h) * plan.arrival;
           }
         }
       }
@@ -1002,7 +1009,21 @@ export class World {
     const toFood = Math.hypot(plan.seekX - px, plan.seekZ - pz);
     let faceYaw = NaN;
     if (standOff && toStation < plan.arrival) {
-      faceYaw = Math.atan2(plan.seekX - px, plan.seekZ - pz);
+      // Facing the food, the fish closes on it along its own bearing, not the station's. Beside a
+      // station moved round a rock tip that line can put the rock between snout and food, and the
+      // fish bumps it short of a bite and backs out (#306); it makes for the station until its own
+      // bearing is clear at stand-off range.
+      const heading = Math.atan2(plan.seekX - px, plan.seekZ - pz);
+      const bearing = Math.atan2(px - plan.seekX, pz - plan.seekZ);
+      const ahead = this.poseRoom(
+        i,
+        sdf,
+        plan.seekX + Math.sin(bearing) * plan.arrival,
+        seekY,
+        plan.seekZ + Math.cos(bearing) * plan.arrival,
+        heading,
+      );
+      if (ahead >= 0) faceYaw = heading;
     }
     if (plan.seekWeight > 0) {
       let qx = (seekX - px) / plan.seekTau;
@@ -1357,8 +1378,61 @@ export class World {
     );
   }
 
+  /**
+   * Straight out from the surface, rock beside the food (a wedge tip) can stand between the
+   * station and the food; a fish parked there cannot turn its mouth to it (#258). Works round the
+   * food, toward the fish's side first, to the nearest bearing where it fits facing it; NaN when
+   * the straight-out station fits or nothing does. The answer depends only on the food, the hard
+   * decor and the side, so it is kept until one of them changes.
+   */
+  private ringStation(
+    i: number,
+    sdf: Sdf,
+    sdfMask: number,
+    plan: Plan,
+    y: number,
+    base: number,
+    toward: number,
+    room: number,
+  ): number {
+    const m = this.stationMemo;
+    const o = i * STATION_MEMO;
+    if (
+      m[o] === this.stationEpoch &&
+      m[o + 1] === sdfMask &&
+      m[o + 2] === plan.seekX &&
+      m[o + 3] === y &&
+      m[o + 4] === plan.seekZ &&
+      m[o + 5] === plan.arrival &&
+      m[o + 6] === toward
+    ) {
+      return m[o + 7] ?? NaN;
+    }
+    let found = NaN;
+    if (this.stationRoom(i, sdf, plan, y, base) < room) {
+      const step = Math.PI / STEERING.standOffRingSteps;
+      for (let k = 2; k <= 2 * STEERING.standOffRingSteps; k++) {
+        const h = base + (k % 2 === 0 ? toward : -toward) * (k >> 1) * step;
+        if (this.stationRoom(i, sdf, plan, y, h) >= room) {
+          found = h;
+          break;
+        }
+      }
+    }
+    m[o] = this.stationEpoch;
+    m[o + 1] = sdfMask;
+    m[o + 2] = plan.seekX;
+    m[o + 3] = y;
+    m[o + 4] = plan.seekZ;
+    m[o + 5] = plan.arrival;
+    m[o + 6] = toward;
+    m[o + 7] = found;
+    return found;
+  }
+
   /** Room for fish `i` on the stand-off ring at bearing `bearing` from the food, facing it. */
   private stationRoom(i: number, sdf: Sdf, plan: Plan, y: number, bearing: number): number {
+    this.stationChecks++;
     return this.poseRoom(
       i,
       sdf,
