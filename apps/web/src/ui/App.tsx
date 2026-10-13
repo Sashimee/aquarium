@@ -10,6 +10,7 @@ import {
   useRedirect,
   useRoute,
 } from './context';
+import { usePanels } from './panels';
 import { LifeStatus } from './LifeStatus';
 import { PlayControls } from './PlayControls';
 import { useOptionalSession, useSessionState } from './session';
@@ -87,18 +88,9 @@ function TankTypeSwitch({ onCreate }: { onCreate(biome: Biome): void }) {
   );
 }
 
-function DecorToggle({ onOpen }: { onOpen(): void }) {
-  const { interaction } = useBridge();
-  const active = useDecorState()?.active ?? false;
+function DecorToggle({ pressed, onToggle }: { pressed: boolean; onToggle(): void }) {
   return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={() => {
-        if (!active) onOpen();
-        interaction.emit('decor:request-mode', { active: !active });
-      }}
-    >
+    <button type="button" aria-pressed={pressed} onClick={onToggle}>
       Decorate
     </button>
   );
@@ -216,10 +208,10 @@ export function App() {
   useRedirect();
   const route = useRoute();
   const modal = route.name !== 'home';
-  const [panelOpen, setPanelOpen] = useState(false);
+  const { panel, dispatch } = usePanels();
+  const panelOpen = panel === 'tank';
   const [newTankBiome, setNewTankBiome] = useState<Biome | null>(null);
-  const decorating = useDecorState()?.active ?? false;
-  const { interaction } = useBridge();
+  const decorating = panel === 'decor';
   const shell = useRef<HTMLDivElement>(null);
   const bar = useRef<HTMLElement>(null);
   const previous = useRef(route.name);
@@ -258,21 +250,19 @@ export function App() {
         <TankTypeSwitch
           onCreate={(biome) => {
             setNewTankBiome(biome);
-            if (decorating) interaction.emit('decor:request-mode', { active: false });
-            setPanelOpen(true);
+            dispatch({ type: 'open-tank' });
           }}
         />
         <CameraControls />
         {decorating ? null : <PlayControls />}
-        <DecorToggle onOpen={() => setPanelOpen(false)} />
+        <DecorToggle pressed={decorating} onToggle={() => dispatch({ type: 'toggle-decor' })} />
         <button
           type="button"
           aria-expanded={panelOpen}
           aria-controls="tank-panel"
           onClick={() => {
             setNewTankBiome(null);
-            if (!panelOpen && decorating) interaction.emit('decor:request-mode', { active: false });
-            setPanelOpen(!panelOpen);
+            dispatch({ type: 'toggle-tank' });
           }}
         >
           My tank
@@ -292,12 +282,12 @@ export function App() {
             key={newTankBiome ?? 'default'}
             open
             newTankBiome={newTankBiome}
-            onClose={() => setPanelOpen(false)}
+            onClose={() => dispatch({ type: 'close' })}
           />
         </Suspense>
       )}
       <DecorEditor />
-      <LifeDialogs onReview={() => setPanelOpen(true)} />
+      <LifeDialogs onReview={() => dispatch({ type: 'open-tank' })} />
       <div className={modal ? 'stage modal' : 'stage'}>
         <Screen />
       </div>

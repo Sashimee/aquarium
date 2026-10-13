@@ -144,8 +144,10 @@ async function boot(): Promise<void> {
     if (mode === 'dive') rig.dive();
     else if (mode === 'orbit') rig.exit();
   });
+  const exposePose = new URLSearchParams(window.location.search).has('e2e');
   engine.onFrame((deltaS) => {
     rig.update(deltaS);
+    if (!exposePose) return;
     const { x, y, z } = rig.lookAtPoint;
     const p = rig.position;
     const pose = [p.x, p.y, p.z, x, y, z].map((v) => v.toFixed(3)).join(' ');

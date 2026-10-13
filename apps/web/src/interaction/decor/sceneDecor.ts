@@ -9,21 +9,30 @@ export type DecorFactory<S> = (scene: S, initial: SavedTank | null) => DecorSyst
  * Gives each built scene its own decor system. The scene is rebuilt when the tank's biome changes
  * and the saved layout arrives on `tank:loaded` before the new scene is up, so the latest saved
  * tank is tracked here for the page's lifetime and handed to each new system. The decor code is a
- * lazy chunk; a scene unmounted before it arrives gets none.
+ * lazy chunk; a scene unmounted before it arrives gets none. A request to enter decorate mode that
+ * arrives while no system exists (first load, or between scenes) is remembered and replayed once
+ * the next system is up, so the first tap on Decorate is never lost.
  */
 export class SceneDecor<S> {
   private saved: SavedTank | null = null;
   private scene: S | null = null;
   private decor: DecorSystem | null = null;
   private stopped = false;
+  private wanted = false;
   private readonly offs: (() => void)[];
 
   constructor(
-    interaction: EventBus<InteractionEvents>,
+    private readonly interaction: EventBus<InteractionEvents>,
     private readonly load: () => Promise<DecorFactory<S>>,
     private readonly report: (message: string, cause: unknown) => void,
   ) {
     this.offs = [
+      interaction.on('decor:request-mode', ({ active }) => {
+        this.wanted = active;
+      }),
+      interaction.on('decor:mode-changed', ({ active }) => {
+        this.wanted = active;
+      }),
       interaction.on('tank:loaded', ({ tankId, biome, decorLayout }) => {
         this.saved = { tankId, biome, layout: decorLayout };
       }),
@@ -47,6 +56,9 @@ export class SceneDecor<S> {
       (create) => {
         if (this.stopped || this.scene !== scene || this.decor) return;
         this.decor = create(scene, this.saved);
+        if (this.wanted && !this.decor.active) {
+          this.interaction.emit('decor:request-mode', { active: true });
+        }
       },
       (cause: unknown) => this.report('Decor failed to load', cause),
     );

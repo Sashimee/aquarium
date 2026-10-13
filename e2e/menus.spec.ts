@@ -15,20 +15,29 @@ let touch = false;
 // then sends one real touch or mouse press at its centre.
 async function press(target: Locator): Promise<void> {
   await target.waitFor({ state: 'visible' });
-  const box = await target.boundingBox();
-  if (!box) throw new Error(`${String(target)} has no box to press`);
-  const x = box.x + box.width / 2;
-  const y = box.y + box.height / 2;
-  const reachable = await target.evaluate(
-    (element, [px, py]) => {
-      const top = document.elementFromPoint(px ?? 0, py ?? 0);
-      return top !== null && element.contains(top);
-    },
-    [x, y],
-  );
-  if (!reachable) throw new Error(`${String(target)} is covered by another element at ${x},${y}`);
-  if (touch) await target.page().touchscreen.tap(x, y);
-  else await target.page().mouse.click(x, y);
+  // The header re-measures a frame after a panel opens or closes, so a panel can briefly sit over
+  // it; a target that is still covered after that settles is a real bug.
+  let point: [number, number] = [0, 0];
+  await expect
+    .poll(
+      async () => {
+        const box = await target.boundingBox();
+        if (!box) return `${String(target)} has no box to press`;
+        point = [box.x + box.width / 2, box.y + box.height / 2];
+        const cover = await target.evaluate((element, [px, py]) => {
+          const top = document.elementFromPoint(px ?? 0, py ?? 0);
+          if (top !== null && element.contains(top)) return null;
+          return top
+            ? `${top.tagName.toLowerCase()}.${top.className} "${top.textContent?.slice(0, 40)}"`
+            : 'nothing';
+        }, point);
+        return cover ? `covered by ${cover} at ${point.join(',')}` : null;
+      },
+      { message: `${String(target)} cannot be pressed`, timeout: 5_000 },
+    )
+    .toBeNull();
+  if (touch) await target.page().touchscreen.tap(...point);
+  else await target.page().mouse.click(...point);
 }
 
 const bar = (page: Page) => page.locator('header.bar');
@@ -132,8 +141,41 @@ async function expectOrbits(page: Page, drag: Drag, context: string) {
   );
 }
 
+// Software rendering runs at a few frames a second, so one unchanged reading proves nothing.
+async function settledPose(page: Page): Promise<string> {
+  const canvas = page.locator('canvas#tank');
+  let last = '';
+  let steady = 0;
+  await expect
+    .poll(
+      async () => {
+        const pose = (await canvas.getAttribute('data-camera')) ?? '';
+        steady = pose === last ? steady + 1 : 0;
+        last = pose;
+        return steady;
+      },
+      { message: 'the camera never came to rest', intervals: [500], timeout: 40_000 },
+    )
+    .toBeGreaterThanOrEqual(4);
+  return last;
+}
+
+async function expectToolClaimsDrag(page: Page, drag: Drag) {
+  const viewport = page.viewportSize();
+  if (!viewport) throw new Error('viewport is not set');
+  const y = Math.round(viewport.height * 0.6);
+  const laser = playGroup(page).getByRole('button', { name: 'Laser', exact: true });
+  await press(laser);
+  await expect(laser).toHaveAttribute('aria-pressed', 'true');
+  const before = await settledPose(page);
+  await drag([viewport.width * 0.8, y], [viewport.width * 0.2, y]);
+  expect(await settledPose(page), 'a Laser drag orbited the camera').toBe(before);
+  await press(playGroup(page).getByRole('button', { name: 'Tap glass', exact: true }));
+  await expectOrbits(page, drag, 'after switching Laser back to Tap glass');
+}
+
 async function ready(page: Page) {
-  await page.goto('/?tier=low&backend=webgl', { waitUntil: 'domcontentloaded' });
+  await page.goto('/?tier=low&backend=webgl&e2e', { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('button', { name: 'Hand-feed' })).toBeEnabled({ timeout: 45_000 });
   await expect(page.locator('canvas#tank')).toBeVisible();
 }
@@ -163,6 +205,7 @@ async function expectOnePanel(page: Page, context: string) {
 async function exercise(page: Page, drag: Drag) {
   await ready(page);
   await expectOrbits(page, drag, 'on a fresh page');
+  await expectToolClaimsDrag(page, drag);
   for (let i = 0; i < MENUS.length; i += 2) {
     const first = MENUS[i];
     const second = MENUS[i + 1];
@@ -176,6 +219,15 @@ async function exercise(page: Page, drag: Drag) {
     await closeAllPanels(page);
     await expectOrbits(page, drag, `after ${trail}`);
   }
+  const [tank, decorate] = MENUS;
+  if (!tank || !decorate) throw new Error('MENUS lost My tank or Decorate');
+  await decorate.open(page);
+  await decorate.isOpen(page);
+  await tank.open(page);
+  await tank.isOpen(page);
+  await expectOnePanel(page, 'Decorate, then My tank');
+  await closeAllPanels(page);
+  await expectOrbits(page, drag, 'after Decorate, then My tank');
 }
 
 test.describe('menus on a phone', () => {
@@ -193,7 +245,7 @@ test.describe('menus on a phone', () => {
   });
 
   test('every menu opens, switches and leaves the camera draggable', async ({ page }) => {
-    test.setTimeout(300_000);
+    test.setTimeout(420_000);
     const cdp = await page.context().newCDPSession(page);
     await exercise(page, (from, to) => touchDrag(cdp, from, to));
   });
@@ -207,7 +259,7 @@ test.describe('menus with a mouse', () => {
   });
 
   test('every menu opens, switches and leaves the camera draggable', async ({ page }) => {
-    test.setTimeout(300_000);
+    test.setTimeout(420_000);
     await exercise(page, (from, to) => mouseDrag(page, from, to));
   });
 });

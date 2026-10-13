@@ -52,15 +52,17 @@ export function createDecorSystem(
     return mode;
   };
 
+  let wanted = false;
   const stopRequests = interaction.on('decor:request-mode', ({ active }) => {
     if (disposed) return;
+    wanted = active;
     if (!active) {
       mode?.stop();
       return;
     }
     ensureMode().then(
       (m) => {
-        if (!disposed) m.start();
+        if (!disposed && wanted) m.start();
       },
       (cause: unknown) => engine.events.emit('engine:error', { message: 'Decorate mode', cause }),
     );

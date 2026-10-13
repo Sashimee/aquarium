@@ -49,7 +49,7 @@ export function useApi(): ApiClient {
   return api;
 }
 
-function useLatest<Events extends object, K extends keyof Events>(
+export function useLatest<Events extends object, K extends keyof Events>(
   bus: EventBus<Events>,
   type: K,
 ): Events[K] | undefined {
