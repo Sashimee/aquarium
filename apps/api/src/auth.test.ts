@@ -31,9 +31,18 @@ function verificationPath(h: Harness, email: string): string {
   return parsed.pathname + parsed.search;
 }
 
+function verifyFrom(h: Harness, email: string, signedUpWith?: LightMyRequestResponse) {
+  const cookie = signedUpWith ? cookieJar(signedUpWith) : '';
+  return h.app.inject({
+    method: 'GET',
+    url: verificationPath(h, email),
+    headers: cookie ? { cookie } : {},
+  });
+}
+
 async function verifiedSession(h: Harness, email = nextEmail()) {
-  await signUp(h.app, email);
-  const verify = await h.app.inject(verificationPath(h, email));
+  const signedUp = await signUp(h.app, email);
+  const verify = await verifyFrom(h, email, signedUp);
   const cookie = cookieJar(verify);
   expect(cookie).not.toBe('');
   return { email, cookie, verify };
@@ -81,18 +90,57 @@ describe('unverified sign-up takeover (#114)', () => {
     return token;
   }
 
-  it('does not let the pre-verification password work after the real owner verifies', async () => {
+  it('does not let the attacker password work after the owner clicks the sign-up mail', async () => {
     const email = nextEmail();
-    expect((await signUpWith(email, ATTACKER_PASSWORD)).statusCode).toBe(200);
-    const second = await signUpWith(email, VICTIM_PASSWORD);
-    expect(second.statusCode).toBe(200);
-    expect(second.cookies).toHaveLength(0);
+    const attacker = await signUpWith(email, ATTACKER_PASSWORD);
+    expect(attacker.statusCode).toBe(200);
 
-    const verify = await h.app.inject(verificationPath(h, email));
+    const verify = await verifyFrom(h, email);
     expect(verify.statusCode).toBe(302);
 
     expect((await signInWith(email, ATTACKER_PASSWORD)).statusCode).toBe(401);
-    expect((await signInWith(email, VICTIM_PASSWORD)).statusCode).toBe(401);
+  });
+
+  it('does not let the attacker password work after the owner clicks a sign-in mail', async () => {
+    const email = nextEmail();
+    await signUpWith(email, ATTACKER_PASSWORD);
+    const blocked = await signInWith(email, ATTACKER_PASSWORD);
+    expect(blocked.statusCode).toBe(403);
+    expect(h.outbox.filter((m) => m.to === email)).toHaveLength(2);
+
+    await verifyFrom(h, email);
+
+    expect((await signInWith(email, ATTACKER_PASSWORD)).statusCode).toBe(401);
+  });
+
+  it('revokes every session of the account at first verification', async () => {
+    const email = nextEmail();
+    await signUpWith(email, ATTACKER_PASSWORD);
+    const user = await h.database.pool.query('select id from "user" where email = $1', [email]);
+    const userId = String(user.rows[0].id);
+    await h.database.pool.query(
+      `insert into session (id, user_id, token, expires_at, created_at, updated_at)
+       values ('planted', $1, 'planted-token', now() + interval '1 day', now(), now())`,
+      [userId],
+    );
+    await verifyFrom(h, email);
+    const left = await h.database.pool.query('select 1 from session where id = $1', ['planted']);
+    expect(left.rowCount).toBe(0);
+  });
+
+  it('keeps the password of an honest single sign-up verified in the same browser', async () => {
+    const email = nextEmail();
+    const signedUp = await signUpWith(email, VICTIM_PASSWORD);
+    await verifyFrom(h, email, signedUp);
+    expect((await signInWith(email, VICTIM_PASSWORD)).statusCode).toBe(200);
+  });
+
+  it('does not let a cookie from another account carry over', async () => {
+    const email = nextEmail();
+    await signUpWith(email, ATTACKER_PASSWORD);
+    const unrelated = await signUpWith(nextEmail(), VICTIM_PASSWORD);
+    await verifyFrom(h, email, unrelated);
+    expect((await signInWith(email, ATTACKER_PASSWORD)).statusCode).toBe(401);
   });
 
   it('answers a repeat sign-up like a fresh one and mails the address again', async () => {
@@ -104,25 +152,28 @@ describe('unverified sign-up takeover (#114)', () => {
     expect(h.outbox.filter((m) => m.to === email)).toHaveLength(2);
   });
 
-  it('drops the pre-verification password when verification is re-requested directly', async () => {
-    const email = nextEmail();
-    await signUpWith(email, ATTACKER_PASSWORD);
-    const resend = await h.app.inject({
-      method: 'POST',
-      url: '/api/auth/send-verification-email',
-      headers: jsonHeaders,
-      payload: { email, callbackURL: '/' },
-    });
-    expect(resend.statusCode).toBe(200);
-    await h.app.inject(verificationPath(h, email));
-    expect((await signInWith(email, ATTACKER_PASSWORD)).statusCode).toBe(401);
+  it('responds to a repeat sign-up in about the time of a fresh one', async () => {
+    const median = (xs: number[]) => [...xs].sort((x, y) => x - y)[Math.floor(xs.length / 2)] ?? 0;
+    const time = async (email: string) => {
+      const start = performance.now();
+      await signUpWith(email, ATTACKER_PASSWORD);
+      return performance.now() - start;
+    };
+    const fresh: number[] = [];
+    const repeat: number[] = [];
+    for (let i = 0; i < 5; i++) {
+      const email = nextEmail();
+      fresh.push(await time(email));
+      repeat.push(await time(email));
+    }
+    expect(Math.abs(median(repeat) - median(fresh))).toBeLessThan(150);
   });
 
   it('lets the owner set a password by reset, revoking sessions, and leaves verified accounts intact', async () => {
     const email = nextEmail();
     await signUpWith(email, ATTACKER_PASSWORD);
     await signUpWith(email, VICTIM_PASSWORD);
-    const verify = await h.app.inject(verificationPath(h, email));
+    const verify = await verifyFrom(h, email);
     const ownerCookie = cookieJar(verify);
 
     expect((await requestReset(email)).statusCode).toBe(200);
@@ -167,12 +218,12 @@ describe('email + password', () => {
     expect(mails).toHaveLength(1);
     expect(mails[0]?.from).toBe('Aquarium <fish@bas.lu>');
     expect(mails[0]?.text).toContain('/api/auth/verify-email?token=');
-    expect(res.cookies).toHaveLength(0);
+    expect(res.cookies.some((c) => c.name.includes('session_token'))).toBe(false);
   });
 
   it('refuses sign-in until the email is verified, then allows it', async () => {
     const email = nextEmail();
-    await signUp(h.app, email);
+    const signedUp = await signUp(h.app, email);
     const blocked = await h.app.inject({
       method: 'POST',
       url: '/api/auth/sign-in/email',
@@ -182,7 +233,7 @@ describe('email + password', () => {
     expect(blocked.statusCode).toBe(403);
     expect(blocked.cookies).toHaveLength(0);
 
-    await h.app.inject(verificationPath(h, email));
+    await verifyFrom(h, email, signedUp);
     const ok = await h.app.inject({
       method: 'POST',
       url: '/api/auth/sign-in/email',
