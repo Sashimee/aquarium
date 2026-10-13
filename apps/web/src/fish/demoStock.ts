@@ -20,7 +20,12 @@ const DEMO_CONTENT = [
 ].map((raw) => contentSchema.parse(raw));
 
 export const DEMO_SPECIES: readonly SpeciesInput[] = DEMO_CONTENT.map(
-  ({ id, behaviour, locomotion }) => ({ id, behaviour, locomotion }),
+  ({ id, behaviour, locomotion, lifecycle }) => ({
+    id,
+    behaviour,
+    locomotion,
+    lifecycle: { diet: lifecycle.diet },
+  }),
 );
 
 /** Guppies are all female: a male needs its own asset batch, and batches are keyed by species. */
