@@ -63,10 +63,10 @@ function shoalClusters(w: World, members: number[], linkM: number): number[] {
  * A rock angled 20 degrees off the back glass: a V that narrows toward +x, where a tang swimming
  * along the pane slides deeper on every bump instead of being pinned.
  */
-function wedgeTank(): World {
+function wedgeTank(seed = 1): World {
   const back = -REEF_TANK.depth / 2;
   const w = new World({
-    seed: 1,
+    seed,
     tank: REEF_TANK,
     species: ARCHETYPES,
     decor: [
@@ -236,7 +236,7 @@ describe('World containment', { timeout: LONG }, () => {
     const watch = backOutWatch(w);
     let firstContact = -1;
     let worst = Infinity;
-    for (let t = 0; t < STEERING.deadEndMemoryS / STEP_DT; t++) {
+    for (let t = 0; t < 10 / STEP_DT; t++) {
       watch.step();
       worst = Math.min(worst, w.bodyClearance(0));
       if (firstContact < 0 && at(w.contactCount, 0) > 0) firstContact = t;
@@ -275,6 +275,37 @@ describe('World containment', { timeout: LONG }, () => {
       if (events.some((e) => e.foodId === nori)) biteAfter = t * STEP_DT;
     }
     expect(biteAfter).toBeGreaterThanOrEqual(0);
+  });
+
+  it('keeps a tang chasing food past the wedge from grinding back into the slot', () => {
+    // #287: with the goal beyond the rock's narrow end the pull runs straight back into the
+    // slot it just left. Each back-out costs ~3 s, so one that repeats delays the bite.
+    const back = -REEF_TANK.depth / 2;
+    const cases = [
+      { seed: 1, placeAtBackOut: true },
+      { seed: 1, placeAtBackOut: false },
+      { seed: 2, placeAtBackOut: false },
+      { seed: 3, placeAtBackOut: false },
+    ];
+    for (const { seed, placeAtBackOut } of cases) {
+      const label = `seed ${seed}, ${placeAtBackOut ? 'nori above the wedge' : 'nori past the tip'}`;
+      const w = wedgeTank(seed);
+      const watch = backOutWatch(w);
+      const rain = new FoodRain(REEF_TANK);
+      let nori = placeAtBackOut ? -1 : rain.place('nori', 0.45, 0.15, back + 0.012);
+      let bite = -1;
+      for (let t = 0; t < 30 / STEP_DT && bite < 0; t++) {
+        rain.feed(w);
+        watch.step();
+        if (nori < 0 && watch.starts.length > 0) nori = rain.place('nori', 0.15, 0.38, back + 0.02);
+        const events = w.takeAteEvents();
+        rain.eat(events);
+        if (events.some((e) => e.foodId === nori)) bite = w.tick * STEP_DT;
+      }
+      expect(watch.starts.length, label).toBeLessThanOrEqual(2);
+      expect(bite, label).toBeGreaterThan(0);
+      expect(bite, label).toBeLessThan(23);
+    }
   });
 });
 
