@@ -5,7 +5,7 @@ import type { InteractionEvents } from '../events';
 import type { FeederLayer } from './feederLayer';
 import { collidersFor } from './colliders';
 import { layoutKey } from './key';
-import { composeLayout, numberPieces, splitLayout, type Piece } from './layout';
+import { composeLayout, numberPieces, sanitizeLayout, splitLayout, type Piece } from './layout';
 import { FEEDER_SPEC, specsFromCatalog, type DecorSpec } from './spec';
 
 /** What the decor layer needs from the tank scene; `TankScene` satisfies it. */
@@ -31,6 +31,8 @@ export class DecorWorld {
   private applied: Promise<void> = Promise.resolve();
   private unmanaged: readonly DecorItem[];
   private presetLayoutKey: string;
+  /** Says what loading a saved layout had to drop; shown while decorating. */
+  notice: string | null = null;
 
   constructor(
     private readonly scene: DecorScenePort,
@@ -67,7 +69,13 @@ export class DecorWorld {
   /** Shows a saved layout. An empty one means "never edited", so the preset stays. */
   showSaved(layout: readonly DecorItem[]): Promise<void> {
     if (layout.length === 0) return this.show(numberPieces(this.scene.presetHardDecor));
-    const { pieces } = splitLayout(layout, this.specs);
+    const clean = sanitizeLayout(layout, this.scene.biome);
+    const n = clean.dropped;
+    this.notice =
+      n === 0
+        ? null
+        : `${n} saved ${n === 1 ? 'piece does' : 'pieces do'} not fit this tank and ${n === 1 ? 'was' : 'were'} removed. Your next change saves the cleaned layout.`;
+    const { pieces } = splitLayout(clean.layout, this.specs);
     return this.show(numberPieces(pieces));
   }
 

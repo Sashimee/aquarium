@@ -114,6 +114,39 @@ describe('DecorMode', () => {
     expect(h.last().persisted).toBe(false);
   });
 
+  it('offers only the pieces the tank biome allows', () => {
+    const fresh = harness([], 'freshwater');
+    fresh.mode.start();
+    const freshIds = fresh.last().palette.map((p) => p.assetId);
+    expect(freshIds).toContain('driftwood-branch');
+    expect(freshIds).not.toContain('reef-arch');
+
+    const reef = harness([], 'reef');
+    reef.mode.start();
+    const reefIds = reef.last().palette.map((p) => p.assetId);
+    expect(reefIds).toContain('reef-arch');
+    expect(reefIds).not.toContain('driftwood-branch');
+  });
+
+  it('removes saved wrong-biome pieces on load and says so', async () => {
+    const h = harness([], 'freshwater');
+    h.load('t1', [item('driftwood-branch', 0, 0), item('reef-arch', 0.3, 0)]);
+    await settle();
+    h.mode.start();
+    expect(h.last().pieces.map((p) => p.label)).toEqual(['Driftwood branch']);
+    expect(h.last().problem).toMatch(/1 saved piece does not fit this tank/);
+  });
+
+  it('says why a second vacation feeder is refused', () => {
+    const h = harness([]);
+    h.mode.start();
+    h.bus.emit('decor:command', { type: 'add', assetId: VACATION_FEEDER_ASSET_ID });
+    h.bus.emit('decor:command', { type: 'add', assetId: VACATION_FEEDER_ASSET_ID });
+    expect(h.last().hasFeeder).toBe(true);
+    expect(h.last().pieces.filter((p) => p.label === 'Vacation feeder')).toHaveLength(1);
+    expect(h.last().problem).toMatch(/one vacation feeder/i);
+  });
+
   it('refuses to edit a scene of another biome than the tank', () => {
     const h = harness([], 'freshwater');
     h.bus.emit('tank:loaded', {
