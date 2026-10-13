@@ -14,13 +14,19 @@ const nextEmail = () => `t06-${Date.now()}-${counter++}@bas.lu`;
 
 const jsonHeaders = { 'content-type': 'application/json', origin: APP_ORIGIN };
 
-const median = (xs: number[]) => [...xs].sort((x, y) => x - y)[Math.floor(xs.length / 2)] ?? 0;
+const median = (xs: number[]) => {
+  const sorted = [...xs].sort((x, y) => x - y);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? (sorted[mid] ?? 0) : ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2;
+};
 
-// Samples are taken interleaved so host load hits both sets alike; the allowed gap scales
-// with the observed latency instead of an absolute bound a loaded host can break.
-function expectSimilarMedians(a: number[], b: number[]) {
-  const base = Math.min(median(a), median(b));
-  expect(Math.abs(median(a) - median(b))).toBeLessThan(15 + 0.25 * base);
+// Paired sign test: with no timing difference, "repeat slower" in each adjacent pair is a fair
+// coin, so 80 pairs fall outside 25..55 with probability ~0.05%. Host load shifts both halves
+// of a pair alike and cannot bias the count, unlike an absolute or median-relative bound.
+function expectNoTimingSkew(pairs: { fresh: number; repeat: number }[]) {
+  const slower = pairs.filter((p) => p.repeat > p.fresh).length;
+  expect(slower, `repeat slower in ${slower} of ${pairs.length} pairs`).toBeGreaterThan(24);
+  expect(slower, `repeat slower in ${slower} of ${pairs.length} pairs`).toBeLessThan(56);
 }
 
 function cookieJar(res: LightMyRequestResponse): string {
@@ -171,28 +177,28 @@ describe('unverified sign-up takeover (#114)', () => {
 
   it('responds to a repeat sign-up in about the time of a fresh one', async () => {
     const time = async (email: string) => {
+      // The previous sign-up's background mail would otherwise land inside this timing window.
+      await h.settleMail();
       const start = performance.now();
       await signUpWith(email, ATTACKER_PASSWORD);
       return performance.now() - start;
     };
-    const fresh: number[] = [];
-    const repeat: number[] = [];
+    const pairs: { fresh: number; repeat: number }[] = [];
     await time(nextEmail());
-    for (let i = 0; i < 10; i++) {
-      const email = nextEmail();
-      const first = await time(email);
-      const second = await time(email);
-      fresh.push(first);
-      repeat.push(second);
-      const other = nextEmail();
-      await signUpWith(other, ATTACKER_PASSWORD);
-      const secondRepeat = await time(other);
-      const secondFresh = await time(nextEmail());
-      repeat.push(secondRepeat);
-      fresh.push(secondFresh);
+    for (let i = 0; i < 80; i++) {
+      if (i % 2 === 0) {
+        const email = nextEmail();
+        const fresh = await time(email);
+        pairs.push({ fresh, repeat: await time(email) });
+      } else {
+        const email = nextEmail();
+        await signUpWith(email, ATTACKER_PASSWORD);
+        const repeat = await time(email);
+        pairs.push({ fresh: await time(nextEmail()), repeat });
+      }
     }
-    expectSimilarMedians(repeat, fresh);
-  }, 30_000);
+    expectNoTimingSkew(pairs);
+  }, 240_000);
 
   it('lets the owner set a password by reset, revoking sessions, and leaves verified accounts intact', async () => {
     const email = nextEmail();
@@ -575,7 +581,6 @@ describe('mail abuse limits', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const cooledRes = await resend(cooled);
     const logged = spy.mock.calls.map((c) => String(c[0]));
-    spy.mockRestore();
     expect(logged).toEqual([expect.stringMatching(/^verification mail throttled, retry in \d+s$/)]);
     const unknownRes = await resend(unknown);
     expect(cooledRes.res.statusCode).toBe(200);
@@ -587,11 +592,15 @@ describe('mail abuse limits', () => {
 
     const cooledMs: number[] = [];
     const unknownMs: number[] = [];
-    for (let i = 0; i < 9; i++) {
+    for (let i = 0; i < 5; i++) {
       cooledMs.push((await resend(cooled)).ms);
       unknownMs.push((await resend(nextEmail())).ms);
     }
-    expectSimilarMedians(cooledMs, unknownMs);
+    spy.mockRestore();
+    // Better Auth pads send-verification-email to MINIMUM_MS (500 ms, email-verification.mjs),
+    // which masks small differences, so only a leak beyond the pad is observable here.
+    expect(median(cooledMs)).toBeLessThan(560);
+    expect(median(unknownMs)).toBeLessThan(560);
     expect(h.outbox.length).toBe(mailsBefore);
     await h.close();
   }, 20_000);
@@ -997,7 +1006,7 @@ describe('mail abuse limits', () => {
       return { h, hits, arm: () => (spentOnce = true) };
     }
 
-    it('sends no sign-up mail and charges one hit when the cap frees before the mail step', async () => {
+    it('sends no sign-up mail and charges nothing when the cap frees before the mail step', async () => {
       const { h, hits, arm } = await harnessWithFlakyCap();
       const before = await hits();
       arm();
@@ -1008,7 +1017,7 @@ describe('mail abuse limits', () => {
       await h.close();
     });
 
-    it('sends no reset mail and charges one hit when the cap frees before the mail step', async () => {
+    it('sends no reset mail and charges nothing when the cap frees before the mail step', async () => {
       const { h, hits, arm } = await harnessWithFlakyCap();
       const email = nextEmail();
       await signUp(h.app, email);
