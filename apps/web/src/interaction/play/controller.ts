@@ -2,7 +2,7 @@ import type { FoodType } from '@aquarium/shared';
 import type { FeedGate } from '../../sync/feedGate';
 import type { EventBus } from '../../engine/events';
 import type { Vec3 } from '../camera';
-import type { InteractionEvents, PlayTool } from '../events';
+import { HAND_FEED_PORTION, type InteractionEvents, type PlayTool } from '../events';
 import { FoodField } from '../food/particles';
 import { FoodLink } from '../food/link';
 import { BubbleField } from './bubbles';
@@ -41,7 +41,6 @@ export interface PlayDeps {
 
 const GLASS_OFFSET_M = 0.003;
 const WAND_BUBBLES_PER_S = 14;
-const DEFAULT_PORTION = 1;
 
 export class PlayController {
   private activeTool: PlayTool = 'tap';
@@ -91,7 +90,7 @@ export class PlayController {
       const hit = pickPlaneY(ray.origin, ray.dir, this.deps.max.y);
       const { min, max } = this.deps;
       if (hit && hit.x >= min.x && hit.x <= max.x && hit.z >= min.z && hit.z <= max.z) {
-        this.feed(this.selectedFood, DEFAULT_PORTION, hit);
+        this.feed(this.selectedFood, HAND_FEED_PORTION, hit);
       }
       return;
     }

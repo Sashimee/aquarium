@@ -1,0 +1,238 @@
+import type {
+  AwaySummary,
+  CauseOfDeath,
+  Fish,
+  Memorial,
+  SpeciesSummary,
+  Tank,
+  Water,
+} from '@aquarium/shared';
+import { speciesNameMap, type SpeciesNames } from './speciesNames';
+import { hasCapacityFor, MAX_FISH_PER_TANK, TANK_BIOLOAD_CAPACITY } from '@aquarium/sim/lifecycle';
+
+export { speciesNameMap, type SpeciesNames } from './speciesNames';
+
+function speciesName(names: SpeciesNames, id: string): string {
+  return names.get(id)?.toLowerCase() ?? id.replaceAll('-', ' ');
+}
+
+export const CAUSE_TEXT: Record<CauseOfDeath, string> = {
+  starvation: 'went too long without food',
+  ammonia: 'was poisoned by ammonia in the water',
+  old_age: 'died of old age after a full life',
+  unknown: 'died of a cause we could not tell',
+};
+
+const CAUSE_ADVICE: Record<CauseOfDeath, string> = {
+  starvation: 'A little food each day keeps hunger away.',
+  ammonia: 'Vacuuming the gravel and changing some water keeps ammonia down.',
+  old_age: 'Nothing could have been done.',
+  unknown: '',
+};
+
+export function deathSentence(name: string, species: string, cause: CauseOfDeath): string {
+  return `${name} the ${species} ${CAUSE_TEXT[cause]}.`;
+}
+
+export function deathAdvice(cause: CauseOfDeath): string {
+  return CAUSE_ADVICE[cause];
+}
+
+export const MIN_AWAY_MINUTES = 60;
+
+export function shouldShowAway(away: AwaySummary | undefined | null): away is AwaySummary {
+  if (!away) return false;
+  return away.deaths.length > 0 || away.elapsedMinutes >= MIN_AWAY_MINUTES;
+}
+
+export function formatDuration(minutes: number): string {
+  if (minutes < 60) return `${Math.max(1, Math.round(minutes))} minutes`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return hours === 1 ? '1 hour' : `${hours} hours`;
+  return `${Math.floor(hours / 24)} days`;
+}
+
+export interface AwayReport {
+  title: string;
+  lines: string[];
+  deaths: { fishId: string; sentence: string; advice: string }[];
+  tone: 'calm' | 'loss';
+}
+
+/** Renders the server's offline catch-up verbatim; nothing here is predicted on the client. */
+export function describeAway(away: AwaySummary, names: SpeciesNames): AwayReport {
+  const lines = [`You were away for ${formatDuration(away.elapsedMinutes)}.`];
+  if (away.capped) {
+    lines.push('The tank is simulated for at most 60 days, however long you stayed away.');
+  }
+  const deaths = away.deaths.map((d) => ({
+    fishId: d.fishId,
+    sentence: deathSentence(d.name, speciesName(names, d.species), d.cause),
+    advice: deathAdvice(d.cause),
+  }));
+  if (deaths.length === 0) lines.push('Everyone is still alive.');
+  else {
+    lines.push(
+      deaths.length === 1
+        ? 'One fish died while you were gone.'
+        : `${deaths.length} fish died while you were gone.`,
+    );
+  }
+  return {
+    title: deaths.length > 0 ? 'We are sorry' : 'Welcome back',
+    lines,
+    deaths,
+    tone: deaths.length > 0 ? 'loss' : 'calm',
+  };
+}
+
+export function deadFish(tank: Tank): Fish[] {
+  return tank.fish.filter((f) => f.status === 'dead');
+}
+
+export function livingFish(tank: Tank): Fish[] {
+  return tank.fish.filter((f) => f.status === 'alive');
+}
+
+export interface NetStep {
+  fish: Fish;
+  prompt: string;
+  confirmLabel: string;
+}
+
+export function netPrompt(fish: Fish, names: SpeciesNames): NetStep {
+  if (fish.status !== 'dead' || !fish.cause) {
+    throw new Error(`netPrompt needs a dead fish, got ${fish.name} (${fish.status})`);
+  }
+  const sentence = deathSentence(fish.name, speciesName(names, fish.species), fish.cause);
+  return {
+    fish,
+    prompt: `${sentence} Net ${fish.name} and add them to the memorial?`,
+    confirmLabel: `Net ${fish.name}`,
+  };
+}
+
+export function lifespanDays(bornAt: string, diedAt: string): number {
+  return Math.max(0, Math.floor((Date.parse(diedAt) - Date.parse(bornAt)) / 86_400_000));
+}
+
+export function memorialLine(m: Memorial, names: SpeciesNames): string {
+  const days = lifespanDays(m.bornAt, m.diedAt);
+  const lived = days === 0 ? 'less than a day' : days === 1 ? '1 day' : `${days} days`;
+  return `${m.fishName}, ${speciesName(names, m.species)}. Lived ${lived}, died ${m.diedAt.slice(0, 10)}: ${CAUSE_TEXT[m.cause]}.`;
+}
+
+export interface Capacity {
+  usedBioload: number;
+  capacity: number;
+  livingFish: number;
+  maxFish: number;
+}
+
+export function tankCapacity(tank: Tank, species: readonly SpeciesSummary[]): Capacity {
+  const bioload = new Map(species.map((s) => [s.id, s.lifecycle.bioload]));
+  const living = livingFish(tank);
+  return {
+    usedBioload: living.reduce((sum, f) => sum + (bioload.get(f.species) ?? 0), 0),
+    capacity: TANK_BIOLOAD_CAPACITY,
+    livingFish: living.length,
+    maxFish: MAX_FISH_PER_TANK,
+  };
+}
+
+export type ShopVerdict = { ok: true } | { ok: false; reason: string };
+
+export function canBuy(
+  tank: Tank,
+  candidate: SpeciesSummary,
+  all: readonly SpeciesSummary[],
+): ShopVerdict {
+  if (candidate.biome !== tank.biome) {
+    return { ok: false, reason: `${candidate.commonName} needs a ${candidate.biome} tank.` };
+  }
+  const bioload = new Map(all.map((s) => [s.id, s.lifecycle.bioload]));
+  const existing = tank.fish.map((f) => ({
+    alive: f.status === 'alive',
+    maxBioload: bioload.get(f.species) ?? 0,
+  }));
+  const fits = hasCapacityFor(
+    existing,
+    candidate.lifecycle.bioload,
+    TANK_BIOLOAD_CAPACITY,
+    MAX_FISH_PER_TANK,
+  );
+  if (fits) return { ok: true };
+  return { ok: false, reason: 'This tank is full. Start another tank for more fish.' };
+}
+
+export const ACCLIMATION_SECONDS = 45;
+
+export const FOOD_LEFTOVER_VACUUM_AT = 3;
+
+export type WaterQuality = 'good' | 'fair' | 'poor';
+
+export interface WaterReport {
+  ammonia: WaterQuality;
+  nitrate: WaterQuality;
+  algae: WaterQuality;
+  leftoverFood: WaterQuality;
+  needsVacuum: boolean;
+}
+
+const DEFAULT_AMMONIA_TOLERANCE = 0.1;
+
+function rate(value: number, fair: number, poor: number): WaterQuality {
+  return value >= poor ? 'poor' : value >= fair ? 'fair' : 'good';
+}
+
+export function waterReport(
+  water: Water,
+  tank: Tank,
+  species: readonly SpeciesSummary[],
+): WaterReport {
+  const tolerance = new Map(species.map((s) => [s.id, s.lifecycle.ammoniaTolerance]));
+  const strictest = livingFish(tank).reduce(
+    (min, f) => Math.min(min, tolerance.get(f.species) ?? DEFAULT_AMMONIA_TOLERANCE),
+    Number.POSITIVE_INFINITY,
+  );
+  const limit = Number.isFinite(strictest) ? strictest : DEFAULT_AMMONIA_TOLERANCE;
+  return {
+    ammonia: rate(water.ammonia, limit * 0.4, limit * 0.8),
+    nitrate: rate(water.nitrate, 15, 30),
+    algae: rate(water.algae, 0.4, 0.75),
+    leftoverFood: rate(water.uneatenFood, FOOD_LEFTOVER_VACUUM_AT, 8),
+    needsVacuum: water.uneatenFood >= FOOD_LEFTOVER_VACUUM_AT,
+  };
+}
+
+function hungerWord(hunger: number): string {
+  if (hunger >= 0.75) return 'starving';
+  if (hunger >= 0.5) return 'hungry';
+  if (hunger >= 0.25) return 'peckish';
+  return 'well fed';
+}
+
+export function tankReportLines(tank: Tank, species: readonly SpeciesSummary[]): string[] {
+  const names = speciesNameMap(species);
+  const living = livingFish(tank);
+  const dead = deadFish(tank);
+  const water = waterReport(tank.water, tank, species);
+  const lines = [
+    `${tank.name}, a ${tank.biome} tank.`,
+    living.length === 0
+      ? 'No fish are alive in this tank.'
+      : `${living.length} fish alive: ${living
+          .map((f) => `${f.name} the ${speciesName(names, f.species)}, ${hungerWord(f.hunger)}`)
+          .join('; ')}.`,
+  ];
+  if (dead.length > 0) {
+    lines.push(
+      `${dead.map((f) => f.name).join(', ')} ${dead.length === 1 ? 'has' : 'have'} died and can be netted.`,
+    );
+  }
+  lines.push(
+    `Water: ammonia ${water.ammonia}, nitrate ${water.nitrate}, algae ${water.algae}, leftover food ${water.leftoverFood}.`,
+  );
+  if (water.needsVacuum) lines.push('Leftover food is building up. Vacuum the gravel.');
+  return lines;
+}
