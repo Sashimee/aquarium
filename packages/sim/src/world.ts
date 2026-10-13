@@ -90,6 +90,8 @@ export interface WorldConfig {
 const PENETRATION_EPSILON = 1e-9;
 const MAX_BODY_PUSHES = 8;
 
+const NO_ATE_EVENTS: readonly AteEvent[] = Object.freeze([]);
+
 export class World {
   readonly count: number;
   readonly fishIds: readonly string[];
@@ -304,8 +306,9 @@ export class World {
   }
 
   /** What fish have eaten since the last call, in the order it happened. */
-  takeAteEvents(): AteEvent[] {
-    return this.behaviour.feeding.events.splice(0);
+  takeAteEvents(): readonly AteEvent[] {
+    const events = this.behaviour.feeding.events;
+    return events.length === 0 ? NO_ATE_EVENTS : events.splice(0);
   }
 
   /** Smallest distance from fish `i`'s spine chain to the tank or hard decor, minus its thickness. */

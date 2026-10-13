@@ -87,6 +87,8 @@ export class Feeding {
   private readonly claimDist = new Float64Array(MAX_FOOD_PARTICLES * MAX_FEEDERS);
   private readonly claimCount = new Uint8Array(MAX_FOOD_PARTICLES);
   private readonly candidates = new Int32Array(MAX_FOOD_PARTICLES);
+  /** Score of the particle the last `choose` returned. */
+  private chosenScore = 0;
   private readonly buried = new Uint8Array(MAX_FOOD_PARTICLES);
   private readonly n3 = new Float64Array(3);
   private readonly nbr = new Int32Array(FEEDING.followNeighbours);
@@ -177,8 +179,9 @@ export class Feeding {
       if (at(this.target, i) >= 0 && food.feeders(at(this.target, i)) > 1) continue;
       this.retarget[i] = FEEDING.retargetS;
       this.looked[i] = 1;
-      const [k, score] = this.choose(i, false);
+      const k = this.choose(i, false);
       if (k < 0) continue;
+      const score = this.chosenScore;
       const current = at(this.target, i);
       if (current === k) {
         this.targetScore[i] = score;
@@ -257,12 +260,13 @@ export class Feeding {
   /**
    * Best particle in fish `i`'s perception cone by salience × diet preference. With `contested`,
    * particles already claimed by as many fish as can feed on them, all nearer than `i`, are
-   * skipped.
+   * skipped. Returns the particle index or -1, and leaves its score in `chosenScore`.
    */
-  private choose(i: number, contested: boolean): [number, number] {
+  private choose(i: number, contested: boolean): number {
     const { food, position, forward } = this.host;
+    this.chosenScore = 0;
     const sp = this.host.species[at(this.host.speciesIndex, i)];
-    if (sp === undefined) return [-1, 0];
+    if (sp === undefined) return -1;
     const px = at(position, i * 3);
     const py = at(position, i * 3 + 1);
     const pz = at(position, i * 3 + 2);
@@ -300,7 +304,9 @@ export class Feeding {
         best = k;
       }
     }
-    return bestScore >= FEEDING.minScore ? [best, bestScore] : [-1, 0];
+    if (bestScore < FEEDING.minScore) return -1;
+    this.chosenScore = bestScore;
+    return best;
   }
 
   private full(k: number, d: number): boolean {
@@ -364,9 +370,9 @@ export class Feeding {
       for (let m = 0; m < lost; m++) {
         const i = at(this.lost, m);
         this.drop(i);
-        const [k, score] = this.choose(i, true);
+        const k = this.choose(i, true);
         if (k < 0) continue;
-        this.aim(i, k, score);
+        this.aim(i, k, this.chosenScore);
         const out = this.claim(k, i, this.distanceTo(i, k));
         if (out >= 0) this.lostNext[next++] = out;
       }
