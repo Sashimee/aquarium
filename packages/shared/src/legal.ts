@@ -167,7 +167,7 @@ export const PRIVACY_POLICY: PrivacyPolicy = privacyPolicySchema.parse({
       id: 'rights',
       title: 'Your rights',
       paragraphs: [
-        'You can download all your data as JSON (access and portability, Art. 15 and 20) and delete your account (erasure, Art. 17) yourself from your account settings, using the API endpoints GET /api/me/export and POST /api/me/delete.',
+        'You can download all your data as JSON (access and portability, Art. 15 and 20) and delete your account (erasure, Art. 17) yourself from your account settings, using the API endpoints POST /api/me/export and POST /api/me/delete.',
         'For correction, restriction or objection (Art. 16, 18, 21), write to the contact address. You may also lodge a complaint with your national data protection authority.',
       ],
     },
