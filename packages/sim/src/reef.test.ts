@@ -169,6 +169,9 @@ describe('tangs on the reef preset', { timeout: LONG }, () => {
   // Room for one abandoned approach (pursuit timeout, then ignoring the clip) and a second go.
   const BOUND_STEPS = 30 * STEP_HZ;
   const SEEDS = [1, 2, 3];
+  // A lone tang's approach path is chaotic in the rock layout, so more seeds catch a station it
+  // cannot face from (#232) that three happen to miss.
+  const LONE_SEEDS = [1, 2, 3, 4, 5, 6];
   // Contacts per fish-step. Turning on the spot in a corner brushes the glass now and then, and
   // a second tang squeezing past the one at the clip more often; a fish pressed against the pane,
   // as in #89, touches it nearly every step. About 1.5 times the rates measured.
@@ -192,7 +195,7 @@ describe('tangs on the reef preset', { timeout: LONG }, () => {
       let fishSteps = 0;
       for (const [name, x, y, z] of [pane, ...corners]) {
         for (const start of STARTS) {
-          for (const seed of SEEDS) {
+          for (const seed of LONE_SEEDS) {
             const run = graze(reefTank(seed, sp.id, [start]), x, y, z, BOUND_STEPS);
             if (run.first[0] === -1) missed.push(`${name}, start ${start.join()}, seed ${seed}`);
             contacts += run.contacts;
