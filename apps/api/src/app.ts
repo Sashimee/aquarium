@@ -213,12 +213,14 @@ function isStaticAsset(pathname: string): boolean {
 }
 
 async function isUnverified(res: Response): Promise<boolean> {
+  let body: { code?: unknown };
   try {
-    const body = (await res.clone().json()) as { code?: unknown };
-    return body.code === 'EMAIL_NOT_VERIFIED';
-  } catch {
-    return false;
+    body = (await res.clone().json()) as { code?: unknown };
+  } catch (err) {
+    if (err instanceof SyntaxError) return false;
+    throw err;
   }
+  return body.code === 'EMAIL_NOT_VERIFIED';
 }
 
 export function buildApp(opts: AppOptions): FastifyInstance {
@@ -314,6 +316,10 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     return indexable ? 'User-agent: *\nAllow: /\n' : 'User-agent: *\nDisallow: /\n';
   });
 
+  async function currentSession(req: FastifyRequest) {
+    return auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+  }
+
   const tooMany = (reply: FastifyReply, retryAfter: number) =>
     reply
       .code(429)
@@ -366,6 +372,16 @@ export function buildApp(opts: AppOptions): FastifyInstance {
           const wait = await signInThrottle.store.consume(failureKey, signInThrottle.limit);
           if (wait > 0) return tooMany(reply, wait);
         }
+        // Same slot-first scheme keyed by the signed-in user. Without a session there is nothing to
+        // guess against, so Better Auth answers 401 on its own.
+        if (req.method === 'POST' && pathname === `${AUTH_BASE_PATH}/change-password`) {
+          const current = await currentSession(req);
+          if (current) {
+            failureKey = `pw-change-fail:${current.user.id}`;
+            const wait = await signInThrottle.store.consume(failureKey, signInThrottle.limit);
+            if (wait > 0) return tooMany(reply, wait);
+          }
+        }
 
         const headers = new Headers();
         for (const [name, value] of Object.entries(req.headers)) {
@@ -383,12 +399,14 @@ export function buildApp(opts: AppOptions): FastifyInstance {
         });
         const res = await mailer.runAdmitted(admission, () => auth.handler(request));
         // Better Auth also answers 403 before looking at the password (bad callbackURL, foreign
-        // origin, cross-site navigation), so only its EMAIL_NOT_VERIFIED, raised after the password
-        // matched, counts as a success next to 200.
-        if (
-          failureKey &&
-          (res.status === 200 || (res.status === 403 && (await isUnverified(res))))
-        ) {
+        // origin, cross-site navigation), so on sign-in only its EMAIL_NOT_VERIFIED, raised after
+        // the password matched, counts as a success next to 200. change-password has no such case:
+        // every non-200 is either a rejection before the check or the wrong password.
+        const unverifiedSignIn =
+          pathname === `${AUTH_BASE_PATH}/sign-in/email` &&
+          res.status === 403 &&
+          (await isUnverified(res));
+        if (failureKey && (res.status === 200 || unverifiedSignIn)) {
           await signInThrottle.store.reset(failureKey);
         }
 
@@ -407,10 +425,6 @@ export function buildApp(opts: AppOptions): FastifyInstance {
       },
     });
   });
-
-  async function currentSession(req: FastifyRequest) {
-    return auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
-  }
 
   app.get('/api/me', async (req, reply) => {
     const current = await currentSession(req);
