@@ -358,11 +358,11 @@ export function scaleCaudal(
   normals: Float32Array,
   fins: FinResult,
   factor: number,
-  label = 'scaleCaudal',
+  recipeId?: string,
 ): void {
   if (!(factor >= CAUDAL_SCALE_MIN && factor <= CAUDAL_SCALE_MAX))
     throw new Error(
-      `${label}: caudalScale ${factor} is outside ${CAUDAL_SCALE_MIN}-${CAUDAL_SCALE_MAX}; below about ${CAUDAL_SCALE_FOLD.toFixed(2)} the tail folds onto itself, above 1 it grows. Change the recipe's caudalScale.`,
+      `${recipeId ?? 'scaleCaudal'}: caudalScale ${factor} is outside ${CAUDAL_SCALE_MIN}-${CAUDAL_SCALE_MAX}; below about ${CAUDAL_SCALE_FOLD.toFixed(2)} the tail folds onto itself, above 1 it grows. Change the recipe's caudalScale.`,
     );
   const bandEnd = fins.zPeduncle + 0.03 * (fins.zSnout - fins.zTail);
   let yBody = 0;

@@ -133,4 +133,15 @@ describe('normaliseFish attachments', () => {
       without.at(0)?.extra[FIN_MASK_ATTRIBUTE],
     );
   });
+
+  it('names the recipe when its caudalScale would fold the tail', () => {
+    expect(() =>
+      normaliseFish({
+        ...input,
+        parts: [body],
+        hints: { caudalScale: 0.3 },
+        recipeId: 'folded-fish',
+      }),
+    ).toThrow(/folded-fish: caudalScale 0\.3 is outside 0\.45-1/);
+  });
 });
