@@ -1,19 +1,23 @@
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 import type { Engine } from './Engine';
 import { TIERS, type Tier } from './quality/tiers';
+import { readStats, type StatsReadout } from './statsReadout';
 
 /** Developer tweak panel. Loaded only in dev builds through a dynamic import. */
 export function createDevPanel(engine: Engine): () => void {
   const gui = new GUI({ title: 'Engine (dev)', width: 300 });
   gui.close();
 
-  const readout = {
+  const readout: StatsReadout = {
     backend: engine.backend,
-    tier: engine.quality.tier as Tier,
+    tier: engine.quality.tier,
     adaptive: engine.quality.adaptive,
     fps: '',
     frame: '',
     gpu: '',
+    dpr: '',
+    pixelRatio: '',
+    canvas: '',
     draws: 0,
     triangles: 0,
   };
@@ -28,17 +32,14 @@ export function createDevPanel(engine: Engine): () => void {
   perf.add(readout, 'fps').disable().listen();
   perf.add(readout, 'frame').name('frame ms').disable().listen();
   perf.add(readout, 'gpu').name('gpu ms').disable().listen();
+  perf.add(readout, 'dpr').name('device px ratio').disable().listen();
+  perf.add(readout, 'pixelRatio').name('render px ratio').disable().listen();
+  perf.add(readout, 'canvas').disable().listen();
   perf.add(readout, 'draws').disable().listen();
   perf.add(readout, 'triangles').disable().listen();
 
   const offStats = engine.events.on('engine:stats', (s) => {
-    readout.tier = s.tier;
-    readout.adaptive = engine.quality.adaptive;
-    readout.fps = s.fps.toFixed(1);
-    readout.frame = s.frameMs.toFixed(2);
-    readout.gpu = s.gpuMs === null ? 'n/a' : s.gpuMs.toFixed(2);
-    readout.draws = s.drawCalls;
-    readout.triangles = s.triangles;
+    Object.assign(readout, readStats(engine, s, window.devicePixelRatio));
   });
 
   const { medium, caustics, hood, scene, renderer } = engine;

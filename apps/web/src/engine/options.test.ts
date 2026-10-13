@@ -8,6 +8,7 @@ describe('parseEngineOptions', () => {
       tier: null,
       adaptive: true,
       clock: null,
+      stats: false,
     });
   });
 
@@ -22,6 +23,7 @@ describe('parseEngineOptions', () => {
       tier: 'ultra',
       adaptive: false,
       clock: null,
+      stats: false,
     });
     expect(parseEngineOptions('?tier=low&adaptive=1').adaptive).toBe(false);
   });
@@ -32,6 +34,7 @@ describe('parseEngineOptions', () => {
       tier: null,
       adaptive: false,
       clock: null,
+      stats: false,
     });
   });
 
@@ -40,10 +43,17 @@ describe('parseEngineOptions', () => {
     expect(parseEngineOptions('?clock=night').clock).toBe(0);
   });
 
+  it('turns the stats readout on only for stats=1', () => {
+    expect(parseEngineOptions('?stats=1').stats).toBe(true);
+    expect(parseEngineOptions('?stats=0').stats).toBe(false);
+    expect(parseEngineOptions('?tier=low&stats=1')).toMatchObject({ tier: 'low', stats: true });
+  });
+
   it('rejects unknown values with a message naming the valid ones', () => {
     expect(() => parseEngineOptions('?backend=vulkan')).toThrow(/auto, webgpu, webgl/);
     expect(() => parseEngineOptions('?tier=extreme')).toThrow(/low, medium, high, ultra/);
     expect(() => parseEngineOptions('?adaptive=yes')).toThrow(/0 or 1/);
+    expect(() => parseEngineOptions('?stats=yes')).toThrow(/0 or 1/);
     expect(() => parseEngineOptions('?clock=noon')).toThrow(/HH:MM, day or night/);
   });
 });
