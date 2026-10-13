@@ -143,7 +143,10 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     }
   });
 
+  const secure = new URL(appOrigin).protocol === 'https:';
   app.addHook('onSend', async (_req, reply) => {
+    reply.headers(SECURITY_HEADERS);
+    if (secure) reply.header('strict-transport-security', HSTS);
     if (!indexable) reply.header('x-robots-tag', 'noindex, nofollow');
   });
 
@@ -375,6 +378,33 @@ export function buildApp(opts: AppOptions): FastifyInstance {
 
   return app;
 }
+
+// wasm-unsafe-eval: meshopt and basis transcoders. unsafe-eval: the basis transcoder is an emscripten
+// embind module that calls new Function, and KTX2Loader runs it in a blob: worker, which inherits the
+// document's policy (verified: without it every KTX2 load throws EvalError). worker-src blob: same loader. img-src blob: the account export download. style-src unsafe-inline: React style= attributes.
+export const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval'",
+  "worker-src 'self' blob:",
+  "connect-src 'self'",
+  "img-src 'self' data: blob:",
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join('; ');
+
+const HSTS = 'max-age=31536000; includeSubDomains';
+
+const SECURITY_HEADERS = {
+  'content-security-policy': CONTENT_SECURITY_POLICY,
+  'x-content-type-options': 'nosniff',
+  'referrer-policy': 'strict-origin-when-cross-origin',
+  'permissions-policy': 'camera=(), microphone=(), geolocation=()',
+  'cross-origin-opener-policy': 'same-origin',
+};
 
 // Vite emits content-hashed bundles flat in assets/; models and textures copied from public/ live in
 // subdirectories under stable names, so they must stay revalidatable.
