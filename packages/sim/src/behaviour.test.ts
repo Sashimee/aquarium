@@ -526,15 +526,154 @@ describe('behaviour traits', () => {
   });
 
   it('maps traits to behaviours', () => {
-    const s = toSimSpecies(withTraits(['shoal', 'air-gulp', 'glass-grazer']));
-    expect(s.shoal).toBe(true);
-    expect(s.airGulp).toBe(true);
-    expect(s.grazer).toBe('glass');
-    expect(s.bellyToSurface).toBe(true);
+    const cory = toSimSpecies(bronzeCorydoras);
+    expect(cory.shoal).toBe(true);
+    expect(cory.airGulp).toBe(true);
+    const oto = toSimSpecies(otocinclus);
+    expect(oto.grazer).toBe('glass');
+    expect(oto.bellyToSurface).toBe(true);
     expect(toSimSpecies(royalGramma).home).toBe('cave');
     expect(toSimSpecies(clownfish).home).toBe('anemone');
     expect(toSimSpecies(angelfish).home).toBe('station');
   });
+  const withGait = (
+    species: SpeciesInput,
+    gait: SpeciesInput['locomotion']['gait'],
+    traits: SpeciesInput['behaviour']['traits'],
+  ): SpeciesInput => ({
+    ...species,
+    behaviour: { ...species.behaviour, traits },
+    locomotion: { ...species.locomotion, gait },
+  });
+
+  it('rejects air-gulp on a gait other than forage, where a gulp never starts', () => {
+    for (const gait of ['burst-and-coast', 'cruise', 'hover'] as const) {
+      expect(() => toSimSpecies(withGait(neonTetra, gait, ['air-gulp']))).toThrow(
+        /species "neon-tetra": trait "air-gulp" needs gait "forage"/,
+      );
+    }
+    expect(toSimSpecies(withGait(neonTetra, 'forage', ['air-gulp'])).airGulp).toBe(true);
+  });
+
+  it('rejects rock-grazer on a fish with a home or a forage gait, which never swims free', () => {
+    const rejects = /species "yellow-tang": trait "rock-grazer" needs a gait other than "hover"/;
+    for (const gait of ['hover', 'forage'] as const) {
+      expect(() => toSimSpecies(withGait(yellowTang, gait, ['rock-grazer']))).toThrow(rejects);
+    }
+    for (const home of ['anemone-host', 'cave-dweller'] as const) {
+      expect(() => toSimSpecies(withGait(yellowTang, 'cruise', ['rock-grazer', home]))).toThrow(
+        rejects,
+      );
+    }
+    for (const gait of ['burst-and-coast', 'cruise'] as const) {
+      expect(toSimSpecies(withGait(yellowTang, gait, ['rock-grazer'])).grazer).toBe('rock');
+    }
+  });
+
+  it('rejects glass-grazer on a forage gait, whose bottom foraging takes precedence', () => {
+    expect(() => toSimSpecies(withGait(otocinclus, 'forage', ['glass-grazer']))).toThrow(
+      /species "otocinclus": trait "glass-grazer" needs a gait other than "forage"/,
+    );
+    for (const gait of ['burst-and-coast', 'cruise', 'hover'] as const) {
+      expect(toSimSpecies(withGait(otocinclus, gait, ['glass-grazer'])).grazer).toBe('glass');
+    }
+  });
+
+  it('rejects anemone-host on a forager or glass grazer, which would never host', () => {
+    expect(() => toSimSpecies(withGait(clownfish, 'forage', ['anemone-host']))).toThrow(
+      /species "ocellaris-clownfish": trait "anemone-host" needs a gait other than "forage" and no "glass-grazer"/,
+    );
+    expect(() =>
+      toSimSpecies(withGait(clownfish, 'hover', ['anemone-host', 'glass-grazer'])),
+    ).toThrow(/trait "anemone-host" needs a gait other than "forage" and no "glass-grazer"/);
+    for (const gait of ['burst-and-coast', 'cruise', 'hover'] as const) {
+      expect(toSimSpecies(withGait(clownfish, gait, ['anemone-host'])).home).toBe('anemone');
+    }
+  });
+
+  it('accepts cave-dweller on a forager or a glass grazer', () => {
+    expect(toSimSpecies(withGait(bronzeCorydoras, 'forage', ['cave-dweller'])).home).toBe('cave');
+    expect(toSimSpecies(withGait(otocinclus, 'hover', ['glass-grazer', 'cave-dweller'])).home).toBe(
+      'cave',
+    );
+  });
+});
+
+describe('cave-dwelling foragers and glass grazers', { timeout: LONG }, () => {
+  const caveCory: SpeciesInput = {
+    ...bronzeCorydoras,
+    id: 'cave-cory',
+    behaviour: { ...bronzeCorydoras.behaviour, traits: ['cave-dweller'] },
+  };
+  const pleco: SpeciesInput = {
+    ...otocinclus,
+    id: 'pleco',
+    behaviour: {
+      ...otocinclus.behaviour,
+      schooling: undefined,
+      traits: ['glass-grazer', 'cave-dweller'],
+    },
+  };
+
+  for (const [species, active] of [
+    [caveCory, FishState.Forage],
+    [pleco, FishState.Graze],
+  ] as const) {
+    it(`${species.id} keeps its own gait by day and shelters in the cave when startled and at night`, () => {
+      const w = new World({
+        seed: 12,
+        tank: REEF_TANK,
+        species: [species],
+        decor: REEF_DECOR,
+        anchors: REEF_ANCHORS,
+        fish: spawnMany(species.id, 1),
+      });
+      const cave = anchorOf('cave');
+      const length = toSimSpecies(species).bodyLength;
+      let own = 0;
+      let sheltered = 0;
+      for (let t = 0; t < 3000; t++) {
+        w.step();
+        if (at(w.state, 0) === active) own++;
+        if (at(w.state, 0) === FishState.Shelter) sheltered++;
+      }
+      expect(own).toBeGreaterThan(0);
+      expect(sheltered).toBe(0);
+
+      let shelteredAfterStartle = false;
+      for (let tap = 0; tap < 10 && at(w.behaviour.startledAt, 0) < 0; tap++) {
+        const p = [at(w.position, 0), at(w.position, 1), at(w.position, 2)] as const;
+        w.startle({ position: [p[0], p[1], p[2] + 0.05], intensity: 1 });
+        for (let t = 0; t < 60; t++) {
+          w.step();
+          if (at(w.state, 0) === FishState.Shelter) shelteredAfterStartle = true;
+        }
+      }
+      expect(at(w.behaviour.startledAt, 0)).toBeGreaterThanOrEqual(0);
+      for (let t = 0; t < 600; t++) {
+        w.step();
+        if (at(w.state, 0) === FishState.Shelter) shelteredAfterStartle = true;
+      }
+      expect(shelteredAfterStartle).toBe(true);
+
+      w.setLight(0);
+      let inside = 0;
+      let night = 0;
+      for (let t = 0; t < 9000; t++) {
+        w.step();
+        if (t < 4500) continue;
+        const s = at(w.state, 0);
+        if (
+          (s === FishState.Shelter || s === FishState.Rest) &&
+          distanceTo(w, 0, cave.position) < cave.radius + length
+        ) {
+          inside++;
+        }
+        night++;
+      }
+      expect(inside / night).toBeGreaterThan(0.6);
+    });
+  }
 });
 
 describe('per-trait parameters', () => {
@@ -653,10 +792,10 @@ describe('per-trait parameters', () => {
 
   it('rejects a parameter object the sim would never read', () => {
     expect(() => toSimSpecies(tetra({ airGulp: { perHour: 4 } }))).toThrow(
-      /species "neon-tetra": behaviour.airGulp is set but needs trait "air-gulp" and gait "forage"/,
+      /species "neon-tetra": behaviour.airGulp is set but needs trait "air-gulp"/,
     );
     expect(() => toSimSpecies(tetra({ airGulp: { perHour: 4 } }, ['air-gulp']))).toThrow(
-      /behaviour.airGulp is set but needs trait "air-gulp" and gait "forage"/,
+      /trait "air-gulp" needs gait "forage"/,
     );
     expect(() => toSimSpecies(tetra({ grazing: { meanIntervalS: 10 } }, ['glass-grazer']))).toThrow(
       /behaviour.grazing is set but needs trait "rock-grazer"/,
@@ -670,9 +809,21 @@ describe('per-trait parameters', () => {
           grazing: { meanIntervalS: 5 },
         },
       }),
-    ).toThrow(/behaviour.grazing is set but needs trait "rock-grazer" on a species with no home/);
+    ).toThrow(/trait "rock-grazer" needs a gait other than "hover" or "forage"/);
     expect(() => toSimSpecies(tetra({ station: { radiusBodyLengths: 2 } }))).toThrow(
       /behaviour.station is set but needs gait "hover" or an anemone or cave home/,
+    );
+    expect(() =>
+      toSimSpecies({
+        ...bronzeCorydoras,
+        behaviour: {
+          ...bronzeCorydoras.behaviour,
+          traits: ['cave-dweller'],
+          station: { radiusBodyLengths: 2 },
+        },
+      }),
+    ).toThrow(
+      /behaviour.station is set but needs .* without gait "forage" or trait "glass-grazer"/,
     );
     expect(() => toSimSpecies(tetra({ refuge: { afterStartleS: 10 } }))).toThrow(
       /needs trait "cave-dweller"/,

@@ -787,6 +787,7 @@ export class Behaviour {
       this.planGulp(i, plan);
       return;
     }
+    if (this.planShelter(i, sp, plan)) return;
     if (sp.gait === 'forage') {
       this.planForage(i, sp, plan);
     } else if (sp.grazer === 'glass') {
@@ -1207,21 +1208,6 @@ export class Behaviour {
       );
       return;
     }
-    if (rest > 0.5 || at(this.shelterTimer, i) > 0) {
-      plan.comfort = BEHAVIOUR.shelterComfort;
-      const [tx, ty, tz] = this.approach(i, a);
-      this.holdStation(
-        i,
-        plan,
-        tx,
-        ty,
-        tz,
-        Math.max(0.6 * a.radius, 0.5 * length),
-        FishState.Shelter,
-      );
-      if (plan.state === FishState.Shelter) this.bellyToSurface(i, sp, plan);
-      return;
-    }
     let mx = ax;
     let my = ay;
     let mz = az;
@@ -1245,6 +1231,39 @@ export class Behaviour {
       FishState.Station,
     );
     this.bellyToSurface(i, sp, plan);
+  }
+
+  /** A cave-dweller hides in its cave at rest and after a startle, whatever its gait. */
+  private planShelter(i: number, sp: SimSpecies, plan: Plan): boolean {
+    const a = this.anchors[at(this.anchor, i)];
+    if (a?.kind !== 'cave') return false;
+    if (at(this.rest, i) <= 0.5 && at(this.shelterTimer, i) <= 0) return false;
+    plan.comfort = BEHAVIOUR.shelterComfort;
+    const length = at(this.host.bodyLength, i);
+    const [tx, cy, tz] = this.approach(i, a);
+    let ty = cy;
+    if (sp.gait === 'forage') {
+      // A bottom dweller shelters on the sand under the overhang, not at mid-height in the cave.
+      const { basin, position } = this.host;
+      const ground = basin.ground(at(position, i * 3), at(position, i * 3 + 2));
+      plan.floor = false;
+      plan.bandLo = ground + BEHAVIOUR.forageBandLowBodyLengths * length;
+      plan.bandHi = ground + BEHAVIOUR.forageBandHighBodyLengths * length;
+      ty =
+        basin.ground(tx, tz) +
+        0.5 * (BEHAVIOUR.forageBandLowBodyLengths + BEHAVIOUR.forageBandHighBodyLengths) * length;
+    }
+    this.holdStation(
+      i,
+      plan,
+      tx,
+      ty,
+      tz,
+      Math.max(0.6 * a.radius, 0.5 * length),
+      FishState.Shelter,
+    );
+    if (plan.state === FishState.Shelter) this.bellyToSurface(i, sp, plan);
+    return true;
   }
 
   /**
