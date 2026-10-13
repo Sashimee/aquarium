@@ -39,7 +39,7 @@ export function createAuth({
   database,
   mailer,
   rateLimits = DEFAULT_AUTH_RATE_LIMITS,
-  runInBackground = () => {},
+  runInBackground = (task) => void task,
 }: AuthDeps) {
   const origin = config.appUrl.origin;
   const secure = config.appUrl.protocol === 'https:';
