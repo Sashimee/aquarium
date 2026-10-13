@@ -106,8 +106,6 @@ describe('food input', () => {
       ['repeated id', records([2, 0, 0.2, 0, 0], [2, 0.1, 0.2, 0, 0]), /unique/],
       ['NaN position', records([2, 0, Number.NaN, 0, 0]), /finite/],
       ['infinite position', records([2, Infinity, 0.2, 0, 0]), /finite/],
-      ['outside the tank', records([2, 0.7, 0.2, 0, 0]), /outside the tank/],
-      ['below the sand', records([2, 0, -0.05, 0, 0]), /outside the tank/],
       ['unknown type', records([2, 0, 0.2, 0, FOOD_TYPES.length]), /typeIndex/],
       ['fractional type', records([2, 0, 0.2, 0, 0.5]), /typeIndex/],
       [
@@ -131,10 +129,36 @@ describe('food input', () => {
     expect(() => s.set([1, 0, 0.2, 0, 0] as unknown as Float32Array, 1)).toThrow(/Float32Array/);
   });
 
-  it('allows a floating flake just above the water line', () => {
+  it('clamps particles outside the water box onto it instead of dropping the buffer', () => {
     const s = store();
-    s.set(records([1, 0, SHOW_TANK.height + 0.01, 0, type('flakes')]), 0);
-    expect(s.count).toBe(1);
+    const { width, height, depth } = SHOW_TANK;
+    s.set(
+      records(
+        [1, 0, 0.2, 0, type('flakes')],
+        [2, 0, height + 0.07, 0, type('flakes')],
+        [3, 0, -0.05, 0, type('pellets')],
+        [4, width, 0.2, -depth, type('pellets')],
+        [5, -width, 0.2, depth, type('nori')],
+      ),
+      0,
+    );
+    expect(s.count).toBe(5);
+    const position = (id: number): number[] =>
+      Array.from(s.position.subarray(s.indexOf(id) * 3, s.indexOf(id) * 3 + 3));
+    expect(position(1)).toEqual([0, Math.fround(0.2), 0]);
+    expect(position(2)).toEqual([0, height, 0]);
+    expect(position(3)).toEqual([0, 0, 0]);
+    expect(position(4)).toEqual([width / 2, Math.fround(0.2), -depth / 2]);
+    expect(position(5)).toEqual([-width / 2, Math.fround(0.2), depth / 2]);
+    const hits = new Int32Array(MAX_FOOD_PARTICLES);
+    expect(s.near(width / 2, 0.2, -depth / 2, 0.01, hits)).toBe(1);
+    expect(at(hits, 0)).toBe(s.indexOf(4));
+  });
+
+  it('keeps clamped particles still: a particle held at the floor reads as resting', () => {
+    const s = store();
+    for (let t = 0; t < 30; t++) s.set(records([1, 0, -0.05 - 0.01 * t, 0, type('pellets')]), t);
+    expect(at(s.speed, s.indexOf(1))).toBe(0);
   });
 
   it('answers range queries exactly like a brute-force scan', () => {
@@ -189,6 +213,19 @@ describe('food input', () => {
         ),
         t,
       );
+    }
+    expect(at(s.speed, s.indexOf(1))).toBeCloseTo(0.02, 4);
+    expect(at(s.speed, s.indexOf(2))).toBe(0);
+  });
+
+  it('tracks speed by id through reordered and repeated reports within a tick', () => {
+    const s = store();
+    for (let t = 0; t < 60; t++) {
+      const y = 0.4 - 0.02 * t * (1 / 30);
+      const a: [number, number, number, number, number] = [1, 0, y, 0, type('pellets')];
+      const b: [number, number, number, number, number] = [2, 0.2, 0.004, 0, type('pellets')];
+      s.set(t % 2 === 0 ? records(a, b) : records(b, a), t);
+      s.set(records(b, [3, 0.1, 0.2, 0, type('flakes')], a), t);
     }
     expect(at(s.speed, s.indexOf(1))).toBeCloseTo(0.02, 4);
     expect(at(s.speed, s.indexOf(2))).toBe(0);

@@ -15,7 +15,6 @@ export {
 export { BEHAVIOUR, type Anchor, type Stimulus } from './behaviour.ts';
 export {
   FOOD_PARTICLES,
-  FOOD_POSITION_SLACK_M,
   FOOD_STRIDE,
   FOOD_TYPES,
   FoodField,

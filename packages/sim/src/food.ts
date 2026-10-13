@@ -1,5 +1,6 @@
 import type { FoodType } from '@aquarium/shared';
 import type { TankDimensions } from './sdf.ts';
+import { clamp } from './math.ts';
 
 /**
  * The `lifecycle.diet` vocabulary in the order of `foodTypeSchema` in packages/shared; a food
@@ -21,8 +22,6 @@ export const FoodField = { Id: 0, X: 1, Y: 2, Z: 3, Type: 4 } as const;
 export const MAX_FOOD_PARTICLES = 1024;
 /** Ids travel as float32, which holds every integer below 2^24 exactly. */
 export const MAX_FOOD_ID = 2 ** 24 - 1;
-/** How far outside the water body a particle may sit (a flake riding the meniscus). */
-export const FOOD_POSITION_SLACK_M = 0.02;
 
 /**
  * What one particle of each food type carries, in the feed portions of the lifecycle model, and
@@ -82,14 +81,22 @@ export class FoodStore {
   private readonly cellOf = new Int32Array(MAX_FOOD_PARTICLES);
   private readonly items = new Int32Array(MAX_FOOD_PARTICLES);
 
-  private index = new Map<number, number>();
+  // Three id → slot maps rotate between the current report, the speed reference and the one
+  // being built, so a report at 30 Hz allocates nothing.
+  private readonly indexMaps = [
+    new Map<number, number>(),
+    new Map<number, number>(),
+    new Map<number, number>(),
+  ] as const;
+  private index: Map<number, number> = this.indexMaps[0];
+  private ref: Map<number, number> = this.indexMaps[1];
   private eatenById = new Map<number, number>();
+  private eatenSpare = new Map<number, number>();
+  private readonly seen = new Set<number>();
   private lastTick = -1;
   private refTick = -1;
-  private ref = new Map<number, number>();
   private readonly refPosition = new Float64Array(MAX_FOOD_PARTICLES * 3);
   private readonly lastPosition = new Float64Array(MAX_FOOD_PARTICLES * 3);
-  private lastIndex = new Map<number, number>();
   private readonly lastSpeed = new Float64Array(MAX_FOOD_PARTICLES);
 
   constructor(tank: TankDimensions) {
@@ -102,28 +109,37 @@ export class FoodStore {
 
   /**
    * Replaces the particles with `buffer` (stride `FOOD_STRIDE`). The whole buffer is validated
-   * before anything changes, so a bad one leaves the previous food in place.
+   * before anything changes, so a malformed one leaves the previous food in place. Positions are
+   * clamped into the water box rather than rejected: the client's frame can be off by a few
+   * centimetres (sloped sand, the meniscus), and one stray particle must not drop all food.
    */
   set(buffer: Float32Array, tick: number): void {
     this.validate(buffer);
     const n = buffer.length / FOOD_STRIDE;
+    const last = this.index;
     // A report in a later tick than the last one turns that one into the reference the next
     // speeds are measured against; several reports within one tick share a reference.
     if (tick > this.lastTick && this.lastTick >= 0) {
-      this.ref = this.lastIndex;
+      this.ref = last;
       this.refTick = this.lastTick;
       this.refPosition.set(this.lastPosition.subarray(0, this.count * 3));
     }
-    const index = new Map<number, number>();
-    const eatenById = new Map<number, number>();
+    let index = this.indexMaps[0];
+    for (const m of this.indexMaps) {
+      if (m !== last && m !== this.ref) index = m;
+    }
+    index.clear();
+    const eatenById = this.eatenSpare;
+    eatenById.clear();
+    const { width, height, depth } = this.tank;
     const elapsed = (tick - this.refTick) * DT;
     const blend = elapsed > 0 ? 1 - Math.exp(-elapsed / SPEED_SMOOTHING_S) : 0;
     for (let k = 0; k < n; k++) {
       const o = k * FOOD_STRIDE;
       const id = at(buffer, o + FoodField.Id);
-      const x = at(buffer, o + FoodField.X);
-      const y = at(buffer, o + FoodField.Y);
-      const z = at(buffer, o + FoodField.Z);
+      const x = clamp(at(buffer, o + FoodField.X), -width / 2, width / 2);
+      const y = clamp(at(buffer, o + FoodField.Y), 0, height);
+      const z = clamp(at(buffer, o + FoodField.Z), -depth / 2, depth / 2);
       index.set(id, k);
       this.id[k] = id;
       this.position[k * 3] = x;
@@ -133,7 +149,7 @@ export class FoodStore {
       const eaten = this.eatenById.get(id) ?? 0;
       this.eaten[k] = eaten;
       if (eaten > 0) eatenById.set(id, eaten);
-      const before = this.lastIndex.get(id);
+      const before = last.get(id);
       const previous = before === undefined ? 0 : at(this.lastSpeed, before);
       const r = this.ref.get(id);
       if (r === undefined || elapsed <= 0) {
@@ -150,8 +166,8 @@ export class FoodStore {
     }
     this.count = n;
     this.index = index;
+    this.eatenSpare = this.eatenById;
     this.eatenById = eatenById;
-    this.lastIndex = index;
     this.lastTick = tick;
     this.lastPosition.set(this.position.subarray(0, n * 3));
     this.lastSpeed.set(this.speed.subarray(0, n));
@@ -251,9 +267,8 @@ export class FoodStore {
     if (n > MAX_FOOD_PARTICLES) {
       throw new RangeError(`food: ${n} particles exceeds the cap of ${MAX_FOOD_PARTICLES}`);
     }
-    const { width, height, depth } = this.tank;
-    const slack = FOOD_POSITION_SLACK_M;
-    const seen = new Set<number>();
+    const seen = this.seen;
+    seen.clear();
     for (let k = 0; k < n; k++) {
       const o = k * FOOD_STRIDE;
       const id = at(buffer, o + FoodField.Id);
@@ -265,16 +280,9 @@ export class FoodStore {
       const x = at(buffer, o + FoodField.X);
       const y = at(buffer, o + FoodField.Y);
       const z = at(buffer, o + FoodField.Z);
-      if (![x, y, z].every(Number.isFinite)) {
+      if (!(Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z))) {
         throw new RangeError(`food ${id}: position must be finite, got [${x}, ${y}, ${z}]`);
       }
-      const inside =
-        Math.abs(x) <= width / 2 + slack &&
-        y >= -slack &&
-        y <= height + slack &&
-        Math.abs(z) <= depth / 2 + slack;
-      if (!inside)
-        throw new RangeError(`food ${id}: position [${x}, ${y}, ${z}] is outside the tank`);
       const type = at(buffer, o + FoodField.Type);
       if (!(Number.isInteger(type) && type >= 0 && type < FOOD_TYPES.length)) {
         throw new RangeError(
