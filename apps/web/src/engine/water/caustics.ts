@@ -151,6 +151,17 @@ export class Caustics {
     this.bakeTarget.dispose();
   }
 
+  /**
+   * The baked pattern with unit mean at a surface point (metres), for effects that need the
+   * caustic shape but not its animation detail. Sampled at an explicit level, so it may be
+   * called from non-uniform control flow.
+   */
+  bakedAt(surfacePoint: Node<'vec2'>, scale: number): Node<'float'> {
+    const cells = surfacePoint.mul(this.cellsPerMetre.mul(scale / BAKE_PERIOD_CELLS));
+    const drift = vec2(0.021, 0.013).mul(time.mul(this.speed));
+    return texture(this.bakeTarget.texture, cells.add(drift)).level(float(1)).r.mul(PATTERN_GAIN);
+  }
+
   /** Colour node for the hood light: radiance x surface-to-point transmittance x caustics. */
   lightColorNode(): Node<'vec3'> {
     const { medium } = this;

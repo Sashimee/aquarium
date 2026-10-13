@@ -1,0 +1,235 @@
+import { describe, expect, it } from 'vitest';
+import type { FishSpawn } from '@aquarium/sim';
+import { FISH_1, FISH_2, FISH_3, TANK_A, TANK_B, fishFixture } from '../sync/fixtures';
+import { hashString, TankRoster } from './roster';
+
+const DEMO: readonly FishSpawn[] = [
+  { id: 'neon-tetra-0', species: 'neon-tetra', bodyLengthM: 0.03 },
+  { id: 'angelfish-0', species: 'angelfish' },
+];
+
+function loaded(fish = [fishFixture(FISH_1), fishFixture(FISH_2)]): TankRoster {
+  const roster = new TankRoster(DEMO);
+  roster.load({ tankId: TANK_A, biome: 'freshwater', decorLayout: [], fish });
+  return roster;
+}
+
+function simId(roster: TankRoster, serverId: string): string {
+  const id = roster.simIdOf(serverId);
+  if (id === undefined) throw new Error(`no sim id for ${serverId}`);
+  return id;
+}
+
+describe('TankRoster', () => {
+  it('starts with the demo stock, which has no server ids', () => {
+    const roster = new TankRoster(DEMO);
+    const fish = [...roster.entries()];
+    expect(fish.map((f) => f.key)).toEqual(['neon-tetra-0', 'angelfish-0']);
+    expect(fish.every((f) => f.serverId === null && f.phase === 'swimming')).toBe(true);
+    expect(fish[0]?.lengthM).toBe(0.03);
+    expect(roster.tankId).toBeNull();
+  });
+
+  it('replaces the demo stock with the saved fish on load and maps server ids', () => {
+    const roster = loaded([
+      fishFixture(FISH_1, { size: 0.025, health: 0.4 }),
+      fishFixture(FISH_2, { species: 'betta', status: 'dead', health: 0 }),
+    ]);
+    expect(roster.size).toBe(2);
+    expect(roster.tankId).toBe(TANK_A);
+    expect(roster.biome).toBe('freshwater');
+    const one = roster.get(simId(roster, FISH_1));
+    expect(one).toMatchObject({ serverId: FISH_1, key: FISH_1, lengthM: 0.025, health: 0.4 });
+    expect(one?.phase).toBe('swimming');
+    expect(roster.get(simId(roster, FISH_2))?.phase).toBe('dead');
+    expect(roster.serverIdOf(simId(roster, FISH_2))).toBe(FISH_2);
+    expect(roster.swimming().map((f) => f.serverId)).toEqual([FISH_1]);
+    expect([...roster.entries()].some((f) => f.serverId === null)).toBe(false);
+  });
+
+  it('never reuses a sim id, even when the same fish loads again', () => {
+    const roster = loaded();
+    const first = simId(roster, FISH_1);
+    roster.unload({ tankId: TANK_A, reason: 'switch' });
+    roster.load({
+      tankId: TANK_A,
+      biome: 'freshwater',
+      decorLayout: [],
+      fish: [fishFixture(FISH_1)],
+    });
+    expect(simId(roster, FISH_1)).not.toBe(first);
+    expect(roster.get(first)).toBeUndefined();
+  });
+
+  it('restores the demo stock on unload and leaves none of the tank behind', () => {
+    const roster = loaded();
+    const before = roster.revision;
+    expect(roster.unload({ tankId: TANK_A, reason: 'switch' })).toBe(true);
+    expect(roster.revision).toBeGreaterThan(before);
+    expect(roster.tankId).toBeNull();
+    expect([...roster.entries()].map((f) => f.key)).toEqual(['neon-tetra-0', 'angelfish-0']);
+    expect(roster.simIdOf(FISH_1)).toBeUndefined();
+    expect(roster.simIdOf(FISH_2)).toBeUndefined();
+  });
+
+  it('ignores an unload for a tank that is not the loaded one', () => {
+    const roster = loaded();
+    const before = roster.revision;
+    expect(roster.unload({ tankId: TANK_B, reason: 'switch' })).toBe(false);
+    expect(roster.revision).toBe(before);
+    expect(roster.size).toBe(2);
+    expect(new TankRoster(DEMO).unload({ tankId: TANK_A, reason: 'switch' })).toBe(false);
+  });
+
+  it('switching tanks keeps only the new tank, with no demo fish', () => {
+    const roster = loaded();
+    roster.load({
+      tankId: TANK_B,
+      biome: 'reef',
+      decorLayout: [],
+      fish: [fishFixture(FISH_3, { tankId: TANK_B, species: 'ocellaris-clownfish' })],
+    });
+    expect([...roster.entries()].map((f) => f.serverId)).toEqual([FISH_3]);
+    expect(roster.simIdOf(FISH_1)).toBeUndefined();
+    expect(roster.biome).toBe('reef');
+    expect(roster.unload({ tankId: TANK_A, reason: 'switch' })).toBe(false);
+    expect(roster.size).toBe(1);
+  });
+
+  it('bags an acclimating fish outside the sim until it is released', () => {
+    const roster = loaded();
+    const before = roster.revision;
+    const bagged = roster.add({ tankId: TANK_A, fish: fishFixture(FISH_3), acclimate: true });
+    expect(bagged?.phase).toBe('bagged');
+    expect(roster.revision).toBe(before);
+    expect(roster.swimming().map((f) => f.serverId)).toEqual([FISH_1, FISH_2]);
+
+    expect(roster.release({ tankId: TANK_A, fishId: FISH_3 })?.phase).toBe('swimming');
+    expect(roster.revision).toBe(before + 1);
+    expect(roster.swimming().map((f) => f.serverId)).toEqual([FISH_1, FISH_2, FISH_3]);
+    expect(roster.release({ tankId: TANK_A, fishId: FISH_3 })).toBeNull();
+    expect(roster.revision).toBe(before + 1);
+  });
+
+  it('adds a fish without a bag straight into the sim, and ignores duplicates and other tanks', () => {
+    const roster = loaded([fishFixture(FISH_1)]);
+    const before = roster.revision;
+    expect(roster.add({ tankId: TANK_A, fish: fishFixture(FISH_2), acclimate: false })?.phase).toBe(
+      'swimming',
+    );
+    expect(roster.revision).toBe(before + 1);
+    expect(roster.add({ tankId: TANK_A, fish: fishFixture(FISH_2), acclimate: false })).toBeNull();
+    expect(roster.add({ tankId: TANK_B, fish: fishFixture(FISH_3), acclimate: false })).toBeNull();
+    expect(roster.release({ tankId: TANK_B, fishId: FISH_2 })).toBeNull();
+    expect(roster.size).toBe(2);
+    expect(
+      new TankRoster(DEMO).add({ tankId: TANK_A, fish: fishFixture(FISH_3), acclimate: false }),
+    ).toBeNull();
+  });
+
+  it('takes a dying fish out of the sim and keeps it mapped for the net', () => {
+    const roster = loaded();
+    const before = roster.revision;
+    const dead = roster.died({ tankId: TANK_A, fish: fishFixture(FISH_1, { status: 'dead' }) });
+    expect(dead).toMatchObject({ phase: 'dead', diedLive: true, health: 0 });
+    expect(roster.revision).toBe(before + 1);
+    expect(roster.simIdOf(FISH_1)).toBeDefined();
+    expect(
+      roster.died({ tankId: TANK_A, fish: fishFixture(FISH_1, { status: 'dead' }) }),
+    ).toBeNull();
+    expect(
+      roster.died({ tankId: TANK_B, fish: fishFixture(FISH_2, { status: 'dead' }) }),
+    ).toBeNull();
+  });
+
+  it('adds an unknown fish that died as already dead', () => {
+    const roster = loaded([fishFixture(FISH_1)]);
+    const before = roster.revision;
+    const dead = roster.died({ tankId: TANK_A, fish: fishFixture(FISH_3, { status: 'dead' }) });
+    expect(dead).toMatchObject({ serverId: FISH_3, phase: 'dead', diedLive: false });
+    expect(roster.revision).toBe(before);
+  });
+
+  it('a bagged fish that dies never enters the sim', () => {
+    const roster = loaded([fishFixture(FISH_1)]);
+    roster.add({ tankId: TANK_A, fish: fishFixture(FISH_2), acclimate: true });
+    const before = roster.revision;
+    roster.died({ tankId: TANK_A, fish: fishFixture(FISH_2, { status: 'dead' }) });
+    expect(roster.revision).toBe(before);
+    expect(roster.release({ tankId: TANK_A, fishId: FISH_2 })).toBeNull();
+  });
+
+  it('removes a fish and its mapping', () => {
+    const roster = loaded();
+    roster.died({ tankId: TANK_A, fish: fishFixture(FISH_2, { status: 'dead' }) });
+    const gone = simId(roster, FISH_2);
+    const before = roster.revision;
+    expect(roster.removed({ tankId: TANK_A, fishId: FISH_2, reason: 'netted' })).not.toBeNull();
+    expect(roster.revision).toBe(before);
+    expect(roster.get(gone)).toBeUndefined();
+    expect(roster.simIdOf(FISH_2)).toBeUndefined();
+    expect(roster.removed({ tankId: TANK_A, fishId: FISH_2, reason: 'netted' })).toBeNull();
+
+    roster.removed({ tankId: TANK_A, fishId: FISH_1, reason: 'gone' });
+    expect(roster.revision).toBe(before + 1);
+    expect(roster.size).toBe(0);
+  });
+
+  describe('translateAte', () => {
+    it('reports bites under server ids while a saved tank is loaded', () => {
+      const roster = loaded();
+      const bites = roster.translateAte([
+        { fishId: simId(roster, FISH_1), foodId: 3, portion: 0.1 },
+        { fishId: simId(roster, FISH_2), foodId: 4, portion: 0.2 },
+      ]);
+      expect(bites).toEqual([
+        { fishId: FISH_1, foodId: 3, portion: 0.1 },
+        { fishId: FISH_2, foodId: 4, portion: 0.2 },
+      ]);
+    });
+
+    it('drops bites from dead, bagged and unknown fish', () => {
+      const roster = loaded();
+      roster.add({ tankId: TANK_A, fish: fishFixture(FISH_3), acclimate: true });
+      roster.died({ tankId: TANK_A, fish: fishFixture(FISH_2, { status: 'dead' }) });
+      const bites = roster.translateAte([
+        { fishId: simId(roster, FISH_2), foodId: 1, portion: 0.1 },
+        { fishId: simId(roster, FISH_3), foodId: 2, portion: 0.1 },
+        { fishId: 'fish-999', foodId: 3, portion: 0.1 },
+        { fishId: FISH_1, foodId: 4, portion: 0.1 },
+      ]);
+      expect(bites).toEqual([]);
+    });
+
+    it('drops bites from the previous tank after a switch', () => {
+      const roster = loaded();
+      const stale = simId(roster, FISH_1);
+      roster.load({
+        tankId: TANK_B,
+        biome: 'freshwater',
+        decorLayout: [],
+        fish: [fishFixture(FISH_3)],
+      });
+      expect(roster.translateAte([{ fishId: stale, foodId: 1, portion: 0.1 }])).toEqual([]);
+    });
+
+    it('passes demo bites on under the demo ids', () => {
+      const roster = new TankRoster(DEMO);
+      const [neon] = roster.swimming();
+      if (neon === undefined) throw new Error('demo stock is empty');
+      expect(roster.translateAte([{ fishId: neon.simId, foodId: 1, portion: 0.1 }])).toEqual([
+        { fishId: 'neon-tetra-0', foodId: 1, portion: 0.1 },
+      ]);
+    });
+  });
+});
+
+describe('hashString', () => {
+  it('is stable and spreads nearby keys', () => {
+    expect(hashString(FISH_1)).toBe(hashString(FISH_1));
+    expect(hashString(FISH_1)).not.toBe(hashString(FISH_2));
+    expect(hashString('')).toBe(0x811c9dc5);
+    expect(Number.isInteger(hashString('neon-tetra-0'))).toBe(true);
+    expect(hashString('neon-tetra-0')).toBeGreaterThanOrEqual(0);
+  });
+});

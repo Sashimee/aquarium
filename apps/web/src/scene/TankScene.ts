@@ -1,5 +1,5 @@
 import type { Material, MeshStandardNodeMaterial, Texture } from 'three/webgpu';
-import type { DecorItem, PlantPatch, PresetLayout } from '@aquarium/shared';
+import type { Biome, DecorItem, PlantPatch, PresetLayout } from '@aquarium/shared';
 import type { Engine } from '../engine/Engine';
 import type { Tier, TierSettings } from '../engine/quality/tiers';
 import { substrateHeight } from '../engine/tank/substrate';
@@ -11,6 +11,17 @@ import {
   anemoneReach,
   type SceneAnchor,
 } from './anemone';
+import {
+  EUPHYLLIA_DETAIL,
+  EuphylliaGroup,
+  euphylliaCollider,
+  euphylliaReach,
+  generateEuphyllia,
+  type EuphylliaMesh,
+  parseEuphylliaId,
+  type EuphylliaDetail,
+  type EuphylliaVariant,
+} from './euphyllia';
 import { ColliderField, type CapsuleCollider, type Collider } from './colliders';
 import { CurrentField, type CurrentParameters } from './current';
 import { fitCollider, Hardscape, HARDSCAPE_KINDS } from './hardscape';
@@ -22,7 +33,7 @@ import { RebuildQueue } from './rebuildQueue';
 import { PlantGroup, maxSway, type PlantEntry } from './plants';
 import { createSubstrateMaterial, type SubstrateLayers } from './substrate';
 
-const DEFAULT_CURRENT: CurrentParameters = {
+export const DEFAULT_CURRENT: CurrentParameters = {
   direction: [1, 0],
   speed: 0.04,
   gustPeriodS: 9,
@@ -43,7 +54,15 @@ interface SubstrateInstall {
   readonly textureSize: 1024 | 2048;
 }
 
+interface EuphylliaItem {
+  readonly item: DecorItem;
+  readonly variant: EuphylliaVariant;
+  readonly seed: number;
+  readonly fullDetail?: EuphylliaMesh;
+}
+
 interface VisualKey {
+  readonly euphylliaDetail: EuphylliaDetail;
   readonly plantLod: ModelLod;
   readonly hardscapeLod: ModelLod;
   readonly textureSize: 1024 | 2048;
@@ -51,6 +70,7 @@ interface VisualKey {
 
 function keyFor(tier: Tier, settings: Readonly<TierSettings>): VisualKey {
   return {
+    euphylliaDetail: EUPHYLLIA_DETAIL[tier],
     plantLod: PLANT_LOD[tier],
     hardscapeLod: HARDSCAPE_LOD[tier],
     textureSize: settings.textureSize,
@@ -59,6 +79,7 @@ function keyFor(tier: Tier, settings: Readonly<TierSettings>): VisualKey {
 
 function sameKey(a: VisualKey, b: VisualKey): boolean {
   return (
+    a.euphylliaDetail === b.euphylliaDetail &&
     a.plantLod === b.plantLod &&
     a.hardscapeLod === b.hardscapeLod &&
     a.textureSize === b.textureSize
@@ -76,12 +97,14 @@ export class TankScene {
 
   private hardscape: Hardscape | null = null;
   private anemones: AnemoneGroup[] = [];
+  private euphyllias: EuphylliaGroup[] = [];
   private plantGroups: PlantGroup[] = [];
   private installedKey: VisualKey | null = null;
   private readonly queue: RebuildQueue<VisualKey>;
   private substrate: SubstrateInstall | null = null;
   private readonly placeholderSubstrate: Material | Material[];
   private disposed = false;
+  private readonly presetHard: readonly DecorItem[];
   private readonly releases: (() => void)[] = [];
 
   private constructor(
@@ -90,11 +113,13 @@ export class TankScene {
     private readonly preset: PresetLayout,
     private readonly colliderData: readonly Collider[],
     private readonly plantEntries: ReadonlyMap<string, PlantEntry[]>,
-    private readonly hardItems: readonly { item: DecorItem; kind: string }[],
+    private hardItems: readonly { item: DecorItem; kind: string }[],
     private readonly anemoneItems: readonly DecorItem[],
+    private readonly euphylliaItems: readonly EuphylliaItem[],
     private readonly anchorData: readonly SceneAnchor[],
     options: SceneOptions,
   ) {
+    this.presetHard = hardItems.map((h) => h.item);
     this.queue = new RebuildQueue(
       sameKey,
       (key, isStale) => this.rebuildVisuals(key, isStale),
@@ -141,7 +166,13 @@ export class TankScene {
     const hardItems: { item: DecorItem; kind: string }[] = [];
     const layoutPlants: DecorItem[] = [];
     const anemoneItems: DecorItem[] = [];
+    const euphylliaItems: EuphylliaItem[] = [];
     for (const item of preset.decor) {
+      const procedural = parseEuphylliaId(item.assetId);
+      if (procedural) {
+        euphylliaItems.push({ item, ...procedural });
+        continue;
+      }
       const kind = catalog.get(item.assetId).kind;
       if (HARDSCAPE_KINDS.has(kind)) hardItems.push({ item, kind });
       else if (kind === 'plant') layoutPlants.push(item);
@@ -165,11 +196,7 @@ export class TankScene {
     }
     const hard = new ColliderField(colliders);
 
-    const { length, depth, glass } = dimensions;
-    const extent: Extent = {
-      halfLength: length / 2 - glass - WALL_MARGIN,
-      halfDepth: depth / 2 - glass - WALL_MARGIN,
-    };
+    const extent = glassExtent(dimensions);
     const ground = (x: number, z: number) => substrateHeight(dimensions, x, z);
     const normal = new Float64Array(3);
     const blocked = (x: number, y: number, z: number) =>
@@ -234,6 +261,14 @@ export class TankScene {
       anchors.push(anemoneAnchor(`anemone-${i + 1}`, entry, item));
     });
 
+    const current = preset.current ?? DEFAULT_CURRENT;
+    for (const [i, entry] of euphylliaItems.entries()) {
+      const fullDetail = generateEuphyllia(entry.variant, entry.seed, 2);
+      euphylliaItems[i] = { ...entry, fullDetail };
+      checkEuphylliaClearOfGlass(entry.item, fullDetail.bounds, current, extent);
+      colliders.push(euphylliaCollider(fullDetail.bounds, entry.item));
+    }
+
     const scene = new TankScene(
       engine,
       library,
@@ -242,6 +277,7 @@ export class TankScene {
       plantEntries,
       hardItems,
       anemoneItems,
+      euphylliaItems,
       anchors,
       options,
     );
@@ -253,6 +289,64 @@ export class TankScene {
     scene.releases.push(applyBiomeLighting(engine, preset.biome));
     scene.releases.push(engine.quality.register('scene', (s, t) => scene.applyTier(t, s)));
     return scene;
+  }
+
+  get biome(): Biome {
+    return this.preset.biome;
+  }
+
+  /** The preset's movable pieces, which an unedited tank shows. */
+  get presetHardDecor(): readonly DecorItem[] {
+    return this.presetHard;
+  }
+
+  /** Plants and anemones from the preset, which stay where they are. */
+  get fixedDecor(): readonly DecorItem[] {
+    const catalog = this.library.catalog;
+    return this.preset.decor.filter((i) => !HARDSCAPE_KINDS.has(catalog.get(i.assetId).kind));
+  }
+
+  catalogEntries(): IterableIterator<CatalogEntry> {
+    return this.library.catalog.entries();
+  }
+
+  /**
+   * Swaps the rocks, wood and ornaments for `items` at the installed quality tier. The scene's
+   * own collider list is not rebuilt: the sim gets the moved pieces' colliders from the decor layer.
+   */
+  async setHardDecor(items: readonly DecorItem[]): Promise<void> {
+    await this.queue.settled();
+    const key = this.installedKey;
+    if (this.disposed || !key) return;
+    const catalog = this.library.catalog;
+    const next = items.map((item) => ({ item, kind: catalog.get(item.assetId).kind }));
+    for (const { item, kind } of next) {
+      if (!HARDSCAPE_KINDS.has(kind)) {
+        throw new Error(
+          `Decor "${item.assetId}" is a ${kind}, which cannot be placed as hardscape`,
+        );
+      }
+    }
+    const hardscape = new Hardscape();
+    for (const { item } of next) {
+      const entry = catalog.get(item.assetId);
+      const model = await this.library.load(item.assetId, key.hardscapeLod, key.textureSize);
+      hardscape.add(entry, model, item);
+    }
+    if (this.disposed) {
+      hardscape.dispose();
+      return;
+    }
+    this.hardscape?.dispose();
+    this.hardscape = hardscape;
+    this.hardItems = next;
+    this.engine.scene.add(hardscape.group);
+    await this.evictUnused();
+  }
+
+  /** Moves one piece's meshes now; used while dragging, before the layout is committed. */
+  moveHardDecor(index: number, item: DecorItem): void {
+    this.hardscape?.setItem(index, item);
   }
 
   get colliderList(): readonly Collider[] {
@@ -328,6 +422,7 @@ export class TankScene {
     const hardscape = new Hardscape();
     const groups: PlantGroup[] = [];
     const anemones: AnemoneGroup[] = [];
+    const euphyllias: EuphylliaGroup[] = [];
     let substrate: SubstrateInstall | null = null;
     try {
       if (!this.substrate || this.substrate.textureSize !== key.textureSize) {
@@ -347,10 +442,18 @@ export class TankScene {
         const model = await this.library.load(item.assetId, key.hardscapeLod, key.textureSize);
         anemones.push(new AnemoneGroup(entry, model, item, this.current));
       }
+      for (const { item, variant, seed, fullDetail } of this.euphylliaItems) {
+        const mesh =
+          key.euphylliaDetail === 2 && fullDetail
+            ? fullDetail
+            : generateEuphyllia(variant, seed, key.euphylliaDetail);
+        euphyllias.push(new EuphylliaGroup(mesh, item, this.current));
+      }
     } catch (error) {
       hardscape.dispose();
       for (const group of groups) group.dispose();
       for (const anemone of anemones) anemone.dispose();
+      for (const coral of euphyllias) coral.dispose();
       if (substrate) this.discardSubstrate(substrate);
       throw error;
     }
@@ -358,6 +461,7 @@ export class TankScene {
       hardscape.dispose();
       for (const group of groups) group.dispose();
       for (const anemone of anemones) anemone.dispose();
+      for (const coral of euphyllias) coral.dispose();
       if (substrate) this.discardSubstrate(substrate);
       await this.evictUnused();
       return false;
@@ -365,11 +469,14 @@ export class TankScene {
     this.hardscape?.dispose();
     for (const group of this.plantGroups) group.dispose();
     for (const anemone of this.anemones) anemone.dispose();
+    for (const coral of this.euphyllias) coral.dispose();
     this.hardscape = hardscape;
     this.plantGroups = groups;
     this.anemones = anemones;
+    this.euphyllias = euphyllias;
     this.engine.scene.add(hardscape.group);
     for (const anemone of anemones) this.engine.scene.add(anemone.object);
+    for (const coral of euphyllias) this.engine.scene.add(coral.object);
     for (const group of groups) {
       group.setDensity(this.engine.quality.settings.plantDensity);
       this.engine.scene.add(group.object);
@@ -410,6 +517,7 @@ export class TankScene {
     this.hardscape?.dispose();
     for (const group of this.plantGroups) group.dispose();
     for (const anemone of this.anemones) anemone.dispose();
+    for (const coral of this.euphyllias) coral.dispose();
     this.overlay.dispose();
     if (this.substrate) {
       this.engine.tank.substrate.material = this.placeholderSubstrate;
@@ -420,7 +528,18 @@ export class TankScene {
   }
 }
 
-function checkClearOfGlass(
+export function glassExtent(dimensions: {
+  readonly length: number;
+  readonly depth: number;
+  readonly glass: number;
+}): Extent {
+  return {
+    halfLength: dimensions.length / 2 - dimensions.glass - WALL_MARGIN,
+    halfDepth: dimensions.depth / 2 - dimensions.glass - WALL_MARGIN,
+  };
+}
+
+export function checkClearOfGlass(
   entry: CatalogEntry,
   item: DecorItem,
   current: CurrentParameters,
@@ -433,6 +552,23 @@ function checkClearOfGlass(
   ) {
     throw new Error(
       `Anemone "${item.assetId}" at ${item.position[0]}, ${item.position[2]} reaches ${reach.toFixed(3)} m and would cross the glass; move it inwards`,
+    );
+  }
+}
+
+export function checkEuphylliaClearOfGlass(
+  item: DecorItem,
+  bounds: EuphylliaMesh['bounds'],
+  current: CurrentParameters,
+  extent: Extent,
+): void {
+  const reach = euphylliaReach(bounds, item, current);
+  if (
+    Math.abs(item.position[0]) + reach > extent.halfLength ||
+    Math.abs(item.position[2]) + reach > extent.halfDepth
+  ) {
+    throw new Error(
+      `Coral "${item.assetId}" at ${item.position[0]}, ${item.position[2]} reaches ${reach.toFixed(3)} m and would cross the glass; move it inwards`,
     );
   }
 }

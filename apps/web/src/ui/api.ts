@@ -1,5 +1,13 @@
 import {
+  addFishRequestSchema,
   apiErrorSchema,
+  ateBatchRequestSchema,
+  careActionSchema,
+  createTankRequestSchema,
+  speciesListSchema,
+  tankListSchema,
+  tankSchema,
+  updateTankRequestSchema,
   creditsSchema,
   dataExportSchema,
   privacyPolicySchema,
@@ -8,7 +16,14 @@ import {
   signInRequestSchema,
   signUpRequestSchema,
   userSchema,
+  type AteReport,
+  type CareAction,
+  type DecorLayout,
   type Credits,
+  type CreateTankRequest,
+  type AddFishRequest,
+  type SpeciesSummary,
+  type Tank,
   type ErrorCode,
   type PrivacyPolicy,
   type SessionInfo,
@@ -121,6 +136,16 @@ export interface ApiClient {
   credits(): Promise<Credits>;
   exportData(): Promise<{ filename: string; text: string }>;
   deleteAccount(password: string): Promise<void>;
+  species(): Promise<SpeciesSummary[]>;
+  tanks(): Promise<Tank[]>;
+  tank(tankId: string): Promise<Tank>;
+  createTank(input: CreateTankRequest): Promise<Tank>;
+  renameTank(tankId: string, name: string): Promise<Tank>;
+  saveDecorLayout(tankId: string, layout: DecorLayout): Promise<Tank>;
+  addFish(tankId: string, input: AddFishRequest): Promise<Tank>;
+  netFish(tankId: string, fishId: string): Promise<Tank>;
+  care(tankId: string, action: CareAction): Promise<Tank>;
+  reportAte(tankId: string, reports: readonly AteReport[]): Promise<Tank>;
 }
 
 export function createApiClient(fetcher: Fetcher = (i, init) => fetch(i, init)): ApiClient {
@@ -147,6 +172,16 @@ export function createApiClient(fetcher: Fetcher = (i, init) => fetch(i, init)):
   async function post(path: string, body: unknown): Promise<Response> {
     const res = await send(path, {
       method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw await toError(res);
+    return res;
+  }
+
+  async function patch(path: string, body: unknown): Promise<Response> {
+    const res = await send(path, {
+      method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
     });
@@ -239,6 +274,53 @@ export function createApiClient(fetcher: Fetcher = (i, init) => fetch(i, init)):
     },
     async deleteAccount(password) {
       await post('/api/me/delete', password.length > 0 ? { password } : {});
+    },
+    async species() {
+      const res = await send('/api/species');
+      if (!res.ok) throw await toError(res);
+      return parsed(res, speciesListSchema);
+    },
+    async tanks() {
+      const res = await send('/api/tanks');
+      if (!res.ok) throw await toError(res);
+      return parsed(res, tankListSchema);
+    },
+    async tank(tankId) {
+      const res = await send(`/api/tanks/${encodeURIComponent(tankId)}`);
+      if (!res.ok) throw await toError(res);
+      return parsed(res, tankSchema);
+    },
+    async createTank(input) {
+      const body = validate(createTankRequestSchema, input);
+      return parsed(await post('/api/tanks', body), tankSchema);
+    },
+    async renameTank(tankId, name) {
+      const body = validate(updateTankRequestSchema, { name });
+      return parsed(await patch(`/api/tanks/${encodeURIComponent(tankId)}`, body), tankSchema);
+    },
+    async saveDecorLayout(tankId, layout) {
+      const body = validate(updateTankRequestSchema, { decorLayout: layout });
+      return parsed(await patch(`/api/tanks/${encodeURIComponent(tankId)}`, body), tankSchema);
+    },
+    async addFish(tankId, input) {
+      const body = validate(addFishRequestSchema, input);
+      return parsed(await post(`/api/tanks/${encodeURIComponent(tankId)}/fish`, body), tankSchema);
+    },
+    async netFish(tankId, fishId) {
+      const res = await send(
+        `/api/tanks/${encodeURIComponent(tankId)}/fish/${encodeURIComponent(fishId)}`,
+        { method: 'DELETE' },
+      );
+      if (!res.ok) throw await toError(res);
+      return parsed(res, tankSchema);
+    },
+    async care(tankId, action) {
+      const body = validate(careActionSchema, action);
+      return parsed(await post(`/api/tanks/${encodeURIComponent(tankId)}/care`, body), tankSchema);
+    },
+    async reportAte(tankId, reports) {
+      const body = validate(ateBatchRequestSchema, { reports });
+      return parsed(await post(`/api/tanks/${encodeURIComponent(tankId)}/ate`, body), tankSchema);
     },
   };
 }

@@ -7,6 +7,7 @@ import { createAuth, type Auth, DEFAULT_AUTH_RATE_LIMITS, type AuthRateLimits } 
 import { connect, runMigrations, type Database } from './db/index.ts';
 import { createClock, type Clock } from './clock.ts';
 import { createMailer, DEFAULT_MAIL_LIMITS, type MailLimits } from './mail.ts';
+import { postgresHitStore } from './rate-limit.ts';
 import { loadCatalog } from './species.ts';
 import type { LegalLimits } from './legal.ts';
 import type { CareLimits } from './tanks.ts';
@@ -18,6 +19,7 @@ const GENEROUS_MAIL: MailLimits = {
   perRecipient: { max: 10_000, windowMs: 60_000 },
   verificationCooldown: { max: 10_000, windowMs: 1000 },
   perIpSignup: { max: 10_000, windowMs: 60_000 },
+  global: { max: 10_000, windowMs: 60_000 },
 };
 
 export interface SentMail {
@@ -107,11 +109,10 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     },
   });
 
-  const mailer = createMailer(
-    transport,
-    'fish@bas.lu',
-    opts.mailLimits ?? (opts.limited ? DEFAULT_MAIL_LIMITS : GENEROUS_MAIL),
-  );
+  const mailer = createMailer(transport, 'fish@bas.lu', {
+    limits: opts.mailLimits ?? (opts.limited ? DEFAULT_MAIL_LIMITS : GENEROUS_MAIL),
+    store: postgresHitStore(database, 'testsecrettestsecrettestsecret0123456789'),
+  });
   const auth = createAuth({
     config: {
       authSecret: 'testsecrettestsecrettestsecret0123456789',
@@ -124,7 +125,12 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
       opts.authLimits ??
       (opts.limited
         ? DEFAULT_AUTH_RATE_LIMITS
-        : { signIn: GENEROUS, signUp: GENEROUS, sendVerification: GENEROUS }),
+        : {
+            signIn: GENEROUS,
+            signUp: GENEROUS,
+            sendVerification: GENEROUS,
+            passwordReset: GENEROUS,
+          }),
   });
   const clock = createClock();
   const app = buildApp({

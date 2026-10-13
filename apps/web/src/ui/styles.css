@@ -298,3 +298,214 @@
   border: 1px solid var(--edge);
   border-radius: 0.7rem;
 }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+#ui select,
+#ui .inline-form input,
+#ui .block input {
+  font: inherit;
+  min-height: 2.5rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--edge);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
+}
+
+#ui select option {
+  color: #000;
+}
+
+#ui .block input,
+#ui .block select {
+  box-sizing: border-box;
+  max-width: 100%;
+}
+
+.tank-panel {
+  position: absolute;
+  top: 4.5rem;
+  right: 0.75rem;
+  bottom: 4rem;
+  width: min(25rem, calc(100% - 1.5rem));
+  pointer-events: auto;
+}
+
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.panel-head h2,
+.block h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.block {
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--edge);
+}
+
+.block.loss {
+  border-top-color: var(--danger);
+}
+
+.row,
+.inline-form,
+.care-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+
+.inline-form label {
+  font-weight: 600;
+}
+
+.water {
+  list-style: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.25rem 1rem;
+  padding: 0;
+  margin: 0.5rem 0;
+}
+
+#ui button.primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: transparent;
+  font-weight: 650;
+  flex: 1 1 100%;
+  min-height: 3rem;
+}
+
+#ui button.primary.urgent {
+  outline: 3px solid #ffd27f;
+  outline-offset: 2px;
+}
+
+.shop,
+.memorial,
+.loss-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.shop li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.shop .hint {
+  margin: 0.1rem 0 0;
+}
+
+.memorial li {
+  color: var(--ink-soft);
+}
+
+.loss-list li {
+  padding-left: 0.75rem;
+  border-left: 3px solid var(--danger);
+}
+
+.life-status {
+  position: absolute;
+  top: 4rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  max-width: min(36rem, calc(100% - 1.5rem));
+  pointer-events: none;
+}
+
+.life-status:not(:empty) {
+  padding: 0.4rem 0.4rem 0.4rem 0.9rem;
+  background: var(--surface);
+  border: 1px solid var(--edge);
+  border-radius: 0.7rem;
+  pointer-events: auto;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(2, 8, 14, 0.6);
+  pointer-events: auto;
+  z-index: 3;
+}
+
+.dialog.loss {
+  border-color: var(--danger);
+}
+
+.dialog h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.3rem;
+}
+
+.dialog h2:focus {
+  outline: none;
+}
+
+progress {
+  vertical-align: middle;
+  width: 8rem;
+}
+
+.decor-panel {
+  position: absolute;
+  top: 4.5rem;
+  left: 0.75rem;
+  bottom: 4rem;
+  width: min(22rem, calc(100% - 1.5rem));
+  overflow-y: auto;
+  pointer-events: auto;
+}
+
+.decor-palette,
+.decor-pieces {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.decor-nudge,
+.decor-turn {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.decor-status:empty,
+.decor-save:empty {
+  display: none;
+}

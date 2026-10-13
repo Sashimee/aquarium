@@ -1,16 +1,21 @@
+import { depthOfFieldFollowsCamera } from './engine/cameraFocus';
 import { Engine } from './engine/Engine';
 import { EventBus, type EngineEvents } from './engine/events';
 import { parseEngineOptions } from './engine/options';
 import { DEFAULT_TANK } from './engine/tank/dimensions';
-import { startDemoFish, type DemoFish } from './fish/start';
+import { queueTankEvents, startFish } from './fish/start';
 import { CameraRig } from './interaction/camera';
 import { bindCameraControls } from './interaction/controls';
+import { FeederLayer } from './interaction/decor/feederLayer';
+import { SceneDecor } from './interaction/decor/sceneDecor';
 import type { InteractionEvents } from './interaction/events';
 import { onPageTeardown } from './interaction/pageLifecycle';
 import { watchReducedMotion } from './interaction/motion';
+import { PlayChoices } from './interaction/play/choices';
 import { createPlaySystem, type PlaySystem } from './interaction/play/system';
-import { mountPresetWhenTierKnown, parseBiome, type TankScene } from './scene';
+import { mountBiomeScene, parseBiome, TankBiome, type TankScene } from './scene';
 import { mountUi } from './ui/mount';
+import { FeedGate } from './sync/feedGate';
 
 function showFatal(container: HTMLElement, message: string): void {
   const box = document.createElement('pre');
@@ -37,6 +42,19 @@ async function boot(): Promise<void> {
     console.info(`quality tier ${from ?? '(start)'} -> ${to} (${reason})`),
   );
 
+  const tankEvents = queueTankEvents(interaction);
+  const tankBiome = new TankBiome(interaction, parseBiome(window.location.search));
+  const playChoices = new PlayChoices(interaction);
+  const sceneDecor = new SceneDecor<TankScene>(
+    interaction,
+    () =>
+      import('./interaction/decor/system').then(
+        ({ createDecorSystem }) =>
+          (scene, initial) =>
+            createDecorSystem(engine, scene, interaction, initial, new FeederLayer()),
+      ),
+    (message, cause) => console.error(message, cause),
+  );
   mountUi(uiRoot, { engine: events, interaction });
 
   let engine: Engine;
@@ -46,6 +64,10 @@ async function boot(): Promise<void> {
       events,
     });
   } catch (cause) {
+    tankEvents.stop();
+    tankBiome.stop();
+    playChoices.stop();
+    sceneDecor.dispose();
     showFatal(container, cause instanceof Error ? cause.message : String(cause));
     return;
   }
@@ -59,6 +81,7 @@ async function boot(): Promise<void> {
     'Aquarium view. Arrow keys orbit, plus and minus zoom, Escape leaves dive mode.',
   );
 
+  const followFocus = depthOfFieldFollowsCamera(engine);
   const rig = new CameraRig(
     engine.camera,
     {
@@ -68,20 +91,40 @@ async function boot(): Promise<void> {
       waterTop: DEFAULT_TANK.height - DEFAULT_TANK.freeboard,
       floor: DEFAULT_TANK.substrateBack + 0.05,
     },
-    { onModeChange: (mode) => interaction.emit('camera:mode-changed', { mode }) },
+    {
+      onModeChange: (mode) => {
+        followFocus(mode);
+        interaction.emit('camera:mode-changed', { mode });
+      },
+    },
   );
 
   const stopMotionWatch = watchReducedMotion((reduced) => rig.setReducedMotion(reduced));
   let play: PlaySystem | null = null;
   const unbindControls = bindCameraControls(canvas, rig, {
     tap: (e) => {
-      if (e.button === 0) play?.controller.tap(e.x, e.y);
+      if (e.button !== 0) return;
+      if (sceneDecor.system?.active) sceneDecor.system.tap(e.x, e.y);
+      else play?.controller.tap(e.x, e.y);
     },
-    claimDrag: () => play?.controller.claimsDrag ?? false,
-    pointerDown: (x, y) => play?.controller.pointerDown(x, y),
-    pointerMove: (x, y) => play?.controller.pointerMove(x, y),
-    pointerUp: () => play?.controller.pointerUp(),
-    pointerLeave: () => play?.controller.pointerLeave(),
+    claimDrag: () =>
+      sceneDecor.system?.active
+        ? sceneDecor.system.claimsDrag
+        : (play?.controller.claimsDrag ?? false),
+    pointerDown: (x, y) =>
+      sceneDecor.system?.active
+        ? sceneDecor.system.pointerDown(x, y)
+        : play?.controller.pointerDown(x, y),
+    pointerMove: (x, y) =>
+      sceneDecor.system?.active
+        ? sceneDecor.system.pointerMove(x, y)
+        : play?.controller.pointerMove(x, y),
+    pointerUp: () =>
+      sceneDecor.system?.active ? sceneDecor.system.pointerUp() : play?.controller.pointerUp(),
+    pointerLeave: () => {
+      if (sceneDecor.system?.active) sceneDecor.system.pointerUp();
+      else play?.controller.pointerLeave();
+    },
   });
   const stopRequests = interaction.on('camera:request-mode', ({ mode }) => {
     if (mode === 'dive') rig.dive();
@@ -89,22 +132,36 @@ async function boot(): Promise<void> {
   });
   engine.onFrame((deltaS) => rig.update(deltaS));
 
-  const biome = parseBiome(window.location.search);
-  const fish: DemoFish =
-    biome === 'freshwater'
-      ? startDemoFish(engine, DEFAULT_TANK, `${import.meta.env.BASE_URL}assets/`)
-      : { sim: { startle: () => undefined }, stop: () => undefined };
+  const fish = startFish(engine, {
+    tank: DEFAULT_TANK,
+    assetRoot: `${import.meta.env.BASE_URL}assets/`,
+    biome: tankBiome.fallback,
+    interaction,
+    tankEvents,
+  });
 
-  let tankScene: TankScene | null = null;
-  mountPresetWhenTierKnown(engine, biome, window.location.search, (scene) => {
-    tankScene = scene;
-    play = createPlaySystem(engine, scene, interaction, fish.sim);
-    if (import.meta.env.DEV) Object.assign(window, { tankScene });
+  const feedGate = new FeedGate();
+  const scenes = mountBiomeScene(engine, tankBiome, window.location.search, {
+    mounted(scene) {
+      fish.setAnchors(scene.anchors);
+      play = createPlaySystem(engine, scene, interaction, fish.sim, feedGate);
+      playChoices.applyTo(play.controller);
+      sceneDecor.mount(scene);
+      if (import.meta.env.DEV) Object.assign(window, { tankScene: scene });
+    },
+    unmounting() {
+      sceneDecor.unmount();
+      play?.dispose();
+      play = null;
+      fish.setAnchors([]);
+    },
   });
 
   onPageTeardown(window, () => {
-    play?.dispose();
-    tankScene?.dispose().catch((cause: unknown) => console.error('Scene dispose failed', cause));
+    scenes.dispose().catch((cause: unknown) => console.error('Scene dispose failed', cause));
+    sceneDecor.dispose();
+    tankBiome.stop();
+    playChoices.stop();
     stopMotionWatch();
     unbindControls();
     stopRequests();

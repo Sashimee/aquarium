@@ -68,6 +68,10 @@ export class AssetCatalog {
   has(id: string): boolean {
     return this.byId.has(id);
   }
+
+  entries(): IterableIterator<CatalogEntry> {
+    return this.byId.values();
+  }
 }
 
 /** Points the transcoder at the bundled copy and picks the 1k or 2k variant of every texture. */

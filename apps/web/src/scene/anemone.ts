@@ -41,6 +41,14 @@ function spread(entry: CatalogEntry): number {
   return Math.max(Math.abs(b.min[0]), Math.abs(b.max[0]), Math.abs(b.min[2]), Math.abs(b.max[2]));
 }
 
+function horizontalRadius(entry: CatalogEntry): number {
+  const b = entry.bounds;
+  if (!b) throw new Error(`Anemone "${entry.id}" has no bounds in the asset index`);
+  return Math.max(
+    ...[b.min[0], b.max[0]].flatMap((x) => [b.min[2], b.max[2]].map((z) => Math.hypot(x, z))),
+  );
+}
+
 function height(entry: CatalogEntry): number {
   const top = entry.bounds?.max[1];
   if (top === undefined) throw new Error(`Anemone "${entry.id}" has no bounds in the asset index`);
@@ -72,7 +80,34 @@ export function anemoneReach(
   current: CurrentParameters,
 ): number {
   const peakFlow = current.speed * (1 + current.gustDepth);
-  return (spread(entry) + WAVE_METRES) * item.scale + peakFlow * LEAN_SECONDS;
+  return (horizontalRadius(entry) + WAVE_METRES) * item.scale + peakFlow * LEAN_SECONDS;
+}
+
+/** Tentacle streaming shared by every swaying polyp: lean into the current plus a travelling wave, both weighted by the `_sway` attribute. */
+export function swayPositionNode(
+  item: DecorItem,
+  current: CurrentField,
+  waveMetres: number,
+  leanSeconds: number,
+) {
+  const sway = attribute(SWAY_ATTRIBUTE, 'float');
+  const tip = sway.mul(sway);
+  const omega = (TWO_PI * WAVES_PER_WRAP) / wrapPeriodS(current.parameters);
+  const phase = positionLocal.x.mul(23).add(positionLocal.z.mul(17));
+  const angle = current.elapsed.mul(omega).add(phase);
+  const wave = vec3(sin(angle), sin(angle.mul(2).add(1.7)).mul(0.4), sin(angle.add(1.9))).mul(
+    sway.mul(waveMetres),
+  );
+  const origin = vec3(...item.position);
+  const flow = current.velocityNode(positionLocal.mul(item.scale).add(origin));
+  const [cos, sinYaw] = [Math.cos(item.rotationY), Math.sin(item.rotationY)];
+  const localFlow = vec3(
+    flow.x.mul(cos).sub(flow.z.mul(sinYaw)),
+    0,
+    flow.x.mul(sinYaw).add(flow.z.mul(cos)),
+  );
+  const lean = localFlow.mul(tip.mul(leanSeconds / item.scale));
+  return positionLocal.add(lean).add(wave);
 }
 
 function createAnemoneMaterial(
@@ -96,24 +131,7 @@ function createAnemoneMaterial(
   material.metalness = 0;
   material.side = DoubleSide;
 
-  const sway = attribute(SWAY_ATTRIBUTE, 'float');
-  const tip = sway.mul(sway);
-  const omega = (TWO_PI * WAVES_PER_WRAP) / wrapPeriodS(current.parameters);
-  const phase = positionLocal.x.mul(23).add(positionLocal.z.mul(17));
-  const angle = current.elapsed.mul(omega).add(phase);
-  const wave = vec3(sin(angle), sin(angle.mul(2).add(1.7)).mul(0.4), sin(angle.add(1.9))).mul(
-    sway.mul(WAVE_METRES),
-  );
-  const origin = vec3(...item.position);
-  const flow = current.velocityNode(positionLocal.mul(item.scale).add(origin));
-  const [cos, sinYaw] = [Math.cos(item.rotationY), Math.sin(item.rotationY)];
-  const localFlow = vec3(
-    flow.x.mul(cos).sub(flow.z.mul(sinYaw)),
-    0,
-    flow.x.mul(sinYaw).add(flow.z.mul(cos)),
-  );
-  const lean = localFlow.mul(tip.mul(LEAN_SECONDS / item.scale));
-  material.positionNode = positionLocal.add(lean).add(wave);
+  material.positionNode = swayPositionNode(item, current, WAVE_METRES, LEAN_SECONDS);
   return material;
 }
 

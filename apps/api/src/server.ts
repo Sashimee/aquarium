@@ -3,6 +3,7 @@ import { createAuth } from './auth.ts';
 import { loadConfig } from './config.ts';
 import { connect, runMigrations } from './db/index.ts';
 import { createMailer, createSmtpTransport } from './mail.ts';
+import { postgresHitStore } from './rate-limit.ts';
 import { startMaintenance } from './maintenance.ts';
 import { loadCatalog } from './species.ts';
 
@@ -14,6 +15,7 @@ await runMigrations(database);
 const mailer = createMailer(
   createSmtpTransport(config.smtp.host, config.smtp.port),
   config.mailFrom,
+  { store: postgresHitStore(database, config.authSecret) },
 );
 const auth = createAuth({ config, database, mailer });
 

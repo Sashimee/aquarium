@@ -1,16 +1,18 @@
 import nodemailer, { type Transporter } from 'nodemailer';
-import { RateLimiter, type Limit } from './rate-limit.ts';
+import { memoryHitStore, type HitStore, type Limit } from './rate-limit.ts';
 
 export interface MailLimits {
   perRecipient: Limit;
   verificationCooldown: Limit;
   perIpSignup: Limit;
+  global: Limit;
 }
 
 export const DEFAULT_MAIL_LIMITS: MailLimits = {
   perRecipient: { max: 5, windowMs: 60 * 60 * 1000 },
   verificationCooldown: { max: 1, windowMs: 60 * 1000 },
   perIpSignup: { max: 10, windowMs: 60 * 60 * 1000 },
+  global: { max: 200, windowMs: 60 * 60 * 1000 },
 };
 
 export class MailThrottledError extends Error {
@@ -47,36 +49,112 @@ export function verificationMessage(url: string): { text: string; html: string }
   return { text, html };
 }
 
+export function passwordResetMessage(url: string): { text: string; html: string } {
+  const safe = escapeHtml(url);
+  const text = `Set a new password for your aquarium account:\n\n<${url}>\n\nThe link works once and expires in one hour. If you did not ask for this, ignore this message.\n`;
+  const html = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="color-scheme" content="light"><title>Reset your Aquarium password</title></head><body style="margin:0;padding:24px;background:#f4f7f9;font-family:Arial,Helvetica,sans-serif;color:#12202b">
+<div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:8px;padding:24px">
+<h1 style="font-size:20px;margin:0 0 16px">Set a new password</h1>
+<p style="margin:0 0 24px"><a href="${safe}" style="display:inline-block;background:#0b7285;color:#ffffff;font-size:16px;font-weight:bold;text-decoration:none;padding:14px 28px;border-radius:6px">Choose a password</a></p>
+<p style="font-size:13px;line-height:1.5;margin:0 0 8px">Or open this link in your browser:</p>
+<p style="font-size:13px;line-height:1.5;margin:0 0 24px;word-break:break-all"><a href="${safe}" style="color:#0b7285">${safe}</a></p>
+<p style="font-size:13px;color:#5b6b78;margin:0">The link works once and expires in one hour. If you did not ask for this, ignore this message.</p>
+</div></body></html>
+`;
+  return { text, html };
+}
+
 export function createSmtpTransport(host: string, port: number): Transporter {
   return nodemailer.createTransport({ host, port, secure: false });
 }
 
 export interface Mailer {
-  /** Throws MailThrottledError when the recipient is inside the verification cooldown or hourly cap. */
+  /** Throws MailThrottledError when the recipient is inside the verification cooldown or hourly cap, or the global cap is spent. */
   sendVerification(to: string, url: string): Promise<void>;
+  /** Same limits as sendVerification, tracked separately so one flow cannot starve the other. */
+  sendPasswordReset(to: string, url: string): Promise<void>;
   /** Consumes one per-IP slot for mail-triggering endpoints; returns retry-after seconds or 0. */
-  consumeIp(ip: string): number;
-  peekVerificationCooldown(to: string): number;
+  consumeIp(ip: string): Promise<number>;
+  peekVerificationCooldown(to: string): Promise<number>;
+}
+
+export interface MailerOptions {
+  limits?: MailLimits;
+  store?: HitStore;
+  log?: (message: string) => void;
+}
+
+const STORE_FAILURE_RETRY_SECONDS = 60;
+const SHARED_INBOX_DOMAINS = new Set(['gmail.com', 'googlemail.com']);
+
+// The same inbox must map to one budget: strip +tag everywhere, and Gmail's dots and alias domain.
+export function recipientKey(address: string): string {
+  const lowered = address.trim().toLowerCase();
+  const at = lowered.lastIndexOf('@');
+  if (at < 1) return lowered;
+  let local = lowered.slice(0, at);
+  let domain = lowered.slice(at + 1);
+  local = local.split('+')[0] ?? local;
+  if (SHARED_INBOX_DOMAINS.has(domain)) {
+    local = local.replace(/\./g, '');
+    domain = 'gmail.com';
+  }
+  return `${local}@${domain}`;
 }
 
 export function createMailer(
   transport: Transporter,
   mailFrom: string,
-  limits: MailLimits = DEFAULT_MAIL_LIMITS,
+  {
+    limits = DEFAULT_MAIL_LIMITS,
+    store = memoryHitStore(),
+    log = console.error,
+  }: MailerOptions = {},
 ): Mailer {
-  const recipient = new RateLimiter();
-  const cooldown = new RateLimiter();
-  const ip = new RateLimiter();
   const from = `Aquarium <${mailFrom}>`;
-  const key = (to: string) => to.trim().toLowerCase();
+  let globalCapLogged = false;
+  let storeFailureLogged = false;
+
+  // A broken store must stop mail, not let it through unmetered.
+  const failClosed = async (work: () => Promise<number>): Promise<number> => {
+    try {
+      const wait = await work();
+      storeFailureLogged = false;
+      return wait;
+    } catch (err) {
+      if (!storeFailureLogged) {
+        storeFailureLogged = true;
+        log(
+          `mail limiter unavailable, refusing mail: ${err instanceof Error ? err.name : 'unknown'}`,
+        );
+      }
+      return STORE_FAILURE_RETRY_SECONDS;
+    }
+  };
+
+  const consume = (key: string, limit: Limit) => failClosed(() => store.consume(key, limit));
+
+  const admit = async (flow: 'verify' | 'reset', to: string) => {
+    const k = recipientKey(to);
+    const wait = await consume(`${flow}:cooldown:${k}`, limits.verificationCooldown);
+    if (wait > 0) throw new MailThrottledError(wait);
+    const capped = await consume(`recipient:${k}`, limits.perRecipient);
+    if (capped > 0) throw new MailThrottledError(capped);
+    const globalWait = await consume('global', limits.global);
+    if (globalWait > 0) {
+      if (!globalCapLogged) {
+        globalCapLogged = true;
+        log('global mail cap reached, refusing mail until the window frees up');
+      }
+      throw new MailThrottledError(globalWait);
+    }
+    globalCapLogged = false;
+  };
 
   return {
     async sendVerification(to, url) {
-      const k = key(to);
-      const wait = cooldown.consume(k, limits.verificationCooldown);
-      if (wait > 0) throw new MailThrottledError(wait);
-      const capped = recipient.consume(k, limits.perRecipient);
-      if (capped > 0) throw new MailThrottledError(capped);
+      await admit('verify', to);
       await transport.sendMail({
         from,
         to,
@@ -86,9 +164,20 @@ export function createMailer(
         textEncoding: 'base64',
       });
     },
-    consumeIp: (address) => ip.consume(address, limits.perIpSignup),
-    peekVerificationCooldown(to) {
-      return cooldown.remaining(key(to), limits.verificationCooldown);
+    async sendPasswordReset(to, url) {
+      await admit('reset', to);
+      await transport.sendMail({
+        from,
+        to,
+        subject: 'Reset your Aquarium password',
+        ...passwordResetMessage(url),
+        textEncoding: 'base64',
+      });
     },
+    consumeIp: (address) => consume(`ip:${address}`, limits.perIpSignup),
+    peekVerificationCooldown: (to) =>
+      failClosed(() =>
+        store.remaining(`verify:cooldown:${recipientKey(to)}`, limits.verificationCooldown),
+      ),
   };
 }

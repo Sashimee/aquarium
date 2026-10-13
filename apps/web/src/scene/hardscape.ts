@@ -47,6 +47,7 @@ export function fitCollider(
 
 export class Hardscape {
   readonly group = new Group();
+  private readonly meshesByItem: Mesh[][] = [];
 
   constructor() {
     this.group.name = 'hardscape';
@@ -54,8 +55,11 @@ export class Hardscape {
 
   add(entry: CatalogEntry, model: LoadedModel, item: DecorItem): void {
     const matrix = decorMatrix(item);
+    const meshes: Mesh[] = [];
+    this.meshesByItem.push(meshes);
     for (const { geometry, material } of model.primitives) {
       const mesh = new Mesh(geometry, material);
+      meshes.push(mesh);
       mesh.name = `${entry.id}:${material.name}`;
       mesh.matrixAutoUpdate = false;
       mesh.matrix.copy(matrix);
@@ -63,6 +67,11 @@ export class Hardscape {
       mesh.receiveShadow = true;
       this.group.add(mesh);
     }
+  }
+
+  setItem(index: number, item: DecorItem): void {
+    const matrix = decorMatrix(item);
+    for (const mesh of this.meshesByItem[index] ?? []) mesh.matrix.copy(matrix);
   }
 
   dispose(): void {

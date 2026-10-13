@@ -30,6 +30,7 @@ import {
   normalWorld,
   positionGeometry,
   positionLocal,
+  positionPrevious,
   positionWorld,
   pow,
   screenCoordinate,
@@ -87,6 +88,12 @@ const PELVIC_AMPLITUDE = 0.015;
 /** Guanine (n ≈ 1.83) platelets are the reflectors in fish iridophores (Land 1972). */
 const GUANINE_IOR = 1.83;
 const FIN_OPACITY_FLOOR = 0.2;
+/**
+ * A resting or stressed fish tilts its iridophore platelets closer together: the reflection dims
+ * and shifts towards violet, as the neon tetra's stripe does at night (Yoshioka et al. 2011).
+ */
+const NIGHT_IRIDESCENCE_LOSS = 0.5;
+const NIGHT_PLATELET_SHRINK = 0.12;
 /** Below this alpha a texel is outside the fin silhouette in every mode. */
 const SILHOUETTE_ALPHA = 0.1;
 /** Golden-ratio-like step that decorrelates consecutive frames of the noise (Jimenez 2014). */
@@ -283,9 +290,9 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
           : float(1);
       this.iridescenceNode = where
         .mul(finAmount.oneMinus())
-        .mul(pale.oneMinus())
+        .mul(pale.mul(NIGHT_IRIDESCENCE_LOSS).oneMinus())
         .mul(profile.iridescence);
-      this.iridescenceThicknessNode = look.w;
+      this.iridescenceThicknessNode = look.w.mul(pale.mul(NIGHT_PLATELET_SHRINK).oneMinus());
     } else {
       this.iridescenceNode = null;
       this.iridescenceThicknessNode = null;
@@ -295,6 +302,8 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
 
   override setupPosition(builder: NodeBuilder): Node {
     positionLocal.assign(this.deformedPosition);
+    // Motion vectors for the temporal resolve: the swimming wave is slow next to the instance motion.
+    if (builder.needsPreviousData()) positionPrevious.assign(this.deformedPosition);
     normalLocal.assign(this.deformedNormal);
     return super.setupPosition(builder);
   }

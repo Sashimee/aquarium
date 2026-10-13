@@ -225,14 +225,18 @@ export function buildApp(opts: AppOptions): FastifyInstance {
 
         if (req.method === 'POST' && pathname === `${AUTH_BASE_PATH}/sign-up/email`) {
           signUpBodySchema.parse(parseJson(raw));
-          const wait = mailer.consumeIp(req.ip);
+          const wait = await mailer.consumeIp(req.ip);
+          if (wait > 0) return tooMany(reply, wait);
+        }
+        if (req.method === 'POST' && pathname === `${AUTH_BASE_PATH}/request-password-reset`) {
+          const wait = await mailer.consumeIp(req.ip);
           if (wait > 0) return tooMany(reply, wait);
         }
         if (req.method === 'POST' && pathname === `${AUTH_BASE_PATH}/send-verification-email`) {
-          const wait = mailer.consumeIp(req.ip);
+          const wait = await mailer.consumeIp(req.ip);
           if (wait > 0) return tooMany(reply, wait);
           const email = recipientOf(raw);
-          const cooldown = email ? mailer.peekVerificationCooldown(email) : 0;
+          const cooldown = email ? await mailer.peekVerificationCooldown(email) : 0;
           if (cooldown > 0) return tooMany(reply, cooldown);
         }
 
