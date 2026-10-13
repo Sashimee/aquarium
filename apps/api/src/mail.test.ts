@@ -151,6 +151,7 @@ describe('global mail cap', () => {
         perRecipient: { max: 100, windowMs: 3_600_000 },
         verificationCooldown: { max: 100, windowMs: 1000 },
         perIpSignup: { max: 2, windowMs: 3_600_000 },
+        perIpRequests: { max: 100, windowMs: 3_600_000 },
         global: { max: 1, windowMs: 60_000 },
       },
     });
