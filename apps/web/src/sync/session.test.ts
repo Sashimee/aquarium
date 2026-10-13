@@ -24,13 +24,10 @@ const deadPip = fishFixture(FISH_1, {
   cause: 'starvation',
 });
 
-function setup(
-  initial: Tank[] = [tankFixture({ fish: [fishFixture(FISH_1)] })],
-  storage?: Pick<Storage, 'getItem' | 'setItem'>,
-) {
-  const api = {
-    species: vi.fn().mockResolvedValue([speciesFixture()]),
-    tanks: vi.fn().mockResolvedValue(initial),
+function apiMocks() {
+  return {
+    species: vi.fn(),
+    tanks: vi.fn(),
     tank: vi.fn(),
     createTank: vi.fn(),
     renameTank: vi.fn(),
@@ -39,6 +36,15 @@ function setup(
     care: vi.fn(),
     reportAte: vi.fn(),
   };
+}
+
+function setup(
+  initial: Tank[] = [tankFixture({ fish: [fishFixture(FISH_1)] })],
+  storage?: Pick<Storage, 'getItem' | 'setItem'>,
+) {
+  const api = apiMocks();
+  api.species.mockResolvedValue([speciesFixture()]);
+  api.tanks.mockResolvedValue(initial);
   const rec = recordBus();
   const session = new TankSession({
     api: api as unknown as ApiClient,
@@ -375,6 +381,87 @@ describe('death, net and memorial', () => {
     expect(await session.net(FISH_1)).toBe(false);
     expect(rec.of('tank:fish-removed')).toEqual([]);
     expect(session.activeTank?.fish).toHaveLength(1);
+  });
+});
+
+describe('sign-out safety', () => {
+  const second = tankFixture({ id: TANK_B, name: 'Reef', biome: 'reef', fish: [] });
+
+  it('ignores a tank pick made while signing out', async () => {
+    const { api, rec, session } = setup([tankFixture(), second]);
+    await session.setUser(verified);
+    const signingOut = session.setUser(null);
+    await session.select(TANK_B);
+    await signingOut;
+    expect(api.tank).not.toHaveBeenCalled();
+    expect(session.getState()).toMatchObject({ phase: 'anonymous', tanks: [], activeId: null });
+    expect(rec.of('tank:loaded').map((e) => (e as { tankId: string }).tankId)).toEqual([TANK_A]);
+    expect(rec.of('tank:unloaded')).toEqual([{ tankId: TANK_A }]);
+  });
+
+  it('keeps the new load when signing out and straight back in', async () => {
+    const { rec, session } = setup([tankFixture(), second]);
+    await session.setUser(verified);
+    const out = session.setUser(null);
+    const back = session.setUser(verified);
+    await Promise.all([out, back]);
+    expect(session.getState()).toMatchObject({ phase: 'ready', activeId: TANK_A });
+    const loaded = rec.of('tank:loaded').length;
+    expect(loaded - rec.of('tank:unloaded').length).toBe(1);
+  });
+
+  const lateReplies: [
+    string,
+    (s: TankSession) => Promise<boolean>,
+    keyof ReturnType<typeof apiMocks>,
+  ][] = [
+    ['care', (s) => s.careAction({ type: 'gravel_vacuum' }), 'care'],
+    ['buy', (s) => s.buy('neon-tetra', 'Pip'), 'addFish'],
+    ['net', (s) => s.net(FISH_1), 'netFish'],
+    ['rename', (s) => s.rename('Den'), 'renameTank'],
+  ];
+
+  it.each(lateReplies)('drops a late %s reply after sign-out', async (_name, act, method) => {
+    const { api, rec, session } = setup([tankFixture({ fish: [deadPip] })]);
+    await session.setUser(verified);
+    let reply: (tank: Tank) => void = () => undefined;
+    api[method].mockReturnValue(new Promise<Tank>((resolve) => (reply = resolve)));
+    const pending = act(session);
+    await session.setUser(null);
+    reply(tankFixture({ lastTickAt: '2026-02-01T12:30:00.000Z', fish: [] }));
+    await pending;
+    expect(session.getState()).toMatchObject({
+      phase: 'anonymous',
+      tanks: [],
+      notice: null,
+      error: null,
+    });
+    expect(rec.of('tank:care')).toEqual([]);
+    expect(rec.of('tank:fish-removed')).toEqual([]);
+  });
+
+  it('does not show a late failure from the old account', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    let fail: (e: unknown) => void = () => undefined;
+    api.care.mockReturnValue(new Promise<Tank>((_r, reject) => (fail = reject)));
+    const pending = session.careAction({ type: 'water_change' });
+    await session.setUser(null);
+    fail(apiError(500, 'internal'));
+    await pending;
+    expect(session.getState().error).toBeNull();
+  });
+
+  it('announces a death as a notice and clears it with the session', async () => {
+    const { api, session } = setup([tankFixture({ fish: [fishFixture(FISH_1, { name: 'Pip' })] })]);
+    await session.setUser(verified);
+    api.care.mockResolvedValue(
+      tankFixture({ lastTickAt: '2026-02-01T12:30:00.000Z', fish: [deadPip] }),
+    );
+    await session.careAction({ type: 'feed', food: 'flakes', portion: 0.5 });
+    expect(session.getState().notice).toMatch(/^Pip the .* has died\./);
+    await session.setUser(null);
+    expect(session.getState().notice).toBeNull();
   });
 });
 

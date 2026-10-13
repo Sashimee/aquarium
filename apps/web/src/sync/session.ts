@@ -85,14 +85,21 @@ export class TankSession {
   async load(): Promise<void> {
     const id = ++this.loadId;
     this.switchId++;
-    this.patch({ phase: 'loading', error: null });
+    this.unloadScene()?.dispose();
+    this.patch({
+      phase: 'loading',
+      tanks: [],
+      activeId: null,
+      awayByTank: {},
+      pendingNet: null,
+      error: null,
+      notice: null,
+    });
     try {
       const [species, tanks] = await withRetry(
         () => Promise.all([this.deps.api.species(), this.deps.api.tanks()]),
         { maxAttempts: LOAD_ATTEMPTS, sleep: this.sleep },
       );
-      if (id !== this.loadId) return;
-      await this.leaveActive();
       if (id !== this.loadId) return;
       this.lastRefreshMs = this.now();
       const awayByTank: Record<string, AwaySummary> = {};
@@ -112,8 +119,10 @@ export class TankSession {
     const { phase, activeId } = this.state;
     if (phase !== 'ready' || !activeId) return;
     if (this.now() - this.lastRefreshMs < (this.deps.refreshAfterMs ?? 10 * 60_000)) return;
+    const gen = this.loadId;
     await this.perform(async () => {
       const tank = await this.deps.api.tank(activeId);
+      if (gen !== this.loadId) return;
       this.lastRefreshMs = this.now();
       this.apply(tank);
       if (shouldShowAway(tank.away)) {
@@ -132,6 +141,7 @@ export class TankSession {
   }
 
   async select(tankId: string): Promise<void> {
+    if (this.state.phase !== 'ready') return;
     if (tankId === this.state.activeId || !this.state.tanks.some((t) => t.id === tankId)) return;
     const id = ++this.switchId;
     this.deps.storage?.setItem(ACTIVE_KEY, tankId);
@@ -140,7 +150,11 @@ export class TankSession {
       await this.leaveActive();
       if (id !== this.switchId) return;
       this.activate(tankId);
-      await this.perform(async () => this.apply(await this.deps.api.tank(tankId)));
+      const gen = this.loadId;
+      await this.perform(async () => {
+        const next = await this.deps.api.tank(tankId);
+        if (gen === this.loadId) this.apply(next);
+      });
     });
   }
 
@@ -172,8 +186,11 @@ export class TankSession {
   async rename(name: string): Promise<boolean> {
     const tank = this.activeTank;
     if (!tank) return false;
+    const gen = this.loadId;
     return this.perform(async () => {
-      this.apply(await this.deps.api.renameTank(tank.id, name));
+      const next = await this.deps.api.renameTank(tank.id, name);
+      if (gen !== this.loadId) return;
+      this.apply(next);
       this.patch({ notice: 'Tank renamed.' });
     });
   }
@@ -185,8 +202,11 @@ export class TankSession {
   async careAction(action: CareAction): Promise<boolean> {
     const tank = this.activeTank;
     if (!tank) return false;
+    const gen = this.loadId;
     return this.perform(async () => {
-      this.apply(await this.deps.api.care(tank.id, action));
+      const next = await this.deps.api.care(tank.id, action);
+      if (gen !== this.loadId) return;
+      this.apply(next);
       this.deps.interaction.emit('tank:care', { tankId: tank.id, action: action.type });
       if (action.type !== 'feed') this.patch({ notice: CARE_DONE[action.type] });
     });
@@ -195,8 +215,10 @@ export class TankSession {
   async buy(speciesId: string, name: string): Promise<boolean> {
     const tank = this.activeTank;
     if (!tank) return false;
+    const gen = this.loadId;
     return this.perform(async () => {
       const next = await this.deps.api.addFish(tank.id, { species: speciesId, name });
+      if (gen !== this.loadId) return;
       this.apply(next, { acclimateNew: true });
       this.patch({ notice: `${name} is in a bag, getting used to the water.` });
     });
@@ -223,9 +245,12 @@ export class TankSession {
   async net(fishId: string): Promise<boolean> {
     const tank = this.activeTank;
     if (!tank) return false;
+    const gen = this.loadId;
     return this.perform(async () => {
       const fish = tank.fish.find((f) => f.id === fishId);
-      this.apply(await this.deps.api.netFish(tank.id, fishId), { removal: 'netted' });
+      const next = await this.deps.api.netFish(tank.id, fishId);
+      if (gen !== this.loadId) return;
+      this.apply(next, { removal: 'netted' });
       this.patch({ notice: fish ? `${fish.name} was netted and added to the memorial.` : null });
     });
   }
@@ -238,7 +263,7 @@ export class TankSession {
   private async reset(phase: 'anonymous' | 'unverified'): Promise<void> {
     this.loadId++;
     this.switchId++;
-    await this.leaveActive();
+    this.unloadScene()?.dispose();
     for (const timer of this.releaseTimers.values()) clearTimeout(timer);
     this.releaseTimers.clear();
     this.state = { ...INITIAL_STATE, phase };
@@ -249,12 +274,14 @@ export class TankSession {
     const tank = this.state.tanks.find((t) => t.id === tankId);
     if (!tank) return;
     this.unloadScene()?.dispose();
+    const gen = this.loadId;
     this.loadedId = tankId;
     this.uploader = new AteUploader({
       ...this.deps.ateOptions,
       sleep: this.sleep,
       send: async (reports) => {
-        this.apply(await this.enqueue(() => this.deps.api.reportAte(tankId, reports)));
+        const next = await this.enqueue(() => this.deps.api.reportAte(tankId, reports));
+        if (gen === this.loadId) this.apply(next);
       },
       onDropped: (reason, reports) => {
         if (reason === 'rejected') return;
@@ -329,12 +356,14 @@ export class TankSession {
   }
 
   private async perform(task: () => Promise<void>): Promise<boolean> {
+    const gen = this.loadId;
     this.inFlight++;
     this.patch({ busy: true, error: null });
     try {
       await this.enqueue(task);
       return true;
     } catch (error) {
+      if (gen !== this.loadId) return false;
       this.patch({ error: describeSyncError(error), notice: null });
       return false;
     } finally {
@@ -371,6 +400,10 @@ export class TankSession {
     for (const fish of diff.died) {
       this.cancelRelease(fish.id);
       interaction.emit('tank:fish-died', { tankId: tank.id, fish });
+      const species = this.state.species.find((sp) => sp.id === fish.species)?.commonName;
+      this.patch({
+        notice: `${fish.name} the ${species?.toLowerCase() ?? 'fish'} has died. You can net them when you are ready.`,
+      });
     }
     if (held.water !== tank.water)
       interaction.emit('tank:water', { tankId: tank.id, water: tank.water });
