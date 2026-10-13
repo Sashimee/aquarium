@@ -33,7 +33,10 @@ export const SnapshotField = {
 export const SNAPSHOT_STRIDE = 11;
 
 export interface Snapshot {
-  /** Bumped by every re-init; ticks restart at 0 within a new epoch. */
+  /**
+   * Bumped by every re-init and by every fish added or removed (see `SimLayout`); ticks restart at
+   * 0 only after a re-init.
+   */
   readonly epoch: number;
   readonly tick: number;
   /** Simulation seconds at this tick. */

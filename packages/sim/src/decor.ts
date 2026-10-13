@@ -389,7 +389,7 @@ export interface DecorPlan {
  * of primitives and moving one collider rebuilds only the cells its old and new bounds cover.
  */
 export class DecorField implements Sdf {
-  readonly reach: number;
+  private reachM: number;
   private readonly cell: number;
   private readonly nx: number;
   private readonly ny: number;
@@ -409,7 +409,7 @@ export class DecorField implements Sdf {
       throw new RangeError(`DecorField reach must be a positive number of metres, got ${reach}`);
     }
     const basin = basinOf(tank);
-    this.reach = reach;
+    this.reachM = reach;
     this.cell = cellSize;
     this.nx = Math.max(1, Math.ceil(basin.width / cellSize));
     this.ny = Math.max(1, Math.ceil(basin.height / cellSize));
@@ -422,6 +422,25 @@ export class DecorField implements Sdf {
 
   get size(): number {
     return this.slotOf.size;
+  }
+
+  /** Beyond this distance from every collider `sample` reports exactly this, with an up normal. */
+  get reach(): number {
+    return this.reachM;
+  }
+
+  /** Raises the reach to `reach` and rebins every collider; returns cells rebuilt. Never lowers it. */
+  widen(reach: number): number {
+    if (!(reach > this.reachM && Number.isFinite(reach))) return 0;
+    let touched = 0;
+    this.slots.forEach((p, slot) => {
+      if (p) touched += this.bin(p, slot, false);
+    });
+    this.reachM = reach;
+    this.slots.forEach((p, slot) => {
+      if (p) touched += this.bin(p, slot, true);
+    });
+    return touched;
   }
 
   has(id: string): boolean {
@@ -510,7 +529,7 @@ export class DecorField implements Sdf {
     iy = iy < 0 ? 0 : iy >= this.ny ? this.ny - 1 : iy;
     iz = iz < 0 ? 0 : iz >= this.nz ? this.nz - 1 : iz;
     const list = this.cells[(iz * this.ny + iy) * this.nx + ix];
-    let best = this.reach;
+    let best = this.reachM;
     normal[0] = 0;
     normal[1] = 1;
     normal[2] = 0;
@@ -535,7 +554,7 @@ export class DecorField implements Sdf {
   }
 
   private bin(p: Primitive, slot: number, add: boolean): number {
-    const r = this.reach;
+    const r = this.reachM;
     const x0 = Math.max(0, Math.floor((p.minX - r - this.ox) / this.cell));
     const x1 = Math.min(this.nx - 1, Math.floor((p.maxX + r - this.ox) / this.cell));
     const y0 = Math.max(0, Math.floor((p.minY - r - this.oy) / this.cell));

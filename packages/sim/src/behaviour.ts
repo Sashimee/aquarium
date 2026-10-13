@@ -1,6 +1,7 @@
 import type { Basin } from './basin.ts';
 import type { Point3 } from './decor.ts';
 import { FEEDING, Feeding, feedingHeight } from './feeding.ts';
+import type { FishResize } from './fishArrays.ts';
 import type { FoodStore } from './food.ts';
 import { clamp, DEG, wrapAngle } from './math.ts';
 import { selectNearest } from './neighbours.ts';
@@ -274,54 +275,54 @@ export class Behaviour {
   private anchors: readonly Anchor[] = [];
   private readonly stimuli: Stimulus[] = [];
 
-  private readonly startlePhase: Uint8Array;
-  private readonly startleTimer: Float64Array;
-  private readonly startleElapsed: Float64Array;
-  private readonly escapeYaw: Float64Array;
-  private readonly escapePitch: Float64Array;
-  private readonly startleAt: Float64Array;
-  private readonly scheduledYaw: Float64Array;
-  private readonly scheduledPitch: Float64Array;
-  private readonly refractory: Float64Array;
-  readonly tighten: Float64Array;
-  private readonly habituation: Float64Array;
+  private startlePhase: Uint8Array;
+  private startleTimer: Float64Array;
+  private startleElapsed: Float64Array;
+  private escapeYaw: Float64Array;
+  private escapePitch: Float64Array;
+  private startleAt: Float64Array;
+  private scheduledYaw: Float64Array;
+  private scheduledPitch: Float64Array;
+  private refractory: Float64Array;
+  tighten: Float64Array;
+  private habituation: Float64Array;
   /** Tick at which each fish last began a startle, or -1. */
-  readonly startledAt: Float64Array;
+  startledAt: Float64Array;
 
-  readonly rest: Float64Array;
-  private readonly restTau: Float64Array;
-  private readonly restSpot: Float64Array;
-  private readonly restSpotSet: Uint8Array;
+  rest: Float64Array;
+  private restTau: Float64Array;
+  private restSpot: Float64Array;
+  private restSpotSet: Uint8Array;
 
-  private readonly home: Float64Array;
-  private readonly homeTimer: Float64Array;
-  readonly anchor: Int32Array;
-  private readonly shelterTimer: Float64Array;
+  private home: Float64Array;
+  private homeTimer: Float64Array;
+  anchor: Int32Array;
+  private shelterTimer: Float64Array;
 
-  private readonly territoryPhase: Uint8Array;
-  private readonly territoryTimer: Float64Array;
-  private readonly territoryCheck: Float64Array;
-  private readonly territoryCooldown: Float64Array;
-  readonly yieldTimer: Float64Array;
-  private readonly yieldYaw: Float64Array;
-  readonly territoryTarget: Int32Array;
+  private territoryPhase: Uint8Array;
+  private territoryTimer: Float64Array;
+  private territoryCheck: Float64Array;
+  private territoryCooldown: Float64Array;
+  yieldTimer: Float64Array;
+  private yieldYaw: Float64Array;
+  territoryTarget: Int32Array;
 
-  private readonly gulpPhase: Uint8Array;
-  private readonly gulpTimer: Float64Array;
+  private gulpPhase: Uint8Array;
+  private gulpTimer: Float64Array;
 
-  private readonly grazePhase: Uint8Array;
-  private readonly grazeTimer: Float64Array;
-  private readonly grazeNext: Float64Array;
-  private readonly grazeTarget: Float64Array;
-  private readonly grazeYaw: Float64Array;
-  private readonly crawlSign: Float64Array;
+  private grazePhase: Uint8Array;
+  private grazeTimer: Float64Array;
+  private grazeNext: Float64Array;
+  private grazeTarget: Float64Array;
+  private grazeYaw: Float64Array;
+  private crawlSign: Float64Array;
 
-  private readonly sifting: Uint8Array;
-  private readonly forageTimer: Float64Array;
+  private sifting: Uint8Array;
+  private forageTimer: Float64Array;
 
-  private readonly excursion: Uint8Array;
-  private readonly excursionTimer: Float64Array;
-  private readonly excursionTarget: Float64Array;
+  private excursion: Uint8Array;
+  private excursionTimer: Float64Array;
+  private excursionTarget: Float64Array;
 
   private readonly groupHome: Float64Array;
   private readonly groupTimer: Float64Array;
@@ -390,22 +391,127 @@ export class Behaviour {
 
   /** Draws each fish's private timers; call once positions are spawned. */
   init(): void {
-    const { rng } = this.host;
+    for (let i = 0; i < this.host.count; i++) this.drawTimers(i);
+    for (let i = 0; i < this.host.count; i++) this.pickHome(i);
+  }
+
+  /**
+   * Starts fish `i`, just appended by `resize`, as `init` starts every fish, and gives it an
+   * anemone or cave if one has room, without moving any other fish from its own.
+   */
+  addFish(i: number): void {
+    this.drawTimers(i);
+    this.pickHome(i);
+    this.anchor[i] = this.freeAnchor(i);
+  }
+
+  /**
+   * Follows a fish joining or leaving. A fish whose rival left calls off the contest, and a
+   * station group that lost its leader follows its next member.
+   */
+  resize(edit: FishResize): void {
+    if (edit.removed >= 0) this.plans.splice(edit.removed, 1);
+    else this.plans.push(new Plan());
+    this.startlePhase = edit.array(this.startlePhase);
+    this.startleTimer = edit.array(this.startleTimer);
+    this.startleElapsed = edit.array(this.startleElapsed);
+    this.escapeYaw = edit.array(this.escapeYaw);
+    this.escapePitch = edit.array(this.escapePitch);
+    this.startleAt = edit.array(this.startleAt, 1, -1);
+    this.scheduledYaw = edit.array(this.scheduledYaw);
+    this.scheduledPitch = edit.array(this.scheduledPitch);
+    this.refractory = edit.array(this.refractory);
+    this.tighten = edit.array(this.tighten);
+    this.habituation = edit.array(this.habituation);
+    this.startledAt = edit.array(this.startledAt, 1, -1);
+    this.rest = edit.array(this.rest);
+    this.restTau = edit.array(this.restTau);
+    this.restSpot = edit.array(this.restSpot, 3);
+    this.restSpotSet = edit.array(this.restSpotSet);
+    this.home = edit.array(this.home, 3);
+    this.homeTimer = edit.array(this.homeTimer);
+    this.anchor = edit.array(this.anchor, 1, -1);
+    this.shelterTimer = edit.array(this.shelterTimer);
+    this.territoryPhase = edit.array(this.territoryPhase);
+    this.territoryTimer = edit.array(this.territoryTimer);
+    this.territoryCheck = edit.array(this.territoryCheck);
+    this.territoryCooldown = edit.array(this.territoryCooldown);
+    this.yieldTimer = edit.array(this.yieldTimer);
+    this.yieldYaw = edit.array(this.yieldYaw);
+    this.territoryTarget = edit.array(this.territoryTarget, 1, -1);
+    this.gulpPhase = edit.array(this.gulpPhase);
+    this.gulpTimer = edit.array(this.gulpTimer);
+    this.grazePhase = edit.array(this.grazePhase);
+    this.grazeTimer = edit.array(this.grazeTimer);
+    this.grazeNext = edit.array(this.grazeNext);
+    this.grazeTarget = edit.array(this.grazeTarget, 3);
+    this.grazeYaw = edit.array(this.grazeYaw);
+    this.crawlSign = edit.array(this.crawlSign, 1, 1);
+    this.sifting = edit.array(this.sifting);
+    this.forageTimer = edit.array(this.forageTimer);
+    this.excursion = edit.array(this.excursion);
+    this.excursionTimer = edit.array(this.excursionTimer);
+    this.excursionTarget = edit.array(this.excursionTarget, 3);
+    this.feeding.resize(edit);
+    if (edit.removed < 0) return;
+    for (let i = 0; i < this.territoryTarget.length; i++) {
+      const j = edit.index(at(this.territoryTarget, i));
+      this.territoryTarget[i] = j;
+      // Not `endTerritory`: that draws a cooldown, and the rival only left the tank.
+      if (j < 0) this.territoryPhase[i] = TerritoryPhase.Idle;
+    }
+    const leaders = this.groupLeader;
+    for (let s = 0; s < leaders.length; s++) leaders[s] = edit.index(at(leaders, s));
+    this.groupSize.fill(0);
     for (let i = 0; i < this.host.count; i++) {
       const sp = this.speciesOf(i);
+      if (sp.home !== 'station' || !sp.schooling) continue;
       const si = at(this.host.speciesIndex, i);
-      this.restTau[i] = BEHAVIOUR.restTauS * (1 + BEHAVIOUR.restTauJitter * rng.signed());
-      this.territoryCheck[i] = rng.range(0, BEHAVIOUR.territoryCheckS);
-      this.grazeNext[i] = rng.range(0, sp.grazeMeanIntervalS);
-      this.crawlSign[i] = rng.next() < 0.5 ? -1 : 1;
-      this.forageTimer[i] = rng.range(BEHAVIOUR.moveMinS, BEHAVIOUR.moveMaxS);
-      this.excursionTimer[i] = rng.range(0, 2 * sp.excursionMeanIntervalS);
-      if (sp.home === 'station' && sp.schooling) {
-        this.groupSize[si] = at(this.groupSize, si) + 1;
-        if (at(this.groupLeader, si) < 0) this.groupLeader[si] = i;
+      this.groupSize[si] = at(this.groupSize, si) + 1;
+      if (at(leaders, si) < 0) leaders[si] = i;
+    }
+  }
+
+  private drawTimers(i: number): void {
+    const { rng } = this.host;
+    const sp = this.speciesOf(i);
+    const si = at(this.host.speciesIndex, i);
+    this.restTau[i] = BEHAVIOUR.restTauS * (1 + BEHAVIOUR.restTauJitter * rng.signed());
+    this.territoryCheck[i] = rng.range(0, BEHAVIOUR.territoryCheckS);
+    this.grazeNext[i] = rng.range(0, sp.grazeMeanIntervalS);
+    this.crawlSign[i] = rng.next() < 0.5 ? -1 : 1;
+    this.forageTimer[i] = rng.range(BEHAVIOUR.moveMinS, BEHAVIOUR.moveMaxS);
+    this.excursionTimer[i] = rng.range(0, 2 * sp.excursionMeanIntervalS);
+    if (sp.home === 'station' && sp.schooling) {
+      this.groupSize[si] = at(this.groupSize, si) + 1;
+      if (at(this.groupLeader, si) < 0) this.groupLeader[si] = i;
+    }
+  }
+
+  /**
+   * The anchor a newly added fish takes: the anemone holding the fewest of its species (they
+   * live in pairs, as `setAnchors` deals them out), or a cave none of its species holds; -1 if
+   * there is none.
+   */
+  private freeAnchor(i: number): number {
+    const sp = this.speciesOf(i);
+    const kind = sp.home === 'anemone' || sp.home === 'cave' ? sp.home : null;
+    if (kind === null) return -1;
+    const own = at(this.host.speciesIndex, i);
+    let best = -1;
+    let bestHeld = Infinity;
+    for (let k = 0; k < this.anchors.length; k++) {
+      if (this.anchors[k]?.kind !== kind) continue;
+      let held = 0;
+      for (let j = 0; j < this.host.count; j++) {
+        if (j !== i && at(this.anchor, j) === k && at(this.host.speciesIndex, j) === own) held++;
+      }
+      if (held < bestHeld) {
+        best = k;
+        bestHeld = held;
       }
     }
-    for (let i = 0; i < this.host.count; i++) this.pickHome(i);
+    return kind === 'cave' && bestHeld > 0 ? -1 : best;
   }
 
   setAnchors(anchors: readonly Anchor[]): void {
