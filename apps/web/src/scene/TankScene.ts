@@ -17,6 +17,7 @@ import {
   euphylliaCollider,
   euphylliaReach,
   generateEuphyllia,
+  type EuphylliaMesh,
   parseEuphylliaId,
   type EuphylliaDetail,
   type EuphylliaVariant,
@@ -32,7 +33,7 @@ import { RebuildQueue } from './rebuildQueue';
 import { PlantGroup, maxSway, type PlantEntry } from './plants';
 import { createSubstrateMaterial, type SubstrateLayers } from './substrate';
 
-const DEFAULT_CURRENT: CurrentParameters = {
+export const DEFAULT_CURRENT: CurrentParameters = {
   direction: [1, 0],
   speed: 0.04,
   gustPeriodS: 9,
@@ -57,6 +58,7 @@ interface EuphylliaItem {
   readonly item: DecorItem;
   readonly variant: EuphylliaVariant;
   readonly seed: number;
+  readonly fullDetail?: EuphylliaMesh;
 }
 
 interface VisualKey {
@@ -194,11 +196,7 @@ export class TankScene {
     }
     const hard = new ColliderField(colliders);
 
-    const { length, depth, glass } = dimensions;
-    const extent: Extent = {
-      halfLength: length / 2 - glass - WALL_MARGIN,
-      halfDepth: depth / 2 - glass - WALL_MARGIN,
-    };
+    const extent = glassExtent(dimensions);
     const ground = (x: number, z: number) => substrateHeight(dimensions, x, z);
     const normal = new Float64Array(3);
     const blocked = (x: number, y: number, z: number) =>
@@ -264,10 +262,11 @@ export class TankScene {
     });
 
     const current = preset.current ?? DEFAULT_CURRENT;
-    for (const { item, variant, seed } of euphylliaItems) {
-      const { bounds } = generateEuphyllia(variant, seed, 2);
-      checkEuphylliaClearOfGlass(item, euphylliaReach(bounds, item, current), extent);
-      colliders.push(euphylliaCollider(bounds, item));
+    for (const [i, entry] of euphylliaItems.entries()) {
+      const fullDetail = generateEuphyllia(entry.variant, entry.seed, 2);
+      euphylliaItems[i] = { ...entry, fullDetail };
+      checkEuphylliaClearOfGlass(entry.item, fullDetail.bounds, current, extent);
+      colliders.push(euphylliaCollider(fullDetail.bounds, entry.item));
     }
 
     const scene = new TankScene(
@@ -443,8 +442,11 @@ export class TankScene {
         const model = await this.library.load(item.assetId, key.hardscapeLod, key.textureSize);
         anemones.push(new AnemoneGroup(entry, model, item, this.current));
       }
-      for (const { item, variant, seed } of this.euphylliaItems) {
-        const mesh = generateEuphyllia(variant, seed, key.euphylliaDetail);
+      for (const { item, variant, seed, fullDetail } of this.euphylliaItems) {
+        const mesh =
+          key.euphylliaDetail === 2 && fullDetail
+            ? fullDetail
+            : generateEuphyllia(variant, seed, key.euphylliaDetail);
         euphyllias.push(new EuphylliaGroup(mesh, item, this.current));
       }
     } catch (error) {
@@ -526,7 +528,18 @@ export class TankScene {
   }
 }
 
-function checkClearOfGlass(
+export function glassExtent(dimensions: {
+  readonly length: number;
+  readonly depth: number;
+  readonly glass: number;
+}): Extent {
+  return {
+    halfLength: dimensions.length / 2 - dimensions.glass - WALL_MARGIN,
+    halfDepth: dimensions.depth / 2 - dimensions.glass - WALL_MARGIN,
+  };
+}
+
+export function checkClearOfGlass(
   entry: CatalogEntry,
   item: DecorItem,
   current: CurrentParameters,
@@ -543,7 +556,13 @@ function checkClearOfGlass(
   }
 }
 
-function checkEuphylliaClearOfGlass(item: DecorItem, reach: number, extent: Extent): void {
+export function checkEuphylliaClearOfGlass(
+  item: DecorItem,
+  bounds: EuphylliaMesh['bounds'],
+  current: CurrentParameters,
+  extent: Extent,
+): void {
+  const reach = euphylliaReach(bounds, item, current);
   if (
     Math.abs(item.position[0]) + reach > extent.halfLength ||
     Math.abs(item.position[2]) + reach > extent.halfDepth

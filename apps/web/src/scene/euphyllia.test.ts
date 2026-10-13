@@ -10,6 +10,7 @@ import {
   generateEuphyllia,
   parseEuphylliaId,
   type EuphylliaDetail,
+  type EuphylliaMesh,
   type EuphylliaVariant,
 } from './euphyllia';
 
@@ -27,8 +28,19 @@ describe('euphyllia ids', () => {
     expect(parseEuphylliaId(euphylliaId('torch', 42))).toEqual({ variant: 'torch', seed: 42 });
   });
 
+  it('accepts a bare zero seed', () => {
+    expect(parseEuphylliaId('euphyllia-torch-0')).toEqual({ variant: 'torch', seed: 0 });
+  });
+
   it('ignores catalog assets and malformed ids', () => {
-    for (const id of ['brain-coral', 'euphyllia-fan-1', 'euphyllia-hammer-', 'euphyllia-torch-x']) {
+    for (const id of [
+      'brain-coral',
+      'euphyllia-fan-1',
+      'euphyllia-hammer-',
+      'euphyllia-torch-x',
+      'euphyllia-hammer-03',
+      'euphyllia-torch-00',
+    ]) {
       expect(parseEuphylliaId(id), id).toBeNull();
     }
   });
@@ -128,5 +140,14 @@ describe('euphyllia placement data', () => {
     expect(euphylliaReach(mesh.bounds, item, brisk)).toBeGreaterThan(
       euphylliaReach(mesh.bounds, item, calm),
     );
+  });
+});
+
+describe('euphyllia glass reach', () => {
+  it('counts a rotated corner, not just the largest single-axis extent', () => {
+    const bounds: EuphylliaMesh['bounds'] = { min: [-0.1, 0, -0.1], max: [0.1, 0.1, 0.1] };
+    const still = { direction: [1, 0] as const, speed: 0, gustPeriodS: 8, gustDepth: 0 };
+    const rotated = { ...item, rotationY: Math.PI / 4, scale: 1 };
+    expect(euphylliaReach(bounds, rotated, still)).toBeGreaterThanOrEqual(Math.hypot(0.1, 0.1));
   });
 });

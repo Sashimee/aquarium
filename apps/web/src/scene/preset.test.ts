@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_TANK } from '../engine/tank/dimensions';
 import { substrateHeight } from '../engine/tank/substrate';
+import type { CatalogEntry } from './assets';
 import { loadPreset, parsePreset } from './preset';
 import catalog from '../../public/assets/index.json';
 import { generateEuphyllia, parseEuphylliaId } from './euphyllia';
+import {
+  DEFAULT_CURRENT,
+  checkClearOfGlass,
+  checkEuphylliaClearOfGlass,
+  glassExtent,
+} from './TankScene';
 
 const kinds = new Map(catalog.assets.map((a) => [a.id, a.kind]));
 
@@ -130,5 +137,37 @@ describe('loadPreset', () => {
   it('loads a preset for every biome', () => {
     expect(loadPreset('freshwater').biome).toBe('freshwater');
     expect(loadPreset('reef').biome).toBe('reef');
+  });
+});
+
+describe.each(['freshwater', 'reef'] as const)('%s preset glass clearance at load', (biome) => {
+  const preset = loadPreset(biome);
+  const entries = new Map(catalog.assets.map((a) => [a.id, a]));
+  const extent = glassExtent(DEFAULT_TANK);
+  const current = preset.current ?? DEFAULT_CURRENT;
+
+  it('passes the checks the scene runs while loading', () => {
+    for (const item of preset.decor) {
+      const procedural = parseEuphylliaId(item.assetId);
+      if (procedural) {
+        const { bounds } = generateEuphyllia(procedural.variant, procedural.seed, 2);
+        expect(
+          () => checkEuphylliaClearOfGlass(item, bounds, current, extent),
+          item.assetId,
+        ).not.toThrow();
+      } else if (kinds.get(item.assetId) === 'anemone') {
+        const b = entries.get(item.assetId)?.bounds;
+        if (!b) throw new Error(`${item.assetId} has no bounds`);
+        const [x0 = 0, y0 = 0, z0 = 0] = b.min;
+        const [x1 = 0, y1 = 0, z1 = 0] = b.max;
+        const entry: CatalogEntry = {
+          id: item.assetId,
+          kind: 'anemone',
+          lods: [],
+          bounds: { min: [x0, y0, z0], max: [x1, y1, z1] },
+        };
+        expect(() => checkClearOfGlass(entry, item, current, extent), item.assetId).not.toThrow();
+      }
+    }
   });
 });
