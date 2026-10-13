@@ -8,7 +8,11 @@ import {
   useRedirect,
   useRoute,
 } from './context';
+import { tankReportLines } from '../sync/life';
+import { AwayDialog, LifeStatus } from './LifeStatus';
 import { PlayControls } from './PlayControls';
+import { useActiveTank, useSessionState } from './session';
+import { TankPanel } from './TankPanel';
 import {
   CreditsScreen,
   Link,
@@ -83,6 +87,8 @@ function TankReport() {
   const [open, setOpen] = useState(false);
   const engine = useEngineReady();
   const mode = useCameraMode();
+  const tank = useActiveTank();
+  const { species, phase } = useSessionState();
   return (
     <section className="report" aria-label="Tank report">
       <button
@@ -94,14 +100,24 @@ function TankReport() {
         Tank report
       </button>
       <div id="tank-report-body" hidden={!open}>
-        <p>A 300 litre freshwater aquarium, 120 by 50 by 50 centimetres.</p>
+        {tank ? (
+          tankReportLines(tank, species).map((line) => <p key={line}>{line}</p>)
+        ) : (
+          <>
+            <p>A 300 litre freshwater aquarium, 120 by 50 by 50 centimetres.</p>
+            <p>
+              {phase === 'unverified'
+                ? 'Verify your email address to keep a saved tank.'
+                : 'This is the demo tank. Sign in with a verified account to keep a tank.'}
+            </p>
+          </>
+        )}
         <p>Camera: {MODE_LABEL[mode]}.</p>
         <p>
           {engine
             ? `Rendering with ${engine.backend === 'webgpu' ? 'WebGPU' : 'WebGL 2'} at the ${engine.tier} quality tier.`
             : 'The tank is still loading.'}
         </p>
-        <p>No fish live here yet.</p>
       </div>
     </section>
   );
@@ -137,6 +153,7 @@ export function App() {
   useRedirect();
   const route = useRoute();
   const modal = route.name !== 'home';
+  const [panelOpen, setPanelOpen] = useState(false);
   const previous = useRef(route.name);
   useEffect(() => {
     if (route.name === 'home' && previous.current !== 'home') {
@@ -162,8 +179,19 @@ export function App() {
         </Link>
         <CameraControls />
         <PlayControls />
+        <button
+          type="button"
+          aria-expanded={panelOpen}
+          aria-controls="tank-panel"
+          onClick={() => setPanelOpen(!panelOpen)}
+        >
+          My tank
+        </button>
         <AccountMenu />
       </header>
+      <LifeStatus />
+      <TankPanel open={panelOpen} onClose={() => setPanelOpen(false)} />
+      <AwayDialog onReview={() => setPanelOpen(true)} />
       <div className={modal ? 'stage modal' : 'stage'}>
         <Screen />
       </div>

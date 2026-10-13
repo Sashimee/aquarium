@@ -1,7 +1,9 @@
 import { foodTypeSchema, type FoodType } from '@aquarium/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { PlayTool } from '../interaction/events';
+import { HAND_FEED_PORTION, type PlayTool } from '../interaction/events';
+import { deadFish } from '../sync/life';
 import { useBridge, usePlayTool } from './context';
+import { useActiveTank } from './session';
 
 const TOOLS: readonly { tool: PlayTool; label: string }[] = [
   { tool: 'tap', label: 'Tap glass' },
@@ -9,6 +11,8 @@ const TOOLS: readonly { tool: PlayTool; label: string }[] = [
   { tool: 'laser', label: 'Laser' },
   { tool: 'wand', label: 'Bubbles' },
 ];
+
+const NET: { tool: PlayTool; label: string } = { tool: 'net', label: 'Net' };
 
 const FOOD_LABEL: Record<FoodType, string> = {
   flakes: 'Flakes',
@@ -22,6 +26,8 @@ const FOOD_LABEL: Record<FoodType, string> = {
 export function PlayControls() {
   const { interaction } = useBridge();
   const tool = usePlayTool();
+  const tank = useActiveTank();
+  const tools = tank && deadFish(tank).length > 0 ? [...TOOLS, NET] : TOOLS;
   const [food, setFood] = useState<FoodType>('flakes');
   const [message, setMessage] = useState('');
   const [ready, setReady] = useState(false);
@@ -78,11 +84,11 @@ export function PlayControls() {
       <button
         type="button"
         disabled={!ready}
-        onClick={() => interaction.emit('feed:request', { food, portion: 1 })}
+        onClick={() => interaction.emit('feed:request', { food, portion: HAND_FEED_PORTION })}
       >
         Feed
       </button>
-      {TOOLS.map((t) => (
+      {tools.map((t) => (
         <button
           key={t.tool}
           type="button"
