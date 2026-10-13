@@ -1,17 +1,9 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { CameraMode } from '../interaction/camera';
-import {
-  useAuth,
-  useBridge,
-  useCameraMode,
-  useEngineReady,
-  useRedirect,
-  useRoute,
-} from './context';
-import { tankReportLines } from '../sync/life';
+import { useAuth, useBridge, useCameraMode, useRedirect, useRoute } from './context';
 import { LifeStatus } from './LifeStatus';
 import { PlayControls } from './PlayControls';
-import { useActiveTank, useSessionState } from './session';
+import { useSessionState } from './session';
 import {
   CreditsScreen,
   Link,
@@ -23,12 +15,6 @@ import {
   SignUpScreen,
   VerifyEmailScreen,
 } from './screens';
-
-const MODE_LABEL: Record<CameraMode, string> = {
-  orbit: 'Outside view',
-  focus: 'Following a fish',
-  dive: 'Inside the tank',
-};
 
 function CameraControls() {
   const { interaction } = useBridge();
@@ -82,46 +68,6 @@ function AccountMenu() {
   );
 }
 
-function TankReport() {
-  const [open, setOpen] = useState(false);
-  const engine = useEngineReady();
-  const mode = useCameraMode();
-  const tank = useActiveTank();
-  const { species, phase } = useSessionState();
-  return (
-    <section className="report" aria-label="Tank report">
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls="tank-report-body"
-        onClick={() => setOpen(!open)}
-      >
-        Tank report
-      </button>
-      <div id="tank-report-body" hidden={!open}>
-        {tank ? (
-          tankReportLines(tank, species).map((line) => <p key={line}>{line}</p>)
-        ) : (
-          <>
-            <p>A 300 litre freshwater aquarium, 120 by 50 by 50 centimetres.</p>
-            <p>
-              {phase === 'unverified'
-                ? 'Verify your email address to keep a saved tank.'
-                : 'This is the demo tank. Sign in with a verified account to keep a tank.'}
-            </p>
-          </>
-        )}
-        <p>Camera: {MODE_LABEL[mode]}.</p>
-        <p>
-          {engine
-            ? `Rendering with ${engine.backend === 'webgpu' ? 'WebGPU' : 'WebGL 2'} at the ${engine.tier} quality tier.`
-            : 'The tank is still loading.'}
-        </p>
-      </div>
-    </section>
-  );
-}
-
 function Screen() {
   const route = useRoute();
   const { status } = useAuth();
@@ -148,6 +94,7 @@ function Screen() {
   }
 }
 
+const TankReport = lazy(() => import('./TankReport'));
 const TankPanel = lazy(() => import('./TankPanel').then((m) => ({ default: m.TankPanel })));
 
 const LifeDialogsView = lazy(() => import('./LifeDialogs'));
@@ -218,7 +165,9 @@ export function App() {
       <div className={modal ? 'stage modal' : 'stage'}>
         <Screen />
       </div>
-      <TankReport />
+      <Suspense fallback={null}>
+        <TankReport />
+      </Suspense>
       <footer className="legal-links">
         <nav aria-label="Legal">
           <Link to="/privacy">Privacy</Link>

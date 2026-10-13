@@ -24,7 +24,10 @@ const deadPip = fishFixture(FISH_1, {
   cause: 'starvation',
 });
 
-function setup(initial: Tank[] = [tankFixture({ fish: [fishFixture(FISH_1)] })]) {
+function setup(
+  initial: Tank[] = [tankFixture({ fish: [fishFixture(FISH_1)] })],
+  storage?: Pick<Storage, 'getItem' | 'setItem'>,
+) {
   const api = {
     species: vi.fn().mockResolvedValue([speciesFixture()]),
     tanks: vi.fn().mockResolvedValue(initial),
@@ -42,9 +45,13 @@ function setup(initial: Tank[] = [tankFixture({ fish: [fishFixture(FISH_1)] })])
     interaction: rec.bus,
     sleep: async () => undefined,
     now: () => Date.parse('2026-02-01T12:00:00.000Z'),
+    ...(storage ? { storage } : {}),
   });
   return { api, rec, session };
 }
+
+const setupWithStorage = (storage: Pick<Storage, 'getItem' | 'setItem'>) =>
+  setup(undefined, storage);
 
 const verified = { emailVerified: true };
 
@@ -462,6 +469,72 @@ describe('tank switcher and naming', () => {
     const calls = api.reportAte.mock.calls.length;
     await new Promise((r) => setTimeout(r, 40));
     expect(api.reportAte.mock.calls.length).toBe(calls);
+    session.dispose();
+  });
+
+  it('does not resurrect a tank created just before the user signed out', async () => {
+    const storage = { getItem: vi.fn().mockReturnValue(null), setItem: vi.fn() };
+    const { api, rec, session } = setupWithStorage(storage);
+    await session.setUser(verified);
+    let finishCreate: (tank: Tank) => void = () => undefined;
+    api.createTank.mockReturnValue(new Promise<Tank>((resolve) => (finishCreate = resolve)));
+    const creating = session.createTank('Den', 'freshwater');
+    await session.setUser(null);
+    finishCreate(tankFixture({ id: TANK_B, name: 'Den' }));
+    expect(await creating).toBe(false);
+    expect(session.getState()).toMatchObject({ phase: 'anonymous', tanks: [], activeId: null });
+    expect(storage.setItem).not.toHaveBeenCalled();
+    expect(rec.of('tank:loaded').map((e) => (e as { tankId: string }).tankId)).toEqual([TANK_A]);
+    expect(rec.of('tank:unloaded')).toEqual([{ tankId: TANK_A }]);
+  });
+
+  it('leaves exactly one tank live when a create finishes during a reload', async () => {
+    const { api, rec, session } = setup([tankFixture(), second]);
+    await session.setUser(verified);
+    let finishCreate: (tank: Tank) => void = () => undefined;
+    api.createTank.mockReturnValue(new Promise<Tank>((resolve) => (finishCreate = resolve)));
+    const creating = session.createTank('Den', 'freshwater');
+    await session.load();
+    finishCreate(tankFixture({ id: TANK_C, name: 'Den' }));
+    expect(await creating).toBe(false);
+    const loaded = rec.of('tank:loaded').length;
+    const unloaded = rec.of('tank:unloaded').length;
+    expect(loaded - unloaded).toBe(1);
+    expect(session.getState().tanks.map((t) => t.id)).toEqual([TANK_A, TANK_B]);
+    expect(session.getState().activeId).toBe(TANK_A);
+  });
+
+  it('says reports were dropped when the periodic flush was already retrying', async () => {
+    vi.useFakeTimers();
+    const abortableSleep = (_ms: number, signal: AbortSignal) =>
+      new Promise<void>((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+      });
+    const api = {
+      species: vi.fn().mockResolvedValue([speciesFixture()]),
+      tanks: vi.fn().mockResolvedValue([tankFixture({ fish: [fishFixture(FISH_1)] }), second]),
+      tank: vi.fn().mockResolvedValue({ ...second, lastTickAt: '2026-02-01T12:00:00.000Z' }),
+      reportAte: vi.fn().mockRejectedValue(apiError(0, 'network')),
+    };
+    const rec = recordBus();
+    const session = new TankSession({
+      api: api as unknown as ApiClient,
+      interaction: rec.bus,
+      sleep: abortableSleep,
+      now: () => Date.parse('2026-02-01T12:00:00.000Z'),
+      leaveFlushMs: 20,
+    });
+    await session.setUser(verified);
+    rec.bus.emit('food:ate', { eaten: [{ fishId: FISH_1, portion: 0.3 }] });
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(api.reportAte).toHaveBeenCalledTimes(1);
+
+    const switching = session.select(TANK_B);
+    await vi.advanceTimersByTimeAsync(30);
+    await switching;
+
+    expect(session.getState().activeId).toBe(TANK_B);
+    expect(session.getState().notice).toMatch(/feeding reports .* dropped/);
     session.dispose();
   });
 

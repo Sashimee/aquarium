@@ -7,13 +7,10 @@ import type {
   Tank,
   Water,
 } from '@aquarium/shared';
+import { speciesNameMap, type SpeciesNames } from './speciesNames';
 import { hasCapacityFor, MAX_FISH_PER_TANK, TANK_BIOLOAD_CAPACITY } from '@aquarium/sim/lifecycle';
 
-export type SpeciesNames = ReadonlyMap<string, string>;
-
-export function speciesNameMap(species: readonly SpeciesSummary[]): SpeciesNames {
-  return new Map(species.map((s) => [s.id, s.commonName]));
-}
+export { speciesNameMap, type SpeciesNames } from './speciesNames';
 
 function speciesName(names: SpeciesNames, id: string): string {
   return names.get(id)?.toLowerCase() ?? id.replaceAll('-', ' ');

@@ -1,7 +1,6 @@
 import { foodTypeSchema, type FoodType } from '@aquarium/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { HAND_FEED_PORTION, type PlayTool } from '../interaction/events';
-import { deadFish } from '../sync/life';
 import { useBridge, usePlayTool } from './context';
 import { useActiveTank } from './session';
 
@@ -27,7 +26,7 @@ export function PlayControls() {
   const { interaction } = useBridge();
   const tool = usePlayTool();
   const tank = useActiveTank();
-  const tools = tank && deadFish(tank).length > 0 ? [...TOOLS, NET] : TOOLS;
+  const tools = tank?.fish.some((f) => f.status === 'dead') ? [...TOOLS, NET] : TOOLS;
   const [food, setFood] = useState<FoodType>('flakes');
   const [message, setMessage] = useState('');
   const [ready, setReady] = useState(false);

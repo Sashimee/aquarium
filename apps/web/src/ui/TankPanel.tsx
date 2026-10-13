@@ -12,7 +12,7 @@ import { checkFishName, checkTankName, suggestFishName, suggestTankName } from '
 import type { SessionState, TankSession } from '../sync/session';
 import { useAuth } from './context';
 import { Link } from './screens';
-import { useActiveTank, useSessionState, useSpeciesNames, useTankSession } from './session';
+import { useActiveTank, useSessionState, useOptionalSession, useSpeciesNames } from './session';
 
 const BIOME_LABEL: Record<Biome, string> = { freshwater: 'Freshwater', reef: 'Reef' };
 
@@ -33,7 +33,7 @@ export function TankPanel({ open, onClose }: { open: boolean; onClose(): void })
 }
 
 function PanelBody({ state }: { state: SessionState }) {
-  const session = useTankSession();
+  const session = useOptionalSession();
   const { user } = useAuth();
   const tank = useActiveTank();
 
@@ -58,7 +58,7 @@ function PanelBody({ state }: { state: SessionState }) {
       </p>
     );
   }
-  if (state.phase === 'loading') return <p role="status">Loading your tanks.</p>;
+  if (state.phase === 'loading' || !session) return <p role="status">Loading your tanks.</p>;
   if (state.phase === 'offline') {
     return (
       <div>

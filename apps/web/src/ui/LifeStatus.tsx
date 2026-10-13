@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useBridge } from './context';
-import { useSessionState, useSpeciesNames, useTankSession } from './session';
+import { useOptionalSession, useSessionState, useSpeciesNames } from './session';
 
 /** Speaks and shows what just happened: chores done, errors, and a fish dying while you watch. */
 export function LifeStatus() {
-  const session = useTankSession();
+  const session = useOptionalSession();
   const { interaction } = useBridge();
   const state = useSessionState();
   const names = useSpeciesNames();
@@ -29,7 +29,7 @@ export function LifeStatus() {
             type="button"
             aria-label="Dismiss message"
             onClick={() => {
-              session.clearMessages();
+              session?.clearMessages();
               setDied(null);
             }}
           >

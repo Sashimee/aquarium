@@ -8,21 +8,38 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from 'react';
-import { speciesNameMap, type SpeciesNames } from '../sync/life';
-import { TankSession, type SessionState } from '../sync/session';
+import { speciesNameMap, type SpeciesNames } from '../sync/speciesNames';
+import { INITIAL_STATE, type SessionState } from '../sync/state';
+import type { TankSession } from '../sync/session';
 import { useApi, useAuth, useBridge } from './context';
 
-const SessionContext = createContext<TankSession | null>(null);
+interface SessionContextValue {
+  session: TankSession | null;
+  loading: boolean;
+}
+
+const SessionContext = createContext<SessionContextValue>({ session: null, loading: false });
+
+const LOADING_STATE: SessionState = { ...INITIAL_STATE, phase: 'loading' };
+const noopSubscribe = () => () => undefined;
+
+/** Null until a verified user needs a saved tank; the persistence code is fetched only then. */
+export function useOptionalSession(): TankSession | null {
+  return useContext(SessionContext).session;
+}
 
 export function useTankSession(): TankSession {
-  const session = useContext(SessionContext);
-  if (!session) throw new Error('useTankSession needs a <SessionProvider> ancestor');
+  const session = useOptionalSession();
+  if (!session) throw new Error('useTankSession needs a loaded session; check useOptionalSession');
   return session;
 }
 
 export function useSessionState(): SessionState {
-  const session = useTankSession();
-  return useSyncExternalStore(session.subscribe, session.getState);
+  const { session, loading } = useContext(SessionContext);
+  return useSyncExternalStore(
+    session ? session.subscribe : noopSubscribe,
+    session ? session.getState : () => (loading ? LOADING_STATE : INITIAL_STATE),
+  );
 }
 
 export function useActiveTank(): Tank | null {
@@ -41,22 +58,35 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const { interaction } = useBridge();
   const { user, status } = useAuth();
   const [session, setSession] = useState<TankSession | null>(null);
+  const verified = status !== 'loading' && user?.emailVerified === true;
+  const [needed, setNeeded] = useState(false);
+  useEffect(() => {
+    if (verified) setNeeded(true);
+  }, [verified]);
 
   // Built in an effect so StrictMode's mount, unmount, mount cycle gets a fresh, undisposed session.
   useEffect(() => {
-    const storage = typeof localStorage === 'undefined' ? undefined : localStorage;
-    const created = new TankSession({ api, interaction, ...(storage ? { storage } : {}) });
-    setSession(created);
+    if (!needed) return;
+    let cancelled = false;
+    let created: TankSession | null = null;
     const onVisible = () => {
-      if (document.visibilityState === 'visible') void created.onVisible();
+      if (document.visibilityState === 'visible') void created?.onVisible();
     };
-    document.addEventListener('visibilitychange', onVisible);
+    void import('../sync/session').then(({ TankSession }) => {
+      if (cancelled) return;
+      const storage = typeof localStorage === 'undefined' ? undefined : localStorage;
+      created = new TankSession({ api, interaction, ...(storage ? { storage } : {}) });
+      document.addEventListener('visibilitychange', onVisible);
+      setSession(created);
+    });
     return () => {
+      cancelled = true;
       document.removeEventListener('visibilitychange', onVisible);
-      created.dispose();
+      created?.dispose();
       setSession(null);
     };
-  }, [api, interaction]);
+    // Once needed, the session outlives sign-in changes and is only rebuilt for a new api or bus.
+  }, [api, interaction, needed]);
 
   const identity = status === 'loading' ? null : user ? `${user.id}:${user.emailVerified}` : '';
   useEffect(() => {
@@ -64,6 +94,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     void session.setUser(user);
   }, [session, identity]);
 
-  if (!session) return null;
-  return <SessionContext.Provider value={session}>{children}</SessionContext.Provider>;
+  const value = useMemo(() => ({ session, loading: verified && !session }), [session, verified]);
+  return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

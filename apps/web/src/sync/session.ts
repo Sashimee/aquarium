@@ -1,12 +1,4 @@
-import type {
-  AwaySummary,
-  Biome,
-  CareAction,
-  FoodType,
-  SpeciesSummary,
-  Tank,
-  User,
-} from '@aquarium/shared';
+import type { AwaySummary, Biome, CareAction, FoodType, Tank, User } from '@aquarium/shared';
 import type { EventBus } from '../engine/events';
 import type { InteractionEvents } from '../interaction/events';
 import type { ApiClient } from '../ui/api';
@@ -14,30 +6,10 @@ import { AteUploader, type AteUploaderOptions } from './ateUploader';
 import { withRetry, realSleep, type Sleep } from './backoff';
 import { ACCLIMATION_SECONDS, shouldShowAway } from './life';
 import { describeSyncError } from './messages';
+import { INITIAL_STATE, type SessionState } from './state';
 import { diffFish, isStaleSnapshot, upsertTank } from './reconcile';
 
-export type SessionPhase = 'anonymous' | 'unverified' | 'loading' | 'ready' | 'offline';
-
-export interface BaggedFish {
-  fishId: string;
-  name: string;
-  releaseAtMs: number;
-}
-
-export interface SessionState {
-  phase: SessionPhase;
-  tanks: readonly Tank[];
-  activeId: string | null;
-  species: readonly SpeciesSummary[];
-  /** Server-reported catch-up for tanks the player has not yet been told about. */
-  awayByTank: Readonly<Record<string, AwaySummary>>;
-  bagged: readonly BaggedFish[];
-  /** A dead fish the player has asked to net and not yet confirmed. */
-  pendingNet: string | null;
-  busy: boolean;
-  error: string | null;
-  notice: string | null;
-}
+export type { BaggedFish, SessionPhase, SessionState } from './state';
 
 export interface SessionDeps {
   api: ApiClient;
@@ -56,21 +28,8 @@ const ACTIVE_KEY = 'aquarium.activeTank';
 const LOAD_ATTEMPTS = 4;
 const LEAVE_FLUSH_MS = 3_000;
 
-const INITIAL: SessionState = {
-  phase: 'anonymous',
-  tanks: [],
-  activeId: null,
-  species: [],
-  awayByTank: {},
-  bagged: [],
-  pendingNet: null,
-  busy: false,
-  error: null,
-  notice: null,
-};
-
 export class TankSession {
-  private state: SessionState = INITIAL;
+  private state: SessionState = INITIAL_STATE;
   private readonly listeners = new Set<() => void>();
   private chain: Promise<unknown> = Promise.resolve();
   private inFlight = 0;
@@ -186,12 +145,15 @@ export class TankSession {
   }
 
   async createTank(name: string, biome: Biome): Promise<boolean> {
+    if (this.state.phase !== 'ready') return false;
+    const generation = this.loadId;
     const made: { tank?: Tank } = {};
     const ok = await this.perform(async () => {
       made.tank = await this.deps.api.createTank({ name, biome });
     });
     const tank = made.tank;
     if (!ok || !tank) return false;
+    if (generation !== this.loadId || this.state.phase !== 'ready') return false;
     const id = ++this.switchId;
     this.deps.storage?.setItem(ACTIVE_KEY, tank.id);
     this.patch({
@@ -279,13 +241,14 @@ export class TankSession {
     await this.leaveActive();
     for (const timer of this.releaseTimers.values()) clearTimeout(timer);
     this.releaseTimers.clear();
-    this.state = { ...INITIAL, phase };
+    this.state = { ...INITIAL_STATE, phase };
     this.emitChange();
   }
 
   private activate(tankId: string): void {
     const tank = this.state.tanks.find((t) => t.id === tankId);
     if (!tank) return;
+    this.unloadScene()?.dispose();
     this.loadedId = tankId;
     this.uploader = new AteUploader({
       ...this.deps.ateOptions,
@@ -308,13 +271,7 @@ export class TankSession {
 
   /** Unloads synchronously, so overlapping switches unload once; only the report flush is awaited. */
   private async leaveActive(): Promise<void> {
-    const tankId = this.loadedId;
-    const uploader = this.uploader;
-    this.loadedId = null;
-    this.uploader = null;
-    for (const bag of this.state.bagged) this.cancelRelease(bag.fishId);
-    this.patch({ bagged: [] });
-    if (tankId) this.deps.interaction.emit('tank:unloaded', { tankId });
+    const uploader = this.unloadScene();
     if (!uploader) return;
     const finished = await this.flushBounded(uploader);
     uploader.dispose();
@@ -325,14 +282,25 @@ export class TankSession {
     }
   }
 
+  private unloadScene(): AteUploader | null {
+    const tankId = this.loadedId;
+    const uploader = this.uploader;
+    this.loadedId = null;
+    this.uploader = null;
+    for (const bag of this.state.bagged) this.cancelRelease(bag.fishId);
+    this.patch({ bagged: [] });
+    if (tankId) this.deps.interaction.emit('tank:unloaded', { tankId });
+    return uploader;
+  }
+
   private async flushBounded(uploader: AteUploader): Promise<boolean> {
-    if (uploader.size === 0) return true;
+    if (uploader.settled) return true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<false>((resolve) => {
       timer = setTimeout(() => resolve(false), this.deps.leaveFlushMs ?? LEAVE_FLUSH_MS);
     });
     const flushed = uploader.flushNow().then(
-      () => uploader.size === 0,
+      () => uploader.settled,
       () => false,
     );
     try {
@@ -379,6 +347,7 @@ export class TankSession {
     tank: Tank,
     options: { acclimateNew?: boolean; removal?: 'netted' | 'gone' } = {},
   ): void {
+    if (this.state.phase !== 'ready') return;
     const held = this.state.tanks.find((t) => t.id === tank.id);
     if (isStaleSnapshot(held, tank)) return;
     this.patch({ tanks: upsertTank(this.state.tanks, tank) });

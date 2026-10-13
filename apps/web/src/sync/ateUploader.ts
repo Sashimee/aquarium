@@ -29,6 +29,8 @@ export class AteUploader {
   private readonly abort = new AbortController();
   private readonly now: () => Date;
   private readonly maxAgeMs: number;
+  private delivering: Promise<void> | null = null;
+  private lost = false;
 
   constructor(private readonly options: AteUploaderOptions) {
     this.now = options.now ?? (() => new Date());
@@ -49,8 +51,15 @@ export class AteUploader {
     this.batcher.add(fishId, portion);
   }
 
-  flushNow(): Promise<void> {
-    return this.batcher.flushNow();
+  /** Nothing queued, nothing mid-delivery and nothing given up on. */
+  get settled(): boolean {
+    return this.batcher.size === 0 && this.delivering === null && !this.lost;
+  }
+
+  /** Also waits for a delivery the periodic timer already has in flight, which the batcher skips. */
+  async flushNow(): Promise<void> {
+    await this.batcher.flushNow();
+    while (this.delivering) await this.delivering;
   }
 
   dispose(): void {
@@ -63,7 +72,15 @@ export class AteUploader {
     return batch.filter((r) => Date.parse(r.at) >= cutoff);
   }
 
-  private async deliver(batch: AteReport[]): Promise<void> {
+  private deliver(batch: AteReport[]): Promise<void> {
+    const run = this.attempt(batch).finally(() => {
+      if (this.delivering === run) this.delivering = null;
+    });
+    this.delivering = run;
+    return run;
+  }
+
+  private async attempt(batch: AteReport[]): Promise<void> {
     const { send, onDropped } = this.options;
     let remaining = batch;
     const prune = () => {
@@ -90,6 +107,7 @@ export class AteUploader {
         },
       );
     } catch (cause) {
+      this.lost = true;
       if (this.abort.signal.aborted) return;
       onDropped?.(isTransient(cause) ? 'gave-up' : 'rejected', remaining, cause);
     }
