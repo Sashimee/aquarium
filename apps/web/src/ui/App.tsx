@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { CameraMode } from '../interaction/camera';
 import {
   useAuth,
@@ -9,10 +9,9 @@ import {
   useRoute,
 } from './context';
 import { tankReportLines } from '../sync/life';
-import { AwayDialog, LifeStatus } from './LifeStatus';
+import { LifeStatus } from './LifeStatus';
 import { PlayControls } from './PlayControls';
 import { useActiveTank, useSessionState } from './session';
-import { TankPanel } from './TankPanel';
 import {
   CreditsScreen,
   Link,
@@ -149,6 +148,20 @@ function Screen() {
   }
 }
 
+const TankPanel = lazy(() => import('./TankPanel').then((m) => ({ default: m.TankPanel })));
+
+const LifeDialogsView = lazy(() => import('./LifeDialogs'));
+
+function LifeDialogs({ onReview }: { onReview(): void }) {
+  const state = useSessionState();
+  if (!state.activeId || (!state.awayByTank[state.activeId] && !state.pendingNet)) return null;
+  return (
+    <Suspense fallback={null}>
+      <LifeDialogsView onReview={onReview} />
+    </Suspense>
+  );
+}
+
 export function App() {
   useRedirect();
   const route = useRoute();
@@ -190,8 +203,18 @@ export function App() {
         <AccountMenu />
       </header>
       <LifeStatus />
-      <TankPanel open={panelOpen} onClose={() => setPanelOpen(false)} />
-      <AwayDialog onReview={() => setPanelOpen(true)} />
+      {panelOpen && (
+        <Suspense
+          fallback={
+            <p className="hint" role="status">
+              Opening your tank...
+            </p>
+          }
+        >
+          <TankPanel open onClose={() => setPanelOpen(false)} />
+        </Suspense>
+      )}
+      <LifeDialogs onReview={() => setPanelOpen(true)} />
       <div className={modal ? 'stage modal' : 'stage'}>
         <Screen />
       </div>

@@ -1,16 +1,9 @@
-import {
-  biomeSchema,
-  type Biome,
-  type Fish,
-  type SpeciesSummary,
-  type Tank,
-} from '@aquarium/shared';
+import { biomeSchema, type Biome, type SpeciesSummary, type Tank } from '@aquarium/shared';
 import { useEffect, useId, useState, type FormEvent } from 'react';
 import {
   canBuy,
   deadFish,
   memorialLine,
-  netPrompt,
   tankCapacity,
   waterReport,
   type SpeciesNames,
@@ -18,7 +11,6 @@ import {
 import { checkFishName, checkTankName, suggestFishName, suggestTankName } from '../sync/naming';
 import type { SessionState, TankSession } from '../sync/session';
 import { useAuth } from './context';
-import { Dialog } from './Dialog';
 import { Link } from './screens';
 import { useActiveTank, useSessionState, useSpeciesNames, useTankSession } from './session';
 
@@ -107,7 +99,7 @@ function TankSections({
       <Care session={session} state={state} water={water} />
       <Shop session={session} state={state} tank={tank} />
       <Bag session={session} state={state} />
-      <DeadFish session={session} state={state} tank={tank} names={names} />
+      <DeadFish session={session} tank={tank} />
       <Memorial tank={tank} names={names} />
     </>
   );
@@ -428,21 +420,9 @@ function Bag({ session, state }: { session: TankSession; state: SessionState }) 
   );
 }
 
-function DeadFish({
-  session,
-  state,
-  tank,
-  names,
-}: {
-  session: TankSession;
-  state: SessionState;
-  tank: Tank;
-  names: SpeciesNames;
-}) {
+function DeadFish({ session, tank }: { session: TankSession; tank: Tank }) {
   const dead = deadFish(tank);
-  const [pending, setPending] = useState<Fish | null>(null);
   if (dead.length === 0) return null;
-  const step = pending ? netPrompt(pending, names) : null;
   return (
     <section aria-label="Fish that have died" className="block loss">
       <h3>Fish that have died</h3>
@@ -453,33 +433,12 @@ function DeadFish({
         {dead.map((f) => (
           <li key={f.id}>
             <span>{f.name}</span>
-            <button type="button" onClick={() => setPending(f)}>
+            <button type="button" onClick={() => session.requestNet(f.id)}>
               Net {f.name}
             </button>
           </li>
         ))}
       </ul>
-      {step && (
-        <Dialog title={`Net ${step.fish.name}?`} tone="loss" onClose={() => setPending(null)}>
-          <p>{step.prompt}</p>
-          <div className="row">
-            <button
-              type="submit"
-              disabled={state.busy}
-              onClick={() => {
-                const target = step.fish.id;
-                setPending(null);
-                void session.net(target);
-              }}
-            >
-              {step.confirmLabel}
-            </button>
-            <button type="button" onClick={() => setPending(null)}>
-              Not yet
-            </button>
-          </div>
-        </Dialog>
-      )}
     </section>
   );
 }

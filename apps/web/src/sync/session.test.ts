@@ -12,6 +12,7 @@ import {
   tankFixture,
   TANK_A,
   TANK_B,
+  TANK_C,
 } from './fixtures';
 import { ACCLIMATION_SECONDS } from './life';
 import { TankSession } from './session';
@@ -333,12 +334,31 @@ describe('death, net and memorial', () => {
     expect(session.getState().notice).toBe('Pip was netted and added to the memorial.');
   });
 
-  it('nets when the fish system reports a net tap on a dead fish', async () => {
-    const { api, rec, session } = setup([tankFixture({ fish: [deadPip] })]);
+  it('asks before netting when the fish system reports a net tap', async () => {
+    const { api, rec, session } = setup([tankFixture({ fish: [deadPip, fishFixture(FISH_2)] })]);
     await session.setUser(verified);
     api.netFish.mockResolvedValue(tankFixture({ lastTickAt: '2026-02-01T12:02:00.000Z' }));
     rec.bus.emit('net:tap', { fishId: FISH_1 });
-    await vi.waitFor(() => expect(api.netFish).toHaveBeenCalledWith(TANK_A, FISH_1));
+    expect(session.getState().pendingNet).toBe(FISH_1);
+    expect(api.netFish).not.toHaveBeenCalled();
+
+    session.cancelNet();
+    expect(session.getState().pendingNet).toBeNull();
+    expect(api.netFish).not.toHaveBeenCalled();
+
+    rec.bus.emit('net:tap', { fishId: FISH_1 });
+    expect(await session.confirmNet()).toBe(true);
+    expect(api.netFish).toHaveBeenCalledWith(TANK_A, FISH_1);
+    expect(session.getState().pendingNet).toBeNull();
+  });
+
+  it('ignores a net tap on a living fish', async () => {
+    const { api, rec, session } = setup([tankFixture({ fish: [fishFixture(FISH_2)] })]);
+    await session.setUser(verified);
+    rec.bus.emit('net:tap', { fishId: FISH_2 });
+    expect(session.getState().pendingNet).toBeNull();
+    expect(await session.confirmNet()).toBe(false);
+    expect(api.netFish).not.toHaveBeenCalled();
   });
 
   it('keeps the fish in the scene when the server refuses to net a living fish', async () => {
@@ -391,6 +411,58 @@ describe('tank switcher and naming', () => {
     api.createTank.mockRejectedValue(apiError(409, 'conflict'));
     expect(await session.createTank('Sixth', 'freshwater')).toBe(false);
     expect(session.getState().activeId).toBe(TANK_A);
+  });
+
+  it('lets the last pick win when tanks are chosen in quick succession', async () => {
+    const third = tankFixture({ id: TANK_C, name: 'Third', fish: [] });
+    const { api, rec, session } = setup([tankFixture(), second, third]);
+    await session.setUser(verified);
+    api.tank.mockResolvedValue({ ...third, lastTickAt: '2026-02-01T12:00:00.000Z' });
+    const pickB = session.select(TANK_B);
+    expect(session.getState().busy).toBe(true);
+    const pickC = session.select(TANK_C);
+    await Promise.all([pickB, pickC]);
+    expect(session.getState()).toMatchObject({ activeId: TANK_C, busy: false });
+    expect(rec.of('tank:unloaded')).toEqual([{ tankId: TANK_A }]);
+    expect(rec.of('tank:loaded').map((e) => (e as { tankId: string }).tankId)).toEqual([
+      TANK_A,
+      TANK_C,
+    ]);
+    expect(api.tank).toHaveBeenCalledTimes(1);
+    expect(api.tank).toHaveBeenCalledWith(TANK_C);
+  });
+
+  it('does not wait on retries when the network is down during a switch', async () => {
+    const abortableSleep = (_ms: number, signal: AbortSignal) =>
+      new Promise<void>((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+      });
+    const api = {
+      species: vi.fn().mockResolvedValue([speciesFixture()]),
+      tanks: vi.fn().mockResolvedValue([tankFixture({ fish: [fishFixture(FISH_1)] }), second]),
+      tank: vi.fn().mockResolvedValue({ ...second, lastTickAt: '2026-02-01T12:00:00.000Z' }),
+      reportAte: vi.fn().mockRejectedValue(apiError(0, 'network')),
+    };
+    const rec = recordBus();
+    const session = new TankSession({
+      api: api as unknown as ApiClient,
+      interaction: rec.bus,
+      sleep: abortableSleep,
+      now: () => Date.parse('2026-02-01T12:00:00.000Z'),
+      leaveFlushMs: 20,
+    });
+    await session.setUser(verified);
+    rec.bus.emit('food:ate', { eaten: [{ fishId: FISH_1, portion: 0.3 }] });
+
+    await session.select(TANK_B);
+
+    expect(session.getState()).toMatchObject({ activeId: TANK_B, busy: false });
+    expect(session.getState().notice).toMatch(/feeding reports .* dropped/);
+    expect(rec.of('tank:unloaded')).toEqual([{ tankId: TANK_A }]);
+    const calls = api.reportAte.mock.calls.length;
+    await new Promise((r) => setTimeout(r, 40));
+    expect(api.reportAte.mock.calls.length).toBe(calls);
+    session.dispose();
   });
 
   it('renames the active tank from the server reply', async () => {

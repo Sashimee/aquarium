@@ -32,6 +32,8 @@ export interface SessionState {
   /** Server-reported catch-up for tanks the player has not yet been told about. */
   awayByTank: Readonly<Record<string, AwaySummary>>;
   bagged: readonly BaggedFish[];
+  /** A dead fish the player has asked to net and not yet confirmed. */
+  pendingNet: string | null;
   busy: boolean;
   error: string | null;
   notice: string | null;
@@ -46,10 +48,13 @@ export interface SessionDeps {
   ateOptions?: Omit<AteUploaderOptions, 'send' | 'onDropped'>;
   /** Visible-again refreshes only run after this long, matching the server's 10 minute step. */
   refreshAfterMs?: number;
+  /** Longest a tank switch waits for pending eating reports; the rest are dropped with a notice. */
+  leaveFlushMs?: number;
 }
 
 const ACTIVE_KEY = 'aquarium.activeTank';
 const LOAD_ATTEMPTS = 4;
+const LEAVE_FLUSH_MS = 3_000;
 
 const INITIAL: SessionState = {
   phase: 'anonymous',
@@ -58,6 +63,7 @@ const INITIAL: SessionState = {
   species: [],
   awayByTank: {},
   bagged: [],
+  pendingNet: null,
   busy: false,
   error: null,
   notice: null,
@@ -71,6 +77,8 @@ export class TankSession {
   private uploader: AteUploader | null = null;
   private lastRefreshMs = 0;
   private loadId = 0;
+  private switchId = 0;
+  private loadedId: string | null = null;
   private readonly releaseTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly stopListening: (() => void)[];
   private readonly now: () => number;
@@ -84,7 +92,7 @@ export class TankSession {
       deps.interaction.on('food:ate', ({ eaten }) => {
         for (const e of eaten) this.uploader?.add(e.fishId, e.portion);
       }),
-      deps.interaction.on('net:tap', ({ fishId }) => void this.net(fishId)),
+      deps.interaction.on('net:tap', ({ fishId }) => this.requestNet(fishId)),
     ];
   }
 
@@ -117,12 +125,15 @@ export class TankSession {
 
   async load(): Promise<void> {
     const id = ++this.loadId;
+    this.switchId++;
     this.patch({ phase: 'loading', error: null });
     try {
       const [species, tanks] = await withRetry(
         () => Promise.all([this.deps.api.species(), this.deps.api.tanks()]),
         { maxAttempts: LOAD_ATTEMPTS, sleep: this.sleep },
       );
+      if (id !== this.loadId) return;
+      await this.leaveActive();
       if (id !== this.loadId) return;
       this.lastRefreshMs = this.now();
       const awayByTank: Record<string, AwaySummary> = {};
@@ -163,11 +174,15 @@ export class TankSession {
 
   async select(tankId: string): Promise<void> {
     if (tankId === this.state.activeId || !this.state.tanks.some((t) => t.id === tankId)) return;
-    await this.leaveActive();
+    const id = ++this.switchId;
     this.deps.storage?.setItem(ACTIVE_KEY, tankId);
-    this.patch({ activeId: tankId });
-    this.activate(tankId);
-    await this.perform(async () => this.apply(await this.deps.api.tank(tankId)));
+    this.patch({ activeId: tankId, pendingNet: null });
+    await this.track(async () => {
+      await this.leaveActive();
+      if (id !== this.switchId) return;
+      this.activate(tankId);
+      await this.perform(async () => this.apply(await this.deps.api.tank(tankId)));
+    });
   }
 
   async createTank(name: string, biome: Biome): Promise<boolean> {
@@ -177,14 +192,18 @@ export class TankSession {
     });
     const tank = made.tank;
     if (!ok || !tank) return false;
-    await this.leaveActive();
+    const id = ++this.switchId;
+    this.deps.storage?.setItem(ACTIVE_KEY, tank.id);
     this.patch({
       tanks: upsertTank(this.state.tanks, tank),
       activeId: tank.id,
+      pendingNet: null,
       notice: `${tank.name} is ready.`,
     });
-    this.deps.storage?.setItem(ACTIVE_KEY, tank.id);
-    this.activate(tank.id);
+    await this.track(async () => {
+      await this.leaveActive();
+      if (id === this.switchId) this.activate(tank.id);
+    });
     return true;
   }
 
@@ -221,6 +240,24 @@ export class TankSession {
     });
   }
 
+  /** Asks to net a dead fish; nothing happens to the tank until `confirmNet`. */
+  requestNet(fishId: string): void {
+    const fish = this.activeTank?.fish.find((f) => f.id === fishId);
+    if (fish?.status !== 'dead') return;
+    this.patch({ pendingNet: fishId });
+  }
+
+  cancelNet(): void {
+    this.patch({ pendingNet: null });
+  }
+
+  async confirmNet(): Promise<boolean> {
+    const fishId = this.state.pendingNet;
+    if (!fishId) return false;
+    this.patch({ pendingNet: null });
+    return this.net(fishId);
+  }
+
   async net(fishId: string): Promise<boolean> {
     const tank = this.activeTank;
     if (!tank) return false;
@@ -238,6 +275,7 @@ export class TankSession {
 
   private async reset(phase: 'anonymous' | 'unverified'): Promise<void> {
     this.loadId++;
+    this.switchId++;
     await this.leaveActive();
     for (const timer of this.releaseTimers.values()) clearTimeout(timer);
     this.releaseTimers.clear();
@@ -248,6 +286,7 @@ export class TankSession {
   private activate(tankId: string): void {
     const tank = this.state.tanks.find((t) => t.id === tankId);
     if (!tank) return;
+    this.loadedId = tankId;
     this.uploader = new AteUploader({
       ...this.deps.ateOptions,
       sleep: this.sleep,
@@ -267,17 +306,51 @@ export class TankSession {
     this.deps.interaction.emit('tank:water', { tankId, water: tank.water });
   }
 
+  /** Unloads synchronously, so overlapping switches unload once; only the report flush is awaited. */
   private async leaveActive(): Promise<void> {
-    const tankId = this.state.activeId;
+    const tankId = this.loadedId;
     const uploader = this.uploader;
+    this.loadedId = null;
     this.uploader = null;
-    if (uploader) {
-      await uploader.flushNow().catch(() => undefined);
-      uploader.dispose();
-    }
     for (const bag of this.state.bagged) this.cancelRelease(bag.fishId);
     this.patch({ bagged: [] });
     if (tankId) this.deps.interaction.emit('tank:unloaded', { tankId });
+    if (!uploader) return;
+    const finished = await this.flushBounded(uploader);
+    uploader.dispose();
+    if (!finished) {
+      this.patch({
+        notice: 'Some feeding reports could not be sent and were dropped. The tank is unaffected.',
+      });
+    }
+  }
+
+  private async flushBounded(uploader: AteUploader): Promise<boolean> {
+    if (uploader.size === 0) return true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<false>((resolve) => {
+      timer = setTimeout(() => resolve(false), this.deps.leaveFlushMs ?? LEAVE_FLUSH_MS);
+    });
+    const flushed = uploader.flushNow().then(
+      () => uploader.size === 0,
+      () => false,
+    );
+    try {
+      return await Promise.race([flushed, timeout]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  private async track(task: () => Promise<void>): Promise<void> {
+    this.inFlight++;
+    this.patch({ busy: true });
+    try {
+      await task();
+    } finally {
+      this.inFlight--;
+      if (this.inFlight === 0) this.patch({ busy: false });
+    }
   }
 
   /** All requests run one after another so snapshots always arrive in the order the server made them. */
