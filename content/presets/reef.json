@@ -82,6 +82,18 @@
       "scale": 0.6
     },
     {
+      "assetId": "euphyllia-hammer-3",
+      "position": [-0.12, 0.066, 0.07],
+      "rotationY": 0.6,
+      "scale": 1
+    },
+    {
+      "assetId": "euphyllia-torch-8",
+      "position": [0.0, 0.066, 0.065],
+      "rotationY": -0.3,
+      "scale": 1
+    },
+    {
       "assetId": "lambis-shell",
       "position": [0.2, 0.055, 0.15],
       "rotationY": 2.2,
