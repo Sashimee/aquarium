@@ -51,13 +51,15 @@ const fed = new World(benchmarkConfig(10));
 const rain = new FoodRain(REEF_TANK);
 const feedSteps = 3000;
 let feedMs = 0;
+let stepFeedMs = 0;
 let particleSteps = 0;
+const feedSamples: number[] = [];
 const timedWorld = {
   substrateSdf: fed.substrateSdf,
   setFood(buffer: Float32Array): void {
     const t0 = performance.now();
     fed.setFood(buffer);
-    feedMs += performance.now() - t0;
+    stepFeedMs += performance.now() - t0;
     particleSteps += buffer.length / 5;
   },
 };
@@ -66,15 +68,19 @@ for (let i = 0; i < feedSteps; i++) {
     rain.sprinkle('flakes', 240, 0.4 * Math.sin(i), 0.1 * Math.cos(i), 0.5, 3);
     rain.sprinkle('pellets', 60, -0.3, 0, 0.3);
   }
+  stepFeedMs = 0;
   rain.feed(timedWorld);
   const t0 = performance.now();
   fed.step();
-  feedMs += performance.now() - t0;
+  stepFeedMs += performance.now() - t0;
+  feedMs += stepFeedMs;
+  feedSamples.push(stepFeedMs);
   rain.eat(fed.takeAteEvents());
 }
 const feedMean = feedMs / feedSteps;
 
 samples.sort((a, b) => a - b);
+feedSamples.sort((a, b) => a - b);
 const mean = means.reduce((a, b) => a + b, 0) / means.length;
 console.log(
   JSON.stringify({
@@ -91,5 +97,27 @@ console.log(
     draggingDecorMeanMsPerStep: Number(dragMean.toFixed(4)),
     feedingMeanParticles: Math.round(particleSteps / feedSteps),
     feedingMeanMsPerStep: Number(feedMean.toFixed(4)),
+    feedingP99Ms: Number(percentile(feedSamples, 0.99).toFixed(4)),
   }),
 );
+
+const gates: [string, number][] = [
+  ['p99 step', percentile(samples, 0.99)],
+  ['p99 feeding step', percentile(feedSamples, 0.99)],
+];
+const over: string[] = [];
+for (const [name, ms] of gates) {
+  if (ms > DESKTOP_BUDGET_MS) {
+    over.push(`${name} ${ms.toFixed(3)} ms is over the ${DESKTOP_BUDGET_MS} ms desktop budget`);
+  }
+  if (THROTTLE * ms > THROTTLED_BUDGET_MS) {
+    over.push(
+      `${name} ${(THROTTLE * ms).toFixed(3)} ms at ${THROTTLE}x throttle is over the ${THROTTLED_BUDGET_MS} ms budget`,
+    );
+  }
+}
+if (over.length > 0) {
+  throw new Error(
+    `${over.join('\n')}\nRerun on an idle machine before treating this as a regression.`,
+  );
+}
