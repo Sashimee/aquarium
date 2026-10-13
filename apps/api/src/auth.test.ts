@@ -970,6 +970,7 @@ describe('mail abuse limits', () => {
         await signUp(h.app, nextEmail(), { 'x-forwarded-for': '203.0.113.73' });
       }
       const store = postgresHitStore(h.database, 'testsecrettestsecrettestsecret0123456789');
+      expect(await store.remaining('global', { max: 3, windowMs: 3_600_000 })).toBeGreaterThan(0);
       expect(await store.remaining('global', { max: 4, windowMs: 3_600_000 })).toBe(0);
       await h.close();
     });
@@ -1005,7 +1006,7 @@ describe('mail abuse limits', () => {
       return { h, hits, arm: () => (spentOnce = true) };
     }
 
-    it('sends no sign-up mail and charges nothing when the cap frees before the mail step', async () => {
+    it('sends no sign-up mail and charges only the per-IP request counter when the cap frees before the mail step', async () => {
       const { h, hits, arm } = await harnessWithFlakyCap();
       const before = await hits();
       arm();
@@ -1016,7 +1017,7 @@ describe('mail abuse limits', () => {
       await h.close();
     });
 
-    it('sends no reset mail and charges nothing when the cap frees before the mail step', async () => {
+    it('sends no reset mail and charges only the per-IP request counter when the cap frees before the mail step', async () => {
       const { h, hits, arm } = await harnessWithFlakyCap();
       const email = nextEmail();
       await signUp(h.app, email);
@@ -1035,6 +1036,24 @@ describe('mail abuse limits', () => {
       expect(await hits()).toBe(before + 1);
       await h.close();
     });
+  });
+
+  it('shares the per-IP budget across one IPv6 /64 but not another', async () => {
+    const h = await createHarness({
+      mailLimits: {
+        perRecipient: { max: 100, windowMs: 3_600_000 },
+        verificationCooldown: { max: 100, windowMs: 1000 },
+        perIpSignup: { max: 2, windowMs: 3_600_000 },
+        global: { max: 1000, windowMs: 3_600_000 },
+      },
+    });
+    const from = async (ip: string) =>
+      (await signUp(h.app, nextEmail(), { 'x-forwarded-for': ip })).statusCode;
+    expect(await from('2001:db8:0:1::1')).toBe(200);
+    expect(await from('2001:0db8:0:1:ffff:eeee:dddd:cccc')).toBe(200);
+    expect(await from('2001:db8:0:1::99')).toBe(429);
+    expect(await from('2001:db8:0:2::1')).toBe(200);
+    await h.close();
   });
 
   it('gives a known and an unknown address the same per-IP 429 sequence', async () => {
