@@ -47,6 +47,7 @@ export const STEERING = {
   standOffPasses: 3,
   standOffBearingShares: [0.5, 0.25],
   standOffFacingRad: 0.5,
+  standOffRingSteps: 12,
   standOffBrakeS: 1,
   turnRoomSamples: 3,
   turnRingHeadings: 4,
@@ -637,21 +638,35 @@ export class World {
         seekZ = plan.seekZ + uz * plan.arrival;
         // Part way round to the fish's own bearing, so fish sharing a clip hold different spots,
         // as far round as the body still fits there facing the food.
+        const base = Math.atan2(ux, uz);
+        const room = STEERING.turnRoomMarginBodyLengths * length;
         const bx = px - plan.seekX;
         const bz = pz - plan.seekZ;
+        let off = 0;
+        let placed = false;
         if (Math.hypot(bx, bz) > 1e-9) {
-          const off = wrapAngle(Math.atan2(bx, bz) - Math.atan2(ux, uz));
+          off = wrapAngle(Math.atan2(bx, bz) - base);
           for (const share of STEERING.standOffBearingShares) {
-            const h = Math.atan2(ux, uz) + off * share;
-            const sx = plan.seekX + Math.sin(h) * plan.arrival;
-            const sz = plan.seekZ + Math.cos(h) * plan.arrival;
-            const facing = h + Math.PI;
-            if (
-              this.poseRoom(i, sdf, sx, seekY, sz, facing) >=
-              STEERING.turnRoomMarginBodyLengths * length
-            ) {
-              seekX = sx;
-              seekZ = sz;
+            const h = base + off * share;
+            if (this.stationRoom(i, sdf, plan, seekY, h) >= room) {
+              seekX = plan.seekX + Math.sin(h) * plan.arrival;
+              seekZ = plan.seekZ + Math.cos(h) * plan.arrival;
+              placed = true;
+              break;
+            }
+          }
+        }
+        // Straight out from the surface, rock beside the food (a wedge tip) can stand between the
+        // station and the food; a fish parked there cannot turn its mouth to it (#258). Work round
+        // the food, toward the fish's side first, to the nearest spot where it fits facing it.
+        if (!placed && this.stationRoom(i, sdf, plan, seekY, base) < room) {
+          const toward = off >= 0 ? 1 : -1;
+          const step = Math.PI / STEERING.standOffRingSteps;
+          for (let k = 2; k <= 2 * STEERING.standOffRingSteps; k++) {
+            const h = base + (k % 2 === 0 ? toward : -toward) * (k >> 1) * step;
+            if (this.stationRoom(i, sdf, plan, seekY, h) >= room) {
+              seekX = plan.seekX + Math.sin(h) * plan.arrival;
+              seekZ = plan.seekZ + Math.cos(h) * plan.arrival;
               break;
             }
           }
@@ -755,7 +770,10 @@ export class World {
       dz *= keep;
       const h = length * STEERING.avoidGradientBodyLengths;
       const scratch = this.previous;
-      if (aHere > 0) smoothGradient(sdf, px, py, pz, h, nh, scratch);
+      if (aHere > 0) {
+        smoothGradient(sdf, px, py, pz, h, nh, scratch);
+        aWall = aHere * Math.hypot(nh[0] ?? 0, nh[2] ?? 0);
+      }
       if (aProbe > 0) {
         smoothGradient(sdf, px + fx * probe, py + fy * probe, pz + fz * probe, h, np, scratch);
       }
@@ -790,7 +808,6 @@ export class World {
         // floor or rock top (a mostly vertical normal) the answer is to rise, not to slide, and a
         // tangent taken from the small horizontal part of the normal would spin the fish.
         const hl = Math.hypot(nx, nz);
-        aWall = a * hl;
         if (hl > STEERING.slideMinHorizontal) {
           const ux = nx / hl;
           const uz = nz / hl;
@@ -955,6 +972,8 @@ export class World {
     // Only the horizontal share of avoidance blocks the pivot: a rock top under the station is
     // avoidance in pitch, turning on the spot over it brings the body no nearer, and turnRoom
     // already checks the horizontal sweep. Gating on it left a tang unable to face a clip (#232).
+    // Only the body's own proximity counts, too: the nose probe sweeps onto the food's own glass
+    // as the fish comes round to it and would block the very turn it is part way through (#258).
     if (
       !Number.isNaN(faceYaw) &&
       aWall < STEERING.avoidReleaseThreshold &&
@@ -1011,6 +1030,18 @@ export class World {
       other.seekWeight > 0 &&
       other.seekX === plan.seekX &&
       other.seekZ === plan.seekZ
+    );
+  }
+
+  /** Room for fish `i` on the stand-off ring at bearing `bearing` from the food, facing it. */
+  private stationRoom(i: number, sdf: Sdf, plan: Plan, y: number, bearing: number): number {
+    return this.poseRoom(
+      i,
+      sdf,
+      plan.seekX + Math.sin(bearing) * plan.arrival,
+      y,
+      plan.seekZ + Math.cos(bearing) * plan.arrival,
+      bearing + Math.PI,
     );
   }
 
