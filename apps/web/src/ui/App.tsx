@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Biome } from '@aquarium/shared';
 import type { CameraMode } from '../interaction/camera';
 import {
@@ -87,14 +87,17 @@ function TankTypeSwitch({ onCreate }: { onCreate(biome: Biome): void }) {
   );
 }
 
-function DecorToggle() {
+function DecorToggle({ onOpen }: { onOpen(): void }) {
   const { interaction } = useBridge();
   const active = useDecorState()?.active ?? false;
   return (
     <button
       type="button"
       aria-pressed={active}
-      onClick={() => interaction.emit('decor:request-mode', { active: !active })}
+      onClick={() => {
+        if (!active) onOpen();
+        interaction.emit('decor:request-mode', { active: !active });
+      }}
     >
       Decorate
     </button>
@@ -216,7 +219,20 @@ export function App() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [newTankBiome, setNewTankBiome] = useState<Biome | null>(null);
   const decorating = useDecorState()?.active ?? false;
+  const { interaction } = useBridge();
+  const shell = useRef<HTMLDivElement>(null);
+  const bar = useRef<HTMLElement>(null);
   const previous = useRef(route.name);
+  useLayoutEffect(() => {
+    const target = bar.current;
+    const root = shell.current;
+    if (!target || !root) return;
+    const publish = () => root.style.setProperty('--bar-h', `${target.offsetHeight}px`);
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, []);
   useEffect(() => {
     if (route.name === 'home' && previous.current !== 'home') {
       document.getElementById('tank')?.focus();
@@ -224,7 +240,7 @@ export function App() {
     previous.current = route.name;
   }, [route.name]);
   return (
-    <div className="shell">
+    <div className="shell" ref={shell}>
       <a
         className="skip"
         href="#tank"
@@ -235,25 +251,27 @@ export function App() {
       >
         Skip to the tank
       </a>
-      <header className="bar">
+      <header className="bar" ref={bar}>
         <Link to="/" className="brand">
           Aquarium
         </Link>
         <TankTypeSwitch
           onCreate={(biome) => {
             setNewTankBiome(biome);
+            if (decorating) interaction.emit('decor:request-mode', { active: false });
             setPanelOpen(true);
           }}
         />
         <CameraControls />
         {decorating ? null : <PlayControls />}
-        <DecorToggle />
+        <DecorToggle onOpen={() => setPanelOpen(false)} />
         <button
           type="button"
           aria-expanded={panelOpen}
           aria-controls="tank-panel"
           onClick={() => {
             setNewTankBiome(null);
+            if (!panelOpen && decorating) interaction.emit('decor:request-mode', { active: false });
             setPanelOpen(!panelOpen);
           }}
         >

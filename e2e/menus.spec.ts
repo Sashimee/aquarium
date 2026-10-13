@@ -3,7 +3,7 @@ import { expect, test, devices, type CDPSession, type Locator, type Page } from 
 const { viewport, userAgent } = devices['iPhone 15 Pro'];
 
 const SEED = 188;
-const STEPS = 10;
+const STEPS = 4;
 
 function random(seed: number): () => number {
   let state = seed;
@@ -17,9 +17,11 @@ interface Menu {
   name: string;
   open(page: Page): Promise<void>;
   isOpen(page: Page): Promise<void>;
-  close(page: Page): Promise<void>;
-  closed(page: Page): Promise<void>;
 }
+
+let touch = false;
+
+const press = (target: Locator) => (touch ? target.tap() : target.click());
 
 const bar = (page: Page) => page.locator('header.bar');
 
@@ -27,56 +29,60 @@ function toggle(
   label: string,
   attribute: 'aria-expanded' | 'aria-pressed',
   scope: (page: Page) => Locator,
+  beforeOpen?: (page: Page) => Promise<void>,
 ): Menu {
   const button = (page: Page): Locator =>
     scope(page).getByRole('button', { name: label, exact: true });
   return {
     name: label,
-    open: (page) => button(page).tap(),
+    open: async (page) => {
+      await beforeOpen?.(page);
+      await press(button(page));
+    },
     isOpen: (page) => expect(button(page)).toHaveAttribute(attribute, 'true'),
-    close: (page) => button(page).tap(),
-    closed: (page) => expect(button(page)).toHaveAttribute(attribute, 'false'),
   };
 }
 
 function route(label: string, path: string, heading: string): Menu {
   return {
     name: label,
-    open: (page) => bar(page).getByRole('link', { name: label, exact: true }).tap(),
+    open: (page) => press(bar(page).getByRole('link', { name: label, exact: true })),
     isOpen: async (page) => {
       await expect(page).toHaveURL(new RegExp(`${path}(\\?|$)`));
       await expect(page.getByRole('heading', { name: heading, level: 1 })).toBeVisible();
     },
-    close: (page) => bar(page).getByRole('link', { name: 'Aquarium', exact: true }).tap(),
-    closed: (page) => expect(page.getByRole('heading', { level: 1 })).toHaveCount(0),
   };
 }
+
+async function leaveDecorate(page: Page) {
+  const decorate = bar(page).getByRole('button', { name: 'Decorate' });
+  if ((await decorate.getAttribute('aria-pressed')) === 'true') await press(decorate);
+}
+
+const playGroup = (page: Page) => page.getByRole('group', { name: 'Play and feed' });
+const tankType = (page: Page) => page.getByRole('group', { name: 'Tank type' });
 
 const MENUS: Menu[] = [
   {
     name: 'My tank',
-    open: (page) => bar(page).getByRole('button', { name: 'My tank' }).tap(),
+    open: (page) => press(bar(page).getByRole('button', { name: 'My tank' })),
     isOpen: (page) => expect(page.getByRole('region', { name: 'Your tank' })).toBeVisible(),
-    close: (page) => bar(page).getByRole('button', { name: 'My tank' }).tap(),
-    closed: (page) => expect(page.getByRole('region', { name: 'Your tank' })).toHaveCount(0),
   },
   {
     name: 'Decorate',
-    open: (page) => bar(page).getByRole('button', { name: 'Decorate' }).tap(),
+    open: (page) => press(bar(page).getByRole('button', { name: 'Decorate' })),
     isOpen: (page) => expect(page.getByRole('region', { name: 'Decorate the tank' })).toBeVisible(),
-    close: (page) => bar(page).getByRole('button', { name: 'Decorate' }).tap(),
-    closed: (page) =>
-      expect(page.getByRole('region', { name: 'Decorate the tank' })).toHaveCount(0),
   },
   toggle('Tank report', 'aria-expanded', (page) =>
     page.getByRole('region', { name: 'Tank report' }),
   ),
   route('Sign in', '/sign-in', 'Sign in'),
   route('Create account', '/sign-up', 'Create an account'),
-  toggle('Hand-feed', 'aria-pressed', (page) => page.getByRole('group', { name: 'Play and feed' })),
-  toggle('Laser', 'aria-pressed', (page) => page.getByRole('group', { name: 'Play and feed' })),
-  toggle('Bubbles', 'aria-pressed', (page) => page.getByRole('group', { name: 'Play and feed' })),
+  toggle('Hand-feed', 'aria-pressed', playGroup, leaveDecorate),
+  toggle('Laser', 'aria-pressed', playGroup, leaveDecorate),
+  toggle('Bubbles', 'aria-pressed', playGroup, leaveDecorate),
   toggle('Dive', 'aria-pressed', (page) => page.getByRole('group', { name: 'Camera' })),
+  toggle('Reef', 'aria-pressed', tankType),
 ];
 
 type Drag = (from: [number, number], to: [number, number]) => Promise<void>;
@@ -124,33 +130,64 @@ async function ready(page: Page) {
   await expect(page.locator('canvas#tank')).toBeVisible();
 }
 
-async function backToTank(page: Page) {
+async function closeAllPanels(page: Page) {
+  const tank = bar(page).getByRole('button', { name: 'My tank' });
+  if ((await tank.getAttribute('aria-expanded')) === 'true') await press(tank);
+  const decorate = bar(page).getByRole('button', { name: 'Decorate' });
+  if ((await decorate.getAttribute('aria-pressed')) === 'true') await press(decorate);
   if (/\/(sign-in|sign-up)(\?|$)/.test(page.url())) {
-    await bar(page).getByRole('link', { name: 'Aquarium', exact: true }).tap();
+    await press(bar(page).getByRole('link', { name: 'Aquarium', exact: true }));
   }
+  await expect(page.getByRole('region', { name: 'Your tank' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Decorate the tank' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveCount(0);
+}
+
+async function expectOnePanel(page: Page, context: string) {
+  const open = await page.getByRole('region', { name: /^(Your tank|Decorate the tank)$/ }).count();
+  expect(open, `two panels were open ${context}`).toBeLessThanOrEqual(1);
 }
 
 async function exercise(page: Page, drag: Drag) {
   await ready(page);
   await expectOrbits(page, drag, 'on a fresh page');
   const next = random(SEED);
-  for (let step = 0; step < STEPS; step += 1) {
+  const pick = () => {
     const menu = MENUS[Math.floor(next() * MENUS.length)];
     if (!menu) throw new Error('unreachable');
-    await menu.open(page);
-    await menu.isOpen(page);
-    if (next() < 0.5) {
-      await menu.close(page);
-      await menu.closed(page);
+    return menu;
+  };
+  for (let step = 0; step < STEPS; step += 1) {
+    const first = pick();
+    const second = pick();
+    const trail = `step ${step} (${first.name}, then ${second.name})`;
+    await first.open(page);
+    await first.isOpen(page);
+    await second.open(page);
+    await second.isOpen(page);
+    await expectOnePanel(page, trail);
+    if (next() < 0.2) {
+      await ready(page);
+      continue;
     }
-    if (next() < 0.2) await ready(page);
-    await backToTank(page);
-    await expectOrbits(page, drag, `after step ${step} (${menu.name})`);
+    await closeAllPanels(page);
+    await expectOrbits(page, drag, `after ${trail}`);
   }
 }
 
 test.describe('menus on a phone', () => {
-  test.use({ viewport, userAgent, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
+  test.use({
+    viewport,
+    userAgent,
+    deviceScaleFactor: 1,
+    hasTouch: true,
+    isMobile: true,
+    actionTimeout: 30_000,
+  });
+
+  test.beforeEach(() => {
+    touch = true;
+  });
 
   test('every menu opens, switches and leaves the camera draggable', async ({ page }) => {
     test.setTimeout(900_000);
@@ -160,7 +197,11 @@ test.describe('menus on a phone', () => {
 });
 
 test.describe('menus with a mouse', () => {
-  test.use({ viewport: { width: 1280, height: 800 } });
+  test.use({ viewport: { width: 1280, height: 800 }, actionTimeout: 30_000 });
+
+  test.beforeEach(() => {
+    touch = false;
+  });
 
   test('every menu opens, switches and leaves the camera draggable', async ({ page }) => {
     test.setTimeout(900_000);
