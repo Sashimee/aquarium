@@ -32,6 +32,8 @@ export interface PlayDeps {
   readonly gate: FeedGate;
   readonly events: EventBus<InteractionEvents>;
   startle?: ((stimulus: StimulusLike) => void) | undefined;
+  /** Picks the fish under the ray; the fish system emits `net:tap` for a catchable one. */
+  netTap?: ((ray: Ray) => void) | undefined;
   toSim(x: number, y: number, z: number, out: Float64Array): void;
   /** TODO(#72): the sim has no lure input yet; wire this to `bridge.setLure` once it lands. */
   lure?(position: Vec3 | null): void;
@@ -92,6 +94,10 @@ export class PlayController {
       if (hit && hit.x >= min.x && hit.x <= max.x && hit.z >= min.z && hit.z <= max.z) {
         this.feed(this.selectedFood, HAND_FEED_PORTION, hit);
       }
+      return;
+    }
+    if (this.activeTool === 'net') {
+      this.deps.netTap?.(ray);
       return;
     }
     if (this.activeTool === 'tap') this.tapGlass(ray);
