@@ -8,6 +8,13 @@
       "when": 1791838799812,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791854495014,
+      "tag": "0001_mail_limit_hits",
+      "breakpoints": true
     }
   ]
 }

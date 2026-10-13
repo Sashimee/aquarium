@@ -9,6 +9,9 @@ export async function pruneExpired({ db }: Database): Promise<{ sessions: number
     .where(lt(schema.session.expiresAt, sql`now()`))
     .returning({ id: schema.session.id });
   await db.delete(schema.verification).where(lt(schema.verification.expiresAt, sql`now()`));
+  await db
+    .delete(schema.mailLimitHits)
+    .where(lt(schema.mailLimitHits.at, sql`now() - interval '1 day'`));
   return { sessions: sessions.length };
 }
 
