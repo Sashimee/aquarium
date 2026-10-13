@@ -2,6 +2,8 @@ import { apiErrorSchema, sessionListSchema, userSchema } from '@aquarium/shared'
 import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import nodemailer from 'nodemailer';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { createMailer, DEFAULT_MAIL_LIMITS } from './mail.ts';
 import { postgresHitStore } from './rate-limit.ts';
 import { APP_ORIGIN, createHarness, type Harness } from './test-harness.ts';
@@ -1135,6 +1137,51 @@ describe('input and origin checks', () => {
       expect(res.statusCode).toBe(403);
     },
   );
+});
+
+describe('auth proxy path rules cannot be dodged with dot segments (#199)', () => {
+  const rawPost = (port: number, path: string, body: string) =>
+    new Promise<number>((resolve, reject) => {
+      const req = http.request(
+        {
+          host: '127.0.0.1',
+          port,
+          method: 'POST',
+          path,
+          headers: { ...jsonHeaders, 'content-length': Buffer.byteLength(body) },
+        },
+        (res) => {
+          res.resume();
+          res.on('end', () => resolve(res.statusCode ?? 0));
+        },
+      );
+      req.on('error', reject);
+      req.end(body);
+    });
+
+  it.each([
+    '/api/auth/x/%2E%2E/request-password-reset',
+    '/api/auth/x/%2e%2e/request-password-reset',
+    '/api/auth/./request-password-reset',
+    '/api/auth/x/../request-password-reset',
+    '/api/auth//request-password-reset',
+    '/api/auth/x/%2E%2E/revoke-session',
+    '/api/auth/x/%2E%2E/sign-up/email',
+  ])('refuses %s', async (path) => {
+    const h = await createHarness({
+      mailLimits: { ...DEFAULT_MAIL_LIMITS, perIpSignup: { max: 1, windowMs: 60_000 } },
+    });
+    try {
+      await h.app.listen({ port: 0, host: '127.0.0.1' });
+      const { port } = h.app.server.address() as AddressInfo;
+      const body = JSON.stringify({ email: nextEmail(), redirectTo: '/' });
+      expect(await rawPost(port, path, body)).toBe(404);
+      expect(await rawPost(port, '/api/auth/request-password-reset', body)).toBe(200);
+      expect(await rawPost(port, '/api/auth/request-password-reset', body)).toBe(429);
+    } finally {
+      await h.close();
+    }
+  });
 });
 
 describe('password reset request does not reveal the account (#161)', () => {

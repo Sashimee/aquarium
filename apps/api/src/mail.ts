@@ -19,7 +19,7 @@ export const DEFAULT_MAIL_LIMITS: MailLimits = {
 export interface IpAdmission {
   /** Seconds until the IP may try again, or 0 when the request may proceed. */
   wait: number;
-  /** Seconds the global cap is spent for, or 0. While positive the IP slot was not charged and no mail may go out for this request. */
+  /** Seconds the global cap is spent for, or 0. While positive no mail may go out for this request, and the IP slot is charged only if the cap was reached after the IP check. */
   mailBlockedFor: number;
   /** The request already took its one global slot, so sending must not take another. */
   globalCharged?: boolean;
@@ -158,20 +158,23 @@ export function createMailer(
   const consume = (key: string, limit: Limit) => failClosed(() => store.consume(key, limit));
 
   // Only a store that answered means the cap is spent; a failure is already logged as unavailable.
+  const logGlobalCap = (retryAfterSeconds: number, answered: boolean) => {
+    if (!answered || globalCapLogged) return;
+    globalCapLogged = true;
+    log(
+      JSON.stringify({
+        level: 'error',
+        event: GLOBAL_CAP_EVENT,
+        msg: 'global mail cap reached',
+        limit: limits.global.max,
+        windowSeconds: limits.global.windowMs / 1000,
+        retryAfterSeconds,
+      }),
+    );
+  };
+
   const refuseGlobal = (retryAfterSeconds: number, answered: boolean): never => {
-    if (answered && !globalCapLogged) {
-      globalCapLogged = true;
-      log(
-        JSON.stringify({
-          level: 'error',
-          event: GLOBAL_CAP_EVENT,
-          msg: 'global mail cap reached',
-          limit: limits.global.max,
-          windowSeconds: limits.global.windowMs / 1000,
-          retryAfterSeconds,
-        }),
-      );
-    }
+    logGlobalCap(retryAfterSeconds, answered);
     throw new MailThrottledError(retryAfterSeconds);
   };
 
@@ -232,13 +235,18 @@ export function createMailer(
       const key = `ip:${address}`;
       const spent = await guarded(() => store.remaining('global', limits.global));
       if (spent.answered && spent.wait > 0) {
+        logGlobalCap(spent.wait, true);
         const wait = await failClosed(() => store.remaining(key, limits.perIpSignup));
         return { wait, mailBlockedFor: spent.wait };
       }
+      if (spent.answered) globalCapLogged = false;
       const wait = await consume(key, limits.perIpSignup);
       if (!chargeGlobal || wait > 0) return { wait, mailBlockedFor: 0 };
       const taken = await guarded(() => store.consume('global', limits.global));
-      if (taken.wait > 0) return { wait: 0, mailBlockedFor: taken.wait };
+      if (taken.wait > 0) {
+        logGlobalCap(taken.wait, taken.answered);
+        return { wait: 0, mailBlockedFor: taken.wait };
+      }
       return { wait: 0, mailBlockedFor: 0, globalCharged: true };
     },
     runAdmitted: (admission, work) => admissions.run(admission, work),

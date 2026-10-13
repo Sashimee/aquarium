@@ -119,6 +119,23 @@ export function stripTokens(value: unknown): unknown {
   );
 }
 
+// Better Auth resolves the request through the WHATWG URL parser, which collapses dot segments
+// (also percent-encoded) and treats a backslash as a slash. Path-based rules here compare a literal
+// string, so any path the parser would rewrite is refused instead of being matched differently.
+function hasAmbiguousPath(url: string): boolean {
+  const raw = url.split('?')[0]?.split('#')[0] ?? '';
+  if (raw.includes('\\') || raw.includes('//')) return true;
+  return raw.split('/').some((segment) => {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(segment);
+    } catch {
+      return true;
+    }
+    return decoded === '.' || decoded === '..' || decoded.includes('/') || decoded.includes('\\');
+  });
+}
+
 function normalizedPathname(url: string): string {
   const raw = url.split('?')[0] ?? '/';
   let decoded: string;
@@ -267,6 +284,9 @@ export function buildApp(opts: AppOptions): FastifyInstance {
       method: ['GET', 'POST'],
       url: `${AUTH_BASE_PATH}/*`,
       handler: async (req, reply) => {
+        if (hasAmbiguousPath(req.url)) {
+          return reply.code(404).send(apiError('not_found', 'Not found.'));
+        }
         const pathname = normalizedPathname(req.url);
         if (BLOCKED_AUTH_PATHS.has(pathname)) {
           return reply.code(404).send(apiError('not_found', 'Not found.'));
