@@ -1,4 +1,6 @@
 import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { APP_ORIGIN, createHarness, type Harness } from './test-harness.ts';
 
@@ -37,6 +39,28 @@ const post = (app: FastifyInstance, url: string, payload: unknown, cookie = '') 
     headers: cookie ? { ...jsonHeaders, cookie } : jsonHeaders,
     payload: JSON.stringify(payload),
   });
+
+const BLOCKED: ['GET' | 'POST', string][] = [
+  ['GET', 'list-sessions'],
+  ['POST', 'revoke-session'],
+  ['POST', 'revoke-sessions'],
+  ['POST', 'revoke-other-sessions'],
+  ['POST', 'change-email'],
+  ['POST', 'delete-user'],
+  ['GET', 'delete-user/callback'],
+  ['GET', 'account-info'],
+  ['POST', 'get-access-token'],
+  ['POST', 'refresh-token'],
+  ['POST', 'link-social'],
+  ['POST', 'unlink-account'],
+  ['GET', 'list-accounts'],
+  ['POST', 'sign-in/social'],
+  ['POST', 'update-session'],
+  ['POST', 'verify-password'],
+  ['POST', 'passkey/delete-passkey'],
+  ['GET', 'passkey/list-user-passkeys'],
+  ['POST', 'passkey/update-passkey'],
+];
 
 describe('Better Auth body validation (#118)', () => {
   let h: Harness;
@@ -126,16 +150,86 @@ describe('Better Auth body validation (#118)', () => {
     expect(ok.statusCode).toBe(200);
   });
 
-  it('returns 404 for endpoints the app does not use', async () => {
+  it('stores the trimmed name on update-user', async () => {
+    const { email, cookie } = await verifiedSession(h);
+    const padded = 'x'.repeat(60) + ' '.repeat(400_000);
+    expect((await post(h.app, '/api/auth/update-user', { name: padded }, cookie)).statusCode).toBe(
+      200,
+    );
+    expect((await stored(email)).name).toBe('x'.repeat(60));
+    await post(h.app, '/api/auth/update-user', { name: '  Bob  ' }, cookie);
+    expect((await stored(email)).name).toBe('Bob');
+  });
+
+  it('stores the trimmed name on sign-up', async () => {
+    const email = nextEmail();
+    const res = await post(h.app, '/api/auth/sign-up/email', {
+      email,
+      password: PASSWORD,
+      name: '  Bob' + ' '.repeat(400_000),
+      callbackURL: '/',
+    });
+    expect(res.statusCode).toBe(200);
+    expect((await stored(email)).name).toBe('Bob');
+  });
+
+  it.each(BLOCKED)('returns 404 for %s', async (method, path) => {
     const { cookie } = await verifiedSession(h);
-    for (const path of [
-      'delete-user',
-      'change-email',
-      'revoke-sessions',
-      'passkey/delete-passkey',
-    ]) {
-      const res = await post(h.app, `/api/auth/${path}`, {}, cookie);
-      expect(res.statusCode, path).toBe(404);
-    }
+    const res = await h.app.inject({
+      method,
+      url: `/api/auth/${path}`,
+      headers: { ...jsonHeaders, cookie },
+      ...(method === 'POST' ? { payload: '{}' } : {}),
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  describe('fragment in the request path', () => {
+    let port: number;
+    beforeAll(async () => {
+      await h.app.listen({ port: 0, host: '127.0.0.1' });
+      port = (h.app.server.address() as AddressInfo).port;
+    });
+
+    const raw = (method: string, path: string, cookie: string, body?: string) =>
+      new Promise<number>((resolve, reject) => {
+        const req = http.request(
+          {
+            host: '127.0.0.1',
+            port,
+            method,
+            path,
+            headers: {
+              ...jsonHeaders,
+              cookie,
+              'content-length': Buffer.byteLength(body ?? ''),
+            },
+          },
+          (res) => {
+            res.resume();
+            res.on('end', () => resolve(res.statusCode ?? 0));
+          },
+        );
+        req.on('error', reject);
+        req.end(body);
+      });
+
+    it('cannot bypass validation, the blocklist or the mail gate', async () => {
+      const { email, cookie } = await verifiedSession(h);
+      const big = JSON.stringify({ name: 'x'.repeat(1000), image: 'javascript:alert(1)' });
+      expect(await raw('POST', '/api/auth/update-user#x', cookie, big)).toBe(404);
+      expect((await stored(email)).image).toBeNull();
+      for (const [method, path] of BLOCKED) {
+        expect(await raw(method, `/api/auth/${path}#x`, cookie, '{}'), path).toBe(404);
+      }
+      for (const path of [
+        'change-password',
+        'request-password-reset',
+        'sign-up/email',
+        'send-verification-email',
+      ]) {
+        expect(await raw('POST', `/api/auth/${path}#x`, cookie, '{}'), path).toBe(404);
+      }
+    });
   });
 });

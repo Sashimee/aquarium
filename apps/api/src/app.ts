@@ -155,7 +155,8 @@ export function stripTokens(value: unknown): unknown {
 // (also percent-encoded) and treats a backslash as a slash. Path-based rules here compare a literal
 // string, so any path the parser would rewrite is refused instead of being matched differently.
 function hasAmbiguousPath(url: string): boolean {
-  const raw = url.split('?')[0]?.split('#')[0] ?? '';
+  if (url.includes('#')) return true;
+  const raw = url.split('?')[0] ?? '';
   if (raw.includes('\\') || raw.includes('//')) return true;
   return raw.split('/').some((segment) => {
     let decoded: string;
@@ -169,7 +170,7 @@ function hasAmbiguousPath(url: string): boolean {
 }
 
 function normalizedPathname(url: string): string {
-  const raw = url.split('?')[0] ?? '/';
+  const raw = url.split('?')[0]?.split('#')[0] ?? '/';
   let decoded: string;
   try {
     decoded = decodeURIComponent(raw);
@@ -323,11 +324,11 @@ export function buildApp(opts: AppOptions): FastifyInstance {
         if (BLOCKED_AUTH_PATHS.has(pathname)) {
           return reply.code(404).send(apiError('not_found', 'Not found.'));
         }
-        const raw = typeof req.body === 'string' ? req.body : undefined;
+        let raw = typeof req.body === 'string' ? req.body : undefined;
         let admission: IpAdmission = { wait: 0, mailBlockedFor: 0 };
 
         const bodySchema = req.method === 'POST' ? BODY_SCHEMAS.get(pathname) : undefined;
-        bodySchema?.parse(parseJson(raw));
+        if (bodySchema) raw = JSON.stringify(bodySchema.parse(parseJson(raw)));
 
         if (req.method === 'POST' && pathname === `${AUTH_BASE_PATH}/sign-up/email`) {
           admission = await mailer.consumeIp(req.ip, { chargeGlobal: true });
@@ -344,7 +345,8 @@ export function buildApp(opts: AppOptions): FastifyInstance {
 
         const headers = new Headers();
         for (const [name, value] of Object.entries(req.headers)) {
-          if (value === undefined || name === 'x-forwarded-for') continue;
+          if (value === undefined || name === 'x-forwarded-for' || name === 'content-length')
+            continue;
           if (Array.isArray(value)) value.forEach((v) => headers.append(name, v));
           else headers.set(name, value);
         }
