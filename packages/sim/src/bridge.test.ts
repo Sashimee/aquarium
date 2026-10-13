@@ -364,4 +364,168 @@ describe('sim worker bridge', () => {
       client.init({ ...config, fish: [{ id: 'x', species: 'unknown-fish' }] }),
     ).rejects.toThrow(/unknown species/);
   });
+  it('adds and removes fish in place under a new epoch, as a local world would', async () => {
+    const { client } = connect();
+    const config = benchmarkConfig(4);
+    const ready = await client.init(config);
+    const local = new World(config);
+    client.setFood(flakeGrid(30));
+    local.setFood(flakeGrid(30));
+    await stepCollecting(client, 30, 30);
+    for (let t = 0; t < 30; t++) local.step();
+    local.takeAteEvents();
+
+    const spawn = { id: 'newcomer', species: 'yellow-tang' };
+    const at = { position: [0.3, 0.4, 0.15] as const, heading: 1 };
+    const added = nextSnapshot(client);
+    const layout = await client.addFish(spawn, at);
+    local.addFish(spawn, at);
+    expect(layout.epoch).toBe(ready.epoch + 1);
+    expect(layout.change).toEqual({ kind: 'add', id: 'newcomer' });
+    expect(layout.fishIds).toEqual([...ready.fishIds, 'newcomer']);
+    expect(layout.stride).toBe(SNAPSHOT_STRIDE);
+    const afterAdd = await added;
+    expect(afterAdd.epoch).toBe(layout.epoch);
+    expect(afterAdd.tick).toBe(30);
+    expect(afterAdd.data.length).toBe(layout.fishIds.length * SNAPSHOT_STRIDE);
+
+    const removed = nextSnapshot(client);
+    const second = await client.removeFish('neon-tetra-3');
+    local.removeFish('neon-tetra-3');
+    expect(second.epoch).toBe(layout.epoch + 1);
+    expect(second.change).toEqual({ kind: 'remove', id: 'neon-tetra-3' });
+    expect(second.fishIds).toEqual(layout.fishIds.filter((id) => id !== 'neon-tetra-3'));
+    expect((await removed).data.length).toBe(second.fishIds.length * SNAPSHOT_STRIDE);
+
+    const { snapshot, ate } = await stepCollecting(client, 60, 90);
+    const expected: AteEvent[] = [];
+    for (let t = 0; t < 60; t++) {
+      local.step();
+      expected.push(...local.takeAteEvents());
+    }
+    expect(snapshot.epoch).toBe(second.epoch);
+    expect(expected.length).toBeGreaterThan(0);
+    expect(ate.flatMap((a) => a.events)).toEqual(expected);
+    const data = new Float32Array(local.count * SNAPSHOT_STRIDE);
+    local.writeSnapshot(data);
+    expect(Array.from(snapshot.data)).toEqual(Array.from(data));
+  });
+
+  it('rejects a bad add or remove with its own error and keeps the world running', async () => {
+    const { client } = connect();
+    await expect(client.removeFish('ghost')).rejects.toThrow(/"removeFish" before "init"/);
+    const ready = await client.init(benchmarkConfig(1));
+    const errors: string[] = [];
+    client.onError((m) => errors.push(m));
+    const ghost = client.removeFish('ghost');
+    const twin = client.addFish({ id: 'neon-tetra-0', species: 'neon-tetra' });
+    const fine = client.addFish({ id: 'cory-x', species: 'bronze-corydoras' });
+    await expect(ghost).rejects.toThrow(/no fish "ghost"/);
+    await expect(twin).rejects.toThrow(/already in the world/);
+    const layout = await fine;
+    expect(layout.epoch).toBe(ready.epoch + 1);
+    expect(layout.fishIds).toEqual([...ready.fishIds, 'cory-x']);
+    expect(errors).toHaveLength(2);
+  });
+
+  it('passes on bites across a layout change and drops those from an older epoch', () => {
+    let deliver: ((event: MessageEvent) => void) | null = null;
+    const sent: unknown[] = [];
+    const client = new SimClient({
+      postMessage: (message) => sent.push(message),
+      addEventListener: (_type, listener) => {
+        deliver = listener;
+      },
+      removeEventListener: () => undefined,
+    });
+    const post = (data: unknown): void => deliver?.({ data } as MessageEvent);
+    const ate = (epoch: number, foodId: number): unknown => ({
+      type: 'ate',
+      epoch,
+      tick: 1,
+      events: [{ fishId: 'f', foodId, portion: 0.025 }],
+    });
+    const seen: number[] = [];
+    client.onAte((events) => seen.push(...events.map((e) => e.foodId)));
+    post({ type: 'ready', epoch: 1, fishIds: ['f'], stride: SNAPSHOT_STRIDE, stepHz: STEP_HZ });
+
+    void client.removeFish('g');
+    const request = (sent.at(-1) as { request: number }).request;
+    post(ate(1, 1));
+    post({
+      type: 'layout',
+      epoch: 2,
+      request,
+      fishIds: ['f'],
+      stride: SNAPSHOT_STRIDE,
+      change: { kind: 'remove', id: 'g' },
+    });
+    post(ate(1, 2));
+    post(ate(2, 3));
+    expect(seen).toEqual([1, 3]);
+    expect(() =>
+      post({
+        type: 'layout',
+        epoch: 3,
+        request: request + 99,
+        fishIds: [],
+        stride: 11,
+        change: {},
+      }),
+    ).toThrow(/unknown request/);
+  });
+
+  it('sends bites taken before a layout change in the old epoch, ahead of the layout', async () => {
+    const { client, clientPort } = connect();
+    const ready = await client.init(benchmarkConfig(5));
+    const seen: { type: string; epoch: number; tick: number }[] = [];
+    clientPort.addEventListener('message', (event: MessageEvent) => {
+      const data = event.data as { type: string; epoch: number; tick?: number };
+      seen.push({ type: data.type, epoch: data.epoch, tick: data.tick ?? -1 });
+    });
+    client.setFood(flakeGrid(30));
+    client.step(90);
+    const layout = await client.removeFish('neon-tetra-0');
+    await stepCollecting(client, 30, 120);
+
+    const at = seen.findIndex((m) => m.type === 'layout');
+    expect(at).toBeGreaterThan(0);
+    const before = seen.slice(0, at);
+    const after = seen.slice(at + 1);
+    expect(before.some((m) => m.type === 'ate')).toBe(true);
+    expect(before.every((m) => m.epoch === layout.epoch - 1 && m.epoch === ready.epoch)).toBe(true);
+    expect(after[0]).toEqual({ type: 'snapshot', epoch: layout.epoch, tick: 90 });
+    expect(after.some((m) => m.type === 'ate')).toBe(true);
+    expect(after.every((m) => m.epoch === layout.epoch)).toBe(true);
+  });
+
+  it('never lets an error for an add or remove reject a pending init', async () => {
+    let deliver: ((event: MessageEvent) => void) | null = null;
+    const client = new SimClient({
+      postMessage: () => undefined,
+      addEventListener: (_type, listener) => {
+        deliver = listener;
+      },
+      removeEventListener: () => undefined,
+    });
+    const post = (data: unknown): void => deliver?.({ data } as MessageEvent);
+    const errors: string[] = [];
+    client.onError((m) => errors.push(m));
+    const init = client.init(benchmarkConfig(1));
+    post({ type: 'error', message: 'stale remove', request: 41 });
+    post({ type: 'ready', epoch: 1, fishIds: [], stride: SNAPSHOT_STRIDE, stepHz: STEP_HZ });
+    await expect(init).resolves.toMatchObject({ type: 'ready', epoch: 1 });
+    expect(errors).toEqual(['stale remove']);
+  });
+
+  it('rejects pending adds and removes when the client is disposed', async () => {
+    const client = new SimClient({
+      postMessage: () => undefined,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    });
+    const pending = client.addFish({ id: 'x', species: 'neon-tetra' });
+    client.dispose();
+    await expect(pending).rejects.toThrow(/disposed/);
+  });
 });

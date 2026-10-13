@@ -2,7 +2,13 @@ import type { Collider } from '@aquarium/shared';
 import type { Anchor, Stimulus } from './behaviour.ts';
 import { FOOD_STRIDE, type AteEvent } from './food.ts';
 import { SNAPSHOT_STRIDE, type Snapshot } from './snapshot.ts';
-import { STEP_HZ, World, type AnyWorldConfig } from './world.ts';
+import {
+  STEP_HZ,
+  World,
+  type AnyWorldConfig,
+  type FishPlacement,
+  type FishSpawn,
+} from './world.ts';
 
 /**
  * Every position crossing the bridge (startle stimuli, food, decor colliders, anchors, and the
@@ -10,6 +16,9 @@ import { STEP_HZ, World, type AnyWorldConfig } from './world.ts';
  * `space`, so scene coordinates pass through unchanged; the legacy flat-floor box when it has
  * `tank`. Never map positions by subtracting the local sand height: food would sink under the
  * fish's floor where the sand is low and startles would land in the wrong place.
+ *
+ * `addFish` and `removeFish` change the running world in place and are answered by a `layout`
+ * event carrying the same `request` number, or by an `error` event carrying it.
  */
 export type SimCommand =
   | { readonly type: 'init'; readonly config: AnyWorldConfig }
@@ -23,7 +32,14 @@ export type SimCommand =
   | { readonly type: 'decor'; readonly colliders: readonly Collider[] }
   | { readonly type: 'anchors'; readonly anchors: readonly Anchor[] }
   /** Float32 records of `[id, x, y, z, typeIndex]`; see `World.setFood`. */
-  | { readonly type: 'food'; readonly buffer: ArrayBuffer };
+  | { readonly type: 'food'; readonly buffer: ArrayBuffer }
+  | {
+      readonly type: 'addFish';
+      readonly request: number;
+      readonly spawn: FishSpawn;
+      readonly at?: FishPlacement;
+    }
+  | { readonly type: 'removeFish'; readonly request: number; readonly id: string };
 
 export interface SimReady {
   readonly type: 'ready';
@@ -43,7 +59,29 @@ export type SimEvent =
       readonly buffer: ArrayBuffer;
     }
   | SimAte
-  | { readonly type: 'error'; readonly message: string };
+  | SimLayout
+  /** `request` is set when the failed command was an `addFish` or `removeFish`. */
+  | { readonly type: 'error'; readonly message: string; readonly request?: number };
+
+/**
+ * The world gained or lost a fish and every later message uses the new layout. The sequence on
+ * the port is: any bites taken before the change (`ate`, old epoch), this event, then a snapshot
+ * of the changed world in the new epoch at the same tick. Ticks carry on across a layout epoch;
+ * they restart at 0 only after `init`.
+ *
+ * `fishIds` is the snapshot order: fish `fishIds[i]` is record `i`, at float offset `i * stride`.
+ * An added fish is appended at the end and every other fish keeps its record. A removed fish's
+ * record is gone and the fish after it each move down one. Snapshots whose `epoch` is older than
+ * `epoch` use the previous layout.
+ */
+export interface SimLayout {
+  readonly type: 'layout';
+  readonly epoch: number;
+  readonly request: number;
+  readonly fishIds: readonly string[];
+  readonly stride: number;
+  readonly change: { readonly kind: 'add' | 'remove'; readonly id: string };
+}
 
 /** Bites taken in the steps leading up to the snapshot at `tick`, which follows it. */
 export interface SimAte {
@@ -72,8 +110,10 @@ const COMMAND_TYPES = new Set([
   'decor',
   'anchors',
   'food',
+  'addFish',
+  'removeFish',
 ]);
-const EVENT_TYPES = new Set(['ready', 'snapshot', 'ate', 'error']);
+const EVENT_TYPES = new Set(['ready', 'snapshot', 'ate', 'layout', 'error']);
 
 function messageType(data: unknown, allowed: ReadonlySet<string>): string {
   if (typeof data === 'object' && data !== null && 'type' in data) {
@@ -83,6 +123,12 @@ function messageType(data: unknown, allowed: ReadonlySet<string>): string {
   const text = JSON.stringify(data) ?? String(data);
   const shown = text.length > 200 ? `${text.slice(0, 200)}…` : text;
   throw new TypeError(`unexpected sim bridge message: ${shown}`);
+}
+
+function requestOf(data: unknown): number | undefined {
+  if (typeof data !== 'object' || data === null || !('request' in data)) return undefined;
+  const request = (data as { request: unknown }).request;
+  return typeof request === 'number' ? request : undefined;
 }
 
 export interface SimHostOptions {
@@ -127,8 +173,9 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
     timer = null;
   };
 
-  const sendError = (error: unknown): void => {
-    send({ type: 'error', message: error instanceof Error ? error.message : String(error) });
+  const sendError = (error: unknown, request?: number): void => {
+    const message = error instanceof Error ? error.message : String(error);
+    send(request === undefined ? { type: 'error', message } : { type: 'error', message, request });
   };
 
   const loop = (): void => {
@@ -158,6 +205,21 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
   const requireWorld = (type: SimCommand['type']): World => {
     if (world === null) throw new Error(`sim: "${type}" before "init"`);
     return world;
+  };
+
+  const changeLayout = (
+    w: World,
+    request: number,
+    change: SimLayout['change'],
+    apply: () => void,
+  ): void => {
+    // Bites taken so far belong to the old layout's epoch, so they go out before it changes.
+    const events = w.takeAteEvents();
+    if (events.length > 0) send({ type: 'ate', epoch, tick: w.tick, events });
+    apply();
+    epoch++;
+    send({ type: 'layout', epoch, request, fishIds: w.fishIds, stride: SNAPSHOT_STRIDE, change });
+    emitSnapshot(w);
   };
 
   const handle = (command: SimCommand): void => {
@@ -224,6 +286,21 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
         w.setFood(new Float32Array(buffer));
         return;
       }
+      case 'addFish': {
+        const w = requireWorld(command.type);
+        const { spawn, at } = command;
+        changeLayout(w, command.request, { kind: 'add', id: spawn.id }, () => {
+          if (at === undefined) w.addFish(spawn);
+          else w.addFish(spawn, at);
+        });
+        return;
+      }
+      case 'removeFish': {
+        const w = requireWorld(command.type);
+        const { id } = command;
+        changeLayout(w, command.request, { kind: 'remove', id }, () => w.removeFish(id));
+        return;
+      }
     }
   };
 
@@ -232,7 +309,7 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
       messageType(event.data, COMMAND_TYPES);
       handle(event.data as SimCommand);
     } catch (error) {
-      sendError(error);
+      sendError(error, requestOf(event.data));
     }
   };
   port.addEventListener('message', listener);
@@ -257,6 +334,11 @@ export class SimClient {
     resolve: (ready: SimReady) => void;
     reject: (error: Error) => void;
   } | null = null;
+  private readonly pendingLayouts = new Map<
+    number,
+    { resolve: (layout: SimLayout) => void; reject: (error: Error) => void }
+  >();
+  private nextRequest = 1;
   private readonly listener = (event: MessageEvent): void => this.receive(event.data);
   private epoch = 0;
 
@@ -274,6 +356,23 @@ export class SimClient {
       this.pendingInit = { resolve, reject };
       this.send({ type: 'init', config });
     });
+  }
+
+  /**
+   * Adds a fish to the running world, at `at` (moved clear of glass, sand and rock) or, without
+   * it, wherever a fish would spawn at init. Resolves with the new layout; see `SimLayout`.
+   */
+  addFish(spawn: FishSpawn, at?: FishPlacement): Promise<SimLayout> {
+    return this.requestLayout((request) =>
+      at === undefined
+        ? { type: 'addFish', request, spawn }
+        : { type: 'addFish', request, spawn, at },
+    );
+  }
+
+  /** Takes fish `id` out of the running world; rejects if there is no such fish. */
+  removeFish(id: string): Promise<SimLayout> {
+    return this.requestLayout((request) => ({ type: 'removeFish', request, id }));
   }
 
   start(): void {
@@ -349,10 +448,22 @@ export class SimClient {
     this.ateListeners.clear();
     this.pendingInit?.reject(new Error('sim: client disposed'));
     this.pendingInit = null;
+    for (const pending of this.pendingLayouts.values()) {
+      pending.reject(new Error('sim: client disposed'));
+    }
+    this.pendingLayouts.clear();
   }
 
   private send(command: SimCommand): void {
     this.port.postMessage(command, []);
+  }
+
+  private requestLayout(command: (request: number) => SimCommand): Promise<SimLayout> {
+    const request = this.nextRequest++;
+    return new Promise((resolve, reject) => {
+      this.pendingLayouts.set(request, { resolve, reject });
+      this.send(command(request));
+    });
   }
 
   private receive(data: unknown): void {
@@ -380,9 +491,24 @@ export class SimClient {
         if (this.pendingInit !== null || event.epoch !== this.epoch) return;
         for (const l of this.ateListeners) l(event.events, event);
         return;
+      case 'layout': {
+        const pending = this.pendingLayouts.get(event.request);
+        if (pending === undefined) {
+          throw new Error(`sim: layout for unknown request ${event.request}`);
+        }
+        this.pendingLayouts.delete(event.request);
+        this.epoch = event.epoch;
+        pending.resolve(event);
+        return;
+      }
       case 'error': {
-        const pending = this.pendingInit;
-        this.pendingInit = null;
+        // An error naming a request belongs to that add or remove alone, never to an init.
+        const pending =
+          event.request === undefined
+            ? this.pendingInit
+            : (this.pendingLayouts.get(event.request) ?? null);
+        if (event.request === undefined) this.pendingInit = null;
+        else this.pendingLayouts.delete(event.request);
         pending?.reject(new Error(event.message));
         if (pending === null && this.errorListeners.size === 0) {
           throw new Error(`sim worker error with no listener: ${event.message}`);
