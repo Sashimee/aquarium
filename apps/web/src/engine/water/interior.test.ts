@@ -59,6 +59,18 @@ describe('Caustics.hoodLightAtDepth', () => {
 });
 
 describe('InteriorLight.update', () => {
+  it('exposes the hood light blue channel at the sand as the actinic excitation', () => {
+    const { caustics, interior } = setup(0.1);
+    caustics.lightRadiance.value.setRGB(1, 1, 4);
+    interior.update();
+    const atSand = caustics.hoodLightAtDepth(SURFACE - 0.1, new Color());
+    expect(interior.actinicExcitation).toBeCloseTo(atSand.b, 9);
+    caustics.lightRadiance.value.setRGB(0, 0, 0.5);
+    interior.update();
+    expect(interior.actinicExcitation).toBeLessThan(0.5);
+    expect(interior.actinicExcitation).toBeGreaterThan(0);
+  });
+
   it('throws back the hood light at the sand, coloured by the substrate', () => {
     const { caustics, interior } = setup(0.1);
     interior.update();
