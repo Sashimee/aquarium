@@ -234,11 +234,17 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     if (!indexable) reply.header('x-robots-tag', 'noindex, nofollow');
   };
   const app = Fastify({
-    // Fastify answers an undecodable URL (GET /%) before routing, so no hook ever runs for it.
-    frameworkErrors: (_err, _req, reply: FastifyReply) => {
+    // Fastify answers an undecodable URL (GET /%), an over-long path param (414) and a failed async
+    // constraint (500) before routing, so no hook runs for them.
+    frameworkErrors: (err, _req, reply: FastifyReply) => {
       applySecurityHeaders(reply);
-      const body = JSON.stringify(apiError('validation_failed', 'Malformed request.'));
-      return reply.code(400).type('application/json; charset=utf-8').send(body);
+      const status = err.statusCode ?? 500;
+      const body = JSON.stringify(
+        status >= 500
+          ? apiError('internal', 'Internal server error.')
+          : apiError('validation_failed', 'Malformed request.'),
+      );
+      return reply.code(status).type('application/json; charset=utf-8').send(body);
     },
     trustProxy: opts.trustedProxies,
     rewriteUrl: (req) => (req.url ?? '/').replace(/^\/{2,}/, '/'),
@@ -540,7 +546,8 @@ export function buildApp(opts: AppOptions): FastifyInstance {
 }
 
 // unsafe-eval: the basis transcoder is an emscripten module that calls new Function, and KTX2Loader
-// runs it in a blob: worker that inherits this policy. wasm-unsafe-eval: meshopt. worker-src and
+// runs it in a blob: worker that inherits this policy. wasm-unsafe-eval: meshopt and the
+// basis transcoder. worker-src and
 // img-src blob: the same loader and the account export download. style-src unsafe-inline: the
 // inline <style> in index.html and React style= attributes.
 export const CONTENT_SECURITY_POLICY = [

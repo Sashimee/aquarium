@@ -135,6 +135,14 @@ describe('security headers', () => {
     it('bad-URL 400', async () => {
       const res = await plain.app.inject({ method: 'GET', url: '/%' });
       expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({ error: { code: 'validation_failed' } });
+      expectSecured(res.headers);
+    });
+
+    it('over-long param 414', async () => {
+      const res = await plain.app.inject({ method: 'GET', url: `/api/tanks/${'a'.repeat(150)}` });
+      expect(res.statusCode).toBe(414);
+      expect(res.json()).toMatchObject({ error: { code: 'validation_failed' } });
       expectSecured(res.headers);
     });
   });
