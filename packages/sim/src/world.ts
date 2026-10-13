@@ -1,10 +1,12 @@
+import type { Collider, TankSpace } from '@aquarium/shared';
+import { Basin, type TankDimensions } from './basin.ts';
 import { Behaviour, BEHAVIOUR, type Anchor, type Plan, type Stimulus } from './behaviour.ts';
-import { compileCollider, DecorField, UnionSdf, type DecorCollider } from './decor.ts';
+import { DecorField, UnionSdf } from './decor.ts';
 import { FoodStore, type AteEvent } from './food.ts';
 import { clamp, DEG, quatFromYawPitchRoll, wrapAngle } from './math.ts';
 import { pairwiseDistanceSq, selectNearest } from './neighbours.ts';
 import { Rng } from './rng.ts';
-import { smoothGradient, TankSdf, type Sdf, type TankDimensions } from './sdf.ts';
+import { smoothGradient, TankSdf, type Sdf } from './sdf.ts';
 import { FishState, SNAPSHOT_STRIDE } from './snapshot.ts';
 import {
   DRAG_COEFFICIENT_L2,
@@ -76,16 +78,37 @@ export interface FishSpawn {
   readonly bodyLengthM?: number;
 }
 
-export interface WorldConfig {
+interface WorldConfigBase {
   readonly seed: number;
-  readonly tank: TankDimensions;
   readonly species: readonly SpeciesInput[];
   readonly fish: readonly FishSpawn[];
-  readonly decor?: readonly DecorCollider[];
+  /** Hard colliders block fish; soft ones (plants) only push them aside. */
+  readonly decor?: readonly Collider[];
   readonly anchors?: readonly Anchor[];
   /** Tank light, 0 (dark) to 1 (full day). */
   readonly light?: number;
 }
+
+/**
+ * A world in tank space from @aquarium/shared, identical to the scene's coordinates: the water box
+ * comes from `tankWaterBounds` and the floor follows `sampleFloor`. Every position the sim takes
+ * or reports (fish, food, startle stimuli, decor colliders, anchors) is in that frame.
+ */
+export interface TankSpaceWorldConfig extends WorldConfigBase {
+  readonly space: TankSpace;
+  readonly tank?: undefined;
+}
+
+/**
+ * The legacy world: a box with a flat floor at y = 0, centred on x = z = 0. A client mapping scene
+ * positions into it must subtract the one constant offset it built the box with.
+ */
+export interface WorldConfig extends WorldConfigBase {
+  readonly tank: TankDimensions;
+  readonly space?: undefined;
+}
+
+export type AnyWorldConfig = TankSpaceWorldConfig | WorldConfig;
 
 const PENETRATION_EPSILON = 1e-9;
 const MAX_BODY_PUSHES = 8;
@@ -95,7 +118,8 @@ const NO_ATE_EVENTS: readonly AteEvent[] = Object.freeze([]);
 export class World {
   readonly count: number;
   readonly fishIds: readonly string[];
-  readonly tank: TankDimensions;
+  /** The water and the floor under it, in the world's frame. */
+  readonly basin: Basin;
   readonly species: readonly SimSpecies[];
   tick = 0;
   /** Steps where the hard SDF constraint had to move a fish; avoidance should keep this rare. */
@@ -165,9 +189,9 @@ export class World {
   private readonly probeNormal = new Float64Array(3);
   private readonly previous = new Float64Array(3);
 
-  constructor(config: WorldConfig) {
+  constructor(config: AnyWorldConfig) {
     this.rng = new Rng(config.seed);
-    this.tank = config.tank;
+    this.basin = basinOfConfig(config);
     this.species = config.species.map(toSimSpecies);
     const byId = new Map(this.species.map((s, i) => [s.id, i]));
     if (byId.size !== this.species.length) throw new Error('species ids must be unique');
@@ -180,11 +204,11 @@ export class World {
     // Steering never samples further than ~1.75 body lengths from a surface; beyond that reach
     // the decor field only has to report "far".
     const reach = Math.max(0.05, 2 * longest);
-    this.hardDecor = new DecorField(config.tank, reach);
-    this.softDecor = new DecorField(config.tank, reach);
+    this.hardDecor = new DecorField(this.basin, reach);
+    this.softDecor = new DecorField(this.basin, reach);
     this.setDecor(config.decor ?? []);
     const tankSdf = (floor: boolean, surface: boolean): TankSdf =>
-      new TankSdf(config.tank, { floor, surface });
+      new TankSdf(this.basin, { floor, surface });
     this.sceneSdf = new UnionSdf([tankSdf(true, true), this.hardDecor]);
     this.substrateSdf = new UnionSdf([tankSdf(true, false), this.hardDecor]);
     this.steerSdf = [
@@ -245,7 +269,7 @@ export class World {
     this.scratchDist = new Float64Array(kMax);
 
     config.fish.forEach((spawn, i) => this.spawn(i, spawn, byId));
-    this.food = new FoodStore(config.tank);
+    this.food = new FoodStore(this.basin);
     this.behaviour = new Behaviour(this);
     this.behaviour.setAnchors(config.anchors ?? []);
     this.behaviour.init();
@@ -278,18 +302,16 @@ export class World {
    * cells; returns how many cells were rebuilt. A fish left inside moved decor is pushed out by
    * the body constraint on the next step.
    */
-  setDecor(colliders: readonly DecorCollider[]): number {
+  setDecor(colliders: readonly Collider[]): number {
     const ids = new Set<string>();
     for (const c of colliders) {
       if (ids.has(c.id)) throw new Error(`decor collider ids must be unique, "${c.id}" repeats`);
       ids.add(c.id);
-      // Validated up front, so a bad collider leaves both fields as they were.
-      compileCollider(c);
     }
-    return (
-      this.hardDecor.set(colliders.filter((c) => c.solid)) +
-      this.softDecor.set(colliders.filter((c) => !c.solid))
-    );
+    // Both plans validate before either field changes, so a bad collider leaves both as they were.
+    const hard = this.hardDecor.plan(colliders.filter((c) => c.hard));
+    const soft = this.softDecor.plan(colliders.filter((c) => !c.hard));
+    return this.hardDecor.apply(hard) + this.softDecor.apply(soft);
   }
 
   setAnchors(anchors: readonly Anchor[]): void {
@@ -353,8 +375,8 @@ export class World {
     // Isometric scaling: mass ∝ L³, drag area ∝ L², speeds in body lengths per second.
     const scale = length / sp.bodyLength;
     const r = length * STEERING.collisionRadiusBodyLengths;
-    const { width, height, depth } = this.tank;
-    if (2 * r >= Math.min(width, height, depth)) {
+    const basin = this.basin;
+    if (2 * r >= Math.min(basin.width, basin.maxY - basin.floorMax, basin.depth)) {
       throw new RangeError(`fish "${spawn.id}" (${length} m) does not fit in the tank`);
     }
 
@@ -369,16 +391,22 @@ export class World {
     this.cruiseSpeed[i] = sp.cruiseSpeed * scale;
 
     const pad = r * 2;
-    const yLo = Math.max(sp.depthLow * height, pad);
-    const yHi = Math.min(sp.depthHigh * height, height - pad);
     const o = i * 3;
     let placed = false;
     for (let attempt = 0; attempt < STEERING.spawnAttempts && !placed; attempt++) {
+      const x = this.rng.range(basin.minX + pad, basin.maxX - pad);
+      // Drawn before z (the depth band depends on the sand under x, z), but consumed as y.
+      const t = this.rng.next();
+      const z = this.rng.range(basin.minZ + pad, basin.maxZ - pad);
+      const ground = basin.ground(x, z);
+      const column = basin.maxY - ground;
+      const yLo = ground + Math.max(sp.depthLow * column, pad);
+      const yHi = ground + Math.min(sp.depthHigh * column, column - pad);
       // Fall back to the whole water column when decor crowds the preferred band.
       const inBand = attempt < STEERING.spawnAttempts / 2 && yLo <= yHi;
-      const x = this.rng.range(-width / 2 + pad, width / 2 - pad);
-      const y = inBand ? this.rng.range(yLo, yHi) : this.rng.range(pad, height - pad);
-      const z = this.rng.range(-depth / 2 + pad, depth / 2 - pad);
+      const lo = inBand ? yLo : ground + pad;
+      const hi = inBand ? yHi : basin.maxY - pad;
+      const y = lo + (hi - lo) * t;
       if (this.hardDecor.sample(x, y, z, this.normal) < pad) continue;
       this.position[o] = x;
       this.position[o + 1] = y;
@@ -534,10 +562,11 @@ export class World {
     dy += sy * ws;
     dz += sz * ws;
 
-    const height = this.tank.height;
+    const ground = this.basin.ground(px, pz);
+    const top = this.basin.maxY;
     const clearance = radius + length * STEERING.proximityBodyLengths * comfort;
-    const bandLo = plan.floor ? Math.max(plan.bandLo, clearance) : plan.bandLo;
-    const bandHi = plan.surface ? Math.min(plan.bandHi, height - clearance) : plan.bandHi;
+    const bandLo = plan.floor ? Math.max(plan.bandLo, ground + clearance) : plan.bandLo;
+    const bandHi = plan.surface ? Math.min(plan.bandHi, top - clearance) : plan.bandHi;
     const bandTarget = clamp(py, Math.min(bandLo, bandHi), Math.max(bandLo, bandHi));
     const vyLimit = cruiseBase * STEERING.depthMaxSpeedFraction;
     dy += clamp((bandTarget - py) / STEERING.depthTauS, -vyLimit, vyLimit);
@@ -612,8 +641,8 @@ export class World {
       // With the floor or surface masked out, an overhang pushes a fish into the very surface it
       // is hugging (a cory nosing under driftwood); only a sideways escape is possible there.
       if (
-        (!plan.floor && ny < 0 && py < clearance) ||
-        (!plan.surface && ny > 0 && height - py < clearance)
+        (!plan.floor && ny < 0 && py - ground < clearance) ||
+        (!plan.surface && ny > 0 && top - py < clearance)
       ) {
         ny = 0;
       }
@@ -747,8 +776,8 @@ export class World {
     // swings the snout or tail into it (a tang lifting off the rock it grazed, a cory nosing the
     // sand with the floor masked), so the tilt is capped to what the clearance allows.
     this.capTilt(i, dHere, verticalHere);
-    if (!plan.floor) this.capTilt(i, py, 1);
-    if (!plan.surface) this.capTilt(i, this.tank.height - py, 1);
+    if (!plan.floor) this.capTilt(i, py - ground, 1);
+    if (!plan.surface) this.capTilt(i, top - py, 1);
   }
 
   /**
@@ -1041,4 +1070,14 @@ export class World {
       out[o + 10] = this.thrust[i] ?? 0;
     }
   }
+}
+
+function basinOfConfig(config: AnyWorldConfig): Basin {
+  const { space, tank } = config;
+  if (space !== undefined && tank !== undefined) {
+    throw new RangeError('WorldConfig takes either space or tank, not both');
+  }
+  if (space !== undefined) return Basin.fromSpace(space);
+  if (tank !== undefined) return Basin.fromTank(tank);
+  throw new RangeError('WorldConfig needs space (tank space) or tank (legacy box)');
 }

@@ -1,10 +1,11 @@
+import type { Basin } from './basin.ts';
 import type { Point3 } from './decor.ts';
 import { FEEDING, Feeding, feedingHeight } from './feeding.ts';
 import type { FoodStore } from './food.ts';
 import { clamp, DEG, wrapAngle } from './math.ts';
 import { selectNearest } from './neighbours.ts';
 import type { Rng } from './rng.ts';
-import type { Sdf, TankDimensions } from './sdf.ts';
+import type { Sdf } from './sdf.ts';
 import { FishState } from './snapshot.ts';
 import type { SimSpecies } from './species.ts';
 
@@ -147,7 +148,7 @@ export interface Stimulus {
 export interface BehaviourHost {
   readonly count: number;
   readonly fishIds: readonly string[];
-  readonly tank: TankDimensions;
+  readonly basin: Basin;
   readonly species: readonly SimSpecies[];
   readonly speciesIndex: Int32Array;
   readonly position: Float64Array;
@@ -319,6 +320,8 @@ export class Behaviour {
   private readonly nbr: Int32Array;
   private readonly nbrDist: Float64Array;
   private readonly n3 = new Float64Array(3);
+  private bandLo = 0;
+  private bandHi = 0;
 
   constructor(host: BehaviourHost) {
     this.host = host;
@@ -395,7 +398,7 @@ export class Behaviour {
   }
 
   setAnchors(anchors: readonly Anchor[]): void {
-    const { tank } = this.host;
+    const { basin } = this.host;
     const ids = new Set<string>();
     for (const a of anchors) {
       if (typeof a.id !== 'string' || a.id === '') {
@@ -421,7 +424,12 @@ export class Behaviour {
       }
       const [x, y, z] = a.position;
       const inside =
-        Math.abs(x) < tank.width / 2 && y > 0 && y < tank.height && Math.abs(z) < tank.depth / 2;
+        x > basin.minX &&
+        x < basin.maxX &&
+        z > basin.minZ &&
+        z < basin.maxZ &&
+        y > basin.ground(x, z) &&
+        y < basin.maxY;
       if (!inside) throw new RangeError(`anchor "${a.id}" lies outside the tank`);
       if (!(Number.isFinite(a.radius) && a.radius > 0)) {
         throw new RangeError(`anchor "${a.id}": radius must be positive, got ${a.radius}`);
@@ -531,11 +539,15 @@ export class Behaviour {
     return s;
   }
 
-  private bandOf(i: number): [number, number] {
+  /** The species' depth band over (x, z), as heights: fractions of the water column above the sand there. */
+  private bandAt(i: number, x: number, z: number): void {
     const sp = this.speciesOf(i);
-    const h = this.host.tank.height;
+    const { basin } = this.host;
+    const g = basin.ground(x, z);
+    const h = basin.maxY - g;
     const drop = BEHAVIOUR.restBandDrop * at(this.rest, i) * h;
-    return [Math.max(0, sp.depthLow * h - drop), Math.max(0, sp.depthHigh * h - drop)];
+    this.bandLo = g + Math.max(0, sp.depthLow * h - drop);
+    this.bandHi = g + Math.max(0, sp.depthHigh * h - drop);
   }
 
   private updateGroups(): void {
@@ -546,8 +558,7 @@ export class Behaviour {
       const left = at(this.groupTimer, s) - DT;
       this.groupTimer[s] = left;
       if (left > 0) continue;
-      const [lo, hi] = this.bandOf(leader);
-      this.chooseStation(leader, lo, hi, this.groupHome, s * 3);
+      this.chooseStation(leader, this.groupHome, s * 3);
       this.groupTimer[s] = this.host.rng.range(BEHAVIOUR.restationMinS, BEHAVIOUR.restationMaxS);
     }
   }
@@ -555,8 +566,7 @@ export class Behaviour {
   private pickHome(i: number): void {
     const sp = this.speciesOf(i);
     if (sp.home === 'none') return;
-    const [lo, hi] = this.bandOf(i);
-    this.chooseStation(i, lo, hi, this.home, i * 3);
+    this.chooseStation(i, this.home, i * 3);
     this.homeTimer[i] = this.host.rng.range(BEHAVIOUR.restationMinS, BEHAVIOUR.restationMaxS);
   }
 
@@ -564,8 +574,8 @@ export class Behaviour {
    * Picks a hovering spot inside the band: clear of geometry, preferably about 1.5 body lengths
    * from hard decor (fish hold station by structure), and not far from where the fish is.
    */
-  private chooseStation(i: number, lo: number, hi: number, out: Float64Array, o: number): void {
-    const { tank, rng, sceneSdf, decorSdf, position } = this.host;
+  private chooseStation(i: number, out: Float64Array, o: number): void {
+    const { basin, rng, sceneSdf, decorSdf, position } = this.host;
     const length = at(this.host.bodyLength, i);
     const radius = at(this.host.radius, i);
     const margin = radius + length;
@@ -577,12 +587,15 @@ export class Behaviour {
     let bx = px;
     let by = py;
     let bz = pz;
-    const yLo = Math.max(lo, margin);
-    const yHi = Math.max(yLo, Math.min(hi, tank.height - margin));
     for (let c = 0; c < BEHAVIOUR.stationCandidates; c++) {
-      const x = rng.range(-tank.width / 2 + margin, tank.width / 2 - margin);
-      const y = rng.range(yLo, yHi);
-      const z = rng.range(-tank.depth / 2 + margin, tank.depth / 2 - margin);
+      const x = rng.range(basin.minX + margin, basin.maxX - margin);
+      // Drawn before z (the band depends on the sand under x, z), but consumed as y.
+      const t = rng.next();
+      const z = rng.range(basin.minZ + margin, basin.maxZ - margin);
+      this.bandAt(i, x, z);
+      const yLo = Math.max(this.bandLo, basin.ground(x, z) + margin);
+      const yHi = Math.max(yLo, Math.min(this.bandHi, basin.maxY - margin));
+      const y = yLo + (yHi - yLo) * t;
       if (sceneSdf.sample(x, y, z, n3) < margin) continue;
       const toDecor =
         decorSdf === null
@@ -727,8 +740,8 @@ export class Behaviour {
     const sp = this.speciesOf(i);
     const plan = this.plans[i];
     if (plan === undefined) throw new RangeError(`no plan for fish ${i}`);
-    const [lo, hi] = this.bandOf(i);
-    plan.reset(lo, hi);
+    this.bandAt(i, at(this.host.position, i * 3), at(this.host.position, i * 3 + 2));
+    plan.reset(this.bandLo, this.bandHi);
     const rest = at(this.rest, i);
     const calm = 1 - (1 - BEHAVIOUR.restSpeedFactor) * rest;
     plan.cruiseScale = calm;
@@ -791,7 +804,7 @@ export class Behaviour {
     if (k < 0 && j < 0 && !handling) return false;
     if (at(this.gulpPhase, i) !== GulpPhase.None) return false;
     if (at(this.territoryPhase, i) !== TerritoryPhase.Idle) this.endTerritory(i);
-    const { position, food, tank } = this.host;
+    const { position, food, basin } = this.host;
     const length = at(this.host.bodyLength, i);
     const cruise = at(this.host.cruiseSpeed, i);
     const vmax = at(this.host.maxSpeed, i);
@@ -821,11 +834,12 @@ export class Behaviour {
     const fx = at(food.position, k * 3);
     const fy = at(food.position, k * 3 + 1);
     const fz = at(food.position, k * 3 + 2);
-    const ty = feedingHeight(fy, length, tank.height);
+    const floorY = basin.ground(fx, fz);
+    const ty = feedingHeight(fy, length, floorY, basin.maxY);
     this.widenBand(plan, ty, length);
     const d = Math.hypot(fx - px, ty - py, fz - pz);
     if (d < 2 * length) plan.comfort = FEEDING.approachComfort;
-    if (sp.gait === 'forage' && fy < length) {
+    if (sp.gait === 'forage' && fy - floorY < length) {
       plan.floor = false;
       if (d < 2 * length) plan.pitch = Math.max(BEHAVIOUR.siftPitchRad, -sp.maxPitch);
     }
@@ -1241,21 +1255,22 @@ export class Behaviour {
   }
 
   private startExcursion(i: number, a: Anchor, length: number): void {
-    const { rng, sceneSdf, tank } = this.host;
+    const { rng, sceneSdf, basin } = this.host;
     const reach = a.radius + BEHAVIOUR.excursionBodyLengths * length;
     const heading = rng.range(-Math.PI, Math.PI);
     const margin = at(this.host.radius, i) + length;
     const x = clamp(
       a.position[0] + Math.sin(heading) * reach,
-      -tank.width / 2 + margin,
-      tank.width / 2 - margin,
+      basin.minX + margin,
+      basin.maxX - margin,
     );
-    const y = clamp(a.position[1] + rng.range(0, length), margin, tank.height - margin);
+    const rise = rng.range(0, length);
     const z = clamp(
       a.position[2] + Math.cos(heading) * reach,
-      -tank.depth / 2 + margin,
-      tank.depth / 2 - margin,
+      basin.minZ + margin,
+      basin.maxZ - margin,
     );
+    const y = clamp(a.position[1] + rise, basin.ground(x, z) + margin, basin.maxY - margin);
     if (sceneSdf.sample(x, y, z, this.n3) < margin) {
       this.excursionTimer[i] = rng.range(0, BEHAVIOUR.excursionMeanIntervalS);
       return;
@@ -1300,8 +1315,12 @@ export class Behaviour {
     const length = at(this.host.bodyLength, i);
     plan.floor = false;
     const rest = at(this.rest, i);
-    plan.bandLo = BEHAVIOUR.forageBandLowBodyLengths * length;
-    plan.bandHi = BEHAVIOUR.forageBandHighBodyLengths * length;
+    const ground = this.host.basin.ground(
+      at(this.host.position, i * 3),
+      at(this.host.position, i * 3 + 2),
+    );
+    plan.bandLo = ground + BEHAVIOUR.forageBandLowBodyLengths * length;
+    plan.bandHi = ground + BEHAVIOUR.forageBandHighBodyLengths * length;
     plan.state = FishState.Forage;
     if (sp.airGulp) {
       const p = 1 - Math.exp(-(BEHAVIOUR.gulpsPerHour / 3600) * DT);
@@ -1337,10 +1356,12 @@ export class Behaviour {
   /** Corydoras rise to the surface for a gulp of air and dart back down (Kramer & McClure 1980). */
   private planGulp(i: number, plan: Plan): void {
     const length = at(this.host.bodyLength, i);
-    const h = this.host.tank.height;
+    const { basin } = this.host;
+    const h = basin.maxY;
     const px = at(this.host.position, i * 3);
     const py = at(this.host.position, i * 3 + 1);
     const pz = at(this.host.position, i * 3 + 2);
+    const ground = basin.ground(px, pz);
     const speed = BEHAVIOUR.gulpAscentSpeedFraction * at(this.host.maxSpeed, i);
     plan.state = FishState.Gulp;
     plan.floor = false;
@@ -1349,7 +1370,7 @@ export class Behaviour {
     plan.wander = 0;
     plan.align = 0;
     plan.cohesion = 0;
-    plan.bandLo = 0;
+    plan.bandLo = ground;
     plan.bandHi = h;
     const left = at(this.gulpTimer, i) - DT;
     this.gulpTimer[i] = left;
@@ -1371,9 +1392,9 @@ export class Behaviour {
         this.gulpTimer[i] = BEHAVIOUR.gulpTimeoutS;
       }
     } else {
-      const floorY = BEHAVIOUR.forageBandHighBodyLengths * length;
-      plan.seek(px, floorY, pz, speed, 0.3);
-      if (py <= 1.5 * floorY || left <= 0) this.gulpPhase[i] = GulpPhase.None;
+      const above = BEHAVIOUR.forageBandHighBodyLengths * length;
+      plan.seek(px, ground + above, pz, speed, 0.3);
+      if (py - ground <= 1.5 * above || left <= 0) this.gulpPhase[i] = GulpPhase.None;
     }
   }
 
@@ -1395,8 +1416,8 @@ export class Behaviour {
     const left = at(this.grazeTimer, i) - DT;
     this.grazeTimer[i] = left;
     plan.floor = false;
-    plan.bandLo = 0;
-    plan.bandHi = this.host.tank.height;
+    plan.bandLo = this.host.basin.ground(px, pz);
+    plan.bandHi = this.host.basin.maxY;
     if (phase === GrazePhase.Roam) {
       if (left <= 0) this.grazePhase[i] = GrazePhase.None;
       return;
@@ -1456,8 +1477,7 @@ export class Behaviour {
     if (rest > 0.5) {
       const o = i * 3;
       if (this.restSpotSet[i] === 0) {
-        const [lo, hi] = this.bandOf(i);
-        this.chooseStation(i, lo, hi, this.restSpot, o);
+        this.chooseStation(i, this.restSpot, o);
         this.restSpotSet[i] = 1;
       }
       this.holdStation(
@@ -1544,7 +1564,7 @@ export class Behaviour {
 
   /** Projects a few random nearby points onto hard decor and keeps the closest standoff spot. */
   private pickGrazeSpot(i: number): boolean {
-    const { rng, decorSdf, substrateSdf, sceneSdf, tank } = this.host;
+    const { rng, decorSdf, substrateSdf, sceneSdf, basin } = this.host;
     const field = decorSdf ?? substrateSdf;
     const n3 = this.n3;
     const o = i * 3;
@@ -1559,7 +1579,7 @@ export class Behaviour {
     let best = Infinity;
     for (let c = 0; c < 4; c++) {
       let x = px + rng.signed() * 0.3;
-      let y = clamp(py + rng.signed() * 0.15, 0, tank.height);
+      let y = clamp(py + rng.signed() * 0.15, basin.minY, basin.maxY);
       let z = pz + rng.signed() * 0.3;
       let d = Infinity;
       for (let k = 0; k < 8; k++) {
@@ -1589,7 +1609,7 @@ export class Behaviour {
       ) {
         continue;
       }
-      if (gy > tank.height - 2 * length) continue;
+      if (gy > basin.maxY - 2 * length) continue;
       const dist = Math.hypot(gx - px, gy - py, gz - pz);
       // Doubling back to a spot behind costs a U-turn; a forager picks what lies ahead.
       if ((gx - px) * fx + (gz - pz) * fz < 0) continue;

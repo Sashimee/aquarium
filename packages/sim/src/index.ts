@@ -23,15 +23,9 @@ export {
   type AteEvent,
 } from './food.ts';
 export { FEEDING } from './feeding.ts';
-export {
-  compileCollider,
-  DecorField,
-  UnionSdf,
-  type DecorCollider,
-  type DecorShape,
-  type Point3,
-} from './decor.ts';
-export { resolvePenetration, TankSdf, type Sdf, type TankDimensions } from './sdf.ts';
+export { compileCollider, DecorField, fitHull, UnionSdf, type Point3 } from './decor.ts';
+export { Basin, type TankDimensions } from './basin.ts';
+export { resolvePenetration, TankSdf, type Sdf } from './sdf.ts';
 export { pairwiseDistanceSq, selectNearest } from './neighbours.ts';
 export {
   FishState,
@@ -41,7 +35,16 @@ export {
   SnapshotInterpolator,
   type Snapshot,
 } from './snapshot.ts';
-export { STEERING, STEP_DT, STEP_HZ, World, type FishSpawn, type WorldConfig } from './world.ts';
+export {
+  STEERING,
+  STEP_DT,
+  STEP_HZ,
+  World,
+  type AnyWorldConfig,
+  type FishSpawn,
+  type TankSpaceWorldConfig,
+  type WorldConfig,
+} from './world.ts';
 export {
   createSimHost,
   SimClient,

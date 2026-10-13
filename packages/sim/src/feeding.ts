@@ -41,12 +41,13 @@ const DT = 1 / 30;
 const EMPTY = 1e-9;
 
 /**
- * Where a fish holds its body centre to take food at height `y`. Food on the sand or at the
- * meniscus is taken with the centre a little way off that surface, the mouth tipped to it.
+ * Where a fish holds its body centre to take food at height `y`, over sand at height `floor` and
+ * under the surface at `top`. Food on the sand or at the meniscus is taken with the centre a
+ * little way off that surface, the mouth tipped to it.
  */
-export function feedingHeight(y: number, length: number, tankHeight: number): number {
+export function feedingHeight(y: number, length: number, floor: number, top: number): number {
   const off = FEEDING.reachHeightBodyLengths * length;
-  return clamp(y, off, tankHeight - off);
+  return clamp(y, floor + off, top - off);
 }
 
 function at(a: ArrayLike<number>, i: number): number {
@@ -242,15 +243,14 @@ export class Feeding {
   }
 
   /**
-   * How strongly a food type at height `y` draws a fish: full inside its depth band, fading to
+   * How strongly food at height `y` over sand at `ground` draws a fish: full inside its depth band, fading to
    * `zoneEdgeSalience` at `zoneReach` of the water column beyond it, nothing further out. Bottom
    * foragers reach up less far: they wait for food to sink to them.
    */
-  private zone(i: number, y: number): number {
+  private zone(i: number, y: number, ground: number): number {
     const sp = this.host.species[at(this.host.speciesIndex, i)];
     if (sp === undefined) return 0;
-    const h = this.host.tank.height;
-    const u = y / h;
+    const u = (y - ground) / (this.host.basin.maxY - ground);
     const outside = Math.max(sp.depthLow - u, u - sp.depthHigh, 0);
     const reach = sp.gait === 'forage' ? FEEDING.bottomZoneReach : FEEDING.zoneReach;
     if (outside > reach) return 0;
@@ -297,7 +297,9 @@ export class Feeding {
       if (contested && this.full(k, d)) continue;
       const motion = Math.min(1, at(food.speed, k) / FEEDING.motionReferenceMps);
       const salience =
-        (1 - d / range) * (1 + FEEDING.motionSalienceGain * motion) * this.zone(i, y);
+        (1 - d / range) *
+        (1 + FEEDING.motionSalienceGain * motion) *
+        this.zone(i, y, at(food.ground, k));
       const score = salience * preference * motivation;
       if (score > bestScore) {
         bestScore = score;
@@ -392,7 +394,7 @@ export class Feeding {
   }
 
   private bite(): void {
-    const { food, position, forward, bodyLength, fishIds, tank } = this.host;
+    const { food, position, forward, bodyLength, fishIds, basin } = this.host;
     for (let i = 0; i < this.host.count; i++) {
       const k = at(this.target, i);
       if (k < 0 || at(this.handling, i) > 0) continue;
@@ -400,7 +402,7 @@ export class Feeding {
       const mouth = FEEDING.mouthBodyLengths * length;
       const d = Math.hypot(
         at(food.position, k * 3) - (at(position, i * 3) + at(forward, i * 3) * mouth),
-        feedingHeight(at(food.position, k * 3 + 1), length, tank.height) -
+        feedingHeight(at(food.position, k * 3 + 1), length, at(food.ground, k), basin.maxY) -
           (at(position, i * 3 + 1) + at(forward, i * 3 + 1) * mouth),
         at(food.position, k * 3 + 2) - (at(position, i * 3 + 2) + at(forward, i * 3 + 2) * mouth),
       );
