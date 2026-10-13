@@ -28,6 +28,8 @@ Assets are used under CC0, CC-BY or (reference photos only) CC-BY-SA. The in-app
 | Gramma loreto 257593001.jpg (`wm-gramma-257593001`)                          | Dan Schofield         | [source](https://commons.wikimedia.org/wiki/File:Gramma_loreto_257593001.jpg)                       | [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/) |
 | Gramma loreto 365520074.jpg (`wm-gramma-365520074`)                          | cello caruso-turiello | [source](https://commons.wikimedia.org/wiki/File:Gramma_loreto_365520074.jpg)                       | [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/) |
 | Gelbe Segelflossendoktor Zebrasoma flavescens.jpg (`wm-yellowtang-holleday`) | Holger Krisp          | [source](https://commons.wikimedia.org/wiki/File:Gelbe_Segelflossendoktor_Zebrasoma_flavescens.jpg) | [CC-BY-3.0](https://creativecommons.org/licenses/by/3.0/) |
+| Archway Rock Formation (`sketchfab-4db2b936`)                                | NE14ABJ               | [source](https://sketchfab.com/3d-models/4db2b936751a4aa89af6b2afeca05248)                          | [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/) |
+| Fungia scutaria (Mushroom coral) (`sketchfab-e72cb3bd`)                      | Phelpst               | [source](https://sketchfab.com/3d-models/e72cb3bdfd504df3a31d38721f1f8a86)                          | [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/) |
 
 ## CC-BY-SA (reference photos for procedural loft textures)
 
@@ -56,3 +58,6 @@ ShareAlike applies to any texture derived from these photos: such derived textur
 - Clean Pebbles by Charlotte Baglioni, Dario Barresi ([source](https://polyhaven.com/a/clean_pebbles))
 - Coast Sand 01 by Rob Tuytel ([source](https://polyhaven.com/a/coast_sand_01))
 - Coast Sand 04 by Dario Barresi, Rob Tuytel ([source](https://polyhaven.com/a/coast_sand_04))
+- Madrepora cytherea by The Smithsonian Institution ([source](https://sketchfab.com/3d-models/9ff5270cafce4ceab61ce84c41c26faa))
+- Goniopora columna by The Smithsonian Institution ([source](https://sketchfab.com/3d-models/6b652ae52c4d4232b26cfb5b900f7d8a))
+- Ground 101 by ambientCG ([source](https://ambientcg.com/a/Ground101))
