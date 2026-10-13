@@ -1,6 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { ApiRequestError } from './api';
 import { useApi, useAuth } from './context';
+import {
+  readResetState,
+  stateWithResetDone,
+  stateWithToken,
+  withoutTokenParam,
+} from './resetToken';
 import { Field, FormError, Link, Panel, useSubmission } from './screens';
 
 export function ForgotPasswordScreen() {
@@ -71,6 +77,17 @@ function ExpiredLink() {
   );
 }
 
+function PasswordChanged() {
+  return (
+    <Panel title="Password changed">
+      <p role="status">Your new password is set. Sign in with it to get back to your tank.</p>
+      <p className="alt">
+        <Link to="/sign-in">Sign in</Link>
+      </p>
+    </Panel>
+  );
+}
+
 export function ResetPasswordScreen({
   token: urlToken,
   error,
@@ -81,7 +98,8 @@ export function ResetPasswordScreen({
   const api = useApi();
   const auth = useAuth();
   const submission = useSubmission();
-  const [token] = useState(urlToken);
+  const [restored] = useState(() => readResetState(window.history.state));
+  const [token, setToken] = useState(urlToken ?? restored.token);
   const [password, setPassword] = useState('');
   const [done, setDone] = useState(false);
   const [stale, setStale] = useState(false);
@@ -91,24 +109,18 @@ export function ResetPasswordScreen({
     meta.name = 'referrer';
     meta.content = 'no-referrer';
     document.head.append(meta);
-    if (new URLSearchParams(window.location.search).has('token')) {
-      window.history.replaceState(window.history.state, '', window.location.pathname);
+    if (urlToken) {
+      window.history.replaceState(
+        stateWithToken(window.history.state, urlToken),
+        '',
+        withoutTokenParam(window.location),
+      );
     }
     return () => meta.remove();
-  }, []);
+  }, [urlToken]);
 
+  if (done || (restored.done && !urlToken && !error)) return <PasswordChanged />;
   if (error || !token || stale) return <ExpiredLink />;
-
-  if (done) {
-    return (
-      <Panel title="Password changed">
-        <p role="status">Your new password is set. Sign in with it to get back to your tank.</p>
-        <p className="alt">
-          <Link to="/sign-in">Sign in</Link>
-        </p>
-      </Panel>
-    );
-  }
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -120,7 +132,15 @@ export function ResetPasswordScreen({
         },
         { rethrow: true },
       )
-      .then(() => setDone(true))
+      .then(() => {
+        window.history.replaceState(
+          stateWithResetDone(window.history.state),
+          '',
+          window.location.pathname + window.location.search + window.location.hash,
+        );
+        setToken(null);
+        setDone(true);
+      })
       .catch((cause: unknown) => {
         if (cause instanceof ApiRequestError && cause.status === 400) setStale(true);
       });
