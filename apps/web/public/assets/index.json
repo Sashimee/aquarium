@@ -2,7 +2,7 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; every texture has both files.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Anemone tentacle sway is \"_sway\" (0 base, 1 tip).",
-  "totalBytes": 62159969,
+  "totalBytes": 62160777,
   "assets": [
     {
       "id": "angelfish",
@@ -2509,7 +2509,7 @@
         "LOD0 capped at 25000 triangles, LOD1 and LOD2 simplified further",
         "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
         "museum plinth cropped off",
-        "bleached skeleton recoloured by luminance to live tan, brown and olive tones",
+        "bleached skeleton recoloured by luminance to saturated live violet and blue tissue, with mottled patches",
         "baked metallicRoughness map dropped"
       ],
       "bounds": {
@@ -2555,15 +2555,15 @@
           "variants": {
             "1k": {
               "file": "coral/acropora-cytherea/textures/acropora-cytherea_basecolor_1k.ktx2",
-              "bytes": 196888,
-              "sha256": "2f3899626bc88eb9b63321ef305afa21449ddef0f6e24e243cdf9058e14544eb",
+              "bytes": 211731,
+              "sha256": "465fb93bd609ad89af9c88b87f578c99af7a811409a6c185e2f9f98484b2cb45",
               "size": 1024,
               "codec": "etc1s"
             },
             "2k": {
               "file": "coral/acropora-cytherea/textures/acropora-cytherea_basecolor_2k.ktx2",
-              "bytes": 731553,
-              "sha256": "7b08f6c837353d386f9d58bfc2f3905172351bfdf772fd3f76dbaf85def83b75",
+              "bytes": 763881,
+              "sha256": "8fd1a7bf2a5aa5a443ac30e5892d3c1d0f8c7a9bf2a0420f83c181c1c9885080",
               "size": 2048,
               "codec": "etc1s"
             }
@@ -2609,13 +2609,13 @@
         },
         {
           "file": "coral/acropora-cytherea/textures/acropora-cytherea_basecolor_1k.ktx2",
-          "bytes": 196888,
-          "sha256": "2f3899626bc88eb9b63321ef305afa21449ddef0f6e24e243cdf9058e14544eb"
+          "bytes": 211731,
+          "sha256": "465fb93bd609ad89af9c88b87f578c99af7a811409a6c185e2f9f98484b2cb45"
         },
         {
           "file": "coral/acropora-cytherea/textures/acropora-cytherea_basecolor_2k.ktx2",
-          "bytes": 731553,
-          "sha256": "7b08f6c837353d386f9d58bfc2f3905172351bfdf772fd3f76dbaf85def83b75"
+          "bytes": 763881,
+          "sha256": "8fd1a7bf2a5aa5a443ac30e5892d3c1d0f8c7a9bf2a0420f83c181c1c9885080"
         },
         {
           "file": "coral/acropora-cytherea/textures/acropora-cytherea_normal_1k.ktx2",
@@ -2642,7 +2642,8 @@
         "origin at the centre of the base, scaled so the longest edge is 0.35 m",
         "LOD0 capped at 20000 triangles, LOD1 and LOD2 simplified further",
         "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
-        "museum plinth cropped off"
+        "museum plinth cropped off",
+        "bleached skeleton recoloured by luminance to saturated live amber and lime tissue, with mottled patches"
       ],
       "bounds": {
         "min": [
@@ -2687,15 +2688,15 @@
           "variants": {
             "1k": {
               "file": "coral/acropora-palmata/textures/acropora-palmata_basecolor_1k.ktx2",
-              "bytes": 175527,
-              "sha256": "d375701f76f2421e69f5757ff1456f7859e844dd8039aa68e206cd76e25983ee",
+              "bytes": 183260,
+              "sha256": "693d51778d99c37f825d07fff0f7d371c3ab4bd426c721853b100701c1b9d25c",
               "size": 1024,
               "codec": "etc1s"
             },
             "2k": {
               "file": "coral/acropora-palmata/textures/acropora-palmata_basecolor_2k.ktx2",
-              "bytes": 643538,
-              "sha256": "759c28cecf3c54af6691f92f419edefef2a55e09a15ebd6fa7df0f855e5ca26a",
+              "bytes": 639038,
+              "sha256": "3b4c3c77456bbcce7cae85a9f3015744998f343fa7fb4042a8af4849358ca1d9",
               "size": 2048,
               "codec": "etc1s"
             }
@@ -2741,13 +2742,13 @@
         },
         {
           "file": "coral/acropora-palmata/textures/acropora-palmata_basecolor_1k.ktx2",
-          "bytes": 175527,
-          "sha256": "d375701f76f2421e69f5757ff1456f7859e844dd8039aa68e206cd76e25983ee"
+          "bytes": 183260,
+          "sha256": "693d51778d99c37f825d07fff0f7d371c3ab4bd426c721853b100701c1b9d25c"
         },
         {
           "file": "coral/acropora-palmata/textures/acropora-palmata_basecolor_2k.ktx2",
-          "bytes": 643538,
-          "sha256": "759c28cecf3c54af6691f92f419edefef2a55e09a15ebd6fa7df0f855e5ca26a"
+          "bytes": 639038,
+          "sha256": "3b4c3c77456bbcce7cae85a9f3015744998f343fa7fb4042a8af4849358ca1d9"
         },
         {
           "file": "coral/acropora-palmata/textures/acropora-palmata_normal_1k.ktx2",
@@ -2872,44 +2873,45 @@
       "licence": "CC-BY-4.0",
       "modifications": [
         "merged meshes, dropped unused attributes, skeleton and animation",
-        "origin at the centre of the base, scaled so the longest edge is 0.25 m",
+        "origin at the centre of the base, scaled so the longest edge is 0.25 m before cropping",
         "LOD0 capped at 20000 triangles, LOD1 and LOD2 simplified further",
         "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
-        "8192 px textures downscaled"
+        "8192 px textures downscaled",
+        "rock base slab cropped off"
       ],
       "bounds": {
         "min": [
-          -0.077296,
+          -0.057131,
           0,
-          -0.080494
+          -0.052843
         ],
         "max": [
-          0.077296,
-          0.25,
-          0.080494
+          0.057131,
+          0.159419,
+          0.052843
         ]
       },
       "lods": [
         {
           "file": "coral/brain-coral/lod0.glb",
-          "bytes": 260000,
-          "sha256": "1e9127058b4d61a5e497026178c9659ecdeda8a1201911edbf9841f4549787de",
-          "triangles": 20000,
-          "vertices": 14182
+          "bytes": 230984,
+          "sha256": "43e52f4e3bb703b69d70eccd40516637c7f94226b2516d9a75e688c5ca34e69c",
+          "triangles": 19999,
+          "vertices": 12690
         },
         {
           "file": "coral/brain-coral/lod1.glb",
-          "bytes": 107912,
-          "sha256": "56bbccc285f0814f81544c858caf41f3e9843eceb2106579cc448ab225ddda38",
+          "bytes": 94280,
+          "sha256": "f9d7e1bb88635931e2e054622410e7fc37998b9278e46fbde67073989ad39c6e",
           "triangles": 7000,
-          "vertices": 5629
+          "vertices": 4914
         },
         {
           "file": "coral/brain-coral/lod2.glb",
-          "bytes": 45516,
-          "sha256": "818186c882fa3eff796315722236d77d998416f7aaa71988c2af6d8c8aaabc7a",
+          "bytes": 38568,
+          "sha256": "fc8ff45d9ba02815a2a6b50bbfc9785eac304311f9574fc562c56dbb8518100c",
           "triangles": 2400,
-          "vertices": 2207
+          "vertices": 1859
         }
       ],
       "textures": [
@@ -2959,18 +2961,18 @@
       "files": [
         {
           "file": "coral/brain-coral/lod0.glb",
-          "bytes": 260000,
-          "sha256": "1e9127058b4d61a5e497026178c9659ecdeda8a1201911edbf9841f4549787de"
+          "bytes": 230984,
+          "sha256": "43e52f4e3bb703b69d70eccd40516637c7f94226b2516d9a75e688c5ca34e69c"
         },
         {
           "file": "coral/brain-coral/lod1.glb",
-          "bytes": 107912,
-          "sha256": "56bbccc285f0814f81544c858caf41f3e9843eceb2106579cc448ab225ddda38"
+          "bytes": 94280,
+          "sha256": "f9d7e1bb88635931e2e054622410e7fc37998b9278e46fbde67073989ad39c6e"
         },
         {
           "file": "coral/brain-coral/lod2.glb",
-          "bytes": 45516,
-          "sha256": "818186c882fa3eff796315722236d77d998416f7aaa71988c2af6d8c8aaabc7a"
+          "bytes": 38568,
+          "sha256": "fc8ff45d9ba02815a2a6b50bbfc9785eac304311f9574fc562c56dbb8518100c"
         },
         {
           "file": "coral/brain-coral/textures/brain-coral_basecolor_1k.ktx2",

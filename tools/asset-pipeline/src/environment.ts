@@ -43,6 +43,8 @@ export interface EnvironmentRecipe {
   maxTriangles: number;
   /** Removes triangles whose centroid lies in the lowest fraction of the height (a museum plinth, a scan base). */
   clipBelowFraction?: number;
+  /** With `clipBelowFraction`, scales so `longestM` refers to the uncropped scan, keeping the metric scale the full scan would have had. */
+  keepUncroppedScale?: boolean;
   material?: MaterialOptions;
   /** Paint a green leaf texture for sources that only carry a flat colour. */
   proceduralLeafTexture?: boolean;
@@ -63,6 +65,11 @@ function bounds(parts: Part[]): { min: [number, number, number]; max: [number, n
         max[a] = Math.max(max[a]!, part.positions[i + a]!);
       }
   return { min, max };
+}
+
+function longestEdge(parts: Part[]): number {
+  const { min, max } = bounds(parts);
+  return Math.max(max[0] - min[0], max[1] - min[1], max[2] - min[2]);
 }
 
 /** Drops vertices no triangle references. */
@@ -219,9 +226,13 @@ export async function buildEnvironment(
   );
 
   let parts = extractParts(doc).map(weldPart);
+  const uncropped = longestEdge(parts);
   if (recipe.clipBelowFraction !== undefined) parts = clipBelow(parts, recipe.clipBelowFraction);
   if (parts.length === 0) throw new Error(`${recipe.id}: no geometry left after dropping meshes`);
-  normaliseToBase(parts, recipe.longestM);
+  const longestM = recipe.keepUncroppedScale
+    ? (recipe.longestM * longestEdge(parts)) / uncropped
+    : recipe.longestM;
+  normaliseToBase(parts, longestM);
 
   const used = new Set(parts.map((p) => p.material));
   const materials: MaterialDef[] = [];
@@ -259,7 +270,7 @@ export async function buildEnvironment(
       licence: ctx.licenceOf(recipe.sourceId),
       modifications: [
         'merged meshes, dropped unused attributes, skeleton and animation',
-        `origin at the centre of the base, scaled so the longest edge is ${recipe.longestM} m`,
+        `origin at the centre of the base, scaled so the longest edge is ${recipe.longestM} m${recipe.keepUncroppedScale ? ' before cropping' : ''}`,
         `LOD0 capped at ${recipe.maxTriangles} triangles, LOD1 and LOD2 simplified further`,
         recipe.pores
           ? 'textures re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness'

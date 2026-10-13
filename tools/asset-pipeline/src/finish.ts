@@ -15,6 +15,8 @@ export interface TintSpec {
   /** Size in pixels of the patches that switch between the two ramps. */
   mottleCells: number;
   seed: number;
+  /** Pixels darker than this luminance (0..1) are left out of the contrast stretch, e.g. empty atlas gaps. */
+  ignoreBelow?: number;
 }
 
 export interface PoreSpec {
@@ -81,7 +83,8 @@ export function tintImage(image: Rgba, spec: TintSpec): Rgba {
   const lum = new Float32Array(width * height);
   for (let i = 0; i < lum.length; i++)
     lum[i] = (0.2126 * data[i * 4]! + 0.7152 * data[i * 4 + 1]! + 0.0722 * data[i * 4 + 2]!) / 255;
-  const sorted = Float32Array.from(lum).sort();
+  const sorted = Float32Array.from(lum.filter((l) => l >= (spec.ignoreBelow ?? 0))).sort();
+  if (sorted.length === 0) throw new Error('tintImage: every pixel is below ignoreBelow');
   const low = sorted[Math.floor(sorted.length * 0.02)]!;
   const high = sorted[Math.floor(sorted.length * 0.98)]!;
   const span = Math.max(1e-3, high - low);
