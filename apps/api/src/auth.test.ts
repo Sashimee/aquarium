@@ -1,6 +1,6 @@
 import { apiErrorSchema, sessionListSchema, userSchema } from '@aquarium/shared';
 import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from 'vitest';
 import nodemailer from 'nodemailer';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -20,13 +20,12 @@ const median = (xs: number[]) => {
   return sorted.length % 2 ? (sorted[mid] ?? 0) : ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2;
 };
 
-// Paired sign test: with no timing difference, "repeat slower" in each adjacent pair is a fair
-// coin, so 80 pairs fall outside 25..55 with probability ~0.05%. Host load shifts both halves
-// of a pair alike and cannot bias the count, unlike an absolute or median-relative bound.
+// The median of per-pair differences cancels host load, which hits both halves of an adjacent
+// pair alike. A repeat sign-up is legitimately ~1-3 ms faster (it inserts no user rows), so the
+// tolerance is a few ms, well below the 25 ms leaks this is meant to expose.
 function expectNoTimingSkew(pairs: { fresh: number; repeat: number }[]) {
-  const slower = pairs.filter((p) => p.repeat > p.fresh).length;
-  expect(slower, `repeat slower in ${slower} of ${pairs.length} pairs`).toBeGreaterThan(24);
-  expect(slower, `repeat slower in ${slower} of ${pairs.length} pairs`).toBeLessThan(56);
+  const gap = median(pairs.map((p) => p.repeat - p.fresh));
+  expect(Math.abs(gap), `median repeat - fresh = ${gap.toFixed(1)} ms`).toBeLessThan(12);
 }
 
 function cookieJar(res: LightMyRequestResponse): string {
@@ -198,7 +197,7 @@ describe('unverified sign-up takeover (#114)', () => {
       }
     }
     expectNoTimingSkew(pairs);
-  }, 240_000);
+  }, 120_000);
 
   it('lets the owner set a password by reset, revoking sessions, and leaves verified accounts intact', async () => {
     const email = nextEmail();
@@ -579,6 +578,7 @@ describe('mail abuse limits', () => {
       return { res, ms };
     };
     const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    onTestFinished(() => spy.mockRestore());
     const cooledRes = await resend(cooled);
     const logged = spy.mock.calls.map((c) => String(c[0]));
     expect(logged).toEqual([expect.stringMatching(/^verification mail throttled, retry in \d+s$/)]);
@@ -596,7 +596,6 @@ describe('mail abuse limits', () => {
       cooledMs.push((await resend(cooled)).ms);
       unknownMs.push((await resend(nextEmail())).ms);
     }
-    spy.mockRestore();
     // Better Auth pads send-verification-email to MINIMUM_MS (500 ms, email-verification.mjs),
     // which masks small differences, so only a leak beyond the pad is observable here.
     expect(median(cooledMs)).toBeLessThan(560);
