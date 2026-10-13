@@ -123,5 +123,9 @@ jobs:
           for path in / /api/health; do
             curl -fsS -D headers.txt -o /dev/null "http://127.0.0.1:3000$path"
             grep -i '^x-robots-tag: noindex, nofollow' headers.txt
+            grep -i "^content-security-policy: .*script-src 'self' 'wasm-unsafe-eval'" headers.txt
+            grep -i '^strict-transport-security: max-age=31536000' headers.txt
+            grep -i '^x-content-type-options: nosniff' headers.txt
+            grep -i '^referrer-policy: ' headers.txt
           done
           curl -fsS http://127.0.0.1:3000/robots.txt | grep -x 'Disallow: /'
