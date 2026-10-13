@@ -15,6 +15,16 @@ describe('coral style', () => {
     }
   });
 
+  it('keeps Acropora tints close to white so the baked colour shows through', () => {
+    for (const id of ['acropora-cytherea', 'acropora-palmata']) {
+      for (let i = 0; i < 2; i++) {
+        const c = coralTint(id, i);
+        expect(Math.min(c?.r ?? 0, c?.g ?? 0, c?.b ?? 0)).toBeGreaterThanOrEqual(0.7);
+      }
+    }
+    expect(coralTint('acropora-palmata', 0)?.r).toBeCloseTo(1 - 0.62 * 0.35, 5);
+  });
+
   it('leaves rock and unknown assets untinted and unsquashed', () => {
     expect(coralTint('boulder-01', 0)).toBeNull();
     expect(heightScale('boulder-01')).toBe(1);
