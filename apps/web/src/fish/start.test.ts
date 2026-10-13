@@ -103,7 +103,12 @@ describe('queueTankEvents', () => {
   it('buffers events until drained, then passes each later one straight on', () => {
     const interaction = new EventBus<InteractionEvents>();
     const queue = queueTankEvents(interaction);
-    interaction.emit('tank:loaded', { tankId: TANK_A, biome: 'freshwater', fish: [] });
+    interaction.emit('tank:loaded', {
+      tankId: TANK_A,
+      biome: 'freshwater',
+      decorLayout: [],
+      fish: [],
+    });
     interaction.emit('tank:fish-released', { tankId: TANK_A, fishId: FISH_1 });
     const seen: string[] = [];
     queue.drain((event) => seen.push(event.type));
@@ -132,6 +137,7 @@ describe('startFish', () => {
       interaction.emit('tank:loaded', {
         tankId: TANK_A,
         biome: 'freshwater',
+        decorLayout: [],
         fish: [fishFixture(FISH_1)],
       });
       interaction.emit('tank:fish-added', {
@@ -152,6 +158,7 @@ describe('startFish', () => {
     interaction.emit('tank:loaded', {
       tankId: TANK_A,
       biome: 'freshwater',
+      decorLayout: [],
       fish: [fishFixture(FISH_1)],
     });
     interaction.emit('tank:fish-added', {
@@ -193,7 +200,7 @@ describe('startFish', () => {
       { id: 'anemone-1', kind: 'anemone', position: [-0.1, 0.2, 0], radius: 0.05 },
     ];
     handle.setAnchors(first);
-    interaction.emit('tank:loaded', { tankId: TANK_A, biome: 'reef', fish: [] });
+    interaction.emit('tank:loaded', { tankId: TANK_A, biome: 'reef', decorLayout: [], fish: [] });
     handle.setAnchors(latest);
     pending.resolve(fish);
     await flush();

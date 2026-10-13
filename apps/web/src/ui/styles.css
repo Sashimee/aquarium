@@ -476,3 +476,36 @@ progress {
   vertical-align: middle;
   width: 8rem;
 }
+
+.decor-panel {
+  position: absolute;
+  top: 4.5rem;
+  left: 0.75rem;
+  bottom: 4rem;
+  width: min(22rem, calc(100% - 1.5rem));
+  overflow-y: auto;
+  pointer-events: auto;
+}
+
+.decor-palette,
+.decor-pieces {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.decor-nudge,
+.decor-turn {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.decor-status:empty,
+.decor-save:empty {
+  display: none;
+}

@@ -1,3 +1,4 @@
+import type { DecorLayout } from '@aquarium/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { ApiRequestError, ClientValidationError, createApiClient } from './api';
 
@@ -148,6 +149,45 @@ describe('api client', () => {
   it('rejects a bad email before asking for a verification mail', async () => {
     const fetcher = vi.fn();
     await expect(createApiClient(fetcher).resendVerification('nope')).rejects.toBeInstanceOf(
+      ClientValidationError,
+    );
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('saves a decor layout with PATCH and returns the tank the server stored', async () => {
+    const layout: DecorLayout = [
+      { assetId: 'boulder-01', position: [0.1, 0.05, -0.2], rotationY: 0.5, scale: 1 },
+    ];
+    const tank = {
+      id: '00000000-0000-4000-8000-00000000000a',
+      name: 'Home',
+      biome: 'freshwater',
+      decorLayout: layout,
+      water: { ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 0 },
+      lastTickAt: '2026-02-01T00:00:00.000Z',
+      fish: [],
+      memorials: [],
+    };
+    const fetcher = vi.fn().mockResolvedValue(json(tank));
+    const saved = await createApiClient(fetcher).saveDecorLayout(tank.id, layout);
+    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`/api/tanks/${tank.id}`);
+    expect(init.method).toBe('PATCH');
+    expect(JSON.parse(init.body as string)).toEqual({ decorLayout: layout });
+    expect(saved.decorLayout).toEqual(layout);
+  });
+
+  it('refuses to send a layout the server would reject', async () => {
+    const fetcher = vi.fn();
+    const outside = [
+      {
+        assetId: 'boulder-01',
+        position: [9, 0, 0] as [number, number, number],
+        rotationY: 0,
+        scale: 1,
+      },
+    ];
+    await expect(createApiClient(fetcher).saveDecorLayout('t', outside)).rejects.toBeInstanceOf(
       ClientValidationError,
     );
     expect(fetcher).not.toHaveBeenCalled();

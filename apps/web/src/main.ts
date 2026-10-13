@@ -5,6 +5,9 @@ import { DEFAULT_TANK } from './engine/tank/dimensions';
 import { queueTankEvents, startFish } from './fish/start';
 import { CameraRig } from './interaction/camera';
 import { bindCameraControls } from './interaction/controls';
+import { FeederLayer } from './interaction/decor/feederLayer';
+import type { SavedTank } from './interaction/decor/binding';
+import type { DecorSystem } from './interaction/decor/system';
 import type { InteractionEvents } from './interaction/events';
 import { onPageTeardown } from './interaction/pageLifecycle';
 import { watchReducedMotion } from './interaction/motion';
@@ -36,6 +39,19 @@ async function boot(): Promise<void> {
   events.on('quality:tier-changed', ({ from, to, reason }) =>
     console.info(`quality tier ${from ?? '(start)'} -> ${to} (${reason})`),
   );
+
+  let savedTank: SavedTank | null = null;
+  const watchTank = [
+    interaction.on('tank:loaded', ({ tankId, biome, decorLayout }) => {
+      savedTank = { tankId, biome, layout: decorLayout };
+    }),
+    interaction.on('tank:decor', ({ layout }) => {
+      if (savedTank) savedTank = { ...savedTank, layout };
+    }),
+    interaction.on('tank:unloaded', () => {
+      savedTank = null;
+    }),
+  ];
 
   const tankEvents = queueTankEvents(interaction);
   mountUi(uiRoot, { engine: events, interaction });
@@ -75,15 +91,23 @@ async function boot(): Promise<void> {
 
   const stopMotionWatch = watchReducedMotion((reduced) => rig.setReducedMotion(reduced));
   let play: PlaySystem | null = null;
+  let decor: DecorSystem | null = null;
   const unbindControls = bindCameraControls(canvas, rig, {
     tap: (e) => {
-      if (e.button === 0) play?.controller.tap(e.x, e.y);
+      if (e.button !== 0) return;
+      if (decor?.active) decor.tap(e.x, e.y);
+      else play?.controller.tap(e.x, e.y);
     },
-    claimDrag: () => play?.controller.claimsDrag ?? false,
-    pointerDown: (x, y) => play?.controller.pointerDown(x, y),
-    pointerMove: (x, y) => play?.controller.pointerMove(x, y),
-    pointerUp: () => play?.controller.pointerUp(),
-    pointerLeave: () => play?.controller.pointerLeave(),
+    claimDrag: () => (decor?.active ? decor.claimsDrag : (play?.controller.claimsDrag ?? false)),
+    pointerDown: (x, y) =>
+      decor?.active ? decor.pointerDown(x, y) : play?.controller.pointerDown(x, y),
+    pointerMove: (x, y) =>
+      decor?.active ? decor.pointerMove(x, y) : play?.controller.pointerMove(x, y),
+    pointerUp: () => (decor?.active ? decor.pointerUp() : play?.controller.pointerUp()),
+    pointerLeave: () => {
+      if (decor?.active) decor.pointerUp();
+      else play?.controller.pointerLeave();
+    },
   });
   const stopRequests = interaction.on('camera:request-mode', ({ mode }) => {
     if (mode === 'dive') rig.dive();
@@ -101,15 +125,27 @@ async function boot(): Promise<void> {
   });
 
   let tankScene: TankScene | null = null;
+  let tornDown = false;
   mountPresetWhenTierKnown(engine, biome, window.location.search, (scene) => {
     tankScene = scene;
     fish.setAnchors(scene.anchors);
     play = createPlaySystem(engine, scene, interaction, fish.sim);
+    import('./interaction/decor/system').then(
+      ({ createDecorSystem }) => {
+        if (tornDown) return;
+        watchTank.forEach((off) => off());
+        decor = createDecorSystem(engine, scene, interaction, savedTank, new FeederLayer());
+      },
+      (cause: unknown) => console.error('Decor failed to load', cause),
+    );
     if (import.meta.env.DEV) Object.assign(window, { tankScene });
   });
 
   onPageTeardown(window, () => {
     play?.dispose();
+    decor?.dispose();
+    watchTank.forEach((off) => off());
+    tornDown = true;
     tankScene?.dispose().catch((cause: unknown) => console.error('Scene dispose failed', cause));
     stopMotionWatch();
     unbindControls();
