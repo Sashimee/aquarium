@@ -3,13 +3,15 @@ import { TIER_COST, tierAt, tierIndex, type Tier } from './tiers';
 
 export interface ControllerConfig {
   targetMs: number;
+  /** The display's frame interval: frame intervals only show headroom when they reach it. */
+  refreshMs: number;
   signal: TimingSignal;
   windowSize: number;
   /** Step down when the rolling mean exceeds `targetMs * downRatio`. */
   downRatio: number;
   /** GPU signal: step up when the next tier's predicted cost fits in `targetMs * upFitRatio`. */
   upFitRatio: number;
-  /** Frame signal: step up when the rolling mean stays within `targetMs * frameUpRatio`. */
+  /** Frame signal: step up when the rolling mean stays within `refreshMs * frameUpRatio`. */
   frameUpRatio: number;
   downHoldMs: number;
   upHoldMs: number;
@@ -24,7 +26,10 @@ export interface ControllerConfig {
   maxTier: Tier;
 }
 
-export const DEFAULT_CONTROLLER_CONFIG: Omit<ControllerConfig, 'targetMs' | 'signal'> = {
+export const DEFAULT_CONTROLLER_CONFIG: Omit<
+  ControllerConfig,
+  'targetMs' | 'refreshMs' | 'signal'
+> = {
   windowSize: 60,
   downRatio: 1.2,
   upFitRatio: 0.8,
@@ -58,6 +63,7 @@ export class TierController {
 
   constructor(initial: Tier, config: ControllerConfig) {
     if (!(config.targetMs > 0)) throw new RangeError('TierController: targetMs must be > 0');
+    if (!(config.refreshMs > 0)) throw new RangeError('TierController: refreshMs must be > 0');
     if (config.windowSize < 1) throw new RangeError('TierController: windowSize must be >= 1');
     if (tierIndex(config.minTier) > tierIndex(config.maxTier)) {
       throw new RangeError('TierController: minTier is above maxTier');
@@ -122,7 +128,7 @@ export class TierController {
       const predicted = (meanMs * TIER_COST[next]) / TIER_COST[this.current];
       return predicted <= c.targetMs * c.upFitRatio;
     }
-    return meanMs <= c.targetMs * c.frameUpRatio;
+    return meanMs <= c.refreshMs * c.frameUpRatio;
   }
 
   private nextUp(): Tier | null {

@@ -1,4 +1,4 @@
-import { TIER_COST, TIERS, type Tier } from './tiers';
+import { TIER_COST, TIERS, tierIndex, type Tier } from './tiers';
 
 export type TimingSignal = 'gpu' | 'frame';
 
@@ -8,6 +8,13 @@ export interface ProbeInput {
   signal: TimingSignal;
   probeTier: Tier;
   targetMs: number;
+  /**
+   * The display's frame interval. Frame intervals cannot drop below it, so only a probe that runs
+   * at this rate shows the device keeping up. Defaults to `targetMs`.
+   */
+  refreshMs?: number;
+  /** The highest tier the device class may start at. Defaults to ultra. */
+  maxTier?: Tier;
   /** Fraction of the target a GPU-timed tier may use, leaving room for CPU work and spikes. */
   gpuHeadroom?: number;
   /** A frame-interval median within this ratio of the target counts as "keeping up". */
@@ -28,11 +35,20 @@ export function median(values: readonly number[]): number | null {
   return (lower + upper) / 2;
 }
 
-function highestTierWithin(medianMs: number, probeTier: Tier, budgetMs: number): Tier | null {
-  for (const tier of [...TIERS].reverse()) {
+function highestTierWithin(
+  medianMs: number,
+  probeTier: Tier,
+  budgetMs: number,
+  maxTier: Tier,
+): Tier | null {
+  for (const tier of TIERS.slice(0, tierIndex(maxTier) + 1).reverse()) {
     if ((medianMs * TIER_COST[tier]) / TIER_COST[probeTier] <= budgetMs) return tier;
   }
   return null;
+}
+
+function lowerOf(a: Tier, b: Tier): Tier {
+  return tierIndex(a) <= tierIndex(b) ? a : b;
 }
 
 /**
@@ -43,23 +59,36 @@ function highestTierWithin(medianMs: number, probeTier: Tier, budgetMs: number):
  * the probe tier starts there and the adaptive controller climbs further if it can.
  */
 export function selectInitialTier(input: ProbeInput): ProbeResult {
-  const { samples, signal, probeTier, targetMs } = input;
+  const { samples, signal, targetMs } = input;
+  const refreshMs = input.refreshMs ?? targetMs;
+  const maxTier = input.maxTier ?? 'ultra';
+  const probeTier = input.probeTier;
   const gpuHeadroom = input.gpuHeadroom ?? 0.8;
   const frameTolerance = input.frameTolerance ?? 1.1;
   const medianMs = median(samples);
 
   if (medianMs === null) {
-    return { tier: 'medium', medianMs, reason: 'no timing samples during probe' };
+    return { tier: lowerOf('medium', maxTier), medianMs, reason: 'no timing samples during probe' };
   }
 
   if (signal === 'gpu') {
-    const tier = highestTierWithin(medianMs, probeTier, targetMs * gpuHeadroom) ?? 'low';
+    const tier = highestTierWithin(medianMs, probeTier, targetMs * gpuHeadroom, maxTier) ?? 'low';
     return { tier, medianMs, reason: `gpu ${medianMs.toFixed(2)} ms at ${probeTier}` };
   }
 
-  if (medianMs <= targetMs * frameTolerance) {
-    return { tier: probeTier, medianMs, reason: `frame ${medianMs.toFixed(2)} ms keeps up` };
+  if (medianMs <= refreshMs * frameTolerance) {
+    return {
+      tier: lowerOf(probeTier, maxTier),
+      medianMs,
+      reason: `frame ${medianMs.toFixed(2)} ms keeps up`,
+    };
   }
-  const tier = highestTierWithin(medianMs, probeTier, targetMs * frameTolerance) ?? 'low';
+  const tier =
+    highestTierWithin(
+      medianMs,
+      probeTier,
+      targetMs * frameTolerance,
+      lowerOf(probeTier, maxTier),
+    ) ?? 'low';
   return { tier, medianMs, reason: `frame ${medianMs.toFixed(2)} ms at ${probeTier}` };
 }
