@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
 import { describe, expect, it } from 'vitest';
-import { createMailer, escapeHtml } from './mail.ts';
+import { createMailer, escapeHtml, MailThrottledError } from './mail.ts';
+import { memoryHitStore } from './rate-limit.ts';
 
 const TOKEN = `eyJhbGciOiJIUzI1NiJ9.${'abcDEF0123456789_-'.repeat(18)}.sig`;
 const URL_WITH_AMP = `https://devfish.bas.lu/api/auth/verify-email?token=${TOKEN}&callbackURL=%2Fverify-email`;
@@ -71,5 +72,37 @@ describe('verification mail', () => {
 
   it('escapes html metacharacters', () => {
     expect(escapeHtml(`a&b<c>"d'`)).toBe('a&amp;b&lt;c&gt;&quot;d&#39;');
+  });
+});
+
+describe('global mail cap', () => {
+  it('does not use up a recipient budget while refusing under an exhausted cap', async () => {
+    let now = 0;
+    const sent: string[] = [];
+    const transport = nodemailer.createTransport({ jsonTransport: true });
+    transport.sendMail = (async (data: { to: string }) => {
+      sent.push(data.to);
+    }) as unknown as typeof transport.sendMail;
+    const mailer = createMailer(transport, 'fish@bas.lu', {
+      store: memoryHitStore(() => now),
+      log: () => undefined,
+      limits: {
+        perRecipient: { max: 2, windowMs: 3_600_000 },
+        verificationCooldown: { max: 100, windowMs: 1000 },
+        perIpSignup: { max: 100, windowMs: 3_600_000 },
+        global: { max: 2, windowMs: 60_000 },
+      },
+    });
+    await mailer.sendVerification('a@bas.lu', 'https://x.test/a');
+    await mailer.sendVerification('b@bas.lu', 'https://x.test/b');
+    for (let i = 0; i < 5; i++) {
+      await expect(mailer.sendVerification('victim@bas.lu', 'https://x.test/v')).rejects.toThrow(
+        MailThrottledError,
+      );
+    }
+    now += 61_000;
+    await mailer.sendVerification('victim@bas.lu', 'https://x.test/v');
+    await mailer.sendPasswordReset('victim@bas.lu', 'https://x.test/v');
+    expect(sent.filter((to) => to === 'victim@bas.lu')).toHaveLength(2);
   });
 });
