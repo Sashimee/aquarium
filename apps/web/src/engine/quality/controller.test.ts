@@ -8,6 +8,7 @@ function controller(initial: Tier, overrides: Partial<ControllerConfig> = {}): T
   return new TierController(initial, {
     ...DEFAULT_CONTROLLER_CONFIG,
     targetMs: TARGET,
+    refreshMs: TARGET,
     signal: 'gpu',
     windowSize: 10,
     cooldownMs: 1000,
@@ -38,6 +39,7 @@ function feedUntil(c: TierController, ms: number, startMs: number, tier: Tier): 
 describe('TierController', () => {
   it('rejects invalid configuration', () => {
     expect(() => controller('high', { targetMs: 0 })).toThrow(RangeError);
+    expect(() => controller('high', { refreshMs: 0 })).toThrow(RangeError);
     expect(() => controller('high', { windowSize: 0 })).toThrow(RangeError);
     expect(() => controller('high', { minTier: 'ultra', maxTier: 'low' })).toThrow(RangeError);
   });
@@ -104,6 +106,33 @@ describe('TierController', () => {
     const c = controller('medium', { signal: 'frame' });
     expect(run(c, 20, 0, 20_000).changes).toEqual([]);
     expect(run(c, TARGET, 20_000, 20_000).changes[0]).toMatchObject({ to: 'high' });
+  });
+
+  it('does not read a frame rate at the target as headroom when the display runs faster', () => {
+    const mobileTarget = 1000 / 36;
+    const c = controller('medium', {
+      signal: 'frame',
+      targetMs: mobileTarget,
+      refreshMs: 1000 / 60,
+      maxTier: 'ultra',
+    });
+    expect(run(c, 1000 / 31, 0, 60_000).changes).toEqual([]);
+    expect(c.tier).toBe('medium');
+    expect(run(c, 1000 / 60, 60_000, 20_000).changes[0]).toMatchObject({ to: 'high' });
+  });
+
+  it('steps a 30 fps budget device down once it falls under 30 fps', () => {
+    const c = controller('medium', {
+      signal: 'frame',
+      targetMs: 1000 / 36,
+      refreshMs: 1000 / 60,
+    });
+    expect(run(c, 1000 / 32, 0, 10_000).changes).toEqual([]);
+    expect(run(c, 1000 / 27, 10_000, 10_000).changes[0]).toMatchObject({
+      from: 'medium',
+      to: 'low',
+      reason: 'over-budget',
+    });
   });
 
   it('ignores samples during the cooldown after a change', () => {

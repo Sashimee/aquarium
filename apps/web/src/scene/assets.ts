@@ -175,22 +175,39 @@ export class ModelLibrary {
     if (!pending) {
       const entry = this.catalog.get(assetId);
       const file = this.lodFile(assetId, Math.min(2, entry.lods.length - 1) as ModelLod);
-      pending = this.geometryGltf.loadAsync(`${ASSET_BASE}${file}`).then((gltf) => {
-        gltf.scene.updateMatrixWorld(true);
-        const geometries: BufferGeometry[] = [];
-        gltf.scene.traverse((object) => {
-          if (!isMesh(object)) return;
-          const geometry = object.geometry.clone();
-          geometry.applyMatrix4(object.matrixWorld);
-          geometries.push(geometry);
-        });
-        if (geometries.length === 0) throw new Error(`${file} contains no meshes`);
-        return geometries;
-      });
+      pending = this.parsedRenderModel(file).then(
+        (model) =>
+          model?.primitives.map((p) => p.geometry.clone()) ??
+          this.geometryGltf.loadAsync(`${ASSET_BASE}${file}`).then((gltf) => {
+            gltf.scene.updateMatrixWorld(true);
+            const geometries: BufferGeometry[] = [];
+            gltf.scene.traverse((object) => {
+              if (!isMesh(object)) return;
+              const geometry = object.geometry.clone();
+              geometry.applyMatrix4(object.matrixWorld);
+              geometries.push(geometry);
+            });
+            if (geometries.length === 0) throw new Error(`${file} contains no meshes`);
+            return geometries;
+          }),
+      );
       this.collision.set(assetId, pending);
       pending.catch(() => this.collision.delete(assetId));
     }
     return pending;
+  }
+
+  /** A render-path model already parsed (or parsing) for `file`, at any texture size, so collision can skip a second parse. */
+  private async parsedRenderModel(file: string): Promise<LoadedModel | undefined> {
+    for (const [key, pending] of this.cache) {
+      if (!key.startsWith(`${file}@`)) continue;
+      try {
+        return await pending;
+      } catch {
+        continue;
+      }
+    }
+    return undefined;
   }
 
   async loadTexture(

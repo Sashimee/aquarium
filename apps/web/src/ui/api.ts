@@ -345,8 +345,7 @@ export function createApiClient(fetcher: Fetcher = (i, init) => fetch(i, init)):
       return parsed(res, creditsSchema);
     },
     async exportData() {
-      const res = await send('/api/me/export');
-      if (!res.ok) throw await toError(res);
+      const res = await post('/api/me/export', {});
       const text = await res.text();
       let body: unknown;
       try {

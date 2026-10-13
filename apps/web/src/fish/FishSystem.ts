@@ -33,6 +33,7 @@ import { demoTank, type DemoTank } from './demoStock';
 import { FishInstanceData, type InstanceValues } from './instances';
 import { selectLod, type LodThresholds } from './lod';
 import { FishMaterial, type FinRendering, type FishMaterialFeatures } from './material';
+import { commitLodDraw } from './prewarm';
 import {
   bagCentre,
   bagHeight,
@@ -70,6 +71,7 @@ interface LodBatch {
   readonly meshes: readonly InstancedMesh[];
   readonly materials: readonly FishMaterial[];
   count: number;
+  warmed: boolean;
 }
 
 interface SpeciesBatch {
@@ -223,6 +225,7 @@ export class FishSystem {
   private layout: Layout | null = null;
   private pendingLayout: { epoch: number; ids: readonly string[] } | null = null;
   private simRevision = -1;
+  private sceneRevision = -1;
   private simReady = false;
   private dirty = false;
   private syncing = false;
@@ -592,7 +595,7 @@ export class FishSystem {
       const matrices = meshes[0]?.instanceMatrix;
       if (matrices === undefined) throw new Error(`fish ${model.entry.id}: lod${level} is empty`);
       matrices.setUsage(DynamicDrawUsage);
-      return { instances, matrices, meshes, materials, count: 0 };
+      return { instances, matrices, meshes, materials, count: 0, warmed: false };
     });
     batch.capacity = capacity;
     this.applyShadows(batch);
@@ -759,7 +762,11 @@ export class FishSystem {
   private applyShadows(batch: SpeciesBatch): void {
     const cast = (this.shadows?.shadowMapSize ?? 0) > 0;
     batch.lods.forEach((lod, level) => {
-      for (const mesh of lod.meshes) mesh.castShadow = cast && level < SHADOW_LODS;
+      const castShadow = cast && level < SHADOW_LODS;
+      for (const mesh of lod.meshes) {
+        if (mesh.castShadow !== castShadow) lod.warmed = false;
+        mesh.castShadow = castShadow;
+      }
     });
   }
 
@@ -768,7 +775,10 @@ export class FishSystem {
     if (sameFeatures(this.features, features)) return;
     this.features = features;
     for (const batch of this.batches.values()) {
-      for (const lod of batch.lods) for (const m of lod.materials) m.setFeatures(features);
+      for (const lod of batch.lods) {
+        for (const m of lod.materials) m.setFeatures(features);
+        lod.warmed = false;
+      }
     }
   }
 
@@ -833,7 +843,15 @@ export class FishSystem {
     const layout = this.layout;
     const frame =
       layout !== null && this.interpolator.sample(nowMs, layout.frame) ? layout.frame : null;
-    for (const batch of this.batches.values()) for (const lod of batch.lods) lod.count = 0;
+    const sceneRevision = this.engine.sceneRevision;
+    const rewarm = sceneRevision !== this.sceneRevision;
+    this.sceneRevision = sceneRevision;
+    for (const batch of this.batches.values()) {
+      for (const lod of batch.lods) {
+        lod.count = 0;
+        if (rewarm) lod.warmed = false;
+      }
+    }
     this.bags.begin();
 
     const camera = this.engine.camera.position;
@@ -886,12 +904,9 @@ export class FishSystem {
 
     for (const batch of this.batches.values()) {
       for (const lod of batch.lods) {
+        commitLodDraw(lod);
         lod.matrices.needsUpdate = true;
         lod.instances.commit();
-        for (const mesh of lod.meshes) {
-          mesh.count = lod.count;
-          mesh.visible = lod.count > 0;
-        }
       }
     }
   }

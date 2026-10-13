@@ -67,7 +67,9 @@ export function createParticulates(
   const g2 = PHASE_G * PHASE_G;
   const phase = float(1 - g2).div(pow(float(1 + g2).sub(cosTheta.mul(2 * PHASE_G)), 1.5));
   const depth = medium.boxMax.y.sub(centre.y);
-  const fromSurface = medium.transmittance(depth.div(max(caustics.lightDirection.y, 0.2)));
+  const fromSurface = medium
+    .transmittance(depth.div(max(caustics.lightDirection.y, 0.2)))
+    .mul(medium.hoodSpread(depth));
   const toCamera = medium.transmittance(medium.pathToFragment(centre));
   const radiance = vertexStage(
     fromSurface

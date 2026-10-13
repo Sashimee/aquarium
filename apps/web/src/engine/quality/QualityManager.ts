@@ -1,7 +1,13 @@
 import type { EngineEventBus } from '../events';
 import { DEFAULT_CONTROLLER_CONFIG, TierController } from './controller';
 import { selectInitialTier, type TimingSignal } from './probe';
-import { TIER_SETTINGS, type Tier, type TierChangeReason, type TierSettings } from './tiers';
+import {
+  TIER_SETTINGS,
+  tierIndex,
+  type Tier,
+  type TierChangeReason,
+  type TierSettings,
+} from './tiers';
 
 export type ApplyTier = (settings: Readonly<TierSettings>, tier: Tier) => void;
 
@@ -12,7 +18,11 @@ export interface QualityOptions {
   pinned: Tier | null;
   adaptive: boolean;
   targetMs: number;
+  /** The display's frame interval; defaults to `targetMs`. */
+  refreshMs?: number;
   probeTier?: Tier;
+  /** The highest tier the probe and adaptation may choose; a pinned or manual tier may exceed it. */
+  maxTier?: Tier;
   probeMs?: number;
   /** Frames right after start-up include pipeline compiles and are not representative. */
   warmupMs?: number;
@@ -38,6 +48,8 @@ export class QualityManager {
   private phase: Phase = { kind: 'idle' };
   private controller: TierController | null = null;
   private readonly probeTier: Tier;
+  private readonly maxTier: Tier;
+  private readonly refreshMs: number;
   private readonly probeMs: number;
   private readonly warmupMs: number;
   private readonly minGpuSamples: number;
@@ -48,7 +60,12 @@ export class QualityManager {
     private readonly options: QualityOptions,
   ) {
     if (!(options.targetMs > 0)) throw new RangeError('QualityManager: targetMs must be > 0');
+    this.maxTier = options.maxTier ?? 'ultra';
     this.probeTier = options.probeTier ?? 'high';
+    if (tierIndex(this.probeTier) > tierIndex(this.maxTier)) {
+      throw new RangeError('QualityManager: probeTier is above maxTier');
+    }
+    this.refreshMs = options.refreshMs ?? options.targetMs;
     this.probeMs = options.probeMs ?? 2000;
     this.warmupMs = options.warmupMs ?? 300;
     this.minGpuSamples = options.minGpuSamples ?? 10;
@@ -122,7 +139,7 @@ export class QualityManager {
     const ms = this.signal === 'gpu' ? gpuMs : frameMs;
     if (ms === null) return;
     const change = this.controller.sample(ms, nowMs);
-    if (change) this.apply(change.from, change.to, change.reason);
+    if (change) this.apply(this.current, change.to, change.reason);
   }
 
   /** Manual override from the dev panel or settings; adaptation restarts from there. */
@@ -142,12 +159,16 @@ export class QualityManager {
       signal,
       probeTier: this.probeTier,
       targetMs: this.options.targetMs,
+      refreshMs: this.refreshMs,
+      maxTier: this.maxTier,
     });
     this.phase = { kind: 'running' };
     if (this.options.adaptive) {
       this.controller = new TierController(result.tier, {
         ...DEFAULT_CONTROLLER_CONFIG,
         targetMs: this.options.targetMs,
+        refreshMs: this.refreshMs,
+        maxTier: this.maxTier,
         signal,
       });
       this.controller.reset(result.tier, nowMs);

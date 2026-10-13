@@ -117,3 +117,12 @@ export function tierAt(index: number): Tier {
 export function isTier(value: unknown): value is Tier {
   return typeof value === 'string' && (TIERS as readonly string[]).includes(value);
 }
+
+/** The renderer pixel ratio for a tier: the device ratio clamped to the tier's cap, then scaled. */
+export function renderPixelRatio(
+  devicePixelRatio: number,
+  settings: Pick<TierSettings, 'maxPixelRatio' | 'resolutionScale'>,
+): number {
+  const dpr = Number.isFinite(devicePixelRatio) && devicePixelRatio > 0 ? devicePixelRatio : 1;
+  return Math.min(dpr, settings.maxPixelRatio) * settings.resolutionScale;
+}

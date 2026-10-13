@@ -115,6 +115,35 @@ function parseTraits(id: string, traits: readonly string[]): ReadonlySet<Trait> 
   return out;
 }
 
+/**
+ * Rejects a trait whose behaviour `Behaviour.planDefault` never reaches on this gait, so that it
+ * cannot be ignored silently. The branch order there is: forage gait, then glass grazing, then a
+ * home (anchor or station), then free swimming. A `cave-dweller` is not listed: every gait
+ * shelters in its cave at rest and after a startle.
+ */
+function requireReachable(id: string, traits: ReadonlySet<Trait>, gait: Gait): void {
+  const forager = gait === 'forage';
+  const rules: [Trait, boolean, string][] = [
+    ['air-gulp', forager, 'gait "forage", the only gait that starts a gulp'],
+    ['glass-grazer', !forager, 'a gait other than "forage", whose bottom foraging comes first'],
+    [
+      'anemone-host',
+      !forager && !traits.has('glass-grazer'),
+      'a gait other than "forage" and no "glass-grazer", which both come before hosting',
+    ],
+    [
+      'rock-grazer',
+      !forager && gait !== 'hover' && !traits.has('anemone-host') && !traits.has('cave-dweller'),
+      'a gait other than "hover" or "forage" and no anemone or cave home, to swim free',
+    ],
+  ];
+  for (const [trait, reachable, needs] of rules) {
+    if (traits.has(trait) && !reachable) {
+      throw new RangeError(`species "${id}": trait "${trait}" needs ${needs}`);
+    }
+  }
+}
+
 function parseDiet(id: string, diet: unknown): number[] {
   if (!Array.isArray(diet) || diet.length === 0) {
     throw new RangeError(`species "${id}": lifecycle.diet must be a non-empty array of food types`);
@@ -163,17 +192,10 @@ function parseTraitParams(
   home: HomeKind,
 ): TraitParams {
   const { airGulp, grazing, flare, station, refuge, excursion } = behaviour;
-  const forager = gait === 'forage';
-  const homed = !forager && !traits.has('glass-grazer') && home !== 'none';
-  const free = !forager && !traits.has('glass-grazer') && home === 'none';
+  const homed = gait !== 'forage' && !traits.has('glass-grazer') && home !== 'none';
   const owners: [string, unknown, boolean, string][] = [
-    ['airGulp', airGulp, forager && traits.has('air-gulp'), 'trait "air-gulp" and gait "forage"'],
-    [
-      'grazing',
-      grazing,
-      free && traits.has('rock-grazer'),
-      'trait "rock-grazer" on a species with no home and a gait other than "hover" or "forage"',
-    ],
+    ['airGulp', airGulp, traits.has('air-gulp'), 'trait "air-gulp"'],
+    ['grazing', grazing, traits.has('rock-grazer'), 'trait "rock-grazer"'],
     ['flare', flare, traits.has('flare-display'), 'trait "flare-display"'],
     [
       'station',
@@ -182,12 +204,7 @@ function parseTraitParams(
       'gait "hover" or an anemone or cave home, without gait "forage" or trait "glass-grazer"',
     ],
     ['refuge', refuge, traits.has('cave-dweller'), 'trait "cave-dweller"'],
-    [
-      'excursion',
-      excursion,
-      homed && traits.has('anemone-host'),
-      'trait "anemone-host" without gait "forage" or trait "glass-grazer"',
-    ],
+    ['excursion', excursion, traits.has('anemone-host'), 'trait "anemone-host"'],
   ];
   for (const [field, value, active, needs] of owners) {
     if (value !== undefined && !active) {
@@ -270,6 +287,7 @@ export function toSimSpecies(input: SpeciesInput): SimSpecies {
   }
   const neighbours = behaviour.schooling?.topologicalNeighbours ?? 0;
   const traits = parseTraits(id, behaviour.traits);
+  requireReachable(id, traits, loco.gait);
   if (traits.has('shoal') && neighbours === 0) {
     throw new RangeError(`species "${id}": trait "shoal" needs a behaviour.schooling block`);
   }
