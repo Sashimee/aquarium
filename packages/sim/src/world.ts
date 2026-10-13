@@ -81,6 +81,9 @@ export const STEERING = {
   scrapeWindowS: 1,
   scrapeContactFraction: 0.2,
   scrapeDriftBodyLengths: 0.5,
+  deadEndMemoryS: 10,
+  deadEndRadiusBodyLengths: 4,
+  deadEndBearingCos: 0.3,
 } as const;
 
 export interface FishSpawn {
@@ -184,6 +187,9 @@ export class World {
   private readonly scrapeAnchor: Float64Array;
   private readonly scrapeTime: Float64Array;
   private readonly scrapeHits: Uint16Array;
+  /** Horizontal spot where the fish last had to back out, avoided while its timer runs. */
+  private readonly deadEnd: Float64Array;
+  private readonly deadEndTimer: Float64Array;
   private readonly wanderTurn: Float64Array;
   private readonly wanderPitch: Float64Array;
   /** Horizontal unit slide direction along the wall being avoided; zero when disengaged. */
@@ -263,6 +269,8 @@ export class World {
     this.scrapeAnchor = new Float64Array(n * 3);
     this.scrapeTime = new Float64Array(n);
     this.scrapeHits = new Uint16Array(n);
+    this.deadEnd = new Float64Array(n * 2);
+    this.deadEndTimer = new Float64Array(n);
     this.mass = new Float64Array(n);
     this.drag = new Float64Array(n);
     this.maxSpeed = new Float64Array(n);
@@ -591,6 +599,8 @@ export class World {
     const vyLimit = cruiseBase * STEERING.depthMaxSpeedFraction;
     dy += clamp((bandTarget - py) / STEERING.depthTauS, -vyLimit, vyLimit);
 
+    const deadEndLeft = Math.max(0, (this.deadEndTimer[i] ?? 0) - dt);
+    this.deadEndTimer[i] = deadEndLeft;
     const nh = this.normal;
     const np = this.probeNormal;
     const sdf = this.steerSdf[(plan.floor ? 1 : 0) + (plan.surface ? 2 : 0)] ?? this.sceneSdf;
@@ -795,8 +805,36 @@ export class World {
               pz0 = 0;
             }
           }
+          // A fish that had to back out of a dead end (a slot between rock and glass) remembers
+          // where it was and slides round the other way while it is near, even against the pull
+          // of its goal, which would otherwise drag it along the rock back into the same slot.
+          let shunning = false;
+          if (deadEndLeft > 0) {
+            const ex = (this.deadEnd[i * 2] ?? 0) - px;
+            const ez = (this.deadEnd[i * 2 + 1] ?? 0) - pz;
+            const reach = Math.hypot(ex, ez);
+            const toward = (tx * ex + tz * ez) * side;
+            if (
+              reach < STEERING.deadEndRadiusBodyLengths * length &&
+              Math.abs(toward) > STEERING.deadEndBearingCos * reach
+            ) {
+              shunning = true;
+              if (toward > 0) {
+                side = -side;
+                px0 = 0;
+                pz0 = 0;
+              }
+            }
+          }
           tx *= side;
           tz *= side;
+          if (shunning) {
+            const back = dx * tx + dz * tz;
+            if (back < 0) {
+              dx -= tx * back;
+              dz -= tz * back;
+            }
+          }
           if (px0 === 0 && pz0 === 0) {
             this.avoidOrigin[i * 2] = tx;
             this.avoidOrigin[i * 2 + 1] = tz;
@@ -1156,6 +1194,7 @@ export class World {
     this.wedged[i] = 0;
     this.detourTimer[i] = 0;
     this.reverseLeft[i] = STEERING.backOutMaxBodyLengths * (this.bodyLength[i] ?? 0);
+    this.rememberDeadEnd(i);
   }
 
   /**
@@ -1190,6 +1229,13 @@ export class World {
     this.wedged[i] = 0;
     this.detourTimer[i] = 0;
     this.reverseLeft[i] = STEERING.backOutMaxBodyLengths * length;
+    this.rememberDeadEnd(i);
+  }
+
+  private rememberDeadEnd(i: number): void {
+    this.deadEnd[i * 2] = this.position[i * 3] ?? 0;
+    this.deadEnd[i * 2 + 1] = this.position[i * 3 + 2] ?? 0;
+    this.deadEndTimer[i] = STEERING.deadEndMemoryS;
   }
 
   /**

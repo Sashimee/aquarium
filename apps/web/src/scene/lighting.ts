@@ -7,6 +7,8 @@ interface Lighting {
   readonly hoodIntensity: number;
   readonly water: WaterQuality;
   readonly ambientScatter: readonly [number, number, number];
+  /** Mean linear albedo of the biome's substrate. */
+  readonly substrateAlbedo: readonly [number, number, number];
 }
 
 /**
@@ -19,6 +21,7 @@ const BIOME_LIGHTING: Readonly<Partial<Record<Biome, Lighting>>> = {
     hoodIntensity: 7,
     water: { cdom440: 0.004, turbidity: 0.035 },
     ambientScatter: [0.008, 0.026, 0.05],
+    substrateAlbedo: [0.78, 0.68, 0.46],
   },
 };
 
@@ -27,22 +30,25 @@ export function applyBiomeLighting(engine: Engine, biome: Biome): () => void {
   const lighting = BIOME_LIGHTING[biome];
   if (!lighting) return () => undefined;
 
-  const { hood, medium, ambientScatter } = engine;
+  const { hood, medium, ambientScatter, substrateAlbedo } = engine;
   const previous = {
     colour: hood.color.clone(),
     intensity: hood.intensity,
     water: medium.getQuality(),
     ambientScatter: ambientScatter.clone(),
+    substrateAlbedo: substrateAlbedo.clone(),
   };
   hood.color.setRGB(...lighting.hoodColor);
   hood.intensity = lighting.hoodIntensity;
   medium.setQuality(lighting.water);
   ambientScatter.setRGB(...lighting.ambientScatter);
+  substrateAlbedo.setRGB(...lighting.substrateAlbedo);
 
   return () => {
     hood.color.copy(previous.colour);
     hood.intensity = previous.intensity;
     medium.setQuality(previous.water);
     ambientScatter.copy(previous.ambientScatter);
+    substrateAlbedo.copy(previous.substrateAlbedo);
   };
 }

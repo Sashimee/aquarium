@@ -70,7 +70,12 @@ describe('applyBiomeLighting', () => {
       cdom440: 0.05,
       turbidity: 0.08,
     });
-    return { hood, medium, ambientScatter: new Color(0.02, 0.03, 0.034) } as unknown as Engine;
+    return {
+      hood,
+      medium,
+      ambientScatter: new Color(0.02, 0.03, 0.034),
+      substrateAlbedo: new Color(0.13, 0.09, 0.055),
+    } as unknown as Engine;
   }
 
   it('leaves freshwater untouched', () => {
@@ -87,10 +92,12 @@ describe('applyBiomeLighting', () => {
     const restore = applyBiomeLighting(engine, 'reef');
     expect(engine.hood.color.b).toBeGreaterThan(engine.hood.color.r);
     expect(engine.medium.getQuality().cdom440).toBeLessThan(0.05);
+    expect(engine.substrateAlbedo.r).toBeGreaterThan(0.5);
     restore();
     expect(engine.hood.color.getHex()).toBe(new Color(1, 0.97, 0.92).getHex());
     expect(engine.hood.intensity).toBe(3);
     expect(engine.medium.getQuality()).toEqual({ cdom440: 0.05, turbidity: 0.08 });
     expect(engine.ambientScatter.g).toBeCloseTo(0.03);
+    expect(engine.substrateAlbedo.getHex()).toBe(new Color(0.13, 0.09, 0.055).getHex());
   });
 });
