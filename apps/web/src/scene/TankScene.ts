@@ -317,8 +317,7 @@ export class TankScene {
 
   /** Plants and anemones from the preset, which stay where they are. */
   get fixedDecor(): readonly DecorItem[] {
-    const catalog = this.library.catalog;
-    return this.preset.decor.filter((i) => !HARDSCAPE_KINDS.has(catalog.get(i.assetId).kind));
+    return fixedDecorOf(this.preset.decor, this.library.catalog);
   }
 
   catalogEntries(): IterableIterator<CatalogEntry> {
@@ -569,6 +568,16 @@ export function checkClearOfGlass(
       `Anemone "${item.assetId}" at ${item.position[0]}, ${item.position[2]} reaches ${reach.toFixed(3)} m and would cross the glass; move it inwards`,
     );
   }
+}
+
+export function fixedDecorOf(
+  decor: readonly DecorItem[],
+  catalog: Pick<AssetCatalog, 'get'>,
+): DecorItem[] {
+  return decor.filter(
+    (i) =>
+      parseEuphylliaId(i.assetId) !== null || !HARDSCAPE_KINDS.has(catalog.get(i.assetId).kind),
+  );
 }
 
 export function checkEuphylliaClearOfGlass(

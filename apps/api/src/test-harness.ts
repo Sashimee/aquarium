@@ -35,6 +35,8 @@ export interface Harness {
   database: Database;
   outbox: SentMail[];
   clock: Clock;
+  settleMail(): Promise<void>;
+  holdMail(): { sendStarted: Promise<void>; release(): void; fail(err: Error): void };
   dropDatabase(): Promise<void>;
   close(): Promise<void>;
 }
@@ -89,25 +91,33 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
   await runMigrations(database);
 
   const outbox: SentMail[] = [];
+  let gate: Promise<void> = Promise.resolve();
+  let onSend: () => void = () => {};
   const transport = nodemailer.createTransport({
     name: 'test',
     version: '0',
     send(mail, done) {
       const data = mail.data;
-      outbox.push({
-        from: String(data.from),
-        to: String(data.to),
-        subject: String(data.subject),
-        text: String(data.text),
-      });
-      done(null, {
-        envelope: { from: false, to: [] },
-        messageId: 'test',
-        accepted: [],
-        rejected: [],
-        pending: [],
-        response: 'ok',
-      });
+      onSend();
+      gate.then(
+        () => {
+          outbox.push({
+            from: String(data.from),
+            to: String(data.to),
+            subject: String(data.subject),
+            text: String(data.text),
+          });
+          done(null, {
+            envelope: { from: false, to: [] },
+            messageId: 'test',
+            accepted: [],
+            rejected: [],
+            pending: [],
+            response: 'ok',
+          });
+        },
+        (err: Error) => done(err),
+      );
     },
   });
 
@@ -115,6 +125,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     limits: opts.mailLimits ?? (opts.limited ? DEFAULT_MAIL_LIMITS : GENEROUS_MAIL),
     store: postgresHitStore(database, 'testsecrettestsecrettestsecret0123456789'),
   });
+  const background = new Set<Promise<void>>();
   const auth = createAuth({
     config: {
       authSecret: 'testsecrettestsecrettestsecret0123456789',
@@ -123,6 +134,10 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     },
     database,
     mailer,
+    runInBackground: (task) => {
+      background.add(task);
+      void task.finally(() => background.delete(task));
+    },
     rateLimits:
       opts.authLimits ??
       (opts.limited
@@ -159,6 +174,20 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     database,
     outbox,
     clock,
+    holdMail() {
+      let release!: () => void;
+      let fail!: (err: Error) => void;
+      gate = new Promise<void>((resolve, reject) => {
+        release = resolve;
+        fail = reject;
+      });
+      gate.catch(() => {});
+      const sendStarted = new Promise<void>((resolve) => (onSend = resolve));
+      return { sendStarted, release, fail };
+    },
+    async settleMail() {
+      await Promise.all([...background]);
+    },
     dropDatabase: testDb.drop,
     async close() {
       await app.close();
