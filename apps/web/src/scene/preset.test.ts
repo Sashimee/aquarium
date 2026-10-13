@@ -122,13 +122,15 @@ describe('reef preset', () => {
     }
   });
 
-  it('keeps corals and the anemone from intersecting each other', () => {
+  it('keeps corals and the anemone from intersecting each other or the other decor', () => {
     interface Box {
       id: string;
       corners: [number, number][];
       y0: number;
       y1: number;
       coral: boolean;
+      rock: boolean;
+      slack: number;
     }
     const boxes: Box[] = preset.decor.map((item) => {
       const procedural = parseEuphylliaId(item.assetId);
@@ -161,6 +163,8 @@ describe('reef preset', () => {
         y0: item.position[1] + y0 * item.scale,
         y1: item.position[1] + y1 * item.scale,
         coral: kind === 'coral' || kind === 'anemone',
+        rock: kind === 'rock',
+        slack: procedural || kind === 'anemone' ? 0.02 : 0,
       };
     });
     const overlapDepth = (a: [number, number][], b: [number, number][]): number => {
@@ -184,18 +188,19 @@ describe('reef preset', () => {
       return depth;
     };
     const tolerance = 0.005;
+    const overlaps: string[] = [];
     for (let i = 0; i < boxes.length; i++) {
       for (let j = i + 1; j < boxes.length; j++) {
         const a = boxes[i];
         const b = boxes[j];
-        if (!a || !b || !a.coral || !b.coral) continue;
+        if (!a || !b || (!a.coral && !b.coral) || a.rock || b.rock) continue;
         const vertical = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
         if (vertical <= tolerance) continue;
-        expect(overlapDepth(a.corners, b.corners), `${a.id} vs ${b.id}`).toBeLessThanOrEqual(
-          tolerance,
-        );
+        const depth = overlapDepth(a.corners, b.corners) + a.slack + b.slack;
+        if (depth > tolerance) overlaps.push(`${a.id} vs ${b.id} (${depth.toFixed(3)} m)`);
       }
     }
+    expect(overlaps).toEqual([]);
   });
 
   it('seats rocks, corals and the anemone on the substrate', () => {

@@ -42,41 +42,41 @@
       "assetId": "host-anemone",
       "position": [-0.34, 0.069, 0.06],
       "rotationY": 0.8,
-      "scale": 0.55
+      "scale": 0.5
     },
     {
       "assetId": "acropora-cytherea",
-      "position": [0.075, 0.068, 0.09],
+      "position": [0.095, 0.068, 0.12],
       "rotationY": 0.4,
-      "scale": 0.62
+      "scale": 0.58
     },
     {
       "assetId": "acropora-palmata",
-      "position": [0.385, 0.059, 0.13],
+      "position": [0.41, 0.059, 0.14],
       "rotationY": -0.7,
       "scale": 0.42
     },
     {
       "assetId": "brain-coral",
-      "position": [0.53, 0.05, 0.1],
+      "position": [0.53, 0.05, 0.06],
       "rotationY": 0.2,
       "scale": 0.65
     },
     {
       "assetId": "brain-coral",
-      "position": [-0.5, 0.054, 0.14],
+      "position": [-0.51, 0.054, 0.15],
       "rotationY": 1.1,
-      "scale": 0.8
+      "scale": 0.7
     },
     {
       "assetId": "brain-coral",
-      "position": [0.17, 0.073, 0.19],
+      "position": [-0.2, 0.073, 0.18],
       "rotationY": 0.0,
       "scale": 0.6
     },
     {
       "assetId": "euphyllia-hammer-3",
-      "position": [-0.12, 0.066, 0.06],
+      "position": [-0.12, 0.066, 0.04],
       "rotationY": 0.6,
       "scale": 1
     },
@@ -88,8 +88,8 @@
     },
     {
       "assetId": "lambis-shell",
-      "position": [0.2, 0.055, 0.15],
-      "rotationY": 2.2,
+      "position": [0.25, 0.055, 0.185],
+      "rotationY": 0.2,
       "scale": 1.0
     }
   ],
