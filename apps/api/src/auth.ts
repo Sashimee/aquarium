@@ -48,7 +48,10 @@ export function createAuth({
     try {
       await send();
     } catch (err) {
-      if (err instanceof MailThrottledError) return;
+      if (err instanceof MailThrottledError) {
+        console.error(`${what} mail throttled, retry in ${err.retryAfterSeconds}s`);
+        return;
+      }
       console.error(`${what} mail failed:`, err instanceof Error ? err.name : 'unknown');
     }
   };

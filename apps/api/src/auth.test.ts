@@ -505,7 +505,11 @@ describe('mail abuse limits', () => {
       await h.settleMail();
       return { res, ms: performance.now() - start };
     };
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const cooledRes = await resend(cooled);
+    const logged = spy.mock.calls.map((c) => String(c[0]));
+    spy.mockRestore();
+    expect(logged).toEqual([expect.stringMatching(/^verification mail throttled, retry in \d+s$/)]);
     const unknownRes = await resend(unknown);
     expect(cooledRes.res.statusCode).toBe(200);
     expect(unknownRes.res.statusCode).toBe(200);
