@@ -52,6 +52,7 @@ describe('request logging', () => {
       headers: jsonHeaders,
       payload: { email, redirectTo: '/' },
     });
+    await h.settleMail();
     const mail = [...h.outbox].reverse().find((m) => m.to === email && /reset/i.test(m.subject));
     const token = /reset-password\/([A-Za-z0-9]+)/.exec(mail?.text ?? '')?.[1];
     expect(token).toBeTruthy();
