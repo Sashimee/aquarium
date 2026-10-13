@@ -112,6 +112,14 @@ function effectiveLicenceProblems(
 
 const TEXTURE_ONLY_KINDS: readonly string[] = ['substrate', 'hdri'];
 
+function safeDecodeUri(uri: string): string {
+  try {
+    return decodeURIComponent(uri);
+  } catch {
+    return uri;
+  }
+}
+
 const SHIPPED_EXTENSIONS: readonly string[] = ['.glb', '.ktx2'];
 
 function lodProblems(asset: OutputAsset, assetsDir: string, problems: string[]): void {
@@ -138,10 +146,10 @@ function lodProblems(asset: OutputAsset, assetsDir: string, problems: string[]):
       if (primitives.length === 0) problems.push(`${at}: ${lod.file} has no mesh primitives`);
       for (const image of json.images ?? []) {
         if (image.uri === undefined) continue;
-        const target = posix.join(posix.dirname(lod.file), image.uri);
+        const target = posix.join(posix.dirname(lod.file), safeDecodeUri(image.uri));
         if (!owned.has(target)) {
           problems.push(
-            `${at}: ${lod.file} references ${image.uri}, which is not in the asset's files`,
+            `${at}: ${lod.file} references ${image.uri}, which is not in the asset's files (embedded data: URIs are not allowed either)`,
           );
         }
       }

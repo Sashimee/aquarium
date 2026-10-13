@@ -2,7 +2,7 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; every texture has both files.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Anemone tentacle sway is \"_sway\" (0 base, 1 tip).",
-  "totalBytes": 57314687,
+  "totalBytes": 57311893,
   "assets": [
     {
       "id": "angelfish",
@@ -4371,6 +4371,7 @@
       ],
       "licence": "CC0-1.0",
       "modifications": [
+        "2 pixel(s) above 65000 (the HDR encoder's ceiling) clamped to it",
         "equirectangular Radiance .hdr flipped vertically (compressed textures cannot flipY at upload) and re-encoded as KTX2 UASTC HDR 4x4 with Zstandard supercompression, no mipmaps; KTX2Loader transcodes it to BC6H or RGBA16F"
       ],
       "lods": [],
@@ -4378,8 +4379,8 @@
       "files": [
         {
           "file": "hdri/kloofendal-48d-partly-cloudy-puresky/kloofendal_48d_partly_cloudy_puresky_2k.ktx2",
-          "bytes": 1777777,
-          "sha256": "79f0a3889a2f68a1f8f72f93d112dfb18afbc54510108ff6e9f67b125883814f"
+          "bytes": 1774983,
+          "sha256": "d5b4d0f57283310f0f267fb5fe30e7c1709a151594b78845186f1bb0145fda83"
         }
       ]
     },

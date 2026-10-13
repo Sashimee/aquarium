@@ -159,6 +159,23 @@ export function isCompleteKtx2(bytes: Uint8Array): boolean {
   return true;
 }
 
+/** The `KTXmapRange` scale basisu stores when it had to rescale an HDR image; 1 when absent. three ignores it. */
+export function ktx2MapRangeScale(bytes: Uint8Array): number {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let at = view.getUint32(56, true);
+  const end = at + view.getUint32(60, true);
+  while (at + 4 <= end) {
+    const length = view.getUint32(at, true);
+    const entry = bytes.subarray(at + 4, at + 4 + length);
+    const split = entry.indexOf(0);
+    if (new TextDecoder().decode(entry.subarray(0, split)) === 'KTXmapRange') {
+      return view.getFloat32(at + 4 + split + 1, true);
+    }
+    at += 4 + Math.ceil(length / 4) * 4;
+  }
+  return 1;
+}
+
 function readCachedKtx2(path: string): Uint8Array | null {
   if (!existsSync(path)) return null;
   const bytes = new Uint8Array(readFileSync(path));
@@ -178,7 +195,7 @@ export async function encodeHdrKtx2(hdr: Uint8Array): Promise<Uint8Array> {
   const digest = createHash('sha256').update(HDR_ENCODER_VERSION).update(hdr).digest('hex');
   const path = join(cacheDir(), `${digest}.ktx2`);
   const cached = readCachedKtx2(path);
-  if (cached) return cached;
+  if (cached && ktx2MapRangeScale(cached) === 1) return cached;
   const log = console.log;
   console.log = () => undefined;
   try {
@@ -192,6 +209,12 @@ export async function encodeHdrKtx2(hdr: Uint8Array): Promise<Uint8Array> {
       hdrQualityLevel: 1,
     });
     if (!isCompleteKtx2(bytes)) throw new Error('HDR KTX2 encoder returned an incomplete file');
+    const scale = ktx2MapRangeScale(bytes);
+    if (scale !== 1) {
+      throw new Error(
+        `HDR KTX2 carries KTXmapRange scale ${scale}, which three ignores and would darken the map; clamp the source to the half-float range first`,
+      );
+    }
     writeCachedKtx2(path, bytes);
     return bytes;
   } finally {

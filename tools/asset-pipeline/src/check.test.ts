@@ -376,6 +376,23 @@ describe('checkAssets', () => {
     expect(checkAssets(input)).toEqual([]);
   });
 
+  it('matches percent-encoded texture uris against the listed files', () => {
+    const asset = fishAsset();
+    const lod0 = asset.lods[0];
+    if (!lod0) throw new Error('fixture has no LOD');
+    const attributes = ['POSITION', FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE];
+    const texture = put('fish/tetra/textures/my skin_1k.ktx2', 'ktx');
+    const withImage = put('fish/tetra/lod0.glb', glb(attributes, ['textures/my%20skin_1k.ktx2']));
+    const input = inputFor([
+      {
+        ...asset,
+        lods: [{ ...lod0, ...withImage }, ...asset.lods.slice(1)],
+        files: [withImage, ...asset.files.slice(1), texture],
+      },
+    ]);
+    expect(checkAssets(input)).toEqual([]);
+  });
+
   it('fails a shipped file that is neither GLB nor KTX2', () => {
     const asset = fishAsset();
     const raw = put('fish/tetra/env.hdr', 'RADIANCE');

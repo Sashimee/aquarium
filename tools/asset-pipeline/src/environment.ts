@@ -25,7 +25,14 @@ import {
   type Part,
 } from './parts.ts';
 import { RAW_ROOT, bakeToWorldSpace, readGltf, type SkinPose } from './source.ts';
-import { decodeRgbe, encodeRgbe, flipVertical, halve } from './rgbe.ts';
+import {
+  HDR_ENCODER_MAX,
+  clampPixels,
+  decodeRgbe,
+  encodeRgbe,
+  flipVertical,
+  halve,
+} from './rgbe.ts';
 import { decodeImage, encodeHdrKtx2, type Rgba } from './textures.ts';
 
 export interface EnvironmentRecipe {
@@ -376,8 +383,9 @@ export async function buildHdri(recipe: HdriRecipe, ctx: FishContext): Promise<O
   const halvings = recipe.halvings ?? 0;
   let image = decodeRgbe(source);
   for (let i = 0; i < halvings; i++) image = halve(image);
+  const { image: limited, clamped } = clampPixels(image, HDR_ENCODER_MAX);
   // Compressed textures cannot flipY at upload and the equirect lookup expects the first row at v = 1.
-  const hdr = encodeRgbe(flipVertical(image));
+  const hdr = encodeRgbe(flipVertical(limited));
   const file = writeFileTracked(
     ctx.outRoot,
     `hdri/${recipe.id}/${recipe.output}`,
@@ -392,6 +400,9 @@ export async function buildHdri(recipe: HdriRecipe, ctx: FishContext): Promise<O
     modifications: [
       ...(halvings > 0
         ? [`downsampled ${2 ** halvings}x with a 2x2 box filter in linear light`]
+        : []),
+      ...(clamped > 0
+        ? [`${clamped} pixel(s) above ${HDR_ENCODER_MAX} (the HDR encoder's ceiling) clamped to it`]
         : []),
       'equirectangular Radiance .hdr flipped vertically (compressed textures cannot flipY at upload) and re-encoded as KTX2 UASTC HDR 4x4 with Zstandard supercompression, no mipmaps; KTX2Loader transcodes it to BC6H or RGBA16F',
     ],

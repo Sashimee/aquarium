@@ -757,9 +757,7 @@
       "textures": "equirect HDR",
       "rigged": false,
       "notes": "Neutral sunlit sky HDRI for IBL and the above-water view. 2k .hdr. Licence stated as CC0 on the asset page and https://polyhaven.com/license.",
-      "modifications": [
-        "flipped vertically and re-encoded as KTX2 UASTC HDR 4x4 (Zstandard), 2k, no mipmaps; the raw .hdr is not committed"
-      ],
+      "modifications": [],
       "status": "downloaded",
       "files": [
         {
@@ -784,9 +782,7 @@
       "textures": "equirect HDR",
       "rigged": false,
       "notes": "Soft studio HDRI for neutral reflections on glass and a room-like lighting alternative. 2k .hdr. Licence stated as CC0 on the asset page and https://polyhaven.com/license.",
-      "modifications": [
-        "downsampled 2k to 1k with a 2x2 box filter in linear light, flipped vertically and re-encoded as KTX2 UASTC HDR 4x4 (Zstandard), no mipmaps; the raw .hdr is not committed"
-      ],
+      "modifications": [],
       "status": "downloaded",
       "files": [
         {

@@ -165,3 +165,25 @@ export function flipVertical(image: RgbeImage): RgbeImage {
     pixels.set(image.pixels.subarray(y * row, (y + 1) * row), (image.height - 1 - y) * row);
   return { width: image.width, height: image.height, pixels };
 }
+
+/** Basis Universal's HDR ceiling; brighter input makes it rescale the whole image (KTXmapRange), which three ignores. */
+export const HDR_ENCODER_MAX = 65000;
+
+/** Clamps every channel to `limit` and returns the clamped image with the number of pixels that changed. */
+export function clampPixels(
+  image: RgbeImage,
+  limit: number,
+): { image: RgbeImage; clamped: number } {
+  const pixels = new Float32Array(image.pixels.length);
+  let clamped = 0;
+  for (let i = 0; i < pixels.length; i += 3) {
+    const r = image.pixels[i]!;
+    const g = image.pixels[i + 1]!;
+    const b = image.pixels[i + 2]!;
+    if (Math.max(r, g, b) > limit) clamped++;
+    pixels[i] = Math.min(r, limit);
+    pixels[i + 1] = Math.min(g, limit);
+    pixels[i + 2] = Math.min(b, limit);
+  }
+  return { image: { width: image.width, height: image.height, pixels }, clamped };
+}
