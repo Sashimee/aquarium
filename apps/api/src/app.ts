@@ -1,3 +1,4 @@
+import { safeError } from './safe-error.ts';
 import { existsSync } from 'node:fs';
 import { relative, resolve, sep } from 'node:path';
 import fastifyStatic from '@fastify/static';
@@ -9,7 +10,12 @@ import {
 } from '@aquarium/shared';
 import { fromNodeHeaders } from 'better-auth/node';
 import { and, desc, eq, gt, sql } from 'drizzle-orm';
-import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
+import Fastify, {
+  type FastifyError,
+  type FastifyInstance,
+  type FastifyReply,
+  type FastifyRequest,
+} from 'fastify';
 import { z, ZodError } from 'zod';
 import { AUTH_BASE_PATH, type Auth } from './auth.ts';
 import { createClock, type Clock } from './clock.ts';
@@ -110,13 +116,20 @@ function normalizedPathname(url: string): string {
 }
 
 const TOKEN_PATH_PREFIXES = [`${AUTH_BASE_PATH}/reset-password/`, `${AUTH_BASE_PATH}/callback/`];
-const TOKEN_LIKE_SEGMENT = /^(?=.*\d)[A-Za-z0-9_-]{20,}$/;
+const TOKEN_LIKE_SEGMENT = /^[A-Za-z0-9]{20,}$/;
 
 export function redactUrl(url: string): string {
-  const path = '/' + (url.split('?')[0] ?? '').replace(/^\/+/, '');
+  const path = normalizedPathname(url);
   const lower = path.toLowerCase();
   const prefix = TOKEN_PATH_PREFIXES.find((p) => lower.startsWith(p));
-  if (prefix) return `${path.slice(0, prefix.length)}[redacted]`;
+  if (prefix) {
+    const rest = path.slice(prefix.length);
+    if (prefix.endsWith('/callback/')) {
+      const provider = rest.split('/')[0] ?? '';
+      return `${path.slice(0, prefix.length)}${provider}`;
+    }
+    return `${path.slice(0, prefix.length)}[redacted]`;
+  }
   if (!lower.startsWith(`${AUTH_BASE_PATH}/`)) return path;
   return path
     .split('/')
@@ -141,6 +154,8 @@ export function buildApp(opts: AppOptions): FastifyInstance {
       ? {
           ...(opts.logStream ? { stream: opts.logStream } : {}),
           serializers: {
+            // stack embeds the unredacted message, params included
+            err: (e: FastifyError) => ({ ...safeError(e), stack: '' }),
             req: (req: FastifyRequest) => ({
               method: req.method,
               url: redactUrl(req.url),
