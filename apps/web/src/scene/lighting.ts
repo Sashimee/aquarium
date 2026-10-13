@@ -9,6 +9,8 @@ interface Lighting {
   readonly ambientScatter: readonly [number, number, number];
   /** Mean linear albedo of the biome's substrate. */
   readonly substrateAlbedo: readonly [number, number, number];
+  /** See `InteriorLight.fill`. */
+  readonly fillLevel: number;
 }
 
 /**
@@ -22,6 +24,9 @@ const BIOME_LIGHTING: Readonly<Partial<Record<Biome, Lighting>>> = {
     water: { cdom440: 0.004, turbidity: 0.035 },
     ambientScatter: [0.008, 0.026, 0.05],
     substrateAlbedo: [0.78, 0.68, 0.46],
+    // The bright sand already throws back about a third of the hood's light at the floor into the
+    // shadows, against a twentieth from the dark freshwater sand, so the reef needs no fill.
+    fillLevel: 0,
   },
 };
 
@@ -30,19 +35,21 @@ export function applyBiomeLighting(engine: Engine, biome: Biome): () => void {
   const lighting = BIOME_LIGHTING[biome];
   if (!lighting) return () => undefined;
 
-  const { hood, medium, ambientScatter, substrateAlbedo } = engine;
+  const { hood, medium, ambientScatter, substrateAlbedo, interior } = engine;
   const previous = {
     colour: hood.color.clone(),
     intensity: hood.intensity,
     water: medium.getQuality(),
     ambientScatter: ambientScatter.clone(),
     substrateAlbedo: substrateAlbedo.clone(),
+    fillLevel: interior.fillLevel,
   };
   hood.color.setRGB(...lighting.hoodColor);
   hood.intensity = lighting.hoodIntensity;
   medium.setQuality(lighting.water);
   ambientScatter.setRGB(...lighting.ambientScatter);
   substrateAlbedo.setRGB(...lighting.substrateAlbedo);
+  interior.fillLevel = lighting.fillLevel;
 
   return () => {
     hood.color.copy(previous.colour);
@@ -50,5 +57,6 @@ export function applyBiomeLighting(engine: Engine, biome: Biome): () => void {
     medium.setQuality(previous.water);
     ambientScatter.copy(previous.ambientScatter);
     substrateAlbedo.copy(previous.substrateAlbedo);
+    interior.fillLevel = previous.fillLevel;
   };
 }
