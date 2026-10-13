@@ -63,6 +63,9 @@ describe('reef preset', () => {
     );
     expect(corals).toContain('brain-coral');
     expect(corals).toContain('acropora-palmata');
+    expect(corals).toContain('acropora-cytherea');
+    expect(preset.substrate?.assetId).toBe('reef-sand');
+    expect(preset.decor.filter((d) => d.assetId === 'reef-arch').length).toBeGreaterThanOrEqual(2);
     expect(kinds.get(preset.substrate?.assetId ?? '')).toBe('substrate');
   });
 
