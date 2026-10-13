@@ -1,3 +1,4 @@
+import { safeError } from './safe-error.ts';
 import { passkey } from '@better-auth/passkey';
 import { betterAuth } from 'better-auth';
 import { createAuthMiddleware, createEmailVerificationToken } from 'better-auth/api';
@@ -82,7 +83,19 @@ export function createAuth({
     basePath: AUTH_BASE_PATH,
     secret: config.authSecret,
     trustedOrigins: [origin],
-    logger: { level: 'error' },
+    // better-call prints unhandled errors with console.error, driver params included. Rethrowing
+    // sends them to the Fastify error handler, which logs through safeError.
+    onAPIError: { throw: true },
+    logger: {
+      level: 'error',
+      log: (level, message, ...args) => {
+        const detail = args.map((arg) => safeError(arg));
+        console.error(
+          `[Better Auth] ${level}: ${message}`,
+          ...detail.map((d) => JSON.stringify(d)),
+        );
+      },
+    },
     database: drizzleAdapter(database.db, {
       provider: 'pg',
       schema: {
