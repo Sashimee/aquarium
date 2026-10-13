@@ -140,17 +140,22 @@ export function createAuth({
         await internalAdapter.deleteUserSessions(user.id);
         if (!holdsSignupProof(request, user.id)) await dropUnverifiedCredential(user.id);
       },
-      sendVerificationEmail: ({ user, url }, request) =>
-        throttleSafe(async () => {
+      sendVerificationEmail: async ({ user, url }, request) => {
+        const path = request ? new URL(request.url).pathname : '';
+        const send = throttleSafe(async () => {
           // Sign-up and resend consume the IP budget in the HTTP layer; sign-in only learns it
           // owes a mail here, after the password checked out.
-          if (request && new URL(request.url).pathname === `${AUTH_BASE_PATH}/sign-in/email`) {
-            const ip = request.headers.get('x-forwarded-for');
+          if (path === `${AUTH_BASE_PATH}/sign-in/email`) {
+            const ip = request?.headers.get('x-forwarded-for');
             const admission = await mailer.consumeIp(ip ?? 'unknown');
             if (admission.wait > 0 || admission.mailBlockedFor > 0) return;
           }
           await mailer.sendVerification(user.email, url);
-        }, 'verification'),
+        }, 'verification');
+        // Better Auth awaits this for known unverified accounts only, so a resend must not wait on SMTP.
+        if (path === `${AUTH_BASE_PATH}/send-verification-email`) runInBackground(send);
+        else await send;
+      },
     },
     hooks: {
       after: createAuthMiddleware(async (ctx) => {

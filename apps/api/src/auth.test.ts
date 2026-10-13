@@ -480,7 +480,7 @@ describe('csrf', () => {
 });
 
 describe('mail abuse limits', () => {
-  it('applies a cooldown to verification resends', async () => {
+  it('answers a resend inside the cooldown like any other, and still sends nothing', async () => {
     const h = await createHarness({
       mailLimits: {
         perRecipient: { max: 100, windowMs: 3_600_000 },
@@ -489,20 +489,66 @@ describe('mail abuse limits', () => {
         global: { max: 1000, windowMs: 3_600_000 },
       },
     });
+    const cooled = nextEmail();
+    await signUp(h.app, cooled);
+    const unknown = nextEmail();
+    const mailsBefore = h.outbox.length;
+
+    const resend = async (email: string) => {
+      const start = performance.now();
+      const res = await h.app.inject({
+        method: 'POST',
+        url: '/api/auth/send-verification-email',
+        headers: jsonHeaders,
+        payload: { email, callbackURL: '/' },
+      });
+      await h.settleMail();
+      return { res, ms: performance.now() - start };
+    };
+    const cooledRes = await resend(cooled);
+    const unknownRes = await resend(unknown);
+    expect(cooledRes.res.statusCode).toBe(200);
+    expect(unknownRes.res.statusCode).toBe(200);
+    expect(cooledRes.res.body).toBe(unknownRes.res.body);
+    expect(cooledRes.res.headers['retry-after']).toBeUndefined();
+    expect(h.outbox.length).toBe(mailsBefore);
+    expect(h.outbox.filter((m) => m.to === cooled)).toHaveLength(1);
+
+    const median = (xs: number[]) => [...xs].sort((x, y) => x - y)[Math.floor(xs.length / 2)] ?? 0;
+    const cooledMs: number[] = [];
+    const unknownMs: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      cooledMs.push((await resend(cooled)).ms);
+      unknownMs.push((await resend(nextEmail())).ms);
+    }
+    expect(Math.abs(median(cooledMs) - median(unknownMs))).toBeLessThan(150);
+    expect(h.outbox.length).toBe(mailsBefore);
+    await h.close();
+  }, 20_000);
+
+  it('does not make a resend wait on SMTP for a known address', async () => {
+    const h = await createHarness();
     const email = nextEmail();
     await signUp(h.app, email);
-    expect(h.outbox.filter((m) => m.to === email)).toHaveLength(1);
-
-    const resend = await h.app.inject({
+    const held = h.holdMail();
+    const res = await h.app.inject({
       method: 'POST',
       url: '/api/auth/send-verification-email',
       headers: jsonHeaders,
       payload: { email, callbackURL: '/' },
     });
-    expect(resend.statusCode).toBe(429);
-    expect(Number(resend.headers['retry-after'])).toBeGreaterThan(0);
-    expect(apiErrorSchema.parse(resend.json()).error.code).toBe('rate_limited');
-    expect(h.outbox.filter((m) => m.to === email)).toHaveLength(1);
+    expect(res.statusCode).toBe(200);
+    const stranger = await h.app.inject({
+      method: 'POST',
+      url: '/api/auth/send-verification-email',
+      headers: jsonHeaders,
+      payload: { email: nextEmail(), callbackURL: '/' },
+    });
+    expect(res.body).toBe(stranger.body);
+    await held.sendStarted;
+    held.release();
+    await h.settleMail();
+    expect(h.outbox.filter((m) => m.to === email)).toHaveLength(2);
     await h.close();
   });
 
