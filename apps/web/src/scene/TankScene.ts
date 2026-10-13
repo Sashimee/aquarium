@@ -39,6 +39,8 @@ import {
 } from './plants';
 import { createSubstrateMaterial, type SubstrateLayers } from './substrate';
 
+const FALLBACK_PLANT_HEIGHT = 0.2;
+
 export const DEFAULT_CURRENT: CurrentParameters = {
   direction: [1, 0],
   speed: 0.04,
@@ -219,12 +221,7 @@ export class TankScene {
     for (const patch of preset.plantPatches) {
       const bounds = catalog.get(patch.assetId).bounds;
       const reach = plantReach(patch.assetId, bounds, preset.current ?? DEFAULT_CURRENT);
-      const ceiling = surfaceScaleCeiling(
-        waterTop,
-        patch.assetId,
-        bounds?.max[1] ?? 0.2,
-        preset.current ?? DEFAULT_CURRENT,
-      );
+      const ceiling = surfaceScaleCeiling(waterTop, bounds?.max[1] ?? FALLBACK_PLANT_HEIGHT);
       const instances = scatterPatch(patch, ground, blocked, extent, reach, ceiling);
       if (instances.length < patch.count) {
         console.warn(
@@ -251,7 +248,7 @@ export class TankScene {
         rank: -1,
       });
       const entry = catalog.get(item.assetId);
-      const height = (entry.bounds?.max[1] ?? 0) * item.scale;
+      const height = (entry.bounds?.max[1] ?? FALLBACK_PLANT_HEIGHT) * item.scale;
       if (item.position[1] + height > waterTop - SURFACE_MARGIN) {
         throw new Error(
           `Plant "${item.assetId}" at y ${item.position[1]} reaches ${(item.position[1] + height).toFixed(3)} m, above the water line ${(waterTop - SURFACE_MARGIN).toFixed(3)} m; lower its scale`,
@@ -596,7 +593,7 @@ function plantReach(
   bounds: { readonly min: readonly number[]; readonly max: readonly number[] } | undefined,
   current: CurrentParameters,
 ): (scale: number) => number {
-  const height = bounds?.max[1] ?? 0.2;
+  const height = bounds?.max[1] ?? FALLBACK_PLANT_HEIGHT;
   const half = bounds
     ? Math.max(
         Math.abs(bounds.min[0] ?? 0),

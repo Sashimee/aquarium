@@ -5,7 +5,7 @@ import { DEFAULT_TANK } from '../engine/tank/dimensions';
 import { substrateHeight } from '../engine/tank/substrate';
 import { sampleCurrent, wrapPeriodS } from './current';
 import { scatterPatch, type PlantInstance } from './placement';
-import { SURFACE_MARGIN, SWAY_SECONDS, surfaceScaleCeiling, swayGain } from './plants';
+import { SURFACE_MARGIN, leanSeconds, surfaceScaleCeiling } from './plants';
 import { loadPreset } from './preset';
 import { DEFAULT_CURRENT, glassExtent } from './TankScene';
 
@@ -23,11 +23,14 @@ function tipHeight(
   timeS: number,
 ): number {
   const height = heights.get(assetId) ?? 0;
-  sampleCurrent(current, plant.x, plant.y + height * plant.scale, plant.z, timeS, flow);
-  const lean = (SWAY_SECONDS * swayGain(assetId) * height) / 0.3;
-  const tip = new Vector3((flow[0] ?? 0) * lean, height, (flow[2] ?? 0) * lean);
-  tip.applyEuler(new Euler(plant.tiltX, plant.yaw, plant.tiltZ, 'YXZ'));
-  return plant.y + tip.y * plant.scale;
+  const rooted = new Vector3(0, height * plant.scale, 0).applyEuler(
+    new Euler(plant.tiltX, plant.yaw, plant.tiltZ, 'YXZ'),
+  );
+  sampleCurrent(current, plant.x, plant.y + rooted.y, plant.z, timeS, flow);
+  const lean = new Vector3(flow[0] ?? 0, 0, flow[2] ?? 0).multiplyScalar(
+    leanSeconds(assetId, height),
+  );
+  return plant.y + rooted.y + lean.y;
 }
 
 describe('freshwater plants against the water surface', () => {
@@ -45,7 +48,7 @@ describe('freshwater plants against the water surface', () => {
         () => false,
         glassExtent(DEFAULT_TANK),
         () => 0,
-        surfaceScaleCeiling(waterTop, patch.assetId, height, current),
+        surfaceScaleCeiling(waterTop, height),
       );
       expect(plants.length).toBe(patch.count);
       for (const plant of plants) {
@@ -62,12 +65,7 @@ describe('freshwater plants against the water surface', () => {
   it('keeps the preset scales under the ceiling so the clamp is only a guard', () => {
     const backRootY = ground(0, -(DEFAULT_TANK.depth / 2 - DEFAULT_TANK.glass)) - 0.004;
     for (const patch of preset.plantPatches) {
-      const ceiling = surfaceScaleCeiling(
-        waterTop,
-        patch.assetId,
-        heights.get(patch.assetId) ?? 0,
-        current,
-      );
+      const ceiling = surfaceScaleCeiling(waterTop, heights.get(patch.assetId) ?? 0);
       expect(patch.scale[1], patch.id).toBeLessThanOrEqual(ceiling(backRootY) + 1e-9);
     }
   });
@@ -82,7 +80,7 @@ describe('freshwater plants against the water surface', () => {
       () => false,
       glassExtent(DEFAULT_TANK),
       () => 0,
-      surfaceScaleCeiling(waterTop, patch.assetId, heights.get(patch.assetId) ?? 0, current),
+      surfaceScaleCeiling(waterTop, heights.get(patch.assetId) ?? 0),
     );
     for (const plant of plants) {
       expect(tipHeight(patch.assetId, plant, current, 0)).toBeLessThanOrEqual(limit);
@@ -90,9 +88,8 @@ describe('freshwater plants against the water surface', () => {
   });
 
   it('caps scale by root height and never goes negative', () => {
-    const ceiling = surfaceScaleCeiling(0.47, 'water-plant', 0.35, current);
-    expect(ceiling(0.11)).toBeLessThan(0.33 / 0.35);
-    expect(ceiling(0.11)).toBeGreaterThan(0.9 * (0.33 / 0.35));
+    const ceiling = surfaceScaleCeiling(0.47, 0.35);
+    expect(ceiling(0.11)).toBeCloseTo(0.33 / 0.35, 6);
     expect(ceiling(0.9)).toBe(0);
   });
 });
