@@ -1,17 +1,18 @@
 import {
   Color,
   Group,
+  Material,
   Matrix4,
   Mesh,
   Quaternion,
   MeshStandardNodeMaterial,
   Vector3,
   type BufferGeometry,
-  type Material,
   type MeshStandardMaterial,
+  type Node,
   type UniformNode,
 } from 'three/webgpu';
-import { diffuseColor, dot, mix, saturate, uniform, vec3 } from 'three/tsl';
+import { diffuseColor, dot, materialEmissive, mix, normalWorld, saturate, vec3 } from 'three/tsl';
 import type { Biome, DecorItem } from '@aquarium/shared';
 import type { CatalogEntry, LoadedModel } from './assets';
 import { coralGlow, coralTint, placementKey, heightScale } from './coralStyle';
@@ -60,26 +61,34 @@ export function fitCollider(
 }
 
 const LUMA = vec3(0.2126, 0.7152, 0.0722);
+const UNDERSIDE_GLOW = 0.3;
 
-/** Tissue glows more where the albedo is bright, so the emission follows the polyps rather than the skeleton. */
+/**
+ * Emission graph shared by every fluorescent coral, so the shader builder sees one cache key. The
+ * glow colour arrives through `material.emissive`. Tissue glows more where the albedo is bright, so
+ * the emission follows the polyps rather than the skeleton, and the excitation comes from above, so
+ * downward faces get a fraction of it.
+ */
+export function createCoralGlowNode(level: UniformNode<'float', number>): Node<'vec3'> {
+  const tissue = mix(0.4, 1.4, saturate(dot(diffuseColor.rgb, LUMA).mul(2)));
+  const facing = mix(UNDERSIDE_GLOW, 1, normalWorld.y.mul(0.5).add(0.5));
+  return materialEmissive.mul(level).mul(tissue).mul(facing);
+}
+
 function fluorescentMaterial(
   source: MeshStandardMaterial,
+  tint: Color,
   glow: Color,
-  level: UniformNode<'float', number>,
+  glowNode: Node<'vec3'>,
 ): MeshStandardNodeMaterial {
   const material = new MeshStandardNodeMaterial();
-  material.name = source.name;
-  material.color.copy(source.color);
-  material.map = source.map;
-  material.normalMap = source.normalMap;
-  material.normalScale.copy(source.normalScale);
-  material.roughnessMap = source.roughnessMap;
-  material.aoMap = source.aoMap;
-  material.roughness = source.roughness;
-  material.metalness = source.metalness;
-  material.side = source.side;
-  const tissue = mix(0.4, 1.4, saturate(dot(diffuseColor.rgb, LUMA).mul(2)));
-  material.emissiveNode = uniform(glow).mul(level).mul(tissue);
+  // NodeMaterial.copy skips the private-backed accessors (alphaTest), which Material.copy handles.
+  Material.prototype.copy.call(material, source);
+  material.copy(source);
+  material.color.multiply(tint);
+  material.emissive.copy(glow);
+  material.emissiveIntensity = 1;
+  material.emissiveNode = glowNode;
   return material;
 }
 
@@ -90,7 +99,7 @@ export class Hardscape {
 
   constructor(
     private readonly biome: Biome,
-    private readonly fluorescence: UniformNode<'float', number>,
+    private readonly glowNode: Node<'vec3'>,
   ) {
     this.group.name = 'hardscape';
   }
@@ -104,11 +113,13 @@ export class Hardscape {
     for (const primitive of model.primitives) {
       let material: Material = primitive.material;
       if (tint) {
-        const tinted = primitive.material.clone();
-        tinted.color.multiply(tint);
         const glow = coralGlow(this.biome, item.assetId, key);
-        material = glow ? fluorescentMaterial(tinted, glow, this.fluorescence) : tinted;
-        if (material !== tinted) tinted.dispose();
+        if (glow) {
+          material = fluorescentMaterial(primitive.material, tint, glow, this.glowNode);
+        } else {
+          material = primitive.material.clone();
+          (material as MeshStandardMaterial).color.multiply(tint);
+        }
         this.tintedMaterials.push(material);
       }
       const mesh = new Mesh(primitive.geometry, material);
