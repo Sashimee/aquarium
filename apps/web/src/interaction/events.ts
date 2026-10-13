@@ -81,6 +81,10 @@ export interface InteractionEvents {
    * when nothing was loaded, since a switch may already have unloaded the last tank.
    */
   'tank:none': Record<string, never>;
+  /** The UI asks to show the other biome's demo tank (anonymous visitors, or no saved tank). */
+  'demo:request-biome': { biome: 'freshwater' | 'reef' };
+  /** The demo tank's biome, sent after each `demo:request-biome` that changed it. */
+  'demo:biome-changed': { biome: 'freshwater' | 'reef' };
   /** A fish joined. `acclimate` means it starts in a floating bag until `tank:fish-released`. */
   'tank:fish-added': { tankId: string; fish: Fish; acclimate: boolean };
   'tank:fish-released': { tankId: string; fishId: string };
@@ -113,6 +117,7 @@ export const STICKY_INTERACTION_EVENTS: readonly (keyof InteractionEvents)[] = [
   'camera:mode-changed',
   'play:tool-changed',
   'play:ready',
+  'demo:biome-changed',
   'decor:state',
   'decor:save-state',
 ];

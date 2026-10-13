@@ -1,6 +1,8 @@
 import { apiErrorSchema, sessionListSchema, userSchema } from '@aquarium/shared';
 import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import nodemailer from 'nodemailer';
+import { createMailer, DEFAULT_MAIL_LIMITS } from './mail.ts';
 import { postgresHitStore } from './rate-limit.ts';
 import { APP_ORIGIN, createHarness, type Harness } from './test-harness.ts';
 
@@ -75,13 +77,16 @@ describe('unverified sign-up takeover (#114)', () => {
       payload: { email, password, name: 'Someone', callbackURL: '/' },
     });
 
-  const requestReset = (email: string) =>
-    h.app.inject({
+  const requestReset = async (email: string) => {
+    const res = await h.app.inject({
       method: 'POST',
       url: '/api/auth/request-password-reset',
       headers: jsonHeaders,
       payload: { email, redirectTo: '/' },
     });
+    await h.settleMail();
+    return res;
+  };
 
   function resetToken(email: string): string {
     const mail = [...h.outbox].reverse().find((m) => m.to === email && /reset/i.test(m.subject));
@@ -678,6 +683,38 @@ describe('mail abuse limits', () => {
     await h.close();
   });
 
+  it('never exceeds the IP or global cap under concurrent requests at the boundary', async () => {
+    const h = await createHarness();
+    const limits = {
+      perRecipient: { max: 100, windowMs: 3_600_000 },
+      verificationCooldown: { max: 100, windowMs: 1000 },
+      perIpSignup: { max: 5, windowMs: 3_600_000 },
+      global: { max: 7, windowMs: 3_600_000 },
+    };
+    const sent: string[] = [];
+    const transport = nodemailer.createTransport({ jsonTransport: true });
+    transport.sendMail = (async (data: { to: string }) => {
+      sent.push(data.to);
+    }) as unknown as typeof transport.sendMail;
+    const mailer = createMailer(transport, 'fish@bas.lu', {
+      limits,
+      store: postgresHitStore(h.database, 'concurrency-secret-concurrency-secret-01'),
+      log: () => undefined,
+    });
+    const ipWaits = await Promise.all(
+      Array.from({ length: 20 }, () => mailer.consumeIp('203.0.113.50')),
+    );
+    expect(ipWaits.filter((w) => w === 0)).toHaveLength(5);
+    const results = await Promise.allSettled(
+      Array.from({ length: 20 }, (_, i) =>
+        mailer.sendVerification(`c${i}@bas.lu`, 'https://x.test/'),
+      ),
+    );
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(7);
+    expect(sent).toHaveLength(7);
+    await h.close();
+  });
+
   it('refuses mail instead of sending it unmetered when the limiter store fails', async () => {
     const h = await createHarness();
     await h.database.pool.query('drop table mail_limit_hits');
@@ -833,4 +870,92 @@ describe('input and origin checks', () => {
       expect(res.statusCode).toBe(403);
     },
   );
+});
+
+describe('password reset request does not reveal the account (#161)', () => {
+  const request = (h: Harness, email: string) =>
+    h.app.inject({
+      method: 'POST',
+      url: '/api/auth/request-password-reset',
+      headers: jsonHeaders,
+      payload: { email, redirectTo: '/' },
+    });
+
+  const observable = (res: LightMyRequestResponse) => {
+    const headers = { ...res.headers };
+    delete headers['date'];
+    delete headers['x-request-id'];
+    return { status: res.statusCode, body: res.body, headers };
+  };
+
+  const resetMails = (h: Harness) => h.outbox.filter((m) => /reset/i.test(m.subject));
+
+  it('answers identically for unknown, unverified, verified and throttled recipients', async () => {
+    const h = await createHarness({
+      mailLimits: { ...DEFAULT_MAIL_LIMITS, perIpSignup: { max: 10_000, windowMs: 60_000 } },
+    });
+    try {
+      const unverified = nextEmail();
+      await signUp(h.app, unverified);
+      const verified = await verifiedSession(h);
+
+      const unknown = observable(await request(h, nextEmail()));
+      expect(unknown.status).toBe(200);
+      expect(JSON.parse(unknown.body)).toMatchObject({ status: true });
+
+      expect(observable(await request(h, unverified))).toEqual(unknown);
+      expect(observable(await request(h, verified.email))).toEqual(unknown);
+      await h.settleMail();
+      expect(resetMails(h)).toHaveLength(2);
+
+      expect(observable(await request(h, verified.email))).toEqual(unknown);
+      await h.settleMail();
+      expect(resetMails(h)).toHaveLength(2);
+    } finally {
+      await h.close();
+    }
+  });
+
+  it('does not wait for the mail to be sent', async () => {
+    const h = await createHarness();
+    try {
+      const { email } = await verifiedSession(h);
+      const gate = h.holdMail();
+
+      const res = await request(h, email);
+      expect(res.statusCode).toBe(200);
+      await gate.sendStarted;
+      expect(resetMails(h)).toHaveLength(0);
+
+      gate.release();
+      await h.settleMail();
+      expect(resetMails(h)).toHaveLength(1);
+    } finally {
+      await h.close();
+    }
+  });
+
+  it('logs a failed send without the address or the token and still answers 200', async () => {
+    const h = await createHarness();
+    const printed: string[] = [];
+    const spy = vi
+      .spyOn(console, 'error')
+      .mockImplementation((...a: unknown[]) => void printed.push(a.map(String).join(' ')));
+    try {
+      const { email } = await verifiedSession(h);
+      const gate = h.holdMail();
+      const res = await request(h, email);
+      expect(res.statusCode).toBe(200);
+      await gate.sendStarted;
+      gate.fail(new Error(`smtp refused ${email} reset-password/secrettoken`));
+      await h.settleMail();
+      const output = printed.join('\n');
+      expect(output).toContain('reset mail failed');
+      expect(output).not.toContain(email);
+      expect(output).not.toContain('secrettoken');
+    } finally {
+      spy.mockRestore();
+      await h.close();
+    }
+  });
 });

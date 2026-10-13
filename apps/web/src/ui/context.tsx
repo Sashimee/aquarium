@@ -1,4 +1,4 @@
-import type { SignInRequest, SignUpRequest, User } from '@aquarium/shared';
+import type { Biome, SignInRequest, SignUpRequest, User } from '@aquarium/shared';
 import {
   createContext,
   useCallback,
@@ -11,6 +11,7 @@ import {
 } from 'react';
 import type { EngineEvents, EventBus } from '../engine/events';
 import type { CameraMode } from '../interaction/camera';
+import { parseBiome } from '../scene/options';
 import type {
   DecorViewState,
   InteractionEvents,
@@ -66,6 +67,12 @@ export function useCameraMode(): CameraMode {
   return useLatest(interaction, 'camera:mode-changed')?.mode ?? 'orbit';
 }
 
+export function useDemoBiome(): Biome {
+  const { interaction } = useBridge();
+  const latest = useLatest(interaction, 'demo:biome-changed');
+  return latest?.biome ?? parseBiome(window.location.search);
+}
+
 export function usePlayTool(): PlayTool {
   const { interaction } = useBridge();
   return useLatest(interaction, 'play:tool-changed')?.tool ?? 'tap';
@@ -91,6 +98,7 @@ export interface AuthState {
   user: User | null;
   signIn(input: SignInRequest): Promise<void>;
   signUp(input: SignUpRequest): Promise<void>;
+  signInWithPasskey(): Promise<void>;
   signOut(): Promise<void>;
   refresh(): Promise<void>;
 }
@@ -141,6 +149,18 @@ function AuthProvider({ children }: { children: ReactNode }) {
         setUser(signedIn);
       },
       signUp: (input) => api.signUp(input),
+      async signInWithPasskey() {
+        await api.signInWithPasskey();
+        const signedIn = await api.me();
+        if (!signedIn) {
+          throw new ApiRequestError(
+            401,
+            'unauthenticated',
+            'You were signed in, but the session was not kept. Check that your browser accepts cookies and try again.',
+          );
+        }
+        setUser(signedIn);
+      },
       async signOut() {
         await api.signOut();
         setUser(null);

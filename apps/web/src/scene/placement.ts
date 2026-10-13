@@ -39,6 +39,9 @@ const ATTEMPTS_PER_PLANT = 40;
  * Dart-throws `patch.count` plants into a disc, keeping a spacing that shrinks if the disc is too
  * crowded to honour. The result is ordered so that any prefix is also evenly spread, which is how
  * the quality tier thins a patch without moving the survivors.
+ *
+ * `scaleCeiling(rootY)` caps a plant's scale from where it roots, which keeps tall stems under the
+ * water line.
  */
 export function scatterPatch(
   patch: PlantPatch,
@@ -46,13 +49,14 @@ export function scatterPatch(
   blocked: (x: number, y: number, z: number) => boolean,
   extent: Extent,
   reach: (scale: number) => number = () => 0,
+  scaleCeiling: (rootY: number) => number = () => Infinity,
 ): PlantInstance[] {
   const rng = mulberry32(patch.seed);
   const [cx, cz] = patch.center;
   const area = Math.PI * patch.radius * patch.radius;
   let spacing = 0.7 * Math.sqrt(area / patch.count);
   const placed: PlantInstance[] = [];
-  const [minScale, maxScale] = patch.scale;
+  const [minScale, maxPatchScale] = patch.scale;
 
   let failures = 0;
   while (placed.length < patch.count) {
@@ -61,14 +65,15 @@ export function scatterPatch(
     const yaw = rng() * Math.PI * 2;
     const tiltX = (rng() - 0.5) * 2 * MAX_TILT_RAD;
     const tiltZ = (rng() - 0.5) * 2 * MAX_TILT_RAD;
-    const scale = minScale + (maxScale - minScale) * rng();
+    const drawnScale = minScale + (maxPatchScale - minScale) * rng();
     const tone = 0.88 + 0.2 * rng();
-    const margin = reach(scale);
+    const margin = reach(drawnScale);
     const limitX = Math.max(0, extent.halfLength - margin);
     const limitZ = Math.max(0, extent.halfDepth - margin);
     const x = Math.min(limitX, Math.max(-limitX, cx + Math.cos(a) * r));
     const z = Math.min(limitZ, Math.max(-limitZ, cz + Math.sin(a) * r));
     const y = ground(x, z) - ROOT_DEPTH;
+    const scale = Math.min(drawnScale, scaleCeiling(y));
     const crowded = placed.some((p) => Math.hypot(p.x - x, p.z - z) < spacing);
     const rejected = crowded || blocked(x, y, z);
     if (rejected) {

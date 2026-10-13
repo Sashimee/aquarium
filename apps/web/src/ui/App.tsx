@@ -1,9 +1,19 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import type { Biome } from '@aquarium/shared';
 import type { CameraMode } from '../interaction/camera';
-import { useAuth, useBridge, useCameraMode, useDecorState, useRedirect, useRoute } from './context';
+import {
+  useAuth,
+  useBridge,
+  useCameraMode,
+  useDecorState,
+  useDemoBiome,
+  useRedirect,
+  useRoute,
+} from './context';
 import { LifeStatus } from './LifeStatus';
 import { PlayControls } from './PlayControls';
-import { useSessionState } from './session';
+import { useOptionalSession, useSessionState } from './session';
+import { canSwitch, planSwitch, shownBiome } from './tankSwitch';
 import {
   CreditsScreen,
   Link,
@@ -28,6 +38,51 @@ function CameraControls() {
       <button type="button" aria-pressed={mode === 'dive'} onClick={() => request('dive')}>
         Dive
       </button>
+    </div>
+  );
+}
+
+const TANK_TYPES: readonly { biome: Biome; label: string }[] = [
+  { biome: 'freshwater', label: 'Freshwater' },
+  { biome: 'reef', label: 'Reef' },
+];
+
+function TankTypeSwitch({ onCreate }: { onCreate(biome: Biome): void }) {
+  const { interaction } = useBridge();
+  const session = useOptionalSession();
+  const state = useSessionState();
+  const demo = useDemoBiome();
+  const shown = shownBiome(state, demo);
+  const enabled = canSwitch(state);
+  const choose = (target: Biome) => {
+    const plan = planSwitch(state, demo, target);
+    switch (plan.kind) {
+      case 'none':
+        return;
+      case 'demo':
+        interaction.emit('demo:request-biome', { biome: plan.biome });
+        return;
+      case 'select':
+        void session?.select(plan.tankId);
+        return;
+      case 'create':
+        onCreate(plan.biome);
+        return;
+    }
+  };
+  return (
+    <div role="group" aria-label="Tank type" className="tank-type">
+      {TANK_TYPES.map(({ biome, label }) => (
+        <button
+          key={biome}
+          type="button"
+          aria-pressed={shown === biome}
+          disabled={!enabled}
+          onClick={() => choose(biome)}
+        >
+          {label}
+        </button>
+      ))}
     </div>
   );
 }
@@ -159,6 +214,7 @@ export function App() {
   const route = useRoute();
   const modal = route.name !== 'home';
   const [panelOpen, setPanelOpen] = useState(false);
+  const [newTankBiome, setNewTankBiome] = useState<Biome | null>(null);
   const decorating = useDecorState()?.active ?? false;
   const previous = useRef(route.name);
   useEffect(() => {
@@ -183,6 +239,12 @@ export function App() {
         <Link to="/" className="brand">
           Aquarium
         </Link>
+        <TankTypeSwitch
+          onCreate={(biome) => {
+            setNewTankBiome(biome);
+            setPanelOpen(true);
+          }}
+        />
         <CameraControls />
         {decorating ? null : <PlayControls />}
         <DecorToggle />
@@ -190,7 +252,10 @@ export function App() {
           type="button"
           aria-expanded={panelOpen}
           aria-controls="tank-panel"
-          onClick={() => setPanelOpen(!panelOpen)}
+          onClick={() => {
+            setNewTankBiome(null);
+            setPanelOpen(!panelOpen);
+          }}
         >
           My tank
         </button>
@@ -205,7 +270,12 @@ export function App() {
             </p>
           }
         >
-          <TankPanel open onClose={() => setPanelOpen(false)} />
+          <TankPanel
+            key={newTankBiome ?? 'default'}
+            open
+            newTankBiome={newTankBiome}
+            onClose={() => setPanelOpen(false)}
+          />
         </Suspense>
       )}
       <DecorEditor />

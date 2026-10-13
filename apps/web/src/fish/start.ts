@@ -44,6 +44,8 @@ export interface FishHandle {
   readonly sim: FishSimBridge;
   /** Engine-space homes; held until the fish are up, then forwarded. */
   setAnchors(anchors: readonly SceneAnchor[]): void;
+  /** Swaps the demo stock; held until the fish are up. */
+  setDemoBiome(biome: Biome): void;
   stop(): void;
 }
 
@@ -114,6 +116,7 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
   const ateListeners = new Set<(events: readonly FishBite[]) => void>();
   let ready: FishSystem | null = null;
   let anchors: readonly SceneAnchor[] | null = null;
+  let demoBiome = options.biome;
 
   const system = import('./FishSystem')
     .then(({ FishSystem }) =>
@@ -132,6 +135,7 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
       });
       ready = fish;
       if (anchors !== null) fish.setAnchors(anchors);
+      if (demoBiome !== options.biome) fish.setDemoBiome(demoBiome);
       tankEvents.drain((event) => fish.handle(event));
       return fish;
     })
@@ -156,6 +160,10 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
     setAnchors(next) {
       anchors = next;
       ready?.setAnchors(next);
+    },
+    setDemoBiome(next) {
+      demoBiome = next;
+      ready?.setDemoBiome(next);
     },
     stop() {
       abort.abort();

@@ -15,6 +15,13 @@ export function parseSceneOptions(search: string): SceneOptions {
   return { colliders: colliders === '1' };
 }
 
+/** The query string with `?biome=` set to `biome`, every other parameter kept. */
+export function withBiome(search: string, biome: Biome): string {
+  const params = new URLSearchParams(search);
+  params.set('biome', biome);
+  return `?${params.toString()}`;
+}
+
 /** `?biome=reef` picks the preset; anything else, including a typo, falls back to freshwater. */
 export function parseBiome(search: string): Biome {
   const value = new URLSearchParams(search).get('biome');
