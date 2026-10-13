@@ -27,7 +27,7 @@ import { apiError } from './errors.ts';
 import { loadCredits } from './credits.ts';
 import { DEFAULT_LEGAL_LIMITS, registerLegalRoutes, type LegalLimits } from './legal.ts';
 import type { IpAdmission, Mailer } from './mail.ts';
-import { memoryHitStore, RateLimiter, type Limit, type ResettableHitStore } from './rate-limit.ts';
+import { RateLimiter, type Limit, type ResettableHitStore } from './rate-limit.ts';
 import type { SpeciesCatalog } from './species.ts';
 import { DEFAULT_CARE_LIMITS, registerTankRoutes, type CareLimits } from './tanks.ts';
 
@@ -39,7 +39,7 @@ export interface AppOptions {
   database: Database;
   auth: Auth;
   mailer: Mailer;
-  signInThrottle?: { store: ResettableHitStore; limit: Limit };
+  signInThrottle: { store: ResettableHitStore; limit: Limit };
   species: SpeciesCatalog;
   clock?: Clock;
   careLimits?: CareLimits;
@@ -212,13 +212,19 @@ function isStaticAsset(pathname: string): boolean {
   return dot > 0 && STATIC_EXTENSIONS.has(last.slice(dot + 1).toLowerCase());
 }
 
+async function isUnverified(res: Response): Promise<boolean> {
+  try {
+    const body = (await res.clone().json()) as { code?: unknown };
+    return body.code === 'EMAIL_NOT_VERIFIED';
+  } catch {
+    return false;
+  }
+}
+
 export function buildApp(opts: AppOptions): FastifyInstance {
   const { indexable, webRoot, appOrigin, database, auth, mailer, logger = true } = opts;
   const clock = opts.clock ?? createClock();
-  const signInThrottle = opts.signInThrottle ?? {
-    store: memoryHitStore(),
-    limit: DEFAULT_SIGN_IN_THROTTLE,
-  };
+  const { signInThrottle } = opts;
   const app = Fastify({
     trustProxy: opts.trustedProxies,
     rewriteUrl: (req) => (req.url ?? '/').replace(/^\/{2,}/, '/'),
@@ -356,7 +362,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
         let failureKey: string | undefined;
         if (req.method === 'POST' && pathname === `${AUTH_BASE_PATH}/sign-in/email`) {
           const { email } = signInBodySchema.parse(parseJson(raw));
-          failureKey = `signin-fail:${email.trim().toLowerCase()}`;
+          failureKey = `signin-fail:${email.toLowerCase()}`;
           const wait = await signInThrottle.store.consume(failureKey, signInThrottle.limit);
           if (wait > 0) return tooMany(reply, wait);
         }
@@ -376,8 +382,13 @@ export function buildApp(opts: AppOptions): FastifyInstance {
           ...(req.method === 'POST' && raw !== undefined ? { body: raw } : {}),
         });
         const res = await mailer.runAdmitted(admission, () => auth.handler(request));
-        // 403 is "email not verified", which Better Auth only raises after the password matched.
-        if (failureKey && (res.status === 200 || res.status === 403)) {
+        // Better Auth also answers 403 before looking at the password (bad callbackURL, foreign
+        // origin, cross-site navigation), so only its EMAIL_NOT_VERIFIED, raised after the password
+        // matched, counts as a success next to 200.
+        if (
+          failureKey &&
+          (res.status === 200 || (res.status === 403 && (await isUnverified(res))))
+        ) {
           await signInThrottle.store.reset(failureKey);
         }
 

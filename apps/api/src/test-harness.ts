@@ -13,6 +13,7 @@ import { loadCatalog } from './species.ts';
 import type { LegalLimits } from './legal.ts';
 import type { CareLimits } from './tanks.ts';
 
+export const TEST_SECRET = 'testsecrettestsecrettestsecret0123456789';
 export const APP_ORIGIN = 'https://fish.test';
 
 const GENEROUS = { window: 60, max: 10_000 };
@@ -127,14 +128,12 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
 
   const mailer = createMailer(transport, 'fish@bas.lu', {
     limits: opts.mailLimits ?? (opts.limited ? DEFAULT_MAIL_LIMITS : GENEROUS_MAIL),
-    store: (opts.wrapMailStore ?? ((store) => store))(
-      postgresHitStore(database, 'testsecrettestsecrettestsecret0123456789'),
-    ),
+    store: (opts.wrapMailStore ?? ((store) => store))(postgresHitStore(database, TEST_SECRET)),
   });
   const background = new Set<Promise<void>>();
   const auth = createAuth({
     config: {
-      authSecret: 'testsecrettestsecrettestsecret0123456789',
+      authSecret: TEST_SECRET,
       appUrl: new URL(opts.appOrigin ?? APP_ORIGIN),
       trustedProxies: ['127.0.0.1'],
     },
@@ -165,7 +164,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     auth,
     mailer,
     signInThrottle: {
-      store: postgresHitStore(database, 'testsecrettestsecrettestsecret0123456789'),
+      store: postgresHitStore(database, TEST_SECRET),
       limit: opts.signInThrottle ?? { max: 10_000, windowMs: DEFAULT_SIGN_IN_THROTTLE.windowMs },
     },
     species: loadCatalog(),

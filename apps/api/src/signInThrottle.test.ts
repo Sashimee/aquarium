@@ -4,9 +4,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from './app.ts';
 import { postgresHitStore } from './rate-limit.ts';
 import { loadCatalog } from './species.ts';
-import { APP_ORIGIN, createHarness, type Harness } from './test-harness.ts';
+import { APP_ORIGIN, createHarness, TEST_SECRET, type Harness } from './test-harness.ts';
 
-const SECRET = 'testsecrettestsecrettestsecret0123456789';
 const PASSWORD = 'correct horse battery';
 const WRONG = 'wrong-password-1';
 const MAX = 3;
@@ -26,9 +25,10 @@ const signIn = (app: FastifyInstance, email: string, password: string) =>
 const observable = (res: LightMyRequestResponse) => ({
   status: res.statusCode,
   body: res.body,
-  retryAfter: res.headers['retry-after'],
   headerNames: Object.keys(res.headers).sort(),
 });
+
+const retryAfter = (res: LightMyRequestResponse) => Number(res.headers['retry-after']);
 
 describe('per-account sign-in throttle (#121)', () => {
   let h: Harness;
@@ -80,14 +80,47 @@ describe('per-account sign-in throttle (#121)', () => {
     const b = await signIn(h.app, unknown, WRONG);
     expect(a.statusCode).toBe(429);
     expect(observable(a)).toEqual(observable(b));
+    expect(Math.abs(retryAfter(a) - retryAfter(b))).toBeLessThanOrEqual(1);
   });
 
   it('lets sign-in work again once the window has passed', async () => {
     const email = await verifiedUser();
+    const [{ maxId }] = (
+      await h.database.db.execute(
+        sql`select coalesce(max(id), 0)::int as "maxId" from mail_limit_hits`,
+      )
+    ).rows as [{ maxId: number }];
     for (let i = 0; i < MAX; i++) await signIn(h.app, email, WRONG);
     expect((await signIn(h.app, email, PASSWORD)).statusCode).toBe(429);
-    await h.database.db.execute(sql`update mail_limit_hits set at = at - interval '16 minutes'`);
+    await h.database.db.execute(
+      sql`update mail_limit_hits set at = at - interval '16 minutes' where id > ${maxId}`,
+    );
     expect((await signIn(h.app, email, PASSWORD)).statusCode).toBe(200);
+  });
+
+  it('is not reset by 403s Better Auth raises before checking the password', async () => {
+    const email = await verifiedUser();
+    const junk = (extra: Record<string, string>, callbackURL?: string) =>
+      h.app.inject({
+        method: 'POST',
+        url: '/api/auth/sign-in/email',
+        headers: { 'content-type': 'application/json', ...extra },
+        payload: { email, password: WRONG, ...(callbackURL ? { callbackURL } : {}) },
+      });
+    const junkRequests = [
+      () => junk({ origin: APP_ORIGIN }, 'https://evil.example/'),
+      () => junk({ origin: 'https://evil.example' }),
+      () =>
+        junk({ origin: APP_ORIGIN, 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'navigate' }),
+    ];
+    const seen: number[] = [];
+    for (let round = 0; round < 2 * MAX && !seen.includes(429); round++) {
+      seen.push((await signIn(h.app, email, WRONG)).statusCode);
+      for (const request of junkRequests) seen.push((await request()).statusCode);
+    }
+    expect(seen).toContain(429);
+    expect(seen.filter((c) => c === 403).length).toBeGreaterThan(0);
+    expect((await signIn(h.app, email, PASSWORD)).statusCode).toBe(429);
   });
 
   it('does not let one account lock out another', async () => {
@@ -127,7 +160,7 @@ describe('per-account sign-in throttle (#121)', () => {
       database: h.database,
       auth: h.auth,
       mailer: h.mailer,
-      signInThrottle: { store: postgresHitStore(h.database, SECRET), limit: LIMIT },
+      signInThrottle: { store: postgresHitStore(h.database, TEST_SECRET), limit: LIMIT },
       species: loadCatalog(),
       logger: false,
     });
