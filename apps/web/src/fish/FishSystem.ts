@@ -560,7 +560,7 @@ export class FishSystem {
     const mode = SWIM_MODES[input.locomotion.swimmingMode];
     const lighting = {
       lightDirection: this.engine.caustics.lightDirection,
-      lightRadiance: this.engine.caustics.lightRadiance,
+      light: this.engine.caustics.hoodLight(),
     };
     batch.lods = model.lods.map((parts, level) => {
       const instances = new FishInstanceData(capacity);
