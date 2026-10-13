@@ -37,9 +37,10 @@ open to correction.
   `gait: hover`, `anemone-host` or `cave-dweller`, because an anemone or cave fish placed without
   its anchor holds a self-chosen station instead); `refuge.afterStartleS` → `shelterAfterStartleS`
   (needs `cave-dweller`); `excursion.meanIntervalS`/`leashBodyLengths` →
-  `excursionMeanIntervalS`/`hostLeashBodyLengths` (needs `anemone-host`). `station`, `refuge` and
-  `excursion` also need a gait other than `forage` and no `glass-grazer`, since those behaviours
-  take precedence over a home. Species loading **rejects** an object the sim would never read,
+  `excursionMeanIntervalS`/`hostLeashBodyLengths` (needs `anemone-host`). `station` and `excursion`
+  also need a gait other than `forage` and no `glass-grazer`, since those behaviours take
+  precedence over a home. `refuge` does not: every `cave-dweller` holds off feeding for
+  `shelterAfterStartleS` after a startle, whatever its gait. Species loading **rejects** an object the sim would never read,
   because it would otherwise be ignored silently and a warning in a worker is easy to miss. It also rejects a min/max pair that is out of order after
   the merge, such as `grazing: { minS: 50 }` against the default `grazeMaxS` of 4.
 - **Feeding:** every feeding tunable is in `FEEDING` (`src/feeding.ts`). Food arrives each tick

@@ -181,12 +181,7 @@ function parseTraitParams(
       homed,
       'gait "hover" or an anemone or cave home, without gait "forage" or trait "glass-grazer"',
     ],
-    [
-      'refuge',
-      refuge,
-      homed && traits.has('cave-dweller'),
-      'trait "cave-dweller" without gait "forage" or trait "glass-grazer"',
-    ],
+    ['refuge', refuge, traits.has('cave-dweller'), 'trait "cave-dweller"'],
     [
       'excursion',
       excursion,

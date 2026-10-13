@@ -611,6 +611,17 @@ describe('per-trait parameters', () => {
       behaviour: { ...clownfish.behaviour, station: { radiusBodyLengths: 2 } },
     });
     expect(homed.stationRadiusBodyLengths).toBe(2);
+    for (const sheltering of [bronzeCorydoras, otocinclus]) {
+      const s = toSimSpecies({
+        ...sheltering,
+        behaviour: {
+          ...sheltering.behaviour,
+          traits: [...sheltering.behaviour.traits, 'cave-dweller'],
+          refuge: { afterStartleS: 10 },
+        },
+      });
+      expect(s.shelterAfterStartleS).toBe(10);
+    }
   });
 
   it('rejects a min/max pair that is out of order once merged with the defaults', () => {
@@ -663,16 +674,6 @@ describe('per-trait parameters', () => {
     expect(() => toSimSpecies(tetra({ station: { radiusBodyLengths: 2 } }))).toThrow(
       /behaviour.station is set but needs gait "hover" or an anemone or cave home/,
     );
-    expect(() =>
-      toSimSpecies({
-        ...bronzeCorydoras,
-        behaviour: {
-          ...bronzeCorydoras.behaviour,
-          traits: ['cave-dweller'],
-          refuge: { afterStartleS: 10 },
-        },
-      }),
-    ).toThrow(/behaviour.refuge is set but needs trait "cave-dweller" without gait "forage"/);
     expect(() => toSimSpecies(tetra({ refuge: { afterStartleS: 10 } }))).toThrow(
       /needs trait "cave-dweller"/,
     );
