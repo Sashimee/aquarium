@@ -17,7 +17,7 @@ import { decorMatrix } from './hardscape';
 export const SWAY_ATTRIBUTE = '_sway';
 
 /** Whole waves per current wrap period, so the undulation loops without a visible seam. */
-const WAVES_PER_WRAP = 12;
+export const WAVES_PER_WRAP = 12;
 const WAVE_METRES = 0.012;
 /** Seconds of current a tentacle tip leans into. */
 const LEAN_SECONDS = 0.35;
