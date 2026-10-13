@@ -28,7 +28,7 @@ import {
 } from './food.ts';
 import { FishState } from './snapshot.ts';
 import { toSimSpecies, type SpeciesInput } from './species.ts';
-import { STEERING, World, type FishSpawn, type WorldConfig } from './world.ts';
+import { STEERING, STEP_DT, World, type FishSpawn, type WorldConfig } from './world.ts';
 
 const LONG = 60_000;
 
@@ -482,6 +482,39 @@ describe('feeding AI', { timeout: LONG }, () => {
     expect(new Set(bites.map((b) => b.fishId)).size).toBe(w.count);
     for (const b of bites) expect(b.portion).toBeLessThanOrEqual(FEEDING.grazeBitePortion + 1e-12);
     expect(grazing).toBeGreaterThan(300);
+  });
+
+  it('lets two tangs graze one clip side by side, taking bites by turns', () => {
+    // Bites within 2 s of the other tang's. Kept a full separation zone apart, one tang holds
+    // the clip and the other hangs back: on seeds 1 and 6 they never once bite together.
+    const window = 2 / STEP_DT;
+    for (let seed = 1; seed <= 8; seed++) {
+      const w = new World({
+        seed,
+        tank: REEF_TANK,
+        species: ARCHETYPES,
+        decor: REEF_DECOR,
+        anchors: REEF_ANCHORS,
+        fish: spawnMany(yellowTang.id, 2),
+      });
+      const rain = new FoodRain(REEF_TANK);
+      const nori = rain.place('nori', 0.85, 0.35, 0);
+      const last = [-Infinity, -Infinity];
+      let together = 0;
+      for (let t = 0; t < 2700; t++) {
+        rain.feed(w);
+        w.step();
+        const events = w.takeAteEvents();
+        rain.eat(events);
+        for (const e of events) {
+          if (e.foodId !== nori) continue;
+          const i = w.fishIds.indexOf(e.fishId);
+          last[i] = t;
+          if (t - (last[1 - i] ?? -Infinity) < window) together++;
+        }
+      }
+      expect(together, `seed ${seed}`).toBeGreaterThanOrEqual(20);
+    }
   });
 
   it('has a betta take flakes floating at the surface', () => {

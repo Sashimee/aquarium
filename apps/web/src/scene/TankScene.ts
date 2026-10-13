@@ -1,4 +1,5 @@
 import type { Material, MeshStandardNodeMaterial, Texture } from 'three/webgpu';
+import { uniform } from 'three/tsl';
 import type { Biome, DecorItem, PlantPatch, PresetLayout } from '@aquarium/shared';
 import type { Engine } from '../engine/Engine';
 import type { Tier, TierSettings } from '../engine/quality/tiers';
@@ -24,9 +25,8 @@ import {
 } from './euphyllia';
 import { ColliderField, type CapsuleCollider, type Collider } from './colliders';
 import { CurrentField, type CurrentParameters } from './current';
-import { uniform } from 'three/tsl';
 import { fluorescenceLevel } from './coralStyle';
-import { fitCollider, Hardscape, HARDSCAPE_KINDS } from './hardscape';
+import { createCoralGlowNode, fitCollider, Hardscape, HARDSCAPE_KINDS } from './hardscape';
 import { applyBiomeLighting } from './lighting';
 import type { SceneOptions } from './options';
 import { ColliderOverlay } from './overlay';
@@ -104,6 +104,7 @@ export class TankScene {
   readonly colliders: ColliderField;
 
   private readonly fluorescence = uniform(0);
+  private readonly coralGlowNode = createCoralGlowNode(this.fluorescence);
   private hardscape: Hardscape | null = null;
   private anemones: AnemoneGroup[] = [];
   private euphyllias: EuphylliaGroup[] = [];
@@ -347,7 +348,7 @@ export class TankScene {
         );
       }
     }
-    const hardscape = new Hardscape(this.preset.biome, this.fluorescence);
+    const hardscape = new Hardscape(this.preset.biome, this.coralGlowNode);
     for (const { item } of next) {
       const entry = catalog.get(item.assetId);
       const model = await this.library.load(item.assetId, key.hardscapeLod, key.textureSize);
@@ -439,7 +440,7 @@ export class TankScene {
    * (`generation` is stale) or the scene was disposed; a dropped build frees what it made.
    */
   private async rebuildVisuals(key: VisualKey, isStale: () => boolean): Promise<boolean> {
-    const hardscape = new Hardscape(this.preset.biome, this.fluorescence);
+    const hardscape = new Hardscape(this.preset.biome, this.coralGlowNode);
     const groups: PlantGroup[] = [];
     const anemones: AnemoneGroup[] = [];
     const euphyllias: EuphylliaGroup[] = [];

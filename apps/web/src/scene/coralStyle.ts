@@ -76,7 +76,7 @@ const GLOW: Readonly<Record<string, readonly Rgb[]>> = {
 };
 
 /** Share of the absorbed blue that comes back out as visible light. */
-const FLUORESCENCE_YIELD = 0.1;
+const FLUORESCENCE_YIELD = 0.08;
 
 /** Fluorescence exists only on a reef; freshwater has no coral and gets no glow. */
 export function coralGlow(biome: Biome, assetId: string, key: number): Color | null {
@@ -87,9 +87,10 @@ export function coralGlow(biome: Biome, assetId: string, key: number): Color | n
 }
 
 /**
- * Emission scale for a blue excitation radiance. The square root keeps the moonlight, which is
- * about a tenth of the day's actinic, visible at night while the day does not blow out.
+ * Emission scale for a blue excitation radiance. The 0.4 power compresses the day-to-night range
+ * (about 10x in light) to about 2.5x in glow: moonlight stays clearly visible while the daytime
+ * actinic, which the eye sees against bright water, stays subtle.
  */
 export function fluorescenceLevel(excitation: number): number {
-  return FLUORESCENCE_YIELD * Math.sqrt(Math.max(excitation, 0));
+  return FLUORESCENCE_YIELD * Math.max(excitation, 0) ** 0.4;
 }
