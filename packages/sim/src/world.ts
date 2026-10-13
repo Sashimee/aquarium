@@ -42,6 +42,9 @@ export const STEERING = {
   avoidMemoryS: 1.5,
   avoidMaxSwingCos: -0.2,
   slideMinHorizontal: 0.2,
+  slideWishFraction: 0.25,
+  standOffPasses: 3,
+  standOffFacingFraction: 0.05,
   avoidClosingGain: 2,
   avoidMinSpeedFraction: 0.5,
   headingHoldFraction: 0.1,
@@ -571,10 +574,55 @@ export class World {
     const vyLimit = cruiseBase * STEERING.depthMaxSpeedFraction;
     dy += clamp((bandTarget - py) / STEERING.depthTauS, -vyLimit, vyLimit);
 
+    const nh = this.normal;
+    const np = this.probeNormal;
+    const sdf = this.steerSdf[(plan.floor ? 1 : 0) + (plan.surface ? 2 : 0)] ?? this.sceneSdf;
+    let seekX = plan.seekX;
+    const seekY = plan.seekY;
+    let seekZ = plan.seekZ;
+    if (plan.seekWeight > 0 && plan.arrival > 0) {
+      // Food against glass or rock is approached from open water: the fish makes for a stand-off
+      // point `arrival` out from the food, where it fits facing the food with its mouth in reach,
+      // not for the food itself, which would leave its snout pressed to the pane as it turns.
+      // Pushing off each surface in turn finds the open side, diagonal out of a corner. Only the
+      // horizontal push is used, so food on the sand stays directly below a forager's mouth.
+      for (let pass = 0; pass < STEERING.standOffPasses; pass++) {
+        const room = sdf.sample(seekX, seekY, seekZ, np);
+        const hx = np[0] ?? 0;
+        const hz = np[2] ?? 0;
+        const h = Math.hypot(hx, hz);
+        if (room >= plan.arrival || h < 1e-6) break;
+        const push = (plan.arrival - room) / h;
+        seekX += hx * push;
+        seekZ += hz * push;
+      }
+      const ox = seekX - plan.seekX;
+      const oz = seekZ - plan.seekZ;
+      const out = Math.hypot(ox, oz);
+      if (out > 1e-9) {
+        // Halfway round to the fish's own bearing, so fish sharing a clip hold different spots.
+        const bx = px - plan.seekX;
+        const bz = pz - plan.seekZ;
+        const b = Math.hypot(bx, bz);
+        let ux = ox / out + (b > 1e-9 ? bx / b : 0);
+        let uz = oz / out + (b > 1e-9 ? bz / b : 0);
+        const u = Math.hypot(ux, uz);
+        if (u < 1e-6) {
+          ux = ox / out;
+          uz = oz / out;
+        } else {
+          ux /= u;
+          uz /= u;
+        }
+        seekX = plan.seekX + ux * plan.arrival;
+        seekZ = plan.seekZ + uz * plan.arrival;
+      }
+    }
+    const standOff = seekX !== plan.seekX || seekZ !== plan.seekZ;
     if (plan.seekWeight > 0) {
-      let qx = (plan.seekX - px) / plan.seekTau;
-      let qy = (plan.seekY - py) / plan.seekTau;
-      let qz = (plan.seekZ - pz) / plan.seekTau;
+      let qx = (seekX - px) / plan.seekTau;
+      let qy = (seekY - py) / plan.seekTau;
+      let qz = (seekZ - pz) / plan.seekTau;
       const ql = Math.hypot(qx, qy, qz);
       if (ql > plan.seekSpeed) {
         const s = plan.seekSpeed / ql;
@@ -582,13 +630,25 @@ export class World {
         qy *= s;
         qz *= s;
       }
+      if (standOff) {
+        // At the stand-off the fish faces the food it is working. Having drifted a little past
+        // the point it eases sideways but never backs away, which would turn its tail to the
+        // food and set it circling.
+        const fx0 = plan.seekX - px;
+        const fz0 = plan.seekZ - pz;
+        const f0 = Math.hypot(fx0, fz0);
+        if (f0 > 1e-9) {
+          const back = (qx * fx0 + qz * fz0) / f0;
+          const face = (STEERING.standOffFacingFraction * cruiseBase - Math.min(back, 0)) / f0;
+          qx += fx0 * face;
+          qz += fz0 * face;
+        }
+      }
       dx += qx * plan.seekWeight;
       dy += qy * plan.seekWeight;
       dz += qz * plan.seekWeight;
     }
 
-    const nh = this.normal;
-    const np = this.probeNormal;
     // Plants are soft: they push a fish aside and slow it, but never block it.
     let plantSlow = 1;
     if (this.softDecor.size > 0) {
@@ -607,14 +667,19 @@ export class World {
 
     // Containment (Reynolds 1999): react to the surface ahead along the path, plus a short-range
     // safety term for surfaces the probe misses (beside or behind while turning).
-    const sdf = this.steerSdf[(plan.floor ? 1 : 0) + (plan.surface ? 2 : 0)] ?? this.sceneSdf;
     const dHere = sdf.sample(px, py, pz, nh);
     const verticalHere = Math.abs(nh[1] ?? 0);
     const nose = (BEHAVIOUR.bodySampleOffsets[0] ?? 0) * length;
     const noseRoom =
       sdf.sample(px + fx * nose, py + fy * nose, pz + fz * nose, np) - (this.thickness[i] ?? 0);
     this.cramped[i] = noseRoom < length * STEERING.crampedClearanceBodyLengths ? 1 : 0;
-    const probe = 0.5 * length + v * STEERING.avoidLookaheadS + v / this.turnRateLimit(i, sp, plan);
+    let probe = 0.5 * length + v * STEERING.avoidLookaheadS + v / this.turnRateLimit(i, sp, plan);
+    // A fish closing on its stand-off point stops there, so glass or rock beyond it is not on
+    // its path; looking further turns it away from a nori clip on the pane or food in a corner
+    // every time it comes near.
+    if (plan.seekWeight > 0 && plan.arrival > 0) {
+      probe = Math.min(probe, Math.max(nose, Math.hypot(seekX - px, seekY - py, seekZ - pz)));
+    }
     const dProbe = sdf.sample(px + fx * probe, py + fy * probe, pz + fz * probe, np);
     const probeMargin = radius + length * STEERING.avoidMarginBodyLengths * comfort;
     // Only a path that closes on a surface is a threat; a probe that is merely near a wall the
@@ -683,7 +748,21 @@ export class World {
           }
           // Within one engagement the slide direction stays continuous as the wall normal turns
           // (pane to corner to next pane); only a fresh engagement picks a side from the heading.
-          const reference = px0 !== 0 || pz0 !== 0 ? tx * px0 + tz * pz0 : fx * tx + fz * tz;
+          // Closing on food, a clear wish along the wall (further along the pane, into the
+          // corner) overrides both: sliding against it parks a fish beside food it cannot turn
+          // back to. Cruising keeps continuity, or a wandering heading flips the slide.
+          const along = dx * tx + dz * tz;
+          const wished =
+            plan.arrival > 0 && Math.abs(along) > STEERING.slideWishFraction * cruiseBase;
+          if (wished && Math.sign(along) * (tx * px0 + tz * pz0) < 0) {
+            px0 = 0;
+            pz0 = 0;
+          }
+          const reference = wished
+            ? along
+            : px0 !== 0 || pz0 !== 0
+              ? tx * px0 + tz * pz0
+              : fx * tx + fz * tz;
           let side = Math.abs(reference) > 1e-6 ? Math.sign(reference) : nextWt >= 0 ? 1 : -1;
           // A slide that runs into a narrowing slot (glass on one flank, rock closing in on the
           // other) only wedges the fish deeper; once its snout is cramped it turns back to where

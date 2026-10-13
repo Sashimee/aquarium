@@ -479,6 +479,7 @@ describe('feeding AI', { timeout: LONG }, () => {
     });
     const bites = events.filter((e) => e.foodId === nori);
     expect(bites.length).toBeGreaterThan(5);
+    expect(new Set(bites.map((b) => b.fishId)).size).toBe(w.count);
     for (const b of bites) expect(b.portion).toBeLessThanOrEqual(FEEDING.grazeBitePortion + 1e-12);
     expect(grazing).toBeGreaterThan(300);
   });
