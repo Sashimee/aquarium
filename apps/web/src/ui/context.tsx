@@ -1,4 +1,4 @@
-import type { SignInRequest, SignUpRequest, User } from '@aquarium/shared';
+import type { Biome, SignInRequest, SignUpRequest, User } from '@aquarium/shared';
 import {
   createContext,
   useCallback,
@@ -11,6 +11,7 @@ import {
 } from 'react';
 import type { EngineEvents, EventBus } from '../engine/events';
 import type { CameraMode } from '../interaction/camera';
+import { parseBiome } from '../scene/options';
 import type {
   DecorViewState,
   InteractionEvents,
@@ -53,6 +54,13 @@ export function useCameraMode(): CameraMode {
   const [mode, setMode] = useState<CameraMode>('orbit');
   useEffect(() => interaction.on('camera:mode-changed', (e) => setMode(e.mode)), [interaction]);
   return mode;
+}
+
+export function useDemoBiome(): Biome {
+  const { interaction } = useBridge();
+  const [biome, setBiome] = useState<Biome>(() => parseBiome(window.location.search));
+  useEffect(() => interaction.on('demo:biome-changed', (e) => setBiome(e.biome)), [interaction]);
+  return biome;
 }
 
 export function usePlayTool(): PlayTool {

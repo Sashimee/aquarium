@@ -16,7 +16,15 @@ import { useActiveTank, useSessionState, useOptionalSession, useSpeciesNames } f
 
 const BIOME_LABEL: Record<Biome, string> = { freshwater: 'Freshwater', reef: 'Reef' };
 
-export function TankPanel({ open, onClose }: { open: boolean; onClose(): void }) {
+export function TankPanel({
+  open,
+  onClose,
+  newTankBiome = null,
+}: {
+  open: boolean;
+  onClose(): void;
+  newTankBiome?: Biome | null;
+}) {
   const state = useSessionState();
   if (!open) return null;
   return (
@@ -27,12 +35,12 @@ export function TankPanel({ open, onClose }: { open: boolean; onClose(): void })
           Close
         </button>
       </div>
-      <PanelBody state={state} />
+      <PanelBody state={state} newTankBiome={newTankBiome} />
     </section>
   );
 }
 
-function PanelBody({ state }: { state: SessionState }) {
+function PanelBody({ state, newTankBiome }: { state: SessionState; newTankBiome: Biome | null }) {
   const session = useOptionalSession();
   const { user } = useAuth();
   const tank = useActiveTank();
@@ -69,15 +77,23 @@ function PanelBody({ state }: { state: SessionState }) {
       </div>
     );
   }
-  if (!tank) return <FirstTank session={session} state={state} />;
-  return <TankSections session={session} state={state} tank={tank} />;
+  if (!tank) return <FirstTank session={session} state={state} biome={newTankBiome} />;
+  return <TankSections session={session} state={state} tank={tank} newTankBiome={newTankBiome} />;
 }
 
-function FirstTank({ session, state }: { session: TankSession; state: SessionState }) {
+function FirstTank({
+  session,
+  state,
+  biome,
+}: {
+  session: TankSession;
+  state: SessionState;
+  biome: Biome | null;
+}) {
   return (
     <div>
       <p>You have no tank yet. Start one and add your first fish.</p>
-      <NewTankForm session={session} state={state} />
+      <NewTankForm session={session} state={state} initialBiome={biome ?? 'freshwater'} />
     </div>
   );
 }
@@ -86,16 +102,18 @@ function TankSections({
   session,
   state,
   tank,
+  newTankBiome,
 }: {
   session: TankSession;
   state: SessionState;
   tank: Tank;
+  newTankBiome: Biome | null;
 }) {
   const names = useSpeciesNames();
   const water = waterReport(tank.water, tank, state.species);
   return (
     <>
-      <TankSwitcher session={session} state={state} tank={tank} />
+      <TankSwitcher session={session} state={state} tank={tank} newTankBiome={newTankBiome} />
       <Care session={session} state={state} water={water} />
       <Shop session={session} state={state} tank={tank} />
       <Bag session={session} state={state} />
@@ -109,13 +127,15 @@ function TankSwitcher({
   session,
   state,
   tank,
+  newTankBiome,
 }: {
   session: TankSession;
   state: SessionState;
   tank: Tank;
+  newTankBiome: Biome | null;
 }) {
   const selectId = useId();
-  const [adding, setAdding] = useState(false);
+  const [adding, setAdding] = useState(newTankBiome !== null);
   const [renaming, setRenaming] = useState(false);
   return (
     <section aria-labelledby={`${selectId}-h`} className="block">
@@ -154,7 +174,14 @@ function TankSwitcher({
           }}
         />
       )}
-      {adding && <NewTankForm session={session} state={state} onDone={() => setAdding(false)} />}
+      {adding && (
+        <NewTankForm
+          session={session}
+          state={state}
+          initialBiome={newTankBiome ?? 'freshwater'}
+          onDone={() => setAdding(false)}
+        />
+      )}
     </section>
   );
 }
@@ -204,16 +231,18 @@ function RenameForm({
 function NewTankForm({
   session,
   state,
+  initialBiome,
   onDone,
 }: {
   session: TankSession;
   state: SessionState;
+  initialBiome: Biome;
   onDone?: () => void;
 }) {
   const id = useId();
-  const [biome, setBiome] = useState<Biome>('freshwater');
+  const [biome, setBiome] = useState<Biome>(initialBiome);
   const taken = state.tanks.map((t) => t.name);
-  const [name, setName] = useState(() => suggestTankName('freshwater', taken));
+  const [name, setName] = useState(() => suggestTankName(initialBiome, taken));
   const [problem, setProblem] = useState<string | null>(null);
 
   const submit = (e: FormEvent) => {

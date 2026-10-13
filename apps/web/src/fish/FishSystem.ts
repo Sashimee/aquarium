@@ -394,6 +394,16 @@ export class FishSystem {
     this.requestSync();
   }
 
+  /** Replaces the demo stock with `biome`'s; a loaded saved tank is left alone. */
+  setDemoBiome(biome: Biome): void {
+    if (this.disposed) return;
+    const demo = demoTank(this.options.tank, this.seed, biome);
+    if (this.roster.setDemo(demo.config.fish)) this.stopWorld();
+    this.prune();
+    this.materialize();
+    this.requestSync();
+  }
+
   /** The id the rest of the app uses for a sim fish: its server id while a saved tank is shown. */
   serverIdOf(simId: string): string | undefined {
     return this.roster.serverIdOf(simId);
