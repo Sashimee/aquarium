@@ -105,6 +105,7 @@ export class Engine {
   readonly quality: QualityManager;
 
   private readonly clock: number | null;
+  private readonly showStats: boolean;
   private daylightLevel = 1;
   private daylightCheckedAt = -Infinity;
   private daylightAnnounced = false;
@@ -160,6 +161,7 @@ export class Engine {
   ) {
     const dimensions = config.tank ?? DEFAULT_TANK;
     this.clock = config.options.clock;
+    this.showStats = config.options.stats;
     this.gpuTiming = renderer.hasFeature('timestamp-query');
     this.quality = new QualityManager(events, {
       gpuTiming: this.gpuTiming,
@@ -239,6 +241,7 @@ export class Engine {
       tier: this.quality.tier,
       gpuTiming: this.gpuTiming,
     });
+    if (this.showStats) void this.loadStatsOverlay();
   }
 
   async dispose(): Promise<void> {
@@ -334,6 +337,16 @@ export class Engine {
       this.cleanup.add(() => this.effects.dispose());
     } catch (cause) {
       this.reportError('Render effects failed to load; continuing without them', cause);
+    }
+  }
+
+  private async loadStatsOverlay(): Promise<void> {
+    try {
+      const { createStatsOverlay } = await import('./statsOverlay');
+      if (this.disposed) return;
+      this.cleanup.add(createStatsOverlay(this, document.body));
+    } catch (cause) {
+      this.reportError('The ?stats=1 readout failed to load', cause);
     }
   }
 

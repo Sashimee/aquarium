@@ -10,6 +10,8 @@ export interface EngineOptions {
   adaptive: boolean;
   /** Pins the tank clock to these minutes after midnight; null follows the local time. */
   clock: number | null;
+  /** Shows the on-device performance readout. */
+  stats: boolean;
 }
 
 const BACKENDS: readonly BackendPreference[] = ['auto', 'webgpu', 'webgl'];
@@ -18,7 +20,7 @@ function isBackend(value: string): value is BackendPreference {
   return (BACKENDS as readonly string[]).includes(value);
 }
 
-/** Reads `?backend=`, `?tier=`, `?adaptive=` and `?clock=` from a URL query string. */
+/** Reads `?backend=`, `?tier=`, `?adaptive=`, `?clock=` and `?stats=` from a URL query string. */
 export function parseEngineOptions(search: string): EngineOptions {
   const params = new URLSearchParams(search);
 
@@ -40,6 +42,17 @@ export function parseEngineOptions(search: string): EngineOptions {
   const clockParam = params.get('clock');
   const clock = clockParam === null ? null : parseClock(clockParam);
 
+  const statsParam = params.get('stats');
+  if (statsParam !== null && statsParam !== '0' && statsParam !== '1') {
+    throw new Error(`Unknown ?stats=${statsParam}; use 0 or 1`);
+  }
+
   const tier = tierParam ?? null;
-  return { backend, tier, adaptive: tier === null && adaptiveParam !== '0', clock };
+  return {
+    backend,
+    tier,
+    adaptive: tier === null && adaptiveParam !== '0',
+    clock,
+    stats: statsParam === '1',
+  };
 }
