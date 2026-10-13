@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import shippedIndex from '../../public/assets/index.json';
 import { parseFishAssets } from './assetIndex';
-import { DEMO_SPECIES } from './demoStock';
+import { DEMO_STOCKS } from './demoStock';
 import { renderProfile } from './profiles';
 
 function fish(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -58,7 +58,7 @@ describe('parseFishAssets', () => {
 
   it('parses the shipped index and has a model for every demo species', () => {
     const entries = parseFishAssets(shippedIndex);
-    for (const species of DEMO_SPECIES) {
+    for (const species of Object.values(DEMO_STOCKS).flatMap((s) => s.species)) {
       const entry = entries.get(renderProfile(species.id).assetId);
       expect(entry, species.id).toBeDefined();
       expect(entry?.lodFiles.length).toBeGreaterThanOrEqual(1);
