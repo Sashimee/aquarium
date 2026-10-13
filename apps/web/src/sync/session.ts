@@ -1,6 +1,6 @@
 import type { AwaySummary, Biome, CareAction, FoodType, Tank, User } from '@aquarium/shared';
 import type { EventBus } from '../engine/events';
-import { layoutKey } from '../interaction/decor/layout';
+import { layoutKey } from '../interaction/decor/key';
 import type { InteractionEvents } from '../interaction/events';
 import type { ApiClient } from '../ui/api';
 import { AteUploader, type AteUploaderOptions } from './ateUploader';

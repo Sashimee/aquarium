@@ -256,6 +256,36 @@ describe('DecorMode', () => {
     expect(h.layouts.length).toBe(before);
   });
 
+  it('leaves decorate mode when another tank loads and never saves into it', async () => {
+    const h = harness([]);
+    h.load('t1');
+    h.mode.start();
+    h.bus.emit('decor:command', { type: 'add', assetId: 'boulder-01' });
+    await settle();
+    const savedForA = h.layouts.length;
+    h.load('t2');
+    expect(h.mode.active).toBe(false);
+    expect(h.modes).toEqual([true, false]);
+    h.mode.stop();
+    h.bus.emit('decor:command', { type: 'add', assetId: 'boulder-01' });
+    await settle();
+    expect(h.layouts).toHaveLength(savedForA);
+    expect(h.layouts.every((l) => l.tankId === 't1')).toBe(true);
+  });
+
+  it('leaves decorate mode when the tank is unloaded on sign-out', async () => {
+    const h = harness([]);
+    h.load('t1');
+    h.mode.start();
+    h.bus.emit('decor:command', { type: 'add', assetId: 'boulder-01' });
+    await settle();
+    const savedForA = h.layouts.length;
+    h.bus.emit('tank:unloaded', { tankId: 't1' });
+    expect(h.mode.active).toBe(false);
+    expect(h.modes).toEqual([true, false]);
+    expect(h.layouts).toHaveLength(savedForA);
+  });
+
   it('thins out collider updates while a piece is being dragged', () => {
     const h = harness([item('boulder-01', 0, 0)]);
     h.mode.start();

@@ -7,7 +7,8 @@ import type { InteractionEvents } from '../events';
 import { SavedDecor } from './binding';
 import { item, must } from './fixtures';
 import catalog from '../../../public/assets/index.json';
-import { hasVacationFeeder, layoutKey } from './layout';
+import { layoutKey } from './key';
+import { hasVacationFeeder } from './layout';
 import { VACATION_FEEDER_ASSET_ID } from './spec';
 import { DecorWorld, type DecorScenePort } from './world';
 

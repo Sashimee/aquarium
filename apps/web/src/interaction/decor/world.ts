@@ -4,7 +4,8 @@ import type { EventBus } from '../../engine/events';
 import type { CatalogEntry } from '../../scene/assets';
 import type { InteractionEvents } from '../events';
 import { collidersFor } from './colliders';
-import { composeLayout, layoutKey, numberPieces, splitLayout, type Piece } from './layout';
+import { layoutKey } from './key';
+import { composeLayout, numberPieces, splitLayout, type Piece } from './layout';
 import { FEEDER_SPEC, specsFromCatalog, type DecorSpec } from './spec';
 
 /** What the decor layer needs from the tank scene; `TankScene` satisfies it. */

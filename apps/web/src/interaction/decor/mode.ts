@@ -38,6 +38,7 @@ export class DecorMode {
   private lastColliderSync = 0;
   private stopFrame: (() => void) | null = null;
   private stopCommands: (() => void) | null = null;
+  private tankId: string | null = null;
   private wasBusy = false;
   private readonly raycaster = new Raycaster();
   private readonly ndc = new Vector2();
@@ -75,14 +76,25 @@ export class DecorMode {
       ground: (x, z) => world.groundHeight(x, z),
       pieces: world.pieces,
     });
-    this.stopCommands = interaction.on('decor:command', (command) => this.command(command));
+    this.tankId = saved.tankId;
+    const offs = [
+      interaction.on('decor:command', (command) => this.command(command)),
+      interaction.on('tank:loaded', ({ tankId }) => {
+        if (tankId !== this.tankId) this.stop(false);
+      }),
+      interaction.on('tank:unloaded', () => {
+        if (this.tankId !== null) this.stop(false);
+      }),
+    ];
+    this.stopCommands = () => offs.forEach((off) => off());
     this.stopFrame = engine.onFrame((deltaS) => this.frame(deltaS));
     interaction.emit('decor:mode-changed', { active: true });
     this.publish();
     return true;
   }
 
-  stop(): void {
+  /** `keep` is false when the tank under the editor went away, so its pieces must not be saved anywhere. */
+  stop(keep = true): void {
     const editor = this.editor;
     if (!editor) return;
     this.pointerUp();
@@ -90,9 +102,11 @@ export class DecorMode {
     this.stopCommands?.();
     this.stopFrame = null;
     this.stopCommands = null;
-    const final = editor.settleNow();
-    for (const piece of final) this.deps.world.preview(piece);
-    this.commit(editor);
+    if (keep) {
+      const final = editor.settleNow();
+      for (const piece of final) this.deps.world.preview(piece);
+      this.commit(editor);
+    }
     this.editor = null;
     this.deps.interaction.emit('decor:mode-changed', { active: false });
     this.deps.interaction.emit('decor:state', { ...this.emptyState(), active: false });
@@ -222,8 +236,8 @@ export class DecorMode {
   private commit(editor: DecorEditor): void {
     const { world, saved, interaction } = this.deps;
     world.emitColliders();
-    const tankId = saved.tankId;
-    if (tankId) {
+    const tankId = this.tankId;
+    if (tankId && saved.tankId === tankId) {
       interaction.emit('decor:layout', { tankId, layout: world.layout(editor.restingPieces()) });
     }
   }
