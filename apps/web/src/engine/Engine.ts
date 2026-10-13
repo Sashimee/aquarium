@@ -19,6 +19,7 @@ import { qualityProfile } from './quality/profile';
 import { QualityManager } from './quality/QualityManager';
 import { renderPixelRatio } from './quality/tiers';
 import { DEFAULT_TANK, type TankDimensions, waterBounds } from './tank/dimensions';
+import { meanSubstrateHeight } from './tank/substrate';
 import { Tank } from './tank/Tank';
 import { Caustics } from './water/caustics';
 import { InteriorLight } from './water/interior';
@@ -206,7 +207,13 @@ export class Engine {
     this.medium = new WaterMedium(waterBounds(dimensions), config.water ?? DEFAULT_WATER);
     this.caustics = new Caustics(this.medium);
     cleanup.add(() => this.caustics.dispose());
-    this.interior = new InteriorLight(this.medium, this.caustics, roomLighting.initial);
+    this.interior = new InteriorLight(
+      this.medium,
+      this.caustics,
+      roomLighting.initial,
+      this.substrateAlbedo,
+      meanSubstrateHeight(dimensions),
+    );
     this.tank = new Tank(dimensions, this.medium, roomLighting.initial, this.interior);
     cleanup.add(() => this.tank.dispose());
     this.scene.add(this.tank.group);
@@ -329,10 +336,10 @@ export class Engine {
     this.caustics.lightDirection.value.copy(hood.position).sub(hood.target.position).normalize();
     const room = ROOM_AT_NIGHT + (1 - ROOM_AT_NIGHT) * day;
     this.interior.roomLevel.value = room;
-    this.interior.substrateAlbedo.value.copy(this.substrateAlbedo);
     this.scene.backgroundIntensity = this.roomBackgroundIntensity * room;
     this.medium.hoodInScatter.value.copy(radiance).multiplyScalar(1 / (4 * Math.PI));
     this.medium.roomInScatter.value.copy(this.ambientScatter).multiplyScalar(room);
+    this.interior.update();
   }
 
   private registerQualityFeatures(): void {

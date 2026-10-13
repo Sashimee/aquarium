@@ -51,6 +51,8 @@ const PATTERN_GAIN = 6.25;
 const BAKE_PERIOD_CELLS = 8;
 const BAKE_SIZE = 512;
 const DISPERSION = 0.015;
+/** Floor on the light's elevation cosine, so a grazing hood does not stretch the slant path without bound. */
+const MIN_COS_LIGHT = 0.2;
 
 const METHOD_ID = { texture: 0, single: 1, layered: 2, dispersion: 3 } as const;
 
@@ -169,7 +171,7 @@ export class Caustics {
     const { medium } = this;
     const depth = medium.boxMax.y.sub(p.y).toVar();
     const inWater = medium.submerged(p).toVar();
-    const cosLight = max(this.lightDirection.y, 0.2);
+    const cosLight = max(this.lightDirection.y, MIN_COS_LIGHT);
     const slant = depth.div(cosLight).toVar();
     const transmittance = exp(medium.extinction().mul(slant.mul(inWater)).negate());
     const light = transmittance.mul(medium.hoodSpread(depth.mul(inWater))).mul(this.lightRadiance);
@@ -179,6 +181,25 @@ export class Caustics {
   /** The hood's light at `p` without the caustic pattern, for effects shaded by hand. */
   hoodLight(p: Node<'vec3'> = positionWorld): Node<'vec3'> {
     return Fn(() => this.reach(p).light)();
+  }
+
+  /**
+   * `hoodLight` at `depth` (m) below the surface, from the uniforms' current values. For light that
+   * is the same everywhere in a frame, so the shaders read it as one uniform.
+   */
+  hoodLightAtDepth(depth: number, target: Color): Color {
+    const { medium } = this;
+    const below = Math.max(depth, 0);
+    const slant = below / Math.max(this.lightDirection.value.y, MIN_COS_LIGHT);
+    const h = medium.fixtureHeight.value;
+    const spread = (h / (h + below)) ** 2;
+    const absorption = medium.absorption.value;
+    const scale = medium.absorptionScale.value;
+    const scattering = medium.scattering.value;
+    const reaching = (a: number): number => Math.exp(-(a * scale + scattering) * slant) * spread;
+    return target
+      .setRGB(reaching(absorption.x), reaching(absorption.y), reaching(absorption.z))
+      .multiply(this.lightRadiance.value);
   }
 
   /** Colour node for the hood light: radiance x spread x surface-to-point transmittance x caustics. */
