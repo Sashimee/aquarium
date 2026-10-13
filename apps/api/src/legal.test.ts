@@ -323,7 +323,7 @@ describe('data export', () => {
   afterAll(() => h.close());
 
   it('requires a session', async () => {
-    const res = await h.app.inject('/api/me/export');
+    const res = await h.app.inject({ method: 'POST', url: '/api/me/export' });
     expect(res.statusCode).toBe(401);
     expect(apiErrorSchema.parse(res.json()).error.code).toBe('unauthenticated');
   });
@@ -344,7 +344,7 @@ describe('data export', () => {
       backedUp: true,
     });
 
-    const res = await call(h, alice.cookie, 'GET', '/api/me/export');
+    const res = await call(h, alice.cookie, 'POST', '/api/me/export', {});
     expect(res.statusCode).toBe(200);
     expect(res.headers['cache-control']).toBe('no-store');
     expect(res.headers['content-disposition']).toContain('attachment');
@@ -372,11 +372,41 @@ describe('data export', () => {
     expect(raw).not.toMatch(/"token"/);
   });
 
+  it('cannot be triggered cross-site or by a plain GET, and never spends quota doing so', async () => {
+    const dave = await account(h);
+    const get = await call(h, dave.cookie, 'GET', '/api/me/export', undefined, {
+      'sec-fetch-site': 'cross-site',
+      'sec-fetch-mode': 'navigate',
+    });
+    expect(get.statusCode).toBe(404);
+    const foreign = [
+      await call(h, dave.cookie, 'POST', '/api/me/export', {}, { origin: 'https://evil.example' }),
+      await call(
+        h,
+        dave.cookie,
+        'POST',
+        '/api/me/export',
+        {},
+        { origin: '', referer: 'https://evil.example/x' },
+      ),
+      await h.app.inject({
+        method: 'POST',
+        url: '/api/me/export',
+        headers: { cookie: dave.cookie },
+      }),
+    ];
+    for (const res of foreign) expect(res.statusCode).toBe(403);
+    for (let i = 0; i < 5; i++) await call(h, dave.cookie, 'GET', '/api/me/export');
+    expect((await call(h, dave.cookie, 'POST', '/api/me/export', {})).statusCode).toBe(200);
+    expect((await call(h, dave.cookie, 'POST', '/api/me/export', {})).statusCode).toBe(200);
+    expect((await call(h, dave.cookie, 'POST', '/api/me/export', {})).statusCode).toBe(429);
+  });
+
   it('is rate limited per user', async () => {
     const carol = await account(h);
-    expect((await call(h, carol.cookie, 'GET', '/api/me/export')).statusCode).toBe(200);
-    expect((await call(h, carol.cookie, 'GET', '/api/me/export')).statusCode).toBe(200);
-    const limited = await call(h, carol.cookie, 'GET', '/api/me/export');
+    expect((await call(h, carol.cookie, 'POST', '/api/me/export', {})).statusCode).toBe(200);
+    expect((await call(h, carol.cookie, 'POST', '/api/me/export', {})).statusCode).toBe(200);
+    const limited = await call(h, carol.cookie, 'POST', '/api/me/export', {});
     expect(limited.statusCode).toBe(429);
     expect(Number(limited.headers['retry-after'])).toBeGreaterThan(0);
   });
