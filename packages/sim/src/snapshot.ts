@@ -11,6 +11,7 @@ export const FishState = {
   Host: 9,
   Shelter: 10,
   Station: 11,
+  Feed: 12,
 } as const;
 export type FishState = (typeof FishState)[keyof typeof FishState];
 

@@ -10,7 +10,7 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json",
-    "bench": "node scripts/bench.ts"
+    "bench": "node --import ./scripts/resolve-ts.mjs scripts/bench.ts"
   },
   "dependencies": {
     "@aquarium/shared": "workspace:*"
