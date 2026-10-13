@@ -14,7 +14,9 @@ import { installRoomLighting, DEFAULT_HDRI_URL } from './environment';
 import { EventBus, type BackendKind, type EngineEvents, type EngineEventBus } from './events';
 import { buildOrRelease, DisposeStack } from './lifecycle';
 import type { EngineOptions } from './options';
+import { qualityProfile } from './quality/profile';
 import { QualityManager } from './quality/QualityManager';
+import { renderPixelRatio } from './quality/tiers';
 import { DEFAULT_TANK, type TankDimensions, waterBounds } from './tank/dimensions';
 import { Tank } from './tank/Tank';
 import { Caustics } from './water/caustics';
@@ -44,9 +46,8 @@ const DAYLIGHT_INTERVAL_MS = 1000;
 /** Smallest daylight change worth announcing: about 20 s into a one-hour ramp. */
 const DAYLIGHT_EPSILON = 0.005;
 
-function targetFrameMs(): number {
-  const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
-  return 1000 / (coarse ? 30 : 60);
+function hasCoarsePointer(): boolean {
+  return typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 }
 
 /** The part of the renderer the start-up path needs, so failures can be tested without a GPU. */
@@ -161,11 +162,15 @@ export class Engine {
     const dimensions = config.tank ?? DEFAULT_TANK;
     this.clock = config.options.clock;
     this.gpuTiming = renderer.hasFeature('timestamp-query');
+    const profile = qualityProfile(hasCoarsePointer());
     this.quality = new QualityManager(events, {
       gpuTiming: this.gpuTiming,
       pinned: config.options.tier,
       adaptive: config.options.adaptive,
-      targetMs: targetFrameMs(),
+      targetMs: profile.targetMs,
+      refreshMs: profile.refreshMs,
+      probeTier: profile.probeTier,
+      maxTier: profile.maxTier,
     });
 
     container.appendChild(renderer.domElement);
@@ -306,9 +311,7 @@ export class Engine {
 
   private registerQualityFeatures(): void {
     this.quality.register('pixel-ratio', (s) => {
-      this.renderer.setPixelRatio(
-        Math.min(window.devicePixelRatio, s.maxPixelRatio) * s.resolutionScale,
-      );
+      this.renderer.setPixelRatio(renderPixelRatio(window.devicePixelRatio, s));
     });
     this.quality.register('shadows', (s) => {
       this.hood.castShadow = s.shadowMapSize > 0;
