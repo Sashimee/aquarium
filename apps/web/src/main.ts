@@ -3,7 +3,7 @@ import { Engine } from './engine/Engine';
 import { EventBus, type EngineEvents } from './engine/events';
 import { parseEngineOptions } from './engine/options';
 import { DEFAULT_TANK } from './engine/tank/dimensions';
-import { queueTankEvents, startFish } from './fish/start';
+import { queueTankEvents, startFish, type FishHandle } from './fish/start';
 import { CameraRig } from './interaction/camera';
 import { bindCameraControls } from './interaction/controls';
 import { FeederLayer } from './interaction/decor/feederLayer';
@@ -13,7 +13,7 @@ import { onPageTeardown } from './interaction/pageLifecycle';
 import { watchReducedMotion } from './interaction/motion';
 import { PlayChoices } from './interaction/play/choices';
 import { createPlaySystem, type PlaySystem } from './interaction/play/system';
-import { mountBiomeScene, parseBiome, TankBiome, type TankScene } from './scene';
+import { mountBiomeScene, parseBiome, TankBiome, withBiome, type TankScene } from './scene';
 import { mountUi } from './ui/mount';
 import { FeedGate } from './sync/feedGate';
 
@@ -55,6 +55,19 @@ async function boot(): Promise<void> {
       ),
     (message, cause) => console.error(message, cause),
   );
+  let liveFish: FishHandle | null = null;
+  const stopDemoRequests = interaction.on('demo:request-biome', ({ biome }) => {
+    if (biome === tankBiome.fallback) return;
+    tankBiome.setFallback(biome);
+    liveFish?.setDemoBiome(biome);
+    const { pathname, search, hash } = window.location;
+    window.history.replaceState(
+      window.history.state,
+      '',
+      `${pathname}${withBiome(search, biome)}${hash}`,
+    );
+    interaction.emit('demo:biome-changed', { biome });
+  });
   mountUi(uiRoot, { engine: events, interaction });
 
   let engine: Engine;
@@ -66,6 +79,7 @@ async function boot(): Promise<void> {
   } catch (cause) {
     tankEvents.stop();
     tankBiome.stop();
+    stopDemoRequests();
     playChoices.stop();
     sceneDecor.dispose();
     showFatal(container, cause instanceof Error ? cause.message : String(cause));
@@ -140,6 +154,7 @@ async function boot(): Promise<void> {
     tankEvents,
   });
 
+  liveFish = fish;
   const feedGate = new FeedGate();
   const scenes = mountBiomeScene(engine, tankBiome, window.location.search, {
     mounted(scene) {
@@ -161,6 +176,7 @@ async function boot(): Promise<void> {
     scenes.dispose().catch((cause: unknown) => console.error('Scene dispose failed', cause));
     sceneDecor.dispose();
     tankBiome.stop();
+    stopDemoRequests();
     playChoices.stop();
     stopMotionWatch();
     unbindControls();

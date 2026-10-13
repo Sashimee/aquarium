@@ -35,6 +35,10 @@ class FakeFishSystem {
   setFood(buffer: Float32Array): void {
     this.food.push(buffer);
   }
+  demoBiomes: string[] = [];
+  setDemoBiome(biome: string): void {
+    this.demoBiomes.push(biome);
+  }
   netTap(ray: PickRay): void {
     this.taps.push(ray);
   }
@@ -190,6 +194,26 @@ describe('startFish', () => {
       type: 'tank:unloaded',
       payload: { tankId: TANK_A, reason: 'switch' },
     });
+  });
+
+  it('applies a demo biome chosen before the fish were up, and later ones at once', async () => {
+    const fish = new FakeFishSystem();
+    const pending = deferred<FakeFishSystem>();
+    const { handle } = setup(pending.promise);
+    handle.setDemoBiome('reef');
+    pending.resolve(fish);
+    await flush();
+    expect(fish.demoBiomes).toEqual(['reef']);
+    handle.setDemoBiome('freshwater');
+    expect(fish.demoBiomes).toEqual(['reef', 'freshwater']);
+  });
+
+  it('does not touch the demo stock when the biome never changed', async () => {
+    const fish = new FakeFishSystem();
+    const { handle } = setup(Promise.resolve(fish));
+    await flush();
+    expect(fish.demoBiomes).toEqual([]);
+    handle.stop();
   });
 
   it('holds the scene anchors until the fish are up, ahead of the queued tank events', async () => {

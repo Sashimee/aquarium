@@ -1,7 +1,7 @@
 import type { CameraMode } from '../interaction/camera';
 import { useState } from 'react';
 import { tankReportLines } from '../sync/life';
-import { useCameraMode, useEngineReady } from './context';
+import { useCameraMode, useDemoBiome, useEngineReady } from './context';
 import { useActiveTank, useSessionState } from './session';
 
 const MODE_LABEL: Record<CameraMode, string> = {
@@ -14,6 +14,7 @@ export default function TankReport() {
   const [open, setOpen] = useState(false);
   const engine = useEngineReady();
   const mode = useCameraMode();
+  const demoBiome = useDemoBiome();
   const tank = useActiveTank();
   const { species, phase } = useSessionState();
   return (
@@ -31,7 +32,7 @@ export default function TankReport() {
           tankReportLines(tank, species).map((line) => <p key={line}>{line}</p>)
         ) : (
           <>
-            <p>A 300 litre freshwater aquarium, 120 by 50 by 50 centimetres.</p>
+            <p>A 300 litre {demoBiome} aquarium, 120 by 50 by 50 centimetres.</p>
             <p>
               {phase === 'unverified'
                 ? 'Verify your email address to keep a saved tank.'

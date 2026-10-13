@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { parseBiome, parseSceneOptions } from './options';
+import { parseBiome, parseSceneOptions, withBiome } from './options';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -32,5 +32,21 @@ describe('parseBiome', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     expect(parseBiome('?biome=lake')).toBe('freshwater');
     expect(warn).toHaveBeenCalledOnce();
+  });
+});
+
+describe('withBiome', () => {
+  it('adds the biome to an empty query', () => {
+    expect(withBiome('', 'reef')).toBe('?biome=reef');
+  });
+
+  it('replaces an existing biome and keeps the other parameters', () => {
+    expect(withBiome('?backend=webgl&biome=reef&colliders=1', 'freshwater')).toBe(
+      '?backend=webgl&biome=freshwater&colliders=1',
+    );
+  });
+
+  it('round-trips through parseBiome', () => {
+    expect(parseBiome(withBiome('?biome=lake', 'reef'))).toBe('reef');
   });
 });

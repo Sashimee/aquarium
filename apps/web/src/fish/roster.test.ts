@@ -72,6 +72,24 @@ describe('TankRoster', () => {
     expect(roster.simIdOf(FISH_2)).toBeUndefined();
   });
 
+  it('swaps the demo stock while no saved tank is loaded', () => {
+    const roster = new TankRoster(DEMO);
+    const before = roster.revision;
+    expect(roster.setDemo([{ id: 'ocellaris-0', species: 'ocellaris-clownfish' }])).toBe(true);
+    expect(roster.revision).toBeGreaterThan(before);
+    expect([...roster.entries()].map((f) => f.key)).toEqual(['ocellaris-0']);
+  });
+
+  it('keeps the saved tank when the demo stock is swapped, and shows the new demo on unload', () => {
+    const roster = loaded();
+    const before = roster.revision;
+    expect(roster.setDemo([{ id: 'ocellaris-0', species: 'ocellaris-clownfish' }])).toBe(false);
+    expect(roster.revision).toBe(before);
+    expect([...roster.entries()].map((f) => f.serverId)).toEqual([FISH_1, FISH_2]);
+    roster.unload({ tankId: TANK_A, reason: 'switch' });
+    expect([...roster.entries()].map((f) => f.key)).toEqual(['ocellaris-0']);
+  });
+
   it('ignores an unload for a tank that is not the loaded one', () => {
     const roster = loaded();
     const before = roster.revision;

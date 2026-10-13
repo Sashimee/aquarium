@@ -33,7 +33,7 @@ export class TankRoster {
   private nextId = 0;
   revision = 0;
 
-  constructor(private readonly demo: readonly FishSpawn[]) {
+  constructor(private demo: readonly FishSpawn[]) {
     this.showDemo();
   }
 
@@ -74,6 +74,16 @@ export class TankRoster {
     this.loaded = { tankId, biome };
     for (const f of fish) this.insertSaved(f, f.status === 'dead' ? 'dead' : 'swimming');
     this.revision++;
+  }
+
+  /** Swaps the demo stock; what is shown changes only while no saved tank is loaded. */
+  setDemo(demo: readonly FishSpawn[]): boolean {
+    this.demo = demo;
+    if (this.loaded !== null) return false;
+    this.clear();
+    this.showDemo();
+    this.revision++;
+    return true;
   }
 
   /** False when `tankId` is not the loaded tank, e.g. a late event from a previous switch. */
