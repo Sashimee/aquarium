@@ -9,7 +9,7 @@ import type { InteractionEvents } from './interaction/events';
 import { onPageTeardown } from './interaction/pageLifecycle';
 import { watchReducedMotion } from './interaction/motion';
 import { createPlaySystem, type PlaySystem } from './interaction/play/system';
-import { mountPresetWhenTierKnown, parseBiome, type TankScene } from './scene';
+import { mountBiomeScene, parseBiome, TankBiome } from './scene';
 import { mountUi } from './ui/mount';
 
 function showFatal(container: HTMLElement, message: string): void {
@@ -38,6 +38,7 @@ async function boot(): Promise<void> {
   );
 
   const tankEvents = queueTankEvents(interaction);
+  const tankBiome = new TankBiome(interaction, parseBiome(window.location.search));
   mountUi(uiRoot, { engine: events, interaction });
 
   let engine: Engine;
@@ -48,6 +49,7 @@ async function boot(): Promise<void> {
     });
   } catch (cause) {
     tankEvents.stop();
+    tankBiome.stop();
     showFatal(container, cause instanceof Error ? cause.message : String(cause));
     return;
   }
@@ -91,26 +93,30 @@ async function boot(): Promise<void> {
   });
   engine.onFrame((deltaS) => rig.update(deltaS));
 
-  const biome = parseBiome(window.location.search);
   const fish = startFish(engine, {
     tank: DEFAULT_TANK,
     assetRoot: `${import.meta.env.BASE_URL}assets/`,
-    biome,
+    biome: tankBiome.fallback,
     interaction,
     tankEvents,
   });
 
-  let tankScene: TankScene | null = null;
-  mountPresetWhenTierKnown(engine, biome, window.location.search, (scene) => {
-    tankScene = scene;
-    fish.setAnchors(scene.anchors);
-    play = createPlaySystem(engine, scene, interaction, fish.sim);
-    if (import.meta.env.DEV) Object.assign(window, { tankScene });
+  const scenes = mountBiomeScene(engine, tankBiome, window.location.search, {
+    mounted(scene) {
+      fish.setAnchors(scene.anchors);
+      play = createPlaySystem(engine, scene, interaction, fish.sim);
+      if (import.meta.env.DEV) Object.assign(window, { tankScene: scene });
+    },
+    unmounting() {
+      play?.dispose();
+      play = null;
+      fish.setAnchors([]);
+    },
   });
 
   onPageTeardown(window, () => {
-    play?.dispose();
-    tankScene?.dispose().catch((cause: unknown) => console.error('Scene dispose failed', cause));
+    scenes.dispose().catch((cause: unknown) => console.error('Scene dispose failed', cause));
+    tankBiome.stop();
     stopMotionWatch();
     unbindControls();
     stopRequests();
