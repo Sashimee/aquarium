@@ -1,3 +1,4 @@
+import { parseClock } from './daylight';
 import { isTier, TIERS, type Tier } from './quality/tiers';
 
 export type BackendPreference = 'auto' | 'webgpu' | 'webgl';
@@ -7,6 +8,8 @@ export interface EngineOptions {
   /** Pins the quality tier and disables the probe and adaptation. */
   tier: Tier | null;
   adaptive: boolean;
+  /** Pins the tank clock to these minutes after midnight; null follows the local time. */
+  clock: number | null;
 }
 
 const BACKENDS: readonly BackendPreference[] = ['auto', 'webgpu', 'webgl'];
@@ -15,7 +18,7 @@ function isBackend(value: string): value is BackendPreference {
   return (BACKENDS as readonly string[]).includes(value);
 }
 
-/** Reads `?backend=`, `?tier=` and `?adaptive=` from a URL query string. */
+/** Reads `?backend=`, `?tier=`, `?adaptive=` and `?clock=` from a URL query string. */
 export function parseEngineOptions(search: string): EngineOptions {
   const params = new URLSearchParams(search);
 
@@ -34,6 +37,9 @@ export function parseEngineOptions(search: string): EngineOptions {
     throw new Error(`Unknown ?adaptive=${adaptiveParam}; use 0 or 1`);
   }
 
+  const clockParam = params.get('clock');
+  const clock = clockParam === null ? null : parseClock(clockParam);
+
   const tier = tierParam ?? null;
-  return { backend, tier, adaptive: tier === null && adaptiveParam !== '0' };
+  return { backend, tier, adaptive: tier === null && adaptiveParam !== '0', clock };
 }

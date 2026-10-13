@@ -15,6 +15,8 @@ export interface EngineEvents {
   'engine:ready': { backend: BackendKind; tier: Tier; gpuTiming: boolean };
   'engine:error': { message: string; cause?: unknown };
   'engine:stats': EngineStats;
+  /** Hood light level from the photoperiod: 0 night .. 1 day. */
+  'engine:daylight': { level: number };
   'quality:tier-changed': { from: Tier | null; to: Tier; reason: TierChangeReason };
 }
 

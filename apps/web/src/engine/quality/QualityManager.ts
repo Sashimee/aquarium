@@ -75,13 +75,18 @@ export class QualityManager {
     return this.controller !== null;
   }
 
-  /** Registers a feature and applies the current tier to it immediately. */
+  /** Registers a feature and applies the current tier to it immediately; not kept if that throws. */
   register(name: string, apply: ApplyTier): () => void {
     if (this.features.has(name)) {
       throw new Error(`QualityManager: feature "${name}" is already registered`);
     }
     this.features.set(name, apply);
-    apply(this.settings, this.current);
+    try {
+      apply(this.settings, this.current);
+    } catch (error) {
+      this.features.delete(name);
+      throw error;
+    }
     return () => this.features.delete(name);
   }
 
