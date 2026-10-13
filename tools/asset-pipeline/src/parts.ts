@@ -207,7 +207,7 @@ export async function materialDefFrom(
   const normal =
     options.keepNormal === false
       ? undefined
-      : await textureFrom(source.getNormalTexture(), 'normal', 'uastc');
+      : await textureFrom(source.getNormalTexture(), 'normal', 'etc1s');
   const factor = specGloss ? specGloss.getDiffuseFactor() : source.getBaseColorFactor();
   let alphaMode: AlphaMode = options.alphaMode ?? 'OPAQUE';
   if (options.alphaMode === undefined && source.getAlphaMode() !== 'OPAQUE') {

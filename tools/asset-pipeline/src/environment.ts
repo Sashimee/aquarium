@@ -25,6 +25,7 @@ import {
   type Part,
 } from './parts.ts';
 import { RAW_ROOT, bakeToWorldSpace, readGltf, type SkinPose } from './source.ts';
+import { decodeRgbe, encodeRgbe, halve } from './rgbe.ts';
 import { decodeImage, type Rgba } from './textures.ts';
 
 export interface EnvironmentRecipe {
@@ -305,7 +306,7 @@ export async function buildSubstrate(
     {
       name: `${recipe.id}_normal`,
       colorSpace: 'linear',
-      source: { role: 'normal', codec: 'uastc', image: await load('nor_gl') },
+      source: { role: 'normal', codec: 'etc1s', image: await load('nor_gl') },
     },
     {
       name: `${recipe.id}_arm`,
@@ -341,19 +342,32 @@ export interface HdriRecipe {
   id: string;
   sourceId: string;
   file: string;
+  /** Output name and the number of 2x2 downsamples applied to the source. */
+  derived?: { file: string; halvings: number; label: string };
 }
 
 export function buildHdri(recipe: HdriRecipe, ctx: FishContext): OutputAsset {
   ctx.verifySource(recipe.sourceId);
-  const bytes = readFileSync(join(RAW_ROOT, recipe.sourceId, recipe.file));
-  const file = writeFileTracked(ctx.outRoot, `hdri/${recipe.id}/${recipe.file}`, bytes);
+  const source = readFileSync(join(RAW_ROOT, recipe.sourceId, recipe.file));
+  const { derived } = recipe;
+  let bytes: Uint8Array = source;
+  if (derived) {
+    let image = decodeRgbe(source);
+    for (let i = 0; i < derived.halvings; i++) image = halve(image);
+    bytes = encodeRgbe(image);
+  }
+  const file = writeFileTracked(
+    ctx.outRoot,
+    `hdri/${recipe.id}/${derived?.file ?? recipe.file}`,
+    bytes,
+  );
   return {
     id: recipe.id,
     kind: 'hdri',
-    origin: 'passthrough',
+    origin: derived ? 'texture-set' : 'passthrough',
     sources: [recipe.sourceId],
     licence: ctx.licenceOf(recipe.sourceId),
-    modifications: ['copied unchanged (Radiance .hdr, 2k)'],
+    modifications: [derived ? derived.label : 'copied unchanged (Radiance .hdr, 2k)'],
     lods: [],
     textures: [],
     files: [file],

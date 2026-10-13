@@ -1,0 +1,176 @@
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { z } from 'zod';
+import type { AssetIndex, OutputAsset } from './index-schema.ts';
+
+/** PLAN section 2.7: initial download. */
+export const TIER_BUDGETS = {
+  mobile: { tiers: 'low/medium', slot: '1k', bytes: 15 * 1000 * 1000 },
+  desktop: { tiers: 'high/ultra', slot: '2k', bytes: 40 * 1000 * 1000 },
+} as const;
+
+export type BudgetGroup = keyof typeof TIER_BUDGETS;
+
+/** Brotli JS plus the Basis transcoder, which the asset files do not include. */
+export const CODE_RESERVE_BYTES = 1.5 * 1000 * 1000;
+
+/** Same shape as `ID_PATTERN` in apps/web/src/scene/euphyllia.ts: generated at runtime, no files. */
+export const PROCEDURAL_ASSET_ID = /^euphyllia-(hammer|torch)-(0|[1-9]\d{0,8})$/;
+
+/** The environment map `Engine` fetches on every tier, as `hdri/<id>/<file>` under the asset base. */
+export interface HdriRef {
+  id: string;
+  file: string;
+}
+
+const HDRI_URL_SOURCE = ['apps', 'web', 'src', 'engine', 'environment.ts'];
+
+export interface PresetRef {
+  id: string;
+  biome: string;
+  assetIds: string[];
+}
+
+export interface BudgetInput {
+  index: AssetIndex;
+  presets: PresetRef[];
+  hdri: HdriRef;
+  speciesBiome: ReadonlyMap<string, string>;
+}
+
+const presetSchema = z.object({
+  id: z.string(),
+  biome: z.string(),
+  substrate: z.object({ assetId: z.string() }),
+  decor: z.array(z.object({ assetId: z.string() })),
+  plantPatches: z.array(z.object({ assetId: z.string() })),
+});
+
+const speciesSchema = z.object({ id: z.string(), biome: z.string() });
+
+function readJsonDir<T>(dir: string, schema: z.ZodType<T>): T[] {
+  return readdirSync(dir)
+    .filter((name) => name.endsWith('.json'))
+    .sort()
+    .map((name) => schema.parse(JSON.parse(readFileSync(join(dir, name), 'utf8'))));
+}
+
+export function parseHdriUrl(source: string): HdriRef {
+  const match = /export const DEFAULT_HDRI_URL = `[^`]*?hdri\/([^/`]+)\/([^/`]+)`/.exec(source);
+  if (!match)
+    throw new Error(
+      `${HDRI_URL_SOURCE.join('/')}: DEFAULT_HDRI_URL no longer has the form \`\${ASSET_BASE}hdri/<id>/<file>\`; update parseHdriUrl in tools/asset-pipeline/src/budgets.ts`,
+    );
+  const [, id = '', name = ''] = match;
+  return { id, file: `hdri/${id}/${name}` };
+}
+
+export function loadBudgetContent(
+  repoRoot: string,
+): Pick<BudgetInput, 'presets' | 'speciesBiome' | 'hdri'> {
+  const presets = readJsonDir(join(repoRoot, 'content', 'presets'), presetSchema).map((p) => ({
+    id: p.id,
+    biome: p.biome,
+    assetIds: [
+      ...new Set([
+        p.substrate.assetId,
+        ...p.decor.map((d) => d.assetId),
+        ...p.plantPatches.map((d) => d.assetId),
+      ]),
+    ],
+  }));
+  const speciesBiome = new Map(
+    readJsonDir(join(repoRoot, 'content', 'species'), speciesSchema).map((s) => [s.id, s.biome]),
+  );
+  const hdri = parseHdriUrl(readFileSync(join(repoRoot, ...HDRI_URL_SOURCE), 'utf8'));
+  return { presets, speciesBiome, hdri };
+}
+
+function filesToFetch(
+  asset: OutputAsset,
+  slots: readonly ('1k' | '2k')[],
+  only?: string,
+): Map<string, number> {
+  const sizeOf = new Map(asset.files.map((f) => [f.file, f.bytes]));
+  const wanted = new Map<string, number>();
+  const add = (file: string): void => {
+    const bytes = sizeOf.get(file);
+    if (bytes === undefined)
+      throw new Error(`${asset.kind}/${asset.id}: ${file} is not in files[]`);
+    wanted.set(file, bytes);
+  };
+  // Fish swap LOD with distance, so all of them can be fetched; everything else loads LOD0 for
+  // rendering and the last LOD for collision geometry.
+  const first = asset.lods[0];
+  const last = asset.lods.at(-1);
+  const lods = asset.kind === 'fish' ? asset.lods : first && last ? [first, last] : [];
+  for (const lod of lods) add(lod.file);
+  if (only !== undefined) add(only);
+  for (const texture of asset.textures) for (const slot of slots) add(texture.variants[slot].file);
+
+  return wanted;
+}
+
+/**
+ * Worst-case bytes a preset fetches before it is interactive. Desktop also counts the 1k
+ * textures because hardscape collision geometry still pulls the low set (#174).
+ */
+export function presetDownloadBytes(
+  input: BudgetInput,
+  preset: PresetRef,
+  group: BudgetGroup,
+): number {
+  const slots = group === 'desktop' ? (['1k', '2k'] as const) : (['1k'] as const);
+  const byKey = new Map(input.index.assets.map((a) => [a.id, a]));
+  const assets: OutputAsset[] = [];
+  const hdri = byKey.get(input.hdri.id);
+  if (!hdri || hdri.kind !== 'hdri')
+    throw new Error(
+      `HDRI "${input.hdri.id}" loaded by apps/web is not an hdri asset in index.json; rebuild the assets or fix DEFAULT_HDRI_URL`,
+    );
+  if (!hdri.files.some((f) => f.file === input.hdri.file))
+    throw new Error(`HDRI file ${input.hdri.file} is not in index.json ${hdri.id}.files`);
+  const fetched = new Map<string, number>(filesToFetch(hdri, slots, input.hdri.file));
+  for (const id of preset.assetIds) {
+    const asset = byKey.get(id);
+    if (!asset) {
+      if (PROCEDURAL_ASSET_ID.test(id)) continue;
+      throw new Error(`preset ${preset.id} uses unknown asset "${id}" that is not in index.json`);
+    }
+    assets.push(asset);
+  }
+  for (const asset of input.index.assets) {
+    if (
+      asset.kind === 'fish' &&
+      asset.species &&
+      input.speciesBiome.get(asset.species) === preset.biome
+    )
+      assets.push(asset);
+  }
+  for (const asset of assets)
+    for (const [file, bytes] of filesToFetch(asset, slots)) fetched.set(file, bytes);
+  return [...fetched.values()].reduce((sum, bytes) => sum + bytes, 0);
+}
+
+export function budgetProblems(input: BudgetInput): string[] {
+  const problems: string[] = [];
+  for (const group of Object.keys(TIER_BUDGETS) as BudgetGroup[]) {
+    const { tiers, bytes: budget } = TIER_BUDGETS[group];
+    const limit = budget - CODE_RESERVE_BYTES;
+    for (const preset of input.presets) {
+      let bytes: number;
+      try {
+        bytes = presetDownloadBytes(input, preset, group);
+      } catch (error) {
+        problems.push(`download budget: ${(error as Error).message}`);
+        continue;
+      }
+      if (bytes > limit) {
+        problems.push(
+          `download budget: preset ${preset.id} on ${tiers} fetches ${(bytes / 1e6).toFixed(1)} MB of assets, over ${(limit / 1e6).toFixed(1)} MB (${budget / 1e6} MB budget less ${CODE_RESERVE_BYTES / 1e6} MB for code)`,
+        );
+      }
+    }
+  }
+  return problems;
+}
