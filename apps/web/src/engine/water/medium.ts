@@ -41,6 +41,9 @@ const CDOM_SLOPE = 0.014;
  */
 const BOUNDARY_TOLERANCE = 0.005;
 
+/** Depth below which a point is in the water rather than on its surface. */
+const SURFACE_MARGIN = 0.001;
+
 /**
  * A hood about a metre above the surface: an extended LED array whose irradiance halves from the
  * surface to the sand of a 50 cm tank, as reef PAR maps show.
@@ -78,8 +81,10 @@ export class WaterMedium {
   readonly absorption = uniform(new Vector3());
   readonly absorptionScale = uniform(1);
   readonly scattering = uniform(0.1);
-  /** Radiance scattered towards the eye per unit of scattering, driven by the lights. */
-  readonly inScatterRadiance = uniform(new Color(0.18, 0.22, 0.24));
+  /** The hood's share of the radiance scattered towards the eye per unit of scattering, at the surface. */
+  readonly hoodInScatter = uniform(new Color(0.18, 0.22, 0.24));
+  /** The room's share, from light coming in through the glass: it does not fade with depth. */
+  readonly roomInScatter = uniform(new Color(0.02, 0.03, 0.034));
   /** Height (m) of the hood's light source above the water surface, for its spread with depth. */
   readonly fixtureHeight = uniform(DEFAULT_FIXTURE_HEIGHT);
 
@@ -132,15 +137,36 @@ export class WaterMedium {
   }
 
   /**
-   * Light scattered into the view ray along a segment with transmittance `t`. With `depth`, the
-   * segment's mean depth below the surface, the light reaching it is dimmed and filtered on its
-   * way down; without it the surface level is used.
+   * Radiance per steradian reaching a point `depth` below the surface, as the hood's and the room's
+   * light averaged over the sphere. Only the hood's part is dimmed and filtered on its way down;
+   * without `depth` the surface level is used.
    */
+  inScatterRadiance(depth?: Node<'float'>): Node<'vec3'> {
+    const reaching = depth === undefined ? vec3(1) : this.lightAtDepth(depth);
+    return reaching.mul(this.hoodInScatter).add(this.roomInScatter);
+  }
+
+  /** Light scattered into the view ray along a segment with transmittance `t` at mean `depth`. */
   inScatter(t: Node<'vec3'>, depth?: Node<'float'>): Node<'vec3'> {
     const albedo = max(this.extinction(), vec3(MIN_EXTINCTION)).reciprocal().mul(this.scattering);
-    const lit = albedo.mul(this.inScatterRadiance);
-    const atDepth = depth === undefined ? lit : lit.mul(this.lightAtDepth(depth));
-    return atDepth.mul(t.oneMinus());
+    return albedo.mul(this.inScatterRadiance(depth)).mul(t.oneMinus());
+  }
+
+  /** `p` moved onto the nearest point inside the water box by at least `margin`. */
+  clampInside(p: Node<'vec3'>, margin = 0.002): Node<'vec3'> {
+    return min(max(p, this.boxMin.add(margin)), this.boxMax.sub(margin));
+  }
+
+  /**
+   * 1 for points in the water, else 0. The box is widened at the glass so that the substrate's cut
+   * faces against the panes count, and ends just under the surface so that the surface does not.
+   */
+  submerged(p: Node<'vec3'>): Node<'float'> {
+    const below = vec3(BOUNDARY_TOLERANCE, -SURFACE_MARGIN, BOUNDARY_TOLERANCE);
+    const inside = step(this.boxMin.sub(BOUNDARY_TOLERANCE), p).mul(
+      step(p, this.boxMax.add(below)),
+    );
+    return inside.x.mul(inside.y).mul(inside.z);
   }
 
   /**

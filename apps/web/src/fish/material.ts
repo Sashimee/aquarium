@@ -1,5 +1,4 @@
 import {
-  Color,
   MeshPhysicalNodeMaterial,
   Vector3,
   DoubleSide,
@@ -51,7 +50,8 @@ import { TAIL_AMPLITUDE_BODY_LENGTHS, type SwimModeParams } from './swim';
 export interface FishLighting {
   /** Unit vector towards the main light. */
   readonly lightDirection: UniformNode<'vec3', Vector3>;
-  readonly lightRadiance: UniformNode<'color', Color>;
+  /** The main light reaching the fragment, without its caustics. */
+  readonly light: Node<'vec3'>;
 }
 
 /**
@@ -272,7 +272,7 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
       const diffuse = abs(dot(normalWorld, l)).mul(0.3);
       const forward = pow(max(dot(toEye, l.negate()), 0), 3).mul(0.7);
       this.emissiveNode = albedo
-        .mul(lighting.lightRadiance)
+        .mul(lighting.light)
         .mul(diffuse.add(forward))
         .mul(finAmount.mul(profile.finTransmission / Math.PI));
     } else {
