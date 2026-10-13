@@ -1,4 +1,5 @@
 import { buildApp } from './app.ts';
+import { createBackgroundTasks, shutdown } from './background.ts';
 import { createAuth } from './auth.ts';
 import { loadConfig } from './config.ts';
 import { connect, runMigrations } from './db/index.ts';
@@ -6,6 +7,8 @@ import { createMailer, createSmtpTransport } from './mail.ts';
 import { postgresHitStore } from './rate-limit.ts';
 import { startMaintenance } from './maintenance.ts';
 import { loadCatalog } from './species.ts';
+
+const DRAIN_TIMEOUT_MS = 10_000;
 
 const config = loadConfig(process.env);
 
@@ -17,7 +20,13 @@ const mailer = createMailer(
   config.mailFrom,
   { store: postgresHitStore(database, config.authSecret) },
 );
-const auth = createAuth({ config, database, mailer });
+const background = createBackgroundTasks();
+const auth = createAuth({
+  config,
+  database,
+  mailer,
+  runInBackground: (task) => background.run(task),
+});
 
 const app = buildApp({
   indexable: config.indexable,
@@ -35,8 +44,16 @@ const stopMaintenance = startMaintenance(database);
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
-    stopMaintenance();
-    void app.close().then(() => database.close());
+    shutdown({
+      stopMaintenance,
+      closeApp: () => app.close(),
+      tasks: background,
+      closeDatabase: () => database.close(),
+      drainTimeoutMs: DRAIN_TIMEOUT_MS,
+    }).catch((err: unknown) => {
+      console.error('shutdown failed:', err instanceof Error ? err.name : 'unknown');
+      process.exitCode = 1;
+    });
   });
 }
 
