@@ -34,6 +34,7 @@ export interface CheckInput {
 
 export function readGlbJson(buffer: Uint8Array): {
   meshes?: { primitives: { attributes: Record<string, number> }[] }[];
+  images?: { uri?: string }[];
 } {
   const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
   if (buffer.byteLength < 20 || view.getUint32(0, true) !== 0x46546c67) {
@@ -111,8 +112,19 @@ function effectiveLicenceProblems(
 
 const TEXTURE_ONLY_KINDS: readonly string[] = ['substrate', 'hdri'];
 
+function safeDecodeUri(uri: string): string {
+  try {
+    return decodeURIComponent(uri);
+  } catch {
+    return uri;
+  }
+}
+
+const SHIPPED_EXTENSIONS: readonly string[] = ['.glb', '.ktx2'];
+
 function lodProblems(asset: OutputAsset, assetsDir: string, problems: string[]): void {
   const at = `${asset.kind} ${asset.id}`;
+  const owned = new Set(asset.files.map((f) => f.file));
   if (asset.lods.length !== LOD_COUNT) {
     problems.push(`${at}: needs ${LOD_COUNT} LODs, index lists ${asset.lods.length}`);
   }
@@ -132,6 +144,15 @@ function lodProblems(asset: OutputAsset, assetsDir: string, problems: string[]):
       const json = readGlbJson(readFileSync(path));
       const primitives = (json.meshes ?? []).flatMap((m) => m.primitives);
       if (primitives.length === 0) problems.push(`${at}: ${lod.file} has no mesh primitives`);
+      for (const image of json.images ?? []) {
+        if (image.uri === undefined) continue;
+        const target = posix.join(posix.dirname(lod.file), safeDecodeUri(image.uri));
+        if (!owned.has(target)) {
+          problems.push(
+            `${at}: ${lod.file} references ${image.uri}, which is not in the asset's files (embedded data: URIs are not allowed either)`,
+          );
+        }
+      }
       for (const attr of asset.kind === 'fish' ? [FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE] : []) {
         if (primitives.some((p) => p.attributes[attr] === undefined)) {
           problems.push(`${at}: ${lod.file} lacks vertex attribute ${attr}`);
@@ -182,6 +203,11 @@ export function checkAssets(input: CheckInput): string[] {
         problems.push(`file ${file.file} is claimed by both ${previous} and ${key}`);
       }
       listed.set(file.file, key);
+      if (!SHIPPED_EXTENSIONS.some((extension) => file.file.endsWith(extension))) {
+        problems.push(
+          `${key}: ${file.file} is not a ${SHIPPED_EXTENSIONS.join(' or ')} file; PLAN section 3 commits only processed GLB and KTX2`,
+        );
+      }
       const path = join(assetsDir, file.file);
       if (!existsSync(path)) {
         problems.push(`${key}: ${file.file} is listed in index.json but missing on disk`);
