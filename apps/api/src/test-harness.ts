@@ -49,6 +49,7 @@ export interface HarnessOptions {
   legalLimits?: LegalLimits;
   testHooks?: boolean;
   appOrigin?: string;
+  logStream?: { write(chunk: string): void };
 }
 
 function baseUrl(): URL {
@@ -147,7 +148,8 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     testHooks: opts.testHooks ?? true,
     ...(opts.careLimits ? { careLimits: opts.careLimits } : {}),
     ...(opts.legalLimits ? { legalLimits: opts.legalLimits } : {}),
-    logger: false,
+    logger: opts.logStream !== undefined,
+    ...(opts.logStream ? { logStream: opts.logStream } : {}),
   });
   await app.ready();
 

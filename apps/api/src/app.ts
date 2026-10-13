@@ -36,6 +36,7 @@ export interface AppOptions {
   legalLimits?: LegalLimits;
   testHooks?: boolean;
   logger?: boolean;
+  logStream?: { write(chunk: string): void };
 }
 
 const HELLO_PAGE = `<!doctype html>
@@ -108,6 +109,21 @@ function normalizedPathname(url: string): string {
   return '/' + decoded.replace(/^\/+/, '').replace(/\/{2,}/g, '/');
 }
 
+const TOKEN_PATH_PREFIXES = [`${AUTH_BASE_PATH}/reset-password/`, `${AUTH_BASE_PATH}/callback/`];
+const TOKEN_LIKE_SEGMENT = /^(?=.*\d)[A-Za-z0-9_-]{20,}$/;
+
+export function redactUrl(url: string): string {
+  const path = '/' + (url.split('?')[0] ?? '').replace(/^\/+/, '');
+  const lower = path.toLowerCase();
+  const prefix = TOKEN_PATH_PREFIXES.find((p) => lower.startsWith(p));
+  if (prefix) return `${path.slice(0, prefix.length)}[redacted]`;
+  if (!lower.startsWith(`${AUTH_BASE_PATH}/`)) return path;
+  return path
+    .split('/')
+    .map((seg) => (TOKEN_LIKE_SEGMENT.test(seg) ? '[redacted]' : seg))
+    .join('/');
+}
+
 function isStaticAsset(pathname: string): boolean {
   if (pathname.startsWith('/assets/')) return true;
   const last = pathname.split('/').pop() ?? '';
@@ -123,10 +139,11 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     rewriteUrl: (req) => (req.url ?? '/').replace(/^\/{2,}/, '/'),
     logger: logger
       ? {
+          ...(opts.logStream ? { stream: opts.logStream } : {}),
           serializers: {
             req: (req: FastifyRequest) => ({
               method: req.method,
-              url: req.url.split('?')[0] ?? '',
+              url: redactUrl(req.url),
             }),
           },
         }
