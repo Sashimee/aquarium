@@ -53,7 +53,7 @@ async function signUp(page: Page, email: string): Promise<void> {
 async function submitSignIn(page: Page, email: string, password: string): Promise<void> {
   await page.getByLabel('Email', { exact: true }).fill(email);
   await page.getByLabel('Password', { exact: true }).fill(password);
-  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 }
 
 async function requestReset(page: Page, email: string): Promise<void> {

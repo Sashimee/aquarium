@@ -36,6 +36,24 @@ const STIFFNESS: Readonly<Record<string, number>> = {
   'staurogyne-repens': 0.35,
 };
 
+/** Gap kept between the tallest leaf tip and the water surface, which ripples. */
+export const SURFACE_MARGIN = 0.03;
+
+/**
+ * Largest scale at which a plant rooted at `rootY` keeps its highest leaf `SURFACE_MARGIN` under
+ * `waterTop`. The shader adds its lean after the instance transform, so it is horizontal in tank
+ * space and never raises a leaf; the tip stays at `rootY + scale * height * cos(tilt)`, and
+ * `height` bounds that.
+ */
+export function surfaceScaleCeiling(waterTop: number, height: number): (rootY: number) => number {
+  return (rootY) => Math.max(0, (waterTop - SURFACE_MARGIN - rootY) / Math.max(height, 1e-3));
+}
+
+/** Seconds of current a leaf tip of a plant this tall leans into, before the bend curve. */
+export function leanSeconds(assetId: string, height: number): number {
+  return SWAY_SECONDS * swayGain(assetId) * (height / 0.3);
+}
+
 export interface PlantEntry extends PlantInstance {
   /** Position in the patch's thinning order, 0 first to 1 last; layout plants use -1. */
   readonly rank: number;
@@ -45,7 +63,7 @@ export interface PlantEntry extends PlantInstance {
 export function maxSway(assetId: string, height: number, current: CurrentParameters): number {
   const forward = current.speed * (1 + current.gustDepth);
   const sideways = current.speed * current.gustDepth * MEANDER_AMPLITUDE;
-  const lean = Math.hypot(forward, sideways) * SWAY_SECONDS * swayGain(assetId) * (height / 0.3);
+  const lean = Math.hypot(forward, sideways) * leanSeconds(assetId, height);
   return lean + FLUTTER_METRES * 1.6;
 }
 
@@ -63,7 +81,7 @@ export function swayGain(assetId: string): number {
 function createSwayMaterial(
   source: MeshStandardMaterial,
   geometry: BufferGeometry,
-  gain: number,
+  assetId: string,
   current: CurrentField,
 ): MeshStandardNodeMaterial {
   geometry.computeBoundingBox();
@@ -93,10 +111,7 @@ function createSwayMaterial(
   )
     .mul(FLUTTER_METRES)
     .mul(bend);
-  const lean = vec3(flow.x, 0, flow.z)
-    .mul(SWAY_SECONDS * gain)
-    .mul(bend)
-    .mul(height / 0.3);
+  const lean = vec3(flow.x, 0, flow.z).mul(leanSeconds(assetId, height)).mul(bend);
   material.positionNode = positionLocal.add(lean).add(vec3(flutter, 0, flutter.mul(0.6)));
   return material;
 }
@@ -127,7 +142,7 @@ export class PlantGroup {
     this.total = ordered.length;
     this.sorted = ordered;
     for (const { geometry, material: source } of model.primitives) {
-      const material = createSwayMaterial(source, geometry, swayGain(assetId), current);
+      const material = createSwayMaterial(source, geometry, assetId, current);
       this.materials.push(material);
       const mesh = new InstancedMesh(geometry, material, Math.max(1, ordered.length));
       mesh.name = `${assetId}:${source.name}`;

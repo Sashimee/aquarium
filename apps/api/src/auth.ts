@@ -31,6 +31,7 @@ export interface AuthDeps {
   database: Database;
   mailer: Mailer;
   rateLimits?: AuthRateLimits;
+  runInBackground?: (task: Promise<void>) => void;
 }
 
 export function createAuth({
@@ -38,6 +39,7 @@ export function createAuth({
   database,
   mailer,
   rateLimits = DEFAULT_AUTH_RATE_LIMITS,
+  runInBackground = () => {},
 }: AuthDeps) {
   const origin = config.appUrl.origin;
   const secure = config.appUrl.protocol === 'https:';
@@ -117,8 +119,11 @@ export function createAuth({
         const { internalAdapter } = await auth.$context;
         await internalAdapter.updateUser(user.id, { emailVerified: true });
       },
-      sendResetPassword: ({ user, url }) =>
-        throttleSafe(() => mailer.sendPasswordReset(user.email, url), 'reset'),
+      // Better Auth awaits this for known accounts only, so awaiting the SMTP send would make the
+      // response time reveal whether the address is registered. throttleSafe never rejects.
+      sendResetPassword: async ({ user, url }) => {
+        runInBackground(throttleSafe(() => mailer.sendPasswordReset(user.email, url), 'reset'));
+      },
       onExistingUserSignUp: async ({ user }) => {
         if (user.emailVerified) return;
         const token = await createEmailVerificationToken(config.authSecret, user.email);

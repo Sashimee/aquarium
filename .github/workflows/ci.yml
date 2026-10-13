@@ -78,6 +78,12 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium
         if: hashFiles('e2e/**') != ''
       - run: pnpm run --if-present e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-traces
+          path: e2e/test-results
+          if-no-files-found: ignore
 
   docker:
     runs-on: ubuntu-latest
