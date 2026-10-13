@@ -2,7 +2,7 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; every texture has both files.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Anemone tentacle sway is \"_sway\" (0 base, 1 tip).",
-  "totalBytes": 122287774,
+  "totalBytes": 145446051,
   "assets": [
     {
       "id": "angelfish",
@@ -2466,6 +2466,138 @@
       ]
     },
     {
+      "id": "acropora-cytherea",
+      "kind": "coral",
+      "origin": "model",
+      "sources": [
+        "sketchfab-9ff5270c"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.34 m",
+        "LOD0 capped at 25000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "museum plinth cropped off",
+        "bleached skeleton recoloured by luminance to live tan, brown and olive tones",
+        "baked metallicRoughness map dropped, constant roughness"
+      ],
+      "bounds": {
+        "min": [
+          -0.17,
+          0,
+          -0.111911
+        ],
+        "max": [
+          0.17,
+          0.148694,
+          0.111911
+        ]
+      },
+      "lods": [
+        {
+          "file": "coral/acropora-cytherea/lod0.glb",
+          "bytes": 469988,
+          "sha256": "1d82d5d481a947b4fd093d19746c698e1b52d6f265bab67db00c91f3efd639d7",
+          "triangles": 24983,
+          "vertices": 25644
+        },
+        {
+          "file": "coral/acropora-cytherea/lod1.glb",
+          "bytes": 172352,
+          "sha256": "b9bcca722594aafe9f1b6712a5cf470f032f1a74b17d48c9443b580d5a5409f1",
+          "triangles": 8742,
+          "vertices": 8655
+        },
+        {
+          "file": "coral/acropora-cytherea/lod2.glb",
+          "bytes": 54580,
+          "sha256": "144c0c029736bf5976916c7756ba65278fbecebcb4ce8346d3f4dd4605ad7069",
+          "triangles": 2985,
+          "vertices": 2483
+        }
+      ],
+      "textures": [
+        {
+          "name": "acropora-cytherea_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "coral/acropora-cytherea/textures/acropora-cytherea_basecolor_1k.ktx2",
+              "bytes": 196888,
+              "sha256": "2f3899626bc88eb9b63321ef305afa21449ddef0f6e24e243cdf9058e14544eb",
+              "size": 1024
+            },
+            "2k": {
+              "file": "coral/acropora-cytherea/textures/acropora-cytherea_basecolor_2k.ktx2",
+              "bytes": 731553,
+              "sha256": "7b08f6c837353d386f9d58bfc2f3905172351bfdf772fd3f76dbaf85def83b75",
+              "size": 2048
+            }
+          }
+        },
+        {
+          "name": "acropora-cytherea_normal",
+          "role": "normal",
+          "codec": "uastc",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "coral/acropora-cytherea/textures/acropora-cytherea_normal_1k.ktx2",
+              "bytes": 1352223,
+              "sha256": "be6fd4ad3ffa52e511c482dbac2c533f46b755b080252830f88e9e31344c5ef3",
+              "size": 1024
+            },
+            "2k": {
+              "file": "coral/acropora-cytherea/textures/acropora-cytherea_normal_2k.ktx2",
+              "bytes": 5397618,
+              "sha256": "b395aa1d0b386c9b58161f6c44cd7b5f104fee13eea460f219a69e65533e8436",
+              "size": 2048
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "coral/acropora-cytherea/lod0.glb",
+          "bytes": 469988,
+          "sha256": "1d82d5d481a947b4fd093d19746c698e1b52d6f265bab67db00c91f3efd639d7"
+        },
+        {
+          "file": "coral/acropora-cytherea/lod1.glb",
+          "bytes": 172352,
+          "sha256": "b9bcca722594aafe9f1b6712a5cf470f032f1a74b17d48c9443b580d5a5409f1"
+        },
+        {
+          "file": "coral/acropora-cytherea/lod2.glb",
+          "bytes": 54580,
+          "sha256": "144c0c029736bf5976916c7756ba65278fbecebcb4ce8346d3f4dd4605ad7069"
+        },
+        {
+          "file": "coral/acropora-cytherea/textures/acropora-cytherea_basecolor_1k.ktx2",
+          "bytes": 196888,
+          "sha256": "2f3899626bc88eb9b63321ef305afa21449ddef0f6e24e243cdf9058e14544eb"
+        },
+        {
+          "file": "coral/acropora-cytherea/textures/acropora-cytherea_basecolor_2k.ktx2",
+          "bytes": 731553,
+          "sha256": "7b08f6c837353d386f9d58bfc2f3905172351bfdf772fd3f76dbaf85def83b75"
+        },
+        {
+          "file": "coral/acropora-cytherea/textures/acropora-cytherea_normal_1k.ktx2",
+          "bytes": 1352223,
+          "sha256": "be6fd4ad3ffa52e511c482dbac2c533f46b755b080252830f88e9e31344c5ef3"
+        },
+        {
+          "file": "coral/acropora-cytherea/textures/acropora-cytherea_normal_2k.ktx2",
+          "bytes": 5397618,
+          "sha256": "b395aa1d0b386c9b58161f6c44cd7b5f104fee13eea460f219a69e65533e8436"
+        }
+      ]
+    },
+    {
       "id": "acropora-palmata",
       "kind": "coral",
       "origin": "model",
@@ -3473,6 +3605,138 @@
       ]
     },
     {
+      "id": "reef-arch",
+      "kind": "rock",
+      "origin": "model",
+      "sources": [
+        "sketchfab-4db2b936"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.3 m",
+        "LOD0 capped at 7000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "recoloured by luminance to coralline purple and pink live-rock tones, with mottled patches",
+        "procedural pore detail added to the normal map and darkened into the colour map; textures upscaled from 1024 px to 2048 px before the pores were added",
+        "metallicRoughness map dropped, constant roughness"
+      ],
+      "bounds": {
+        "min": [
+          -0.15,
+          0,
+          -0.050608
+        ],
+        "max": [
+          0.15,
+          0.101862,
+          0.050608
+        ]
+      },
+      "lods": [
+        {
+          "file": "rock/reef-arch/lod0.glb",
+          "bytes": 83660,
+          "sha256": "43685afc91bbf7f32e6efb46e5d61d08df5d3e81d26809ef78e055c4009a5344",
+          "triangles": 6920,
+          "vertices": 4366
+        },
+        {
+          "file": "rock/reef-arch/lod1.glb",
+          "bytes": 35388,
+          "sha256": "68f4568c31e60e409a5fce93ea0e15d426d608533fd2342ab3bf5ef3a4618442",
+          "triangles": 2422,
+          "vertices": 1700
+        },
+        {
+          "file": "rock/reef-arch/lod2.glb",
+          "bytes": 15616,
+          "sha256": "e3226a7eec1049cb5c00d13b4394af3d61479f4e9c5de094b7e9233a4a12df35",
+          "triangles": 830,
+          "vertices": 651
+        }
+      ],
+      "textures": [
+        {
+          "name": "reef-arch_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "rock/reef-arch/textures/reef-arch_basecolor_1k.ktx2",
+              "bytes": 186318,
+              "sha256": "7b6d2f8fde718362de2bbc36931eb929c503e55fa52688e01ac7f5867d5659ce",
+              "size": 1024
+            },
+            "2k": {
+              "file": "rock/reef-arch/textures/reef-arch_basecolor_2k.ktx2",
+              "bytes": 668411,
+              "sha256": "c370954d2409f08e392966a3c3a6283281bef6a5335479d19ccf7fc5d7832680",
+              "size": 2048
+            }
+          }
+        },
+        {
+          "name": "reef-arch_normal",
+          "role": "normal",
+          "codec": "uastc",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "rock/reef-arch/textures/reef-arch_normal_1k.ktx2",
+              "bytes": 1327029,
+              "sha256": "c20713a76ab451c459e77136a7d9c0d56f43dde2eb2abf639e8587b06c71c77a",
+              "size": 1024
+            },
+            "2k": {
+              "file": "rock/reef-arch/textures/reef-arch_normal_2k.ktx2",
+              "bytes": 5163964,
+              "sha256": "37f9a9b89b7c62fd79e3d76eed54821f918c5a7e8b0b93b22740eb150482d210",
+              "size": 2048
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "rock/reef-arch/lod0.glb",
+          "bytes": 83660,
+          "sha256": "43685afc91bbf7f32e6efb46e5d61d08df5d3e81d26809ef78e055c4009a5344"
+        },
+        {
+          "file": "rock/reef-arch/lod1.glb",
+          "bytes": 35388,
+          "sha256": "68f4568c31e60e409a5fce93ea0e15d426d608533fd2342ab3bf5ef3a4618442"
+        },
+        {
+          "file": "rock/reef-arch/lod2.glb",
+          "bytes": 15616,
+          "sha256": "e3226a7eec1049cb5c00d13b4394af3d61479f4e9c5de094b7e9233a4a12df35"
+        },
+        {
+          "file": "rock/reef-arch/textures/reef-arch_basecolor_1k.ktx2",
+          "bytes": 186318,
+          "sha256": "7b6d2f8fde718362de2bbc36931eb929c503e55fa52688e01ac7f5867d5659ce"
+        },
+        {
+          "file": "rock/reef-arch/textures/reef-arch_basecolor_2k.ktx2",
+          "bytes": 668411,
+          "sha256": "c370954d2409f08e392966a3c3a6283281bef6a5335479d19ccf7fc5d7832680"
+        },
+        {
+          "file": "rock/reef-arch/textures/reef-arch_normal_1k.ktx2",
+          "bytes": 1327029,
+          "sha256": "c20713a76ab451c459e77136a7d9c0d56f43dde2eb2abf639e8587b06c71c77a"
+        },
+        {
+          "file": "rock/reef-arch/textures/reef-arch_normal_2k.ktx2",
+          "bytes": 5163964,
+          "sha256": "37f9a9b89b7c62fd79e3d76eed54821f918c5a7e8b0b93b22740eb150482d210"
+        }
+      ]
+    },
+    {
       "id": "lambis-shell",
       "kind": "decor",
       "origin": "model",
@@ -3922,6 +4186,114 @@
           "file": "substrate/coast-sand-04/textures/coast-sand-04_normal_2k.ktx2",
           "bytes": 5395894,
           "sha256": "0d419f1405b5183a824b79dbfb89fc0e5ae84e30da6e7dcbc396e6d0bcfbe9d3"
+        }
+      ]
+    },
+    {
+      "id": "reef-sand",
+      "kind": "substrate",
+      "origin": "texture-set",
+      "sources": [
+        "ambientcg-Ground101"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "tileable PBR set re-encoded to KTX2 at 1k and 2k: base colour, GL normal map, ARM (occlusion, roughness, metalness)",
+        "ARM packed from the separate occlusion and roughness maps; displacement map not shipped"
+      ],
+      "lods": [],
+      "textures": [
+        {
+          "name": "reef-sand_basecolor",
+          "role": "baseColor",
+          "codec": "etc1s",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "substrate/reef-sand/textures/reef-sand_basecolor_1k.ktx2",
+              "bytes": 119240,
+              "sha256": "4364299127afc652f105006b7e48032dbb7e1542f360b883a1ab248f657295ce",
+              "size": 1024
+            },
+            "2k": {
+              "file": "substrate/reef-sand/textures/reef-sand_basecolor_2k.ktx2",
+              "bytes": 476920,
+              "sha256": "0b5e9bab90581ba87e489a32c531afa49ac8cb5a8eb014a8236d406896fe9010",
+              "size": 2048
+            }
+          }
+        },
+        {
+          "name": "reef-sand_normal",
+          "role": "normal",
+          "codec": "uastc",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "substrate/reef-sand/textures/reef-sand_normal_1k.ktx2",
+              "bytes": 1219038,
+              "sha256": "0bef8fce2e18059e6187511dc607b8290e3ace0797c1b8dfa519ee29e3c1363a",
+              "size": 1024
+            },
+            "2k": {
+              "file": "substrate/reef-sand/textures/reef-sand_normal_2k.ktx2",
+              "bytes": 4946555,
+              "sha256": "fef8e024bf142f970f8df582147edc33a67cc747e9961cfed23858384d3d8665",
+              "size": 2048
+            }
+          }
+        },
+        {
+          "name": "reef-sand_arm",
+          "role": "occlusionRoughnessMetal",
+          "codec": "etc1s",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "substrate/reef-sand/textures/reef-sand_arm_1k.ktx2",
+              "bytes": 111046,
+              "sha256": "5eaf523df577c0382d3c86a3bddaf2c15e9631045595ef7fb06f38df8ad07a1c",
+              "size": 1024
+            },
+            "2k": {
+              "file": "substrate/reef-sand/textures/reef-sand_arm_2k.ktx2",
+              "bytes": 429890,
+              "sha256": "0c24f779878e9bd4826100d2785d6cf0448146ebb36dd4c8484f9939c1d43c6f",
+              "size": 2048
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "substrate/reef-sand/textures/reef-sand_arm_1k.ktx2",
+          "bytes": 111046,
+          "sha256": "5eaf523df577c0382d3c86a3bddaf2c15e9631045595ef7fb06f38df8ad07a1c"
+        },
+        {
+          "file": "substrate/reef-sand/textures/reef-sand_arm_2k.ktx2",
+          "bytes": 429890,
+          "sha256": "0c24f779878e9bd4826100d2785d6cf0448146ebb36dd4c8484f9939c1d43c6f"
+        },
+        {
+          "file": "substrate/reef-sand/textures/reef-sand_basecolor_1k.ktx2",
+          "bytes": 119240,
+          "sha256": "4364299127afc652f105006b7e48032dbb7e1542f360b883a1ab248f657295ce"
+        },
+        {
+          "file": "substrate/reef-sand/textures/reef-sand_basecolor_2k.ktx2",
+          "bytes": 476920,
+          "sha256": "0b5e9bab90581ba87e489a32c531afa49ac8cb5a8eb014a8236d406896fe9010"
+        },
+        {
+          "file": "substrate/reef-sand/textures/reef-sand_normal_1k.ktx2",
+          "bytes": 1219038,
+          "sha256": "0bef8fce2e18059e6187511dc607b8290e3ace0797c1b8dfa519ee29e3c1363a"
+        },
+        {
+          "file": "substrate/reef-sand/textures/reef-sand_normal_2k.ktx2",
+          "bytes": 4946555,
+          "sha256": "fef8e024bf142f970f8df582147edc33a67cc747e9961cfed23858384d3d8665"
         }
       ]
     },

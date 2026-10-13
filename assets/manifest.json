@@ -1492,7 +1492,12 @@
       "textures": "Material_baseColor.jpeg 1024x1024, Material_metallicRoughness.png 1024x1024, Material_normal.png 1024x1024",
       "rigged": false,
       "notes": "Reef arch candidate (issue #79). Sculpted grey-pink rock arch, about 40 x 13.6 x 13.5 units as authored (long axis X, Y up); scale about 0.0075 for a 0.3 m span. Smooth sculpt with no pore detail: needs a coralline pink/purple tint and a procedural porous normal/occlusion layer. Verified from the downloaded glTF: 6920 triangles, not rigged (no skins). Zip sha256 9ab29ee5e8806b0e9f2dcfe96f288f2442d76eee95cf092ac42ab173156d0f8d; sha256 is the aggregate over files[].",
-      "modifications": [],
+      "modifications": [
+        "recoloured by luminance to coralline purple and pink live-rock tones, with mottled patches",
+        "procedural pore detail added to the normal map and darkened into the colour map; textures upscaled from 1024 px to 2048 px first",
+        "metallicRoughness map dropped, constant roughness",
+        "scaled to a 0.3 m span, origin at the base centre, simplified into three LODs, textures re-encoded to KTX2"
+      ],
       "status": "downloaded",
       "files": [
         {
@@ -1542,7 +1547,12 @@
       "textures": "default_baseColor.jpeg 2048x2048, default_metallicRoughness.png 2048x2048, default_normal.jpeg 2048x2048",
       "rigged": false,
       "notes": "SPS table coral (Acropora cytherea) scan for issue #79: bleached skeleton on a museum plinth, 0.63 x 0.34 x 0.41 m including plinth. Two primitives sharing one material (81199 + 18801 triangles); crop the plinth, decimate to about 25k, tint for live coral and scale to a 0.30 to 0.35 m footprint (factor about 0.5). Verified from the downloaded glTF: 100000 triangles, not rigged (no skins). Zip sha256 1e1b5f7cfbd68bcd11b390ed4f830325ee9480288b5d22ec656eba1f1592b76d; sha256 is the aggregate over files[].",
-      "modifications": [],
+      "modifications": [
+        "museum plinth cropped off",
+        "bleached skeleton recoloured by luminance to live tan, brown and olive tones",
+        "baked metallicRoughness map dropped, constant roughness",
+        "decimated to 25k triangles, scaled to a 0.34 m footprint, origin at the base centre, three LODs, textures re-encoded to KTX2"
+      ],
       "status": "downloaded",
       "files": [
         {
@@ -1677,7 +1687,10 @@
       "textures": "PBR jpg 2048x2048: Color, NormalGL, Roughness, AmbientOcclusion, Displacement",
       "rigged": false,
       "notes": "Pale, fine-grained sand (tags beige, white, light, fine) as the aragonite reef substrate for issue #79; coast_sand_04 reads brown under reef light. Licence stated as CC0 on the asset page FAQ and https://docs.ambientcg.com/license/. Zip sha256 a070b33c3513a2b62940cc704b5cde26c50d814e46ca5ad0f4002c44e5d3a9f3 (Ground101_2K-JPG.zip); the raw directory also holds the unlisted .blend/.usdc/.mtlx/.tres/NormalDX files from the zip. sha256 is the aggregate over files[].",
-      "modifications": [],
+      "modifications": [
+        "colour, GL normal, roughness and ambient occlusion maps re-encoded to KTX2 at 1k and 2k; occlusion and roughness packed into one ARM texture",
+        "displacement and DX normal maps not shipped"
+      ],
       "status": "downloaded",
       "files": [
         {

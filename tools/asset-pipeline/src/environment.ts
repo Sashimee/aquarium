@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Material } from '@gltf-transform/core';
+import type { Document, Material } from '@gltf-transform/core';
 import {
   KHRMaterialsPBRSpecularGlossiness,
   type PBRSpecularGlossiness,
@@ -13,6 +13,7 @@ import {
   type TextureEntry,
 } from './emit.ts';
 import type { FishContext } from './fish.ts';
+import { addPores, packArm, tintImage, upscaleTo, type PoreSpec, type TintSpec } from './finish.ts';
 import { writeFileTracked } from './glb.ts';
 import type { AssetKind, OutputAsset } from './index-schema.ts';
 import {
@@ -44,6 +45,10 @@ export interface EnvironmentRecipe {
   material?: MaterialOptions;
   /** Paint a green leaf texture for sources that only carry a flat colour. */
   proceduralLeafTexture?: boolean;
+  /** Recolours the base colour map by luminance. */
+  tint?: TintSpec;
+  /** Adds procedural pores to the normal and colour maps; both are upscaled to 2048 px first. */
+  pores?: PoreSpec;
   modifications: string[];
 }
 
@@ -143,7 +148,17 @@ function leafTexture(): Rgba {
   return { width: size, height: size, data };
 }
 
-function assertTexcoordZero(source: Material, recipe: string): void {
+function sameValues(
+  a: ArrayLike<number> | null | undefined,
+  b: ArrayLike<number> | null | undefined,
+): boolean {
+  if (!a || !b || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+/** A texture on TEXCOORD_n is exportable only when that set is a copy of TEXCOORD_0 on every primitive. */
+function assertTexcoordZero(doc: Document, source: Material, recipe: string): void {
   const specGloss = source.getExtension<PBRSpecularGlossiness>(
     KHRMaterialsPBRSpecularGlossiness.EXTENSION_NAME,
   );
@@ -152,12 +167,40 @@ function assertTexcoordZero(source: Material, recipe: string): void {
     source.getNormalTextureInfo(),
   ];
   for (const info of infos) {
-    if (info && info.getTexCoord() !== 0) {
-      throw new Error(
-        `${recipe}: material "${source.getName()}" samples TEXCOORD_${info.getTexCoord()}; only TEXCOORD_0 is exported`,
-      );
-    }
+    const set = info?.getTexCoord() ?? 0;
+    if (set === 0) continue;
+    for (const mesh of doc.getRoot().listMeshes())
+      for (const prim of mesh.listPrimitives()) {
+        if (prim.getMaterial() !== source) continue;
+        const same = sameValues(
+          prim.getAttribute(`TEXCOORD_${set}`)?.getArray(),
+          prim.getAttribute('TEXCOORD_0')?.getArray(),
+        );
+        if (!same)
+          throw new Error(
+            `${recipe}: material "${source.getName()}" samples TEXCOORD_${set}, which differs from TEXCOORD_0; only TEXCOORD_0 is exported`,
+          );
+      }
   }
+}
+
+async function finishMaterial(def: MaterialDef, recipe: EnvironmentRecipe): Promise<MaterialDef> {
+  if (!recipe.tint && !recipe.pores) return def;
+  if (!def.baseColor) throw new Error(`${recipe.id}: tint and pores need a base colour texture`);
+  let image = recipe.pores ? await upscaleTo(def.baseColor.image, 2048) : def.baseColor.image;
+  if (recipe.tint) image = tintImage(image, recipe.tint);
+  let normal = def.normal;
+  if (recipe.pores) {
+    if (!normal) throw new Error(`${recipe.id}: pores need a normal map to perturb`);
+    const detailed = addPores(image, await upscaleTo(normal.image, 2048), recipe.pores);
+    image = detailed.baseColor;
+    normal = { ...normal, image: detailed.normal };
+  }
+  return {
+    ...def,
+    baseColor: { ...def.baseColor, image },
+    ...(normal ? { normal } : {}),
+  };
 }
 
 export async function buildEnvironment(
@@ -182,8 +225,9 @@ export async function buildEnvironment(
   const materials: MaterialDef[] = [];
   for (const source of doc.getRoot().listMaterials()) {
     if (!used.has(source.getName())) continue;
-    assertTexcoordZero(source, recipe.id);
-    const def = await materialDefFrom(source, { metallic: 0, ...recipe.material });
+    assertTexcoordZero(doc, source, recipe.id);
+    let def = await materialDefFrom(source, { metallic: 0, ...recipe.material });
+    def = await finishMaterial(def, recipe);
     if (recipe.proceduralLeafTexture && !def.baseColor) {
       materials.push({
         ...def,
@@ -225,7 +269,10 @@ export async function buildEnvironment(
 export interface SubstrateRecipe {
   id: string;
   sourceId: string;
-  prefix: string;
+  /** Poly Haven naming: `<prefix>_diff|nor_gl|arm_2k.jpg`. */
+  prefix?: string;
+  /** Separate occlusion and roughness maps (ambientCG), packed into an ARM texture here. */
+  files?: { diff: string; normal: string; occlusion: string; roughness: string };
 }
 
 export async function buildSubstrate(
@@ -234,8 +281,18 @@ export async function buildSubstrate(
 ): Promise<OutputAsset> {
   ctx.verifySource(recipe.sourceId);
   const dir = join(RAW_ROOT, recipe.sourceId);
-  const load = async (suffix: string): Promise<Rgba> =>
-    decodeImage(readFileSync(join(dir, `${recipe.prefix}_${suffix}_2k.jpg`)));
+  const loadFile = async (name: string): Promise<Rgba> =>
+    decodeImage(readFileSync(join(dir, name)));
+  const load = async (suffix: string): Promise<Rgba> => {
+    if (recipe.files) {
+      const { files } = recipe;
+      if (suffix === 'diff') return loadFile(files.diff);
+      if (suffix === 'nor_gl') return loadFile(files.normal);
+      return packArm(await loadFile(files.occlusion), await loadFile(files.roughness));
+    }
+    if (!recipe.prefix) throw new Error(`${recipe.id}: substrate recipe needs a prefix or files`);
+    return loadFile(`${recipe.prefix}_${suffix}_2k.jpg`);
+  };
   const entries: TextureEntry[] = [
     {
       name: `${recipe.id}_basecolor`,
@@ -267,7 +324,9 @@ export async function buildSubstrate(
     licence: ctx.licenceOf(recipe.sourceId),
     modifications: [
       'tileable PBR set re-encoded to KTX2 at 1k and 2k: base colour, GL normal map, ARM (occlusion, roughness, metalness)',
-      'displacement and roughness maps not shipped',
+      recipe.files
+        ? 'ARM packed from the separate occlusion and roughness maps; displacement map not shipped'
+        : 'displacement and roughness maps not shipped',
     ],
     lods: [],
     textures,
