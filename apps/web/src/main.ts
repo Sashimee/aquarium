@@ -2,7 +2,7 @@ import { Engine } from './engine/Engine';
 import { EventBus, type EngineEvents } from './engine/events';
 import { parseEngineOptions } from './engine/options';
 import { DEFAULT_TANK } from './engine/tank/dimensions';
-import { startDemoFish } from './fish/start';
+import { queueTankEvents, startFish } from './fish/start';
 import { CameraRig } from './interaction/camera';
 import { bindCameraControls } from './interaction/controls';
 import type { InteractionEvents } from './interaction/events';
@@ -37,6 +37,7 @@ async function boot(): Promise<void> {
     console.info(`quality tier ${from ?? '(start)'} -> ${to} (${reason})`),
   );
 
+  const tankEvents = queueTankEvents(interaction);
   mountUi(uiRoot, { engine: events, interaction });
 
   let engine: Engine;
@@ -46,6 +47,7 @@ async function boot(): Promise<void> {
       events,
     });
   } catch (cause) {
+    tankEvents.stop();
     showFatal(container, cause instanceof Error ? cause.message : String(cause));
     return;
   }
@@ -90,7 +92,13 @@ async function boot(): Promise<void> {
   engine.onFrame((deltaS) => rig.update(deltaS));
 
   const biome = parseBiome(window.location.search);
-  const fish = startDemoFish(engine, DEFAULT_TANK, biome, `${import.meta.env.BASE_URL}assets/`);
+  const fish = startFish(engine, {
+    tank: DEFAULT_TANK,
+    assetRoot: `${import.meta.env.BASE_URL}assets/`,
+    biome,
+    interaction,
+    tankEvents,
+  });
 
   let tankScene: TankScene | null = null;
   mountPresetWhenTierKnown(engine, biome, window.location.search, (scene) => {
