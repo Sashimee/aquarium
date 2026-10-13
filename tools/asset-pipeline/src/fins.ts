@@ -341,6 +341,14 @@ const smoothstep = (t: number): number => {
 };
 
 /**
+ * Mapping z -> -d * f(d) stays monotonic only while 1 - (1 - factor) * max(9t^2 - 8t^3) > 0; that maximum is 27/16 at
+ * t = 3/4, so the tail folds onto itself below 1 - 16/27 (about 0.407).
+ */
+export const CAUDAL_SCALE_FOLD = 1 - 16 / 27;
+export const CAUDAL_SCALE_MIN = 0.45;
+export const CAUDAL_SCALE_MAX = 1;
+
+/**
  * Shrinks everything behind the peduncle about its centre. The factor eases from 1 at the peduncle to `factor` half a
  * tail length behind it, so the rear of the dorsal and anal fins, which also run past the peduncle, follow without a
  * seam. Fin ids and masks are untouched; normals are transformed by the inverse transpose of the local Jacobian.
@@ -350,7 +358,12 @@ export function scaleCaudal(
   normals: Float32Array,
   fins: FinResult,
   factor: number,
+  label = 'scaleCaudal',
 ): void {
+  if (!(factor >= CAUDAL_SCALE_MIN && factor <= CAUDAL_SCALE_MAX))
+    throw new Error(
+      `${label}: caudalScale ${factor} is outside ${CAUDAL_SCALE_MIN}-${CAUDAL_SCALE_MAX}; below about ${CAUDAL_SCALE_FOLD.toFixed(2)} the tail folds onto itself, above 1 it grows. Change the recipe's caudalScale.`,
+    );
   const bandEnd = fins.zPeduncle + 0.03 * (fins.zSnout - fins.zTail);
   let yBody = 0;
   let n = 0;

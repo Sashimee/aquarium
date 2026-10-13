@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { scaleCaudal, type FinResult } from './fins.ts';
+import { CAUDAL_SCALE_FOLD, CAUDAL_SCALE_MIN, scaleCaudal, type FinResult } from './fins.ts';
 import { FIN_IDS } from './index-schema.ts';
 
 const at = (p: ArrayLike<number>, i: number): number => {
@@ -107,5 +107,19 @@ describe('scaleCaudal', () => {
       zTail: -0.6,
     };
     expect(() => scaleCaudal(positions, new Float32Array(3), fins, 0.5)).toThrow(/no body vertex/);
+  });
+
+  it('rejects caudalScale outside the fold-free range and accepts its edges and the recipes', () => {
+    expect(CAUDAL_SCALE_MIN).toBeGreaterThan(CAUDAL_SCALE_FOLD);
+    for (const bad of [0.4, 0.44, 1.01, 0, -1, Number.NaN]) {
+      const { positions, normals, fins } = strip();
+      expect(() => scaleCaudal(positions, normals, fins, bad, 'betta')).toThrow(
+        /betta: caudalScale .* outside 0\.45-1/,
+      );
+    }
+    for (const ok of [CAUDAL_SCALE_MIN, 0.56, 0.76, 1]) {
+      const { positions, normals, fins } = strip();
+      expect(() => scaleCaudal(positions, normals, fins, ok)).not.toThrow();
+    }
   });
 });
