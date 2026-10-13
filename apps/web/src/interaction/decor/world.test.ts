@@ -184,7 +184,7 @@ describe('SavedDecor', () => {
     const { bus, world, hard } = setup();
     const saved = new SavedDecor(bus, vi.fn());
     saved.attach(world);
-    bus.emit('tank:unloaded', { tankId: 'x' });
+    bus.emit('tank:unloaded', { tankId: 'x', reason: 'reset' });
     expect(hard).toHaveLength(0);
   });
 
@@ -198,10 +198,52 @@ describe('SavedDecor', () => {
       fish,
       decorLayout: [item('boulder-01', 0.1, 0.1)],
     });
-    bus.emit('tank:unloaded', { tankId: 't1' });
+    bus.emit('tank:unloaded', { tankId: 't1', reason: 'reset' });
     await settle();
     expect(hard.at(-1)).toEqual(preset);
     expect(saved.tankId).toBeNull();
+  });
+
+  it('waits for the next tank across a switch instead of flashing the preset', async () => {
+    const { bus, world, hard } = setup();
+    const saved = new SavedDecor(bus, vi.fn());
+    saved.attach(world);
+    bus.emit('tank:loaded', {
+      tankId: 't1',
+      biome: 'freshwater',
+      fish,
+      decorLayout: [item('boulder-01', 0.1, 0.1)],
+    });
+    await settle();
+    const before = hard.length;
+    bus.emit('tank:unloaded', { tankId: 't1', reason: 'switch' });
+    await settle();
+    expect(hard).toHaveLength(before);
+    expect(saved.tankId).toBeNull();
+    bus.emit('tank:loaded', {
+      tankId: 't2',
+      biome: 'freshwater',
+      fish,
+      decorLayout: [item('boulder-01', -0.2, 0.1)],
+    });
+    await settle();
+    expect(hard.slice(before)).toEqual([[item('boulder-01', -0.2, 0.1)]]);
+  });
+
+  it('goes back to the preset when no tank follows a switch', async () => {
+    const { bus, world, hard } = setup();
+    const saved = new SavedDecor(bus, vi.fn());
+    saved.attach(world);
+    bus.emit('tank:loaded', {
+      tankId: 't1',
+      biome: 'freshwater',
+      fish,
+      decorLayout: [item('boulder-01', 0.1, 0.1)],
+    });
+    bus.emit('tank:unloaded', { tankId: 't1', reason: 'switch' });
+    bus.emit('tank:none', {});
+    await settle();
+    expect(hard.at(-1)).toEqual(preset);
   });
 
   it('ignores a layout of a tank with another biome', () => {
