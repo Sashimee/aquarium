@@ -4,7 +4,7 @@ import { boundsOf } from './geometry.ts';
 import { FIN_ID_ATTRIBUTE, FIN_IDS, FIN_MASK_ATTRIBUTE, SWAY_ATTRIBUTE } from './index-schema.ts';
 import { loftFish, signedVolume, sideProjection } from './loft.ts';
 import { LOFT_FISH_RECIPES, appendSwatch } from './loft-fish.ts';
-import { compactPart, normaliseToBase } from './environment.ts';
+import { compactPart, cropForRecipe, normaliseToBase } from './environment.ts';
 import { anemonePart } from './anemone.ts';
 import {
   createGrid,
@@ -338,6 +338,27 @@ describe('environment helpers', () => {
     expect(min[1]).toBeCloseTo(0);
     expect((min[0] + max[0]) / 2).toBeCloseTo(0);
     expect(Math.max(max[0] - min[0], max[1] - min[1], max[2] - min[2])).toBeCloseTo(0.5);
+  });
+
+  it('keepUncroppedScale measures the longest edge before the crop', () => {
+    const tall: Part = {
+      positions: Float32Array.from([0, 0, 0, 1, 0, 0, 0, 10, 0, 0, 5, 0, 1, 5, 0, 0, 10, 1]),
+      normals: new Float32Array(18),
+      uvs: new Float32Array(12),
+      indices: Uint32Array.from([0, 1, 2, 3, 4, 5]),
+      material: 'm',
+      extra: {},
+    };
+    const recipe = { longestM: 1, clipBelowFraction: 0.4 };
+    const plain = cropForRecipe([tall], recipe);
+    const kept = cropForRecipe([tall], { ...recipe, keepUncroppedScale: true });
+    expect(plain.longestM).toBe(1);
+    expect(plain.parts[0]!.indices).toHaveLength(3);
+    // cropped edge is 5 against an uncropped 10, so the full scan scale gives 0.5
+    expect(kept.longestM).toBeCloseTo(0.5);
+    normaliseToBase(kept.parts, kept.longestM);
+    const { min, max } = boundsOf(kept.parts[0]!.positions);
+    expect(max[1] - min[1]).toBeCloseTo(0.5);
   });
 });
 

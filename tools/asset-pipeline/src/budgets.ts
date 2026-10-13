@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
+import { PROCEDURAL_EUPHYLLIA_ID } from '@aquarium/shared';
 import type { AssetIndex, OutputAsset } from './index-schema.ts';
 
 /** PLAN section 2.7: initial download. */
@@ -14,8 +15,8 @@ export type BudgetGroup = keyof typeof TIER_BUDGETS;
 /** Brotli JS plus the Basis transcoder, which the asset files do not include. */
 export const CODE_RESERVE_BYTES = 1.5 * 1000 * 1000;
 
-/** Same shape as `ID_PATTERN` in apps/web/src/scene/euphyllia.ts: generated at runtime, no files. */
-export const PROCEDURAL_ASSET_ID = /^euphyllia-(hammer|torch)-(0|[1-9]\d{0,8})$/;
+/** Generated at runtime, no files. */
+export const PROCEDURAL_ASSET_ID = PROCEDURAL_EUPHYLLIA_ID;
 
 /** The environment map `Engine` fetches on every tier, as `hdri/<id>/<file>` under the asset base. */
 export interface HdriRef {

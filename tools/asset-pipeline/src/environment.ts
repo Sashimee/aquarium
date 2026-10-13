@@ -212,6 +212,19 @@ async function finishMaterial(def: MaterialDef, recipe: EnvironmentRecipe): Prom
   };
 }
 
+export function cropForRecipe(
+  parts: Part[],
+  recipe: Pick<EnvironmentRecipe, 'longestM' | 'clipBelowFraction' | 'keepUncroppedScale'>,
+): { parts: Part[]; longestM: number } {
+  const uncropped = longestEdge(parts);
+  const kept =
+    recipe.clipBelowFraction === undefined ? parts : clipBelow(parts, recipe.clipBelowFraction);
+  const longestM = recipe.keepUncroppedScale
+    ? (recipe.longestM * longestEdge(kept)) / uncropped
+    : recipe.longestM;
+  return { parts: kept, longestM };
+}
+
 export async function buildEnvironment(
   recipe: EnvironmentRecipe,
   ctx: FishContext,
@@ -226,13 +239,10 @@ export async function buildEnvironment(
   );
 
   let parts = extractParts(doc).map(weldPart);
-  const uncropped = longestEdge(parts);
-  if (recipe.clipBelowFraction !== undefined) parts = clipBelow(parts, recipe.clipBelowFraction);
   if (parts.length === 0) throw new Error(`${recipe.id}: no geometry left after dropping meshes`);
-  const longestM = recipe.keepUncroppedScale
-    ? (recipe.longestM * longestEdge(parts)) / uncropped
-    : recipe.longestM;
-  normaliseToBase(parts, longestM);
+  const cropped = cropForRecipe(parts, recipe);
+  parts = cropped.parts;
+  normaliseToBase(parts, cropped.longestM);
 
   const used = new Set(parts.map((p) => p.material));
   const materials: MaterialDef[] = [];
