@@ -9,7 +9,7 @@ import {
 } from 'three/webgpu';
 import type { DecorItem } from '@aquarium/shared';
 import type { CatalogEntry, LoadedModel } from './assets';
-import { coralTint, heightScale } from './coralStyle';
+import { coralTint, placementKey, heightScale } from './coralStyle';
 import { fitCapsuleChain, fitHull, transformPoints, type Collider } from './colliders';
 
 export const HARDSCAPE_KINDS: ReadonlySet<string> = new Set([
@@ -58,7 +58,6 @@ export class Hardscape {
   readonly group = new Group();
   private readonly meshesByItem: Mesh[][] = [];
   private readonly tintedMaterials: MeshStandardMaterial[] = [];
-  private readonly ordinals = new Map<string, number>();
 
   constructor() {
     this.group.name = 'hardscape';
@@ -68,9 +67,7 @@ export class Hardscape {
     const matrix = decorMatrix(item);
     const meshes: Mesh[] = [];
     this.meshesByItem.push(meshes);
-    const ordinal = this.ordinals.get(item.assetId) ?? 0;
-    this.ordinals.set(item.assetId, ordinal + 1);
-    const tint = coralTint(item.assetId, ordinal);
+    const tint = coralTint(item.assetId, placementKey(item.position, item.rotationY));
     for (const primitive of model.primitives) {
       let material = primitive.material;
       if (tint) {
