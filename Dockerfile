@@ -8,7 +8,7 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm fetch
 COPY . .
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --offline
-RUN pnpm build
+RUN pnpm build && pnpm --filter @aquarium/api compress:web
 RUN mkdir -p apps/web/dist
 RUN pnpm --filter @aquarium/api --prod deploy /out/api
 

@@ -1,11 +1,13 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { brotliCompressSync, brotliDecompressSync, gunzipSync, gzipSync } from 'node:zlib';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { createHarness, type Harness } from './test-harness.ts';
 
 const NOINDEX = 'noindex, nofollow';
+const BUNDLE = 'console.log("hello aquarium");'.repeat(200);
 let dist: string;
 let plain: Harness;
 let spa: Harness;
@@ -16,6 +18,12 @@ beforeAll(async () => {
   mkdirSync(join(dist, 'assets'));
   writeFileSync(join(dist, 'index.html'), '<!doctype html><title>spa</title>');
   writeFileSync(join(dist, 'assets', 'app.js'), 'console.log(1)');
+  writeFileSync(join(dist, 'assets', 'index-C7vUOBtl.js'), BUNDLE);
+  writeFileSync(join(dist, 'assets', 'index-C7vUOBtl.js.br'), brotliCompressSync(BUNDLE));
+  writeFileSync(join(dist, 'assets', 'index-C7vUOBtl.js.gz'), gzipSync(BUNDLE));
+  writeFileSync(join(dist, 'assets', 'index.json'), '{}');
+  mkdirSync(join(dist, 'assets', 'fish'));
+  writeFileSync(join(dist, 'assets', 'fish', 'tetra.glb'), 'glb');
   writeFileSync(join(dist, '.env'), 'SECRET=1');
   [plain, spa, indexable] = await Promise.all([
     createHarness(),
@@ -66,6 +74,37 @@ describe('with a web build', () => {
     const res = await withDist().inject('/assets/app.js');
     expect(res.statusCode).toBe(200);
     expect(res.body).toBe('console.log(1)');
+  });
+
+  it('serves hashed bundles brotli, gzip or identity by Accept-Encoding', async () => {
+    const app = withDist();
+    const url = '/assets/index-C7vUOBtl.js';
+
+    const br = await app.inject({ url, headers: { 'accept-encoding': 'gzip, br' } });
+    expect(br.headers['content-encoding']).toBe('br');
+    expect(br.headers['content-type']).toContain('javascript');
+    expect(br.headers['vary']).toContain('accept-encoding');
+    expect(brotliDecompressSync(br.rawPayload).toString()).toBe(BUNDLE);
+
+    const gz = await app.inject({ url, headers: { 'accept-encoding': 'gzip' } });
+    expect(gz.headers['content-encoding']).toBe('gzip');
+    expect(gunzipSync(gz.rawPayload).toString()).toBe(BUNDLE);
+
+    const identity = await app.inject({ url });
+    expect(identity.headers['content-encoding']).toBeUndefined();
+    expect(identity.body).toBe(BUNDLE);
+  });
+
+  it('caches by how stable the file name is', async () => {
+    const app = withDist();
+    const cache = async (url: string): Promise<unknown> =>
+      (await app.inject({ url, headers: { 'accept-encoding': 'br' } })).headers['cache-control'];
+    expect(await cache('/assets/index-C7vUOBtl.js')).toBe('public, max-age=31536000, immutable');
+    expect(await cache('/assets/fish/tetra.glb')).toBe('public, max-age=3600');
+    expect(await cache('/assets/index.json')).toBe('no-cache');
+    expect(await cache('/index.html')).toBe('no-cache');
+    expect(await cache('/')).toBe('no-cache');
+    expect(await cache('/tank/42')).toBe('no-cache');
   });
 
   it('falls back to index.html for SPA routes, GET and HEAD', async () => {

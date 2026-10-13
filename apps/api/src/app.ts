@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { relative, resolve, sep } from 'node:path';
 import fastifyStatic from '@fastify/static';
 import {
   revokeSessionRequestSchema,
@@ -352,7 +352,17 @@ export function buildApp(opts: AppOptions): FastifyInstance {
 
   const root = resolve(webRoot);
   const hasWeb = existsSync(resolve(root, 'index.html'));
-  if (hasWeb) void app.register(fastifyStatic, { root, dotfiles: 'ignore' });
+  if (hasWeb) {
+    void app.register(fastifyStatic, {
+      root,
+      dotfiles: 'ignore',
+      preCompressed: true,
+      cacheControl: false,
+      setHeaders: (res, path) => {
+        res.header('cache-control', staticCacheControl(relative(root, path)));
+      },
+    });
+  }
 
   app.setNotFoundHandler(async (req, reply) => {
     const pathname = normalizedPathname(req.url);
@@ -364,6 +374,22 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   });
 
   return app;
+}
+
+// Vite emits content-hashed bundles flat in assets/; models and textures copied from public/ live in
+// subdirectories under stable names, so they must stay revalidatable.
+const HASHED_ASSET = /^assets\/[^/]+-[A-Za-z0-9_-]{8,}\.[a-z0-9]+$/;
+
+function staticCacheControl(relPath: string): string {
+  const file = relPath
+    .split(sep)
+    .join('/')
+    .replace(/\.(br|gz)$/, '');
+  if (HASHED_ASSET.test(file)) return 'public, max-age=31536000, immutable';
+  if (file.startsWith('assets/') && file.indexOf('/', 'assets/'.length) !== -1) {
+    return 'public, max-age=3600';
+  }
+  return 'no-cache';
 }
 
 function originOf(referer: string | undefined): string | undefined {
