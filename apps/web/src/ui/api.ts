@@ -256,7 +256,7 @@ export function createApiClient(fetcher: Fetcher = (i, init) => fetch(i, init)):
       } catch (cause) {
         throw passkeyFailure(cause, 'created');
       }
-      const { clientExtensionResults: _ignored, ...response } = credential;
+      const response = { ...credential, clientExtensionResults: undefined };
       await post('/api/auth/passkey/verify-registration', { response });
     },
     async signInWithPasskey() {
@@ -281,7 +281,7 @@ export function createApiClient(fetcher: Fetcher = (i, init) => fetch(i, init)):
       } catch (cause) {
         throw passkeyFailure(cause, 'used');
       }
-      const { clientExtensionResults: _ignored, ...response } = credential;
+      const response = { ...credential, clientExtensionResults: undefined };
       await post('/api/auth/passkey/verify-authentication', { response });
     },
     async resendVerification(email) {

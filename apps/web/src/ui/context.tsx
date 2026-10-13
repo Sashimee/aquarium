@@ -62,10 +62,23 @@ export function usePlayTool(): PlayTool {
   return tool;
 }
 
+const lastDecorState = new WeakMap<object, DecorViewState>();
+
+// The editor panel mounts after its lazy chunk loads, once the state event it needs has already
+// fired, so a late subscriber starts from the last state seen rather than from nothing.
 export function useDecorState(): DecorViewState | null {
   const { interaction } = useBridge();
-  const [state, setState] = useState<DecorViewState | null>(null);
-  useEffect(() => interaction.on('decor:state', setState), [interaction]);
+  const [state, setState] = useState<DecorViewState | null>(
+    () => lastDecorState.get(interaction) ?? null,
+  );
+  useEffect(
+    () =>
+      interaction.on('decor:state', (next) => {
+        lastDecorState.set(interaction, next);
+        setState(next);
+      }),
+    [interaction],
+  );
   return state;
 }
 
