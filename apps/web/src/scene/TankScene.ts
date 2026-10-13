@@ -597,7 +597,7 @@ export function checkEuphylliaClearOfGlass(
   }
 }
 
-function plantReach(
+export function plantReach(
   assetId: string,
   bounds: { readonly min: readonly number[]; readonly max: readonly number[] } | undefined,
   current: CurrentParameters,
@@ -612,7 +612,8 @@ function plantReach(
       )
     : 0.1;
   const lean = Math.sin(MAX_PLANT_TILT) * height;
-  return (scale) => (half + lean + maxSway(assetId, height, current)) * scale;
+  const sway = maxSway(assetId, height, current);
+  return (scale) => (half + lean) * scale + sway;
 }
 
 function plantCapsule(
