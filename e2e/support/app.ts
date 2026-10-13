@@ -1,0 +1,98 @@
+import { expect, type Page } from '@playwright/test';
+import { APP_URL, SINK_URL } from './env.ts';
+
+export const PASSWORD = 'a long enough passphrase 9';
+export const SCENE_TIMEOUT_MS = 180_000;
+
+let counter = 0;
+
+export function newIdentity(label: string): { name: string; email: string } {
+  counter += 1;
+  const tag = `${label}${Date.now().toString(36)}${counter}`;
+  return { name: `E2E ${label}`, email: `e2e-${tag}@bas.lu` };
+}
+
+interface SinkMessage {
+  to: string;
+  subject: string;
+  text: string;
+}
+
+async function outboxFor(email: string): Promise<SinkMessage[]> {
+  const res = await fetch(`${SINK_URL}/outbox`);
+  const all = (await res.json()) as SinkMessage[];
+  return all.filter((m) => m.to.toLowerCase() === email.toLowerCase());
+}
+
+export async function verificationLinkFor(email: string): Promise<string> {
+  let link = '';
+  await expect
+    .poll(
+      async () => {
+        const mail = (await outboxFor(email)).find((m) => /verify/i.test(m.subject));
+        link = mail ? (/<(https?:\/\/[^>\s]+)>/.exec(mail.text)?.[1] ?? '') : '';
+        return link;
+      },
+      { message: `a verification email for ${email} in the test outbox` },
+    )
+    .not.toBe('');
+  return link;
+}
+
+/** Signs up through the API and follows the mailed link in the page's own browser context. */
+export async function registerVerifiedUser(
+  page: Page,
+  label: string,
+): Promise<{ name: string; email: string }> {
+  const identity = newIdentity(label);
+  const signUp = await page.request.post('/api/auth/sign-up/email', {
+    headers: { origin: APP_URL },
+    data: { ...identity, password: PASSWORD, callbackURL: '/verify-email' },
+  });
+  expect(signUp.ok(), 'sign-up request').toBe(true);
+  const verified = await page.request.get(await verificationLinkFor(identity.email));
+  expect(verified.ok(), 'verification link').toBe(true);
+  return identity;
+}
+
+export async function openTank(page: Page): Promise<void> {
+  await page.goto('/?backend=webgl');
+  await expect(page.getByRole('button', { name: 'Feed', exact: true })).toBeEnabled({
+    timeout: SCENE_TIMEOUT_MS,
+  });
+}
+
+export async function openTankPanel(page: Page): Promise<void> {
+  const toggle = page.getByRole('button', { name: 'My tank' });
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
+  await expect(page.getByRole('region', { name: 'Your tank' })).toBeVisible();
+}
+
+export async function createFirstTank(page: Page): Promise<void> {
+  await openTankPanel(page);
+  await page.getByRole('button', { name: 'Create tank' }).click();
+  await expect(page.getByRole('heading', { name: 'Tanks' })).toBeVisible();
+}
+
+export interface TankView {
+  id: string;
+  name: string;
+  water: { uneatenFood: number; ammonia: number; algae: number };
+  decorLayout: { assetId: string; position: number[]; rotationY: number }[];
+  fish: { id: string; name: string; status: 'alive' | 'dead' }[];
+  memorials: { fishName: string }[];
+}
+
+export async function savedTanks(page: Page): Promise<TankView[]> {
+  const res = await page.request.get('/api/tanks');
+  expect(res.ok(), 'GET /api/tanks').toBe(true);
+  return (await res.json()) as TankView[];
+}
+
+export async function advanceServerClock(page: Page, minutes: number): Promise<void> {
+  const res = await page.request.post('/api/test/advance-time', {
+    data: { minutes },
+    headers: { origin: APP_URL },
+  });
+  expect(res.status(), 'advance-time (the API must run with NODE_ENV=test)').toBe(204);
+}
