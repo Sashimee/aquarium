@@ -1054,7 +1054,12 @@ describe('mail abuse limits', () => {
       headers: { ...jsonHeaders, 'x-forwarded-for': '203.0.113.1' },
       payload: { email: known, password: PASSWORD, name: 'Tester' },
     });
-    const sequence = async (ip: string, url: string, email: string) => {
+    const sequence = async (
+      ip: string,
+      url: string,
+      email: string,
+      redirect: Record<string, string>,
+    ) => {
       const statuses: number[] = [];
       for (let i = 0; i < 5; i++) {
         const res = await h.app.inject({
@@ -1062,18 +1067,20 @@ describe('mail abuse limits', () => {
           url,
           remoteAddress: '127.0.0.1',
           headers: { ...jsonHeaders, 'x-forwarded-for': ip },
-          payload: { email, callbackURL: '/', redirectTo: '/' },
+          payload: { email, ...redirect },
         });
         statuses.push(res.statusCode);
       }
       return statuses;
     };
-    for (const [n, url] of [
-      '/api/auth/send-verification-email',
-      '/api/auth/request-password-reset',
-    ].entries()) {
-      const forKnown = await sequence(`203.0.113.${10 + n}`, url, known);
-      const forUnknown = await sequence(`203.0.113.${20 + n}`, url, nextEmail());
+    for (const [n, [url, redirect]] of (
+      [
+        ['/api/auth/send-verification-email', { callbackURL: '/' }],
+        ['/api/auth/request-password-reset', { redirectTo: '/' }],
+      ] as const
+    ).entries()) {
+      const forKnown = await sequence(`203.0.113.${10 + n}`, url, known, redirect);
+      const forUnknown = await sequence(`203.0.113.${20 + n}`, url, nextEmail(), redirect);
       expect(forKnown).toEqual([200, 200, 200, 429, 429]);
       expect(forUnknown).toEqual(forKnown);
     }

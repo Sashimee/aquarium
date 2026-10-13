@@ -12,7 +12,8 @@ const sha256 = (b: Buffer | string) => createHash('sha256').update(b).digest();
 function head(major: number, n: number): Buffer {
   if (n < 24) return Buffer.from([(major << 5) | n]);
   if (n < 256) return Buffer.from([(major << 5) | 24, n]);
-  return Buffer.from([(major << 5) | 25, n >> 8, n & 0xff]);
+  if (n < 65536) return Buffer.from([(major << 5) | 25, n >> 8, n & 0xff]);
+  throw new Error(`CBOR length ${n} needs a wider head than this test encoder supports`);
 }
 
 type Cbor = number | string | Buffer | Map<Cbor, Cbor>;
@@ -184,13 +185,14 @@ describe('passkey registration and sign-in with hashed identifiers', () => {
     expect((await register(cookie, authenticator)).statusCode).toBe(200);
 
     const options = await h.app.inject('/api/auth/passkey/generate-authenticate-options');
+    expect(options.statusCode).toBe(200);
     const forged = await h.app.inject({
       method: 'POST',
       url: '/api/auth/passkey/verify-authentication',
       headers: { ...headers, cookie: cookieHeader(options) },
       payload: { response: authenticator.assert(b64url(randomBytes(32))) },
     });
-    expect(forged.statusCode).toBeGreaterThanOrEqual(400);
+    expect(forged.statusCode).toBe(400);
     expect(cookieHeader(forged)).not.toContain('session_token');
   });
 });
