@@ -12,6 +12,7 @@ import {
   dataExportSchema,
   privacyPolicySchema,
   emailSchema,
+  passwordSchema,
   sessionListSchema,
   signInRequestSchema,
   signUpRequestSchema,
@@ -33,6 +34,7 @@ import {
 } from '@aquarium/shared';
 
 export const VERIFY_CALLBACK_PATH = '/verify-email';
+export const RESET_REDIRECT_PATH = '/reset-password';
 
 export type FieldErrors = Partial<Record<string, string>>;
 
@@ -128,6 +130,8 @@ export interface ApiClient {
   signUp(input: SignUpRequest): Promise<void>;
   signIn(input: SignInRequest): Promise<void>;
   signOut(): Promise<void>;
+  requestPasswordReset(email: string): Promise<void>;
+  resetPassword(token: string, newPassword: string): Promise<void>;
   resendVerification(email: string): Promise<void>;
   me(): Promise<User | null>;
   sessions(): Promise<SessionInfo[]>;
@@ -218,6 +222,23 @@ export function createApiClient(fetcher: Fetcher = (i, init) => fetch(i, init)):
     },
     async signOut() {
       await post('/api/auth/sign-out', {});
+    },
+    async requestPasswordReset(email) {
+      const valid = emailSchema.safeParse(email);
+      if (!valid.success) {
+        throw new ClientValidationError({ email: 'Enter a valid email address.' });
+      }
+      await post('/api/auth/request-password-reset', {
+        email: valid.data,
+        redirectTo: RESET_REDIRECT_PATH,
+      });
+    },
+    async resetPassword(token, newPassword) {
+      const valid = passwordSchema.safeParse(newPassword);
+      if (!valid.success) {
+        throw new ClientValidationError({ password: 'Use at least 10 characters.' });
+      }
+      await post('/api/auth/reset-password', { token, newPassword: valid.data });
     },
     async resendVerification(email) {
       const valid = emailSchema.safeParse(email);

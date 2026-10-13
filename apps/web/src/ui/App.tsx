@@ -107,6 +107,18 @@ function Screen() {
       return <SignUpScreen />;
     case 'verify-email':
       return <VerifyEmailScreen error={route.error} />;
+    case 'forgot-password':
+      return (
+        <Suspense fallback={null}>
+          <ForgotPasswordScreen />
+        </Suspense>
+      );
+    case 'reset-password':
+      return (
+        <Suspense fallback={null}>
+          <ResetPasswordScreen token={route.token} error={route.error} />
+        </Suspense>
+      );
     case 'sessions':
       return status === 'loading' ? null : <SessionsScreen />;
     case 'settings':
@@ -119,6 +131,13 @@ function Screen() {
       return <NotFoundScreen />;
   }
 }
+
+const ForgotPasswordScreen = lazy(() =>
+  import('./PasswordReset').then((m) => ({ default: m.ForgotPasswordScreen })),
+);
+const ResetPasswordScreen = lazy(() =>
+  import('./PasswordReset').then((m) => ({ default: m.ResetPasswordScreen })),
+);
 
 const TankReport = lazy(() => import('./TankReport'));
 const TankPanel = lazy(() => import('./TankPanel').then((m) => ({ default: m.TankPanel })));
