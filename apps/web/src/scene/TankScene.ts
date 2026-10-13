@@ -33,7 +33,7 @@ import { RebuildQueue } from './rebuildQueue';
 import { PlantGroup, maxSway, type PlantEntry } from './plants';
 import { createSubstrateMaterial, type SubstrateLayers } from './substrate';
 
-const DEFAULT_CURRENT: CurrentParameters = {
+export const DEFAULT_CURRENT: CurrentParameters = {
   direction: [1, 0],
   speed: 0.04,
   gustPeriodS: 9,
@@ -194,11 +194,7 @@ export class TankScene {
     }
     const hard = new ColliderField(colliders);
 
-    const { length, depth, glass } = dimensions;
-    const extent: Extent = {
-      halfLength: length / 2 - glass - WALL_MARGIN,
-      halfDepth: depth / 2 - glass - WALL_MARGIN,
-    };
+    const extent = glassExtent(dimensions);
     const ground = (x: number, z: number) => substrateHeight(dimensions, x, z);
     const normal = new Float64Array(3);
     const blocked = (x: number, y: number, z: number) =>
@@ -267,11 +263,7 @@ export class TankScene {
     for (const [i, entry] of euphylliaItems.entries()) {
       const fullDetail = generateEuphyllia(entry.variant, entry.seed, 2);
       euphylliaItems[i] = { ...entry, fullDetail };
-      checkEuphylliaClearOfGlass(
-        entry.item,
-        euphylliaReach(fullDetail.bounds, entry.item, current),
-        extent,
-      );
+      checkEuphylliaClearOfGlass(entry.item, fullDetail.bounds, current, extent);
       colliders.push(euphylliaCollider(fullDetail.bounds, entry.item));
     }
 
@@ -476,7 +468,18 @@ export class TankScene {
   }
 }
 
-function checkClearOfGlass(
+export function glassExtent(dimensions: {
+  readonly length: number;
+  readonly depth: number;
+  readonly glass: number;
+}): Extent {
+  return {
+    halfLength: dimensions.length / 2 - dimensions.glass - WALL_MARGIN,
+    halfDepth: dimensions.depth / 2 - dimensions.glass - WALL_MARGIN,
+  };
+}
+
+export function checkClearOfGlass(
   entry: CatalogEntry,
   item: DecorItem,
   current: CurrentParameters,
@@ -493,7 +496,13 @@ function checkClearOfGlass(
   }
 }
 
-function checkEuphylliaClearOfGlass(item: DecorItem, reach: number, extent: Extent): void {
+export function checkEuphylliaClearOfGlass(
+  item: DecorItem,
+  bounds: EuphylliaMesh['bounds'],
+  current: CurrentParameters,
+  extent: Extent,
+): void {
+  const reach = euphylliaReach(bounds, item, current);
   if (
     Math.abs(item.position[0]) + reach > extent.halfLength ||
     Math.abs(item.position[2]) + reach > extent.halfDepth
