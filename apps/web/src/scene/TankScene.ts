@@ -17,6 +17,7 @@ import {
   euphylliaCollider,
   euphylliaReach,
   generateEuphyllia,
+  type EuphylliaMesh,
   parseEuphylliaId,
   type EuphylliaDetail,
   type EuphylliaVariant,
@@ -57,6 +58,7 @@ interface EuphylliaItem {
   readonly item: DecorItem;
   readonly variant: EuphylliaVariant;
   readonly seed: number;
+  readonly fullDetail?: EuphylliaMesh;
 }
 
 interface VisualKey {
@@ -262,10 +264,15 @@ export class TankScene {
     });
 
     const current = preset.current ?? DEFAULT_CURRENT;
-    for (const { item, variant, seed } of euphylliaItems) {
-      const { bounds } = generateEuphyllia(variant, seed, 2);
-      checkEuphylliaClearOfGlass(item, euphylliaReach(bounds, item, current), extent);
-      colliders.push(euphylliaCollider(bounds, item));
+    for (const [i, entry] of euphylliaItems.entries()) {
+      const fullDetail = generateEuphyllia(entry.variant, entry.seed, 2);
+      euphylliaItems[i] = { ...entry, fullDetail };
+      checkEuphylliaClearOfGlass(
+        entry.item,
+        euphylliaReach(fullDetail.bounds, entry.item, current),
+        extent,
+      );
+      colliders.push(euphylliaCollider(fullDetail.bounds, entry.item));
     }
 
     const scene = new TankScene(
@@ -383,8 +390,11 @@ export class TankScene {
         const model = await this.library.load(item.assetId, key.hardscapeLod, key.textureSize);
         anemones.push(new AnemoneGroup(entry, model, item, this.current));
       }
-      for (const { item, variant, seed } of this.euphylliaItems) {
-        const mesh = generateEuphyllia(variant, seed, key.euphylliaDetail);
+      for (const { item, variant, seed, fullDetail } of this.euphylliaItems) {
+        const mesh =
+          key.euphylliaDetail === 2 && fullDetail
+            ? fullDetail
+            : generateEuphyllia(variant, seed, key.euphylliaDetail);
         euphyllias.push(new EuphylliaGroup(mesh, item, this.current));
       }
     } catch (error) {

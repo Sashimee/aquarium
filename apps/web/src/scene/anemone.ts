@@ -41,6 +41,14 @@ function spread(entry: CatalogEntry): number {
   return Math.max(Math.abs(b.min[0]), Math.abs(b.max[0]), Math.abs(b.min[2]), Math.abs(b.max[2]));
 }
 
+function horizontalRadius(entry: CatalogEntry): number {
+  const b = entry.bounds;
+  if (!b) throw new Error(`Anemone "${entry.id}" has no bounds in the asset index`);
+  return Math.max(
+    ...[b.min[0], b.max[0]].flatMap((x) => [b.min[2], b.max[2]].map((z) => Math.hypot(x, z))),
+  );
+}
+
 function height(entry: CatalogEntry): number {
   const top = entry.bounds?.max[1];
   if (top === undefined) throw new Error(`Anemone "${entry.id}" has no bounds in the asset index`);
@@ -72,7 +80,7 @@ export function anemoneReach(
   current: CurrentParameters,
 ): number {
   const peakFlow = current.speed * (1 + current.gustDepth);
-  return (spread(entry) + WAVE_METRES) * item.scale + peakFlow * LEAN_SECONDS;
+  return (horizontalRadius(entry) + WAVE_METRES) * item.scale + peakFlow * LEAN_SECONDS;
 }
 
 /** Tentacle streaming shared by every swaying polyp: lean into the current plus a travelling wave, both weighted by the `_sway` attribute. */

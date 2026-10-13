@@ -43,7 +43,7 @@ export const EUPHYLLIA_TRIANGLE_BUDGET: Readonly<Record<EuphylliaDetail, number>
   2: 18000,
 };
 
-const ID_PATTERN = /^euphyllia-(hammer|torch)-(\d{1,9})$/;
+const ID_PATTERN = /^euphyllia-(hammer|torch)-(0|[1-9]\d{0,8})$/;
 const WAVE_METRES = 0.0035;
 const LEAN_SECONDS = 0.5;
 const COLONY_HEIGHT = 0.1;
@@ -398,6 +398,14 @@ export function euphylliaTriangles(mesh: EuphylliaMesh): number {
   return mesh.indices.length / 3;
 }
 
+function horizontalRadius(bounds: EuphylliaMesh['bounds']): number {
+  return Math.max(
+    ...[bounds.min[0], bounds.max[0]].flatMap((x) =>
+      [bounds.min[2], bounds.max[2]].map((z) => Math.hypot(x, z)),
+    ),
+  );
+}
+
 function footprint(bounds: EuphylliaMesh['bounds']): number {
   return Math.max(
     Math.abs(bounds.min[0]),
@@ -425,7 +433,7 @@ export function euphylliaReach(
   current: CurrentParameters,
 ): number {
   const peakFlow = current.speed * (1 + current.gustDepth);
-  return (footprint(bounds) + WAVE_METRES) * item.scale + peakFlow * LEAN_SECONDS;
+  return (horizontalRadius(bounds) + WAVE_METRES) * item.scale + peakFlow * LEAN_SECONDS;
 }
 
 export function euphylliaGeometry(mesh: EuphylliaMesh): BufferGeometry {
