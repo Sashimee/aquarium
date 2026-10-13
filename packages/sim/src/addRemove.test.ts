@@ -1,3 +1,4 @@
+import type { Collider } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import { DecorField } from './decor.ts';
 import {
@@ -20,8 +21,22 @@ type Typed = Float64Array | Int32Array | Int8Array | Uint8Array | Uint16Array | 
 
 /** Arrays holding fish indices; compared by the id of the fish they point at. */
 const FISH_INDEX_ARRAYS = new Set(['schoolNbr', 'anyNbr', 'territoryTarget', 'follow']);
-/** Rebuilt from scratch before every read (`distSq`) or scratch within one call (`lost*`). */
-const SCRATCH = new Set(['distSq', 'lost', 'lostNext']);
+/** Rebuilt before every read (`distSq`) or scratch within one call (the rest). */
+const SCRATCH = new Set([
+  'distSq',
+  'lost',
+  'lostNext',
+  'normal',
+  'probeNormal',
+  'previous',
+  'turnNormal',
+  'scratchDist',
+  'n3',
+]);
+
+function fieldName(name: string): string {
+  return name.replace(/^_/, '');
+}
 
 /**
  * Thirteen fish, a count no per-species or per-particle array length is a multiple of, so every
@@ -64,8 +79,10 @@ function perFishArrays(w: World): Map<string, Typed> {
   const out = new Map<string, Typed>();
   for (const [ownerName, owner] of Object.entries(owners(w))) {
     for (const [name, v] of Object.entries(owner)) {
-      if (!isTyped(v) || SCRATCH.has(name)) continue;
-      if (v.length > 0 && v.length % w.count === 0) out.set(`${ownerName}.${name}`, v);
+      if (!isTyped(v) || SCRATCH.has(fieldName(name))) continue;
+      // Public arrays sit in `_name` fields behind readonly getters.
+      const key = `${ownerName}.${fieldName(name)}`;
+      if (v.length > 0 && v.length % w.count === 0) out.set(key, v);
     }
   }
   return out;
@@ -130,17 +147,50 @@ function worldHash(w: World): number {
   };
   for (const owner of Object.values(owners(w))) {
     for (const [name, v] of Object.entries(owner)) {
-      if (!isTyped(v) || SCRATCH.has(name)) continue;
+      if (!isTyped(v) || SCRATCH.has(fieldName(name))) continue;
       mix(new Uint8Array(v.buffer, v.byteOffset, v.byteLength));
     }
   }
   mix(new TextEncoder().encode(w.fishIds.join('\n')));
+  const reach = ['hardDecor', 'softDecor'].map((name) => field<DecorField>(w, name).reach);
+  mix(new Uint8Array(new Float64Array(reach).buffer));
   const s = w.rng.state();
   mix(new Uint8Array(new Uint32Array([s.a, s.b, s.c, s.d]).buffer));
   return h >>> 0;
 }
 
 const NEWCOMER: FishSpawn = { id: 'newcomer', species: 'yellow-tang' };
+
+/**
+ * Per-fish arrays a fish fills from its spawn spot or its own RNG draws, and the neighbour lists,
+ * which every step rebuilds before reading (a joining fish's start empty rather than at fish 0).
+ */
+const SPAWN_DRAWN = new Set([
+  'behaviour.crawlSign',
+  'behaviour.excursionTimer',
+  'behaviour.forageTimer',
+  'behaviour.grazeNext',
+  'behaviour.home',
+  'behaviour.homeTimer',
+  'behaviour.restTau',
+  'behaviour.territoryCheck',
+  'world.anyNbr',
+  'world.position',
+  'world.schoolNbr',
+  'world.scrapeAnchor',
+  'world.targetYaw',
+  'world.yaw',
+]);
+
+/** Steps both worlds and expects them to stay bit-identical. */
+function expectSameFuture(a: World, b: World, steps: number): void {
+  for (let t = 0; t < steps; t++) {
+    a.step();
+    b.step();
+  }
+  expect(Array.from(a.position)).toEqual(Array.from(b.position));
+  expect(worldHash(a)).toBe(worldHash(b));
+}
 
 describe('adding a fish to a running world', () => {
   it('appends it to every per-fish array and leaves every other fish exactly as it was', () => {
@@ -234,16 +284,75 @@ describe('adding a fish to a running world', () => {
     expect(field.reach).toBeGreaterThanOrEqual(2 * (w.bodyLength[i] ?? NaN));
   });
 
-  it('rejects a duplicate id, an unknown species and a non-finite spot without changing anything', () => {
-    const w = new World(community(5));
+  it('gives a newcomer the same starting state a fish spawned at construction gets', () => {
+    const born = new World({ ...community(1), fish: [...community(1).fish, NEWCOMER] });
+    const added = new World(community(1));
+    const i = added.addFish(NEWCOMER);
+    const bornRows = perFishArrays(born);
+    const checked: string[] = [];
+    for (const [key, a] of perFishArrays(added)) {
+      const width = a.length / added.count;
+      const row = Array.from(a.subarray(i * width, (i + 1) * width));
+      const b = bornRows.get(key);
+      if (b === undefined) throw new Error(`${key} missing from the constructed world`);
+      const expected = Array.from(b.subarray(i * width, (i + 1) * width));
+      if (SPAWN_DRAWN.has(key)) continue;
+      expect(row, key).toEqual(expected);
+      checked.push(key);
+    }
+    expect(checked).toEqual(
+      expect.arrayContaining(['behaviour.startleAt', 'behaviour.startledAt', 'feeding.retarget']),
+    );
+  });
+
+  it('rejects a duplicate id, an unknown species and a bad spot without changing anything', () => {
+    const w = new World({ ...community(5), fish: spawnMany('neon-tetra', 8) });
+    const twin = new World({ ...community(5), fish: spawnMany('neon-tetra', 8) });
     w.step();
+    twin.step();
     const hash = worldHash(w);
+    const tang = { id: 'tang', species: 'blue-tang' };
     expect(() => w.addFish({ id: 'neon-tetra-0', species: 'neon-tetra' })).toThrow(
       /already in the world/,
     );
     expect(() => w.addFish({ id: 'x', species: 'goldfish' })).toThrow(/unknown species/);
-    expect(() => w.addFish(NEWCOMER, { position: [0, NaN, 0], heading: 0 })).toThrow(/finite/);
+    expect(() => w.addFish(tang, { position: [0, NaN, 0], heading: 0 })).toThrow(/finite/);
+    expect(() => w.addFish(tang, { position: [0, 0.2, 0], heading: Infinity })).toThrow(/finite/);
+    const short = { position: [0, 0.2] as unknown as [number, number, number], heading: 0 };
+    expect(() => w.addFish(tang, short)).toThrow(/finite \[x, y, z\]/);
     expect(worldHash(w)).toBe(hash);
+    expectSameFuture(w, twin, 900);
+  });
+
+  it('takes back RNG draws and the wider decor reach when no free water is found', () => {
+    const config = { ...community(6), fish: spawnMany('neon-tetra', 8) };
+    const w = new World(config);
+    const twin = new World(config);
+    const solid: Collider = {
+      id: 'solid',
+      hard: true,
+      kind: 'box',
+      center: [0, 0.3, 0],
+      halfExtents: [1, 0.4, 0.4],
+      rotationY: 0,
+      rounding: 0,
+    };
+    for (const v of [w, twin]) {
+      for (let t = 0; t < 30; t++) v.step();
+      v.setDecor([...REEF_DECOR, solid]);
+    }
+    const hash = worldHash(w);
+    const tang = { id: 'tang', species: 'blue-tang' };
+    const draws = w.rng.state();
+    expect(() => w.addFish(tang)).toThrow(/no free water to spawn in/);
+    expect(() => w.addFish(tang, { position: [0, 0.3, 0], heading: 0 })).toThrow(
+      /no free water near/,
+    );
+    expect(w.rng.state()).toEqual(draws);
+    expect(worldHash(w)).toBe(hash);
+    for (const v of [w, twin]) v.setDecor(REEF_DECOR);
+    expect(worldHash(w)).toBe(worldHash(twin));
+    expectSameFuture(w, twin, 900);
   });
 
   it('keeps the newcomer and everyone else out of glass and rock', { timeout: LONG }, () => {

@@ -62,18 +62,12 @@ function at(a: ArrayLike<number>, i: number): number {
  * before every `update` and turns the targets into plans afterwards.
  */
 export class Feeding {
-  /** Feed portions in the stomach; empties exponentially (gastric evacuation). */
-  gut: Float64Array;
-  /** Index into the food store of the particle being pursued, or -1. */
-  target: Int32Array;
-  /** Fish index of a feeding neighbour this fish is swimming towards, or -1. */
-  follow: Int32Array;
-  /** Time left handling the last item swallowed, or until the next rasp of a grazed item. */
-  handling: Float64Array;
-  /** 1 when the fish may feed this step. */
-  eligible: Uint8Array;
-  /** Per fish x, y, z, radius of the area it will leave home for; radius Infinity for none. */
-  leash: Float64Array;
+  private _gut: Float64Array;
+  private _target: Int32Array;
+  private _follow: Int32Array;
+  private _handling: Float64Array;
+  private _eligible: Uint8Array;
+  private _leash: Float64Array;
   readonly events: AteEvent[] = [];
 
   private readonly host: BehaviourHost;
@@ -99,15 +93,45 @@ export class Feeding {
   private readonly nbr = new Int32Array(FEEDING.followNeighbours);
   private readonly nbrDist = new Float64Array(FEEDING.followNeighbours);
 
+  /** Feed portions in the stomach; empties exponentially (gastric evacuation). */
+  get gut(): Float64Array {
+    return this._gut;
+  }
+
+  /** Index into the food store of the particle being pursued, or -1. */
+  get target(): Int32Array {
+    return this._target;
+  }
+
+  /** Fish index of a feeding neighbour this fish is swimming towards, or -1. */
+  get follow(): Int32Array {
+    return this._follow;
+  }
+
+  /** Time left handling the last item swallowed, or until the next rasp of a grazed item. */
+  get handling(): Float64Array {
+    return this._handling;
+  }
+
+  /** 1 when the fish may feed this step. */
+  get eligible(): Uint8Array {
+    return this._eligible;
+  }
+
+  /** Per fish x, y, z, radius of the area it will leave home for; radius Infinity for none. */
+  get leash(): Float64Array {
+    return this._leash;
+  }
+
   constructor(host: BehaviourHost) {
     this.host = host;
     const n = host.count;
-    this.gut = new Float64Array(n);
-    this.target = new Int32Array(n).fill(-1);
-    this.follow = new Int32Array(n).fill(-1);
-    this.handling = new Float64Array(n);
-    this.eligible = new Uint8Array(n);
-    this.leash = new Float64Array(n * 4);
+    this._gut = new Float64Array(n);
+    this._target = new Int32Array(n).fill(-1);
+    this._follow = new Int32Array(n).fill(-1);
+    this._handling = new Float64Array(n);
+    this._eligible = new Uint8Array(n);
+    this._leash = new Float64Array(n * 4);
     this.targetId = new Int32Array(n).fill(-1);
     this.targetScore = new Float64Array(n);
     this.pursuit = new Float64Array(n);
@@ -131,12 +155,12 @@ export class Feeding {
    * beside it, forgets it; bites it already took stay in `events`.
    */
   resize(edit: FishResize): void {
-    this.gut = edit.array(this.gut);
-    this.target = edit.array(this.target, 1, -1);
-    this.follow = edit.array(this.follow, 1, -1);
-    this.handling = edit.array(this.handling);
-    this.eligible = edit.array(this.eligible);
-    this.leash = edit.array(this.leash, 4);
+    this._gut = edit.array(this.gut);
+    this._target = edit.array(this.target, 1, -1);
+    this._follow = edit.array(this.follow, 1, -1);
+    this._handling = edit.array(this.handling);
+    this._eligible = edit.array(this.eligible);
+    this._leash = edit.array(this.leash, 4);
     this.targetId = edit.array(this.targetId, 1, -1);
     this.targetScore = edit.array(this.targetScore);
     this.pursuit = edit.array(this.pursuit);

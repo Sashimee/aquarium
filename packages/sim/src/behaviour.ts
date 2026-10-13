@@ -284,28 +284,27 @@ export class Behaviour {
   private scheduledYaw: Float64Array;
   private scheduledPitch: Float64Array;
   private refractory: Float64Array;
-  tighten: Float64Array;
+  private _tighten: Float64Array;
   private habituation: Float64Array;
-  /** Tick at which each fish last began a startle, or -1. */
-  startledAt: Float64Array;
+  private _startledAt: Float64Array;
 
-  rest: Float64Array;
+  private _rest: Float64Array;
   private restTau: Float64Array;
   private restSpot: Float64Array;
   private restSpotSet: Uint8Array;
 
   private home: Float64Array;
   private homeTimer: Float64Array;
-  anchor: Int32Array;
+  private _anchor: Int32Array;
   private shelterTimer: Float64Array;
 
   private territoryPhase: Uint8Array;
   private territoryTimer: Float64Array;
   private territoryCheck: Float64Array;
   private territoryCooldown: Float64Array;
-  yieldTimer: Float64Array;
+  private _yieldTimer: Float64Array;
   private yieldYaw: Float64Array;
-  territoryTarget: Int32Array;
+  private _territoryTarget: Int32Array;
 
   private gulpPhase: Uint8Array;
   private gulpTimer: Float64Array;
@@ -335,6 +334,31 @@ export class Behaviour {
   private bandLo = 0;
   private bandHi = 0;
 
+  get tighten(): Float64Array {
+    return this._tighten;
+  }
+
+  /** Tick at which each fish last began a startle, or -1. */
+  get startledAt(): Float64Array {
+    return this._startledAt;
+  }
+
+  get rest(): Float64Array {
+    return this._rest;
+  }
+
+  get anchor(): Int32Array {
+    return this._anchor;
+  }
+
+  get yieldTimer(): Float64Array {
+    return this._yieldTimer;
+  }
+
+  get territoryTarget(): Int32Array {
+    return this._territoryTarget;
+  }
+
   constructor(host: BehaviourHost) {
     this.host = host;
     const n = host.count;
@@ -350,24 +374,24 @@ export class Behaviour {
     this.scheduledYaw = new Float64Array(n);
     this.scheduledPitch = new Float64Array(n);
     this.refractory = new Float64Array(n);
-    this.tighten = new Float64Array(n);
+    this._tighten = new Float64Array(n);
     this.habituation = new Float64Array(n);
-    this.startledAt = new Float64Array(n).fill(-1);
-    this.rest = new Float64Array(n);
+    this._startledAt = new Float64Array(n).fill(-1);
+    this._rest = new Float64Array(n);
     this.restTau = new Float64Array(n);
     this.restSpot = new Float64Array(n * 3);
     this.restSpotSet = new Uint8Array(n);
     this.home = new Float64Array(n * 3);
     this.homeTimer = new Float64Array(n);
-    this.anchor = new Int32Array(n).fill(-1);
+    this._anchor = new Int32Array(n).fill(-1);
     this.shelterTimer = new Float64Array(n);
     this.territoryPhase = new Uint8Array(n);
     this.territoryTimer = new Float64Array(n);
     this.territoryCheck = new Float64Array(n);
     this.territoryCooldown = new Float64Array(n);
-    this.yieldTimer = new Float64Array(n);
+    this._yieldTimer = new Float64Array(n);
     this.yieldYaw = new Float64Array(n);
-    this.territoryTarget = new Int32Array(n).fill(-1);
+    this._territoryTarget = new Int32Array(n).fill(-1);
     this.gulpPhase = new Uint8Array(n);
     this.gulpTimer = new Float64Array(n);
     this.grazePhase = new Uint8Array(n);
@@ -421,24 +445,24 @@ export class Behaviour {
     this.scheduledYaw = edit.array(this.scheduledYaw);
     this.scheduledPitch = edit.array(this.scheduledPitch);
     this.refractory = edit.array(this.refractory);
-    this.tighten = edit.array(this.tighten);
+    this._tighten = edit.array(this.tighten);
     this.habituation = edit.array(this.habituation);
-    this.startledAt = edit.array(this.startledAt, 1, -1);
-    this.rest = edit.array(this.rest);
+    this._startledAt = edit.array(this.startledAt, 1, -1);
+    this._rest = edit.array(this.rest);
     this.restTau = edit.array(this.restTau);
     this.restSpot = edit.array(this.restSpot, 3);
     this.restSpotSet = edit.array(this.restSpotSet);
     this.home = edit.array(this.home, 3);
     this.homeTimer = edit.array(this.homeTimer);
-    this.anchor = edit.array(this.anchor, 1, -1);
+    this._anchor = edit.array(this.anchor, 1, -1);
     this.shelterTimer = edit.array(this.shelterTimer);
     this.territoryPhase = edit.array(this.territoryPhase);
     this.territoryTimer = edit.array(this.territoryTimer);
     this.territoryCheck = edit.array(this.territoryCheck);
     this.territoryCooldown = edit.array(this.territoryCooldown);
-    this.yieldTimer = edit.array(this.yieldTimer);
+    this._yieldTimer = edit.array(this.yieldTimer);
     this.yieldYaw = edit.array(this.yieldYaw);
-    this.territoryTarget = edit.array(this.territoryTarget, 1, -1);
+    this._territoryTarget = edit.array(this.territoryTarget, 1, -1);
     this.gulpPhase = edit.array(this.gulpPhase);
     this.gulpTimer = edit.array(this.gulpTimer);
     this.grazePhase = edit.array(this.grazePhase);

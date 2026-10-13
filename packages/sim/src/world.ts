@@ -164,6 +164,21 @@ const SHELL_DIRECTIONS: readonly (readonly [number, number, number])[] = (() => 
   return out.sort((a, b) => countZeros(b) - countZeros(a));
 })();
 
+function checkPlacement(id: string, at: FishPlacement): void {
+  const p: unknown = typeof at === 'object' && at !== null ? at.position : undefined;
+  const valid =
+    Array.isArray(p) &&
+    p.length === 3 &&
+    p.every((c) => typeof c === 'number' && Number.isFinite(c)) &&
+    typeof at.heading === 'number' &&
+    Number.isFinite(at.heading);
+  if (!valid) {
+    throw new RangeError(
+      `fish "${id}": placement needs a finite [x, y, z] position and a finite heading`,
+    );
+  }
+}
+
 function countZeros(v: readonly number[]): number {
   return v.filter((c) => c === 0).length;
 }
@@ -188,8 +203,8 @@ const MAX_BODY_PUSHES = 8;
 const NO_ATE_EVENTS: readonly AteEvent[] = Object.freeze([]);
 
 export class World {
-  count: number;
-  fishIds: readonly string[];
+  private _count: number;
+  private _fishIds: readonly string[];
   /** The water and the floor under it, in the world's frame. */
   readonly basin: Basin;
   readonly species: readonly SimSpecies[];
@@ -199,28 +214,25 @@ export class World {
   /** Fish-steps spent inside a plant (soft contact). */
   plantContacts = 0;
 
-  position: Float64Array;
-  yaw: Float64Array;
-  pitch: Float64Array;
-  roll: Float64Array;
-  speed: Float64Array;
-  yawRate: Float64Array;
-  pitchRate: Float64Array;
-  state: Uint8Array;
+  private _position: Float64Array;
+  private _yaw: Float64Array;
+  private _pitch: Float64Array;
+  private _roll: Float64Array;
+  private _speed: Float64Array;
+  private _yawRate: Float64Array;
+  private _pitchRate: Float64Array;
+  private _state: Uint8Array;
 
-  bodyLength: Float64Array;
-  /** Comfort radius steering keeps from surfaces; the hard body is a thinner spine chain. */
-  radius: Float64Array;
-  thickness: Float64Array;
-  speciesIndex: Int32Array;
-  /** Caudal thrust as a fraction of the maximum; 0 while coasting. */
-  thrust: Float64Array;
-  /** Per-fish share of `contacts`. */
-  contactCount: Uint32Array;
-  forward: Float64Array;
-  distSq: Float64Array;
-  maxSpeed: Float64Array;
-  cruiseSpeed: Float64Array;
+  private _bodyLength: Float64Array;
+  private _radius: Float64Array;
+  private _thickness: Float64Array;
+  private _speciesIndex: Int32Array;
+  private _thrust: Float64Array;
+  private _contactCount: Uint32Array;
+  private _forward: Float64Array;
+  private _distSq: Float64Array;
+  private _maxSpeed: Float64Array;
+  private _cruiseSpeed: Float64Array;
 
   readonly rng: Rng;
   readonly food: FoodStore;
@@ -269,6 +281,89 @@ export class World {
   private readonly previous = new Float64Array(3);
   private readonly turnNormal = new Float64Array(3);
 
+  get count(): number {
+    return this._count;
+  }
+
+  get fishIds(): readonly string[] {
+    return this._fishIds;
+  }
+
+  get position(): Float64Array {
+    return this._position;
+  }
+
+  get yaw(): Float64Array {
+    return this._yaw;
+  }
+
+  get pitch(): Float64Array {
+    return this._pitch;
+  }
+
+  get roll(): Float64Array {
+    return this._roll;
+  }
+
+  get speed(): Float64Array {
+    return this._speed;
+  }
+
+  get yawRate(): Float64Array {
+    return this._yawRate;
+  }
+
+  get pitchRate(): Float64Array {
+    return this._pitchRate;
+  }
+
+  get state(): Uint8Array {
+    return this._state;
+  }
+
+  get bodyLength(): Float64Array {
+    return this._bodyLength;
+  }
+
+  /** Comfort radius steering keeps from surfaces; the hard body is a thinner spine chain. */
+  get radius(): Float64Array {
+    return this._radius;
+  }
+
+  get thickness(): Float64Array {
+    return this._thickness;
+  }
+
+  get speciesIndex(): Int32Array {
+    return this._speciesIndex;
+  }
+
+  /** Caudal thrust as a fraction of the maximum; 0 while coasting. */
+  get thrust(): Float64Array {
+    return this._thrust;
+  }
+
+  /** Per-fish share of `contacts`. */
+  get contactCount(): Uint32Array {
+    return this._contactCount;
+  }
+
+  get forward(): Float64Array {
+    return this._forward;
+  }
+
+  get distSq(): Float64Array {
+    return this._distSq;
+  }
+
+  get maxSpeed(): Float64Array {
+    return this._maxSpeed;
+  }
+
+  get cruiseSpeed(): Float64Array {
+    return this._cruiseSpeed;
+  }
+
   constructor(config: AnyWorldConfig) {
     this.rng = new Rng(config.seed);
     this.basin = basinOfConfig(config);
@@ -298,24 +393,24 @@ export class World {
     ];
 
     const n = config.fish.length;
-    this.count = n;
-    this.fishIds = config.fish.map((f) => f.id);
+    this._count = n;
+    this._fishIds = config.fish.map((f) => f.id);
     if (new Set(this.fishIds).size !== n) throw new Error('fish ids must be unique');
 
-    this.position = new Float64Array(n * 3);
-    this.yaw = new Float64Array(n);
-    this.pitch = new Float64Array(n);
-    this.roll = new Float64Array(n);
-    this.speed = new Float64Array(n);
-    this.yawRate = new Float64Array(n);
-    this.pitchRate = new Float64Array(n);
-    this.state = new Uint8Array(n);
-    this.bodyLength = new Float64Array(n);
-    this.radius = new Float64Array(n);
-    this.thickness = new Float64Array(n);
-    this.speciesIndex = new Int32Array(n);
-    this.thrust = new Float64Array(n);
-    this.contactCount = new Uint32Array(n);
+    this._position = new Float64Array(n * 3);
+    this._yaw = new Float64Array(n);
+    this._pitch = new Float64Array(n);
+    this._roll = new Float64Array(n);
+    this._speed = new Float64Array(n);
+    this._yawRate = new Float64Array(n);
+    this._pitchRate = new Float64Array(n);
+    this._state = new Uint8Array(n);
+    this._bodyLength = new Float64Array(n);
+    this._radius = new Float64Array(n);
+    this._thickness = new Float64Array(n);
+    this._speciesIndex = new Int32Array(n);
+    this._thrust = new Float64Array(n);
+    this._contactCount = new Uint32Array(n);
     this.coasting = new Uint8Array(n);
     this.gaitTimer = new Float64Array(n);
     this.detourSign = new Int8Array(n);
@@ -330,8 +425,8 @@ export class World {
     this.deadEndTimer = new Float64Array(n);
     this.mass = new Float64Array(n);
     this.drag = new Float64Array(n);
-    this.maxSpeed = new Float64Array(n);
-    this.cruiseSpeed = new Float64Array(n);
+    this._maxSpeed = new Float64Array(n);
+    this._cruiseSpeed = new Float64Array(n);
     this.wanderTurn = new Float64Array(n);
     this.wanderPitch = new Float64Array(n);
     this.avoidTangent = new Float64Array(n * 2);
@@ -341,8 +436,8 @@ export class World {
     this.targetYaw = new Float64Array(n);
     this.targetPitch = new Float64Array(n);
     this.targetSpeed = new Float64Array(n);
-    this.forward = new Float64Array(n * 3);
-    this.distSq = new Float64Array(n * n);
+    this._forward = new Float64Array(n * 3);
+    this._distSq = new Float64Array(n * n);
     this.schoolGroup = new Int32Array(n);
 
     let kMax: number = STEERING.anyNeighbours;
@@ -524,9 +619,6 @@ export class World {
    */
   private spotNear(fit: Fit, at: FishPlacement): Spot {
     const [ax, ay, az] = at.position;
-    if (![ax, ay, az, at.heading].every(Number.isFinite)) {
-      throw new RangeError(`fish "${fit.id}": placement position and heading must be finite`);
-    }
     const basin = this.basin;
     const pad = fit.r * 2;
     const n = this.normal;
@@ -582,18 +674,25 @@ export class World {
     if (this.fishIds.includes(spawn.id))
       throw new Error(`fish "${spawn.id}" is already in the world`);
     const fit = this.fit(spawn);
+    if (at !== undefined) checkPlacement(fit.id, at);
+    const rng = this.rng.state();
+    const hardReach = this.hardDecor.reach;
+    const softReach = this.softDecor.reach;
+    // The spot search needs the newcomer's reach (its stand-off can exceed the old one), so the
+    // fields widen first and are put back if no spot is found.
     this.widenDecorReach(fit.length);
-    const saved = this.rng.state();
     let spot: Spot;
     try {
       spot = at === undefined ? this.randomSpot(fit) : this.spotNear(fit, at);
     } catch (error) {
-      this.rng.restore(saved);
+      this.rng.restore(rng);
+      this.hardDecor.restoreReach(hardReach);
+      this.softDecor.restoreReach(softReach);
       throw error;
     }
     const i = this.count;
     this.resize(FishResize.join(i));
-    this.fishIds = [...this.fishIds, spawn.id];
+    this._fishIds = [...this.fishIds, spawn.id];
     this.spawn(i, fit, spot);
     this.behaviour.addFish(i);
     return i;
@@ -608,28 +707,28 @@ export class World {
   removeFish(id: string): void {
     const r = this.fishIds.indexOf(id);
     if (r < 0) throw new Error(`no fish "${id}" in the world to remove`);
-    this.fishIds = this.fishIds.filter((f) => f !== id);
+    this._fishIds = this.fishIds.filter((f) => f !== id);
     this.resize(FishResize.leave(this.count, r));
   }
 
   private resize(edit: FishResize): void {
     const n = edit.next;
     const k = this.kMax;
-    this.count = n;
-    this.position = edit.array(this.position, 3);
-    this.yaw = edit.array(this.yaw);
-    this.pitch = edit.array(this.pitch);
-    this.roll = edit.array(this.roll);
-    this.speed = edit.array(this.speed);
-    this.yawRate = edit.array(this.yawRate);
-    this.pitchRate = edit.array(this.pitchRate);
-    this.state = edit.array(this.state);
-    this.bodyLength = edit.array(this.bodyLength);
-    this.radius = edit.array(this.radius);
-    this.thickness = edit.array(this.thickness);
-    this.speciesIndex = edit.array(this.speciesIndex);
-    this.thrust = edit.array(this.thrust);
-    this.contactCount = edit.array(this.contactCount);
+    this._count = n;
+    this._position = edit.array(this.position, 3);
+    this._yaw = edit.array(this.yaw);
+    this._pitch = edit.array(this.pitch);
+    this._roll = edit.array(this.roll);
+    this._speed = edit.array(this.speed);
+    this._yawRate = edit.array(this.yawRate);
+    this._pitchRate = edit.array(this.pitchRate);
+    this._state = edit.array(this.state);
+    this._bodyLength = edit.array(this.bodyLength);
+    this._radius = edit.array(this.radius);
+    this._thickness = edit.array(this.thickness);
+    this._speciesIndex = edit.array(this.speciesIndex);
+    this._thrust = edit.array(this.thrust);
+    this._contactCount = edit.array(this.contactCount);
     this.coasting = edit.array(this.coasting);
     this.gaitTimer = edit.array(this.gaitTimer);
     this.detourSign = edit.array(this.detourSign);
@@ -644,8 +743,8 @@ export class World {
     this.deadEndTimer = edit.array(this.deadEndTimer);
     this.mass = edit.array(this.mass);
     this.drag = edit.array(this.drag);
-    this.maxSpeed = edit.array(this.maxSpeed);
-    this.cruiseSpeed = edit.array(this.cruiseSpeed);
+    this._maxSpeed = edit.array(this.maxSpeed);
+    this._cruiseSpeed = edit.array(this.cruiseSpeed);
     this.wanderTurn = edit.array(this.wanderTurn);
     this.wanderPitch = edit.array(this.wanderPitch);
     this.avoidTangent = edit.array(this.avoidTangent, 2);
@@ -655,14 +754,14 @@ export class World {
     this.targetYaw = edit.array(this.targetYaw);
     this.targetPitch = edit.array(this.targetPitch);
     this.targetSpeed = edit.array(this.targetSpeed);
-    this.forward = edit.array(this.forward, 3);
+    this._forward = edit.array(this.forward, 3);
     this.schoolGroup = edit.array(this.schoolGroup);
     this.schoolNbr = edit.array(this.schoolNbr, k, -1);
     this.anyNbr = edit.array(this.anyNbr, k, -1);
     edit.remap(this.schoolNbr);
     edit.remap(this.anyNbr);
     // Rebuilt by every step before anything reads it.
-    this.distSq = new Float64Array(n * n);
+    this._distSq = new Float64Array(n * n);
     // A loner's group is its own index, so loners after the removed fish need theirs renumbered.
     for (let i = 0; i < n; i++) {
       const sp = this.species[this.speciesIndex[i] ?? -1];

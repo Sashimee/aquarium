@@ -475,6 +475,49 @@ describe('sim worker bridge', () => {
     ).toThrow(/unknown request/);
   });
 
+  it('sends bites taken before a layout change in the old epoch, ahead of the layout', async () => {
+    const { client, clientPort } = connect();
+    const ready = await client.init(benchmarkConfig(5));
+    const seen: { type: string; epoch: number; tick: number }[] = [];
+    clientPort.addEventListener('message', (event: MessageEvent) => {
+      const data = event.data as { type: string; epoch: number; tick?: number };
+      seen.push({ type: data.type, epoch: data.epoch, tick: data.tick ?? -1 });
+    });
+    client.setFood(flakeGrid(30));
+    client.step(90);
+    const layout = await client.removeFish('neon-tetra-0');
+    await stepCollecting(client, 30, 120);
+
+    const at = seen.findIndex((m) => m.type === 'layout');
+    expect(at).toBeGreaterThan(0);
+    const before = seen.slice(0, at);
+    const after = seen.slice(at + 1);
+    expect(before.some((m) => m.type === 'ate')).toBe(true);
+    expect(before.every((m) => m.epoch === layout.epoch - 1 && m.epoch === ready.epoch)).toBe(true);
+    expect(after[0]).toEqual({ type: 'snapshot', epoch: layout.epoch, tick: 90 });
+    expect(after.some((m) => m.type === 'ate')).toBe(true);
+    expect(after.every((m) => m.epoch === layout.epoch)).toBe(true);
+  });
+
+  it('never lets an error for an add or remove reject a pending init', async () => {
+    let deliver: ((event: MessageEvent) => void) | null = null;
+    const client = new SimClient({
+      postMessage: () => undefined,
+      addEventListener: (_type, listener) => {
+        deliver = listener;
+      },
+      removeEventListener: () => undefined,
+    });
+    const post = (data: unknown): void => deliver?.({ data } as MessageEvent);
+    const errors: string[] = [];
+    client.onError((m) => errors.push(m));
+    const init = client.init(benchmarkConfig(1));
+    post({ type: 'error', message: 'stale remove', request: 41 });
+    post({ type: 'ready', epoch: 1, fishIds: [], stride: SNAPSHOT_STRIDE, stepHz: STEP_HZ });
+    await expect(init).resolves.toMatchObject({ type: 'ready', epoch: 1 });
+    expect(errors).toEqual(['stale remove']);
+  });
+
   it('rejects pending adds and removes when the client is disposed', async () => {
     const client = new SimClient({
       postMessage: () => undefined,

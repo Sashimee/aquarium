@@ -502,14 +502,15 @@ export class SimClient {
         return;
       }
       case 'error': {
-        const request = event.request;
-        const pendingLayout = request === undefined ? undefined : this.pendingLayouts.get(request);
-        if (request !== undefined) this.pendingLayouts.delete(request);
-        pendingLayout?.reject(new Error(event.message));
-        const pending = pendingLayout === undefined ? this.pendingInit : null;
-        if (pendingLayout === undefined) this.pendingInit = null;
+        // An error naming a request belongs to that add or remove alone, never to an init.
+        const pending =
+          event.request === undefined
+            ? this.pendingInit
+            : (this.pendingLayouts.get(event.request) ?? null);
+        if (event.request === undefined) this.pendingInit = null;
+        else this.pendingLayouts.delete(event.request);
         pending?.reject(new Error(event.message));
-        if (pending === null && pendingLayout === undefined && this.errorListeners.size === 0) {
+        if (pending === null && this.errorListeners.size === 0) {
           throw new Error(`sim worker error with no listener: ${event.message}`);
         }
         for (const l of this.errorListeners) l(event.message);

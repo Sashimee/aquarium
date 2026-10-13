@@ -432,6 +432,21 @@ export class DecorField implements Sdf {
   /** Raises the reach to `reach` and rebins every collider; returns cells rebuilt. Never lowers it. */
   widen(reach: number): number {
     if (!(reach > this.reachM && Number.isFinite(reach))) return 0;
+    return this.rebin(reach);
+  }
+
+  /**
+   * Sets the reach back to `reach`, a value it had before a `widen` that has to be taken back.
+   * Cells hold slots sorted, so the field ends up exactly as it was.
+   */
+  restoreReach(reach: number): number {
+    if (!(reach > 0 && Number.isFinite(reach))) {
+      throw new RangeError(`DecorField reach must be a positive number of metres, got ${reach}`);
+    }
+    return reach === this.reachM ? 0 : this.rebin(reach);
+  }
+
+  private rebin(reach: number): number {
     let touched = 0;
     this.slots.forEach((p, slot) => {
       if (p) touched += this.bin(p, slot, false);
