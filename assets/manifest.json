@@ -1487,7 +1487,7 @@
       "licence": "CC-BY-4.0",
       "licence_url": "https://creativecommons.org/licenses/by/4.0/",
       "checked_at": "2026-10-13",
-      "sha256": "477ecdfcec3ae0f3f19c22d88857f1fb7e4e8ad664f41ae005b136dcba5103c9",
+      "sha256": "61f442328c11d278a4364141a5028e4527c5dcbd11349a35ea74fa4375cd6931",
       "polycount": 6920,
       "textures": "Material_baseColor.jpeg 1024x1024, Material_metallicRoughness.png 1024x1024, Material_normal.png 1024x1024",
       "rigged": false,
@@ -1496,32 +1496,32 @@
       "status": "downloaded",
       "files": [
         {
-          "path": "license.txt",
+          "path": "gltf/license.txt",
           "sha256": "6cd1b11a98eb9d6eacd997b3c7c10eb44de58ffdd677ce8b9aa057bad8cd4f42",
           "bytes": 704
         },
         {
-          "path": "scene.bin",
+          "path": "gltf/scene.bin",
           "sha256": "379bc81ebc9902d8e1f3c11ff90051144563aefbf196d08bedbd64181bddfa8e",
           "bytes": 607200
         },
         {
-          "path": "scene.gltf",
+          "path": "gltf/scene.gltf",
           "sha256": "d1e87f0910ad97983de93ae955c56f08c23c35e1e4ab526debee6ec77b6e7bd6",
           "bytes": 8082
         },
         {
-          "path": "textures/Material_baseColor.jpeg",
+          "path": "gltf/textures/Material_baseColor.jpeg",
           "sha256": "6864a156f64855c38fbd1621ea1e4f84b4d64beb11f5c9f4d0e323622f6d553f",
           "bytes": 305775
         },
         {
-          "path": "textures/Material_metallicRoughness.png",
+          "path": "gltf/textures/Material_metallicRoughness.png",
           "sha256": "f9abef3d121eb14a905bc9b595bf18ab537a94e1a00619b68d76196a53b70b6a",
           "bytes": 1280455
         },
         {
-          "path": "textures/Material_normal.png",
+          "path": "gltf/textures/Material_normal.png",
           "sha256": "eedde9574fbcb8db1e64fb4e8fab151afc83f14a2a1a3ed90cc21feb2c855d68",
           "bytes": 1787728
         }
@@ -1537,7 +1537,7 @@
       "licence": "CC0-1.0",
       "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
       "checked_at": "2026-10-13",
-      "sha256": "3810722834007a5883a7d1e163ee860d74d00050627d5c0346f9c054bc6797f8",
+      "sha256": "a0b0084b506e9c33aaea182cf435a0c8f16b824754618bcdc4addea2279c8a69",
       "polycount": 100000,
       "textures": "default_baseColor.jpeg 2048x2048, default_metallicRoughness.png 2048x2048, default_normal.jpeg 2048x2048",
       "rigged": false,
@@ -1546,32 +1546,32 @@
       "status": "downloaded",
       "files": [
         {
-          "path": "license.txt",
+          "path": "gltf/license.txt",
           "sha256": "61b6b7e13658a5369eece27399db2cc531abc7d46141e0dfe02a5e54b26d414a",
           "bytes": 375
         },
         {
-          "path": "scene.bin",
+          "path": "gltf/scene.bin",
           "sha256": "db5e874c7a4cb7540465ed6739d0aae737193e9e7ecbe678fa4ade8320be5b19",
           "bytes": 6512064
         },
         {
-          "path": "scene.gltf",
+          "path": "gltf/scene.gltf",
           "sha256": "272dcdac310dfd768163b8906fac9ce900877fd553d4115f4975694ab00afcd1",
           "bytes": 7999
         },
         {
-          "path": "textures/default_baseColor.jpeg",
+          "path": "gltf/textures/default_baseColor.jpeg",
           "sha256": "3de064d9131491df4ca5cfe5a8106b17f8a79843d5bcfe2c2e63e94ead20a97a",
           "bytes": 1889870
         },
         {
-          "path": "textures/default_metallicRoughness.png",
+          "path": "gltf/textures/default_metallicRoughness.png",
           "sha256": "16f05336d173815fdef2e3c01c5960619c19b7dfadd2f9812e5d4e1516d158cd",
           "bytes": 2902343
         },
         {
-          "path": "textures/default_normal.jpeg",
+          "path": "gltf/textures/default_normal.jpeg",
           "sha256": "f01b96124fd9a9703c6ad3fb566bcb7634b062f79a81f7ff864f2bc96712b4c6",
           "bytes": 5667808
         }
@@ -1587,7 +1587,7 @@
       "licence": "CC0-1.0",
       "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
       "checked_at": "2026-10-13",
-      "sha256": "c23347f0f62bfa8ee5467fa0bce9105f1d8812316edb7a54ec673ce078d187f3",
+      "sha256": "05486fa967168f5718e12ea8c7036ab5555041a1932aa53ab5508e567ee2bcb7",
       "polycount": 100000,
       "textures": "default_baseColor.jpeg 2048x2048, default_metallicRoughness.png 2048x2048, default_normal.jpeg 2048x2048",
       "rigged": false,
@@ -1596,32 +1596,32 @@
       "status": "downloaded",
       "files": [
         {
-          "path": "license.txt",
+          "path": "gltf/license.txt",
           "sha256": "987491c5e889998bb05c42c45196e7975c4ec534c2ae850a082bc744dac41765",
           "bytes": 373
         },
         {
-          "path": "scene.bin",
+          "path": "gltf/scene.bin",
           "sha256": "0efe58cecaea56e82da7f660b24640107cbb3d735e110125c79cfebcd7bd0110",
           "bytes": 4770944
         },
         {
-          "path": "scene.gltf",
+          "path": "gltf/scene.gltf",
           "sha256": "0ab44e3f5069f02a3fe27543d4b631ee779fbe4dd7aa5bb793f7e7a9a886b10f",
           "bytes": 5410
         },
         {
-          "path": "textures/default_baseColor.jpeg",
+          "path": "gltf/textures/default_baseColor.jpeg",
           "sha256": "d050b4370b21b4b2bc2f0cda7a1e35be27997f61eb6d31cf770bcfb71a118c75",
           "bytes": 1343754
         },
         {
-          "path": "textures/default_metallicRoughness.png",
+          "path": "gltf/textures/default_metallicRoughness.png",
           "sha256": "7a88723e1c6751aea3f50f07a71b28c68753ac7fd75b7107866aba18134b81a9",
           "bytes": 1930413
         },
         {
-          "path": "textures/default_normal.jpeg",
+          "path": "gltf/textures/default_normal.jpeg",
           "sha256": "a2fed767248c9fe5e32227f08ef1382759aa0f0eb0700f7e108a9efcef41113e",
           "bytes": 3723883
         }
@@ -1637,7 +1637,7 @@
       "licence": "CC-BY-4.0",
       "licence_url": "https://creativecommons.org/licenses/by/4.0/",
       "checked_at": "2026-10-13",
-      "sha256": "41a91b9e71159027b82b06d1056aadcb1bf1b166f48edee9d4e7e0f2c010fcb0",
+      "sha256": "5d85edaec80008a3b816c934ef0fd9373fd46a8da0c376be84b17599dbc55ee3",
       "polycount": 178319,
       "textures": "none (COLOR_0 vertex colours only)",
       "rigged": false,
@@ -1646,17 +1646,17 @@
       "status": "downloaded",
       "files": [
         {
-          "path": "license.txt",
+          "path": "gltf/license.txt",
           "sha256": "d446a1244a41aa9b5b584c9ac2f816104b865bcc121b6b4235abd255615bfb5c",
           "bytes": 740
         },
         {
-          "path": "scene.bin",
+          "path": "gltf/scene.bin",
           "sha256": "00159100e26aabaa709818a3e584894ad27578f9a03e735936a9e97a14f6199b",
           "bytes": 7242708
         },
         {
-          "path": "scene.gltf",
+          "path": "gltf/scene.gltf",
           "sha256": "4e53a113a776222c05e65a04fd435f2f41c05596a55442efdc13d3d9a54042fa",
           "bytes": 5543
         }
