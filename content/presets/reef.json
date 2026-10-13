@@ -46,7 +46,7 @@
     },
     {
       "assetId": "acropora-cytherea",
-      "position": [0.095, 0.068, 0.12],
+      "position": [0.065, 0.068, 0.14],
       "rotationY": 0.4,
       "scale": 0.58
     },
@@ -58,7 +58,7 @@
     },
     {
       "assetId": "brain-coral",
-      "position": [0.53, 0.05, 0.06],
+      "position": [0.52, 0.05, 0.06],
       "rotationY": 0.2,
       "scale": 0.65
     },
@@ -82,7 +82,7 @@
     },
     {
       "assetId": "euphyllia-torch-8",
-      "position": [0.31, 0.068, -0.03],
+      "position": [0.3, 0.068, 0.0],
       "rotationY": -0.3,
       "scale": 1
     },
@@ -90,7 +90,7 @@
       "assetId": "lambis-shell",
       "position": [0.25, 0.055, 0.185],
       "rotationY": 0.2,
-      "scale": 1.0
+      "scale": 0.9
     }
   ],
   "plantPatches": [],
