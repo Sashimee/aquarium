@@ -32,6 +32,8 @@ export class InteriorLight {
    * it would run in each of the environment lookups three builds per material.
    */
   readonly substrateBounce = uniform(new Color());
+  /** Blue channel of the hood light at the substrate, which excites fluorescent tissue: the actinic by day and the moonlight at night. */
+  actinicExcitation = 0;
   private readonly roomNodes: PMREMNode[] = [];
 
   /**
@@ -51,8 +53,9 @@ export class InteriorLight {
   /** Call once per frame, after the hood and water uniforms are set. */
   update(): void {
     const depth = this.medium.boxMax.value.y - this.sandHeight;
-    this.caustics
-      .hoodLightAtDepth(depth, this.substrateBounce.value)
+    this.caustics.hoodLightAtDepth(depth, this.substrateBounce.value);
+    this.actinicExcitation = this.substrateBounce.value.b;
+    this.substrateBounce.value
       .multiply(this.substrateAlbedo.value)
       .multiplyScalar(SUBSTRATE_BOUNCE / Math.PI);
   }

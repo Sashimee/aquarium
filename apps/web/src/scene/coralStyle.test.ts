@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { coralTint, heightScale, placementKey } from './coralStyle';
+import { coralGlow, coralTint, fluorescenceLevel, heightScale, placementKey } from './coralStyle';
 import { loadPreset } from './preset';
 
 describe('coral style', () => {
@@ -41,5 +41,39 @@ describe('coral style', () => {
       .decor.filter((d) => d.assetId === 'brain-coral')
       .map((d) => coralTint(d.assetId, placementKey(d.position, d.rotationY))?.getHex());
     expect(new Set(hexes).size).toBe(hexes.length);
+  });
+});
+
+describe('coral fluorescence', () => {
+  const corals = ['brain-coral', 'acropora-cytherea', 'acropora-palmata'];
+
+  it('is absent in freshwater and on anything that is not a coral', () => {
+    for (const id of corals) expect(coralGlow('freshwater', id, 0)).toBeNull();
+    expect(coralGlow('reef', 'boulder-01', 0)).toBeNull();
+  });
+
+  it('gives each style its own green, orange or pink, wrapping with the placement key', () => {
+    const glows = [0, 1, 2].map((i) => coralGlow('reef', 'brain-coral', i)?.getHex());
+    expect(new Set(glows).size).toBe(3);
+    expect(coralGlow('reef', 'brain-coral', 3)?.getHex()).toBe(glows[0]);
+    const cytherea = [0, 1].map((i) => coralGlow('reef', 'acropora-cytherea', i)?.getHex());
+    expect(cytherea[0]).not.toBe(cytherea[1]);
+    for (const id of corals) {
+      for (let i = 0; i < 4; i++) {
+        const c = coralGlow('reef', id, i);
+        expect(Math.max(c?.r ?? 2, c?.g ?? 2, c?.b ?? 2)).toBeLessThanOrEqual(1);
+        expect(Math.max(c?.r ?? 0, c?.g ?? 0, c?.b ?? 0)).toBeGreaterThan(0.9);
+      }
+    }
+  });
+
+  it('follows the excitation: nothing without light, more by day than at night, never negative', () => {
+    const day = fluorescenceLevel(3);
+    const night = fluorescenceLevel(0.3);
+    expect(fluorescenceLevel(0)).toBe(0);
+    expect(fluorescenceLevel(-1)).toBe(0);
+    expect(night).toBeGreaterThan(0);
+    expect(day).toBeGreaterThan(night);
+    expect(day / night).toBeLessThan(3 / 0.3);
   });
 });

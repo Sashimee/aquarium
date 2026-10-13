@@ -1,15 +1,20 @@
 import {
+  Color,
   Group,
   Matrix4,
   Mesh,
   Quaternion,
+  MeshStandardNodeMaterial,
   Vector3,
   type BufferGeometry,
+  type Material,
   type MeshStandardMaterial,
+  type UniformNode,
 } from 'three/webgpu';
-import type { DecorItem } from '@aquarium/shared';
+import { diffuseColor, dot, mix, saturate, uniform, vec3 } from 'three/tsl';
+import type { Biome, DecorItem } from '@aquarium/shared';
 import type { CatalogEntry, LoadedModel } from './assets';
-import { coralTint, placementKey, heightScale } from './coralStyle';
+import { coralGlow, coralTint, placementKey, heightScale } from './coralStyle';
 import { fitCapsuleChain, fitHull, transformPoints, type Collider } from './colliders';
 
 export const HARDSCAPE_KINDS: ReadonlySet<string> = new Set([
@@ -54,12 +59,39 @@ export function fitCollider(
   return kind === 'driftwood' ? fitCapsuleChain(points, WOOD_SEGMENTS) : [fitHull(points)];
 }
 
+const LUMA = vec3(0.2126, 0.7152, 0.0722);
+
+/** Tissue glows more where the albedo is bright, so the emission follows the polyps rather than the skeleton. */
+function fluorescentMaterial(
+  source: MeshStandardMaterial,
+  glow: Color,
+  level: UniformNode<'float', number>,
+): MeshStandardNodeMaterial {
+  const material = new MeshStandardNodeMaterial();
+  material.name = source.name;
+  material.color.copy(source.color);
+  material.map = source.map;
+  material.normalMap = source.normalMap;
+  material.normalScale.copy(source.normalScale);
+  material.roughnessMap = source.roughnessMap;
+  material.aoMap = source.aoMap;
+  material.roughness = source.roughness;
+  material.metalness = source.metalness;
+  material.side = source.side;
+  const tissue = mix(0.4, 1.4, saturate(dot(diffuseColor.rgb, LUMA).mul(2)));
+  material.emissiveNode = uniform(glow).mul(level).mul(tissue);
+  return material;
+}
+
 export class Hardscape {
   readonly group = new Group();
   private readonly meshesByItem: Mesh[][] = [];
-  private readonly tintedMaterials: MeshStandardMaterial[] = [];
+  private readonly tintedMaterials: Material[] = [];
 
-  constructor() {
+  constructor(
+    private readonly biome: Biome,
+    private readonly fluorescence: UniformNode<'float', number>,
+  ) {
     this.group.name = 'hardscape';
   }
 
@@ -67,12 +99,16 @@ export class Hardscape {
     const matrix = decorMatrix(item);
     const meshes: Mesh[] = [];
     this.meshesByItem.push(meshes);
-    const tint = coralTint(item.assetId, placementKey(item.position, item.rotationY));
+    const key = placementKey(item.position, item.rotationY);
+    const tint = coralTint(item.assetId, key);
     for (const primitive of model.primitives) {
-      let material = primitive.material;
+      let material: Material = primitive.material;
       if (tint) {
-        material = material.clone();
-        material.color.multiply(tint);
+        const tinted = primitive.material.clone();
+        tinted.color.multiply(tint);
+        const glow = coralGlow(this.biome, item.assetId, key);
+        material = glow ? fluorescentMaterial(tinted, glow, this.fluorescence) : tinted;
+        if (material !== tinted) tinted.dispose();
         this.tintedMaterials.push(material);
       }
       const mesh = new Mesh(primitive.geometry, material);

@@ -1,4 +1,5 @@
 import { Color } from 'three/webgpu';
+import type { Biome } from '@aquarium/shared';
 
 /**
  * Scan-derived corals arrive in dull museum tones, so the scene tints each instance toward live
@@ -52,4 +53,43 @@ export function coralTint(assetId: string, key: number): Color | null {
 
 export function heightScale(assetId: string): number {
   return HEIGHT_SCALE[assetId] ?? 1;
+}
+
+/**
+ * Emission of the fluorescent proteins in live tissue, parallel to `TINTS`: the same placement key
+ * picks a tint and its glow. Green, orange and pink, the colours reef corals fluoresce in.
+ */
+const GLOW: Readonly<Record<string, readonly Rgb[]>> = {
+  'acropora-cytherea': [
+    [1, 0.18, 0.62],
+    [1, 0.42, 0.06],
+  ],
+  'acropora-palmata': [
+    [0.1, 1, 0.22],
+    [1, 0.18, 0.62],
+  ],
+  'brain-coral': [
+    [0.1, 1, 0.22],
+    [1, 0.42, 0.06],
+    [1, 0.18, 0.62],
+  ],
+};
+
+/** Share of the absorbed blue that comes back out as visible light. */
+const FLUORESCENCE_YIELD = 0.1;
+
+/** Fluorescence exists only on a reef; freshwater has no coral and gets no glow. */
+export function coralGlow(biome: Biome, assetId: string, key: number): Color | null {
+  if (biome !== 'reef') return null;
+  const palette = GLOW[assetId];
+  const rgb = palette?.[key % palette.length];
+  return rgb ? new Color(rgb[0], rgb[1], rgb[2]) : null;
+}
+
+/**
+ * Emission scale for a blue excitation radiance. The square root keeps the moonlight, which is
+ * about a tenth of the day's actinic, visible at night while the day does not blow out.
+ */
+export function fluorescenceLevel(excitation: number): number {
+  return FLUORESCENCE_YIELD * Math.sqrt(Math.max(excitation, 0));
 }
