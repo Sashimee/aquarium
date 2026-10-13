@@ -23,6 +23,7 @@ export const STEP_DT = 1 / STEP_HZ;
 export const STEERING = {
   separationZoneBodyLengths: 1,
   separationWeight: 2,
+  coGrazeSeparation: 0.25,
   alignmentWeight: 1.5,
   cohesionRatePerS: 1,
   anyNeighbours: 6,
@@ -77,6 +78,9 @@ export const STEERING = {
   backOutBodyLengths: 0.3,
   backOutMaxBodyLengths: 1.5,
   backOutAlignedRad: 30 * DEG,
+  scrapeWindowS: 1,
+  scrapeContactFraction: 0.2,
+  scrapeDriftBodyLengths: 0.5,
 } as const;
 
 export interface FishSpawn {
@@ -177,6 +181,9 @@ export class World {
   private readonly cramped: Uint8Array;
   private readonly wedged: Float64Array;
   private readonly reverseLeft: Float64Array;
+  private readonly scrapeAnchor: Float64Array;
+  private readonly scrapeTime: Float64Array;
+  private readonly scrapeHits: Uint16Array;
   private readonly wanderTurn: Float64Array;
   private readonly wanderPitch: Float64Array;
   /** Horizontal unit slide direction along the wall being avoided; zero when disengaged. */
@@ -253,6 +260,9 @@ export class World {
     this.cramped = new Uint8Array(n);
     this.wedged = new Float64Array(n);
     this.reverseLeft = new Float64Array(n);
+    this.scrapeAnchor = new Float64Array(n * 3);
+    this.scrapeTime = new Float64Array(n);
+    this.scrapeHits = new Uint16Array(n);
     this.mass = new Float64Array(n);
     this.drag = new Float64Array(n);
     this.maxSpeed = new Float64Array(n);
@@ -556,7 +566,8 @@ export class World {
     let sz = 0;
     for (let m = 0; m < anyCount; m++) {
       const j = this.anyNbr[i * k + m] ?? 0;
-      const zone = 0.5 * (length + (this.bodyLength[j] ?? 0)) * STEERING.separationZoneBodyLengths;
+      let zone = 0.5 * (length + (this.bodyLength[j] ?? 0)) * STEERING.separationZoneBodyLengths;
+      if (plan.arrival > 0 && this.coGrazing(plan, j)) zone *= STEERING.coGrazeSeparation;
       const d2 = this.distSq[i * n + j] ?? Infinity;
       if (d2 >= zone * zone) continue;
       const d = Math.sqrt(d2);
@@ -900,6 +911,18 @@ export class World {
     return Math.min(sp.maxTurnRate, Math.max(arc, STEERING.pivotTurnRateRadPerS));
   }
 
+  /** Whether fish `j` is grazing the same item as `plan`, so the two may feed side by side. */
+  private coGrazing(plan: Plan, j: number): boolean {
+    const other = this.behaviour.plans[j];
+    return (
+      other !== undefined &&
+      other.arrival > 0 &&
+      other.seekWeight > 0 &&
+      other.seekX === plan.seekX &&
+      other.seekZ === plan.seekZ
+    );
+  }
+
   /** Least clearance of the level snout and tail of fish `i` held at (x, y, z) facing `heading`. */
   private poseRoom(i: number, sdf: Sdf, x: number, y: number, z: number, heading: number): number {
     const reach = (BEHAVIOUR.bodySampleOffsets[0] ?? 0) * (this.bodyLength[i] ?? 0);
@@ -1079,10 +1102,12 @@ export class World {
     const into = this.constrainBody(i, fx, fy, fz, nrm);
     if (into === null) {
       this.wedged[i] = 0;
+      this.scraping(i, false);
       return;
     }
     this.contacts++;
     this.contactCount[i] = (this.contactCount[i] ?? 0) + 1;
+    this.scraping(i, Math.hypot(nrm[0] ?? 0, nrm[2] ?? 0) >= STEERING.slideMinHorizontal);
     if (!(this.bodyClearance(i) >= -PENETRATION_EPSILON)) {
       // The new pose cannot be made valid (a turn wedged the body into a corner): keep the old one.
       this.position.set(prev, o);
@@ -1126,6 +1151,40 @@ export class World {
     this.wedged[i] = 0;
     this.detourTimer[i] = 0;
     this.reverseLeft[i] = STEERING.backOutMaxBodyLengths * (this.bodyLength[i] ?? 0);
+  }
+
+  /**
+   * A fish that keeps touching glass or rock while getting nowhere is working itself along a
+   * dead-end wedge, sliding to and fro fast enough never to count as pinned; it backs out too.
+   * Sand and rock tops underneath do not count: a forager rests its belly on them.
+   */
+  private scraping(i: number, contact: boolean): void {
+    if (contact) this.scrapeHits[i] = (this.scrapeHits[i] ?? 0) + 1;
+    const time = (this.scrapeTime[i] ?? 0) + STEP_DT;
+    if (time < STEERING.scrapeWindowS) {
+      this.scrapeTime[i] = time;
+      return;
+    }
+    const o = i * 3;
+    const a = this.scrapeAnchor;
+    const drift = Math.hypot(
+      (this.position[o] ?? 0) - (a[o] ?? 0),
+      (this.position[o + 1] ?? 0) - (a[o + 1] ?? 0),
+      (this.position[o + 2] ?? 0) - (a[o + 2] ?? 0),
+    );
+    const hits = (this.scrapeHits[i] ?? 0) / (time / STEP_DT);
+    a[o] = this.position[o] ?? 0;
+    a[o + 1] = this.position[o + 1] ?? 0;
+    a[o + 2] = this.position[o + 2] ?? 0;
+    this.scrapeTime[i] = 0;
+    this.scrapeHits[i] = 0;
+    const length = this.bodyLength[i] ?? 0;
+    if (hits < STEERING.scrapeContactFraction || drift > STEERING.scrapeDriftBodyLengths * length) {
+      return;
+    }
+    this.wedged[i] = 0;
+    this.detourTimer[i] = 0;
+    this.reverseLeft[i] = STEERING.backOutMaxBodyLengths * length;
   }
 
   /**

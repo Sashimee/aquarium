@@ -172,8 +172,8 @@ describe('tangs on the reef preset', { timeout: LONG }, () => {
   // Contacts per fish-step. Turning on the spot in a corner brushes the glass now and then, and
   // a second tang squeezing past the one at the clip more often; a fish pressed against the pane,
   // as in #89, touches it nearly every step. About 1.5 times the rates measured.
-  const LONE_CONTACT_RATE = 2.5e-3;
-  const PAIR_CONTACT_RATE = 7.5e-3;
+  const LONE_CONTACT_RATE = 2.75e-3;
+  const PAIR_CONTACT_RATE = 6e-3;
   const { minX, maxX, minZ, maxZ } = reefTank(1, yellowTang.id, STARTS).basin;
   // Nori clipped 2 cm off the glass.
   const inset = 0.02;
