@@ -1,6 +1,15 @@
-import { Group, Matrix4, Mesh, Quaternion, Vector3, type BufferGeometry } from 'three/webgpu';
+import {
+  Group,
+  Matrix4,
+  Mesh,
+  Quaternion,
+  Vector3,
+  type BufferGeometry,
+  type MeshStandardMaterial,
+} from 'three/webgpu';
 import type { DecorItem } from '@aquarium/shared';
 import type { CatalogEntry, LoadedModel } from './assets';
+import { coralTint, placementKey, heightScale } from './coralStyle';
 import { fitCapsuleChain, fitHull, transformPoints, type Collider } from './colliders';
 
 export const HARDSCAPE_KINDS: ReadonlySet<string> = new Set([
@@ -17,7 +26,7 @@ export function decorMatrix(item: DecorItem): Matrix4 {
   return new Matrix4().compose(
     new Vector3(...item.position),
     new Quaternion().setFromAxisAngle(UP, item.rotationY),
-    new Vector3(item.scale, item.scale, item.scale),
+    new Vector3(item.scale, item.scale * heightScale(item.assetId), item.scale),
   );
 }
 
@@ -48,6 +57,7 @@ export function fitCollider(
 export class Hardscape {
   readonly group = new Group();
   private readonly meshesByItem: Mesh[][] = [];
+  private readonly tintedMaterials: MeshStandardMaterial[] = [];
 
   constructor() {
     this.group.name = 'hardscape';
@@ -57,8 +67,15 @@ export class Hardscape {
     const matrix = decorMatrix(item);
     const meshes: Mesh[] = [];
     this.meshesByItem.push(meshes);
-    for (const { geometry, material } of model.primitives) {
-      const mesh = new Mesh(geometry, material);
+    const tint = coralTint(item.assetId, placementKey(item.position, item.rotationY));
+    for (const primitive of model.primitives) {
+      let material = primitive.material;
+      if (tint) {
+        material = material.clone();
+        material.color.multiply(tint);
+        this.tintedMaterials.push(material);
+      }
+      const mesh = new Mesh(primitive.geometry, material);
       meshes.push(mesh);
       mesh.name = `${entry.id}:${material.name}`;
       mesh.matrixAutoUpdate = false;
@@ -77,5 +94,6 @@ export class Hardscape {
   dispose(): void {
     this.group.removeFromParent();
     this.group.clear();
+    for (const material of this.tintedMaterials) material.dispose();
   }
 }
