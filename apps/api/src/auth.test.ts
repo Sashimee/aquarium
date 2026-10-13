@@ -1,7 +1,8 @@
 import { apiErrorSchema, sessionListSchema, userSchema } from '@aquarium/shared';
 import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_MAIL_LIMITS } from './mail.ts';
+import nodemailer from 'nodemailer';
+import { createMailer, DEFAULT_MAIL_LIMITS } from './mail.ts';
 import { postgresHitStore } from './rate-limit.ts';
 import { APP_ORIGIN, createHarness, type Harness } from './test-harness.ts';
 
@@ -679,6 +680,38 @@ describe('mail abuse limits', () => {
     expect(await store.consume('global', { max: 2, windowMs: 3_600_000 })).toBeGreaterThan(0);
     const rows = await h.database.pool.query('select key from mail_limit_hits');
     expect(rows.rows.every((r: { key: string }) => /^[0-9a-f]{64}$/.test(r.key))).toBe(true);
+    await h.close();
+  });
+
+  it('never exceeds the IP or global cap under concurrent requests at the boundary', async () => {
+    const h = await createHarness();
+    const limits = {
+      perRecipient: { max: 100, windowMs: 3_600_000 },
+      verificationCooldown: { max: 100, windowMs: 1000 },
+      perIpSignup: { max: 5, windowMs: 3_600_000 },
+      global: { max: 7, windowMs: 3_600_000 },
+    };
+    const sent: string[] = [];
+    const transport = nodemailer.createTransport({ jsonTransport: true });
+    transport.sendMail = (async (data: { to: string }) => {
+      sent.push(data.to);
+    }) as unknown as typeof transport.sendMail;
+    const mailer = createMailer(transport, 'fish@bas.lu', {
+      limits,
+      store: postgresHitStore(h.database, 'concurrency-secret-concurrency-secret-01'),
+      log: () => undefined,
+    });
+    const ipWaits = await Promise.all(
+      Array.from({ length: 20 }, () => mailer.consumeIp('203.0.113.50')),
+    );
+    expect(ipWaits.filter((w) => w === 0)).toHaveLength(5);
+    const results = await Promise.allSettled(
+      Array.from({ length: 20 }, (_, i) =>
+        mailer.sendVerification(`c${i}@bas.lu`, 'https://x.test/'),
+      ),
+    );
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(7);
+    expect(sent).toHaveLength(7);
     await h.close();
   });
 

@@ -106,6 +106,51 @@ describe('global mail cap', () => {
     expect(sent.filter((to) => to === 'victim@bas.lu')).toHaveLength(2);
   });
 
+  it('leaves the IP slot available when the global cap refuses', async () => {
+    let now = 0;
+    const transport = nodemailer.createTransport({ jsonTransport: true });
+    transport.sendMail = (async () => undefined) as unknown as typeof transport.sendMail;
+    const mailer = createMailer(transport, 'fish@bas.lu', {
+      store: memoryHitStore(() => now),
+      log: () => undefined,
+      limits: {
+        perRecipient: { max: 100, windowMs: 3_600_000 },
+        verificationCooldown: { max: 100, windowMs: 1000 },
+        perIpSignup: { max: 2, windowMs: 3_600_000 },
+        global: { max: 1, windowMs: 60_000 },
+      },
+    });
+    await mailer.sendVerification('a@bas.lu', 'https://x.test/a');
+    for (let i = 0; i < 5; i++) {
+      expect(await mailer.consumeIp('203.0.113.9')).toBe(0);
+      await expect(mailer.sendVerification('b@bas.lu', 'https://x.test/b')).rejects.toThrow(
+        MailThrottledError,
+      );
+    }
+    now += 61_000;
+    expect(await mailer.consumeIp('203.0.113.9')).toBe(0);
+    expect(await mailer.consumeIp('203.0.113.9')).toBe(0);
+    expect(await mailer.consumeIp('203.0.113.9')).toBeGreaterThan(0);
+  });
+
+  it('still refuses an exhausted IP while the global cap is spent', async () => {
+    const transport = nodemailer.createTransport({ jsonTransport: true });
+    transport.sendMail = (async () => undefined) as unknown as typeof transport.sendMail;
+    const mailer = createMailer(transport, 'fish@bas.lu', {
+      store: memoryHitStore(() => 0),
+      log: () => undefined,
+      limits: {
+        perRecipient: { max: 100, windowMs: 3_600_000 },
+        verificationCooldown: { max: 100, windowMs: 1000 },
+        perIpSignup: { max: 1, windowMs: 3_600_000 },
+        global: { max: 1, windowMs: 60_000 },
+      },
+    });
+    expect(await mailer.consumeIp('203.0.113.9')).toBe(0);
+    await mailer.sendVerification('a@bas.lu', 'https://x.test/a');
+    expect(await mailer.consumeIp('203.0.113.9')).toBeGreaterThan(0);
+  });
+
   it('refuses mail without logging the cap event when the store throws', async () => {
     const logs: string[] = [];
     const transport = nodemailer.createTransport({ jsonTransport: true });

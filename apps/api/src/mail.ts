@@ -74,7 +74,7 @@ export interface Mailer {
   sendVerification(to: string, url: string): Promise<void>;
   /** Same limits as sendVerification, tracked separately so one flow cannot starve the other. */
   sendPasswordReset(to: string, url: string): Promise<void>;
-  /** Consumes one per-IP slot for mail-triggering endpoints; returns retry-after seconds or 0. */
+  /** Consumes one per-IP slot for mail-triggering endpoints, except while the global cap is spent; returns retry-after seconds or 0. */
   consumeIp(ip: string): Promise<number>;
   peekVerificationCooldown(to: string): Promise<number>;
 }
@@ -195,7 +195,16 @@ export function createMailer(
         textEncoding: 'base64',
       });
     },
-    consumeIp: (address) => consume(`ip:${address}`, limits.perIpSignup),
+    // While the global cap is spent no mail can go out, so the slot is only checked, not used.
+    // This depends on the shared global counter alone, never on whether the address has an account.
+    async consumeIp(address) {
+      const key = `ip:${address}`;
+      const spent = await guarded(() => store.remaining('global', limits.global));
+      if (spent.answered && spent.wait > 0) {
+        return failClosed(() => store.remaining(key, limits.perIpSignup));
+      }
+      return consume(key, limits.perIpSignup);
+    },
     peekVerificationCooldown: (to) =>
       failClosed(() =>
         store.remaining(`verify:cooldown:${recipientKey(to)}`, limits.verificationCooldown),
