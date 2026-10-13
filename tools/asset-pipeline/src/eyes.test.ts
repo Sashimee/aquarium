@@ -110,7 +110,7 @@ describe('seatEyes', () => {
 describe('normaliseFish attachments', () => {
   const body = ellipsoid([0, 0, 0], [0.2, 0.3, 1]);
   const eyes = ellipsoid([0.15, 0.05, 0.6], [0.05, 0.05, 0.05]);
-  const input = { standardLengthM: 0.03 };
+  const input = { standardLengthM: 0.03, recipeId: 'test-fish' };
 
   it('keeps attachments rigid, in the body frame, and out of the fin attributes it computes', () => {
     const result = normaliseFish({ ...input, parts: [body], attachments: [eyes] });
