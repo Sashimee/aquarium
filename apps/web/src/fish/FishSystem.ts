@@ -225,6 +225,7 @@ export class FishSystem {
   private layout: Layout | null = null;
   private pendingLayout: { epoch: number; ids: readonly string[] } | null = null;
   private simRevision = -1;
+  private sceneRevision = -1;
   private simReady = false;
   private dirty = false;
   private syncing = false;
@@ -832,7 +833,15 @@ export class FishSystem {
     const layout = this.layout;
     const frame =
       layout !== null && this.interpolator.sample(nowMs, layout.frame) ? layout.frame : null;
-    for (const batch of this.batches.values()) for (const lod of batch.lods) lod.count = 0;
+    const sceneRevision = this.engine.sceneRevision;
+    const rewarm = sceneRevision !== this.sceneRevision;
+    this.sceneRevision = sceneRevision;
+    for (const batch of this.batches.values()) {
+      for (const lod of batch.lods) {
+        lod.count = 0;
+        if (rewarm) lod.warmed = false;
+      }
+    }
     this.bags.begin();
 
     const camera = this.engine.camera.position;

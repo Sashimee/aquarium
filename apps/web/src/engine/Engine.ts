@@ -12,6 +12,7 @@ import { daylightAt, minuteOfDay } from './daylight';
 import { EffectsSlot } from './effectsSlot';
 import { installRoomLighting, DEFAULT_HDRI_URL } from './environment';
 import { EventBus, type BackendKind, type EngineEvents, type EngineEventBus } from './events';
+import { CullPrewarm } from './cullPrewarm';
 import { buildOrRelease, DisposeStack } from './lifecycle';
 import type { EngineOptions } from './options';
 import { qualityProfile } from './quality/profile';
@@ -114,6 +115,8 @@ export class Engine {
   private readonly effects = new EffectsSlot((message, cause) => this.reportError(message, cause));
   private readonly frameCallbacks = new Set<FrameCallback>();
   private lastFrameAt: number | null = null;
+  private readonly cullPrewarm = new CullPrewarm(this.scene);
+  private sceneRevisionValue = 0;
   private gpuMs: number | null = null;
   private readonly gpuTiming: boolean;
   private lastGpuMs: number | null = null;
@@ -224,6 +227,14 @@ export class Engine {
   /** Depth of field follows the focus camera, on tiers that allow it. */
   setFocusMode(on: boolean): void {
     this.effects.setFocusMode(on);
+  }
+
+  /**
+   * Changes whenever new objects (lights included) join the scene. Every render object three built
+   * before may then be rebuilt on its next draw, so hidden variants should be drawn again.
+   */
+  get sceneRevision(): number {
+    return this.sceneRevisionValue;
   }
 
   /** Called once per rendered frame before the scene is drawn. */
@@ -356,7 +367,12 @@ export class Engine {
     for (const callback of this.frameCallbacks) callback(deltaS, nowMs);
     this.updateDaylight(nowMs);
     this.updateHoodUniforms();
-    if (!this.effects.render()) this.renderer.render(this.scene, this.camera);
+    if (this.cullPrewarm.begin(nowMs) > 0) this.sceneRevisionValue++;
+    try {
+      if (!this.effects.render()) this.renderer.render(this.scene, this.camera);
+    } finally {
+      this.cullPrewarm.end();
+    }
     this.pollGpuTime();
 
     if (frameMs > 0) {
