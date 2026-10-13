@@ -5,6 +5,8 @@ export type Route =
   | { name: 'sign-in' }
   | { name: 'sign-up' }
   | { name: 'verify-email'; error: string | null }
+  | { name: 'forgot-password' }
+  | { name: 'reset-password'; token: string | null; error: string | null }
   | { name: 'sessions' }
   | { name: 'settings' }
   | { name: 'privacy' }
@@ -32,6 +34,14 @@ export function parseRoute(href: string): Route {
       return { name: 'privacy' };
     case '/credits':
       return { name: 'credits' };
+    case '/forgot-password':
+      return { name: 'forgot-password' };
+    case '/reset-password':
+      return {
+        name: 'reset-password',
+        token: url.searchParams.get('token'),
+        error: url.searchParams.get('error'),
+      };
     case '/verify-email':
       return { name: 'verify-email', error: url.searchParams.get('error') };
     default:
@@ -49,6 +59,13 @@ export function routePath(route: Route): string {
       return route.error
         ? `/verify-email?error=${encodeURIComponent(route.error)}`
         : '/verify-email';
+    case 'reset-password': {
+      const params = new URLSearchParams();
+      if (route.token) params.set('token', route.token);
+      if (route.error) params.set('error', route.error);
+      const query = params.toString();
+      return query ? `/reset-password?${query}` : '/reset-password';
+    }
     default:
       return `/${route.name}`;
   }
@@ -78,7 +95,9 @@ export function redirectFor(href: string, user: User | null): string | null {
   const url = new URL(href, 'http://localhost');
   if (trimmedPath(url.pathname) === target.pathname) return null;
   const params = new URLSearchParams(url.search);
-  if (targetRoute.name !== 'verify-email') params.delete('error');
+  if (targetRoute.name !== 'verify-email' && targetRoute.name !== 'reset-password') {
+    params.delete('error');
+  }
   for (const [key, value] of target.searchParams) params.set(key, value);
   const query = params.toString();
   return target.pathname + (query ? `?${query}` : '') + url.hash;
@@ -89,6 +108,7 @@ export function carryQuery(path: string, currentSearch: string): string {
   if (path.includes('?') || path.includes('#')) return path;
   const params = new URLSearchParams(currentSearch);
   params.delete('error');
+  params.delete('token');
   const query = params.toString();
   return query ? `${path}?${query}` : path;
 }
