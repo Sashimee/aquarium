@@ -1,5 +1,6 @@
 import type { Anchor, Stimulus } from './behaviour.ts';
 import type { DecorCollider } from './decor.ts';
+import { FOOD_STRIDE, type AteEvent } from './food.ts';
 import { SNAPSHOT_STRIDE, type Snapshot } from './snapshot.ts';
 import { STEP_HZ, World, type WorldConfig } from './world.ts';
 
@@ -12,7 +13,9 @@ export type SimCommand =
   | { readonly type: 'startle'; readonly stimulus: Stimulus }
   | { readonly type: 'light'; readonly level: number }
   | { readonly type: 'decor'; readonly colliders: readonly DecorCollider[] }
-  | { readonly type: 'anchors'; readonly anchors: readonly Anchor[] };
+  | { readonly type: 'anchors'; readonly anchors: readonly Anchor[] }
+  /** Float32 records of `[id, x, y, z, typeIndex]`; see `World.setFood`. */
+  | { readonly type: 'food'; readonly buffer: ArrayBuffer };
 
 export interface SimReady {
   readonly type: 'ready';
@@ -31,7 +34,16 @@ export type SimEvent =
       readonly time: number;
       readonly buffer: ArrayBuffer;
     }
+  | SimAte
   | { readonly type: 'error'; readonly message: string };
+
+/** Bites taken in the steps leading up to the snapshot at `tick`, which follows it. */
+export interface SimAte {
+  readonly type: 'ate';
+  readonly epoch: number;
+  readonly tick: number;
+  readonly events: readonly AteEvent[];
+}
 
 /** The structural slice of `Worker`, `DedicatedWorkerGlobalScope` and `MessagePort` we use. */
 export interface MessagePortLike {
@@ -51,8 +63,9 @@ const COMMAND_TYPES = new Set([
   'light',
   'decor',
   'anchors',
+  'food',
 ]);
-const EVENT_TYPES = new Set(['ready', 'snapshot', 'error']);
+const EVENT_TYPES = new Set(['ready', 'snapshot', 'ate', 'error']);
 
 function messageType(data: unknown, allowed: ReadonlySet<string>): string {
   if (typeof data === 'object' && data !== null && 'type' in data) {
@@ -91,6 +104,8 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
   };
 
   const emitSnapshot = (w: World): void => {
+    const events = w.takeAteEvents();
+    if (events.length > 0) send({ type: 'ate', epoch, tick: w.tick, events });
     const bytes = w.count * SNAPSHOT_STRIDE * Float32Array.BYTES_PER_ELEMENT;
     let buffer = pool.pop();
     while (buffer !== undefined && buffer.byteLength !== bytes) buffer = pool.pop();
@@ -189,6 +204,18 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
       case 'anchors':
         requireWorld(command.type).setAnchors(command.anchors);
         return;
+      case 'food': {
+        const w = requireWorld(command.type);
+        const { buffer } = command;
+        if (
+          !(buffer instanceof ArrayBuffer) ||
+          buffer.byteLength % Float32Array.BYTES_PER_ELEMENT
+        ) {
+          throw new TypeError('sim: "food" needs an ArrayBuffer of float32 records');
+        }
+        w.setFood(new Float32Array(buffer));
+        return;
+      }
     }
   };
 
@@ -217,11 +244,13 @@ export class SimClient {
   private readonly port: MessagePortLike;
   private readonly snapshotListeners = new Set<(snapshot: Snapshot) => void>();
   private readonly errorListeners = new Set<(message: string) => void>();
+  private readonly ateListeners = new Set<(events: readonly AteEvent[], ate: SimAte) => void>();
   private pendingInit: {
     resolve: (ready: SimReady) => void;
     reject: (error: Error) => void;
   } | null = null;
   private readonly listener = (event: MessageEvent): void => this.receive(event.data);
+  private epoch = 0;
 
   constructor(port: MessagePortLike) {
     this.port = port;
@@ -270,6 +299,18 @@ export class SimClient {
     this.send({ type: 'anchors', anchors });
   }
 
+  /**
+   * Sends this tick's food particles, `FOOD_STRIDE` floats each: id, x, y, z in tank space, and
+   * the index of the food type in `foodTypeSchema`. The array is copied, so the caller keeps it.
+   */
+  setFood(food: Float32Array): void {
+    if (food.length % FOOD_STRIDE !== 0) {
+      throw new RangeError(`food: length ${food.length} is not a multiple of ${FOOD_STRIDE}`);
+    }
+    const buffer = food.slice().buffer;
+    this.port.postMessage({ type: 'food', buffer } satisfies SimCommand, [buffer]);
+  }
+
   /** Hands a snapshot's buffer back to the worker; the snapshot must not be read afterwards. */
   recycle(snapshot: Snapshot): void {
     const buffer = snapshot.data.buffer;
@@ -282,6 +323,12 @@ export class SimClient {
     return () => this.snapshotListeners.delete(listener);
   }
 
+  /** What fish ate; gameplay removes eaten particles and reports the portions to the lifecycle. */
+  onAte(listener: (events: readonly AteEvent[], ate: SimAte) => void): () => void {
+    this.ateListeners.add(listener);
+    return () => this.ateListeners.delete(listener);
+  }
+
   onError(listener: (message: string) => void): () => void {
     this.errorListeners.add(listener);
     return () => this.errorListeners.delete(listener);
@@ -291,6 +338,7 @@ export class SimClient {
     this.port.removeEventListener('message', this.listener);
     this.snapshotListeners.clear();
     this.errorListeners.clear();
+    this.ateListeners.clear();
     this.pendingInit?.reject(new Error('sim: client disposed'));
     this.pendingInit = null;
   }
@@ -304,6 +352,7 @@ export class SimClient {
     const event = data as SimEvent;
     switch (event.type) {
       case 'ready':
+        this.epoch = event.epoch;
         this.pendingInit?.resolve(event);
         this.pendingInit = null;
         return;
@@ -317,6 +366,12 @@ export class SimClient {
         for (const l of this.snapshotListeners) l(snapshot);
         return;
       }
+      case 'ate':
+        // A world being replaced by `init` may still report bites on food the caller has
+        // already reset; only the current world's are passed on.
+        if (this.pendingInit !== null || event.epoch !== this.epoch) return;
+        for (const l of this.ateListeners) l(event.events, event);
+        return;
       case 'error': {
         const pending = this.pendingInit;
         this.pendingInit = null;

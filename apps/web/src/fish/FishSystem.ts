@@ -19,11 +19,13 @@ import {
   type Stimulus,
   type WorldConfig,
 } from '@aquarium/sim';
+import type { Biome } from '@aquarium/shared';
 import type { Engine } from '../engine/Engine';
 import { TIER_SETTINGS, type Tier, type TierSettings } from '../engine/quality/tiers';
 import type { TankDimensions } from '../engine/tank/dimensions';
 import { disposeFishModel, FishAssetLoader, type FishModel } from './assets';
-import { demoTank } from './demoStock';
+import type { SceneAnchor } from '../scene/anemone';
+import { demoTank, sceneAnchorsToSim, type DemoTank } from './demoStock';
 import { FishInstanceData, type InstanceValues } from './instances';
 import { selectLod, type LodThresholds } from './lod';
 import { FishMaterial, type FinRendering, type FishMaterialFeatures } from './material';
@@ -32,6 +34,7 @@ import { SWIM_MODES, SwimState } from './swim';
 
 export interface FishSystemOptions {
   readonly tank: TankDimensions;
+  readonly biome: Biome;
   /** Folder holding `index.json` and the fish GLBs, with a trailing slash. */
   readonly assetRoot: string;
   readonly seed?: number;
@@ -133,6 +136,7 @@ export class FishSystem {
   private readonly interpolator = new SnapshotInterpolator(STEP_DT);
   private readonly frame: Float32Array;
   private readonly offset: Vector3;
+  private readonly demo: DemoTank;
   private readonly cleanups: (() => void)[] = [];
   private thresholds: LodThresholds = { midDistance: 1, impostorDistance: 3 };
   private features: FishMaterialFeatures | null = null;
@@ -167,7 +171,7 @@ export class FishSystem {
     const { signal } = options;
     signal.throwIfAborted();
     const seed = options.seed ?? Math.floor(Math.random() * 0x7fffffff);
-    const demo = demoTank(options.tank, seed);
+    const demo = demoTank(options.tank, seed, options.biome);
     const loader = new FishAssetLoader(engine.renderer, options.assetRoot);
     const models = new Map<string, FishModel>();
     try {
@@ -198,7 +202,7 @@ export class FishSystem {
       name: 'fish-sim',
     });
     const client = new SimClient(worker);
-    const system = new FishSystem(engine, client, demo.offset, demo.config.fish.length);
+    const system = new FishSystem(engine, client, demo);
     system.cleanups.push(() => {
       client.dispose();
       worker.terminate();
@@ -229,11 +233,11 @@ export class FishSystem {
   private constructor(
     private readonly engine: Engine,
     private readonly sim: SimClient,
-    offset: readonly [number, number, number],
-    count: number,
+    demo: DemoTank,
   ) {
-    this.offset = new Vector3(...offset);
-    this.frame = new Float32Array(count * SNAPSHOT_STRIDE);
+    this.demo = demo;
+    this.offset = new Vector3(...demo.offset);
+    this.frame = new Float32Array(demo.config.fish.length * SNAPSHOT_STRIDE);
     this.group.name = 'fish';
     engine.scene.add(this.group);
     this.cleanups.push(() => this.group.removeFromParent());
@@ -387,6 +391,11 @@ export class FishSystem {
    */
   startle(stimulus: Stimulus): void {
     if (!this.disposed) this.sim.startle(stimulus);
+  }
+
+  /** Homes from the scene, in engine space: the clownfish's anemone. */
+  setAnchors(anchors: readonly SceneAnchor[]): void {
+    if (!this.disposed) this.sim.setAnchors(sceneAnchorsToSim(anchors, this.demo));
   }
 
   /** Fish pale at night by their species' sensitivity, and the sim lets them rest. */

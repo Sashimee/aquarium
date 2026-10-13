@@ -130,6 +130,7 @@ function makeController(ray: Ray | null = frontRay()) {
   const toSim = sceneToSim(() => 0.06);
   const bubbles = new BubbleField(MAX.y, () => 0.5);
   const startle = vi.fn();
+  const netTap = vi.fn();
   const lure = vi.fn();
   const setLaserDot = vi.fn();
   let now = 10_000;
@@ -145,6 +146,7 @@ function makeController(ray: Ray | null = frontRay()) {
     gate: new FeedGate({ cooldownMs: 1000 }),
     events,
     startle,
+    netTap,
     toSim,
     lure,
     setLaserDot,
@@ -164,6 +166,7 @@ function makeController(ray: Ray | null = frontRay()) {
     food,
     bubbles,
     startle,
+    netTap,
     lure,
     setLaserDot,
     seen,
@@ -216,6 +219,27 @@ describe('PlayController glass tap', () => {
   it('works with no sim attached', () => {
     const t = makeController();
     expect(() => t.controller.tap(0, 0)).not.toThrow();
+  });
+});
+
+describe('PlayController net', () => {
+  it('hands the tap ray to the fish pick instead of tapping the glass', () => {
+    const t = makeController();
+    t.controller.setTool('net');
+    t.controller.tap(10, 10);
+    expect(t.netTap).toHaveBeenCalledWith(frontRay());
+    expect(t.startle).not.toHaveBeenCalled();
+  });
+
+  it('does not net with other tools or without a camera ray', () => {
+    const t = makeController();
+    t.controller.tap(10, 10);
+    t.controller.setTool('feed');
+    t.controller.tap(10, 10);
+    t.controller.setTool('net');
+    t.setRay(null);
+    t.controller.tap(10, 10);
+    expect(t.netTap).not.toHaveBeenCalled();
   });
 });
 

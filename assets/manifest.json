@@ -1492,7 +1492,12 @@
       "textures": "Material_baseColor.jpeg 1024x1024, Material_metallicRoughness.png 1024x1024, Material_normal.png 1024x1024",
       "rigged": false,
       "notes": "Reef arch candidate (issue #79). Sculpted grey-pink rock arch, about 40 x 13.6 x 13.5 units as authored (long axis X, Y up); scale about 0.0075 for a 0.3 m span. Smooth sculpt with no pore detail: needs a coralline pink/purple tint and a procedural porous normal/occlusion layer. Verified from the downloaded glTF: 6920 triangles, not rigged (no skins). Zip sha256 9ab29ee5e8806b0e9f2dcfe96f288f2442d76eee95cf092ac42ab173156d0f8d; sha256 is the aggregate over files[].",
-      "modifications": [],
+      "modifications": [
+        "recoloured by luminance to coralline purple and pink live-rock tones, with mottled patches",
+        "procedural pore detail added to the normal map and darkened into the colour map; textures upscaled from 1024 px to 2048 px first",
+        "metallicRoughness map dropped, constant roughness",
+        "scaled to a 0.3 m span, origin at the base centre, simplified into three LODs, textures re-encoded to KTX2"
+      ],
       "status": "downloaded",
       "files": [
         {

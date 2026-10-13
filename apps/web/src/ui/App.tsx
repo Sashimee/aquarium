@@ -1,14 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { CameraMode } from '../interaction/camera';
-import {
-  useAuth,
-  useBridge,
-  useCameraMode,
-  useEngineReady,
-  useRedirect,
-  useRoute,
-} from './context';
+import { useAuth, useBridge, useCameraMode, useRedirect, useRoute } from './context';
+import { LifeStatus } from './LifeStatus';
 import { PlayControls } from './PlayControls';
+import { useSessionState } from './session';
 import {
   CreditsScreen,
   Link,
@@ -20,12 +15,6 @@ import {
   SignUpScreen,
   VerifyEmailScreen,
 } from './screens';
-
-const MODE_LABEL: Record<CameraMode, string> = {
-  orbit: 'Outside view',
-  focus: 'Following a fish',
-  dive: 'Inside the tank',
-};
 
 function CameraControls() {
   const { interaction } = useBridge();
@@ -79,34 +68,6 @@ function AccountMenu() {
   );
 }
 
-function TankReport() {
-  const [open, setOpen] = useState(false);
-  const engine = useEngineReady();
-  const mode = useCameraMode();
-  return (
-    <section className="report" aria-label="Tank report">
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls="tank-report-body"
-        onClick={() => setOpen(!open)}
-      >
-        Tank report
-      </button>
-      <div id="tank-report-body" hidden={!open}>
-        <p>A 300 litre freshwater aquarium, 120 by 50 by 50 centimetres.</p>
-        <p>Camera: {MODE_LABEL[mode]}.</p>
-        <p>
-          {engine
-            ? `Rendering with ${engine.backend === 'webgpu' ? 'WebGPU' : 'WebGL 2'} at the ${engine.tier} quality tier.`
-            : 'The tank is still loading.'}
-        </p>
-        <p>No fish live here yet.</p>
-      </div>
-    </section>
-  );
-}
-
 function Screen() {
   const route = useRoute();
   const { status } = useAuth();
@@ -133,10 +94,26 @@ function Screen() {
   }
 }
 
+const TankReport = lazy(() => import('./TankReport'));
+const TankPanel = lazy(() => import('./TankPanel').then((m) => ({ default: m.TankPanel })));
+
+const LifeDialogsView = lazy(() => import('./LifeDialogs'));
+
+function LifeDialogs({ onReview }: { onReview(): void }) {
+  const state = useSessionState();
+  if (!state.activeId || (!state.awayByTank[state.activeId] && !state.pendingNet)) return null;
+  return (
+    <Suspense fallback={null}>
+      <LifeDialogsView onReview={onReview} />
+    </Suspense>
+  );
+}
+
 export function App() {
   useRedirect();
   const route = useRoute();
   const modal = route.name !== 'home';
+  const [panelOpen, setPanelOpen] = useState(false);
   const previous = useRef(route.name);
   useEffect(() => {
     if (route.name === 'home' && previous.current !== 'home') {
@@ -162,12 +139,35 @@ export function App() {
         </Link>
         <CameraControls />
         <PlayControls />
+        <button
+          type="button"
+          aria-expanded={panelOpen}
+          aria-controls="tank-panel"
+          onClick={() => setPanelOpen(!panelOpen)}
+        >
+          My tank
+        </button>
         <AccountMenu />
       </header>
+      <LifeStatus />
+      {panelOpen && (
+        <Suspense
+          fallback={
+            <p className="hint" role="status">
+              Opening your tank...
+            </p>
+          }
+        >
+          <TankPanel open onClose={() => setPanelOpen(false)} />
+        </Suspense>
+      )}
+      <LifeDialogs onReview={() => setPanelOpen(true)} />
       <div className={modal ? 'stage modal' : 'stage'}>
         <Screen />
       </div>
-      <TankReport />
+      <Suspense fallback={null}>
+        <TankReport />
+      </Suspense>
       <footer className="legal-links">
         <nav aria-label="Legal">
           <Link to="/privacy">Privacy</Link>

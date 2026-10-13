@@ -1,7 +1,16 @@
 import { traitSchema, type Species } from '@aquarium/shared';
+import { FOOD_TYPES } from './food.ts';
 import { DEG } from './math.ts';
 
-export type SpeciesInput = Pick<Species, 'id' | 'behaviour' | 'locomotion'>;
+export type SpeciesInput = Pick<Species, 'id' | 'behaviour' | 'locomotion'> & {
+  readonly lifecycle: Pick<Species['lifecycle'], 'diet'>;
+};
+
+/**
+ * `lifecycle.diet` is read most-preferred first: each later entry is worth this fraction of the
+ * one before it. Food missing from the diet is not eaten.
+ */
+export const DIET_RANK_DECAY = 0.7;
 
 export const WATER_DENSITY = 1000;
 
@@ -50,6 +59,8 @@ export interface SimSpecies {
   readonly flare: boolean;
   /** Turns its belly towards the nearest surface when close to it (cave ceilings, glass). */
   readonly bellyToSurface: boolean;
+  /** Preference weight per `FOOD_TYPES` index, 1 for the first diet entry and 0 off the diet. */
+  readonly foodPreference: readonly number[];
 }
 
 function parseTraits(id: string, traits: readonly string[]): ReadonlySet<Trait> {
@@ -75,6 +86,25 @@ function parseTraits(id: string, traits: readonly string[]): ReadonlySet<Trait> 
   return out;
 }
 
+function parseDiet(id: string, diet: unknown): number[] {
+  if (!Array.isArray(diet) || diet.length === 0) {
+    throw new RangeError(`species "${id}": lifecycle.diet must be a non-empty array of food types`);
+  }
+  const weights = FOOD_TYPES.map(() => 0);
+  diet.forEach((food: unknown, rank) => {
+    const k = FOOD_TYPES.findIndex((t) => t === food);
+    if (k < 0) {
+      throw new RangeError(
+        `species "${id}": unknown food "${String(food)}" in lifecycle.diet; known foods are ${FOOD_TYPES.join(', ')}`,
+      );
+    }
+    if (weights[k] !== 0)
+      throw new RangeError(`species "${id}": "${String(food)}" repeats in lifecycle.diet`);
+    weights[k] = DIET_RANK_DECAY ** rank;
+  });
+  return weights;
+}
+
 function requirePositive(value: number, field: string, id: string): number {
   if (!Number.isFinite(value) || value <= 0) {
     throw new RangeError(`species "${id}": ${field} must be a positive number, got ${value}`);
@@ -84,6 +114,9 @@ function requirePositive(value: number, field: string, id: string): number {
 
 export function toSimSpecies(input: SpeciesInput): SimSpecies {
   const { id, locomotion: loco, behaviour } = input;
+  if (typeof input.lifecycle !== 'object' || input.lifecycle === null) {
+    throw new RangeError(`species "${id}": lifecycle.diet is required`);
+  }
   const maxSpeed = requirePositive(loco.maxSpeedMps, 'locomotion.maxSpeedMps', id);
   const cruiseSpeed = requirePositive(loco.cruiseSpeedMps, 'locomotion.cruiseSpeedMps', id);
   if (cruiseSpeed > maxSpeed) {
@@ -140,5 +173,6 @@ export function toSimSpecies(input: SpeciesInput): SimSpecies {
     grazer: traits.has('glass-grazer') ? 'glass' : traits.has('rock-grazer') ? 'rock' : 'none',
     flare: traits.has('flare-display'),
     bellyToSurface: traits.has('glass-grazer') || traits.has('cave-dweller'),
+    foodPreference: parseDiet(id, input.lifecycle.diet),
   };
 }
