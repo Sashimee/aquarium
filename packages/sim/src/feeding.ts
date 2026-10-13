@@ -290,6 +290,13 @@ export class Feeding {
     }
   }
 
+  private isUnreachable(k: number): boolean {
+    for (let m = 0; m < this.unreachableCount; m++) {
+      if (this.unreachable[m] === k) return true;
+    }
+    return false;
+  }
+
   private best(i: number, contested: boolean): number {
     const { food, position, forward } = this.host;
     this.chosenScore = 0;
@@ -311,7 +318,7 @@ export class Feeding {
       const k = at(this.candidates, m);
       const id = at(food.id, k);
       if (id === at(this.ignoreId, i) || this.buried[k] === 1) continue;
-      if (this.unreachable.subarray(0, this.unreachableCount).includes(k)) continue;
+      if (this.isUnreachable(k)) continue;
       const preference = at(sp.foodPreference, at(food.type, k));
       if (preference <= 0 || food.remaining(k) <= EMPTY) continue;
       const x = at(food.position, k * 3);

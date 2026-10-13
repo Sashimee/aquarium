@@ -3,10 +3,12 @@ import { describe, expect, it } from 'vitest';
 // Long simulations: well under a second locally, but shared CI runners can be several times slower.
 const LONG = 60_000;
 import { BEHAVIOUR } from './behaviour.ts';
+import { FEEDING } from './feeding.ts';
 import {
   ARCHETYPES,
   benchmarkConfig,
   blueTang,
+  FoodRain,
   neonTetra,
   REEF_DECOR,
   REEF_TANK,
@@ -55,6 +57,65 @@ function shoalClusters(w: World, members: number[], linkM: number): number[] {
   const sizes = new Map<number, number>();
   members.forEach((_, k) => sizes.set(root(k), (sizes.get(root(k)) ?? 0) + 1));
   return [...sizes.values()];
+}
+
+/**
+ * A rock angled 20 degrees off the back glass: a V that narrows toward +x, where a tang swimming
+ * along the pane slides deeper on every bump instead of being pinned.
+ */
+function wedgeTank(): World {
+  const back = -REEF_TANK.depth / 2;
+  const w = new World({
+    seed: 1,
+    tank: REEF_TANK,
+    species: ARCHETYPES,
+    decor: [
+      {
+        id: 'wedge-rock',
+        hard: true,
+        kind: 'box',
+        center: [0.2, 0.15, back + 0.1],
+        halfExtents: [0.25, 0.15, 0.05],
+        rotationY: 0.35,
+        rounding: 0,
+      },
+    ],
+    fish: spawnMany(yellowTang.id, 1),
+  });
+  w.position.set([0, 0.15, back + 0.048], 0);
+  w.yaw[0] = Math.PI / 2;
+  w.pitch[0] = 0;
+  if (!(w.bodyClearance(0) > 0)) throw new Error('the tang does not fit at the wedge mouth');
+  return w;
+}
+
+interface BackOutWatch {
+  step(): void;
+  /** Where and when fish 0 started each back-out: zero speed, moving tail first. */
+  readonly starts: { t: number; x: number; z: number }[];
+  readonly reversing: boolean;
+}
+
+function backOutWatch(w: World): BackOutWatch {
+  const starts: { t: number; x: number; z: number }[] = [];
+  let reversing = false;
+  return {
+    starts,
+    get reversing() {
+      return reversing;
+    },
+    step() {
+      const x0 = at(w.position, 0);
+      const z0 = at(w.position, 2);
+      w.step();
+      const ahead =
+        (at(w.position, 0) - x0) * Math.sin(at(w.yaw, 0)) +
+        (at(w.position, 2) - z0) * Math.cos(at(w.yaw, 0));
+      const now = at(w.speed, 0) === 0 && ahead < 0;
+      if (now && !reversing) starts.push({ t: w.tick - 1, x: x0, z: z0 });
+      reversing = now;
+    },
+  };
 }
 
 describe('World determinism', { timeout: LONG }, () => {
@@ -167,6 +228,53 @@ describe('World containment', { timeout: LONG }, () => {
     expect(freedAt * STEP_DT).toBeLessThan(5);
     // Backing out, not thrashing: it does not try to spin round inside the slot.
     expect(turned).toBeLessThan(2 * Math.PI);
+  });
+
+  it('backs a fish out of a closing wedge soon after it noses in, and it swims clear', () => {
+    const w = wedgeTank();
+    const length = at(w.bodyLength, 0);
+    const watch = backOutWatch(w);
+    let firstContact = -1;
+    let worst = Infinity;
+    for (let t = 0; t < STEERING.deadEndMemoryS / STEP_DT; t++) {
+      watch.step();
+      worst = Math.min(worst, w.bodyClearance(0));
+      if (firstContact < 0 && at(w.contactCount, 0) > 0) firstContact = t;
+    }
+    expect(worst).toBeGreaterThanOrEqual(-1e-9);
+    expect(firstContact).toBeGreaterThanOrEqual(0);
+    const first = watch.starts[0];
+    if (first === undefined) throw new Error('the tang never backed out of the wedge');
+    expect((first.t - firstContact) * STEP_DT).toBeLessThan(2);
+    // The dead-end memory itself is tested on the reef cave (behaviour.test.ts), where a goal
+    // beyond the rock pulls the fish back in; this tang has no such pull.
+    const again = watch.starts
+      .slice(1)
+      .filter((b) => Math.hypot(b.x - first.x, b.z - first.z) < length);
+    expect(again).toEqual([]);
+    expect(at(w.position, 0)).toBeLessThan(first.x - 2 * length);
+  });
+
+  it('lets a fish that just backed out of a wedge go for food on the glass beside it', () => {
+    // Nori clipped to the back pane just above the wedge rock: reaching it means swimming back
+    // toward the remembered dead end, which shunning it would delay past the approach timeout.
+    const w = wedgeTank();
+    const watch = backOutWatch(w);
+    while (watch.starts.length === 0 || watch.reversing) {
+      watch.step();
+      if (w.tick * STEP_DT > STEERING.deadEndMemoryS) throw new Error('no back-out to start from');
+    }
+    const rain = new FoodRain(REEF_TANK);
+    const nori = rain.place('nori', 0.15, 0.38, -REEF_TANK.depth / 2 + 0.02);
+    let biteAfter = -1;
+    for (let t = 0; t < FEEDING.pursuitTimeoutS / STEP_DT && biteAfter < 0; t++) {
+      rain.feed(w);
+      w.step();
+      const events = w.takeAteEvents();
+      rain.eat(events);
+      if (events.some((e) => e.foodId === nori)) biteAfter = t * STEP_DT;
+    }
+    expect(biteAfter).toBeGreaterThanOrEqual(0);
   });
 });
 
