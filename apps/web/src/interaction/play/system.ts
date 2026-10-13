@@ -8,7 +8,7 @@ import { FoodLink, type FoodBridge } from '../food/link';
 import { FoodField } from '../food/particles';
 import { sceneToSim } from '../food/simSpace';
 import { BubbleField } from './bubbles';
-import { PlayController, type StimulusLike } from './controller';
+import { PlayController, type Ray, type StimulusLike } from './controller';
 import { RippleField } from './ripples';
 import { PlayVisuals } from './visuals';
 
@@ -20,6 +20,7 @@ export interface PlayScene {
 
 export interface PlaySimBridge extends FoodBridge {
   startle?(stimulus: StimulusLike): void;
+  netTap?(ray: Ray): void;
 }
 
 export interface PlaySystem {
@@ -78,6 +79,7 @@ export function createPlaySystem(
     gate: new FeedGate(),
     events: interaction,
     startle: sim.startle?.bind(sim),
+    netTap: sim.netTap?.bind(sim),
     toSim,
     setLaserDot: (p) => visuals.setLaser(p),
     now: () => performance.now(),
