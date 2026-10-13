@@ -5,6 +5,8 @@ import { DEFAULT_TANK } from './engine/tank/dimensions';
 import { startDemoFish, type DemoFish } from './fish/start';
 import { CameraRig } from './interaction/camera';
 import { bindCameraControls } from './interaction/controls';
+import { SavedDecor } from './interaction/decor/binding';
+import { createDecorSystem, type DecorSystem } from './interaction/decor/system';
 import type { InteractionEvents } from './interaction/events';
 import { onPageTeardown } from './interaction/pageLifecycle';
 import { watchReducedMotion } from './interaction/motion';
@@ -36,6 +38,8 @@ async function boot(): Promise<void> {
   events.on('quality:tier-changed', ({ from, to, reason }) =>
     console.info(`quality tier ${from ?? '(start)'} -> ${to} (${reason})`),
   );
+
+  const savedDecor = new SavedDecor(interaction, (message, cause) => console.error(message, cause));
 
   mountUi(uiRoot, { engine: events, interaction });
 
@@ -73,15 +77,23 @@ async function boot(): Promise<void> {
 
   const stopMotionWatch = watchReducedMotion((reduced) => rig.setReducedMotion(reduced));
   let play: PlaySystem | null = null;
+  let decor: DecorSystem | null = null;
   const unbindControls = bindCameraControls(canvas, rig, {
     tap: (e) => {
-      if (e.button === 0) play?.controller.tap(e.x, e.y);
+      if (e.button !== 0) return;
+      if (decor?.active) decor.tap(e.x, e.y);
+      else play?.controller.tap(e.x, e.y);
     },
-    claimDrag: () => play?.controller.claimsDrag ?? false,
-    pointerDown: (x, y) => play?.controller.pointerDown(x, y),
-    pointerMove: (x, y) => play?.controller.pointerMove(x, y),
-    pointerUp: () => play?.controller.pointerUp(),
-    pointerLeave: () => play?.controller.pointerLeave(),
+    claimDrag: () => (decor?.active ? decor.claimsDrag : (play?.controller.claimsDrag ?? false)),
+    pointerDown: (x, y) =>
+      decor?.active ? decor.pointerDown(x, y) : play?.controller.pointerDown(x, y),
+    pointerMove: (x, y) =>
+      decor?.active ? decor.pointerMove(x, y) : play?.controller.pointerMove(x, y),
+    pointerUp: () => (decor?.active ? decor.pointerUp() : play?.controller.pointerUp()),
+    pointerLeave: () => {
+      if (decor?.active) decor.pointerUp();
+      else play?.controller.pointerLeave();
+    },
   });
   const stopRequests = interaction.on('camera:request-mode', ({ mode }) => {
     if (mode === 'dive') rig.dive();
@@ -99,11 +111,14 @@ async function boot(): Promise<void> {
   mountPresetWhenTierKnown(engine, biome, window.location.search, (scene) => {
     tankScene = scene;
     play = createPlaySystem(engine, scene, interaction, fish.sim);
+    decor = createDecorSystem(engine, scene, interaction, savedDecor);
     if (import.meta.env.DEV) Object.assign(window, { tankScene });
   });
 
   onPageTeardown(window, () => {
     play?.dispose();
+    decor?.dispose();
+    savedDecor.dispose();
     tankScene?.dispose().catch((cause: unknown) => console.error('Scene dispose failed', cause));
     stopMotionWatch();
     unbindControls();

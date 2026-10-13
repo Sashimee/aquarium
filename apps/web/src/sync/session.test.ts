@@ -31,6 +31,7 @@ function apiMocks() {
     tank: vi.fn(),
     createTank: vi.fn(),
     renameTank: vi.fn(),
+    saveDecorLayout: vi.fn(),
     addFish: vi.fn(),
     netFish: vi.fn(),
     care: vi.fn(),
@@ -50,6 +51,7 @@ function setup(
     api: api as unknown as ApiClient,
     interaction: rec.bus,
     sleep: async () => undefined,
+    layoutDebounceMs: 700,
     now: () => Date.parse('2026-02-01T12:00:00.000Z'),
     ...(storage ? { storage } : {}),
   });
@@ -634,5 +636,83 @@ describe('tank switcher and naming', () => {
     expect(await session.rename('Den')).toBe(true);
     expect(api.renameTank).toHaveBeenCalledWith(TANK_A, 'Den');
     expect(session.activeTank?.name).toBe('Den');
+  });
+});
+
+describe('decor layout', () => {
+  const layout = [
+    {
+      assetId: 'rock-a',
+      position: [0.1, 0.02, -0.05] as [number, number, number],
+      rotationY: 0.5,
+      scale: 1,
+    },
+  ];
+
+  it('announces the saved layout with the tank', async () => {
+    const { rec, session } = setup([tankFixture({ decorLayout: layout })]);
+    await session.setUser(verified);
+    expect(rec.of('tank:loaded')).toMatchObject([{ decorLayout: layout }]);
+  });
+
+  it('saves only the newest of a burst of edits and does not echo it back to the scene', async () => {
+    vi.useFakeTimers();
+    const { api, rec, session } = setup();
+    await session.setUser(verified);
+    const later = [
+      {
+        assetId: 'rock-a',
+        position: [0.2, 0.02, 0] as [number, number, number],
+        rotationY: 0.5,
+        scale: 1,
+      },
+    ];
+    api.saveDecorLayout.mockResolvedValue(
+      tankFixture({ decorLayout: later, lastTickAt: '2026-02-01T12:00:00.000Z' }),
+    );
+    rec.bus.emit('decor:layout', { tankId: TANK_A, layout });
+    rec.bus.emit('decor:layout', { tankId: TANK_A, layout: later });
+    await vi.advanceTimersByTimeAsync(700);
+    expect(api.saveDecorLayout).toHaveBeenCalledTimes(1);
+    expect(api.saveDecorLayout).toHaveBeenCalledWith(TANK_A, later);
+    expect(session.activeTank?.decorLayout).toEqual(later);
+    expect(rec.of('tank:decor')).toEqual([]);
+    expect(rec.of('decor:save-state').at(-1)).toEqual({ status: 'saved', message: null });
+    session.dispose();
+  });
+
+  it('shows a layout changed on another device', async () => {
+    const { api } = setup();
+    const rec = recordBus();
+    const session = new TankSession({
+      api: api as unknown as ApiClient,
+      interaction: rec.bus,
+      sleep: async () => undefined,
+      now: () => Date.parse('2026-02-01T12:00:00.000Z'),
+      refreshAfterMs: 0,
+    });
+    await session.setUser(verified);
+    api.tank.mockResolvedValue(
+      tankFixture({ decorLayout: layout, lastTickAt: '2026-02-01T12:00:00.000Z' }),
+    );
+    await session.onVisible();
+    expect(rec.of('tank:decor')).toEqual([{ tankId: TANK_A, layout }]);
+  });
+
+  it('reports a failed save and retries it on request', async () => {
+    vi.useFakeTimers();
+    const { api, rec, session } = setup();
+    await session.setUser(verified);
+    api.saveDecorLayout.mockRejectedValueOnce(apiError(400, 'validation_failed'));
+    rec.bus.emit('decor:layout', { tankId: TANK_A, layout });
+    await vi.advanceTimersByTimeAsync(700);
+    expect(rec.of('decor:save-state').at(-1)).toMatchObject({ status: 'error' });
+    api.saveDecorLayout.mockResolvedValue(
+      tankFixture({ decorLayout: layout, lastTickAt: '2026-02-01T12:00:00.000Z' }),
+    );
+    rec.bus.emit('decor:command', { type: 'retry-save' });
+    await vi.advanceTimersByTimeAsync(700);
+    expect(rec.of('decor:save-state').at(-1)).toEqual({ status: 'saved', message: null });
+    session.dispose();
   });
 });

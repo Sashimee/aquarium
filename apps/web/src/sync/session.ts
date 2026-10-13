@@ -1,9 +1,11 @@
 import type { AwaySummary, Biome, CareAction, FoodType, Tank, User } from '@aquarium/shared';
 import type { EventBus } from '../engine/events';
+import { layoutKey } from '../interaction/decor/layout';
 import type { InteractionEvents } from '../interaction/events';
 import type { ApiClient } from '../ui/api';
 import { AteUploader, type AteUploaderOptions } from './ateUploader';
 import { withRetry, realSleep, type Sleep } from './backoff';
+import { LayoutSaver } from './layout';
 import { ACCLIMATION_SECONDS, shouldShowAway } from './life';
 import { describeSyncError } from './messages';
 import { INITIAL_STATE, type SessionState } from './state';
@@ -22,6 +24,7 @@ export interface SessionDeps {
   refreshAfterMs?: number;
   /** Longest a tank switch waits for pending eating reports; the rest are dropped with a notice. */
   leaveFlushMs?: number;
+  layoutDebounceMs?: number;
 }
 
 const ACTIVE_KEY = 'aquarium.activeTank';
@@ -38,6 +41,8 @@ export class TankSession {
   private loadId = 0;
   private switchId = 0;
   private loadedId: string | null = null;
+  private readonly shownLayout = new Map<string, string>();
+  private readonly layoutSaver: LayoutSaver;
   private readonly releaseTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly stopListening: (() => void)[];
   private readonly now: () => number;
@@ -46,7 +51,27 @@ export class TankSession {
   constructor(private readonly deps: SessionDeps) {
     this.now = deps.now ?? (() => Date.now());
     this.sleep = deps.sleep ?? realSleep;
+    this.layoutSaver = new LayoutSaver({
+      sleep: this.sleep,
+      debounceMs: deps.layoutDebounceMs,
+      report: (status, message) => deps.interaction.emit('decor:save-state', { status, message }),
+      send: async (tankId, layout) => {
+        const gen = this.loadId;
+        const next = await this.enqueue(() => deps.api.saveDecorLayout(tankId, layout));
+        if (gen === this.loadId) this.apply(next);
+      },
+    });
     this.stopListening = [
+      deps.interaction.on('decor:layout', ({ tankId, layout }) => {
+        this.shownLayout.set(tankId, layoutKey(layout));
+        this.layoutSaver.submit(tankId, layout);
+      }),
+      deps.interaction.on('decor:command', (command) => {
+        if (command.type === 'retry-save') this.layoutSaver.retry();
+      }),
+      deps.interaction.on('decor:mode-changed', ({ active }) => {
+        if (!active) void this.layoutSaver.flush();
+      }),
       deps.interaction.on('feed:dropped', ({ food, portion }) => void this.feed(food, portion)),
       deps.interaction.on('food:ate', ({ eaten }) => {
         for (const e of eaten) this.uploader?.add(e.fishId, e.portion);
@@ -72,6 +97,7 @@ export class TankSession {
     this.releaseTimers.clear();
     this.uploader?.dispose();
     this.uploader = null;
+    this.layoutSaver.dispose();
     this.listeners.clear();
   }
 
@@ -276,6 +302,7 @@ export class TankSession {
     this.unloadScene()?.dispose();
     const gen = this.loadId;
     this.loadedId = tankId;
+    this.shownLayout.set(tankId, layoutKey(tank.decorLayout));
     this.uploader = new AteUploader({
       ...this.deps.ateOptions,
       sleep: this.sleep,
@@ -292,6 +319,7 @@ export class TankSession {
       tankId,
       biome: tank.biome,
       fish: tank.fish,
+      decorLayout: tank.decorLayout,
     });
     this.deps.interaction.emit('tank:water', { tankId, water: tank.water });
   }
@@ -404,6 +432,11 @@ export class TankSession {
       this.patch({
         notice: `${fish.name} the ${species?.toLowerCase() ?? 'fish'} has died. You can net them when you are ready.`,
       });
+    }
+    const incomingLayout = layoutKey(tank.decorLayout);
+    if (!this.layoutSaver.busy && incomingLayout !== this.shownLayout.get(tank.id)) {
+      this.shownLayout.set(tank.id, incomingLayout);
+      interaction.emit('tank:decor', { tankId: tank.id, layout: tank.decorLayout });
     }
     if (held.water !== tank.water)
       interaction.emit('tank:water', { tankId: tank.id, water: tank.water });

@@ -1,5 +1,5 @@
 import type { Material, MeshStandardNodeMaterial, Texture } from 'three/webgpu';
-import type { DecorItem, PlantPatch, PresetLayout } from '@aquarium/shared';
+import type { Biome, DecorItem, PlantPatch, PresetLayout } from '@aquarium/shared';
 import type { Engine } from '../engine/Engine';
 import type { Tier, TierSettings } from '../engine/quality/tiers';
 import { substrateHeight } from '../engine/tank/substrate';
@@ -82,6 +82,7 @@ export class TankScene {
   private substrate: SubstrateInstall | null = null;
   private readonly placeholderSubstrate: Material | Material[];
   private disposed = false;
+  private readonly presetHard: readonly DecorItem[];
   private readonly releases: (() => void)[] = [];
 
   private constructor(
@@ -90,11 +91,12 @@ export class TankScene {
     private readonly preset: PresetLayout,
     private readonly colliderData: readonly Collider[],
     private readonly plantEntries: ReadonlyMap<string, PlantEntry[]>,
-    private readonly hardItems: readonly { item: DecorItem; kind: string }[],
+    private hardItems: readonly { item: DecorItem; kind: string }[],
     private readonly anemoneItems: readonly DecorItem[],
     private readonly anchorData: readonly SceneAnchor[],
     options: SceneOptions,
   ) {
+    this.presetHard = hardItems.map((h) => h.item);
     this.queue = new RebuildQueue(
       sameKey,
       (key, isStale) => this.rebuildVisuals(key, isStale),
@@ -253,6 +255,64 @@ export class TankScene {
     scene.releases.push(applyBiomeLighting(engine, preset.biome));
     scene.releases.push(engine.quality.register('scene', (s, t) => scene.applyTier(t, s)));
     return scene;
+  }
+
+  get biome(): Biome {
+    return this.preset.biome;
+  }
+
+  /** The preset's movable pieces, which an unedited tank shows. */
+  get presetHardDecor(): readonly DecorItem[] {
+    return this.presetHard;
+  }
+
+  /** Plants and anemones from the preset, which stay where they are. */
+  get fixedDecor(): readonly DecorItem[] {
+    const catalog = this.library.catalog;
+    return this.preset.decor.filter((i) => !HARDSCAPE_KINDS.has(catalog.get(i.assetId).kind));
+  }
+
+  catalogEntries(): IterableIterator<CatalogEntry> {
+    return this.library.catalog.entries();
+  }
+
+  /**
+   * Swaps the rocks, wood and ornaments for `items` at the installed quality tier. The scene's
+   * own collider list is not rebuilt: the sim gets the moved pieces' colliders from the decor layer.
+   */
+  async setHardDecor(items: readonly DecorItem[]): Promise<void> {
+    await this.queue.settled();
+    const key = this.installedKey;
+    if (this.disposed || !key) return;
+    const catalog = this.library.catalog;
+    const next = items.map((item) => ({ item, kind: catalog.get(item.assetId).kind }));
+    for (const { item, kind } of next) {
+      if (!HARDSCAPE_KINDS.has(kind)) {
+        throw new Error(
+          `Decor "${item.assetId}" is a ${kind}, which cannot be placed as hardscape`,
+        );
+      }
+    }
+    const hardscape = new Hardscape();
+    for (const { item } of next) {
+      const entry = catalog.get(item.assetId);
+      const model = await this.library.load(item.assetId, key.hardscapeLod, key.textureSize);
+      hardscape.add(entry, model, item);
+    }
+    if (this.disposed) {
+      hardscape.dispose();
+      return;
+    }
+    this.hardscape?.dispose();
+    this.hardscape = hardscape;
+    this.hardItems = next;
+    this.engine.scene.add(hardscape.group);
+    await this.evictUnused();
+  }
+
+  /** Moves one piece's meshes now; used while dragging, before the layout is committed. */
+  moveHardDecor(index: number, item: DecorItem): void {
+    this.hardscape?.setItem(index, item);
   }
 
   get colliderList(): readonly Collider[] {
