@@ -8,13 +8,10 @@ import {
 } from 'three/webgpu';
 import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { ASSET_BASE } from '../scene/assets';
 
-/**
- * Manifest entry `polyhaven-studio_small_09` (CC0, Sergej Majboroda), loaded from Poly Haven
- * until the asset pipeline (T08) serves its own copy.
- */
-export const DEFAULT_HDRI_URL =
-  'https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_small_09_1k.hdr';
+/** Manifest entry `polyhaven-studio_small_09` (CC0, Sergej Majboroda), served from our own origin. */
+export const DEFAULT_HDRI_URL = `${ASSET_BASE}hdri/studio-small-09/studio_small_09_2k.hdr`;
 
 export interface RoomLighting {
   dispose(): void;
