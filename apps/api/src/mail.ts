@@ -6,6 +6,8 @@ export interface MailLimits {
   perRecipient: Limit;
   verificationCooldown: Limit;
   perIpSignup: Limit;
+  /** Requests per IP to mail-triggering endpoints, charged whatever the global cap says. Defaults to perIpSignup. */
+  perIpRequests?: Limit;
   global: Limit;
 }
 
@@ -85,7 +87,8 @@ export interface Mailer {
   /** Same limits as sendVerification, tracked separately so one flow cannot starve the other. */
   sendPasswordReset(to: string, url: string): Promise<void>;
   /**
-   * Charges one flat per-IP slot per mail-triggering request, whatever the recipient; not charged while the global cap is spent.
+   * Charges one flat per-IP slot per mail-triggering request, whatever the recipient; the mail slot is not charged while the global cap is spent.
+   * A separate request counter is always charged first, in the shared store, so an IP cannot outrun its limit during a cap outage.
    * With chargeGlobal the request also takes exactly one global slot up front, whether or not a mail follows,
    * so the global counter cannot reveal if the address has an account.
    */
@@ -233,6 +236,8 @@ export function createMailer(
     // which does not depend on the address, may skip it.
     async consumeIp(address, { chargeGlobal = false } = {}) {
       const key = `ip:${address}`;
+      const requestWait = await consume(`req:${key}`, limits.perIpRequests ?? limits.perIpSignup);
+      if (requestWait > 0) return { wait: requestWait, mailBlockedFor: 0 };
       const spent = await guarded(() => store.remaining('global', limits.global));
       if (spent.answered && spent.wait > 0) {
         logGlobalCap(spent.wait, true);

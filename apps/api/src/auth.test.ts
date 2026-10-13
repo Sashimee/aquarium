@@ -854,12 +854,13 @@ describe('mail abuse limits', () => {
     await h.close();
   });
 
-  it('charges no IP slot to concurrent requests while the global cap is spent', async () => {
+  it('charges no IP mail slot to concurrent requests while the global cap is spent', async () => {
     const h = await createHarness();
     const limits = {
       perRecipient: { max: 100, windowMs: 3_600_000 },
       verificationCooldown: { max: 100, windowMs: 1000 },
       perIpSignup: { max: 5, windowMs: 3_600_000 },
+      perIpRequests: { max: 100, windowMs: 3_600_000 },
       global: { max: 1, windowMs: 3_600_000 },
     };
     const store = postgresHitStore(h.database, 'concurrency-secret-concurrency-secret-01');
@@ -873,8 +874,80 @@ describe('mail abuse limits', () => {
     expect(spent.every((a) => a.wait === 0 && a.mailBlockedFor > 0)).toBe(true);
     expect(await store.remaining('ip:203.0.113.51', limits.perIpSignup)).toBe(0);
     const rows = await h.database.pool.query('select count(*)::int as n from mail_limit_hits');
-    expect(rows.rows[0].n).toBe(1);
+    expect(rows.rows[0].n).toBe(21);
     await h.close();
+  });
+
+  describe('per-IP request limit while the global cap is spent (#220)', () => {
+    const limits = {
+      perRecipient: { max: 100, windowMs: 3_600_000 },
+      verificationCooldown: { max: 100, windowMs: 1000 },
+      perIpSignup: { max: 100, windowMs: 3_600_000 },
+      perIpRequests: { max: 3, windowMs: 3_600_000 },
+      global: { max: 1, windowMs: 3_600_000 },
+    };
+    const reset = (h: Harness, email: string, ip: string) =>
+      h.app.inject({
+        method: 'POST',
+        url: '/api/auth/request-password-reset',
+        headers: { ...jsonHeaders, 'x-forwarded-for': ip },
+        payload: { email, redirectTo: '/' },
+      });
+
+    it('refuses an IP past its limit while the cap is spent, and keeps refusing after a restart', async () => {
+      const h = await createHarness({ mailLimits: limits });
+      const ip = '203.0.113.70';
+      const statuses: number[] = [];
+      for (let i = 0; i < 5; i++) {
+        statuses.push((await signUp(h.app, nextEmail(), { 'x-forwarded-for': ip })).statusCode);
+      }
+      expect(statuses.slice(0, 3).every((s) => s < 400)).toBe(true);
+      expect(statuses.slice(3)).toEqual([429, 429]);
+      expect(h.outbox).toHaveLength(1);
+
+      const restarted = createMailer(
+        nodemailer.createTransport({ jsonTransport: true }),
+        'fish@bas.lu',
+        {
+          limits,
+          store: postgresHitStore(h.database, 'testsecrettestsecrettestsecret0123456789'),
+          log: () => undefined,
+        },
+      );
+      expect((await restarted.consumeIp(ip)).wait).toBeGreaterThan(0);
+      expect((await restarted.consumeIp('203.0.113.71')).wait).toBe(0);
+      await h.close();
+    });
+
+    it('limits the same way for a registered and an unknown address', async () => {
+      const run = async (registered: boolean) => {
+        const h = await createHarness({ mailLimits: limits });
+        try {
+          const target = nextEmail();
+          if (registered) await signUp(h.app, target, { 'x-forwarded-for': '198.51.100.1' });
+          const statuses: number[] = [];
+          for (let i = 0; i < 5; i++) {
+            statuses.push((await reset(h, target, '203.0.113.72')).statusCode);
+          }
+          return statuses;
+        } finally {
+          await h.close();
+        }
+      };
+      expect(await run(true)).toEqual(await run(false));
+    });
+
+    it('does not charge the global mail budget for a request the IP limit refuses', async () => {
+      const h = await createHarness({
+        mailLimits: { ...limits, global: { max: 4, windowMs: 3_600_000 } },
+      });
+      for (let i = 0; i < 6; i++) {
+        await signUp(h.app, nextEmail(), { 'x-forwarded-for': '203.0.113.73' });
+      }
+      const store = postgresHitStore(h.database, 'testsecrettestsecrettestsecret0123456789');
+      expect(await store.remaining('global', { max: 4, windowMs: 3_600_000 })).toBe(0);
+      await h.close();
+    });
   });
 
   describe('request admitted while the global cap is spent', () => {
@@ -914,7 +987,7 @@ describe('mail abuse limits', () => {
       expect((await signUp(h.app, nextEmail())).statusCode).toBe(200);
       await h.settleMail();
       expect(h.outbox).toHaveLength(0);
-      expect(await hits()).toBe(before);
+      expect(await hits()).toBe(before + 1);
       await h.close();
     });
 
@@ -934,7 +1007,7 @@ describe('mail abuse limits', () => {
       expect(res.statusCode).toBe(200);
       await h.settleMail();
       expect(h.outbox).toHaveLength(0);
-      expect(await hits()).toBe(before);
+      expect(await hits()).toBe(before + 1);
       await h.close();
     });
   });
