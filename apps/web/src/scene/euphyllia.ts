@@ -44,8 +44,8 @@ export const EUPHYLLIA_TRIANGLE_BUDGET: Readonly<Record<EuphylliaDetail, number>
 };
 
 const ID_PATTERN = /^euphyllia-(hammer|torch)-(0|[1-9]\d{0,8})$/;
-const WAVE_METRES = 0.0035;
-const LEAN_SECONDS = 0.5;
+export const WAVE_METRES = 0.0035;
+export const LEAN_SECONDS = 0.5;
 const COLONY_HEIGHT = 0.1;
 
 export function euphylliaId(variant: EuphylliaVariant, seed: number): string {
