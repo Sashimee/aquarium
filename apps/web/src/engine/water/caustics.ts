@@ -162,7 +162,7 @@ export class Caustics {
     return texture(this.bakeTarget.texture, cells.add(drift)).level(float(1)).r.mul(PATTERN_GAIN);
   }
 
-  /** Colour node for the hood light: radiance x surface-to-point transmittance x caustics. */
+  /** Colour node for the hood light: radiance x spread x surface-to-point transmittance x caustics. */
   lightColorNode(): Node<'vec3'> {
     const { medium } = this;
     return Fn(() => {
@@ -213,7 +213,7 @@ export class Caustics {
       const amount = this.strength.mul(formed).mul(inWater);
       const caustic = max(pattern.mul(PATTERN_GAIN).sub(1).mul(amount).add(1), 0);
       const transmittance = exp(medium.extinction().mul(slant.mul(inWater)).negate());
-      return caustic.mul(transmittance).mul(this.lightRadiance);
+      return caustic.mul(transmittance).mul(medium.hoodSpread(depth)).mul(this.lightRadiance);
     })();
   }
 }
