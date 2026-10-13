@@ -103,10 +103,14 @@ const signInBodySchema = signInRequestSchema.extend({
   rememberMe: z.boolean().optional(),
 });
 
-const mailRequestBodySchema = z.strictObject({
+const requestPasswordResetBodySchema = z.strictObject({
+  email: emailSchema,
+  redirectTo: z.string().max(2048).optional(),
+});
+
+const sendVerificationEmailBodySchema = z.strictObject({
   email: emailSchema,
   callbackURL: z.string().max(2048).optional(),
-  redirectTo: z.string().max(2048).optional(),
 });
 
 const BODY_SCHEMAS = new Map<string, z.ZodType>([
@@ -114,8 +118,8 @@ const BODY_SCHEMAS = new Map<string, z.ZodType>([
   [`${AUTH_BASE_PATH}/sign-in/email`, signInBodySchema],
   [`${AUTH_BASE_PATH}/update-user`, updateUserRequestSchema],
   [`${AUTH_BASE_PATH}/change-password`, changePasswordRequestSchema],
-  [`${AUTH_BASE_PATH}/request-password-reset`, mailRequestBodySchema],
-  [`${AUTH_BASE_PATH}/send-verification-email`, mailRequestBodySchema],
+  [`${AUTH_BASE_PATH}/request-password-reset`, requestPasswordResetBodySchema],
+  [`${AUTH_BASE_PATH}/send-verification-email`, sendVerificationEmailBodySchema],
 ]);
 
 function parseJson(raw: string | undefined): unknown {
