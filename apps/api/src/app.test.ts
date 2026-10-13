@@ -131,6 +131,10 @@ describe('with a web build', () => {
     const cache = async (url: string): Promise<unknown> =>
       (await app.inject({ url, headers: { 'accept-encoding': 'br' } })).headers['cache-control'];
     expect(await cache('/assets/index-C7vUOBtl.js')).toBe('public, max-age=31536000, immutable');
+    for (const name of ['index-C-nEAlfU.js', 'system--58a3A-e.js']) {
+      writeFileSync(join(dist, 'assets', name), 'x');
+      expect(await cache(`/assets/${name}`), name).toBe('public, max-age=31536000, immutable');
+    }
     expect(await cache('/assets/fish/tetra.glb')).toBe('public, max-age=3600');
     expect(await cache('/assets/index.json')).toBe('no-cache');
     expect(await cache('/index.html')).toBe('no-cache');
