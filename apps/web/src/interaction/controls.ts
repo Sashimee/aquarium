@@ -88,6 +88,7 @@ export function bindCameraControls(
   element.addEventListener('pointermove', onMove);
   element.addEventListener('pointerup', onUp);
   element.addEventListener('pointercancel', onUp);
+  element.addEventListener('lostpointercapture', onUp);
   element.addEventListener('pointerleave', onLeave);
   return () => {
     element.removeEventListener('keydown', onKey);
@@ -95,6 +96,7 @@ export function bindCameraControls(
     element.removeEventListener('pointermove', onMove);
     element.removeEventListener('pointerup', onUp);
     element.removeEventListener('pointercancel', onUp);
+    element.removeEventListener('lostpointercapture', onUp);
     element.removeEventListener('pointerleave', onLeave);
     detachPointer();
   };

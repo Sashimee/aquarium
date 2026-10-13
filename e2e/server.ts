@@ -72,6 +72,7 @@ const app = buildApp({
   database,
   auth,
   mailer,
+  signInThrottle: { store: postgresHitStore(database, secret), limit: unlimited },
   species: loadCatalog(),
   clock: createClock(),
   testHooks: true,

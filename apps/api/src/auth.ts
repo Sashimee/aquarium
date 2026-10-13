@@ -18,6 +18,7 @@ export interface AuthRateLimits {
   signUp: { window: number; max: number };
   sendVerification: { window: number; max: number };
   passwordReset: { window: number; max: number };
+  changePassword?: { window: number; max: number };
 }
 
 export const DEFAULT_AUTH_RATE_LIMITS: AuthRateLimits = {
@@ -201,6 +202,7 @@ export function createAuth({
         '/sign-up/email': rateLimits.signUp,
         '/send-verification-email': rateLimits.sendVerification,
         '/request-password-reset': rateLimits.passwordReset,
+        ...(rateLimits.changePassword ? { '/change-password': rateLimits.changePassword } : {}),
       },
     },
     plugins: [

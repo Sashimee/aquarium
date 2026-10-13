@@ -704,6 +704,73 @@ describe('cave-dwelling foragers and glass grazers', { timeout: LONG }, () => {
     for (let t = 0; t < 3000; t++) w.step();
     expect(insideAtNight(w, toSimSpecies(caveCory).bodyLength)).toBeGreaterThan(0.6);
   });
+
+  /** Back-outs over a night in the pleco's day spot, and the share of its second half in the cave. */
+  function nightBackOuts(seed: number, startled: boolean): { backOuts: number; inside: number } {
+    const w = reefWith(pleco, seed);
+    for (let t = 0; t < 3000; t++) w.step();
+    if (startled) {
+      for (let tap = 0; tap < 10 && at(w.behaviour.startledAt, 0) < 0; tap++) {
+        const p = [at(w.position, 0), at(w.position, 1), at(w.position, 2)] as const;
+        w.startle({ position: [p[0], p[1], p[2] + 0.05], intensity: 1 });
+        w.step();
+        for (let t = 1; t < 60 && at(w.behaviour.startledAt, 0) < 0; t++) w.step();
+      }
+      expect(at(w.behaviour.startledAt, 0)).toBeGreaterThanOrEqual(0);
+      for (let t = 0; t < Math.round((0.75 * BEHAVIOUR.shelterAfterStartleS) / STEP_DT); t++) {
+        w.step();
+      }
+    }
+    w.setLight(0);
+    const length = toSimSpecies(pleco).bodyLength;
+    let backOuts = 0;
+    let reversing = false;
+    let inside = 0;
+    for (let t = 0; t < 9000; t++) {
+      const x0 = at(w.position, 0);
+      const z0 = at(w.position, 2);
+      w.step();
+      const ahead =
+        (at(w.position, 0) - x0) * Math.sin(at(w.yaw, 0)) +
+        (at(w.position, 2) - z0) * Math.cos(at(w.yaw, 0));
+      const now = at(w.speed, 0) === 0 && ahead < 0;
+      if (now && !reversing) backOuts++;
+      reversing = now;
+      const s = at(w.state, 0);
+      if (
+        t >= 4500 &&
+        (s === FishState.Shelter || s === FishState.Rest) &&
+        distanceTo(w, 0, cave.position) < cave.radius + length
+      ) {
+        inside++;
+      }
+    }
+    return { backOuts, inside: inside / 4500 };
+  }
+
+  // Seeds on which the cave lies straight beyond the rock from where the pleco ends up, so its
+  // goal draws it back into the slot it has just backed out of. Without the dead-end memory it
+  // backs out of the same slot 26 times in the calm night and 16 times after the startle; with
+  // it, 3 times on each.
+  for (const [seed, startled] of [
+    [23, false],
+    [4, true],
+  ] as const) {
+    it(`remembers the slot it backed out of and keeps out of it, seed ${seed} (#202)`, () => {
+      const night = nightBackOuts(seed, startled);
+      expect(night.backOuts).toBeLessThanOrEqual(5);
+      expect(night.inside).toBeGreaterThan(0.6);
+    });
+  }
+
+  it('does not take its flank brushing the rock for a dead end', () => {
+    // On this seed the pleco's flank or tail keeps touching the rock on its way to the cave.
+    // Counting those touches as scraping backs it out 10 times and keeps it out of the cave for
+    // a quarter of the night.
+    const night = nightBackOuts(31, false);
+    expect(night.backOuts).toBeLessThanOrEqual(5);
+    expect(night.inside).toBeGreaterThan(0.9);
+  });
 });
 
 describe('per-trait parameters', () => {

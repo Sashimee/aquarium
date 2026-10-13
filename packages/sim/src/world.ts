@@ -76,8 +76,9 @@ export const STEERING = {
   backOutAfterS: 0.3,
   backOutSpeedFraction: 0.5,
   backOutBodyLengths: 0.3,
-  backOutMaxBodyLengths: 1.5,
+  backOutMaxBodyLengths: 2,
   backOutAlignedRad: 30 * DEG,
+  backOutBlockedCos: 0.5,
   scrapeWindowS: 1,
   scrapeContactFraction: 0.2,
   scrapeDriftBodyLengths: 0.5,
@@ -438,6 +439,7 @@ export class World {
       this.position[o] = x;
       this.position[o + 1] = y;
       this.position[o + 2] = z;
+      this.scrapeAnchor.set(this.position.subarray(o, o + 3), o);
       placed = true;
     }
     if (!placed) {
@@ -678,6 +680,33 @@ export class World {
       dz += qz * plan.seekWeight;
     }
 
+    // Whatever took a fish into a dead end (a wander, its depth band, a goal beyond the rock)
+    // would take it straight back in once it has backed out, so for a while it steers round the
+    // spot instead, by the open side when its goal lies straight beyond it (a cave past the
+    // rock), and while it still faces the spot it turns without keeping way on along the wall.
+    // Not when it is going for food: pursuit gives up before the memory fades (#259).
+    let keepWay = true;
+    if (deadEndLeft > 0 && (this.behaviour.feeding.target[i] ?? -1) < 0) {
+      const ex = (this.deadEnd[i * 2] ?? 0) - px;
+      const ez = (this.deadEnd[i * 2 + 1] ?? 0) - pz;
+      const reach = Math.hypot(ex, ez);
+      const zone = STEERING.deadEndRadiusBodyLengths * length;
+      if (reach < zone && reach > 1e-9) {
+        const ux = ex / reach;
+        const uz = ez / reach;
+        const toward = Math.max(0, dx * ux + dz * uz);
+        let across = dz * ux - dx * uz;
+        if (Math.abs(across) < toward) {
+          sdf.sample(px, py, pz, np);
+          across = (np[2] ?? 0) * ux - (np[0] ?? 0) * uz;
+        }
+        const side = across >= 0 ? 1 : -1;
+        dx -= (ux + uz * side) * toward;
+        dz -= (uz - ux * side) * toward;
+        keepWay = fx * ux + fz * uz <= 0;
+      }
+    }
+
     // Plants are soft: they push a fish aside and slow it, but never block it.
     let plantSlow = 1;
     if (this.softDecor.size > 0) {
@@ -795,21 +824,34 @@ export class World {
           let side = Math.abs(reference) > 1e-6 ? Math.sign(reference) : nextWt >= 0 ? 1 : -1;
           // A slide that runs into a narrowing slot (glass on one flank, rock closing in on the
           // other) only wedges the fish deeper; once its snout is cramped it turns back to where
-          // the gap opens.
+          // the gap opens. A fish working its way somewhere compares the room along the surface
+          // beside its body, since the blended slide can angle into a flat face and read it as a
+          // narrowing (#257). One at food keeps the blended slide: in a tank corner it reads the
+          // corner closing in and turns the fish out along the pane before it grinds round there.
           if (this.cramped[i] === 1) {
-            const ahead = sdf.sample(px + tx * side * nose, py, pz + tz * side * nose, scratch);
-            const behind = sdf.sample(px - tx * side * nose, py, pz - tz * side * nose, scratch);
+            let wx = tx * side;
+            let wz = tz * side;
+            const wl = Math.hypot(nh[0] ?? 0, nh[2] ?? 0);
+            if ((this.behaviour.feeding.target[i] ?? -1) < 0 && wl > STEERING.slideMinHorizontal) {
+              const sx = -(nh[2] ?? 0) / wl;
+              const sz = (nh[0] ?? 0) / wl;
+              const sense = sx * wx + sz * wz < 0 ? -1 : 1;
+              wx = sx * sense;
+              wz = sz * sense;
+            }
+            const ahead = sdf.sample(px + wx * nose, py, pz + wz * nose, scratch);
+            const behind = sdf.sample(px - wx * nose, py, pz - wz * nose, scratch);
             if (ahead < STEERING.narrowingFlipRatio * behind) {
               side = -side;
               px0 = 0;
               pz0 = 0;
             }
           }
-          // A fish that had to back out of a dead end (a slot between rock and glass) remembers
-          // where it was and slides round the other way while it is near, even against the pull
-          // of its goal, which would otherwise drag it along the rock back into the same slot.
+          // The goal would drag a fish that just backed out of a slot along the rock straight
+          // back into it. A clear wish toward food still wins: pursuit gives up (6-8 s) before
+          // the memory fades, so shunning would cost the fish food it could reach.
           let shunning = false;
-          if (deadEndLeft > 0) {
+          if (deadEndLeft > 0 && !wished) {
             const ex = (this.deadEnd[i * 2] ?? 0) - px;
             const ez = (this.deadEnd[i * 2 + 1] ?? 0) - pz;
             const reach = Math.hypot(ex, ez);
@@ -879,7 +921,9 @@ export class World {
     const mag = Math.hypot(dx, dy, dz);
     // Fish do not stop and pirouette to dodge glass; they keep way on and turn along it.
     const minSpeed = Math.max(
-      a > 0 ? cruiseBase * STEERING.avoidMinSpeedFraction * a : 0,
+      a > 0 && (keepWay || this.cramped[i] !== 1)
+        ? cruiseBase * STEERING.avoidMinSpeedFraction * a
+        : 0,
       plan.speedFloor,
     );
     const maxSpeed = Math.min(vmax, plan.speedCap) * plantSlow;
@@ -1150,7 +1194,10 @@ export class World {
     }
     this.contacts++;
     this.contactCount[i] = (this.contactCount[i] ?? 0) + 1;
-    this.scraping(i, Math.hypot(nrm[0] ?? 0, nrm[2] ?? 0) >= STEERING.slideMinHorizontal);
+    this.scraping(
+      i,
+      into < 0 && Math.hypot(nrm[0] ?? 0, nrm[2] ?? 0) >= STEERING.slideMinHorizontal,
+    );
     if (!(this.bodyClearance(i) >= -PENETRATION_EPSILON)) {
       // The new pose cannot be made valid (a turn wedged the body into a corner): keep the old one.
       this.position.set(prev, o);
@@ -1200,7 +1247,8 @@ export class World {
   /**
    * A fish that keeps touching glass or rock while getting nowhere is working itself along a
    * dead-end wedge, sliding to and fro fast enough never to count as pinned; it backs out too.
-   * Sand and rock tops underneath do not count: a forager rests its belly on them.
+   * Sand and rock tops underneath do not count: a forager rests its belly on them. Nor does a
+   * flank or tail brushing a surface: only the snout pushing into one marks a dead end.
    */
   private scraping(i: number, contact: boolean): void {
     if (contact) this.scrapeHits[i] = (this.scrapeHits[i] ?? 0) + 1;
@@ -1241,9 +1289,11 @@ export class World {
   /**
    * Backs straight out of a crevice on the pectoral fins, pivoting toward the wanted heading
    * only where the body has room to, until it has regained some room and faces a way out;
-   * stopping as soon as it is free would just send it nose-first back into the same slot.
+   * stopping as soon as it is free would just send it nose-first back into the same slot. It
+   * backs out level, since a fish pitched up to climb past an overhang would otherwise sink back
+   * under it, and slides along a surface its tail comes up against rather than grinding into it.
    */
-  private reverse(i: number, sp: SimSpecies, plan: Plan, yaw: number, pitch: number): void {
+  private reverse(i: number, sp: SimSpecies, plan: Plan, yaw: number, pitchIn: number): void {
     const o = i * 3;
     const dt = STEP_DT;
     const prev = this.previous;
@@ -1257,18 +1307,42 @@ export class World {
       this.yaw[i] = yaw;
       this.yawRate[i] = 0;
     }
+    this.pitch[i] = pitchIn - clamp(pitchIn, -sp.maxTurnRate * dt, sp.maxTurnRate * dt);
+    if (!(this.bodyClearance(i) >= -PENETRATION_EPSILON)) this.pitch[i] = pitchIn;
+    const pitch = this.pitch[i] ?? 0;
     const step = STEERING.backOutSpeedFraction * (this.cruiseSpeed[i] ?? 0) * dt;
     const cp = Math.cos(pitch);
     const heading = this.yaw[i] ?? 0;
+    const fx = Math.sin(heading) * cp;
+    const fy = Math.sin(pitch);
+    const fz = Math.cos(heading) * cp;
+    let bx = -Math.sin(heading) * step;
+    let by = 0;
+    let bz = -Math.cos(heading) * step;
+    const n = this.normal;
+    if (this.nearestSurface(i, fx, fy, fz, n) < step) {
+      const nx = n[0] ?? 0;
+      const ny = n[1] ?? 0;
+      const nz = n[2] ?? 0;
+      if (fx * nx + fy * ny + fz * nz > STEERING.backOutBlockedCos) {
+        this.reverseLeft[i] = 0;
+        return;
+      }
+      const along = bx * nx + bz * nz;
+      if (along < 0) {
+        bx -= along * nx;
+        by -= along * ny;
+        bz -= along * nz;
+      }
+    }
     prev[0] = this.position[o] ?? 0;
     prev[1] = this.position[o + 1] ?? 0;
     prev[2] = this.position[o + 2] ?? 0;
-    this.position[o] = (prev[0] ?? 0) - Math.sin(heading) * cp * step;
-    this.position[o + 1] = (prev[1] ?? 0) - Math.sin(pitch) * step;
-    this.position[o + 2] = (prev[2] ?? 0) - Math.cos(heading) * cp * step;
-    const fx = Math.sin(heading) * cp;
-    const fz = Math.cos(heading) * cp;
-    if (this.constrainBody(i, fx, Math.sin(pitch), fz, this.normal) !== null) this.contacts++;
+    this.position[o] = (prev[0] ?? 0) + bx;
+    this.position[o + 1] = (prev[1] ?? 0) + by;
+    this.position[o + 2] = (prev[2] ?? 0) + bz;
+    const into = this.constrainBody(i, fx, fy, fz, this.normal);
+    if (into !== null) this.contacts++;
     if (!(this.bodyClearance(i) >= -PENETRATION_EPSILON)) {
       this.position.set(prev, o);
       this.reverseLeft[i] = 0;
@@ -1277,9 +1351,60 @@ export class World {
     const left = Math.max(0, (this.reverseLeft[i] ?? 0) - step);
     const length = this.bodyLength[i] ?? 0;
     const backed = (STEERING.backOutMaxBodyLengths - STEERING.backOutBodyLengths) * length;
-    const aligned =
-      Math.abs(wrapAngle((this.targetYaw[i] ?? 0) - heading)) < STEERING.backOutAlignedRad;
-    this.reverseLeft[i] = left <= backed && aligned ? 0 : left;
+    if (into !== null && into > STEERING.backOutBlockedCos) {
+      this.reverseLeft[i] = 0;
+      return;
+    }
+    if (into !== null && into > 0) {
+      const nl = Math.hypot(n[0] ?? 0, n[2] ?? 0);
+      if (nl > STEERING.slideMinHorizontal) {
+        const nx = (n[0] ?? 0) / nl;
+        const nz = (n[2] ?? 0) / nl;
+        const hx = Math.sin(heading);
+        const hz = Math.cos(heading);
+        const d = hx * nx + hz * nz;
+        const turn = clamp(
+          wrapAngle(Math.atan2(hx - d * nx, hz - d * nz) - heading),
+          -wTurn * dt,
+          wTurn * dt,
+        );
+        this.yaw[i] = wrapAngle(heading + turn);
+        if (!(this.bodyClearance(i) >= -PENETRATION_EPSILON)) this.yaw[i] = heading;
+      }
+    }
+    if (left > backed) {
+      this.reverseLeft[i] = left;
+      return;
+    }
+
+    const want = this.targetYaw[i] ?? 0;
+    const free =
+      Math.abs(wrapAngle(want - heading)) < STEERING.backOutAlignedRad ||
+      this.turnRoom(i, this.steerSdf[0] ?? this.sceneSdf, heading, want) >=
+        STEERING.turnRoomMarginBodyLengths * length;
+    this.reverseLeft[i] = free ? 0 : left;
+  }
+
+  /** Clearance of the spine sample nearest a surface, with that surface's normal in `nrm`. */
+  private nearestSurface(i: number, fx: number, fy: number, fz: number, nrm: Float64Array): number {
+    const o = i * 3;
+    const length = this.bodyLength[i] ?? 0;
+    const scratch = this.probeNormal;
+    let worst = Infinity;
+    for (const s of BEHAVIOUR.bodySampleOffsets) {
+      const k = s * length;
+      const d = this.sceneSdf.sample(
+        (this.position[o] ?? 0) + fx * k,
+        (this.position[o + 1] ?? 0) + fy * k,
+        (this.position[o + 2] ?? 0) + fz * k,
+        scratch,
+      );
+      if (d < worst) {
+        worst = d;
+        nrm.set(scratch);
+      }
+    }
+    return worst - (this.thickness[i] ?? 0);
   }
 
   /**

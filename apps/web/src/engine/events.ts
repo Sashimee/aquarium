@@ -33,9 +33,24 @@ const rethrowLater: HandlerErrorReporter = (error) => {
 
 export class EventBus<Events extends object> {
   private readonly handlers = new Map<keyof Events, Set<Handler<never>>>();
+  private readonly latest = new Map<keyof Events, unknown>();
+  private readonly sticky: ReadonlySet<keyof Events>;
 
-  /** A throwing handler is reported here and does not stop the other handlers or the emitter. */
-  constructor(private readonly onHandlerError: HandlerErrorReporter = rethrowLater) {}
+  /**
+   * A throwing handler is reported here and does not stop the other handlers or the emitter.
+   * Sticky types keep their last payload for `peek`, so a lazily loaded view that subscribes after
+   * the event fired can still read the current state.
+   */
+  constructor(
+    private readonly onHandlerError: HandlerErrorReporter = rethrowLater,
+    sticky: readonly (keyof Events)[] = [],
+  ) {
+    this.sticky = new Set(sticky);
+  }
+
+  peek<K extends keyof Events>(type: K): Events[K] | undefined {
+    return this.latest.get(type) as Events[K] | undefined;
+  }
 
   on<K extends keyof Events>(type: K, handler: Handler<Events[K]>): () => void {
     let set = this.handlers.get(type);
@@ -63,6 +78,7 @@ export class EventBus<Events extends object> {
   }
 
   emit<K extends keyof Events>(type: K, payload: Events[K]): void {
+    if (this.sticky.has(type)) this.latest.set(type, payload);
     const set = this.handlers.get(type);
     if (!set) return;
     for (const handler of [...set] as Handler<Events[K]>[]) {
@@ -80,6 +96,7 @@ export class EventBus<Events extends object> {
 
   clear(): void {
     this.handlers.clear();
+    this.latest.clear();
   }
 }
 

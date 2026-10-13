@@ -27,7 +27,7 @@ import { apiError } from './errors.ts';
 import { loadCredits } from './credits.ts';
 import { DEFAULT_LEGAL_LIMITS, registerLegalRoutes, type LegalLimits } from './legal.ts';
 import type { IpAdmission, Mailer } from './mail.ts';
-import { RateLimiter } from './rate-limit.ts';
+import { RateLimiter, type Limit, type ResettableHitStore } from './rate-limit.ts';
 import type { SpeciesCatalog } from './species.ts';
 import { DEFAULT_CARE_LIMITS, registerTankRoutes, type CareLimits } from './tanks.ts';
 
@@ -39,6 +39,7 @@ export interface AppOptions {
   database: Database;
   auth: Auth;
   mailer: Mailer;
+  signInThrottle: { store: ResettableHitStore; limit: Limit };
   species: SpeciesCatalog;
   clock?: Clock;
   careLimits?: CareLimits;
@@ -115,6 +116,8 @@ function parseJson(raw: string | undefined): unknown {
     throw new ZodError([{ code: 'custom', path: [], message: 'Body must be valid JSON.' }]);
   }
 }
+
+export const DEFAULT_SIGN_IN_THROTTLE: Limit = { max: 10, windowMs: 15 * 60_000 };
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const BLOCKED_AUTH_PATHS = new Set([
@@ -209,9 +212,21 @@ function isStaticAsset(pathname: string): boolean {
   return dot > 0 && STATIC_EXTENSIONS.has(last.slice(dot + 1).toLowerCase());
 }
 
+async function isUnverified(res: Response): Promise<boolean> {
+  let body: { code?: unknown };
+  try {
+    body = (await res.clone().json()) as { code?: unknown };
+  } catch (err) {
+    if (err instanceof SyntaxError) return false;
+    throw err;
+  }
+  return body.code === 'EMAIL_NOT_VERIFIED';
+}
+
 export function buildApp(opts: AppOptions): FastifyInstance {
   const { indexable, webRoot, appOrigin, database, auth, mailer, logger = true } = opts;
   const clock = opts.clock ?? createClock();
+  const { signInThrottle } = opts;
   const app = Fastify({
     trustProxy: opts.trustedProxies,
     rewriteUrl: (req) => (req.url ?? '/').replace(/^\/{2,}/, '/'),
@@ -301,6 +316,10 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     return indexable ? 'User-agent: *\nAllow: /\n' : 'User-agent: *\nDisallow: /\n';
   });
 
+  async function currentSession(req: FastifyRequest) {
+    return auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+  }
+
   const tooMany = (reply: FastifyReply, retryAfter: number) =>
     reply
       .code(429)
@@ -343,6 +362,27 @@ export function buildApp(opts: AppOptions): FastifyInstance {
           if (admission.wait > 0) return tooMany(reply, admission.wait);
         }
 
+        // A slot is taken before the password is checked, so concurrent guesses cannot all slip
+        // under the cap; a sign-in that gets past the password check gives the slots back. The key
+        // is the email as typed, never the account, so the 429 is the same for unknown addresses.
+        let failureKey: string | undefined;
+        if (req.method === 'POST' && pathname === `${AUTH_BASE_PATH}/sign-in/email`) {
+          const { email } = signInBodySchema.parse(parseJson(raw));
+          failureKey = `signin-fail:${email.toLowerCase()}`;
+          const wait = await signInThrottle.store.consume(failureKey, signInThrottle.limit);
+          if (wait > 0) return tooMany(reply, wait);
+        }
+        // Same slot-first scheme keyed by the signed-in user. Without a session there is nothing to
+        // guess against, so Better Auth answers 401 on its own.
+        if (req.method === 'POST' && pathname === `${AUTH_BASE_PATH}/change-password`) {
+          const current = await currentSession(req);
+          if (current) {
+            failureKey = `pw-change-fail:${current.user.id}`;
+            const wait = await signInThrottle.store.consume(failureKey, signInThrottle.limit);
+            if (wait > 0) return tooMany(reply, wait);
+          }
+        }
+
         const headers = new Headers();
         for (const [name, value] of Object.entries(req.headers)) {
           if (value === undefined || name === 'x-forwarded-for' || name === 'content-length')
@@ -358,6 +398,17 @@ export function buildApp(opts: AppOptions): FastifyInstance {
           ...(req.method === 'POST' && raw !== undefined ? { body: raw } : {}),
         });
         const res = await mailer.runAdmitted(admission, () => auth.handler(request));
+        // Better Auth also answers 403 before looking at the password (bad callbackURL, foreign
+        // origin, cross-site navigation), so on sign-in only its EMAIL_NOT_VERIFIED, raised after
+        // the password matched, counts as a success next to 200. change-password has no such case:
+        // every non-200 is either a rejection before the check or the wrong password.
+        const unverifiedSignIn =
+          pathname === `${AUTH_BASE_PATH}/sign-in/email` &&
+          res.status === 403 &&
+          (await isUnverified(res));
+        if (failureKey && (res.status === 200 || unverifiedSignIn)) {
+          await signInThrottle.store.reset(failureKey);
+        }
 
         reply.code(res.status);
         res.headers.forEach((value, name) => {
@@ -374,10 +425,6 @@ export function buildApp(opts: AppOptions): FastifyInstance {
       },
     });
   });
-
-  async function currentSession(req: FastifyRequest) {
-    return auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
-  }
 
   app.get('/api/me', async (req, reply) => {
     const current = await currentSession(req);

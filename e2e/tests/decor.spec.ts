@@ -21,14 +21,22 @@ async function startDecorating(page: Page) {
   const panel = page.getByRole('region', { name: 'Decorate the tank' });
   const tankPanel = page.getByRole('region', { name: 'Your tank' });
   if (await tankPanel.isVisible()) await tankPanel.getByRole('button', { name: 'Close' }).click();
-  // The editor attaches a moment after the tank is ready, and a request before then is dropped.
-  await expect(async () => {
-    const toggle = page.getByRole('button', { name: 'Decorate' });
-    if ((await toggle.getAttribute('aria-pressed')) !== 'true') await toggle.click();
-    await expect(panel).toBeVisible({ timeout: 5_000 });
-  }).toPass();
+  await page.getByRole('button', { name: 'Decorate' }).click();
+  await expect(panel).toBeVisible({ timeout: 30_000 });
   return panel;
 }
+
+test('Decorate pressed before the tank is ready still opens the editor', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto('/?tier=low&backend=webgl', { waitUntil: 'domcontentloaded' });
+  const toggle = page.getByRole('button', { name: 'Decorate' });
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('region', { name: 'Decorate the tank' })).toBeVisible({
+    timeout: 60_000,
+  });
+  await expect(page.getByRole('button', { name: 'Hand-feed' })).toHaveCount(0);
+});
 
 test('a decor piece is swapped, moved, saved and still there after a reload', async ({ page }) => {
   test.setTimeout(420_000);

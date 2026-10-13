@@ -8,7 +8,7 @@ import { CameraRig } from './interaction/camera';
 import { bindCameraControls } from './interaction/controls';
 import { FeederLayer } from './interaction/decor/feederLayer';
 import { SceneDecor } from './interaction/decor/sceneDecor';
-import type { InteractionEvents } from './interaction/events';
+import { STICKY_INTERACTION_EVENTS, type InteractionEvents } from './interaction/events';
 import { onPageTeardown } from './interaction/pageLifecycle';
 import { watchReducedMotion } from './interaction/motion';
 import { PlayChoices } from './interaction/play/choices';
@@ -35,8 +35,8 @@ async function boot(): Promise<void> {
   const container = requireElement('app');
   const uiRoot = requireElement('ui');
 
-  const events = new EventBus<EngineEvents>();
-  const interaction = new EventBus<InteractionEvents>();
+  const events = new EventBus<EngineEvents>(undefined, ['engine:ready']);
+  const interaction = new EventBus<InteractionEvents>(undefined, STICKY_INTERACTION_EVENTS);
   events.on('engine:error', ({ message, cause }) => console.error(message, cause));
   events.on('quality:tier-changed', ({ from, to, reason }) =>
     console.info(`quality tier ${from ?? '(start)'} -> ${to} (${reason})`),
@@ -144,7 +144,15 @@ async function boot(): Promise<void> {
     if (mode === 'dive') rig.dive();
     else if (mode === 'orbit') rig.exit();
   });
-  engine.onFrame((deltaS) => rig.update(deltaS));
+  const exposePose = new URLSearchParams(window.location.search).has('e2e');
+  engine.onFrame((deltaS) => {
+    rig.update(deltaS);
+    if (!exposePose) return;
+    const { x, y, z } = rig.lookAtPoint;
+    const p = rig.position;
+    const pose = [p.x, p.y, p.z, x, y, z].map((v) => v.toFixed(3)).join(' ');
+    if (canvas.dataset['camera'] !== pose) canvas.dataset['camera'] = pose;
+  });
 
   const fish = startFish(engine, {
     tank: DEFAULT_TANK,
