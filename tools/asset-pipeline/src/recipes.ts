@@ -193,7 +193,7 @@ export const ENVIRONMENT_RECIPES: EnvironmentRecipe[] = [
     modifications: [
       'recoloured by luminance to coralline purple and pink live-rock tones, with mottled patches',
       'procedural pore detail added to the normal map and darkened into the colour map; textures upscaled from 1024 px to 2048 px before the pores were added',
-      'metallicRoughness map dropped, constant roughness',
+      'metallicRoughness map dropped',
     ],
   },
   {
@@ -215,7 +215,7 @@ export const ENVIRONMENT_RECIPES: EnvironmentRecipe[] = [
     modifications: [
       'museum plinth cropped off',
       'bleached skeleton recoloured by luminance to live tan, brown and olive tones',
-      'baked metallicRoughness map dropped, constant roughness',
+      'baked metallicRoughness map dropped',
     ],
   },
   {

@@ -2480,7 +2480,7 @@
         "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
         "museum plinth cropped off",
         "bleached skeleton recoloured by luminance to live tan, brown and olive tones",
-        "baked metallicRoughness map dropped, constant roughness"
+        "baked metallicRoughness map dropped"
       ],
       "bounds": {
         "min": [
@@ -3616,10 +3616,10 @@
         "merged meshes, dropped unused attributes, skeleton and animation",
         "origin at the centre of the base, scaled so the longest edge is 0.3 m",
         "LOD0 capped at 7000 triangles, LOD1 and LOD2 simplified further",
-        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "textures re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
         "recoloured by luminance to coralline purple and pink live-rock tones, with mottled patches",
         "procedural pore detail added to the normal map and darkened into the colour map; textures upscaled from 1024 px to 2048 px before the pores were added",
-        "metallicRoughness map dropped, constant roughness"
+        "metallicRoughness map dropped"
       ],
       "bounds": {
         "min": [

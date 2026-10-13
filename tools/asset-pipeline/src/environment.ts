@@ -172,10 +172,11 @@ function assertTexcoordZero(doc: Document, source: Material, recipe: string): vo
     for (const mesh of doc.getRoot().listMeshes())
       for (const prim of mesh.listPrimitives()) {
         if (prim.getMaterial() !== source) continue;
-        const same = sameValues(
-          prim.getAttribute(`TEXCOORD_${set}`)?.getArray(),
-          prim.getAttribute('TEXCOORD_0')?.getArray(),
-        );
+        const target = prim.getAttribute(`TEXCOORD_${set}`);
+        const first = prim.getAttribute('TEXCOORD_0');
+        const same =
+          target?.getNormalized() === first?.getNormalized() &&
+          sameValues(target?.getArray(), first?.getArray());
         if (!same)
           throw new Error(
             `${recipe}: material "${source.getName()}" samples TEXCOORD_${set}, which differs from TEXCOORD_0; only TEXCOORD_0 is exported`,
@@ -259,7 +260,9 @@ export async function buildEnvironment(
         'merged meshes, dropped unused attributes, skeleton and animation',
         `origin at the centre of the base, scaled so the longest edge is ${recipe.longestM} m`,
         `LOD0 capped at ${recipe.maxTriangles} triangles, LOD1 and LOD2 simplified further`,
-        'textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness',
+        recipe.pores
+          ? 'textures re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness'
+          : 'textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness',
         ...recipe.modifications,
       ],
     },

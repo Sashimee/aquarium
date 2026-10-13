@@ -95,7 +95,7 @@ export function tintImage(image: Rgba, spec: TintSpec): Rgba {
       const a = ramp(spec.ramps[0], t);
       const b = ramp(spec.ramps[1], t);
       for (let c = 0; c < 3; c++) out[i * 4 + c] = Math.round(a[c]! * (1 - m) + b[c]! * m);
-      out[i * 4 + 3] = 255;
+      out[i * 4 + 3] = data[i * 4 + 3]!;
     }
   return { width, height, data: out };
 }
