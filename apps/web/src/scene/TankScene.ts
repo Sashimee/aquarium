@@ -607,7 +607,8 @@ export function plantReach(
         Math.max(Math.abs(bounds.min[2] ?? 0), Math.abs(bounds.max[2] ?? 0)),
       )
     : 0.1;
-  const lean = Math.sin(MAX_PLANT_TILT) * height;
+  // Euler YXZ tilts both axes at once: tip offset is h*sqrt(sin²X + sin²Z cos²X), max when both equal T.
+  const lean = Math.sin(MAX_PLANT_TILT) * Math.sqrt(1 + Math.cos(MAX_PLANT_TILT) ** 2) * height;
   const sway = maxSway(assetId, height, current);
   return (scale) => (half + lean) * scale + sway;
 }

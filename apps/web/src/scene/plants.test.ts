@@ -1,3 +1,4 @@
+import { Euler, Quaternion, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { TIER_SETTINGS } from '../engine/quality/tiers';
 import type { PlantPatch } from '@aquarium/shared';
@@ -44,11 +45,11 @@ describe('maxSway', () => {
   });
 });
 
+const bounds = { min: [-0.05, 0, -0.05], max: [0.05, 0.4, 0.05] };
+const half = Math.hypot(0.05, 0.05);
+const planarLean = Math.sin(MAX_TILT_RAD) * Math.sqrt(1 + Math.cos(MAX_TILT_RAD) ** 2) * 0.4;
+
 describe('plantReach', () => {
-  const bounds = { min: [-0.05, 0, -0.05], max: [0.05, 0.4, 0.05] };
-
-  const half = Math.hypot(0.05, 0.05);
-
   it('adds the shader lean in world units, unaffected by instance scale', () => {
     const reach = plantReach('vallisneria', bounds, DEFAULT_CURRENT);
     const sway = maxSway('vallisneria', 0.4, DEFAULT_CURRENT);
@@ -57,11 +58,11 @@ describe('plantReach', () => {
     expect(reach(0.5) - reach(0)).toBeGreaterThan(0);
   });
 
-  it('scales footprint diagonal and tilt lean, then adds the full sway', () => {
+  it('scales footprint diagonal and two-axis tilt lean, then adds the full sway', () => {
     const reach = plantReach('vallisneria', bounds, DEFAULT_CURRENT);
     const sway = maxSway('vallisneria', 0.4, DEFAULT_CURRENT);
     for (const s of [0.5, 1, 1.5]) {
-      expect(reach(s)).toBeCloseTo((half + Math.sin(MAX_TILT_RAD) * 0.4) * s + sway, 9);
+      expect(reach(s)).toBeCloseTo((half + planarLean) * s + sway, 9);
     }
   });
 
@@ -69,17 +70,14 @@ describe('plantReach', () => {
     const lopsided = { min: [-0.02, 0, -0.1], max: [0.06, 0.4, 0.03] };
     const reach = plantReach('vallisneria', lopsided, DEFAULT_CURRENT);
     const sway = maxSway('vallisneria', 0.4, DEFAULT_CURRENT);
-    expect(reach(1)).toBeCloseTo(Math.hypot(0.06, 0.1) + Math.sin(MAX_TILT_RAD) * 0.4 + sway, 9);
+    expect(reach(1)).toBeCloseTo(Math.hypot(0.06, 0.1) + planarLean + sway, 9);
   });
 });
 
 describe('plant placement against the glass', () => {
-  const bounds = { min: [-0.05, 0, -0.05], max: [0.05, 0.4, 0.05] };
   const extent = { halfLength: 0.5, halfDepth: 0.4 };
   const sway = maxSway('vallisneria', 0.4, DEFAULT_CURRENT);
   const reach = plantReach('vallisneria', bounds, DEFAULT_CURRENT);
-  const lean = Math.sin(MAX_TILT_RAD) * 0.4;
-  const half = Math.hypot(0.05, 0.05);
   const patch: PlantPatch = {
     id: 'edge',
     assetId: 'vallisneria',
@@ -89,8 +87,36 @@ describe('plant placement against the glass', () => {
     scale: [0.4, 0.9],
     seed: 11,
   };
+  const corners = [-0.05, 0.05].flatMap((cx) =>
+    [0, 0.4].flatMap((cy) => [-0.05, 0.05].map((cz) => [cx, cy, cz] as const)),
+  );
 
-  it('keeps small plants clear of the glass', () => {
+  const worldCorners = (p: {
+    x: number;
+    y: number;
+    z: number;
+    yaw: number;
+    tiltX: number;
+    tiltZ: number;
+    scale: number;
+  }) => {
+    const q = new Quaternion().setFromEuler(new Euler(p.tiltX, p.yaw, p.tiltZ, 'YXZ'));
+    return corners.map(([cx, cy, cz]) =>
+      new Vector3(cx, cy, cz)
+        .multiplyScalar(p.scale)
+        .applyQuaternion(q)
+        .add(new Vector3(p.x, p.y, p.z)),
+    );
+  };
+
+  const expectInside = (plant: Parameters<typeof worldCorners>[0]) => {
+    for (const c of worldCorners(plant)) {
+      expect(Math.abs(c.x) + sway).toBeLessThanOrEqual(extent.halfLength + 1e-9);
+      expect(Math.abs(c.z) + sway).toBeLessThanOrEqual(extent.halfDepth + 1e-9);
+    }
+  };
+
+  it('keeps every rotated bounding-box corner of scattered plants inside the glass', () => {
     const plants = scatterPatch(
       patch,
       () => 0,
@@ -99,40 +125,25 @@ describe('plant placement against the glass', () => {
       reach,
     );
     expect(plants.length).toBeGreaterThan(0);
-    for (const p of plants) {
-      expect(p.scale).toBeLessThan(1);
-      expect(Math.abs(p.x) + (half + lean) * p.scale + sway).toBeLessThanOrEqual(
-        extent.halfLength + 1e-9,
-      );
-      expect(Math.abs(p.z) + (half + lean) * p.scale + sway).toBeLessThanOrEqual(
-        extent.halfDepth + 1e-9,
-      );
-    }
+    for (const p of plants) expectInside(p);
   });
 
-  it('keeps every yawed footprint corner inside the glass', () => {
-    const plants = scatterPatch(
-      patch,
-      () => 0,
-      () => false,
-      extent,
-      reach,
-    );
-    for (const p of plants) {
-      for (const [cx, cz] of [
-        [-0.05, -0.05],
-        [-0.05, 0.05],
-        [0.05, -0.05],
-        [0.05, 0.05],
-      ] as const) {
-        const rx = (cx * Math.cos(p.yaw) - cz * Math.sin(p.yaw)) * p.scale;
-        const rz = (cx * Math.sin(p.yaw) + cz * Math.cos(p.yaw)) * p.scale;
-        expect(Math.abs(p.x + rx) + lean * p.scale + sway).toBeLessThanOrEqual(
-          extent.halfLength + 1e-9,
-        );
-        expect(Math.abs(p.z + rz) + lean * p.scale + sway).toBeLessThanOrEqual(
-          extent.halfDepth + 1e-9,
-        );
+  it('holds for the worst case: both tilts at maximum, yawed at a wall', () => {
+    const scale = 1;
+    for (const yaw of [0, Math.PI / 4, Math.PI / 2, (3 * Math.PI) / 4, Math.PI]) {
+      for (const sx of [-1, 1]) {
+        for (const sz of [-1, 1]) {
+          const r = reach(scale);
+          expectInside({
+            x: sx * (extent.halfLength - r),
+            y: 0,
+            z: sz * (extent.halfDepth - r),
+            yaw,
+            tiltX: sx * MAX_TILT_RAD,
+            tiltZ: sz * MAX_TILT_RAD,
+            scale,
+          });
+        }
       }
     }
   });
