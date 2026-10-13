@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import { speciesSchema } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import { BEHAVIOUR } from './behaviour.ts';
-import { compileCollider, type DecorCollider } from './decor.ts';
+import type { Collider } from '@aquarium/shared';
+import { compileCollider } from './decor.ts';
 import {
   REEF_ANCHORS,
   REEF_DECOR,
@@ -74,9 +75,9 @@ function fishCount(species: ReturnType<typeof contentSchema.parse>): number {
 }
 
 /** Spine-chain clearance computed from the primitives directly, not through the world's grid. */
-function bruteClearance(w: World, tank: TankDimensions, decor: readonly DecorCollider[]) {
+function bruteClearance(w: World, tank: TankDimensions, decor: readonly Collider[]) {
   const tankSdf = new TankSdf(tank);
-  const solids = decor.filter((c) => c.solid).map(compileCollider);
+  const solids = decor.filter((c) => c.hard).map(compileCollider);
   const n = new Float64Array(3);
   return (i: number): number => {
     const o = i * 3;

@@ -1,5 +1,5 @@
 import type { FoodType } from '@aquarium/shared';
-import type { TankDimensions } from './sdf.ts';
+import { basinOf, type Basin, type TankDimensions } from './basin.ts';
 import { clamp } from './math.ts';
 
 /**
@@ -69,11 +69,13 @@ export class FoodStore {
   readonly id = new Int32Array(MAX_FOOD_PARTICLES);
   readonly position = new Float64Array(MAX_FOOD_PARTICLES * 3);
   readonly type = new Uint8Array(MAX_FOOD_PARTICLES);
+  /** Sand height under each particle. */
+  readonly ground = new Float64Array(MAX_FOOD_PARTICLES);
   /** Smoothed particle speed in m/s; sinking and drifting food is more salient. */
   readonly speed = new Float64Array(MAX_FOOD_PARTICLES);
   readonly eaten = new Float64Array(MAX_FOOD_PARTICLES);
 
-  private readonly tank: TankDimensions;
+  private readonly basin: Basin;
   private readonly nx: number;
   private readonly ny: number;
   private readonly nz: number;
@@ -99,19 +101,20 @@ export class FoodStore {
   private readonly lastPosition = new Float64Array(MAX_FOOD_PARTICLES * 3);
   private readonly lastSpeed = new Float64Array(MAX_FOOD_PARTICLES);
 
-  constructor(tank: TankDimensions) {
-    this.tank = tank;
-    this.nx = Math.max(1, Math.ceil(tank.width / CELL_M));
-    this.ny = Math.max(1, Math.ceil(tank.height / CELL_M));
-    this.nz = Math.max(1, Math.ceil(tank.depth / CELL_M));
+  constructor(tank: Basin | TankDimensions) {
+    const basin = basinOf(tank);
+    this.basin = basin;
+    this.nx = Math.max(1, Math.ceil(basin.width / CELL_M));
+    this.ny = Math.max(1, Math.ceil(basin.height / CELL_M));
+    this.nz = Math.max(1, Math.ceil(basin.depth / CELL_M));
     this.cellStart = new Int32Array(this.nx * this.ny * this.nz + 1);
   }
 
   /**
    * Replaces the particles with `buffer` (stride `FOOD_STRIDE`). The whole buffer is validated
    * before anything changes, so a malformed one leaves the previous food in place. Positions are
-   * clamped into the water box rather than rejected: the client's frame can be off by a few
-   * centimetres (sloped sand, the meniscus), and one stray particle must not drop all food.
+   * clamped into the water, above the sand and below the surface, rather than rejected: physics
+   * can let a particle settle a hair into the sand, and one stray particle must not drop all food.
    */
   set(buffer: Float32Array, tick: number): void {
     this.validate(buffer);
@@ -131,16 +134,18 @@ export class FoodStore {
     index.clear();
     const eatenById = this.eatenSpare;
     eatenById.clear();
-    const { width, height, depth } = this.tank;
+    const basin = this.basin;
     const elapsed = (tick - this.refTick) * DT;
     const blend = elapsed > 0 ? 1 - Math.exp(-elapsed / SPEED_SMOOTHING_S) : 0;
     for (let k = 0; k < n; k++) {
       const o = k * FOOD_STRIDE;
       const id = at(buffer, o + FoodField.Id);
-      const x = clamp(at(buffer, o + FoodField.X), -width / 2, width / 2);
-      const y = clamp(at(buffer, o + FoodField.Y), 0, height);
-      const z = clamp(at(buffer, o + FoodField.Z), -depth / 2, depth / 2);
+      const x = clamp(at(buffer, o + FoodField.X), basin.minX, basin.maxX);
+      const z = clamp(at(buffer, o + FoodField.Z), basin.minZ, basin.maxZ);
+      const ground = basin.ground(x, z);
+      const y = clamp(at(buffer, o + FoodField.Y), ground, basin.maxY);
       index.set(id, k);
+      this.ground[k] = ground;
       this.id[k] = id;
       this.position[k * 3] = x;
       this.position[k * 3 + 1] = y;
@@ -198,13 +203,13 @@ export class FoodStore {
   /** Writes the indices of particles within `r` of a point into `out`; returns how many. */
   near(x: number, y: number, z: number, r: number, out: Int32Array): number {
     if (this.count === 0) return 0;
-    const { width, depth } = this.tank;
-    const x0 = this.cell(x - r + width / 2, this.nx);
-    const x1 = this.cell(x + r + width / 2, this.nx);
-    const y0 = this.cell(y - r, this.ny);
-    const y1 = this.cell(y + r, this.ny);
-    const z0 = this.cell(z - r + depth / 2, this.nz);
-    const z1 = this.cell(z + r + depth / 2, this.nz);
+    const { minX, minY, minZ } = this.basin;
+    const x0 = this.cell(x - r - minX, this.nx);
+    const x1 = this.cell(x + r - minX, this.nx);
+    const y0 = this.cell(y - r - minY, this.ny);
+    const y1 = this.cell(y + r - minY, this.ny);
+    const z0 = this.cell(z - r - minZ, this.nz);
+    const z1 = this.cell(z + r - minZ, this.nz);
     const r2 = r * r;
     let found = 0;
     for (let cx = x0; cx <= x1; cx++) {
@@ -230,15 +235,15 @@ export class FoodStore {
 
   /** Counting sort into cells ordered x, y, z, so a z-run of cells is one contiguous slice. */
   private rebin(): void {
-    const { width, depth } = this.tank;
+    const { minX, minY, minZ } = this.basin;
     const start = this.cellStart;
     start.fill(0);
     for (let k = 0; k < this.count; k++) {
       const c =
-        (this.cell(at(this.position, k * 3) + width / 2, this.nx) * this.ny +
-          this.cell(at(this.position, k * 3 + 1), this.ny)) *
+        (this.cell(at(this.position, k * 3) - minX, this.nx) * this.ny +
+          this.cell(at(this.position, k * 3 + 1) - minY, this.ny)) *
           this.nz +
-        this.cell(at(this.position, k * 3 + 2) + depth / 2, this.nz);
+        this.cell(at(this.position, k * 3 + 2) - minZ, this.nz);
       this.cellOf[k] = c;
       start[c + 1] = at(start, c + 1) + 1;
     }

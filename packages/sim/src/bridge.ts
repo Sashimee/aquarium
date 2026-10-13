@@ -1,18 +1,26 @@
+import type { Collider } from '@aquarium/shared';
 import type { Anchor, Stimulus } from './behaviour.ts';
-import type { DecorCollider } from './decor.ts';
 import { FOOD_STRIDE, type AteEvent } from './food.ts';
 import { SNAPSHOT_STRIDE, type Snapshot } from './snapshot.ts';
-import { STEP_HZ, World, type WorldConfig } from './world.ts';
+import { STEP_HZ, World, type AnyWorldConfig } from './world.ts';
 
+/**
+ * Every position crossing the bridge (startle stimuli, food, decor colliders, anchors, and the
+ * fish in snapshots) is in the world's frame, which `init` fixes: tank space when the config has
+ * `space`, so scene coordinates pass through unchanged; the legacy flat-floor box when it has
+ * `tank`. Never map positions by subtracting the local sand height: food would sink under the
+ * fish's floor where the sand is low and startles would land in the wrong place.
+ */
 export type SimCommand =
-  | { readonly type: 'init'; readonly config: WorldConfig }
+  | { readonly type: 'init'; readonly config: AnyWorldConfig }
   | { readonly type: 'start' }
   | { readonly type: 'stop' }
   | { readonly type: 'step'; readonly steps: number }
   | { readonly type: 'recycle'; readonly buffer: ArrayBuffer }
   | { readonly type: 'startle'; readonly stimulus: Stimulus }
   | { readonly type: 'light'; readonly level: number }
-  | { readonly type: 'decor'; readonly colliders: readonly DecorCollider[] }
+  /** The full collider set in the shared format; hard ones block fish, soft ones (plants) push them aside. */
+  | { readonly type: 'decor'; readonly colliders: readonly Collider[] }
   | { readonly type: 'anchors'; readonly anchors: readonly Anchor[] }
   /** Float32 records of `[id, x, y, z, typeIndex]`; see `World.setFood`. */
   | { readonly type: 'food'; readonly buffer: ArrayBuffer };
@@ -258,7 +266,7 @@ export class SimClient {
     port.start?.();
   }
 
-  init(config: WorldConfig): Promise<SimReady> {
+  init(config: AnyWorldConfig): Promise<SimReady> {
     if (this.pendingInit !== null) {
       return Promise.reject(new Error('sim: init already in flight'));
     }
@@ -280,7 +288,7 @@ export class SimClient {
     this.send({ type: 'step', steps });
   }
 
-  /** A glass tap or a fast pointer at `stimulus.position`; nearby fish may C-start. */
+  /** A glass tap or a fast pointer at `stimulus.position` (world frame); nearby fish may C-start. */
   startle(stimulus: Stimulus): void {
     this.send({ type: 'startle', stimulus });
   }
@@ -291,7 +299,7 @@ export class SimClient {
   }
 
   /** Replaces the decor colliders; only moved, added or removed ones are rebuilt in the field. */
-  setDecor(colliders: readonly DecorCollider[]): void {
+  setDecor(colliders: readonly Collider[]): void {
     this.send({ type: 'decor', colliders });
   }
 
@@ -300,7 +308,7 @@ export class SimClient {
   }
 
   /**
-   * Sends this tick's food particles, `FOOD_STRIDE` floats each: id, x, y, z in tank space, and
+   * Sends this tick's food particles, `FOOD_STRIDE` floats each: id, x, y, z in the world's frame, and
    * the index of the food type in `foodTypeSchema`. The array is copied, so the caller keeps it.
    */
   setFood(food: Float32Array): void {

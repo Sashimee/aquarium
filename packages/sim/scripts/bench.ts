@@ -1,4 +1,4 @@
-import type { DecorCollider } from '../src/decor.ts';
+import type { Collider } from '@aquarium/shared';
 import { benchmarkConfig, FoodRain, REEF_DECOR, REEF_TANK } from '../src/fixtures.ts';
 import { World } from '../src/world.ts';
 
@@ -35,9 +35,9 @@ const dragSteps = 600;
 const dragStart = performance.now();
 for (let i = 0; i < dragSteps; i++) {
   const x = -0.6 + (1.2 * i) / dragSteps;
-  const decor: DecorCollider[] = REEF_DECOR.map((c) =>
+  const decor: Collider[] = REEF_DECOR.map((c) =>
     c.id === 'rock-left'
-      ? { ...c, shape: { kind: 'sphere', center: [x, 0, 0.15], radius: 0.12 } }
+      ? { id: c.id, hard: c.hard, kind: 'sphere', center: [x, 0, 0.15], radius: 0.12 }
       : c,
   );
   dragged.setDecor(decor);
