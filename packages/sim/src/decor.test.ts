@@ -58,6 +58,35 @@ function expectSameField(
 }
 
 describe('decor primitives', () => {
+  it('accepts the nested DecorCollider format as the same shape', () => {
+    const box = () => ({
+      kind: 'box' as const,
+      center: [0.1, 0.2, 0] as [number, number, number],
+      halfExtents: [0.1, 0.05, 0.08] as [number, number, number],
+      rotationY: 0.4,
+      rounding: 0.02,
+    });
+    const nested = compileCollider({ id: 'decor:p1', solid: true, shape: box() });
+    const flat = compileCollider({ id: 'decor:p1', hard: true, ...box() });
+    const nn = new Float64Array(3);
+    const probes: [number, number, number][] = [
+      [0.1, 0.2, 0],
+      [0.3, 0.25, 0.1],
+      [0, 0.1, -0.2],
+    ];
+    for (const [x, y, z] of probes) {
+      expect(nested.sample(x, y, z, nn)).toBe(flat.sample(x, y, z, n));
+      expect(Array.from(nn)).toEqual(Array.from(n));
+    }
+    expect(() =>
+      compileCollider({
+        id: 'decor:p2',
+        solid: true,
+        shape: { ...box(), halfExtents: [0, 1, 1] },
+      }),
+    ).toThrow(/decor "decor:p2": halfExtents/);
+  });
+
   it('measures exact distances to spheres, boxes and capsules', () => {
     const sphere = compileCollider({
       id: 's',
@@ -294,11 +323,14 @@ describe('decor primitives', () => {
       compileCollider(
         forged({
           id: 'old',
-          solid: true,
+          solid: 'yes',
           shape: { kind: 'sphere', center: [0, 0, 0], radius: 0.1 },
         }),
       ),
-    ).toThrow(/decor "old"/);
+    ).toThrow(/decor "old": hard/);
+    expect(() => compileCollider(forged({ id: 'flat', solid: true, shape: null }))).toThrow(
+      /decor "flat"/,
+    );
     expect(() => compileCollider(forged(null))).toThrow(/decor \(no id\)/);
   });
 });

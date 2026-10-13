@@ -23,7 +23,15 @@ export {
   type AteEvent,
 } from './food.ts';
 export { FEEDING } from './feeding.ts';
-export { compileCollider, DecorField, fitHull, UnionSdf, type Point3 } from './decor.ts';
+export {
+  compileCollider,
+  DecorField,
+  fitHull,
+  UnionSdf,
+  type DecorCollider,
+  type DecorShape,
+  type Point3,
+} from './decor.ts';
 export { Basin, type TankDimensions } from './basin.ts';
 export { resolvePenetration, TankSdf, type Sdf } from './sdf.ts';
 export { pairwiseDistanceSq, selectNearest } from './neighbours.ts';
