@@ -107,3 +107,12 @@ export interface InteractionEvents {
   /** Emitted by the fish system when the net tool taps a dead fish. */
   'net:tap': { fishId: string };
 }
+
+/** State the overlay reads when a lazily loaded view mounts after the event already fired. */
+export const STICKY_INTERACTION_EVENTS: readonly (keyof InteractionEvents)[] = [
+  'camera:mode-changed',
+  'play:tool-changed',
+  'play:ready',
+  'decor:state',
+  'decor:save-state',
+];

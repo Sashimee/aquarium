@@ -48,42 +48,42 @@ export function useApi(): ApiClient {
   return api;
 }
 
+function useLatest<Events extends object, K extends keyof Events>(
+  bus: EventBus<Events>,
+  type: K,
+): Events[K] | undefined {
+  const [value, setValue] = useState<Events[K] | undefined>(() => bus.peek(type));
+  useEffect(() => {
+    const off = bus.on(type, setValue);
+    setValue(bus.peek(type));
+    return off;
+  }, [bus, type]);
+  return value;
+}
+
 export function useCameraMode(): CameraMode {
   const { interaction } = useBridge();
-  const [mode, setMode] = useState<CameraMode>('orbit');
-  useEffect(() => interaction.on('camera:mode-changed', (e) => setMode(e.mode)), [interaction]);
-  return mode;
+  return useLatest(interaction, 'camera:mode-changed')?.mode ?? 'orbit';
 }
 
 export function usePlayTool(): PlayTool {
   const { interaction } = useBridge();
-  const [tool, setTool] = useState<PlayTool>('tap');
-  useEffect(() => interaction.on('play:tool-changed', (e) => setTool(e.tool)), [interaction]);
-  return tool;
+  return useLatest(interaction, 'play:tool-changed')?.tool ?? 'tap';
 }
 
 export function useDecorState(): DecorViewState | null {
   const { interaction } = useBridge();
-  const [state, setState] = useState<DecorViewState | null>(null);
-  useEffect(() => interaction.on('decor:state', setState), [interaction]);
-  return state;
+  return useLatest(interaction, 'decor:state') ?? null;
 }
 
 export function useDecorSaveState(): { status: SaveStatus; message: string | null } {
   const { interaction } = useBridge();
-  const [state, setState] = useState<{ status: SaveStatus; message: string | null }>({
-    status: 'idle',
-    message: null,
-  });
-  useEffect(() => interaction.on('decor:save-state', setState), [interaction]);
-  return state;
+  return useLatest(interaction, 'decor:save-state') ?? { status: 'idle', message: null };
 }
 
 export function useEngineReady(): EngineEvents['engine:ready'] | null {
   const { engine } = useBridge();
-  const [info, setInfo] = useState<EngineEvents['engine:ready'] | null>(null);
-  useEffect(() => engine.on('engine:ready', setInfo), [engine]);
-  return info;
+  return useLatest(engine, 'engine:ready') ?? null;
 }
 
 export interface AuthState {

@@ -29,7 +29,7 @@ export function PlayControls() {
   const tools = tank?.fish.some((f) => f.status === 'dead') ? [...TOOLS, NET] : TOOLS;
   const [food, setFood] = useState<FoodType>('flakes');
   const [message, setMessage] = useState('');
-  const [ready, setReady] = useState(false);
+  const [ready, setReady] = useState(() => interaction.peek('play:ready') !== undefined);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // A live region only speaks when its text changes, so clear it first to repeat a message.
