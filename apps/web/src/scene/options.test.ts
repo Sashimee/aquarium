@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { parseSceneOptions } from './options';
+import { parseBiome, parseSceneOptions } from './options';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -15,6 +15,22 @@ describe('parseSceneOptions', () => {
   it('warns and ignores any other value', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     expect(parseSceneOptions('?colliders=yes')).toEqual({ colliders: false });
+    expect(warn).toHaveBeenCalledOnce();
+  });
+});
+
+describe('parseBiome', () => {
+  it('defaults to freshwater', () => {
+    expect(parseBiome('')).toBe('freshwater');
+  });
+
+  it('selects the reef with ?biome=reef', () => {
+    expect(parseBiome('?backend=webgl&biome=reef')).toBe('reef');
+  });
+
+  it('warns and falls back to freshwater for an unknown biome', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    expect(parseBiome('?biome=lake')).toBe('freshwater');
     expect(warn).toHaveBeenCalledOnce();
   });
 });
