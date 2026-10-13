@@ -8,6 +8,8 @@ import {
   Scene,
   WebGPURenderer,
 } from 'three/webgpu';
+import { daylightAt, minuteOfDay } from './daylight';
+import type { Effects } from './effects';
 import { installRoomLighting, DEFAULT_HDRI_URL } from './environment';
 import { EventBus, type BackendKind, type EngineEvents, type EngineEventBus } from './events';
 import { buildOrRelease, DisposeStack } from './lifecycle';
@@ -34,6 +36,13 @@ const MAX_DELTA_S = 0.1;
 
 /** Hood LED, roughly 6500 K. */
 const HOOD_COLOR = new Color(1, 0.97, 0.92);
+/** The hood's blue "moonlight" channel, left on through the night. */
+const MOONLIGHT = new Color(0.012, 0.03, 0.09);
+/** Room light at night relative to the day, from a lamp somewhere in the room. */
+const ROOM_AT_NIGHT = 0.15;
+const DAYLIGHT_INTERVAL_MS = 1000;
+/** Smallest daylight change worth announcing: about 20 s into a one-hour ramp. */
+const DAYLIGHT_EPSILON = 0.005;
 
 function targetFrameMs(): number {
   const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
@@ -95,6 +104,14 @@ export class Engine {
   readonly ambientScatter = new Color(0.02, 0.03, 0.034);
   readonly quality: QualityManager;
 
+  private readonly clock: number | null;
+  private daylightLevel = 1;
+  private daylightCheckedAt = -Infinity;
+  private daylightAnnounced = false;
+  private readonly scratch = new Color();
+  private readonly roomBackgroundIntensity: number;
+  private effects: Effects | null = null;
+  private focusMode = false;
   private readonly frameCallbacks = new Set<FrameCallback>();
   private lastFrameAt: number | null = null;
   private gpuMs: number | null = null;
@@ -118,6 +135,7 @@ export class Engine {
           configureRenderer(renderer);
           const engine = new Engine(container, renderer, backend, events, config, cleanup);
           await engine.warmUp();
+          await engine.loadEffects();
           return engine;
         },
         (error) =>
@@ -142,6 +160,7 @@ export class Engine {
     private readonly cleanup: DisposeStack,
   ) {
     const dimensions = config.tank ?? DEFAULT_TANK;
+    this.clock = config.options.clock;
     this.gpuTiming = renderer.hasFeature('timestamp-query');
     this.quality = new QualityManager(events, {
       gpuTiming: this.gpuTiming,
@@ -156,8 +175,18 @@ export class Engine {
     renderer.domElement.style.width = '100%';
     renderer.domElement.style.height = '100%';
 
+    const roomLighting = installRoomLighting(
+      renderer,
+      this.scene,
+      config.hdriUrl ?? DEFAULT_HDRI_URL,
+      (message, cause) => this.reportError(message, cause),
+      (environment) => this.tank.setSky(environment),
+    );
+    cleanup.add(() => roomLighting.dispose());
+    this.roomBackgroundIntensity = this.scene.backgroundIntensity;
+
     this.medium = new WaterMedium(waterBounds(dimensions), config.water ?? DEFAULT_WATER);
-    this.tank = new Tank(dimensions, this.medium);
+    this.tank = new Tank(dimensions, this.medium, roomLighting.initial);
     cleanup.add(() => this.tank.dispose());
     this.scene.add(this.tank.group);
     this.scene.fogNode = this.medium.fogNode();
@@ -171,14 +200,6 @@ export class Engine {
     this.camera.position.set(0, 0.35, 1.6);
     this.camera.lookAt(0, 0.25, 0);
 
-    const roomLighting = installRoomLighting(
-      renderer,
-      this.scene,
-      config.hdriUrl ?? DEFAULT_HDRI_URL,
-      (message, cause) => this.reportError(message, cause),
-    );
-    cleanup.add(() => roomLighting.dispose());
-
     this.registerQualityFeatures();
 
     const resizeObserver = new ResizeObserver(() => this.resize());
@@ -189,6 +210,17 @@ export class Engine {
 
   get disposed(): boolean {
     return this.cleanup.isDisposed;
+  }
+
+  /** 0 = hood off (night, moonlight only) .. 1 = full day; follows the local clock or `?clock=`. */
+  get daylight(): number {
+    return this.daylightLevel;
+  }
+
+  /** Depth of field follows the focus camera, on tiers that allow it. */
+  setFocusMode(on: boolean): void {
+    this.focusMode = on;
+    this.effects?.setFocusMode(on);
   }
 
   /** Called once per rendered frame before the scene is drawn. */
@@ -242,15 +274,36 @@ export class Engine {
     this.updateHoodUniforms();
   }
 
+  private updateDaylight(nowMs: number): void {
+    if (nowMs - this.daylightCheckedAt < DAYLIGHT_INTERVAL_MS) return;
+    this.daylightCheckedAt = nowMs;
+    const level = daylightAt(this.clock ?? minuteOfDay(new Date()));
+    if (this.daylightAnnounced && Math.abs(level - this.daylightLevel) < DAYLIGHT_EPSILON) return;
+    this.daylightAnnounced = true;
+    this.daylightLevel = level;
+    this.events.emit('engine:daylight', { level });
+  }
+
+  /**
+   * The hood colour and intensity are the daytime setting (a preset may change them); the
+   * photoperiod fades them into the moonlight channel and dims the room around the tank.
+   */
   private updateHoodUniforms(): void {
     const hood = this.hood;
+    const day = this.daylightLevel;
     const radiance = this.caustics.lightRadiance.value;
-    radiance.copy(hood.color).multiplyScalar(hood.intensity);
+    radiance
+      .copy(hood.color)
+      .multiplyScalar(hood.intensity * day)
+      .add(this.scratch.copy(MOONLIGHT).multiplyScalar(1 - day));
     this.caustics.lightDirection.value.copy(hood.position).sub(hood.target.position).normalize();
+    const room = ROOM_AT_NIGHT + (1 - ROOM_AT_NIGHT) * day;
+    this.scene.environmentIntensity = room;
+    this.scene.backgroundIntensity = this.roomBackgroundIntensity * room;
     this.medium.inScatterRadiance.value
       .copy(radiance)
       .multiplyScalar(1 / (4 * Math.PI))
-      .add(this.ambientScatter);
+      .add(this.scratch.copy(this.ambientScatter).multiplyScalar(room));
   }
 
   private registerQualityFeatures(): void {
@@ -269,7 +322,26 @@ export class Engine {
   }
 
   private async warmUp(): Promise<void> {
+    this.updateDaylight(0);
+    this.updateHoodUniforms();
     await this.renderer.compileAsync(this.scene, this.camera);
+  }
+
+  /** The effects are a separate chunk; without them every tier still renders, just plainer. */
+  private async loadEffects(): Promise<void> {
+    try {
+      const { Effects } = await import('./effects');
+      if (this.disposed) return;
+      const effects = new Effects(this);
+      this.effects = effects;
+      this.cleanup.add(() => {
+        this.effects = null;
+        effects.dispose();
+      });
+      effects.setFocusMode(this.focusMode);
+    } catch (cause) {
+      this.reportError('Render effects failed to load; continuing without them', cause);
+    }
   }
 
   private resize(): void {
@@ -286,8 +358,9 @@ export class Engine {
     const deltaS = Math.min(frameMs / 1000, MAX_DELTA_S);
 
     for (const callback of this.frameCallbacks) callback(deltaS, nowMs);
+    this.updateDaylight(nowMs);
     this.updateHoodUniforms();
-    this.renderer.render(this.scene, this.camera);
+    if (this.effects?.render() !== true) this.renderer.render(this.scene, this.camera);
     this.pollGpuTime();
 
     if (frameMs > 0) {

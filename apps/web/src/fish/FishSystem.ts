@@ -20,7 +20,7 @@ import {
   type WorldConfig,
 } from '@aquarium/sim';
 import type { Engine } from '../engine/Engine';
-import type { Tier, TierSettings } from '../engine/quality/tiers';
+import { TIER_SETTINGS, type Tier, type TierSettings } from '../engine/quality/tiers';
 import type { TankDimensions } from '../engine/tank/dimensions';
 import { disposeFishModel, FishAssetLoader, type FishModel } from './assets';
 import { demoTank } from './demoStock';
@@ -67,11 +67,17 @@ interface FishRuntime {
 }
 
 /**
- * No tier has a temporal resolve yet (T15), so translucent fins use alpha-to-coverage, which needs
- * the MSAA the engine only enables below DPR 2; without it they fall back to the cutout.
+ * Translucent fins dither under the temporal resolve, which averages the pattern into a blend.
+ * Elsewhere they use alpha-to-coverage, which needs the MSAA the engine only enables below DPR 2;
+ * without it they fall back to the cutout.
  */
 function featuresFor(tier: Tier, msaa: boolean): FishMaterialFeatures {
-  const fins: FinRendering = tier !== 'low' && msaa ? 'coverage' : 'cutout';
+  const temporal = TIER_SETTINGS[tier].postChain === 'taa-bloom';
+  const fins: FinRendering = temporal
+    ? 'stochastic'
+    : tier !== 'low' && msaa
+      ? 'coverage'
+      : 'cutout';
   return {
     fins,
     iridescence: tier === 'high' || tier === 'ultra',
@@ -297,7 +303,9 @@ export class FishSystem {
       engine.quality.register('fish-shadows', (s) => this.applyShadows(s)),
       engine.quality.register('fish-materials', (_s, tier) => this.applyFeatures(tier)),
       engine.onFrame((deltaS, nowMs) => this.update(deltaS, nowMs)),
+      engine.events.on('engine:daylight', ({ level }) => this.setDaylight(level)),
     );
+    this.setDaylight(engine.daylight);
   }
 
   private createBatch(
@@ -381,9 +389,10 @@ export class FishSystem {
     if (!this.disposed) this.sim.startle(stimulus);
   }
 
-  /** 0 day .. 1 night; fish pale by their species' night sensitivity. */
-  setNight(amount: number): void {
-    this.night = Math.min(1, Math.max(0, amount));
+  /** Fish pale at night by their species' sensitivity, and the sim lets them rest. */
+  private setDaylight(level: number): void {
+    this.night = 1 - level;
+    this.sim.setLight(level);
   }
 
   /** 0 healthy .. 1 critically ill; a stressed fish loses its colour. */
