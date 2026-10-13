@@ -16,11 +16,9 @@ import {
   SnapshotField,
   SnapshotInterpolator,
   STEP_DT,
-  type FishSpawn,
   type SimReady,
   type SpeciesInput,
   type Stimulus,
-  type TankDimensions as SimTankDimensions,
   type WorldConfig,
 } from '@aquarium/sim';
 import type { Engine } from '../engine/Engine';
@@ -30,7 +28,8 @@ import { waterBounds, type TankDimensions } from '../engine/tank/dimensions';
 import type { InteractionEvents } from '../interaction/events';
 import { disposeFishModel, FishAssetLoader, type FishModel } from './assets';
 import { AcclimationBags } from './bag';
-import { demoTank } from './demoStock';
+import type { SceneAnchor } from '../scene/anemone';
+import { demoTank, type DemoTank } from './demoStock';
 import { FishInstanceData, type InstanceValues } from './instances';
 import { selectLod, type LodThresholds } from './lod';
 import { FishMaterial, type FinRendering, type FishMaterialFeatures } from './material';
@@ -49,6 +48,7 @@ import {
 } from './poses';
 import { renderProfile, type FishRenderProfile } from './profiles';
 import { hashString, TankRoster, type RosterFish } from './roster';
+import { SimWorldSpec } from './simWorld';
 import { speciesInput } from './species';
 import type { FishBite, PickRay, TankEvent } from './start';
 import { SWIM_MODES, SwimState } from './swim';
@@ -211,6 +211,7 @@ export class FishSystem {
   private readonly lifetime = new AbortController();
   private readonly offset: Vector3;
   private readonly box: WaterBox;
+  private readonly spec: SimWorldSpec;
   private readonly cleanups: (() => void)[] = [];
   private readonly ateListeners = new Set<(events: readonly FishBite[]) => void>();
   private layout: Layout | null = null;
@@ -257,20 +258,13 @@ export class FishSystem {
     const { signal } = options;
     signal.throwIfAborted();
     const seed = options.seed ?? Math.floor(Math.random() * 0x7fffffff);
-    const demo = demoTank(options.tank, seed);
-    // TODO(render-engineer): #92 adds the reef demo stock; until then the reef demo is empty.
-    const stock = options.biome === 'freshwater' ? demo.config.fish : [];
+    const demo = demoTank(options.tank, seed, options.biome);
     const worker = new Worker(new URL('./simWorker.ts', import.meta.url), {
       type: 'module',
       name: 'fish-sim',
     });
     const client = new SimClient(worker);
-    const system = new FishSystem(engine, client, worker, options, {
-      seed,
-      stock,
-      simTank: demo.config.tank,
-      offset: demo.offset,
-    });
+    const system = new FishSystem(engine, client, worker, options, demo, seed);
     const onAbort = (): void => system.dispose();
     signal.addEventListener('abort', onAbort);
     system.cleanups.push(() => signal.removeEventListener('abort', onAbort));
@@ -296,24 +290,21 @@ export class FishSystem {
     private readonly sim: SimClient,
     private readonly worker: Worker,
     private readonly options: FishSystemOptions,
-    private readonly world: {
-      readonly seed: number;
-      readonly stock: readonly FishSpawn[];
-      readonly simTank: SimTankDimensions;
-      readonly offset: readonly [number, number, number];
-    },
+    demo: DemoTank,
+    private readonly seed: number,
   ) {
-    this.offset = new Vector3(...world.offset);
+    this.offset = new Vector3(...demo.offset);
     const bounds = waterBounds(options.tank);
     this.box = {
       minX: bounds.min.x,
       maxX: bounds.max.x,
-      minY: world.offset[1],
+      minY: demo.offset[1],
       minZ: bounds.min.z,
       maxZ: bounds.max.z,
       top: bounds.max.y,
     };
-    this.roster = new TankRoster(world.stock);
+    this.roster = new TankRoster(demo.config.fish);
+    this.spec = new SimWorldSpec(demo, seed);
     this.loader = new FishAssetLoader(engine.renderer, options.assetRoot);
     this.group.name = 'fish';
     this.bags = new AcclimationBags(this.group);
@@ -409,6 +400,16 @@ export class FishSystem {
    */
   startle(stimulus: Stimulus): void {
     if (!this.disposed && this.simReady) this.sim.startle(stimulus);
+  }
+
+  /**
+   * Homes from the scene, in engine space: the clownfish's anemone. Kept for every later sim
+   * world, since a re-initialised world starts with only the anchors in its config.
+   */
+  setAnchors(anchors: readonly SceneAnchor[]): void {
+    if (this.disposed) return;
+    const simAnchors = this.spec.setAnchors(anchors);
+    if (this.simReady) this.sim.setAnchors(simAnchors);
   }
 
   setFood(buffer: Float32Array): void {
@@ -607,7 +608,7 @@ export class FishSystem {
   }
 
   private createRuntime(fish: RosterFish, batch: SpeciesBatch): FishRuntime {
-    const rng = new Rng((this.world.seed ^ hashString(fish.key)) >>> 0);
+    const rng = new Rng((this.seed ^ hashString(fish.key)) >>> 0);
     const { profile, input } = batch;
     const length = fish.lengthM ?? input.locomotion.bodyLengthM;
     const v = profile.tintVariation;
@@ -703,29 +704,13 @@ export class FishSystem {
 
   private async reinit(): Promise<void> {
     const revision = this.roster.revision;
-    const fish: FishSpawn[] = [];
-    const species = new Map<string, SpeciesInput>();
-    for (const f of this.roster.swimming()) {
-      const input = speciesInput(f.species);
-      if (input === undefined) continue;
-      species.set(input.id, input);
-      fish.push(
-        f.lengthM === undefined
-          ? { id: f.simId, species: f.species }
-          : { id: f.simId, species: f.species, bodyLengthM: f.lengthM },
-      );
-    }
-    if (fish.length === 0) {
+    const config = this.spec.config(this.roster.swimming());
+    if (config === null) {
       this.stopWorld();
       this.simRevision = revision;
       return;
     }
-    const ready = await initSim(
-      this.sim,
-      this.worker,
-      { seed: this.world.seed, tank: this.world.simTank, species: [...species.values()], fish },
-      this.lifetime.signal,
-    );
+    const ready = await initSim(this.sim, this.worker, config, this.lifetime.signal);
     if (this.disposed) return;
     this.simReady = true;
     this.simRevision = revision;

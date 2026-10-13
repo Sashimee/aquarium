@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Engine } from '../engine/Engine';
 import { EventBus, type EngineEvents } from '../engine/events';
 import type { InteractionEvents } from '../interaction/events';
+import type { SceneAnchor } from '../scene/anemone';
 import { FISH_1, FISH_2, TANK_A, fishFixture } from '../sync/fixtures';
 import type { FishBite, PickRay, TankEvent } from './start';
 
@@ -9,11 +10,19 @@ class FakeFishSystem {
   readonly handled: TankEvent[] = [];
   readonly food: Float32Array[] = [];
   readonly taps: PickRay[] = [];
+  /** Tank event types and `anchors` calls, in arrival order. */
+  readonly log: string[] = [];
+  readonly anchors: (readonly SceneAnchor[])[] = [];
   disposed = false;
   private ate: ((events: readonly FishBite[]) => void) | null = null;
 
   handle(event: TankEvent): void {
     this.handled.push(event);
+    this.log.push(event.type);
+  }
+  setAnchors(anchors: readonly SceneAnchor[]): void {
+    this.anchors.push(anchors);
+    this.log.push('anchors');
   }
   onAte(listener: (events: readonly FishBite[]) => void): () => void {
     this.ate = listener;
@@ -119,6 +128,28 @@ describe('startFish', () => {
       'tank:unloaded',
     ]);
     expect(fish.handled[5]).toEqual({ type: 'tank:unloaded', payload: { tankId: TANK_A } });
+  });
+
+  it('holds the scene anchors until the fish are up, ahead of the queued tank events', async () => {
+    const fish = new FakeFishSystem();
+    const pending = deferred<FakeFishSystem>();
+    const { handle, interaction } = setup(pending.promise);
+    const first: SceneAnchor[] = [
+      { id: 'anemone-1', kind: 'anemone', position: [0.1, 0.2, 0], radius: 0.05 },
+    ];
+    const latest: SceneAnchor[] = [
+      { id: 'anemone-1', kind: 'anemone', position: [-0.1, 0.2, 0], radius: 0.05 },
+    ];
+    handle.setAnchors(first);
+    interaction.emit('tank:loaded', { tankId: TANK_A, biome: 'reef', fish: [] });
+    handle.setAnchors(latest);
+    pending.resolve(fish);
+    await flush();
+    expect(fish.log).toEqual(['anchors', 'tank:loaded']);
+    expect(fish.anchors).toEqual([latest]);
+
+    handle.setAnchors(first);
+    expect(fish.anchors).toEqual([latest, first]);
   });
 
   it('passes bites to listeners that subscribed before the fish were up', async () => {

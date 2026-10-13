@@ -4,6 +4,7 @@ import type { Engine } from '../engine/Engine';
 import type { EventBus } from '../engine/events';
 import type { TankDimensions } from '../engine/tank/dimensions';
 import type { InteractionEvents } from '../interaction/events';
+import type { SceneAnchor } from '../scene/anemone';
 import type { FishSystem } from './FishSystem';
 
 type TankEventName =
@@ -41,6 +42,8 @@ export interface FishSimBridge {
 
 export interface FishHandle {
   readonly sim: FishSimBridge;
+  /** Engine-space homes; held until the fish are up, then forwarded. */
+  setAnchors(anchors: readonly SceneAnchor[]): void;
   stop(): void;
 }
 
@@ -63,6 +66,7 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
   const ateListeners = new Set<(events: readonly FishBite[]) => void>();
   let queue: TankEvent[] | null = [];
   let ready: FishSystem | null = null;
+  let anchors: readonly SceneAnchor[] | null = null;
 
   const deliver = (event: TankEvent): void => {
     if (ready !== null) ready.handle(event);
@@ -97,6 +101,7 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
         for (const listener of ateListeners) listener(events);
       });
       ready = fish;
+      if (anchors !== null) fish.setAnchors(anchors);
       const pending = queue ?? [];
       queue = null;
       for (const event of pending) fish.handle(event);
@@ -119,6 +124,10 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
         return () => ateListeners.delete(listener);
       },
       netTap: (ray) => ready?.netTap(ray),
+    },
+    setAnchors(next) {
+      anchors = next;
+      ready?.setAnchors(next);
     },
     stop() {
       abort.abort();

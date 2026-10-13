@@ -100,6 +100,7 @@ async function boot(): Promise<void> {
   let tankScene: TankScene | null = null;
   mountPresetWhenTierKnown(engine, biome, window.location.search, (scene) => {
     tankScene = scene;
+    fish.setAnchors(scene.anchors);
     play = createPlaySystem(engine, scene, interaction, fish.sim);
     if (import.meta.env.DEV) Object.assign(window, { tankScene });
   });
