@@ -1,6 +1,7 @@
 export { Rng, type RngState } from './rng.ts';
 export { DEG, quatFromYawPitchRoll, rotateByQuat, wrapAngle, type Vec3 } from './math.ts';
 export {
+  DIET_RANK_DECAY,
   DRAG_COEFFICIENT_L2,
   toSimSpecies,
   TRAITS,
@@ -12,6 +13,17 @@ export {
   type Trait,
 } from './species.ts';
 export { BEHAVIOUR, type Anchor, type Stimulus } from './behaviour.ts';
+export {
+  FOOD_PARTICLES,
+  FOOD_POSITION_SLACK_M,
+  FOOD_STRIDE,
+  FOOD_TYPES,
+  FoodField,
+  MAX_FOOD_ID,
+  MAX_FOOD_PARTICLES,
+  type AteEvent,
+} from './food.ts';
+export { FEEDING } from './feeding.ts';
 export {
   compileCollider,
   DecorField,
@@ -39,5 +51,6 @@ export {
   type SimEvent,
   type SimHost,
   type SimHostOptions,
+  type SimAte,
   type SimReady,
 } from './bridge.ts';

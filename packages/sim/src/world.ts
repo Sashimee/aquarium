@@ -1,5 +1,6 @@
 import { Behaviour, BEHAVIOUR, type Anchor, type Plan, type Stimulus } from './behaviour.ts';
 import { compileCollider, DecorField, UnionSdf, type DecorCollider } from './decor.ts';
+import { FoodStore, type AteEvent } from './food.ts';
 import { clamp, DEG, quatFromYawPitchRoll, wrapAngle } from './math.ts';
 import { pairwiseDistanceSq, selectNearest } from './neighbours.ts';
 import { Rng } from './rng.ts';
@@ -124,6 +125,7 @@ export class World {
   readonly cruiseSpeed: Float64Array;
 
   readonly rng: Rng;
+  readonly food: FoodStore;
   readonly behaviour: Behaviour;
   /** Tank and hard decor: what no fish body may enter. */
   readonly sceneSdf: Sdf;
@@ -241,6 +243,7 @@ export class World {
     this.scratchDist = new Float64Array(kMax);
 
     config.fish.forEach((spawn, i) => this.spawn(i, spawn, byId));
+    this.food = new FoodStore(config.tank);
     this.behaviour = new Behaviour(this);
     this.behaviour.setAnchors(config.anchors ?? []);
     this.behaviour.init();
@@ -289,6 +292,20 @@ export class World {
 
   setAnchors(anchors: readonly Anchor[]): void {
     this.behaviour.setAnchors(anchors);
+  }
+
+  /**
+   * Replaces the food particles with `buffer`, records of `[id, x, y, z, typeIndex]` in tank
+   * space. Call it every tick food is in the water; the sim reads the particles but never moves
+   * them.
+   */
+  setFood(buffer: Float32Array): void {
+    this.food.set(buffer, this.tick);
+  }
+
+  /** What fish have eaten since the last call, in the order it happened. */
+  takeAteEvents(): AteEvent[] {
+    return this.behaviour.feeding.events.splice(0);
   }
 
   /** Smallest distance from fish `i`'s spine chain to the tank or hard decor, minus its thickness. */
@@ -735,11 +752,12 @@ export class World {
    * A cruising fish turns on an arc of a few tenths of its length, not on the spot; only a
    * hovering fish pivots, and slowly. Foraging, grazing and station-keeping are slow, deliberate
    * manoeuvres and keep the full rate, as does a fish whose snout is about to touch something.
+   * A fish chasing food swims and turns like a cruising one.
    */
   private turnRateLimit(i: number, sp: SimSpecies, plan: Plan): number {
-    if (plan.state !== FishState.Cruise || plan.seekWeight > 0 || this.cramped[i] === 1) {
-      return sp.maxTurnRate;
-    }
+    const arcLimited =
+      plan.state === FishState.Feed || (plan.state === FishState.Cruise && plan.seekWeight === 0);
+    if (!arcLimited || plan.pivot || this.cramped[i] === 1) return sp.maxTurnRate;
     const radius = STEERING.minTurnRadiusBodyLengths * (this.bodyLength[i] ?? 1);
     const arc = (this.speed[i] ?? 0) / radius;
     return Math.min(sp.maxTurnRate, Math.max(arc, STEERING.pivotTurnRateRadPerS));

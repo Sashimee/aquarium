@@ -1,8 +1,15 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Anchor } from './behaviour.ts';
-import { createSimHost, SimClient, type SimHost, type SimHostOptions } from './bridge.ts';
+import {
+  createSimHost,
+  SimClient,
+  type SimAte,
+  type SimHost,
+  type SimHostOptions,
+} from './bridge.ts';
 import type { DecorCollider } from './decor.ts';
 import { benchmarkConfig, REEF_ANCHORS, REEF_DECOR } from './fixtures.ts';
+import { FOOD_STRIDE, FOOD_TYPES, type AteEvent } from './food.ts';
 import { SNAPSHOT_STRIDE, SnapshotField, SnapshotInterpolator, type Snapshot } from './snapshot.ts';
 import { STEP_HZ, World } from './world.ts';
 
@@ -40,6 +47,39 @@ function nextError(client: SimClient): Promise<string> {
       resolve(m);
     });
   });
+}
+
+function flakeGrid(count: number): Float32Array {
+  const records = new Float32Array(count * FOOD_STRIDE);
+  for (let k = 0; k < count; k++) {
+    records.set(
+      [
+        k + 1,
+        -0.5 + (k % 10) * 0.1,
+        0.3,
+        -0.1 + Math.floor(k / 10) * 0.1,
+        FOOD_TYPES.indexOf('flakes'),
+      ],
+      k * FOOD_STRIDE,
+    );
+  }
+  return records;
+}
+
+/** Steps the host and gathers every `ate` message sent up to the snapshot at `tick`. */
+async function stepCollecting(client: SimClient, steps: number, tick: number) {
+  const ate: SimAte[] = [];
+  const offAte = client.onAte((a) => ate.push(a));
+  const snapshot = await new Promise<Snapshot>((resolve) => {
+    const off = client.onSnapshot((s) => {
+      if (s.tick !== tick) return;
+      off();
+      resolve(s);
+    });
+    client.step(steps);
+  });
+  offAte();
+  return { snapshot, ate };
 }
 
 afterEach(() => {
@@ -179,6 +219,55 @@ describe('sim worker bridge', () => {
     const forgedAnchor = { id: 'x', kind: 'reef', position: [0, 0.1, 0], radius: 0.05 } as unknown;
     client.setAnchors([forgedAnchor as Anchor]);
     expect(await reefless).toMatch(/anchor "x": kind must be/);
+  });
+
+  it('feeds fish from a food buffer and reports what they ate as a local world would', async () => {
+    const { client } = connect();
+    const config = benchmarkConfig(5);
+    const food = flakeGrid(30);
+    const ready = await client.init(config);
+    client.setFood(food);
+    const { snapshot, ate } = await stepCollecting(client, 90, 90);
+
+    const local = new World(config);
+    local.setFood(food);
+    const expected: AteEvent[] = [];
+    for (let t = 0; t < 90; t++) {
+      local.step();
+      expected.push(...local.takeAteEvents());
+    }
+    expect(expected.length).toBeGreaterThan(0);
+    expect(ate.every((a) => a.epoch === ready.epoch)).toBe(true);
+    expect(ate.flatMap((a) => a.events)).toEqual(expected);
+    const data = new Float32Array(local.count * SNAPSHOT_STRIDE);
+    local.writeSnapshot(data);
+    expect(Array.from(snapshot.data)).toEqual(Array.from(data));
+  });
+
+  it('rejects bad food as a whole, keeps the previous food, and refuses food before init', async () => {
+    const { client } = connect();
+    const early = nextError(client);
+    client.setFood(flakeGrid(1));
+    expect(await early).toMatch(/"food" before "init"/);
+
+    const config = benchmarkConfig(6);
+    await client.init(config);
+    const food = flakeGrid(20);
+    client.setFood(food);
+    const poisoned = food.slice();
+    poisoned[3 * FOOD_STRIDE + 2] = Number.NaN;
+    const bad = nextError(client);
+    client.setFood(poisoned);
+    expect(await bad).toMatch(/finite/);
+    expect(() => client.setFood(new Float32Array(7))).toThrow(/multiple of 5/);
+    const { snapshot } = await stepCollecting(client, 60, 60);
+
+    const local = new World(config);
+    local.setFood(food);
+    for (let t = 0; t < 60; t++) local.step();
+    const data = new Float32Array(local.count * SNAPSHOT_STRIDE);
+    local.writeSnapshot(data);
+    expect(Array.from(snapshot.data)).toEqual(Array.from(data));
   });
 
   it('tags a re-init with a new epoch so the interpolator restarts cleanly', async () => {

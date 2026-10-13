@@ -1,4 +1,6 @@
 import type { Point3 } from './decor.ts';
+import { FEEDING, Feeding, feedingHeight } from './feeding.ts';
+import type { FoodStore } from './food.ts';
 import { clamp, DEG, wrapAngle } from './math.ts';
 import { selectNearest } from './neighbours.ts';
 import type { Rng } from './rng.ts';
@@ -144,6 +146,7 @@ export interface Stimulus {
 /** What `World` exposes to the behaviour layer. */
 export interface BehaviourHost {
   readonly count: number;
+  readonly fishIds: readonly string[];
   readonly tank: TankDimensions;
   readonly species: readonly SimSpecies[];
   readonly speciesIndex: Int32Array;
@@ -163,6 +166,7 @@ export interface BehaviourHost {
   readonly substrateSdf: Sdf;
   /** Hard decor alone, or null when the tank is bare. */
   readonly decorSdf: Sdf | null;
+  readonly food: FoodStore;
 }
 
 /** One fish's intent for this step, consumed by steering and integration. */
@@ -191,6 +195,7 @@ export class Plan {
   turnRate = NaN;
   roll = NaN;
   continuous = false;
+  pivot = false;
 
   reset(bandLo: number, bandHi: number): void {
     this.state = FishState.Cruise;
@@ -214,6 +219,7 @@ export class Plan {
     this.turnRate = NaN;
     this.roll = NaN;
     this.continuous = false;
+    this.pivot = false;
   }
 
   seek(x: number, y: number, z: number, speed: number, tau: number, weight = 1): void {
@@ -248,6 +254,7 @@ function sigmoid(x: number): number {
  */
 export class Behaviour {
   readonly plans: Plan[];
+  readonly feeding: Feeding;
   light = 1;
   night = false;
 
@@ -318,6 +325,7 @@ export class Behaviour {
     const n = host.count;
     const s = host.species.length;
     this.plans = Array.from({ length: n }, () => new Plan());
+    this.feeding = new Feeding(host);
     this.startlePhase = new Uint8Array(n);
     this.startleTimer = new Float64Array(n);
     this.startleElapsed = new Float64Array(n);
@@ -486,7 +494,35 @@ export class Behaviour {
         this.beginStartle(i, at(this.scheduledYaw, i), at(this.scheduledPitch, i));
       }
     }
+    this.prepareFeeding();
+    this.feeding.update();
     for (let i = 0; i < n; i++) this.plan(i);
+  }
+
+  /** Who may feed this step, and how far an anchored fish will leave its anemone or cave. */
+  private prepareFeeding(): void {
+    const { eligible, leash } = this.feeding;
+    for (let i = 0; i < this.host.count; i++) {
+      eligible[i] =
+        at(this.startlePhase, i) === StartlePhase.None &&
+        at(this.startleAt, i) < 0 &&
+        at(this.yieldTimer, i) <= 0 &&
+        at(this.gulpPhase, i) === GulpPhase.None &&
+        at(this.shelterTimer, i) <= 0 &&
+        at(this.rest, i) <= 0.5
+          ? 1
+          : 0;
+      const a = this.anchors[at(this.anchor, i)];
+      const o = i * 4;
+      if (a === undefined) {
+        leash[o + 3] = Infinity;
+        continue;
+      }
+      leash[o] = a.position[0];
+      leash[o + 1] = a.position[1];
+      leash[o + 2] = a.position[2];
+      leash[o + 3] = a.radius + FEEDING.leashBodyLengths * at(this.host.bodyLength, i);
+    }
   }
 
   private speciesOf(i: number): SimSpecies {
@@ -716,6 +752,7 @@ export class Behaviour {
       this.planYield(i, plan);
       return;
     }
+    if (this.planFeed(i, sp, plan)) return;
     if (sp.territorial) this.updateTerritory(i, sp);
     if (at(this.territoryPhase, i) !== TerritoryPhase.Idle) {
       this.planTerritory(i, sp, plan);
@@ -739,6 +776,79 @@ export class Behaviour {
     if (rest > 0.5 && (plan.state === FishState.Cruise || plan.state === FishState.Station)) {
       plan.state = FishState.Rest;
     }
+  }
+
+  /**
+   * Swims to the food particle the feeding layer assigned, or towards a neighbour that is feeding.
+   * Feeding loosens the school but keeps separation, and lets the fish reach food lying on the
+   * substrate or floating at the surface.
+   */
+  private planFeed(i: number, sp: SimSpecies, plan: Plan): boolean {
+    const f = this.feeding;
+    const k = at(f.target, i);
+    const j = at(f.follow, i);
+    const handling = at(f.handling, i) > 0;
+    if (k < 0 && j < 0 && !handling) return false;
+    if (at(this.gulpPhase, i) !== GulpPhase.None) return false;
+    if (at(this.territoryPhase, i) !== TerritoryPhase.Idle) this.endTerritory(i);
+    const { position, food, tank } = this.host;
+    const length = at(this.host.bodyLength, i);
+    const cruise = at(this.host.cruiseSpeed, i);
+    const vmax = at(this.host.maxSpeed, i);
+    const motivation = f.motivation(i);
+    const px = at(position, i * 3);
+    const py = at(position, i * 3 + 1);
+    const pz = at(position, i * 3 + 2);
+    plan.align *= FEEDING.schoolFactor;
+    plan.cohesion *= FEEDING.schoolFactor;
+    plan.wander *= 0.3;
+    const pursuit = cruise + (FEEDING.pursuitSpeedFraction * vmax - cruise) * motivation;
+    if (k < 0 && !handling) {
+      const tx = at(position, j * 3);
+      const ty = at(position, j * 3 + 1);
+      const tz = at(position, j * 3 + 2);
+      this.widenBand(plan, ty, length);
+      plan.seek(tx, ty, tz, Math.max(cruise, 0.5 * pursuit), 0.5, 0.5);
+      return true;
+    }
+    plan.state = FishState.Feed;
+    plan.speedFloor = 0;
+    if (k < 0) {
+      plan.speedCap = FEEDING.grazeSpeedFactor * cruise;
+      plan.wander = 0;
+      return true;
+    }
+    const fx = at(food.position, k * 3);
+    const fy = at(food.position, k * 3 + 1);
+    const fz = at(food.position, k * 3 + 2);
+    const ty = feedingHeight(fy, length, tank.height);
+    this.widenBand(plan, ty, length);
+    const d = Math.hypot(fx - px, ty - py, fz - pz);
+    if (d < 2 * length) plan.comfort = FEEDING.approachComfort;
+    if (sp.gait === 'forage' && fy < length) {
+      plan.floor = false;
+      if (d < 2 * length) plan.pitch = Math.max(BEHAVIOUR.siftPitchRad, -sp.maxPitch);
+    }
+    if (handling) {
+      plan.speedCap = FEEDING.grazeSpeedFactor * cruise;
+      plan.seek(fx, ty, fz, FEEDING.grazeSpeedFactor * cruise, 0.5);
+      return true;
+    }
+    plan.seek(fx, ty, fz, pursuit, 0.25);
+    const brake = FEEDING.brakeBodyLengths * length;
+    if (d < brake) {
+      // The final approach is slow, steady swimming with the full will to turn, so a fish comes
+      // round onto food beside it instead of circling it; arriving at speed would also carry
+      // the snout into the sand or glass the food lies against.
+      const slow = FEEDING.strikeSpeedFactor * cruise;
+      plan.speedCap = slow + (pursuit - slow) * (d / brake);
+      plan.continuous = true;
+      plan.wander = 0;
+      // Browsers work an attached item (a nori clip, a wafer) head-on, manoeuvring on the spot
+      // with their fins as they do over rock rather than swimming arcs past it.
+      plan.pivot = f.grazes(k) && d < length;
+    }
+    return true;
   }
 
   private planYield(i: number, plan: Plan): void {
