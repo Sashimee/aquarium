@@ -244,7 +244,7 @@ export class SimClient {
   private readonly port: MessagePortLike;
   private readonly snapshotListeners = new Set<(snapshot: Snapshot) => void>();
   private readonly errorListeners = new Set<(message: string) => void>();
-  private readonly ateListeners = new Set<(ate: SimAte) => void>();
+  private readonly ateListeners = new Set<(events: readonly AteEvent[], ate: SimAte) => void>();
   private pendingInit: {
     resolve: (ready: SimReady) => void;
     reject: (error: Error) => void;
@@ -323,7 +323,7 @@ export class SimClient {
   }
 
   /** What fish ate; gameplay removes eaten particles and reports the portions to the lifecycle. */
-  onAte(listener: (ate: SimAte) => void): () => void {
+  onAte(listener: (events: readonly AteEvent[], ate: SimAte) => void): () => void {
     this.ateListeners.add(listener);
     return () => this.ateListeners.delete(listener);
   }
@@ -365,7 +365,7 @@ export class SimClient {
         return;
       }
       case 'ate':
-        for (const l of this.ateListeners) l(event);
+        for (const l of this.ateListeners) l(event.events, event);
         return;
       case 'error': {
         const pending = this.pendingInit;

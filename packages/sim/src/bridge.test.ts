@@ -69,7 +69,10 @@ function flakeGrid(count: number): Float32Array {
 /** Steps the host and gathers every `ate` message sent up to the snapshot at `tick`. */
 async function stepCollecting(client: SimClient, steps: number, tick: number) {
   const ate: SimAte[] = [];
-  const offAte = client.onAte((a) => ate.push(a));
+  const offAte = client.onAte((events, a) => {
+    expect(events).toBe(a.events);
+    ate.push(a);
+  });
   const snapshot = await new Promise<Snapshot>((resolve) => {
     const off = client.onSnapshot((s) => {
       if (s.tick !== tick) return;
