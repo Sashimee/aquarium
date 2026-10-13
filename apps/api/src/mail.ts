@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import nodemailer, { type Transporter } from 'nodemailer';
 import { memoryHitStore, type HitStore, type Limit } from './rate-limit.ts';
 
@@ -14,6 +15,13 @@ export const DEFAULT_MAIL_LIMITS: MailLimits = {
   perIpSignup: { max: 10, windowMs: 60 * 60 * 1000 },
   global: { max: 200, windowMs: 60 * 60 * 1000 },
 };
+
+export interface IpAdmission {
+  /** Seconds until the IP may try again, or 0 when the request may proceed. */
+  wait: number;
+  /** Seconds the global cap is spent for, or 0. While positive the IP slot was not charged and no mail may go out for this request. */
+  mailBlockedFor: number;
+}
 
 export class MailThrottledError extends Error {
   readonly retryAfterSeconds: number;
@@ -74,8 +82,10 @@ export interface Mailer {
   sendVerification(to: string, url: string): Promise<void>;
   /** Same limits as sendVerification, tracked separately so one flow cannot starve the other. */
   sendPasswordReset(to: string, url: string): Promise<void>;
-  /** Consumes one per-IP slot for mail-triggering endpoints, except while the global cap is spent; returns retry-after seconds or 0. */
-  consumeIp(ip: string): Promise<number>;
+  /** Charges one flat per-IP slot per mail-triggering request, whatever the recipient; not charged while the global cap is spent. */
+  consumeIp(ip: string): Promise<IpAdmission>;
+  /** Mail sent inside `work` honours the admission: a request admitted without an IP charge sends nothing. */
+  runAdmitted<T>(admission: IpAdmission, work: () => Promise<T>): Promise<T>;
   peekVerificationCooldown(to: string): Promise<number>;
 }
 
@@ -114,6 +124,7 @@ export function createMailer(
   }: MailerOptions = {},
 ): Mailer {
   const from = `Aquarium <${mailFrom}>`;
+  const admissions = new AsyncLocalStorage<IpAdmission>();
   let globalCapLogged = false;
   let storeFailureLogged = false;
 
@@ -160,6 +171,10 @@ export function createMailer(
   };
 
   const admit = async (flow: 'verify' | 'reset', to: string) => {
+    // The cap may have freed since consumeIp skipped the IP charge; sending now would be unmetered per IP.
+    const admission = admissions.getStore();
+    if (admission && admission.mailBlockedFor > 0)
+      return refuseGlobal(admission.mailBlockedFor, true);
     const k = recipientKey(to);
     // Peek first so a spent global cap refuses without using up the recipient's own budget.
     const spent = await guarded(() => store.remaining('global', limits.global));
@@ -195,16 +210,19 @@ export function createMailer(
         textEncoding: 'base64',
       });
     },
-    // While the global cap is spent no mail can go out, so the slot is only checked, not used.
-    // This depends on the shared global counter alone, never on whether the address has an account.
+    // The charge is flat per request: refunding it for a recipient or cooldown refusal would let the
+    // IP's 429 behaviour reveal whether the address has an account. Only the shared global counter,
+    // which does not depend on the address, may skip it.
     async consumeIp(address) {
       const key = `ip:${address}`;
       const spent = await guarded(() => store.remaining('global', limits.global));
       if (spent.answered && spent.wait > 0) {
-        return failClosed(() => store.remaining(key, limits.perIpSignup));
+        const wait = await failClosed(() => store.remaining(key, limits.perIpSignup));
+        return { wait, mailBlockedFor: spent.wait };
       }
-      return consume(key, limits.perIpSignup);
+      return { wait: await consume(key, limits.perIpSignup), mailBlockedFor: 0 };
     },
+    runAdmitted: (admission, work) => admissions.run(admission, work),
     peekVerificationCooldown: (to) =>
       failClosed(() =>
         store.remaining(`verify:cooldown:${recipientKey(to)}`, limits.verificationCooldown),

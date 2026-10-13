@@ -704,7 +704,7 @@ describe('mail abuse limits', () => {
     const ipWaits = await Promise.all(
       Array.from({ length: 20 }, () => mailer.consumeIp('203.0.113.50')),
     );
-    expect(ipWaits.filter((w) => w === 0)).toHaveLength(5);
+    expect(ipWaits.filter((a) => a.wait === 0)).toHaveLength(5);
     const results = await Promise.allSettled(
       Array.from({ length: 20 }, (_, i) =>
         mailer.sendVerification(`c${i}@bas.lu`, 'https://x.test/'),
@@ -712,6 +712,29 @@ describe('mail abuse limits', () => {
     );
     expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(7);
     expect(sent).toHaveLength(7);
+    await h.close();
+  });
+
+  it('charges no IP slot to concurrent requests while the global cap is spent', async () => {
+    const h = await createHarness();
+    const limits = {
+      perRecipient: { max: 100, windowMs: 3_600_000 },
+      verificationCooldown: { max: 100, windowMs: 1000 },
+      perIpSignup: { max: 5, windowMs: 3_600_000 },
+      global: { max: 1, windowMs: 3_600_000 },
+    };
+    const store = postgresHitStore(h.database, 'concurrency-secret-concurrency-secret-01');
+    const transport = nodemailer.createTransport({ jsonTransport: true });
+    transport.sendMail = (async () => undefined) as unknown as typeof transport.sendMail;
+    const mailer = createMailer(transport, 'fish@bas.lu', { limits, store, log: () => undefined });
+    await store.consume('global', limits.global);
+    const spent = await Promise.all(
+      Array.from({ length: 20 }, () => mailer.consumeIp('203.0.113.51')),
+    );
+    expect(spent.every((a) => a.wait === 0 && a.mailBlockedFor > 0)).toBe(true);
+    expect(await store.remaining('ip:203.0.113.51', limits.perIpSignup)).toBe(0);
+    const rows = await h.database.pool.query('select count(*)::int as n from mail_limit_hits');
+    expect(rows.rows[0].n).toBe(1);
     await h.close();
   });
 
