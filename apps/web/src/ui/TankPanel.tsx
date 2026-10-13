@@ -1,5 +1,5 @@
 import { biomeSchema, type Biome, type SpeciesSummary, type Tank } from '@aquarium/shared';
-import { useEffect, useId, useState, type FormEvent } from 'react';
+import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react';
 import {
   canBuy,
   deadFish,
@@ -16,48 +16,37 @@ import { useActiveTank, useSessionState, useOptionalSession, useSpeciesNames } f
 
 const BIOME_LABEL: Record<Biome, string> = { freshwater: 'Freshwater', reef: 'Reef' };
 
-export function TankPanel({
-  open,
-  onClose,
-  newTankBiome = null,
-}: {
-  open: boolean;
-  onClose(): void;
-  newTankBiome?: Biome | null;
-}) {
-  const state = useSessionState();
-  if (!open) return null;
+interface Ready {
+  session: TankSession;
+  state: SessionState;
+  tank: Tank;
+}
+
+function SignInPrompt() {
   return (
-    <section id="tank-panel" className="panel tank-panel" aria-label="Your tank">
-      <div className="panel-head">
-        <h2>Your tank</h2>
-        <button type="button" onClick={onClose}>
-          Close
-        </button>
-      </div>
-      <PanelBody state={state} newTankBiome={newTankBiome} />
-    </section>
+    <div>
+      <p>You are looking at the demo tank. It is yours to play with, but nothing in it is saved.</p>
+      <p>
+        <Link to="/sign-in">Sign in</Link> or <Link to="/sign-up">create an account</Link> with a
+        verified email address to keep a tank, choose fish and have them live while you are away.
+      </p>
+    </div>
   );
 }
 
-function PanelBody({ state, newTankBiome }: { state: SessionState; newTankBiome: Biome | null }) {
+function Gate({
+  noTank,
+  children,
+}: {
+  noTank(session: TankSession, state: SessionState): ReactNode;
+  children(ready: Ready): ReactNode;
+}) {
+  const state = useSessionState();
   const session = useOptionalSession();
   const { user } = useAuth();
   const tank = useActiveTank();
 
-  if (state.phase === 'anonymous') {
-    return (
-      <div>
-        <p>
-          You are looking at the demo tank. It is yours to play with, but nothing in it is saved.
-        </p>
-        <p>
-          <Link to="/sign-in">Sign in</Link> or <Link to="/sign-up">create an account</Link> with a
-          verified email address to keep a tank, choose fish and have them live while you are away.
-        </p>
-      </div>
-    );
-  }
+  if (state.phase === 'anonymous') return <SignInPrompt />;
   if (state.phase === 'unverified') {
     return (
       <p>
@@ -77,46 +66,58 @@ function PanelBody({ state, newTankBiome }: { state: SessionState; newTankBiome:
       </div>
     );
   }
-  if (!tank) return <FirstTank session={session} state={state} biome={newTankBiome} />;
-  return <TankSections session={session} state={state} tank={tank} newTankBiome={newTankBiome} />;
+  if (!tank) return noTank(session, state);
+  return children({ session, state, tank });
 }
 
-function FirstTank({
-  session,
-  state,
-  biome,
-}: {
-  session: TankSession;
-  state: SessionState;
-  biome: Biome | null;
-}) {
+const needTank = (): ReactNode => (
+  <p>You have no tank yet. Open My tank at the top to start one.</p>
+);
+
+export function TanksPanel({ newTankBiome }: { newTankBiome: Biome | null }) {
   return (
-    <div>
-      <p>You have no tank yet. Start one and add your first fish.</p>
-      <NewTankForm session={session} state={state} initialBiome={biome ?? 'freshwater'} />
-    </div>
+    <Gate
+      noTank={(session, state) => (
+        <div>
+          <p>You have no tank yet. Start one and add your first fish.</p>
+          <NewTankForm
+            session={session}
+            state={state}
+            initialBiome={newTankBiome ?? 'freshwater'}
+          />
+        </div>
+      )}
+    >
+      {({ session, state, tank }) => (
+        <TankSwitcher session={session} state={state} tank={tank} newTankBiome={newTankBiome} />
+      )}
+    </Gate>
   );
 }
 
-function TankSections({
-  session,
-  state,
-  tank,
-  newTankBiome,
-}: {
-  session: TankSession;
-  state: SessionState;
-  tank: Tank;
-  newTankBiome: Biome | null;
-}) {
+export function ShopPanel() {
+  return (
+    <Gate noTank={needTank}>
+      {({ session, state, tank }) => (
+        <>
+          <Shop session={session} state={state} tank={tank} />
+          <Bag session={session} state={state} />
+        </>
+      )}
+    </Gate>
+  );
+}
+
+export function CarePanel() {
+  return <Gate noTank={needTank}>{(ready) => <CareSections {...ready} />}</Gate>;
+}
+
+function CareSections({ session, state, tank }: Ready) {
   const names = useSpeciesNames();
   const water = waterReport(tank.water, tank, state.species);
   return (
     <>
-      <TankSwitcher session={session} state={state} tank={tank} newTankBiome={newTankBiome} />
       <Care session={session} state={state} water={water} />
-      <Shop session={session} state={state} tank={tank} />
-      <Bag session={session} state={state} />
       <DeadFish session={session} tank={tank} />
       <Memorial tank={tank} names={names} />
     </>
@@ -338,8 +339,8 @@ function Care({
         </button>
       </div>
       <p className="hint">
-        Feed from the toolbar, a little at a time. Uneaten food rots and poisons the water; the
-        gravel vacuum removes it.
+        Feed from the dock, a little at a time. Uneaten food rots and poisons the water; the gravel
+        vacuum removes it.
       </p>
     </section>
   );

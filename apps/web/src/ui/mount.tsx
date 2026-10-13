@@ -4,6 +4,7 @@ import { App } from './App';
 import { UiProviders, type UiBridge } from './context';
 import { SessionProvider } from './session';
 import './styles.css';
+import './game.css';
 
 /** Returns a function that unmounts the overlay. */
 export function mountUi(container: HTMLElement, bridge: UiBridge): () => void {

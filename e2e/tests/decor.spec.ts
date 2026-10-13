@@ -1,5 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
-import { createFirstTank, openTank, registerVerifiedUser, savedTanks } from '../support/app.ts';
+import {
+  createFirstTank,
+  dockButton,
+  openTank,
+  registerVerifiedUser,
+  savedTanks,
+} from '../support/app.ts';
 
 type Layout = Awaited<ReturnType<typeof savedTanks>>[number]['decorLayout'] | undefined;
 
@@ -13,9 +19,7 @@ function roughly(layout: Layout) {
 
 async function startDecorating(page: Page) {
   const panel = page.getByRole('region', { name: 'Decorate the tank' });
-  const tankPanel = page.getByRole('region', { name: 'Your tank' });
-  if (await tankPanel.isVisible()) await tankPanel.getByRole('button', { name: 'Close' }).click();
-  await page.getByRole('button', { name: 'Decorate' }).click();
+  await dockButton(page, 'Decorate').click();
   await expect(panel).toBeVisible({ timeout: 30_000 });
   return panel;
 }
@@ -23,7 +27,7 @@ async function startDecorating(page: Page) {
 test('Decorate pressed before the tank is ready still opens the editor', async ({ page }) => {
   test.setTimeout(120_000);
   await page.goto('/?tier=low&backend=webgl', { waitUntil: 'domcontentloaded' });
-  const toggle = page.getByRole('button', { name: 'Decorate' });
+  const toggle = dockButton(page, 'Decorate');
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('region', { name: 'Decorate the tank' })).toBeVisible({
@@ -41,8 +45,8 @@ test('a decor piece is swapped, moved, saved and still there after a reload', as
 
   const panel = await startDecorating(page);
   const inTank = panel.locator('.decor-pieces');
+  await expect(inTank.getByRole('button').first()).toBeVisible({ timeout: 60_000 });
   const startCount = await inTank.getByRole('button').count();
-  expect(startCount).toBeGreaterThan(0);
 
   await inTank.getByRole('button').first().click();
   await panel.getByRole('button', { name: 'Remove' }).click();

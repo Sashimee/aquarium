@@ -16,21 +16,18 @@ export default function DecorPanel() {
   const { interaction } = useBridge();
   const state = useDecorState();
   const save = useDecorSaveState();
-  if (!state?.active) return null;
+  if (!state?.active) {
+    return (
+      <p role="status" className="hint">
+        Getting the tank ready for decorating.
+      </p>
+    );
+  }
   const send = (command: DecorCommand) => interaction.emit('decor:command', command);
   const selected = state.pieces.find((p) => p.id === state.selectedId) ?? null;
 
   return (
-    <section className="panel decor-panel" aria-label="Decorate the tank">
-      <div className="panel-head">
-        <h2>Decorate</h2>
-        <button
-          type="button"
-          onClick={() => interaction.emit('decor:request-mode', { active: false })}
-        >
-          Done
-        </button>
-      </div>
+    <>
       <p className="hint">
         Drag a piece in the tank to move it, or pick it from the list and use the buttons. Pieces
         drop onto the gravel and cannot overlap.
@@ -144,6 +141,6 @@ export default function DecorPanel() {
           Try saving again
         </button>
       )}
-    </section>
+    </>
   );
 }

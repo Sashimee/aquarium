@@ -1,5 +1,11 @@
 import { expect, test } from '@playwright/test';
-import { createFirstTank, openTank, registerVerifiedUser, savedTanks } from '../support/app.ts';
+import {
+  createFirstTank,
+  openDock,
+  openTank,
+  registerVerifiedUser,
+  savedTanks,
+} from '../support/app.ts';
 
 test('hand-feeding drops food and the server records it', async ({ page }) => {
   await registerVerifiedUser(page, 'feed');
@@ -8,7 +14,8 @@ test('hand-feeding drops food and the server records it', async ({ page }) => {
   await expect.poll(async () => (await savedTanks(page)).length).toBe(1);
   expect((await savedTanks(page))[0]?.water.uneatenFood).toBe(0);
 
-  await page.getByRole('button', { name: 'Feed', exact: true }).click();
+  await openDock(page, 'Feed', 'Feed the fish');
+  await page.getByRole('button', { name: 'Drop food' }).click();
 
   await expect(page.getByText('Fed flakes.')).toBeVisible();
   await expect
@@ -18,6 +25,6 @@ test('hand-feeding drops food and the server records it', async ({ page }) => {
     .toBeGreaterThan(0);
 
   await page.getByLabel('Food').selectOption('pellets');
-  await page.getByRole('button', { name: 'Feed', exact: true }).click();
+  await page.getByRole('button', { name: 'Drop food' }).click();
   await expect(page.getByText(/Fed pellets\.|Feeding too often/)).toBeVisible();
 });

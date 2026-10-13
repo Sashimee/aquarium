@@ -1,23 +1,22 @@
-import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { Biome } from '@aquarium/shared';
-import type { CameraMode } from '../interaction/camera';
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef } from 'react';
+import { useAuth, useRedirect, useRoute } from './context';
+import { Dock } from './Dock';
 import {
-  useAuth,
-  useBridge,
-  useCameraMode,
-  useDecorState,
-  useDemoBiome,
-  useRedirect,
-  useRoute,
-} from './context';
-import { usePanels } from './panels';
+  AccountPanel,
+  AvatarButton,
+  CameraControls,
+  StatusCard,
+  TankButton,
+  TankTypeSwitch,
+} from './Hud';
 import { LifeStatus } from './LifeStatus';
-import { PlayControls } from './PlayControls';
-import { useOptionalSession, useSessionState } from './session';
-import { canSwitch, planSwitch, shownBiome } from './tankSwitch';
+import { usePanels, type OpenPanel, type Panel } from './panels';
+import { FeedPanel, FeedToast, PlayPanel, useFood } from './PlayControls';
+import { navigate } from './router';
+import { Sheet } from './Sheet';
+import { useSessionState } from './session';
 import {
   CreditsScreen,
-  Link,
   NotFoundScreen,
   PrivacyScreen,
   SessionsScreen,
@@ -26,123 +25,6 @@ import {
   SignUpScreen,
   VerifyEmailScreen,
 } from './screens';
-
-function CameraControls() {
-  const { interaction } = useBridge();
-  const mode = useCameraMode();
-  const request = (next: CameraMode) => interaction.emit('camera:request-mode', { mode: next });
-  return (
-    <div role="group" aria-label="Camera" className="camera-controls">
-      <button type="button" aria-pressed={mode === 'orbit'} onClick={() => request('orbit')}>
-        Outside
-      </button>
-      <button type="button" aria-pressed={mode === 'dive'} onClick={() => request('dive')}>
-        Dive
-      </button>
-    </div>
-  );
-}
-
-const TANK_TYPES: readonly { biome: Biome; label: string }[] = [
-  { biome: 'freshwater', label: 'Freshwater' },
-  { biome: 'reef', label: 'Reef' },
-];
-
-function TankTypeSwitch({ onCreate }: { onCreate(biome: Biome): void }) {
-  const { interaction } = useBridge();
-  const session = useOptionalSession();
-  const state = useSessionState();
-  const demo = useDemoBiome();
-  const shown = shownBiome(state, demo);
-  const enabled = canSwitch(state);
-  const choose = (target: Biome) => {
-    const plan = planSwitch(state, demo, target);
-    switch (plan.kind) {
-      case 'none':
-        return;
-      case 'demo':
-        interaction.emit('demo:request-biome', { biome: plan.biome });
-        return;
-      case 'select':
-        void session?.select(plan.tankId);
-        return;
-      case 'create':
-        onCreate(plan.biome);
-        return;
-    }
-  };
-  return (
-    <div role="group" aria-label="Tank type" className="tank-type">
-      {TANK_TYPES.map(({ biome, label }) => (
-        <button
-          key={biome}
-          type="button"
-          aria-pressed={shown === biome}
-          disabled={!enabled}
-          onClick={() => choose(biome)}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function DecorToggle({ pressed, onToggle }: { pressed: boolean; onToggle(): void }) {
-  return (
-    <button type="button" aria-pressed={pressed} onClick={onToggle}>
-      Decorate
-    </button>
-  );
-}
-
-const DecorPanel = lazy(() => import('./DecorPanel'));
-
-function DecorEditor() {
-  const active = useDecorState()?.active ?? false;
-  if (!active) return null;
-  return (
-    <Suspense fallback={null}>
-      <DecorPanel />
-    </Suspense>
-  );
-}
-
-function AccountMenu() {
-  const { user, status, signOut } = useAuth();
-  const [error, setError] = useState<string | null>(null);
-  if (status === 'loading') return null;
-  if (!user) {
-    return (
-      <nav aria-label="Account" className="account">
-        <Link to="/sign-in">Sign in</Link>
-        <Link to="/sign-up">Create account</Link>
-      </nav>
-    );
-  }
-  return (
-    <nav aria-label="Account" className="account">
-      <span>{user.name}</span>
-      <Link to="/sessions">Sessions</Link>
-      <Link to="/settings">Settings</Link>
-      <button
-        type="button"
-        onClick={() => {
-          setError(null);
-          signOut().catch((cause: unknown) => {
-            console.error(cause);
-            setError('Sign out failed. Try again.');
-          });
-        }}
-      >
-        Sign out
-      </button>
-      <span role="alert" hidden={!error}>
-        {error}
-      </span>
-    </nav>
-  );
-}
 
 function Screen() {
   const route = useRoute();
@@ -189,8 +71,22 @@ const ResetPasswordScreen = lazy(() =>
   import('./PasswordReset').then((m) => ({ default: m.ResetPasswordScreen })),
 );
 
-const TankReport = lazy(() => import('./TankReport'));
-const TankPanel = lazy(() => import('./TankPanel').then((m) => ({ default: m.TankPanel })));
+const DecorBody = lazy(() => import('./DecorPanel'));
+const TankReportBody = lazy(() => import('./TankReport'));
+const TanksPanel = lazy(() => import('./TankPanel').then((m) => ({ default: m.TanksPanel })));
+const ShopPanel = lazy(() => import('./TankPanel').then((m) => ({ default: m.ShopPanel })));
+const CarePanel = lazy(() => import('./TankPanel').then((m) => ({ default: m.CarePanel })));
+
+const PANEL_TITLE: Record<OpenPanel, { label: string; title: string }> = {
+  feed: { label: 'Feed the fish', title: 'Feed' },
+  play: { label: 'Play with the fish', title: 'Play' },
+  decor: { label: 'Decorate the tank', title: 'Decorate' },
+  shop: { label: 'Fish shop', title: 'Fish shop' },
+  care: { label: 'Care', title: 'Care' },
+  tanks: { label: 'Your tank', title: 'Your tank' },
+  report: { label: 'Tank report', title: 'Tank report' },
+  account: { label: 'Account menu', title: 'Account' },
+};
 
 const LifeDialogsView = lazy(() => import('./LifeDialogs'));
 
@@ -204,33 +100,83 @@ function LifeDialogs({ onReview }: { onReview(): void }) {
   );
 }
 
+function PanelBody({
+  panel,
+  newTank,
+  food,
+  onFood,
+}: {
+  panel: OpenPanel;
+  newTank: ReturnType<typeof usePanels>['newTank'];
+  food: ReturnType<typeof useFood>[0];
+  onFood: ReturnType<typeof useFood>[1];
+}) {
+  switch (panel) {
+    case 'feed':
+      return <FeedPanel food={food} onFood={onFood} />;
+    case 'play':
+      return <PlayPanel />;
+    case 'decor':
+      return <DecorBody />;
+    case 'shop':
+      return <ShopPanel />;
+    case 'care':
+      return <CarePanel />;
+    case 'tanks':
+      return <TanksPanel key={newTank ?? 'default'} newTankBiome={newTank} />;
+    case 'report':
+      return <TankReportBody />;
+    case 'account':
+      return <AccountPanel />;
+  }
+}
+
+function isOpen(panel: Panel): panel is OpenPanel {
+  return panel !== 'none';
+}
+
 export function App() {
   useRedirect();
   const route = useRoute();
-  const modal = route.name !== 'home';
-  const { panel, dispatch } = usePanels();
-  const panelOpen = panel === 'tank';
-  const [newTankBiome, setNewTankBiome] = useState<Biome | null>(null);
-  const decorating = panel === 'decor';
+  const home = route.name === 'home';
+  const { panel, newTank, dispatch } = usePanels();
+  const [food, setFood] = useFood();
   const shell = useRef<HTMLDivElement>(null);
-  const bar = useRef<HTMLElement>(null);
+  const dock = useRef<HTMLDivElement>(null);
   const previous = useRef(route.name);
+
   useLayoutEffect(() => {
-    const target = bar.current;
+    const target = dock.current;
     const root = shell.current;
     if (!target || !root) return;
-    const publish = () => root.style.setProperty('--bar-h', `${target.offsetHeight}px`);
+    const publish = () => root.style.setProperty('--dock-h', `${target.offsetHeight}px`);
     publish();
     const observer = new ResizeObserver(publish);
     observer.observe(target);
     return () => observer.disconnect();
   }, []);
+
   useEffect(() => {
-    if (route.name === 'home' && previous.current !== 'home') {
-      document.getElementById('tank')?.focus();
-    }
+    if (home && previous.current !== 'home') document.getElementById('tank')?.focus();
     previous.current = route.name;
-  }, [route.name]);
+    dispatch({ type: 'route-changed', home });
+  }, [route.name, home, dispatch]);
+
+  const closable = panel !== 'none' && panel !== 'decor';
+  useEffect(() => {
+    if (!closable) return;
+    const canvas = document.getElementById('tank');
+    if (!canvas) return;
+    const close = () => dispatch({ type: 'close' });
+    canvas.addEventListener('pointerdown', close);
+    return () => canvas.removeEventListener('pointerdown', close);
+  }, [closable, dispatch]);
+
+  const toggle = (target: OpenPanel) => {
+    if (!home) navigate('/');
+    dispatch({ type: 'toggle', panel: target });
+  };
+
   return (
     <div className="shell" ref={shell}>
       <a
@@ -243,63 +189,50 @@ export function App() {
       >
         Skip to the tank
       </a>
-      <header className="bar" ref={bar}>
-        <Link to="/" className="brand">
-          Aquarium
-        </Link>
-        <TankTypeSwitch
-          onCreate={(biome) => {
-            setNewTankBiome(biome);
-            dispatch({ type: 'open-tank' });
-          }}
-        />
-        <CameraControls />
-        {decorating ? null : <PlayControls />}
-        <DecorToggle pressed={decorating} onToggle={() => dispatch({ type: 'toggle-decor' })} />
-        <button
-          type="button"
-          aria-expanded={panelOpen}
-          aria-controls="tank-panel"
-          onClick={() => {
-            setNewTankBiome(null);
-            dispatch({ type: 'toggle-tank' });
-          }}
-        >
-          My tank
-        </button>
-        <AccountMenu />
+      <header className="hud">
+        <div className="hud-left">
+          <StatusCard open={panel === 'report'} onPress={() => toggle('report')} />
+          <CameraControls />
+        </div>
+        <div className="hud-right">
+          <div className="hud-buttons">
+            <TankButton open={panel === 'tanks'} onPress={() => toggle('tanks')} />
+            <AvatarButton open={panel === 'account'} onPress={() => toggle('account')} />
+          </div>
+          <TankTypeSwitch onCreate={(biome) => dispatch({ type: 'new-tank', biome })} />
+        </div>
       </header>
-      <LifeStatus />
-      {panelOpen && (
-        <Suspense
-          fallback={
-            <p className="hint" role="status">
-              Opening your tank...
-            </p>
-          }
+      <div className="toasts">
+        <LifeStatus />
+        <FeedToast />
+      </div>
+      {isOpen(panel) && (
+        <Sheet
+          key={panel}
+          panel={panel}
+          label={PANEL_TITLE[panel].label}
+          title={PANEL_TITLE[panel].title}
+          closeLabel={panel === 'decor' ? 'Done' : 'Close'}
+          onClose={() => dispatch({ type: 'close' })}
         >
-          <TankPanel
-            key={newTankBiome ?? 'default'}
-            open
-            newTankBiome={newTankBiome}
-            onClose={() => dispatch({ type: 'close' })}
-          />
-        </Suspense>
+          <Suspense
+            fallback={
+              <p className="hint" role="status">
+                Opening.
+              </p>
+            }
+          >
+            <PanelBody panel={panel} newTank={newTank} food={food} onFood={setFood} />
+          </Suspense>
+        </Sheet>
       )}
-      <DecorEditor />
-      <LifeDialogs onReview={() => dispatch({ type: 'open-tank' })} />
-      <div className={modal ? 'stage modal' : 'stage'}>
+      <LifeDialogs onReview={() => dispatch({ type: 'open', panel: 'care' })} />
+      <div className={home ? 'stage' : 'stage modal'}>
         <Screen />
       </div>
-      <Suspense fallback={null}>
-        <TankReport />
-      </Suspense>
-      <footer className="legal-links">
-        <nav aria-label="Legal">
-          <Link to="/privacy">Privacy</Link>
-          <Link to="/credits">Credits</Link>
-        </nav>
-      </footer>
+      <div className="dock-wrap" ref={dock}>
+        <Dock panel={panel} onPress={toggle} />
+      </div>
     </div>
   );
 }

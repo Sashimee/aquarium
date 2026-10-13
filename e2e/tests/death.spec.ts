@@ -2,6 +2,8 @@ import { expect, test } from '@playwright/test';
 import {
   advanceServerClock,
   createFirstTank,
+  openDock,
+  openReport,
   openTank,
   registerVerifiedUser,
   savedTanks,
@@ -15,6 +17,7 @@ test('a fish that starves while you are away is reported, netted and remembered'
   await registerVerifiedUser(page, 'death');
   await openTank(page);
   await createFirstTank(page);
+  await openDock(page, 'Shop', 'Fish shop');
   await page.getByLabel('Name for the new fish').fill('Biscuit');
   await page.getByRole('button', { name: 'Add', exact: true }).first().click();
   await expect(page.getByRole('region', { name: 'Fish in bags' })).toContainText('Biscuit');
@@ -44,8 +47,5 @@ test('a fish that starves while you are away is reported, netted and remembered'
   expect(tank?.fish).toEqual([]);
   expect(tank?.memorials).toMatchObject([{ fishName: 'Biscuit' }]);
 
-  await page.getByRole('button', { name: 'Tank report' }).click();
-  await expect(page.getByRole('region', { name: 'Tank report' })).toContainText(
-    'No fish are alive in this tank.',
-  );
+  await expect(await openReport(page)).toContainText('No fish are alive in this tank.');
 });
