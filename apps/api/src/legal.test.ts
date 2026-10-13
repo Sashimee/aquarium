@@ -24,7 +24,7 @@ const cookieOf = (res: LightMyRequestResponse) =>
 
 async function account(h: Harness) {
   const email = `t20-${Date.now()}-${counter++}@bas.lu`;
-  await h.app.inject({
+  const signedUp = await h.app.inject({
     method: 'POST',
     url: '/api/auth/sign-up/email',
     headers: jsonHeaders,
@@ -34,7 +34,13 @@ async function account(h: Harness) {
   const link = /https?:\/\/\S+verify-email\?\S+/.exec(mail?.text ?? '')?.[0];
   if (!link) throw new Error('no verification link');
   const url = new URL(link);
-  const cookie = cookieOf(await h.app.inject(url.pathname + url.search));
+  const cookie = cookieOf(
+    await h.app.inject({
+      method: 'GET',
+      url: url.pathname + url.search,
+      headers: { cookie: cookieOf(signedUp) },
+    }),
+  );
   if (!cookie) throw new Error('verification did not sign in');
   const [user] = await h.database.db.select().from(schema.user).where(eq(schema.user.email, email));
   if (!user) throw new Error('user missing');

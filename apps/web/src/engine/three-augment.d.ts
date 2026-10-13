@@ -12,3 +12,10 @@ declare module 'three/src/lights/Light.js' {
     colorNode?: Node | null;
   }
 }
+
+declare module 'three/src/nodes/core/NodeBuilder.js' {
+  export default interface NodeBuilder {
+    /** True while a velocity attachment needs previous-frame positions (TRAA). */
+    needsPreviousData(): boolean;
+  }
+}

@@ -44,6 +44,18 @@ describe('QualityManager', () => {
     expect(quality.featureNames()).toEqual(['recorder']);
   });
 
+  it('does not keep a feature whose first application throws', () => {
+    const { quality } = setup();
+    const broken = new Error('shader build failed');
+    expect(() =>
+      quality.register('broken', () => {
+        throw broken;
+      }),
+    ).toThrow(broken);
+    expect(quality.featureNames()).toEqual(['recorder']);
+    expect(() => quality.register('broken', () => undefined)).not.toThrow();
+  });
+
   it('pins the tier without probing or adapting', () => {
     const { quality, announced, applied } = setup({ pinned: 'low', adaptive: false });
     quality.start(0);

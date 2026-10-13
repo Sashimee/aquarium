@@ -124,7 +124,12 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
       opts.authLimits ??
       (opts.limited
         ? DEFAULT_AUTH_RATE_LIMITS
-        : { signIn: GENEROUS, signUp: GENEROUS, sendVerification: GENEROUS }),
+        : {
+            signIn: GENEROUS,
+            signUp: GENEROUS,
+            sendVerification: GENEROUS,
+            passwordReset: GENEROUS,
+          }),
   });
   const clock = createClock();
   const app = buildApp({
