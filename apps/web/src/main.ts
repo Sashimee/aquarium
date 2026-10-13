@@ -2,7 +2,7 @@ import { Engine } from './engine/Engine';
 import { EventBus, type EngineEvents } from './engine/events';
 import { parseEngineOptions } from './engine/options';
 import { DEFAULT_TANK } from './engine/tank/dimensions';
-import { startDemoFish, type DemoFish } from './fish/start';
+import { startDemoFish } from './fish/start';
 import { CameraRig } from './interaction/camera';
 import { bindCameraControls } from './interaction/controls';
 import { SavedDecor } from './interaction/decor/binding';
@@ -102,14 +102,12 @@ async function boot(): Promise<void> {
   engine.onFrame((deltaS) => rig.update(deltaS));
 
   const biome = parseBiome(window.location.search);
-  const fish: DemoFish =
-    biome === 'freshwater'
-      ? startDemoFish(engine, DEFAULT_TANK, `${import.meta.env.BASE_URL}assets/`)
-      : { sim: { startle: () => undefined }, stop: () => undefined };
+  const fish = startDemoFish(engine, DEFAULT_TANK, biome, `${import.meta.env.BASE_URL}assets/`);
 
   let tankScene: TankScene | null = null;
   mountPresetWhenTierKnown(engine, biome, window.location.search, (scene) => {
     tankScene = scene;
+    fish.setAnchors(scene.anchors);
     play = createPlaySystem(engine, scene, interaction, fish.sim);
     decor = createDecorSystem(engine, scene, interaction, savedDecor);
     if (import.meta.env.DEV) Object.assign(window, { tankScene });

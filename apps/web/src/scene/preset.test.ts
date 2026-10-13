@@ -3,6 +3,7 @@ import { DEFAULT_TANK } from '../engine/tank/dimensions';
 import { substrateHeight } from '../engine/tank/substrate';
 import { loadPreset, parsePreset } from './preset';
 import catalog from '../../public/assets/index.json';
+import { generateEuphyllia, parseEuphylliaId } from './euphyllia';
 
 const kinds = new Map(catalog.assets.map((a) => [a.id, a.kind]));
 
@@ -66,16 +67,27 @@ describe('reef preset', () => {
   });
 
   it('references only shipped assets', () => {
-    for (const item of preset.decor) expect(kinds.has(item.assetId), item.assetId).toBe(true);
+    for (const item of preset.decor) {
+      expect(kinds.has(item.assetId) || parseEuphylliaId(item.assetId), item.assetId).toBeTruthy();
+    }
+  });
+
+  it('places a hammer and a torch Euphyllia colony', () => {
+    const variants = preset.decor.map((d) => parseEuphylliaId(d.assetId)?.variant);
+    expect(variants).toContain('hammer');
+    expect(variants).toContain('torch');
   });
 
   it('keeps every footprint, with room for the anemone to sway, inside the glass', () => {
     const halfL = DEFAULT_TANK.length / 2 - DEFAULT_TANK.glass;
     const halfD = DEFAULT_TANK.depth / 2 - DEFAULT_TANK.glass;
     for (const item of preset.decor) {
-      const bounds = entries.get(item.assetId)?.bounds;
+      const procedural = parseEuphylliaId(item.assetId);
+      const bounds = procedural
+        ? generateEuphyllia(procedural.variant, procedural.seed, 2).bounds
+        : entries.get(item.assetId)?.bounds;
       if (!bounds) throw new Error(`${item.assetId} has no bounds`);
-      const slack = kinds.get(item.assetId) === 'anemone' ? 0.05 : 0;
+      const slack = procedural || kinds.get(item.assetId) === 'anemone' ? 0.05 : 0;
       const [x0 = 0, , z0 = 0] = bounds.min;
       const [x1 = 0, , z1 = 0] = bounds.max;
       const cos = Math.cos(item.rotationY);
@@ -102,7 +114,7 @@ describe('reef preset', () => {
 
   it('seats rocks, corals and the anemone on the substrate', () => {
     for (const item of preset.decor) {
-      const kind = kinds.get(item.assetId);
+      const kind = parseEuphylliaId(item.assetId) ? 'coral' : kinds.get(item.assetId);
       if (kind !== 'rock' && kind !== 'coral' && kind !== 'anemone') continue;
       const ground = substrateHeight(DEFAULT_TANK, item.position[0], item.position[2]);
       if (item.assetId === 'coast-rocks-05' && item.position[1] > ground + 0.05) continue;
