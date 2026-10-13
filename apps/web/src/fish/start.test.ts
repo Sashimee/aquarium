@@ -108,7 +108,7 @@ describe('queueTankEvents', () => {
     const seen: string[] = [];
     queue.drain((event) => seen.push(event.type));
     expect(seen).toEqual(['tank:loaded', 'tank:fish-released']);
-    interaction.emit('tank:unloaded', { tankId: TANK_A });
+    interaction.emit('tank:unloaded', { tankId: TANK_A, reason: 'switch' });
     expect(seen).toEqual(['tank:loaded', 'tank:fish-released', 'tank:unloaded']);
     expect(() => queue.drain(() => undefined)).toThrow(/already drained/);
   });
@@ -116,9 +116,9 @@ describe('queueTankEvents', () => {
   it('stops listening and drops the buffer on stop', () => {
     const interaction = new EventBus<InteractionEvents>();
     const queue = queueTankEvents(interaction);
-    interaction.emit('tank:unloaded', { tankId: TANK_A });
+    interaction.emit('tank:unloaded', { tankId: TANK_A, reason: 'switch' });
     queue.stop();
-    interaction.emit('tank:unloaded', { tankId: TANK_A });
+    interaction.emit('tank:unloaded', { tankId: TANK_A, reason: 'switch' });
     const seen: string[] = [];
     queue.drain((event) => seen.push(event.type));
     expect(seen).toEqual([]);
@@ -173,13 +173,16 @@ describe('startFish', () => {
       fish: fishFixture(FISH_1, { status: 'dead' }),
     });
     interaction.emit('tank:fish-removed', { tankId: TANK_A, fishId: FISH_1, reason: 'netted' });
-    interaction.emit('tank:unloaded', { tankId: TANK_A });
+    interaction.emit('tank:unloaded', { tankId: TANK_A, reason: 'switch' });
     expect(fish.handled.map((e) => e.type).slice(3)).toEqual([
       'tank:fish-died',
       'tank:fish-removed',
       'tank:unloaded',
     ]);
-    expect(fish.handled[5]).toEqual({ type: 'tank:unloaded', payload: { tankId: TANK_A } });
+    expect(fish.handled[5]).toEqual({
+      type: 'tank:unloaded',
+      payload: { tankId: TANK_A, reason: 'switch' },
+    });
   });
 
   it('holds the scene anchors until the fish are up, ahead of the queued tank events', async () => {
@@ -237,18 +240,18 @@ describe('startFish', () => {
     handle.stop();
     await flush();
     expect(fish.disposed).toBe(true);
-    interaction.emit('tank:unloaded', { tankId: TANK_A });
+    interaction.emit('tank:unloaded', { tankId: TANK_A, reason: 'switch' });
     expect(fish.handled).toHaveLength(0);
   });
 
   it('reports a failed start once and drops the queued events', async () => {
     const pending = deferred<FakeFishSystem>();
     const { interaction, errors } = setup(pending.promise);
-    interaction.emit('tank:unloaded', { tankId: TANK_A });
+    interaction.emit('tank:unloaded', { tankId: TANK_A, reason: 'switch' });
     pending.reject(new Error('no WebGPU'));
     await flush();
     expect(errors).toEqual(['Fish failed to start']);
-    interaction.emit('tank:unloaded', { tankId: TANK_A });
+    interaction.emit('tank:unloaded', { tankId: TANK_A, reason: 'switch' });
   });
 
   it('reports nothing when stopped while still loading', async () => {

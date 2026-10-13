@@ -50,7 +50,7 @@ describe('TankRoster', () => {
   it('never reuses a sim id, even when the same fish loads again', () => {
     const roster = loaded();
     const first = simId(roster, FISH_1);
-    roster.unload({ tankId: TANK_A });
+    roster.unload({ tankId: TANK_A, reason: 'switch' });
     roster.load({ tankId: TANK_A, biome: 'freshwater', fish: [fishFixture(FISH_1)] });
     expect(simId(roster, FISH_1)).not.toBe(first);
     expect(roster.get(first)).toBeUndefined();
@@ -59,7 +59,7 @@ describe('TankRoster', () => {
   it('restores the demo stock on unload and leaves none of the tank behind', () => {
     const roster = loaded();
     const before = roster.revision;
-    expect(roster.unload({ tankId: TANK_A })).toBe(true);
+    expect(roster.unload({ tankId: TANK_A, reason: 'switch' })).toBe(true);
     expect(roster.revision).toBeGreaterThan(before);
     expect(roster.tankId).toBeNull();
     expect([...roster.entries()].map((f) => f.key)).toEqual(['neon-tetra-0', 'angelfish-0']);
@@ -70,10 +70,10 @@ describe('TankRoster', () => {
   it('ignores an unload for a tank that is not the loaded one', () => {
     const roster = loaded();
     const before = roster.revision;
-    expect(roster.unload({ tankId: TANK_B })).toBe(false);
+    expect(roster.unload({ tankId: TANK_B, reason: 'switch' })).toBe(false);
     expect(roster.revision).toBe(before);
     expect(roster.size).toBe(2);
-    expect(new TankRoster(DEMO).unload({ tankId: TANK_A })).toBe(false);
+    expect(new TankRoster(DEMO).unload({ tankId: TANK_A, reason: 'switch' })).toBe(false);
   });
 
   it('switching tanks keeps only the new tank, with no demo fish', () => {
@@ -86,7 +86,7 @@ describe('TankRoster', () => {
     expect([...roster.entries()].map((f) => f.serverId)).toEqual([FISH_3]);
     expect(roster.simIdOf(FISH_1)).toBeUndefined();
     expect(roster.biome).toBe('reef');
-    expect(roster.unload({ tankId: TANK_A })).toBe(false);
+    expect(roster.unload({ tankId: TANK_A, reason: 'switch' })).toBe(false);
     expect(roster.size).toBe(1);
   });
 

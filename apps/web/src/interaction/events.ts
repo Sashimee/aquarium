@@ -30,8 +30,12 @@ export interface InteractionEvents {
    * dead ones at the surface, and keeps the demo tank's fish out while this one is active.
    */
   'tank:loaded': { tankId: string; biome: 'freshwater' | 'reef'; fish: readonly Fish[] };
-  /** The active saved tank went away (switch or sign-out); drop its fish. */
-  'tank:unloaded': { tankId: string };
+  /**
+   * The active saved tank went away; drop its fish. `switch` means another saved tank is on its
+   * way (a switch, a new tank or a reload); `reset` means signed out or unverified, so the demo
+   * tank shows.
+   */
+  'tank:unloaded': { tankId: string; reason: 'switch' | 'reset' };
   /** A fish joined. `acclimate` means it starts in a floating bag until `tank:fish-released`. */
   'tank:fish-added': { tankId: string; fish: Fish; acclimate: boolean };
   'tank:fish-released': { tankId: string; fishId: string };

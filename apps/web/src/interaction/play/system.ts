@@ -34,6 +34,8 @@ export function createPlaySystem(
   scene: PlayScene,
   interaction: EventBus<InteractionEvents>,
   sim: PlaySimBridge = {},
+  // Passed in so the feed cooldown survives the play system being rebuilt with a new scene.
+  gate: FeedGate = new FeedGate(),
 ): PlaySystem {
   const box = waterBounds(engine.tank.dimensions);
   const food = new FoodField({
@@ -76,7 +78,7 @@ export function createPlaySystem(
     link,
     bubbles,
     ripples,
-    gate: new FeedGate(),
+    gate,
     events: interaction,
     startle: sim.startle?.bind(sim),
     netTap: sim.netTap?.bind(sim),

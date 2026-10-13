@@ -8,9 +8,11 @@ import { bindCameraControls } from './interaction/controls';
 import type { InteractionEvents } from './interaction/events';
 import { onPageTeardown } from './interaction/pageLifecycle';
 import { watchReducedMotion } from './interaction/motion';
+import { PlayChoices } from './interaction/play/choices';
 import { createPlaySystem, type PlaySystem } from './interaction/play/system';
 import { mountBiomeScene, parseBiome, TankBiome } from './scene';
 import { mountUi } from './ui/mount';
+import { FeedGate } from './sync/feedGate';
 
 function showFatal(container: HTMLElement, message: string): void {
   const box = document.createElement('pre');
@@ -39,6 +41,7 @@ async function boot(): Promise<void> {
 
   const tankEvents = queueTankEvents(interaction);
   const tankBiome = new TankBiome(interaction, parseBiome(window.location.search));
+  const playChoices = new PlayChoices(interaction);
   mountUi(uiRoot, { engine: events, interaction });
 
   let engine: Engine;
@@ -50,6 +53,7 @@ async function boot(): Promise<void> {
   } catch (cause) {
     tankEvents.stop();
     tankBiome.stop();
+    playChoices.stop();
     showFatal(container, cause instanceof Error ? cause.message : String(cause));
     return;
   }
@@ -101,10 +105,12 @@ async function boot(): Promise<void> {
     tankEvents,
   });
 
+  const feedGate = new FeedGate();
   const scenes = mountBiomeScene(engine, tankBiome, window.location.search, {
     mounted(scene) {
       fish.setAnchors(scene.anchors);
-      play = createPlaySystem(engine, scene, interaction, fish.sim);
+      play = createPlaySystem(engine, scene, interaction, fish.sim, feedGate);
+      playChoices.applyTo(play.controller);
       if (import.meta.env.DEV) Object.assign(window, { tankScene: scene });
     },
     unmounting() {
@@ -117,6 +123,7 @@ async function boot(): Promise<void> {
   onPageTeardown(window, () => {
     scenes.dispose().catch((cause: unknown) => console.error('Scene dispose failed', cause));
     tankBiome.stop();
+    playChoices.stop();
     stopMotionWatch();
     unbindControls();
     stopRequests();

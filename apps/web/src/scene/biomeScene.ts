@@ -3,12 +3,15 @@ import type { EventBus } from '../engine/events';
 import type { InteractionEvents } from '../interaction/events';
 
 /**
- * The biome the scene should show: the loaded saved tank's, or `fallback` (from `?biome=`) while
- * none is loaded. Create it before the UI mounts, since the bus drops events nobody listens to and
- * the session can load a tank before the engine is up.
+ * The biome the scene should show: the loaded saved tank's, or `fallback` (from `?biome=`) once
+ * the session resets to the demo tank. A tank unloaded for a switch keeps its biome until the next
+ * one loads, because the session awaits the old tank's report flush in between and falling back
+ * there would build the fallback preset only to tear it down again. Create it before the UI
+ * mounts, since the bus drops events nobody listens to and the session can load a tank before the
+ * engine is up.
  */
 export class TankBiome implements BiomeSource {
-  private loaded: { readonly tankId: string; readonly biome: Biome } | null = null;
+  private loaded: { readonly tankId: string | null; readonly biome: Biome } | null = null;
   private readonly listeners = new Set<(biome: Biome) => void>();
   private readonly unsubscribe: (() => void)[];
 
@@ -21,8 +24,12 @@ export class TankBiome implements BiomeSource {
         this.loaded = { tankId, biome };
         this.notify();
       }),
-      interaction.on('tank:unloaded', ({ tankId }) => {
-        if (this.loaded?.tankId !== tankId) return;
+      interaction.on('tank:unloaded', ({ tankId, reason }) => {
+        if (this.loaded === null || this.loaded.tankId !== tankId) return;
+        if (reason === 'switch') {
+          this.loaded = { tankId: null, biome: this.loaded.biome };
+          return;
+        }
         this.loaded = null;
         this.notify();
       }),
@@ -136,7 +143,15 @@ export class BiomeScene<S extends DisposableScene> {
         continue;
       }
       this.shown = scene;
-      this.options.mounted(scene);
+      this.hook('mounted', scene);
+    }
+  }
+
+  private hook(name: 'mounted' | 'unmounting', scene: S): void {
+    try {
+      this.options[name](scene);
+    } catch (cause) {
+      this.options.onError(`Scene ${name} hook failed`, cause);
     }
   }
 
@@ -167,7 +182,7 @@ export class BiomeScene<S extends DisposableScene> {
     const scene = this.shown;
     if (scene === null) return;
     this.shown = null;
-    this.options.unmounting(scene);
+    this.hook('unmounting', scene);
     await this.release(scene);
   }
 

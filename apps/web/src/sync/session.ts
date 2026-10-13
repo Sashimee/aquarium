@@ -85,7 +85,7 @@ export class TankSession {
   async load(): Promise<void> {
     const id = ++this.loadId;
     this.switchId++;
-    this.unloadScene()?.dispose();
+    this.unloadScene('switch')?.dispose();
     this.patch({
       phase: 'loading',
       tanks: [],
@@ -263,7 +263,7 @@ export class TankSession {
   private async reset(phase: 'anonymous' | 'unverified'): Promise<void> {
     this.loadId++;
     this.switchId++;
-    this.unloadScene()?.dispose();
+    this.unloadScene('reset')?.dispose();
     for (const timer of this.releaseTimers.values()) clearTimeout(timer);
     this.releaseTimers.clear();
     this.state = { ...INITIAL_STATE, phase };
@@ -273,7 +273,7 @@ export class TankSession {
   private activate(tankId: string): void {
     const tank = this.state.tanks.find((t) => t.id === tankId);
     if (!tank) return;
-    this.unloadScene()?.dispose();
+    this.unloadScene('switch')?.dispose();
     const gen = this.loadId;
     this.loadedId = tankId;
     this.uploader = new AteUploader({
@@ -298,7 +298,7 @@ export class TankSession {
 
   /** Unloads synchronously, so overlapping switches unload once; only the report flush is awaited. */
   private async leaveActive(): Promise<void> {
-    const uploader = this.unloadScene();
+    const uploader = this.unloadScene('switch');
     if (!uploader) return;
     const finished = await this.flushBounded(uploader);
     uploader.dispose();
@@ -309,14 +309,14 @@ export class TankSession {
     }
   }
 
-  private unloadScene(): AteUploader | null {
+  private unloadScene(reason: InteractionEvents['tank:unloaded']['reason']): AteUploader | null {
     const tankId = this.loadedId;
     const uploader = this.uploader;
     this.loadedId = null;
     this.uploader = null;
     for (const bag of this.state.bagged) this.cancelRelease(bag.fishId);
     this.patch({ bagged: [] });
-    if (tankId) this.deps.interaction.emit('tank:unloaded', { tankId });
+    if (tankId) this.deps.interaction.emit('tank:unloaded', { tankId, reason });
     return uploader;
   }
 
