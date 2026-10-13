@@ -19,10 +19,10 @@ import {
   type CurrentParameters,
 } from './current';
 import type { LoadedModel } from './assets';
-import type { PlantInstance } from './placement';
+import { MAX_TILT_RAD, type PlantInstance } from './placement';
 
 /** Seconds of current a leaf tip leans into; the bend grows with the square of the height. */
-const SWAY_SECONDS = 1.2;
+export const SWAY_SECONDS = 1.2;
 const FLUTTER_METRES = 0.004;
 
 /** How much each species yields to the current: carpets and ferns hold still, ribbons stream. */
@@ -35,6 +35,25 @@ const STIFFNESS: Readonly<Record<string, number>> = {
   'java-fern': 0.45,
   'staurogyne-repens': 0.35,
 };
+
+/** Gap kept between the tallest leaf tip and the water surface, which ripples. */
+export const SURFACE_MARGIN = 0.03;
+
+/**
+ * Largest scale at which a plant rooted at `rootY` keeps its highest leaf `SURFACE_MARGIN` under
+ * `waterTop`. The shader leans plants sideways only, but a tilted root turns part of that lean
+ * upwards, so the tallest point is the height plus the lean projected through the maximum tilt.
+ */
+export function surfaceScaleCeiling(
+  waterTop: number,
+  assetId: string,
+  height: number,
+  current: CurrentParameters,
+): (rootY: number) => number {
+  const reachUp =
+    Math.max(height, 1e-3) + maxSway(assetId, height, current) * Math.sin(MAX_TILT_RAD);
+  return (rootY) => Math.max(0, (waterTop - SURFACE_MARGIN - rootY) / reachUp);
+}
 
 export interface PlantEntry extends PlantInstance {
   /** Position in the patch's thinning order, 0 first to 1 last; layout plants use -1. */
