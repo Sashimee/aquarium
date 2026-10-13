@@ -230,7 +230,7 @@ describe('World containment', { timeout: LONG }, () => {
     expect(turned).toBeLessThan(2 * Math.PI);
   });
 
-  it('backs a fish out of a closing wedge soon after it noses in, and keeps it out', () => {
+  it('backs a fish out of a closing wedge soon after it noses in, and it swims clear', () => {
     const w = wedgeTank();
     const length = at(w.bodyLength, 0);
     const watch = backOutWatch(w);
@@ -246,7 +246,8 @@ describe('World containment', { timeout: LONG }, () => {
     const first = watch.starts[0];
     if (first === undefined) throw new Error('the tang never backed out of the wedge');
     expect((first.t - firstContact) * STEP_DT).toBeLessThan(2);
-    // Remembering the dead end, it does not nose back into the same wedge while the memory lasts.
+    // The dead-end memory itself is tested on the reef cave (behaviour.test.ts), where a goal
+    // beyond the rock pulls the fish back in; this tang has no such pull.
     const again = watch.starts
       .slice(1)
       .filter((b) => Math.hypot(b.x - first.x, b.z - first.z) < length);
