@@ -175,6 +175,50 @@ export const ENVIRONMENT_RECIPES: EnvironmentRecipe[] = [
     modifications: ['museum plinth cropped off'],
   },
   {
+    id: 'reef-arch',
+    kind: 'rock',
+    sourceId: 'sketchfab-4db2b936',
+    longestM: 0.3,
+    maxTriangles: 7000,
+    material: { roughness: 0.92 },
+    tint: {
+      ramps: [
+        { dark: [58, 36, 62], mid: [128, 84, 128], light: [198, 152, 178] },
+        { dark: [78, 46, 50], mid: [158, 102, 104], light: [216, 172, 150] },
+      ],
+      mottleCells: 380,
+      seed: 11,
+    },
+    pores: { cell: 44, strength: 3.2, darken: 0.4, seed: 5 },
+    modifications: [
+      'recoloured by luminance to coralline purple and pink live-rock tones, with mottled patches',
+      'procedural pore detail added to the normal map and darkened into the colour map; textures upscaled from 1024 px to 2048 px before the pores were added',
+      'metallicRoughness map dropped',
+    ],
+  },
+  {
+    id: 'acropora-cytherea',
+    kind: 'coral',
+    sourceId: 'sketchfab-9ff5270c',
+    longestM: 0.34,
+    maxTriangles: 25000,
+    clipBelowFraction: 0.21,
+    material: { roughness: 0.75 },
+    tint: {
+      ramps: [
+        { dark: [64, 42, 26], mid: [146, 104, 62], light: [214, 176, 122] },
+        { dark: [58, 54, 30], mid: [130, 118, 64], light: [196, 184, 122] },
+      ],
+      mottleCells: 300,
+      seed: 23,
+    },
+    modifications: [
+      'museum plinth cropped off',
+      'bleached skeleton recoloured by luminance to live tan, brown and olive tones',
+      'baked metallicRoughness map dropped',
+    ],
+  },
+  {
     id: 'blue-sea-anemone',
     kind: 'coral',
     sourceId: 'sketchfab-f2542a86',
@@ -243,6 +287,16 @@ export const SUBSTRATE_RECIPES: SubstrateRecipe[] = [
   { id: 'clean-pebbles', sourceId: 'polyhaven-clean_pebbles', prefix: 'clean_pebbles' },
   { id: 'coast-sand-01', sourceId: 'polyhaven-coast_sand_01', prefix: 'coast_sand_01' },
   { id: 'coast-sand-04', sourceId: 'polyhaven-coast_sand_04', prefix: 'coast_sand_04' },
+  {
+    id: 'reef-sand',
+    sourceId: 'ambientcg-Ground101',
+    files: {
+      diff: 'Ground101_2K-JPG_Color.jpg',
+      normal: 'Ground101_2K-JPG_NormalGL.jpg',
+      occlusion: 'Ground101_2K-JPG_AmbientOcclusion.jpg',
+      roughness: 'Ground101_2K-JPG_Roughness.jpg',
+    },
+  },
 ];
 
 export const HDRI_RECIPES: HdriRecipe[] = [

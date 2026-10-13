@@ -1,5 +1,5 @@
 import type { DecorCollider } from '../src/decor.ts';
-import { benchmarkConfig, REEF_DECOR } from '../src/fixtures.ts';
+import { benchmarkConfig, FoodRain, REEF_DECOR, REEF_TANK } from '../src/fixtures.ts';
 import { World } from '../src/world.ts';
 
 const WARMUP_STEPS = 300;
@@ -45,6 +45,35 @@ for (let i = 0; i < dragSteps; i++) {
 }
 const dragMean = (performance.now() - dragStart) / dragSteps;
 
+// A feeding frenzy: a few hundred particles in the water while every fish hunts. Only the sim's
+// share is timed (taking the food buffer and stepping), not the test harness moving the food.
+const fed = new World(benchmarkConfig(10));
+const rain = new FoodRain(REEF_TANK);
+const feedSteps = 3000;
+let feedMs = 0;
+let particleSteps = 0;
+const timedWorld = {
+  substrateSdf: fed.substrateSdf,
+  setFood(buffer: Float32Array): void {
+    const t0 = performance.now();
+    fed.setFood(buffer);
+    feedMs += performance.now() - t0;
+    particleSteps += buffer.length / 5;
+  },
+};
+for (let i = 0; i < feedSteps; i++) {
+  if (rain.count < 200) {
+    rain.sprinkle('flakes', 240, 0.4 * Math.sin(i), 0.1 * Math.cos(i), 0.5, 3);
+    rain.sprinkle('pellets', 60, -0.3, 0, 0.3);
+  }
+  rain.feed(timedWorld);
+  const t0 = performance.now();
+  fed.step();
+  feedMs += performance.now() - t0;
+  rain.eat(fed.takeAteEvents());
+}
+const feedMean = feedMs / feedSteps;
+
 samples.sort((a, b) => a - b);
 const mean = means.reduce((a, b) => a + b, 0) / means.length;
 console.log(
@@ -60,5 +89,7 @@ console.log(
     throttled4xP99EstimateMs: Number((THROTTLE * percentile(samples, 0.99)).toFixed(4)),
     throttledBudgetMs: THROTTLED_BUDGET_MS,
     draggingDecorMeanMsPerStep: Number(dragMean.toFixed(4)),
+    feedingMeanParticles: Math.round(particleSteps / feedSteps),
+    feedingMeanMsPerStep: Number(feedMean.toFixed(4)),
   }),
 );

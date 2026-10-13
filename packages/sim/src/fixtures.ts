@@ -1,5 +1,7 @@
 import type { Anchor } from './behaviour.ts';
 import type { DecorCollider } from './decor.ts';
+import { FOOD_PARTICLES, FOOD_STRIDE, FOOD_TYPES, type AteEvent } from './food.ts';
+import type { Sdf, TankDimensions } from './sdf.ts';
 import type { SpeciesInput } from './species.ts';
 import type { FishSpawn, WorldConfig } from './world.ts';
 
@@ -31,6 +33,7 @@ export const neonTetra: SpeciesInput = {
     strouhal: 0.3,
     bodyLengthM: 0.035,
   },
+  lifecycle: { diet: ['flakes', 'pellets', 'bloodworms'] },
 };
 
 export const angelfish: SpeciesInput = {
@@ -56,6 +59,7 @@ export const angelfish: SpeciesInput = {
     strouhal: 0.3,
     bodyLengthM: 0.12,
   },
+  lifecycle: { diet: ['flakes', 'pellets', 'bloodworms'] },
 };
 
 export const blueTang: SpeciesInput = {
@@ -81,6 +85,7 @@ export const blueTang: SpeciesInput = {
     strouhal: 0.3,
     bodyLengthM: 0.2,
   },
+  lifecycle: { diet: ['nori', 'algae-wafer', 'flakes'] },
 };
 
 export const bronzeCorydoras: SpeciesInput = {
@@ -107,6 +112,7 @@ export const bronzeCorydoras: SpeciesInput = {
     strouhal: 0.3,
     bodyLengthM: 0.06,
   },
+  lifecycle: { diet: ['pellets', 'algae-wafer', 'bloodworms'] },
 };
 
 export const betta: SpeciesInput = {
@@ -132,6 +138,7 @@ export const betta: SpeciesInput = {
     strouhal: 0.3,
     bodyLengthM: 0.06,
   },
+  lifecycle: { diet: ['pellets', 'bloodworms', 'flakes'] },
 };
 
 export const yellowTang: SpeciesInput = {
@@ -157,6 +164,7 @@ export const yellowTang: SpeciesInput = {
     strouhal: 0.3,
     bodyLengthM: 0.15,
   },
+  lifecycle: { diet: ['nori', 'algae-wafer', 'flakes'] },
 };
 
 export const clownfish: SpeciesInput = {
@@ -182,6 +190,7 @@ export const clownfish: SpeciesInput = {
     strouhal: 0.3,
     bodyLengthM: 0.08,
   },
+  lifecycle: { diet: ['flakes', 'pellets', 'brine-shrimp'] },
 };
 
 export const royalGramma: SpeciesInput = {
@@ -207,6 +216,7 @@ export const royalGramma: SpeciesInput = {
     strouhal: 0.3,
     bodyLengthM: 0.07,
   },
+  lifecycle: { diet: ['flakes', 'brine-shrimp', 'pellets'] },
 };
 
 /** Not in the shipped roster: the glass-grazer archetype (Otocinclus). */
@@ -234,6 +244,7 @@ export const otocinclus: SpeciesInput = {
     strouhal: 0.3,
     bodyLengthM: 0.04,
   },
+  lifecycle: { diet: ['algae-wafer', 'nori'] },
 };
 
 export const ARCHETYPES: readonly SpeciesInput[] = [
@@ -354,4 +365,110 @@ export function benchmarkConfig(seed: number): WorldConfig {
       ...spawnMany('betta', 1),
     ],
   };
+}
+
+type FoodName = (typeof FOOD_TYPES)[number];
+
+interface Particle {
+  readonly id: number;
+  readonly type: FoodName;
+  x: number;
+  y: number;
+  z: number;
+  floatS: number;
+  readonly sinkMps: number;
+  left: number;
+}
+
+const REST_M = 0.004;
+
+const SINK_MPS: Readonly<Record<FoodName, number>> = {
+  flakes: 0.01,
+  pellets: 0.03,
+  bloodworms: 0.02,
+  'brine-shrimp': 0.005,
+  nori: 0,
+  'algae-wafer': 0.04,
+};
+
+/**
+ * A stand-in for gameplay's food physics in tests and the benchmark: flakes float a while, food
+ * sinks to the sand at a per-type speed, nori stays clipped where it was put, and a particle
+ * vanishes once fish have eaten all of it.
+ */
+export class FoodRain {
+  private readonly tank: TankDimensions;
+  private readonly particles: Particle[] = [];
+  private nextId = 1;
+  private readonly normal = new Float64Array(3);
+  eaten = 0;
+
+  constructor(tank: TankDimensions) {
+    this.tank = tank;
+  }
+
+  get count(): number {
+    return this.particles.length;
+  }
+
+  /** Places one particle and returns its id. */
+  place(
+    type: FoodName,
+    x: number,
+    y: number,
+    z: number,
+    floatS = 0,
+    sinkMps = SINK_MPS[type],
+  ): number {
+    const id = this.nextId++;
+    this.particles.push({ id, type, x, y, z, floatS, sinkMps, left: FOOD_PARTICLES[type].portion });
+    return id;
+  }
+
+  /** Scatters `count` particles on a sunflower spiral of `radius` at the surface around (x, z). */
+  sprinkle(type: FoodName, count: number, x: number, z: number, radius: number, floatS = 0): void {
+    const { width, height, depth } = this.tank;
+    for (let k = 0; k < count; k++) {
+      const r = radius * Math.sqrt((k + 0.5) / count);
+      const a = k * 2.399963;
+      const px = Math.max(-width / 2, Math.min(width / 2, x + r * Math.cos(a)));
+      const pz = Math.max(-depth / 2, Math.min(depth / 2, z + r * Math.sin(a)));
+      this.place(type, px, height, pz, floatS * (1 + (k % 5) / 5));
+    }
+  }
+
+  position(id: number): [number, number, number] | null {
+    const p = this.particles.find((q) => q.id === id);
+    return p === undefined ? null : [p.x, p.y, p.z];
+  }
+
+  /** Advances the particles one step and hands them to the world; food settles on sand or rock. */
+  feed(
+    world: { setFood(buffer: Float32Array): void; readonly substrateSdf: Sdf },
+    dt = 1 / 30,
+  ): void {
+    const buffer = new Float32Array(this.particles.length * FOOD_STRIDE);
+    this.particles.forEach((p, k) => {
+      if (p.floatS > 0) p.floatS -= dt;
+      else if (world.substrateSdf.sample(p.x, p.y - p.sinkMps * dt, p.z, this.normal) > REST_M) {
+        p.y -= p.sinkMps * dt;
+      }
+      buffer.set([p.id, p.x, p.y, p.z, FOOD_TYPES.indexOf(p.type)], k * FOOD_STRIDE);
+    });
+    world.setFood(buffer);
+  }
+
+  /** Takes eaten portions off their particles and removes the finished ones. */
+  eat(events: readonly AteEvent[]): void {
+    for (const e of events) {
+      const p = this.particles.find((q) => q.id === e.foodId);
+      if (p === undefined) throw new Error(`fish ${e.fishId} ate food ${e.foodId}, which is gone`);
+      p.left -= e.portion;
+      this.eaten += e.portion;
+      if (p.left < -1e-9) throw new Error(`food ${e.foodId} was eaten past its portion`);
+    }
+    for (let k = this.particles.length - 1; k >= 0; k--) {
+      if ((this.particles[k]?.left ?? 0) <= 1e-9) this.particles.splice(k, 1);
+    }
+  }
 }
