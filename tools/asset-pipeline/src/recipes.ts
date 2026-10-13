@@ -319,16 +319,13 @@ export const HDRI_RECIPES: HdriRecipe[] = [
     id: 'kloofendal-48d-partly-cloudy-puresky',
     sourceId: 'polyhaven-kloofendal_48d_partly_cloudy_puresky',
     file: 'kloofendal_48d_partly_cloudy_puresky_2k.hdr',
+    output: 'kloofendal_48d_partly_cloudy_puresky_2k.ktx2',
   },
   {
     id: 'studio-small-09',
     sourceId: 'polyhaven-studio_small_09',
     file: 'studio_small_09_2k.hdr',
-    derived: {
-      file: 'studio_small_09_1k.hdr',
-      halvings: 1,
-      label:
-        'downsampled 2k to 1k with a 2x2 box filter in linear light and re-encoded as RLE Radiance .hdr',
-    },
+    output: 'studio_small_09_1k.ktx2',
+    halvings: 1,
   },
 ];

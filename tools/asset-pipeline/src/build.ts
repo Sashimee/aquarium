@@ -60,7 +60,7 @@ function tasks(): Task[] {
     ...HDRI_RECIPES.map((recipe) => ({
       kind: 'hdri' as const,
       id: recipe.id,
-      run: (ctx: FishContext) => Promise.resolve(buildHdri(recipe, ctx)),
+      run: (ctx: FishContext) => buildHdri(recipe, ctx),
     })),
     ...LOFT_FISH_RECIPES.map((recipe) => ({
       kind: 'fish' as const,

@@ -167,10 +167,14 @@ describe('checkAssets', () => {
     return { file: relative, bytes: bytes.byteLength, sha256: sha256(bytes) };
   }
 
-  function glb(attributes: string[]): Uint8Array {
+  function glb(attributes: string[], imageUris: string[] = []): Uint8Array {
     const attrs = Object.fromEntries(attributes.map((name, i) => [name, i]));
     return packGlb(
-      { asset: { version: '2.0' }, meshes: [{ primitives: [{ attributes: attrs }] }] },
+      {
+        asset: { version: '2.0' },
+        meshes: [{ primitives: [{ attributes: attrs }] }],
+        ...(imageUris.length > 0 ? { images: imageUris.map((uri) => ({ uri })) } : {}),
+      },
       new Uint8Array(4),
     );
   }
@@ -333,6 +337,67 @@ describe('checkAssets', () => {
       index: { ...input.index, assets: [{ ...asset, files: [...asset.files, filler] }] },
     });
     expect(problems.join('\n')).toContain('exceeds the 150 MB budget');
+  });
+
+  it('fails a GLB that references a texture the asset does not list', () => {
+    const asset = fishAsset();
+    const lod0 = asset.lods[0];
+    if (!lod0) throw new Error('fixture has no LOD');
+    const stray = put(
+      'fish/tetra/lod0.glb',
+      glb(['POSITION', FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE], ['textures/ghost_1k.ktx2']),
+    );
+    const problems = checkAssets(
+      inputFor([
+        {
+          ...asset,
+          lods: [{ ...lod0, ...stray }, ...asset.lods.slice(1)],
+          files: [stray, ...asset.files.slice(1)],
+        },
+      ]),
+    );
+    expect(problems.join('\n')).toContain('references textures/ghost_1k.ktx2');
+  });
+
+  it('accepts a GLB whose texture uris are all listed', () => {
+    const asset = fishAsset();
+    const lod0 = asset.lods[0];
+    if (!lod0) throw new Error('fixture has no LOD');
+    const attributes = ['POSITION', FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE];
+    const texture = put('fish/tetra/textures/skin_1k.ktx2', 'ktx');
+    const withImage = put('fish/tetra/lod0.glb', glb(attributes, ['textures/skin_1k.ktx2']));
+    const input = inputFor([
+      {
+        ...asset,
+        lods: [{ ...lod0, ...withImage }, ...asset.lods.slice(1)],
+        files: [withImage, ...asset.files.slice(1), texture],
+      },
+    ]);
+    expect(checkAssets(input)).toEqual([]);
+  });
+
+  it('matches percent-encoded texture uris against the listed files', () => {
+    const asset = fishAsset();
+    const lod0 = asset.lods[0];
+    if (!lod0) throw new Error('fixture has no LOD');
+    const attributes = ['POSITION', FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE];
+    const texture = put('fish/tetra/textures/my skin_1k.ktx2', 'ktx');
+    const withImage = put('fish/tetra/lod0.glb', glb(attributes, ['textures/my%20skin_1k.ktx2']));
+    const input = inputFor([
+      {
+        ...asset,
+        lods: [{ ...lod0, ...withImage }, ...asset.lods.slice(1)],
+        files: [withImage, ...asset.files.slice(1), texture],
+      },
+    ]);
+    expect(checkAssets(input)).toEqual([]);
+  });
+
+  it('fails a shipped file that is neither GLB nor KTX2', () => {
+    const asset = fishAsset();
+    const raw = put('fish/tetra/env.hdr', 'RADIANCE');
+    const problems = checkAssets(inputFor([{ ...asset, files: [...asset.files, raw] }]));
+    expect(problems.join('\n')).toContain('env.hdr is not a .glb or .ktx2 file');
   });
 
   it('fails a fish without a fin mask attribute', () => {
