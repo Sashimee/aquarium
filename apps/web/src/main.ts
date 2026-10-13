@@ -2,14 +2,14 @@ import { Engine } from './engine/Engine';
 import { EventBus, type EngineEvents } from './engine/events';
 import { parseEngineOptions } from './engine/options';
 import { DEFAULT_TANK } from './engine/tank/dimensions';
-import { startDemoFish } from './fish/start';
+import { startDemoFish, type DemoFish } from './fish/start';
 import { CameraRig } from './interaction/camera';
 import { bindCameraControls } from './interaction/controls';
 import type { InteractionEvents } from './interaction/events';
 import { onPageTeardown } from './interaction/pageLifecycle';
 import { watchReducedMotion } from './interaction/motion';
 import { createPlaySystem, type PlaySystem } from './interaction/play/system';
-import { mountPresetWhenTierKnown, type TankScene } from './scene';
+import { mountPresetWhenTierKnown, parseBiome, type TankScene } from './scene';
 import { mountUi } from './ui/mount';
 
 function showFatal(container: HTMLElement, message: string): void {
@@ -89,10 +89,14 @@ async function boot(): Promise<void> {
   });
   engine.onFrame((deltaS) => rig.update(deltaS));
 
-  const fish = startDemoFish(engine, DEFAULT_TANK, `${import.meta.env.BASE_URL}assets/`);
+  const biome = parseBiome(window.location.search);
+  const fish: DemoFish =
+    biome === 'freshwater'
+      ? startDemoFish(engine, DEFAULT_TANK, `${import.meta.env.BASE_URL}assets/`)
+      : { sim: { startle: () => undefined }, stop: () => undefined };
 
   let tankScene: TankScene | null = null;
-  mountPresetWhenTierKnown(engine, 'freshwater', window.location.search, (scene) => {
+  mountPresetWhenTierKnown(engine, biome, window.location.search, (scene) => {
     tankScene = scene;
     play = createPlaySystem(engine, scene, interaction, fish.sim);
     if (import.meta.env.DEV) Object.assign(window, { tankScene });

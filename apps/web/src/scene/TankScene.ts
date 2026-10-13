@@ -3,10 +3,18 @@ import type { DecorItem, PlantPatch, PresetLayout } from '@aquarium/shared';
 import type { Engine } from '../engine/Engine';
 import type { Tier, TierSettings } from '../engine/quality/tiers';
 import { substrateHeight } from '../engine/tank/substrate';
-import { AssetCatalog, ModelLibrary, type ModelLod } from './assets';
+import { AssetCatalog, ModelLibrary, type CatalogEntry, type ModelLod } from './assets';
+import {
+  AnemoneGroup,
+  anemoneAnchor,
+  anemoneCollider,
+  anemoneReach,
+  type SceneAnchor,
+} from './anemone';
 import { ColliderField, type CapsuleCollider, type Collider } from './colliders';
 import { CurrentField, type CurrentParameters } from './current';
 import { fitCollider, Hardscape, HARDSCAPE_KINDS } from './hardscape';
+import { applyBiomeLighting } from './lighting';
 import type { SceneOptions } from './options';
 import { ColliderOverlay } from './overlay';
 import { MAX_TILT_RAD as MAX_PLANT_TILT, scatterPatch, type Extent } from './placement';
@@ -67,6 +75,7 @@ export class TankScene {
   readonly colliders: ColliderField;
 
   private hardscape: Hardscape | null = null;
+  private anemones: AnemoneGroup[] = [];
   private plantGroups: PlantGroup[] = [];
   private installedKey: VisualKey | null = null;
   private readonly queue: RebuildQueue<VisualKey>;
@@ -82,6 +91,8 @@ export class TankScene {
     private readonly colliderData: readonly Collider[],
     private readonly plantEntries: ReadonlyMap<string, PlantEntry[]>,
     private readonly hardItems: readonly { item: DecorItem; kind: string }[],
+    private readonly anemoneItems: readonly DecorItem[],
+    private readonly anchorData: readonly SceneAnchor[],
     options: SceneOptions,
   ) {
     this.queue = new RebuildQueue(
@@ -129,10 +140,12 @@ export class TankScene {
 
     const hardItems: { item: DecorItem; kind: string }[] = [];
     const layoutPlants: DecorItem[] = [];
+    const anemoneItems: DecorItem[] = [];
     for (const item of preset.decor) {
       const kind = catalog.get(item.assetId).kind;
       if (HARDSCAPE_KINDS.has(kind)) hardItems.push({ item, kind });
       else if (kind === 'plant') layoutPlants.push(item);
+      else if (kind === 'anemone') anemoneItems.push(item);
       else throw new Error(`Preset item "${item.assetId}" is a ${kind}, which a tank cannot hold`);
     }
     for (const patch of preset.plantPatches) {
@@ -213,6 +226,14 @@ export class TankScene {
       }
     }
 
+    const anchors: SceneAnchor[] = [];
+    anemoneItems.forEach((item, i) => {
+      const entry = catalog.get(item.assetId);
+      checkClearOfGlass(entry, item, preset.current ?? DEFAULT_CURRENT, extent);
+      colliders.push(anemoneCollider(entry, item));
+      anchors.push(anemoneAnchor(`anemone-${i + 1}`, entry, item));
+    });
+
     const scene = new TankScene(
       engine,
       library,
@@ -220,6 +241,8 @@ export class TankScene {
       colliders,
       plantEntries,
       hardItems,
+      anemoneItems,
+      anchors,
       options,
     );
     scene.current.configure(preset.current ?? DEFAULT_CURRENT);
@@ -227,12 +250,18 @@ export class TankScene {
     const key = keyFor(tier, settings);
     await scene.rebuildVisuals(key, () => false);
     scene.queue.adopt(key);
+    scene.releases.push(applyBiomeLighting(engine, preset.biome));
     scene.releases.push(engine.quality.register('scene', (s, t) => scene.applyTier(t, s)));
     return scene;
   }
 
   get colliderList(): readonly Collider[] {
     return this.colliderData;
+  }
+
+  /** Where species with a home (clownfish and their anemone) are drawn to. */
+  get anchors(): readonly SceneAnchor[] {
+    return this.anchorData;
   }
 
   get plantCount(): number {
@@ -298,6 +327,7 @@ export class TankScene {
   private async rebuildVisuals(key: VisualKey, isStale: () => boolean): Promise<boolean> {
     const hardscape = new Hardscape();
     const groups: PlantGroup[] = [];
+    const anemones: AnemoneGroup[] = [];
     let substrate: SubstrateInstall | null = null;
     try {
       if (!this.substrate || this.substrate.textureSize !== key.textureSize) {
@@ -312,24 +342,34 @@ export class TankScene {
         const model = await this.library.load(assetId, key.plantLod, key.textureSize);
         groups.push(new PlantGroup(assetId, model, entries, this.current));
       }
+      for (const item of this.anemoneItems) {
+        const entry = this.library.catalog.get(item.assetId);
+        const model = await this.library.load(item.assetId, key.hardscapeLod, key.textureSize);
+        anemones.push(new AnemoneGroup(entry, model, item, this.current));
+      }
     } catch (error) {
       hardscape.dispose();
       for (const group of groups) group.dispose();
+      for (const anemone of anemones) anemone.dispose();
       if (substrate) this.discardSubstrate(substrate);
       throw error;
     }
     if (this.disposed || isStale()) {
       hardscape.dispose();
       for (const group of groups) group.dispose();
+      for (const anemone of anemones) anemone.dispose();
       if (substrate) this.discardSubstrate(substrate);
       await this.evictUnused();
       return false;
     }
     this.hardscape?.dispose();
     for (const group of this.plantGroups) group.dispose();
+    for (const anemone of this.anemones) anemone.dispose();
     this.hardscape = hardscape;
     this.plantGroups = groups;
+    this.anemones = anemones;
     this.engine.scene.add(hardscape.group);
+    for (const anemone of anemones) this.engine.scene.add(anemone.object);
     for (const group of groups) {
       group.setDensity(this.engine.quality.settings.plantDensity);
       this.engine.scene.add(group.object);
@@ -352,6 +392,9 @@ export class TankScene {
       for (const { item } of this.hardItems) {
         keep.add(this.library.modelKey(item.assetId, key.hardscapeLod, key.textureSize));
       }
+      for (const item of this.anemoneItems) {
+        keep.add(this.library.modelKey(item.assetId, key.hardscapeLod, key.textureSize));
+      }
       for (const assetId of this.plantEntries.keys()) {
         keep.add(this.library.modelKey(assetId, key.plantLod, key.textureSize));
       }
@@ -366,6 +409,7 @@ export class TankScene {
     await this.queue.stop();
     this.hardscape?.dispose();
     for (const group of this.plantGroups) group.dispose();
+    for (const anemone of this.anemones) anemone.dispose();
     this.overlay.dispose();
     if (this.substrate) {
       this.engine.tank.substrate.material = this.placeholderSubstrate;
@@ -373,6 +417,23 @@ export class TankScene {
       this.substrate = null;
     }
     await this.library.dispose();
+  }
+}
+
+function checkClearOfGlass(
+  entry: CatalogEntry,
+  item: DecorItem,
+  current: CurrentParameters,
+  extent: Extent,
+): void {
+  const reach = anemoneReach(entry, item, current);
+  if (
+    Math.abs(item.position[0]) + reach > extent.halfLength ||
+    Math.abs(item.position[2]) + reach > extent.halfDepth
+  ) {
+    throw new Error(
+      `Anemone "${item.assetId}" at ${item.position[0]}, ${item.position[2]} reaches ${reach.toFixed(3)} m and would cross the glass; move it inwards`,
+    );
   }
 }
 

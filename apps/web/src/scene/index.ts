@@ -5,6 +5,8 @@ import { loadPreset } from './preset';
 import { TankScene } from './TankScene';
 
 export { TankScene } from './TankScene';
+export { parseBiome } from './options';
+export type { SceneAnchor } from './anemone';
 export { CurrentField, sampleCurrent, type CurrentParameters } from './current';
 export { ColliderField, type Collider } from './colliders';
 
