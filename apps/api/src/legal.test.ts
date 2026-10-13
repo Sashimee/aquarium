@@ -608,4 +608,23 @@ describe('maintenance', () => {
     expect(sessions).toBe(1);
     expect((await counts(h, gina.userId)).sessions).toBe(1);
   });
+
+  it('prunes mail limiter hits older than a day and keeps recent ones', async () => {
+    await h.database.pool.query('delete from mail_limit_hits');
+    await h.database.pool.query(
+      `insert into mail_limit_hits (key, at) values
+        ('old', now() - interval '25 hours'),
+        ('recent', now() - interval '23 hours')`,
+    );
+    await pruneExpired(h.database);
+    const rows = await h.database.pool.query('select key from mail_limit_hits');
+    expect(rows.rows).toEqual([{ key: 'recent' }]);
+  });
+
+  it('has an index on mail_limit_hits.at for the prune', async () => {
+    const rows = await h.database.pool.query(
+      `select 1 from pg_indexes where tablename = 'mail_limit_hits' and indexname = 'mail_limit_hits_at_idx'`,
+    );
+    expect(rows.rowCount).toBe(1);
+  });
 });

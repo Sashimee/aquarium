@@ -647,7 +647,16 @@ describe('mail abuse limits', () => {
     }
     spy.mockRestore();
     expect(h.outbox).toHaveLength(3);
-    expect(logs.filter((m) => m.includes('global mail cap'))).toHaveLength(1);
+    const capLogs = logs.filter((m) => m.includes('mail_global_cap_reached'));
+    expect(capLogs).toHaveLength(1);
+    expect(JSON.parse(capLogs[0] ?? '')).toEqual({
+      level: 'error',
+      event: 'mail_global_cap_reached',
+      msg: 'global mail cap reached',
+      limit: 3,
+      windowSeconds: 3600,
+      retryAfterSeconds: expect.any(Number),
+    });
     await h.close();
   });
 
