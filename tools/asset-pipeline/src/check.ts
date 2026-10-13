@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, posix, relative, sep } from 'node:path';
+import { budgetProblems, loadBudgetContent, type BudgetInput } from './budgets.ts';
 import {
   FIN_ID_ATTRIBUTE,
   FIN_MASK_ATTRIBUTE,
@@ -28,6 +29,7 @@ export interface CheckInput {
   index: AssetIndex;
   assetsDir: string;
   repoRoot: string;
+  content?: Pick<BudgetInput, 'presets' | 'speciesBiome'>;
 }
 
 export function readGlbJson(buffer: Uint8Array): {
@@ -223,6 +225,7 @@ export function checkAssets(input: CheckInput): string[] {
       `index.json totalBytes ${index.totalBytes} does not match the files on disk (rebuild with pnpm build:assets)`,
     );
   }
+  if (input.content) problems.push(...budgetProblems({ index, ...input.content }));
   return problems;
 }
 
@@ -237,5 +240,5 @@ export function loadCheckInput(repoRoot: string): CheckInput {
     throw new Error(`${indexPath} is missing; run pnpm build:assets`);
   }
   const index = assetIndexSchema.parse(JSON.parse(readFileSync(indexPath, 'utf8')));
-  return { manifest, credits, index, assetsDir, repoRoot };
+  return { manifest, credits, index, assetsDir, repoRoot, content: loadBudgetContent(repoRoot) };
 }

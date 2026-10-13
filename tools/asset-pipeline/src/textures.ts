@@ -32,7 +32,19 @@ export interface EncodedVariant {
 export const TIER_SIZES = { '1k': 1024, '2k': 2048 } as const;
 export type Tier = keyof typeof TIER_SIZES;
 
+/**
+ * The '1k' slot is what low/medium tiers fetch and the '2k' slot what high/ultra fetch. Normal maps
+ * are capped lower than colour because their payload is the bulk of the download budget
+ * (PLAN section 2.7); the real edge length is recorded per variant in index.json.
+ */
+export const NORMAL_TIER_SIZES = { '1k': 512, '2k': 1024 } as const;
+
+export function tierMaxDim(tier: Tier, role: TextureRole): number {
+  return role === 'normal' ? NORMAL_TIER_SIZES[tier] : TIER_SIZES[tier];
+}
+
 const ENCODER_VERSION = 'ktx2-encoder@0.6.0:etc1s-q128-c2:uastc-l1-zstd:v1';
+const NORMAL_ENCODER_VERSION = 'normal:etc1s-q255-c2-normalmap:v2';
 
 export function cacheDir(): string {
   const dir = join(homeDir(), '.cache', 'aquarium-assets', 'pipeline-cache');
@@ -113,6 +125,7 @@ function cacheKey(image: Rgba, spec: Pick<TextureSpec, 'codec' | 'colorSpace' | 
   return createHash('sha256')
     .update(ENCODER_VERSION)
     .update(`${spec.codec}|${spec.colorSpace}|${spec.role}|${image.width}x${image.height}|`)
+    .update(spec.role === 'normal' ? NORMAL_ENCODER_VERSION : '')
     .update(image.data)
     .digest('hex');
 }
@@ -142,7 +155,8 @@ async function encodeKtx2(
           })
         : await encodeToKTX2(new Uint8Array(1), {
             isUASTC: false,
-            qualityLevel: 128,
+            isNormalMap: spec.role === 'normal',
+            qualityLevel: spec.role === 'normal' ? 255 : 128,
             compressionLevel: 2,
             isPerceptual: spec.colorSpace === 'srgb',
             isSetKTX2SRGBTransferFunc: spec.colorSpace === 'srgb',
@@ -160,7 +174,7 @@ async function encodeKtx2(
 export async function encodeTiers(spec: TextureSpec): Promise<Record<Tier, EncodedVariant>> {
   const out = {} as Record<Tier, EncodedVariant>;
   for (const tier of Object.keys(TIER_SIZES) as Tier[]) {
-    const image = await resizeImage(spec.image, TIER_SIZES[tier]);
+    const image = await resizeImage(spec.image, tierMaxDim(tier, spec.role));
     out[tier] = { size: Math.max(image.width, image.height), bytes: await encodeKtx2(image, spec) };
   }
   return out;
