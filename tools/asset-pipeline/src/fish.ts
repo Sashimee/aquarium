@@ -68,6 +68,7 @@ export interface NormaliseInput {
   attachments?: Part[];
   hints?: FinHints | undefined;
   standardLengthM: number;
+  recipeId?: string;
 }
 
 function slicePart(
@@ -104,7 +105,7 @@ export function normaliseFish(input: NormaliseInput): Part[] {
 
   const fins = classifyFins(merged.positions, merged.indices, input.hints);
   if (input.hints?.caudalScale !== undefined)
-    scaleCaudal(merged.positions, merged.normals, fins, input.hints.caudalScale);
+    scaleCaudal(merged.positions, merged.normals, fins, input.hints.caudalScale, input.recipeId);
   const scale = input.standardLengthM / (fins.zSnout - fins.zPeduncle);
   for (const part of [merged, ...attachments])
     for (let i = 0; i < part.positions.length; i++) part.positions[i] = part.positions[i]! * scale;
@@ -230,6 +231,7 @@ export async function buildSourceFish(recipe: FishRecipe, ctx: FishContext): Pro
     attachments: eyeParts,
     hints: recipe.hints,
     standardLengthM,
+    recipeId: recipe.id,
   });
 
   const materials = await Promise.all(

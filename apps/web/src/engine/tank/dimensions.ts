@@ -1,3 +1,4 @@
+import { DEFAULT_TANK_METRES } from '@aquarium/shared';
 import { Box3, Vector3 } from 'three/webgpu';
 
 /** All lengths in metres. The tank sits centred on x/z with its bottom glass at y = 0. */
@@ -14,10 +15,7 @@ export interface TankDimensions {
 
 /** A standard 120 x 50 x 50 cm (300 l) rimless tank with 10 mm glass. */
 export const DEFAULT_TANK: Readonly<TankDimensions> = {
-  length: 1.2,
-  depth: 0.5,
-  height: 0.5,
-  glass: 0.01,
+  ...DEFAULT_TANK_METRES,
   freeboard: 0.03,
   substrateFront: 0.04,
   substrateBack: 0.1,

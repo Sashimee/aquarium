@@ -77,7 +77,8 @@ export const FISH_RECIPES: FishRecipe[] = [
     sourceId: 'sketchfab-00dac50e',
     axes: { forward: '-x', up: '+y' },
     keepMaterial: /^Fish$/,
-    // Placed at the narrow waist of the peduncle in the mesh, where the wedge-shaped caudal starts; it is not derived from the target ratio.
+    // Placed at the narrow waist of the peduncle in the mesh, where the wedge-shaped caudal starts;
+    // it is not derived from the target ratio.
     hints: { peduncleFromSnout: 0.86 },
     fallbackLengthM: 0.2,
   },

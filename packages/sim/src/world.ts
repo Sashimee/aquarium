@@ -85,6 +85,7 @@ export const STEERING = {
   deadEndMemoryS: 10,
   deadEndRadiusBodyLengths: 4,
   deadEndBearingCos: 0.3,
+  deadEndBehindFaceBodyLengths: 0.5,
 } as const;
 
 export interface FishSpawn {
@@ -848,12 +849,15 @@ export class World {
             }
           }
           // The goal would drag a fish that just backed out of a slot along the rock straight
-          // back into it. A clear wish toward food still wins: pursuit gives up (6-8 s) before
-          // the memory fades, so shunning would cost the fish food it could reach.
+          // back into it, food included (#287). Only a remembered slot behind the face being
+          // slid along is no threat: shunning it would turn a fish working along the rock's
+          // front toward food away from that food (#279).
           let shunning = false;
-          if (deadEndLeft > 0 && !wished) {
-            const ex = (this.deadEnd[i * 2] ?? 0) - px;
-            const ez = (this.deadEnd[i * 2 + 1] ?? 0) - pz;
+          const ex = (this.deadEnd[i * 2] ?? 0) - px;
+          const ez = (this.deadEnd[i * 2 + 1] ?? 0) - pz;
+          const slotBehindFace =
+            ex * ux + ez * uz < -(dHere + STEERING.deadEndBehindFaceBodyLengths * length);
+          if (deadEndLeft > 0 && !(wished && slotBehindFace)) {
             const reach = Math.hypot(ex, ez);
             const toward = (tx * ex + tz * ez) * side;
             if (
