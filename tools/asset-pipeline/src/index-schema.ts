@@ -20,12 +20,14 @@ export const lodSchema = fileEntry.extend({
   vertices: z.int().positive(),
 });
 
-export const textureVariantSchema = fileEntry.extend({ size: z.int().positive() });
+export const textureVariantSchema = fileEntry.extend({
+  size: z.int().positive(),
+  codec: z.enum(['etc1s', 'uastc']),
+});
 
 export const textureSchema = z.strictObject({
   name: z.string().min(1),
   role: z.enum(['baseColor', 'normal', 'metallicRoughness', 'occlusionRoughnessMetal', 'emissive']),
-  codec: z.enum(['etc1s', 'uastc']),
   colorSpace: z.enum(['srgb', 'linear']),
   variants: z.strictObject({
     '1k': textureVariantSchema,

@@ -29,8 +29,21 @@ export interface DemoStock {
   readonly maxLengthM: Readonly<Record<string, number>>;
 }
 
-function stock(raw: readonly unknown[], counts: Readonly<Record<string, number>>): DemoStock {
+/**
+ * `wanted` is the count the demo asks for. A schooling species is raised to its content
+ * `minGroup`, so the demo never shows a shoal the care rules would call stressed.
+ */
+function stock(raw: readonly unknown[], wanted: Readonly<Record<string, number>>): DemoStock {
   const content = raw.map((r) => contentSchema.parse(r));
+  for (const id of Object.keys(wanted)) {
+    if (!content.some((s) => s.id === id)) throw new Error(`demo stock: ${id} has no content`);
+  }
+  const counts = Object.fromEntries(
+    content.map(({ id, behaviour }) => [
+      id,
+      Math.max(wanted[id] ?? 0, behaviour.schooling?.minGroup ?? 0),
+    ]),
+  );
   return {
     species: content.map(({ id, behaviour, locomotion, lifecycle }) => ({
       id,
@@ -46,7 +59,7 @@ function stock(raw: readonly unknown[], counts: Readonly<Record<string, number>>
 /**
  * Guppies are all female: a male needs its own asset batch, and batches are keyed by species.
  * The reef has one clownfish pair for its one host anemone, a yellow rather than a blue tang
- * (a blue tang outgrows a 120 cm tank), and three banggai because content asks for a group of three.
+ * (a blue tang outgrows a 120 cm tank), and as many banggai as content's smallest group.
  */
 export const DEMO_STOCKS: Readonly<Record<Biome, DemoStock>> = {
   freshwater: stock(
@@ -55,7 +68,7 @@ export const DEMO_STOCKS: Readonly<Record<Biome, DemoStock>> = {
   ),
   reef: stock(
     [ocellarisClownfishContent, yellowTangContent, royalGrammaContent, banggaiCardinalfishContent],
-    { 'ocellaris-clownfish': 2, 'yellow-tang': 1, 'royal-gramma': 1, 'banggai-cardinalfish': 3 },
+    { 'ocellaris-clownfish': 2, 'yellow-tang': 1, 'royal-gramma': 1, 'banggai-cardinalfish': 1 },
   ),
 };
 

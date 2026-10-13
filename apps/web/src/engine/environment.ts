@@ -11,7 +11,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { ASSET_BASE } from '../scene/assets';
 
 /** Manifest entry `polyhaven-studio_small_09` (CC0, Sergej Majboroda), served from our own origin. */
-export const DEFAULT_HDRI_URL = `${ASSET_BASE}hdri/studio-small-09/studio_small_09_2k.hdr`;
+export const DEFAULT_HDRI_URL = `${ASSET_BASE}hdri/studio-small-09/studio_small_09_1k.hdr`;
 
 export interface RoomLighting {
   /** The procedural studio installed at once; `onChange` reports the swap to the HDRI. */
@@ -39,7 +39,7 @@ export function installRoomLighting(
   scene.environment = roomTarget.texture;
   scene.background = roomTarget.texture;
   scene.backgroundBlurriness = 0.35;
-  scene.backgroundIntensity = 0.6;
+  scene.backgroundIntensity = 0.45;
 
   let hdri: Texture | null = null;
   let room: typeof roomTarget | null = roomTarget;

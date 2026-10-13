@@ -9,6 +9,8 @@ import { loadPreset } from '../scene/preset';
 import { DEMO_STOCKS, demoTank, sceneAnchorsToSim } from './demoStock';
 
 const BIOMES = biomeSchema.options;
+// PLAN §2.7: the mobile tier draws at most 30 fish per tank, and the demo runs on mobile too.
+const MOBILE_FISH_BUDGET = 30;
 
 function reefAnemone(): { anchor: SceneAnchor; crownTop: number } {
   const item = loadPreset('reef').decor.find((i) => i.assetId === 'host-anemone');
@@ -109,6 +111,36 @@ describe.each(BIOMES)('demoTank(%s)', (biome) => {
     const c = demoTank(DEFAULT_TANK, 43, biome).config.fish.map((f) => f.bodyLengthM);
     expect(a).toEqual(b);
     expect(a).not.toEqual(c);
+  });
+
+  it('stocks every schooling species at least at its content minGroup', () => {
+    const files = import.meta.glob('../../../../content/species/*.json', {
+      eager: true,
+      import: 'default',
+    });
+    const schooling = stock.species.flatMap((species) => {
+      const raw = files[`../../../../content/species/${species.id}.json`];
+      const { schooling } = speciesSchema.partial({ render: true }).parse(raw).behaviour;
+      return schooling === undefined ? [] : [{ id: species.id, minGroup: schooling.minGroup }];
+    });
+    if (biome === 'freshwater') {
+      expect(schooling.map((s) => s.id)).toEqual(
+        expect.arrayContaining(['neon-tetra', 'bronze-corydoras']),
+      );
+    } else {
+      expect(schooling.map((s) => s.id)).toContain('banggai-cardinalfish');
+    }
+    const spawned = demoTank(DEFAULT_TANK, 1, biome).config.fish;
+    for (const { id, minGroup } of schooling) {
+      expect(stock.counts[id] ?? 0, id).toBeGreaterThanOrEqual(minGroup);
+      expect(spawned.filter((f) => f.species === id).length, id).toBeGreaterThanOrEqual(minGroup);
+    }
+  });
+
+  it('stays within the mobile fish budget', () => {
+    expect(demoTank(DEFAULT_TANK, 1, biome).config.fish.length).toBeLessThanOrEqual(
+      MOBILE_FISH_BUDGET,
+    );
   });
 
   it('builds a world the sim accepts', () => {

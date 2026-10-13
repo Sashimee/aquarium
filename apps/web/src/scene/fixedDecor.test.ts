@@ -43,4 +43,39 @@ describe('fixedDecorOf', () => {
     });
     expect(world.layout()).toHaveLength(reef.decor.length);
   });
+
+  it('never asks the model catalogue for a procedural coral, in any preset', () => {
+    const lookups: string[] = [];
+    const spy = { get: (id: string) => (lookups.push(id), catalog.get(id)) };
+    for (const biome of ['freshwater', 'reef'] as const) {
+      const preset = loadPreset(biome);
+      fixedDecorOf(preset.decor, spy);
+      for (const item of preset.decor) {
+        if (parseEuphylliaId(item.assetId)) expect(lookups).not.toContain(item.assetId);
+        else expect(() => catalog.get(item.assetId)).not.toThrow();
+      }
+    }
+  });
+
+  it('keeps corals through a saved reef layout without an API', async () => {
+    const fixed = fixedDecorOf(reef.decor, catalog);
+    const hard = reef.decor.filter((i) => !fixed.includes(i));
+    const setHardDecor = vi.fn(() => Promise.resolve());
+    const world = new DecorWorld(
+      {
+        biome: 'reef',
+        presetHardDecor: hard,
+        fixedDecor: fixed,
+        catalogEntries: () => entries,
+        groundHeight: () => 0.06,
+        setHardDecor,
+        moveHardDecor: vi.fn(),
+      },
+      new EventBus<InteractionEvents>(),
+      { sync: vi.fn(), dispose: vi.fn() },
+    );
+    await world.showSaved(reef.decor);
+    expect(setHardDecor).toHaveBeenCalledWith(hard);
+    expect(world.layout()).toHaveLength(reef.decor.length);
+  });
 });

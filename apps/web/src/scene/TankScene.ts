@@ -50,8 +50,6 @@ export const DEFAULT_CURRENT: CurrentParameters = {
 
 const PLANT_LOD: Readonly<Record<Tier, ModelLod>> = { low: 2, medium: 1, high: 1, ultra: 0 };
 const HARDSCAPE_LOD: Readonly<Record<Tier, ModelLod>> = { low: 2, medium: 1, high: 0, ultra: 0 };
-// Collision geometry is read once at build time, so it never pays for a tier's large textures.
-const COLLISION_TEXTURE_SIZE = 1024;
 const WALL_MARGIN = 0.005;
 const BLOCKED_CLEARANCE = 0.005;
 const MIN_COLLIDER_PLANT_HEIGHT = 0.15;
@@ -199,7 +197,7 @@ export class TankScene {
 
     const colliders: Collider[] = [];
     for (const { item, kind } of hardItems) {
-      const geometries = await library.collisionGeometry(item.assetId, COLLISION_TEXTURE_SIZE);
+      const geometries = await library.collisionGeometry(item.assetId);
       colliders.push(...fitCollider(kind, geometries, item));
     }
     const hard = new ColliderField(colliders);
@@ -315,7 +313,7 @@ export class TankScene {
     return this.presetHard;
   }
 
-  /** Plants and anemones from the preset, which stay where they are. */
+  /** Plants, anemones and procedural corals from the preset, which stay where they are. */
   get fixedDecor(): readonly DecorItem[] {
     return fixedDecorOf(this.preset.decor, this.library.catalog);
   }

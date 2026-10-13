@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { EventBus, type EngineEvents } from '../events';
 import { QualityManager, type QualityOptions } from './QualityManager';
+import { MOBILE_PROFILE } from './profile';
 import { TIER_SETTINGS, type Tier } from './tiers';
 
 const TARGET = 1000 / 60;
@@ -157,6 +158,47 @@ describe('QualityManager', () => {
     expect(quality.tier).toBe('low');
     expect(quality.settings).toBe(TIER_SETTINGS.low);
     expect(announced).toEqual([{ from: 'high', to: 'low', reason: 'manual' }]);
+  });
+
+  it('keeps a phone that holds the display rate at its tier cap however fast it runs', () => {
+    const { quality, announced } = setup({ ...MOBILE_PROFILE, gpuTiming: false });
+    expect(quality.tier).toBe('medium');
+    quality.start(0);
+    const t = feed(quality, TARGET, null, 0, 2400);
+    expect(quality.tier).toBe('medium');
+    feed(quality, TARGET, null, t, t + 60_000);
+    expect(quality.tier).toBe('medium');
+    expect(announced).toEqual([{ from: null, to: 'medium', reason: 'probe' }]);
+  });
+
+  it('starts a phone stuck at 30 fps on low', () => {
+    const { quality } = setup({ ...MOBILE_PROFILE, gpuTiming: false });
+    quality.start(0);
+    feed(quality, 1000 / 30, null, 0, 2400);
+    expect(quality.tier).toBe('low');
+  });
+
+  it('caps gpu-timed phones at maxTier', () => {
+    const { quality } = setup({ ...MOBILE_PROFILE });
+    quality.start(0);
+    feed(quality, TARGET, 1, 0, 2400);
+    expect(quality.timingSignal).toBe('gpu');
+    expect(quality.tier).toBe('medium');
+  });
+
+  it('keeps a manual tier above the cap until it runs over budget', () => {
+    const { quality, announced } = setup({ ...MOBILE_PROFILE, gpuTiming: false });
+    quality.start(0);
+    let t = feed(quality, TARGET, null, 0, 2400);
+    quality.setTier('ultra', t);
+    t = feed(quality, TARGET, null, t, t + 30_000);
+    expect(quality.tier).toBe('ultra');
+    feed(quality, 50, null, t, t + 15_000);
+    expect(announced.slice(2)[0]).toEqual({ from: 'ultra', to: 'low', reason: 'over-budget' });
+  });
+
+  it('rejects a probe tier above the tier cap', () => {
+    expect(() => setup({ probeTier: 'high', maxTier: 'medium' })).toThrow(/above maxTier/);
   });
 
   it('cannot be started twice', () => {

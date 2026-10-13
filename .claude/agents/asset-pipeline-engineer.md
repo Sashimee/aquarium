@@ -30,7 +30,7 @@ Model: sonnet — scoped, test-driven tooling work against a clear spec.
 - Input: the manifest + raw files in `~/.cache/aquarium-assets/raw/`. Output: committed `apps/web/public/assets/<kind>/<id>/{lod0,lod1,lod2}.glb` + KTX2 textures + `apps/web/public/assets/index.json`.
 - **Normalise fish:** body axis to +Z forward, +Y up, origin at the centre of mass, scale to real **standard length** in metres (from species JSON), merge meshes, strip unused data.
 - **Fin mask:** bake a vertex attribute (0 = rigid body, 1 = fin tip) plus a fin id (caudal, dorsal, anal, pectoral, pelvic) using geometry heuristics (distance from the body midline surface, thinness). Write a debug render per species so the mask can be checked visually.
-- LOD chain via simplification at target ratios, meshopt compression, KTX2 (UASTC for normals, ETC1S for colour) at 1k and 2k.
+- LOD chain via simplification at target ratios, meshopt compression, KTX2 with a codec split: ETC1S for colour and for the 512 px low/medium normal slot (`_1k`), UASTC for the 1024 px high/ultra normal slot (`_2k`), because ETC1S cannot hold normal chroma across 4x4 block edges.
 - **Procedural-loft fallback:** generate a body from species proportions (cross-sections along the spine) with UVs for the projected reference-photo texture.
 - `pnpm assets:check` fails on: an asset not in the manifest, a licence not CC0/CC-BY, a missing CC-BY credit, a total over 150 MB, or a fish missing its fin mask or LODs. Wire it into CI.
 - The pipeline must be reproducible: same inputs give byte-identical outputs where the tools allow.

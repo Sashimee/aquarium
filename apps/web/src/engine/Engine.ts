@@ -12,9 +12,12 @@ import { daylightAt, minuteOfDay } from './daylight';
 import { EffectsSlot } from './effectsSlot';
 import { installRoomLighting, DEFAULT_HDRI_URL } from './environment';
 import { EventBus, type BackendKind, type EngineEvents, type EngineEventBus } from './events';
+import { CullPrewarm } from './cullPrewarm';
 import { buildOrRelease, DisposeStack } from './lifecycle';
 import type { EngineOptions } from './options';
+import { qualityProfile } from './quality/profile';
 import { QualityManager } from './quality/QualityManager';
+import { renderPixelRatio } from './quality/tiers';
 import { DEFAULT_TANK, type TankDimensions, waterBounds } from './tank/dimensions';
 import { Tank } from './tank/Tank';
 import { Caustics } from './water/caustics';
@@ -36,6 +39,8 @@ const MAX_DELTA_S = 0.1;
 
 /** Hood LED, roughly 6500 K. */
 const HOOD_COLOR = new Color(1, 0.97, 0.92);
+/** At the water surface; the hood's spread leaves about three quarters of it on average below. */
+const HOOD_INTENSITY = 4;
 /** The hood's blue "moonlight" channel, left on through the night. */
 const MOONLIGHT = new Color(0.012, 0.03, 0.09);
 /** Room light at night relative to the day, from a lamp somewhere in the room. */
@@ -44,9 +49,8 @@ const DAYLIGHT_INTERVAL_MS = 1000;
 /** Smallest daylight change worth announcing: about 20 s into a one-hour ramp. */
 const DAYLIGHT_EPSILON = 0.005;
 
-function targetFrameMs(): number {
-  const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
-  return 1000 / (coarse ? 30 : 60);
+function hasCoarsePointer(): boolean {
+  return typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 }
 
 /** The part of the renderer the start-up path needs, so failures can be tested without a GPU. */
@@ -99,12 +103,13 @@ export class Engine {
   readonly medium: WaterMedium;
   readonly caustics: Caustics;
   readonly tank: Tank;
-  readonly hood = new DirectionalLight(HOOD_COLOR, 3);
+  readonly hood = new DirectionalLight(HOOD_COLOR, HOOD_INTENSITY);
   /** Room light reaching the water from outside the hood, for in-scatter. */
   readonly ambientScatter = new Color(0.02, 0.03, 0.034);
   readonly quality: QualityManager;
 
   private readonly clock: number | null;
+  private readonly showStats: boolean;
   private daylightLevel = 1;
   private daylightCheckedAt = -Infinity;
   private daylightAnnounced = false;
@@ -113,6 +118,8 @@ export class Engine {
   private readonly effects = new EffectsSlot((message, cause) => this.reportError(message, cause));
   private readonly frameCallbacks = new Set<FrameCallback>();
   private lastFrameAt: number | null = null;
+  private readonly cullPrewarm = new CullPrewarm(this.scene);
+  private sceneRevisionValue = 0;
   private gpuMs: number | null = null;
   private readonly gpuTiming: boolean;
   private lastGpuMs: number | null = null;
@@ -160,12 +167,17 @@ export class Engine {
   ) {
     const dimensions = config.tank ?? DEFAULT_TANK;
     this.clock = config.options.clock;
+    this.showStats = config.options.stats;
     this.gpuTiming = renderer.hasFeature('timestamp-query');
+    const profile = qualityProfile(hasCoarsePointer());
     this.quality = new QualityManager(events, {
       gpuTiming: this.gpuTiming,
       pinned: config.options.tier,
       adaptive: config.options.adaptive,
-      targetMs: targetFrameMs(),
+      targetMs: profile.targetMs,
+      refreshMs: profile.refreshMs,
+      probeTier: profile.probeTier,
+      maxTier: profile.maxTier,
     });
 
     container.appendChild(renderer.domElement);
@@ -221,6 +233,14 @@ export class Engine {
     this.effects.setFocusMode(on);
   }
 
+  /**
+   * Changes whenever new objects (lights included) join the scene. Every render object three built
+   * before may then be rebuilt on its next draw, so hidden variants should be drawn again.
+   */
+  get sceneRevision(): number {
+    return this.sceneRevisionValue;
+  }
+
   /** Called once per rendered frame before the scene is drawn. */
   onFrame(callback: FrameCallback): () => void {
     this.frameCallbacks.add(callback);
@@ -239,6 +259,7 @@ export class Engine {
       tier: this.quality.tier,
       gpuTiming: this.gpuTiming,
     });
+    if (this.showStats) void this.loadStatsOverlay();
   }
 
   async dispose(): Promise<void> {
@@ -255,6 +276,7 @@ export class Engine {
     hood.name = 'hood';
     hood.position.set(0.12, d.height + 1.2, 0.2);
     hood.target.position.set(0, d.height / 2, 0);
+    this.medium.fixtureHeight.value = hood.position.y - this.medium.boxMax.value.y;
     this.scene.add(hood, hood.target);
 
     const shadowCam = hood.shadow.camera;
@@ -306,9 +328,7 @@ export class Engine {
 
   private registerQualityFeatures(): void {
     this.quality.register('pixel-ratio', (s) => {
-      this.renderer.setPixelRatio(
-        Math.min(window.devicePixelRatio, s.maxPixelRatio) * s.resolutionScale,
-      );
+      this.renderer.setPixelRatio(renderPixelRatio(window.devicePixelRatio, s));
     });
     this.quality.register('shadows', (s) => {
       this.hood.castShadow = s.shadowMapSize > 0;
@@ -337,6 +357,16 @@ export class Engine {
     }
   }
 
+  private async loadStatsOverlay(): Promise<void> {
+    try {
+      const { createStatsOverlay } = await import('./statsOverlay');
+      if (this.disposed) return;
+      this.cleanup.add(createStatsOverlay(this, document.body));
+    } catch (cause) {
+      this.reportError('The ?stats=1 readout failed to load', cause);
+    }
+  }
+
   private resize(): void {
     const width = Math.max(1, this.container.clientWidth);
     const height = Math.max(1, this.container.clientHeight);
@@ -353,7 +383,12 @@ export class Engine {
     for (const callback of this.frameCallbacks) callback(deltaS, nowMs);
     this.updateDaylight(nowMs);
     this.updateHoodUniforms();
-    if (!this.effects.render()) this.renderer.render(this.scene, this.camera);
+    if (this.cullPrewarm.begin(nowMs) > 0) this.sceneRevisionValue++;
+    try {
+      if (!this.effects.render()) this.renderer.render(this.scene, this.camera);
+    } finally {
+      this.cullPrewarm.end();
+    }
     this.pollGpuTime();
 
     if (frameMs > 0) {

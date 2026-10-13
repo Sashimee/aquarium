@@ -10,7 +10,7 @@ import {
 import { LOD_COUNT, type AssetKind, type OutputAsset } from './index-schema.ts';
 import { simplifyPrimitive, triangleCountOf } from './lod.ts';
 import type { MaterialDef, Part, TextureSource } from './parts.ts';
-import { encodeTiers, type EncodedVariant, type Tier } from './textures.ts';
+import { encodeTiers, type EncodedVariant, type TextureCodec, type Tier } from './textures.ts';
 
 export interface LodPlan {
   /** Triangle ratios for LOD0..LOD2 against the welded input. */
@@ -154,7 +154,7 @@ export async function writeTextureEntries(
       colorSpace: entry.colorSpace,
       image: entry.source.image,
     });
-    const written = {} as Record<Tier, WrittenFile & { size: number }>;
+    const written = {} as Record<Tier, WrittenFile & { size: number; codec: TextureCodec }>;
     for (const tier of ['1k', '2k'] as const) {
       const file = writeFileTracked(
         outRoot,
@@ -162,12 +162,11 @@ export async function writeTextureEntries(
         variants[tier].bytes,
       );
       files.push(file);
-      written[tier] = { ...file, size: variants[tier].size };
+      written[tier] = { ...file, size: variants[tier].size, codec: variants[tier].codec };
     }
     textures.push({
       name: entry.name,
       role: entry.source.role,
-      codec: entry.source.codec,
       colorSpace: entry.colorSpace,
       variants: { '1k': written['1k'], '2k': written['2k'] },
     });

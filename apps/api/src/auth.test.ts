@@ -480,7 +480,7 @@ describe('csrf', () => {
 });
 
 describe('mail abuse limits', () => {
-  it('applies a cooldown to verification resends', async () => {
+  it('answers a resend inside the cooldown like any other, and still sends nothing', async () => {
     const h = await createHarness({
       mailLimits: {
         perRecipient: { max: 100, windowMs: 3_600_000 },
@@ -489,20 +489,70 @@ describe('mail abuse limits', () => {
         global: { max: 1000, windowMs: 3_600_000 },
       },
     });
+    const cooled = nextEmail();
+    await signUp(h.app, cooled);
+    const unknown = nextEmail();
+    const mailsBefore = h.outbox.length;
+
+    const resend = async (email: string) => {
+      const start = performance.now();
+      const res = await h.app.inject({
+        method: 'POST',
+        url: '/api/auth/send-verification-email',
+        headers: jsonHeaders,
+        payload: { email, callbackURL: '/' },
+      });
+      await h.settleMail();
+      return { res, ms: performance.now() - start };
+    };
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const cooledRes = await resend(cooled);
+    const logged = spy.mock.calls.map((c) => String(c[0]));
+    spy.mockRestore();
+    expect(logged).toEqual([expect.stringMatching(/^verification mail throttled, retry in \d+s$/)]);
+    const unknownRes = await resend(unknown);
+    expect(cooledRes.res.statusCode).toBe(200);
+    expect(unknownRes.res.statusCode).toBe(200);
+    expect(cooledRes.res.body).toBe(unknownRes.res.body);
+    expect(cooledRes.res.headers['retry-after']).toBeUndefined();
+    expect(h.outbox.length).toBe(mailsBefore);
+    expect(h.outbox.filter((m) => m.to === cooled)).toHaveLength(1);
+
+    const median = (xs: number[]) => [...xs].sort((x, y) => x - y)[Math.floor(xs.length / 2)] ?? 0;
+    const cooledMs: number[] = [];
+    const unknownMs: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      cooledMs.push((await resend(cooled)).ms);
+      unknownMs.push((await resend(nextEmail())).ms);
+    }
+    expect(Math.abs(median(cooledMs) - median(unknownMs))).toBeLessThan(150);
+    expect(h.outbox.length).toBe(mailsBefore);
+    await h.close();
+  }, 20_000);
+
+  it('does not make a resend wait on SMTP for a known address', async () => {
+    const h = await createHarness();
     const email = nextEmail();
     await signUp(h.app, email);
-    expect(h.outbox.filter((m) => m.to === email)).toHaveLength(1);
-
-    const resend = await h.app.inject({
+    const held = h.holdMail();
+    const res = await h.app.inject({
       method: 'POST',
       url: '/api/auth/send-verification-email',
       headers: jsonHeaders,
       payload: { email, callbackURL: '/' },
     });
-    expect(resend.statusCode).toBe(429);
-    expect(Number(resend.headers['retry-after'])).toBeGreaterThan(0);
-    expect(apiErrorSchema.parse(resend.json()).error.code).toBe('rate_limited');
-    expect(h.outbox.filter((m) => m.to === email)).toHaveLength(1);
+    expect(res.statusCode).toBe(200);
+    const stranger = await h.app.inject({
+      method: 'POST',
+      url: '/api/auth/send-verification-email',
+      headers: jsonHeaders,
+      payload: { email: nextEmail(), callbackURL: '/' },
+    });
+    expect(res.body).toBe(stranger.body);
+    await held.sendStarted;
+    held.release();
+    await h.settleMail();
+    expect(h.outbox.filter((m) => m.to === email)).toHaveLength(2);
     await h.close();
   });
 
@@ -704,7 +754,7 @@ describe('mail abuse limits', () => {
     const ipWaits = await Promise.all(
       Array.from({ length: 20 }, () => mailer.consumeIp('203.0.113.50')),
     );
-    expect(ipWaits.filter((w) => w === 0)).toHaveLength(5);
+    expect(ipWaits.filter((a) => a.wait === 0)).toHaveLength(5);
     const results = await Promise.allSettled(
       Array.from({ length: 20 }, (_, i) =>
         mailer.sendVerification(`c${i}@bas.lu`, 'https://x.test/'),
@@ -712,6 +762,134 @@ describe('mail abuse limits', () => {
     );
     expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(7);
     expect(sent).toHaveLength(7);
+    await h.close();
+  });
+
+  it('charges no IP slot to concurrent requests while the global cap is spent', async () => {
+    const h = await createHarness();
+    const limits = {
+      perRecipient: { max: 100, windowMs: 3_600_000 },
+      verificationCooldown: { max: 100, windowMs: 1000 },
+      perIpSignup: { max: 5, windowMs: 3_600_000 },
+      global: { max: 1, windowMs: 3_600_000 },
+    };
+    const store = postgresHitStore(h.database, 'concurrency-secret-concurrency-secret-01');
+    const transport = nodemailer.createTransport({ jsonTransport: true });
+    transport.sendMail = (async () => undefined) as unknown as typeof transport.sendMail;
+    const mailer = createMailer(transport, 'fish@bas.lu', { limits, store, log: () => undefined });
+    await store.consume('global', limits.global);
+    const spent = await Promise.all(
+      Array.from({ length: 20 }, () => mailer.consumeIp('203.0.113.51')),
+    );
+    expect(spent.every((a) => a.wait === 0 && a.mailBlockedFor > 0)).toBe(true);
+    expect(await store.remaining('ip:203.0.113.51', limits.perIpSignup)).toBe(0);
+    const rows = await h.database.pool.query('select count(*)::int as n from mail_limit_hits');
+    expect(rows.rows[0].n).toBe(1);
+    await h.close();
+  });
+
+  describe('request admitted while the global cap is spent', () => {
+    const limits = {
+      perRecipient: { max: 100, windowMs: 3_600_000 },
+      verificationCooldown: { max: 100, windowMs: 1000 },
+      perIpSignup: { max: 100, windowMs: 3_600_000 },
+      global: { max: 1000, windowMs: 3_600_000 },
+    };
+
+    async function harnessWithFlakyCap() {
+      let spentOnce = false;
+      const h = await createHarness({
+        mailLimits: limits,
+        wrapMailStore: (store) => ({
+          consume: (key, limit) => store.consume(key, limit),
+          remaining: async (key, limit) => {
+            if (key === 'global' && spentOnce) {
+              spentOnce = false;
+              return 30;
+            }
+            return store.remaining(key, limit);
+          },
+        }),
+      });
+      const hits = async () =>
+        Number(
+          (await h.database.pool.query('select count(*)::int as n from mail_limit_hits')).rows[0].n,
+        );
+      return { h, hits, arm: () => (spentOnce = true) };
+    }
+
+    it('sends no sign-up mail and charges nothing when the cap frees before the mail step', async () => {
+      const { h, hits, arm } = await harnessWithFlakyCap();
+      const before = await hits();
+      arm();
+      expect((await signUp(h.app, nextEmail())).statusCode).toBe(200);
+      await h.settleMail();
+      expect(h.outbox).toHaveLength(0);
+      expect(await hits()).toBe(before);
+      await h.close();
+    });
+
+    it('sends no reset mail and charges nothing when the cap frees before the mail step', async () => {
+      const { h, hits, arm } = await harnessWithFlakyCap();
+      const email = nextEmail();
+      await signUp(h.app, email);
+      h.outbox.length = 0;
+      const before = await hits();
+      arm();
+      const res = await h.app.inject({
+        method: 'POST',
+        url: '/api/auth/request-password-reset',
+        headers: jsonHeaders,
+        payload: { email, redirectTo: '/' },
+      });
+      expect(res.statusCode).toBe(200);
+      await h.settleMail();
+      expect(h.outbox).toHaveLength(0);
+      expect(await hits()).toBe(before);
+      await h.close();
+    });
+  });
+
+  it('gives a known and an unknown address the same per-IP 429 sequence', async () => {
+    const h = await createHarness({
+      mailLimits: {
+        perRecipient: { max: 1, windowMs: 3_600_000 },
+        verificationCooldown: { max: 100, windowMs: 1000 },
+        perIpSignup: { max: 3, windowMs: 3_600_000 },
+        global: { max: 1000, windowMs: 3_600_000 },
+      },
+    });
+    const known = nextEmail();
+    await h.app.inject({
+      method: 'POST',
+      url: '/api/auth/sign-up/email',
+      remoteAddress: '127.0.0.1',
+      headers: { ...jsonHeaders, 'x-forwarded-for': '203.0.113.1' },
+      payload: { email: known, password: PASSWORD, name: 'Tester' },
+    });
+    const sequence = async (ip: string, url: string, email: string) => {
+      const statuses: number[] = [];
+      for (let i = 0; i < 5; i++) {
+        const res = await h.app.inject({
+          method: 'POST',
+          url,
+          remoteAddress: '127.0.0.1',
+          headers: { ...jsonHeaders, 'x-forwarded-for': ip },
+          payload: { email, callbackURL: '/', redirectTo: '/' },
+        });
+        statuses.push(res.statusCode);
+      }
+      return statuses;
+    };
+    for (const [n, url] of [
+      '/api/auth/send-verification-email',
+      '/api/auth/request-password-reset',
+    ].entries()) {
+      const forKnown = await sequence(`203.0.113.${10 + n}`, url, known);
+      const forUnknown = await sequence(`203.0.113.${20 + n}`, url, nextEmail());
+      expect(forKnown).toEqual([200, 200, 200, 429, 429]);
+      expect(forUnknown).toEqual(forKnown);
+    }
     await h.close();
   });
 

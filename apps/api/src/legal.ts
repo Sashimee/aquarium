@@ -60,7 +60,7 @@ export function registerLegalRoutes(deps: LegalDeps): void {
     return credits;
   });
 
-  app.get('/api/me/export', async (req, reply) => {
+  app.post('/api/me/export', async (req, reply) => {
     const current = await deps.currentSession(req);
     if (!current) return unauthenticated(reply);
     const userId = current.user.id;

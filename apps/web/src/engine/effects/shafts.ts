@@ -66,10 +66,16 @@ export class WaterShafts {
         Loop(STEPS, ({ i }) => {
           const t = start.add(stepLength.mul(float(i).add(jitter)));
           const p = eye.add(dir.mul(t));
-          const slant = max(medium.boxMax.y.sub(p.y), 0).div(cosLight);
+          const depth = max(medium.boxMax.y.sub(p.y), 0);
+          const slant = depth.div(cosLight);
           const surface = p.xz.add(light.xz.mul(slant));
           const deviation = caustics.bakedAt(surface, SHAFT_PATTERN_SCALE).sub(1);
-          sum.addAssign(medium.transmittance(slant.add(t.sub(start))).mul(deviation));
+          sum.addAssign(
+            medium
+              .transmittance(slant.add(t.sub(start)))
+              .mul(medium.hoodSpread(depth))
+              .mul(deviation),
+          );
         });
         const g2 = PHASE_G * PHASE_G;
         const cosTheta = dot(dir, light.negate());

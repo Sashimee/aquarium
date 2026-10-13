@@ -706,6 +706,7 @@ export class World {
     const aProbe = clamp((probeMargin - dProbe) / (probeMargin - radius), 0, 1) * closing;
     const aHere = clamp((clearance - dHere) / (clearance - radius), 0, 1);
     const a = Math.max(aHere, aProbe);
+    let aWall = 0;
     if (a > 0) {
       // Prioritised blending (Reynolds 1987): an imminent wall outranks the school.
       const keep = 1 - a * STEERING.avoidPriority;
@@ -749,6 +750,7 @@ export class World {
         // floor or rock top (a mostly vertical normal) the answer is to rise, not to slide, and a
         // tangent taken from the small horizontal part of the normal would spin the fish.
         const hl = Math.hypot(nx, nz);
+        aWall = a * hl;
         if (hl > STEERING.slideMinHorizontal) {
           const ux = nx / hl;
           const uz = nz / hl;
@@ -864,9 +866,12 @@ export class World {
     } else {
       this.targetSpeed[i] = clamp(Math.max(mag, minSpeed), 0, Math.max(0, maxSpeed));
     }
+    // Only the horizontal share of avoidance blocks the pivot: a rock top under the station is
+    // avoidance in pitch, turning on the spot over it brings the body no nearer, and turnRoom
+    // already checks the horizontal sweep. Gating on it left a tang unable to face a clip (#232).
     if (
       !Number.isNaN(faceYaw) &&
-      a < STEERING.avoidReleaseThreshold &&
+      aWall < STEERING.avoidReleaseThreshold &&
       (Math.abs(wrapAngle(faceYaw - yaw)) < STEERING.standOffFacingRad ||
         this.turnRoom(i, sdf, yaw, faceYaw) >= STEERING.turnRoomMarginBodyLengths * length)
     ) {

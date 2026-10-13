@@ -7,7 +7,7 @@ import { createAuth, type Auth, DEFAULT_AUTH_RATE_LIMITS, type AuthRateLimits } 
 import { connect, runMigrations, type Database } from './db/index.ts';
 import { createClock, type Clock } from './clock.ts';
 import { createMailer, DEFAULT_MAIL_LIMITS, type MailLimits } from './mail.ts';
-import { postgresHitStore } from './rate-limit.ts';
+import { postgresHitStore, type HitStore } from './rate-limit.ts';
 import { loadCatalog } from './species.ts';
 import type { LegalLimits } from './legal.ts';
 import type { CareLimits } from './tanks.ts';
@@ -45,6 +45,7 @@ export interface HarnessOptions {
   indexable?: boolean;
   webRoot?: string;
   mailLimits?: MailLimits;
+  wrapMailStore?: (store: HitStore) => HitStore;
   authLimits?: AuthRateLimits;
   limited?: boolean;
   careLimits?: CareLimits;
@@ -123,7 +124,9 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
 
   const mailer = createMailer(transport, 'fish@bas.lu', {
     limits: opts.mailLimits ?? (opts.limited ? DEFAULT_MAIL_LIMITS : GENEROUS_MAIL),
-    store: postgresHitStore(database, 'testsecrettestsecrettestsecret0123456789'),
+    store: (opts.wrapMailStore ?? ((store) => store))(
+      postgresHitStore(database, 'testsecrettestsecrettestsecret0123456789'),
+    ),
   });
   const background = new Set<Promise<void>>();
   const auth = createAuth({

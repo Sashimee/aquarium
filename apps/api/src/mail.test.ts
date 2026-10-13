@@ -122,15 +122,15 @@ describe('global mail cap', () => {
     });
     await mailer.sendVerification('a@bas.lu', 'https://x.test/a');
     for (let i = 0; i < 5; i++) {
-      expect(await mailer.consumeIp('203.0.113.9')).toBe(0);
+      expect((await mailer.consumeIp('203.0.113.9')).wait).toBe(0);
       await expect(mailer.sendVerification('b@bas.lu', 'https://x.test/b')).rejects.toThrow(
         MailThrottledError,
       );
     }
     now += 61_000;
-    expect(await mailer.consumeIp('203.0.113.9')).toBe(0);
-    expect(await mailer.consumeIp('203.0.113.9')).toBe(0);
-    expect(await mailer.consumeIp('203.0.113.9')).toBeGreaterThan(0);
+    expect((await mailer.consumeIp('203.0.113.9')).wait).toBe(0);
+    expect((await mailer.consumeIp('203.0.113.9')).wait).toBe(0);
+    expect((await mailer.consumeIp('203.0.113.9')).wait).toBeGreaterThan(0);
   });
 
   it('still refuses an exhausted IP while the global cap is spent', async () => {
@@ -146,9 +146,39 @@ describe('global mail cap', () => {
         global: { max: 1, windowMs: 60_000 },
       },
     });
-    expect(await mailer.consumeIp('203.0.113.9')).toBe(0);
+    expect((await mailer.consumeIp('203.0.113.9')).wait).toBe(0);
     await mailer.sendVerification('a@bas.lu', 'https://x.test/a');
-    expect(await mailer.consumeIp('203.0.113.9')).toBeGreaterThan(0);
+    expect((await mailer.consumeIp('203.0.113.9')).wait).toBeGreaterThan(0);
+  });
+
+  it('sends nothing for a request admitted without an IP charge, even if the cap frees meanwhile', async () => {
+    let now = 0;
+    const sent: string[] = [];
+    const transport = nodemailer.createTransport({ jsonTransport: true });
+    transport.sendMail = (async (data: { to: string }) => {
+      sent.push(data.to);
+    }) as unknown as typeof transport.sendMail;
+    const mailer = createMailer(transport, 'fish@bas.lu', {
+      store: memoryHitStore(() => now),
+      log: () => undefined,
+      limits: {
+        perRecipient: { max: 100, windowMs: 3_600_000 },
+        verificationCooldown: { max: 100, windowMs: 1000 },
+        perIpSignup: { max: 2, windowMs: 3_600_000 },
+        global: { max: 1, windowMs: 60_000 },
+      },
+    });
+    await mailer.sendVerification('a@bas.lu', 'https://x.test/a');
+    const admission = await mailer.consumeIp('203.0.113.9');
+    expect(admission.wait).toBe(0);
+    expect(admission.mailBlockedFor).toBeGreaterThan(0);
+    now += 61_000;
+    await expect(
+      mailer.runAdmitted(admission, () => mailer.sendVerification('b@bas.lu', 'https://x.test/b')),
+    ).rejects.toThrow(MailThrottledError);
+    expect(sent).toEqual(['a@bas.lu']);
+    await mailer.sendVerification('b@bas.lu', 'https://x.test/b');
+    expect(sent).toEqual(['a@bas.lu', 'b@bas.lu']);
   });
 
   it('refuses mail without logging the cap event when the store throws', async () => {

@@ -1,5 +1,6 @@
 import {
   BufferGeometry,
+  CompressedTexture,
   LoadingManager,
   type Object3D,
   RepeatWrapping,
@@ -97,12 +98,21 @@ function isMesh(object: Object3D): object is Mesh {
 
 export type ModelLod = 0 | 1 | 2;
 
+/** Satisfies GLTFLoader's required KHR_texture_basisu hook without fetching or transcoding anything. */
+class SkipKTX2Loader extends KTX2Loader {
+  override load(_url: string, onLoad: (texture: CompressedTexture) => void): void {
+    onLoad(new CompressedTexture([], 1, 1));
+  }
+}
+
 /** One GLTF + KTX2 + meshopt pipeline, caching every (asset, lod, texture size) it loads. */
 export class ModelLibrary {
   private readonly manager = new LoadingManager();
   private readonly ktx2 = new KTX2Loader(this.manager);
   private readonly gltf = new GLTFLoader(this.manager);
+  private readonly geometryGltf = new GLTFLoader().setKTX2Loader(new SkipKTX2Loader());
   private readonly cache = new Map<string, Promise<LoadedModel>>();
+  private readonly collision = new Map<string, Promise<readonly BufferGeometry[]>>();
   private textureSize: 1024 | 2048 = 1024;
   private readonly textures: Texture[] = [];
   private inflight = 0;
@@ -117,6 +127,7 @@ export class ModelLibrary {
     this.ktx2.detectSupport(renderer);
     this.gltf.setKTX2Loader(this.ktx2);
     this.gltf.setMeshoptDecoder(MeshoptDecoder);
+    this.geometryGltf.setMeshoptDecoder(MeshoptDecoder);
   }
 
   private lodFile(assetId: string, lod: ModelLod): string {
@@ -158,18 +169,45 @@ export class ModelLibrary {
     return pending;
   }
 
-  /** Geometry of the cheapest LOD, so every client fits identical colliders whatever its tier. */
-  async collisionGeometry(
-    assetId: string,
-    textureSize: 1024 | 2048,
-  ): Promise<readonly BufferGeometry[]> {
-    const entry = this.catalog.get(assetId);
-    const model = await this.load(
-      assetId,
-      Math.min(2, entry.lods.length - 1) as ModelLod,
-      textureSize,
-    );
-    return model.primitives.map((p) => p.geometry);
+  /** Geometry of the cheapest LOD, so every client fits identical colliders whatever its tier. Fetches no textures. */
+  collisionGeometry(assetId: string): Promise<readonly BufferGeometry[]> {
+    let pending = this.collision.get(assetId);
+    if (!pending) {
+      const entry = this.catalog.get(assetId);
+      const file = this.lodFile(assetId, Math.min(2, entry.lods.length - 1) as ModelLod);
+      pending = this.parsedRenderModel(file).then(
+        (model) =>
+          model?.primitives.map((p) => p.geometry.clone()) ??
+          this.geometryGltf.loadAsync(`${ASSET_BASE}${file}`).then((gltf) => {
+            gltf.scene.updateMatrixWorld(true);
+            const geometries: BufferGeometry[] = [];
+            gltf.scene.traverse((object) => {
+              if (!isMesh(object)) return;
+              const geometry = object.geometry.clone();
+              geometry.applyMatrix4(object.matrixWorld);
+              geometries.push(geometry);
+            });
+            if (geometries.length === 0) throw new Error(`${file} contains no meshes`);
+            return geometries;
+          }),
+      );
+      this.collision.set(assetId, pending);
+      pending.catch(() => this.collision.delete(assetId));
+    }
+    return pending;
+  }
+
+  /** A render-path model already parsed (or parsing) for `file`, at any texture size, so collision can skip a second parse. */
+  private async parsedRenderModel(file: string): Promise<LoadedModel | undefined> {
+    for (const [key, pending] of this.cache) {
+      if (!key.startsWith(`${file}@`)) continue;
+      try {
+        return await pending;
+      } catch {
+        continue;
+      }
+    }
+    return undefined;
   }
 
   async loadTexture(
@@ -240,6 +278,11 @@ export class ModelLibrary {
     for (const texture of this.textures) texture.dispose();
     this.textures.length = 0;
     this.cache.clear();
+    const collision = await Promise.allSettled(this.collision.values());
+    for (const result of collision) {
+      if (result.status === 'fulfilled') for (const geometry of result.value) geometry.dispose();
+    }
+    this.collision.clear();
     this.ktx2.dispose();
   }
 }

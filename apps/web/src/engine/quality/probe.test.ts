@@ -73,6 +73,33 @@ describe('selectInitialTier', () => {
     expect(pick(25)).toBe('medium');
   });
 
+  it('needs frames at the display rate before keeping the probe tier', () => {
+    const pick = (ms: number) =>
+      selectInitialTier({
+        samples: [ms],
+        signal: 'frame',
+        probeTier: 'medium',
+        targetMs: 1000 / 36,
+        refreshMs: TARGET,
+      }).tier;
+    expect(pick(TARGET)).toBe('medium');
+    // 30 fps meets the old 30 fps target, but medium cannot hold the 36 fps one.
+    expect(pick(1000 / 30)).toBe('low');
+    expect(pick(22)).toBe('medium');
+  });
+
+  it('never picks above maxTier, whatever the signal', () => {
+    const base = { probeTier: 'medium', targetMs: TARGET, maxTier: 'medium' } as const;
+    expect(selectInitialTier({ ...base, samples: [1], signal: 'gpu' }).tier).toBe('medium');
+    expect(selectInitialTier({ ...base, samples: [TARGET], signal: 'frame' }).tier).toBe('medium');
+    expect(selectInitialTier({ ...base, samples: [], signal: 'gpu', maxTier: 'low' }).tier).toBe(
+      'low',
+    );
+    expect(
+      selectInitialTier({ ...base, samples: [TARGET], signal: 'frame', probeTier: 'high' }).tier,
+    ).toBe('medium');
+  });
+
   it('respects custom headroom and tolerance', () => {
     expect(
       selectInitialTier({

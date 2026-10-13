@@ -526,13 +526,424 @@ describe('behaviour traits', () => {
   });
 
   it('maps traits to behaviours', () => {
-    const s = toSimSpecies(withTraits(['shoal', 'air-gulp', 'glass-grazer']));
-    expect(s.shoal).toBe(true);
-    expect(s.airGulp).toBe(true);
-    expect(s.grazer).toBe('glass');
-    expect(s.bellyToSurface).toBe(true);
+    const cory = toSimSpecies(bronzeCorydoras);
+    expect(cory.shoal).toBe(true);
+    expect(cory.airGulp).toBe(true);
+    const oto = toSimSpecies(otocinclus);
+    expect(oto.grazer).toBe('glass');
+    expect(oto.bellyToSurface).toBe(true);
     expect(toSimSpecies(royalGramma).home).toBe('cave');
     expect(toSimSpecies(clownfish).home).toBe('anemone');
     expect(toSimSpecies(angelfish).home).toBe('station');
   });
+  const withGait = (
+    species: SpeciesInput,
+    gait: SpeciesInput['locomotion']['gait'],
+    traits: SpeciesInput['behaviour']['traits'],
+  ): SpeciesInput => ({
+    ...species,
+    behaviour: { ...species.behaviour, traits },
+    locomotion: { ...species.locomotion, gait },
+  });
+
+  it('rejects air-gulp on a gait other than forage, where a gulp never starts', () => {
+    for (const gait of ['burst-and-coast', 'cruise', 'hover'] as const) {
+      expect(() => toSimSpecies(withGait(neonTetra, gait, ['air-gulp']))).toThrow(
+        /species "neon-tetra": trait "air-gulp" needs gait "forage"/,
+      );
+    }
+    expect(toSimSpecies(withGait(neonTetra, 'forage', ['air-gulp'])).airGulp).toBe(true);
+  });
+
+  it('rejects rock-grazer on a fish with a home or a forage gait, which never swims free', () => {
+    const rejects = /species "yellow-tang": trait "rock-grazer" needs a gait other than "hover"/;
+    for (const gait of ['hover', 'forage'] as const) {
+      expect(() => toSimSpecies(withGait(yellowTang, gait, ['rock-grazer']))).toThrow(rejects);
+    }
+    for (const home of ['anemone-host', 'cave-dweller'] as const) {
+      expect(() => toSimSpecies(withGait(yellowTang, 'cruise', ['rock-grazer', home]))).toThrow(
+        rejects,
+      );
+    }
+    for (const gait of ['burst-and-coast', 'cruise'] as const) {
+      expect(toSimSpecies(withGait(yellowTang, gait, ['rock-grazer'])).grazer).toBe('rock');
+    }
+  });
+
+  it('rejects glass-grazer on a forage gait, whose bottom foraging takes precedence', () => {
+    expect(() => toSimSpecies(withGait(otocinclus, 'forage', ['glass-grazer']))).toThrow(
+      /species "otocinclus": trait "glass-grazer" needs a gait other than "forage"/,
+    );
+    for (const gait of ['burst-and-coast', 'cruise', 'hover'] as const) {
+      expect(toSimSpecies(withGait(otocinclus, gait, ['glass-grazer'])).grazer).toBe('glass');
+    }
+  });
+
+  it('rejects anemone-host on a forager or glass grazer, which would never host', () => {
+    expect(() => toSimSpecies(withGait(clownfish, 'forage', ['anemone-host']))).toThrow(
+      /species "ocellaris-clownfish": trait "anemone-host" needs a gait other than "forage" and no "glass-grazer"/,
+    );
+    expect(() =>
+      toSimSpecies(withGait(clownfish, 'hover', ['anemone-host', 'glass-grazer'])),
+    ).toThrow(/trait "anemone-host" needs a gait other than "forage" and no "glass-grazer"/);
+    for (const gait of ['burst-and-coast', 'cruise', 'hover'] as const) {
+      expect(toSimSpecies(withGait(clownfish, gait, ['anemone-host'])).home).toBe('anemone');
+    }
+  });
+
+  it('accepts cave-dweller on a forager or a glass grazer', () => {
+    expect(toSimSpecies(withGait(bronzeCorydoras, 'forage', ['cave-dweller'])).home).toBe('cave');
+    expect(toSimSpecies(withGait(otocinclus, 'hover', ['glass-grazer', 'cave-dweller'])).home).toBe(
+      'cave',
+    );
+  });
+});
+
+describe('cave-dwelling foragers and glass grazers', { timeout: LONG }, () => {
+  const caveCory: SpeciesInput = {
+    ...bronzeCorydoras,
+    id: 'cave-cory',
+    behaviour: { ...bronzeCorydoras.behaviour, traits: ['cave-dweller'] },
+  };
+  const pleco: SpeciesInput = {
+    ...otocinclus,
+    id: 'pleco',
+    behaviour: {
+      ...otocinclus.behaviour,
+      schooling: undefined,
+      traits: ['glass-grazer', 'cave-dweller'],
+    },
+  };
+
+  // Seeds on which the first version of this sheltered at the mouth or pinned against the floor.
+  const SEEDS = [5, 7, 12, 99];
+  const cave = anchorOf('cave');
+
+  function reefWith(species: SpeciesInput, seed: number): World {
+    return new World({
+      seed,
+      tank: REEF_TANK,
+      species: [species],
+      decor: REEF_DECOR,
+      anchors: REEF_ANCHORS,
+      fish: spawnMany(species.id, 1),
+    });
+  }
+
+  function insideAtNight(w: World, length: number): number {
+    w.setLight(0);
+    let inside = 0;
+    let night = 0;
+    for (let t = 0; t < 9000; t++) {
+      w.step();
+      if (t < 4500) continue;
+      const s = at(w.state, 0);
+      if (
+        (s === FishState.Shelter || s === FishState.Rest) &&
+        distanceTo(w, 0, cave.position) < cave.radius + length
+      ) {
+        inside++;
+      }
+      night++;
+    }
+    return inside / night;
+  }
+
+  for (const [species, active] of [
+    [caveCory, FishState.Forage],
+    [pleco, FishState.Graze],
+  ] as const) {
+    const length = toSimSpecies(species).bodyLength;
+
+    it(`${species.id} keeps its own gait by day and makes for the cave when startled`, () => {
+      for (const seed of SEEDS) {
+        const w = reefWith(species, seed);
+        let own = 0;
+        let sheltered = 0;
+        for (let t = 0; t < 3000; t++) {
+          w.step();
+          if (at(w.state, 0) === active) own++;
+          if (at(w.state, 0) === FishState.Shelter) sheltered++;
+        }
+        expect(own, `seed ${seed}`).toBeGreaterThan(0);
+        expect(sheltered, `seed ${seed}`).toBe(0);
+
+        for (let tap = 0; tap < 10 && at(w.behaviour.startledAt, 0) < 0; tap++) {
+          const p = [at(w.position, 0), at(w.position, 1), at(w.position, 2)] as const;
+          w.startle({ position: [p[0], p[1], p[2] + 0.05], intensity: 1 });
+          w.step();
+          for (let t = 1; t < 60 && at(w.behaviour.startledAt, 0) < 0; t++) w.step();
+        }
+        expect(at(w.behaviour.startledAt, 0), `seed ${seed}`).toBeGreaterThanOrEqual(0);
+        const before = distanceTo(w, 0, cave.position);
+        let closest = before;
+        let ownWhileSheltering = 0;
+        const window = Math.round((0.75 * BEHAVIOUR.shelterAfterStartleS) / STEP_DT);
+        for (let t = 0; t < window; t++) {
+          w.step();
+          if (at(w.state, 0) === active) ownWhileSheltering++;
+          closest = Math.min(closest, distanceTo(w, 0, cave.position));
+        }
+        expect(ownWhileSheltering, `seed ${seed}`).toBe(0);
+        expect(closest, `seed ${seed}`).toBeLessThan(before - length);
+        expect(insideAtNight(w, length), `seed ${seed}`).toBeGreaterThan(0.6);
+      }
+    });
+
+    it(`${species.id} goes into the cave on a night that no startle preceded`, () => {
+      for (const seed of SEEDS) {
+        const w = reefWith(species, seed);
+        for (let t = 0; t < 3000; t++) w.step();
+        expect(insideAtNight(w, length), `seed ${seed}`).toBeGreaterThan(0.6);
+      }
+    });
+  }
+});
+
+describe('per-trait parameters', () => {
+  const tetra = (
+    extra: Partial<SpeciesInput['behaviour']>,
+    traits: SpeciesInput['behaviour']['traits'] = [],
+  ): SpeciesInput => ({
+    ...neonTetra,
+    behaviour: { ...neonTetra.behaviour, ...extra, traits },
+  });
+
+  it('falls back to the BEHAVIOUR defaults when a species sets no parameters', () => {
+    const s = toSimSpecies(betta);
+    expect(s.gulpsPerHour).toBe(BEHAVIOUR.gulpsPerHour);
+    expect([s.grazeMeanIntervalS, s.grazeMinS, s.grazeMaxS]).toEqual([
+      BEHAVIOUR.grazeMeanIntervalS,
+      BEHAVIOUR.grazeMinS,
+      BEHAVIOUR.grazeMaxS,
+    ]);
+    expect([s.flareMinS, s.flareMaxS]).toEqual([BEHAVIOUR.flareMinS, BEHAVIOUR.flareMaxS]);
+    expect([s.stationRadiusBodyLengths, s.restationMinS, s.restationMaxS]).toEqual([
+      BEHAVIOUR.stationRadiusBodyLengths,
+      BEHAVIOUR.restationMinS,
+      BEHAVIOUR.restationMaxS,
+    ]);
+    expect(s.shelterAfterStartleS).toBe(BEHAVIOUR.shelterAfterStartleS);
+    expect([s.excursionMeanIntervalS, s.hostLeashBodyLengths]).toEqual([
+      BEHAVIOUR.excursionMeanIntervalS,
+      BEHAVIOUR.hostLeashBodyLengths,
+    ]);
+  });
+
+  it('reads each parameter object and keeps defaults for the fields it leaves out', () => {
+    const tang = toSimSpecies({
+      ...yellowTang,
+      behaviour: { ...yellowTang.behaviour, grazing: { meanIntervalS: 8, maxS: 3 } },
+    });
+    expect([tang.grazeMeanIntervalS, tang.grazeMinS, tang.grazeMaxS]).toEqual([
+      8,
+      BEHAVIOUR.grazeMinS,
+      3,
+    ]);
+    const fish = toSimSpecies({
+      ...angelfish,
+      behaviour: { ...angelfish.behaviour, station: { radiusBodyLengths: 3, restationMaxS: 90 } },
+    });
+    expect([fish.stationRadiusBodyLengths, fish.restationMinS, fish.restationMaxS]).toEqual([
+      3,
+      BEHAVIOUR.restationMinS,
+      90,
+    ]);
+    const clown = toSimSpecies({
+      ...clownfish,
+      behaviour: { ...clownfish.behaviour, excursion: { meanIntervalS: 40, leashBodyLengths: 2 } },
+    });
+    expect([clown.excursionMeanIntervalS, clown.hostLeashBodyLengths]).toEqual([40, 2]);
+    const gramma = toSimSpecies({
+      ...royalGramma,
+      behaviour: { ...royalGramma.behaviour, refuge: { afterStartleS: 45 } },
+    });
+    expect(gramma.shelterAfterStartleS).toBe(45);
+    const fighter = toSimSpecies({
+      ...betta,
+      behaviour: { ...betta.behaviour, flare: { minS: 4, maxS: 9 } },
+    });
+    expect([fighter.flareMinS, fighter.flareMaxS]).toEqual([4, 9]);
+    const cory = toSimSpecies({
+      ...bronzeCorydoras,
+      behaviour: { ...bronzeCorydoras.behaviour, airGulp: { perHour: 20 } },
+    });
+    expect(cory.gulpsPerHour).toBe(20);
+    const homed = toSimSpecies({
+      ...clownfish,
+      behaviour: { ...clownfish.behaviour, station: { radiusBodyLengths: 2 } },
+    });
+    expect(homed.stationRadiusBodyLengths).toBe(2);
+    for (const sheltering of [bronzeCorydoras, otocinclus]) {
+      const s = toSimSpecies({
+        ...sheltering,
+        behaviour: {
+          ...sheltering.behaviour,
+          traits: [...sheltering.behaviour.traits, 'cave-dweller'],
+          refuge: { afterStartleS: 10 },
+        },
+      });
+      expect(s.shelterAfterStartleS).toBe(10);
+    }
+  });
+
+  it('rejects a min/max pair that is out of order once merged with the defaults', () => {
+    expect(() =>
+      toSimSpecies({
+        ...yellowTang,
+        behaviour: { ...yellowTang.behaviour, grazing: { meanIntervalS: 20, minS: 50 } },
+      }),
+    ).toThrow(/species "yellow-tang": behaviour.grazing.minS\/maxS min 50 exceeds max 4/);
+    expect(() =>
+      toSimSpecies({
+        ...angelfish,
+        behaviour: { ...angelfish.behaviour, station: { radiusBodyLengths: 1, restationMaxS: 5 } },
+      }),
+    ).toThrow(/species "angelfish": behaviour.station.restationMinS\/restationMaxS min 20/);
+    expect(() =>
+      toSimSpecies({ ...betta, behaviour: { ...betta.behaviour, flare: { minS: 6, maxS: 3 } } }),
+    ).toThrow(/species "betta": behaviour.flare.minS\/maxS min 6 exceeds max 3/);
+  });
+
+  it('rejects a non-positive value', () => {
+    expect(() =>
+      toSimSpecies({
+        ...bronzeCorydoras,
+        behaviour: { ...bronzeCorydoras.behaviour, airGulp: { perHour: 0 } },
+      }),
+    ).toThrow(/behaviour.airGulp.perHour must be a positive number/);
+  });
+
+  it('rejects a parameter object the sim would never read', () => {
+    expect(() => toSimSpecies(tetra({ airGulp: { perHour: 4 } }))).toThrow(
+      /species "neon-tetra": behaviour.airGulp is set but needs trait "air-gulp"/,
+    );
+    expect(() => toSimSpecies(tetra({ airGulp: { perHour: 4 } }, ['air-gulp']))).toThrow(
+      /trait "air-gulp" needs gait "forage"/,
+    );
+    expect(() => toSimSpecies(tetra({ grazing: { meanIntervalS: 10 } }, ['glass-grazer']))).toThrow(
+      /behaviour.grazing is set but needs trait "rock-grazer"/,
+    );
+    expect(() =>
+      toSimSpecies({
+        ...angelfish,
+        behaviour: {
+          ...angelfish.behaviour,
+          traits: ['rock-grazer'],
+          grazing: { meanIntervalS: 5 },
+        },
+      }),
+    ).toThrow(/trait "rock-grazer" needs a gait other than "hover" or "forage"/);
+    expect(() => toSimSpecies(tetra({ station: { radiusBodyLengths: 2 } }))).toThrow(
+      /behaviour.station is set but needs gait "hover" or an anemone or cave home/,
+    );
+    expect(() =>
+      toSimSpecies({
+        ...bronzeCorydoras,
+        behaviour: {
+          ...bronzeCorydoras.behaviour,
+          traits: ['cave-dweller'],
+          station: { radiusBodyLengths: 2 },
+        },
+      }),
+    ).toThrow(
+      /behaviour.station is set but needs .* without gait "forage" or trait "glass-grazer"/,
+    );
+    expect(() => toSimSpecies(tetra({ refuge: { afterStartleS: 10 } }))).toThrow(
+      /needs trait "cave-dweller"/,
+    );
+    expect(() => toSimSpecies(tetra({ excursion: { meanIntervalS: 10 } }))).toThrow(
+      /needs trait "anemone-host"/,
+    );
+  });
+
+  it('accepts station parameters on an anemone or cave species, which stations without an anchor', () => {
+    for (const home of [clownfish, royalGramma]) {
+      const s = toSimSpecies({
+        ...home,
+        behaviour: { ...home.behaviour, station: { radiusBodyLengths: 4, restationMinS: 30 } },
+      });
+      expect([s.stationRadiusBodyLengths, s.restationMinS]).toEqual([4, 30]);
+    }
+  });
+
+  it(
+    'an anchorless clownfish holds its station to its own station radius',
+    { timeout: LONG },
+    () => {
+      const withRadius = (id: string, radiusBodyLengths: number): SpeciesInput => ({
+        ...clownfish,
+        id,
+        behaviour: {
+          ...clownfish.behaviour,
+          station: { radiusBodyLengths, restationMinS: 500, restationMaxS: 600 },
+        },
+      });
+      const run = (): number[] => {
+        const w = new World({
+          seed: 11,
+          tank: SHOW_TANK,
+          species: [withRadius('clown-tight', 0.5), withRadius('clown-loose', 8)],
+          decor: SHOW_DECOR,
+          fish: [...spawnMany('clown-tight', 4), ...spawnMany('clown-loose', 4)],
+        });
+        const station = [0, 0];
+        for (let t = 0; t < 3600; t++) {
+          w.step();
+          if (t < 900) continue;
+          for (let i = 0; i < w.count; i++) {
+            if (at(w.state, i) !== FishState.Station) continue;
+            const k = i < 4 ? 0 : 1;
+            station[k] = at(station, k) + 1;
+          }
+        }
+        return station;
+      };
+      const station = run();
+      // 4 fish × 2700 ticks: the 0.5 L radius is mostly overshot, the 8 L one rarely left.
+      expect(at(station, 0)).toBeLessThan(0.4 * 10_800);
+      expect(at(station, 1)).toBeGreaterThan(0.75 * 10_800);
+      expect(run()).toEqual(station);
+    },
+  );
+
+  it(
+    'two air-gulping species with different rates gulp at different rates, reproducibly',
+    { timeout: LONG },
+    () => {
+      const withRate = (id: string, perHour: number): SpeciesInput => ({
+        ...bronzeCorydoras,
+        id,
+        behaviour: { ...bronzeCorydoras.behaviour, airGulp: { perHour } },
+      });
+      const run = (): number[] => {
+        const w = new World({
+          seed: 11,
+          tank: SHOW_TANK,
+          species: [withRate('cory-slow', 2), withRate('cory-fast', 90)],
+          decor: SHOW_DECOR,
+          fish: [...spawnMany('cory-slow', 6), ...spawnMany('cory-fast', 6)],
+        });
+        const gulping = new Uint8Array(w.count);
+        const gulps = [0, 0];
+        for (let t = 0; t < 9000; t++) {
+          w.step();
+          for (let i = 0; i < w.count; i++) {
+            const now = at(w.state, i) === FishState.Gulp ? 1 : 0;
+            if (now === 1 && gulping[i] === 0) {
+              const k = i < 6 ? 0 : 1;
+              gulps[k] = at(gulps, k) + 1;
+            }
+            gulping[i] = now;
+          }
+        }
+        return gulps;
+      };
+      const gulps = run();
+      // Six fish for five minutes: about 1 gulp expected at 2/h and 45 at 90/h.
+      expect(at(gulps, 0)).toBeLessThanOrEqual(5);
+      expect(at(gulps, 1)).toBeGreaterThan(20);
+      expect(run()).toEqual(gulps);
+    },
+  );
 });

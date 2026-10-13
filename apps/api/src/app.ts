@@ -23,7 +23,7 @@ import { schema, type Database } from './db/index.ts';
 import { apiError } from './errors.ts';
 import { loadCredits } from './credits.ts';
 import { DEFAULT_LEGAL_LIMITS, registerLegalRoutes, type LegalLimits } from './legal.ts';
-import type { Mailer } from './mail.ts';
+import type { IpAdmission, Mailer } from './mail.ts';
 import { RateLimiter } from './rate-limit.ts';
 import type { SpeciesCatalog } from './species.ts';
 import { DEFAULT_CARE_LIMITS, registerTankRoutes, type CareLimits } from './tanks.ts';
@@ -257,22 +257,20 @@ export function buildApp(opts: AppOptions): FastifyInstance {
           return reply.code(404).send(apiError('not_found', 'Not found.'));
         }
         const raw = typeof req.body === 'string' ? req.body : undefined;
+        let admission: IpAdmission = { wait: 0, mailBlockedFor: 0 };
 
         if (req.method === 'POST' && pathname === `${AUTH_BASE_PATH}/sign-up/email`) {
           signUpBodySchema.parse(parseJson(raw));
-          const wait = await mailer.consumeIp(req.ip);
-          if (wait > 0) return tooMany(reply, wait);
+          admission = await mailer.consumeIp(req.ip);
+          if (admission.wait > 0) return tooMany(reply, admission.wait);
         }
         if (req.method === 'POST' && pathname === `${AUTH_BASE_PATH}/request-password-reset`) {
-          const wait = await mailer.consumeIp(req.ip);
-          if (wait > 0) return tooMany(reply, wait);
+          admission = await mailer.consumeIp(req.ip);
+          if (admission.wait > 0) return tooMany(reply, admission.wait);
         }
         if (req.method === 'POST' && pathname === `${AUTH_BASE_PATH}/send-verification-email`) {
-          const wait = await mailer.consumeIp(req.ip);
-          if (wait > 0) return tooMany(reply, wait);
-          const email = recipientOf(raw);
-          const cooldown = email ? await mailer.peekVerificationCooldown(email) : 0;
-          if (cooldown > 0) return tooMany(reply, cooldown);
+          admission = await mailer.consumeIp(req.ip);
+          if (admission.wait > 0) return tooMany(reply, admission.wait);
         }
 
         const headers = new Headers();
@@ -288,7 +286,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
           headers,
           ...(req.method === 'POST' && raw !== undefined ? { body: raw } : {}),
         });
-        const res = await auth.handler(request);
+        const res = await mailer.runAdmitted(admission, () => auth.handler(request));
 
         reply.code(res.status);
         res.headers.forEach((value, name) => {
@@ -458,17 +456,6 @@ function originOf(referer: string | undefined): string | undefined {
   if (!referer) return undefined;
   try {
     return new URL(referer).origin;
-  } catch {
-    return undefined;
-  }
-}
-
-function recipientOf(raw: string | undefined): string | undefined {
-  if (!raw) return undefined;
-  try {
-    const body: unknown = JSON.parse(raw);
-    const email = (body as { email?: unknown } | null)?.email;
-    return typeof email === 'string' ? email : undefined;
   } catch {
     return undefined;
   }

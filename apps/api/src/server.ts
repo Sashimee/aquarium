@@ -1,4 +1,5 @@
 import { buildApp } from './app.ts';
+import { createBackgroundTasks, shutdown } from './background.ts';
 import { createAuth } from './auth.ts';
 import { loadConfig } from './config.ts';
 import { connect, runMigrations } from './db/index.ts';
@@ -6,6 +7,10 @@ import { createMailer, createSmtpTransport } from './mail.ts';
 import { postgresHitStore } from './rate-limit.ts';
 import { startMaintenance } from './maintenance.ts';
 import { loadCatalog } from './species.ts';
+
+// Docker's default stop grace is 10 s; finish well inside it.
+const SHUTDOWN_BUDGET_MS = 5500;
+const HARD_EXIT_MS = 8000;
 
 const config = loadConfig(process.env);
 
@@ -17,7 +22,13 @@ const mailer = createMailer(
   config.mailFrom,
   { store: postgresHitStore(database, config.authSecret) },
 );
-const auth = createAuth({ config, database, mailer });
+const background = createBackgroundTasks();
+const auth = createAuth({
+  config,
+  database,
+  mailer,
+  runInBackground: (task) => background.run(task),
+});
 
 const app = buildApp({
   indexable: config.indexable,
@@ -33,11 +44,26 @@ const app = buildApp({
 
 const stopMaintenance = startMaintenance(database);
 
-for (const signal of ['SIGTERM', 'SIGINT'] as const) {
-  process.once(signal, () => {
-    stopMaintenance();
-    void app.close().then(() => database.close());
+let shuttingDown: Promise<void> | undefined;
+
+const stop = () => {
+  if (shuttingDown) return;
+  shuttingDown = shutdown({
+    stopMaintenance,
+    closeApp: () => app.close(),
+    tasks: background,
+    closeDatabase: () => database.close(),
+    budgetMs: SHUTDOWN_BUDGET_MS,
+  }).catch((err: unknown) => {
+    console.error('shutdown failed:', err instanceof Error ? err.name : 'unknown');
+    process.exitCode = 1;
   });
-}
+  // An abandoned task can hold a socket, or a pool client, open indefinitely.
+  setTimeout(() => process.exit(1), HARD_EXIT_MS).unref();
+  void shuttingDown.finally(() => process.exit(process.exitCode ?? 0));
+};
+
+process.on('SIGTERM', stop);
+process.on('SIGINT', stop);
 
 await app.listen({ host: '0.0.0.0', port: config.port });
