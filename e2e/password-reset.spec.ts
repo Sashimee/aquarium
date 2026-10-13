@@ -91,7 +91,7 @@ test.describe('password reset', () => {
     await requestReset(page, email);
 
     await open(page, await waitForLink(page, email, /reset/i));
-    await expect(page).toHaveURL(/\/reset-password\?token=/);
+    await expect(page).toHaveURL(/\/reset-password$/);
     await page.getByLabel('New password', { exact: true }).fill('short');
     await page.getByRole('button', { name: 'Set password' }).click();
     await expect(page.getByText('Use at least 10 characters.')).toBeVisible();
@@ -163,5 +163,37 @@ test.describe('password reset', () => {
     await expect(page).toHaveURL(/\/$/);
     await expect(page.getByRole('navigation', { name: 'Account' })).toContainText('Reset Tester');
     await phone.context().close();
+  });
+
+  test('resetting on a device that is still signed in lands on a working sign-in', async ({
+    page,
+    browser,
+  }) => {
+    const email = freshEmail();
+    await signUp(page, email);
+    await open(page, await waitForLink(page, email, /verify/i));
+    await expect(page.getByRole('heading', { name: 'Email verified' })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Account' })).toContainText('Reset Tester');
+
+    const desktop = await newContextPage(browser);
+    await open(desktop, '/forgot-password');
+    await requestReset(desktop, email);
+    await desktop.context().close();
+
+    await open(page, await waitForLink(page, email, /reset/i));
+    await expect(page.getByRole('heading', { name: 'Choose a new password' })).toBeVisible();
+    await expect(page).toHaveURL(/\/reset-password$/);
+    await page.getByLabel('New password', { exact: true }).fill(NEW_PASSWORD);
+    await page.getByRole('button', { name: 'Set password' }).click();
+    await expect(page.getByRole('heading', { name: 'Password changed' })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Account' })).not.toContainText(
+      'Reset Tester',
+    );
+
+    await page.getByRole('link', { name: 'Sign in' }).last().click();
+    await expect(page).toHaveURL(/\/sign-in$/);
+    await submitSignIn(page, email, NEW_PASSWORD);
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByRole('navigation', { name: 'Account' })).toContainText('Reset Tester');
   });
 });

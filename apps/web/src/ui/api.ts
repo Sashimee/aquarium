@@ -236,7 +236,12 @@ export function createApiClient(fetcher: Fetcher = (i, init) => fetch(i, init)):
     async resetPassword(token, newPassword) {
       const valid = passwordSchema.safeParse(newPassword);
       if (!valid.success) {
-        throw new ClientValidationError({ password: 'Use at least 10 characters.' });
+        throw new ClientValidationError({
+          password:
+            newPassword.length > 128
+              ? 'Use at most 128 characters.'
+              : 'Use at least 10 characters.',
+        });
       }
       await post('/api/auth/reset-password', { token, newPassword: valid.data });
     },

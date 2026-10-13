@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { ApiRequestError } from './api';
-import { useApi } from './context';
+import { useApi, useAuth } from './context';
 import { Field, FormError, Link, Panel, useSubmission } from './screens';
 
 export function ForgotPasswordScreen() {
@@ -47,11 +47,7 @@ export function ForgotPasswordScreen() {
           error={submission.fields.email}
         />
         <FormError
-          message={
-            limited
-              ? 'A reset email went out a moment ago. Please wait before asking for another.'
-              : submission.error
-          }
+          message={limited ? 'Too many requests, try again in a few minutes.' : submission.error}
         />
         <button type="submit" disabled={submission.busy}>
           {submission.busy ? 'Sending…' : 'Send reset link'}
@@ -76,17 +72,30 @@ function ExpiredLink() {
 }
 
 export function ResetPasswordScreen({
-  token,
+  token: urlToken,
   error,
 }: {
   token: string | null;
   error: string | null;
 }) {
   const api = useApi();
+  const auth = useAuth();
   const submission = useSubmission();
+  const [token] = useState(urlToken);
   const [password, setPassword] = useState('');
   const [done, setDone] = useState(false);
   const [stale, setStale] = useState(false);
+
+  useEffect(() => {
+    const meta = document.createElement('meta');
+    meta.name = 'referrer';
+    meta.content = 'no-referrer';
+    document.head.append(meta);
+    if (new URLSearchParams(window.location.search).has('token')) {
+      window.history.replaceState(window.history.state, '', window.location.pathname);
+    }
+    return () => meta.remove();
+  }, []);
 
   if (error || !token || stale) return <ExpiredLink />;
 
@@ -104,7 +113,13 @@ export function ResetPasswordScreen({
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     void submission
-      .run(() => api.resetPassword(token, password), { rethrow: true })
+      .run(
+        async () => {
+          await api.resetPassword(token, password);
+          await auth.refresh();
+        },
+        { rethrow: true },
+      )
       .then(() => setDone(true))
       .catch((cause: unknown) => {
         if (cause instanceof ApiRequestError && cause.status === 400) setStale(true);

@@ -222,4 +222,12 @@ describe('api client', () => {
     );
     expect(fetcher).not.toHaveBeenCalled();
   });
+
+  it('explains the length limit when a new password is too long', async () => {
+    const fetcher = vi.fn();
+    await expect(
+      createApiClient(fetcher).resetPassword('tok', 'a'.repeat(129)),
+    ).rejects.toMatchObject({ fields: { password: 'Use at most 128 characters.' } });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
 });
