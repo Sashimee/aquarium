@@ -197,6 +197,62 @@ describe('unverified sign-up takeover (#114)', () => {
     expect((await signInWith(email, ATTACKER_PASSWORD)).statusCode).toBe(401);
   });
 
+  describe('reset on an unverified account (#139)', () => {
+    const resetPassword = (email: string, newPassword: string) =>
+      h.app.inject({
+        method: 'POST',
+        url: '/api/auth/reset-password',
+        headers: jsonHeaders,
+        payload: { newPassword, token: resetToken(email) },
+      });
+
+    it('keeps the reset password through a later verification', async () => {
+      const email = nextEmail();
+      await signUpWith(email, ATTACKER_PASSWORD);
+      const link = verificationPath(h, email);
+      await requestReset(email);
+      expect((await resetPassword(email, VICTIM_PASSWORD)).statusCode).toBe(200);
+      expect((await signInWith(email, ATTACKER_PASSWORD)).statusCode).toBe(401);
+      expect((await signInWith(email, VICTIM_PASSWORD)).statusCode).toBe(200);
+      expect((await h.app.inject({ method: 'GET', url: link })).statusCode).toBe(302);
+      expect((await signInWith(email, VICTIM_PASSWORD)).statusCode).toBe(200);
+    });
+
+    it('marks the address verified and signs the attacker session out', async () => {
+      const email = nextEmail();
+      const attacker = await signUpWith(email, ATTACKER_PASSWORD);
+      await h.database.pool.query(
+        `insert into session (id, user_id, token, expires_at, created_at, updated_at)
+         select 'atk-' || id, id, 'atk-token-' || id, now() + interval '1 day', now(), now()
+         from "user" where email = $1`,
+        [email],
+      );
+      await requestReset(email);
+      await resetPassword(email, VICTIM_PASSWORD);
+      const row = await h.database.pool.query(
+        'select u.email_verified, (select count(*) from session s where s.user_id = u.id) as sessions from "user" u where email = $1',
+        [email],
+      );
+      expect(row.rows[0].email_verified).toBe(true);
+      expect(Number(row.rows[0].sessions)).toBe(0);
+      expect(
+        (await h.app.inject({ url: '/api/me', headers: { cookie: cookieJar(attacker) } }))
+          .statusCode,
+      ).toBe(401);
+    });
+
+    it('does not drop the new credential when an old verification link is clicked', async () => {
+      const email = nextEmail();
+      await signUpWith(email, ATTACKER_PASSWORD);
+      const oldLink = verificationPath(h, email);
+      await requestReset(email);
+      await resetPassword(email, VICTIM_PASSWORD);
+      const click = await h.app.inject({ method: 'GET', url: oldLink });
+      expect(click.statusCode).toBe(302);
+      expect((await signInWith(email, VICTIM_PASSWORD)).statusCode).toBe(200);
+    });
+  });
+
   it('answers a reset request for an unknown address the same way and sends nothing', async () => {
     const email = nextEmail();
     expect((await requestReset(email)).statusCode).toBe(200);
