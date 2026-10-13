@@ -2,6 +2,7 @@ import { Engine } from './engine/Engine';
 import { EventBus, type EngineEvents } from './engine/events';
 import { parseEngineOptions } from './engine/options';
 import { DEFAULT_TANK } from './engine/tank/dimensions';
+import { startDemoFish, type DemoFish } from './fish/start';
 import { CameraRig } from './interaction/camera';
 import { bindCameraControls } from './interaction/controls';
 import type { InteractionEvents } from './interaction/events';
@@ -88,17 +89,18 @@ async function boot(): Promise<void> {
   });
   engine.onFrame((deltaS) => rig.update(deltaS));
 
+  const biome = parseBiome(window.location.search);
+  const fish: DemoFish =
+    biome === 'freshwater'
+      ? startDemoFish(engine, DEFAULT_TANK, `${import.meta.env.BASE_URL}assets/`)
+      : { sim: { startle: () => undefined }, stop: () => undefined };
+
   let tankScene: TankScene | null = null;
-  mountPresetWhenTierKnown(
-    engine,
-    parseBiome(window.location.search),
-    window.location.search,
-    (scene) => {
-      tankScene = scene;
-      play = createPlaySystem(engine, scene, interaction);
-      if (import.meta.env.DEV) Object.assign(window, { tankScene });
-    },
-  );
+  mountPresetWhenTierKnown(engine, biome, window.location.search, (scene) => {
+    tankScene = scene;
+    play = createPlaySystem(engine, scene, interaction, fish.sim);
+    if (import.meta.env.DEV) Object.assign(window, { tankScene });
+  });
 
   onPageTeardown(window, () => {
     play?.dispose();
@@ -106,6 +108,7 @@ async function boot(): Promise<void> {
     stopMotionWatch();
     unbindControls();
     stopRequests();
+    fish.stop();
     engine.dispose().catch((cause: unknown) => console.error('Engine dispose failed', cause));
   });
 
