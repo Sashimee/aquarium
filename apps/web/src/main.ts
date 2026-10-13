@@ -89,14 +89,14 @@ async function boot(): Promise<void> {
   });
   engine.onFrame((deltaS) => rig.update(deltaS));
 
+  const fish = startDemoFish(engine, DEFAULT_TANK, `${import.meta.env.BASE_URL}assets/`);
+
   let tankScene: TankScene | null = null;
   mountPresetWhenTierKnown(engine, 'freshwater', window.location.search, (scene) => {
     tankScene = scene;
-    play = createPlaySystem(engine, scene, interaction);
+    play = createPlaySystem(engine, scene, interaction, fish.sim);
     if (import.meta.env.DEV) Object.assign(window, { tankScene });
   });
-
-  const stopFish = startDemoFish(engine, DEFAULT_TANK, `${import.meta.env.BASE_URL}assets/`);
 
   onPageTeardown(window, () => {
     play?.dispose();
@@ -104,7 +104,7 @@ async function boot(): Promise<void> {
     stopMotionWatch();
     unbindControls();
     stopRequests();
-    stopFish();
+    fish.stop();
     engine.dispose().catch((cause: unknown) => console.error('Engine dispose failed', cause));
   });
 

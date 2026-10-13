@@ -16,6 +16,7 @@ import {
   STEP_DT,
   type SimReady,
   type SpeciesInput,
+  type Stimulus,
   type WorldConfig,
 } from '@aquarium/sim';
 import type { Engine } from '../engine/Engine';
@@ -191,7 +192,7 @@ export class FishSystem {
       name: 'fish-sim',
     });
     const client = new SimClient(worker);
-    const system = new FishSystem(engine, demo.offset, demo.config.fish.length);
+    const system = new FishSystem(engine, client, demo.offset, demo.config.fish.length);
     system.cleanups.push(() => {
       client.dispose();
       worker.terminate();
@@ -221,6 +222,7 @@ export class FishSystem {
 
   private constructor(
     private readonly engine: Engine,
+    private readonly sim: SimClient,
     offset: readonly [number, number, number],
     count: number,
   ) {
@@ -369,6 +371,14 @@ export class FishSystem {
     for (const batch of this.batches) {
       for (const lod of batch.lods) for (const m of lod.materials) m.setFeatures(features);
     }
+  }
+
+  /**
+   * `stimulus.position` is in the sim's frame (y above the substrate). The demo sim's floor is flat
+   * at the highest substrate point, so a low-ground tap reads up to a few cm high until #64.
+   */
+  startle(stimulus: Stimulus): void {
+    if (!this.disposed) this.sim.startle(stimulus);
   }
 
   /** 0 day .. 1 night; fish pale by their species' night sensitivity. */
