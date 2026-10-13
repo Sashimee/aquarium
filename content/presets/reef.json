@@ -40,27 +40,27 @@
     },
     {
       "assetId": "host-anemone",
-      "position": [-0.26, 0.069, 0.06],
+      "position": [-0.34, 0.069, 0.06],
       "rotationY": 0.8,
       "scale": 0.55
     },
     {
       "assetId": "acropora-cytherea",
-      "position": [0.1, 0.068, 0.06],
+      "position": [0.075, 0.068, 0.09],
       "rotationY": 0.4,
-      "scale": 0.85
+      "scale": 0.62
     },
     {
       "assetId": "acropora-palmata",
-      "position": [0.36, 0.059, 0.11],
+      "position": [0.385, 0.059, 0.13],
       "rotationY": -0.7,
-      "scale": 0.5
+      "scale": 0.42
     },
     {
       "assetId": "brain-coral",
-      "position": [0.5, 0.05, 0.1],
+      "position": [0.53, 0.05, 0.1],
       "rotationY": 0.2,
-      "scale": 0.8
+      "scale": 0.65
     },
     {
       "assetId": "brain-coral",
@@ -70,7 +70,7 @@
     },
     {
       "assetId": "brain-coral",
-      "position": [-0.02, 0.073, 0.0],
+      "position": [0.17, 0.073, 0.19],
       "rotationY": 0.0,
       "scale": 0.6
     },
@@ -82,7 +82,7 @@
     },
     {
       "assetId": "euphyllia-torch-8",
-      "position": [0.22, 0.068, 0.03],
+      "position": [0.31, 0.068, -0.03],
       "rotationY": -0.3,
       "scale": 1
     },

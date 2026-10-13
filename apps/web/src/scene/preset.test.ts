@@ -122,6 +122,82 @@ describe('reef preset', () => {
     }
   });
 
+  it('keeps corals and the anemone from intersecting each other', () => {
+    interface Box {
+      id: string;
+      corners: [number, number][];
+      y0: number;
+      y1: number;
+      coral: boolean;
+    }
+    const boxes: Box[] = preset.decor.map((item) => {
+      const procedural = parseEuphylliaId(item.assetId);
+      const bounds = procedural
+        ? generateEuphyllia(procedural.variant, procedural.seed, 2).bounds
+        : entries.get(item.assetId)?.bounds;
+      if (!bounds) throw new Error(`${item.assetId} has no bounds`);
+      const [x0 = 0, y0 = 0, z0 = 0] = bounds.min;
+      const [x1 = 0, y1 = 0, z1 = 0] = bounds.max;
+      const cos = Math.cos(item.rotationY);
+      const sin = Math.sin(item.rotationY);
+      const corners = (
+        [
+          [x0, z0],
+          [x0, z1],
+          [x1, z1],
+          [x1, z0],
+        ] as [number, number][]
+      ).map(
+        ([x, z]) =>
+          [
+            item.position[0] + (x * cos + z * sin) * item.scale,
+            item.position[2] + (-x * sin + z * cos) * item.scale,
+          ] as [number, number],
+      );
+      const kind = procedural ? 'coral' : kinds.get(item.assetId);
+      return {
+        id: item.assetId,
+        corners,
+        y0: item.position[1] + y0 * item.scale,
+        y1: item.position[1] + y1 * item.scale,
+        coral: kind === 'coral' || kind === 'anemone',
+      };
+    });
+    const overlapDepth = (a: [number, number][], b: [number, number][]): number => {
+      let depth = Infinity;
+      for (const poly of [a, b]) {
+        for (let i = 0; i < 4; i++) {
+          const [px = 0, pz = 0] = poly[i] ?? [];
+          const [qx = 0, qz = 0] = poly[(i + 1) % 4] ?? [];
+          const nx = pz - qz;
+          const nz = qx - px;
+          const len = Math.hypot(nx, nz);
+          const project = (c: [number, number][]) => {
+            const v = c.map(([x, z]) => (x * nx + z * nz) / len);
+            return [Math.min(...v), Math.max(...v)] as const;
+          };
+          const [a0, a1] = project(a);
+          const [b0, b1] = project(b);
+          depth = Math.min(depth, Math.min(a1, b1) - Math.max(a0, b0));
+        }
+      }
+      return depth;
+    };
+    const tolerance = 0.005;
+    for (let i = 0; i < boxes.length; i++) {
+      for (let j = i + 1; j < boxes.length; j++) {
+        const a = boxes[i];
+        const b = boxes[j];
+        if (!a || !b || !a.coral || !b.coral) continue;
+        const vertical = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
+        if (vertical <= tolerance) continue;
+        expect(overlapDepth(a.corners, b.corners), `${a.id} vs ${b.id}`).toBeLessThanOrEqual(
+          tolerance,
+        );
+      }
+    }
+  });
+
   it('seats rocks, corals and the anemone on the substrate', () => {
     for (const item of preset.decor) {
       const kind = parseEuphylliaId(item.assetId) ? 'coral' : kinds.get(item.assetId);
