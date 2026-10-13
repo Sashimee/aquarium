@@ -615,63 +615,87 @@ describe('cave-dwelling foragers and glass grazers', { timeout: LONG }, () => {
     },
   };
 
+  // Seeds on which the first version of this sheltered at the mouth or pinned against the floor.
+  const SEEDS = [5, 7, 12, 99];
+  const cave = anchorOf('cave');
+
+  function reefWith(species: SpeciesInput, seed: number): World {
+    return new World({
+      seed,
+      tank: REEF_TANK,
+      species: [species],
+      decor: REEF_DECOR,
+      anchors: REEF_ANCHORS,
+      fish: spawnMany(species.id, 1),
+    });
+  }
+
+  function insideAtNight(w: World, length: number): number {
+    w.setLight(0);
+    let inside = 0;
+    let night = 0;
+    for (let t = 0; t < 9000; t++) {
+      w.step();
+      if (t < 4500) continue;
+      const s = at(w.state, 0);
+      if (
+        (s === FishState.Shelter || s === FishState.Rest) &&
+        distanceTo(w, 0, cave.position) < cave.radius + length
+      ) {
+        inside++;
+      }
+      night++;
+    }
+    return inside / night;
+  }
+
   for (const [species, active] of [
     [caveCory, FishState.Forage],
     [pleco, FishState.Graze],
   ] as const) {
-    it(`${species.id} keeps its own gait by day and shelters in the cave when startled and at night`, () => {
-      const w = new World({
-        seed: 12,
-        tank: REEF_TANK,
-        species: [species],
-        decor: REEF_DECOR,
-        anchors: REEF_ANCHORS,
-        fish: spawnMany(species.id, 1),
-      });
-      const cave = anchorOf('cave');
-      const length = toSimSpecies(species).bodyLength;
-      let own = 0;
-      let sheltered = 0;
-      for (let t = 0; t < 3000; t++) {
-        w.step();
-        if (at(w.state, 0) === active) own++;
-        if (at(w.state, 0) === FishState.Shelter) sheltered++;
-      }
-      expect(own).toBeGreaterThan(0);
-      expect(sheltered).toBe(0);
+    const length = toSimSpecies(species).bodyLength;
 
-      let shelteredAfterStartle = false;
-      for (let tap = 0; tap < 10 && at(w.behaviour.startledAt, 0) < 0; tap++) {
-        const p = [at(w.position, 0), at(w.position, 1), at(w.position, 2)] as const;
-        w.startle({ position: [p[0], p[1], p[2] + 0.05], intensity: 1 });
-        for (let t = 0; t < 60; t++) {
+    it(`${species.id} keeps its own gait by day and makes for the cave when startled`, () => {
+      for (const seed of SEEDS) {
+        const w = reefWith(species, seed);
+        let own = 0;
+        let sheltered = 0;
+        for (let t = 0; t < 3000; t++) {
           w.step();
-          if (at(w.state, 0) === FishState.Shelter) shelteredAfterStartle = true;
+          if (at(w.state, 0) === active) own++;
+          if (at(w.state, 0) === FishState.Shelter) sheltered++;
         }
-      }
-      expect(at(w.behaviour.startledAt, 0)).toBeGreaterThanOrEqual(0);
-      for (let t = 0; t < 600; t++) {
-        w.step();
-        if (at(w.state, 0) === FishState.Shelter) shelteredAfterStartle = true;
-      }
-      expect(shelteredAfterStartle).toBe(true);
+        expect(own, `seed ${seed}`).toBeGreaterThan(0);
+        expect(sheltered, `seed ${seed}`).toBe(0);
 
-      w.setLight(0);
-      let inside = 0;
-      let night = 0;
-      for (let t = 0; t < 9000; t++) {
-        w.step();
-        if (t < 4500) continue;
-        const s = at(w.state, 0);
-        if (
-          (s === FishState.Shelter || s === FishState.Rest) &&
-          distanceTo(w, 0, cave.position) < cave.radius + length
-        ) {
-          inside++;
+        for (let tap = 0; tap < 10 && at(w.behaviour.startledAt, 0) < 0; tap++) {
+          const p = [at(w.position, 0), at(w.position, 1), at(w.position, 2)] as const;
+          w.startle({ position: [p[0], p[1], p[2] + 0.05], intensity: 1 });
+          w.step();
+          for (let t = 1; t < 60 && at(w.behaviour.startledAt, 0) < 0; t++) w.step();
         }
-        night++;
+        expect(at(w.behaviour.startledAt, 0), `seed ${seed}`).toBeGreaterThanOrEqual(0);
+        const before = distanceTo(w, 0, cave.position);
+        let closest = before;
+        let ownWhileSheltering = 0;
+        const window = Math.round((0.75 * BEHAVIOUR.shelterAfterStartleS) / STEP_DT);
+        for (let t = 0; t < window; t++) {
+          w.step();
+          if (at(w.state, 0) === active) ownWhileSheltering++;
+          closest = Math.min(closest, distanceTo(w, 0, cave.position));
+        }
+        expect(ownWhileSheltering, `seed ${seed}`).toBe(0);
+        expect(closest, `seed ${seed}`).toBeLessThan(before - length);
+        expect(insideAtNight(w, length), `seed ${seed}`).toBeGreaterThan(0.6);
       }
-      expect(inside / night).toBeGreaterThan(0.6);
+    });
+
+    it(`${species.id} goes into the cave on a night that no startle preceded`, () => {
+      for (const seed of SEEDS) {
+        const w = reefWith(species, seed);
+        for (let t = 0; t < 3000; t++) w.step();
+        expect(insideAtNight(w, length), `seed ${seed}`).toBeGreaterThan(0.6);
+      }
     });
   }
 });
