@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { isIPv4, isIPv6 } from 'node:net';
 import nodemailer, { type Transporter } from 'nodemailer';
 import { memoryHitStore, type HitStore, type Limit } from './rate-limit.ts';
 
@@ -123,6 +124,48 @@ export function recipientKey(address: string): string {
   return `${local}@${domain}`;
 }
 
+// A residential IPv6 customer holds a whole /64, so per-address keys would let one host rotate through 2^64 budgets.
+// Anything unparseable is keyed on the raw string: it still gets a budget instead of throwing.
+export function ipBucket(address: string): string {
+  const unzoned = address.split('%')[0] ?? address;
+  if (isIPv4(unzoned)) return unzoned;
+  if (!isIPv6(unzoned)) return address;
+  const groups = expandIpv6(unzoned);
+  if (!groups) return address;
+  const [g0, g1, g2, g3, g4, g5, g6, g7] = groups as [
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+  ];
+  if (g0 === 0 && g1 === 0 && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0xffff) {
+    return `${g6 >> 8}.${g6 & 255}.${g7 >> 8}.${g7 & 255}`;
+  }
+  return `${[g0, g1, g2, g3].map((g) => g.toString(16)).join(':')}::/64`;
+}
+
+function expandIpv6(address: string): number[] | undefined {
+  let text = address;
+  const lastColon = text.lastIndexOf(':');
+  const tail = text.slice(lastColon + 1);
+  if (tail.includes('.')) {
+    const [a = 0, b = 0, c = 0, d = 0] = tail.split('.').map(Number);
+    text = `${text.slice(0, lastColon + 1)}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`;
+  }
+  const halves = text.split('::');
+  if (halves.length > 2) return undefined;
+  const parse = (part: string) => (part === '' ? [] : part.split(':').map((g) => parseInt(g, 16)));
+  const head = parse(halves[0] ?? '');
+  const rest = halves.length === 2 ? parse(halves[1] ?? '') : [];
+  const fill = halves.length === 2 ? 8 - head.length - rest.length : 0;
+  const groups = [...head, ...new Array<number>(Math.max(fill, 0)).fill(0), ...rest];
+  return groups.length === 8 && groups.every((g) => Number.isInteger(g)) ? groups : undefined;
+}
+
 export function createMailer(
   transport: Transporter,
   mailFrom: string,
@@ -236,7 +279,7 @@ export function createMailer(
     // IP's 429 behaviour reveal whether the address has an account. Only the shared global counter,
     // which does not depend on the address, may skip it.
     async consumeIp(address, { chargeGlobal = false } = {}) {
-      const key = `ip:${address}`;
+      const key = `ip:${ipBucket(address)}`;
       const requestWait = await consume(`req:${key}`, limits.perIpRequests ?? limits.perIpSignup);
       if (requestWait > 0) return { wait: requestWait, mailBlockedFor: 0 };
       const spent = await guarded(() => store.remaining('global', limits.global));
