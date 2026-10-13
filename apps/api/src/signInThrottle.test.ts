@@ -98,29 +98,33 @@ describe('per-account sign-in throttle (#121)', () => {
     expect((await signIn(h.app, email, PASSWORD)).statusCode).toBe(200);
   });
 
-  it('is not reset by 403s Better Auth raises before checking the password', async () => {
-    const email = await verifiedUser();
-    const junk = (extra: Record<string, string>, callbackURL?: string) =>
-      h.app.inject({
-        method: 'POST',
-        url: '/api/auth/sign-in/email',
-        headers: { 'content-type': 'application/json', ...extra },
-        payload: { email, password: WRONG, ...(callbackURL ? { callbackURL } : {}) },
-      });
-    const junkRequests = [
-      () => junk({ origin: APP_ORIGIN }, 'https://evil.example/'),
-      () => junk({ origin: 'https://evil.example' }),
-      () =>
-        junk({ origin: APP_ORIGIN, 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'navigate' }),
-    ];
-    const seen: number[] = [];
-    for (let round = 0; round < 2 * MAX && !seen.includes(429); round++) {
-      seen.push((await signIn(h.app, email, WRONG)).statusCode);
-      for (const request of junkRequests) seen.push((await request()).statusCode);
-    }
-    expect(seen).toContain(429);
-    expect(seen.filter((c) => c === 403).length).toBeGreaterThan(0);
-    expect((await signIn(h.app, email, PASSWORD)).statusCode).toBe(429);
+  describe.each([
+    ['INVALID_CALLBACK_URL', { origin: APP_ORIGIN }, 'https://evil.example/'],
+    ['INVALID_ORIGIN', { origin: 'https://evil.example' }, undefined],
+    [
+      'CROSS_SITE_NAVIGATION_LOGIN_BLOCKED',
+      { origin: APP_ORIGIN, 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'navigate' },
+      undefined,
+    ],
+  ])('403 %s from Better Auth', (code, extra, callbackURL) => {
+    it('is not reset by it, and still counts against the cap', async () => {
+      const email = await verifiedUser();
+      const junk = () =>
+        h.app.inject({
+          method: 'POST',
+          url: '/api/auth/sign-in/email',
+          headers: { 'content-type': 'application/json', ...extra },
+          payload: { email, password: WRONG, ...(callbackURL ? { callbackURL } : {}) },
+        });
+      const first = await junk();
+      expect(first.statusCode).toBe(403);
+      expect(first.json().code).toBe(code);
+      expect((await signIn(h.app, email, WRONG)).statusCode).toBe(401);
+      const second = await junk();
+      expect(second.statusCode).toBe(403);
+      expect(second.json().code).toBe(code);
+      expect((await signIn(h.app, email, PASSWORD)).statusCode).toBe(429);
+    });
   });
 
   it('does not let one account lock out another', async () => {

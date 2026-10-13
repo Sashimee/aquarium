@@ -152,6 +152,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
             signUp: GENEROUS,
             sendVerification: GENEROUS,
             passwordReset: GENEROUS,
+            changePassword: GENEROUS,
           }),
   });
   const clock = createClock();
