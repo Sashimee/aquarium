@@ -50,6 +50,22 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: aquarium
+          POSTGRES_PASSWORD: aquarium
+          POSTGRES_DB: aquarium_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aquarium"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://aquarium:aquarium@localhost:5432/aquarium_test
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -58,6 +74,7 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm build
       - run: pnpm exec playwright install --with-deps chromium
         if: hashFiles('e2e/**') != ''
       - run: pnpm run --if-present e2e
