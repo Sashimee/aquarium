@@ -4,15 +4,27 @@ import { Color } from 'three/webgpu';
  * Scan-derived corals arrive in dull museum tones, so the scene tints each instance toward live
  * tissue colour. Palettes are multiplied into the base colour map, each channel stays at or below 1 so albedo never exceeds the scan's.
  */
-const TINTS: Readonly<Record<string, readonly (readonly [number, number, number])[]>> = {
-  'acropora-cytherea': [
+type Rgb = readonly [number, number, number];
+
+/** Acropora scans carry saturated live colour already, so a full-strength multiply only darkens it. */
+const ACROPORA_TINT_STRENGTH = 0.35;
+
+const lighten = (palette: readonly Rgb[]): Rgb[] =>
+  palette.map(([r, g, b]) => [
+    1 - (1 - r) * ACROPORA_TINT_STRENGTH,
+    1 - (1 - g) * ACROPORA_TINT_STRENGTH,
+    1 - (1 - b) * ACROPORA_TINT_STRENGTH,
+  ]);
+
+const TINTS: Readonly<Record<string, readonly Rgb[]>> = {
+  'acropora-cytherea': lighten([
     [0.4, 0.22, 1],
     [1, 0.4, 0.17],
-  ],
-  'acropora-palmata': [
+  ]),
+  'acropora-palmata': lighten([
     [0.38, 1, 0.25],
     [1, 0.3, 0.53],
-  ],
+  ]),
   'brain-coral': [
     [0.33, 1, 0.33],
     [1, 0.47, 0.18],
