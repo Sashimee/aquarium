@@ -698,6 +698,12 @@ describe('cave-dwelling foragers and glass grazers', { timeout: LONG }, () => {
       }
     });
   }
+
+  it('backs out of the slot between rock and back glass and goes round the other side (#228)', () => {
+    const w = reefWith(caveCory, 3);
+    for (let t = 0; t < 3000; t++) w.step();
+    expect(insideAtNight(w, toSimSpecies(caveCory).bodyLength)).toBeGreaterThan(0.6);
+  });
 });
 
 describe('per-trait parameters', () => {

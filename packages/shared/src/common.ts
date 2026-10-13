@@ -25,3 +25,5 @@ export type DecorItem = z.infer<typeof decorItemSchema>;
 
 export const decorLayoutSchema = z.array(decorItemSchema).max(200);
 export type DecorLayout = z.infer<typeof decorLayoutSchema>;
+
+export const PROCEDURAL_EUPHYLLIA_ID = /^euphyllia-(hammer|torch)-(0|[1-9]\d{0,8})$/;

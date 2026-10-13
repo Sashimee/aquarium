@@ -7,7 +7,7 @@ import {
   MeshStandardNodeMaterial,
 } from 'three/webgpu';
 import { vertexColor } from 'three/tsl';
-import type { DecorItem } from '@aquarium/shared';
+import { PROCEDURAL_EUPHYLLIA_ID, type DecorItem } from '@aquarium/shared';
 import type { Tier } from '../engine/quality/tiers';
 import { SWAY_ATTRIBUTE, swayPositionNode } from './anemone';
 import type { CapsuleCollider } from './colliders';
@@ -43,7 +43,6 @@ export const EUPHYLLIA_TRIANGLE_BUDGET: Readonly<Record<EuphylliaDetail, number>
   2: 18000,
 };
 
-const ID_PATTERN = /^euphyllia-(hammer|torch)-(0|[1-9]\d{0,8})$/;
 export const WAVE_METRES = 0.0035;
 export const LEAN_SECONDS = 0.5;
 const COLONY_HEIGHT = 0.1;
@@ -55,7 +54,7 @@ export function euphylliaId(variant: EuphylliaVariant, seed: number): string {
 export function parseEuphylliaId(
   id: string,
 ): { readonly variant: EuphylliaVariant; readonly seed: number } | null {
-  const match = ID_PATTERN.exec(id);
+  const match = PROCEDURAL_EUPHYLLIA_ID.exec(id);
   if (!match) return null;
   return { variant: match[1] as EuphylliaVariant, seed: Number(match[2]) };
 }

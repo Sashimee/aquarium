@@ -27,7 +27,6 @@ import {
   saturate,
   sin,
   smoothstep,
-  step,
   texture,
   time,
   uniform,
@@ -162,21 +161,31 @@ export class Caustics {
     return texture(this.bakeTarget.texture, cells.add(drift)).level(float(1)).r.mul(PATTERN_GAIN);
   }
 
+  /**
+   * The hood's light reaching `p` under water: spread and absorption on the slant path down from
+   * the surface. Outside the water it is the hood's radiance itself.
+   */
+  private reach(p: Node<'vec3'>) {
+    const { medium } = this;
+    const depth = medium.boxMax.y.sub(p.y).toVar();
+    const inWater = medium.submerged(p).toVar();
+    const cosLight = max(this.lightDirection.y, 0.2);
+    const slant = depth.div(cosLight).toVar();
+    const transmittance = exp(medium.extinction().mul(slant.mul(inWater)).negate());
+    const light = transmittance.mul(medium.hoodSpread(depth.mul(inWater))).mul(this.lightRadiance);
+    return { depth, inWater, slant, light };
+  }
+
+  /** The hood's light at `p` without the caustic pattern, for effects shaded by hand. */
+  hoodLight(p: Node<'vec3'> = positionWorld): Node<'vec3'> {
+    return Fn(() => this.reach(p).light)();
+  }
+
   /** Colour node for the hood light: radiance x spread x surface-to-point transmittance x caustics. */
   lightColorNode(): Node<'vec3'> {
-    const { medium } = this;
     return Fn(() => {
       const p = positionWorld;
-      const depth = medium.boxMax.y.sub(p.y).toVar();
-      const inWater = step(medium.boxMin.x, p.x)
-        .mul(step(p.x, medium.boxMax.x))
-        .mul(step(medium.boxMin.z, p.z))
-        .mul(step(p.z, medium.boxMax.z))
-        .mul(step(0, depth))
-        .toVar();
-
-      const cosLight = max(this.lightDirection.y, 0.2);
-      const slant = depth.div(cosLight).toVar();
+      const { depth, inWater, slant, light } = this.reach(p);
       const surfacePoint = p.xz.add(this.lightDirection.xz.mul(slant));
       const q = surfacePoint.mul(this.cellsPerMetre).toVar();
       const t = time.mul(this.speed).toVar();
@@ -212,8 +221,7 @@ export class Caustics {
       const formed = smoothstep(0, 0.06, depth);
       const amount = this.strength.mul(formed).mul(inWater);
       const caustic = max(pattern.mul(PATTERN_GAIN).sub(1).mul(amount).add(1), 0);
-      const transmittance = exp(medium.extinction().mul(slant.mul(inWater)).negate());
-      return caustic.mul(transmittance).mul(medium.hoodSpread(depth)).mul(this.lightRadiance);
+      return caustic.mul(light);
     })();
   }
 }
