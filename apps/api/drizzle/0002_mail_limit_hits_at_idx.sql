@@ -1,0 +1,1 @@
+CREATE INDEX "mail_limit_hits_at_idx" ON "mail_limit_hits" USING btree ("at");

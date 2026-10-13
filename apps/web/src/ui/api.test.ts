@@ -192,4 +192,42 @@ describe('api client', () => {
     );
     expect(fetcher).not.toHaveBeenCalled();
   });
+
+  it('asks for a reset link that lands on an app route', async () => {
+    const fetcher = vi.fn().mockResolvedValue(json({ status: true }));
+    await createApiClient(fetcher).requestPasswordReset('a@bas.lu');
+    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/auth/request-password-reset');
+    expect(JSON.parse(init.body as string)).toEqual({
+      email: 'a@bas.lu',
+      redirectTo: '/reset-password',
+    });
+    await expect(createApiClient(fetcher).requestPasswordReset('nope')).rejects.toBeInstanceOf(
+      ClientValidationError,
+    );
+  });
+
+  it('posts the token and a valid new password, and rejects a short one locally', async () => {
+    const fetcher = vi.fn().mockResolvedValue(json({ status: true }));
+    await createApiClient(fetcher).resetPassword('tok', 'correct horse battery');
+    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/auth/reset-password');
+    expect(JSON.parse(init.body as string)).toEqual({
+      token: 'tok',
+      newPassword: 'correct horse battery',
+    });
+    fetcher.mockClear();
+    await expect(createApiClient(fetcher).resetPassword('tok', 'short')).rejects.toBeInstanceOf(
+      ClientValidationError,
+    );
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('explains the length limit when a new password is too long', async () => {
+    const fetcher = vi.fn();
+    await expect(
+      createApiClient(fetcher).resetPassword('tok', 'a'.repeat(129)),
+    ).rejects.toMatchObject({ fields: { password: 'Use at most 128 characters.' } });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
 });

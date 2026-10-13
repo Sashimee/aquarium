@@ -65,6 +65,16 @@ curl -sI https://devfish.bas.lu/api/health
 curl -s  https://devfish.bas.lu/robots.txt
 ```
 
+## Alerts
+
+- **Global mail cap reached.** The API logs one JSON line to stderr when the 200 mails/hour cap starts
+  refusing mail (and again only after mail has flowed once more):
+  `{"level":"error","event":"mail_global_cap_reached","msg":"global mail cap reached","limit":200,"windowSeconds":3600,"retryAfterSeconds":N}`.
+  Match on `"event":"mail_global_cap_reached"`. While it holds, verification and reset mail is refused for
+  everyone, which usually means about 20 IPs are spending their per-IP budget on sign-ups. Check the
+  `aquarium-*` container logs in Dokploy, find the source IPs in the proxy log, and block them or lower
+  `perIpSignup` in `apps/api/src/mail.ts`. The alert is not configured yet; setting it up is a Dokploy action.
+
 ## Troubleshooting traps
 
 - **Failing healthcheck:** Traefik drops unhealthy containers and the host then answers 404 on the default

@@ -85,6 +85,7 @@ export interface MailerOptions {
   log?: (message: string) => void;
 }
 
+export const GLOBAL_CAP_EVENT = 'mail_global_cap_reached';
 const STORE_FAILURE_RETRY_SECONDS = 60;
 const SHARED_INBOX_DOMAINS = new Set(['gmail.com', 'googlemail.com']);
 
@@ -117,11 +118,13 @@ export function createMailer(
   let storeFailureLogged = false;
 
   // A broken store must stop mail, not let it through unmetered.
-  const failClosed = async (work: () => Promise<number>): Promise<number> => {
+  const guarded = async (
+    work: () => Promise<number>,
+  ): Promise<{ wait: number; answered: boolean }> => {
     try {
       const wait = await work();
       storeFailureLogged = false;
-      return wait;
+      return { wait, answered: true };
     } catch (err) {
       if (!storeFailureLogged) {
         storeFailureLogged = true;
@@ -129,26 +132,44 @@ export function createMailer(
           `mail limiter unavailable, refusing mail: ${err instanceof Error ? err.name : 'unknown'}`,
         );
       }
-      return STORE_FAILURE_RETRY_SECONDS;
+      return { wait: STORE_FAILURE_RETRY_SECONDS, answered: false };
     }
   };
 
+  const failClosed = async (work: () => Promise<number>): Promise<number> =>
+    (await guarded(work)).wait;
+
   const consume = (key: string, limit: Limit) => failClosed(() => store.consume(key, limit));
+
+  // Only a store that answered means the cap is spent; a failure is already logged as unavailable.
+  const refuseGlobal = (retryAfterSeconds: number, answered: boolean): never => {
+    if (answered && !globalCapLogged) {
+      globalCapLogged = true;
+      log(
+        JSON.stringify({
+          level: 'error',
+          event: GLOBAL_CAP_EVENT,
+          msg: 'global mail cap reached',
+          limit: limits.global.max,
+          windowSeconds: limits.global.windowMs / 1000,
+          retryAfterSeconds,
+        }),
+      );
+    }
+    throw new MailThrottledError(retryAfterSeconds);
+  };
 
   const admit = async (flow: 'verify' | 'reset', to: string) => {
     const k = recipientKey(to);
+    // Peek first so a spent global cap refuses without using up the recipient's own budget.
+    const spent = await guarded(() => store.remaining('global', limits.global));
+    if (spent.wait > 0) return refuseGlobal(spent.wait, spent.answered);
     const wait = await consume(`${flow}:cooldown:${k}`, limits.verificationCooldown);
     if (wait > 0) throw new MailThrottledError(wait);
     const capped = await consume(`recipient:${k}`, limits.perRecipient);
     if (capped > 0) throw new MailThrottledError(capped);
-    const globalWait = await consume('global', limits.global);
-    if (globalWait > 0) {
-      if (!globalCapLogged) {
-        globalCapLogged = true;
-        log('global mail cap reached, refusing mail until the window frees up');
-      }
-      throw new MailThrottledError(globalWait);
-    }
+    const final = await guarded(() => store.consume('global', limits.global));
+    if (final.wait > 0) return refuseGlobal(final.wait, final.answered);
     globalCapLogged = false;
   };
 
