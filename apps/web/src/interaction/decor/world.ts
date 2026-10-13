@@ -68,7 +68,7 @@ export class DecorWorld {
 
   /** Shows a saved layout. An empty one means "never edited", so the preset stays. */
   showSaved(layout: readonly DecorItem[]): Promise<void> {
-    if (layout.length === 0) return this.show(numberPieces(this.scene.presetHardDecor));
+    if (layout.length === 0) return this.showPreset();
     const clean = sanitizeLayout(layout, this.scene.biome);
     const n = clean.dropped;
     this.notice =
@@ -80,6 +80,7 @@ export class DecorWorld {
   }
 
   showPreset(): Promise<void> {
+    this.notice = null;
     return this.show(numberPieces(this.scene.presetHardDecor));
   }
 

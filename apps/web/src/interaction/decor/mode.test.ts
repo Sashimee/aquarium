@@ -137,6 +137,26 @@ describe('DecorMode', () => {
     expect(h.last().problem).toMatch(/1 saved piece does not fit this tank/);
   });
 
+  it('does not carry the removed-pieces notice to the next tank', async () => {
+    const h = harness([], 'freshwater');
+    h.load('t1', [item('reef-arch', 0.3, 0)]);
+    await settle();
+    h.load('t2', []);
+    await settle();
+    h.mode.start();
+    expect(h.last().problem).toBeNull();
+  });
+
+  it('clears the removed-pieces notice once the cleaned layout is saved', async () => {
+    const h = harness([], 'freshwater');
+    h.load('t1', [item('driftwood-branch', 0, 0), item('reef-arch', 0.3, 0)]);
+    await settle();
+    h.mode.start();
+    expect(h.last().problem).toMatch(/removed/);
+    h.bus.emit('decor:save-state', { status: 'saved', message: null });
+    expect(h.last().problem).toBeNull();
+  });
+
   it('says why a second vacation feeder is refused', () => {
     const h = harness([]);
     h.mode.start();

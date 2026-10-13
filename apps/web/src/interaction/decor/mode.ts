@@ -77,6 +77,11 @@ export class DecorMode {
     this.tankId = saved.tankId;
     const offs = [
       interaction.on('decor:command', (command) => this.command(command)),
+      interaction.on('decor:save-state', ({ status }) => {
+        if (status !== 'saved' || this.deps.world.notice === null) return;
+        this.deps.world.notice = null;
+        this.publish();
+      }),
       interaction.on('tank:loaded', ({ tankId }) => {
         if (tankId !== this.tankId) this.stop(false);
       }),
