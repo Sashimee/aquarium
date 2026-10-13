@@ -536,3 +536,159 @@ describe('behaviour traits', () => {
     expect(toSimSpecies(angelfish).home).toBe('station');
   });
 });
+
+describe('per-trait parameters', () => {
+  const tetra = (
+    extra: Partial<SpeciesInput['behaviour']>,
+    traits: SpeciesInput['behaviour']['traits'] = [],
+  ): SpeciesInput => ({
+    ...neonTetra,
+    behaviour: { ...neonTetra.behaviour, ...extra, traits },
+  });
+
+  it('falls back to the BEHAVIOUR defaults when a species sets no parameters', () => {
+    const s = toSimSpecies(betta);
+    expect(s.gulpsPerHour).toBe(BEHAVIOUR.gulpsPerHour);
+    expect([s.grazeMeanIntervalS, s.grazeMinS, s.grazeMaxS]).toEqual([
+      BEHAVIOUR.grazeMeanIntervalS,
+      BEHAVIOUR.grazeMinS,
+      BEHAVIOUR.grazeMaxS,
+    ]);
+    expect([s.flareMinS, s.flareMaxS]).toEqual([BEHAVIOUR.flareMinS, BEHAVIOUR.flareMaxS]);
+    expect([s.stationRadiusBodyLengths, s.restationMinS, s.restationMaxS]).toEqual([
+      BEHAVIOUR.stationRadiusBodyLengths,
+      BEHAVIOUR.restationMinS,
+      BEHAVIOUR.restationMaxS,
+    ]);
+    expect(s.shelterAfterStartleS).toBe(BEHAVIOUR.shelterAfterStartleS);
+    expect([s.excursionMeanIntervalS, s.hostLeashBodyLengths]).toEqual([
+      BEHAVIOUR.excursionMeanIntervalS,
+      BEHAVIOUR.hostLeashBodyLengths,
+    ]);
+  });
+
+  it('reads each parameter object and keeps defaults for the fields it leaves out', () => {
+    const tang = toSimSpecies({
+      ...yellowTang,
+      behaviour: { ...yellowTang.behaviour, grazing: { meanIntervalS: 8, maxS: 3 } },
+    });
+    expect([tang.grazeMeanIntervalS, tang.grazeMinS, tang.grazeMaxS]).toEqual([
+      8,
+      BEHAVIOUR.grazeMinS,
+      3,
+    ]);
+    const fish = toSimSpecies({
+      ...angelfish,
+      behaviour: { ...angelfish.behaviour, station: { radiusBodyLengths: 3, restationMaxS: 90 } },
+    });
+    expect([fish.stationRadiusBodyLengths, fish.restationMinS, fish.restationMaxS]).toEqual([
+      3,
+      BEHAVIOUR.restationMinS,
+      90,
+    ]);
+    const clown = toSimSpecies({
+      ...clownfish,
+      behaviour: { ...clownfish.behaviour, excursion: { meanIntervalS: 40, leashBodyLengths: 2 } },
+    });
+    expect([clown.excursionMeanIntervalS, clown.hostLeashBodyLengths]).toEqual([40, 2]);
+    const gramma = toSimSpecies({
+      ...royalGramma,
+      behaviour: { ...royalGramma.behaviour, refuge: { afterStartleS: 45 } },
+    });
+    expect(gramma.shelterAfterStartleS).toBe(45);
+    const fighter = toSimSpecies({
+      ...betta,
+      behaviour: { ...betta.behaviour, flare: { minS: 4, maxS: 9 } },
+    });
+    expect([fighter.flareMinS, fighter.flareMaxS]).toEqual([4, 9]);
+    expect(toSimSpecies(tetra({ airGulp: { perHour: 20 } }, ['air-gulp'])).gulpsPerHour).toBe(20);
+  });
+
+  it('rejects a min/max pair that is out of order once merged with the defaults', () => {
+    expect(() =>
+      toSimSpecies({
+        ...yellowTang,
+        behaviour: { ...yellowTang.behaviour, grazing: { meanIntervalS: 20, minS: 50 } },
+      }),
+    ).toThrow(/species "yellow-tang": behaviour.grazing.minS\/maxS min 50 exceeds max 4/);
+    expect(() =>
+      toSimSpecies({
+        ...angelfish,
+        behaviour: { ...angelfish.behaviour, station: { radiusBodyLengths: 1, restationMaxS: 5 } },
+      }),
+    ).toThrow(/species "angelfish": behaviour.station.restationMinS\/restationMaxS min 20/);
+    expect(() =>
+      toSimSpecies({ ...betta, behaviour: { ...betta.behaviour, flare: { minS: 6, maxS: 3 } } }),
+    ).toThrow(/species "betta": behaviour.flare.minS\/maxS min 6 exceeds max 3/);
+  });
+
+  it('rejects a non-positive value', () => {
+    expect(() => toSimSpecies(tetra({ airGulp: { perHour: 0 } }, ['air-gulp']))).toThrow(
+      /behaviour.airGulp.perHour must be a positive number/,
+    );
+  });
+
+  it('rejects a parameter object whose trait is off', () => {
+    expect(() => toSimSpecies(tetra({ airGulp: { perHour: 4 } }))).toThrow(
+      /species "neon-tetra": behaviour.airGulp is set but needs trait "air-gulp"/,
+    );
+    expect(() => toSimSpecies(tetra({ grazing: { meanIntervalS: 10 } }, ['glass-grazer']))).toThrow(
+      /behaviour.grazing is set but needs trait "rock-grazer"/,
+    );
+    expect(() => toSimSpecies(tetra({ station: { radiusBodyLengths: 2 } }))).toThrow(
+      /behaviour.station is set but needs gait "hover"/,
+    );
+    expect(() =>
+      toSimSpecies({
+        ...clownfish,
+        behaviour: { ...clownfish.behaviour, station: { radiusBodyLengths: 2 } },
+      }),
+    ).toThrow(/behaviour.station is set but needs gait "hover"/);
+    expect(() => toSimSpecies(tetra({ refuge: { afterStartleS: 10 } }))).toThrow(
+      /needs trait "cave-dweller"/,
+    );
+    expect(() => toSimSpecies(tetra({ excursion: { meanIntervalS: 10 } }))).toThrow(
+      /needs trait "anemone-host"/,
+    );
+  });
+
+  it(
+    'two air-gulping species with different rates gulp at different rates, reproducibly',
+    { timeout: LONG },
+    () => {
+      const withRate = (id: string, perHour: number): SpeciesInput => ({
+        ...bronzeCorydoras,
+        id,
+        behaviour: { ...bronzeCorydoras.behaviour, airGulp: { perHour } },
+      });
+      const run = (): number[] => {
+        const w = new World({
+          seed: 11,
+          tank: SHOW_TANK,
+          species: [withRate('cory-slow', 2), withRate('cory-fast', 90)],
+          decor: SHOW_DECOR,
+          fish: [...spawnMany('cory-slow', 6), ...spawnMany('cory-fast', 6)],
+        });
+        const gulping = new Uint8Array(w.count);
+        const gulps = [0, 0];
+        for (let t = 0; t < 9000; t++) {
+          w.step();
+          for (let i = 0; i < w.count; i++) {
+            const now = at(w.state, i) === FishState.Gulp ? 1 : 0;
+            if (now === 1 && gulping[i] === 0) {
+              const k = i < 6 ? 0 : 1;
+              gulps[k] = at(gulps, k) + 1;
+            }
+            gulping[i] = now;
+          }
+        }
+        return gulps;
+      };
+      const gulps = run();
+      // Six fish for five minutes: about 1 gulp expected at 2/h and 45 at 90/h.
+      expect(at(gulps, 0)).toBeLessThanOrEqual(5);
+      expect(at(gulps, 1)).toBeGreaterThan(20);
+      expect(run()).toEqual(gulps);
+    },
+  );
+});
