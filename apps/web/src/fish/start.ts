@@ -47,30 +47,23 @@ export interface FishHandle {
   stop(): void;
 }
 
-export interface StartFishOptions {
-  readonly tank: TankDimensions;
-  readonly assetRoot: string;
-  /** Picks the demo stock shown while no saved tank is loaded. */
-  readonly biome: Biome;
-  readonly interaction: EventBus<InteractionEvents>;
+export interface TankEventQueue {
+  /** Hands every buffered event to `sink` in order, then each later one as it arrives. */
+  drain(sink: (event: TankEvent) => void): void;
+  stop(): void;
 }
 
 /**
- * Starts the fish without blocking boot. The fish code (loaders, sim client) is a separate chunk,
- * since nothing swims before the models arrive anyway; saved-tank events that arrive meanwhile
- * are queued and replayed in order.
+ * Subscribes to the saved-tank events at once and buffers them. The session can load a tank
+ * before the engine is up, and the bus drops events nobody listens to, so this must exist before
+ * the UI mounts.
  */
-export function startFish(engine: Engine, options: StartFishOptions): FishHandle {
-  const { interaction } = options;
-  const abort = new AbortController();
-  const ateListeners = new Set<(events: readonly FishBite[]) => void>();
-  let queue: TankEvent[] | null = [];
-  let ready: FishSystem | null = null;
-  let anchors: readonly SceneAnchor[] | null = null;
-
+export function queueTankEvents(interaction: EventBus<InteractionEvents>): TankEventQueue {
+  let buffer: TankEvent[] | null = [];
+  let sink: ((event: TankEvent) => void) | null = null;
   const deliver = (event: TankEvent): void => {
-    if (ready !== null) ready.handle(event);
-    else queue?.push(event);
+    if (sink !== null) sink(event);
+    else buffer?.push(event);
   };
   const unsubscribe = [
     interaction.on('tank:loaded', (payload) => deliver({ type: 'tank:loaded', payload })),
@@ -84,6 +77,43 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
       deliver({ type: 'tank:fish-removed', payload }),
     ),
   ];
+  return {
+    drain(next) {
+      if (sink !== null) throw new Error('queueTankEvents: already drained');
+      const pending = buffer ?? [];
+      buffer = null;
+      sink = next;
+      for (const event of pending) next(event);
+    },
+    stop() {
+      for (const off of unsubscribe) off();
+      buffer = null;
+      sink = null;
+    },
+  };
+}
+
+export interface StartFishOptions {
+  readonly tank: TankDimensions;
+  readonly assetRoot: string;
+  /** Picks the demo stock shown while no saved tank is loaded. */
+  readonly biome: Biome;
+  readonly interaction: EventBus<InteractionEvents>;
+  /** Created before the UI mounts; drained into the fish once they are up, stopped with them. */
+  readonly tankEvents: TankEventQueue;
+}
+
+/**
+ * Starts the fish without blocking boot. The fish code (loaders, sim client) is a separate chunk,
+ * since nothing swims before the models arrive anyway; `tankEvents` holds the saved-tank events
+ * until then.
+ */
+export function startFish(engine: Engine, options: StartFishOptions): FishHandle {
+  const { interaction, tankEvents } = options;
+  const abort = new AbortController();
+  const ateListeners = new Set<(events: readonly FishBite[]) => void>();
+  let ready: FishSystem | null = null;
+  let anchors: readonly SceneAnchor[] | null = null;
 
   const system = import('./FishSystem')
     .then(({ FishSystem }) =>
@@ -102,13 +132,11 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
       });
       ready = fish;
       if (anchors !== null) fish.setAnchors(anchors);
-      const pending = queue ?? [];
-      queue = null;
-      for (const event of pending) fish.handle(event);
+      tankEvents.drain((event) => fish.handle(event));
       return fish;
     })
     .catch((cause: unknown) => {
-      queue = null;
+      tankEvents.stop();
       if (!abort.signal.aborted) {
         engine.events.emit('engine:error', { message: 'Fish failed to start', cause });
       }
@@ -131,9 +159,8 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
     },
     stop() {
       abort.abort();
-      for (const off of unsubscribe) off();
+      tankEvents.stop();
       ateListeners.clear();
-      queue = null;
       ready = null;
       void system.then((fish) => fish?.dispose());
     },

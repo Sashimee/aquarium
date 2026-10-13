@@ -46,14 +46,20 @@ class FakeFishSystem {
 const create = vi.hoisted(() => vi.fn());
 vi.mock('./FishSystem', () => ({ FishSystem: { create } }));
 
-const { startFish } = await import('./start');
+const { queueTankEvents, startFish } = await import('./start');
 
-function setup(result: Promise<FakeFishSystem>) {
+/** `beforeStart` runs after the queue exists but before `startFish`, like a fast session at boot. */
+function setup(
+  result: Promise<FakeFishSystem>,
+  beforeStart: (interaction: EventBus<InteractionEvents>) => void = () => undefined,
+) {
   create.mockReturnValueOnce(result);
   const events = new EventBus<EngineEvents>();
   const errors: string[] = [];
   events.on('engine:error', ({ message }) => errors.push(message));
   const interaction = new EventBus<InteractionEvents>();
+  const tankEvents = queueTankEvents(interaction);
+  beforeStart(interaction);
   const engine = { events } as unknown as Engine;
   const handle = startFish(engine, {
     tank: {
@@ -68,6 +74,7 @@ function setup(result: Promise<FakeFishSystem>) {
     assetRoot: '/assets/',
     biome: 'freshwater',
     interaction,
+    tankEvents,
   });
   return { handle, interaction, errors };
 }
@@ -92,7 +99,52 @@ afterEach(() => {
   create.mockReset();
 });
 
+describe('queueTankEvents', () => {
+  it('buffers events until drained, then passes each later one straight on', () => {
+    const interaction = new EventBus<InteractionEvents>();
+    const queue = queueTankEvents(interaction);
+    interaction.emit('tank:loaded', { tankId: TANK_A, biome: 'freshwater', fish: [] });
+    interaction.emit('tank:fish-released', { tankId: TANK_A, fishId: FISH_1 });
+    const seen: string[] = [];
+    queue.drain((event) => seen.push(event.type));
+    expect(seen).toEqual(['tank:loaded', 'tank:fish-released']);
+    interaction.emit('tank:unloaded', { tankId: TANK_A });
+    expect(seen).toEqual(['tank:loaded', 'tank:fish-released', 'tank:unloaded']);
+    expect(() => queue.drain(() => undefined)).toThrow(/already drained/);
+  });
+
+  it('stops listening and drops the buffer on stop', () => {
+    const interaction = new EventBus<InteractionEvents>();
+    const queue = queueTankEvents(interaction);
+    interaction.emit('tank:unloaded', { tankId: TANK_A });
+    queue.stop();
+    interaction.emit('tank:unloaded', { tankId: TANK_A });
+    const seen: string[] = [];
+    queue.drain((event) => seen.push(event.type));
+    expect(seen).toEqual([]);
+  });
+});
+
 describe('startFish', () => {
+  it('shows a saved tank the session loaded before the fish were even started', async () => {
+    const fish = new FakeFishSystem();
+    setup(Promise.resolve(fish), (interaction) => {
+      interaction.emit('tank:loaded', {
+        tankId: TANK_A,
+        biome: 'freshwater',
+        fish: [fishFixture(FISH_1)],
+      });
+      interaction.emit('tank:fish-added', {
+        tankId: TANK_A,
+        fish: fishFixture(FISH_2),
+        acclimate: true,
+      });
+    });
+    await flush();
+    expect(fish.handled.map((e) => e.type)).toEqual(['tank:loaded', 'tank:fish-added']);
+    expect(fish.handled[0]?.payload).toMatchObject({ tankId: TANK_A });
+  });
+
   it('replays tank events that arrived before the fish were up, in order', async () => {
     const fish = new FakeFishSystem();
     const pending = deferred<FakeFishSystem>();
