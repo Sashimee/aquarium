@@ -12,13 +12,12 @@ import type { InteractionEvents } from '../interaction/events';
  */
 export class TankBiome implements BiomeSource {
   private loaded: Biome | null = null;
+  private demo: Biome;
   private readonly listeners = new Set<(biome: Biome) => void>();
   private readonly unsubscribe: (() => void)[];
 
-  constructor(
-    interaction: EventBus<InteractionEvents>,
-    readonly fallback: Biome,
-  ) {
+  constructor(interaction: EventBus<InteractionEvents>, fallback: Biome) {
+    this.demo = fallback;
     this.unsubscribe = [
       interaction.on('tank:loaded', ({ biome }) => {
         this.loaded = biome;
@@ -31,8 +30,19 @@ export class TankBiome implements BiomeSource {
     ];
   }
 
+  get fallback(): Biome {
+    return this.demo;
+  }
+
   get current(): Biome {
-    return this.loaded ?? this.fallback;
+    return this.loaded ?? this.demo;
+  }
+
+  /** Picks the demo tank's biome; the scene only follows it while no saved tank is loaded. */
+  setFallback(biome: Biome): void {
+    if (biome === this.demo) return;
+    this.demo = biome;
+    if (this.loaded === null) this.notify();
   }
 
   onChange(listener: (biome: Biome) => void): () => void {

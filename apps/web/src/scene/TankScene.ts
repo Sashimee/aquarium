@@ -30,8 +30,16 @@ import type { SceneOptions } from './options';
 import { ColliderOverlay } from './overlay';
 import { MAX_TILT_RAD as MAX_PLANT_TILT, scatterPatch, type Extent } from './placement';
 import { RebuildQueue } from './rebuildQueue';
-import { PlantGroup, maxSway, type PlantEntry } from './plants';
+import {
+  PlantGroup,
+  maxSway,
+  surfaceScaleCeiling,
+  SURFACE_MARGIN,
+  type PlantEntry,
+} from './plants';
 import { createSubstrateMaterial, type SubstrateLayers } from './substrate';
+
+const FALLBACK_PLANT_HEIGHT = 0.2;
 
 export const DEFAULT_CURRENT: CurrentParameters = {
   direction: [1, 0],
@@ -197,6 +205,7 @@ export class TankScene {
     const hard = new ColliderField(colliders);
 
     const extent = glassExtent(dimensions);
+    const waterTop = dimensions.height - dimensions.freeboard;
     const ground = (x: number, z: number) => substrateHeight(dimensions, x, z);
     const normal = new Float64Array(3);
     const blocked = (x: number, y: number, z: number) =>
@@ -212,7 +221,8 @@ export class TankScene {
     for (const patch of preset.plantPatches) {
       const bounds = catalog.get(patch.assetId).bounds;
       const reach = plantReach(patch.assetId, bounds, preset.current ?? DEFAULT_CURRENT);
-      const instances = scatterPatch(patch, ground, blocked, extent, reach);
+      const ceiling = surfaceScaleCeiling(waterTop, bounds?.max[1] ?? FALLBACK_PLANT_HEIGHT);
+      const instances = scatterPatch(patch, ground, blocked, extent, reach, ceiling);
       if (instances.length < patch.count) {
         console.warn(
           `Plant patch "${patch.id}" fitted ${instances.length} of ${patch.count} plants; move it clear of hardscape and glass`,
@@ -238,7 +248,12 @@ export class TankScene {
         rank: -1,
       });
       const entry = catalog.get(item.assetId);
-      const height = (entry.bounds?.max[1] ?? 0) * item.scale;
+      const height = (entry.bounds?.max[1] ?? FALLBACK_PLANT_HEIGHT) * item.scale;
+      if (item.position[1] + height > waterTop - SURFACE_MARGIN) {
+        throw new Error(
+          `Plant "${item.assetId}" at y ${item.position[1]} reaches ${(item.position[1] + height).toFixed(3)} m, above the water line ${(waterTop - SURFACE_MARGIN).toFixed(3)} m; lower its scale`,
+        );
+      }
       const half = Math.max(entry.bounds?.max[0] ?? 0.05, entry.bounds?.max[2] ?? 0.05);
       if (height >= MIN_COLLIDER_PLANT_HEIGHT) {
         colliders.push(
@@ -302,8 +317,7 @@ export class TankScene {
 
   /** Plants and anemones from the preset, which stay where they are. */
   get fixedDecor(): readonly DecorItem[] {
-    const catalog = this.library.catalog;
-    return this.preset.decor.filter((i) => !HARDSCAPE_KINDS.has(catalog.get(i.assetId).kind));
+    return fixedDecorOf(this.preset.decor, this.library.catalog);
   }
 
   catalogEntries(): IterableIterator<CatalogEntry> {
@@ -556,6 +570,16 @@ export function checkClearOfGlass(
   }
 }
 
+export function fixedDecorOf(
+  decor: readonly DecorItem[],
+  catalog: Pick<AssetCatalog, 'get'>,
+): DecorItem[] {
+  return decor.filter(
+    (i) =>
+      parseEuphylliaId(i.assetId) !== null || !HARDSCAPE_KINDS.has(catalog.get(i.assetId).kind),
+  );
+}
+
 export function checkEuphylliaClearOfGlass(
   item: DecorItem,
   bounds: EuphylliaMesh['bounds'],
@@ -573,12 +597,12 @@ export function checkEuphylliaClearOfGlass(
   }
 }
 
-function plantReach(
+export function plantReach(
   assetId: string,
   bounds: { readonly min: readonly number[]; readonly max: readonly number[] } | undefined,
   current: CurrentParameters,
 ): (scale: number) => number {
-  const height = bounds?.max[1] ?? 0.2;
+  const height = bounds?.max[1] ?? FALLBACK_PLANT_HEIGHT;
   const half = bounds
     ? Math.max(
         Math.abs(bounds.min[0] ?? 0),
@@ -588,7 +612,8 @@ function plantReach(
       )
     : 0.1;
   const lean = Math.sin(MAX_PLANT_TILT) * height;
-  return (scale) => (half + lean + maxSway(assetId, height, current)) * scale;
+  const sway = maxSway(assetId, height, current);
+  return (scale) => (half + lean) * scale + sway;
 }
 
 function plantCapsule(

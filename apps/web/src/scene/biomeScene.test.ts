@@ -89,6 +89,23 @@ afterEach(() => {
 });
 
 describe('TankBiome', () => {
+  it('retargets the demo biome and notifies only while no saved tank is loaded', () => {
+    const { tankBiome, load, none } = harness('freshwater');
+    const seen: Biome[] = [];
+    tankBiome.onChange((b) => seen.push(b));
+    tankBiome.setFallback('freshwater');
+    tankBiome.setFallback('reef');
+    expect(seen).toEqual(['reef']);
+    expect(tankBiome.fallback).toBe('reef');
+    load('t1', 'freshwater');
+    tankBiome.setFallback('freshwater');
+    expect(seen).toEqual(['reef', 'freshwater']);
+    tankBiome.setFallback('reef');
+    expect(tankBiome.current).toBe('freshwater');
+    none();
+    expect(tankBiome.current).toBe('reef');
+  });
+
   it('follows the loaded tank and falls back to the URL biome once no tank is coming', () => {
     const { tankBiome, load, none } = harness('freshwater');
     const seen: Biome[] = [];

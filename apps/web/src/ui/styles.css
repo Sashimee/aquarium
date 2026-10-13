@@ -73,6 +73,7 @@
 }
 
 .camera-controls,
+.tank-type,
 .play-controls {
   display: flex;
   flex-wrap: wrap;

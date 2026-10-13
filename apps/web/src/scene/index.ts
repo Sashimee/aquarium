@@ -6,7 +6,7 @@ import { BiomeScene, type TankBiome } from './biomeScene';
 import { TankScene } from './TankScene';
 
 export { TankScene } from './TankScene';
-export { parseBiome } from './options';
+export { parseBiome, withBiome } from './options';
 export { BiomeScene, TankBiome } from './biomeScene';
 export type { SceneAnchor } from './anemone';
 export { CurrentField, sampleCurrent, type CurrentParameters } from './current';
