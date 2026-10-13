@@ -116,4 +116,53 @@ describe('SceneDecor', () => {
     expect(report).toHaveBeenCalledWith('Decor failed to load', expect.any(Error));
     expect(decor.system).toBeNull();
   });
+
+  describe('a decorate request made before the system exists', () => {
+    const requests = (bus: EventBus<InteractionEvents>) => {
+      const seen: boolean[] = [];
+      bus.on('decor:request-mode', ({ active }) => seen.push(active));
+      return seen;
+    };
+
+    it('is replayed once the system is up', async () => {
+      const { bus, decor } = setup();
+      const seen = requests(bus);
+      bus.emit('decor:request-mode', { active: true });
+      decor.mount('reef');
+      await settle();
+      expect(seen).toEqual([true, true]);
+    });
+
+    it('is replayed after a scene rebuild when still wanted', async () => {
+      const { bus, decor } = setup();
+      decor.mount('first');
+      await settle();
+      decor.unmount();
+      bus.emit('decor:request-mode', { active: true });
+      const seen = requests(bus);
+      decor.mount('second');
+      await settle();
+      expect(seen).toEqual([true]);
+    });
+
+    it('is not replayed after the user asked to leave', async () => {
+      const { bus, decor } = setup();
+      bus.emit('decor:request-mode', { active: true });
+      bus.emit('decor:request-mode', { active: false });
+      const seen = requests(bus);
+      decor.mount('reef');
+      await settle();
+      expect(seen).toEqual([]);
+    });
+
+    it('is not replayed once the mode reports it ended', async () => {
+      const { bus, decor } = setup();
+      bus.emit('decor:request-mode', { active: true });
+      bus.emit('decor:mode-changed', { active: false });
+      const seen = requests(bus);
+      decor.mount('reef');
+      await settle();
+      expect(seen).toEqual([]);
+    });
+  });
 });

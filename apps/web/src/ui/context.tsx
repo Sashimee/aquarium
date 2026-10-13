@@ -49,62 +49,48 @@ export function useApi(): ApiClient {
   return api;
 }
 
+export function useLatest<Events extends object, K extends keyof Events>(
+  bus: EventBus<Events>,
+  type: K,
+): Events[K] | undefined {
+  const [value, setValue] = useState<Events[K] | undefined>(() => bus.peek(type));
+  useEffect(() => {
+    const off = bus.on(type, setValue);
+    setValue(bus.peek(type));
+    return off;
+  }, [bus, type]);
+  return value;
+}
+
 export function useCameraMode(): CameraMode {
   const { interaction } = useBridge();
-  const [mode, setMode] = useState<CameraMode>('orbit');
-  useEffect(() => interaction.on('camera:mode-changed', (e) => setMode(e.mode)), [interaction]);
-  return mode;
+  return useLatest(interaction, 'camera:mode-changed')?.mode ?? 'orbit';
 }
 
 export function useDemoBiome(): Biome {
   const { interaction } = useBridge();
-  const [biome, setBiome] = useState<Biome>(() => parseBiome(window.location.search));
-  useEffect(() => interaction.on('demo:biome-changed', (e) => setBiome(e.biome)), [interaction]);
-  return biome;
+  const latest = useLatest(interaction, 'demo:biome-changed');
+  return latest?.biome ?? parseBiome(window.location.search);
 }
 
 export function usePlayTool(): PlayTool {
   const { interaction } = useBridge();
-  const [tool, setTool] = useState<PlayTool>('tap');
-  useEffect(() => interaction.on('play:tool-changed', (e) => setTool(e.tool)), [interaction]);
-  return tool;
+  return useLatest(interaction, 'play:tool-changed')?.tool ?? 'tap';
 }
 
-const lastDecorState = new WeakMap<object, DecorViewState>();
-
-// The editor panel mounts after its lazy chunk loads, once the state event it needs has already
-// fired, so a late subscriber starts from the last state seen rather than from nothing.
 export function useDecorState(): DecorViewState | null {
   const { interaction } = useBridge();
-  const [state, setState] = useState<DecorViewState | null>(
-    () => lastDecorState.get(interaction) ?? null,
-  );
-  useEffect(
-    () =>
-      interaction.on('decor:state', (next) => {
-        lastDecorState.set(interaction, next);
-        setState(next);
-      }),
-    [interaction],
-  );
-  return state;
+  return useLatest(interaction, 'decor:state') ?? null;
 }
 
 export function useDecorSaveState(): { status: SaveStatus; message: string | null } {
   const { interaction } = useBridge();
-  const [state, setState] = useState<{ status: SaveStatus; message: string | null }>({
-    status: 'idle',
-    message: null,
-  });
-  useEffect(() => interaction.on('decor:save-state', setState), [interaction]);
-  return state;
+  return useLatest(interaction, 'decor:save-state') ?? { status: 'idle', message: null };
 }
 
 export function useEngineReady(): EngineEvents['engine:ready'] | null {
   const { engine } = useBridge();
-  const [info, setInfo] = useState<EngineEvents['engine:ready'] | null>(null);
-  useEffect(() => engine.on('engine:ready', setInfo), [engine]);
-  return info;
+  return useLatest(engine, 'engine:ready') ?? null;
 }
 
 export interface AuthState {

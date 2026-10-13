@@ -1,7 +1,7 @@
 import { foodTypeSchema, type FoodType } from '@aquarium/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { HAND_FEED_PORTION, type PlayTool } from '../interaction/events';
-import { useBridge, usePlayTool } from './context';
+import { useBridge, useLatest, usePlayTool } from './context';
 import { useActiveTank } from './session';
 
 const TOOLS: readonly { tool: PlayTool; label: string }[] = [
@@ -29,7 +29,7 @@ export function PlayControls() {
   const tools = tank?.fish.some((f) => f.status === 'dead') ? [...TOOLS, NET] : TOOLS;
   const [food, setFood] = useState<FoodType>('flakes');
   const [message, setMessage] = useState('');
-  const [ready, setReady] = useState(false);
+  const ready = useLatest(interaction, 'play:ready') !== undefined;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // A live region only speaks when its text changes, so clear it first to repeat a message.
@@ -52,7 +52,6 @@ export function PlayControls() {
 
   useEffect(() => {
     const offs = [
-      interaction.on('play:ready', () => setReady(true)),
       interaction.on('feed:dropped', ({ food: f }) =>
         announce(`Fed ${FOOD_LABEL[f].toLowerCase()}.`),
       ),

@@ -105,4 +105,36 @@ describe('EventBus', () => {
     expect(bus.listenerCount('ping')).toBe(0);
     expect(bus.listenerCount('other')).toBe(0);
   });
+
+  describe('sticky events', () => {
+    it('lets a late subscriber read the last payload emitted before it existed', () => {
+      const bus = new EventBus<TestEvents>(undefined, ['ping']);
+      bus.emit('ping', { n: 1 });
+      bus.emit('ping', { n: 2 });
+      expect(bus.peek('ping')).toEqual({ n: 2 });
+    });
+
+    it('is undefined before the first emit and for types that are not sticky', () => {
+      const bus = new EventBus<TestEvents>(undefined, ['ping']);
+      expect(bus.peek('ping')).toBeUndefined();
+      bus.emit('other', 'x');
+      expect(bus.peek('other')).toBeUndefined();
+    });
+
+    it('is forgotten by clear', () => {
+      const bus = new EventBus<TestEvents>(undefined, ['ping']);
+      bus.emit('ping', { n: 1 });
+      bus.clear();
+      expect(bus.peek('ping')).toBeUndefined();
+    });
+
+    it('records the payload even when a handler throws', () => {
+      const bus = new EventBus<TestEvents>(vi.fn(), ['ping']);
+      bus.on('ping', () => {
+        throw new Error('boom');
+      });
+      bus.emit('ping', { n: 3 });
+      expect(bus.peek('ping')).toEqual({ n: 3 });
+    });
+  });
 });

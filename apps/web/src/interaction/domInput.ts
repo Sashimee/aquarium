@@ -50,6 +50,9 @@ export function attachPointerInput(
 
   const down = (e: PointerEvent) => {
     if (!startsGesture(e.pointerType, e.button)) return;
+    // A mouse is one pointer, so any still tracked is stale: its release was swallowed (a panel
+    // opened under the cursor) and would otherwise turn this press into a pinch.
+    if (e.pointerType === 'mouse') recognizer.cancelAll();
     try {
       element.setPointerCapture(e.pointerId);
     } catch (cause) {
@@ -77,6 +80,7 @@ export function attachPointerInput(
   element.addEventListener('pointermove', move);
   element.addEventListener('pointerup', up);
   element.addEventListener('pointercancel', cancel);
+  element.addEventListener('lostpointercapture', cancel);
   element.addEventListener('wheel', wheel, { passive: false });
   element.addEventListener('contextmenu', contextMenu);
   window.addEventListener('blur', blur);
@@ -85,6 +89,7 @@ export function attachPointerInput(
     element.removeEventListener('pointermove', move);
     element.removeEventListener('pointerup', up);
     element.removeEventListener('pointercancel', cancel);
+    element.removeEventListener('lostpointercapture', cancel);
     element.removeEventListener('wheel', wheel);
     element.removeEventListener('contextmenu', contextMenu);
     window.removeEventListener('blur', blur);
