@@ -29,15 +29,18 @@ open to correction.
   trait fails species loading. `gait: hover` gives a fish a self-chosen station.
 - **Per-trait parameters:** a species can override some of those defaults with optional
   `behaviour` objects, read by `toSimSpecies`. A field left out keeps the `BEHAVIOUR` default.
-  `airGulp.perHour` → `gulpsPerHour` (needs `air-gulp`); `grazing.meanIntervalS`/`minS`/`maxS` →
-  `grazeMeanIntervalS`/`grazeMinS`/`grazeMaxS` (needs `rock-grazer`); `flare.minS`/`maxS` →
-  `flareMinS`/`flareMaxS` (needs `flare-display`); `station.radiusBodyLengths`/`restationMinS`/
-  `restationMaxS` → `stationRadiusBodyLengths`/`restationMinS`/`restationMaxS` (needs `gait: hover`
-  without an anemone or cave home); `refuge.afterStartleS` → `shelterAfterStartleS` (needs
-  `cave-dweller`); `excursion.meanIntervalS`/`leashBodyLengths` →
-  `excursionMeanIntervalS`/`hostLeashBodyLengths` (needs `anemone-host`). Species loading
-  **rejects** an object whose trait is off, because the sim would otherwise ignore it silently and
-  a warning in a worker is easy to miss. It also rejects a min/max pair that is out of order after
+  `airGulp.perHour` → `gulpsPerHour` (needs `air-gulp` and `gait: forage`);
+  `grazing.meanIntervalS`/`minS`/`maxS` → `grazeMeanIntervalS`/`grazeMinS`/`grazeMaxS` (needs
+  `rock-grazer` on a free swimmer: no home, gait neither `hover` nor `forage`); `flare.minS`/`maxS`
+  → `flareMinS`/`flareMaxS` (needs `flare-display`); `station.radiusBodyLengths`/`restationMinS`/
+  `restationMaxS` → `stationRadiusBodyLengths`/`restationMinS`/`restationMaxS` (needs a home:
+  `gait: hover`, `anemone-host` or `cave-dweller`, because an anemone or cave fish placed without
+  its anchor holds a self-chosen station instead); `refuge.afterStartleS` → `shelterAfterStartleS`
+  (needs `cave-dweller`); `excursion.meanIntervalS`/`leashBodyLengths` →
+  `excursionMeanIntervalS`/`hostLeashBodyLengths` (needs `anemone-host`). `station`, `refuge` and
+  `excursion` also need a gait other than `forage` and no `glass-grazer`, since those behaviours
+  take precedence over a home. Species loading **rejects** an object the sim would never read,
+  because it would otherwise be ignored silently and a warning in a worker is easy to miss. It also rejects a min/max pair that is out of order after
   the merge, such as `grazing: { minS: 50 }` against the default `grazeMaxS` of 4.
 - **Feeding:** every feeding tunable is in `FEEDING` (`src/feeding.ts`). Food arrives each tick
   as `[id, x, y, z, typeIndex]` float32 records (`FOOD_STRIDE = 5`), `typeIndex` in the order of

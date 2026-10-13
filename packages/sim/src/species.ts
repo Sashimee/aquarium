@@ -150,23 +150,49 @@ function requireOrdered(min: number, max: number, field: string, id: string): vo
 }
 
 /**
- * Reads the optional per-trait parameter objects over the `BEHAVIOUR` defaults. An object whose
- * trait is off would be silently ignored, so it fails loading like an unknown trait does.
+ * Reads the optional per-trait parameter objects over the `BEHAVIOUR` defaults. An object the
+ * sim would never read fails loading like an unknown trait does, rather than being ignored.
+ * Which objects are read follows the branch order of `Behaviour.planDefault`: forage gait, then
+ * glass grazing, then a home (anchor or station), then free swimming.
  */
 function parseTraitParams(
   id: string,
   behaviour: SpeciesInput['behaviour'],
   traits: ReadonlySet<Trait>,
+  gait: Gait,
   home: HomeKind,
 ): TraitParams {
   const { airGulp, grazing, flare, station, refuge, excursion } = behaviour;
+  const forager = gait === 'forage';
+  const homed = !forager && !traits.has('glass-grazer') && home !== 'none';
+  const free = !forager && !traits.has('glass-grazer') && home === 'none';
   const owners: [string, unknown, boolean, string][] = [
-    ['airGulp', airGulp, traits.has('air-gulp'), 'trait "air-gulp"'],
-    ['grazing', grazing, traits.has('rock-grazer'), 'trait "rock-grazer"'],
+    ['airGulp', airGulp, forager && traits.has('air-gulp'), 'trait "air-gulp" and gait "forage"'],
+    [
+      'grazing',
+      grazing,
+      free && traits.has('rock-grazer'),
+      'trait "rock-grazer" on a species with no home and a gait other than "hover" or "forage"',
+    ],
     ['flare', flare, traits.has('flare-display'), 'trait "flare-display"'],
-    ['station', station, home === 'station', 'gait "hover" without an anemone or cave home'],
-    ['refuge', refuge, traits.has('cave-dweller'), 'trait "cave-dweller"'],
-    ['excursion', excursion, traits.has('anemone-host'), 'trait "anemone-host"'],
+    [
+      'station',
+      station,
+      homed,
+      'gait "hover" or an anemone or cave home, without gait "forage" or trait "glass-grazer"',
+    ],
+    [
+      'refuge',
+      refuge,
+      homed && traits.has('cave-dweller'),
+      'trait "cave-dweller" without gait "forage" or trait "glass-grazer"',
+    ],
+    [
+      'excursion',
+      excursion,
+      homed && traits.has('anemone-host'),
+      'trait "anemone-host" without gait "forage" or trait "glass-grazer"',
+    ],
   ];
   for (const [field, value, active, needs] of owners) {
     if (value !== undefined && !active) {
@@ -292,6 +318,6 @@ export function toSimSpecies(input: SpeciesInput): SimSpecies {
     flare: traits.has('flare-display'),
     bellyToSurface: traits.has('glass-grazer') || traits.has('cave-dweller'),
     foodPreference: parseDiet(id, input.lifecycle.diet),
-    ...parseTraitParams(id, behaviour, traits, home),
+    ...parseTraitParams(id, behaviour, traits, loco.gait, home),
   };
 }

@@ -601,7 +601,16 @@ describe('per-trait parameters', () => {
       behaviour: { ...betta.behaviour, flare: { minS: 4, maxS: 9 } },
     });
     expect([fighter.flareMinS, fighter.flareMaxS]).toEqual([4, 9]);
-    expect(toSimSpecies(tetra({ airGulp: { perHour: 20 } }, ['air-gulp'])).gulpsPerHour).toBe(20);
+    const cory = toSimSpecies({
+      ...bronzeCorydoras,
+      behaviour: { ...bronzeCorydoras.behaviour, airGulp: { perHour: 20 } },
+    });
+    expect(cory.gulpsPerHour).toBe(20);
+    const homed = toSimSpecies({
+      ...clownfish,
+      behaviour: { ...clownfish.behaviour, station: { radiusBodyLengths: 2 } },
+    });
+    expect(homed.stationRadiusBodyLengths).toBe(2);
   });
 
   it('rejects a min/max pair that is out of order once merged with the defaults', () => {
@@ -623,27 +632,47 @@ describe('per-trait parameters', () => {
   });
 
   it('rejects a non-positive value', () => {
-    expect(() => toSimSpecies(tetra({ airGulp: { perHour: 0 } }, ['air-gulp']))).toThrow(
-      /behaviour.airGulp.perHour must be a positive number/,
-    );
+    expect(() =>
+      toSimSpecies({
+        ...bronzeCorydoras,
+        behaviour: { ...bronzeCorydoras.behaviour, airGulp: { perHour: 0 } },
+      }),
+    ).toThrow(/behaviour.airGulp.perHour must be a positive number/);
   });
 
-  it('rejects a parameter object whose trait is off', () => {
+  it('rejects a parameter object the sim would never read', () => {
     expect(() => toSimSpecies(tetra({ airGulp: { perHour: 4 } }))).toThrow(
-      /species "neon-tetra": behaviour.airGulp is set but needs trait "air-gulp"/,
+      /species "neon-tetra": behaviour.airGulp is set but needs trait "air-gulp" and gait "forage"/,
+    );
+    expect(() => toSimSpecies(tetra({ airGulp: { perHour: 4 } }, ['air-gulp']))).toThrow(
+      /behaviour.airGulp is set but needs trait "air-gulp" and gait "forage"/,
     );
     expect(() => toSimSpecies(tetra({ grazing: { meanIntervalS: 10 } }, ['glass-grazer']))).toThrow(
       /behaviour.grazing is set but needs trait "rock-grazer"/,
     );
+    expect(() =>
+      toSimSpecies({
+        ...angelfish,
+        behaviour: {
+          ...angelfish.behaviour,
+          traits: ['rock-grazer'],
+          grazing: { meanIntervalS: 5 },
+        },
+      }),
+    ).toThrow(/behaviour.grazing is set but needs trait "rock-grazer" on a species with no home/);
     expect(() => toSimSpecies(tetra({ station: { radiusBodyLengths: 2 } }))).toThrow(
-      /behaviour.station is set but needs gait "hover"/,
+      /behaviour.station is set but needs gait "hover" or an anemone or cave home/,
     );
     expect(() =>
       toSimSpecies({
-        ...clownfish,
-        behaviour: { ...clownfish.behaviour, station: { radiusBodyLengths: 2 } },
+        ...bronzeCorydoras,
+        behaviour: {
+          ...bronzeCorydoras.behaviour,
+          traits: ['cave-dweller'],
+          refuge: { afterStartleS: 10 },
+        },
       }),
-    ).toThrow(/behaviour.station is set but needs gait "hover"/);
+    ).toThrow(/behaviour.refuge is set but needs trait "cave-dweller" without gait "forage"/);
     expect(() => toSimSpecies(tetra({ refuge: { afterStartleS: 10 } }))).toThrow(
       /needs trait "cave-dweller"/,
     );
@@ -651,6 +680,56 @@ describe('per-trait parameters', () => {
       /needs trait "anemone-host"/,
     );
   });
+
+  it('accepts station parameters on an anemone or cave species, which stations without an anchor', () => {
+    for (const home of [clownfish, royalGramma]) {
+      const s = toSimSpecies({
+        ...home,
+        behaviour: { ...home.behaviour, station: { radiusBodyLengths: 4, restationMinS: 30 } },
+      });
+      expect([s.stationRadiusBodyLengths, s.restationMinS]).toEqual([4, 30]);
+    }
+  });
+
+  it(
+    'an anchorless clownfish holds its station to its own station radius',
+    { timeout: LONG },
+    () => {
+      const withRadius = (id: string, radiusBodyLengths: number): SpeciesInput => ({
+        ...clownfish,
+        id,
+        behaviour: {
+          ...clownfish.behaviour,
+          station: { radiusBodyLengths, restationMinS: 500, restationMaxS: 600 },
+        },
+      });
+      const run = (): number[] => {
+        const w = new World({
+          seed: 11,
+          tank: SHOW_TANK,
+          species: [withRadius('clown-tight', 0.5), withRadius('clown-loose', 8)],
+          decor: SHOW_DECOR,
+          fish: [...spawnMany('clown-tight', 4), ...spawnMany('clown-loose', 4)],
+        });
+        const station = [0, 0];
+        for (let t = 0; t < 3600; t++) {
+          w.step();
+          if (t < 900) continue;
+          for (let i = 0; i < w.count; i++) {
+            if (at(w.state, i) !== FishState.Station) continue;
+            const k = i < 4 ? 0 : 1;
+            station[k] = at(station, k) + 1;
+          }
+        }
+        return station;
+      };
+      const station = run();
+      // 4 fish × 2700 ticks: the 0.5 L radius is mostly overshot, the 8 L one rarely left.
+      expect(at(station, 0)).toBeLessThan(0.4 * 10_800);
+      expect(at(station, 1)).toBeGreaterThan(0.75 * 10_800);
+      expect(run()).toEqual(station);
+    },
+  );
 
   it(
     'two air-gulping species with different rates gulp at different rates, reproducibly',
