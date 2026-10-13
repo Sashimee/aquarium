@@ -9,6 +9,7 @@ import {
   finDebugColors,
   medianX,
   orient,
+  scaleCaudal,
   type Axes,
   type FinHints,
 } from './fins.ts';
@@ -102,6 +103,8 @@ export function normaliseFish(input: NormaliseInput): Part[] {
   }
 
   const fins = classifyFins(merged.positions, merged.indices, input.hints);
+  if (input.hints?.caudalScale !== undefined)
+    scaleCaudal(merged.positions, merged.normals, fins, input.hints.caudalScale);
   const scale = input.standardLengthM / (fins.zSnout - fins.zPeduncle);
   for (const part of [merged, ...attachments])
     for (let i = 0; i < part.positions.length; i++) part.positions[i] = part.positions[i]! * scale;

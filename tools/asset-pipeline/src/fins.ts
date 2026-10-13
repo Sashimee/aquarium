@@ -31,6 +31,8 @@ export interface FinHints {
   finThresholdVoxels?: number;
   /** Treat small pieces detached from the body on the flank as pectoral fins (sources that model them as flush shells). */
   shellPectorals?: boolean;
+  /** Uniform scale of the caudal fin about its root, for sources whose tail is out of proportion to the body. */
+  caudalScale?: number;
   /** Fins to leave unclassified, for species whose fin is part of the body mesh. */
   skip?: FinName[];
 }
@@ -331,6 +333,61 @@ export function classifyFins(
     });
   }
   return { mask, id, zSnout, zPeduncle, zTail };
+}
+
+const smoothstep = (t: number): number => {
+  const x = clamp(t, 0, 1);
+  return x * x * (3 - 2 * x);
+};
+
+/**
+ * Shrinks everything behind the peduncle about its centre. The factor eases from 1 at the peduncle to `factor` half a
+ * tail length behind it, so the rear of the dorsal and anal fins, which also run past the peduncle, follow without a
+ * seam. Fin ids and masks are untouched; normals are transformed by the inverse transpose of the local Jacobian.
+ */
+export function scaleCaudal(
+  positions: Float32Array,
+  normals: Float32Array,
+  fins: FinResult,
+  factor: number,
+): void {
+  const bandEnd = fins.zPeduncle + 0.03 * (fins.zSnout - fins.zTail);
+  let yBody = 0;
+  let n = 0;
+  for (let i = 0; i < fins.id.length; i++) {
+    const z = positions[i * 3 + 2]!;
+    if (fins.id[i] !== 0 || z < fins.zPeduncle || z > bandEnd) continue;
+    yBody += positions[i * 3 + 1]!;
+    n++;
+  }
+  if (n === 0)
+    throw new Error('scaleCaudal: no body vertex just ahead of the peduncle to centre the tail on');
+  const yRoot = yBody / n;
+  const band = 0.5 * (fins.zPeduncle - fins.zTail);
+  for (let i = 0; i < fins.id.length; i++) {
+    const d = fins.zPeduncle - positions[i * 3 + 2]!;
+    if (d <= 0) continue;
+    const t = clamp(d / band, 0, 1);
+    const f = 1 - (1 - factor) * smoothstep(t);
+    const slope = d < band ? (-(1 - factor) * 6 * t * (1 - t)) / band : 0;
+    const ux = positions[i * 3]!;
+    const uy = positions[i * 3 + 1]! - yRoot;
+    positions[i * 3] = ux * f;
+    positions[i * 3 + 1] = yRoot + uy * f;
+    positions[i * 3 + 2] = fins.zPeduncle - d * f;
+
+    const nx = normals[i * 3]!;
+    const ny = normals[i * 3 + 1]!;
+    const nz = normals[i * 3 + 2]!;
+    const k = (ux * nx + uy * ny - d * nz) / (f + slope * d);
+    const mx = nx / f;
+    const my = ny / f;
+    const mz = (nz + slope * k) / f;
+    const len = Math.hypot(mx, my, mz) || 1;
+    normals[i * 3] = mx / len;
+    normals[i * 3 + 1] = my / len;
+    normals[i * 3 + 2] = mz / len;
+  }
 }
 
 export function bodyCentreOfMass(

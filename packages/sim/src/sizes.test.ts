@@ -124,10 +124,7 @@ const ADULT_MAX: Record<string, { model: string; maxSlM: number; maxTlM: number;
  * Models whose own TL/SL draws the species outside the tolerance, with the issue that fixes the
  * model. The test asserts the error is still there, so a fixed model forces the entry out.
  */
-const KNOWN_MODEL_ERRORS: Readonly<Record<string, number>> = {
-  betta: 267,
-  'neon-tetra': 266,
-};
+const KNOWN_MODEL_ERRORS: Readonly<Record<string, number>> = {};
 
 const TOLERANCE = 0.1;
 
