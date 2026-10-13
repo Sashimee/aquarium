@@ -39,7 +39,7 @@ export function installRoomLighting(
   scene.environment = roomTarget.texture;
   scene.background = roomTarget.texture;
   scene.backgroundBlurriness = 0.35;
-  scene.backgroundIntensity = 0.6;
+  scene.backgroundIntensity = 0.45;
 
   let hdri: Texture | null = null;
   let room: typeof roomTarget | null = roomTarget;

@@ -41,6 +41,12 @@ const CDOM_SLOPE = 0.014;
  */
 const BOUNDARY_TOLERANCE = 0.005;
 
+/**
+ * A hood about a metre above the surface: an extended LED array whose irradiance halves from the
+ * surface to the sand of a 50 cm tank, as reef PAR maps show.
+ */
+const DEFAULT_FIXTURE_HEIGHT = 1.2;
+
 /** Absorption scale and turbidity can both reach 0, which would make the albedo 0/0. */
 const MIN_EXTINCTION = 1e-6;
 
@@ -74,6 +80,8 @@ export class WaterMedium {
   readonly scattering = uniform(0.1);
   /** Radiance scattered towards the eye per unit of scattering, driven by the lights. */
   readonly inScatterRadiance = uniform(new Color(0.18, 0.22, 0.24));
+  /** Height (m) of the hood's light source above the water surface, for its spread with depth. */
+  readonly fixtureHeight = uniform(DEFAULT_FIXTURE_HEIGHT);
 
   private quality: WaterQuality = { cdom440: 0, turbidity: 0.1 };
 
@@ -109,10 +117,30 @@ export class WaterMedium {
     return exp(this.extinction().mul(pathLength).negate());
   }
 
-  /** Light scattered into the view ray along a segment with transmittance `t`. */
-  inScatter(t: Node<'vec3'>): Node<'vec3'> {
+  /**
+   * How much of the hood's surface irradiance its spread leaves at `depth` (m) below the surface,
+   * as from a source `fixtureHeight` above it. Above the surface it is 1.
+   */
+  hoodSpread(depth: Node<'float'>): Node<'float'> {
+    const h = this.fixtureHeight;
+    return h.div(h.add(max(depth, 0))).pow(2);
+  }
+
+  /** The hood's light at `depth` below the surface relative to the surface: spread and absorption. */
+  lightAtDepth(depth: Node<'float'>): Node<'vec3'> {
+    return this.transmittance(max(depth, 0)).mul(this.hoodSpread(depth));
+  }
+
+  /**
+   * Light scattered into the view ray along a segment with transmittance `t`. With `depth`, the
+   * segment's mean depth below the surface, the light reaching it is dimmed and filtered on its
+   * way down; without it the surface level is used.
+   */
+  inScatter(t: Node<'vec3'>, depth?: Node<'float'>): Node<'vec3'> {
     const albedo = max(this.extinction(), vec3(MIN_EXTINCTION)).reciprocal().mul(this.scattering);
-    return albedo.mul(this.inScatterRadiance).mul(t.oneMinus());
+    const lit = albedo.mul(this.inScatterRadiance);
+    const atDepth = depth === undefined ? lit : lit.mul(this.lightAtDepth(depth));
+    return atDepth.mul(t.oneMinus());
   }
 
   /**
@@ -152,11 +180,23 @@ export class WaterMedium {
     return mix(bent, dir, step(tNear, 0));
   }
 
+  /**
+   * The camera ray's path inside water up to `target`, and the depth below the surface of that
+   * path's midpoint. Unless `throughBox`, the path is 0 for targets beyond the box.
+   */
+  private segment(target: Node<'vec3'>, throughBox: boolean) {
+    const { dist, dir, tNear, tFar } = this.raySegment(target);
+    const start = max(tNear, 0).toVar();
+    const end = min(tFar, dist).toVar();
+    const length = max(end.sub(start), 0);
+    const path = throughBox ? length : length.mul(step(dist, tFar.add(BOUNDARY_TOLERANCE)));
+    const midY = cameraPosition.y.add(dir.y.mul(start.add(end).mul(0.5)));
+    return { path, depth: this.boxMax.y.sub(midY) };
+  }
+
   /** Length of the camera ray inside water up to `target`, 0 if the target lies beyond the box. */
   pathToFragment(target: Node<'vec3'> = positionWorld): Node<'float'> {
-    const { dist, tNear, tFar } = this.raySegment(target);
-    const inside = step(dist, tFar.add(BOUNDARY_TOLERANCE));
-    return max(min(tFar, dist).sub(max(tNear, 0)), 0).mul(inside);
+    return this.segment(target, false).path;
   }
 
   /** Distance from `origin` inside the water box to where a ray along `dir` leaves it. */
@@ -171,20 +211,21 @@ export class WaterMedium {
 
   /** Length of the camera ray through the whole box, for fragments on its far faces. */
   pathThroughBox(): Node<'float'> {
-    const { dist, tNear, tFar } = this.raySegment();
-    return max(min(tFar, dist).sub(max(tNear, 0)), 0);
+    return this.segment(positionWorld, true).path;
   }
 
   /** Scene fog node: attenuates and in-scatters the material output of anything in the water. */
   fogNode(): Node<'vec4'> {
-    const t = this.transmittance(this.pathToFragment()).toVar();
-    return vec4(output.rgb.mul(t).add(this.inScatter(t)), output.a);
+    const { path, depth } = this.segment(positionWorld, false);
+    const t = this.transmittance(path).toVar();
+    return vec4(output.rgb.mul(t).add(this.inScatter(t, depth)), output.a);
   }
 
   /** For materials blending with premultiplied alpha (One, OneMinusSrcAlpha). */
   applyPremultiplied(color: Node<'vec4'>): Node<'vec4'> {
-    const t = this.transmittance(this.pathToFragment()).toVar();
-    return vec4(color.rgb.mul(t).add(this.inScatter(t).mul(color.a)), color.a);
+    const { path, depth } = this.segment(positionWorld, false);
+    const t = this.transmittance(path).toVar();
+    return vec4(color.rgb.mul(t).add(this.inScatter(t, depth).mul(color.a)), color.a);
   }
 
   /** Transmittance of the far-face volume pass. */
@@ -193,6 +234,7 @@ export class WaterMedium {
   }
 
   volumeInScatter(): Node<'vec3'> {
-    return this.inScatter(this.transmittance(this.pathThroughBox()));
+    const { path, depth } = this.segment(positionWorld, true);
+    return this.inScatter(this.transmittance(path), depth);
   }
 }

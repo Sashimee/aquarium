@@ -36,6 +36,8 @@ const MAX_DELTA_S = 0.1;
 
 /** Hood LED, roughly 6500 K. */
 const HOOD_COLOR = new Color(1, 0.97, 0.92);
+/** At the water surface; the hood's spread leaves about three quarters of it on average below. */
+const HOOD_INTENSITY = 4;
 /** The hood's blue "moonlight" channel, left on through the night. */
 const MOONLIGHT = new Color(0.012, 0.03, 0.09);
 /** Room light at night relative to the day, from a lamp somewhere in the room. */
@@ -99,7 +101,7 @@ export class Engine {
   readonly medium: WaterMedium;
   readonly caustics: Caustics;
   readonly tank: Tank;
-  readonly hood = new DirectionalLight(HOOD_COLOR, 3);
+  readonly hood = new DirectionalLight(HOOD_COLOR, HOOD_INTENSITY);
   /** Room light reaching the water from outside the hood, for in-scatter. */
   readonly ambientScatter = new Color(0.02, 0.03, 0.034);
   readonly quality: QualityManager;
@@ -258,6 +260,7 @@ export class Engine {
     hood.name = 'hood';
     hood.position.set(0.12, d.height + 1.2, 0.2);
     hood.target.position.set(0, d.height / 2, 0);
+    this.medium.fixtureHeight.value = hood.position.y - this.medium.boxMax.value.y;
     this.scene.add(hood, hood.target);
 
     const shadowCam = hood.shadow.camera;

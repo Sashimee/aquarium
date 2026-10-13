@@ -10,13 +10,13 @@ interface Lighting {
 }
 
 /**
- * A metal-halide / LED reef blend near 14 000 K over very clear, tannin-free water. Freshwater
- * keeps the engine defaults, so it has no entry.
+ * A reef LED: 20 000 K white plus actinic 420-450 nm channels (linear sRGB), over very clear,
+ * tannin-free water. Freshwater keeps the engine defaults, so it has no entry.
  */
 const BIOME_LIGHTING: Readonly<Partial<Record<Biome, Lighting>>> = {
   reef: {
-    hoodColor: [0.74, 0.86, 1],
-    hoodIntensity: 3.4,
+    hoodColor: [0.32, 0.45, 1],
+    hoodIntensity: 7,
     water: { cdom440: 0.004, turbidity: 0.035 },
     ambientScatter: [0.008, 0.026, 0.05],
   },

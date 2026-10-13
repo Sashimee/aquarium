@@ -4,6 +4,7 @@ import {
   BufferGeometry,
   Color,
   CustomBlending,
+  DoubleSide,
   Group,
   Mesh,
   MeshBasicNodeMaterial,
@@ -33,6 +34,7 @@ import {
   float,
   Fn,
   If,
+  max,
   mix,
   mrt,
   mx_fractal_noise_float,
@@ -131,6 +133,34 @@ function overlayAlgae(
   })();
 }
 
+/** Linear albedo of the dark blue backdrop film stuck to the outside of the back pane. */
+const BACKDROP_ALBEDO = new Color(0.01, 0.025, 0.08);
+/**
+ * Irradiance on the backdrop relative to the hood's: the hood only grazes it, and the rest is
+ * light the water scatters onto it.
+ */
+const BACKDROP_IRRADIANCE = 0.35;
+/** Mirrored rays leaving the water this close to the back face end on the backdrop. */
+const BACKDROP_TOLERANCE = 0.02;
+const BACKDROP_GAP = 0.0005;
+/**
+ * What a side pane mirrors below the water is the substrate, which its shader cannot see: a
+ * mid-grey sand under the hood stands in for it, rather than the room's floor.
+ */
+const MIRRORED_SUBSTRATE_ALBEDO = 0.2;
+
+/**
+ * Radiance of the backdrop at `depth` below the surface, lit by the hood (the medium's in-scatter
+ * radiance is the hood's over 4π sr) as it reaches that depth.
+ */
+function backdropRadiance(medium: WaterMedium, depth: Node<'float'>): Node<'vec3'> {
+  return medium
+    .lightAtDepth(depth)
+    .mul(medium.inScatterRadiance)
+    .mul(color(BACKDROP_ALBEDO))
+    .mul(4 * BACKDROP_IRRADIANCE);
+}
+
 /**
  * The faces of a pane only reflect: diffuse is black and the output is premultiplied, so the
  * reflection adds on top while the scene behind is kept by (1 - F). A face towards the water is
@@ -156,9 +186,19 @@ function createGlassFaceMaterial(
   const cosWater = abs(dot(inWater, normalWorldGeometry));
   const reflectance = fresnelDielectric(cosWater, WATER_IOR / AIR_IOR).toVar();
   const mirrored = reflect(inWater, normalWorldGeometry).toVar();
-  const across = medium.transmittance(medium.exitDistance(positionWorld, mirrored)).toVar();
+  const exitDistance = medium.exitDistance(positionWorld, mirrored).toVar();
+  const across = medium.transmittance(exitDistance).toVar();
+  const exitPoint = positionWorld.add(mirrored.mul(exitDistance)).toVar();
+  const onBackdrop = step(exitPoint.z, medium.boxMin.z.add(BACKDROP_TOLERANCE));
+  const onFloor = step(exitPoint.y, medium.boxMin.y.add(BACKDROP_TOLERANCE));
   const skyNode = pmremTexture(sky, mirrored, float(SURFACE_ROUGHNESS));
-  const mirroredScene = medium.inScatter(across).add(skyNode.mul(backgroundIntensity).mul(across));
+  const floor = medium
+    .lightAtDepth(medium.boxMax.y.sub(medium.boxMin.y))
+    .mul(medium.inScatterRadiance)
+    .mul(4 * MIRRORED_SUBSTRATE_ALBEDO);
+  const interior = mix(backdropRadiance(medium, medium.boxMax.y.sub(exitPoint.y)), floor, onFloor);
+  const beyond = mix(skyNode.mul(backgroundIntensity), interior, max(onBackdrop, onFloor));
+  const mirroredScene = medium.inScatter(across).add(beyond.mul(across));
   const inner = vec4(mirroredScene.mul(reflectance), reflectance);
   const pane = mix(output, inner, towardsWater);
   material.outputNode = medium.applyPremultiplied(overlayAlgae(pane, algae, medium));
@@ -275,6 +315,7 @@ export class Tank {
     this.group.add(this.substrate);
 
     this.addGlass(medium, sky);
+    this.addBackdrop(medium);
     this.addWaterVolume(medium);
     this.addWaterSurface(medium, sky);
     this.addStand();
@@ -363,6 +404,22 @@ export class Tank {
       mesh.renderOrder = 2;
       this.group.add(mesh);
     }
+  }
+
+  /**
+   * Most tanks have a dark backdrop on the back pane. It hides the room behind the tank, so what
+   * is seen through the water is the water itself, darkening with depth.
+   */
+  private addBackdrop(medium: WaterMedium): void {
+    const { length: l, depth: d, height: h } = this.dimensions;
+    const material = new MeshBasicNodeMaterial({ side: DoubleSide });
+    material.name = 'backdrop';
+    material.fog = false;
+    material.colorNode = backdropRadiance(medium, medium.boxMax.y.sub(positionWorld.y));
+    const mesh = this.track(new Mesh(new PlaneGeometry(l, h), material));
+    mesh.name = 'backdrop';
+    mesh.position.set(0, h / 2, -d / 2 - BACKDROP_GAP);
+    this.group.add(mesh);
   }
 
   /**
