@@ -1,4 +1,9 @@
-import type { DecorItem } from '@aquarium/shared';
+import {
+  decorPositionLimits,
+  isDecorAssetForBiome,
+  type Biome,
+  type DecorItem,
+} from '@aquarium/shared';
 import { VACATION_FEEDER_ASSET_ID } from './spec';
 import {
   corners,
@@ -72,6 +77,28 @@ export function check(
   return null;
 }
 
+/** The assets of `specs` the server accepts in a `biome` tank; the vacation feeder fits any. */
+export function paletteSpecs(specs: ReadonlyMap<string, DecorSpec>, biome: Biome): DecorSpec[] {
+  return [...specs.values()].filter(
+    (s) => s.assetId === VACATION_FEEDER_ASSET_ID || isDecorAssetForBiome(biome, s.assetId),
+  );
+}
+
+/** Holds a position inside the interior the server accepts for a saved layout. */
+export function withinServerBounds(item: DecorItem): DecorItem {
+  const limits = decorPositionLimits();
+  const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
+  const [x, y, z] = item.position;
+  return {
+    ...item,
+    position: [
+      clamp(x, -limits.x, limits.x),
+      clamp(y, 0, limits.yMax),
+      clamp(z, -limits.z, limits.z),
+    ],
+  };
+}
+
 /** Slides the piece along x and z just far enough to be inside the glass. */
 export function keepInside(spec: DecorSpec, item: DecorItem, limits: TankLimits): DecorItem {
   const f = footprintOf(spec, item);
@@ -79,14 +106,21 @@ export function keepInside(spec: DecorSpec, item: DecorItem, limits: TankLimits)
   const clamp = (v: number, bound: number) => Math.min(Math.max(v, -bound), bound);
   const dx = clamp(f.cx, Math.max(0, limits.halfLength - e.x)) - f.cx;
   const dz = clamp(f.cz, Math.max(0, limits.halfDepth - e.z)) - f.cz;
-  return { ...item, position: [item.position[0] + dx, item.position[1], item.position[2] + dz] };
+  return withinServerBounds({
+    ...item,
+    position: [item.position[0] + dx, item.position[1], item.position[2] + dz],
+  });
 }
 
 export function admit(
   spec: DecorSpec | undefined,
   existing: readonly { item: DecorItem }[],
+  biome: Biome,
 ): Rejection | null {
   if (!spec) return 'unknown-asset';
+  if (spec.assetId !== VACATION_FEEDER_ASSET_ID && !isDecorAssetForBiome(biome, spec.assetId)) {
+    return 'unknown-asset';
+  }
   if (existing.length >= MAX_PIECES) return 'full';
   if (
     spec.assetId === VACATION_FEEDER_ASSET_ID &&

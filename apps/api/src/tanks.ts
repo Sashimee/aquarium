@@ -4,6 +4,7 @@ import {
   careActionSchema,
   createTankRequestSchema,
   decorLayoutSchema,
+  findDecorProblems,
   idSchema,
   speciesListSchema,
   tankListSchema,
@@ -400,6 +401,26 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       const body = updateTankRequestSchema.parse(req.body);
       throttle(user.id, 'care');
       return withTank(user, tankId, async (tx, ticked) => {
+        if (body.decorLayout !== undefined) {
+          const problems = findDecorProblems(
+            ticked.tank.biome,
+            body.decorLayout,
+            VACATION_FEEDER_ASSET_ID,
+          );
+          if (problems.length > 0) {
+            throw new HttpError(
+              400,
+              apiError(
+                'validation_failed',
+                'The decor layout has pieces this tank cannot hold. Remove or move them and save again.',
+                problems.map((p) => ({
+                  path: ['decorLayout', p.index, p.field],
+                  message: p.message,
+                })),
+              ),
+            );
+          }
+        }
         const [row] = await tx
           .update(schema.tanks)
           .set({

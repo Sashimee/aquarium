@@ -1,4 +1,10 @@
-import { apiErrorSchema, speciesListSchema, tankListSchema, tankSchema } from '@aquarium/shared';
+import {
+  apiErrorSchema,
+  decorPositionLimits,
+  speciesListSchema,
+  tankListSchema,
+  tankSchema,
+} from '@aquarium/shared';
 import { eq } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -568,5 +574,105 @@ describe('hooks and error codes', () => {
     } finally {
       await h.close();
     }
+  });
+});
+
+describe('PATCH decor layout validation', () => {
+  let h: Harness;
+  let cookie: string;
+  beforeEach(async () => {
+    h = await createHarness();
+    cookie = await signedIn(h);
+  });
+  afterEach(() => h.close());
+
+  type Vec = [number, number, number];
+  const piece = (assetId: string, position: Vec = [0, 0.05, 0]) => ({ assetId, position });
+
+  function patch(tankId: string, decorLayout: unknown[]) {
+    return call(h, cookie, 'PATCH', `/api/tanks/${tankId}`, { decorLayout });
+  }
+
+  function expectRejected(res: LightMyRequestResponse, path: (string | number)[]) {
+    expect(res.statusCode).toBe(400);
+    const body = apiErrorSchema.parse(res.json());
+    expect(body.error.code).toBe('validation_failed');
+    expect(body.error.issues?.map((i) => i.path)).toContainEqual(path);
+  }
+
+  it('accepts a valid layout in each biome and stores it', async () => {
+    const fresh = await createTank(h, cookie);
+    const reef = await createTank(h, cookie, 'reef');
+    const reefLayout = [piece('reef-arch'), piece('euphyllia-torch-8'), piece('brain-coral')];
+    const freshRes = await patch(fresh.id, [piece('driftwood-branch'), piece('vacation-feeder')]);
+    expect(freshRes.statusCode).toBe(200);
+    expect((await patch(reef.id, reefLayout)).statusCode).toBe(200);
+    const got = tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${reef.id}`)).json());
+    expect(got.decorLayout.map((i) => i.assetId)).toEqual(reefLayout.map((i) => i.assetId));
+  });
+
+  it('rejects an asset id that is in no catalog', async () => {
+    const tank = await createTank(h, cookie);
+    expectRejected(await patch(tank.id, [piece('boulder-01'), piece('nope')]), [
+      'decorLayout',
+      1,
+      'assetId',
+    ]);
+  });
+
+  it('rejects an asset id from the other biome', async () => {
+    const fresh = await createTank(h, cookie);
+    const reef = await createTank(h, cookie, 'reef');
+    expectRejected(await patch(fresh.id, [piece('brain-coral')]), ['decorLayout', 0, 'assetId']);
+    expectRejected(await patch(reef.id, [piece('java-fern')]), ['decorLayout', 0, 'assetId']);
+  });
+
+  it('rejects a second vacation feeder', async () => {
+    const tank = await createTank(h, cookie);
+    expectRejected(
+      await patch(tank.id, [piece('vacation-feeder'), piece('vacation-feeder', [0.1, 0, 0])]),
+      ['decorLayout', 1, 'assetId'],
+    );
+  });
+
+  it.each<[string, Vec]>([
+    ['+x', [0.6, 0.05, 0]],
+    ['-x', [-0.6, 0.05, 0]],
+    ['+z', [0, 0.05, 0.26]],
+    ['-z', [0, 0.05, -0.26]],
+    ['y above the rim', [0, 0.51, 0]],
+    ['y below the glass', [0, -0.01, 0]],
+  ])('rejects a position outside the tank on %s', async (_axis, position) => {
+    const tank = await createTank(h, cookie);
+    expectRejected(await patch(tank.id, [piece('boulder-01', position)]), [
+      'decorLayout',
+      0,
+      'position',
+    ]);
+  });
+
+  it('accepts positions exactly on the interior boundary', async () => {
+    const tank = await createTank(h, cookie);
+    const { x, z, yMax } = decorPositionLimits();
+    const res = await patch(tank.id, [
+      piece('boulder-01', [x, 0, z]),
+      piece('boulder-01', [-x, yMax, -z]),
+    ]);
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('keeps old junk readable but refuses to save it again', async () => {
+    const tank = await createTank(h, cookie);
+    const junk = [piece('legacy-thing', [3, 0, 3]), piece('vacation-feeder')];
+    await h.database.db
+      .update(schema.tanks)
+      .set({ decorLayout: junk.map((j) => ({ ...j, rotationY: 0, scale: 1 })) })
+      .where(eq(schema.tanks.id, tank.id));
+    const got = await call(h, cookie, 'GET', `/api/tanks/${tank.id}`);
+    expect(got.statusCode).toBe(200);
+    expect(tankSchema.parse(got.json()).decorLayout).toHaveLength(2);
+    const renamed = await call(h, cookie, 'PATCH', `/api/tanks/${tank.id}`, { name: 'Renamed' });
+    expect(renamed.statusCode).toBe(200);
+    expectRejected(await patch(tank.id, junk), ['decorLayout', 0, 'assetId']);
   });
 });

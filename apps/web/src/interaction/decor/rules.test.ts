@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { FLAT_GROUND, flat, item, LIMITS, spec } from './fixtures';
+import { decorPositionLimits, isDecorAssetForBiome } from '@aquarium/shared';
+import { FLAT_GROUND, flat, item, LIMITS, SPECS, spec } from './fixtures';
 import {
   admit,
   check,
@@ -8,7 +9,9 @@ import {
   findFreeSpot,
   keepInside,
   MAX_PIECES,
+  paletteSpecs,
   restHeight,
+  withinServerBounds,
 } from './rules';
 import { FEEDER_SPEC } from './spec';
 
@@ -69,18 +72,20 @@ describe('keepInside', () => {
 
 describe('admit', () => {
   it('refuses unknown assets', () => {
-    expect(admit(undefined, [])).toBe('unknown-asset');
+    expect(admit(undefined, [], 'reef')).toBe('unknown-asset');
   });
 
   it('caps the number of pieces', () => {
     const many = Array.from({ length: MAX_PIECES }, () => ({ item: item('boulder-01', 0, 0) }));
-    expect(admit(rock, many)).toBe('full');
-    expect(admit(rock, many.slice(1))).toBeNull();
+    expect(admit(rock, many, 'reef')).toBe('full');
+    expect(admit(rock, many.slice(1), 'reef')).toBeNull();
   });
 
   it('allows a single vacation feeder', () => {
-    expect(admit(FEEDER_SPEC, [])).toBeNull();
-    expect(admit(FEEDER_SPEC, [{ item: item(FEEDER_SPEC.assetId, 0, 0) }])).toBe('feeder-exists');
+    expect(admit(FEEDER_SPEC, [], 'reef')).toBeNull();
+    expect(admit(FEEDER_SPEC, [{ item: item(FEEDER_SPEC.assetId, 0, 0) }], 'freshwater')).toBe(
+      'feeder-exists',
+    );
   });
 });
 
@@ -117,5 +122,57 @@ describe('describeRejection', () => {
     ] as const) {
       expect(describeRejection(r).length).toBeGreaterThan(10);
     }
+  });
+});
+
+describe('paletteSpecs', () => {
+  const ids = (biome: 'freshwater' | 'reef') => paletteSpecs(SPECS, biome).map((s) => s.assetId);
+
+  it('offers only what the server accepts for the biome, plus the feeder', () => {
+    for (const biome of ['freshwater', 'reef'] as const) {
+      for (const id of ids(biome)) {
+        expect(id === FEEDER_SPEC.assetId || isDecorAssetForBiome(biome, id)).toBe(true);
+      }
+      expect(ids(biome)).toContain(FEEDER_SPEC.assetId);
+    }
+  });
+
+  it('keeps reef-only pieces out of freshwater and freshwater-only pieces out of the reef', () => {
+    expect(ids('freshwater')).not.toContain('reef-arch');
+    expect(ids('freshwater')).not.toContain('lambis-shell');
+    expect(ids('freshwater')).toContain('driftwood-branch');
+    expect(ids('reef')).toContain('reef-arch');
+    expect(ids('reef')).not.toContain('driftwood-branch');
+  });
+
+  it('shares the rocks between both biomes', () => {
+    expect(ids('freshwater')).toContain('boulder-01');
+    expect(ids('reef')).toContain('boulder-01');
+  });
+});
+
+describe('withinServerBounds', () => {
+  const limits = decorPositionLimits();
+  const at = (x: number, y: number, z: number) =>
+    withinServerBounds({ ...item('boulder-01', 0, 0), position: [x, y, z] }).position;
+
+  it('leaves positions on the exact bounds alone', () => {
+    expect(at(limits.x, limits.yMax, limits.z)).toEqual([limits.x, limits.yMax, limits.z]);
+    expect(at(-limits.x, 0, -limits.z)).toEqual([-limits.x, 0, -limits.z]);
+  });
+
+  it('pulls anything past a bound back onto it', () => {
+    expect(at(limits.x + 0.01, 0.1, 0)).toEqual([limits.x, 0.1, 0]);
+    expect(at(-limits.x - 1, 0.1, 0)).toEqual([-limits.x, 0.1, 0]);
+    expect(at(0, 0.1, limits.z + 0.01)).toEqual([0, 0.1, limits.z]);
+    expect(at(0, -0.01, 0)).toEqual([0, 0, 0]);
+    expect(at(0, limits.yMax + 0.01, 0)).toEqual([0, limits.yMax, 0]);
+  });
+
+  it('is applied by keepInside even when the tank limits are wider', () => {
+    const wide = { halfLength: 2, halfDepth: 2 };
+    const out = keepInside(rock, item('boulder-01', 1.5, -1.5), wide);
+    expect(out.position[0]).toBe(limits.x);
+    expect(out.position[2]).toBe(-limits.z);
   });
 });

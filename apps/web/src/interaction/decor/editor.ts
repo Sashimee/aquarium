@@ -1,4 +1,4 @@
-import type { DecorItem } from '@aquarium/shared';
+import type { Biome, DecorItem } from '@aquarium/shared';
 import { footprintOf, rayHit, type RayLike } from './footprint';
 import type { Piece } from './layout';
 import {
@@ -9,6 +9,7 @@ import {
   keepInside,
   LIFT,
   restHeight,
+  withinServerBounds,
   type GroundHeight,
   type Obstacle,
   type Rejection,
@@ -42,14 +43,15 @@ function wrapAngle(a: number): number {
 }
 
 function tidy(item: DecorItem): DecorItem {
-  return {
+  return withinServerBounds({
     ...item,
     position: [mm(item.position[0]), mm(item.position[1]), mm(item.position[2])],
-  };
+  });
 }
 
 export interface EditorOptions {
   readonly specs: ReadonlyMap<string, DecorSpec>;
+  readonly biome: Biome;
   readonly limits: TankLimits;
   readonly ground: GroundHeight;
   readonly pieces: readonly Piece[];
@@ -149,10 +151,10 @@ export class DecorEditor {
       this.options.limits,
     );
     const rest = restHeight(spec, moved, this.options.ground);
-    const lifted: DecorItem = {
+    const lifted = withinServerBounds({
       ...moved,
       position: [moved.position[0], rest + LIFT, moved.position[2]],
-    };
+    });
     const reason = check(spec, lifted, this.obstaclesExcept(drag.id), this.options.limits);
     drag.valid = reason === null;
     this.problem = reason ? describeRejection(reason) : null;
@@ -184,7 +186,7 @@ export class DecorEditor {
 
   add(assetId: string): { id: string } | { rejection: Rejection } {
     const spec = this.options.specs.get(assetId);
-    const rejection = admit(spec, this.list);
+    const rejection = admit(spec, this.list, this.options.biome);
     if (rejection || !spec) return { rejection: rejection ?? 'unknown-asset' };
     const template: DecorItem = { assetId, position: [0, 0, 0], rotationY: 0, scale: 1 };
     const spot = findFreeSpot(spec, template, DEFAULT_SPAWN, this.obstacles(), this.options.limits);
