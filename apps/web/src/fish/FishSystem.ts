@@ -29,6 +29,7 @@ import { disposeFishModel, FishAssetLoader, type FishModel } from './assets';
 import { AcclimationBags } from './bag';
 import type { SceneAnchor } from '../scene/anemone';
 import { demoTank, type DemoTank } from './demoStock';
+import { HeldFish } from './heldFish';
 import { FishInstanceData, type InstanceValues } from './instances';
 import { selectLod, type LodThresholds } from './lod';
 import { FishMaterial, type FinRendering, type FishMaterialFeatures } from './material';
@@ -49,7 +50,7 @@ import {
 import { renderProfile, type FishRenderProfile } from './profiles';
 import { hashString, TankRoster, type RosterFish } from './roster';
 import { SimStream } from './simStream';
-import { layoutChanges, SimWorldSpec } from './simWorld';
+import { layoutChanges, SimWorldSpec, startWorld } from './simWorld';
 import { speciesInput } from './species';
 import type { FishBite, PickRay, TankEvent } from './start';
 import { SWIM_MODES, SwimState } from './swim';
@@ -107,8 +108,6 @@ interface FishRuntime {
   handover: number;
   readonly fromPosition: Vector3;
   readonly fromQuaternion: Quaternion;
-  /** Kept at its last pose while a rebuilt world starts, then blended into it like a handover. */
-  held: boolean;
   bagSlot: number | null;
   script: Script | null;
 }
@@ -208,6 +207,7 @@ export class FishSystem {
   private readonly loading = new Map<string, Promise<void>>();
   private readonly unavailable = new Set<string>();
   private readonly stream = new SimStream(STEP_DT, (snapshot) => this.sim.recycle(snapshot));
+  private readonly held = new HeldFish();
   private readonly loader: FishAssetLoader;
   private readonly bags: AcclimationBags;
   private readonly lifetime = new AbortController();
@@ -495,7 +495,7 @@ export class FishSystem {
         await this.syncWorld();
       } catch (cause) {
         if (this.disposed) return;
-        this.hold(false);
+        this.held.releaseAll();
         this.report('Fish could not be updated for the new tank stock', cause);
       }
     }
@@ -654,7 +654,6 @@ export class FishSystem {
       handover: 0,
       fromPosition: new Vector3(),
       fromQuaternion: new Quaternion(),
-      held: false,
       bagSlot: null,
       script: null,
     };
@@ -682,7 +681,7 @@ export class FishSystem {
     const rt = this.runtimes.get(fish.simId);
     if (rt === undefined) return;
     rt.bagSlot = null;
-    rt.held = false;
+    this.held.release(fish.simId);
     rt.handover = 0;
     if (!rt.shown) {
       rt.script = {
@@ -705,7 +704,9 @@ export class FishSystem {
   /** Drops the runtimes of fish that left the roster. */
   private prune(): void {
     for (const [simId, rt] of this.runtimes) {
-      if (this.roster.get(simId) !== rt.fish) this.runtimes.delete(simId);
+      if (this.roster.get(simId) === rt.fish) continue;
+      this.runtimes.delete(simId);
+      this.held.release(simId);
     }
   }
 
@@ -715,19 +716,19 @@ export class FishSystem {
     this.inWorld = null;
     this.generation++;
     this.stream.reset();
-    this.hold(false);
+    this.held.releaseAll();
   }
 
-  /** With `held`, every swimming fish on screen waits where it is for the next world. */
-  private hold(held: boolean): void {
-    for (const rt of this.runtimes.values()) {
-      rt.held =
-        held &&
-        rt.shown &&
-        rt.fish.phase === 'swimming' &&
-        rt.bagSlot === null &&
-        rt.script === null;
-    }
+  /** Every swimming fish on screen waits where it is for the next world. */
+  private holdSwimming(): void {
+    const candidates = [...this.runtimes.values()].map((rt) => ({
+      id: rt.fish.simId,
+      shown: rt.shown,
+      phase: rt.fish.phase,
+      bagged: rt.bagSlot !== null,
+      scripted: rt.script !== null,
+    }));
+    this.held.hold(candidates, this.clockS);
   }
 
   /** Brings the sim's fish in line with the roster's swimming set. */
@@ -764,7 +765,7 @@ export class FishSystem {
       if (this.disposed || generation !== this.generation) return;
       this.report('A fish could not join or leave the running tank; respawning all fish', cause);
       this.stopWorld();
-      this.hold(true);
+      this.holdSwimming();
       this.dirty = true;
     }
   }
@@ -783,16 +784,16 @@ export class FishSystem {
 
   private async reinit(config: TankSpaceWorldConfig): Promise<void> {
     const generation = this.generation;
-    const ready = await initSim(this.sim, this.worker, config, this.lifetime.signal);
-    if (this.disposed || generation !== this.generation) return;
-    this.simReady = true;
-    this.sim.setLight(this.light);
-    const { decor, anchors } = this.spec.changedSince(config);
-    if (decor !== null) this.sim.setDecor(decor);
-    if (anchors !== null) this.sim.setAnchors(anchors);
-    this.inWorld = new Set(ready.fishIds);
-    this.stream.begin(ready.epoch, ready.fishIds);
-    this.sim.start();
+    const init = initSim(this.sim, this.worker, config, this.lifetime.signal);
+    await startWorld(this.sim, this.spec, config, init, {
+      current: () => !this.disposed && generation === this.generation,
+      light: () => this.light,
+      begin: (ready) => {
+        this.simReady = true;
+        this.inWorld = new Set(ready.fishIds);
+        this.stream.begin(ready.epoch, ready.fishIds);
+      },
+    });
   }
 
   private applyShadows(batch: SpeciesBatch): void {
@@ -824,10 +825,19 @@ export class FishSystem {
     const { fish } = rt;
     if (fish.phase === 'swimming') {
       const o = frame === null ? undefined : this.stream.layout?.offsets.get(fish.simId);
+      const presence = frame === null ? 'no-frame' : o === undefined ? 'missing' : 'present';
+      const held = this.held.step(fish.simId, this.clockS, presence);
+      if (held === 'wait') {
+        this.position.copy(rt.lastPosition);
+        this.quaternion.copy(rt.lastQuaternion);
+        pose.speed = 0;
+        pose.yawRate = 0;
+        pose.liveliness = 1;
+        return true;
+      }
       if (frame !== null && o !== undefined) {
-        if (rt.bagSlot !== null || rt.held) {
+        if (rt.bagSlot !== null || held === 'join') {
           rt.bagSlot = null;
-          rt.held = false;
           if (rt.shown) {
             rt.handover = HANDOVER_S;
             rt.fromPosition.copy(rt.lastPosition);
@@ -854,15 +864,6 @@ export class FishSystem {
           this.quaternion.slerp(rt.fromQuaternion, w);
           rt.handover = Math.max(0, rt.handover - deltaS);
         }
-        return true;
-      }
-      if (rt.held && frame !== null) rt.held = false;
-      if (rt.held) {
-        this.position.copy(rt.lastPosition);
-        this.quaternion.copy(rt.lastQuaternion);
-        pose.speed = 0;
-        pose.yawRate = 0;
-        pose.liveliness = 1;
         return true;
       }
       if (rt.bagSlot === null) return false;
