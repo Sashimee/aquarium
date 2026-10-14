@@ -339,6 +339,11 @@ async function closeAllPanels(page: Page) {
     await page.goBack();
     await expect.poll(() => page.getByRole('heading', { level: 1 }).count()).toBeLessThanOrEqual(0);
   }
+  const tapGlass = playGroup(page).getByRole('button', { name: 'Tap glass', exact: true });
+  if ((await tapGlass.count()) > 0 && (await tapGlass.getAttribute('aria-pressed')) !== 'true') {
+    await press(tapGlass);
+    await expect(tapGlass).toHaveAttribute('aria-pressed', 'true');
+  }
   await closeSheet(page);
   if (await dock(page, 'Play').evaluate((element) => element.classList.contains('glow'))) {
     await resetTool(page);

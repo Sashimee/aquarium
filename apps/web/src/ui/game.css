@@ -56,6 +56,8 @@
   gap: 0.5rem;
 }
 
+/* No backdrop-filter: blurring a canvas that redraws every frame costs seconds per frame
+   under software rendering, so the glass look is an opaque tint, an edge and an unblurred shadow. */
 #ui .status-card,
 #ui .round,
 #ui .segmented,
@@ -65,9 +67,7 @@
 .life-status:not(:empty) {
   background: var(--glass);
   border: 1px solid var(--glass-edge);
-  backdrop-filter: blur(18px) saturate(1.4);
-  -webkit-backdrop-filter: blur(18px) saturate(1.4);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.3);
 }
 
 #ui .status-card {

@@ -6,8 +6,8 @@
   --ink: #f4f7fa;
   --ink-soft: #c5d0da;
   --surface: rgba(10, 18, 26, 0.88);
-  --glass: rgba(12, 24, 38, 0.62);
-  --glass-strong: rgba(10, 20, 32, 0.8);
+  --glass: rgba(12, 24, 38, 0.78);
+  --glass-strong: rgba(10, 20, 32, 0.9);
   --edge: rgba(190, 215, 235, 0.28);
   --glass-edge: rgba(255, 255, 255, 0.16);
   --accent: #7fd1ff;
@@ -106,7 +106,6 @@
   background: var(--surface);
   border: 1px solid var(--edge);
   border-radius: 0.9rem;
-  backdrop-filter: blur(10px);
 }
 
 .panel h1 {
