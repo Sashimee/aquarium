@@ -45,6 +45,7 @@ export function specsFromCatalog(entries: Iterable<CatalogEntry>): Map<string, D
       assetId: entry.id,
       kind: entry.kind,
       label: humanize(entry.id),
+      // decorMatrix squashes from the model origin, so the box bottom scales with the top.
       box: {
         min: scaleHeight(entry.bounds.min, heightScale(entry.id)),
         max: scaleHeight(entry.bounds.max, heightScale(entry.id)),
