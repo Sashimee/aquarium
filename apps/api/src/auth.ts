@@ -127,10 +127,14 @@ export function createAuth({
         // identifiers rule out matching on the `reset-password:` prefix. Delete-account
         // confirmation, magic-link or email-OTP would also store bare ids and need excluding here;
         // resetTokens.test.ts pins which flows write them.
-        await database.db.delete(schema.verification).where(eq(schema.verification.value, user.id));
-        if (user.emailVerified) return;
-        const { internalAdapter } = await auth.$context;
-        await internalAdapter.updateUser(user.id, { emailVerified: true });
+        await database.db.transaction(async (tx) => {
+          await tx.delete(schema.verification).where(eq(schema.verification.value, user.id));
+          if (user.emailVerified) return;
+          await tx
+            .update(schema.user)
+            .set({ emailVerified: true, updatedAt: new Date() })
+            .where(eq(schema.user.id, user.id));
+        });
       },
       // Better Auth awaits this for known accounts only, so awaiting the SMTP send would make the
       // response time reveal whether the address is registered. throttleSafe never rejects.
