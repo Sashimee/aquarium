@@ -336,18 +336,22 @@ export class Caustics {
   /**
    * The baked pattern with unit mean at a surface point (metres), for effects that need the
    * caustic shape but not its animation detail. Sampled at an explicit level, so it may be
-   * called from non-uniform control flow.
+   * called from non-uniform control flow. A caller sampling it in a loop passes `mean`, read once
+   * from `bakedMean()` before the loop.
    */
-  bakedAt(surfacePoint: Node<'vec2'>, scale: number): Node<'float'> {
+  bakedAt(
+    surfacePoint: Node<'vec2'>,
+    scale: number,
+    mean: Node<'float'> = this.bakedMean(),
+  ): Node<'float'> {
     const cells = surfacePoint.mul(this.cellsPerMetre.mul(scale / BAKE.periodCells));
     const drift = fract(vec2(DRIFT[0], DRIFT[1]).mul(time.mul(this.speed).div(BAKE.periodCells)));
-    return texture(this.bakeTarget.texture, cells.add(drift))
-      .level(float(1))
-      .r.div(this.bakedMean());
+    return texture(this.bakeTarget.texture, cells.add(drift)).level(float(1)).r.div(mean);
   }
 
-  private bakedMean(): Node<'float'> {
-    return texture(this.bakeTarget.texture, vec2(0.5)).level(float(BAKE_MEAN_LEVEL)).r;
+  /** The baked tile's mean, floored so a missing or black 1x1 mip cannot divide to Inf or NaN. */
+  bakedMean(): Node<'float'> {
+    return max(texture(this.bakeTarget.texture, vec2(0.5)).level(float(BAKE_MEAN_LEVEL)).r, 1e-4);
   }
 
   /**
