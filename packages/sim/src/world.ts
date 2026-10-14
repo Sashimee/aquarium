@@ -265,7 +265,8 @@ export class World {
   /**
    * Per fish, the last stand-off ring search: `[epoch, sdf, foodX, foodY, foodZ, arrival, side,
    * bearing]`, where bearing is NaN when the station stays straight out from the surface. Valid
-   * while its epoch is `stationEpoch`, which moves on whenever hard decor or the fish set changes.
+   * while its epoch is `stationEpoch`, which moves on whenever hard decor or the fish set changes:
+   * a joining fish can widen the hard-decor reach, so the same ring reads farther rock.
    */
   private stationMemo: Float64Array;
   private stationEpoch = 1;
@@ -504,8 +505,9 @@ export class World {
     // Both plans validate before either field changes, so a bad collider leaves both as they were.
     const hard = this.hardDecor.plan(colliders.filter((c) => c.hard));
     const soft = this.softDecor.plan(colliders.filter((c) => !c.hard));
+    const rebuilt = this.hardDecor.apply(hard) + this.softDecor.apply(soft);
     if (hard.gone.length > 0 || hard.changed.length > 0) this.stationEpoch++;
-    return this.hardDecor.apply(hard) + this.softDecor.apply(soft);
+    return rebuilt;
   }
 
   setAnchors(anchors: readonly Anchor[]): void {
@@ -754,6 +756,8 @@ export class World {
     this.deadEnd = edit.array(this.deadEnd, 2);
     this.deadEndTimer = edit.array(this.deadEndTimer);
     this.stationMemo = edit.array(this.stationMemo, STATION_MEMO);
+    // edit.array already moves each fish's memo with it; the bump is for addFish, which may have
+    // widened the decor reach every cached ring search was read at.
     this.stationEpoch++;
     this.mass = edit.array(this.mass);
     this.drag = edit.array(this.drag);
@@ -1213,24 +1217,28 @@ export class World {
           // The goal would drag a fish that just backed out of a slot along the rock straight
           // back into it, food included (#287). Only a remembered slot behind the face being
           // slid along is no threat: shunning it would turn a fish working along the rock's
-          // front toward food away from that food (#279).
+          // front toward food away from that food (#279). "Behind" is measured along the slide
+          // normal from the nearest surface, so where the glass is nearer than the rock face
+          // the slot counts as behind the face early, by as much as the glass is nearer.
           let shunning = false;
-          const ex = (this.deadEnd[i * 2] ?? 0) - px;
-          const ez = (this.deadEnd[i * 2 + 1] ?? 0) - pz;
-          const slotBehindFace =
-            ex * ux + ez * uz < -(dHere + STEERING.deadEndBehindFaceBodyLengths * length);
-          if (deadEndLeft > 0 && !(wished && slotBehindFace)) {
-            const reach = Math.hypot(ex, ez);
-            const toward = (tx * ex + tz * ez) * side;
-            if (
-              reach < STEERING.deadEndRadiusBodyLengths * length &&
-              Math.abs(toward) > STEERING.deadEndBearingCos * reach
-            ) {
-              shunning = true;
-              if (toward > 0) {
-                side = -side;
-                px0 = 0;
-                pz0 = 0;
+          if (deadEndLeft > 0) {
+            const ex = (this.deadEnd[i * 2] ?? 0) - px;
+            const ez = (this.deadEnd[i * 2 + 1] ?? 0) - pz;
+            const slotBehindFace =
+              ex * ux + ez * uz < -(dHere + STEERING.deadEndBehindFaceBodyLengths * length);
+            if (!(wished && slotBehindFace)) {
+              const reach = Math.hypot(ex, ez);
+              const toward = (tx * ex + tz * ez) * side;
+              if (
+                reach < STEERING.deadEndRadiusBodyLengths * length &&
+                Math.abs(toward) > STEERING.deadEndBearingCos * reach
+              ) {
+                shunning = true;
+                if (toward > 0) {
+                  side = -side;
+                  px0 = 0;
+                  pz0 = 0;
+                }
               }
             }
           }
