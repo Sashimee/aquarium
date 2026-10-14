@@ -125,6 +125,8 @@ export class Engine {
   private lastFrameAt: number | null = null;
   private readonly cullPrewarm = new CullPrewarm(this.scene);
   private sceneRevisionValue = 0;
+  /** Later tier changes warm what they turn on themselves. */
+  private warmedUp = false;
   private gpuMs: number | null = null;
   private readonly gpuTiming: boolean;
   private lastGpuMs: number | null = null;
@@ -349,7 +351,14 @@ export class Engine {
       this.caustics.setMethod(s.causticMethod, s.causticLayers);
     });
     this.quality.register('surface-reflection', (s) => {
+      const wasOn = this.tank.surfaceReflection;
       this.tank.setSurfaceReflection(s.surfaceReflection);
+      if (wasOn || !this.tank.surfaceReflection || !this.warmedUp) return;
+      this.tank
+        .compileSurfaceReflection(this.renderer, this.scene, this.camera)
+        .catch((cause: unknown) =>
+          this.reportError('The surface reflection could not be prepared', cause),
+        );
     });
   }
 
@@ -357,6 +366,8 @@ export class Engine {
     this.updateDaylight(0);
     applyDayLighting(this.dayRig, this.daylightLevel);
     await this.renderer.compileAsync(this.scene, this.camera);
+    await this.tank.compileSurfaceReflection(this.renderer, this.scene, this.camera);
+    this.warmedUp = true;
   }
 
   /** The effects are a separate chunk; without them every tier still renders, just plainer. */

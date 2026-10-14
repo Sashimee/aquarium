@@ -32,6 +32,12 @@ const _frustum = new Frustum();
 const _size = new Vector2();
 
 /**
+ * Within this many metres of the water plane the oblique near plane passes through the eye and the
+ * reflection's depth degenerates, so the pass is skipped while the camera crosses the waterline.
+ */
+export const WATERLINE_MARGIN = 0.005;
+
+/**
  * Places `out` at `camera` mirrored in the level plane y = `level`, looking along the mirrored view.
  * Its image is the reflection flipped left to right (sample it at `screenUV.flipX()`), and its near
  * plane is the water plane itself (Lengyel's oblique clipping), so only what lies below is drawn.
@@ -68,7 +74,9 @@ export function mirrorCamera(
     -1,
     (1 + p[10]) / p[14],
   );
-  _clip.multiplyScalar(1 / _clip.dot(_q));
+  // The far corner Q must land on clip depth 1; WebGL's [-1, 1] range then needs twice the scale.
+  const scale = coordinateSystem === WebGPUCoordinateSystem ? 1 : 2;
+  _clip.multiplyScalar(scale / _clip.dot(_q));
   p[2] = _clip.x;
   p[6] = _clip.y;
   p[10] = coordinateSystem === WebGPUCoordinateSystem ? _clip.z : _clip.z + 1;
@@ -81,8 +89,6 @@ export function mirrorCamera(
  * the surface, into a target the size of the drawing buffer times `resolutionScale`.
  */
 export class SurfaceReflection {
-  /** The reflected radiance at the fragment's screen position. */
-  readonly node: Node<'vec4'>;
   private readonly target = new RenderTarget(1, 1, { type: HalfFloatType });
   private readonly camera = new PerspectiveCamera();
   /**
@@ -95,7 +101,6 @@ export class SurfaceReflection {
   /** `surface` is the water surface as a flat box, for culling. */
   constructor(private readonly surface: Box3) {
     this.target.texture.name = 'output';
-    this.node = texture(this.target.texture, screenUV.flipX());
   }
 
   get enabled(): boolean {
@@ -113,12 +118,17 @@ export class SurfaceReflection {
     this.scale = scale;
   }
 
+  /** The reflected radiance at the fragment's screen position moved by `offset` in UV. */
+  sample(offset: Node<'vec2'>): Node<'vec4'> {
+    return texture(this.target.texture, screenUV.flipX().add(offset));
+  }
+
   /** Draws the reflection for `camera`, unless it is off or the camera cannot see the underside. */
   render(renderer: WebGPURenderer, scene: Scene, camera: PerspectiveCamera): void {
     if (!this.enabled) return;
     camera.updateMatrixWorld();
     _position.setFromMatrixPosition(camera.matrixWorld);
-    if (_position.y >= this.surface.max.y) return;
+    if (_position.y >= this.surface.max.y - WATERLINE_MARGIN) return;
     _viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     _frustum.setFromProjectionMatrix(_viewProjection, renderer.coordinateSystem);
     if (!_frustum.intersectsBox(this.surface)) return;
@@ -128,6 +138,22 @@ export class SurfaceReflection {
       Math.max(1, Math.round(_size.x * this.scale)),
       Math.max(1, Math.round(_size.y * this.scale)),
     );
+    this.withMirror(renderer, camera, () => renderer.render(scene, this.camera));
+  }
+
+  /**
+   * Builds the pass's pipelines for what `camera`'s mirror image sees, so the first frame under
+   * the surface, or the first after a tier turns the reflection on, does not compile them.
+   */
+  async compile(renderer: WebGPURenderer, scene: Scene, camera: PerspectiveCamera): Promise<void> {
+    if (!this.enabled) return;
+    await renderer.init();
+    camera.updateMatrixWorld();
+    // compileAsync reads the target and MRT before its first await, so they can be restored at once.
+    await this.withMirror(renderer, camera, () => renderer.compileAsync(scene, this.camera));
+  }
+
+  private withMirror<T>(renderer: WebGPURenderer, camera: PerspectiveCamera, draw: () => T): T {
     mirrorCamera(camera, this.surface.max.y, this.camera, renderer.coordinateSystem);
     this.camera.layers.mask = camera.layers.mask;
     this.camera.layers.disable(UNREFLECTED_LAYER);
@@ -139,7 +165,7 @@ export class SurfaceReflection {
     renderer.setMRT(this.outputs);
     renderer.autoClear = true;
     try {
-      renderer.render(scene, this.camera);
+      return draw();
     } finally {
       renderer.setRenderTarget(previousTarget);
       renderer.setMRT(previousMrt);
