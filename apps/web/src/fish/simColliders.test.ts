@@ -141,6 +141,21 @@ describe('SimColliders', () => {
     expect(colliders.list).toBe(before);
     expect(colliders.setDecor([decorBox]).map((c) => c.id)).toEqual(['scene:0', 'decor:p1']);
   });
+
+  it("drops the old tank's colliders when the new scene's are broken", () => {
+    const colliders = new SimColliders();
+    colliders.setScene([PLANT, rock(0, 0, 1)]);
+    const empty: SceneCollider = {
+      kind: 'hull',
+      hard: true,
+      planes: [1, 0, 0, -1, -1, 0, 0, -1, 0, 1, 0, 1, 0, -1, 0, 1, 0, 0, 1, 1, 0, 0, -1, 1],
+      centre: [0, 0, 0],
+      boundRadius: 1,
+    };
+    expect(() => colliders.setScene([PLANT, empty])).toThrow(/Sim colliders are invalid/);
+    expect(colliders.list).toEqual([]);
+    expect(colliders.setDecor([decorBox]).map((c) => c.id)).toEqual(['decor:p1']);
+  });
 });
 
 describe('demo sim with scene hull colliders', () => {

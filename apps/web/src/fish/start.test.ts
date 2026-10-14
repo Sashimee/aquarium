@@ -294,6 +294,24 @@ describe('startFish', () => {
     expect(fish.colliders).toHaveLength(2);
   });
 
+  it("clears the old tank's obstacles when the new scene's colliders are broken", async () => {
+    const fish = new FakeFishSystem();
+    const { handle, errors } = setup(Promise.resolve(fish));
+    await flush();
+    const plant: SceneCollider = {
+      kind: 'capsule',
+      hard: false,
+      a: [0.1, 0.1, 0],
+      b: [0.1, 0.3, 0],
+      radius: 0.02,
+    };
+    handle.setSceneColliders([plant]);
+    handle.setSceneColliders([{ ...plant, radius: -1 }]);
+    expect(errors).toEqual(["Fish swim without obstacles: the new scene's colliders are invalid"]);
+    expect(fish.colliders.map((list) => list.map((c) => c.id))).toEqual([[], ['scene:0'], []]);
+    handle.stop();
+  });
+
   it('passes bites to listeners that subscribed before the fish were up', async () => {
     const fish = new FakeFishSystem();
     const { handle } = setup(Promise.resolve(fish));

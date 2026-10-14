@@ -7,7 +7,8 @@
 export interface WaterBox {
   readonly minX: number;
   readonly maxX: number;
-  readonly minY: number;
+  /** Substrate height at (x, z). */
+  ground(x: number, z: number): number;
   readonly minZ: number;
   readonly maxZ: number;
   /** The water surface. */
@@ -122,10 +123,13 @@ export function dyingPose(
   const float = floatHeight(box, length);
   out.x = from.x + 1.2 * length * throes * Math.sin(2.3 * t + 6 * s);
   out.z = from.z + 1.2 * length * throes * Math.sin(1.7 * t + 3 * s);
+  keepInside(out, box, length);
+  // A bottom dweller dies closer to the sand than half its length; it must not jump up to that.
+  const clearance = Math.max(0, Math.min(length / 2, from.y - box.ground(from.x, from.z)));
   out.y = Math.min(
     float,
     Math.max(
-      box.minY + length / 2,
+      box.ground(out.x, out.z) + clearance,
       from.y +
         (float - from.y) * smoothstep(0.15, 1, u) +
         0.8 * length * throes * Math.sin(2.9 * t + s),
@@ -137,7 +141,6 @@ export function dyingPose(
   out.roll = BELLY_UP * smoothstep(0.3, 1, u) + 0.9 * throes * Math.sin(5.3 * t + 4 * s);
   out.liveliness = 1 - smoothstep(0.55, 1, u);
   out.speed = length * (1.5 + 1.5 * Math.abs(Math.sin(3.7 * t + s))) * out.liveliness;
-  keepInside(out, box, length);
 }
 
 function dyingEnd(from: Anchor, length: number, box: WaterBox): Anchor {

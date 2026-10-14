@@ -112,11 +112,16 @@ export class SimColliders {
     return this.current;
   }
 
-  /** A new scene also has a new decor layer, so the old layer's pieces are dropped. */
+  /**
+   * A new scene also has a new decor layer, so the old layer's pieces are dropped. When the new
+   * scene's list is broken, nothing of the old tank's is valid either, so the list is left empty.
+   */
   setScene(colliders: readonly SceneCollider[]): readonly Collider[] {
     const converted = sceneCollidersToSim(colliders);
     const hard = converted.filter((c) => c.hard);
     const soft = converted.filter((c) => !c.hard);
+    this.current = [];
+    this.sceneSoft = [];
     this.current = validated([...soft, ...hard]);
     this.sceneSoft = soft;
     return this.current;

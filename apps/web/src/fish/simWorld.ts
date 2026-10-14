@@ -12,8 +12,7 @@ import { allSpeciesInputs, speciesInput } from './species';
  */
 export class SimWorldSpec {
   private simAnchors: readonly Anchor[] = [];
-  /** Already in the shared format and tank space; see `SimColliders`. */
-  decor: readonly Collider[] = [];
+  private simDecor: readonly Collider[] = [];
 
   constructor(
     private readonly demo: DemoTank,
@@ -28,6 +27,29 @@ export class SimWorldSpec {
   setAnchors(anchors: readonly SceneAnchor[]): readonly Anchor[] {
     this.simAnchors = sceneAnchorsToSim(anchors, this.demo);
     return this.simAnchors;
+  }
+
+  get decor(): readonly Collider[] {
+    return this.simDecor;
+  }
+
+  /** Already in the shared format and tank space; see `SimColliders`. */
+  setDecor(colliders: readonly Collider[]): void {
+    this.simDecor = colliders;
+  }
+
+  /**
+   * What the scene changed after `config` was built. A world takes a while to start, and an update
+   * in that window reached neither the config nor the world, so it has to follow once it is up.
+   */
+  changedSince(config: TankSpaceWorldConfig): {
+    decor: readonly Collider[] | null;
+    anchors: readonly Anchor[] | null;
+  } {
+    return {
+      decor: config.decor === this.simDecor ? null : this.simDecor,
+      anchors: config.anchors === this.simAnchors ? null : this.simAnchors,
+    };
   }
 
   /**
@@ -50,7 +72,7 @@ export class SimWorldSpec {
       space: this.demo.config.space,
       species: allSpeciesInputs(),
       fish,
-      decor: this.decor,
+      decor: this.simDecor,
       anchors: this.simAnchors,
     };
   }

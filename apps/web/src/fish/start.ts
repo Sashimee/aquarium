@@ -126,14 +126,19 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
   let demoBiome = options.biome;
   const colliders = new SimColliders();
   const updateColliders = (update: () => readonly Collider[]): void => {
+    const before = colliders.list;
     let next: readonly Collider[];
     try {
       next = update();
     } catch (cause) {
+      const kept = colliders.list === before;
       engine.events.emit('engine:error', {
-        message: 'Fish keep their previous obstacles: the new colliders are invalid',
+        message: kept
+          ? 'Fish keep their previous obstacles: the new colliders are invalid'
+          : "Fish swim without obstacles: the new scene's colliders are invalid",
         cause,
       });
+      if (!kept) ready?.setColliders(colliders.list);
       return;
     }
     ready?.setColliders(next);

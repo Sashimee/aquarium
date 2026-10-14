@@ -1,4 +1,4 @@
-import type { Biome, Collider } from '@aquarium/shared';
+import { sampleFloor, type Biome, type Collider } from '@aquarium/shared';
 import {
   DynamicDrawUsage,
   Group,
@@ -298,10 +298,11 @@ export class FishSystem {
     private readonly seed: number,
   ) {
     const bounds = waterBounds(options.tank);
+    const space = demo.config.space;
     this.box = {
       minX: bounds.min.x,
       maxX: bounds.max.x,
-      minY: demo.config.space.floor.max,
+      ground: (x, z) => sampleFloor(space, x, z),
       minZ: bounds.min.z,
       maxZ: bounds.max.z,
       top: bounds.max.y,
@@ -418,7 +419,7 @@ export class FishSystem {
   /** Every collider the sim avoids, in the shared format; kept for later worlds like anchors. */
   setColliders(colliders: readonly Collider[]): void {
     if (this.disposed) return;
-    this.spec.decor = colliders;
+    this.spec.setDecor(colliders);
     if (this.simReady) this.sim.setDecor(colliders);
   }
 
@@ -787,6 +788,9 @@ export class FishSystem {
     if (this.disposed || generation !== this.generation) return;
     this.simReady = true;
     this.sim.setLight(this.light);
+    const { decor, anchors } = this.spec.changedSince(config);
+    if (decor !== null) this.sim.setDecor(decor);
+    if (anchors !== null) this.sim.setAnchors(anchors);
     this.inWorld = new Set(ready.fishIds);
     this.stream.begin(ready.epoch, ready.fishIds);
     this.sim.start();
