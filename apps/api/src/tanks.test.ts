@@ -1,6 +1,8 @@
 import {
   apiErrorSchema,
+  decorLayoutSchema,
   decorPositionLimits,
+  legacyTintSeed,
   speciesListSchema,
   tankListSchema,
   tankSchema,
@@ -739,6 +741,55 @@ describe('PATCH decor layout validation', () => {
     expect((await patch(reef.id, reefLayout)).statusCode).toBe(200);
     const got = tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${reef.id}`)).json());
     expect(got.decorLayout.map((i) => i.assetId)).toEqual(reefLayout.map((i) => i.assetId));
+  });
+
+  describe('tint seed', () => {
+    const coral = { assetId: 'brain-coral', rotationY: 0.4, scale: 1 };
+    const getLayout = async (id: string) =>
+      tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${id}`)).json()).decorLayout;
+
+    it('assigns a seed on save and keeps it when the coral is moved or rotated', async () => {
+      const reef = await createTank(h, cookie, 'reef');
+      await patch(reef.id, [{ ...coral, position: [0, 0.05, 0] }]);
+      const [saved] = await getLayout(reef.id);
+      expect(saved?.tintSeed).toBeTypeOf('number');
+
+      const moved = await patch(reef.id, [
+        { ...saved, position: [0.2, 0.05, 0.1], rotationY: 1.9 },
+      ]);
+      expect(moved.statusCode).toBe(200);
+      const [after] = await getLayout(reef.id);
+      expect(after?.tintSeed).toBe(saved?.tintSeed);
+      expect(after?.position).toEqual([0.2, 0.05, 0.1]);
+    });
+
+    it('serves a placement-derived seed for rows stored without one, and persists it on save', async () => {
+      const reef = await createTank(h, cookie, 'reef');
+      await h.database.db
+        .update(schema.tanks)
+        .set({ decorLayout: [{ ...coral, position: [0.1, 0.05, 0.2] }] })
+        .where(eq(schema.tanks.id, reef.id));
+      const [legacy] = await getLayout(reef.id);
+      expect(legacy?.tintSeed).toBe(legacyTintSeed({ position: [0.1, 0.05, 0.2], rotationY: 0.4 }));
+
+      await patch(reef.id, [{ ...legacy, position: [-0.3, 0.05, 0] }]);
+      const [row] = await h.database.db
+        .select()
+        .from(schema.tanks)
+        .where(eq(schema.tanks.id, reef.id));
+      expect(decorLayoutSchema.parse(row?.decorLayout)[0]?.tintSeed).toBe(legacy?.tintSeed);
+    });
+
+    it('stores a seedless piece with the seed of its saved placement', async () => {
+      const reef = await createTank(h, cookie, 'reef');
+      await patch(reef.id, [
+        { ...coral, position: [0, 0.05, 0] },
+        { ...coral, position: [0.2, 0.05, 0] },
+      ]);
+      const layout = await getLayout(reef.id);
+      expect(layout.map((i) => i.tintSeed)).toEqual(layout.map((i) => legacyTintSeed(i)));
+      expect(layout[0]?.tintSeed).not.toBe(layout[1]?.tintSeed);
+    });
   });
 
   it('rejects an asset id that is in no catalog', async () => {

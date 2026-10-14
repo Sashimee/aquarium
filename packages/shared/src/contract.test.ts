@@ -6,6 +6,7 @@ import {
   careActionSchema,
   careEventSchema,
   decorItemSchema,
+  legacyTintSeed,
   memorialSchema,
   waterParametersSchema,
   createTankRequestSchema,
@@ -364,6 +365,18 @@ describe('decor bounds', () => {
   const item = { assetId: 'rock-1', position: [0, 0, 0] };
   it('accepts a sane item and applies defaults', () => {
     expect(decorItemSchema.parse(item)).toMatchObject({ rotationY: 0, scale: 1 });
+  });
+  it('accepts a tint seed and rejects out-of-range ones', () => {
+    expect(decorItemSchema.parse({ ...item, tintSeed: 7 }).tintSeed).toBe(7);
+    expect(decorItemSchema.parse(item).tintSeed).toBeUndefined();
+    for (const tintSeed of [-1, 1.5, 2 ** 32])
+      expect(decorItemSchema.safeParse({ ...item, tintSeed }).success).toBe(false);
+  });
+  it('derives the legacy seed from placement only', () => {
+    const a = legacyTintSeed({ position: [0.1, 0.05, 0.2], rotationY: 0.5 });
+    expect(a).toBe(legacyTintSeed({ position: [0.1, 0.05, 0.2], rotationY: 0.5 }));
+    expect(a).not.toBe(legacyTintSeed({ position: [0.3, 0.05, 0.2], rotationY: 0.5 }));
+    expect(Number.isInteger(a) && a >= 0 && a <= 0xffffffff).toBe(true);
   });
   it.each([
     ['huge assetId', { ...item, assetId: 'a'.repeat(65) }],

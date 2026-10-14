@@ -6,6 +6,7 @@ import {
   decorLayoutSchema,
   findDecorProblems,
   idSchema,
+  legacyTintSeed,
   speciesListSchema,
   tankListSchema,
   tankSchema,
@@ -246,7 +247,9 @@ async function render(tx: Tx, ticked: Ticked, fishRows = ticked.fishRows): Promi
     id: tank.id,
     name: tank.name,
     biome: tank.biome,
-    decorLayout: tank.decorLayout,
+    decorLayout: decorLayoutSchema
+      .parse(tank.decorLayout)
+      .map((item) => ({ ...item, tintSeed: item.tintSeed ?? legacyTintSeed(item) })),
     water: tank.water,
     lastTickAt: tank.lastTickAt.toISOString(),
     fish: fishRows
@@ -425,7 +428,14 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           .update(schema.tanks)
           .set({
             ...(body.name !== undefined ? { name: body.name } : {}),
-            ...(body.decorLayout !== undefined ? { decorLayout: body.decorLayout } : {}),
+            ...(body.decorLayout !== undefined
+              ? {
+                  decorLayout: body.decorLayout.map((item) => ({
+                    ...item,
+                    tintSeed: item.tintSeed ?? legacyTintSeed(item),
+                  })),
+                }
+              : {}),
             updatedAt: new Date(clock.now()),
           })
           .where(eq(schema.tanks.id, tankId))
