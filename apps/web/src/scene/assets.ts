@@ -253,6 +253,20 @@ export class ModelLibrary {
       if (result.status === 'fulfilled') collectResources(result.value, resources);
     }
     for (const resource of resources) resource.dispose();
+    await this.pruneCollision(keep);
+  }
+
+  private async pruneCollision(keep: ReadonlySet<string>): Promise<void> {
+    const files = new Set([...keep].map((key) => key.slice(0, key.lastIndexOf('@'))));
+    const stale = [...this.collision].filter(([assetId]) => {
+      const { lods } = this.catalog.get(assetId);
+      return !lods.some((lod) => files.has(lod.file));
+    });
+    for (const [assetId] of stale) this.collision.delete(assetId);
+    const settled = await Promise.allSettled(stale.map(([, pending]) => pending));
+    for (const result of settled) {
+      if (result.status === 'fulfilled') for (const geometry of result.value) geometry.dispose();
+    }
   }
 
   /** Frees one texture loaded through `loadTexture`. */

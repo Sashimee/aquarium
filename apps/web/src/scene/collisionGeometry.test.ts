@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CompressedTexture } from 'three';
+import { type BufferGeometry, CompressedTexture } from 'three';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import type { WebGPURenderer } from 'three/webgpu';
 import { createSharedKtx2 } from '../engine/ktx2';
@@ -102,6 +102,7 @@ describe('ModelLibrary.collisionGeometry', () => {
     const rendered = await library.load(rock.id, lowLod, 1024);
     const collision = await library.collisionGeometry(rock.id);
 
+    expect(collision.length).toBe(rendered.primitives.length);
     collision.forEach((geometry, i) => {
       const renderGeometry = rendered.primitives[i]?.geometry;
       expect(geometry.getAttribute('position').array).not.toBe(
@@ -119,9 +120,24 @@ describe('ModelLibrary.collisionGeometry', () => {
   it('does not wait on an in-flight render load', async () => {
     const { library, rock, lowLod } = await setup();
     vi.spyOn(KTX2Loader.prototype, 'load').mockImplementation(() => {});
-    const render = library.load(rock.id, lowLod, 1024);
+    void library.load(rock.id, lowLod, 1024);
     const geometries = await library.collisionGeometry(rock.id);
     expect(geometries.length).toBeGreaterThan(0);
-    void render;
+  });
+
+  it('retainOnly drops collision geometry of assets no longer kept and refetches on demand', async () => {
+    const { library, rock, lowLod, requested } = await setup();
+    const first = await library.collisionGeometry(rock.id);
+    const disposed = vi.spyOn(first[0] as BufferGeometry, 'dispose');
+
+    await library.retainOnly(new Set([library.modelKey(rock.id, lowLod, 1024)]));
+    expect(disposed).not.toHaveBeenCalled();
+
+    await library.retainOnly(new Set());
+    expect(disposed).toHaveBeenCalledOnce();
+
+    const before = requested.length;
+    await library.collisionGeometry(rock.id);
+    expect(requested.length).toBeGreaterThan(before);
   });
 });
