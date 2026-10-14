@@ -41,6 +41,25 @@ function cookieJar(res: LightMyRequestResponse): string {
   return res.cookies.map((c) => `${c.name}=${c.value}`).join('; ');
 }
 
+async function withHarness(
+  options: Parameters<typeof createHarness>[0],
+  run: (h: Harness) => Promise<void>,
+): Promise<void> {
+  const h = await createHarness(options);
+  let failed = false;
+  try {
+    await run(h);
+  } catch (err) {
+    failed = true;
+    throw err;
+  } finally {
+    // A close failure must not replace the assertion that is already failing the test.
+    await h.close().catch((err: unknown) => {
+      if (!failed) throw err;
+    });
+  }
+}
+
 async function signUp(app: FastifyInstance, email: string, extra: Record<string, string> = {}) {
   return app.inject({
     method: 'POST',
@@ -623,61 +642,64 @@ describe('csrf', () => {
 
 describe('mail abuse limits', () => {
   it('answers a resend inside the cooldown like any other, and still sends nothing', async () => {
-    const h = await createHarness({
-      mailLimits: {
-        perRecipient: { max: 100, windowMs: 3_600_000 },
-        verificationCooldown: { max: 1, windowMs: 60_000 },
-        perIpSignup: { max: 100, windowMs: 3_600_000 },
-        global: { max: 1000, windowMs: 3_600_000 },
+    await withHarness(
+      {
+        mailLimits: {
+          perRecipient: { max: 100, windowMs: 3_600_000 },
+          verificationCooldown: { max: 1, windowMs: 60_000 },
+          perIpSignup: { max: 100, windowMs: 3_600_000 },
+          global: { max: 1000, windowMs: 3_600_000 },
+        },
       },
-    });
-    const cooled = nextEmail();
-    await signUp(h.app, cooled);
-    const unknown = nextEmail();
-    const mailsBefore = h.outbox.length;
+      async (h) => {
+        const cooled = nextEmail();
+        await signUp(h.app, cooled);
+        const unknown = nextEmail();
+        const mailsBefore = h.outbox.length;
 
-    const resend = async (email: string) => {
-      const start = performance.now();
-      const res = await h.app.inject({
-        method: 'POST',
-        url: '/api/auth/send-verification-email',
-        headers: jsonHeaders,
-        payload: { email, callbackURL: '/verify-email' },
-      });
-      const ms = performance.now() - start;
-      await h.settleMail();
-      return { res, ms };
-    };
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    try {
-      const cooledRes = await resend(cooled);
-      const logged = spy.mock.calls.map((c) => String(c[0]));
-      expect(logged).toEqual([
-        expect.stringMatching(/^verification mail throttled, retry in \d+s$/),
-      ]);
-      const unknownRes = await resend(unknown);
-      expect(cooledRes.res.statusCode).toBe(200);
-      expect(unknownRes.res.statusCode).toBe(200);
-      expect(cooledRes.res.body).toBe(unknownRes.res.body);
-      expect(cooledRes.res.headers['retry-after']).toBeUndefined();
-      expect(h.outbox.length).toBe(mailsBefore);
-      expect(h.outbox.filter((m) => m.to === cooled)).toHaveLength(1);
+        const resend = async (email: string) => {
+          const start = performance.now();
+          const res = await h.app.inject({
+            method: 'POST',
+            url: '/api/auth/send-verification-email',
+            headers: jsonHeaders,
+            payload: { email, callbackURL: '/verify-email' },
+          });
+          const ms = performance.now() - start;
+          await h.settleMail();
+          return { res, ms };
+        };
+        const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        try {
+          const cooledRes = await resend(cooled);
+          const logged = spy.mock.calls.map((c) => String(c[0]));
+          expect(logged).toEqual([
+            expect.stringMatching(/^verification mail throttled, retry in \d+s$/),
+          ]);
+          const unknownRes = await resend(unknown);
+          expect(cooledRes.res.statusCode).toBe(200);
+          expect(unknownRes.res.statusCode).toBe(200);
+          expect(cooledRes.res.body).toBe(unknownRes.res.body);
+          expect(cooledRes.res.headers['retry-after']).toBeUndefined();
+          expect(h.outbox.length).toBe(mailsBefore);
+          expect(h.outbox.filter((m) => m.to === cooled)).toHaveLength(1);
 
-      const cooledMs: number[] = [];
-      const unknownMs: number[] = [];
-      for (let i = 0; i < 5; i++) {
-        cooledMs.push((await resend(cooled)).ms);
-        unknownMs.push((await resend(nextEmail())).ms);
-      }
-      // Better Auth pads send-verification-email to MINIMUM_MS (500 ms, email-verification.mjs),
-      // which masks small differences, so only a leak beyond the pad is observable here.
-      expect(median(cooledMs)).toBeLessThan(560);
-      expect(median(unknownMs)).toBeLessThan(560);
-      expect(h.outbox.length).toBe(mailsBefore);
-    } finally {
-      spy.mockRestore();
-      await h.close();
-    }
+          const cooledMs: number[] = [];
+          const unknownMs: number[] = [];
+          for (let i = 0; i < 5; i++) {
+            cooledMs.push((await resend(cooled)).ms);
+            unknownMs.push((await resend(nextEmail())).ms);
+          }
+          // Better Auth pads send-verification-email to MINIMUM_MS (500 ms, email-verification.mjs),
+          // which masks small differences, so only a leak beyond the pad is observable here.
+          expect(median(cooledMs)).toBeLessThan(560);
+          expect(median(unknownMs)).toBeLessThan(560);
+          expect(h.outbox.length).toBe(mailsBefore);
+        } finally {
+          spy.mockRestore();
+        }
+      },
+    );
   }, 20_000);
 
   it('does not make a resend wait on SMTP for a known address', async () => {
@@ -836,22 +858,30 @@ describe('mail abuse limits', () => {
 
   it('stops all mail at the global cap and logs it once', async () => {
     const logs: string[] = [];
+    // The mailer binds console.error when it is built, so the spy must exist before the harness.
     const spy = vi.spyOn(console, 'error').mockImplementation((m: unknown) => {
       logs.push(String(m));
     });
-    const h = await createHarness({
-      mailLimits: {
-        perRecipient: { max: 100, windowMs: 3_600_000 },
-        verificationCooldown: { max: 100, windowMs: 1000 },
-        perIpSignup: { max: 100, windowMs: 3_600_000 },
-        global: { max: 3, windowMs: 3_600_000 },
-      },
-    });
-    for (let i = 0; i < 6; i++) {
-      await signUp(h.app, nextEmail(), { 'x-forwarded-for': `203.0.113.${i + 1}` });
+    try {
+      await withHarness(
+        {
+          mailLimits: {
+            perRecipient: { max: 100, windowMs: 3_600_000 },
+            verificationCooldown: { max: 100, windowMs: 1000 },
+            perIpSignup: { max: 100, windowMs: 3_600_000 },
+            global: { max: 3, windowMs: 3_600_000 },
+          },
+        },
+        async (h) => {
+          for (let i = 0; i < 6; i++) {
+            await signUp(h.app, nextEmail(), { 'x-forwarded-for': `203.0.113.${i + 1}` });
+          }
+          expect(h.outbox).toHaveLength(3);
+        },
+      );
+    } finally {
+      spy.mockRestore();
     }
-    spy.mockRestore();
-    expect(h.outbox).toHaveLength(3);
     const capLogs = logs.filter((m) => m.includes('mail_global_cap_reached'));
     expect(capLogs).toHaveLength(1);
     expect(JSON.parse(capLogs[0] ?? '')).toEqual({
@@ -862,7 +892,6 @@ describe('mail abuse limits', () => {
       windowSeconds: 3600,
       retryAfterSeconds: expect.any(Number),
     });
-    await h.close();
   });
 
   it('spends the global budget on a reset for an unknown address like on a known one (#199)', async () => {
@@ -1183,13 +1212,16 @@ describe('mail abuse limits', () => {
   });
 
   it('refuses mail instead of sending it unmetered when the limiter store fails', async () => {
-    const h = await createHarness();
-    await h.database.pool.query('drop table mail_limit_hits');
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    await signUp(h.app, nextEmail());
-    spy.mockRestore();
-    expect(h.outbox).toHaveLength(0);
-    await h.close();
+    await withHarness(undefined, async (h) => {
+      await h.database.pool.query('drop table mail_limit_hits');
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      try {
+        await signUp(h.app, nextEmail());
+      } finally {
+        spy.mockRestore();
+      }
+      expect(h.outbox).toHaveLength(0);
+    });
   });
 
   it('ignores a spoofed x-forwarded-for from an untrusted peer', async () => {
