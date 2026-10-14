@@ -165,7 +165,7 @@ export interface ApiClient {
   addFish(tankId: string, input: AddFishRequest): Promise<Tank>;
   netFish(tankId: string, fishId: string): Promise<Tank>;
   care(tankId: string, action: CareAction): Promise<Tank>;
-  reportAte(tankId: string, reports: readonly AteReport[]): Promise<Tank>;
+  reportAte(tankId: string, reports: readonly AteReport[], batchId?: string): Promise<Tank>;
 }
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
@@ -490,8 +490,8 @@ export function createApiClient(
       const body = validate(careActionSchema, action);
       return parsed(await post(`/api/tanks/${encodeURIComponent(tankId)}/care`, body), tankSchema);
     },
-    async reportAte(tankId, reports) {
-      const body = validate(ateBatchRequestSchema, { reports });
+    async reportAte(tankId, reports, batchId) {
+      const body = validate(ateBatchRequestSchema, { reports, ...(batchId ? { batchId } : {}) });
       return parsed(await post(`/api/tanks/${encodeURIComponent(tankId)}/ate`, body), tankSchema);
     },
   };

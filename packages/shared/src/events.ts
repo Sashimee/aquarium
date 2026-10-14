@@ -40,6 +40,8 @@ export const ateReportSchema = z.strictObject({
 export type AteReport = z.infer<typeof ateReportSchema>;
 
 export const ateBatchRequestSchema = z.strictObject({
+  // Optional so clients cached from before this field existed keep working during a deploy.
+  batchId: idSchema.optional(),
   reports: z.array(ateReportSchema).min(1).max(200),
 });
 export type AteBatchRequest = z.infer<typeof ateBatchRequestSchema>;

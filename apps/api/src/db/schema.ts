@@ -8,6 +8,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uuid,
@@ -173,6 +174,21 @@ export const events = pgTable(
       .default(sql`'{}'::jsonb`),
   },
   (t) => [index('events_tank_id_at_idx').on(t.tankId, t.at)],
+);
+
+export const ateBatches = pgTable(
+  'ate_batches',
+  {
+    tankId: uuid('tank_id')
+      .notNull()
+      .references(() => tanks.id, { onDelete: 'cascade' }),
+    batchId: uuid('batch_id').notNull(),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.tankId, t.batchId] }),
+    index('ate_batches_created_at_idx').on(t.createdAt),
+  ],
 );
 
 export const memorials = pgTable(
