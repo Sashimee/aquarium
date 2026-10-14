@@ -1,7 +1,9 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from 'vite';
+import { ktx2WorkerPlugin } from './build/ktx2-worker-plugin';
 
 export default defineConfig({
+  plugins: [ktx2WorkerPlugin()],
   build: {
     target: 'es2022',
     sourcemap: false,

@@ -3,6 +3,13 @@ import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import basisTranscoderJs from 'three/addons/libs/basis/basis_transcoder.js?url';
 import basisTranscoderWasm from 'three/addons/libs/basis/basis_transcoder.wasm?url';
 
+/**
+ * Emitted at build time by ktx2WorkerPlugin (vite.config.ts). A same-origin worker takes the CSP
+ * of its own response, so the API can allow 'unsafe-eval' for this file alone: the basis
+ * transcoder's embind glue calls new Function, which a blob: worker would need the page to allow.
+ */
+export const KTX2_WORKER_URL = '/ktx2-worker.js';
+
 /** Points the transcoder at the bundled copy. */
 export function bundledTranscoderUrl(url: string): string {
   if (url.endsWith('basis_transcoder.js')) return basisTranscoderJs;
@@ -80,9 +87,18 @@ class DisposableKtx2Loader extends KTX2Loader {
   /** A transcoder that arrives after dispose would otherwise install a fresh worker creator. */
   override init(): Promise<void> {
     this.initialized ??= super.init().then(() => {
-      if (!this.disposed) return;
       if (this.workerSourceURL) URL.revokeObjectURL(this.workerSourceURL);
-      throw disposedError('a texture');
+      this.workerSourceURL = '';
+      if (this.disposed) throw disposedError('a texture');
+      this.workerPool.setWorkerCreator(() => {
+        const worker = new Worker(KTX2_WORKER_URL);
+        if (!this.transcoderBinary) throw new Error('KTX2: the transcoder binary is missing');
+        const transcoderBinary = this.transcoderBinary.slice(0);
+        worker.postMessage({ type: 'init', config: this.workerConfig, transcoderBinary }, [
+          transcoderBinary,
+        ]);
+        return worker;
+      });
     });
     return this.initialized;
   }

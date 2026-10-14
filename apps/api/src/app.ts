@@ -322,6 +322,9 @@ export function buildApp(opts: AppOptions): FastifyInstance {
 
   app.addHook('onSend', async (req, reply) => {
     applySecurityHeaders(reply);
+    if (normalizedPathname(req.url) === KTX2_WORKER_PATH) {
+      reply.header('content-security-policy', KTX2_WORKER_CSP);
+    }
     if (carriesUrlToken(req.url)) reply.header('referrer-policy', 'no-referrer');
   });
 
@@ -605,13 +608,12 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   return app;
 }
 
-// unsafe-eval: the basis transcoder is an emscripten module that calls new Function, and KTX2Loader
-// runs it in a blob: worker that inherits this policy. wasm-unsafe-eval: meshopt and the basis
-// transcoder. worker-src and img-src blob: the same loader and the account export download.
+// wasm-unsafe-eval: meshopt and the basis transcoder. img-src blob: the account export download.
+// worker-src blob: kept for three's own loaders; the KTX2 worker is a same-origin file instead.
 // style-src unsafe-inline: the inline <style> in index.html and React style= attributes.
 export const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
-  "script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval'",
+  "script-src 'self' 'wasm-unsafe-eval'",
   "worker-src 'self' blob:",
   "connect-src 'self'",
   "img-src 'self' data: blob:",
@@ -622,6 +624,12 @@ export const CONTENT_SECURITY_POLICY = [
   "form-action 'self'",
   "frame-ancestors 'none'",
 ].join('; ');
+
+// The basis transcoder's embind glue calls new Function, and wasm-unsafe-eval does not cover that.
+// A same-origin worker is governed by its own response's CSP, so only this file may eval; the page
+// and every other response stay without 'unsafe-eval'.
+const KTX2_WORKER_PATH = '/ktx2-worker.js';
+const KTX2_WORKER_CSP = "default-src 'none'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval'";
 
 const HSTS = 'max-age=31536000; includeSubDomains';
 
