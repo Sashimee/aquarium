@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import nodemailer from 'nodemailer';
 import pg from 'pg';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, InjectOptions, LightMyRequestResponse } from 'fastify';
 import { buildApp, DEFAULT_SIGN_IN_THROTTLE } from './app.ts';
 import type { Limit } from './rate-limit.ts';
 import { createAuth, type Auth, DEFAULT_AUTH_RATE_LIMITS, type AuthRateLimits } from './auth.ts';
@@ -31,6 +31,8 @@ export interface SentMail {
   text: string;
 }
 
+type PromiseInject = (opts: string | InjectOptions) => Promise<LightMyRequestResponse>;
+
 export interface Harness {
   app: FastifyInstance;
   auth: Auth;
@@ -39,7 +41,7 @@ export interface Harness {
   outbox: SentMail[];
   clock: Clock;
   settleMail(): Promise<void>;
-  rawInject: FastifyInstance['inject'];
+  rawInject: PromiseInject;
   holdMail(): { sendStarted: Promise<void>; release(): void; fail(err: Error): void };
   dropDatabase(): Promise<void>;
   close(): Promise<void>;
@@ -101,6 +103,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
   let gate: Promise<void> = Promise.resolve();
   let onSend: () => void = () => {};
   let held = false;
+  let releaseHeld: () => void = () => {};
   const transport = nodemailer.createTransport({
     name: 'test',
     version: '0',
@@ -186,9 +189,10 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
 
   // Mail leaves the response path, so tests that read the outbox right after a request need it settled.
   // Timing tests use rawInject to measure the response alone.
-  const rawInject = app.inject.bind(app);
-  const settledInject = async (...args: Parameters<typeof rawInject>) => {
-    const res = await (rawInject as (...a: typeof args) => ReturnType<typeof rawInject>)(...args);
+  const originalInject = app.inject.bind(app) as PromiseInject;
+  const rawInject: PromiseInject = (opts) => originalInject(opts);
+  const settledInject: PromiseInject = async (opts) => {
+    const res = await rawInject(opts);
     if (!held) await Promise.all([...background]);
     return res;
   };
@@ -217,6 +221,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
         };
       });
       gate.catch(() => {});
+      releaseHeld = release;
       const sendStarted = new Promise<void>((resolve) => (onSend = resolve));
       return { sendStarted, release, fail };
     },
@@ -225,9 +230,17 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     },
     dropDatabase: testDb.drop,
     async close() {
-      await app.close();
-      await database.close();
+      releaseHeld();
+      const failures: unknown[] = [];
+      for (const step of [() => app.close(), () => database.close()]) {
+        try {
+          await step();
+        } catch (err) {
+          failures.push(err);
+        }
+      }
       await testDb.drop();
+      if (failures.length > 0) throw failures[0];
     },
   };
 }

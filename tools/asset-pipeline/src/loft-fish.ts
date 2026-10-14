@@ -59,7 +59,7 @@ function smooth(edge0: number, edge1: number, x: number): number {
   return t * t * (3 - 2 * t);
 }
 
-const SWATCH_ROWS = 16;
+const SWATCH_ROWS = 32;
 
 /** Adds a flat strip of the swatch's mean colour under the photo; body coordinates stay above it via `bodyVMax`. */
 export function appendSwatch(
@@ -204,7 +204,7 @@ export const LOFT_FISH_RECIPES: LoftFishRecipe[] = [
       crop: { left: 185, top: 247, width: 826, height: 345 },
       snoutPixel: [915, 485],
       tailPixel: [419, 438],
-      finSwatch: { left: 260, top: 170, width: 240, height: 50 },
+      finSwatch: { left: 300, top: 238, width: 160, height: 22 },
     },
     spec: {
       roundness: 2.5,

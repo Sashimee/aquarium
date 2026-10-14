@@ -97,3 +97,16 @@ export async function advanceServerClock(page: Page, minutes: number): Promise<v
   });
   expect(res.status(), 'advance-time (the e2e server enables test hooks)').toBe(204);
 }
+
+/**
+ * Moves the page's own clock past the refresh throttle and fires the visibility event a returning
+ * tab would, so the app asks the server what happened instead of booting the scene again.
+ */
+export async function returnToTab(page: Page, awayMinutes: number): Promise<void> {
+  await page.evaluate((ms) => {
+    const w = window as unknown as { __realNow?: () => number };
+    const realNow = (w.__realNow ??= Date.now.bind(Date));
+    Date.now = () => realNow() + ms;
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, awayMinutes * 60_000);
+}

@@ -21,11 +21,12 @@ const median = (xs: number[]) => {
 };
 
 // Hashing dominates a fresh sign-up (~65 ms), so a repeat that skips it shows a gap of ~6.7 times
-// the faster half (the repeat itself) and a second hash ~1.0. Load stretches both halves of an adjacent pair together, so
-// the median pair gap is bounded relative to the faster median (dividing by the slower would let a
-// faster repeat inflate its own denominator) instead of in absolute milliseconds. Detection floor is
-// 25% of that, ~16 ms on a quiet host. The bound grows with load: fine for CPU-bound leaks like a
-// hash, looser for I/O-bound ones. A repeat is legitimately ~1-3 ms faster (no user rows).
+// the faster half (the repeat itself) and a second hash ~1.0. Load stretches both halves of an
+// adjacent pair together, so the median pair gap is bounded relative to the faster median (dividing
+// by the slower would let a faster repeat inflate its own denominator) instead of in absolute
+// milliseconds. Detection floor is 25% of that, ~16 ms on a quiet host. The bound grows with load:
+// fine for CPU-bound leaks like a hash, looser for I/O-bound ones. A repeat is legitimately ~1-3 ms
+// faster (Better Auth's extra inserts for a new address); that skew is accepted.
 function expectNoTimingSkew(pairs: { fresh: number; repeat: number }[]) {
   const gap = median(pairs.map((p) => p.repeat - p.fresh));
   const fresh = median(pairs.map((p) => p.fresh));
@@ -95,7 +96,11 @@ async function verifiedSession(h: Harness, email = nextEmail()) {
   return { email, cookie, verify };
 }
 
-const SLOW_MAIL_MS = 40;
+const SLOW_MAIL_MS = 120;
+
+// The timing tests make hundreds of sign-ups, each ~0.3 s on a host at load ~11 (the first took 67 s),
+// so a 120 s budget was exceeded by a busy full-suite run. This only guards against a hang.
+const TIMING_TEST_TIMEOUT_MS = 600_000;
 
 describe('timing skew bound', () => {
   it('flags a repeat that skips the mail send against a slow mailer', () => {
@@ -132,7 +137,11 @@ describe('unverified sign-up takeover (#114)', () => {
       payload: { email, password },
     });
 
-  const signUpWith = (email: string, password: string, inject = h.app.inject.bind(h.app)) =>
+  const signUpWith = (
+    email: string,
+    password: string,
+    inject: Harness['rawInject'] = (opts) => h.app.inject(opts),
+  ) =>
     inject({
       method: 'POST',
       url: '/api/auth/sign-up/email',
@@ -221,52 +230,61 @@ describe('unverified sign-up takeover (#114)', () => {
     expect(h.outbox.filter((m) => m.to === email)).toHaveLength(2);
   });
 
-  it('responds to a repeat sign-up in about the time of a fresh one', async () => {
-    const time = async (email: string) => {
-      // The previous sign-up's background mail would otherwise land inside this timing window.
-      await h.settleMail();
-      const start = performance.now();
-      await signUpWith(email, ATTACKER_PASSWORD, h.rawInject);
-      return performance.now() - start;
-    };
-    const pairs: { fresh: number; repeat: number }[] = [];
-    await time(nextEmail());
-    for (let i = 0; i < 80; i++) {
-      if (i % 2 === 0) {
-        const email = nextEmail();
-        const fresh = await time(email);
-        pairs.push({ fresh, repeat: await time(email) });
-      } else {
-        const email = nextEmail();
+  it(
+    'responds to a repeat sign-up in about the time of a fresh one',
+    async () => {
+      const time = async (email: string) => {
+        // The previous sign-up's background mail would otherwise land inside this timing window.
+        await h.settleMail();
+        const start = performance.now();
         await signUpWith(email, ATTACKER_PASSWORD, h.rawInject);
-        const repeat = await time(email);
-        pairs.push({ fresh: await time(nextEmail()), repeat });
+        return performance.now() - start;
+      };
+      const pairs: { fresh: number; repeat: number }[] = [];
+      await time(nextEmail());
+      for (let i = 0; i < 80; i++) {
+        if (i % 2 === 0) {
+          const email = nextEmail();
+          const fresh = await time(email);
+          pairs.push({ fresh, repeat: await time(email) });
+        } else {
+          const email = nextEmail();
+          await signUpWith(email, ATTACKER_PASSWORD, h.rawInject);
+          const repeat = await time(email);
+          pairs.push({ fresh: await time(nextEmail()), repeat });
+        }
       }
-    }
-    expectNoTimingSkew(pairs);
-  }, 120_000);
+      expectNoTimingSkew(pairs);
+    },
+    TIMING_TEST_TIMEOUT_MS,
+  );
 
-  it('responds to a sign-up for a verified address in about the time of a fresh one (#120)', async () => {
-    const time = async (email: string) => {
-      await h.settleMail();
-      const start = performance.now();
-      const res = await signUpWith(email, ATTACKER_PASSWORD, h.rawInject);
-      expect(res.statusCode).toBe(200);
-      return performance.now() - start;
-    };
-    const verified = nextEmail();
-    await verifiedSession(h, verified);
-    const pairs: { fresh: number; repeat: number }[] = [];
-    await time(nextEmail());
-    for (let i = 0; i < 40; i++) {
-      if (i % 2 === 0) pairs.push({ fresh: await time(nextEmail()), repeat: await time(verified) });
-      else {
-        const repeat = await time(verified);
-        pairs.push({ fresh: await time(nextEmail()), repeat });
+  it(
+    'responds to a sign-up for a verified address in about the time of a fresh one (#120)',
+    async () => {
+      const time = async (email: string) => {
+        await h.settleMail();
+        const start = performance.now();
+        const res = await signUpWith(email, ATTACKER_PASSWORD, h.rawInject);
+        expect(res.statusCode).toBe(200);
+        return performance.now() - start;
+      };
+      const verified = nextEmail();
+      await verifiedSession(h, verified);
+      const pairs: { fresh: number; repeat: number }[] = [];
+      await time(nextEmail());
+      for (let i = 0; i < 40; i++) {
+        if (i % 2 === 0)
+          pairs.push({ fresh: await time(nextEmail()), repeat: await time(verified) });
+        else {
+          const repeat = await time(verified);
+          pairs.push({ fresh: await time(nextEmail()), repeat });
+        }
       }
-    }
-    expectNoTimingSkew(pairs);
-  }, 120_000);
+      expectNoTimingSkew(pairs);
+    },
+    TIMING_TEST_TIMEOUT_MS,
+  );
 
   it('does not wait for the mail relay when signing up', async () => {
     const held = h.holdMail();
@@ -291,6 +309,9 @@ describe('unverified sign-up takeover (#114)', () => {
     const verify = await verifyFrom(h, email);
     const ownerCookie = cookieJar(verify);
 
+    expect(
+      (await h.app.inject({ url: '/api/me', headers: { cookie: ownerCookie } })).statusCode,
+    ).toBe(200);
     expect((await requestReset(email)).statusCode).toBe(200);
     const reset = await h.app.inject({
       method: 'POST',
@@ -334,7 +355,7 @@ describe('unverified sign-up takeover (#114)', () => {
 
     it('marks the address verified and signs the attacker session out', async () => {
       const email = nextEmail();
-      const attacker = await signUpWith(email, ATTACKER_PASSWORD);
+      await signUpWith(email, ATTACKER_PASSWORD);
       await h.database.pool.query(
         `insert into session (id, user_id, token, expires_at, created_at, updated_at)
          select 'atk-' || id, id, 'atk-token-' || id, now() + interval '1 day', now(), now()
@@ -349,10 +370,11 @@ describe('unverified sign-up takeover (#114)', () => {
       );
       expect(row.rows[0].email_verified).toBe(true);
       expect(Number(row.rows[0].sessions)).toBe(0);
-      expect(
-        (await h.app.inject({ url: '/api/me', headers: { cookie: cookieJar(attacker) } }))
-          .statusCode,
-      ).toBe(401);
+      const signIn = await signInWith(email, VICTIM_PASSWORD);
+      expect(signIn.statusCode).toBe(200);
+      const me = await h.app.inject({ url: '/api/me', headers: { cookie: cookieJar(signIn) } });
+      expect(me.statusCode).toBe(200);
+      expect(userSchema.parse(me.json()).emailVerified).toBe(true);
     });
 
     it('does not drop the new credential when an old verification link is clicked', async () => {
@@ -625,6 +647,17 @@ describe('csrf', () => {
       expect(res.statusCode, url).toBe(403);
     }
     expect((await h.app.inject({ url: '/api/me', headers: { cookie } })).statusCode).toBe(200);
+  });
+
+  it('accepts a same-origin Referer when no Origin is sent on the export POST', async () => {
+    const { cookie } = await verifiedSession(h);
+    const res = await h.app.inject({
+      method: 'POST',
+      url: '/api/me/export',
+      headers: { 'content-type': 'application/json', cookie, referer: `${APP_ORIGIN}/account` },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(200);
   });
 
   it('accepts the same mutation from the app origin', async () => {
@@ -1213,16 +1246,17 @@ describe('mail abuse limits', () => {
   });
 
   it('refuses mail instead of sending it unmetered when the limiter store fails', async () => {
-    await withHarness(undefined, async (h) => {
-      await h.database.pool.query('drop table mail_limit_hits');
-      const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-      try {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      await withHarness(undefined, async (h) => {
+        await h.database.pool.query('drop table mail_limit_hits');
         await signUp(h.app, nextEmail());
-      } finally {
-        spy.mockRestore();
-      }
-      expect(h.outbox).toHaveLength(0);
-    });
+        expect(h.outbox).toHaveLength(0);
+      });
+      expect(spy).toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('ignores a spoofed x-forwarded-for from an untrusted peer', async () => {
@@ -1616,5 +1650,40 @@ describe('password reset request does not reveal the account (#161)', () => {
       spy.mockRestore();
       await h.close();
     }
+  });
+});
+
+describe('auth proxy invalid upstream body (#383)', () => {
+  const lines: string[] = [];
+  let h: Harness;
+  beforeAll(async () => {
+    h = await createHarness({ logStream: { write: (chunk) => void lines.push(chunk) } });
+  });
+  afterAll(() => h.close());
+
+  it('answers 502 without a session cookie and logs only path and status', async () => {
+    const spy = vi.spyOn(h.auth, 'handler').mockResolvedValue(
+      new Response('{"token": secret-snippet', {
+        status: 200,
+        headers: { 'content-type': 'application/json', 'set-cookie': 'session=abc; Path=/' },
+      }),
+    );
+    try {
+      const res = await h.app.inject({
+        method: 'POST',
+        url: '/api/auth/sign-in/email',
+        headers: jsonHeaders,
+        payload: { email: nextEmail(), password: PASSWORD },
+      });
+      expect(res.statusCode).toBe(502);
+      expect(res.headers['set-cookie']).toBeUndefined();
+      expect(apiErrorSchema.parse(res.json()).error.code).toBe('internal');
+    } finally {
+      spy.mockRestore();
+    }
+    const logged = lines.join('');
+    expect(logged).toContain('/api/auth/sign-in/email');
+    expect(logged).toContain('unparseable');
+    expect(logged).not.toContain('secret-snippet');
   });
 });

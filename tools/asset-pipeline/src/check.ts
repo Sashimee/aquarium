@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, posix, relative, sep } from 'node:path';
+import { speciesLengthM } from './fish.ts';
+import { FISH_RECIPES } from './recipes.ts';
 import { budgetProblems, loadBudgetContent, type BudgetInput } from './budgets.ts';
 import {
   FIN_ID_ATTRIBUTE,
@@ -16,6 +18,7 @@ import {
   licenceRank,
   manifestSchema,
   validateManifest,
+  modificationProblems,
   PENDING_STATUS,
   type Manifest,
   type ManifestAsset,
@@ -177,11 +180,32 @@ function fishProblems(asset: OutputAsset, repoRoot: string, problems: string[]):
   if (!existsSync(join(repoRoot, 'tools', 'asset-pipeline', asset.fish.debugRender))) {
     problems.push(`${at}: debug render ${asset.fish.debugRender} is missing`);
   }
+  const speciesLength = asset.species ? speciesLengthM(repoRoot, asset.species) : null;
+  if (speciesLength === null) {
+    if (asset.fish.lengthSource === 'species-json') {
+      problems.push(
+        `${at}: built with lengthSource species-json but content/species/${asset.species}.json has no bodyLengthM (rebuild with pnpm build:assets)`,
+      );
+    }
+    return;
+  }
+  const lengthFactor = FISH_RECIPES.find((r) => r.id === asset.id)?.lengthFactor ?? 1;
+  const expectedLength = speciesLength * lengthFactor;
+  if (asset.fish.lengthSource !== 'species-json') {
+    problems.push(
+      `${at}: built with lengthSource ${asset.fish.lengthSource} but content/species/${asset.species}.json has bodyLengthM ${speciesLength} (rebuild with pnpm build:assets)`,
+    );
+  } else if (Math.abs(asset.fish.standardLengthM - expectedLength) > 1e-9) {
+    problems.push(
+      `${at}: standardLengthM ${asset.fish.standardLengthM} differs from content/species/${asset.species}.json bodyLengthM ${speciesLength} x ${lengthFactor} (rebuild with pnpm build:assets)`,
+    );
+  }
 }
 
 export function checkAssets(input: CheckInput): string[] {
   const { manifest, credits, index, assetsDir, repoRoot } = input;
   const problems = validateManifest(manifest, credits);
+  problems.push(...modificationProblems(index, manifest));
   const byId = new Map(manifest.assets.map((a) => [a.id, a]));
 
   const listed = new Map<string, string>();

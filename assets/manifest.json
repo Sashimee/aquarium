@@ -24,7 +24,13 @@
       "textures": "braincor_1_8k_04k_u1_v1_baseColor.jpeg 8192x8192, braincor_1_8k_04k_u1_v1_normal.jpeg 8192x8192",
       "rigged": false,
       "notes": "Photogrammetry brain coral (Platygyra), realistic colour, 40k faces; decimate for instancing. Verified from the downloaded glTF: 40002 triangles, not rigged (no skins). Zip sha256 32df051e2ffd9e5cf4f8a0d451d53609a3eaa5c83aaf7c1a772700d4721f2f32; sha256 is the aggregate over files[]. Textures are 8192x8192 (base colour and normal): downscale to 2048 or less.",
-      "modifications": [],
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.25 m before cropping",
+        "LOD0 capped at 20000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "rock base slab cropped off"
+      ],
       "status": "downloaded",
       "files": [
         {
@@ -119,7 +125,13 @@
       "textures": "default_baseColor.jpeg 2048x2048",
       "rigged": false,
       "notes": "Photogrammetry reef-plate scan with blue branching coral on live rock (title says anemone but it is an Acropora-type coral); usable as a reef focal piece. Verified from the downloaded glTF: 22057 triangles, not rigged (no skins). Zip sha256 3be7ebe502866b45bca990d069a4a5b95f6a1b2b3fd31501828dfe79e00bd987; sha256 is the aggregate over files[].",
-      "modifications": [],
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.3 m",
+        "LOD0 capped at 15000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "KHR_materials_specular dropped"
+      ],
       "status": "downloaded",
       "files": [
         {
@@ -294,7 +306,13 @@
       "textures": "material_0_diffuse.png 4096x4096, material_0_specularGlossiness.png 4096x4096, material_0_normal.png 4096x4096",
       "rigged": false,
       "notes": "Photogrammetry scan of real aquarium root wood: the best driftwood candidate. 40k faces, needs decimation to about 15k with baked normal map. Verified from the downloaded glTF: 40000 triangles, not rigged (no skins). Zip sha256 ca115b8b75db69b54d90ac8d109222b18fe998c2d76ab341854982c91fd525d0; sha256 is the aggregate over files[].",
-      "modifications": [],
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.4 m",
+        "LOD0 capped at 15000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "KHR_materials_pbrSpecularGlossiness converted to metallic-roughness, 4096 px textures downscaled"
+      ],
       "status": "downloaded",
       "files": [
         {
@@ -345,7 +363,12 @@
       "textures": "Fish_baseColor.jpeg 2048x2048, Fish_metallicRoughness.png 2048x2048, Fish_emissive.jpeg 2048x2048, Fish_normal.png 2048x2048",
       "rigged": false,
       "notes": "Palette-surgeonfish pattern and body outline are right. Texture is somewhat flat/painted; pipeline should add scale normal detail. Tail needs a thin-fin treatment. Verified from the downloaded glTF: 3688 triangles, not rigged (no skins). Zip sha256 7dfc5580bf46af29f9ed1c1faee50240961cc026ea56f74f25279a15ec313ded; sha256 is the aggregate over files[].",
-      "modifications": [],
+      "modifications": [
+        "merged meshes, dropped skeleton, animation and unused attributes",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "baked fin mask and fin id vertex attributes",
+        "colour and normal maps re-encoded to KTX2 at 1k and 2k"
+      ],
       "status": "downloaded",
       "files": [
         {
@@ -401,7 +424,13 @@
       "textures": "Material.001_baseColor.png 2048x2048, Material.001_metallicRoughness.png 2048x2048, Material.001_clearcoat.png 2048x2048",
       "rigged": true,
       "notes": "Male blue-speckled fancy guppy, low poly with high-quality texture. Pair with the female. Verified from the downloaded glTF: 1689 triangles, rigged: 1 skin(s), 44 joints, 1 animation clip(s). Zip sha256 c0ad595d353bf9b1278dd83aec5d0a05f836b5642d82f55c7633756c23744ec4; sha256 is the aggregate over files[].",
-      "modifications": [],
+      "modifications": [
+        "merged meshes, dropped skeleton, animation and unused attributes",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "baked fin mask and fin id vertex attributes",
+        "colour and normal maps re-encoded to KTX2 at 1k and 2k",
+        "eyeballs kept from their own mesh and re-seated on the head, outside fin classification"
+      ],
       "status": "downloaded",
       "files": [
         {
@@ -452,7 +481,12 @@
       "textures": "Paracheirodon_innesi_baseColor.png 1024x1024, Paracheirodon_innesi_metallicRoughness.png 1024x1024, Paracheirodon_innesi_normal.png 1024x1024",
       "rigged": true,
       "notes": "Realistic PBR-style texture with correct blue/red lateral stripes. Has 1 animation clip in Sketchfab metadata. Verified from the downloaded glTF: 1498 triangles, rigged: 1 skin(s), 30 joints, 1 animation clip(s). Zip sha256 51193102379d7df5c14826ac2fd739023f024648f5d55d45c31363ef1bee4ce1; sha256 is the aggregate over files[].",
-      "modifications": [],
+      "modifications": [
+        "merged meshes, dropped skeleton, animation and unused attributes",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "baked fin mask and fin id vertex attributes",
+        "colour and normal maps re-encoded to KTX2 at 1k and 2k"
+      ],
       "status": "downloaded",
       "files": [
         {
@@ -503,7 +537,12 @@
       "textures": "wire_028149177_baseColor.jpeg 2048x2048, wire_028149177_metallicRoughness.png 2048x2048, wire_028149177_normal.png 2048x2048",
       "rigged": false,
       "notes": "Good ocellaris proportions and black fin edging; PBR textures from Substance Painter. Verified from the downloaded glTF: 1606 triangles, not rigged (no skins). Zip sha256 0912de58f4a39e7ef419b8b5a17ae343fc38fdadf72eae5b5138e30b43c22f65; sha256 is the aggregate over files[].",
-      "modifications": [],
+      "modifications": [
+        "merged meshes, dropped skeleton, animation and unused attributes",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "baked fin mask and fin id vertex attributes",
+        "colour and normal maps re-encoded to KTX2 at 1k and 2k"
+      ],
       "status": "downloaded",
       "files": [
         {
@@ -554,7 +593,12 @@
       "textures": "Material.001_baseColor.png 1024x1024",
       "rigged": false,
       "notes": "Reasonable Zebrasoma-like body and snout; slightly stout and soft detail. Single texture. Verified from the downloaded glTF: 1184 triangles, not rigged (no skins). Zip sha256 f045455640d22701a26f408ae72dc1c9d1d1e4638e66979d9a0469c56ae0ff29; sha256 is the aggregate over files[].",
-      "modifications": [],
+      "modifications": [
+        "merged meshes, dropped skeleton, animation and unused attributes",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "baked fin mask and fin id vertex attributes",
+        "colour and normal maps re-encoded to KTX2 at 1k and 2k"
+      ],
       "status": "downloaded",
       "files": [
         {
@@ -595,7 +639,13 @@
       "textures": "texture_1_baseColor.png 2048x2048, texture_2_baseColor.png 2048x2048, texture_3_baseColor.png 2048x2048, texture_4_baseColor.png 2048x2048",
       "rigged": false,
       "notes": "Hand-painted marbled Pterophyllum with long ventral filaments. The scene holds 4 colourways; split into separate meshes and keep the best 1-2. Fins are thin cards: needs fin-mask bake. Verified from the downloaded glTF: 3088 triangles, not rigged (no skins). Zip sha256 d89dc3439b61316c6ecee07842037de18f069c7353239982ea34082aef671d0e; sha256 is the aggregate over files[]. Four colourways, one material and texture each; unlit materials (KHR_materials_unlit) must be replaced with PBR.",
-      "modifications": [],
+      "modifications": [
+        "merged meshes, dropped skeleton, animation and unused attributes",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "baked fin mask and fin id vertex attributes",
+        "colour and normal maps re-encoded to KTX2 at 1k and 2k",
+        "kept one of four colourways, KHR_materials_unlit replaced by PBR"
+      ],
       "status": "downloaded",
       "files": [
         {
@@ -651,7 +701,12 @@
       "textures": "BETTA_baseColor.png 2048x2048, BETTA_metallicRoughness.png 2048x2048, BETTA_normal.png 2048x2048",
       "rigged": true,
       "notes": "Halfmoon male with detailed fin rays and scale texture. Highest-quality betta found. Fin vertex weights need checking for the spine wave. Verified from the downloaded glTF: 10668 triangles, rigged: 1 skin(s), 53 joints, 1 animation clip(s). Zip sha256 c20b1d5fb832fd3e096f5c03e5c45d7bc566867c2f175596e020ce8df3694d71; sha256 is the aggregate over files[].",
-      "modifications": [],
+      "modifications": [
+        "merged meshes, dropped skeleton, animation and unused attributes",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "baked fin mask and fin id vertex attributes",
+        "colour and normal maps re-encoded to KTX2 at 1k and 2k"
+      ],
       "status": "downloaded",
       "files": [
         {
@@ -702,7 +757,12 @@
       "textures": "Guppy_skin_F_diffuse.png 2048x2048, Guppy_skin_F_specularGlossiness.png 2048x2048, Guppy_Layer1_F_diffuse.png 2048x2048, Guppy_Heart_F_diffuse.png 2048x2048",
       "rigged": true,
       "notes": "Female guppy (sexual dimorphism with the male). Verified from the downloaded glTF: 6548 triangles, rigged: 1 skin(s), 191 joints, 2 animation clip(s). Zip sha256 bd1d932f4796f8969217a9ca8ee5d5d53df8fe5261f08572a5885f1e8fd3ab99; sha256 is the aggregate over files[].",
-      "modifications": [],
+      "modifications": [
+        "merged meshes, dropped skeleton, animation and unused attributes",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "baked fin mask and fin id vertex attributes",
+        "colour and normal maps re-encoded to KTX2 at 1k and 2k"
+      ],
       "status": "downloaded",
       "files": [
         {
@@ -807,7 +867,13 @@
       "textures": "FrondStem_Mat_diffuse.png 128x512, FrondStem_Mat_specularGlossiness.png 128x512, FrondStem_Mat_normal.png 128x512, PondWeedLeaflets_Mat_diffuse.png 512x512, PondWeedLeaflets_Mat_specularGlossiness.png 512x512, PondWeedLeaflets_Mat_normal.png 512x512, PondWeed_Med_Mat_diffuse.png 256x2048, PondWeed_Med_Mat_specularGlossiness.png 256x2048, PondWeed_Med_Mat_normal.png 256x2048",
       "rigged": false,
       "notes": "Stem plant (pond weed type) clumps; good for background planting. Verified from the downloaded glTF: 7549 triangles, not rigged (no skins). Zip sha256 0e7ab1b00314e7cb87a82acc3d4e43fa60bc293ac19e9076b823cf91bd3c607a; sha256 is the aggregate over files[].",
-      "modifications": [],
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.25 m",
+        "LOD0 capped at 12000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "KHR_materials_pbrSpecularGlossiness converted to metallic-roughness, alpha cut-out kept"
+      ],
       "status": "downloaded",
       "files": [
         {
@@ -887,7 +953,13 @@
       "textures": "none (flat material colour)",
       "rigged": true,
       "notes": "Single Elodea/Egeria-like stem with leaf whorls, 1 animation in metadata. Instance many with sway in shader. Verified from the downloaded glTF: 6076 triangles, rigged: 1 skin(s), 30 joints, 1 animation clip(s). Zip sha256 94fa5bb65e953b7c0b7d39203adac31f26e7334133130995cd63357f4feaebea; sha256 is the aggregate over files[]. No texture images: flat material colour only.",
-      "modifications": [],
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.35 m",
+        "LOD0 capped at 12000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "source has a flat colour only; a procedural leaf texture was painted"
+      ],
       "status": "downloaded",
       "files": [
         {
@@ -922,7 +994,33 @@
       "textures": "tripo_mat_d6ac9413_baseColor.jpeg 4096x4096, tripo_mat_46d92b9d_baseColor.jpeg 4096x4096, Material.001_baseColor.jpeg 2048x2048, tripo_mat_426602b4_baseColor.jpeg 4096x4096, tripo_mat_c7bb0dda_baseColor.jpeg 4096x4096",
       "rigged": false,
       "notes": "Set of aquarium plants (java fern, vallisneria, broadleaf, bromeliad-like with flower). 130k faces: split per plant and decimate to LOD0 under 8k each for instancing. Verified from the downloaded glTF: 130860 triangles, not rigged (no skins). Zip sha256 dbc5f7f014815de1bcc4b96ee78c52aa5336285c4fcb00173880fac203dbf2fe; sha256 is the aggregate over files[]. Five materials, four of them 4096x4096: split per plant and downscale.",
-      "modifications": [],
+      "modifications": [
+        "java-fern: merged meshes, dropped unused attributes, skeleton and animation",
+        "java-fern: origin at the centre of the base, scaled so the longest edge is 0.3 m",
+        "java-fern: LOD0 capped at 12000 triangles, LOD1 and LOD2 simplified further",
+        "java-fern: textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "java-fern: split out of a six-plant scene, 4096 px texture downscaled",
+        "red-tiger-lotus: merged meshes, dropped unused attributes, skeleton and animation",
+        "red-tiger-lotus: origin at the centre of the base, scaled so the longest edge is 0.3 m",
+        "red-tiger-lotus: LOD0 capped at 12000 triangles, LOD1 and LOD2 simplified further",
+        "red-tiger-lotus: textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "red-tiger-lotus: split out of a six-plant scene",
+        "staurogyne-repens: merged meshes, dropped unused attributes, skeleton and animation",
+        "staurogyne-repens: origin at the centre of the base, scaled so the longest edge is 0.25 m",
+        "staurogyne-repens: LOD0 capped at 12000 triangles, LOD1 and LOD2 simplified further",
+        "staurogyne-repens: textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "staurogyne-repens: split out of a six-plant scene, 4096 px texture downscaled; the duplicate \"Staurogyne Repens2\" mesh is not shipped",
+        "universal-plant: merged meshes, dropped unused attributes, skeleton and animation",
+        "universal-plant: origin at the centre of the base, scaled so the longest edge is 0.3 m",
+        "universal-plant: LOD0 capped at 12000 triangles, LOD1 and LOD2 simplified further",
+        "universal-plant: textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "universal-plant: split out of a six-plant scene, 4096 px texture downscaled",
+        "vallisneria: merged meshes, dropped unused attributes, skeleton and animation",
+        "vallisneria: origin at the centre of the base, scaled so the longest edge is 0.35 m",
+        "vallisneria: LOD0 capped at 12000 triangles, LOD1 and LOD2 simplified further",
+        "vallisneria: textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "vallisneria: split out of a six-plant scene, 4096 px texture downscaled"
+      ],
       "status": "downloaded",
       "files": [
         {
@@ -1493,10 +1591,13 @@
       "rigged": false,
       "notes": "Reef arch candidate (issue #79). Sculpted grey-pink rock arch, about 40 x 13.6 x 13.5 units as authored (long axis X, Y up); scale about 0.0075 for a 0.3 m span. Smooth sculpt with no pore detail: needs a coralline pink/purple tint and a procedural porous normal/occlusion layer. Verified from the downloaded glTF: 6920 triangles, not rigged (no skins). Zip sha256 9ab29ee5e8806b0e9f2dcfe96f288f2442d76eee95cf092ac42ab173156d0f8d; sha256 is the aggregate over files[].",
       "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.3 m",
+        "LOD0 capped at 7000 triangles, LOD1 and LOD2 simplified further",
+        "textures re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
         "recoloured by luminance to coralline purple and pink live-rock tones, with mottled patches",
-        "procedural pore detail added to the normal map and darkened into the colour map; textures upscaled from 1024 px to 2048 px first",
-        "metallicRoughness map dropped, constant roughness",
-        "scaled to a 0.3 m span, origin at the base centre, simplified into three LODs, textures re-encoded to KTX2"
+        "procedural pore detail added to the normal map and darkened into the colour map; textures upscaled from 1024 px to 2048 px before the pores were added",
+        "metallicRoughness map dropped"
       ],
       "status": "downloaded",
       "files": [

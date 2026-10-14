@@ -755,7 +755,7 @@ describe('PATCH decor layout validation', () => {
     it('assigns a seed on save and keeps it when the coral is moved or rotated', async () => {
       const reef = await createTank(h, cookie, 'reef');
       await patch(reef.id, [{ ...coral, position: [0, 0.05, 0] }]);
-      const [saved] = await getLayout(reef.id);
+      const [saved] = await storedLayout(reef.id);
       expect(saved?.tintSeed).toBeTypeOf('number');
 
       const moved = await patch(reef.id, [
