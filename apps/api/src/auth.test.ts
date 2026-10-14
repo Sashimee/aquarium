@@ -1132,13 +1132,14 @@ describe('mail abuse limits', () => {
       },
     });
     const known = nextEmail();
-    await h.app.inject({
+    const setup = await h.app.inject({
       method: 'POST',
       url: '/api/auth/sign-up/email',
       remoteAddress: '127.0.0.1',
       headers: { ...jsonHeaders, 'x-forwarded-for': '203.0.113.1' },
       payload: { email: known, password: PASSWORD, name: 'Tester' },
     });
+    expect(setup.statusCode).toBe(200);
     const sequence = async (
       ip: string,
       url: string,
