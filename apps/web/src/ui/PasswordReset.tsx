@@ -5,6 +5,7 @@ import {
   readResetState,
   stateWithResetDone,
   stateWithToken,
+  stateWithoutToken,
   withoutTokenParam,
 } from './resetToken';
 import { Field, FormError, Link, Panel, useSubmission } from './screens';
@@ -142,7 +143,14 @@ export function ResetPasswordScreen({
         setDone(true);
       })
       .catch((cause: unknown) => {
-        if (cause instanceof ApiRequestError && cause.status === 400) setStale(true);
+        if (cause instanceof ApiRequestError && cause.status === 400) {
+          window.history.replaceState(
+            stateWithoutToken(window.history.state),
+            '',
+            window.location.pathname + window.location.search + window.location.hash,
+          );
+          setStale(true);
+        }
       });
   };
 

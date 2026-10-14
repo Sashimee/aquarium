@@ -3,6 +3,7 @@ import {
   readResetState,
   stateWithResetDone,
   stateWithToken,
+  stateWithoutToken,
   withoutTokenParam,
 } from './resetToken';
 
@@ -35,6 +36,12 @@ describe('reset history state', () => {
     const state = stateWithResetDone(stateWithToken(null, 'secret-token'));
     expect(readResetState(state)).toEqual({ token: null, done: true });
     expect(JSON.stringify(state)).not.toContain('secret-token');
+  });
+
+  it('drops a rejected token without marking the reset done', () => {
+    const state = stateWithoutToken(stateWithToken({ keep: 1 }, 'dead-token'));
+    expect(readResetState(state)).toEqual({ token: null, done: false });
+    expect(state).toMatchObject({ keep: 1 });
   });
 
   it('tolerates missing or foreign state', () => {

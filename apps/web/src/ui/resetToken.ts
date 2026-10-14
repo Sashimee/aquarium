@@ -25,6 +25,10 @@ export function stateWithToken(state: unknown, token: string): Record<string, un
   return { ...asRecord(state), [TOKEN_KEY]: token, [DONE_KEY]: false };
 }
 
+export function stateWithoutToken(state: unknown): Record<string, unknown> {
+  return { ...asRecord(state), [TOKEN_KEY]: null, [DONE_KEY]: false };
+}
+
 export function stateWithResetDone(state: unknown): Record<string, unknown> {
   return { ...asRecord(state), [TOKEN_KEY]: null, [DONE_KEY]: true };
 }

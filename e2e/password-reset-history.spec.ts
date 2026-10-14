@@ -98,4 +98,28 @@ test.describe('reset token in history', () => {
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { name: 'Password changed' })).toBeVisible();
   });
+
+  test('a token rejected by the server shows the error on every later reload', async ({ page }) => {
+    const link = await resetLinkFor(page, freshEmail());
+    const redirect = await page.request.get(link, { maxRedirects: 0 });
+    const landing = new URL(redirect.headers()['location'] ?? '', 'http://localhost');
+    const token = landing.searchParams.get('token');
+    expect(token).toBeTruthy();
+    await page.goto(`${landing.pathname}${landing.search}`, { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { name: 'Choose a new password' })).toBeVisible();
+
+    const consumed = await page.request.post('/api/auth/reset-password', {
+      data: { token, newPassword: NEW_PASSWORD },
+      headers: { origin: new URL(page.url()).origin },
+    });
+    expect(consumed.ok()).toBe(true);
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.getByLabel('New password', { exact: true }).fill(`${NEW_PASSWORD} again`);
+    await page.getByRole('button', { name: 'Set password' }).click();
+    await expect(page.getByRole('heading', { name: 'That link did not work' })).toBeVisible();
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { name: 'That link did not work' })).toBeVisible();
+  });
 });
