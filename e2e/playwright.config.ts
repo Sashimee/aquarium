@@ -5,7 +5,7 @@ const port = Number(process.env['E2E_PORT'] ?? 4317);
 export default defineConfig({
   testDir: '.',
   testMatch: ['*.spec.ts', 'tests/*.spec.ts'],
-  fullyParallel: true,
+  fullyParallel: false,
   workers: 1,
   retries: process.env['CI'] ? 1 : 0,
   timeout: 240_000,

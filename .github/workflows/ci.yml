@@ -60,7 +60,7 @@ jobs:
           - name: decor
             args: decor.spec
           - name: menus-mouse-death
-            args: menus.spec death.spec --grep=mouse\|starves
+            args: menus.spec death.spec --grep-invert=phone
           - name: switch-tanks-feed
             args: tank-type-switch.spec tanks.spec feed.spec
           - name: care-auth-reset
@@ -91,6 +91,17 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm exec playwright install --with-deps chromium
+      - name: Record how many tests this shard selects
+        run: |
+          mkdir shard-count
+          pnpm exec playwright test -c e2e/playwright.config.ts --list --reporter=list ${{ matrix.args }} \
+            | sed -nE 's/^Total: ([0-9]+) tests? in .*/\1/p' > shard-count/${{ matrix.name }}
+          test -s shard-count/${{ matrix.name }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: e2e-count-${{ matrix.name }}
+          path: shard-count
+          retention-days: 1
       - run: pnpm run e2e ${{ matrix.args }}
         env:
           PLAYWRIGHT_BLOB_OUTPUT_DIR: ${{ github.workspace }}/blob-report
@@ -120,7 +131,8 @@ jobs:
           pattern: e2e-blob-*
           path: all-blobs
           merge-multiple: true
-      - run: pnpm exec playwright merge-reports --reporter html all-blobs
+      - if: hashFiles('all-blobs/**') != ''
+        run: pnpm exec playwright merge-reports --reporter html all-blobs
         env:
           PLAYWRIGHT_HTML_OUTPUT_DIR: ${{ github.workspace }}/playwright-report
           PLAYWRIGHT_HTML_OPEN: never
@@ -128,6 +140,7 @@ jobs:
         with:
           name: e2e-html-report
           path: playwright-report
+          if-no-files-found: ignore
           retention-days: 7
 
   e2e:
@@ -136,14 +149,31 @@ jobs:
     if: ${{ always() }}
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - name: Every spec file is assigned to a shard
-        run: |
-          for f in e2e/*.spec.ts e2e/tests/*.spec.ts; do
-            grep -q "$(basename "$f" .ts)" .github/workflows/ci.yml || { echo "::error::$f is in no e2e shard; add it to the matrix in ci.yml"; exit 1; }
-          done
       - name: All e2e shards passed
         run: test "${{ needs.e2e-shard.result }}" = success
+      - uses: actions/checkout@v4
+      - name: Every spec file is named in a shard's args
+        run: |
+          for f in e2e/*.spec.ts e2e/tests/*.spec.ts; do
+            grep -Eq "^\s+args: .*(^|[ /])$(basename "$f" .ts)( |$)" .github/workflows/ci.yml || { echo "::error::$f is in no e2e shard; add it to the matrix in ci.yml"; exit 1; }
+          done
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: e2e-count-*
+          path: shard-count
+          merge-multiple: true
+      - name: Shards select exactly the tests that exist
+        run: |
+          total=$(pnpm exec playwright test -c e2e/playwright.config.ts --list --reporter=list | sed -nE 's/^Total: ([0-9]+) tests? in .*/\1/p')
+          selected=$(cat shard-count/* | awk '{n+=$1} END {print n}')
+          echo "listed=$total selected=$selected"
+          test -n "$total" && test "$total" = "$selected" || { echo "::error::shards select $selected of $total e2e tests; fix the matrix args in ci.yml"; exit 1; }
 
   docker:
     runs-on: ubuntu-latest
