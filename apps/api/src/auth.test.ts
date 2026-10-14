@@ -506,14 +506,19 @@ describe('sessions', () => {
     expect(got.statusCode).toBe(200);
     expect(got.json<{ user: { email: string } }>().user.email).toBe(email);
 
-    const bodies = [signedUp.body, verify.body, signedIn.body, got.body];
+    const me = await h.app.inject({ url: '/api/me', headers: { cookie: signInCookie } });
+    expect(me.statusCode).toBe(200);
+
+    const bodies = [signedUp.body, signedIn.body, got.body, me.body];
     for (const body of bodies) {
       expect(body).not.toContain(token);
       expect(body).not.toContain(signInToken);
       expect(body).not.toContain('"token"');
     }
-    const me = await h.app.inject({ url: '/api/me', headers: { cookie: signInCookie } });
-    expect(me.statusCode).toBe(200);
+  });
+
+  it('strips tokens only because passkey is the sole plugin; review stripTokens when adding one', () => {
+    expect(h.auth.options.plugins?.map((plugin) => plugin.id)).toEqual(['passkey']);
   });
 
   it('does not expose revoke-session, which takes a token', async () => {

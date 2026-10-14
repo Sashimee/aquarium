@@ -178,6 +178,14 @@ export function stripTokens(value: unknown): unknown {
   );
 }
 
+export function stripTokensFromBody(raw: string): string | null {
+  try {
+    return JSON.stringify(stripTokens(JSON.parse(raw)));
+  } catch {
+    return null;
+  }
+}
+
 // Better Auth resolves the request through the WHATWG URL parser, which collapses dot segments
 // (also percent-encoded) and treats a backslash as a slash. Path-based rules here compare a literal
 // string, so any path the parser would rewrite is refused instead of being matched differently.
@@ -475,7 +483,13 @@ export function buildApp(opts: AppOptions): FastifyInstance {
         const payload = Buffer.from(await res.arrayBuffer());
         const isJson = (res.headers.get('content-type') ?? '').toLowerCase().includes('json');
         if (!isJson || payload.length === 0) return reply.send(payload);
-        return reply.send(JSON.stringify(stripTokens(JSON.parse(payload.toString('utf8')))));
+        const stripped = stripTokensFromBody(payload.toString('utf8'));
+        if (stripped === null) {
+          return reply
+            .code(502)
+            .send(apiError('internal', 'Authentication service returned an invalid response.'));
+        }
+        return reply.send(stripped);
       },
     });
   });
