@@ -205,6 +205,7 @@ export class FishSystem {
   private simReady = false;
   private dirty = false;
   private syncing = false;
+  private readonly syncWaiters: (() => void)[] = [];
   private clockS = 0;
   private thresholds: LodThresholds = { midDistance: 1, impostorDistance: 3 };
   private shadows: Readonly<TierSettings> | null = null;
@@ -435,6 +436,7 @@ export class FishSystem {
     this.disposed = true;
     this.lifetime.abort(new Error('fish system disposed'));
     this.ateListeners.clear();
+    for (const resolve of this.syncWaiters.splice(0)) resolve();
     for (const cleanup of this.cleanups.splice(0).reverse()) cleanup();
   }
 
@@ -450,7 +452,14 @@ export class FishSystem {
     this.syncing = true;
     void this.runSync().finally(() => {
       this.syncing = false;
+      for (const resolve of this.syncWaiters.splice(0)) resolve();
     });
+  }
+
+  /** Resolves once the stock handed in so far has loaded and joined the sim, or failed to. */
+  synced(): Promise<void> {
+    if (!this.syncing || this.disposed) return Promise.resolve();
+    return new Promise((resolve) => this.syncWaiters.push(resolve));
   }
 
   /** One pass at a time, so sim inits never overlap; changes made meanwhile run another pass. */
