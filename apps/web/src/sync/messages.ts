@@ -11,6 +11,8 @@ export function describeSyncError(error: unknown): string {
   switch (error.code) {
     case 'network':
       return 'Could not reach the server. Your tank is safe; check your connection and try again.';
+    case 'timeout':
+      return 'The server did not answer in time. Your tank is safe; try again in a moment.';
     case 'unauthenticated':
       return 'You have been signed out. Sign in again to keep caring for your tank.';
     case 'email_not_verified':

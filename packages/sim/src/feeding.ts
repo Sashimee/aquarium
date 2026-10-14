@@ -1,4 +1,5 @@
 import type { BehaviourHost } from './behaviour.ts';
+import type { FishResize } from './fishArrays.ts';
 import { MAX_FEEDERS, MAX_FOOD_PARTICLES, type AteEvent } from './food.ts';
 import { clamp } from './math.ts';
 import { selectNearest } from './neighbours.ts';
@@ -61,30 +62,24 @@ function at(a: ArrayLike<number>, i: number): number {
  * before every `update` and turns the targets into plans afterwards.
  */
 export class Feeding {
-  /** Feed portions in the stomach; empties exponentially (gastric evacuation). */
-  readonly gut: Float64Array;
-  /** Index into the food store of the particle being pursued, or -1. */
-  readonly target: Int32Array;
-  /** Fish index of a feeding neighbour this fish is swimming towards, or -1. */
-  readonly follow: Int32Array;
-  /** Time left handling the last item swallowed, or until the next rasp of a grazed item. */
-  readonly handling: Float64Array;
-  /** 1 when the fish may feed this step. */
-  readonly eligible: Uint8Array;
-  /** Per fish x, y, z, radius of the area it will leave home for; radius Infinity for none. */
-  readonly leash: Float64Array;
+  private _gut: Float64Array;
+  private _target: Int32Array;
+  private _follow: Int32Array;
+  private _handling: Float64Array;
+  private _eligible: Uint8Array;
+  private _leash: Float64Array;
   readonly events: AteEvent[] = [];
 
   private readonly host: BehaviourHost;
-  private readonly targetId: Int32Array;
-  private readonly targetScore: Float64Array;
-  private readonly pursuit: Float64Array;
-  private readonly ignoreId: Int32Array;
-  private readonly ignoreTimer: Float64Array;
-  private readonly retarget: Float64Array;
-  private readonly looked: Uint8Array;
-  private readonly lost: Int32Array;
-  private readonly lostNext: Int32Array;
+  private targetId: Int32Array;
+  private targetScore: Float64Array;
+  private pursuit: Float64Array;
+  private ignoreId: Int32Array;
+  private ignoreTimer: Float64Array;
+  private retarget: Float64Array;
+  private looked: Uint8Array;
+  private lost: Int32Array;
+  private lostNext: Int32Array;
   private readonly claimFish = new Int32Array(MAX_FOOD_PARTICLES * MAX_FEEDERS);
   private readonly claimDist = new Float64Array(MAX_FOOD_PARTICLES * MAX_FEEDERS);
   private readonly claimCount = new Uint8Array(MAX_FOOD_PARTICLES);
@@ -98,15 +93,45 @@ export class Feeding {
   private readonly nbr = new Int32Array(FEEDING.followNeighbours);
   private readonly nbrDist = new Float64Array(FEEDING.followNeighbours);
 
+  /** Feed portions in the stomach; empties exponentially (gastric evacuation). */
+  get gut(): Float64Array {
+    return this._gut;
+  }
+
+  /** Index into the food store of the particle being pursued, or -1. */
+  get target(): Int32Array {
+    return this._target;
+  }
+
+  /** Fish index of a feeding neighbour this fish is swimming towards, or -1. */
+  get follow(): Int32Array {
+    return this._follow;
+  }
+
+  /** Time left handling the last item swallowed, or until the next rasp of a grazed item. */
+  get handling(): Float64Array {
+    return this._handling;
+  }
+
+  /** 1 when the fish may feed this step. */
+  get eligible(): Uint8Array {
+    return this._eligible;
+  }
+
+  /** Per fish x, y, z, radius of the area it will leave home for; radius Infinity for none. */
+  get leash(): Float64Array {
+    return this._leash;
+  }
+
   constructor(host: BehaviourHost) {
     this.host = host;
     const n = host.count;
-    this.gut = new Float64Array(n);
-    this.target = new Int32Array(n).fill(-1);
-    this.follow = new Int32Array(n).fill(-1);
-    this.handling = new Float64Array(n);
-    this.eligible = new Uint8Array(n);
-    this.leash = new Float64Array(n * 4);
+    this._gut = new Float64Array(n);
+    this._target = new Int32Array(n).fill(-1);
+    this._follow = new Int32Array(n).fill(-1);
+    this._handling = new Float64Array(n);
+    this._eligible = new Uint8Array(n);
+    this._leash = new Float64Array(n * 4);
     this.targetId = new Int32Array(n).fill(-1);
     this.targetScore = new Float64Array(n);
     this.pursuit = new Float64Array(n);
@@ -123,6 +148,51 @@ export class Feeding {
   /** 1 for an empty stomach, 0 for a full one. */
   motivation(i: number): number {
     return clamp(1 - at(this.gut, i) / FEEDING.satiationPortions, 0, 1);
+  }
+
+  /**
+   * Follows a fish joining or leaving. A fish following the one that left, or holding a claim
+   * beside it, forgets it; bites it already took stay in `events`.
+   */
+  resize(edit: FishResize): void {
+    this._gut = edit.array(this.gut);
+    this._target = edit.array(this.target, 1, -1);
+    this._follow = edit.array(this.follow, 1, -1);
+    this._handling = edit.array(this.handling);
+    this._eligible = edit.array(this.eligible);
+    this._leash = edit.array(this.leash, 4);
+    this.targetId = edit.array(this.targetId, 1, -1);
+    this.targetScore = edit.array(this.targetScore);
+    this.pursuit = edit.array(this.pursuit);
+    this.ignoreId = edit.array(this.ignoreId, 1, -1);
+    this.ignoreTimer = edit.array(this.ignoreTimer);
+    this.retarget = edit.array(this.retarget, 1, (edit.count % 8) * DT);
+    this.looked = edit.array(this.looked);
+    this.lost = edit.array(this.lost);
+    this.lostNext = edit.array(this.lostNext);
+    edit.remap(this.follow);
+    edit.remap(this.lost);
+    edit.remap(this.lostNext);
+    if (edit.removed < 0) return;
+    for (let k = 0; k < MAX_FOOD_PARTICLES; k++) {
+      const o = k * MAX_FEEDERS;
+      const count = at(this.claimCount, k);
+      let kept = 0;
+      for (let m = 0; m < count; m++) {
+        const j = edit.index(at(this.claimFish, o + m));
+        if (j < 0) continue;
+        this.claimFish[o + kept] = j;
+        this.claimDist[o + kept] = at(this.claimDist, o + m);
+        kept++;
+      }
+      this.claimCount[k] = kept;
+    }
+  }
+
+  /** Fish holding a claim on particle `k`, nearest first, as of the last update. */
+  claimants(k: number): number[] {
+    const o = k * MAX_FEEDERS;
+    return Array.from(this.claimFish.subarray(o, o + at(this.claimCount, k)));
   }
 
   update(): void {

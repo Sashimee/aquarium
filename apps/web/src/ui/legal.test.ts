@@ -74,7 +74,7 @@ describe('legal api', () => {
   });
 
   it('posts the password for deletion, and an empty body for passkey accounts', async () => {
-    const fetcher = vi.fn().mockResolvedValue(json({}));
+    const fetcher = vi.fn().mockImplementation(async () => json({}));
     const api = createApiClient(fetcher);
     await api.deleteAccount('hunter2hunter2');
     await api.deleteAccount('');

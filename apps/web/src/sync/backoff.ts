@@ -19,10 +19,15 @@ export function backoffDelay(attempt: number, options: BackoffOptions = {}): num
   return Math.min(max, Math.max(0, Math.round(raw + spread)));
 }
 
-/** Network failures, server errors and rate limits can succeed later; rejections cannot. */
+/** Network failures, timeouts, server errors and rate limits can succeed later; rejections cannot. */
 export function isTransient(error: unknown): boolean {
   if (!(error instanceof ApiRequestError)) return false;
-  return error.code === 'network' || error.status === 429 || error.status >= 500;
+  return (
+    error.code === 'network' ||
+    error.code === 'timeout' ||
+    error.status === 429 ||
+    error.status >= 500
+  );
 }
 
 /** Milliseconds to wait before retrying `error`, or null when retrying is pointless. */

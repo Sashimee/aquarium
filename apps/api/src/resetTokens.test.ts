@@ -120,7 +120,9 @@ describe('reset and verification token hygiene (#132)', () => {
   });
 
   it('writes bare-user-id verification rows only for password resets', async () => {
-    const { email } = await verifiedUser();
+    const { email, verifyPath } = await signedUp();
+    const verified = await h.app.inject({ method: 'GET', url: verifyPath });
+    const cookie = verified.cookies.map((c) => `${c.name}=${c.value}`).join('; ');
     const { rows: users } = await h.database.pool.query<{ id: string }>(
       'select id from "user" where email = $1',
       [email],
@@ -140,9 +142,16 @@ describe('reset and verification token hygiene (#132)', () => {
     await requestReset(email);
     expect(await bareIdRows()).toBe(2);
 
+    const options = await h.app.inject({
+      url: '/api/auth/passkey/generate-register-options',
+      headers: { cookie },
+    });
+    expect(options.statusCode).toBe(200);
+
     const { rows } = await h.database.pool.query<{ value: string }>(
       'select value from verification where value not in (select id from "user")',
     );
+    expect(rows.length).toBeGreaterThan(0);
     for (const row of rows) expect(row.value).toMatch(/^\{/);
   });
 

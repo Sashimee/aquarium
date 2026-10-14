@@ -193,8 +193,10 @@ describe('Better Auth body validation (#118)', () => {
 
     it.each(cases)('rejects bad %s bodies before Better Auth runs', async (path, field) => {
       const before = h.outbox.length;
+      const otherField = field === 'redirectTo' ? 'callbackURL' : 'redirectTo';
       for (const body of [
         {},
+        { email: nextEmail(), [otherField]: '/' },
         { email: 'nope' },
         { email: `${'x'.repeat(250)}@bas.lu` },
         { email: nextEmail(), [field]: 'x'.repeat(3000) },
@@ -225,13 +227,37 @@ describe('Better Auth body validation (#118)', () => {
         for (let i = 0; i < 4; i++) {
           statuses.push((await post(limited.app, `/api/auth/${path}`, body)).statusCode);
         }
-        expect(statuses[0]).toBe(200);
-        expect(statuses).toContain(429);
+        expect(statuses).toEqual([200, 200, 429, 429]);
       } finally {
         await limited.close();
         await limited.dropDatabase();
       }
     });
+  });
+
+  it('does not charge the per-IP budget for rejected bodies', async () => {
+    const limited = await createHarness({
+      mailLimits: { ...DEFAULT_MAIL_LIMITS, perIpSignup: { max: 2, windowMs: 60_000 } },
+    });
+    try {
+      for (let i = 0; i < 5; i++) {
+        const bad = await post(limited.app, '/api/auth/request-password-reset', {
+          email: 'nope',
+        });
+        expect(bad.statusCode).toBe(400);
+      }
+      const good = { email: nextEmail(), redirectTo: '/' };
+      const statuses: number[] = [];
+      for (let i = 0; i < 3; i++) {
+        statuses.push(
+          (await post(limited.app, '/api/auth/request-password-reset', good)).statusCode,
+        );
+      }
+      expect(statuses).toEqual([200, 200, 429]);
+    } finally {
+      await limited.close();
+      await limited.dropDatabase();
+    }
   });
 
   describe('fragment in the request path', () => {
