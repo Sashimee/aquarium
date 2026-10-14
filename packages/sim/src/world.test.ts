@@ -357,8 +357,8 @@ describe('World containment', { timeout: LONG }, () => {
           }
           if (!targeted) {
             // Nori at the edge of sight scores below the floor and is never chosen: that is
-            // perception, not steering.
-            expect(away, label).toBeGreaterThan(0.9 * range);
+            // perception, not steering. Salience falls linearly to zero at the range.
+            expect(away, label).toBeGreaterThan((1 - FEEDING.minScore) * range);
             continue;
           }
           expect(bite, label).toBeGreaterThan(0);
@@ -367,7 +367,7 @@ describe('World containment', { timeout: LONG }, () => {
         }
       }
     }
-    expect(bitten).toBeGreaterThanOrEqual(2 * spots.length * 12 - 4);
+    expect(bitten).toBeGreaterThanOrEqual(2 * spots.length * 12 - 2);
   });
 
   it('brings a tang round to face nori in the wedge tip and bite instead of parking', () => {
@@ -507,6 +507,62 @@ describe('stand-off station search', { timeout: LONG }, () => {
     const left = onRingStation(true);
     left.removeFish('neon');
     expect(stepCounting(left)).toBeGreaterThan(SHARES);
+  });
+});
+
+describe('rising before crossing to a station over a rock', { timeout: LONG }, () => {
+  const back = -REEF_TANK.depth / 2;
+  type Vec3 = [number, number, number];
+
+  function block(id: string, center: Vec3, halfExtents: Vec3): Collider {
+    return { id, hard: true, kind: 'box', center, halfExtents, rotationY: 0, rounding: 0 };
+  }
+
+  /** A tang placed at `spot` facing along the glass, a third of a second after nori goes up at `noriY`. */
+  function goingForNori(decor: Collider[], spot: Vec3, noriY: number): World {
+    const w = new World({
+      seed: 1,
+      tank: REEF_TANK,
+      species: ARCHETYPES,
+      decor,
+      fish: spawnMany(yellowTang.id, 1),
+    });
+    w.position.set(spot, 0);
+    w.yaw[0] = Math.PI / 2;
+    w.pitch[0] = 0;
+    if (!(w.bodyClearance(0) > 0)) throw new Error('the tang does not fit where it is placed');
+    const rain = new FoodRain(REEF_TANK);
+    rain.place('nori', 0, noriY, back + 0.012);
+    let targeted = false;
+    for (let t = 0; t < 10; t++) {
+      rain.feed(w);
+      w.step();
+      rain.eat(w.takeAteEvents());
+      if (at(w.behaviour.feeding.target, 0) >= 0) targeted = true;
+    }
+    expect(targeted).toBe(true);
+    return w;
+  }
+
+  it('does not rise into a ledge overhead', () => {
+    // A lip juts 30 cm out from the top of a rock on the back glass. Under it, the way straight up
+    // ends against the lip, though the crossing at station height above the rock is clear.
+    const pillar = block('pillar', [0, 0.1, back + 0.06], [0.15, 0.1, 0.06]);
+    const lip = block('lip', [0, 0.21, back + 0.15], [0.15, 0.02, 0.15]);
+    for (const x of [-0.05, 0.05]) {
+      expect(goingForNori([pillar, lip], [x, 0.1, back + 0.22], 0.33).climbs, `x ${x}`).toBe(0);
+    }
+  });
+
+  it('rises off the sand to a station over the top of a rock', () => {
+    // #358: a fish grazing low is within a radius of the sand, which lies below the way up and so
+    // does not block the rise.
+    const rock = block('rock', [0, 0.1, back + 0.1], [0.15, 0.1, 0.1]);
+    for (const y of [0.03, 0.05, 0.07]) {
+      const w = goingForNori([rock], [0.05, y, back + 0.3], 0.3);
+      expect(y, 'placed within a radius of the sand').toBeLessThan(at(w.radius, 0));
+      expect(w.climbs, `y ${y}`).toBeGreaterThan(0);
+    }
   });
 });
 
