@@ -169,15 +169,13 @@ export class FoodField {
     const gain = profile.currentGain;
     const targetVy = floating ? 0 : -profile.sinkSpeed + (this.flow[1] ?? 0) * gain;
     const k = 1 - Math.exp(-dt / profile.responseS);
-    p.vx += ((this.flow[0] ?? 0) * gain - p.vx) * k;
+    const pushX = (this.flow[0] ?? 0) * gain;
+    const pushZ = (this.flow[2] ?? 0) * gain;
+    const push = Math.hypot(pushX, pushZ);
+    const soft = push > 0 ? (profile.maxDriftS * Math.tanh(push / profile.maxDriftS)) / push : 0;
+    p.vx += (pushX * soft - p.vx) * k;
     p.vy += (targetVy - p.vy) * k;
-    p.vz += ((this.flow[2] ?? 0) * gain - p.vz) * k;
-    const drift = Math.hypot(p.vx, p.vz);
-    if (drift > profile.maxDriftS) {
-      const scale = profile.maxDriftS / drift;
-      p.vx *= scale;
-      p.vz *= scale;
-    }
+    p.vz += (pushZ * soft - p.vz) * k;
 
     p.x += p.vx * dt;
     p.y += p.vy * dt;

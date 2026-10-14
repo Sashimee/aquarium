@@ -58,12 +58,12 @@ describe('FoodField sinking', () => {
     for (const food of ['pellets', 'algae-wafer', 'bloodworms', 'brine-shrimp'] as const) {
       const profile = FOOD_PROFILES[food];
       const fall = meanSinkSpeed(food);
-      expect(fall).toBeCloseTo(profile.sinkSpeed, 2);
+      expect(Math.abs(fall - profile.sinkSpeed)).toBeLessThan(0.05 * profile.sinkSpeed);
     }
   });
 
   it('sinks pellets and wafers faster than flakes and brine shrimp', () => {
-    expect(meanSinkSpeed('pellets')).toBeGreaterThan(meanSinkSpeed('brine-shrimp') * 1.5);
+    expect(meanSinkSpeed('pellets')).toBeGreaterThan(meanSinkSpeed('brine-shrimp') * 3);
     expect(meanSinkSpeed('algae-wafer')).toBeGreaterThan(meanSinkSpeed('pellets'));
   });
 
@@ -139,7 +139,7 @@ describe('FoodField settling and decay', () => {
 describe('FoodField current', () => {
   const east = env({
     current: (_x, _y, _z, out) => {
-      out[0] = 0.05;
+      out[0] = 0.12;
       out[1] = 0;
       out[2] = 0;
     },
@@ -150,11 +150,11 @@ describe('FoodField current', () => {
     const heavy = new FoodField(east, fixedRandom);
     light.drop('brine-shrimp', 0.1, -0.3, 0, 0);
     heavy.drop('algae-wafer', 1, -0.3, 0, 0);
-    runFor(light, 6);
-    runFor(heavy, 6);
+    runFor(light, 4);
+    runFor(heavy, 4);
     const dx = (f: FoodField) => (f.particles[0]?.x ?? 0) + 0.3;
-    expect(dx(light)).toBeGreaterThan(0.05);
-    expect(dx(heavy)).toBeLessThan(dx(light));
+    expect(dx(light)).toBeGreaterThan(0.03);
+    expect(dx(heavy)).toBeLessThan(dx(light) / 2);
   });
 
   it('stops against the end glass instead of leaving the tank', () => {
