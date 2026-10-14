@@ -1,4 +1,5 @@
 import type { PerspectiveCamera, Scene, WebGPURenderer } from 'three/webgpu';
+import { materialIdOf } from '../pipelineErrors';
 import type { QualityManager } from '../quality/QualityManager';
 import type { TierSettings } from '../quality/tiers';
 import type { Tank } from '../tank/Tank';
@@ -77,6 +78,10 @@ export class Effects {
   /** Whether the frames drawn now go through a temporal resolve (TRAA). */
   get temporal(): boolean {
     return this.failure === null && (this.post?.temporal ?? false);
+  }
+
+  ownsMaterial(id: number): boolean {
+    return [this.particulates, this.bubbles].some(({ material }) => materialIdOf(material) === id);
   }
 
   setFocusMode(on: boolean): void {

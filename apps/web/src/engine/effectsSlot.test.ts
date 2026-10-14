@@ -20,6 +20,10 @@ class FakeEffects implements FrameEffects {
     this.focus.push(on);
   }
 
+  ownsMaterial(id: number): boolean {
+    return id === 7;
+  }
+
   dispose(): void {
     this.disposed += 1;
     if (this.disposeError !== null) throw this.disposeError;
@@ -123,6 +127,34 @@ describe('EffectsSlot', () => {
     expect(reports.map((r) => r.cause)).toEqual([renderError, disposeError]);
     expect(slot.render()).toBe(false);
     expect(effects.renders).toBe(1);
+  });
+
+  it('asks the attached effects which materials they own', () => {
+    const { slot } = setup();
+    expect(slot.ownsMaterial(7)).toBe(false);
+    slot.attach(new FakeEffects());
+    expect(slot.ownsMaterial(7)).toBe(true);
+    expect(slot.ownsMaterial(8)).toBe(false);
+  });
+
+  it('drops the effects for a failure found outside their calls', () => {
+    const { slot, reports, temporal } = setup();
+    const effects = new FakeEffects();
+    effects.temporal = true;
+    slot.attach(effects);
+    const broken = new Error('pipeline creation failed');
+    slot.fail(broken);
+    expect(slot.active).toBe(false);
+    expect(effects.disposed).toBe(1);
+    expect(reports.map((r) => r.cause)).toEqual([broken]);
+    expect(temporal).toEqual([true, false]);
+    expect(slot.render()).toBe(false);
+  });
+
+  it('ignores a failure once nothing is attached', () => {
+    const { slot, reports } = setup();
+    slot.fail(new Error('late pipeline failure'));
+    expect(reports).toEqual([]);
   });
 
   it('disposes the attached effects once', () => {

@@ -5,6 +5,8 @@ export interface FrameEffects {
   /** Draws the whole frame, restoring the renderer state it changed even when it throws. */
   render(): void;
   setFocusMode(on: boolean): void;
+  /** Whether the effects draw with material `id` (three's runtime material id). */
+  ownsMaterial(id: number): boolean;
   dispose(): void;
 }
 
@@ -63,6 +65,15 @@ export class EffectsSlot {
     return drawn;
   }
 
+  ownsMaterial(id: number): boolean {
+    return this.effects?.ownsMaterial(id) ?? false;
+  }
+
+  /** Drops the effects for a failure found outside their calls: a pipeline that failed to build. */
+  fail(cause: unknown): void {
+    if (this.effects !== null) this.drop(cause);
+  }
+
   /** Rereads `temporal` from the effects, which change it on their own with the tier. */
   refresh(): void {
     const on = this.effects?.temporal ?? false;
@@ -85,13 +96,17 @@ export class EffectsSlot {
     try {
       return call();
     } catch (cause) {
-      this.report('Render effects failed; continuing without them', cause);
-      try {
-        this.dispose();
-      } catch (disposeCause) {
-        this.report('Disposing the failed render effects failed', disposeCause);
-      }
+      this.drop(cause);
       return null;
+    }
+  }
+
+  private drop(cause: unknown): void {
+    this.report('Render effects failed; continuing without them', cause);
+    try {
+      this.dispose();
+    } catch (disposeCause) {
+      this.report('Disposing the failed render effects failed', disposeCause);
     }
   }
 }

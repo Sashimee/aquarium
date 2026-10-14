@@ -6,11 +6,13 @@ import {
   type ContextNode,
   LinearSRGBColorSpace,
   Lighting,
+  MeshBasicNodeMaterial,
   type MRTNode,
   NoToneMapping,
   PerspectiveCamera,
   RenderTarget,
   Scene,
+  Sprite,
   SRGBColorSpace,
   type ToneMapping,
   Vector3,
@@ -18,6 +20,7 @@ import {
 import { context, mrt, output } from 'three/tsl';
 import { EffectsSlot } from '../effectsSlot';
 import { EventBus, type EngineEvents } from '../events';
+import { materialIdOf } from '../pipelineErrors';
 import { QualityManager } from '../quality/QualityManager';
 import type { Tier } from '../quality/tiers';
 import { Caustics } from '../water/caustics';
@@ -192,6 +195,20 @@ describe('Effects', () => {
     expect(built).toHaveLength(1);
     effects.render();
     expect(built[0]?.renders).toBe(1);
+  });
+
+  it('owns the materials of its sprites and nothing else in the scene', () => {
+    const { host, createPost, scene } = setup('high');
+    const effects = new Effects(host, createPost);
+    const ids = scene.children.map((child) =>
+      child instanceof Sprite ? materialIdOf(child.material) : null,
+    );
+    expect(ids).toHaveLength(2);
+    for (const id of ids) {
+      expect(id).not.toBeNull();
+      expect(effects.ownsMaterial(id ?? -1)).toBe(true);
+    }
+    expect(effects.ownsMaterial(materialIdOf(new MeshBasicNodeMaterial()) ?? -1)).toBe(false);
   });
 
   it('draws the scene itself on the low tier, which has no post pipeline', () => {
