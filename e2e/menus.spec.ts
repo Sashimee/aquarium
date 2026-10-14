@@ -172,28 +172,47 @@ function mouseDrag(page: Page, cdp: CDPSession, from: [number, number], to: [num
   ]);
 }
 
-async function expectOrbits(page: Page, drag: Drag, context: string) {
+// The canvas sits under the overlay controls. A drag that ends on one of them is not routed to
+// the canvas (the synthetic mouse gets no pointer capture), so the drag runs along the first row
+// where its start, middle and end are all bare canvas. No such row means the canvas has no room
+// left to drag on, which is a layout bug worth failing for.
+async function dragPath(page: Page): Promise<[[number, number], [number, number]]> {
   const viewport = page.viewportSize();
   if (!viewport) throw new Error('viewport is not set');
-  const y = Math.round(viewport.height * 0.6);
-  const canvas = page.locator('canvas#tank');
-  const before = await canvas.getAttribute('data-camera');
-  const from: [number, number] = [viewport.width * 0.8, y];
-  const to: [number, number] = [viewport.width * 0.2, y];
-  const orbited = () =>
-    expect(canvas, `the camera did not orbit ${context}`).not.toHaveAttribute(
-      'data-camera',
-      before ?? '',
-    );
-  await drag(from, to);
-  // A frame longer than the long-press delay between press and move turns the drag into a
-  // long-press, so a camera that has not moved after a generous wait gets one more drag.
-  try {
-    await expect(async () => orbited()).toPass({ timeout: 12_000 });
-  } catch {
-    await drag(from, to);
-    await orbited();
+  const xs = [0.8, 0.5, 0.2].map((fraction) => Math.round(viewport.width * fraction));
+  const rows = [0.6, 0.5, 0.7, 0.4, 0.8, 0.3].map((fraction) =>
+    Math.round(viewport.height * fraction),
+  );
+  const clear = await page.evaluate(
+    ([columns, candidates]) =>
+      candidates.find((y) =>
+        columns.every((x) => document.elementFromPoint(x, y)?.id === 'tank'),
+      ) ?? null,
+    [xs, rows] as const,
+  );
+  if (clear === null) {
+    throw new Error(`no row of the canvas is free of overlays at x=${xs.join(',')}`);
   }
+  const [start, , end] = xs;
+  if (start === undefined || end === undefined) throw new Error('drag columns are missing');
+  return [
+    [start, clear],
+    [end, clear],
+  ];
+}
+
+async function expectOrbits(page: Page, drag: Drag, context: string) {
+  const canvas = page.locator('canvas#tank');
+  // A tank switch compiles shaders on the main thread for many seconds; a drag that lands before
+  // the frame loop is running again is applied too late for the wait below.
+  await frames(page, 2);
+  const before = await canvas.getAttribute('data-camera');
+  const [from, to] = await dragPath(page);
+  await drag(from, to);
+  await expect(canvas, `the camera did not orbit ${context}`).not.toHaveAttribute(
+    'data-camera',
+    before ?? '',
+  );
 }
 
 async function frames(page: Page, count: number) {
@@ -227,18 +246,18 @@ async function settledPose(page: Page): Promise<string> {
 function poseDistance(a: string, b: string): number {
   const left = a.split(' ').map(Number);
   const right = b.split(' ').map(Number);
+  if (left.length !== 6 || right.length !== 6 || [...left, ...right].some(Number.isNaN)) {
+    throw new Error(`data-camera is not a pose: "${a}" and "${b}"`);
+  }
   return Math.max(...left.map((value, i) => Math.abs(value - (right[i] ?? Number.NaN))));
 }
 
 async function expectToolClaimsDrag(page: Page, drag: Drag) {
-  const viewport = page.viewportSize();
-  if (!viewport) throw new Error('viewport is not set');
-  const y = Math.round(viewport.height * 0.6);
   const laser = playGroup(page).getByRole('button', { name: 'Laser', exact: true });
   await press(laser);
   await expect(laser).toHaveAttribute('aria-pressed', 'true');
   const before = await settledPose(page);
-  await drag([viewport.width * 0.8, y], [viewport.width * 0.2, y]);
+  await drag(...(await dragPath(page)));
   await frames(page, 3);
   const after = (await page.locator('canvas#tank').getAttribute('data-camera')) ?? '';
   expect(poseDistance(after, before), 'a Laser drag orbited the camera').toBeLessThan(0.1);
@@ -256,6 +275,7 @@ async function closeAllPanels(page: Page) {
   const tapGlass = playGroup(page).getByRole('button', { name: 'Tap glass', exact: true });
   if ((await tapGlass.count()) > 0 && (await tapGlass.getAttribute('aria-pressed')) !== 'true') {
     await press(tapGlass);
+    await expect(tapGlass).toHaveAttribute('aria-pressed', 'true');
   }
   const tank = bar(page).getByRole('button', { name: 'My tank' });
   if ((await tank.getAttribute('aria-expanded')) === 'true') await press(tank);
@@ -274,17 +294,9 @@ async function expectOnePanel(page: Page, context: string) {
   expect(open, `two panels were open ${context}`).toBeLessThanOrEqual(1);
 }
 
-// Under load a tap right after a camera drag can be swallowed; a menu that has not opened after a
-// generous wait most likely never received the tap. A late first tap would make the second one
-// close the menu again, so the retry is only worth it after the wait is clearly over.
 async function openMenu(page: Page, menu: Menu) {
   await menu.open(page);
-  try {
-    await expect(async () => menu.isOpen(page)).toPass({ timeout: 15_000 });
-  } catch {
-    await menu.open(page);
-    await menu.isOpen(page);
-  }
+  await menu.isOpen(page);
 }
 
 async function exercise(page: Page, drag: Drag, first: Menu, second: Menu) {
@@ -364,6 +376,7 @@ test.describe('menus with a mouse', () => {
     (page, cdp) => (from, to) => mouseDrag(page, cdp, from, to),
   );
 
+  // Tests run in order on one page, so Dive and Reef stay on for the pairs after theirs.
   test('a Laser drag does not move the camera, and Tap glass gives the orbit back', async () => {
     const { page, drag } = app();
     await expectToolClaimsDrag(page, drag);
