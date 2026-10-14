@@ -77,6 +77,11 @@ const GLASS_F0 = 0.04;
 /** Ripples spread the room seen through Snell's window a little. */
 const SURFACE_ROUGHNESS = 0.08;
 const WATER_F0 = 0.02;
+/**
+ * Screen-UV shift of the mirror per unit of ripple slope: a slope tilts the reflected ray by twice
+ * its angle, and the 40° camera spans about 0.73 in tan across the screen.
+ */
+const RIPPLE_MIRROR_SHIFT = 2 / 0.73;
 
 /** Schlick Fresnel against the shading normal. */
 function schlick(f0: number): Node<'float'> {
@@ -308,6 +313,8 @@ function rippleNormalWorld(amplitude: Node<'float'>): Node<'vec3'> {
 
 interface SurfaceUnderside {
   material: MeshBasicNodeMaterial;
+  /** The rippled surface normal, in world space. */
+  normal: Node<'vec3'>;
   skyNodes: PMREMNode[];
   /** The output with `mirror` as what total internal reflection shows, else the traced walls. */
   output(mirror?: Node<'vec3'>): Node<'vec4'>;
@@ -343,7 +350,7 @@ function createSurfaceUnderside(
   const output = (mirror: Node<'vec3'> = traced): Node<'vec4'> =>
     medium.applyPremultiplied(vec4(mix(room, mirror, reflectance), 1));
   material.outputNode = output();
-  return { material, skyNodes: [skyNode, mirroredSky], output };
+  return { material, normal, skyNodes: [skyNode, mirroredSky], output };
 }
 
 export class Tank {
@@ -359,6 +366,7 @@ export class Tank {
   private readonly blended: [NodeMaterial, Node<'vec4'>][] = [];
   private readonly reflection: SurfaceReflection;
   private readonly underside: SurfaceUnderside;
+  private readonly undersideMesh: Mesh;
 
   /** `sky` is the room environment, seen from below through Snell's window. */
   constructor(
@@ -382,7 +390,7 @@ export class Tank {
     this.addGlass(medium, sky, interior);
     this.addBackdrop(medium, interior);
     this.addWaterVolume(medium);
-    this.underside = this.addWaterSurface(medium, sky, interior);
+    [this.underside, this.undersideMesh] = this.addWaterSurface(medium, sky, interior);
     this.addStand();
 
     const top = this.waterBounds.max.y;
@@ -407,9 +415,29 @@ export class Tank {
     const wasEnabled = this.reflection.enabled;
     this.reflection.setResolutionScale(resolutionScale);
     if (this.reflection.enabled === wasEnabled) return;
-    const { material, output } = this.underside;
-    material.outputNode = this.reflection.enabled ? output(this.reflection.node.rgb) : output();
+    const { material, output, normal } = this.underside;
+    material.outputNode = this.reflection.enabled
+      ? output(this.reflection.sample(normal.xz.mul(RIPPLE_MIRROR_SHIFT)).rgb)
+      : output();
     material.needsUpdate = true;
+  }
+
+  get surfaceReflection(): boolean {
+    return this.reflection.enabled;
+  }
+
+  /**
+   * Builds the pipelines the surface reflection adds: its own pass, and the underside drawn from
+   * `camera` with the reflection in it.
+   */
+  async compileSurfaceReflection(
+    renderer: WebGPURenderer,
+    scene: Scene,
+    camera: PerspectiveCamera,
+  ): Promise<void> {
+    if (!this.reflection.enabled) return;
+    await this.reflection.compile(renderer, scene, camera);
+    await renderer.compileAsync(this.undersideMesh, camera, scene);
   }
 
   /** Draws the surface reflection for this frame's camera; call it before the scene is drawn. */
@@ -577,7 +605,7 @@ export class Tank {
     medium: WaterMedium,
     sky: Texture,
     interior: InteriorLight,
-  ): SurfaceUnderside {
+  ): [SurfaceUnderside, Mesh] {
     const size = this.waterBounds.getSize(this.waterBounds.max.clone());
     const material = new MeshPhysicalNodeMaterial({ roughness: 0.02, metalness: 0, ior: 1.333 });
     material.name = 'water-surface';
@@ -607,7 +635,7 @@ export class Tank {
     underside.layers.set(UNREFLECTED_LAYER);
     this.group.add(underside);
     this.skyNodes.push(...below.skyNodes);
-    return below;
+    return [below, underside];
   }
 
   private addStand(): void {

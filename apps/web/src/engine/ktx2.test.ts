@@ -237,6 +237,34 @@ describe('the shared loader after dispose', () => {
     expect(seen.workers).toBe(0);
   });
 
+  it('rejects every pending transcode even when one error callback throws', async () => {
+    stubDownloads();
+    const shared = createSharedKtx2(renderer);
+    await shared.loader.init();
+    const boom = new Error('caller bug');
+    const buffer = (): ArrayBuffer => new Uint8Array(texture).buffer;
+
+    shared.loader.parse(
+      buffer(),
+      () => undefined,
+      () => {
+        throw boom;
+      },
+    );
+    const second = texturePromise((...args) => shared.loader.parse(...args));
+
+    let thrown: unknown;
+    try {
+      shared.dispose();
+    } catch (error) {
+      thrown = error;
+    }
+
+    await expect(second).rejects.toThrow(/disposed/);
+    expect(thrown).toBeInstanceOf(AggregateError);
+    expect((thrown as AggregateError).errors).toEqual([boom]);
+  });
+
   it('rejects a transcode whose transcoder arrives after dispose without starting a worker', async () => {
     let arrive = (): void => {};
     const seen = stubDownloads({

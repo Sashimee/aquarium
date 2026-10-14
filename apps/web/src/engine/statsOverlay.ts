@@ -6,6 +6,11 @@ const EDGE = 'max(0.75rem, env(safe-area-inset-bottom))';
 const STACK_ABOVE = '#ui .report';
 const GAP_PX = 8;
 
+/** The CSS `bottom` that keeps the readout `GAP_PX` above the report, or at the edge without it. */
+export function stackedBottom(viewportHeight: number, reportTop: number | null): string {
+  return reportTop === null ? EDGE : `${viewportHeight - reportTop + GAP_PX}px`;
+}
+
 /** On-device performance readout for `?stats=1`, loaded only when asked for. */
 export function createStatsOverlay(engine: Engine, parent: HTMLElement): () => void {
   const box = document.createElement('pre');
@@ -26,12 +31,20 @@ export function createStatsOverlay(engine: Engine, parent: HTMLElement): () => v
     pointerEvents: 'none',
     userSelect: 'none',
   } satisfies Partial<CSSStyleDeclaration>);
+  // Opening or closing the report resizes it between stats ticks.
+  const resized = new ResizeObserver(() => place());
+  let observed: Element | null = null;
   const place = () => {
     const below = document.querySelector(STACK_ABOVE);
-    box.style.bottom =
-      below === null
-        ? EDGE
-        : `${window.innerHeight - below.getBoundingClientRect().top + GAP_PX}px`;
+    if (below !== observed) {
+      if (observed !== null) resized.unobserve(observed);
+      if (below !== null) resized.observe(below);
+      observed = below;
+    }
+    box.style.bottom = stackedBottom(
+      window.innerHeight,
+      below === null ? null : below.getBoundingClientRect().top,
+    );
   };
   box.textContent = formatPending({
     backend: engine.backend,
@@ -48,6 +61,7 @@ export function createStatsOverlay(engine: Engine, parent: HTMLElement): () => v
 
   return () => {
     off();
+    resized.disconnect();
     box.remove();
   };
 }
