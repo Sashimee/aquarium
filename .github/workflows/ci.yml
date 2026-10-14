@@ -155,7 +155,7 @@ jobs:
       - name: Every spec file is named in a shard's args
         run: |
           for f in e2e/*.spec.ts e2e/tests/*.spec.ts; do
-            grep -Eq "^\s+args: .*(^|[ /])$(basename "$f" .ts)( |$)" .github/workflows/ci.yml || { echo "::error::$f is in no e2e shard; add it to the matrix in ci.yml"; exit 1; }
+            grep -Eq "^\s+args: (.* )?$(basename "$f" .ts)( |$)" .github/workflows/ci.yml || { echo "::error::$f is in no e2e shard; add it to the matrix in ci.yml"; exit 1; }
           done
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
