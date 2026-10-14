@@ -23,6 +23,7 @@ export {
   type AteEvent,
 } from './food.ts';
 export { FEEDING } from './feeding.ts';
+export { CURIOSITY } from './curiosity.ts';
 export {
   compileCollider,
   DecorField,

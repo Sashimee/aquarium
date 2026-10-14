@@ -498,6 +498,14 @@ export class World {
   }
 
   /**
+   * Shows a lure (a laser dot or fingertip on the glass) at `position`, or removes it with null.
+   * Curious fish that see it close on it and track it until they lose interest.
+   */
+  setLure(position: Point3 | null): void {
+    this.behaviour.setLure(position);
+  }
+
+  /**
    * Replaces the decor colliders. Only colliders whose id is new, gone or changed rebin their grid
    * cells; returns how many cells were rebuilt. A fish left inside moved decor is pushed out by
    * the body constraint on the next step.

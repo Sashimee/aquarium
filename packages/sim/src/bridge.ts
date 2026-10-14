@@ -1,5 +1,6 @@
 import type { Collider } from '@aquarium/shared';
 import type { Anchor, Stimulus } from './behaviour.ts';
+import type { Point3 } from './decor.ts';
 import { FOOD_STRIDE, type AteEvent } from './food.ts';
 import { SNAPSHOT_STRIDE, type Snapshot } from './snapshot.ts';
 import {
@@ -28,6 +29,8 @@ export type SimCommand =
   | { readonly type: 'recycle'; readonly buffer: ArrayBuffer }
   | { readonly type: 'startle'; readonly stimulus: Stimulus }
   | { readonly type: 'light'; readonly level: number }
+  /** A laser dot or fingertip on the glass, or null once it is gone; see `World.setLure`. */
+  | { readonly type: 'lure'; readonly position: Point3 | null }
   /** The full collider set in the shared format; hard ones block fish, soft ones (plants) push them aside. */
   | { readonly type: 'decor'; readonly colliders: readonly Collider[] }
   | { readonly type: 'anchors'; readonly anchors: readonly Anchor[] }
@@ -107,6 +110,7 @@ const COMMAND_TYPES = new Set([
   'recycle',
   'startle',
   'light',
+  'lure',
   'decor',
   'anchors',
   'food',
@@ -268,6 +272,9 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
       case 'light':
         requireWorld(command.type).setLight(command.level);
         return;
+      case 'lure':
+        requireWorld(command.type).setLure(command.position);
+        return;
       case 'decor':
         requireWorld(command.type).setDecor(command.colliders);
         return;
@@ -395,6 +402,11 @@ export class SimClient {
   /** 0 = lights off (night rest), 1 = full day. */
   setLight(level: number): void {
     this.send({ type: 'light', level });
+  }
+
+  /** Where the lure is (world frame), or null when it is switched off or lifted from the glass. */
+  setLure(position: Point3 | null): void {
+    this.send({ type: 'lure', position });
   }
 
   /** Replaces the decor colliders; only moved, added or removed ones are rebuilt in the field. */
