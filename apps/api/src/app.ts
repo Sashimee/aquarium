@@ -322,7 +322,11 @@ export function buildApp(opts: AppOptions): FastifyInstance {
 
   app.addHook('onSend', async (req, reply) => {
     applySecurityHeaders(reply);
-    if (normalizedPathname(req.url) === KTX2_WORKER_PATH) {
+    if (
+      reply.statusCode === 200 &&
+      (req.method === 'GET' || req.method === 'HEAD') &&
+      normalizedPathname(req.url) === KTX2_WORKER_PATH
+    ) {
       reply.header('content-security-policy', KTX2_WORKER_CSP);
     }
     if (carriesUrlToken(req.url)) reply.header('referrer-policy', 'no-referrer');

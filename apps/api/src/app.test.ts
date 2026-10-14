@@ -90,6 +90,20 @@ describe('security headers', () => {
     expect(res.headers['x-content-type-options']).toBe('nosniff');
   });
 
+  it('serves the versioned KTX2 worker url with the eval policy', async () => {
+    const res = await withDist().inject('/ktx2-worker.js?v=r190');
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-security-policy']).toContain("'unsafe-eval'");
+  });
+
+  it('does not extend the eval policy to non-GET responses on the worker path', async () => {
+    const app = withDist();
+    const post = await app.inject({ method: 'POST', url: '/ktx2-worker.js' });
+    expect(post.headers['content-security-policy']).not.toMatch(/'unsafe-eval'/);
+    const options = await app.inject({ method: 'OPTIONS', url: '/ktx2-worker.js' });
+    expect(options.headers['content-security-policy']).not.toMatch(/'unsafe-eval'/);
+  });
+
   describe('on every kind of response', () => {
     const expectSecured = (headers: Record<string, unknown>): void => {
       expect(headers['content-security-policy']).toContain("default-src 'self'");

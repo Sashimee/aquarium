@@ -48,10 +48,10 @@ afterEach(() => {
 });
 
 describe('bundledTranscoderUrl', () => {
-  it('redirects the basis transcoder to the bundled copy', () => {
+  it('redirects the wasm to the bundled copy and skips the unused glue script', () => {
     const js = bundledTranscoderUrl('https://cdn/libs/basis/basis_transcoder.js');
     const wasm = bundledTranscoderUrl('https://cdn/libs/basis/basis_transcoder.wasm');
-    expect(js).not.toContain('cdn');
+    expect(js.startsWith('data:')).toBe(true);
     expect(wasm).not.toContain('cdn');
     expect(js).not.toBe(wasm);
   });
@@ -92,7 +92,7 @@ describe('rewritingKtx2Loader', () => {
 
     expect(second).toBe(first);
     expect(view.workerPool).toBe(shared.loader.workerPool);
-    expect(requested.filter((u) => u.includes('basis_transcoder')).length).toBe(2);
+    expect(requested.filter((u) => u.includes('basis_transcoder')).length).toBe(1);
     expect(warn).not.toHaveBeenCalled();
     shared.dispose();
   });
