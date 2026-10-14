@@ -47,7 +47,9 @@ async function press(target: Locator): Promise<void> {
             .some(
               (animation) =>
                 Number.isFinite(animation.effect?.getComputedTiming().endTime) &&
-                animation.playState === 'running',
+                animation.playState === 'running' &&
+                animation.effect instanceof KeyframeEffect &&
+                animation.effect.target?.contains(element),
             );
           const box = element.getBoundingClientRect();
           const px = box.x + box.width / 2;

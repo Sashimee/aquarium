@@ -352,7 +352,7 @@
   padding: 1rem;
   background: rgba(2, 8, 14, 0.6);
   pointer-events: auto;
-  z-index: 3;
+  z-index: 6;
 }
 
 .dialog.loss {
