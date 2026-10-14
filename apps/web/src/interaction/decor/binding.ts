@@ -40,8 +40,8 @@ export class SavedDecor {
         this.latest = { biome, layout: decorLayout };
         this.show();
       }),
-      interaction.on('tank:decor', ({ layout }) => {
-        if (this.editing || !this.latest) return;
+      interaction.on('tank:decor', ({ tankId, layout }) => {
+        if (this.editing || !this.latest || tankId !== this.loadedTankId) return;
         this.latest = { ...this.latest, layout };
         this.show();
       }),
@@ -80,7 +80,9 @@ export class SavedDecor {
   private show(): void {
     const world = this.world;
     if (!world) return;
-    const saved = this.latest && this.latest.biome === world.biome ? this.latest : null;
+    // Another biome's tank means this scene is about to be replaced; arranging it would only race its disposal.
+    if (this.latest && this.latest.biome !== world.biome) return;
+    const saved = this.latest;
     if (!saved && !this.customised) return;
     this.customised = saved !== null;
     const task = saved ? world.showSaved(saved.layout) : world.showPreset();

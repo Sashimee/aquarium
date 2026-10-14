@@ -128,3 +128,48 @@ export async function startWorld(
   hooks.begin(ready);
   sim.start();
 }
+
+/** A sim worker that never answered `init`; it is stuck and must be replaced. */
+export class SimInitTimeout extends Error {
+  constructor(readonly timeoutMs: number) {
+    super(`Fish sim did not answer init within ${timeoutMs / 1000} s`);
+    this.name = 'SimInitTimeout';
+  }
+}
+
+export interface SimInit {
+  readonly client: { init(config: TankSpaceWorldConfig): Promise<SimReady> };
+  readonly worker: Pick<Worker, 'addEventListener' | 'removeEventListener'>;
+  readonly config: TankSpaceWorldConfig;
+  readonly signal: AbortSignal;
+  readonly timeoutMs: number;
+}
+
+/**
+ * Asks the worker to build `config`. A worker whose script fails to load never answers `init`, so
+ * its error event settles it; one that hangs is settled by the timeout.
+ */
+export function initSim({ client, worker, config, signal, timeoutMs }: SimInit): Promise<SimReady> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    const settle = (finish: () => void): void => {
+      clearTimeout(timer);
+      worker.removeEventListener('error', onError);
+      signal.removeEventListener('abort', onAbort);
+      finish();
+    };
+    const onError = (event: ErrorEvent): void =>
+      settle(() => reject(new Error(`Fish sim worker failed to start: ${event.message}`)));
+    const onAbort = (): void => settle(() => reject(signal.reason));
+    const timer = setTimeout(() => settle(() => reject(new SimInitTimeout(timeoutMs))), timeoutMs);
+    worker.addEventListener('error', onError);
+    signal.addEventListener('abort', onAbort);
+    client.init(config).then(
+      (ready) => settle(() => resolve(ready)),
+      (cause: unknown) => settle(() => reject(cause)),
+    );
+  });
+}

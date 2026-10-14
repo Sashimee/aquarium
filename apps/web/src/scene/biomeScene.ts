@@ -82,8 +82,9 @@ export interface BiomeSceneOptions<S extends DisposableScene> {
 }
 
 /**
- * Keeps one scene built for the wanted biome. Requests made in the same tick coalesce, so a tank
- * switch (unload, then load) between two tanks of one biome never rebuilds. The old scene is
+ * Keeps one scene built for the wanted biome. Requests made in the same tick coalesce, but a tank
+ * switch between two tanks of one biome never rebuilds because `TankBiome` keeps the biome
+ * unchanged across it, not because of the coalescing. The old scene is
  * disposed before the new one is built, because a scene captures and restores engine state
  * (lighting, the substrate material) and two alive at once would restore each other's. A build
  * that is no longer wanted when it lands, or that outlives `timeoutMs`, is disposed unseen, and a

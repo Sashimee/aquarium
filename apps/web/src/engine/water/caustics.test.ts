@@ -10,7 +10,7 @@ import {
   type Node,
   type Texture,
 } from 'three/webgpu';
-import { float, uniform, vec2 } from 'three/tsl';
+import { float, time, uniform, vec2 } from 'three/tsl';
 import { Caustics, castingShare, causticContrast } from './caustics';
 import { daylightAt, parseClock } from '../daylight';
 import { BAKE } from './causticPattern';
@@ -167,6 +167,22 @@ describe('the baked caustics', () => {
     const taps = netTileTaps(caustics().bakedAt(uniform(vec2(0.2, 0.1)), 0.45));
     expect(taps).toContain('level 1');
     expect(taps).toContain(`level ${meanLevel}`);
+  });
+
+  // The shafts sample it 12 times per pixel; the drift depends on time alone.
+  it('takes a drift read once outside the loop instead of rebuilding it per sample', () => {
+    const c = caustics();
+    const reads = (n: Node): number => {
+      let count = 0;
+      n.traverse((child) => {
+        if (child === time) count++;
+      });
+      return count;
+    };
+    const p = uniform(vec2(0.2, 0.1));
+    expect(reads(c.bakedAt(p, 0.45))).toBeGreaterThan(0);
+    expect(reads(c.bakedAt(p, 0.45, c.bakedMean(), uniform(vec2(0.3, 0.6))))).toBe(0);
+    expect(reads(c.bakedDrift())).toBeGreaterThan(0);
   });
 
   it('has a 1x1 mip to read the mean from', () => {

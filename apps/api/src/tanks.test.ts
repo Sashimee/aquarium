@@ -747,6 +747,10 @@ describe('PATCH decor layout validation', () => {
     const coral = { assetId: 'brain-coral', rotationY: 0.4, scale: 1 };
     const getLayout = async (id: string) =>
       tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${id}`)).json()).decorLayout;
+    const storedLayout = async (id: string) => {
+      const [row] = await h.database.db.select().from(schema.tanks).where(eq(schema.tanks.id, id));
+      return decorLayoutSchema.parse(row?.decorLayout);
+    };
 
     it('assigns a seed on save and keeps it when the coral is moved or rotated', async () => {
       const reef = await createTank(h, cookie, 'reef');
@@ -773,11 +777,7 @@ describe('PATCH decor layout validation', () => {
       expect(legacy?.tintSeed).toBe(legacyTintSeed({ position: [0.1, 0.05, 0.2], rotationY: 0.4 }));
 
       await patch(reef.id, [{ ...legacy, position: [-0.3, 0.05, 0] }]);
-      const [row] = await h.database.db
-        .select()
-        .from(schema.tanks)
-        .where(eq(schema.tanks.id, reef.id));
-      expect(decorLayoutSchema.parse(row?.decorLayout)[0]?.tintSeed).toBe(legacy?.tintSeed);
+      expect((await storedLayout(reef.id))[0]?.tintSeed).toBe(legacy?.tintSeed);
     });
 
     it('stores a seedless piece with the seed of its saved placement', async () => {
@@ -786,7 +786,8 @@ describe('PATCH decor layout validation', () => {
         { ...coral, position: [0, 0.05, 0] },
         { ...coral, position: [0.2, 0.05, 0] },
       ]);
-      const layout = await getLayout(reef.id);
+      const layout = await storedLayout(reef.id);
+      expect(layout).toHaveLength(2);
       expect(layout.map((i) => i.tintSeed)).toEqual(layout.map((i) => legacyTintSeed(i)));
       expect(layout[0]?.tintSeed).not.toBe(layout[1]?.tintSeed);
     });

@@ -248,6 +248,7 @@ export class Caustics {
   /** Unit vector from the scene towards the light. */
   readonly lightDirection = uniform(new Vector3(0, 1, 0));
   readonly lightRadiance = uniform(new Color(1, 1, 1));
+  /** The main channel's part of `lightRadiance`, the part that casts caustics. */
   private readonly casting = new Color();
 
   private readonly bakeTarget = new RenderTarget(BAKE.size, BAKE.size, {
@@ -335,17 +336,22 @@ export class Caustics {
   /**
    * The baked pattern with unit mean at a surface point (metres), for effects that need the
    * caustic shape but not its animation detail. Sampled at an explicit level, so it may be
-   * called from non-uniform control flow. A caller sampling it in a loop passes `mean`, read once
-   * from `bakedMean()` before the loop.
+   * called from non-uniform control flow. A caller sampling it in a loop passes `mean` and `drift`,
+   * read once from `bakedMean()` and `bakedDrift()` before the loop.
    */
   bakedAt(
     surfacePoint: Node<'vec2'>,
     scale: number,
     mean: Node<'float'> = this.bakedMean(),
+    drift: Node<'vec2'> = this.bakedDrift(),
   ): Node<'float'> {
     const cells = surfacePoint.mul(this.cellsPerMetre.mul(scale / BAKE.periodCells));
-    const drift = fract(vec2(DRIFT[0], DRIFT[1]).mul(time.mul(this.speed).div(BAKE.periodCells)));
     return texture(this.bakeTarget.texture, cells.add(drift)).level(float(1)).r.div(mean);
+  }
+
+  /** How far the baked tile has drifted by now, in tiles; the same at every pixel. */
+  bakedDrift(): Node<'vec2'> {
+    return fract(vec2(DRIFT[0], DRIFT[1]).mul(time.mul(this.speed).div(BAKE.periodCells)));
   }
 
   /** The baked tile's mean, floored so a missing or black 1x1 mip cannot divide to Inf or NaN. */

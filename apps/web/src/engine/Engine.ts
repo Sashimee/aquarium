@@ -125,6 +125,8 @@ export class Engine {
   private lastFrameAt: number | null = null;
   private readonly cullPrewarm = new CullPrewarm(this.scene);
   private sceneRevisionValue = 0;
+  /** Later tier changes warm what they turn on themselves. */
+  private warmedUp = false;
   private gpuMs: number | null = null;
   private readonly gpuTiming: boolean;
   private lastGpuMs: number | null = null;
@@ -183,6 +185,7 @@ export class Engine {
       refreshMs: profile.refreshMs,
       probeTier: profile.probeTier,
       maxTier: profile.maxTier,
+      awaitContent: true,
     });
 
     container.appendChild(renderer.domElement);
@@ -295,6 +298,12 @@ export class Engine {
     if (this.showStats) void this.loadStatsOverlay();
   }
 
+  /** The first scene and fish are drawn from the next frame on, so the quality probe may time them. */
+  contentReady(): void {
+    if (this.disposed) return;
+    this.quality.contentReady(performance.now());
+  }
+
   async dispose(): Promise<void> {
     this.frameCallbacks.clear();
     await this.cleanup.dispose();
@@ -348,8 +357,17 @@ export class Engine {
     this.quality.register('caustics', (s) => {
       this.caustics.setMethod(s.causticMethod, s.causticLayers);
     });
+    // A tier change can rebuild pipelines without touching a material, e.g. by toggling shadows.
+    this.quality.register('cull-prewarm', () => this.cullPrewarm.invalidate());
     this.quality.register('surface-reflection', (s) => {
+      const wasOn = this.tank.surfaceReflection;
       this.tank.setSurfaceReflection(s.surfaceReflection);
+      if (wasOn || !this.tank.surfaceReflection || !this.warmedUp) return;
+      this.tank
+        .compileSurfaceReflection(this.renderer, this.scene, this.camera)
+        .catch((cause: unknown) =>
+          this.reportError('The surface reflection could not be prepared', cause),
+        );
     });
   }
 
@@ -357,6 +375,8 @@ export class Engine {
     this.updateDaylight(0);
     applyDayLighting(this.dayRig, this.daylightLevel);
     await this.renderer.compileAsync(this.scene, this.camera);
+    await this.tank.compileSurfaceReflection(this.renderer, this.scene, this.camera);
+    this.warmedUp = true;
   }
 
   /** The effects are a separate chunk; without them every tier still renders, just plainer. */
