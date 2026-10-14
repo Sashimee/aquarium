@@ -1,5 +1,7 @@
 /** What the engine needs from the lazily loaded render effects. */
 export interface FrameEffects {
+  /** Whether the frames drawn now go through a temporal resolve (TRAA). */
+  readonly temporal: boolean;
   /** Draws the whole frame, restoring the renderer state it changed even when it throws. */
   render(): void;
   setFocusMode(on: boolean): void;
@@ -7,6 +9,7 @@ export interface FrameEffects {
 }
 
 export type ReportError = (message: string, cause: unknown) => void;
+export type TemporalChanged = (on: boolean) => void;
 
 /**
  * Holds the optional effects and keeps a failure in them from stopping the scene. Their node
@@ -16,41 +19,66 @@ export type ReportError = (message: string, cause: unknown) => void;
 export class EffectsSlot {
   private effects: FrameEffects | null = null;
   private focus = false;
+  private temporalOn = false;
 
-  constructor(private readonly report: ReportError) {}
+  /** `temporalChanged` hears every change of `temporal`, whatever caused it. */
+  constructor(
+    private readonly report: ReportError,
+    private readonly temporalChanged: TemporalChanged = () => undefined,
+  ) {}
 
   get active(): boolean {
     return this.effects !== null;
+  }
+
+  /** Whether frames go through a temporal resolve; false without effects. */
+  get temporal(): boolean {
+    return this.temporalOn;
   }
 
   attach(effects: FrameEffects): void {
     if (this.effects !== null) throw new Error('EffectsSlot: effects are already attached');
     this.effects = effects;
     this.guard(() => effects.setFocusMode(this.focus));
+    this.refresh();
   }
 
   setFocusMode(on: boolean): void {
     this.focus = on;
     const effects = this.effects;
     if (effects !== null) this.guard(() => effects.setFocusMode(on));
+    this.refresh();
   }
 
   /** True when the effects drew the frame; false means the caller must render it plainly. */
   render(): boolean {
     const effects = this.effects;
     if (effects === null) return false;
-    return (
+    const drawn =
       this.guard(() => {
         effects.render();
         return true;
-      }) ?? false
-    );
+      }) ?? false;
+    this.refresh();
+    return drawn;
+  }
+
+  /** Rereads `temporal` from the effects, which change it on their own with the tier. */
+  refresh(): void {
+    const on = this.effects?.temporal ?? false;
+    if (on === this.temporalOn) return;
+    this.temporalOn = on;
+    this.temporalChanged(on);
   }
 
   dispose(): void {
     const effects = this.effects;
     this.effects = null;
-    effects?.dispose();
+    try {
+      effects?.dispose();
+    } finally {
+      this.refresh();
+    }
   }
 
   private guard<T>(call: () => T): T | null {

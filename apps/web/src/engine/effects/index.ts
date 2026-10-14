@@ -74,6 +74,11 @@ export class Effects {
     }
   }
 
+  /** Whether the frames drawn now go through a temporal resolve (TRAA). */
+  get temporal(): boolean {
+    return this.failure === null && (this.post?.temporal ?? false);
+  }
+
   setFocusMode(on: boolean): void {
     this.focus = on;
     if (this.settings !== null) this.configurePost(this.settings);

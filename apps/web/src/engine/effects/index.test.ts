@@ -294,6 +294,21 @@ describe('Effects', () => {
     expect(built.at(-1)?.settings.depthOfField).toBe(false);
   });
 
+  it('resolves temporally only while a TRAA pipeline is up and has not failed', () => {
+    const { host, createPost, quality, failWith } = setup('ultra');
+    const effects = new Effects(host, createPost);
+    expect(effects.temporal).toBe(true);
+    quality.setTier('high', 0);
+    expect(effects.temporal).toBe(false);
+    quality.setTier('ultra', 0);
+    expect(effects.temporal).toBe(true);
+    failWith(new Error('TRAA build failed'));
+    quality.setTier('high', 0);
+    quality.setTier('ultra', 0);
+    expect(effects.temporal).toBe(false);
+    effects.dispose();
+  });
+
   it('turns velocity passthrough on only for a temporal pipeline, and off when disposed', () => {
     const { host, createPost, passthrough, scene, quality, built } = setup('ultra');
     const effects = new Effects(host, createPost);

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { EffectsSlot, type FrameEffects } from './effectsSlot';
 
 class FakeEffects implements FrameEffects {
+  temporal = false;
   renders = 0;
   disposed = 0;
   focus: boolean[] = [];
@@ -27,8 +28,12 @@ class FakeEffects implements FrameEffects {
 
 function setup() {
   const reports: { message: string; cause: unknown }[] = [];
-  const slot = new EffectsSlot((message, cause) => reports.push({ message, cause }));
-  return { slot, reports };
+  const temporal: boolean[] = [];
+  const slot = new EffectsSlot(
+    (message, cause) => reports.push({ message, cause }),
+    (on) => temporal.push(on),
+  );
+  return { slot, reports, temporal };
 }
 
 describe('EffectsSlot', () => {
@@ -128,5 +133,46 @@ describe('EffectsSlot', () => {
     slot.dispose();
     expect(effects.disposed).toBe(1);
     expect(slot.render()).toBe(false);
+  });
+
+  it('resolves temporally only while attached effects do', () => {
+    const { slot, temporal } = setup();
+    expect(slot.temporal).toBe(false);
+    const effects = new FakeEffects();
+    effects.temporal = true;
+    slot.attach(effects);
+    expect(slot.temporal).toBe(true);
+    effects.temporal = false;
+    slot.refresh();
+    slot.refresh();
+    expect(slot.temporal).toBe(false);
+    effects.temporal = true;
+    slot.render();
+    expect(temporal).toEqual([true, false, true]);
+    slot.dispose();
+    expect(slot.temporal).toBe(false);
+    expect(temporal).toEqual([true, false, true, false]);
+  });
+
+  it('stops resolving temporally once failed effects are dropped', () => {
+    const { slot, temporal } = setup();
+    const effects = new FakeEffects();
+    effects.temporal = true;
+    slot.attach(effects);
+    effects.renderError = new Error('TRAA pipeline failed');
+    expect(slot.render()).toBe(false);
+    expect(slot.temporal).toBe(false);
+    expect(temporal).toEqual([true, false]);
+  });
+
+  it('stops resolving temporally even when disposing throws', () => {
+    const { slot, temporal } = setup();
+    const effects = new FakeEffects();
+    effects.temporal = true;
+    effects.disposeError = new Error('dispose');
+    slot.attach(effects);
+    expect(() => slot.dispose()).toThrow('dispose');
+    expect(slot.temporal).toBe(false);
+    expect(temporal).toEqual([true, false]);
   });
 });
