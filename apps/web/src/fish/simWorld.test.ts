@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { Collider } from '@aquarium/shared';
-import { World } from '@aquarium/sim';
+import { SNAPSHOT_STRIDE, World, type SimReady } from '@aquarium/sim';
 import { DEFAULT_TANK } from '../engine/tank/dimensions';
 import type { SceneAnchor } from '../scene/anemone';
 import { FISH_1, FISH_2, TANK_A, fishFixture } from '../sync/fixtures';
 import { demoTank, sceneAnchorsToSim } from './demoStock';
 import { TankRoster } from './roster';
 import { allSpeciesInputs } from './species';
-import { layoutChanges, SimWorldSpec } from './simWorld';
+import { layoutChanges, SimWorldSpec, startWorld, type WorldControls } from './simWorld';
 
 const DEMO = demoTank(DEFAULT_TANK, 7, 'reef');
 const ANEMONE: SceneAnchor = {
@@ -175,5 +175,116 @@ describe('layoutChanges', () => {
   it('fills an empty world and empties a full one', () => {
     expect(layoutChanges([], [spawn('a')])).toEqual({ remove: [], add: [spawn('a')] });
     expect(layoutChanges(['a'], [])).toEqual({ remove: ['a'], add: [] });
+  });
+});
+
+describe('startWorld', () => {
+  type Call = readonly [string, unknown?];
+
+  function recorder(): { sim: WorldControls; calls: Call[] } {
+    const calls: Call[] = [];
+    return {
+      calls,
+      sim: {
+        setLight: (level) => calls.push(['light', level]),
+        setDecor: (decor) => calls.push(['decor', decor]),
+        setAnchors: (anchors) => calls.push(['anchors', anchors]),
+        start: () => calls.push(['start']),
+      },
+    };
+  }
+
+  function pending(): { promise: Promise<SimReady>; answer: (ready: SimReady) => void } {
+    let answer: (ready: SimReady) => void = () => undefined;
+    const promise = new Promise<SimReady>((resolve) => {
+      answer = resolve;
+    });
+    return { promise, answer };
+  }
+
+  const READY: SimReady = {
+    type: 'ready',
+    epoch: 1,
+    fishIds: ['a'],
+    stride: SNAPSHOT_STRIDE,
+    stepHz: 30,
+  };
+
+  function demoConfig(spec: SimWorldSpec, roster: TankRoster) {
+    const config = spec.config(roster.swimming());
+    if (config === null) throw new Error('the demo has no world');
+    return config;
+  }
+
+  it('re-sends the colliders and homes the scene sent while the first world was starting', async () => {
+    const { spec, roster } = setup();
+    const { sim, calls } = recorder();
+    const init = pending();
+    const config = demoConfig(spec, roster);
+    let light = 0.3;
+    const started = startWorld(sim, spec, config, init.promise, {
+      current: () => true,
+      light: () => light,
+      begin: (ready) => calls.push(['begin', ready]),
+    });
+
+    spec.setDecor([ROCK]);
+    const homes = spec.setAnchors([ANEMONE]);
+    light = 0.8;
+    expect(calls).toEqual([]);
+
+    init.answer(READY);
+    await started;
+    expect(calls).toEqual([
+      ['light', 0.8],
+      ['decor', [ROCK]],
+      ['anchors', homes],
+      ['begin', READY],
+      ['start'],
+    ]);
+  });
+
+  it('sends no colliders or homes the config already carried', async () => {
+    const { spec, roster } = setup();
+    spec.setDecor([ROCK]);
+    spec.setAnchors([ANEMONE]);
+    const { sim, calls } = recorder();
+    await startWorld(sim, spec, demoConfig(spec, roster), Promise.resolve(READY), {
+      current: () => true,
+      light: () => 1,
+      begin: () => undefined,
+    });
+    expect(calls).toEqual([['light', 1], ['start']]);
+  });
+
+  it('leaves a world dropped while starting unstarted', async () => {
+    const { spec, roster } = setup();
+    const { sim, calls } = recorder();
+    const init = pending();
+    let current = true;
+    const started = startWorld(sim, spec, demoConfig(spec, roster), init.promise, {
+      current: () => current,
+      light: () => 1,
+      begin: (ready) => calls.push(['begin', ready]),
+    });
+    spec.setDecor([ROCK]);
+    current = false;
+    init.answer(READY);
+    await started;
+    expect(calls).toEqual([]);
+  });
+
+  it('passes on a failed init without starting anything', async () => {
+    const { spec, roster } = setup();
+    const { sim, calls } = recorder();
+    const failure = new Error('worker failed to start');
+    await expect(
+      startWorld(sim, spec, demoConfig(spec, roster), Promise.reject(failure), {
+        current: () => true,
+        light: () => 1,
+        begin: () => undefined,
+      }),
+    ).rejects.toBe(failure);
+    expect(calls).toEqual([]);
   });
 });
