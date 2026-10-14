@@ -509,6 +509,7 @@ describe('feeding AI', { timeout: LONG }, () => {
         for (const e of events) {
           if (e.foodId !== nori) continue;
           const i = w.fishIds.indexOf(e.fishId);
+          if (i < 0) throw new Error(`bite by unknown fish ${e.fishId}`);
           last[i] = t;
           if (t - (last[1 - i] ?? -Infinity) < window) together++;
         }

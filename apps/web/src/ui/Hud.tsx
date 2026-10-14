@@ -48,7 +48,7 @@ export function StatusCard({ open, onPress }: { open: boolean; onPress(): void }
       className="status-card"
       data-opener="report"
       aria-expanded={open}
-      aria-controls="panel-report"
+      aria-controls={open ? 'panel-report' : undefined}
       aria-label={`Tank report: ${title}, ${subtitle}${summary ? `, ${summary}` : ''}${time ? `, ${time.toLowerCase()}` : ''}`}
       onClick={onPress}
     >
@@ -155,7 +155,7 @@ export function RoundButton({
       data-opener={panel}
       aria-label={label}
       aria-expanded={open}
-      aria-controls={`panel-${panel}`}
+      aria-controls={open ? `panel-${panel}` : undefined}
       disabled={disabled ?? false}
       onClick={onPress}
     >

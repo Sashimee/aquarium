@@ -30,7 +30,7 @@ export function Dock({ panel, onPress }: { panel: Panel; onPress(panel: OpenPane
             className={id === 'play' && tool !== 'tap' ? 'dock-item glow' : 'dock-item'}
             data-opener={id}
             aria-pressed={panel === id}
-            aria-controls={`panel-${id}`}
+            aria-controls={panel === id ? `panel-${id}` : undefined}
             disabled={waiting}
             title={waiting ? 'The tank is still loading' : undefined}
             onClick={() => onPress(id)}

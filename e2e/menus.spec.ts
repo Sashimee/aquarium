@@ -10,14 +10,10 @@ interface Menu {
 
 let touch = false;
 
-// Locator.tap/click wait two animation frames per action, which costs seconds each under software
-// rendering. This checks the same thing that matters here, that nothing covers the target, and
-// then sends one real touch or mouse press at its centre.
-async function press(target: Locator, timeout = 30_000): Promise<void> {
-  await target.waitFor({ state: 'visible' });
-  // Under software rendering the main thread can lag a running spring animation by seconds, so a
-  // box measured mid-animation is not where the element ends up.
-  await target.page().evaluate(() =>
+// Under software rendering the main thread can lag a running spring animation by seconds, so a
+// box measured mid-animation is not where the element ends up.
+async function settleAnimations(page: Page): Promise<void> {
+  await page.evaluate(() =>
     Promise.all(
       document
         .getAnimations()
@@ -25,6 +21,14 @@ async function press(target: Locator, timeout = 30_000): Promise<void> {
         .map((animation) => animation.finished.catch(() => undefined)),
     ),
   );
+}
+
+// Locator.tap/click wait two animation frames per action, which costs seconds each under software
+// rendering. This checks the same thing that matters here, that nothing covers the target, and
+// then sends one real touch or mouse press at its centre.
+async function press(target: Locator): Promise<void> {
+  await target.waitFor({ state: 'visible' });
+  await settleAnimations(target.page());
   // The header re-measures a frame after a panel opens or closes, so a panel can briefly sit over
   // it; a target that is still covered after that settles is a real bug.
   let point: [number, number] = [0, 0];
@@ -48,7 +52,7 @@ async function press(target: Locator, timeout = 30_000): Promise<void> {
         }, point);
         return cover ? `covered by ${cover} at ${point.join(',')}` : null;
       },
-      { message: `${String(target)} cannot be pressed`, intervals: [300], timeout },
+      { message: `${String(target)} cannot be pressed`, intervals: [300], timeout: 30_000 },
     )
     .toBeNull();
   if (touch) await target.page().touchscreen.tap(...point);
@@ -122,10 +126,8 @@ function route(label: string, path: string, heading: string): Menu {
       const link = page
         .getByRole('navigation', { name: 'Account' })
         .getByRole('link', { name: label, exact: true });
-      await expect(async () => {
-        if ((await avatar.getAttribute('aria-expanded')) !== 'true') await press(avatar, 10_000);
-        await press(link, 10_000);
-      }).toPass({ timeout: 90_000 });
+      if ((await avatar.getAttribute('aria-expanded')) !== 'true') await press(avatar);
+      await press(link);
     },
     isOpen: async (page) => {
       await expect(page).toHaveURL(new RegExp(`${path}(\\?|$)`));
@@ -215,6 +217,7 @@ async function settledPose(page: Page): Promise<string> {
   return last;
 }
 
+// The camera keeps easing for a moment after a drag under load; a real orbit moves it by over 1.
 function poseDistance(a: string, b: string): number {
   const left = a.split(' ').map(Number);
   const right = b.split(' ').map(Number);
@@ -226,6 +229,7 @@ async function expectToolClaimsDrag(page: Page, drag: Drag) {
   if (!viewport) throw new Error('viewport is not set');
   const y = dragRow(page);
   await openPlay(page);
+  await expectBigTargets(page);
   const laser = playGroup(page).getByRole('button', { name: 'Laser', exact: true });
   await press(laser);
   await expect(laser).toHaveAttribute('aria-pressed', 'true');
@@ -277,8 +281,13 @@ async function expectOnePanel(page: Page, context: string) {
 }
 
 async function expectBigTargets(page: Page) {
+  await settleAnimations(page);
   const small = await page.evaluate(() =>
-    [...document.querySelectorAll<HTMLElement>('.dock button, .hud button')]
+    [
+      ...document.querySelectorAll<HTMLElement>(
+        '.dock button, .hud button, .sheet .panel-head button',
+      ),
+    ]
       .map((el) => ({
         label: el.getAttribute('aria-label') ?? el.textContent ?? '',
         box: el.getBoundingClientRect(),
@@ -339,7 +348,7 @@ test.describe('menus on a phone', () => {
   });
 
   test('every menu opens, switches and leaves the camera draggable', async ({ page }) => {
-    test.setTimeout(900_000);
+    test.setTimeout(480_000);
     const cdp = await page.context().newCDPSession(page);
     await exercise(page, (from, to) => touchDrag(cdp, from, to));
   });
@@ -353,7 +362,7 @@ test.describe('menus with a mouse', () => {
   });
 
   test('every menu opens, switches and leaves the camera draggable', async ({ page }) => {
-    test.setTimeout(900_000);
+    test.setTimeout(480_000);
     await exercise(page, (from, to) => mouseDrag(page, from, to));
   });
 

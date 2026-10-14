@@ -48,7 +48,11 @@ export default function DecorPanel() {
                   Add {entry.label}
                 </button>
                 {entry.assetId === VACATION_FEEDER_ASSET_ID && (
-                  <span className="hint"> Slows hunger by half while you are away.</span>
+                  <span className="hint">
+                    {blocked
+                      ? ' This tank already has its one vacation feeder.'
+                      : ' Slows hunger by half while you are away.'}
+                  </span>
                 )}
               </li>
             );

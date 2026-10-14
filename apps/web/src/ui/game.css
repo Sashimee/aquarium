@@ -277,6 +277,11 @@
   flex: none;
 }
 
+#ui .sheet .panel-head button {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+}
+
 .sheet .panel-head h2:focus {
   outline: none;
 }
@@ -287,6 +292,48 @@
   overscroll-behavior: contain;
 }
 
+@media (max-width: 480px) {
+  .hud {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 0.5rem;
+  }
+
+  .hud-left,
+  .hud-right {
+    display: contents;
+  }
+
+  #ui .status-card {
+    grid-column: 1;
+    grid-row: 1;
+    width: auto;
+  }
+
+  .hud-buttons {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .camera-controls {
+    grid-column: 1;
+    grid-row: 2;
+    justify-self: start;
+  }
+
+  .tank-type {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: end;
+  }
+
+  #ui .segmented button {
+    padding: 0.3rem 0.55rem;
+    font-size: 0.82rem;
+  }
+}
+
 @media (min-width: 721px) {
   .hud-left {
     max-width: 18rem;
@@ -295,7 +342,7 @@
   .sheet {
     left: auto;
     right: 0.75rem;
-    top: 7rem;
+    top: 8rem;
     bottom: calc(var(--dock-h, 5rem) + 1rem);
     width: 25rem;
     max-height: none;
@@ -337,8 +384,14 @@
   padding-right: 1rem;
 }
 
-.toast[hidden] {
-  display: none;
+.toast-live {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.toast-live > .toast {
+  margin: 0;
 }
 
 .tool-grid {
@@ -440,7 +493,7 @@
     animation: sheet-up 420ms var(--spring);
   }
 
-  .toast:not([hidden]),
+  .toast,
   .life-status > * {
     animation: toast-pop 360ms var(--spring);
   }

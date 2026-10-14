@@ -557,6 +557,28 @@ describe('account deletion', () => {
     expect(left).toContain('v-bob');
   });
 
+  it("removes the user's password reset rows and leaves other users' rows", async () => {
+    const alice = await account(h);
+    const bob = await account(h);
+    const row = (id: string, userId: string) => ({
+      id,
+      identifier: `reset-${id}`,
+      value: userId,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    await h.database.db
+      .insert(schema.verification)
+      .values([row('r-alice', alice.userId), row('r-bob', bob.userId)]);
+
+    expect(
+      (await call(h, alice.cookie, 'POST', '/api/me/delete', { password: PASSWORD })).statusCode,
+    ).toBe(204);
+
+    const left = (await h.database.db.select().from(schema.verification)).map((v) => v.id);
+    expect(left).not.toContain('r-alice');
+    expect(left).toContain('r-bob');
+  });
+
   it('lets a passkey-only user delete with a fresh session, but not a stale one', async () => {
     const dave = await account(h);
     await h.database.db.delete(schema.account).where(eq(schema.account.userId, dave.userId));

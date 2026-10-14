@@ -85,7 +85,11 @@ describe('reset and verification token hygiene (#132)', () => {
     const mineToken = await requestReset(mine.email);
     const theirToken = await requestReset(theirs.email);
 
-    await post('/api/auth/reset-password', { newPassword: NEW_PASSWORD, token: mineToken });
+    const mineUsed = await post('/api/auth/reset-password', {
+      newPassword: NEW_PASSWORD,
+      token: mineToken,
+    });
+    expect(mineUsed.statusCode).toBe(200);
 
     const res = await post('/api/auth/reset-password', {
       newPassword: NEW_PASSWORD,
@@ -113,6 +117,42 @@ describe('reset and verification token hygiene (#132)', () => {
     expect(identifiers.length).toBeGreaterThan(0);
     expect(identifiers.some((id) => id.includes(token))).toBe(false);
     expect(identifiers.some((id) => id.startsWith('reset-password:'))).toBe(false);
+  });
+
+  it('writes bare-user-id verification rows only for password resets', async () => {
+    const { email, verifyPath } = await signedUp();
+    const verified = await h.app.inject({ method: 'GET', url: verifyPath });
+    const cookie = verified.cookies.map((c) => `${c.name}=${c.value}`).join('; ');
+    const { rows: users } = await h.database.pool.query<{ id: string }>(
+      'select id from "user" where email = $1',
+      [email],
+    );
+    const userId = users[0]?.id;
+    if (!userId) throw new Error('user missing');
+    const bareIdRows = async () =>
+      (
+        await h.database.pool.query(
+          'select 1 from verification where value = $1 and expires_at > now()',
+          [userId],
+        )
+      ).rowCount;
+
+    expect(await bareIdRows()).toBe(0);
+    await requestReset(email);
+    await requestReset(email);
+    expect(await bareIdRows()).toBe(2);
+
+    const options = await h.app.inject({
+      url: '/api/auth/passkey/generate-register-options',
+      headers: { cookie },
+    });
+    expect(options.statusCode).toBe(200);
+
+    const { rows } = await h.database.pool.query<{ value: string }>(
+      'select value from verification where value not in (select id from "user")',
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) expect(row.value).toMatch(/^\{/);
   });
 
   it('still verifies an email address from the mailed link', async () => {

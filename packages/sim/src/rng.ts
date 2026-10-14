@@ -53,6 +53,14 @@ export class Rng {
     return { a: this.a, b: this.b, c: this.c, d: this.d };
   }
 
+  /** Rewinds this generator to a `state()` it had, so draws made since are taken back. */
+  restore(state: RngState): void {
+    this.a = state.a >>> 0;
+    this.b = state.b >>> 0;
+    this.c = state.c >>> 0;
+    this.d = state.d >>> 0;
+  }
+
   nextUint32(): number {
     const t = (((this.a + this.b) >>> 0) + this.d) >>> 0;
     this.d = (this.d + 1) >>> 0;

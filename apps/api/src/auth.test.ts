@@ -1,6 +1,6 @@
 import { apiErrorSchema, sessionListSchema, userSchema } from '@aquarium/shared';
 import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from 'vitest';
 import nodemailer from 'nodemailer';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -13,6 +13,20 @@ let counter = 0;
 const nextEmail = () => `t06-${Date.now()}-${counter++}@bas.lu`;
 
 const jsonHeaders = { 'content-type': 'application/json', origin: APP_ORIGIN };
+
+const median = (xs: number[]) => {
+  const sorted = [...xs].sort((x, y) => x - y);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? (sorted[mid] ?? 0) : ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2;
+};
+
+// The median of per-pair differences cancels host load, which hits both halves of an adjacent
+// pair alike. A repeat sign-up is legitimately ~1-3 ms faster (it inserts no user rows), so the
+// tolerance is a few ms, well below the 25 ms leaks this is meant to expose.
+function expectNoTimingSkew(pairs: { fresh: number; repeat: number }[]) {
+  const gap = median(pairs.map((p) => p.repeat - p.fresh));
+  expect(Math.abs(gap), `median repeat - fresh = ${gap.toFixed(1)} ms`).toBeLessThan(12);
+}
 
 function cookieJar(res: LightMyRequestResponse): string {
   return res.cookies.map((c) => `${c.name}=${c.value}`).join('; ');
@@ -161,21 +175,29 @@ describe('unverified sign-up takeover (#114)', () => {
   });
 
   it('responds to a repeat sign-up in about the time of a fresh one', async () => {
-    const median = (xs: number[]) => [...xs].sort((x, y) => x - y)[Math.floor(xs.length / 2)] ?? 0;
     const time = async (email: string) => {
+      // The previous sign-up's background mail would otherwise land inside this timing window.
+      await h.settleMail();
       const start = performance.now();
       await signUpWith(email, ATTACKER_PASSWORD);
       return performance.now() - start;
     };
-    const fresh: number[] = [];
-    const repeat: number[] = [];
-    for (let i = 0; i < 5; i++) {
-      const email = nextEmail();
-      fresh.push(await time(email));
-      repeat.push(await time(email));
+    const pairs: { fresh: number; repeat: number }[] = [];
+    await time(nextEmail());
+    for (let i = 0; i < 80; i++) {
+      if (i % 2 === 0) {
+        const email = nextEmail();
+        const fresh = await time(email);
+        pairs.push({ fresh, repeat: await time(email) });
+      } else {
+        const email = nextEmail();
+        await signUpWith(email, ATTACKER_PASSWORD);
+        const repeat = await time(email);
+        pairs.push({ fresh: await time(nextEmail()), repeat });
+      }
     }
-    expect(Math.abs(median(repeat) - median(fresh))).toBeLessThan(150);
-  });
+    expectNoTimingSkew(pairs);
+  }, 120_000);
 
   it('lets the owner set a password by reset, revoking sessions, and leaves verified accounts intact', async () => {
     const email = nextEmail();
@@ -551,13 +573,14 @@ describe('mail abuse limits', () => {
         headers: jsonHeaders,
         payload: { email, callbackURL: '/' },
       });
+      const ms = performance.now() - start;
       await h.settleMail();
-      return { res, ms: performance.now() - start };
+      return { res, ms };
     };
     const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    onTestFinished(() => spy.mockRestore());
     const cooledRes = await resend(cooled);
     const logged = spy.mock.calls.map((c) => String(c[0]));
-    spy.mockRestore();
     expect(logged).toEqual([expect.stringMatching(/^verification mail throttled, retry in \d+s$/)]);
     const unknownRes = await resend(unknown);
     expect(cooledRes.res.statusCode).toBe(200);
@@ -567,14 +590,16 @@ describe('mail abuse limits', () => {
     expect(h.outbox.length).toBe(mailsBefore);
     expect(h.outbox.filter((m) => m.to === cooled)).toHaveLength(1);
 
-    const median = (xs: number[]) => [...xs].sort((x, y) => x - y)[Math.floor(xs.length / 2)] ?? 0;
     const cooledMs: number[] = [];
     const unknownMs: number[] = [];
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 5; i++) {
       cooledMs.push((await resend(cooled)).ms);
       unknownMs.push((await resend(nextEmail())).ms);
     }
-    expect(Math.abs(median(cooledMs) - median(unknownMs))).toBeLessThan(150);
+    // Better Auth pads send-verification-email to MINIMUM_MS (500 ms, email-verification.mjs),
+    // which masks small differences, so only a leak beyond the pad is observable here.
+    expect(median(cooledMs)).toBeLessThan(560);
+    expect(median(unknownMs)).toBeLessThan(560);
     expect(h.outbox.length).toBe(mailsBefore);
     await h.close();
   }, 20_000);
@@ -945,6 +970,7 @@ describe('mail abuse limits', () => {
         await signUp(h.app, nextEmail(), { 'x-forwarded-for': '203.0.113.73' });
       }
       const store = postgresHitStore(h.database, 'testsecrettestsecrettestsecret0123456789');
+      expect(await store.remaining('global', { max: 3, windowMs: 3_600_000 })).toBeGreaterThan(0);
       expect(await store.remaining('global', { max: 4, windowMs: 3_600_000 })).toBe(0);
       await h.close();
     });
@@ -980,7 +1006,7 @@ describe('mail abuse limits', () => {
       return { h, hits, arm: () => (spentOnce = true) };
     }
 
-    it('sends no sign-up mail and charges nothing when the cap frees before the mail step', async () => {
+    it('sends no sign-up mail and charges only the per-IP request counter when the cap frees before the mail step', async () => {
       const { h, hits, arm } = await harnessWithFlakyCap();
       const before = await hits();
       arm();
@@ -991,7 +1017,7 @@ describe('mail abuse limits', () => {
       await h.close();
     });
 
-    it('sends no reset mail and charges nothing when the cap frees before the mail step', async () => {
+    it('sends no reset mail and charges only the per-IP request counter when the cap frees before the mail step', async () => {
       const { h, hits, arm } = await harnessWithFlakyCap();
       const email = nextEmail();
       await signUp(h.app, email);
@@ -1012,6 +1038,24 @@ describe('mail abuse limits', () => {
     });
   });
 
+  it('shares the per-IP budget across one IPv6 /64 but not another', async () => {
+    const h = await createHarness({
+      mailLimits: {
+        perRecipient: { max: 100, windowMs: 3_600_000 },
+        verificationCooldown: { max: 100, windowMs: 1000 },
+        perIpSignup: { max: 2, windowMs: 3_600_000 },
+        global: { max: 1000, windowMs: 3_600_000 },
+      },
+    });
+    const from = async (ip: string) =>
+      (await signUp(h.app, nextEmail(), { 'x-forwarded-for': ip })).statusCode;
+    expect(await from('2001:db8:0:1::1')).toBe(200);
+    expect(await from('2001:0db8:0:1:ffff:eeee:dddd:cccc')).toBe(200);
+    expect(await from('2001:db8:0:1::99')).toBe(429);
+    expect(await from('2001:db8:0:2::1')).toBe(200);
+    await h.close();
+  });
+
   it('gives a known and an unknown address the same per-IP 429 sequence', async () => {
     const h = await createHarness({
       mailLimits: {
@@ -1029,7 +1073,12 @@ describe('mail abuse limits', () => {
       headers: { ...jsonHeaders, 'x-forwarded-for': '203.0.113.1' },
       payload: { email: known, password: PASSWORD, name: 'Tester' },
     });
-    const sequence = async (ip: string, url: string, email: string) => {
+    const sequence = async (
+      ip: string,
+      url: string,
+      email: string,
+      redirect: Record<string, string>,
+    ) => {
       const statuses: number[] = [];
       for (let i = 0; i < 5; i++) {
         const res = await h.app.inject({
@@ -1037,18 +1086,20 @@ describe('mail abuse limits', () => {
           url,
           remoteAddress: '127.0.0.1',
           headers: { ...jsonHeaders, 'x-forwarded-for': ip },
-          payload: { email, callbackURL: '/', redirectTo: '/' },
+          payload: { email, ...redirect },
         });
         statuses.push(res.statusCode);
       }
       return statuses;
     };
-    for (const [n, url] of [
-      '/api/auth/send-verification-email',
-      '/api/auth/request-password-reset',
-    ].entries()) {
-      const forKnown = await sequence(`203.0.113.${10 + n}`, url, known);
-      const forUnknown = await sequence(`203.0.113.${20 + n}`, url, nextEmail());
+    for (const [n, [url, redirect]] of (
+      [
+        ['/api/auth/send-verification-email', { callbackURL: '/' }],
+        ['/api/auth/request-password-reset', { redirectTo: '/' }],
+      ] as const
+    ).entries()) {
+      const forKnown = await sequence(`203.0.113.${10 + n}`, url, known, redirect);
+      const forUnknown = await sequence(`203.0.113.${20 + n}`, url, nextEmail(), redirect);
       expect(forKnown).toEqual([200, 200, 200, 429, 429]);
       expect(forUnknown).toEqual(forKnown);
     }

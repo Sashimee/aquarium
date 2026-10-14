@@ -79,6 +79,74 @@ describe('security headers', () => {
     expect(res.headers['strict-transport-security']).toBe('max-age=31536000; includeSubDomains');
   });
 
+  describe('on every kind of response', () => {
+    const expectSecured = (headers: Record<string, unknown>): void => {
+      expect(headers['content-security-policy']).toContain("default-src 'self'");
+      expect(headers['x-content-type-options']).toBe('nosniff');
+      expect(headers['referrer-policy']).toBe('strict-origin-when-cross-origin');
+      expect(headers['permissions-policy']).toBe('camera=(), microphone=(), geolocation=()');
+      expect(headers['cross-origin-opener-policy']).toBe('same-origin');
+      expect(headers['strict-transport-security']).toBe('max-age=31536000; includeSubDomains');
+      expect(headers['x-robots-tag']).toBe(NOINDEX);
+    };
+
+    it('precompressed static', async () => {
+      const res = await spa.app.inject({
+        url: '/assets/index-C7vUOBtl.js',
+        headers: { 'accept-encoding': 'br' },
+      });
+      expect(res.headers['content-encoding']).toBe('br');
+      expectSecured(res.headers);
+    });
+
+    it('304 not modified', async () => {
+      const url = '/assets/app.js';
+      const first = await spa.app.inject(url);
+      const res = await spa.app.inject({
+        url,
+        headers: { 'if-none-match': String(first.headers['etag']) },
+      });
+      expect(res.statusCode).toBe(304);
+      expectSecured(res.headers);
+    });
+
+    it('CSRF 403', async () => {
+      const res = await plain.app.inject({
+        method: 'POST',
+        url: '/api/sessions/revoke',
+        headers: { cookie: 'a=b', origin: 'https://evil.test' },
+        payload: {},
+      });
+      expect(res.statusCode).toBe(403);
+      expectSecured(res.headers);
+    });
+
+    it('error handler response', async () => {
+      const res = await plain.app.inject({
+        method: 'POST',
+        url: '/api/sessions/revoke',
+        headers: { 'content-type': 'text/plain' },
+        payload: 'x',
+      });
+      expect(res.statusCode).toBe(415);
+      expectSecured(res.headers);
+    });
+
+    it('bad-URL 400', async () => {
+      const res = await plain.app.inject({ method: 'GET', url: '/%' });
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({ error: { code: 'validation_failed' } });
+      expectSecured(res.headers);
+    });
+
+    it('over-long param 414', async () => {
+      const res = await plain.app.inject({ method: 'GET', url: `/api/tanks/${'a'.repeat(150)}` });
+      expect(res.statusCode).toBe(414);
+      expect(res.json()).toMatchObject({ error: { code: 'validation_failed' } });
+      expectSecured(res.headers);
+    });
+  });
+
   it('sets them on the hello page when there is no web build', async () => {
     const res = await noDist().inject('/');
     expect(res.headers['content-security-policy']).toBeDefined();

@@ -88,7 +88,7 @@ export class WaterShafts {
             .mul(medium.scattering)
             .mul(phase)
             .mul(caustics.lightRadiance)
-            .mul(caustics.strength)
+            .mul(caustics.shaftContrast)
             .mul(this.strength),
         );
       });

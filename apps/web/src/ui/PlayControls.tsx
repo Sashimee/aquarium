@@ -31,7 +31,7 @@ export function useEngineReadyForPlay(): boolean {
   return useLatest(interaction, 'play:ready') !== undefined;
 }
 
-/** Keeps the engine's selected food in step; mounted for the whole session so toasts keep working. */
+/** Keeps the engine's selected food in step for the whole session, not only while the feed sheet is open. */
 export function useFood(): [FoodType, (food: FoodType) => void] {
   const { interaction } = useBridge();
   const [food, setFood] = useState<FoodType>('flakes');
@@ -79,8 +79,8 @@ export function FeedToast() {
   }, [interaction]);
 
   return (
-    <div role="status" aria-live="polite" className="toast play-message" hidden={!message}>
-      {message}
+    <div role="status" aria-live="polite" className="toast-live">
+      {message && <p className="toast play-message">{message}</p>}
     </div>
   );
 }

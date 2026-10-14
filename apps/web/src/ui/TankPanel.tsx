@@ -307,7 +307,7 @@ function Care({
   const id = useId();
   return (
     <section aria-labelledby={`${id}-h`} className="block">
-      <h3 id={`${id}-h`}>Care</h3>
+      <h3 id={`${id}-h`}>Water and chores</h3>
       <ul className="water">
         <li>Ammonia: {QUALITY_LABEL[water.ammonia]}</li>
         <li>Nitrate: {QUALITY_LABEL[water.nitrate]}</li>
@@ -367,7 +367,7 @@ function Shop({ session, state, tank }: { session: TankSession; state: SessionSt
 
   return (
     <section aria-labelledby={`${id}-h`} className="block">
-      <h3 id={`${id}-h`}>Fish shop</h3>
+      <h3 id={`${id}-h`}>Choose a fish</h3>
       <p>
         <progress
           max={cap.capacity}

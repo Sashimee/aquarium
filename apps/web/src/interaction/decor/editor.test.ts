@@ -1,3 +1,4 @@
+import type { Biome } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import { loadPreset } from '../../scene/preset';
 import { DecorEditor } from './editor';
@@ -12,8 +13,8 @@ const piece = (id: string, assetId: string, x: number, z: number): Piece => ({
   item: item(assetId, x, z),
 });
 
-function editor(pieces: Piece[] = []): DecorEditor {
-  return new DecorEditor({ specs: SPECS, limits: LIMITS, ground: flat, pieces });
+function editor(pieces: Piece[] = [], biome: Biome = 'reef'): DecorEditor {
+  return new DecorEditor({ specs: SPECS, biome, limits: LIMITS, ground: flat, pieces });
 }
 
 function finishSettling(e: DecorEditor): void {
@@ -196,12 +197,27 @@ describe('rotate and nudge', () => {
     const ridge = (x: number) => (x > 0.1 ? 0.12 : 0.06);
     const e = new DecorEditor({
       specs: SPECS,
+      biome: 'reef',
       limits: LIMITS,
       ground: ridge,
       pieces: [piece('p1', 'lambis-shell', 0, 0)],
     });
     expect(e.nudge('p1', 0.2, 0)).toBe(true);
     expect(must(e.piece('p1')).item.position[1]).toBeGreaterThan(0.1);
+  });
+});
+
+describe('adding by biome', () => {
+  it('refuses a reef-only piece in a freshwater tank and accepts it in a reef tank', () => {
+    expect(editor([], 'freshwater').add('reef-arch')).toEqual({ rejection: 'unknown-asset' });
+    expect(editor([], 'reef').add('reef-arch')).toHaveProperty('id');
+  });
+
+  it('refuses a second vacation feeder', () => {
+    const e = editor([]);
+    expect(e.add(VACATION_FEEDER_ASSET_ID)).toHaveProperty('id');
+    expect(e.add(VACATION_FEEDER_ASSET_ID)).toEqual({ rejection: 'feeder-exists' });
+    expect(e.pieces.filter((p) => p.item.assetId === VACATION_FEEDER_ASSET_ID)).toHaveLength(1);
   });
 });
 

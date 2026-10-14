@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
-const APP_URL = `http://localhost:${process.env['E2E_PORT'] ?? 4317}`;
+export const APP_URL = `http://localhost:${process.env['E2E_PORT'] ?? 4317}`;
 
 export const PASSWORD = 'a long enough passphrase 9';
 export const SCENE_TIMEOUT_MS = 180_000;

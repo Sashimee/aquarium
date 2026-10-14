@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
+  APP_URL,
   createFirstTank,
   dockButton,
   openTank,
@@ -33,7 +34,7 @@ test('Decorate pressed before the tank is ready still opens the editor', async (
   await expect(page.getByRole('region', { name: 'Decorate the tank' })).toBeVisible({
     timeout: 60_000,
   });
-  await expect(page.getByRole('button', { name: 'Hand-feed' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Done' })).toBeVisible();
 });
 
 test('a decor piece is swapped, moved, saved and still there after a reload', async ({ page }) => {
@@ -75,4 +76,36 @@ test('a decor piece is swapped, moved, saved and still there after a reload', as
   const reopened = await startDecorating(page);
   await expect(reopened.locator('.decor-pieces').getByRole('button')).toHaveCount(startCount);
   expect(roughly((await savedTanks(page))[0]?.decorLayout)).toEqual(roughly(moved));
+});
+
+test('the palette follows the tank biome and the server refuses what it hides', async ({
+  page,
+}) => {
+  test.setTimeout(420_000);
+  await registerVerifiedUser(page, 'decor-biome');
+  await openTank(page);
+  await createFirstTank(page);
+  const tank = (await savedTanks(page))[0];
+  if (!tank) throw new Error('the first tank was not saved');
+
+  const panel = await startDecorating(page);
+  await expect(panel.getByRole('button', { name: 'Add Driftwood branch' })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Add Reef arch' })).toHaveCount(0);
+  await expect(panel.getByRole('button', { name: 'Add Vacation feeder' })).toBeEnabled();
+
+  await panel.getByRole('button', { name: 'Add Vacation feeder' }).click();
+  await expect(panel.getByRole('button', { name: 'Add Vacation feeder' })).toBeDisabled();
+  await expect(panel.getByText('already has its one vacation feeder')).toBeVisible();
+  await expect(panel.getByText('Layout saved.')).toBeVisible();
+
+  const rejected = await page.request.patch(`/api/tanks/${tank.id}`, {
+    headers: { origin: APP_URL },
+    data: {
+      decorLayout: [{ assetId: 'reef-arch', position: [0, 0.05, 0], rotationY: 0, scale: 1 }],
+    },
+  });
+  expect(rejected.status()).toBe(400);
+  expect(((await rejected.json()) as { error: { code: string } }).error.code).toBe(
+    'validation_failed',
+  );
 });

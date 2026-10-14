@@ -12,7 +12,7 @@ import type { SavedDecor } from './binding';
 import { DecorEditor } from './editor';
 import type { Piece } from './layout';
 import { perspectiveRay } from './ray';
-import { describeRejection } from './rules';
+import { describeRejection, paletteSpecs } from './rules';
 import type { DecorWorld } from './world';
 
 const COLLIDER_SYNC_MS = 100;
@@ -66,6 +66,7 @@ export class DecorMode {
     const dims = engine.tank.dimensions;
     this.editor = new DecorEditor({
       specs: world.specs,
+      biome: world.biome,
       limits: {
         halfLength: dims.length / 2 - dims.glass - WATER_INSET,
         halfDepth: dims.depth / 2 - dims.glass - WATER_INSET,
@@ -76,6 +77,11 @@ export class DecorMode {
     this.tankId = saved.tankId;
     const offs = [
       interaction.on('decor:command', (command) => this.command(command)),
+      interaction.on('decor:save-state', ({ status }) => {
+        if (status !== 'saved' || this.deps.world.notice === null) return;
+        this.deps.world.notice = null;
+        this.publish();
+      }),
       interaction.on('tank:loaded', ({ tankId }) => {
         if (tankId !== this.tankId) this.stop(false);
       }),
@@ -276,7 +282,7 @@ export class DecorMode {
   private publish(problem?: string): void {
     const editor = this.editor;
     const { world, saved, interaction } = this.deps;
-    const palette: DecorPaletteEntry[] = [...world.specs.values()]
+    const palette: DecorPaletteEntry[] = paletteSpecs(world.specs, world.biome)
       .map((s) => ({ assetId: s.assetId, label: s.label, kind: s.kind }))
       .sort((a, b) => a.label.localeCompare(b.label));
     const pieces: DecorPieceView[] = labelPieces(editor?.pieces ?? [], world);
@@ -287,7 +293,7 @@ export class DecorMode {
       pieces,
       selectedId: editor?.selectedId ?? null,
       hasFeeder: editor?.hasFeeder ?? false,
-      problem: problem ?? editor?.problem ?? null,
+      problem: problem ?? editor?.problem ?? world.notice,
     });
   }
 }

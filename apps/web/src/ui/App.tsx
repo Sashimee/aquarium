@@ -139,7 +139,8 @@ export function App() {
   useRedirect();
   const route = useRoute();
   const home = route.name === 'home';
-  const { panel, newTank, dispatch } = usePanels();
+  const { panel: requested, newTank, dispatch } = usePanels();
+  const panel: Panel = home ? requested : 'none';
   const [food, setFood] = useFood();
   const shell = useRef<HTMLDivElement>(null);
   const dock = useRef<HTMLDivElement>(null);
@@ -157,7 +158,9 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (home && previous.current !== 'home') document.getElementById('tank')?.focus();
+    if (home && previous.current !== 'home' && !document.querySelector('.sheet')) {
+      document.getElementById('tank')?.focus();
+    }
     previous.current = route.name;
     dispatch({ type: 'route-changed', home });
   }, [route.name, home, dispatch]);
@@ -173,8 +176,9 @@ export function App() {
   }, [closable, dispatch]);
 
   const toggle = (target: OpenPanel) => {
-    if (!home) navigate('/');
-    dispatch({ type: 'toggle', panel: target });
+    if (home) return dispatch({ type: 'toggle', panel: target });
+    navigate('/');
+    dispatch({ type: 'open', panel: target });
   };
 
   return (
@@ -199,7 +203,12 @@ export function App() {
             <TankButton open={panel === 'tanks'} onPress={() => toggle('tanks')} />
             <AvatarButton open={panel === 'account'} onPress={() => toggle('account')} />
           </div>
-          <TankTypeSwitch onCreate={(biome) => dispatch({ type: 'new-tank', biome })} />
+          <TankTypeSwitch
+            onCreate={(biome) => {
+              if (!home) navigate('/');
+              dispatch({ type: 'new-tank', biome });
+            }}
+          />
         </div>
       </header>
       <div className="toasts">

@@ -49,6 +49,7 @@ export {
   STEP_HZ,
   World,
   type AnyWorldConfig,
+  type FishPlacement,
   type FishSpawn,
   type TankSpaceWorldConfig,
   type WorldConfig,
@@ -62,5 +63,6 @@ export {
   type SimHost,
   type SimHostOptions,
   type SimAte,
+  type SimLayout,
   type SimReady,
 } from './bridge.ts';

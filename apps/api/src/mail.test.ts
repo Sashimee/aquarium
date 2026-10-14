@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer';
 import { describe, expect, it } from 'vitest';
-import { createMailer, escapeHtml, MailThrottledError } from './mail.ts';
+import { createMailer, escapeHtml, ipBucket, MailThrottledError } from './mail.ts';
 import { memoryHitStore } from './rate-limit.ts';
 
 const TOKEN = `eyJhbGciOiJIUzI1NiJ9.${'abcDEF0123456789_-'.repeat(18)}.sig`;
@@ -68,6 +68,15 @@ describe('verification mail', () => {
     }
     expect(html).toContain('>Verify my email</a>');
     expect(html).toContain(`>${escapeHtml(URL_WITH_AMP)}</a>`);
+  });
+
+  it('tells the user to open the link in the same browser, in both parts', async () => {
+    const raw = await rawMessage(URL_WITH_AMP);
+    for (const type of ['text/plain', 'text/html'] as const) {
+      const body = decodePart(raw, type);
+      expect(body).toContain('Open the link in the same browser you signed up in.');
+      expect(body).toContain('set one with Forgot password instead.');
+    }
   });
 
   it('escapes html metacharacters', () => {
@@ -238,5 +247,43 @@ describe('global mail cap', () => {
     expect(logs).toHaveLength(1);
     expect(logs[0]).toContain('mail limiter unavailable');
     expect(logs.some((m) => m.includes('mail_global_cap_reached'))).toBe(false);
+  });
+});
+
+describe('ipBucket', () => {
+  it('leaves IPv4 untouched', () => {
+    expect(ipBucket('203.0.113.9')).toBe('203.0.113.9');
+  });
+
+  it('treats an IPv4-mapped IPv6 address as its IPv4 address', () => {
+    expect(ipBucket('::ffff:203.0.113.9')).toBe('203.0.113.9');
+    expect(ipBucket('::ffff:cb00:7109')).toBe('203.0.113.9');
+  });
+
+  it('puts compressed and expanded forms of one /64 in the same bucket', () => {
+    const a = ipBucket('2001:db8:0:1::5');
+    expect(ipBucket('2001:0db8:0000:0001:aaaa:bbbb:cccc:dddd')).toBe(a);
+    expect(ipBucket('2001:DB8:0:1:0:0:0:1')).toBe(a);
+  });
+
+  it('keeps different /64s apart', () => {
+    expect(ipBucket('2001:db8:0:1::5')).not.toBe(ipBucket('2001:db8:0:2::5'));
+    expect(ipBucket('2001:db8:0:1::5')).not.toBe(ipBucket('2001:db9:0:1::5'));
+  });
+
+  it('handles :: inside the prefix and an embedded IPv4 tail', () => {
+    expect(ipBucket('2001:db8::1')).toBe(ipBucket('2001:db8:0:0:9::1'));
+    expect(ipBucket('2001:db8:0:1::1.2.3.4')).toBe(ipBucket('2001:db8:0:1::7'));
+  });
+
+  it('drops a zone id', () => {
+    expect(ipBucket('fe80::1%eth0')).toBe(ipBucket('fe80::2'));
+    expect(ipBucket('203.0.113.9%eth0')).toBe('203.0.113.9');
+  });
+
+  it('keys malformed input on the raw string without throwing', () => {
+    for (const garbage of ['', 'not-an-ip', '2001:db8::1::2', '1.2.3', '12345::1', 'g::1']) {
+      expect(ipBucket(garbage)).toBe(garbage);
+    }
   });
 });

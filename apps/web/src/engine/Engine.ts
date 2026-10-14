@@ -118,7 +118,6 @@ export class Engine {
   private daylightLevel = 1;
   private daylightCheckedAt = -Infinity;
   private daylightAnnounced = false;
-  private readonly scratch = new Color();
   private readonly roomBackgroundIntensity: number;
   private readonly effects = new EffectsSlot((message, cause) => this.reportError(message, cause));
   private readonly frameCallbacks = new Set<FrameCallback>();
@@ -328,11 +327,8 @@ export class Engine {
   private updateHoodUniforms(): void {
     const hood = this.hood;
     const day = this.daylightLevel;
+    this.caustics.setHood(hood.color, hood.intensity, MOONLIGHT, day, this.substrateAlbedo);
     const radiance = this.caustics.lightRadiance.value;
-    radiance
-      .copy(hood.color)
-      .multiplyScalar(hood.intensity * day)
-      .add(this.scratch.copy(MOONLIGHT).multiplyScalar(1 - day));
     this.caustics.lightDirection.value.copy(hood.position).sub(hood.target.position).normalize();
     const room = ROOM_AT_NIGHT + (1 - ROOM_AT_NIGHT) * day;
     this.interior.roomLevel.value = room;

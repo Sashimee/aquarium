@@ -8,6 +8,7 @@ import {
   signInRequestSchema,
   updateUserRequestSchema,
   changePasswordRequestSchema,
+  emailSchema,
   sessionListSchema,
   userSchema,
 } from '@aquarium/shared';
@@ -102,11 +103,23 @@ const signInBodySchema = signInRequestSchema.extend({
   rememberMe: z.boolean().optional(),
 });
 
+const requestPasswordResetBodySchema = z.strictObject({
+  email: emailSchema,
+  redirectTo: z.string().max(2048).optional(),
+});
+
+const sendVerificationEmailBodySchema = z.strictObject({
+  email: emailSchema,
+  callbackURL: z.string().max(2048).optional(),
+});
+
 const BODY_SCHEMAS = new Map<string, z.ZodType>([
   [`${AUTH_BASE_PATH}/sign-up/email`, signUpBodySchema],
   [`${AUTH_BASE_PATH}/sign-in/email`, signInBodySchema],
   [`${AUTH_BASE_PATH}/update-user`, updateUserRequestSchema],
   [`${AUTH_BASE_PATH}/change-password`, changePasswordRequestSchema],
+  [`${AUTH_BASE_PATH}/request-password-reset`, requestPasswordResetBodySchema],
+  [`${AUTH_BASE_PATH}/send-verification-email`, sendVerificationEmailBodySchema],
 ]);
 
 function parseJson(raw: string | undefined): unknown {
@@ -227,7 +240,25 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   const { indexable, webRoot, appOrigin, database, auth, mailer, logger = true } = opts;
   const clock = opts.clock ?? createClock();
   const { signInThrottle } = opts;
+  const secure = new URL(appOrigin).protocol === 'https:';
+  const applySecurityHeaders = (reply: FastifyReply): void => {
+    reply.headers(SECURITY_HEADERS);
+    if (secure) reply.header('strict-transport-security', HSTS);
+    if (!indexable) reply.header('x-robots-tag', 'noindex, nofollow');
+  };
   const app = Fastify({
+    // Fastify answers an undecodable URL (GET /%), an over-long path param (414) and a failed async
+    // constraint (500) before routing, so no hook runs for them.
+    frameworkErrors: (err, _req, reply: FastifyReply) => {
+      applySecurityHeaders(reply);
+      const status = err.statusCode ?? 500;
+      const body = JSON.stringify(
+        status >= 500
+          ? apiError('internal', 'Internal server error.')
+          : apiError('validation_failed', 'Malformed request.'),
+      );
+      return reply.code(status).type('application/json; charset=utf-8').send(body);
+    },
     trustProxy: opts.trustedProxies,
     rewriteUrl: (req) => (req.url ?? '/').replace(/^\/{2,}/, '/'),
     logger: logger
@@ -255,11 +286,8 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     }
   });
 
-  const secure = new URL(appOrigin).protocol === 'https:';
   app.addHook('onSend', async (_req, reply) => {
-    reply.headers(SECURITY_HEADERS);
-    if (secure) reply.header('strict-transport-security', HSTS);
-    if (!indexable) reply.header('x-robots-tag', 'noindex, nofollow');
+    applySecurityHeaders(reply);
   });
 
   app.addHook('onRequest', async (req, reply) => {
@@ -530,9 +558,10 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   return app;
 }
 
-// wasm-unsafe-eval: meshopt and basis transcoders. unsafe-eval: the basis transcoder is an emscripten
-// embind module that calls new Function, and KTX2Loader runs it in a blob: worker, which inherits the
-// document's policy (verified: without it every KTX2 load throws EvalError). worker-src blob: same loader. img-src blob: the account export download. style-src unsafe-inline: React style= attributes.
+// unsafe-eval: the basis transcoder is an emscripten module that calls new Function, and KTX2Loader
+// runs it in a blob: worker that inherits this policy. wasm-unsafe-eval: meshopt and the basis
+// transcoder. worker-src and img-src blob: the same loader and the account export download.
+// style-src unsafe-inline: the inline <style> in index.html and React style= attributes.
 export const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval'",
