@@ -14,6 +14,8 @@ import {
   linkFailureMessage,
   materialIdOf,
   parsePipelineFailure,
+  PipelineFailureHandler,
+  type DroppableEffects,
   usesMaterial,
   watchPipelineErrors,
   type FailureContext,
@@ -210,5 +212,90 @@ describe('blameEffects', () => {
     expect(blameEffects({ kind: 'compute', materialId: null, message: 'failed' }, context())).toBe(
       false,
     );
+  });
+});
+
+describe('PipelineFailureHandler', () => {
+  class FakeEffects implements DroppableEffects {
+    active = true;
+    failures: unknown[] = [];
+
+    ownsMaterial(materialId: number): boolean {
+      return materialId === 1;
+    }
+
+    fail(cause: unknown): void {
+      if (!this.active) return;
+      this.active = false;
+      this.failures.push(cause);
+    }
+  }
+
+  function setup() {
+    const effects = new FakeEffects();
+    const reports: { message: string; cause: unknown }[] = [];
+    const handler = new PipelineFailureHandler(
+      effects,
+      (id) => id === 2,
+      (message, cause) => reports.push({ message, cause }),
+    );
+    return { effects, reports, handler };
+  }
+
+  const failure = (materialId: number | null, message = 'failed'): PipelineFailure => ({
+    kind: 'render',
+    materialId,
+    message,
+  });
+  const settle = () => new Promise<void>((resolve) => queueMicrotask(resolve));
+
+  it('drops the effects after the draw that reported the failure, without reporting it', async () => {
+    const { effects, reports, handler } = setup();
+    handler.handle(failure(1));
+    expect(effects.failures).toEqual([]);
+    await settle();
+    expect(effects.failures).toHaveLength(1);
+    expect(reports).toEqual([]);
+  });
+
+  it('reports a link failure that comes after the effects were dropped, once', async () => {
+    const { effects, reports, handler } = setup();
+    handler.handle(failure(null, 'post link failed'));
+    await settle();
+    expect(effects.active).toBe(false);
+    handler.handle(failure(null, 'decor link failed'));
+    handler.handle(failure(null, 'decor link failed'));
+    expect(reports).toHaveLength(1);
+    expect(reports[0]?.message).toMatch(/material failed to build/);
+    expect(reports[0]?.cause).toEqual(new Error('decor link failed'));
+  });
+
+  it('reports an out-of-scene material after the drop, but not the one already blamed', async () => {
+    const { reports, handler } = setup();
+    handler.handle(failure(5));
+    await settle();
+    handler.handle(failure(5));
+    handler.handle(failure(6));
+    expect(reports.map((r) => r.cause)).toEqual([new Error('failed')]);
+  });
+
+  it('reports a scene material once while keeping the effects', async () => {
+    const { effects, reports, handler } = setup();
+    handler.handle(failure(2));
+    handler.handle(failure(2));
+    await settle();
+    expect(effects.active).toBe(true);
+    expect(reports).toHaveLength(1);
+  });
+
+  it('reports a compute failure once by its message', () => {
+    const { effects, reports, handler } = setup();
+    const compute: PipelineFailure = { kind: 'compute', materialId: null, message: 'bad' };
+    handler.handle(compute);
+    handler.handle(compute);
+    expect(effects.active).toBe(true);
+    expect(reports.map((r) => r.message)).toEqual([
+      'A GPU compute pass failed to build and does not run',
+    ]);
   });
 });

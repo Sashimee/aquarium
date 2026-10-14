@@ -119,7 +119,7 @@ export function usesMaterial(root: Object3D, id: number): boolean {
 }
 
 export interface FailureContext {
-  /** Effects are attached, or were dropped for an earlier pipeline failure. */
+  /** Effects are attached now, so dropping them can still help. */
   readonly effects: boolean;
   ownedByEffects(materialId: number): boolean;
   inScene(materialId: number): boolean;
@@ -134,4 +134,56 @@ export function blameEffects(failure: PipelineFailure, context: FailureContext):
   if (!context.effects || failure.kind === 'compute') return false;
   const id = failure.materialId;
   return id === null || context.ownedByEffects(id) || !context.inScene(id);
+}
+
+/** The engine's effects, as far as answering a pipeline failure goes. */
+export interface DroppableEffects {
+  readonly active: boolean;
+  ownsMaterial(materialId: number): boolean;
+  /** Drops the effects; does nothing once they are gone. */
+  fail(cause: unknown): void;
+}
+
+export type ReportFailure = (message: string, cause: unknown) => void;
+
+/**
+ * Answers each pipeline failure once: by dropping the effects while that can still help, otherwise
+ * by reporting it. Only the materials already blamed on dropped effects stay quiet afterwards, as
+ * their pending builds may still fail; any other failure is reported, whatever came before.
+ */
+export class PipelineFailureHandler {
+  private readonly blamed = new Set<number>();
+  private readonly reported = new Set<number | string>();
+
+  constructor(
+    private readonly effects: DroppableEffects,
+    private readonly inScene: (materialId: number) => boolean,
+    private readonly report: ReportFailure,
+  ) {}
+
+  handle(failure: PipelineFailure): void {
+    const id = failure.materialId;
+    if (id !== null && this.blamed.has(id)) return;
+    const cause = new Error(failure.message);
+    const context: FailureContext = {
+      effects: this.effects.active,
+      ownedByEffects: (materialId) => this.effects.ownsMaterial(materialId),
+      inScene: this.inScene,
+    };
+    if (blameEffects(failure, context)) {
+      if (id !== null) this.blamed.add(id);
+      // WebGL reports from inside the draw; tearing the post chain down mid-render is not safe.
+      queueMicrotask(() => this.effects.fail(cause));
+      return;
+    }
+    const key = id ?? failure.message;
+    if (this.reported.has(key)) return;
+    this.reported.add(key);
+    this.report(
+      failure.kind === 'compute'
+        ? 'A GPU compute pass failed to build and does not run'
+        : 'A material failed to build and is not drawn',
+      cause,
+    );
+  }
 }

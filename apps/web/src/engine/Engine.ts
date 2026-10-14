@@ -11,12 +11,7 @@ import {
 import { applyDayLighting, type DayLightingRig, FRESHWATER_FILL_LEVEL } from './dayLighting';
 import { daylightAt, minuteOfDay } from './daylight';
 import { EffectsSlot } from './effectsSlot';
-import {
-  blameEffects,
-  usesMaterial,
-  watchPipelineErrors,
-  type PipelineFailure,
-} from './pipelineErrors';
+import { PipelineFailureHandler, usesMaterial, watchPipelineErrors } from './pipelineErrors';
 import { installRoomLighting, DEFAULT_HDRI_URL } from './environment';
 import { createSharedKtx2, type Ktx2Textures } from './ktx2';
 import { EventBus, type BackendKind, type EngineEvents, type EngineEventBus } from './events';
@@ -136,8 +131,6 @@ export class Engine {
   private sceneRevisionValue = 0;
   /** Later tier changes warm what they turn on themselves. */
   private warmedUp = false;
-  private effectsLostPipeline = false;
-  private readonly reportedPipelines = new Set<number | string>();
   private gpuMs: number | null = null;
   private readonly gpuTiming: boolean;
   private lastGpuMs: number | null = null;
@@ -200,7 +193,12 @@ export class Engine {
     });
     // Announced once every feature, the effects included, has the new tier.
     cleanup.add(events.on('quality:tier-changed', () => this.effects.refresh()));
-    cleanup.add(watchPipelineErrors(renderer, (failure) => this.onPipelineFailure(failure)));
+    const pipelineFailures = new PipelineFailureHandler(
+      this.effects,
+      (id) => usesMaterial(this.scene, id),
+      (message, cause) => this.reportError(message, cause),
+    );
+    cleanup.add(watchPipelineErrors(renderer, (failure) => pipelineFailures.handle(failure)));
 
     container.appendChild(renderer.domElement);
     cleanup.add(() => renderer.domElement.remove());
@@ -326,31 +324,6 @@ export class Engine {
   async dispose(): Promise<void> {
     this.frameCallbacks.clear();
     await this.cleanup.dispose();
-  }
-
-  /** three skips every draw needing a pipeline it failed to build, so it must not go unsaid. */
-  private onPipelineFailure(failure: PipelineFailure): void {
-    const cause = new Error(failure.message);
-    const blamed = blameEffects(failure, {
-      effects: this.effects.active || this.effectsLostPipeline,
-      ownedByEffects: (id) => this.effects.ownsMaterial(id),
-      inScene: (id) => usesMaterial(this.scene, id),
-    });
-    if (blamed) {
-      this.effectsLostPipeline = true;
-      // WebGL reports from inside the draw; tearing the post chain down mid-render is not safe.
-      queueMicrotask(() => this.effects.fail(cause));
-      return;
-    }
-    const key = failure.materialId ?? failure.message;
-    if (this.reportedPipelines.has(key)) return;
-    this.reportedPipelines.add(key);
-    this.reportError(
-      failure.kind === 'compute'
-        ? 'A GPU compute pass failed to build and does not run'
-        : 'A material failed to build and is not drawn',
-      cause,
-    );
   }
 
   private reportError(message: string, cause: unknown): void {
