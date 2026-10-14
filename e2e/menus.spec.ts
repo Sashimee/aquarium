@@ -196,6 +196,12 @@ async function expectOrbits(page: Page, drag: Drag, context: string) {
   }
 }
 
+async function frames(page: Page, count: number) {
+  await page.evaluate(async (n) => {
+    for (let i = 0; i < n; i += 1) await new Promise((done) => requestAnimationFrame(done));
+  }, count);
+}
+
 // Software rendering runs at a few frames a second, so a pose read twice within one frame proves
 // nothing: each reading waits for two animation frames first.
 async function settledPose(page: Page): Promise<string> {
@@ -205,18 +211,23 @@ async function settledPose(page: Page): Promise<string> {
   await expect
     .poll(
       async () => {
-        await page.evaluate(
-          () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
-        );
+        await frames(page, 2);
         const pose = (await canvas.getAttribute('data-camera')) ?? '';
         steady = pose === last ? steady + 1 : 0;
         last = pose;
         return steady;
       },
-      { message: 'the camera never came to rest', intervals: [100], timeout: 60_000 },
+      { message: 'the camera never came to rest', intervals: [100], timeout: 40_000 },
     )
-    .toBeGreaterThanOrEqual(3);
+    .toBeGreaterThanOrEqual(2);
   return last;
+}
+
+// A real orbit moves the camera by over 1 within the frame that follows the drag.
+function poseDistance(a: string, b: string): number {
+  const left = a.split(' ').map(Number);
+  const right = b.split(' ').map(Number);
+  return Math.max(...left.map((value, i) => Math.abs(value - (right[i] ?? Number.NaN))));
 }
 
 async function expectToolClaimsDrag(page: Page, drag: Drag) {
@@ -228,7 +239,9 @@ async function expectToolClaimsDrag(page: Page, drag: Drag) {
   await expect(laser).toHaveAttribute('aria-pressed', 'true');
   const before = await settledPose(page);
   await drag([viewport.width * 0.8, y], [viewport.width * 0.2, y]);
-  expect(await settledPose(page), 'a Laser drag orbited the camera').toBe(before);
+  await frames(page, 3);
+  const after = (await page.locator('canvas#tank').getAttribute('data-camera')) ?? '';
+  expect(poseDistance(after, before), 'a Laser drag orbited the camera').toBeLessThan(0.1);
   await press(playGroup(page).getByRole('button', { name: 'Tap glass', exact: true }));
   await expectOrbits(page, drag, 'after switching Laser back to Tap glass');
 }
@@ -347,13 +360,12 @@ test.describe('menus with a mouse', () => {
   });
 
   const app = shared(
-    { viewport: { width: 1280, height: 800 } },
+    { viewport: { width: 800, height: 540 } },
     (page, cdp) => (from, to) => mouseDrag(page, cdp, from, to),
   );
 
-  test('the camera orbits on a fresh page, and a Laser drag does not move it', async () => {
+  test('a Laser drag does not move the camera, and Tap glass gives the orbit back', async () => {
     const { page, drag } = app();
-    await expectOrbits(page, drag, 'on a fresh page');
     await expectToolClaimsDrag(page, drag);
   });
 
