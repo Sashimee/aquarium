@@ -2,7 +2,7 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; every texture has both files.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Anemone tentacle sway is \"_sway\" (0 base, 1 tip).",
-  "totalBytes": 57313273,
+  "totalBytes": 57311661,
   "assets": [
     {
       "id": "angelfish",
@@ -587,24 +587,24 @@
       "lods": [
         {
           "file": "fish/bronze-corydoras/lod0.glb",
-          "bytes": 30284,
-          "sha256": "183d3a651d73a682d8bffa9129fe5de14f8941cb2796a37a1d5399fde51c1889",
+          "bytes": 30336,
+          "sha256": "9da59c914457e2d4bff6a26e1534d36e641fc483295e3360bbb33d7bfd9414a3",
           "triangles": 3144,
           "vertices": 1700
         },
         {
           "file": "fish/bronze-corydoras/lod1.glb",
-          "bytes": 15700,
-          "sha256": "3dddbca0a8a10e73e5f3d9872693b9446f6cc5d2ab6f6c0d24a49df41812de51",
+          "bytes": 15696,
+          "sha256": "3667466c5c7ba4df8ec5a7ac4749d4147112011d8b32bc913a565bb5aa501157",
           "triangles": 1257,
           "vertices": 690
         },
         {
           "file": "fish/bronze-corydoras/lod2.glb",
-          "bytes": 8376,
-          "sha256": "3a011c8e13d237a9331459bdccd5a6dbb0e02273d007d00a063c7c104eb0aed6",
+          "bytes": 8432,
+          "sha256": "43b310b126596b2ca9f654c313d255b6574c212387de596e35f0480da65f239e",
           "triangles": 471,
-          "vertices": 272
+          "vertices": 271
         }
       ],
       "textures": [
@@ -615,15 +615,15 @@
           "variants": {
             "1k": {
               "file": "fish/bronze-corydoras/textures/bronze-corydoras_basecolor_1k.ktx2",
-              "bytes": 32811,
-              "sha256": "f05d56859e416c569b1082dab406aa0764169e088fa51df9bd372ec7aa60eb3e",
+              "bytes": 31953,
+              "sha256": "ca575a0c5de7de3411a94c49f655600cfaa90dfcfdf3bd6e11a99432bcdf31b1",
               "size": 512,
               "codec": "etc1s"
             },
             "2k": {
               "file": "fish/bronze-corydoras/textures/bronze-corydoras_basecolor_2k.ktx2",
-              "bytes": 32811,
-              "sha256": "f05d56859e416c569b1082dab406aa0764169e088fa51df9bd372ec7aa60eb3e",
+              "bytes": 31953,
+              "sha256": "ca575a0c5de7de3411a94c49f655600cfaa90dfcfdf3bd6e11a99432bcdf31b1",
               "size": 512,
               "codec": "etc1s"
             }
@@ -633,28 +633,28 @@
       "files": [
         {
           "file": "fish/bronze-corydoras/lod0.glb",
-          "bytes": 30284,
-          "sha256": "183d3a651d73a682d8bffa9129fe5de14f8941cb2796a37a1d5399fde51c1889"
+          "bytes": 30336,
+          "sha256": "9da59c914457e2d4bff6a26e1534d36e641fc483295e3360bbb33d7bfd9414a3"
         },
         {
           "file": "fish/bronze-corydoras/lod1.glb",
-          "bytes": 15700,
-          "sha256": "3dddbca0a8a10e73e5f3d9872693b9446f6cc5d2ab6f6c0d24a49df41812de51"
+          "bytes": 15696,
+          "sha256": "3667466c5c7ba4df8ec5a7ac4749d4147112011d8b32bc913a565bb5aa501157"
         },
         {
           "file": "fish/bronze-corydoras/lod2.glb",
-          "bytes": 8376,
-          "sha256": "3a011c8e13d237a9331459bdccd5a6dbb0e02273d007d00a063c7c104eb0aed6"
+          "bytes": 8432,
+          "sha256": "43b310b126596b2ca9f654c313d255b6574c212387de596e35f0480da65f239e"
         },
         {
           "file": "fish/bronze-corydoras/textures/bronze-corydoras_basecolor_1k.ktx2",
-          "bytes": 32811,
-          "sha256": "f05d56859e416c569b1082dab406aa0764169e088fa51df9bd372ec7aa60eb3e"
+          "bytes": 31953,
+          "sha256": "ca575a0c5de7de3411a94c49f655600cfaa90dfcfdf3bd6e11a99432bcdf31b1"
         },
         {
           "file": "fish/bronze-corydoras/textures/bronze-corydoras_basecolor_2k.ktx2",
-          "bytes": 32811,
-          "sha256": "f05d56859e416c569b1082dab406aa0764169e088fa51df9bd372ec7aa60eb3e"
+          "bytes": 31953,
+          "sha256": "ca575a0c5de7de3411a94c49f655600cfaa90dfcfdf3bd6e11a99432bcdf31b1"
         }
       ],
       "fish": {
