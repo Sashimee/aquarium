@@ -113,8 +113,8 @@ describe('unverified sign-up takeover (#114)', () => {
       payload: { email, password },
     });
 
-  const signUpWith = (email: string, password: string) =>
-    h.app.inject({
+  const signUpWith = (email: string, password: string, inject = h.app.inject.bind(h.app)) =>
+    inject({
       method: 'POST',
       url: '/api/auth/sign-up/email',
       headers: jsonHeaders,
@@ -207,7 +207,7 @@ describe('unverified sign-up takeover (#114)', () => {
       // The previous sign-up's background mail would otherwise land inside this timing window.
       await h.settleMail();
       const start = performance.now();
-      await signUpWith(email, ATTACKER_PASSWORD);
+      await signUpWith(email, ATTACKER_PASSWORD, h.rawInject);
       return performance.now() - start;
     };
     const pairs: { fresh: number; repeat: number }[] = [];
@@ -219,13 +219,51 @@ describe('unverified sign-up takeover (#114)', () => {
         pairs.push({ fresh, repeat: await time(email) });
       } else {
         const email = nextEmail();
-        await signUpWith(email, ATTACKER_PASSWORD);
+        await signUpWith(email, ATTACKER_PASSWORD, h.rawInject);
         const repeat = await time(email);
         pairs.push({ fresh: await time(nextEmail()), repeat });
       }
     }
     expectNoTimingSkew(pairs);
   }, 120_000);
+
+  it('responds to a sign-up for a verified address in about the time of a fresh one (#120)', async () => {
+    const time = async (email: string) => {
+      await h.settleMail();
+      const start = performance.now();
+      const res = await signUpWith(email, ATTACKER_PASSWORD, h.rawInject);
+      expect(res.statusCode).toBe(200);
+      return performance.now() - start;
+    };
+    const verified = nextEmail();
+    await verifiedSession(h, verified);
+    const pairs: { fresh: number; repeat: number }[] = [];
+    await time(nextEmail());
+    for (let i = 0; i < 40; i++) {
+      if (i % 2 === 0) pairs.push({ fresh: await time(nextEmail()), repeat: await time(verified) });
+      else {
+        const repeat = await time(verified);
+        pairs.push({ fresh: await time(nextEmail()), repeat });
+      }
+    }
+    expectNoTimingSkew(pairs);
+  }, 120_000);
+
+  it('does not wait for the mail relay when signing up', async () => {
+    const held = h.holdMail();
+    try {
+      const email = nextEmail();
+      const res = await signUpWith(email, ATTACKER_PASSWORD, h.rawInject);
+      expect(res.statusCode).toBe(200);
+      await held.sendStarted;
+      expect(h.outbox.filter((m) => m.to === email)).toHaveLength(0);
+      const repeat = await signUpWith(email, VICTIM_PASSWORD, h.rawInject);
+      expect(repeat.statusCode).toBe(200);
+    } finally {
+      held.release();
+      await h.settleMail();
+    }
+  });
 
   it('lets the owner set a password by reset, revoking sessions, and leaves verified accounts intact', async () => {
     const email = nextEmail();
