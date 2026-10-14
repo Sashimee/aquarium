@@ -185,12 +185,12 @@ describe('Better Auth body validation (#118)', () => {
     expect(res.statusCode).toBe(404);
   });
 
-  describe('reset and resend bodies', () => {
-    const cases = [
-      ['request-password-reset', 'redirectTo'],
-      ['send-verification-email', 'callbackURL'],
-    ] as const;
+  const cases = [
+    ['request-password-reset', 'redirectTo'],
+    ['send-verification-email', 'callbackURL'],
+  ] as const;
 
+  describe('reset and resend bodies', () => {
     it.each(cases)('rejects bad %s bodies before Better Auth runs', async (path, field) => {
       const before = h.outbox.length;
       const otherField = field === 'redirectTo' ? 'callbackURL' : 'redirectTo';
@@ -235,30 +235,31 @@ describe('Better Auth body validation (#118)', () => {
     });
   });
 
-  it('does not charge the per-IP budget for rejected bodies', async () => {
-    const limited = await createHarness({
-      mailLimits: { ...DEFAULT_MAIL_LIMITS, perIpSignup: { max: 2, windowMs: 60_000 } },
-    });
-    try {
-      for (let i = 0; i < 5; i++) {
-        const bad = await post(limited.app, '/api/auth/request-password-reset', {
-          email: 'nope',
-        });
-        expect(bad.statusCode).toBe(400);
+  it.each(cases)(
+    'does not charge the per-IP budget for rejected %s bodies',
+    async (path, field) => {
+      const limited = await createHarness({
+        mailLimits: { ...DEFAULT_MAIL_LIMITS, perIpSignup: { max: 2, windowMs: 60_000 } },
+      });
+      try {
+        for (let i = 0; i < 5; i++) {
+          const bad = await post(limited.app, `/api/auth/${path}`, {
+            email: 'nope',
+          });
+          expect(bad.statusCode).toBe(400);
+        }
+        const good = { email: nextEmail(), [field]: '/' };
+        const statuses: number[] = [];
+        for (let i = 0; i < 3; i++) {
+          statuses.push((await post(limited.app, `/api/auth/${path}`, good)).statusCode);
+        }
+        expect(statuses).toEqual([200, 200, 429]);
+      } finally {
+        await limited.close();
+        await limited.dropDatabase();
       }
-      const good = { email: nextEmail(), redirectTo: '/' };
-      const statuses: number[] = [];
-      for (let i = 0; i < 3; i++) {
-        statuses.push(
-          (await post(limited.app, '/api/auth/request-password-reset', good)).statusCode,
-        );
-      }
-      expect(statuses).toEqual([200, 200, 429]);
-    } finally {
-      await limited.close();
-      await limited.dropDatabase();
-    }
-  });
+    },
+  );
 
   describe('fragment in the request path', () => {
     let port: number;

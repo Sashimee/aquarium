@@ -75,6 +75,9 @@ describe('verification mail', () => {
     for (const type of ['text/plain', 'text/html'] as const) {
       const body = decodePart(raw, type);
       expect(body).toContain('Open the link in the same browser you signed up in.');
+      expect(body).toContain(
+        'If you open it in another browser or on another device, your password will not carry over;',
+      );
       expect(body).toContain('set one with Forgot password instead.');
     }
   });
@@ -281,9 +284,45 @@ describe('ipBucket', () => {
     expect(ipBucket('203.0.113.9%eth0')).toBe('203.0.113.9');
   });
 
-  it('keys malformed input on the raw string without throwing', () => {
+  it('keys malformed input on the prefixed raw string without throwing', () => {
     for (const garbage of ['', 'not-an-ip', '2001:db8::1::2', '1.2.3', '12345::1', 'g::1']) {
-      expect(ipBucket(garbage)).toBe(garbage);
+      expect(ipBucket(garbage)).toBe(`raw:${garbage}`);
     }
+  });
+
+  it('never lets raw input share a real bucket', () => {
+    expect(ipBucket('2001:db8:0:1::/64')).not.toBe(ipBucket('2001:db8:0:1::5'));
+    expect(ipBucket('2001:db8:0:1::/64')).toBe('raw:2001:db8:0:1::/64');
+  });
+});
+
+describe('consumeIp bucketing', () => {
+  const mailer = () => {
+    const transport = nodemailer.createTransport({ jsonTransport: true });
+    return createMailer(transport, 'fish@bas.lu', {
+      store: memoryHitStore(() => 0),
+      log: () => undefined,
+      limits: {
+        perRecipient: { max: 100, windowMs: 3_600_000 },
+        verificationCooldown: { max: 100, windowMs: 1000 },
+        perIpSignup: { max: 2, windowMs: 3_600_000 },
+        global: { max: 1000, windowMs: 3_600_000 },
+      },
+    });
+  };
+
+  it('spends one budget across an IPv4 address and its IPv4-mapped forms', async () => {
+    const m = mailer();
+    expect((await m.consumeIp('203.0.113.60')).wait).toBe(0);
+    expect((await m.consumeIp('::ffff:203.0.113.60')).wait).toBe(0);
+    expect((await m.consumeIp('::ffff:cb00:713c')).wait).toBeGreaterThan(0);
+    expect((await m.consumeIp('203.0.113.60')).wait).toBeGreaterThan(0);
+    expect((await m.consumeIp('203.0.113.61')).wait).toBe(0);
+  });
+
+  it('does not let a literal prefix string spend the budget of that /64', async () => {
+    const m = mailer();
+    for (let i = 0; i < 5; i++) await m.consumeIp('2001:db8:0:1::/64');
+    expect((await m.consumeIp('2001:db8:0:1::5')).wait).toBe(0);
   });
 });

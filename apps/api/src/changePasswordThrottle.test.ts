@@ -80,7 +80,7 @@ describe('per-account change-password throttle (#285)', () => {
     expect((await change(a, PASSWORD)).statusCode).toBe(429);
   });
 
-  it('is not reset by a foreign-origin 403', async () => {
+  it('neither counts nor resets the budget on a foreign-origin 403', async () => {
     const a = await account();
     expect((await change(a, WRONG)).statusCode).toBe(400);
     const foreign = await change(a, WRONG, NEXT, { origin: 'https://evil.example' });
