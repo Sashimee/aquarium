@@ -3,7 +3,8 @@ import type { Biome } from '@aquarium/shared';
 
 /**
  * Scan-derived corals arrive in dull museum tones, so the scene tints each instance toward live
- * tissue colour. Palettes are multiplied into the base colour map, each channel stays at or below 1 so albedo never exceeds the scan's.
+ * tissue colour. Palettes are multiplied into the base colour map. Each channel stays at or
+ * below 1, so albedo never exceeds the scan's.
  */
 type Rgb = readonly [number, number, number];
 
