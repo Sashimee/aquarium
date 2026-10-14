@@ -75,9 +75,9 @@ describe('legal api', () => {
 
   it('requests the export with POST', async () => {
     const fetcher = vi.fn().mockResolvedValue(json({ format: 'other' }));
-    await createApiClient(fetcher)
-      .exportData()
-      .catch(() => undefined);
+    await expect(createApiClient(fetcher).exportData()).rejects.toMatchObject({
+      code: 'unexpected_response',
+    });
     const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
     expect([url, init.method]).toEqual(['/api/me/export', 'POST']);
   });
