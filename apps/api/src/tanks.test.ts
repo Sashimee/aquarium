@@ -1,8 +1,8 @@
 import {
   apiErrorSchema,
   decorLayoutSchema,
-  legacyTintSeed,
   decorPositionLimits,
+  legacyTintSeed,
   speciesListSchema,
   tankListSchema,
   tankSchema,
@@ -780,15 +780,15 @@ describe('PATCH decor layout validation', () => {
       expect(decorLayoutSchema.parse(row?.decorLayout)[0]?.tintSeed).toBe(legacy?.tintSeed);
     });
 
-    it('gives each newly placed piece without a seed its own stored seed', async () => {
+    it('stores a seedless piece with the seed of its saved placement', async () => {
       const reef = await createTank(h, cookie, 'reef');
       await patch(reef.id, [
         { ...coral, position: [0, 0.05, 0] },
         { ...coral, position: [0.2, 0.05, 0] },
       ]);
-      const seeds = (await getLayout(reef.id)).map((i) => i.tintSeed);
-      expect(seeds.every((s) => s !== undefined)).toBe(true);
-      expect(seeds[0]).not.toBe(seeds[1]);
+      const layout = await getLayout(reef.id);
+      expect(layout.map((i) => i.tintSeed)).toEqual(layout.map((i) => legacyTintSeed(i)));
+      expect(layout[0]?.tintSeed).not.toBe(layout[1]?.tintSeed);
     });
   });
 

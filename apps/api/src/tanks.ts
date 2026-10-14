@@ -1,4 +1,3 @@
-import { randomInt } from 'node:crypto';
 import {
   addFishRequestSchema,
   ateBatchRequestSchema,
@@ -6,8 +5,8 @@ import {
   createTankRequestSchema,
   decorLayoutSchema,
   findDecorProblems,
-  legacyTintSeed,
   idSchema,
+  legacyTintSeed,
   speciesListSchema,
   tankListSchema,
   tankSchema,
@@ -433,7 +432,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
               ? {
                   decorLayout: body.decorLayout.map((item) => ({
                     ...item,
-                    tintSeed: item.tintSeed ?? randomInt(0x100000000),
+                    tintSeed: item.tintSeed ?? legacyTintSeed(item),
                   })),
                 }
               : {}),

@@ -1,8 +1,21 @@
+import { legacyTintSeed } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import { coralGlow, coralTint, fluorescenceLevel, heightScale, placementKey } from './coralStyle';
 import { loadPreset } from './preset';
 
 describe('coral style', () => {
+  it('keeps placementKey equal to the shared legacyTintSeed', () => {
+    for (const [position, rotationY] of [
+      [[0, 0, 0], 0],
+      [[0.123, 0.05, -0.2], 1.234],
+      [[-0.59, 0.5, 0.24], -6.28],
+    ] as const) {
+      expect(placementKey(position, rotationY)).toBe(
+        legacyTintSeed({ position: [...position], rotationY }),
+      );
+    }
+  });
+
   it('wraps around the palette and keeps every channel at or below 1', () => {
     const tints = [0, 1, 2].map((i) => coralTint('brain-coral', i));
     expect(new Set(tints.map((t) => t?.getHex())).size).toBe(3);
