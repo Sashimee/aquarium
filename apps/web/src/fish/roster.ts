@@ -18,8 +18,6 @@ export interface RosterFish {
   phase: FishPhase;
   /** 0 dead .. 1 healthy, as of the last server snapshot that carried this fish. */
   health: number;
-  /** Died while the tank was on screen, so it gets the death throes before floating. */
-  diedLive: boolean;
 }
 
 /**
@@ -121,7 +119,6 @@ export class TankRoster {
     if (entry.phase === 'swimming') this.revision++;
     entry.phase = 'dead';
     entry.health = 0;
-    entry.diedLive = true;
     return entry;
   }
 
@@ -174,7 +171,6 @@ export class TankRoster {
         lengthM: spawn.bodyLengthM,
         phase: 'swimming',
         health: 1,
-        diedLive: false,
       });
     }
   }
@@ -188,7 +184,6 @@ export class TankRoster {
       lengthM: fish.size,
       phase,
       health: fish.status === 'dead' ? 0 : fish.health,
-      diedLive: false,
     };
     this.insert(entry);
     this.simIdByServer.set(fish.id, entry.simId);

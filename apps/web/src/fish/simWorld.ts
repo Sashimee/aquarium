@@ -2,6 +2,7 @@ import type { Collider } from '@aquarium/shared';
 import type { Anchor, FishSpawn, SimReady, TankSpaceWorldConfig } from '@aquarium/sim';
 import type { SceneAnchor } from '../scene/anemone';
 import { sceneAnchorsToSim, type DemoTank } from './demoStock';
+import { bodyLengthOf } from './profiles';
 import type { RosterFish } from './roster';
 import { allSpeciesInputs, speciesInput } from './species';
 
@@ -59,12 +60,13 @@ export class SimWorldSpec {
   config(swimming: readonly RosterFish[]): TankSpaceWorldConfig | null {
     const fish: FishSpawn[] = [];
     for (const f of swimming) {
-      if (speciesInput(f.species) === undefined) continue;
-      fish.push(
-        f.lengthM === undefined
-          ? { id: f.simId, species: f.species }
-          : { id: f.simId, species: f.species, bodyLengthM: f.lengthM },
-      );
+      const input = speciesInput(f.species);
+      if (input === undefined) continue;
+      fish.push({
+        id: f.simId,
+        species: f.species,
+        bodyLengthM: bodyLengthOf(f, input.locomotion.bodyLengthM),
+      });
     }
     if (fish.length === 0) return null;
     return {

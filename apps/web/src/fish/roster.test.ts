@@ -149,7 +149,7 @@ describe('TankRoster', () => {
     const roster = loaded();
     const before = roster.revision;
     const dead = roster.died({ tankId: TANK_A, fish: fishFixture(FISH_1, { status: 'dead' }) });
-    expect(dead).toMatchObject({ phase: 'dead', diedLive: true, health: 0 });
+    expect(dead).toMatchObject({ phase: 'dead', health: 0 });
     expect(roster.revision).toBe(before + 1);
     expect(roster.simIdOf(FISH_1)).toBeDefined();
     expect(
@@ -164,7 +164,7 @@ describe('TankRoster', () => {
     const roster = loaded([fishFixture(FISH_1)]);
     const before = roster.revision;
     const dead = roster.died({ tankId: TANK_A, fish: fishFixture(FISH_3, { status: 'dead' }) });
-    expect(dead).toMatchObject({ serverId: FISH_3, phase: 'dead', diedLive: false });
+    expect(dead).toMatchObject({ serverId: FISH_3, phase: 'dead' });
     expect(roster.revision).toBe(before);
   });
 

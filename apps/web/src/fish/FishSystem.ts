@@ -47,7 +47,13 @@ import {
   type Anchor,
   type WaterBox,
 } from './poses';
-import { assetIdFor, batchKeyOf, renderProfile, type FishRenderProfile } from './profiles';
+import {
+  batchKeyOf,
+  bodyLengthOf,
+  modelFor,
+  renderProfile,
+  type FishRenderProfile,
+} from './profiles';
 import { hashString, TankRoster, type RosterFish } from './roster';
 import { SimStream } from './simStream';
 import { initSim, layoutChanges, SimInitTimeout, SimWorldSpec, startWorld } from './simWorld';
@@ -196,8 +202,6 @@ export class FishSystem {
   private readonly forward = new Vector3();
   private readonly quat = new Float32Array(4);
   private readonly pose = createPose();
-  /** The placed fish's caudal thrust from the sim; scripted and held poses count as powered. */
-  private thrust = 1;
   private readonly values: InstanceValues = {
     qx: 0,
     qy: 0,
@@ -301,13 +305,16 @@ export class FishSystem {
   /** Applies a saved-tank event; see `InteractionEvents` for the contract. */
   handle(event: TankEvent): void {
     if (this.disposed) return;
+    let swapped = false;
     switch (event.type) {
       case 'tank:loaded':
         this.roster.load(event.payload);
         this.stopWorld();
+        swapped = true;
         break;
       case 'tank:unloaded':
-        if (this.roster.unload(event.payload)) this.stopWorld();
+        swapped = this.roster.unload(event.payload);
+        if (swapped) this.stopWorld();
         break;
       case 'tank:fish-added':
         this.roster.add(event.payload);
@@ -325,6 +332,7 @@ export class FishSystem {
         break;
     }
     this.prune();
+    if (swapped) this.evictUnusedBatches();
     this.materialize();
     this.requestSync();
   }
@@ -333,8 +341,10 @@ export class FishSystem {
   setDemoBiome(biome: Biome): void {
     if (this.disposed) return;
     const demo = demoTank(this.options.tank, this.seed, biome);
-    if (this.roster.setDemo(demo.config.fish)) this.stopWorld();
+    const swapped = this.roster.setDemo(demo.config.fish);
+    if (swapped) this.stopWorld();
     this.prune();
+    if (swapped) this.evictUnusedBatches();
     this.materialize();
     this.requestSync();
   }
@@ -494,13 +504,13 @@ export class FishSystem {
     let profile: FishRenderProfile;
     try {
       profile = renderProfile(species);
-      model = await this.loader.load(assetIdFor(profile, fish.key));
+      model = await this.loader.load(modelFor(profile, fish.key).assetId);
     } catch (cause) {
       this.unavailable.add(key);
       this.report(`Fish "${species}" has no visual; it swims and eats unseen`, cause);
       return;
     }
-    if (this.disposed) {
+    if (this.disposed || !this.wantedBatches().has(key)) {
       disposeFishModel(model);
       return;
     }
@@ -569,6 +579,27 @@ export class FishSystem {
     batch.capacity = 0;
   }
 
+  private wantedBatches(): Set<string> {
+    const keys = new Set<string>();
+    for (const fish of this.roster.entries()) keys.add(batchKeyOf(fish));
+    return keys;
+  }
+
+  /**
+   * After a tank or demo swap, frees the model and buffers of every batch no fish draws from, so
+   * GPU memory follows the shown stock rather than every species seen. Runs after `prune`, so no
+   * runtime still points at an evicted batch.
+   */
+  private evictUnusedBatches(): void {
+    const wanted = this.wantedBatches();
+    for (const [key, batch] of this.batches) {
+      if (wanted.has(key)) continue;
+      this.disposeLods(batch);
+      disposeFishModel(batch.model);
+      this.batches.delete(key);
+    }
+  }
+
   /** Builds a runtime for every roster fish whose model is loaded. */
   private materialize(): void {
     const perBatch = new Map<string, number>();
@@ -590,7 +621,7 @@ export class FishSystem {
   private createRuntime(fish: RosterFish, batch: SpeciesBatch): FishRuntime {
     const rng = new Rng((this.seed ^ hashString(fish.key)) >>> 0);
     const { profile, input } = batch;
-    const length = fish.lengthM ?? input.locomotion.bodyLengthM;
+    const length = bodyLengthOf(fish, input.locomotion.bodyLengthM);
     const v = profile.tintVariation;
     const brightness = 1 + v * rng.signed();
     const [lo, hi] = profile.filmThicknessNm;
@@ -837,7 +868,7 @@ export class FishSystem {
   private place(rt: FishRuntime, deltaS: number, frame: Float32Array | null): boolean {
     const pose = this.pose;
     const { fish } = rt;
-    this.thrust = 1;
+    pose.thrust = 1;
     if (fish.phase === 'swimming') {
       const o = frame === null ? undefined : this.stream.layout?.offsets.get(fish.simId);
       let presence: FramePresence;
@@ -876,7 +907,7 @@ export class FishSystem {
         pose.speed = frame[o + SnapshotField.Speed] ?? 0;
         pose.yawRate = frame[o + SnapshotField.YawRate] ?? 0;
         pose.liveliness = 1;
-        this.thrust = frame[o + SnapshotField.Thrust] ?? 1;
+        pose.thrust = frame[o + SnapshotField.Thrust] ?? 1;
         if (rt.handover > 0) {
           const w = smoothstep01(rt.handover / HANDOVER_S);
           this.position.lerp(rt.fromPosition, w);
@@ -929,8 +960,8 @@ export class FishSystem {
         rt.shown = false;
         continue;
       }
-      const { liveliness, speed, yawRate } = this.pose;
-      rt.swim.advance(deltaS * liveliness, { speed, yawRate, thrust: this.thrust });
+      const { liveliness } = this.pose;
+      rt.swim.advance(deltaS * liveliness, this.pose);
       rt.lastPosition.copy(this.position);
       rt.lastQuaternion.copy(this.quaternion);
       rt.shown = true;

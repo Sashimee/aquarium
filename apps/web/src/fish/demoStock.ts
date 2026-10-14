@@ -65,7 +65,7 @@ function stock(raw: readonly unknown[], wanted: Readonly<Record<string, number>>
 }
 
 /**
- * Guppies are about half male: each fish picks its model from the guppy render variants.
+ * Guppies are about half male: each fish's sex, and with it its model, comes from its key.
  * The reef has one clownfish pair for its one host anemone, a yellow rather than a blue tang
  * (a blue tang outgrows a 120 cm tank), and as many banggai as content's smallest group.
  */
