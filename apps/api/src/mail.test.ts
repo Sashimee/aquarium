@@ -263,6 +263,11 @@ describe('global mail cap', () => {
     now += 31_000;
     expect(await retryAfter()).toBe(60);
     expect(logs).toHaveLength(1);
+
+    await mailer.sendVerification('c@bas.lu', 'https://x.test/c');
+    now += 61_000;
+    expect(await retryAfter()).toBe(60);
+    expect(logs).toHaveLength(1);
   });
 
   it('refuses mail without logging the cap event when the store throws', async () => {
