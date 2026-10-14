@@ -429,6 +429,13 @@ export class DecorField implements Sdf {
     return this.reachM;
   }
 
+  /** Collider entries summed over the grid cells: the work queries walk, which a wider reach raises. */
+  get cellEntries(): number {
+    let total = 0;
+    for (const list of this.cells) total += list.length;
+    return total;
+  }
+
   /** Raises the reach to `reach` and rebins every collider; returns cells rebuilt. Never lowers it. */
   widen(reach: number): number {
     if (!(reach > this.reachM && Number.isFinite(reach))) return 0;

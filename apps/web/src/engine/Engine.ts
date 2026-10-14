@@ -8,6 +8,7 @@ import {
   Scene,
   WebGPURenderer,
 } from 'three/webgpu';
+import { applyDayLighting, FRESHWATER_FILL_LEVEL } from './dayLighting';
 import { daylightAt, minuteOfDay } from './daylight';
 import { EffectsSlot } from './effectsSlot';
 import { installRoomLighting, DEFAULT_HDRI_URL } from './environment';
@@ -43,10 +44,6 @@ const MAX_DELTA_S = 0.1;
 const HOOD_COLOR = new Color(1, 0.97, 0.92);
 /** At the water surface; the hood's spread leaves about three quarters of it on average below. */
 const HOOD_INTENSITY = 4;
-/** The hood's blue "moonlight" channel, left on through the night. */
-const MOONLIGHT = new Color(0.04, 0.14, 0.9);
-/** Room light at night relative to the day, from a lamp somewhere in the room. */
-const ROOM_AT_NIGHT = 0.15;
 const DAYLIGHT_INTERVAL_MS = 1000;
 /** Smallest daylight change worth announcing: about 20 s into a one-hour ramp. */
 const DAYLIGHT_EPSILON = 0.005;
@@ -118,7 +115,7 @@ export class Engine {
   private daylightLevel = 1;
   private daylightCheckedAt = -Infinity;
   private daylightAnnounced = false;
-  private readonly roomBackgroundIntensity: number;
+  readonly roomBackgroundIntensity: number;
   private readonly effects = new EffectsSlot((message, cause) => this.reportError(message, cause));
   private readonly frameCallbacks = new Set<FrameCallback>();
   private lastFrameAt: number | null = null;
@@ -213,6 +210,7 @@ export class Engine {
       this.substrateAlbedo,
       meanSubstrateHeight(dimensions),
     );
+    this.interior.fillLevel = FRESHWATER_FILL_LEVEL;
     this.tank = new Tank(dimensions, this.medium, roomLighting.initial, this.interior);
     cleanup.add(() => this.tank.dispose());
     this.scene.add(this.tank.group);
@@ -306,7 +304,7 @@ export class Engine {
     hood.shadow.normalBias = 0.01;
 
     hood.colorNode = this.caustics.lightColorNode();
-    this.updateHoodUniforms();
+    applyDayLighting(this, this.daylightLevel);
   }
 
   private updateDaylight(nowMs: number): void {
@@ -317,25 +315,6 @@ export class Engine {
     this.daylightAnnounced = true;
     this.daylightLevel = level;
     this.events.emit('engine:daylight', { level });
-  }
-
-  /**
-   * The hood colour and intensity are the daytime setting (a preset may change them); the
-   * photoperiod fades them into the moonlight channel and dims the room around the tank. The
-   * room's level is in the environment node, so `scene.environmentIntensity` stays a plain gain.
-   */
-  private updateHoodUniforms(): void {
-    const hood = this.hood;
-    const day = this.daylightLevel;
-    this.caustics.setHood(hood.color, hood.intensity, MOONLIGHT, day, this.substrateAlbedo);
-    const radiance = this.caustics.lightRadiance.value;
-    this.caustics.lightDirection.value.copy(hood.position).sub(hood.target.position).normalize();
-    const room = ROOM_AT_NIGHT + (1 - ROOM_AT_NIGHT) * day;
-    this.interior.roomLevel.value = room;
-    this.scene.backgroundIntensity = this.roomBackgroundIntensity * room;
-    this.medium.hoodInScatter.value.copy(radiance).multiplyScalar(1 / (4 * Math.PI));
-    this.medium.roomInScatter.value.copy(this.ambientScatter).multiplyScalar(room);
-    this.interior.update();
   }
 
   private registerQualityFeatures(): void {
@@ -353,7 +332,7 @@ export class Engine {
 
   private async warmUp(): Promise<void> {
     this.updateDaylight(0);
-    this.updateHoodUniforms();
+    applyDayLighting(this, this.daylightLevel);
     await this.renderer.compileAsync(this.scene, this.camera);
   }
 
@@ -394,7 +373,7 @@ export class Engine {
 
     for (const callback of this.frameCallbacks) callback(deltaS, nowMs);
     this.updateDaylight(nowMs);
-    this.updateHoodUniforms();
+    applyDayLighting(this, this.daylightLevel);
     if (this.cullPrewarm.begin(nowMs) > 0) this.sceneRevisionValue++;
     try {
       if (!this.effects.render()) this.renderer.render(this.scene, this.camera);

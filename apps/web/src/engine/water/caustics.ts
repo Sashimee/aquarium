@@ -248,8 +248,9 @@ export class Caustics {
   /** Unit vector from the scene towards the light. */
   readonly lightDirection = uniform(new Vector3(0, 1, 0));
   readonly lightRadiance = uniform(new Color(1, 1, 1));
+  /** The main channel's part of `lightRadiance`, the part that casts caustics. */
+  readonly casting = new Color();
 
-  private readonly casting = new Color();
   private readonly bakeTarget = new RenderTarget(BAKE.size, BAKE.size, {
     type: HalfFloatType,
     generateMipmaps: true,
@@ -374,6 +375,11 @@ export class Caustics {
    * is the same everywhere in a frame, so the shaders read it as one uniform.
    */
   hoodLightAtDepth(depth: number, target: Color): Color {
+    return this.reachAtDepth(depth, target).multiply(this.lightRadiance.value);
+  }
+
+  /** The share of the hood's light, per channel, that spread and absorption leave at `depth` (m). */
+  reachAtDepth(depth: number, target: Color): Color {
     const { medium } = this;
     const below = Math.max(depth, 0);
     const slant = below / Math.max(this.lightDirection.value.y, MIN_COS_LIGHT);
@@ -383,9 +389,7 @@ export class Caustics {
     const scale = medium.absorptionScale.value;
     const scattering = medium.scattering.value;
     const reaching = (a: number): number => Math.exp(-(a * scale + scattering) * slant) * spread;
-    return target
-      .setRGB(reaching(absorption.x), reaching(absorption.y), reaching(absorption.z))
-      .multiply(this.lightRadiance.value);
+    return target.setRGB(reaching(absorption.x), reaching(absorption.y), reaching(absorption.z));
   }
 
   /** Colour node for the hood light: radiance x spread x surface-to-point transmittance x caustics. */

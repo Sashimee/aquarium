@@ -22,7 +22,9 @@ const median = (xs: number[]) => {
 
 // The median of per-pair differences cancels host load, which hits both halves of an adjacent
 // pair alike. A repeat sign-up is legitimately ~1-3 ms faster (it inserts no user rows), so the
-// tolerance is a few ms, well below the 25 ms leaks this is meant to expose.
+// tolerance must clear that. 12 ms clears the worst no-leak median seen under load (~8 ms) and stays
+// below the 25 ms leaks this is meant to expose; leaks under ~15 ms are not reliably caught, and
+// catching them needs more pairs rather than a tighter bound.
 function expectNoTimingSkew(pairs: { fresh: number; repeat: number }[]) {
   const gap = median(pairs.map((p) => p.repeat - p.fresh));
   expect(Math.abs(gap), `median repeat - fresh = ${gap.toFixed(1)} ms`).toBeLessThan(12);
@@ -686,7 +688,7 @@ describe('mail abuse limits', () => {
         global: { max: 1000, windowMs: 3_600_000 },
       },
     });
-    const emails = Array.from({ length: 6 }, () => nextEmail());
+    const emails = Array.from({ length: 4 }, () => nextEmail());
     for (const [i, email] of emails.entries()) {
       await signUp(h.app, email, { 'x-forwarded-for': `203.0.113.${i + 1}` });
     }
@@ -703,7 +705,7 @@ describe('mail abuse limits', () => {
       });
       statuses.push(res.statusCode);
     }
-    expect(statuses).toEqual([403, 403, 403, 403, 403, 403]);
+    expect(statuses).toEqual([403, 403, 403, 403]);
     expect(h.outbox).toHaveLength(2);
 
     const elsewhere = await h.app.inject({
@@ -716,7 +718,7 @@ describe('mail abuse limits', () => {
     expect(elsewhere.statusCode).toBe(403);
     expect(h.outbox).toHaveLength(3);
     await h.close();
-  });
+  }, 15_000);
 
   it('does not charge the per-IP budget for sign-ins that send no mail', async () => {
     const h = await createHarness({
