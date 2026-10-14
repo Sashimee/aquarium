@@ -55,6 +55,7 @@ export interface HarnessOptions {
   careLimits?: CareLimits;
   legalLimits?: LegalLimits;
   testHooks?: boolean;
+  mailDelayMs?: number;
   appOrigin?: string;
   logStream?: { write(chunk: string): void };
 }
@@ -104,7 +105,10 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     send(mail, done) {
       const data = mail.data;
       onSend();
-      gate.then(
+      const delayed = opts.mailDelayMs
+        ? new Promise<void>((resolve) => setTimeout(resolve, opts.mailDelayMs))
+        : undefined;
+      Promise.all([delayed, gate]).then(
         () => {
           outbox.push({
             from: String(data.from),

@@ -20,8 +20,8 @@ const median = (xs: number[]) => {
   return sorted.length % 2 ? (sorted[mid] ?? 0) : ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2;
 };
 
-// Hashing dominates a fresh sign-up (~65 ms), so a repeat that skips it shows a gap of ~0.89 of the
-// faster half and a second hash ~1.0. Load stretches both halves of an adjacent pair together, so
+// Hashing dominates a fresh sign-up (~65 ms), so a repeat that skips it shows a gap of ~6.7 times
+// the faster half (the repeat itself) and a second hash ~1.0. Load stretches both halves of an adjacent pair together, so
 // the median pair gap is bounded relative to the faster median (dividing by the slower would let a
 // faster repeat inflate its own denominator) instead of in absolute milliseconds. Detection floor is
 // 25% of that, ~16 ms on a quiet host. The bound grows with load: fine for CPU-bound leaks like a
@@ -76,10 +76,29 @@ async function verifiedSession(h: Harness, email = nextEmail()) {
   return { email, cookie, verify };
 }
 
+const SLOW_MAIL_MS = 40;
+
+describe('timing skew bound', () => {
+  it('flags a repeat that skips the mail send against a slow mailer', () => {
+    const fresh = 65 + SLOW_MAIL_MS;
+    expect(() =>
+      expectNoTimingSkew(
+        Array.from({ length: 9 }, () => ({ fresh, repeat: fresh - SLOW_MAIL_MS })),
+      ),
+    ).toThrow();
+  });
+
+  it('accepts pairs that differ by a couple of milliseconds', () => {
+    expect(() =>
+      expectNoTimingSkew(Array.from({ length: 9 }, () => ({ fresh: 105, repeat: 103 }))),
+    ).not.toThrow();
+  });
+});
+
 describe('unverified sign-up takeover (#114)', () => {
   let h: Harness;
   beforeAll(async () => {
-    h = await createHarness();
+    h = await createHarness({ mailDelayMs: SLOW_MAIL_MS });
   });
   afterAll(() => h.close());
 
