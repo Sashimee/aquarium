@@ -91,7 +91,13 @@ describe('AteUploader', () => {
   it('names the cause when crypto.randomUUID is unavailable', async () => {
     const send = vi.fn().mockResolvedValue(undefined);
     const causes: unknown[] = [];
-    const h = harness(send, { onDropped: (_r, _reports, cause) => causes.push(cause) });
+    const reasons: DropReason[] = [];
+    const h = harness(send, {
+      onDropped: (reason, _reports, cause) => {
+        reasons.push(reason);
+        causes.push(cause);
+      },
+    });
     vi.stubGlobal('crypto', {});
     try {
       h.uploader.add(FISH_1, 0.5);
@@ -100,6 +106,7 @@ describe('AteUploader', () => {
       vi.unstubAllGlobals();
     }
     expect(send).not.toHaveBeenCalled();
+    expect(reasons).toEqual(['unsupported']);
     expect(String(causes[0])).toContain('crypto.randomUUID is unavailable');
   });
 

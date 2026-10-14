@@ -504,6 +504,8 @@ describe('care actions and feeding validation', () => {
         .from(schema.ateBatches)
         .where(eq(schema.ateBatches.tankId, tank.id));
       expect(claims).toHaveLength(0);
+      const fresh = await ateBatch(cookie, tank.id, fishId, randomUUID());
+      expect(fresh.statusCode).toBe(200);
     });
 
     it('rejects a malformed batch id with 400', async () => {
