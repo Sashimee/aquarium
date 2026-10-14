@@ -98,6 +98,10 @@ async function verifiedSession(h: Harness, email = nextEmail()) {
 
 const SLOW_MAIL_MS = 120;
 
+// The timing tests make hundreds of sign-ups, each ~0.3 s on a host at load ~11 (the first took 67 s),
+// so a 120 s budget was exceeded by a busy full-suite run. This only guards against a hang.
+const TIMING_TEST_TIMEOUT_MS = 600_000;
+
 describe('timing skew bound', () => {
   it('flags a repeat that skips the mail send against a slow mailer', () => {
     const fresh = 65 + SLOW_MAIL_MS;
@@ -133,7 +137,11 @@ describe('unverified sign-up takeover (#114)', () => {
       payload: { email, password },
     });
 
-  const signUpWith = (email: string, password: string, inject = h.app.inject.bind(h.app)) =>
+  const signUpWith = (
+    email: string,
+    password: string,
+    inject: Harness['rawInject'] = (opts) => h.app.inject(opts),
+  ) =>
     inject({
       method: 'POST',
       url: '/api/auth/sign-up/email',
@@ -222,52 +230,61 @@ describe('unverified sign-up takeover (#114)', () => {
     expect(h.outbox.filter((m) => m.to === email)).toHaveLength(2);
   });
 
-  it('responds to a repeat sign-up in about the time of a fresh one', async () => {
-    const time = async (email: string) => {
-      // The previous sign-up's background mail would otherwise land inside this timing window.
-      await h.settleMail();
-      const start = performance.now();
-      await signUpWith(email, ATTACKER_PASSWORD, h.rawInject);
-      return performance.now() - start;
-    };
-    const pairs: { fresh: number; repeat: number }[] = [];
-    await time(nextEmail());
-    for (let i = 0; i < 80; i++) {
-      if (i % 2 === 0) {
-        const email = nextEmail();
-        const fresh = await time(email);
-        pairs.push({ fresh, repeat: await time(email) });
-      } else {
-        const email = nextEmail();
+  it(
+    'responds to a repeat sign-up in about the time of a fresh one',
+    async () => {
+      const time = async (email: string) => {
+        // The previous sign-up's background mail would otherwise land inside this timing window.
+        await h.settleMail();
+        const start = performance.now();
         await signUpWith(email, ATTACKER_PASSWORD, h.rawInject);
-        const repeat = await time(email);
-        pairs.push({ fresh: await time(nextEmail()), repeat });
+        return performance.now() - start;
+      };
+      const pairs: { fresh: number; repeat: number }[] = [];
+      await time(nextEmail());
+      for (let i = 0; i < 80; i++) {
+        if (i % 2 === 0) {
+          const email = nextEmail();
+          const fresh = await time(email);
+          pairs.push({ fresh, repeat: await time(email) });
+        } else {
+          const email = nextEmail();
+          await signUpWith(email, ATTACKER_PASSWORD, h.rawInject);
+          const repeat = await time(email);
+          pairs.push({ fresh: await time(nextEmail()), repeat });
+        }
       }
-    }
-    expectNoTimingSkew(pairs);
-  }, 120_000);
+      expectNoTimingSkew(pairs);
+    },
+    TIMING_TEST_TIMEOUT_MS,
+  );
 
-  it('responds to a sign-up for a verified address in about the time of a fresh one (#120)', async () => {
-    const time = async (email: string) => {
-      await h.settleMail();
-      const start = performance.now();
-      const res = await signUpWith(email, ATTACKER_PASSWORD, h.rawInject);
-      expect(res.statusCode).toBe(200);
-      return performance.now() - start;
-    };
-    const verified = nextEmail();
-    await verifiedSession(h, verified);
-    const pairs: { fresh: number; repeat: number }[] = [];
-    await time(nextEmail());
-    for (let i = 0; i < 40; i++) {
-      if (i % 2 === 0) pairs.push({ fresh: await time(nextEmail()), repeat: await time(verified) });
-      else {
-        const repeat = await time(verified);
-        pairs.push({ fresh: await time(nextEmail()), repeat });
+  it(
+    'responds to a sign-up for a verified address in about the time of a fresh one (#120)',
+    async () => {
+      const time = async (email: string) => {
+        await h.settleMail();
+        const start = performance.now();
+        const res = await signUpWith(email, ATTACKER_PASSWORD, h.rawInject);
+        expect(res.statusCode).toBe(200);
+        return performance.now() - start;
+      };
+      const verified = nextEmail();
+      await verifiedSession(h, verified);
+      const pairs: { fresh: number; repeat: number }[] = [];
+      await time(nextEmail());
+      for (let i = 0; i < 40; i++) {
+        if (i % 2 === 0)
+          pairs.push({ fresh: await time(nextEmail()), repeat: await time(verified) });
+        else {
+          const repeat = await time(verified);
+          pairs.push({ fresh: await time(nextEmail()), repeat });
+        }
       }
-    }
-    expectNoTimingSkew(pairs);
-  }, 120_000);
+      expectNoTimingSkew(pairs);
+    },
+    TIMING_TEST_TIMEOUT_MS,
+  );
 
   it('does not wait for the mail relay when signing up', async () => {
     const held = h.holdMail();
