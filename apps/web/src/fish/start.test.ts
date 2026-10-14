@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { Collider } from '@aquarium/shared';
 import type { Engine } from '../engine/Engine';
 import { EventBus, type EngineEvents } from '../engine/events';
 import type { InteractionEvents } from '../interaction/events';
 import type { SceneAnchor } from '../scene/anemone';
+import type { Collider as SceneCollider } from '../scene/colliders';
 import { FISH_1, FISH_2, TANK_A, fishFixture } from '../sync/fixtures';
 import type { FishBite, PickRay, TankEvent } from './start';
 
@@ -13,6 +15,7 @@ class FakeFishSystem {
   /** Tank event types and `anchors` calls, in arrival order. */
   readonly log: string[] = [];
   readonly anchors: (readonly SceneAnchor[])[] = [];
+  readonly colliders: (readonly Collider[])[] = [];
   disposed = false;
   private ate: ((events: readonly FishBite[]) => void) | null = null;
 
@@ -23,6 +26,9 @@ class FakeFishSystem {
   setAnchors(anchors: readonly SceneAnchor[]): void {
     this.anchors.push(anchors);
     this.log.push('anchors');
+  }
+  setColliders(colliders: readonly Collider[]): void {
+    this.colliders.push(colliders);
   }
   onAte(listener: (events: readonly FishBite[]) => void): () => void {
     this.ate = listener;
@@ -236,6 +242,56 @@ describe('startFish', () => {
 
     handle.setAnchors(first);
     expect(fish.anchors).toEqual([latest, first]);
+  });
+
+  it('holds scene and decor colliders until the fish are up, then sends them as one list', async () => {
+    const fish = new FakeFishSystem();
+    const pending = deferred<FakeFishSystem>();
+    const { handle, interaction } = setup(pending.promise);
+    const plant: SceneCollider = {
+      kind: 'capsule',
+      hard: false,
+      a: [0, 0.1, 0],
+      b: [0, 0.3, 0],
+      radius: 0.02,
+    };
+    const wood: SceneCollider = { ...plant, hard: true, a: [0.2, 0.12, 0], b: [0.4, 0.12, 0] };
+    handle.setSceneColliders([plant, wood]);
+    pending.resolve(fish);
+    await flush();
+    expect(fish.colliders.map((list) => list.map((c) => c.id))).toEqual([['scene:0', 'scene:1']]);
+
+    interaction.emit('decor:colliders', {
+      colliders: [
+        {
+          id: 'decor:p1',
+          solid: true,
+          shape: { kind: 'capsule', a: [0.2, 0.15, 0], b: [0.4, 0.15, 0], radius: 0.03 },
+        },
+      ],
+    });
+    expect(fish.colliders.at(-1)?.map((c) => c.id)).toEqual(['scene:0', 'decor:p1']);
+    handle.setSceneColliders([]);
+    expect(fish.colliders.at(-1)).toEqual([]);
+    handle.stop();
+  });
+
+  it('reports colliders the sim would reject and keeps the last good ones', async () => {
+    const fish = new FakeFishSystem();
+    const { handle, interaction, errors } = setup(Promise.resolve(fish));
+    await flush();
+    const piece = {
+      id: 'decor:p1',
+      solid: true,
+      shape: { kind: 'sphere' as const, center: [0, 0.2, 0] as const, radius: 0.05 },
+    };
+    interaction.emit('decor:colliders', { colliders: [piece] });
+    interaction.emit('decor:colliders', { colliders: [piece, piece] });
+    expect(errors).toEqual(['Fish keep their previous obstacles: the new colliders are invalid']);
+    expect(fish.colliders.map((list) => list.map((c) => c.id))).toEqual([[], ['decor:p1']]);
+    handle.stop();
+    interaction.emit('decor:colliders', { colliders: [] });
+    expect(fish.colliders).toHaveLength(2);
   });
 
   it('passes bites to listeners that subscribed before the fish were up', async () => {

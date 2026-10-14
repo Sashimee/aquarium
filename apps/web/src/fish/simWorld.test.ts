@@ -32,6 +32,18 @@ describe('SimWorldSpec', () => {
     expect(anchorsOf(spec, roster)).toEqual([]);
   });
 
+  it('hands the latest colliders to every new world, which the sim accepts', () => {
+    const { spec, roster } = setup();
+    expect(spec.config(roster.swimming())?.decor).toEqual([]);
+    spec.decor = [
+      { id: 'scene:0', kind: 'sphere', hard: true, center: [0, 0.25, 0], radius: 0.05 },
+    ];
+    const config = spec.config(roster.swimming());
+    expect(config?.decor).toBe(spec.decor);
+    if (config === null) throw new Error('the demo has no world');
+    expect(() => new World(config)).not.toThrow();
+  });
+
   it('hands the scene anchors, in the sim frame, to every world after them', () => {
     const { spec, roster } = setup();
     const sim = spec.setAnchors([ANEMONE]);
@@ -91,7 +103,7 @@ describe('SimWorldSpec', () => {
     ]);
     expect(config?.species).toBe(allSpeciesInputs());
     expect(config?.seed).toBe(7);
-    expect(config?.tank).toBe(DEMO.config.tank);
+    expect(config?.space).toBe(DEMO.config.space);
   });
 
   it('builds a world that can take in a fish of a species it started without', () => {

@@ -1,10 +1,17 @@
-import { speciesSchema, type Biome } from '@aquarium/shared';
+import {
+  createTankSpace,
+  sampleFloor,
+  speciesSchema,
+  tankWaterTop,
+  type Biome,
+  type TankSpace,
+} from '@aquarium/shared';
 import {
   Rng,
   type Anchor,
   type FishSpawn,
   type SpeciesInput,
-  type WorldConfig,
+  type TankSpaceWorldConfig,
 } from '@aquarium/sim';
 import angelfishContent from '../../../../content/species/angelfish.json';
 import banggaiCardinalfishContent from '../../../../content/species/banggai-cardinalfish.json';
@@ -17,6 +24,7 @@ import royalGrammaContent from '../../../../content/species/royal-gramma.json';
 import yellowTangContent from '../../../../content/species/yellow-tang.json';
 import type { TankDimensions } from '../engine/tank/dimensions';
 import { WATER_INSET } from '../engine/tank/dimensions';
+import { substrateHeight } from '../engine/tank/substrate';
 import type { SceneAnchor } from '../scene/anemone';
 
 // Content files get their render block with the fish models; the demo needs everything else.
@@ -75,20 +83,28 @@ export const DEMO_STOCKS: Readonly<Record<Biome, DemoStock>> = {
 const LENGTH_SPREAD = 0.08;
 
 export interface DemoTank {
-  readonly config: WorldConfig;
-  /** Engine-space position of the sim's origin (the centre of its flat floor). */
-  readonly offset: readonly [number, number, number];
+  /** In tank space, the scene's own frame: positions cross to and from the sim unchanged. */
+  readonly config: TankSpaceWorldConfig;
 }
 
-/**
- * The sim has a flat floor, so it sits on the highest point of the sloped substrate: fish at the
- * front then hover a few centimetres above the gravel instead of sinking into it at the back.
- */
+/** The scene's tank as the shared tank space, its floor sampled from the sand the scene draws. */
+export function tankSpaceOf(tank: TankDimensions): TankSpace {
+  return createTankSpace(
+    {
+      width: tank.length,
+      depth: tank.depth,
+      height: tank.height,
+      glass: tank.glass,
+      freeboard: tank.freeboard,
+      inset: WATER_INSET,
+    },
+    (x, z) => substrateHeight(tank, x, z),
+  );
+}
+
 export function demoTank(tank: TankDimensions, seed: number, biome: Biome): DemoTank {
   const { species, counts, maxLengthM } = DEMO_STOCKS[biome];
   const rng = new Rng(seed);
-  const floorY = tank.glass + Math.max(tank.substrateFront, tank.substrateBack) + 0.01;
-  const waterTop = tank.height - tank.freeboard;
   const fish: FishSpawn[] = [];
   for (const s of species) {
     const count = counts[s.id] ?? 0;
@@ -103,38 +119,25 @@ export function demoTank(tank: TankDimensions, seed: number, biome: Biome): Demo
       });
     }
   }
-  return {
-    config: {
-      seed,
-      tank: {
-        width: tank.length - 2 * (tank.glass + WATER_INSET),
-        depth: tank.depth - 2 * (tank.glass + WATER_INSET),
-        height: waterTop - floorY,
-      },
-      species,
-      fish,
-    },
-    offset: [0, floorY, 0],
-  };
+  return { config: { seed, space: tankSpaceOf(tank), species, fish } };
 }
 
 /**
- * Scene anchors measure y from the bottom glass. They go into the demo sim's frame, whose flat
- * floor is at `offset`, rather than through the per-point substrate height the food uses: that
- * is the frame the fish are drawn from, so the pair holds station where the anemone is seen. An
- * anemone on low sand can sit below that floor, so its anchor is lifted until the anchor sphere
- * clears it, which keeps the pair just over the tentacles.
+ * Scene anchors are already in the sim's frame. The radius is capped to a quarter of the water
+ * column under the anchor, and the centre kept that far off the sand and the surface, because the
+ * sim rejects an anchor outside the water.
  */
 export function sceneAnchorsToSim(anchors: readonly SceneAnchor[], demo: DemoTank): Anchor[] {
-  const [ox, oy, oz] = demo.offset;
-  const { height } = demo.config.tank;
+  const { space } = demo.config;
+  const top = tankWaterTop(space);
   return anchors.map((a) => {
     const [x, y, z] = a.position;
-    const radius = Math.min(a.radius, height / 4);
+    const ground = sampleFloor(space, x, z);
+    const radius = Math.min(a.radius, (top - ground) / 4);
     return {
       id: a.id,
       kind: a.kind,
-      position: [x - ox, Math.min(Math.max(y - oy, radius), height - radius), z - oz],
+      position: [x, Math.min(Math.max(y, ground + radius), top - radius), z],
       radius,
     };
   });

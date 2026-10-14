@@ -1,11 +1,13 @@
-import type { Biome } from '@aquarium/shared';
+import type { Biome, Collider } from '@aquarium/shared';
 import type { Stimulus } from '@aquarium/sim';
 import type { Engine } from '../engine/Engine';
 import type { EventBus } from '../engine/events';
 import type { TankDimensions } from '../engine/tank/dimensions';
 import type { InteractionEvents } from '../interaction/events';
 import type { SceneAnchor } from '../scene/anemone';
+import type { Collider as SceneCollider } from '../scene/colliders';
 import type { FishSystem } from './FishSystem';
+import { SimColliders } from './simColliders';
 
 type TankEventName =
   | 'tank:loaded'
@@ -42,8 +44,13 @@ export interface FishSimBridge {
 
 export interface FishHandle {
   readonly sim: FishSimBridge;
-  /** Engine-space homes; held until the fish are up, then forwarded. */
+  /** Scene homes; held until the fish are up, then forwarded. */
   setAnchors(anchors: readonly SceneAnchor[]): void;
+  /**
+   * The mounted scene's colliders, or none between scenes. The decor layer's `decor:colliders`
+   * then replace the scene's hard ones; both are held until the fish are up.
+   */
+  setSceneColliders(colliders: readonly SceneCollider[]): void;
   /** Swaps the demo stock; held until the fish are up. */
   setDemoBiome(biome: Biome): void;
   stop(): void;
@@ -117,6 +124,23 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
   let ready: FishSystem | null = null;
   let anchors: readonly SceneAnchor[] | null = null;
   let demoBiome = options.biome;
+  const colliders = new SimColliders();
+  const updateColliders = (update: () => readonly Collider[]): void => {
+    let next: readonly Collider[];
+    try {
+      next = update();
+    } catch (cause) {
+      engine.events.emit('engine:error', {
+        message: 'Fish keep their previous obstacles: the new colliders are invalid',
+        cause,
+      });
+      return;
+    }
+    ready?.setColliders(next);
+  };
+  const stopDecor = interaction.on('decor:colliders', ({ colliders: pieces }) =>
+    updateColliders(() => colliders.setDecor(pieces)),
+  );
 
   const system = import('./FishSystem')
     .then(({ FishSystem }) =>
@@ -135,12 +159,14 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
       });
       ready = fish;
       if (anchors !== null) fish.setAnchors(anchors);
+      fish.setColliders(colliders.list);
       if (demoBiome !== options.biome) fish.setDemoBiome(demoBiome);
       tankEvents.drain((event) => fish.handle(event));
       return fish;
     })
     .catch((cause: unknown) => {
       tankEvents.stop();
+      stopDecor();
       if (!abort.signal.aborted) {
         engine.events.emit('engine:error', { message: 'Fish failed to start', cause });
       }
@@ -161,6 +187,9 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
       anchors = next;
       ready?.setAnchors(next);
     },
+    setSceneColliders(next) {
+      updateColliders(() => colliders.setScene(next));
+    },
     setDemoBiome(next) {
       demoBiome = next;
       ready?.setDemoBiome(next);
@@ -168,6 +197,7 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
     stop() {
       abort.abort();
       tankEvents.stop();
+      stopDecor();
       ateListeners.clear();
       ready = null;
       void system.then((fish) => fish?.dispose());
