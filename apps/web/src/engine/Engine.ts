@@ -11,6 +11,7 @@ import {
 import { applyDayLighting, type DayLightingRig, FRESHWATER_FILL_LEVEL } from './dayLighting';
 import { daylightAt, minuteOfDay } from './daylight';
 import { EffectsSlot } from './effectsSlot';
+import { PipelineFailureHandler, usesMaterial, watchPipelineErrors } from './pipelineErrors';
 import { installRoomLighting, DEFAULT_HDRI_URL } from './environment';
 import { createSharedKtx2, type Ktx2Textures } from './ktx2';
 import { EventBus, type BackendKind, type EngineEvents, type EngineEventBus } from './events';
@@ -120,7 +121,10 @@ export class Engine {
   private daylightCheckedAt = -Infinity;
   private daylightAnnounced = false;
   private readonly dayRig: DayLightingRig;
-  private readonly effects = new EffectsSlot((message, cause) => this.reportError(message, cause));
+  private readonly effects = new EffectsSlot(
+    (message, cause) => this.reportError(message, cause),
+    (on) => this.events.emit('engine:temporal-resolve', { on }),
+  );
   private readonly frameCallbacks = new Set<FrameCallback>();
   private lastFrameAt: number | null = null;
   private readonly cullPrewarm = new CullPrewarm(this.scene);
@@ -187,6 +191,14 @@ export class Engine {
       maxTier: profile.maxTier,
       awaitContent: true,
     });
+    // Announced once every feature, the effects included, has the new tier.
+    cleanup.add(events.on('quality:tier-changed', () => this.effects.refresh()));
+    const pipelineFailures = new PipelineFailureHandler(
+      this.effects,
+      (id) => usesMaterial(this.scene, id),
+      (message, cause) => this.reportError(message, cause),
+    );
+    cleanup.add(watchPipelineErrors(renderer, (failure) => pipelineFailures.handle(failure)));
 
     container.appendChild(renderer.domElement);
     cleanup.add(() => renderer.domElement.remove());
@@ -272,6 +284,11 @@ export class Engine {
   /** 0 = hood off (night, moonlight only) .. 1 = full day; follows the local clock or `?clock=`. */
   get daylight(): number {
     return this.daylightLevel;
+  }
+
+  /** Whether frames go through a temporal resolve; `engine:temporal-resolve` tells changes. */
+  get temporalResolve(): boolean {
+    return this.effects.temporal;
   }
 
   /** Depth of field follows the focus camera, on tiers that allow it. */

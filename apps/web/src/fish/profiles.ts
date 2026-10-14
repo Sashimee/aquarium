@@ -1,15 +1,18 @@
 import { hashString } from './roster';
 
-/** Another model of the same species, e.g. the other sex, drawn for `share` of its fish. */
-export interface FishVariant {
+export type Sex = 'female' | 'male';
+
+/** The model one fish wears, and its standard length over the species' (female) one. */
+export interface FishModelChoice {
   readonly assetId: string;
-  readonly share: number;
+  /** Must match the asset recipe's `lengthFactor`, which the model was scaled by. */
+  readonly lengthFactor: number;
 }
 
 export interface FishRenderProfile {
   readonly assetId: string;
-  /** Alternatives to `assetId`; one sim species, so mixed groups still school together. */
-  readonly variants: readonly FishVariant[];
+  /** The model males wear instead; one sim species, so mixed groups still school together. */
+  readonly male: FishModelChoice | null;
   /** Guanine-platelet iridescence strength on the body, 0..1. */
   readonly iridescence: number;
   /** `blue` limits iridescence to blue-dominant texels, e.g. the neon tetra's stripe. */
@@ -27,7 +30,7 @@ export interface FishRenderProfile {
 
 const DEFAULTS: FishRenderProfile = {
   assetId: '',
-  variants: [],
+  male: null,
   iridescence: 0.25,
   iridescenceMask: 'body',
   filmThicknessNm: [250, 420],
@@ -79,7 +82,7 @@ export const FISH_RENDER_PROFILES: Readonly<Record<string, FishRenderProfile>> =
   guppy: {
     ...DEFAULTS,
     assetId: 'guppy-female',
-    variants: [{ assetId: 'guppy-male', share: 0.5 }],
+    male: { assetId: 'guppy-male', lengthFactor: 0.625 },
     iridescence: 0.3,
     finTransmission: 0.6,
     tintVariation: 0.1,
@@ -104,18 +107,34 @@ export function renderProfile(speciesId: string): FishRenderProfile {
   return profile;
 }
 
-/** The model one fish wears, chosen by its stable key so it keeps it across reloads. */
-export function assetIdFor(profile: FishRenderProfile, fishKey: string): string {
-  let u = hashString(`${fishKey}:variant`) / 2 ** 32;
-  for (const variant of profile.variants) {
-    if (u < variant.share) return variant.assetId;
-    u -= variant.share;
-  }
-  return profile.assetId;
+/**
+ * Depends on the fish's key alone, never on a profile, so editing the models can't flip a saved
+ * fish. Even 1:1, and the same draw that first assigned guppies their sex.
+ */
+export function sexOf(fishKey: string): Sex {
+  return hashString(`${fishKey}:variant`) < 2 ** 31 ? 'male' : 'female';
+}
+
+export function modelFor(profile: FishRenderProfile, fishKey: string): FishModelChoice {
+  if (profile.male !== null && sexOf(fishKey) === 'male') return profile.male;
+  return { assetId: profile.assetId, lengthFactor: 1 };
+}
+
+/**
+ * In metres: the fish's size, or else the species' adult length, scaled for its sex. Sizes are on
+ * the species' (female) scale, so a guppy male is drawn and simulated smaller than its size.
+ */
+export function bodyLengthOf(
+  fish: { readonly species: string; readonly key: string; readonly lengthM: number | undefined },
+  speciesLengthM: number,
+): number {
+  const profile = FISH_RENDER_PROFILES[fish.species];
+  const factor = profile === undefined ? 1 : modelFor(profile, fish.key).lengthFactor;
+  return (fish.lengthM ?? speciesLengthM) * factor;
 }
 
 /** The instanced batch that draws a fish: one per species and model. */
 export function batchKeyOf(fish: { readonly species: string; readonly key: string }): string {
   const profile = FISH_RENDER_PROFILES[fish.species];
-  return `${fish.species}/${profile === undefined ? '' : assetIdFor(profile, fish.key)}`;
+  return `${fish.species}/${profile === undefined ? '' : modelFor(profile, fish.key).assetId}`;
 }

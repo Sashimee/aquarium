@@ -2,6 +2,7 @@ import type { Collider } from '@aquarium/shared';
 import type { Anchor, FishSpawn, SimReady, TankSpaceWorldConfig } from '@aquarium/sim';
 import type { SceneAnchor } from '../scene/anemone';
 import { sceneAnchorsToSim, type DemoTank } from './demoStock';
+import { bodyLengthOf } from './profiles';
 import type { RosterFish } from './roster';
 import { allSpeciesInputs, speciesInput } from './species';
 
@@ -59,12 +60,13 @@ export class SimWorldSpec {
   config(swimming: readonly RosterFish[]): TankSpaceWorldConfig | null {
     const fish: FishSpawn[] = [];
     for (const f of swimming) {
-      if (speciesInput(f.species) === undefined) continue;
-      fish.push(
-        f.lengthM === undefined
-          ? { id: f.simId, species: f.species }
-          : { id: f.simId, species: f.species, bodyLengthM: f.lengthM },
-      );
+      const input = speciesInput(f.species);
+      if (input === undefined) continue;
+      fish.push({
+        id: f.simId,
+        species: f.species,
+        bodyLengthM: bodyLengthOf(f, input.locomotion.bodyLengthM),
+      });
     }
     if (fish.length === 0) return null;
     return {
@@ -137,9 +139,17 @@ export class SimInitTimeout extends Error {
   }
 }
 
+type WorkerError = Pick<ErrorEvent, 'message'>;
+
+/** The part of the worker `initSim` watches; a `Worker` is one. */
+export interface SimWorkerErrors {
+  addEventListener(type: 'error', listener: (event: WorkerError) => void): void;
+  removeEventListener(type: 'error', listener: (event: WorkerError) => void): void;
+}
+
 export interface SimInit {
   readonly client: { init(config: TankSpaceWorldConfig): Promise<SimReady> };
-  readonly worker: Pick<Worker, 'addEventListener' | 'removeEventListener'>;
+  readonly worker: SimWorkerErrors;
   readonly config: TankSpaceWorldConfig;
   readonly signal: AbortSignal;
   readonly timeoutMs: number;
@@ -161,7 +171,7 @@ export function initSim({ client, worker, config, signal, timeoutMs }: SimInit):
       signal.removeEventListener('abort', onAbort);
       finish();
     };
-    const onError = (event: ErrorEvent): void =>
+    const onError = (event: WorkerError): void =>
       settle(() => reject(new Error(`Fish sim worker failed to start: ${event.message}`)));
     const onAbort = (): void => settle(() => reject(signal.reason));
     const timer = setTimeout(() => settle(() => reject(new SimInitTimeout(timeoutMs))), timeoutMs);

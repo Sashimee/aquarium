@@ -131,8 +131,8 @@ export function createAuth({
           await tx.delete(schema.verification).where(eq(schema.verification.value, user.id));
           await tx.delete(schema.session).where(eq(schema.session.userId, user.id));
           if (user.emailVerified) return;
-          // Raw update on purpose: the Better Auth adapter can't join this transaction, and it would bypass
-          // any databaseHooks.user.update; none are configured, so add the effect here if one is.
+          // Raw update on purpose: the Better Auth adapter can't join this transaction, and this raw
+          // tx.update skips any databaseHooks.user.update; none are configured, so add the effect here if one is.
           await tx
             .update(schema.user)
             .set({ emailVerified: true, updatedAt: new Date() })

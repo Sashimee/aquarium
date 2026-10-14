@@ -1,7 +1,9 @@
 import type { BehaviourHost } from './behaviour.ts';
 import type { Point3 } from './decor.ts';
+import type { Feeding } from './feeding.ts';
 import type { FishResize } from './fishArrays.ts';
 import { clamp } from './math.ts';
+import type { SimSpecies } from './species.ts';
 
 /** Every tunable of lure following and feeding-spot memory; sources are in BEHAVIOUR.md. */
 export const CURIOSITY = {
@@ -156,7 +158,7 @@ export class Curiosity {
     return at(this.strength, i) * motivation;
   }
 
-  update(motivation: (i: number) => number): void {
+  update(hunger: Pick<Feeding, 'motivation'>): void {
     const n = this.host.count;
     const time = this.host.tick * DT;
     const recover = Math.exp(-DT / CURIOSITY.lureRecoverTauS);
@@ -168,7 +170,7 @@ export class Curiosity {
       if (entered > 0) this.learn(i, time);
       this.anticipation[i] =
         this.eligible[i] === 1 && this.spotWithinLeash(i)
-          ? this.anticipate(i, motivation(i), time)
+          ? this.anticipate(i, hunger.motivation(i), time)
           : 0;
       if (this.follow[i] === 1) {
         this.track(i, track);
@@ -218,8 +220,7 @@ export class Curiosity {
     }
     const watched = notice + DT;
     this.notice[i] = watched;
-    const sp = this.host.species[at(this.host.speciesIndex, i)];
-    const curiosity = sp?.curiosity ?? 0;
+    const curiosity = this.speciesOf(i).curiosity;
     const latency =
       CURIOSITY.lureLatencyMinS +
       (CURIOSITY.lureLatencyMaxS - CURIOSITY.lureLatencyMinS) * (1 - curiosity);
@@ -238,8 +239,7 @@ export class Curiosity {
       this.stop(i, 0);
       return;
     }
-    const sp = this.host.species[at(this.host.speciesIndex, i)];
-    const attention = CURIOSITY.lureAttentionS * (0.5 + (sp?.curiosity ?? 0));
+    const attention = CURIOSITY.lureAttentionS * (0.5 + this.speciesOf(i).curiosity);
     const h = at(this.habituation, i) + DT / attention;
     this.habituation[i] = h;
     if (h >= 1) {
@@ -263,8 +263,7 @@ export class Curiosity {
    */
   private sees(i: number, tracking: boolean): boolean {
     const { position, forward } = this.host;
-    const sp = this.host.species[at(this.host.speciesIndex, i)];
-    if (sp === undefined) return false;
+    const sp = this.speciesOf(i);
     const dx = at(this.lure, 0) - at(position, i * 3);
     const dy = at(this.lure, 1) - at(position, i * 3 + 1);
     const dz = at(this.lure, 2) - at(position, i * 3 + 2);
@@ -276,6 +275,12 @@ export class Curiosity {
     const cos =
       (dx * at(forward, i * 3) + dy * at(forward, i * 3 + 1) + dz * at(forward, i * 3 + 2)) / d;
     return cos >= Math.cos(sp.perceptionFov / 2);
+  }
+
+  private speciesOf(i: number): SimSpecies {
+    const sp = this.host.species[at(this.host.speciesIndex, i)];
+    if (sp === undefined) throw new RangeError(`no fish at index ${i}`);
+    return sp;
   }
 
   private withinLeash(i: number, x: number, y: number, z: number): boolean {

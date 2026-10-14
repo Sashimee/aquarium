@@ -70,7 +70,7 @@ export interface FishMaterialFeatures {
 
 export interface FishMaterialConfig {
   readonly source: MeshStandardMaterial;
-  /** The model the material draws, which may be one of the profile's variants. */
+  /** The model the material draws, which may be the profile's male one. */
   readonly assetId: string;
   readonly profile: FishRenderProfile;
   readonly mode: SwimModeParams;

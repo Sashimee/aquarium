@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import shippedIndex from '../../public/assets/index.json';
 import { parseFishAssets } from './assetIndex';
 import { DEMO_STOCKS } from './demoStock';
-import { renderProfile } from './profiles';
+import { FISH_RENDER_PROFILES, renderProfile } from './profiles';
 
 function fish(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -60,11 +60,25 @@ describe('parseFishAssets', () => {
     const entries = parseFishAssets(shippedIndex);
     for (const species of Object.values(DEMO_STOCKS).flatMap((s) => s.species)) {
       const profile = renderProfile(species.id);
-      for (const assetId of [profile.assetId, ...profile.variants.map((v) => v.assetId)]) {
+      for (const assetId of [profile.assetId, profile.male?.assetId ?? profile.assetId]) {
         const entry = entries.get(assetId);
         expect(entry, assetId).toBeDefined();
         expect(entry?.lodFiles.length).toBeGreaterThanOrEqual(1);
       }
+    }
+  });
+
+  it('scales each male model by its profile length factor, so males draw at true size', () => {
+    const entries = parseFishAssets(shippedIndex);
+    const males = Object.values(FISH_RENDER_PROFILES).flatMap((p) =>
+      p.male === null ? [] : [{ base: p.assetId, male: p.male }],
+    );
+    expect(males.length).toBeGreaterThan(0);
+    for (const { base, male } of males) {
+      const female = entries.get(base)?.standardLengthM;
+      const own = entries.get(male.assetId)?.standardLengthM;
+      if (female === undefined || own === undefined) throw new Error(`${male.assetId}: no model`);
+      expect(own / female, male.assetId).toBeCloseTo(male.lengthFactor, 3);
     }
   });
 });

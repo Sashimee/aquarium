@@ -182,20 +182,25 @@ describe('lure following', { timeout: LONG }, () => {
   });
 
   it('rejects a lure that is not a finite point and moves one outside the water into it', () => {
-    const w = show(spawnMany('angelfish', 1), 1);
+    const w = show(spawnMany('angelfish', 4), 3);
     expect(() => w.setLure([0, Number.NaN, 0])).toThrow(/lure: position/);
     expect(() => w.setLure([0, 0.2] as unknown as Point3)).toThrow(/lure: position/);
     expect(w.behaviour.curiosity.lureActive).toBe(false);
-    w.setLure([5, -1, 5]);
+    w.setLure([0, -1, 5]);
     expect(w.behaviour.curiosity.lureActive).toBe(true);
-    for (let t = 0; t < seconds(20); t++) w.step();
-    for (let i = 0; i < w.count; i++) {
-      if (w.behaviour.curiosity.follow[i] !== 1) continue;
-      const seen = w.behaviour.curiosity.seen;
-      expect(at(seen, i * 3)).toBeLessThanOrEqual(SHOW_TANK.width / 2);
-      expect(at(seen, i * 3 + 1)).toBeGreaterThanOrEqual(0);
-      expect(at(seen, i * 3 + 2)).toBeLessThanOrEqual(SHOW_TANK.depth / 2);
+    let followed = 0;
+    for (let t = 0; t < seconds(20); t++) {
+      w.step();
+      for (let i = 0; i < w.count; i++) {
+        if (w.behaviour.curiosity.follow[i] !== 1) continue;
+        followed++;
+        const seen = w.behaviour.curiosity.seen;
+        expect(at(seen, i * 3)).toBeLessThanOrEqual(SHOW_TANK.width / 2);
+        expect(at(seen, i * 3 + 1)).toBeGreaterThanOrEqual(0);
+        expect(at(seen, i * 3 + 2)).toBeLessThanOrEqual(SHOW_TANK.depth / 2);
+      }
     }
+    expect(followed).toBeGreaterThan(0);
   });
 
   it('is deterministic: the same seed and lure path give the same trajectory', () => {
@@ -252,8 +257,8 @@ describe('lure following', { timeout: LONG }, () => {
       expect(lured.worst).toBeGreaterThanOrEqual(-1e-9);
       expect(lured.followed).toBeGreaterThan(0);
       // Glass grazers touch the pane by design, so only the contacts the lure adds count, held to
-      // the budget of a feeding chase: a fish pivoting at stand-off may brush rock beside it.
-      expect(lured.contactRate - sweep(false).contactRate).toBeLessThan(2e-3);
+      // half the budget of a feeding chase: a fish pivoting at stand-off may brush rock beside it.
+      expect(lured.contactRate - sweep(false).contactRate).toBeLessThan(1e-3);
     },
   );
 });

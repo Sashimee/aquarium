@@ -377,6 +377,31 @@ describe('unverified sign-up takeover (#114)', () => {
       expect(userSchema.parse(me.json()).emailVerified).toBe(true);
     });
 
+    it('deletes the sessions inside the reset transaction even without the later revoke', async () => {
+      const email = nextEmail();
+      await signUpWith(email, ATTACKER_PASSWORD);
+      await h.database.pool.query(
+        `insert into session (id, user_id, token, expires_at, created_at, updated_at)
+         select 'atk-' || id, id, 'atk-token-' || id, now() + interval '1 day', now(), now()
+         from "user" where email = $1`,
+        [email],
+      );
+      await requestReset(email);
+      const context = await h.auth.$context;
+      const revoke = vi.spyOn(context.internalAdapter, 'deleteUserSessions').mockResolvedValue();
+      try {
+        expect((await resetPassword(email, VICTIM_PASSWORD)).statusCode).toBe(200);
+        expect(revoke).toHaveBeenCalled();
+      } finally {
+        revoke.mockRestore();
+      }
+      const row = await h.database.pool.query(
+        'select count(*) as sessions from session s join "user" u on u.id = s.user_id where u.email = $1',
+        [email],
+      );
+      expect(Number(row.rows[0].sessions)).toBe(0);
+    });
+
     it('does not drop the new credential when an old verification link is clicked', async () => {
       const email = nextEmail();
       await signUpWith(email, ATTACKER_PASSWORD);

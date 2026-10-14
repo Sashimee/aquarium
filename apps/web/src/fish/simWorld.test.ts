@@ -5,6 +5,7 @@ import { DEFAULT_TANK } from '../engine/tank/dimensions';
 import type { SceneAnchor } from '../scene/anemone';
 import { FISH_1, FISH_2, TANK_A, fishFixture } from '../sync/fixtures';
 import { demoTank, sceneAnchorsToSim } from './demoStock';
+import { sexOf } from './profiles';
 import { TankRoster } from './roster';
 import { allSpeciesInputs } from './species';
 import {
@@ -120,6 +121,23 @@ describe('SimWorldSpec', () => {
     expect(config?.species).toBe(allSpeciesInputs());
     expect(config?.seed).toBe(7);
     expect(config?.space).toBe(DEMO.config.space);
+  });
+
+  it('spawns a male guppy at the male length, so it swims at its own body lengths', () => {
+    const { spec, roster } = setup();
+    expect([sexOf(FISH_1), sexOf(FISH_2)]).toEqual(['female', 'male']);
+    roster.load({
+      tankId: TANK_A,
+      biome: 'freshwater',
+      decorLayout: [],
+      fish: [
+        fishFixture(FISH_1, { species: 'guppy', size: 0.04 }),
+        fishFixture(FISH_2, { species: 'guppy', size: 0.04 }),
+      ],
+    });
+    const lengths = spec.config(roster.swimming())?.fish.map((f) => f.bodyLengthM);
+    expect(lengths?.[0]).toBe(0.04);
+    expect(lengths?.[1]).toBeCloseTo(0.025);
   });
 
   it('builds a world that can take in a fish of a species it started without', () => {
@@ -307,13 +325,15 @@ describe('initSim', () => {
   };
 
   function start(client: SimInit['client'], signal = new AbortController().signal) {
-    const listeners = new Set<(event: ErrorEvent) => void>();
-    const worker = {
-      addEventListener: (_type: string, listener: (event: ErrorEvent) => void) =>
-        listeners.add(listener),
-      removeEventListener: (_type: string, listener: (event: ErrorEvent) => void) =>
-        listeners.delete(listener),
-    } as unknown as SimInit['worker'];
+    const listeners = new Set<(event: Pick<ErrorEvent, 'message'>) => void>();
+    const worker: SimInit['worker'] = {
+      addEventListener: (_type, listener) => {
+        listeners.add(listener);
+      },
+      removeEventListener: (_type, listener) => {
+        listeners.delete(listener);
+      },
+    };
     const { spec, roster } = setup();
     const config = spec.config(roster.swimming());
     if (config === null) throw new Error('the demo has no world');
@@ -322,7 +342,7 @@ describe('initSim', () => {
       init,
       listeners,
       fail: (message: string) => {
-        for (const l of [...listeners]) l({ message } as ErrorEvent);
+        for (const l of [...listeners]) l({ message });
       },
     };
   }

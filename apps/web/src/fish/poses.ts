@@ -25,6 +25,8 @@ export interface Pose {
   /** Drives the tail beat as if the fish swam at this speed (m/s). */
   speed: number;
   yawRate: number;
+  /** The sim's caudal thrust, 0 coasting .. 1; the fixed animations here leave it at 1. */
+  thrust: number;
   /** Scales the body wave and fin motion: 1 alive, 0 limp. */
   liveliness: number;
 }
@@ -44,7 +46,18 @@ const BAG_SPACING = 0.16;
 const BAG_INSET = 0.12;
 
 export function createPose(): Pose {
-  return { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, roll: 0, speed: 0, yawRate: 0, liveliness: 1 };
+  return {
+    x: 0,
+    y: 0,
+    z: 0,
+    yaw: 0,
+    pitch: 0,
+    roll: 0,
+    speed: 0,
+    yawRate: 0,
+    thrust: 1,
+    liveliness: 1,
+  };
 }
 
 function clamp(v: number, lo: number, hi: number): number {

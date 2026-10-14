@@ -17,6 +17,8 @@ export interface EngineEvents {
   'engine:stats': EngineStats;
   /** Hood light level from the photoperiod: 0 night .. 1 day. */
   'engine:daylight': { level: number };
+  /** Frames started or stopped going through a temporal resolve (TRAA). */
+  'engine:temporal-resolve': { on: boolean };
   'quality:tier-changed': { from: Tier | null; to: Tier; reason: TierChangeReason };
 }
 
