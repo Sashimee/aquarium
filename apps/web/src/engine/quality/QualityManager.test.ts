@@ -201,6 +201,67 @@ describe('QualityManager', () => {
     expect(() => setup({ probeTier: 'high', maxTier: 'medium' })).toThrow(/above maxTier/);
   });
 
+  it('holds the probe until the content is ready, then warms up and times the full tank', () => {
+    const { quality, announced } = setup({ awaitContent: true });
+    quality.start(0);
+    feed(quality, TARGET, 4, 0, 5000);
+    expect(quality.probing).toBe(true);
+    expect(announced).toEqual([]);
+    quality.contentReady(5000);
+    feed(quality, 200, 200, 5000, 5299);
+    expect(quality.probing).toBe(true);
+    feed(quality, TARGET, 14, 5300, 7400);
+    expect(quality.probing).toBe(false);
+    expect(quality.tier).toBe('medium');
+    expect(announced).toEqual([{ from: null, to: 'medium', reason: 'probe' }]);
+  });
+
+  it('probes at once when the content was ready before start', () => {
+    const { quality } = setup({ awaitContent: true });
+    quality.contentReady(0);
+    quality.start(0);
+    feed(quality, TARGET, 14, 0, 2400);
+    expect(quality.probing).toBe(false);
+    expect(quality.tier).toBe('medium');
+  });
+
+  it('probes anyway once the content wait times out', () => {
+    const { quality } = setup({ awaitContent: true, contentTimeoutMs: 10_000 });
+    quality.start(0);
+    const t = feed(quality, TARGET, 14, 0, 9990);
+    expect(quality.probing).toBe(true);
+    feed(quality, TARGET, 14, t, 12_400);
+    expect(quality.probing).toBe(false);
+    expect(quality.tier).toBe('medium');
+  });
+
+  it('ignores content readiness after the probe has finished', () => {
+    const { quality, announced } = setup({ awaitContent: true, contentTimeoutMs: 1000 });
+    quality.start(0);
+    const t = feed(quality, TARGET, 14, 0, 3400);
+    quality.contentReady(t);
+    expect(quality.probing).toBe(false);
+    expect(announced).toHaveLength(1);
+  });
+
+  it('setTier while waiting for content ends the wait and keeps the manual choice', () => {
+    const { quality, announced } = setup({ awaitContent: true });
+    quality.start(0);
+    quality.setTier('low', 100);
+    expect(quality.probing).toBe(false);
+    quality.contentReady(200);
+    feed(quality, TARGET, 4, 200, 3000);
+    expect(quality.probing).toBe(false);
+    expect(announced).toEqual([{ from: 'high', to: 'low', reason: 'manual' }]);
+  });
+
+  it('pins the tier without waiting for content', () => {
+    const { quality, announced } = setup({ pinned: 'low', awaitContent: true });
+    quality.start(0);
+    expect(quality.probing).toBe(false);
+    expect(announced).toEqual([{ from: null, to: 'low', reason: 'override' }]);
+  });
+
   it('cannot be started twice', () => {
     const { quality } = setup();
     quality.start(0);
