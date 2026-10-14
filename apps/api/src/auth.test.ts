@@ -20,17 +20,20 @@ const median = (xs: number[]) => {
   return sorted.length % 2 ? (sorted[mid] ?? 0) : ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2;
 };
 
-// Hashing the password dominates a fresh sign-up (~65 ms), so a repeat that skips it is ~75% faster
-// and one that adds a second hash ~100% slower. Host load stretches both halves of an adjacent pair
-// in proportion, so the median pair difference is bounded relative to the median fresh time rather
-// than by absolute milliseconds. 25% sits above the noise seen under load (an absolute 12 ms was
-// exceeded by noise at ~13 ms in CI) and far below either leak. A repeat is ~1-3 ms faster (no user rows).
+// Hashing dominates a fresh sign-up (~65 ms), so a repeat that skips it shows a gap of ~0.89 of the
+// faster half and a second hash ~1.0. Load stretches both halves of an adjacent pair together, so
+// the median pair gap is bounded relative to the faster median (dividing by the slower would let a
+// faster repeat inflate its own denominator) instead of in absolute milliseconds. Detection floor is
+// 25% of that, ~16 ms on a quiet host. The bound grows with load: fine for CPU-bound leaks like a
+// hash, looser for I/O-bound ones. A repeat is legitimately ~1-3 ms faster (no user rows).
 function expectNoTimingSkew(pairs: { fresh: number; repeat: number }[]) {
   const gap = median(pairs.map((p) => p.repeat - p.fresh));
   const fresh = median(pairs.map((p) => p.fresh));
+  const repeat = median(pairs.map((p) => p.repeat));
+  const base = Math.min(fresh, repeat);
   expect(
-    Math.abs(gap) / fresh,
-    `median repeat - fresh = ${gap.toFixed(1)} ms of ${fresh.toFixed(1)} ms`,
+    Math.abs(gap) / base,
+    `median repeat - fresh = ${gap.toFixed(1)} ms of ${base.toFixed(1)} ms`,
   ).toBeLessThan(0.25);
 }
 
