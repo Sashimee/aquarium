@@ -49,24 +49,60 @@ function nativeConsole(type: ConsoleType, message: string, ...params: unknown[])
   else console[type](message, ...params);
 }
 
-type InfoLogs = Pick<WebGL2RenderingContext, 'getProgramInfoLog' | 'getShaderInfoLog'>;
+export type ShaderLogs = Pick<
+  WebGL2RenderingContext,
+  | 'COMPILE_STATUS'
+  | 'getProgramInfoLog'
+  | 'getShaderInfoLog'
+  | 'getShaderParameter'
+  | 'getShaderSource'
+>;
 
-/** The message for a WebGL program that failed to link, with whichever info logs say why. */
+const SOURCE_CONTEXT_LINES = 6;
+
+/** The lines around `errorLine` (1-based), the failing one marked, as three prints them. */
+function sourceExcerpt(source: string, errorLine: number): string {
+  const lines = source.split('\n');
+  const from = Math.max(errorLine - SOURCE_CONTEXT_LINES, 0);
+  const to = Math.min(errorLine + SOURCE_CONTEXT_LINES, lines.length);
+  return lines
+    .slice(from, to)
+    .map((text, i) => {
+      const line = from + i + 1;
+      return `${line === errorLine ? '>' : ' '} ${line}: ${text}`;
+    })
+    .join('\n');
+}
+
+/** A shader's compile errors with the source around the first one; empty when it compiled. */
+function shaderErrors(gl: ShaderLogs, shader: WebGLShader, stage: 'vertex' | 'fragment'): string {
+  const compiled = gl.getShaderParameter(shader, gl.COMPILE_STATUS) === true;
+  const errors = (gl.getShaderInfoLog(shader) ?? '').trim();
+  if (compiled && errors === '') return '';
+  const errorLine = /ERROR: 0:(\d+)/.exec(errors)?.[1];
+  const source = gl.getShaderSource(shader);
+  if (errorLine === undefined || source === null) return errors;
+  return `${stage.toUpperCase()}\n\n${errors}\n\n${sourceExcerpt(source, Number(errorLine))}`;
+}
+
+/**
+ * The report three prints for a WebGL program that failed to link, which `onShaderError`
+ * replaces: the program log and each stage's errors with the failing source line marked.
+ */
 export function linkFailureMessage(
-  gl: InfoLogs,
+  gl: ShaderLogs,
   program: WebGLProgram,
   vertex: WebGLShader,
   fragment: WebGLShader,
 ): string {
   return [
-    'WebGL program failed to link',
-    gl.getProgramInfoLog(program),
-    gl.getShaderInfoLog(vertex),
-    gl.getShaderInfoLog(fragment),
+    'THREE.WebGLProgram: Shader Error - program failed to link',
+    `Program Info Log: ${(gl.getProgramInfoLog(program) ?? '').trim()}`,
+    shaderErrors(gl, vertex, 'vertex'),
+    shaderErrors(gl, fragment, 'fragment'),
   ]
-    .map((part) => (part ?? '').trim())
     .filter((part) => part !== '')
-    .join('\n');
+    .join('\n\n');
 }
 
 /**
@@ -90,7 +126,7 @@ export function watchPipelineErrors(
   const previousShaderError = renderer.debug.onShaderError;
   renderer.debug.onShaderError = (gl, program, vertex, fragment) => {
     const message = linkFailureMessage(gl, program, vertex, fragment);
-    if (previousShaderError === null) console.error(message);
+    if (previousShaderError === null) forward('error', message);
     else previousShaderError(gl, program, vertex, fragment);
     onFailure({ kind: 'render', materialId: null, message });
   };

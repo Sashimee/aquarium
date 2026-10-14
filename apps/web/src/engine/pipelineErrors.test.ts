@@ -20,6 +20,7 @@ import {
   watchPipelineErrors,
   type FailureContext,
   type PipelineFailure,
+  type ShaderLogs,
 } from './pipelineErrors';
 
 describe('parsePipelineFailure', () => {
@@ -61,27 +62,72 @@ describe('parsePipelineFailure', () => {
 });
 
 describe('linkFailureMessage', () => {
-  const logs = (program: string | null, vertex: string | null, fragment: string | null) => {
-    const vertexShader = {};
-    return {
-      gl: {
-        getProgramInfoLog: () => program,
-        getShaderInfoLog: (shader: WebGLShader) => (shader === vertexShader ? vertex : fragment),
-      },
-      vertexShader,
-    };
-  };
+  interface Stage {
+    compiled: boolean;
+    log: string | null;
+    source: string | null;
+  }
 
-  it('joins the info logs that say something', () => {
-    const { gl, vertexShader } = logs('link failed\n', null, "  ERROR: 'foo' undeclared ");
-    expect(linkFailureMessage(gl, {}, vertexShader, {})).toBe(
-      "WebGL program failed to link\nlink failed\nERROR: 'foo' undeclared",
+  function gl(program: string | null, vertex: Stage, fragment: Stage) {
+    const vertexShader = {};
+    const fragmentShader = {};
+    const stage = (shader: WebGLShader) => (shader === vertexShader ? vertex : fragment);
+    const logs: ShaderLogs = {
+      COMPILE_STATUS: 0x8b81,
+      getProgramInfoLog: () => program,
+      getShaderInfoLog: (shader) => stage(shader).log,
+      getShaderParameter: (shader, name) => name === 0x8b81 && stage(shader).compiled,
+      getShaderSource: (shader) => stage(shader).source,
+    };
+    return { logs, vertexShader, fragmentShader };
+  }
+
+  const ok: Stage = { compiled: true, log: '', source: 'void main() {}' };
+  const source = Array.from({ length: 20 }, (_, i) => `line${i + 1}`).join('\n');
+
+  it('marks the failing source line with five lines before and six after, as three does', () => {
+    const failing: Stage = { compiled: false, log: "ERROR: 0:10: 'foo' : undeclared", source };
+    const { logs, vertexShader, fragmentShader } = gl('link failed\n', ok, failing);
+    const message = linkFailureMessage(logs, {}, vertexShader, fragmentShader);
+    expect(message).toBe(
+      [
+        'THREE.WebGLProgram: Shader Error - program failed to link',
+        'Program Info Log: link failed',
+        "FRAGMENT\n\nERROR: 0:10: 'foo' : undeclared",
+        [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+          .map((n) => `${n === 10 ? '>' : ' '} ${n}: line${n}`)
+          .join('\n'),
+      ].join('\n\n'),
     );
   });
 
-  it('still names the failure when every log is empty', () => {
-    const { gl, vertexShader } = logs('', '', null);
-    expect(linkFailureMessage(gl, {}, vertexShader, {})).toBe('WebGL program failed to link');
+  it('clips the excerpt at the ends of the source', () => {
+    const failing: Stage = { compiled: false, log: 'ERROR: 0:1: syntax error', source };
+    const { logs, vertexShader, fragmentShader } = gl('', failing, ok);
+    const message = linkFailureMessage(logs, {}, vertexShader, fragmentShader);
+    expect(message).toContain('> 1: line1\n  2: line2');
+    expect(message).toContain('  7: line7');
+    expect(message).not.toContain(' 8: line8');
+  });
+
+  it('gives the bare log when it names no line', () => {
+    const failing: Stage = { compiled: false, log: ' out of memory ', source };
+    const { logs, vertexShader, fragmentShader } = gl(null, failing, ok);
+    expect(linkFailureMessage(logs, {}, vertexShader, fragmentShader)).toBe(
+      [
+        'THREE.WebGLProgram: Shader Error - program failed to link',
+        'Program Info Log: ',
+        'out of memory',
+      ].join('\n\n'),
+    );
+  });
+
+  it('keeps warnings from a shader that compiled', () => {
+    const warned: Stage = { compiled: true, log: 'WARNING: precision', source };
+    const { logs, vertexShader, fragmentShader } = gl('', warned, ok);
+    expect(linkFailureMessage(logs, {}, vertexShader, fragmentShader)).toContain(
+      'WARNING: precision',
+    );
   });
 });
 
