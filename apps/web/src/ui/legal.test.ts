@@ -73,6 +73,15 @@ describe('legal api', () => {
     expect(error.code).toBe('unexpected_response');
   });
 
+  it('requests the export with POST', async () => {
+    const fetcher = vi.fn().mockResolvedValue(json({ format: 'other' }));
+    await createApiClient(fetcher)
+      .exportData()
+      .catch(() => undefined);
+    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect([url, init.method]).toEqual(['/api/me/export', 'POST']);
+  });
+
   it('posts the password for deletion, and an empty body for passkey accounts', async () => {
     const fetcher = vi.fn().mockImplementation(async () => json({}));
     const api = createApiClient(fetcher);
