@@ -24,6 +24,7 @@ export const FEEDING = {
   grazeBiteS: 1.5,
   grazeBitePortion: 0.01,
   pursuitTimeoutS: 6,
+  pursuitClosingFraction: 0.25,
   ignoreS: 10,
   reachChecks: 3,
   pursuitSpeedFraction: 0.6,
@@ -74,6 +75,8 @@ export class Feeding {
   private targetId: Int32Array;
   private targetScore: Float64Array;
   private pursuit: Float64Array;
+  private lastDist: Float64Array;
+  private backingOut: Uint8Array;
   private ignoreId: Int32Array;
   private ignoreTimer: Float64Array;
   private retarget: Float64Array;
@@ -135,6 +138,8 @@ export class Feeding {
     this.targetId = new Int32Array(n).fill(-1);
     this.targetScore = new Float64Array(n);
     this.pursuit = new Float64Array(n);
+    this.lastDist = new Float64Array(n).fill(Infinity);
+    this.backingOut = new Uint8Array(n);
     this.ignoreId = new Int32Array(n).fill(-1);
     this.ignoreTimer = new Float64Array(n);
     // Staggered by index rather than drawn from the RNG, so a tank without food keeps the exact
@@ -164,6 +169,8 @@ export class Feeding {
     this.targetId = edit.array(this.targetId, 1, -1);
     this.targetScore = edit.array(this.targetScore);
     this.pursuit = edit.array(this.pursuit);
+    this.lastDist = edit.array(this.lastDist, 1, Infinity);
+    this.backingOut = edit.array(this.backingOut);
     this.ignoreId = edit.array(this.ignoreId, 1, -1);
     this.ignoreTimer = edit.array(this.ignoreTimer);
     this.retarget = edit.array(this.retarget, 1, (edit.count % 8) * DT);
@@ -197,7 +204,7 @@ export class Feeding {
 
   update(): void {
     const n = this.host.count;
-    const { food } = this.host;
+    const { food, position, cruiseSpeed } = this.host;
     const empty = Math.exp(-DT / FEEDING.gastricEvacuationTauS);
     for (let i = 0; i < n; i++) {
       this.gut[i] = at(this.gut, i) * empty;
@@ -209,6 +216,7 @@ export class Feeding {
     }
     if (food.count === 0) {
       for (let i = 0; i < n; i++) this.drop(i);
+      this.backingOut.fill(0);
       return;
     }
     // Food reported inside rock or glass (a client physics slip) can never be reached; chasing it
@@ -238,7 +246,22 @@ export class Feeding {
         continue;
       }
       this.target[i] = k;
-      this.pursuit[i] = at(this.pursuit, i) + DT;
+      // The clock counts only time spent not closing in, so the long way round a rock is not
+      // taken for a wedged chase, and stands still while the fish backs out of a dead end; a fish
+      // grinding at a wedge still gives up, since each back-out needs a stretch of grinding first.
+      const d = Math.hypot(
+        at(food.position, k * 3) - at(position, i * 3),
+        at(food.position, k * 3 + 1) - at(position, i * 3 + 1),
+        at(food.position, k * 3 + 2) - at(position, i * 3 + 2),
+      );
+      const closing = (at(this.lastDist, i) - d) / DT;
+      this.lastDist[i] = d;
+      if (
+        this.backingOut[i] === 0 &&
+        !(closing > FEEDING.pursuitClosingFraction * at(cruiseSpeed, i))
+      ) {
+        this.pursuit[i] = at(this.pursuit, i) + DT;
+      }
       if (at(this.pursuit, i) > FEEDING.pursuitTimeoutS) {
         // Out of reach (wedged in a crevice, behind rock): give up on it for a while.
         this.ignoreId[i] = id;
@@ -247,6 +270,7 @@ export class Feeding {
         this.retarget[i] = 0;
       }
     }
+    this.backingOut.fill(0);
 
     for (let i = 0; i < n; i++) {
       if (at(this.retarget, i) > 0 || !this.hungry(i) || at(this.handling, i) > 0) continue;
@@ -275,6 +299,7 @@ export class Feeding {
     this.targetId[i] = -1;
     this.targetScore[i] = 0;
     this.pursuit[i] = 0;
+    this.lastDist[i] = Infinity;
     this.follow[i] = -1;
   }
 
@@ -283,7 +308,13 @@ export class Feeding {
     this.targetId[i] = at(this.host.food.id, k);
     this.targetScore[i] = score;
     this.pursuit[i] = 0;
+    this.lastDist[i] = Infinity;
     this.follow[i] = -1;
+  }
+
+  /** Fish `i` spent this step backing out of a dead end, which does not count as pursuit. */
+  backedOut(i: number): void {
+    this.backingOut[i] = 1;
   }
 
   private hungry(i: number): boolean {
