@@ -197,6 +197,20 @@ function normalizedPathname(url: string): string {
 }
 
 const TOKEN_PATH_PREFIXES = [`${AUTH_BASE_PATH}/reset-password/`, `${AUTH_BASE_PATH}/callback/`];
+// Pages and links whose URL holds a one-time token. The strict-origin-when-cross-origin default
+// would still send the full URL to same-origin subresources (JS, CSS, /api/me) on first load. The
+// policy stays scoped: the CSRF check falls back to Referer and the default suits every other route.
+const TOKEN_PAGES = new Set(['/reset-password', '/verify-email']);
+
+function carriesUrlToken(url: string): boolean {
+  const path = normalizedPathname(url).toLowerCase().replace(/\/+$/, '');
+  return (
+    TOKEN_PAGES.has(path) ||
+    path === `${AUTH_BASE_PATH}/verify-email` ||
+    path.startsWith(`${AUTH_BASE_PATH}/reset-password/`)
+  );
+}
+
 const TOKEN_LIKE_SEGMENT = /^[A-Za-z0-9]{20,}$/;
 
 export function redactUrl(url: string): string {
@@ -286,8 +300,9 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     }
   });
 
-  app.addHook('onSend', async (_req, reply) => {
+  app.addHook('onSend', async (req, reply) => {
     applySecurityHeaders(reply);
+    if (carriesUrlToken(req.url)) reply.header('referrer-policy', 'no-referrer');
   });
 
   app.addHook('onRequest', async (req, reply) => {

@@ -147,6 +147,34 @@ describe('security headers', () => {
     });
   });
 
+  describe('referrer policy', () => {
+    it.each([
+      '/reset-password?token=abcdefghijklmnopqrstuvwx',
+      '/verify-email?token=abcdefghijklmnopqrstuvwx',
+      '/api/auth/verify-email?token=abc.def.ghi&callbackURL=%2F',
+      '/api/auth/reset-password/abcdefghijklmnopqrstuvwx?callbackURL=%2Freset-password',
+    ])('is no-referrer on %s', async (url) => {
+      const res = await spa.app.inject(url);
+      expect(res.headers['referrer-policy']).toBe('no-referrer');
+    });
+
+    it('is no-referrer on the page when there is no web build too', async () => {
+      const res = await noDist().inject('/reset-password?token=abcdefghijklmnopqrstuvwx');
+      expect(res.headers['referrer-policy']).toBe('no-referrer');
+    });
+
+    it.each([
+      '/',
+      '/assets/app.js',
+      '/api/health',
+      '/reset-password-help',
+      '/api/auth/get-session',
+    ])('keeps the default on %s', async (url) => {
+      const res = await spa.app.inject(url);
+      expect(res.headers['referrer-policy']).toBe('strict-origin-when-cross-origin');
+    });
+  });
+
   it('sets them on the hello page when there is no web build', async () => {
     const res = await noDist().inject('/');
     expect(res.headers['content-security-policy']).toBeDefined();

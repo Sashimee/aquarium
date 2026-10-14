@@ -20,7 +20,8 @@ const SUBSTRATE_BOUNCE = 0.5;
 /**
  * The light from every direction but the hood's beam. Outside the water it is the room. Under
  * water the room only comes in through the glass, filtered by the water on its way, and the hood's
- * light bounced off the substrate takes its place, so what is in the tank takes the hood's colour.
+ * light bounced off the substrate and scattered about (`fill`) takes its place, so what is in the
+ * tank takes the hood's colour.
  */
 export class InteriorLight {
   /** The room's brightness relative to the day: its lamps at night. */
@@ -32,8 +33,18 @@ export class InteriorLight {
    * it would run in each of the environment lookups three builds per material.
    */
   readonly substrateBounce = uniform(new Color());
+  /**
+   * Even daytime fill under water: the hood's main channel scattered about by the water, the panes
+   * and the planting, which neither its beam nor the substrate bounce carries. It comes from every
+   * direction, so it lifts what the beam leaves in shadow without casting shadows or highlights of
+   * its own, and it is off with the main channel at night. Not part of `lightRadiance`, so it
+   * never counts as light that casts caustics.
+   */
+  readonly fill = uniform(new Color());
   /** Blue channel of the hood light at the substrate, which excites fluorescent tissue: the actinic by day and the moonlight at night. */
   actinicExcitation = 0;
+  private readonly reach = new Color();
+  private fillShare = 0;
   private readonly roomNodes: PMREMNode[] = [];
 
   /**
@@ -50,14 +61,31 @@ export class InteriorLight {
     this.substrateAlbedo = uniform(substrateAlbedo);
   }
 
+  /** The fill's irradiance as a share of the main channel's at the substrate, on a surface facing up. */
+  get fillLevel(): number {
+    return this.fillShare;
+  }
+
+  set fillLevel(share: number) {
+    if (!(share >= 0 && Number.isFinite(share))) {
+      throw new RangeError(`InteriorLight: fillLevel must be a finite share >= 0, got ${share}`);
+    }
+    this.fillShare = share;
+  }
+
   /** Call once per frame, after the hood and water uniforms are set. */
   update(): void {
     const depth = this.medium.boxMax.value.y - this.sandHeight;
-    this.caustics.hoodLightAtDepth(depth, this.substrateBounce.value);
-    this.actinicExcitation = this.substrateBounce.value.b;
-    this.substrateBounce.value
-      .multiply(this.substrateAlbedo.value)
-      .multiplyScalar(SUBSTRATE_BOUNCE / Math.PI);
+    const reach = this.caustics.reachAtDepth(depth, this.reach);
+    const bounce = this.substrateBounce.value
+      .copy(reach)
+      .multiply(this.caustics.lightRadiance.value);
+    this.actinicExcitation = bounce.b;
+    bounce.multiply(this.substrateAlbedo.value).multiplyScalar(SUBSTRATE_BOUNCE / Math.PI);
+    this.fill.value
+      .copy(reach)
+      .multiply(this.caustics.casting)
+      .multiplyScalar(this.fillShare / Math.PI);
   }
 
   setRoom(texture: Texture): void {
@@ -89,7 +117,7 @@ export class InteriorLight {
     const inWater = medium.submerged(p);
     const throughGlass = medium.transmittance(medium.boxMax.z.sub(p.z)).mul(ROOM_THROUGH_GLASS);
     const roomShare = mix(vec3(1), throughGlass, inWater);
-    const bounce = this.substrateBounce.mul(inWater);
-    return room.mul(this.roomLevel).mul(roomShare).add(bounce);
+    const underWater = this.substrateBounce.mul(inWater).add(this.fill.mul(inWater));
+    return room.mul(this.roomLevel).mul(roomShare).add(underWater);
   }
 }
