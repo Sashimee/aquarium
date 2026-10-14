@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Anchor } from './behaviour.ts';
 import {
   createSimHost,
@@ -497,6 +497,38 @@ describe('sim worker bridge', () => {
     expect(after[0]).toEqual({ type: 'snapshot', epoch: layout.epoch, tick: 90 });
     expect(after.some((m) => m.type === 'ate')).toBe(true);
     expect(after.every((m) => m.epoch === layout.epoch)).toBe(true);
+  });
+
+  it('still sends bites stranded by a step that threw in the old epoch, ahead of the layout', async () => {
+    const { client, clientPort } = connect();
+    const ready = await client.init(benchmarkConfig(5));
+    const seen: { type: string; epoch: number }[] = [];
+    clientPort.addEventListener('message', (event: MessageEvent) => {
+      const data = event.data as { type: string; epoch: number };
+      seen.push({ type: data.type, epoch: data.epoch });
+    });
+    const step = World.prototype.step;
+    let calls = 0;
+    const spy = vi.spyOn(World.prototype, 'step').mockImplementation(function (this: World) {
+      if (++calls === 90) throw new Error('step exploded');
+      step.call(this);
+    });
+    try {
+      client.setFood(flakeGrid(30));
+      const failed = nextError(client);
+      client.step(90);
+      expect(await failed).toBe('step exploded');
+    } finally {
+      spy.mockRestore();
+    }
+    // The throw skipped the snapshot that would have carried these bites.
+    expect(seen.some((m) => m.type === 'ate')).toBe(false);
+
+    const layout = await client.removeFish('neon-tetra-0');
+    const at = seen.findIndex((m) => m.type === 'layout');
+    expect(seen.slice(0, at)).toContainEqual({ type: 'ate', epoch: ready.epoch });
+    expect(layout.epoch).toBe(ready.epoch + 1);
+    expect(seen.slice(at + 1).some((m) => m.type === 'ate')).toBe(false);
   });
 
   it('never lets an error for an add or remove reject a pending init', async () => {
