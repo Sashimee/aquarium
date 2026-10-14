@@ -89,4 +89,35 @@ describe('ModelLibrary.collisionGeometry', () => {
     expect(geometries.length).toBeGreaterThan(0);
     expect(glbFetches()).toBe(before);
   });
+
+  it('does not share vertex arrays with the render model and survives its disposal', async () => {
+    const { library, rock, lowLod } = await setup();
+    vi.spyOn(KTX2Loader.prototype, 'load').mockImplementation((_url, onLoad) => {
+      onLoad(new CompressedTexture([], 1, 1));
+    });
+    const rendered = await library.load(rock.id, lowLod, 1024);
+    const collision = await library.collisionGeometry(rock.id);
+
+    collision.forEach((geometry, i) => {
+      const renderGeometry = rendered.primitives[i]?.geometry;
+      expect(geometry.getAttribute('position').array).not.toBe(
+        renderGeometry?.getAttribute('position').array,
+      );
+    });
+    const before = collision.map((g) => Array.from(g.getAttribute('position').array));
+    for (const primitive of rendered.primitives) {
+      primitive.geometry.getAttribute('position').array.fill(0);
+      primitive.geometry.dispose();
+    }
+    expect(collision.map((g) => Array.from(g.getAttribute('position').array))).toEqual(before);
+  });
+
+  it('does not wait on an in-flight render load', async () => {
+    const { library, rock, lowLod } = await setup();
+    vi.spyOn(KTX2Loader.prototype, 'load').mockImplementation(() => {});
+    const render = library.load(rock.id, lowLod, 1024);
+    const geometries = await library.collisionGeometry(rock.id);
+    expect(geometries.length).toBeGreaterThan(0);
+    void render;
+  });
 });

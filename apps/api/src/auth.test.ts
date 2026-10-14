@@ -20,14 +20,21 @@ const median = (xs: number[]) => {
   return sorted.length % 2 ? (sorted[mid] ?? 0) : ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2;
 };
 
-// The median of per-pair differences cancels host load, which hits both halves of an adjacent
-// pair alike. A repeat sign-up is legitimately ~1-3 ms faster (it inserts no user rows), so the
-// tolerance must clear that. 12 ms clears the worst no-leak median seen under load (~8 ms) and stays
-// below the 25 ms leaks this is meant to expose; leaks under ~15 ms are not reliably caught, and
-// catching them needs more pairs rather than a tighter bound.
+// Hashing dominates a fresh sign-up (~65 ms), so a repeat that skips it shows a gap of ~6.7 times
+// the faster half (the repeat itself) and a second hash ~1.0. Load stretches both halves of an adjacent pair together, so
+// the median pair gap is bounded relative to the faster median (dividing by the slower would let a
+// faster repeat inflate its own denominator) instead of in absolute milliseconds. Detection floor is
+// 25% of that, ~16 ms on a quiet host. The bound grows with load: fine for CPU-bound leaks like a
+// hash, looser for I/O-bound ones. A repeat is legitimately ~1-3 ms faster (no user rows).
 function expectNoTimingSkew(pairs: { fresh: number; repeat: number }[]) {
   const gap = median(pairs.map((p) => p.repeat - p.fresh));
-  expect(Math.abs(gap), `median repeat - fresh = ${gap.toFixed(1)} ms`).toBeLessThan(12);
+  const fresh = median(pairs.map((p) => p.fresh));
+  const repeat = median(pairs.map((p) => p.repeat));
+  const base = Math.min(fresh, repeat);
+  expect(
+    Math.abs(gap) / base,
+    `median repeat - fresh = ${gap.toFixed(1)} ms of ${base.toFixed(1)} ms`,
+  ).toBeLessThan(0.25);
 }
 
 function cookieJar(res: LightMyRequestResponse): string {
@@ -69,10 +76,29 @@ async function verifiedSession(h: Harness, email = nextEmail()) {
   return { email, cookie, verify };
 }
 
+const SLOW_MAIL_MS = 40;
+
+describe('timing skew bound', () => {
+  it('flags a repeat that skips the mail send against a slow mailer', () => {
+    const fresh = 65 + SLOW_MAIL_MS;
+    expect(() =>
+      expectNoTimingSkew(
+        Array.from({ length: 9 }, () => ({ fresh, repeat: fresh - SLOW_MAIL_MS })),
+      ),
+    ).toThrow();
+  });
+
+  it('accepts pairs that differ by a couple of milliseconds', () => {
+    expect(() =>
+      expectNoTimingSkew(Array.from({ length: 9 }, () => ({ fresh: 105, repeat: 103 }))),
+    ).not.toThrow();
+  });
+});
+
 describe('unverified sign-up takeover (#114)', () => {
   let h: Harness;
   beforeAll(async () => {
-    h = await createHarness();
+    h = await createHarness({ mailDelayMs: SLOW_MAIL_MS });
   });
   afterAll(() => h.close());
 
