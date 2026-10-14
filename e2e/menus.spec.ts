@@ -17,8 +17,6 @@ interface Menu {
   isOpen(page: Page): Promise<void>;
 }
 
-let touch = false;
-
 // Under software rendering the main thread can lag a running spring animation by seconds, so a
 // box measured mid-animation is not where the element ends up.
 async function settleAnimations(page: Page): Promise<void> {
@@ -36,35 +34,44 @@ async function settleAnimations(page: Page): Promise<void> {
 // rendering. This checks the same thing that matters here, that nothing covers the target, and
 // then sends one real touch or mouse press at its centre.
 async function press(target: Locator): Promise<void> {
-  await target.waitFor({ state: 'visible' });
-  await settleAnimations(target.page());
-  // The HUD re-measures a frame after a panel opens or closes, so a panel can briefly sit over
-  // it; a target that is still covered after that settles is a real bug.
-  let point: [number, number] = [0, 0];
+  // The HUD re-measures a frame after a panel opens or closes, and a sheet springs in over several
+  // frames, so a target can briefly be moving or covered; one that still is after that settles is
+  // a real bug. Each check is a single round trip, which is what costs time under load.
+  let point: Point = [0, 0];
   await expect
     .poll(
       async () => {
         const probe = await target.evaluate((element) => {
+          const moving = document
+            .getAnimations()
+            .some(
+              (animation) =>
+                Number.isFinite(animation.effect?.getComputedTiming().endTime) &&
+                animation.playState === 'running',
+            );
           const box = element.getBoundingClientRect();
           const px = box.x + box.width / 2;
           const py = box.y + box.height / 2;
           const top = document.elementFromPoint(px, py);
-          const cover =
-            top !== null && element.contains(top)
-              ? null
-              : top
-                ? `${top.tagName.toLowerCase()}.${top.className} "${top.textContent?.slice(0, 40)}"`
-                : 'nothing';
-          return { point: [px, py] as [number, number], cover };
+          const state =
+            box.width === 0 || box.height === 0
+              ? 'is not rendered'
+              : moving
+                ? 'is still animating'
+                : top !== null && element.contains(top)
+                  ? null
+                  : top
+                    ? `is covered by ${top.tagName.toLowerCase()}.${top.className} "${top.textContent?.slice(0, 40)}"`
+                    : 'is covered by nothing';
+          return { point: [px, py] as Point, state };
         });
         point = probe.point;
-        return probe.cover ? `covered by ${probe.cover} at ${point.join(',')}` : null;
+        return probe.state ? `${probe.state} at ${point.join(',')}` : null;
       },
       { message: `${String(target)} cannot be pressed`, timeout: 20_000 },
     )
     .toBeNull();
-  if (touch) await target.page().touchscreen.tap(...point);
-  else await target.page().mouse.click(...point);
+  await tap(target.page(), point);
 }
 
 const dock = (page: Page, label: string) =>
@@ -179,25 +186,32 @@ async function dispatchGesture(page: Page, what: string, events: Promise<unknown
   }
 }
 
-function touchDrag(page: Page, cdp: CDPSession, from: [number, number], to: [number, number]) {
-  const send = (type: 'touchStart' | 'touchMove' | 'touchEnd', point?: [number, number]) =>
+type Point = [number, number];
+type Pointer = (path: Point[]) => Promise<void>;
+
+const pointers = new WeakMap<Page, Pointer>();
+
+function touchPointer(page: Page, cdp: CDPSession): Pointer {
+  const send = (type: 'touchStart' | 'touchMove' | 'touchEnd', point?: Point) =>
     cdp.send('Input.dispatchTouchEvent', {
       type,
       touchPoints: point ? [{ x: point[0], y: point[1], id: 1 }] : [],
     });
-  const mid: [number, number] = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2];
-  return dispatchGesture(page, 'touch drag', [
-    send('touchStart', from),
-    send('touchMove', mid),
-    send('touchMove', to),
-    send('touchEnd'),
-  ]);
+  return (path) => {
+    const [first, ...rest] = path;
+    if (!first) throw new Error('a pointer path needs a point');
+    return dispatchGesture(page, 'touch gesture', [
+      send('touchStart', first),
+      ...rest.map((point) => send('touchMove', point)),
+      send('touchEnd'),
+    ]);
+  };
 }
 
-function mouseDrag(page: Page, cdp: CDPSession, from: [number, number], to: [number, number]) {
+function mousePointer(page: Page, cdp: CDPSession): Pointer {
   const send = (
     type: 'mousePressed' | 'mouseMoved' | 'mouseReleased',
-    point: [number, number],
+    point: Point,
     buttons: number,
   ) =>
     cdp.send('Input.dispatchMouseEvent', {
@@ -208,15 +222,26 @@ function mouseDrag(page: Page, cdp: CDPSession, from: [number, number], to: [num
       buttons,
       clickCount: type === 'mouseMoved' ? 0 : 1,
     });
-  const mid: [number, number] = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2];
-  return dispatchGesture(page, 'mouse drag', [
-    send('mouseMoved', from, 0),
-    send('mousePressed', from, 1),
-    send('mouseMoved', mid, 1),
-    send('mouseMoved', to, 1),
-    send('mouseReleased', to, 0),
-  ]);
+  return (path) => {
+    const [first, ...rest] = path;
+    const last = rest.at(-1) ?? first;
+    if (!first || !last) throw new Error('a pointer path needs a point');
+    return dispatchGesture(page, 'mouse gesture', [
+      send('mouseMoved', first, 0),
+      send('mousePressed', first, 1),
+      ...rest.map((point) => send('mouseMoved', point, 1)),
+      send('mouseReleased', last, 0),
+    ]);
+  };
 }
+
+function pointerOf(page: Page): Pointer {
+  const pointer = pointers.get(page);
+  if (!pointer) throw new Error('the page has no pointer; open it through shared()');
+  return pointer;
+}
+
+const tap = (page: Page, point: Point) => pointerOf(page)([point]);
 
 // The canvas sits under the overlay controls. A drag that ends on one of them is not routed to
 // the canvas (the synthetic mouse gets no pointer capture), so the drag runs along the first row
@@ -256,6 +281,9 @@ async function expectOrbits(page: Page, drag: Drag, context: string) {
   const before = await canvas.getAttribute('data-camera');
   const [from, to] = await dragPath(page);
   await drag(from, to);
+  // One frame can take over 20 s while shaders compile under software rendering, longer than the
+  // expect timeout, and the pose only changes in a frame.
+  await frames(page, 2);
   await expect(canvas, `the camera did not orbit ${context}`).not.toHaveAttribute(
     'data-camera',
     before ?? '',
@@ -324,7 +352,9 @@ async function ready(page: Page) {
 
 async function resetTool(page: Page) {
   await openPlay(page);
-  await press(playGroup(page).getByRole('button', { name: 'Tap glass', exact: true }));
+  const tapGlass = playGroup(page).getByRole('button', { name: 'Tap glass', exact: true });
+  await press(tapGlass);
+  await expect(tapGlass).toHaveAttribute('aria-pressed', 'true');
   await closeSheet(page);
 }
 
@@ -339,15 +369,11 @@ async function closeAllPanels(page: Page) {
     await page.goBack();
     await expect.poll(() => page.getByRole('heading', { level: 1 }).count()).toBeLessThanOrEqual(0);
   }
-  const tapGlass = playGroup(page).getByRole('button', { name: 'Tap glass', exact: true });
-  if ((await tapGlass.count()) > 0 && (await tapGlass.getAttribute('aria-pressed')) !== 'true') {
-    await press(tapGlass);
-    await expect(tapGlass).toHaveAttribute('aria-pressed', 'true');
-  }
-  await closeSheet(page);
-  if (await dock(page, 'Play').evaluate((element) => element.classList.contains('glow'))) {
-    await resetTool(page);
-  }
+  const toolActive = await dock(page, 'Play').evaluate((element) =>
+    element.classList.contains('glow'),
+  );
+  if (toolActive) await resetTool(page);
+  else await closeSheet(page);
   await expect(sheet(page)).toHaveCount(0);
   await expect(page.getByRole('heading', { level: 1 })).toHaveCount(0);
 }
@@ -383,9 +409,7 @@ async function expectSceneTapClosesPanel(page: Page) {
   if (!viewport) throw new Error('viewport is not set');
   await press(dock(page, 'Shop'));
   await expect(sheet(page)).toHaveCount(1);
-  const point: [number, number] = [viewport.width * 0.3, viewport.height * 0.3];
-  if (touch) await page.touchscreen.tap(...point);
-  else await page.mouse.click(...point);
+  await tap(page, [viewport.width * 0.3, viewport.height * 0.3]);
   await expect(sheet(page), 'tapping the scene left the panel open').toHaveCount(0);
 }
 
@@ -415,9 +439,16 @@ const tank = MENUS.find((menu) => menu.name === 'My tank');
 if (!decorate || !tank) throw new Error('MENUS lost My tank or Decorate');
 PAIRS.push([decorate, tank]);
 
+// Tools and camera toggles do not depend on the layout, so the phone run covers them and the
+// desktop run covers the drawer.
+const DRAWER_PAIRS = PAIRS.filter(([first]) => !['Hand-feed', 'Dive'].includes(first.name));
+
 // A cold boot costs 25-45 s on a CI runner, so the tests of one describe share a page and run in
 // order, each leaving the app as the next expects (no panel open, Tap glass selected).
-function shared(options: BrowserContextOptions, makeDrag: (page: Page, cdp: CDPSession) => Drag) {
+function shared(
+  options: BrowserContextOptions,
+  makePointer: (page: Page, cdp: CDPSession) => Pointer,
+) {
   let context: BrowserContext | undefined;
   let state: { page: Page; drag: Drag } | undefined;
   test.describe.configure({ mode: 'serial' });
@@ -427,8 +458,13 @@ function shared(options: BrowserContextOptions, makeDrag: (page: Page, cdp: CDPS
     const page = await context.newPage();
     page.setDefaultTimeout(30_000);
     const cdp = await context.newCDPSession(page);
+    const pointer = makePointer(page, cdp);
+    pointers.set(page, pointer);
     await ready(page);
-    state = { page, drag: makeDrag(page, cdp) };
+    state = {
+      page,
+      drag: (from, to) => pointer([from, [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2], to]),
+    };
   });
   test.afterAll(async () => {
     await context?.close();
@@ -440,13 +476,9 @@ function shared(options: BrowserContextOptions, makeDrag: (page: Page, cdp: CDPS
 }
 
 test.describe('menus on a phone', () => {
-  test.beforeEach(() => {
-    touch = true;
-  });
-
   const app = shared(
     { viewport, userAgent, deviceScaleFactor: 1, hasTouch: true, isMobile: true },
-    (page, cdp) => (from, to) => touchDrag(page, cdp, from, to),
+    touchPointer,
   );
 
   test('the camera orbits on a fresh page and the controls are big enough to touch', async () => {
@@ -468,14 +500,7 @@ test.describe('menus on a phone', () => {
 });
 
 test.describe('menus with a mouse', () => {
-  test.beforeEach(() => {
-    touch = false;
-  });
-
-  const app = shared(
-    { viewport: { width: 800, height: 540 } },
-    (page, cdp) => (from, to) => mouseDrag(page, cdp, from, to),
-  );
+  const app = shared({ viewport: { width: 800, height: 540 } }, mousePointer);
 
   // Tests run in order on one page, so Dive and Reef stay on for the pairs after theirs.
   test('a Laser drag does not move the camera, and Tap glass gives the orbit back', async () => {
@@ -499,7 +524,7 @@ test.describe('menus with a mouse', () => {
     await expect(shop).toBeFocused();
   });
 
-  for (const [first, second] of PAIRS) {
+  for (const [first, second] of DRAWER_PAIRS) {
     test(`${first.name}, then ${second.name} opens, switches and leaves the camera draggable`, async () => {
       const { page, drag } = app();
       await exercise(page, drag, first, second);
