@@ -10,14 +10,12 @@ import basisTranscoderWasm from 'three/addons/libs/basis/basis_transcoder.wasm?u
 export const KTX2_WORKER_URL = `/ktx2-worker.js?v=${REVISION}`;
 
 /**
- * KTX2Loader.init() fetches basis_transcoder.js only to embed it in a blob worker this loader
- * never starts (the worker file embeds its own copy), so that fetch gets an empty script.
+ * KTX2Loader.init() fetches the glue script only to embed it in a blob worker this loader never
+ * starts, so it gets the worker file (same origin, as connect-src 'self' requires; a data: URL
+ * would be refused) instead of a second bundled copy of the transcoder.
  */
-const EMPTY_SCRIPT_URL = 'data:text/javascript,';
-
-/** Points the transcoder at the bundled copy. */
 export function bundledTranscoderUrl(url: string): string {
-  if (url.endsWith('basis_transcoder.js')) return EMPTY_SCRIPT_URL;
+  if (url.endsWith('basis_transcoder.js')) return KTX2_WORKER_URL;
   if (url.endsWith('basis_transcoder.wasm')) return basisTranscoderWasm;
   return url;
 }

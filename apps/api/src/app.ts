@@ -323,7 +323,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   app.addHook('onSend', async (req, reply) => {
     applySecurityHeaders(reply);
     if (
-      reply.statusCode === 200 &&
+      (reply.statusCode === 200 || reply.statusCode === 304) &&
       (req.method === 'GET' || req.method === 'HEAD') &&
       normalizedPathname(req.url) === KTX2_WORKER_PATH
     ) {

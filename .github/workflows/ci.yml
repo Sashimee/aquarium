@@ -135,6 +135,8 @@ jobs:
           pattern: e2e-blob-*
           path: all-blobs
           merge-multiple: true
+      - if: hashFiles('all-blobs/**') == ''
+        run: echo "::warning::No e2e blob reports were downloaded; the HTML report was not produced."
       - if: hashFiles('all-blobs/**') != ''
         continue-on-error: true
         run: pnpm exec playwright merge-reports --reporter html all-blobs
