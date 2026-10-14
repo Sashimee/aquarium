@@ -108,7 +108,7 @@ export class Hardscape {
     const matrix = decorMatrix(item);
     const meshes: Mesh[] = [];
     this.meshesByItem.push(meshes);
-    const key = placementKey(item.position, item.rotationY);
+    const key = item.tintSeed ?? placementKey(item.position, item.rotationY);
     const tint = coralTint(item.assetId, key);
     for (const primitive of model.primitives) {
       let material: Material = primitive.material;
