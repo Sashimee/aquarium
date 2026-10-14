@@ -118,7 +118,11 @@ test('the palette follows the tank biome and the server refuses what it hides', 
   await panel.getByRole('button', { name: 'Add Vacation feeder' }).click();
   await expect(panel.getByRole('button', { name: 'Add Vacation feeder' })).toBeDisabled();
   await expect(panel.getByText('already has its one vacation feeder')).toBeVisible();
-  await expect(panel.getByText('Layout saved.')).toBeVisible();
+  await expect
+    .poll(async () =>
+      (await savedTanks(page))[0]?.decorLayout.some((p) => p.assetId === 'vacation-feeder'),
+    )
+    .toBe(true);
 
   const rejected = await page.request.patch(`/api/tanks/${tank.id}`, {
     headers: { origin: APP_URL },

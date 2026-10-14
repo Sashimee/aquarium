@@ -104,7 +104,8 @@ export async function advanceServerClock(page: Page, minutes: number): Promise<v
  */
 export async function returnToTab(page: Page, awayMinutes: number): Promise<void> {
   await page.evaluate((ms) => {
-    const realNow = Date.now.bind(Date);
+    const w = window as unknown as { __realNow?: () => number };
+    const realNow = (w.__realNow ??= Date.now.bind(Date));
     Date.now = () => realNow() + ms;
     document.dispatchEvent(new Event('visibilitychange'));
   }, awayMinutes * 60_000);
