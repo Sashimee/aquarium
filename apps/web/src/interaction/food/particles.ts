@@ -1,4 +1,5 @@
 import type { FoodType } from '@aquarium/shared';
+import { FOOD_PARTICLES } from '@aquarium/sim';
 import { FOOD_PROFILES, foodTypeIndex } from './profiles';
 
 export interface FoodBounds {
@@ -30,6 +31,8 @@ export interface FoodParticle {
   ageS: number;
   /** Seconds since touching the floor, or -1 while still falling. */
   settledS: number;
+  /** Feed portions fish have taken from this particle so far. */
+  eaten: number;
 }
 
 export const MAX_FOOD_PARTICLES = 400;
@@ -37,6 +40,10 @@ export const FOOD_STRIDE = 5;
 const MAX_STEP_S = 0.1;
 const SURFACE_MARGIN = 0.002;
 const WALL_MARGIN = 0.004;
+const EATEN_EPSILON = 1e-6;
+const NORI_CLIP_DEPTH = 0.12;
+const NORI_GLASS_GAP = 0.012;
+const NORI_SPACING = 0.12;
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
@@ -64,7 +71,7 @@ export class FoodField {
   }
 
   /**
-   * Scatters a portion around (x, z) at the water surface. Returns how many particles were made,
+   * Scatters a portion around (x, z) at the water surface; nori is clipped to the back glass instead. Returns how many particles were made,
    * which is fewer than asked when the tank already holds the cap of uneaten food.
    */
   drop(food: FoodType, portion: number, x: number, z: number, spread = 0.03): number {
@@ -74,6 +81,10 @@ export class FoodField {
     const made = Math.min(wanted, MAX_FOOD_PARTICLES - this.list.length);
     const { bounds } = this.env;
     for (let i = 0; i < made; i++) {
+      if (food === 'nori') {
+        this.list.push(this.clipped(x, i, made));
+        continue;
+      }
       const angle = this.random() * Math.PI * 2;
       const radius = spread * Math.sqrt(this.random());
       this.list.push({
@@ -95,9 +106,28 @@ export class FoodField {
         vz: 0,
         ageS: -this.random() * 0.4,
         settledS: -1,
+        eaten: 0,
       });
     }
     return made;
+  }
+
+  private clipped(x: number, index: number, count: number): FoodParticle {
+    const { bounds } = this.env;
+    const slot = count > 1 ? index / (count - 1) - 0.5 : 0;
+    return {
+      id: this.nextId++,
+      food: 'nori',
+      x: clamp(x + slot * NORI_SPACING, bounds.minX + WALL_MARGIN, bounds.maxX - WALL_MARGIN),
+      y: bounds.waterTop - NORI_CLIP_DEPTH - this.random() * 0.03,
+      z: bounds.minZ + NORI_GLASS_GAP,
+      vx: 0,
+      vy: 0,
+      vz: 0,
+      ageS: 0,
+      settledS: -1,
+      eaten: 0,
+    };
   }
 
   /** Removes particles by id (eaten); unknown ids are ignored. Returns the ones removed. */
@@ -112,6 +142,15 @@ export class FoodField {
     }
     this.list.length = keep;
     return removed;
+  }
+
+  /** Records a bite; the particle goes once its whole portion is eaten. False for an unknown id. */
+  bite(id: number, portion: number): boolean {
+    const p = this.list.find((q) => q.id === id);
+    if (!p) return false;
+    p.eaten += portion;
+    if (p.eaten >= FOOD_PARTICLES[p.food].portion - EATEN_EPSILON) this.remove([id]);
+    return true;
   }
 
   clear(): void {
@@ -157,7 +196,7 @@ export class FoodField {
 
   private advance(p: FoodParticle, dt: number): void {
     p.ageS += dt;
-    if (p.ageS < 0) return;
+    if (p.ageS < 0 || p.food === 'nori') return;
     if (p.settledS >= 0) {
       p.settledS += dt;
       return;
@@ -169,9 +208,13 @@ export class FoodField {
     const gain = profile.currentGain;
     const targetVy = floating ? 0 : -profile.sinkSpeed + (this.flow[1] ?? 0) * gain;
     const k = 1 - Math.exp(-dt / profile.responseS);
-    p.vx += ((this.flow[0] ?? 0) * gain - p.vx) * k;
+    const pushX = (this.flow[0] ?? 0) * gain;
+    const pushZ = (this.flow[2] ?? 0) * gain;
+    const push = Math.hypot(pushX, pushZ);
+    const soft = push > 0 ? (profile.maxDriftS * Math.tanh(push / profile.maxDriftS)) / push : 0;
+    p.vx += (pushX * soft - p.vx) * k;
     p.vy += (targetVy - p.vy) * k;
-    p.vz += ((this.flow[2] ?? 0) * gain - p.vz) * k;
+    p.vz += (pushZ * soft - p.vz) * k;
 
     p.x += p.vx * dt;
     p.y += p.vy * dt;

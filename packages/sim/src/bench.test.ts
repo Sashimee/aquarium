@@ -14,8 +14,9 @@ const TEST_TIMEOUT_MS = 120_000;
 // against a fixed reference workload stepped in turn with it, and the gate is on their ratio. The
 // limits are the ratios measured on the desktop the 2 ms / 4 ms-at-4x-throttle budgets were set
 // on (Ryzen 5 7600X, Node 24: 1.12 swimming, 2.4 feeding), times 1.4 for how differently other
-// CPUs and V8 builds weigh the sim's mix of work against the reference's. A sim twice as slow is
-// still well past the limit. The absolute budgets are gated by `pnpm --filter @aquarium/sim bench`.
+// CPUs and V8 builds weigh the sim's mix of work against the reference's. That catches roughly a
+// doubling of the sim's cost, not smaller slowdowns: 1.5x only just fails the feeding limit and
+// 1.3x passes. The absolute budgets are gated by `pnpm --filter @aquarium/sim bench`.
 const HEADROOM = 1.4;
 const SWIMMING_LIMIT = 1.12 * HEADROOM;
 const FEEDING_LIMIT = 2.4 * HEADROOM;
@@ -24,12 +25,6 @@ const REFERENCE_PASSES = 20;
 interface Scenario {
   /** Advances one step and returns the milliseconds the sim spent on it. */
   step(): number;
-}
-
-function timed(run: () => void): number {
-  const t0 = performance.now();
-  run();
-  return performance.now() - t0;
 }
 
 function school(seed: number, fish = 60): WorldConfig {
@@ -43,7 +38,14 @@ interface Swimming extends Scenario {
 
 function swimming(seed: number): Swimming {
   const world = new World(school(seed));
-  return { count: world.count, step: () => timed(() => world.step()) };
+  return {
+    count: world.count,
+    step(): number {
+      const t0 = performance.now();
+      world.step();
+      return performance.now() - t0;
+    },
+  };
 }
 
 const REFERENCE_POINTS = 60;
@@ -91,8 +93,9 @@ function flockPass(pos: Float64Array, heading: Float64Array, nearest: Float64Arr
   }
 }
 
-// Timed here rather than through `timed`, whose call site sees every scenario's closures: how V8
-// inlines a megamorphic call shifted the reference's cost by up to 30% between runs.
+// Every scenario times its own work inline. A shared timing helper's call site sees every
+// scenario's closures, and how V8 inlined that megamorphic call shifted the reference's cost by up
+// to 30% between runs.
 function reference(): Scenario {
   const pos = new Float64Array(REFERENCE_POINTS * 3);
   const heading = new Float64Array(REFERENCE_POINTS);
@@ -137,7 +140,9 @@ function feeding(
   const sim = {
     substrateSdf: world.substrateSdf,
     setFood(buffer: Float32Array): void {
-      ms += timed(() => world.setFood(buffer));
+      const t0 = performance.now();
+      world.setFood(buffer);
+      ms += performance.now() - t0;
       particleSteps += buffer.length / 5;
     },
   };
@@ -153,7 +158,9 @@ function feeding(
       if (rain.count < cap) feed(rain, t);
       ms = 0;
       rain.feed(sim);
-      ms += timed(() => world.step());
+      const t0 = performance.now();
+      world.step();
+      ms += performance.now() - t0;
       rain.eat(world.takeAteEvents());
       return ms;
     },

@@ -8,10 +8,11 @@ import {
   Scene,
   WebGPURenderer,
 } from 'three/webgpu';
-import { applyDayLighting, FRESHWATER_FILL_LEVEL } from './dayLighting';
+import { applyDayLighting, type DayLightingRig, FRESHWATER_FILL_LEVEL } from './dayLighting';
 import { daylightAt, minuteOfDay } from './daylight';
 import { EffectsSlot } from './effectsSlot';
 import { installRoomLighting, DEFAULT_HDRI_URL } from './environment';
+import { createSharedKtx2, type Ktx2Textures } from './ktx2';
 import { EventBus, type BackendKind, type EngineEvents, type EngineEventBus } from './events';
 import { CullPrewarm } from './cullPrewarm';
 import { buildOrRelease, DisposeStack } from './lifecycle';
@@ -21,6 +22,7 @@ import { QualityManager } from './quality/QualityManager';
 import { renderPixelRatio } from './quality/tiers';
 import { DEFAULT_TANK, type TankDimensions, waterBounds } from './tank/dimensions';
 import { meanSubstrateHeight } from './tank/substrate';
+import { UNREFLECTED_LAYER } from './tank/surfaceReflection';
 import { Tank } from './tank/Tank';
 import { Caustics } from './water/caustics';
 import { InteriorLight } from './water/interior';
@@ -109,18 +111,22 @@ export class Engine {
   /** Linear albedo of the substrate, for the hood light it throws back: the dark freshwater sand. */
   readonly substrateAlbedo = new Color(0.13, 0.09, 0.055);
   readonly quality: QualityManager;
+  /** The only KTX2 transcoder for this renderer; every texture loader shares it. */
+  readonly ktx2: Ktx2Textures;
 
   private readonly clock: number | null;
   private readonly showStats: boolean;
   private daylightLevel = 1;
   private daylightCheckedAt = -Infinity;
   private daylightAnnounced = false;
-  readonly roomBackgroundIntensity: number;
+  private readonly dayRig: DayLightingRig;
   private readonly effects = new EffectsSlot((message, cause) => this.reportError(message, cause));
   private readonly frameCallbacks = new Set<FrameCallback>();
   private lastFrameAt: number | null = null;
   private readonly cullPrewarm = new CullPrewarm(this.scene);
   private sceneRevisionValue = 0;
+  /** Later tier changes warm what they turn on themselves. */
+  private warmedUp = false;
   private gpuMs: number | null = null;
   private readonly gpuTiming: boolean;
   private lastGpuMs: number | null = null;
@@ -179,6 +185,7 @@ export class Engine {
       refreshMs: profile.refreshMs,
       probeTier: profile.probeTier,
       maxTier: profile.maxTier,
+      awaitContent: true,
     });
 
     container.appendChild(renderer.domElement);
@@ -187,8 +194,13 @@ export class Engine {
     renderer.domElement.style.width = '100%';
     renderer.domElement.style.height = '100%';
 
+    const sharedKtx2 = createSharedKtx2(renderer);
+    cleanup.add(() => sharedKtx2.dispose());
+    this.ktx2 = sharedKtx2.loader;
+
     const roomLighting = installRoomLighting(
       renderer,
+      this.ktx2,
       this.scene,
       config.hdriUrl ?? DEFAULT_HDRI_URL,
       (message, cause) => this.reportError(message, cause),
@@ -198,7 +210,7 @@ export class Engine {
       },
     );
     cleanup.add(() => roomLighting.dispose());
-    this.roomBackgroundIntensity = this.scene.backgroundIntensity;
+    const roomBackgroundIntensity = this.scene.backgroundIntensity;
 
     this.medium = new WaterMedium(waterBounds(dimensions), config.water ?? DEFAULT_WATER);
     this.caustics = new Caustics(this.medium);
@@ -211,6 +223,16 @@ export class Engine {
       meanSubstrateHeight(dimensions),
     );
     this.interior.fillLevel = FRESHWATER_FILL_LEVEL;
+    this.dayRig = {
+      hood: this.hood,
+      caustics: this.caustics,
+      interior: this.interior,
+      medium: this.medium,
+      scene: this.scene,
+      ambientScatter: this.ambientScatter,
+      substrateAlbedo: this.substrateAlbedo,
+      roomBackgroundIntensity,
+    };
     this.tank = new Tank(dimensions, this.medium, roomLighting.initial, this.interior);
     cleanup.add(() => this.tank.dispose());
     this.scene.add(this.tank.group);
@@ -221,6 +243,7 @@ export class Engine {
     this.setupHood(dimensions);
     cleanup.add(() => this.hood.shadow.dispose());
 
+    this.camera.layers.enable(UNREFLECTED_LAYER);
     this.camera.position.set(0, 0.35, 1.6);
     this.camera.lookAt(0, 0.25, 0);
 
@@ -275,6 +298,12 @@ export class Engine {
     if (this.showStats) void this.loadStatsOverlay();
   }
 
+  /** The first scene and fish are drawn from the next frame on, so the quality probe may time them. */
+  contentReady(): void {
+    if (this.disposed) return;
+    this.quality.contentReady(performance.now());
+  }
+
   async dispose(): Promise<void> {
     this.frameCallbacks.clear();
     await this.cleanup.dispose();
@@ -304,7 +333,7 @@ export class Engine {
     hood.shadow.normalBias = 0.01;
 
     hood.colorNode = this.caustics.lightColorNode();
-    applyDayLighting(this, this.daylightLevel);
+    applyDayLighting(this.dayRig, this.daylightLevel);
   }
 
   private updateDaylight(nowMs: number): void {
@@ -328,12 +357,26 @@ export class Engine {
     this.quality.register('caustics', (s) => {
       this.caustics.setMethod(s.causticMethod, s.causticLayers);
     });
+    // A tier change can rebuild pipelines without touching a material, e.g. by toggling shadows.
+    this.quality.register('cull-prewarm', () => this.cullPrewarm.invalidate());
+    this.quality.register('surface-reflection', (s) => {
+      const wasOn = this.tank.surfaceReflection;
+      this.tank.setSurfaceReflection(s.surfaceReflection);
+      if (wasOn || !this.tank.surfaceReflection || !this.warmedUp) return;
+      this.tank
+        .compileSurfaceReflection(this.renderer, this.scene, this.camera)
+        .catch((cause: unknown) =>
+          this.reportError('The surface reflection could not be prepared', cause),
+        );
+    });
   }
 
   private async warmUp(): Promise<void> {
     this.updateDaylight(0);
-    applyDayLighting(this, this.daylightLevel);
+    applyDayLighting(this.dayRig, this.daylightLevel);
     await this.renderer.compileAsync(this.scene, this.camera);
+    await this.tank.compileSurfaceReflection(this.renderer, this.scene, this.camera);
+    this.warmedUp = true;
   }
 
   /** The effects are a separate chunk; without them every tier still renders, just plainer. */
@@ -373,9 +416,10 @@ export class Engine {
 
     for (const callback of this.frameCallbacks) callback(deltaS, nowMs);
     this.updateDaylight(nowMs);
-    applyDayLighting(this, this.daylightLevel);
+    applyDayLighting(this.dayRig, this.daylightLevel);
     if (this.cullPrewarm.begin(nowMs) > 0) this.sceneRevisionValue++;
     try {
+      this.renderSurfaceReflection();
       if (!this.effects.render()) this.renderer.render(this.scene, this.camera);
     } finally {
       this.cullPrewarm.end();
@@ -389,6 +433,21 @@ export class Engine {
       this.stats.frameMsSum += frameMs;
     }
     if (nowMs - this.stats.since >= STATS_INTERVAL_MS) this.emitStats(nowMs);
+  }
+
+  /**
+   * The hood's shadow map does not depend on the view, but three redraws it once per camera and
+   * frame: the mirrored camera uses the last one drawn for the scene camera.
+   */
+  private renderSurfaceReflection(): void {
+    const shadow = this.hood.shadow;
+    const autoUpdate = shadow.autoUpdate;
+    shadow.autoUpdate = false;
+    try {
+      this.tank.renderSurfaceReflection(this.renderer, this.scene, this.camera);
+    } finally {
+      shadow.autoUpdate = autoUpdate;
+    }
   }
 
   /** Timestamp queries resolve asynchronously; the result lands on a later frame. */

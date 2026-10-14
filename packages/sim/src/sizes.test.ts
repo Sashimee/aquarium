@@ -122,9 +122,10 @@ const ADULT_MAX: Record<string, { model: string; maxSlM: number; maxTlM: number;
 
 /**
  * Models whose own TL/SL draws the species outside the tolerance, with the issue that fixes the
- * model. The test asserts the error is still there, so a fixed model forces the entry out.
+ * model and a cap a little above its error when listed. The test asserts the error is still there,
+ * so a fixed model forces the entry out, and that it stays under the cap, so it cannot get worse.
  */
-const KNOWN_MODEL_ERRORS: Readonly<Record<string, number>> = {};
+const KNOWN_MODEL_ERRORS: Readonly<Record<string, { issue: number; maxError: number }>> = {};
 
 const TOLERANCE = 0.1;
 
@@ -166,16 +167,34 @@ describe('species sizes are standard lengths', () => {
     },
   );
 
-  it.each(Object.entries(KNOWN_MODEL_ERRORS))(
-    '%s: is still drawn off its real adult TL until issue #%i fixes the model',
-    (id, issue) => {
+  it('caps every known model error at or above the tolerance', () => {
+    for (const [id, { issue, maxError }] of Object.entries(KNOWN_MODEL_ERRORS)) {
+      expect(
+        maxError,
+        `${id} (#${issue}) is under TOLERANCE, so it is not a known error`,
+      ).toBeGreaterThanOrEqual(TOLERANCE);
+    }
+  });
+
+  it.each(
+    Object.entries(KNOWN_MODEL_ERRORS).map(
+      ([id, { issue, maxError }]) => [id, issue, maxError] as const,
+    ),
+  )(
+    '%s: is still drawn off its real adult TL, within its cap, until issue #%i fixes the model',
+    (id, issue, maxError) => {
       const adult = ADULT_MAX[id];
       expect(adult, id).toBeDefined();
       if (adult === undefined) return;
+      const error = drawnError(id, adult);
       expect(
-        drawnError(id, adult),
+        error,
         `#${issue} looks fixed: remove ${id} from KNOWN_MODEL_ERRORS`,
       ).toBeGreaterThanOrEqual(TOLERANCE);
+      expect(
+        error,
+        `${id} is drawn worse than its KNOWN_MODEL_ERRORS cap (#${issue})`,
+      ).toBeLessThanOrEqual(maxError);
     },
   );
 

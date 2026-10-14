@@ -152,7 +152,7 @@ export class TankScene {
     options: SceneOptions,
   ): Promise<TankScene> {
     const catalog = await AssetCatalog.fetch();
-    const library = new ModelLibrary(engine.renderer, catalog);
+    const library = new ModelLibrary(engine.ktx2, catalog);
     try {
       const scene = await TankScene.build(engine, library, catalog, preset, options);
       return scene;
@@ -609,14 +609,16 @@ export function plantReach(
   bounds: { readonly min: readonly number[]; readonly max: readonly number[] } | undefined,
   current: CurrentParameters,
 ): (scale: number) => number {
-  const height = bounds?.max[1] ?? FALLBACK_PLANT_HEIGHT;
+  const height = bounds
+    ? Math.max(Math.abs(bounds.min[1] ?? 0), bounds.max[1] ?? 0)
+    : FALLBACK_PLANT_HEIGHT;
   const half = bounds
     ? Math.hypot(
         Math.max(Math.abs(bounds.min[0] ?? 0), Math.abs(bounds.max[0] ?? 0)),
         Math.max(Math.abs(bounds.min[2] ?? 0), Math.abs(bounds.max[2] ?? 0)),
       )
     : 0.1;
-  // Euler YXZ tilts both axes at once: tip offset is h*sqrt(sin²X + sin²Z cos²X), max when both equal T.
+  // Euler YXZ tilts both axes at once: tip offset is h*sqrt(sin²Z + sin²X cos²Z), max when both equal T.
   const lean = Math.sin(MAX_PLANT_TILT) * Math.sqrt(1 + Math.cos(MAX_PLANT_TILT) ** 2) * height;
   const sway = maxSway(assetId, height, current);
   return (scale) => (half + lean) * scale + sway;

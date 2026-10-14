@@ -28,7 +28,7 @@ async function account(h: Harness) {
     method: 'POST',
     url: '/api/auth/sign-up/email',
     headers: jsonHeaders,
-    payload: { email, password: PASSWORD, name: 'Tester', callbackURL: '/' },
+    payload: { email, password: PASSWORD, name: 'Tester', callbackURL: '/verify-email' },
   });
   const mail = h.outbox.findLast((m) => m.to === email);
   const link = /https?:\/\/\S+verify-email\?\S+/.exec(mail?.text ?? '')?.[0];
@@ -381,14 +381,11 @@ describe('data export', () => {
     expect(get.statusCode).toBe(404);
     const foreign = [
       await call(h, dave.cookie, 'POST', '/api/me/export', {}, { origin: 'https://evil.example' }),
-      await call(
-        h,
-        dave.cookie,
-        'POST',
-        '/api/me/export',
-        {},
-        { origin: '', referer: 'https://evil.example/x' },
-      ),
+      await h.app.inject({
+        method: 'POST',
+        url: '/api/me/export',
+        headers: { cookie: dave.cookie, referer: 'https://evil.example/x' },
+      }),
       await h.app.inject({
         method: 'POST',
         url: '/api/me/export',

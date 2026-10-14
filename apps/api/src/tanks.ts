@@ -6,6 +6,7 @@ import {
   decorLayoutSchema,
   findDecorProblems,
   idSchema,
+  legacyTintSeed,
   speciesListSchema,
   tankListSchema,
   tankSchema,
@@ -246,7 +247,9 @@ async function render(tx: Tx, ticked: Ticked, fishRows = ticked.fishRows): Promi
     id: tank.id,
     name: tank.name,
     biome: tank.biome,
-    decorLayout: tank.decorLayout,
+    decorLayout: decorLayoutSchema
+      .parse(tank.decorLayout)
+      .map((item) => ({ ...item, tintSeed: item.tintSeed ?? legacyTintSeed(item) })),
     water: tank.water,
     lastTickAt: tank.lastTickAt.toISOString(),
     fish: fishRows
@@ -425,7 +428,14 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           .update(schema.tanks)
           .set({
             ...(body.name !== undefined ? { name: body.name } : {}),
-            ...(body.decorLayout !== undefined ? { decorLayout: body.decorLayout } : {}),
+            ...(body.decorLayout !== undefined
+              ? {
+                  decorLayout: body.decorLayout.map((item) => ({
+                    ...item,
+                    tintSeed: item.tintSeed ?? legacyTintSeed(item),
+                  })),
+                }
+              : {}),
             updatedAt: new Date(clock.now()),
           })
           .where(eq(schema.tanks.id, tankId))
@@ -554,6 +564,19 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       const body = ateBatchRequestSchema.parse(req.body);
       throttle(user.id, 'ate');
       const result = await withTank(user, tankId, async (tx, ticked) => {
+        if (body.batchId) {
+          const claimed = await tx
+            .insert(schema.ateBatches)
+            .values({ tankId, batchId: body.batchId })
+            .onConflictDoNothing()
+            .returning({ batchId: schema.ateBatches.batchId });
+          if (claimed.length === 0) {
+            // The replay's payload isn't compared with the original, so a client reusing an id would
+            // drop reports silently; this log is the only trace.
+            req.log.debug({ tankId, batchId: body.batchId }, 'ate batch replay ignored');
+            return { tank: await render(tx, ticked) };
+          }
+        }
         const nowMs = clock.now();
         const windowMs = FEEDING_WINDOW_MINUTES * 60_000;
         const recent = await tx

@@ -49,11 +49,12 @@ export function createPlaySystem(
     groundHeight: (x, z) => scene.groundHeight(x, z),
     current: (x, y, z, out) => scene.current.sample(x, y, z, out),
   });
-  const toSim = sceneToSim((x, z) => scene.groundHeight(x, z));
-  const link = new FoodLink(food, sim, toSim, (eaten) => interaction.emit('food:ate', { eaten }));
+  const link = new FoodLink(food, sim, sceneToSim, (eaten) =>
+    interaction.emit('food:ate', { eaten }),
+  );
   const bubbles = new BubbleField(box.max.y);
   const ripples = new RippleField();
-  const visuals = new PlayVisuals();
+  const visuals = new PlayVisuals((x, z) => scene.groundHeight(x, z));
   engine.scene.add(visuals.group);
 
   const raycaster = new Raycaster();
@@ -82,7 +83,7 @@ export function createPlaySystem(
     events: interaction,
     startle: sim.startle?.bind(sim),
     netTap: sim.netTap?.bind(sim),
-    toSim,
+    toSim: sceneToSim,
     setLaserDot: (p) => visuals.setLaser(p),
     now: () => performance.now(),
   });

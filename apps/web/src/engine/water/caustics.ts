@@ -249,7 +249,7 @@ export class Caustics {
   readonly lightDirection = uniform(new Vector3(0, 1, 0));
   readonly lightRadiance = uniform(new Color(1, 1, 1));
   /** The main channel's part of `lightRadiance`, the part that casts caustics. */
-  readonly casting = new Color();
+  private readonly casting = new Color();
 
   private readonly bakeTarget = new RenderTarget(BAKE.size, BAKE.size, {
     type: HalfFloatType,
@@ -336,18 +336,27 @@ export class Caustics {
   /**
    * The baked pattern with unit mean at a surface point (metres), for effects that need the
    * caustic shape but not its animation detail. Sampled at an explicit level, so it may be
-   * called from non-uniform control flow.
+   * called from non-uniform control flow. A caller sampling it in a loop passes `mean` and `drift`,
+   * read once from `bakedMean()` and `bakedDrift()` before the loop.
    */
-  bakedAt(surfacePoint: Node<'vec2'>, scale: number): Node<'float'> {
+  bakedAt(
+    surfacePoint: Node<'vec2'>,
+    scale: number,
+    mean: Node<'float'> = this.bakedMean(),
+    drift: Node<'vec2'> = this.bakedDrift(),
+  ): Node<'float'> {
     const cells = surfacePoint.mul(this.cellsPerMetre.mul(scale / BAKE.periodCells));
-    const drift = fract(vec2(DRIFT[0], DRIFT[1]).mul(time.mul(this.speed).div(BAKE.periodCells)));
-    return texture(this.bakeTarget.texture, cells.add(drift))
-      .level(float(1))
-      .r.div(this.bakedMean());
+    return texture(this.bakeTarget.texture, cells.add(drift)).level(float(1)).r.div(mean);
   }
 
-  private bakedMean(): Node<'float'> {
-    return texture(this.bakeTarget.texture, vec2(0.5)).level(float(BAKE_MEAN_LEVEL)).r;
+  /** How far the baked tile has drifted by now, in tiles; the same at every pixel. */
+  bakedDrift(): Node<'vec2'> {
+    return fract(vec2(DRIFT[0], DRIFT[1]).mul(time.mul(this.speed).div(BAKE.periodCells)));
+  }
+
+  /** The baked tile's mean, floored so a missing or black 1x1 mip cannot divide to Inf or NaN. */
+  bakedMean(): Node<'float'> {
+    return max(texture(this.bakeTarget.texture, vec2(0.5)).level(float(BAKE_MEAN_LEVEL)).r, 1e-4);
   }
 
   /**
@@ -370,12 +379,9 @@ export class Caustics {
     return Fn(() => this.reach(p).light)();
   }
 
-  /**
-   * `hoodLight` at `depth` (m) below the surface, from the uniforms' current values. For light that
-   * is the same everywhere in a frame, so the shaders read it as one uniform.
-   */
-  hoodLightAtDepth(depth: number, target: Color): Color {
-    return this.reachAtDepth(depth, target).multiply(this.lightRadiance.value);
+  /** Copies out the main channel's part of `lightRadiance`, the part that casts caustics. */
+  getCasting(target: Color): Color {
+    return target.copy(this.casting);
   }
 
   /** The share of the hood's light, per channel, that spread and absorption leave at `depth` (m). */

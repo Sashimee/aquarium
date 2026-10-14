@@ -21,7 +21,7 @@ import Fastify, {
   type FastifyRequest,
 } from 'fastify';
 import { z, ZodError } from 'zod';
-import { AUTH_BASE_PATH, type Auth } from './auth.ts';
+import { AUTH_BASE_PATH, RESET_REDIRECT_PATH, VERIFY_CALLBACK_PATH, type Auth } from './auth.ts';
 import { createClock, type Clock } from './clock.ts';
 import { schema, type Database } from './db/index.ts';
 import { apiError } from './errors.ts';
@@ -94,23 +94,34 @@ const advanceTimeRequestSchema = z.strictObject({
     .max(60 * 24 * 365),
 });
 
+// Only the two pages that carry a no-referrer policy may be named, so the values are pinned
+// instead of validated. Better Auth appends the reset token to redirectTo, so any other path would
+// land it on a page that leaks or ignores it; the verify token travels in the mail link's query to
+// the API, and callbackURL is only where the browser lands afterwards.
+const resetRedirectSchema = z.literal(RESET_REDIRECT_PATH, {
+  error: `redirectTo must be exactly ${RESET_REDIRECT_PATH}.`,
+});
+const verifyCallbackSchema = z.literal(VERIFY_CALLBACK_PATH, {
+  error: `callbackURL must be exactly ${VERIFY_CALLBACK_PATH}.`,
+});
+
 const signUpBodySchema = signUpRequestSchema.extend({
-  callbackURL: z.string().max(2048).optional(),
+  callbackURL: verifyCallbackSchema.optional(),
 });
 
 const signInBodySchema = signInRequestSchema.extend({
-  callbackURL: z.string().max(2048).optional(),
+  callbackURL: verifyCallbackSchema.optional(),
   rememberMe: z.boolean().optional(),
 });
 
 const requestPasswordResetBodySchema = z.strictObject({
   email: emailSchema,
-  redirectTo: z.string().max(2048).optional(),
+  redirectTo: resetRedirectSchema.default(RESET_REDIRECT_PATH),
 });
 
 const sendVerificationEmailBodySchema = z.strictObject({
   email: emailSchema,
-  callbackURL: z.string().max(2048).optional(),
+  callbackURL: verifyCallbackSchema.optional(),
 });
 
 const BODY_SCHEMAS = new Map<string, z.ZodType>([
@@ -167,6 +178,14 @@ export function stripTokens(value: unknown): unknown {
   );
 }
 
+export function stripTokensFromBody(raw: string): string | null {
+  try {
+    return JSON.stringify(stripTokens(JSON.parse(raw)));
+  } catch {
+    return null;
+  }
+}
+
 // Better Auth resolves the request through the WHATWG URL parser, which collapses dot segments
 // (also percent-encoded) and treats a backslash as a slash. Path-based rules here compare a literal
 // string, so any path the parser would rewrite is refused instead of being matched differently.
@@ -207,7 +226,7 @@ function carriesUrlToken(url: string): boolean {
   return (
     TOKEN_PAGES.has(path) ||
     path === `${AUTH_BASE_PATH}/verify-email` ||
-    path.startsWith(`${AUTH_BASE_PATH}/reset-password/`)
+    TOKEN_PATH_PREFIXES.some((prefix) => path.startsWith(prefix))
   );
 }
 
@@ -441,9 +460,9 @@ export function buildApp(opts: AppOptions): FastifyInstance {
           ...(req.method === 'POST' && raw !== undefined ? { body: raw } : {}),
         });
         const res = await mailer.runAdmitted(admission, () => auth.handler(request));
-        // Better Auth also answers 403 before looking at the password (bad callbackURL, foreign
-        // origin, cross-site navigation), so on sign-in only its EMAIL_NOT_VERIFIED, raised after
-        // the password matched, counts as a success next to 200. change-password has no such case:
+        // Better Auth also answers 403 before looking at the password (missing, null or foreign
+        // origin, or cross-site navigation), so on sign-in only its EMAIL_NOT_VERIFIED, raised
+        // after the password matched, counts as a success next to 200. change-password has no such case:
         // every non-200 is either a rejection before the check or the wrong password.
         const unverifiedSignIn =
           pathname === `${AUTH_BASE_PATH}/sign-in/email` &&
@@ -464,7 +483,13 @@ export function buildApp(opts: AppOptions): FastifyInstance {
         const payload = Buffer.from(await res.arrayBuffer());
         const isJson = (res.headers.get('content-type') ?? '').toLowerCase().includes('json');
         if (!isJson || payload.length === 0) return reply.send(payload);
-        return reply.send(JSON.stringify(stripTokens(JSON.parse(payload.toString('utf8')))));
+        const stripped = stripTokensFromBody(payload.toString('utf8'));
+        if (stripped === null) {
+          return reply
+            .code(502)
+            .send(apiError('internal', 'Authentication service returned an invalid response.'));
+        }
+        return reply.send(stripped);
       },
     });
   });

@@ -228,6 +228,48 @@ describe('global mail cap', () => {
     expect(sent).toEqual(['a@bas.lu', 'b@bas.lu']);
   });
 
+  it('re-checks a blocked request: fresh retry-after while the cap is spent, no log once it has freed', async () => {
+    let now = 0;
+    const logs: string[] = [];
+    const transport = nodemailer.createTransport({ jsonTransport: true });
+    transport.sendMail = (async () => undefined) as unknown as typeof transport.sendMail;
+    const mailer = createMailer(transport, 'fish@bas.lu', {
+      store: memoryHitStore(() => now),
+      log: (m) => logs.push(m),
+      limits: {
+        perRecipient: { max: 100, windowMs: 3_600_000 },
+        verificationCooldown: { max: 100, windowMs: 1000 },
+        perIpSignup: { max: 2, windowMs: 3_600_000 },
+        global: { max: 1, windowMs: 60_000 },
+      },
+    });
+    await mailer.sendVerification('a@bas.lu', 'https://x.test/a');
+    const admission = await mailer.consumeIp('203.0.113.9');
+    expect(admission.mailBlockedFor).toBe(60);
+    expect(logs.filter((m) => m.includes('mail_global_cap_reached'))).toHaveLength(1);
+
+    const retryAfter = async () => {
+      const err = await mailer
+        .runAdmitted(admission, () => mailer.sendVerification('b@bas.lu', 'https://x.test/b'))
+        .catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(MailThrottledError);
+      return (err as MailThrottledError).retryAfterSeconds;
+    };
+
+    now += 30_000;
+    expect(await retryAfter()).toBe(30);
+    expect(logs).toHaveLength(1);
+
+    now += 31_000;
+    expect(await retryAfter()).toBe(60);
+    expect(logs).toHaveLength(1);
+
+    await mailer.sendVerification('c@bas.lu', 'https://x.test/c');
+    now += 61_000;
+    expect(await retryAfter()).toBe(60);
+    expect(logs).toHaveLength(1);
+  });
+
   it('refuses mail without logging the cap event when the store throws', async () => {
     const logs: string[] = [];
     const transport = nodemailer.createTransport({ jsonTransport: true });

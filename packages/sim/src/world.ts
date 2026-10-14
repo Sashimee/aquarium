@@ -88,6 +88,9 @@ export const STEERING = {
   deadEndRadiusBodyLengths: 4,
   deadEndBearingCos: 0.3,
   deadEndBehindFaceBodyLengths: 0.5,
+  deadEndHeightBodyLengths: 0.75,
+  pathTraceSteps: 24,
+  pathTraceMinStep: 0.25,
 } as const;
 
 export interface FishSpawn {
@@ -216,6 +219,8 @@ export class World {
   plantContacts = 0;
   /** Stand-off spots tested for room to face the food from; the bearing search behind them is cached. */
   stationChecks = 0;
+  /** Fish-steps spent rising in place before crossing to a stand-off station over the top of a rock. */
+  climbs = 0;
 
   private _position: Float64Array;
   private _yaw: Float64Array;
@@ -259,13 +264,15 @@ export class World {
   private scrapeAnchor: Float64Array;
   private scrapeTime: Float64Array;
   private scrapeHits: Uint16Array;
-  /** Horizontal spot where the fish last had to back out, avoided while its timer runs. */
+  /** Spot where the fish last had to back out, avoided while its timer runs. */
   private deadEnd: Float64Array;
   private deadEndTimer: Float64Array;
   /**
    * Per fish, the last stand-off ring search: `[epoch, sdf, foodX, foodY, foodZ, arrival, side,
    * bearing]`, where bearing is NaN when the station stays straight out from the surface. Valid
-   * while its epoch is `stationEpoch`, which moves on whenever hard decor or the fish set changes.
+   * while its epoch is `stationEpoch`, which moves on whenever hard decor or the fish set changes:
+   * a joining fish can widen the hard-decor reach, and a search cached at the old, smaller reach
+   * would miss rock the wider field now reports.
    */
   private stationMemo: Float64Array;
   private stationEpoch = 1;
@@ -431,7 +438,7 @@ export class World {
     this.scrapeAnchor = new Float64Array(n * 3);
     this.scrapeTime = new Float64Array(n);
     this.scrapeHits = new Uint16Array(n);
-    this.deadEnd = new Float64Array(n * 2);
+    this.deadEnd = new Float64Array(n * 3);
     this.deadEndTimer = new Float64Array(n);
     this.stationMemo = new Float64Array(n * STATION_MEMO);
     this.mass = new Float64Array(n);
@@ -504,8 +511,9 @@ export class World {
     // Both plans validate before either field changes, so a bad collider leaves both as they were.
     const hard = this.hardDecor.plan(colliders.filter((c) => c.hard));
     const soft = this.softDecor.plan(colliders.filter((c) => !c.hard));
+    const rebuilt = this.hardDecor.apply(hard) + this.softDecor.apply(soft);
     if (hard.gone.length > 0 || hard.changed.length > 0) this.stationEpoch++;
-    return this.hardDecor.apply(hard) + this.softDecor.apply(soft);
+    return rebuilt;
   }
 
   setAnchors(anchors: readonly Anchor[]): void {
@@ -751,9 +759,11 @@ export class World {
     this.scrapeAnchor = edit.array(this.scrapeAnchor, 3);
     this.scrapeTime = edit.array(this.scrapeTime);
     this.scrapeHits = edit.array(this.scrapeHits);
-    this.deadEnd = edit.array(this.deadEnd, 2);
+    this.deadEnd = edit.array(this.deadEnd, 3);
     this.deadEndTimer = edit.array(this.deadEndTimer);
     this.stationMemo = edit.array(this.stationMemo, STATION_MEMO);
+    // edit.array already moves each fish's memo with it; the bump is for addFish, which may have
+    // widened the decor reach every cached ring search was read at.
     this.stationEpoch++;
     this.mass = edit.array(this.mass);
     this.drag = edit.array(this.drag);
@@ -1025,10 +1035,30 @@ export class World {
       );
       if (ahead >= 0) faceYaw = heading;
     }
+    // A station over the top of a rock is out of reach in a straight line: at its pitch limit the
+    // fish runs its snout into the rock's flank well before it has the height (#332). It rises
+    // where it is first and crosses once the way over the top is clear. The way it would fly is
+    // what counts, and that climbs no steeper than its pitch limit.
+    const reachY = Math.min(seekY, py + Math.tan(sp.maxPitch) * toStation);
+    const climbFirst =
+      standOff &&
+      seekY - py > radius &&
+      !(
+        deadEndLeft > 0 &&
+        Math.hypot(
+          (this.deadEnd[i * 3] ?? 0) - px,
+          (this.deadEnd[i * 3 + 1] ?? 0) - py,
+          (this.deadEnd[i * 3 + 2] ?? 0) - pz,
+        ) < length
+      ) &&
+      !this.pathClear(sdf, px, py, pz, seekX, reachY, seekZ, radius) &&
+      this.riseClear(sdf, px, py, pz, seekY, radius) &&
+      this.pathClear(sdf, px, seekY, pz, seekX, seekY, seekZ, radius);
+    if (climbFirst) this.climbs++;
     if (plan.seekWeight > 0) {
-      let qx = (seekX - px) / plan.seekTau;
+      let qx = climbFirst ? 0 : (seekX - px) / plan.seekTau;
       let qy = (seekY - py) / plan.seekTau;
-      let qz = (seekZ - pz) / plan.seekTau;
+      let qz = climbFirst ? 0 : (seekZ - pz) / plan.seekTau;
       const ql = Math.hypot(qx, qy, qz);
       if (ql > plan.seekSpeed) {
         const s = plan.seekSpeed / ql;
@@ -1048,8 +1078,8 @@ export class World {
     // Not when it is going for food: pursuit gives up before the memory fades (#259).
     let keepWay = true;
     if (deadEndLeft > 0 && (this.behaviour.feeding.target[i] ?? -1) < 0) {
-      const ex = (this.deadEnd[i * 2] ?? 0) - px;
-      const ez = (this.deadEnd[i * 2 + 1] ?? 0) - pz;
+      const ex = (this.deadEnd[i * 3] ?? 0) - px;
+      const ez = (this.deadEnd[i * 3 + 2] ?? 0) - pz;
       const reach = Math.hypot(ex, ez);
       const zone = STEERING.deadEndRadiusBodyLengths * length;
       if (reach < zone && reach > 1e-9) {
@@ -1213,24 +1243,33 @@ export class World {
           // The goal would drag a fish that just backed out of a slot along the rock straight
           // back into it, food included (#287). Only a remembered slot behind the face being
           // slid along is no threat: shunning it would turn a fish working along the rock's
-          // front toward food away from that food (#279).
+          // front toward food away from that food (#279). "Behind" is measured along the slide
+          // normal from the nearest surface, so where the glass is nearer than the rock face
+          // the slot counts as behind the face early, by as much as the glass is nearer. A slot
+          // well out on the open side of the face is not the one being slid along, and a fish
+          // that has risen clear above the slot can no longer be dragged into it (#332).
           let shunning = false;
-          const ex = (this.deadEnd[i * 2] ?? 0) - px;
-          const ez = (this.deadEnd[i * 2 + 1] ?? 0) - pz;
-          const slotBehindFace =
-            ex * ux + ez * uz < -(dHere + STEERING.deadEndBehindFaceBodyLengths * length);
-          if (deadEndLeft > 0 && !(wished && slotBehindFace)) {
-            const reach = Math.hypot(ex, ez);
-            const toward = (tx * ex + tz * ez) * side;
-            if (
-              reach < STEERING.deadEndRadiusBodyLengths * length &&
-              Math.abs(toward) > STEERING.deadEndBearingCos * reach
-            ) {
-              shunning = true;
-              if (toward > 0) {
-                side = -side;
-                px0 = 0;
-                pz0 = 0;
+          if (deadEndLeft > 0) {
+            const ex = (this.deadEnd[i * 3] ?? 0) - px;
+            const ez = (this.deadEnd[i * 3 + 2] ?? 0) - pz;
+            const offFace = ex * ux + ez * uz + dHere;
+            const band = STEERING.deadEndBehindFaceBodyLengths * length;
+            const overhead =
+              Math.abs(py - (this.deadEnd[i * 3 + 1] ?? 0)) >
+              STEERING.deadEndHeightBodyLengths * length;
+            if (!overhead && !(wished && offFace < -band) && offFace <= band) {
+              const reach = Math.hypot(ex, ez);
+              const toward = (tx * ex + tz * ez) * side;
+              if (
+                reach < STEERING.deadEndRadiusBodyLengths * length &&
+                Math.abs(toward) > STEERING.deadEndBearingCos * reach
+              ) {
+                shunning = true;
+                if (toward > 0) {
+                  side = -side;
+                  px0 = 0;
+                  pz0 = 0;
+                }
               }
             }
           }
@@ -1443,6 +1482,48 @@ export class World {
     );
   }
 
+  /**
+   * Whether a body of radius `r` can rise straight up from (x, y, z) to `toY`. A fish grazing low is
+   * within `r` of the sand or rock top it rises away from, so the trace allows it the clearance it
+   * has at the start: only a surface it would close on, a shelf overhead, blocks it.
+   */
+  private riseClear(sdf: Sdf, x: number, y: number, z: number, toY: number, r: number): boolean {
+    const start = sdf.sample(x, y, z, this.previous);
+    const room = Math.min(r, start);
+    return room > 0 && this.pathClear(sdf, x, y, z, x, toY, z, room, start);
+  }
+
+  /**
+   * Whether a body of radius `r` fits along the segment, by sphere tracing `sdf`. Approximate: each
+   * step overshoots the safe distance by `pathTraceMinStep` radii, so between two samples the
+   * centre can come to within about three quarters of `r` of a surface.
+   */
+  private pathClear(
+    sdf: Sdf,
+    x0: number,
+    y0: number,
+    z0: number,
+    x1: number,
+    y1: number,
+    z1: number,
+    r: number,
+    start = sdf.sample(x0, y0, z0, this.previous),
+  ): boolean {
+    const length = Math.hypot(x1 - x0, y1 - y0, z1 - z0);
+    if (length < 1e-9) return start >= r;
+    const ux = (x1 - x0) / length;
+    const uy = (y1 - y0) / length;
+    const uz = (z1 - z0) / length;
+    let t = 0;
+    for (let k = 0; k < STEERING.pathTraceSteps; k++) {
+      const d = k === 0 ? start : sdf.sample(x0 + ux * t, y0 + uy * t, z0 + uz * t, this.previous);
+      if (d < r) return false;
+      if (t >= length) return true;
+      t = Math.min(length, t + d - r + STEERING.pathTraceMinStep * r);
+    }
+    return false;
+  }
+
   /** Least clearance of the level snout and tail of fish `i` held at (x, y, z) facing `heading`. */
   private poseRoom(i: number, sdf: Sdf, x: number, y: number, z: number, heading: number): number {
     const reach = (BEHAVIOUR.bodySampleOffsets[0] ?? 0) * (this.bodyLength[i] ?? 0);
@@ -1529,6 +1610,7 @@ export class World {
     const yaw = this.yaw[i] ?? 0;
     const pitch = this.pitch[i] ?? 0;
     if (!reflex && (this.reverseLeft[i] ?? 0) > 0) {
+      this.behaviour.feeding.backedOut(i);
       this.reverse(i, sp, plan, yaw, pitch);
       return;
     }
@@ -1714,8 +1796,9 @@ export class World {
   }
 
   private rememberDeadEnd(i: number): void {
-    this.deadEnd[i * 2] = this.position[i * 3] ?? 0;
-    this.deadEnd[i * 2 + 1] = this.position[i * 3 + 2] ?? 0;
+    this.deadEnd[i * 3] = this.position[i * 3] ?? 0;
+    this.deadEnd[i * 3 + 1] = this.position[i * 3 + 1] ?? 0;
+    this.deadEnd[i * 3 + 2] = this.position[i * 3 + 2] ?? 0;
     this.deadEndTimer[i] = STEERING.deadEndMemoryS;
   }
 

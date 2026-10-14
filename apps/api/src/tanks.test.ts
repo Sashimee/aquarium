@@ -1,6 +1,8 @@
 import {
   apiErrorSchema,
+  decorLayoutSchema,
   decorPositionLimits,
+  legacyTintSeed,
   speciesListSchema,
   tankListSchema,
   tankSchema,
@@ -8,7 +10,9 @@ import {
 import { eq } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import { schema } from './db/index.ts';
+import { pruneExpired } from './maintenance.ts';
 import { APP_ORIGIN, createHarness, type Harness } from './test-harness.ts';
 
 const PASSWORD = 'correct horse battery';
@@ -25,7 +29,7 @@ async function signedIn(h: Harness): Promise<string> {
     method: 'POST',
     url: '/api/auth/sign-up/email',
     headers: jsonHeaders,
-    payload: { email, password: PASSWORD, name: 'Tester', callbackURL: '/' },
+    payload: { email, password: PASSWORD, name: 'Tester', callbackURL: '/verify-email' },
   });
   const mail = h.outbox.findLast((m) => m.to === email);
   const link = /https?:\/\/\S+verify-email\?\S+/.exec(mail?.text ?? '')?.[0];
@@ -415,6 +419,134 @@ describe('care actions and feeding validation', () => {
     expect((await ate(cookie, tank.id, fishId, 0.6)).statusCode).toBe(422);
   });
 
+  describe('batch idempotency', () => {
+    const ateBatch = (cookie: string, tankId: string, fishId: string, batchId?: string) =>
+      call(h, cookie, 'POST', `/api/tanks/${tankId}/ate`, {
+        ...(batchId !== undefined ? { batchId } : {}),
+        reports: [{ fishId, portion: 0.3, at: new Date(h.clock.now()).toISOString() }],
+      });
+    const ateEvents = async (tankId: string) =>
+      (
+        await h.database.db.select().from(schema.events).where(eq(schema.events.tankId, tankId))
+      ).filter((r) => r.kind === 'ate');
+
+    it('applies a repeated batch id once and answers the repeat with the same success', async () => {
+      const { cookie, tank, fishId } = await setup();
+      await feed(cookie, tank.id, 1);
+      const batchId = randomUUID();
+      const first = await ateBatch(cookie, tank.id, fishId, batchId);
+      const repeat = await ateBatch(cookie, tank.id, fishId, batchId);
+      expect(first.statusCode).toBe(200);
+      expect(repeat.statusCode).toBe(200);
+      expect(tankSchema.parse(repeat.json()).water.uneatenFood).toBeCloseTo(0.7);
+      expect(await ateEvents(tank.id)).toHaveLength(1);
+    });
+
+    it('applies concurrent duplicates once', async () => {
+      const { cookie, tank, fishId } = await setup();
+      await feed(cookie, tank.id, 1);
+      const batchId = randomUUID();
+      const responses = await Promise.all([
+        ateBatch(cookie, tank.id, fishId, batchId),
+        ateBatch(cookie, tank.id, fishId, batchId),
+        ateBatch(cookie, tank.id, fishId, batchId),
+      ]);
+      expect(responses.map((r) => r.statusCode)).toEqual([200, 200, 200]);
+      expect(await ateEvents(tank.id)).toHaveLength(1);
+      const after = tankSchema.parse(
+        (await call(h, cookie, 'GET', `/api/tanks/${tank.id}`)).json(),
+      );
+      expect(after.water.uneatenFood).toBeCloseTo(0.7);
+    });
+
+    it('scopes a batch id to its tank', async () => {
+      const a = await setup();
+      const second = await createTank(h, a.cookie);
+      const withFish = await addFish(h, a.cookie, second.id);
+      const otherFish = withFish.fish[0]?.id ?? '';
+      await feed(a.cookie, a.tank.id, 1);
+      await feed(a.cookie, second.id, 1);
+      const batchId = randomUUID();
+      expect((await ateBatch(a.cookie, a.tank.id, a.fishId, batchId)).statusCode).toBe(200);
+      expect((await ateBatch(a.cookie, second.id, otherFish, batchId)).statusCode).toBe(200);
+      expect(await ateEvents(a.tank.id)).toHaveLength(1);
+      expect(await ateEvents(second.id)).toHaveLength(1);
+    });
+
+    it('does not consume the id when the batch is rejected', async () => {
+      const { cookie, tank, fishId } = await setup();
+      const batchId = randomUUID();
+      expect((await ateBatch(cookie, tank.id, fishId, batchId)).statusCode).toBe(422);
+      await feed(cookie, tank.id, 1);
+      expect((await ateBatch(cookie, tank.id, fishId, batchId)).statusCode).toBe(200);
+      expect(await ateEvents(tank.id)).toHaveLength(1);
+    });
+
+    it('rejects a stale report under a pruned batch id and rolls the claim back', async () => {
+      const { cookie, tank, fishId } = await setup();
+      await feed(cookie, tank.id, 1);
+      const old = randomUUID();
+      await h.database.db.insert(schema.ateBatches).values({
+        tankId: tank.id,
+        batchId: old,
+        createdAt: new Date(Date.now() - 2 * DAY * 60_000),
+      });
+      await pruneExpired(h.database);
+      const stale = await call(h, cookie, 'POST', `/api/tanks/${tank.id}/ate`, {
+        batchId: old,
+        reports: [
+          { fishId, portion: 0.3, at: new Date(h.clock.now() - 3 * 60 * 60_000).toISOString() },
+        ],
+      });
+      expect(stale.statusCode).toBe(422);
+      expect(apiErrorSchema.parse(stale.json()).error.code).toBe('feeding_rejected');
+      expect(await ateEvents(tank.id)).toHaveLength(0);
+      const claims = await h.database.db
+        .select()
+        .from(schema.ateBatches)
+        .where(eq(schema.ateBatches.tankId, tank.id));
+      expect(claims).toHaveLength(0);
+      const fresh = await ateBatch(cookie, tank.id, fishId, randomUUID());
+      expect(fresh.statusCode).toBe(200);
+    });
+
+    it('rejects a malformed batch id with 400', async () => {
+      const { cookie, tank, fishId } = await setup();
+      await feed(cookie, tank.id, 1);
+      for (const bad of ['', 'not-a-uuid', 'x'.repeat(5000)]) {
+        expect((await ateBatch(cookie, tank.id, fishId, bad)).statusCode).toBe(400);
+      }
+      expect(await ateEvents(tank.id)).toHaveLength(0);
+    });
+
+    it('still accepts batches without an id, from clients cached before the field existed', async () => {
+      const { cookie, tank, fishId } = await setup();
+      await feed(cookie, tank.id, 1);
+      expect((await ateBatch(cookie, tank.id, fishId)).statusCode).toBe(200);
+      expect((await ateBatch(cookie, tank.id, fishId)).statusCode).toBe(200);
+      expect(await ateEvents(tank.id)).toHaveLength(2);
+    });
+
+    it('prunes stored ids after a day', async () => {
+      const { cookie, tank, fishId } = await setup();
+      await feed(cookie, tank.id, 1);
+      await ateBatch(cookie, tank.id, fishId, randomUUID());
+      const old = randomUUID();
+      await h.database.db.insert(schema.ateBatches).values({
+        tankId: tank.id,
+        batchId: old,
+        createdAt: new Date(Date.now() - 2 * DAY * 60_000),
+      });
+      await pruneExpired(h.database);
+      const left = await h.database.db
+        .select()
+        .from(schema.ateBatches)
+        .where(eq(schema.ateBatches.tankId, tank.id));
+      expect(left).toHaveLength(1);
+      expect(left[0]?.batchId).not.toBe(old);
+    });
+  });
+
   it('rejects reports for another tank’s fish and malformed batches', async () => {
     const a = await setup();
     const b = await setup();
@@ -609,6 +741,56 @@ describe('PATCH decor layout validation', () => {
     expect((await patch(reef.id, reefLayout)).statusCode).toBe(200);
     const got = tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${reef.id}`)).json());
     expect(got.decorLayout.map((i) => i.assetId)).toEqual(reefLayout.map((i) => i.assetId));
+  });
+
+  describe('tint seed', () => {
+    const coral = { assetId: 'brain-coral', rotationY: 0.4, scale: 1 };
+    const getLayout = async (id: string) =>
+      tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${id}`)).json()).decorLayout;
+    const storedLayout = async (id: string) => {
+      const [row] = await h.database.db.select().from(schema.tanks).where(eq(schema.tanks.id, id));
+      return decorLayoutSchema.parse(row?.decorLayout);
+    };
+
+    it('assigns a seed on save and keeps it when the coral is moved or rotated', async () => {
+      const reef = await createTank(h, cookie, 'reef');
+      await patch(reef.id, [{ ...coral, position: [0, 0.05, 0] }]);
+      const [saved] = await getLayout(reef.id);
+      expect(saved?.tintSeed).toBeTypeOf('number');
+
+      const moved = await patch(reef.id, [
+        { ...saved, position: [0.2, 0.05, 0.1], rotationY: 1.9 },
+      ]);
+      expect(moved.statusCode).toBe(200);
+      const [after] = await getLayout(reef.id);
+      expect(after?.tintSeed).toBe(saved?.tintSeed);
+      expect(after?.position).toEqual([0.2, 0.05, 0.1]);
+    });
+
+    it('serves a placement-derived seed for rows stored without one, and persists it on save', async () => {
+      const reef = await createTank(h, cookie, 'reef');
+      await h.database.db
+        .update(schema.tanks)
+        .set({ decorLayout: [{ ...coral, position: [0.1, 0.05, 0.2] }] })
+        .where(eq(schema.tanks.id, reef.id));
+      const [legacy] = await getLayout(reef.id);
+      expect(legacy?.tintSeed).toBe(legacyTintSeed({ position: [0.1, 0.05, 0.2], rotationY: 0.4 }));
+
+      await patch(reef.id, [{ ...legacy, position: [-0.3, 0.05, 0] }]);
+      expect((await storedLayout(reef.id))[0]?.tintSeed).toBe(legacy?.tintSeed);
+    });
+
+    it('stores a seedless piece with the seed of its saved placement', async () => {
+      const reef = await createTank(h, cookie, 'reef');
+      await patch(reef.id, [
+        { ...coral, position: [0, 0.05, 0] },
+        { ...coral, position: [0.2, 0.05, 0] },
+      ]);
+      const layout = await storedLayout(reef.id);
+      expect(layout).toHaveLength(2);
+      expect(layout.map((i) => i.tintSeed)).toEqual(layout.map((i) => legacyTintSeed(i)));
+      expect(layout[0]?.tintSeed).not.toBe(layout[1]?.tintSeed);
+    });
   });
 
   it('rejects an asset id that is in no catalog', async () => {

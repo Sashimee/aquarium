@@ -10,6 +10,8 @@ import { schema, type Database } from './db/index.ts';
 import { MailThrottledError, type Mailer } from './mail.ts';
 
 export const AUTH_BASE_PATH = '/api/auth';
+export const RESET_REDIRECT_PATH = '/reset-password';
+export const VERIFY_CALLBACK_PATH = '/verify-email';
 const MIN_PASSWORD_LENGTH = 10;
 const MAX_PASSWORD_LENGTH = 128;
 
@@ -138,8 +140,10 @@ export function createAuth({
       onExistingUserSignUp: async ({ user }) => {
         if (user.emailVerified) return;
         const token = await createEmailVerificationToken(config.authSecret, user.email);
-        const url = `${origin}${AUTH_BASE_PATH}/verify-email?token=${token}&callbackURL=${encodeURIComponent('/')}`;
-        await throttleSafe(() => mailer.sendVerification(user.email, url), 'verification');
+        const url = `${origin}${AUTH_BASE_PATH}/verify-email?token=${token}&callbackURL=${encodeURIComponent(VERIFY_CALLBACK_PATH)}`;
+        runInBackground(
+          throttleSafe(() => mailer.sendVerification(user.email, url), 'verification'),
+        );
       },
     },
     emailVerification: {
@@ -163,9 +167,10 @@ export function createAuth({
           }
           await mailer.sendVerification(user.email, url);
         }, 'verification');
-        // Better Auth awaits this for known unverified accounts only, so a resend must not wait on SMTP.
-        if (path === `${AUTH_BASE_PATH}/send-verification-email`) runInBackground(send);
-        else await send;
+        // Sign-up and resend answer the same whether or not a mail goes out, so neither may wait on
+        // SMTP. Sign-in has already proven the password, so there is nothing to hide.
+        if (path === `${AUTH_BASE_PATH}/sign-in/email`) await send;
+        else runInBackground(send);
       },
     },
     hooks: {

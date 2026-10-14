@@ -1,4 +1,4 @@
-import type { Biome } from '@aquarium/shared';
+import { sampleFloor, type Biome, type Collider } from '@aquarium/shared';
 import {
   DynamicDrawUsage,
   Group,
@@ -12,14 +12,12 @@ import {
   quatFromYawPitchRoll,
   Rng,
   SimClient,
-  SNAPSHOT_STRIDE,
   SnapshotField,
-  SnapshotInterpolator,
   STEP_DT,
-  type SimReady,
+  type FishPlacement,
   type SpeciesInput,
   type Stimulus,
-  type WorldConfig,
+  type TankSpaceWorldConfig,
 } from '@aquarium/sim';
 import type { Engine } from '../engine/Engine';
 import type { EventBus } from '../engine/events';
@@ -30,6 +28,7 @@ import { disposeFishModel, FishAssetLoader, type FishModel } from './assets';
 import { AcclimationBags } from './bag';
 import type { SceneAnchor } from '../scene/anemone';
 import { demoTank, type DemoTank } from './demoStock';
+import { HeldFish, type FramePresence } from './heldFish';
 import { FishInstanceData, type InstanceValues } from './instances';
 import { selectLod, type LodThresholds } from './lod';
 import { FishMaterial, type FinRendering, type FishMaterialFeatures } from './material';
@@ -49,7 +48,8 @@ import {
 } from './poses';
 import { renderProfile, type FishRenderProfile } from './profiles';
 import { hashString, TankRoster, type RosterFish } from './roster';
-import { SimWorldSpec } from './simWorld';
+import { SimStream } from './simStream';
+import { initSim, layoutChanges, SimInitTimeout, SimWorldSpec, startWorld } from './simWorld';
 import { speciesInput } from './species';
 import type { FishBite, PickRay, TankEvent } from './start';
 import { SWIM_MODES, SwimState } from './swim';
@@ -103,18 +103,12 @@ interface FishRuntime {
   shown: boolean;
   readonly lastPosition: Vector3;
   readonly lastQuaternion: Quaternion;
-  /** Seconds left of the blend from `fromPosition` into a new sim world's pose. */
+  /** Seconds left of the blend from `fromPosition` (its bag) into the sim's pose. */
   handover: number;
   readonly fromPosition: Vector3;
   readonly fromQuaternion: Quaternion;
   bagSlot: number | null;
   script: Script | null;
-}
-
-interface Layout {
-  readonly epoch: number;
-  readonly frame: Float32Array;
-  readonly offsets: ReadonlyMap<string, number>;
 }
 
 /**
@@ -138,10 +132,7 @@ function featuresFor(tier: Tier, msaa: boolean): FishMaterialFeatures {
 
 /** LOD levels near enough for their self-shadowing to read. */
 const SHADOW_LODS = 2;
-/**
- * Re-initialising the sim respawns every fish (it cannot add or remove one in place), so fish
- * already on screen glide from where they were into the new world over this long.
- */
+/** A fish leaving its bag, or held over a rebuilt world, glides into the sim's pose this long. */
 const HANDOVER_S = 1.2;
 /** Fingertip slop when netting a small fish, in metres. */
 const MIN_PICK_RADIUS = 0.02;
@@ -169,32 +160,13 @@ function smoothstep01(x: number): number {
   return t * t * (3 - 2 * t);
 }
 
-/** A worker whose script fails to load never answers `init`, so its error event settles it. */
-function initSim(
-  client: SimClient,
-  worker: Worker,
-  config: WorldConfig,
-  signal: AbortSignal,
-): Promise<SimReady> {
-  return new Promise((resolve, reject) => {
-    const settle = (finish: () => void): void => {
-      worker.removeEventListener('error', onError);
-      signal.removeEventListener('abort', onAbort);
-      finish();
-    };
-    const onError = (event: ErrorEvent): void =>
-      settle(() => reject(new Error(`Fish sim worker failed to start: ${event.message}`)));
-    const onAbort = (): void => settle(() => reject(signal.reason));
-    if (signal.aborted) {
-      reject(signal.reason);
-      return;
-    }
-    worker.addEventListener('error', onError);
-    signal.addEventListener('abort', onAbort);
-    client.init(config).then(
-      (ready) => settle(() => resolve(ready)),
-      (cause: unknown) => settle(() => reject(cause)),
-    );
+/** Far above a cold worker start on a slow phone; past it the worker is taken to be stuck. */
+const SIM_INIT_TIMEOUT_MS = 15_000;
+
+function spawnSimWorker(): Worker {
+  return new Worker(new URL('./simWorker.ts', import.meta.url), {
+    type: 'module',
+    name: 'fish-sim',
   });
 }
 
@@ -204,7 +176,8 @@ function initSim(
  * fish come from the sim, while bagged, dying and dead ones follow the fixed poses in `poses.ts`.
  *
  * Which fish exist is the `TankRoster`'s job: the demo stock, or a saved tank driven by the
- * `tank:*` events. Each change to the swimming set re-initialises the sim world.
+ * `tank:*` events. A fish joining or leaving the swimming set is added to or removed from the
+ * running sim world, so the others carry on; only swapping the tank or demo stock builds a new one.
  */
 export class FishSystem {
   readonly group = new Group();
@@ -213,22 +186,26 @@ export class FishSystem {
   private readonly batches = new Map<string, SpeciesBatch>();
   private readonly loading = new Map<string, Promise<void>>();
   private readonly unavailable = new Set<string>();
-  private readonly interpolator = new SnapshotInterpolator(STEP_DT);
+  private readonly stream = new SimStream(STEP_DT, (snapshot) => this.sim.recycle(snapshot));
+  private readonly held = new HeldFish();
   private readonly loader: FishAssetLoader;
   private readonly bags: AcclimationBags;
   private readonly lifetime = new AbortController();
-  private readonly offset: Vector3;
   private readonly box: WaterBox;
   private readonly spec: SimWorldSpec;
   private readonly cleanups: (() => void)[] = [];
   private readonly ateListeners = new Set<(events: readonly FishBite[]) => void>();
-  private layout: Layout | null = null;
-  private pendingLayout: { epoch: number; ids: readonly string[] } | null = null;
-  private simRevision = -1;
+  /** Replaced, with its worker, when the worker stops answering. */
+  private sim: SimClient;
+  /** The fish in the running world once the commands sent so far land; null with no world. */
+  private inWorld: Set<string> | null = null;
+  /** Bumped whenever the world is dropped, so add/remove replies from before are ignored. */
+  private generation = 0;
   private sceneRevision = -1;
   private simReady = false;
   private dirty = false;
   private syncing = false;
+  private readonly syncWaiters: (() => void)[] = [];
   private clockS = 0;
   private thresholds: LodThresholds = { midDistance: 1, impostorDistance: 3 };
   private shadows: Readonly<TierSettings> | null = null;
@@ -269,12 +246,7 @@ export class FishSystem {
     signal.throwIfAborted();
     const seed = options.seed ?? Math.floor(Math.random() * 0x7fffffff);
     const demo = demoTank(options.tank, seed, options.biome);
-    const worker = new Worker(new URL('./simWorker.ts', import.meta.url), {
-      type: 'module',
-      name: 'fish-sim',
-    });
-    const client = new SimClient(worker);
-    const system = new FishSystem(engine, client, worker, options, demo, seed);
+    const system = new FishSystem(engine, spawnSimWorker(), options, demo, seed);
     const onAbort = (): void => system.dispose();
     signal.addEventListener('abort', onAbort);
     system.cleanups.push(() => signal.removeEventListener('abort', onAbort));
@@ -282,40 +254,36 @@ export class FishSystem {
       await system.loadSpecies();
       signal.throwIfAborted();
       system.materialize();
-      await system.reinit();
+      await system.syncWorld();
       signal.throwIfAborted();
     } catch (cause) {
       system.dispose();
       throw signal.aborted ? signal.reason : cause;
     }
-    worker.addEventListener('error', (event) =>
-      system.report(`Fish sim worker failed: ${event.message}`),
-    );
-    client.onError((message) => system.report(`Fish sim: ${message}`));
+    system.reportSimErrors();
     return system;
   }
 
   private constructor(
     private readonly engine: Engine,
-    private readonly sim: SimClient,
-    private readonly worker: Worker,
+    private worker: Worker,
     private readonly options: FishSystemOptions,
     demo: DemoTank,
     private readonly seed: number,
   ) {
-    this.offset = new Vector3(...demo.offset);
     const bounds = waterBounds(options.tank);
+    const space = demo.config.space;
     this.box = {
       minX: bounds.min.x,
       maxX: bounds.max.x,
-      minY: demo.offset[1],
+      ground: (x, z) => sampleFloor(space, x, z),
       minZ: bounds.min.z,
       maxZ: bounds.max.z,
       top: bounds.max.y,
     };
     this.roster = new TankRoster(demo.config.fish);
     this.spec = new SimWorldSpec(demo, seed);
-    this.loader = new FishAssetLoader(engine.renderer, options.assetRoot);
+    this.loader = new FishAssetLoader(engine.ktx2, options.assetRoot);
     this.group.name = 'fish';
     this.bags = new AcclimationBags(this.group);
     engine.scene.add(this.group);
@@ -325,7 +293,6 @@ export class FishSystem {
         this.sim.dispose();
         this.worker.terminate();
       },
-      () => this.loader.dispose(),
       () => this.bags.dispose(),
       () => {
         for (const batch of this.batches.values()) {
@@ -336,21 +303,7 @@ export class FishSystem {
         this.runtimes.clear();
       },
     );
-    sim.onSnapshot((snapshot) => {
-      const pending = this.pendingLayout;
-      if (pending !== null && snapshot.epoch === pending.epoch) this.switchLayout(pending);
-      if (this.layout === null || snapshot.epoch !== this.layout.epoch) {
-        sim.recycle(snapshot);
-        return;
-      }
-      const evicted = this.interpolator.push(snapshot, performance.now());
-      if (evicted !== null) sim.recycle(evicted);
-    });
-    sim.onAte((events) => {
-      const bites = this.roster.translateAte(events);
-      if (bites.length === 0) return;
-      for (const listener of this.ateListeners) listener(bites);
-    });
+    this.sim = this.connectSim(worker);
     this.cleanups.push(
       engine.quality.register('fish-lod', (s) => {
         this.thresholds = s.fishLod;
@@ -416,22 +369,26 @@ export class FishSystem {
     return this.roster.simIdOf(serverId);
   }
 
-  /**
-   * `stimulus.position` is in the sim's frame (y above the substrate). The demo sim's floor is flat
-   * at the highest substrate point, so a low-ground tap reads up to a few cm high until #64.
-   */
+  /** `stimulus.position` is in tank space, which the sim and the scene share. */
   startle(stimulus: Stimulus): void {
     if (!this.disposed && this.simReady) this.sim.startle(stimulus);
   }
 
   /**
-   * Homes from the scene, in engine space: the clownfish's anemone. Kept for every later sim
-   * world, since a re-initialised world starts with only the anchors in its config.
+   * Homes from the scene: the clownfish's anemone. Kept for every later sim world, since a
+   * re-initialised world starts with only the anchors in its config.
    */
   setAnchors(anchors: readonly SceneAnchor[]): void {
     if (this.disposed) return;
     const simAnchors = this.spec.setAnchors(anchors);
     if (this.simReady) this.sim.setAnchors(simAnchors);
+  }
+
+  /** Every collider the sim avoids, in the shared format; kept for later worlds like anchors. */
+  setColliders(colliders: readonly Collider[]): void {
+    if (this.disposed) return;
+    this.spec.setDecor(colliders);
+    if (this.simReady) this.sim.setDecor(colliders);
   }
 
   setFood(buffer: Float32Array): void {
@@ -479,11 +436,13 @@ export class FishSystem {
     this.disposed = true;
     this.lifetime.abort(new Error('fish system disposed'));
     this.ateListeners.clear();
+    for (const resolve of this.syncWaiters.splice(0)) resolve();
     for (const cleanup of this.cleanups.splice(0).reverse()) cleanup();
   }
 
+  /** Silent once the engine is going: its teardown fails loads that are still in flight. */
   private report(message: string, cause?: unknown): void {
-    if (this.disposed) return;
+    if (this.disposed || this.engine.disposed) return;
     this.engine.events.emit('engine:error', cause === undefined ? { message } : { message, cause });
   }
 
@@ -493,7 +452,14 @@ export class FishSystem {
     this.syncing = true;
     void this.runSync().finally(() => {
       this.syncing = false;
+      for (const resolve of this.syncWaiters.splice(0)) resolve();
     });
+  }
+
+  /** Resolves once the stock handed in so far has loaded and joined the sim, or failed to. */
+  synced(): Promise<void> {
+    if (!this.syncing || this.disposed) return Promise.resolve();
+    return new Promise((resolve) => this.syncWaiters.push(resolve));
   }
 
   /** One pass at a time, so sim inits never overlap; changes made meanwhile run another pass. */
@@ -504,9 +470,10 @@ export class FishSystem {
         await this.loadSpecies();
         if (this.disposed) return;
         this.materialize();
-        if (this.roster.revision !== this.simRevision) await this.reinit();
+        await this.syncWorld();
       } catch (cause) {
         if (this.disposed) return;
+        this.held.releaseAll();
         this.report('Fish could not be updated for the new tank stock', cause);
       }
     }
@@ -692,6 +659,7 @@ export class FishSystem {
     const rt = this.runtimes.get(fish.simId);
     if (rt === undefined) return;
     rt.bagSlot = null;
+    this.held.release(fish.simId);
     rt.handover = 0;
     if (!rt.shown) {
       rt.script = {
@@ -714,49 +682,140 @@ export class FishSystem {
   /** Drops the runtimes of fish that left the roster. */
   private prune(): void {
     for (const [simId, rt] of this.runtimes) {
-      if (this.roster.get(simId) !== rt.fish) this.runtimes.delete(simId);
+      if (this.roster.get(simId) === rt.fish) continue;
+      this.runtimes.delete(simId);
+      this.held.release(simId);
     }
   }
 
   /** Until the next init nothing of the current world may show, eat or be blended from. */
   private stopWorld(): void {
     this.sim.stop();
-    this.layout = null;
-    this.pendingLayout = null;
-    this.interpolator.reset();
+    this.inWorld = null;
+    this.generation++;
+    this.stream.reset();
+    this.held.releaseAll();
   }
 
-  private async reinit(): Promise<void> {
-    const revision = this.roster.revision;
+  /** Every swimming fish on screen waits where it is for the next world. */
+  private holdSwimming(): void {
+    const candidates = [...this.runtimes.values()].map((rt) => ({
+      id: rt.fish.simId,
+      shown: rt.shown,
+      phase: rt.fish.phase,
+      bagged: rt.bagSlot !== null,
+      scripted: rt.script !== null,
+    }));
+    this.held.hold(candidates, this.clockS);
+  }
+
+  /** Brings the sim's fish in line with the roster's swimming set. */
+  private async syncWorld(): Promise<void> {
     const config = this.spec.config(this.roster.swimming());
     if (config === null) {
-      this.stopWorld();
-      this.simRevision = revision;
+      if (this.inWorld !== null) this.stopWorld();
       return;
     }
-    const ready = await initSim(this.sim, this.worker, config, this.lifetime.signal);
-    if (this.disposed) return;
-    this.simReady = true;
-    this.sim.setLight(this.light);
-    this.simRevision = revision;
-    this.pendingLayout = { epoch: ready.epoch, ids: ready.fishIds };
-    this.sim.start();
+    const inWorld = this.inWorld;
+    if (inWorld === null) {
+      await this.reinit(config);
+      return;
+    }
+    const generation = this.generation;
+    const { remove, add } = layoutChanges(inWorld, config.fish);
+    try {
+      for (const id of remove) {
+        inWorld.delete(id);
+        const layout = await this.sim.removeFish(id);
+        if (generation !== this.generation) return;
+        this.stream.change(layout.epoch, layout.fishIds);
+      }
+      for (const spawn of add) {
+        inWorld.add(spawn.id);
+        const at = this.placement(spawn.id);
+        const layout = await (at === undefined
+          ? this.sim.addFish(spawn)
+          : this.sim.addFish(spawn, at));
+        if (generation !== this.generation) return;
+        this.stream.change(layout.epoch, layout.fishIds);
+      }
+    } catch (cause) {
+      if (this.disposed || generation !== this.generation) return;
+      this.report('A fish could not join or leave the running tank; respawning all fish', cause);
+      this.stopWorld();
+      this.holdSwimming();
+      this.dirty = true;
+    }
   }
 
-  private switchLayout(pending: { epoch: number; ids: readonly string[] }): void {
-    this.pendingLayout = null;
-    this.layout = {
-      epoch: pending.epoch,
-      frame: new Float32Array(pending.ids.length * SNAPSHOT_STRIDE),
-      offsets: new Map(pending.ids.map((id, i) => [id, i * SNAPSHOT_STRIDE])),
+  /** Where the fish is on screen (its bag); undefined if it isn't shown. */
+  private placement(simId: string): FishPlacement | undefined {
+    const rt = this.runtimes.get(simId);
+    if (rt === undefined || !rt.shown) return undefined;
+    this.forward.set(0, 0, 1).applyQuaternion(rt.lastQuaternion);
+    const p = rt.lastPosition;
+    return {
+      position: [p.x, p.y, p.z],
+      heading: Math.atan2(this.forward.x, this.forward.z),
     };
-    this.interpolator.reset();
-    for (const rt of this.runtimes.values()) {
-      if (!rt.shown || rt.fish.phase !== 'swimming') continue;
-      rt.handover = HANDOVER_S;
-      rt.fromPosition.copy(rt.lastPosition);
-      rt.fromQuaternion.copy(rt.lastQuaternion);
+  }
+
+  private async reinit(config: TankSpaceWorldConfig): Promise<void> {
+    const generation = this.generation;
+    const init = initSim({
+      client: this.sim,
+      worker: this.worker,
+      config,
+      signal: this.lifetime.signal,
+      timeoutMs: SIM_INIT_TIMEOUT_MS,
+    });
+    try {
+      await startWorld(this.sim, this.spec, config, init, {
+        current: () => !this.disposed && generation === this.generation,
+        light: () => this.light,
+        begin: (ready) => {
+          this.simReady = true;
+          this.inWorld = new Set(ready.fishIds);
+          this.stream.begin(ready.epoch, ready.fishIds);
+        },
+      });
+    } catch (cause) {
+      if (cause instanceof SimInitTimeout && !this.disposed) this.replaceWorker();
+      throw cause;
     }
+  }
+
+  private connectSim(worker: Worker): SimClient {
+    const sim = new SimClient(worker);
+    sim.onSnapshot((snapshot) => this.stream.push(snapshot, performance.now()));
+    sim.onAte((events) => {
+      const bites = this.roster.translateAte(events);
+      if (bites.length === 0) return;
+      for (const listener of this.ateListeners) listener(bites);
+    });
+    return sim;
+  }
+
+  /** Until this runs, a worker that fails while starting fails `create` instead. */
+  private reportSimErrors(): void {
+    this.worker.addEventListener('error', (event) =>
+      this.report(`Fish sim worker failed: ${event.message}`),
+    );
+    this.sim.onError((message) => this.report(`Fish sim: ${message}`));
+  }
+
+  /**
+   * A worker that never answered `init` would refuse every later one ("init already in flight"),
+   * so it goes, with its world, and the next stock change starts a fresh world in a new worker.
+   */
+  private replaceWorker(): void {
+    this.stopWorld();
+    this.simReady = false;
+    this.sim.dispose();
+    this.worker.terminate();
+    this.worker = spawnSimWorker();
+    this.sim = this.connectSim(this.worker);
+    this.reportSimErrors();
   }
 
   private applyShadows(batch: SpeciesBatch): void {
@@ -787,16 +846,34 @@ export class FishSystem {
     const pose = this.pose;
     const { fish } = rt;
     if (fish.phase === 'swimming') {
-      const o = frame === null ? undefined : this.layout?.offsets.get(fish.simId);
+      const o = frame === null ? undefined : this.stream.layout?.offsets.get(fish.simId);
+      let presence: FramePresence;
+      if (frame === null) presence = 'no-frame';
+      else if (o === undefined) presence = 'missing';
+      else presence = 'present';
+      const held = this.held.step(fish.simId, this.clockS, presence);
+      if (held === 'wait') {
+        this.position.copy(rt.lastPosition);
+        this.quaternion.copy(rt.lastQuaternion);
+        pose.speed = 0;
+        pose.yawRate = 0;
+        pose.liveliness = 1;
+        return true;
+      }
       if (frame !== null && o !== undefined) {
-        rt.bagSlot = null;
-        this.position
-          .set(
-            frame[o + SnapshotField.PosX] ?? 0,
-            frame[o + SnapshotField.PosY] ?? 0,
-            frame[o + SnapshotField.PosZ] ?? 0,
-          )
-          .add(this.offset);
+        if (rt.bagSlot !== null || held === 'join') {
+          rt.bagSlot = null;
+          if (rt.shown) {
+            rt.handover = HANDOVER_S;
+            rt.fromPosition.copy(rt.lastPosition);
+            rt.fromQuaternion.copy(rt.lastQuaternion);
+          }
+        }
+        this.position.set(
+          frame[o + SnapshotField.PosX] ?? 0,
+          frame[o + SnapshotField.PosY] ?? 0,
+          frame[o + SnapshotField.PosZ] ?? 0,
+        );
         this.quaternion.set(
           frame[o + SnapshotField.QuatX] ?? 0,
           frame[o + SnapshotField.QuatY] ?? 0,
@@ -840,9 +917,7 @@ export class FishSystem {
 
   private update(deltaS: number, nowMs: number): void {
     this.clockS += deltaS;
-    const layout = this.layout;
-    const frame =
-      layout !== null && this.interpolator.sample(nowMs, layout.frame) ? layout.frame : null;
+    const frame = this.stream.sample(nowMs);
     const sceneRevision = this.engine.sceneRevision;
     const rewarm = sceneRevision !== this.sceneRevision;
     this.sceneRevision = sceneRevision;

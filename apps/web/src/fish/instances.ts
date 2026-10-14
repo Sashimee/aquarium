@@ -56,11 +56,8 @@ export class FishInstanceData {
   }
 
   write(index: number, v: InstanceValues): void {
-    if (!(index >= 0 && index < this.capacity)) {
-      throw new RangeError(`fish instances: index ${index} outside 0..${this.capacity - 1}`);
-    }
     const a = this.array;
-    const o = index * INSTANCE_STRIDE;
+    const o = this.offset(index);
     a[o + InstanceSlot.QuatX] = v.qx;
     a[o + InstanceSlot.QuatY] = v.qy;
     a[o + InstanceSlot.QuatZ] = v.qz;
@@ -78,7 +75,20 @@ export class FishInstanceData {
     a[o + InstanceSlot.TintB] = v.tint[2];
   }
 
+  /** Zero scale, so the swim deformation adds nothing to a collapsed instance matrix. */
+  collapse(index: number): void {
+    const o = this.offset(index);
+    this.array.fill(0, o, o + INSTANCE_STRIDE);
+  }
+
   commit(): void {
     this.buffer.needsUpdate = true;
+  }
+
+  private offset(index: number): number {
+    if (!(index >= 0 && index < this.capacity)) {
+      throw new RangeError(`fish instances: index ${index} outside 0..${this.capacity - 1}`);
+    }
+    return index * INSTANCE_STRIDE;
   }
 }

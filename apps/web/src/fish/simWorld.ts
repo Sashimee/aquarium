@@ -1,15 +1,18 @@
-import type { Anchor, FishSpawn, SpeciesInput, WorldConfig } from '@aquarium/sim';
+import type { Collider } from '@aquarium/shared';
+import type { Anchor, FishSpawn, SimReady, TankSpaceWorldConfig } from '@aquarium/sim';
 import type { SceneAnchor } from '../scene/anemone';
 import { sceneAnchorsToSim, type DemoTank } from './demoStock';
 import type { RosterFish } from './roster';
-import { speciesInput } from './species';
+import { allSpeciesInputs, speciesInput } from './species';
 
 /**
- * What every sim world is built from. The sim re-initialises on each change to the swimming set,
- * and a new world knows only its config, so the scene's homes live here and ride along each time.
+ * What every sim world is built from. A world is rebuilt only when the tank or demo stock is
+ * swapped; fish come and go through `layoutChanges`. A new world knows only its config, so the
+ * scene's homes and colliders live here and ride along each time.
  */
 export class SimWorldSpec {
   private simAnchors: readonly Anchor[] = [];
+  private simDecor: readonly Collider[] = [];
 
   constructor(
     private readonly demo: DemoTank,
@@ -20,20 +23,43 @@ export class SimWorldSpec {
     return this.simAnchors;
   }
 
-  /** Engine-space scene anchors; returns them in the sim frame for the running world. */
+  /** Scene anchors; returns them as the sim takes them, for the running world. */
   setAnchors(anchors: readonly SceneAnchor[]): readonly Anchor[] {
     this.simAnchors = sceneAnchorsToSim(anchors, this.demo);
     return this.simAnchors;
   }
 
-  /** Null when none of `swimming` has content in this build, so there is no world to run. */
-  config(swimming: readonly RosterFish[]): WorldConfig | null {
+  get decor(): readonly Collider[] {
+    return this.simDecor;
+  }
+
+  /** Already in the shared format and tank space; see `SimColliders`. */
+  setDecor(colliders: readonly Collider[]): void {
+    this.simDecor = colliders;
+  }
+
+  /**
+   * What the scene changed after `config` was built. A world takes a while to start, and an update
+   * in that window reached neither the config nor the world, so it has to follow once it is up.
+   */
+  changedSince(config: TankSpaceWorldConfig): {
+    decor: readonly Collider[] | null;
+    anchors: readonly Anchor[] | null;
+  } {
+    return {
+      decor: config.decor === this.simDecor ? null : this.simDecor,
+      anchors: config.anchors === this.simAnchors ? null : this.simAnchors,
+    };
+  }
+
+  /**
+   * Null when none of `swimming` has content in this build, so there is no world to run. The world
+   * knows every content species, since one can't be added to it later.
+   */
+  config(swimming: readonly RosterFish[]): TankSpaceWorldConfig | null {
     const fish: FishSpawn[] = [];
-    const species = new Map<string, SpeciesInput>();
     for (const f of swimming) {
-      const input = speciesInput(f.species);
-      if (input === undefined) continue;
-      species.set(input.id, input);
+      if (speciesInput(f.species) === undefined) continue;
       fish.push(
         f.lengthM === undefined
           ? { id: f.simId, species: f.species }
@@ -43,10 +69,107 @@ export class SimWorldSpec {
     if (fish.length === 0) return null;
     return {
       seed: this.seed,
-      tank: this.demo.config.tank,
-      species: [...species.values()],
+      space: this.demo.config.space,
+      species: allSpeciesInputs(),
       fish,
+      decor: this.simDecor,
       anchors: this.simAnchors,
     };
   }
+}
+
+/** What turns a running world holding `inWorld` into one holding exactly `wanted`. */
+export function layoutChanges(
+  inWorld: Iterable<string>,
+  wanted: readonly FishSpawn[],
+): { readonly remove: string[]; readonly add: FishSpawn[] } {
+  const present = new Set(inWorld);
+  const keep = new Set(wanted.map((f) => f.id));
+  return {
+    remove: [...present].filter((id) => !keep.has(id)),
+    add: wanted.filter((f) => !present.has(f.id)),
+  };
+}
+
+/** The part of `SimClient` that brings up a world once its `init` has answered. */
+export interface WorldControls {
+  setLight(level: number): void;
+  setDecor(colliders: readonly Collider[]): void;
+  setAnchors(anchors: readonly Anchor[]): void;
+  start(): void;
+}
+
+export interface WorldStart {
+  /** False once the world being started was dropped, so it must not run. */
+  current(): boolean;
+  light(): number;
+  /** Runs before the world starts, so nothing it posts can arrive ahead of its layout. */
+  begin(ready: SimReady): void;
+}
+
+/**
+ * Starts the world `init` was asked to build from `config`. Light, colliders and homes that changed
+ * while it was starting reached neither the config nor the world, so they follow first. A world
+ * dropped before `init` answered is left unstarted.
+ */
+export async function startWorld(
+  sim: WorldControls,
+  spec: SimWorldSpec,
+  config: TankSpaceWorldConfig,
+  init: Promise<SimReady>,
+  hooks: WorldStart,
+): Promise<void> {
+  const ready = await init;
+  if (!hooks.current()) return;
+  sim.setLight(hooks.light());
+  const { decor, anchors } = spec.changedSince(config);
+  if (decor !== null) sim.setDecor(decor);
+  if (anchors !== null) sim.setAnchors(anchors);
+  hooks.begin(ready);
+  sim.start();
+}
+
+/** A sim worker that never answered `init`; it is stuck and must be replaced. */
+export class SimInitTimeout extends Error {
+  constructor(readonly timeoutMs: number) {
+    super(`Fish sim did not answer init within ${timeoutMs / 1000} s`);
+    this.name = 'SimInitTimeout';
+  }
+}
+
+export interface SimInit {
+  readonly client: { init(config: TankSpaceWorldConfig): Promise<SimReady> };
+  readonly worker: Pick<Worker, 'addEventListener' | 'removeEventListener'>;
+  readonly config: TankSpaceWorldConfig;
+  readonly signal: AbortSignal;
+  readonly timeoutMs: number;
+}
+
+/**
+ * Asks the worker to build `config`. A worker whose script fails to load never answers `init`, so
+ * its error event settles it; one that hangs is settled by the timeout.
+ */
+export function initSim({ client, worker, config, signal, timeoutMs }: SimInit): Promise<SimReady> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    const settle = (finish: () => void): void => {
+      clearTimeout(timer);
+      worker.removeEventListener('error', onError);
+      signal.removeEventListener('abort', onAbort);
+      finish();
+    };
+    const onError = (event: ErrorEvent): void =>
+      settle(() => reject(new Error(`Fish sim worker failed to start: ${event.message}`)));
+    const onAbort = (): void => settle(() => reject(signal.reason));
+    const timer = setTimeout(() => settle(() => reject(new SimInitTimeout(timeoutMs))), timeoutMs);
+    worker.addEventListener('error', onError);
+    signal.addEventListener('abort', onAbort);
+    client.init(config).then(
+      (ready) => settle(() => resolve(ready)),
+      (cause: unknown) => settle(() => reject(cause)),
+    );
+  });
 }

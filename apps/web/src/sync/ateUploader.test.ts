@@ -49,6 +49,24 @@ describe('AteUploader', () => {
     expect(h.uploader.size).toBe(0);
   });
 
+  it('reuses one batch id across retries and uses a fresh one for the next batch', async () => {
+    const send = vi
+      .fn()
+      .mockRejectedValueOnce(apiError(0, 'network'))
+      .mockRejectedValueOnce(apiError(0, 'timeout'))
+      .mockResolvedValue(undefined);
+    const h = harness(send);
+    h.uploader.add(FISH_1, 0.5);
+    await h.uploader.flushNow();
+    const ids = send.mock.calls.map((c) => c[1] as string);
+    expect(ids).toHaveLength(3);
+    expect(ids[0]).toMatch(/^[0-9a-f-]{36}$/);
+    expect(new Set(ids).size).toBe(1);
+    h.uploader.add(FISH_1, 0.5);
+    await h.uploader.flushNow();
+    expect(send.mock.calls[3]?.[1]).not.toBe(ids[0]);
+  });
+
   it('keeps the original timestamps across retries', async () => {
     const send = vi.fn().mockRejectedValueOnce(apiError(0, 'network')).mockResolvedValue(undefined);
     const h = harness(send);
@@ -68,6 +86,28 @@ describe('AteUploader', () => {
     expect(send).toHaveBeenCalledTimes(1);
     expect(h.dropped).toEqual([{ reason: 'rejected', count: 1 }]);
     expect(h.uploader.size).toBe(0);
+  });
+
+  it('names the cause when crypto.randomUUID is unavailable', async () => {
+    const send = vi.fn().mockResolvedValue(undefined);
+    const causes: unknown[] = [];
+    const reasons: DropReason[] = [];
+    const h = harness(send, {
+      onDropped: (reason, _reports, cause) => {
+        reasons.push(reason);
+        causes.push(cause);
+      },
+    });
+    vi.stubGlobal('crypto', {});
+    try {
+      h.uploader.add(FISH_1, 0.5);
+      await h.uploader.flushNow();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(send).not.toHaveBeenCalled();
+    expect(reasons).toEqual(['unsupported']);
+    expect(String(causes[0])).toContain('crypto.randomUUID is unavailable');
   });
 
   it('gives up after the attempt limit while offline, bounded in time and memory', async () => {

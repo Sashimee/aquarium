@@ -4,15 +4,14 @@ import catalogJson from '../../../public/assets/index.json';
 import type { CatalogEntry } from '../../scene/assets';
 import { decorMatrix } from '../../scene/hardscape';
 import { footprintOf } from './footprint';
-import { specsFromCatalog } from './spec';
+import { SPECS } from './fixtures';
 
 const entries = catalogJson.assets as unknown as CatalogEntry[];
-const specs = specsFromCatalog(entries);
 
 describe('specsFromCatalog', () => {
   it.each(['brain-coral', 'boulder-01'])('box of %s matches the rendered mesh height', (id) => {
     const entry = entries.find((e) => e.id === id);
-    const spec = specs.get(id);
+    const spec = SPECS.get(id);
     if (!entry?.bounds || !spec) throw new Error(`${id} missing from the catalog`);
     const item = {
       assetId: id,

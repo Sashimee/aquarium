@@ -3,10 +3,10 @@ import type { AteReport } from '@aquarium/shared';
 import { AteBatcher, type AteBatcherOptions } from './ateBatcher';
 import { isTransient, realSleep, withRetry, type Sleep } from './backoff';
 
-export type DropReason = 'rejected' | 'gave-up' | 'expired';
+export type DropReason = 'rejected' | 'gave-up' | 'expired' | 'unsupported';
 
 export interface AteUploaderOptions {
-  send(reports: AteReport[]): Promise<void>;
+  send(reports: AteReport[], batchId: string): Promise<void>;
   /** Called when reports are discarded for good, so the UI can say so instead of failing silently. */
   onDropped?(reason: DropReason, reports: readonly AteReport[], cause?: unknown): void;
   intervalMs?: number;
@@ -82,6 +82,17 @@ export class AteUploader {
 
   private async attempt(batch: AteReport[]): Promise<void> {
     const { send, onDropped } = this.options;
+    if (typeof crypto.randomUUID !== 'function') {
+      this.lost = true;
+      // randomUUID exists only in secure contexts, so plain http on a LAN IP lands here.
+      onDropped?.(
+        'unsupported',
+        batch,
+        new Error('crypto.randomUUID is unavailable (insecure context); serve the app over https'),
+      );
+      return;
+    }
+    const batchId = crypto.randomUUID();
     let remaining = batch;
     const prune = () => {
       const live = this.fresh(remaining);
@@ -97,7 +108,7 @@ export class AteUploader {
       await withRetry(
         async () => {
           prune();
-          if (remaining.length > 0) await send(remaining);
+          if (remaining.length > 0) await send(remaining, batchId);
         },
         {
           maxAttempts: this.options.maxAttempts ?? 12,

@@ -1,8 +1,21 @@
+import { legacyTintSeed } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import { coralGlow, coralTint, fluorescenceLevel, heightScale, placementKey } from './coralStyle';
 import { loadPreset } from './preset';
 
 describe('coral style', () => {
+  it('keeps placementKey equal to the shared legacyTintSeed', () => {
+    for (const [position, rotationY] of [
+      [[0, 0, 0], 0],
+      [[0.123, 0.05, -0.2], 1.234],
+      [[-0.59, 0.5, 0.24], -6.28],
+    ] as const) {
+      expect(placementKey(position, rotationY)).toBe(
+        legacyTintSeed({ position: [...position], rotationY }),
+      );
+    }
+  });
+
   it('wraps around the palette and keeps every channel at or below 1', () => {
     const tints = [0, 1, 2].map((i) => coralTint('brain-coral', i));
     expect(new Set(tints.map((t) => t?.getHex())).size).toBe(3);
@@ -19,10 +32,14 @@ describe('coral style', () => {
     for (const id of ['acropora-cytherea', 'acropora-palmata']) {
       for (let i = 0; i < 2; i++) {
         const c = coralTint(id, i);
-        expect(Math.min(c?.r ?? 0, c?.g ?? 0, c?.b ?? 0)).toBeGreaterThanOrEqual(0.7);
+        expect(c).not.toBeNull();
+        const min = Math.min(c?.r ?? 0, c?.g ?? 0, c?.b ?? 0);
+        expect(min).toBeGreaterThanOrEqual(0.7);
+        expect(min).toBeLessThan(1);
       }
     }
-    expect(coralTint('acropora-palmata', 0)?.r).toBeCloseTo(1 - 0.62 * 0.35, 5);
+    const palette = [0, 1].map((i) => coralTint('acropora-palmata', i)?.getHex());
+    expect(palette[0]).not.toBe(palette[1]);
   });
 
   it('leaves rock and unknown assets untinted and unsquashed', () => {

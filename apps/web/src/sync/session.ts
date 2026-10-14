@@ -309,13 +309,13 @@ export class TankSession {
     this.uploader = new AteUploader({
       ...this.deps.ateOptions,
       sleep: this.sleep,
-      send: async (reports) => {
-        const next = await this.enqueue(() => this.deps.api.reportAte(tankId, reports));
+      send: async (reports, batchId) => {
+        const next = await this.enqueue(() => this.deps.api.reportAte(tankId, reports, batchId));
         if (gen === this.loadId) this.apply(next);
       },
-      onDropped: (reason, reports) => {
+      onDropped: (reason, reports, cause) => {
         if (reason === 'rejected') return;
-        console.warn(`dropped ${reports.length} eating reports (${reason})`);
+        console.warn(`dropped ${reports.length} eating reports (${reason})`, cause);
       },
     });
     this.deps.interaction.emit('tank:loaded', {

@@ -164,12 +164,19 @@ async function boot(): Promise<void> {
 
   liveFish = fish;
   const feedGate = new FeedGate();
+  let firstSceneMounted = (): void => undefined;
+  const sceneMounted = new Promise<void>((resolve) => {
+    firstSceneMounted = resolve;
+  });
+  void Promise.all([fish.settled, sceneMounted]).then(() => engine.contentReady());
   const scenes = mountBiomeScene(engine, tankBiome, window.location.search, {
     mounted(scene) {
       fish.setAnchors(scene.anchors);
+      fish.setSceneColliders(scene.colliderList);
       play = createPlaySystem(engine, scene, interaction, fish.sim, feedGate);
       playChoices.applyTo(play.controller);
       sceneDecor.mount(scene);
+      firstSceneMounted();
       if (import.meta.env.DEV) Object.assign(window, { tankScene: scene });
     },
     unmounting() {
@@ -177,6 +184,7 @@ async function boot(): Promise<void> {
       play?.dispose();
       play = null;
       fish.setAnchors([]);
+      fish.setSceneColliders([]);
     },
   });
 

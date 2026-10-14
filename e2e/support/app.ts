@@ -62,7 +62,7 @@ export const dockButton = (page: Page, label: string): Locator =>
     .getByRole('button', { name: label, exact: true });
 
 export async function openTank(page: Page): Promise<void> {
-  await page.goto('/?backend=webgl');
+  await page.goto('/?tier=low&backend=webgl');
   await expect(dockButton(page, 'Feed')).toBeEnabled({ timeout: SCENE_TIMEOUT_MS });
 }
 

@@ -21,36 +21,36 @@ function setup(sandHeight = 0.1) {
   return { medium, caustics, albedo, interior };
 }
 
-describe('Caustics.hoodLightAtDepth', () => {
-  it('is the hood radiance itself at and above the surface', () => {
+describe('Caustics.reachAtDepth', () => {
+  it('is all of the hood light at and above the surface', () => {
     const { caustics } = setup();
     const out = new Color();
-    expect(caustics.hoodLightAtDepth(0, out).toArray()).toEqual([2, 2, 2]);
-    expect(caustics.hoodLightAtDepth(-0.1, out).toArray()).toEqual([2, 2, 2]);
+    expect(caustics.reachAtDepth(0, out).toArray()).toEqual([1, 1, 1]);
+    expect(caustics.reachAtDepth(-0.1, out).toArray()).toEqual([1, 1, 1]);
   });
 
   it('spreads and absorbs with depth, red first', () => {
     const { medium, caustics } = setup();
     const depth = 0.4;
-    const light = caustics.hoodLightAtDepth(depth, new Color());
+    const reach = caustics.reachAtDepth(depth, new Color());
     const h = medium.fixtureHeight.value;
     const spread = (h / (h + depth)) ** 2;
     const [ar, , ab] = medium.absorption.value.toArray();
-    expect(light.r).toBeCloseTo(2 * spread * Math.exp(-(ar + 0.1) * depth), 6);
-    expect(light.b).toBeCloseTo(2 * spread * Math.exp(-(ab + 0.1) * depth), 6);
-    expect(light.r).toBeLessThan(light.g);
-    expect(light.g).toBeLessThan(light.b);
+    expect(reach.r).toBeCloseTo(spread * Math.exp(-(ar + 0.1) * depth), 6);
+    expect(reach.b).toBeCloseTo(spread * Math.exp(-(ab + 0.1) * depth), 6);
+    expect(reach.r).toBeLessThan(reach.g);
+    expect(reach.g).toBeLessThan(reach.b);
   });
 
   it('lengthens the path for a slanted light, but not past a grazing limit', () => {
     const { caustics } = setup();
-    const overhead = caustics.hoodLightAtDepth(0.4, new Color()).r;
+    const overhead = caustics.reachAtDepth(0.4, new Color()).r;
     caustics.lightDirection.value.set(1, 1, 0).normalize();
-    const slanted = caustics.hoodLightAtDepth(0.4, new Color()).r;
+    const slanted = caustics.reachAtDepth(0.4, new Color()).r;
     caustics.lightDirection.value.set(1, 0.05, 0).normalize();
-    const grazing = caustics.hoodLightAtDepth(0.4, new Color()).r;
+    const grazing = caustics.reachAtDepth(0.4, new Color()).r;
     caustics.lightDirection.value.set(0, -1, 0);
-    const below = caustics.hoodLightAtDepth(0.4, new Color()).r;
+    const below = caustics.reachAtDepth(0.4, new Color()).r;
     expect(slanted).toBeLessThan(overhead);
     expect(grazing).toBeLessThan(slanted);
     expect(grazing).toBeGreaterThan(0);
@@ -63,7 +63,9 @@ describe('InteriorLight.update', () => {
     const { caustics, interior } = setup(0.1);
     caustics.lightRadiance.value.setRGB(1, 1, 4);
     interior.update();
-    const atSand = caustics.hoodLightAtDepth(SURFACE - 0.1, new Color());
+    const atSand = caustics
+      .reachAtDepth(SURFACE - 0.1, new Color())
+      .multiply(caustics.lightRadiance.value);
     expect(interior.actinicExcitation).toBeCloseTo(atSand.b, 9);
     caustics.lightRadiance.value.setRGB(0, 0, 0.5);
     interior.update();
@@ -74,7 +76,9 @@ describe('InteriorLight.update', () => {
   it('throws back the hood light at the sand, coloured by the substrate', () => {
     const { caustics, interior } = setup(0.1);
     interior.update();
-    const atSand = caustics.hoodLightAtDepth(SURFACE - 0.1, new Color());
+    const atSand = caustics
+      .reachAtDepth(SURFACE - 0.1, new Color())
+      .multiply(caustics.lightRadiance.value);
     const expected = atSand.multiplyScalar(0.5 * (0.5 / Math.PI));
     expect(interior.substrateBounce.value.r).toBeCloseTo(expected.r, 9);
     expect(interior.substrateBounce.value.b).toBeCloseTo(expected.b, 9);

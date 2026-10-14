@@ -31,10 +31,17 @@ export interface QualityOptions {
    * at a time, so on a GPU-bound device results arrive every few frames.
    */
   minGpuSamples?: number;
+  /**
+   * Hold the probe until `contentReady()`: timing an empty tank picks a tier that is too high.
+   * After `contentTimeoutMs` it probes anyway, so a scene or fish that never loads cannot stall it.
+   */
+  awaitContent?: boolean;
+  contentTimeoutMs?: number;
 }
 
 type Phase =
   | { kind: 'idle' }
+  | { kind: 'waiting'; deadline: number }
   | { kind: 'probing'; startedAt: number; gpu: number[]; frame: number[] }
   | { kind: 'running' };
 
@@ -53,6 +60,8 @@ export class QualityManager {
   private readonly probeMs: number;
   private readonly warmupMs: number;
   private readonly minGpuSamples: number;
+  private readonly contentTimeoutMs: number;
+  private hasContent: boolean;
   private signal: TimingSignal | null = null;
 
   constructor(
@@ -69,6 +78,8 @@ export class QualityManager {
     this.probeMs = options.probeMs ?? 2000;
     this.warmupMs = options.warmupMs ?? 300;
     this.minGpuSamples = options.minGpuSamples ?? 10;
+    this.contentTimeoutMs = options.contentTimeoutMs ?? 15_000;
+    this.hasContent = !(options.awaitContent ?? false);
     this.current = options.pinned ?? this.probeTier;
   }
 
@@ -80,8 +91,9 @@ export class QualityManager {
     return TIER_SETTINGS[this.current];
   }
 
+  /** True from `start()` until the probe picks a tier, including any wait for content. */
   get probing(): boolean {
-    return this.phase.kind === 'probing';
+    return this.phase.kind === 'waiting' || this.phase.kind === 'probing';
   }
 
   get timingSignal(): TimingSignal | null {
@@ -118,7 +130,15 @@ export class QualityManager {
       this.announce(null, this.options.pinned, 'override');
       return;
     }
-    this.phase = { kind: 'probing', startedAt: nowMs + this.warmupMs, gpu: [], frame: [] };
+    if (this.hasContent) this.beginProbe(nowMs);
+    else this.phase = { kind: 'waiting', deadline: nowMs + this.contentTimeoutMs };
+  }
+
+  /** The first scene and fish are in; the probe's warm-up starts now. Later calls do nothing. */
+  contentReady(nowMs: number): void {
+    if (this.hasContent) return;
+    this.hasContent = true;
+    if (this.phase.kind === 'waiting') this.beginProbe(nowMs);
   }
 
   /**
@@ -128,6 +148,10 @@ export class QualityManager {
    */
   sample(frameMs: number, gpuMs: number | null, nowMs: number): void {
     const phase = this.phase;
+    if (phase.kind === 'waiting') {
+      if (nowMs >= phase.deadline) this.beginProbe(nowMs);
+      return;
+    }
     if (phase.kind === 'probing') {
       if (nowMs < phase.startedAt) return;
       if (gpuMs !== null && gpuMs > 0) phase.gpu.push(gpuMs);
@@ -142,12 +166,20 @@ export class QualityManager {
     if (change) this.apply(this.current, change.to, change.reason);
   }
 
-  /** Manual override from the dev panel or settings; adaptation restarts from there. */
+  /**
+   * Manual override from the dev panel or settings; adaptation restarts from there. A pick above
+   * `maxTier` is shown as picked, but the controller restarts clamped to `maxTier`, so its first
+   * step over budget lands one below the cap: on a phone, ultra drops straight to low.
+   */
   setTier(tier: Tier, nowMs: number): void {
-    if (this.phase.kind === 'probing') this.phase = { kind: 'running' };
+    if (this.probing) this.phase = { kind: 'running' };
     this.controller?.reset(tier, nowMs);
     const from = this.current;
     if (from !== tier) this.apply(from, tier, 'manual');
+  }
+
+  private beginProbe(nowMs: number): void {
+    this.phase = { kind: 'probing', startedAt: nowMs + this.warmupMs, gpu: [], frame: [] };
   }
 
   private finishProbe(phase: Extract<Phase, { kind: 'probing' }>, nowMs: number): void {

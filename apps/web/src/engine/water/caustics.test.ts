@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { Box3, Color, ConstNode, TextureNode, VarNode, Vector3, type Node } from 'three/webgpu';
-import { float, uniform, vec2 } from 'three/tsl';
+import {
+  Box3,
+  Color,
+  ConstNode,
+  LinearMipmapLinearFilter,
+  TextureNode,
+  VarNode,
+  Vector3,
+  type Node,
+  type Texture,
+} from 'three/webgpu';
+import { float, time, uniform, vec2 } from 'three/tsl';
 import { Caustics, castingShare, causticContrast } from './caustics';
 import { daylightAt, parseClock } from '../daylight';
 import { BAKE } from './causticPattern';
@@ -108,6 +118,20 @@ describe('Caustics.setHood', () => {
     expect(c.contrast.value).toBeCloseTo(0.3, 10);
     expect(c.shaftContrast.value).toBeCloseTo(0.3, 10);
   });
+
+  it('copies out the casting light, which a caller cannot then change', () => {
+    const c = caustics();
+    const day = at('20:40');
+    c.setHood(hood, 4, moonlight, day, darkSand);
+    const expected = hood.clone().multiplyScalar(4 * day);
+    const out = new Color();
+    expect(c.getCasting(out)).toBe(out);
+    expect(out.equals(expected)).toBe(true);
+    out.setRGB(9, 9, 9);
+    expect(c.getCasting(new Color()).equals(expected)).toBe(true);
+    c.setHood(hood, 4, moonlight, at('23:00'), darkSand);
+    expect(c.getCasting(out).toArray()).toEqual([0, 0, 0]);
+  });
 });
 
 describe('the baked caustics', () => {
@@ -145,7 +169,39 @@ describe('the baked caustics', () => {
     expect(taps).toContain(`level ${meanLevel}`);
   });
 
+  // The shafts sample it 12 times per pixel; the drift depends on time alone.
+  it('takes a drift read once outside the loop instead of rebuilding it per sample', () => {
+    const c = caustics();
+    const reads = (n: Node): number => {
+      let count = 0;
+      n.traverse((child) => {
+        if (child === time) count++;
+      });
+      return count;
+    };
+    const p = uniform(vec2(0.2, 0.1));
+    expect(reads(c.bakedAt(p, 0.45))).toBeGreaterThan(0);
+    expect(reads(c.bakedAt(p, 0.45, c.bakedMean(), uniform(vec2(0.3, 0.6))))).toBe(0);
+    expect(reads(c.bakedDrift())).toBeGreaterThan(0);
+  });
+
   it('has a 1x1 mip to read the mean from', () => {
     expect(Number.isInteger(meanLevel)).toBe(true);
+  });
+
+  // Without generated mips the mean level does not exist, and the shafts and the low tier's floor
+  // would divide by whatever the backend returns for it.
+  it('generates the mips of the tile it reads the mean from', () => {
+    const tiles: Texture[] = [];
+    caustics()
+      .bakedMean()
+      .traverse((n) => {
+        if (n instanceof TextureNode && n.value.width === BAKE.size) tiles.push(n.value);
+      });
+    expect(tiles.length).toBeGreaterThan(0);
+    for (const tile of tiles) {
+      expect(tile.generateMipmaps).toBe(true);
+      expect(tile.minFilter).toBe(LinearMipmapLinearFilter);
+    }
   });
 });

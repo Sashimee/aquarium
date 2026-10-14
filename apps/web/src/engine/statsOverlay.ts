@@ -1,5 +1,15 @@
 import type { Engine } from './Engine';
-import { formatReadout, readStats } from './statsReadout';
+import { formatPending, formatReadout, readStats } from './statsReadout';
+
+const EDGE = 'max(0.75rem, env(safe-area-inset-bottom))';
+/** The Tank report sits in the same corner and grows upwards when opened. */
+const STACK_ABOVE = '#ui .report';
+const GAP_PX = 8;
+
+/** The CSS `bottom` that keeps the readout `GAP_PX` above the report, or at the edge without it. */
+export function stackedBottom(viewportHeight: number, reportTop: number | null): string {
+  return reportTop === null ? EDGE : `${viewportHeight - reportTop + GAP_PX}px`;
+}
 
 /** On-device performance readout for `?stats=1`, loaded only when asked for. */
 export function createStatsOverlay(engine: Engine, parent: HTMLElement): () => void {
@@ -9,7 +19,7 @@ export function createStatsOverlay(engine: Engine, parent: HTMLElement): () => v
   Object.assign(box.style, {
     position: 'fixed',
     left: 'max(0.75rem, env(safe-area-inset-left))',
-    bottom: 'calc(max(0.75rem, env(safe-area-inset-bottom)) + 3.75rem)',
+    bottom: EDGE,
     zIndex: '2',
     margin: '0',
     padding: '0.35rem 0.5rem',
@@ -21,15 +31,37 @@ export function createStatsOverlay(engine: Engine, parent: HTMLElement): () => v
     pointerEvents: 'none',
     userSelect: 'none',
   } satisfies Partial<CSSStyleDeclaration>);
-  box.textContent = `${engine.backend}  ${engine.quality.tier}\nwaiting for frames`;
+  // Opening or closing the report resizes it between stats ticks.
+  const resized = new ResizeObserver(() => place());
+  let observed: Element | null = null;
+  const place = () => {
+    const below = document.querySelector(STACK_ABOVE);
+    if (below !== observed) {
+      if (observed !== null) resized.unobserve(observed);
+      if (below !== null) resized.observe(below);
+      observed = below;
+    }
+    box.style.bottom = stackedBottom(
+      window.innerHeight,
+      below === null ? null : below.getBoundingClientRect().top,
+    );
+  };
+  box.textContent = formatPending({
+    backend: engine.backend,
+    tier: engine.quality.tier,
+    adaptive: engine.quality.adaptive,
+  });
+  place();
   parent.appendChild(box);
 
   const off = engine.events.on('engine:stats', (stats) => {
     box.textContent = formatReadout(readStats(engine, stats, window.devicePixelRatio));
+    place();
   });
 
   return () => {
     off();
+    resized.disconnect();
     box.remove();
   };
 }

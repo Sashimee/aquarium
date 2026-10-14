@@ -1,6 +1,6 @@
 import { apiErrorSchema, sessionListSchema, userSchema } from '@aquarium/shared';
 import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
-import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import nodemailer from 'nodemailer';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -20,18 +20,44 @@ const median = (xs: number[]) => {
   return sorted.length % 2 ? (sorted[mid] ?? 0) : ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2;
 };
 
-// The median of per-pair differences cancels host load, which hits both halves of an adjacent
-// pair alike. A repeat sign-up is legitimately ~1-3 ms faster (it inserts no user rows), so the
-// tolerance must clear that. 12 ms clears the worst no-leak median seen under load (~8 ms) and stays
-// below the 25 ms leaks this is meant to expose; leaks under ~15 ms are not reliably caught, and
-// catching them needs more pairs rather than a tighter bound.
+// Hashing dominates a fresh sign-up (~65 ms), so a repeat that skips it shows a gap of ~6.7 times
+// the faster half (the repeat itself) and a second hash ~1.0. Load stretches both halves of an adjacent pair together, so
+// the median pair gap is bounded relative to the faster median (dividing by the slower would let a
+// faster repeat inflate its own denominator) instead of in absolute milliseconds. Detection floor is
+// 25% of that, ~16 ms on a quiet host. The bound grows with load: fine for CPU-bound leaks like a
+// hash, looser for I/O-bound ones. A repeat is legitimately ~1-3 ms faster (no user rows).
 function expectNoTimingSkew(pairs: { fresh: number; repeat: number }[]) {
   const gap = median(pairs.map((p) => p.repeat - p.fresh));
-  expect(Math.abs(gap), `median repeat - fresh = ${gap.toFixed(1)} ms`).toBeLessThan(12);
+  const fresh = median(pairs.map((p) => p.fresh));
+  const repeat = median(pairs.map((p) => p.repeat));
+  const base = Math.min(fresh, repeat);
+  expect(
+    Math.abs(gap) / base,
+    `median repeat - fresh = ${gap.toFixed(1)} ms of ${base.toFixed(1)} ms`,
+  ).toBeLessThan(0.25);
 }
 
 function cookieJar(res: LightMyRequestResponse): string {
   return res.cookies.map((c) => `${c.name}=${c.value}`).join('; ');
+}
+
+async function withHarness(
+  options: Parameters<typeof createHarness>[0],
+  run: (h: Harness) => Promise<void>,
+): Promise<void> {
+  const h = await createHarness(options);
+  let failed = false;
+  try {
+    await run(h);
+  } catch (err) {
+    failed = true;
+    throw err;
+  } finally {
+    // A close failure must not replace the assertion that is already failing the test.
+    await h.close().catch((err: unknown) => {
+      if (!failed) throw err;
+    });
+  }
 }
 
 async function signUp(app: FastifyInstance, email: string, extra: Record<string, string> = {}) {
@@ -39,7 +65,7 @@ async function signUp(app: FastifyInstance, email: string, extra: Record<string,
     method: 'POST',
     url: '/api/auth/sign-up/email',
     headers: { ...jsonHeaders, ...extra },
-    payload: { email, password: PASSWORD, name: 'Tester', callbackURL: '/' },
+    payload: { email, password: PASSWORD, name: 'Tester', callbackURL: '/verify-email' },
   });
 }
 
@@ -69,10 +95,29 @@ async function verifiedSession(h: Harness, email = nextEmail()) {
   return { email, cookie, verify };
 }
 
+const SLOW_MAIL_MS = 40;
+
+describe('timing skew bound', () => {
+  it('flags a repeat that skips the mail send against a slow mailer', () => {
+    const fresh = 65 + SLOW_MAIL_MS;
+    expect(() =>
+      expectNoTimingSkew(
+        Array.from({ length: 9 }, () => ({ fresh, repeat: fresh - SLOW_MAIL_MS })),
+      ),
+    ).toThrow();
+  });
+
+  it('accepts pairs that differ by a couple of milliseconds', () => {
+    expect(() =>
+      expectNoTimingSkew(Array.from({ length: 9 }, () => ({ fresh: 105, repeat: 103 }))),
+    ).not.toThrow();
+  });
+});
+
 describe('unverified sign-up takeover (#114)', () => {
   let h: Harness;
   beforeAll(async () => {
-    h = await createHarness();
+    h = await createHarness({ mailDelayMs: SLOW_MAIL_MS });
   });
   afterAll(() => h.close());
 
@@ -87,12 +132,12 @@ describe('unverified sign-up takeover (#114)', () => {
       payload: { email, password },
     });
 
-  const signUpWith = (email: string, password: string) =>
-    h.app.inject({
+  const signUpWith = (email: string, password: string, inject = h.app.inject.bind(h.app)) =>
+    inject({
       method: 'POST',
       url: '/api/auth/sign-up/email',
       headers: jsonHeaders,
-      payload: { email, password, name: 'Someone', callbackURL: '/' },
+      payload: { email, password, name: 'Someone', callbackURL: '/verify-email' },
     });
 
   const requestReset = async (email: string) => {
@@ -100,7 +145,7 @@ describe('unverified sign-up takeover (#114)', () => {
       method: 'POST',
       url: '/api/auth/request-password-reset',
       headers: jsonHeaders,
-      payload: { email, redirectTo: '/' },
+      payload: { email, redirectTo: '/reset-password' },
     });
     await h.settleMail();
     return res;
@@ -181,7 +226,7 @@ describe('unverified sign-up takeover (#114)', () => {
       // The previous sign-up's background mail would otherwise land inside this timing window.
       await h.settleMail();
       const start = performance.now();
-      await signUpWith(email, ATTACKER_PASSWORD);
+      await signUpWith(email, ATTACKER_PASSWORD, h.rawInject);
       return performance.now() - start;
     };
     const pairs: { fresh: number; repeat: number }[] = [];
@@ -193,13 +238,51 @@ describe('unverified sign-up takeover (#114)', () => {
         pairs.push({ fresh, repeat: await time(email) });
       } else {
         const email = nextEmail();
-        await signUpWith(email, ATTACKER_PASSWORD);
+        await signUpWith(email, ATTACKER_PASSWORD, h.rawInject);
         const repeat = await time(email);
         pairs.push({ fresh: await time(nextEmail()), repeat });
       }
     }
     expectNoTimingSkew(pairs);
   }, 120_000);
+
+  it('responds to a sign-up for a verified address in about the time of a fresh one (#120)', async () => {
+    const time = async (email: string) => {
+      await h.settleMail();
+      const start = performance.now();
+      const res = await signUpWith(email, ATTACKER_PASSWORD, h.rawInject);
+      expect(res.statusCode).toBe(200);
+      return performance.now() - start;
+    };
+    const verified = nextEmail();
+    await verifiedSession(h, verified);
+    const pairs: { fresh: number; repeat: number }[] = [];
+    await time(nextEmail());
+    for (let i = 0; i < 40; i++) {
+      if (i % 2 === 0) pairs.push({ fresh: await time(nextEmail()), repeat: await time(verified) });
+      else {
+        const repeat = await time(verified);
+        pairs.push({ fresh: await time(nextEmail()), repeat });
+      }
+    }
+    expectNoTimingSkew(pairs);
+  }, 120_000);
+
+  it('does not wait for the mail relay when signing up', async () => {
+    const held = h.holdMail();
+    try {
+      const email = nextEmail();
+      const res = await signUpWith(email, ATTACKER_PASSWORD, h.rawInject);
+      expect(res.statusCode).toBe(200);
+      await held.sendStarted;
+      expect(h.outbox.filter((m) => m.to === email)).toHaveLength(0);
+      const repeat = await signUpWith(email, VICTIM_PASSWORD, h.rawInject);
+      expect(repeat.statusCode).toBe(200);
+    } finally {
+      held.release();
+      await h.settleMail();
+    }
+  });
 
   it('lets the owner set a password by reset, revoking sessions, and leaves verified accounts intact', async () => {
     const email = nextEmail();
@@ -442,14 +525,19 @@ describe('sessions', () => {
     expect(got.statusCode).toBe(200);
     expect(got.json<{ user: { email: string } }>().user.email).toBe(email);
 
-    const bodies = [signedUp.body, verify.body, signedIn.body, got.body];
+    const me = await h.app.inject({ url: '/api/me', headers: { cookie: signInCookie } });
+    expect(me.statusCode).toBe(200);
+
+    const bodies = [signedUp.body, signedIn.body, got.body, me.body];
     for (const body of bodies) {
       expect(body).not.toContain(token);
       expect(body).not.toContain(signInToken);
       expect(body).not.toContain('"token"');
     }
-    const me = await h.app.inject({ url: '/api/me', headers: { cookie: signInCookie } });
-    expect(me.statusCode).toBe(200);
+  });
+
+  it('strips tokens only because passkey is the sole plugin; review stripTokens when adding one', () => {
+    expect(h.auth.options.plugins?.map((plugin) => plugin.id)).toEqual(['passkey']);
   });
 
   it('does not expose revoke-session, which takes a token', async () => {
@@ -554,56 +642,64 @@ describe('csrf', () => {
 
 describe('mail abuse limits', () => {
   it('answers a resend inside the cooldown like any other, and still sends nothing', async () => {
-    const h = await createHarness({
-      mailLimits: {
-        perRecipient: { max: 100, windowMs: 3_600_000 },
-        verificationCooldown: { max: 1, windowMs: 60_000 },
-        perIpSignup: { max: 100, windowMs: 3_600_000 },
-        global: { max: 1000, windowMs: 3_600_000 },
+    await withHarness(
+      {
+        mailLimits: {
+          perRecipient: { max: 100, windowMs: 3_600_000 },
+          verificationCooldown: { max: 1, windowMs: 60_000 },
+          perIpSignup: { max: 100, windowMs: 3_600_000 },
+          global: { max: 1000, windowMs: 3_600_000 },
+        },
       },
-    });
-    const cooled = nextEmail();
-    await signUp(h.app, cooled);
-    const unknown = nextEmail();
-    const mailsBefore = h.outbox.length;
+      async (h) => {
+        const cooled = nextEmail();
+        await signUp(h.app, cooled);
+        const unknown = nextEmail();
+        const mailsBefore = h.outbox.length;
 
-    const resend = async (email: string) => {
-      const start = performance.now();
-      const res = await h.app.inject({
-        method: 'POST',
-        url: '/api/auth/send-verification-email',
-        headers: jsonHeaders,
-        payload: { email, callbackURL: '/' },
-      });
-      const ms = performance.now() - start;
-      await h.settleMail();
-      return { res, ms };
-    };
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    onTestFinished(() => spy.mockRestore());
-    const cooledRes = await resend(cooled);
-    const logged = spy.mock.calls.map((c) => String(c[0]));
-    expect(logged).toEqual([expect.stringMatching(/^verification mail throttled, retry in \d+s$/)]);
-    const unknownRes = await resend(unknown);
-    expect(cooledRes.res.statusCode).toBe(200);
-    expect(unknownRes.res.statusCode).toBe(200);
-    expect(cooledRes.res.body).toBe(unknownRes.res.body);
-    expect(cooledRes.res.headers['retry-after']).toBeUndefined();
-    expect(h.outbox.length).toBe(mailsBefore);
-    expect(h.outbox.filter((m) => m.to === cooled)).toHaveLength(1);
+        const resend = async (email: string) => {
+          const start = performance.now();
+          const res = await h.app.inject({
+            method: 'POST',
+            url: '/api/auth/send-verification-email',
+            headers: jsonHeaders,
+            payload: { email, callbackURL: '/verify-email' },
+          });
+          const ms = performance.now() - start;
+          await h.settleMail();
+          return { res, ms };
+        };
+        const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        try {
+          const cooledRes = await resend(cooled);
+          const logged = spy.mock.calls.map((c) => String(c[0]));
+          expect(logged).toEqual([
+            expect.stringMatching(/^verification mail throttled, retry in \d+s$/),
+          ]);
+          const unknownRes = await resend(unknown);
+          expect(cooledRes.res.statusCode).toBe(200);
+          expect(unknownRes.res.statusCode).toBe(200);
+          expect(cooledRes.res.body).toBe(unknownRes.res.body);
+          expect(cooledRes.res.headers['retry-after']).toBeUndefined();
+          expect(h.outbox.length).toBe(mailsBefore);
+          expect(h.outbox.filter((m) => m.to === cooled)).toHaveLength(1);
 
-    const cooledMs: number[] = [];
-    const unknownMs: number[] = [];
-    for (let i = 0; i < 5; i++) {
-      cooledMs.push((await resend(cooled)).ms);
-      unknownMs.push((await resend(nextEmail())).ms);
-    }
-    // Better Auth pads send-verification-email to MINIMUM_MS (500 ms, email-verification.mjs),
-    // which masks small differences, so only a leak beyond the pad is observable here.
-    expect(median(cooledMs)).toBeLessThan(560);
-    expect(median(unknownMs)).toBeLessThan(560);
-    expect(h.outbox.length).toBe(mailsBefore);
-    await h.close();
+          const cooledMs: number[] = [];
+          const unknownMs: number[] = [];
+          for (let i = 0; i < 5; i++) {
+            cooledMs.push((await resend(cooled)).ms);
+            unknownMs.push((await resend(nextEmail())).ms);
+          }
+          // Better Auth pads send-verification-email to MINIMUM_MS (500 ms, email-verification.mjs),
+          // which masks small differences, so only a leak beyond the pad is observable here.
+          expect(median(cooledMs)).toBeLessThan(560);
+          expect(median(unknownMs)).toBeLessThan(560);
+          expect(h.outbox.length).toBe(mailsBefore);
+        } finally {
+          spy.mockRestore();
+        }
+      },
+    );
   }, 20_000);
 
   it('does not make a resend wait on SMTP for a known address', async () => {
@@ -615,14 +711,14 @@ describe('mail abuse limits', () => {
       method: 'POST',
       url: '/api/auth/send-verification-email',
       headers: jsonHeaders,
-      payload: { email, callbackURL: '/' },
+      payload: { email, callbackURL: '/verify-email' },
     });
     expect(res.statusCode).toBe(200);
     const stranger = await h.app.inject({
       method: 'POST',
       url: '/api/auth/send-verification-email',
       headers: jsonHeaders,
-      payload: { email: nextEmail(), callbackURL: '/' },
+      payload: { email: nextEmail(), callbackURL: '/verify-email' },
     });
     expect(res.body).toBe(stranger.body);
     await held.sendStarted;
@@ -648,7 +744,7 @@ describe('mail abuse limits', () => {
         method: 'POST',
         url: '/api/auth/send-verification-email',
         headers: jsonHeaders,
-        payload: { email, callbackURL: '/' },
+        payload: { email, callbackURL: '/verify-email' },
       });
     }
     expect(h.outbox.filter((m) => m.to === email)).toHaveLength(2);
@@ -762,22 +858,30 @@ describe('mail abuse limits', () => {
 
   it('stops all mail at the global cap and logs it once', async () => {
     const logs: string[] = [];
+    // The mailer binds console.error when it is built, so the spy must exist before the harness.
     const spy = vi.spyOn(console, 'error').mockImplementation((m: unknown) => {
       logs.push(String(m));
     });
-    const h = await createHarness({
-      mailLimits: {
-        perRecipient: { max: 100, windowMs: 3_600_000 },
-        verificationCooldown: { max: 100, windowMs: 1000 },
-        perIpSignup: { max: 100, windowMs: 3_600_000 },
-        global: { max: 3, windowMs: 3_600_000 },
-      },
-    });
-    for (let i = 0; i < 6; i++) {
-      await signUp(h.app, nextEmail(), { 'x-forwarded-for': `203.0.113.${i + 1}` });
+    try {
+      await withHarness(
+        {
+          mailLimits: {
+            perRecipient: { max: 100, windowMs: 3_600_000 },
+            verificationCooldown: { max: 100, windowMs: 1000 },
+            perIpSignup: { max: 100, windowMs: 3_600_000 },
+            global: { max: 3, windowMs: 3_600_000 },
+          },
+        },
+        async (h) => {
+          for (let i = 0; i < 6; i++) {
+            await signUp(h.app, nextEmail(), { 'x-forwarded-for': `203.0.113.${i + 1}` });
+          }
+          expect(h.outbox).toHaveLength(3);
+        },
+      );
+    } finally {
+      spy.mockRestore();
     }
-    spy.mockRestore();
-    expect(h.outbox).toHaveLength(3);
     const capLogs = logs.filter((m) => m.includes('mail_global_cap_reached'));
     expect(capLogs).toHaveLength(1);
     expect(JSON.parse(capLogs[0] ?? '')).toEqual({
@@ -788,7 +892,6 @@ describe('mail abuse limits', () => {
       windowSeconds: 3600,
       retryAfterSeconds: expect.any(Number),
     });
-    await h.close();
   });
 
   it('spends the global budget on a reset for an unknown address like on a known one (#199)', async () => {
@@ -815,7 +918,7 @@ describe('mail abuse limits', () => {
           method: 'POST',
           url: '/api/auth/request-password-reset',
           headers: jsonHeaders,
-          payload: { email: target, redirectTo: '/' },
+          payload: { email: target, redirectTo: '/reset-password' },
         });
         await h.settleMail();
         const attacker = nextEmail();
@@ -918,7 +1021,7 @@ describe('mail abuse limits', () => {
         method: 'POST',
         url: '/api/auth/request-password-reset',
         headers: { ...jsonHeaders, 'x-forwarded-for': ip },
-        payload: { email, redirectTo: '/' },
+        payload: { email, redirectTo: '/reset-password' },
       });
 
     it('refuses an IP past its limit while the cap is spent, and keeps refusing after a restart', async () => {
@@ -1030,7 +1133,7 @@ describe('mail abuse limits', () => {
         method: 'POST',
         url: '/api/auth/request-password-reset',
         headers: jsonHeaders,
-        payload: { email, redirectTo: '/' },
+        payload: { email, redirectTo: '/reset-password' },
       });
       expect(res.statusCode).toBe(200);
       await h.settleMail();
@@ -1068,13 +1171,14 @@ describe('mail abuse limits', () => {
       },
     });
     const known = nextEmail();
-    await h.app.inject({
+    const setup = await h.app.inject({
       method: 'POST',
       url: '/api/auth/sign-up/email',
       remoteAddress: '127.0.0.1',
       headers: { ...jsonHeaders, 'x-forwarded-for': '203.0.113.1' },
       payload: { email: known, password: PASSWORD, name: 'Tester' },
     });
+    expect(setup.statusCode).toBe(200);
     const sequence = async (
       ip: string,
       url: string,
@@ -1096,8 +1200,8 @@ describe('mail abuse limits', () => {
     };
     for (const [n, [url, redirect]] of (
       [
-        ['/api/auth/send-verification-email', { callbackURL: '/' }],
-        ['/api/auth/request-password-reset', { redirectTo: '/' }],
+        ['/api/auth/send-verification-email', { callbackURL: '/verify-email' }],
+        ['/api/auth/request-password-reset', { redirectTo: '/reset-password' }],
       ] as const
     ).entries()) {
       const forKnown = await sequence(`203.0.113.${10 + n}`, url, known, redirect);
@@ -1109,13 +1213,16 @@ describe('mail abuse limits', () => {
   });
 
   it('refuses mail instead of sending it unmetered when the limiter store fails', async () => {
-    const h = await createHarness();
-    await h.database.pool.query('drop table mail_limit_hits');
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    await signUp(h.app, nextEmail());
-    spy.mockRestore();
-    expect(h.outbox).toHaveLength(0);
-    await h.close();
+    await withHarness(undefined, async (h) => {
+      await h.database.pool.query('drop table mail_limit_hits');
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      try {
+        await signUp(h.app, nextEmail());
+      } finally {
+        spy.mockRestore();
+      }
+      expect(h.outbox).toHaveLength(0);
+    });
   });
 
   it('ignores a spoofed x-forwarded-for from an untrusted peer', async () => {
@@ -1251,18 +1358,132 @@ describe('input and origin checks', () => {
     expect(res.statusCode).toBe(403);
   });
 
-  it.each(['https://evil.example/', '//evil.example/', '/\\evil.example'])(
-    'rejects callbackURL %s',
-    async (callbackURL) => {
+  describe('pins the mail-link redirects (#331)', () => {
+    const BAD = [
+      '/credits',
+      '/',
+      '',
+      `${APP_ORIGIN}/credits`,
+      `${APP_ORIGIN}/reset-password`,
+      `${APP_ORIGIN}/verify-email`,
+      'https://evil.example/',
+      '//evil.example',
+      '//evil.example/reset-password',
+      '/\\evil.example',
+      '\\\\evil.example',
+      '/reset-password/../credits',
+      '/%72eset-password',
+      '/%76erify-email',
+      '/reset-password/',
+      '/verify-email/',
+      '/reset-password?x=1',
+      '/Reset-Password',
+      '/verify-email#x',
+    ];
+    const ENDPOINTS = [
+      ['/api/auth/request-password-reset', 'redirectTo', '/reset-password'],
+      ['/api/auth/send-verification-email', 'callbackURL', '/verify-email'],
+      ['/api/auth/sign-up/email', 'callbackURL', '/verify-email'],
+      ['/api/auth/sign-in/email', 'callbackURL', '/verify-email'],
+    ] as const;
+    const cases = ENDPOINTS.flatMap(([url, field, allowed]) =>
+      BAD.map((value) => [url, field, allowed, value] as const),
+    );
+
+    it.each(cases)('%s rejects %s=%j with 400 and sends no mail', async (url, field, _a, value) => {
+      const email = nextEmail();
+      const before = h.outbox.length;
       const res = await h.app.inject({
         method: 'POST',
-        url: '/api/auth/sign-up/email',
+        url,
         headers: jsonHeaders,
-        payload: { email: nextEmail(), password: PASSWORD, name: 'Cb', callbackURL },
+        payload: {
+          email,
+          ...(url.includes('/sign-') ? { password: PASSWORD, name: 'Cb' } : {}),
+          [field]: value,
+        },
       });
-      expect(res.statusCode).toBe(403);
-    },
-  );
+      await h.settleMail();
+      expect(res.statusCode).toBe(400);
+      expect(apiErrorSchema.parse(res.json()).error.code).toBe('validation_failed');
+      expect(res.body).toContain(field);
+      expect(h.outbox).toHaveLength(before);
+    });
+
+    it('puts only the pinned reset path in the reset mail', async () => {
+      const email = nextEmail();
+      expect((await signUp(h.app, email)).statusCode).toBe(200);
+      await h.settleMail();
+      await verifyFrom(h, email);
+      const res = await h.app.inject({
+        method: 'POST',
+        url: '/api/auth/request-password-reset',
+        headers: jsonHeaders,
+        payload: { email, redirectTo: '/reset-password' },
+      });
+      await h.settleMail();
+      expect(res.statusCode).toBe(200);
+      const mail = h.outbox.filter((m) => m.to === email).at(-1);
+      expect(mail?.text).toContain('callbackURL=%2Freset-password');
+    });
+
+    it('puts only the pinned verify path in the sign-up and resend mails', async () => {
+      const email = nextEmail();
+      expect((await signUp(h.app, email)).statusCode).toBe(200);
+      await h.settleMail();
+      expect(h.outbox.find((m) => m.to === email)?.text).toContain('callbackURL=%2Fverify-email');
+      const resend = await h.app.inject({
+        method: 'POST',
+        url: '/api/auth/send-verification-email',
+        headers: jsonHeaders,
+        payload: { email, callbackURL: '/verify-email' },
+      });
+      await h.settleMail();
+      expect(resend.statusCode).toBe(200);
+      expect(h.outbox.filter((m) => m.to === email).at(-1)?.text).toContain(
+        'callbackURL=%2Fverify-email',
+      );
+    });
+
+    it('still accepts a request that omits the field', async () => {
+      const res = await h.app.inject({
+        method: 'POST',
+        url: '/api/auth/request-password-reset',
+        headers: jsonHeaders,
+        payload: { email: nextEmail() },
+      });
+      expect(res.statusCode).toBe(200);
+    });
+
+    it('defaults an omitted redirectTo to the pinned reset page', async () => {
+      const email = nextEmail();
+      expect((await signUp(h.app, email)).statusCode).toBe(200);
+      await h.settleMail();
+      await verifyFrom(h, email);
+      const res = await h.app.inject({
+        method: 'POST',
+        url: '/api/auth/request-password-reset',
+        headers: jsonHeaders,
+        payload: { email },
+      });
+      await h.settleMail();
+      expect(res.statusCode).toBe(200);
+      const mail = h.outbox.filter((m) => m.to === email).at(-1);
+      expect(mail?.text).toContain('callbackURL=%2Freset-password');
+    });
+
+    it('pins the verify path in the mail for a re-sign-up on an unverified address', async () => {
+      const email = nextEmail();
+      expect((await signUp(h.app, email)).statusCode).toBe(200);
+      await h.settleMail();
+      const before = h.outbox.filter((m) => m.to === email).length;
+      expect((await signUp(h.app, email)).statusCode).toBe(200);
+      await h.settleMail();
+      const mails = h.outbox.filter((m) => m.to === email);
+      expect(mails.length).toBeGreaterThan(before);
+      expect(mails.at(-1)?.text).toContain('callbackURL=%2Fverify-email');
+    });
+  });
 });
 
 describe('auth proxy path rules cannot be dodged with dot segments (#199)', () => {
@@ -1300,7 +1521,7 @@ describe('auth proxy path rules cannot be dodged with dot segments (#199)', () =
     try {
       await h.app.listen({ port: 0, host: '127.0.0.1' });
       const { port } = h.app.server.address() as AddressInfo;
-      const body = JSON.stringify({ email: nextEmail(), redirectTo: '/' });
+      const body = JSON.stringify({ email: nextEmail(), redirectTo: '/reset-password' });
       expect(await rawPost(port, path, body)).toBe(404);
       expect(await rawPost(port, '/api/auth/request-password-reset', body)).toBe(200);
       expect(await rawPost(port, '/api/auth/request-password-reset', body)).toBe(429);
@@ -1316,7 +1537,7 @@ describe('password reset request does not reveal the account (#161)', () => {
       method: 'POST',
       url: '/api/auth/request-password-reset',
       headers: jsonHeaders,
-      payload: { email, redirectTo: '/' },
+      payload: { email, redirectTo: '/reset-password' },
     });
 
   const observable = (res: LightMyRequestResponse) => {

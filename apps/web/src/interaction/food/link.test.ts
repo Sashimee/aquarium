@@ -14,12 +14,7 @@ const env: FoodEnvironment = {
 function setup(bridge: FoodBridge) {
   const field = new FoodField(env, () => 0.5);
   const onEaten = vi.fn();
-  const link = new FoodLink(
-    field,
-    bridge,
-    sceneToSim(() => 0.05),
-    onEaten,
-  );
+  const link = new FoodLink(field, bridge, sceneToSim, onEaten);
   return { field, link, onEaten };
 }
 
@@ -61,6 +56,25 @@ describe('FoodLink', () => {
       { fishId: 'f1', portion: 0.3 },
       { fishId: 'f2', portion: 0.2 },
     ]);
+  });
+
+  it('keeps a nori sheet through partial bites and removes it once its portion is gone', () => {
+    const { field, link, onEaten } = setup({});
+    field.drop('nori', 0.5, 0, 0, 0);
+    expect(field.count).toBe(1);
+    const id = field.particles[0]?.id ?? -1;
+    link.handleAte([
+      { fishId: 'f1', foodId: id, portion: 0.01 },
+      { fishId: 'f2', foodId: id, portion: 0.01 },
+    ]);
+    expect(field.count).toBe(1);
+    expect(field.particles[0]?.eaten).toBeCloseTo(0.02, 9);
+    expect(onEaten).toHaveBeenCalledWith([
+      { fishId: 'f1', portion: 0.01 },
+      { fishId: 'f2', portion: 0.01 },
+    ]);
+    link.handleAte([{ fishId: 'f1', foodId: id, portion: 0.48 }]);
+    expect(field.count).toBe(0);
   });
 
   it('stays silent when nothing eaten is known', () => {

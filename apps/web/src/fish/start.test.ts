@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { Collider } from '@aquarium/shared';
 import type { Engine } from '../engine/Engine';
 import { EventBus, type EngineEvents } from '../engine/events';
 import type { InteractionEvents } from '../interaction/events';
 import type { SceneAnchor } from '../scene/anemone';
+import type { Collider as SceneCollider } from '../scene/colliders';
 import { FISH_1, FISH_2, TANK_A, fishFixture } from '../sync/fixtures';
 import type { FishBite, PickRay, TankEvent } from './start';
 
@@ -13,7 +15,10 @@ class FakeFishSystem {
   /** Tank event types and `anchors` calls, in arrival order. */
   readonly log: string[] = [];
   readonly anchors: (readonly SceneAnchor[])[] = [];
+  readonly colliders: (readonly Collider[])[] = [];
   disposed = false;
+  /** What `synced()` hands out; resolve it to finish loading the stock handed in. */
+  sync: Promise<void> = Promise.resolve();
   private ate: ((events: readonly FishBite[]) => void) | null = null;
 
   handle(event: TankEvent): void {
@@ -23,6 +28,9 @@ class FakeFishSystem {
   setAnchors(anchors: readonly SceneAnchor[]): void {
     this.anchors.push(anchors);
     this.log.push('anchors');
+  }
+  setColliders(colliders: readonly Collider[]): void {
+    this.colliders.push(colliders);
   }
   onAte(listener: (events: readonly FishBite[]) => void): () => void {
     this.ate = listener;
@@ -41,6 +49,9 @@ class FakeFishSystem {
   }
   netTap(ray: PickRay): void {
     this.taps.push(ray);
+  }
+  synced(): Promise<void> {
+    return this.sync;
   }
   dispose(): void {
     this.disposed = true;
@@ -104,6 +115,22 @@ afterEach(() => {
 });
 
 describe('queueTankEvents', () => {
+  it('tells whether a saved tank is coming from the first tank:loaded or tank:none', async () => {
+    const interaction = new EventBus<InteractionEvents>();
+    const saved = queueTankEvents(interaction);
+    interaction.emit('tank:loaded', {
+      tankId: TANK_A,
+      biome: 'freshwater',
+      decorLayout: [],
+      fish: [],
+    });
+    interaction.emit('tank:none', {});
+    await expect(saved.stock).resolves.toBe('saved');
+    const none = queueTankEvents(interaction);
+    interaction.emit('tank:none', {});
+    await expect(none.stock).resolves.toBe('none');
+  });
+
   it('buffers events until drained, then passes each later one straight on', () => {
     const interaction = new EventBus<InteractionEvents>();
     const queue = queueTankEvents(interaction);
@@ -238,6 +265,74 @@ describe('startFish', () => {
     expect(fish.anchors).toEqual([latest, first]);
   });
 
+  it('holds scene and decor colliders until the fish are up, then sends them as one list', async () => {
+    const fish = new FakeFishSystem();
+    const pending = deferred<FakeFishSystem>();
+    const { handle, interaction } = setup(pending.promise);
+    const plant: SceneCollider = {
+      kind: 'capsule',
+      hard: false,
+      a: [0, 0.1, 0],
+      b: [0, 0.3, 0],
+      radius: 0.02,
+    };
+    const wood: SceneCollider = { ...plant, hard: true, a: [0.2, 0.12, 0], b: [0.4, 0.12, 0] };
+    handle.setSceneColliders([plant, wood]);
+    pending.resolve(fish);
+    await flush();
+    expect(fish.colliders.map((list) => list.map((c) => c.id))).toEqual([['scene:0', 'scene:1']]);
+
+    interaction.emit('decor:colliders', {
+      colliders: [
+        {
+          id: 'decor:p1',
+          solid: true,
+          shape: { kind: 'capsule', a: [0.2, 0.15, 0], b: [0.4, 0.15, 0], radius: 0.03 },
+        },
+      ],
+    });
+    expect(fish.colliders.at(-1)?.map((c) => c.id)).toEqual(['scene:0', 'decor:p1']);
+    handle.setSceneColliders([]);
+    expect(fish.colliders.at(-1)).toEqual([]);
+    handle.stop();
+  });
+
+  it('reports colliders the sim would reject and keeps the last good ones', async () => {
+    const fish = new FakeFishSystem();
+    const { handle, interaction, errors } = setup(Promise.resolve(fish));
+    await flush();
+    const piece = {
+      id: 'decor:p1',
+      solid: true,
+      shape: { kind: 'sphere' as const, center: [0, 0.2, 0] as const, radius: 0.05 },
+    };
+    interaction.emit('decor:colliders', { colliders: [piece] });
+    interaction.emit('decor:colliders', { colliders: [piece, piece] });
+    expect(errors).toEqual(['Fish keep their previous obstacles: the new colliders are invalid']);
+    expect(fish.colliders.map((list) => list.map((c) => c.id))).toEqual([[], ['decor:p1']]);
+    handle.stop();
+    interaction.emit('decor:colliders', { colliders: [] });
+    expect(fish.colliders).toHaveLength(2);
+  });
+
+  it("clears the old tank's obstacles when the new scene's colliders are broken", async () => {
+    const fish = new FakeFishSystem();
+    const { handle, errors } = setup(Promise.resolve(fish));
+    await flush();
+    const plant: SceneCollider = {
+      kind: 'capsule',
+      hard: false,
+      a: [0.1, 0.1, 0],
+      b: [0.1, 0.3, 0],
+      radius: 0.02,
+    };
+    handle.setSceneColliders([plant]);
+    handle.setSceneColliders([{ ...plant, radius: -1 }]);
+    expect(errors).toEqual(["Fish swim without obstacles: the new scene's colliders are invalid"]);
+    expect(fish.colliders.map((list) => list.map((c) => c.id))).toEqual([[], ['scene:0'], []]);
+    handle.stop();
+  });
+
   it('passes bites to listeners that subscribed before the fish were up', async () => {
     const fish = new FakeFishSystem();
     const { handle } = setup(Promise.resolve(fish));
@@ -283,6 +378,100 @@ describe('startFish', () => {
     await flush();
     expect(errors).toEqual(['Fish failed to start']);
     interaction.emit('tank:unloaded', { tankId: TANK_A, reason: 'switch' });
+  });
+
+  it('settles once the fish are up and the session has no saved tank', async () => {
+    const pending = deferred<FakeFishSystem>();
+    const { handle, interaction } = setup(pending.promise);
+    let settled = false;
+    void handle.settled.then(() => (settled = true));
+    pending.resolve(new FakeFishSystem());
+    await flush();
+    expect(settled).toBe(false);
+    interaction.emit('tank:none', {});
+    await flush();
+    expect(settled).toBe(true);
+  });
+
+  it("waits for a saved tank's own fish before settling", async () => {
+    const fish = new FakeFishSystem();
+    const loading = deferred<undefined>();
+    fish.sync = loading.promise;
+    const { handle } = setup(Promise.resolve(fish), (interaction) => {
+      interaction.emit('tank:loaded', {
+        tankId: TANK_A,
+        biome: 'freshwater',
+        decorLayout: [],
+        fish: [fishFixture(FISH_1)],
+      });
+    });
+    let settled = false;
+    void handle.settled.then(() => (settled = true));
+    await flush();
+    expect(fish.handled.map((e) => e.type)).toEqual(['tank:loaded']);
+    expect(settled).toBe(false);
+    loading.resolve(undefined);
+    await flush();
+    expect(settled).toBe(true);
+  });
+
+  it('waits for a saved tank that loads after the fish are up', async () => {
+    const fish = new FakeFishSystem();
+    const loading = deferred<undefined>();
+    const { handle, interaction } = setup(Promise.resolve(fish));
+    let settled = false;
+    void handle.settled.then(() => (settled = true));
+    await flush();
+    fish.sync = loading.promise;
+    interaction.emit('tank:loaded', {
+      tankId: TANK_A,
+      biome: 'freshwater',
+      decorLayout: [],
+      fish: [fishFixture(FISH_1)],
+    });
+    await flush();
+    expect(settled).toBe(false);
+    loading.resolve(undefined);
+    await flush();
+    expect(settled).toBe(true);
+  });
+
+  it('settles on stop while waiting for the stock', async () => {
+    const fish = new FakeFishSystem();
+    fish.sync = new Promise(() => undefined);
+    const { handle, interaction } = setup(Promise.resolve(fish));
+    let settled = false;
+    void handle.settled.then(() => (settled = true));
+    await flush();
+    handle.stop();
+    await flush();
+    expect(settled).toBe(true);
+    interaction.emit('tank:none', {});
+  });
+
+  it('settles on stop while the saved tank is still loading', async () => {
+    const fish = new FakeFishSystem();
+    fish.sync = new Promise(() => undefined);
+    const { handle } = setup(Promise.resolve(fish), (interaction) => {
+      interaction.emit('tank:loaded', {
+        tankId: TANK_A,
+        biome: 'freshwater',
+        decorLayout: [],
+        fish: [fishFixture(FISH_1)],
+      });
+    });
+    let settled = false;
+    void handle.settled.then(() => (settled = true));
+    await flush();
+    expect(settled).toBe(false);
+    handle.stop();
+    await flush();
+    expect(settled).toBe(true);
+  });
+
+  it('settles after a failed start too', async () => {
+    const { handle } = setup(Promise.reject(new Error('no WebGPU')));
+    await expect(handle.settled).resolves.toBeUndefined();
   });
 
   it('reports nothing when stopped while still loading', async () => {

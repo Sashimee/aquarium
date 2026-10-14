@@ -20,8 +20,19 @@ export const decorItemSchema = z.strictObject({
     .max(Math.PI * 2)
     .default(0),
   scale: z.number().min(0.01).max(10).default(1),
+  tintSeed: z.number().int().min(0).max(0xffffffff).optional().describe('stable colour seed'),
 });
 export type DecorItem = z.infer<typeof decorItemSchema>;
+
+// FNV-1a over the placement, matching the web's former coral placement key, so rows saved before
+// tintSeed existed keep the colour they already show.
+export function legacyTintSeed(item: Pick<DecorItem, 'position' | 'rotationY'>): number {
+  let h = 2166136261;
+  for (const v of [...item.position, item.rotationY]) {
+    h = Math.imul(h ^ Math.round(v * 1000), 16777619) >>> 0;
+  }
+  return h;
+}
 
 export const decorLayoutSchema = z.array(decorItemSchema).max(200);
 export type DecorLayout = z.infer<typeof decorLayoutSchema>;
