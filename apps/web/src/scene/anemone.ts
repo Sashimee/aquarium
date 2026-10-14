@@ -25,7 +25,8 @@ const TWO_PI = Math.PI * 2;
 
 /**
  * The scene point a species is drawn to, in the frame the scene and sim share. `FishSystem`
- * clamps it into the water, puts it in the `SimWorldSpec`, and re-sends it to each new sim world.
+ * puts it in the `SimWorldSpec` and re-sends it to each new sim world, after `sceneAnchorsToSim`
+ * (`fish/demoStock.ts`) clamps it into the water.
  */
 export interface SceneAnchor {
   readonly id: string;
