@@ -103,7 +103,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
   let gate: Promise<void> = Promise.resolve();
   let onSend: () => void = () => {};
   let held = false;
-  let releaseHeld: () => void = () => {};
+  const releasers = new Set<() => void>();
   const transport = nodemailer.createTransport({
     name: 'test',
     version: '0',
@@ -221,7 +221,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
         };
       });
       gate.catch(() => {});
-      releaseHeld = release;
+      releasers.add(release);
       const sendStarted = new Promise<void>((resolve) => (onSend = resolve));
       return { sendStarted, release, fail };
     },
@@ -230,16 +230,20 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     },
     dropDatabase: testDb.drop,
     async close() {
-      releaseHeld();
+      for (const release of releasers) release();
       const failures: unknown[] = [];
-      for (const step of [() => app.close(), () => database.close()]) {
+      for (const step of [
+        () => Promise.allSettled([...background]),
+        () => app.close(),
+        () => database.close(),
+        () => testDb.drop(),
+      ]) {
         try {
           await step();
         } catch (err) {
           failures.push(err);
         }
       }
-      await testDb.drop();
       if (failures.length > 0) throw failures[0];
     },
   };

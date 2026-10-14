@@ -99,8 +99,8 @@ async function verifiedSession(h: Harness, email = nextEmail()) {
 const SLOW_MAIL_MS = 120;
 
 // The timing tests make hundreds of sign-ups, each ~0.3 s on a host at load ~11 (the first took 67 s),
-// so a 120 s budget was exceeded by a busy full-suite run. This only guards against a hang.
-const TIMING_TEST_TIMEOUT_MS = 600_000;
+// so a 120 s budget was exceeded by a busy full-suite run, and the mail-delay waits add to it. This only guards against a hang; two hung tests at 300 s stay under the 20 min job timeout.
+const TIMING_TEST_TIMEOUT_MS = 300_000;
 
 describe('timing skew bound', () => {
   it('flags a repeat that skips the mail send against a slow mailer', () => {
@@ -363,7 +363,7 @@ describe('unverified sign-up takeover (#114)', () => {
         [email],
       );
       await requestReset(email);
-      await resetPassword(email, VICTIM_PASSWORD);
+      expect((await resetPassword(email, VICTIM_PASSWORD)).statusCode).toBe(200);
       const row = await h.database.pool.query(
         'select u.email_verified, (select count(*) from session s where s.user_id = u.id) as sessions from "user" u where email = $1',
         [email],
@@ -1653,7 +1653,7 @@ describe('password reset request does not reveal the account (#161)', () => {
   });
 });
 
-describe('auth proxy invalid upstream body (#383)', () => {
+describe('auth proxy invalid upstream body (#389)', () => {
   const lines: string[] = [];
   let h: Harness;
   beforeAll(async () => {
