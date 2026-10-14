@@ -1,6 +1,6 @@
 import { apiErrorSchema, sessionListSchema, userSchema } from '@aquarium/shared';
 import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
-import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import nodemailer from 'nodemailer';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -644,30 +644,35 @@ describe('mail abuse limits', () => {
       return { res, ms };
     };
     const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    onTestFinished(() => spy.mockRestore());
-    const cooledRes = await resend(cooled);
-    const logged = spy.mock.calls.map((c) => String(c[0]));
-    expect(logged).toEqual([expect.stringMatching(/^verification mail throttled, retry in \d+s$/)]);
-    const unknownRes = await resend(unknown);
-    expect(cooledRes.res.statusCode).toBe(200);
-    expect(unknownRes.res.statusCode).toBe(200);
-    expect(cooledRes.res.body).toBe(unknownRes.res.body);
-    expect(cooledRes.res.headers['retry-after']).toBeUndefined();
-    expect(h.outbox.length).toBe(mailsBefore);
-    expect(h.outbox.filter((m) => m.to === cooled)).toHaveLength(1);
+    try {
+      const cooledRes = await resend(cooled);
+      const logged = spy.mock.calls.map((c) => String(c[0]));
+      expect(logged).toEqual([
+        expect.stringMatching(/^verification mail throttled, retry in \d+s$/),
+      ]);
+      const unknownRes = await resend(unknown);
+      expect(cooledRes.res.statusCode).toBe(200);
+      expect(unknownRes.res.statusCode).toBe(200);
+      expect(cooledRes.res.body).toBe(unknownRes.res.body);
+      expect(cooledRes.res.headers['retry-after']).toBeUndefined();
+      expect(h.outbox.length).toBe(mailsBefore);
+      expect(h.outbox.filter((m) => m.to === cooled)).toHaveLength(1);
 
-    const cooledMs: number[] = [];
-    const unknownMs: number[] = [];
-    for (let i = 0; i < 5; i++) {
-      cooledMs.push((await resend(cooled)).ms);
-      unknownMs.push((await resend(nextEmail())).ms);
+      const cooledMs: number[] = [];
+      const unknownMs: number[] = [];
+      for (let i = 0; i < 5; i++) {
+        cooledMs.push((await resend(cooled)).ms);
+        unknownMs.push((await resend(nextEmail())).ms);
+      }
+      // Better Auth pads send-verification-email to MINIMUM_MS (500 ms, email-verification.mjs),
+      // which masks small differences, so only a leak beyond the pad is observable here.
+      expect(median(cooledMs)).toBeLessThan(560);
+      expect(median(unknownMs)).toBeLessThan(560);
+      expect(h.outbox.length).toBe(mailsBefore);
+    } finally {
+      spy.mockRestore();
+      await h.close();
     }
-    // Better Auth pads send-verification-email to MINIMUM_MS (500 ms, email-verification.mjs),
-    // which masks small differences, so only a leak beyond the pad is observable here.
-    expect(median(cooledMs)).toBeLessThan(560);
-    expect(median(unknownMs)).toBeLessThan(560);
-    expect(h.outbox.length).toBe(mailsBefore);
-    await h.close();
   }, 20_000);
 
   it('does not make a resend wait on SMTP for a known address', async () => {
