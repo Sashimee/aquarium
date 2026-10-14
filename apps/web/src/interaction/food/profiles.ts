@@ -68,7 +68,7 @@ export const FOOD_PROFILES: Readonly<Record<FoodType, FoodProfile>> = {
     currentGain: 0.5,
     maxDriftS: 0.09,
     decayS: 420,
-    radius: 0.011,
+    radius: 0.03,
   },
   'algae-wafer': {
     particlesPerPortion: 1,

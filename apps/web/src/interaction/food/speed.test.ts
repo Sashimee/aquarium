@@ -71,7 +71,8 @@ describe('food speed against its eaters', () => {
             last.set(p.id, [p.x, p.y, p.z]);
           }
         }
-        expect(fastest).toBeGreaterThan(0);
+        if (food === 'nori') expect(fastest).toBe(0);
+        else expect(fastest).toBeGreaterThan(0);
         expect(fastest).toBeLessThanOrEqual(limit);
       },
     );

@@ -11,7 +11,7 @@ import {
   type Texture,
   type WebGPURenderer,
 } from 'three/webgpu';
-import type { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
+import type { Ktx2Textures } from './ktx2';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { ASSET_BASE } from '../scene/assets';
 
@@ -60,7 +60,7 @@ export interface RoomLighting {
  */
 export function installRoomLighting(
   renderer: WebGPURenderer,
-  ktx2: KTX2Loader,
+  ktx2: Ktx2Textures,
   scene: Scene,
   hdriUrl: string,
   onError: (message: string, cause: unknown) => void,

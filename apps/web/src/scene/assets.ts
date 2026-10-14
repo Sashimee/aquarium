@@ -11,7 +11,7 @@ import {
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { rewritingKtx2Loader } from '../engine/ktx2';
+import { rewritingKtx2Loader, type Ktx2Textures } from '../engine/ktx2';
 
 export const ASSET_BASE = `${import.meta.env.BASE_URL}assets/`;
 
@@ -116,7 +116,7 @@ export class ModelLibrary {
 
   /** `ktx2` is the renderer's shared loader; the library never disposes it. */
   constructor(
-    ktx2: KTX2Loader,
+    ktx2: Ktx2Textures,
     readonly catalog: AssetCatalog,
   ) {
     this.ktx2 = rewritingKtx2Loader(ktx2, (url) => materialTextureUrl(url, this.textureSize));
@@ -253,6 +253,20 @@ export class ModelLibrary {
       if (result.status === 'fulfilled') collectResources(result.value, resources);
     }
     for (const resource of resources) resource.dispose();
+    await this.pruneCollision(keep);
+  }
+
+  private async pruneCollision(keep: ReadonlySet<string>): Promise<void> {
+    const files = new Set([...keep].map((key) => key.slice(0, key.lastIndexOf('@'))));
+    const stale = [...this.collision].filter(([assetId]) => {
+      const { lods } = this.catalog.get(assetId);
+      return !lods.some((lod) => files.has(lod.file));
+    });
+    for (const [assetId] of stale) this.collision.delete(assetId);
+    const settled = await Promise.allSettled(stale.map(([, pending]) => pending));
+    for (const result of settled) {
+      if (result.status === 'fulfilled') for (const geometry of result.value) geometry.dispose();
+    }
   }
 
   /** Frees one texture loaded through `loadTexture`. */

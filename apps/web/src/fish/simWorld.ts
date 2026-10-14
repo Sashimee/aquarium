@@ -1,5 +1,5 @@
 import type { Collider } from '@aquarium/shared';
-import type { Anchor, FishSpawn, TankSpaceWorldConfig } from '@aquarium/sim';
+import type { Anchor, FishSpawn, SimReady, TankSpaceWorldConfig } from '@aquarium/sim';
 import type { SceneAnchor } from '../scene/anemone';
 import { sceneAnchorsToSim, type DemoTank } from './demoStock';
 import type { RosterFish } from './roster';
@@ -89,4 +89,42 @@ export function layoutChanges(
     remove: [...present].filter((id) => !keep.has(id)),
     add: wanted.filter((f) => !present.has(f.id)),
   };
+}
+
+/** The part of `SimClient` that brings up a world once its `init` has answered. */
+export interface WorldControls {
+  setLight(level: number): void;
+  setDecor(colliders: readonly Collider[]): void;
+  setAnchors(anchors: readonly Anchor[]): void;
+  start(): void;
+}
+
+export interface WorldStart {
+  /** False once the world being started was dropped, so it must not run. */
+  current(): boolean;
+  light(): number;
+  /** Runs before the world starts, so nothing it posts can arrive ahead of its layout. */
+  begin(ready: SimReady): void;
+}
+
+/**
+ * Starts the world `init` was asked to build from `config`. Light, colliders and homes that changed
+ * while it was starting reached neither the config nor the world, so they follow first. A world
+ * dropped before `init` answered is left unstarted.
+ */
+export async function startWorld(
+  sim: WorldControls,
+  spec: SimWorldSpec,
+  config: TankSpaceWorldConfig,
+  init: Promise<SimReady>,
+  hooks: WorldStart,
+): Promise<void> {
+  const ready = await init;
+  if (!hooks.current()) return;
+  sim.setLight(hooks.light());
+  const { decor, anchors } = spec.changedSince(config);
+  if (decor !== null) sim.setDecor(decor);
+  if (anchors !== null) sim.setAnchors(anchors);
+  hooks.begin(ready);
+  sim.start();
 }

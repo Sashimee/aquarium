@@ -21,6 +21,11 @@ export interface TierSettings {
   depthOfField: boolean;
   causticMethod: CausticMethod;
   causticLayers: 1 | 2;
+  /**
+   * Resolution scale of the scene reflected under the water surface; 0 traces only the walls and
+   * floor in the surface's shader.
+   */
+  surfaceReflection: number;
   /** Suspended particulates drifting in the water. */
   particleCount: number;
   /** Bubbles in the airstone column. */
@@ -40,6 +45,7 @@ export const TIER_SETTINGS: Readonly<Record<Tier, Readonly<TierSettings>>> = {
     depthOfField: false,
     causticMethod: 'texture',
     causticLayers: 1,
+    surfaceReflection: 0,
     particleCount: 150,
     bubbleCount: 12,
     fishLod: { midDistance: 0.6, impostorDistance: 1.6 },
@@ -55,6 +61,7 @@ export const TIER_SETTINGS: Readonly<Record<Tier, Readonly<TierSettings>>> = {
     depthOfField: true,
     causticMethod: 'procedural',
     causticLayers: 1,
+    surfaceReflection: 0,
     particleCount: 400,
     bubbleCount: 24,
     fishLod: { midDistance: 0.9, impostorDistance: 2.4 },
@@ -70,6 +77,7 @@ export const TIER_SETTINGS: Readonly<Record<Tier, Readonly<TierSettings>>> = {
     depthOfField: true,
     causticMethod: 'procedural',
     causticLayers: 2,
+    surfaceReflection: 0.5,
     particleCount: 900,
     bubbleCount: 40,
     fishLod: { midDistance: 1.4, impostorDistance: 3.5 },
@@ -85,6 +93,7 @@ export const TIER_SETTINGS: Readonly<Record<Tier, Readonly<TierSettings>>> = {
     depthOfField: true,
     causticMethod: 'procedural-dispersion',
     causticLayers: 2,
+    surfaceReflection: 0.5,
     particleCount: 1600,
     bubbleCount: 64,
     fishLod: { midDistance: 2, impostorDistance: 5 },
