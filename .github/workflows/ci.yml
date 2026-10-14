@@ -48,13 +48,23 @@ jobs:
       - run: pnpm run --if-present assets:check
 
   e2e-shard:
-    name: e2e shard ${{ matrix.shard }}/4
+    name: e2e shard ${{ matrix.name }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        include:
+          - name: menus-phone
+            args: menus.spec --grep=phone
+          - name: decor
+            args: decor.spec
+          - name: menus-mouse-death
+            args: menus.spec death.spec --grep=mouse\|starves
+          - name: switch-tanks-feed
+            args: tank-type-switch.spec tanks.spec feed.spec
+          - name: care-auth-reset
+            args: care.spec auth.spec password-reset.spec password-reset-history.spec
     services:
       postgres:
         image: postgres:17
@@ -81,13 +91,13 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm run e2e --shard=${{ matrix.shard }}/4
+      - run: pnpm run e2e ${{ matrix.args }}
         env:
           PLAYWRIGHT_BLOB_OUTPUT_DIR: ${{ github.workspace }}/blob-report
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
-          name: e2e-blob-${{ matrix.shard }}
+          name: e2e-blob-${{ matrix.name }}
           path: blob-report
           retention-days: 7
           if-no-files-found: ignore
@@ -126,6 +136,12 @@ jobs:
     if: ${{ always() }}
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@v4
+      - name: Every spec file is assigned to a shard
+        run: |
+          for f in e2e/*.spec.ts e2e/tests/*.spec.ts; do
+            grep -q "$(basename "$f" .ts)" .github/workflows/ci.yml || { echo "::error::$f is in no e2e shard; add it to the matrix in ci.yml"; exit 1; }
+          done
       - name: All e2e shards passed
         run: test "${{ needs.e2e-shard.result }}" = success
 
