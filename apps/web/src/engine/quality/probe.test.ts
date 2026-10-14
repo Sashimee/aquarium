@@ -83,7 +83,6 @@ describe('selectInitialTier', () => {
         refreshMs: TARGET,
       }).tier;
     expect(pick(TARGET)).toBe('medium');
-    // 30 fps meets the old 30 fps target, but medium cannot hold the 36 fps one.
     expect(pick(1000 / 30)).toBe('low');
     expect(pick(22)).toBe('medium');
   });
