@@ -181,7 +181,14 @@ function fishProblems(asset: OutputAsset, repoRoot: string, problems: string[]):
     problems.push(`${at}: debug render ${asset.fish.debugRender} is missing`);
   }
   const speciesLength = asset.species ? speciesLengthM(repoRoot, asset.species) : null;
-  if (speciesLength === null) return;
+  if (speciesLength === null) {
+    if (asset.fish.lengthSource === 'species-json') {
+      problems.push(
+        `${at}: built with lengthSource species-json but content/species/${asset.species}.json has no bodyLengthM (rebuild with pnpm build:assets)`,
+      );
+    }
+    return;
+  }
   const lengthFactor = FISH_RECIPES.find((r) => r.id === asset.id)?.lengthFactor ?? 1;
   const expectedLength = speciesLength * lengthFactor;
   if (asset.fish.lengthSource !== 'species-json') {

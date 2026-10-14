@@ -31,7 +31,9 @@ async function main(argv: string[]): Promise<number> {
       const modifications = derived.get(asset.id);
       if (modifications) asset.modifications = modifications;
     }
-    writeFileSync(path, `${JSON.stringify(raw, null, 2)}\n`);
+    const { format, resolveConfig } = await import('prettier');
+    const options = (await resolveConfig(path)) ?? {};
+    writeFileSync(path, await format(JSON.stringify(raw), { ...options, filepath: path }));
     return 0;
   }
   if (command === 'build') {

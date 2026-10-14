@@ -1,4 +1,4 @@
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -12,6 +12,8 @@ import {
 } from './index-schema.ts';
 import {
   aggregateSha256,
+  derivedModifications,
+  modificationProblems,
   validateManifest,
   type Manifest,
   type ManifestAsset,
@@ -270,6 +272,25 @@ describe('checkAssets', () => {
     );
   });
 
+  it('prefixes notes with the asset id when a source feeds several assets, and clears unused sources', () => {
+    const derivedOf = (modifications: string[], extra: ManifestAsset[] = []): Manifest =>
+      manifestOf(
+        manifestAsset({ id: 'src-a', licence: 'CC-BY-4.0', author: 'Ann', modifications }),
+        ...extra,
+      );
+    const one = { ...fishAsset(), licence: 'CC-BY-4.0', modifications: ['scaled'] };
+    const two = { ...one, id: 'other' };
+    const index = { ...inputFor([one, two]).index };
+    expect(derivedModifications(index, derivedOf([])).get('src-a')).toEqual([
+      'tetra: scaled',
+      'other: scaled',
+    ]);
+    const unused = derivedOf(['stale note']);
+    const none = { ...index, assets: [] };
+    expect(derivedModifications(none, unused).get('src-a')).toEqual([]);
+    expect(modificationProblems(none, unused)).toHaveLength(1);
+  });
+
   it('fails a CC-BY source that has no credit', () => {
     const manifest = manifestOf(manifestAsset({ licence: 'CC-BY-4.0' }));
     const asset = { ...fishAsset(), licence: 'CC-BY-4.0' };
@@ -450,29 +471,62 @@ describe('checkAssets', () => {
   });
 
   describe('species length', () => {
-    const guppyJson = resolve(REPO_ROOT, 'content', 'species', 'guppy.json');
+    const SPECIES_LENGTH = 0.04;
 
-    function withGuppy(fish: Partial<NonNullable<OutputAsset['fish']>>): OutputAsset {
+    function speciesFile(bodyLengthM: number | null): void {
+      const template = JSON.parse(
+        readFileSync(resolve(REPO_ROOT, 'content', 'species', 'guppy.json'), 'utf8'),
+      ) as { locomotion?: Record<string, unknown> };
+      if (bodyLengthM === null) delete template.locomotion;
+      else template.locomotion = { ...template.locomotion, bodyLengthM };
       mkdirSync(join(root, 'content', 'species'), { recursive: true });
-      copyFileSync(guppyJson, join(root, 'content', 'species', 'guppy.json'));
+      writeFileSync(join(root, 'content', 'species', 'guppy.json'), JSON.stringify(template));
+    }
+
+    function guppy(fish: Partial<NonNullable<OutputAsset['fish']>>, id = 'tetra'): OutputAsset {
       const base = fishAsset();
       if (!base.fish) throw new Error('fishAsset has no fish block');
-      return { ...base, species: 'guppy', fish: { ...base.fish, ...fish } };
+      return { ...base, id, species: 'guppy', fish: { ...base.fish, ...fish } };
+    }
+
+    function problemsFor(asset: OutputAsset): string {
+      return checkAssets(inputFor([asset])).join('\n');
     }
 
     it('fails a fish built from the recipe length once the species file has bodyLengthM', () => {
-      const asset = withGuppy({ lengthSource: 'recipe', standardLengthM: 0.027 });
-      expect(checkAssets(inputFor([asset])).join('\n')).toContain('lengthSource recipe');
+      speciesFile(SPECIES_LENGTH);
+      const asset = guppy({ lengthSource: 'recipe', standardLengthM: SPECIES_LENGTH });
+      expect(problemsFor(asset)).toContain('lengthSource recipe');
     });
 
     it('fails a fish whose standardLengthM differs from the species file', () => {
-      const asset = withGuppy({ lengthSource: 'species-json', standardLengthM: 0.03 });
-      expect(checkAssets(inputFor([asset])).join('\n')).toContain('differs from content/species');
+      speciesFile(SPECIES_LENGTH);
+      const asset = guppy({ lengthSource: 'species-json', standardLengthM: 0.05 });
+      expect(problemsFor(asset)).toContain('differs from content/species');
     });
 
     it('accepts a fish built at the species length', () => {
-      const asset = withGuppy({ lengthSource: 'species-json', standardLengthM: 0.027 });
-      expect(checkAssets(inputFor([asset])).join('\n')).not.toContain('bodyLengthM');
+      speciesFile(SPECIES_LENGTH);
+      const asset = guppy({ lengthSource: 'species-json', standardLengthM: SPECIES_LENGTH });
+      expect(problemsFor(asset)).not.toContain('bodyLengthM');
+    });
+
+    it('applies the recipe lengthFactor (guppy-male is 0.625 of the species length)', () => {
+      speciesFile(SPECIES_LENGTH);
+      const scaled = SPECIES_LENGTH * 0.625;
+      const good = guppy({ lengthSource: 'species-json', standardLengthM: scaled }, 'guppy-male');
+      expect(problemsFor(good)).not.toContain('bodyLengthM');
+      const unscaled = guppy(
+        { lengthSource: 'species-json', standardLengthM: SPECIES_LENGTH },
+        'guppy-male',
+      );
+      expect(problemsFor(unscaled)).toContain('differs from content/species');
+    });
+
+    it('fails a species-json fish whose species file lost bodyLengthM', () => {
+      speciesFile(null);
+      const asset = guppy({ lengthSource: 'species-json', standardLengthM: SPECIES_LENGTH });
+      expect(problemsFor(asset)).toContain('has no bodyLengthM');
     });
   });
 

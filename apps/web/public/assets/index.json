@@ -2876,7 +2876,6 @@
         "origin at the centre of the base, scaled so the longest edge is 0.25 m before cropping",
         "LOD0 capped at 20000 triangles, LOD1 and LOD2 simplified further",
         "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
-        "8192 px textures downscaled",
         "rock base slab cropped off"
       ],
       "bounds": {

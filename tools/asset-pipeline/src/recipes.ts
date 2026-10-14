@@ -171,7 +171,7 @@ export const ENVIRONMENT_RECIPES: EnvironmentRecipe[] = [
     maxTriangles: 20000,
     clipBelowFraction: 0.37,
     keepUncroppedScale: true,
-    modifications: ['8192 px textures downscaled', 'rock base slab cropped off'],
+    modifications: ['rock base slab cropped off'],
   },
   {
     id: 'acropora-palmata',

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import type { AssetIndex } from './index-schema.ts';
+import type { AssetIndex, OutputAsset } from './index-schema.ts';
 
 export const ALLOWED_LICENCES = ['CC0-1.0', 'CC-BY-3.0', 'CC-BY-4.0'] as const;
 export const SHARE_ALIKE_LICENCES = ['CC-BY-SA-3.0', 'CC-BY-SA-4.0'] as const;
@@ -161,19 +161,24 @@ export function validateManifest(manifest: Manifest, credits: string): string[] 
   return problems;
 }
 
-/** Union of the modifications of every built asset that derives from each credit-requiring source, in index order. */
+/** Modifications of every built asset deriving from each credit-requiring source, prefixed with the asset id when a source feeds several; empty for unused sources. */
 export function derivedModifications(index: AssetIndex, manifest: Manifest): Map<string, string[]> {
-  const needsCredit = new Set(
-    manifest.assets.filter((a) => requiresCredit(a.licence)).map((a) => a.id),
+  const users = new Map<string, OutputAsset[]>(
+    manifest.assets.filter((a) => requiresCredit(a.licence)).map((a) => [a.id, []]),
   );
-  const derived = new Map<string, string[]>();
   for (const asset of index.assets) {
-    for (const sourceId of asset.sources) {
-      if (!needsCredit.has(sourceId)) continue;
-      const list = derived.get(sourceId) ?? [];
-      for (const note of asset.modifications) if (!list.includes(note)) list.push(note);
-      derived.set(sourceId, list);
+    for (const sourceId of asset.sources) users.get(sourceId)?.push(asset);
+  }
+  const derived = new Map<string, string[]>();
+  for (const [sourceId, assets] of users) {
+    const list: string[] = [];
+    for (const asset of assets) {
+      for (const note of asset.modifications) {
+        const line = assets.length > 1 ? `${asset.id}: ${note}` : note;
+        if (!list.includes(line)) list.push(line);
+      }
     }
+    derived.set(sourceId, list);
   }
   return derived;
 }
@@ -185,7 +190,7 @@ export function modificationProblems(index: AssetIndex, manifest: Manifest): str
     const actual = byId.get(sourceId)?.modifications ?? [];
     if (JSON.stringify(actual) !== JSON.stringify(expected)) {
       problems.push(
-        `manifest asset ${sourceId}: modifications do not list the changes made by the pipeline (run pnpm assets:sync-manifest, then prettier --write assets/manifest.json)`,
+        `manifest asset ${sourceId}: modifications do not list the changes made by the pipeline (run pnpm assets:sync-manifest)`,
       );
     }
   }
