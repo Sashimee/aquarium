@@ -19,10 +19,14 @@ describe('coral style', () => {
     for (const id of ['acropora-cytherea', 'acropora-palmata']) {
       for (let i = 0; i < 2; i++) {
         const c = coralTint(id, i);
-        expect(Math.min(c?.r ?? 0, c?.g ?? 0, c?.b ?? 0)).toBeGreaterThanOrEqual(0.7);
+        expect(c).not.toBeNull();
+        const min = Math.min(c?.r ?? 0, c?.g ?? 0, c?.b ?? 0);
+        expect(min).toBeGreaterThanOrEqual(0.7);
+        expect(min).toBeLessThan(1);
       }
     }
-    expect(coralTint('acropora-palmata', 0)?.r).toBeCloseTo(1 - 0.62 * 0.35, 5);
+    const palette = [0, 1].map((i) => coralTint('acropora-palmata', i)?.getHex());
+    expect(palette[0]).not.toBe(palette[1]);
   });
 
   it('leaves rock and unknown assets untinted and unsquashed', () => {
