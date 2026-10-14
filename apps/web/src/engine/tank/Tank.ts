@@ -1,5 +1,6 @@
 import {
   BackSide,
+  Box3,
   BoxGeometry,
   BufferGeometry,
   Color,
@@ -17,12 +18,14 @@ import {
   SrcColorFactor,
   Vector3,
   ZeroFactor,
-  type Box3,
   type Material,
   type Node,
+  type PerspectiveCamera,
   type PMREMNode,
+  type Scene,
   type Texture,
   type UniformNode,
+  type WebGPURenderer,
 } from 'three/webgpu';
 import {
   abs,
@@ -36,6 +39,7 @@ import {
   Fn,
   If,
   max,
+  min,
   mix,
   mrt,
   mx_fractal_noise_float,
@@ -67,6 +71,7 @@ import type { WaterMedium } from '../water/medium';
 import { AIR_IOR, fresnelDielectric, WATER_IOR } from '../water/optics';
 import { type TankDimensions, validateTank, waterBounds } from './dimensions';
 import { createSubstrateGeometry, createSubstrateMaterial } from './substrate';
+import { SurfaceReflection, UNREFLECTED_LAYER } from './surfaceReflection';
 
 const GLASS_F0 = 0.04;
 /** Ripples spread the room seen through Snell's window a little. */
@@ -188,6 +193,32 @@ function mirroredSubstrate(
 }
 
 /**
+ * Radiance reaching the fragment, a point in the water, along `dir` from where that ray leaves the
+ * water box: the backdrop, a level patch of substrate on the floor, or the room seen through the
+ * glass (`room`), dimmed and in-scattered over the way. No object in the water is drawn.
+ */
+function waterAlongRay(
+  medium: WaterMedium,
+  interior: InteriorLight,
+  dir: Node<'vec3'>,
+  room: PMREMNode,
+): Node<'vec3'> {
+  const exitDistance = medium.exitDistance(positionWorld, dir).toVar();
+  const across = medium.transmittance(exitDistance).toVar();
+  const exitPoint = positionWorld.add(dir.mul(exitDistance)).toVar();
+  const onBackdrop = step(exitPoint.z, medium.boxMin.z.add(BACKDROP_TOLERANCE));
+  const onFloor = step(exitPoint.y, medium.boxMin.y.add(BACKDROP_TOLERANCE));
+  const inTank = mix(
+    backdropRadiance(medium, interior, exitPoint),
+    mirroredSubstrate(medium, interior, exitPoint),
+    onFloor,
+  );
+  const beyond = mix(room.mul(backgroundIntensity), inTank, max(onBackdrop, onFloor));
+  const midDepth = medium.boxMax.y.sub(positionWorld.y.add(exitPoint.y).mul(0.5));
+  return medium.inScatter(across, midDepth).add(beyond.mul(across));
+}
+
+/**
  * The faces of a pane only reflect: diffuse is black and the output is premultiplied, so the
  * reflection adds on top while the scene behind is kept by (1 - F). A face towards the water is
  * seen through it, where the parallel plate acts as a water-air boundary: past the critical angle
@@ -213,20 +244,8 @@ function createGlassFaceMaterial(
   const cosWater = abs(dot(inWater, normalWorldGeometry));
   const reflectance = fresnelDielectric(cosWater, WATER_IOR / AIR_IOR).toVar();
   const mirrored = reflect(inWater, normalWorldGeometry).toVar();
-  const exitDistance = medium.exitDistance(positionWorld, mirrored).toVar();
-  const across = medium.transmittance(exitDistance).toVar();
-  const exitPoint = positionWorld.add(mirrored.mul(exitDistance)).toVar();
-  const onBackdrop = step(exitPoint.z, medium.boxMin.z.add(BACKDROP_TOLERANCE));
-  const onFloor = step(exitPoint.y, medium.boxMin.y.add(BACKDROP_TOLERANCE));
   const skyNode = pmremTexture(sky, mirrored, float(SURFACE_ROUGHNESS));
-  const inTank = mix(
-    backdropRadiance(medium, interior, exitPoint),
-    mirroredSubstrate(medium, interior, exitPoint),
-    onFloor,
-  );
-  const beyond = mix(skyNode.mul(backgroundIntensity), inTank, max(onBackdrop, onFloor));
-  const midDepth = medium.boxMax.y.sub(positionWorld.y.add(exitPoint.y).mul(0.5));
-  const mirroredScene = medium.inScatter(across, midDepth).add(beyond.mul(across));
+  const mirroredScene = waterAlongRay(medium, interior, mirrored, skyNode);
   const inner = vec4(mirroredScene.mul(reflectance), reflectance);
   const pane = mix(output, inner, towardsWater);
   material.outputNode = medium.applyPremultiplied(overlayAlgae(pane, algae, medium));
@@ -287,29 +306,44 @@ function rippleNormalWorld(amplitude: Node<'float'>): Node<'vec3'> {
   return normalize(vec3(slopeX.negate(), 1, slopeZ.negate()));
 }
 
+interface SurfaceUnderside {
+  material: MeshBasicNodeMaterial;
+  skyNodes: PMREMNode[];
+  /** The output with `mirror` as what total internal reflection shows, else the traced walls. */
+  output(mirror?: Node<'vec3'>): Node<'vec4'>;
+}
+
 /**
  * The underside of the surface seen from the water: inside Snell's window (a 97° cone) the room
  * shows through, compressed towards the rim; outside it total internal reflection mirrors the
- * water back.
+ * tank. Without a reflection of the scene the mirrored ray is traced to the walls and floor, so the
+ * mirror still shades from the long hazy paths at the rim to the short ones onto the sand.
  */
-function createSurfaceUndersideMaterial(
+function createSurfaceUnderside(
   medium: WaterMedium,
+  interior: InteriorLight,
   normal: Node<'vec3'>,
   sky: Texture,
-): { material: MeshBasicNodeMaterial; skyNode: PMREMNode } {
+): SurfaceUnderside {
   const material = new MeshBasicNodeMaterial();
   material.name = 'water-surface-underside';
   material.side = BackSide;
   material.fog = false;
   const view = medium.waterRayDirection().toVar();
   const reflectance = fresnelDielectric(abs(dot(view, normal)), WATER_IOR / AIR_IOR).toVar();
-  const mirroredWater = medium.inScatter(vec3(0));
   // Past the critical angle refract() returns zero, where the reflectance is 1 anyway.
   const toRoom = refract(view, normal.negate(), WATER_IOR / AIR_IOR).add(vec3(0, 1e-4, 0));
   const skyNode = pmremTexture(sky, toRoom, float(SURFACE_ROUGHNESS));
   const room = skyNode.mul(backgroundIntensity);
-  material.outputNode = medium.applyPremultiplied(vec4(mix(room, mirroredWater, reflectance), 1));
-  return { material, skyNode };
+  const bounced = reflect(view, normal);
+  // A ripple can tip a grazing ray back up; it still has to go down into the water.
+  const mirrored = normalize(vec3(bounced.x, min(bounced.y, -1e-3), bounced.z)).toVar();
+  const mirroredSky = pmremTexture(sky, mirrored, float(SURFACE_ROUGHNESS));
+  const traced = waterAlongRay(medium, interior, mirrored, mirroredSky);
+  const output = (mirror: Node<'vec3'> = traced): Node<'vec4'> =>
+    medium.applyPremultiplied(vec4(mix(room, mirror, reflectance), 1));
+  material.outputNode = output();
+  return { material, skyNodes: [skyNode, mirroredSky], output };
 }
 
 export class Tank {
@@ -323,6 +357,8 @@ export class Tank {
   private readonly disposables: { dispose(): void }[] = [];
   /** Blended materials and the velocity each must write to leave the attachment unchanged. */
   private readonly blended: [NodeMaterial, Node<'vec4'>][] = [];
+  private readonly reflection: SurfaceReflection;
+  private readonly underside: SurfaceUnderside;
 
   /** `sky` is the room environment, seen from below through Snell's window. */
   constructor(
@@ -346,12 +382,39 @@ export class Tank {
     this.addGlass(medium, sky, interior);
     this.addBackdrop(medium, interior);
     this.addWaterVolume(medium);
-    this.addWaterSurface(medium, sky);
+    this.underside = this.addWaterSurface(medium, sky, interior);
     this.addStand();
+
+    const top = this.waterBounds.max.y;
+    this.reflection = new SurfaceReflection(
+      new Box3(
+        new Vector3(this.waterBounds.min.x, top, this.waterBounds.min.z),
+        new Vector3(this.waterBounds.max.x, top, this.waterBounds.max.z),
+      ),
+    );
+    this.disposables.push(this.reflection);
   }
 
   setSky(texture: Texture): void {
     for (const node of this.skyNodes) node.value = texture;
+  }
+
+  /**
+   * Total internal reflection under the surface shows the scene itself, drawn again at
+   * `resolutionScale` of the drawing buffer; 0 traces the walls in the shader instead.
+   */
+  setSurfaceReflection(resolutionScale: number): void {
+    const wasEnabled = this.reflection.enabled;
+    this.reflection.setResolutionScale(resolutionScale);
+    if (this.reflection.enabled === wasEnabled) return;
+    const { material, output } = this.underside;
+    material.outputNode = this.reflection.enabled ? output(this.reflection.node.rgb) : output();
+    material.needsUpdate = true;
+  }
+
+  /** Draws the surface reflection for this frame's camera; call it before the scene is drawn. */
+  renderSurfaceReflection(renderer: WebGPURenderer, scene: Scene, camera: PerspectiveCamera): void {
+    this.reflection.render(renderer, scene, camera);
   }
 
   /**
@@ -432,6 +495,9 @@ export class Tank {
       const mesh = this.track(new Mesh(merged, material));
       mesh.name = name;
       mesh.renderOrder = 2;
+      // The faces trace the eye's ray as refracted into the water where it meets the box, which
+      // for the mirrored camera above the surface is the wrong boundary.
+      if (material === faceMaterial) mesh.layers.set(UNREFLECTED_LAYER);
       this.group.add(mesh);
     }
   }
@@ -507,7 +573,11 @@ export class Tank {
     });
   }
 
-  private addWaterSurface(medium: WaterMedium, sky: Texture): void {
+  private addWaterSurface(
+    medium: WaterMedium,
+    sky: Texture,
+    interior: InteriorLight,
+  ): SurfaceUnderside {
     const size = this.waterBounds.getSize(this.waterBounds.max.clone());
     const material = new MeshPhysicalNodeMaterial({ roughness: 0.02, metalness: 0, ior: 1.333 });
     material.name = 'water-surface';
@@ -525,16 +595,19 @@ export class Tank {
     mesh.rotation.x = -Math.PI / 2;
     mesh.position.set(0, this.waterBounds.max.y, 0);
     mesh.renderOrder = 1;
+    mesh.layers.set(UNREFLECTED_LAYER);
     this.group.add(mesh);
 
-    const below = createSurfaceUndersideMaterial(medium, normal, sky);
+    const below = createSurfaceUnderside(medium, interior, normal, sky);
     const underside = this.track(new Mesh(mesh.geometry, below.material));
     underside.name = 'water-surface-underside';
     underside.rotation.copy(mesh.rotation);
     underside.position.copy(mesh.position);
     underside.renderOrder = 1;
+    underside.layers.set(UNREFLECTED_LAYER);
     this.group.add(underside);
-    this.skyNodes.push(below.skyNode);
+    this.skyNodes.push(...below.skyNodes);
+    return below;
   }
 
   private addStand(): void {
