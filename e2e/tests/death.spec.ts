@@ -3,6 +3,7 @@ import {
   advanceServerClock,
   createFirstTank,
   openTank,
+  returnToTab,
   registerVerifiedUser,
   savedTanks,
 } from '../support/app.ts';
@@ -21,7 +22,7 @@ test('a fish that starves while you are away is reported, netted and remembered'
   expect((await savedTanks(page))[0]?.fish).toMatchObject([{ name: 'Biscuit', status: 'alive' }]);
 
   await advanceServerClock(page, THIRTY_DAYS_IN_MINUTES);
-  await openTank(page);
+  await returnToTab(page, THIRTY_DAYS_IN_MINUTES);
 
   const away = page.getByRole('dialog', { name: 'We are sorry' });
   await expect(away).toContainText('One fish died while you were gone.');
