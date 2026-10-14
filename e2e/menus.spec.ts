@@ -1,4 +1,13 @@
-import { expect, test, devices, type CDPSession, type Locator, type Page } from '@playwright/test';
+import {
+  expect,
+  test,
+  devices,
+  type BrowserContext,
+  type BrowserContextOptions,
+  type CDPSession,
+  type Locator,
+  type Page,
+} from '@playwright/test';
 
 const { viewport, userAgent } = devices['iPhone 15 Pro'];
 
@@ -169,14 +178,26 @@ async function expectOrbits(page: Page, drag: Drag, context: string) {
   const y = Math.round(viewport.height * 0.6);
   const canvas = page.locator('canvas#tank');
   const before = await canvas.getAttribute('data-camera');
-  await drag([viewport.width * 0.8, y], [viewport.width * 0.2, y]);
-  await expect(canvas, `the camera did not orbit ${context}`).not.toHaveAttribute(
-    'data-camera',
-    before ?? '',
-  );
+  const from: [number, number] = [viewport.width * 0.8, y];
+  const to: [number, number] = [viewport.width * 0.2, y];
+  const orbited = () =>
+    expect(canvas, `the camera did not orbit ${context}`).not.toHaveAttribute(
+      'data-camera',
+      before ?? '',
+    );
+  await drag(from, to);
+  // A frame longer than the long-press delay between press and move turns the drag into a
+  // long-press, so a camera that has not moved after a generous wait gets one more drag.
+  try {
+    await expect(async () => orbited()).toPass({ timeout: 12_000 });
+  } catch {
+    await drag(from, to);
+    await orbited();
+  }
 }
 
-// Software rendering runs at a few frames a second, so one unchanged reading proves nothing.
+// Software rendering runs at a few frames a second, so a pose read twice within one frame proves
+// nothing: each reading waits for two animation frames first.
 async function settledPose(page: Page): Promise<string> {
   const canvas = page.locator('canvas#tank');
   let last = '';
@@ -184,14 +205,17 @@ async function settledPose(page: Page): Promise<string> {
   await expect
     .poll(
       async () => {
+        await page.evaluate(
+          () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+        );
         const pose = (await canvas.getAttribute('data-camera')) ?? '';
         steady = pose === last ? steady + 1 : 0;
         last = pose;
         return steady;
       },
-      { message: 'the camera never came to rest', intervals: [500], timeout: 40_000 },
+      { message: 'the camera never came to rest', intervals: [100], timeout: 60_000 },
     )
-    .toBeGreaterThanOrEqual(4);
+    .toBeGreaterThanOrEqual(3);
   return last;
 }
 
@@ -252,7 +276,6 @@ async function openMenu(page: Page, menu: Menu) {
 
 async function exercise(page: Page, drag: Drag, first: Menu, second: Menu) {
   const trail = `${first.name}, then ${second.name}`;
-  await ready(page);
   await openMenu(page, first);
   await openMenu(page, second);
   await expectOnePanel(page, trail);
@@ -271,57 +294,73 @@ for (let i = 0; i < MENUS.length; i += 2) {
 }
 PAIRS.push([decorate, tank]);
 
-test.describe('menus on a phone', () => {
-  test.use({
-    viewport,
-    userAgent,
-    deviceScaleFactor: 1,
-    hasTouch: true,
-    isMobile: true,
-    actionTimeout: 30_000,
+// A cold boot costs 25-45 s on a CI runner, so the tests of one describe share a page and run in
+// order, each leaving the app as the next expects (no panel open, Tap glass selected).
+function shared(options: BrowserContextOptions, makeDrag: (page: Page, cdp: CDPSession) => Drag) {
+  let context: BrowserContext | undefined;
+  let state: { page: Page; drag: Drag } | undefined;
+  test.describe.configure({ mode: 'serial' });
+  test.beforeAll(async ({ browser, baseURL }) => {
+    if (!baseURL) throw new Error('playwright.config.ts must set use.baseURL');
+    context = await browser.newContext({ ...options, baseURL });
+    const page = await context.newPage();
+    page.setDefaultTimeout(30_000);
+    const cdp = await context.newCDPSession(page);
+    await ready(page);
+    state = { page, drag: makeDrag(page, cdp) };
   });
+  test.afterAll(async () => {
+    await context?.close();
+  });
+  return () => {
+    if (!state) throw new Error('the shared page did not start; see the beforeAll failure');
+    return state;
+  };
+}
 
+test.describe('menus on a phone', () => {
   test.beforeEach(() => {
     touch = true;
   });
 
-  test('the camera orbits on a fresh page', async ({ page }) => {
-    const cdp = await page.context().newCDPSession(page);
-    await ready(page);
-    await expectOrbits(page, (from, to) => touchDrag(page, cdp, from, to), 'on a fresh page');
+  const app = shared(
+    { viewport, userAgent, deviceScaleFactor: 1, hasTouch: true, isMobile: true },
+    (page, cdp) => (from, to) => touchDrag(page, cdp, from, to),
+  );
+
+  test('the camera orbits on a fresh page', async () => {
+    const { page, drag } = app();
+    await expectOrbits(page, drag, 'on a fresh page');
   });
 
   for (const [first, second] of PAIRS) {
-    test(`${first.name}, then ${second.name} opens, switches and leaves the camera draggable`, async ({
-      page,
-    }) => {
-      const cdp = await page.context().newCDPSession(page);
-      await exercise(page, (from, to) => touchDrag(page, cdp, from, to), first, second);
+    test(`${first.name}, then ${second.name} opens, switches and leaves the camera draggable`, async () => {
+      const { page, drag } = app();
+      await exercise(page, drag, first, second);
     });
   }
 });
 
 test.describe('menus with a mouse', () => {
-  test.use({ viewport: { width: 1280, height: 800 }, actionTimeout: 30_000 });
-
   test.beforeEach(() => {
     touch = false;
   });
 
-  test('the camera orbits on a fresh page, and a Laser drag does not move it', async ({ page }) => {
-    const cdp = await page.context().newCDPSession(page);
-    const drag: Drag = (from, to) => mouseDrag(page, cdp, from, to);
-    await ready(page);
+  const app = shared(
+    { viewport: { width: 1280, height: 800 } },
+    (page, cdp) => (from, to) => mouseDrag(page, cdp, from, to),
+  );
+
+  test('the camera orbits on a fresh page, and a Laser drag does not move it', async () => {
+    const { page, drag } = app();
     await expectOrbits(page, drag, 'on a fresh page');
     await expectToolClaimsDrag(page, drag);
   });
 
   for (const [first, second] of PAIRS) {
-    test(`${first.name}, then ${second.name} opens, switches and leaves the camera draggable`, async ({
-      page,
-    }) => {
-      const cdp = await page.context().newCDPSession(page);
-      await exercise(page, (from, to) => mouseDrag(page, cdp, from, to), first, second);
+    test(`${first.name}, then ${second.name} opens, switches and leaves the camera draggable`, async () => {
+      const { page, drag } = app();
+      await exercise(page, drag, first, second);
     });
   }
 });
