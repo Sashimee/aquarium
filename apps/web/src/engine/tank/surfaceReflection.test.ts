@@ -1,19 +1,24 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   Box3,
+  Frustum,
+  Matrix4,
   PerspectiveCamera,
+  RenderTarget,
   Scene,
   Vector3,
   WebGLCoordinateSystem,
   WebGPUCoordinateSystem,
   type Camera,
   type CoordinateSystem,
+  type MRTNode,
+  type Object3D,
   type Vector2,
-  type WebGPURenderer,
 } from 'three/webgpu';
 import {
   mirrorCamera,
   SurfaceReflection,
+  type ReflectionRenderer,
   UNREFLECTED_LAYER,
   WATERLINE_MARGIN,
 } from './surfaceReflection';
@@ -94,38 +99,45 @@ describe('mirrorCamera depth', () => {
 });
 
 /** Records what the reflection does to the renderer, and restores nothing on its own. */
+interface PassState {
+  target: RenderTarget | null;
+  mrt: MRTNode | null;
+}
+
 function fakeRenderer(): {
-  renderer: WebGPURenderer;
+  renderer: ReflectionRenderer;
   rendered: Camera[];
-  compiled: { camera: Camera; target: unknown; mrt: unknown }[];
-  state: { target: unknown; mrt: unknown };
+  compiled: (PassState & { camera: Camera })[];
+  state: PassState;
   finishCompile: () => void;
 } {
   let finishCompile = (): void => undefined;
-  const state: { target: unknown; mrt: unknown } = { target: null, mrt: null };
+  const state: PassState = { target: null, mrt: null };
   const rendered: Camera[] = [];
-  const compiled: { camera: Camera; target: unknown; mrt: unknown }[] = [];
-  const renderer = {
+  const compiled: (PassState & { camera: Camera })[] = [];
+  const renderer: ReflectionRenderer = {
     coordinateSystem: WebGPUCoordinateSystem,
     autoClear: false,
     init: () => Promise.resolve(),
     getDrawingBufferSize: (out: Vector2) => out.set(1600, 900),
     getRenderTarget: () => state.target,
-    setRenderTarget: (target: unknown) => {
+    setRenderTarget: (target) => {
       state.target = target;
     },
     getMRT: () => state.mrt,
-    setMRT: (mrt: unknown) => {
+    setMRT: (mrt) => {
       state.mrt = mrt;
     },
-    render: (_scene: Scene, camera: Camera) => rendered.push(camera),
-    compileAsync: (_scene: Scene, camera: Camera) => {
+    render: (_scene: Object3D, camera: Camera) => {
+      rendered.push(camera);
+    },
+    compileAsync: (_scene: Object3D, camera: Camera) => {
       compiled.push({ camera, target: state.target, mrt: state.mrt });
       return new Promise<void>((resolve) => (finishCompile = resolve));
     },
   };
   return {
-    renderer: renderer as unknown as WebGPURenderer,
+    renderer,
     rendered,
     compiled,
     state,
@@ -170,7 +182,7 @@ describe('SurfaceReflection', () => {
     expect(compiled).toEqual([]);
 
     reflection.setResolutionScale(1);
-    const sceneTarget = { name: 'scene' };
+    const sceneTarget = new RenderTarget(1, 1);
     state.target = sceneTarget;
     const done = vi.fn();
     const compiling = reflection.compile(renderer, scene, camera).then(done);
@@ -191,6 +203,40 @@ describe('SurfaceReflection', () => {
     expect(pass?.camera.layers.isEnabled(0)).toBe(true);
     reflection.dispose();
   });
+
+  it.each([
+    ['above the water, facing away from the tank', [0.2, LEVEL + 0.3, 1.6], [0, LEVEL + 0.3, 5]],
+    ['under the water, looking down at the floor', [0, LEVEL - 0.1, 0], [0, 0, 0.01]],
+    ['under the water, looking out of the front glass', [0, 0.2, 0.1], [0, 0.2, 3]],
+  ] as const)(
+    'compiles a view of the whole tank floor whatever the camera does (%s)',
+    async (_pose, [x, y, z], [tx, ty, tz]) => {
+      const reflection = new SurfaceReflection(surface);
+      reflection.setResolutionScale(0.5);
+      const { renderer, compiled, finishCompile } = fakeRenderer();
+      const camera = sceneCamera(WebGPUCoordinateSystem);
+      camera.position.set(x, y, z);
+      camera.lookAt(tx, ty, tz);
+      const compiling = reflection.compile(renderer, new Scene(), camera);
+      await vi.waitFor(() => expect(compiled).toHaveLength(1));
+      finishCompile();
+      await compiling;
+
+      const view = compiled[0]?.camera;
+      if (!(view instanceof PerspectiveCamera)) throw new Error('expected a perspective camera');
+      const frustum = new Frustum().setFromProjectionMatrix(
+        new Matrix4().multiplyMatrices(view.projectionMatrix, view.matrixWorldInverse),
+        WebGPUCoordinateSystem,
+      );
+      for (const cx of [surface.min.x, surface.max.x]) {
+        for (const cz of [surface.min.z, surface.max.z]) {
+          expect(frustum.containsPoint(new Vector3(cx, 0, cz))).toBe(true);
+          expect(frustum.containsPoint(new Vector3(cx, LEVEL, cz))).toBe(true);
+        }
+      }
+      reflection.dispose();
+    },
+  );
 
   it('starts off and turns on with a positive resolution scale', () => {
     const reflection = new SurfaceReflection(surface);

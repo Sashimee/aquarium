@@ -21,7 +21,7 @@ import {
 } from '@aquarium/sim';
 import type { Engine } from '../engine/Engine';
 import type { EventBus } from '../engine/events';
-import { TIER_SETTINGS, type Tier, type TierSettings } from '../engine/quality/tiers';
+import type { Tier, TierSettings } from '../engine/quality/tiers';
 import { waterBounds, type TankDimensions } from '../engine/tank/dimensions';
 import type { InteractionEvents } from '../interaction/events';
 import { disposeFishModel, FishAssetLoader, type FishModel } from './assets';
@@ -31,7 +31,8 @@ import { demoTank, type DemoTank } from './demoStock';
 import { HeldFish, type FramePresence } from './heldFish';
 import { FishInstanceData, type InstanceValues } from './instances';
 import { selectLod, type LodThresholds } from './lod';
-import { FishMaterial, type FinRendering, type FishMaterialFeatures } from './material';
+import { featuresFor, sameFeatures } from './features';
+import { FishMaterial, type FishMaterialFeatures } from './material';
 import { commitLodDraw } from './prewarm';
 import {
   bagCentre,
@@ -111,25 +112,6 @@ interface FishRuntime {
   script: Script | null;
 }
 
-/**
- * Translucent fins dither under the temporal resolve, which averages the pattern into a blend.
- * Elsewhere they use alpha-to-coverage, which needs the MSAA the engine only enables below DPR 2;
- * without it they fall back to the cutout.
- */
-function featuresFor(tier: Tier, msaa: boolean): FishMaterialFeatures {
-  const temporal = TIER_SETTINGS[tier].postChain === 'taa-bloom';
-  const fins: FinRendering = temporal
-    ? 'stochastic'
-    : tier !== 'low' && msaa
-      ? 'coverage'
-      : 'cutout';
-  return {
-    fins,
-    iridescence: tier === 'high' || tier === 'ultra',
-    clearcoat: tier !== 'low',
-  };
-}
-
 /** LOD levels near enough for their self-shadowing to read. */
 const SHADOW_LODS = 2;
 /** A fish leaving its bag, or held over a rebuilt world, glides into the sim's pose this long. */
@@ -139,15 +121,6 @@ const MIN_PICK_RADIUS = 0.02;
 const MIN_CAPACITY = 4;
 /** How much a sick fish (health 0) pales; death pales it fully. */
 const SICK_PALING = 0.7;
-
-function sameFeatures(a: FishMaterialFeatures | null, b: FishMaterialFeatures): boolean {
-  return (
-    a !== null &&
-    a.fins === b.fins &&
-    a.iridescence === b.iridescence &&
-    a.clearcoat === b.clearcoat
-  );
-}
 
 function capacityFor(needed: number): number {
   let capacity = MIN_CAPACITY;
@@ -213,6 +186,8 @@ export class FishSystem {
   private night = 0;
   private light = 1;
   private disposed = false;
+  /** False while `create` runs: a failure then fails `create`, which disposes the worker anyway. */
+  private started = false;
 
   private readonly matrix = new Matrix4();
   private readonly position = new Vector3();
@@ -262,6 +237,7 @@ export class FishSystem {
       system.dispose();
       throw signal.aborted ? signal.reason : cause;
     }
+    system.started = true;
     system.reportSimErrors();
     return system;
   }
@@ -317,6 +293,7 @@ export class FishSystem {
       engine.quality.register('fish-materials', (_s, tier) => this.applyFeatures(tier)),
       engine.onFrame((deltaS, nowMs) => this.update(deltaS, nowMs)),
       engine.events.on('engine:daylight', ({ level }) => this.setDaylight(level)),
+      engine.events.on('engine:temporal-resolve', () => this.applyFeatures(engine.quality.tier)),
     );
     this.setDaylight(engine.daylight);
   }
@@ -792,7 +769,7 @@ export class FishSystem {
         },
       });
     } catch (cause) {
-      if (cause instanceof SimInitTimeout && !this.disposed) this.replaceWorker();
+      if (cause instanceof SimInitTimeout && this.started && !this.disposed) this.replaceWorker();
       throw cause;
     }
   }
@@ -842,7 +819,10 @@ export class FishSystem {
   }
 
   private applyFeatures(tier: Tier): void {
-    const features = featuresFor(tier, this.engine.renderer.samples > 1);
+    const features = featuresFor(tier, {
+      msaa: this.engine.renderer.samples > 1,
+      temporal: this.engine.temporalResolve,
+    });
     if (sameFeatures(this.features, features)) return;
     this.features = features;
     for (const batch of this.batches.values()) {

@@ -201,50 +201,95 @@ describe('QualityManager', () => {
     expect(() => setup({ probeTier: 'high', maxTier: 'medium' })).toThrow(/above maxTier/);
   });
 
-  it('holds the probe until the content is ready, then warms up and times the full tank', () => {
-    const { quality, announced } = setup({ awaitContent: true });
+  it('times the empty tank first, then corrects the tier once the content is in', () => {
+    const { quality, announced, applied } = setup({ awaitContent: true });
     quality.start(0);
-    feed(quality, TARGET, 4, 0, 5000);
+    feed(quality, TARGET, 4, 0, 2400);
     expect(quality.probing).toBe(true);
-    expect(announced).toEqual([]);
+    expect(quality.tier).toBe('high');
+    expect(announced).toEqual([{ from: null, to: 'high', reason: 'probe' }]);
+    feed(quality, TARGET, 4, 2401, 5000);
     quality.contentReady(5000);
     feed(quality, 200, 200, 5000, 5299);
     expect(quality.probing).toBe(true);
     feed(quality, TARGET, 14, 5300, 7400);
     expect(quality.probing).toBe(false);
     expect(quality.tier).toBe('medium');
-    expect(announced).toEqual([{ from: null, to: 'medium', reason: 'probe' }]);
+    expect(applied).toEqual(['high', 'medium']);
+    expect(announced).toEqual([
+      { from: null, to: 'high', reason: 'probe' },
+      { from: 'high', to: 'medium', reason: 'probe' },
+    ]);
   });
 
-  it('probes at once when the content was ready before start', () => {
-    const { quality } = setup({ awaitContent: true });
+  it('settles a slow device on its tier before the content is built, and keeps it', () => {
+    const { quality, announced, applied } = setup({ awaitContent: true });
+    quality.start(0);
+    const t = feed(quality, 200, null, 0, 2400);
+    expect(quality.tier).toBe('low');
+    expect(announced).toEqual([{ from: null, to: 'low', reason: 'probe' }]);
+    quality.contentReady(t);
+    feed(quality, 400, null, t, t + 2400);
+    expect(quality.probing).toBe(false);
+    expect(quality.tier).toBe('low');
+    expect(applied).toEqual(['high', 'low']);
+    expect(announced).toHaveLength(1);
+  });
+
+  it('never raises the tier from the empty tank, but may from the full one', () => {
+    const { quality, announced } = setup({ awaitContent: true });
+    quality.start(0);
+    const t = feed(quality, TARGET, 2, 0, 2400);
+    expect(quality.tier).toBe('high');
+    quality.contentReady(t);
+    feed(quality, TARGET, 4, t, t + 2400);
+    expect(quality.tier).toBe('ultra');
+    expect(announced.at(-1)).toEqual({ from: 'high', to: 'ultra', reason: 'probe' });
+  });
+
+  it('times the content straight after the empty tank when it arrived meanwhile', () => {
+    const { quality, announced } = setup({ awaitContent: true });
+    quality.start(0);
+    const t = feed(quality, TARGET, 4, 0, 1000);
+    quality.contentReady(t);
+    feed(quality, TARGET, 4, t, 2400);
+    expect(quality.probing).toBe(true);
+    feed(quality, TARGET, 14, 2401, 4800);
+    expect(quality.probing).toBe(false);
+    expect(announced.map((e) => e.to)).toEqual(['high', 'medium']);
+  });
+
+  it('probes once at the probe tier when the content was ready before start', () => {
+    const { quality, announced } = setup({ awaitContent: true });
     quality.contentReady(0);
     quality.start(0);
     feed(quality, TARGET, 14, 0, 2400);
     expect(quality.probing).toBe(false);
     expect(quality.tier).toBe('medium');
+    expect(announced).toEqual([{ from: null, to: 'medium', reason: 'probe' }]);
   });
 
-  it('probes anyway once the content wait times out', () => {
+  it('probes the content anyway once the wait for it times out', () => {
     const { quality } = setup({ awaitContent: true, contentTimeoutMs: 10_000 });
     quality.start(0);
-    const t = feed(quality, TARGET, 14, 0, 9990);
+    const t = feed(quality, TARGET, 4, 0, 12_200);
     expect(quality.probing).toBe(true);
-    feed(quality, TARGET, 14, t, 12_400);
+    feed(quality, TARGET, 14, t, 14_800);
     expect(quality.probing).toBe(false);
     expect(quality.tier).toBe('medium');
   });
 
-  it('ignores content readiness after the probe has finished', () => {
+  it('ignores content readiness after the probes have finished', () => {
     const { quality, announced } = setup({ awaitContent: true, contentTimeoutMs: 1000 });
     quality.start(0);
-    const t = feed(quality, TARGET, 14, 0, 3400);
+    const t = feed(quality, TARGET, 4, 0, 6000);
+    expect(quality.probing).toBe(false);
     quality.contentReady(t);
     expect(quality.probing).toBe(false);
-    expect(announced).toHaveLength(1);
+    expect(announced.map((e) => e.to)).toEqual(['high', 'ultra']);
   });
 
-  it('setTier while waiting for content ends the wait and keeps the manual choice', () => {
+  it('setTier during the empty-tank probe ends probing and keeps the manual choice', () => {
     const { quality, announced } = setup({ awaitContent: true });
     quality.start(0);
     quality.setTier('low', 100);
@@ -253,6 +298,18 @@ describe('QualityManager', () => {
     feed(quality, TARGET, 4, 200, 3000);
     expect(quality.probing).toBe(false);
     expect(announced).toEqual([{ from: 'high', to: 'low', reason: 'manual' }]);
+  });
+
+  it('setTier while waiting for content ends the wait and keeps the manual choice', () => {
+    const { quality, announced } = setup({ awaitContent: true });
+    quality.start(0);
+    const t = feed(quality, TARGET, 4, 0, 2400);
+    quality.setTier('medium', t);
+    expect(quality.probing).toBe(false);
+    quality.contentReady(t);
+    feed(quality, TARGET, 1, t, t + 3000);
+    expect(quality.tier).toBe('medium');
+    expect(announced.at(-1)).toEqual({ from: 'high', to: 'medium', reason: 'manual' });
   });
 
   it('pins the tier without waiting for content', () => {

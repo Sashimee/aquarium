@@ -307,13 +307,15 @@ describe('initSim', () => {
   };
 
   function start(client: SimInit['client'], signal = new AbortController().signal) {
-    const listeners = new Set<(event: ErrorEvent) => void>();
-    const worker = {
-      addEventListener: (_type: string, listener: (event: ErrorEvent) => void) =>
-        listeners.add(listener),
-      removeEventListener: (_type: string, listener: (event: ErrorEvent) => void) =>
-        listeners.delete(listener),
-    } as unknown as SimInit['worker'];
+    const listeners = new Set<(event: Pick<ErrorEvent, 'message'>) => void>();
+    const worker: SimInit['worker'] = {
+      addEventListener: (_type, listener) => {
+        listeners.add(listener);
+      },
+      removeEventListener: (_type, listener) => {
+        listeners.delete(listener);
+      },
+    };
     const { spec, roster } = setup();
     const config = spec.config(roster.swimming());
     if (config === null) throw new Error('the demo has no world');
@@ -322,7 +324,7 @@ describe('initSim', () => {
       init,
       listeners,
       fail: (message: string) => {
-        for (const l of [...listeners]) l({ message } as ErrorEvent);
+        for (const l of [...listeners]) l({ message });
       },
     };
   }

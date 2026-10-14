@@ -227,10 +227,11 @@ export class WaterMedium {
 
   /** Distance from `origin` inside the water box to where a ray along `dir` leaves it. */
   exitDistance(origin: Node<'vec3'>, dir: Node<'vec3'>): Node<'float'> {
-    const wall = mix(this.boxMin, this.boxMax, step(vec3(0), dir));
+    const ahead = step(vec3(0), dir).toVar();
+    const wall = mix(this.boxMin, this.boxMax, ahead);
     const t = wall
       .sub(origin)
-      .mul(sign(dir))
+      .mul(ahead.mul(2).sub(1))
       .div(max(abs(dir), 1e-6));
     return max(min(min(t.x, t.y), t.z), 0);
   }

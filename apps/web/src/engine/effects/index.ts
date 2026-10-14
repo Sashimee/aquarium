@@ -1,5 +1,5 @@
 import type { PerspectiveCamera, Scene, WebGPURenderer } from 'three/webgpu';
-import { mrt, vec4 } from 'three/tsl';
+import { materialIdOf } from '../pipelineErrors';
 import type { QualityManager } from '../quality/QualityManager';
 import type { TierSettings } from '../quality/tiers';
 import type { Tank } from '../tank/Tank';
@@ -75,6 +75,15 @@ export class Effects {
     }
   }
 
+  /** Whether the frames drawn now go through a temporal resolve (TRAA). */
+  get temporal(): boolean {
+    return this.failure === null && (this.post?.temporal ?? false);
+  }
+
+  ownsMaterial(id: number): boolean {
+    return [this.particulates, this.bubbles].some(({ material }) => materialIdOf(material) === id);
+  }
+
   setFocusMode(on: boolean): void {
     this.focus = on;
     if (this.settings !== null) this.configurePost(this.settings);
@@ -140,7 +149,7 @@ export class Effects {
     this.post?.dispose();
     this.post = next;
     this.postKey = key;
-    this.setVelocityPassthrough(next?.temporal ?? false);
+    this.host.tank.setVelocityPassthrough(next?.temporal ?? false);
   }
 
   private disposeParts(): void {
@@ -148,16 +157,7 @@ export class Effects {
     for (const { sprite } of sprites) sprite.removeFromParent();
     this.post?.dispose();
     this.post = null;
-    this.setVelocityPassthrough(false);
+    this.host.tank.setVelocityPassthrough(false);
     for (const { material } of sprites) material.dispose();
-  }
-
-  /** Additive sprites must add nothing to the velocity attachment TRAA reads. */
-  private setVelocityPassthrough(on: boolean): void {
-    this.host.tank.setVelocityPassthrough(on);
-    for (const { material } of [this.particulates, this.bubbles]) {
-      material.mrtNode = on ? mrt({ velocity: vec4(0) }) : null;
-      material.needsUpdate = true;
-    }
   }
 }

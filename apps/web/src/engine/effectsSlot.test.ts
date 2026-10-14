@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { EffectsSlot, type FrameEffects } from './effectsSlot';
 
 class FakeEffects implements FrameEffects {
+  temporal = false;
   renders = 0;
   disposed = 0;
   focus: boolean[] = [];
@@ -19,6 +20,10 @@ class FakeEffects implements FrameEffects {
     this.focus.push(on);
   }
 
+  ownsMaterial(id: number): boolean {
+    return id === 7;
+  }
+
   dispose(): void {
     this.disposed += 1;
     if (this.disposeError !== null) throw this.disposeError;
@@ -27,8 +32,12 @@ class FakeEffects implements FrameEffects {
 
 function setup() {
   const reports: { message: string; cause: unknown }[] = [];
-  const slot = new EffectsSlot((message, cause) => reports.push({ message, cause }));
-  return { slot, reports };
+  const temporal: boolean[] = [];
+  const slot = new EffectsSlot(
+    (message, cause) => reports.push({ message, cause }),
+    (on) => temporal.push(on),
+  );
+  return { slot, reports, temporal };
 }
 
 describe('EffectsSlot', () => {
@@ -120,6 +129,34 @@ describe('EffectsSlot', () => {
     expect(effects.renders).toBe(1);
   });
 
+  it('asks the attached effects which materials they own', () => {
+    const { slot } = setup();
+    expect(slot.ownsMaterial(7)).toBe(false);
+    slot.attach(new FakeEffects());
+    expect(slot.ownsMaterial(7)).toBe(true);
+    expect(slot.ownsMaterial(8)).toBe(false);
+  });
+
+  it('drops the effects for a failure found outside their calls', () => {
+    const { slot, reports, temporal } = setup();
+    const effects = new FakeEffects();
+    effects.temporal = true;
+    slot.attach(effects);
+    const broken = new Error('pipeline creation failed');
+    slot.fail(broken);
+    expect(slot.active).toBe(false);
+    expect(effects.disposed).toBe(1);
+    expect(reports.map((r) => r.cause)).toEqual([broken]);
+    expect(temporal).toEqual([true, false]);
+    expect(slot.render()).toBe(false);
+  });
+
+  it('ignores a failure once nothing is attached', () => {
+    const { slot, reports } = setup();
+    slot.fail(new Error('late pipeline failure'));
+    expect(reports).toEqual([]);
+  });
+
   it('disposes the attached effects once', () => {
     const { slot } = setup();
     const effects = new FakeEffects();
@@ -128,5 +165,46 @@ describe('EffectsSlot', () => {
     slot.dispose();
     expect(effects.disposed).toBe(1);
     expect(slot.render()).toBe(false);
+  });
+
+  it('resolves temporally only while attached effects do', () => {
+    const { slot, temporal } = setup();
+    expect(slot.temporal).toBe(false);
+    const effects = new FakeEffects();
+    effects.temporal = true;
+    slot.attach(effects);
+    expect(slot.temporal).toBe(true);
+    effects.temporal = false;
+    slot.refresh();
+    slot.refresh();
+    expect(slot.temporal).toBe(false);
+    effects.temporal = true;
+    slot.render();
+    expect(temporal).toEqual([true, false, true]);
+    slot.dispose();
+    expect(slot.temporal).toBe(false);
+    expect(temporal).toEqual([true, false, true, false]);
+  });
+
+  it('stops resolving temporally once failed effects are dropped', () => {
+    const { slot, temporal } = setup();
+    const effects = new FakeEffects();
+    effects.temporal = true;
+    slot.attach(effects);
+    effects.renderError = new Error('TRAA pipeline failed');
+    expect(slot.render()).toBe(false);
+    expect(slot.temporal).toBe(false);
+    expect(temporal).toEqual([true, false]);
+  });
+
+  it('stops resolving temporally even when disposing throws', () => {
+    const { slot, temporal } = setup();
+    const effects = new FakeEffects();
+    effects.temporal = true;
+    effects.disposeError = new Error('dispose');
+    slot.attach(effects);
+    expect(() => slot.dispose()).toThrow('dispose');
+    expect(slot.temporal).toBe(false);
+    expect(temporal).toEqual([true, false]);
   });
 });

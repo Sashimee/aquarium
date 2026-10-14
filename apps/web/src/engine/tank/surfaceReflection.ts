@@ -10,10 +10,12 @@ import {
   Vector3,
   Vector4,
   WebGPUCoordinateSystem,
+  type Camera,
   type CoordinateSystem,
+  type MRTNode,
   type Node,
+  type Object3D,
   type Scene,
-  type WebGPURenderer,
 } from 'three/webgpu';
 import { mrt, output, screenUV, texture } from 'three/tsl';
 
@@ -30,6 +32,21 @@ const _q = new Vector4();
 const _viewProjection = new Matrix4();
 const _frustum = new Frustum();
 const _size = new Vector2();
+const _centre = new Vector3();
+
+/** The part of the renderer the pass uses. */
+export interface ReflectionRenderer {
+  readonly coordinateSystem: CoordinateSystem;
+  autoClear: boolean;
+  init(): Promise<unknown>;
+  getDrawingBufferSize(target: Vector2): Vector2;
+  getRenderTarget(): RenderTarget | null;
+  setRenderTarget(target: RenderTarget | null): void;
+  getMRT(): MRTNode | null;
+  setMRT(mrt: MRTNode | null): unknown;
+  render(scene: Object3D, camera: Camera): void;
+  compileAsync(scene: Object3D, camera: Camera): Promise<void>;
+}
 
 /**
  * Within this many metres of the water plane the oblique near plane passes through the eye and the
@@ -124,7 +141,7 @@ export class SurfaceReflection {
   }
 
   /** Draws the reflection for `camera`, unless it is off or the camera cannot see the underside. */
-  render(renderer: WebGPURenderer, scene: Scene, camera: PerspectiveCamera): void {
+  render(renderer: ReflectionRenderer, scene: Scene, camera: PerspectiveCamera): void {
     if (!this.enabled) return;
     camera.updateMatrixWorld();
     _position.setFromMatrixPosition(camera.matrixWorld);
@@ -138,23 +155,46 @@ export class SurfaceReflection {
       Math.max(1, Math.round(_size.x * this.scale)),
       Math.max(1, Math.round(_size.y * this.scale)),
     );
-    this.withMirror(renderer, camera, () => renderer.render(scene, this.camera));
+    mirrorCamera(camera, this.surface.max.y, this.camera, renderer.coordinateSystem);
+    this.inPass(renderer, camera, () => renderer.render(scene, this.camera));
   }
 
   /**
-   * Builds the pass's pipelines for what `camera`'s mirror image sees, so the first frame under
-   * the surface, or the first after a tier turns the reflection on, does not compile them.
+   * Builds the pass's pipelines for everything under the surface, so the first frame under it, or
+   * the first after a tier turns the reflection on, does not compile them. compileAsync culls to
+   * the camera's frustum, and the user's mirror image may face away from the tank, so the pass is
+   * compiled from above the surface looking straight down at all of it.
    */
-  async compile(renderer: WebGPURenderer, scene: Scene, camera: PerspectiveCamera): Promise<void> {
+  async compile(
+    renderer: ReflectionRenderer,
+    scene: Scene,
+    camera: PerspectiveCamera,
+  ): Promise<void> {
     if (!this.enabled) return;
     await renderer.init();
-    camera.updateMatrixWorld();
+    this.overlook(renderer, camera);
     // compileAsync reads the target and MRT before its first await, so they can be restored at once.
-    await this.withMirror(renderer, camera, () => renderer.compileAsync(scene, this.camera));
+    await this.inPass(renderer, camera, () => renderer.compileAsync(scene, this.camera));
   }
 
-  private withMirror<T>(renderer: WebGPURenderer, camera: PerspectiveCamera, draw: () => T): T {
-    mirrorCamera(camera, this.surface.max.y, this.camera, renderer.coordinateSystem);
+  /** A 90° view down from a height that frames the whole surface, and so all below it. */
+  private overlook(renderer: ReflectionRenderer, camera: PerspectiveCamera): void {
+    const height = Math.max(this.surface.min.distanceTo(this.surface.max) / 2, 0.1);
+    this.surface.getCenter(_centre);
+    this.camera.coordinateSystem = renderer.coordinateSystem;
+    this.camera.fov = 90;
+    this.camera.aspect = 1;
+    this.camera.zoom = 1;
+    this.camera.near = Math.min(camera.near, height / 2);
+    this.camera.far = height + camera.far;
+    this.camera.position.set(_centre.x, this.surface.max.y + height, _centre.z);
+    this.camera.up.set(0, 0, -1);
+    this.camera.lookAt(_centre.x, this.surface.max.y, _centre.z);
+    this.camera.updateMatrixWorld();
+    this.camera.updateProjectionMatrix();
+  }
+
+  private inPass<T>(renderer: ReflectionRenderer, camera: PerspectiveCamera, draw: () => T): T {
     this.camera.layers.mask = camera.layers.mask;
     this.camera.layers.disable(UNREFLECTED_LAYER);
 

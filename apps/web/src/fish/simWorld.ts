@@ -137,9 +137,17 @@ export class SimInitTimeout extends Error {
   }
 }
 
+type WorkerError = Pick<ErrorEvent, 'message'>;
+
+/** The part of the worker `initSim` watches; a `Worker` is one. */
+export interface SimWorkerErrors {
+  addEventListener(type: 'error', listener: (event: WorkerError) => void): void;
+  removeEventListener(type: 'error', listener: (event: WorkerError) => void): void;
+}
+
 export interface SimInit {
   readonly client: { init(config: TankSpaceWorldConfig): Promise<SimReady> };
-  readonly worker: Pick<Worker, 'addEventListener' | 'removeEventListener'>;
+  readonly worker: SimWorkerErrors;
   readonly config: TankSpaceWorldConfig;
   readonly signal: AbortSignal;
   readonly timeoutMs: number;
@@ -161,7 +169,7 @@ export function initSim({ client, worker, config, signal, timeoutMs }: SimInit):
       signal.removeEventListener('abort', onAbort);
       finish();
     };
-    const onError = (event: ErrorEvent): void =>
+    const onError = (event: WorkerError): void =>
       settle(() => reject(new Error(`Fish sim worker failed to start: ${event.message}`)));
     const onAbort = (): void => settle(() => reject(signal.reason));
     const timer = setTimeout(() => settle(() => reject(new SimInitTimeout(timeoutMs))), timeoutMs);
