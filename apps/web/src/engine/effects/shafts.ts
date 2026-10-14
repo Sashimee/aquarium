@@ -63,13 +63,14 @@ export class WaterShafts {
         const stepLength = end.sub(start).div(STEPS).toVar();
         const jitter = interleavedGradientNoise(screenCoordinate.xy);
         const sum = vec3(0).toVar();
+        const mean = caustics.bakedMean().toVar();
         Loop(STEPS, ({ i }) => {
           const t = start.add(stepLength.mul(float(i).add(jitter)));
           const p = eye.add(dir.mul(t));
           const depth = max(medium.boxMax.y.sub(p.y), 0);
           const slant = depth.div(cosLight);
           const surface = p.xz.add(light.xz.mul(slant));
-          const deviation = caustics.bakedAt(surface, SHAFT_PATTERN_SCALE).sub(1);
+          const deviation = caustics.bakedAt(surface, SHAFT_PATTERN_SCALE, mean).sub(1);
           sum.addAssign(
             medium
               .transmittance(slant.add(t.sub(start)))

@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { Box3, Color, ConstNode, TextureNode, VarNode, Vector3, type Node } from 'three/webgpu';
+import {
+  Box3,
+  Color,
+  ConstNode,
+  LinearMipmapLinearFilter,
+  TextureNode,
+  VarNode,
+  Vector3,
+  type Node,
+  type Texture,
+} from 'three/webgpu';
 import { float, uniform, vec2 } from 'three/tsl';
 import { Caustics, castingShare, causticContrast } from './caustics';
 import { daylightAt, parseClock } from '../daylight';
@@ -147,5 +157,21 @@ describe('the baked caustics', () => {
 
   it('has a 1x1 mip to read the mean from', () => {
     expect(Number.isInteger(meanLevel)).toBe(true);
+  });
+
+  // Without generated mips the mean level does not exist, and the shafts and the low tier's floor
+  // would divide by whatever the backend returns for it.
+  it('generates the mips of the tile it reads the mean from', () => {
+    const tiles: Texture[] = [];
+    caustics()
+      .bakedMean()
+      .traverse((n) => {
+        if (n instanceof TextureNode && n.value.width === BAKE.size) tiles.push(n.value);
+      });
+    expect(tiles.length).toBeGreaterThan(0);
+    for (const tile of tiles) {
+      expect(tile.generateMipmaps).toBe(true);
+      expect(tile.minFilter).toBe(LinearMipmapLinearFilter);
+    }
   });
 });
