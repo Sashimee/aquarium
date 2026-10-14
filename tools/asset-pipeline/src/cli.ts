@@ -25,11 +25,12 @@ async function main(argv: string[]): Promise<number> {
     const derived = derivedModifications(input.index, input.manifest);
     const path = join(REPO_ROOT, 'assets', 'manifest.json');
     const raw = JSON.parse(readFileSync(path, 'utf8')) as {
-      assets: { id: string; modifications: string[] }[];
+      assets: { id: string; kind: string; modifications: string[] }[];
     };
     for (const asset of raw.assets) {
       const modifications = derived.get(asset.id);
       if (modifications) asset.modifications = modifications;
+      else if (asset.kind === 'reference-photo') asset.modifications = [];
     }
     const { format, resolveConfig } = await import('prettier');
     const options = (await resolveConfig(path)) ?? {};

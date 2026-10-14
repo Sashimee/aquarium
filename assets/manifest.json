@@ -1119,13 +1119,7 @@
       "textures": "photo 3000x2000",
       "rigged": false,
       "notes": "High resolution (3000x2000) side-on shot for texture projection. Download: https://upload.wikimedia.org/wikipedia/commons/f/fe/Banggai-Kardinalbarsch_Pterapogon_kauderni.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
-      "modifications": [
-        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
-        "fin mask and fin id vertex attributes generated analytically",
-        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
-        "Pterapogon kauderni by Holger Krisp (CC-BY-3.0), side view projected onto the loft",
-        "colour map re-encoded to KTX2 at 1k and 2k"
-      ],
+      "modifications": [],
       "status": "downloaded"
     },
     {
