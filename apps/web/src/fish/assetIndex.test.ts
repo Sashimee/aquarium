@@ -59,9 +59,12 @@ describe('parseFishAssets', () => {
   it('parses the shipped index and has a model for every demo species', () => {
     const entries = parseFishAssets(shippedIndex);
     for (const species of Object.values(DEMO_STOCKS).flatMap((s) => s.species)) {
-      const entry = entries.get(renderProfile(species.id).assetId);
-      expect(entry, species.id).toBeDefined();
-      expect(entry?.lodFiles.length).toBeGreaterThanOrEqual(1);
+      const profile = renderProfile(species.id);
+      for (const assetId of [profile.assetId, ...profile.variants.map((v) => v.assetId)]) {
+        const entry = entries.get(assetId);
+        expect(entry, assetId).toBeDefined();
+        expect(entry?.lodFiles.length).toBeGreaterThanOrEqual(1);
+      }
     }
   });
 });
