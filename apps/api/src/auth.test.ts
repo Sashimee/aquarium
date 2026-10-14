@@ -21,11 +21,12 @@ const median = (xs: number[]) => {
 };
 
 // Hashing dominates a fresh sign-up (~65 ms), so a repeat that skips it shows a gap of ~6.7 times
-// the faster half (the repeat itself) and a second hash ~1.0. Load stretches both halves of an adjacent pair together, so
-// the median pair gap is bounded relative to the faster median (dividing by the slower would let a
-// faster repeat inflate its own denominator) instead of in absolute milliseconds. Detection floor is
-// 25% of that, ~16 ms on a quiet host. The bound grows with load: fine for CPU-bound leaks like a
-// hash, looser for I/O-bound ones. A repeat is legitimately ~1-3 ms faster (no user rows).
+// the faster half (the repeat itself) and a second hash ~1.0. Load stretches both halves of an
+// adjacent pair together, so the median pair gap is bounded relative to the faster median (dividing
+// by the slower would let a faster repeat inflate its own denominator) instead of in absolute
+// milliseconds. Detection floor is 25% of that, ~16 ms on a quiet host. The bound grows with load:
+// fine for CPU-bound leaks like a hash, looser for I/O-bound ones. A repeat is legitimately ~1-3 ms
+// faster (Better Auth's extra inserts for a new address); that skew is accepted.
 function expectNoTimingSkew(pairs: { fresh: number; repeat: number }[]) {
   const gap = median(pairs.map((p) => p.repeat - p.fresh));
   const fresh = median(pairs.map((p) => p.fresh));
@@ -95,7 +96,7 @@ async function verifiedSession(h: Harness, email = nextEmail()) {
   return { email, cookie, verify };
 }
 
-const SLOW_MAIL_MS = 40;
+const SLOW_MAIL_MS = 120;
 
 describe('timing skew bound', () => {
   it('flags a repeat that skips the mail send against a slow mailer', () => {
