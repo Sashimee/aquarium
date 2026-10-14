@@ -24,9 +24,9 @@ const LEAN_SECONDS = 0.35;
 const TWO_PI = Math.PI * 2;
 
 /**
- * The scene point a species is drawn to; the shape `packages/sim` takes in `setAnchors`. Heights
- * here are measured from the bottom glass, while the sim measures from the substrate (#64), so
- * whoever wires `setAnchors` must convert.
+ * The scene point a species is drawn to, in the frame the scene and sim share. `FishSystem`
+ * puts it in the `SimWorldSpec` and re-sends it to each new sim world, after `sceneAnchorsToSim`
+ * (`fish/demoStock.ts`) clamps it into the water.
  */
 export interface SceneAnchor {
   readonly id: string;
