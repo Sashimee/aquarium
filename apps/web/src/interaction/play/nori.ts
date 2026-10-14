@@ -36,7 +36,7 @@ import { FOOD_PROFILES } from '../food/profiles';
 /** Sheet height in radii; the sheet spans x in [-1, 1] and hangs from the clip at y = 0. */
 export const SHEET_LENGTH = 1.6;
 /** How far the clip's jaws reach past the sheet's plane when it lies flat, in radii. */
-const CLIP_LIFT = 0.11;
+const CLIP_LIFT = 0.06;
 const SHEET_COLUMNS = 18;
 const SHEET_ROWS = 14;
 const PART_SHEET = 0;
@@ -57,17 +57,13 @@ function sheetGeometry(): BufferGeometry {
 }
 
 function clipGeometry(): BufferGeometry {
-  const frontJaw = new BoxGeometry(0.5, 0.26, 0.07).translate(0, -0.05, 0.06);
-  const backJaw = new BoxGeometry(0.5, 0.26, 0.07).translate(0, -0.05, -0.06);
-  const spring = new BoxGeometry(0.5, 0.09, 0.19).translate(0, 0.13, 0);
-  const grip = new BoxGeometry(0.4, 0.04, 0.07).translate(0, -0.18, 0.1);
-  const neck = new CylinderGeometry(0.04, 0.05, 0.12, 10)
+  const frontJaw = new BoxGeometry(0.26, 0.1, 0.035).translate(0, -0.01, 0.03);
+  const backJaw = new BoxGeometry(0.26, 0.1, 0.035).translate(0, -0.01, -0.03);
+  const arm = new BoxGeometry(0.08, 0.06, 0.16).translate(0, 0.04, -0.08);
+  const cup = new CylinderGeometry(0.04, 0.13, 0.05, 20, 1, true)
     .rotateX(Math.PI / 2)
-    .translate(0, 0, -0.15);
-  const cup = new CylinderGeometry(0.05, 0.2, 0.08, 18, 1, true)
-    .rotateX(Math.PI / 2)
-    .translate(0, 0, -0.25);
-  const parts = [frontJaw, backJaw, spring, grip, neck, cup].map((g) => tagged(g, PART_CLIP));
+    .translate(0, 0.04, -0.17);
+  const parts = [frontJaw, backJaw, arm, cup].map((g) => tagged(g, PART_CLIP));
   const merged = mergeGeometries(parts);
   for (const g of parts) g.dispose();
   return merged;
@@ -112,9 +108,8 @@ function buildMaterial(): MeshStandardNodeMaterial {
     vec3(coord.x.mul(2 * scale).add(ox), coord.y.mul(SHEET_LENGTH * scale).add(oy), salt);
   const crinkle = (p: ReturnType<typeof at>) =>
     mx_noise_float(p.mul(2.6))
-      .mul(0.55)
-      .add(mx_noise_float(p.mul(5.7)).mul(0.3))
-      .add(mx_noise_float(p.mul(11.3)).mul(0.15));
+      .mul(0.7)
+      .add(mx_noise_float(p.mul(5.7)).mul(0.3));
 
   const height = crinkle(at(1, 0, 0));
   const coarse = mx_noise_float(at(1, 0, 0).mul(2.6))
@@ -124,19 +119,17 @@ function buildMaterial(): MeshStandardNodeMaterial {
     .mul(0.06)
     .mul(hang)
     .mul(far.mul(far));
-  const lift = coarse.mul(0.06).add(flutter);
+  const lift = coarse.mul(0.02).add(flutter);
   const displaced = positionLocal.add(vec3(0, 0, lift));
 
-  const edgeNoise = mx_noise_float(at(1.3, 4, 9))
-    .mul(0.5)
-    .add(mx_noise_float(at(3.4, 1, 2)).mul(0.15));
+  const edgeNoise = mx_noise_float(at(0.75, 4, 9)).mul(0.5);
   const sideDistance = min(coord.x, float(1).sub(coord.x)).mul(2);
-  const outline = min(sideDistance, along.mul(1.25)).add(edgeNoise.mul(0.22)).sub(0.05);
+  const outline = min(sideDistance, along.mul(1.25)).add(edgeNoise.mul(0.2)).sub(0.05);
   const bite = mx_noise_float(at(1.7, 13, 5))
     .mul(0.5)
     .add(0.5)
-    .mul(0.45)
-    .add(far.mul(0.6));
+    .mul(0.2)
+    .add(far);
   const threshold = float(1.05).sub(loss);
   const inside = min(outline, threshold.sub(bite).mul(1.6));
   const pinholes = smoothstep(
@@ -155,14 +148,14 @@ function buildMaterial(): MeshStandardNodeMaterial {
   const fibre = mx_noise_float(vec3(coord.x.mul(46).add(salt), coord.y.mul(4), seed.mul(5)))
     .mul(0.5)
     .add(0.5);
-  const body = mix(vec3(0.014, 0.034, 0.02), vec3(0.04, 0.03, 0.026), mottle);
+  const body = mix(vec3(0.012, 0.04, 0.009), vec3(0.028, 0.07, 0.014), mottle);
   const veined = body.mul(float(0.85).add(fibre.mul(0.3)));
   const glow = clamp(thin.mul(0.85).add(mottle.sub(0.62).mul(0.5).max(0)), 0, 1);
-  const sheetColor = mix(veined, vec3(0.07, 0.12, 0.03), glow);
+  const sheetColor = mix(veined, vec3(0.1, 0.16, 0.03), glow);
 
   const slopeX = crinkle(at(1, 0.012, 0)).sub(height);
   const slopeY = crinkle(at(1, 0, 0.012)).sub(height);
-  const crinkled = normalize(vec3(slopeX.mul(-9), slopeY.mul(-9), 0.55));
+  const crinkled = normalize(vec3(slopeX.mul(-2.5), slopeY.mul(-2.5), 0.55));
   const viewNormal = transformNormalToView(select(isClip, vec3(0, 0, 1), crinkled)).mul(
     faceDirection,
   );
@@ -174,10 +167,14 @@ function buildMaterial(): MeshStandardNodeMaterial {
     side: DoubleSide,
   });
   material.positionNode = select(isClip, positionLocal, displaced);
-  material.colorNode = select(isClip, vec3(0.3, 0.33, 0.34), sheetColor);
+  material.colorNode = select(isClip, vec3(0.05, 0.2, 0.1), sheetColor);
   material.opacityNode = select(isClip, float(1), sheetAlpha);
-  material.roughnessNode = select(isClip, float(0.32), float(0.5).add(fibre.mul(0.25)));
-  material.emissiveNode = select(isClip, vec3(0), vec3(0.03, 0.065, 0.012).mul(thin));
+  material.roughnessNode = select(isClip, float(0.15), float(0.62).add(fibre.mul(0.2)));
+  material.emissiveNode = select(
+    isClip,
+    vec3(0),
+    vec3(0.012, 0.03, 0.006).add(vec3(0.03, 0.06, 0.012).mul(thin)),
+  );
   material.normalNode = viewNormal;
   return material;
 }
@@ -223,7 +220,7 @@ export class NoriLayer {
     const seed = noriSeed(state.id);
     const scale = FOOD_PROFILES.nori.radius * (0.85 + 0.3 * noriSeed(state.id + 101));
     const angle = hangAngle(state.y - state.ground, scale);
-    this.yaw.setFromAxisAngle(Y_AXIS, seed * Math.PI * 2);
+    this.yaw.setFromAxisAngle(Y_AXIS, (seed - 0.5) * 0.4 + Math.sin(angle) * seed * Math.PI * 2);
     this.swing.setFromAxisAngle(X_AXIS, angle);
     this.orientation.multiplyQuaternions(this.yaw, this.swing);
     this.position.set(state.x, state.y + scale * CLIP_LIFT * Math.sin(angle), state.z);

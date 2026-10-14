@@ -29,7 +29,7 @@ describe('nori geometry', () => {
     for (let i = 0; i < position.count; i++) {
       if (part.getX(i) === 1) rearmost = Math.min(rearmost, position.getZ(i));
     }
-    expect(rearmost).toBeLessThan(-0.25);
+    expect(rearmost).toBeLessThan(-0.15);
   });
 
   it('spans uv 0..1 down the sheet, which the shader tears and bites against', () => {

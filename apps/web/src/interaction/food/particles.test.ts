@@ -251,3 +251,25 @@ describe('FoodField.pack', () => {
     expect(new FoodField(env()).pack(sceneToSim).length).toBe(0);
   });
 });
+
+describe('clipped nori', () => {
+  it('hangs on the back glass in the water and stays put through a current', () => {
+    const push = (_x: number, _y: number, _z: number, out: Float64Array | number[]) => {
+      out[0] = 0.2;
+      out[1] = -0.1;
+      out[2] = 0.2;
+    };
+    const field = new FoodField(env({ current: push }), fixedRandom);
+    expect(field.drop('nori', 1, 0.1, 0.1)).toBe(2);
+    const before = field.particles.map((p) => [p.x, p.y, p.z]);
+    runFor(field, 600);
+    expect(field.count).toBe(2);
+    field.particles.forEach((p, i) => {
+      expect([p.x, p.y, p.z]).toEqual(before[i]);
+      expect(p.z).toBeLessThan(-0.2);
+      expect(p.y).toBeGreaterThan(GROUND + 0.2);
+      expect(p.y).toBeLessThan(0.47);
+      expect(p.settledS).toBe(-1);
+    });
+  });
+});

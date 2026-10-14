@@ -41,6 +41,9 @@ const MAX_STEP_S = 0.1;
 const SURFACE_MARGIN = 0.002;
 const WALL_MARGIN = 0.004;
 const EATEN_EPSILON = 1e-6;
+const NORI_CLIP_DEPTH = 0.12;
+const NORI_GLASS_GAP = 0.012;
+const NORI_SPACING = 0.12;
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
@@ -68,7 +71,7 @@ export class FoodField {
   }
 
   /**
-   * Scatters a portion around (x, z) at the water surface. Returns how many particles were made,
+   * Scatters a portion around (x, z) at the water surface; nori is clipped to the back glass instead. Returns how many particles were made,
    * which is fewer than asked when the tank already holds the cap of uneaten food.
    */
   drop(food: FoodType, portion: number, x: number, z: number, spread = 0.03): number {
@@ -78,6 +81,10 @@ export class FoodField {
     const made = Math.min(wanted, MAX_FOOD_PARTICLES - this.list.length);
     const { bounds } = this.env;
     for (let i = 0; i < made; i++) {
+      if (food === 'nori') {
+        this.list.push(this.clipped(x, i, made));
+        continue;
+      }
       const angle = this.random() * Math.PI * 2;
       const radius = spread * Math.sqrt(this.random());
       this.list.push({
@@ -103,6 +110,24 @@ export class FoodField {
       });
     }
     return made;
+  }
+
+  private clipped(x: number, index: number, count: number): FoodParticle {
+    const { bounds } = this.env;
+    const slot = count > 1 ? index / (count - 1) - 0.5 : 0;
+    return {
+      id: this.nextId++,
+      food: 'nori',
+      x: clamp(x + slot * NORI_SPACING, bounds.minX + WALL_MARGIN, bounds.maxX - WALL_MARGIN),
+      y: bounds.waterTop - NORI_CLIP_DEPTH - this.random() * 0.03,
+      z: bounds.minZ + NORI_GLASS_GAP,
+      vx: 0,
+      vy: 0,
+      vz: 0,
+      ageS: 0,
+      settledS: -1,
+      eaten: 0,
+    };
   }
 
   /** Removes particles by id (eaten); unknown ids are ignored. Returns the ones removed. */
@@ -171,7 +196,7 @@ export class FoodField {
 
   private advance(p: FoodParticle, dt: number): void {
     p.ageS += dt;
-    if (p.ageS < 0) return;
+    if (p.ageS < 0 || p.food === 'nori') return;
     if (p.settledS >= 0) {
       p.settledS += dt;
       return;
