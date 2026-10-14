@@ -10,6 +10,8 @@ import { schema, type Database } from './db/index.ts';
 import { MailThrottledError, type Mailer } from './mail.ts';
 
 export const AUTH_BASE_PATH = '/api/auth';
+export const RESET_REDIRECT_PATH = '/reset-password';
+export const VERIFY_CALLBACK_PATH = '/verify-email';
 const MIN_PASSWORD_LENGTH = 10;
 const MAX_PASSWORD_LENGTH = 128;
 
@@ -138,7 +140,7 @@ export function createAuth({
       onExistingUserSignUp: async ({ user }) => {
         if (user.emailVerified) return;
         const token = await createEmailVerificationToken(config.authSecret, user.email);
-        const url = `${origin}${AUTH_BASE_PATH}/verify-email?token=${token}&callbackURL=${encodeURIComponent('/')}`;
+        const url = `${origin}${AUTH_BASE_PATH}/verify-email?token=${token}&callbackURL=${encodeURIComponent(VERIFY_CALLBACK_PATH)}`;
         await throttleSafe(() => mailer.sendVerification(user.email, url), 'verification');
       },
     },
