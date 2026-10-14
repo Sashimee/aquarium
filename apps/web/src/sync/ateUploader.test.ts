@@ -88,6 +88,21 @@ describe('AteUploader', () => {
     expect(h.uploader.size).toBe(0);
   });
 
+  it('names the cause when crypto.randomUUID is unavailable', async () => {
+    const send = vi.fn().mockResolvedValue(undefined);
+    const causes: unknown[] = [];
+    const h = harness(send, { onDropped: (_r, _reports, cause) => causes.push(cause) });
+    vi.stubGlobal('crypto', {});
+    try {
+      h.uploader.add(FISH_1, 0.5);
+      await h.uploader.flushNow();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(send).not.toHaveBeenCalled();
+    expect(String(causes[0])).toContain('crypto.randomUUID is unavailable');
+  });
+
   it('gives up after the attempt limit while offline, bounded in time and memory', async () => {
     const send = vi.fn().mockRejectedValue(apiError(0, 'network'));
     const h = harness(send, { maxAttempts: 4 });

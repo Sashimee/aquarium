@@ -82,6 +82,16 @@ export class AteUploader {
 
   private async attempt(batch: AteReport[]): Promise<void> {
     const { send, onDropped } = this.options;
+    if (typeof crypto.randomUUID !== 'function') {
+      this.lost = true;
+      // randomUUID exists only in secure contexts, so plain http on a LAN IP lands here.
+      onDropped?.(
+        'rejected',
+        batch,
+        new Error('crypto.randomUUID is unavailable (insecure context); serve the app over https'),
+      );
+      return;
+    }
     const batchId = crypto.randomUUID();
     let remaining = batch;
     const prune = () => {

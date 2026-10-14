@@ -480,6 +480,32 @@ describe('care actions and feeding validation', () => {
       expect(await ateEvents(tank.id)).toHaveLength(1);
     });
 
+    it('rejects a stale report under a pruned batch id and rolls the claim back', async () => {
+      const { cookie, tank, fishId } = await setup();
+      await feed(cookie, tank.id, 1);
+      const old = randomUUID();
+      await h.database.db.insert(schema.ateBatches).values({
+        tankId: tank.id,
+        batchId: old,
+        createdAt: new Date(Date.now() - 2 * DAY * 60_000),
+      });
+      await pruneExpired(h.database);
+      const stale = await call(h, cookie, 'POST', `/api/tanks/${tank.id}/ate`, {
+        batchId: old,
+        reports: [
+          { fishId, portion: 0.3, at: new Date(h.clock.now() - 3 * 60 * 60_000).toISOString() },
+        ],
+      });
+      expect(stale.statusCode).toBe(422);
+      expect(apiErrorSchema.parse(stale.json()).error.code).toBe('feeding_rejected');
+      expect(await ateEvents(tank.id)).toHaveLength(0);
+      const claims = await h.database.db
+        .select()
+        .from(schema.ateBatches)
+        .where(eq(schema.ateBatches.tankId, tank.id));
+      expect(claims).toHaveLength(0);
+    });
+
     it('rejects a malformed batch id with 400', async () => {
       const { cookie, tank, fishId } = await setup();
       await feed(cookie, tank.id, 1);
