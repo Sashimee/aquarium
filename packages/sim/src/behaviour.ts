@@ -654,7 +654,7 @@ export class Behaviour {
     this.prepareFeeding();
     this.feeding.update();
     this.prepareCuriosity();
-    this.curiosity.update((i) => this.feeding.motivation(i));
+    this.curiosity.update(this.feeding);
     for (let i = 0; i < n; i++) this.plan(i);
   }
 
