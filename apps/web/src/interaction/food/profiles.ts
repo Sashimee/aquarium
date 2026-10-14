@@ -11,6 +11,8 @@ export interface FoodProfile {
   readonly responseS: number;
   /** Fraction of the current's speed the particle takes up (light food is pushed more). */
   readonly currentGain: number;
+  /** Hard cap on horizontal drift in m/s, so food never outruns the slowest fish that eats it. */
+  readonly maxDriftS: number;
   /** Seconds the settled particle lasts before it dissolves. */
   readonly decayS: number;
   /** Particle radius in metres, used by the renderer. */
@@ -20,37 +22,41 @@ export interface FoodProfile {
 export const FOOD_PROFILES: Readonly<Record<FoodType, FoodProfile>> = {
   flakes: {
     particlesPerPortion: 18,
-    sinkSpeed: 0.012,
+    sinkSpeed: 0.008,
     floatS: 25,
     responseS: 0.6,
     currentGain: 1,
+    maxDriftS: 0.01,
     decayS: 90,
     radius: 0.0032,
   },
   pellets: {
     particlesPerPortion: 8,
-    sinkSpeed: 0.075,
+    sinkSpeed: 0.012,
     floatS: 0,
     responseS: 0.25,
     currentGain: 0.35,
+    maxDriftS: 0.008,
     decayS: 180,
     radius: 0.0028,
   },
   bloodworms: {
     particlesPerPortion: 6,
-    sinkSpeed: 0.05,
+    sinkSpeed: 0.014,
     floatS: 0,
     responseS: 0.35,
     currentGain: 0.5,
+    maxDriftS: 0.01,
     decayS: 150,
     radius: 0.0035,
   },
   'brine-shrimp': {
     particlesPerPortion: 20,
-    sinkSpeed: 0.008,
+    sinkSpeed: 0.006,
     floatS: 0,
     responseS: 0.8,
     currentGain: 0.9,
+    maxDriftS: 0.01,
     decayS: 60,
     radius: 0.0018,
   },
@@ -60,15 +66,17 @@ export const FOOD_PROFILES: Readonly<Record<FoodType, FoodProfile>> = {
     floatS: 40,
     responseS: 0.7,
     currentGain: 0.8,
+    maxDriftS: 0.05,
     decayS: 420,
     radius: 0.011,
   },
   'algae-wafer': {
     particlesPerPortion: 1,
-    sinkSpeed: 0.1,
+    sinkSpeed: 0.025,
     floatS: 0,
     responseS: 0.2,
     currentGain: 0.15,
+    maxDriftS: 0.01,
     decayS: 900,
     radius: 0.012,
   },

@@ -63,7 +63,7 @@ describe('FoodField sinking', () => {
   });
 
   it('sinks pellets and wafers faster than flakes and brine shrimp', () => {
-    expect(meanSinkSpeed('pellets')).toBeGreaterThan(meanSinkSpeed('brine-shrimp') * 3);
+    expect(meanSinkSpeed('pellets')).toBeGreaterThan(meanSinkSpeed('brine-shrimp') * 1.5);
     expect(meanSinkSpeed('algae-wafer')).toBeGreaterThan(meanSinkSpeed('pellets'));
   });
 
@@ -98,7 +98,7 @@ describe('FoodField settling and decay', () => {
   it('settles on the sand at the local ground height and stops moving', () => {
     const field = new FoodField(env({ groundHeight: (x) => 0.05 + 0.02 * x }), fixedRandom);
     field.drop('pellets', 1, 0.2, 0, 0);
-    runFor(field, 8);
+    runFor(field, 60);
     for (const p of field.particles) {
       expect(p.settledS).toBeGreaterThanOrEqual(0);
       expect(p.y).toBeCloseTo(0.05 + 0.02 * p.x, 6);
@@ -153,8 +153,8 @@ describe('FoodField current', () => {
     runFor(light, 6);
     runFor(heavy, 6);
     const dx = (f: FoodField) => (f.particles[0]?.x ?? 0) + 0.3;
-    expect(dx(light)).toBeGreaterThan(0.15);
-    expect(dx(heavy)).toBeLessThan(dx(light) / 4);
+    expect(dx(light)).toBeGreaterThan(0.05);
+    expect(dx(heavy)).toBeLessThan(dx(light));
   });
 
   it('stops against the end glass instead of leaving the tank', () => {
@@ -242,7 +242,7 @@ describe('FoodField.pack', () => {
   it('puts settled food at sim y = 0 and never below', () => {
     const field = new FoodField(env(), fixedRandom);
     field.drop('algae-wafer', 1, 0, 0);
-    runFor(field, 6);
+    runFor(field, 30);
     const buf = field.pack(sceneToSim(() => GROUND));
     expect(buf[2]).toBe(0);
   });

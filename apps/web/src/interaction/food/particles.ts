@@ -172,6 +172,12 @@ export class FoodField {
     p.vx += ((this.flow[0] ?? 0) * gain - p.vx) * k;
     p.vy += (targetVy - p.vy) * k;
     p.vz += ((this.flow[2] ?? 0) * gain - p.vz) * k;
+    const drift = Math.hypot(p.vx, p.vz);
+    if (drift > profile.maxDriftS) {
+      const scale = profile.maxDriftS / drift;
+      p.vx *= scale;
+      p.vz *= scale;
+    }
 
     p.x += p.vx * dt;
     p.y += p.vy * dt;
