@@ -22,6 +22,7 @@ import { QualityManager } from './quality/QualityManager';
 import { renderPixelRatio } from './quality/tiers';
 import { DEFAULT_TANK, type TankDimensions, waterBounds } from './tank/dimensions';
 import { meanSubstrateHeight } from './tank/substrate';
+import { UNREFLECTED_LAYER } from './tank/surfaceReflection';
 import { Tank } from './tank/Tank';
 import { Caustics } from './water/caustics';
 import { InteriorLight } from './water/interior';
@@ -239,6 +240,7 @@ export class Engine {
     this.setupHood(dimensions);
     cleanup.add(() => this.hood.shadow.dispose());
 
+    this.camera.layers.enable(UNREFLECTED_LAYER);
     this.camera.position.set(0, 0.35, 1.6);
     this.camera.lookAt(0, 0.25, 0);
 
@@ -346,6 +348,9 @@ export class Engine {
     this.quality.register('caustics', (s) => {
       this.caustics.setMethod(s.causticMethod, s.causticLayers);
     });
+    this.quality.register('surface-reflection', (s) => {
+      this.tank.setSurfaceReflection(s.surfaceReflection);
+    });
   }
 
   private async warmUp(): Promise<void> {
@@ -394,6 +399,7 @@ export class Engine {
     applyDayLighting(this.dayRig, this.daylightLevel);
     if (this.cullPrewarm.begin(nowMs) > 0) this.sceneRevisionValue++;
     try {
+      this.renderSurfaceReflection();
       if (!this.effects.render()) this.renderer.render(this.scene, this.camera);
     } finally {
       this.cullPrewarm.end();
@@ -407,6 +413,21 @@ export class Engine {
       this.stats.frameMsSum += frameMs;
     }
     if (nowMs - this.stats.since >= STATS_INTERVAL_MS) this.emitStats(nowMs);
+  }
+
+  /**
+   * The hood's shadow map does not depend on the view, but three redraws it once per camera and
+   * frame: the mirrored camera uses the last one drawn for the scene camera.
+   */
+  private renderSurfaceReflection(): void {
+    const shadow = this.hood.shadow;
+    const autoUpdate = shadow.autoUpdate;
+    shadow.autoUpdate = false;
+    try {
+      this.tank.renderSurfaceReflection(this.renderer, this.scene, this.camera);
+    } finally {
+      shadow.autoUpdate = autoUpdate;
+    }
   }
 
   /** Timestamp queries resolve asynchronously; the result lands on a later frame. */
