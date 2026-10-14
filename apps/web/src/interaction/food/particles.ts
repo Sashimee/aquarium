@@ -1,4 +1,5 @@
 import type { FoodType } from '@aquarium/shared';
+import { FOOD_PARTICLES } from '@aquarium/sim';
 import { FOOD_PROFILES, foodTypeIndex } from './profiles';
 
 export interface FoodBounds {
@@ -30,6 +31,8 @@ export interface FoodParticle {
   ageS: number;
   /** Seconds since touching the floor, or -1 while still falling. */
   settledS: number;
+  /** Feed portions fish have taken from this particle so far. */
+  eaten: number;
 }
 
 export const MAX_FOOD_PARTICLES = 400;
@@ -37,6 +40,7 @@ export const FOOD_STRIDE = 5;
 const MAX_STEP_S = 0.1;
 const SURFACE_MARGIN = 0.002;
 const WALL_MARGIN = 0.004;
+const EATEN_EPSILON = 1e-6;
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
@@ -95,6 +99,7 @@ export class FoodField {
         vz: 0,
         ageS: -this.random() * 0.4,
         settledS: -1,
+        eaten: 0,
       });
     }
     return made;
@@ -112,6 +117,15 @@ export class FoodField {
     }
     this.list.length = keep;
     return removed;
+  }
+
+  /** Records a bite; the particle goes once its whole portion is eaten. False for an unknown id. */
+  bite(id: number, portion: number): boolean {
+    const p = this.list.find((q) => q.id === id);
+    if (!p) return false;
+    p.eaten += portion;
+    if (p.eaten >= FOOD_PARTICLES[p.food].portion - EATEN_EPSILON) this.remove([id]);
+    return true;
   }
 
   clear(): void {

@@ -53,7 +53,7 @@ export function createPlaySystem(
   const link = new FoodLink(food, sim, toSim, (eaten) => interaction.emit('food:ate', { eaten }));
   const bubbles = new BubbleField(box.max.y);
   const ripples = new RippleField();
-  const visuals = new PlayVisuals();
+  const visuals = new PlayVisuals((x, z) => scene.groundHeight(x, z));
   engine.scene.add(visuals.group);
 
   const raycaster = new Raycaster();
