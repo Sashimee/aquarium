@@ -5,12 +5,12 @@ const port = Number(process.env['E2E_PORT'] ?? 4317);
 export default defineConfig({
   testDir: '.',
   testMatch: ['*.spec.ts', 'tests/*.spec.ts'],
-  fullyParallel: false,
+  fullyParallel: true,
   workers: 1,
   retries: process.env['CI'] ? 1 : 0,
   timeout: 240_000,
   expect: { timeout: 20_000 },
-  reporter: [['list']],
+  reporter: process.env['CI'] ? [['blob'], ['list']] : [['list']],
   use: {
     baseURL: `http://localhost:${port}`,
     viewport: { width: 800, height: 540 },
