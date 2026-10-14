@@ -233,7 +233,9 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
       for (const release of releasers) release();
       const failures: unknown[] = [];
       for (const step of [
-        () => Promise.allSettled([...background]),
+        async () => {
+          while (background.size > 0) await Promise.allSettled([...background]);
+        },
         () => app.close(),
         () => database.close(),
         () => testDb.drop(),
@@ -244,7 +246,9 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
           failures.push(err);
         }
       }
-      if (failures.length > 0) throw failures[0];
+      if (failures.length === 1) throw failures[0];
+      if (failures.length > 1)
+        throw new AggregateError(failures, 'several harness teardown steps failed');
     },
   };
 }
