@@ -39,6 +39,7 @@ export interface Harness {
   outbox: SentMail[];
   clock: Clock;
   settleMail(): Promise<void>;
+  rawInject: FastifyInstance['inject'];
   holdMail(): { sendStarted: Promise<void>; release(): void; fail(err: Error): void };
   dropDatabase(): Promise<void>;
   close(): Promise<void>;
@@ -99,6 +100,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
   const outbox: SentMail[] = [];
   let gate: Promise<void> = Promise.resolve();
   let onSend: () => void = () => {};
+  let held = false;
   const transport = nodemailer.createTransport({
     name: 'test',
     version: '0',
@@ -182,7 +184,18 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
   });
   await app.ready();
 
+  // Mail leaves the response path, so tests that read the outbox right after a request need it settled.
+  // Timing tests use rawInject to measure the response alone.
+  const rawInject = app.inject.bind(app);
+  const settledInject = async (...args: Parameters<typeof rawInject>) => {
+    const res = await (rawInject as (...a: typeof args) => ReturnType<typeof rawInject>)(...args);
+    if (!held) await Promise.all([...background]);
+    return res;
+  };
+  app.inject = settledInject as typeof app.inject;
+
   return {
+    rawInject,
     app,
     auth,
     database,
@@ -192,9 +205,16 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     holdMail() {
       let release!: () => void;
       let fail!: (err: Error) => void;
+      held = true;
       gate = new Promise<void>((resolve, reject) => {
-        release = resolve;
-        fail = reject;
+        release = () => {
+          held = false;
+          resolve();
+        };
+        fail = (err) => {
+          held = false;
+          reject(err);
+        };
       });
       gate.catch(() => {});
       const sendStarted = new Promise<void>((resolve) => (onSend = resolve));
