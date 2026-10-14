@@ -21,7 +21,7 @@ import Fastify, {
   type FastifyRequest,
 } from 'fastify';
 import { z, ZodError } from 'zod';
-import { AUTH_BASE_PATH, type Auth } from './auth.ts';
+import { AUTH_BASE_PATH, RESET_REDIRECT_PATH, VERIFY_CALLBACK_PATH, type Auth } from './auth.ts';
 import { createClock, type Clock } from './clock.ts';
 import { schema, type Database } from './db/index.ts';
 import { apiError } from './errors.ts';
@@ -94,12 +94,10 @@ const advanceTimeRequestSchema = z.strictObject({
     .max(60 * 24 * 365),
 });
 
-// Better Auth appends the one-time token to these in the mail link. Only the two pages that
-// carry a no-referrer policy and consume the token may be named, so the values are pinned
-// instead of validated: any other path would land the token on a page that leaks or ignores it.
-const RESET_REDIRECT_PATH = '/reset-password';
-const VERIFY_CALLBACK_PATH = '/verify-email';
-
+// Only the two pages that carry a no-referrer policy may be named, so the values are pinned
+// instead of validated. Better Auth appends the reset token to redirectTo, so any other path would
+// land it on a page that leaks or ignores it; the verify token travels in the mail link's query to
+// the API, and callbackURL is only where the browser lands afterwards.
 const resetRedirectSchema = z.literal(RESET_REDIRECT_PATH, {
   error: `redirectTo must be exactly ${RESET_REDIRECT_PATH}.`,
 });
@@ -118,7 +116,7 @@ const signInBodySchema = signInRequestSchema.extend({
 
 const requestPasswordResetBodySchema = z.strictObject({
   email: emailSchema,
-  redirectTo: resetRedirectSchema.optional(),
+  redirectTo: resetRedirectSchema.default(RESET_REDIRECT_PATH),
 });
 
 const sendVerificationEmailBodySchema = z.strictObject({
@@ -454,8 +452,8 @@ export function buildApp(opts: AppOptions): FastifyInstance {
           ...(req.method === 'POST' && raw !== undefined ? { body: raw } : {}),
         });
         const res = await mailer.runAdmitted(admission, () => auth.handler(request));
-        // Better Auth also answers 403 before looking at the password (bad callbackURL, foreign
-        // origin, cross-site navigation), so on sign-in only its EMAIL_NOT_VERIFIED, raised after
+        // Better Auth also answers 403 before looking at the password (foreign origin or cross-site
+        // navigation), so on sign-in only its EMAIL_NOT_VERIFIED, raised after
         // the password matched, counts as a success next to 200. change-password has no such case:
         // every non-200 is either a rejection before the check or the wrong password.
         const unverifiedSignIn =

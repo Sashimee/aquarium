@@ -1347,6 +1347,35 @@ describe('input and origin checks', () => {
       });
       expect(res.statusCode).toBe(200);
     });
+
+    it('defaults an omitted redirectTo to the pinned reset page', async () => {
+      const email = nextEmail();
+      expect((await signUp(h.app, email)).statusCode).toBe(200);
+      await h.settleMail();
+      await verifyFrom(h, email);
+      const res = await h.app.inject({
+        method: 'POST',
+        url: '/api/auth/request-password-reset',
+        headers: jsonHeaders,
+        payload: { email },
+      });
+      await h.settleMail();
+      expect(res.statusCode).toBe(200);
+      const mail = h.outbox.filter((m) => m.to === email).at(-1);
+      expect(mail?.text).toContain('callbackURL=%2Freset-password');
+    });
+
+    it('pins the verify path in the mail for a re-sign-up on an unverified address', async () => {
+      const email = nextEmail();
+      expect((await signUp(h.app, email)).statusCode).toBe(200);
+      await h.settleMail();
+      const before = h.outbox.filter((m) => m.to === email).length;
+      expect((await signUp(h.app, email)).statusCode).toBe(200);
+      await h.settleMail();
+      const mails = h.outbox.filter((m) => m.to === email);
+      expect(mails.length).toBeGreaterThan(before);
+      expect(mails.at(-1)?.text).toContain('callbackURL=%2Fverify-email');
+    });
   });
 });
 
