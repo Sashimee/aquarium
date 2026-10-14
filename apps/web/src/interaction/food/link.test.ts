@@ -58,6 +58,25 @@ describe('FoodLink', () => {
     ]);
   });
 
+  it('keeps a nori sheet through partial bites and removes it once its portion is gone', () => {
+    const { field, link, onEaten } = setup({});
+    field.drop('nori', 0.5, 0, 0, 0);
+    expect(field.count).toBe(1);
+    const id = field.particles[0]?.id ?? -1;
+    link.handleAte([
+      { fishId: 'f1', foodId: id, portion: 0.01 },
+      { fishId: 'f2', foodId: id, portion: 0.01 },
+    ]);
+    expect(field.count).toBe(1);
+    expect(field.particles[0]?.eaten).toBeCloseTo(0.02, 9);
+    expect(onEaten).toHaveBeenCalledWith([
+      { fishId: 'f1', portion: 0.01 },
+      { fishId: 'f2', portion: 0.01 },
+    ]);
+    link.handleAte([{ fishId: 'f1', foodId: id, portion: 0.48 }]);
+    expect(field.count).toBe(0);
+  });
+
   it('stays silent when nothing eaten is known', () => {
     const { link, onEaten } = setup({});
     link.handleAte([{ fishId: 'f1', foodId: 77, portion: 1 }]);

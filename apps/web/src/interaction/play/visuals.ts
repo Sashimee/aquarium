@@ -15,8 +15,10 @@ import {
 import type { FoodType } from '@aquarium/shared';
 import type { Vec3 } from '../camera';
 import { FOOD_PROFILES } from '../food/profiles';
+import { FOOD_PARTICLES } from '@aquarium/sim';
 import { FoodField, MAX_FOOD_PARTICLES } from '../food/particles';
 import { BubbleField, MAX_BUBBLES } from './bubbles';
+import { NoriLayer } from './nori';
 import { MAX_RIPPLES, RippleField } from './ripples';
 
 const FOOD_COLORS: Readonly<Record<FoodType, number>> = {
@@ -24,7 +26,7 @@ const FOOD_COLORS: Readonly<Record<FoodType, number>> = {
   pellets: 0x8a5a2b,
   bloodworms: 0x8c1d1d,
   'brine-shrimp': 0xe3a98a,
-  nori: 0x1f3b24,
+  nori: 0x0d1c12,
   'algae-wafer': 0x3d4a22,
 };
 
@@ -36,6 +38,7 @@ const Z_AXIS = new Vector3(0, 0, 1);
 export class PlayVisuals {
   readonly group = new Group();
   private readonly food: InstancedMesh;
+  private readonly nori: NoriLayer;
   private readonly bubbles: InstancedMesh;
   private readonly rings: Mesh<RingGeometry, MeshBasicNodeMaterial>[] = [];
   private readonly laser: Mesh;
@@ -48,12 +51,13 @@ export class PlayVisuals {
   private readonly normal = new Vector3();
   private readonly sway = { dx: 0, dz: 0 };
 
-  constructor() {
+  constructor(private readonly groundHeight: (x: number, z: number) => number) {
     const foodGeometry = new SphereGeometry(1, 8, 6);
     const foodMaterial = new MeshStandardNodeMaterial({ roughness: 0.85 });
     this.food = new InstancedMesh(foodGeometry, foodMaterial, MAX_FOOD_PARTICLES);
     this.food.count = 0;
     this.food.frustumCulled = false;
+    this.nori = new NoriLayer(MAX_FOOD_PARTICLES);
 
     const bubbleGeometry = new SphereGeometry(1, 10, 8);
     const bubbleMaterial = new MeshStandardNodeMaterial({
@@ -88,7 +92,7 @@ export class PlayVisuals {
     this.laser.visible = false;
     this.laser.renderOrder = 10;
 
-    this.group.add(this.food, this.bubbles, this.laser);
+    this.group.add(this.food, this.nori.mesh, this.bubbles, this.laser);
     this.disposables.push(
       foodGeometry,
       foodMaterial,
@@ -114,13 +118,15 @@ export class PlayVisuals {
   dispose(): void {
     this.group.removeFromParent();
     this.food.dispose();
+    this.nori.dispose();
     this.bubbles.dispose();
     for (const d of this.disposables) d.dispose();
   }
 
   private drawFood(field: FoodField): void {
     const list = field.particles;
-    this.food.count = list.length;
+    let beads = 0;
+    let sheets = 0;
     this.quat.identity();
     for (let i = 0; i < list.length; i++) {
       const p = list[i];
@@ -128,15 +134,30 @@ export class PlayVisuals {
       const profile = FOOD_PROFILES[p.food];
       const remaining =
         p.settledS < 0 ? 1 : Math.min(1, Math.max(0, (profile.decayS - p.settledS) / FADE_TAIL_S));
+      if (p.food === 'nori') {
+        this.nori.set(sheets++, {
+          id: p.id,
+          x: p.x,
+          y: p.y,
+          z: p.z,
+          eaten: p.eaten / FOOD_PARTICLES.nori.portion,
+          remaining,
+          ground: this.groundHeight(p.x, p.z),
+        });
+        continue;
+      }
       const r = profile.radius * remaining;
       this.pos.set(p.x, p.y + r * 0.5, p.z);
       this.scale.set(r, r * 0.7, r);
       this.matrix.compose(this.pos, this.quat, this.scale);
-      this.food.setMatrixAt(i, this.matrix);
-      this.food.setColorAt(i, this.color.setHex(FOOD_COLORS[p.food]));
+      this.food.setMatrixAt(beads, this.matrix);
+      this.food.setColorAt(beads, this.color.setHex(FOOD_COLORS[p.food]));
+      beads++;
     }
+    this.food.count = beads;
     this.food.instanceMatrix.needsUpdate = true;
     if (this.food.instanceColor) this.food.instanceColor.needsUpdate = true;
+    this.nori.commit(sheets);
   }
 
   private drawBubbles(field: BubbleField): void {

@@ -54,7 +54,7 @@ export function createPlaySystem(
   );
   const bubbles = new BubbleField(box.max.y);
   const ripples = new RippleField();
-  const visuals = new PlayVisuals();
+  const visuals = new PlayVisuals((x, z) => scene.groundHeight(x, z));
   engine.scene.add(visuals.group);
 
   const raycaster = new Raycaster();

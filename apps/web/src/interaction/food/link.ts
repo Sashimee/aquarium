@@ -51,11 +51,8 @@ export class FoodLink {
 
   handleAte(events: readonly AteEvent[]): void {
     const eaten: EatenFood[] = [];
-    const taken = new Set<number>();
     for (const e of events) {
-      if (taken.has(e.foodId)) continue;
-      if (this.field.remove([e.foodId]).length === 0) continue;
-      taken.add(e.foodId);
+      if (!this.field.bite(e.foodId, e.portion)) continue;
       eaten.push({ fishId: e.fishId, portion: e.portion });
     }
     if (eaten.length > 0) this.onEaten(eaten);
