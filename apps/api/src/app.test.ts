@@ -24,6 +24,7 @@ beforeAll(async () => {
   writeFileSync(join(dist, 'assets', 'index-C7vUOBtl.js.br'), brotliCompressSync(BUNDLE));
   writeFileSync(join(dist, 'assets', 'index-C7vUOBtl.js.gz'), gzipSync(BUNDLE));
   writeFileSync(join(dist, 'assets', 'index.json'), '{}');
+  writeFileSync(join(dist, 'ktx2-worker.js'), 'self.onmessage=()=>{}');
   mkdirSync(join(dist, 'assets', 'fish'));
   writeFileSync(join(dist, 'assets', 'fish', 'tetra.glb'), 'glb');
   writeFileSync(join(dist, '.env'), 'SECRET=1');
@@ -66,7 +67,8 @@ describe('security headers', () => {
     const res = await withDist().inject(url);
     const csp = String(res.headers['content-security-policy']);
     expect(csp).toContain("default-src 'self'");
-    expect(csp).toContain("script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval';");
+    expect(csp).toContain("script-src 'self' 'wasm-unsafe-eval';");
+    expect(csp).not.toMatch(/'unsafe-eval'/);
     expect(csp).not.toMatch(/script-src[^;]*'unsafe-inline'/);
     expect(csp).toContain("worker-src 'self' blob:");
     expect(csp).toContain("img-src 'self' data: blob:");
@@ -77,6 +79,15 @@ describe('security headers', () => {
     expect(res.headers['permissions-policy']).toBe('camera=(), microphone=(), geolocation=()');
     expect(res.headers['cross-origin-opener-policy']).toBe('same-origin');
     expect(res.headers['strict-transport-security']).toBe('max-age=31536000; includeSubDomains');
+  });
+
+  it('lets only the KTX2 worker file eval', async () => {
+    const res = await withDist().inject('/ktx2-worker.js');
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-security-policy']).toBe(
+      "default-src 'none'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval'",
+    );
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
   });
 
   describe('on every kind of response', () => {
