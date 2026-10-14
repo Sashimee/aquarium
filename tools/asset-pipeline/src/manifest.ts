@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
+import type { AssetIndex } from './index-schema.ts';
 
 export const ALLOWED_LICENCES = ['CC0-1.0', 'CC-BY-3.0', 'CC-BY-4.0'] as const;
 export const SHARE_ALIKE_LICENCES = ['CC-BY-SA-3.0', 'CC-BY-SA-4.0'] as const;
@@ -155,6 +156,37 @@ export function validateManifest(manifest: Manifest, credits: string): string[] 
       } else if (asset.author.trim() !== '' && !credits.includes(asset.author)) {
         problems.push(`${at}: CREDITS.md does not name author "${asset.author}"`);
       }
+    }
+  }
+  return problems;
+}
+
+/** Union of the modifications of every built asset that derives from each credit-requiring source, in index order. */
+export function derivedModifications(index: AssetIndex, manifest: Manifest): Map<string, string[]> {
+  const needsCredit = new Set(
+    manifest.assets.filter((a) => requiresCredit(a.licence)).map((a) => a.id),
+  );
+  const derived = new Map<string, string[]>();
+  for (const asset of index.assets) {
+    for (const sourceId of asset.sources) {
+      if (!needsCredit.has(sourceId)) continue;
+      const list = derived.get(sourceId) ?? [];
+      for (const note of asset.modifications) if (!list.includes(note)) list.push(note);
+      derived.set(sourceId, list);
+    }
+  }
+  return derived;
+}
+
+export function modificationProblems(index: AssetIndex, manifest: Manifest): string[] {
+  const byId = new Map(manifest.assets.map((a) => [a.id, a]));
+  const problems: string[] = [];
+  for (const [sourceId, expected] of derivedModifications(index, manifest)) {
+    const actual = byId.get(sourceId)?.modifications ?? [];
+    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+      problems.push(
+        `manifest asset ${sourceId}: modifications do not list the changes made by the pipeline (run pnpm assets:sync-manifest, then prettier --write assets/manifest.json)`,
+      );
     }
   }
   return problems;

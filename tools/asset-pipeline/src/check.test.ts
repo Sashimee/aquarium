@@ -248,6 +248,28 @@ describe('checkAssets', () => {
     );
   });
 
+  it('fails a CC-BY source whose manifest modifications omit what the pipeline did', () => {
+    const asset = { ...fishAsset(), licence: 'CC-BY-4.0', modifications: ['merged meshes'] };
+    const by = manifestOf(
+      manifestAsset({ id: 'src-a', licence: 'CC-BY-4.0', author: 'Ann', modifications: [] }),
+    );
+    const credits = '- src-a Ann';
+    expect(checkAssets(inputFor([asset], by, credits)).join('\n')).toContain(
+      'modifications do not list',
+    );
+    const synced = manifestOf(
+      manifestAsset({
+        id: 'src-a',
+        licence: 'CC-BY-4.0',
+        author: 'Ann',
+        modifications: ['merged meshes'],
+      }),
+    );
+    expect(checkAssets(inputFor([asset], synced, credits)).join('\n')).not.toContain(
+      'modifications do not list',
+    );
+  });
+
   it('fails a CC-BY source that has no credit', () => {
     const manifest = manifestOf(manifestAsset({ licence: 'CC-BY-4.0' }));
     const asset = { ...fishAsset(), licence: 'CC-BY-4.0' };
@@ -434,7 +456,8 @@ describe('checkAssets', () => {
       mkdirSync(join(root, 'content', 'species'), { recursive: true });
       copyFileSync(guppyJson, join(root, 'content', 'species', 'guppy.json'));
       const base = fishAsset();
-      return { ...base, species: 'guppy', fish: { ...base.fish!, ...fish } };
+      if (!base.fish) throw new Error('fishAsset has no fish block');
+      return { ...base, species: 'guppy', fish: { ...base.fish, ...fish } };
     }
 
     it('fails a fish built from the recipe length once the species file has bodyLengthM', () => {

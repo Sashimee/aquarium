@@ -18,6 +18,7 @@ import {
   licenceRank,
   manifestSchema,
   validateManifest,
+  modificationProblems,
   PENDING_STATUS,
   type Manifest,
   type ManifestAsset,
@@ -197,6 +198,7 @@ function fishProblems(asset: OutputAsset, repoRoot: string, problems: string[]):
 export function checkAssets(input: CheckInput): string[] {
   const { manifest, credits, index, assetsDir, repoRoot } = input;
   const problems = validateManifest(manifest, credits);
+  problems.push(...modificationProblems(index, manifest));
   const byId = new Map(manifest.assets.map((a) => [a.id, a]));
 
   const listed = new Map<string, string>();
