@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { LOFT_FISH_RECIPES, loftFishPart } from './loft-fish.ts';
-import { sideProjection } from './loft.ts';
+import { RING, SECTION_COUNT, sideProjection } from './loft.ts';
 
 type Point = [number, number];
 
 /** Outline of the fish body in the banggai photo crop, traced by hand; fins excluded. */
 const BANGGAI_TOP: Point[] = [
+  [100, 1090],
   [130, 1040],
   [160, 990],
   [210, 950],
@@ -24,9 +25,10 @@ const BANGGAI_TOP: Point[] = [
   [1150, 885],
 ];
 const BANGGAI_BOTTOM: Point[] = [
-  [105, 1100],
-  [130, 1160],
-  [170, 1220],
+  [100, 1090],
+  [108, 1145],
+  [140, 1185],
+  [190, 1227],
   [230, 1270],
   [300, 1310],
   [380, 1330],
@@ -41,8 +43,9 @@ const BANGGAI_BOTTOM: Point[] = [
   [1150, 1065],
 ];
 const OUTLINE: Point[] = [...BANGGAI_TOP, ...[...BANGGAI_BOTTOM].reverse()];
-const OUTLINE_X_MIN = 125;
+const OUTLINE_X_MIN = 95;
 const OUTLINE_X_MAX = 1150;
+const EDGE_MARGIN_PX = 3;
 
 const at = <T>(items: ArrayLike<T>, i: number): T => {
   const v = items[i];
@@ -77,20 +80,19 @@ describe('banggai photo projection', () => {
   });
   const part = loftFishPart(recipe, 1, project);
 
-  const RING = 24;
-  const SECTIONS = 48;
   const TOP_SLOT = RING / 4;
   const BOTTOM_SLOT = (3 * RING) / 4;
 
   it('keeps the dorsal and ventral body outline on the fish, not the photo background', () => {
     const outside: string[] = [];
-    for (let s = 0; s < SECTIONS; s++)
+    for (let s = 0; s < SECTION_COUNT; s++)
       for (const slot of [TOP_SLOT, BOTTOM_SLOT]) {
         const v = s * RING + slot;
         const x = at(part.uvs, v * 2) * source.crop.width;
         const y = at(part.uvs, v * 2 + 1) * source.crop.height;
         if (x < OUTLINE_X_MIN || x > OUTLINE_X_MAX) continue;
-        if (!inside(OUTLINE, [x, y]))
+        const outward = slot === TOP_SLOT ? -EDGE_MARGIN_PX : EDGE_MARGIN_PX;
+        if (!inside(OUTLINE, [x, y + outward]))
           outside.push(
             `${slot === TOP_SLOT ? 'top' : 'bottom'} s${s} at ${x.toFixed(0)},${y.toFixed(0)}`,
           );

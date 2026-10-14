@@ -47,8 +47,8 @@ export interface Projection {
   (behind: number, y: number): [number, number];
 }
 
-const RING = 24;
-const SECTION_COUNT = 48;
+export const RING = 24;
+export const SECTION_COUNT = 48;
 const FIN_COLUMNS = 12;
 const FIN_ROWS = 5;
 const ROOT_INSET = 0.02;

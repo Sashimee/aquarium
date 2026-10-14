@@ -343,13 +343,13 @@ export const LOFT_FISH_RECIPES: LoftFishRecipe[] = [
     spec: {
       roundness: 2.2,
       sections: [
-        { t: 0, top: 0.22, bottom: 0.14, halfWidth: 0.02 },
-        { t: 0.06, top: 0.272, bottom: 0.11, halfWidth: 0.06 },
+        { t: 0, top: 0.188, bottom: 0.172, halfWidth: 0.02 },
+        { t: 0.06, top: 0.284, bottom: 0.08, halfWidth: 0.06 },
         { t: 0.2, top: 0.358, bottom: -0.028, halfWidth: 0.12 },
         { t: 0.4, top: 0.408, bottom: -0.072, halfWidth: 0.13 },
         { t: 0.6, top: 0.398, bottom: -0.053, halfWidth: 0.1 },
-        { t: 0.8, top: 0.295, bottom: 0.058, halfWidth: 0.07 },
-        { t: 1, top: 0.238, bottom: 0.092, halfWidth: 0.05 },
+        { t: 0.8, top: 0.29, bottom: 0.058, halfWidth: 0.07 },
+        { t: 1, top: 0.23, bottom: 0.1, halfWidth: 0.05 },
       ],
       fins: [
         {
