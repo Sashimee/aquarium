@@ -328,13 +328,16 @@ export class FishSystem {
   /** Applies a saved-tank event; see `InteractionEvents` for the contract. */
   handle(event: TankEvent): void {
     if (this.disposed) return;
+    let swapped = false;
     switch (event.type) {
       case 'tank:loaded':
         this.roster.load(event.payload);
         this.stopWorld();
+        swapped = true;
         break;
       case 'tank:unloaded':
-        if (this.roster.unload(event.payload)) this.stopWorld();
+        swapped = this.roster.unload(event.payload);
+        if (swapped) this.stopWorld();
         break;
       case 'tank:fish-added':
         this.roster.add(event.payload);
@@ -352,6 +355,7 @@ export class FishSystem {
         break;
     }
     this.prune();
+    if (swapped) this.evictUnusedBatches();
     this.materialize();
     this.requestSync();
   }
@@ -360,8 +364,10 @@ export class FishSystem {
   setDemoBiome(biome: Biome): void {
     if (this.disposed) return;
     const demo = demoTank(this.options.tank, this.seed, biome);
-    if (this.roster.setDemo(demo.config.fish)) this.stopWorld();
+    const swapped = this.roster.setDemo(demo.config.fish);
+    if (swapped) this.stopWorld();
     this.prune();
+    if (swapped) this.evictUnusedBatches();
     this.materialize();
     this.requestSync();
   }
@@ -527,7 +533,7 @@ export class FishSystem {
       this.report(`Fish "${species}" has no visual; it swims and eats unseen`, cause);
       return;
     }
-    if (this.disposed) {
+    if (this.disposed || !this.wantedBatches().has(key)) {
       disposeFishModel(model);
       return;
     }
@@ -594,6 +600,27 @@ export class FishSystem {
     }
     batch.lods = [];
     batch.capacity = 0;
+  }
+
+  private wantedBatches(): Set<string> {
+    const keys = new Set<string>();
+    for (const fish of this.roster.entries()) keys.add(batchKeyOf(fish));
+    return keys;
+  }
+
+  /**
+   * After a tank or demo swap, frees the model and buffers of every batch no fish draws from, so
+   * GPU memory follows the shown stock rather than every species seen. Runs after `prune`, so no
+   * runtime still points at an evicted batch.
+   */
+  private evictUnusedBatches(): void {
+    const wanted = this.wantedBatches();
+    for (const [key, batch] of this.batches) {
+      if (wanted.has(key)) continue;
+      this.disposeLods(batch);
+      disposeFishModel(batch.model);
+      this.batches.delete(key);
+    }
   }
 
   /** Builds a runtime for every roster fish whose model is loaded. */
