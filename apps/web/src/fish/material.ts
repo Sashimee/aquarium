@@ -70,6 +70,8 @@ export interface FishMaterialFeatures {
 
 export interface FishMaterialConfig {
   readonly source: MeshStandardMaterial;
+  /** The model the material draws, which may be one of the profile's variants. */
+  readonly assetId: string;
   readonly profile: FishRenderProfile;
   readonly mode: SwimModeParams;
   /** Model-space z of the snout and of the tail tip. */
@@ -133,7 +135,7 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
     super();
     this.config = config;
     const { source, profile } = config;
-    this.name = `fish:${profile.assetId}:${source.name}`;
+    this.name = `fish:${config.assetId}:${source.name}`;
     this.side = DoubleSide;
     this.roughness = profile.roughness;
     this.metalness = 0;

@@ -255,6 +255,16 @@ export class Engine {
     this.resize();
   }
 
+  /** The room backdrop at full daylight; `scene.backgroundIntensity` is this times the room level. */
+  get roomBackgroundIntensity(): number {
+    return this.dayRig.roomBackgroundIntensity;
+  }
+
+  set roomBackgroundIntensity(value: number) {
+    this.dayRig.roomBackgroundIntensity = value;
+    applyDayLighting(this.dayRig, this.daylightLevel);
+  }
+
   get disposed(): boolean {
     return this.cleanup.isDisposed;
   }

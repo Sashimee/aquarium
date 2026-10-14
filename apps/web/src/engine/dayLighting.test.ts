@@ -167,6 +167,26 @@ describe('the daytime fill', () => {
   });
 });
 
+describe('the room backdrop', () => {
+  it('keeps a changed daytime level through every later frame and scales it at night', () => {
+    const r = rig();
+    r.roomBackgroundIntensity = 1.2;
+    applyDayLighting(r, at('12:00'));
+    applyDayLighting(r, at('12:00'));
+    expect(r.scene.backgroundIntensity).toBeCloseTo(1.2);
+    applyDayLighting(r, at('02:00'));
+    expect(r.scene.backgroundIntensity).toBeGreaterThan(0);
+    expect(r.scene.backgroundIntensity).toBeLessThan(0.3);
+  });
+
+  it('goes dark when the daytime level is zero', () => {
+    const r = rig();
+    r.roomBackgroundIntensity = 0;
+    applyDayLighting(r, at('12:00'));
+    expect(r.scene.backgroundIntensity).toBe(0);
+  });
+});
+
 describe('InteriorLight.fillLevel', () => {
   it('refuses a negative or non-finite share', () => {
     const { interior } = rig();

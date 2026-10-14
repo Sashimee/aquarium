@@ -72,16 +72,23 @@ function capsuleMesh(c: CapsuleCollider, material: MeshBasicNodeMaterial): Mesh 
 /** Wireframes of the sim colliders, red for hard and green for soft, drawn over the scene. */
 export class ColliderOverlay {
   readonly group = new Group();
-  private readonly materials: MeshBasicNodeMaterial[] = [];
+  private readonly hardMaterial: MeshBasicNodeMaterial;
+  private readonly softMaterial: MeshBasicNodeMaterial;
 
   constructor(colliders: readonly Collider[]) {
     this.group.name = 'collider-overlay';
     this.group.visible = false;
     this.group.renderOrder = 10;
-    const hard = this.material(0xff4422);
-    const soft = this.material(0x33dd55);
+    this.hardMaterial = overlayMaterial(0xff4422);
+    this.softMaterial = overlayMaterial(0x33dd55);
+    this.setColliders(colliders);
+  }
+
+  /** Redraws the wireframes for a new collider list, e.g. after the decor moved. */
+  setColliders(colliders: readonly Collider[]): void {
+    this.clearMeshes();
     for (const collider of colliders) {
-      const material = collider.hard ? hard : soft;
+      const material = collider.hard ? this.hardMaterial : this.softMaterial;
       const mesh =
         collider.kind === 'capsule'
           ? capsuleMesh(collider, material)
@@ -99,21 +106,25 @@ export class ColliderOverlay {
     this.group.visible = value;
   }
 
-  private material(color: number): MeshBasicNodeMaterial {
-    const material = new MeshBasicNodeMaterial({ color, wireframe: true });
-    material.depthTest = false;
-    material.transparent = true;
-    material.fog = false;
-    this.materials.push(material);
-    return material;
+  dispose(): void {
+    this.clearMeshes();
+    this.hardMaterial.dispose();
+    this.softMaterial.dispose();
+    this.group.removeFromParent();
   }
 
-  dispose(): void {
+  private clearMeshes(): void {
     this.group.traverse((o) => {
       if (o instanceof Mesh) o.geometry.dispose();
     });
-    for (const material of this.materials) material.dispose();
-    this.group.removeFromParent();
     this.group.clear();
   }
+}
+
+function overlayMaterial(color: number): MeshBasicNodeMaterial {
+  const material = new MeshBasicNodeMaterial({ color, wireframe: true });
+  material.depthTest = false;
+  material.transparent = true;
+  material.fog = false;
+  return material;
 }
