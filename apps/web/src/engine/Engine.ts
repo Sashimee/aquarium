@@ -350,6 +350,8 @@ export class Engine {
     this.quality.register('caustics', (s) => {
       this.caustics.setMethod(s.causticMethod, s.causticLayers);
     });
+    // A tier change can rebuild pipelines without touching a material, e.g. by toggling shadows.
+    this.quality.register('cull-prewarm', () => this.cullPrewarm.invalidate());
     this.quality.register('surface-reflection', (s) => {
       const wasOn = this.tank.surfaceReflection;
       this.tank.setSurfaceReflection(s.surfaceReflection);
