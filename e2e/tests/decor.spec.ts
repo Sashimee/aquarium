@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import {
   APP_URL,
   createFirstTank,
@@ -26,7 +26,29 @@ async function startDecorating(page: Page) {
   return panel;
 }
 
-test('Decorate pressed before the tank is ready still opens the editor', async ({ page }) => {
+// Each cold boot costs 25-45 s under software rendering, so the three tests share one page, one
+// account and one tank, and run in order.
+test.describe.configure({ mode: 'serial' });
+let context: BrowserContext | undefined;
+let shared: Page | undefined;
+
+test.beforeAll(async ({ browser, baseURL }) => {
+  if (!baseURL) throw new Error('playwright.config.ts must set use.baseURL');
+  context = await browser.newContext({ baseURL });
+  shared = await context.newPage();
+});
+
+test.afterAll(async () => {
+  await context?.close();
+});
+
+function sharedPage(): Page {
+  if (!shared) throw new Error('the shared page did not start; see the beforeAll failure');
+  return shared;
+}
+
+test('Decorate pressed before the tank is ready still opens the editor', async () => {
+  const page = sharedPage();
   test.setTimeout(120_000);
   await page.goto('/?tier=low&backend=webgl', { waitUntil: 'domcontentloaded' });
   const toggle = page.getByRole('button', { name: 'Decorate' });
@@ -38,7 +60,8 @@ test('Decorate pressed before the tank is ready still opens the editor', async (
   await expect(page.getByRole('button', { name: 'Hand-feed' })).toHaveCount(0);
 });
 
-test('a decor piece is swapped, moved, saved and still there after a reload', async ({ page }) => {
+test('a decor piece is swapped, moved, saved and still there after a reload', async () => {
+  const page = sharedPage();
   test.setTimeout(420_000);
   await registerVerifiedUser(page, 'decor');
   await openTank(page);
@@ -77,15 +100,13 @@ test('a decor piece is swapped, moved, saved and still there after a reload', as
   const reopened = await startDecorating(page);
   await expect(reopened.locator('.decor-pieces').getByRole('button')).toHaveCount(startCount);
   expect(roughly((await savedTanks(page))[0]?.decorLayout)).toEqual(roughly(moved));
+  await reopened.getByRole('button', { name: 'Done' }).click();
+  await expect(reopened).toBeHidden();
 });
 
-test('the palette follows the tank biome and the server refuses what it hides', async ({
-  page,
-}) => {
+test('the palette follows the tank biome and the server refuses what it hides', async () => {
+  const page = sharedPage();
   test.setTimeout(420_000);
-  await registerVerifiedUser(page, 'decor-biome');
-  await openTank(page);
-  await createFirstTank(page);
   const tank = (await savedTanks(page))[0];
   if (!tank) throw new Error('the first tank was not saved');
 
