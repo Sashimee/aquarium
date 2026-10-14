@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { brotliCompressSync, brotliDecompressSync, gunzipSync, gzipSync } from 'node:zlib';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { staticCacheControl } from './app.ts';
+import { staticCacheControl, stripTokensFromBody } from './app.ts';
 import { createHarness, type Harness } from './test-harness.ts';
 
 const NOINDEX = 'noindex, nofollow';
@@ -372,5 +372,18 @@ describe('indexing', () => {
     const res = await app.inject('/');
     expect(res.headers['x-robots-tag']).toBeUndefined();
     expect((await app.inject('/robots.txt')).body).not.toContain('Disallow: /');
+  });
+});
+
+describe('stripTokensFromBody', () => {
+  it('drops token keys at any depth', () => {
+    const out = stripTokensFromBody(
+      '{"token":"a","user":{"id":"u","token":"b"},"list":[{"token":"c","n":1}]}',
+    );
+    expect(JSON.parse(out ?? '')).toEqual({ user: { id: 'u' }, list: [{ n: 1 }] });
+  });
+
+  it('returns null for malformed JSON instead of throwing', () => {
+    expect(stripTokensFromBody('{"token": secret-snippet')).toBeNull();
   });
 });
