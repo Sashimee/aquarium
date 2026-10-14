@@ -554,6 +554,16 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       const body = ateBatchRequestSchema.parse(req.body);
       throttle(user.id, 'ate');
       const result = await withTank(user, tankId, async (tx, ticked) => {
+        if (body.batchId) {
+          const claimed = await tx
+            .insert(schema.ateBatches)
+            .values({ tankId, batchId: body.batchId })
+            .onConflictDoNothing()
+            .returning({ batchId: schema.ateBatches.batchId });
+          if (claimed.length === 0) {
+            return { tank: await render(tx, ticked) };
+          }
+        }
         const nowMs = clock.now();
         const windowMs = FEEDING_WINDOW_MINUTES * 60_000;
         const recent = await tx

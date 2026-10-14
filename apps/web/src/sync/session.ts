@@ -309,8 +309,8 @@ export class TankSession {
     this.uploader = new AteUploader({
       ...this.deps.ateOptions,
       sleep: this.sleep,
-      send: async (reports) => {
-        const next = await this.enqueue(() => this.deps.api.reportAte(tankId, reports));
+      send: async (reports, batchId) => {
+        const next = await this.enqueue(() => this.deps.api.reportAte(tankId, reports, batchId));
         if (gen === this.loadId) this.apply(next);
       },
       onDropped: (reason, reports) => {
