@@ -80,6 +80,13 @@ describe('blendsVelocity', () => {
     expect(blendsVelocity(material(false, NormalBlending))).toBe(false);
   });
 
+  it.each([AdditiveBlending, SubtractiveBlending, MultiplyBlending, CustomBlending])(
+    'is true for an opaque material blending with mode %s, which three blends anyway',
+    (blending) => {
+      expect(blendsVelocity(material(false, blending))).toBe(true);
+    },
+  );
+
   it('is false for a transparent material that does not blend, and so overwrites', () => {
     expect(blendsVelocity(material(true, NoBlending))).toBe(false);
   });

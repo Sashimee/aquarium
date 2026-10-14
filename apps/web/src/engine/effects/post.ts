@@ -2,6 +2,7 @@ import {
   BlendMode,
   MaterialBlending,
   NoBlending,
+  NormalBlending,
   RenderPipeline,
   type Material,
   type MRTNode,
@@ -63,12 +64,14 @@ export function needsPost(settings: PostSettings): boolean {
 }
 
 /**
- * Whether `material` blends into the velocity attachment. Such a material writes zero with zero
- * alpha there, which leaves the velocity the opaque scene wrote under normal, premultiplied,
- * additive and subtractive blending; a multiplying one must set its own (see `Tank`).
+ * Whether `material` blends into the velocity attachment, by three's rule: normal blending only
+ * when transparent, any other mode always. Such a material writes zero with zero alpha there,
+ * which leaves the velocity the opaque scene wrote under normal, premultiplied, additive and
+ * subtractive blending; a multiplying one must set its own (see `Tank`).
  */
 export function blendsVelocity(material: Pick<Material, 'transparent' | 'blending'>): boolean {
-  return material.transparent && material.blending !== NoBlending;
+  const { blending } = material;
+  return blending !== NoBlending && (blending !== NormalBlending || material.transparent);
 }
 
 const sceneVelocity = Fn((builder) => {
