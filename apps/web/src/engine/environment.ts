@@ -4,7 +4,6 @@ import {
   HalfFloatType,
   LinearFilter,
   LinearSRGBColorSpace,
-  LoadingManager,
   PMREMGenerator,
   RGBAFormat,
   type Scene,
@@ -12,9 +11,9 @@ import {
   type Texture,
   type WebGPURenderer,
 } from 'three/webgpu';
-import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
+import type { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { ASSET_BASE, rewriteAssetUrl } from '../scene/assets';
+import { ASSET_BASE } from '../scene/assets';
 
 /** Manifest entry `polyhaven-studio_small_09` (CC0, Sergej Majboroda), served from our own origin. */
 export const DEFAULT_HDRI_URL = `${ASSET_BASE}hdri/studio-small-09/studio_small_09_1k.ktx2`;
@@ -61,6 +60,7 @@ export interface RoomLighting {
  */
 export function installRoomLighting(
   renderer: WebGPURenderer,
+  ktx2: KTX2Loader,
   scene: Scene,
   hdriUrl: string,
   onError: (message: string, cause: unknown) => void,
@@ -80,17 +80,8 @@ export function installRoomLighting(
   let hdri: Texture | null = null;
   let room: typeof roomTarget | null = roomTarget;
   let disposed = false;
-  const manager = new LoadingManager();
-  manager.setURLModifier((url) => rewriteAssetUrl(url, 1024));
-  const loader = new KTX2Loader(manager).setTranscoderPath('basis/').detectSupport(renderer);
-  let loaderDisposed = false;
-  const releaseLoader = (): void => {
-    if (loaderDisposed) return;
-    loaderDisposed = true;
-    loader.dispose();
-  };
 
-  loader
+  ktx2
     .loadAsync(hdriUrl)
     .then((loaded) => {
       if (disposed) {
@@ -108,15 +99,12 @@ export function installRoomLighting(
     })
     .catch((cause: unknown) => {
       if (!disposed) onError(`Could not load the room HDRI from ${hdriUrl}`, cause);
-    })
-    .finally(releaseLoader);
+    });
 
   return {
     initial: roomTarget.texture,
     dispose() {
       disposed = true;
-      manager.abort();
-      releaseLoader();
       hdri?.dispose();
       room?.dispose();
       room = null;

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CompressedTexture } from 'three';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import type { WebGPURenderer } from 'three/webgpu';
+import { createSharedKtx2 } from '../engine/ktx2';
 import { AssetCatalog, ModelLibrary, type ModelLod } from './assets';
 
 const PUBLIC = join(__dirname, '../../public');
@@ -33,7 +34,10 @@ async function setup() {
   });
 
   const library = new ModelLibrary(
-    { isWebGPURenderer: true, hasFeature: () => false } as unknown as WebGPURenderer,
+    createSharedKtx2({
+      isWebGPURenderer: true,
+      hasFeature: () => false,
+    } as unknown as WebGPURenderer).loader,
     catalog,
   );
   const lowLod = Math.min(2, rock.lods.length - 1) as ModelLod;
