@@ -1,5 +1,10 @@
 import {
+  BlendMode,
+  MaterialBlending,
+  NoBlending,
   RenderPipeline,
+  type Material,
+  type MRTNode,
   type Node,
   type PerspectiveCamera,
   type Scene,
@@ -8,6 +13,7 @@ import {
 } from 'three/webgpu';
 import {
   float,
+  Fn,
   max,
   min,
   mrt,
@@ -54,6 +60,32 @@ export function postSettingsKey(settings: PostSettings): string {
 /** Whether a frame needs the post pipeline at all, or can go straight to the canvas. */
 export function needsPost(settings: PostSettings): boolean {
   return settings.chain !== 'none' || settings.godRays || settings.depthOfField;
+}
+
+/**
+ * Whether `material` blends into the velocity attachment. Such a material writes zero with zero
+ * alpha there, which leaves the velocity the opaque scene wrote under normal, premultiplied,
+ * additive and subtractive blending; a multiplying one must set its own (see `Tank`).
+ */
+export function blendsVelocity(material: Pick<Material, 'transparent' | 'blending'>): boolean {
+  return material.transparent && material.blending !== NoBlending;
+}
+
+const sceneVelocity = Fn((builder) => {
+  const { material } = builder;
+  return material !== null && blendsVelocity(material) ? vec4(0) : velocity;
+});
+
+/**
+ * The scene pass's attachments under TRAA. The velocity one blends as each material does, as on
+ * WebGL without per-target blending or in WebGPU compatibility mode, so every backend keeps what
+ * the opaque scene wrote under a blended material.
+ */
+export function temporalOutputs(): MRTNode {
+  return mrt({ output, velocity: sceneVelocity() }).setBlendMode(
+    'velocity',
+    new BlendMode(MaterialBlending),
+  );
 }
 
 interface Disposable {
@@ -104,7 +136,7 @@ export class PostPipeline {
     const { chain } = settings;
     const scenePass = pass(scene, camera, this.temporal ? { samples: 0 } : undefined);
     this.owned.push(scenePass);
-    if (this.temporal) scenePass.setMRT(mrt({ output, velocity }));
+    if (this.temporal) scenePass.setMRT(temporalOutputs());
     const depth = scenePass.getTextureNode('depth');
 
     let colour: Node<'vec4'> = scenePass.getTextureNode('output');

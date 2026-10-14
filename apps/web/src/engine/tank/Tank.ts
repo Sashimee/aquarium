@@ -362,7 +362,7 @@ export class Tank {
   readonly algae = uniform(0);
   private readonly skyNodes: PMREMNode[] = [];
   private readonly disposables: { dispose(): void }[] = [];
-  /** Blended materials and the velocity each must write to leave the attachment unchanged. */
+  /** Blended materials that multiply, and the velocity each must write to leave it unchanged. */
   private readonly blended: [NodeMaterial, Node<'vec4'>][] = [];
   private readonly reflection: SurfaceReflection;
   private readonly underside: SurfaceUnderside;
@@ -446,8 +446,9 @@ export class Tank {
   }
 
   /**
-   * Under TRAA the scene pass has a velocity attachment, and blending applies to it as well:
-   * these outputs make every blended pass leave the velocity the opaque scene wrote.
+   * Under TRAA the scene pass has a velocity attachment that blends as each material does. The
+   * pass keeps it under the usual blends by itself (see `temporalOutputs`); a multiplying pass
+   * keeps it by writing one.
    */
   setVelocityPassthrough(on: boolean): void {
     for (const [material, keep] of this.blended) {
@@ -512,7 +513,6 @@ export class Tank {
       sky,
     );
     this.skyNodes.push(skyNode);
-    this.blended.push([faceMaterial, vec4(0)]);
     const parts: [string, BufferGeometry[], Material][] = [
       ['glass-faces', faces, faceMaterial],
       ['glass-edges', edges, createGlassEdgeMaterial()],
@@ -590,7 +590,6 @@ export class Tank {
     scatter.blendSrcAlpha = ZeroFactor;
     scatter.blendDstAlpha = OneFactor;
     scatter.outputNode = vec4(medium.volumeInScatter(), 0);
-    this.blended.push([scatter, vec4(0)]);
 
     [absorb, scatter].forEach((material, i) => {
       const mesh = this.track(new Mesh(geometry, material));
@@ -616,7 +615,6 @@ export class Tank {
     premultipliedBlend(material);
     material.fog = false;
     material.outputNode = medium.applyPremultiplied(output);
-    this.blended.push([material, vec4(0)]);
 
     const mesh = this.track(new Mesh(new PlaneGeometry(size.x, size.z), material));
     mesh.name = 'water-surface';
