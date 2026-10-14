@@ -383,7 +383,8 @@ describe('World containment', { timeout: LONG }, () => {
       for (let t = 0; t < 30 / STEP_DT && bite < 0; t++) {
         rain.feed(w);
         watch.step();
-        // The grind round the tip on the way in (≈5 s) is #299's; by 10 s every seed is on station.
+        // Earlier contacts are not at the tip: the snout in the V before the back-out (<2 s), then
+        // the tail swept onto the back glass as the fish turns out of it (≈5.2–5.6 s, #299).
         if (settled < 0 && w.tick * STEP_DT >= 10) settled = w.contacts;
         const events = w.takeAteEvents();
         rain.eat(events);
