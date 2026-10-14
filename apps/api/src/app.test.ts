@@ -153,6 +153,19 @@ describe('security headers', () => {
       '/verify-email?token=abcdefghijklmnopqrstuvwx',
       '/api/auth/verify-email?token=abc.def.ghi&callbackURL=%2F',
       '/api/auth/reset-password/abcdefghijklmnopqrstuvwx?callbackURL=%2Freset-password',
+      '/api/auth/callback/google?code=abc&state=xyz',
+      '/reset-password/?token=abcdefghijklmnopqrstuvwx',
+      '/Reset-Password?token=abcdefghijklmnopqrstuvwx',
+      '/VERIFY-EMAIL/?token=abcdefghijklmnopqrstuvwx',
+      '//reset-password?token=abcdefghijklmnopqrstuvwx',
+      '/%72eset-password?token=abcdefghijklmnopqrstuvwx',
+      '/reset%2Dpassword?token=abcdefghijklmnopqrstuvwx',
+      '/api/auth/Verify-Email/?token=abc.def.ghi',
+      '/api/auth/RESET-PASSWORD/abcdefghijklmnopqrstuvwx',
+      '/api/auth/reset-password/abcdefghijklmnopqrstuvwx/',
+      '/api//auth/reset-password/abcdefghijklmnopqrstuvwx',
+      '/api/auth/callback/Google/',
+      '/api%2Fauth%2Fcallback%2Fgoogle?code=abc',
     ])('is no-referrer on %s', async (url) => {
       const res = await spa.app.inject(url);
       expect(res.headers['referrer-policy']).toBe('no-referrer');

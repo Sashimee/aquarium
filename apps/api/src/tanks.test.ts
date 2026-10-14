@@ -25,7 +25,7 @@ async function signedIn(h: Harness): Promise<string> {
     method: 'POST',
     url: '/api/auth/sign-up/email',
     headers: jsonHeaders,
-    payload: { email, password: PASSWORD, name: 'Tester', callbackURL: '/' },
+    payload: { email, password: PASSWORD, name: 'Tester', callbackURL: '/verify-email' },
   });
   const mail = h.outbox.findLast((m) => m.to === email);
   const link = /https?:\/\/\S+verify-email\?\S+/.exec(mail?.text ?? '')?.[0];

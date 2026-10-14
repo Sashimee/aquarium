@@ -44,13 +44,18 @@ describe('request logging', () => {
       method: 'POST',
       url: '/api/auth/sign-up/email',
       headers: jsonHeaders,
-      payload: { email, password: 'correct horse battery', name: 'Tester', callbackURL: '/' },
+      payload: {
+        email,
+        password: 'correct horse battery',
+        name: 'Tester',
+        callbackURL: '/verify-email',
+      },
     });
     await h.app.inject({
       method: 'POST',
       url: '/api/auth/request-password-reset',
       headers: jsonHeaders,
-      payload: { email, redirectTo: '/' },
+      payload: { email, redirectTo: '/reset-password' },
     });
     await h.settleMail();
     const mail = [...h.outbox].reverse().find((m) => m.to === email && /reset/i.test(m.subject));
@@ -117,7 +122,12 @@ describe('database failures do not leak values', () => {
       method: 'POST',
       url: '/api/auth/sign-up/email',
       headers: jsonHeaders,
-      payload: { email, password: 'correct horse battery', name: 'Tester', callbackURL: '/' },
+      payload: {
+        email,
+        password: 'correct horse battery',
+        name: 'Tester',
+        callbackURL: '/verify-email',
+      },
     });
     const printed: string[] = [];
     const spies = (['error', 'warn', 'log'] as const).map((k) =>
@@ -131,7 +141,7 @@ describe('database failures do not leak values', () => {
         method: 'POST',
         url: '/api/auth/request-password-reset',
         headers: jsonHeaders,
-        payload: { email, redirectTo: '/' },
+        payload: { email, redirectTo: '/reset-password' },
       });
       expect(res.statusCode).toBeGreaterThanOrEqual(400);
     } finally {
@@ -151,7 +161,12 @@ describe('database failures do not leak values', () => {
       method: 'POST',
       url: '/api/auth/sign-up/email',
       headers: jsonHeaders,
-      payload: { email, password: 'correct horse battery', name: 'Tester', callbackURL: '/' },
+      payload: {
+        email,
+        password: 'correct horse battery',
+        name: 'Tester',
+        callbackURL: '/verify-email',
+      },
     });
     expect(signUp.statusCode).toBe(200);
     const mail = h.outbox.findLast((m) => m.to === email);

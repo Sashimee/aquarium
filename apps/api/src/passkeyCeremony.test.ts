@@ -122,7 +122,12 @@ describe('passkey registration and sign-in with hashed identifiers', () => {
       method: 'POST',
       url: '/api/auth/sign-up/email',
       headers,
-      payload: { email, password: 'correct horse battery', name: 'Tester', callbackURL: '/' },
+      payload: {
+        email,
+        password: 'correct horse battery',
+        name: 'Tester',
+        callbackURL: '/verify-email',
+      },
     });
     await h.settleMail();
     const text = h.outbox.find((m) => m.to === email)?.text ?? '';

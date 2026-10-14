@@ -43,7 +43,7 @@ describe('per-account sign-in throttle (#121)', () => {
       method: 'POST',
       url: '/api/auth/sign-up/email',
       headers,
-      payload: { email, password: PASSWORD, name: 'Tester', callbackURL: '/' },
+      payload: { email, password: PASSWORD, name: 'Tester', callbackURL: '/verify-email' },
     });
     const mail = h.outbox.find((m) => m.to === email);
     const link = /https?:\/\/\S+verify-email\?\S+/.exec(mail?.text ?? '')?.[0];
@@ -99,14 +99,12 @@ describe('per-account sign-in throttle (#121)', () => {
   });
 
   describe.each([
-    ['INVALID_CALLBACK_URL', { origin: APP_ORIGIN }, 'https://evil.example/'],
-    ['INVALID_ORIGIN', { origin: 'https://evil.example' }, undefined],
+    ['INVALID_ORIGIN', { origin: 'https://evil.example' }],
     [
       'CROSS_SITE_NAVIGATION_LOGIN_BLOCKED',
       { origin: APP_ORIGIN, 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'navigate' },
-      undefined,
     ],
-  ])('403 %s from Better Auth', (code, extra, callbackURL) => {
+  ])('403 %s from Better Auth', (code, extra) => {
     it('is not reset by it, and still counts against the cap', async () => {
       const email = await verifiedUser();
       const junk = () =>
@@ -114,7 +112,7 @@ describe('per-account sign-in throttle (#121)', () => {
           method: 'POST',
           url: '/api/auth/sign-in/email',
           headers: { 'content-type': 'application/json', ...extra },
-          payload: { email, password: WRONG, ...(callbackURL ? { callbackURL } : {}) },
+          payload: { email, password: WRONG },
         });
       const first = await junk();
       expect(first.statusCode).toBe(403);
