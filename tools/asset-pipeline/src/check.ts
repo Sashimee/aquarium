@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, posix, relative, sep } from 'node:path';
+import { speciesLengthM } from './fish.ts';
+import { FISH_RECIPES } from './recipes.ts';
 import { budgetProblems, loadBudgetContent, type BudgetInput } from './budgets.ts';
 import {
   FIN_ID_ATTRIBUTE,
@@ -176,6 +178,19 @@ function fishProblems(asset: OutputAsset, repoRoot: string, problems: string[]):
   }
   if (!existsSync(join(repoRoot, 'tools', 'asset-pipeline', asset.fish.debugRender))) {
     problems.push(`${at}: debug render ${asset.fish.debugRender} is missing`);
+  }
+  const speciesLength = asset.species ? speciesLengthM(repoRoot, asset.species) : null;
+  if (speciesLength === null) return;
+  const lengthFactor = FISH_RECIPES.find((r) => r.id === asset.id)?.lengthFactor ?? 1;
+  const expectedLength = speciesLength * lengthFactor;
+  if (asset.fish.lengthSource !== 'species-json') {
+    problems.push(
+      `${at}: built with lengthSource ${asset.fish.lengthSource} but content/species/${asset.species}.json has bodyLengthM ${speciesLength} (rebuild with pnpm build:assets)`,
+    );
+  } else if (Math.abs(asset.fish.standardLengthM - expectedLength) > 1e-9) {
+    problems.push(
+      `${at}: standardLengthM ${asset.fish.standardLengthM} differs from content/species/${asset.species}.json bodyLengthM ${speciesLength} x ${lengthFactor} (rebuild with pnpm build:assets)`,
+    );
   }
 }
 

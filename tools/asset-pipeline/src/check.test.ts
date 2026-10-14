@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -425,6 +425,32 @@ describe('checkAssets', () => {
     const bare: OutputAsset = { ...fishAsset() };
     delete bare.fish;
     expect(checkAssets(inputFor([bare])).join('\n')).toContain('no fish block');
+  });
+
+  describe('species length', () => {
+    const guppyJson = resolve(REPO_ROOT, 'content', 'species', 'guppy.json');
+
+    function withGuppy(fish: Partial<NonNullable<OutputAsset['fish']>>): OutputAsset {
+      mkdirSync(join(root, 'content', 'species'), { recursive: true });
+      copyFileSync(guppyJson, join(root, 'content', 'species', 'guppy.json'));
+      const base = fishAsset();
+      return { ...base, species: 'guppy', fish: { ...base.fish!, ...fish } };
+    }
+
+    it('fails a fish built from the recipe length once the species file has bodyLengthM', () => {
+      const asset = withGuppy({ lengthSource: 'recipe', standardLengthM: 0.027 });
+      expect(checkAssets(inputFor([asset])).join('\n')).toContain('lengthSource recipe');
+    });
+
+    it('fails a fish whose standardLengthM differs from the species file', () => {
+      const asset = withGuppy({ lengthSource: 'species-json', standardLengthM: 0.03 });
+      expect(checkAssets(inputFor([asset])).join('\n')).toContain('differs from content/species');
+    });
+
+    it('accepts a fish built at the species length', () => {
+      const asset = withGuppy({ lengthSource: 'species-json', standardLengthM: 0.027 });
+      expect(checkAssets(inputFor([asset])).join('\n')).not.toContain('bodyLengthM');
+    });
   });
 
   it('fails an index whose totalBytes disagrees with the disk', () => {
