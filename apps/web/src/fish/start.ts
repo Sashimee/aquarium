@@ -44,6 +44,8 @@ export interface FishSimBridge {
 
 export interface FishHandle {
   readonly sim: FishSimBridge;
+  /** Settles once the first fish are in the scene, or once starting them has failed or stopped. */
+  readonly settled: Promise<void>;
   /** Scene homes; held until the fish are up, then forwarded. */
   setAnchors(anchors: readonly SceneAnchor[]): void;
   /**
@@ -179,6 +181,7 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
     });
 
   return {
+    settled: system.then(() => undefined),
     sim: {
       startle: (stimulus) => ready?.startle(stimulus),
       setFood: (buffer) => ready?.setFood(buffer),

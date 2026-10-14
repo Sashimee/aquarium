@@ -359,6 +359,23 @@ describe('startFish', () => {
     interaction.emit('tank:unloaded', { tankId: TANK_A, reason: 'switch' });
   });
 
+  it('settles once the fish are up', async () => {
+    const pending = deferred<FakeFishSystem>();
+    const { handle } = setup(pending.promise);
+    let settled = false;
+    void handle.settled.then(() => (settled = true));
+    await flush();
+    expect(settled).toBe(false);
+    pending.resolve(new FakeFishSystem());
+    await flush();
+    expect(settled).toBe(true);
+  });
+
+  it('settles after a failed start too', async () => {
+    const { handle } = setup(Promise.reject(new Error('no WebGPU')));
+    await expect(handle.settled).resolves.toBeUndefined();
+  });
+
   it('reports nothing when stopped while still loading', async () => {
     const fish = new FakeFishSystem();
     const pending = deferred<FakeFishSystem>();

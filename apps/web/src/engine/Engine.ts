@@ -183,6 +183,7 @@ export class Engine {
       refreshMs: profile.refreshMs,
       probeTier: profile.probeTier,
       maxTier: profile.maxTier,
+      awaitContent: true,
     });
 
     container.appendChild(renderer.domElement);
@@ -293,6 +294,11 @@ export class Engine {
       gpuTiming: this.gpuTiming,
     });
     if (this.showStats) void this.loadStatsOverlay();
+  }
+
+  /** The first scene and fish are drawn from the next frame on, so the quality probe may time them. */
+  contentReady(): void {
+    this.quality.contentReady(performance.now());
   }
 
   async dispose(): Promise<void> {
