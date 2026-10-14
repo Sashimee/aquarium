@@ -45,6 +45,16 @@ describe('FishInstanceData', () => {
     expect(() => data.write(Number.NaN, values)).toThrow(RangeError);
   });
 
+  it('collapses one slot to zero scale and leaves its neighbours alone', () => {
+    const data = new FishInstanceData(2);
+    data.write(0, values);
+    data.write(1, values);
+    data.collapse(0);
+    expect(data.array.subarray(0, INSTANCE_STRIDE).every((v) => v === 0)).toBe(true);
+    expect(data.array[INSTANCE_STRIDE + InstanceSlot.Scale]).toBeCloseTo(1.05, 6);
+    expect(() => data.collapse(2)).toThrow(RangeError);
+  });
+
   it('rejects an empty or fractional capacity', () => {
     expect(() => new FishInstanceData(0)).toThrow(RangeError);
     expect(() => new FishInstanceData(1.5)).toThrow(RangeError);

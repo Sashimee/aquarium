@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { EngineStats } from './events';
-import { formatReadout, readStats, type ReadoutSource } from './statsReadout';
+import { formatPending, formatReadout, readStats, type ReadoutSource } from './statsReadout';
 
 const source: ReadoutSource = {
   backend: 'webgl2',
@@ -58,5 +58,14 @@ describe('formatReadout', () => {
   it('says when adaptation is off', () => {
     const r = readStats({ ...source, quality: { adaptive: false } }, stats, 1);
     expect(formatReadout(r).split('\n')[0]).toBe('webgl2  medium  adaptive off');
+  });
+});
+
+describe('formatPending', () => {
+  it('opens with the same line the first readout will replace it with', () => {
+    const r = readStats(source, stats, 3);
+    const pending = formatPending(r).split('\n');
+    expect(pending[0]).toBe(formatReadout(r).split('\n')[0]);
+    expect(pending[1]).toBe('waiting for frames');
   });
 });

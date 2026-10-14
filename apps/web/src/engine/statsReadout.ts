@@ -46,9 +46,19 @@ export function readStats(
   };
 }
 
+type ReadoutHeader = Pick<StatsReadout, 'backend' | 'tier' | 'adaptive'>;
+
+function formatHeader(r: ReadoutHeader): string {
+  return `${r.backend}  ${r.tier}  adaptive ${r.adaptive ? 'on' : 'off'}`;
+}
+
+export function formatPending(r: ReadoutHeader): string {
+  return `${formatHeader(r)}\nwaiting for frames`;
+}
+
 export function formatReadout(r: StatsReadout): string {
   return [
-    `${r.backend}  ${r.tier}  adaptive ${r.adaptive ? 'on' : 'off'}`,
+    formatHeader(r),
     `fps ${r.fps}  frame ${r.frame} ms`,
     `gpu ${r.gpu} ms`,
     `dpr ${r.dpr}  render ${r.pixelRatio}`,
