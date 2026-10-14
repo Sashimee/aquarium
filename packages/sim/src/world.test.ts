@@ -357,8 +357,8 @@ describe('World containment', { timeout: LONG }, () => {
           }
           if (!targeted) {
             // Nori at the edge of sight scores below the floor and is never chosen: that is
-            // perception, not steering.
-            expect(away, label).toBeGreaterThan(0.9 * range);
+            // perception, not steering. Salience falls linearly to zero at the range.
+            expect(away, label).toBeGreaterThan((1 - FEEDING.minScore) * range);
             continue;
           }
           expect(bite, label).toBeGreaterThan(0);
@@ -367,7 +367,7 @@ describe('World containment', { timeout: LONG }, () => {
         }
       }
     }
-    expect(bitten).toBeGreaterThanOrEqual(2 * spots.length * 12 - 4);
+    expect(bitten).toBeGreaterThanOrEqual(2 * spots.length * 12 - 2);
   });
 
   it('brings a tang round to face nori in the wedge tip and bite instead of parking', () => {

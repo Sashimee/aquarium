@@ -1050,6 +1050,7 @@ export class World {
         ) < length
       ) &&
       !this.pathClear(sdf, px, py, pz, seekX, reachY, seekZ, radius) &&
+      this.pathClear(sdf, px, py, pz, px, seekY, pz, radius) &&
       this.pathClear(sdf, px, seekY, pz, seekX, seekY, seekZ, radius);
     if (plan.seekWeight > 0) {
       let qx = climbFirst ? 0 : (seekX - px) / plan.seekTau;
@@ -1478,7 +1479,11 @@ export class World {
     );
   }
 
-  /** Whether a body of radius `r` fits all the way along the segment, by sphere tracing `sdf`. */
+  /**
+   * Whether a body of radius `r` fits along the segment, by sphere tracing `sdf`. Approximate: each
+   * step overshoots the safe distance by `pathTraceMinStep` radii, so between two samples the
+   * centre can come to within about three quarters of `r` of a surface.
+   */
   private pathClear(
     sdf: Sdf,
     x0: number,
