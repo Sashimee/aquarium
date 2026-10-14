@@ -32,8 +32,11 @@ export interface QualityOptions {
    */
   minGpuSamples?: number;
   /**
-   * Hold the probe until `contentReady()`: timing an empty tank picks a tier that is too high.
-   * After `contentTimeoutMs` it probes anyway, so a scene or fish that never loads cannot stall it.
+   * Probe twice. The first probe times the empty tank and announces the starting tier, which may
+   * only drop from `probeTier`, so the scene is built once at a tier the device can at least draw
+   * empty. The second waits for `contentReady()`, since timing an empty tank picks a tier that is
+   * too high, and corrects it. After `contentTimeoutMs` it probes anyway, so a scene or fish that
+   * never loads cannot stall it.
    */
   awaitContent?: boolean;
   contentTimeoutMs?: number;
@@ -42,7 +45,7 @@ export interface QualityOptions {
 type Phase =
   | { kind: 'idle' }
   | { kind: 'waiting'; deadline: number }
-  | { kind: 'probing'; startedAt: number; gpu: number[]; frame: number[] }
+  | { kind: 'probing'; content: boolean; startedAt: number; gpu: number[]; frame: number[] }
   | { kind: 'running' };
 
 /**
@@ -62,6 +65,7 @@ export class QualityManager {
   private readonly minGpuSamples: number;
   private readonly contentTimeoutMs: number;
   private hasContent: boolean;
+  private tierAnnounced = false;
   private signal: TimingSignal | null = null;
 
   constructor(
@@ -130,15 +134,17 @@ export class QualityManager {
       this.announce(null, this.options.pinned, 'override');
       return;
     }
-    if (this.hasContent) this.beginProbe(nowMs);
-    else this.phase = { kind: 'waiting', deadline: nowMs + this.contentTimeoutMs };
+    this.beginProbe(nowMs, this.hasContent);
   }
 
-  /** The first scene and fish are in; the probe's warm-up starts now. Later calls do nothing. */
+  /**
+   * The first scene and fish are in; the content probe's warm-up starts now, or as soon as the
+   * empty-tank probe ends. Later calls do nothing.
+   */
   contentReady(nowMs: number): void {
     if (this.hasContent) return;
     this.hasContent = true;
-    if (this.phase.kind === 'waiting') this.beginProbe(nowMs);
+    if (this.phase.kind === 'waiting') this.beginProbe(nowMs, true);
   }
 
   /**
@@ -149,7 +155,7 @@ export class QualityManager {
   sample(frameMs: number, gpuMs: number | null, nowMs: number): void {
     const phase = this.phase;
     if (phase.kind === 'waiting') {
-      if (nowMs >= phase.deadline) this.beginProbe(nowMs);
+      if (nowMs >= phase.deadline) this.beginProbe(nowMs, true);
       return;
     }
     if (phase.kind === 'probing') {
@@ -178,22 +184,30 @@ export class QualityManager {
     if (from !== tier) this.apply(from, tier, 'manual');
   }
 
-  private beginProbe(nowMs: number): void {
-    this.phase = { kind: 'probing', startedAt: nowMs + this.warmupMs, gpu: [], frame: [] };
+  private beginProbe(nowMs: number, content: boolean): void {
+    this.phase = { kind: 'probing', content, startedAt: nowMs + this.warmupMs, gpu: [], frame: [] };
   }
 
   private finishProbe(phase: Extract<Phase, { kind: 'probing' }>, nowMs: number): void {
     const signal: TimingSignal =
       this.options.gpuTiming && phase.gpu.length >= this.minGpuSamples ? 'gpu' : 'frame';
     this.signal = signal;
+    const measured = this.current;
     const result = selectInitialTier({
       samples: signal === 'gpu' ? phase.gpu : phase.frame,
       signal,
-      probeTier: this.probeTier,
+      probeTier: measured,
       targetMs: this.options.targetMs,
       refreshMs: this.refreshMs,
-      maxTier: this.maxTier,
+      // The empty tank runs faster than the furnished one will, so it may only lower the tier.
+      maxTier: phase.content ? this.maxTier : measured,
     });
+    if (!phase.content) {
+      this.settle(result.tier);
+      if (this.hasContent) this.beginProbe(nowMs, true);
+      else this.phase = { kind: 'waiting', deadline: nowMs + this.contentTimeoutMs };
+      return;
+    }
     this.phase = { kind: 'running' };
     if (this.options.adaptive) {
       this.controller = new TierController(result.tier, {
@@ -205,10 +219,16 @@ export class QualityManager {
       });
       this.controller.reset(result.tier, nowMs);
     }
+    this.settle(result.tier);
+  }
+
+  /** Applies a probe's pick; the first pick is announced even when it keeps the probe tier. */
+  private settle(tier: Tier): void {
     const from = this.current;
-    this.current = result.tier;
-    if (from !== result.tier) this.applyFeatures();
-    this.announce(null, result.tier, 'probe');
+    this.current = tier;
+    if (from !== tier) this.applyFeatures();
+    if (!this.tierAnnounced) this.announce(null, tier, 'probe');
+    else if (from !== tier) this.announce(from, tier, 'probe');
   }
 
   private apply(from: Tier, to: Tier, reason: TierChangeReason): void {
@@ -223,6 +243,7 @@ export class QualityManager {
   }
 
   private announce(from: Tier | null, to: Tier, reason: TierChangeReason): void {
+    this.tierAnnounced = true;
     this.events.emit('quality:tier-changed', { from, to, reason });
   }
 }
