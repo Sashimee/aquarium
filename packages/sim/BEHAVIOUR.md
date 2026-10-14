@@ -168,6 +168,18 @@ not in any state that already stops feeding. Constants are in `CURIOSITY`
 (`packages/sim/src/curiosity.ts`); the species field is `behaviour.curiosity`. The sim keeps no
 clock time, so the learnt interval between meals stands in for the time of day.
 
+Spot memory is the same for every species: `spotLearnRate`, `spotMemoryTauS`, `mealGapS` and the
+anticipation window are global constants with no species field, as the time-place studies cited
+below give no per-species rates to tell them apart. Fish differ only in how hungry each is, which
+scales the pull, and in the anchor leash.
+
+Determinism: the RNG is drawn only while a lure is shown, so a world that never shows one draws
+the same random numbers as it did before lures existed. Its trajectories can still differ from
+before: once a tank has had two meals, fish wait at the learnt spot as the next comes due, so a
+run with repeated feeding moves differently from one recorded before feeding-spot memory was
+added. With at most one meal there is no learnt interval and nothing to wait for. The same seed
+and inputs always give the same trajectory.
+
 | Behaviour                | What the code does                                                                                                                                                                                                                                                          | Source                                                                                                                                                                                                                      | Parameter                                                                         |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | Noticing a lure          | A lure in the perception range and view cone is watched for a latency of 0.5 s + 2.5 s × (1 − curiosity); then the fish takes it up with probability `curiosity`, or ignores it for 5 s and tries again. The RNG is drawn only while a lure is shown.                       | Boldness as a stable tendency to approach a novel object, and approach latency as its measure: Wilson et al. 1994, TREE 9:442–446; Frost et al. 2007, Proc R Soc B 274:333–339. Latency range **heuristic**.                | `behaviour.curiosity`, `lureLatencyMinS`, `lureLatencyMaxS`, `lureRetryS`         |
@@ -190,5 +202,5 @@ clock time, so the learnt interval between meals stands in for the time of day.
 
 Area-restricted search after a find, learning which food is good, and food type affecting the
 strike (suction versus biting) are not modelled. Feeding-spot memory knows one spot per fish
-and no time of day. Behaviour constants outside the per-trait
+and no time of day, with rates shared by every species. Behaviour constants outside the per-trait
 parameter objects are shared by every species.
