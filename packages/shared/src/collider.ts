@@ -2,12 +2,11 @@ import { z } from 'zod';
 
 /**
  * Collision proxies in tank space (see tankSpace.ts), the one format the web scene exports and
- * the sim consumes. The sphere, box and capsule members use the field names of the sim's
- * `DecorShape` (`hard` is its `solid`), and a hull is its vertices only; consumers derive
- * half-spaces from them. The scene emits the corners of its 54-direction k-DOP and rebuilds its
- * own planes from those same vertices with `fitHull`, as the sim does, so both sides evaluate
- * identical planes (rebuilding from the corners matches the original k-DOP only up to
- * rounding). Hard colliders are never penetrated; soft ones (plants) only push fish aside.
+ * the sim consumes. A hull is its vertices only. The scene emits the corners of its
+ * 54-direction k-DOP, and the scene and the sim both rebuild half-spaces from those same
+ * vertices with `fitHullPlanes` below, so both sides evaluate identical planes (rebuilding from
+ * the corners matches the original k-DOP only up to rounding). Hard colliders are never
+ * penetrated; soft ones (plants) only push fish aside.
  */
 
 export const MAX_HULL_VERTICES = 256;
@@ -64,6 +63,48 @@ export const capsuleColliderSchema = z.strictObject({
   b: point3Schema,
   radius: length,
 });
+
+const HULL_SPIRAL_DIRECTIONS = 48;
+
+/** The 54 k-DOP directions, packed `x, y, z`: the six axes, then a golden-angle spiral from +Y to -Y. */
+export const HULL_DIRECTIONS: Float64Array = (() => {
+  const out = [1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1];
+  const golden = Math.PI * (3 - Math.sqrt(5));
+  for (let i = 0; i < HULL_SPIRAL_DIRECTIONS; i++) {
+    const y = 1 - (2 * (i + 0.5)) / HULL_SPIRAL_DIRECTIONS;
+    const r = Math.sqrt(1 - y * y);
+    out.push(Math.cos(golden * i) * r, y, Math.sin(golden * i) * r);
+  }
+  return Float64Array.from(out);
+})();
+
+/**
+ * The support plane of a point cloud (packed `x, y, z`) along each of `HULL_DIRECTIONS`, packed
+ * `nx, ny, nz, d`: the hull is every point with `n . p <= d`. Never smaller than the points'
+ * convex hull, and the first six planes are their bounding box.
+ */
+export function fitHullPlanes(points: ArrayLike<number>): Float64Array {
+  const count = Math.floor(points.length / 3);
+  if (count < 4) throw new RangeError('fitHullPlanes needs at least 4 points');
+  const planes = new Float64Array((HULL_DIRECTIONS.length / 3) * 4);
+  for (let k = 0, p = 0; k < HULL_DIRECTIONS.length; k += 3, p += 4) {
+    const nx = HULL_DIRECTIONS[k] ?? 0;
+    const ny = HULL_DIRECTIONS[k + 1] ?? 0;
+    const nz = HULL_DIRECTIONS[k + 2] ?? 0;
+    let d = -Infinity;
+    for (let i = 0; i < count * 3; i += 3) {
+      d = Math.max(
+        d,
+        nx * (points[i] ?? 0) + ny * (points[i + 1] ?? 0) + nz * (points[i + 2] ?? 0),
+      );
+    }
+    planes[p] = nx;
+    planes[p + 1] = ny;
+    planes[p + 2] = nz;
+    planes[p + 3] = d;
+  }
+  return planes;
+}
 
 const HULL_RELATIVE_VOLUME_EPSILON = 1e-6;
 

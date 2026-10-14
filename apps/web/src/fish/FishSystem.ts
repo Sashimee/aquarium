@@ -46,7 +46,7 @@ import {
   type Anchor,
   type WaterBox,
 } from './poses';
-import { renderProfile, type FishRenderProfile } from './profiles';
+import { assetIdFor, batchKeyOf, renderProfile, type FishRenderProfile } from './profiles';
 import { hashString, TankRoster, type RosterFish } from './roster';
 import { SimStream } from './simStream';
 import { initSim, layoutChanges, SimInitTimeout, SimWorldSpec, startWorld } from './simWorld';
@@ -221,6 +221,8 @@ export class FishSystem {
   private readonly forward = new Vector3();
   private readonly quat = new Float32Array(4);
   private readonly pose = createPose();
+  /** The placed fish's caudal thrust from the sim; scripted and held poses count as powered. */
+  private thrust = 1;
   private readonly values: InstanceValues = {
     qx: 0,
     qy: 0,
@@ -479,27 +481,35 @@ export class FishSystem {
     }
   }
 
-  /** Loads the model of every species in the roster; a species that fails stays unseen. */
+  /**
+   * Loads the model of every species and variant in the roster; one that fails stays unseen.
+   * Batches are keyed by species and model, so a guppy male and female draw from separate
+   * batches but stay one sim species.
+   */
   private async loadSpecies(): Promise<void> {
-    const wanted = new Set<string>();
-    for (const fish of this.roster.entries()) wanted.add(fish.species);
-    await Promise.all([...wanted].map((species) => this.loadBatch(species)));
+    const wanted = new Map<string, RosterFish>();
+    for (const fish of this.roster.entries()) {
+      const key = batchKeyOf(fish);
+      if (!wanted.has(key)) wanted.set(key, fish);
+    }
+    await Promise.all([...wanted].map(([key, fish]) => this.loadBatch(key, fish)));
   }
 
-  private loadBatch(species: string): Promise<void> {
-    if (this.batches.has(species) || this.unavailable.has(species)) return Promise.resolve();
-    let pending = this.loading.get(species);
+  private loadBatch(key: string, fish: RosterFish): Promise<void> {
+    if (this.batches.has(key) || this.unavailable.has(key)) return Promise.resolve();
+    let pending = this.loading.get(key);
     if (pending === undefined) {
-      pending = this.createBatch(species).finally(() => this.loading.delete(species));
-      this.loading.set(species, pending);
+      pending = this.createBatch(key, fish).finally(() => this.loading.delete(key));
+      this.loading.set(key, pending);
     }
     return pending;
   }
 
-  private async createBatch(species: string): Promise<void> {
+  private async createBatch(key: string, fish: RosterFish): Promise<void> {
+    const { species } = fish;
     const input = speciesInput(species);
     if (input === undefined) {
-      this.unavailable.add(species);
+      this.unavailable.add(key);
       this.report(`Fish species "${species}" has no content in this build; it stays hidden`);
       return;
     }
@@ -507,9 +517,9 @@ export class FishSystem {
     let profile: FishRenderProfile;
     try {
       profile = renderProfile(species);
-      model = await this.loader.load(profile.assetId);
+      model = await this.loader.load(assetIdFor(profile, fish.key));
     } catch (cause) {
-      this.unavailable.add(species);
+      this.unavailable.add(key);
       this.report(`Fish "${species}" has no visual; it swims and eats unseen`, cause);
       return;
     }
@@ -518,7 +528,7 @@ export class FishSystem {
       return;
     }
     const batch: SpeciesBatch = { input, model, profile, lods: [], capacity: 0 };
-    this.batches.set(species, batch);
+    this.batches.set(key, batch);
   }
 
   /** Grows a species' instance buffers; the materials are rebuilt around the new ones. */
@@ -539,6 +549,7 @@ export class FishSystem {
       for (const part of parts) {
         const material = new FishMaterial({
           source: part.source,
+          assetId: model.entry.id,
           profile,
           mode,
           zMin: model.entry.min[2],
@@ -583,17 +594,18 @@ export class FishSystem {
 
   /** Builds a runtime for every roster fish whose model is loaded. */
   private materialize(): void {
-    const perSpecies = new Map<string, number>();
+    const perBatch = new Map<string, number>();
     for (const fish of this.roster.entries()) {
-      perSpecies.set(fish.species, (perSpecies.get(fish.species) ?? 0) + 1);
+      const key = batchKeyOf(fish);
+      perBatch.set(key, (perBatch.get(key) ?? 0) + 1);
     }
-    for (const [species, count] of perSpecies) {
-      const batch = this.batches.get(species);
+    for (const [key, count] of perBatch) {
+      const batch = this.batches.get(key);
       if (batch !== undefined) this.ensureCapacity(batch, count);
     }
     for (const fish of this.roster.entries()) {
       if (this.runtimes.has(fish.simId)) continue;
-      const batch = this.batches.get(fish.species);
+      const batch = this.batches.get(batchKeyOf(fish));
       if (batch !== undefined) this.runtimes.set(fish.simId, this.createRuntime(fish, batch));
     }
   }
@@ -845,6 +857,7 @@ export class FishSystem {
   private place(rt: FishRuntime, deltaS: number, frame: Float32Array | null): boolean {
     const pose = this.pose;
     const { fish } = rt;
+    this.thrust = 1;
     if (fish.phase === 'swimming') {
       const o = frame === null ? undefined : this.stream.layout?.offsets.get(fish.simId);
       let presence: FramePresence;
@@ -883,6 +896,7 @@ export class FishSystem {
         pose.speed = frame[o + SnapshotField.Speed] ?? 0;
         pose.yawRate = frame[o + SnapshotField.YawRate] ?? 0;
         pose.liveliness = 1;
+        this.thrust = frame[o + SnapshotField.Thrust] ?? 1;
         if (rt.handover > 0) {
           const w = smoothstep01(rt.handover / HANDOVER_S);
           this.position.lerp(rt.fromPosition, w);
@@ -936,7 +950,7 @@ export class FishSystem {
         continue;
       }
       const { liveliness, speed, yawRate } = this.pose;
-      rt.swim.advance(deltaS * liveliness, { speed, yawRate });
+      rt.swim.advance(deltaS * liveliness, { speed, yawRate, thrust: this.thrust });
       rt.lastPosition.copy(this.position);
       rt.lastQuaternion.copy(this.quaternion);
       rt.shown = true;

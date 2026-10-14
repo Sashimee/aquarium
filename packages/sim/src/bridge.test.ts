@@ -198,6 +198,40 @@ describe('sim worker bridge', () => {
     expect(Array.from(remote.data)).toEqual(Array.from(expected));
   });
 
+  it('applies lure commands exactly as a local world would', async () => {
+    const { client } = connect();
+    const config = benchmarkConfig(3);
+    await client.init(config);
+    const local = new World(config);
+    const lure = [0, 0.3, 0.297] as const;
+    const tick = (n: number) =>
+      new Promise<Snapshot>((resolve) => {
+        const off = client.onSnapshot((snapshot) => {
+          if (snapshot.tick !== n) return;
+          off();
+          resolve(snapshot);
+        });
+      });
+
+    client.setLure([...lure]);
+    const lured = tick(150);
+    client.step(150);
+    await lured;
+    client.setLure(null);
+    const released = tick(180);
+    client.step(30);
+    const remote = await released;
+
+    local.setLure([...lure]);
+    for (let t = 0; t < 150; t++) local.step();
+    expect(local.behaviour.curiosity.follow.some((f) => f === 1)).toBe(true);
+    local.setLure(null);
+    for (let t = 0; t < 30; t++) local.step();
+    const expected = new Float32Array(local.count * SNAPSHOT_STRIDE);
+    local.writeSnapshot(expected);
+    expect(Array.from(remote.data)).toEqual(Array.from(expected));
+  });
+
   it('reports scene commands before init and invalid scene values as errors', async () => {
     const { client } = connect();
     const early = nextError(client);
@@ -208,6 +242,9 @@ describe('sim worker bridge', () => {
     const dark = nextError(client);
     client.setLight(2);
     expect(await dark).toMatch(/light level/);
+    const nowhere = nextError(client);
+    client.setLure([Number.NaN, 0.2, 0]);
+    expect(await nowhere).toMatch(/lure: position/);
     const tap = nextError(client);
     client.startle({ position: [0, 0.2, 0], intensity: 3 });
     expect(await tap).toMatch(/intensity/);

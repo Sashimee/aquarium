@@ -100,6 +100,7 @@ export class FoodStore {
   private readonly refPosition = new Float64Array(MAX_FOOD_PARTICLES * 3);
   private readonly lastPosition = new Float64Array(MAX_FOOD_PARTICLES * 3);
   private readonly lastSpeed = new Float64Array(MAX_FOOD_PARTICLES);
+  private readonly arrivals = new Float64Array(4);
 
   constructor(tank: Basin | TankDimensions) {
     const basin = basinOf(tank);
@@ -155,6 +156,12 @@ export class FoodStore {
       this.eaten[k] = eaten;
       if (eaten > 0) eatenById.set(id, eaten);
       const before = last.get(id);
+      if (before === undefined) {
+        this.arrivals[0] = at(this.arrivals, 0) + x;
+        this.arrivals[1] = at(this.arrivals, 1) + y;
+        this.arrivals[2] = at(this.arrivals, 2) + z;
+        this.arrivals[3] = at(this.arrivals, 3) + 1;
+      }
       const previous = before === undefined ? 0 : at(this.lastSpeed, before);
       const r = this.ref.get(id);
       if (r === undefined || elapsed <= 0) {
@@ -177,6 +184,21 @@ export class FoodStore {
     this.lastPosition.set(this.position.subarray(0, n * 3));
     this.lastSpeed.set(this.speed.subarray(0, n));
     this.rebin();
+  }
+
+  /**
+   * How many particles were first reported since the last call, writing their mean position to
+   * `out`; where food enters the tank, as fish learn it.
+   */
+  takeArrivals(out: Float64Array): number {
+    const n = at(this.arrivals, 3);
+    if (n > 0) {
+      out[0] = at(this.arrivals, 0) / n;
+      out[1] = at(this.arrivals, 1) / n;
+      out[2] = at(this.arrivals, 2) / n;
+    }
+    this.arrivals.fill(0);
+    return n;
   }
 
   indexOf(id: number): number {

@@ -101,7 +101,7 @@ function sameKey(a: VisualKey, b: VisualKey): boolean {
 export class TankScene {
   readonly current = new CurrentField();
   readonly overlay: ColliderOverlay;
-  readonly colliders: ColliderField;
+  private colliderField: ColliderField;
 
   private readonly fluorescence = uniform(0);
   private readonly coralGlowNode = createCoralGlowNode(this.fluorescence);
@@ -121,7 +121,9 @@ export class TankScene {
     private readonly engine: Engine,
     private readonly library: ModelLibrary,
     private readonly preset: PresetLayout,
-    private readonly colliderData: readonly Collider[],
+    private colliderData: readonly Collider[],
+    /** The leading entries of `colliderData`, fitted to the movable hardscape. */
+    private hardColliderCount: number,
     private readonly plantEntries: ReadonlyMap<string, PlantEntry[]>,
     private hardItems: readonly { item: DecorItem; kind: string }[],
     private readonly anemoneItems: readonly DecorItem[],
@@ -140,7 +142,7 @@ export class TankScene {
         }),
     );
     this.placeholderSubstrate = engine.tank.substrate.material;
-    this.colliders = new ColliderField(colliderData);
+    this.colliderField = new ColliderField(colliderData);
     this.overlay = new ColliderOverlay(colliderData);
     this.overlay.visible = options.colliders;
     engine.scene.add(this.overlay.group);
@@ -204,6 +206,7 @@ export class TankScene {
       const geometries = await library.collisionGeometry(item.assetId);
       colliders.push(...fitCollider(kind, geometries, item));
     }
+    const hardColliderCount = colliders.length;
     const hard = new ColliderField(colliders);
 
     const extent = glassExtent(dimensions);
@@ -291,6 +294,7 @@ export class TankScene {
       library,
       preset,
       colliders,
+      hardColliderCount,
       plantEntries,
       hardItems,
       anemoneItems,
@@ -332,8 +336,9 @@ export class TankScene {
   }
 
   /**
-   * Swaps the rocks, wood and ornaments for `items` at the installed quality tier. The scene's
-   * own collider list is not rebuilt: the sim gets the moved pieces' colliders from the decor layer.
+   * Swaps the rocks, wood and ornaments for `items` at the installed quality tier and refits their
+   * colliders, so the collider field and the `?colliders=1` overlay follow the moved pieces. The
+   * sim gets the moved pieces' colliders from the decor layer instead.
    */
   async setHardDecor(items: readonly DecorItem[]): Promise<void> {
     await this.queue.settled();
@@ -349,10 +354,14 @@ export class TankScene {
       }
     }
     const hardscape = new Hardscape(this.preset.biome, this.coralGlowNode);
-    for (const { item } of next) {
+    const hardColliders: Collider[] = [];
+    for (const { item, kind } of next) {
       const entry = catalog.get(item.assetId);
       const model = await this.library.load(item.assetId, key.hardscapeLod, key.textureSize);
       hardscape.add(entry, model, item);
+      hardColliders.push(
+        ...fitCollider(kind, await this.library.collisionGeometry(item.assetId), item),
+      );
     }
     if (this.disposed) {
       hardscape.dispose();
@@ -361,6 +370,7 @@ export class TankScene {
     this.hardscape?.dispose();
     this.hardscape = hardscape;
     this.hardItems = next;
+    this.replaceHardColliders(hardColliders);
     this.engine.scene.add(hardscape.group);
     await this.evictUnused();
   }
@@ -372,6 +382,17 @@ export class TankScene {
 
   get colliderList(): readonly Collider[] {
     return this.colliderData;
+  }
+
+  get colliders(): ColliderField {
+    return this.colliderField;
+  }
+
+  private replaceHardColliders(hard: readonly Collider[]): void {
+    this.colliderData = [...hard, ...this.colliderData.slice(this.hardColliderCount)];
+    this.hardColliderCount = hard.length;
+    this.colliderField = new ColliderField(this.colliderData);
+    this.overlay.setColliders(this.colliderData);
   }
 
   /** Where species with a home (clownfish and their anemone) are drawn to. */

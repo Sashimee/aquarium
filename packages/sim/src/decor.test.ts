@@ -1,6 +1,6 @@
-import type { Collider } from '@aquarium/shared';
+import { fitHullPlanes, type Collider } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
-import { compileCollider, DecorField, fitHull, UnionSdf, type Point3 } from './decor.ts';
+import { compileCollider, DecorField, UnionSdf } from './decor.ts';
 import { ARCHETYPES, REEF_DECOR, REEF_TANK, SHOW_DECOR, SHOW_TANK, spawnMany } from './fixtures.ts';
 import { Rng } from './rng.ts';
 import { TankSdf } from './sdf.ts';
@@ -184,58 +184,29 @@ describe('decor primitives', () => {
     expect(Array.from(n)).toEqual([0, 0, 1]);
   });
 
-  it('fits hull planes the way the scene does: axes first, every plane touching the points', () => {
+  it('evaluates a hull with the shared k-DOP planes, with their bounding box as its bounds', () => {
     const rng = new Rng(5);
-    const points: Point3[] = Array.from({ length: 40 }, () => [
+    const vertices: [number, number, number][] = Array.from({ length: 40 }, () => [
       rng.signed() * 0.2,
       rng.range(0, 0.3),
       rng.signed() * 0.1,
     ]);
-    const planes = fitHull(points);
-    expect(planes.length).toBe(54 * 4);
-    const xs = points.map((p) => p[0]);
-    const ys = points.map((p) => p[1]);
-    const zs = points.map((p) => p[2]);
-    expect(Array.from(planes.subarray(0, 24))).toEqual(
-      [
-        1,
-        0,
-        0,
-        Math.max(...xs),
-        -1,
-        0,
-        0,
-        -Math.min(...xs),
-        0,
-        1,
-        0,
-        Math.max(...ys),
-        0,
-        -1,
-        0,
-        -Math.min(...ys),
-        0,
-        0,
-        1,
-        Math.max(...zs),
-        0,
-        0,
-        -1,
-        -Math.min(...zs),
-      ].map((v) => (Object.is(v, -0) ? 0 : v)),
+    const hull = compileCollider({ id: 'h', hard: true, kind: 'hull', vertices });
+    const planes = fitHullPlanes(vertices.flat());
+    expect([hull.maxX, -hull.minX, hull.maxY, -hull.minY, hull.maxZ, -hull.minZ]).toEqual(
+      [0, 1, 2, 3, 4, 5].map((k) => at(planes, k * 4 + 3)),
     );
-    for (let k = 0; k < planes.length; k += 4) {
-      const nx = at(planes, k);
-      const ny = at(planes, k + 1);
-      const nz = at(planes, k + 2);
-      expect(Math.hypot(nx, ny, nz)).toBeCloseTo(1, 12);
-      const support = Math.max(...points.map((p) => nx * p[0] + ny * p[1] + nz * p[2]));
-      expect(at(planes, k + 3)).toBe(support);
+    for (let s = 0; s < 500; s++) {
+      const [x, y, z] = [rng.signed() * 0.4, rng.range(-0.1, 0.4), rng.signed() * 0.3];
+      let expected = -Infinity;
+      for (let k = 0; k < planes.length; k += 4) {
+        expected = Math.max(
+          expected,
+          at(planes, k) * x + at(planes, k + 1) * y + at(planes, k + 2) * z - at(planes, k + 3),
+        );
+      }
+      expect(hull.sample(x, y, z, n)).toBe(expected);
     }
-    // The 48 spiral directions run from the north pole to the south pole.
-    expect(at(planes, 25)).toBeCloseTo(1 - 1 / 48, 12);
-    expect(at(planes, planes.length - 3)).toBeCloseTo(-1 + 1 / 48, 12);
-    expect(() => fitHull(points.slice(0, 3))).toThrow('at least 4');
   });
 
   it('rejects malformed colliders with the collider id and the bad field in the message', () => {

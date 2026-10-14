@@ -23,7 +23,8 @@ export interface DayLightingRig {
   readonly scene: Scene;
   readonly ambientScatter: Color;
   readonly substrateAlbedo: Color;
-  readonly roomBackgroundIntensity: number;
+  /** The room backdrop's daytime level; the photoperiod scales it down at night. */
+  roomBackgroundIntensity: number;
 }
 
 /**

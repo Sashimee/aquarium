@@ -78,6 +78,15 @@ export const MIN_TURN_SPEED_BODY_LENGTHS_PER_S = 0.5;
 /** Strongest body bend, as curvature × body length, short of a C-start. */
 export const MAX_BEND = 3;
 const BEND_SMOOTHING_S = 0.08;
+/**
+ * Thrust (fraction of the maximum) below which the sim's fish is gliding. Coasting tetras hold the
+ * body "passive and straight" (Li et al. 2021, Commun Biol 4:68), so the beat dies out within one
+ * tail period: e^-3, 5% left, after one period. A kick restarts it about as fast as the sim's 0.1 s
+ * burst response.
+ */
+export const COAST_THRUST = 1e-3;
+const COAST_DECAY_PER_PERIOD = 3;
+const DRIVE_RISE_S = 0.03;
 const TAU = Math.PI * 2;
 
 function clamp(v: number, lo: number, hi: number): number {
@@ -95,12 +104,16 @@ export function tailBeatHz(speed: number, length: number, strouhal: number): num
   return clamp(f, IDLE_TAIL_BEAT_HZ, MAX_TAIL_BEAT_HZ);
 }
 
-/** Fraction of the cruising body-wave amplitude used at this speed (0.2 hovering, 1 cruising). */
-export function amplitudeScale(speed: number, length: number): number {
+/**
+ * Fraction of the cruising body-wave amplitude used at this speed: 0.2 hovering, 1 cruising.
+ * `drive` (0 gliding .. 1 powered) scales the swimming share only, so a resting fish keeps its
+ * station-holding undulation while a coasting one goes straight.
+ */
+export function amplitudeScale(speed: number, length: number, drive: number): number {
   requirePositiveLength(length);
   const x = clamp(Math.max(speed, 0) / length / FULL_AMPLITUDE_BODY_LENGTHS_PER_S, 0, 1);
   const eased = x * x * (3 - 2 * x);
-  return IDLE_AMPLITUDE + (1 - IDLE_AMPLITUDE) * eased;
+  return IDLE_AMPLITUDE * (1 - eased) + eased * clamp(drive, 0, 1);
 }
 
 /**
@@ -121,6 +134,8 @@ export function envelopeAt(mode: SwimModeParams, s: number): number {
 export interface SwimSample {
   speed: number;
   yawRate: number;
+  /** Caudal thrust as a fraction of the maximum, 0 while coasting; 1 for scripted poses. */
+  thrust: number;
 }
 
 /**
@@ -131,6 +146,8 @@ export class SwimState {
   phase: number;
   finPhase: number;
   amplitude = IDLE_AMPLITUDE;
+  /** Smoothed 0 gliding .. 1 powered, so a coast fades the beat instead of cutting it. */
+  drive = 1;
   curvature = 0;
   frequency = IDLE_TAIL_BEAT_HZ;
 
@@ -149,7 +166,10 @@ export class SwimState {
     if (!(dt >= 0)) throw new RangeError(`swim: dt must be >= 0, got ${dt}`);
     const { length } = this;
     this.frequency = tailBeatHz(sample.speed, length, this.strouhal);
-    this.amplitude = amplitudeScale(sample.speed, length);
+    const powered = sample.thrust > COAST_THRUST;
+    const tau = powered ? DRIVE_RISE_S : 1 / (COAST_DECAY_PER_PERIOD * this.frequency);
+    this.drive += ((powered ? 1 : 0) - this.drive) * (1 - Math.exp(-dt / tau));
+    this.amplitude = amplitudeScale(sample.speed, length, this.drive);
     this.phase = (this.phase + TAU * this.frequency * dt) % TAU;
     const finHz = Math.max(this.frequency, this.mode.pectoralIdleHz);
     this.finPhase = (this.finPhase + TAU * finHz * dt) % TAU;

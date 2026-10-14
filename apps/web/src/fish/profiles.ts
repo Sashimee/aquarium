@@ -1,5 +1,15 @@
+import { hashString } from './roster';
+
+/** Another model of the same species, e.g. the other sex, drawn for `share` of its fish. */
+export interface FishVariant {
+  readonly assetId: string;
+  readonly share: number;
+}
+
 export interface FishRenderProfile {
   readonly assetId: string;
+  /** Alternatives to `assetId`; one sim species, so mixed groups still school together. */
+  readonly variants: readonly FishVariant[];
   /** Guanine-platelet iridescence strength on the body, 0..1. */
   readonly iridescence: number;
   /** `blue` limits iridescence to blue-dominant texels, e.g. the neon tetra's stripe. */
@@ -17,6 +27,7 @@ export interface FishRenderProfile {
 
 const DEFAULTS: FishRenderProfile = {
   assetId: '',
+  variants: [],
   iridescence: 0.25,
   iridescenceMask: 'body',
   filmThicknessNm: [250, 420],
@@ -68,6 +79,7 @@ export const FISH_RENDER_PROFILES: Readonly<Record<string, FishRenderProfile>> =
   guppy: {
     ...DEFAULTS,
     assetId: 'guppy-female',
+    variants: [{ assetId: 'guppy-male', share: 0.5 }],
     iridescence: 0.3,
     finTransmission: 0.6,
     tintVariation: 0.1,
@@ -90,4 +102,20 @@ export function renderProfile(speciesId: string): FishRenderProfile {
     throw new Error(`no fish render profile for species "${speciesId}"; add it to profiles.ts`);
   }
   return profile;
+}
+
+/** The model one fish wears, chosen by its stable key so it keeps it across reloads. */
+export function assetIdFor(profile: FishRenderProfile, fishKey: string): string {
+  let u = hashString(`${fishKey}:variant`) / 2 ** 32;
+  for (const variant of profile.variants) {
+    if (u < variant.share) return variant.assetId;
+    u -= variant.share;
+  }
+  return profile.assetId;
+}
+
+/** The instanced batch that draws a fish: one per species and model. */
+export function batchKeyOf(fish: { readonly species: string; readonly key: string }): string {
+  const profile = FISH_RENDER_PROFILES[fish.species];
+  return `${fish.species}/${profile === undefined ? '' : assetIdFor(profile, fish.key)}`;
 }

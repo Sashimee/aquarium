@@ -1,4 +1,5 @@
 import type { Basin } from './basin.ts';
+import { CURIOSITY, Curiosity } from './curiosity.ts';
 import type { Point3 } from './decor.ts';
 import { FEEDING, Feeding, feedingHeight } from './feeding.ts';
 import type { FishResize } from './fishArrays.ts';
@@ -268,6 +269,7 @@ function sigmoid(x: number): number {
 export class Behaviour {
   readonly plans: Plan[];
   readonly feeding: Feeding;
+  readonly curiosity: Curiosity;
   light = 1;
   night = false;
 
@@ -365,6 +367,7 @@ export class Behaviour {
     const s = host.species.length;
     this.plans = Array.from({ length: n }, () => new Plan());
     this.feeding = new Feeding(host);
+    this.curiosity = new Curiosity(host);
     this.startlePhase = new Uint8Array(n);
     this.startleTimer = new Float64Array(n);
     this.startleElapsed = new Float64Array(n);
@@ -477,6 +480,7 @@ export class Behaviour {
     this.excursionTimer = edit.array(this.excursionTimer);
     this.excursionTarget = edit.array(this.excursionTarget, 3);
     this.feeding.resize(edit);
+    this.curiosity.resize(edit);
     if (edit.removed < 0) return;
     for (let i = 0; i < this.territoryTarget.length; i++) {
       const j = edit.index(at(this.territoryTarget, i));
@@ -608,6 +612,10 @@ export class Behaviour {
     this.stimuli.push(stimulus);
   }
 
+  setLure(position: Point3 | null): void {
+    this.curiosity.setLure(position);
+  }
+
   setLight(level: number): void {
     if (!(level >= 0 && level <= 1)) {
       throw new RangeError(`light level must be within [0, 1], got ${level}`);
@@ -645,6 +653,8 @@ export class Behaviour {
     }
     this.prepareFeeding();
     this.feeding.update();
+    this.prepareCuriosity();
+    this.curiosity.update((i) => this.feeding.motivation(i));
     for (let i = 0; i < n; i++) this.plan(i);
   }
 
@@ -671,6 +681,35 @@ export class Behaviour {
       leash[o + 1] = a.position[1];
       leash[o + 2] = a.position[2];
       leash[o + 3] = a.radius + FEEDING.leashBodyLengths * at(this.host.bodyLength, i);
+    }
+  }
+
+  /**
+   * A fish busy with food, a rival or anything that already stops it feeding has no attention
+   * for a lure or its feeding spot; an anchored fish goes no further for them than an excursion.
+   */
+  private prepareCuriosity(): void {
+    const f = this.feeding;
+    const { eligible, leash } = this.curiosity;
+    for (let i = 0; i < this.host.count; i++) {
+      eligible[i] =
+        at(f.eligible, i) === 1 &&
+        at(f.target, i) < 0 &&
+        at(f.follow, i) < 0 &&
+        at(f.handling, i) <= 0 &&
+        at(this.territoryPhase, i) === TerritoryPhase.Idle
+          ? 1
+          : 0;
+      const a = this.anchors[at(this.anchor, i)];
+      const o = i * 4;
+      if (a === undefined) {
+        leash[o + 3] = Infinity;
+        continue;
+      }
+      leash[o] = a.position[0];
+      leash[o + 1] = a.position[1];
+      leash[o + 2] = a.position[2];
+      leash[o + 3] = a.radius + CURIOSITY.lureLeashBodyLengths * at(this.host.bodyLength, i);
     }
   }
 
@@ -918,6 +957,8 @@ export class Behaviour {
       return;
     }
     if (this.planShelter(i, sp, plan)) return;
+    if (this.planLure(i, sp, plan)) return;
+    if (this.planSpot(i, sp, plan)) return;
     if (sp.gait === 'forage') {
       this.planForage(i, sp, plan);
     } else if (sp.grazer === 'glass') {
@@ -1008,6 +1049,74 @@ export class Behaviour {
       // with their fins as they do over rock rather than swimming arcs past it.
       plan.pivot = f.grazes(k) && d < length;
     }
+    return true;
+  }
+
+  /**
+   * Closes on the lure as the fish last saw it and holds a little way off it, facing it: against
+   * the glass the stand-off is taken from the pane, in open water the fish slows to a hover.
+   */
+  private planLure(i: number, sp: SimSpecies, plan: Plan): boolean {
+    const c = this.curiosity;
+    if (at(c.follow, i) !== 1) return false;
+    const o = i * 3;
+    const sx = at(c.seen, o);
+    const sy = at(c.seen, o + 1);
+    const sz = at(c.seen, o + 2);
+    const { position } = this.host;
+    const length = at(this.host.bodyLength, i);
+    const cruise = at(this.host.cruiseSpeed, i);
+    const vmax = at(this.host.maxSpeed, i);
+    const d = Math.hypot(sx - at(position, o), sy - at(position, o + 1), sz - at(position, o + 2));
+    plan.align *= CURIOSITY.lureSchoolFactor;
+    plan.cohesion *= CURIOSITY.lureSchoolFactor;
+    plan.wander *= 0.3;
+    this.widenBand(plan, sy, length);
+    plan.arrival = (FEEDING.mouthBodyLengths + CURIOSITY.lureStandoffBodyLengths) * length;
+    const speed = Math.min(
+      FEEDING.pursuitSpeedFraction * vmax,
+      Math.max(cruise * (1 + sp.curiosity), (d - plan.arrival) / CURIOSITY.lureCatchUpS),
+    );
+    plan.seek(sx, sy, sz, speed, 0.5);
+    plan.speedFloor = 0;
+    plan.speedCap = speed * clamp((d - plan.arrival) / (2 * length), 0, 1);
+    return true;
+  }
+
+  /**
+   * As its next meal comes due, a fish that has learnt where food comes in waits there, at the
+   * top of its band, or on the sand below for a bottom forager (time-place learning).
+   */
+  private planSpot(i: number, sp: SimSpecies, plan: Plan): boolean {
+    const c = this.curiosity;
+    const w = at(c.anticipation, i);
+    if (w < CURIOSITY.anticipationMinWeight) return false;
+    const { basin, position } = this.host;
+    const length = at(this.host.bodyLength, i);
+    const x = at(c.spot, i * 2);
+    const z = at(c.spot, i * 2 + 1);
+    let y: number;
+    if (sp.gait === 'forage') {
+      const ground = basin.ground(at(position, i * 3), at(position, i * 3 + 2));
+      const mid = 0.5 * (BEHAVIOUR.forageBandLowBodyLengths + BEHAVIOUR.forageBandHighBodyLengths);
+      plan.floor = false;
+      plan.bandLo = ground + BEHAVIOUR.forageBandLowBodyLengths * length;
+      plan.bandHi = ground + BEHAVIOUR.forageBandHighBodyLengths * length;
+      y = basin.ground(x, z) + mid * length;
+    } else {
+      this.bandAt(i, x, z);
+      y = Math.max(this.bandLo, Math.min(this.bandHi, basin.maxY - length));
+    }
+    this.holdStation(
+      i,
+      plan,
+      x,
+      y,
+      z,
+      CURIOSITY.anticipationRadiusBodyLengths * length,
+      FishState.Station,
+    );
+    plan.seekWeight *= Math.min(1, w);
     return true;
   }
 
