@@ -37,7 +37,10 @@ export const behaviourSchema = z.strictObject({
   preferredZone: zoneSchema,
   depthBand: z
     .tuple([unitSchema, unitSchema])
-    .refine(([lo, hi]) => lo <= hi, 'depthBand must be [low, high]'),
+    .refine(([lo, hi]) => lo <= hi, 'depthBand must be [low, high]')
+    .describe(
+      'fractions of the local water column measured up from the substrate: 0 = sand, 1 = surface',
+    ),
   perceptionRangeM: positive,
   perceptionFovDeg: z.number().min(1).max(360),
   curiosity: unitSchema,

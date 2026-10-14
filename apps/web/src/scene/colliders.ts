@@ -1,3 +1,5 @@
+import { fitHullPlanes } from '@aquarium/shared';
+
 /**
  * Collider shapes in tank space (metres), as plain structured-cloneable data so they can be
  * posted to the sim worker. `ColliderField.hard` follows the sim's `Sdf` contract: positive in
@@ -25,41 +27,13 @@ export interface HullCollider {
 
 export type Collider = CapsuleCollider | HullCollider;
 
-const DIRECTION_COUNT = 48;
-const AXES: readonly Vec3Tuple[] = [
-  [1, 0, 0],
-  [-1, 0, 0],
-  [0, 1, 0],
-  [0, -1, 0],
-  [0, 0, 1],
-  [0, 0, -1],
-];
-
-let cachedDirections: number[] | null = null;
-
-function hullDirections(): number[] {
-  if (cachedDirections) return cachedDirections;
-  const out: number[] = [];
-  for (const axis of AXES) out.push(...axis);
-  const golden = Math.PI * (3 - Math.sqrt(5));
-  for (let i = 0; i < DIRECTION_COUNT; i++) {
-    const y = 1 - (2 * (i + 0.5)) / DIRECTION_COUNT;
-    const r = Math.sqrt(1 - y * y);
-    out.push(Math.cos(golden * i) * r, y, Math.sin(golden * i) * r);
-  }
-  cachedDirections = out;
-  return out;
-}
-
 /**
- * Tight convex envelope of a point cloud: for each of 54 fixed directions the support plane of
- * the points. Cheap to evaluate (54 dot products) and never smaller than the mesh.
+ * Tight convex envelope of a point cloud: the shared 54-direction k-DOP, so the planes match the
+ * ones the sim rebuilds from the exported corners. Cheap to evaluate and never smaller than the mesh.
  */
 export function fitHull(points: ArrayLike<number>): HullCollider {
+  const planes = Array.from(fitHullPlanes(points));
   const count = Math.floor(points.length / 3);
-  if (count < 4) throw new RangeError('fitHull needs at least 4 points');
-  const directions = hullDirections();
-  const planes: number[] = [];
   let cx = 0;
   let cy = 0;
   let cz = 0;
@@ -81,19 +55,6 @@ export function fitHull(points: ArrayLike<number>): HullCollider {
         (points[i * 3 + 2] ?? 0) - cz,
       ),
     );
-  }
-  for (let k = 0; k < directions.length; k += 3) {
-    const nx = directions[k] ?? 0;
-    const ny = directions[k + 1] ?? 0;
-    const nz = directions[k + 2] ?? 0;
-    let d = -Infinity;
-    for (let i = 0; i < count; i++) {
-      d = Math.max(
-        d,
-        nx * (points[i * 3] ?? 0) + ny * (points[i * 3 + 1] ?? 0) + nz * (points[i * 3 + 2] ?? 0),
-      );
-    }
-    planes.push(nx, ny, nz, d);
   }
   return { kind: 'hull', hard: true, planes, centre: [cx, cy, cz], boundRadius: bound };
 }

@@ -1,4 +1,4 @@
-import { colliderSchema, type Collider } from '@aquarium/shared';
+import { colliderSchema, fitHullPlanes, type Collider } from '@aquarium/shared';
 import { basinOf, type Basin, type TankDimensions } from './basin.ts';
 import type { Sdf } from './sdf.ts';
 
@@ -251,45 +251,6 @@ class CapsulePrimitive implements Primitive {
   }
 }
 
-const HULL_SPIRAL_DIRECTIONS = 48;
-
-/**
- * The 54 fixed directions of the scene's k-DOP hulls: the six axes, then a golden-angle spiral.
- * Must match `fitHull` in apps/web/src/scene/colliders.ts direction for direction, so the planes
- * rebuilt from a hull's vertices are the planes the scene uses.
- */
-const HULL_DIRECTIONS: Float64Array = (() => {
-  const out = [1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1];
-  const golden = Math.PI * (3 - Math.sqrt(5));
-  for (let i = 0; i < HULL_SPIRAL_DIRECTIONS; i++) {
-    const y = 1 - (2 * (i + 0.5)) / HULL_SPIRAL_DIRECTIONS;
-    const r = Math.sqrt(1 - y * y);
-    out.push(Math.cos(golden * i) * r, y, Math.sin(golden * i) * r);
-  }
-  return Float64Array.from(out);
-})();
-
-/**
- * The support plane of `vertices` along each k-DOP direction, packed as `nx, ny, nz, d`: the hull
- * is every point with `n . p <= d`. Never smaller than the vertices' convex hull.
- */
-export function fitHull(vertices: readonly Point3[]): Float64Array {
-  if (vertices.length < 4) throw new RangeError('fitHull needs at least 4 vertices');
-  const planes = new Float64Array((HULL_DIRECTIONS.length / 3) * 4);
-  for (let k = 0, p = 0; k < HULL_DIRECTIONS.length; k += 3, p += 4) {
-    const nx = HULL_DIRECTIONS[k] ?? 0;
-    const ny = HULL_DIRECTIONS[k + 1] ?? 0;
-    const nz = HULL_DIRECTIONS[k + 2] ?? 0;
-    let d = -Infinity;
-    for (const v of vertices) d = Math.max(d, nx * v[0] + ny * v[1] + nz * v[2]);
-    planes[p] = nx;
-    planes[p + 1] = ny;
-    planes[p + 2] = nz;
-    planes[p + 3] = d;
-  }
-  return planes;
-}
-
 /**
  * A convex k-DOP. Inside, the largest plane distance is the exact depth; outside it never exceeds
  * the true distance, so avoidance only errs towards caution past edges and corners.
@@ -306,7 +267,7 @@ class HullPrimitive implements Primitive {
 
   constructor(id: string, vertices: readonly Point3[]) {
     this.id = id;
-    const p = fitHull(vertices);
+    const p = fitHullPlanes(vertices.flat());
     this.planes = p;
     // The first six directions are the axes, so their planes are the vertices' bounding box.
     this.maxX = p[3] ?? 0;
