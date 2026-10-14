@@ -61,7 +61,7 @@ export class WaterShafts {
         const light = caustics.lightDirection;
         const cosLight = max(light.y, 0.2);
         const stepLength = end.sub(start).div(STEPS).toVar();
-        const jitter = interleavedGradientNoise(screenCoordinate.xy);
+        const jitter = interleavedGradientNoise(screenCoordinate.xy).toVar();
         const sum = vec3(0).toVar();
         const mean = caustics.bakedMean().toVar();
         Loop(STEPS, ({ i }) => {
