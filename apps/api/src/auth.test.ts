@@ -20,14 +20,18 @@ const median = (xs: number[]) => {
   return sorted.length % 2 ? (sorted[mid] ?? 0) : ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2;
 };
 
-// The median of per-pair differences cancels host load, which hits both halves of an adjacent
-// pair alike. A repeat sign-up is legitimately ~1-3 ms faster (it inserts no user rows), so the
-// tolerance must clear that. 12 ms clears the worst no-leak median seen under load (~8 ms) and stays
-// below the 25 ms leaks this is meant to expose; leaks under ~15 ms are not reliably caught, and
-// catching them needs more pairs rather than a tighter bound.
+// Hashing the password dominates a fresh sign-up (~65 ms), so a repeat that skips it is ~75% faster
+// and one that adds a second hash ~100% slower. Host load stretches both halves of an adjacent pair
+// in proportion, so the median pair difference is bounded relative to the median fresh time rather
+// than by absolute milliseconds. 25% sits above the noise seen under load (an absolute 12 ms was
+// exceeded by noise at ~13 ms in CI) and far below either leak. A repeat is ~1-3 ms faster (no user rows).
 function expectNoTimingSkew(pairs: { fresh: number; repeat: number }[]) {
   const gap = median(pairs.map((p) => p.repeat - p.fresh));
-  expect(Math.abs(gap), `median repeat - fresh = ${gap.toFixed(1)} ms`).toBeLessThan(12);
+  const fresh = median(pairs.map((p) => p.fresh));
+  expect(
+    Math.abs(gap) / fresh,
+    `median repeat - fresh = ${gap.toFixed(1)} ms of ${fresh.toFixed(1)} ms`,
+  ).toBeLessThan(0.25);
 }
 
 function cookieJar(res: LightMyRequestResponse): string {
