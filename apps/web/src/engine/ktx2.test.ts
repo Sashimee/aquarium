@@ -120,12 +120,19 @@ describe('the shared loader after dispose', () => {
     ),
   );
 
-  /** Serves a real KTX2 file once `textureArrives` resolves, so a load would reach the workers. */
-  function stubDownloads(textureArrives: Promise<void> = Promise.resolve()): {
+  /**
+   * Serves a real KTX2 file, so a load reaches the workers, and workers that never answer, so a
+   * transcode stays in the pool until something settles it.
+   */
+  function stubDownloads({
+    textureArrives = Promise.resolve(),
+    transcoderArrives = Promise.resolve(),
+  }: { textureArrives?: Promise<void>; transcoderArrives?: Promise<void> } = {}): {
     requested: string[];
     workers: number;
+    transcodes: number;
   } {
-    const seen = { requested: [] as string[], workers: 0 };
+    const seen = { requested: [] as string[], workers: 0, transcodes: 0 };
     vi.stubGlobal('ProgressEvent', Event);
     vi.stubGlobal(
       'Request',
@@ -135,7 +142,10 @@ describe('the shared loader after dispose', () => {
     );
     vi.stubGlobal('fetch', async (input: { url: string }) => {
       seen.requested.push(input.url);
-      if (input.url.includes('basis_transcoder')) return new Response(new Uint8Array(4));
+      if (input.url.includes('basis_transcoder')) {
+        await transcoderArrives;
+        return new Response(new Uint8Array(4));
+      }
       await textureArrives;
       return new Response(new Uint8Array(texture));
     });
@@ -146,12 +156,22 @@ describe('the shared loader after dispose', () => {
           seen.workers++;
         }
         addEventListener(): void {}
-        postMessage(): void {}
+        postMessage(message: { type: string }): void {
+          if (message.type === 'transcode') seen.transcodes++;
+        }
         terminate(): void {}
       },
     );
     return seen;
   }
+
+  function texturePromise(parse: KTX2Loader['parse']): Promise<unknown> {
+    return new Promise((resolve, reject) => {
+      parse(new Uint8Array(texture).buffer, resolve, reject);
+    });
+  }
+
+  const nextTask = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
   it('rejects a late load instead of starting a worker from the revoked transcoder', async () => {
     const seen = stubDownloads();
@@ -176,7 +196,7 @@ describe('the shared loader after dispose', () => {
 
   it('does not transcode a download that finishes after dispose', async () => {
     let arrive = (): void => {};
-    const seen = stubDownloads(new Promise((resolve) => (arrive = resolve)));
+    const seen = stubDownloads({ textureArrives: new Promise((resolve) => (arrive = resolve)) });
     const shared = createSharedKtx2(renderer);
 
     const late = shared.loader.loadAsync('fish_1k.ktx2');
@@ -185,6 +205,80 @@ describe('the shared loader after dispose', () => {
 
     await expect(late).rejects.toThrow(/cannot load a downloaded texture, the shared loader/);
     expect(seen.workers).toBe(0);
+  });
+
+  it('rejects transcodes that are running or queued in the pool when it is disposed', async () => {
+    const seen = stubDownloads();
+    const shared = createSharedKtx2(renderer);
+    await shared.loader.init();
+    const loads = Array.from({ length: shared.loader.workerPool.pool + 2 }, (_, i) =>
+      shared.loader.loadAsync(`fish_${i}_1k.ktx2`),
+    );
+    await vi.waitFor(() => expect(seen.transcodes).toBe(shared.loader.workerPool.pool));
+    const workersAtDispose = seen.workers;
+
+    shared.dispose();
+
+    for (const load of loads) await expect(load).rejects.toThrow(/disposed/);
+    await nextTask();
+    expect(seen.workers).toBe(workersAtDispose);
+  });
+
+  it('rejects a transcode accepted in the same tick as dispose without starting a worker', async () => {
+    const seen = stubDownloads();
+    const shared = createSharedKtx2(renderer);
+    await shared.loader.init();
+
+    const transcoded = texturePromise((...args) => shared.loader.parse(...args));
+    shared.dispose();
+
+    await expect(transcoded).rejects.toThrow(/disposed/);
+    await nextTask();
+    expect(seen.workers).toBe(0);
+  });
+
+  it('rejects a transcode whose transcoder arrives after dispose without starting a worker', async () => {
+    let arrive = (): void => {};
+    const seen = stubDownloads({
+      transcoderArrives: new Promise((resolve) => (arrive = resolve)),
+    });
+    const shared = createSharedKtx2(renderer);
+
+    const transcoded = texturePromise((...args) => shared.loader.parse(...args));
+    shared.dispose();
+    arrive();
+
+    await expect(transcoded).rejects.toThrow(/disposed/);
+    const transcoder = shared.loader.init();
+    await Promise.allSettled([transcoder]);
+    await nextTask();
+    expect(seen.workers).toBe(0);
+    await expect(transcoder).rejects.toThrow(/disposed/);
+  });
+});
+
+describe('the shared loader before dispose', () => {
+  it('still reports an exception thrown by onLoad through onError, as three does', async () => {
+    vi.spyOn(KTX2Loader.prototype, 'parse').mockImplementation((_buffer, onLoad, onError) => {
+      Promise.resolve(new CompressedTexture([], 1, 1))
+        .then(onLoad)
+        .catch(onError);
+    });
+    const shared = createSharedKtx2(renderer);
+    const boom = new Error('boom');
+
+    const reported = await new Promise((resolve) => {
+      shared.loader.parse(
+        new ArrayBuffer(4),
+        () => {
+          throw boom;
+        },
+        resolve,
+      );
+    });
+
+    expect(reported).toBe(boom);
+    shared.dispose();
   });
 });
 
