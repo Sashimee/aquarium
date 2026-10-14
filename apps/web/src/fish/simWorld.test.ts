@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { Collider } from '@aquarium/shared';
 import { World } from '@aquarium/sim';
 import { DEFAULT_TANK } from '../engine/tank/dimensions';
 import type { SceneAnchor } from '../scene/anemone';
@@ -17,6 +18,13 @@ const ANEMONE: SceneAnchor = {
 };
 const MOVED: SceneAnchor = { ...ANEMONE, position: [-0.2, 0.2, 0.05] };
 const CLOWN = { species: 'ocellaris-clownfish' } as const;
+const ROCK: Collider = {
+  id: 'scene:0',
+  kind: 'sphere',
+  hard: true,
+  center: [0, 0.15, 0],
+  radius: 0.05,
+};
 
 function setup(): { spec: SimWorldSpec; roster: TankRoster } {
   return { spec: new SimWorldSpec(DEMO, 7), roster: new TankRoster(DEMO.config.fish) };
@@ -30,6 +38,18 @@ describe('SimWorldSpec', () => {
   it('starts a world without homes until the scene sends them', () => {
     const { spec, roster } = setup();
     expect(anchorsOf(spec, roster)).toEqual([]);
+  });
+
+  it('hands the latest colliders to every new world, which the sim accepts', () => {
+    const { spec, roster } = setup();
+    expect(spec.config(roster.swimming())?.decor).toEqual([]);
+    spec.setDecor([
+      { id: 'scene:0', kind: 'sphere', hard: true, center: [0, 0.25, 0], radius: 0.05 },
+    ]);
+    const config = spec.config(roster.swimming());
+    expect(config?.decor).toBe(spec.decor);
+    if (config === null) throw new Error('the demo has no world');
+    expect(() => new World(config)).not.toThrow();
   });
 
   it('hands the scene anchors, in the sim frame, to every world after them', () => {
@@ -91,7 +111,7 @@ describe('SimWorldSpec', () => {
     ]);
     expect(config?.species).toBe(allSpeciesInputs());
     expect(config?.seed).toBe(7);
-    expect(config?.tank).toBe(DEMO.config.tank);
+    expect(config?.space).toBe(DEMO.config.space);
   });
 
   it('builds a world that can take in a fish of a species it started without', () => {
@@ -107,6 +127,26 @@ describe('SimWorldSpec', () => {
     const world = new World(config);
     expect(() => world.addFish({ id: 'tang', species: 'blue-tang' })).not.toThrow();
     expect(world.fishIds).toEqual([roster.simIdOf(FISH_1), 'tang']);
+  });
+
+  it('names the colliders and homes that changed while a world was starting', () => {
+    const { spec, roster } = setup();
+    spec.setDecor([ROCK]);
+    spec.setAnchors([ANEMONE]);
+    const starting = spec.config(roster.swimming());
+    if (starting === null) throw new Error('the demo has no world');
+    expect(spec.changedSince(starting)).toEqual({ decor: null, anchors: null });
+
+    const moved: Collider = { ...ROCK, center: [0.2, 0.15, 0.1] };
+    spec.setDecor([moved]);
+    expect(spec.changedSince(starting)).toEqual({ decor: [moved], anchors: null });
+
+    const homes = spec.setAnchors([MOVED]);
+    expect(spec.changedSince(starting)).toEqual({ decor: [moved], anchors: homes });
+
+    const next = spec.config(roster.swimming());
+    if (next === null) throw new Error('the demo has no world');
+    expect(spec.changedSince(next)).toEqual({ decor: null, anchors: null });
   });
 
   it('has no world to run when nothing swims', () => {

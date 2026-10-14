@@ -561,6 +561,9 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
             .onConflictDoNothing()
             .returning({ batchId: schema.ateBatches.batchId });
           if (claimed.length === 0) {
+            // The replay's payload isn't compared with the original, so a client reusing an id would
+            // drop reports silently; this log is the only trace.
+            req.log.debug({ tankId, batchId: body.batchId }, 'ate batch replay ignored');
             return { tank: await render(tx, ticked) };
           }
         }

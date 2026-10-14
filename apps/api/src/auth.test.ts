@@ -20,14 +20,21 @@ const median = (xs: number[]) => {
   return sorted.length % 2 ? (sorted[mid] ?? 0) : ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2;
 };
 
-// The median of per-pair differences cancels host load, which hits both halves of an adjacent
-// pair alike. A repeat sign-up is legitimately ~1-3 ms faster (it inserts no user rows), so the
-// tolerance must clear that. 12 ms clears the worst no-leak median seen under load (~8 ms) and stays
-// below the 25 ms leaks this is meant to expose; leaks under ~15 ms are not reliably caught, and
-// catching them needs more pairs rather than a tighter bound.
+// Hashing dominates a fresh sign-up (~65 ms), so a repeat that skips it shows a gap of ~6.7 times
+// the faster half (the repeat itself) and a second hash ~1.0. Load stretches both halves of an adjacent pair together, so
+// the median pair gap is bounded relative to the faster median (dividing by the slower would let a
+// faster repeat inflate its own denominator) instead of in absolute milliseconds. Detection floor is
+// 25% of that, ~16 ms on a quiet host. The bound grows with load: fine for CPU-bound leaks like a
+// hash, looser for I/O-bound ones. A repeat is legitimately ~1-3 ms faster (no user rows).
 function expectNoTimingSkew(pairs: { fresh: number; repeat: number }[]) {
   const gap = median(pairs.map((p) => p.repeat - p.fresh));
-  expect(Math.abs(gap), `median repeat - fresh = ${gap.toFixed(1)} ms`).toBeLessThan(12);
+  const fresh = median(pairs.map((p) => p.fresh));
+  const repeat = median(pairs.map((p) => p.repeat));
+  const base = Math.min(fresh, repeat);
+  expect(
+    Math.abs(gap) / base,
+    `median repeat - fresh = ${gap.toFixed(1)} ms of ${base.toFixed(1)} ms`,
+  ).toBeLessThan(0.25);
 }
 
 function cookieJar(res: LightMyRequestResponse): string {
@@ -69,10 +76,29 @@ async function verifiedSession(h: Harness, email = nextEmail()) {
   return { email, cookie, verify };
 }
 
+const SLOW_MAIL_MS = 40;
+
+describe('timing skew bound', () => {
+  it('flags a repeat that skips the mail send against a slow mailer', () => {
+    const fresh = 65 + SLOW_MAIL_MS;
+    expect(() =>
+      expectNoTimingSkew(
+        Array.from({ length: 9 }, () => ({ fresh, repeat: fresh - SLOW_MAIL_MS })),
+      ),
+    ).toThrow();
+  });
+
+  it('accepts pairs that differ by a couple of milliseconds', () => {
+    expect(() =>
+      expectNoTimingSkew(Array.from({ length: 9 }, () => ({ fresh: 105, repeat: 103 }))),
+    ).not.toThrow();
+  });
+});
+
 describe('unverified sign-up takeover (#114)', () => {
   let h: Harness;
   beforeAll(async () => {
-    h = await createHarness();
+    h = await createHarness({ mailDelayMs: SLOW_MAIL_MS });
   });
   afterAll(() => h.close());
 
@@ -87,8 +113,8 @@ describe('unverified sign-up takeover (#114)', () => {
       payload: { email, password },
     });
 
-  const signUpWith = (email: string, password: string) =>
-    h.app.inject({
+  const signUpWith = (email: string, password: string, inject = h.app.inject.bind(h.app)) =>
+    inject({
       method: 'POST',
       url: '/api/auth/sign-up/email',
       headers: jsonHeaders,
@@ -181,7 +207,7 @@ describe('unverified sign-up takeover (#114)', () => {
       // The previous sign-up's background mail would otherwise land inside this timing window.
       await h.settleMail();
       const start = performance.now();
-      await signUpWith(email, ATTACKER_PASSWORD);
+      await signUpWith(email, ATTACKER_PASSWORD, h.rawInject);
       return performance.now() - start;
     };
     const pairs: { fresh: number; repeat: number }[] = [];
@@ -193,13 +219,51 @@ describe('unverified sign-up takeover (#114)', () => {
         pairs.push({ fresh, repeat: await time(email) });
       } else {
         const email = nextEmail();
-        await signUpWith(email, ATTACKER_PASSWORD);
+        await signUpWith(email, ATTACKER_PASSWORD, h.rawInject);
         const repeat = await time(email);
         pairs.push({ fresh: await time(nextEmail()), repeat });
       }
     }
     expectNoTimingSkew(pairs);
   }, 120_000);
+
+  it('responds to a sign-up for a verified address in about the time of a fresh one (#120)', async () => {
+    const time = async (email: string) => {
+      await h.settleMail();
+      const start = performance.now();
+      const res = await signUpWith(email, ATTACKER_PASSWORD, h.rawInject);
+      expect(res.statusCode).toBe(200);
+      return performance.now() - start;
+    };
+    const verified = nextEmail();
+    await verifiedSession(h, verified);
+    const pairs: { fresh: number; repeat: number }[] = [];
+    await time(nextEmail());
+    for (let i = 0; i < 40; i++) {
+      if (i % 2 === 0) pairs.push({ fresh: await time(nextEmail()), repeat: await time(verified) });
+      else {
+        const repeat = await time(verified);
+        pairs.push({ fresh: await time(nextEmail()), repeat });
+      }
+    }
+    expectNoTimingSkew(pairs);
+  }, 120_000);
+
+  it('does not wait for the mail relay when signing up', async () => {
+    const held = h.holdMail();
+    try {
+      const email = nextEmail();
+      const res = await signUpWith(email, ATTACKER_PASSWORD, h.rawInject);
+      expect(res.statusCode).toBe(200);
+      await held.sendStarted;
+      expect(h.outbox.filter((m) => m.to === email)).toHaveLength(0);
+      const repeat = await signUpWith(email, VICTIM_PASSWORD, h.rawInject);
+      expect(repeat.statusCode).toBe(200);
+    } finally {
+      held.release();
+      await h.settleMail();
+    }
+  });
 
   it('lets the owner set a password by reset, revoking sessions, and leaves verified accounts intact', async () => {
     const email = nextEmail();

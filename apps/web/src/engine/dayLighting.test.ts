@@ -107,7 +107,9 @@ describe('the daytime fill', () => {
       const r = rig(level);
       applyDayLighting(r, at('12:00'));
       const depth = r.medium.boxMax.value.y - meanSubstrateHeight(DEFAULT_TANK);
-      const direct = r.caustics.reachAtDepth(depth, new Color()).multiply(r.caustics.casting);
+      const direct = r.caustics
+        .reachAtDepth(depth, new Color())
+        .multiply(r.caustics.getCasting(new Color()));
       const indirect = r.interior.substrateBounce.value.clone().add(r.interior.fill.value);
       return luminance(indirect.multiplyScalar(Math.PI)) / luminance(direct);
     };

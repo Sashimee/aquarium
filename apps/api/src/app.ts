@@ -452,9 +452,9 @@ export function buildApp(opts: AppOptions): FastifyInstance {
           ...(req.method === 'POST' && raw !== undefined ? { body: raw } : {}),
         });
         const res = await mailer.runAdmitted(admission, () => auth.handler(request));
-        // Better Auth also answers 403 before looking at the password (foreign origin or cross-site
-        // navigation), so on sign-in only its EMAIL_NOT_VERIFIED, raised after
-        // the password matched, counts as a success next to 200. change-password has no such case:
+        // Better Auth also answers 403 before looking at the password (missing, null or foreign
+        // origin, or cross-site navigation), so on sign-in only its EMAIL_NOT_VERIFIED, raised
+        // after the password matched, counts as a success next to 200. change-password has no such case:
         // every non-200 is either a rejection before the check or the wrong password.
         const unverifiedSignIn =
           pathname === `${AUTH_BASE_PATH}/sign-in/email` &&

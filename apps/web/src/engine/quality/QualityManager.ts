@@ -142,7 +142,11 @@ export class QualityManager {
     if (change) this.apply(this.current, change.to, change.reason);
   }
 
-  /** Manual override from the dev panel or settings; adaptation restarts from there. */
+  /**
+   * Manual override from the dev panel or settings; adaptation restarts from there. A pick above
+   * `maxTier` is shown as picked, but the controller restarts clamped to `maxTier`, so its first
+   * step over budget lands one below the cap: on a phone, ultra drops straight to low.
+   */
   setTier(tier: Tier, nowMs: number): void {
     if (this.phase.kind === 'probing') this.phase = { kind: 'running' };
     this.controller?.reset(tier, nowMs);

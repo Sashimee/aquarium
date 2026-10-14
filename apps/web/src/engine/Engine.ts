@@ -8,7 +8,7 @@ import {
   Scene,
   WebGPURenderer,
 } from 'three/webgpu';
-import { applyDayLighting, FRESHWATER_FILL_LEVEL } from './dayLighting';
+import { applyDayLighting, type DayLightingRig, FRESHWATER_FILL_LEVEL } from './dayLighting';
 import { daylightAt, minuteOfDay } from './daylight';
 import { EffectsSlot } from './effectsSlot';
 import { installRoomLighting, DEFAULT_HDRI_URL } from './environment';
@@ -115,7 +115,7 @@ export class Engine {
   private daylightLevel = 1;
   private daylightCheckedAt = -Infinity;
   private daylightAnnounced = false;
-  readonly roomBackgroundIntensity: number;
+  private readonly dayRig: DayLightingRig;
   private readonly effects = new EffectsSlot((message, cause) => this.reportError(message, cause));
   private readonly frameCallbacks = new Set<FrameCallback>();
   private lastFrameAt: number | null = null;
@@ -198,7 +198,7 @@ export class Engine {
       },
     );
     cleanup.add(() => roomLighting.dispose());
-    this.roomBackgroundIntensity = this.scene.backgroundIntensity;
+    const roomBackgroundIntensity = this.scene.backgroundIntensity;
 
     this.medium = new WaterMedium(waterBounds(dimensions), config.water ?? DEFAULT_WATER);
     this.caustics = new Caustics(this.medium);
@@ -211,6 +211,16 @@ export class Engine {
       meanSubstrateHeight(dimensions),
     );
     this.interior.fillLevel = FRESHWATER_FILL_LEVEL;
+    this.dayRig = {
+      hood: this.hood,
+      caustics: this.caustics,
+      interior: this.interior,
+      medium: this.medium,
+      scene: this.scene,
+      ambientScatter: this.ambientScatter,
+      substrateAlbedo: this.substrateAlbedo,
+      roomBackgroundIntensity,
+    };
     this.tank = new Tank(dimensions, this.medium, roomLighting.initial, this.interior);
     cleanup.add(() => this.tank.dispose());
     this.scene.add(this.tank.group);
@@ -304,7 +314,7 @@ export class Engine {
     hood.shadow.normalBias = 0.01;
 
     hood.colorNode = this.caustics.lightColorNode();
-    applyDayLighting(this, this.daylightLevel);
+    applyDayLighting(this.dayRig, this.daylightLevel);
   }
 
   private updateDaylight(nowMs: number): void {
@@ -332,7 +342,7 @@ export class Engine {
 
   private async warmUp(): Promise<void> {
     this.updateDaylight(0);
-    applyDayLighting(this, this.daylightLevel);
+    applyDayLighting(this.dayRig, this.daylightLevel);
     await this.renderer.compileAsync(this.scene, this.camera);
   }
 
@@ -373,7 +383,7 @@ export class Engine {
 
     for (const callback of this.frameCallbacks) callback(deltaS, nowMs);
     this.updateDaylight(nowMs);
-    applyDayLighting(this, this.daylightLevel);
+    applyDayLighting(this.dayRig, this.daylightLevel);
     if (this.cullPrewarm.begin(nowMs) > 0) this.sceneRevisionValue++;
     try {
       if (!this.effects.render()) this.renderer.render(this.scene, this.camera);
