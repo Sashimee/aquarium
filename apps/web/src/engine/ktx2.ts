@@ -10,9 +10,92 @@ export function bundledTranscoderUrl(url: string): string {
   return url;
 }
 
+/**
+ * What users of the shared loader may do with it: load textures. The narrowing is type-level;
+ * it keeps callers from disposing the engine's loader by accident, not by force.
+ */
+export type Ktx2Textures = Pick<KTX2Loader, 'load' | 'loadAsync'>;
+
 export interface SharedKtx2 {
   readonly loader: KTX2Loader;
   dispose(): void;
+}
+
+function disposedError(what: string): Error {
+  return new Error(`KTX2: cannot load ${what}, the shared loader was disposed`);
+}
+
+function refuse(what: string, onError: ((err: unknown) => void) | undefined): void {
+  if (!onError) throw disposedError(what);
+  onError(disposedError(what));
+}
+
+/**
+ * three's dispose() revokes the transcoder's blob URL and empties the worker pool without
+ * settling what was queued in it, so every load still in the pipeline would hang, and a
+ * transcode posted after dispose would start a worker nobody terminates. This loader refuses
+ * new work, rejects pending work, and leaves the pool unable to create workers.
+ */
+class DisposableKtx2Loader extends KTX2Loader {
+  private disposed = false;
+  private initialized: Promise<void> | null = null;
+  private readonly pending = new Set<(error: Error) => void>();
+
+  override load(...args: Parameters<KTX2Loader['load']>): void {
+    if (this.disposed) refuse(args[0], args[3]);
+    else super.load(...args);
+  }
+
+  override parse(...[buffer, onLoad, onError]: Parameters<KTX2Loader['parse']>): void {
+    if (this.disposed) {
+      refuse('a downloaded texture', onError);
+      return;
+    }
+    // After 'loaded', three still routes an exception thrown by onLoad to onError; keep that.
+    let state: 'pending' | 'loaded' | 'failed' = 'pending';
+    const fail = (error: unknown): void => {
+      if (state === 'failed') return;
+      state = 'failed';
+      this.pending.delete(fail);
+      onError?.(error);
+    };
+    this.pending.add(fail);
+    try {
+      super.parse(
+        buffer,
+        (texture) => {
+          if (state !== 'pending') return;
+          state = 'loaded';
+          this.pending.delete(fail);
+          onLoad?.(texture);
+        },
+        fail,
+      );
+    } catch (error) {
+      this.pending.delete(fail);
+      throw error;
+    }
+  }
+
+  /** A transcoder that arrives after dispose would otherwise install a fresh worker creator. */
+  override init(): Promise<void> {
+    this.initialized ??= super.init().then(() => {
+      if (!this.disposed) return;
+      if (this.workerSourceURL) URL.revokeObjectURL(this.workerSourceURL);
+      throw disposedError('a texture');
+    });
+    return this.initialized;
+  }
+
+  override dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.workerPool.setWorkerCreator(() => {
+      throw disposedError('a texture');
+    });
+    super.dispose();
+    for (const fail of [...this.pending]) fail(disposedError('a texture'));
+  }
 }
 
 /**
@@ -22,13 +105,12 @@ export interface SharedKtx2 {
 export function createSharedKtx2(renderer: WebGPURenderer): SharedKtx2 {
   const manager = new LoadingManager();
   manager.setURLModifier(bundledTranscoderUrl);
-  const loader = new KTX2Loader(manager).setTranscoderPath('basis/').detectSupport(renderer);
-  let disposed = false;
+  const loader = new DisposableKtx2Loader(manager)
+    .setTranscoderPath('basis/')
+    .detectSupport(renderer);
   return {
     loader,
     dispose() {
-      if (disposed) return;
-      disposed = true;
       manager.abort();
       loader.dispose();
     },
@@ -38,16 +120,36 @@ export function createSharedKtx2(renderer: WebGPURenderer): SharedKtx2 {
 /**
  * `loader` with `rewrite` applied to every URL loaded through the view, and to nothing else.
  * State and workers stay on `loader`, so one caller can pick texture variants without a second
- * transcoder and without affecting other callers' loads.
+ * transcoder and without affecting other callers' loads. The view is a whole KTX2Loader so that
+ * GLTFLoader accepts it, but its dispose() throws: only the owner of `loader` may dispose it.
  */
 export function rewritingKtx2Loader(
-  loader: KTX2Loader,
+  loader: Ktx2Textures,
   rewrite: (url: string) => string,
 ): KTX2Loader {
+  if (!(loader instanceof KTX2Loader)) {
+    throw new TypeError('rewritingKtx2Loader: expected the shared KTX2Loader (engine.ktx2)');
+  }
   const load: KTX2Loader['load'] = (url, onLoad, onProgress, onError) => {
     loader.load(rewrite(url), onLoad, onProgress, onError);
   };
+  const dispose = (): never => {
+    throw new Error('KTX2: a view cannot dispose the shared loader; the engine owns it');
+  };
   return new Proxy(loader, {
-    get: (target, key, receiver) => (key === 'load' ? load : Reflect.get(target, key, receiver)),
+    get: (target, key, receiver) => {
+      if (key === 'load') return load;
+      if (key === 'dispose') return dispose;
+      return Reflect.get(target, key, receiver);
+    },
   });
+}
+
+/**
+ * The shared loader in the shape GLTFLoader.setKTX2Loader takes, unable to dispose it. Fish use
+ * this because their textures stay at 1k; ModelLibrary uses rewritingKtx2Loader to swap its
+ * models' textures to 2k on request without touching anyone else's loads.
+ */
+export function gltfKtx2Loader(loader: Ktx2Textures): KTX2Loader {
+  return rewritingKtx2Loader(loader, (url) => url);
 }

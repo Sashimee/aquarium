@@ -9,7 +9,7 @@ import {
   type Material,
 } from 'three/webgpu';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import type { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
+import { gltfKtx2Loader, type Ktx2Textures } from '../engine/ktx2';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { parseFishAssets, type FishAssetEntry } from './assetIndex';
@@ -138,10 +138,12 @@ export class FishAssetLoader {
 
   /** `ktx2` is the renderer's shared loader; this loader never disposes it. */
   constructor(
-    ktx2: KTX2Loader,
+    ktx2: Ktx2Textures,
     private readonly root: string,
   ) {
-    this.gltf = new GLTFLoader().setKTX2Loader(ktx2).setMeshoptDecoder(MeshoptDecoder);
+    this.gltf = new GLTFLoader()
+      .setKTX2Loader(gltfKtx2Loader(ktx2))
+      .setMeshoptDecoder(MeshoptDecoder);
   }
 
   entries(): Promise<Map<string, FishAssetEntry>> {

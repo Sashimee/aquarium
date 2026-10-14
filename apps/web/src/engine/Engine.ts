@@ -1,4 +1,3 @@
-import type { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import {
   AgXToneMapping,
   Color,
@@ -13,7 +12,7 @@ import { applyDayLighting, type DayLightingRig, FRESHWATER_FILL_LEVEL } from './
 import { daylightAt, minuteOfDay } from './daylight';
 import { EffectsSlot } from './effectsSlot';
 import { installRoomLighting, DEFAULT_HDRI_URL } from './environment';
-import { createSharedKtx2 } from './ktx2';
+import { createSharedKtx2, type Ktx2Textures } from './ktx2';
 import { EventBus, type BackendKind, type EngineEvents, type EngineEventBus } from './events';
 import { CullPrewarm } from './cullPrewarm';
 import { buildOrRelease, DisposeStack } from './lifecycle';
@@ -112,7 +111,7 @@ export class Engine {
   readonly substrateAlbedo = new Color(0.13, 0.09, 0.055);
   readonly quality: QualityManager;
   /** The only KTX2 transcoder for this renderer; every texture loader shares it. */
-  readonly ktx2: KTX2Loader;
+  readonly ktx2: Ktx2Textures;
 
   private readonly clock: number | null;
   private readonly showStats: boolean;

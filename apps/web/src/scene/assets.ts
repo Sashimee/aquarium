@@ -11,7 +11,7 @@ import {
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { rewritingKtx2Loader } from '../engine/ktx2';
+import { rewritingKtx2Loader, type Ktx2Textures } from '../engine/ktx2';
 
 export const ASSET_BASE = `${import.meta.env.BASE_URL}assets/`;
 
@@ -116,7 +116,7 @@ export class ModelLibrary {
 
   /** `ktx2` is the renderer's shared loader; the library never disposes it. */
   constructor(
-    ktx2: KTX2Loader,
+    ktx2: Ktx2Textures,
     readonly catalog: AssetCatalog,
   ) {
     this.ktx2 = rewritingKtx2Loader(ktx2, (url) => materialTextureUrl(url, this.textureSize));
