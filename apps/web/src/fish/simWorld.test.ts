@@ -5,7 +5,8 @@ import type { SceneAnchor } from '../scene/anemone';
 import { FISH_1, FISH_2, TANK_A, fishFixture } from '../sync/fixtures';
 import { demoTank, sceneAnchorsToSim } from './demoStock';
 import { TankRoster } from './roster';
-import { SimWorldSpec } from './simWorld';
+import { allSpeciesInputs } from './species';
+import { layoutChanges, SimWorldSpec } from './simWorld';
 
 const DEMO = demoTank(DEFAULT_TANK, 7, 'reef');
 const ANEMONE: SceneAnchor = {
@@ -88,14 +89,51 @@ describe('SimWorldSpec', () => {
     expect(config?.fish).toEqual([
       { id: roster.simIdOf(FISH_1), species: 'ocellaris-clownfish', bodyLengthM: 0.07 },
     ]);
-    expect(config?.species.map((s) => s.id)).toEqual(['ocellaris-clownfish']);
+    expect(config?.species).toBe(allSpeciesInputs());
     expect(config?.seed).toBe(7);
     expect(config?.tank).toBe(DEMO.config.tank);
+  });
+
+  it('builds a world that can take in a fish of a species it started without', () => {
+    const { spec, roster } = setup();
+    roster.load({
+      tankId: TANK_A,
+      biome: 'reef',
+      decorLayout: [],
+      fish: [fishFixture(FISH_1, CLOWN)],
+    });
+    const config = spec.config(roster.swimming());
+    if (config === null) throw new Error('the clownfish tank has no world');
+    const world = new World(config);
+    expect(() => world.addFish({ id: 'tang', species: 'blue-tang' })).not.toThrow();
+    expect(world.fishIds).toEqual([roster.simIdOf(FISH_1), 'tang']);
   });
 
   it('has no world to run when nothing swims', () => {
     const { spec, roster } = setup();
     roster.load({ tankId: TANK_A, biome: 'reef', decorLayout: [], fish: [] });
     expect(spec.config(roster.swimming())).toBeNull();
+  });
+});
+
+describe('layoutChanges', () => {
+  const spawn = (id: string) => ({ id, species: 'neon-tetra' });
+
+  it('adds the newcomers and removes the leavers, leaving the rest alone', () => {
+    const { remove, add } = layoutChanges(['a', 'b', 'c'], [spawn('a'), spawn('c'), spawn('d')]);
+    expect(remove).toEqual(['b']);
+    expect(add).toEqual([spawn('d')]);
+  });
+
+  it('changes nothing when the world already holds the wanted fish', () => {
+    expect(layoutChanges(new Set(['a', 'b']), [spawn('b'), spawn('a')])).toEqual({
+      remove: [],
+      add: [],
+    });
+  });
+
+  it('fills an empty world and empties a full one', () => {
+    expect(layoutChanges([], [spawn('a')])).toEqual({ remove: [], add: [spawn('a')] });
+    expect(layoutChanges(['a'], [])).toEqual({ remove: ['a'], add: [] });
   });
 });

@@ -19,3 +19,10 @@ for (const raw of Object.values(files)) {
 export function speciesInput(id: string): SpeciesInput | undefined {
   return SPECIES.get(id);
 }
+
+const ALL_SPECIES: readonly SpeciesInput[] = [...SPECIES.values()];
+
+/** Every content species, so a running sim world can take in a fish of any of them. */
+export function allSpeciesInputs(): readonly SpeciesInput[] {
+  return ALL_SPECIES;
+}
