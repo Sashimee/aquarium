@@ -57,7 +57,7 @@ export async function registerVerifiedUser(
 }
 
 export async function openTank(page: Page): Promise<void> {
-  await page.goto('/?backend=webgl');
+  await page.goto('/?tier=low&backend=webgl');
   await expect(page.getByRole('button', { name: 'Feed', exact: true })).toBeEnabled({
     timeout: SCENE_TIMEOUT_MS,
   });

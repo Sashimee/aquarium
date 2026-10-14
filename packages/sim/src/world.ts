@@ -1488,8 +1488,9 @@ export class World {
    * has at the start: only a surface it would close on, a shelf overhead, blocks it.
    */
   private riseClear(sdf: Sdf, x: number, y: number, z: number, toY: number, r: number): boolean {
-    const room = Math.min(r, sdf.sample(x, y, z, this.previous));
-    return room > 0 && this.pathClear(sdf, x, y, z, x, toY, z, room);
+    const start = sdf.sample(x, y, z, this.previous);
+    const room = Math.min(r, start);
+    return room > 0 && this.pathClear(sdf, x, y, z, x, toY, z, room, start);
   }
 
   /**
@@ -1506,15 +1507,16 @@ export class World {
     y1: number,
     z1: number,
     r: number,
+    start = sdf.sample(x0, y0, z0, this.previous),
   ): boolean {
     const length = Math.hypot(x1 - x0, y1 - y0, z1 - z0);
-    if (length < 1e-9) return sdf.sample(x0, y0, z0, this.previous) >= r;
+    if (length < 1e-9) return start >= r;
     const ux = (x1 - x0) / length;
     const uy = (y1 - y0) / length;
     const uz = (z1 - z0) / length;
     let t = 0;
     for (let k = 0; k < STEERING.pathTraceSteps; k++) {
-      const d = sdf.sample(x0 + ux * t, y0 + uy * t, z0 + uz * t, this.previous);
+      const d = k === 0 ? start : sdf.sample(x0 + ux * t, y0 + uy * t, z0 + uz * t, this.previous);
       if (d < r) return false;
       if (t >= length) return true;
       t = Math.min(length, t + d - r + STEERING.pathTraceMinStep * r);

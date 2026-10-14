@@ -167,9 +167,22 @@ describe('species sizes are standard lengths', () => {
     },
   );
 
-  it.each(Object.entries(KNOWN_MODEL_ERRORS))(
-    '%s: is still drawn off its real adult TL, within its cap, until the model is fixed',
-    (id, { issue, maxError }) => {
+  it('caps every known model error at or above the tolerance', () => {
+    for (const [id, { issue, maxError }] of Object.entries(KNOWN_MODEL_ERRORS)) {
+      expect(
+        maxError,
+        `${id} (#${issue}) is under TOLERANCE, so it is not a known error`,
+      ).toBeGreaterThanOrEqual(TOLERANCE);
+    }
+  });
+
+  it.each(
+    Object.entries(KNOWN_MODEL_ERRORS).map(
+      ([id, { issue, maxError }]) => [id, issue, maxError] as const,
+    ),
+  )(
+    '%s: is still drawn off its real adult TL, within its cap, until issue #%i fixes the model',
+    (id, issue, maxError) => {
       const adult = ADULT_MAX[id];
       expect(adult, id).toBeDefined();
       if (adult === undefined) return;

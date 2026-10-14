@@ -94,7 +94,17 @@ class DisposableKtx2Loader extends KTX2Loader {
       throw disposedError('a texture');
     });
     super.dispose();
-    for (const fail of [...this.pending]) fail(disposedError('a texture'));
+    const thrown: unknown[] = [];
+    for (const fail of [...this.pending]) {
+      try {
+        fail(disposedError('a texture'));
+      } catch (error) {
+        thrown.push(error);
+      }
+    }
+    if (thrown.length > 0) {
+      throw new AggregateError(thrown, `KTX2: ${thrown.length} error callback(s) threw on dispose`);
+    }
   }
 }
 

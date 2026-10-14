@@ -44,6 +44,11 @@ export interface FishSimBridge {
 
 export interface FishHandle {
   readonly sim: FishSimBridge;
+  /**
+   * Settles once the first fish are in the scene: a saved tank's own, once the session has said
+   * whether one is coming. Also settles once starting them has failed or stopped.
+   */
+  readonly settled: Promise<void>;
   /** Scene homes; held until the fish are up, then forwarded. */
   setAnchors(anchors: readonly SceneAnchor[]): void;
   /**
@@ -57,6 +62,8 @@ export interface FishHandle {
 }
 
 export interface TankEventQueue {
+  /** The first `tank:loaded` or `tank:none`: whether a saved tank's fish are coming. */
+  readonly stock: Promise<'saved' | 'none'>;
   /** Hands every buffered event to `sink` in order, then each later one as it arrives. */
   drain(sink: (event: TankEvent) => void): void;
   stop(): void;
@@ -86,7 +93,15 @@ export function queueTankEvents(interaction: EventBus<InteractionEvents>): TankE
       deliver({ type: 'tank:fish-removed', payload }),
     ),
   ];
+  let decide!: (stock: 'saved' | 'none') => void;
+  const stock = new Promise<'saved' | 'none'>((resolve) => (decide = resolve));
+  // After `deliver`, so a saved tank is already handed to the fish when `stock` resolves.
+  unsubscribe.push(
+    interaction.on('tank:loaded', () => decide('saved')),
+    interaction.on('tank:none', () => decide('none')),
+  );
   return {
+    stock,
     drain(next) {
       if (sink !== null) throw new Error('queueTankEvents: already drained');
       const pending = buffer ?? [];
@@ -179,6 +194,14 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
     });
 
   return {
+    settled: system.then(async (fish) => {
+      if (fish === null || abort.signal.aborted) return;
+      const stopped = new Promise<void>((resolve) =>
+        abort.signal.addEventListener('abort', () => resolve(), { once: true }),
+      );
+      const stock = await Promise.race([tankEvents.stock, stopped]);
+      if (stock === 'saved') await Promise.race([fish.synced(), stopped]);
+    }),
     sim: {
       startle: (stimulus) => ready?.startle(stimulus),
       setFood: (buffer) => ready?.setFood(buffer),

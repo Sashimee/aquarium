@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Collider } from '@aquarium/shared';
 import { SNAPSHOT_STRIDE, World, type SimReady } from '@aquarium/sim';
 import { DEFAULT_TANK } from '../engine/tank/dimensions';
@@ -7,7 +7,15 @@ import { FISH_1, FISH_2, TANK_A, fishFixture } from '../sync/fixtures';
 import { demoTank, sceneAnchorsToSim } from './demoStock';
 import { TankRoster } from './roster';
 import { allSpeciesInputs } from './species';
-import { layoutChanges, SimWorldSpec, startWorld, type WorldControls } from './simWorld';
+import {
+  initSim,
+  layoutChanges,
+  SimInitTimeout,
+  SimWorldSpec,
+  startWorld,
+  type SimInit,
+  type WorldControls,
+} from './simWorld';
 
 const DEMO = demoTank(DEFAULT_TANK, 7, 'reef');
 const ANEMONE: SceneAnchor = {
@@ -286,5 +294,89 @@ describe('startWorld', () => {
       }),
     ).rejects.toBe(failure);
     expect(calls).toEqual([]);
+  });
+});
+
+describe('initSim', () => {
+  const READY: SimReady = {
+    type: 'ready',
+    epoch: 1,
+    fishIds: ['a'],
+    stride: SNAPSHOT_STRIDE,
+    stepHz: 30,
+  };
+
+  function start(client: SimInit['client'], signal = new AbortController().signal) {
+    const listeners = new Set<(event: ErrorEvent) => void>();
+    const worker = {
+      addEventListener: (_type: string, listener: (event: ErrorEvent) => void) =>
+        listeners.add(listener),
+      removeEventListener: (_type: string, listener: (event: ErrorEvent) => void) =>
+        listeners.delete(listener),
+    } as unknown as SimInit['worker'];
+    const { spec, roster } = setup();
+    const config = spec.config(roster.swimming());
+    if (config === null) throw new Error('the demo has no world');
+    const init = initSim({ client, worker, config, signal, timeoutMs: 1000 });
+    return {
+      init,
+      listeners,
+      fail: (message: string) => {
+        for (const l of [...listeners]) l({ message } as ErrorEvent);
+      },
+    };
+  }
+
+  const never: SimInit['client'] = { init: () => new Promise<SimReady>(() => undefined) };
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('resolves with the answer and lets go of the worker', async () => {
+    vi.useFakeTimers();
+    const { init, listeners } = start({ init: () => Promise.resolve(READY) });
+    await expect(init).resolves.toBe(READY);
+    expect(listeners.size).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('fails with SimInitTimeout when the worker never answers', async () => {
+    vi.useFakeTimers();
+    const { init, listeners } = start(never);
+    const settled = expect(init).rejects.toThrow(/did not answer init within 1 s/);
+    await vi.advanceTimersByTimeAsync(999);
+    expect(listeners.size).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await settled;
+    await expect(init).rejects.toBeInstanceOf(SimInitTimeout);
+    expect(listeners.size).toBe(0);
+  });
+
+  it('fails when the worker script errors, without waiting for the timeout', async () => {
+    vi.useFakeTimers();
+    const { init, fail } = start(never);
+    fail('404');
+    await expect(init).rejects.toThrow('Fish sim worker failed to start: 404');
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('passes on the sim refusing the config', async () => {
+    const refused = new Error('bad config');
+    await expect(start({ init: () => Promise.reject(refused) }).init).rejects.toBe(refused);
+  });
+
+  it('rejects with the abort reason, whether aborted before or during init', async () => {
+    vi.useFakeTimers();
+    const gone = new Error('disposed');
+    const before = new AbortController();
+    before.abort(gone);
+    await expect(start(never, before.signal).init).rejects.toBe(gone);
+
+    const during = new AbortController();
+    const { init } = start(never, during.signal);
+    during.abort(gone);
+    await expect(init).rejects.toBe(gone);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

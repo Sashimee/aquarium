@@ -15,7 +15,6 @@ import {
   SnapshotField,
   STEP_DT,
   type FishPlacement,
-  type SimReady,
   type SpeciesInput,
   type Stimulus,
   type TankSpaceWorldConfig,
@@ -29,7 +28,7 @@ import { disposeFishModel, FishAssetLoader, type FishModel } from './assets';
 import { AcclimationBags } from './bag';
 import type { SceneAnchor } from '../scene/anemone';
 import { demoTank, type DemoTank } from './demoStock';
-import { HeldFish } from './heldFish';
+import { HeldFish, type FramePresence } from './heldFish';
 import { FishInstanceData, type InstanceValues } from './instances';
 import { selectLod, type LodThresholds } from './lod';
 import { FishMaterial, type FinRendering, type FishMaterialFeatures } from './material';
@@ -50,7 +49,7 @@ import {
 import { renderProfile, type FishRenderProfile } from './profiles';
 import { hashString, TankRoster, type RosterFish } from './roster';
 import { SimStream } from './simStream';
-import { layoutChanges, SimWorldSpec, startWorld } from './simWorld';
+import { initSim, layoutChanges, SimInitTimeout, SimWorldSpec, startWorld } from './simWorld';
 import { speciesInput } from './species';
 import type { FishBite, PickRay, TankEvent } from './start';
 import { SWIM_MODES, SwimState } from './swim';
@@ -161,32 +160,13 @@ function smoothstep01(x: number): number {
   return t * t * (3 - 2 * t);
 }
 
-/** A worker whose script fails to load never answers `init`, so its error event settles it. */
-function initSim(
-  client: SimClient,
-  worker: Worker,
-  config: TankSpaceWorldConfig,
-  signal: AbortSignal,
-): Promise<SimReady> {
-  return new Promise((resolve, reject) => {
-    const settle = (finish: () => void): void => {
-      worker.removeEventListener('error', onError);
-      signal.removeEventListener('abort', onAbort);
-      finish();
-    };
-    const onError = (event: ErrorEvent): void =>
-      settle(() => reject(new Error(`Fish sim worker failed to start: ${event.message}`)));
-    const onAbort = (): void => settle(() => reject(signal.reason));
-    if (signal.aborted) {
-      reject(signal.reason);
-      return;
-    }
-    worker.addEventListener('error', onError);
-    signal.addEventListener('abort', onAbort);
-    client.init(config).then(
-      (ready) => settle(() => resolve(ready)),
-      (cause: unknown) => settle(() => reject(cause)),
-    );
+/** Far above a cold worker start on a slow phone; past it the worker is taken to be stuck. */
+const SIM_INIT_TIMEOUT_MS = 15_000;
+
+function spawnSimWorker(): Worker {
+  return new Worker(new URL('./simWorker.ts', import.meta.url), {
+    type: 'module',
+    name: 'fish-sim',
   });
 }
 
@@ -215,6 +195,8 @@ export class FishSystem {
   private readonly spec: SimWorldSpec;
   private readonly cleanups: (() => void)[] = [];
   private readonly ateListeners = new Set<(events: readonly FishBite[]) => void>();
+  /** Replaced, with its worker, when the worker stops answering. */
+  private sim: SimClient;
   /** The fish in the running world once the commands sent so far land; null with no world. */
   private inWorld: Set<string> | null = null;
   /** Bumped whenever the world is dropped, so add/remove replies from before are ignored. */
@@ -223,6 +205,7 @@ export class FishSystem {
   private simReady = false;
   private dirty = false;
   private syncing = false;
+  private readonly syncWaiters: (() => void)[] = [];
   private clockS = 0;
   private thresholds: LodThresholds = { midDistance: 1, impostorDistance: 3 };
   private shadows: Readonly<TierSettings> | null = null;
@@ -263,12 +246,7 @@ export class FishSystem {
     signal.throwIfAborted();
     const seed = options.seed ?? Math.floor(Math.random() * 0x7fffffff);
     const demo = demoTank(options.tank, seed, options.biome);
-    const worker = new Worker(new URL('./simWorker.ts', import.meta.url), {
-      type: 'module',
-      name: 'fish-sim',
-    });
-    const client = new SimClient(worker);
-    const system = new FishSystem(engine, client, worker, options, demo, seed);
+    const system = new FishSystem(engine, spawnSimWorker(), options, demo, seed);
     const onAbort = (): void => system.dispose();
     signal.addEventListener('abort', onAbort);
     system.cleanups.push(() => signal.removeEventListener('abort', onAbort));
@@ -282,17 +260,13 @@ export class FishSystem {
       system.dispose();
       throw signal.aborted ? signal.reason : cause;
     }
-    worker.addEventListener('error', (event) =>
-      system.report(`Fish sim worker failed: ${event.message}`),
-    );
-    client.onError((message) => system.report(`Fish sim: ${message}`));
+    system.reportSimErrors();
     return system;
   }
 
   private constructor(
     private readonly engine: Engine,
-    private readonly sim: SimClient,
-    private readonly worker: Worker,
+    private worker: Worker,
     private readonly options: FishSystemOptions,
     demo: DemoTank,
     private readonly seed: number,
@@ -329,12 +303,7 @@ export class FishSystem {
         this.runtimes.clear();
       },
     );
-    sim.onSnapshot((snapshot) => this.stream.push(snapshot, performance.now()));
-    sim.onAte((events) => {
-      const bites = this.roster.translateAte(events);
-      if (bites.length === 0) return;
-      for (const listener of this.ateListeners) listener(bites);
-    });
+    this.sim = this.connectSim(worker);
     this.cleanups.push(
       engine.quality.register('fish-lod', (s) => {
         this.thresholds = s.fishLod;
@@ -467,11 +436,13 @@ export class FishSystem {
     this.disposed = true;
     this.lifetime.abort(new Error('fish system disposed'));
     this.ateListeners.clear();
+    for (const resolve of this.syncWaiters.splice(0)) resolve();
     for (const cleanup of this.cleanups.splice(0).reverse()) cleanup();
   }
 
+  /** Silent once the engine is going: its teardown fails loads that are still in flight. */
   private report(message: string, cause?: unknown): void {
-    if (this.disposed) return;
+    if (this.disposed || this.engine.disposed) return;
     this.engine.events.emit('engine:error', cause === undefined ? { message } : { message, cause });
   }
 
@@ -481,7 +452,14 @@ export class FishSystem {
     this.syncing = true;
     void this.runSync().finally(() => {
       this.syncing = false;
+      for (const resolve of this.syncWaiters.splice(0)) resolve();
     });
+  }
+
+  /** Resolves once the stock handed in so far has loaded and joined the sim, or failed to. */
+  synced(): Promise<void> {
+    if (!this.syncing || this.disposed) return Promise.resolve();
+    return new Promise((resolve) => this.syncWaiters.push(resolve));
   }
 
   /** One pass at a time, so sim inits never overlap; changes made meanwhile run another pass. */
@@ -784,16 +762,60 @@ export class FishSystem {
 
   private async reinit(config: TankSpaceWorldConfig): Promise<void> {
     const generation = this.generation;
-    const init = initSim(this.sim, this.worker, config, this.lifetime.signal);
-    await startWorld(this.sim, this.spec, config, init, {
-      current: () => !this.disposed && generation === this.generation,
-      light: () => this.light,
-      begin: (ready) => {
-        this.simReady = true;
-        this.inWorld = new Set(ready.fishIds);
-        this.stream.begin(ready.epoch, ready.fishIds);
-      },
+    const init = initSim({
+      client: this.sim,
+      worker: this.worker,
+      config,
+      signal: this.lifetime.signal,
+      timeoutMs: SIM_INIT_TIMEOUT_MS,
     });
+    try {
+      await startWorld(this.sim, this.spec, config, init, {
+        current: () => !this.disposed && generation === this.generation,
+        light: () => this.light,
+        begin: (ready) => {
+          this.simReady = true;
+          this.inWorld = new Set(ready.fishIds);
+          this.stream.begin(ready.epoch, ready.fishIds);
+        },
+      });
+    } catch (cause) {
+      if (cause instanceof SimInitTimeout && !this.disposed) this.replaceWorker();
+      throw cause;
+    }
+  }
+
+  private connectSim(worker: Worker): SimClient {
+    const sim = new SimClient(worker);
+    sim.onSnapshot((snapshot) => this.stream.push(snapshot, performance.now()));
+    sim.onAte((events) => {
+      const bites = this.roster.translateAte(events);
+      if (bites.length === 0) return;
+      for (const listener of this.ateListeners) listener(bites);
+    });
+    return sim;
+  }
+
+  /** Until this runs, a worker that fails while starting fails `create` instead. */
+  private reportSimErrors(): void {
+    this.worker.addEventListener('error', (event) =>
+      this.report(`Fish sim worker failed: ${event.message}`),
+    );
+    this.sim.onError((message) => this.report(`Fish sim: ${message}`));
+  }
+
+  /**
+   * A worker that never answered `init` would refuse every later one ("init already in flight"),
+   * so it goes, with its world, and the next stock change starts a fresh world in a new worker.
+   */
+  private replaceWorker(): void {
+    this.stopWorld();
+    this.simReady = false;
+    this.sim.dispose();
+    this.worker.terminate();
+    this.worker = spawnSimWorker();
+    this.sim = this.connectSim(this.worker);
+    this.reportSimErrors();
   }
 
   private applyShadows(batch: SpeciesBatch): void {
@@ -825,7 +847,10 @@ export class FishSystem {
     const { fish } = rt;
     if (fish.phase === 'swimming') {
       const o = frame === null ? undefined : this.stream.layout?.offsets.get(fish.simId);
-      const presence = frame === null ? 'no-frame' : o === undefined ? 'missing' : 'present';
+      let presence: FramePresence;
+      if (frame === null) presence = 'no-frame';
+      else if (o === undefined) presence = 'missing';
+      else presence = 'present';
       const held = this.held.step(fish.simId, this.clockS, presence);
       if (held === 'wait') {
         this.position.copy(rt.lastPosition);
