@@ -300,6 +300,7 @@ export class Engine {
 
   /** The first scene and fish are drawn from the next frame on, so the quality probe may time them. */
   contentReady(): void {
+    if (this.disposed) return;
     this.quality.contentReady(performance.now());
   }
 
