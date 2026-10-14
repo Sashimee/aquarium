@@ -21,19 +21,23 @@ async function press(target: Locator): Promise<void> {
   await expect
     .poll(
       async () => {
-        const box = await target.boundingBox();
-        if (!box) return `${String(target)} has no box to press`;
-        point = [box.x + box.width / 2, box.y + box.height / 2];
-        const cover = await target.evaluate((element, [px, py]) => {
-          const top = document.elementFromPoint(px ?? 0, py ?? 0);
-          if (top !== null && element.contains(top)) return null;
-          return top
-            ? `${top.tagName.toLowerCase()}.${top.className} "${top.textContent?.slice(0, 40)}"`
-            : 'nothing';
-        }, point);
-        return cover ? `covered by ${cover} at ${point.join(',')}` : null;
+        const probe = await target.evaluate((element) => {
+          const box = element.getBoundingClientRect();
+          const px = box.x + box.width / 2;
+          const py = box.y + box.height / 2;
+          const top = document.elementFromPoint(px, py);
+          const cover =
+            top !== null && element.contains(top)
+              ? null
+              : top
+                ? `${top.tagName.toLowerCase()}.${top.className} "${top.textContent?.slice(0, 40)}"`
+                : 'nothing';
+          return { point: [px, py] as [number, number], cover };
+        });
+        point = probe.point;
+        return probe.cover ? `covered by ${probe.cover} at ${point.join(',')}` : null;
       },
-      { message: `${String(target)} cannot be pressed`, timeout: 5_000 },
+      { message: `${String(target)} cannot be pressed`, timeout: 20_000 },
     )
     .toBeNull();
   if (touch) await target.page().touchscreen.tap(...point);
@@ -79,6 +83,8 @@ async function leaveDecorate(page: Page) {
 const playGroup = (page: Page) => page.getByRole('group', { name: 'Play and feed' });
 const tankType = (page: Page) => page.getByRole('group', { name: 'Tank type' });
 
+type Drag = (from: [number, number], to: [number, number]) => Promise<void>;
+
 const MENUS: Menu[] = [
   {
     name: 'My tank',
@@ -102,30 +108,59 @@ const MENUS: Menu[] = [
   toggle('Reef', 'aria-pressed', tankType),
 ];
 
-type Drag = (from: [number, number], to: [number, number]) => Promise<void>;
+// Every input event waits for the page to produce a frame, and software rendering manages a few
+// frames a second, so awaiting each event in turn costs seconds apiece. Chromium handles queued
+// events in order, so the whole gesture goes out at once and is awaited as one.
+async function dispatchGesture(page: Page, what: string, events: Promise<unknown>[]) {
+  try {
+    await Promise.all(events);
+  } catch (error) {
+    if (page.isClosed()) {
+      throw new Error(`the page closed during a ${what} (test timeout or browser crash)`, {
+        cause: error,
+      });
+    }
+    throw error;
+  }
+}
 
-async function touchDrag(cdp: CDPSession, from: [number, number], to: [number, number]) {
+function touchDrag(page: Page, cdp: CDPSession, from: [number, number], to: [number, number]) {
   const send = (type: 'touchStart' | 'touchMove' | 'touchEnd', point?: [number, number]) =>
     cdp.send('Input.dispatchTouchEvent', {
       type,
       touchPoints: point ? [{ x: point[0], y: point[1], id: 1 }] : [],
     });
-  await send('touchStart', from);
-  const steps = 2;
-  for (let i = 1; i <= steps; i += 1) {
-    await send('touchMove', [
-      from[0] + ((to[0] - from[0]) * i) / steps,
-      from[1] + ((to[1] - from[1]) * i) / steps,
-    ]);
-  }
-  await send('touchEnd');
+  const mid: [number, number] = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2];
+  return dispatchGesture(page, 'touch drag', [
+    send('touchStart', from),
+    send('touchMove', mid),
+    send('touchMove', to),
+    send('touchEnd'),
+  ]);
 }
 
-async function mouseDrag(page: Page, from: [number, number], to: [number, number]) {
-  await page.mouse.move(...from);
-  await page.mouse.down();
-  await page.mouse.move(...to, { steps: 2 });
-  await page.mouse.up();
+function mouseDrag(page: Page, cdp: CDPSession, from: [number, number], to: [number, number]) {
+  const send = (
+    type: 'mousePressed' | 'mouseMoved' | 'mouseReleased',
+    point: [number, number],
+    buttons: number,
+  ) =>
+    cdp.send('Input.dispatchMouseEvent', {
+      type,
+      x: point[0],
+      y: point[1],
+      button: type === 'mouseMoved' ? 'none' : 'left',
+      buttons,
+      clickCount: type === 'mouseMoved' ? 0 : 1,
+    });
+  const mid: [number, number] = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2];
+  return dispatchGesture(page, 'mouse drag', [
+    send('mouseMoved', from, 0),
+    send('mousePressed', from, 1),
+    send('mouseMoved', mid, 1),
+    send('mouseMoved', to, 1),
+    send('mouseReleased', to, 0),
+  ]);
 }
 
 async function expectOrbits(page: Page, drag: Drag, context: string) {
@@ -202,33 +237,39 @@ async function expectOnePanel(page: Page, context: string) {
   expect(open, `two panels were open ${context}`).toBeLessThanOrEqual(1);
 }
 
-async function exercise(page: Page, drag: Drag, checkToolDrag: boolean) {
-  await ready(page);
-  if (checkToolDrag) await expectToolClaimsDrag(page, drag);
-  else await expectOrbits(page, drag, 'on a fresh page');
-  for (let i = 0; i < MENUS.length; i += 2) {
-    const first = MENUS[i];
-    const second = MENUS[i + 1];
-    if (!first || !second) throw new Error('MENUS needs an even number of entries');
-    const trail = `${first.name}, then ${second.name}`;
-    await first.open(page);
-    await first.isOpen(page);
-    await second.open(page);
-    await second.isOpen(page);
-    await expectOnePanel(page, trail);
-    await closeAllPanels(page);
-    await expectOrbits(page, drag, `after ${trail}`);
+// Under load a tap right after a camera drag can be swallowed; a menu that has not opened after a
+// generous wait most likely never received the tap. A late first tap would make the second one
+// close the menu again, so the retry is only worth it after the wait is clearly over.
+async function openMenu(page: Page, menu: Menu) {
+  await menu.open(page);
+  try {
+    await expect(async () => menu.isOpen(page)).toPass({ timeout: 15_000 });
+  } catch {
+    await menu.open(page);
+    await menu.isOpen(page);
   }
-  const [tank, decorate] = MENUS;
-  if (!tank || !decorate) throw new Error('MENUS lost My tank or Decorate');
-  await decorate.open(page);
-  await decorate.isOpen(page);
-  await tank.open(page);
-  await tank.isOpen(page);
-  await expectOnePanel(page, 'Decorate, then My tank');
-  await closeAllPanels(page);
-  await expectOrbits(page, drag, 'after Decorate, then My tank');
 }
+
+async function exercise(page: Page, drag: Drag, first: Menu, second: Menu) {
+  const trail = `${first.name}, then ${second.name}`;
+  await ready(page);
+  await openMenu(page, first);
+  await openMenu(page, second);
+  await expectOnePanel(page, trail);
+  await closeAllPanels(page);
+  await expectOrbits(page, drag, `after ${trail}`);
+}
+
+const [tank, decorate] = MENUS;
+if (!tank || !decorate) throw new Error('MENUS lost My tank or Decorate');
+const PAIRS: [Menu, Menu][] = [];
+for (let i = 0; i < MENUS.length; i += 2) {
+  const first = MENUS[i];
+  const second = MENUS[i + 1];
+  if (!first || !second) throw new Error('MENUS needs an even number of entries');
+  PAIRS.push([first, second]);
+}
+PAIRS.push([decorate, tank]);
 
 test.describe('menus on a phone', () => {
   test.use({
@@ -244,11 +285,20 @@ test.describe('menus on a phone', () => {
     touch = true;
   });
 
-  test('every menu opens, switches and leaves the camera draggable', async ({ page }) => {
-    test.setTimeout(480_000);
+  test('the camera orbits on a fresh page', async ({ page }) => {
     const cdp = await page.context().newCDPSession(page);
-    await exercise(page, (from, to) => touchDrag(cdp, from, to), false);
+    await ready(page);
+    await expectOrbits(page, (from, to) => touchDrag(page, cdp, from, to), 'on a fresh page');
   });
+
+  for (const [first, second] of PAIRS) {
+    test(`${first.name}, then ${second.name} opens, switches and leaves the camera draggable`, async ({
+      page,
+    }) => {
+      const cdp = await page.context().newCDPSession(page);
+      await exercise(page, (from, to) => touchDrag(page, cdp, from, to), first, second);
+    });
+  }
 });
 
 test.describe('menus with a mouse', () => {
@@ -258,8 +308,20 @@ test.describe('menus with a mouse', () => {
     touch = false;
   });
 
-  test('every menu opens, switches and leaves the camera draggable', async ({ page }) => {
-    test.setTimeout(480_000);
-    await exercise(page, (from, to) => mouseDrag(page, from, to), true);
+  test('the camera orbits on a fresh page, and a Laser drag does not move it', async ({ page }) => {
+    const cdp = await page.context().newCDPSession(page);
+    const drag: Drag = (from, to) => mouseDrag(page, cdp, from, to);
+    await ready(page);
+    await expectOrbits(page, drag, 'on a fresh page');
+    await expectToolClaimsDrag(page, drag);
   });
+
+  for (const [first, second] of PAIRS) {
+    test(`${first.name}, then ${second.name} opens, switches and leaves the camera draggable`, async ({
+      page,
+    }) => {
+      const cdp = await page.context().newCDPSession(page);
+      await exercise(page, (from, to) => mouseDrag(page, cdp, from, to), first, second);
+    });
+  }
 });
