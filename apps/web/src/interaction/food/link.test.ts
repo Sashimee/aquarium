@@ -14,12 +14,7 @@ const env: FoodEnvironment = {
 function setup(bridge: FoodBridge) {
   const field = new FoodField(env, () => 0.5);
   const onEaten = vi.fn();
-  const link = new FoodLink(
-    field,
-    bridge,
-    sceneToSim(() => 0.05),
-    onEaten,
-  );
+  const link = new FoodLink(field, bridge, sceneToSim, onEaten);
   return { field, link, onEaten };
 }
 

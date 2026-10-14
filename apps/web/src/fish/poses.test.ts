@@ -17,7 +17,9 @@ import {
   type WaterBox,
 } from './poses';
 
-const BOX: WaterBox = { minX: -0.59, maxX: 0.59, minY: 0.11, minZ: -0.24, maxZ: 0.24, top: 0.47 };
+/** Sand sloping from 11 cm at the back glass down to 5 cm at the front, like the default scape. */
+const ground = (_x: number, z: number): number => 0.08 - 0.125 * z;
+const BOX: WaterBox = { minX: -0.59, maxX: 0.59, ground, minZ: -0.24, maxZ: 0.24, top: 0.47 };
 const LENGTH = 0.06;
 const START: Anchor = { x: 0.2, y: 0.25, z: -0.05, yaw: 0.7 };
 
@@ -27,7 +29,7 @@ function inside(pose: Pose, length = LENGTH): void {
   expect(pose.z).toBeGreaterThanOrEqual(BOX.minZ + length / 2 - 1e-9);
   expect(pose.z).toBeLessThanOrEqual(BOX.maxZ - length / 2 + 1e-9);
   expect(pose.y).toBeLessThanOrEqual(BOX.top);
-  expect(pose.y).toBeGreaterThanOrEqual(BOX.minY);
+  expect(pose.y).toBeGreaterThanOrEqual(ground(pose.x, pose.z) - 1e-9);
 }
 
 describe('dyingPose', () => {
@@ -68,9 +70,33 @@ describe('dyingPose', () => {
     expect(maxRoll).toBeGreaterThan(1);
   });
 
+  it('does not lift a fish that dies just above low sand', () => {
+    const length = 0.05;
+    const z = 0.13;
+    const low: Anchor = { x: 0, y: ground(0, z) + 0.012, z, yaw: 0 };
+    const pose = createPose();
+    let prev = low.y;
+    for (let t = 0; t <= 1; t += 1 / 60) {
+      dyingPose(t, low, length, 0.37, BOX, pose);
+      expect(pose.y - ground(pose.x, pose.z), `t = ${t.toFixed(3)}`).toBeGreaterThanOrEqual(
+        0.012 - 1e-9,
+      );
+      expect(Math.abs(pose.y - prev), `t = ${t.toFixed(3)}`).toBeLessThan(0.01);
+      prev = pose.y;
+    }
+    dyingPose(0, low, length, 0.37, BOX, pose);
+    expect(pose.y).toBe(low.y);
+    expect(ground(0, z)).toBeLessThan(ground(0, BOX.minZ) - 0.04);
+  });
+
   it('stays in the tank when the fish dies against the glass', () => {
     const pose = createPose();
-    const corner: Anchor = { x: BOX.maxX - 0.01, y: BOX.minY + 0.01, z: BOX.minZ + 0.01, yaw: 0 };
+    const corner: Anchor = {
+      x: BOX.maxX - 0.01,
+      y: ground(0, BOX.minZ) + 0.01,
+      z: BOX.minZ + 0.01,
+      yaw: 0,
+    };
     for (let t = 0; t <= DYING_S + 5; t += 0.1) {
       dyingPose(t, corner, LENGTH, 0.5, BOX, pose);
       inside(pose);

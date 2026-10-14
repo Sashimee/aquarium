@@ -1,4 +1,4 @@
-import type { Biome } from '@aquarium/shared';
+import { sampleFloor, type Biome, type Collider } from '@aquarium/shared';
 import {
   DynamicDrawUsage,
   Group,
@@ -18,7 +18,7 @@ import {
   type SimReady,
   type SpeciesInput,
   type Stimulus,
-  type WorldConfig,
+  type TankSpaceWorldConfig,
 } from '@aquarium/sim';
 import type { Engine } from '../engine/Engine';
 import type { EventBus } from '../engine/events';
@@ -166,7 +166,7 @@ function smoothstep01(x: number): number {
 function initSim(
   client: SimClient,
   worker: Worker,
-  config: WorldConfig,
+  config: TankSpaceWorldConfig,
   signal: AbortSignal,
 ): Promise<SimReady> {
   return new Promise((resolve, reject) => {
@@ -211,7 +211,6 @@ export class FishSystem {
   private readonly loader: FishAssetLoader;
   private readonly bags: AcclimationBags;
   private readonly lifetime = new AbortController();
-  private readonly offset: Vector3;
   private readonly box: WaterBox;
   private readonly spec: SimWorldSpec;
   private readonly cleanups: (() => void)[] = [];
@@ -298,12 +297,12 @@ export class FishSystem {
     demo: DemoTank,
     private readonly seed: number,
   ) {
-    this.offset = new Vector3(...demo.offset);
     const bounds = waterBounds(options.tank);
+    const space = demo.config.space;
     this.box = {
       minX: bounds.min.x,
       maxX: bounds.max.x,
-      minY: demo.offset[1],
+      ground: (x, z) => sampleFloor(space, x, z),
       minZ: bounds.min.z,
       maxZ: bounds.max.z,
       top: bounds.max.y,
@@ -402,22 +401,26 @@ export class FishSystem {
     return this.roster.simIdOf(serverId);
   }
 
-  /**
-   * `stimulus.position` is in the sim's frame (y above the substrate). The demo sim's floor is flat
-   * at the highest substrate point, so a low-ground tap reads up to a few cm high until #64.
-   */
+  /** `stimulus.position` is in tank space, which the sim and the scene share. */
   startle(stimulus: Stimulus): void {
     if (!this.disposed && this.simReady) this.sim.startle(stimulus);
   }
 
   /**
-   * Homes from the scene, in engine space: the clownfish's anemone. Kept for every later sim
-   * world, since a re-initialised world starts with only the anchors in its config.
+   * Homes from the scene: the clownfish's anemone. Kept for every later sim world, since a
+   * re-initialised world starts with only the anchors in its config.
    */
   setAnchors(anchors: readonly SceneAnchor[]): void {
     if (this.disposed) return;
     const simAnchors = this.spec.setAnchors(anchors);
     if (this.simReady) this.sim.setAnchors(simAnchors);
+  }
+
+  /** Every collider the sim avoids, in the shared format; kept for later worlds like anchors. */
+  setColliders(colliders: readonly Collider[]): void {
+    if (this.disposed) return;
+    this.spec.setDecor(colliders);
+    if (this.simReady) this.sim.setDecor(colliders);
   }
 
   setFood(buffer: Float32Array): void {
@@ -767,24 +770,27 @@ export class FishSystem {
     }
   }
 
-  /** Where the fish is on screen (its bag), in the sim's frame; undefined if it isn't shown. */
+  /** Where the fish is on screen (its bag); undefined if it isn't shown. */
   private placement(simId: string): FishPlacement | undefined {
     const rt = this.runtimes.get(simId);
     if (rt === undefined || !rt.shown) return undefined;
     this.forward.set(0, 0, 1).applyQuaternion(rt.lastQuaternion);
     const p = rt.lastPosition;
     return {
-      position: [p.x - this.offset.x, p.y - this.offset.y, p.z - this.offset.z],
+      position: [p.x, p.y, p.z],
       heading: Math.atan2(this.forward.x, this.forward.z),
     };
   }
 
-  private async reinit(config: WorldConfig): Promise<void> {
+  private async reinit(config: TankSpaceWorldConfig): Promise<void> {
     const generation = this.generation;
     const ready = await initSim(this.sim, this.worker, config, this.lifetime.signal);
     if (this.disposed || generation !== this.generation) return;
     this.simReady = true;
     this.sim.setLight(this.light);
+    const { decor, anchors } = this.spec.changedSince(config);
+    if (decor !== null) this.sim.setDecor(decor);
+    if (anchors !== null) this.sim.setAnchors(anchors);
     this.inWorld = new Set(ready.fishIds);
     this.stream.begin(ready.epoch, ready.fishIds);
     this.sim.start();
@@ -829,13 +835,11 @@ export class FishSystem {
             rt.fromQuaternion.copy(rt.lastQuaternion);
           }
         }
-        this.position
-          .set(
-            frame[o + SnapshotField.PosX] ?? 0,
-            frame[o + SnapshotField.PosY] ?? 0,
-            frame[o + SnapshotField.PosZ] ?? 0,
-          )
-          .add(this.offset);
+        this.position.set(
+          frame[o + SnapshotField.PosX] ?? 0,
+          frame[o + SnapshotField.PosY] ?? 0,
+          frame[o + SnapshotField.PosZ] ?? 0,
+        );
         this.quaternion.set(
           frame[o + SnapshotField.QuatX] ?? 0,
           frame[o + SnapshotField.QuatY] ?? 0,
