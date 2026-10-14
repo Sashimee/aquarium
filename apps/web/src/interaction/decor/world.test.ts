@@ -275,6 +275,36 @@ describe('SavedDecor', () => {
     expect(hard.at(-1)).toEqual([item('boulder-01', 0.2, 0.2)]);
   });
 
+  it('ignores a layout pushed for a tank that is not the active one', async () => {
+    const { bus, world, hard } = setup();
+    const saved = new SavedDecor(bus, vi.fn());
+    saved.attach(world);
+    bus.emit('tank:loaded', { tankId: 't1', biome: 'freshwater', fish, decorLayout: [] });
+    await settle();
+    const before = hard.length;
+    bus.emit('tank:decor', { tankId: 'other', layout: [item('boulder-01', 0.2, 0.2)] });
+    await settle();
+    expect(hard).toHaveLength(before);
+  });
+
+  it('leaves a customised scene alone when the next tank is of another biome', async () => {
+    const { bus, world, hard } = setup();
+    const saved = new SavedDecor(bus, vi.fn());
+    saved.attach(world);
+    bus.emit('tank:loaded', {
+      tankId: 't1',
+      biome: 'freshwater',
+      fish,
+      decorLayout: [item('boulder-01', 0.1, 0.1)],
+    });
+    await settle();
+    const before = hard.length;
+    bus.emit('tank:unloaded', { tankId: 't1', reason: 'switch' });
+    bus.emit('tank:loaded', { tankId: 't2', biome: 'reef', fish, decorLayout: [] });
+    await settle();
+    expect(hard).toHaveLength(before);
+  });
+
   it('reports a failed rebuild instead of swallowing it', async () => {
     const bus = new EventBus<InteractionEvents>();
     const { scene } = fakeScene();
