@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { backoffDelay, isTransient, retryDelayMs, withRetry } from './backoff';
+import { ApiTimeoutError } from '../ui/api';
 import { apiError } from './fixtures';
 
 describe('backoffDelay', () => {
@@ -78,5 +79,14 @@ describe('withRetry', () => {
     controller.abort();
     await expect(promise).rejects.toMatchObject({ name: 'AbortError' });
     expect(task).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('timeouts', () => {
+  it('are transient and retried only after a capped delay', () => {
+    const timeout = new ApiTimeoutError(15_000);
+    expect(isTransient(timeout)).toBe(true);
+    const delay = retryDelayMs(timeout, 20, { baseMs: 1000, maxMs: 60_000, jitter: 0 });
+    expect(delay).toBe(60_000);
   });
 });
