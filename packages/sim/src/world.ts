@@ -219,6 +219,8 @@ export class World {
   plantContacts = 0;
   /** Stand-off spots tested for room to face the food from; the bearing search behind them is cached. */
   stationChecks = 0;
+  /** Fish-steps spent rising in place before crossing to a stand-off station over the top of a rock. */
+  climbs = 0;
 
   private _position: Float64Array;
   private _yaw: Float64Array;
@@ -1050,8 +1052,9 @@ export class World {
         ) < length
       ) &&
       !this.pathClear(sdf, px, py, pz, seekX, reachY, seekZ, radius) &&
-      this.pathClear(sdf, px, py, pz, px, seekY, pz, radius) &&
+      this.riseClear(sdf, px, py, pz, seekY, radius) &&
       this.pathClear(sdf, px, seekY, pz, seekX, seekY, seekZ, radius);
+    if (climbFirst) this.climbs++;
     if (plan.seekWeight > 0) {
       let qx = climbFirst ? 0 : (seekX - px) / plan.seekTau;
       let qy = (seekY - py) / plan.seekTau;
@@ -1477,6 +1480,16 @@ export class World {
       plan.seekZ + Math.cos(bearing) * plan.arrival,
       bearing + Math.PI,
     );
+  }
+
+  /**
+   * Whether a body of radius `r` can rise straight up from (x, y, z) to `toY`. A fish grazing low is
+   * within `r` of the sand or rock top it rises away from, so the trace allows it the clearance it
+   * has at the start: only a surface it would close on, a shelf overhead, blocks it.
+   */
+  private riseClear(sdf: Sdf, x: number, y: number, z: number, toY: number, r: number): boolean {
+    const room = Math.min(r, sdf.sample(x, y, z, this.previous));
+    return room > 0 && this.pathClear(sdf, x, y, z, x, toY, z, room);
   }
 
   /**
