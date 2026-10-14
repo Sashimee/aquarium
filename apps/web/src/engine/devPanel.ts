@@ -61,7 +61,7 @@ export function createDevPanel(engine: Engine): () => void {
   lightFolder.add(hood, 'intensity', 0, 10, 0.05).name('hood intensity');
   lightFolder.addColor(hood, 'color').name('hood colour');
   lightFolder.add(scene, 'environmentIntensity', 0, 3, 0.01).name('room env');
-  lightFolder.add(scene, 'backgroundIntensity', 0, 3, 0.01).name('room background');
+  lightFolder.add(engine, 'roomBackgroundIntensity', 0, 3, 0.01).name('room background (day)');
   lightFolder.add(renderer, 'toneMappingExposure', 0.1, 4, 0.01).name('exposure');
 
   return () => {
