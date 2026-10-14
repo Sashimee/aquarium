@@ -1,9 +1,11 @@
+import type { Collider } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 
 // Long simulations: well under a second locally, but shared CI runners can be several times slower.
 const LONG = 60_000;
 import { BEHAVIOUR } from './behaviour.ts';
 import { FEEDING } from './feeding.ts';
+import { FOOD_TYPES } from './food.ts';
 import {
   ARCHETYPES,
   benchmarkConfig,
@@ -63,23 +65,23 @@ function shoalClusters(w: World, members: number[], linkM: number): number[] {
  * A rock angled 20 degrees off the back glass: a V that narrows toward +x, where a tang swimming
  * along the pane slides deeper on every bump instead of being pinned.
  */
+const WEDGE_ROCK: Collider = {
+  id: 'wedge-rock',
+  hard: true,
+  kind: 'box',
+  center: [0.2, 0.15, -REEF_TANK.depth / 2 + 0.1],
+  halfExtents: [0.25, 0.15, 0.05],
+  rotationY: 0.35,
+  rounding: 0,
+};
+
 function wedgeTank(seed = 1, species = yellowTang.id): World {
   const back = -REEF_TANK.depth / 2;
   const w = new World({
     seed,
     tank: REEF_TANK,
     species: ARCHETYPES,
-    decor: [
-      {
-        id: 'wedge-rock',
-        hard: true,
-        kind: 'box',
-        center: [0.2, 0.15, back + 0.1],
-        halfExtents: [0.25, 0.15, 0.05],
-        rotationY: 0.35,
-        rounding: 0,
-      },
-    ],
+    decor: [WEDGE_ROCK],
     fish: spawnMany(species, 1),
   });
   w.position.set([0, 0.15, back + 0.048], 0);
@@ -363,6 +365,119 @@ describe('World containment', { timeout: LONG }, () => {
         expect(bite, label).toBeLessThan(24);
       }
     }
+  });
+
+  it('keeps a tang beside a station moved round the rock tip off the rock until it bites', () => {
+    // #306: on station the fish closes on the food along its own bearing; from the rock side of a
+    // moved station that line ran the snout into the rock tip short of a bite (seeds 8 and 11:
+    // two extra back-outs, then a bite at 20.9 s).
+    const back = -REEF_TANK.depth / 2;
+    for (let seed = 1; seed <= 12; seed++) {
+      const label = `seed ${seed}`;
+      const w = wedgeTank(seed);
+      const watch = backOutWatch(w);
+      const rain = new FoodRain(REEF_TANK);
+      const nori = rain.place('nori', 0.45, 0.15, back + 0.012);
+      let settled = -1;
+      let bite = -1;
+      for (let t = 0; t < 30 / STEP_DT && bite < 0; t++) {
+        rain.feed(w);
+        watch.step();
+        // The grind round the tip on the way in (≈5 s) is #299's; by 10 s every seed is on station.
+        if (settled < 0 && w.tick * STEP_DT >= 10) settled = w.contacts;
+        const events = w.takeAteEvents();
+        rain.eat(events);
+        if (events.some((e) => e.foodId === nori)) bite = w.tick * STEP_DT;
+      }
+      expect(bite, label).toBeGreaterThan(0);
+      expect(watch.starts, label).toHaveLength(1);
+      expect(w.contacts - settled, label).toBe(0);
+    }
+  });
+});
+
+describe('stand-off station search', { timeout: LONG }, () => {
+  const back = -REEF_TANK.depth / 2;
+  const NORI = FOOD_TYPES.indexOf('nori');
+  // Every step on station tries the bearing shares; checks beyond them mean the ring search ran.
+  const SHARES = STEERING.standOffBearingShares.length;
+
+  function feedNori(w: World, x = 0.45): void {
+    w.setFood(new Float32Array([1, x, 0.15, back + 0.012, NORI]));
+  }
+
+  function stepCounting(w: World, x = 0.45): number {
+    feedNori(w, x);
+    const before = w.stationChecks;
+    w.step();
+    w.takeAteEvents();
+    return w.stationChecks - before;
+  }
+
+  /** A tang at the wedge tip on the first step it holds a station the ring search found. */
+  function onRingStation(companion = false): World {
+    const w = wedgeTank(1);
+    if (companion) {
+      w.addFish({ id: 'neon', species: neonTetra.id }, { position: [-0.5, 0.3, 0.2], heading: 0 });
+    }
+    let searched = false;
+    for (let t = 0; t < 30 / STEP_DT; t++) {
+      const checks = stepCounting(w);
+      if (checks > SHARES) searched = true;
+      else if (searched && checks === SHARES) return w;
+    }
+    throw new Error('the tang never held a station found round the rock tip');
+  }
+
+  it('searches round a rock tip once per target, not on every step', () => {
+    const w = wedgeTank(1);
+    let seeking = 0;
+    let searches = 0;
+    for (let t = 0; t < 20 / STEP_DT; t++) {
+      const checks = stepCounting(w);
+      if (checks > 0) seeking++;
+      if (checks > SHARES) searches++;
+    }
+    expect(seeking).toBeGreaterThan(100);
+    expect(searches).toBeLessThanOrEqual(3);
+  });
+
+  it('keeps the station while nothing it depends on changes', () => {
+    expect(stepCounting(onRingStation())).toBe(SHARES);
+    const same = onRingStation();
+    same.setDecor([WEDGE_ROCK]);
+    expect(stepCounting(same)).toBe(SHARES);
+    const plant = onRingStation();
+    plant.setDecor([
+      WEDGE_ROCK,
+      { id: 'plant', hard: false, kind: 'sphere', center: [-0.6, 0.1, 0.2], radius: 0.05 },
+    ]);
+    expect(stepCounting(plant)).toBe(SHARES);
+  });
+
+  it('searches again when the food moves, hard decor changes or the fish set changes', () => {
+    expect(stepCounting(onRingStation(), 0.451)).toBeGreaterThan(SHARES);
+
+    const rock = onRingStation();
+    rock.setDecor([
+      WEDGE_ROCK,
+      { id: 'pebble', hard: true, kind: 'sphere', center: [-0.6, 0.05, 0.2], radius: 0.04 },
+    ]);
+    expect(stepCounting(rock)).toBeGreaterThan(SHARES);
+
+    const joined = onRingStation();
+    const neon = joined.addFish(
+      { id: 'neon', species: neonTetra.id },
+      { position: [-0.5, 0.3, 0.2], heading: 0 },
+    );
+    expect(stepCounting(joined)).toBeGreaterThan(SHARES);
+    // The ring search counted is the tang's own: the neon has no stand-off to look for.
+    expect(joined.behaviour.plans[neon]?.arrival).toBe(0);
+
+    expect(stepCounting(onRingStation(true))).toBe(SHARES);
+    const left = onRingStation(true);
+    left.removeFish('neon');
+    expect(stepCounting(left)).toBeGreaterThan(SHARES);
   });
 });
 
