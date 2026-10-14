@@ -129,7 +129,10 @@ export function createAuth({
         // resetTokens.test.ts pins which flows write them.
         await database.db.transaction(async (tx) => {
           await tx.delete(schema.verification).where(eq(schema.verification.value, user.id));
+          await tx.delete(schema.session).where(eq(schema.session.userId, user.id));
           if (user.emailVerified) return;
+          // Raw update on purpose: the Better Auth adapter can't join this transaction, and it would bypass
+          // any databaseHooks.user.update; none are configured, so add the effect here if one is.
           await tx
             .update(schema.user)
             .set({ emailVerified: true, updatedAt: new Date() })
