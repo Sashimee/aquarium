@@ -41,6 +41,7 @@ describe('uploadableHdri', () => {
       [{ data: pixels, width: 4, height: 4 }],
       4,
       4,
+      // three's types reject RGBAFormat here, but KTX2Loader really returns this texture
       RGBAFormat as never,
       HalfFloatType,
     );
@@ -74,6 +75,7 @@ describe('uploadableHdri', () => {
       [{ data: new Uint8Array(64), width: 4, height: 4 }],
       4,
       4,
+      // three's types reject RGBAFormat here, but KTX2Loader really returns this texture
       RGBAFormat as never,
     );
     expect(() => uploadableHdri(wrong)).toThrow('half-float');

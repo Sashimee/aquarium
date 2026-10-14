@@ -166,7 +166,7 @@ export function flipVertical(image: RgbeImage): RgbeImage {
   return { width: image.width, height: image.height, pixels };
 }
 
-/** Basis Universal's HDR ceiling; brighter input makes it rescale the whole image (KTXmapRange), which three ignores. */
+/** Safety margin below the encoder's real ceiling (65504 still gave a 1.00098 range scale); brighter input makes it rescale the whole image (KTXmapRange), which three ignores. */
 export const HDR_ENCODER_MAX = 65000;
 
 /** Clamps every channel to `limit` and returns the clamped image with the number of pixels that changed. */
