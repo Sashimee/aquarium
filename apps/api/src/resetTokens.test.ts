@@ -24,7 +24,7 @@ describe('reset and verification token hygiene (#132)', () => {
       email,
       password: PASSWORD,
       name: 'Tester',
-      callbackURL: '/',
+      callbackURL: '/verify-email',
     });
     await h.settleMail();
     const text = h.outbox.find((m) => m.to === email)?.text ?? '';
@@ -42,7 +42,7 @@ describe('reset and verification token hygiene (#132)', () => {
 
   async function requestReset(email: string): Promise<string> {
     const before = h.outbox.filter((m) => m.to === email).length;
-    await post('/api/auth/request-password-reset', { email, redirectTo: '/' });
+    await post('/api/auth/request-password-reset', { email, redirectTo: '/reset-password' });
     await h.settleMail();
     const mail = h.outbox.filter((m) => m.to === email).slice(before)[0];
     const token = /reset-password\/([A-Za-z0-9]+)/.exec(mail?.text ?? '')?.[1];

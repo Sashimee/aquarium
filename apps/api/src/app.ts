@@ -94,23 +94,36 @@ const advanceTimeRequestSchema = z.strictObject({
     .max(60 * 24 * 365),
 });
 
+// Better Auth appends the one-time token to these in the mail link. Only the two pages that
+// carry a no-referrer policy and consume the token may be named, so the values are pinned
+// instead of validated: any other path would land the token on a page that leaks or ignores it.
+const RESET_REDIRECT_PATH = '/reset-password';
+const VERIFY_CALLBACK_PATH = '/verify-email';
+
+const resetRedirectSchema = z.literal(RESET_REDIRECT_PATH, {
+  error: `redirectTo must be exactly ${RESET_REDIRECT_PATH}.`,
+});
+const verifyCallbackSchema = z.literal(VERIFY_CALLBACK_PATH, {
+  error: `callbackURL must be exactly ${VERIFY_CALLBACK_PATH}.`,
+});
+
 const signUpBodySchema = signUpRequestSchema.extend({
-  callbackURL: z.string().max(2048).optional(),
+  callbackURL: verifyCallbackSchema.optional(),
 });
 
 const signInBodySchema = signInRequestSchema.extend({
-  callbackURL: z.string().max(2048).optional(),
+  callbackURL: verifyCallbackSchema.optional(),
   rememberMe: z.boolean().optional(),
 });
 
 const requestPasswordResetBodySchema = z.strictObject({
   email: emailSchema,
-  redirectTo: z.string().max(2048).optional(),
+  redirectTo: resetRedirectSchema.optional(),
 });
 
 const sendVerificationEmailBodySchema = z.strictObject({
   email: emailSchema,
-  callbackURL: z.string().max(2048).optional(),
+  callbackURL: verifyCallbackSchema.optional(),
 });
 
 const BODY_SCHEMAS = new Map<string, z.ZodType>([
@@ -207,7 +220,7 @@ function carriesUrlToken(url: string): boolean {
   return (
     TOKEN_PAGES.has(path) ||
     path === `${AUTH_BASE_PATH}/verify-email` ||
-    path.startsWith(`${AUTH_BASE_PATH}/reset-password/`)
+    TOKEN_PATH_PREFIXES.some((prefix) => path.startsWith(prefix))
   );
 }
 

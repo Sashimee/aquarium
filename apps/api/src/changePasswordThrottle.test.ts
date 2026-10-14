@@ -28,7 +28,7 @@ describe('per-account change-password throttle (#285)', () => {
       method: 'POST',
       url: '/api/auth/sign-up/email',
       headers: json,
-      payload: { email, password: PASSWORD, name: 'Tester', callbackURL: '/' },
+      payload: { email, password: PASSWORD, name: 'Tester', callbackURL: '/verify-email' },
     });
     const link = /https?:\/\/\S+verify-email\?\S+/.exec(
       h.outbox.find((m) => m.to === email)?.text ?? '',

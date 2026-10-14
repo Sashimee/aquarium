@@ -39,7 +39,7 @@ async function signUp(app: FastifyInstance, email: string, extra: Record<string,
     method: 'POST',
     url: '/api/auth/sign-up/email',
     headers: { ...jsonHeaders, ...extra },
-    payload: { email, password: PASSWORD, name: 'Tester', callbackURL: '/' },
+    payload: { email, password: PASSWORD, name: 'Tester', callbackURL: '/verify-email' },
   });
 }
 
@@ -92,7 +92,7 @@ describe('unverified sign-up takeover (#114)', () => {
       method: 'POST',
       url: '/api/auth/sign-up/email',
       headers: jsonHeaders,
-      payload: { email, password, name: 'Someone', callbackURL: '/' },
+      payload: { email, password, name: 'Someone', callbackURL: '/verify-email' },
     });
 
   const requestReset = async (email: string) => {
@@ -100,7 +100,7 @@ describe('unverified sign-up takeover (#114)', () => {
       method: 'POST',
       url: '/api/auth/request-password-reset',
       headers: jsonHeaders,
-      payload: { email, redirectTo: '/' },
+      payload: { email, redirectTo: '/reset-password' },
     });
     await h.settleMail();
     return res;
@@ -573,7 +573,7 @@ describe('mail abuse limits', () => {
         method: 'POST',
         url: '/api/auth/send-verification-email',
         headers: jsonHeaders,
-        payload: { email, callbackURL: '/' },
+        payload: { email, callbackURL: '/verify-email' },
       });
       const ms = performance.now() - start;
       await h.settleMail();
@@ -615,14 +615,14 @@ describe('mail abuse limits', () => {
       method: 'POST',
       url: '/api/auth/send-verification-email',
       headers: jsonHeaders,
-      payload: { email, callbackURL: '/' },
+      payload: { email, callbackURL: '/verify-email' },
     });
     expect(res.statusCode).toBe(200);
     const stranger = await h.app.inject({
       method: 'POST',
       url: '/api/auth/send-verification-email',
       headers: jsonHeaders,
-      payload: { email: nextEmail(), callbackURL: '/' },
+      payload: { email: nextEmail(), callbackURL: '/verify-email' },
     });
     expect(res.body).toBe(stranger.body);
     await held.sendStarted;
@@ -648,7 +648,7 @@ describe('mail abuse limits', () => {
         method: 'POST',
         url: '/api/auth/send-verification-email',
         headers: jsonHeaders,
-        payload: { email, callbackURL: '/' },
+        payload: { email, callbackURL: '/verify-email' },
       });
     }
     expect(h.outbox.filter((m) => m.to === email)).toHaveLength(2);
@@ -815,7 +815,7 @@ describe('mail abuse limits', () => {
           method: 'POST',
           url: '/api/auth/request-password-reset',
           headers: jsonHeaders,
-          payload: { email: target, redirectTo: '/' },
+          payload: { email: target, redirectTo: '/reset-password' },
         });
         await h.settleMail();
         const attacker = nextEmail();
@@ -918,7 +918,7 @@ describe('mail abuse limits', () => {
         method: 'POST',
         url: '/api/auth/request-password-reset',
         headers: { ...jsonHeaders, 'x-forwarded-for': ip },
-        payload: { email, redirectTo: '/' },
+        payload: { email, redirectTo: '/reset-password' },
       });
 
     it('refuses an IP past its limit while the cap is spent, and keeps refusing after a restart', async () => {
@@ -1030,7 +1030,7 @@ describe('mail abuse limits', () => {
         method: 'POST',
         url: '/api/auth/request-password-reset',
         headers: jsonHeaders,
-        payload: { email, redirectTo: '/' },
+        payload: { email, redirectTo: '/reset-password' },
       });
       expect(res.statusCode).toBe(200);
       await h.settleMail();
@@ -1096,8 +1096,8 @@ describe('mail abuse limits', () => {
     };
     for (const [n, [url, redirect]] of (
       [
-        ['/api/auth/send-verification-email', { callbackURL: '/' }],
-        ['/api/auth/request-password-reset', { redirectTo: '/' }],
+        ['/api/auth/send-verification-email', { callbackURL: '/verify-email' }],
+        ['/api/auth/request-password-reset', { redirectTo: '/reset-password' }],
       ] as const
     ).entries()) {
       const forKnown = await sequence(`203.0.113.${10 + n}`, url, known, redirect);
@@ -1251,18 +1251,103 @@ describe('input and origin checks', () => {
     expect(res.statusCode).toBe(403);
   });
 
-  it.each(['https://evil.example/', '//evil.example/', '/\\evil.example'])(
-    'rejects callbackURL %s',
-    async (callbackURL) => {
+  describe('pins the mail-link redirects (#331)', () => {
+    const BAD = [
+      '/credits',
+      '/',
+      '',
+      `${APP_ORIGIN}/credits`,
+      `${APP_ORIGIN}/reset-password`,
+      `${APP_ORIGIN}/verify-email`,
+      'https://evil.example/',
+      '//evil.example',
+      '//evil.example/reset-password',
+      '/\\evil.example',
+      '\\\\evil.example',
+      '/reset-password/../credits',
+      '/%72eset-password',
+      '/%76erify-email',
+      '/reset-password/',
+      '/verify-email/',
+      '/reset-password?x=1',
+      '/Reset-Password',
+      '/verify-email#x',
+    ];
+    const ENDPOINTS = [
+      ['/api/auth/request-password-reset', 'redirectTo', '/reset-password'],
+      ['/api/auth/send-verification-email', 'callbackURL', '/verify-email'],
+      ['/api/auth/sign-up/email', 'callbackURL', '/verify-email'],
+      ['/api/auth/sign-in/email', 'callbackURL', '/verify-email'],
+    ] as const;
+    const cases = ENDPOINTS.flatMap(([url, field, allowed]) =>
+      BAD.map((value) => [url, field, allowed, value] as const),
+    );
+
+    it.each(cases)('%s rejects %s=%j with 400 and sends no mail', async (url, field, _a, value) => {
+      const email = nextEmail();
+      const before = h.outbox.length;
       const res = await h.app.inject({
         method: 'POST',
-        url: '/api/auth/sign-up/email',
+        url,
         headers: jsonHeaders,
-        payload: { email: nextEmail(), password: PASSWORD, name: 'Cb', callbackURL },
+        payload: {
+          email,
+          ...(url.includes('/sign-') ? { password: PASSWORD, name: 'Cb' } : {}),
+          [field]: value,
+        },
       });
-      expect(res.statusCode).toBe(403);
-    },
-  );
+      await h.settleMail();
+      expect(res.statusCode).toBe(400);
+      expect(apiErrorSchema.parse(res.json()).error.code).toBe('validation_failed');
+      expect(res.body).toContain(field);
+      expect(h.outbox).toHaveLength(before);
+    });
+
+    it('puts only the pinned reset path in the reset mail', async () => {
+      const email = nextEmail();
+      expect((await signUp(h.app, email)).statusCode).toBe(200);
+      await h.settleMail();
+      await verifyFrom(h, email);
+      const res = await h.app.inject({
+        method: 'POST',
+        url: '/api/auth/request-password-reset',
+        headers: jsonHeaders,
+        payload: { email, redirectTo: '/reset-password' },
+      });
+      await h.settleMail();
+      expect(res.statusCode).toBe(200);
+      const mail = h.outbox.filter((m) => m.to === email).at(-1);
+      expect(mail?.text).toContain('callbackURL=%2Freset-password');
+    });
+
+    it('puts only the pinned verify path in the sign-up and resend mails', async () => {
+      const email = nextEmail();
+      expect((await signUp(h.app, email)).statusCode).toBe(200);
+      await h.settleMail();
+      expect(h.outbox.find((m) => m.to === email)?.text).toContain('callbackURL=%2Fverify-email');
+      const resend = await h.app.inject({
+        method: 'POST',
+        url: '/api/auth/send-verification-email',
+        headers: jsonHeaders,
+        payload: { email, callbackURL: '/verify-email' },
+      });
+      await h.settleMail();
+      expect(resend.statusCode).toBe(200);
+      expect(h.outbox.filter((m) => m.to === email).at(-1)?.text).toContain(
+        'callbackURL=%2Fverify-email',
+      );
+    });
+
+    it('still accepts a request that omits the field', async () => {
+      const res = await h.app.inject({
+        method: 'POST',
+        url: '/api/auth/request-password-reset',
+        headers: jsonHeaders,
+        payload: { email: nextEmail() },
+      });
+      expect(res.statusCode).toBe(200);
+    });
+  });
 });
 
 describe('auth proxy path rules cannot be dodged with dot segments (#199)', () => {
@@ -1300,7 +1385,7 @@ describe('auth proxy path rules cannot be dodged with dot segments (#199)', () =
     try {
       await h.app.listen({ port: 0, host: '127.0.0.1' });
       const { port } = h.app.server.address() as AddressInfo;
-      const body = JSON.stringify({ email: nextEmail(), redirectTo: '/' });
+      const body = JSON.stringify({ email: nextEmail(), redirectTo: '/reset-password' });
       expect(await rawPost(port, path, body)).toBe(404);
       expect(await rawPost(port, '/api/auth/request-password-reset', body)).toBe(200);
       expect(await rawPost(port, '/api/auth/request-password-reset', body)).toBe(429);
@@ -1316,7 +1401,7 @@ describe('password reset request does not reveal the account (#161)', () => {
       method: 'POST',
       url: '/api/auth/request-password-reset',
       headers: jsonHeaders,
-      payload: { email, redirectTo: '/' },
+      payload: { email, redirectTo: '/reset-password' },
     });
 
   const observable = (res: LightMyRequestResponse) => {

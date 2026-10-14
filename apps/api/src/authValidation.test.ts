@@ -19,7 +19,7 @@ async function verifiedSession(h: Harness) {
     method: 'POST',
     url: '/api/auth/sign-up/email',
     headers: jsonHeaders,
-    payload: { email, password: PASSWORD, name: 'Tester', callbackURL: '/' },
+    payload: { email, password: PASSWORD, name: 'Tester', callbackURL: '/verify-email' },
   });
   const mail = [...h.outbox].reverse().find((m) => m.to === email);
   const link = /https?:\/\/\S+verify-email\?\S+/.exec(mail?.text ?? '')?.[0];
@@ -127,7 +127,7 @@ describe('Better Auth body validation (#118)', () => {
     const ok = await post(h.app, '/api/auth/sign-in/email', {
       email,
       password: PASSWORD,
-      callbackURL: '/',
+      callbackURL: '/verify-email',
     });
     expect(ok.statusCode).toBe(200);
   });
@@ -168,7 +168,7 @@ describe('Better Auth body validation (#118)', () => {
       email,
       password: PASSWORD,
       name: '  Bob' + ' '.repeat(400_000),
-      callbackURL: '/',
+      callbackURL: '/verify-email',
     });
     expect(res.statusCode).toBe(200);
     expect((await stored(email)).name).toBe('Bob');
@@ -186,8 +186,8 @@ describe('Better Auth body validation (#118)', () => {
   });
 
   const cases = [
-    ['request-password-reset', 'redirectTo'],
-    ['send-verification-email', 'callbackURL'],
+    ['request-password-reset', 'redirectTo', '/reset-password'],
+    ['send-verification-email', 'callbackURL', '/verify-email'],
   ] as const;
 
   describe('reset and resend bodies', () => {
@@ -196,7 +196,10 @@ describe('Better Auth body validation (#118)', () => {
       const otherField = field === 'redirectTo' ? 'callbackURL' : 'redirectTo';
       for (const body of [
         {},
-        { email: nextEmail(), [otherField]: '/' },
+        {
+          email: nextEmail(),
+          [otherField]: otherField === 'redirectTo' ? '/reset-password' : '/verify-email',
+        },
         { email: 'nope' },
         { email: `${'x'.repeat(250)}@bas.lu` },
         { email: nextEmail(), [field]: 'x'.repeat(3000) },
@@ -217,27 +220,30 @@ describe('Better Auth body validation (#118)', () => {
       expect(h.outbox.length).toBe(before);
     });
 
-    it.each(cases)('accepts a good %s body and still rate-limits it', async (path, field) => {
-      const limited = await createHarness({
-        mailLimits: { ...DEFAULT_MAIL_LIMITS, perIpSignup: { max: 2, windowMs: 60_000 } },
-      });
-      try {
-        const body = { email: nextEmail(), [field]: '/' };
-        const statuses: number[] = [];
-        for (let i = 0; i < 4; i++) {
-          statuses.push((await post(limited.app, `/api/auth/${path}`, body)).statusCode);
+    it.each(cases)(
+      'accepts a good %s body and still rate-limits it',
+      async (path, field, allowed) => {
+        const limited = await createHarness({
+          mailLimits: { ...DEFAULT_MAIL_LIMITS, perIpSignup: { max: 2, windowMs: 60_000 } },
+        });
+        try {
+          const body = { email: nextEmail(), [field]: allowed };
+          const statuses: number[] = [];
+          for (let i = 0; i < 4; i++) {
+            statuses.push((await post(limited.app, `/api/auth/${path}`, body)).statusCode);
+          }
+          expect(statuses).toEqual([200, 200, 429, 429]);
+        } finally {
+          await limited.close();
+          await limited.dropDatabase();
         }
-        expect(statuses).toEqual([200, 200, 429, 429]);
-      } finally {
-        await limited.close();
-        await limited.dropDatabase();
-      }
-    });
+      },
+    );
   });
 
   it.each(cases)(
     'does not charge the per-IP budget for rejected %s bodies',
-    async (path, field) => {
+    async (path, field, allowed) => {
       const limited = await createHarness({
         mailLimits: { ...DEFAULT_MAIL_LIMITS, perIpSignup: { max: 2, windowMs: 60_000 } },
       });
@@ -248,7 +254,7 @@ describe('Better Auth body validation (#118)', () => {
           });
           expect(bad.statusCode).toBe(400);
         }
-        const good = { email: nextEmail(), [field]: '/' };
+        const good = { email: nextEmail(), [field]: allowed };
         const statuses: number[] = [];
         for (let i = 0; i < 3; i++) {
           statuses.push((await post(limited.app, `/api/auth/${path}`, good)).statusCode);
