@@ -12,10 +12,9 @@ import {
   quatFromYawPitchRoll,
   Rng,
   SimClient,
-  SNAPSHOT_STRIDE,
   SnapshotField,
-  SnapshotInterpolator,
   STEP_DT,
+  type FishPlacement,
   type SimReady,
   type SpeciesInput,
   type Stimulus,
@@ -49,7 +48,8 @@ import {
 } from './poses';
 import { renderProfile, type FishRenderProfile } from './profiles';
 import { hashString, TankRoster, type RosterFish } from './roster';
-import { SimWorldSpec } from './simWorld';
+import { SimStream } from './simStream';
+import { layoutChanges, SimWorldSpec } from './simWorld';
 import { speciesInput } from './species';
 import type { FishBite, PickRay, TankEvent } from './start';
 import { SWIM_MODES, SwimState } from './swim';
@@ -103,18 +103,12 @@ interface FishRuntime {
   shown: boolean;
   readonly lastPosition: Vector3;
   readonly lastQuaternion: Quaternion;
-  /** Seconds left of the blend from `fromPosition` into a new sim world's pose. */
+  /** Seconds left of the blend from `fromPosition` (its bag) into the sim's pose. */
   handover: number;
   readonly fromPosition: Vector3;
   readonly fromQuaternion: Quaternion;
   bagSlot: number | null;
   script: Script | null;
-}
-
-interface Layout {
-  readonly epoch: number;
-  readonly frame: Float32Array;
-  readonly offsets: ReadonlyMap<string, number>;
 }
 
 /**
@@ -138,10 +132,7 @@ function featuresFor(tier: Tier, msaa: boolean): FishMaterialFeatures {
 
 /** LOD levels near enough for their self-shadowing to read. */
 const SHADOW_LODS = 2;
-/**
- * Re-initialising the sim respawns every fish (it cannot add or remove one in place), so fish
- * already on screen glide from where they were into the new world over this long.
- */
+/** A fish released from its bag glides from the bag into the sim's pose over this long. */
 const HANDOVER_S = 1.2;
 /** Fingertip slop when netting a small fish, in metres. */
 const MIN_PICK_RADIUS = 0.02;
@@ -204,7 +195,8 @@ function initSim(
  * fish come from the sim, while bagged, dying and dead ones follow the fixed poses in `poses.ts`.
  *
  * Which fish exist is the `TankRoster`'s job: the demo stock, or a saved tank driven by the
- * `tank:*` events. Each change to the swimming set re-initialises the sim world.
+ * `tank:*` events. A fish joining or leaving the swimming set is added to or removed from the
+ * running sim world, so the others carry on; only swapping the tank or demo stock builds a new one.
  */
 export class FishSystem {
   readonly group = new Group();
@@ -213,7 +205,7 @@ export class FishSystem {
   private readonly batches = new Map<string, SpeciesBatch>();
   private readonly loading = new Map<string, Promise<void>>();
   private readonly unavailable = new Set<string>();
-  private readonly interpolator = new SnapshotInterpolator(STEP_DT);
+  private readonly stream = new SimStream(STEP_DT, (snapshot) => this.sim.recycle(snapshot));
   private readonly loader: FishAssetLoader;
   private readonly bags: AcclimationBags;
   private readonly lifetime = new AbortController();
@@ -222,9 +214,10 @@ export class FishSystem {
   private readonly spec: SimWorldSpec;
   private readonly cleanups: (() => void)[] = [];
   private readonly ateListeners = new Set<(events: readonly FishBite[]) => void>();
-  private layout: Layout | null = null;
-  private pendingLayout: { epoch: number; ids: readonly string[] } | null = null;
-  private simRevision = -1;
+  /** The fish in the running world once the commands sent so far land; null with no world. */
+  private inWorld: Set<string> | null = null;
+  /** Bumped whenever the world is dropped, so add/remove replies from before are ignored. */
+  private generation = 0;
   private sceneRevision = -1;
   private simReady = false;
   private dirty = false;
@@ -282,7 +275,7 @@ export class FishSystem {
       await system.loadSpecies();
       signal.throwIfAborted();
       system.materialize();
-      await system.reinit();
+      await system.syncWorld();
       signal.throwIfAborted();
     } catch (cause) {
       system.dispose();
@@ -336,16 +329,7 @@ export class FishSystem {
         this.runtimes.clear();
       },
     );
-    sim.onSnapshot((snapshot) => {
-      const pending = this.pendingLayout;
-      if (pending !== null && snapshot.epoch === pending.epoch) this.switchLayout(pending);
-      if (this.layout === null || snapshot.epoch !== this.layout.epoch) {
-        sim.recycle(snapshot);
-        return;
-      }
-      const evicted = this.interpolator.push(snapshot, performance.now());
-      if (evicted !== null) sim.recycle(evicted);
-    });
+    sim.onSnapshot((snapshot) => this.stream.push(snapshot, performance.now()));
     sim.onAte((events) => {
       const bites = this.roster.translateAte(events);
       if (bites.length === 0) return;
@@ -504,7 +488,7 @@ export class FishSystem {
         await this.loadSpecies();
         if (this.disposed) return;
         this.materialize();
-        if (this.roster.revision !== this.simRevision) await this.reinit();
+        await this.syncWorld();
       } catch (cause) {
         if (this.disposed) return;
         this.report('Fish could not be updated for the new tank stock', cause);
@@ -721,42 +705,70 @@ export class FishSystem {
   /** Until the next init nothing of the current world may show, eat or be blended from. */
   private stopWorld(): void {
     this.sim.stop();
-    this.layout = null;
-    this.pendingLayout = null;
-    this.interpolator.reset();
+    this.inWorld = null;
+    this.generation++;
+    this.stream.reset();
   }
 
-  private async reinit(): Promise<void> {
-    const revision = this.roster.revision;
+  /** Brings the sim's fish in line with the roster's swimming set. */
+  private async syncWorld(): Promise<void> {
     const config = this.spec.config(this.roster.swimming());
     if (config === null) {
-      this.stopWorld();
-      this.simRevision = revision;
+      if (this.inWorld !== null) this.stopWorld();
       return;
     }
-    const ready = await initSim(this.sim, this.worker, config, this.lifetime.signal);
-    if (this.disposed) return;
-    this.simReady = true;
-    this.sim.setLight(this.light);
-    this.simRevision = revision;
-    this.pendingLayout = { epoch: ready.epoch, ids: ready.fishIds };
-    this.sim.start();
+    const inWorld = this.inWorld;
+    if (inWorld === null) {
+      await this.reinit(config);
+      return;
+    }
+    const generation = this.generation;
+    const { remove, add } = layoutChanges(inWorld, config.fish);
+    try {
+      for (const id of remove) {
+        inWorld.delete(id);
+        const layout = await this.sim.removeFish(id);
+        if (generation !== this.generation) return;
+        this.stream.change(layout.epoch, layout.fishIds);
+      }
+      for (const spawn of add) {
+        inWorld.add(spawn.id);
+        const at = this.placement(spawn.id);
+        const layout = await (at === undefined
+          ? this.sim.addFish(spawn)
+          : this.sim.addFish(spawn, at));
+        if (generation !== this.generation) return;
+        this.stream.change(layout.epoch, layout.fishIds);
+      }
+    } catch (cause) {
+      if (this.disposed || generation !== this.generation) return;
+      this.report('A fish could not join or leave the running tank; respawning all fish', cause);
+      this.stopWorld();
+      this.dirty = true;
+    }
   }
 
-  private switchLayout(pending: { epoch: number; ids: readonly string[] }): void {
-    this.pendingLayout = null;
-    this.layout = {
-      epoch: pending.epoch,
-      frame: new Float32Array(pending.ids.length * SNAPSHOT_STRIDE),
-      offsets: new Map(pending.ids.map((id, i) => [id, i * SNAPSHOT_STRIDE])),
+  /** Where the fish is on screen (its bag), in the sim's frame; undefined if it isn't shown. */
+  private placement(simId: string): FishPlacement | undefined {
+    const rt = this.runtimes.get(simId);
+    if (rt === undefined || !rt.shown) return undefined;
+    this.forward.set(0, 0, 1).applyQuaternion(rt.lastQuaternion);
+    const p = rt.lastPosition;
+    return {
+      position: [p.x - this.offset.x, p.y - this.offset.y, p.z - this.offset.z],
+      heading: Math.atan2(this.forward.x, this.forward.z),
     };
-    this.interpolator.reset();
-    for (const rt of this.runtimes.values()) {
-      if (!rt.shown || rt.fish.phase !== 'swimming') continue;
-      rt.handover = HANDOVER_S;
-      rt.fromPosition.copy(rt.lastPosition);
-      rt.fromQuaternion.copy(rt.lastQuaternion);
-    }
+  }
+
+  private async reinit(config: WorldConfig): Promise<void> {
+    const generation = this.generation;
+    const ready = await initSim(this.sim, this.worker, config, this.lifetime.signal);
+    if (this.disposed || generation !== this.generation) return;
+    this.simReady = true;
+    this.sim.setLight(this.light);
+    this.inWorld = new Set(ready.fishIds);
+    this.stream.begin(ready.epoch, ready.fishIds);
+    this.sim.start();
   }
 
   private applyShadows(batch: SpeciesBatch): void {
@@ -787,9 +799,16 @@ export class FishSystem {
     const pose = this.pose;
     const { fish } = rt;
     if (fish.phase === 'swimming') {
-      const o = frame === null ? undefined : this.layout?.offsets.get(fish.simId);
+      const o = frame === null ? undefined : this.stream.layout?.offsets.get(fish.simId);
       if (frame !== null && o !== undefined) {
-        rt.bagSlot = null;
+        if (rt.bagSlot !== null) {
+          rt.bagSlot = null;
+          if (rt.shown) {
+            rt.handover = HANDOVER_S;
+            rt.fromPosition.copy(rt.lastPosition);
+            rt.fromQuaternion.copy(rt.lastQuaternion);
+          }
+        }
         this.position
           .set(
             frame[o + SnapshotField.PosX] ?? 0,
@@ -840,9 +859,7 @@ export class FishSystem {
 
   private update(deltaS: number, nowMs: number): void {
     this.clockS += deltaS;
-    const layout = this.layout;
-    const frame =
-      layout !== null && this.interpolator.sample(nowMs, layout.frame) ? layout.frame : null;
+    const frame = this.stream.sample(nowMs);
     const sceneRevision = this.engine.sceneRevision;
     const rewarm = sceneRevision !== this.sceneRevision;
     this.sceneRevision = sceneRevision;
