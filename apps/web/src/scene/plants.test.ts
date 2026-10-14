@@ -72,6 +72,13 @@ describe('plantReach', () => {
     const sway = maxSway('vallisneria', 0.4, DEFAULT_CURRENT);
     expect(reach(1)).toBeCloseTo(Math.hypot(0.06, 0.1) + planarLean + sway, 9);
   });
+
+  it('takes the height from the larger of the extents above and below the origin', () => {
+    const sunken = { min: [-0.05, -0.4, -0.05], max: [0.05, 0.1, 0.05] };
+    const reach = plantReach('vallisneria', sunken, DEFAULT_CURRENT);
+    const sway = maxSway('vallisneria', 0.4, DEFAULT_CURRENT);
+    expect(reach(1)).toBeCloseTo(half + planarLean + sway, 9);
+  });
 });
 
 describe('plant placement against the glass', () => {
@@ -125,7 +132,10 @@ describe('plant placement against the glass', () => {
       reach,
     );
     expect(plants.length).toBeGreaterThan(0);
-    for (const p of plants) expectInside(p);
+    for (const p of plants) {
+      expect(p.scale).toBeLessThan(1);
+      expectInside(p);
+    }
   });
 
   it('holds for the worst case: both tilts at maximum, yawed at a wall', () => {
