@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
+import type { AssetIndex, OutputAsset } from './index-schema.ts';
 
 export const ALLOWED_LICENCES = ['CC0-1.0', 'CC-BY-3.0', 'CC-BY-4.0'] as const;
 export const SHARE_ALIKE_LICENCES = ['CC-BY-SA-3.0', 'CC-BY-SA-4.0'] as const;
@@ -155,6 +156,42 @@ export function validateManifest(manifest: Manifest, credits: string): string[] 
       } else if (asset.author.trim() !== '' && !credits.includes(asset.author)) {
         problems.push(`${at}: CREDITS.md does not name author "${asset.author}"`);
       }
+    }
+  }
+  return problems;
+}
+
+/** Modifications of every built asset deriving from each credit-requiring source, prefixed with the asset id when a source feeds several; empty for unused sources. */
+export function derivedModifications(index: AssetIndex, manifest: Manifest): Map<string, string[]> {
+  const users = new Map<string, OutputAsset[]>(
+    manifest.assets.filter((a) => requiresCredit(a.licence)).map((a) => [a.id, []]),
+  );
+  for (const asset of index.assets) {
+    for (const sourceId of asset.sources) users.get(sourceId)?.push(asset);
+  }
+  const derived = new Map<string, string[]>();
+  for (const [sourceId, assets] of users) {
+    const list: string[] = [];
+    for (const asset of assets) {
+      for (const note of asset.modifications) {
+        const line = assets.length > 1 ? `${asset.id}: ${note}` : note;
+        if (!list.includes(line)) list.push(line);
+      }
+    }
+    derived.set(sourceId, list);
+  }
+  return derived;
+}
+
+export function modificationProblems(index: AssetIndex, manifest: Manifest): string[] {
+  const byId = new Map(manifest.assets.map((a) => [a.id, a]));
+  const problems: string[] = [];
+  for (const [sourceId, expected] of derivedModifications(index, manifest)) {
+    const actual = byId.get(sourceId)?.modifications ?? [];
+    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+      problems.push(
+        `manifest asset ${sourceId}: modifications do not list the changes made by the pipeline (run pnpm assets:sync-manifest)`,
+      );
     }
   }
   return problems;
