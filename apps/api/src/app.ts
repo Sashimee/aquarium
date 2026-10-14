@@ -204,6 +204,7 @@ function hasAmbiguousPath(url: string): boolean {
   });
 }
 
+// Collapsing // matters outside the auth proxy (which refuses it): referrer policy and log redaction.
 function normalizedPathname(url: string): string {
   const raw = url.split('?')[0]?.split('#')[0] ?? '/';
   let decoded: string;
@@ -212,7 +213,7 @@ function normalizedPathname(url: string): string {
   } catch {
     decoded = raw;
   }
-  return '/' + decoded.replace(/^\/+/, '');
+  return '/' + decoded.replace(/^\/+/, '').replace(/\/{2,}/g, '/');
 }
 
 const TOKEN_PATH_PREFIXES = [`${AUTH_BASE_PATH}/reset-password/`, `${AUTH_BASE_PATH}/callback/`];
