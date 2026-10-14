@@ -628,6 +628,17 @@ describe('csrf', () => {
     expect((await h.app.inject({ url: '/api/me', headers: { cookie } })).statusCode).toBe(200);
   });
 
+  it('accepts a same-origin Referer when no Origin is sent on the export POST', async () => {
+    const { cookie } = await verifiedSession(h);
+    const res = await h.app.inject({
+      method: 'POST',
+      url: '/api/me/export',
+      headers: { 'content-type': 'application/json', cookie, referer: `${APP_ORIGIN}/account` },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
   it('accepts the same mutation from the app origin', async () => {
     const { cookie } = await verifiedSession(h);
     const res = await h.app.inject({
@@ -1617,5 +1628,40 @@ describe('password reset request does not reveal the account (#161)', () => {
       spy.mockRestore();
       await h.close();
     }
+  });
+});
+
+describe('auth proxy invalid upstream body (#383)', () => {
+  const lines: string[] = [];
+  let h: Harness;
+  beforeAll(async () => {
+    h = await createHarness({ logStream: { write: (chunk) => void lines.push(chunk) } });
+  });
+  afterAll(() => h.close());
+
+  it('answers 502 without a session cookie and logs only path and status', async () => {
+    const spy = vi.spyOn(h.auth, 'handler').mockResolvedValue(
+      new Response('{"token": secret-snippet', {
+        status: 200,
+        headers: { 'content-type': 'application/json', 'set-cookie': 'session=abc; Path=/' },
+      }),
+    );
+    try {
+      const res = await h.app.inject({
+        method: 'POST',
+        url: '/api/auth/sign-in/email',
+        headers: jsonHeaders,
+        payload: { email: nextEmail(), password: PASSWORD },
+      });
+      expect(res.statusCode).toBe(502);
+      expect(res.headers['set-cookie']).toBeUndefined();
+      expect(apiErrorSchema.parse(res.json()).error.code).toBe('internal');
+    } finally {
+      spy.mockRestore();
+    }
+    const logged = lines.join('');
+    expect(logged).toContain('/api/auth/sign-in/email');
+    expect(logged).toContain('unparseable');
+    expect(logged).not.toContain('secret-snippet');
   });
 });

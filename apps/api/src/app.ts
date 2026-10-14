@@ -212,7 +212,7 @@ function normalizedPathname(url: string): string {
   } catch {
     decoded = raw;
   }
-  return '/' + decoded.replace(/^\/+/, '').replace(/\/{2,}/g, '/');
+  return '/' + decoded.replace(/^\/+/, '');
 }
 
 const TOKEN_PATH_PREFIXES = [`${AUTH_BASE_PATH}/reset-password/`, `${AUTH_BASE_PATH}/callback/`];
@@ -472,6 +472,20 @@ export function buildApp(opts: AppOptions): FastifyInstance {
           await signInThrottle.store.reset(failureKey);
         }
 
+        const payload = Buffer.from(await res.arrayBuffer());
+        const isJson = (res.headers.get('content-type') ?? '').toLowerCase().includes('json');
+        const stripped =
+          isJson && payload.length > 0 ? stripTokensFromBody(payload.toString('utf8')) : undefined;
+        if (stripped === null) {
+          req.log.warn(
+            { path: redactUrl(req.url), status: res.status },
+            'auth proxy: upstream returned an unparseable JSON body',
+          );
+          return reply
+            .code(502)
+            .send(apiError('internal', 'Authentication service returned an invalid response.'));
+        }
+
         reply.code(res.status);
         res.headers.forEach((value, name) => {
           if (name === 'set-cookie' || name === 'content-length' || name === 'transfer-encoding')
@@ -480,15 +494,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
         });
         const cookies = res.headers.getSetCookie();
         if (cookies.length > 0) reply.header('set-cookie', cookies);
-        const payload = Buffer.from(await res.arrayBuffer());
-        const isJson = (res.headers.get('content-type') ?? '').toLowerCase().includes('json');
-        if (!isJson || payload.length === 0) return reply.send(payload);
-        const stripped = stripTokensFromBody(payload.toString('utf8'));
-        if (stripped === null) {
-          return reply
-            .code(502)
-            .send(apiError('internal', 'Authentication service returned an invalid response.'));
-        }
+        if (stripped === undefined) return reply.send(payload);
         return reply.send(stripped);
       },
     });
