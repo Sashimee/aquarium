@@ -118,6 +118,20 @@ describe('Caustics.setHood', () => {
     expect(c.contrast.value).toBeCloseTo(0.3, 10);
     expect(c.shaftContrast.value).toBeCloseTo(0.3, 10);
   });
+
+  it('copies out the casting light, which a caller cannot then change', () => {
+    const c = caustics();
+    const day = at('20:40');
+    c.setHood(hood, 4, moonlight, day, darkSand);
+    const expected = hood.clone().multiplyScalar(4 * day);
+    const out = new Color();
+    expect(c.getCasting(out)).toBe(out);
+    expect(out.equals(expected)).toBe(true);
+    out.setRGB(9, 9, 9);
+    expect(c.getCasting(new Color()).equals(expected)).toBe(true);
+    c.setHood(hood, 4, moonlight, at('23:00'), darkSand);
+    expect(c.getCasting(out).toArray()).toEqual([0, 0, 0]);
+  });
 });
 
 describe('the baked caustics', () => {

@@ -82,9 +82,9 @@ export class InteriorLight {
       .multiply(this.caustics.lightRadiance.value);
     this.actinicExcitation = bounce.b;
     bounce.multiply(this.substrateAlbedo.value).multiplyScalar(SUBSTRATE_BOUNCE / Math.PI);
-    this.fill.value
-      .copy(reach)
-      .multiply(this.caustics.casting)
+    this.caustics
+      .getCasting(this.fill.value)
+      .multiply(reach)
       .multiplyScalar(this.fillShare / Math.PI);
   }
 
