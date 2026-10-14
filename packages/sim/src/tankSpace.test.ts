@@ -1,4 +1,5 @@
 import {
+  fitHullPlanes,
   sampleFloor,
   sampleFloorSlope,
   tankWaterBounds,
@@ -7,7 +8,7 @@ import {
 } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import { Basin } from './basin.ts';
-import { fitHull, type Point3 } from './decor.ts';
+import type { Point3 } from './decor.ts';
 import {
   ARCHETYPES,
   bronzeCorydoras,
@@ -172,7 +173,7 @@ describe('fish on sloped sand', { timeout: LONG }, () => {
   });
 
   it('keeps every fish out of a hull rock that they would otherwise swim through', () => {
-    const planes = fitHull(ROCK.kind === 'hull' ? ROCK.vertices : []);
+    const planes = fitHullPlanes(ROCK.kind === 'hull' ? ROCK.vertices.flat() : []);
     const rockDistance = (x: number, y: number, z: number): number => {
       let d = -Infinity;
       for (let k = 0; k < planes.length; k += 4) {

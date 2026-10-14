@@ -26,7 +26,6 @@ export { FEEDING } from './feeding.ts';
 export {
   compileCollider,
   DecorField,
-  fitHull,
   UnionSdf,
   type DecorCollider,
   type DecorShape,

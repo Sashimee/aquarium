@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { colliderListSchema, type Collider } from '@aquarium/shared';
-import { fitHull as simFitHull, Rng, World, type DecorCollider } from '@aquarium/sim';
+import { colliderListSchema, fitHullPlanes, type Collider } from '@aquarium/shared';
+import { Rng, World, type DecorCollider } from '@aquarium/sim';
 import { DEFAULT_TANK } from '../engine/tank/dimensions';
 import { substrateHeight } from '../engine/tank/substrate';
 import {
@@ -73,7 +73,7 @@ describe('hullCorners', () => {
       const corners = hullCorners(hull.planes);
       expect(corners.length).toBeGreaterThanOrEqual(4);
       expect(corners.length).toBeLessThanOrEqual(2 * (hull.planes.length / 4) - 4);
-      const rebuilt = simFitHull(corners);
+      const rebuilt = fitHullPlanes(corners.flat());
       expect(rebuilt).toHaveLength(hull.planes.length);
       hull.planes.forEach((v, i) => expect(rebuilt[i], `plane value ${i}`).toBeCloseTo(v, 9));
     }
