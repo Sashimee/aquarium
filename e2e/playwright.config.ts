@@ -10,7 +10,7 @@ export default defineConfig({
   retries: process.env['CI'] ? 1 : 0,
   timeout: 240_000,
   expect: { timeout: 20_000 },
-  reporter: [['list']],
+  reporter: process.env['CI'] ? [['blob'], ['list']] : [['list']],
   use: {
     baseURL: `http://localhost:${port}`,
     viewport: { width: 800, height: 540 },
