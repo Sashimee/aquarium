@@ -46,7 +46,13 @@ import {
   type Anchor,
   type WaterBox,
 } from './poses';
-import { assetIdFor, batchKeyOf, renderProfile, type FishRenderProfile } from './profiles';
+import {
+  batchKeyOf,
+  bodyLengthOf,
+  modelFor,
+  renderProfile,
+  type FishRenderProfile,
+} from './profiles';
 import { hashString, TankRoster, type RosterFish } from './roster';
 import { SimStream } from './simStream';
 import { initSim, layoutChanges, SimInitTimeout, SimWorldSpec, startWorld } from './simWorld';
@@ -221,8 +227,6 @@ export class FishSystem {
   private readonly forward = new Vector3();
   private readonly quat = new Float32Array(4);
   private readonly pose = createPose();
-  /** The placed fish's caudal thrust from the sim; scripted and held poses count as powered. */
-  private thrust = 1;
   private readonly values: InstanceValues = {
     qx: 0,
     qy: 0,
@@ -517,7 +521,7 @@ export class FishSystem {
     let profile: FishRenderProfile;
     try {
       profile = renderProfile(species);
-      model = await this.loader.load(assetIdFor(profile, fish.key));
+      model = await this.loader.load(modelFor(profile, fish.key).assetId);
     } catch (cause) {
       this.unavailable.add(key);
       this.report(`Fish "${species}" has no visual; it swims and eats unseen`, cause);
@@ -613,7 +617,7 @@ export class FishSystem {
   private createRuntime(fish: RosterFish, batch: SpeciesBatch): FishRuntime {
     const rng = new Rng((this.seed ^ hashString(fish.key)) >>> 0);
     const { profile, input } = batch;
-    const length = fish.lengthM ?? input.locomotion.bodyLengthM;
+    const length = bodyLengthOf(fish, input.locomotion.bodyLengthM);
     const v = profile.tintVariation;
     const brightness = 1 + v * rng.signed();
     const [lo, hi] = profile.filmThicknessNm;
@@ -857,7 +861,7 @@ export class FishSystem {
   private place(rt: FishRuntime, deltaS: number, frame: Float32Array | null): boolean {
     const pose = this.pose;
     const { fish } = rt;
-    this.thrust = 1;
+    pose.thrust = 1;
     if (fish.phase === 'swimming') {
       const o = frame === null ? undefined : this.stream.layout?.offsets.get(fish.simId);
       let presence: FramePresence;
@@ -896,7 +900,7 @@ export class FishSystem {
         pose.speed = frame[o + SnapshotField.Speed] ?? 0;
         pose.yawRate = frame[o + SnapshotField.YawRate] ?? 0;
         pose.liveliness = 1;
-        this.thrust = frame[o + SnapshotField.Thrust] ?? 1;
+        pose.thrust = frame[o + SnapshotField.Thrust] ?? 1;
         if (rt.handover > 0) {
           const w = smoothstep01(rt.handover / HANDOVER_S);
           this.position.lerp(rt.fromPosition, w);
@@ -949,8 +953,8 @@ export class FishSystem {
         rt.shown = false;
         continue;
       }
-      const { liveliness, speed, yawRate } = this.pose;
-      rt.swim.advance(deltaS * liveliness, { speed, yawRate, thrust: this.thrust });
+      const { liveliness } = this.pose;
+      rt.swim.advance(deltaS * liveliness, this.pose);
       rt.lastPosition.copy(this.position);
       rt.lastQuaternion.copy(this.quaternion);
       rt.shown = true;
