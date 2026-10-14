@@ -309,6 +309,9 @@ describe('unverified sign-up takeover (#114)', () => {
     const verify = await verifyFrom(h, email);
     const ownerCookie = cookieJar(verify);
 
+    expect(
+      (await h.app.inject({ url: '/api/me', headers: { cookie: ownerCookie } })).statusCode,
+    ).toBe(200);
     expect((await requestReset(email)).statusCode).toBe(200);
     const reset = await h.app.inject({
       method: 'POST',
@@ -352,7 +355,7 @@ describe('unverified sign-up takeover (#114)', () => {
 
     it('marks the address verified and signs the attacker session out', async () => {
       const email = nextEmail();
-      const attacker = await signUpWith(email, ATTACKER_PASSWORD);
+      await signUpWith(email, ATTACKER_PASSWORD);
       await h.database.pool.query(
         `insert into session (id, user_id, token, expires_at, created_at, updated_at)
          select 'atk-' || id, id, 'atk-token-' || id, now() + interval '1 day', now(), now()
@@ -367,10 +370,11 @@ describe('unverified sign-up takeover (#114)', () => {
       );
       expect(row.rows[0].email_verified).toBe(true);
       expect(Number(row.rows[0].sessions)).toBe(0);
-      expect(
-        (await h.app.inject({ url: '/api/me', headers: { cookie: cookieJar(attacker) } }))
-          .statusCode,
-      ).toBe(401);
+      const signIn = await signInWith(email, VICTIM_PASSWORD);
+      expect(signIn.statusCode).toBe(200);
+      const me = await h.app.inject({ url: '/api/me', headers: { cookie: cookieJar(signIn) } });
+      expect(me.statusCode).toBe(200);
+      expect(userSchema.parse(me.json()).emailVerified).toBe(true);
     });
 
     it('does not drop the new credential when an old verification link is clicked', async () => {
