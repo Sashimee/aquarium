@@ -107,6 +107,8 @@ interface FishRuntime {
   handover: number;
   readonly fromPosition: Vector3;
   readonly fromQuaternion: Quaternion;
+  /** Kept at its last pose while a rebuilt world starts, then blended into it like a handover. */
+  held: boolean;
   bagSlot: number | null;
   script: Script | null;
 }
@@ -132,7 +134,7 @@ function featuresFor(tier: Tier, msaa: boolean): FishMaterialFeatures {
 
 /** LOD levels near enough for their self-shadowing to read. */
 const SHADOW_LODS = 2;
-/** A fish released from its bag glides from the bag into the sim's pose over this long. */
+/** A fish leaving its bag, or held over a rebuilt world, glides into the sim's pose this long. */
 const HANDOVER_S = 1.2;
 /** Fingertip slop when netting a small fish, in metres. */
 const MIN_PICK_RADIUS = 0.02;
@@ -491,6 +493,7 @@ export class FishSystem {
         await this.syncWorld();
       } catch (cause) {
         if (this.disposed) return;
+        this.hold(false);
         this.report('Fish could not be updated for the new tank stock', cause);
       }
     }
@@ -649,6 +652,7 @@ export class FishSystem {
       handover: 0,
       fromPosition: new Vector3(),
       fromQuaternion: new Quaternion(),
+      held: false,
       bagSlot: null,
       script: null,
     };
@@ -676,6 +680,7 @@ export class FishSystem {
     const rt = this.runtimes.get(fish.simId);
     if (rt === undefined) return;
     rt.bagSlot = null;
+    rt.held = false;
     rt.handover = 0;
     if (!rt.shown) {
       rt.script = {
@@ -708,6 +713,19 @@ export class FishSystem {
     this.inWorld = null;
     this.generation++;
     this.stream.reset();
+    this.hold(false);
+  }
+
+  /** With `held`, every swimming fish on screen waits where it is for the next world. */
+  private hold(held: boolean): void {
+    for (const rt of this.runtimes.values()) {
+      rt.held =
+        held &&
+        rt.shown &&
+        rt.fish.phase === 'swimming' &&
+        rt.bagSlot === null &&
+        rt.script === null;
+    }
   }
 
   /** Brings the sim's fish in line with the roster's swimming set. */
@@ -744,6 +762,7 @@ export class FishSystem {
       if (this.disposed || generation !== this.generation) return;
       this.report('A fish could not join or leave the running tank; respawning all fish', cause);
       this.stopWorld();
+      this.hold(true);
       this.dirty = true;
     }
   }
@@ -801,8 +820,9 @@ export class FishSystem {
     if (fish.phase === 'swimming') {
       const o = frame === null ? undefined : this.stream.layout?.offsets.get(fish.simId);
       if (frame !== null && o !== undefined) {
-        if (rt.bagSlot !== null) {
+        if (rt.bagSlot !== null || rt.held) {
           rt.bagSlot = null;
+          rt.held = false;
           if (rt.shown) {
             rt.handover = HANDOVER_S;
             rt.fromPosition.copy(rt.lastPosition);
@@ -831,6 +851,15 @@ export class FishSystem {
           this.quaternion.slerp(rt.fromQuaternion, w);
           rt.handover = Math.max(0, rt.handover - deltaS);
         }
+        return true;
+      }
+      if (rt.held && frame !== null) rt.held = false;
+      if (rt.held) {
+        this.position.copy(rt.lastPosition);
+        this.quaternion.copy(rt.lastQuaternion);
+        pose.speed = 0;
+        pose.yawRate = 0;
+        pose.liveliness = 1;
         return true;
       }
       if (rt.bagSlot === null) return false;
