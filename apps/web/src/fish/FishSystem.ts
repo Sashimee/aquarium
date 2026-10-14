@@ -1,4 +1,4 @@
-import type { Biome } from '@aquarium/shared';
+import { sampleFloor, type Biome, type Collider } from '@aquarium/shared';
 import {
   DynamicDrawUsage,
   Group,
@@ -18,7 +18,7 @@ import {
   type SimReady,
   type SpeciesInput,
   type Stimulus,
-  type WorldConfig,
+  type TankSpaceWorldConfig,
 } from '@aquarium/sim';
 import type { Engine } from '../engine/Engine';
 import type { EventBus } from '../engine/events';
@@ -107,6 +107,8 @@ interface FishRuntime {
   handover: number;
   readonly fromPosition: Vector3;
   readonly fromQuaternion: Quaternion;
+  /** Kept at its last pose while a rebuilt world starts, then blended into it like a handover. */
+  held: boolean;
   bagSlot: number | null;
   script: Script | null;
 }
@@ -132,7 +134,7 @@ function featuresFor(tier: Tier, msaa: boolean): FishMaterialFeatures {
 
 /** LOD levels near enough for their self-shadowing to read. */
 const SHADOW_LODS = 2;
-/** A fish released from its bag glides from the bag into the sim's pose over this long. */
+/** A fish leaving its bag, or held over a rebuilt world, glides into the sim's pose this long. */
 const HANDOVER_S = 1.2;
 /** Fingertip slop when netting a small fish, in metres. */
 const MIN_PICK_RADIUS = 0.02;
@@ -164,7 +166,7 @@ function smoothstep01(x: number): number {
 function initSim(
   client: SimClient,
   worker: Worker,
-  config: WorldConfig,
+  config: TankSpaceWorldConfig,
   signal: AbortSignal,
 ): Promise<SimReady> {
   return new Promise((resolve, reject) => {
@@ -209,7 +211,6 @@ export class FishSystem {
   private readonly loader: FishAssetLoader;
   private readonly bags: AcclimationBags;
   private readonly lifetime = new AbortController();
-  private readonly offset: Vector3;
   private readonly box: WaterBox;
   private readonly spec: SimWorldSpec;
   private readonly cleanups: (() => void)[] = [];
@@ -296,19 +297,19 @@ export class FishSystem {
     demo: DemoTank,
     private readonly seed: number,
   ) {
-    this.offset = new Vector3(...demo.offset);
     const bounds = waterBounds(options.tank);
+    const space = demo.config.space;
     this.box = {
       minX: bounds.min.x,
       maxX: bounds.max.x,
-      minY: demo.offset[1],
+      ground: (x, z) => sampleFloor(space, x, z),
       minZ: bounds.min.z,
       maxZ: bounds.max.z,
       top: bounds.max.y,
     };
     this.roster = new TankRoster(demo.config.fish);
     this.spec = new SimWorldSpec(demo, seed);
-    this.loader = new FishAssetLoader(engine.renderer, options.assetRoot);
+    this.loader = new FishAssetLoader(engine.ktx2, options.assetRoot);
     this.group.name = 'fish';
     this.bags = new AcclimationBags(this.group);
     engine.scene.add(this.group);
@@ -318,7 +319,6 @@ export class FishSystem {
         this.sim.dispose();
         this.worker.terminate();
       },
-      () => this.loader.dispose(),
       () => this.bags.dispose(),
       () => {
         for (const batch of this.batches.values()) {
@@ -400,22 +400,26 @@ export class FishSystem {
     return this.roster.simIdOf(serverId);
   }
 
-  /**
-   * `stimulus.position` is in the sim's frame (y above the substrate). The demo sim's floor is flat
-   * at the highest substrate point, so a low-ground tap reads up to a few cm high until #64.
-   */
+  /** `stimulus.position` is in tank space, which the sim and the scene share. */
   startle(stimulus: Stimulus): void {
     if (!this.disposed && this.simReady) this.sim.startle(stimulus);
   }
 
   /**
-   * Homes from the scene, in engine space: the clownfish's anemone. Kept for every later sim
-   * world, since a re-initialised world starts with only the anchors in its config.
+   * Homes from the scene: the clownfish's anemone. Kept for every later sim world, since a
+   * re-initialised world starts with only the anchors in its config.
    */
   setAnchors(anchors: readonly SceneAnchor[]): void {
     if (this.disposed) return;
     const simAnchors = this.spec.setAnchors(anchors);
     if (this.simReady) this.sim.setAnchors(simAnchors);
+  }
+
+  /** Every collider the sim avoids, in the shared format; kept for later worlds like anchors. */
+  setColliders(colliders: readonly Collider[]): void {
+    if (this.disposed) return;
+    this.spec.setDecor(colliders);
+    if (this.simReady) this.sim.setDecor(colliders);
   }
 
   setFood(buffer: Float32Array): void {
@@ -491,6 +495,7 @@ export class FishSystem {
         await this.syncWorld();
       } catch (cause) {
         if (this.disposed) return;
+        this.hold(false);
         this.report('Fish could not be updated for the new tank stock', cause);
       }
     }
@@ -649,6 +654,7 @@ export class FishSystem {
       handover: 0,
       fromPosition: new Vector3(),
       fromQuaternion: new Quaternion(),
+      held: false,
       bagSlot: null,
       script: null,
     };
@@ -676,6 +682,7 @@ export class FishSystem {
     const rt = this.runtimes.get(fish.simId);
     if (rt === undefined) return;
     rt.bagSlot = null;
+    rt.held = false;
     rt.handover = 0;
     if (!rt.shown) {
       rt.script = {
@@ -708,6 +715,19 @@ export class FishSystem {
     this.inWorld = null;
     this.generation++;
     this.stream.reset();
+    this.hold(false);
+  }
+
+  /** With `held`, every swimming fish on screen waits where it is for the next world. */
+  private hold(held: boolean): void {
+    for (const rt of this.runtimes.values()) {
+      rt.held =
+        held &&
+        rt.shown &&
+        rt.fish.phase === 'swimming' &&
+        rt.bagSlot === null &&
+        rt.script === null;
+    }
   }
 
   /** Brings the sim's fish in line with the roster's swimming set. */
@@ -744,28 +764,32 @@ export class FishSystem {
       if (this.disposed || generation !== this.generation) return;
       this.report('A fish could not join or leave the running tank; respawning all fish', cause);
       this.stopWorld();
+      this.hold(true);
       this.dirty = true;
     }
   }
 
-  /** Where the fish is on screen (its bag), in the sim's frame; undefined if it isn't shown. */
+  /** Where the fish is on screen (its bag); undefined if it isn't shown. */
   private placement(simId: string): FishPlacement | undefined {
     const rt = this.runtimes.get(simId);
     if (rt === undefined || !rt.shown) return undefined;
     this.forward.set(0, 0, 1).applyQuaternion(rt.lastQuaternion);
     const p = rt.lastPosition;
     return {
-      position: [p.x - this.offset.x, p.y - this.offset.y, p.z - this.offset.z],
+      position: [p.x, p.y, p.z],
       heading: Math.atan2(this.forward.x, this.forward.z),
     };
   }
 
-  private async reinit(config: WorldConfig): Promise<void> {
+  private async reinit(config: TankSpaceWorldConfig): Promise<void> {
     const generation = this.generation;
     const ready = await initSim(this.sim, this.worker, config, this.lifetime.signal);
     if (this.disposed || generation !== this.generation) return;
     this.simReady = true;
     this.sim.setLight(this.light);
+    const { decor, anchors } = this.spec.changedSince(config);
+    if (decor !== null) this.sim.setDecor(decor);
+    if (anchors !== null) this.sim.setAnchors(anchors);
     this.inWorld = new Set(ready.fishIds);
     this.stream.begin(ready.epoch, ready.fishIds);
     this.sim.start();
@@ -801,21 +825,20 @@ export class FishSystem {
     if (fish.phase === 'swimming') {
       const o = frame === null ? undefined : this.stream.layout?.offsets.get(fish.simId);
       if (frame !== null && o !== undefined) {
-        if (rt.bagSlot !== null) {
+        if (rt.bagSlot !== null || rt.held) {
           rt.bagSlot = null;
+          rt.held = false;
           if (rt.shown) {
             rt.handover = HANDOVER_S;
             rt.fromPosition.copy(rt.lastPosition);
             rt.fromQuaternion.copy(rt.lastQuaternion);
           }
         }
-        this.position
-          .set(
-            frame[o + SnapshotField.PosX] ?? 0,
-            frame[o + SnapshotField.PosY] ?? 0,
-            frame[o + SnapshotField.PosZ] ?? 0,
-          )
-          .add(this.offset);
+        this.position.set(
+          frame[o + SnapshotField.PosX] ?? 0,
+          frame[o + SnapshotField.PosY] ?? 0,
+          frame[o + SnapshotField.PosZ] ?? 0,
+        );
         this.quaternion.set(
           frame[o + SnapshotField.QuatX] ?? 0,
           frame[o + SnapshotField.QuatY] ?? 0,
@@ -831,6 +854,15 @@ export class FishSystem {
           this.quaternion.slerp(rt.fromQuaternion, w);
           rt.handover = Math.max(0, rt.handover - deltaS);
         }
+        return true;
+      }
+      if (rt.held && frame !== null) rt.held = false;
+      if (rt.held) {
+        this.position.copy(rt.lastPosition);
+        this.quaternion.copy(rt.lastQuaternion);
+        pose.speed = 0;
+        pose.yawRate = 0;
+        pose.liveliness = 1;
         return true;
       }
       if (rt.bagSlot === null) return false;

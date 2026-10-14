@@ -119,6 +119,20 @@ describe('SimStream', () => {
     expect(recycled).toContain(unknown);
   });
 
+  it('never falls back to an older epoch announced after a newer one took over', () => {
+    const { stream, recycled, now } = running();
+    stream.change(3, ['b', 'c']);
+    stream.push(snapshot(3, 1, [3, 4]), now);
+    const shown = xs(stream, now);
+
+    stream.change(2, ['a', 'b', 'c', 'd']);
+    const stale = snapshot(2, 2, [100, 200, 300, 400]);
+    stream.push(stale, now);
+    expect(stream.layout?.epoch).toBe(3);
+    expect(xs(stream, now)).toEqual(shown);
+    expect(recycled).toContain(stale);
+  });
+
   it('starts a new world afresh, carrying nothing over', () => {
     const { stream, now } = running();
     stream.reset();
@@ -149,10 +163,12 @@ describe('SimStream', () => {
     expect(recycled.filter((s) => s.epoch === 1)).toHaveLength(2);
   });
 
-  it('rejects a snapshot whose size does not fit its layout', () => {
-    const { stream } = setup();
+  it('rejects a snapshot whose size does not fit its layout, and recycles it', () => {
+    const { stream, recycled } = setup();
     stream.begin(1, ['a', 'b']);
-    expect(() => stream.push(snapshot(1, 0, [1]), 0)).toThrow(/needs 22/);
+    const misfit = snapshot(1, 0, [1]);
+    expect(() => stream.push(misfit, 0)).toThrow(/needs 22/);
+    expect(recycled).toEqual([misfit]);
   });
 });
 

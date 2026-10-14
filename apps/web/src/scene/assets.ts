@@ -1,20 +1,17 @@
 import {
   BufferGeometry,
   CompressedTexture,
-  LoadingManager,
   type Object3D,
   RepeatWrapping,
   Texture,
   type Material,
   type Mesh,
   type MeshStandardMaterial,
-  type WebGPURenderer,
 } from 'three/webgpu';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import basisTranscoderJs from 'three/addons/libs/basis/basis_transcoder.js?url';
-import basisTranscoderWasm from 'three/addons/libs/basis/basis_transcoder.wasm?url';
+import { rewritingKtx2Loader } from '../engine/ktx2';
 
 export const ASSET_BASE = `${import.meta.env.BASE_URL}assets/`;
 
@@ -75,11 +72,10 @@ export class AssetCatalog {
   }
 }
 
-/** Points the transcoder at the bundled copy and picks the 1k or 2k variant of every texture. */
-export function rewriteAssetUrl(url: string, textureSize: 1024 | 2048): string {
-  if (url.endsWith('basis_transcoder.js')) return basisTranscoderJs;
-  if (url.endsWith('basis_transcoder.wasm')) return basisTranscoderWasm;
-  if (textureSize === 2048) return url.replace(/_1k\.ktx2(\?.*)?$/, '_2k.ktx2$1');
+/** Picks the 1k or 2k variant of a material texture. Only `textures/` has both; an HDRI may not. */
+export function materialTextureUrl(url: string, textureSize: 1024 | 2048): string {
+  if (textureSize === 2048)
+    return url.replace(/(\/textures\/[^/?]+)_1k\.ktx2(\?.*)?$/, '$1_2k.ktx2$2');
   return url;
 }
 
@@ -107,24 +103,23 @@ class SkipKTX2Loader extends KTX2Loader {
 
 /** One GLTF + KTX2 + meshopt pipeline, caching every (asset, lod, texture size) it loads. */
 export class ModelLibrary {
-  private readonly manager = new LoadingManager();
-  private readonly ktx2 = new KTX2Loader(this.manager);
-  private readonly gltf = new GLTFLoader(this.manager);
+  private readonly ktx2: KTX2Loader;
+  private readonly gltf = new GLTFLoader();
   private readonly geometryGltf = new GLTFLoader().setKTX2Loader(new SkipKTX2Loader());
   private readonly cache = new Map<string, Promise<LoadedModel>>();
+  private readonly finished = new Map<string, LoadedModel>();
   private readonly collision = new Map<string, Promise<readonly BufferGeometry[]>>();
   private textureSize: 1024 | 2048 = 1024;
   private readonly textures: Texture[] = [];
   private inflight = 0;
   private idleWaiters: (() => void)[] = [];
 
+  /** `ktx2` is the renderer's shared loader; the library never disposes it. */
   constructor(
-    renderer: WebGPURenderer,
+    ktx2: KTX2Loader,
     readonly catalog: AssetCatalog,
   ) {
-    this.manager.setURLModifier((url) => rewriteAssetUrl(url, this.textureSize));
-    this.ktx2.setTranscoderPath('basis/');
-    this.ktx2.detectSupport(renderer);
+    this.ktx2 = rewritingKtx2Loader(ktx2, (url) => materialTextureUrl(url, this.textureSize));
     this.gltf.setKTX2Loader(this.ktx2);
     this.gltf.setMeshoptDecoder(MeshoptDecoder);
     this.geometryGltf.setMeshoptDecoder(MeshoptDecoder);
@@ -161,7 +156,9 @@ export class ModelLibrary {
             primitives.push({ geometry, material: material as MeshStandardMaterial });
           });
           if (primitives.length === 0) throw new Error(`${file} contains no meshes`);
-          return { primitives };
+          const model = { primitives };
+          if (this.cache.get(key) === pending) this.finished.set(key, model);
+          return model;
         });
       this.cache.set(key, pending);
       pending.catch(() => this.cache.delete(key));
@@ -175,10 +172,10 @@ export class ModelLibrary {
     if (!pending) {
       const entry = this.catalog.get(assetId);
       const file = this.lodFile(assetId, Math.min(2, entry.lods.length - 1) as ModelLod);
-      pending = this.parsedRenderModel(file).then(
-        (model) =>
-          model?.primitives.map((p) => p.geometry.clone()) ??
-          this.geometryGltf.loadAsync(`${ASSET_BASE}${file}`).then((gltf) => {
+      const model = this.finishedRenderModel(file);
+      pending = model
+        ? Promise.resolve(model.primitives.map((p) => p.geometry.clone()))
+        : this.geometryGltf.loadAsync(`${ASSET_BASE}${file}`).then((gltf) => {
             gltf.scene.updateMatrixWorld(true);
             const geometries: BufferGeometry[] = [];
             gltf.scene.traverse((object) => {
@@ -189,23 +186,17 @@ export class ModelLibrary {
             });
             if (geometries.length === 0) throw new Error(`${file} contains no meshes`);
             return geometries;
-          }),
-      );
+          });
       this.collision.set(assetId, pending);
       pending.catch(() => this.collision.delete(assetId));
     }
     return pending;
   }
 
-  /** A render-path model already parsed (or parsing) for `file`, at any texture size, so collision can skip a second parse. */
-  private async parsedRenderModel(file: string): Promise<LoadedModel | undefined> {
-    for (const [key, pending] of this.cache) {
-      if (!key.startsWith(`${file}@`)) continue;
-      try {
-        return await pending;
-      } catch {
-        continue;
-      }
+  /** Only a finished render load is reused: waiting on an in-flight one would also wait for its texture decode. */
+  private finishedRenderModel(file: string): LoadedModel | undefined {
+    for (const [key, model] of this.finished) {
+      if (key.startsWith(`${file}@`)) return model;
     }
     return undefined;
   }
@@ -233,7 +224,7 @@ export class ModelLibrary {
     }
   }
 
-  /** The URL modifier is global to the manager, so loads of different texture sizes take turns. */
+  /** The texture variant is chosen per library, not per load, so loads of different texture sizes take turns. */
   private async enter(size: 1024 | 2048): Promise<void> {
     while (this.inflight > 0 && this.textureSize !== size) {
       await new Promise<void>((resolve) => this.idleWaiters.push(resolve));
@@ -252,7 +243,10 @@ export class ModelLibrary {
   /** Frees every cached model whose key is not in `keep`, so a tier change drops the old tier's set. */
   async retainOnly(keep: ReadonlySet<string>): Promise<void> {
     const stale = [...this.cache].filter(([key]) => !keep.has(key));
-    for (const [key] of stale) this.cache.delete(key);
+    for (const [key] of stale) {
+      this.cache.delete(key);
+      this.finished.delete(key);
+    }
     const settled = await Promise.allSettled(stale.map(([, pending]) => pending));
     const resources = new Set<Texture | Material | BufferGeometry>();
     for (const result of settled) {
@@ -278,12 +272,12 @@ export class ModelLibrary {
     for (const texture of this.textures) texture.dispose();
     this.textures.length = 0;
     this.cache.clear();
+    this.finished.clear();
     const collision = await Promise.allSettled(this.collision.values());
     for (const result of collision) {
       if (result.status === 'fulfilled') for (const geometry of result.value) geometry.dispose();
     }
     this.collision.clear();
-    this.ktx2.dispose();
   }
 }
 

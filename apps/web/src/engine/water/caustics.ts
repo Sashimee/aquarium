@@ -248,8 +248,7 @@ export class Caustics {
   /** Unit vector from the scene towards the light. */
   readonly lightDirection = uniform(new Vector3(0, 1, 0));
   readonly lightRadiance = uniform(new Color(1, 1, 1));
-  /** The main channel's part of `lightRadiance`, the part that casts caustics. */
-  readonly casting = new Color();
+  private readonly casting = new Color();
 
   private readonly bakeTarget = new RenderTarget(BAKE.size, BAKE.size, {
     type: HalfFloatType,
@@ -374,12 +373,9 @@ export class Caustics {
     return Fn(() => this.reach(p).light)();
   }
 
-  /**
-   * `hoodLight` at `depth` (m) below the surface, from the uniforms' current values. For light that
-   * is the same everywhere in a frame, so the shaders read it as one uniform.
-   */
-  hoodLightAtDepth(depth: number, target: Color): Color {
-    return this.reachAtDepth(depth, target).multiply(this.lightRadiance.value);
+  /** Copies out the main channel's part of `lightRadiance`, the part that casts caustics. */
+  getCasting(target: Color): Color {
+    return target.copy(this.casting);
   }
 
   /** The share of the hood's light, per channel, that spread and absorption leave at `depth` (m). */

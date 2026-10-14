@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { biomeSchema, speciesSchema } from '@aquarium/shared';
+import {
+  biomeSchema,
+  sampleFloor,
+  speciesSchema,
+  tankWaterBounds,
+  tankWaterTop,
+} from '@aquarium/shared';
 import { BEHAVIOUR, World } from '@aquarium/sim';
 import shippedIndex from '../../public/assets/index.json';
-import { DEFAULT_TANK, WATER_INSET } from '../engine/tank/dimensions';
+import { DEFAULT_TANK, waterBounds } from '../engine/tank/dimensions';
+import { substrateHeight } from '../engine/tank/substrate';
 import { anemoneAnchor, type SceneAnchor } from '../scene/anemone';
 import type { CatalogEntry } from '../scene/assets';
 import { loadPreset } from '../scene/preset';
@@ -59,17 +66,16 @@ describe.each(BIOMES)('demoTank(%s)', (biome) => {
     }
   });
 
-  it('fits the sim tank inside the water above the substrate', () => {
-    const { config, offset } = demoTank(DEFAULT_TANK, 1, biome);
-    const t = DEFAULT_TANK;
-    expect(config.tank.width).toBeCloseTo(t.length - 2 * (t.glass + WATER_INSET), 9);
-    expect(config.tank.depth).toBeCloseTo(t.depth - 2 * (t.glass + WATER_INSET), 9);
-    const floorY = offset[1];
-    expect(floorY).toBeGreaterThan(t.glass + Math.max(t.substrateFront, t.substrateBack));
-    expect(floorY + config.tank.height).toBeCloseTo(t.height - t.freeboard, 9);
-    expect(config.tank.height).toBeGreaterThan(0);
-    expect(offset[0]).toBe(0);
-    expect(offset[2]).toBe(0);
+  it("runs the sim in the scene's water box", () => {
+    const { space } = demoTank(DEFAULT_TANK, 1, biome).config;
+    const scene = waterBounds(DEFAULT_TANK);
+    const sim = tankWaterBounds(space);
+    expect(sim.min[0]).toBeCloseTo(scene.min.x, 12);
+    expect(sim.min[1]).toBeCloseTo(scene.min.y, 12);
+    expect(sim.min[2]).toBeCloseTo(scene.min.z, 12);
+    expect(sim.max[0]).toBeCloseTo(scene.max.x, 12);
+    expect(sim.max[1]).toBeCloseTo(scene.max.y, 12);
+    expect(sim.max[2]).toBeCloseTo(scene.max.z, 12);
   });
 
   it('varies body lengths by at most 8% around the species length', () => {
@@ -163,58 +169,109 @@ describe('reef stock', () => {
   });
 });
 
+describe('demo tank floor', () => {
+  const t = DEFAULT_TANK;
+  const { space } = demoTank(t, 1, 'freshwater').config;
+  const flatFloor = t.glass + Math.max(t.substrateFront, t.substrateBack) + 0.01;
+
+  it("follows the scene's sloped, duned sand to under half a millimetre", () => {
+    let worst = 0;
+    for (let i = 0; i <= 40; i++) {
+      for (let j = 0; j <= 20; j++) {
+        const x = -0.58 + (1.16 * i) / 40;
+        const z = -0.23 + (0.46 * j) / 20;
+        worst = Math.max(worst, Math.abs(sampleFloor(space, x, z) - substrateHeight(t, x, z)));
+      }
+    }
+    expect(worst).toBeLessThan(5e-4);
+  });
+
+  it('is low at the front and high at the back, not flat at the highest point', () => {
+    const front = sampleFloor(space, 0, 0.23);
+    const back = sampleFloor(space, 0, -0.23);
+    expect(back - front).toBeGreaterThan(0.05);
+    expect(front).toBeLessThan(flatFloor - 0.05);
+  });
+
+  it('keeps corydoras on the sand down the slope, below where the flat floor held them', () => {
+    const demo = demoTank(t, 11, 'freshwater');
+    const world = new World(demo.config);
+    const cories = demo.config.fish.flatMap((f, i) =>
+      f.species === 'bronze-corydoras' ? [i] : [],
+    );
+    expect(cories.length).toBeGreaterThan(0);
+    const heights: number[] = [];
+    let belowFlat = 0;
+    for (let step = 0; step < 6000; step++) {
+      world.step();
+      if (step < 600 || step % 5 !== 0) continue;
+      for (const i of cories) {
+        const x = world.position[i * 3] ?? 0;
+        const y = world.position[i * 3 + 1] ?? 0;
+        const z = world.position[i * 3 + 2] ?? 0;
+        const h = y - substrateHeight(t, x, z);
+        expect(h).toBeGreaterThan(0);
+        heights.push(h);
+        if (y < flatFloor) belowFlat++;
+      }
+    }
+    heights.sort((a, b) => a - b);
+    expect(heights[Math.floor(heights.length / 2)]).toBeLessThan(0.02);
+    expect(belowFlat / heights.length).toBeGreaterThan(0.8);
+  });
+});
+
 describe('sceneAnchorsToSim', () => {
   const demo = demoTank(DEFAULT_TANK, 5, 'reef');
-  const floorY = demo.offset[1];
-  const { height } = demo.config.tank;
+  const { space } = demo.config;
+  const top = tankWaterTop(space);
 
-  it('moves an anchor in free water down by the sim floor height', () => {
+  it('passes an anchor in free water through unchanged', () => {
     const scene: SceneAnchor = {
       id: 'a',
       kind: 'anemone',
       position: [0.1, 0.25, -0.05],
       radius: 0.04,
     };
-    const [sim] = sceneAnchorsToSim([scene], demo);
-    expect(sim?.id).toBe('a');
-    expect(sim?.kind).toBe('anemone');
-    expect(sim?.radius).toBe(0.04);
-    expect(sim?.position[0]).toBe(0.1);
-    expect(sim?.position[1]).toBeCloseTo(0.25 - floorY, 12);
-    expect(sim?.position[2]).toBe(-0.05);
+    expect(sceneAnchorsToSim([scene], demo)).toEqual([
+      { id: 'a', kind: 'anemone', position: [0.1, 0.25, -0.05], radius: 0.04 },
+    ]);
   });
 
-  it('lifts an anchor below the sim floor until its sphere clears it', () => {
-    const low: SceneAnchor = { id: 'low', kind: 'anemone', position: [0, 0.05, 0], radius: 0.03 };
+  it('lifts an anchor sunk into the sand until its sphere clears it', () => {
+    const low: SceneAnchor = { id: 'low', kind: 'anemone', position: [0, 0.02, 0], radius: 0.03 };
     const [sim] = sceneAnchorsToSim([low], demo);
-    expect(sim?.position[1]).toBeCloseTo(0.03, 12);
+    expect(sim?.position[1]).toBeCloseTo(sampleFloor(space, 0, 0) + 0.03, 12);
   });
 
   it('keeps an anchor at the surface inside the water', () => {
-    const top: SceneAnchor = { id: 'top', kind: 'cave', position: [0, 0.6, 0], radius: 0.03 };
-    const [sim] = sceneAnchorsToSim([top], demo);
-    expect(sim?.position[1]).toBeCloseTo(height - 0.03, 12);
+    const high: SceneAnchor = { id: 'top', kind: 'cave', position: [0, 0.6, 0], radius: 0.03 };
+    const [sim] = sceneAnchorsToSim([high], demo);
+    expect(sim?.position[1]).toBeCloseTo(top - 0.03, 12);
   });
 
   it('shrinks a radius too large for the water column', () => {
     const big: SceneAnchor = { id: 'big', kind: 'anemone', position: [0, 0.2, 0], radius: 1 };
     const [sim] = sceneAnchorsToSim([big], demo);
-    expect(sim?.radius).toBeCloseTo(height / 4, 12);
-    expect(sim?.position[1]).toBeGreaterThan(0);
-    expect(sim?.position[1]).toBeLessThan(height);
+    const ground = sampleFloor(space, 0, 0);
+    expect(sim?.radius).toBeCloseTo((top - ground) / 4, 12);
+    expect(sim?.position[1]).toBeGreaterThan(ground);
+    expect(sim?.position[1]).toBeLessThan(top);
   });
 
   it('returns no anchors for a scene without any', () => {
     expect(sceneAnchorsToSim([], demo)).toEqual([]);
   });
 
-  it('puts the reef clownfish pair on the preset anemone', () => {
+  it('puts the reef clownfish pair in the preset anemone', () => {
     const { anchor, crownTop } = reefAnemone();
     const simAnchors = sceneAnchorsToSim([anchor], demo);
-    const world = new World(demo.config);
-    world.setAnchors(simAnchors);
     const sim = simAnchors[0];
     if (sim === undefined) throw new Error('no converted anchor');
+    expect(sim.position).toEqual(anchor.position);
+    expect(sim.position[1] - sim.radius).toBeLessThanOrEqual(crownTop);
+    const world = new World(demo.config);
+    world.setAnchors(simAnchors);
     const clowns = demo.config.fish.flatMap((f, i) =>
       f.species === 'ocellaris-clownfish' ? [i] : [],
     );
@@ -237,9 +294,5 @@ describe('sceneAnchorsToSim', () => {
       }
     }
     expect(close / samples).toBeGreaterThan(0.75);
-    // Back in engine space the anchor sphere still reaches into the tentacle crown.
-    const centre = sim.position[1] + floorY;
-    expect(centre).toBeGreaterThanOrEqual(anchor.position[1]);
-    expect(centre - sim.radius).toBeLessThanOrEqual(crownTop);
   });
 });

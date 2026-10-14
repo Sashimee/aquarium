@@ -484,6 +484,58 @@ describe('feeding AI', { timeout: LONG }, () => {
     expect(grazing).toBeGreaterThan(300);
   });
 
+  it('gives up on nori behind rock once it stops closing in, then leaves it be', () => {
+    // A 6 mm slot between a slab and the back pane: the tang sees the clip but cannot get in.
+    // Swimming up to the slab does not count against the pursuit clock; pressing on it does.
+    const back = -REEF_TANK.depth / 2;
+    for (let seed = 1; seed <= 3; seed++) {
+      const w = new World({
+        seed,
+        tank: REEF_TANK,
+        species: ARCHETYPES,
+        decor: [
+          {
+            id: 'slab',
+            hard: true,
+            kind: 'box',
+            center: [0, 0.25, back + 0.046],
+            halfExtents: [0.3, 0.25, 0.04],
+            rotationY: 0,
+            rounding: 0,
+          },
+        ],
+        fish: spawnMany(yellowTang.id, 1),
+      });
+      pose(w, 0, 0, 0.3, back + 0.3, Math.PI);
+      const rain = new FoodRain(REEF_TANK);
+      const nori = rain.place('nori', 0, 0.3, back + 0.003);
+      let chased = -1;
+      let dropped = -1;
+      let retargeted = false;
+      const events = feedFor(
+        w,
+        rain,
+        (FEEDING.pursuitTimeoutS + 4 + FEEDING.ignoreS) / STEP_DT,
+        (t) => {
+          const target = at(w.behaviour.feeding.target, 0);
+          if (chased < 0 && target >= 0) chased = t * STEP_DT;
+          else if (chased >= 0 && dropped < 0 && target < 0) dropped = t * STEP_DT;
+          else if (dropped >= 0 && t * STEP_DT < dropped + 0.9 * FEEDING.ignoreS && target >= 0)
+            retargeted = true;
+        },
+      );
+      const label = `seed ${seed}`;
+      expect(
+        events.filter((e) => e.foodId === nori),
+        label,
+      ).toEqual([]);
+      expect(chased, label).toBe(0);
+      expect(dropped - chased, label).toBeGreaterThan(FEEDING.pursuitTimeoutS + 1);
+      expect(dropped - chased, label).toBeLessThan(FEEDING.pursuitTimeoutS + 4);
+      expect(retargeted, label).toBe(false);
+    }
+  });
+
   it('lets two tangs graze one clip side by side, taking bites by turns', () => {
     // Bites within 2 s of the other tang's. Kept a full separation zone apart, one tang holds
     // the clip and the other hangs back: on seeds 1 and 6 they never once bite together.

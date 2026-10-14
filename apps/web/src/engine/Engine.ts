@@ -1,3 +1,4 @@
+import type { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import {
   AgXToneMapping,
   Color,
@@ -8,10 +9,11 @@ import {
   Scene,
   WebGPURenderer,
 } from 'three/webgpu';
-import { applyDayLighting, FRESHWATER_FILL_LEVEL } from './dayLighting';
+import { applyDayLighting, type DayLightingRig, FRESHWATER_FILL_LEVEL } from './dayLighting';
 import { daylightAt, minuteOfDay } from './daylight';
 import { EffectsSlot } from './effectsSlot';
 import { installRoomLighting, DEFAULT_HDRI_URL } from './environment';
+import { createSharedKtx2 } from './ktx2';
 import { EventBus, type BackendKind, type EngineEvents, type EngineEventBus } from './events';
 import { CullPrewarm } from './cullPrewarm';
 import { buildOrRelease, DisposeStack } from './lifecycle';
@@ -109,13 +111,15 @@ export class Engine {
   /** Linear albedo of the substrate, for the hood light it throws back: the dark freshwater sand. */
   readonly substrateAlbedo = new Color(0.13, 0.09, 0.055);
   readonly quality: QualityManager;
+  /** The only KTX2 transcoder for this renderer; every texture loader shares it. */
+  readonly ktx2: KTX2Loader;
 
   private readonly clock: number | null;
   private readonly showStats: boolean;
   private daylightLevel = 1;
   private daylightCheckedAt = -Infinity;
   private daylightAnnounced = false;
-  readonly roomBackgroundIntensity: number;
+  private readonly dayRig: DayLightingRig;
   private readonly effects = new EffectsSlot((message, cause) => this.reportError(message, cause));
   private readonly frameCallbacks = new Set<FrameCallback>();
   private lastFrameAt: number | null = null;
@@ -187,8 +191,13 @@ export class Engine {
     renderer.domElement.style.width = '100%';
     renderer.domElement.style.height = '100%';
 
+    const sharedKtx2 = createSharedKtx2(renderer);
+    cleanup.add(() => sharedKtx2.dispose());
+    this.ktx2 = sharedKtx2.loader;
+
     const roomLighting = installRoomLighting(
       renderer,
+      this.ktx2,
       this.scene,
       config.hdriUrl ?? DEFAULT_HDRI_URL,
       (message, cause) => this.reportError(message, cause),
@@ -198,7 +207,7 @@ export class Engine {
       },
     );
     cleanup.add(() => roomLighting.dispose());
-    this.roomBackgroundIntensity = this.scene.backgroundIntensity;
+    const roomBackgroundIntensity = this.scene.backgroundIntensity;
 
     this.medium = new WaterMedium(waterBounds(dimensions), config.water ?? DEFAULT_WATER);
     this.caustics = new Caustics(this.medium);
@@ -211,6 +220,16 @@ export class Engine {
       meanSubstrateHeight(dimensions),
     );
     this.interior.fillLevel = FRESHWATER_FILL_LEVEL;
+    this.dayRig = {
+      hood: this.hood,
+      caustics: this.caustics,
+      interior: this.interior,
+      medium: this.medium,
+      scene: this.scene,
+      ambientScatter: this.ambientScatter,
+      substrateAlbedo: this.substrateAlbedo,
+      roomBackgroundIntensity,
+    };
     this.tank = new Tank(dimensions, this.medium, roomLighting.initial, this.interior);
     cleanup.add(() => this.tank.dispose());
     this.scene.add(this.tank.group);
@@ -304,7 +323,7 @@ export class Engine {
     hood.shadow.normalBias = 0.01;
 
     hood.colorNode = this.caustics.lightColorNode();
-    applyDayLighting(this, this.daylightLevel);
+    applyDayLighting(this.dayRig, this.daylightLevel);
   }
 
   private updateDaylight(nowMs: number): void {
@@ -332,7 +351,7 @@ export class Engine {
 
   private async warmUp(): Promise<void> {
     this.updateDaylight(0);
-    applyDayLighting(this, this.daylightLevel);
+    applyDayLighting(this.dayRig, this.daylightLevel);
     await this.renderer.compileAsync(this.scene, this.camera);
   }
 
@@ -373,7 +392,7 @@ export class Engine {
 
     for (const callback of this.frameCallbacks) callback(deltaS, nowMs);
     this.updateDaylight(nowMs);
-    applyDayLighting(this, this.daylightLevel);
+    applyDayLighting(this.dayRig, this.daylightLevel);
     if (this.cullPrewarm.begin(nowMs) > 0) this.sceneRevisionValue++;
     try {
       if (!this.effects.render()) this.renderer.render(this.scene, this.camera);

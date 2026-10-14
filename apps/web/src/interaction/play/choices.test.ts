@@ -24,18 +24,17 @@ function controllerOn(events: EventBus<InteractionEvents>, gate = new FeedGate()
     },
     () => 0.5,
   );
-  const toSim = sceneToSim(() => 0.06);
   return new PlayController({
     rayAt: () => ({ origin: { x: 0.1, y: 1, z: 0.05 }, dir: { x: 0, y: -1, z: 0 } }),
     min: MIN,
     max: MAX,
     food,
-    link: new FoodLink(food, {}, toSim, () => undefined),
+    link: new FoodLink(food, {}, sceneToSim, () => undefined),
     bubbles: new BubbleField(MAX.y, () => 0.5),
     ripples: new RippleField(),
     gate,
     events,
-    toSim,
+    toSim: sceneToSim,
     setLaserDot: () => undefined,
     now: () => 10_000,
   });

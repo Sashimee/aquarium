@@ -4,8 +4,8 @@ import {
   Material,
   Matrix4,
   Mesh,
-  Quaternion,
   MeshStandardNodeMaterial,
+  Quaternion,
   Vector3,
   type BufferGeometry,
   type MeshStandardMaterial,
@@ -15,7 +15,7 @@ import {
 import { diffuseColor, dot, materialEmissive, mix, normalWorld, saturate, vec3 } from 'three/tsl';
 import type { Biome, DecorItem } from '@aquarium/shared';
 import type { CatalogEntry, LoadedModel } from './assets';
-import { coralGlow, coralTint, placementKey, heightScale } from './coralStyle';
+import { coralGlow, coralTint, heightScale, placementKey } from './coralStyle';
 import { fitCapsuleChain, fitHull, transformPoints, type Collider } from './colliders';
 
 export const HARDSCAPE_KINDS: ReadonlySet<string> = new Set([

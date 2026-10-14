@@ -127,7 +127,6 @@ function makeController(ray: Ray | null = frontRay()) {
     },
     () => 0.5,
   );
-  const toSim = sceneToSim(() => 0.06);
   const bubbles = new BubbleField(MAX.y, () => 0.5);
   const startle = vi.fn();
   const netTap = vi.fn();
@@ -140,14 +139,14 @@ function makeController(ray: Ray | null = frontRay()) {
     min: MIN,
     max: MAX,
     food,
-    link: new FoodLink(food, {}, toSim, () => undefined),
+    link: new FoodLink(food, {}, sceneToSim, () => undefined),
     bubbles,
     ripples: new RippleField(),
     gate: new FeedGate({ cooldownMs: 1000 }),
     events,
     startle,
     netTap,
-    toSim,
+    toSim: sceneToSim,
     lure,
     setLaserDot,
     now: () => now,
@@ -180,7 +179,7 @@ function makeController(ray: Ray | null = frontRay()) {
 }
 
 describe('PlayController glass tap', () => {
-  it('startles at the tapped glass point in sim space and adds a ripple', () => {
+  it('startles at the tapped glass point in tank space and adds a ripple', () => {
     const t = makeController();
     t.controller.tap(10, 10);
     expect(t.startle).toHaveBeenCalledTimes(1);
@@ -189,7 +188,7 @@ describe('PlayController glass tap', () => {
       intensity: number;
     };
     expect(stimulus.position[0]).toBeCloseTo(0);
-    expect(stimulus.position[1]).toBeCloseTo(0.3 - 0.06);
+    expect(stimulus.position[1]).toBeCloseTo(0.3);
     expect(stimulus.position[2]).toBeCloseTo(0.24);
     expect(stimulus.intensity).toBe(0.5);
   });

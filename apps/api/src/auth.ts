@@ -141,7 +141,9 @@ export function createAuth({
         if (user.emailVerified) return;
         const token = await createEmailVerificationToken(config.authSecret, user.email);
         const url = `${origin}${AUTH_BASE_PATH}/verify-email?token=${token}&callbackURL=${encodeURIComponent(VERIFY_CALLBACK_PATH)}`;
-        await throttleSafe(() => mailer.sendVerification(user.email, url), 'verification');
+        runInBackground(
+          throttleSafe(() => mailer.sendVerification(user.email, url), 'verification'),
+        );
       },
     },
     emailVerification: {
@@ -165,9 +167,10 @@ export function createAuth({
           }
           await mailer.sendVerification(user.email, url);
         }, 'verification');
-        // Better Auth awaits this for known unverified accounts only, so a resend must not wait on SMTP.
-        if (path === `${AUTH_BASE_PATH}/send-verification-email`) runInBackground(send);
-        else await send;
+        // Sign-up and resend answer the same whether or not a mail goes out, so neither may wait on
+        // SMTP. Sign-in has already proven the password, so there is nothing to hide.
+        if (path === `${AUTH_BASE_PATH}/sign-in/email`) await send;
+        else runInBackground(send);
       },
     },
     hooks: {

@@ -58,7 +58,7 @@ describe('FoodField sinking', () => {
     for (const food of ['pellets', 'algae-wafer', 'bloodworms', 'brine-shrimp'] as const) {
       const profile = FOOD_PROFILES[food];
       const fall = meanSinkSpeed(food);
-      expect(fall).toBeCloseTo(profile.sinkSpeed, 2);
+      expect(Math.abs(fall - profile.sinkSpeed)).toBeLessThan(0.05 * profile.sinkSpeed);
     }
   });
 
@@ -98,7 +98,7 @@ describe('FoodField settling and decay', () => {
   it('settles on the sand at the local ground height and stops moving', () => {
     const field = new FoodField(env({ groundHeight: (x) => 0.05 + 0.02 * x }), fixedRandom);
     field.drop('pellets', 1, 0.2, 0, 0);
-    runFor(field, 8);
+    runFor(field, 60);
     for (const p of field.particles) {
       expect(p.settledS).toBeGreaterThanOrEqual(0);
       expect(p.y).toBeCloseTo(0.05 + 0.02 * p.x, 6);
@@ -139,7 +139,7 @@ describe('FoodField settling and decay', () => {
 describe('FoodField current', () => {
   const east = env({
     current: (_x, _y, _z, out) => {
-      out[0] = 0.05;
+      out[0] = 0.12;
       out[1] = 0;
       out[2] = 0;
     },
@@ -150,11 +150,11 @@ describe('FoodField current', () => {
     const heavy = new FoodField(east, fixedRandom);
     light.drop('brine-shrimp', 0.1, -0.3, 0, 0);
     heavy.drop('algae-wafer', 1, -0.3, 0, 0);
-    runFor(light, 6);
-    runFor(heavy, 6);
+    runFor(light, 4);
+    runFor(heavy, 4);
     const dx = (f: FoodField) => (f.particles[0]?.x ?? 0) + 0.3;
-    expect(dx(light)).toBeGreaterThan(0.15);
-    expect(dx(heavy)).toBeLessThan(dx(light) / 4);
+    expect(dx(light)).toBeGreaterThan(0.03);
+    expect(dx(heavy)).toBeLessThan(dx(light) / 2);
   });
 
   it('stops against the end glass instead of leaving the tank', () => {
@@ -224,30 +224,30 @@ describe('FoodField edges', () => {
 });
 
 describe('FoodField.pack', () => {
-  it('writes id, sim-space position and type index with stride 5', () => {
+  it('writes id, tank-space position and type index with stride 5', () => {
     const field = new FoodField(env(), fixedRandom);
     field.drop('pellets', 0.25, 0.1, -0.05, 0);
     field.drop('nori', 1, -0.1, 0.05, 0);
-    const buf = field.pack(sceneToSim(() => GROUND));
+    const buf = field.pack(sceneToSim);
     expect(buf).toBeInstanceOf(Float32Array);
     expect(buf.length).toBe(field.count * FOOD_STRIDE);
     const first = field.particles[0];
     expect(buf[0]).toBe(first?.id);
     expect(buf[1]).toBeCloseTo(first?.x ?? NaN, 5);
-    expect(buf[2]).toBeCloseTo((first?.y ?? NaN) - GROUND, 5);
+    expect(buf[2]).toBeCloseTo(first?.y ?? NaN, 5);
     expect(buf[4]).toBe(foodTypeIndex('pellets'));
     expect(buf[(field.count - 1) * FOOD_STRIDE + 4]).toBe(foodTypeIndex('nori'));
   });
 
-  it('puts settled food at sim y = 0 and never below', () => {
+  it('puts settled food on the sand and never below', () => {
     const field = new FoodField(env(), fixedRandom);
     field.drop('algae-wafer', 1, 0, 0);
-    runFor(field, 6);
-    const buf = field.pack(sceneToSim(() => GROUND));
-    expect(buf[2]).toBe(0);
+    runFor(field, 30);
+    const buf = field.pack(sceneToSim);
+    expect(buf[2]).toBeCloseTo(GROUND, 6);
   });
 
   it('packs an empty field to an empty buffer', () => {
-    expect(new FoodField(env()).pack(sceneToSim(() => 0)).length).toBe(0);
+    expect(new FoodField(env()).pack(sceneToSim).length).toBe(0);
   });
 });

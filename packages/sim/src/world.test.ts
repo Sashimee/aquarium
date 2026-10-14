@@ -310,36 +310,64 @@ describe('World containment', { timeout: LONG }, () => {
     }
   });
 
-  it('lets a fish leaving a slot graze the glass in front of the rock it remembers', () => {
+  it('lets a tang leaving a slot graze the glass in front of the rock it remembers', () => {
     // #279/#299: the remembered slot lies behind the face the fish slides along toward the food;
-    // shunning it there turns the fish away from food it was a body length or two from.
+    // shunning it there turns the fish away from food it was a body length or two from. #332:
+    // nori above the rock's top is reached by rising first, not by ramming the flank at the
+    // pitch limit, on every seed and for both tangs.
     const back = -REEF_TANK.depth / 2;
-    for (const [x, y] of [
+    const spots = [
       [0.05, 0.38],
       [0.45, 0.38],
       [0.45, 0.15],
-    ] as const) {
-      const w = wedgeTank(1);
-      const watch = backOutWatch(w);
-      while (watch.starts.length === 0 || watch.reversing) {
-        watch.step();
-        if (w.tick * STEP_DT > STEERING.deadEndMemoryS)
-          throw new Error('no back-out to start from');
+      [0.15, 0.38],
+    ] as const;
+    let bitten = 0;
+    for (const def of [yellowTang, blueTang]) {
+      const range = toSimSpecies(def).perceptionRange;
+      for (const [x, y] of spots) {
+        for (let seed = 1; seed <= 12; seed++) {
+          const label = `${def.id}, seed ${seed}, nori at x ${x}, y ${y}`;
+          const w = wedgeTank(seed, def.id);
+          const watch = backOutWatch(w);
+          while (watch.starts.length === 0 || watch.reversing) {
+            watch.step();
+            if (w.tick * STEP_DT > STEERING.deadEndMemoryS)
+              throw new Error(`${label}: no back-out to start from`);
+          }
+          const start = w.tick;
+          const z = back + 0.02;
+          const away = Math.hypot(
+            x - at(w.position, 0),
+            y - at(w.position, 1),
+            z - at(w.position, 2),
+          );
+          const rain = new FoodRain(REEF_TANK);
+          const nori = rain.place('nori', x, y, z);
+          let targeted = false;
+          let bite = -1;
+          for (let t = 0; t < 12 / STEP_DT && bite < 0; t++) {
+            rain.feed(w);
+            w.step();
+            if (at(w.behaviour.feeding.target, 0) >= 0) targeted = true;
+            const events = w.takeAteEvents();
+            rain.eat(events);
+            if (events.some((e) => e.foodId === nori)) bite = (w.tick - start) * STEP_DT;
+            expect(w.bodyClearance(0), label).toBeGreaterThan(0);
+          }
+          if (!targeted) {
+            // Nori at the edge of sight scores below the floor and is never chosen: that is
+            // perception, not steering.
+            expect(away, label).toBeGreaterThan(0.9 * range);
+            continue;
+          }
+          expect(bite, label).toBeGreaterThan(0);
+          expect(bite, label).toBeLessThan(8);
+          bitten++;
+        }
       }
-      const start = w.tick;
-      const rain = new FoodRain(REEF_TANK);
-      const nori = rain.place('nori', x, y, back + 0.02);
-      let bite = -1;
-      for (let t = 0; t < 12 / STEP_DT && bite < 0; t++) {
-        rain.feed(w);
-        w.step();
-        const events = w.takeAteEvents();
-        rain.eat(events);
-        if (events.some((e) => e.foodId === nori)) bite = (w.tick - start) * STEP_DT;
-      }
-      expect(bite, `nori at x ${x}, y ${y}`).toBeGreaterThan(0);
-      expect(bite, `nori at x ${x}, y ${y}`).toBeLessThan(8);
     }
+    expect(bitten).toBeGreaterThanOrEqual(2 * spots.length * 12 - 4);
   });
 
   it('brings a tang round to face nori in the wedge tip and bite instead of parking', () => {

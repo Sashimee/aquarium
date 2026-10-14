@@ -110,6 +110,7 @@ export class SimStream {
     }
     const layout = layoutOf(snapshot.epoch, next.ids);
     if (snapshot.data.length !== layout.frame.length) {
+      this.recycle(snapshot);
       throw new RangeError(
         `sim snapshot of epoch ${snapshot.epoch} holds ${snapshot.data.length} floats, but its ` +
           `layout of ${next.ids.length} fish needs ${layout.frame.length}`,
