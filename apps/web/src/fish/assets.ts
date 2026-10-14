@@ -7,10 +7,9 @@ import {
   Texture,
   type InterleavedBufferAttribute,
   type Material,
-  type WebGPURenderer,
 } from 'three/webgpu';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
+import type { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { parseFishAssets, type FishAssetEntry } from './assetIndex';
@@ -135,15 +134,14 @@ function collectParts(
 
 export class FishAssetLoader {
   private readonly gltf: GLTFLoader;
-  private readonly ktx2: KTX2Loader;
   private index: Promise<Map<string, FishAssetEntry>> | null = null;
 
+  /** `ktx2` is the renderer's shared loader; this loader never disposes it. */
   constructor(
-    renderer: WebGPURenderer,
+    ktx2: KTX2Loader,
     private readonly root: string,
   ) {
-    this.ktx2 = new KTX2Loader().detectSupport(renderer);
-    this.gltf = new GLTFLoader().setKTX2Loader(this.ktx2).setMeshoptDecoder(MeshoptDecoder);
+    this.gltf = new GLTFLoader().setKTX2Loader(ktx2).setMeshoptDecoder(MeshoptDecoder);
   }
 
   entries(): Promise<Map<string, FishAssetEntry>> {
@@ -176,10 +174,6 @@ export class FishAssetLoader {
       throw cause;
     }
     return { entry, lods };
-  }
-
-  dispose(): void {
-    this.ktx2.dispose();
   }
 }
 

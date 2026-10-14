@@ -309,7 +309,7 @@ export class FishSystem {
     };
     this.roster = new TankRoster(demo.config.fish);
     this.spec = new SimWorldSpec(demo, seed);
-    this.loader = new FishAssetLoader(engine.renderer, options.assetRoot);
+    this.loader = new FishAssetLoader(engine.ktx2, options.assetRoot);
     this.group.name = 'fish';
     this.bags = new AcclimationBags(this.group);
     engine.scene.add(this.group);
@@ -319,7 +319,6 @@ export class FishSystem {
         this.sim.dispose();
         this.worker.terminate();
       },
-      () => this.loader.dispose(),
       () => this.bags.dispose(),
       () => {
         for (const batch of this.batches.values()) {

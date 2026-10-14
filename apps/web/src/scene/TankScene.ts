@@ -152,7 +152,7 @@ export class TankScene {
     options: SceneOptions,
   ): Promise<TankScene> {
     const catalog = await AssetCatalog.fetch();
-    const library = new ModelLibrary(engine.renderer, catalog);
+    const library = new ModelLibrary(engine.ktx2, catalog);
     try {
       const scene = await TankScene.build(engine, library, catalog, preset, options);
       return scene;
