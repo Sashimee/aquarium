@@ -270,6 +270,26 @@ describe('care and feeding', () => {
     expect(reports).toHaveLength(1);
     expect(reports[0]?.portion).toBeCloseTo(0.5);
   });
+
+  it('logs the cause when eating reports cannot be sent without crypto.randomUUID', async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { api, rec, session } = setup();
+    await session.setUser(verified);
+    vi.stubGlobal('crypto', {});
+    try {
+      rec.bus.emit('food:ate', { eaten: [{ fishId: FISH_1, portion: 0.2 }] });
+      await vi.advanceTimersByTimeAsync(5_000);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(api.reportAte).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('(unsupported)'),
+      expect.objectContaining({ message: expect.stringContaining('crypto.randomUUID') }),
+    );
+    warn.mockRestore();
+  });
 });
 
 describe('shop and the acclimation bag', () => {
