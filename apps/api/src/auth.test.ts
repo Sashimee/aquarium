@@ -1225,16 +1225,17 @@ describe('mail abuse limits', () => {
   });
 
   it('refuses mail instead of sending it unmetered when the limiter store fails', async () => {
-    await withHarness(undefined, async (h) => {
-      await h.database.pool.query('drop table mail_limit_hits');
-      const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-      try {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      await withHarness(undefined, async (h) => {
+        await h.database.pool.query('drop table mail_limit_hits');
         await signUp(h.app, nextEmail());
-      } finally {
-        spy.mockRestore();
-      }
-      expect(h.outbox).toHaveLength(0);
-    });
+        expect(h.outbox).toHaveLength(0);
+      });
+      expect(spy).toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('ignores a spoofed x-forwarded-for from an untrusted peer', async () => {
