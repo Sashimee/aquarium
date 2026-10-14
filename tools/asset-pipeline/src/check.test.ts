@@ -291,6 +291,20 @@ describe('checkAssets', () => {
     expect(modificationProblems(none, unused)).toHaveLength(1);
   });
 
+  it('keeps reference-photo modifications empty', () => {
+    const photo = manifestAsset({
+      id: 'src-a',
+      kind: 'reference-photo',
+      licence: 'CC-BY-4.0',
+      author: 'Ann',
+      modifications: ['projected onto the loft'],
+    });
+    const loft = { ...fishAsset(), licence: 'CC-BY-4.0', modifications: ['projected'] };
+    const index = inputFor([loft]).index;
+    expect(derivedModifications(index, manifestOf(photo)).has('src-a')).toBe(false);
+    expect(modificationProblems(index, manifestOf(photo)).join('\n')).toContain('must stay empty');
+  });
+
   it('fails a CC-BY source that has no credit', () => {
     const manifest = manifestOf(manifestAsset({ licence: 'CC-BY-4.0' }));
     const asset = { ...fishAsset(), licence: 'CC-BY-4.0' };
