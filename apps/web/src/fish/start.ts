@@ -196,11 +196,17 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
   return {
     settled: system.then(async (fish) => {
       if (fish === null || abort.signal.aborted) return;
-      const stopped = new Promise<void>((resolve) =>
-        abort.signal.addEventListener('abort', () => resolve(), { once: true }),
-      );
-      const stock = await Promise.race([tankEvents.stock, stopped]);
-      if (stock === 'saved') await Promise.race([fish.synced(), stopped]);
+      let onAbort = (): void => undefined;
+      const stopped = new Promise<void>((resolve) => {
+        onAbort = resolve;
+        abort.signal.addEventListener('abort', onAbort, { once: true });
+      });
+      try {
+        const stock = await Promise.race([tankEvents.stock, stopped]);
+        if (stock === 'saved') await Promise.race([fish.synced(), stopped]);
+      } finally {
+        abort.signal.removeEventListener('abort', onAbort);
+      }
     }),
     sim: {
       startle: (stimulus) => ready?.startle(stimulus),

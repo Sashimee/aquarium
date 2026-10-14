@@ -393,6 +393,29 @@ describe('startFish', () => {
     expect(settled).toBe(true);
   });
 
+  it('stops listening for a stop once settled', async () => {
+    const pending = deferred<FakeFishSystem>();
+    const { handle, interaction } = setup(pending.promise);
+    await flush();
+    const options: unknown = create.mock.lastCall?.[1];
+    if (!(typeof options === 'object' && options !== null && 'signal' in options)) {
+      throw new Error('FishSystem.create was not given a signal');
+    }
+    const signal = options.signal;
+    if (!(signal instanceof AbortSignal)) throw new Error('expected an AbortSignal');
+    const added = vi.spyOn(signal, 'addEventListener');
+    const removed = vi.spyOn(signal, 'removeEventListener');
+    pending.resolve(new FakeFishSystem());
+    await flush();
+    interaction.emit('tank:none', {});
+    await handle.settled;
+    const aborts = (calls: unknown[][]) => calls.filter(([type]) => type === 'abort');
+    expect(aborts(added.mock.calls)).toHaveLength(1);
+    expect(aborts(removed.mock.calls).map(([, listener]) => listener)).toEqual(
+      aborts(added.mock.calls).map(([, listener]) => listener),
+    );
+  });
+
   it("waits for a saved tank's own fish before settling", async () => {
     const fish = new FakeFishSystem();
     const loading = deferred<undefined>();

@@ -213,6 +213,8 @@ export class FishSystem {
   private night = 0;
   private light = 1;
   private disposed = false;
+  /** False while `create` runs: a failure then fails `create`, which disposes the worker anyway. */
+  private started = false;
 
   private readonly matrix = new Matrix4();
   private readonly position = new Vector3();
@@ -260,6 +262,7 @@ export class FishSystem {
       system.dispose();
       throw signal.aborted ? signal.reason : cause;
     }
+    system.started = true;
     system.reportSimErrors();
     return system;
   }
@@ -780,7 +783,7 @@ export class FishSystem {
         },
       });
     } catch (cause) {
-      if (cause instanceof SimInitTimeout && !this.disposed) this.replaceWorker();
+      if (cause instanceof SimInitTimeout && this.started && !this.disposed) this.replaceWorker();
       throw cause;
     }
   }
