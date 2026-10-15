@@ -35,6 +35,7 @@ export { WALK, Walkers } from './walk.ts';
 export {
   CARCASS,
   carcassFate,
+  carcassLandS,
   carcassSettleS,
   CarcassSupport,
   sinkingCarcass,

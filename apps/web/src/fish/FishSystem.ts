@@ -11,6 +11,7 @@ import {
 import {
   CARCASS,
   carcassFate,
+  carcassLandS,
   carcassSettleS,
   CarcassSupport,
   quatFromYawPitchRoll,
@@ -132,6 +133,8 @@ type Script =
       readonly anchor: Anchor;
       /** What it lands on: the substrate or the top of hard decor. */
       readonly floorY: number;
+      /** Where it goes on the way down: (y, x, z), sliding off steep rock. */
+      readonly path: Float64Array;
       /** How it was drawn when it died, eased out of while it goes limp; null if it never was. */
       readonly fromQuaternion: Quaternion | null;
     };
@@ -175,6 +178,11 @@ function capacityFor(needed: number): number {
   let capacity = MIN_CAPACITY;
   while (capacity < needed) capacity *= 2;
   return capacity;
+}
+
+/** Whether two descent paths end at the same spot. */
+function sameRest(a: Float64Array, b: Float64Array): boolean {
+  return a.at(-2) === b.at(-2) && a.at(-1) === b.at(-1);
 }
 
 export type BatchLocomotion =
@@ -917,29 +925,29 @@ export class FishSystem {
     fallS: number,
     fromQuaternion: Quaternion | null,
   ): Extract<Script, { kind: 'sinking' }> {
-    const floorY = this.support.floorY(anchor, rt.length, this.box.ground);
+    const { floorY, path } = this.support.descend(anchor, rt.length, this.box.ground);
     const lowest = floorY + CARCASS.restBellyBodyLengths * rt.length;
     const from = anchor.y >= lowest ? anchor : { ...anchor, y: lowest };
-    return { kind: 'sinking', startS, fallS, anchor: from, floorY, fromQuaternion };
+    return { kind: 'sinking', startS, fallS, anchor: from, floorY, path, fromQuaternion };
   }
 
   /**
-   * Decor moved: a dead shrimp lands on whatever is under it now. One whose floor changed falls
-   * again from where it is drawn, so it sinks off a removed rock instead of jumping down.
+   * Decor moved: a dead shrimp lands on whatever is under it now, from where it is drawn. One
+   * still falling to a floor below it keeps its fall, and so its speed; any other falls again
+   * from rest there, so it sinks off a removed rock instead of jumping down.
    */
   private resettleCarcasses(): void {
     for (const rt of this.runtimes.values()) {
       const { script } = rt;
       if (script?.kind !== 'sinking') continue;
-      const anchor = rt.shown ? { ...script.anchor, y: rt.lastPosition.y } : script.anchor;
-      const next = this.sinkingScript(
-        rt,
-        anchor,
-        script.startS,
-        this.clockS,
-        script.fromQuaternion,
-      );
-      if (next.floorY !== script.floorY) rt.script = next;
+      const { x, y, z } = rt.lastPosition;
+      const here = rt.shown ? { x, y, z, yaw: script.anchor.yaw } : script.anchor;
+      const next = this.sinkingScript(rt, here, script.startS, this.clockS, script.fromQuaternion);
+      if (next.floorY === script.floorY && sameRest(next.path, script.path)) continue;
+      const fallT = this.clockS - script.fallS;
+      const falling = fallT < carcassLandS(script.anchor, rt.length, rt.seed, script.floorY);
+      const below = next.anchor.y === here.y;
+      rt.script = falling && below ? { ...next, anchor: script.anchor, fallS: script.fallS } : next;
     }
   }
 
@@ -951,7 +959,7 @@ export class FishSystem {
   private deadScript(rt: FishRuntime): Script {
     const anchor = deadAnchor(this.box, rt.length, rt.seed);
     if (!this.sinks(rt)) return { kind: 'dead', startS: this.clockS, anchor };
-    const floorY = this.support.floorY(anchor, rt.length, this.box.ground);
+    const { floorY, path } = this.support.descend(anchor, rt.length, this.box.ground);
     const onFloor = { ...anchor, y: floorY + CARCASS.restBellyBodyLengths * rt.length };
     const startS = this.clockS - carcassSettleS(onFloor, rt.length, rt.seed, floorY);
     return {
@@ -960,6 +968,7 @@ export class FishSystem {
       fallS: startS,
       anchor: onFloor,
       floorY,
+      path,
       fromQuaternion: null,
     };
   }
@@ -1212,7 +1221,8 @@ export class FishSystem {
       const t = this.clockS - script.startS;
       if (script.kind === 'sinking') {
         const fallT = this.clockS - script.fallS;
-        sinkingCarcass(t, script.anchor, rt.length, rt.seed, script.floorY, pose, fallT);
+        const { anchor, floorY, path } = script;
+        sinkingCarcass(t, anchor, rt.length, rt.seed, floorY, pose, fallT, path);
         limpFrom = script.fromQuaternion;
         limpWeight = 1 - smoothstep01(t / CARCASS.limpS);
       } else {

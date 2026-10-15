@@ -12,6 +12,7 @@ import {
   type CarcassPose,
   type CarcassStart,
 } from './carcass.ts';
+import { compileCollider } from './decor.ts';
 import { STEP_DT } from './world.ts';
 
 const SETTLE_WITHIN_S = 15;
@@ -221,12 +222,91 @@ describe('CarcassSupport', () => {
     expect(support.floorY(across, length, sand)).toBe(0.02);
   });
 
-  it('slides past a rock face it only brushes', () => {
-    const turned = { ...rock(), rotationY: Math.PI / 4 };
-    const support = new CarcassSupport([turned]);
-    const off = (0.05 + 0.0002) / Math.SQRT2;
-    const brushing = { x: off, y: 0.3, z: off, yaw: (3 * Math.PI) / 4 };
-    expect(support.floorY(brushing, length, sand)).toBe(0.02);
+  const halfThickness = (CARCASS.thicknessBodyLengths / 2) * length;
+
+  /** The least rock distance anywhere along the body's axis, tip to tip, at every frame of its sink and rest. */
+  function closestOnTheWayDown(
+    rocks: readonly Collider[],
+    from: CarcassStart,
+    seed: number,
+  ): number {
+    const support = new CarcassSupport(rocks);
+    const { floorY, path } = support.descend(from, length, sand);
+    const prims = rocks.map(compileCollider);
+    const normal = new Float64Array(3);
+    const p = pose();
+    let closest = Infinity;
+    const end = carcassSettleS(from, length, seed, floorY) + 1;
+    for (let t = 0; t <= end; t += 1 / 60) {
+      sinkingCarcass(t, from, length, seed, floorY, p, t, path);
+      for (let k = -10; k <= 10; k++) {
+        const along = (k / 20) * length;
+        const x = p.x + Math.sin(p.yaw) * along;
+        const z = p.z + Math.cos(p.yaw) * along;
+        for (const prim of prims) closest = Math.min(closest, prim.sample(x, p.y, z, normal));
+      }
+    }
+    return closest;
+  }
+
+  it('slides off a rock edge it would only catch on the rim of its body', () => {
+    const from = { x: 0.05 + 0.9 * halfThickness, y: 0.3, z: 0, yaw: 0 };
+    const { floorY, path } = new CarcassSupport([rock()]).descend(from, length, sand);
+    expect(floorY).toBe(0.02);
+    expect(path[path.length - 2]).toBeGreaterThanOrEqual(0.05 + halfThickness - 0.0005);
+    expect(closestOnTheWayDown([rock()], from, 0.1)).toBeGreaterThan(halfThickness - 0.0005);
+  });
+
+  it('stays clear of a round rock all the way down, sliding off its steep flank', () => {
+    const boulder: Collider = {
+      id: 'boulder',
+      kind: 'sphere',
+      hard: true,
+      center: [0, 0.1, 0],
+      radius: 0.05,
+    };
+    const support = new CarcassSupport([boulder]);
+    for (const x of [0, 0.015, 0.03, 0.045, 0.047, 0.049, 0.052, 0.055]) {
+      for (const yaw of [0, Math.PI / 2, 1]) {
+        const from = { x, y: 0.3, z: 0, yaw };
+        expect(closestOnTheWayDown([boulder], from, 0.1)).toBeGreaterThan(halfThickness - 0.0005);
+      }
+    }
+    const crownY = 0.1 + Math.sqrt(0.05 ** 2 - 0.015 ** 2);
+    expect(support.floorY({ x: 0.015, y: 0.3, z: 0, yaw: 0 }, length, sand)).toBeGreaterThan(
+      crownY - 0.001,
+    );
+    expect(support.floorY({ x: 0.049, y: 0.3, z: 0, yaw: 0 }, length, sand)).toBe(0.02);
+  });
+
+  it('lies across a round crown with no part of its body in the rock', () => {
+    const boulder: Collider = {
+      id: 'boulder',
+      kind: 'sphere',
+      hard: true,
+      center: [0, 0.1, 0],
+      radius: 0.05,
+    };
+    const across = { x: 0, y: 0.3, z: 0, yaw: Math.PI / 2 };
+    expect(new CarcassSupport([boulder]).floorY(across, length, sand)).toBeGreaterThan(0.15);
+    expect(closestOnTheWayDown([boulder], across, 0.1)).toBeGreaterThan(halfThickness - 0.0005);
+  });
+
+  it('slides all the way down a tall rock face it starts a hair away from', () => {
+    const pillar: Collider = {
+      id: 'pillar',
+      kind: 'box',
+      hard: true,
+      center: [0, 0.27, 0],
+      halfExtents: [0.02, 0.25, 0.02],
+      rotationY: 0,
+      rounding: 0,
+    };
+    const support = new CarcassSupport([pillar]);
+    for (const skin of [0.0001, 0.000101, 0.00011, 0.00012, 0.0004]) {
+      const from = { x: 0.02 + halfThickness + skin, y: 0.55, z: 0, yaw: 0 };
+      expect(support.floorY(from, length, sand)).toBe(0.02);
+    }
   });
 
   it('falls past a rock that is above where it died, as under a ledge', () => {
