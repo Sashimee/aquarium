@@ -470,6 +470,32 @@ describe('FishSystem dead shrimp', () => {
     fish.dispose();
   });
 
+  it('keeps sinking, not jumping up, when a rock appears above it mid-fall', async () => {
+    const { fish, scene, advance } = await shrimpTank();
+    die(fish);
+    advance(3);
+    const before = drawnPosition(scene);
+    advance(0.2);
+    const at = drawnPosition(scene);
+    fish.setColliders([
+      {
+        id: 'ledge',
+        kind: 'box',
+        hard: true,
+        center: [at.x, at.y + 0.02, at.z],
+        halfExtents: [0.03, 0.01, 0.03],
+        rotationY: 0,
+        rounding: 0,
+      },
+    ]);
+    advance(STEP_S);
+    expect(drawnPosition(scene).y).toBeLessThan(at.y);
+    advance(0.2 - STEP_S);
+    const after = drawnPosition(scene);
+    expect(at.y - after.y).toBeGreaterThan(0.95 * (before.y - at.y));
+    fish.dispose();
+  });
+
   it('eases out of a climbing pose and lies along the glass, not into it', async () => {
     const onGlass = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), -Math.PI / 2);
     const forward = new Vector3(0, 0, 1).applyQuaternion(onGlass);
