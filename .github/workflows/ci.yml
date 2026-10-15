@@ -57,6 +57,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # part is index/count over the describe's tests; raise count when a describe's shards pass ~10 min.
         include:
           - name: menus-phone-1
             args: menus.spec
@@ -120,7 +121,9 @@ jobs:
           PART: ${{ matrix.part }}
           DESCRIBE: ${{ matrix.describe }}
           SPEC: ${{ matrix.args }}
-        run: echo "E2E_GREP=$(node .github/scripts/e2e-slice.mjs "$PART" "$DESCRIBE" $SPEC)" >> "$GITHUB_ENV"
+        run: |
+          grep=$(node .github/scripts/e2e-slice.mjs "$PART" "$DESCRIBE" $SPEC)
+          echo "E2E_GREP=$grep" >> "$GITHUB_ENV"
       - name: Record which tests this shard selects
         env:
           SPEC: ${{ matrix.args }}
@@ -133,7 +136,7 @@ jobs:
           test -s shard-tests/${{ matrix.name }}.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: e2e-count-${{ matrix.name }}
+          name: e2e-tests-${{ matrix.name }}
           path: shard-tests
           retention-days: 1
       - name: Run this shard
@@ -210,7 +213,7 @@ jobs:
         id: counts-1
         continue-on-error: true
         with:
-          pattern: e2e-count-*
+          pattern: e2e-tests-*
           path: shard-tests
           merge-multiple: true
       - if: ${{ steps.counts-1.outcome == 'failure' }}
@@ -220,7 +223,7 @@ jobs:
         if: ${{ steps.counts-1.outcome == 'failure' }}
         continue-on-error: true
         with:
-          pattern: e2e-count-*
+          pattern: e2e-tests-*
           path: shard-tests
           merge-multiple: true
       - if: ${{ steps.counts-1.outcome == 'failure' && steps.counts-2.outcome == 'failure' }}
@@ -228,7 +231,7 @@ jobs:
       - uses: actions/download-artifact@v4
         if: ${{ steps.counts-1.outcome == 'failure' && steps.counts-2.outcome == 'failure' }}
         with:
-          pattern: e2e-count-*
+          pattern: e2e-tests-*
           path: shard-tests
           merge-multiple: true
       - name: Every test runs in exactly one shard

@@ -40,6 +40,10 @@ if (inDescribe.length < count) {
 
 // Round-robin puts neighbouring tests, which cost about the same, in different parts.
 const mine = inDescribe.filter((_, i) => i % count === index - 1);
+if (inDescribe.some((title) => /[\r\n]/.test(title))) {
+  console.error('a test title contains a line break, which cannot go through GITHUB_ENV');
+  process.exit(1);
+}
 const escape = (s) => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
 const grep = mine.map(escape).join('|');
 
