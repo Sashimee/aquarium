@@ -16,11 +16,12 @@ import { DecorWorld, type DecorScenePort } from './world';
 const preset: DecorItem[] = [item('boulder-01', -0.3, 0), item('coast-rocks-05', 0.3, 0.05)];
 const plant: DecorItem = item('host-anemone', 0.1, -0.1);
 
-function fakeScene() {
+function fakeScene(waterTop?: number) {
   const hard: DecorItem[][] = [];
   const moves: [number, DecorItem][] = [];
   const scene: DecorScenePort = {
     biome: 'freshwater',
+    ...(waterTop === undefined ? {} : { waterTop }),
     presetHardDecor: preset,
     fixedDecor: [plant],
     catalogEntries: () => catalog.assets as unknown as CatalogEntry[],
@@ -38,11 +39,11 @@ function fakeScene() {
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-function setup() {
+function setup(waterTop?: number) {
   const bus = new EventBus<InteractionEvents>();
   const colliders: (readonly DecorCollider[])[] = [];
   bus.on('decor:colliders', (e) => colliders.push(e.colliders));
-  const { scene, hard, moves } = fakeScene();
+  const { scene, hard, moves } = fakeScene(waterTop);
   const feeders = new FeederLayer();
   const world = new DecorWorld(scene, bus, feeders);
   return { bus, world, feeders, hard, moves, colliders };
@@ -77,6 +78,16 @@ describe('DecorWorld', () => {
     const { world, hard } = setup();
     await world.showSaved([], true);
     expect(hard.at(-1)).toEqual([]);
+  });
+
+  it('tells the player when a saved plant was shrunk to fit the water', async () => {
+    const { world } = setup(0.3);
+    await world.showSaved([item('java-fern', 0, 0, { scale: 1 }, 0.1)], true);
+    expect(world.notice).toMatch(/1 plant was too tall for the water and was shrunk/);
+    expect(world.notice).not.toMatch(/removed/);
+    await world.showSaved([item('boulder-01', 0, 0), item('reef-arch', 0.2, 0)], true);
+    expect(world.notice).toMatch(/1 saved piece does not fit this tank and was removed/);
+    expect(world.notice).not.toMatch(/shrunk/);
   });
 
   it('keeps the vacation feeder out of the hardscape but in the layout and colliders', async () => {

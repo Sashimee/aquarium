@@ -100,6 +100,7 @@ export function createPlaySystem(
       sim.setLure?.([lureSim[0] ?? 0, lureSim[1] ?? 0, lureSim[2] ?? 0]);
     },
     setLaserDot: (p) => visuals.setLaser(p),
+    report: (message, cause) => console.error(message, cause),
     now: () => performance.now(),
   });
 

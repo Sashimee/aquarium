@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import type { Plugin } from 'vite';
@@ -13,6 +14,7 @@ const Loader = KTX2Loader as unknown as {
 };
 
 const FILE_NAME = 'ktx2-worker.js';
+const UNUSED_TRANSCODER_GLUE = /^assets\/basis_transcoder-[\w-]+\.js$/;
 
 function workerSource(): string {
   const require = createRequire(import.meta.url);
@@ -33,15 +35,27 @@ function workerSource(): string {
 }
 
 export function ktx2WorkerPlugin(): Plugin {
+  const source = workerSource();
+  // three's REVISION does not change across patch releases, so only the content can version the URL.
+  const hash = createHash('sha256').update(source).digest('hex').slice(0, 12);
   return {
     name: 'aquarium:ktx2-worker',
-    generateBundle() {
-      this.emitFile({ type: 'asset', fileName: FILE_NAME, source: workerSource() });
+    config() {
+      return { define: { __KTX2_WORKER_HASH__: JSON.stringify(hash) } };
+    },
+    enforce: 'post',
+    generateBundle(_options, bundle) {
+      // KTX2Loader's module-level new URL() makes the bundler emit the glue script, but the shared
+      // loader never fetches it: bundledTranscoderUrl serves the worker file instead.
+      for (const name of Object.keys(bundle)) {
+        if (UNUSED_TRANSCODER_GLUE.test(name)) Reflect.deleteProperty(bundle, name);
+      }
+      this.emitFile({ type: 'asset', fileName: FILE_NAME, source });
     },
     configureServer(server) {
       server.middlewares.use(`/${FILE_NAME}`, (_req, res) => {
         res.setHeader('content-type', 'text/javascript');
-        res.end(workerSource());
+        res.end(source);
       });
     },
   };

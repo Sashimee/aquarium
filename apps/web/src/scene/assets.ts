@@ -39,8 +39,8 @@ export class AssetCatalog {
     for (const entry of entries) this.byId.set(entry.id, entry);
   }
 
-  static async fetch(url = `${ASSET_BASE}index.json`): Promise<AssetCatalog> {
-    const response = await fetch(url);
+  static async fetch(url = `${ASSET_BASE}index.json`, signal?: AbortSignal): Promise<AssetCatalog> {
+    const response = await fetch(url, signal ? { signal } : undefined);
     if (!response.ok) {
       throw new Error(`Asset index ${url} returned HTTP ${response.status}; run pnpm build:assets`);
     }

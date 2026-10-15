@@ -17,6 +17,15 @@ describe('FeedGate', () => {
     expect(gate.tryFeed(10_000).ok).toBe(true);
   });
 
+  it('gives a slot back, which clears the cooldown and the window count', () => {
+    const gate = new FeedGate({ max: 1, windowMs: 10_000, cooldownMs: 1000 });
+    expect(gate.tryFeed(100).ok).toBe(true);
+    gate.release(100);
+    expect(gate.tryFeed(100)).toEqual({ ok: true });
+    gate.release(999);
+    expect(gate.tryFeed(200).ok).toBe(false);
+  });
+
   it('does not count refused attempts', () => {
     const gate = new FeedGate({ max: 1, windowMs: 1000, cooldownMs: 0 });
     gate.tryFeed(0);
