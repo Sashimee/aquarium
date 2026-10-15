@@ -43,7 +43,7 @@ When `SITE_INDEXABLE` is not exactly `true`, every response carries `X-Robots-Ta
 
 ## CI
 
-`.github/workflows/ci.yml` runs on PRs into `dev` and pushes to `dev`: typecheck, lint, test (Postgres 17
+`.github/workflows/ci.yml` runs on PRs into `dev` and pushes to `dev`: typecheck, lint, test (Postgres 18
 service, `DATABASE_URL` provided), build, `assets:check`, e2e, and a Docker build that also waits for the
 container to become healthy and checks the noindex header. `assets:check` and `e2e` are skipped until their
 scripts exist.
