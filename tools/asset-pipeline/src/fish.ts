@@ -21,7 +21,14 @@ import {
   type Axes,
   type FinHints,
 } from './fins.ts';
-import { FIN_ID_ATTRIBUTE, FIN_IDS, FIN_MASK_ATTRIBUTE, type OutputAsset } from './index-schema.ts';
+import {
+  FIN_ID_ATTRIBUTE,
+  FIN_IDS,
+  FIN_MASK_ATTRIBUTE,
+  MOUTH_ATTRIBUTE,
+  type OutputAsset,
+} from './index-schema.ts';
+import { bakeMouthMask, type MouthHints } from './mouth.ts';
 import {
   extractParts,
   materialDefFrom,
@@ -52,6 +59,7 @@ export interface FishRecipe {
   /** Multiplies the species-JSON length, for sexes or morphs that differ from the species value. */
   lengthFactor?: number;
   hints?: FinHints | undefined;
+  mouth?: MouthHints;
   /** Flattens rigid head spikes into the skin before anything else looks at the mesh. */
   despike?: DespikeSpec;
   /** Grows soft tentacles on the despiked snout, as rigid attachments outside fin classification. */
@@ -104,6 +112,7 @@ export interface NormaliseInput {
   /** Rigid parts, such as eyes, that follow the body transform but never take part in fin classification. */
   attachments?: Part[];
   hints?: FinHints | undefined;
+  mouth?: MouthHints | undefined;
   standardLengthM: number;
   recipeId: string;
 }
@@ -154,6 +163,7 @@ export function normaliseFish(input: NormaliseInput): Part[] {
     }
   merged.extra[FIN_MASK_ATTRIBUTE] = fins.mask;
   merged.extra[FIN_ID_ATTRIBUTE] = fins.id;
+  merged.extra[MOUTH_ATTRIBUTE] = bakeMouthMask(merged.positions, fins.id, input.mouth);
 
   const out: Part[] = [];
   let vertex = 0;
@@ -170,6 +180,7 @@ export function normaliseFish(input: NormaliseInput): Part[] {
     const vertices = part.positions.length / 3;
     part.extra[FIN_MASK_ATTRIBUTE] = new Float32Array(vertices);
     part.extra[FIN_ID_ATTRIBUTE] = new Float32Array(vertices);
+    part.extra[MOUTH_ATTRIBUTE] = new Float32Array(vertices);
     out.push(part);
   }
   return out;
@@ -243,6 +254,7 @@ export function fishInfo(
       idAttribute: FIN_ID_ATTRIBUTE,
       ids: { ...FIN_IDS },
     },
+    mouthMask: { attribute: MOUTH_ATTRIBUTE },
     debugRender,
   };
 }
@@ -336,6 +348,7 @@ export async function buildSourceFish(recipe: FishRecipe, ctx: FishContext): Pro
     parts,
     attachments: [...eyeParts, ...bristleParts, ...glossyParts],
     hints: recipe.hints,
+    mouth: recipe.mouth,
     standardLengthM,
     recipeId: recipe.id,
   });
@@ -361,7 +374,7 @@ export async function buildSourceFish(recipe: FishRecipe, ctx: FishContext): Pro
       modifications: [
         'merged meshes, dropped skeleton, animation and unused attributes',
         'oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length',
-        'baked fin mask and fin id vertex attributes',
+        'baked fin mask, fin id and mouth mask vertex attributes',
         'colour and normal maps re-encoded to KTX2 at 1k and 2k',
         ...(recipe.modifications ?? []),
       ],

@@ -1,8 +1,8 @@
 {
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; every texture has both files.",
-  "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body, carapace and eyes; 6 walking leg; 7 antenna; 8 pleopod; 9 abdomen, telson and tail fan) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x; antennules 0/1, long antennae 2/3; tail-fan leaves k * 2 + side). Shrimp _fin_mask means: id 0 is 0 (eye stalks included, ignore it); ids 6 and 7 are the weight along the limb, 0 root to 1 tip; id 8 is the pleopod beat weight, 0 root to 1 tip; id 9 is the tail-curl weight clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1) of the rest position. Tail curl rotates ids 8 and 9 about +x through the shrimp.abdomenHinge {y, z} by flex * clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1), computed from the rest position, never from _fin_mask, so the pleopods follow the segment they hang from. Pleopods (id 8) exist only in LOD0 and LOD1 and are removed from LOD2; legs are simplified, so do not assume every _leg index exists at every LOD. The cherry material is alphaMode BLEND with base colour alpha 0.86: three.js GLTFLoader turns depthWrite off for BLEND, so set depthWrite true on the cherry material and expect some sorting artefacts from the self-overlapping legs and antennae.",
-  "totalBytes": 60668664,
+  "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Every fish LOD also carries _MOUTH, geometry attribute \"_mouth\", a float in [0, 1] for buccal motion: 1 at the jaw or lower-lip tip, easing to 0 behind the gill line and above the mouth slit; fins, eyes and attachments are 0. Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body, carapace and eyes; 6 walking leg; 7 antenna; 8 pleopod; 9 abdomen, telson and tail fan) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x; antennules 0/1, long antennae 2/3; tail-fan leaves k * 2 + side). Shrimp _fin_mask means: id 0 is 0 (eye stalks included, ignore it); ids 6 and 7 are the weight along the limb, 0 root to 1 tip; id 8 is the pleopod beat weight, 0 root to 1 tip; id 9 is the tail-curl weight clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1) of the rest position. Tail curl rotates ids 8 and 9 about +x through the shrimp.abdomenHinge {y, z} by flex * clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1), computed from the rest position, never from _fin_mask, so the pleopods follow the segment they hang from. Pleopods (id 8) exist only in LOD0 and LOD1 and are removed from LOD2; legs are simplified, so do not assume every _leg index exists at every LOD. The cherry material is alphaMode BLEND with base colour alpha 0.86: three.js GLTFLoader turns depthWrite off for BLEND, so set depthWrite true on the cherry material and expect some sorting artefacts from the self-overlapping legs and antennae.",
+  "totalBytes": 60752788,
   "assets": [
     {
       "id": "angelfish",
@@ -16,7 +16,7 @@
       "modifications": [
         "merged meshes, dropped skeleton, animation and unused attributes",
         "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
-        "baked fin mask and fin id vertex attributes",
+        "baked fin mask, fin id and mouth mask vertex attributes",
         "colour and normal maps re-encoded to KTX2 at 1k and 2k",
         "kept one of four colourways, KHR_materials_unlit replaced by PBR"
       ],
@@ -35,23 +35,23 @@
       "lods": [
         {
           "file": "fish/angelfish/lod0.glb",
-          "bytes": 12852,
-          "sha256": "916c12d00294b03aee4b75caf98faabf2e71d04eee52b185b5156f571dc5e141",
+          "bytes": 13532,
+          "sha256": "a80406b85a951b7697b42613653599631a2d26a7c035fb35085780f89fb25a44",
           "triangles": 772,
           "vertices": 407
         },
         {
           "file": "fish/angelfish/lod1.glb",
-          "bytes": 7476,
-          "sha256": "94a5fd581ded4621bbe41ed6f0feeb2a0e70e55defef51d20dd6082e808fbfe4",
+          "bytes": 7908,
+          "sha256": "aeda1afb217db8213fa68b4b2b2d5a1e161f5e4314b50837c25a7d3310c4ddbc",
           "triangles": 308,
           "vertices": 169
         },
         {
           "file": "fish/angelfish/lod2.glb",
-          "bytes": 5360,
-          "sha256": "2995c02fd3cbc43d6c346de134767be0623e7db9ef7f73945da297fec46d5d5c",
-          "triangles": 146,
+          "bytes": 5816,
+          "sha256": "5e702b50e44bad9232b6d018d4700ec092a32166665c0274c1386b64ccb59cda",
+          "triangles": 150,
           "vertices": 83
         }
       ],
@@ -81,18 +81,18 @@
       "files": [
         {
           "file": "fish/angelfish/lod0.glb",
-          "bytes": 12852,
-          "sha256": "916c12d00294b03aee4b75caf98faabf2e71d04eee52b185b5156f571dc5e141"
+          "bytes": 13532,
+          "sha256": "a80406b85a951b7697b42613653599631a2d26a7c035fb35085780f89fb25a44"
         },
         {
           "file": "fish/angelfish/lod1.glb",
-          "bytes": 7476,
-          "sha256": "94a5fd581ded4621bbe41ed6f0feeb2a0e70e55defef51d20dd6082e808fbfe4"
+          "bytes": 7908,
+          "sha256": "aeda1afb217db8213fa68b4b2b2d5a1e161f5e4314b50837c25a7d3310c4ddbc"
         },
         {
           "file": "fish/angelfish/lod2.glb",
-          "bytes": 5360,
-          "sha256": "2995c02fd3cbc43d6c346de134767be0623e7db9ef7f73945da297fec46d5d5c"
+          "bytes": 5816,
+          "sha256": "5e702b50e44bad9232b6d018d4700ec092a32166665c0274c1386b64ccb59cda"
         },
         {
           "file": "fish/angelfish/textures/angelfish_basecolor_1k.ktx2",
@@ -123,6 +123,9 @@
             "pectoral": 4,
             "pelvic": 5
           }
+        },
+        "mouthMask": {
+          "attribute": "_MOUTH"
         },
         "debugRender": "debug/angelfish.png"
       }
@@ -158,24 +161,24 @@
       "lods": [
         {
           "file": "fish/banggai-cardinalfish/lod0.glb",
-          "bytes": 31292,
-          "sha256": "8409c33858fe7aed522ff7a81f566f77eca63d0830a471ec305386b276f6ecaf",
+          "bytes": 32404,
+          "sha256": "73b18d15dc9f22dc727ae59b237cec25fe769310857349ed2e42430853b22663",
           "triangles": 3264,
           "vertices": 1778
         },
         {
           "file": "fish/banggai-cardinalfish/lod1.glb",
-          "bytes": 16016,
-          "sha256": "9ad60eb96b1f8120028c49c421604c1994011a0d0d64ba28c90ff49a77512c98",
-          "triangles": 1305,
-          "vertices": 721
+          "bytes": 17044,
+          "sha256": "595a29a661e885da574890ad6535c42e4a2e36177809a895696df997050be910",
+          "triangles": 1306,
+          "vertices": 718
         },
         {
           "file": "fish/banggai-cardinalfish/lod2.glb",
-          "bytes": 8536,
-          "sha256": "5bd68c29616b8794c3d42204973f757b8c95c785bf9449532bd17274b97e9c11",
-          "triangles": 489,
-          "vertices": 288
+          "bytes": 9324,
+          "sha256": "734ab2f0a245c418afd88f9b73fca196fbb52091b402ded94daa2fe000bac539",
+          "triangles": 490,
+          "vertices": 287
         }
       ],
       "textures": [
@@ -204,18 +207,18 @@
       "files": [
         {
           "file": "fish/banggai-cardinalfish/lod0.glb",
-          "bytes": 31292,
-          "sha256": "8409c33858fe7aed522ff7a81f566f77eca63d0830a471ec305386b276f6ecaf"
+          "bytes": 32404,
+          "sha256": "73b18d15dc9f22dc727ae59b237cec25fe769310857349ed2e42430853b22663"
         },
         {
           "file": "fish/banggai-cardinalfish/lod1.glb",
-          "bytes": 16016,
-          "sha256": "9ad60eb96b1f8120028c49c421604c1994011a0d0d64ba28c90ff49a77512c98"
+          "bytes": 17044,
+          "sha256": "595a29a661e885da574890ad6535c42e4a2e36177809a895696df997050be910"
         },
         {
           "file": "fish/banggai-cardinalfish/lod2.glb",
-          "bytes": 8536,
-          "sha256": "5bd68c29616b8794c3d42204973f757b8c95c785bf9449532bd17274b97e9c11"
+          "bytes": 9324,
+          "sha256": "734ab2f0a245c418afd88f9b73fca196fbb52091b402ded94daa2fe000bac539"
         },
         {
           "file": "fish/banggai-cardinalfish/textures/banggai-cardinalfish_basecolor_1k.ktx2",
@@ -247,6 +250,9 @@
             "pelvic": 5
           }
         },
+        "mouthMask": {
+          "attribute": "_MOUTH"
+        },
         "debugRender": "debug/banggai-cardinalfish.png"
       }
     },
@@ -262,7 +268,7 @@
       "modifications": [
         "merged meshes, dropped skeleton, animation and unused attributes",
         "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
-        "baked fin mask and fin id vertex attributes",
+        "baked fin mask, fin id and mouth mask vertex attributes",
         "colour and normal maps re-encoded to KTX2 at 1k and 2k"
       ],
       "bounds": {
@@ -280,24 +286,24 @@
       "lods": [
         {
           "file": "fish/betta/lod0.glb",
-          "bytes": 112360,
-          "sha256": "065abb27bb198af518c8b6abd70558109a2cdf3683de662713cfdab27db98786",
+          "bytes": 125448,
+          "sha256": "56123c4e9bdab997e5823999b479fd64f0ff73304bfd35137739d58a79b0eaf4",
           "triangles": 10656,
           "vertices": 5815
         },
         {
           "file": "fish/betta/lod1.glb",
-          "bytes": 54376,
-          "sha256": "91a939dd350745be33cf4c379bc2286f1932b2dec160966ef7c1139f80e6c2b4",
-          "triangles": 4256,
-          "vertices": 2458
+          "bytes": 60024,
+          "sha256": "1639d9bf8a3b79a6c2615de9f9f971100861ce85ba6826a78ac6897971bd6989",
+          "triangles": 4257,
+          "vertices": 2463
         },
         {
           "file": "fish/betta/lod2.glb",
-          "bytes": 26716,
-          "sha256": "14d755ffc9b4215f38092d590385645fbe60b749cba416682f56e6f2d73d2068",
+          "bytes": 29320,
+          "sha256": "536de25bf92c01e4d355c2c22bfc9f283f95e2e5f6548abf187b9b878f55b510",
           "triangles": 1596,
-          "vertices": 1004
+          "vertices": 999
         }
       ],
       "textures": [
@@ -347,18 +353,18 @@
       "files": [
         {
           "file": "fish/betta/lod0.glb",
-          "bytes": 112360,
-          "sha256": "065abb27bb198af518c8b6abd70558109a2cdf3683de662713cfdab27db98786"
+          "bytes": 125448,
+          "sha256": "56123c4e9bdab997e5823999b479fd64f0ff73304bfd35137739d58a79b0eaf4"
         },
         {
           "file": "fish/betta/lod1.glb",
-          "bytes": 54376,
-          "sha256": "91a939dd350745be33cf4c379bc2286f1932b2dec160966ef7c1139f80e6c2b4"
+          "bytes": 60024,
+          "sha256": "1639d9bf8a3b79a6c2615de9f9f971100861ce85ba6826a78ac6897971bd6989"
         },
         {
           "file": "fish/betta/lod2.glb",
-          "bytes": 26716,
-          "sha256": "14d755ffc9b4215f38092d590385645fbe60b749cba416682f56e6f2d73d2068"
+          "bytes": 29320,
+          "sha256": "536de25bf92c01e4d355c2c22bfc9f283f95e2e5f6548abf187b9b878f55b510"
         },
         {
           "file": "fish/betta/textures/betta_basecolor_1k.ktx2",
@@ -400,6 +406,9 @@
             "pelvic": 5
           }
         },
+        "mouthMask": {
+          "attribute": "_MOUTH"
+        },
         "debugRender": "debug/betta.png"
       }
     },
@@ -415,7 +424,7 @@
       "modifications": [
         "merged meshes, dropped skeleton, animation and unused attributes",
         "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
-        "baked fin mask and fin id vertex attributes",
+        "baked fin mask, fin id and mouth mask vertex attributes",
         "colour and normal maps re-encoded to KTX2 at 1k and 2k"
       ],
       "bounds": {
@@ -433,24 +442,24 @@
       "lods": [
         {
           "file": "fish/blue-tang/lod0.glb",
-          "bytes": 47120,
-          "sha256": "e134fbd7e243773a0c0efb9dded06124e7cafd1d45182b09eb4e6dd14874ceda",
+          "bytes": 48704,
+          "sha256": "27b8202c90b4e38f4678cf268db43c4a8dd5b5c4870101d37aa419d5cbfa7627",
           "triangles": 3688,
           "vertices": 2089
         },
         {
           "file": "fish/blue-tang/lod1.glb",
-          "bytes": 23576,
-          "sha256": "b7982e4ea27674f2baf178164175ad09f6a45ef385781fc6f9026e58949d2b81",
+          "bytes": 24444,
+          "sha256": "e8b442b0ad0f1e8b7947284e1510d9f2e42d1b03e35dbd36f9503e22870d2a92",
           "triangles": 1474,
-          "vertices": 898
+          "vertices": 899
         },
         {
           "file": "fish/blue-tang/lod2.glb",
-          "bytes": 12220,
-          "sha256": "22c2de86d0894ea5cc746455e0d3395316843f8e21c1b9bb7441a88135433db7",
+          "bytes": 12704,
+          "sha256": "7f9cd334a538c0ab30dfa5260bf41b982445725665e3d5bf22ee0bbeb62738a4",
           "triangles": 552,
-          "vertices": 360
+          "vertices": 359
         }
       ],
       "textures": [
@@ -500,18 +509,18 @@
       "files": [
         {
           "file": "fish/blue-tang/lod0.glb",
-          "bytes": 47120,
-          "sha256": "e134fbd7e243773a0c0efb9dded06124e7cafd1d45182b09eb4e6dd14874ceda"
+          "bytes": 48704,
+          "sha256": "27b8202c90b4e38f4678cf268db43c4a8dd5b5c4870101d37aa419d5cbfa7627"
         },
         {
           "file": "fish/blue-tang/lod1.glb",
-          "bytes": 23576,
-          "sha256": "b7982e4ea27674f2baf178164175ad09f6a45ef385781fc6f9026e58949d2b81"
+          "bytes": 24444,
+          "sha256": "e8b442b0ad0f1e8b7947284e1510d9f2e42d1b03e35dbd36f9503e22870d2a92"
         },
         {
           "file": "fish/blue-tang/lod2.glb",
-          "bytes": 12220,
-          "sha256": "22c2de86d0894ea5cc746455e0d3395316843f8e21c1b9bb7441a88135433db7"
+          "bytes": 12704,
+          "sha256": "7f9cd334a538c0ab30dfa5260bf41b982445725665e3d5bf22ee0bbeb62738a4"
         },
         {
           "file": "fish/blue-tang/textures/blue-tang_basecolor_1k.ktx2",
@@ -553,6 +562,9 @@
             "pelvic": 5
           }
         },
+        "mouthMask": {
+          "attribute": "_MOUTH"
+        },
         "debugRender": "debug/blue-tang.png"
       }
     },
@@ -568,7 +580,7 @@
       "modifications": [
         "merged meshes, dropped skeleton, animation and unused attributes",
         "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
-        "baked fin mask and fin id vertex attributes",
+        "baked fin mask, fin id and mouth mask vertex attributes",
         "colour and normal maps re-encoded to KTX2 at 1k and 2k",
         "decimated from 40k to 8k triangles at LOD0",
         "rigid spikes around the head flattened into the skin, and soft tapered tentacles added along the snout margin and top of the snout, with fewer segments and sides per LOD, forks only at LOD0 and only the two front tentacles per side at LOD2",
@@ -591,24 +603,24 @@
       "lods": [
         {
           "file": "fish/bristlenose-pleco/lod0.glb",
-          "bytes": 192984,
-          "sha256": "563fb86c5a6981a0277ac3b0f0557ef881d473de369713a702c02685acc217e4",
-          "triangles": 10304,
-          "vertices": 9184
+          "bytes": 196064,
+          "sha256": "418b30abcfb3a06d5c181eabaf9b109fd58da227916d391dafc2d595083e1346",
+          "triangles": 10312,
+          "vertices": 9169
         },
         {
           "file": "fish/bristlenose-pleco/lod1.glb",
-          "bytes": 78620,
-          "sha256": "db5e54717ef62ee808bdf44483a459ea66cb5732fcfe81d0e1be4d3e8ef87915",
-          "triangles": 3750,
-          "vertices": 3270
+          "bytes": 80380,
+          "sha256": "08ca54997a69ac74366231569a8f32ae27c8a7929bf3afa15562ba5d4e7165ec",
+          "triangles": 3748,
+          "vertices": 3263
         },
         {
           "file": "fish/bristlenose-pleco/lod2.glb",
-          "bytes": 33740,
-          "sha256": "a4426d8b02e43f654df248b7efbab769562df3af1b2ec87d0896743a4e6fb66d",
+          "bytes": 34824,
+          "sha256": "042ab1d9f78969eb702939e2e0e327e7cbbf0175ea345df95ea623af0c7a5519",
           "triangles": 1330,
-          "vertices": 1116
+          "vertices": 1105
         }
       ],
       "textures": [
@@ -679,18 +691,18 @@
       "files": [
         {
           "file": "fish/bristlenose-pleco/lod0.glb",
-          "bytes": 192984,
-          "sha256": "563fb86c5a6981a0277ac3b0f0557ef881d473de369713a702c02685acc217e4"
+          "bytes": 196064,
+          "sha256": "418b30abcfb3a06d5c181eabaf9b109fd58da227916d391dafc2d595083e1346"
         },
         {
           "file": "fish/bristlenose-pleco/lod1.glb",
-          "bytes": 78620,
-          "sha256": "db5e54717ef62ee808bdf44483a459ea66cb5732fcfe81d0e1be4d3e8ef87915"
+          "bytes": 80380,
+          "sha256": "08ca54997a69ac74366231569a8f32ae27c8a7929bf3afa15562ba5d4e7165ec"
         },
         {
           "file": "fish/bristlenose-pleco/lod2.glb",
-          "bytes": 33740,
-          "sha256": "a4426d8b02e43f654df248b7efbab769562df3af1b2ec87d0896743a4e6fb66d"
+          "bytes": 34824,
+          "sha256": "042ab1d9f78969eb702939e2e0e327e7cbbf0175ea345df95ea623af0c7a5519"
         },
         {
           "file": "fish/bristlenose-pleco/textures/bristlenose-pleco_custommaterial_basecolor_1k.ktx2",
@@ -742,6 +754,9 @@
             "pelvic": 5
           }
         },
+        "mouthMask": {
+          "attribute": "_MOUTH"
+        },
         "debugRender": "debug/bristlenose-pleco.png"
       }
     },
@@ -776,24 +791,24 @@
       "lods": [
         {
           "file": "fish/bronze-corydoras/lod0.glb",
-          "bytes": 30520,
-          "sha256": "bb8317f82ee7c46e49191be0d30ccd189fa371adfe90f9f45da540887e9f09ed",
+          "bytes": 31608,
+          "sha256": "0210c6da93b3a19d0c54330a010b74ec28c23de52a02e3786fd4160c4ff4f98a",
           "triangles": 3144,
           "vertices": 1700
         },
         {
           "file": "fish/bronze-corydoras/lod1.glb",
-          "bytes": 15740,
-          "sha256": "0c23479126f953a7f5998a725ae0f12683deedd93a1d42f58902dd9656be2276",
-          "triangles": 1258,
-          "vertices": 690
+          "bytes": 16696,
+          "sha256": "6e37f8341e44c6b97822dc729704fa0ee590d5399187e3cef825a66c14bc3237",
+          "triangles": 1257,
+          "vertices": 688
         },
         {
           "file": "fish/bronze-corydoras/lod2.glb",
-          "bytes": 8436,
-          "sha256": "793627cb5baaa160113da198524353fc2fd4ed73a2bef931c15fcc5dda4ac62b",
+          "bytes": 9104,
+          "sha256": "9db0775b5bd2a03a2c614697ba1febbee0f68c17bd956492c160f92813538558",
           "triangles": 472,
-          "vertices": 272
+          "vertices": 270
         }
       ],
       "textures": [
@@ -822,18 +837,18 @@
       "files": [
         {
           "file": "fish/bronze-corydoras/lod0.glb",
-          "bytes": 30520,
-          "sha256": "bb8317f82ee7c46e49191be0d30ccd189fa371adfe90f9f45da540887e9f09ed"
+          "bytes": 31608,
+          "sha256": "0210c6da93b3a19d0c54330a010b74ec28c23de52a02e3786fd4160c4ff4f98a"
         },
         {
           "file": "fish/bronze-corydoras/lod1.glb",
-          "bytes": 15740,
-          "sha256": "0c23479126f953a7f5998a725ae0f12683deedd93a1d42f58902dd9656be2276"
+          "bytes": 16696,
+          "sha256": "6e37f8341e44c6b97822dc729704fa0ee590d5399187e3cef825a66c14bc3237"
         },
         {
           "file": "fish/bronze-corydoras/lod2.glb",
-          "bytes": 8436,
-          "sha256": "793627cb5baaa160113da198524353fc2fd4ed73a2bef931c15fcc5dda4ac62b"
+          "bytes": 9104,
+          "sha256": "9db0775b5bd2a03a2c614697ba1febbee0f68c17bd956492c160f92813538558"
         },
         {
           "file": "fish/bronze-corydoras/textures/bronze-corydoras_basecolor_1k.ktx2",
@@ -865,6 +880,9 @@
             "pelvic": 5
           }
         },
+        "mouthMask": {
+          "attribute": "_MOUTH"
+        },
         "debugRender": "debug/bronze-corydoras.png"
       }
     },
@@ -880,7 +898,7 @@
       "modifications": [
         "merged meshes, dropped skeleton, animation and unused attributes",
         "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
-        "baked fin mask and fin id vertex attributes",
+        "baked fin mask, fin id and mouth mask vertex attributes",
         "colour and normal maps re-encoded to KTX2 at 1k and 2k",
         "4096 px colour and normal maps downscaled to the 1k and 2k tiers",
         "'Material' (22 triangles, the mouth patch) dropped: it reused the body normal map; Material.001, .002 and .003 kept"
@@ -900,24 +918,24 @@
       "lods": [
         {
           "file": "fish/discus/lod0.glb",
-          "bytes": 116916,
-          "sha256": "77d52c463b98052c5c6093a4a581e37524a7f8b5de21e43951d66e06c85b2a5b",
+          "bytes": 124360,
+          "sha256": "722faa8eff96cb8080ee14a711dc0500902dc631adb65fcf538ac8990f0b3922",
           "triangles": 8011,
           "vertices": 5331
         },
         {
           "file": "fish/discus/lod1.glb",
-          "bytes": 59648,
-          "sha256": "8c7744e2e946c200e3a35315f893859c40437452a8315182d0c5f51d510f53d4",
+          "bytes": 63388,
+          "sha256": "78ac47e2429f929ad2dc0a8d0d81280ced58c4382409eb66eff1d79340fea49d",
           "triangles": 3355,
-          "vertices": 2343
+          "vertices": 2347
         },
         {
           "file": "fish/discus/lod2.glb",
-          "bytes": 31124,
-          "sha256": "98949f6919ccbca58dae7369fa1ad82b3589648cdc9e5b1aab7142393b840ea8",
+          "bytes": 34036,
+          "sha256": "43e2a1d665b14e098e38caac1ef1bbef97c1235278856805b63b6764c3fede3b",
           "triangles": 1440,
-          "vertices": 1056
+          "vertices": 1063
         }
       ],
       "textures": [
@@ -988,18 +1006,18 @@
       "files": [
         {
           "file": "fish/discus/lod0.glb",
-          "bytes": 116916,
-          "sha256": "77d52c463b98052c5c6093a4a581e37524a7f8b5de21e43951d66e06c85b2a5b"
+          "bytes": 124360,
+          "sha256": "722faa8eff96cb8080ee14a711dc0500902dc631adb65fcf538ac8990f0b3922"
         },
         {
           "file": "fish/discus/lod1.glb",
-          "bytes": 59648,
-          "sha256": "8c7744e2e946c200e3a35315f893859c40437452a8315182d0c5f51d510f53d4"
+          "bytes": 63388,
+          "sha256": "78ac47e2429f929ad2dc0a8d0d81280ced58c4382409eb66eff1d79340fea49d"
         },
         {
           "file": "fish/discus/lod2.glb",
-          "bytes": 31124,
-          "sha256": "98949f6919ccbca58dae7369fa1ad82b3589648cdc9e5b1aab7142393b840ea8"
+          "bytes": 34036,
+          "sha256": "43e2a1d665b14e098e38caac1ef1bbef97c1235278856805b63b6764c3fede3b"
         },
         {
           "file": "fish/discus/textures/discus_material-001_basecolor_1k.ktx2",
@@ -1051,6 +1069,9 @@
             "pelvic": 5
           }
         },
+        "mouthMask": {
+          "attribute": "_MOUTH"
+        },
         "debugRender": "debug/discus.png"
       }
     },
@@ -1085,24 +1106,24 @@
       "lods": [
         {
           "file": "fish/firefish/lod0.glb",
-          "bytes": 45328,
-          "sha256": "33cfc5a87f1f88a04f2eb1d6967dca3110dd6ef7db032f9110713806bfcb3665",
+          "bytes": 46504,
+          "sha256": "eb84340311cc5f0ba79c976c44e117203d565f609094a469725b82232abbb080",
           "triangles": 4608,
           "vertices": 2554
         },
         {
           "file": "fish/firefish/lod1.glb",
-          "bytes": 23412,
-          "sha256": "30f91160289bafdb8cbb0fe1cda85a4b14a35ed15b066a6ca64c1ca6178bf891",
+          "bytes": 24404,
+          "sha256": "482885908590c123f17f78cb464aca4955cf64c7a081fd56334d7f0a28a8c78c",
           "triangles": 1842,
-          "vertices": 1050
+          "vertices": 1048
         },
         {
           "file": "fish/firefish/lod2.glb",
-          "bytes": 11540,
-          "sha256": "a71261682da23d1063fac3576adc6c8444d6cd691526588588186534d11b1d1a",
-          "triangles": 691,
-          "vertices": 411
+          "bytes": 12200,
+          "sha256": "182cf6dfb48bda409c42764f87e5acb5f4ccf2eefb8562d394ba7d82016ef498",
+          "triangles": 690,
+          "vertices": 404
         }
       ],
       "textures": [
@@ -1131,18 +1152,18 @@
       "files": [
         {
           "file": "fish/firefish/lod0.glb",
-          "bytes": 45328,
-          "sha256": "33cfc5a87f1f88a04f2eb1d6967dca3110dd6ef7db032f9110713806bfcb3665"
+          "bytes": 46504,
+          "sha256": "eb84340311cc5f0ba79c976c44e117203d565f609094a469725b82232abbb080"
         },
         {
           "file": "fish/firefish/lod1.glb",
-          "bytes": 23412,
-          "sha256": "30f91160289bafdb8cbb0fe1cda85a4b14a35ed15b066a6ca64c1ca6178bf891"
+          "bytes": 24404,
+          "sha256": "482885908590c123f17f78cb464aca4955cf64c7a081fd56334d7f0a28a8c78c"
         },
         {
           "file": "fish/firefish/lod2.glb",
-          "bytes": 11540,
-          "sha256": "a71261682da23d1063fac3576adc6c8444d6cd691526588588186534d11b1d1a"
+          "bytes": 12200,
+          "sha256": "182cf6dfb48bda409c42764f87e5acb5f4ccf2eefb8562d394ba7d82016ef498"
         },
         {
           "file": "fish/firefish/textures/firefish_basecolor_1k.ktx2",
@@ -1174,6 +1195,9 @@
             "pelvic": 5
           }
         },
+        "mouthMask": {
+          "attribute": "_MOUTH"
+        },
         "debugRender": "debug/firefish.png"
       }
     },
@@ -1189,7 +1213,7 @@
       "modifications": [
         "merged meshes, dropped skeleton, animation and unused attributes",
         "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
-        "baked fin mask and fin id vertex attributes",
+        "baked fin mask, fin id and mouth mask vertex attributes",
         "colour and normal maps re-encoded to KTX2 at 1k and 2k"
       ],
       "bounds": {
@@ -1207,24 +1231,24 @@
       "lods": [
         {
           "file": "fish/guppy-female/lod0.glb",
-          "bytes": 77828,
-          "sha256": "a649c93001eb5a2b7808c34e3299831cb730ebb52f961adfb5ed1a8c17aacb08",
+          "bytes": 82920,
+          "sha256": "ff8abeea2ec192a0ad2870aada60630b4d1da801c97629dfc83bce481b660aff",
           "triangles": 5948,
           "vertices": 3389
         },
         {
           "file": "fish/guppy-female/lod1.glb",
-          "bytes": 38792,
-          "sha256": "90203397ca1054745ed976dc39defe58817e3cd960c32acfe7f76224a459e37a",
+          "bytes": 41220,
+          "sha256": "adb41d5087f1e31572f16d156a50b23ec019214a2cf3b3ae34ec3e7bd3fe970b",
           "triangles": 2377,
           "vertices": 1400
         },
         {
           "file": "fish/guppy-female/lod2.glb",
-          "bytes": 22604,
-          "sha256": "be7f4e9413166c8fcacb4239935015f2ec16b7e404f91b121e454d66b5c9b07f",
-          "triangles": 944,
-          "vertices": 615
+          "bytes": 24320,
+          "sha256": "398af95e58f8f471c3b758496bee8a28513f0cee95e448d4867f8898c8a50b20",
+          "triangles": 943,
+          "vertices": 614
         }
       ],
       "textures": [
@@ -1295,18 +1319,18 @@
       "files": [
         {
           "file": "fish/guppy-female/lod0.glb",
-          "bytes": 77828,
-          "sha256": "a649c93001eb5a2b7808c34e3299831cb730ebb52f961adfb5ed1a8c17aacb08"
+          "bytes": 82920,
+          "sha256": "ff8abeea2ec192a0ad2870aada60630b4d1da801c97629dfc83bce481b660aff"
         },
         {
           "file": "fish/guppy-female/lod1.glb",
-          "bytes": 38792,
-          "sha256": "90203397ca1054745ed976dc39defe58817e3cd960c32acfe7f76224a459e37a"
+          "bytes": 41220,
+          "sha256": "adb41d5087f1e31572f16d156a50b23ec019214a2cf3b3ae34ec3e7bd3fe970b"
         },
         {
           "file": "fish/guppy-female/lod2.glb",
-          "bytes": 22604,
-          "sha256": "be7f4e9413166c8fcacb4239935015f2ec16b7e404f91b121e454d66b5c9b07f"
+          "bytes": 24320,
+          "sha256": "398af95e58f8f471c3b758496bee8a28513f0cee95e448d4867f8898c8a50b20"
         },
         {
           "file": "fish/guppy-female/textures/guppy-female_guppy-layer1-f_basecolor_1k.ktx2",
@@ -1358,6 +1382,9 @@
             "pelvic": 5
           }
         },
+        "mouthMask": {
+          "attribute": "_MOUTH"
+        },
         "debugRender": "debug/guppy-female.png"
       }
     },
@@ -1373,7 +1400,7 @@
       "modifications": [
         "merged meshes, dropped skeleton, animation and unused attributes",
         "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
-        "baked fin mask and fin id vertex attributes",
+        "baked fin mask, fin id and mouth mask vertex attributes",
         "colour and normal maps re-encoded to KTX2 at 1k and 2k",
         "eyeballs kept from their own mesh and re-seated on the head, outside fin classification"
       ],
@@ -1392,23 +1419,23 @@
       "lods": [
         {
           "file": "fish/guppy-male/lod0.glb",
-          "bytes": 22196,
-          "sha256": "5c4454d24fb9d11e0cb3e03c584d4a3e066815f9b6c864b95307a63fcfcd1d58",
+          "bytes": 23544,
+          "sha256": "8dae114cf5880afd21e67222906c1bb7d481f2508bf89715c788811f4ec621c7",
           "triangles": 1561,
           "vertices": 784
         },
         {
           "file": "fish/guppy-male/lod1.glb",
-          "bytes": 12980,
-          "sha256": "78b87082e8424675728f8de52ad7c3e4eff5e37cb82e2c4528a7ab721ece8c3d",
-          "triangles": 642,
+          "bytes": 13972,
+          "sha256": "d14315fdedbca456360056d5de990ceb6baaa5e83f31ac9b88332d9f6facf905",
+          "triangles": 640,
           "vertices": 335
         },
         {
           "file": "fish/guppy-male/lod2.glb",
-          "bytes": 9520,
-          "sha256": "52d72669f27d4f74e9a435ab584004f44a5523cc13fcecf023712415f4b00dad",
-          "triangles": 333,
+          "bytes": 10324,
+          "sha256": "dca395cc2c97ad4f8f067a09ae479edcce1fc2a710d91196918afad5b783d675",
+          "triangles": 332,
           "vertices": 178
         }
       ],
@@ -1438,18 +1465,18 @@
       "files": [
         {
           "file": "fish/guppy-male/lod0.glb",
-          "bytes": 22196,
-          "sha256": "5c4454d24fb9d11e0cb3e03c584d4a3e066815f9b6c864b95307a63fcfcd1d58"
+          "bytes": 23544,
+          "sha256": "8dae114cf5880afd21e67222906c1bb7d481f2508bf89715c788811f4ec621c7"
         },
         {
           "file": "fish/guppy-male/lod1.glb",
-          "bytes": 12980,
-          "sha256": "78b87082e8424675728f8de52ad7c3e4eff5e37cb82e2c4528a7ab721ece8c3d"
+          "bytes": 13972,
+          "sha256": "d14315fdedbca456360056d5de990ceb6baaa5e83f31ac9b88332d9f6facf905"
         },
         {
           "file": "fish/guppy-male/lod2.glb",
-          "bytes": 9520,
-          "sha256": "52d72669f27d4f74e9a435ab584004f44a5523cc13fcecf023712415f4b00dad"
+          "bytes": 10324,
+          "sha256": "dca395cc2c97ad4f8f067a09ae479edcce1fc2a710d91196918afad5b783d675"
         },
         {
           "file": "fish/guppy-male/textures/guppy-male_basecolor_1k.ktx2",
@@ -1480,6 +1507,9 @@
             "pectoral": 4,
             "pelvic": 5
           }
+        },
+        "mouthMask": {
+          "attribute": "_MOUTH"
         },
         "debugRender": "debug/guppy-male.png"
       }
@@ -1515,24 +1545,24 @@
       "lods": [
         {
           "file": "fish/harlequin-rasbora/lod0.glb",
-          "bytes": 43300,
-          "sha256": "f0808118981f82b4c8006b3b5229e7984c45236e76ed9bc807cf6e2e3894864d",
+          "bytes": 44484,
+          "sha256": "8a076839b37f4a39a410761329b170fa14bf207478d43b3444a309c91f40b346",
           "triangles": 4320,
           "vertices": 2379
         },
         {
           "file": "fish/harlequin-rasbora/lod1.glb",
-          "bytes": 22536,
-          "sha256": "3768bec1255091fd321319c8d50bfeaa31007910347d1c102d7b459a27c12868",
+          "bytes": 23576,
+          "sha256": "4053242c0a2f1633631cbd9c63216fca11e6e7e4eb8c78c1b29052b85272db23",
           "triangles": 1728,
-          "vertices": 968
+          "vertices": 966
         },
         {
           "file": "fish/harlequin-rasbora/lod2.glb",
-          "bytes": 11140,
-          "sha256": "28e2c94633813f7b130bd73202957e287495d4d5424b992b2daf16758e0f9ac7",
+          "bytes": 11788,
+          "sha256": "134c1c8a14f3fa3ec810b0b83305fbfd34efcd25df5b1c1ad496b4b7deb605e6",
           "triangles": 647,
-          "vertices": 384
+          "vertices": 381
         }
       ],
       "textures": [
@@ -1561,18 +1591,18 @@
       "files": [
         {
           "file": "fish/harlequin-rasbora/lod0.glb",
-          "bytes": 43300,
-          "sha256": "f0808118981f82b4c8006b3b5229e7984c45236e76ed9bc807cf6e2e3894864d"
+          "bytes": 44484,
+          "sha256": "8a076839b37f4a39a410761329b170fa14bf207478d43b3444a309c91f40b346"
         },
         {
           "file": "fish/harlequin-rasbora/lod1.glb",
-          "bytes": 22536,
-          "sha256": "3768bec1255091fd321319c8d50bfeaa31007910347d1c102d7b459a27c12868"
+          "bytes": 23576,
+          "sha256": "4053242c0a2f1633631cbd9c63216fca11e6e7e4eb8c78c1b29052b85272db23"
         },
         {
           "file": "fish/harlequin-rasbora/lod2.glb",
-          "bytes": 11140,
-          "sha256": "28e2c94633813f7b130bd73202957e287495d4d5424b992b2daf16758e0f9ac7"
+          "bytes": 11788,
+          "sha256": "134c1c8a14f3fa3ec810b0b83305fbfd34efcd25df5b1c1ad496b4b7deb605e6"
         },
         {
           "file": "fish/harlequin-rasbora/textures/harlequin-rasbora_basecolor_1k.ktx2",
@@ -1604,6 +1634,9 @@
             "pelvic": 5
           }
         },
+        "mouthMask": {
+          "attribute": "_MOUTH"
+        },
         "debugRender": "debug/harlequin-rasbora.png"
       }
     },
@@ -1619,7 +1652,7 @@
       "modifications": [
         "merged meshes, dropped skeleton, animation and unused attributes",
         "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
-        "baked fin mask and fin id vertex attributes",
+        "baked fin mask, fin id and mouth mask vertex attributes",
         "colour and normal maps re-encoded to KTX2 at 1k and 2k"
       ],
       "bounds": {
@@ -1637,24 +1670,24 @@
       "lods": [
         {
           "file": "fish/neon-tetra/lod0.glb",
-          "bytes": 25040,
-          "sha256": "3311c49fd38120c9653a1667c8a3b5152c7c03a582a44adb0a59935f15334758",
+          "bytes": 27504,
+          "sha256": "6d12d5b16dbe8ca719570dfac7c705ba2eb3b2c62f71cb704164dac790436c8c",
           "triangles": 1498,
           "vertices": 929
         },
         {
           "file": "fish/neon-tetra/lod1.glb",
-          "bytes": 15724,
-          "sha256": "0f68714da359784a0b97e3ece247332d06aff2faf86c688f254d52b702ca78b4",
-          "triangles": 659,
-          "vertices": 463
+          "bytes": 17340,
+          "sha256": "736f935a757c34bc7e28105a0877d5a9c9a992f64fec57375ecfb6f8e7752667",
+          "triangles": 660,
+          "vertices": 461
         },
         {
           "file": "fish/neon-tetra/lod2.glb",
-          "bytes": 11560,
-          "sha256": "774578d0b8c67ed077f5f41a631dfbed6de3e099f8bc3ac9641b2049cd6fff0f",
+          "bytes": 12728,
+          "sha256": "48195b85e434ec5f4e9edd375848c6860027cfdf7b105c85666317ad2b51d107",
           "triangles": 341,
-          "vertices": 265
+          "vertices": 258
         }
       ],
       "textures": [
@@ -1704,18 +1737,18 @@
       "files": [
         {
           "file": "fish/neon-tetra/lod0.glb",
-          "bytes": 25040,
-          "sha256": "3311c49fd38120c9653a1667c8a3b5152c7c03a582a44adb0a59935f15334758"
+          "bytes": 27504,
+          "sha256": "6d12d5b16dbe8ca719570dfac7c705ba2eb3b2c62f71cb704164dac790436c8c"
         },
         {
           "file": "fish/neon-tetra/lod1.glb",
-          "bytes": 15724,
-          "sha256": "0f68714da359784a0b97e3ece247332d06aff2faf86c688f254d52b702ca78b4"
+          "bytes": 17340,
+          "sha256": "736f935a757c34bc7e28105a0877d5a9c9a992f64fec57375ecfb6f8e7752667"
         },
         {
           "file": "fish/neon-tetra/lod2.glb",
-          "bytes": 11560,
-          "sha256": "774578d0b8c67ed077f5f41a631dfbed6de3e099f8bc3ac9641b2049cd6fff0f"
+          "bytes": 12728,
+          "sha256": "48195b85e434ec5f4e9edd375848c6860027cfdf7b105c85666317ad2b51d107"
         },
         {
           "file": "fish/neon-tetra/textures/neon-tetra_basecolor_1k.ktx2",
@@ -1757,6 +1790,9 @@
             "pelvic": 5
           }
         },
+        "mouthMask": {
+          "attribute": "_MOUTH"
+        },
         "debugRender": "debug/neon-tetra.png"
       }
     },
@@ -1772,7 +1808,7 @@
       "modifications": [
         "merged meshes, dropped skeleton, animation and unused attributes",
         "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
-        "baked fin mask and fin id vertex attributes",
+        "baked fin mask, fin id and mouth mask vertex attributes",
         "colour and normal maps re-encoded to KTX2 at 1k and 2k"
       ],
       "bounds": {
@@ -1790,24 +1826,24 @@
       "lods": [
         {
           "file": "fish/ocellaris-clownfish/lod0.glb",
-          "bytes": 23884,
-          "sha256": "a3c01fe0dea74fa5ffc00b5b73b740e9eadb3633585708052287e738f0a9c48e",
+          "bytes": 24884,
+          "sha256": "9c9f268d9773c289da9ea2073baedafd973330e8ffbdf0a57f731d8c9b39c192",
           "triangles": 1606,
           "vertices": 903
         },
         {
           "file": "fish/ocellaris-clownfish/lod1.glb",
-          "bytes": 12884,
-          "sha256": "a781bfa422ded84e521db0d29e8068207fbe0bbb9f0e0df9dee535e0ffdf144f",
+          "bytes": 13440,
+          "sha256": "8a5eee930005dbeee4bab6edaacf9f76b5778f6b9bbf966d863058eecafce180",
           "triangles": 642,
-          "vertices": 390
+          "vertices": 388
         },
         {
           "file": "fish/ocellaris-clownfish/lod2.glb",
-          "bytes": 7628,
-          "sha256": "bf60de32772594e8bf0b7c9f177800219daf21d6209764b19ff0bd0e41bfc62a",
+          "bytes": 8004,
+          "sha256": "381e8fc0d50973c6c2e1c2dd6cb0aba989dfadcd331e551ad25fc1c3f0d001a4",
           "triangles": 240,
-          "vertices": 163
+          "vertices": 164
         }
       ],
       "textures": [
@@ -1857,18 +1893,18 @@
       "files": [
         {
           "file": "fish/ocellaris-clownfish/lod0.glb",
-          "bytes": 23884,
-          "sha256": "a3c01fe0dea74fa5ffc00b5b73b740e9eadb3633585708052287e738f0a9c48e"
+          "bytes": 24884,
+          "sha256": "9c9f268d9773c289da9ea2073baedafd973330e8ffbdf0a57f731d8c9b39c192"
         },
         {
           "file": "fish/ocellaris-clownfish/lod1.glb",
-          "bytes": 12884,
-          "sha256": "a781bfa422ded84e521db0d29e8068207fbe0bbb9f0e0df9dee535e0ffdf144f"
+          "bytes": 13440,
+          "sha256": "8a5eee930005dbeee4bab6edaacf9f76b5778f6b9bbf966d863058eecafce180"
         },
         {
           "file": "fish/ocellaris-clownfish/lod2.glb",
-          "bytes": 7628,
-          "sha256": "bf60de32772594e8bf0b7c9f177800219daf21d6209764b19ff0bd0e41bfc62a"
+          "bytes": 8004,
+          "sha256": "381e8fc0d50973c6c2e1c2dd6cb0aba989dfadcd331e551ad25fc1c3f0d001a4"
         },
         {
           "file": "fish/ocellaris-clownfish/textures/ocellaris-clownfish_basecolor_1k.ktx2",
@@ -1910,6 +1946,9 @@
             "pelvic": 5
           }
         },
+        "mouthMask": {
+          "attribute": "_MOUTH"
+        },
         "debugRender": "debug/ocellaris-clownfish.png"
       }
     },
@@ -1942,24 +1981,24 @@
       "lods": [
         {
           "file": "fish/royal-gramma/lod0.glb",
-          "bytes": 33560,
-          "sha256": "81db0e094157bd9ec785fbbac7c47e71ce19e0762707833563e67d93b8f2885f",
+          "bytes": 34708,
+          "sha256": "fb01950d6c2899f05a12c11fcc0e9ae0ad8ff4765f2032f08007dfd27b510278",
           "triangles": 3144,
           "vertices": 1700
         },
         {
           "file": "fish/royal-gramma/lod1.glb",
-          "bytes": 17416,
-          "sha256": "32253bafa2d85def120935f9346310936604609dde1587e1f9aa2e9707a6a6d6",
+          "bytes": 18252,
+          "sha256": "471840bad7c45d0874be5f490501a1b08d7c0858d3ea49a143c3eed30e1c5410",
           "triangles": 1257,
-          "vertices": 697
+          "vertices": 693
         },
         {
           "file": "fish/royal-gramma/lod2.glb",
-          "bytes": 9088,
-          "sha256": "21d84d0c9343164e32b0009e7b9f5e14bcf04a7e39bae47e2d91890c2fef2613",
+          "bytes": 9764,
+          "sha256": "b18f9b41e9fecc078ab8ecf633921877f94a28647e3fca2c6d837b38a6ee3fed",
           "triangles": 472,
-          "vertices": 277
+          "vertices": 275
         }
       ],
       "textures": [
@@ -1988,18 +2027,18 @@
       "files": [
         {
           "file": "fish/royal-gramma/lod0.glb",
-          "bytes": 33560,
-          "sha256": "81db0e094157bd9ec785fbbac7c47e71ce19e0762707833563e67d93b8f2885f"
+          "bytes": 34708,
+          "sha256": "fb01950d6c2899f05a12c11fcc0e9ae0ad8ff4765f2032f08007dfd27b510278"
         },
         {
           "file": "fish/royal-gramma/lod1.glb",
-          "bytes": 17416,
-          "sha256": "32253bafa2d85def120935f9346310936604609dde1587e1f9aa2e9707a6a6d6"
+          "bytes": 18252,
+          "sha256": "471840bad7c45d0874be5f490501a1b08d7c0858d3ea49a143c3eed30e1c5410"
         },
         {
           "file": "fish/royal-gramma/lod2.glb",
-          "bytes": 9088,
-          "sha256": "21d84d0c9343164e32b0009e7b9f5e14bcf04a7e39bae47e2d91890c2fef2613"
+          "bytes": 9764,
+          "sha256": "b18f9b41e9fecc078ab8ecf633921877f94a28647e3fca2c6d837b38a6ee3fed"
         },
         {
           "file": "fish/royal-gramma/textures/royal-gramma_basecolor_1k.ktx2",
@@ -2030,6 +2069,9 @@
             "pectoral": 4,
             "pelvic": 5
           }
+        },
+        "mouthMask": {
+          "attribute": "_MOUTH"
         },
         "debugRender": "debug/royal-gramma.png"
       }
@@ -2065,24 +2107,24 @@
       "lods": [
         {
           "file": "fish/six-line-wrasse/lod0.glb",
-          "bytes": 43396,
-          "sha256": "dc64837df56705dcdccc78ae8725958981c9d8b4aa24972bf666039333fe0480",
+          "bytes": 44592,
+          "sha256": "e0ce140e54540f99094f002e45bbb613d2733ad0eef0cd712dd449433d168b5e",
           "triangles": 4320,
           "vertices": 2379
         },
         {
           "file": "fish/six-line-wrasse/lod1.glb",
-          "bytes": 22772,
-          "sha256": "6831d2c95254ad5b972994731f436300ee74bfa58026c7bb11cccf5e97942169",
-          "triangles": 1728,
-          "vertices": 979
+          "bytes": 23712,
+          "sha256": "4dfc4bdd3fa3446b55d84def391b997088becf8ed19597614ad0b2388537b78f",
+          "triangles": 1727,
+          "vertices": 971
         },
         {
           "file": "fish/six-line-wrasse/lod2.glb",
-          "bytes": 11116,
-          "sha256": "b19d71b5b23914e411f54aa141c213cc7b7bab72cfa38ddb6af7cf262cd28818",
+          "bytes": 11860,
+          "sha256": "1a81eebe11ff0c3b6d102dda632e25c503c93fc634677e6cdec20617e37c0634",
           "triangles": 647,
-          "vertices": 382
+          "vertices": 377
         }
       ],
       "textures": [
@@ -2111,18 +2153,18 @@
       "files": [
         {
           "file": "fish/six-line-wrasse/lod0.glb",
-          "bytes": 43396,
-          "sha256": "dc64837df56705dcdccc78ae8725958981c9d8b4aa24972bf666039333fe0480"
+          "bytes": 44592,
+          "sha256": "e0ce140e54540f99094f002e45bbb613d2733ad0eef0cd712dd449433d168b5e"
         },
         {
           "file": "fish/six-line-wrasse/lod1.glb",
-          "bytes": 22772,
-          "sha256": "6831d2c95254ad5b972994731f436300ee74bfa58026c7bb11cccf5e97942169"
+          "bytes": 23712,
+          "sha256": "4dfc4bdd3fa3446b55d84def391b997088becf8ed19597614ad0b2388537b78f"
         },
         {
           "file": "fish/six-line-wrasse/lod2.glb",
-          "bytes": 11116,
-          "sha256": "b19d71b5b23914e411f54aa141c213cc7b7bab72cfa38ddb6af7cf262cd28818"
+          "bytes": 11860,
+          "sha256": "1a81eebe11ff0c3b6d102dda632e25c503c93fc634677e6cdec20617e37c0634"
         },
         {
           "file": "fish/six-line-wrasse/textures/six-line-wrasse_basecolor_1k.ktx2",
@@ -2154,6 +2196,9 @@
             "pelvic": 5
           }
         },
+        "mouthMask": {
+          "attribute": "_MOUTH"
+        },
         "debugRender": "debug/six-line-wrasse.png"
       }
     },
@@ -2169,7 +2214,7 @@
       "modifications": [
         "merged meshes, dropped skeleton, animation and unused attributes",
         "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
-        "baked fin mask and fin id vertex attributes",
+        "baked fin mask, fin id and mouth mask vertex attributes",
         "colour and normal maps re-encoded to KTX2 at 1k and 2k"
       ],
       "bounds": {
@@ -2187,22 +2232,22 @@
       "lods": [
         {
           "file": "fish/yellow-tang/lod0.glb",
-          "bytes": 16984,
-          "sha256": "31ae905d9387a16b47700cd3f4ed131e9f918aa25ef685a3283c52d8a9137c59",
+          "bytes": 17804,
+          "sha256": "8de428dc91dc8620a8ea7184345f30d686fdd8ca7cc357a3dd6804a29718a82b",
           "triangles": 1184,
           "vertices": 623
         },
         {
           "file": "fish/yellow-tang/lod1.glb",
-          "bytes": 9568,
-          "sha256": "589dd9dca853231c275fc1826252861634521b6e65c6f066e44d9af4c9a91e85",
+          "bytes": 10136,
+          "sha256": "7b5056f1da4458bde408bcd6a8995411ce66e7a35888957926fd3c9b58303221",
           "triangles": 473,
           "vertices": 261
         },
         {
           "file": "fish/yellow-tang/lod2.glb",
-          "bytes": 5908,
-          "sha256": "c6ccd9fa1f05153703bd0bd6b50cd0ad46d1a61d0ab39572f48217452594bfeb",
+          "bytes": 6340,
+          "sha256": "db8f7e035129cc71b0df1b3c2338f51ad477f41100a8fe901cbb1c458a107d83",
           "triangles": 176,
           "vertices": 107
         }
@@ -2233,18 +2278,18 @@
       "files": [
         {
           "file": "fish/yellow-tang/lod0.glb",
-          "bytes": 16984,
-          "sha256": "31ae905d9387a16b47700cd3f4ed131e9f918aa25ef685a3283c52d8a9137c59"
+          "bytes": 17804,
+          "sha256": "8de428dc91dc8620a8ea7184345f30d686fdd8ca7cc357a3dd6804a29718a82b"
         },
         {
           "file": "fish/yellow-tang/lod1.glb",
-          "bytes": 9568,
-          "sha256": "589dd9dca853231c275fc1826252861634521b6e65c6f066e44d9af4c9a91e85"
+          "bytes": 10136,
+          "sha256": "7b5056f1da4458bde408bcd6a8995411ce66e7a35888957926fd3c9b58303221"
         },
         {
           "file": "fish/yellow-tang/lod2.glb",
-          "bytes": 5908,
-          "sha256": "c6ccd9fa1f05153703bd0bd6b50cd0ad46d1a61d0ab39572f48217452594bfeb"
+          "bytes": 6340,
+          "sha256": "db8f7e035129cc71b0df1b3c2338f51ad477f41100a8fe901cbb1c458a107d83"
         },
         {
           "file": "fish/yellow-tang/textures/yellow-tang_basecolor_1k.ktx2",
@@ -2275,6 +2320,9 @@
             "pectoral": 4,
             "pelvic": 5
           }
+        },
+        "mouthMask": {
+          "attribute": "_MOUTH"
         },
         "debugRender": "debug/yellow-tang.png"
       }
