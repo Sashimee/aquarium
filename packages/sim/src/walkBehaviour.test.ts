@@ -2,6 +2,7 @@ import type { Collider, SphereCollider } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import { BEHAVIOUR } from './behaviour.ts';
 import {
+  blueTang,
   cherryShrimp,
   FoodRain,
   neonTetra,
@@ -178,6 +179,153 @@ describe('cave-dwelling walkers at night', { timeout: LONG }, () => {
     expect(planDistance(world, i, caveX, caveZ)).toBeLessThanOrEqual(
       cave.radius + 0.5 * cherryShrimp.locomotion.bodyLengthM,
     );
+  });
+
+  it('spread a crowd turned away from a full cave over separate nooks', () => {
+    const room = caveRoom(cherryShrimp.locomotion.bodyLengthM);
+    const world = reefNearCave(3, cherryShrimp, room + 5);
+    world.setLight(0);
+    run(world, 240);
+    const length = cherryShrimp.locomotion.bodyLengthM;
+    const overflow = [];
+    for (let i = 0; i < world.count; i++) {
+      expect(world.state[i]).toBe(FishState.Shelter);
+      if (world.behaviour.anchor[i] !== CAVE) overflow.push(i);
+    }
+    expect(overflow).toHaveLength(5);
+    for (const i of overflow) {
+      for (const j of overflow) {
+        if (j <= i) continue;
+        const o = j * 3;
+        const apart = planDistance(world, i, world.position[o] ?? 0, world.position[o + 2] ?? 0);
+        expect(apart).toBeGreaterThan(0.5 * length);
+      }
+    }
+  });
+
+  it('shelter in a nook outside a cave they cannot get into', () => {
+    const [x0, z0] = [0.5, 0];
+    const length = cherryShrimp.locomotion.bodyLengthM;
+    const wall = (id: string, dx: number, dz: number, hx: number, hz: number): Collider => ({
+      id,
+      hard: true,
+      kind: 'box',
+      center: [x0 + dx, REEF_TANK.height / 2, z0 + dz],
+      halfExtents: [hx, REEF_TANK.height / 2, hz],
+      rotationY: 0,
+      rounding: 0,
+    });
+    const world = new World({
+      seed: 9,
+      tank: REEF_TANK,
+      species: [cherryShrimp],
+      decor: [
+        wall('n', 0, 0.05, 0.06, 0.01),
+        wall('s', 0, -0.05, 0.06, 0.01),
+        wall('e', 0.05, 0, 0.01, 0.06),
+        wall('w', -0.05, 0, 0.01, 0.06),
+      ],
+      anchors: [{ id: 'walled-in', kind: 'cave', position: [x0, 0.03, z0], radius: 0.03 }],
+      fish: [],
+    });
+    world.addFish(
+      { id: 'shut-out', species: cherryShrimp.id },
+      { position: [0.2, 0.02, 0], heading: 1 },
+    );
+    world.setLight(0);
+    run(world, BEHAVIOUR.walkerCaveGiveUpS + 60);
+    expect(world.behaviour.anchor[0]).toBe(-1);
+    let sheltering = 0;
+    const seconds = 60;
+    run(world, seconds, () => {
+      if (world.state[0] === FishState.Shelter) sheltering++;
+    });
+    expect(sheltering).toBeGreaterThan(0.9 * (seconds / STEP_DT));
+    const fromCave = planDistance(world, 0, x0, z0);
+    expect(fromCave).toBeGreaterThan(0.06);
+    expect(fromCave).toBeLessThan(0.06 + 2 * length);
+  });
+
+  it('rest where they are when neither the cave nor a nook beside it can be reached', () => {
+    const [x0, z0] = [0.5, 0];
+    const wall = (id: string, dx: number, dz: number, hx: number, hz: number): Collider => ({
+      id,
+      hard: true,
+      kind: 'box',
+      center: [x0 + dx, REEF_TANK.height / 2, z0 + dz],
+      halfExtents: [hx, REEF_TANK.height / 2, hz],
+      rotationY: 0,
+      rounding: 0,
+    });
+    const world = new World({
+      seed: 9,
+      tank: REEF_TANK,
+      species: [cherryShrimp],
+      decor: [
+        wall('n', 0, 0.1, 0.11, 0.01),
+        wall('s', 0, -0.1, 0.11, 0.01),
+        wall('e', 0.1, 0, 0.01, 0.11),
+        wall('w', -0.1, 0, 0.01, 0.11),
+      ],
+      anchors: [{ id: 'walled-in', kind: 'cave', position: [x0, 0.03, z0], radius: 0.03 }],
+      fish: [],
+    });
+    world.addFish(
+      { id: 'shut-out', species: cherryShrimp.id },
+      { position: [0.2, 0.02, 0], heading: 1 },
+    );
+    world.setLight(0);
+    run(world, 40);
+    expect(world.behaviour.anchor[0]).toBe(0);
+    run(world, BEHAVIOUR.walkerCaveGiveUpS + BEHAVIOUR.walkerNookGiveUpS + 60);
+    expect(world.behaviour.anchor[0]).toBe(-1);
+    let resting = 0;
+    const seconds = 60;
+    run(world, seconds, () => {
+      if (world.state[0] === FishState.Rest) resting++;
+    });
+    expect(resting).toBeGreaterThan(0.9 * (seconds / STEP_DT));
+  });
+
+  it('head for the nearest cave with room, not the first', () => {
+    const world = new World({
+      seed: 5,
+      tank: REEF_TANK,
+      species: [cherryShrimp],
+      decor: [],
+      anchors: [
+        { id: 'far', kind: 'cave', position: [-0.6, 0.03, 0], radius: 0.05 },
+        { id: 'near', kind: 'cave', position: [0.4, 0.03, 0], radius: 0.05 },
+      ],
+      fish: [],
+    });
+    world.addFish(
+      { id: 'shrimp', species: cherryShrimp.id },
+      { position: [0.2, 0.02, 0], heading: 0 },
+    );
+    world.setLight(0);
+    run(world, 60);
+    expect(world.behaviour.anchor[0]).toBe(1);
+  });
+
+  it('leave resting swimmers on their stations when the anchors change', () => {
+    const config: WorldConfig = {
+      seed: 17,
+      tank: REEF_TANK,
+      species: [blueTang, cherryShrimp],
+      decor: REEF_DECOR,
+      anchors: REEF_ANCHORS,
+      fish: spawnMany(blueTang.id, 3),
+    };
+    const [same, remounted] = [new World(config), new World(config)];
+    for (const w of [same, remounted]) {
+      w.setLight(0);
+      run(w, 60);
+    }
+    remounted.setAnchors(REEF_ANCHORS);
+    run(same, 30);
+    run(remounted, 30);
+    expect(new Float64Array(remounted.position)).toEqual(new Float64Array(same.position));
   });
 
   it('share caves deterministically', () => {

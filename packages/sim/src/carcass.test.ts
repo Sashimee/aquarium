@@ -1,11 +1,12 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { speciesContentSchema } from '@aquarium/shared';
+import { speciesContentSchema, type Collider } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import {
   CARCASS,
   carcassFate,
   carcassSettleS,
+  CarcassSupport,
   sinkingCarcass,
   sinkSpeed,
   type CarcassPose,
@@ -164,10 +165,88 @@ describe('sinkingCarcass', () => {
     }
   });
 
+  it('falls again from rest when its support goes, limp and rolled as long dead', () => {
+    const from = { x: 0, y: 0.2, z: 0, yaw: 0 };
+    const p = pose();
+    sinkingCarcass(30, from, 0.03, 0.9, 0, p, 0);
+    expect(p).toMatchObject({ y: 0.2, roll: -Math.PI / 2, liveliness: 0 });
+    sinkingCarcass(30.5, from, 0.03, 0.9, 0, p, 0.5);
+    const fell = p.y;
+    expect(fell).toBeLessThan(0.2);
+    sinkingCarcass(0.5, from, 0.03, 0.9, 0, p);
+    expect(fell).toBe(p.y);
+  });
+
   it('holds the start pose before t = 0', () => {
     const from = { x: 0.3, y: 0.4, z: 0.2, yaw: 2 };
     const p = pose();
     sinkingCarcass(-1, from, 0.03, 0.5, 0, p);
     expect(p).toMatchObject({ x: 0.3, y: 0.4, z: 0.2, yaw: 2, roll: 0, liveliness: 1 });
+  });
+});
+
+describe('CarcassSupport', () => {
+  const length = 0.03;
+  const sand = (): number => 0.02;
+  const rock = (overrides: Partial<{ hard: boolean; y: number }> = {}): Collider => ({
+    id: 'rock',
+    kind: 'box',
+    hard: overrides.hard ?? true,
+    center: [0, overrides.y ?? 0.1, 0],
+    halfExtents: [0.05, 0.05, 0.05],
+    rotationY: 0,
+    rounding: 0,
+  });
+
+  it('lands on the substrate when nothing hard is under the body', () => {
+    const support = new CarcassSupport([rock({ hard: false })]);
+    expect(support.floorY({ x: 0, y: 0.3, z: 0, yaw: 0 }, length, sand)).toBe(0.02);
+    expect(new CarcassSupport([]).floorY({ x: 0, y: 0.3, z: 0, yaw: 0 }, length, sand)).toBe(0.02);
+  });
+
+  it('lands on top of a rock under its centre', () => {
+    const support = new CarcassSupport([rock()]);
+    expect(support.floorY({ x: 0.01, y: 0.3, z: -0.02, yaw: 1 }, length, sand)).toBeCloseTo(
+      0.15,
+      3,
+    );
+  });
+
+  it('is held up by a rock under only one end', () => {
+    const support = new CarcassSupport([rock()]);
+    const edge = 0.05 + 0.3 * length;
+    const along = { x: 0, y: 0.3, z: edge, yaw: 0 };
+    const across = { x: 0, y: 0.3, z: edge, yaw: Math.PI / 2 };
+    expect(support.floorY(along, length, sand)).toBeCloseTo(0.15, 3);
+    expect(support.floorY(across, length, sand)).toBe(0.02);
+  });
+
+  it('slides past a rock face it only brushes', () => {
+    const turned = { ...rock(), rotationY: Math.PI / 4 };
+    const support = new CarcassSupport([turned]);
+    const off = (0.05 + 0.0002) / Math.SQRT2;
+    const brushing = { x: off, y: 0.3, z: off, yaw: (3 * Math.PI) / 4 };
+    expect(support.floorY(brushing, length, sand)).toBe(0.02);
+  });
+
+  it('falls past a rock that is above where it died, as under a ledge', () => {
+    const support = new CarcassSupport([rock({ y: 0.25 })]);
+    expect(support.floorY({ x: 0, y: 0.15, z: 0, yaw: 0 }, length, sand)).toBe(0.02);
+  });
+
+  it('lies on top of a rock it starts inside', () => {
+    const support = new CarcassSupport([rock()]);
+    expect(support.floorY({ x: 0, y: 0.07, z: 0, yaw: 0 }, length, sand)).toBeCloseTo(0.15, 3);
+  });
+
+  it('rests the body on the rock, not in it', () => {
+    const support = new CarcassSupport([rock()]);
+    const from = { x: 0, y: 0.3, z: 0, yaw: 0 };
+    const floorY = support.floorY(from, length, sand);
+    const p = pose();
+    for (const seed of [0.1, 0.5, 0.9]) {
+      sinkingCarcass(carcassSettleS(from, length, seed, floorY), from, length, seed, floorY, p);
+      expect(p.y).toBeGreaterThan(0.15);
+    }
   });
 });

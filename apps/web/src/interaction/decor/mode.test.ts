@@ -1,5 +1,4 @@
-import type { DecorItem } from '@aquarium/shared';
-import type { DecorCollider } from '@aquarium/sim';
+import type { Collider, DecorItem } from '@aquarium/shared';
 import { PerspectiveCamera, Vector3 } from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
 import type { Engine } from '../../engine/Engine';
@@ -54,7 +53,7 @@ function harness(layout: DecorItem[], biome: 'freshwater' | 'reef' = 'freshwater
   saved.attach(world);
 
   const layouts: { tankId: string; layout: DecorItem[] }[] = [];
-  const colliders: (readonly DecorCollider[])[] = [];
+  const colliders: (readonly Collider[])[] = [];
   const states: DecorViewState[] = [];
   const modes: boolean[] = [];
   bus.on('decor:layout', (e) => layouts.push(e));

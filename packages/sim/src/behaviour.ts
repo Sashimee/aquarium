@@ -142,6 +142,11 @@ export const BEHAVIOUR = {
   walkerNookArriveBodyLengths: 0.5,
   walkerNookDecorBodyLengths: 1.5,
   walkerNookGiveUpS: 60,
+  /** Another walker's nook closer than this, in plan view, is taken. */
+  walkerNookSpacingBodyLengths: 1,
+  /** A walker that gets no closer to its cave or nook than this in the give-up time lets it go. */
+  walkerSeekProgressBodyLengths: 0.5,
+  walkerCaveGiveUpS: 60,
 
   /** Fish body as a chain of spheres along the spine, in body lengths. */
   bodyThicknessBodyLengths: 0.12,
@@ -312,9 +317,14 @@ export class Behaviour {
   private _rest: Float64Array;
   private restTau: Float64Array;
   private restSpot: Float64Array;
-  /** Swimmers: 1 once a rest station is chosen. Walkers: 0 unchosen, 1 a nook, 2 none found. */
+  /**
+   * Swimmers: 1 once a rest station is chosen. Walkers: 0 unchosen, 1 a nook, 2 none found or
+   * given up, 3 on the way to a cave.
+   */
   private restSpotSet: Uint8Array;
-  private nookTimer: Float64Array;
+  private seekTimer: Float64Array;
+  /** Walkers on the way to a cave or nook: the closest they have got to it, in plan view. */
+  private seekClosest: Float64Array;
 
   private home: Float64Array;
   private homeTimer: Float64Array;
@@ -405,7 +415,8 @@ export class Behaviour {
     this.restTau = new Float64Array(n);
     this.restSpot = new Float64Array(n * 3);
     this.restSpotSet = new Uint8Array(n);
-    this.nookTimer = new Float64Array(n);
+    this.seekTimer = new Float64Array(n);
+    this.seekClosest = new Float64Array(n);
     this.home = new Float64Array(n * 3);
     this.homeTimer = new Float64Array(n);
     this._anchor = new Int32Array(n).fill(-1);
@@ -477,7 +488,8 @@ export class Behaviour {
     this.restTau = edit.array(this.restTau);
     this.restSpot = edit.array(this.restSpot, 3);
     this.restSpotSet = edit.array(this.restSpotSet);
-    this.nookTimer = edit.array(this.nookTimer);
+    this.seekTimer = edit.array(this.seekTimer);
+    this.seekClosest = edit.array(this.seekClosest);
     this.home = edit.array(this.home, 3);
     this.homeTimer = edit.array(this.homeTimer);
     this._anchor = edit.array(this.anchor, 1, -1);
@@ -567,13 +579,17 @@ export class Behaviour {
   }
 
   /**
-   * The cave walker `i` moves into: of those with room for another walker, the one holding the
-   * fewest, lower index first; -1 when every cave is full. Room grows with the cave's floor area
-   * over the species' size, since shrimp crowd into a shared refuge rather than defend one.
+   * The cave walker `i` moves into: the nearest in plan view with room for another walker, the
+   * one holding fewer on a tie, then the lower index; -1 when every cave is full. Room grows with
+   * the cave's floor area over the species' size, since shrimp crowd into a shared refuge rather
+   * than defend one.
    */
   private walkerCave(i: number): number {
     const length = this.speciesOf(i).bodyLength;
+    const px = at(this.host.position, i * 3);
+    const pz = at(this.host.position, i * 3 + 2);
     let best = -1;
+    let bestDist = Infinity;
     let bestHeld = Infinity;
     for (let k = 0; k < this.anchors.length; k++) {
       const a = this.anchors[k];
@@ -583,8 +599,11 @@ export class Behaviour {
       for (let j = 0; j < this.host.count; j++) {
         if (j !== i && at(this.anchor, j) === k && this.speciesOf(j).walking !== null) held++;
       }
-      if (held < room && held < bestHeld) {
+      if (held >= room) continue;
+      const dist = Math.hypot(a.position[0] - px, a.position[2] - pz);
+      if (dist < bestDist || (dist === bestDist && held < bestHeld)) {
         best = k;
+        bestDist = dist;
         bestHeld = held;
       }
     }
@@ -631,7 +650,10 @@ export class Behaviour {
     }
     this.anchors = anchors;
     this.anchor.fill(-1);
-    this.restSpotSet.fill(0);
+    // A swimmer's rest station does not depend on the anchors, so only walkers choose again.
+    for (let i = 0; i < this.host.count; i++) {
+      if (this.speciesOf(i).walking !== null) this.restSpotSet[i] = 0;
+    }
     const ordinal = new Map<string, number>();
     for (let i = 0; i < this.host.count; i++) {
       const sp = this.speciesOf(i);
@@ -804,6 +826,34 @@ export class Behaviour {
     if (sp.home === 'none') return;
     this.chooseStation(i, this.home, i * 3);
     this.homeTimer[i] = this.host.rng.range(sp.restationMinS, sp.restationMaxS);
+  }
+
+  /**
+   * Hard decor moved: any station, group station or swimmer rest spot the decor now covers is
+   * chosen again on the next plan. Walker nooks are rechecked every step by `nookHolds`.
+   */
+  decorMoved(): void {
+    const { count, species } = this.host;
+    for (let s = 0; s < species.length; s++) {
+      const leader = at(this.groupLeader, s);
+      if (leader >= 0 && this.covered(leader, this.groupHome, s * 3)) this.groupTimer[s] = 0;
+    }
+    for (let i = 0; i < count; i++) {
+      const sp = this.speciesOf(i);
+      if (sp.home !== 'none' && this.covered(i, this.home, i * 3)) this.homeTimer[i] = 0;
+      if (
+        sp.walking === null &&
+        this.restSpotSet[i] === 1 &&
+        this.covered(i, this.restSpot, i * 3)
+      ) {
+        this.restSpotSet[i] = 0;
+      }
+    }
+  }
+
+  private covered(i: number, spots: Float64Array, o: number): boolean {
+    const d = this.host.sceneSdf.sample(at(spots, o), at(spots, o + 1), at(spots, o + 2), this.n3);
+    return d < at(this.host.radius, i);
   }
 
   /**
@@ -1330,20 +1380,10 @@ export class Behaviour {
       if (at(this.anchor, i) < 0 && this.restSpotSet[i] === 0) this.anchor[i] = this.walkerCave(i);
       const a = this.anchors[at(this.anchor, i)];
       if (a?.kind === 'cave') {
-        // A walker comes in along the floor at its own height, so the mouth is judged in plan view.
-        const [tx, ty, tz] = this.approach(i, a, py);
-        const [ax, , az] = a.position;
-        if (Math.hypot(px - ax, pz - az) <= a.radius + 0.5 * length) {
-          plan.state = FishState.Shelter;
-          plan.speedCap = 0;
-          plan.wander = 0;
-          return;
-        }
-        plan.seek(tx, ty, tz, 0, 0.5);
-        plan.wander *= 0.3;
+        if (this.planCave(i, a, plan, px, py, pz, length)) return;
+      } else if (this.planNook(i, plan, px, pz, length)) {
         return;
       }
-      if (this.planNook(i, plan, px, pz, length)) return;
     }
 
     const left = at(this.forageTimer, i) - DT;
@@ -1370,6 +1410,47 @@ export class Behaviour {
   }
 
   /**
+   * Walker `i` heads for cave `a` and shelters in its mouth. False once it has gone
+   * `walkerCaveGiveUpS` without getting closer (the way is blocked) and finds no nook beside
+   * it either: it lets the cave go and rests where it is.
+   */
+  private planCave(
+    i: number,
+    a: Anchor,
+    plan: Plan,
+    px: number,
+    py: number,
+    pz: number,
+    length: number,
+  ): boolean {
+    // A walker comes in along the floor at its own height, so the mouth is judged in plan view.
+    const [ax, , az] = a.position;
+    const d = Math.hypot(px - ax, pz - az);
+    if (this.restSpotSet[i] === 0) {
+      this.restSpotSet[i] = 3;
+      this.seekClosest[i] = Infinity;
+    }
+    if (this.restSpotSet[i] !== 3) return false;
+    if (d <= a.radius + 0.5 * length) {
+      this.seekClosest[i] = d;
+      this.seekTimer[i] = BEHAVIOUR.walkerCaveGiveUpS;
+      plan.state = FishState.Shelter;
+      plan.speedCap = 0;
+      plan.wander = 0;
+      return true;
+    }
+    if (this.stalled(i, d, length, BEHAVIOUR.walkerCaveGiveUpS)) {
+      this.restSpotSet[i] = 0;
+      this.anchor[i] = -1;
+      return this.planNook(i, plan, px, pz, length);
+    }
+    const [tx, ty, tz] = this.approach(i, a, py);
+    plan.seek(tx, ty, tz, 0, 0.5);
+    plan.wander *= 0.3;
+    return true;
+  }
+
+  /**
    * A cave-dweller turned away from full caves shelters against the rock beside the nearest one,
    * as shrimp crowd into crevices round an occupied refuge. False when there is no such nook, or
    * it could not be reached in time: the walker then rests where it is.
@@ -1379,26 +1460,41 @@ export class Behaviour {
     if (this.restSpotSet[i] === 1 && !this.nookHolds(i, length)) this.restSpotSet[i] = 0;
     if (this.restSpotSet[i] === 0) {
       this.restSpotSet[i] = this.pickNook(i, length) ? 1 : 2;
-      this.nookTimer[i] = BEHAVIOUR.walkerNookGiveUpS;
+      this.seekClosest[i] = Infinity;
     }
     if (this.restSpotSet[i] !== 1) return false;
     const nx = at(this.restSpot, o);
     const nz = at(this.restSpot, o + 2);
-    if (Math.hypot(px - nx, pz - nz) <= BEHAVIOUR.walkerNookArriveBodyLengths * length) {
+    const d = Math.hypot(px - nx, pz - nz);
+    if (d <= BEHAVIOUR.walkerNookArriveBodyLengths * length) {
+      this.seekClosest[i] = d;
+      this.seekTimer[i] = BEHAVIOUR.walkerNookGiveUpS;
       plan.state = FishState.Shelter;
       plan.speedCap = 0;
       plan.wander = 0;
       return true;
     }
-    const left = at(this.nookTimer, i) - DT;
-    this.nookTimer[i] = left;
-    if (left <= 0) {
+    if (this.stalled(i, d, length, BEHAVIOUR.walkerNookGiveUpS)) {
       this.restSpotSet[i] = 2;
       return false;
     }
     plan.seek(nx, at(this.restSpot, o + 1), nz, 0, 0.5);
     plan.wander *= 0.3;
     return true;
+  }
+
+  /**
+   * Counts down walker `i`'s give-up time, restarting it whenever the walker has got a little
+   * closer to where it is heading; true once it runs out.
+   */
+  private stalled(i: number, d: number, length: number, giveUpS: number): boolean {
+    if (d < at(this.seekClosest, i) - BEHAVIOUR.walkerSeekProgressBodyLengths * length) {
+      this.seekClosest[i] = d;
+      this.seekTimer[i] = giveUpS;
+    }
+    const left = at(this.seekTimer, i) - DT;
+    this.seekTimer[i] = left;
+    return left <= 0;
   }
 
   /** Whether walker `i`'s nook is still clear of rock and still beside it after decor moved. */
@@ -1470,6 +1566,7 @@ export class Behaviour {
       const sy = basin.ground(sx, sz) + lift;
       if (sceneSdf.sample(sx, sy, sz, n3) < 1.2 * thickness) continue;
       if (decorSdf.sample(sx, sy, sz, n3) > BEHAVIOUR.walkerNookDecorBodyLengths * length) continue;
+      if (this.nookTaken(i, sx, sz, length)) continue;
       const dist = Math.hypot(sx - px, sz - pz);
       if (dist < best) {
         best = dist;
@@ -1479,6 +1576,17 @@ export class Behaviour {
       }
     }
     return best < Infinity;
+  }
+
+  /** Whether another walker already holds a nook within spacing of (x, z), in plan view. */
+  private nookTaken(i: number, x: number, z: number, length: number): boolean {
+    const spacing = BEHAVIOUR.walkerNookSpacingBodyLengths * length;
+    for (let j = 0; j < this.host.count; j++) {
+      if (j === i || this.restSpotSet[j] !== 1 || this.speciesOf(j).walking === null) continue;
+      const o = j * 3;
+      if (Math.hypot(at(this.restSpot, o) - x, at(this.restSpot, o + 2) - z) < spacing) return true;
+    }
+    return false;
   }
 
   private territoryCentre(i: number, sp: SimSpecies): [number, number, number, number] {

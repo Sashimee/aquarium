@@ -409,7 +409,7 @@ export class World {
     const reach = decorReach(longest);
     this.hardDecor = new DecorField(this.basin, reach);
     this.softDecor = new DecorField(this.basin, reach);
-    this.setDecor(config.decor ?? []);
+    this.applyDecor(config.decor ?? []);
     const tankSdf = (floor: boolean, surface: boolean): TankSdf =>
       new TankSdf(this.basin, { floor, surface });
     this.sceneSdf = new UnionSdf([tankSdf(true, true), this.hardDecor]);
@@ -528,10 +528,21 @@ export class World {
 
   /**
    * Replaces the decor colliders. Only colliders whose id is new, gone or changed rebin their grid
-   * cells; returns how many cells were rebuilt. A fish left inside moved decor is pushed out by
-   * the body constraint on the next step.
+   * cells; returns how many cells were rebuilt. A fish or walker that moved hard decor now holds is
+   * set down at the nearest free spot at once, since the body constraint alone cannot free one
+   * pinned between a rock and the sand. Stations and nooks the move blocked are chosen again.
    */
   setDecor(colliders: readonly Collider[]): number {
+    const { rebuilt, hardChanged } = this.applyDecor(colliders);
+    if (hardChanged) {
+      this.stationEpoch++;
+      this.freeTrappedBodies();
+      this.behaviour.decorMoved();
+    }
+    return rebuilt;
+  }
+
+  private applyDecor(colliders: readonly Collider[]): { rebuilt: number; hardChanged: boolean } {
     const ids = new Set<string>();
     for (const c of colliders) {
       if (ids.has(c.id)) throw new Error(`decor collider ids must be unique, "${c.id}" repeats`);
@@ -541,8 +552,25 @@ export class World {
     const hard = this.hardDecor.plan(colliders.filter((c) => c.hard));
     const soft = this.softDecor.plan(colliders.filter((c) => !c.hard));
     const rebuilt = this.hardDecor.apply(hard) + this.softDecor.apply(soft);
-    if (hard.gone.length > 0 || hard.changed.length > 0) this.stationEpoch++;
-    return rebuilt;
+    return { rebuilt, hardChanged: hard.gone.length > 0 || hard.changed.length > 0 };
+  }
+
+  private freeTrappedBodies(): void {
+    for (let i = 0; i < this.count; i++) {
+      if (this.spineClearance(i, this.hardDecor) >= -PENETRATION_EPSILON) continue;
+      const o = i * 3;
+      const spot = this.freeSpotNear(this.radius[i] ?? 0, {
+        position: [this.position[o] ?? 0, this.position[o + 1] ?? 0, this.position[o + 2] ?? 0],
+        heading: this.yaw[i] ?? 0,
+      });
+      // Decor filling the whole tank leaves nowhere to go; the body constraint still pushes.
+      if (spot === null) continue;
+      this.position[o] = spot.x;
+      this.position[o + 1] = spot.y;
+      this.position[o + 2] = spot.z;
+      this.scrapeAnchor.set(this.position.subarray(o, o + 3), o);
+      if (this.walker[i] === 1) this.walkers.place(i);
+    }
   }
 
   setAnchors(anchors: readonly Anchor[]): void {
@@ -566,6 +594,10 @@ export class World {
 
   /** Smallest distance from fish `i`'s spine chain to the tank or hard decor, minus its thickness. */
   bodyClearance(i: number): number {
+    return this.spineClearance(i, this.sceneSdf);
+  }
+
+  private spineClearance(i: number, field: Sdf): number {
     const o = i * 3;
     const length = this.bodyLength[i] ?? 0;
     const cp = Math.cos(this.pitch[i] ?? 0);
@@ -575,7 +607,7 @@ export class World {
     let worst = Infinity;
     for (const s of BEHAVIOUR.bodySampleOffsets) {
       const k = s * length;
-      const d = this.sceneSdf.sample(
+      const d = field.sample(
         (this.position[o] ?? 0) + fx * k,
         (this.position[o + 1] ?? 0) + fy * k,
         (this.position[o + 2] ?? 0) + fz * k,
@@ -680,9 +712,19 @@ export class World {
    * nearest clear point on a widening shell round it. Draws nothing from the RNG.
    */
   private spotNear(fit: Fit, at: FishPlacement): Spot {
+    const spot = this.freeSpotNear(fit.r, at);
+    if (spot === null) {
+      throw new RangeError(
+        `fish "${fit.id}": no free water near the placement, decor fills the tank`,
+      );
+    }
+    return spot;
+  }
+
+  private freeSpotNear(r: number, at: FishPlacement): Spot | null {
     const [ax, ay, az] = at.position;
     const basin = this.basin;
-    const pad = fit.r * 2;
+    const pad = r * 2;
     const n = this.normal;
     const inWater = (x: number, y: number, z: number): [number, number, number] => {
       const cx = clampInto(x, basin.minX + pad, basin.maxX - pad);
@@ -721,9 +763,7 @@ export class World {
       }
       if (best !== null) return best;
     }
-    throw new RangeError(
-      `fish "${fit.id}": no free water near the placement, decor fills the tank`,
-    );
+    return null;
   }
 
   /**

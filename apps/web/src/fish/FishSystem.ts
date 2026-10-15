@@ -12,6 +12,7 @@ import {
   CARCASS,
   carcassFate,
   carcassSettleS,
+  CarcassSupport,
   quatFromYawPitchRoll,
   Rng,
   SimClient,
@@ -30,6 +31,7 @@ import { releaseAll } from '../engine/lifecycle';
 import type { Tier, TierSettings } from '../engine/quality/tiers';
 import { waterBounds, type TankDimensions } from '../engine/tank/dimensions';
 import type { InteractionEvents } from '../interaction/events';
+import type { FishAssetEntry, ShrimpRig } from './assetIndex';
 import { disposeFishModel, FishAssetLoader, type FishModel } from './assets';
 import { AcclimationBags } from './bag';
 import { BatchCache } from './batchCache';
@@ -81,8 +83,8 @@ import {
 import { SimUnavailableError } from '../interaction/simUnavailable';
 import { speciesInput } from './species';
 import type { FishBite, FishPoint, PickRay, TankEvent } from './start';
-import { isFinned, SWIM_MODES, SwimState } from './swim';
-import { WalkState, type WalkSample } from './walk';
+import { isFinned, SWIM_MODES, SwimState, type SwimModeParams, type SwimmingMode } from './swim';
+import { curlAboveFloor, WalkState, type WalkSample } from './walk';
 
 export interface FishSystemOptions {
   readonly tank: TankDimensions;
@@ -115,12 +117,24 @@ interface SpeciesBatch {
   features: FishMaterialFeatures | null;
 }
 
-interface Script {
-  /** Fish rise and float belly-up; shrimp are denser than water and sink. */
-  readonly kind: 'dying' | 'dead' | 'sinking';
-  readonly startS: number;
-  readonly anchor: Anchor;
-}
+/** Fish rise and float belly-up; shrimp are denser than water and sink. */
+type Script =
+  | {
+      readonly kind: 'dying' | 'dead';
+      readonly startS: number;
+      readonly anchor: Anchor;
+    }
+  | {
+      readonly kind: 'sinking';
+      readonly startS: number;
+      /** When it began falling from `anchor`: its death, or when the decor holding it moved. */
+      readonly fallS: number;
+      readonly anchor: Anchor;
+      /** What it lands on: the substrate or the top of hard decor. */
+      readonly floorY: number;
+      /** How it was drawn when it died, eased out of while it goes limp; null if it never was. */
+      readonly fromQuaternion: Quaternion | null;
+    };
 
 interface FishRuntime {
   readonly fish: RosterFish;
@@ -149,6 +163,8 @@ interface FishRuntime {
 const SHADOW_LODS = 2;
 /** A fish leaving its bag, or held over a rebuilt world, glides into the sim's pose this long. */
 const HANDOVER_S = 1.2;
+/** Below this horizontal share of its forward axis a body is climbing and has no heading. */
+const CLIMBING_FORWARD_XZ = 0.5;
 /** Fingertip slop when netting a small fish, in metres. */
 const MIN_PICK_RADIUS = 0.02;
 const MIN_CAPACITY = 4;
@@ -159,6 +175,24 @@ function capacityFor(needed: number): number {
   let capacity = MIN_CAPACITY;
   while (capacity < needed) capacity *= 2;
   return capacity;
+}
+
+export type BatchLocomotion =
+  | { readonly kind: 'swim'; readonly mode: SwimModeParams }
+  | { readonly kind: 'walk'; readonly shrimp: ShrimpRig };
+
+export function batchLocomotion(
+  entry: FishAssetEntry,
+  swimmingMode: SwimmingMode,
+  profile: FishRenderProfile,
+): BatchLocomotion {
+  if (isFinned(swimmingMode)) {
+    return { kind: 'swim', mode: swimModeFor(SWIM_MODES[swimmingMode], profile) };
+  }
+  if (entry.shrimp === null) {
+    throw new Error(`fish ${entry.id}: a walking species needs a shrimp model`);
+  }
+  return { kind: 'walk', shrimp: entry.shrimp };
 }
 
 function smoothstep01(x: number): number {
@@ -198,6 +232,7 @@ export class FishSystem {
   );
   private readonly stream = new SimStream(STEP_DT, (snapshot) => this.sim.recycle(snapshot));
   private readonly held = new HeldFish();
+  private support = new CarcassSupport([]);
   private readonly loader: FishAssetLoader;
   private readonly bags: AcclimationBags;
   private readonly lifetime = new AbortController();
@@ -442,11 +477,16 @@ export class FishSystem {
     if (this.simReady) this.sim.setAnchors(simAnchors);
   }
 
-  /** Every collider the sim avoids, in the shared format; kept for later worlds like anchors. */
+  /**
+   * Every collider the sim avoids, in the shared format; kept for later worlds like anchors. Dead
+   * shrimp land on the hard ones.
+   */
   setColliders(colliders: readonly Collider[]): void {
     if (this.disposed) return;
     this.spec.setDecor(colliders);
     if (this.simReady) this.sim.setDecor(colliders);
+    this.support = new CarcassSupport(colliders);
+    this.resettleCarcasses();
   }
 
   setFood(buffer: Float32Array): void {
@@ -648,17 +688,13 @@ export class FishSystem {
     this.disposeLods(batch);
     const capacity = capacityFor(needed);
     const { model, profile, input } = batch;
-    const { swimmingMode } = input.locomotion;
-    const { shrimp } = model.entry;
-    if (!isFinned(swimmingMode) && shrimp === null) {
-      throw new Error(`fish ${model.entry.id}: a walking species needs a shrimp model`);
-    }
+    const locomotion = batchLocomotion(model.entry, input.locomotion.swimmingMode, profile);
     const lighting = {
       lightDirection: this.engine.caustics.lightDirection,
       light: this.engine.caustics.hoodLight(),
     };
     batch.lods = model.lods.map((parts, level) => {
-      const walking = !isFinned(swimmingMode) && shrimp !== null;
+      const walking = locomotion.kind === 'walk';
       const instances = new FishInstanceData(
         capacity,
         walking ? WALKER_INSTANCE_STRIDE : INSTANCE_STRIDE,
@@ -670,23 +706,18 @@ export class FishSystem {
           source: part.source,
           assetId: model.entry.id,
           profile,
-          locomotion: walking
-            ? {
-                kind: 'walk',
-                rig: {
-                  bodyLength: model.entry.standardLengthM,
-                  hinge: shrimp.hinge,
-                  telsonZ: shrimp.telsonZ,
-                  legPivots: part.legPivots,
-                },
-              }
-            : {
-                kind: 'swim',
-                mode: swimModeFor(
-                  SWIM_MODES[isFinned(swimmingMode) ? swimmingMode : 'carangiform'],
-                  profile,
-                ),
-              },
+          locomotion:
+            locomotion.kind === 'walk'
+              ? {
+                  kind: 'walk',
+                  rig: {
+                    bodyLength: model.entry.standardLengthM,
+                    hinge: locomotion.shrimp.hinge,
+                    telsonZ: locomotion.shrimp.telsonZ,
+                    legPivots: part.legPivots,
+                  },
+                }
+              : locomotion,
           zMin: model.entry.min[2],
           zMax: model.entry.max[2],
           instances,
@@ -855,14 +886,61 @@ export class FishSystem {
       rt.script = this.deadScript(rt);
       return;
     }
-    this.forward.set(0, 0, 1).applyQuaternion(rt.lastQuaternion);
     const anchor: Anchor = {
       x: rt.lastPosition.x,
       y: rt.lastPosition.y,
       z: rt.lastPosition.z,
-      yaw: Math.atan2(this.forward.x, this.forward.z),
+      yaw: this.restingYaw(rt.lastQuaternion),
     };
-    rt.script = { kind: this.sinks(rt) ? 'sinking' : 'dying', startS: this.clockS, anchor };
+    rt.script = this.sinks(rt)
+      ? this.sinkingScript(rt, anchor, this.clockS, this.clockS, rt.lastQuaternion.clone())
+      : { kind: 'dying', startS: this.clockS, anchor };
+  }
+
+  /**
+   * The heading a body keeps as it goes down. A shrimp climbing the glass or a rock face points
+   * up or down, which has no heading, so it lies along its side axis: parallel to the surface it
+   * was on, never into it.
+   */
+  private restingYaw(q: Quaternion): number {
+    const f = this.forward.set(0, 0, 1).applyQuaternion(q);
+    if (Math.hypot(f.x, f.z) >= CLIMBING_FORWARD_XZ) return Math.atan2(f.x, f.z);
+    const side = this.forward.set(1, 0, 0).applyQuaternion(q);
+    return Math.atan2(side.x, side.z);
+  }
+
+  /** Raises `anchor` out of decor it starts inside, onto what it will land on. */
+  private sinkingScript(
+    rt: FishRuntime,
+    anchor: Anchor,
+    startS: number,
+    fallS: number,
+    fromQuaternion: Quaternion | null,
+  ): Extract<Script, { kind: 'sinking' }> {
+    const floorY = this.support.floorY(anchor, rt.length, this.box.ground);
+    const lowest = floorY + CARCASS.restBellyBodyLengths * rt.length;
+    const from = anchor.y >= lowest ? anchor : { ...anchor, y: lowest };
+    return { kind: 'sinking', startS, fallS, anchor: from, floorY, fromQuaternion };
+  }
+
+  /**
+   * Decor moved: a dead shrimp lands on whatever is under it now. One whose floor changed falls
+   * again from where it is drawn, so it sinks off a removed rock instead of jumping down.
+   */
+  private resettleCarcasses(): void {
+    for (const rt of this.runtimes.values()) {
+      const { script } = rt;
+      if (script?.kind !== 'sinking') continue;
+      const anchor = rt.shown ? { ...script.anchor, y: rt.lastPosition.y } : script.anchor;
+      const next = this.sinkingScript(
+        rt,
+        anchor,
+        script.startS,
+        this.clockS,
+        script.fromQuaternion,
+      );
+      if (next.floorY !== script.floorY) rt.script = next;
+    }
   }
 
   private sinks(rt: FishRuntime): boolean {
@@ -873,12 +951,16 @@ export class FishSystem {
   private deadScript(rt: FishRuntime): Script {
     const anchor = deadAnchor(this.box, rt.length, rt.seed);
     if (!this.sinks(rt)) return { kind: 'dead', startS: this.clockS, anchor };
-    const floorY = this.box.ground(anchor.x, anchor.z);
+    const floorY = this.support.floorY(anchor, rt.length, this.box.ground);
     const onFloor = { ...anchor, y: floorY + CARCASS.restBellyBodyLengths * rt.length };
+    const startS = this.clockS - carcassSettleS(onFloor, rt.length, rt.seed, floorY);
     return {
       kind: 'sinking',
-      startS: this.clockS - carcassSettleS(onFloor, rt.length, rt.seed, floorY),
+      startS,
+      fallS: startS,
       anchor: onFloor,
+      floorY,
+      fromQuaternion: null,
     };
   }
 
@@ -1123,15 +1205,19 @@ export class FishSystem {
       }
       if (rt.bagSlot === null) return false;
     }
-    if (rt.script !== null) {
-      const { kind, anchor, startS } = rt.script;
-      const t = this.clockS - startS;
-      if (kind === 'sinking') {
-        const floorY = this.box.ground(anchor.x, anchor.z);
-        sinkingCarcass(t, anchor, rt.length, rt.seed, floorY, pose);
+    let limpFrom: Quaternion | null = null;
+    let limpWeight = 0;
+    const { script } = rt;
+    if (script !== null) {
+      const t = this.clockS - script.startS;
+      if (script.kind === 'sinking') {
+        const fallT = this.clockS - script.fallS;
+        sinkingCarcass(t, script.anchor, rt.length, rt.seed, script.floorY, pose, fallT);
+        limpFrom = script.fromQuaternion;
+        limpWeight = 1 - smoothstep01(t / CARCASS.limpS);
       } else {
-        const animate = kind === 'dying' ? dyingPose : deadPose;
-        animate(t, anchor, rt.length, rt.seed, this.box, pose);
+        const animate = script.kind === 'dying' ? dyingPose : deadPose;
+        animate(t, script.anchor, rt.length, rt.seed, this.box, pose);
       }
     } else {
       rt.bagSlot ??= this.freeBagSlot();
@@ -1148,7 +1234,18 @@ export class FishSystem {
     this.position.set(pose.x, pose.y, pose.z);
     quatFromYawPitchRoll(pose.yaw, pose.pitch, pose.roll, this.quat, 0);
     this.quaternion.fromArray(this.quat);
+    if (limpFrom !== null && limpWeight > 0) this.quaternion.slerp(limpFrom, limpWeight);
     return true;
+  }
+
+  /** `curl` for the walker just placed, cut short where it would put the tail into the sand. */
+  private curlAboveFloor(rt: FishRuntime, curl: number): number {
+    const { tail } = rt.batch.model;
+    if (tail === null)
+      throw new Error(`fish ${rt.batch.model.entry.id}: a walker needs a tail rig`);
+    const { position } = this;
+    const floorY = this.box.ground(position.x, position.z);
+    return curlAboveFloor(curl, tail, rt.scale, position, this.quaternion, floorY);
   }
 
   private update(deltaS: number, nowMs: number): void {
@@ -1207,7 +1304,7 @@ export class FishSystem {
       v.phase = swim?.phase ?? 0;
       v.amplitude = (swim?.amplitude ?? 0) * liveliness;
       v.curvature = (swim?.curvature ?? 0) * rt.scale * liveliness;
-      v.finPhase = swim?.finPhase ?? (motion as WalkState).clock;
+      v.finPhase = motion instanceof SwimState ? motion.finPhase : motion.clock;
       v.pale = Math.max(
         rt.condition,
         rt.fish.phase === 'dead' ? 1 - liveliness : 0,
@@ -1222,7 +1319,7 @@ export class FishSystem {
         const w = this.walker;
         w.legPhase = motion.legPhase;
         w.stride = motion.stride * liveliness;
-        w.curl = motion.curl * liveliness;
+        w.curl = this.curlAboveFloor(rt, motion.curl * liveliness);
         w.paddle = motion.paddle * liveliness;
         w.pick = motion.pick * liveliness;
         w.dance = motion.dance * liveliness;

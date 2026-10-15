@@ -66,6 +66,81 @@ export function tailCurl(progress: number): number {
   return MAX_TAIL_CURL * flex;
 }
 
+/** A model-space point on the curling tail and the share of the flexion it turns by. */
+export interface TailTip {
+  readonly y: number;
+  readonly z: number;
+  readonly share: number;
+}
+
+/** What `curlAboveFloor` needs of a walker's model, in model units. */
+export interface TailRig {
+  readonly hinge: { readonly y: number; readonly z: number };
+  readonly tip: TailTip;
+  readonly bodyLength: number;
+}
+
+/** Gap kept between the tail tip and the substrate, in body lengths. */
+export const TAIL_FLOOR_CLEARANCE_BODY_LENGTHS = 0.01;
+const CURL_MARCH_STEPS = 8;
+const CURL_BISECTIONS = 12;
+
+/**
+ * The tip at ventral flexion `curl`, turned about the hinge as the material turns it: positive
+ * flexion is a negative turn about +x.
+ */
+export function curledTip(rig: TailRig, curl: number): { y: number; z: number } {
+  const { hinge, tip } = rig;
+  const a = -curl * tip.share;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  const dy = tip.y - hinge.y;
+  const dz = tip.z - hinge.z;
+  return { y: hinge.y + dy * c - dz * s, z: hinge.z + dy * s + dz * c };
+}
+
+/**
+ * The largest flexion up to `curl` that keeps the tail tip above `floorY`, for a walker at
+ * `position` turned by `quaternion` and scaled by `scale`. The sim lets go of the surface as a
+ * flip starts, but the abdomen peaks within its first third, while the body is still only
+ * millimetres up, so the full curl would sweep the tail fan through the sand. A tip already below
+ * the floor at rest is only kept from sinking further.
+ */
+export function curlAboveFloor(
+  curl: number,
+  rig: TailRig,
+  scale: number,
+  position: { readonly y: number },
+  quaternion: { readonly x: number; readonly y: number; readonly z: number; readonly w: number },
+  floorY: number,
+): number {
+  if (!(curl > 0)) return curl;
+  const { x, y, z, w } = quaternion;
+  const upFromY = 1 - 2 * (x * x + z * z);
+  const upFromZ = 2 * (y * z - w * x);
+  const floor = floorY + TAIL_FLOOR_CLEARANCE_BODY_LENGTHS * rig.bodyLength * scale;
+  const clearance = (c: number): number => {
+    const t = curledTip(rig, c);
+    return position.y + scale * (upFromY * t.y + upFromZ * t.z) - floor;
+  };
+  const limit = Math.min(clearance(0), 0);
+  let clear = 0;
+  for (let k = 1; k <= CURL_MARCH_STEPS; k++) {
+    const c = (curl * k) / CURL_MARCH_STEPS;
+    if (clearance(c) < limit) {
+      let blocked = c;
+      for (let i = 0; i < CURL_BISECTIONS; i++) {
+        const mid = (clear + blocked) / 2;
+        if (clearance(mid) < limit) blocked = mid;
+        else clear = mid;
+      }
+      return clear;
+    }
+    clear = c;
+  }
+  return curl;
+}
+
 /**
  * A leg's swing at `u` (its own cycle phase, 0..1): `sweep` runs +1 (forward) to -1 while the foot
  * is planted and back while it swings; `lift` rises to 1 mid-swing. The material evaluates the

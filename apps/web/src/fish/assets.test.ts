@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CompressedTexture } from 'three';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { disposeFishModel, FIN_ATTRIBUTE, FishAssetLoader, LEG_PART_ID } from './assets';
+import { curlAboveFloor, curledTip, MAX_TAIL_CURL } from './walk';
 
 const ROOT = '/assets/';
 const PUBLIC = fileURLToPath(new URL('../../public/assets/', import.meta.url));
@@ -120,6 +121,32 @@ describe('FishAssetLoader', () => {
     },
   );
 
+  it.each(['cherry-shrimp', 'cleaner-shrimp'])(
+    'finds the tail tip of %s, which a full curl on the floor would put into the sand',
+    async (id) => {
+      serveShippedAssets();
+      spyTextureLoads();
+      const loader = new FishAssetLoader(new KTX2Loader(), ROOT);
+      const model = await loader.load(id);
+      const entry = (await loader.entries()).get(id);
+      if (entry?.shrimp == null || model.tail === null) throw new Error(`${id}: no tail rig`);
+      const { tail } = model;
+      expect(tail.hinge).toEqual(entry.shrimp.hinge);
+      expect(tail.tip.share).toBe(1);
+      expect(tail.tip.z).toBeGreaterThan(entry.min[2] - 1e-6);
+
+      // A millimetre into a flip off the floor, a full curl would still sweep the fan deep below.
+      const floor = 0;
+      const y = -entry.min[1] + 0.001;
+      const level = { x: 0, y: 0, z: 0, w: 1 };
+      expect(y + curledTip(tail, MAX_TAIL_CURL).y).toBeLessThan(floor - 0.005);
+      const curl = curlAboveFloor(MAX_TAIL_CURL, tail, 1, { y }, level, floor);
+      expect(curl).toBeGreaterThan(0);
+      expect(y + curledTip(tail, curl).y).toBeGreaterThan(floor);
+      disposeFishModel(model);
+    },
+  );
+
   it('keeps a fish on the two-component fin attribute with no hips', async () => {
     serveShippedAssets();
     spyTextureLoads();
@@ -128,6 +155,7 @@ describe('FishAssetLoader', () => {
       expect(part.geometry.getAttribute(FIN_ATTRIBUTE).itemSize).toBe(2);
       expect(part.legPivots).toEqual([]);
     }
+    expect(model.tail).toBeNull();
     disposeFishModel(model);
   });
 });

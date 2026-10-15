@@ -4,34 +4,6 @@ import type { Sdf } from './sdf.ts';
 
 export type Point3 = readonly [number, number, number];
 
-export type DecorShape =
-  | { readonly kind: 'sphere'; readonly center: Point3; readonly radius: number }
-  | {
-      readonly kind: 'box';
-      readonly center: Point3;
-      readonly halfExtents: Point3;
-      readonly rotationY?: number;
-      readonly rounding?: number;
-    }
-  | { readonly kind: 'capsule'; readonly a: Point3; readonly b: Point3; readonly radius: number };
-
-/**
- * The nested collider format the sim took before the shared `Collider` contract; `solid` is
- * `hard`. Still accepted by `compileCollider` because apps/web's decorate mode emits it.
- */
-export interface DecorCollider {
-  readonly id: string;
-  readonly solid: boolean;
-  readonly shape: DecorShape;
-}
-
-function flattenDecorCollider(collider: unknown): unknown {
-  if (typeof collider !== 'object' || collider === null || !('shape' in collider)) return collider;
-  const { shape, solid, ...rest } = collider as Record<string, unknown>;
-  if (typeof shape !== 'object' || shape === null) return collider;
-  return { ...rest, hard: solid, ...shape };
-}
-
 interface Primitive {
   readonly id: string;
   readonly minX: number;
@@ -296,12 +268,9 @@ class HullPrimitive implements Primitive {
   }
 }
 
-/**
- * Validates one collider in the shared format, or the nested `DecorCollider` one (it may come
- * from another thread), and builds its distance function.
- */
-export function compileCollider(collider: Collider | DecorCollider): Primitive {
-  const parsed = colliderSchema.safeParse(flattenDecorCollider(collider));
+/** Validates one collider (it may come from another thread) and builds its distance function. */
+export function compileCollider(collider: Collider): Primitive {
+  const parsed = colliderSchema.safeParse(collider);
   if (!parsed.success) {
     const raw: unknown = collider;
     const id =
