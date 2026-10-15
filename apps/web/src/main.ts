@@ -1,3 +1,4 @@
+import { followAnyFish } from './interaction/follow';
 import { depthOfFieldFollowsCamera } from './engine/cameraFocus';
 import { Engine } from './engine/Engine';
 import { EventBus, type EngineEvents } from './engine/events';
@@ -149,8 +150,7 @@ async function boot(): Promise<void> {
     if (mode === 'dive') rig.dive();
     else if (mode === 'orbit') rig.exit();
     else {
-      const target = liveFish?.sim.anyFish();
-      if (target) rig.focusOn(target);
+      followAnyFish(liveFish?.sim.anyFish(), (target) => rig.focusOn(target), interaction);
     }
   });
   const exposePose = new URLSearchParams(window.location.search).has('e2e');

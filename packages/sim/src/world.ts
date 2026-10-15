@@ -599,8 +599,10 @@ export class World {
     }
     const { hunger } = spawn;
     if (hunger !== undefined && (typeof hunger !== 'number' || !(hunger >= 0 && hunger <= 1))) {
+      // JSON.stringify would print NaN as null.
+      const shown = typeof hunger === 'number' ? String(hunger) : JSON.stringify(hunger);
       throw new RangeError(
-        `fish "${spawn.id}": hunger must be a number within 0 to 1, got ${JSON.stringify(hunger)}`,
+        `fish "${spawn.id}": hunger must be a number within 0 to 1, got ${shown}`,
       );
     }
     return { id: spawn.id, si, sp, length, r, hunger };

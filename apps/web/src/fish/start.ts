@@ -256,7 +256,13 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
       stopDecor();
       ateListeners.clear();
       ready = null;
-      void system.then((fish) => fish?.dispose());
+      void system.then((fish) => {
+        try {
+          fish?.dispose();
+        } catch (cause) {
+          engine.events.emit('engine:error', { message: 'Fish cleanup failed', cause });
+        }
+      });
     },
   };
 }

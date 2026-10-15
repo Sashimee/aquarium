@@ -26,7 +26,13 @@ import type { Tier } from '../quality/tiers';
 import { Caustics } from '../water/caustics';
 import { WaterMedium } from '../water/medium';
 import { Effects, type Post, type PostFactory } from './index';
-import { PostNodeLoader, postNodesFor, type PostNodes, type PostSettings } from './post';
+import {
+  PostNodeLoader,
+  postNodesFor,
+  type PostNodeName,
+  type PostNodes,
+  type PostSettings,
+} from './post';
 import type { RenderStateTarget } from './renderState';
 
 class FakeRenderer implements RenderStateTarget {
@@ -411,6 +417,79 @@ describe('Effects', () => {
     expect(() => effects.render()).toThrow(offline);
   });
 
+  it('is ready at once when the tier pipeline needs no load', async () => {
+    const { host, createPost, built } = setup('high');
+    const effects = new Effects(host, createPost);
+    await effects.ready();
+    expect(built.map((p) => p.settings.chain)).toEqual(['smaa-bloom']);
+  });
+
+  it('is ready only once the lazily loaded tier pipeline is built', async () => {
+    const { host, createPost, built, loadLazily, arrive } = setup('ultra');
+    loadLazily();
+    const effects = new Effects(host, createPost);
+    let ready = false;
+    const done = effects.ready().then(() => {
+      ready = true;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(ready).toBe(false);
+
+    await arrive(0);
+    await done;
+    expect(built.map((p) => p.settings.chain)).toEqual(['taa-bloom']);
+  });
+
+  it('is ready when the nodes fail to load, leaving the failure to the next frame', async () => {
+    const { host, createPost, loads, loadLazily } = setup('high');
+    loadLazily();
+    const effects = new Effects(host, createPost);
+    const offline = new Error('Failed to fetch dynamically imported module');
+    loads[0]?.reject(offline);
+    await effects.ready();
+    expect(() => effects.render()).toThrow(offline);
+  });
+
+  it('announces a pipeline that lands after the tier change, before the next frame', async () => {
+    const { host, createPost, quality, loadLazily, arrive } = setup('high');
+    const temporal: boolean[] = [];
+    const slot = new EffectsSlot(
+      () => undefined,
+      (on) => temporal.push(on),
+    );
+    const effects = new Effects(host, createPost, () => slot.refresh());
+    slot.attach(effects);
+    loadLazily();
+    quality.setTier('ultra', 0);
+    slot.refresh();
+    expect(temporal).toEqual([]);
+
+    await arrive(0);
+    expect(temporal).toEqual([true]);
+    expect(slot.temporal).toBe(true);
+  });
+
+  it('ignores a failed load for a pipeline no longer wanted, and loads it again later', async () => {
+    const { host, createPost, built, quality, loads, loadLazily, arrive } = setup('low');
+    loadLazily();
+    const changes: number[] = [];
+    const effects = new Effects(host, createPost, () => changes.push(loads.length));
+    quality.setTier('high', 0);
+    quality.setTier('low', 0);
+    loads[0]?.reject(new Error('offline'));
+    await effects.ready();
+    expect(() => effects.render()).not.toThrow();
+    expect(changes).toEqual([]);
+
+    quality.setTier('high', 0);
+    expect(loads.map((l) => l.settings.chain)).toEqual(['smaa-bloom', 'smaa-bloom']);
+    await arrive(1);
+    expect(built.map((p) => p.settings.chain)).toEqual(['smaa-bloom']);
+    effects.render();
+    expect(built[0]?.renders).toBe(1);
+  });
+
   it('builds nothing once disposed, however late the nodes arrive', async () => {
     const { host, createPost, built, loadLazily, arrive } = setup('ultra');
     loadLazily();
@@ -423,17 +502,19 @@ describe('Effects', () => {
 
 describe('PostNodeLoader', () => {
   function fakeImports() {
-    const calls: string[] = [];
-    const node = (name: string) => () => {
-      calls.push(name);
-      return Promise.resolve(vi.fn());
-    };
+    const calls: PostNodeName[] = [];
+    const node =
+      <K extends PostNodeName>(name: K, fake: PostNodes[K]) =>
+      (): Promise<PostNodes[K]> => {
+        calls.push(name);
+        return Promise.resolve(fake);
+      };
     const imports = {
-      bloom: node('bloom'),
-      dof: node('dof'),
-      smaa: node('smaa'),
-      traa: node('traa'),
-    } as unknown as { readonly [K in keyof PostNodes]: () => Promise<PostNodes[K]> };
+      bloom: node('bloom', vi.fn<PostNodes['bloom']>()),
+      dof: node('dof', vi.fn<PostNodes['dof']>()),
+      smaa: node('smaa', vi.fn<PostNodes['smaa']>()),
+      traa: node('traa', vi.fn<PostNodes['traa']>()),
+    };
     return { calls, imports };
   }
 

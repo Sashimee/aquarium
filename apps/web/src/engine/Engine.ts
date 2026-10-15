@@ -470,12 +470,20 @@ export class Engine {
     try {
       const { Effects, postPipelineFactory } = await import('./effects');
       if (this.disposed) return;
-      this.effects.attach(new Effects(this, postPipelineFactory(this.renderer)));
+      const effects = new Effects(this, postPipelineFactory(this.renderer), () =>
+        this.effects.refresh(),
+      );
+      this.effects.attach(effects);
       this.cleanup.add(() => this.effects.dispose());
       // Right behind the effects' own feature, so the features registered later (the fish
-      // materials) already see the new tier's temporal resolve and are rebuilt once, not twice.
-      // The fish register theirs only once `Engine.create` resolves, which awaits this load.
+      // materials) see the new tier's temporal resolve when its nodes are already loaded. A tier
+      // whose nodes still have to load swaps its pipeline later; the refresh passed to `Effects`
+      // then announces the change before the next frame, so the fish rebuild a second time but
+      // never draw a temporal frame without velocity. The fish register only once
+      // `Engine.create` resolves, which awaits this load.
       this.cleanup.add(this.quality.register('effects-temporal', () => this.effects.refresh()));
+      // The first frames already carry the starting tier's look instead of popping into it.
+      await effects.ready();
     } catch (cause) {
       this.reportError('Render effects failed to load; continuing without them', cause);
     }

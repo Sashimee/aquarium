@@ -65,6 +65,7 @@ export function createPlaySystem(
   const ndc = new Vector2();
   const canvas = engine.renderer.domElement;
   let lured = false;
+  const lureSim = new Float64Array(3);
   const controller = new PlayController({
     rayAt(x, y) {
       const w = canvas.clientWidth;
@@ -94,7 +95,9 @@ export function createPlaySystem(
     lure(p) {
       if (p === null && !lured) return;
       lured = p !== null;
-      sim.setLure?.(p ? [p.x, p.y, p.z] : null);
+      if (p === null) return sim.setLure?.(null);
+      sceneToSim(p.x, p.y, p.z, lureSim);
+      sim.setLure?.([lureSim[0] ?? 0, lureSim[1] ?? 0, lureSim[2] ?? 0]);
     },
     setLaserDot: (p) => visuals.setLaser(p),
     now: () => performance.now(),
@@ -115,6 +118,7 @@ export function createPlaySystem(
       stopFrame();
       stopRequests();
       controller.dispose();
+      sim.setLure?.(null);
       link.dispose();
       visuals.dispose();
     },

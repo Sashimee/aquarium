@@ -4,8 +4,10 @@ import {
   ApiRequestError,
   ApiTimeoutError,
   ClientValidationError,
+  MAX_RESPONSE_BYTES,
   REQUEST_TIMEOUT_MS,
   SLOW_REQUEST_TIMEOUT_MS,
+  TOTAL_TIMEOUT_FACTOR,
   createApiClient,
 } from './api';
 
@@ -395,6 +397,68 @@ describe('api client timeouts', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('times out a body that trickles in forever once the overall deadline passes', async () => {
+    vi.useFakeTimers();
+    try {
+      const encoder = new TextEncoder();
+      const trickle = () =>
+        Promise.resolve(
+          new Response(
+            new ReadableStream<Uint8Array>({
+              async pull(controller) {
+                await new Promise((resolve) => setTimeout(resolve, REQUEST_TIMEOUT_MS - 1000));
+                controller.enqueue(encoder.encode(' '));
+              },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+        );
+      const result = createApiClient(trickle)
+        .tanks()
+        .catch((e: unknown) => e);
+      await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS * TOTAL_TIMEOUT_FACTOR);
+      expect(await result).toMatchObject({
+        timeoutMs: REQUEST_TIMEOUT_MS * TOTAL_TIMEOUT_FACTOR,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('rejects a body that grows past the size cap', async () => {
+    const chunk = new Uint8Array(1024 * 1024);
+    let sent = 0;
+    const huge = () =>
+      Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            pull(controller) {
+              sent += 1;
+              controller.enqueue(chunk);
+            },
+          }),
+          { status: 200 },
+        ),
+      );
+    await expect(createApiClient(huge).tanks()).rejects.toMatchObject({
+      code: 'unexpected_response',
+    });
+    expect(sent).toBeLessThanOrEqual(MAX_RESPONSE_BYTES / chunk.byteLength + 2);
+  });
+
+  it('rejects a response whose content-length is over the cap without reading it', async () => {
+    const declared = () =>
+      Promise.resolve(
+        new Response('[]', {
+          status: 200,
+          headers: { 'content-length': String(MAX_RESPONSE_BYTES + 1) },
+        }),
+      );
+    await expect(createApiClient(declared).tanks()).rejects.toMatchObject({
+      code: 'unexpected_response',
+    });
   });
 
   describe('without AbortSignal.any', () => {

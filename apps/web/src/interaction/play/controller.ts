@@ -164,6 +164,7 @@ export class PlayController {
   dispose(): void {
     for (const stop of this.stopListening) stop();
     this.deps.setLaserDot(null);
+    this.deps.lure?.(null);
   }
 
   private feed(food: FoodType, portion: number, at: Vec3 | null): void {

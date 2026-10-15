@@ -4,6 +4,7 @@ import { SCENE_TIMEOUT_MS, dockButton } from './support/app';
 declare global {
   interface Window {
     __cspViolations?: string[];
+    __ktx2Transcodes?: { decoded: number; failed: string[] };
   }
 }
 
@@ -32,6 +33,14 @@ function watch(page: Page): Load {
 
 async function expectCleanLoad(page: Page, load: Load, what: string): Promise<void> {
   await expect(dockButton(page, 'Feed')).toBeEnabled({ timeout: SCENE_TIMEOUT_MS });
+  await expect
+    .poll(() => page.evaluate(() => window.__ktx2Transcodes?.decoded ?? 0), {
+      message: `textures transcoded by the worker ${what}`,
+      timeout: SCENE_TIMEOUT_MS,
+    })
+    .toBeGreaterThan(0);
+  const failed = await page.evaluate(() => window.__ktx2Transcodes?.failed ?? []);
+  expect(failed, `transcode errors ${what}`).toEqual([]);
   const violations = await page.evaluate(() => window.__cspViolations ?? []);
   expect(violations, `CSP violations ${what}`).toEqual([]);
   expect(load.problems, `EvalError or CSP errors ${what}`).toEqual([]);
@@ -45,6 +54,22 @@ test('KTX2 textures decode with no EvalError or CSP violation, also after a relo
   page,
 }) => {
   await page.addInitScript(() => {
+    const transcodes = { decoded: 0, failed: [] as string[] };
+    window.__ktx2Transcodes = transcodes;
+    const NativeWorker = window.Worker;
+    window.Worker = class extends NativeWorker {
+      constructor(url: string | URL, options?: WorkerOptions) {
+        super(url, options);
+        if (!String(url).includes('ktx2-worker.js')) return;
+        this.addEventListener(
+          'message',
+          (event: MessageEvent<{ type?: string; error?: string }>) => {
+            if (event.data.type === 'transcode') transcodes.decoded += 1;
+            if (event.data.type === 'error') transcodes.failed.push(event.data.error ?? 'unknown');
+          },
+        );
+      }
+    };
     window.__cspViolations = [];
     document.addEventListener('securitypolicyviolation', (event) => {
       window.__cspViolations?.push(`${event.violatedDirective} ${event.blockedURI}`);
