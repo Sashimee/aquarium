@@ -56,7 +56,7 @@ export class Curiosity {
   private interval: Float64Array;
 
   private readonly host: BehaviourHost;
-  private readonly lure = new Float64Array(3);
+  private readonly _lure = new Float64Array(3);
   private lureOn = false;
   private readonly arrival = new Float64Array(3);
 
@@ -88,6 +88,11 @@ export class Curiosity {
   /** 0 to 1: how strongly each fish is drawn to its feeding spot this step. */
   get anticipation(): Float64Array {
     return this._anticipation;
+  }
+
+  /** Where the lure is, x, y, z, after `setLure` moved it into the water; stale while inactive. */
+  get lure(): Float64Array {
+    return this._lure;
   }
 
   get lureActive(): boolean {
@@ -142,9 +147,9 @@ export class Curiosity {
     const { basin } = this.host;
     const x = clamp(position[0], basin.minX, basin.maxX);
     const z = clamp(position[2], basin.minZ, basin.maxZ);
-    this.lure[0] = x;
-    this.lure[1] = clamp(position[1], basin.ground(x, z), basin.maxY);
-    this.lure[2] = z;
+    this._lure[0] = x;
+    this._lure[1] = clamp(position[1], basin.ground(x, z), basin.maxY);
+    this._lure[2] = z;
     this.lureOn = true;
   }
 
@@ -230,7 +235,7 @@ export class Curiosity {
       return;
     }
     this.follow[i] = 1;
-    this.seen.set(this.lure, i * 3);
+    this.seen.set(this._lure, i * 3);
   }
 
   /** A following fish: closes on the lure as it moves, and tires of it. */
@@ -248,7 +253,7 @@ export class Curiosity {
     }
     const o = i * 3;
     for (let a = 0; a < 3; a++) {
-      this.seen[o + a] = at(this.seen, o + a) + (at(this.lure, a) - at(this.seen, o + a)) * blend;
+      this.seen[o + a] = at(this.seen, o + a) + (at(this._lure, a) - at(this.seen, o + a)) * blend;
     }
   }
 
@@ -264,11 +269,11 @@ export class Curiosity {
   private sees(i: number, tracking: boolean): boolean {
     const { position, forward } = this.host;
     const sp = this.speciesOf(i);
-    const dx = at(this.lure, 0) - at(position, i * 3);
-    const dy = at(this.lure, 1) - at(position, i * 3 + 1);
-    const dz = at(this.lure, 2) - at(position, i * 3 + 2);
+    const dx = at(this._lure, 0) - at(position, i * 3);
+    const dy = at(this._lure, 1) - at(position, i * 3 + 1);
+    const dz = at(this._lure, 2) - at(position, i * 3 + 2);
     const d = Math.hypot(dx, dy, dz);
-    if (!this.withinLeash(i, at(this.lure, 0), at(this.lure, 1), at(this.lure, 2))) return false;
+    if (!this.withinLeash(i, at(this._lure, 0), at(this._lure, 1), at(this._lure, 2))) return false;
     if (tracking) return d <= CURIOSITY.lureKeepRangeFactor * sp.perceptionRange;
     if (d > sp.perceptionRange) return false;
     if (d < 1e-9 || sp.perceptionFov >= 2 * Math.PI) return true;

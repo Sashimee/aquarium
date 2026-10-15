@@ -11,6 +11,7 @@ import {
   REEF_TANK,
   SHOW_DECOR,
   SHOW_TANK,
+  SLOPED_SPACE,
   spawnMany,
 } from './fixtures.ts';
 import { FOOD_STRIDE, FOOD_TYPES } from './food.ts';
@@ -186,21 +187,38 @@ describe('lure following', { timeout: LONG }, () => {
     expect(() => w.setLure([0, Number.NaN, 0])).toThrow(/lure: position/);
     expect(() => w.setLure([0, 0.2] as unknown as Point3)).toThrow(/lure: position/);
     expect(w.behaviour.curiosity.lureActive).toBe(false);
-    w.setLure([0, -1, 5]);
+    const { basin } = w;
+    w.setLure([-5, 5, -5]);
+    expect(Array.from(w.behaviour.curiosity.lure)).toEqual([basin.minX, basin.maxY, basin.minZ]);
+    w.setLure([5, -1, 5]);
     expect(w.behaviour.curiosity.lureActive).toBe(true);
+    const lure = [basin.maxX, basin.ground(basin.maxX, basin.maxZ), basin.maxZ];
+    expect(Array.from(w.behaviour.curiosity.lure)).toEqual(lure);
     let followed = 0;
     for (let t = 0; t < seconds(20); t++) {
       w.step();
       for (let i = 0; i < w.count; i++) {
         if (w.behaviour.curiosity.follow[i] !== 1) continue;
         followed++;
-        const seen = w.behaviour.curiosity.seen;
-        expect(at(seen, i * 3)).toBeLessThanOrEqual(SHOW_TANK.width / 2);
-        expect(at(seen, i * 3 + 1)).toBeGreaterThanOrEqual(0);
-        expect(at(seen, i * 3 + 2)).toBeLessThanOrEqual(SHOW_TANK.depth / 2);
+        expect(Array.from(w.behaviour.curiosity.seen.subarray(i * 3, i * 3 + 3))).toEqual(lure);
       }
     }
     expect(followed).toBeGreaterThan(0);
+  });
+
+  it('puts a lure dropped into sloped sand on the sand where it fell', () => {
+    const w = new World({ seed: 3, space: SLOPED_SPACE, species: ARCHETYPES, decor: [], fish: [] });
+    const { basin } = w;
+    const drops: [Point3, number, number][] = [
+      [[0, -1, 5], 0, basin.maxZ],
+      [[0.2, -1, 0], 0.2, 0],
+      [[-5, -1, -5], basin.minX, basin.minZ],
+    ];
+    for (const [drop, x, z] of drops) {
+      w.setLure(drop);
+      expect(Array.from(w.behaviour.curiosity.lure)).toEqual([x, basin.ground(x, z), z]);
+      expect(basin.ground(x, z)).toBeGreaterThan(basin.minY);
+    }
   });
 
   it('is deterministic: the same seed and lure path give the same trajectory', () => {

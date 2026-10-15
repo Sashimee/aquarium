@@ -137,7 +137,8 @@ describe('species sizes are standard lengths', () => {
     const drawn = new Set(Object.values(ADULT_MAX).map((a) => a.model));
     for (const m of models.values()) {
       if (drawn.has(m.id)) continue;
-      // Not drawn by any species batch yet: the guppy roster is all female.
+      // ADULT_MAX is keyed by species and the guppy's model is guppy-female; the web puts male
+      // guppies in guppy-male at 0.625 of the species length (apps/web/src/fish/profiles.ts).
       expect(m.id, `fish model "${m.id}" needs an ADULT_MAX entry`).toBe('guppy-male');
     }
     for (const [id, adult] of Object.entries(ADULT_MAX)) {
