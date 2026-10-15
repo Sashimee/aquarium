@@ -134,6 +134,14 @@ export const BEHAVIOUR = {
   grazerPickMaxS: 8,
   grazerWalkMinS: 1,
   grazerWalkMaxS: 4,
+  /** A cave takes this many walkers per (cave radius / body length)², and at least one. */
+  walkerCaveShare: 2,
+  walkerNookCandidates: 8,
+  walkerNookRingBodyLengths: 1,
+  walkerNookOutBodyLengths: 0.5,
+  walkerNookArriveBodyLengths: 0.5,
+  walkerNookDecorBodyLengths: 1.5,
+  walkerNookGiveUpS: 60,
 
   /** Fish body as a chain of spheres along the spine, in body lengths. */
   bodyThicknessBodyLengths: 0.12,
@@ -304,7 +312,9 @@ export class Behaviour {
   private _rest: Float64Array;
   private restTau: Float64Array;
   private restSpot: Float64Array;
+  /** Swimmers: 1 once a rest station is chosen. Walkers: 0 unchosen, 1 a nook, 2 none found. */
   private restSpotSet: Uint8Array;
+  private nookTimer: Float64Array;
 
   private home: Float64Array;
   private homeTimer: Float64Array;
@@ -395,6 +405,7 @@ export class Behaviour {
     this.restTau = new Float64Array(n);
     this.restSpot = new Float64Array(n * 3);
     this.restSpotSet = new Uint8Array(n);
+    this.nookTimer = new Float64Array(n);
     this.home = new Float64Array(n * 3);
     this.homeTimer = new Float64Array(n);
     this._anchor = new Int32Array(n).fill(-1);
@@ -466,6 +477,7 @@ export class Behaviour {
     this.restTau = edit.array(this.restTau);
     this.restSpot = edit.array(this.restSpot, 3);
     this.restSpotSet = edit.array(this.restSpotSet);
+    this.nookTimer = edit.array(this.nookTimer);
     this.home = edit.array(this.home, 3);
     this.homeTimer = edit.array(this.homeTimer);
     this._anchor = edit.array(this.anchor, 1, -1);
@@ -530,10 +542,11 @@ export class Behaviour {
   /**
    * The anchor a newly added fish takes: the anemone holding the fewest of its species (they
    * live in pairs, as `setAnchors` deals them out), or a cave none of its species holds; -1 if
-   * there is none.
+   * there is none. Walkers share caves instead (see `walkerCave`).
    */
   private freeAnchor(i: number): number {
     const sp = this.speciesOf(i);
+    if (sp.walking !== null) return sp.home === 'cave' ? this.walkerCave(i) : -1;
     const kind = sp.home === 'anemone' || sp.home === 'cave' ? sp.home : null;
     if (kind === null) return -1;
     const own = at(this.host.speciesIndex, i);
@@ -551,6 +564,31 @@ export class Behaviour {
       }
     }
     return kind === 'cave' && bestHeld > 0 ? -1 : best;
+  }
+
+  /**
+   * The cave walker `i` moves into: of those with room for another walker, the one holding the
+   * fewest, lower index first; -1 when every cave is full. Room grows with the cave's floor area
+   * over the species' size, since shrimp crowd into a shared refuge rather than defend one.
+   */
+  private walkerCave(i: number): number {
+    const length = this.speciesOf(i).bodyLength;
+    let best = -1;
+    let bestHeld = Infinity;
+    for (let k = 0; k < this.anchors.length; k++) {
+      const a = this.anchors[k];
+      if (a?.kind !== 'cave') continue;
+      const room = Math.max(1, Math.floor(BEHAVIOUR.walkerCaveShare * (a.radius / length) ** 2));
+      let held = 0;
+      for (let j = 0; j < this.host.count; j++) {
+        if (j !== i && at(this.anchor, j) === k && this.speciesOf(j).walking !== null) held++;
+      }
+      if (held < room && held < bestHeld) {
+        best = k;
+        bestHeld = held;
+      }
+    }
+    return best;
   }
 
   setAnchors(anchors: readonly Anchor[]): void {
@@ -592,12 +630,17 @@ export class Behaviour {
       }
     }
     this.anchors = anchors;
+    this.anchor.fill(-1);
+    this.restSpotSet.fill(0);
     const ordinal = new Map<string, number>();
     for (let i = 0; i < this.host.count; i++) {
       const sp = this.speciesOf(i);
       const kind = sp.home === 'anemone' || sp.home === 'cave' ? sp.home : null;
-      this.anchor[i] = -1;
       if (kind === null) continue;
+      if (sp.walking !== null) {
+        this.anchor[i] = this.walkerCave(i);
+        continue;
+      }
       const matching = anchors.flatMap((a, k) => (a.kind === kind ? [k] : []));
       if (matching.length === 0) continue;
       const k = ordinal.get(sp.id) ?? 0;
@@ -1279,20 +1322,28 @@ export class Behaviour {
       return;
     }
 
-    const a = this.anchors[at(this.anchor, i)];
-    if (a?.kind === 'cave' && (rest > 0.5 || at(this.shelterTimer, i) > 0)) {
-      // A walker comes in along the floor at its own height, so the mouth is judged in plan view.
-      const [tx, ty, tz] = this.approach(i, a, py);
-      const [ax, , az] = a.position;
-      if (Math.hypot(px - ax, pz - az) <= a.radius + 0.5 * length) {
-        plan.state = FishState.Shelter;
-        plan.speedCap = 0;
-        plan.wander = 0;
+    const sheltering = rest > 0.5 || at(this.shelterTimer, i) > 0;
+    if (!sheltering) {
+      this.restSpotSet[i] = 0;
+    } else if (this.speciesOf(i).home === 'cave') {
+      // A cave that emptied since the walker was turned away (a shrimp removed) is claimed anew.
+      if (at(this.anchor, i) < 0 && this.restSpotSet[i] === 0) this.anchor[i] = this.walkerCave(i);
+      const a = this.anchors[at(this.anchor, i)];
+      if (a?.kind === 'cave') {
+        // A walker comes in along the floor at its own height, so the mouth is judged in plan view.
+        const [tx, ty, tz] = this.approach(i, a, py);
+        const [ax, , az] = a.position;
+        if (Math.hypot(px - ax, pz - az) <= a.radius + 0.5 * length) {
+          plan.state = FishState.Shelter;
+          plan.speedCap = 0;
+          plan.wander = 0;
+          return;
+        }
+        plan.seek(tx, ty, tz, 0, 0.5);
+        plan.wander *= 0.3;
         return;
       }
-      plan.seek(tx, ty, tz, 0, 0.5);
-      plan.wander *= 0.3;
-      return;
+      if (this.planNook(i, plan, px, pz, length)) return;
     }
 
     const left = at(this.forageTimer, i) - DT;
@@ -1316,6 +1367,118 @@ export class Behaviour {
       plan.speedCap = 0;
     }
     if (rest > 0.5) plan.state = FishState.Rest;
+  }
+
+  /**
+   * A cave-dweller turned away from full caves shelters against the rock beside the nearest one,
+   * as shrimp crowd into crevices round an occupied refuge. False when there is no such nook, or
+   * it could not be reached in time: the walker then rests where it is.
+   */
+  private planNook(i: number, plan: Plan, px: number, pz: number, length: number): boolean {
+    const o = i * 3;
+    if (this.restSpotSet[i] === 1 && !this.nookHolds(i, length)) this.restSpotSet[i] = 0;
+    if (this.restSpotSet[i] === 0) {
+      this.restSpotSet[i] = this.pickNook(i, length) ? 1 : 2;
+      this.nookTimer[i] = BEHAVIOUR.walkerNookGiveUpS;
+    }
+    if (this.restSpotSet[i] !== 1) return false;
+    const nx = at(this.restSpot, o);
+    const nz = at(this.restSpot, o + 2);
+    if (Math.hypot(px - nx, pz - nz) <= BEHAVIOUR.walkerNookArriveBodyLengths * length) {
+      plan.state = FishState.Shelter;
+      plan.speedCap = 0;
+      plan.wander = 0;
+      return true;
+    }
+    const left = at(this.nookTimer, i) - DT;
+    this.nookTimer[i] = left;
+    if (left <= 0) {
+      this.restSpotSet[i] = 2;
+      return false;
+    }
+    plan.seek(nx, at(this.restSpot, o + 1), nz, 0, 0.5);
+    plan.wander *= 0.3;
+    return true;
+  }
+
+  /** Whether walker `i`'s nook is still clear of rock and still beside it after decor moved. */
+  private nookHolds(i: number, length: number): boolean {
+    const { sceneSdf, decorSdf } = this.host;
+    if (decorSdf === null) return false;
+    const o = i * 3;
+    const x = at(this.restSpot, o);
+    const y = at(this.restSpot, o + 1);
+    const z = at(this.restSpot, o + 2);
+    const thickness = BEHAVIOUR.bodyThicknessBodyLengths * length;
+    return (
+      sceneSdf.sample(x, y, z, this.n3) >= 1.2 * thickness &&
+      decorSdf.sample(x, y, z, this.n3) <= BEHAVIOUR.walkerNookDecorBodyLengths * length
+    );
+  }
+
+  /**
+   * Projects points on a ring round the nearest cave onto its rock and keeps the foot of the
+   * flank nearest walker `i`, half a body length out from it, in `restSpot`. Draws nothing from
+   * the RNG.
+   */
+  private pickNook(i: number, length: number): boolean {
+    const { decorSdf, sceneSdf, basin, position } = this.host;
+    if (decorSdf === null) return false;
+    const o = i * 3;
+    const px = at(position, o);
+    const pz = at(position, o + 2);
+    let cave: Anchor | undefined;
+    let caveDist = Infinity;
+    for (const a of this.anchors) {
+      if (a.kind !== 'cave') continue;
+      const d = Math.hypot(a.position[0] - px, a.position[2] - pz);
+      if (d < caveDist) {
+        cave = a;
+        caveDist = d;
+      }
+    }
+    if (cave === undefined) return false;
+    const n3 = this.n3;
+    const thickness = BEHAVIOUR.bodyThicknessBodyLengths * length;
+    const ring = cave.radius + BEHAVIOUR.walkerNookRingBodyLengths * length;
+    const out = BEHAVIOUR.walkerNookOutBodyLengths * length;
+    const lift = 0.5 * length;
+    let best = Infinity;
+    for (let c = 0; c < BEHAVIOUR.walkerNookCandidates; c++) {
+      const t = (2 * Math.PI * c) / BEHAVIOUR.walkerNookCandidates;
+      let x = cave.position[0] + Math.sin(t) * ring;
+      let z = cave.position[2] + Math.cos(t) * ring;
+      let y = basin.ground(x, z) + lift;
+      let d = Infinity;
+      for (let k = 0; k < 8; k++) {
+        d = decorSdf.sample(x, y, z, n3);
+        x -= at(n3, 0) * d;
+        y -= at(n3, 1) * d;
+        z -= at(n3, 2) * d;
+        if (Math.abs(d) < 1e-4) break;
+      }
+      if (Math.abs(d) > 1e-3) continue;
+      decorSdf.sample(x, y, z, n3);
+      const flank = Math.hypot(at(n3, 0), at(n3, 2));
+      // The top of a rock is no hiding place.
+      if (flank < 0.3) continue;
+      const sx = x + (at(n3, 0) / flank) * out;
+      const sz = z + (at(n3, 2) / flank) * out;
+      const margin = length;
+      if (sx < basin.minX + margin || sx > basin.maxX - margin) continue;
+      if (sz < basin.minZ + margin || sz > basin.maxZ - margin) continue;
+      const sy = basin.ground(sx, sz) + lift;
+      if (sceneSdf.sample(sx, sy, sz, n3) < 1.2 * thickness) continue;
+      if (decorSdf.sample(sx, sy, sz, n3) > BEHAVIOUR.walkerNookDecorBodyLengths * length) continue;
+      const dist = Math.hypot(sx - px, sz - pz);
+      if (dist < best) {
+        best = dist;
+        this.restSpot[o] = sx;
+        this.restSpot[o + 1] = sy;
+        this.restSpot[o + 2] = sz;
+      }
+    }
+    return best < Infinity;
   }
 
   private territoryCentre(i: number, sp: SimSpecies): [number, number, number, number] {

@@ -111,6 +111,8 @@ export class Walkers {
   private readonly probe = new Float64Array(3);
   /** Position, heading, up and normal before the step, restored if the step cannot be made valid. */
   private readonly before = new Float64Array(12);
+  /** Position before a landing attempt, restored if there is nothing to stand on there. */
+  private readonly landing = new Float64Array(3);
   private readonly basis: Vec3[] = [
     [0, 0, 1],
     [0, 1, 0],
@@ -680,6 +682,7 @@ export class Walkers {
     }
     this.transport(i);
     this.smoothUp(i);
+    this.stance(i);
     const stride = w.strideBodyLengths * length;
     const phase = at(this.legPhase, i) + (v * dt) / stride;
     this.legPhase[i] = phase - Math.floor(phase);
@@ -876,17 +879,57 @@ export class Walkers {
     this.host.thrust[i] = 0;
     const slack = WALK.attachSlackBodyLengths * at(bodyLength, i);
     if (this.spine(i) <= this.standoff(i) + slack) {
-      const before = new Float64Array(position.subarray(o, o + 3));
+      this.landing.set(position.subarray(o, o + 3));
       this.project(i, WALK.projectionPasses);
       if (this.surfaceNormal(i, w) > 0) {
         this.attach(i);
         this.smoothUp(i);
       } else {
-        position.set(before, o);
+        position.set(this.landing, o);
       }
       return this.backstop(i) || contact;
     }
     return contact;
+  }
+
+  /**
+   * The legs hold walker `i`'s spine at the stand-off from every surface it nears, not only the
+   * one underfoot: tipping up a wall out of a crease, or turning beside a rock while picking,
+   * would otherwise swing a body end into the other surface.
+   */
+  private stance(i: number): void {
+    const { position, bodyLength, sceneSdf } = this.host;
+    const o = i * 3;
+    const length = at(bodyLength, i);
+    const s = this.standoff(i);
+    const tolerance = 1e-4 * length;
+    const hx = at(this.heading, o);
+    const hy = at(this.heading, o + 1);
+    const hz = at(this.heading, o + 2);
+    const g = this.scratch;
+    for (let pass = 0; pass < WALK.projectionPasses; pass++) {
+      let worst = tolerance;
+      let wx = 0;
+      let wy = 0;
+      let wz = 0;
+      const px = at(position, o);
+      const py = at(position, o + 1);
+      const pz = at(position, o + 2);
+      for (const offset of BEHAVIOUR.bodySampleOffsets) {
+        const k = offset * length;
+        const d = sceneSdf.sample(px + hx * k, py + hy * k, pz + hz * k, g);
+        if (s - d > worst) {
+          worst = s - d;
+          wx = at(g, 0);
+          wy = at(g, 1);
+          wz = at(g, 2);
+        }
+      }
+      if (worst <= tolerance) return;
+      position[o] = px + wx * worst;
+      position[o + 1] = py + wy * worst;
+      position[o + 2] = pz + wz * worst;
+    }
   }
 
   /**

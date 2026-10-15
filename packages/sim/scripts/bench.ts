@@ -1,5 +1,11 @@
 import type { Collider } from '@aquarium/shared';
-import { benchmarkConfig, FoodRain, REEF_DECOR, REEF_TANK } from '../src/fixtures.ts';
+import {
+  benchmarkConfig,
+  FoodRain,
+  REEF_DECOR,
+  REEF_TANK,
+  walkerBenchmarkConfig,
+} from '../src/fixtures.ts';
 import { World } from '../src/world.ts';
 
 const WARMUP_STEPS = 300;
@@ -28,6 +34,22 @@ for (let run = 0; run < RUNS; run++) {
   }
   means.push((performance.now() - start) / MEASURED_STEPS);
 }
+
+// The same 60 fish with 20 cherry shrimp walking the reef floor.
+const walkerSamples: number[] = [];
+let walkerMs = 0;
+for (let run = 0; run < RUNS; run++) {
+  const world = new World(walkerBenchmarkConfig(run + 1));
+  for (let i = 0; i < WARMUP_STEPS; i++) world.step();
+  for (let i = 0; i < MEASURED_STEPS; i++) {
+    const t0 = performance.now();
+    world.step();
+    const ms = performance.now() - t0;
+    walkerSamples.push(ms);
+    walkerMs += ms;
+  }
+}
+const walkerMean = walkerMs / (RUNS * MEASURED_STEPS);
 
 // Dragging a rock: one collider moves every step, rebinning only its old and new cells.
 const dragged = new World(benchmarkConfig(9));
@@ -81,6 +103,7 @@ const feedMean = feedMs / feedSteps;
 
 samples.sort((a, b) => a - b);
 feedSamples.sort((a, b) => a - b);
+walkerSamples.sort((a, b) => a - b);
 const mean = means.reduce((a, b) => a + b, 0) / means.length;
 console.log(
   JSON.stringify({
@@ -94,6 +117,9 @@ console.log(
     throttled4xEstimateMs: Number((THROTTLE * mean).toFixed(4)),
     throttled4xP99EstimateMs: Number((THROTTLE * percentile(samples, 0.99)).toFixed(4)),
     throttledBudgetMs: THROTTLED_BUDGET_MS,
+    withWalkers: walkerBenchmarkConfig(0).fish.length,
+    withWalkersMeanMsPerStep: Number(walkerMean.toFixed(4)),
+    withWalkersP99Ms: Number(percentile(walkerSamples, 0.99).toFixed(4)),
     draggingDecorMeanMsPerStep: Number(dragMean.toFixed(4)),
     feedingMeanParticles: Math.round(particleSteps / feedSteps),
     feedingMeanMsPerStep: Number(feedMean.toFixed(4)),
@@ -104,6 +130,7 @@ console.log(
 const gates: [string, number][] = [
   ['p99 step', percentile(samples, 0.99)],
   ['p99 feeding step', percentile(feedSamples, 0.99)],
+  ['p99 step with walkers', percentile(walkerSamples, 0.99)],
 ];
 const over: string[] = [];
 for (const [name, ms] of gates) {
