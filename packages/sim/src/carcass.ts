@@ -108,7 +108,9 @@ function restRoll(seed: number): number {
 /**
  * A negatively buoyant carcass `t` seconds after death: it goes limp, sinks straight down from
  * `from` at its drag-limited speed and settles belly-down or on its side, by `seed` in [0, 1).
- * `floorY` is the substrate height under `from`. Its height never increases with `t`.
+ * `floorY` is the substrate height under `from`. Its height never increases with `t`. A carcass
+ * whose support went away falls again from rest at `from`, `fallT` seconds ago, while its limbs
+ * and roll keep counting from death.
  */
 export function sinkingCarcass(
   t: number,
@@ -117,17 +119,19 @@ export function sinkingCarcass(
   seed: number,
   floorY: number,
   out: CarcassPose,
+  fallT = t,
 ): void {
   const s = Math.max(0, t);
+  const fall = Math.max(0, fallT);
   const vt = sinkSpeed(length);
   const tau = sinkTimeConstant(length);
   const restY = carcassRestY(from, length, seed, floorY);
   const drop = from.y - restY;
   const landS = fallTime(drop, vt, tau);
-  const settled = s >= landS;
+  const settled = fall >= landS;
   out.x = from.x;
   out.z = from.z;
-  out.y = settled ? restY : Math.max(restY, from.y - fallen(s, vt, tau));
+  out.y = settled ? restY : Math.max(restY, from.y - fallen(fall, vt, tau));
   out.yaw = from.yaw;
   out.pitch = 0;
   out.roll = restRoll(seed) * smoothstep(s / Math.max(landS, CARCASS.minSettleS));
@@ -152,6 +156,8 @@ type Primitive = ReturnType<typeof compileCollider>;
 
 const SURFACE_M = 5e-4;
 const MAX_MARCH_STEPS = 4096;
+/** A surface whose normal points at least this far up holds a body; a steeper one it slides off. */
+const SUPPORT_NORMAL_Y = 0.5;
 
 /**
  * The decor a carcass comes to rest on. Plants and anemones bend under a body, so only hard
@@ -160,6 +166,7 @@ const MAX_MARCH_STEPS = 4096;
 export class CarcassSupport {
   private readonly hard: readonly Primitive[];
   private readonly normal = new Float64Array(3);
+  private nearestUp = 0;
 
   constructor(colliders: readonly Collider[]) {
     this.hard = colliders.filter((c) => c.hard).map(compileCollider);
@@ -193,16 +200,26 @@ export class CarcassSupport {
       y += Math.max(-d, SURFACE_M);
       d = this.distance(under, x, y, z);
     }
-    for (let i = 0; d > SURFACE_M && y > ground && i < MAX_MARCH_STEPS; i++) {
-      y -= d;
+    for (let i = 0; y > ground && i < MAX_MARCH_STEPS; i++) {
+      if (d > SURFACE_M) y -= d;
+      // Brushing past a rock's flank is no landing; the column only stops on a top or inside.
+      else if (d < 0 || this.nearestUp >= SUPPORT_NORMAL_Y) break;
+      else y -= SURFACE_M;
       d = this.distance(under, x, y, z);
     }
     return Math.max(y, ground);
   }
 
+  /** Union distance at (x, y, z); `nearestUp` is the up component of the nearest surface's normal. */
   private distance(under: readonly Primitive[], x: number, y: number, z: number): number {
     let d = Infinity;
-    for (const p of under) d = Math.min(d, p.sample(x, y, z, this.normal));
+    for (const p of under) {
+      const dp = p.sample(x, y, z, this.normal);
+      if (dp < d) {
+        d = dp;
+        this.nearestUp = this.normal[1] ?? 0;
+      }
+    }
     return d;
   }
 }

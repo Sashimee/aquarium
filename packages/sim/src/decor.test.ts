@@ -550,6 +550,63 @@ describe('World decor', () => {
       }
     });
 
+    it('frees two fish a rock lands on at once, each to a place of its own', () => {
+      const w = community(1);
+      let pair: [number, number] = [0, 1];
+      let closest = Infinity;
+      for (let k = 0; k < w.count; k++) {
+        for (let j = k + 1; j < w.count; j++) {
+          const d = Math.hypot(
+            ...[0, 1, 2].map((c) => at(w.position, k * 3 + c) - at(w.position, j * 3 + c)),
+          );
+          if (d < closest) {
+            closest = d;
+            pair = [k, j];
+          }
+        }
+      }
+      const [k, j] = pair;
+      const lo = [0, 1, 2].map((c) =>
+        Math.min(at(w.position, k * 3 + c), at(w.position, j * 3 + c)),
+      );
+      const hi = [0, 1, 2].map((c) =>
+        Math.max(at(w.position, k * 3 + c), at(w.position, j * 3 + c)),
+      );
+      const ground = 0;
+      const top = (hi[1] ?? 0) + 0.04;
+      const dropped: Collider = {
+        id: 'dropped',
+        hard: true,
+        kind: 'box',
+        center: [
+          ((lo[0] ?? 0) + (hi[0] ?? 0)) / 2,
+          (ground + top) / 2,
+          ((lo[2] ?? 0) + (hi[2] ?? 0)) / 2,
+        ],
+        halfExtents: [
+          ((hi[0] ?? 0) - (lo[0] ?? 0)) / 2 + 0.04,
+          (top - ground) / 2,
+          ((hi[2] ?? 0) - (lo[2] ?? 0)) / 2 + 0.04,
+        ],
+        rotationY: 0,
+        rounding: 0,
+      };
+      const field = compileCollider(dropped);
+      expect(centre(w, field, k)).toBeLessThan(0);
+      expect(centre(w, field, j)).toBeLessThan(0);
+
+      w.setDecor([rockAt(-0.3), dropped]);
+
+      for (const f of [k, j]) {
+        expect(w.bodyClearance(f), w.fishIds[f]).toBeGreaterThanOrEqual(-PENETRATION_EPSILON);
+        expect(centre(w, field, f)).toBeGreaterThan(0);
+      }
+      const apart = Math.hypot(
+        ...[0, 1, 2].map((c) => at(w.position, k * 3 + c) - at(w.position, j * 3 + c)),
+      );
+      expect(apart).toBeGreaterThan(0.01);
+    });
+
     it('moves the same way from the same seed', () => {
       const [a, b] = [community(2), community(2)];
       for (const w of [a, b]) {

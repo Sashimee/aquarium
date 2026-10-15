@@ -21,6 +21,12 @@ function percentile(sorted: readonly number[], p: number): number {
   return sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))] ?? NaN;
 }
 
+// Reported, not gated: a scavenge landing inside a step is what a p99 spike usually is, and this
+// tells a reader whether the hot loop allocates before they chase it.
+const gcPauses: PerformanceEntry[] = [];
+const gc = new PerformanceObserver((list) => gcPauses.push(...list.getEntries()));
+gc.observe({ entryTypes: ['gc'] });
+
 const means: number[] = [];
 const samples: number[] = [];
 for (let run = 0; run < RUNS; run++) {
@@ -101,6 +107,11 @@ for (let i = 0; i < feedSteps; i++) {
 }
 const feedMean = feedMs / feedSteps;
 
+// Node queues gc entries to the observer only once the event loop turns.
+await new Promise((resolve) => setTimeout(resolve, 0));
+gc.disconnect();
+const gcMs = gcPauses.reduce((sum, e) => sum + e.duration, 0);
+
 samples.sort((a, b) => a - b);
 feedSamples.sort((a, b) => a - b);
 walkerSamples.sort((a, b) => a - b);
@@ -124,6 +135,8 @@ console.log(
     feedingMeanParticles: Math.round(particleSteps / feedSteps),
     feedingMeanMsPerStep: Number(feedMean.toFixed(4)),
     feedingP99Ms: Number(percentile(feedSamples, 0.99).toFixed(4)),
+    gcPauses: gcPauses.length,
+    gcPauseMs: Number(gcMs.toFixed(4)),
   }),
 );
 
