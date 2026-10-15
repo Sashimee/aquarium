@@ -13,14 +13,15 @@ const TEST_TIMEOUT_MS = 120_000;
 // A slower machine (a shared CI runner) is still slower on an idle core, so the sim is timed
 // against a fixed reference workload stepped in turn with it, and the gate is on their ratio. The
 // limits are the ratios measured on the desktop the 2 ms / 4 ms-at-4x-throttle budgets were set
-// on (Ryzen 5 7600X, Node 24: 1.12 swimming, 1.65 with 20 shrimp walking, 2.4 feeding), times 1.4 for how differently other
+// on (Ryzen 5 7600X, Node 24.20; remeasured on 2026-10-15 at 1.13-1.15 swimming, 1.74-1.80 with
+// 20 shrimp walking and 2.26-2.29 feeding, three runs each), times 1.4 for how differently other
 // CPUs and V8 builds weigh the sim's mix of work against the reference's. That catches roughly a
 // doubling of the sim's cost, not smaller slowdowns: 1.5x only just fails the feeding limit and
 // 1.3x passes. The absolute budgets are gated by `pnpm --filter @aquarium/sim bench`.
 const HEADROOM = 1.4;
-const SWIMMING_LIMIT = 1.12 * HEADROOM;
-const WALKING_LIMIT = 1.65 * HEADROOM;
-const FEEDING_LIMIT = 2.4 * HEADROOM;
+const SWIMMING_LIMIT = 1.14 * HEADROOM;
+const WALKING_LIMIT = 1.8 * HEADROOM;
+const FEEDING_LIMIT = 2.3 * HEADROOM;
 const REFERENCE_PASSES = 20;
 
 interface Scenario {
