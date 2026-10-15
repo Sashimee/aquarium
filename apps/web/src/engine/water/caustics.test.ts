@@ -4,6 +4,7 @@ import {
   Color,
   ConstNode,
   LinearMipmapLinearFilter,
+  MathNode,
   TextureNode,
   VarNode,
   Vector3,
@@ -203,5 +204,47 @@ describe('the baked caustics', () => {
       expect(tile.generateMipmaps).toBe(true);
       expect(tile.minFilter).toBe(LinearMipmapLinearFilter);
     }
+  });
+});
+
+describe('Caustics.terms', () => {
+  function sines(node: Node): number {
+    let count = 0;
+    node.traverse((n) => {
+      if (n instanceof MathNode && n.method === MathNode.SIN) count++;
+    });
+    return count;
+  }
+
+  function patternSines(c: Caustics): number {
+    const { pattern } = c.terms(uniform(vec2(3, 4)), uniform(vec2(0, 0)), float(1));
+    return sines(pattern);
+  }
+
+  it('reports a change of method only when the method actually changes', () => {
+    const c = caustics();
+    expect(c.setMethod('procedural', 2)).toBe(false);
+    expect(c.setMethod('procedural', 1)).toBe(true);
+    expect(c.setMethod('procedural', 1)).toBe(false);
+    expect(c.setMethod('procedural-dispersion', 2)).toBe(true);
+  });
+
+  it('refuses the texture method before the tiles are baked', () => {
+    expect(() => caustics().setMethod('texture', 1)).toThrow(/bake\(\)/);
+  });
+
+  // Every lit shader inlines this graph, so an unused method left in it is compile time spent on
+  // every material (#539).
+  it('builds only the selected method, so a cheaper method gives a smaller shader', () => {
+    const c = caustics();
+    c.setMethod('procedural', 1);
+    const single = patternSines(c);
+    c.setMethod('procedural', 2);
+    const layered = patternSines(c);
+    c.setMethod('procedural-dispersion', 2);
+    const dispersion = patternSines(c);
+    expect(single).toBeGreaterThan(0);
+    expect(layered).toBeGreaterThan(single);
+    expect(dispersion).toBeGreaterThan(layered);
   });
 });

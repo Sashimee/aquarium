@@ -18,7 +18,6 @@ import {
   floor,
   fract,
   Fn,
-  If,
   length,
   max,
   min,
@@ -244,7 +243,6 @@ export class Caustics {
   readonly shaftContrast = uniform(0);
   readonly cellsPerMetre = uniform(13);
   readonly speed = uniform(0.55);
-  readonly method = uniform(METHOD_ID.layered, 'int');
   /** Unit vector from the scene towards the light. */
   readonly lightDirection = uniform(new Vector3(0, 1, 0));
   readonly lightRadiance = uniform(new Color(1, 1, 1));
@@ -270,14 +268,22 @@ export class Caustics {
     depthBuffer: false,
   });
   private baked = false;
+  private methodId: number = METHOD_ID.layered;
 
   constructor(private readonly medium: WaterMedium) {}
 
-  setMethod(method: CausticMethod, layers: 1 | 2): void {
+  /**
+   * Returns whether the method changed. Shaders build in the method they find, so every pipeline
+   * built from `lightColorNode` must then be rebuilt.
+   */
+  setMethod(method: CausticMethod, layers: 1 | 2): boolean {
     if (method === 'texture' && !this.baked) {
       throw new Error('Caustics: call bake() before selecting the texture method');
     }
-    this.method.value = causticMethodId(method, layers);
+    const id = causticMethodId(method, layers);
+    const changed = id !== this.methodId;
+    this.methodId = id;
+    return changed;
   }
 
   /**
@@ -407,34 +413,7 @@ export class Caustics {
       const t = time.mul(this.speed).toVar();
       const cells = surfacePoint.mul(this.cellsPerMetre).toVar();
       const drift = vec2(DRIFT[0], DRIFT[1]).mul(t).toVar();
-      const focus = float(0).toVar();
-      const defocused = float(PATTERN.defocusedContrast).toVar();
-      const pattern = vec3(1).toVar();
-
-      If(this.method.equal(METHOD_ID.texture), () => {
-        focus.assign(this.bakedFocus(cells, drift, t));
-        defocused.assign(BAKED_DEFOCUSED_CONTRAST);
-        pattern.assign(vec3(this.bakedPattern(cells, drift, t, focus)));
-      }).Else(() => {
-        const q = cells.add(drift).toVar();
-        focus.assign(focusField(q, t, null));
-        If(this.method.equal(METHOD_ID.single), () => {
-          pattern.assign(vec3(net(q, t, focus, null)));
-        })
-          .ElseIf(this.method.equal(METHOD_ID.layered), () => {
-            pattern.assign(vec3(layeredPattern(q, t, focus)));
-          })
-          .Else(() => {
-            pattern.assign(
-              vec3(
-                layeredPattern(q.mul(1 - DISPERSION), t, focus),
-                layeredPattern(q, t, focus),
-                layeredPattern(q.mul(1 + DISPERSION), t, focus),
-              ),
-            );
-          });
-        pattern.mulAssign(PATTERN_GAIN);
-      });
+      const { focus, defocused, pattern } = this.terms(cells, drift, t);
 
       const formed = smoothstep(0, 0.06, depth);
       const patch = mix(defocused, 1, focus);
@@ -442,6 +421,46 @@ export class Caustics {
       const caustic = max(pattern.sub(1).mul(amount).add(1), 0);
       return caustic.mul(light);
     })();
+  }
+
+  /**
+   * The current method's pattern with unit mean, where the light is focused (1) or spread (0), and
+   * the contrast left where it is spread. Only the current method is built, not a uniform switch
+   * over all four: every lit shader inlines it, and the unused methods tripled each one, which a
+   * software GPU then compiled for seconds per material on every tank switch (#539).
+   */
+  terms(
+    cells: Node<'vec2'>,
+    drift: Node<'vec2'>,
+    t: Node<'float'>,
+  ): { focus: Node<'float'>; defocused: Node<'float'>; pattern: Node<'vec3'> } {
+    if (this.methodId === METHOD_ID.texture) {
+      const focus = this.bakedFocus(cells, drift, t).toVar();
+      return {
+        focus,
+        defocused: float(BAKED_DEFOCUSED_CONTRAST),
+        pattern: vec3(this.bakedPattern(cells, drift, t, focus)),
+      };
+    }
+    const q = cells.add(drift).toVar();
+    const focus = focusField(q, t, null).toVar();
+    let pattern: Node<'vec3'>;
+    if (this.methodId === METHOD_ID.single) {
+      pattern = vec3(net(q, t, focus, null));
+    } else if (this.methodId === METHOD_ID.layered) {
+      pattern = vec3(layeredPattern(q, t, focus));
+    } else {
+      pattern = vec3(
+        layeredPattern(q.mul(1 - DISPERSION), t, focus),
+        layeredPattern(q, t, focus),
+        layeredPattern(q.mul(1 + DISPERSION), t, focus),
+      );
+    }
+    return {
+      focus,
+      defocused: float(PATTERN.defocusedContrast),
+      pattern: pattern.mul(PATTERN_GAIN),
+    };
   }
 
   /**
