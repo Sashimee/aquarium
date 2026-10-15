@@ -32,6 +32,16 @@ export {
   type AteEvent,
 } from './food.ts';
 export { WALK, Walkers } from './walk.ts';
+export {
+  CARCASS,
+  carcassFate,
+  carcassSettleS,
+  sinkingCarcass,
+  sinkSpeed,
+  type CarcassFate,
+  type CarcassPose,
+  type CarcassStart,
+} from './carcass.ts';
 export { FEEDING, gutForHunger } from './feeding.ts';
 export { CURIOSITY } from './curiosity.ts';
 export {
