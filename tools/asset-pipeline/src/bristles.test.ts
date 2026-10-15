@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { countSpikeVertices, despikeHead } from './bristles.ts';
 import type { Part } from './parts.ts';
-import { growBristles } from './tentacles.ts';
+import { growBristles, pickSkinUv } from './tentacles.ts';
 
 const RADIUS = 0.4;
 const HALF_LENGTH = 1;
@@ -48,6 +48,7 @@ function ellipsoid(spikes: number[]): Part {
 }
 
 const around = 32;
+const SKIN: [number, number] = [0.5, 0.5];
 const headSpikes = [4, 8, 12].map((r) => r * around + 5);
 const spec = { headFraction: 0.3, thickness: 0.03, reach: 0.004, rings: 2 };
 
@@ -87,6 +88,30 @@ describe('despikeHead', () => {
     expect(tail.positions).toEqual(before);
   });
 
+  it('reseats a tiny stray uv island on the head onto the skin texture', () => {
+    const part = ellipsoid(headSpikes);
+    const stray = [10 * around + 3, 10 * around + 4, 11 * around + 3];
+    const first = part.positions.length / 3;
+    const positions = [...part.positions];
+    const uvs = [...part.uvs];
+    for (const v of stray) {
+      positions.push(
+        part.positions[v * 3]!,
+        part.positions[v * 3 + 1]!,
+        part.positions[v * 3 + 2]!,
+      );
+      uvs.push(0.95, 0.95);
+    }
+    part.positions = Float32Array.from(positions);
+    part.normals = Float32Array.from([...part.normals, ...stray.flatMap(() => [0, 1, 0])]);
+    part.uvs = Float32Array.from(uvs);
+    part.indices = Uint32Array.from([...part.indices, first, first + 1, first + 2]);
+
+    despikeHead(part, spec);
+
+    for (let k = 0; k < 3; k++) expect(part.uvs[(first + k) * 2]!).toBeLessThan(0.9);
+  });
+
   it('keeps indices and uvs valid and normals unit length', () => {
     const part = ellipsoid(headSpikes);
     despikeHead(part, spec);
@@ -104,8 +129,8 @@ describe('growBristles', () => {
   const bristles = { rim: 4, crown: 2, length: 0.05 };
 
   it('grows a finite, deterministic set of tentacles in front of the middle of the body', () => {
-    const first = growBristles(body, bristles);
-    const second = growBristles(body, bristles);
+    const first = growBristles(body, bristles, SKIN);
+    const second = growBristles(body, bristles, SKIN);
     expect(first.positions).toEqual(second.positions);
     expect(first.positions.length).toBeGreaterThan(0);
     expect(first.positions.every(Number.isFinite)).toBe(true);
@@ -116,8 +141,8 @@ describe('growBristles', () => {
   });
 
   it('puts tentacles on both sides and only the rim row when there is no crown', () => {
-    const rimOnly = growBristles(body, { ...bristles, crown: 0 });
-    const withCrown = growBristles(body, bristles);
+    const rimOnly = growBristles(body, { ...bristles, crown: 0 }, SKIN);
+    const withCrown = growBristles(body, bristles, SKIN);
     const xs = Array.from(
       { length: rimOnly.positions.length / 3 },
       (_, i) => rimOnly.positions[i * 3]!,
@@ -128,10 +153,34 @@ describe('growBristles', () => {
   });
 
   it('samples a small patch of the body texture', () => {
-    const { uvs } = growBristles(body, bristles);
+    const { uvs } = growBristles(body, bristles, SKIN);
     const spanU =
       Math.max(...uvs.filter((_, i) => i % 2 === 0)) -
       Math.min(...uvs.filter((_, i) => i % 2 === 0));
     expect(spanU).toBeLessThan(0.05);
+    expect(Math.min(...uvs.filter((_, i) => i % 2 === 0))).toBeCloseTo(SKIN[0], 6);
+  });
+
+  it('builds a forked tentacle from many more vertices than a plain tube', () => {
+    const { positions } = growBristles(body, { rim: 1, crown: 0, length: 0.2 }, SKIN);
+    expect(positions.length / 3).toBeGreaterThan(40);
+  });
+});
+
+describe('pickSkinUv', () => {
+  it('picks mid-tone head skin and ignores the lighter tail', () => {
+    const body = ellipsoid([]);
+    const luma = (u: number, v: number): number => (v < 0.5 ? 30 + u * 100 : 255);
+    const [u, v] = pickSkinUv(body, 0.3, luma);
+    expect(v).toBeLessThan(0.3);
+    const value = luma(u, v);
+    expect(value).toBeGreaterThan(30);
+    expect(value).toBeLessThan(130);
+  });
+
+  it('is deterministic', () => {
+    const body = ellipsoid([]);
+    const luma = (u: number, v: number): number => u * 7 + v * 3;
+    expect(pickSkinUv(body, 0.3, luma)).toEqual(pickSkinUv(body, 0.3, luma));
   });
 });

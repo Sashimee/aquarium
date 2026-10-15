@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { speciesSchema } from '@aquarium/shared';
 import { despikeHead, type DespikeSpec } from './bristles.ts';
-import { growBristles, type BristleSpec } from './tentacles.ts';
+import { growBristles, pickSkinUv, type BristleSpec } from './tentacles.ts';
 import { buildDocument, emitAsset, type LodPlan } from './emit.ts';
 import { seatEyes, type EyePlacement } from './eyes.ts';
 import {
@@ -161,6 +161,17 @@ export function normaliseFish(input: NormaliseInput): Part[] {
   return out;
 }
 
+function skinUv(body: Part, materials: MaterialDef[], headFraction: number): [number, number] {
+  const image = materials.find((m) => m.name === body.material)?.baseColor?.image;
+  if (!image) throw new Error(`${body.material}: tentacles need a base colour texture to match`);
+  return pickSkinUv(body, headFraction, (u, v) => {
+    const x = Math.min(image.width - 1, Math.max(0, Math.floor(u * image.width)));
+    const y = Math.min(image.height - 1, Math.max(0, Math.floor(v * image.height)));
+    const at = (y * image.width + x) * 4;
+    return 0.299 * image.data[at]! + 0.587 * image.data[at + 1]! + 0.114 * image.data[at + 2]!;
+  });
+}
+
 export async function writeDebugRender(
   repoRoot: string,
   id: string,
@@ -267,21 +278,6 @@ export async function buildSourceFish(recipe: FishRecipe, ctx: FishContext): Pro
     eyeParts.splice(0, eyeParts.length, eyes);
   }
 
-  const bristleParts = recipe.bristles
-    ? [growBristles(mergeParts(parts, parts[0]!.material), recipe.bristles)]
-    : [];
-
-  const fromSpecies = speciesLengthM(ctx.repoRoot, recipe.species);
-  const standardLengthM =
-    fromSpecies !== null ? fromSpecies * (recipe.lengthFactor ?? 1) : recipe.fallbackLengthM;
-  const normalised = normaliseFish({
-    parts,
-    attachments: [...eyeParts, ...bristleParts],
-    hints: recipe.hints,
-    standardLengthM,
-    recipeId: recipe.id,
-  });
-
   const materials = await Promise.all(
     sourceMaterials.map(async (m) => {
       const def = await materialDefFrom(m, { roughness: recipe.roughness ?? 0.45 });
@@ -298,6 +294,28 @@ export async function buildSourceFish(recipe: FishRecipe, ctx: FishContext): Pro
       return { ...def, baseColor: { ...def.baseColor, image } };
     }),
   );
+  const body = mergeParts(parts, parts[0]!.material);
+  const bristleParts = recipe.bristles
+    ? [
+        growBristles(
+          body,
+          recipe.bristles,
+          skinUv(body, materials, recipe.despike?.headFraction ?? 0.3),
+        ),
+      ]
+    : [];
+
+  const fromSpecies = speciesLengthM(ctx.repoRoot, recipe.species);
+  const standardLengthM =
+    fromSpecies !== null ? fromSpecies * (recipe.lengthFactor ?? 1) : recipe.fallbackLengthM;
+  const normalised = normaliseFish({
+    parts,
+    attachments: [...eyeParts, ...bristleParts],
+    hints: recipe.hints,
+    standardLengthM,
+    recipeId: recipe.id,
+  });
+
   const debugRender = await writeDebugRender(ctx.repoRoot, recipe.id, normalised, materials);
   const built = buildDocument(recipe.id, normalised, materials);
   return emitAsset({

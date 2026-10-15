@@ -112,8 +112,8 @@ export const FISH_RECIPES: FishRecipe[] = [
     keepMaterial: /^CustomMaterial$/,
     lodPlan: { ratios: [0.2, 0.08, 0.03], minTriangles: 1300 },
     despike: { headFraction: 0.3, thickness: 0.03, reach: 0.004, rings: 3 },
-    bristles: { rim: 5, crown: 2, length: 0.05 },
-    roughness: 0.5,
+    bristles: { rim: 5, crown: 2, length: 0.07 },
+    roughness: 0.78,
     recolour: {
       tint: {
         ramps: [

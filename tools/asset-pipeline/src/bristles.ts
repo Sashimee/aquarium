@@ -155,16 +155,17 @@ function measure(
 
 const UV_DONORS = 8;
 const SAME_ISLAND = 0.08;
+const SEAM_EXTENT = 0.02;
 
 /**
  * A spike's vertices keep the uvs of the spike texture, which would smear dark streaks over the skin they now lie on.
  * They take an inverse-distance blend of the nearest untouched vertices instead, skipping donors from another uv island.
  */
-function reseatUvs(part: Part, welded: Welded, moved: Set<number>): void {
+function reseatUvs(part: Part, welded: Welded, moved: Set<number>, stragglers: Set<number>): void {
   const donors: number[] = [];
   const receivers: number[] = [];
   for (let i = 0; i < welded.canon.length; i++)
-    (moved.has(welded.canon[i]!) ? receivers : donors).push(i);
+    (moved.has(welded.canon[i]!) || stragglers.has(i) ? receivers : donors).push(i);
   const fixed = Float32Array.from(part.uvs);
   for (const i of receivers) {
     const nearest: { j: number; d: number }[] = [];
@@ -202,6 +203,92 @@ function reseatUvs(part: Part, welded: Welded, moved: Set<number>): void {
     fixed[i * 2 + 1] = v / total;
   }
   part.uvs.set(fixed);
+}
+
+/**
+ * A triangle that straddles two uv islands smears a streak of texture across the skin. Where such a triangle is on
+ * the head its corners are split off and given the mean uv, so it shows one flat tone instead.
+ */
+function flattenSeamTriangles(part: Part, welded: Welded, inHead: (v: number) => boolean): void {
+  const flat: number[] = [];
+  for (let t = 0; t < part.indices.length; t += 3) {
+    const corners = [part.indices[t]!, part.indices[t + 1]!, part.indices[t + 2]!];
+    if (!corners.some((c) => inHead(welded.canon[c]!))) continue;
+    const us = corners.map((c) => part.uvs[c * 2]!);
+    const vs = corners.map((c) => part.uvs[c * 2 + 1]!);
+    if (
+      Math.max(...us) - Math.min(...us) <= SEAM_EXTENT &&
+      Math.max(...vs) - Math.min(...vs) <= SEAM_EXTENT
+    )
+      continue;
+    flat.push(t);
+  }
+  if (flat.length === 0) return;
+  const count = part.positions.length / 3;
+  const total = count + flat.length * 3;
+  const grow = <T extends Float32Array<ArrayBuffer>>(
+    source: T,
+    stride: number,
+  ): Float32Array<ArrayBuffer> => {
+    const out = new Float32Array(total * stride);
+    out.set(source);
+    return out;
+  };
+  const positions = grow(part.positions, 3);
+  const normals = grow(part.normals, 3);
+  const uvs = grow(part.uvs, 2);
+  const extra = Object.fromEntries(Object.entries(part.extra).map(([k, v]) => [k, grow(v, 1)]));
+  const indices = Uint32Array.from(part.indices);
+  flat.forEach((t, n) => {
+    const corners = [indices[t]!, indices[t + 1]!, indices[t + 2]!];
+    const u = (uvs[corners[0]! * 2]! + uvs[corners[1]! * 2]! + uvs[corners[2]! * 2]!) / 3;
+    const v =
+      (uvs[corners[0]! * 2 + 1]! + uvs[corners[1]! * 2 + 1]! + uvs[corners[2]! * 2 + 1]!) / 3;
+    corners.forEach((c, k) => {
+      const at = count + n * 3 + k;
+      positions.set(positions.subarray(c * 3, c * 3 + 3), at * 3);
+      normals.set(normals.subarray(c * 3, c * 3 + 3), at * 3);
+      uvs[at * 2] = u;
+      uvs[at * 2 + 1] = v;
+      for (const values of Object.values(extra)) values[at] = values[c]!;
+      indices[t + k] = at;
+    });
+  });
+  part.positions = positions;
+  part.normals = normals;
+  part.uvs = uvs;
+  part.indices = indices;
+  part.extra = extra;
+}
+
+const SMALL_ISLAND = 16;
+
+/** Vertices of the head that sit on a tiny uv island: the leftovers of the spike texture, which show as dark flecks. */
+function smallIslandVertices(part: Part, inHead: (index: number) => boolean): Set<number> {
+  const parent = Uint32Array.from({ length: part.positions.length / 3 }, (_, i) => i);
+  const find = (i: number): number => {
+    let root = i;
+    while (parent[root] !== root) root = parent[root]!;
+    for (let at = i; parent[at] !== root;) {
+      const next = parent[at]!;
+      parent[at] = root;
+      at = next;
+    }
+    return root;
+  };
+  for (let t = 0; t < part.indices.length; t += 3) {
+    const a = find(part.indices[t]!);
+    for (const k of [1, 2]) parent[find(part.indices[t + k]!)] = a;
+  }
+  const triangles = new Map<number, number>();
+  for (let t = 0; t < part.indices.length; t += 3) {
+    const root = find(part.indices[t]!);
+    triangles.set(root, (triangles.get(root) ?? 0) + 1);
+  }
+  const small = new Set<number>();
+  for (let i = 0; i < parent.length; i++)
+    if (inHead(i) && (triangles.get(find(i)) ?? 0) < SMALL_ISLAND) small.add(i);
+  return small;
 }
 
 export function countSpikeVertices(part: Part, spec: DespikeSpec): number {
@@ -242,9 +329,15 @@ export function despikeHead(part: Part, spec: DespikeSpec): number {
     if (!affected.has(v)) continue;
     for (let a = 0; a < 3; a++) part.positions[i * 3 + a] = positions[v * 3 + a]!;
   }
-  reseatUvs(part, welded, moved);
+  reseatUvs(
+    part,
+    welded,
+    moved,
+    smallIslandVertices(part, (i) => inHead(welded.canon[i]!)),
+  );
   const shading = new Set<number>();
   for (let v = 0; v < count; v++) if (inHead(v)) shading.add(v);
   recomputeNormals(part, welded, shading);
+  flattenSeamTriangles(part, welded, inHead);
   return moved.size;
 }
