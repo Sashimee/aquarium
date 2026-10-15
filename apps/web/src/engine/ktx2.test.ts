@@ -55,10 +55,6 @@ describe('bundledTranscoderUrl', () => {
     expect(wasm).toContain('basis_transcoder');
   });
 
-  it('versions the worker url by content hash, not by three revision', () => {
-    expect(KTX2_WORKER_URL).toMatch(/^\/ktx2-worker\.js\?v=[0-9a-f]{12}$/);
-  });
-
   it('leaves texture urls alone, so no caller sees another caller’s variant choice', () => {
     expect(bundledTranscoderUrl('/assets/rock/a/textures/a_1k.ktx2')).toBe(
       '/assets/rock/a/textures/a_1k.ktx2',
@@ -149,7 +145,7 @@ describe('the shared loader init', () => {
 
     expect(started).toHaveLength(1);
     expect(started[0]?.url).toBe(KTX2_WORKER_URL);
-    expect(KTX2_WORKER_URL).toMatch(/^\/ktx2-worker\.js\?v=\d+$/);
+    expect(KTX2_WORKER_URL).toMatch(/^\/ktx2-worker\.js\?v=[0-9a-f]{12}$/);
     expect(started[0]?.message.transcoderBinary.byteLength).toBe(4);
     shared.dispose();
   });

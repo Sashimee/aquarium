@@ -14,6 +14,7 @@ const Loader = KTX2Loader as unknown as {
 };
 
 const FILE_NAME = 'ktx2-worker.js';
+const UNUSED_TRANSCODER_GLUE = /^assets\/basis_transcoder-[\w-]+\.js$/;
 
 function workerSource(): string {
   const require = createRequire(import.meta.url);
@@ -42,7 +43,13 @@ export function ktx2WorkerPlugin(): Plugin {
     config() {
       return { define: { __KTX2_WORKER_HASH__: JSON.stringify(hash) } };
     },
-    generateBundle() {
+    enforce: 'post',
+    generateBundle(_options, bundle) {
+      // KTX2Loader's module-level new URL() makes the bundler emit the glue script, but the shared
+      // loader never fetches it: bundledTranscoderUrl serves the worker file instead.
+      for (const name of Object.keys(bundle)) {
+        if (UNUSED_TRANSCODER_GLUE.test(name)) Reflect.deleteProperty(bundle, name);
+      }
       this.emitFile({ type: 'asset', fileName: FILE_NAME, source });
     },
     configureServer(server) {
