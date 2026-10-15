@@ -6,7 +6,7 @@
     "sha256 is null if and only if status is selected-pending-download.",
     "files[] is optional. When present, sha256 is the aggregate: sha256 of the lines '<file sha256>  <path>' sorted by path, joined with \\n, with no trailing newline (utf-8).",
     "rigged is null until a downloaded file confirms it.",
-    "CC-BY-SA entries are allowed only for reference photos, per Alex's decision on issue #29; ShareAlike applies to any texture derived from them."
+    "CC-BY-SA entries are allowed only for reference photos, per Alex's decisions: issue #29 (2026-10-12: Corydoras aeneus, Gramma loreto, Pterapogon kauderni) and 2026-10-15 (docs/PLAN.md section 1: lateral photos for firefish, six-line wrasse, harlequin rasbora and Ancistrus by Nick Hobgood, Diego Delso, Mariusz Dabrowski, Júlio Reis and Corydoras-adolfoi). ShareAlike applies to any texture derived from them: derived textures ship as CC-BY-SA with attribution, and a photo used as a source is credited as shipped with its modifications."
   ],
   "assets": [
     {
@@ -1119,7 +1119,13 @@
       "textures": "photo 3000x2000",
       "rigged": false,
       "notes": "High resolution (3000x2000) side-on shot for texture projection. Download: https://upload.wikimedia.org/wikipedia/commons/f/fe/Banggai-Kardinalbarsch_Pterapogon_kauderni.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
-      "modifications": [],
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "Pterapogon kauderni by Holger Krisp (CC-BY-3.0), side view projected onto the loft",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
       "status": "downloaded"
     },
     {
@@ -2206,7 +2212,13 @@
       "textures": "photo 2736x1905",
       "rigged": false,
       "notes": "Near-lateral firefish (Nemateleotris magnifica) in natural light on reef: shows the full-length trailing first dorsal spine, pale lilac-white front, yellow-green face and the orange-red rear body with dark-edged fins that the CC0 photo wm-firefish-karelj crops out. Pick for the loft texture; use the CC0 photo as a second colour reference. ShareAlike: any texture derived from this photo must be released under the same CC BY-SA licence and attributed in CREDITS.md, so keep derived loft textures in a separately attributed asset. Alex approved CC BY-SA for lateral photos of this species on 2026-10-15 (extends the #29 decision). Licence read from the Commons file page metadata (CC BY-SA 3.0).",
-      "modifications": [],
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "Nemateleotris magnifica by Nick Hobgood (CC-BY-SA-3.0), oblique photograph projected onto the loft with the photographed body fitted to the species proportions; the first dorsal spine is modelled from the species description",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
       "status": "downloaded"
     },
     {
@@ -2224,8 +2236,14 @@
       "polycount": null,
       "textures": "photo 2063x1098",
       "rigged": false,
-      "notes": "True lateral, sharp, evenly lit full-body harlequin rasbora (Trigonostigma heteromorpha) on a dark ground, 2063x1098 crop: copper back, silvery belly and the black pennant patch, red-edged eye and tail base all legible. Pick for the loft texture. ShareAlike: any texture derived from this photo must be released under the same CC BY-SA licence and attributed in CREDITS.md, so keep derived loft textures in a separately attributed asset. Alex approved CC BY-SA for lateral photos of this species on 2026-10-15 (extends the #29 decision). Licence read from the Commons file page metadata (CC BY-SA 3.0).",
-      "modifications": [],
+      "notes": "True lateral, sharp, evenly lit full-body harlequin rasbora (Trigonostigma heteromorpha) on a dark ground, 2063x1098 crop: copper back, silvery belly and the black pennant patch, red-edged eye and tail base all legible. Pick for the loft texture. ShareAlike: any texture derived from this photo must be released under the same CC BY-SA licence and attributed in CREDITS.md, so keep derived loft textures in a separately attributed asset. Alex approved CC BY-SA for lateral photos of this species on 2026-10-15 (extends the #29 decision). The author has no Commons profile page (User:Wayrse does not exist), so author_url is the file page. Licence read from the Commons file page metadata (CC BY-SA 3.0).",
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "Trigonostigma heteromorpha by Mariusz Dabrowski (CC-BY-SA-3.0), side view projected onto the loft with the photographed body fitted to the species proportions; fins painted as translucent reddish membranes",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
       "status": "downloaded"
     },
     {
@@ -2244,7 +2262,13 @@
       "textures": "photo 4093x2729",
       "rigged": false,
       "notes": "Sharp, well-lit near-lateral six-line wrasse (Pseudocheilinus hexataenia) with the whole body in frame, 4093x2729: six orange lines on violet-blue, red-ringed eye, green caudal fin with the peduncle spot. The body is tilted slightly, so rectify the stripe curvature when projecting. Pick for the loft texture, with wm-sixline-huffman as a CC-BY colour check. ShareAlike: any texture derived from this photo must be released under the same CC BY-SA licence and attributed in CREDITS.md, so keep derived loft textures in a separately attributed asset. Alex approved CC BY-SA for lateral photos of this species on 2026-10-15 (extends the #29 decision). Licence read from the Commons file page metadata (CC BY-SA 4.0).",
-      "modifications": [],
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "Pseudocheilinus hexataenia by Diego Delso (CC-BY-SA-4.0), tilted side view rectified and projected onto the loft with the photographed body fitted to the species proportions; fins painted as translucent membranes",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
       "status": "downloaded"
     },
     {

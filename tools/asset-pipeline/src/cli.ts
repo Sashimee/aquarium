@@ -30,7 +30,6 @@ async function main(argv: string[]): Promise<number> {
     for (const asset of raw.assets) {
       const modifications = derived.get(asset.id);
       if (modifications) asset.modifications = modifications;
-      else if (asset.kind === 'reference-photo') asset.modifications = [];
     }
     const { format, resolveConfig } = await import('prettier');
     const options = (await resolveConfig(path)) ?? {};

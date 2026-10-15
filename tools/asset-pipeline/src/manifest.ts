@@ -166,12 +166,10 @@ export function validateManifest(manifest: Manifest, credits: string): string[] 
   return problems;
 }
 
-/** Modifications of every built asset deriving from each credit-requiring source, prefixed with the asset id when a source feeds several; empty for unused sources; reference photos are never derived from. */
+/** Modifications of every built asset deriving from each credit-requiring source, prefixed with the asset id when a source feeds several; empty for unused sources; reference photos appear only when a built asset uses them as a source. */
 export function derivedModifications(index: AssetIndex, manifest: Manifest): Map<string, string[]> {
   const users = new Map<string, OutputAsset[]>(
-    manifest.assets
-      .filter((a) => requiresCredit(a.licence) && a.kind !== SHARE_ALIKE_KIND)
-      .map((a) => [a.id, []]),
+    manifest.assets.filter((a) => requiresCredit(a.licence)).map((a) => [a.id, []]),
   );
   for (const asset of index.assets) {
     for (const sourceId of asset.sources) users.get(sourceId)?.push(asset);
@@ -193,13 +191,6 @@ export function derivedModifications(index: AssetIndex, manifest: Manifest): Map
 export function modificationProblems(index: AssetIndex, manifest: Manifest): string[] {
   const byId = new Map(manifest.assets.map((a) => [a.id, a]));
   const problems: string[] = [];
-  for (const asset of manifest.assets) {
-    if (asset.kind === SHARE_ALIKE_KIND && asset.modifications.length > 0) {
-      problems.push(
-        `manifest asset ${asset.id}: reference photos are not redistributed, so modifications must stay empty`,
-      );
-    }
-  }
   for (const [sourceId, expected] of derivedModifications(index, manifest)) {
     const actual = byId.get(sourceId)?.modifications ?? [];
     if (JSON.stringify(actual) !== JSON.stringify(expected)) {

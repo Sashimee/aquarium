@@ -86,7 +86,7 @@ export function buildCredits(manifest: unknown): Credits {
       attribution: `"${a.title}" by ${a.author}, licensed under ${a.licence}.`,
       shareAlike: a.licence.startsWith('CC-BY-SA'),
       species: a.species ?? null,
-      referenceOnly: a.kind === 'reference-photo',
+      referenceOnly: a.kind === 'reference-photo' && a.modifications.length === 0,
       modifications:
         a.kind === 'reference-photo' || a.licence === 'CC0-1.0'
           ? a.modifications
