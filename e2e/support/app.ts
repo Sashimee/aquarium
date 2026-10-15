@@ -61,8 +61,21 @@ export const dockButton = (page: Page, label: string): Locator =>
     .getByRole('navigation', { name: 'Actions' })
     .getByRole('button', { name: label, exact: true });
 
+export const loadingOverlay = (page: Page): Locator => page.locator('.loading');
+
+/**
+ * The loading overlay is modal and covers the whole page until the tank has drawn its first
+ * frames, so nothing can be pressed before it is gone. It only shows after 150 ms, so wait for
+ * the scene first: by then it is certainly up.
+ */
+export async function awaitLoaded(page: Page, timeout = SCENE_TIMEOUT_MS): Promise<void> {
+  await expect(page.locator('#app')).toHaveAttribute('data-scene-biome', /\w/, { timeout });
+  await expect(loadingOverlay(page)).toHaveCount(0, { timeout });
+}
+
 export async function openTank(page: Page): Promise<void> {
   await page.goto('/?tier=low&backend=webgl');
+  await awaitLoaded(page);
   await expect(dockButton(page, 'Feed')).toBeEnabled({ timeout: SCENE_TIMEOUT_MS });
 }
 

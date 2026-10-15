@@ -405,6 +405,8 @@ async function expectToolClaimsDrag(page: Page, drag: Drag) {
 
 async function ready(page: Page) {
   await page.goto('/?tier=low&backend=webgl&e2e', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('#app')).toHaveAttribute('data-scene-biome', /\w/, { timeout: 90_000 });
+  await expect(page.locator('.loading')).toHaveCount(0, { timeout: 90_000 });
   await expect(dock(page, 'Feed')).toBeEnabled({ timeout: 45_000 });
   await expect(page.locator('canvas#tank')).toBeVisible();
   await expect(hud(page, /^Account/)).toBeEnabled();

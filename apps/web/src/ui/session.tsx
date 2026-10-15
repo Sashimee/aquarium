@@ -64,6 +64,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     if (verified) setNeeded(true);
   }, [verified]);
 
+  // Visitors without a verified account never get a session, and the fish wait for the session
+  // to say whether a saved tank is coming.
+  useEffect(() => {
+    if (status === 'loading' || verified || session) return;
+    interaction.emit('tank:none', {});
+  }, [status, verified, session, interaction]);
+
   // Built in an effect so StrictMode's mount, unmount, mount cycle gets a fresh, undisposed session.
   useEffect(() => {
     if (!needed) return;

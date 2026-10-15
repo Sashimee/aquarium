@@ -10,6 +10,7 @@ import {
   TankTypeSwitch,
 } from './Hud';
 import { LifeStatus } from './LifeStatus';
+import { LoadingScreen } from './LoadingScreen';
 import { usePanels, type OpenPanel, type Panel } from './panels';
 import { FeedPanel, FeedToast, PlayPanel, useFood } from './PlayControls';
 import { navigate } from './router';
@@ -242,6 +243,7 @@ export function App() {
       <div className="dock-wrap" ref={dock}>
         <Dock panel={panel} onPress={toggle} />
       </div>
+      {home && <LoadingScreen />}
     </div>
   );
 }

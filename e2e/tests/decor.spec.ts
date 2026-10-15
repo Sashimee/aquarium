@@ -1,8 +1,10 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import {
   APP_URL,
+  awaitLoaded,
   createFirstTank,
   dockButton,
+  loadingOverlay,
   openTank,
   registerVerifiedUser,
   savedTanks,
@@ -46,15 +48,28 @@ function sharedPage(): Page {
   return shared;
 }
 
-test('Decorate pressed before the tank is ready still opens the editor', async () => {
+test('Decorate cannot be pressed while the tank loads, and opens the editor once it is ready', async () => {
   const page = sharedPage();
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   await page.goto('/?tier=low&backend=webgl', { waitUntil: 'domcontentloaded' });
   const toggle = dockButton(page, 'Decorate');
+  await expect(loadingOverlay(page)).toBeVisible({ timeout: 60_000 });
+  await expect
+    .poll(() =>
+      toggle.evaluate((button) => {
+        const { left, top, width, height } = button.getBoundingClientRect();
+        const hit = document.elementFromPoint(left + width / 2, top + height / 2);
+        return hit?.closest('.loading') !== null;
+      }),
+    )
+    .toBe(true);
+  await expect(page.getByRole('region', { name: 'Decorate the tank' })).toHaveCount(0);
+
+  await awaitLoaded(page, 120_000);
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   await expect(page.getByRole('region', { name: 'Decorate the tank' })).toBeVisible({
-    timeout: 60_000,
+    timeout: 30_000,
   });
   await expect(page.getByRole('button', { name: 'Done' })).toBeVisible();
 });

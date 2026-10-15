@@ -99,6 +99,8 @@ export interface InteractionEvents {
   /** Netted, or removed on another device. */
   'tank:fish-removed': { tankId: string; fishId: string; reason: 'netted' | 'gone' };
   'tank:water': { tankId: string; water: Water };
+  /** The loading screen: from app start, and from each tank switch, until the tank has drawn. */
+  'load:state': LoadState;
   /** A care action succeeded on the server; scenes can play the matching visual. */
   'tank:care': { tankId: string; action: CareAction['type'] };
   'decor:request-mode': { active: boolean };
@@ -120,6 +122,16 @@ export interface InteractionEvents {
   'net:tap': { fishId: string };
 }
 
+export interface LoadState {
+  active: boolean;
+  reason: 'boot' | 'switch';
+  /** 0..1, never goes back while a load runs. */
+  progress: number;
+  stage: string;
+  /** Set when the load failed; the screen then offers a retry. */
+  error: string | null;
+}
+
 /** State the overlay reads when a lazily loaded view mounts after the event already fired. */
 export const STICKY_INTERACTION_EVENTS: readonly (keyof InteractionEvents)[] = [
   'camera:mode-changed',
@@ -129,4 +141,5 @@ export const STICKY_INTERACTION_EVENTS: readonly (keyof InteractionEvents)[] = [
   'decor:state',
   'decor:save-state',
   'decor:load-failed',
+  'load:state',
 ];
