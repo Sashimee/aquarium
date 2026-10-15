@@ -10,12 +10,14 @@ export interface ReachBridge {
 /** How far a refused clip climbs per try; the #302 slot behind the reef rock clears within a few. */
 export const CLIP_STEP_M = 0.02;
 
+const SIM_UNAVAILABLE = /not ready|No fish yet|disposed|before "init"/;
+
 export type ClipSpot = { readonly y: number } | null;
 
 /**
  * Where `clip` can stay so that some nori grazer could turn at it: where it is, else higher up the
  * same pane in `CLIP_STEP_M` steps below `ceilingY`, else null. A sim that cannot answer allows the
- * clip as placed.
+ * clip as placed. Any other rejection is a bug, so it goes to `report` before the clip is allowed.
  */
 export async function reachableSpot(
   clip: FoodParticle,
@@ -23,6 +25,7 @@ export async function reachableSpot(
   toSim: (x: number, y: number, z: number, out: Float64Array) => void,
   ceilingY: number,
   stillCurrent: () => boolean,
+  report: (message: string, cause: unknown) => void = () => undefined,
 ): Promise<ClipSpot> {
   const grazers = bridge.noriGrazers?.() ?? [];
   const query = bridge.canGrazeAt;
@@ -36,8 +39,10 @@ export async function reachableSpot(
       if (!stillCurrent()) return { y: clip.y };
       if (answers.some(Boolean)) return { y };
     }
-  } catch {
-    // The sim is not up or the world is being rebuilt; the clip stays as placed, as before the check.
+  } catch (cause) {
+    if (!(cause instanceof Error && SIM_UNAVAILABLE.test(cause.message))) {
+      report('Nori reach check failed; the clip stays where it was placed', cause);
+    }
     return { y: clip.y };
   }
   return null;

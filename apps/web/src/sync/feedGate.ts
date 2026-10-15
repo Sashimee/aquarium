@@ -36,4 +36,10 @@ export class FeedGate {
     this.stamps.push(nowMs);
     return { ok: true };
   }
+
+  /** Gives back the slot `tryFeed(nowMs)` took, for a feed that ended up posting nothing. */
+  release(nowMs: number): void {
+    const at = this.stamps.lastIndexOf(nowMs);
+    if (at !== -1) this.stamps.splice(at, 1);
+  }
 }
