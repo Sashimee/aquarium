@@ -1828,7 +1828,7 @@
       "polycount": 8033,
       "textures": "Material.001_baseColor.jpeg 4096x4096, Material.001_metallicRoughness.png 4096x4096, Material.001_normal.png 4096x4096, Material.001_specularf0.png 4096x4096, Material.002_baseColor.jpeg 4096x4096, Material.002_metallicRoughness.png 4096x4096, Material_baseColor.png 4096x4096, Material_specularf0.png 4096x4096",
       "rigged": false,
-      "notes": "Turquoise discus with a mottled network pattern, tall round body, long dorsal and anal fins, red eye; thin body (about 0.15 of height). Four materials; the body maps are 4096x4096 and heavy (60 MB of textures), so downscale to 2048 or less. Verified from the downloaded glTF: 8033 triangles, not rigged (no skins). Second upload of the same mesh by adyatttt (184c187d) was not used. Accuracy checked against Sketchfab thumbnail only; the pipeline agent should confirm fin shape in a lit render. Zip sha256 3bd8cdc0a877cb2f62450e87ff66053259d31b21998e46ab14096dbdb0177332; sha256 is the aggregate over files[].",
+      "notes": "Turquoise discus with a mottled network pattern, tall round body, long dorsal and anal fins, red eye; thin body (about 0.15 of height). Three materials; the body maps are 4096x4096 and heavy (60 MB of textures), so downscale to 2048 or less. Verified from the downloaded glTF: 8033 triangles, not rigged (no skins). Second upload of the same mesh by adyatttt (184c187d) was not used. Accuracy checked against Sketchfab thumbnail only; the pipeline agent should confirm fin shape in a lit render. Zip sha256 3bd8cdc0a877cb2f62450e87ff66053259d31b21998e46ab14096dbdb0177332; sha256 is the aggregate over files[].",
       "modifications": [],
       "status": "downloaded",
       "files": [
@@ -2077,7 +2077,7 @@
       "polycount": null,
       "textures": "photo 4288x2848",
       "rigged": false,
-      "notes": "Red Cherry shrimp (Neocaridina davidi var. Red Cherry) in an aquarium, 4288x2848, lateral to three-quarter view; use for carapace colour, translucent saddle and leg detail. Textures for a procedural shrimp body, not a fish loft. Licence read from the Commons file page metadata (CC BY 4.0).",
+      "notes": "Red Cherry shrimp (Neocaridina davidi var. Red Cherry) in an aquarium, 4288x2848, lateral to three-quarter view; use for carapace colour, translucent saddle and leg detail. Textures for a procedural shrimp body, not a fish loft. Licence read from the Commons file page metadata (CC BY 4.0). The embedded EXIF says CC BY-NC 4.0, but the author's own Commons upload is CC BY 4.0, which is the licence that governs the file here.",
       "modifications": [],
       "status": "downloaded"
     },
@@ -2096,7 +2096,7 @@
       "polycount": null,
       "textures": "photo 4288x2848",
       "rigged": false,
-      "notes": "Second Red Cherry shrimp photo from the same set, 4288x2848; use for the pleopod and tail fan detail. Licence read from the Commons file page metadata (CC BY 4.0).",
+      "notes": "Weak reference: Commons titles it as a snail (Planorbis planorbis) photo and the frame is mostly snails, so use only for the shrimp visible in it (pleopods, tail fan), and prefer wm-cherry-dagostino-1. Licence read from the Commons file page metadata (CC BY 4.0). The embedded EXIF says CC BY-NC 4.0, but the author's own Commons upload is CC BY 4.0, which is the licence that governs the file here.",
       "modifications": [],
       "status": "downloaded"
     },
