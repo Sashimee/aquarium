@@ -1,5 +1,4 @@
 import type { CameraMode } from '../interaction/camera';
-import { useState } from 'react';
 import { tankReportLines } from '../sync/life';
 import { useCameraMode, useDemoBiome, useEngineReady } from './context';
 import { useActiveTank, useSessionState } from './session';
@@ -11,23 +10,14 @@ const MODE_LABEL: Record<CameraMode, string> = {
 };
 
 export default function TankReport() {
-  const [open, setOpen] = useState(false);
   const engine = useEngineReady();
   const mode = useCameraMode();
   const demoBiome = useDemoBiome();
   const tank = useActiveTank();
   const { species, phase } = useSessionState();
   return (
-    <section className="report" aria-label="Tank report">
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls="tank-report-body"
-        onClick={() => setOpen(!open)}
-      >
-        Tank report
-      </button>
-      <div id="tank-report-body" hidden={!open}>
+    <div className="report">
+      <div id="tank-report-body">
         {tank ? (
           tankReportLines(tank, species).map((line) => <p key={line}>{line}</p>)
         ) : (
@@ -47,6 +37,6 @@ export default function TankReport() {
             : 'The tank is still loading.'}
         </p>
       </div>
-    </section>
+    </div>
   );
 }

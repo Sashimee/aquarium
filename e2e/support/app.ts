@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 
 export const APP_URL = `http://localhost:${process.env['E2E_PORT'] ?? 4317}`;
 
@@ -56,17 +56,47 @@ export async function registerVerifiedUser(
   return identity;
 }
 
+export const dockButton = (page: Page, label: string): Locator =>
+  page
+    .getByRole('navigation', { name: 'Actions' })
+    .getByRole('button', { name: label, exact: true });
+
 export async function openTank(page: Page): Promise<void> {
   await page.goto('/?tier=low&backend=webgl');
-  await expect(page.getByRole('button', { name: 'Feed', exact: true })).toBeEnabled({
-    timeout: SCENE_TIMEOUT_MS,
-  });
+  await expect(dockButton(page, 'Feed')).toBeEnabled({ timeout: SCENE_TIMEOUT_MS });
 }
 
-export async function openTankPanel(page: Page): Promise<void> {
-  const toggle = page.getByRole('button', { name: 'My tank' });
-  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
-  await expect(page.getByRole('region', { name: 'Your tank' })).toBeVisible();
+async function open(button: Locator, attribute: string, region: Locator): Promise<Locator> {
+  if ((await button.getAttribute(attribute)) !== 'true') await button.click();
+  await expect(region).toBeVisible();
+  return region;
+}
+
+export function openDock(page: Page, label: string, region: string): Promise<Locator> {
+  return open(dockButton(page, label), 'aria-pressed', page.getByRole('region', { name: region }));
+}
+
+export function openTankPanel(page: Page): Promise<Locator> {
+  return open(
+    page.getByRole('button', { name: 'My tank' }),
+    'aria-expanded',
+    page.getByRole('region', { name: 'Your tank' }),
+  );
+}
+
+export function openReport(page: Page): Promise<Locator> {
+  return open(
+    page.getByRole('button', { name: 'Tank report' }),
+    'aria-expanded',
+    page.getByRole('region', { name: 'Tank report' }),
+  );
+}
+
+export async function openAccount(page: Page): Promise<Locator> {
+  const avatar = page.getByRole('button', { name: /^Account/ });
+  await expect(avatar).toBeEnabled();
+  await open(avatar, 'aria-expanded', page.getByRole('region', { name: 'Account menu' }));
+  return page.getByRole('navigation', { name: 'Account' });
 }
 
 export async function createFirstTank(page: Page): Promise<void> {
