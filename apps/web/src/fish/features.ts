@@ -33,3 +33,14 @@ export function sameFeatures(a: FishMaterialFeatures | null, b: FishMaterialFeat
     a.clearcoat === b.clearcoat
   );
 }
+
+/**
+ * Whether a batch whose textures are reloading may draw with `current` until its reload rebuilds it
+ * with `next`. Fin rendering may not wait: the old mode under a new temporal resolve smears.
+ */
+export function waitsForReload(
+  current: FishMaterialFeatures | null,
+  next: FishMaterialFeatures,
+): boolean {
+  return current !== null && current.fins === next.fins;
+}

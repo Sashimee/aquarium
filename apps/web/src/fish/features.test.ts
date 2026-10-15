@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { featuresFor, sameFeatures } from './features';
+import { featuresFor, sameFeatures, waitsForReload } from './features';
 
 describe('featuresFor', () => {
   it('dithers fins only while frames go through a temporal resolve', () => {
@@ -41,5 +41,25 @@ describe('sameFeatures', () => {
   it('tells a change of fin rendering apart', () => {
     expect(sameFeatures(ultra, featuresFor('ultra', { msaa: false, temporal: true }))).toBe(true);
     expect(sameFeatures(ultra, featuresFor('ultra', { msaa: false, temporal: false }))).toBe(false);
+  });
+});
+
+describe('waitsForReload', () => {
+  it('lets the cosmetic features wait for the reload when the fins keep their mode', () => {
+    const medium = featuresFor('medium', { msaa: false, temporal: true });
+    const ultra = featuresFor('ultra', { msaa: false, temporal: true });
+    expect(sameFeatures(medium, ultra)).toBe(false);
+    expect(waitsForReload(medium, ultra)).toBe(true);
+  });
+
+  it('applies a change of fin rendering at once, as when the temporal resolve turns on', () => {
+    const before = featuresFor('high', { msaa: true, temporal: false });
+    const after = featuresFor('high', { msaa: true, temporal: true });
+    expect(waitsForReload(before, after)).toBe(false);
+    expect(waitsForReload(after, before)).toBe(false);
+  });
+
+  it('does not wait for a batch that never had features', () => {
+    expect(waitsForReload(null, featuresFor('low', { msaa: false, temporal: false }))).toBe(false);
   });
 });

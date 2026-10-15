@@ -29,7 +29,7 @@ import { EventBus, type BackendKind, type EngineEvents, type EngineEventBus } fr
 import { CullPrewarm } from './cullPrewarm';
 import { ReflectedShadow } from './reflectedShadow';
 import { RenderLoop } from './renderLoop';
-import { buildOrRelease, DisposeStack } from './lifecycle';
+import { buildOrRelease, DisposeStack, settlesWithin } from './lifecycle';
 import type { EngineOptions } from './options';
 import { qualityProfile } from './quality/profile';
 import { QualityManager } from './quality/QualityManager';
@@ -55,6 +55,8 @@ export interface EngineConfig {
 const STATS_INTERVAL_MS = 500;
 const DEFAULT_WATER: WaterQuality = { cdom440: 0.05, turbidity: 0.08 };
 const MAX_DELTA_S = 0.1;
+/** A stalled effects chunk never settles; past this the tank starts plain and they attach later. */
+const EFFECTS_BOOT_WAIT_MS = 5000;
 
 /** Hood LED, roughly 6500 K. */
 const HOOD_COLOR = new Color(1, 0.97, 0.92);
@@ -187,7 +189,12 @@ export class Engine {
             );
           }
           await engine.warmUp();
-          await engine.loadEffects();
+          if (!(await settlesWithin(engine.loadEffects(), EFFECTS_BOOT_WAIT_MS))) {
+            engine.reportError(
+              'Render effects are slow to load; starting without them until they arrive',
+              new Error(`effects not ready after ${EFFECTS_BOOT_WAIT_MS} ms`),
+            );
+          }
           return engine;
         },
         (error) =>
@@ -480,7 +487,8 @@ export class Engine {
       // whose nodes still have to load swaps its pipeline later; the refresh passed to `Effects`
       // then announces the change before the next frame, so the fish rebuild a second time but
       // never draw a temporal frame without velocity. The fish register only once
-      // `Engine.create` resolves, which awaits this load.
+      // `Engine.create` resolves, which awaits this load unless it stalls; effects that attach
+      // after the fish take that same announced path on every tier change.
       this.cleanup.add(this.quality.register('effects-temporal', () => this.effects.refresh()));
       // The first frames already carry the starting tier's look instead of popping into it.
       await effects.ready();
