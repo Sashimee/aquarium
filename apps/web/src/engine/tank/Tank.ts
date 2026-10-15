@@ -236,7 +236,7 @@ function createGlassFaceMaterial(
   centre: Vector3,
   algae: UniformNode<'float', number>,
   sky: Texture,
-): { material: MeshStandardNodeMaterial; skyNode: PMREMNode } {
+): MeshStandardNodeMaterial {
   const material = new MeshStandardNodeMaterial({ roughness: 0.03, metalness: 0 });
   material.name = 'glass-face';
   material.colorNode = vec3(0);
@@ -254,7 +254,7 @@ function createGlassFaceMaterial(
   const inner = vec4(mirroredScene.mul(reflectance), reflectance);
   const pane = mix(output, inner, towardsWater);
   material.outputNode = medium.applyPremultiplied(overlayAlgae(pane, algae, medium));
-  return { material, skyNode };
+  return material;
 }
 
 /** Light travelling along the pane gives float glass its green edge. */
@@ -315,7 +315,6 @@ interface SurfaceUnderside {
   material: MeshBasicNodeMaterial;
   /** The rippled surface normal, in world space. */
   normal: Node<'vec3'>;
-  skyNodes: PMREMNode[];
   /** The output with `mirror` as what total internal reflection shows, else the traced walls. */
   output(mirror?: Node<'vec3'>): Node<'vec4'>;
 }
@@ -350,7 +349,7 @@ function createSurfaceUnderside(
   const output = (mirror: Node<'vec3'> = traced): Node<'vec4'> =>
     medium.applyPremultiplied(vec4(mix(room, mirror, reflectance), 1));
   material.outputNode = output();
-  return { material, normal, skyNodes: [skyNode, mirroredSky], output };
+  return { material, normal, output };
 }
 
 export class Tank {
@@ -360,7 +359,6 @@ export class Tank {
   readonly rippleAmplitude = uniform(0.12);
   /** 0 clean glass .. 1 neglected for weeks. */
   readonly algae = uniform(0);
-  private readonly skyNodes: PMREMNode[] = [];
   private readonly disposables: { dispose(): void }[] = [];
   /** Blended materials that multiply, and the velocity each must write to leave it unchanged. */
   private readonly blended: [NodeMaterial, Node<'vec4'>][] = [];
@@ -403,10 +401,6 @@ export class Tank {
     this.disposables.push(this.reflection);
   }
 
-  setSky(texture: Texture): void {
-    for (const node of this.skyNodes) node.value = texture;
-  }
-
   /**
    * Total internal reflection under the surface shows the scene itself, drawn again at
    * `resolutionScale` of the drawing buffer; 0 traces the walls in the shader instead.
@@ -440,9 +434,16 @@ export class Tank {
     await renderer.compileAsync(this.undersideMesh, camera, scene);
   }
 
-  /** Draws the surface reflection for this frame's camera; call it before the scene is drawn. */
-  renderSurfaceReflection(renderer: WebGPURenderer, scene: Scene, camera: PerspectiveCamera): void {
-    this.reflection.render(renderer, scene, camera);
+  /**
+   * Draws the surface reflection for this frame's camera; call it before the scene is drawn.
+   * Returns whether it drew.
+   */
+  renderSurfaceReflection(
+    renderer: WebGPURenderer,
+    scene: Scene,
+    camera: PerspectiveCamera,
+  ): boolean {
+    return this.reflection.render(renderer, scene, camera);
   }
 
   /**
@@ -505,14 +506,13 @@ export class Tank {
       );
       box.dispose();
     }
-    const { material: faceMaterial, skyNode } = createGlassFaceMaterial(
+    const faceMaterial = createGlassFaceMaterial(
       medium,
       interior,
       this.waterBounds.getCenter(new Vector3()),
       this.algae,
       sky,
     );
-    this.skyNodes.push(skyNode);
     const parts: [string, BufferGeometry[], Material][] = [
       ['glass-faces', faces, faceMaterial],
       ['glass-edges', edges, createGlassEdgeMaterial()],
@@ -632,7 +632,6 @@ export class Tank {
     underside.renderOrder = 1;
     underside.layers.set(UNREFLECTED_LAYER);
     this.group.add(underside);
-    this.skyNodes.push(...below.skyNodes);
     return [below, underside];
   }
 

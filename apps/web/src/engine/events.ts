@@ -1,3 +1,4 @@
+import type { LossRecovery } from './deviceLoss';
 import type { Tier, TierChangeReason } from './quality/tiers';
 
 export type BackendKind = 'webgpu' | 'webgl2';
@@ -14,6 +15,8 @@ export interface EngineStats {
 export interface EngineEvents {
   'engine:ready': { backend: BackendKind; tier: Tier; gpuTiming: boolean };
   'engine:error': { message: string; cause?: unknown };
+  /** The GPU device or WebGL context went away; nothing draws until `recovery` happens. */
+  'engine:device-lost': { api: 'WebGPU' | 'WebGL'; message: string; recovery: LossRecovery };
   'engine:stats': EngineStats;
   /** Hood light level from the photoperiod: 0 night .. 1 day. */
   'engine:daylight': { level: number };
