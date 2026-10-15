@@ -43,6 +43,13 @@
       "when": 1792027116789,
       "tag": "0005_decor_layout_nullable",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792031392010,
+      "tag": "0006_fish_sex_drop_default",
+      "breakpoints": true
     }
   ]
 }
