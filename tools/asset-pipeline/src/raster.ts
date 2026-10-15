@@ -6,6 +6,8 @@ export interface RasterMesh {
   /** Per-vertex RGB in 0..1. */
   colors?: Float32Array;
   uvs?: Float32Array;
+  /** Per-vertex normals; when present they are interpolated for smooth shading instead of flat per-triangle lighting. */
+  normals?: Float32Array;
 }
 
 export interface TextureImage {
@@ -91,7 +93,7 @@ export function rasterise(
     rgb[i * 3 + 2] = 34;
   }
 
-  const { positions, indices, colors, uvs } = mesh;
+  const { positions, indices, colors, uvs, normals } = mesh;
   const light = proj.light;
   const p0 = [0, 0, 0];
   const p1 = [0, 0, 0];
@@ -151,9 +153,24 @@ export function rasterise(
           g = w0 * colors[ia * 3 + 1]! + w1 * colors[ib * 3 + 1]! + w2 * colors[ic * 3 + 1]!;
           b = w0 * colors[ia * 3 + 2]! + w1 * colors[ib * 3 + 2]! + w2 * colors[ic * 3 + 2]!;
         }
-        rgb[slot * 3] = Math.min(255, Math.round(r * shade * 255));
-        rgb[slot * 3 + 1] = Math.min(255, Math.round(g * shade * 255));
-        rgb[slot * 3 + 2] = Math.min(255, Math.round(b * shade * 255));
+        let pixelShade = shade;
+        if (normals) {
+          let sx2 = 0;
+          let sy2 = 0;
+          let sz2 = 0;
+          const weights = [w0, w1, w2];
+          [ia, ib, ic].forEach((vertex, k) => {
+            sx2 += weights[k]! * normals[vertex * 3]!;
+            sy2 += weights[k]! * normals[vertex * 3 + 1]!;
+            sz2 += weights[k]! * normals[vertex * 3 + 2]!;
+          });
+          const norm = Math.hypot(sx2, sy2, sz2) || 1;
+          const smooth = Math.abs((sx2 * light[0] + sy2 * light[1] + sz2 * light[2]) / norm);
+          pixelShade = 0.35 + 0.65 * smooth;
+        }
+        rgb[slot * 3] = Math.min(255, Math.round(r * pixelShade * 255));
+        rgb[slot * 3 + 1] = Math.min(255, Math.round(g * pixelShade * 255));
+        rgb[slot * 3 + 2] = Math.min(255, Math.round(b * pixelShade * 255));
       }
     }
   }

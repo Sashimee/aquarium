@@ -21,8 +21,8 @@ export const SHRIMP_LOD_PLAN: LodPlan = { ratios: [1, 0.4, 0.15], minTriangles: 
 export const LEG_PAIRS = 5;
 export const PLEOPOD_PAIRS = 5;
 const ABDOMEN_SEGMENTS = 6;
-const RING = 12;
-const SEGMENT_SAMPLES = 5;
+const RING = 16;
+const SEGMENT_SAMPLES = 6;
 const LEG_SIDES = 5;
 const ANTENNA_SIDES = 4;
 
@@ -63,10 +63,10 @@ export const SHRIMP_RECIPES: ShrimpRecipe[] = [
     kind: 'cherry',
     fallbackLengthM: 0.03,
     seed: 11,
-    carapaceEnd: 0.33,
+    carapaceEnd: 0.4,
     widthScale: 1,
     heightScale: 1,
-    arch: { peak: 0.03, drop: 0.1 },
+    arch: { peak: 0.05, drop: 0.13 },
     antennaLength: 1.05,
     antennuleLength: 0.3,
     legReach: 1,
@@ -79,10 +79,10 @@ export const SHRIMP_RECIPES: ShrimpRecipe[] = [
     kind: 'cleaner',
     fallbackLengthM: 0.045,
     seed: 23,
-    carapaceEnd: 0.31,
+    carapaceEnd: 0.38,
     widthScale: 0.78,
     heightScale: 0.8,
-    arch: { peak: 0.012, drop: 0.05 },
+    arch: { peak: 0.03, drop: 0.09 },
     antennaLength: 1.9,
     antennuleLength: 0.45,
     legReach: 1.3,
@@ -92,23 +92,25 @@ export const SHRIMP_RECIPES: ShrimpRecipe[] = [
 ];
 
 const PROFILE: ProfileKey[] = [
-  { s: 0, hw: 0.003, top: 0.004, bottom: 0.004 },
-  { s: 0.04, hw: 0.012, top: 0.03, bottom: 0.012 },
-  { s: 0.09, hw: 0.04, top: 0.06, bottom: 0.04 },
-  { s: 0.16, hw: 0.062, top: 0.088, bottom: 0.065 },
-  { s: 0.25, hw: 0.07, top: 0.098, bottom: 0.078 },
-  { s: 0.33, hw: 0.066, top: 0.096, bottom: 0.076 },
-  { s: 0.42, hw: 0.062, top: 0.09, bottom: 0.07 },
-  { s: 0.5, hw: 0.056, top: 0.082, bottom: 0.062 },
-  { s: 0.7, hw: 0.04, top: 0.058, bottom: 0.045 },
-  { s: 0.88, hw: 0.026, top: 0.036, bottom: 0.03 },
+  { s: 0, hw: 0.002, top: 0.004, bottom: 0.004 },
+  { s: 0.05, hw: 0.008, top: 0.03, bottom: 0.008 },
+  { s: 0.1, hw: 0.036, top: 0.08, bottom: 0.036 },
+  { s: 0.17, hw: 0.065, top: 0.112, bottom: 0.075 },
+  { s: 0.27, hw: 0.076, top: 0.128, bottom: 0.092 },
+  { s: 0.4, hw: 0.07, top: 0.12, bottom: 0.092 },
+  { s: 0.5, hw: 0.064, top: 0.106, bottom: 0.082 },
+  { s: 0.62, hw: 0.058, top: 0.092, bottom: 0.072 },
+  { s: 0.75, hw: 0.044, top: 0.07, bottom: 0.052 },
+  { s: 0.88, hw: 0.028, top: 0.04, bottom: 0.03 },
   { s: 1, hw: 0.004, top: 0.006, bottom: 0.006 },
 ];
 
 const ABDOMEN_END = 0.88;
 const TELSON_SAMPLES = [0.91, 0.95, 0.98, 1];
 const CARAPACE_SAMPLES = [0, 0.015, 0.04, 0.07, 0.1, 0.14, 0.18, 0.22, 0.26, 0.3];
-const GROOVE_DEPTH = 0.1;
+const GROOVE_DEPTH = 0.07;
+const SKIRT_WIDTH = 0.24;
+const SKIRT_DROP = 0.018;
 
 const ATLAS_WIDTH = 1024;
 const ATLAS_HEIGHT = 512;
@@ -121,7 +123,7 @@ const BANDS = {
   eye: { top: 0.96, bottom: 1 },
 } as const;
 
-const mid = (band: { top: number; bottom: number }): number => (band.top + band.bottom) / 2;
+const MID = (band: { top: number; bottom: number }): number => (band.top + band.bottom) / 2;
 
 function interpolateProfile(s: number): { hw: number; top: number; bottom: number } {
   let k = 0;
@@ -138,10 +140,10 @@ function interpolateProfile(s: number): { hw: number; top: number; bottom: numbe
 }
 
 function spineHeight(recipe: ShrimpRecipe, s: number): number {
-  const bump = Math.sin(Math.PI * clamp((s - 0.1) / 0.6, 0, 1));
-  const tuck = smoothstep(0.55, 1, s) ** 1.5;
-  const rostrum = 0.03 * (1 - smoothstep(0, 0.12, s));
-  return recipe.arch.peak * bump - recipe.arch.drop * tuck + rostrum;
+  const hump = recipe.arch.peak * smoothstep(0.1, 0.6, s);
+  const tuck = (recipe.arch.peak + recipe.arch.drop) * smoothstep(0.6, 1, s) ** 1.3;
+  const rostrum = 0.035 * (1 - smoothstep(0, 0.14, s));
+  return hump - tuck + rostrum;
 }
 
 const zOf = (s: number): number => 1 - s;
@@ -246,13 +248,21 @@ function addBody(b: Builder, recipe: ShrimpRecipe): void {
     const bottom = Math.max(0.002, p.bottom * recipe.heightScale * scale);
     const yc = spineHeight(recipe, s);
     const abdomen = s >= recipe.carapaceEnd;
+    const skirt =
+      smoothstep(recipe.carapaceEnd - 0.03, recipe.carapaceEnd + 0.04, s) *
+      (1 - smoothstep(0.78, ABDOMEN_END, s));
     const weight = abdomen ? clamp((s - recipe.carapaceEnd) / (1 - recipe.carapaceEnd), 0, 1) : 0;
     for (let j = 0; j < ring; j++) {
       const t = j / RING;
       const angle = Math.PI + 2 * Math.PI * t;
       const cosA = Math.cos(angle);
+      const plate = skirt * Math.exp(-(((cosA + 0.5) / 0.35) ** 2));
       b.vertex(
-        [hw * Math.sin(angle), yc + (cosA > 0 ? top : bottom) * cosA, zOf(s)],
+        [
+          hw * Math.sin(angle) * (1 + SKIRT_WIDTH * plate),
+          yc + (cosA > 0 ? top : bottom) * cosA - SKIRT_DROP * plate * scale,
+          zOf(s),
+        ],
         [s, t * BODY_V_MAX],
         abdomen ? SHRIMP_PART_IDS.abdomen : SHRIMP_PART_IDS.body,
         weight,
@@ -412,18 +422,33 @@ function addSphere(b: Builder, centre: Vec3, radius: number, uv: [number, number
 }
 
 function addEyes(b: Builder, recipe: ShrimpRecipe): void {
-  const s = 0.085;
+  const s = 0.09;
   const p = interpolateProfile(s);
   const yc = spineHeight(recipe, s);
   for (const side of [-1, 1]) {
     const root: Vec3 = [
-      side * p.hw * recipe.widthScale * 0.7,
-      yc + p.top * recipe.heightScale * 0.55,
-      zOf(s),
+      side * p.hw * recipe.widthScale * 0.6,
+      yc + p.top * recipe.heightScale * 0.6,
+      zOf(s) + 0.005,
     ];
-    const eye: Vec3 = [side * 0.055 * recipe.widthScale, root[1] + 0.012, zOf(s) + 0.012];
-    addTube(b, [root, eye], [0.011, 0.01], 5, SHRIMP_PART_IDS.body, 0, () => [0.1, mid(BANDS.eye)]);
-    addSphere(b, [eye[0], eye[1] + 0.004, eye[2] + 0.004], 0.026, [0.7, mid(BANDS.eye)]);
+    const elbow: Vec3 = [
+      side * (p.hw * recipe.widthScale * 0.6 + 0.025),
+      root[1] + 0.012,
+      root[2] + 0.014,
+    ];
+    const eye: Vec3 = [
+      side * (p.hw * recipe.widthScale * 0.6 + 0.045),
+      root[1] + 0.016,
+      root[2] + 0.024,
+    ];
+    addTube(b, [root, elbow, eye], [0.008, 0.006, 0.0055], 6, SHRIMP_PART_IDS.body, 0, () => [
+      0.1,
+      MID(BANDS.eye),
+    ]);
+    addSphere(b, [eye[0] + side * 0.004, eye[1] + 0.002, eye[2] + 0.005], 0.017, [
+      0.7,
+      MID(BANDS.eye),
+    ]);
   }
 }
 
@@ -471,7 +496,7 @@ function addLegs(b: Builder, recipe: ShrimpRecipe): void {
         LEG_SIDES,
         SHRIMP_PART_IDS.leg,
         pair * 2 + (side > 0 ? 1 : 0),
-        (f) => [f, mid(BANDS.leg)],
+        (f) => [f, MID(BANDS.leg)],
       );
     }
 }
@@ -494,7 +519,7 @@ function addPleopods(b: Builder, recipe: ShrimpRecipe): void {
         SHRIMP_PART_IDS.pleopod,
         k * 2 + (side > 0 ? 1 : 0),
         (u) => u,
-        (u) => [u, mid(BANDS.pleopod)],
+        (u) => [u, MID(BANDS.pleopod)],
       );
   }
 }
@@ -520,7 +545,7 @@ function addTailFan(b: Builder, recipe: ShrimpRecipe): void {
         4,
         SHRIMP_PART_IDS.abdomen,
         k * 2 + (side > 0 ? 1 : 0),
-        (p) => abdomenWeight(p, leaf.length),
+        (p) => abdomenWeight(p, leaf.length * (-leaf.dir[2] / Math.hypot(...leaf.dir))),
         (p, q) => [p, BANDS.fan.top + (BANDS.fan.bottom - BANDS.fan.top) * (0.5 + 0.5 * q)],
       );
     });
@@ -558,7 +583,7 @@ function addAntennae(b: Builder, recipe: ShrimpRecipe): void {
       ANTENNA_SIDES,
       SHRIMP_PART_IDS.antenna,
       2 + sideIndex,
-      (f) => [f, mid(BANDS.antenna)],
+      (f) => [f, MID(BANDS.antenna)],
     );
     const U = recipe.antennuleLength;
     const shortBase: Vec3 = [side * 0.014, baseTop + 0.004, z + 0.01];
@@ -576,7 +601,7 @@ function addAntennae(b: Builder, recipe: ShrimpRecipe): void {
       ANTENNA_SIDES,
       SHRIMP_PART_IDS.antenna,
       sideIndex,
-      (f) => [f, mid(BANDS.antenna)],
+      (f) => [f, MID(BANDS.antenna)],
     );
   }
 }
@@ -681,6 +706,8 @@ const PALETTE = {
   },
 };
 
+// Cherry translucency hint: glTF alphaMode BLEND with baseColorFactor alpha 0.86; the renderer should keep depth write on and treat it as a slightly see-through shell. Cleaner stays OPAQUE.
+const CHERRY_ALPHA = 0.86;
 const CHERRY_SADDLE: Rgb = [0.45, 0.03, 0.04];
 const EYE_BLACK: Rgb = [0.02, 0.02, 0.025];
 
@@ -766,11 +793,11 @@ export function shrimpTexture(recipe: ShrimpRecipe): Rgba {
 export function shrimpMaterial(recipe: ShrimpRecipe, image: Rgba): MaterialDef {
   return {
     name: recipe.id,
-    baseColorFactor: [1, 1, 1, 1],
+    baseColorFactor: [1, 1, 1, recipe.kind === 'cherry' ? CHERRY_ALPHA : 1],
     baseColor: { role: 'baseColor', codec: 'etc1s', image },
     roughness: 0.4,
     metallic: 0,
-    alphaMode: 'OPAQUE',
+    alphaMode: recipe.kind === 'cherry' ? 'BLEND' : 'OPAQUE',
     doubleSided: true,
     normalScale: 1,
   };
@@ -806,7 +833,7 @@ export async function writeShrimpDebugRenders(
     { view: 'side', pixelsAcross: 1100 },
     { view: 'top', pixelsAcross: 1100 },
   ] as const;
-  const mesh = { positions: part.positions, indices: part.indices };
+  const mesh = { positions: part.positions, indices: part.indices, normals: part.normals };
   const textured = await renderSheet({ ...mesh, uvs: part.uvs }, [...views], {
     data: atlas.data,
     width: atlas.width,

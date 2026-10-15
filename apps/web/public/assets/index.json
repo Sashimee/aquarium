@@ -2,7 +2,7 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; every texture has both files.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body and eyes, 6 leg, 7 antenna, 8 pleopod, 9 abdomen and tail fan) and _fin_mask (weight along the limb, 0 root to 1 tip) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x).",
-  "totalBytes": 57561983,
+  "totalBytes": 57576749,
   "assets": [
     {
       "id": "angelfish",
@@ -1552,36 +1552,36 @@
       "bounds": {
         "min": [
           -0.014526,
-          -0.003766,
-          -0.016768
+          -0.004847,
+          -0.016144
         ],
         "max": [
           0.014526,
-          0.00325,
-          0.020742
+          0.003795,
+          0.021366
         ]
       },
       "lods": [
         {
           "file": "shrimp/cherry-shrimp/lod0.glb",
-          "bytes": 28428,
-          "sha256": "23988a7e753b31a292042db968102f3d8849a4dfd995d994a1ade02daea3ca82",
-          "triangles": 2184,
-          "vertices": 1303
+          "bytes": 34208,
+          "sha256": "1452ba20a7dcee97fbd8d952a515b729adc8a1970d70456c3578fb366c621daf",
+          "triangles": 2758,
+          "vertices": 1601
         },
         {
           "file": "shrimp/cherry-shrimp/lod1.glb",
-          "bytes": 15116,
-          "sha256": "a4da8f6c465bdf73eb2a640600be53c5412852fa51930f651e1a04cf5dbe9a26",
-          "triangles": 874,
-          "vertices": 562
+          "bytes": 18060,
+          "sha256": "817fab59342d09f00fc1cb8ca1f5573607c8b945761165687e57a046fdd0503e",
+          "triangles": 1102,
+          "vertices": 688
         },
         {
           "file": "shrimp/cherry-shrimp/lod2.glb",
-          "bytes": 8768,
-          "sha256": "c1e1198837bc18a339c4950031c1bcb5d4b5137db1b1b49088d58773d8b2257a",
-          "triangles": 320,
-          "vertices": 230
+          "bytes": 9760,
+          "sha256": "d504992764131638250011f4d5f35237b36c1e4ed30b8066be569a99ab3bf1ac",
+          "triangles": 411,
+          "vertices": 276
         }
       ],
       "textures": [
@@ -1592,15 +1592,15 @@
           "variants": {
             "1k": {
               "file": "shrimp/cherry-shrimp/textures/cherry-shrimp_basecolor_1k.ktx2",
-              "bytes": 50332,
-              "sha256": "7398576dcaeac3be9040e0e98e54aa2b64d3582066fa290e6f6f01f035b1ceef",
+              "bytes": 50456,
+              "sha256": "4e5948fcaf3980c1492123e6e5b884dcd4f74e2482af829c8668e8b4ec37ead6",
               "size": 1024,
               "codec": "etc1s"
             },
             "2k": {
               "file": "shrimp/cherry-shrimp/textures/cherry-shrimp_basecolor_2k.ktx2",
-              "bytes": 50332,
-              "sha256": "7398576dcaeac3be9040e0e98e54aa2b64d3582066fa290e6f6f01f035b1ceef",
+              "bytes": 50456,
+              "sha256": "4e5948fcaf3980c1492123e6e5b884dcd4f74e2482af829c8668e8b4ec37ead6",
               "size": 1024,
               "codec": "etc1s"
             }
@@ -1610,28 +1610,28 @@
       "files": [
         {
           "file": "shrimp/cherry-shrimp/lod0.glb",
-          "bytes": 28428,
-          "sha256": "23988a7e753b31a292042db968102f3d8849a4dfd995d994a1ade02daea3ca82"
+          "bytes": 34208,
+          "sha256": "1452ba20a7dcee97fbd8d952a515b729adc8a1970d70456c3578fb366c621daf"
         },
         {
           "file": "shrimp/cherry-shrimp/lod1.glb",
-          "bytes": 15116,
-          "sha256": "a4da8f6c465bdf73eb2a640600be53c5412852fa51930f651e1a04cf5dbe9a26"
+          "bytes": 18060,
+          "sha256": "817fab59342d09f00fc1cb8ca1f5573607c8b945761165687e57a046fdd0503e"
         },
         {
           "file": "shrimp/cherry-shrimp/lod2.glb",
-          "bytes": 8768,
-          "sha256": "c1e1198837bc18a339c4950031c1bcb5d4b5137db1b1b49088d58773d8b2257a"
+          "bytes": 9760,
+          "sha256": "d504992764131638250011f4d5f35237b36c1e4ed30b8066be569a99ab3bf1ac"
         },
         {
           "file": "shrimp/cherry-shrimp/textures/cherry-shrimp_basecolor_1k.ktx2",
-          "bytes": 50332,
-          "sha256": "7398576dcaeac3be9040e0e98e54aa2b64d3582066fa290e6f6f01f035b1ceef"
+          "bytes": 50456,
+          "sha256": "4e5948fcaf3980c1492123e6e5b884dcd4f74e2482af829c8668e8b4ec37ead6"
         },
         {
           "file": "shrimp/cherry-shrimp/textures/cherry-shrimp_basecolor_2k.ktx2",
-          "bytes": 50332,
-          "sha256": "7398576dcaeac3be9040e0e98e54aa2b64d3582066fa290e6f6f01f035b1ceef"
+          "bytes": 50456,
+          "sha256": "4e5948fcaf3980c1492123e6e5b884dcd4f74e2482af829c8668e8b4ec37ead6"
         }
       ],
       "shrimp": {
@@ -1642,7 +1642,7 @@
           "up": "+y"
         },
         "origin": "centre-of-mass",
-        "standoffM": 0.0037021569442003965,
+        "standoffM": 0.004633959848433733,
         "attributes": {
           "partId": "_FIN_ID",
           "weight": "_FIN_MASK",
@@ -1658,10 +1658,10 @@
         "legPairs": 5,
         "pleopodPairs": 5,
         "abdomenHinge": {
-          "y": 0.00041273255922026923,
-          "z": 0.0033315442726057675
+          "y": 0.0002051010124557017,
+          "z": 0.0018557810947788323
         },
-        "telsonZ": -0.01676845572739423,
+        "telsonZ": -0.016144218905221167,
         "debugRender": "debug/cherry-shrimp.png",
         "debugPartsRender": "debug/cherry-shrimp-parts.png"
       }
@@ -1683,36 +1683,36 @@
       "bounds": {
         "min": [
           -0.039383,
-          -0.006347,
-          -0.05257
+          -0.007258,
+          -0.051646
         ],
         "max": [
           0.039383,
-          0.003577,
-          0.037834
+          0.004468,
+          0.038759
         ]
       },
       "lods": [
         {
           "file": "shrimp/cleaner-shrimp/lod0.glb",
-          "bytes": 28520,
-          "sha256": "75421ba3aa58d5e11afe1b537ed4a6e6964c9c57e15ca6e3659f2e71bd34118c",
-          "triangles": 2184,
-          "vertices": 1303
+          "bytes": 34104,
+          "sha256": "a70caece38a776f4e4586c27aa97b3b4db3c50a574ad8739e7fabb9732bf730c",
+          "triangles": 2758,
+          "vertices": 1601
         },
         {
           "file": "shrimp/cleaner-shrimp/lod1.glb",
-          "bytes": 15316,
-          "sha256": "0e4f4cbf913610f90d4aeb76c51f845448a52582a481c7758baacd0c9df90077",
-          "triangles": 874,
-          "vertices": 566
+          "bytes": 17652,
+          "sha256": "5af7dd332bd307ac50e1ccc6a22a106d236e8a44736019c98ba12a8b07ac3279",
+          "triangles": 1102,
+          "vertices": 685
         },
         {
           "file": "shrimp/cleaner-shrimp/lod2.glb",
-          "bytes": 8616,
-          "sha256": "d96b5b97881cf7e529637d9427ab5debdc2118c305d2cc124bfed12f72a0c2ac",
-          "triangles": 327,
-          "vertices": 226
+          "bytes": 9592,
+          "sha256": "66eb76ee7b6be7aafa80d5b814f992da56233b9567ed0b25a6a5473adb78c4b5",
+          "triangles": 412,
+          "vertices": 285
         }
       ],
       "textures": [
@@ -1723,15 +1723,15 @@
           "variants": {
             "1k": {
               "file": "shrimp/cleaner-shrimp/textures/cleaner-shrimp_basecolor_1k.ktx2",
-              "bytes": 23544,
-              "sha256": "548440618d1a0e8323fc0a433a5007ab490374663690b793f3c65108cb81b642",
+              "bytes": 21497,
+              "sha256": "1fd3f00b0a2b55a5fe67114f22c8eeb4749975dc9583dc6b61756aed23d58f46",
               "size": 1024,
               "codec": "etc1s"
             },
             "2k": {
               "file": "shrimp/cleaner-shrimp/textures/cleaner-shrimp_basecolor_2k.ktx2",
-              "bytes": 23544,
-              "sha256": "548440618d1a0e8323fc0a433a5007ab490374663690b793f3c65108cb81b642",
+              "bytes": 21497,
+              "sha256": "1fd3f00b0a2b55a5fe67114f22c8eeb4749975dc9583dc6b61756aed23d58f46",
               "size": 1024,
               "codec": "etc1s"
             }
@@ -1741,28 +1741,28 @@
       "files": [
         {
           "file": "shrimp/cleaner-shrimp/lod0.glb",
-          "bytes": 28520,
-          "sha256": "75421ba3aa58d5e11afe1b537ed4a6e6964c9c57e15ca6e3659f2e71bd34118c"
+          "bytes": 34104,
+          "sha256": "a70caece38a776f4e4586c27aa97b3b4db3c50a574ad8739e7fabb9732bf730c"
         },
         {
           "file": "shrimp/cleaner-shrimp/lod1.glb",
-          "bytes": 15316,
-          "sha256": "0e4f4cbf913610f90d4aeb76c51f845448a52582a481c7758baacd0c9df90077"
+          "bytes": 17652,
+          "sha256": "5af7dd332bd307ac50e1ccc6a22a106d236e8a44736019c98ba12a8b07ac3279"
         },
         {
           "file": "shrimp/cleaner-shrimp/lod2.glb",
-          "bytes": 8616,
-          "sha256": "d96b5b97881cf7e529637d9427ab5debdc2118c305d2cc124bfed12f72a0c2ac"
+          "bytes": 9592,
+          "sha256": "66eb76ee7b6be7aafa80d5b814f992da56233b9567ed0b25a6a5473adb78c4b5"
         },
         {
           "file": "shrimp/cleaner-shrimp/textures/cleaner-shrimp_basecolor_1k.ktx2",
-          "bytes": 23544,
-          "sha256": "548440618d1a0e8323fc0a433a5007ab490374663690b793f3c65108cb81b642"
+          "bytes": 21497,
+          "sha256": "1fd3f00b0a2b55a5fe67114f22c8eeb4749975dc9583dc6b61756aed23d58f46"
         },
         {
           "file": "shrimp/cleaner-shrimp/textures/cleaner-shrimp_basecolor_2k.ktx2",
-          "bytes": 23544,
-          "sha256": "548440618d1a0e8323fc0a433a5007ab490374663690b793f3c65108cb81b642"
+          "bytes": 21497,
+          "sha256": "1fd3f00b0a2b55a5fe67114f22c8eeb4749975dc9583dc6b61756aed23d58f46"
         }
       ],
       "shrimp": {
@@ -1773,7 +1773,7 @@
           "up": "+y"
         },
         "origin": "centre-of-mass",
-        "standoffM": 0.0063468292355537415,
+        "standoffM": 0.007258373778313398,
         "attributes": {
           "partId": "_FIN_ID",
           "weight": "_FIN_MASK",
@@ -1789,10 +1789,10 @@
         "legPairs": 5,
         "pleopodPairs": 5,
         "abdomenHinge": {
-          "y": 0.00011271723112212626,
-          "z": 0.005868904313847503
+          "y": 0.00007988937249542094,
+          "z": 0.003643370972259736
         },
-        "telsonZ": -0.025181095686152493,
+        "telsonZ": -0.024256629027740263,
         "debugRender": "debug/cleaner-shrimp.png",
         "debugPartsRender": "debug/cleaner-shrimp-parts.png"
       }

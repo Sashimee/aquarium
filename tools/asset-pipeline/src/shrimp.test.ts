@@ -137,7 +137,7 @@ describe.each(SHRIMP_RECIPES)('shrimp geometry $id', (recipe) => {
   it('stays inside the LOD0 triangle budget', () => {
     const triangles = part.indices.length / 3;
     expect(triangles).toBeGreaterThan(1500);
-    expect(triangles).toBeLessThan(3000);
+    expect(triangles).toBeLessThan(4500);
   });
 });
 
