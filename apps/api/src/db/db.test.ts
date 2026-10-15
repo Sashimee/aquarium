@@ -100,6 +100,48 @@ describe('migrations', () => {
     expect((legacy.rows[0] as { sex: string }).sex).toBe('female');
   });
 
+  it('turns an empty stored decor layout into NULL and leaves edited ones alone (0005)', async () => {
+    const database = await freshDatabase();
+    await runMigrations(database);
+    const q = (text: string, values: unknown[] = []) => database.pool.query(text, values);
+    await q(`alter table tanks alter column decor_layout set default '[]'::jsonb`);
+    await q(`alter table tanks alter column decor_layout set not null`);
+    await q(`insert into "user" (id, name, email) values ('u4', 'U', 'u4@bas.lu')`);
+    const layout = `[{"assetId":"boulder-01","position":[0,0,0],"rotationY":0,"scale":1}]`;
+    const insert = async (name: string, value: string) =>
+      (
+        (
+          await q(
+            `insert into tanks (owner_id, biome, name, decor_layout) values ('u4', 'freshwater', $1, $2::jsonb) returning id`,
+            [name, value],
+          )
+        ).rows[0] as { id: string }
+      ).id;
+    const empty = await insert('empty', '[]');
+    const spaced = await insert('spaced', '[ ]');
+    const filled = await insert('filled', layout);
+
+    const migration = readFileSync(
+      new URL('../../drizzle/0005_decor_layout_nullable.sql', import.meta.url),
+      'utf8',
+    );
+    for (const statement of migration.split('--> statement-breakpoint')) {
+      await q(statement);
+    }
+
+    const { rows } = await q(`select id, decor_layout from tanks`);
+    const byId = new Map(
+      rows.map((r: { id: string; decor_layout: unknown }) => [r.id, r.decor_layout]),
+    );
+    expect(byId.get(empty)).toBeNull();
+    expect(byId.get(spaced)).toBeNull();
+    expect(byId.get(filled)).toEqual(JSON.parse(layout));
+    const fresh = await q(
+      `insert into tanks (owner_id, biome, name) values ('u4', 'freshwater', 'new') returning decor_layout`,
+    );
+    expect((fresh.rows[0] as { decor_layout: unknown }).decor_layout).toBeNull();
+  });
+
   it('fail loudly when the database is unreachable', async () => {
     const database = connect('postgres://aquarium:wrong@127.0.0.1:1/none');
     opened.push(database);

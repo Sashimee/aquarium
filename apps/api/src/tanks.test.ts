@@ -887,9 +887,19 @@ describe('PATCH decor layout validation', () => {
     });
 
     it('treats a null column as no vacation feeder', async () => {
-      const tank = await createTank(h, cookie);
-      expect(await storedColumn(tank.id)).toBeNull();
-      expect((await fetchTank(tank.id)).fish).toEqual([]);
+      const never = await createTank(h, cookie);
+      const emptied = await createTank(h, cookie);
+      const fed = await createTank(h, cookie);
+      expect(await storedColumn(never.id)).toBeNull();
+      await patch(emptied.id, []);
+      await patch(fed.id, [piece('vacation-feeder')]);
+      for (const t of [never, emptied, fed]) await addFish(h, cookie, t.id);
+      await advance(h, 2 * DAY);
+      const hungerOf = async (id: string) => (await fetchTank(id)).fish[0]?.hunger ?? 0;
+      const neverHunger = await hungerOf(never.id);
+      expect(neverHunger).toBeGreaterThan(0.1);
+      expect(neverHunger).toBeCloseTo(await hungerOf(emptied.id), 6);
+      expect(neverHunger).toBeCloseTo((await hungerOf(fed.id)) * 2, 2);
     });
   });
 
