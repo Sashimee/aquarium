@@ -22,42 +22,64 @@ function isLosable(device: unknown): device is LosableDevice {
   );
 }
 
+export interface DeviceLossWatch {
+  /** Watches the WebGPU device too; call once `init()` has created it. */
+  watchDevice(): void;
+  /** Hands the loss to `handler`, at once if it happened before there was one to take it. */
+  onLost(handler: (info: DeviceLostInfo) => void): void;
+  /** Excuses the `destroyed` that the renderer's own dispose causes. */
+  stop(): void;
+}
+
 /**
- * Calls `onLost` once when the renderer's WebGPU device or WebGL context goes away, after three's
- * own handler has stopped it drawing. three ignores a WebGPU loss with reason `destroyed`, but
+ * Reports the first time the renderer's WebGPU device or WebGL context goes away, after three's
+ * own handler has stopped it drawing. Start it before `init()`: a loss while the engine starts
+ * is held until the engine takes it. three ignores a WebGPU loss with reason `destroyed`, but
  * Chromium reports that reason too when its GPU process drops the device, so `device.lost` is
- * watched as well; the stop function excuses the `destroyed` that the renderer's own dispose causes.
+ * watched as well.
  */
-export function watchDeviceLoss(
-  renderer: LossSource,
-  onLost: (info: DeviceLostInfo) => void,
-): () => void {
+export function watchDeviceLoss(renderer: LossSource): DeviceLossWatch {
   let watching = true;
+  let handler: ((info: DeviceLostInfo) => void) | null = null;
+  let held: DeviceLostInfo | null = null;
   const threeHandler = renderer.onDeviceLost;
   const hook = (info: DeviceLostInfo): void => {
     threeHandler.call(renderer, info);
     if (!watching) return;
     watching = false;
-    onLost(info);
+    if (handler === null) held = info;
+    else handler(info);
   };
   renderer.onDeviceLost = hook;
 
-  const device: unknown = Reflect.get(renderer.backend, 'device');
-  if (isLosable(device)) {
-    void device.lost.then((lost) => {
-      if (lost.reason !== 'destroyed' || !watching) return;
-      hook({
-        api: 'WebGPU',
-        message: lost.message || 'Unknown reason',
-        reason: lost.reason,
-        originalEvent: lost,
+  return {
+    watchDevice() {
+      const device: unknown = Reflect.get(renderer.backend, 'device');
+      if (!isLosable(device)) return;
+      void device.lost.then((lost) => {
+        if (lost.reason !== 'destroyed' || !watching) return;
+        hook({
+          api: 'WebGPU',
+          message: lost.message || 'Unknown reason',
+          reason: lost.reason,
+          originalEvent: lost,
+        });
       });
-    });
-  }
-
-  return () => {
-    watching = false;
-    if (renderer.onDeviceLost === hook) renderer.onDeviceLost = threeHandler;
+    },
+    onLost(next) {
+      if (handler !== null)
+        throw new Error('watchDeviceLoss: onLost() was already given a handler');
+      handler = next;
+      if (held === null) return;
+      const info = held;
+      held = null;
+      next(info);
+    },
+    stop() {
+      watching = false;
+      held = null;
+      if (renderer.onDeviceLost === hook) renderer.onDeviceLost = threeHandler;
+    },
   };
 }
 

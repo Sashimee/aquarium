@@ -23,7 +23,7 @@ export const DEFAULT_HDRI_URL = `${ASSET_BASE}hdri/studio-small-09/studio_small_
  * CompressedTexture, which the WebGPU backend uploads as rgba8unorm and then throws on. Raw
  * half-float data goes in a DataTexture; BC6H stays compressed.
  */
-export function uploadableHdri(texture: CompressedTexture): Texture {
+export function uploadableHdri(texture: CompressedTexture): CompressedTexture | DataTexture {
   // KTX2Loader passes RGBAFormat here although the type only admits compressed formats.
   if ((texture.format as number) !== RGBAFormat) return texture;
   const level = texture.mipmaps?.[0];
@@ -105,7 +105,7 @@ export function installRoomLighting(
       }
       const hdri = uploadableHdri(loaded);
       try {
-        const { width } = hdri.image as { width: number };
+        const { width } = hdri.image;
         if (pmremCubeSize(width) !== ROOM_CUBE_SIZE) {
           throw new Error(
             `The HDRI is ${width} texels wide; the room needs a 1k map (${4 * ROOM_CUBE_SIZE} wide)`,
@@ -113,8 +113,11 @@ export function installRoomLighting(
         }
         hdri.mapping = EquirectangularReflectionMapping;
         const generator = new PMREMGenerator(renderer);
-        generator.fromEquirectangular(hdri, room);
-        generator.dispose();
+        try {
+          generator.fromEquirectangular(hdri, room);
+        } finally {
+          generator.dispose();
+        }
       } finally {
         hdri.dispose();
       }

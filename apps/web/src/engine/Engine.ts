@@ -12,7 +12,9 @@ import { applyDayLighting, type DayLightingRig, FRESHWATER_FILL_LEVEL } from './
 import { daylightAt, minuteOfDay } from './daylight';
 import {
   browserSessionStore,
+  type DeviceLossWatch,
   type DeviceLostInfo,
+  type LossSource,
   recoveryFor,
   sessionBackend,
   watchDeviceLoss,
@@ -66,10 +68,9 @@ function hasCoarsePointer(): boolean {
 }
 
 /** The part of the renderer the start-up path needs, so failures can be tested without a GPU. */
-export interface StartableRenderer {
+export interface StartableRenderer extends LossSource {
   init(): Promise<unknown>;
   dispose(): Promise<void> | void;
-  readonly backend: object;
 }
 
 export type RendererFactory<R extends StartableRenderer> = (
@@ -79,13 +80,14 @@ export type RendererFactory<R extends StartableRenderer> = (
 /**
  * Creates and initialises the renderer, registering its disposal on `cleanup` before
  * anything can fail, so a rejected init() or a refused backend still frees the device.
+ * Device loss is watched from before init(), so a loss while the engine starts is not missed.
  */
 export async function initRenderer<R extends StartableRenderer>(
   options: EngineOptions,
   cleanup: DisposeStack,
   create: RendererFactory<R>,
   devicePixelRatio: number,
-): Promise<{ renderer: R; backend: BackendKind }> {
+): Promise<{ renderer: R; backend: BackendKind; deviceLoss: DeviceLossWatch }> {
   const renderer = create({
     forceWebGL: options.backend === 'webgl',
     antialias: devicePixelRatio < 2,
@@ -93,12 +95,15 @@ export async function initRenderer<R extends StartableRenderer>(
     powerPreference: 'high-performance',
   });
   cleanup.add(() => renderer.dispose());
+  const deviceLoss = watchDeviceLoss(renderer);
+  cleanup.add(() => deviceLoss.stop());
   await renderer.init();
+  deviceLoss.watchDevice();
   const backend: BackendKind = 'isWebGPUBackend' in renderer.backend ? 'webgpu' : 'webgl2';
   if (options.backend === 'webgpu' && backend !== 'webgpu') {
     throw new Error('WebGPU was requested with ?backend=webgpu but is not available here');
   }
-  return { renderer, backend };
+  return { renderer, backend, deviceLoss };
 }
 
 function configureRenderer(renderer: WebGPURenderer): void {
@@ -155,14 +160,22 @@ export class Engine {
       return await buildOrRelease(
         async (cleanup) => {
           const session = sessionBackend(config.options.backend, browserSessionStore());
-          const { renderer, backend } = await initRenderer(
+          const { renderer, backend, deviceLoss } = await initRenderer(
             { ...config.options, backend: session.backend },
             cleanup,
             (parameters) => new WebGPURenderer(parameters),
             window.devicePixelRatio,
           );
           configureRenderer(renderer);
-          const engine = new Engine(container, renderer, backend, events, config, cleanup);
+          const engine = new Engine(
+            container,
+            renderer,
+            backend,
+            events,
+            config,
+            cleanup,
+            deviceLoss,
+          );
           if (session.fellBack) {
             cleanup.add(
               showDeviceNotice(
@@ -195,9 +208,10 @@ export class Engine {
     readonly events: EngineEventBus,
     config: EngineConfig,
     private readonly cleanup: DisposeStack,
+    deviceLoss: DeviceLossWatch,
   ) {
     const preference = config.options.backend;
-    cleanup.add(watchDeviceLoss(renderer, (info) => this.deviceLost(info, preference)));
+    deviceLoss.onLost((info) => this.deviceLost(info, preference));
     const dimensions = config.tank ?? DEFAULT_TANK;
     this.clock = config.options.clock;
     this.showStats = config.options.stats;

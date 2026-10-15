@@ -5,6 +5,7 @@ import type { EngineOptions } from './options';
 
 class FakeRenderer implements StartableRenderer {
   readonly dispose = vi.fn();
+  onDeviceLost = vi.fn<StartableRenderer['onDeviceLost']>();
   constructor(
     readonly backend: object,
     private readonly initResult: () => Promise<unknown>,
@@ -44,6 +45,28 @@ describe('initRenderer', () => {
     const failure = new Error('no adapter');
     const fake = new FakeRenderer({}, () => Promise.reject(failure));
     await expect(initRenderer(options('auto'), cleanup, () => fake, 1)).rejects.toBe(failure);
+    await cleanup.dispose();
+    expect(fake.dispose).toHaveBeenCalledOnce();
+  });
+
+  it('hands on a context lost while init() was pending', async () => {
+    const fake: FakeRenderer = new FakeRenderer({}, () => {
+      fake.onDeviceLost({ api: 'WebGL', message: 'lost', reason: null, originalEvent: null });
+      return Promise.resolve();
+    });
+    const { deviceLoss } = await initRenderer(options('auto'), new DisposeStack(), () => fake, 1);
+    const onLost = vi.fn();
+    deviceLoss.onLost(onLost);
+    expect(onLost).toHaveBeenCalledWith(expect.objectContaining({ api: 'WebGL' }));
+  });
+
+  it('stops watching before it disposes the renderer', async () => {
+    const cleanup = new DisposeStack();
+    const fake = new FakeRenderer({}, () => Promise.resolve());
+    const threeHandler = fake.onDeviceLost;
+    await initRenderer(options('auto'), cleanup, () => fake, 1);
+    expect(fake.onDeviceLost).not.toBe(threeHandler);
+    fake.dispose.mockImplementation(() => expect(fake.onDeviceLost).toBe(threeHandler));
     await cleanup.dispose();
     expect(fake.dispose).toHaveBeenCalledOnce();
   });
