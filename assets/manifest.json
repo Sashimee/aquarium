@@ -1978,6 +1978,7 @@
         "decimated from 40k to 8k triangles at LOD0",
         "rigid spikes around the head flattened into the skin, and soft tapered tentacles added along the snout margin and top of the snout, with fewer segments and sides per LOD, forks only at LOD0 and only the two front tentacles per side at LOD2",
         "faceted eye beads covered with smooth dark glossy spheres on a separate material",
+        "atlas gutter and island outlines replaced by a smooth fill of the colours inside each island, so simplified triangles that cross an island border no longer show a dark crack",
         "orange morph recoloured by luminance to natural brown, with pale cream spots painted in world space so UV stretch cannot enlarge them"
       ],
       "status": "downloaded",

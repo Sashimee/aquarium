@@ -261,7 +261,7 @@ function flattenSeamTriangles(part: Part, welded: Welded, inHead: (v: number) =>
   part.extra = extra;
 }
 
-const SMALL_ISLAND = 16;
+const SMALL_ISLAND = 80;
 
 /** Vertices of the head that sit on a tiny uv island: the leftovers of the spike texture, which show as dark flecks. */
 function smallIslandVertices(part: Part, inHead: (index: number) => boolean): Set<number> {
