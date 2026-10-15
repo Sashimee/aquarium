@@ -109,7 +109,7 @@ describe('walking invertebrates', () => {
   it('requires walking exactly when swimmingMode is pleopod', () => {
     expect(issuePaths(shrimp({ walking: undefined }, []))).toEqual(['locomotion.walking']);
     const swimmer = { ...tetra, locomotion: { ...tetra.locomotion, walking } };
-    expect(issuePaths(swimmer)).toContain('locomotion.walking');
+    expect(issuePaths(swimmer)).toEqual(['locomotion.walking', 'behaviour.schooling']);
   });
 
   it('requires walking for biofilm-grazer', () => {
@@ -176,6 +176,16 @@ describe('walking invertebrates', () => {
       const tf = { ...walking.tailFlip, speedMps: exact };
       expect(ok(withWalking({ tailFlip: tf }))).toBe(true);
       expect(issuePaths(withWalking({ tailFlip: { ...tf, speedMps: exact * 1.01 } }))).toEqual([
+        'locomotion.walking.tailFlip.speedMps',
+      ]);
+    });
+
+    it('tolerates a rounded tail-flip mean within 1e-6 of the peak and rejects beyond it', () => {
+      const exact = loco.maxSpeedMps / (Math.PI / 2);
+      const withMean = (speedMps: number): unknown =>
+        withWalking({ tailFlip: { ...walking.tailFlip, speedMps } });
+      expect(ok(withMean(exact * (1 + 5e-7)))).toBe(true);
+      expect(issuePaths(withMean(exact * (1 + 1e-5)))).toEqual([
         'locomotion.walking.tailFlip.speedMps',
       ]);
     });
