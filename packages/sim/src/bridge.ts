@@ -18,12 +18,15 @@ import {
  * `tank`. Never map positions by subtracting the local sand height: food would sink under the
  * fish's floor where the sand is low and startles would land in the wrong place.
  *
+ * `init` is answered by a `ready` event carrying the same `request` number, or by an `error` event
+ * carrying it.
+ *
  * `addFish` and `removeFish` change the running world in place and are answered by a `layout`
  * event carrying the same `request` number, or by an `error` event carrying it. `canGrazeAt`
  * changes nothing and is answered by a `grazeReach` event, or an `error` event, with its `request`.
  */
 export type SimCommand =
-  | { readonly type: 'init'; readonly config: AnyWorldConfig }
+  | { readonly type: 'init'; readonly request: number; readonly config: AnyWorldConfig }
   | { readonly type: 'start' }
   | { readonly type: 'stop' }
   | { readonly type: 'step'; readonly steps: number }
@@ -54,6 +57,8 @@ export type SimCommand =
 
 export interface SimReady {
   readonly type: 'ready';
+  /** The `init` this answers. */
+  readonly request: number;
   readonly epoch: number;
   readonly fishIds: readonly string[];
   readonly stride: number;
@@ -72,7 +77,7 @@ export type SimEvent =
   | SimAte
   | SimLayout
   | SimGrazeReach
-  /** `request` is set when the failed command was an `addFish`, `removeFish` or `canGrazeAt`. */
+  /** `request` is set when the failed command was an `init`, `addFish`, `removeFish` or `canGrazeAt`. */
   | { readonly type: 'error'; readonly message: string; readonly request?: number };
 
 /**
@@ -269,6 +274,7 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
         epoch++;
         send({
           type: 'ready',
+          request: command.request,
           epoch,
           fishIds: world.fishIds,
           stride: SNAPSHOT_STRIDE,
@@ -385,6 +391,7 @@ export class SimClient {
   private readonly errorListeners = new Set<(message: string) => void>();
   private readonly ateListeners = new Set<(events: readonly AteEvent[], ate: SimAte) => void>();
   private pendingInit: {
+    request: number;
     resolve: (ready: SimReady) => void;
     reject: (error: Error) => void;
   } | null = null;
@@ -399,7 +406,7 @@ export class SimClient {
   private nextRequest = 1;
   /**
    * Requests a worker failure rejected. The worker may well have survived it, so their replies can
-   * still arrive; they are dropped, except that a layout still moves the epoch.
+   * still arrive; they are dropped, except that a ready or a layout still moves the epoch.
    */
   private readonly abandoned = new Set<number>();
   private readonly listener = (event: MessageEvent): void => this.receive(event.data);
@@ -418,9 +425,10 @@ export class SimClient {
     if (this.pendingInit !== null) {
       return Promise.reject(new Error('sim: init already in flight'));
     }
+    const request = this.nextRequest++;
     return new Promise((resolve, reject) => {
-      this.pendingInit = { resolve, reject };
-      this.send({ type: 'init', config });
+      this.pendingInit = { request, resolve, reject };
+      this.send({ type: 'init', request, config });
     });
   }
 
@@ -554,6 +562,7 @@ export class SimClient {
   }
 
   private fail(message: string): void {
+    if (this.pendingInit !== null) this.abandoned.add(this.pendingInit.request);
     for (const request of this.pendingLayouts.keys()) this.abandoned.add(request);
     for (const request of this.pendingQueries.keys()) this.abandoned.add(request);
     this.rejectPending(message);
@@ -576,11 +585,18 @@ export class SimClient {
     messageType(data, EVENT_TYPES);
     const event = data as SimEvent;
     switch (event.type) {
-      case 'ready':
+      case 'ready': {
+        const pending = this.pendingInit?.request === event.request ? this.pendingInit : null;
+        if (pending === null && !this.abandoned.delete(event.request)) {
+          throw new Error(`sim: ready for unknown request ${event.request}`);
+        }
         this.epoch = event.epoch;
-        this.pendingInit?.resolve(event);
-        this.pendingInit = null;
+        if (pending !== null) {
+          this.pendingInit = null;
+          pending.resolve(event);
+        }
         return;
+      }
       case 'snapshot': {
         const snapshot: Snapshot = {
           epoch: event.epoch,
@@ -618,19 +634,20 @@ export class SimClient {
         return;
       }
       case 'error': {
-        // An error naming a request belongs to that add, remove or query alone, never to an init;
-        // one without a request goes to a pending init, and to the listeners only if none is.
-        if (event.request !== undefined && this.abandoned.delete(event.request)) return;
-        const pending =
-          event.request === undefined
-            ? this.pendingInit
-            : (this.pendingLayouts.get(event.request) ??
-              this.pendingQueries.get(event.request) ??
-              null);
-        if (event.request === undefined) this.pendingInit = null;
-        else {
-          this.pendingLayouts.delete(event.request);
-          this.pendingQueries.delete(event.request);
+        // An error naming a request belongs to that request alone; one without a request (the
+        // step loop failing, say) goes to the listeners.
+        const { request } = event;
+        if (request !== undefined && this.abandoned.delete(request)) return;
+        let pending: { reject: (error: Error) => void } | null = null;
+        if (request !== undefined) {
+          if (this.pendingInit?.request === request) {
+            pending = this.pendingInit;
+            this.pendingInit = null;
+          } else {
+            pending = this.pendingLayouts.get(request) ?? this.pendingQueries.get(request) ?? null;
+            this.pendingLayouts.delete(request);
+            this.pendingQueries.delete(request);
+          }
         }
         if (pending !== null) {
           pending.reject(new Error(event.message));
