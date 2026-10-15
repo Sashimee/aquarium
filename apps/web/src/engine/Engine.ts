@@ -191,8 +191,6 @@ export class Engine {
       maxTier: profile.maxTier,
       awaitContent: true,
     });
-    // Announced once every feature, the effects included, has the new tier.
-    cleanup.add(events.on('quality:tier-changed', () => this.effects.refresh()));
     const pipelineFailures = new PipelineFailureHandler(
       this.effects,
       (id) => usesMaterial(this.scene, id),
@@ -413,6 +411,9 @@ export class Engine {
       if (this.disposed) return;
       this.effects.attach(new Effects(this, postPipelineFactory(this.renderer)));
       this.cleanup.add(() => this.effects.dispose());
+      // Right behind the effects' own feature, so the features registered later (the fish
+      // materials) already see the new tier's temporal resolve and are rebuilt once, not twice.
+      this.cleanup.add(this.quality.register('effects-temporal', () => this.effects.refresh()));
     } catch (cause) {
       this.reportError('Render effects failed to load; continuing without them', cause);
     }

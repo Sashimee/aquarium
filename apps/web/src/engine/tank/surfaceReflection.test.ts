@@ -204,19 +204,23 @@ describe('SurfaceReflection', () => {
     reflection.dispose();
   });
 
+  // The compile view ignores the camera's pose; only its clip planes reach it.
   it.each([
-    ['above the water, facing away from the tank', [0.2, LEVEL + 0.3, 1.6], [0, LEVEL + 0.3, 5]],
-    ['under the water, looking down at the floor', [0, LEVEL - 0.1, 0], [0, 0, 0.01]],
-    ['under the water, looking out of the front glass', [0, 0.2, 0.1], [0, 0.2, 3]],
+    ['the scene camera', 0.05, 50],
+    ['a camera with a near plane beyond the surface', 0.6, 50],
+    ['a camera with a close far plane', 0.01, 2],
   ] as const)(
-    'compiles a view of the whole tank floor whatever the camera does (%s)',
-    async (_pose, [x, y, z], [tx, ty, tz]) => {
+    'compiles a view of the whole tank floor whatever the camera clips (%s)',
+    async (_name, near, far) => {
       const reflection = new SurfaceReflection(surface);
       reflection.setResolutionScale(0.5);
       const { renderer, compiled, finishCompile } = fakeRenderer();
       const camera = sceneCamera(WebGPUCoordinateSystem);
-      camera.position.set(x, y, z);
-      camera.lookAt(tx, ty, tz);
+      camera.near = near;
+      camera.far = far;
+      camera.position.set(0.2, LEVEL + 0.3, 1.6);
+      camera.lookAt(0, LEVEL + 0.3, 5);
+      camera.updateProjectionMatrix();
       const compiling = reflection.compile(renderer, new Scene(), camera);
       await vi.waitFor(() => expect(compiled).toHaveLength(1));
       finishCompile();

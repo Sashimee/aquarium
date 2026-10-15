@@ -45,6 +45,16 @@ describe('QualityManager', () => {
     expect(quality.featureNames()).toEqual(['recorder']);
   });
 
+  it('applies a tier change to the features in the order they registered', () => {
+    const { quality } = setup();
+    const order: string[] = [];
+    quality.register('effects', () => order.push('effects'));
+    quality.register('fish', () => order.push('fish'));
+    order.length = 0;
+    quality.setTier('ultra', 0);
+    expect(order).toEqual(['effects', 'fish']);
+  });
+
   it('does not keep a feature whose first application throws', () => {
     const { quality } = setup();
     const broken = new Error('shader build failed');
@@ -272,11 +282,45 @@ describe('QualityManager', () => {
   it('probes the content anyway once the wait for it times out', () => {
     const { quality } = setup({ awaitContent: true, contentTimeoutMs: 10_000 });
     quality.start(0);
-    const t = feed(quality, TARGET, 4, 0, 12_200);
+    const t = feed(quality, TARGET, 4, 0, 9_900);
     expect(quality.probing).toBe(true);
-    feed(quality, TARGET, 14, t, 14_800);
+    feed(quality, TARGET, 14, t, 12_400);
     expect(quality.probing).toBe(false);
     expect(quality.tier).toBe('medium');
+  });
+
+  it('counts the wait for content from start, not from the end of the empty-tank probe', () => {
+    const { quality } = setup({ awaitContent: true, contentTimeoutMs: 3000 });
+    quality.start(0);
+    const t = feed(quality, TARGET, 4, 0, 2900);
+    expect(quality.probing).toBe(true);
+    feed(quality, TARGET, 14, t, 5400);
+    expect(quality.probing).toBe(false);
+    expect(quality.tier).toBe('medium');
+  });
+
+  it('probes the content straight away when the wait ran out during the empty-tank probe', () => {
+    const { quality } = setup({ awaitContent: true, contentTimeoutMs: 1000 });
+    quality.start(0);
+    const t = feed(quality, TARGET, 4, 0, 2350);
+    expect(quality.tier).toBe('high');
+    feed(quality, TARGET, 14, t, 4700);
+    expect(quality.probing).toBe(false);
+    expect(quality.tier).toBe('medium');
+  });
+
+  it('leaves climbing back from a slow empty-tank probe to the controller on frame timing', () => {
+    const { quality, announced } = setup({ awaitContent: true, gpuTiming: false });
+    quality.start(0);
+    let t = feed(quality, 1.5 * TARGET, null, 0, 2400);
+    expect(quality.tier).toBe('medium');
+    quality.contentReady(t);
+    t = feed(quality, TARGET, null, t, t + 2400);
+    expect(quality.probing).toBe(false);
+    expect(quality.tier).toBe('medium');
+    feed(quality, TARGET, null, t, t + 14_000);
+    expect(quality.tier).toBe('high');
+    expect(announced.at(-1)).toEqual({ from: 'medium', to: 'high', reason: 'headroom' });
   });
 
   it('ignores content readiness after the probes have finished', () => {
