@@ -28,6 +28,7 @@ import { createSharedKtx2, type Ktx2Textures } from './ktx2';
 import { EventBus, type BackendKind, type EngineEvents, type EngineEventBus } from './events';
 import { CullPrewarm } from './cullPrewarm';
 import { ReflectedShadow } from './reflectedShadow';
+import { RenderLoop } from './renderLoop';
 import { buildOrRelease, DisposeStack } from './lifecycle';
 import type { EngineOptions } from './options';
 import { qualityProfile } from './quality/profile';
@@ -147,6 +148,7 @@ export class Engine {
   /** Later tier changes warm what they turn on themselves. */
   private warmedUp = false;
   private readonly reflectedShadow = new ReflectedShadow();
+  private readonly loop: RenderLoop;
   private gpuMs: number | null = null;
   private readonly gpuTiming: boolean;
   private lastGpuMs: number | null = null;
@@ -211,6 +213,7 @@ export class Engine {
     deviceLoss: DeviceLossWatch,
   ) {
     const preference = config.options.backend;
+    this.loop = new RenderLoop(renderer, (t) => this.frame(t));
     deviceLoss.onLost((info) => this.deviceLost(info, preference));
     const dimensions = config.tank ?? DEFAULT_TANK;
     this.clock = config.options.clock;
@@ -345,8 +348,7 @@ export class Engine {
     const now = performance.now();
     this.stats.since = now;
     this.quality.start(now);
-    this.cleanup.add(() => this.renderer.setAnimationLoop(null));
-    void this.renderer.setAnimationLoop((t) => this.frame(t));
+    if (this.loop.start()) this.cleanup.add(() => this.loop.stop());
     this.events.emit('engine:ready', {
       backend: this.backend,
       tier: this.quality.tier,
@@ -377,7 +379,7 @@ export class Engine {
    */
   private deviceLost(info: DeviceLostInfo, preference: EngineOptions['backend']): void {
     if (this.disposed) return;
-    void this.renderer.setAnimationLoop(null);
+    this.loop.halt();
     const recovery = recoveryFor(info.api, preference);
     this.events.emit('engine:device-lost', { api: info.api, message: info.message, recovery });
     this.reportError(`The ${info.api} device was lost: ${info.message}`, info);
