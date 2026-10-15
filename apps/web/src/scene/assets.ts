@@ -16,7 +16,16 @@ import { rewritingKtx2Loader, type Ktx2Textures } from '../engine/ktx2';
 export const ASSET_BASE = `${import.meta.env.BASE_URL}assets/`;
 
 export type AssetKind =
-  'fish' | 'plant' | 'coral' | 'anemone' | 'driftwood' | 'rock' | 'decor' | 'substrate' | 'hdri';
+  | 'fish'
+  | 'shrimp'
+  | 'plant'
+  | 'coral'
+  | 'anemone'
+  | 'driftwood'
+  | 'rock'
+  | 'decor'
+  | 'substrate'
+  | 'hdri';
 
 export interface CatalogEntry {
   readonly id: string;

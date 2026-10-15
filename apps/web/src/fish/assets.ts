@@ -18,7 +18,11 @@ import { parseFishAssets, type FishAssetEntry } from './assetIndex';
 export interface FishPart {
   readonly geometry: BufferGeometry;
   readonly source: MeshStandardMaterial;
+  /** A walker's hip for each `_leg` index, null where this LOD has no such leg; empty for a fish. */
+  readonly legPivots: readonly (Vec3 | null)[];
 }
+
+export type Vec3 = readonly [number, number, number];
 
 export type FishTextureSize = 1024 | 2048;
 
@@ -29,8 +33,15 @@ export interface FishModel {
   readonly lods: readonly (readonly FishPart[])[];
 }
 
-/** `_fin_mask` and `_fin_id` share one vec2 so the fish stay within WebGPU's 8 vertex buffers. */
+/**
+ * `_fin_mask` and `_fin_id` share one vec2, and a walker's `_leg` makes it a vec3, so the models
+ * stay within WebGPU's 8 vertex buffers.
+ */
 export const FIN_ATTRIBUTE = 'fin';
+/** `_fin_id` of a shrimp's walking legs and chelipeds. */
+export const LEG_PART_ID = 6;
+/** Hip vertices sit at the minimum limb weight; the simplified LODs may shift it slightly. */
+const HIP_WEIGHT_SLACK = 0.02;
 const KEPT_ATTRIBUTES = ['position', 'normal', 'uv'] as const;
 
 function toFloat32(attribute: BufferAttribute | InterleavedBufferAttribute): BufferAttribute {
@@ -42,13 +53,20 @@ function toFloat32(attribute: BufferAttribute | InterleavedBufferAttribute): Buf
   return new BufferAttribute(out, itemSize);
 }
 
-/** Bakes the node transform and repacks the fin attributes; the result is unquantised float32. */
-export function prepareFishGeometry(mesh: Mesh, label: string): BufferGeometry {
+/**
+ * Bakes the node transform and repacks the fin attributes, with `_leg` when `limbs`; the result is
+ * unquantised float32.
+ */
+export function prepareFishGeometry(mesh: Mesh, label: string, limbs = false): BufferGeometry {
   const source = mesh.geometry;
   const mask = source.getAttribute('_fin_mask');
   const id = source.getAttribute('_fin_id');
   if (mask === undefined || id === undefined) {
     throw new Error(`${label}: _FIN_MASK/_FIN_ID attributes missing; re-run the asset pipeline`);
+  }
+  const leg = limbs ? source.getAttribute('_leg') : undefined;
+  if (limbs && leg === undefined) {
+    throw new Error(`${label}: shrimp _LEG attribute missing; re-run the asset pipeline`);
   }
   const geometry = new BufferGeometry();
   for (const name of KEPT_ATTRIBUTES) {
@@ -56,18 +74,49 @@ export function prepareFishGeometry(mesh: Mesh, label: string): BufferGeometry {
     if (attribute === undefined) throw new Error(`${label}: vertex attribute "${name}" missing`);
     geometry.setAttribute(name, toFloat32(attribute));
   }
-  const fin = new Float32Array(mask.count * 2);
+  const size = leg === undefined ? 2 : 3;
+  const fin = new Float32Array(mask.count * size);
   for (let i = 0; i < mask.count; i++) {
-    fin[i * 2] = mask.getX(i);
-    fin[i * 2 + 1] = Math.round(id.getX(i));
+    fin[i * size] = mask.getX(i);
+    fin[i * size + 1] = Math.round(id.getX(i));
+    if (leg !== undefined) fin[i * size + 2] = Math.round(leg.getX(i));
   }
-  geometry.setAttribute(FIN_ATTRIBUTE, new BufferAttribute(fin, 2));
+  geometry.setAttribute(FIN_ATTRIBUTE, new BufferAttribute(fin, size));
   const index = source.getIndex();
   if (index !== null) geometry.setIndex(Array.from(index.array as ArrayLike<number>));
   mesh.updateWorldMatrix(true, false);
   geometry.applyMatrix4(mesh.matrixWorld);
   geometry.computeBoundingSphere();
   return geometry;
+}
+
+/**
+ * The hip of each leg: the centroid of its vertices nearest the root, where the limb weight is
+ * lowest. The legs swing rigidly about it, so a step neither stretches nor bulges the tube.
+ */
+export function legPivots(geometry: BufferGeometry, legCount: number): (Vec3 | null)[] {
+  const fin = geometry.getAttribute(FIN_ATTRIBUTE);
+  const position = geometry.getAttribute('position');
+  if (fin.itemSize !== 3) throw new Error('legPivots: the geometry has no packed _leg attribute');
+  const lowest = new Array<number>(legCount).fill(Infinity);
+  for (let i = 0; i < fin.count; i++) {
+    const leg = fin.getZ(i);
+    if (fin.getY(i) === LEG_PART_ID && leg >= 0 && leg < legCount) {
+      lowest[leg] = Math.min(lowest[leg] ?? Infinity, fin.getX(i));
+    }
+  }
+  const sums = Array.from({ length: legCount }, () => [0, 0, 0, 0]);
+  for (let i = 0; i < fin.count; i++) {
+    const sum = sums[fin.getZ(i)];
+    const floor = lowest[fin.getZ(i)];
+    if (fin.getY(i) !== LEG_PART_ID || sum === undefined || floor === undefined) continue;
+    if (fin.getX(i) > floor + HIP_WEIGHT_SLACK) continue;
+    sum[0] = (sum[0] ?? 0) + position.getX(i);
+    sum[1] = (sum[1] ?? 0) + position.getY(i);
+    sum[2] = (sum[2] ?? 0) + position.getZ(i);
+    sum[3] = (sum[3] ?? 0) + 1;
+  }
+  return sums.map(([x = 0, y = 0, z = 0, n = 0]) => (n > 0 ? [x / n, y / n, z / n] : null));
 }
 
 function standardMaterial(material: Material | Material[], label: string): MeshStandardMaterial {
@@ -103,6 +152,7 @@ function collectParts(
   root: Object3D,
   label: string,
   shared: Map<string, MeshStandardMaterial>,
+  legCount: number,
 ): FishPart[] {
   const earlier = new Map(shared);
   const groups = new Map<MeshStandardMaterial, BufferGeometry[]>();
@@ -114,7 +164,7 @@ function collectParts(
     if (material !== own) unused.add(own);
     else if (own.name !== '' && !shared.has(own.name)) shared.set(own.name, own);
     const list = groups.get(material) ?? [];
-    list.push(prepareFishGeometry(object, label));
+    list.push(prepareFishGeometry(object, label, legCount > 0));
     groups.set(material, list);
   });
   const keep = new Set(groups.keys());
@@ -131,7 +181,11 @@ function collectParts(
       throw new Error(`${label}: primitives sharing "${source.name}" could not be merged`);
     }
     if (geometries.length > 1) for (const g of geometries) g.dispose();
-    return { geometry: merged, source };
+    return {
+      geometry: merged,
+      source,
+      legPivots: legCount > 0 ? legPivots(merged, legCount) : [],
+    };
   });
 }
 
@@ -192,7 +246,8 @@ export class FishAssetLoader {
       for (const file of entry.lodFiles) {
         const gltf = await gltfLoader.loadAsync(`${this.root}${file}`);
         try {
-          lods.push(collectParts(gltf.scene, `fish ${file}`, shared));
+          const legCount = (entry.shrimp?.legPairs ?? 0) * 2;
+          lods.push(collectParts(gltf.scene, `fish ${file}`, shared, legCount));
         } catch (cause) {
           disposeScene(gltf.scene);
           throw cause;

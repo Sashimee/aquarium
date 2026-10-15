@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CompressedTexture } from 'three';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
-import { disposeFishModel, FishAssetLoader } from './assets';
+import { disposeFishModel, FIN_ATTRIBUTE, FishAssetLoader, LEG_PART_ID } from './assets';
 
 const ROOT = '/assets/';
 const PUBLIC = fileURLToPath(new URL('../../public/assets/', import.meta.url));
@@ -85,6 +85,49 @@ describe('FishAssetLoader', () => {
     expect(loader.textureSizeFor(neon)).toBe(2048);
     const model = await loader.load('bronze-corydoras');
     expect(model.textureSize).toBe(1024);
+    disposeFishModel(model);
+  });
+
+  it.each(['cherry-shrimp', 'cleaner-shrimp'])(
+    'packs the limb index of %s and finds a hip beside the body for every leg',
+    async (id) => {
+      serveShippedAssets();
+      spyTextureLoads();
+      const loader = new FishAssetLoader(new KTX2Loader(), ROOT);
+      const model = await loader.load(id);
+      const entry = (await loader.entries()).get(id);
+      if (entry?.shrimp == null) throw new Error(`${id}: no shrimp rig in the shipped index`);
+      const halfWidth = Math.max(-entry.min[0], entry.max[0]);
+      for (const [level, parts] of model.lods.entries()) {
+        for (const part of parts) {
+          const fin = part.geometry.getAttribute(FIN_ATTRIBUTE);
+          expect(fin.itemSize).toBe(3);
+          expect(part.legPivots).toHaveLength(entry.shrimp.legPairs * 2);
+          const hasLegs = Array.from({ length: fin.count }, (_, i) => fin.getY(i)).includes(
+            LEG_PART_ID,
+          );
+          if (!hasLegs) continue;
+          part.legPivots.forEach((hip, leg) => {
+            if (level === 0) expect(hip, `${id} leg ${leg}`).not.toBeNull();
+            if (hip === null) return;
+            expect(Math.sign(hip[0]), `${id} leg ${leg} side`).toBe(leg % 2 === 0 ? -1 : 1);
+            expect(Math.abs(hip[0])).toBeLessThan(halfWidth);
+            expect(hip[1]).toBeLessThan(entry.max[1]);
+          });
+        }
+      }
+      disposeFishModel(model);
+    },
+  );
+
+  it('keeps a fish on the two-component fin attribute with no hips', async () => {
+    serveShippedAssets();
+    spyTextureLoads();
+    const model = await new FishAssetLoader(new KTX2Loader(), ROOT).load('neon-tetra');
+    for (const part of model.lods.flat()) {
+      expect(part.geometry.getAttribute(FIN_ATTRIBUTE).itemSize).toBe(2);
+      expect(part.legPivots).toEqual([]);
+    }
     disposeFishModel(model);
   });
 });

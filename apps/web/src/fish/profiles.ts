@@ -156,6 +156,25 @@ export const FISH_RENDER_PROFILES: Readonly<Record<string, FishRenderProfile>> =
     finTransmission: 0.55,
     nightPaling: 0.3,
   },
+  // Shrimp colour sits in chromatophores under a clear chitin shell: a glossy surface with no
+  // guanine sheen, and thin limbs that let light through. Neocaridina fade sharply when stressed.
+  'cherry-shrimp': {
+    ...DEFAULTS,
+    assetId: 'cherry-shrimp',
+    iridescence: 0,
+    roughness: 0.3,
+    finTransmission: 0.5,
+    nightPaling: 0.3,
+    tintVariation: 0.12,
+  },
+  'cleaner-shrimp': {
+    ...DEFAULTS,
+    assetId: 'cleaner-shrimp',
+    iridescence: 0,
+    roughness: 0.3,
+    finTransmission: 0.4,
+    nightPaling: 0.2,
+  },
 };
 
 export function renderProfile(speciesId: string): FishRenderProfile {

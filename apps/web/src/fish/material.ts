@@ -15,11 +15,17 @@ import {
   color,
   cos,
   cross,
+  dFdx,
+  dFdy,
   dot,
+  exp2,
   float,
+  floor,
+  fract,
   frameId,
   instancedDynamicBufferAttribute,
-  interleavedGradientNoise,
+  length,
+  log2,
   luminance,
   max,
   min,
@@ -33,18 +39,18 @@ import {
   positionPrevious,
   positionWorld,
   pow,
-  screenCoordinate,
+  select,
   sign,
   sin,
   smoothstep,
   step,
   texture,
-  vec2,
   vec3,
   vec4,
 } from 'three/tsl';
-import { FIN_ATTRIBUTE } from './assets';
-import { INSTANCE_STRIDE, type FishInstanceData } from './instances';
+import { FIN_ATTRIBUTE, LEG_PART_ID } from './assets';
+import { WALKER_INSTANCE_STRIDE, type FishInstanceData } from './instances';
+import { idIs, walkerDeformation, type Deformation, type WalkerRig } from './limbs';
 import type { FishRenderProfile } from './profiles';
 import { TAIL_AMPLITUDE_BODY_LENGTHS, type SwimModeParams } from './swim';
 
@@ -76,7 +82,9 @@ export interface FishMaterialConfig {
   /** The model the material draws, which may be the profile's male one. */
   readonly assetId: string;
   readonly profile: FishRenderProfile;
-  readonly mode: SwimModeParams;
+  readonly locomotion:
+    | { readonly kind: 'swim'; readonly mode: SwimModeParams }
+    | { readonly kind: 'walk'; readonly rig: WalkerRig };
   /** Model-space z of the snout and of the tail tip. */
   readonly zMax: number;
   readonly zMin: number;
@@ -113,17 +121,8 @@ const NIGHT_PLATELET_SHRINK = 0.12;
 const SILHOUETTE_ALPHA = 0.1;
 /** `antialias: true` gives four MSAA samples on both backends. */
 const COVERAGE_SAMPLES = 4;
-/** Golden-ratio-like step that decorrelates consecutive frames of the noise (Jimenez 2014). */
-const FRAME_NOISE_STEP = 5.588238;
-
-interface Deformation {
-  readonly position: Node<'vec3'>;
-  readonly normal: Node<'vec3'>;
-}
-
-function idIs(id: Node<'float'>, value: number): Node<'float'> {
-  return step(value - 0.5, id).mul(step(id, value + 0.5));
-}
+/** Golden-ratio step that decorrelates consecutive frames of the noise. */
+const FRAME_NOISE_STEP = 0.618034;
 
 /** smoothstep(a, b, x) and its derivative in x. */
 function smoothRamp(a: number, b: number, x: Node<'float'>): [Node<'float'>, Node<'float'>] {
@@ -136,27 +135,57 @@ function rotateByQuat(q: Node<'vec4'>, v: Node<'vec3'>): Node<'vec3'> {
   return v.add(t.mul(q.w)).add(cross(q.xyz, t));
 }
 
-/**
- * A pixel survives when its alpha beats interleaved gradient noise (Jimenez 2014). The pattern
- * moves every frame so a temporal resolve averages it into a blend; without one it is raw stipple.
- * The per-fish offset keeps two overlapping fins from sharing a pattern.
- */
-function screenDoor(alpha: Node<'float'>, seed: Node<'float'>): Node<'bool'> {
-  const frame = float(frameId).mod(64).mul(FRAME_NOISE_STEP);
-  const pixel = screenCoordinate.xy.add(vec2(seed.mul(61.3), seed.mul(29.7)).floor()).add(frame);
-  return alpha.greaterThan(interleavedGradientNoise(pixel));
+/** Dave Hoskins' "hash without sine" hash13: no trigonometry, so it is stable on mobile GPUs. */
+function hash13(cell: Node<'vec3'>): Node<'float'> {
+  const p = fract(cell.mul(0.1031)).toVar();
+  const q = p.add(dot(p, p.zyx.add(31.32)));
+  return fract(q.x.add(q.y).mul(q.z));
 }
 
 /**
- * Alpha-to-coverage keeps only COVERAGE_SAMPLES + 1 levels, so a soft membrane edge would band and
- * its faint rim would round to nothing. A fixed per-pixel offset of up to one sample step dithers
- * between neighbouring levels, which the MSAA resolve averages back into a gradient. The offset
- * shrinks to zero towards alpha 1, so opaque skin keeps every sample.
+ * Uniform noise anchored to the surface: hashed alpha testing (Wyman & McGuire 2017). Cells are
+ * hashed from the rest-pose model position at about one per pixel, so the pattern rides along with
+ * a beating fin instead of crawling over it as a screen-space pattern does. The cell size steps in
+ * powers of two with the distance, blended between the two nearest and remapped to stay uniform.
+ * The per-fish offset keeps two overlapping fins from sharing a pattern.
+ */
+function surfaceNoise(seed: Node<'float'>): Node<'float'> {
+  const p = positionGeometry;
+  const footprint = max(max(length(dFdx(p)), length(dFdy(p))), 1e-9);
+  const level = log2(footprint);
+  const fine = exp2(floor(level));
+  const offset = vec3(seed.mul(61.3), seed.mul(29.7), seed.mul(17.1)).floor();
+  const a = hash13(floor(p.div(fine)).add(offset));
+  const b = hash13(floor(p.div(fine.mul(2))).add(offset));
+  const t = fract(level);
+  const x = mix(a, b, t);
+  const edge = max(min(t, t.oneMinus()), 1e-4);
+  const spread = edge.mul(edge.oneMinus()).mul(2);
+  const low = x.mul(x).div(spread);
+  const middle = x.sub(edge.mul(0.5)).div(edge.oneMinus());
+  const high = float(1).sub(x.oneMinus().mul(x.oneMinus()).div(spread));
+  const uniform = select(x.lessThan(edge), low, select(x.lessThan(edge.oneMinus()), middle, high));
+  return clamp(uniform, 0, 1);
+}
+
+/**
+ * A pixel survives when its alpha beats the surface noise. The noise shifts every frame so a
+ * temporal resolve averages it into a blend; without one it is raw stipple.
+ */
+function screenDoor(alpha: Node<'float'>, seed: Node<'float'>): Node<'bool'> {
+  const frame = float(frameId).mod(64).mul(FRAME_NOISE_STEP);
+  return alpha.greaterThan(fract(surfaceNoise(seed).add(frame)));
+}
+
+/**
+ * Alpha-to-coverage keeps only COVERAGE_SAMPLES + 1 levels, so a soft membrane would band and its
+ * faint rim would round to nothing. A fixed offset of up to one sample step dithers between
+ * neighbouring levels, which the MSAA resolve averages back into a gradient. The offset shrinks to
+ * zero towards alpha 1, so opaque skin keeps every sample.
  */
 function ditheredCoverage(alpha: Node<'float'>, seed: Node<'float'>): Node<'float'> {
-  const pixel = screenCoordinate.xy.add(vec2(seed.mul(61.3), seed.mul(29.7)).floor());
   const reach = min(alpha.oneMinus().mul(2), 1 / COVERAGE_SAMPLES);
-  return alpha.add(interleavedGradientNoise(pixel).sub(0.5).mul(reach));
+  return alpha.add(surfaceNoise(seed).sub(0.5).mul(reach));
 }
 
 /**
@@ -183,8 +212,22 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
     this.clearcoatRoughness = 0.08;
     this.iridescenceIOR = GUANINE_IOR;
 
-    this.still = this.buildDeformation(false);
-    this.breathing = this.buildDeformation(true);
+    const { locomotion } = config;
+    if (locomotion.kind === 'walk') {
+      if (config.instances.stride !== WALKER_INSTANCE_STRIDE) {
+        throw new Error(`${this.name}: a walker needs instance data with the walker stride`);
+      }
+      const walker = walkerDeformation(locomotion.rig, {
+        look: this.instanceVec4(8),
+        walk: this.instanceVec4(16),
+        act: this.instanceVec4(20),
+      });
+      this.still = walker;
+      this.breathing = walker;
+    } else {
+      this.still = this.buildDeformation(locomotion.mode, false);
+      this.breathing = this.buildDeformation(locomotion.mode, true);
+    }
     this.deformation = this.still;
     const { position } = this.still;
 
@@ -204,7 +247,7 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
       node = instancedDynamicBufferAttribute(
         this.config.instances.buffer,
         'vec4',
-        INSTANCE_STRIDE,
+        this.config.instances.stride,
         offset,
       );
       this.instanceNodes.set(offset, node);
@@ -212,8 +255,8 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
     return node;
   }
 
-  private buildDeformation(gills: boolean): Deformation {
-    const { mode, zMax, zMin } = this.config;
+  private buildDeformation(mode: SwimModeParams, gills: boolean): Deformation {
+    const { zMax, zMin } = this.config;
     const zLen = zMax - zMin;
     const [c0, c1, c2] = mode.envelope;
     const k = (2 * Math.PI) / mode.wavelength;
@@ -296,8 +339,15 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
     const tint = this.instanceVec4(12).xyz;
     const pale = look.y;
     const seed = look.z;
-    const fin = attribute<'vec2'>(FIN_ATTRIBUTE, 'vec2');
-    const finAmount = smoothstep(0.08, 0.5, fin.x);
+    const walker = this.config.locomotion.kind === 'walk';
+    const fin = walker
+      ? attribute<'vec3'>(FIN_ATTRIBUTE, 'vec3').xy
+      : attribute<'vec2'>(FIN_ATTRIBUTE, 'vec2');
+    // A shrimp's limbs are its translucent membranes; its abdomen weight is the tail curl's.
+    const membrane = walker
+      ? step(LEG_PART_ID - 0.5, fin.y).mul(step(fin.y, 8.5))
+      : step(0.5, fin.y);
+    const finAmount = smoothstep(0.08, 0.5, fin.x).mul(membrane);
 
     const sample = source.map !== null ? texture(source.map) : vec4(1);
     const base = sample.rgb.mul(color(source.color)).mul(tint);
@@ -312,20 +362,27 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
       ? textureAlpha.greaterThan(authoredCutoff ? source.alphaTest : SILHOUETTE_ALPHA)
       : null;
     const translucent = features.fins !== 'cutout' && (hasAlpha || profile.finTransmission > 0);
-    // Source alpha is only trusted as coverage on the body, where BLEND models often carry
-    // half-transparent skin texels; the membrane look comes from the fin mask.
+    // BLEND models often carry half-transparent skin texels, so the body's source alpha is only a
+    // silhouette. A fish's membranes keep their painted alpha from the root out, where the fin mask
+    // is still near 0, and the fin mask thins it further towards the edge. A shrimp's alpha is one
+    // flat value over the whole shell, so its limbs only thin by the mask: a solid stipple of a
+    // flat alpha would dust every leg with holes from hip to tip.
     const bodyAlpha = smoothstep(0.02, 0.1, textureAlpha);
-    const finAlpha = textureAlpha.mul(
+    const finAlpha = (walker ? bodyAlpha : textureAlpha).mul(
       float(1).sub(finAmount.mul(profile.finTransmission * (1 - FIN_OPACITY_FLOOR))),
     );
-    const coverage = mix(bodyAlpha, finAlpha, finAmount);
+    const coverage = mix(bodyAlpha, finAlpha, membrane);
     this.alphaToCoverage = translucent && features.fins === 'coverage';
-    this.opacityNode = this.alphaToCoverage ? ditheredCoverage(coverage, seed) : null;
+    // Every species with see-through membranes needs the dither, or its fins band into
+    // COVERAGE_SAMPLES steps; the body is opaque or cut out, so it is left undithered.
+    this.opacityNode = this.alphaToCoverage
+      ? mix(coverage, ditheredCoverage(coverage, seed), membrane)
+      : null;
     if (translucent && features.fins === 'stochastic') {
       this.maskNode = screenDoor(coverage, seed);
     } else if (this.alphaToCoverage && hasAlpha && !authoredCutoff) {
-      // Coverage fades a membrane rim out by itself; the skin keeps its hard cut.
-      this.maskNode = textureAlpha.greaterThan(finAmount.oneMinus().mul(SILHOUETTE_ALPHA));
+      // Coverage fades a membrane out by itself; the skin keeps its hard cut.
+      this.maskNode = textureAlpha.greaterThan(membrane.oneMinus().mul(SILHOUETTE_ALPHA));
     } else {
       this.maskNode = silhouette;
     }
