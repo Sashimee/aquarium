@@ -888,9 +888,6 @@ export class FishSystem {
 
   /** Until this runs, a worker that fails while starting fails `create` instead. */
   private reportSimErrors(): void {
-    this.worker.addEventListener('error', (event) =>
-      this.report(`Fish sim worker failed: ${event.message}`),
-    );
     this.sim.onError((message) => this.report(`Fish sim: ${message}`));
   }
 
