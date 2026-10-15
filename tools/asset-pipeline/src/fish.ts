@@ -304,6 +304,7 @@ export async function buildSourceFish(recipe: FishRecipe, ctx: FishContext): Pro
           image,
           parts.filter((p) => p.material === m.getName()),
           recipe.recolour.islandBleedPx,
+          `${recipe.id}/${m.getName()}`,
         );
       if (recipe.recolour.spots) image = spotImage(image, recipe.recolour.spots);
       if (recipe.recolour.worldSpots)

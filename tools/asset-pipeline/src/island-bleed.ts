@@ -11,17 +11,27 @@ interface Level {
 
 const at = (values: ArrayLike<number>, i: number): number => values[i] ?? 0;
 
-function interiorMask(parts: Part[], width: number, height: number, px: number): Uint8Array {
+function interiorMask(parts: Part[], width: number, height: number, px: number): Uint8Array | null {
   const positions = coveredTexelPositions(parts, width, height);
   const count = width * height;
+  const covered = Uint8Array.from({ length: count }, (_, i) =>
+    Number.isNaN(at(positions, i * 3)) ? 0 : 1,
+  );
+  if (!covered.includes(1)) return null;
+
   const depth = new Int32Array(count).fill(-1);
   let frontier: number[] = [];
   for (let i = 0; i < count; i++)
-    if (Number.isNaN(at(positions, i * 3))) {
+    if (!covered[i]) {
       depth[i] = 0;
       frontier.push(i);
     }
-  for (let d = 1; frontier.length > 0 && d <= px; d++) {
+  const onImageEdge = (i: number): boolean => {
+    const x = i % width;
+    const y = Math.floor(i / width);
+    return x === 0 || y === 0 || x === width - 1 || y === height - 1;
+  };
+  for (let d = 1; ; d++) {
     const next: number[] = [];
     for (const i of frontier) {
       const x = i % width;
@@ -37,9 +47,49 @@ function interiorMask(parts: Part[], width: number, height: number, px: number):
         next.push(n);
       }
     }
+    if (d === 1)
+      for (let i = 0; i < count; i++)
+        if (at(depth, i) < 0 && onImageEdge(i)) {
+          depth[i] = 1;
+          next.push(i);
+        }
+    if (next.length === 0) break;
     frontier = next;
   }
-  return Uint8Array.from(depth, (d) => (d < 0 ? 1 : 0));
+
+  const label = new Int32Array(count).fill(-1);
+  const deepest: number[] = [];
+  for (let seed = 0; seed < count; seed++) {
+    if (!covered[seed] || at(label, seed) >= 0) continue;
+    const id = deepest.length;
+    let max = 0;
+    label[seed] = id;
+    const stack = [seed];
+    while (stack.length > 0) {
+      const i = stack.pop() ?? 0;
+      max = Math.max(max, at(depth, i));
+      const x = i % width;
+      for (const [step, blocked] of [
+        [1, x === width - 1],
+        [-1, x === 0],
+        [width, false],
+        [-width, false],
+      ] as const) {
+        const n = i + step;
+        if (blocked || n < 0 || n >= count || !covered[n] || at(label, n) >= 0) continue;
+        label[n] = id;
+        stack.push(n);
+      }
+    }
+    deepest.push(max);
+  }
+
+  return Uint8Array.from({ length: count }, (_, i) => {
+    if (!covered[i]) return 0;
+    const reach = at(deepest, at(label, i));
+    const margin = reach <= px ? 0 : px;
+    return at(depth, i) > margin ? 1 : 0;
+  });
 }
 
 function downsample(level: Level): Level {
@@ -98,12 +148,16 @@ function fillFrom(level: Level, coarse: Level): void {
  * dark smear. Simplification pulls vertices across island borders, so triangles stretch over the
  * gutter and show it as a dark crack. Texels within `px` of an island border, and the whole gutter,
  * are replaced by a smooth push-pull fill of the colours deeper inside, so a stretched triangle
- * blends between the two islands instead of cutting through black.
+ * blends between the two islands instead of cutting through black. The image edge counts as an island
+ * border, and an island no wider than twice `px` keeps its own colour.
  */
-export function bleedIslandEdges(image: Rgba, parts: Part[], px: number): Rgba {
+export function bleedIslandEdges(image: Rgba, parts: Part[], px: number, label: string): Rgba {
   const { width, height, data } = image;
   const valid = interiorMask(parts, width, height, px);
-  if (!valid.includes(1)) return image;
+  if (!valid)
+    throw new Error(
+      `${label}: no UV triangle covers any texel, so there is nothing to bleed; check that the material has geometry and UVs inside 0..1`,
+    );
   const base: Level = {
     width,
     height,
