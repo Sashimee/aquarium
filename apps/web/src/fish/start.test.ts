@@ -62,6 +62,10 @@ class FakeFishSystem {
   noriGrazers(): string[] {
     return [];
   }
+  species: readonly string[] = ['angelfish', 'neon-tetra'];
+  swimmingSpecies(): readonly string[] {
+    return this.species;
+  }
   canGrazeAt(): Promise<boolean> {
     return Promise.resolve(true);
   }
@@ -256,6 +260,18 @@ describe('startFish', () => {
     expect(fish.demoBiomes).toEqual(['reef']);
     handle.setDemoBiome('freshwater');
     expect(fish.demoBiomes).toEqual(['reef', 'freshwater']);
+  });
+
+  it('reports no swimming species until the fish are up, then theirs', async () => {
+    const fish = new FakeFishSystem();
+    const pending = deferred<FakeFishSystem>();
+    const { handle } = setup(pending.promise);
+    expect(handle.swimmingSpecies()).toBeNull();
+    pending.resolve(fish);
+    await flush();
+    expect(handle.swimmingSpecies()).toBe(fish.species);
+    handle.stop();
+    expect(handle.swimmingSpecies()).toBeNull();
   });
 
   it('does not touch the demo stock when the biome never changed', async () => {
