@@ -1,8 +1,8 @@
 {
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; every texture has both files.",
-  "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Anemone tentacle sway is \"_sway\" (0 base, 1 tip).",
-  "totalBytes": 57309467,
+  "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body and eyes, 6 leg, 7 antenna, 8 pleopod, 9 abdomen and tail fan) and _fin_mask (weight along the limb, 0 root to 1 tip) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x).",
+  "totalBytes": 57561983,
   "assets": [
     {
       "id": "angelfish",
@@ -1533,6 +1533,268 @@
           }
         },
         "debugRender": "debug/yellow-tang.png"
+      }
+    },
+    {
+      "id": "cherry-shrimp",
+      "kind": "shrimp",
+      "species": "cherry-shrimp",
+      "origin": "procedural",
+      "sources": [],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "generated procedurally: lofted carapace and six-segment abdomen, five walking leg pairs, five pleopod pairs, tail fan, eye stalks, antennae and antennules, deterministic seed",
+        "oriented to +Z forward / +Y up, origin at the body centre of mass, scaled so rostrum to telson tip is the standard length",
+        "_FIN_ID part ids 0 body and eyes, 6 leg, 7 antenna, 8 pleopod, 9 abdomen and tail fan; _FIN_MASK weight along the limb; _LEG limb index",
+        "colour atlas painted procedurally; palette and layout matched by eye to the reference photos, no photo pixels shipped",
+        "Neocaridina davidi: stout carapace, arched abdomen; translucent red palette matched by eye to wm-cherry-dagostino-1"
+      ],
+      "bounds": {
+        "min": [
+          -0.014526,
+          -0.003766,
+          -0.016768
+        ],
+        "max": [
+          0.014526,
+          0.00325,
+          0.020742
+        ]
+      },
+      "lods": [
+        {
+          "file": "shrimp/cherry-shrimp/lod0.glb",
+          "bytes": 28428,
+          "sha256": "23988a7e753b31a292042db968102f3d8849a4dfd995d994a1ade02daea3ca82",
+          "triangles": 2184,
+          "vertices": 1303
+        },
+        {
+          "file": "shrimp/cherry-shrimp/lod1.glb",
+          "bytes": 15116,
+          "sha256": "a4da8f6c465bdf73eb2a640600be53c5412852fa51930f651e1a04cf5dbe9a26",
+          "triangles": 874,
+          "vertices": 562
+        },
+        {
+          "file": "shrimp/cherry-shrimp/lod2.glb",
+          "bytes": 8768,
+          "sha256": "c1e1198837bc18a339c4950031c1bcb5d4b5137db1b1b49088d58773d8b2257a",
+          "triangles": 320,
+          "vertices": 230
+        }
+      ],
+      "textures": [
+        {
+          "name": "cherry-shrimp_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "shrimp/cherry-shrimp/textures/cherry-shrimp_basecolor_1k.ktx2",
+              "bytes": 50332,
+              "sha256": "7398576dcaeac3be9040e0e98e54aa2b64d3582066fa290e6f6f01f035b1ceef",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "shrimp/cherry-shrimp/textures/cherry-shrimp_basecolor_2k.ktx2",
+              "bytes": 50332,
+              "sha256": "7398576dcaeac3be9040e0e98e54aa2b64d3582066fa290e6f6f01f035b1ceef",
+              "size": 1024,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "shrimp/cherry-shrimp/lod0.glb",
+          "bytes": 28428,
+          "sha256": "23988a7e753b31a292042db968102f3d8849a4dfd995d994a1ade02daea3ca82"
+        },
+        {
+          "file": "shrimp/cherry-shrimp/lod1.glb",
+          "bytes": 15116,
+          "sha256": "a4da8f6c465bdf73eb2a640600be53c5412852fa51930f651e1a04cf5dbe9a26"
+        },
+        {
+          "file": "shrimp/cherry-shrimp/lod2.glb",
+          "bytes": 8768,
+          "sha256": "c1e1198837bc18a339c4950031c1bcb5d4b5137db1b1b49088d58773d8b2257a"
+        },
+        {
+          "file": "shrimp/cherry-shrimp/textures/cherry-shrimp_basecolor_1k.ktx2",
+          "bytes": 50332,
+          "sha256": "7398576dcaeac3be9040e0e98e54aa2b64d3582066fa290e6f6f01f035b1ceef"
+        },
+        {
+          "file": "shrimp/cherry-shrimp/textures/cherry-shrimp_basecolor_2k.ktx2",
+          "bytes": 50332,
+          "sha256": "7398576dcaeac3be9040e0e98e54aa2b64d3582066fa290e6f6f01f035b1ceef"
+        }
+      ],
+      "shrimp": {
+        "standardLengthM": 0.03,
+        "lengthSource": "species-json",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "standoffM": 0.0037021569442003965,
+        "attributes": {
+          "partId": "_FIN_ID",
+          "weight": "_FIN_MASK",
+          "limb": "_LEG"
+        },
+        "partIds": {
+          "body": 0,
+          "leg": 6,
+          "antenna": 7,
+          "pleopod": 8,
+          "abdomen": 9
+        },
+        "legPairs": 5,
+        "pleopodPairs": 5,
+        "abdomenHinge": {
+          "y": 0.00041273255922026923,
+          "z": 0.0033315442726057675
+        },
+        "telsonZ": -0.01676845572739423,
+        "debugRender": "debug/cherry-shrimp.png",
+        "debugPartsRender": "debug/cherry-shrimp-parts.png"
+      }
+    },
+    {
+      "id": "cleaner-shrimp",
+      "kind": "shrimp",
+      "species": "cleaner-shrimp",
+      "origin": "procedural",
+      "sources": [],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "generated procedurally: lofted carapace and six-segment abdomen, five walking leg pairs, five pleopod pairs, tail fan, eye stalks, antennae and antennules, deterministic seed",
+        "oriented to +Z forward / +Y up, origin at the body centre of mass, scaled so rostrum to telson tip is the standard length",
+        "_FIN_ID part ids 0 body and eyes, 6 leg, 7 antenna, 8 pleopod, 9 abdomen and tail fan; _FIN_MASK weight along the limb; _LEG limb index",
+        "colour atlas painted procedurally; palette and layout matched by eye to the reference photos, no photo pixels shipped",
+        "Lysmata amboinensis: slender body, red dorsal band split by a white stripe, white antennae, red tail fan with white rim; palette and layout matched by eye to wm-cleaner-schofield and wm-cleaner-huffman"
+      ],
+      "bounds": {
+        "min": [
+          -0.039383,
+          -0.006347,
+          -0.05257
+        ],
+        "max": [
+          0.039383,
+          0.003577,
+          0.037834
+        ]
+      },
+      "lods": [
+        {
+          "file": "shrimp/cleaner-shrimp/lod0.glb",
+          "bytes": 28520,
+          "sha256": "75421ba3aa58d5e11afe1b537ed4a6e6964c9c57e15ca6e3659f2e71bd34118c",
+          "triangles": 2184,
+          "vertices": 1303
+        },
+        {
+          "file": "shrimp/cleaner-shrimp/lod1.glb",
+          "bytes": 15316,
+          "sha256": "0e4f4cbf913610f90d4aeb76c51f845448a52582a481c7758baacd0c9df90077",
+          "triangles": 874,
+          "vertices": 566
+        },
+        {
+          "file": "shrimp/cleaner-shrimp/lod2.glb",
+          "bytes": 8616,
+          "sha256": "d96b5b97881cf7e529637d9427ab5debdc2118c305d2cc124bfed12f72a0c2ac",
+          "triangles": 327,
+          "vertices": 226
+        }
+      ],
+      "textures": [
+        {
+          "name": "cleaner-shrimp_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "shrimp/cleaner-shrimp/textures/cleaner-shrimp_basecolor_1k.ktx2",
+              "bytes": 23544,
+              "sha256": "548440618d1a0e8323fc0a433a5007ab490374663690b793f3c65108cb81b642",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "shrimp/cleaner-shrimp/textures/cleaner-shrimp_basecolor_2k.ktx2",
+              "bytes": 23544,
+              "sha256": "548440618d1a0e8323fc0a433a5007ab490374663690b793f3c65108cb81b642",
+              "size": 1024,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "shrimp/cleaner-shrimp/lod0.glb",
+          "bytes": 28520,
+          "sha256": "75421ba3aa58d5e11afe1b537ed4a6e6964c9c57e15ca6e3659f2e71bd34118c"
+        },
+        {
+          "file": "shrimp/cleaner-shrimp/lod1.glb",
+          "bytes": 15316,
+          "sha256": "0e4f4cbf913610f90d4aeb76c51f845448a52582a481c7758baacd0c9df90077"
+        },
+        {
+          "file": "shrimp/cleaner-shrimp/lod2.glb",
+          "bytes": 8616,
+          "sha256": "d96b5b97881cf7e529637d9427ab5debdc2118c305d2cc124bfed12f72a0c2ac"
+        },
+        {
+          "file": "shrimp/cleaner-shrimp/textures/cleaner-shrimp_basecolor_1k.ktx2",
+          "bytes": 23544,
+          "sha256": "548440618d1a0e8323fc0a433a5007ab490374663690b793f3c65108cb81b642"
+        },
+        {
+          "file": "shrimp/cleaner-shrimp/textures/cleaner-shrimp_basecolor_2k.ktx2",
+          "bytes": 23544,
+          "sha256": "548440618d1a0e8323fc0a433a5007ab490374663690b793f3c65108cb81b642"
+        }
+      ],
+      "shrimp": {
+        "standardLengthM": 0.045,
+        "lengthSource": "species-json",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "standoffM": 0.0063468292355537415,
+        "attributes": {
+          "partId": "_FIN_ID",
+          "weight": "_FIN_MASK",
+          "limb": "_LEG"
+        },
+        "partIds": {
+          "body": 0,
+          "leg": 6,
+          "antenna": 7,
+          "pleopod": 8,
+          "abdomen": 9
+        },
+        "legPairs": 5,
+        "pleopodPairs": 5,
+        "abdomenHinge": {
+          "y": 0.00011271723112212626,
+          "z": 0.005868904313847503
+        },
+        "telsonZ": -0.025181095686152493,
+        "debugRender": "debug/cleaner-shrimp.png",
+        "debugPartsRender": "debug/cleaner-shrimp-parts.png"
       }
     },
     {

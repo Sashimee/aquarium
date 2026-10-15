@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { readyCodecs } from './glb.ts';
 import { buildSourceFish, type FishContext } from './fish.ts';
 import { buildAnemone } from './anemone.ts';
+import { SHRIMP_RECIPES, buildShrimp } from './shrimp.ts';
 import { buildEnvironment, buildHdri, buildSubstrate } from './environment.ts';
 import { LOFT_FISH_RECIPES, buildLoftFish } from './loft-fish.ts';
 import {
@@ -29,6 +30,7 @@ interface Task {
 
 const KIND_ORDER: OutputAsset['kind'][] = [
   'fish',
+  'shrimp',
   'anemone',
   'plant',
   'coral',
@@ -45,6 +47,11 @@ function tasks(): Task[] {
       kind: 'fish' as const,
       id: recipe.id,
       run: (ctx: FishContext) => buildSourceFish(recipe, ctx),
+    })),
+    ...SHRIMP_RECIPES.map((recipe) => ({
+      kind: 'shrimp' as const,
+      id: recipe.id,
+      run: (ctx: FishContext) => buildShrimp(recipe, ctx),
     })),
     { kind: 'anemone' as const, id: 'host-anemone', run: (ctx: FishContext) => buildAnemone(ctx) },
     ...ENVIRONMENT_RECIPES.map((recipe) => ({

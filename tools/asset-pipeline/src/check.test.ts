@@ -7,6 +7,7 @@ import { packGlb, sha256 } from './glb.ts';
 import {
   FIN_ID_ATTRIBUTE,
   FIN_MASK_ATTRIBUTE,
+  LEG_ATTRIBUTE,
   type AssetIndex,
   type OutputAsset,
 } from './index-schema.ts';
@@ -154,6 +155,8 @@ describe('checkAssets', () => {
     mkdirSync(assetsDir, { recursive: true });
     mkdirSync(join(root, 'tools', 'asset-pipeline', 'debug'), { recursive: true });
     writeFileSync(join(root, 'tools', 'asset-pipeline', 'debug', 'tetra.png'), 'png');
+    writeFileSync(join(root, 'tools', 'asset-pipeline', 'debug', 'prawn.png'), 'png');
+    writeFileSync(join(root, 'tools', 'asset-pipeline', 'debug', 'prawn-parts.png'), 'png');
   });
 
   afterEach(() => rmSync(root, { recursive: true, force: true }));
@@ -217,6 +220,41 @@ describe('checkAssets', () => {
     };
   }
 
+  function shrimpAsset(attributes?: string[]): OutputAsset {
+    const attrs = attributes ?? ['POSITION', FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE, LEG_ATTRIBUTE];
+    const lods = [300, 150, 50].map((triangles, i) => ({
+      ...put(`shrimp/prawn/lod${i}.glb`, glb(attrs)),
+      triangles,
+      vertices: triangles * 2,
+    }));
+    return {
+      id: 'prawn',
+      kind: 'shrimp',
+      origin: 'procedural',
+      sources: [],
+      licence: 'CC0-1.0',
+      modifications: [],
+      lods,
+      textures: [],
+      files: lods.map(({ file, bytes, sha256: digest }) => ({ file, bytes, sha256: digest })),
+      shrimp: {
+        standardLengthM: 0.03,
+        lengthSource: 'recipe',
+        axes: { forward: '+z', up: '+y' },
+        origin: 'centre-of-mass',
+        standoffM: 0.004,
+        attributes: { partId: FIN_ID_ATTRIBUTE, weight: FIN_MASK_ATTRIBUTE, limb: LEG_ATTRIBUTE },
+        partIds: { body: 0, leg: 6, antenna: 7, pleopod: 8, abdomen: 9 },
+        legPairs: 5,
+        pleopodPairs: 5,
+        abdomenHinge: { y: 0, z: 0.003 },
+        telsonZ: -0.015,
+        debugRender: 'debug/prawn.png',
+        debugPartsRender: 'debug/prawn-parts.png',
+      },
+    };
+  }
+
   function inputFor(
     assets: OutputAsset[],
     manifest = manifestOf(manifestAsset()),
@@ -231,6 +269,20 @@ describe('checkAssets', () => {
     };
     return { manifest, credits, index, assetsDir, repoRoot: root };
   }
+
+  it('passes a complete shrimp and fails one without its limb attribute, shrimp block or renders', () => {
+    expect(checkAssets(inputFor([shrimpAsset()]))).toEqual([]);
+    const noLeg = shrimpAsset(['POSITION', FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE]);
+    expect(checkAssets(inputFor([noLeg])).join('\n')).toContain(
+      `lacks vertex attribute ${LEG_ATTRIBUTE}`,
+    );
+    const bare = { ...shrimpAsset(), shrimp: undefined };
+    expect(checkAssets(inputFor([bare])).join('\n')).toContain('has no shrimp block');
+    rmSync(join(root, 'tools', 'asset-pipeline', 'debug', 'prawn-parts.png'));
+    expect(checkAssets(inputFor([shrimpAsset()])).join('\n')).toContain(
+      'debug render debug/prawn-parts.png is missing',
+    );
+  });
 
   it('passes a complete fish', () => {
     expect(checkAssets(inputFor([fishAsset()]))).toEqual([]);

@@ -111,7 +111,10 @@ export interface EmitInput {
   id: string;
   built: BuiltDocument;
   plan: LodPlan;
-  meta: Pick<OutputAsset, 'species' | 'origin' | 'sources' | 'licence' | 'modifications' | 'fish'>;
+  meta: Pick<
+    OutputAsset,
+    'species' | 'origin' | 'sources' | 'licence' | 'modifications' | 'fish' | 'shrimp'
+  >;
 }
 
 function boundsOfDoc(doc: Document): {
@@ -229,5 +232,6 @@ export async function emitAsset(input: EmitInput): Promise<OutputAsset> {
     textures: textureInfo,
     files,
     ...(input.meta.fish ? { fish: input.meta.fish } : {}),
+    ...(input.meta.shrimp ? { shrimp: input.meta.shrimp } : {}),
   };
 }

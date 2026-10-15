@@ -52,10 +52,7 @@ function projectView(view: View): {
 
 function sample(image: TextureImage, u: number, v: number): [number, number, number] {
   const x = Math.min(image.width - 1, Math.max(0, Math.floor((u - Math.floor(u)) * image.width)));
-  const y = Math.min(
-    image.height - 1,
-    Math.max(0, Math.floor((1 - (v - Math.floor(v))) * image.height)),
-  );
+  const y = Math.min(image.height - 1, Math.max(0, Math.floor((v - Math.floor(v)) * image.height)));
   const i = (y * image.width + x) * image.channels;
   return [image.data[i]! / 255, image.data[i + 1]! / 255, image.data[i + 2]! / 255];
 }
