@@ -58,8 +58,12 @@ const speciesFileSchema = speciesSchema.partial({
 });
 
 /** Standard length in metres from content/species/<species>.json, or null while the file has no locomotion block yet. */
-export function speciesLengthM(repoRoot: string, species: string): number | null {
-  const path = join(repoRoot, 'content', 'species', `${species}.json`);
+export function speciesLengthM(
+  repoRoot: string,
+  species: string,
+  directory = 'species',
+): number | null {
+  const path = join(repoRoot, 'content', directory, `${species}.json`);
   if (!existsSync(path)) return null;
   const parsed = speciesFileSchema.safeParse(JSON.parse(readFileSync(path, 'utf8')));
   if (!parsed.success)

@@ -104,7 +104,12 @@ function filesToFetch(
   // rendering and the last LOD for collision geometry.
   const first = asset.lods[0];
   const last = asset.lods.at(-1);
-  const lods = asset.kind === 'fish' ? asset.lods : first && last ? [first, last] : [];
+  const lods =
+    asset.kind === 'fish' || asset.kind === 'shrimp'
+      ? asset.lods
+      : first && last
+        ? [first, last]
+        : [];
   for (const lod of lods) add(lod.file);
   if (only !== undefined) add(only);
   for (const texture of asset.textures) for (const slot of slots) add(texture.variants[slot].file);
@@ -142,7 +147,7 @@ export function presetDownloadBytes(
   }
   for (const asset of input.index.assets) {
     if (
-      asset.kind === 'fish' &&
+      (asset.kind === 'fish' || asset.kind === 'shrimp') &&
       asset.species &&
       input.speciesBiome.get(asset.species) === preset.biome
     )

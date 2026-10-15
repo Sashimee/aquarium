@@ -3,10 +3,12 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, posix, relative, sep } from 'node:path';
 import { speciesLengthM } from './fish.ts';
 import { FISH_RECIPES } from './recipes.ts';
+import { shrimpLength } from './shrimp.ts';
 import { budgetProblems, loadBudgetContent, type BudgetInput } from './budgets.ts';
 import {
   FIN_ID_ATTRIBUTE,
   FIN_MASK_ATTRIBUTE,
+  LEG_ATTRIBUTE,
   LOD_COUNT,
   assetIndexSchema,
   type AssetIndex,
@@ -125,6 +127,12 @@ function safeDecodeUri(uri: string): string {
 
 const SHIPPED_EXTENSIONS: readonly string[] = ['.glb', '.ktx2'];
 
+function requiredAttributes(kind: OutputAsset['kind']): string[] {
+  if (kind === 'fish') return [FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE];
+  if (kind === 'shrimp') return [FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE, LEG_ATTRIBUTE];
+  return [];
+}
+
 function lodProblems(asset: OutputAsset, assetsDir: string, problems: string[]): void {
   const at = `${asset.kind} ${asset.id}`;
   const owned = new Set(asset.files.map((f) => f.file));
@@ -156,7 +164,7 @@ function lodProblems(asset: OutputAsset, assetsDir: string, problems: string[]):
           );
         }
       }
-      for (const attr of asset.kind === 'fish' ? [FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE] : []) {
+      for (const attr of requiredAttributes(asset.kind)) {
         if (primitives.some((p) => p.attributes[attr] === undefined)) {
           problems.push(`${at}: ${lod.file} lacks vertex attribute ${attr}`);
         }
@@ -202,6 +210,29 @@ function fishProblems(asset: OutputAsset, repoRoot: string, problems: string[]):
   }
 }
 
+function shrimpProblems(asset: OutputAsset, repoRoot: string, problems: string[]): void {
+  const at = `shrimp ${asset.id}`;
+  if (!asset.shrimp) {
+    problems.push(`${at}: index entry has no shrimp block (part ids, rig, standard length)`);
+    return;
+  }
+  for (const render of [asset.shrimp.debugRender, asset.shrimp.debugPartsRender]) {
+    if (!existsSync(join(repoRoot, 'tools', 'asset-pipeline', render)))
+      problems.push(`${at}: debug render ${render} is missing`);
+  }
+  const expected = asset.species ? shrimpLength(repoRoot, asset.species) : null;
+  if (expected === null) return;
+  if (asset.shrimp.lengthSource !== 'species-json') {
+    problems.push(
+      `${at}: built with lengthSource ${asset.shrimp.lengthSource} but the species JSON has bodyLengthM ${expected.metres} (rebuild with pnpm build:assets)`,
+    );
+  } else if (Math.abs(asset.shrimp.standardLengthM - expected.metres) > 1e-9) {
+    problems.push(
+      `${at}: standardLengthM ${asset.shrimp.standardLengthM} differs from the species JSON bodyLengthM ${expected.metres} (rebuild with pnpm build:assets)`,
+    );
+  }
+}
+
 export function checkAssets(input: CheckInput): string[] {
   const { manifest, credits, index, assetsDir, repoRoot } = input;
   const problems = validateManifest(manifest, credits);
@@ -217,6 +248,7 @@ export function checkAssets(input: CheckInput): string[] {
     effectiveLicenceProblems(asset, byId, problems);
     if (!TEXTURE_ONLY_KINDS.includes(asset.kind)) lodProblems(asset, assetsDir, problems);
     if (asset.kind === 'fish') fishProblems(asset, repoRoot, problems);
+    if (asset.kind === 'shrimp') shrimpProblems(asset, repoRoot, problems);
 
     for (const file of asset.files) {
       if (!file.file.startsWith(`${asset.kind}/${asset.id}/`)) {

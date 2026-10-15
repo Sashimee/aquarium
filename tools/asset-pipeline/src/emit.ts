@@ -1,4 +1,11 @@
-import { Accessor, Document, Logger, type Material, type Texture } from '@gltf-transform/core';
+import {
+  Accessor,
+  Document,
+  Logger,
+  type Material,
+  type Primitive,
+  type Texture,
+} from '@gltf-transform/core';
 import { cloneDocument, prune } from '@gltf-transform/functions';
 import {
   bindKtx2Textures,
@@ -16,6 +23,8 @@ export interface LodPlan {
   /** Triangle ratios for LOD0..LOD2 against the welded input. */
   ratios: [number, number, number];
   minTriangles: number;
+  /** Runs on each primitive of LOD `level` before simplification. */
+  prepare?: (prim: Primitive, level: number) => void;
 }
 
 export interface TextureEntry {
@@ -111,7 +120,10 @@ export interface EmitInput {
   id: string;
   built: BuiltDocument;
   plan: LodPlan;
-  meta: Pick<OutputAsset, 'species' | 'origin' | 'sources' | 'licence' | 'modifications' | 'fish'>;
+  meta: Pick<
+    OutputAsset,
+    'species' | 'origin' | 'sources' | 'licence' | 'modifications' | 'fish' | 'shrimp'
+  >;
 }
 
 function boundsOfDoc(doc: Document): {
@@ -185,6 +197,7 @@ export async function emitAsset(input: EmitInput): Promise<OutputAsset> {
     const doc = cloneDocument(built.doc).setLogger(new Logger(Logger.Verbosity.WARN));
     for (const mesh of doc.getRoot().listMeshes())
       for (const prim of mesh.listPrimitives()) {
+        plan.prepare?.(prim, level);
         simplifyPrimitive(prim, { ratio: plan.ratios[level]!, minTriangles: plan.minTriangles });
       }
     const textureByName = new Map(
@@ -229,5 +242,6 @@ export async function emitAsset(input: EmitInput): Promise<OutputAsset> {
     textures: textureInfo,
     files,
     ...(input.meta.fish ? { fish: input.meta.fish } : {}),
+    ...(input.meta.shrimp ? { shrimp: input.meta.shrimp } : {}),
   };
 }
