@@ -48,6 +48,10 @@ export interface FishSimBridge {
   onAte(listener: (events: readonly FishBite[]) => void): () => void;
   /** The nearest swimming fish along `ray`, as a position to follow; it reads null once gone. */
   pickFish(ray: PickRay): (() => FishPoint | null) | null;
+  /** The species in the tank that eat nori. */
+  noriGrazers(): string[];
+  /** Whether a fish of `species` could feed on an item at `position`; rejects while the sim is not up. */
+  canGrazeAt(species: string, position: Point3): Promise<boolean>;
   /** Some swimming fish to follow, or null while there are none. */
   anyFish(): (() => FishPoint | null) | null;
   /** The net tool tapped along `ray`; emits `net:tap` when it hits a dead fish. */
@@ -231,6 +235,9 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
       netTap: (ray) => ready?.netTap(ray),
       pickFish: (ray) => ready?.pickFish(ray) ?? null,
       anyFish: () => ready?.anyFish() ?? null,
+      noriGrazers: () => ready?.noriGrazers() ?? [],
+      canGrazeAt: (species, position) =>
+        ready ? ready.canGrazeAt(species, position) : Promise.reject(new Error('No fish yet')),
     },
     setAnchors(next) {
       anchors = next;

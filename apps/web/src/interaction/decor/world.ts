@@ -5,7 +5,14 @@ import type { InteractionEvents } from '../events';
 import type { FeederLayer } from './feederLayer';
 import { collidersFor } from './colliders';
 import { layoutKey } from './key';
-import { composeLayout, numberPieces, sanitizeLayout, splitLayout, type Piece } from './layout';
+import {
+  composeLayout,
+  numberPieces,
+  sanitizeLayout,
+  splitLayout,
+  type Piece,
+  type PlantFit,
+} from './layout';
 import { FEEDER_SPEC, specsFromCatalog, type DecorSpec } from './spec';
 
 /** What the decor layer needs from the tank scene; `TankScene` satisfies it. */
@@ -16,6 +23,8 @@ export interface DecorScenePort {
   /** Anemones and procedural corals, which the player cannot move. */
   readonly fixedDecor: readonly DecorItem[];
   catalogEntries(): Iterable<CatalogEntry>;
+  /** Water surface height, so saved plants taller than the water can be shrunk on load. */
+  readonly waterTop?: number;
   groundHeight(x: number, z: number): number;
   setHardDecor(items: readonly DecorItem[]): Promise<void>;
   moveHardDecor(index: number, item: DecorItem): void;
@@ -69,7 +78,7 @@ export class DecorWorld {
   /** Shows a saved layout; a tank that was never edited keeps the preset, while an emptied one shows bare. */
   showSaved(layout: readonly DecorItem[], edited: boolean): Promise<void> {
     if (!edited) return this.showPreset();
-    const clean = sanitizeLayout(layout, this.scene.biome);
+    const clean = sanitizeLayout(layout, this.scene.biome, this.fit());
     const n = clean.dropped;
     this.notice =
       n === 0
@@ -77,6 +86,12 @@ export class DecorWorld {
         : `${n} saved ${n === 1 ? 'piece does' : 'pieces do'} not fit this tank and ${n === 1 ? 'was' : 'were'} removed. Your next change saves the cleaned layout.`;
     const { pieces } = splitLayout(clean.layout, this.specs);
     return this.show(numberPieces(pieces));
+  }
+
+  private fit(): PlantFit | undefined {
+    const { waterTop } = this.scene;
+    if (waterTop === undefined) return undefined;
+    return { specs: this.specs, waterTop };
   }
 
   showPreset(): Promise<void> {

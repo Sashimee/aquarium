@@ -196,12 +196,24 @@ describe('plants under the surface', () => {
     expect(check(fern, item('java-fern', 0, 0, { scale: 1.5 }, 0.06), [], limits)).toBe('too-tall');
   });
 
-  it('lets plants and rocks share ground', () => {
+  it('lets plants and rocks stand side by side', () => {
     const among = [{ spec: rock, item: item('boulder-01', 0, 0) }];
-    expect(check(fern, item('java-fern', 0, 0), among, LIMITS)).toBeNull();
-    const leaves = [{ spec: fern, item: item('java-fern', 0, 0) }];
+    expect(check(fern, item('java-fern', 0.3, 0), among, LIMITS)).toBeNull();
+    const leaves = [{ spec: fern, item: item('java-fern', 0.3, 0) }];
     expect(check(rock, item('boulder-01', 0, 0), leaves, LIMITS)).toBeNull();
+  });
+
+  it('refuses a plant whose stem is inside a rock, and a rock over a stem', () => {
+    const among = [{ spec: rock, item: item('boulder-01', 0, 0) }];
+    expect(check(fern, item('java-fern', 0, 0), among, LIMITS)).toBe('overlap');
+    const leaves = [{ spec: fern, item: item('java-fern', 0, 0) }];
+    expect(check(rock, item('boulder-01', 0, 0), leaves, LIMITS)).toBe('overlap');
     expect(check(rock, item('boulder-01', 0, 0), among, LIMITS)).toBe('overlap');
+  });
+
+  it('lets two plants share ground', () => {
+    const leaves = [{ spec: fern, item: item('java-fern', 0, 0) }];
+    expect(check(fern, item('java-fern', 0, 0), leaves, LIMITS)).toBeNull();
   });
 
   it('does not limit rocks or tanks without a water level', () => {
