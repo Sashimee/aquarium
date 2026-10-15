@@ -102,6 +102,7 @@ export const passkey = pgTable(
 );
 
 export const biomeEnum = pgEnum('biome', ['freshwater', 'reef']);
+export const fishSexEnum = pgEnum('fish_sex', ['male', 'female']);
 export const fishStatusEnum = pgEnum('fish_status', ['alive', 'dead']);
 export const causeOfDeathEnum = pgEnum('cause_of_death', [
   'starvation',
@@ -149,6 +150,10 @@ export const fish = pgTable(
       .references(() => tanks.id, { onDelete: 'cascade' }),
     species: text('species').notNull(),
     name: text('name').notNull(),
+    // Assigned for every species, 50/50, even those with no male model; the client decides what it
+    // draws. The default only keeps a still-running old container's inserts working during a
+    // rolling deploy; the API always sets sex itself.
+    sex: fishSexEnum('sex').notNull().default('female'),
     bornAt: timestamptz('born_at').notNull().defaultNow(),
     size: doublePrecision('size').notNull(),
     hunger: doublePrecision('hunger').notNull().default(0),

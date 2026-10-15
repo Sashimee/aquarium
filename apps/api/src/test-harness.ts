@@ -16,6 +16,8 @@ import type { CareLimits } from './tanks.ts';
 export const TEST_SECRET = 'testsecrettestsecrettestsecret0123456789';
 export const APP_ORIGIN = 'https://fish.test';
 
+const MAX_DRAIN_ROUNDS = 100;
+
 const GENEROUS = { window: 60, max: 10_000 };
 const GENEROUS_MAIL: MailLimits = {
   perRecipient: { max: 10_000, windowMs: 60_000 },
@@ -234,7 +236,14 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
       const failures: unknown[] = [];
       for (const step of [
         async () => {
-          while (background.size > 0) await Promise.allSettled([...background]);
+          for (let rounds = 0; background.size > 0; rounds++) {
+            if (rounds >= MAX_DRAIN_ROUNDS) {
+              throw new Error(
+                `background work still queued after ${MAX_DRAIN_ROUNDS} drain rounds; a task keeps scheduling more`,
+              );
+            }
+            await Promise.allSettled([...background]);
+          }
         },
         () => app.close(),
         () => database.close(),

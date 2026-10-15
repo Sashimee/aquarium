@@ -25,6 +25,9 @@ export const waterParametersSchema = z.strictObject({
 });
 export type WaterParameters = z.infer<typeof waterParametersSchema>;
 
+export const fishSexSchema = z.enum(['male', 'female']);
+export type FishSex = z.infer<typeof fishSexSchema>;
+
 export const fishStatusSchema = z.enum(['alive', 'dead']);
 export const causeOfDeathSchema = z.enum(['starvation', 'ammonia', 'old_age', 'unknown']);
 export type CauseOfDeath = z.infer<typeof causeOfDeathSchema>;
@@ -34,6 +37,7 @@ export const fishSchema = z.strictObject({
   tankId: idSchema,
   species: slugSchema,
   name: z.string().trim().min(1).max(40),
+  sex: fishSexSchema,
   bornAt: timestampSchema,
   size: z.number().positive().describe('body length in metres'),
   hunger: unitSchema,
