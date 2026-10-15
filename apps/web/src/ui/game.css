@@ -160,6 +160,7 @@
   border-radius: 99rem;
   background: transparent;
   min-height: 2.75rem;
+  min-width: 2.75rem;
   padding: 0.3rem 0.85rem;
 }
 
