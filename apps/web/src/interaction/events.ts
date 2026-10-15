@@ -53,7 +53,7 @@ export interface InteractionEvents {
   'feed:request': { food: FoodType; portion: number };
   /** Food went into the water; the persistence layer posts the feed action. */
   'feed:dropped': { food: FoodType; portion: number; particles: number };
-  'feed:rejected': { reason: 'rate-limited' | 'tank-full'; retryAfterMs: number };
+  'feed:rejected': { reason: 'rate-limited' | 'tank-full' | 'unreachable'; retryAfterMs: number };
   /** Fish ate food; the persistence layer batches these into ate reports. */
   'food:ate': { eaten: readonly { fishId: string; portion: number }[] };
   /** Uneaten food dissolved on the substrate. */

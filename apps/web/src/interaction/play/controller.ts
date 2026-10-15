@@ -3,7 +3,8 @@ import type { FeedGate } from '../../sync/feedGate';
 import type { EventBus } from '../../engine/events';
 import type { Vec3 } from '../camera';
 import { HAND_FEED_PORTION, type InteractionEvents, type PlayTool } from '../events';
-import { FoodField } from '../food/particles';
+import { reachableSpot, type ReachBridge } from '../food/clipReach';
+import type { FoodField, FoodParticle } from '../food/particles';
 import { FoodLink } from '../food/link';
 import { BubbleField } from './bubbles';
 import { pickPlaneY, pickTankBox } from './pick';
@@ -38,11 +39,14 @@ export interface PlayDeps {
   netTap?: ((ray: Ray) => void) | undefined;
   toSim(x: number, y: number, z: number, out: Float64Array): void;
   lure?(position: Vec3 | null): void;
+  /** Asks the sim whether a nori grazer can reach a clip; unset skips the check. */
+  reach?: ReachBridge | undefined;
   setLaserDot(point: Vec3 | null): void;
   now(): number;
 }
 
 const GLASS_OFFSET_M = 0.003;
+const CLIP_CEILING_M = 0.03;
 const WAND_BUBBLES_PER_S = 14;
 
 export class PlayController {
@@ -176,7 +180,45 @@ export class PlayController {
       events.emit('feed:rejected', { reason: 'tank-full', retryAfterMs: 0 });
       return;
     }
+    if (food === 'nori' && this.deps.reach) {
+      void this.checkClips(field.particles.slice(-particles), portion);
+      return;
+    }
     events.emit('feed:dropped', { food, portion, particles });
+  }
+
+  private async checkClips(clips: readonly FoodParticle[], portion: number): Promise<void> {
+    const { events, food: field, reach, max } = this.deps;
+    if (!reach) return;
+    let refused = 0;
+    let kept = 0;
+    await Promise.all(
+      clips.map(async (clip) => {
+        const placed = { x: clip.x, y: clip.y, z: clip.z };
+        const current = () =>
+          field.particles.includes(clip) &&
+          clip.x === placed.x &&
+          clip.y === placed.y &&
+          clip.z === placed.z;
+        const spot = await reachableSpot(
+          clip,
+          reach,
+          this.deps.toSim,
+          max.y - CLIP_CEILING_M,
+          current,
+        );
+        if (!current()) return;
+        if (spot === null) {
+          field.remove([clip.id]);
+          refused += 1;
+        } else {
+          clip.y = spot.y;
+          kept += 1;
+        }
+      }),
+    );
+    if (kept > 0) events.emit('feed:dropped', { food: 'nori', portion, particles: kept });
+    else if (refused > 0) events.emit('feed:rejected', { reason: 'unreachable', retryAfterMs: 0 });
   }
 
   private tapGlass(ray: Ray): void {

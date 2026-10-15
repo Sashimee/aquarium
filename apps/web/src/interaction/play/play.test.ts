@@ -3,6 +3,7 @@ import { EventBus } from '../../engine/events';
 import { FeedGate } from '../../sync/feedGate';
 import type { Vec3 } from '../camera';
 import type { InteractionEvents } from '../events';
+import type { ReachBridge } from '../food/clipReach';
 import { FoodLink } from '../food/link';
 import { FoodField } from '../food/particles';
 import { sceneToSim } from '../food/simSpace';
@@ -116,7 +117,7 @@ function downRay(x = 0.1, z = 0.05): Ray {
   return { origin: { x, y: 1, z }, dir: { x: 0, y: -1, z: 0 } };
 }
 
-function makeController(ray: Ray | null = frontRay()) {
+function makeController(ray: Ray | null = frontRay(), reach?: ReachBridge) {
   const events = new EventBus<InteractionEvents>();
   const food = new FoodField(
     {
@@ -150,6 +151,7 @@ function makeController(ray: Ray | null = frontRay()) {
     netTap,
     pickFish,
     toSim: sceneToSim,
+    reach,
     lure,
     setLaserDot,
     now: () => now,
@@ -328,6 +330,93 @@ describe('PlayController fishAt', () => {
     t.setRay(null);
     expect(t.controller.fishAt(5, 5)).toBeNull();
     expect(t.pickFish).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('PlayController nori clip placement', () => {
+  const clipTo = (t: ReturnType<typeof makeController>) => {
+    t.events.emit('feed:select', { food: 'nori' });
+    t.controller.setTool('feed');
+    t.controller.tap(0, 0);
+  };
+  const grazers = (canGraze: (y: number) => boolean) => ({
+    noriGrazers: () => ['yellow-tang', 'blue-tang'],
+    canGrazeAt: vi.fn((species: string, p: readonly [number, number, number]) =>
+      Promise.resolve(species === 'yellow-tang' && canGraze(p[1])),
+    ),
+  });
+
+  it('keeps a clip that any nori grazer can reach and then says it was fed', async () => {
+    const bridge = grazers(() => true);
+    const t = makeController(downRay(), bridge);
+    clipTo(t);
+    expect(t.seen.dropped).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(t.seen.dropped).toHaveBeenCalledTimes(1));
+    expect(t.food.particles).toHaveLength(1);
+    expect(t.seen.rejected).not.toHaveBeenCalled();
+  });
+
+  it('raises a clip in 2 cm steps until a grazer can turn at it', async () => {
+    const t = makeController(
+      downRay(),
+      grazers((y) => y >= 0.37),
+    );
+    clipTo(t);
+    const before = t.food.particles[0]?.y ?? 0;
+    await vi.waitFor(() => expect(t.seen.dropped).toHaveBeenCalledTimes(1));
+    const after = t.food.particles[0]?.y ?? 0;
+    expect(after).toBeGreaterThanOrEqual(0.37);
+    expect(after - before).toBeCloseTo(Math.ceil((0.37 - before) / 0.02) * 0.02, 6);
+  });
+
+  it('removes the clip and says why when no height works', async () => {
+    const t = makeController(
+      downRay(),
+      grazers(() => false),
+    );
+    clipTo(t);
+    await vi.waitFor(() => expect(t.seen.rejected).toHaveBeenCalledTimes(1));
+    expect(t.seen.rejected).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: 'unreachable' }),
+    );
+    expect(t.food.particles).toHaveLength(0);
+    expect(t.seen.dropped).not.toHaveBeenCalled();
+  });
+
+  it('allows the clip when the sim cannot answer', async () => {
+    const bridge = {
+      noriGrazers: () => ['yellow-tang'],
+      canGrazeAt: () => Promise.reject(new Error('The fish sim is not ready')),
+    };
+    const t = makeController(downRay(), bridge);
+    clipTo(t);
+    await vi.waitFor(() => expect(t.seen.dropped).toHaveBeenCalledTimes(1));
+    expect(t.food.particles).toHaveLength(1);
+  });
+
+  it('skips the check when no fish in the tank eats nori', async () => {
+    const canGrazeAt = vi.fn();
+    const t = makeController(downRay(), { noriGrazers: () => [], canGrazeAt });
+    clipTo(t);
+    await vi.waitFor(() => expect(t.seen.dropped).toHaveBeenCalledTimes(1));
+    expect(canGrazeAt).not.toHaveBeenCalled();
+  });
+
+  it('ignores a stale answer for a clip that was eaten meanwhile', async () => {
+    let answer: (reachable: boolean) => void = () => undefined;
+    const bridge = {
+      noriGrazers: () => ['yellow-tang'],
+      canGrazeAt: () => new Promise<boolean>((resolve) => (answer = resolve)),
+    };
+    const t = makeController(downRay(), bridge);
+    clipTo(t);
+    const [clip] = t.food.particles;
+    t.food.remove([clip?.id ?? -1]);
+    answer(false);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(t.seen.rejected).toHaveBeenCalledTimes(0);
+    expect(t.seen.dropped).toHaveBeenCalledTimes(0);
   });
 });
 
