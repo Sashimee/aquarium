@@ -1,14 +1,16 @@
 import { execFileSync } from 'node:child_process';
 
 const [part, describe, ...listArgs] = process.argv.slice(2);
-const match = /^(\d+)\/(\d+)$/.exec(part ?? '');
+const match = /^(\d+(?:,\d+)*)\/(\d+)$/.exec(part ?? '');
 if (!match || !describe) {
-  console.error('usage: e2e-slice.mjs <index>/<count> <describe title> [playwright args]');
+  console.error(
+    'usage: e2e-slice.mjs <index[,index...]>/<count> <describe title> [playwright args]',
+  );
   process.exit(2);
 }
-const index = Number(match[1]);
+const indexes = match[1].split(',').map(Number);
 const count = Number(match[2]);
-if (index < 1 || index > count) {
+if (indexes.some((index) => index < 1 || index > count)) {
   console.error(`part ${part} is out of range`);
   process.exit(2);
 }
@@ -39,7 +41,7 @@ if (inDescribe.length < count) {
 }
 
 // Round-robin puts neighbouring tests, which cost about the same, in different parts.
-const mine = inDescribe.filter((_, i) => i % count === index - 1);
+const mine = inDescribe.filter((_, i) => indexes.includes((i % count) + 1));
 if (inDescribe.some((title) => /[\r\n]/.test(title))) {
   console.error('a test title contains a line break, which cannot go through GITHUB_ENV');
   process.exit(1);
