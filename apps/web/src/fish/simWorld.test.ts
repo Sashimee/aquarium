@@ -5,7 +5,6 @@ import { DEFAULT_TANK } from '../engine/tank/dimensions';
 import type { SceneAnchor } from '../scene/anemone';
 import { FISH_1, FISH_2, TANK_A, fishFixture } from '../sync/fixtures';
 import { demoTank, sceneAnchorsToSim } from './demoStock';
-import { sexOf } from './profiles';
 import { TankRoster } from './roster';
 import { allSpeciesInputs } from './species';
 import {
@@ -123,16 +122,15 @@ describe('SimWorldSpec', () => {
     expect(config?.space).toBe(DEMO.config.space);
   });
 
-  it('spawns a male guppy at the male length, so it swims at its own body lengths', () => {
+  it('spawns a stored male guppy at the male length, so it swims at its own body lengths', () => {
     const { spec, roster } = setup();
-    expect([sexOf(FISH_1), sexOf(FISH_2)]).toEqual(['female', 'male']);
     roster.load({
       tankId: TANK_A,
       biome: 'freshwater',
       decorLayout: [],
       fish: [
-        fishFixture(FISH_1, { species: 'guppy', size: 0.04 }),
-        fishFixture(FISH_2, { species: 'guppy', size: 0.04 }),
+        fishFixture(FISH_2, { species: 'guppy', size: 0.04, sex: 'female' }),
+        fishFixture(FISH_1, { species: 'guppy', size: 0.04, sex: 'male' }),
       ],
     });
     const lengths = spec.config(roster.swimming())?.fish.map((f) => f.bodyLengthM);
