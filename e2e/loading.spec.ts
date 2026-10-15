@@ -31,7 +31,10 @@ const recorded = (page: Page) => page.evaluate(() => window.__loadValues.slice()
 
 function expectRising(values: readonly number[]): void {
   expect(values.length, 'the progressbar reported values').toBeGreaterThan(0);
-  expect(values.every((v, i) => i === 0 || v >= (values[i - 1] ?? 0))).toBe(true);
+  expect(
+    values.every((v, i) => i === 0 || v >= (values[i - 1] ?? 0)),
+    `progress went backwards: ${values.join(', ')}`,
+  ).toBe(true);
   expect(Math.max(...values)).toBeGreaterThan(Math.min(...values));
   expect(values.every((v) => v >= 0 && v <= 100)).toBe(true);
 }
@@ -90,6 +93,9 @@ test.describe('loading screen', () => {
     await expect(retry).toBeFocused();
 
     await page.unroute('**/assets/index.json');
+    await page.evaluate(() =>
+      window.history.replaceState(null, '', '/?backend=webgl&tier=low&e2e'),
+    );
     await retry.click();
     await expect(page.locator('#app')).toHaveAttribute('data-scene-biome', 'freshwater', {
       timeout: LOAD_MS,

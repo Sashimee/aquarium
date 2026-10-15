@@ -48,6 +48,15 @@ export function LoadingScreen() {
   const failed = load?.error != null;
 
   useEffect(() => {
+    if (phase !== 'shown') return;
+    const behind = [...document.querySelectorAll('#app, .shell > :not(.loading)')];
+    for (const node of behind) node.setAttribute('inert', '');
+    return () => {
+      for (const node of behind) node.removeAttribute('inert');
+    };
+  }, [phase]);
+
+  useEffect(() => {
     if (phase === 'shown' && failed) retry.current?.focus();
   }, [phase, failed]);
 

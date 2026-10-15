@@ -16,7 +16,14 @@ import { TankBiome } from './scene/biomeScene';
 import { parseBiome, withBiome } from './scene/options';
 import type { TankScene } from './scene/TankScene';
 import { LoadTracker } from './ui/loadTracker';
-import { parseStallMs, watchAssets, watchSwitches, type AssetWatch } from './ui/loadSignals';
+import {
+  managerOf,
+  parseStallMs,
+  WARMUP_FRAMES,
+  watchAssets,
+  watchSwitches,
+  type AssetWatch,
+} from './ui/loadSignals';
 import { mountUi } from './ui/mount';
 import { FeedGate } from './sync/feedGate';
 import { awaitTankModules } from './tankLoad';
@@ -52,6 +59,7 @@ async function boot(): Promise<void> {
   tracker.begin('boot');
   const tankEvents = queueTankEvents(interaction);
   const tankBiome = new TankBiome(interaction, parseBiome(window.location.search));
+  const switches = watchSwitches(interaction, tracker, tankBiome.fallback);
   const playChoices = new PlayChoices(interaction);
   const sceneDecor = new SceneDecor<TankScene>(
     interaction,
@@ -84,16 +92,20 @@ async function boot(): Promise<void> {
   try {
     modules = await awaitTankModules(tank, events);
     tracker.reach('code');
-    const { DefaultLoadingManager } = await import('three');
-    assetWatch = watchAssets(DefaultLoadingManager, tracker);
     engine = await modules.Engine.create(container, {
       options: parseEngineOptions(window.location.search),
       events,
     });
     tracker.reach('renderer');
+    const { DefaultLoadingManager } = await import('three');
+    assetWatch = watchAssets(
+      [DefaultLoadingManager, managerOf(engine.ktx2)].filter((source) => source !== null),
+      tracker,
+    );
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : String(cause);
     tracker.fail(message);
+    switches.stop();
     tankEvents.stop();
     tankBiome.stop();
     stopDemoRequests();
@@ -204,11 +216,13 @@ async function boot(): Promise<void> {
   const sceneMounted = new Promise<void>((resolve) => {
     firstSceneMounted = resolve;
   });
-  const frames = (count: number): Promise<void> =>
+  const frames = (count: number, each?: (drawn: number) => void): Promise<void> =>
     new Promise((resolve) => {
       let seen = 0;
       const stop = engine.onFrame(() => {
-        if (++seen < count) return;
+        seen += 1;
+        each?.(seen);
+        if (seen < count) return;
         stop();
         resolve();
       });
@@ -216,7 +230,7 @@ async function boot(): Promise<void> {
   void Promise.all([fish.settled, sceneMounted]).then(() => engine.contentReady());
   void fish.settled.then(() => tracker.reach('fish'));
   void Promise.all([fish.settled, sceneMounted])
-    .then(() => frames(2))
+    .then(() => frames(WARMUP_FRAMES, (drawn) => tracker.part('warmup', drawn / WARMUP_FRAMES)))
     .then(() => {
       tracker.reach('warmup');
       tracker.finish();
@@ -244,9 +258,7 @@ async function boot(): Promise<void> {
     },
   });
 
-  const stopSwitches = watchSwitches({
-    interaction,
-    tracker,
+  switches.attach({
     assets: assetWatch,
     sceneSettled: () => scenes.settled(),
     fishSynced: () => fish.synced(),
@@ -254,7 +266,7 @@ async function boot(): Promise<void> {
   });
 
   onPageTeardown(window, () => {
-    stopSwitches();
+    switches.stop();
     assetWatch.stop();
     tracker.dispose();
     scenes.dispose().catch((cause: unknown) => console.error('Scene dispose failed', cause));

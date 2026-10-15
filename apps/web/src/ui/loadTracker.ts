@@ -4,20 +4,29 @@ import type { InteractionEvents, LoadState } from '../interaction/events';
 export type LoadReason = 'boot' | 'switch';
 export type Milestone = 'code' | 'renderer' | 'scene' | 'fish' | 'warmup';
 
-const BOOT_WEIGHTS: Record<Milestone, number> = {
-  code: 0.08,
-  renderer: 0.07,
+type Part = Milestone | 'assets';
+
+/**
+ * What each part of a load costs, measured on a software-rendered cold boot: the asset requests
+ * go fast, building the tank (fitting plants, compiling materials) and the first frames take
+ * most of the time.
+ */
+const BOOT_WEIGHTS: Record<Part, number> = {
+  code: 0.04,
+  renderer: 0.1,
+  assets: 0.2,
   scene: 0.3,
-  fish: 0.3,
-  warmup: 0.25,
+  fish: 0.06,
+  warmup: 0.3,
 };
 
-const SWITCH_WEIGHTS: Record<Milestone, number> = {
+const SWITCH_WEIGHTS: Record<Part, number> = {
   code: 0,
   renderer: 0,
-  scene: 0.35,
-  fish: 0.4,
-  warmup: 0.25,
+  assets: 0.25,
+  scene: 0.3,
+  fish: 0.15,
+  warmup: 0.3,
 };
 
 const LABELS: Record<Milestone, string> = {
@@ -30,8 +39,6 @@ const LABELS: Record<Milestone, string> = {
 
 const ORDER: readonly Milestone[] = ['code', 'renderer', 'scene', 'fish', 'warmup'];
 
-/** How much of a pending milestone's weight the asset share may fill before it completes. */
-const PARTIAL_SHARE = 0.9;
 const STALL_MESSAGE = 'Loading is taking longer than expected.';
 
 export interface LoadTrackerOptions {
@@ -48,8 +55,7 @@ export interface LoadTrackerOptions {
 export class LoadTracker {
   private state: LoadState = { active: false, reason: 'boot', progress: 0, stage: '', error: null };
   private weights = BOOT_WEIGHTS;
-  private done = new Set<Milestone>();
-  private assetFraction = 0;
+  private share = new Map<Part, number>();
   private stallTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly stallMs: number;
 
@@ -72,29 +78,33 @@ export class LoadTracker {
   /** Starts a load. Milestones in `skip` count as already done. */
   begin(reason: LoadReason, skip: readonly Milestone[] = []): void {
     this.weights = reason === 'boot' ? BOOT_WEIGHTS : SWITCH_WEIGHTS;
-    this.done = new Set(skip);
-    for (const milestone of ORDER) if (this.weights[milestone] === 0) this.done.add(milestone);
-    this.assetFraction = 0;
+    this.share = new Map();
+    for (const milestone of skip) this.share.set(milestone, 1);
+    for (const part of [...ORDER, 'assets' as const]) {
+      if (this.weights[part] === 0) this.share.set(part, 1);
+    }
     this.state = { active: true, reason, progress: 0, stage: '', error: null };
     this.recompute();
     this.armStall();
   }
 
   reach(milestone: Milestone): void {
-    if (!this.running || this.done.has(milestone)) return;
-    this.done.add(milestone);
+    this.part(milestone, 1);
+  }
+
+  /** How far a milestone has come, 0..1; it only moves forward. */
+  part(part: Part, fraction: number): void {
+    if (!this.running) return;
+    const next = Math.min(1, Math.max(0, fraction));
+    if (next <= (this.share.get(part) ?? 0)) return;
+    this.share.set(part, next);
     this.recompute();
     this.armStall();
   }
 
   /** The share of asset requests finished since the load began, 0..1. */
   assets(fraction: number): void {
-    if (!this.running) return;
-    const next = Math.min(1, Math.max(0, fraction));
-    if (next <= this.assetFraction) return;
-    this.assetFraction = next;
-    this.recompute();
-    this.armStall();
+    this.part('assets', fraction);
   }
 
   finish(): void {
@@ -116,18 +126,15 @@ export class LoadTracker {
   }
 
   private recompute(): void {
+    const sceneAndFishUp = this.share.get('scene') === 1 && this.share.get('fish') === 1;
+    if (sceneAndFishUp) this.share.set('assets', 1);
     let progress = 0;
-    let pending = 0;
-    for (const milestone of ORDER) {
-      if (this.done.has(milestone)) progress += this.weights[milestone];
-      else if (milestone === 'scene' || milestone === 'fish') pending += this.weights[milestone];
-    }
-    progress += pending * this.assetFraction * PARTIAL_SHARE;
-    const stage = LABELS[ORDER.find((milestone) => !this.done.has(milestone)) ?? 'warmup'];
+    for (const [part, fraction] of this.share) progress += this.weights[part] * fraction;
+    const pending = ORDER.find((milestone) => (this.share.get(milestone) ?? 0) < 1);
     this.state = {
       ...this.state,
       progress: Math.min(0.99, Math.max(this.state.progress, progress)),
-      stage,
+      stage: LABELS[pending ?? 'warmup'],
     };
     this.publish();
   }

@@ -34,11 +34,11 @@ describe('LoadTracker', () => {
       stage: 'Loading the aquarium',
     });
     tracker.reach('code');
-    expect(tracker.current.progress).toBeCloseTo(0.08);
+    expect(tracker.current.progress).toBeCloseTo(0.04);
     expect(tracker.current.stage).toBe('Starting the renderer');
     tracker.reach('renderer');
     tracker.reach('scene');
-    expect(tracker.current.progress).toBeCloseTo(0.45);
+    expect(tracker.current.progress).toBeCloseTo(0.04 + 0.1 + 0.3);
     expect(tracker.current.stage).toBe('Loading fish');
     tracker.reach('fish');
     expect(tracker.current.stage).toBe('Preparing water');
@@ -61,27 +61,45 @@ describe('LoadTracker', () => {
     tracker.begin('switch');
     expect(tracker.current.stage).toBe('Building the tank');
     tracker.reach('scene');
-    expect(tracker.current.progress).toBeCloseTo(0.35);
+    expect(tracker.current.progress).toBeCloseTo(0.3);
   });
 
   it('counts skipped milestones as done', () => {
     const { tracker } = setup();
     tracker.begin('switch', ['scene']);
-    expect(tracker.current.progress).toBeCloseTo(0.35);
+    expect(tracker.current.progress).toBeCloseTo(0.3);
     expect(tracker.current.stage).toBe('Loading fish');
   });
 
-  it('fills pending asset weight from the asset share, never past a milestone', () => {
+  it('moves with the asset share and counts the assets as done once scene and fish are up', () => {
     const { tracker } = setup();
     tracker.begin('boot');
     tracker.reach('code');
     tracker.reach('renderer');
+    const base = tracker.current.progress;
     tracker.assets(0.5);
-    const half = tracker.current.progress;
-    expect(half).toBeGreaterThan(0.15);
+    expect(tracker.current.progress).toBeCloseTo(base + 0.1);
+    tracker.reach('scene');
+    tracker.reach('fish');
+    expect(tracker.current.progress).toBeCloseTo(0.04 + 0.1 + 0.2 + 0.3 + 0.06);
+  });
+
+  it('keeps moving while the first frames are drawn', () => {
+    const { tracker } = setup();
+    tracker.begin('switch', ['scene', 'fish']);
+    const before = tracker.current.progress;
+    tracker.part('warmup', 0.5);
+    expect(tracker.current.progress).toBeGreaterThan(before);
+    expect(tracker.current.stage).toBe('Preparing water');
+  });
+
+  it('has no plateau above half before the scene is built', () => {
+    const { tracker } = setup();
+    tracker.begin('boot');
+    tracker.reach('code');
+    tracker.reach('renderer');
     tracker.assets(1);
-    expect(tracker.current.progress).toBeGreaterThan(half);
-    expect(tracker.current.progress).toBeLessThan(0.15 + 0.6);
+    expect(tracker.current.progress).toBeLessThan(0.5);
   });
 
   it('never moves backwards', () => {
@@ -147,7 +165,7 @@ describe('watchAssets', () => {
   it('reports the share finished since the last rebase', () => {
     const { tracker } = setup();
     const source: ProgressSource = {};
-    const watch = watchAssets(source, tracker);
+    const watch = watchAssets([source], tracker);
     tracker.begin('boot');
     tracker.reach('code');
     tracker.reach('renderer');
@@ -170,41 +188,89 @@ describe('watchAssets', () => {
     const { tracker } = setup();
     const previous = vi.fn();
     const source: ProgressSource = { onProgress: previous };
-    watchAssets(source, tracker).stop();
+    watchAssets([source], tracker).stop();
     expect(source.onProgress).toBe(previous);
   });
 });
 
 describe('watchSwitches', () => {
-  function rig() {
+  function rig(attached = true) {
     const { bus, tracker, states } = setup();
     const gates = { scene: Promise.resolve(), fish: Promise.resolve(), frames: Promise.resolve() };
-    const stop = watchSwitches({
-      interaction: bus,
-      tracker,
-      assets: { rebase: vi.fn(), stop: vi.fn() },
-      sceneSettled: () => gates.scene,
-      fishSynced: () => gates.fish,
-      frames: () => gates.frames,
-    });
-    return { bus, tracker, states, gates, stop };
+    const watch = watchSwitches(bus, tracker, 'freshwater');
+    if (attached) {
+      watch.attach({
+        assets: { rebase: vi.fn(), stop: vi.fn() },
+        sceneSettled: () => gates.scene,
+        fishSynced: () => gates.fish,
+        frames: () => gates.frames,
+      });
+    }
+    return { bus, tracker, states, gates, watch };
   }
 
-  const loaded = { biome: 'reef' } as InteractionEvents['tank:loaded'];
+  const saved = (tankId: string): InteractionEvents['tank:loaded'] =>
+    ({ tankId, biome: 'reef' }) as InteractionEvents['tank:loaded'];
 
-  it('runs a switch to completion on tank:loaded', async () => {
+  const finishedBoot = (tracker: LoadTracker): void => {
+    tracker.begin('boot');
+    tracker.finish();
+  };
+
+  it('runs a switch to completion when another saved tank loads', async () => {
     const { bus, tracker } = rig();
-    bus.emit('tank:loaded', loaded);
+    bus.emit('tank:loaded', saved('a'));
     expect(tracker.current).toMatchObject({ active: true, reason: 'switch' });
     await vi.waitFor(() => expect(tracker.current.active).toBe(false));
     expect(tracker.current.progress).toBe(1);
+  });
+
+  it('starts nothing for a tank:none while the demo tank is shown', () => {
+    const { bus, tracker, states } = rig();
+    finishedBoot(tracker);
+    const published = states.length;
+    bus.emit('tank:none', {});
+    bus.emit('tank:none', {});
+    expect(tracker.current.active).toBe(false);
+    expect(states).toHaveLength(published);
+  });
+
+  it('starts nothing when the tank on show loads again', async () => {
+    const { bus, tracker } = rig();
+    bus.emit('tank:loaded', saved('a'));
+    await vi.waitFor(() => expect(tracker.current.active).toBe(false));
+    const done = tracker.current;
+    bus.emit('tank:loaded', saved('a'));
+    expect(tracker.current).toBe(done);
+  });
+
+  it('starts nothing when the demo biome is picked again', () => {
+    const { bus, tracker } = rig();
+    finishedBoot(tracker);
+    bus.emit('demo:biome-changed', { biome: 'freshwater' });
+    expect(tracker.current.active).toBe(false);
+  });
+
+  it('switches back to the demo tank when the saved one goes', async () => {
+    const { bus, tracker } = rig();
+    bus.emit('tank:loaded', saved('a'));
+    await vi.waitFor(() => expect(tracker.current.active).toBe(false));
+    bus.emit('tank:none', {});
+    expect(tracker.current).toMatchObject({ active: true, reason: 'switch' });
+    await vi.waitFor(() => expect(tracker.current.active).toBe(false));
+  });
+
+  it('finishes a switch when the scene queue has nothing to do', async () => {
+    const { bus, tracker } = rig();
+    bus.emit('demo:biome-changed', { biome: 'reef' });
+    await vi.waitFor(() => expect(tracker.current).toMatchObject({ active: false, progress: 1 }));
   });
 
   it('waits for the fish and the frames before it finishes', async () => {
     const { bus, tracker, gates } = rig();
     let release: () => void = () => undefined;
     gates.frames = new Promise<void>((resolve) => (release = resolve));
-    bus.emit('tank:loaded', loaded);
+    bus.emit('tank:loaded', saved('a'));
     await vi.waitFor(() => expect(tracker.current.stage).toBe('Preparing water'));
     expect(tracker.current.active).toBe(true);
     release();
@@ -221,18 +287,49 @@ describe('watchSwitches', () => {
   it('leaves the first load alone', () => {
     const { bus, tracker } = rig();
     tracker.begin('boot');
-    bus.emit('tank:none', {});
+    bus.emit('tank:loaded', saved('a'));
     expect(tracker.current.reason).toBe('boot');
+  });
+
+  it('keeps a failed first load failed', () => {
+    const { bus, tracker } = rig();
+    tracker.begin('boot');
+    tracker.fail('no renderer');
+    bus.emit('tank:loaded', saved('a'));
+    expect(tracker.current).toMatchObject({ reason: 'boot', error: 'no renderer' });
+  });
+
+  it('tracks the tank shown during the first load, so a repeat afterwards starts nothing', () => {
+    const { bus, tracker } = rig();
+    tracker.begin('boot');
+    bus.emit('tank:loaded', saved('a'));
+    tracker.finish();
+    bus.emit('tank:loaded', saved('a'));
+    expect(tracker.current.active).toBe(false);
+  });
+
+  it('tracks tanks before the sources are attached', () => {
+    const { bus, tracker, watch } = rig(false);
+    bus.emit('tank:loaded', saved('a'));
+    expect(tracker.current.active).toBe(false);
+    watch.attach({
+      assets: { rebase: vi.fn(), stop: vi.fn() },
+      sceneSettled: () => Promise.resolve(),
+      fishSynced: () => Promise.resolve(),
+      frames: () => Promise.resolve(),
+    });
+    bus.emit('tank:loaded', saved('a'));
+    expect(tracker.current.active).toBe(false);
   });
 
   it('lets a newer switch supersede an older one', async () => {
     const { bus, tracker, gates } = rig();
     let releaseOld: () => void = () => undefined;
     gates.fish = new Promise<void>((resolve) => (releaseOld = resolve));
-    bus.emit('tank:loaded', loaded);
+    bus.emit('tank:loaded', saved('a'));
     await vi.waitFor(() => expect(tracker.current.stage).toBe('Loading fish'));
     gates.fish = Promise.resolve();
-    bus.emit('tank:loaded', loaded);
+    bus.emit('tank:loaded', saved('b'));
     await vi.waitFor(() => expect(tracker.current.active).toBe(false));
     const done = tracker.current;
     releaseOld();
@@ -240,10 +337,10 @@ describe('watchSwitches', () => {
     expect(tracker.current).toBe(done);
   });
 
-  it('stops listening when disposed', () => {
-    const { bus, tracker, stop } = rig();
-    stop();
-    bus.emit('tank:loaded', loaded);
+  it('stops listening when stopped', () => {
+    const { bus, tracker, watch } = rig();
+    watch.stop();
+    bus.emit('tank:loaded', saved('a'));
     expect(tracker.current.active).toBe(false);
   });
 });
