@@ -21,6 +21,7 @@ interface Menu {
 }
 
 const WAIT_TIMEOUT_MS = 120_000;
+const HOLD_STILL_BUDGET_MS = 150_000;
 
 async function within<T>(wait: Promise<T>, what: string, ms = WAIT_TIMEOUT_MS): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
@@ -53,9 +54,9 @@ async function settleAnimations(page: Page): Promise<void> {
 // Lazy panel bodies grow a sheet after it opens, which moves its buttons without an animation. A
 // stalled frame can outlast the poll's timeout, so the frames are awaited here, outside it.
 async function holdStill(target: Locator): Promise<void> {
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    const moved = await within(
-      target.evaluate(async (element) => {
+  const settle = async (): Promise<void> => {
+    for (let attempts = 0; attempts < 10; attempts += 1) {
+      const moved = await target.evaluate(async (element) => {
         const earlier = element.getBoundingClientRect();
         await new Promise((done) => requestAnimationFrame(done));
         await new Promise((done) => requestAnimationFrame(done));
@@ -66,12 +67,12 @@ async function holdStill(target: Locator): Promise<void> {
           Math.abs(later.width - earlier.width) > 0.5 ||
           Math.abs(later.height - earlier.height) > 0.5
         );
-      }),
-      'the target to hold still across two frames',
-    );
-    if (!moved) return;
-  }
-  throw new Error(`${target} was still moving after 10 two-frame checks`);
+      });
+      if (!moved) return;
+    }
+    throw new Error(`${target} was still moving after 10 two-frame checks`);
+  };
+  await within(settle(), 'the target to hold still across two frames', HOLD_STILL_BUDGET_MS);
 }
 
 // Locator.tap/click wait two animation frames per action, which costs seconds each under software

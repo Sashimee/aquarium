@@ -277,7 +277,11 @@ export function createApiClient(
     timeoutMs: number = REQUEST_TIMEOUT_MS,
   ): Promise<Response> {
     const timeout = new AbortController();
-    const deadline = setTimeout(() => timeout.abort(), timeoutMs * TOTAL_TIMEOUT_FACTOR);
+    let deadlineHit = false;
+    const deadline = setTimeout(() => {
+      deadlineHit = true;
+      timeout.abort();
+    }, timeoutMs * TOTAL_TIMEOUT_FACTOR);
     let timer = setTimeout(() => timeout.abort(), timeoutMs);
     const restartTimer = () => {
       clearTimeout(timer);
@@ -311,7 +315,9 @@ export function createApiClient(
           'The server sent a response that is too large to handle. Reload the page.',
         );
       }
-      if (timeout.signal.aborted) throw new ApiTimeoutError(timeoutMs);
+      if (timeout.signal.aborted) {
+        throw new ApiTimeoutError(deadlineHit ? timeoutMs * TOTAL_TIMEOUT_FACTOR : timeoutMs);
+      }
       throw new ApiRequestError(
         0,
         'network',

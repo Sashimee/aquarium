@@ -1,3 +1,4 @@
+import { followAnyFish } from './interaction/follow';
 import { depthOfFieldFollowsCamera } from './engine/cameraFocus';
 import { Engine } from './engine/Engine';
 import { EventBus, type EngineEvents } from './engine/events';
@@ -125,7 +126,6 @@ async function boot(): Promise<void> {
       if (e.button !== 0 || sceneDecor.system?.active) return;
       const target = play?.controller.fishAt(e.x, e.y);
       if (target) rig.focusOn(target);
-      else interaction.emit('camera:follow-unavailable', {});
     },
     claimDrag: () =>
       sceneDecor.system?.active
@@ -150,8 +150,7 @@ async function boot(): Promise<void> {
     if (mode === 'dive') rig.dive();
     else if (mode === 'orbit') rig.exit();
     else {
-      const target = liveFish?.sim.anyFish();
-      if (target) rig.focusOn(target);
+      followAnyFish(liveFish?.sim.anyFish(), (target) => rig.focusOn(target), interaction);
     }
   });
   const exposePose = new URLSearchParams(window.location.search).has('e2e');

@@ -418,7 +418,9 @@ describe('api client timeouts', () => {
         .tanks()
         .catch((e: unknown) => e);
       await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS * TOTAL_TIMEOUT_FACTOR);
-      expect(await result).toBeInstanceOf(ApiTimeoutError);
+      expect(await result).toMatchObject({
+        timeoutMs: REQUEST_TIMEOUT_MS * TOTAL_TIMEOUT_FACTOR,
+      });
     } finally {
       vi.useRealTimers();
     }
