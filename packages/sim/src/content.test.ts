@@ -20,8 +20,6 @@ import { World, type WorldConfig } from './world.ts';
 const LONG = 120_000;
 const dir = join(import.meta.dirname, '../../../content/species');
 
-const pendingDir = join(import.meta.dirname, '../../../content/species-pending');
-
 function load(from: string) {
   return readdirSync(from)
     .filter((f) => f.endsWith('.json'))
@@ -32,7 +30,6 @@ function load(from: string) {
 }
 
 const roster = load(dir);
-const pending = load(pendingDir);
 
 const MVP_ROSTER = [
   ['angelfish', 'Pterophyllum scalare', 'freshwater'],
@@ -41,6 +38,8 @@ const MVP_ROSTER = [
   ['blue-tang', 'Paracanthurus hepatus', 'reef'],
   ['bristlenose-pleco', 'Ancistrus cirrhosus', 'freshwater'],
   ['bronze-corydoras', 'Corydoras aeneus', 'freshwater'],
+  ['cherry-shrimp', 'Neocaridina davidi', 'freshwater'],
+  ['cleaner-shrimp', 'Lysmata amboinensis', 'reef'],
   ['discus', 'Symphysodon aequifasciatus', 'freshwater'],
   ['firefish', 'Nemateleotris magnifica', 'reef'],
   ['guppy', 'Poecilia reticulata', 'freshwater'],
@@ -109,11 +108,11 @@ function bruteClearance(w: World, tank: TankDimensions, decor: readonly Collider
   };
 }
 
-describe('every shipped and pending species in its decorated tank', { timeout: LONG }, () => {
-  const species = [...roster, ...pending].map((r) => r.species);
+describe('every shipped species in its decorated tank', { timeout: LONG }, () => {
+  const species = roster.map((r) => r.species);
 
   it.each(
-    [...roster, ...pending].map((r) => ({
+    roster.map((r) => ({
       id: r.species.id,
       biome: r.species.biome,
       s: r.species,

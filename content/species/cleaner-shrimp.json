@@ -37,15 +37,15 @@
     "strouhal": 0.3,
     "swimmingMode": "pleopod",
     "walking": {
-      "walkSpeedMps": 0.02,
-      "strideBodyLengths": 0.3,
       "legPairs": 5,
+      "strideBodyLengths": 0.3,
       "surfaces": ["substrate", "decor", "glass"],
       "tailFlip": {
-        "speedMps": 0.3,
         "durationS": 0.2,
-        "refractoryS": 3
-      }
+        "refractoryS": 3,
+        "speedMps": 0.3
+      },
+      "walkSpeedMps": 0.02
     }
   },
   "scientificName": "Lysmata amboinensis"

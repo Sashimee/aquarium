@@ -129,7 +129,7 @@ jobs:
           - name: ktx2-feed-auth-death
             args: ktx2.spec feed.spec auth.spec death.spec
           - name: tanks-care-reset
-            args: tanks.spec care.spec password-reset.spec password-reset-history.spec
+            args: tanks.spec care.spec shrimp.spec password-reset.spec password-reset-history.spec
     services:
       postgres:
         image: postgres:18

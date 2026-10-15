@@ -248,7 +248,7 @@ export const otocinclus: SpeciesInput = {
   lifecycle: { diet: ['algae-wafer', 'nori'] },
 };
 
-/** The walker archetype (Neocaridina davidi); the pending content lives in content/species-pending. */
+/** The walker archetype (Neocaridina davidi); the shipped content lives in content/species. */
 export const cherryShrimp: SpeciesInput = {
   id: 'cherry-shrimp',
   behaviour: {
