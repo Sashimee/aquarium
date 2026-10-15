@@ -272,7 +272,7 @@ describe('TankRoster', () => {
       expect(roster.swimmingSpecies()).toEqual(['guppy', 'neon-tetra']);
     });
 
-    it('follows a demo swap, a load and an unload', () => {
+    it('follows a demo swap, a load, a switch and no next tank', () => {
       const roster = new TankRoster(DEMO);
       roster.setDemo([{ id: 'clownfish-0', species: 'clownfish' }]);
       expect(roster.swimmingSpecies()).toEqual(['clownfish']);
@@ -285,6 +285,8 @@ describe('TankRoster', () => {
       });
       expect(roster.swimmingSpecies()).toEqual(['betta']);
       roster.unload({ tankId: TANK_A, reason: 'switch' });
+      expect(roster.swimmingSpecies()).toEqual([]);
+      roster.none();
       expect(roster.swimmingSpecies()).toEqual(['clownfish']);
     });
 
