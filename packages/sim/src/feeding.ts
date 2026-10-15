@@ -39,6 +39,8 @@ export const FEEDING = {
   grazeSpeedFactor: 0.25,
   resolveRounds: 3,
   buriedM: 0.005,
+  /** Walkers pick food off the surface under them and leave anything farther off it. */
+  walkerReachBodyLengths: 0.6,
 } as const;
 
 const DT = 1 / 30;
@@ -102,6 +104,8 @@ export class Feeding {
   /** Score of the particle the last `choose` returned. */
   private chosenScore = 0;
   private readonly buried = new Uint8Array(MAX_FOOD_PARTICLES);
+  /** Each particle's distance to the sand, glass or rock nearest it. */
+  private readonly surfaceDist = new Float64Array(MAX_FOOD_PARTICLES);
   private readonly n3 = new Float64Array(3);
   private readonly nbr = new Int32Array(FEEDING.followNeighbours);
   private readonly nbrDist = new Float64Array(FEEDING.followNeighbours);
@@ -240,6 +244,7 @@ export class Feeding {
         this.n3,
       );
       this.buried[k] = d < -FEEDING.buriedM ? 1 : 0;
+      this.surfaceDist[k] = d;
     }
 
     for (let i = 0; i < n; i++) {
@@ -327,6 +332,10 @@ export class Feeding {
     this.backingOut[i] = 1;
   }
 
+  private isWalker(i: number): boolean {
+    return (this.host.species[at(this.host.speciesIndex, i)]?.walking ?? null) !== null;
+  }
+
   private hungry(i: number): boolean {
     return this.eligible[i] === 1 && this.motivation(i) > FEEDING.satiatedMotivation;
   }
@@ -382,6 +391,8 @@ export class Feeding {
     for (;;) {
       const k = this.best(i, contested);
       if (k < 0) return -1;
+      // A walker reaches food along the surface it stands on, never by turning in open water.
+      if (this.isWalker(i)) return k;
       const y = feedingHeight(
         at(food.position, k * 3 + 1),
         at(bodyLength, i),
@@ -422,6 +433,8 @@ export class Feeding {
     const range = sp.perceptionRange;
     const cone = sp.perceptionFov >= 2 * Math.PI ? -2 : Math.cos(sp.perceptionFov / 2);
     const motivation = this.motivation(i);
+    const walker = sp.walking !== null;
+    const surfaceReach = FEEDING.walkerReachBodyLengths * at(this.host.bodyLength, i);
     const found = food.near(px, py, pz, range, this.candidates);
     let best = -1;
     let bestScore = 0;
@@ -430,6 +443,7 @@ export class Feeding {
       const id = at(food.id, k);
       if (id === at(this.ignoreId, i) || this.buried[k] === 1) continue;
       if (this.isUnreachable(k)) continue;
+      if (walker && at(this.surfaceDist, k) > surfaceReach) continue;
       const preference = at(sp.foodPreference, at(food.type, k));
       if (preference <= 0 || food.remaining(k) <= EMPTY) continue;
       const x = at(food.position, k * 3);
@@ -446,7 +460,7 @@ export class Feeding {
       const salience =
         (1 - d / range) *
         (1 + FEEDING.motionSalienceGain * motion) *
-        this.zone(i, y, at(food.ground, k));
+        (walker ? 1 : this.zone(i, y, at(food.ground, k)));
       const score = salience * preference * motivation;
       if (score > bestScore) {
         bestScore = score;
@@ -547,9 +561,11 @@ export class Feeding {
       if (k < 0 || at(this.handling, i) > 0) continue;
       const length = at(bodyLength, i);
       const mouth = FEEDING.mouthBodyLengths * length;
+      const fy = at(food.position, k * 3 + 1);
+      const walker = this.isWalker(i);
       const d = Math.hypot(
         at(food.position, k * 3) - (at(position, i * 3) + at(forward, i * 3) * mouth),
-        feedingHeight(at(food.position, k * 3 + 1), length, at(food.ground, k), basin.maxY) -
+        (walker ? fy : feedingHeight(fy, length, at(food.ground, k), basin.maxY)) -
           (at(position, i * 3 + 1) + at(forward, i * 3 + 1) * mouth),
         at(food.position, k * 3 + 2) - (at(position, i * 3 + 2) + at(forward, i * 3 + 2) * mouth),
       );
@@ -587,7 +603,11 @@ export class Feeding {
         continue;
       }
       const sp = this.host.species[at(this.host.speciesIndex, i)];
-      if (sp === undefined) continue;
+      // Walkers find food by touch and chemoreception where they stand, not by watching others.
+      if (sp === undefined || sp.walking !== null) {
+        this.follow[i] = -1;
+        continue;
+      }
       const range2 = sp.perceptionRange * sp.perceptionRange;
       const current = at(this.follow, i);
       if (current >= 0) {

@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { speciesSchema } from '@aquarium/shared';
+import { speciesContentSchema } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import { BEHAVIOUR } from './behaviour.ts';
 import type { Collider } from '@aquarium/shared';
@@ -20,13 +20,10 @@ import { World, type WorldConfig } from './world.ts';
 const LONG = 120_000;
 const dir = join(import.meta.dirname, '../../../content/species');
 
-// The render block arrives with the fish models; everything else must already be complete.
-const contentSchema = speciesSchema.partial({ render: true });
-
 const files = readdirSync(dir).filter((f) => f.endsWith('.json'));
 const roster = files.map((file) => {
   const raw: unknown = JSON.parse(readFileSync(join(dir, file), 'utf8'));
-  return { file, raw, species: contentSchema.parse(raw) };
+  return { file, raw, species: speciesContentSchema.parse(raw) };
 });
 
 const MVP_ROSTER = [
@@ -74,7 +71,7 @@ describe('content/species', () => {
   });
 });
 
-function fishCount(species: ReturnType<typeof contentSchema.parse>): number {
+function fishCount(species: ReturnType<typeof speciesContentSchema.parse>): number {
   if (species.behaviour.schooling) return 10;
   return species.behaviour.territorial ? 2 : 6;
 }

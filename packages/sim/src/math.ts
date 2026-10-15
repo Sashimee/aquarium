@@ -56,3 +56,55 @@ export function rotateByQuat(q: ArrayLike<number>, qo: number, v: Readonly<Vec3>
     vz + qw * tz + (qx * ty - qy * tx),
   ];
 }
+
+/**
+ * The rotation taking the body frame to the orthonormal basis whose +Y is `up` and +Z is
+ * `forward` (left = up × forward); `up` must be perpendicular to `forward`.
+ */
+export function quatFromBasis(
+  forward: Readonly<Vec3>,
+  up: Readonly<Vec3>,
+  out: Float32Array | Float64Array,
+  o: number,
+): void {
+  const [m02, m12, m22] = forward;
+  const [m01, m11, m21] = up;
+  const m00 = m11 * m22 - m21 * m12;
+  const m10 = m21 * m02 - m01 * m22;
+  const m20 = m01 * m12 - m11 * m02;
+  const trace = m00 + m11 + m22;
+  let x: number;
+  let y: number;
+  let z: number;
+  let w: number;
+  if (trace > 0) {
+    const s = 0.5 / Math.sqrt(trace + 1);
+    w = 0.25 / s;
+    x = (m21 - m12) * s;
+    y = (m02 - m20) * s;
+    z = (m10 - m01) * s;
+  } else if (m00 > m11 && m00 > m22) {
+    const s = 2 * Math.sqrt(1 + m00 - m11 - m22);
+    w = (m21 - m12) / s;
+    x = 0.25 * s;
+    y = (m01 + m10) / s;
+    z = (m02 + m20) / s;
+  } else if (m11 > m22) {
+    const s = 2 * Math.sqrt(1 + m11 - m00 - m22);
+    w = (m02 - m20) / s;
+    x = (m01 + m10) / s;
+    y = 0.25 * s;
+    z = (m12 + m21) / s;
+  } else {
+    const s = 2 * Math.sqrt(1 + m22 - m00 - m11);
+    w = (m10 - m01) / s;
+    x = (m02 + m20) / s;
+    y = (m12 + m21) / s;
+    z = 0.25 * s;
+  }
+  const inv = 1 / Math.hypot(x, y, z, w);
+  out[o] = x * inv;
+  out[o + 1] = y * inv;
+  out[o + 2] = z * inv;
+  out[o + 3] = w * inv;
+}
