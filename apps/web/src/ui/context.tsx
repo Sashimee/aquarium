@@ -15,6 +15,7 @@ import { parseBiome } from '../scene/options';
 import type {
   DecorViewState,
   InteractionEvents,
+  LoadState,
   PlayTool,
   SaveStatus,
 } from '../interaction/events';
@@ -94,6 +95,11 @@ export function useDecorLoadError(): string | null {
 export function useDecorSaveState(): { status: SaveStatus; message: string | null } {
   const { interaction } = useBridge();
   return useLatest(interaction, 'decor:save-state') ?? { status: 'idle', message: null };
+}
+
+export function useLoadState(): LoadState | null {
+  const { interaction } = useBridge();
+  return useLatest(interaction, 'load:state') ?? null;
 }
 
 export function useEngineReady(): EngineEvents['engine:ready'] | null {

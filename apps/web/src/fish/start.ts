@@ -77,6 +77,8 @@ export interface FishHandle {
   setSceneColliders(colliders: readonly SceneCollider[]): void;
   /** Swaps the demo stock; held until the fish are up. */
   setDemoBiome(biome: Biome): void;
+  /** Resolves once the stock handed in so far has joined the sim, or at once while the fish are not up. */
+  synced(): Promise<void>;
   /** The distinct swimming species, sorted; null until the fish are up. */
   swimmingSpecies(): readonly string[] | null;
   stop(): void;
@@ -261,6 +263,7 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
       demoBiome = next;
       ready?.setDemoBiome(next);
     },
+    synced: () => ready?.synced() ?? Promise.resolve(),
     swimmingSpecies: () => ready?.swimmingSpecies() ?? null,
     stop() {
       abort.abort();
