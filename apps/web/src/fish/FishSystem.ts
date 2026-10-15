@@ -34,7 +34,7 @@ import { demoTank, type DemoTank } from './demoStock';
 import { HeldFish, type FramePresence } from './heldFish';
 import { FishInstanceData, type InstanceValues } from './instances';
 import { selectLod, type LodThresholds } from './lod';
-import { featuresFor, sameFeatures } from './features';
+import { featuresFor, sameFeatures, waitsForReload } from './features';
 import { FishMaterial, type FishMaterialFeatures } from './material';
 import { commitLodDraw } from './prewarm';
 import {
@@ -59,7 +59,14 @@ import {
 } from './profiles';
 import { hashString, TankRoster, type RosterFish } from './roster';
 import { SimStream } from './simStream';
-import { initSim, layoutChanges, SimInitTimeout, SimWorldSpec, startWorld } from './simWorld';
+import {
+  initSim,
+  layoutChanges,
+  SimErrorGate,
+  SimInitTimeout,
+  SimWorldSpec,
+  startWorld,
+} from './simWorld';
 import { speciesInput } from './species';
 import type { FishBite, FishPoint, PickRay, TankEvent } from './start';
 import { SWIM_MODES, SwimState } from './swim';
@@ -91,6 +98,8 @@ interface SpeciesBatch {
   readonly profile: FishRenderProfile;
   lods: readonly LodBatch[];
   capacity: number;
+  /** What its materials draw with; behind `FishSystem.features` while a texture reload is due. */
+  features: FishMaterialFeatures | null;
 }
 
 interface Script {
@@ -204,6 +213,7 @@ export class FishSystem {
   private disposed = false;
   /** False while `create` runs: a failure then fails `create`, which disposes the worker anyway. */
   private started = false;
+  private readonly simErrors = new SimErrorGate((message) => this.report(`Fish sim: ${message}`));
 
   private readonly matrix = new Matrix4();
   private readonly position = new Vector3();
@@ -252,7 +262,7 @@ export class FishSystem {
       throw signal.aborted ? signal.reason : cause;
     }
     system.started = true;
-    system.reportSimErrors();
+    system.simErrors.open();
     if (system.staleTextures().length > 0) system.requestSync();
     return system;
   }
@@ -543,6 +553,9 @@ export class FishSystem {
         if (this.disposed) return;
         this.held.releaseAll();
         this.report('Fish could not be updated for the new tank stock', cause);
+      } finally {
+        // A pending pass reloads what this one left stale, and catches up after itself.
+        if (!this.disposed && !this.dirty) this.catchUpFeatures();
       }
     }
   }
@@ -579,7 +592,7 @@ export class FishSystem {
       this.report(`Fish "${species}" has no visual; it swims and eats unseen`, cause);
       return null;
     }
-    return { input, model, profile, lods: [], capacity: 0 };
+    return { input, model, profile, lods: [], capacity: 0, features: null };
   }
 
   /** Grows a species' instance buffers; the materials are rebuilt around the new ones. */
@@ -627,6 +640,7 @@ export class FishSystem {
       return { instances, matrices, meshes, materials, count: 0, warmed: false };
     });
     batch.capacity = capacity;
+    batch.features = this.features;
     this.applyShadows(batch);
   }
 
@@ -894,6 +908,7 @@ export class FishSystem {
 
   private connectSim(worker: Worker): SimClient {
     const sim = new SimClient(worker);
+    sim.onError(this.simErrors.receive);
     sim.onSnapshot((snapshot) => this.stream.push(snapshot, performance.now()));
     sim.onAte((events) => {
       const bites = this.roster.translateAte(events);
@@ -901,11 +916,6 @@ export class FishSystem {
       for (const listener of this.ateListeners) listener(bites);
     });
     return sim;
-  }
-
-  /** Until this runs, a worker that fails while starting fails `create` instead. */
-  private reportSimErrors(): void {
-    this.sim.onError((message) => this.report(`Fish sim: ${message}`));
   }
 
   /**
@@ -919,7 +929,6 @@ export class FishSystem {
     this.worker.terminate();
     this.worker = spawnSimWorker();
     this.sim = this.connectSim(this.worker);
-    this.reportSimErrors();
   }
 
   private applyShadows(batch: SpeciesBatch): void {
@@ -933,7 +942,10 @@ export class FishSystem {
     });
   }
 
-  /** `retexturing` batches are left as they are: their reload builds them with these features. */
+  /**
+   * `retexturing` batches keep what they have when it may wait: their reload builds them with these
+   * features, and a sync pass that ends without reloading them catches them up.
+   */
   private applyFeatures(tier: Tier, retexturing: ReadonlySet<SpeciesBatch> = new Set()): void {
     const features = featuresFor(tier, {
       msaa: this.engine.renderer.samples > 1,
@@ -942,7 +954,18 @@ export class FishSystem {
     if (sameFeatures(this.features, features)) return;
     this.features = features;
     for (const batch of this.batches.values()) {
-      if (!retexturing.has(batch)) this.setBatchFeatures(batch, features);
+      if (!retexturing.has(batch) || !waitsForReload(batch.features, features)) {
+        this.setBatchFeatures(batch, features);
+      }
+    }
+  }
+
+  /** Brings every batch a reload did not rebuild up to the current features. */
+  private catchUpFeatures(): void {
+    const features = this.features;
+    if (features === null) return;
+    for (const batch of this.batches.values()) {
+      if (!sameFeatures(batch.features, features)) this.setBatchFeatures(batch, features);
     }
   }
 
@@ -951,6 +974,7 @@ export class FishSystem {
       for (const m of lod.materials) m.setFeatures(features);
       lod.warmed = false;
     }
+    batch.features = features;
   }
 
   /** Poses `rt` into `position`/`quaternion`/`pose`; false when it has nowhere to be drawn yet. */

@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
-import { buildOrRelease, DisposeStack, releaseAll } from './lifecycle';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { buildOrRelease, DisposeStack, releaseAll, settlesWithin } from './lifecycle';
 
 describe('releaseAll', () => {
   it('runs the steps last first', () => {
@@ -132,5 +132,46 @@ describe('buildOrRelease', () => {
     expect(onCleanupError).toHaveBeenCalledOnce();
     const reported: unknown = onCleanupError.mock.calls[0]?.[0];
     expect((reported as AggregateError).errors).toEqual([cleanupFailure]);
+  });
+});
+
+describe('settlesWithin', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('is true for work that resolves before the deadline, and clears its timer', async () => {
+    vi.useFakeTimers();
+    await expect(settlesWithin(Promise.resolve('done'), 5000)).resolves.toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('is false for work that never settles, and only once the deadline passes', async () => {
+    vi.useFakeTimers();
+    let outcome: boolean | null = null;
+    void settlesWithin(new Promise(() => undefined), 5000).then((value) => (outcome = value));
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(outcome).toBeNull();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(outcome).toBe(false);
+  });
+
+  it('leaves late work running to finish on its own', async () => {
+    vi.useFakeTimers();
+    let finish = (): void => undefined;
+    const work = new Promise<void>((resolve) => (finish = resolve));
+    const late = vi.fn();
+    void work.then(late);
+    const outcome = settlesWithin(work, 100);
+    await vi.advanceTimersByTimeAsync(100);
+    await expect(outcome).resolves.toBe(false);
+    finish();
+    await work;
+    expect(late).toHaveBeenCalledOnce();
+  });
+
+  it('rethrows a rejection that lands in time', async () => {
+    const failure = new Error('chunk failed');
+    await expect(settlesWithin(Promise.reject(failure), 5000)).rejects.toBe(failure);
   });
 });
