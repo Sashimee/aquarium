@@ -14,12 +14,17 @@ export default defineConfig({
   use: {
     baseURL: `http://localhost:${port}`,
     viewport: { width: 800, height: 540 },
-    reducedMotion: 'reduce',
     trace: 'retain-on-failure',
     launchOptions: {
       args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
     },
   },
+  projects: [
+    { name: 'tanks', testIgnore: 'menus.spec.ts', use: { reducedMotion: 'reduce' } },
+    // menus.spec's press helper relies on the sheet and dock animations to give lazy panel
+    // bodies time to mount before it taps, so it keeps them on.
+    { name: 'menus', testMatch: 'menus.spec.ts', use: { reducedMotion: 'no-preference' } },
+  ],
   webServer: {
     command: 'node e2e/build-server.mjs && node --enable-source-maps apps/api/dist/e2e-server.js',
     cwd: '..',
