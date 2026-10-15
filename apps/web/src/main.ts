@@ -181,6 +181,8 @@ async function boot(): Promise<void> {
   const scenes = mountBiomeScene(engine, tankBiome, window.location.search, {
     mounted(scene) {
       fish.setAnchors(scene.anchors);
+      container.dataset['sceneBiome'] = scene.biome;
+      scene.enableMovablePlants();
       fish.setSceneColliders(scene.colliderList);
       play = createPlaySystem(engine, scene, interaction, fish.sim, feedGate);
       playChoices.applyTo(play.controller);
@@ -189,6 +191,7 @@ async function boot(): Promise<void> {
       if (import.meta.env.DEV) Object.assign(window, { tankScene: scene });
     },
     unmounting() {
+      delete container.dataset['sceneBiome'];
       sceneDecor.unmount();
       play?.dispose();
       play = null;

@@ -468,6 +468,7 @@ describe('sign-out safety', () => {
     let fail: (e: unknown) => void = () => undefined;
     api.care.mockReturnValue(new Promise<Tank>((_r, reject) => (fail = reject)));
     const pending = session.careAction({ type: 'water_change' });
+    await vi.waitFor(() => expect(api.care).toHaveBeenCalled());
     await session.setUser(null);
     fail(apiError(500, 'internal'));
     await pending;
@@ -508,6 +509,23 @@ describe('sign-out safety', () => {
     await session.setUser(null);
     await switching;
     expect(session.getState()).toMatchObject({ phase: 'anonymous', notice: null });
+    session.dispose();
+  });
+
+  it('sends nothing that was still queued when the user signs out', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    let release: (tank: Tank) => void = () => undefined;
+    api.care.mockImplementationOnce(() => new Promise<Tank>((resolve) => (release = resolve)));
+    api.care.mockResolvedValue(tankFixture());
+    const first = session.careAction({ type: 'water_change' });
+    const second = session.careAction({ type: 'gravel_vacuum' });
+    await vi.waitFor(() => expect(api.care).toHaveBeenCalledTimes(1));
+    await session.setUser(null);
+    release(tankFixture());
+    await Promise.all([first, second]);
+    expect(api.care).toHaveBeenCalledTimes(1);
+    expect(session.getState().error).toBeNull();
     session.dispose();
   });
 
@@ -713,7 +731,16 @@ describe('decor layout', () => {
   it('announces the saved layout with the tank', async () => {
     const { rec, session } = setup([tankFixture({ decorLayout: layout })]);
     await session.setUser(verified);
-    expect(rec.of('tank:loaded')).toMatchObject([{ decorLayout: layout }]);
+    expect(rec.of('tank:loaded')).toMatchObject([{ decorLayout: layout, decorEdited: true }]);
+  });
+
+  it('tells a never-edited tank from an emptied one', async () => {
+    const never = setup([tankFixture({ decorLayout: [], decorEdited: false })]);
+    await never.session.setUser(verified);
+    expect(never.rec.of('tank:loaded')).toMatchObject([{ decorLayout: [], decorEdited: false }]);
+    const emptied = setup([tankFixture({ decorLayout: [], decorEdited: true })]);
+    await emptied.session.setUser(verified);
+    expect(emptied.rec.of('tank:loaded')).toMatchObject([{ decorLayout: [], decorEdited: true }]);
   });
 
   it('saves only the newest of a burst of edits and does not echo it back to the scene', async () => {
@@ -757,7 +784,7 @@ describe('decor layout', () => {
       tankFixture({ decorLayout: layout, lastTickAt: '2026-02-01T12:00:00.000Z' }),
     );
     await session.onVisible();
-    expect(rec.of('tank:decor')).toEqual([{ tankId: TANK_A, layout }]);
+    expect(rec.of('tank:decor')).toEqual([{ tankId: TANK_A, layout, edited: true }]);
   });
 
   it('drops an edit still waiting to be saved when the user signs out', async () => {

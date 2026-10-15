@@ -14,7 +14,7 @@ import { FeederLayer } from './feederLayer';
 import { DecorWorld, type DecorScenePort } from './world';
 
 const preset: DecorItem[] = [item('boulder-01', -0.3, 0), item('coast-rocks-05', 0.3, 0.05)];
-const plant: DecorItem = item('java-fern', 0.1, -0.1);
+const plant: DecorItem = item('host-anemone', 0.1, -0.1);
 
 function fakeScene() {
   const hard: DecorItem[][] = [];
@@ -62,21 +62,27 @@ describe('DecorWorld', () => {
   it('shows a saved layout and tells the sim about its colliders', async () => {
     const { world, hard, colliders } = setup();
     const saved = [plant, item('boulder-01', 0.1, 0.1)];
-    await world.showSaved(saved);
+    await world.showSaved(saved, true);
     expect(hard.at(-1)).toEqual([saved[1]]);
     expect(must(colliders.at(-1)).map((c) => c.id)).toEqual(['decor:p1']);
   });
 
-  it('reads an empty saved layout as an unedited tank and keeps the preset', async () => {
+  it('keeps the preset for a tank that was never edited', async () => {
     const { world, hard } = setup();
-    await world.showSaved([]);
+    await world.showSaved([], false);
     expect(hard.at(-1)).toEqual(preset);
+  });
+
+  it('shows a tank the player emptied bare', async () => {
+    const { world, hard } = setup();
+    await world.showSaved([], true);
+    expect(hard.at(-1)).toEqual([]);
   });
 
   it('keeps the vacation feeder out of the hardscape but in the layout and colliders', async () => {
     const { world, feeders, hard, colliders } = setup();
     const feeder = item(VACATION_FEEDER_ASSET_ID, 0, 0.1);
-    await world.showSaved([plant, ...preset, feeder]);
+    await world.showSaved([plant, ...preset, feeder], true);
     expect(hard.at(-1)).toEqual(preset);
     expect(must(colliders.at(-1)).map((c) => c.id)).toContain('decor:p3');
     expect(feeders.group.children).toHaveLength(1);
@@ -87,15 +93,15 @@ describe('DecorWorld', () => {
 
   it('removes the feeder visual when the feeder goes', async () => {
     const { world, feeders } = setup();
-    await world.showSaved([item(VACATION_FEEDER_ASSET_ID, 0, 0.1), ...preset]);
+    await world.showSaved([item(VACATION_FEEDER_ASSET_ID, 0, 0.1), ...preset], true);
     expect(feeders.group.children).toHaveLength(1);
-    await world.showSaved(preset);
+    await world.showSaved(preset, true);
     expect(feeders.group.children).toHaveLength(0);
   });
 
   it('previews a move on the scene piece with the right index', async () => {
     const { world, moves } = setup();
-    await world.showSaved([item(VACATION_FEEDER_ASSET_ID, 0, 0.1), ...preset]);
+    await world.showSaved([item(VACATION_FEEDER_ASSET_ID, 0, 0.1), ...preset], true);
     const moved = { id: 'p3', item: item('coast-rocks-05', 0.2, 0.2) };
     world.preview(moved);
     expect(moves).toEqual([[1, moved.item]]);
@@ -158,7 +164,13 @@ describe('SavedDecor', () => {
     const report = vi.fn();
     const saved = new SavedDecor(bus, report);
     const layout = [plant, item('boulder-01', 0.1, 0.1)];
-    bus.emit('tank:loaded', { tankId: 't1', biome: 'freshwater', fish, decorLayout: layout });
+    bus.emit('tank:loaded', {
+      tankId: 't1',
+      biome: 'freshwater',
+      fish,
+      decorLayout: layout,
+      decorEdited: true,
+    });
     expect(saved.tankId).toBe('t1');
     saved.attach(world);
     await settle();
@@ -172,6 +184,7 @@ describe('SavedDecor', () => {
     const saved = new SavedDecor(bus, vi.fn(), {
       tankId: 't1',
       biome: 'freshwater',
+      edited: true,
       layout,
     });
     expect(saved.tankId).toBe('t1');
@@ -197,6 +210,7 @@ describe('SavedDecor', () => {
       biome: 'freshwater',
       fish,
       decorLayout: [item('boulder-01', 0.1, 0.1)],
+      decorEdited: true,
     });
     bus.emit('tank:unloaded', { tankId: 't1', reason: 'reset' });
     await settle();
@@ -213,6 +227,7 @@ describe('SavedDecor', () => {
       biome: 'freshwater',
       fish,
       decorLayout: [item('boulder-01', 0.1, 0.1)],
+      decorEdited: true,
     });
     await settle();
     const before = hard.length;
@@ -225,6 +240,7 @@ describe('SavedDecor', () => {
       biome: 'freshwater',
       fish,
       decorLayout: [item('boulder-01', -0.2, 0.1)],
+      decorEdited: true,
     });
     await settle();
     expect(hard.slice(before)).toEqual([[item('boulder-01', -0.2, 0.1)]]);
@@ -239,6 +255,7 @@ describe('SavedDecor', () => {
       biome: 'freshwater',
       fish,
       decorLayout: [item('boulder-01', 0.1, 0.1)],
+      decorEdited: true,
     });
     bus.emit('tank:unloaded', { tankId: 't1', reason: 'switch' });
     bus.emit('tank:none', {});
@@ -255,6 +272,7 @@ describe('SavedDecor', () => {
       biome: 'reef',
       fish,
       decorLayout: [item('boulder-01', 0.1, 0.1)],
+      decorEdited: true,
     });
     expect(hard).toHaveLength(0);
     expect(saved.editable).toBe(false);
@@ -264,13 +282,19 @@ describe('SavedDecor', () => {
     const { bus, world, hard } = setup();
     const saved = new SavedDecor(bus, vi.fn());
     saved.attach(world);
-    bus.emit('tank:loaded', { tankId: 't1', biome: 'freshwater', fish, decorLayout: [] });
+    bus.emit('tank:loaded', {
+      tankId: 't1',
+      biome: 'freshwater',
+      fish,
+      decorLayout: [],
+      decorEdited: false,
+    });
     bus.emit('decor:mode-changed', { active: true });
     const before = hard.length;
-    bus.emit('tank:decor', { tankId: 't1', layout: [item('boulder-01', 0.2, 0.2)] });
+    bus.emit('tank:decor', { tankId: 't1', layout: [item('boulder-01', 0.2, 0.2)], edited: true });
     expect(hard).toHaveLength(before);
     bus.emit('decor:mode-changed', { active: false });
-    bus.emit('tank:decor', { tankId: 't1', layout: [item('boulder-01', 0.2, 0.2)] });
+    bus.emit('tank:decor', { tankId: 't1', layout: [item('boulder-01', 0.2, 0.2)], edited: true });
     await settle();
     expect(hard.at(-1)).toEqual([item('boulder-01', 0.2, 0.2)]);
   });
@@ -279,10 +303,20 @@ describe('SavedDecor', () => {
     const { bus, world, hard } = setup();
     const saved = new SavedDecor(bus, vi.fn());
     saved.attach(world);
-    bus.emit('tank:loaded', { tankId: 't1', biome: 'freshwater', fish, decorLayout: [] });
+    bus.emit('tank:loaded', {
+      tankId: 't1',
+      biome: 'freshwater',
+      fish,
+      decorLayout: [],
+      decorEdited: false,
+    });
     await settle();
     const before = hard.length;
-    bus.emit('tank:decor', { tankId: 'other', layout: [item('boulder-01', 0.2, 0.2)] });
+    bus.emit('tank:decor', {
+      tankId: 'other',
+      layout: [item('boulder-01', 0.2, 0.2)],
+      edited: true,
+    });
     await settle();
     expect(hard).toHaveLength(before);
   });
@@ -296,11 +330,18 @@ describe('SavedDecor', () => {
       biome: 'freshwater',
       fish,
       decorLayout: [item('boulder-01', 0.1, 0.1)],
+      decorEdited: true,
     });
     await settle();
     const before = hard.length;
     bus.emit('tank:unloaded', { tankId: 't1', reason: 'switch' });
-    bus.emit('tank:loaded', { tankId: 't2', biome: 'reef', fish, decorLayout: [] });
+    bus.emit('tank:loaded', {
+      tankId: 't2',
+      biome: 'reef',
+      fish,
+      decorLayout: [],
+      decorEdited: false,
+    });
     await settle();
     expect(hard).toHaveLength(before);
   });
@@ -320,6 +361,7 @@ describe('SavedDecor', () => {
       biome: 'freshwater',
       fish,
       decorLayout: [item('boulder-01', 0.1, 0.1)],
+      decorEdited: true,
     });
     await settle();
     expect(report).toHaveBeenCalledWith('Could not arrange the decor', expect.any(Error));

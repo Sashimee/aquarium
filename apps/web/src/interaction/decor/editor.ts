@@ -1,4 +1,5 @@
 import { legacyTintSeed, type Biome, type DecorItem } from '@aquarium/shared';
+import { SURFACE_MARGIN } from '../../scene/plants';
 import { footprintOf, rayHit, type RayLike } from './footprint';
 import type { Piece } from './layout';
 import {
@@ -30,6 +31,7 @@ export type DropResult = 'moved' | 'unchanged' | 'reverted';
 
 const ROTATION_LIMIT = Math.PI;
 const NEW_PIECE_DROP_HEIGHT = 0.18;
+const MIN_PLANT_SCALE = 0.4;
 const DEFAULT_SPAWN: readonly [number, number] = [0, 0.05];
 
 const mm = (v: number) => Math.round(v * 1000) / 1000;
@@ -160,7 +162,11 @@ export class DecorEditor {
       ...moved,
       position: [moved.position[0], rest + LIFT, moved.position[2]],
     });
-    const reason = check(spec, lifted, this.obstaclesExcept(drag.id), this.options.limits);
+    const resting: DecorItem = {
+      ...lifted,
+      position: [lifted.position[0], rest, lifted.position[2]],
+    };
+    const reason = check(spec, resting, this.obstaclesExcept(drag.id), this.options.limits);
     drag.valid = reason === null;
     this.problem = reason ? describeRejection(reason) : null;
     return this.replace({ id: drag.id, item: lifted });
@@ -199,14 +205,20 @@ export class DecorEditor {
       this.problem = describeRejection('no-room');
       return { rejection: 'no-room' };
     }
-    const rest = restHeight(spec, spot, this.options.ground);
+    const fitted = this.fitToWater(spec, spot);
+    if (!fitted) {
+      this.problem = describeRejection('too-tall');
+      return { rejection: 'too-tall' };
+    }
+    const rest = restHeight(spec, fitted, this.options.ground);
+    const dropHeight = this.dropHeightFor(spec, fitted, rest);
     const id = `p${++this.seq}`;
     const piece: Piece = {
       id,
       item: seeded(
         tidy({
-          ...spot,
-          position: [spot.position[0], rest + NEW_PIECE_DROP_HEIGHT, spot.position[2]],
+          ...fitted,
+          position: [fitted.position[0], rest + dropHeight, fitted.position[2]],
         }),
       ),
     };
@@ -281,6 +293,26 @@ export class DecorEditor {
     }
     this.drops.clear();
     return moved;
+  }
+
+  /** A new plant taller than the water is shrunk to fit; null when it would have to shrink too far. */
+  private fitToWater(spec: DecorSpec, spot: DecorItem): DecorItem | null {
+    const { waterTop } = this.options.limits;
+    if (spec.kind !== 'plant' || waterTop === undefined) return spot;
+    const rest = restHeight(spec, spot, this.options.ground);
+    const available = waterTop - SURFACE_MARGIN - rest;
+    const height = spec.box.max[1] * spot.scale;
+    if (available >= height) return spot;
+    const scale = Math.floor((spot.scale * available * 1000) / height) / 1000;
+    return scale < MIN_PLANT_SCALE ? null : { ...spot, scale };
+  }
+
+  /** How far above rest a new piece starts falling; a plant gets only the headroom the water leaves it. */
+  private dropHeightFor(spec: DecorSpec, item: DecorItem, rest: number): number {
+    const { waterTop } = this.options.limits;
+    if (spec.kind !== 'plant' || waterTop === undefined) return NEW_PIECE_DROP_HEIGHT;
+    const room = waterTop - SURFACE_MARGIN - (rest + spec.box.max[1] * item.scale);
+    return Math.max(0, Math.min(NEW_PIECE_DROP_HEIGHT, room));
   }
 
   private tryChange(piece: Piece, spec: DecorSpec, candidate: DecorItem): boolean {

@@ -83,7 +83,7 @@ export const tankSchema = z.object({
   decorLayout: decorLayoutResponseSchema,
   // false: the player never saved a layout, so decorLayout is [] and the client shows the biome preset.
   // true: decorLayout is what the player saved, and [] means they emptied the tank.
-  decorEdited: z.boolean().optional(),
+  decorEdited: z.boolean(),
   water: waterSchema,
   lastTickAt: timestampSchema,
   fish: z.array(fishSchema),

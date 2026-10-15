@@ -1,11 +1,11 @@
 import { VACATION_FEEDER_ASSET_ID } from '@aquarium/sim/lifecycle';
 import type { CatalogEntry } from '../../scene/assets';
 import { heightScale } from '../../scene/coralStyle';
-import { HARDSCAPE_KINDS } from '../../scene/hardscape';
+import { HARDSCAPE_KINDS, PLANT_KIND } from '../../scene/hardscape';
 
 export type Vec3Tuple = readonly [number, number, number];
 
-export type DecorKind = 'rock' | 'driftwood' | 'decor' | 'coral' | 'feeder';
+export type DecorKind = 'rock' | 'driftwood' | 'decor' | 'coral' | 'plant' | 'feeder';
 
 export interface DecorSpec {
   readonly assetId: string;
@@ -30,7 +30,7 @@ export function humanize(assetId: string): string {
 }
 
 function isMovableKind(kind: string): kind is Exclude<DecorKind, 'feeder'> {
-  return HARDSCAPE_KINDS.has(kind);
+  return HARDSCAPE_KINDS.has(kind) || kind === PLANT_KIND;
 }
 
 function scaleHeight(v: Vec3Tuple, k: number): Vec3Tuple {

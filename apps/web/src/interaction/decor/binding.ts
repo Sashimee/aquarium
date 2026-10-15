@@ -7,6 +7,7 @@ export interface SavedTank {
   readonly tankId: string;
   readonly biome: string;
   readonly layout: DecorLayout;
+  readonly edited: boolean;
 }
 
 /**
@@ -16,7 +17,7 @@ export interface SavedTank {
  */
 export class SavedDecor {
   private world: DecorWorld | null = null;
-  private latest: { biome: string; layout: DecorLayout } | null = null;
+  private latest: { biome: string; layout: DecorLayout; edited: boolean } | null = null;
   private editing = false;
   private customised = false;
   private loadedTankId: string | null = null;
@@ -29,20 +30,20 @@ export class SavedDecor {
   ) {
     if (initial) {
       this.loadedTankId = initial.tankId;
-      this.latest = { biome: initial.biome, layout: initial.layout };
+      this.latest = { biome: initial.biome, layout: initial.layout, edited: initial.edited };
     }
     this.offs = [
       interaction.on('decor:mode-changed', ({ active }) => {
         this.editing = active;
       }),
-      interaction.on('tank:loaded', ({ tankId, biome, decorLayout }) => {
+      interaction.on('tank:loaded', ({ tankId, biome, decorLayout, decorEdited }) => {
         this.loadedTankId = tankId;
-        this.latest = { biome, layout: decorLayout };
+        this.latest = { biome, layout: decorLayout, edited: decorEdited };
         this.show();
       }),
-      interaction.on('tank:decor', ({ tankId, layout }) => {
+      interaction.on('tank:decor', ({ tankId, layout, edited }) => {
         if (this.editing || !this.latest || tankId !== this.loadedTankId) return;
-        this.latest = { ...this.latest, layout };
+        this.latest = { ...this.latest, layout, edited };
         this.show();
       }),
       interaction.on('tank:unloaded', ({ reason }) => {
@@ -85,7 +86,7 @@ export class SavedDecor {
     const saved = this.latest;
     if (!saved && !this.customised) return;
     this.customised = saved !== null;
-    const task = saved ? world.showSaved(saved.layout) : world.showPreset();
+    const task = saved ? world.showSaved(saved.layout, saved.edited) : world.showPreset();
     task.catch((cause: unknown) => this.report('Could not arrange the decor', cause));
   }
 }

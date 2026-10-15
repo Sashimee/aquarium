@@ -133,6 +133,7 @@ describe('queueTankEvents', () => {
       tankId: TANK_A,
       biome: 'freshwater',
       decorLayout: [],
+      decorEdited: false,
       fish: [],
     });
     interaction.emit('tank:none', {});
@@ -149,6 +150,7 @@ describe('queueTankEvents', () => {
       tankId: TANK_A,
       biome: 'freshwater',
       decorLayout: [],
+      decorEdited: false,
       fish: [],
     });
     interaction.emit('tank:fish-released', { tankId: TANK_A, fishId: FISH_1 });
@@ -180,6 +182,7 @@ describe('startFish', () => {
         tankId: TANK_A,
         biome: 'freshwater',
         decorLayout: [],
+        decorEdited: false,
         fish: [fishFixture(FISH_1)],
       });
       interaction.emit('tank:fish-added', {
@@ -201,6 +204,7 @@ describe('startFish', () => {
       tankId: TANK_A,
       biome: 'freshwater',
       decorLayout: [],
+      decorEdited: false,
       fish: [fishFixture(FISH_1)],
     });
     interaction.emit('tank:fish-added', {
@@ -265,7 +269,13 @@ describe('startFish', () => {
       { id: 'anemone-1', kind: 'anemone', position: [-0.1, 0.2, 0], radius: 0.05 },
     ];
     handle.setAnchors(first);
-    interaction.emit('tank:loaded', { tankId: TANK_A, biome: 'reef', decorLayout: [], fish: [] });
+    interaction.emit('tank:loaded', {
+      tankId: TANK_A,
+      biome: 'reef',
+      decorLayout: [],
+      decorEdited: false,
+      fish: [],
+    });
     handle.setAnchors(latest);
     pending.resolve(fish);
     await flush();
@@ -444,6 +454,7 @@ describe('startFish', () => {
         tankId: TANK_A,
         biome: 'freshwater',
         decorLayout: [],
+        decorEdited: false,
         fish: [fishFixture(FISH_1)],
       });
     });
@@ -469,6 +480,7 @@ describe('startFish', () => {
       tankId: TANK_A,
       biome: 'freshwater',
       decorLayout: [],
+      decorEdited: false,
       fish: [fishFixture(FISH_1)],
     });
     await flush();
@@ -499,6 +511,7 @@ describe('startFish', () => {
         tankId: TANK_A,
         biome: 'freshwater',
         decorLayout: [],
+        decorEdited: false,
         fish: [fishFixture(FISH_1)],
       });
     });

@@ -183,3 +183,29 @@ describe('withinServerBounds', () => {
     expect(out.position[2]).toBe(-limits.z);
   });
 });
+
+describe('plants under the surface', () => {
+  const fern = spec('java-fern');
+  const limits = { ...LIMITS, waterTop: 0.3 };
+
+  it('accepts a plant whose tip stays 3 cm under the water', () => {
+    expect(check(fern, item('java-fern', 0, 0, {}, 0.08), [], limits)).toBeNull();
+  });
+
+  it('refuses a plant that would reach the surface margin', () => {
+    expect(check(fern, item('java-fern', 0, 0, { scale: 1.5 }, 0.06), [], limits)).toBe('too-tall');
+  });
+
+  it('lets plants and rocks share ground', () => {
+    const among = [{ spec: rock, item: item('boulder-01', 0, 0) }];
+    expect(check(fern, item('java-fern', 0, 0), among, LIMITS)).toBeNull();
+    const leaves = [{ spec: fern, item: item('java-fern', 0, 0) }];
+    expect(check(rock, item('boulder-01', 0, 0), leaves, LIMITS)).toBeNull();
+    expect(check(rock, item('boulder-01', 0, 0), among, LIMITS)).toBe('overlap');
+  });
+
+  it('does not limit rocks or tanks without a water level', () => {
+    expect(check(rock, item('boulder-01', 0, 0, {}, 0.29), [], limits)).toBeNull();
+    expect(check(fern, item('java-fern', 0, 0, { scale: 1.5 }, 0.2), [], LIMITS)).toBeNull();
+  });
+});

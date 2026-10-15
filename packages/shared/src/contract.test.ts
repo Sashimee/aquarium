@@ -165,6 +165,7 @@ describe('tank and fish', () => {
       name: 'Home',
       biome: 'reef',
       decorLayout: [{ assetId: 'rock-1', position: [0, 0, 0] }],
+      decorEdited: true,
       water: { ammonia: 0, nitrate: 2, algae: 0.1, uneatenFood: 0 },
       lastTickAt: ts,
       fish: [fish],
@@ -172,8 +173,8 @@ describe('tank and fish', () => {
     };
     const parsed = tankSchema.parse(tank);
     expect(parsed.decorLayout[0]?.scale).toBe(1);
-    expect(tankSchema.parse({ ...tank, decorEdited: true }).decorEdited).toBe(true);
-    expect(tankSchema.parse(tank).decorEdited).toBeUndefined();
+    expect(parsed.decorEdited).toBe(true);
+    expect(tankSchema.safeParse({ ...tank, decorEdited: undefined }).success).toBe(false);
     expect(
       tankSchema.parse({ ...tank, futureField: 1, fish: [{ ...fish, futureField: 1 }] }),
     ).toEqual(parsed);

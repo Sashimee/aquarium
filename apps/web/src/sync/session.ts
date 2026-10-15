@@ -1,4 +1,12 @@
-import type { AwaySummary, Biome, CareAction, FoodType, Tank, User } from '@aquarium/shared';
+import type {
+  AwaySummary,
+  Biome,
+  CareAction,
+  DecorLayout,
+  FoodType,
+  Tank,
+  User,
+} from '@aquarium/shared';
 import type { EventBus } from '../engine/events';
 import { layoutKey } from '../interaction/decor/key';
 import type { InteractionEvents } from '../interaction/events';
@@ -39,6 +47,7 @@ export class TankSession {
   private uploader: AteUploader | null = null;
   private lastRefreshMs = 0;
   private loadId = 0;
+  private queueEpoch = 0;
   private switchId = 0;
   private loadedId: string | null = null;
   private readonly shownLayout = new Map<string, string>();
@@ -63,7 +72,7 @@ export class TankSession {
     });
     this.stopListening = [
       deps.interaction.on('decor:layout', ({ tankId, layout }) => {
-        this.shownLayout.set(tankId, layoutKey(layout));
+        this.shownLayout.set(tankId, decorKey(true, layout));
         this.layoutSaver.submit(tankId, layout);
       }),
       deps.interaction.on('decor:command', (command) => {
@@ -291,6 +300,7 @@ export class TankSession {
   private async reset(phase: 'anonymous' | 'unverified'): Promise<void> {
     this.loadId++;
     this.switchId++;
+    this.queueEpoch++;
     this.unloadScene('reset')?.dispose();
     this.layoutSaver.reset();
     this.shownLayout.clear();
@@ -308,7 +318,7 @@ export class TankSession {
     this.unloadScene('switch')?.dispose();
     const gen = this.loadId;
     this.loadedId = tankId;
-    this.shownLayout.set(tankId, layoutKey(tank.decorLayout));
+    this.shownLayout.set(tankId, decorKey(tank.decorEdited, tank.decorLayout));
     this.uploader = new AteUploader({
       ...this.deps.ateOptions,
       sleep: this.sleep,
@@ -328,6 +338,7 @@ export class TankSession {
       biome: tank.biome,
       fish: tank.fish,
       decorLayout: tank.decorLayout,
+      decorEdited: tank.decorEdited,
     });
     this.deps.interaction.emit('tank:water', { tankId, water: tank.water });
   }
@@ -387,7 +398,12 @@ export class TankSession {
 
   /** All requests run one after another so snapshots always arrive in the order the server made them. */
   private enqueue<T>(task: () => Promise<T>): Promise<T> {
-    const run = this.chain.then(task, task);
+    const epoch = this.queueEpoch;
+    const guarded = () => {
+      if (epoch !== this.queueEpoch) throw new SessionEnded();
+      return task();
+    };
+    const run = this.chain.then(guarded, guarded);
     this.chain = run.catch(() => undefined);
     return run;
   }
@@ -442,10 +458,14 @@ export class TankSession {
         notice: `${fish.name} the ${species?.toLowerCase() ?? 'fish'} has died. You can net them when you are ready.`,
       });
     }
-    const incomingLayout = layoutKey(tank.decorLayout);
-    if (!this.layoutSaver.busy && incomingLayout !== this.shownLayout.get(tank.id)) {
+    const incomingLayout = decorKey(tank.decorEdited, tank.decorLayout);
+    if (!this.layoutSaver.busyFor(tank.id) && incomingLayout !== this.shownLayout.get(tank.id)) {
       this.shownLayout.set(tank.id, incomingLayout);
-      interaction.emit('tank:decor', { tankId: tank.id, layout: tank.decorLayout });
+      interaction.emit('tank:decor', {
+        tankId: tank.id,
+        layout: tank.decorLayout,
+        edited: tank.decorEdited,
+      });
     }
     if (held.water !== tank.water)
       interaction.emit('tank:water', { tankId: tank.id, water: tank.water });
@@ -481,6 +501,13 @@ export class TankSession {
   private emitChange(): void {
     for (const listener of [...this.listeners]) listener();
   }
+}
+
+/** A queued request that was dropped at sign-out, so it never reaches the next user's session. */
+class SessionEnded extends Error {}
+
+function decorKey(edited: boolean, layout: DecorLayout): string {
+  return `${edited ? 'edited' : 'preset'}:${layoutKey(layout)}`;
 }
 
 const CARE_DONE: Record<Exclude<CareAction['type'], 'feed'>, string> = {

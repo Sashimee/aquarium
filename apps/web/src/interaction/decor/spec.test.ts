@@ -28,3 +28,9 @@ describe('specsFromCatalog', () => {
     expect(footprint.yMin).toBeCloseTo(mesh.min.y, 6);
   });
 });
+
+describe('plants', () => {
+  it('are movable pieces of kind plant', () => {
+    expect(SPECS.get('java-fern')?.kind).toBe('plant');
+  });
+});

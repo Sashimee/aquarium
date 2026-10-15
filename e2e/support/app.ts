@@ -110,6 +110,7 @@ export interface TankView {
   name: string;
   water: { uneatenFood: number; ammonia: number; algae: number };
   decorLayout: { assetId: string; position: number[]; rotationY: number }[];
+  decorEdited: boolean;
   fish: { id: string; name: string; status: 'alive' | 'dead' }[];
   memorials: { fishName: string }[];
 }
