@@ -4,6 +4,7 @@ import type { Biome, DecorItem, PlantPatch, PresetLayout } from '@aquarium/share
 import type { Engine } from '../engine/Engine';
 import type { Tier, TierSettings } from '../engine/quality/tiers';
 import { substrateHeight } from '../engine/tank/substrate';
+import { raceAbort } from './abortable';
 import { AssetCatalog, ModelLibrary, type CatalogEntry, type ModelLod } from './assets';
 import {
   AnemoneGroup,
@@ -168,13 +169,29 @@ export class TankScene {
     engine: Engine,
     preset: PresetLayout,
     options: SceneOptions,
+    signal?: AbortSignal,
   ): Promise<TankScene> {
-    const catalog = await AssetCatalog.fetch();
+    const catalog = await AssetCatalog.fetch(undefined, signal);
+    signal?.throwIfAborted();
     const library = new ModelLibrary(engine.ktx2, catalog);
+    const building = TankScene.build(engine, library, catalog, preset, options, signal);
     try {
-      const scene = await TankScene.build(engine, library, catalog, preset, options);
-      return scene;
+      return await (signal ? raceAbort(building, signal) : building);
     } catch (error) {
+      if (signal?.aborted) {
+        void building
+          .then(
+            (scene) => scene.dispose(),
+            () => library.dispose(),
+          )
+          .catch((cause: unknown) =>
+            engine.events.emit('engine:error', {
+              message: 'Could not clean up an abandoned preset build',
+              cause,
+            }),
+          );
+        throw error;
+      }
       await library.dispose();
       throw error;
     }
@@ -186,6 +203,7 @@ export class TankScene {
     catalog: AssetCatalog,
     preset: PresetLayout,
     options: SceneOptions,
+    signal?: AbortSignal,
   ): Promise<TankScene> {
     const settings = engine.quality.settings;
     const tier = engine.quality.tier;
@@ -220,6 +238,7 @@ export class TankScene {
     const waterTop = dimensions.height - dimensions.freeboard;
     hardItems.push(...layoutPlants.map((item) => ({ item, kind: PLANT_KIND })));
     const movable = await movableColliders(library, hardItems, waterTop);
+    signal?.throwIfAborted();
     const colliders: Collider[] = [...movable.colliders];
     const movableColliderCount = colliders.length;
     const hard = new ColliderField(colliders);
@@ -284,18 +303,24 @@ export class TankScene {
       anchors,
       options,
     );
-    scene.current.configure(preset.current ?? DEFAULT_CURRENT);
-    scene.releases.push(engine.onFrame((deltaS) => scene.current.advance(deltaS)));
-    scene.releases.push(
-      engine.onFrame(() => {
-        scene.fluorescence.value = fluorescenceLevel(engine.interior.actinicExcitation);
-      }),
-    );
-    const key = keyFor(tier, settings);
-    await scene.rebuildVisuals(key, () => false);
-    scene.queue.adopt(key);
-    scene.releases.push(applyBiomeLighting(engine, preset.biome));
-    scene.releases.push(engine.quality.register('scene', (s, t) => scene.applyTier(t, s)));
+    try {
+      scene.current.configure(preset.current ?? DEFAULT_CURRENT);
+      scene.releases.push(engine.onFrame((deltaS) => scene.current.advance(deltaS)));
+      scene.releases.push(
+        engine.onFrame(() => {
+          scene.fluorescence.value = fluorescenceLevel(engine.interior.actinicExcitation);
+        }),
+      );
+      const key = keyFor(tier, settings);
+      await scene.rebuildVisuals(key, () => signal?.aborted ?? false);
+      signal?.throwIfAborted();
+      scene.queue.adopt(key);
+      scene.releases.push(applyBiomeLighting(engine, preset.biome));
+      scene.releases.push(engine.quality.register('scene', (s, t) => scene.applyTier(t, s)));
+    } catch (error) {
+      await scene.dispose();
+      throw error;
+    }
     return scene;
   }
 

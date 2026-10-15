@@ -39,16 +39,16 @@ function harness(url: Biome, options: { gate?: boolean; failing?: Biome } = {}) 
   const tankBiome = new TankBiome(interaction, url);
   const root = new Scene();
   const built: FakeScene[] = [];
-  const gates: { biome: Biome; release: () => void }[] = [];
+  const gates: { biome: Biome; release: () => void; signal: AbortSignal }[] = [];
   const mounted: Biome[] = [];
   const unmounted: Biome[] = [];
   const errors: string[] = [];
   const scenes = new BiomeScene<FakeScene>(tankBiome, {
     ready: Promise.resolve(),
-    build: async (biome) => {
+    build: async (biome, signal) => {
       if (options.gate) {
         const gate = deferred();
-        gates.push({ biome, release: gate.resolve });
+        gates.push({ biome, release: gate.resolve, signal });
         await gate.promise;
       }
       if (biome === options.failing) throw new Error(`no ${biome} assets`);
@@ -337,17 +337,15 @@ describe('BiomeScene', () => {
     h.load('t1', 'reef');
     await vi.waitFor(() => expect(h.gates).toHaveLength(2));
     h.none();
-    h.gates[1]?.release();
     await vi.waitFor(() => expect(h.gates).toHaveLength(3));
+    expect(h.gates[1]?.signal.aborted).toBe(true);
     expect(h.gates[2]?.biome).toBe('freshwater');
+    h.gates[1]?.release();
     h.gates[2]?.release();
     await h.scenes.settled();
+    await vi.waitFor(() => expect(h.built.map((s) => s.disposed)).toEqual([true, true, false]));
     expect(h.mounted).toEqual(['freshwater', 'freshwater']);
-    expect(h.built.map((s) => [s.biome, s.disposed])).toEqual([
-      ['freshwater', true],
-      ['reef', true],
-      ['freshwater', false],
-    ]);
+    expect(h.built.map((s) => s.biome)).toEqual(['freshwater', 'reef', 'freshwater']);
     expect(shownNames(h.root)).toEqual(['freshwater']);
   });
 
@@ -355,10 +353,12 @@ describe('BiomeScene', () => {
     const h = harness('freshwater', { gate: true });
     await vi.waitFor(() => expect(h.gates).toHaveLength(1));
     const disposing = h.scenes.dispose();
-    h.gates[0]?.release();
     await disposing;
+    expect(h.gates[0]?.signal.aborted).toBe(true);
+    h.gates[0]?.release();
+    await vi.waitFor(() => expect(h.built.map((s) => s.disposed)).toEqual([true]));
+    expect(h.built).toHaveLength(1);
     expect(h.mounted).toEqual([]);
-    expect(h.built.every((s) => s.disposed)).toBe(true);
     expect(h.root.children).toHaveLength(0);
   });
 
@@ -398,6 +398,31 @@ describe('BiomeScene', () => {
     expect(shownNames(root)).toEqual(['freshwater']);
   });
 
+  it('abandons a superseded build at once and builds the newer biome', async () => {
+    const h = harness('reef', { gate: true });
+    await vi.waitFor(() => expect(h.gates).toHaveLength(1));
+    h.tankBiome.setFallback('freshwater');
+    await vi.waitFor(() => expect(h.gates).toHaveLength(2));
+    expect(h.gates[0]?.signal.aborted).toBe(true);
+    expect(h.gates[1]?.signal.aborted).toBe(false);
+    h.gates[1]?.release();
+    await h.scenes.settled();
+    expect(h.mounted).toEqual(['freshwater']);
+    expect(h.errors).toEqual([]);
+  });
+
+  it('rebuilds the biome asked for again after its build was superseded', async () => {
+    const h = harness('reef', { gate: true });
+    await vi.waitFor(() => expect(h.gates).toHaveLength(1));
+    h.tankBiome.setFallback('freshwater');
+    h.tankBiome.setFallback('reef');
+    await vi.waitFor(() => expect(h.gates).toHaveLength(2));
+    expect(h.gates[1]?.biome).toBe('reef');
+    h.gates[1]?.release();
+    await h.scenes.settled();
+    expect(h.mounted).toEqual(['reef']);
+  });
+
   it('mounts a build that outlives the timeout once it lands', async () => {
     vi.useFakeTimers();
     const h = harness('reef', { gate: true });
@@ -406,6 +431,7 @@ describe('BiomeScene', () => {
     expect(h.errors).toEqual([
       'The reef preset is still loading after 90 s; showing the empty tank until it arrives',
     ]);
+    expect(h.gates[0]?.signal.aborted).toBe(false);
     expect(h.root.children).toHaveLength(0);
     h.gates[0]?.release();
     await h.scenes.settled();
@@ -413,19 +439,52 @@ describe('BiomeScene', () => {
     expect(shownNames(h.root)).toEqual(['reef']);
   });
 
-  it('disposes a late build when the biome changed meanwhile', async () => {
+  it('builds the next biome while a hung build is still pending, and drops the hung one when it lands', async () => {
     vi.useFakeTimers();
     const h = harness('reef', { gate: true });
     await vi.waitFor(() => expect(h.gates).toHaveLength(1));
     await vi.advanceTimersByTimeAsync(90_000);
     h.tankBiome.setFallback('freshwater');
-    h.gates[0]?.release();
     await vi.waitFor(() => expect(h.gates).toHaveLength(2));
-    expect(h.built[0]?.disposed).toBe(true);
-    expect(h.mounted).toEqual([]);
+    expect(h.gates[0]?.signal.aborted).toBe(true);
     h.gates[1]?.release();
     await h.scenes.settled();
     expect(h.mounted).toEqual(['freshwater']);
+    h.gates[0]?.release();
+    await vi.waitFor(() =>
+      expect(h.built.map((s) => [s.biome, s.disposed])).toEqual([
+        ['freshwater', false],
+        ['reef', true],
+      ]),
+    );
+    expect(h.mounted).toEqual(['freshwater']);
     expect(shownNames(h.root)).toEqual(['freshwater']);
+  });
+
+  it('ignores a late failure of an abandoned build', async () => {
+    const interaction = new EventBus<InteractionEvents>();
+    const tankBiome = new TankBiome(interaction, 'reef');
+    const errors: string[] = [];
+    const root = new Scene();
+    const failures: (() => void)[] = [];
+    const scenes = new BiomeScene<FakeScene>(tankBiome, {
+      ready: Promise.resolve(),
+      build: (biome) =>
+        biome === 'reef'
+          ? new Promise<FakeScene>((_, reject) => failures.push(() => reject(new Error('aborted'))))
+          : Promise.resolve(new FakeScene(biome, root)),
+      mounted: () => undefined,
+      unmounting: () => undefined,
+      onError: (message) => errors.push(message),
+      timeoutMs: 90_000,
+    });
+    await vi.waitFor(() => expect(failures).toHaveLength(1));
+    tankBiome.setFallback('freshwater');
+    await scenes.settled();
+    failures[0]?.();
+    await Promise.resolve();
+    expect(errors).toEqual([]);
+    expect(scenes.scene?.biome).toBe('freshwater');
+    await scenes.dispose();
   });
 });
