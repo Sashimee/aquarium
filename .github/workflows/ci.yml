@@ -192,7 +192,7 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     needs: e2e-shard
-    if: ${{ always() && (github.event_name != 'pull_request' || startsWith(github.head_ref, 'chore/batch-') || contains(github.event.pull_request.labels.*.name, 'e2e')) }}
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || startsWith(github.head_ref, 'chore/batch-') || contains(github.event.pull_request.labels.*.name, 'e2e')) }}
     timeout-minutes: 5
     steps:
       - name: All e2e shards passed
