@@ -10,6 +10,15 @@ import {
 } from 'three/webgpu';
 import { applyDayLighting, type DayLightingRig, FRESHWATER_FILL_LEVEL } from './dayLighting';
 import { daylightAt, minuteOfDay } from './daylight';
+import {
+  browserSessionStore,
+  type DeviceLostInfo,
+  recoveryFor,
+  sessionBackend,
+  watchDeviceLoss,
+  webglFallbackUrl,
+} from './deviceLoss';
+import { showDeviceNotice } from './deviceNotice';
 import { EffectsSlot } from './effectsSlot';
 import { PipelineFailureHandler, usesMaterial, watchPipelineErrors } from './pipelineErrors';
 import { installRoomLighting, DEFAULT_HDRI_URL } from './environment';
@@ -143,14 +152,23 @@ export class Engine {
     try {
       return await buildOrRelease(
         async (cleanup) => {
+          const session = sessionBackend(config.options.backend, browserSessionStore());
           const { renderer, backend } = await initRenderer(
-            config.options,
+            { ...config.options, backend: session.backend },
             cleanup,
             (parameters) => new WebGPURenderer(parameters),
             window.devicePixelRatio,
           );
           configureRenderer(renderer);
           const engine = new Engine(container, renderer, backend, events, config, cleanup);
+          if (session.fellBack) {
+            cleanup.add(
+              showDeviceNotice(
+                document.body,
+                'WebGPU stopped responding on this device, so this tab draws the tank with WebGL 2.',
+              ),
+            );
+          }
           await engine.warmUp();
           await engine.loadEffects();
           return engine;
@@ -176,6 +194,8 @@ export class Engine {
     config: EngineConfig,
     private readonly cleanup: DisposeStack,
   ) {
+    const preference = config.options.backend;
+    cleanup.add(watchDeviceLoss(renderer, (info) => this.deviceLost(info, preference)));
     const dimensions = config.tank ?? DEFAULT_TANK;
     this.clock = config.options.clock;
     this.showStats = config.options.stats;
@@ -336,6 +356,33 @@ export class Engine {
 
   private reportError(message: string, cause: unknown): void {
     if (!this.disposed) this.events.emit('engine:error', { message, cause });
+  }
+
+  /**
+   * Every texture, pipeline and transcoded KTX2 format belongs to the lost device, and the fish,
+   * scene and decor systems all hold them, so the WebGL 2 fallback is a fresh page load rather
+   * than an in-place renderer swap.
+   */
+  private deviceLost(info: DeviceLostInfo, preference: EngineOptions['backend']): void {
+    if (this.disposed) return;
+    void this.renderer.setAnimationLoop(null);
+    const recovery = recoveryFor(info.api, preference);
+    this.events.emit('engine:device-lost', { api: info.api, message: info.message, recovery });
+    this.reportError(`The ${info.api} device was lost: ${info.message}`, info);
+    if (recovery === 'webgl') {
+      const here = window.location.href;
+      const next = webglFallbackUrl(here, browserSessionStore());
+      if (next === here) window.location.reload();
+      else window.location.replace(next);
+      return;
+    }
+    this.cleanup.add(
+      showDeviceNotice(
+        document.body,
+        'The graphics device stopped responding, so the tank cannot be drawn. Reload to try again.',
+        { label: 'Reload', run: () => window.location.reload() },
+      ),
+    );
   }
 
   private setupHood(d: TankDimensions): void {
