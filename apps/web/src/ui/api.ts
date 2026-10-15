@@ -194,6 +194,36 @@ function whenAborted(signal: AbortSignal): Promise<never> {
   });
 }
 
+async function readBody(
+  res: Response,
+  stalled: AbortSignal,
+  progress: () => void,
+): Promise<Uint8Array<ArrayBuffer>> {
+  if (!res.body) return new Uint8Array(0);
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const next = await Promise.race([reader.read(), whenAborted(stalled)]);
+      if (next.done) break;
+      chunks.push(next.value);
+      size += next.value.byteLength;
+      progress();
+    }
+  } catch (cause) {
+    void reader.cancel().catch(() => undefined);
+    throw cause;
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
 function combineSignals(signals: AbortSignal[]): { signal: AbortSignal; dispose(): void } {
   const [only] = signals;
   if (signals.length === 1 && only !== undefined) return { signal: only, dispose() {} };
@@ -228,7 +258,11 @@ export function createApiClient(
     timeoutMs: number = REQUEST_TIMEOUT_MS,
   ): Promise<Response> {
     const timeout = new AbortController();
-    const timer = setTimeout(() => timeout.abort(), timeoutMs);
+    let timer = setTimeout(() => timeout.abort(), timeoutMs);
+    const restartTimer = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => timeout.abort(), timeoutMs);
+    };
     const callerSignals = [init.signal, options.signal].filter(
       (candidate): candidate is AbortSignal => candidate != null,
     );
@@ -240,8 +274,10 @@ export function createApiClient(
         signal: combined.signal,
         headers: { accept: 'application/json', ...init.headers },
       });
-      // Buffered here so the timer also bounds a body that stalls after the headers.
-      const bytes = await Promise.race([res.arrayBuffer(), whenAborted(timeout.signal)]);
+      // Buffered here, and the timer restarts with every chunk: a body that stalls after the
+      // headers times out, while a large one that keeps arriving does not.
+      restartTimer();
+      const bytes = await readBody(res, timeout.signal, restartTimer);
       return new Response(bytes.byteLength > 0 ? bytes : null, {
         status: res.status,
         statusText: res.statusText,
