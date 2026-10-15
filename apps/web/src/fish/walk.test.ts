@@ -1,4 +1,5 @@
-import { FishState } from '@aquarium/sim';
+import type { Collider } from '@aquarium/shared';
+import { CarcassSupport, FishState } from '@aquarium/sim';
 import { describe, expect, it } from 'vitest';
 import {
   APPENDAGE_HZ,
@@ -6,6 +7,7 @@ import {
   APPENDAGE_WRAP_CYCLES,
   curlAboveFloor,
   curledTip,
+  floorUnderTail,
   legCyclePhase,
   legSwing,
   MAX_TAIL_CURL,
@@ -112,6 +114,64 @@ describe('curlAboveFloor', () => {
   it('passes a straight or negative curl through', () => {
     expect(curlAboveFloor(0, rig, 1, { y: FLOOR }, level, FLOOR)).toBe(0);
     expect(curlAboveFloor(-0.2, rig, 1, { y: FLOOR }, level, FLOOR)).toBe(-0.2);
+  });
+
+  describe('floorUnderTail', () => {
+    const ROCK_TOP = 0.15;
+    const rock: Collider = {
+      id: 'rock',
+      kind: 'box',
+      hard: true,
+      center: [0, ROCK_TOP - 0.05, 0],
+      halfExtents: [0.05, 0.05, 0.05],
+      rotationY: 0,
+      rounding: 0,
+    };
+    const sand = (): number => FLOOR;
+    const support = new CarcassSupport([rock]);
+    const floorAt = (x: number, z: number, fromY: number): number =>
+      support.floorY({ x, y: fromY, z, yaw: 0 }, 0, sand);
+
+    it('clamps a flip on a rock against the rock top, not the sand below', () => {
+      const at = { x: 0, y: ROCK_TOP + STANDOFF, z: 0 };
+      const floorY = floorUnderTail(MAX_TAIL_CURL, rig, 1, at, level, floorAt);
+      expect(floorY).toBeCloseTo(ROCK_TOP, 3);
+      expect(curlAboveFloor(MAX_TAIL_CURL, rig, 1, at, level, FLOOR)).toBe(MAX_TAIL_CURL);
+      const curl = curlAboveFloor(MAX_TAIL_CURL, rig, 1, at, level, floorY);
+      expect(curl).toBeLessThan(MAX_TAIL_CURL);
+      expect(tipHeight(curl, at.y)).toBeGreaterThanOrEqual(floorY + margin - 1e-9);
+    });
+
+    it('takes the sand for a walker beside the rock', () => {
+      const at = { x: 0.08, y: FLOOR + STANDOFF, z: 0 };
+      expect(floorUnderTail(MAX_TAIL_CURL, rig, 1, at, level, floorAt)).toBe(FLOOR);
+    });
+
+    it('keeps the higher floor of the tip at rest and fully curled', () => {
+      const curled = curledTip(rig, MAX_TAIL_CURL);
+      const step = (rig.tip.z + curled.z) / 2;
+      const ledge = (_x: number, z: number): number => (z > step ? 0.12 : FLOOR);
+      const at = { x: 0, y: 0.2, z: 0 };
+      expect(floorUnderTail(MAX_TAIL_CURL, rig, 1, at, level, ledge)).toBe(0.12);
+      expect(floorUnderTail(0.01, rig, 1, at, level, ledge)).toBe(FLOOR);
+    });
+
+    it('looks under the tip where the heading turns it, scaled, from the body height', () => {
+      const yaw90 = { x: 0, y: Math.SQRT1_2, z: 0, w: Math.SQRT1_2 };
+      const at = { x: 0.3, y: 0.2, z: -0.1 };
+      const seen: [number, number, number][] = [];
+      floorUnderTail(MAX_TAIL_CURL, rig, 2, at, yaw90, (x, z, fromY) => {
+        seen.push([x, z, fromY]);
+        return FLOOR;
+      });
+      for (const [i, c] of [0, MAX_TAIL_CURL].entries()) {
+        const tip = curledTip(rig, c);
+        const [x, z, fromY] = seen[i] ?? [NaN, NaN, NaN];
+        expect(x).toBeCloseTo(at.x + 2 * tip.z, 9);
+        expect(z).toBeCloseTo(at.z, 9);
+        expect(fromY).toBe(at.y);
+      }
+    });
   });
 });
 
