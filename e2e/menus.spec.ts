@@ -34,16 +34,20 @@ async function settleAnimations(page: Page): Promise<void> {
 // rendering. This checks the same thing that matters here, that nothing covers the target, and
 // then sends one real touch or mouse press at its centre.
 async function press(target: Locator): Promise<void> {
-  // The HUD re-measures a frame after a panel opens or closes, and a sheet springs in over several
-  // frames, so a target can briefly be moving or covered; one that still is after that settles is
-  // a real bug. Settling waits outside the poll because one stalled frame can outlast its timeout.
+  // The HUD re-measures a frame after a panel opens or closes, a sheet springs in over several
+  // frames, and lazy panel bodies grow it after it opens, so a target can briefly be moving or
+  // covered. Its box must hold still across two frames; one that still moves or is covered after
+  // that is a real bug. Settling waits outside the poll because one stalled frame can outlast its timeout.
   let point: Point = [0, 0];
   await settleAnimations(target.page());
   await expect
     .poll(
       async () => {
-        const probe = await target.evaluate((element) => {
-          const moving = document
+        const probe = await target.evaluate(async (element) => {
+          const earlier = element.getBoundingClientRect();
+          await new Promise((done) => requestAnimationFrame(done));
+          await new Promise((done) => requestAnimationFrame(done));
+          const animating = document
             .getAnimations()
             .some(
               (animation) =>
@@ -53,6 +57,12 @@ async function press(target: Locator): Promise<void> {
                 animation.effect.target?.contains(element),
             );
           const box = element.getBoundingClientRect();
+          const moving =
+            animating ||
+            Math.abs(box.x - earlier.x) > 0.5 ||
+            Math.abs(box.y - earlier.y) > 0.5 ||
+            Math.abs(box.width - earlier.width) > 0.5 ||
+            Math.abs(box.height - earlier.height) > 0.5;
           const px = box.x + box.width / 2;
           const py = box.y + box.height / 2;
           const top = document.elementFromPoint(px, py);
@@ -60,7 +70,7 @@ async function press(target: Locator): Promise<void> {
             box.width === 0 || box.height === 0
               ? 'is not rendered'
               : moving
-                ? 'is still animating'
+                ? 'is still moving'
                 : top !== null && element.contains(top)
                   ? null
                   : top
@@ -324,7 +334,7 @@ async function settledPose(page: Page): Promise<string> {
   return last;
 }
 
-// A real orbit moves the camera by about 0.5 within the frame that follows the drag.
+// A real orbit moves the camera by over 1 within the frame that follows the drag.
 function poseDistance(a: string, b: string): number {
   const left = a.split(' ').map(Number);
   const right = b.split(' ').map(Number);

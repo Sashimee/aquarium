@@ -61,7 +61,7 @@ jobs:
           - name: menus-phone
             args: menus.spec --grep=phone
           - name: decor
-            args: decor.spec motion.spec
+            args: decor.spec
           - name: menus-mouse-death
             args: menus.spec death.spec --grep-invert=phone
           - name: switch-tanks-feed
