@@ -1,6 +1,6 @@
 import type { FoodType } from '@aquarium/shared';
-import { FOOD_PARTICLES } from '@aquarium/sim';
-import { FOOD_PROFILES, foodTypeIndex } from './profiles';
+import { FOOD_PARTICLES, FOOD_STRIDE, MAX_FOOD_PARTICLES } from '@aquarium/sim';
+import { FOOD_PROFILES, foodTypeIndex, NORI_SCALE_MAX, particlesPerPortion } from './profiles';
 
 export interface FoodBounds {
   readonly minX: number;
@@ -35,15 +35,19 @@ export interface FoodParticle {
   eaten: number;
 }
 
-export const MAX_FOOD_PARTICLES = 400;
-export const FOOD_STRIDE = 5;
+export { FOOD_STRIDE, MAX_FOOD_PARTICLES };
 const MAX_STEP_S = 0.1;
 const SURFACE_MARGIN = 0.002;
 const WALL_MARGIN = 0.004;
 const EATEN_EPSILON = 1e-6;
 const NORI_CLIP_DEPTH = 0.12;
-const NORI_GLASS_GAP = 0.012;
+export const NORI_GLASS_GAP = 0.012;
 const NORI_SPACING = 0.12;
+/** A sheet hangs this far below its clip, in radii (the shader's sheet length). */
+const NORI_SHEET_DROP = 1.6;
+/** Live clips at once; clipped nori never dissolves, so the player has to let the fish clear it. */
+export const MAX_NORI_CLIPS = 5;
+const NORI_HALF_WIDTH = FOOD_PROFILES.nori.radius * NORI_SCALE_MAX;
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
@@ -71,14 +75,18 @@ export class FoodField {
   }
 
   /**
-   * Scatters a portion around (x, z) at the water surface; nori is clipped to the back glass instead. Returns how many particles were made,
-   * which is fewer than asked when the tank already holds the cap of uneaten food.
+   * Scatters a portion around (x, z) at the water surface; nori is clipped to the back glass
+   * instead. Returns how many particles were made, which is fewer than asked when the tank
+   * already holds the cap of uneaten food (or of nori clips).
    */
   drop(food: FoodType, portion: number, x: number, z: number, spread = 0.03): number {
     if (!(portion > 0)) throw new RangeError(`drop: portion must be positive, got ${portion}`);
-    const profile = FOOD_PROFILES[food];
-    const wanted = Math.max(1, Math.round(profile.particlesPerPortion * portion));
-    const made = Math.min(wanted, MAX_FOOD_PARTICLES - this.list.length);
+    const wanted = Math.max(1, Math.round(particlesPerPortion(food) * portion));
+    const room =
+      food === 'nori'
+        ? Math.min(MAX_NORI_CLIPS - this.clipCount(), MAX_FOOD_PARTICLES - this.list.length)
+        : MAX_FOOD_PARTICLES - this.list.length;
+    const made = Math.min(wanted, room);
     const { bounds } = this.env;
     for (let i = 0; i < made; i++) {
       if (food === 'nori') {
@@ -112,14 +120,21 @@ export class FoodField {
     return made;
   }
 
+  private clipCount(): number {
+    let n = 0;
+    for (const p of this.list) if (p.food === 'nori') n++;
+    return n;
+  }
+
   private clipped(x: number, index: number, count: number): FoodParticle {
     const { bounds } = this.env;
     const slot = count > 1 ? index / (count - 1) - 0.5 : 0;
+    const y = bounds.waterTop - NORI_CLIP_DEPTH - this.random() * 0.03;
     return {
       id: this.nextId++,
       food: 'nori',
-      x: clamp(x + slot * NORI_SPACING, bounds.minX + WALL_MARGIN, bounds.maxX - WALL_MARGIN),
-      y: bounds.waterTop - NORI_CLIP_DEPTH - this.random() * 0.03,
+      x: this.freeClipX(x + slot * NORI_SPACING, y),
+      y,
       z: bounds.minZ + NORI_GLASS_GAP,
       vx: 0,
       vy: 0,
@@ -128,6 +143,30 @@ export class FoodField {
       settledS: -1,
       eaten: 0,
     };
+  }
+
+  /** The clip x nearest `x` that keeps the sheet clear of the side panes and of other sheets. */
+  private freeClipX(x: number, y: number): number {
+    const { bounds } = this.env;
+    const lo = bounds.minX + NORI_HALF_WIDTH + WALL_MARGIN;
+    const hi = bounds.maxX - NORI_HALF_WIDTH - WALL_MARGIN;
+    const wanted = clamp(x, lo, hi);
+    const step = NORI_HALF_WIDTH * 2.2;
+    const reach = FOOD_PROFILES.nori.radius * NORI_SHEET_DROP * NORI_SCALE_MAX;
+    const blocked = (cx: number): boolean =>
+      this.list.some(
+        (q) =>
+          q.food === 'nori' &&
+          Math.abs(q.x - cx) < NORI_HALF_WIDTH * 2 &&
+          Math.abs(q.y - y) < reach,
+      );
+    for (let k = 0; k * step <= hi - lo; k++) {
+      for (const sign of k === 0 ? [1] : [1, -1]) {
+        const cx = wanted + sign * k * step;
+        if (cx >= lo && cx <= hi && !blocked(cx)) return cx;
+      }
+    }
+    return wanted;
   }
 
   /** Removes particles by id (eaten); unknown ids are ignored. Returns the ones removed. */

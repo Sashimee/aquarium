@@ -51,7 +51,7 @@ export class PlayVisuals {
   private readonly normal = new Vector3();
   private readonly sway = { dx: 0, dz: 0 };
 
-  constructor(private readonly groundHeight: (x: number, z: number) => number) {
+  constructor() {
     const foodGeometry = new SphereGeometry(1, 8, 6);
     const foodMaterial = new MeshStandardNodeMaterial({ roughness: 0.85 });
     this.food = new InstancedMesh(foodGeometry, foodMaterial, MAX_FOOD_PARTICLES);
@@ -141,8 +141,6 @@ export class PlayVisuals {
           y: p.y,
           z: p.z,
           eaten: p.eaten / FOOD_PARTICLES.nori.portion,
-          remaining,
-          ground: this.groundHeight(p.x, p.z),
         });
         continue;
       }

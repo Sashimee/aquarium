@@ -246,8 +246,8 @@ describe('PlayController feeding', () => {
   it('drops at the tank centre on a feed request and announces it', () => {
     const t = makeController();
     t.events.emit('feed:request', { food: 'pellets', portion: 1 });
-    expect(t.food.count).toBe(8);
-    expect(t.seen.dropped).toHaveBeenCalledWith({ food: 'pellets', portion: 1, particles: 8 });
+    expect(t.food.count).toBe(20);
+    expect(t.seen.dropped).toHaveBeenCalledWith({ food: 'pellets', portion: 1, particles: 20 });
   });
 
   it('hand-feeds at the water point under the pointer', () => {

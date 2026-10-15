@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { FOOD_PARTICLES } from '@aquarium/sim';
-import { FOOD_PROFILES } from '../food/profiles';
-import { buildNoriGeometry, hangAngle, noriSeed, SHEET_LENGTH } from './nori';
+import { FOOD_PROFILES, NORI_SCALE_MAX, NORI_SCALE_MIN } from '../food/profiles';
+import { buildNoriGeometry, noriScale, noriSeed, SHEET_LENGTH } from './nori';
 
 describe('nori geometry', () => {
   const geometry = buildNoriGeometry();
@@ -45,24 +45,6 @@ describe('nori geometry', () => {
   });
 });
 
-describe('hangAngle', () => {
-  it('hangs straight in open water', () => {
-    expect(hangAngle(1, 0.03)).toBe(0);
-  });
-
-  it('lies flat on the sand', () => {
-    expect(hangAngle(0, 0.03)).toBeCloseTo(Math.PI / 2, 9);
-    expect(hangAngle(-0.01, 0.03)).toBeCloseTo(Math.PI / 2, 9);
-  });
-
-  it('swings so the lowest edge just touches the sand', () => {
-    const scale = 0.03;
-    const height = 0.02;
-    const angle = hangAngle(height, scale);
-    expect(SHEET_LENGTH * scale * Math.cos(angle)).toBeCloseTo(height, 9);
-  });
-});
-
 describe('noriSeed', () => {
   it('is stable, within 0..1 and varies between ids', () => {
     const seeds = Array.from({ length: 50 }, (_, i) => noriSeed(i + 1));
@@ -80,5 +62,15 @@ describe('nori profile', () => {
     expect(FOOD_PROFILES.nori.radius * 2).toBeGreaterThan(0.04);
     expect(FOOD_PROFILES.nori.radius * 2).toBeLessThan(0.08);
     expect(FOOD_PARTICLES.nori.portion).toBeGreaterThan(0);
+  });
+});
+
+describe('noriScale', () => {
+  it('stays within the range the side-wall clearance assumes', () => {
+    for (let id = 1; id <= 200; id++) {
+      const scale = noriScale(id);
+      expect(scale).toBeGreaterThanOrEqual(FOOD_PROFILES.nori.radius * NORI_SCALE_MIN);
+      expect(scale).toBeLessThanOrEqual(FOOD_PROFILES.nori.radius * NORI_SCALE_MAX);
+    }
   });
 });
