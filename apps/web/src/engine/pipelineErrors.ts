@@ -1,10 +1,4 @@
-import {
-  getConsoleFunction,
-  Material,
-  setConsoleFunction,
-  type Object3D,
-  type WebGPURenderer,
-} from 'three/webgpu';
+import { getConsoleFunction, Material, setConsoleFunction, type Object3D } from 'three/webgpu';
 
 /**
  * A pipeline three failed to build. It logs the failure and from then on skips every draw that
@@ -146,12 +140,25 @@ function materialIdOfRenderObject(renderObject: unknown): number | null {
   return material instanceof Material ? materialIdOf(material) : null;
 }
 
+type ShaderErrorHook<GL> = (
+  gl: GL,
+  program: WebGLProgram,
+  vertex: WebGLShader,
+  fragment: WebGLShader,
+) => void;
+
+/** The renderer as far as watching it goes; `GL` is WebGL2RenderingContext on a real one. */
+export interface WatchedRenderer<GL extends ShaderLogs> {
+  readonly backend: object;
+  readonly debug: { onShaderError: ShaderErrorHook<GL> | null };
+}
+
 /**
  * Hears every pipeline three fails to build: on WebGPU through three's console, which still
  * prints as before, and on WebGL through its shader error hook. Returns the undo.
  */
-export function watchPipelineErrors(
-  renderer: Pick<WebGPURenderer, 'debug'> & { readonly backend: object },
+export function watchPipelineErrors<GL extends ShaderLogs>(
+  renderer: WatchedRenderer<GL>,
   onFailure: (failure: PipelineFailure) => void,
 ): () => void {
   const previous: ConsoleFunction | null = getConsoleFunction();
@@ -237,6 +244,12 @@ export type ReportFailure = (message: string, cause: unknown) => void;
  * Answers each pipeline failure once: by dropping the effects while that can still help, otherwise
  * by reporting it. The materials blamed on dropped effects stay quiet afterwards, as their pending
  * builds may still fail, except a scene material, which is reported if it fails without them too.
+ * A material already reported is broken without the effects' help, so it never drops them.
+ *
+ * Dropped effects are never re-attached, so under a temporal resolve (ultra) one broken scene
+ * material costs the post effects for the session: only the plain render tells it from a
+ * velocity-only failure. On WebGPU that test can misfire: failures arrive asynchronously, labelled
+ * by material alone, so a late one from the earlier velocity build reads as the plain one failing.
  */
 export class PipelineFailureHandler {
   private dropping = false;
@@ -254,6 +267,7 @@ export class PipelineFailureHandler {
   handle(failure: PipelineFailure): void {
     const id = failure.materialId;
     const cause = new Error(failure.message);
+    if (id !== null && this.reported.has(id)) return;
     if (id !== null && this.blamed.has(id)) {
       if (this.effects.active || !this.suspects.has(id)) return;
       this.suspects.delete(id);

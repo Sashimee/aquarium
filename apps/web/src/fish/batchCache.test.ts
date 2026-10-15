@@ -98,6 +98,33 @@ describe('BatchCache', () => {
     expect(released).toHaveLength(2);
   });
 
+  it('releases every batch on disposal even when some releases throw, then throws them all', async () => {
+    const wanted = new Set(['guppy', 'neon', 'betta']);
+    const released: string[] = [];
+    const failures = new Map(['guppy', 'betta'].map((key) => [key, new Error(`${key} stuck`)]));
+    const cache = new BatchCache<Batch>(
+      (batch) => {
+        released.push(batch.key);
+        const failure = failures.get(batch.key);
+        if (failure !== undefined) throw failure;
+      },
+      () => wanted,
+    );
+    for (const key of wanted) await cache.load(key, () => Promise.resolve({ key }));
+
+    let thrown: unknown = null;
+    try {
+      cache.dispose();
+    } catch (cause) {
+      thrown = cause;
+    }
+    expect(released).toEqual(['guppy', 'neon', 'betta']);
+    expect(thrown).toBeInstanceOf(AggregateError);
+    expect(thrown instanceof AggregateError ? thrown.errors : []).toEqual([...failures.values()]);
+    expect([...cache.values()]).toEqual([]);
+    expect(() => cache.dispose()).not.toThrow();
+  });
+
   it('loads an evicted key afresh once it is wanted again', async () => {
     const { cache, wanted, loads, loader } = setup(['neon']);
     await cache.load('neon', loader('neon'));
