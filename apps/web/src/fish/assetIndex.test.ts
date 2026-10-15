@@ -60,7 +60,8 @@ describe('parseFishAssets', () => {
     const entries = parseFishAssets(shippedIndex);
     for (const species of Object.values(DEMO_STOCKS).flatMap((s) => s.species)) {
       const profile = renderProfile(species.id);
-      for (const assetId of [profile.assetId, profile.male?.assetId ?? profile.assetId]) {
+      const male = profile.male === null ? [] : [profile.male.assetId];
+      for (const assetId of [profile.assetId, ...male]) {
         const entry = entries.get(assetId);
         expect(entry, assetId).toBeDefined();
         expect(entry?.lodFiles.length).toBeGreaterThanOrEqual(1);

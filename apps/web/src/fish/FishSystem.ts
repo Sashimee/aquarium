@@ -26,6 +26,7 @@ import { waterBounds, type TankDimensions } from '../engine/tank/dimensions';
 import type { InteractionEvents } from '../interaction/events';
 import { disposeFishModel, FishAssetLoader, type FishModel } from './assets';
 import { AcclimationBags } from './bag';
+import { BatchCache } from './batchCache';
 import type { SceneAnchor } from '../scene/anemone';
 import { demoTank, type DemoTank } from './demoStock';
 import { HeldFish, type FramePresence } from './heldFish';
@@ -162,9 +163,13 @@ export class FishSystem {
   readonly group = new Group();
   private readonly roster: TankRoster;
   private readonly runtimes = new Map<string, FishRuntime>();
-  private readonly batches = new Map<string, SpeciesBatch>();
-  private readonly loading = new Map<string, Promise<void>>();
-  private readonly unavailable = new Set<string>();
+  private readonly batches = new BatchCache<SpeciesBatch>(
+    (batch) => {
+      this.disposeLods(batch);
+      disposeFishModel(batch.model);
+    },
+    () => this.wantedBatches(),
+  );
   private readonly stream = new SimStream(STEP_DT, (snapshot) => this.sim.recycle(snapshot));
   private readonly held = new HeldFish();
   private readonly loader: FishAssetLoader;
@@ -277,11 +282,7 @@ export class FishSystem {
       },
       () => this.bags.dispose(),
       () => {
-        for (const batch of this.batches.values()) {
-          this.disposeLods(batch);
-          disposeFishModel(batch.model);
-        }
-        this.batches.clear();
+        this.batches.dispose();
         this.runtimes.clear();
       },
     );
@@ -332,7 +333,7 @@ export class FishSystem {
         break;
     }
     this.prune();
-    if (swapped) this.evictUnusedBatches();
+    if (swapped) this.batches.evictUnwanted();
     this.materialize();
     this.requestSync();
   }
@@ -344,7 +345,8 @@ export class FishSystem {
     const swapped = this.roster.setDemo(demo.config.fish);
     if (swapped) this.stopWorld();
     this.prune();
-    if (swapped) this.evictUnusedBatches();
+    // After `prune`, so no runtime still points at an evicted batch.
+    if (swapped) this.batches.evictUnwanted();
     this.materialize();
     this.requestSync();
   }
@@ -469,7 +471,7 @@ export class FishSystem {
   }
 
   /**
-   * Loads the model of every species and variant in the roster; one that fails stays unseen.
+   * Loads every model the roster draws with; one that fails stays unseen.
    * Batches are keyed by species and model, so a guppy male and female draw from separate
    * batches but stay one sim species.
    */
@@ -479,26 +481,17 @@ export class FishSystem {
       const key = batchKeyOf(fish);
       if (!wanted.has(key)) wanted.set(key, fish);
     }
-    await Promise.all([...wanted].map(([key, fish]) => this.loadBatch(key, fish)));
+    await Promise.all(
+      [...wanted].map(([key, fish]) => this.batches.load(key, () => this.createBatch(fish))),
+    );
   }
 
-  private loadBatch(key: string, fish: RosterFish): Promise<void> {
-    if (this.batches.has(key) || this.unavailable.has(key)) return Promise.resolve();
-    let pending = this.loading.get(key);
-    if (pending === undefined) {
-      pending = this.createBatch(key, fish).finally(() => this.loading.delete(key));
-      this.loading.set(key, pending);
-    }
-    return pending;
-  }
-
-  private async createBatch(key: string, fish: RosterFish): Promise<void> {
+  private async createBatch(fish: RosterFish): Promise<SpeciesBatch | null> {
     const { species } = fish;
     const input = speciesInput(species);
     if (input === undefined) {
-      this.unavailable.add(key);
       this.report(`Fish species "${species}" has no content in this build; it stays hidden`);
-      return;
+      return null;
     }
     let model: FishModel;
     let profile: FishRenderProfile;
@@ -506,16 +499,10 @@ export class FishSystem {
       profile = renderProfile(species);
       model = await this.loader.load(modelFor(profile, fish.key).assetId);
     } catch (cause) {
-      this.unavailable.add(key);
       this.report(`Fish "${species}" has no visual; it swims and eats unseen`, cause);
-      return;
+      return null;
     }
-    if (this.disposed || !this.wantedBatches().has(key)) {
-      disposeFishModel(model);
-      return;
-    }
-    const batch: SpeciesBatch = { input, model, profile, lods: [], capacity: 0 };
-    this.batches.set(key, batch);
+    return { input, model, profile, lods: [], capacity: 0 };
   }
 
   /** Grows a species' instance buffers; the materials are rebuilt around the new ones. */
@@ -583,21 +570,6 @@ export class FishSystem {
     const keys = new Set<string>();
     for (const fish of this.roster.entries()) keys.add(batchKeyOf(fish));
     return keys;
-  }
-
-  /**
-   * After a tank or demo swap, frees the model and buffers of every batch no fish draws from, so
-   * GPU memory follows the shown stock rather than every species seen. Runs after `prune`, so no
-   * runtime still points at an evicted batch.
-   */
-  private evictUnusedBatches(): void {
-    const wanted = this.wantedBatches();
-    for (const [key, batch] of this.batches) {
-      if (wanted.has(key)) continue;
-      this.disposeLods(batch);
-      disposeFishModel(batch.model);
-      this.batches.delete(key);
-    }
   }
 
   /** Builds a runtime for every roster fish whose model is loaded. */

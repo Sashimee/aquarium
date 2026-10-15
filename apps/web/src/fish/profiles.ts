@@ -109,7 +109,9 @@ export function renderProfile(speciesId: string): FishRenderProfile {
 
 /**
  * Depends on the fish's key alone, never on a profile, so editing the models can't flip a saved
- * fish. Even 1:1, and the same draw that first assigned guppies their sex.
+ * fish. Even 1:1, and the same draw that first assigned guppies their sex. Every fish has a sex,
+ * as in a real stock: a species without a male model draws both with its one model at full
+ * length, so a persisted sex belongs to every fish and this is the value for one saved before.
  */
 export function sexOf(fishKey: string): Sex {
   return hashString(`${fishKey}:variant`) < 2 ** 31 ? 'male' : 'female';
