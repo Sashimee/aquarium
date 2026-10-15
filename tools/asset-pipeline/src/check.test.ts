@@ -92,6 +92,21 @@ describe('validateManifest', () => {
     });
 
     it.each([
+      ['wm-firefish-hobgood', 'firefish', 'Nick Hobgood (Nhobgood)', 'CC-BY-SA-3.0'],
+      ['wm-rasbora-dabrowski', 'harlequin-rasbora', 'Mariusz Dabrowski', 'CC-BY-SA-3.0'],
+      ['wm-sixline-delso-63', 'six-line-wrasse', 'Diego Delso', 'CC-BY-SA-4.0'],
+      ['wm-ancistrus-reis', 'bristlenose-pleco', 'Júlio Reis', 'CC-BY-SA-4.0'],
+      ['wm-ancistrus-l144-adolfoi', 'bristlenose-pleco', 'Corydoras-adolfoi', 'CC-BY-SA-4.0'],
+    ])('accepts the roster photo %s', (id, species, author, licence) => {
+      const photo = manifestAsset({ id, kind: 'reference-photo', species, author, licence });
+      expect(validateManifest(manifestOf(photo), `\`${id}\` ${author}`)).toEqual([]);
+      const wrongAuthor = { ...photo, author: 'Jane Doe' };
+      expect(validateManifest(manifestOf(wrongAuthor), `\`${id}\` Jane Doe`).join('\n')).toContain(
+        'only allowed for the approved reference-photo ids',
+      );
+    });
+
+    it.each([
       ['another id by the same author', { id: 'src-a' }],
       ['another species', { species: 'betta' }],
       ['a model instead of a photo', { kind: 'model' }],
@@ -343,18 +358,25 @@ describe('checkAssets', () => {
     expect(modificationProblems(none, unused)).toHaveLength(1);
   });
 
-  it('keeps reference-photo modifications empty', () => {
-    const photo = manifestAsset({
-      id: 'src-a',
-      kind: 'reference-photo',
-      licence: 'CC-BY-4.0',
-      author: 'Ann',
-      modifications: ['projected onto the loft'],
-    });
+  it('derives modifications for a reference photo that feeds a built asset, and none for an unused one', () => {
+    const photo = (modifications: string[]) =>
+      manifestAsset({
+        id: 'src-a',
+        kind: 'reference-photo',
+        licence: 'CC-BY-4.0',
+        author: 'Ann',
+        modifications,
+      });
     const loft = { ...fishAsset(), licence: 'CC-BY-4.0', modifications: ['projected'] };
-    const index = inputFor([loft]).index;
-    expect(derivedModifications(index, manifestOf(photo)).has('src-a')).toBe(false);
-    expect(modificationProblems(index, manifestOf(photo)).join('\n')).toContain('must stay empty');
+    const used = inputFor([loft]).index;
+    expect(derivedModifications(used, manifestOf(photo([]))).get('src-a')).toEqual(['projected']);
+    expect(modificationProblems(used, manifestOf(photo([]))).join('\n')).toContain(
+      'modifications do not list',
+    );
+    expect(modificationProblems(used, manifestOf(photo(['projected'])))).toEqual([]);
+    const unused = { ...used, assets: [] };
+    expect(derivedModifications(unused, manifestOf(photo(['stale']))).get('src-a')).toEqual([]);
+    expect(modificationProblems(unused, manifestOf(photo(['stale']))).length).toBe(1);
   });
 
   it('fails a CC-BY source that has no credit', () => {

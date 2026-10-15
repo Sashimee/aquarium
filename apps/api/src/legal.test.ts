@@ -196,11 +196,24 @@ describe('privacy and credits', () => {
     expect(credits.entries.filter((e) => e.licence === 'CC-BY-3.0').length).toBeGreaterThan(0);
     expect(credits.shareAlikeNotice).toMatch(/BY-SA/);
     for (const e of credits.entries) {
-      expect(e.referenceOnly).toBe(e.kind === 'reference-photo');
+      expect(e.referenceOnly).toBe(e.kind === 'reference-photo' && e.modifications.length === 0);
       if (e.licence === 'CC0-1.0' || e.referenceOnly) expect(e.modifications).toEqual([]);
       else expect(e.modifications.length).toBeGreaterThan(0);
     }
-    expect(sa.every((e) => e.referenceOnly)).toBe(true);
+    const byId = (id: string) => credits.entries.find((e) => e.id === id);
+    for (const id of [
+      'wm-firefish-hobgood',
+      'wm-rasbora-dabrowski',
+      'wm-sixline-delso-63',
+      'wm-banggai-holleday',
+    ]) {
+      expect(byId(id)?.referenceOnly, id).toBe(false);
+      expect(byId(id)?.modifications.length, id).toBeGreaterThan(0);
+    }
+    expect(byId('wm-firefish-hobgood')?.shareAlike).toBe(true);
+    expect(byId('wm-sixline-huffman')?.referenceOnly).toBe(true);
+    expect(byId('wm-ancistrus-reis')?.referenceOnly).toBe(true);
+    expect(byId('wm-ancistrus-l144-adolfoi')?.referenceOnly).toBe(true);
     expect(credits.entries.slice(0, sa.length).every((e) => e.shareAlike)).toBe(true);
   });
 
@@ -245,6 +258,29 @@ describe('privacy and credits', () => {
     });
   });
 
+  it('credits a reference photo with recorded modifications as shipped', () => {
+    const credits = buildCredits({
+      assets: [
+        {
+          id: 'p',
+          kind: 'reference-photo',
+          title: 'T',
+          author: 'A',
+          author_url: 'https://example.com/a',
+          source_url: 'https://example.com/s',
+          licence: 'CC-BY-4.0',
+          licence_url: 'https://creativecommons.org/licenses/by/4.0/',
+          modifications: ['projected onto the loft texture'],
+          status: 'downloaded',
+        },
+      ],
+    });
+    expect(credits.entries[0]).toMatchObject({
+      referenceOnly: false,
+      modifications: ['projected onto the loft texture'],
+    });
+  });
+
   describe('licence rule', () => {
     const entry = {
       id: 'x',
@@ -283,6 +319,13 @@ describe('privacy and credits', () => {
       expect(
         build({ ...photo, species: 'banggai-cardinalfish', author: 'David J. Stang' }),
       ).not.toThrow();
+    });
+
+    it('accepts both approved pleco authors and rejects a third', () => {
+      const pleco = { ...photo, species: 'bristlenose-pleco', licence: 'CC-BY-SA-4.0' };
+      expect(build({ ...pleco, author: 'Júlio Reis' })).not.toThrow();
+      expect(build({ ...pleco, author: 'Corydoras-adolfoi' })).not.toThrow();
+      expect(build({ ...pleco, author: 'Someone Else' })).toThrow(/not allowed/);
     });
 
     it('accepts http and https URLs only', () => {

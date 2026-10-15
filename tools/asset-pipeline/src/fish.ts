@@ -14,9 +14,17 @@ import {
   type FinHints,
 } from './fins.ts';
 import { FIN_ID_ATTRIBUTE, FIN_IDS, FIN_MASK_ATTRIBUTE, type OutputAsset } from './index-schema.ts';
-import { extractParts, materialDefFrom, mergeParts, weldPart, type Part } from './parts.ts';
+import {
+  extractParts,
+  materialDefFrom,
+  mergeParts,
+  weldPart,
+  type MaterialDef,
+  type Part,
+} from './parts.ts';
 import { spotImage, tintImage, type SpotSpec, type TintSpec } from './finish.ts';
 import { renderSheet } from './raster.ts';
+import { worldSpotImage, type WorldSpotSpec } from './world-spots.ts';
 import { bakeToWorldSpace, readGltf, type SkinPose } from './source.ts';
 
 export const FISH_LOD_PLAN: LodPlan = { ratios: [1, 0.4, 0.15], minTriangles: 150 };
@@ -37,7 +45,7 @@ export interface FishRecipe {
   hints?: FinHints | undefined;
   roughness?: number;
   /** Recolours the source's base colour by luminance, then paints spots on it. */
-  recolour?: { tint: TintSpec; spots?: SpotSpec };
+  recolour?: { tint: TintSpec; spots?: SpotSpec; worldSpots?: WorldSpotSpec };
   /** For sources far denser than the other fish, whose LOD0 must itself be a decimation. */
   lodPlan?: LodPlan;
   modifications?: string[];
@@ -151,24 +159,41 @@ export async function writeDebugRender(
   repoRoot: string,
   id: string,
   parts: Part[],
+  materials: MaterialDef[],
 ): Promise<string> {
   const part = mergeParts(parts, parts[0]!.material);
   const rel = `debug/${id}.png`;
   const dir = join(repoRoot, 'tools', 'asset-pipeline', 'debug');
   mkdirSync(dir, { recursive: true });
+  const views = [
+    { view: 'side', pixelsAcross: 520 },
+    { view: 'top', pixelsAcross: 520 },
+    { view: 'front', pixelsAcross: 260 },
+  ] as const;
   const png = await renderSheet(
     {
       positions: part.positions,
       indices: part.indices,
       colors: finDebugColors(part.extra[FIN_MASK_ATTRIBUTE]!, part.extra[FIN_ID_ATTRIBUTE]!),
     },
-    [
-      { view: 'side', pixelsAcross: 520 },
-      { view: 'top', pixelsAcross: 520 },
-      { view: 'front', pixelsAcross: 260 },
-    ],
+    [...views],
   );
   writeFileSync(join(dir, `${id}.png`), png);
+
+  const image = materials.find((m) => m.name === part.material)?.baseColor?.image;
+  if (image) {
+    const textured = await renderSheet(
+      {
+        positions: part.positions,
+        indices: part.indices,
+        normals: part.normals,
+        uvs: part.uvs,
+      },
+      [...views],
+      { data: image.data, width: image.width, height: image.height, channels: 4 },
+    );
+    writeFileSync(join(dir, `${id}-textured.png`), textured);
+  }
   return rel;
 }
 
@@ -250,10 +275,16 @@ export async function buildSourceFish(recipe: FishRecipe, ctx: FishContext): Pro
       if (!def.baseColor) throw new Error(`${recipe.id}: recolour needs a base colour texture`);
       let image = tintImage(def.baseColor.image, recipe.recolour.tint);
       if (recipe.recolour.spots) image = spotImage(image, recipe.recolour.spots);
+      if (recipe.recolour.worldSpots)
+        image = worldSpotImage(
+          image,
+          parts.filter((p) => p.material === m.getName()),
+          recipe.recolour.worldSpots,
+        );
       return { ...def, baseColor: { ...def.baseColor, image } };
     }),
   );
-  const debugRender = await writeDebugRender(ctx.repoRoot, recipe.id, normalised);
+  const debugRender = await writeDebugRender(ctx.repoRoot, recipe.id, normalised, materials);
   const built = buildDocument(recipe.id, normalised, materials);
   return emitAsset({
     outRoot: ctx.outRoot,
