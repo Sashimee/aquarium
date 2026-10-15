@@ -38,6 +38,8 @@ export const RESET_REDIRECT_PATH = '/reset-password';
 
 export const REQUEST_TIMEOUT_MS = 15_000;
 export const SLOW_REQUEST_TIMEOUT_MS = 60_000;
+export const TOTAL_TIMEOUT_FACTOR = 4;
+export const MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
 
 export type FieldErrors = Partial<Record<string, string>>;
 
@@ -188,34 +190,49 @@ export interface ApiClientOptions {
   signal?: AbortSignal;
 }
 
-function whenAborted(signal: AbortSignal): Promise<never> {
-  return new Promise((_resolve, reject) => {
-    const fail = () => reject(new DOMException('aborted', 'AbortError'));
-    if (signal.aborted) fail();
-    else signal.addEventListener('abort', fail, { once: true });
+function whenAborted(signal: AbortSignal): { promise: Promise<never>; dispose(): void } {
+  let onAbort = () => {};
+  const promise = new Promise<never>((_resolve, reject) => {
+    onAbort = () => reject(new DOMException('aborted', 'AbortError'));
+    if (signal.aborted) onAbort();
+    else signal.addEventListener('abort', onAbort, { once: true });
   });
+  promise.catch(() => undefined);
+  return { promise, dispose: () => signal.removeEventListener('abort', onAbort) };
 }
+
+class ResponseTooLargeError extends Error {}
 
 async function readBody(
   res: Response,
   stalled: AbortSignal,
   progress: () => void,
+  maxBytes: number,
 ): Promise<Uint8Array<ArrayBuffer>> {
   if (!res.body) return new Uint8Array(0);
+  const declared = Number.parseInt(res.headers.get('content-length') ?? '', 10);
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    void res.body.cancel().catch(() => undefined);
+    throw new ResponseTooLargeError();
+  }
   const reader = res.body.getReader();
+  const aborted = whenAborted(stalled);
   const chunks: Uint8Array[] = [];
   let size = 0;
   try {
     for (;;) {
-      const next = await Promise.race([reader.read(), whenAborted(stalled)]);
+      const next = await Promise.race([reader.read(), aborted.promise]);
       if (next.done) break;
-      chunks.push(next.value);
       size += next.value.byteLength;
+      if (size > maxBytes) throw new ResponseTooLargeError();
+      chunks.push(next.value);
       progress();
     }
   } catch (cause) {
     void reader.cancel().catch(() => undefined);
     throw cause;
+  } finally {
+    aborted.dispose();
   }
   const bytes = new Uint8Array(size);
   let offset = 0;
@@ -260,6 +277,7 @@ export function createApiClient(
     timeoutMs: number = REQUEST_TIMEOUT_MS,
   ): Promise<Response> {
     const timeout = new AbortController();
+    const deadline = setTimeout(() => timeout.abort(), timeoutMs * TOTAL_TIMEOUT_FACTOR);
     let timer = setTimeout(() => timeout.abort(), timeoutMs);
     const restartTimer = () => {
       clearTimeout(timer);
@@ -276,16 +294,23 @@ export function createApiClient(
         signal: combined.signal,
         headers: { accept: 'application/json', ...init.headers },
       });
-      // Buffered here, and the timer restarts with every chunk: a body that stalls after the
-      // headers times out, while a large one that keeps arriving does not.
+      // Buffered here, and the stall timer restarts with every chunk; the overall deadline and the
+      // size cap bound a body that trickles in forever.
       restartTimer();
-      const bytes = await readBody(res, timeout.signal, restartTimer);
+      const bytes = await readBody(res, timeout.signal, restartTimer, MAX_RESPONSE_BYTES);
       return new Response(bytes.byteLength > 0 ? bytes : null, {
         status: res.status,
         statusText: res.statusText,
         headers: res.headers,
       });
     } catch (cause) {
+      if (cause instanceof ResponseTooLargeError) {
+        throw new ApiRequestError(
+          0,
+          'unexpected_response',
+          'The server sent a response that is too large to handle. Reload the page.',
+        );
+      }
       if (timeout.signal.aborted) throw new ApiTimeoutError(timeoutMs);
       throw new ApiRequestError(
         0,
@@ -296,6 +321,7 @@ export function createApiClient(
       );
     } finally {
       clearTimeout(timer);
+      clearTimeout(deadline);
       combined.dispose();
     }
   }
