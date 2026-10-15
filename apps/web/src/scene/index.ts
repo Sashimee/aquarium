@@ -50,10 +50,8 @@ export function mountBiomeScene(
     build: (b, signal) => mountPreset(engine, b, search, signal),
     mounted: hooks.mounted,
     unmounting: hooks.unmounting,
-    onError: (message, cause) => {
-      engine.events.emit('engine:error', { message, cause });
-      hooks.failed?.(message);
-    },
+    onError: (message, cause) => engine.events.emit('engine:error', { message, cause }),
+    ...(hooks.failed ? { onFailure: hooks.failed } : {}),
     timeoutMs: BUILD_TIMEOUT_MS,
   });
 }
