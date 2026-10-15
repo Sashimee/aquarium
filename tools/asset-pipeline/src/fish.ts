@@ -32,6 +32,7 @@ import {
 } from './parts.ts';
 import { spotImage, tintImage, type SpotSpec, type TintSpec } from './finish.ts';
 import { renderSheet } from './raster.ts';
+import { bleedIslandEdges } from './island-bleed.ts';
 import { worldSpotImage, type WorldSpotSpec } from './world-spots.ts';
 import { bakeToWorldSpace, readGltf, type SkinPose } from './source.ts';
 
@@ -59,7 +60,12 @@ export interface FishRecipe {
   glossyEyes?: GlossyEyeSpec;
   roughness?: number;
   /** Recolours the source's base colour by luminance, then paints spots on it. */
-  recolour?: { tint: TintSpec; spots?: SpotSpec; worldSpots?: WorldSpotSpec };
+  recolour?: {
+    tint: TintSpec;
+    spots?: SpotSpec;
+    worldSpots?: WorldSpotSpec;
+    islandBleedPx?: number;
+  };
   /** For sources far denser than the other fish, whose LOD0 must itself be a decimation. */
   lodPlan?: LodPlan;
   modifications?: string[];
@@ -293,6 +299,12 @@ export async function buildSourceFish(recipe: FishRecipe, ctx: FishContext): Pro
       if (!recipe.recolour) return def;
       if (!def.baseColor) throw new Error(`${recipe.id}: recolour needs a base colour texture`);
       let image = tintImage(def.baseColor.image, recipe.recolour.tint);
+      if (recipe.recolour.islandBleedPx)
+        image = bleedIslandEdges(
+          image,
+          parts.filter((p) => p.material === m.getName()),
+          recipe.recolour.islandBleedPx,
+        );
       if (recipe.recolour.spots) image = spotImage(image, recipe.recolour.spots);
       if (recipe.recolour.worldSpots)
         image = worldSpotImage(

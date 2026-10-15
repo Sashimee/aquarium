@@ -35,8 +35,7 @@ function longestExtent(parts: Part[]): number {
   return Math.max(...[0, 1, 2].map((a) => (max[a] ?? 0) - (min[a] ?? 0)));
 }
 
-/** World position of every texel the UV layout covers; gutter texels borrow the nearest covered neighbour so mips do not bleed unspotted colour. */
-function texelPositions(parts: Part[], width: number, height: number): Float32Array {
+export function coveredTexelPositions(parts: Part[], width: number, height: number): Float32Array {
   const out = new Float32Array(width * height * 3).fill(Number.NaN);
   for (const part of parts) {
     for (let t = 0; t < part.indices.length; t += 3) {
@@ -74,6 +73,12 @@ function texelPositions(parts: Part[], width: number, height: number): Float32Ar
         }
     }
   }
+  return out;
+}
+
+/** World position of every texel the UV layout covers; gutter texels borrow the nearest covered neighbour so mips do not bleed unspotted colour. */
+function texelPositions(parts: Part[], width: number, height: number): Float32Array {
+  const out = coveredTexelPositions(parts, width, height);
   for (let pass = 0; pass < 4; pass++) {
     const snapshot = out.slice();
     for (let y = 0; y < height; y++)
