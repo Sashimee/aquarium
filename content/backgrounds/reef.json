@@ -1,0 +1,42 @@
+[
+  {
+    "id": "coral-wall",
+    "biome": "reef",
+    "title": "Coral wall",
+    "file": null,
+    "credit": null,
+    "licence": null
+  },
+  {
+    "id": "deep-blue",
+    "biome": "reef",
+    "title": "Deep blue",
+    "file": null,
+    "credit": null,
+    "licence": null
+  },
+  {
+    "id": "lagoon-shallows",
+    "biome": "reef",
+    "title": "Lagoon shallows",
+    "file": null,
+    "credit": null,
+    "licence": null
+  },
+  {
+    "id": "rock-canyon",
+    "biome": "reef",
+    "title": "Rock canyon",
+    "file": null,
+    "credit": null,
+    "licence": null
+  },
+  {
+    "id": "open-water",
+    "biome": "reef",
+    "title": "Open water",
+    "file": null,
+    "credit": null,
+    "licence": null
+  }
+]

@@ -1,0 +1,42 @@
+[
+  {
+    "id": "lush-jungle",
+    "biome": "freshwater",
+    "title": "Lush jungle",
+    "file": null,
+    "credit": null,
+    "licence": null
+  },
+  {
+    "id": "river-bed",
+    "biome": "freshwater",
+    "title": "River bed",
+    "file": null,
+    "credit": null,
+    "licence": null
+  },
+  {
+    "id": "sunlit-pond",
+    "biome": "freshwater",
+    "title": "Sunlit pond",
+    "file": null,
+    "credit": null,
+    "licence": null
+  },
+  {
+    "id": "dark-slate",
+    "biome": "freshwater",
+    "title": "Dark slate",
+    "file": null,
+    "credit": null,
+    "licence": null
+  },
+  {
+    "id": "blue-gradient",
+    "biome": "freshwater",
+    "title": "Blue gradient",
+    "file": null,
+    "credit": null,
+    "licence": null
+  }
+]

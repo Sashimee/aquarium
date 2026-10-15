@@ -2,6 +2,7 @@ import {
   apiErrorSchema,
   decorLayoutSchema,
   decorPositionLimits,
+  DEFAULT_BACKGROUND_ID,
   legacyTintSeed,
   speciesListSchema,
   tankListSchema,
@@ -136,6 +137,51 @@ describe('tanks and fish', () => {
     expect(apiErrorSchema.parse(bad.json()).error.code).toBe('validation_failed');
     expect((await call(h, cookie, 'GET', '/api/tanks/not-a-uuid')).statusCode).toBe(400);
     expect((await call(h, cookie, 'PATCH', `/api/tanks/${tank.id}`, {})).statusCode).toBe(400);
+  });
+
+  it('starts on the biome default background and lets the owner change it', async () => {
+    const cookie = await signedIn(h);
+    const fresh = await createTank(h, cookie);
+    const reef = await createTank(h, cookie, 'reef');
+    expect(fresh.backgroundId).toBe(DEFAULT_BACKGROUND_ID.freshwater);
+    expect(reef.backgroundId).toBe(DEFAULT_BACKGROUND_ID.reef);
+
+    const set = await call(h, cookie, 'PATCH', `/api/tanks/${fresh.id}`, {
+      backgroundId: 'dark-slate',
+    });
+    expect(set.statusCode).toBe(200);
+    expect(tankSchema.parse(set.json()).backgroundId).toBe('dark-slate');
+    const reloaded = tankSchema.parse(
+      (await call(h, cookie, 'GET', `/api/tanks/${fresh.id}`)).json(),
+    );
+    expect(reloaded.backgroundId).toBe('dark-slate');
+
+    const renamed = await call(h, cookie, 'PATCH', `/api/tanks/${fresh.id}`, { name: 'Again' });
+    expect(tankSchema.parse(renamed.json()).backgroundId).toBe('dark-slate');
+  });
+
+  it('rejects a background from another biome or an unknown one', async () => {
+    const cookie = await signedIn(h);
+    const tank = await createTank(h, cookie);
+    const wrongBiome = await call(h, cookie, 'PATCH', `/api/tanks/${tank.id}`, {
+      backgroundId: 'coral-wall',
+    });
+    expect(wrongBiome.statusCode).toBe(400);
+    expect(apiErrorSchema.parse(wrongBiome.json()).error.code).toBe('validation_failed');
+    const unknown = await call(h, cookie, 'PATCH', `/api/tanks/${tank.id}`, {
+      backgroundId: 'nope',
+    });
+    expect(unknown.statusCode).toBe(400);
+    const after = tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${tank.id}`)).json());
+    expect(after.backgroundId).toBe(DEFAULT_BACKGROUND_ID.freshwater);
+  });
+
+  it('does not let another user set a background', async () => {
+    const alice = await signedIn(h);
+    const bob = await signedIn(h);
+    const tank = await createTank(h, alice);
+    const res = await call(h, bob, 'PATCH', `/api/tanks/${tank.id}`, { backgroundId: 'river-bed' });
+    expect(res.statusCode).toBe(404);
   });
 
   it('keeps tanks private to their owner', async () => {
