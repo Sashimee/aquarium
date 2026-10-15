@@ -21,7 +21,7 @@ jobs:
     timeout-minutes: 20
     services:
       postgres:
-        image: postgres:17
+        image: postgres:18
         env:
           POSTGRES_USER: aquarium
           POSTGRES_PASSWORD: aquarium
@@ -130,7 +130,7 @@ jobs:
             args: tanks.spec care.spec password-reset.spec password-reset-history.spec
     services:
       postgres:
-        image: postgres:17
+        image: postgres:18
         env:
           POSTGRES_USER: aquarium
           POSTGRES_PASSWORD: aquarium
@@ -310,7 +310,7 @@ jobs:
           docker network create aqnet
           docker run -d --name aqdb --network aqnet \
             -e POSTGRES_USER=aquarium -e POSTGRES_PASSWORD=aquarium -e POSTGRES_DB=aquarium \
-            --health-cmd "pg_isready -U aquarium" --health-interval 2s --health-retries 30 postgres:17
+            --health-cmd "pg_isready -U aquarium" --health-interval 2s --health-retries 30 postgres:18
           for i in $(seq 1 30); do
             [ "$(docker inspect -f '{{.State.Health.Status}}' aqdb)" = healthy ] && break
             sleep 2
