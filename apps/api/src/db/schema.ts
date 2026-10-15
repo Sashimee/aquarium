@@ -128,9 +128,7 @@ export const tanks = pgTable(
       .references(() => user.id, { onDelete: 'cascade' }),
     biome: biomeEnum('biome').notNull(),
     name: text('name').notNull(),
-    decorLayout: jsonb('decor_layout')
-      .notNull()
-      .default(sql`'[]'::jsonb`),
+    decorLayout: jsonb('decor_layout'),
     water: jsonb('water')
       .notNull()
       .default(sql`'{"ammonia":0,"nitrate":0,"algae":0,"uneatenFood":0}'::jsonb`),
