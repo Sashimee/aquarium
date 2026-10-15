@@ -211,7 +211,7 @@ Checked 2026-10-15. Licence, author and downloadable flag from the Sketchfab API
 
 | # | Candidate | Author | Licence | Faces | Texture | Anatomy | Verdict |
 |---|---|---|---|---|---|---|---|
-| 1 | [Discus symphysodon](https://sketchfab.com/3d-models/f623d69769b249a2b55025c000c97499) | Chenchanchong | CC-BY 4.0 | 8,033 | 4 materials, 4096 maps (about 60 MB), reticulated turquoise | tall round disc, long dorsal and anal fins, red eye | PICK: downscale to 2048 or less, needs the spine rig |
+| 1 | [Discus symphysodon](https://sketchfab.com/3d-models/f623d69769b249a2b55025c000c97499) | Chenchanchong | CC-BY 4.0 | 8,033 | 4 materials (3 textured), 4096 maps (about 60 MB), reticulated turquoise | tall round disc, long dorsal and anal fins, red eye | PICK: downscale to 2048 or less, needs the spine rig |
 | 2 | [Discus 3](https://sketchfab.com/3d-models/e284e187712e4e00b001ce773398ad51) | Comitre | CC-BY 4.0 | 3,456 | 1024x512 photo texture, red and white | plausible disc, rigged (11 joints), authored in cm | alternate colourway for tintVariation |
 | 3 | [Discus_1](https://sketchfab.com/3d-models/07ca0c407dc54be5a449b84eafa8977e) | Comitre | CC-BY 4.0 | 3,092 | orange stripes | fine | not downloaded, spare |
 
@@ -243,7 +243,7 @@ I checked only the Sketchfab thumbnail and the downloaded texture, not a lit sid
 | 1 | [Shrimp [Low Poly]](https://sketchfab.com/3d-models/652650059ff949b39bbed3bfc34d5e87) | Fecalis | CC-BY 4.0 | 2,404 | boiled-prawn look | wrong species and cooked | reject |
 | 2 | [generic shrimp](https://sketchfab.com/3d-models/2daef0734a134f35a708581fe33f23f0) | farizulazman | CC-BY 4.0 | 36,780 | generic | not checked beyond the thumbnail | reject: not a dwarf freshwater shrimp |
 
-Reference photos (in manifest, downloaded): `wm-cherry-dagostino-1` and `wm-cherry-dagostino-2` (CC BY 4.0, Uccio D'Agostino, 4288x2848). A CC0 Commons photo was dropped because it is tiny and brownish.
+Reference photos (in manifest, downloaded): `wm-cherry-dagostino-1` and `wm-cherry-dagostino-2` (CC BY 4.0, Uccio D'Agostino, 4288x2848). The second is a weak reference (mostly snails). A CC0 Commons photo was dropped because it is tiny and brownish.
 
 ### Six-line wrasse (Pseudocheilinus hexataenia)
 
