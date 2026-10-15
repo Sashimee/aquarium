@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   biomeSchema,
+  decorLayoutResponseSchema,
   decorLayoutSchema,
   idSchema,
   slugSchema,
@@ -79,7 +80,7 @@ export const tankSchema = z.object({
   id: idSchema,
   name: z.string().trim().min(1).max(60),
   biome: biomeSchema,
-  decorLayout: decorLayoutSchema,
+  decorLayout: decorLayoutResponseSchema,
   // false: the player never saved a layout, so decorLayout is [] and the client shows the biome preset.
   // true: decorLayout is what the player saved, and [] means they emptied the tank.
   decorEdited: z.boolean().optional(),
