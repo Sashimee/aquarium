@@ -9,7 +9,7 @@ import {
   type Material,
 } from 'three/webgpu';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { gltfKtx2Loader, type Ktx2Textures } from '../engine/ktx2';
+import { gltfKtx2Loader, rewritingKtx2Loader, type Ktx2Textures } from '../engine/ktx2';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { parseFishAssets, type FishAssetEntry } from './assetIndex';
@@ -20,8 +20,11 @@ export interface FishPart {
   readonly source: MeshStandardMaterial;
 }
 
+export type FishTextureSize = 1024 | 2048;
+
 export interface FishModel {
   readonly entry: FishAssetEntry;
+  readonly textureSize: FishTextureSize;
   /** `lods[level]` holds that level's parts; every level reuses lod0's materials where it can. */
   readonly lods: readonly (readonly FishPart[])[];
 }
@@ -132,9 +135,17 @@ function collectParts(
   });
 }
 
+/**
+ * The GLBs reference the 1k maps. At 2048 a second GLTFLoader swaps in each map's 2k file, by
+ * exact URL and only where the 2k file is larger, so the shared KTX2 loader is never switched.
+ */
 export class FishAssetLoader {
   private readonly gltf: GLTFLoader;
+  private readonly sharpGltf: GLTFLoader;
+  private readonly sharper = new Map<string, string>();
   private index: Promise<Map<string, FishAssetEntry>> | null = null;
+  /** Applies to loads started after it changes. */
+  textureSize: FishTextureSize = 1024;
 
   /** `ktx2` is the renderer's shared loader; this loader never disposes it. */
   constructor(
@@ -144,6 +155,9 @@ export class FishAssetLoader {
     this.gltf = new GLTFLoader()
       .setKTX2Loader(gltfKtx2Loader(ktx2))
       .setMeshoptDecoder(MeshoptDecoder);
+    this.sharpGltf = new GLTFLoader()
+      .setKTX2Loader(rewritingKtx2Loader(ktx2, (url) => this.sharper.get(url) ?? url))
+      .setMeshoptDecoder(MeshoptDecoder);
   }
 
   entries(): Promise<Map<string, FishAssetEntry>> {
@@ -151,19 +165,32 @@ export class FishAssetLoader {
       if (!response.ok) {
         throw new Error(`assets/index.json: HTTP ${response.status}; is public/assets deployed?`);
       }
-      return parseFishAssets(await response.json());
+      const entries = parseFishAssets(await response.json());
+      for (const entry of entries.values()) {
+        for (const [small, large] of entry.sharperTextures) {
+          this.sharper.set(`${this.root}${small}`, `${this.root}${large}`);
+        }
+      }
+      return entries;
     });
     return this.index;
+  }
+
+  /** The size a load of `entry` gets now; a model with no larger 2k map always gets 1024. */
+  textureSizeFor(entry: FishAssetEntry): FishTextureSize {
+    return entry.sharperTextures.size > 0 ? this.textureSize : 1024;
   }
 
   async load(assetId: string): Promise<FishModel> {
     const entry = (await this.entries()).get(assetId);
     if (entry === undefined) throw new Error(`fish asset "${assetId}" is not in assets/index.json`);
+    const textureSize = this.textureSizeFor(entry);
+    const gltfLoader = textureSize === 2048 ? this.sharpGltf : this.gltf;
     const shared = new Map<string, MeshStandardMaterial>();
     const lods: FishPart[][] = [];
     try {
       for (const file of entry.lodFiles) {
-        const gltf = await this.gltf.loadAsync(`${this.root}${file}`);
+        const gltf = await gltfLoader.loadAsync(`${this.root}${file}`);
         try {
           lods.push(collectParts(gltf.scene, `fish ${file}`, shared));
         } catch (cause) {
@@ -172,10 +199,10 @@ export class FishAssetLoader {
         }
       }
     } catch (cause) {
-      disposeFishModel({ entry, lods });
+      disposeFishModel({ entry, textureSize, lods });
       throw cause;
     }
-    return { entry, lods };
+    return { entry, textureSize, lods };
   }
 }
 
