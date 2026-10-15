@@ -224,7 +224,7 @@ describe('CarcassSupport', () => {
 
   const halfThickness = (CARCASS.thicknessBodyLengths / 2) * length;
 
-  /** The least rock distance of the body's centre and ends at every frame of its sink and rest. */
+  /** The least rock distance anywhere along the body's axis, tip to tip, at every frame of its sink and rest. */
   function closestOnTheWayDown(
     rocks: readonly Collider[],
     from: CarcassStart,
@@ -234,15 +234,15 @@ describe('CarcassSupport', () => {
     const { floorY, path } = support.descend(from, length, sand);
     const prims = rocks.map(compileCollider);
     const normal = new Float64Array(3);
-    const reach = CARCASS.supportReachBodyLengths * length;
     const p = pose();
     let closest = Infinity;
     const end = carcassSettleS(from, length, seed, floorY) + 1;
     for (let t = 0; t <= end; t += 1 / 60) {
       sinkingCarcass(t, from, length, seed, floorY, p, t, path);
-      for (const side of [0, 1, -1]) {
-        const x = p.x + side * Math.sin(p.yaw) * reach;
-        const z = p.z + side * Math.cos(p.yaw) * reach;
+      for (let k = -10; k <= 10; k++) {
+        const along = (k / 20) * length;
+        const x = p.x + Math.sin(p.yaw) * along;
+        const z = p.z + Math.cos(p.yaw) * along;
         for (const prim of prims) closest = Math.min(closest, prim.sample(x, p.y, z, normal));
       }
     }
@@ -277,6 +277,36 @@ describe('CarcassSupport', () => {
       crownY - 0.001,
     );
     expect(support.floorY({ x: 0.049, y: 0.3, z: 0, yaw: 0 }, length, sand)).toBe(0.02);
+  });
+
+  it('lies across a round crown with no part of its body in the rock', () => {
+    const boulder: Collider = {
+      id: 'boulder',
+      kind: 'sphere',
+      hard: true,
+      center: [0, 0.1, 0],
+      radius: 0.05,
+    };
+    const across = { x: 0, y: 0.3, z: 0, yaw: Math.PI / 2 };
+    expect(new CarcassSupport([boulder]).floorY(across, length, sand)).toBeGreaterThan(0.15);
+    expect(closestOnTheWayDown([boulder], across, 0.1)).toBeGreaterThan(halfThickness - 0.0005);
+  });
+
+  it('slides all the way down a tall rock face it starts a hair away from', () => {
+    const pillar: Collider = {
+      id: 'pillar',
+      kind: 'box',
+      hard: true,
+      center: [0, 0.27, 0],
+      halfExtents: [0.02, 0.25, 0.02],
+      rotationY: 0,
+      rounding: 0,
+    };
+    const support = new CarcassSupport([pillar]);
+    for (const skin of [0.0001, 0.000101, 0.00011, 0.00012, 0.0004]) {
+      const from = { x: 0.02 + halfThickness + skin, y: 0.55, z: 0, yaw: 0 };
+      expect(support.floorY(from, length, sand)).toBe(0.02);
+    }
   });
 
   it('falls past a rock that is above where it died, as under a ledge', () => {

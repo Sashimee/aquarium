@@ -23,8 +23,8 @@ export const CARCASS = {
   limpS: 1.5,
   /** A carcass already on the floor still takes this long to tip over. */
   minSettleS: 0.8,
-  /** Fore and aft of the centre, where what holds the body up is looked for. */
-  supportReachBodyLengths: 0.4,
+  /** Centre to either tip; support and clearance are looked for at the tips and halfway there. */
+  tipReachBodyLengths: 0.5,
 } as const;
 
 export type CarcassFate = 'float' | 'sink';
@@ -175,13 +175,17 @@ export interface CarcassDescent {
 }
 
 const SURFACE_M = 5e-4;
-/** How close the body's skin comes to rock before it counts as touching. */
+/** How close the body's skin comes to rock before a push off a steep face stops. */
 const CONTACT_M = 1e-4;
 /** How far a body sliding down a steep face drops between looks at the rock beside it. */
 const SLIDE_STEP_M = 5e-4;
 const MAX_MARCH_STEPS = 4096;
 /** A surface whose normal points at least this far up holds a body; a steeper one it slides off. */
 const SUPPORT_NORMAL_Y = 0.5;
+/** Along the body from its centre, in tip reaches: where it is held up and kept clear of rock. */
+const BODY_POINTS = [0, 0.5, -0.5, 1, -1] as const;
+/** Rock whose bounds are further than this from the body when the search looks round is skipped. */
+const NEAR_M = 0.05;
 
 /** Where a sinking carcass's centre is at height `y` along `path`; (x, z) go into `out`. */
 export function carcassPathAt(path: Float64Array, y: number, out: { x: number; z: number }): void {
@@ -221,17 +225,17 @@ export class CarcassSupport {
   }
 
   /**
-   * How a carcass dropped from `from` goes down: its centre and both ends, kept half a body
-   * thickness clear of hard rock, fall until one of them rests on a surface that faces up or on
-   * the substrate `ground`. Off a steeper face it is pushed clear and slides down it. A body that
-   * starts inside a rock lies on top.
+   * How a carcass dropped from `from` goes down: its centre, tips and the points halfway to them,
+   * kept half a body thickness clear of hard rock, fall until one of them rests on a surface that
+   * faces up or on the substrate `ground`. Off a steeper face it is pushed clear and slides down
+   * it. A body that starts inside a rock lies on top.
    */
   descend(
     from: CarcassStart,
     length: number,
     ground: (x: number, z: number) => number,
   ): CarcassDescent {
-    const reach = CARCASS.supportReachBodyLengths * length;
+    const reach = CARCASS.tipReachBodyLengths * length;
     const ex = Math.sin(from.yaw) * reach;
     const ez = Math.cos(from.yaw) * reach;
     const clearance = (CARCASS.thicknessBodyLengths / 2) * length;
@@ -242,51 +246,79 @@ export class CarcassSupport {
     }
     const path = [from.y, from.x, from.z];
     let { x, y, z } = from;
+    let near = this.near(x, z, ex, ez, y + clearance);
+    let nearX = x;
+    let nearZ = z;
+    // Every step drops at least SLIDE_STEP_M or lands, so this always reaches the floor.
+    const budget = MAX_MARCH_STEPS + Math.ceil((from.y - ground(from.x, from.z)) / SLIDE_STEP_M);
     let floorY = -Infinity;
-    for (let i = 0; i < MAX_MARCH_STEPS; i++) {
+    for (let i = 0; i < budget; i++) {
+      if (Math.hypot(x - nearX, z - nearZ) > NEAR_M / 2) {
+        near = this.near(x, z, ex, ez, y + clearance);
+        nearX = x;
+        nearZ = z;
+      }
       const g = this.highestGround(x, z, ex, ez, ground);
-      const gap = this.bodyDistance(x, y, z, ex, ez) - clearance;
+      const gap = Math.min(this.bodyDistance(near, x, y, z, ex, ez), NEAR_M / 2) - clearance;
       const aboveGround = y - clearance - g;
       if (aboveGround <= CONTACT_M) {
         floorY = g;
         break;
       }
-      if (gap > CONTACT_M) {
+      const [nx = 0, ny = 0, nz = 0] = this.nearest;
+      const facesUp = ny >= SUPPORT_NORMAL_Y;
+      // Closing in on a face that points up shrinks the gap by at least half each step; beside a
+      // steep one it may not shrink at all, so that is left to the fixed slide steps below.
+      if (gap > SURFACE_M || (facesUp && gap > CONTACT_M)) {
         y -= Math.min(gap, aboveGround);
         continue;
       }
-      const [nx = 0, ny = 0, nz = 0] = this.nearest;
-      if (ny >= SUPPORT_NORMAL_Y) {
-        floorY = Math.max(g, y - clearance);
+      if (facesUp) {
+        floorY = Math.max(g, y - clearance - gap);
         break;
       }
       const across = Math.hypot(nx, nz);
       if ((path[path.length - 3] ?? y) - y > SLIDE_STEP_M) path.push(y, x, z);
-      if (across > 1e-6) {
-        const push = (CONTACT_M / 2 - gap) / across;
+      if (across > 1e-6 && gap < CONTACT_M) {
+        const push = (CONTACT_M - gap) / across;
         x += (nx / across) * push;
         z += (nz / across) * push;
       }
       y -= Math.min(SLIDE_STEP_M, aboveGround);
       path.push(y, x, z);
     }
-    if (floorY === -Infinity)
+    if (floorY === -Infinity) {
       floorY = Math.max(this.highestGround(x, z, ex, ez, ground), y - clearance);
+    }
     return { floorY, path: Float64Array.from(path) };
+  }
+
+  /**
+   * The rock that can come near a body centred at (x, z) and below `top`: anything else is more
+   * than NEAR_M away, and stays over NEAR_M / 2 away until the body slides that far.
+   */
+  private near(x: number, z: number, ex: number, ez: number, top: number): Primitive[] {
+    const minX = x - Math.abs(ex) - NEAR_M;
+    const maxX = x + Math.abs(ex) + NEAR_M;
+    const minZ = z - Math.abs(ez) - NEAR_M;
+    const maxZ = z + Math.abs(ez) + NEAR_M;
+    return this.hard.filter(
+      (p) => p.maxX >= minX && p.minX <= maxX && p.maxZ >= minZ && p.minZ <= maxZ && p.minY <= top,
+    );
   }
 
   /** The highest rock top over any of the body's points that start inside rock, or null. */
   private raisedOutOf(from: CarcassStart, ex: number, ez: number): number | null {
     let top: number | null = null;
-    for (const side of [0, 1, -1]) {
+    for (const side of BODY_POINTS) {
       const x = from.x + side * ex;
       const z = from.z + side * ez;
       let y = from.y;
-      let d = this.distance(x, y, z);
+      let d = this.distance(this.hard, x, y, z);
       if (d >= 0) continue;
       for (let i = 0; d < 0 && i < MAX_MARCH_STEPS; i++) {
         y += Math.max(-d, SURFACE_M);
-        d = this.distance(x, y, z);
+        d = this.distance(this.hard, x, y, z);
       }
       top = Math.max(top ?? -Infinity, y);
     }
@@ -300,14 +332,23 @@ export class CarcassSupport {
     ez: number,
     ground: (x: number, z: number) => number,
   ): number {
-    return Math.max(ground(x, z), ground(x + ex, z + ez), ground(x - ex, z - ez));
+    let g = -Infinity;
+    for (const side of BODY_POINTS) g = Math.max(g, ground(x + side * ex, z + side * ez));
+    return g;
   }
 
   /** Distance from the nearest of the body's points to rock; that surface's normal goes to `nearest`. */
-  private bodyDistance(x: number, y: number, z: number, ex: number, ez: number): number {
+  private bodyDistance(
+    rocks: readonly Primitive[],
+    x: number,
+    y: number,
+    z: number,
+    ex: number,
+    ez: number,
+  ): number {
     let d = Infinity;
-    for (const side of [0, 1, -1]) {
-      const dp = this.distance(x + side * ex, y, z + side * ez);
+    for (const side of BODY_POINTS) {
+      const dp = this.distance(rocks, x + side * ex, y, z + side * ez);
       if (dp < d) {
         d = dp;
         this.nearest.set(this.normal);
@@ -317,12 +358,12 @@ export class CarcassSupport {
   }
 
   /** Union distance at (x, y, z); the nearest surface's normal is left in `normal`. */
-  private distance(x: number, y: number, z: number): number {
+  private distance(rocks: readonly Primitive[], x: number, y: number, z: number): number {
     let d = Infinity;
     let nx = 0;
     let ny = 0;
     let nz = 0;
-    for (const p of this.hard) {
+    for (const p of rocks) {
       const dp = p.sample(x, y, z, this.normal);
       if (dp < d) {
         d = dp;
