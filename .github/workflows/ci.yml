@@ -79,38 +79,47 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # part is index/count over the describe's tests; raise count when a describe's shards pass ~10 min.
+        # part is index[,index]/count over the describe's tests, dealt round-robin; the matrix is sized
+        # so every shard's tests add up to about 7 minutes (per-test times: see PR #184 rebalance).
         include:
           - name: menus-phone-1
             args: menus.spec
             describe: menus on a phone
-            part: 1/4
+            part: 1/6
           - name: menus-phone-2
             args: menus.spec
             describe: menus on a phone
-            part: 2/4
+            part: 2/6
           - name: menus-phone-3
             args: menus.spec
             describe: menus on a phone
-            part: 3/4
+            part: 3/6
           - name: menus-phone-4
             args: menus.spec
             describe: menus on a phone
-            part: 4/4
+            part: 4/6
+          - name: menus-phone-5
+            args: menus.spec
+            describe: menus on a phone
+            part: 5,6/6
           - name: menus-mouse-1
             args: menus.spec
             describe: menus with a mouse
-            part: 1/2
+            part: 1/5
           - name: menus-mouse-2
             args: menus.spec
             describe: menus with a mouse
-            part: 2/2
+            part: 2,3/5
+          - name: menus-mouse-3
+            args: menus.spec
+            describe: menus with a mouse
+            part: 4,5/5
           - name: decor-death
             args: decor.spec death.spec
-          - name: switch-tanks-feed
-            args: tank-type-switch.spec tanks.spec feed.spec ktx2.spec
-          - name: care-auth-reset
-            args: care.spec auth.spec password-reset.spec password-reset-history.spec
+          - name: switch-feed-auth
+            args: tank-type-switch.spec ktx2.spec feed.spec auth.spec
+          - name: tanks-care-reset
+            args: tanks.spec care.spec password-reset.spec password-reset-history.spec
     services:
       postgres:
         image: postgres:17
@@ -168,7 +177,16 @@ jobs:
         run: |
           grep_args=()
           if [ -n "$E2E_GREP" ]; then grep_args=("--grep=$E2E_GREP"); fi
-          pnpm run e2e $SPEC "${grep_args[@]}"
+          set -o pipefail
+          pnpm run e2e $SPEC "${grep_args[@]}" 2>&1 | tee e2e-run.log
+      - name: Report tests that passed only on retry
+        if: ${{ always() }}
+        run: |
+          flaky=$(awk '/^ +[0-9]+ flaky/ {on=1} on && /^ +[0-9]+ (passed|skipped|did not run|failed)/ {on=0} on' e2e-run.log 2>/dev/null || true)
+          if [ -n "$flaky" ]; then
+            echo "::warning::e2e shard ${{ matrix.name }} had tests that passed only on retry"
+            printf '### Flaky on %s\n```\n%s\n```\n' "${{ matrix.name }}" "$flaky" >> "$GITHUB_STEP_SUMMARY"
+          fi
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
