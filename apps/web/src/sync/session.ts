@@ -292,6 +292,8 @@ export class TankSession {
     this.loadId++;
     this.switchId++;
     this.unloadScene('reset')?.dispose();
+    this.layoutSaver.reset();
+    this.shownLayout.clear();
     this.deps.interaction.emit('tank:none', {});
     for (const timer of this.releaseTimers.values()) clearTimeout(timer);
     this.releaseTimers.clear();

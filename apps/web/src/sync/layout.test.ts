@@ -132,4 +132,48 @@ describe('LayoutSaver', () => {
     await vi.advanceTimersByTimeAsync(1000);
     expect(send).toHaveBeenCalledTimes(1);
   });
+
+  it('reset drops a waiting edit and a failed save', async () => {
+    vi.useFakeTimers();
+    const send = vi.fn().mockRejectedValue(apiError(400, 'validation_failed'));
+    const { saver, reports } = setup(send);
+    saver.submit('t1', layoutAt(0.1));
+    saver.reset();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(send).not.toHaveBeenCalled();
+    expect(saver.busy).toBe(false);
+    expect(reports.at(-1)).toEqual({ status: 'idle', message: null });
+
+    saver.submit('t1', layoutAt(0.2));
+    await vi.advanceTimersByTimeAsync(500);
+    expect(saver.busy).toBe(true);
+    saver.reset();
+    saver.retry();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(saver.busy).toBe(false);
+  });
+
+  it('reset stops retrying an in-flight save and stays quiet about its outcome', async () => {
+    vi.useFakeTimers();
+    let fail: (e: unknown) => void = () => undefined;
+    const send = vi.fn().mockImplementation(() => new Promise<void>((_r, reject) => (fail = reject)));
+    const { saver, reports } = setup(send);
+    saver.submit('t1', layoutAt(0.1));
+    await vi.advanceTimersByTimeAsync(500);
+    saver.reset();
+    fail(apiError(0, 'network'));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(reports.map((r) => r.status)).toEqual(['saving', 'idle']);
+  });
+
+  it('stays busy while a failed save waits for Retry', async () => {
+    vi.useFakeTimers();
+    const send = vi.fn().mockRejectedValue(apiError(400, 'validation_failed'));
+    const { saver } = setup(send);
+    saver.submit('t1', layoutAt(0.1));
+    await vi.advanceTimersByTimeAsync(500);
+    expect(saver.busy).toBe(true);
+  });
 });

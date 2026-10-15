@@ -719,6 +719,47 @@ describe('decor layout', () => {
     expect(rec.of('tank:decor')).toEqual([{ tankId: TANK_A, layout }]);
   });
 
+  it('drops an edit still waiting to be saved when the user signs out', async () => {
+    vi.useFakeTimers();
+    const { api, rec, session } = setup();
+    await session.setUser(verified);
+    rec.bus.emit('decor:layout', { tankId: TANK_A, layout });
+    await session.setUser(null);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(api.saveDecorLayout).not.toHaveBeenCalled();
+    expect(rec.of('decor:save-state').at(-1)).toEqual({ status: 'idle', message: null });
+    session.dispose();
+  });
+
+  it('forgets a failed save at sign-out so Retry cannot resend it to the next account', async () => {
+    vi.useFakeTimers();
+    const { api, rec, session } = setup();
+    await session.setUser(verified);
+    api.saveDecorLayout.mockRejectedValue(apiError(400, 'validation_failed'));
+    rec.bus.emit('decor:layout', { tankId: TANK_A, layout });
+    await vi.advanceTimersByTimeAsync(700);
+    expect(api.saveDecorLayout).toHaveBeenCalledTimes(1);
+    await session.setUser(null);
+    await session.setUser(verified);
+    rec.bus.emit('decor:command', { type: 'retry-save' });
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(api.saveDecorLayout).toHaveBeenCalledTimes(1);
+    session.dispose();
+  });
+
+  it('keeps an unsaved edit on screen while a failed save waits for Retry', async () => {
+    vi.useFakeTimers();
+    const { api, rec, session } = setup();
+    await session.setUser(verified);
+    api.saveDecorLayout.mockRejectedValue(apiError(400, 'validation_failed'));
+    rec.bus.emit('decor:layout', { tankId: TANK_A, layout });
+    await vi.advanceTimersByTimeAsync(700);
+    api.care.mockResolvedValue(tankFixture({ lastTickAt: '2026-02-01T12:30:00.000Z' }));
+    await session.careAction({ type: 'gravel_vacuum' });
+    expect(rec.of('tank:decor')).toEqual([]);
+    session.dispose();
+  });
+
   it('reports a failed save and retries it on request', async () => {
     vi.useFakeTimers();
     const { api, rec, session } = setup();
