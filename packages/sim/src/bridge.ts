@@ -118,6 +118,23 @@ export interface MessagePortLike {
   start?(): void;
 }
 
+/**
+ * What `SimClient` uses of a `Worker` or `MessagePort`: its messages, and the `error` and
+ * `messageerror` events that say the worker failed or a reply was lost.
+ */
+export interface SimClientPort extends MessagePortLike {
+  addEventListener(type: 'message', listener: (event: MessageEvent) => void): void;
+  addEventListener(type: 'error' | 'messageerror', listener: (event: Event) => void): void;
+  removeEventListener(type: 'message', listener: (event: MessageEvent) => void): void;
+  removeEventListener(type: 'error' | 'messageerror', listener: (event: Event) => void): void;
+}
+
+function failureText(event: Event): string {
+  if (event.type === 'messageerror') return 'sim: a message from the worker could not be read';
+  const detail = 'message' in event && typeof event.message === 'string' ? event.message : '';
+  return `sim worker failed${detail === '' ? '' : `: ${detail}`}`;
+}
+
 const COMMAND_TYPES = new Set([
   'init',
   'start',
@@ -355,9 +372,15 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
   };
 }
 
-/** Main-thread side of the bridge. */
+/**
+ * Main-thread side of the bridge. Every request (`init`, `addFish`, `removeFish`, `canGrazeAt`)
+ * returns a promise that settles with the worker's answer or rejects with its error; such an
+ * error goes to that caller alone. `onError` listeners get the errors no request is waiting for,
+ * and a worker failure (`error` or `messageerror` on the port), which also rejects every request
+ * still pending, since its answer may never come.
+ */
 export class SimClient {
-  private readonly port: MessagePortLike;
+  private readonly port: SimClientPort;
   private readonly snapshotListeners = new Set<(snapshot: Snapshot) => void>();
   private readonly errorListeners = new Set<(message: string) => void>();
   private readonly ateListeners = new Set<(events: readonly AteEvent[], ate: SimAte) => void>();
@@ -375,11 +398,14 @@ export class SimClient {
   >();
   private nextRequest = 1;
   private readonly listener = (event: MessageEvent): void => this.receive(event.data);
+  private readonly failure = (event: Event): void => this.fail(failureText(event));
   private epoch = 0;
 
-  constructor(port: MessagePortLike) {
+  constructor(port: SimClientPort) {
     this.port = port;
     port.addEventListener('message', this.listener);
+    port.addEventListener('error', this.failure);
+    port.addEventListener('messageerror', this.failure);
     port.start?.();
   }
 
@@ -501,16 +527,29 @@ export class SimClient {
 
   dispose(): void {
     this.port.removeEventListener('message', this.listener);
+    this.port.removeEventListener('error', this.failure);
+    this.port.removeEventListener('messageerror', this.failure);
     this.snapshotListeners.clear();
     this.errorListeners.clear();
     this.ateListeners.clear();
-    this.pendingInit?.reject(new Error('sim: client disposed'));
+    this.rejectPending('sim: client disposed');
+  }
+
+  private rejectPending(message: string): void {
+    const pending = [
+      ...(this.pendingInit === null ? [] : [this.pendingInit]),
+      ...this.pendingLayouts.values(),
+      ...this.pendingQueries.values(),
+    ];
     this.pendingInit = null;
-    for (const pending of [...this.pendingLayouts.values(), ...this.pendingQueries.values()]) {
-      pending.reject(new Error('sim: client disposed'));
-    }
     this.pendingLayouts.clear();
     this.pendingQueries.clear();
+    for (const p of pending) p.reject(new Error(message));
+  }
+
+  private fail(message: string): void {
+    this.rejectPending(message);
+    for (const l of this.errorListeners) l(message);
   }
 
   private send(command: SimCommand): void {
@@ -570,7 +609,8 @@ export class SimClient {
         return;
       }
       case 'error': {
-        // An error naming a request belongs to that add, remove or query alone, never to an init.
+        // An error naming a request belongs to that add, remove or query alone, never to an init;
+        // one without a request goes to a pending init, and to the listeners only if none is.
         const pending =
           event.request === undefined
             ? this.pendingInit
@@ -582,8 +622,11 @@ export class SimClient {
           this.pendingLayouts.delete(event.request);
           this.pendingQueries.delete(event.request);
         }
-        pending?.reject(new Error(event.message));
-        if (pending === null && this.errorListeners.size === 0) {
+        if (pending !== null) {
+          pending.reject(new Error(event.message));
+          return;
+        }
+        if (this.errorListeners.size === 0) {
           throw new Error(`sim worker error with no listener: ${event.message}`);
         }
         for (const l of this.errorListeners) l(event.message);
