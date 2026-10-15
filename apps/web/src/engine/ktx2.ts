@@ -1,6 +1,5 @@
-import { LoadingManager, type WebGPURenderer } from 'three/webgpu';
+import { LoadingManager, REVISION, type WebGPURenderer } from 'three/webgpu';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
-import basisTranscoderJs from 'three/addons/libs/basis/basis_transcoder.js?url';
 import basisTranscoderWasm from 'three/addons/libs/basis/basis_transcoder.wasm?url';
 
 /**
@@ -8,11 +7,15 @@ import basisTranscoderWasm from 'three/addons/libs/basis/basis_transcoder.wasm?u
  * of its own response, so the API can allow 'unsafe-eval' for this file alone: the basis
  * transcoder's embind glue calls new Function, which a blob: worker would need the page to allow.
  */
-export const KTX2_WORKER_URL = '/ktx2-worker.js';
+export const KTX2_WORKER_URL = `/ktx2-worker.js?v=${REVISION}`;
 
-/** Points the transcoder at the bundled copy. */
+/**
+ * KTX2Loader.init() fetches the glue script only to embed it in a blob worker this loader never
+ * starts, so it gets the worker file (same origin, as connect-src 'self' requires; a data: URL
+ * would be refused) instead of a second bundled copy of the transcoder.
+ */
 export function bundledTranscoderUrl(url: string): string {
-  if (url.endsWith('basis_transcoder.js')) return basisTranscoderJs;
+  if (url.endsWith('basis_transcoder.js')) return KTX2_WORKER_URL;
   if (url.endsWith('basis_transcoder.wasm')) return basisTranscoderWasm;
   return url;
 }
@@ -91,8 +94,8 @@ class DisposableKtx2Loader extends KTX2Loader {
       this.workerSourceURL = '';
       if (this.disposed) throw disposedError('a texture');
       this.workerPool.setWorkerCreator(() => {
-        const worker = new Worker(KTX2_WORKER_URL);
         if (!this.transcoderBinary) throw new Error('KTX2: the transcoder binary is missing');
+        const worker = new Worker(KTX2_WORKER_URL);
         const transcoderBinary = this.transcoderBinary.slice(0);
         worker.postMessage({ type: 'init', config: this.workerConfig, transcoderBinary }, [
           transcoderBinary,

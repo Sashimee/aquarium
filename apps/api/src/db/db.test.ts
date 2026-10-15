@@ -92,6 +92,12 @@ describe('migrations', () => {
       expect(bySex.get(id), id).toBe(fnv1a(`${id}:variant`) < 2 ** 31 ? 'male' : 'female');
     }
     expect(new Set(bySex.values())).toEqual(new Set(['male', 'female']));
+
+    const legacy = await q(
+      `insert into fish (tank_id, species, name, size) values ($1, 'neon-tetra', 'Old', 0.03) returning sex`,
+      [tankId],
+    );
+    expect((legacy.rows[0] as { sex: string }).sex).toBe('female');
   });
 
   it('fail loudly when the database is unreachable', async () => {

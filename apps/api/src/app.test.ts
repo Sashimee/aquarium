@@ -90,6 +90,33 @@ describe('security headers', () => {
     expect(res.headers['x-content-type-options']).toBe('nosniff');
   });
 
+  it('serves the versioned KTX2 worker url with the eval policy', async () => {
+    const res = await withDist().inject('/ktx2-worker.js?v=r190');
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-security-policy']).toContain("'unsafe-eval'");
+  });
+
+  it('keeps the eval policy on a 304, which replaces the cached 200 headers', async () => {
+    const app = withDist();
+    const first = await app.inject('/ktx2-worker.js');
+    const etag = first.headers['etag'];
+    expect(typeof etag).toBe('string');
+    const revisit = await app.inject({
+      url: '/ktx2-worker.js',
+      headers: { 'if-none-match': etag as string },
+    });
+    expect(revisit.statusCode).toBe(304);
+    expect(revisit.headers['content-security-policy']).toContain("'unsafe-eval'");
+  });
+
+  it('does not extend the eval policy to other methods', async () => {
+    const app = withDist();
+    const post = await app.inject({ method: 'POST', url: '/ktx2-worker.js' });
+    expect(post.headers['content-security-policy']).not.toMatch(/'unsafe-eval'/);
+    const options = await app.inject({ method: 'OPTIONS', url: '/ktx2-worker.js' });
+    expect(options.headers['content-security-policy']).not.toMatch(/'unsafe-eval'/);
+  });
+
   it('does not grant eval when the worker file is not served', async () => {
     const res = await noDist().inject('/ktx2-worker.js');
     expect(res.statusCode).toBe(404);

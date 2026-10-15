@@ -14,4 +14,6 @@ END;
 $$ LANGUAGE plpgsql IMMUTABLE;--> statement-breakpoint
 UPDATE "fish" SET "sex" = CASE WHEN pg_temp.fnv1a32("id"::text || ':variant') < 2147483648 THEN 'male'::"fish_sex" ELSE 'female'::"fish_sex" END;--> statement-breakpoint
 DROP FUNCTION pg_temp.fnv1a32(text);--> statement-breakpoint
-ALTER TABLE "fish" ALTER COLUMN "sex" SET NOT NULL;
+ALTER TABLE "fish" ALTER COLUMN "sex" SET NOT NULL;--> statement-breakpoint
+-- Kept so a still-running old container, which inserts without sex, does not fail during a rolling deploy.
+ALTER TABLE "fish" ALTER COLUMN "sex" SET DEFAULT 'female';

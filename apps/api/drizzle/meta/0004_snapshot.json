@@ -298,7 +298,8 @@
           "type": "fish_sex",
           "typeSchema": "public",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "default": "'female'"
         },
         "born_at": {
           "name": "born_at",
