@@ -61,6 +61,15 @@ export const SWIM_MODES: Readonly<Record<SwimmingMode, SwimModeParams>> = {
     medianFin: 0.035,
     pectoralIdleHz: 2.5,
   },
+  // Walkers have no body wave; the walk deformation lands with T24 phase 4.
+  pleopod: {
+    envelope: [0, 0, 1],
+    wavelength: 1,
+    bodyWave: 0,
+    pectoral: 0,
+    medianFin: 0,
+    pectoralIdleHz: 0,
+  },
 };
 
 /** Peak-to-peak tail amplitude ≈ 0.2 L across speeds (Bainbridge 1958, J Exp Biol 35:109). */
