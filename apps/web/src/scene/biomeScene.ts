@@ -87,8 +87,8 @@ export interface BiomeSceneOptions<S extends DisposableScene> {
  * unchanged across it, not because of the coalescing. The old scene is
  * disposed before the new one is built, because a scene captures and restores engine state
  * (lighting, the substrate material) and two alive at once would restore each other's. A build
- * that is no longer wanted when it lands, or that outlives `timeoutMs`, is disposed unseen, and a
- * failed biome is not retried until a different one has been asked for.
+ * that is no longer wanted when it lands is disposed unseen. One that outlives `timeoutMs` reports
+ * a slow load and is still mounted when it lands. A failed biome is not retried until a different one has been asked for.
  */
 export class BiomeScene<S extends DisposableScene> {
   private wanted: Biome;
@@ -163,25 +163,19 @@ export class BiomeScene<S extends DisposableScene> {
 
   private async build(biome: Biome): Promise<S | null> {
     const { timeoutMs, onError } = this.options;
-    let timedOut = false;
     const timer = setTimeout(() => {
-      timedOut = true;
       onError(
-        `The ${biome} preset did not finish loading in ${timeoutMs / 1000} s; showing the empty tank`,
+        `The ${biome} preset is still loading after ${timeoutMs / 1000} s; showing the empty tank until it arrives`,
       );
     }, timeoutMs);
-    let scene: S;
     try {
-      scene = await this.options.build(biome);
+      return await this.options.build(biome);
     } catch (cause) {
       onError(`Could not build the ${biome} preset`, cause);
       return null;
     } finally {
       clearTimeout(timer);
     }
-    if (!timedOut) return scene;
-    await this.release(scene);
-    return null;
   }
 
   private async unmount(): Promise<void> {
