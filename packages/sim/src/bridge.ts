@@ -171,7 +171,7 @@ function messageType(data: unknown, allowed: ReadonlySet<string>): string {
 function requestOf(data: unknown): number | undefined {
   if (typeof data !== 'object' || data === null || !('request' in data)) return undefined;
   const request = (data as { request: unknown }).request;
-  return typeof request === 'number' ? request : undefined;
+  return Number.isSafeInteger(request) ? (request as number) : undefined;
 }
 
 export interface SimHostOptions {
@@ -268,6 +268,13 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
   const handle = (command: SimCommand): void => {
     switch (command.type) {
       case 'init': {
+        // Checked before anything changes: a `ready` with an unusable request would be refused
+        // by the client after the world it describes had already replaced the old one.
+        if (!Number.isSafeInteger(command.request)) {
+          throw new TypeError(
+            `sim: "init" needs a safe integer request, got ${String(command.request)}`,
+          );
+        }
         stop();
         world = new World(command.config);
         pool.length = 0;
