@@ -197,7 +197,8 @@ describe('privacy and credits', () => {
     expect(credits.shareAlikeNotice).toMatch(/BY-SA/);
     for (const e of credits.entries) {
       expect(e.referenceOnly).toBe(e.kind === 'reference-photo' && e.modifications.length === 0);
-      if (e.licence === 'CC0-1.0' || e.referenceOnly) expect(e.modifications).toEqual([]);
+      if ((e.licence === 'CC0-1.0' && e.kind !== 'reference-photo') || e.referenceOnly)
+        expect(e.modifications).toEqual([]);
       else expect(e.modifications.length).toBeGreaterThan(0);
     }
     const byId = (id: string) => credits.entries.find((e) => e.id === id);
@@ -210,6 +211,8 @@ describe('privacy and credits', () => {
       expect(byId(id)?.referenceOnly, id).toBe(false);
       expect(byId(id)?.modifications.length, id).toBeGreaterThan(0);
     }
+    expect(byId('wm-cory-aeneus-ack210')?.licence).toBe('CC0-1.0');
+    expect(byId('wm-cory-aeneus-ack210')?.referenceOnly).toBe(false);
     expect(byId('wm-firefish-hobgood')?.shareAlike).toBe(true);
     expect(byId('wm-sixline-huffman')?.referenceOnly).toBe(true);
     expect(byId('wm-ancistrus-reis')?.referenceOnly).toBe(true);

@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { speciesSchema } from '@aquarium/shared';
+import { despikeHead, type DespikeSpec } from './bristles.ts';
+import { growBristles, pickSkinUv, type BristleSpec } from './tentacles.ts';
 import { buildDocument, emitAsset, type LodPlan } from './emit.ts';
 import { seatEyes, type EyePlacement } from './eyes.ts';
 import {
@@ -43,6 +45,10 @@ export interface FishRecipe {
   /** Multiplies the species-JSON length, for sexes or morphs that differ from the species value. */
   lengthFactor?: number;
   hints?: FinHints | undefined;
+  /** Flattens rigid head spikes into the skin before anything else looks at the mesh. */
+  despike?: DespikeSpec;
+  /** Grows soft tentacles on the despiked snout, as rigid attachments outside fin classification. */
+  bristles?: BristleSpec;
   roughness?: number;
   /** Recolours the source's base colour by luminance, then paints spots on it. */
   recolour?: { tint: TintSpec; spots?: SpotSpec; worldSpots?: WorldSpotSpec };
@@ -155,6 +161,17 @@ export function normaliseFish(input: NormaliseInput): Part[] {
   return out;
 }
 
+function skinUv(body: Part, materials: MaterialDef[], headFraction: number): [number, number] {
+  const image = materials.find((m) => m.name === body.material)?.baseColor?.image;
+  if (!image) throw new Error(`${body.material}: tentacles need a base colour texture to match`);
+  return pickSkinUv(body, headFraction, (u, v) => {
+    const x = Math.min(image.width - 1, Math.max(0, Math.floor(u * image.width)));
+    const y = Math.min(image.height - 1, Math.max(0, Math.floor(v * image.height)));
+    const at = (y * image.width + x) * 4;
+    return 0.299 * image.data[at]! + 0.587 * image.data[at + 1]! + 0.114 * image.data[at + 2]!;
+  });
+}
+
 export async function writeDebugRender(
   repoRoot: string,
   id: string,
@@ -250,23 +267,16 @@ export async function buildSourceFish(recipe: FishRecipe, ctx: FishContext): Pro
   if (parts.length === 0)
     throw new Error(`${recipe.id}: no geometry uses ${[...names].join(', ')}`);
   for (const part of parts) orient(part.positions, part.normals, recipe.axes);
+  if (recipe.despike) {
+    const moved = parts.reduce((sum, part) => sum + despikeHead(part, recipe.despike!), 0);
+    console.log(`${recipe.id}: despiked ${moved} head vertices`);
+  }
   const eyeParts = recipe.eyes ? await bakeEyes(recipe, recipe.eyes.meshes, names) : [];
   if (recipe.eyes) {
     const eyes = mergeParts(eyeParts, eyeParts[0]!.material);
     seatEyes(eyes, parts, recipe.eyes.placement);
     eyeParts.splice(0, eyeParts.length, eyes);
   }
-
-  const fromSpecies = speciesLengthM(ctx.repoRoot, recipe.species);
-  const standardLengthM =
-    fromSpecies !== null ? fromSpecies * (recipe.lengthFactor ?? 1) : recipe.fallbackLengthM;
-  const normalised = normaliseFish({
-    parts,
-    attachments: eyeParts,
-    hints: recipe.hints,
-    standardLengthM,
-    recipeId: recipe.id,
-  });
 
   const materials = await Promise.all(
     sourceMaterials.map(async (m) => {
@@ -284,6 +294,28 @@ export async function buildSourceFish(recipe: FishRecipe, ctx: FishContext): Pro
       return { ...def, baseColor: { ...def.baseColor, image } };
     }),
   );
+  const body = mergeParts(parts, parts[0]!.material);
+  const bristleParts = recipe.bristles
+    ? [
+        growBristles(
+          body,
+          recipe.bristles,
+          skinUv(body, materials, recipe.despike?.headFraction ?? 0.3),
+        ),
+      ]
+    : [];
+
+  const fromSpecies = speciesLengthM(ctx.repoRoot, recipe.species);
+  const standardLengthM =
+    fromSpecies !== null ? fromSpecies * (recipe.lengthFactor ?? 1) : recipe.fallbackLengthM;
+  const normalised = normaliseFish({
+    parts,
+    attachments: [...eyeParts, ...bristleParts],
+    hints: recipe.hints,
+    standardLengthM,
+    recipeId: recipe.id,
+  });
+
   const debugRender = await writeDebugRender(ctx.repoRoot, recipe.id, normalised, materials);
   const built = buildDocument(recipe.id, normalised, materials);
   return emitAsset({
