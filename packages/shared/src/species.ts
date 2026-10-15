@@ -15,6 +15,7 @@ export const swimmingModeSchema = z.enum([
 export const gaitSchema = z.enum(['burst-and-coast', 'cruise', 'hover', 'forage']);
 export const zoneSchema = z.enum(['surface', 'mid', 'bottom']);
 
+// `cleaner` is accepted but drives no behaviour until the cleaner station lands (T24 phase 2b).
 export const traitSchema = z.enum([
   'shoal',
   'air-gulp',
@@ -91,6 +92,8 @@ export const behaviourSchema = z.strictObject({
     .optional(),
 });
 
+const FLIP_PEAK_OVER_MEAN = Math.PI / 2;
+
 export const walkSurfaceSchema = z.enum(['substrate', 'decor', 'glass']);
 
 export const walkingSchema = z.strictObject({
@@ -101,7 +104,12 @@ export const walkingSchema = z.strictObject({
     .max(1)
     .describe('body lengths per full leg cycle; drives the leg phase'),
   legPairs: z.int().min(4).max(5).describe('pereiopods that walk; render only'),
-  surfaces: z.array(walkSurfaceSchema).min(1),
+  surfaces: z
+    .array(walkSurfaceSchema)
+    .min(1)
+    .describe(
+      'extra surfaces a walker may climb; any surface within 45 degrees of horizontal counts as ground whatever is listed',
+    ),
   tailFlip: z.strictObject({
     speedMps: positive.describe('mean escape speed'),
     durationS: z.number().positive().max(0.5),
@@ -132,7 +140,21 @@ export const locomotionSchema = z
   .refine((l) => (l.swimmingMode === 'pleopod') === (l.walking !== undefined), {
     message: 'walking is required for, and only valid with, swimmingMode "pleopod"',
     path: ['walking'],
-  });
+  })
+  .refine((l) => l.walking === undefined || l.walking.walkSpeedMps <= l.cruiseSpeedMps, {
+    message: 'walking.walkSpeedMps must not exceed cruiseSpeedMps',
+    path: ['walking', 'walkSpeedMps'],
+  })
+  .refine(
+    (l) =>
+      l.walking === undefined ||
+      l.walking.tailFlip.speedMps * FLIP_PEAK_OVER_MEAN <= l.maxSpeedMps * (1 + 1e-6),
+    {
+      message:
+        'walking.tailFlip.speedMps is the mean of a half-sine burst; its peak, pi/2 times the mean, must not exceed maxSpeedMps',
+      path: ['walking', 'tailFlip', 'speedMps'],
+    },
+  );
 
 export const renderSchema = z.strictObject({
   modelId: z.string().min(1),
@@ -178,19 +200,44 @@ export const speciesSchema = z.strictObject({
 export type Species = z.infer<typeof speciesSchema>;
 
 // Cross-block rules live outside speciesSchema because refined objects cannot be .partial()-ed.
+const SWIMMER_TRAITS: readonly Trait[] = [
+  'shoal',
+  'air-gulp',
+  'glass-grazer',
+  'rock-grazer',
+  'anemone-host',
+  'flare-display',
+];
+const WALKER_TRAITS: readonly Trait[] = ['biofilm-grazer', 'cleaner'];
+
 export function checkSpeciesRules(
-  species: { behaviour: { traits: Trait[] }; locomotion: { walking?: unknown } },
+  species: {
+    behaviour: { traits: Trait[]; schooling?: unknown; territorial: boolean };
+    locomotion: { walking?: unknown };
+  },
   ctx: z.RefinementCtx,
 ): void {
-  if (
-    species.behaviour.traits.includes('biofilm-grazer') &&
-    species.locomotion.walking === undefined
-  ) {
-    ctx.addIssue({
-      code: 'custom',
-      message: 'trait "biofilm-grazer" requires locomotion.walking',
-      path: ['behaviour', 'traits'],
-    });
+  const { behaviour, locomotion } = species;
+  const issue = (message: string, path: (string | number)[]): void =>
+    ctx.addIssue({ code: 'custom', message, path });
+  if (locomotion.walking === undefined) {
+    for (const t of WALKER_TRAITS) {
+      if (behaviour.traits.includes(t)) {
+        issue(`trait "${t}" requires locomotion.walking`, ['behaviour', 'traits']);
+      }
+    }
+    return;
+  }
+  for (const t of SWIMMER_TRAITS) {
+    if (behaviour.traits.includes(t)) {
+      issue(`trait "${t}" is for swimmers, not walkers`, ['behaviour', 'traits']);
+    }
+  }
+  if (behaviour.schooling !== undefined) {
+    issue('walkers do not school; drop behaviour.schooling', ['behaviour', 'schooling']);
+  }
+  if (behaviour.territorial) {
+    issue('walkers hold no territory; set territorial to false', ['behaviour', 'territorial']);
   }
 }
 

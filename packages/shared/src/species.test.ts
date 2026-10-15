@@ -79,20 +79,24 @@ describe('walking invertebrates', () => {
     behaviour: { traits: string[] };
     locomotion: Record<string, unknown>;
   };
+  const cherry = JSON.parse(readFileSync(join(pendingDir, 'cherry-shrimp.json'), 'utf8')) as {
+    behaviour: Record<string, unknown>;
+    locomotion: Record<string, unknown>;
+  };
   const walking = {
     walkSpeedMps: 0.01,
     strideBodyLengths: 0.3,
     legPairs: 5,
     surfaces: ['substrate', 'decor'],
-    tailFlip: { speedMps: 0.4, durationS: 0.2, refractoryS: 3 },
+    tailFlip: { speedMps: 0.25, durationS: 0.2, refractoryS: 3 },
   };
   const shrimp = (
     loco: Record<string, unknown> = {},
     traits: string[] = ['biofilm-grazer'],
   ): unknown => ({
-    ...tetra,
-    behaviour: { ...tetra.behaviour, traits },
-    locomotion: { ...tetra.locomotion, swimmingMode: 'pleopod', walking, ...loco },
+    ...cherry,
+    behaviour: { ...cherry.behaviour, traits },
+    locomotion: { ...cherry.locomotion, walking, ...loco },
   });
   const issuePaths = (v: unknown): string[] => {
     const r = speciesContentSchema.safeParse(v);
@@ -118,7 +122,7 @@ describe('walking invertebrates', () => {
   it('requires walking exactly when swimmingMode is pleopod', () => {
     expect(issuePaths(shrimp({ walking: undefined }, []))).toEqual(['locomotion.walking']);
     const swimmer = { ...tetra, locomotion: { ...tetra.locomotion, walking } };
-    expect(issuePaths(swimmer)).toEqual(['locomotion.walking']);
+    expect(issuePaths(swimmer)).toContain('locomotion.walking');
   });
 
   it('requires walking for biofilm-grazer', () => {
@@ -128,7 +132,7 @@ describe('walking invertebrates', () => {
 
   it('accepts boundary values', () => {
     expect(ok(withWalking({ strideBodyLengths: 0.05, legPairs: 4 }))).toBe(true);
-    const upper = { speedMps: 1, durationS: 0.5, refractoryS: 10 };
+    const upper = { speedMps: 0.25, durationS: 0.5, refractoryS: 10 };
     expect(ok(withWalking({ strideBodyLengths: 1, legPairs: 5, tailFlip: upper }))).toBe(true);
   });
 
@@ -148,12 +152,74 @@ describe('walking invertebrates', () => {
       [{ tailFlip: { ...tf, durationS: 0 } }, `${w}.tailFlip.durationS`],
       [{ tailFlip: { ...tf, refractoryS: 10.1 } }, `${w}.tailFlip.refractoryS`],
       [{ tailFlip: { ...tf, speedMps: 0 } }, `${w}.tailFlip.speedMps`],
-      [{ tailFlip: { speedMps: 0.4, durationS: 0.2 } }, `${w}.tailFlip.refractoryS`],
+      [{ tailFlip: { speedMps: 0.25, durationS: 0.2 } }, `${w}.tailFlip.refractoryS`],
       [{ tailFlip: { ...tf, extra: 1 } }, `${w}.tailFlip`],
       [{ extra: 1 }, w],
     ];
     for (const [patch, path] of bad) {
       expect(issuePaths(withWalking(patch)), JSON.stringify(patch)).toEqual([path]);
     }
+  });
+
+  it('requires walker traits to come with walking, naming each trait', () => {
+    const noWalking = (traits: string[]): unknown => ({
+      ...tetra,
+      behaviour: { ...tetra.behaviour, traits },
+    });
+    expect(issuePaths(noWalking(['cleaner']))).toEqual(['behaviour.traits']);
+    expect(issuePaths(noWalking(['biofilm-grazer', 'cleaner']))).toEqual([
+      'behaviour.traits',
+      'behaviour.traits',
+    ]);
+  });
+
+  describe('speed bounds', () => {
+    const loco = cherry.locomotion as { cruiseSpeedMps: number; maxSpeedMps: number };
+    const speedPath = 'locomotion.walking.walkSpeedMps';
+
+    it('accepts walkSpeedMps equal to cruiseSpeedMps and rejects above it', () => {
+      expect(ok(withWalking({ walkSpeedMps: loco.cruiseSpeedMps }))).toBe(true);
+      expect(issuePaths(withWalking({ walkSpeedMps: loco.cruiseSpeedMps * 1.01 }))).toEqual([
+        speedPath,
+      ]);
+    });
+
+    it('accepts a tail-flip peak equal to maxSpeedMps and rejects above it', () => {
+      const exact = loco.maxSpeedMps / (Math.PI / 2);
+      const tf = { ...walking.tailFlip, speedMps: exact };
+      expect(ok(withWalking({ tailFlip: tf }))).toBe(true);
+      expect(issuePaths(withWalking({ tailFlip: { ...tf, speedMps: exact * 1.01 } }))).toEqual([
+        'locomotion.walking.tailFlip.speedMps',
+      ]);
+    });
+  });
+
+  describe('fish-only behaviour', () => {
+    const withBehaviour = (patch: Record<string, unknown>): unknown => ({
+      ...(shrimp() as { behaviour: object; locomotion: object }),
+      behaviour: { ...cherry.behaviour, traits: ['biofilm-grazer'], ...patch },
+    });
+
+    it('rejects schooling', () => {
+      const schooling = { minGroup: 2, topologicalNeighbours: 3, tightenWhenStartled: false };
+      expect(issuePaths(withBehaviour({ schooling }))).toEqual(['behaviour.schooling']);
+    });
+
+    it('rejects territorial walkers', () => {
+      expect(issuePaths(withBehaviour({ territorial: true }))).toEqual(['behaviour.territorial']);
+    });
+
+    it.each(['shoal', 'air-gulp', 'glass-grazer', 'rock-grazer', 'anemone-host', 'flare-display'])(
+      'rejects swimmer trait %s',
+      (trait) => {
+        expect(issuePaths(withBehaviour({ traits: ['biofilm-grazer', trait] }))).toEqual([
+          'behaviour.traits',
+        ]);
+      },
+    );
+
+    it('keeps cave-dweller and cleaner allowed', () => {
+      expect(ok(withBehaviour({ traits: ['cave-dweller', 'cleaner'] }))).toBe(true);
+    });
   });
 });
