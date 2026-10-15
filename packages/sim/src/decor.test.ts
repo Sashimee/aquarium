@@ -1,7 +1,18 @@
 import { fitHullPlanes, type Collider } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import { compileCollider, DecorField, UnionSdf } from './decor.ts';
-import { ARCHETYPES, REEF_DECOR, REEF_TANK, SHOW_DECOR, SHOW_TANK, spawnMany } from './fixtures.ts';
+import {
+  angelfish,
+  ARCHETYPES,
+  bronzeCorydoras,
+  cherryShrimp,
+  neonTetra,
+  REEF_DECOR,
+  REEF_TANK,
+  SHOW_DECOR,
+  SHOW_TANK,
+  spawnMany,
+} from './fixtures.ts';
 import { Rng } from './rng.ts';
 import { TankSdf } from './sdf.ts';
 import { World } from './world.ts';
@@ -58,31 +69,16 @@ function expectSameField(
 }
 
 describe('decor primitives', () => {
-  it('accepts the nested DecorCollider format as the same shape', () => {
-    const box = () => ({
-      kind: 'box' as const,
-      center: [0.1, 0.2, 0] as [number, number, number],
-      halfExtents: [0.1, 0.05, 0.08] as [number, number, number],
-      rotationY: 0.4,
-      rounding: 0.02,
-    });
-    const nested = compileCollider({ id: 'decor:p1', solid: true, shape: box() });
-    const flat = compileCollider({ id: 'decor:p1', hard: true, ...box() });
-    const nn = new Float64Array(3);
-    const probes: [number, number, number][] = [
-      [0.1, 0.2, 0],
-      [0.3, 0.25, 0.1],
-      [0, 0.1, -0.2],
-    ];
-    for (const [x, y, z] of probes) {
-      expect(nested.sample(x, y, z, nn)).toBe(flat.sample(x, y, z, n));
-      expect(Array.from(nn)).toEqual(Array.from(n));
-    }
+  it('names the collider and the field a bad shape fails on', () => {
     expect(() =>
       compileCollider({
         id: 'decor:p2',
-        solid: true,
-        shape: { ...box(), halfExtents: [0, 1, 1] },
+        hard: true,
+        kind: 'box',
+        center: [0.1, 0.2, 0],
+        halfExtents: [0, 1, 1],
+        rotationY: 0.4,
+        rounding: 0,
       }),
     ).toThrow(/decor "decor:p2": halfExtents/);
   });
@@ -294,11 +290,11 @@ describe('decor primitives', () => {
       compileCollider(
         forged({
           id: 'old',
-          solid: 'yes',
+          solid: true,
           shape: { kind: 'sphere', center: [0, 0, 0], radius: 0.1 },
         }),
       ),
-    ).toThrow(/decor "old": hard/);
+    ).toThrow(/decor "old": kind/);
     expect(() => compileCollider(forged({ id: 'flat', solid: true, shape: null }))).toThrow(
       /decor "flat"/,
     );
@@ -447,7 +443,7 @@ describe('World decor', () => {
     return best;
   }
 
-  it('pushes a fish out of a rock dropped onto it, on the next step', () => {
+  it('sets a fish a rock is dropped onto down in free water at once', () => {
     const w = settled([]);
     const i = mostCentral(w);
     const o = i * 3;
@@ -458,9 +454,11 @@ describe('World decor', () => {
       center: [at(w.position, o) + 0.005, at(w.position, o + 1), at(w.position, o + 2)],
       radius: 0.03,
     };
+    const stone = compileCollider(rock);
+    expect(
+      stone.sample(at(w.position, o), at(w.position, o + 1), at(w.position, o + 2), n),
+    ).toBeLessThan(0);
     expect(w.setDecor([rock])).toBeGreaterThan(0);
-    expect(w.bodyClearance(i)).toBeLessThan(0);
-    w.step();
     for (let k = 0; k < w.count; k++) {
       expect(w.bodyClearance(k)).toBeGreaterThanOrEqual(-PENETRATION_EPSILON);
     }
@@ -470,6 +468,96 @@ describe('World decor', () => {
         expect(w.bodyClearance(k)).toBeGreaterThanOrEqual(-PENETRATION_EPSILON);
       }
     }
+  });
+
+  describe('a rock moved across the tank', () => {
+    const rockAt = (x: number): Collider => ({
+      id: 'rock',
+      hard: true,
+      kind: 'box',
+      center: [x, 0.1, 0],
+      halfExtents: [0.12, 0.1, 0.12],
+      rotationY: 0,
+      rounding: 0.02,
+    });
+    const OLD = compileCollider(rockAt(-0.3));
+    const NEW = compileCollider(rockAt(0.3));
+
+    function community(seed: number): World {
+      const w = new World({
+        seed,
+        tank: SHOW_TANK,
+        species: [neonTetra, bronzeCorydoras, cherryShrimp, angelfish],
+        decor: [rockAt(-0.3)],
+        fish: [
+          ...spawnMany(neonTetra.id, 12),
+          ...spawnMany(bronzeCorydoras.id, 4),
+          ...spawnMany(cherryShrimp.id, 8),
+          ...spawnMany(angelfish.id, 2),
+        ],
+      });
+      for (let t = 0; t < 900; t++) w.step();
+      return w;
+    }
+
+    const centre = (w: World, field: typeof OLD, k: number): number =>
+      field.sample(at(w.position, k * 3), at(w.position, k * 3 + 1), at(w.position, k * 3 + 2), n);
+
+    it('keeps every body, sand dwellers under it included, out of the new place', () => {
+      for (const seed of [1, 2, 3]) {
+        const w = community(seed);
+        const underNew = [];
+        for (let k = 0; k < w.count; k++) if (centre(w, NEW, k) < 0) underNew.push(k);
+        expect(
+          underNew.length,
+          `seed ${seed}: some fish sit where the rock will land`,
+        ).toBeGreaterThan(0);
+        w.setDecor([rockAt(0.3)]);
+        for (let t = 0; t <= 900; t++) {
+          for (let k = 0; k < w.count; k++) {
+            expect(
+              w.bodyClearance(k),
+              `seed ${seed} step ${t} ${w.fishIds[k]}`,
+            ).toBeGreaterThanOrEqual(-PENETRATION_EPSILON);
+          }
+          w.step();
+        }
+      }
+    });
+
+    it('lets fish into the space the rock left', () => {
+      const w = community(1);
+      w.setDecor([rockAt(0.3)]);
+      let visits = 0;
+      for (let t = 0; t < 1800; t++) {
+        w.step();
+        for (let k = 0; k < w.count; k++) if (centre(w, OLD, k) < 0) visits++;
+      }
+      expect(visits).toBeGreaterThan(0);
+    });
+
+    it('stands walkers caught under it back on a surface', () => {
+      const w = community(1);
+      const caught = [];
+      for (let k = 0; k < w.count; k++) {
+        if (w.fishIds[k]?.startsWith(cherryShrimp.id) && centre(w, NEW, k) < 0.02) caught.push(k);
+      }
+      expect(caught.length).toBeGreaterThan(0);
+      w.setDecor([rockAt(0.3)]);
+      for (const k of caught) {
+        expect(w.bodyClearance(k)).toBeGreaterThanOrEqual(-PENETRATION_EPSILON);
+        expect(w.walkers.attached[k]).toBe(1);
+      }
+    });
+
+    it('moves the same way from the same seed', () => {
+      const [a, b] = [community(2), community(2)];
+      for (const w of [a, b]) {
+        w.setDecor([rockAt(0.3)]);
+        for (let t = 0; t < 300; t++) w.step();
+      }
+      expect(Array.from(a.position)).toEqual(Array.from(b.position));
+    });
   });
 
   it('lets fish brush through plants without counting them as hard contacts', () => {

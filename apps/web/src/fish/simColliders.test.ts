@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { colliderListSchema, fitHullPlanes, type Collider } from '@aquarium/shared';
-import { Rng, World, type DecorCollider } from '@aquarium/sim';
+import { Rng, World } from '@aquarium/sim';
 import { DEFAULT_TANK } from '../engine/tank/dimensions';
 import { substrateHeight } from '../engine/tank/substrate';
 import {
@@ -10,7 +10,7 @@ import {
   type HullCollider,
 } from '../scene/colliders';
 import { demoTank } from './demoStock';
-import { hullCorners, SimColliders, sceneCollidersToSim } from './simColliders';
+import { colliderDigest, hullCorners, SimColliders, sceneCollidersToSim } from './simColliders';
 
 /** An irregular rock: points on a squashed, lumpy ellipsoid resting on the sand at (x, z). */
 function rockPoints(x: number, z: number, seed: number): number[] {
@@ -100,10 +100,14 @@ describe('sceneCollidersToSim', () => {
 });
 
 describe('SimColliders', () => {
-  const decorBox: DecorCollider = {
+  const decorBox: Collider = {
     id: 'decor:p1',
-    solid: true,
-    shape: { kind: 'box', center: [0, 0.12, 0], halfExtents: [0.05, 0.04, 0.05] },
+    hard: true,
+    kind: 'box',
+    center: [0, 0.12, 0],
+    halfExtents: [0.05, 0.04, 0.05],
+    rotationY: 0,
+    rounding: 0,
   };
 
   it("swaps the scene's hardscape for the decor layer's pieces and keeps the plants", () => {
@@ -155,6 +159,58 @@ describe('SimColliders', () => {
     expect(() => colliders.setScene([PLANT, empty])).toThrow(/Sim colliders are invalid/);
     expect(colliders.list).toEqual([]);
     expect(colliders.setDecor([decorBox]).map((c) => c.id)).toEqual(['decor:p1']);
+  });
+});
+
+describe('colliderDigest', () => {
+  const box = (id: string, x: number): Collider => ({
+    id,
+    hard: true,
+    kind: 'box',
+    center: [x, 0.1, 0],
+    halfExtents: [0.05, 0.05, 0.05],
+    rotationY: 0,
+    rounding: 0,
+  });
+  const reed: Collider = {
+    id: 'decor:reed',
+    hard: false,
+    kind: 'capsule',
+    a: [0, 0, 0],
+    b: [0, 0.3, 0],
+    radius: 0.02,
+  };
+
+  it('lists every piece by id with where it sits', () => {
+    expect(colliderDigest([box('decor:b', 0.2), reed, box('decor:a', -0.1)])).toBe(
+      'decor:a@-0.100,0.100,0.000 decor:b@0.200,0.100,0.000 decor:reed@0.000,0.150,0.000',
+    );
+  });
+
+  it('changes when a piece moves and centres capsules and hulls', () => {
+    expect(colliderDigest([box('decor:a', 0)])).not.toBe(colliderDigest([box('decor:a', 0.01)]));
+    const log: Collider = {
+      ...reed,
+      id: 'decor:log',
+      hard: true,
+      a: [0, 0.1, 0],
+      b: [0.2, 0.1, 0],
+    };
+    const tetra: Collider = {
+      id: 'scene:0',
+      hard: true,
+      kind: 'hull',
+      vertices: [
+        [0, 0, 0],
+        [0.4, 0, 0],
+        [0, 0.4, 0],
+        [0, 0, 0.4],
+      ],
+    };
+    expect(colliderDigest([log, tetra])).toBe(
+      'decor:log@0.100,0.100,0.000 scene:0@0.100,0.100,0.100',
+    );
+    expect(colliderDigest([])).toBe('');
   });
 });
 

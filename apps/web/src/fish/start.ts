@@ -81,6 +81,8 @@ export interface FishHandle {
   synced(): Promise<void>;
   /** The distinct swimming species, sorted; null until the fish are up. */
   swimmingSpecies(): readonly string[] | null;
+  /** What the sim collides with; null until the fish are up. */
+  simColliders(): readonly Collider[] | null;
   stop(): void;
 }
 
@@ -265,6 +267,7 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
     },
     synced: () => ready?.synced() ?? Promise.resolve(),
     swimmingSpecies: () => ready?.swimmingSpecies() ?? null,
+    simColliders: () => (ready === null ? null : colliders.list),
     stop() {
       abort.abort();
       tankEvents.stop();

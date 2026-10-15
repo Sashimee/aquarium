@@ -807,6 +807,34 @@ export class Behaviour {
   }
 
   /**
+   * Hard decor moved: any station, group station or swimmer rest spot the decor now covers is
+   * chosen again on the next plan. Walker nooks are rechecked every step by `nookHolds`.
+   */
+  decorMoved(): void {
+    const { count, species } = this.host;
+    for (let s = 0; s < species.length; s++) {
+      const leader = at(this.groupLeader, s);
+      if (leader >= 0 && this.covered(leader, this.groupHome, s * 3)) this.groupTimer[s] = 0;
+    }
+    for (let i = 0; i < count; i++) {
+      const sp = this.speciesOf(i);
+      if (sp.home !== 'none' && this.covered(i, this.home, i * 3)) this.homeTimer[i] = 0;
+      if (
+        sp.walking === null &&
+        this.restSpotSet[i] === 1 &&
+        this.covered(i, this.restSpot, i * 3)
+      ) {
+        this.restSpotSet[i] = 0;
+      }
+    }
+  }
+
+  private covered(i: number, spots: Float64Array, o: number): boolean {
+    const d = this.host.sceneSdf.sample(at(spots, o), at(spots, o + 1), at(spots, o + 2), this.n3);
+    return d < at(this.host.radius, i);
+  }
+
+  /**
    * Picks a hovering spot inside the band: clear of geometry, preferably about 1.5 body lengths
    * from hard decor (fish hold station by structure), and not far from where the fish is.
    */

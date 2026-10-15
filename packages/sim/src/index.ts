@@ -44,14 +44,7 @@ export {
 } from './carcass.ts';
 export { FEEDING, gutForHunger } from './feeding.ts';
 export { CURIOSITY } from './curiosity.ts';
-export {
-  compileCollider,
-  DecorField,
-  UnionSdf,
-  type DecorCollider,
-  type DecorShape,
-  type Point3,
-} from './decor.ts';
+export { compileCollider, DecorField, UnionSdf, type Point3 } from './decor.ts';
 export { Basin, type TankDimensions } from './basin.ts';
 export { resolvePenetration, TankSdf, type Sdf } from './sdf.ts';
 export { pairwiseDistanceSq, selectNearest } from './neighbours.ts';

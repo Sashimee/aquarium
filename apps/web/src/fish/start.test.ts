@@ -344,8 +344,11 @@ describe('startFish', () => {
       colliders: [
         {
           id: 'decor:p1',
-          solid: true,
-          shape: { kind: 'capsule', a: [0.2, 0.15, 0], b: [0.4, 0.15, 0], radius: 0.03 },
+          hard: true,
+          kind: 'capsule',
+          a: [0.2, 0.15, 0],
+          b: [0.4, 0.15, 0],
+          radius: 0.03,
         },
       ],
     });
@@ -359,10 +362,12 @@ describe('startFish', () => {
     const fish = new FakeFishSystem();
     const { handle, interaction, errors } = setup(Promise.resolve(fish));
     await flush();
-    const piece = {
+    const piece: Collider = {
       id: 'decor:p1',
-      solid: true,
-      shape: { kind: 'sphere' as const, center: [0, 0.2, 0] as const, radius: 0.05 },
+      hard: true,
+      kind: 'sphere',
+      center: [0, 0.2, 0],
+      radius: 0.05,
     };
     interaction.emit('decor:colliders', { colliders: [piece] });
     interaction.emit('decor:colliders', { colliders: [piece, piece] });
