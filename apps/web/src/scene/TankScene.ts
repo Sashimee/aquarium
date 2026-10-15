@@ -26,7 +26,13 @@ import {
 import { ColliderField, type CapsuleCollider, type Collider } from './colliders';
 import { CurrentField, type CurrentParameters } from './current';
 import { fluorescenceLevel } from './coralStyle';
-import { createCoralGlowNode, fitCollider, Hardscape, HARDSCAPE_KINDS } from './hardscape';
+import {
+  createCoralGlowNode,
+  fitCollider,
+  Hardscape,
+  HARDSCAPE_KINDS,
+  PLANT_KIND,
+} from './hardscape';
 import { applyBiomeLighting } from './lighting';
 import type { SceneOptions } from './options';
 import { ColliderOverlay } from './overlay';
@@ -114,7 +120,9 @@ export class TankScene {
   private substrate: SubstrateInstall | null = null;
   private readonly placeholderSubstrate: Material | Material[];
   private disposed = false;
-  private readonly presetHard: readonly DecorItem[];
+  private readonly presetMovable: readonly { item: DecorItem; kind: string }[];
+  private movablePlants = false;
+  private plantSlots = new Map<number, number>();
   private readonly releases: (() => void)[] = [];
 
   private constructor(
@@ -122,16 +130,18 @@ export class TankScene {
     private readonly library: ModelLibrary,
     private readonly preset: PresetLayout,
     private colliderData: readonly Collider[],
-    /** The leading entries of `colliderData`, fitted to the movable hardscape. */
-    private hardColliderCount: number,
-    private readonly plantEntries: ReadonlyMap<string, PlantEntry[]>,
+    /** The leading entries of `colliderData`, fitted to the movable hardscape and layout plants. */
+    private movableColliderCount: number,
+    plantSlots: ReadonlyMap<number, number>,
+    private readonly patchEntries: ReadonlyMap<string, PlantEntry[]>,
     private hardItems: readonly { item: DecorItem; kind: string }[],
     private readonly anemoneItems: readonly DecorItem[],
     private readonly euphylliaItems: readonly EuphylliaItem[],
     private readonly anchorData: readonly SceneAnchor[],
     options: SceneOptions,
   ) {
-    this.presetHard = hardItems.map((h) => h.item);
+    this.presetMovable = hardItems;
+    this.plantSlots = new Map(plantSlots);
     this.queue = new RebuildQueue(
       sameKey,
       (key, isStale) => this.rebuildVisuals(key, isStale),
@@ -187,7 +197,7 @@ export class TankScene {
       }
       const kind = catalog.get(item.assetId).kind;
       if (HARDSCAPE_KINDS.has(kind)) hardItems.push({ item, kind });
-      else if (kind === 'plant') layoutPlants.push(item);
+      else if (kind === PLANT_KIND) layoutPlants.push(item);
       else if (kind === 'anemone') anemoneItems.push(item);
       else throw new Error(`Preset item "${item.assetId}" is a ${kind}, which a tank cannot hold`);
     }
@@ -201,25 +211,23 @@ export class TankScene {
       if (preset.substrate.accentAssetId) catalog.get(preset.substrate.accentAssetId);
     }
 
-    const colliders: Collider[] = [];
-    for (const { item, kind } of hardItems) {
-      const geometries = await library.collisionGeometry(item.assetId);
-      colliders.push(...fitCollider(kind, geometries, item));
-    }
-    const hardColliderCount = colliders.length;
+    const waterTop = dimensions.height - dimensions.freeboard;
+    hardItems.push(...layoutPlants.map((item) => ({ item, kind: PLANT_KIND })));
+    const movable = await TankScene.movableColliders(library, hardItems, waterTop);
+    const colliders: Collider[] = [...movable.colliders];
+    const movableColliderCount = colliders.length;
     const hard = new ColliderField(colliders);
 
     const extent = glassExtent(dimensions);
-    const waterTop = dimensions.height - dimensions.freeboard;
     const ground = (x: number, z: number) => substrateHeight(dimensions, x, z);
     const normal = new Float64Array(3);
     const blocked = (x: number, y: number, z: number) =>
       hard.hard(x, y + 0.02, z, normal) < BLOCKED_CLEARANCE;
 
-    const plantEntries = new Map<string, PlantEntry[]>();
+    const patchEntries = new Map<string, PlantEntry[]>();
     const entriesFor = (assetId: string) => {
-      let list = plantEntries.get(assetId);
-      if (!list) plantEntries.set(assetId, (list = []));
+      let list = patchEntries.get(assetId);
+      if (!list) patchEntries.set(assetId, (list = []));
       return list;
     };
 
@@ -240,39 +248,6 @@ export class TankScene {
       const soft = softPatchCollider(patch, instances, catalog.get(patch.assetId).bounds?.max[1]);
       if (soft) colliders.push(soft);
     }
-    for (const item of layoutPlants) {
-      entriesFor(item.assetId).push({
-        x: item.position[0],
-        y: item.position[1],
-        z: item.position[2],
-        yaw: item.rotationY,
-        tiltX: 0,
-        tiltZ: 0,
-        scale: item.scale,
-        tone: 1,
-        rank: -1,
-      });
-      const entry = catalog.get(item.assetId);
-      const height = (entry.bounds?.max[1] ?? FALLBACK_PLANT_HEIGHT) * item.scale;
-      if (item.position[1] + height > waterTop - SURFACE_MARGIN) {
-        throw new Error(
-          `Plant "${item.assetId}" at y ${item.position[1]} reaches ${(item.position[1] + height).toFixed(3)} m, above the water line ${(waterTop - SURFACE_MARGIN).toFixed(3)} m; lower its scale`,
-        );
-      }
-      const half = Math.max(entry.bounds?.max[0] ?? 0.05, entry.bounds?.max[2] ?? 0.05);
-      if (height >= MIN_COLLIDER_PLANT_HEIGHT) {
-        colliders.push(
-          plantCapsule(
-            item.position[0],
-            item.position[1],
-            item.position[2],
-            height,
-            half * item.scale * 0.5,
-          ),
-        );
-      }
-    }
-
     const anchors: SceneAnchor[] = [];
     anemoneItems.forEach((item, i) => {
       const entry = catalog.get(item.assetId);
@@ -294,8 +269,9 @@ export class TankScene {
       library,
       preset,
       colliders,
-      hardColliderCount,
-      plantEntries,
+      movableColliderCount,
+      movable.plantSlots,
+      patchEntries,
       hardItems,
       anemoneItems,
       euphylliaItems,
@@ -323,12 +299,24 @@ export class TankScene {
 
   /** The preset's movable pieces, which an unedited tank shows. */
   get presetHardDecor(): readonly DecorItem[] {
-    return this.presetHard;
+    return this.presetMovable
+      .filter(({ kind }) => this.movablePlants || kind !== PLANT_KIND)
+      .map(({ item }) => item);
   }
 
-  /** Plants, anemones and procedural corals from the preset, which stay where they are. */
+  /** Anemones, procedural corals and, until `enableMovablePlants`, plants: what stays where it is. */
   get fixedDecor(): readonly DecorItem[] {
-    return fixedDecorOf(this.preset.decor, this.library.catalog);
+    return fixedDecorOf(this.preset.decor, this.library.catalog, this.movablePlants);
+  }
+
+  /**
+   * Makes plants movable pieces: `presetHardDecor` then lists the preset's layout plants,
+   * `fixedDecor` drops them, and `setHardDecor`/`moveHardDecor` take plant items next to rocks and
+   * wood. Call before the decor layer reads the scene. Plants are opt-in so a decor layer that has
+   * no plant pieces keeps seeing them as fixed.
+   */
+  enableMovablePlants(): void {
+    this.movablePlants = true;
   }
 
   catalogEntries(): IterableIterator<CatalogEntry> {
@@ -336,48 +324,86 @@ export class TankScene {
   }
 
   /**
-   * Swaps the rocks, wood and ornaments for `items` at the installed quality tier and refits their
-   * colliders, so the collider field and the `?colliders=1` overlay follow the moved pieces. The
-   * sim gets the moved pieces' colliders from the decor layer instead.
+   * Swaps the rocks, wood and ornaments (and plants, once movable) for `items` at the installed
+   * quality tier and refits their colliders, so the collider field and the `?colliders=1` overlay
+   * follow the moved pieces. The sim gets the moved pieces' colliders from the decor layer instead.
    */
   async setHardDecor(items: readonly DecorItem[]): Promise<void> {
     await this.queue.settled();
     const key = this.installedKey;
     if (this.disposed || !key) return;
     const catalog = this.library.catalog;
-    const next = items.map((item) => ({ item, kind: catalog.get(item.assetId).kind }));
-    for (const { item, kind } of next) {
-      if (!HARDSCAPE_KINDS.has(kind)) {
+    const given = items.map((item) => ({ item, kind: catalog.get(item.assetId).kind }));
+    for (const { item, kind } of given) {
+      if (!HARDSCAPE_KINDS.has(kind) && !(this.movablePlants && kind === PLANT_KIND)) {
         throw new Error(
-          `Decor "${item.assetId}" is a ${kind}, which cannot be placed as hardscape`,
+          `Decor "${item.assetId}" is a ${kind}, which cannot be placed as ${this.movablePlants ? 'movable decor' : 'hardscape'}`,
         );
       }
     }
+    const fixedPlants = this.movablePlants
+      ? []
+      : this.presetMovable.filter(({ kind }) => kind === PLANT_KIND);
+    const next = [...given, ...fixedPlants];
+    const dimensions = this.engine.tank.dimensions;
+    const waterTop = dimensions.height - dimensions.freeboard;
     const hardscape = new Hardscape(this.preset.biome, this.coralGlowNode);
-    const hardColliders: Collider[] = [];
-    for (const { item, kind } of next) {
-      const entry = catalog.get(item.assetId);
-      const model = await this.library.load(item.assetId, key.hardscapeLod, key.textureSize);
-      hardscape.add(entry, model, item);
-      hardColliders.push(
-        ...fitCollider(kind, await this.library.collisionGeometry(item.assetId), item),
-      );
-    }
-    if (this.disposed) {
+    let groups: PlantGroup[] = [];
+    try {
+      for (const { item, kind } of next) {
+        if (kind === PLANT_KIND) continue;
+        const model = await this.library.load(item.assetId, key.hardscapeLod, key.textureSize);
+        hardscape.add(catalog.get(item.assetId), model, item);
+      }
+      groups = await this.buildPlantGroups(key, next);
+      const movable = await TankScene.movableColliders(this.library, next, waterTop);
+      if (this.disposed) {
+        hardscape.dispose();
+        for (const group of groups) group.dispose();
+        return;
+      }
+      this.hardscape?.dispose();
+      for (const group of this.plantGroups) group.dispose();
+      this.hardscape = hardscape;
+      this.plantGroups = groups;
+      this.hardItems = next;
+      this.plantSlots = new Map(movable.plantSlots);
+      this.replaceMovableColliders(movable.colliders);
+    } catch (error) {
       hardscape.dispose();
-      return;
+      for (const group of groups) group.dispose();
+      throw error;
     }
-    this.hardscape?.dispose();
-    this.hardscape = hardscape;
-    this.hardItems = next;
-    this.replaceHardColliders(hardColliders);
     this.engine.scene.add(hardscape.group);
+    for (const group of groups) {
+      group.setDensity(this.engine.quality.settings.plantDensity);
+      this.engine.scene.add(group.object);
+    }
     await this.evictUnused();
   }
 
-  /** Moves one piece's meshes now; used while dragging, before the layout is committed. */
+  /** Moves one piece now; used while dragging, before the layout is committed. */
   moveHardDecor(index: number, item: DecorItem): void {
-    this.hardscape?.setItem(index, item);
+    const slot = this.hardItems[index];
+    if (!slot) return;
+    this.hardItems = this.hardItems.map((h, i) => (i === index ? { item, kind: h.kind } : h));
+    if (slot.kind !== PLANT_KIND) {
+      const hardIndex = this.hardItems.slice(0, index).filter((h) => h.kind !== PLANT_KIND).length;
+      this.hardscape?.setItem(hardIndex, item);
+      return;
+    }
+    const ordinal = this.hardItems
+      .slice(0, index)
+      .filter((h) => h.kind === PLANT_KIND && h.item.assetId === item.assetId).length;
+    const group = this.plantGroups.find((g) => g.assetId === item.assetId);
+    group?.setEntry(ordinal, layoutPlantEntry(item));
+    const colliderIndex = this.plantSlots.get(index);
+    if (colliderIndex === undefined) return;
+    const moved = layoutPlantCollider(this.library.catalog.get(item.assetId), item);
+    if (!moved) return;
+    this.colliderData = this.colliderData.map((c, i) => (i === colliderIndex ? moved : c));
+    this.colliderField = new ColliderField(this.colliderData);
+    this.overlay.setColliders(this.colliderData);
   }
 
   get colliderList(): readonly Collider[] {
@@ -388,9 +414,9 @@ export class TankScene {
     return this.colliderField;
   }
 
-  private replaceHardColliders(hard: readonly Collider[]): void {
-    this.colliderData = [...hard, ...this.colliderData.slice(this.hardColliderCount)];
-    this.hardColliderCount = hard.length;
+  private replaceMovableColliders(movable: readonly Collider[]): void {
+    this.colliderData = [...movable, ...this.colliderData.slice(this.movableColliderCount)];
+    this.movableColliderCount = movable.length;
     this.colliderField = new ColliderField(this.colliderData);
     this.overlay.setColliders(this.colliderData);
   }
@@ -421,6 +447,55 @@ export class TankScene {
     if (this.disposed) return;
     for (const group of this.plantGroups) group.setDensity(settings.plantDensity);
     this.queue.request(keyFor(tier, settings));
+  }
+
+  private async buildPlantGroups(
+    key: VisualKey,
+    movable: readonly { item: DecorItem; kind: string }[],
+  ): Promise<PlantGroup[]> {
+    const layout = new Map<string, PlantEntry[]>();
+    for (const { item, kind } of movable) {
+      if (kind !== PLANT_KIND) continue;
+      const list = layout.get(item.assetId) ?? [];
+      list.push(layoutPlantEntry(item));
+      layout.set(item.assetId, list);
+    }
+    const assetIds = new Set([...layout.keys(), ...this.patchEntries.keys()]);
+    const groups: PlantGroup[] = [];
+    try {
+      for (const assetId of assetIds) {
+        const model = await this.library.load(assetId, key.plantLod, key.textureSize);
+        const entries = [...(layout.get(assetId) ?? []), ...(this.patchEntries.get(assetId) ?? [])];
+        groups.push(new PlantGroup(assetId, model, entries, this.current));
+      }
+    } catch (error) {
+      for (const group of groups) group.dispose();
+      throw error;
+    }
+    return groups;
+  }
+
+  private static async movableColliders(
+    library: ModelLibrary,
+    movable: readonly { item: DecorItem; kind: string }[],
+    waterTop: number,
+  ): Promise<{ colliders: Collider[]; plantSlots: Map<number, number> }> {
+    const colliders: Collider[] = [];
+    const plantSlots = new Map<number, number>();
+    for (const [i, { item, kind }] of movable.entries()) {
+      if (kind === PLANT_KIND) {
+        const entry = library.catalog.get(item.assetId);
+        checkBelowSurface(entry, item, waterTop);
+        const capsule = layoutPlantCollider(entry, item);
+        if (capsule) {
+          plantSlots.set(i, colliders.length);
+          colliders.push(capsule);
+        }
+      } else {
+        colliders.push(...fitCollider(kind, await library.collisionGeometry(item.assetId), item));
+      }
+    }
+    return { colliders, plantSlots };
   }
 
   private async loadSubstrate(textureSize: 1024 | 2048): Promise<SubstrateInstall | null> {
@@ -470,15 +545,13 @@ export class TankScene {
       if (!this.substrate || this.substrate.textureSize !== key.textureSize) {
         substrate = await this.loadSubstrate(key.textureSize);
       }
-      for (const { item } of this.hardItems) {
+      for (const { item, kind } of this.hardItems) {
+        if (kind === PLANT_KIND) continue;
         const entry = this.library.catalog.get(item.assetId);
         const model = await this.library.load(item.assetId, key.hardscapeLod, key.textureSize);
         hardscape.add(entry, model, item);
       }
-      for (const [assetId, entries] of this.plantEntries) {
-        const model = await this.library.load(assetId, key.plantLod, key.textureSize);
-        groups.push(new PlantGroup(assetId, model, entries, this.current));
-      }
+      groups.push(...(await this.buildPlantGroups(key, this.hardItems)));
       for (const item of this.anemoneItems) {
         const entry = this.library.catalog.get(item.assetId);
         const model = await this.library.load(item.assetId, key.hardscapeLod, key.textureSize);
@@ -538,13 +611,14 @@ export class TankScene {
     const key = this.installedKey;
     const keep = new Set<string>();
     if (key) {
-      for (const { item } of this.hardItems) {
-        keep.add(this.library.modelKey(item.assetId, key.hardscapeLod, key.textureSize));
+      for (const { item, kind } of this.hardItems) {
+        const lod = kind === PLANT_KIND ? key.plantLod : key.hardscapeLod;
+        keep.add(this.library.modelKey(item.assetId, lod, key.textureSize));
       }
       for (const item of this.anemoneItems) {
         keep.add(this.library.modelKey(item.assetId, key.hardscapeLod, key.textureSize));
       }
-      for (const assetId of this.plantEntries.keys()) {
+      for (const assetId of this.patchEntries.keys()) {
         keep.add(this.library.modelKey(assetId, key.plantLod, key.textureSize));
       }
     }
@@ -601,10 +675,48 @@ export function checkClearOfGlass(
 export function fixedDecorOf(
   decor: readonly DecorItem[],
   catalog: Pick<AssetCatalog, 'get'>,
+  plantsMovable = false,
 ): DecorItem[] {
-  return decor.filter(
-    (i) =>
-      parseEuphylliaId(i.assetId) !== null || !HARDSCAPE_KINDS.has(catalog.get(i.assetId).kind),
+  return decor.filter((i) => {
+    if (parseEuphylliaId(i.assetId) !== null) return true;
+    const kind = catalog.get(i.assetId).kind;
+    return !HARDSCAPE_KINDS.has(kind) && !(plantsMovable && kind === PLANT_KIND);
+  });
+}
+
+export function layoutPlantEntry(item: DecorItem): PlantEntry {
+  return {
+    x: item.position[0],
+    y: item.position[1],
+    z: item.position[2],
+    yaw: item.rotationY,
+    tiltX: 0,
+    tiltZ: 0,
+    scale: item.scale,
+    tone: 1,
+    rank: -1,
+  };
+}
+
+export function checkBelowSurface(entry: CatalogEntry, item: DecorItem, waterTop: number): void {
+  const height = (entry.bounds?.max[1] ?? FALLBACK_PLANT_HEIGHT) * item.scale;
+  if (item.position[1] + height > waterTop - SURFACE_MARGIN) {
+    throw new Error(
+      `Plant "${item.assetId}" at y ${item.position[1]} reaches ${(item.position[1] + height).toFixed(3)} m, above the water line ${(waterTop - SURFACE_MARGIN).toFixed(3)} m; lower its scale`,
+    );
+  }
+}
+
+export function layoutPlantCollider(entry: CatalogEntry, item: DecorItem): CapsuleCollider | null {
+  const height = (entry.bounds?.max[1] ?? FALLBACK_PLANT_HEIGHT) * item.scale;
+  if (height < MIN_COLLIDER_PLANT_HEIGHT) return null;
+  const half = Math.max(entry.bounds?.max[0] ?? 0.05, entry.bounds?.max[2] ?? 0.05);
+  return plantCapsule(
+    item.position[0],
+    item.position[1],
+    item.position[2],
+    height,
+    half * item.scale * 0.5,
   );
 }
 
