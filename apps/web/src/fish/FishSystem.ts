@@ -15,6 +15,7 @@ import {
   SnapshotField,
   STEP_DT,
   type FishPlacement,
+  type Point3,
   type SpeciesInput,
   type Stimulus,
   type TankSpaceWorldConfig,
@@ -59,7 +60,7 @@ import { hashString, TankRoster, type RosterFish } from './roster';
 import { SimStream } from './simStream';
 import { initSim, layoutChanges, SimInitTimeout, SimWorldSpec, startWorld } from './simWorld';
 import { speciesInput } from './species';
-import type { FishBite, PickRay, TankEvent } from './start';
+import type { FishBite, FishPoint, PickRay, TankEvent } from './start';
 import { SWIM_MODES, SwimState } from './swim';
 
 export interface FishSystemOptions {
@@ -365,6 +366,11 @@ export class FishSystem {
     if (!this.disposed && this.simReady) this.sim.startle(stimulus);
   }
 
+  /** A laser dot or fingertip in tank space, or null once it is gone. */
+  setLure(position: Point3 | null): void {
+    if (!this.disposed && this.simReady) this.sim.setLure(position);
+  }
+
   /**
    * Homes from the scene: the clownfish's anemone. Kept for every later sim world, since a
    * re-initialised world starts with only the anchors in its config.
@@ -407,6 +413,38 @@ export class FishSystem {
       }
     }
     return best;
+  }
+
+  /** The nearest swimming fish along `ray`, as a position the camera can follow, or null. */
+  pickFish(ray: PickRay): (() => FishPoint | null) | null {
+    let best: FishRuntime | null = null;
+    let bestDistance = Infinity;
+    for (const rt of this.runtimes.values()) {
+      if (rt.fish.phase !== 'swimming' || !rt.shown) continue;
+      const radius = Math.max(rt.length / 2, MIN_PICK_RADIUS);
+      const hit = raySphere(ray.origin, ray.dir, rt.lastPosition, radius);
+      if (hit !== null && hit < bestDistance) {
+        bestDistance = hit;
+        best = rt;
+      }
+    }
+    return best === null ? null : this.follow(best);
+  }
+
+  /** Some swimming fish to follow, for a control that has no pointer to pick with. */
+  anyFish(): (() => FishPoint | null) | null {
+    for (const rt of this.runtimes.values()) {
+      if (rt.fish.phase === 'swimming' && rt.shown) return this.follow(rt);
+    }
+    return null;
+  }
+
+  private follow(rt: FishRuntime): () => FishPoint | null {
+    return () => {
+      if (this.disposed || !rt.shown || this.runtimes.get(rt.fish.simId) !== rt) return null;
+      const { x, y, z } = rt.lastPosition;
+      return { x, y, z };
+    };
   }
 
   /** The net tool tapped along `ray`; the session asks for confirmation before netting. */

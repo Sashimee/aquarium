@@ -3,6 +3,7 @@ import type { Engine } from '../../engine/Engine';
 import type { EventBus } from '../../engine/events';
 import { waterBounds } from '../../engine/tank/dimensions';
 import { FeedGate } from '../../sync/feedGate';
+import type { Vec3 } from '../camera';
 import type { InteractionEvents } from '../events';
 import { FoodLink, type FoodBridge } from '../food/link';
 import { FoodField } from '../food/particles';
@@ -20,7 +21,9 @@ export interface PlayScene {
 
 export interface PlaySimBridge extends FoodBridge {
   startle?(stimulus: StimulusLike): void;
+  setLure?(position: readonly [number, number, number] | null): void;
   netTap?(ray: Ray): void;
+  pickFish?(ray: Ray): (() => Vec3 | null) | null;
 }
 
 export interface PlaySystem {
@@ -54,12 +57,13 @@ export function createPlaySystem(
   );
   const bubbles = new BubbleField(box.max.y);
   const ripples = new RippleField();
-  const visuals = new PlayVisuals((x, z) => scene.groundHeight(x, z));
+  const visuals = new PlayVisuals();
   engine.scene.add(visuals.group);
 
   const raycaster = new Raycaster();
   const ndc = new Vector2();
   const canvas = engine.renderer.domElement;
+  let lured = false;
   const controller = new PlayController({
     rayAt(x, y) {
       const w = canvas.clientWidth;
@@ -83,7 +87,13 @@ export function createPlaySystem(
     events: interaction,
     startle: sim.startle?.bind(sim),
     netTap: sim.netTap?.bind(sim),
+    pickFish: sim.pickFish?.bind(sim),
     toSim: sceneToSim,
+    lure(p) {
+      if (p === null && !lured) return;
+      lured = p !== null;
+      sim.setLure?.(p ? [p.x, p.y, p.z] : null);
+    },
     setLaserDot: (p) => visuals.setLaser(p),
     now: () => performance.now(),
   });

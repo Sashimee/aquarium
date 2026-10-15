@@ -160,6 +160,7 @@
   border-radius: 99rem;
   background: transparent;
   min-height: 2.75rem;
+  min-width: 2.75rem;
   padding: 0.3rem 0.85rem;
 }
 
@@ -203,12 +204,27 @@
 }
 
 .dock {
+  position: relative;
   display: flex;
   gap: 0.35rem;
   width: 100%;
   max-width: 30rem;
   padding: 0.35rem;
   border-radius: 1.7rem;
+}
+
+#ui .dock-note {
+  position: absolute;
+  bottom: calc(100% + 0.4rem);
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 0.25rem 0.75rem;
+  border-radius: 99rem;
+  background: var(--glass-strong);
+  font-size: 0.8rem;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 #ui .dock-item {
@@ -228,13 +244,13 @@
   font-weight: 600;
 }
 
-#ui .dock-item[aria-pressed='true'] {
+#ui .dock-item[aria-expanded='true'] {
   background: var(--accent);
   color: var(--accent-ink);
   box-shadow: 0 0 18px rgba(127, 209, 255, 0.55);
 }
 
-#ui .dock-item.glow:not([aria-pressed='true']) {
+#ui .dock-item.glow:not([aria-expanded='true']) {
   box-shadow: inset 0 0 0 2px var(--accent);
 }
 
@@ -329,7 +345,7 @@
   }
 
   #ui .segmented button {
-    padding: 0.3rem 0.55rem;
+    padding: 0.3rem 0.45rem;
     font-size: 0.82rem;
   }
 }

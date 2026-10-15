@@ -140,15 +140,18 @@ export class SurfaceReflection {
     return texture(this.target.texture, screenUV.flipX().add(offset));
   }
 
-  /** Draws the reflection for `camera`, unless it is off or the camera cannot see the underside. */
-  render(renderer: ReflectionRenderer, scene: Scene, camera: PerspectiveCamera): void {
-    if (!this.enabled) return;
+  /**
+   * Draws the reflection for `camera`, unless it is off or the camera cannot see the underside.
+   * Returns whether it drew.
+   */
+  render(renderer: ReflectionRenderer, scene: Scene, camera: PerspectiveCamera): boolean {
+    if (!this.enabled) return false;
     camera.updateMatrixWorld();
     _position.setFromMatrixPosition(camera.matrixWorld);
-    if (_position.y >= this.surface.max.y - WATERLINE_MARGIN) return;
+    if (_position.y >= this.surface.max.y - WATERLINE_MARGIN) return false;
     _viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     _frustum.setFromProjectionMatrix(_viewProjection, renderer.coordinateSystem);
-    if (!_frustum.intersectsBox(this.surface)) return;
+    if (!_frustum.intersectsBox(this.surface)) return false;
 
     renderer.getDrawingBufferSize(_size);
     this.target.setSize(
@@ -157,6 +160,7 @@ export class SurfaceReflection {
     );
     mirrorCamera(camera, this.surface.max.y, this.camera, renderer.coordinateSystem);
     this.inPass(renderer, camera, () => renderer.render(scene, this.camera));
+    return true;
   }
 
   /**

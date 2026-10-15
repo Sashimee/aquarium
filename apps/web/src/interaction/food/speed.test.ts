@@ -38,6 +38,29 @@ describe('food speed against its eaters', () => {
     expect(sink('bloodworms')).toBeGreaterThan(sink('brine-shrimp'));
   });
 
+  it('drifts lighter food at least as far as heavier food at the preset currents', () => {
+    const drift = (food: (typeof FOOD_TYPES)[number]): number => {
+      const field = new FoodField(
+        {
+          bounds: { minX: -5, maxX: 5, minZ: -5, maxZ: 5, waterTop: 5 },
+          groundHeight: () => -5,
+          current: (_x, _y, _z, out) => {
+            out[0] = 0.12;
+            out[1] = 0;
+            out[2] = 0;
+          },
+        },
+        () => 0,
+      );
+      field.drop(food, 0.05, 0, 0, 0);
+      for (let t = 0; t < 4; t += 1 / 30) field.step(1 / 30);
+      return field.particles[0]?.x ?? 0;
+    };
+    expect(drift('brine-shrimp')).toBeGreaterThanOrEqual(drift('bloodworms') - 1e-9);
+    expect(drift('flakes')).toBeGreaterThanOrEqual(drift('bloodworms') - 1e-9);
+    expect(drift('bloodworms')).toBeGreaterThanOrEqual(drift('pellets') - 1e-9);
+  });
+
   it('ships presets with a current to test against', () => {
     expect(presets.length).toBeGreaterThan(0);
   });

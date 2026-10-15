@@ -10,12 +10,25 @@ import {
 } from 'three/webgpu';
 import { applyDayLighting, type DayLightingRig, FRESHWATER_FILL_LEVEL } from './dayLighting';
 import { daylightAt, minuteOfDay } from './daylight';
+import {
+  browserSessionStore,
+  type DeviceLossWatch,
+  type DeviceLostInfo,
+  type LossSource,
+  recoveryFor,
+  sessionBackend,
+  watchDeviceLoss,
+  webglFallbackUrl,
+} from './deviceLoss';
+import { showDeviceNotice } from './deviceNotice';
 import { EffectsSlot } from './effectsSlot';
 import { PipelineFailureHandler, usesMaterial, watchPipelineErrors } from './pipelineErrors';
 import { installRoomLighting, DEFAULT_HDRI_URL } from './environment';
 import { createSharedKtx2, type Ktx2Textures } from './ktx2';
 import { EventBus, type BackendKind, type EngineEvents, type EngineEventBus } from './events';
 import { CullPrewarm } from './cullPrewarm';
+import { ReflectedShadow } from './reflectedShadow';
+import { RenderLoop } from './renderLoop';
 import { buildOrRelease, DisposeStack } from './lifecycle';
 import type { EngineOptions } from './options';
 import { qualityProfile } from './quality/profile';
@@ -56,10 +69,9 @@ function hasCoarsePointer(): boolean {
 }
 
 /** The part of the renderer the start-up path needs, so failures can be tested without a GPU. */
-export interface StartableRenderer {
+export interface StartableRenderer extends LossSource {
   init(): Promise<unknown>;
   dispose(): Promise<void> | void;
-  readonly backend: object;
 }
 
 export type RendererFactory<R extends StartableRenderer> = (
@@ -69,13 +81,14 @@ export type RendererFactory<R extends StartableRenderer> = (
 /**
  * Creates and initialises the renderer, registering its disposal on `cleanup` before
  * anything can fail, so a rejected init() or a refused backend still frees the device.
+ * Device loss is watched from before init(), so a loss while the engine starts is not missed.
  */
 export async function initRenderer<R extends StartableRenderer>(
   options: EngineOptions,
   cleanup: DisposeStack,
   create: RendererFactory<R>,
   devicePixelRatio: number,
-): Promise<{ renderer: R; backend: BackendKind }> {
+): Promise<{ renderer: R; backend: BackendKind; deviceLoss: DeviceLossWatch }> {
   const renderer = create({
     forceWebGL: options.backend === 'webgl',
     antialias: devicePixelRatio < 2,
@@ -83,12 +96,15 @@ export async function initRenderer<R extends StartableRenderer>(
     powerPreference: 'high-performance',
   });
   cleanup.add(() => renderer.dispose());
+  const deviceLoss = watchDeviceLoss(renderer);
+  cleanup.add(() => deviceLoss.stop());
   await renderer.init();
+  deviceLoss.watchDevice();
   const backend: BackendKind = 'isWebGPUBackend' in renderer.backend ? 'webgpu' : 'webgl2';
   if (options.backend === 'webgpu' && backend !== 'webgpu') {
     throw new Error('WebGPU was requested with ?backend=webgpu but is not available here');
   }
-  return { renderer, backend };
+  return { renderer, backend, deviceLoss };
 }
 
 function configureRenderer(renderer: WebGPURenderer): void {
@@ -131,6 +147,8 @@ export class Engine {
   private sceneRevisionValue = 0;
   /** Later tier changes warm what they turn on themselves. */
   private warmedUp = false;
+  private readonly reflectedShadow = new ReflectedShadow();
+  private readonly loop: RenderLoop;
   private gpuMs: number | null = null;
   private readonly gpuTiming: boolean;
   private lastGpuMs: number | null = null;
@@ -143,14 +161,31 @@ export class Engine {
     try {
       return await buildOrRelease(
         async (cleanup) => {
-          const { renderer, backend } = await initRenderer(
-            config.options,
+          const session = sessionBackend(config.options.backend, browserSessionStore());
+          const { renderer, backend, deviceLoss } = await initRenderer(
+            { ...config.options, backend: session.backend },
             cleanup,
             (parameters) => new WebGPURenderer(parameters),
             window.devicePixelRatio,
           );
           configureRenderer(renderer);
-          const engine = new Engine(container, renderer, backend, events, config, cleanup);
+          const engine = new Engine(
+            container,
+            renderer,
+            backend,
+            events,
+            config,
+            cleanup,
+            deviceLoss,
+          );
+          if (session.fellBack) {
+            cleanup.add(
+              showDeviceNotice(
+                document.body,
+                'WebGPU stopped responding on this device, so this tab draws the tank with WebGL 2.',
+              ),
+            );
+          }
           await engine.warmUp();
           await engine.loadEffects();
           return engine;
@@ -175,7 +210,11 @@ export class Engine {
     readonly events: EngineEventBus,
     config: EngineConfig,
     private readonly cleanup: DisposeStack,
+    deviceLoss: DeviceLossWatch,
   ) {
+    const preference = config.options.backend;
+    this.loop = new RenderLoop(renderer, (t) => this.frame(t));
+    deviceLoss.onLost((info) => this.deviceLost(info, preference));
     const dimensions = config.tank ?? DEFAULT_TANK;
     this.clock = config.options.clock;
     this.showStats = config.options.stats;
@@ -214,10 +253,6 @@ export class Engine {
       this.scene,
       config.hdriUrl ?? DEFAULT_HDRI_URL,
       (message, cause) => this.reportError(message, cause),
-      (environment) => {
-        this.tank.setSky(environment);
-        this.interior.setRoom(environment);
-      },
     );
     cleanup.add(() => roomLighting.dispose());
     const roomBackgroundIntensity = this.scene.backgroundIntensity;
@@ -228,7 +263,7 @@ export class Engine {
     this.interior = new InteriorLight(
       this.medium,
       this.caustics,
-      roomLighting.initial,
+      roomLighting.texture,
       this.substrateAlbedo,
       meanSubstrateHeight(dimensions),
     );
@@ -243,7 +278,7 @@ export class Engine {
       substrateAlbedo: this.substrateAlbedo,
       roomBackgroundIntensity,
     };
-    this.tank = new Tank(dimensions, this.medium, roomLighting.initial, this.interior);
+    this.tank = new Tank(dimensions, this.medium, roomLighting.texture, this.interior);
     cleanup.add(() => this.tank.dispose());
     this.scene.add(this.tank.group);
     this.scene.fogNode = this.medium.fogNode();
@@ -313,8 +348,7 @@ export class Engine {
     const now = performance.now();
     this.stats.since = now;
     this.quality.start(now);
-    this.cleanup.add(() => this.renderer.setAnimationLoop(null));
-    void this.renderer.setAnimationLoop((t) => this.frame(t));
+    if (this.loop.start()) this.cleanup.add(() => this.loop.stop());
     this.events.emit('engine:ready', {
       backend: this.backend,
       tier: this.quality.tier,
@@ -336,6 +370,33 @@ export class Engine {
 
   private reportError(message: string, cause: unknown): void {
     if (!this.disposed) this.events.emit('engine:error', { message, cause });
+  }
+
+  /**
+   * Every texture, pipeline and transcoded KTX2 format belongs to the lost device, and the fish,
+   * scene and decor systems all hold them, so the WebGL 2 fallback is a fresh page load rather
+   * than an in-place renderer swap.
+   */
+  private deviceLost(info: DeviceLostInfo, preference: EngineOptions['backend']): void {
+    if (this.disposed) return;
+    this.loop.halt();
+    const recovery = recoveryFor(info.api, preference);
+    this.events.emit('engine:device-lost', { api: info.api, message: info.message, recovery });
+    this.reportError(`The ${info.api} device was lost: ${info.message}`, info);
+    if (recovery === 'webgl') {
+      const here = window.location.href;
+      const next = webglFallbackUrl(here, browserSessionStore());
+      if (next === here) window.location.reload();
+      else window.location.replace(next);
+      return;
+    }
+    this.cleanup.add(
+      showDeviceNotice(
+        document.body,
+        'The graphics device stopped responding, so the tank cannot be drawn. Reload to try again.',
+        { label: 'Reload', run: () => window.location.reload() },
+      ),
+    );
   }
 
   private setupHood(d: TankDimensions): void {
@@ -464,19 +525,10 @@ export class Engine {
     if (nowMs - this.stats.since >= STATS_INTERVAL_MS) this.emitStats(nowMs);
   }
 
-  /**
-   * The hood's shadow map does not depend on the view, but three redraws it once per camera and
-   * frame: the mirrored camera uses the last one drawn for the scene camera.
-   */
   private renderSurfaceReflection(): void {
-    const shadow = this.hood.shadow;
-    const autoUpdate = shadow.autoUpdate;
-    shadow.autoUpdate = false;
-    try {
-      this.tank.renderSurfaceReflection(this.renderer, this.scene, this.camera);
-    } finally {
-      shadow.autoUpdate = autoUpdate;
-    }
+    this.reflectedShadow.draw(this.hood.shadow, this.hood.castShadow, () =>
+      this.tank.renderSurfaceReflection(this.renderer, this.scene, this.camera),
+    );
   }
 
   /** Timestamp queries resolve asynchronously; the result lands on a later frame. */

@@ -162,11 +162,11 @@ describe('SurfaceReflection', () => {
     const { renderer, rendered } = fakeRenderer();
     const scene = new Scene();
 
-    reflection.render(renderer, scene, cameraAt(LEVEL - 0.1));
+    expect(reflection.render(renderer, scene, cameraAt(LEVEL - 0.1))).toBe(true);
     expect(rendered).toHaveLength(1);
-    reflection.render(renderer, scene, cameraAt(LEVEL - WATERLINE_MARGIN / 2));
-    reflection.render(renderer, scene, cameraAt(LEVEL + WATERLINE_MARGIN / 2));
-    reflection.render(renderer, scene, cameraAt(LEVEL + 0.1));
+    expect(reflection.render(renderer, scene, cameraAt(LEVEL - WATERLINE_MARGIN / 2))).toBe(false);
+    expect(reflection.render(renderer, scene, cameraAt(LEVEL + WATERLINE_MARGIN / 2))).toBe(false);
+    expect(reflection.render(renderer, scene, cameraAt(LEVEL + 0.1))).toBe(false);
     expect(rendered).toHaveLength(1);
     reflection.dispose();
   });

@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Collider } from '@aquarium/shared';
+import type { Point3 } from '@aquarium/sim';
 import type { Engine } from '../engine/Engine';
 import { EventBus, type EngineEvents } from '../engine/events';
 import type { InteractionEvents } from '../interaction/events';
 import type { SceneAnchor } from '../scene/anemone';
 import type { Collider as SceneCollider } from '../scene/colliders';
 import { FISH_1, FISH_2, TANK_A, fishFixture } from '../sync/fixtures';
-import type { FishBite, PickRay, TankEvent } from './start';
+import type { FishBite, FishPoint, PickRay, TankEvent } from './start';
 
 class FakeFishSystem {
   readonly handled: TankEvent[] = [];
@@ -40,12 +41,22 @@ class FakeFishSystem {
     this.ate?.(events);
   }
   startle(): void {}
+  readonly lures: (Point3 | null)[] = [];
+  setLure(position: Point3 | null): void {
+    this.lures.push(position);
+  }
   setFood(buffer: Float32Array): void {
     this.food.push(buffer);
   }
   demoBiomes: string[] = [];
   setDemoBiome(biome: string): void {
     this.demoBiomes.push(biome);
+  }
+  pickFish(): (() => FishPoint | null) | null {
+    return () => ({ x: 1, y: 2, z: 3 });
+  }
+  anyFish(): (() => FishPoint | null) | null {
+    return null;
   }
   netTap(ray: PickRay): void {
     this.taps.push(ray);
@@ -359,13 +370,21 @@ describe('startFish', () => {
     const { handle } = setup(pending.promise);
     const ray: PickRay = { origin: { x: 0, y: 0, z: 1 }, dir: { x: 0, y: 0, z: -1 } };
     handle.sim.setFood(new Float32Array(5));
+    handle.sim.setLure([0.1, 0.2, 0.3]);
     handle.sim.netTap(ray);
+    expect(handle.sim.pickFish(ray)).toBeNull();
+    expect(handle.sim.anyFish()).toBeNull();
     pending.resolve(fish);
     await flush();
     expect(fish.food).toHaveLength(0);
     handle.sim.setFood(new Float32Array(5));
+    handle.sim.setLure([0.1, 0.2, 0.3]);
+    handle.sim.setLure(null);
     handle.sim.netTap(ray);
     expect(fish.food).toHaveLength(1);
+    expect(fish.lures).toEqual([[0.1, 0.2, 0.3], null]);
+    expect(handle.sim.pickFish(ray)?.()).toEqual({ x: 1, y: 2, z: 3 });
+    expect(handle.sim.anyFish()).toBeNull();
     expect(fish.taps).toEqual([ray]);
   });
 

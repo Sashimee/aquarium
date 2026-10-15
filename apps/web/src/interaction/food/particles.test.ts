@@ -1,6 +1,19 @@
+import { FOOD_PARTICLES } from '@aquarium/sim';
 import { describe, expect, it } from 'vitest';
-import { FoodField, FOOD_STRIDE, MAX_FOOD_PARTICLES, type FoodEnvironment } from './particles';
-import { FOOD_PROFILES, FOOD_TYPES, foodTypeIndex } from './profiles';
+import {
+  FoodField,
+  FOOD_STRIDE,
+  MAX_FOOD_PARTICLES,
+  MAX_NORI_CLIPS,
+  type FoodEnvironment,
+} from './particles';
+import {
+  FOOD_PROFILES,
+  FOOD_TYPES,
+  foodTypeIndex,
+  NORI_SCALE_MAX,
+  particlesPerPortion,
+} from './profiles';
 import { sceneToSim } from './simSpace';
 
 const GROUND = 0.06;
@@ -46,6 +59,15 @@ describe('food types', () => {
       'algae-wafer',
     ]);
     expect(foodTypeIndex('algae-wafer')).toBe(5);
+  });
+
+  it('spawns the particle count whose portions add up to what was fed', () => {
+    for (const food of FOOD_TYPES) {
+      const field = new FoodField(env(), fixedRandom);
+      const made = field.drop(food, 1, 0, 0);
+      expect(made * FOOD_PARTICLES[food].portion, food).toBeCloseTo(1, 9);
+      expect(particlesPerPortion(food)).toBe(made);
+    }
   });
 
   it('has a profile for every type', () => {
@@ -271,5 +293,42 @@ describe('clipped nori', () => {
       expect(p.y).toBeLessThan(0.47);
       expect(p.settledS).toBe(-1);
     });
+  });
+});
+
+describe('clipped nori limits', () => {
+  const halfWidth = FOOD_PROFILES.nori.radius * NORI_SCALE_MAX;
+
+  it('refuses clips beyond the cap', () => {
+    const field = new FoodField(env(), fixedRandom);
+    let made = 0;
+    for (let i = 0; i < 12; i++) made += field.drop('nori', 0.5, 0, 0);
+    expect(made).toBe(MAX_NORI_CLIPS);
+    expect(field.drop('nori', 0.5, 0, 0)).toBe(0);
+    expect(field.drop('pellets', 0.5, 0, 0)).toBeGreaterThan(0);
+  });
+
+  it('frees a clip slot when a sheet is eaten', () => {
+    const field = new FoodField(env(), fixedRandom);
+    for (let i = 0; i < MAX_NORI_CLIPS; i++) field.drop('nori', 0.5, 0, 0);
+    field.remove([field.particles[0]?.id ?? -1]);
+    expect(field.drop('nori', 0.5, 0, 0)).toBe(1);
+  });
+
+  it('keeps the whole sheet inside the side panes', () => {
+    const field = new FoodField(env(), fixedRandom);
+    field.drop('nori', 0.5, -5, 0);
+    field.drop('nori', 0.5, 5, 0);
+    const [left, right] = field.particles;
+    expect((left?.x ?? 0) - halfWidth).toBeGreaterThan(-0.59);
+    expect((right?.x ?? 0) + halfWidth).toBeLessThan(0.59);
+  });
+
+  it('does not stack a second sheet on the first at the same spot', () => {
+    const field = new FoodField(env(), fixedRandom);
+    field.drop('nori', 0.5, 0.1, 0);
+    field.drop('nori', 0.5, 0.1, 0);
+    const [a, b] = field.particles;
+    expect(Math.abs((a?.x ?? 0) - (b?.x ?? 0))).toBeGreaterThanOrEqual(halfWidth * 2);
   });
 });

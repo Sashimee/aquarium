@@ -1,7 +1,14 @@
 import { expect, test, type Page } from '@playwright/test';
 import { registerVerifiedUser } from './support/app';
 
+let pageErrors: string[] = [];
+
+function collectPageErrors(page: Page): void {
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+}
+
 async function open(page: Page, url: string): Promise<void> {
+  collectPageErrors(page);
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await expect(page.locator('canvas#tank')).toBeVisible();
   await page.getByRole('button', { name: 'Tank report' }).click();
@@ -15,6 +22,14 @@ const sceneBiome = (page: Page) => page.locator('#app');
 const biomeParam = (page: Page) => new URL(page.url()).searchParams.get('biome');
 
 test.describe('tank type switch', () => {
+  test.beforeEach(() => {
+    pageErrors = [];
+  });
+
+  test.afterEach(() => {
+    expect(pageErrors, 'the page raised errors').toEqual([]);
+  });
+
   test('an anonymous visitor switches the demo tank and the URL follows', async ({ page }) => {
     await open(page, '/?backend=webgl&tier=low');
     await expect(typeButton(page, 'Freshwater')).toHaveAttribute('aria-pressed', 'true');

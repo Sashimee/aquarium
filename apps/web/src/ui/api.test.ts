@@ -369,6 +369,34 @@ describe('api client timeouts', () => {
     }
   });
 
+  it('keeps a body that is still arriving alive past the request timeout', async () => {
+    vi.useFakeTimers();
+    try {
+      const encoder = new TextEncoder();
+      const slow = () => {
+        const parts = ['[', ']'];
+        return Promise.resolve(
+          new Response(
+            new ReadableStream<Uint8Array>({
+              async pull(controller) {
+                const part = parts.shift();
+                if (part === undefined) return controller.close();
+                await new Promise((resolve) => setTimeout(resolve, REQUEST_TIMEOUT_MS - 1000));
+                controller.enqueue(encoder.encode(part));
+              },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+        );
+      };
+      const result = createApiClient(slow).tanks();
+      await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS * 2);
+      await expect(result).resolves.toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   describe('without AbortSignal.any', () => {
     const original = AbortSignal.any;
     beforeEach(() => {
@@ -382,6 +410,17 @@ describe('api client timeouts', () => {
       await expect(createApiClient(vi.fn().mockResolvedValue(json([]))).tanks()).resolves.toEqual(
         [],
       );
+    });
+
+    it('removes the listeners it put on the caller signal when the request ends', async () => {
+      const caller = new AbortController();
+      const added = vi.spyOn(caller.signal, 'addEventListener');
+      const removed = vi.spyOn(caller.signal, 'removeEventListener');
+      await createApiClient(vi.fn().mockResolvedValue(json([])), { signal: caller.signal }).tanks();
+      expect(added).toHaveBeenCalled();
+      for (const [type, listener] of added.mock.calls) {
+        expect(removed).toHaveBeenCalledWith(type, listener);
+      }
     });
 
     it('still honours a caller abort and the timeout when signals are combined by hand', async () => {

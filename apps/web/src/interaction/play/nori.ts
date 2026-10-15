@@ -31,18 +31,18 @@ import {
   uv,
   vec3,
 } from 'three/tsl';
-import { FOOD_PROFILES } from '../food/profiles';
+import { NORI_GLASS_GAP } from '../food/particles';
+import { FOOD_PROFILES, NORI_SCALE_MAX, NORI_SCALE_MIN } from '../food/profiles';
 
 /** Sheet height in radii; the sheet spans x in [-1, 1] and hangs from the clip at y = 0. */
 export const SHEET_LENGTH = 1.6;
-/** How far the clip's jaws reach past the sheet's plane when it lies flat, in radii. */
-const CLIP_LIFT = 0.06;
+/** Radii from the clip's origin to the back of the suction cup. */
+const CUP_REAR = 0.195;
+const PANE_CLEARANCE_M = 0.0005;
 const SHEET_COLUMNS = 18;
 const SHEET_ROWS = 14;
 const PART_SHEET = 0;
 const PART_CLIP = 1;
-const Y_AXIS = new Vector3(0, 1, 0);
-const X_AXIS = new Vector3(1, 0, 0);
 
 function tagged(geometry: BufferGeometry, part: number): BufferGeometry {
   const count = geometry.getAttribute('position').count;
@@ -79,25 +79,25 @@ export function buildNoriGeometry(): BufferGeometry {
   return merged;
 }
 
-/** Radians the sheet has swung from hanging (0) toward lying flat (pi/2) at `height` above the sand. */
-export function hangAngle(height: number, scale: number): number {
-  const length = SHEET_LENGTH * scale;
-  if (!(height < length)) return 0;
-  return Math.acos(Math.max(0, height) / length);
-}
-
 /** Stable 0..1 hash of a particle id. */
 export function noriSeed(id: number): number {
   const s = Math.sin(id * 12.9898) * 43758.5453;
   return s - Math.floor(s);
 }
 
+/** Sheet scale in metres per radius unit; clips differ a little so a row of them does not look stamped. */
+export function noriScale(id: number): number {
+  return (
+    FOOD_PROFILES.nori.radius *
+    (NORI_SCALE_MIN + (NORI_SCALE_MAX - NORI_SCALE_MIN) * noriSeed(id + 101))
+  );
+}
+
 function buildMaterial(): MeshStandardNodeMaterial {
   const part = attribute('part', 'float');
-  const data = attribute('noriData', 'vec4');
+  const data = attribute('noriData', 'vec2');
   const loss = data.x;
   const seed = data.y;
-  const hang = data.z;
   const isClip = part.greaterThan(0.5);
 
   const coord = uv();
@@ -117,7 +117,6 @@ function buildMaterial(): MeshStandardNodeMaterial {
     .add(mx_noise_float(at(1, 0, 0).mul(5.7)).mul(0.4));
   const flutter = sin(time.mul(1.6).add(seed.mul(20)).add(far.mul(2.4)))
     .mul(0.06)
-    .mul(hang)
     .mul(far.mul(far));
   const lift = coarse.mul(0.02).add(flutter);
   const displaced = positionLocal.add(vec3(0, 0, lift));
@@ -186,10 +185,6 @@ export interface NoriState {
   readonly z: number;
   /** Fraction of the sheet bitten away, 0..1. */
   readonly eaten: number;
-  /** Fraction left once dissolving, 1 until it starts. */
-  readonly remaining: number;
-  /** Sand height below the sheet. */
-  readonly ground: number;
 }
 
 /** The nori sheets and their clips: one instanced mesh, torn and crinkled in the shader. */
@@ -201,13 +196,11 @@ export class NoriLayer {
   private readonly matrix = new Matrix4();
   private readonly position = new Vector3();
   private readonly scale = new Vector3();
-  private readonly yaw = new Quaternion();
-  private readonly swing = new Quaternion();
-  private readonly orientation = new Quaternion();
+  private readonly upright = new Quaternion();
 
   constructor(capacity: number) {
     this.geometry = buildNoriGeometry();
-    this.data = new InstancedBufferAttribute(new Float32Array(capacity * 4), 4);
+    this.data = new InstancedBufferAttribute(new Float32Array(capacity * 2), 2);
     this.geometry.setAttribute('noriData', this.data);
     this.material = buildMaterial();
     this.mesh = new InstancedMesh(this.geometry, this.material, capacity);
@@ -218,20 +211,19 @@ export class NoriLayer {
 
   set(slot: number, state: NoriState): void {
     const seed = noriSeed(state.id);
-    const scale = FOOD_PROFILES.nori.radius * (0.85 + 0.3 * noriSeed(state.id + 101));
-    const angle = hangAngle(state.y - state.ground, scale);
-    this.yaw.setFromAxisAngle(Y_AXIS, (seed - 0.5) * 0.4 + Math.sin(angle) * seed * Math.PI * 2);
-    this.swing.setFromAxisAngle(X_AXIS, angle);
-    this.orientation.multiplyQuaternions(this.yaw, this.swing);
-    this.position.set(state.x, state.y + scale * CLIP_LIFT * Math.sin(angle), state.z);
+    const scale = noriScale(state.id);
+    this.position.set(
+      state.x,
+      state.y,
+      state.z - NORI_GLASS_GAP + CUP_REAR * scale + PANE_CLEARANCE_M,
+    );
     this.scale.setScalar(scale);
-    this.matrix.compose(this.position, this.orientation, this.scale);
+    this.matrix.compose(this.position, this.upright, this.scale);
     this.mesh.setMatrixAt(slot, this.matrix);
-    const o = slot * 4;
+    const o = slot * 2;
     const array = this.data.array as Float32Array;
-    array[o] = Math.min(1, Math.max(state.eaten, 1 - state.remaining));
+    array[o] = Math.min(1, Math.max(0, state.eaten));
     array[o + 1] = seed;
-    array[o + 2] = Math.cos(angle);
   }
 
   commit(count: number): void {

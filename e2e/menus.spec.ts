@@ -33,15 +33,38 @@ async function settleAnimations(page: Page): Promise<void> {
   );
 }
 
+// Lazy panel bodies grow a sheet after it opens, which moves its buttons without an animation. A
+// stalled frame can outlast the poll's timeout, so the frames are awaited here, outside it.
+async function holdStill(target: Locator): Promise<void> {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const moved = await target.evaluate(async (element) => {
+      const earlier = element.getBoundingClientRect();
+      await new Promise((done) => requestAnimationFrame(done));
+      await new Promise((done) => requestAnimationFrame(done));
+      const later = element.getBoundingClientRect();
+      return (
+        Math.abs(later.x - earlier.x) > 0.5 ||
+        Math.abs(later.y - earlier.y) > 0.5 ||
+        Math.abs(later.width - earlier.width) > 0.5 ||
+        Math.abs(later.height - earlier.height) > 0.5
+      );
+    });
+    if (!moved) return;
+  }
+}
+
 // Locator.tap/click wait two animation frames per action, which costs seconds each under software
 // rendering. This checks the same thing that matters here, that nothing covers the target, and
 // then sends one real touch or mouse press at its centre.
 async function press(target: Locator): Promise<void> {
-  // The HUD re-measures a frame after a panel opens or closes, and a sheet springs in over several
-  // frames, so a target can briefly be moving or covered; one that still is after that settles is
-  // a real bug. Settling waits outside the poll because one stalled frame can outlast its timeout.
+  // The HUD re-measures a frame after a panel opens or closes, a sheet springs in over several
+  // frames, and lazy panel bodies grow it after it opens, so a target can briefly be moving or
+  // covered. Its box must hold still across two frames; one that still is moving or covered after
+  // that is a real bug. Settling waits outside the poll because one stalled frame can outlast its
+  // timeout.
   let point: Point = [0, 0];
   await settleAnimations(target.page());
+  await holdStill(target);
   await expect
     .poll(
       async () => {
@@ -108,12 +131,12 @@ function panel(
 }
 
 function dockPanel(label: string, region: string): Menu {
-  return panel(label, (page) => dock(page, label), 'aria-pressed', region);
+  return panel(label, (page) => dock(page, label), 'aria-expanded', region);
 }
 
 async function openPlay(page: Page) {
   const play = dock(page, 'Play');
-  if ((await play.getAttribute('aria-pressed')) !== 'true') await press(play);
+  if ((await play.getAttribute('aria-expanded')) !== 'true') await press(play);
   await expect(playGroup(page)).toBeVisible();
 }
 
@@ -249,11 +272,11 @@ function pointerOf(page: Page): Pointer {
 
 const tap = (page: Page, point: Point) => pointerOf(page)([point]);
 
-// The canvas sits under the overlay controls. A drag that ends on one of them is not routed to
-// the canvas (the synthetic mouse gets no pointer capture), so the drag runs along the first row
-// where its start, middle and end are all bare canvas. No such row means the canvas has no room
-// left to drag on, which is a layout bug worth failing for. An open panel covers part of the
-// canvas and a canvas press closes it, so callers close panels first.
+// The canvas sits under the overlay controls. The drag runs along the first row where its start,
+// middle and end are all bare canvas, so the press lands on the canvas and the gesture never
+// crosses an overlay. No such row means the canvas has no room left to drag on, which is a layout
+// bug worth failing for. An open panel covers part of the canvas and a canvas press closes it, so
+// callers close panels first. The chosen row is recorded as a test annotation.
 async function dragPath(page: Page): Promise<[[number, number], [number, number]]> {
   const viewport = page.viewportSize();
   if (!viewport) throw new Error('viewport is not set');
@@ -273,6 +296,10 @@ async function dragPath(page: Page): Promise<[[number, number], [number, number]
   }
   const [start, , end] = xs;
   if (start === undefined || end === undefined) throw new Error('drag columns are missing');
+  test.info().annotations.push({
+    type: 'drag row',
+    description: `y=${clear} of ${viewport.height} (${(clear / viewport.height).toFixed(2)})`,
+  });
   return [
     [start, clear],
     [end, clear],
@@ -334,6 +361,7 @@ function poseDistance(a: string, b: string): number {
 }
 
 async function expectToolClaimsDrag(page: Page, drag: Drag) {
+  await resetBaseline(page);
   await openPlay(page);
   await expectBigTargets(page);
   const laser = playGroup(page).getByRole('button', { name: 'Laser', exact: true });
@@ -368,6 +396,19 @@ async function closeSheet(page: Page) {
   if ((await sheet(page).count()) === 0) return;
   await press(sheet(page).getByRole('button', { name: /^(Close|Done)$/ }));
   await expect(sheet(page)).toHaveCount(0);
+}
+
+async function resetCamera(page: Page) {
+  const dive = camera(page).getByRole('button', { name: 'Dive', exact: true });
+  if ((await dive.getAttribute('aria-pressed')) !== 'true') return;
+  const outside = camera(page).getByRole('button', { name: 'Outside', exact: true });
+  await press(outside);
+  await expect(outside).toHaveAttribute('aria-pressed', 'true');
+}
+
+async function resetBaseline(page: Page) {
+  await closeAllPanels(page);
+  await resetCamera(page);
 }
 
 async function closeAllPanels(page: Page) {
@@ -413,6 +454,7 @@ async function expectBigTargets(page: Page) {
 async function expectSceneTapClosesPanel(page: Page) {
   const viewport = page.viewportSize();
   if (!viewport) throw new Error('viewport is not set');
+  await resetBaseline(page);
   await press(dock(page, 'Shop'));
   await expect(sheet(page)).toHaveCount(1);
   await tap(page, [viewport.width * 0.3, viewport.height * 0.3]);
@@ -426,6 +468,7 @@ async function openMenu(page: Page, menu: Menu) {
 
 async function exercise(page: Page, drag: Drag, first: Menu, second: Menu) {
   const trail = `${first.name}, then ${second.name}`;
+  await resetBaseline(page);
   await openMenu(page, first);
   await openMenu(page, second);
   await expectOnePanel(page, trail);
@@ -445,19 +488,21 @@ const tank = MENUS.find((menu) => menu.name === 'My tank');
 if (!decorate || !tank) throw new Error('MENUS lost My tank or Decorate');
 PAIRS.push([decorate, tank]);
 
-// Tools and camera toggles do not depend on the layout, so the phone run covers them and the
-// desktop run covers the drawer.
-const DRAWER_PAIRS = PAIRS.filter(([first]) => !['Hand-feed', 'Dive'].includes(first.name));
+// Tools do not depend on the layout, so the phone run covers them. Dive sits in the top bar, which
+// is laid out by width, so both runs cover it.
+const DRAWER_PAIRS = PAIRS.filter(([first]) => first.name !== 'Hand-feed');
 
-// A cold boot costs 25-45 s on a CI runner, so the tests of one describe share a page and run in
-// order, each leaving the app as the next expects (no panel open, Tap glass selected).
+// A cold boot costs 25-45 s on a CI runner, so the tests of one describe share a page. Each test
+// first restores the baseline itself (no panel open, Tap glass, Outside), so it does not depend on
+// what the previous test left behind.
 function shared(
   options: BrowserContextOptions,
   makePointer: (page: Page, cdp: CDPSession) => Pointer,
 ) {
   let context: BrowserContext | undefined;
   let state: { page: Page; drag: Drag } | undefined;
-  test.describe.configure({ mode: 'serial' });
+  // One pair takes 3-4 minutes under software rendering on a CI runner, close to the 240 s default.
+  test.describe.configure({ mode: 'serial', timeout: 420_000 });
   test.beforeAll(async ({ browser, baseURL }) => {
     if (!baseURL) throw new Error('playwright.config.ts must set use.baseURL');
     context = await browser.newContext({ ...options, baseURL });
@@ -508,7 +553,6 @@ test.describe('menus on a phone', () => {
 test.describe('menus with a mouse', () => {
   const app = shared({ viewport: { width: 800, height: 540 } }, mousePointer);
 
-  // Tests run in order on one page, so Dive and Reef stay on for the pairs after theirs.
   test('a Laser drag does not move the camera, and Tap glass gives the orbit back', async () => {
     const { page, drag } = app();
     await expectToolClaimsDrag(page, drag);
@@ -520,6 +564,7 @@ test.describe('menus with a mouse', () => {
 
   test('Escape closes a panel and gives focus back to its button', async () => {
     const { page } = app();
+    await resetBaseline(page);
     const shop = dock(page, 'Shop');
     await shop.focus();
     await page.keyboard.press('Enter');

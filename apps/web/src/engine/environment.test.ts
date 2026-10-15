@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   CompressedTexture,
   DataTexture,
@@ -9,7 +11,7 @@ import {
 } from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
 import assetIndex from '../../public/assets/index.json';
-import { DEFAULT_HDRI_URL, uploadableHdri } from './environment';
+import { DEFAULT_HDRI_URL, pmremCubeSize, ROOM_CUBE_SIZE, uploadableHdri } from './environment';
 import environmentSource from './environment.ts?raw';
 
 const ORIGIN = 'https://devfish.bas.lu';
@@ -30,6 +32,22 @@ describe('room HDRI', () => {
 
   it('keeps no third-party URL in the module source', () => {
     expect(environmentSource).not.toMatch(/https?:\/\//);
+  });
+
+  it('fits the PMREM the studio is drawn into, so the HDRI can be drawn over it', () => {
+    const relative = DEFAULT_HDRI_URL.slice(DEFAULT_HDRI_URL.indexOf('assets/') + 'assets/'.length);
+    const ktx2 = readFileSync(join(__dirname, '../../public/assets', relative));
+    const pixelWidth = new DataView(ktx2.buffer, ktx2.byteOffset).getUint32(20, true);
+    expect(pmremCubeSize(pixelWidth)).toBe(ROOM_CUBE_SIZE);
+  });
+});
+
+describe('pmremCubeSize', () => {
+  it("matches three's power-of-two cube face for an equirectangular width", () => {
+    expect(pmremCubeSize(1024)).toBe(256);
+    expect(pmremCubeSize(2048)).toBe(512);
+    expect(pmremCubeSize(1000)).toBe(128);
+    expect(pmremCubeSize(1023)).toBe(128);
   });
 });
 
