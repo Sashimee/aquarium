@@ -315,7 +315,9 @@ export class TankSession {
       },
       onDropped: (reason, reports, cause) => {
         if (reason === 'rejected') return;
-        console.warn(`dropped ${reports.length} eating reports (${reason})`, cause);
+        const message = `dropped ${reports.length} eating reports (${reason})`;
+        if (cause === undefined) console.warn(message);
+        else console.warn(message, cause);
       },
     });
     this.deps.interaction.emit('tank:loaded', {
