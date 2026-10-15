@@ -17,6 +17,7 @@ import { parseBiome, withBiome } from './scene/options';
 import type { TankScene } from './scene/TankScene';
 import { mountUi } from './ui/mount';
 import { FeedGate } from './sync/feedGate';
+import { awaitTankModules } from './tankLoad';
 
 function showFatal(container: HTMLElement, message: string): void {
   const box = document.createElement('pre');
@@ -75,10 +76,7 @@ async function boot(): Promise<void> {
   let modules: Awaited<typeof tank>;
   let engine: Engine;
   try {
-    modules = await tank.catch((cause: unknown) => {
-      events.emit('engine:error', { message: 'The tank code failed to load', cause });
-      throw new Error('The tank code failed to load. Reload the page to try again.', { cause });
-    });
+    modules = await awaitTankModules(tank, events);
     engine = await modules.Engine.create(container, {
       options: parseEngineOptions(window.location.search),
       events,
