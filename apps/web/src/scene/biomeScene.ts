@@ -88,7 +88,8 @@ export interface BiomeSceneOptions<S extends DisposableScene> {
  * disposed before the new one is built, because a scene captures and restores engine state
  * (lighting, the substrate material) and two alive at once would restore each other's. A build
  * that is no longer wanted when it lands is disposed unseen. One that outlives `timeoutMs` reports
- * a slow load and is still mounted when it lands. A failed biome is not retried until a different one has been asked for.
+ * a slow load and is still mounted when it lands. A failed biome is not retried until a different
+ * one has been asked for.
  */
 export class BiomeScene<S extends DisposableScene> {
   private wanted: Biome;
