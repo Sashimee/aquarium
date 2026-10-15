@@ -2,7 +2,7 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; every texture has both files.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body, carapace and eyes; 6 walking leg; 7 antenna; 8 pleopod; 9 abdomen, telson and tail fan) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x; antennules 0/1, long antennae 2/3; tail-fan leaves k * 2 + side). Shrimp _fin_mask means: id 0 is 0 (eye stalks included, ignore it); ids 6 and 7 are the weight along the limb, 0 root to 1 tip; id 8 is the pleopod beat weight, 0 root to 1 tip; id 9 is the tail-curl weight clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1) of the rest position. Tail curl rotates ids 8 and 9 about +x through the shrimp.abdomenHinge {y, z} by flex * clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1), computed from the rest position, never from _fin_mask, so the pleopods follow the segment they hang from. Pleopods (id 8) exist only in LOD0 and LOD1 and are removed from LOD2; legs are simplified, so do not assume every _leg index exists at every LOD. The cherry material is alphaMode BLEND with base colour alpha 0.86: three.js GLTFLoader turns depthWrite off for BLEND, so set depthWrite true on the cherry material and expect some sorting artefacts from the self-overlapping legs and antennae.",
-  "totalBytes": 60731678,
+  "totalBytes": 60720386,
   "assets": [
     {
       "id": "angelfish",
@@ -571,7 +571,8 @@
         "baked fin mask and fin id vertex attributes",
         "colour and normal maps re-encoded to KTX2 at 1k and 2k",
         "decimated from 40k to 8k triangles at LOD0",
-        "rigid spikes around the head flattened into the skin, and soft tapered tentacles added along the snout margin and top of the snout",
+        "rigid spikes around the head flattened into the skin, and soft tapered tentacles added along the snout margin and top of the snout, with fewer segments and sides per LOD, forks only at LOD0 and only the two front tentacles per side at LOD2",
+        "faceted eye beads covered with smooth dark glossy spheres on a separate material",
         "orange morph recoloured by luminance to natural brown, with pale cream spots painted in world space so UV stretch cannot enlarge them"
       ],
       "bounds": {
@@ -583,47 +584,47 @@
         "max": [
           0.019985,
           0.019711,
-          0.040769
+          0.040731
         ]
       },
       "lods": [
         {
           "file": "fish/bristlenose-pleco/lod0.glb",
-          "bytes": 182240,
-          "sha256": "93ec3819c11639a7069e55f04c70b601b7fb9521bf63a519bc56c1d7b9a6c694",
-          "triangles": 9295,
-          "vertices": 8671
+          "bytes": 192920,
+          "sha256": "3229fa97f67af9eeadce37d6d97097cfa91a32fb7bf7e40066cb4f9d3824eca1",
+          "triangles": 10312,
+          "vertices": 9240
         },
         {
           "file": "fish/bristlenose-pleco/lod1.glb",
-          "bytes": 86108,
-          "sha256": "c61744cdd8cbce73aeeff145d76603c2200795c8aa816a055a02db2678a9fc1d",
-          "triangles": 4499,
-          "vertices": 3839
+          "bytes": 78432,
+          "sha256": "e769773ec56ef579854d2525e52ef1ddf8e13ebcd50c049c5f66ce4ee33405ce",
+          "triangles": 3752,
+          "vertices": 3304
         },
         {
           "file": "fish/bristlenose-pleco/lod2.glb",
-          "bytes": 47112,
-          "sha256": "17856f55951cd2e1117207a7caf685c16e8c687cd69378edfdbbbffacab72f26",
-          "triangles": 2599,
-          "vertices": 2025
+          "bytes": 32816,
+          "sha256": "e3626db20ee27bea110571eb4601f237aa34c3ac382e0949edf7353651218a6f",
+          "triangles": 1332,
+          "vertices": 1118
         }
       ],
       "textures": [
         {
-          "name": "bristlenose-pleco_basecolor",
+          "name": "bristlenose-pleco_custommaterial_basecolor",
           "role": "baseColor",
           "colorSpace": "srgb",
           "variants": {
             "1k": {
-              "file": "fish/bristlenose-pleco/textures/bristlenose-pleco_basecolor_1k.ktx2",
+              "file": "fish/bristlenose-pleco/textures/bristlenose-pleco_custommaterial_basecolor_1k.ktx2",
               "bytes": 69043,
               "sha256": "9bfe188ef3caabfaa4d682fc59f155bb6f1cb5c6c261fae62990a839928798ab",
               "size": 1024,
               "codec": "etc1s"
             },
             "2k": {
-              "file": "fish/bristlenose-pleco/textures/bristlenose-pleco_basecolor_2k.ktx2",
+              "file": "fish/bristlenose-pleco/textures/bristlenose-pleco_custommaterial_basecolor_2k.ktx2",
               "bytes": 183191,
               "sha256": "63cf69f16a8920f5797bbae743f1502109068dd811a041a9e8db0f4fb804c21a",
               "size": 2048,
@@ -632,19 +633,19 @@
           }
         },
         {
-          "name": "bristlenose-pleco_normal",
+          "name": "bristlenose-pleco_custommaterial_normal",
           "role": "normal",
           "colorSpace": "linear",
           "variants": {
             "1k": {
-              "file": "fish/bristlenose-pleco/textures/bristlenose-pleco_normal_1k.ktx2",
+              "file": "fish/bristlenose-pleco/textures/bristlenose-pleco_custommaterial_normal_1k.ktx2",
               "bytes": 11671,
               "sha256": "747757f3813665c04357daffcfe6ecd4db9ab992ae8e9e7ddaa148cecf8dd1d0",
               "size": 512,
               "codec": "etc1s"
             },
             "2k": {
-              "file": "fish/bristlenose-pleco/textures/bristlenose-pleco_normal_2k.ktx2",
+              "file": "fish/bristlenose-pleco/textures/bristlenose-pleco_custommaterial_normal_2k.ktx2",
               "bytes": 257802,
               "sha256": "01547a25349fac432efd20f5a7efdb28eb760ab097bdd412700a0b9d9c6100e9",
               "size": 1024,
@@ -656,36 +657,36 @@
       "files": [
         {
           "file": "fish/bristlenose-pleco/lod0.glb",
-          "bytes": 182240,
-          "sha256": "93ec3819c11639a7069e55f04c70b601b7fb9521bf63a519bc56c1d7b9a6c694"
+          "bytes": 192920,
+          "sha256": "3229fa97f67af9eeadce37d6d97097cfa91a32fb7bf7e40066cb4f9d3824eca1"
         },
         {
           "file": "fish/bristlenose-pleco/lod1.glb",
-          "bytes": 86108,
-          "sha256": "c61744cdd8cbce73aeeff145d76603c2200795c8aa816a055a02db2678a9fc1d"
+          "bytes": 78432,
+          "sha256": "e769773ec56ef579854d2525e52ef1ddf8e13ebcd50c049c5f66ce4ee33405ce"
         },
         {
           "file": "fish/bristlenose-pleco/lod2.glb",
-          "bytes": 47112,
-          "sha256": "17856f55951cd2e1117207a7caf685c16e8c687cd69378edfdbbbffacab72f26"
+          "bytes": 32816,
+          "sha256": "e3626db20ee27bea110571eb4601f237aa34c3ac382e0949edf7353651218a6f"
         },
         {
-          "file": "fish/bristlenose-pleco/textures/bristlenose-pleco_basecolor_1k.ktx2",
+          "file": "fish/bristlenose-pleco/textures/bristlenose-pleco_custommaterial_basecolor_1k.ktx2",
           "bytes": 69043,
           "sha256": "9bfe188ef3caabfaa4d682fc59f155bb6f1cb5c6c261fae62990a839928798ab"
         },
         {
-          "file": "fish/bristlenose-pleco/textures/bristlenose-pleco_basecolor_2k.ktx2",
+          "file": "fish/bristlenose-pleco/textures/bristlenose-pleco_custommaterial_basecolor_2k.ktx2",
           "bytes": 183191,
           "sha256": "63cf69f16a8920f5797bbae743f1502109068dd811a041a9e8db0f4fb804c21a"
         },
         {
-          "file": "fish/bristlenose-pleco/textures/bristlenose-pleco_normal_1k.ktx2",
+          "file": "fish/bristlenose-pleco/textures/bristlenose-pleco_custommaterial_normal_1k.ktx2",
           "bytes": 11671,
           "sha256": "747757f3813665c04357daffcfe6ecd4db9ab992ae8e9e7ddaa148cecf8dd1d0"
         },
         {
-          "file": "fish/bristlenose-pleco/textures/bristlenose-pleco_normal_2k.ktx2",
+          "file": "fish/bristlenose-pleco/textures/bristlenose-pleco_custommaterial_normal_2k.ktx2",
           "bytes": 257802,
           "sha256": "01547a25349fac432efd20f5a7efdb28eb760ab097bdd412700a0b9d9c6100e9"
         }

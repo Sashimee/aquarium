@@ -20,7 +20,7 @@ export interface DespikeSpec {
   rings?: number;
 }
 
-interface Welded {
+export interface Welded {
   /** Canonical vertex of every vertex of the part, so split normals and uv seams move together. */
   canon: Uint32Array;
   positions: Float32Array;
@@ -28,7 +28,7 @@ interface Welded {
   triangles: Uint32Array;
 }
 
-function weldByPosition(part: Part): Welded {
+export function weldByPosition(part: Part): Welded {
   const count = part.positions.length / 3;
   const seen = new Map<string, number>();
   const canon = new Uint32Array(count);
@@ -66,7 +66,7 @@ function weldByPosition(part: Part): Welded {
   };
 }
 
-function relax(
+export function relax(
   positions: Float32Array,
   neighbours: number[][],
   free: (v: number) => boolean,

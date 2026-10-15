@@ -9,6 +9,21 @@ export interface BristleSpec {
   length: number;
 }
 
+export interface BristleDetail {
+  segments: number;
+  sides: number;
+  forks: boolean;
+  /** Only the first this-many rim tentacles per side (the ones at the front of the snout) are grown. */
+  rimMax: number;
+  crown: boolean;
+}
+
+export const BRISTLE_DETAIL: readonly [BristleDetail, BristleDetail, BristleDetail] = [
+  { segments: 5, sides: 6, forks: true, rimMax: Infinity, crown: true },
+  { segments: 3, sides: 4, forks: false, rimMax: Infinity, crown: true },
+  { segments: 2, sides: 3, forks: false, rimMax: 2, crown: false },
+];
+
 type V3 = [number, number, number];
 
 const add = (a: V3, b: V3, k = 1): V3 => [a[0] + b[0] * k, a[1] + b[1] * k, a[2] + b[2] * k];
@@ -28,8 +43,6 @@ function orthogonal(a: V3, against: V3): V3 {
   return unit(add(a, against, -dot(a, against)));
 }
 
-const SIDES = 6;
-const SEGMENTS = 6;
 /** Side of the square of texture each tentacle samples, so the normal map has a tangent frame to work in. */
 const PATCH = 0.01;
 const FORK_AT = 0.62;
@@ -46,6 +59,12 @@ interface Tentacle {
 }
 
 class TubeBuilder {
+  private readonly detail: BristleDetail;
+
+  constructor(detail: BristleDetail) {
+    this.detail = detail;
+  }
+
   readonly positions: number[] = [];
   readonly normals: number[] = [];
   readonly uvs: number[] = [];
@@ -53,6 +72,7 @@ class TubeBuilder {
 
   /** A tapered tube along a bent path with a rounded tip, open at the base so it sinks into the skin. */
   tube(t: Tentacle, uv: [number, number]): void {
+    const { segments: SEGMENTS, sides: SIDES } = this.detail;
     const path: V3[] = [];
     for (let i = 0; i <= SEGMENTS; i++) {
       const s = i / SEGMENTS;
@@ -98,7 +118,7 @@ class TubeBuilder {
       this.indices.push(a, apex, a + 1);
     }
 
-    if (t.forks === 0) return;
+    if (t.forks === 0 || !this.detail.forks) return;
     const at = SEGMENTS * FORK_AT;
     const lower = path[Math.floor(at)]!;
     const upper = path[Math.ceil(at)]!;
@@ -183,12 +203,17 @@ function snoutMargin(positions: Float32Array, frame: Frame, side: number): V3[] 
  * a few more on top of the snout. Nothing grows around the cheeks or gills, where real fish carry no bristles.
  * Built on the skin of `body` (+Z forward, +Y up, already despiked) and meant to be kept out of fin classification.
  */
-export function growBristles(body: Part, spec: BristleSpec, skinUv: [number, number]): Part {
+export function growBristles(
+  body: Part,
+  spec: BristleSpec,
+  skinUv: [number, number],
+  detail: BristleDetail = BRISTLE_DETAIL[0],
+): Part {
   const { positions } = body;
   const count = positions.length / 3;
   const frame = frameOf(positions);
   const { midline, length, zTip } = frame;
-  const builder = new TubeBuilder();
+  const builder = new TubeBuilder(detail);
 
   for (const side of [-1, 1]) {
     const margin = snoutMargin(positions, frame, side);
@@ -211,7 +236,7 @@ export function growBristles(body: Part, spec: BristleSpec, skinUv: [number, num
       };
     };
 
-    for (let i = 0; i < spec.rim; i++) {
+    for (let i = 0; i < Math.min(spec.rim, detail.rimMax); i++) {
       const fraction = spec.rim === 1 ? 0.15 : 0.05 + (0.8 * i) / (spec.rim - 1);
       const { p, tangent } = pointAt(total * fraction);
       const along = Math.hypot(tangent[0], tangent[1]) || 1;
@@ -232,7 +257,7 @@ export function growBristles(body: Part, spec: BristleSpec, skinUv: [number, num
       );
     }
 
-    for (let i = 0; i < spec.crown; i++) {
+    for (let i = 0; i < (detail.crown ? spec.crown : 0); i++) {
       const z = zTip - (0.07 + 0.05 * i) * length;
       const half = margin.reduce((best, p) =>
         Math.abs(p[2] - z) < Math.abs(best[2] - z) ? p : best,

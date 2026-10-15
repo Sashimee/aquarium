@@ -97,6 +97,7 @@ export function buildDocument(
     const material = materials.get(part.material);
     if (!material) throw new Error(`${assetId}: part uses unknown material "${part.material}"`);
     const prim = doc.createPrimitive().setMaterial(material);
+    if (part.lods) prim.setExtras({ lods: part.lods });
     prim.setIndices(accessorFor(doc, part.indices, 'SCALAR'));
     prim.setAttribute('POSITION', accessorFor(doc, part.positions, 'VEC3'));
     prim.setAttribute('NORMAL', accessorFor(doc, part.normals, 'VEC3'));
@@ -197,9 +198,16 @@ export async function emitAsset(input: EmitInput): Promise<OutputAsset> {
     const doc = cloneDocument(built.doc).setLogger(new Logger(Logger.Verbosity.WARN));
     for (const mesh of doc.getRoot().listMeshes())
       for (const prim of mesh.listPrimitives()) {
+        const lods = prim.getExtras()['lods'];
+        if (Array.isArray(lods)) {
+          prim.setExtras({});
+          if (!lods.includes(level)) prim.dispose();
+          continue;
+        }
         plan.prepare?.(prim, level);
         simplifyPrimitive(prim, { ratio: plan.ratios[level]!, minTriangles: plan.minTriangles });
       }
+    await doc.transform(prune());
     const textureByName = new Map(
       doc
         .getRoot()
