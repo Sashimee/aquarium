@@ -13,9 +13,9 @@ import {
   type UniformNode,
 } from 'three/webgpu';
 import { diffuseColor, dot, materialEmissive, mix, normalWorld, saturate, vec3 } from 'three/tsl';
-import type { Biome, DecorItem } from '@aquarium/shared';
+import { legacyTintSeed, type Biome, type DecorItem } from '@aquarium/shared';
 import type { CatalogEntry, LoadedModel } from './assets';
-import { coralGlow, coralTint, heightScale, placementKey } from './coralStyle';
+import { coralGlow, coralTint, heightScale } from './coralStyle';
 import { fitCapsuleChain, fitHull, transformPoints, type Collider } from './colliders';
 
 export const HARDSCAPE_KINDS: ReadonlySet<string> = new Set([
@@ -108,7 +108,7 @@ export class Hardscape {
     const matrix = decorMatrix(item);
     const meshes: Mesh[] = [];
     this.meshesByItem.push(meshes);
-    const key = item.tintSeed ?? placementKey(item.position, item.rotationY);
+    const key = item.tintSeed ?? legacyTintSeed(item);
     const tint = coralTint(item.assetId, key);
     for (const primitive of model.primitives) {
       let material: Material = primitive.material;
