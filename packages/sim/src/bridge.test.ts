@@ -4,6 +4,7 @@ import {
   createSimHost,
   SimClient,
   type SimAte,
+  type SimClientPort,
   type SimHost,
   type SimHostOptions,
 } from './bridge.ts';
@@ -93,6 +94,35 @@ async function stepCollecting(client: SimClient, steps: number, tick: number) {
   });
   offAte();
   return { snapshot, ate };
+}
+
+/** A worker the test drives by hand: `post` delivers a message, `emit` any other port event. */
+function fakeWorker() {
+  const sent: unknown[] = [];
+  const listeners = new Map<string, Set<(event: never) => void>>();
+  const port: SimClientPort = {
+    postMessage: (message: unknown) => {
+      sent.push(message);
+    },
+    addEventListener: (type: string, listener: (event: never) => void) => {
+      const set = listeners.get(type) ?? new Set();
+      set.add(listener);
+      listeners.set(type, set);
+    },
+    removeEventListener: (type: string, listener: (event: never) => void) => {
+      listeners.get(type)?.delete(listener);
+    },
+  };
+  const emit = (type: string, event: object): void => {
+    for (const l of listeners.get(type) ?? []) (l as (event: object) => void)({ ...event, type });
+  };
+  return {
+    port,
+    sent,
+    emit,
+    post: (data: unknown): void => emit('message', { data }),
+    listening: (): number => [...listeners.values()].reduce((n, set) => n + set.size, 0),
+  };
 }
 
 afterEach(() => {
@@ -321,15 +351,8 @@ describe('sim worker bridge', () => {
   });
 
   it('drops ate events from a world that a pending or completed init replaced', async () => {
-    let deliver: ((event: MessageEvent) => void) | null = null;
-    const client = new SimClient({
-      postMessage: () => undefined,
-      addEventListener: (_type, listener) => {
-        deliver = listener;
-      },
-      removeEventListener: () => undefined,
-    });
-    const post = (data: unknown): void => deliver?.({ data } as MessageEvent);
+    const { port, post } = fakeWorker();
+    const client = new SimClient(port);
     const ready = (epoch: number): unknown => ({
       type: 'ready',
       epoch,
@@ -472,20 +495,13 @@ describe('sim worker bridge', () => {
     const layout = await fine;
     expect(layout.epoch).toBe(ready.epoch + 1);
     expect(layout.fishIds).toEqual([...ready.fishIds, 'cory-x']);
-    expect(errors).toHaveLength(2);
+    // Each caller has its error; nothing else is told.
+    expect(errors).toEqual([]);
   });
 
   it('passes on bites across a layout change and drops those from an older epoch', () => {
-    let deliver: ((event: MessageEvent) => void) | null = null;
-    const sent: unknown[] = [];
-    const client = new SimClient({
-      postMessage: (message) => sent.push(message),
-      addEventListener: (_type, listener) => {
-        deliver = listener;
-      },
-      removeEventListener: () => undefined,
-    });
-    const post = (data: unknown): void => deliver?.({ data } as MessageEvent);
+    const { port, post, sent } = fakeWorker();
+    const client = new SimClient(port);
     const ate = (epoch: number, foodId: number): unknown => ({
       type: 'ate',
       epoch,
@@ -579,15 +595,8 @@ describe('sim worker bridge', () => {
   });
 
   it('never lets an error for an add or remove reject a pending init', async () => {
-    let deliver: ((event: MessageEvent) => void) | null = null;
-    const client = new SimClient({
-      postMessage: () => undefined,
-      addEventListener: (_type, listener) => {
-        deliver = listener;
-      },
-      removeEventListener: () => undefined,
-    });
-    const post = (data: unknown): void => deliver?.({ data } as MessageEvent);
+    const { port, post } = fakeWorker();
+    const client = new SimClient(port);
     const errors: string[] = [];
     client.onError((m) => errors.push(m));
     const init = client.init(benchmarkConfig(1));
@@ -654,7 +663,7 @@ describe('sim worker bridge', () => {
     await expect(unknown).rejects.toThrow(/unknown species "no-such-fish"/);
     await expect(nan).rejects.toThrow(/must be finite/);
     await expect(fine).resolves.toBe(true);
-    expect(errors).toHaveLength(2);
+    expect(errors).toEqual([]);
   });
 
   it('rejects pending canGrazeAt queries when the client is disposed', async () => {
@@ -666,5 +675,63 @@ describe('sim worker bridge', () => {
     const pending = client.canGrazeAt('neon-tetra', [0, 0.3, 0]);
     client.dispose();
     await expect(pending).rejects.toThrow(/disposed/);
+  });
+
+  it('tells the listeners only of errors no request is waiting for', async () => {
+    const { port, post, sent } = fakeWorker();
+    const client = new SimClient(port);
+    const errors: string[] = [];
+    client.onError((m) => errors.push(m));
+    const init = client.init(benchmarkConfig(1));
+    post({ type: 'error', message: 'bad config' });
+    await expect(init).rejects.toThrow('bad config');
+    const query = client.canGrazeAt('neon-tetra', [0, 0.3, 0]);
+    const request = (sent.at(-1) as { request: number }).request;
+    post({ type: 'error', message: 'unknown species', request });
+    await expect(query).rejects.toThrow('unknown species');
+    expect(errors).toEqual([]);
+    post({ type: 'error', message: 'clock exploded' });
+    expect(errors).toEqual(['clock exploded']);
+  });
+
+  for (const [event, failure, expected] of [
+    ['error', { message: 'Uncaught SyntaxError' }, 'sim worker failed: Uncaught SyntaxError'],
+    ['error', {}, 'sim worker failed'],
+    ['messageerror', { data: null }, 'sim: a message from the worker could not be read'],
+  ] as const) {
+    it(`rejects every pending request and reports a worker ${event} ${JSON.stringify(failure)}`, async () => {
+      const { port, post, emit } = fakeWorker();
+      const client = new SimClient(port);
+      const errors: string[] = [];
+      client.onError((m) => errors.push(m));
+      const init = client.init(benchmarkConfig(1));
+      post({ type: 'ready', epoch: 1, fishIds: ['f'], stride: SNAPSHOT_STRIDE, stepHz: STEP_HZ });
+      await init;
+      const reinit = client.init(benchmarkConfig(2));
+      const add = client.addFish({ id: 'x', species: 'neon-tetra' });
+      const remove = client.removeFish('f');
+      const query = client.canGrazeAt('neon-tetra', [0, 0.3, 0]);
+      emit(event, failure);
+      for (const pending of [reinit, add, remove, query]) {
+        await expect(pending).rejects.toThrow(expected);
+      }
+      expect(errors).toEqual([expected]);
+      // Nothing is left pending, so a new init can go out.
+      const again = client.init(benchmarkConfig(3));
+      post({ type: 'ready', epoch: 2, fishIds: [], stride: SNAPSHOT_STRIDE, stepHz: STEP_HZ });
+      await expect(again).resolves.toMatchObject({ epoch: 2 });
+    });
+  }
+
+  it('stops listening to the worker once disposed', () => {
+    const { port, emit, listening } = fakeWorker();
+    const client = new SimClient(port);
+    expect(listening()).toBe(3);
+    const errors: string[] = [];
+    client.onError((m) => errors.push(m));
+    client.dispose();
+    expect(listening()).toBe(0);
+    emit('error', { message: 'late' });
+    expect(errors).toEqual([]);
   });
 });

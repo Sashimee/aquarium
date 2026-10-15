@@ -105,6 +105,28 @@ describe('World.canGrazeAt', () => {
     expect(asked.behaviour.feeding.gut).toEqual(plain.behaviour.feeding.gut);
   });
 
+  it('judges a point on the reach boundary as the float32 food sent there', () => {
+    const w = reef(1, spawnMany(yellowTang.id, 1));
+    const [x, , z] = SLOT;
+    const reach = (y: number): boolean => w.canGrazeAt(yellowTang.id, x, y, z);
+    let lo = Math.fround(0.2);
+    let hi = Math.fround(0.25);
+    expect([reach(lo), reach(hi)]).toEqual([false, true]);
+    for (;;) {
+      const mid = Math.fround((lo + hi) / 2);
+      if (mid === lo || mid === hi) break;
+      if (reach(mid)) hi = mid;
+      else lo = mid;
+    }
+    // Neighbouring float32 values either side of the boundary; float64 points between them are
+    // food the client would send as one or the other.
+    for (const t of [0.01, 0.25, 0.49, 0.51, 0.75, 0.99]) {
+      const y = lo + (hi - lo) * t;
+      expect(Math.fround(y)).not.toBe(y);
+      expect(reach(y), `y ${y}`).toBe(reach(Math.fround(y)));
+    }
+  });
+
   it('rejects an unknown species and a non-finite position', () => {
     const w = reef(1, spawnMany(yellowTang.id, 1));
     expect(() => w.canGrazeAt('no-such-fish', ...ABOVE)).toThrow(/unknown species "no-such-fish"/);

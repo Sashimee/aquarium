@@ -598,8 +598,10 @@ export class World {
       throw new RangeError(`fish "${spawn.id}" (${length} m) does not fit in the tank`);
     }
     const { hunger } = spawn;
-    if (hunger !== undefined && !(hunger >= 0 && hunger <= 1)) {
-      throw new RangeError(`fish "${spawn.id}": hunger must be within 0 to 1, got ${hunger}`);
+    if (hunger !== undefined && (typeof hunger !== 'number' || !(hunger >= 0 && hunger <= 1))) {
+      throw new RangeError(
+        `fish "${spawn.id}": hunger must be a number within 0 to 1, got ${JSON.stringify(hunger)}`,
+      );
     }
     return { id: spawn.id, si, sp, length, r, hunger };
   }
@@ -1592,7 +1594,9 @@ export class World {
    * Whether a fish of `speciesId` could feed on an item fixed at (x, y, z), as the feeding AI
    * judges it: the item is not buried in sand or rock, and the fish can turn round, level, at the
    * height it would hold to bite. Every fish of the species in the tank is tried at its own size;
-   * with none in the tank, a fish of the species' adult length. Changes no state.
+   * with none in the tank, a fish of the species' adult length. The position is rounded to
+   * float32 first, as food positions are, so a point on the reach boundary gets the same answer
+   * as the food the caller then sends there. Changes no state.
    */
   canGrazeAt(speciesId: string, x: number, y: number, z: number): boolean {
     const si = this.speciesById.get(speciesId);
@@ -1602,10 +1606,10 @@ export class World {
       throw new RangeError(`canGrazeAt: position must be finite, got (${x}, ${y}, ${z})`);
     }
     const { minX, maxX, minZ, maxZ, maxY } = this.basin;
-    const cx = clamp(x, minX, maxX);
-    const cz = clamp(z, minZ, maxZ);
+    const cx = clamp(Math.fround(x), minX, maxX);
+    const cz = clamp(Math.fround(z), minZ, maxZ);
     const ground = this.basin.ground(cx, cz);
-    const cy = clamp(y, ground, maxY);
+    const cy = clamp(Math.fround(y), ground, maxY);
     if (this.substrateSdf.sample(cx, cy, cz, this.turnNormal) < -FEEDING.buriedM) return false;
     const fits = (length: number, thickness: number): boolean =>
       this.bodyCanTurnAt(length, thickness, cx, feedingHeight(cy, length, ground, maxY), cz);
