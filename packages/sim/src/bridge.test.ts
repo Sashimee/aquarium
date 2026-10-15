@@ -8,10 +8,20 @@ import {
   type SimHostOptions,
 } from './bridge.ts';
 import type { Collider } from '@aquarium/shared';
-import { benchmarkConfig, REEF_ANCHORS, REEF_DECOR } from './fixtures.ts';
+import type { Point3 } from './decor.ts';
+import {
+  ARCHETYPES,
+  benchmarkConfig,
+  blueTang,
+  REEF_ANCHORS,
+  REEF_DECOR,
+  REEF_TANK,
+  spawnMany,
+  yellowTang,
+} from './fixtures.ts';
 import { FOOD_STRIDE, FOOD_TYPES, type AteEvent } from './food.ts';
 import { SNAPSHOT_STRIDE, SnapshotField, SnapshotInterpolator, type Snapshot } from './snapshot.ts';
-import { STEP_HZ, World } from './world.ts';
+import { STEP_HZ, World, type WorldConfig } from './world.ts';
 
 interface Harness {
   host: SimHost;
@@ -594,6 +604,66 @@ describe('sim worker bridge', () => {
       removeEventListener: () => undefined,
     });
     const pending = client.addFish({ id: 'x', species: 'neon-tetra' });
+    client.dispose();
+    await expect(pending).rejects.toThrow(/disposed/);
+  });
+
+  it('answers canGrazeAt as a local world would, without changing the world', async () => {
+    const { client } = connect();
+    const config: WorldConfig = {
+      seed: 3,
+      tank: REEF_TANK,
+      species: ARCHETYPES,
+      decor: REEF_DECOR,
+      fish: spawnMany(yellowTang.id, 2),
+    };
+    const local = new World(config);
+    await client.init(config);
+    const spots: Point3[] = [
+      [0.55, 0.15, -0.29],
+      [0.55, 0.25, -0.29],
+      [0, 0.3, 0],
+      [0.55, 0.1, -0.12],
+    ];
+    for (const species of [yellowTang.id, blueTang.id]) {
+      for (const at of spots) {
+        expect(await client.canGrazeAt(species, at)).toBe(local.canGrazeAt(species, ...at));
+      }
+    }
+    expect(await client.canGrazeAt(yellowTang.id, [0.55, 0.15, -0.29])).toBe(false);
+    expect(await client.canGrazeAt(yellowTang.id, [0.55, 0.25, -0.29])).toBe(true);
+
+    const { snapshot } = await stepCollecting(client, 30, 30);
+    for (let t = 0; t < 30; t++) local.step();
+    const data = new Float32Array(local.count * SNAPSHOT_STRIDE);
+    local.writeSnapshot(data);
+    expect(Array.from(snapshot.data)).toEqual(Array.from(data));
+  });
+
+  it('rejects a bad canGrazeAt with its own error and keeps answering', async () => {
+    const { client } = connect();
+    await expect(client.canGrazeAt(yellowTang.id, [0, 0.3, 0])).rejects.toThrow(
+      /"canGrazeAt" before "init"/,
+    );
+    await client.init(benchmarkConfig(1));
+    const errors: string[] = [];
+    client.onError((m) => errors.push(m));
+    const unknown = client.canGrazeAt('no-such-fish', [0, 0.3, 0]);
+    const nan = client.canGrazeAt('neon-tetra', [Number.NaN, 0.3, 0]);
+    const fine = client.canGrazeAt('neon-tetra', [0, 0.25, 0]);
+    await expect(unknown).rejects.toThrow(/unknown species "no-such-fish"/);
+    await expect(nan).rejects.toThrow(/must be finite/);
+    await expect(fine).resolves.toBe(true);
+    expect(errors).toHaveLength(2);
+  });
+
+  it('rejects pending canGrazeAt queries when the client is disposed', async () => {
+    const client = new SimClient({
+      postMessage: () => undefined,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    });
+    const pending = client.canGrazeAt('neon-tetra', [0, 0.3, 0]);
     client.dispose();
     await expect(pending).rejects.toThrow(/disposed/);
   });

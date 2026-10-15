@@ -63,6 +63,7 @@ export {
   type SimHost,
   type SimHostOptions,
   type SimAte,
+  type SimGrazeReach,
   type SimLayout,
   type SimReady,
 } from './bridge.ts';

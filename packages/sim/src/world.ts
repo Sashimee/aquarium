@@ -2,6 +2,7 @@ import type { Collider, TankSpace } from '@aquarium/shared';
 import { Basin, type TankDimensions } from './basin.ts';
 import { Behaviour, BEHAVIOUR, type Anchor, type Plan, type Stimulus } from './behaviour.ts';
 import { DecorField, UnionSdf, type Point3 } from './decor.ts';
+import { FEEDING, feedingHeight } from './feeding.ts';
 import { FishResize } from './fishArrays.ts';
 import { FoodStore, type AteEvent } from './food.ts';
 import { clamp, DEG, quatFromYawPitchRoll, wrapAngle } from './math.ts';
@@ -1534,12 +1535,32 @@ export class World {
 
   /** Least clearance of the level snout and tail of fish `i` held at (x, y, z) facing `heading`. */
   private poseRoom(i: number, sdf: Sdf, x: number, y: number, z: number, heading: number): number {
-    const reach = (BEHAVIOUR.bodySampleOffsets[0] ?? 0) * (this.bodyLength[i] ?? 0);
+    return this.bodyPoseRoom(
+      this.bodyLength[i] ?? 0,
+      this.thickness[i] ?? 0,
+      sdf,
+      x,
+      y,
+      z,
+      heading,
+    );
+  }
+
+  private bodyPoseRoom(
+    length: number,
+    thickness: number,
+    sdf: Sdf,
+    x: number,
+    y: number,
+    z: number,
+    heading: number,
+  ): number {
+    const reach = (BEHAVIOUR.bodySampleOffsets[0] ?? 0) * length;
     const ex = Math.sin(heading) * reach;
     const ez = Math.cos(heading) * reach;
     const snout = sdf.sample(x + ex, y, z + ez, this.previous);
     const tail = sdf.sample(x - ex, y, z - ez, this.previous);
-    return Math.min(snout, tail) - (this.thickness[i] ?? 0);
+    return Math.min(snout, tail) - thickness;
   }
 
   /**
@@ -1547,12 +1568,51 @@ export class World {
    * it come. Food at the blind end of a slot narrower than that is out of its reach.
    */
   canTurnAt(i: number, x: number, y: number, z: number): boolean {
-    const length = this.bodyLength[i] ?? 0;
+    return this.bodyCanTurnAt(this.bodyLength[i] ?? 0, this.thickness[i] ?? 0, x, y, z);
+  }
+
+  /**
+   * Whether a fish of `speciesId` could feed on an item fixed at (x, y, z), as the feeding AI
+   * judges it: the item is not buried in sand or rock, and the fish can turn round, level, at the
+   * height it would hold to bite. Every fish of the species in the tank is tried at its own size;
+   * with none in the tank, a fish of the species' adult length. Changes no state.
+   */
+  canGrazeAt(speciesId: string, x: number, y: number, z: number): boolean {
+    const si = this.speciesById.get(speciesId);
+    const sp = si === undefined ? undefined : this.species[si];
+    if (sp === undefined) throw new Error(`canGrazeAt: unknown species "${speciesId}"`);
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+      throw new RangeError(`canGrazeAt: position must be finite, got (${x}, ${y}, ${z})`);
+    }
+    const { minX, maxX, minZ, maxZ, maxY } = this.basin;
+    const cx = clamp(x, minX, maxX);
+    const cz = clamp(z, minZ, maxZ);
+    const ground = this.basin.ground(cx, cz);
+    const cy = clamp(y, ground, maxY);
+    if (this.substrateSdf.sample(cx, cy, cz, this.turnNormal) < -FEEDING.buriedM) return false;
+    const fits = (length: number, thickness: number): boolean =>
+      this.bodyCanTurnAt(length, thickness, cx, feedingHeight(cy, length, ground, maxY), cz);
+    let present = false;
+    for (let i = 0; i < this.count; i++) {
+      if (this.speciesIndex[i] !== si) continue;
+      present = true;
+      if (fits(this.bodyLength[i] ?? 0, this.thickness[i] ?? 0)) return true;
+    }
+    return !present && fits(sp.bodyLength, sp.bodyLength * BEHAVIOUR.bodyThicknessBodyLengths);
+  }
+
+  private bodyCanTurnAt(
+    length: number,
+    thickness: number,
+    x: number,
+    y: number,
+    z: number,
+  ): boolean {
     const sdf = this.steerSdf[0] ?? this.sceneSdf;
     const n = this.turnNormal;
     const need =
       (BEHAVIOUR.bodySampleOffsets[0] ?? 0) * length +
-      (this.thickness[i] ?? 0) +
+      thickness +
       STEERING.turnRoomMarginBodyLengths * length;
     if (sdf.sample(x, y, z, n) >= need) return true;
     const { minX, maxX, minZ, maxZ } = this.basin;
@@ -1570,7 +1630,7 @@ export class World {
     }
     for (let k = 0; k < STEERING.turnRingHeadings; k++) {
       const heading = (Math.PI * k) / STEERING.turnRingHeadings;
-      if (this.poseRoom(i, sdf, sx, y, sz, heading) < 0) return false;
+      if (this.bodyPoseRoom(length, thickness, sdf, sx, y, sz, heading) < 0) return false;
     }
     return true;
   }
