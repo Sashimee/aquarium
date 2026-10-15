@@ -274,6 +274,35 @@ describe('sideProjection', () => {
   it('maps up to smaller v', () => {
     expect(projection(0.5, 0.05)[1]).toBeLessThan(0.5);
   });
+
+  it('mirrors a fish that faces right so its back stays up', () => {
+    const facingRight = sideProjection({
+      standardLengthM: 1,
+      snoutY: 0,
+      tailY: 0,
+      snoutPixel: [600, 50],
+      tailPixel: [100, 50],
+      crop: { left: 0, top: 0, width: 1000, height: 100 },
+    });
+    expect(facingRight(0, 0)).toEqual([0.6, 0.5]);
+    const [u, v] = facingRight(1, 0.05);
+    expect(u).toBeCloseTo(0.1);
+    expect(v).toBeLessThan(0.5);
+  });
+
+  it('keeps the tail on the peduncle pixel of a tilted photo', () => {
+    const tilted = sideProjection({
+      standardLengthM: 1,
+      snoutY: 0,
+      tailY: 0,
+      snoutPixel: [600, 80],
+      tailPixel: [100, 20],
+      crop: { left: 0, top: 0, width: 1000, height: 100 },
+    });
+    const [u, v] = tilted(1, 0);
+    expect(u).toBeCloseTo(0.1);
+    expect(v).toBeCloseTo(0.2);
+  });
 });
 
 describe('voxel utilities', () => {

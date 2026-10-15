@@ -1824,66 +1824,73 @@
       "licence": "CC-BY-4.0",
       "licence_url": "https://creativecommons.org/licenses/by/4.0/",
       "checked_at": "2026-10-15",
-      "sha256": "442f6d3607cacb826a2bbce0a4585e79b48a970c3c5835b5b0496059d7e2fd56",
+      "sha256": "dd212d1e9df85bbf470204cad79dbc2b50df1837c709058e77248bf789908c39",
       "polycount": 8033,
       "textures": "Material.001_baseColor.jpeg 4096x4096, Material.001_metallicRoughness.png 4096x4096, Material.001_normal.png 4096x4096, Material.001_specularf0.png 4096x4096, Material.002_baseColor.jpeg 4096x4096, Material.002_metallicRoughness.png 4096x4096, Material_baseColor.png 4096x4096, Material_specularf0.png 4096x4096",
       "rigged": false,
       "notes": "Turquoise discus with a mottled network pattern, tall round body, long dorsal and anal fins, red eye; thin body (about 0.15 of height). Four materials (three textured); the body maps are 4096x4096 and heavy (60 MB of textures), so downscale to 2048 or less. Verified from the downloaded glTF: 8033 triangles, not rigged (no skins). Second upload of the same mesh by adyatttt (184c187d) was not used. Accuracy checked against Sketchfab thumbnail only; the pipeline agent should confirm fin shape in a lit render. Zip sha256 3bd8cdc0a877cb2f62450e87ff66053259d31b21998e46ab14096dbdb0177332; sha256 is the aggregate over files[].",
-      "modifications": [],
+      "modifications": [
+        "merged meshes, dropped skeleton, animation and unused attributes",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "baked fin mask and fin id vertex attributes",
+        "colour and normal maps re-encoded to KTX2 at 1k and 2k",
+        "4096 px colour and normal maps downscaled to the 1k and 2k tiers",
+        "'Material' (22 triangles, the mouth patch) dropped: it reused the body normal map; Material.001, .002 and .003 kept"
+      ],
       "status": "downloaded",
       "files": [
         {
-          "path": "license.txt",
+          "path": "gltf/license.txt",
           "sha256": "44e5ae1c26117827688fd479a963e52a9d3ab35a1d5e61ab4cc6728ab4f7e161",
           "bytes": 712
         },
         {
-          "path": "scene.bin",
+          "path": "gltf/scene.bin",
           "sha256": "e56f5e8e6f1f81e8a0ace7b5092aba956409a54e6b48f98717209da9907abf8e",
           "bytes": 596540
         },
         {
-          "path": "scene.gltf",
+          "path": "gltf/scene.gltf",
           "sha256": "00c64d9d9a05206217794ad665c21cf9bca778bec37bceeab11ad4a52246c9fc",
           "bytes": 16830
         },
         {
-          "path": "textures/Material.001_baseColor.jpeg",
+          "path": "gltf/textures/Material.001_baseColor.jpeg",
           "sha256": "86b75bc95c0251b37ce705b1bc877aa6f8aa448c58d21f602357f09317f153db",
           "bytes": 7837464
         },
         {
-          "path": "textures/Material.001_metallicRoughness.png",
+          "path": "gltf/textures/Material.001_metallicRoughness.png",
           "sha256": "7b3f1caa73d6056fcef352d9e5045f28b1ad72328dc873334100800cc5d5389e",
           "bytes": 5520829
         },
         {
-          "path": "textures/Material.001_normal.png",
+          "path": "gltf/textures/Material.001_normal.png",
           "sha256": "1579ab870c6dd93d8280f863f4dac02915dce236ca1861e7248f40106b24de13",
           "bytes": 18983419
         },
         {
-          "path": "textures/Material.001_specularf0.png",
+          "path": "gltf/textures/Material.001_specularf0.png",
           "sha256": "ef9af4ba2b1fc059b3155021090695a2649adab85993ebeb2b98a227f1e93f59",
           "bytes": 8382824
         },
         {
-          "path": "textures/Material.002_baseColor.jpeg",
+          "path": "gltf/textures/Material.002_baseColor.jpeg",
           "sha256": "aa540373672f4c3b0a734e11d6f76c6be94f67cdd056ef2809d4405bdd48a07e",
           "bytes": 270017
         },
         {
-          "path": "textures/Material.002_metallicRoughness.png",
+          "path": "gltf/textures/Material.002_metallicRoughness.png",
           "sha256": "19d3d68f70a3f2af298d9813c5fe4bca63879034f752b2556c0bf08667921f80",
           "bytes": 30064
         },
         {
-          "path": "textures/Material_baseColor.png",
+          "path": "gltf/textures/Material_baseColor.png",
           "sha256": "2b4517c49ea4dba77b3d1a0b5a8c57d67025fdcbb31270fc786ba7f74e8fcb0d",
           "bytes": 24056
         },
         {
-          "path": "textures/Material_specularf0.png",
+          "path": "gltf/textures/Material_specularf0.png",
           "sha256": "387cb3effec47ff4989ccc78391a37d4b3a2f6aa7e60a462fd1f9ff5617ad765",
           "bytes": 6764
         }
@@ -1900,7 +1907,7 @@
       "licence": "CC-BY-4.0",
       "licence_url": "https://creativecommons.org/licenses/by/4.0/",
       "checked_at": "2026-10-15",
-      "sha256": "0a26103efc316d391ffe07f35e4314cffa13e6355703901359d7cbbdf2d9a12a",
+      "sha256": "7486380867d97e45e006d7628d73e58fc8e3997be0f02751600c4aa27679a3ab",
       "polycount": 3456,
       "textures": "01_-_Default_baseColor.jpeg 1024x512, 01_-_Default_normal.png 1024x512",
       "rigged": true,
@@ -1909,27 +1916,27 @@
       "status": "downloaded",
       "files": [
         {
-          "path": "license.txt",
+          "path": "gltf/license.txt",
           "sha256": "779d09fbc0c3f6cd520893555281fd624482fcbf3175450e4e8153dca4d00cd7",
           "bytes": 648
         },
         {
-          "path": "scene.bin",
+          "path": "gltf/scene.bin",
           "sha256": "d45492d5dc4f4d2b1a0ded4dfa1ebaf16a07b2c39a7733b3bea9c0664ce2ff93",
           "bytes": 238892
         },
         {
-          "path": "scene.gltf",
+          "path": "gltf/scene.gltf",
           "sha256": "dc2b0d6777a56b9e2cfec36bea4afddaf2c4786486d661326d608ab965e1bed1",
           "bytes": 26945
         },
         {
-          "path": "textures/01_-_Default_baseColor.jpeg",
+          "path": "gltf/textures/01_-_Default_baseColor.jpeg",
           "sha256": "8e1b0f1dd3f3a6d6fc4e7895901e639f6924e499f6602622c0431e66623dc875",
           "bytes": 406057
         },
         {
-          "path": "textures/01_-_Default_normal.png",
+          "path": "gltf/textures/01_-_Default_normal.png",
           "sha256": "9c4df2ccd08282d5529c61466ed0e6446ca778c7fe8c0af8088e99fe997fc8d8",
           "bytes": 819258
         }
@@ -1946,41 +1953,48 @@
       "licence": "CC-BY-4.0",
       "licence_url": "https://creativecommons.org/licenses/by/4.0/",
       "checked_at": "2026-10-15",
-      "sha256": "1beef6f9b40cc6d8e8438f0945f08108c83775076d3e522314132366051781dc",
+      "sha256": "a5145947670fda230966c3724d8336f802bacf42c31d0ca18029179d734ff256",
       "polycount": 40000,
       "textures": "CustomMaterial_baseColor.png 2048x2048, CustomMaterial_metallicRoughness.png 2048x2048, CustomMaterial_normal.png 2048x2048",
       "rigged": false,
       "notes": "Orange (albino-morph) Ancistrus scan-style model with cheek odontodes and snout tentacles; the only Ancistrus on Sketchfab under CC0 or CC-BY. Verified from the downloaded glTF: 40000 triangles, not rigged (no skins). Caveat: the base colour map is blocky and low detail (compression-block artefacts), and this is an orange morph rather than the usual brown-spotted wild type, so the pipeline should recolour (brown with pale spots, see wm-ancistrus-ladenthin) or fall back to a procedural body with the photo texture if a lit render looks poor. Decimate to 10k or less for LOD0. Unlike a free-swimming fish it rests on surfaces, so the pipeline should keep the ventral sucker mouth intact. Zip sha256 9c3c1e7296ea41469821b8bca285801dcb35a08be55e4a908575b924a6c85725; sha256 is the aggregate over files[].",
-      "modifications": [],
+      "modifications": [
+        "merged meshes, dropped skeleton, animation and unused attributes",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "baked fin mask and fin id vertex attributes",
+        "colour and normal maps re-encoded to KTX2 at 1k and 2k",
+        "decimated from 40k to 8k triangles at LOD0",
+        "orange morph recoloured by luminance to natural brown with pale cream spots"
+      ],
       "status": "downloaded",
       "files": [
         {
-          "path": "license.txt",
+          "path": "gltf/license.txt",
           "sha256": "93b8a967dab3d25159b9439a0916d7d79c8584bf827bc3991ed052ada2b091e3",
           "bytes": 714
         },
         {
-          "path": "scene.bin",
+          "path": "gltf/scene.bin",
           "sha256": "a19a0b6473a0eb8386373660ac8461f93144b6565b017479bb21408c0a1ca423",
           "bytes": 3170784
         },
         {
-          "path": "scene.gltf",
+          "path": "gltf/scene.gltf",
           "sha256": "cc5b8a97828e83435fc2ee920b0aa3faf7ee23ebaa99a0e4de10690d40c53c22",
           "bytes": 5951
         },
         {
-          "path": "textures/CustomMaterial_baseColor.png",
+          "path": "gltf/textures/CustomMaterial_baseColor.png",
           "sha256": "a172361367106626ff46884a15c74e0de6dd9f3debc811f255d71d6324042397",
           "bytes": 896674
         },
         {
-          "path": "textures/CustomMaterial_metallicRoughness.png",
+          "path": "gltf/textures/CustomMaterial_metallicRoughness.png",
           "sha256": "8ffa0b7ec30f62a1d4b85b86287b7effe4d276fc734d430ef51dc4b845681c2a",
           "bytes": 503264
         },
         {
-          "path": "textures/CustomMaterial_normal.png",
+          "path": "gltf/textures/CustomMaterial_normal.png",
           "sha256": "6e42178a15eb573dbf16d0ee76d4c590a27fd7c98b73e79ccbadc48420cf8958",
           "bytes": 938594
         }

@@ -24,6 +24,8 @@ export interface FinSpec {
   direction?: [number, number];
   /** Height on the flank for side fins, 0 = belly line, 1 = back. */
   flankHeight?: number;
+  /** Selects an alternative texture tile for the fin, such as a spine fin beside the soft dorsal. */
+  variant?: number;
 }
 
 export interface CaudalSpec {
@@ -40,7 +42,15 @@ export interface LoftSpec {
   roundness: number;
   fins: FinSpec[];
   caudal: CaudalSpec;
+  /**
+   * Membrane fins: smooth outlines on a finer grid, a caudal rooted inside the peduncle, and a
+   * peduncle that narrows so no flat cap shows where the caudal begins.
+   */
+  membrane?: boolean;
 }
+
+/** Maps a fin vertex (fin id, position along the base 0..1, position from base to tip 0..1, tile variant) to a texture coordinate. */
+export type FinTexture = (fin: number, u: number, v: number, variant: number) => [number, number];
 
 export interface Projection {
   /** Maps a point in (metres behind the snout, y) to a texture coordinate. */
@@ -51,7 +61,12 @@ export const RING = 24;
 export const SECTION_COUNT = 48;
 const FIN_COLUMNS = 12;
 const FIN_ROWS = 5;
+const MEMBRANE_FIN_COLUMNS = 24;
+const MEMBRANE_FIN_ROWS = 6;
 const ROOT_INSET = 0.02;
+const CAUDAL_ROOT_DEPTH = 0.05;
+const PEDUNCLE_TAPER_START = 0.86;
+const PEDUNCLE_TAPER_WIDTH = 0.65;
 
 function hermite(keys: SectionKey[], pick: (key: SectionKey) => number, t: number): number {
   const n = keys.length;
@@ -76,11 +91,40 @@ function hermite(keys: SectionKey[], pick: (key: SectionKey) => number, t: numbe
   );
 }
 
-function sampleShape(shape: number[], u: number): number {
+export function sectionEdges(
+  sections: SectionKey[],
+  t: number,
+): { top: number; bottom: number; halfWidth: number } {
+  return {
+    top: hermite(sections, (k) => k.top, t),
+    bottom: hermite(sections, (k) => k.bottom, t),
+    halfWidth: hermite(sections, (k) => k.halfWidth, t),
+  };
+}
+
+function sampleShape(shape: number[], u: number, smoothly: boolean): number {
   const position = clamp(u, 0, 1) * (shape.length - 1);
   const i = Math.min(shape.length - 2, Math.floor(position));
   const f = position - i;
-  return shape[i]! * (1 - f) + shape[i + 1]! * f;
+  if (!smoothly) return shape[i]! * (1 - f) + shape[i + 1]! * f;
+  const p0 = shape[Math.max(0, i - 1)]!;
+  const p1 = shape[i]!;
+  const p2 = shape[i + 1]!;
+  const p3 = shape[Math.min(shape.length - 1, i + 2)]!;
+  const f2 = f * f;
+  const f3 = f2 * f;
+  const value =
+    0.5 *
+    (2 * p1 +
+      (p2 - p0) * f +
+      (2 * p0 - 5 * p1 + 4 * p2 - p3) * f2 +
+      (3 * p1 - p0 - 3 * p2 + p3) * f3);
+  return Math.max(0, value);
+}
+
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  const t = clamp((x - edge0) / (edge1 - edge0), 0, 1);
+  return t * t * (3 - 2 * t);
 }
 
 function signedPow(v: number, exponent: number): number {
@@ -92,11 +136,26 @@ class MeshBuilder {
   indices: number[] = [];
   mask: number[] = [];
   id: number[] = [];
+  finU: number[] = [];
+  finV: number[] = [];
+  finVariant: number[] = [];
 
-  vertex(x: number, y: number, z: number, mask: number, id: number): number {
+  vertex(
+    x: number,
+    y: number,
+    z: number,
+    mask: number,
+    id: number,
+    u = 0,
+    v = 0,
+    variant = 0,
+  ): number {
     this.positions.push(x, y, z);
     this.mask.push(mask);
     this.id.push(id);
+    this.finU.push(u);
+    this.finV.push(v);
+    this.finVariant.push(variant);
     return this.mask.length - 1;
   }
 
@@ -112,7 +171,10 @@ function addBody(builder: MeshBuilder, spec: LoftSpec, length: number): void {
     const t = s / (SECTION_COUNT - 1);
     const top = hermite(spec.sections, (k) => k.top, t) * length;
     const bottom = hermite(spec.sections, (k) => k.bottom, t) * length;
-    const width = Math.max(1e-4, hermite(spec.sections, (k) => k.halfWidth, t) * length);
+    const taper = spec.membrane
+      ? 1 - PEDUNCLE_TAPER_WIDTH * smoothstep(PEDUNCLE_TAPER_START, 1, t)
+      : 1;
+    const width = Math.max(1e-4, hermite(spec.sections, (k) => k.halfWidth, t) * length * taper);
     const centre = (top + bottom) / 2;
     const half = Math.max(1e-4, (top - bottom) / 2);
     const z = length - t * length;
@@ -164,28 +226,34 @@ function addFinGrid(
   base: (u: number) => [number, number, number],
   tip: (u: number) => [number, number, number],
   mirror: boolean,
+  columns: number,
+  rows: number,
+  variant = 0,
 ): void {
   const first = builder.mask.length;
-  for (let c = 0; c <= FIN_COLUMNS; c++) {
-    const u = c / FIN_COLUMNS;
+  for (let c = 0; c <= columns; c++) {
+    const u = c / columns;
     const b = base(u);
     const t = tip(u);
-    for (let r = 0; r <= FIN_ROWS; r++) {
-      const v = r / FIN_ROWS;
+    for (let r = 0; r <= rows; r++) {
+      const v = r / rows;
       builder.vertex(
         b[0] + (t[0] - b[0]) * v,
         b[1] + (t[1] - b[1]) * v,
         b[2] + (t[2] - b[2]) * v,
         v,
         id,
+        u,
+        v,
+        variant,
       );
     }
   }
-  for (let c = 0; c < FIN_COLUMNS; c++)
-    for (let r = 0; r < FIN_ROWS; r++) {
-      const a = first + c * (FIN_ROWS + 1) + r;
+  for (let c = 0; c < columns; c++)
+    for (let r = 0; r < rows; r++) {
+      const a = first + c * (rows + 1) + r;
       const b = a + 1;
-      const d = a + FIN_ROWS + 1;
+      const d = a + rows + 1;
       const e = d + 1;
       if (mirror) {
         builder.triangle(a, d, b);
@@ -200,12 +268,15 @@ function addFinGrid(
 function addFins(builder: MeshBuilder, spec: LoftSpec, length: number): void {
   const at = (t: number, pick: (k: SectionKey) => number): number =>
     hermite(spec.sections, pick, t) * length;
+  const columns = spec.membrane ? MEMBRANE_FIN_COLUMNS : FIN_COLUMNS;
+  const rows = spec.membrane ? MEMBRANE_FIN_ROWS : FIN_ROWS;
+  const smoothly = spec.membrane === true;
   for (const fin of spec.fins) {
     const id = FIN_IDS[fin.fin];
     const sides = fin.anchor === 'side' ? [1, -1] : [0];
     for (const side of sides) {
       const parameter = (u: number): number => fin.from + (fin.to - fin.from) * u;
-      const reach = (u: number): number => sampleShape(fin.shape, u) * length;
+      const reach = (u: number): number => sampleShape(fin.shape, u, smoothly) * length;
       const zAt = (u: number): number => length - parameter(u) * length;
       const base = (u: number): [number, number, number] => {
         const t = parameter(u);
@@ -226,12 +297,13 @@ function addFins(builder: MeshBuilder, spec: LoftSpec, length: number): void {
         const norm = Math.hypot(dx, dy);
         return [bx + (side * dx * r) / norm, by + (dy * r) / norm, bz - fin.sweep * r];
       };
-      addFinGrid(builder, id, base, tip, side < 0);
+      addFinGrid(builder, id, base, tip, side < 0, columns, rows, fin.variant ?? 0);
     }
   }
 
   const last = spec.sections[spec.sections.length - 1]!;
   const rearZ = 0;
+  const rootZ = rearZ + (spec.membrane ? CAUDAL_ROOT_DEPTH : ROOT_INSET) * length;
   const top = last.top * length;
   const bottom = last.bottom * length;
   const centre = (top + bottom) / 2;
@@ -239,13 +311,15 @@ function addFins(builder: MeshBuilder, spec: LoftSpec, length: number): void {
   addFinGrid(
     builder,
     FIN_IDS.caudal,
-    (u) => [0, bottom + (top - bottom) * u, rearZ + ROOT_INSET * length],
+    (u) => [0, bottom + (top - bottom) * u, rootZ],
     (u) => [
       0,
       centre + (u - 0.5) * (top - bottom + 2 * spread),
-      rearZ - sampleShape(spec.caudal.shape, u) * length,
+      rearZ - sampleShape(spec.caudal.shape, u, smoothly) * length,
     ],
     false,
+    columns,
+    rows,
   );
 }
 
@@ -288,6 +362,7 @@ export function loftFish(
   project: Projection,
   material: string,
   finUv?: [number, number],
+  finTexture?: FinTexture,
 ): Part {
   const length = spec.standardLengthM;
   const builder = new MeshBuilder();
@@ -302,6 +377,12 @@ export function loftFish(
   const count = mask.length;
   const uvs = new Float32Array(count * 2);
   for (let i = 0; i < count; i++) {
+    if (finTexture && id[i] !== 0) {
+      const [u, v] = finTexture(id[i]!, builder.finU[i]!, builder.finV[i]!, builder.finVariant[i]!);
+      uvs[i * 2] = u;
+      uvs[i * 2 + 1] = v;
+      continue;
+    }
     if (finUv && id[i] !== 0) {
       uvs[i * 2] = finUv[0];
       uvs[i * 2 + 1] = finUv[1];
@@ -350,7 +431,10 @@ export function signedVolume(positions: Float32Array, indices: Uint32Array): num
   return volume / 6;
 }
 
-/** Similarity transform pinning the snout and the end of the peduncle to two pixels of a side-view photo. */
+/**
+ * Similarity transform pinning the snout and the end of the peduncle to two pixels of a side-view
+ * photo. A fish facing right in the photo is mirrored as well as rotated, so its back stays up.
+ */
 export function sideProjection(options: {
   standardLengthM: number;
   snoutY: number;
@@ -367,14 +451,17 @@ export function sideProjection(options: {
   const ay = tailY - snoutY;
   const px = tail[0] - snout[0];
   const py = tail[1] - snout[1];
-  const denom = ax * ax + ay * ay;
-  const fr = (px * ax + py * ay) / denom;
-  const fi = (py * ax - px * ay) / denom;
+  const axisLength = Math.hypot(ax, ay);
+  const photoLength = Math.hypot(px, py);
+  const scale = photoLength / axisLength;
+  const side = px < 0 ? -1 : 1;
   return (behind, y) => {
     const qx = behind;
     const qy = y - snoutY;
-    const x = snout[0] + fr * qx - fi * qy;
-    const yUp = snout[1] + fi * qx + fr * qy;
+    const along = (qx * ax + qy * ay) / axisLength;
+    const across = (-qx * ay + qy * ax) / axisLength;
+    const x = snout[0] + (scale * (along * px - side * across * py)) / photoLength;
+    const yUp = snout[1] + (scale * (along * py + side * across * px)) / photoLength;
     return [(x - crop.left) / crop.width, (-yUp - crop.top) / crop.height];
   };
 }

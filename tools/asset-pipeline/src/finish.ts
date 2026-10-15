@@ -19,6 +19,17 @@ export interface TintSpec {
   ignoreBelow?: number;
 }
 
+export interface SpotSpec {
+  /** Average spot spacing in pixels. */
+  cell: number;
+  /** Spot radius as a fraction of the cell, before per-spot jitter. */
+  radius: number;
+  /** Chance that a cell holds a spot, 0..1. */
+  density: number;
+  colour: Rgb;
+  seed: number;
+}
+
 export interface PoreSpec {
   /** Average pore spacing in pixels at the 2048 px working size. */
   cell: number;
@@ -99,6 +110,41 @@ export function tintImage(image: Rgba, spec: TintSpec): Rgba {
       const b = ramp(spec.ramps[1], t);
       for (let c = 0; c < 3; c++) out[i * 4 + c] = Math.round(a[c]! * (1 - m) + b[c]! * m);
       out[i * 4 + 3] = data[i * 4 + 3]!;
+    }
+  return { width, height, data: out };
+}
+
+/** Paints soft-edged pale spots at jittered cell centres, keeping some of the underlying shading. */
+export function spotImage(image: Rgba, spec: SpotSpec): Rgba {
+  const { width, height, data } = image;
+  const grid = Math.max(2, Math.round(Math.max(width, height) / spec.cell));
+  const stepX = width / grid;
+  const stepY = height / grid;
+  const out = new Uint8Array(data);
+  for (let y = 0; y < height; y++)
+    for (let x = 0; x < width; x++) {
+      const cx = Math.floor(x / stepX);
+      const cy = Math.floor(y / stepY);
+      let cover = 0;
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          const wx = (((cx + dx) % grid) + grid) % grid;
+          const wy = (((cy + dy) % grid) + grid) % grid;
+          if (hash2(wx, wy, spec.seed) > spec.density) continue;
+          const px = (cx + dx + 0.2 + 0.6 * hash2(wx, wy, spec.seed + 1)) * stepX;
+          const py = (cy + dy + 0.2 + 0.6 * hash2(wx, wy, spec.seed + 2)) * stepY;
+          const radius =
+            Math.min(stepX, stepY) * spec.radius * (0.6 + 0.8 * hash2(wx, wy, spec.seed + 3));
+          const d = Math.hypot(x - px, y - py);
+          cover = Math.max(cover, Math.min(1, Math.max(0, (radius - d) / (radius * 0.35))));
+        }
+      if (cover === 0) continue;
+      const i = (y * width + x) * 4;
+      const shade = 0.75 + 0.25 * ((data[i]! + data[i + 1]! + data[i + 2]!) / 3 / 128);
+      for (let c = 0; c < 3; c++)
+        out[i + c] = Math.round(
+          data[i + c]! * (1 - cover) + Math.min(255, spec.colour[c]! * shade) * cover,
+        );
     }
   return { width, height, data: out };
 }
