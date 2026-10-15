@@ -172,6 +172,7 @@ async function boot(): Promise<void> {
   const scenes = mountBiomeScene(engine, tankBiome, window.location.search, {
     mounted(scene) {
       fish.setAnchors(scene.anchors);
+      scene.enableMovablePlants();
       fish.setSceneColliders(scene.colliderList);
       play = createPlaySystem(engine, scene, interaction, fish.sim, feedGate);
       playChoices.applyTo(play.controller);

@@ -70,6 +70,7 @@ export class DecorMode {
       limits: {
         halfLength: dims.length / 2 - dims.glass - WATER_INSET,
         halfDepth: dims.depth / 2 - dims.glass - WATER_INSET,
+        waterTop: dims.height - dims.freeboard,
       },
       ground: (x, z) => world.groundHeight(x, z),
       pieces: world.pieces,

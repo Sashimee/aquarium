@@ -37,7 +37,7 @@ export function sanitizeLayout(layout: readonly DecorItem[], biome: Biome): Sani
   return { layout: kept, dropped: layout.length - kept.length };
 }
 
-/** Items the player can move: the ones with a spec. Plants, anemones and procedural corals stay where the preset put them. */
+/** Items the player can move: the ones with a spec. Anemones and procedural corals stay where the preset put them. */
 export function splitLayout(
   layout: readonly DecorItem[],
   specs: ReadonlyMap<string, DecorSpec>,

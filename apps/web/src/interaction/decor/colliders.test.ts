@@ -72,3 +72,33 @@ describe('collidersFor', () => {
     expect(collidersFor('p9', feeder, item('vacation-feeder', 0, 0))).toHaveLength(1);
   });
 });
+
+describe('plant colliders', () => {
+  const fern = spec('java-fern');
+
+  it('is a soft capsule matching the scene proxy', () => {
+    const [collider, ...rest] = collidersFor('p2', fern, item('java-fern', 0.1, 0.2, { scale: 2 }));
+    expect(rest).toEqual([]);
+    expect(collider).toEqual({
+      id: 'decor:p2',
+      solid: false,
+      shape: {
+        kind: 'capsule',
+        a: [0.1, 0.06 + 0.15, 0.2],
+        b: [0.1, 0.06 + 0.187478 * 2 * 0.8, 0.2],
+        radius: 0.15,
+      },
+    });
+  });
+
+  it('floors the radius at 4 cm', () => {
+    const [collider] = collidersFor('p1', spec('water-plant'), item('water-plant', 0, 0));
+    expect(collider?.shape).toMatchObject({ kind: 'capsule', radius: 0.04 });
+  });
+
+  it('has none for a plant under 15 cm tall', () => {
+    expect(collidersFor('p1', spec('staurogyne-repens'), item('staurogyne-repens', 0, 0))).toEqual(
+      [],
+    );
+  });
+});

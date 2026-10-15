@@ -4,6 +4,7 @@ import {
   type Biome,
   type DecorItem,
 } from '@aquarium/shared';
+import { SURFACE_MARGIN } from '../../scene/plants';
 import { VACATION_FEEDER_ASSET_ID } from './spec';
 import {
   corners,
@@ -24,7 +25,14 @@ const GAP = 0.005;
 const SPIRAL_STEP = 0.04;
 
 export type Rejection =
-  'outside' | 'overlap' | 'full' | 'feeder-exists' | 'unknown-asset' | 'wrong-biome' | 'no-room';
+  | 'outside'
+  | 'overlap'
+  | 'full'
+  | 'feeder-exists'
+  | 'unknown-asset'
+  | 'wrong-biome'
+  | 'no-room'
+  | 'too-tall';
 
 const MESSAGES: Record<Rejection, string> = {
   outside: 'That would push it through the glass.',
@@ -34,6 +42,7 @@ const MESSAGES: Record<Rejection, string> = {
   'unknown-asset': 'That piece is not available in this tank.',
   'wrong-biome': 'That piece belongs in a different kind of tank.',
   'no-room': 'There is no clear space left for another piece.',
+  'too-tall': 'That plant would reach out of the water.',
 };
 
 export function describeRejection(reason: Rejection): string {
@@ -43,6 +52,8 @@ export function describeRejection(reason: Rejection): string {
 export interface TankLimits {
   readonly halfLength: number;
   readonly halfDepth: number;
+  /** Water surface height; plants must stay this far below it. Unset skips the check. */
+  readonly waterTop?: number;
 }
 
 export interface Obstacle {
@@ -64,6 +75,12 @@ function insidePiece(f: Footprint, limits: TankLimits): boolean {
   return insideTank(f, limits.halfLength, limits.halfDepth);
 }
 
+/** Whether a plant resting at `item` would poke through the surface. */
+export function reachesSurface(spec: DecorSpec, item: DecorItem, limits: TankLimits): boolean {
+  if (spec.kind !== 'plant' || limits.waterTop === undefined) return false;
+  return item.position[1] + spec.box.max[1] * item.scale > limits.waterTop - SURFACE_MARGIN;
+}
+
 export function check(
   spec: DecorSpec,
   item: DecorItem,
@@ -71,6 +88,7 @@ export function check(
   limits: TankLimits,
 ): Rejection | null {
   if (!insidePiece(footprintOf(spec, item), limits)) return 'outside';
+  if (reachesSurface(spec, item, limits)) return 'too-tall';
   const mine = footprintOf(spec, item, OVERLAP_SHRINK);
   for (const other of others) {
     if (overlaps(mine, footprintOf(other.spec, other.item, OVERLAP_SHRINK), GAP)) return 'overlap';
@@ -140,6 +158,7 @@ export function findFreeSpot(
   others: readonly Obstacle[],
   limits: TankLimits,
 ): DecorItem | null {
+  const plan: TankLimits = { halfLength: limits.halfLength, halfDepth: limits.halfDepth };
   const reach = Math.hypot(limits.halfLength, limits.halfDepth) * 2;
   for (let radius = 0; radius <= reach; radius += SPIRAL_STEP) {
     const steps = radius === 0 ? 1 : Math.max(8, Math.ceil((2 * Math.PI * radius) / SPIRAL_STEP));
@@ -155,9 +174,9 @@ export function findFreeSpot(
             preferred[1] + Math.sin(angle) * radius,
           ],
         },
-        limits,
+        plan,
       );
-      if (check(spec, candidate, others, limits) === null) return candidate;
+      if (check(spec, candidate, others, plan) === null) return candidate;
     }
   }
   return null;

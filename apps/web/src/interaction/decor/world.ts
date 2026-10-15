@@ -13,7 +13,7 @@ export interface DecorScenePort {
   readonly biome: Biome;
   /** The preset's own rocks, wood and ornaments: the layout of a tank that was never edited. */
   readonly presetHardDecor: readonly DecorItem[];
-  /** Plants, anemones and procedural corals, which the player cannot move. */
+  /** Anemones and procedural corals, which the player cannot move. */
   readonly fixedDecor: readonly DecorItem[];
   catalogEntries(): Iterable<CatalogEntry>;
   groundHeight(x: number, z: number): number;

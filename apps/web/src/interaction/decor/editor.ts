@@ -1,4 +1,5 @@
 import { legacyTintSeed, type Biome, type DecorItem } from '@aquarium/shared';
+import { SURFACE_MARGIN } from '../../scene/plants';
 import { footprintOf, rayHit, type RayLike } from './footprint';
 import type { Piece } from './layout';
 import {
@@ -160,7 +161,11 @@ export class DecorEditor {
       ...moved,
       position: [moved.position[0], rest + LIFT, moved.position[2]],
     });
-    const reason = check(spec, lifted, this.obstaclesExcept(drag.id), this.options.limits);
+    const resting: DecorItem = {
+      ...lifted,
+      position: [lifted.position[0], rest, lifted.position[2]],
+    };
+    const reason = check(spec, resting, this.obstaclesExcept(drag.id), this.options.limits);
     drag.valid = reason === null;
     this.problem = reason ? describeRejection(reason) : null;
     return this.replace({ id: drag.id, item: lifted });
@@ -200,13 +205,18 @@ export class DecorEditor {
       return { rejection: 'no-room' };
     }
     const rest = restHeight(spec, spot, this.options.ground);
+    const dropHeight = this.dropHeightFor(spec, spot, rest);
+    if (dropHeight === null) {
+      this.problem = describeRejection('too-tall');
+      return { rejection: 'too-tall' };
+    }
     const id = `p${++this.seq}`;
     const piece: Piece = {
       id,
       item: seeded(
         tidy({
           ...spot,
-          position: [spot.position[0], rest + NEW_PIECE_DROP_HEIGHT, spot.position[2]],
+          position: [spot.position[0], rest + dropHeight, spot.position[2]],
         }),
       ),
     };
@@ -281,6 +291,14 @@ export class DecorEditor {
     }
     this.drops.clear();
     return moved;
+  }
+
+  /** How far above rest a new piece may start falling; null when a plant would not fit under the surface at rest. */
+  private dropHeightFor(spec: DecorSpec, spot: DecorItem, rest: number): number | null {
+    const { waterTop } = this.options.limits;
+    if (spec.kind !== 'plant' || waterTop === undefined) return NEW_PIECE_DROP_HEIGHT;
+    const room = waterTop - SURFACE_MARGIN - (rest + spec.box.max[1] * spot.scale);
+    return room < 0 ? null : Math.min(NEW_PIECE_DROP_HEIGHT, room);
   }
 
   private tryChange(piece: Piece, spec: DecorSpec, candidate: DecorItem): boolean {

@@ -276,3 +276,42 @@ describe('colour seed', () => {
     expect(must(e.piece(added.id)).item.tintSeed).toBe(placed.tintSeed);
   });
 });
+
+describe('plants', () => {
+  const plantEditor = (waterTop: number, pieces: Piece[] = []) =>
+    new DecorEditor({
+      specs: SPECS,
+      biome: 'freshwater',
+      limits: { ...LIMITS, waterTop },
+      ground: flat,
+      pieces,
+    });
+
+  it('adds a plant that comes to rest on the gravel', () => {
+    const e = plantEditor(0.3);
+    expect(e.add('java-fern')).toHaveProperty('id');
+    finishSettling(e);
+    const placed = must(e.pieces[0]).item;
+    expect(placed.position[1]).toBeCloseTo(restHeight(spec('java-fern'), placed, flat), 6);
+  });
+
+  it('never starts a new plant above the allowed height', () => {
+    const e = plantEditor(0.45);
+    e.add('vallisneria');
+    const top = must(e.pieces[0]).item.position[1] + spec('vallisneria').box.max[1];
+    expect(top).toBeLessThanOrEqual(0.45 - 0.03 + 1e-9);
+  });
+
+  it('refuses a plant that cannot fit under the surface', () => {
+    const e = plantEditor(0.2);
+    expect(e.add('vallisneria')).toEqual({ rejection: 'too-tall' });
+    expect(e.problem).toMatch(/out of the water/);
+  });
+
+  it('lets a plant be dragged despite the lift', () => {
+    const e = plantEditor(0.3, [piece('p1', 'java-fern', 0, 0)]);
+    expect(e.grab('p1', { x: 0, z: 0 })).toBe(true);
+    e.dragTo(0.3, 0.1);
+    expect(e.drop()).toBe('moved');
+  });
+});

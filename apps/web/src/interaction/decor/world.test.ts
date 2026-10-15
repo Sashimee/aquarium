@@ -14,7 +14,7 @@ import { FeederLayer } from './feederLayer';
 import { DecorWorld, type DecorScenePort } from './world';
 
 const preset: DecorItem[] = [item('boulder-01', -0.3, 0), item('coast-rocks-05', 0.3, 0.05)];
-const plant: DecorItem = item('java-fern', 0.1, -0.1);
+const plant: DecorItem = item('host-anemone', 0.1, -0.1);
 
 function fakeScene() {
   const hard: DecorItem[][] = [];
