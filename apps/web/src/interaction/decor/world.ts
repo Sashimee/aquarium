@@ -79,11 +79,21 @@ export class DecorWorld {
   showSaved(layout: readonly DecorItem[], edited: boolean): Promise<void> {
     if (!edited) return this.showPreset();
     const clean = sanitizeLayout(layout, this.scene.biome, this.fit());
+    const parts: string[] = [];
     const n = clean.dropped;
+    if (n > 0) {
+      parts.push(
+        `${n} saved ${n === 1 ? 'piece does' : 'pieces do'} not fit this tank and ${n === 1 ? 'was' : 'were'} removed.`,
+      );
+    }
+    const m = clean.shrunk;
+    if (m > 0) {
+      parts.push(
+        `${m} ${m === 1 ? 'plant was' : 'plants were'} too tall for the water and ${m === 1 ? 'was' : 'were'} shrunk.`,
+      );
+    }
     this.notice =
-      n === 0
-        ? null
-        : `${n} saved ${n === 1 ? 'piece does' : 'pieces do'} not fit this tank and ${n === 1 ? 'was' : 'were'} removed. Your next change saves the cleaned layout.`;
+      parts.length === 0 ? null : `${parts.join(' ')} Your next change saves the cleaned layout.`;
     const { pieces } = splitLayout(clean.layout, this.specs);
     return this.show(numberPieces(pieces));
   }

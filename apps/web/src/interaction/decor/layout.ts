@@ -20,6 +20,7 @@ export function hasVacationFeeder(layout: readonly DecorItem[]): boolean {
 export interface Sanitized {
   readonly layout: DecorItem[];
   readonly dropped: number;
+  readonly shrunk: number;
 }
 
 export interface PlantFit {
@@ -46,6 +47,7 @@ export function sanitizeLayout(
 ): Sanitized {
   const kept: DecorItem[] = [];
   let feeder = false;
+  let shrunk = 0;
   for (const item of layout) {
     if (item.assetId === VACATION_FEEDER_ASSET_ID) {
       if (feeder) continue;
@@ -55,9 +57,11 @@ export function sanitizeLayout(
     }
     const bounded = withinServerBounds(item);
     const fitted = fit ? fitPlant(bounded, fit) : bounded;
-    if (fitted) kept.push(fitted);
+    if (!fitted) continue;
+    if (fitted.scale < bounded.scale) shrunk += 1;
+    kept.push(fitted);
   }
-  return { layout: kept, dropped: layout.length - kept.length };
+  return { layout: kept, dropped: layout.length - kept.length, shrunk };
 }
 
 /** Items the player can move: the ones with a spec. Anemones and procedural corals stay where the preset put them. */

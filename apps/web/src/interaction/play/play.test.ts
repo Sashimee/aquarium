@@ -5,7 +5,7 @@ import type { Vec3 } from '../camera';
 import type { InteractionEvents } from '../events';
 import type { ReachBridge } from '../food/clipReach';
 import { FoodLink } from '../food/link';
-import { FoodField } from '../food/particles';
+import { FoodField, MAX_FOOD_PARTICLES } from '../food/particles';
 import { sceneToSim } from '../food/simSpace';
 import { BubbleField } from './bubbles';
 import { PlayController, type Ray } from './controller';
@@ -117,7 +117,11 @@ function downRay(x = 0.1, z = 0.05): Ray {
   return { origin: { x, y: 1, z }, dir: { x: 0, y: -1, z: 0 } };
 }
 
-function makeController(ray: Ray | null = frontRay(), reach?: ReachBridge) {
+function makeController(
+  ray: Ray | null = frontRay(),
+  reach?: ReachBridge,
+  report?: (message: string, cause: unknown) => void,
+) {
   const events = new EventBus<InteractionEvents>();
   const food = new FoodField(
     {
@@ -152,6 +156,7 @@ function makeController(ray: Ray | null = frontRay(), reach?: ReachBridge) {
     pickFish,
     toSim: sceneToSim,
     reach,
+    report,
     lure,
     setLaserDot,
     now: () => now,
@@ -306,6 +311,23 @@ describe('PlayController feeding', () => {
     expect(t.seen.dropped).not.toHaveBeenCalled();
   });
 
+  it('reports only the portion that fit when the tank is nearly full', () => {
+    const t = makeController();
+    t.food.drop('brine-shrimp', (MAX_FOOD_PARTICLES - 10) / 50, 0, 0);
+    t.events.emit('feed:request', { food: 'pellets', portion: 1 });
+    expect(t.seen.dropped).toHaveBeenCalledWith({ food: 'pellets', portion: 0.5, particles: 10 });
+  });
+
+  it('gives the feed slot back when the tank is full, so a retry is not rate limited', () => {
+    const t = makeController();
+    t.food.drop('brine-shrimp', MAX_FOOD_PARTICLES / 50, 0, 0);
+    t.events.emit('feed:request', { food: 'flakes', portion: 1 });
+    t.food.remove(t.food.particles.map((p) => p.id));
+    t.events.emit('feed:request', { food: 'flakes', portion: 1 });
+    expect(t.seen.rejected).toHaveBeenCalledTimes(1);
+    expect(t.seen.dropped).toHaveBeenCalledTimes(1);
+  });
+
   it('steps the food each frame', () => {
     const t = makeController();
     t.events.emit('feed:request', { food: 'pellets', portion: 1 });
@@ -381,6 +403,56 @@ describe('PlayController nori clip placement', () => {
     );
     expect(t.food.particles).toHaveLength(0);
     expect(t.seen.dropped).not.toHaveBeenCalled();
+  });
+
+  it('reports only the portion of the clips that were kept', async () => {
+    let asked = 0;
+    const t = makeController(downRay(), {
+      noriGrazers: () => ['yellow-tang'],
+      canGrazeAt: () => Promise.resolve(asked++ === 0),
+    });
+    t.events.emit('feed:request', { food: 'nori', portion: 1 });
+    await vi.waitFor(() => expect(t.seen.dropped).toHaveBeenCalledTimes(1));
+    expect(t.seen.dropped).toHaveBeenCalledWith({ food: 'nori', portion: 0.5, particles: 1 });
+    expect(t.food.particles).toHaveLength(1);
+  });
+
+  it('gives the feed slot back when every clip is refused', async () => {
+    const t = makeController(downRay(), {
+      noriGrazers: () => ['yellow-tang'],
+      canGrazeAt: () => Promise.resolve(false),
+    });
+    t.events.emit('feed:request', { food: 'nori', portion: 1 });
+    await vi.waitFor(() => expect(t.seen.rejected).toHaveBeenCalledTimes(1));
+    t.events.emit('feed:request', { food: 'nori', portion: 1 });
+    await vi.waitFor(() => expect(t.seen.rejected).toHaveBeenCalledTimes(2));
+    expect(t.seen.rejected).not.toHaveBeenCalledWith(
+      expect.objectContaining({ reason: 'rate-limited' }),
+    );
+  });
+
+  it('reports an unexpected sim error and keeps the clip', async () => {
+    const report = vi.fn();
+    const bridge = {
+      noriGrazers: () => ['no-such-fish'],
+      canGrazeAt: () => Promise.reject(new Error('canGrazeAt: unknown species "no-such-fish"')),
+    };
+    const t = makeController(downRay(), bridge, report);
+    clipTo(t);
+    await vi.waitFor(() => expect(t.seen.dropped).toHaveBeenCalledTimes(1));
+    expect(report).toHaveBeenCalledWith(expect.any(String), expect.any(Error));
+  });
+
+  it('does not report the sim being unavailable', async () => {
+    const report = vi.fn();
+    const bridge = {
+      noriGrazers: () => ['yellow-tang'],
+      canGrazeAt: () => Promise.reject(new Error('sim: client disposed')),
+    };
+    const t = makeController(downRay(), bridge, report);
+    clipTo(t);
+    await vi.waitFor(() => expect(t.seen.dropped).toHaveBeenCalledTimes(1));
+    expect(report).not.toHaveBeenCalled();
   });
 
   it('allows the clip when the sim cannot answer', async () => {

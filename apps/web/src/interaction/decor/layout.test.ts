@@ -42,7 +42,7 @@ describe('sanitizeLayout', () => {
 
   it('leaves a clean layout untouched', () => {
     const layout = [item('boulder-01', 0, 0), item(VACATION_FEEDER_ASSET_ID, 0.3, 0.1)];
-    expect(sanitizeLayout(layout, 'reef')).toEqual({ layout, dropped: 0 });
+    expect(sanitizeLayout(layout, 'reef')).toEqual({ layout, dropped: 0, shrunk: 0 });
   });
 
   describe('plants taller than the water', () => {
@@ -53,6 +53,7 @@ describe('sanitizeLayout', () => {
     it('shrinks a plant that would poke through the surface', () => {
       const out = sanitizeLayout([tall(0.1, 1)], 'freshwater', fit);
       expect(out.dropped).toBe(0);
+      expect(out.shrunk).toBe(1);
       const shrunk = out.layout[0];
       expect(shrunk?.scale).toBeLessThan(1);
       expect(
@@ -64,11 +65,16 @@ describe('sanitizeLayout', () => {
       const out = sanitizeLayout([tall(0.285, 1)], 'freshwater', fit);
       expect(out.layout).toEqual([]);
       expect(out.dropped).toBe(1);
+      expect(out.shrunk).toBe(0);
     });
 
     it('leaves a plant that fits, and every plant when the water level is unknown', () => {
       const fine = tall(0.06, 0.5);
-      expect(sanitizeLayout([fine], 'freshwater', fit).layout).toEqual([fine]);
+      expect(sanitizeLayout([fine], 'freshwater', fit)).toEqual({
+        layout: [fine],
+        dropped: 0,
+        shrunk: 0,
+      });
       const poking = tall(0.2, 3);
       expect(sanitizeLayout([poking], 'freshwater').layout).toEqual([poking]);
     });
