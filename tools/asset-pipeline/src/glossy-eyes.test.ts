@@ -43,6 +43,38 @@ function ellipsoid(): Part {
   };
 }
 
+function zs(part: Part): number[] {
+  return Array.from({ length: part.positions.length / 3 }, (_, i) => part.positions[i * 3 + 2]!);
+}
+
+function subPart(source: Part, keepsTriangle: (centroidZ: number) => boolean): Part {
+  const remap = new Map<number, number>();
+  const kept: number[] = [];
+  const indices: number[] = [];
+  for (let t = 0; t < source.indices.length; t += 3) {
+    const ids = [source.indices[t]!, source.indices[t + 1]!, source.indices[t + 2]!];
+    const z = ids.reduce((sum, i) => sum + source.positions[i * 3 + 2]!, 0) / 3;
+    if (!keepsTriangle(z)) continue;
+    for (const i of ids) {
+      if (!remap.has(i)) {
+        remap.set(i, kept.length);
+        kept.push(i);
+      }
+      indices.push(remap.get(i)!);
+    }
+  }
+  return {
+    positions: Float32Array.from(
+      kept.flatMap((i) => [0, 1, 2].map((k) => source.positions[i * 3 + k]!)),
+    ),
+    normals: new Float32Array(kept.length * 3),
+    uvs: new Float32Array(kept.length * 2),
+    indices: Uint32Array.from(indices),
+    material: 'skin',
+    extra: {},
+  };
+}
+
 const spec = { sideways: 0.1, behindSnout: 0.25, radius: 0.04, lift: -0.5, flatten: 0.12 };
 
 describe('eyeSpheres', () => {
@@ -193,5 +225,50 @@ describe('flattenEyeBeads', () => {
       expect(bumpy.uvs[i * 2]).toBeCloseTo(0.1, 5);
       expect(bumpy.uvs[i * 2 + 1]).toBeCloseTo(0.1, 5);
     }
+  });
+
+  it('leaves texels and positions alone when no vertex falls inside the patch', () => {
+    const body = ellipsoid();
+    body.uvs.fill(0.3);
+    body.uvs[0] = 0.9;
+    const uvs = Float32Array.from(body.uvs);
+    const positions = Float32Array.from(body.positions);
+    flattenEyeBeads([body], { ...spec, flatten: 1e-6 });
+    expect(body.uvs).toEqual(uvs);
+    expect(body.positions).toEqual(positions);
+  });
+
+  it('fails loudly when the patch covers every vertex and stray texels have nowhere to go', () => {
+    const body = ellipsoid();
+    for (let i = 0; i < body.positions.length / 3; i++) {
+      body.uvs[i * 2] = (body.positions[i * 3]! + 1) / 2;
+      body.uvs[i * 2 + 1] = (body.positions[i * 3 + 2]! + 1) / 2;
+    }
+    expect(() => flattenEyeBeads([body], { ...spec, flatten: 10 })).toThrow(
+      /part "skin" has no skin outside the patch around the left eye/,
+    );
+  });
+
+  it('measures the patch from the whole body, not from each part', () => {
+    const whole = withBead();
+    const head = subPart(whole, (z) => z > 0.3);
+    const rest = subPart(whole, (z) => z <= 0.3);
+    const before = Float32Array.from(head.positions);
+    const { centre } = eyeSpheres(whole, spec)[1]!;
+    flattenEyeBeads([head, rest], spec);
+    const reach = spec.flatten * 2 * HALF_LENGTH;
+    const partReach = spec.flatten * (Math.max(...zs(head)) - Math.min(...zs(head)));
+    const between = Array.from({ length: head.positions.length / 3 }, (_, i) => i).filter((i) => {
+      const d = Math.hypot(
+        before[i * 3]! - centre[0],
+        before[i * 3 + 1]! - centre[1],
+        before[i * 3 + 2]! - centre[2],
+      );
+      return d > partReach * 1.3 && d < reach * 0.6;
+    });
+    expect(between.length).toBeGreaterThan(0);
+    expect(
+      between.some((i) => Math.abs(head.positions[i * 3 + 1]! - before[i * 3 + 1]!) > 1e-4),
+    ).toBe(true);
   });
 });

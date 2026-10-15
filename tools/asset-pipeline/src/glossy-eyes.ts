@@ -44,17 +44,18 @@ function medianX(positions: Float32Array): number {
  * bead is a fused part of the mesh, so it cannot be cut out; this leaves the eye sphere alone to make the eye.
  */
 export function flattenEyeBeads(parts: Part[], spec: GlossyEyeSpec): void {
-  const spheres = eyeSpheres(mergeParts(parts, parts[0]!.material), spec);
+  const body = mergeParts(parts, parts[0]!.material);
+  const spheres = eyeSpheres(body, spec);
+  let zMin = Infinity;
+  let zMax = -Infinity;
+  for (let i = 2; i < body.positions.length; i += 3) {
+    zMin = Math.min(zMin, body.positions[i]!);
+    zMax = Math.max(zMax, body.positions[i]!);
+  }
+  const reach = spec.flatten * (zMax - zMin);
   for (const part of parts) {
     const welded = weldByPosition(part);
     const { positions, neighbours } = welded;
-    let zMin = Infinity;
-    let zMax = -Infinity;
-    for (let i = 2; i < part.positions.length; i += 3) {
-      zMin = Math.min(zMin, part.positions[i]!);
-      zMax = Math.max(zMax, part.positions[i]!);
-    }
-    const reach = spec.flatten * (zMax - zMin);
     const free = new Uint8Array(neighbours.length);
     for (const s of spheres) {
       const anchor = [s.centre[0], s.centre[1] - spec.lift * s.radius, s.centre[2]];
@@ -124,8 +125,13 @@ function snapStrayUvs(
     const strays = copies.filter(
       (i) => Math.abs(part.uvs[i * 2]! - mu) + Math.abs(part.uvs[i * 2 + 1]! - mv) > STRAY_UV,
     );
+    if (strays.length === 0) return;
     const skin: number[] = [];
     for (let i = 0; i < canon.length; i++) if (!free[canon[i]!]) skin.push(i);
+    if (skin.length === 0)
+      throw new Error(
+        `snapStrayUvs: part "${part.material}" has no skin outside the patch around the ${k === 0 ? 'left' : 'right'} eye to take texels from; lower the recipe's glossyEyes.flatten`,
+      );
     for (const i of strays) {
       let best = skin[0]!;
       let bestDistance = Infinity;
