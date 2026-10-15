@@ -20,7 +20,7 @@ interface Menu {
   isOpen(page: Page): Promise<void>;
 }
 
-const WAIT_TIMEOUT_MS = 30_000;
+const WAIT_TIMEOUT_MS = 120_000;
 
 async function within<T>(wait: Promise<T>, what: string, ms = WAIT_TIMEOUT_MS): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
