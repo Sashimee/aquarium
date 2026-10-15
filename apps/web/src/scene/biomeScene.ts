@@ -67,6 +67,8 @@ export interface BiomeSource {
   onChange(listener: (biome: Biome) => void): () => void;
 }
 
+const ABANDONED_WAIT_MS = 5_000;
+
 export interface DisposableScene {
   dispose(): Promise<void>;
 }
@@ -135,7 +137,22 @@ export class BiomeScene<S extends DisposableScene> {
     this.building?.controller.abort(new DOMException('The scene was disposed', 'AbortError'));
     await this.unmount();
     await this.settled();
-    while (this.abandoned.size > 0) await Promise.all([...this.abandoned]);
+    if (this.abandoned.size === 0) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const gaveUp = new Promise<boolean>((resolve) => {
+      timer = setTimeout(() => resolve(true), ABANDONED_WAIT_MS);
+    });
+    const drained = (async () => {
+      while (this.abandoned.size > 0) await Promise.all([...this.abandoned]);
+      return false;
+    })();
+    const timedOut = await Promise.race([drained, gaveUp]);
+    clearTimeout(timer);
+    if (timedOut) {
+      this.options.onError(
+        `An abandoned preset build did not stop within ${ABANDONED_WAIT_MS / 1000} s; it is released when it lands`,
+      );
+    }
   }
 
   private abandonUnwanted(): void {

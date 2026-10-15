@@ -365,6 +365,20 @@ describe('BiomeScene', () => {
     expect(h.root.children).toHaveLength(0);
   });
 
+  it('stops waiting for an abandoned build that never settles', async () => {
+    vi.useFakeTimers();
+    const h = harness('freshwater', { gate: true });
+    await vi.waitFor(() => expect(h.gates).toHaveLength(1));
+    const disposing = h.scenes.dispose();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await disposing;
+    expect(h.errors).toEqual([
+      'An abandoned preset build did not stop within 5 s; it is released when it lands',
+    ]);
+    h.gates[0]?.release();
+    await vi.waitFor(() => expect(h.built.map((s) => s.disposed)).toEqual([true]));
+  });
+
   it('reports a throwing mount hook instead of rejecting unobserved', async () => {
     const interaction = new EventBus<InteractionEvents>();
     const errors: string[] = [];
