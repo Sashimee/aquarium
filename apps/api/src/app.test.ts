@@ -90,6 +90,12 @@ describe('security headers', () => {
     expect(res.headers['x-content-type-options']).toBe('nosniff');
   });
 
+  it('does not grant eval when the worker file is not served', async () => {
+    const res = await noDist().inject('/ktx2-worker.js');
+    expect(res.statusCode).toBe(404);
+    expect(String(res.headers['content-security-policy'])).not.toMatch(/'unsafe-eval'/);
+  });
+
   describe('on every kind of response', () => {
     const expectSecured = (headers: Record<string, unknown>): void => {
       expect(headers['content-security-policy']).toContain("default-src 'self'");
