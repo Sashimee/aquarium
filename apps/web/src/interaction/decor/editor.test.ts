@@ -209,7 +209,7 @@ describe('rotate and nudge', () => {
 
 describe('adding by biome', () => {
   it('refuses a reef-only piece in a freshwater tank and accepts it in a reef tank', () => {
-    expect(editor([], 'freshwater').add('reef-arch')).toEqual({ rejection: 'unknown-asset' });
+    expect(editor([], 'freshwater').add('reef-arch')).toEqual({ rejection: 'wrong-biome' });
     expect(editor([], 'reef').add('reef-arch')).toHaveProperty('id');
   });
 

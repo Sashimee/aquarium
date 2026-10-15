@@ -24,7 +24,13 @@ const GAP = 0.005;
 const SPIRAL_STEP = 0.04;
 
 export type Rejection =
-  'outside' | 'overlap' | 'full' | 'feeder-exists' | 'unknown-asset' | 'no-room';
+  | 'outside'
+  | 'overlap'
+  | 'full'
+  | 'feeder-exists'
+  | 'unknown-asset'
+  | 'wrong-biome'
+  | 'no-room';
 
 const MESSAGES: Record<Rejection, string> = {
   outside: 'That would push it through the glass.',
@@ -32,6 +38,7 @@ const MESSAGES: Record<Rejection, string> = {
   full: `The tank holds at most ${MAX_PIECES} pieces.`,
   'feeder-exists': 'One vacation feeder is enough.',
   'unknown-asset': 'That piece is not available in this tank.',
+  'wrong-biome': 'That piece belongs in a different kind of tank.',
   'no-room': 'There is no clear space left for another piece.',
 };
 
@@ -119,7 +126,7 @@ export function admit(
 ): Rejection | null {
   if (!spec) return 'unknown-asset';
   if (spec.assetId !== VACATION_FEEDER_ASSET_ID && !isDecorAssetForBiome(biome, spec.assetId)) {
-    return 'unknown-asset';
+    return 'wrong-biome';
   }
   if (existing.length >= MAX_PIECES) return 'full';
   if (
