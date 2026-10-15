@@ -30,24 +30,43 @@ async function settleAnimations(page: Page): Promise<void> {
   );
 }
 
+// Lazy panel bodies grow a sheet after it opens, which moves its buttons without an animation. A
+// stalled frame can outlast the poll's timeout, so the frames are awaited here, outside it.
+async function holdStill(target: Locator): Promise<void> {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const moved = await target.evaluate(async (element) => {
+      const earlier = element.getBoundingClientRect();
+      await new Promise((done) => requestAnimationFrame(done));
+      await new Promise((done) => requestAnimationFrame(done));
+      const later = element.getBoundingClientRect();
+      return (
+        Math.abs(later.x - earlier.x) > 0.5 ||
+        Math.abs(later.y - earlier.y) > 0.5 ||
+        Math.abs(later.width - earlier.width) > 0.5 ||
+        Math.abs(later.height - earlier.height) > 0.5
+      );
+    });
+    if (!moved) return;
+  }
+}
+
 // Locator.tap/click wait two animation frames per action, which costs seconds each under software
 // rendering. This checks the same thing that matters here, that nothing covers the target, and
 // then sends one real touch or mouse press at its centre.
 async function press(target: Locator): Promise<void> {
   // The HUD re-measures a frame after a panel opens or closes, a sheet springs in over several
   // frames, and lazy panel bodies grow it after it opens, so a target can briefly be moving or
-  // covered. Its box must hold still across two frames; one that still moves or is covered after
-  // that is a real bug. Settling waits outside the poll because one stalled frame can outlast its timeout.
+  // covered. Its box must hold still across two frames; one that still is moving or covered after
+  // that is a real bug. Settling waits outside the poll because one stalled frame can outlast its
+  // timeout.
   let point: Point = [0, 0];
   await settleAnimations(target.page());
+  await holdStill(target);
   await expect
     .poll(
       async () => {
-        const probe = await target.evaluate(async (element) => {
-          const earlier = element.getBoundingClientRect();
-          await new Promise((done) => requestAnimationFrame(done));
-          await new Promise((done) => requestAnimationFrame(done));
-          const animating = document
+        const probe = await target.evaluate((element) => {
+          const moving = document
             .getAnimations()
             .some(
               (animation) =>
@@ -57,12 +76,6 @@ async function press(target: Locator): Promise<void> {
                 animation.effect.target?.contains(element),
             );
           const box = element.getBoundingClientRect();
-          const moving =
-            animating ||
-            Math.abs(box.x - earlier.x) > 0.5 ||
-            Math.abs(box.y - earlier.y) > 0.5 ||
-            Math.abs(box.width - earlier.width) > 0.5 ||
-            Math.abs(box.height - earlier.height) > 0.5;
           const px = box.x + box.width / 2;
           const py = box.y + box.height / 2;
           const top = document.elementFromPoint(px, py);
@@ -70,7 +83,7 @@ async function press(target: Locator): Promise<void> {
             box.width === 0 || box.height === 0
               ? 'is not rendered'
               : moving
-                ? 'is still moving'
+                ? 'is still animating'
                 : top !== null && element.contains(top)
                   ? null
                   : top
