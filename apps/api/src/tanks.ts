@@ -108,10 +108,12 @@ function toLifecycleFish(row: FishRow): LifecycleFish {
   };
 }
 
+function storedLayout(row: TankRow) {
+  return row.decorLayout === null ? [] : decorLayoutSchema.parse(row.decorLayout);
+}
+
 function hasVacationFeeder(row: TankRow): boolean {
-  return decorLayoutSchema
-    .parse(row.decorLayout)
-    .some((item) => item.assetId === VACATION_FEEDER_ASSET_ID);
+  return storedLayout(row).some((item) => item.assetId === VACATION_FEEDER_ASSET_ID);
 }
 
 interface Ticked {
@@ -248,9 +250,11 @@ async function render(tx: Tx, ticked: Ticked, fishRows = ticked.fishRows): Promi
     id: tank.id,
     name: tank.name,
     biome: tank.biome,
-    decorLayout: decorLayoutSchema
-      .parse(tank.decorLayout)
-      .map((item) => ({ ...item, tintSeed: item.tintSeed ?? legacyTintSeed(item) })),
+    decorLayout: storedLayout(tank).map((item) => ({
+      ...item,
+      tintSeed: item.tintSeed ?? legacyTintSeed(item),
+    })),
+    decorEdited: tank.decorLayout !== null,
     water: tank.water,
     lastTickAt: tank.lastTickAt.toISOString(),
     fish: fishRows

@@ -37,15 +37,6 @@ const TINTS: Readonly<Record<string, readonly Rgb[]>> = {
 /** Fraction of the scan's height kept, so the tall brain-coral core reads as a low dome. */
 const HEIGHT_SCALE: Readonly<Record<string, number>> = { 'brain-coral': 0.55 };
 
-/** Stable across layout edits: the same placement always gets the same colour. */
-export function placementKey(position: readonly number[], rotationY: number): number {
-  let h = 2166136261;
-  for (const v of [...position, rotationY]) {
-    h = Math.imul(h ^ Math.round(v * 1000), 16777619) >>> 0;
-  }
-  return h;
-}
-
 export function coralTint(assetId: string, key: number): Color | null {
   const palette = TINTS[assetId];
   const rgb = palette?.[key % palette.length];

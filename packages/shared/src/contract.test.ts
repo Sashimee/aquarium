@@ -172,6 +172,8 @@ describe('tank and fish', () => {
     };
     const parsed = tankSchema.parse(tank);
     expect(parsed.decorLayout[0]?.scale).toBe(1);
+    expect(tankSchema.parse({ ...tank, decorEdited: true }).decorEdited).toBe(true);
+    expect(tankSchema.parse(tank).decorEdited).toBeUndefined();
     expect(tankSchema.safeParse({ ...tank, biome: 'pond' }).success).toBe(false);
     expect(tankSchema.safeParse({ ...tank, water: { ...tank.water, algae: 2 } }).success).toBe(
       false,

@@ -457,6 +457,7 @@ export class Engine {
       this.cleanup.add(() => this.effects.dispose());
       // Right behind the effects' own feature, so the features registered later (the fish
       // materials) already see the new tier's temporal resolve and are rebuilt once, not twice.
+      // The fish register theirs only once `Engine.create` resolves, which awaits this load.
       this.cleanup.add(this.quality.register('effects-temporal', () => this.effects.refresh()));
     } catch (cause) {
       this.reportError('Render effects failed to load; continuing without them', cause);
