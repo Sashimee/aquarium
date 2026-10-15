@@ -36,6 +36,7 @@ export {
   CARCASS,
   carcassFate,
   carcassSettleS,
+  CarcassSupport,
   sinkingCarcass,
   sinkSpeed,
   type CarcassFate,
