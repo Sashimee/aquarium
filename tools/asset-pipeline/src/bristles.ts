@@ -92,7 +92,7 @@ export function relax(
   return current;
 }
 
-function recomputeNormals(part: Part, welded: Welded, touched: Set<number>): void {
+export function recomputeNormals(part: Part, welded: Welded, touched: Set<number>): void {
   const accum = new Map<number, [number, number, number]>();
   const { positions, triangles } = welded;
   for (let t = 0; t < triangles.length; t += 3) {

@@ -1,4 +1,6 @@
+import { recomputeNormals, relax, weldByPosition } from './bristles.ts';
 import { mergeParts, type MaterialDef, type Part } from './parts.ts';
+import type { Rgba } from './textures.ts';
 
 export interface GlossyEyeSpec {
   /** Distance of each eye from the midline, as a fraction of the body length. */
@@ -9,19 +11,78 @@ export interface GlossyEyeSpec {
   radius: number;
   /** How far the eye centre sits above the skin it rests on, as a fraction of the radius. */
   lift: number;
+  /** Radius, as a fraction of the body length, of the patch around each eye that is smoothed flat so the source bead leaves no trace. */
+  flatten: number;
 }
 
 export interface EyeSphere {
   centre: [number, number, number];
   radius: number;
+  /** Direction the iris faces, away from the head. */
+  axis?: [number, number, number];
 }
 
 type V3 = [number, number, number];
+
+function unit(a: V3): V3 {
+  const length = Math.hypot(a[0], a[1], a[2]);
+  return [a[0] / length, a[1] / length, a[2] / length];
+}
+
+function cross(a: V3, b: V3): V3 {
+  return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+}
 
 function medianX(positions: Float32Array): number {
   const xs = Array.from({ length: positions.length / 3 }, (_, i) => positions[i * 3]!);
   xs.sort((a, b) => a - b);
   return xs[Math.floor(xs.length / 2)]!;
+}
+
+/**
+ * Smooths the patch of skin around each eye bead flat, in place, by harmonic fill from the skin around it. The
+ * bead is a fused part of the mesh, so it cannot be cut out; this leaves the eye sphere alone to make the eye.
+ */
+export function flattenEyeBeads(parts: Part[], spec: GlossyEyeSpec): void {
+  const spheres = eyeSpheres(mergeParts(parts, parts[0]!.material), spec);
+  for (const part of parts) {
+    const welded = weldByPosition(part);
+    const { positions, neighbours } = welded;
+    let zMin = Infinity;
+    let zMax = -Infinity;
+    for (let i = 2; i < part.positions.length; i += 3) {
+      zMin = Math.min(zMin, part.positions[i]!);
+      zMax = Math.max(zMax, part.positions[i]!);
+    }
+    const reach = spec.flatten * (zMax - zMin);
+    const free = new Uint8Array(neighbours.length);
+    for (const s of spheres) {
+      const anchor = [s.centre[0], s.centre[1] - spec.lift * s.radius, s.centre[2]];
+      for (let v = 0; v < neighbours.length; v++)
+        if (
+          Math.hypot(
+            positions[v * 3]! - anchor[0]!,
+            positions[v * 3 + 1]! - anchor[1]!,
+            positions[v * 3 + 2]! - anchor[2]!,
+          ) < reach
+        )
+          free[v] = 1;
+    }
+    const filled = relax(positions, neighbours, (v) => free[v] === 1, 400);
+    const touched = new Set<number>();
+    for (let v = 0; v < neighbours.length; v++) {
+      if (!free[v]) continue;
+      touched.add(v);
+      for (const n of neighbours[v]!) touched.add(n);
+      for (let a = 0; a < 3; a++) positions[v * 3 + a] = filled[v * 3 + a]!;
+    }
+    for (let i = 0; i < welded.canon.length; i++) {
+      const v = welded.canon[i]!;
+      if (!free[v]) continue;
+      for (let a = 0; a < 3; a++) part.positions[i * 3 + a] = positions[v * 3 + a]!;
+    }
+    recomputeNormals(part, welded, touched);
+  }
 }
 
 /**
@@ -51,7 +112,11 @@ export function eyeSpheres(body: Part, spec: GlossyEyeSpec): EyeSphere[] {
       throw new Error(
         `eyeSpheres: no skin within ${radius.toFixed(3)} of the eye at the ${side < 0 ? 'left' : 'right'}; check sideways and behindSnout`,
       );
-    return { centre: [x, skin + spec.lift * radius, z], radius };
+    return {
+      centre: [x, skin + spec.lift * radius, z],
+      radius,
+      axis: unit([side * 0.55, 0.8, 0.2]),
+    };
   });
 }
 
@@ -66,15 +131,22 @@ export function sphereMesh(
   const normals: number[] = [];
   const uvs: number[] = [];
   const indices: number[] = [];
+  const axis = sphere.axis ?? [0, 1, 0];
+  const helper: V3 = Math.abs(axis[1]) > 0.9 ? [1, 0, 0] : [0, 1, 0];
+  const across = unit(cross(helper, axis));
+  const around = cross(across, axis);
   for (let r = 0; r <= rings; r++) {
     const phi = (r / rings) * Math.PI;
     for (let s = 0; s <= segments; s++) {
       const theta = (s / segments) * Math.PI * 2;
-      const n: V3 = [
+      const local: V3 = [
         Math.sin(phi) * Math.cos(theta),
         Math.cos(phi),
         Math.sin(phi) * Math.sin(theta),
       ];
+      const n: V3 = [0, 1, 2].map(
+        (k) => local[0] * across[k]! + local[1] * axis[k]! + local[2] * around[k]!,
+      ) as V3;
       positions.push(
         sphere.centre[0] + n[0] * sphere.radius,
         sphere.centre[1] + n[1] * sphere.radius,
@@ -101,10 +173,33 @@ export function sphereMesh(
   };
 }
 
+const EYE_TEXTURE_SIZE = 128;
+
+/** Polar iris texture, pole at v = 0: a black pupil, a dark grey-brown iris, a faint bronze ring, dark surround. */
+function eyeImage(): Rgba {
+  const data = new Uint8Array(EYE_TEXTURE_SIZE * EYE_TEXTURE_SIZE * 4);
+  for (let y = 0; y < EYE_TEXTURE_SIZE; y++) {
+    const v = (y + 0.5) / EYE_TEXTURE_SIZE;
+    let colour: V3;
+    if (v < 0.1) colour = [6, 5, 5];
+    else if (v < 0.26) {
+      const t = (v - 0.1) / 0.16;
+      colour = [40 + 22 * t, 32 + 17 * t, 25 + 12 * t];
+    } else if (v < 0.33) colour = [92, 72, 40];
+    else colour = [26, 22, 20];
+    for (let x = 0; x < EYE_TEXTURE_SIZE; x++) {
+      const at = (y * EYE_TEXTURE_SIZE + x) * 4;
+      data.set([...colour, 255], at);
+    }
+  }
+  return { width: EYE_TEXTURE_SIZE, height: EYE_TEXTURE_SIZE, data };
+}
+
 export const GLOSSY_EYE_MATERIAL: MaterialDef = {
   name: 'Eye',
-  baseColorFactor: [0.02, 0.02, 0.025, 1],
-  roughness: 0.12,
+  baseColorFactor: [1, 1, 1, 1],
+  baseColor: { role: 'baseColor', codec: 'etc1s', image: eyeImage() },
+  roughness: 0.25,
   metallic: 0,
   alphaMode: 'OPAQUE',
   doubleSided: false,

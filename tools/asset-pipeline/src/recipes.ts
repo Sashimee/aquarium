@@ -113,7 +113,7 @@ export const FISH_RECIPES: FishRecipe[] = [
     lodPlan: { ratios: [0.2, 0.08, 0.03], minTriangles: 150 },
     despike: { headFraction: 0.3, thickness: 0.03, reach: 0.004, rings: 3 },
     bristles: { rim: 5, crown: 2, length: 0.07 },
-    glossyEyes: { sideways: 0.088, behindSnout: 0.168, radius: 0.026, lift: -0.65 },
+    glossyEyes: { sideways: 0.088, behindSnout: 0.168, radius: 0.014, lift: -0.3, flatten: 0.07 },
     roughness: 0.78,
     recolour: {
       tint: {

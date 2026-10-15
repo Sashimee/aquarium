@@ -2,7 +2,12 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { speciesSchema } from '@aquarium/shared';
 import { despikeHead, type DespikeSpec } from './bristles.ts';
-import { GLOSSY_EYE_MATERIAL, glossyEyeParts, type GlossyEyeSpec } from './glossy-eyes.ts';
+import {
+  flattenEyeBeads,
+  GLOSSY_EYE_MATERIAL,
+  glossyEyeParts,
+  type GlossyEyeSpec,
+} from './glossy-eyes.ts';
 import { BRISTLE_DETAIL, growBristles, pickSkinUv, type BristleSpec } from './tentacles.ts';
 import { buildDocument, emitAsset, type LodPlan } from './emit.ts';
 import { seatEyes, type EyePlacement } from './eyes.ts';
@@ -274,6 +279,7 @@ export async function buildSourceFish(recipe: FishRecipe, ctx: FishContext): Pro
     const moved = parts.reduce((sum, part) => sum + despikeHead(part, recipe.despike!), 0);
     console.log(`${recipe.id}: despiked ${moved} head vertices`);
   }
+  if (recipe.glossyEyes) flattenEyeBeads(parts, recipe.glossyEyes);
   const eyeParts = recipe.eyes ? await bakeEyes(recipe, recipe.eyes.meshes, names) : [];
   if (recipe.eyes) {
     const eyes = mergeParts(eyeParts, eyeParts[0]!.material);
