@@ -18,7 +18,7 @@ export interface SessionDeps {
   interaction: EventBus<InteractionEvents>;
   now?: () => number;
   sleep?: Sleep;
-  storage?: Pick<Storage, 'getItem' | 'setItem'>;
+  storage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
   ateOptions?: Omit<AteUploaderOptions, 'send' | 'onDropped'>;
   /** Visible-again refreshes only run after this long, matching the server's 10 minute step. */
   refreshAfterMs?: number;
@@ -294,6 +294,7 @@ export class TankSession {
     this.unloadScene('reset')?.dispose();
     this.layoutSaver.reset();
     this.shownLayout.clear();
+    this.deps.storage?.removeItem(ACTIVE_KEY);
     this.deps.interaction.emit('tank:none', {});
     for (const timer of this.releaseTimers.values()) clearTimeout(timer);
     this.releaseTimers.clear();

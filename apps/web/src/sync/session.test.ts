@@ -41,7 +41,7 @@ function apiMocks() {
 
 function setup(
   initial: Tank[] = [tankFixture({ fish: [fishFixture(FISH_1)] })],
-  storage?: Pick<Storage, 'getItem' | 'setItem'>,
+  storage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>,
 ) {
   const api = apiMocks();
   api.species.mockResolvedValue([speciesFixture()]);
@@ -58,7 +58,7 @@ function setup(
   return { api, rec, session };
 }
 
-const setupWithStorage = (storage: Pick<Storage, 'getItem' | 'setItem'>) =>
+const setupWithStorage = (storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>) =>
   setup(undefined, storage);
 
 const verified = { emailVerified: true };
@@ -474,6 +474,18 @@ describe('sign-out safety', () => {
     expect(session.getState().error).toBeNull();
   });
 
+  it('removes the remembered active tank at sign-out', async () => {
+    const storage = {
+      getItem: vi.fn().mockReturnValue(null),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+    };
+    const { session } = setupWithStorage(storage);
+    await session.setUser(verified);
+    await session.setUser(null);
+    expect(storage.removeItem).toHaveBeenCalledWith('aquarium.activeTank');
+  });
+
   it('does not leave the dropped-reports notice behind when signing out mid-switch', async () => {
     const hang = new Promise<never>(() => undefined);
     const api = {
@@ -607,7 +619,11 @@ describe('tank switcher and naming', () => {
   });
 
   it('does not resurrect a tank created just before the user signed out', async () => {
-    const storage = { getItem: vi.fn().mockReturnValue(null), setItem: vi.fn() };
+    const storage = {
+      getItem: vi.fn().mockReturnValue(null),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+    };
     const { api, rec, session } = setupWithStorage(storage);
     await session.setUser(verified);
     let finishCreate: (tank: Tank) => void = () => undefined;
