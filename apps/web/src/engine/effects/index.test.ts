@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   ACESFilmicToneMapping,
   AgXToneMapping,
@@ -26,7 +26,7 @@ import type { Tier } from '../quality/tiers';
 import { Caustics } from '../water/caustics';
 import { WaterMedium } from '../water/medium';
 import { Effects, type Post, type PostFactory } from './index';
-import type { PostSettings } from './post';
+import { PostNodeLoader, postNodesFor, type PostNodes, type PostSettings } from './post';
 import type { RenderStateTarget } from './renderState';
 
 class FakeRenderer implements RenderStateTarget {
@@ -157,11 +157,18 @@ function setup(pinned: Tier) {
   });
   const built: FakePost[] = [];
   let failing: Error | null = null;
-  const createPost: PostFactory = (_scene, _camera, _shafts, settings) => {
-    if (failing !== null) throw failing;
-    const post = new FakePost(settings, renderer);
-    built.push(post);
-    return post;
+  let loaded = true;
+  const loads: { settings: PostSettings; resolve: () => void; reject: (e: Error) => void }[] = [];
+  const createPost: PostFactory = {
+    ready: () => loaded,
+    load: (settings) =>
+      new Promise<void>((resolve, reject) => loads.push({ settings, resolve, reject })),
+    create: (_scene, _camera, _shafts, settings) => {
+      if (failing !== null) throw failing;
+      const post = new FakePost(settings, renderer);
+      built.push(post);
+      return post;
+    },
   };
   const host = {
     renderer,
@@ -182,6 +189,17 @@ function setup(pinned: Tier) {
     createPost,
     failWith(error: Error | null) {
       failing = error;
+    },
+    /** Post nodes arrive only when a test settles `loads`. */
+    loadLazily() {
+      loaded = false;
+    },
+    loads,
+    async arrive(index: number) {
+      loaded = true;
+      loads[index]?.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
     },
   };
 }
@@ -335,5 +353,132 @@ describe('Effects', () => {
     expect(built[0]?.disposed).toBe(1);
     expect(scene.children).toEqual([]);
     expect(quality.featureNames()).toEqual([]);
+  });
+
+  it('draws plainly until the nodes of the tier pipeline arrive, then builds it', async () => {
+    const { host, createPost, built, renderer, loads, loadLazily, arrive } = setup('high');
+    loadLazily();
+    const effects = new Effects(host, createPost);
+    expect(built).toHaveLength(0);
+    expect(loads.map((l) => l.settings.chain)).toEqual(['smaa-bloom']);
+    effects.render();
+    expect(renderer.renders).toBe(1);
+
+    await arrive(0);
+    expect(built.map((p) => p.settings.chain)).toEqual(['smaa-bloom']);
+    effects.render();
+    expect(built[0]?.renders).toBe(1);
+    expect(renderer.renders).toBe(1);
+  });
+
+  it('keeps the current pipeline while the nodes of the next tier load', async () => {
+    const { host, createPost, built, quality, loads, loadLazily, arrive } = setup('high');
+    const effects = new Effects(host, createPost);
+    const smaaBloom = built[0];
+    loadLazily();
+    quality.setTier('ultra', 0);
+    expect(effects.temporal).toBe(false);
+    effects.render();
+    expect(smaaBloom?.renders).toBe(1);
+    expect(smaaBloom?.disposed).toBe(0);
+
+    await arrive(loads.length - 1);
+    expect(smaaBloom?.disposed).toBe(1);
+    expect(built.at(-1)?.settings.chain).toBe('taa-bloom');
+    expect(effects.temporal).toBe(true);
+  });
+
+  it('builds only what is wanted when the nodes arrive, not what was asked first', async () => {
+    const { host, createPost, built, quality, loadLazily, arrive } = setup('low');
+    loadLazily();
+    const effects = new Effects(host, createPost);
+    quality.setTier('ultra', 0);
+    quality.setTier('medium', 0);
+    await arrive(0);
+    await arrive(1);
+    expect(built.map((p) => p.settings.chain)).toEqual(['smaa']);
+    effects.dispose();
+  });
+
+  it('fails the next frame when the nodes cannot load', async () => {
+    const { host, createPost, loads, loadLazily } = setup('high');
+    loadLazily();
+    const effects = new Effects(host, createPost);
+    const offline = new Error('Failed to fetch dynamically imported module');
+    loads[0]?.reject(offline);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(() => effects.render()).toThrow(offline);
+  });
+
+  it('builds nothing once disposed, however late the nodes arrive', async () => {
+    const { host, createPost, built, loadLazily, arrive } = setup('ultra');
+    loadLazily();
+    const effects = new Effects(host, createPost);
+    effects.dispose();
+    await arrive(0);
+    expect(built).toHaveLength(0);
+  });
+});
+
+describe('PostNodeLoader', () => {
+  function fakeImports() {
+    const calls: string[] = [];
+    const node = (name: string) => () => {
+      calls.push(name);
+      return Promise.resolve(vi.fn());
+    };
+    const imports = {
+      bloom: node('bloom'),
+      dof: node('dof'),
+      smaa: node('smaa'),
+      traa: node('traa'),
+    } as unknown as { readonly [K in keyof PostNodes]: () => Promise<PostNodes[K]> };
+    return { calls, imports };
+  }
+
+  it('needs only the nodes in the chain', () => {
+    const plain = { godRays: true, depthOfField: false } as const;
+    expect(postNodesFor({ ...plain, chain: 'none' })).toEqual([]);
+    expect(postNodesFor({ ...plain, chain: 'smaa' })).toEqual(['smaa']);
+    expect(postNodesFor({ ...plain, chain: 'smaa-bloom' })).toEqual(['bloom', 'smaa']);
+    expect(postNodesFor({ chain: 'taa-bloom', godRays: true, depthOfField: true })).toEqual([
+      'bloom',
+      'dof',
+      'traa',
+    ]);
+  });
+
+  it('fetches each node once and is ready when all of a chain are in', async () => {
+    const { calls, imports } = fakeImports();
+    const nodes = new PostNodeLoader(imports);
+    const smaa: PostSettings = { chain: 'smaa', godRays: false, depthOfField: false };
+    const bloom: PostSettings = { chain: 'smaa-bloom', godRays: false, depthOfField: false };
+    expect(nodes.ready(smaa)).toBe(false);
+    expect(() => nodes.get('smaa')).toThrow(/not loaded/);
+
+    await Promise.all([nodes.load(smaa), nodes.load(bloom)]);
+    await nodes.load(bloom);
+    expect(calls).toEqual(['smaa', 'bloom']);
+    expect(nodes.ready(bloom)).toBe(true);
+    expect(nodes.ready({ ...bloom, depthOfField: true })).toBe(false);
+  });
+
+  it('tries a node again after its chunk failed to load', async () => {
+    let attempts = 0;
+    const { imports } = fakeImports();
+    const flaky = {
+      ...imports,
+      smaa: () => {
+        attempts++;
+        return attempts === 1 ? Promise.reject(new Error('offline')) : imports.smaa();
+      },
+    };
+    const nodes = new PostNodeLoader(flaky);
+    const smaa: PostSettings = { chain: 'smaa', godRays: false, depthOfField: false };
+    await expect(nodes.load(smaa)).rejects.toThrow('offline');
+    expect(nodes.ready(smaa)).toBe(false);
+    await nodes.load(smaa);
+    expect(nodes.ready(smaa)).toBe(true);
   });
 });

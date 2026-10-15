@@ -7,7 +7,13 @@ import type { Caustics } from '../water/caustics';
 import type { WaterMedium } from '../water/medium';
 import { createBubbles } from './bubbles';
 import { createParticulates } from './particulates';
-import { needsPost, PostPipeline, postSettingsKey, type PostSettings } from './post';
+import {
+  needsPost,
+  PostNodeLoader,
+  PostPipeline,
+  postSettingsKey,
+  type PostSettings,
+} from './post';
 import { captureRenderState, type RenderStateTarget } from './renderState';
 import { WaterShafts } from './shafts';
 import type { SpriteEffect } from './sprites';
@@ -30,16 +36,26 @@ export interface Post {
   dispose(): void;
 }
 
-export type PostFactory = (
-  scene: Scene,
-  camera: PerspectiveCamera,
-  shafts: WaterShafts,
-  settings: PostSettings,
-) => Post;
+export interface PostFactory {
+  /** Whether `create` can build `settings` now, without waiting for a chunk. */
+  ready(settings: PostSettings): boolean;
+  load(settings: PostSettings): Promise<void>;
+  create(
+    scene: Scene,
+    camera: PerspectiveCamera,
+    shafts: WaterShafts,
+    settings: PostSettings,
+  ): Post;
+}
 
 export function postPipelineFactory(renderer: WebGPURenderer): PostFactory {
-  return (scene, camera, shafts, settings) =>
-    new PostPipeline(renderer, scene, camera, shafts, settings);
+  const nodes = new PostNodeLoader();
+  return {
+    ready: (settings) => nodes.ready(settings),
+    load: (settings) => nodes.load(settings),
+    create: (scene, camera, shafts, settings) =>
+      new PostPipeline(renderer, nodes, scene, camera, shafts, settings),
+  };
 }
 
 /**
@@ -52,8 +68,10 @@ export class Effects {
   private readonly shafts: WaterShafts;
   private post: Post | null = null;
   private postKey = '';
+  private wanted: PostSettings | null = null;
   private settings: Readonly<TierSettings> | null = null;
   private focus = false;
+  private disposed = false;
   /** A tier change that failed; thrown from the next frame so the engine drops the effects. */
   private failure: { cause: unknown } | null = null;
   private readonly unregister: () => void;
@@ -110,6 +128,7 @@ export class Effects {
   }
 
   dispose(): void {
+    this.disposed = true;
     this.unregister();
     this.disposeParts();
   }
@@ -137,15 +156,40 @@ export class Effects {
   }
 
   private configurePost(settings: Readonly<TierSettings>): void {
-    const wanted: PostSettings = {
+    this.wanted = {
       chain: settings.postChain,
       godRays: settings.godRays,
       depthOfField: settings.depthOfField && this.focus,
     };
+    this.buildWanted();
+  }
+
+  /** Until the nodes the wanted pipeline needs arrive, frames keep the pipeline they had. */
+  private buildWanted(): void {
+    const wanted = this.wanted;
+    if (wanted === null) return;
     const key = needsPost(wanted) ? postSettingsKey(wanted) : '';
     if (key === this.postKey) return;
+    if (key !== '' && !this.createPost.ready(wanted)) {
+      void this.createPost.load(wanted).then(
+        () => {
+          if (this.disposed) return;
+          try {
+            this.buildWanted();
+          } catch (cause) {
+            this.failure ??= { cause };
+          }
+        },
+        (cause: unknown) => {
+          if (!this.disposed) this.failure ??= { cause };
+        },
+      );
+      return;
+    }
     const next =
-      key === '' ? null : this.createPost(this.host.scene, this.host.camera, this.shafts, wanted);
+      key === ''
+        ? null
+        : this.createPost.create(this.host.scene, this.host.camera, this.shafts, wanted);
     this.post?.dispose();
     this.post = next;
     this.postKey = key;
