@@ -110,9 +110,10 @@ export const FISH_RECIPES: FishRecipe[] = [
     sourceId: 'sketchfab-65133817',
     axes: { forward: '+z', up: '+y' },
     keepMaterial: /^CustomMaterial$/,
-    lodPlan: { ratios: [0.2, 0.08, 0.03], minTriangles: 1300 },
+    lodPlan: { ratios: [0.2, 0.08, 0.03], minTriangles: 150 },
     despike: { headFraction: 0.3, thickness: 0.03, reach: 0.004, rings: 3 },
     bristles: { rim: 5, crown: 2, length: 0.07 },
+    glossyEyes: { sideways: 0.088, behindSnout: 0.168, radius: 0.014, lift: -0.3, flatten: 0.07 },
     roughness: 0.78,
     recolour: {
       tint: {
@@ -128,7 +129,8 @@ export const FISH_RECIPES: FishRecipe[] = [
     fallbackLengthM: 0.08,
     modifications: [
       'decimated from 40k to 8k triangles at LOD0',
-      'rigid spikes around the head flattened into the skin, and soft tapered tentacles added along the snout margin and top of the snout',
+      'rigid spikes around the head flattened into the skin, and soft tapered tentacles added along the snout margin and top of the snout, with fewer segments and sides per LOD, forks only at LOD0 and only the two front tentacles per side at LOD2',
+      'faceted eye beads covered with smooth dark glossy spheres on a separate material',
       'orange morph recoloured by luminance to natural brown, with pale cream spots painted in world space so UV stretch cannot enlarge them',
     ],
   },

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { countSpikeVertices, despikeHead } from './bristles.ts';
 import type { Part } from './parts.ts';
-import { growBristles, pickSkinUv } from './tentacles.ts';
+import { BRISTLE_DETAIL, growBristles, pickSkinUv } from './tentacles.ts';
 
 const RADIUS = 0.4;
 const HALF_LENGTH = 1;
@@ -164,6 +164,39 @@ describe('growBristles', () => {
   it('builds a forked tentacle from many more vertices than a plain tube', () => {
     const { positions } = growBristles(body, { rim: 1, crown: 0, length: 0.2 }, SKIN);
     expect(positions.length / 3).toBeGreaterThan(40);
+  });
+
+  describe('detail per LOD', () => {
+    const [full, medium, far] = BRISTLE_DETAIL.map((detail) =>
+      growBristles(body, bristles, SKIN, detail),
+    ) as [Part, Part, Part];
+    const triangles = (part: Part): number => part.indices.length / 3;
+
+    it('thins the geometry out at every step', () => {
+      expect(triangles(full)).toBeGreaterThan(triangles(medium) * 3);
+      expect(triangles(medium)).toBeGreaterThan(triangles(far) * 3);
+      expect(triangles(far)).toBeGreaterThan(0);
+    });
+
+    it('drops the forks from LOD1 on: a lone rim tentacle is a single tube', () => {
+      const lone = { rim: 1, crown: 0, length: 0.2 };
+      const forked = growBristles(body, lone, SKIN, BRISTLE_DETAIL[0]);
+      const plain = growBristles(body, lone, SKIN, BRISTLE_DETAIL[1]);
+      const { segments, sides } = BRISTLE_DETAIL[1];
+      expect(plain.positions.length / 3).toBe(2 * ((segments + 1) * (sides + 1) + 1));
+      expect(forked.positions.length / 3).toBeGreaterThan(3 * (plain.positions.length / 3));
+    });
+
+    it('keeps only the front tentacles of the rim, and no crown, at LOD2', () => {
+      const { segments, sides } = BRISTLE_DETAIL[2];
+      const tube = (segments + 1) * (sides + 1) + 1;
+      expect(far.positions.length / 3).toBe(2 * 2 * tube);
+    });
+
+    it('keeps the crown at LOD1', () => {
+      const noCrown = growBristles(body, { ...bristles, crown: 0 }, SKIN, BRISTLE_DETAIL[1]);
+      expect(medium.positions.length).toBeGreaterThan(noCrown.positions.length);
+    });
   });
 });
 

@@ -2,7 +2,13 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { speciesSchema } from '@aquarium/shared';
 import { despikeHead, type DespikeSpec } from './bristles.ts';
-import { growBristles, pickSkinUv, type BristleSpec } from './tentacles.ts';
+import {
+  flattenEyeBeads,
+  GLOSSY_EYE_MATERIAL,
+  glossyEyeParts,
+  type GlossyEyeSpec,
+} from './glossy-eyes.ts';
+import { BRISTLE_DETAIL, growBristles, pickSkinUv, type BristleSpec } from './tentacles.ts';
 import { buildDocument, emitAsset, type LodPlan } from './emit.ts';
 import { seatEyes, type EyePlacement } from './eyes.ts';
 import {
@@ -49,6 +55,8 @@ export interface FishRecipe {
   despike?: DespikeSpec;
   /** Grows soft tentacles on the despiked snout, as rigid attachments outside fin classification. */
   bristles?: BristleSpec;
+  /** Covers the eye beads fused into the body mesh with smooth, dark, glossy spheres on a material of their own. */
+  glossyEyes?: GlossyEyeSpec;
   roughness?: number;
   /** Recolours the source's base colour by luminance, then paints spots on it. */
   recolour?: { tint: TintSpec; spots?: SpotSpec; worldSpots?: WorldSpotSpec };
@@ -271,6 +279,7 @@ export async function buildSourceFish(recipe: FishRecipe, ctx: FishContext): Pro
     const moved = parts.reduce((sum, part) => sum + despikeHead(part, recipe.despike!), 0);
     console.log(`${recipe.id}: despiked ${moved} head vertices`);
   }
+  if (recipe.glossyEyes) flattenEyeBeads(parts, recipe.glossyEyes);
   const eyeParts = recipe.eyes ? await bakeEyes(recipe, recipe.eyes.meshes, names) : [];
   if (recipe.eyes) {
     const eyes = mergeParts(eyeParts, eyeParts[0]!.material);
@@ -295,29 +304,36 @@ export async function buildSourceFish(recipe: FishRecipe, ctx: FishContext): Pro
     }),
   );
   const body = mergeParts(parts, parts[0]!.material);
+  const skin = recipe.bristles
+    ? skinUv(body, materials, recipe.despike?.headFraction ?? 0.3)
+    : null;
   const bristleParts = recipe.bristles
-    ? [
-        growBristles(
-          body,
-          recipe.bristles,
-          skinUv(body, materials, recipe.despike?.headFraction ?? 0.3),
-        ),
-      ]
+    ? BRISTLE_DETAIL.map((detail, level) => ({
+        ...growBristles(body, recipe.bristles!, skin!, detail),
+        lods: [level],
+      }))
     : [];
+  const glossyParts = recipe.glossyEyes ? glossyEyeParts(body, recipe.glossyEyes) : [];
+  const materialDefs = recipe.glossyEyes ? [...materials, GLOSSY_EYE_MATERIAL] : materials;
 
   const fromSpecies = speciesLengthM(ctx.repoRoot, recipe.species);
   const standardLengthM =
     fromSpecies !== null ? fromSpecies * (recipe.lengthFactor ?? 1) : recipe.fallbackLengthM;
   const normalised = normaliseFish({
     parts,
-    attachments: [...eyeParts, ...bristleParts],
+    attachments: [...eyeParts, ...bristleParts, ...glossyParts],
     hints: recipe.hints,
     standardLengthM,
     recipeId: recipe.id,
   });
 
-  const debugRender = await writeDebugRender(ctx.repoRoot, recipe.id, normalised, materials);
-  const built = buildDocument(recipe.id, normalised, materials);
+  const debugRender = await writeDebugRender(
+    ctx.repoRoot,
+    recipe.id,
+    normalised.filter((p) => !p.lods || p.lods.includes(0)),
+    materials,
+  );
+  const built = buildDocument(recipe.id, normalised, materialDefs);
   return emitAsset({
     outRoot: ctx.outRoot,
     kind: 'fish',

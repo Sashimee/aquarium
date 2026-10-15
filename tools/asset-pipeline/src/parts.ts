@@ -18,6 +18,8 @@ export interface Part {
   indices: Uint32Array<ArrayBuffer>;
   material: string;
   extra: Record<string, Float32Array<ArrayBuffer>>;
+  /** Detail levels this part is emitted for, when it carries its own geometry per level instead of being simplified. */
+  lods?: number[];
 }
 
 export type AlphaMode = 'OPAQUE' | 'MASK' | 'BLEND';
@@ -164,7 +166,11 @@ export function weldPart(part: Part): Part {
     out.indices[w++] = b;
     out.indices[w++] = c;
   }
-  return { ...out, indices: out.indices.slice(0, w) };
+  return {
+    ...out,
+    indices: out.indices.slice(0, w),
+    ...(part.lods ? { lods: part.lods } : {}),
+  };
 }
 
 export function opaqueCopy(image: Rgba): Rgba {
