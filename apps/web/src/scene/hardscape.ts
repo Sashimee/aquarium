@@ -25,6 +25,8 @@ export const HARDSCAPE_KINDS: ReadonlySet<string> = new Set([
   'coral',
 ]);
 
+export const PLANT_KIND = 'plant';
+
 const WOOD_SEGMENTS = 5;
 const UP = new Vector3(0, 1, 0);
 

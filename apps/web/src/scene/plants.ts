@@ -123,6 +123,18 @@ const position = new Vector3();
 const scale = new Vector3();
 const colour = new Color();
 
+function writeInstance(mesh: InstancedMesh, index: number, entry: PlantEntry): void {
+  euler.set(entry.tiltX, entry.yaw, entry.tiltZ, 'YXZ');
+  quaternion.setFromEuler(euler);
+  position.set(entry.x, entry.y, entry.z);
+  scale.set(entry.scale, entry.scale, entry.scale);
+  matrix.compose(position, quaternion, scale);
+  mesh.setMatrixAt(index, matrix);
+  mesh.setColorAt(index, colour.setScalar(entry.tone));
+  mesh.instanceMatrix.needsUpdate = true;
+  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+}
+
 /** All instances of one plant species, drawn as one InstancedMesh per material. */
 export class PlantGroup {
   readonly object = new Group();
@@ -149,17 +161,7 @@ export class PlantGroup {
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.frustumCulled = false;
-      ordered.forEach((entry, i) => {
-        euler.set(entry.tiltX, entry.yaw, entry.tiltZ, 'YXZ');
-        quaternion.setFromEuler(euler);
-        position.set(entry.x, entry.y, entry.z);
-        scale.set(entry.scale, entry.scale, entry.scale);
-        matrix.compose(position, quaternion, scale);
-        mesh.setMatrixAt(i, matrix);
-        mesh.setColorAt(i, colour.setScalar(entry.tone));
-      });
-      mesh.instanceMatrix.needsUpdate = true;
-      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      ordered.forEach((entry, i) => writeInstance(mesh, i, entry));
       this.meshes.push(mesh);
       this.object.add(mesh);
     }
@@ -167,6 +169,11 @@ export class PlantGroup {
 
   get visible(): number {
     return this.meshes[0]?.count ?? 0;
+  }
+
+  /** Rewrites one instance in place; `index` counts in thinning order, so layout plants come first. */
+  setEntry(index: number, entry: PlantEntry): void {
+    for (const mesh of this.meshes) writeInstance(mesh, index, entry);
   }
 
   /** Shows the plants whose thinning rank is below `density`; layout plants (rank -1) always show. */
