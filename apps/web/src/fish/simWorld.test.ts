@@ -7,6 +7,7 @@ import {
   type SimClientPort,
   type SimReady,
 } from '@aquarium/sim';
+import { HUNGER_PER_PORTION } from '@aquarium/sim/lifecycle';
 import { DEFAULT_TANK } from '../engine/tank/dimensions';
 import type { SceneAnchor } from '../scene/anemone';
 import { FISH_1, FISH_2, TANK_A, fishFixture } from '../sync/fixtures';
@@ -106,6 +107,24 @@ describe('SimWorldSpec', () => {
     });
     const config = spec.config(roster.swimming());
     expect(config?.fish.map((f) => f.hunger)).toEqual([0.7]);
+    if (config === null) throw new Error('no world');
+    expect(() => new World(config)).not.toThrow();
+  });
+
+  it('seeds a world rebuilt mid-session with what the fish ate since it joined', () => {
+    const { spec, roster } = setup();
+    roster.load({
+      tankId: TANK_A,
+      biome: 'reef',
+      decorLayout: [],
+      decorEdited: false,
+      fish: [fishFixture(FISH_1, { ...CLOWN, hunger: 0.7 })],
+    });
+    const fishId = roster.simIdOf(FISH_1);
+    if (fishId === undefined) throw new Error('the fish did not join');
+    roster.translateAte([{ fishId, foodId: 1, portion: 1 }]);
+    const config = spec.config(roster.swimming());
+    expect(config?.fish[0]?.hunger).toBeCloseTo(0.7 - HUNGER_PER_PORTION);
     if (config === null) throw new Error('no world');
     expect(() => new World(config)).not.toThrow();
   });

@@ -1,5 +1,6 @@
 import type { Biome, Fish, FishSex } from '@aquarium/shared';
 import type { AteEvent, FishSpawn } from '@aquarium/sim';
+import { HUNGER_PER_PORTION } from '@aquarium/sim/lifecycle';
 import type { InteractionEvents } from '../interaction/events';
 
 /** `swimming` fish are in the sim; bagged and dead ones are posed by the renderer alone. */
@@ -20,8 +21,11 @@ export interface RosterFish {
   phase: FishPhase;
   /** 0 dead .. 1 healthy, as of the last server snapshot that carried this fish. */
   health: number;
-  /** The server's hunger when this fish joined the roster; unset for demo fish. */
-  readonly hunger?: number;
+  /**
+   * The server's hunger when this fish joined the roster, less what the server takes off for each
+   * bite passed on since; unset for demo fish. A world rebuilt mid-session seeds the gut from it.
+   */
+  hunger?: number;
 }
 
 /**
@@ -138,13 +142,17 @@ export class TankRoster {
   /**
    * Bites by sim id to bites by the id the rest of the app knows: the server id while a saved
    * tank is shown. Bites by fish that are no longer swimming here, or by another world's fish,
-   * are dropped so their food stays in the water.
+   * are dropped so their food stays in the water. Each bite passed on lowers the fish's hunger
+   * as the server will (`applyEating` in the lifecycle).
    */
   translateAte(events: readonly AteEvent[]): AteEvent[] {
     const out: AteEvent[] = [];
     for (const e of events) {
       const entry = this.fish.get(e.fishId);
       if (entry?.phase !== 'swimming') continue;
+      if (entry.hunger !== undefined) {
+        entry.hunger = Math.max(0, entry.hunger - e.portion * HUNGER_PER_PORTION);
+      }
       out.push({ fishId: entry.serverId ?? entry.key, foodId: e.foodId, portion: e.portion });
     }
     return out;
