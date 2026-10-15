@@ -12,6 +12,16 @@ export const FishState = {
   Shelter: 10,
   Station: 11,
   Feed: 12,
+  /** A walker stepping over a surface. */
+  Walk: 13,
+  /** A walker standing still, picking at the surface or at food. */
+  Pick: 14,
+  /** Reserved for the cleaner shrimp's client dance; not emitted yet. */
+  Dance: 15,
+  /** A walker's tail-flip escape. */
+  TailFlip: 16,
+  /** A walker off any surface, sinking until it lands. */
+  Fall: 17,
 } as const;
 export type FishState = (typeof FishState)[keyof typeof FishState];
 
@@ -29,8 +39,17 @@ export const SnapshotField = {
   State: 9,
   /** Caudal thrust as a fraction of the maximum, 0 while coasting; drives the tail beat. */
   Thrust: 10,
+  /**
+   * Walkers: leg cycle phase in [0, 1), advancing one cycle per stride; 0 for swimmers. The body's
+   * up axis (the quaternion's +Y) is the surface normal while attached.
+   */
+  LegPhase: 11,
+  /** Walkers: tail-flip progress from 0 at onset to 1 at its end; 0 outside a flip. */
+  Flip: 12,
+  /** Walkers: 1 while standing on a surface, 0 while flipping or falling; 0 for swimmers. */
+  Attached: 13,
 } as const;
-export const SNAPSHOT_STRIDE = 11;
+export const SNAPSHOT_STRIDE = 14;
 
 export interface Snapshot {
   /**
@@ -92,6 +111,16 @@ export function interpolateSnapshots(
     out[o + 9] = (t < 0.5 ? a[o + 9] : b[o + 9]) ?? 0;
     const thrust = a[o + 10] ?? 0;
     out[o + 10] = thrust + ((b[o + 10] ?? 0) - thrust) * t;
+    const phase = a[o + 11] ?? 0;
+    let step = (b[o + 11] ?? 0) - phase;
+    step -= Math.round(step);
+    const legs = phase + step * t;
+    out[o + 11] = legs - Math.floor(legs);
+    const flip = a[o + 12] ?? 0;
+    const flipB = b[o + 12] ?? 0;
+    // A new flip starting between the two snapshots would otherwise rewind through the old one.
+    out[o + 12] = flipB >= flip ? flip + (flipB - flip) * t : t < 0.5 ? flip : flipB;
+    out[o + 13] = (t < 0.5 ? a[o + 13] : b[o + 13]) ?? 0;
   }
 }
 

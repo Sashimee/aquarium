@@ -1,16 +1,15 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { speciesSchema } from '@aquarium/shared';
+import { speciesContentSchema } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 
 const repo = join(import.meta.dirname, '../../..');
-const contentSchema = speciesSchema.partial({ render: true });
 
 const species = new Map(
   readdirSync(join(repo, 'content/species'))
     .filter((f) => f.endsWith('.json'))
     .map((f) => {
-      const s = contentSchema.parse(
+      const s = speciesContentSchema.parse(
         JSON.parse(readFileSync(join(repo, 'content/species', f), 'utf8')),
       );
       return [s.id, s] as const;

@@ -40,9 +40,9 @@
       "walkSpeedMps": 0.02,
       "strideBodyLengths": 0.3,
       "legPairs": 5,
-      "surfaces": ["substrate", "decor"],
+      "surfaces": ["substrate", "decor", "glass"],
       "tailFlip": {
-        "speedMps": 0.5,
+        "speedMps": 0.3,
         "durationS": 0.2,
         "refractoryS": 3
       }

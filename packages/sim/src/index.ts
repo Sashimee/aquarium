@@ -1,14 +1,23 @@
 export { Rng, type RngState } from './rng.ts';
-export { DEG, quatFromYawPitchRoll, rotateByQuat, wrapAngle, type Vec3 } from './math.ts';
+export {
+  DEG,
+  quatFromBasis,
+  quatFromYawPitchRoll,
+  rotateByQuat,
+  wrapAngle,
+  type Vec3,
+} from './math.ts';
 export {
   DIET_RANK_DECAY,
   DRAG_COEFFICIENT_L2,
+  FLIP_PEAK_OVER_MEAN,
   toSimSpecies,
   TRAITS,
   WATER_DENSITY,
   type Gait,
   type HomeKind,
   type SimSpecies,
+  type SimWalking,
   type SpeciesInput,
   type Trait,
 } from './species.ts';
@@ -22,6 +31,7 @@ export {
   MAX_FOOD_PARTICLES,
   type AteEvent,
 } from './food.ts';
+export { WALK, Walkers } from './walk.ts';
 export { FEEDING, gutForHunger } from './feeding.ts';
 export { CURIOSITY } from './curiosity.ts';
 export {

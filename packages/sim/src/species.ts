@@ -33,6 +33,40 @@ export type Trait = (typeof TRAITS)[number];
 export type HomeKind = 'anemone' | 'cave' | 'station' | 'none';
 export type Gait = SpeciesInput['locomotion']['gait'];
 
+/**
+ * A walking invertebrate's locomotion. Walking is capped at `walkSpeed`, which may not exceed the
+ * species' swimming cruise speed; the tail-flip is a half-sine speed pulse whose mean is
+ * `flipSpeed` and whose peak, π/2 of that, may not exceed `maxSpeedMps`.
+ */
+export interface SimWalking {
+  readonly walkSpeed: number;
+  readonly strideBodyLengths: number;
+  readonly legPairs: number;
+  readonly substrate: boolean;
+  readonly decor: boolean;
+  readonly glass: boolean;
+  readonly flipSpeed: number;
+  readonly flipPeak: number;
+  readonly flipDurationS: number;
+  readonly flipRefractoryS: number;
+  /** Picks biofilm off any surface it stands on, food or not. */
+  readonly biofilmGrazer: boolean;
+}
+
+/** Peak over mean speed of a half-sine pulse. */
+export const FLIP_PEAK_OVER_MEAN = Math.PI / 2;
+
+/** Swimmer-only traits: none of their branches in `Behaviour.plan` runs for a walker. */
+const SWIMMER_TRAITS: readonly Trait[] = [
+  'shoal',
+  'air-gulp',
+  'glass-grazer',
+  'rock-grazer',
+  'anemone-host',
+  'flare-display',
+];
+const WALKER_TRAITS: readonly Trait[] = ['biofilm-grazer', 'cleaner'];
+
 export interface SimSpecies {
   readonly id: string;
   readonly gait: Gait;
@@ -74,6 +108,8 @@ export interface SimSpecies {
   readonly shelterAfterStartleS: number;
   readonly excursionMeanIntervalS: number;
   readonly hostLeashBodyLengths: number;
+  /** Set for a walking invertebrate, which `walk.ts` moves instead of the swimming model. */
+  readonly walking: SimWalking | null;
 }
 
 type TraitParams = Pick<
@@ -190,9 +226,10 @@ function parseTraitParams(
   traits: ReadonlySet<Trait>,
   gait: Gait,
   home: HomeKind,
+  walker: boolean,
 ): TraitParams {
   const { airGulp, grazing, flare, station, refuge, excursion } = behaviour;
-  const homed = gait !== 'forage' && !traits.has('glass-grazer') && home !== 'none';
+  const homed = !walker && gait !== 'forage' && !traits.has('glass-grazer') && home !== 'none';
   const owners: [string, unknown, boolean, string][] = [
     ['airGulp', airGulp, traits.has('air-gulp'), 'trait "air-gulp"'],
     ['grazing', grazing, traits.has('rock-grazer'), 'trait "rock-grazer"'],
@@ -201,7 +238,9 @@ function parseTraitParams(
       'station',
       station,
       homed,
-      'gait "hover" or an anemone or cave home, without gait "forage" or trait "glass-grazer"',
+      walker
+        ? 'a swimmer: walkers hold no station'
+        : 'gait "hover" or an anemone or cave home, without gait "forage" or trait "glass-grazer"',
     ],
     ['refuge', refuge, traits.has('cave-dweller'), 'trait "cave-dweller"'],
     ['excursion', excursion, traits.has('anemone-host'), 'trait "anemone-host"'],
@@ -287,7 +326,8 @@ export function toSimSpecies(input: SpeciesInput): SimSpecies {
   }
   const neighbours = behaviour.schooling?.topologicalNeighbours ?? 0;
   const traits = parseTraits(id, behaviour.traits);
-  requireReachable(id, traits, loco.gait);
+  const walking = parseWalking(id, input, traits, cruiseSpeed, maxSpeed);
+  if (walking === null) requireReachable(id, traits, loco.gait);
   if (traits.has('shoal') && neighbours === 0) {
     throw new RangeError(`species "${id}": trait "shoal" needs a behaviour.schooling block`);
   }
@@ -298,7 +338,7 @@ export function toSimSpecies(input: SpeciesInput): SimSpecies {
     ? 'anemone'
     : traits.has('cave-dweller')
       ? 'cave'
-      : loco.gait === 'hover'
+      : loco.gait === 'hover' && walking === null
         ? 'station'
         : 'none';
   if (!(behaviour.perceptionFovDeg > 0 && behaviour.perceptionFovDeg <= 360)) {
@@ -331,6 +371,79 @@ export function toSimSpecies(input: SpeciesInput): SimSpecies {
     flare: traits.has('flare-display'),
     bellyToSurface: traits.has('glass-grazer') || traits.has('cave-dweller'),
     foodPreference: parseDiet(id, input.lifecycle.diet),
-    ...parseTraitParams(id, behaviour, traits, loco.gait, home),
+    ...parseTraitParams(id, behaviour, traits, loco.gait, home, walking !== null),
+    walking,
+  };
+}
+
+function parseWalking(
+  id: string,
+  input: SpeciesInput,
+  traits: ReadonlySet<Trait>,
+  cruiseSpeed: number,
+  maxSpeed: number,
+): SimWalking | null {
+  const { walking, swimmingMode } = input.locomotion;
+  if (walking === undefined) {
+    for (const t of WALKER_TRAITS) {
+      if (traits.has(t)) {
+        throw new RangeError(`species "${id}": trait "${t}" needs locomotion.walking`);
+      }
+    }
+    return null;
+  }
+  if (swimmingMode !== 'pleopod') {
+    throw new RangeError(`species "${id}": locomotion.walking needs swimmingMode "pleopod"`);
+  }
+  for (const t of SWIMMER_TRAITS) {
+    if (traits.has(t)) {
+      throw new RangeError(`species "${id}": trait "${t}" is for swimmers, not walkers`);
+    }
+  }
+  if (input.behaviour.schooling !== undefined) {
+    throw new RangeError(`species "${id}": walkers do not school; drop behaviour.schooling`);
+  }
+  if (input.behaviour.territorial) {
+    throw new RangeError(`species "${id}": walkers hold no territory; set territorial: false`);
+  }
+  const walkSpeed = requirePositive(walking.walkSpeedMps, 'locomotion.walking.walkSpeedMps', id);
+  if (walkSpeed > cruiseSpeed) {
+    throw new RangeError(
+      `species "${id}": locomotion.walking.walkSpeedMps ${walkSpeed} exceeds cruiseSpeedMps ${cruiseSpeed}`,
+    );
+  }
+  const { tailFlip, surfaces } = walking;
+  const flipSpeed = requirePositive(tailFlip.speedMps, 'locomotion.walking.tailFlip.speedMps', id);
+  const flipPeak = flipSpeed * FLIP_PEAK_OVER_MEAN;
+  // Small rounding slack, so a file giving the mean as max·2/π to a few digits still loads.
+  if (flipPeak > maxSpeed * (1 + 1e-6)) {
+    throw new RangeError(
+      `species "${id}": tail-flip peak π/2 × ${flipSpeed} m/s exceeds maxSpeedMps ${maxSpeed}; ` +
+        `tailFlip.speedMps is the mean and may be at most ${(maxSpeed / FLIP_PEAK_OVER_MEAN).toFixed(3)}`,
+    );
+  }
+  if (surfaces.length === 0) {
+    throw new RangeError(`species "${id}": locomotion.walking.surfaces must not be empty`);
+  }
+  return {
+    walkSpeed,
+    strideBodyLengths: requirePositive(
+      walking.strideBodyLengths,
+      'locomotion.walking.strideBodyLengths',
+      id,
+    ),
+    legPairs: walking.legPairs,
+    substrate: surfaces.includes('substrate'),
+    decor: surfaces.includes('decor'),
+    glass: surfaces.includes('glass'),
+    flipSpeed,
+    flipPeak: Math.min(flipPeak, maxSpeed),
+    flipDurationS: requirePositive(tailFlip.durationS, 'locomotion.walking.tailFlip.durationS', id),
+    flipRefractoryS: requirePositive(
+      tailFlip.refractoryS,
+      'locomotion.walking.tailFlip.refractoryS',
+      id,
+    ),
+    biofilmGrazer: traits.has('biofilm-grazer'),
   };
 }
