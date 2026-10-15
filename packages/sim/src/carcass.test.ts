@@ -229,6 +229,22 @@ describe('CarcassSupport', () => {
     expect(support.floorY(brushing, length, sand)).toBe(0.02);
   });
 
+  it('slides off the steep flank of a round rock but rests on its crown', () => {
+    const boulder: Collider = {
+      id: 'boulder',
+      kind: 'sphere',
+      hard: true,
+      center: [0, 0.1, 0],
+      radius: 0.05,
+    };
+    const support = new CarcassSupport([boulder]);
+    const flank = { x: 0.045, y: 0.3, z: 0, yaw: 0 };
+    expect(support.floorY(flank, length, sand)).toBe(0.02);
+    const crown = { x: 0.015, y: 0.3, z: 0, yaw: 0 };
+    const crownY = 0.1 + Math.sqrt(0.05 ** 2 - 0.015 ** 2);
+    expect(support.floorY(crown, length, sand)).toBeGreaterThan(crownY - 0.001);
+  });
+
   it('falls past a rock that is above where it died, as under a ledge', () => {
     const support = new CarcassSupport([rock({ y: 0.25 })]);
     expect(support.floorY({ x: 0, y: 0.15, z: 0, yaw: 0 }, length, sand)).toBe(0.02);

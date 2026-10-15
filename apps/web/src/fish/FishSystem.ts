@@ -11,6 +11,7 @@ import {
 import {
   CARCASS,
   carcassFate,
+  carcassLandS,
   carcassSettleS,
   CarcassSupport,
   quatFromYawPitchRoll,
@@ -914,19 +915,23 @@ export class FishSystem {
   }
 
   /**
-   * Decor moved: a dead shrimp lands on whatever is under it now. One whose floor changed falls
-   * again from where it is drawn, so it sinks off a removed rock instead of jumping down.
+   * Decor moved: a dead shrimp lands on whatever is under it now. One still falling keeps its
+   * fall, and so its speed; one that had landed falls again from where it is drawn, so it sinks
+   * off a removed rock instead of jumping down.
    */
   private resettleCarcasses(): void {
     for (const rt of this.runtimes.values()) {
       const { script } = rt;
       if (script?.kind !== 'sinking') continue;
-      const anchor = rt.shown ? { ...script.anchor, y: rt.lastPosition.y } : script.anchor;
+      const fallT = this.clockS - script.fallS;
+      const falling = fallT < carcassLandS(script.anchor, rt.length, rt.seed, script.floorY);
+      const anchor =
+        rt.shown && !falling ? { ...script.anchor, y: rt.lastPosition.y } : script.anchor;
       const next = this.sinkingScript(
         rt,
         anchor,
         script.startS,
-        this.clockS,
+        falling ? script.fallS : this.clockS,
         script.fromQuaternion,
       );
       if (next.floorY !== script.floorY) rt.script = next;

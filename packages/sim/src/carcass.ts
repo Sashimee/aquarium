@@ -140,6 +140,17 @@ export function sinkingCarcass(
   out.liveliness = 1 - smoothstep(s / CARCASS.limpS);
 }
 
+/** Seconds a carcass dropped from `from` takes to reach its rest height. */
+export function carcassLandS(
+  from: CarcassStart,
+  length: number,
+  seed: number,
+  floorY: number,
+): number {
+  const drop = from.y - carcassRestY(from, length, seed, floorY);
+  return fallTime(drop, sinkSpeed(length), sinkTimeConstant(length));
+}
+
 /** Seconds from death until a carcass dropped from `from` lies still on the floor. */
 export function carcassSettleS(
   from: CarcassStart,
@@ -147,8 +158,7 @@ export function carcassSettleS(
   seed: number,
   floorY: number,
 ): number {
-  const drop = from.y - carcassRestY(from, length, seed, floorY);
-  const land = fallTime(drop, sinkSpeed(length), sinkTimeConstant(length));
+  const land = carcassLandS(from, length, seed, floorY);
   return Math.max(land, CARCASS.minSettleS, CARCASS.limpS);
 }
 
@@ -202,9 +212,10 @@ export class CarcassSupport {
     }
     for (let i = 0; y > ground && i < MAX_MARCH_STEPS; i++) {
       if (d > SURFACE_M) y -= d;
-      // Brushing past a rock's flank is no landing; the column only stops on a top or inside.
-      else if (d < 0 || this.nearestUp >= SUPPORT_NORMAL_Y) break;
-      else y -= SURFACE_M;
+      else if (this.nearestUp >= SUPPORT_NORMAL_Y) break;
+      // A steep flank, grazed or cut, is no landing. Inside, -d is room to fall without leaving
+      // the rock, so the column passes through to whatever is below.
+      else y -= Math.max(-d, SURFACE_M);
       d = this.distance(under, x, y, z);
     }
     return Math.max(y, ground);

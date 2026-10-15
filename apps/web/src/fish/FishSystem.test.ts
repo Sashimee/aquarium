@@ -332,6 +332,18 @@ describe('FishSystem dead shrimp', () => {
     return q;
   }
 
+  /** Where the shrimp is drawn: the first instance of its LOD 0 mesh. */
+  function drawnPosition(scene: Scene): Vector3 {
+    let mesh: InstancedMesh | null = null;
+    scene.traverse((o) => {
+      if (o instanceof InstancedMesh && o.name.endsWith(':lod0')) mesh = o;
+    });
+    if (mesh === null) throw new Error('no shrimp mesh in the scene');
+    const matrix = new Matrix4();
+    (mesh as InstancedMesh).getMatrixAt(0, matrix);
+    return new Vector3().setFromMatrixPosition(matrix);
+  }
+
   function die(fish: FishSystem): void {
     fish.handle({
       type: 'tank:fish-died',
@@ -425,6 +437,36 @@ describe('FishSystem dead shrimp', () => {
     expect(lower).toBeGreaterThan(0.14);
     advance(5);
     expect(locate(fish).y).toBeLessThan(0.14);
+    fish.dispose();
+  });
+
+  it('keeps its sinking speed when a rock is placed under it mid-fall', async () => {
+    const { fish, scene, advance } = await shrimpTank();
+    die(fish);
+    advance(3);
+    const before = drawnPosition(scene);
+    advance(0.2);
+    const at = drawnPosition(scene);
+    fish.setColliders([
+      {
+        id: 'rock',
+        kind: 'box',
+        hard: true,
+        center: [at.x, at.y - 0.08, at.z],
+        halfExtents: [0.03, 0.02, 0.03],
+        rotationY: 0,
+        rounding: 0,
+      },
+    ]);
+    advance(0.2);
+    const after = drawnPosition(scene);
+    const sinkingBefore = before.y - at.y;
+    expect(sinkingBefore).toBeGreaterThan(0.001);
+    expect(at.y - after.y).toBeGreaterThan(0.95 * sinkingBefore);
+    advance(20);
+    const rest = drawnPosition(scene).y;
+    expect(rest).toBeGreaterThan(at.y - 0.06);
+    expect(rest).toBeLessThan(at.y - 0.06 + 0.12 * SHRIMP.size + 0.003);
     fish.dispose();
   });
 
