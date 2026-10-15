@@ -139,6 +139,8 @@ function writeInstance(mesh: InstancedMesh, index: number, entry: PlantEntry): v
 export class PlantGroup {
   readonly object = new Group();
   readonly total: number;
+  /** The layout plants the instances were built from; null once `setEntry` has moved one. */
+  layoutSignature: string | null;
   private readonly sorted: readonly PlantEntry[];
   private readonly meshes: InstancedMesh[] = [];
   private readonly materials: MeshStandardNodeMaterial[] = [];
@@ -152,6 +154,7 @@ export class PlantGroup {
     this.object.name = `plants:${assetId}`;
     const ordered = [...entries].sort((a, b) => a.rank - b.rank);
     this.total = ordered.length;
+    this.layoutSignature = JSON.stringify(ordered.filter((e) => e.rank < 0));
     this.sorted = ordered;
     for (const { geometry, material: source } of model.primitives) {
       const material = createSwayMaterial(source, geometry, assetId, current);
@@ -173,6 +176,7 @@ export class PlantGroup {
 
   /** Rewrites one instance in place; `index` counts in thinning order, so layout plants come first. */
   setEntry(index: number, entry: PlantEntry): void {
+    this.layoutSignature = null;
     for (const mesh of this.meshes) writeInstance(mesh, index, entry);
   }
 
