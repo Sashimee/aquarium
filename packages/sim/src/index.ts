@@ -63,6 +63,7 @@ export {
   type SimHost,
   type SimHostOptions,
   type SimAte,
+  type SimClientPort,
   type SimGrazeReach,
   type SimLayout,
   type SimReady,
