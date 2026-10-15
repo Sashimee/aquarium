@@ -507,7 +507,7 @@ export class FishSystem {
     let profile: FishRenderProfile;
     try {
       profile = renderProfile(species);
-      model = await this.loader.load(modelFor(profile, fish.key).assetId);
+      model = await this.loader.load(modelFor(profile, fish).assetId);
     } catch (cause) {
       this.report(`Fish "${species}" has no visual; it swims and eats unseen`, cause);
       return null;

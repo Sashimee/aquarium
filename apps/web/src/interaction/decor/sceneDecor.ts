@@ -19,6 +19,7 @@ export class SceneDecor<S> {
   private decor: DecorSystem | null = null;
   private stopped = false;
   private wanted = false;
+  private failed = false;
   private readonly offs: (() => void)[];
 
   constructor(
@@ -29,6 +30,7 @@ export class SceneDecor<S> {
     this.offs = [
       interaction.on('decor:request-mode', ({ active }) => {
         this.wanted = active;
+        if (active && this.failed && this.scene && !this.decor) this.mount(this.scene);
       }),
       interaction.on('decor:mode-changed', ({ active }) => {
         this.wanted = active;
@@ -56,12 +58,24 @@ export class SceneDecor<S> {
       (create) => {
         if (this.stopped || this.scene !== scene || this.decor) return;
         this.decor = create(scene, this.saved);
+        this.setFailed(null);
         if (this.wanted && !this.decor.active) {
           this.interaction.emit('decor:request-mode', { active: true });
         }
       },
-      (cause: unknown) => this.report('Decor failed to load', cause),
+      (cause: unknown) => {
+        this.report('Decor failed to load', cause);
+        if (!this.stopped && this.scene === scene) {
+          this.setFailed('Decorating could not load. Check your connection and try again.');
+        }
+      },
     );
+  }
+
+  private setFailed(message: string | null): void {
+    if (message === null && !this.failed) return;
+    this.failed = message !== null;
+    this.interaction.emit('decor:load-failed', { message });
   }
 
   unmount(): void {

@@ -1,6 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-
-const PASSWORD = 'correct horse battery';
+import { registerVerifiedUser } from './support/app';
 
 async function open(page: Page, url: string): Promise<void> {
   await page.goto(url, { waitUntil: 'domcontentloaded' });
@@ -67,25 +66,7 @@ test.describe('tank type switch', () => {
       HTMLCanvasElement.prototype.getContext = () => null;
     });
     const page = await context.newPage();
-    const email = `switch-${Date.now()}@bas.lu`;
-    await page.goto('/sign-up', { waitUntil: 'domcontentloaded' });
-    await page.getByLabel('Your name', { exact: true }).fill('Switch Tester');
-    await page.getByLabel('Email', { exact: true }).fill(email);
-    await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
-    await page.getByRole('button', { name: 'Create account' }).click();
-    await expect(page.getByRole('heading', { name: 'Check your inbox' })).toBeVisible();
-    let link = '';
-    await expect
-      .poll(async () => {
-        const res = await page.request.get('/__e2e/outbox');
-        const mails = (await res.json()) as { to: string; subject: string; text: string }[];
-        const mail = mails.find((m) => m.to === email && /verify/i.test(m.subject));
-        link = /<(https?:\/\/[^>]+)>/.exec(mail?.text ?? '')?.[1] ?? '';
-        return link;
-      })
-      .not.toBe('');
-    await page.goto(link, { waitUntil: 'domcontentloaded' });
-    await expect(page.getByRole('heading', { name: 'Email verified' })).toBeVisible();
+    await registerVerifiedUser(page, 'switch');
     await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     await typeButton(page, 'Reef').click();

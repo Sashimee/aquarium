@@ -1,4 +1,4 @@
-import type { Biome, DecorItem } from '@aquarium/shared';
+import { legacyTintSeed, type Biome, type DecorItem } from '@aquarium/shared';
 import { footprintOf, rayHit, type RayLike } from './footprint';
 import type { Piece } from './layout';
 import {
@@ -42,6 +42,11 @@ function wrapAngle(a: number): number {
   return Math.round(r * 1000) / 1000;
 }
 
+/** Pins the colour at the placement the player first sees, so later moves cannot change it. */
+function seeded(item: DecorItem): DecorItem {
+  return item.tintSeed === undefined ? { ...item, tintSeed: legacyTintSeed(item) } : item;
+}
+
 function tidy(item: DecorItem): DecorItem {
   return withinServerBounds({
     ...item,
@@ -70,7 +75,7 @@ export class DecorEditor {
   problem: string | null = null;
 
   constructor(private readonly options: EditorOptions) {
-    this.list = [...options.pieces];
+    this.list = options.pieces.map((p) => ({ ...p, item: seeded(p.item) }));
     this.seq = options.pieces.length;
   }
 
@@ -198,10 +203,12 @@ export class DecorEditor {
     const id = `p${++this.seq}`;
     const piece: Piece = {
       id,
-      item: tidy({
-        ...spot,
-        position: [spot.position[0], rest + NEW_PIECE_DROP_HEIGHT, spot.position[2]],
-      }),
+      item: seeded(
+        tidy({
+          ...spot,
+          position: [spot.position[0], rest + NEW_PIECE_DROP_HEIGHT, spot.position[2]],
+        }),
+      ),
     };
     this.list = [...this.list, piece];
     this.drops.set(id, { body: startDrop(piece.item.position[1]), restY: rest });

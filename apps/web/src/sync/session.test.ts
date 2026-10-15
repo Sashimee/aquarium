@@ -41,7 +41,7 @@ function apiMocks() {
 
 function setup(
   initial: Tank[] = [tankFixture({ fish: [fishFixture(FISH_1)] })],
-  storage?: Pick<Storage, 'getItem' | 'setItem'>,
+  storage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>,
 ) {
   const api = apiMocks();
   api.species.mockResolvedValue([speciesFixture()]);
@@ -58,7 +58,7 @@ function setup(
   return { api, rec, session };
 }
 
-const setupWithStorage = (storage: Pick<Storage, 'getItem' | 'setItem'>) =>
+const setupWithStorage = (storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>) =>
   setup(undefined, storage);
 
 const verified = { emailVerified: true };
@@ -474,6 +474,43 @@ describe('sign-out safety', () => {
     expect(session.getState().error).toBeNull();
   });
 
+  it('removes the remembered active tank at sign-out', async () => {
+    const storage = {
+      getItem: vi.fn().mockReturnValue(null),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+    };
+    const { session } = setupWithStorage(storage);
+    await session.setUser(verified);
+    await session.setUser(null);
+    expect(storage.removeItem).toHaveBeenCalledWith('aquarium.activeTank');
+  });
+
+  it('does not leave the dropped-reports notice behind when signing out mid-switch', async () => {
+    const hang = new Promise<never>(() => undefined);
+    const api = {
+      species: vi.fn().mockResolvedValue([speciesFixture()]),
+      tanks: vi.fn().mockResolvedValue([tankFixture({ fish: [fishFixture(FISH_1)] }), second]),
+      tank: vi.fn().mockResolvedValue({ ...second, lastTickAt: '2026-02-01T12:00:00.000Z' }),
+      reportAte: vi.fn().mockReturnValue(hang),
+    };
+    const rec = recordBus();
+    const session = new TankSession({
+      api: api as unknown as ApiClient,
+      interaction: rec.bus,
+      sleep: async () => undefined,
+      now: () => Date.parse('2026-02-01T12:00:00.000Z'),
+      leaveFlushMs: 20,
+    });
+    await session.setUser(verified);
+    rec.bus.emit('food:ate', { eaten: [{ fishId: FISH_1, portion: 0.3 }] });
+    const switching = session.select(TANK_B);
+    await session.setUser(null);
+    await switching;
+    expect(session.getState()).toMatchObject({ phase: 'anonymous', notice: null });
+    session.dispose();
+  });
+
   it('announces a death as a notice and clears it with the session', async () => {
     const { api, session } = setup([tankFixture({ fish: [fishFixture(FISH_1, { name: 'Pip' })] })]);
     await session.setUser(verified);
@@ -582,7 +619,11 @@ describe('tank switcher and naming', () => {
   });
 
   it('does not resurrect a tank created just before the user signed out', async () => {
-    const storage = { getItem: vi.fn().mockReturnValue(null), setItem: vi.fn() };
+    const storage = {
+      getItem: vi.fn().mockReturnValue(null),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+    };
     const { api, rec, session } = setupWithStorage(storage);
     await session.setUser(verified);
     let finishCreate: (tank: Tank) => void = () => undefined;
@@ -717,6 +758,47 @@ describe('decor layout', () => {
     );
     await session.onVisible();
     expect(rec.of('tank:decor')).toEqual([{ tankId: TANK_A, layout }]);
+  });
+
+  it('drops an edit still waiting to be saved when the user signs out', async () => {
+    vi.useFakeTimers();
+    const { api, rec, session } = setup();
+    await session.setUser(verified);
+    rec.bus.emit('decor:layout', { tankId: TANK_A, layout });
+    await session.setUser(null);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(api.saveDecorLayout).not.toHaveBeenCalled();
+    expect(rec.of('decor:save-state').at(-1)).toEqual({ status: 'idle', message: null });
+    session.dispose();
+  });
+
+  it('forgets a failed save at sign-out so Retry cannot resend it to the next account', async () => {
+    vi.useFakeTimers();
+    const { api, rec, session } = setup();
+    await session.setUser(verified);
+    api.saveDecorLayout.mockRejectedValue(apiError(400, 'validation_failed'));
+    rec.bus.emit('decor:layout', { tankId: TANK_A, layout });
+    await vi.advanceTimersByTimeAsync(700);
+    expect(api.saveDecorLayout).toHaveBeenCalledTimes(1);
+    await session.setUser(null);
+    await session.setUser(verified);
+    rec.bus.emit('decor:command', { type: 'retry-save' });
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(api.saveDecorLayout).toHaveBeenCalledTimes(1);
+    session.dispose();
+  });
+
+  it('keeps an unsaved edit on screen while a failed save waits for Retry', async () => {
+    vi.useFakeTimers();
+    const { api, rec, session } = setup();
+    await session.setUser(verified);
+    api.saveDecorLayout.mockRejectedValue(apiError(400, 'validation_failed'));
+    rec.bus.emit('decor:layout', { tankId: TANK_A, layout });
+    await vi.advanceTimersByTimeAsync(700);
+    api.care.mockResolvedValue(tankFixture({ lastTickAt: '2026-02-01T12:30:00.000Z' }));
+    await session.careAction({ type: 'gravel_vacuum' });
+    expect(rec.of('tank:decor')).toEqual([]);
+    session.dispose();
   });
 
   it('reports a failed save and retries it on request', async () => {

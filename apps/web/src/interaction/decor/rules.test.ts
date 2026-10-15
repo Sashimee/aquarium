@@ -75,6 +75,12 @@ describe('admit', () => {
     expect(admit(undefined, [], 'reef')).toBe('unknown-asset');
   });
 
+  it('refuses a piece from another biome with its own reason', () => {
+    const reefArch = spec('reef-arch');
+    expect(admit(reefArch, [], 'freshwater')).toBe('wrong-biome');
+    expect(describeRejection('wrong-biome')).not.toBe(describeRejection('unknown-asset'));
+  });
+
   it('caps the number of pieces', () => {
     const many = Array.from({ length: MAX_PIECES }, () => ({ item: item('boulder-01', 0, 0) }));
     expect(admit(rock, many, 'reef')).toBe('full');
@@ -118,6 +124,7 @@ describe('describeRejection', () => {
       'full',
       'feeder-exists',
       'unknown-asset',
+      'wrong-biome',
       'no-room',
     ] as const) {
       expect(describeRejection(r).length).toBeGreaterThan(10);

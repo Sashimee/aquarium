@@ -1,6 +1,13 @@
+import type { FishSex } from '@aquarium/shared';
 import { hashString } from './roster';
 
-export type Sex = 'female' | 'male';
+export type Sex = FishSex;
+
+/** `sex` is the server's stored one; null for demo fish, which have no server record. */
+export interface SexedFish {
+  readonly key: string;
+  readonly sex: Sex | null;
+}
 
 /** The model one fish wears, and its standard length over the species' (female) one. */
 export interface FishModelChoice {
@@ -108,17 +115,17 @@ export function renderProfile(speciesId: string): FishRenderProfile {
 }
 
 /**
- * Depends on the fish's key alone, never on a profile, so editing the models can't flip a saved
- * fish. Even 1:1, and the same draw that first assigned guppies their sex. Every fish has a sex,
- * as in a real stock: a species without a male model draws both with its one model at full
- * length, so a persisted sex belongs to every fish and this is the value for one saved before.
+ * The stored sex, or for a demo fish one drawn from its key alone, never from a profile, so
+ * editing the models can't flip it. Even 1:1, and the same draw the server backfilled saved fish
+ * with. A species without a male model draws both sexes with its one model at full length.
  */
-export function sexOf(fishKey: string): Sex {
-  return hashString(`${fishKey}:variant`) < 2 ** 31 ? 'male' : 'female';
+export function sexOf(fish: SexedFish): Sex {
+  if (fish.sex !== null) return fish.sex;
+  return hashString(`${fish.key}:variant`) < 2 ** 31 ? 'male' : 'female';
 }
 
-export function modelFor(profile: FishRenderProfile, fishKey: string): FishModelChoice {
-  if (profile.male !== null && sexOf(fishKey) === 'male') return profile.male;
+export function modelFor(profile: FishRenderProfile, fish: SexedFish): FishModelChoice {
+  if (profile.male !== null && sexOf(fish) === 'male') return profile.male;
   return { assetId: profile.assetId, lengthFactor: 1 };
 }
 
@@ -127,16 +134,16 @@ export function modelFor(profile: FishRenderProfile, fishKey: string): FishModel
  * the species' (female) scale, so a guppy male is drawn and simulated smaller than its size.
  */
 export function bodyLengthOf(
-  fish: { readonly species: string; readonly key: string; readonly lengthM: number | undefined },
+  fish: SexedFish & { readonly species: string; readonly lengthM: number | undefined },
   speciesLengthM: number,
 ): number {
   const profile = FISH_RENDER_PROFILES[fish.species];
-  const factor = profile === undefined ? 1 : modelFor(profile, fish.key).lengthFactor;
+  const factor = profile === undefined ? 1 : modelFor(profile, fish).lengthFactor;
   return (fish.lengthM ?? speciesLengthM) * factor;
 }
 
 /** The instanced batch that draws a fish: one per species and model. */
-export function batchKeyOf(fish: { readonly species: string; readonly key: string }): string {
+export function batchKeyOf(fish: SexedFish & { readonly species: string }): string {
   const profile = FISH_RENDER_PROFILES[fish.species];
-  return `${fish.species}/${profile === undefined ? '' : modelFor(profile, fish.key).assetId}`;
+  return `${fish.species}/${profile === undefined ? '' : modelFor(profile, fish).assetId}`;
 }
