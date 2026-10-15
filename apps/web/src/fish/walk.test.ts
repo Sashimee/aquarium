@@ -4,14 +4,18 @@ import {
   APPENDAGE_HZ,
   APPENDAGE_RATE,
   APPENDAGE_WRAP_CYCLES,
+  curlAboveFloor,
+  curledTip,
   legCyclePhase,
   legSwing,
   MAX_TAIL_CURL,
   PICK_IDLE,
   TAIL_CURL_PEAK,
+  TAIL_FLOOR_CLEARANCE_BODY_LENGTHS,
   tailCurl,
   WALK_GAIT,
   WalkState,
+  type TailRig,
   type WalkSample,
 } from './walk';
 
@@ -41,6 +45,73 @@ describe('tailCurl', () => {
       else expect(curl).toBeLessThanOrEqual(last);
       last = curl;
     }
+  });
+});
+
+describe('curlAboveFloor', () => {
+  // The cherry shrimp's hinge and standoff from the shipped index, with its tail-fan tip.
+  const rig: TailRig = {
+    hinge: { y: 0.0002, z: 0.0019 },
+    tip: { y: -0.0015, z: -0.0165, share: 1 },
+    bodyLength: LENGTH,
+  };
+  const STANDOFF = 0.0046;
+  const FLOOR = 0.1;
+  const level = { x: 0, y: 0, z: 0, w: 1 };
+  const margin = TAIL_FLOOR_CLEARANCE_BODY_LENGTHS * LENGTH;
+  const tipHeight = (curl: number, y: number): number => y + curledTip(rig, curl).y;
+
+  it('turns the tip the way the material does: down and forward', () => {
+    const rest = curledTip(rig, 0);
+    expect(rest).toEqual({ y: rig.tip.y, z: rig.tip.z });
+    const curled = curledTip(rig, MAX_TAIL_CURL);
+    expect(curled.y).toBeLessThan(rest.y);
+    expect(curled.z).toBeGreaterThan(rest.z);
+    const radius = Math.hypot(rig.tip.y - rig.hinge.y, rig.tip.z - rig.hinge.z);
+    expect(Math.hypot(curled.y - rig.hinge.y, curled.z - rig.hinge.z)).toBeCloseTo(radius, 12);
+  });
+
+  it('cuts a full curl short on the floor, just where the tip meets the sand', () => {
+    const y = FLOOR + STANDOFF;
+    expect(tipHeight(MAX_TAIL_CURL, y)).toBeLessThan(FLOOR);
+    const curl = curlAboveFloor(MAX_TAIL_CURL, rig, 1, { y }, level, FLOOR);
+    expect(curl).toBeGreaterThan(0);
+    expect(curl).toBeLessThan(MAX_TAIL_CURL);
+    expect(tipHeight(curl, y)).toBeGreaterThanOrEqual(FLOOR + margin - 1e-9);
+    expect(tipHeight(curl, y)).toBeCloseTo(FLOOR + margin, 5);
+  });
+
+  it('lets the whole curl through once the flip has lifted the body clear', () => {
+    const y = FLOOR + 0.03;
+    expect(curlAboveFloor(MAX_TAIL_CURL, rig, 1, { y }, level, FLOOR)).toBe(MAX_TAIL_CURL);
+    expect(curlAboveFloor(0.1, rig, 1, { y: FLOOR + STANDOFF }, level, FLOOR)).toBe(0.1);
+  });
+
+  it('scales the rig with the animal', () => {
+    const y = FLOOR + 2 * STANDOFF;
+    const curl = curlAboveFloor(MAX_TAIL_CURL, rig, 2, { y }, level, FLOOR);
+    expect(curl).toBeLessThan(MAX_TAIL_CURL);
+    expect(y + 2 * curledTip(rig, curl).y).toBeCloseTo(FLOOR + 2 * margin, 5);
+  });
+
+  it('frees the curl on a walker upside down, whose ventral curl lifts the tail', () => {
+    const flipped = { x: 0, y: 0, z: 1, w: 0 };
+    const y = FLOOR + 0.02;
+    expect(curlAboveFloor(MAX_TAIL_CURL, rig, 1, { y }, flipped, FLOOR)).toBe(MAX_TAIL_CURL);
+  });
+
+  it('never sinks a tip that rests below the floor any deeper', () => {
+    const y = FLOOR + STANDOFF - 0.004;
+    const rest = tipHeight(0, y);
+    expect(rest).toBeLessThan(FLOOR);
+    const curl = curlAboveFloor(MAX_TAIL_CURL, rig, 1, { y }, level, FLOOR);
+    expect(curl).toBeLessThan(0.01);
+    expect(tipHeight(curl, y)).toBeGreaterThanOrEqual(rest - 1e-9);
+  });
+
+  it('passes a straight or negative curl through', () => {
+    expect(curlAboveFloor(0, rig, 1, { y: FLOOR }, level, FLOOR)).toBe(0);
+    expect(curlAboveFloor(-0.2, rig, 1, { y: FLOOR }, level, FLOOR)).toBe(-0.2);
   });
 });
 
