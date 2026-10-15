@@ -281,4 +281,88 @@ where a GPU exists).
 ## 8. Open items for later (not blocking)
 
 - Prod DB backup destination (Dokploy S3 target?). Ask at T23.
-- Whether to send "your fish are hungry" reminder emails (needs opt-in). Not in scope unless asked.
+- Reminder emails: now in scope as opt-in (§9, T52).
+
+## 9. Expansion (asked by Alex 2026-10-16, #612)
+
+Alex asked for every proposed extra feature to be built, and for a choice of **5 tank background
+pictures per tank type**. The release (`dev → main`) waits until this section is done (T68).
+
+### 9.1 Decisions
+
+| Topic | Decision |
+|---|---|
+| Tank backgrounds | 5 per biome (10 at launch, more per new biome). They are pictures like the printed posters stuck to a real tank's back glass. The choice is saved per tank and changed from decorate mode. CC0 / CC-BY photos, or renders made in the pipeline from CC0 assets. |
+| Social features | Read-only public links, reactions, gallery and gifts are opt-in per tank, private by default. No free-text chat, and a tank name shown publicly passes a word filter. |
+| Reminder mail | Opt-in only, off by default, at most one a day, one-click unsubscribe. Supersedes the §8 open item. Test mail goes to `@bas.lu` only. |
+| Web push | Through the PWA (iOS 16.4+ needs it installed to the home screen). VAPID keys live in Dokploy env. |
+| Haptics | The Vibration API where it exists (Android). iOS Safari has none, so iOS gets no haptics; no workaround hacks. |
+| Sound | Off until the first user gesture, a master volume and a mute button, respects reduced motion for loud effects. CC0 / CC-BY audio in the manifest. |
+| New biomes | African cichlid lake, Amazon blackwater, brackish mangrove. Each one is a preset, 5 backgrounds and at least 4 species. The schema already allows more tanks per user. |
+| Budgets | §2.7 stays. Backgrounds, audio, new species and biomes stream per preset. A new biome may raise the 150 MB repo asset budget to 250 MB, recorded in `assets:check`. |
+
+### 9.2 Architecture notes
+
+- **Backgrounds:** `packages/shared` adds `tank.backgroundId` (enum per biome, from `content/backgrounds/*.json`). The renderer draws it as a lit, slightly defocused plane just behind the back glass, outside the water volume, so absorption doesn't tint it twice. It is KTX2, 2048×1024, and ≤ 600 KB each.
+- **Water chemistry v2 (lifecycle):** ammonia → nitrite → nitrate through two bacteria colonies that grow on filter media (the nitrogen cycle). Plus pH, KH and temperature. A new tank starts uncycled. "Bottled bacteria" in the shop speeds it up. Every rate lives in `content/species` and a new `content/chemistry.json`.
+- **Breeding:** species JSON gains `breeding` (mode: livebearer | egg-scatterer | substrate-spawner | mouthbrooder | none; conditions; brood size; fry growth). The server decides births inside the lifecycle step. Fry are fish with `stage: fry | juvenile | adult`, and the cap on fry counts keeps bioload sane.
+- **Personality:** per-fish seeded traits `boldness`, `greed`, `sociability` (0..1). They are stored server-side and feed the steering weights in `packages/sim`. "Recognises you": fish approach the front glass when you've visited often.
+- **Disease:** ich, fin rot and velvet, each with a trigger (stress from bad water, temperature swings, a new fish without quarantine), visible symptoms (a TSL overlay: white spots, frayed fin mask, gold dust) and a treatment (medicine dose, temperature, quarantine tank).
+- **Equipment:** filter, heater, light (schedule + intensity), CO₂ (freshwater) and wave maker (reef). Each piece has tiers with lifecycle effects. The wave maker feeds the sim's current field and the coral and plant sway.
+- **Social:** a public tank snapshot is a server-rendered read-only view of the tank state. Visitors' clients run the same sim with the owner's seed. Reactions, votes and gifts are rate-limited, authenticated and audited. The community tank is one shared server-authoritative tank: everyone feeds it, there's a per-user daily food quota, and its state is pushed over SSE.
+- **Replay:** the lifecycle step records an event timeline (`fed`, `born`, `sick`, `died`, `algae`). The "while you were away" screen plays it as a fast-forward with the sim at 20× speed between events.
+
+### 9.3 Tasks
+
+Same rules as §4: one issue, one branch and one PR each, contract first for shared files.
+
+| ID | Task | Agent | Depends on | Wave |
+|---|---|---|---|---|
+| T25 | Contract: `tank.backgroundId`, `content/backgrounds` schema | backend-engineer | — | 9 |
+| T26 | Source 5 background pictures per biome (freshwater, reef) + manifest + credits | asset-curator | — | 9 |
+| T27 | Background pipeline: crop/resize/KTX2, budget check | asset-pipeline-engineer | T25, T26 | 9 |
+| T28 | Render the background plane behind the back glass (all tiers) | render-engineer | T27 | 10 |
+| T29 | Background chooser in decorate mode + persistence + e2e | gameplay-engineer | T25, T28 | 10 |
+| T30 | Contract: chemistry v2, breeding, personality, disease, equipment, fish stage | backend-engineer | — | 9 |
+| T31 | Lifecycle chemistry v2 + nitrogen cycle + offline catch-up + migrations | backend-engineer | T30 | 10 |
+| T32 | Water test kit mini-game (strips read by colour) + chemistry HUD | gameplay-engineer | T31 | 11 |
+| T33 | Breeding in lifecycle: conditions, births, fry growth, caps | backend-engineer | T30 | 10 |
+| T34 | Spawning/brood behaviours (clownfish egg tending, livebearer drop, fry hiding) | fish-behavior-engineer | T30 | 10 |
+| T35 | Fry and juvenile rendering (scale, colour maturity) + birth notifications UI | render-engineer → gameplay-engineer | T33, T34 | 11 |
+| T36 | Personality traits: sim weights + server storage + fish card UI + "come to the glass" | fish-behavior-engineer → backend → gameplay | T30 | 10 |
+| T37 | Disease model in lifecycle + treatments | backend-engineer | T31 | 11 |
+| T38 | Disease visuals (ich spots, fin rot, velvet) in the fish material | render-engineer | T30 | 10 |
+| T39 | Medicine, quarantine tank and treatment UI | gameplay-engineer | T37, T38 | 12 |
+| T40 | Clean-up crew: nerite snail, hermit crab (models) | asset-curator → asset-pipeline-engineer | — | 9 |
+| T41 | Clean-up crew behaviour: algae grazing, scavenging leftover food, wired to lifecycle | fish-behavior-engineer + backend-engineer | T31, T40 | 11 |
+| T42 | Growing plants: growth state, spread, trimming tool, nutrient uptake vs algae | scene-builder + backend-engineer + gameplay-engineer | T31 | 11 |
+| T43 | Corals: growth, fragging, bleaching on bad water | scene-builder + backend-engineer + gameplay-engineer | T31 | 11 |
+| T44 | Cleaner wrasse (Labroides dimidiatus) + cleaning-station behaviour | asset-curator → pipeline → fish-behavior-engineer | T40 | 11 |
+| T45 | Equipment: lifecycle effects + shop tiers | backend-engineer + gameplay-engineer | T31 | 11 |
+| T46 | Wave maker current field in sim + coral/plant sway + light schedule ramp | fish-behavior-engineer + scene-builder + render-engineer | T45 | 12 |
+| T47 | Tank sizes: nano 30 L, 200 L, long 300 L (glass, water volume, sim bounds, capacity) | render-engineer + scene-builder + backend-engineer | T30 | 11 |
+| T48 | New biome: African cichlid lake (preset, 5 backgrounds, 4+ species) | curator → pipeline → scene → behaviour → render | T29, T47 | 12 |
+| T49 | New biome: Amazon blackwater (tannin water tint, leaf litter, 4+ species) | same chain | T29, T47 | 12 |
+| T50 | New biome: brackish mangrove (roots, 4+ species, salinity) | same chain | T29, T47 | 12 |
+| T51 | Collection book + achievements (server-tracked, UI) | backend-engineer + gameplay-engineer | T33 | 11 |
+| T52 | Care reminders: opt-in mail + web push, unsubscribe, daily cap | backend-engineer + gameplay-engineer | T53 | 12 |
+| T53 | PWA: manifest, icons, service worker shell, install prompt, offline "tank asleep" page | gameplay-engineer + devops-engineer | — | 9 |
+| T54 | Photo mode: free camera, DOF, filters, hide UI, save/share PNG | render-engineer + gameplay-engineer | — | 9 |
+| T55 | Toys: mirror (betta flares), ping-pong ball; feeding-target mini-game | gameplay-engineer + fish-behavior-engineer | — | 9 |
+| T56 | Away replay: lifecycle event timeline + fast-forward playback | backend-engineer + gameplay-engineer | T31 | 11 |
+| T57 | Room: living-room/office backdrops behind the tank, window weather and time-of-day light, screensaver/idle camera | scene-builder + render-engineer + gameplay-engineer | T28 | 11 |
+| T58 | Night: nocturnal species active at night, coral polyps out, lights on/off ramp startles fish | fish-behavior-engineer + render-engineer + scene-builder | T46 | 13 |
+| T59 | Sound: audio engine, filter hum, bubbles, underwater muffle in dive, glass tap; CC0 sourcing | asset-curator + gameplay-engineer | — | 9 |
+| T60 | Haptics (Android) on tap, feed and catch | gameplay-engineer | — | 9 |
+| T61 | Public tank links (read-only) + reactions | backend-engineer + gameplay-engineer | T25 | 10 |
+| T62 | Tank of the week gallery + votes | backend-engineer + gameplay-engineer | T61 | 11 |
+| T63 | Gift/trade fish between users (escrow, both accept, acclimation bag) | backend-engineer + gameplay-engineer | T61 | 11 |
+| T64 | Community tank: shared server tank, food quota, SSE state | backend-engineer + gameplay-engineer | T61, T31 | 12 |
+| T65 | Security review of social, push and mail features | code-reviewer | T52, T61–T64 | 13 |
+| T66 | Audit pass 2: realism, perf budgets on all biomes and sizes, iPhone 15 Pro Max numbers | visual-perf-auditor | T48–T50, T58 | 13 |
+| T67 | E2E for every expansion feature | gameplay-engineer | T29–T64 | 13 |
+| T68 | Fix wave from T65/T66, then RC2 on devfish → **stop and ask Alex** for `dev → main` | owners → devops-engineer | T65–T67 | 14 |
+
+Multi-owner tasks are split into one issue per owner when filed, chained in the order listed.
+Up to 6 agents at once is the default; Alex allowed more, so the orchestrator may run more when
+the tasks are independent.
