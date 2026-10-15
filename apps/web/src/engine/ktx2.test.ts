@@ -8,6 +8,7 @@ import {
   bundledTranscoderUrl,
   createSharedKtx2,
   gltfKtx2Loader,
+  KTX2_WORKER_URL,
   rewritingKtx2Loader,
 } from './ktx2';
 
@@ -48,10 +49,10 @@ afterEach(() => {
 });
 
 describe('bundledTranscoderUrl', () => {
-  it('redirects the basis transcoder to the bundled copy', () => {
+  it('redirects the wasm to the bundled copy and the glue script to the same-origin worker', () => {
     const js = bundledTranscoderUrl('https://cdn/libs/basis/basis_transcoder.js');
     const wasm = bundledTranscoderUrl('https://cdn/libs/basis/basis_transcoder.wasm');
-    expect(js).not.toContain('cdn');
+    expect(js).toBe(KTX2_WORKER_URL);
     expect(wasm).not.toContain('cdn');
     expect(js).not.toBe(wasm);
   });
@@ -92,7 +93,9 @@ describe('rewritingKtx2Loader', () => {
 
     expect(second).toBe(first);
     expect(view.workerPool).toBe(shared.loader.workerPool);
-    expect(requested.filter((u) => u.includes('basis_transcoder')).length).toBe(2);
+    expect(
+      requested.filter((u) => u.includes('basis_transcoder') || u.includes('ktx2-worker')).length,
+    ).toBe(2);
     expect(warn).not.toHaveBeenCalled();
     shared.dispose();
   });
