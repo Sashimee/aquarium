@@ -171,10 +171,15 @@ describe('render profile coverage', () => {
     expect(ids).toContain('cherry-shrimp');
   });
 
-  // Walkers get their own deformation and models, not a fish profile.
-  it('has a profile for every swimming species, live or pending', () => {
-    const swimmers = species.filter((s) => s.locomotion.swimmingMode !== 'pleopod');
-    for (const { id } of swimmers) expect(() => renderProfile(id), id).not.toThrow();
+  it('has a profile for every species, live or pending, walkers included', () => {
+    for (const { id } of species) expect(() => renderProfile(id), id).not.toThrow();
+  });
+
+  it('gives no species a profile for a model of another kind', () => {
+    for (const { id, locomotion } of species) {
+      const walker = locomotion.swimmingMode === 'pleopod';
+      expect(renderProfile(id).assetId.endsWith('shrimp'), id).toBe(walker);
+    }
   });
 
   it('names an unknown species when it has no profile', () => {

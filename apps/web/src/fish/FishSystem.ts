@@ -32,7 +32,13 @@ import { BatchCache } from './batchCache';
 import type { SceneAnchor } from '../scene/anemone';
 import { demoTank, type DemoTank } from './demoStock';
 import { HeldFish, type FramePresence } from './heldFish';
-import { FishInstanceData, type InstanceValues } from './instances';
+import {
+  FishInstanceData,
+  INSTANCE_STRIDE,
+  WALKER_INSTANCE_STRIDE,
+  type InstanceValues,
+  type WalkerValues,
+} from './instances';
 import { selectLod, type LodThresholds } from './lod';
 import { featuresFor, sameFeatures, waitsForReload } from './features';
 import { FishMaterial, type FishMaterialFeatures } from './material';
@@ -71,7 +77,8 @@ import {
 import { SimUnavailableError } from '../interaction/simUnavailable';
 import { speciesInput } from './species';
 import type { FishBite, FishPoint, PickRay, TankEvent } from './start';
-import { SWIM_MODES, SwimState } from './swim';
+import { isFinned, SWIM_MODES, SwimState } from './swim';
+import { WalkState, type WalkSample } from './walk';
 
 export interface FishSystemOptions {
   readonly tank: TankDimensions;
@@ -115,7 +122,7 @@ interface FishRuntime {
   readonly batch: SpeciesBatch;
   readonly length: number;
   readonly scale: number;
-  readonly swim: SwimState;
+  readonly motion: SwimState | WalkState;
   readonly seed: number;
   readonly tint: readonly [number, number, number];
   readonly filmThickness: number;
@@ -224,6 +231,21 @@ export class FishSystem {
   private readonly forward = new Vector3();
   private readonly quat = new Float32Array(4);
   private readonly pose = createPose();
+  private readonly walkSample: WalkSample = {
+    speed: 0,
+    state: -1,
+    legPhase: 0,
+    flip: 0,
+    attached: 1,
+  };
+  private readonly walker: WalkerValues = {
+    legPhase: 0,
+    stride: 0,
+    curl: 0,
+    paddle: 0,
+    pick: 0,
+    dance: 0,
+  };
   private readonly values: InstanceValues = {
     qx: 0,
     qy: 0,
@@ -621,13 +643,21 @@ export class FishSystem {
     this.disposeLods(batch);
     const capacity = capacityFor(needed);
     const { model, profile, input } = batch;
-    const mode = swimModeFor(SWIM_MODES[input.locomotion.swimmingMode], profile);
+    const { swimmingMode } = input.locomotion;
+    const { shrimp } = model.entry;
+    if (!isFinned(swimmingMode) && shrimp === null) {
+      throw new Error(`fish ${model.entry.id}: a walking species needs a shrimp model`);
+    }
     const lighting = {
       lightDirection: this.engine.caustics.lightDirection,
       light: this.engine.caustics.hoodLight(),
     };
     batch.lods = model.lods.map((parts, level) => {
-      const instances = new FishInstanceData(capacity);
+      const walking = !isFinned(swimmingMode) && shrimp !== null;
+      const instances = new FishInstanceData(
+        capacity,
+        walking ? WALKER_INSTANCE_STRIDE : INSTANCE_STRIDE,
+      );
       const meshes: InstancedMesh[] = [];
       const materials: FishMaterial[] = [];
       for (const part of parts) {
@@ -635,7 +665,23 @@ export class FishSystem {
           source: part.source,
           assetId: model.entry.id,
           profile,
-          mode,
+          locomotion: walking
+            ? {
+                kind: 'walk',
+                rig: {
+                  bodyLength: model.entry.standardLengthM,
+                  hinge: shrimp.hinge,
+                  telsonZ: shrimp.telsonZ,
+                  legPivots: part.legPivots,
+                },
+              }
+            : {
+                kind: 'swim',
+                mode: swimModeFor(
+                  SWIM_MODES[isFinned(swimmingMode) ? swimmingMode : 'carangiform'],
+                  profile,
+                ),
+              },
           zMin: model.entry.min[2],
           zMax: model.entry.max[2],
           instances,
@@ -747,17 +793,21 @@ export class FishSystem {
     const brightness = 1 + v * rng.signed();
     const [lo, hi] = profile.filmThicknessNm;
     const seed = rng.next();
+    const { swimmingMode } = input.locomotion;
+    const phaseOffset = rng.next() * Math.PI * 2;
     const runtime: FishRuntime = {
       fish,
       batch,
       length,
       scale: length / batch.model.entry.standardLengthM,
-      swim: new SwimState(
-        length,
-        input.locomotion.strouhal,
-        swimModeFor(SWIM_MODES[input.locomotion.swimmingMode], profile),
-        rng.next() * Math.PI * 2,
-      ),
+      motion: isFinned(swimmingMode)
+        ? new SwimState(
+            length,
+            input.locomotion.strouhal,
+            swimModeFor(SWIM_MODES[swimmingMode], profile),
+            phaseOffset,
+          )
+        : new WalkState(length, phaseOffset),
       seed,
       tint: [
         brightness * (1 + 0.5 * v * rng.signed()),
@@ -1003,6 +1053,11 @@ export class FishSystem {
     const pose = this.pose;
     const { fish } = rt;
     pose.thrust = 1;
+    const walk = this.walkSample;
+    walk.state = -1;
+    walk.legPhase = rt.motion instanceof WalkState ? rt.motion.legPhase : 0;
+    walk.flip = 0;
+    walk.attached = 1;
     if (fish.phase === 'swimming') {
       const o = frame === null ? undefined : this.stream.layout?.offsets.get(fish.simId);
       let presence: FramePresence;
@@ -1042,6 +1097,10 @@ export class FishSystem {
         pose.yawRate = frame[o + SnapshotField.YawRate] ?? 0;
         pose.liveliness = 1;
         pose.thrust = frame[o + SnapshotField.Thrust] ?? 1;
+        walk.state = frame[o + SnapshotField.State] ?? -1;
+        walk.legPhase = frame[o + SnapshotField.LegPhase] ?? 0;
+        walk.flip = frame[o + SnapshotField.Flip] ?? 0;
+        walk.attached = frame[o + SnapshotField.Attached] ?? 1;
         if (rt.handover > 0) {
           const w = smoothstep01(rt.handover / HANDOVER_S);
           this.position.lerp(rt.fromPosition, w);
@@ -1095,7 +1154,13 @@ export class FishSystem {
         continue;
       }
       const { liveliness } = this.pose;
-      rt.swim.advance(deltaS * liveliness, this.pose);
+      const { motion } = rt;
+      if (motion instanceof WalkState) {
+        this.walkSample.speed = this.pose.speed;
+        motion.advance(deltaS * liveliness, this.walkSample);
+      } else {
+        motion.advance(deltaS * liveliness, this.pose);
+      }
       rt.lastPosition.copy(this.position);
       rt.lastQuaternion.copy(this.quaternion);
       rt.shown = true;
@@ -1120,10 +1185,11 @@ export class FishSystem {
       v.qz = this.quaternion.z;
       v.qw = this.quaternion.w;
       v.scale = rt.scale;
-      v.phase = rt.swim.phase;
-      v.amplitude = rt.swim.amplitude * liveliness;
-      v.curvature = rt.swim.curvature * rt.scale * liveliness;
-      v.finPhase = rt.swim.finPhase;
+      const swim = motion instanceof SwimState ? motion : null;
+      v.phase = swim?.phase ?? 0;
+      v.amplitude = (swim?.amplitude ?? 0) * liveliness;
+      v.curvature = (swim?.curvature ?? 0) * rt.scale * liveliness;
+      v.finPhase = swim?.finPhase ?? (motion as WalkState).clock;
       v.pale = Math.max(
         rt.condition,
         rt.fish.phase === 'dead' ? 1 - liveliness : 0,
@@ -1132,8 +1198,18 @@ export class FishSystem {
       v.seed = rt.seed;
       v.filmThickness = rt.filmThickness;
       v.tint = rt.tint;
-      v.gills = rt.swim.gillOpening * liveliness;
+      v.gills = (swim?.gillOpening ?? 0) * liveliness;
       lod.instances.write(slot, v);
+      if (motion instanceof WalkState) {
+        const w = this.walker;
+        w.legPhase = motion.legPhase;
+        w.stride = motion.stride * liveliness;
+        w.curl = motion.curl * liveliness;
+        w.paddle = motion.paddle * liveliness;
+        w.pick = motion.pick * liveliness;
+        w.dance = motion.dance * liveliness;
+        lod.instances.writeWalker(slot, w);
+      }
     }
     this.bags.end();
 

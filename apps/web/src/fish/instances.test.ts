@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { FishInstanceData, INSTANCE_STRIDE, InstanceSlot, type InstanceValues } from './instances';
+import {
+  FishInstanceData,
+  INSTANCE_STRIDE,
+  InstanceSlot,
+  WALKER_INSTANCE_STRIDE,
+  WalkerSlot,
+  type InstanceValues,
+  type WalkerValues,
+} from './instances';
 
 const values: InstanceValues = {
   qx: 0.1,
@@ -66,5 +74,53 @@ describe('FishInstanceData', () => {
     const before = data.buffer.version;
     data.commit();
     expect(data.buffer.version).toBe(before + 1);
+  });
+
+  describe('walker stride', () => {
+    const walker: WalkerValues = {
+      legPhase: 0.25,
+      stride: 0.5,
+      curl: 1.2,
+      paddle: 0.75,
+      pick: 0.3,
+      dance: 0.125,
+    };
+
+    it('keeps the fish slots and adds the walker slots after them, inside the stride', () => {
+      for (const slot of Object.values(WalkerSlot)) {
+        expect(slot).toBeGreaterThanOrEqual(INSTANCE_STRIDE);
+        expect(slot).toBeLessThan(WALKER_INSTANCE_STRIDE);
+      }
+      expect(WALKER_INSTANCE_STRIDE % 4).toBe(0);
+    });
+
+    it('writes both blocks of a walker into its own stride', () => {
+      const data = new FishInstanceData(2, WALKER_INSTANCE_STRIDE);
+      expect(data.array.length).toBe(2 * WALKER_INSTANCE_STRIDE);
+      data.write(1, values);
+      data.writeWalker(1, walker);
+      const o = WALKER_INSTANCE_STRIDE;
+      expect(data.array.subarray(0, o).every((v) => v === 0)).toBe(true);
+      expect(data.array[o + InstanceSlot.Scale]).toBeCloseTo(1.05, 6);
+      expect(data.array[o + WalkerSlot.LegPhase]).toBe(0.25);
+      expect(data.array[o + WalkerSlot.Curl]).toBeCloseTo(1.2, 6);
+      expect(data.array[o + WalkerSlot.Paddle]).toBe(0.75);
+      expect(data.array[o + WalkerSlot.Dance]).toBe(0.125);
+    });
+
+    it('collapses the whole walker stride', () => {
+      const data = new FishInstanceData(2, WALKER_INSTANCE_STRIDE);
+      data.writeWalker(0, walker);
+      data.writeWalker(1, walker);
+      data.collapse(0);
+      expect(data.array.subarray(0, WALKER_INSTANCE_STRIDE).every((v) => v === 0)).toBe(true);
+      expect(data.array[WALKER_INSTANCE_STRIDE + WalkerSlot.Stride]).toBe(0.5);
+    });
+
+    it('refuses walker values in a fish buffer, and indices outside the capacity', () => {
+      expect(() => new FishInstanceData(2).writeWalker(0, walker)).toThrow(/walker stride/);
+      const data = new FishInstanceData(2, WALKER_INSTANCE_STRIDE);
+      expect(() => data.writeWalker(2, walker)).toThrow(RangeError);
+    });
   });
 });

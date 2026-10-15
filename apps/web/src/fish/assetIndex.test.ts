@@ -117,6 +117,62 @@ describe('parseFishAssets', () => {
     }
   });
 
+  it('reads a shrimp with its tail-curl rig, and gives fish none', () => {
+    const shrimp = fish({
+      id: 'cherry-shrimp',
+      kind: 'shrimp',
+      fish: undefined,
+      shrimp: {
+        standardLengthM: 0.037,
+        abdomenHinge: { y: 0.001, z: -0.002 },
+        telsonZ: -0.016,
+        legPairs: 5,
+      },
+    });
+    const entries = parseFishAssets({ assets: [fish(), shrimp] });
+    expect(entries.get('neon-tetra')?.shrimp).toBeNull();
+    expect(entries.get('neon-tetra')?.kind).toBe('fish');
+    const cherry = entries.get('cherry-shrimp');
+    expect(cherry?.kind).toBe('shrimp');
+    expect(cherry?.standardLengthM).toBe(0.037);
+    expect(cherry?.shrimp).toEqual({
+      hinge: { y: 0.001, z: -0.002 },
+      telsonZ: -0.016,
+      legPairs: 5,
+    });
+  });
+
+  it.each([
+    ['no hinge', { abdomenHinge: undefined }],
+    ['a telson ahead of the hinge', { telsonZ: 0.01 }],
+    ['a telson on the hinge', { telsonZ: -0.002 }],
+    ['a fractional leg count', { legPairs: 4.5 }],
+    ['no legs', { legPairs: 0 }],
+    ['a non-finite hinge', { abdomenHinge: { y: Number.NaN, z: -0.002 } }],
+  ])('rejects a shrimp with %s', (_, override) => {
+    const shrimp = fish({
+      kind: 'shrimp',
+      shrimp: {
+        standardLengthM: 0.037,
+        abdomenHinge: { y: 0, z: -0.002 },
+        telsonZ: -0.016,
+        legPairs: 5,
+        ...override,
+      },
+    });
+    expect(() => parseFishAssets({ assets: [shrimp] })).toThrow(TypeError);
+  });
+
+  it('parses both shipped shrimp with a hinge ahead of the telson', () => {
+    const entries = parseFishAssets(shippedIndex);
+    for (const id of ['cherry-shrimp', 'cleaner-shrimp']) {
+      const rig = entries.get(id)?.shrimp;
+      expect(rig, id).toBeDefined();
+      expect(rig?.legPairs, id).toBe(5);
+      expect(rig?.telsonZ, id).toBeLessThan(rig?.hinge.z ?? -Infinity);
+    }
+  });
+
   it('gives the shipped neon tetra its 2k normal map but keeps its single-size base colour', () => {
     const neon = parseFishAssets(shippedIndex).get('neon-tetra');
     expect(neon?.sharperTextures).toEqual(

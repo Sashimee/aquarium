@@ -1,6 +1,12 @@
 import type { Species } from '@aquarium/shared';
 
 export type SwimmingMode = Species['locomotion']['swimmingMode'];
+/** Walkers (`pleopod`) have no body wave; their legs, tail and antennae follow `walk.ts`. */
+export type FinnedMode = Exclude<SwimmingMode, 'pleopod'>;
+
+export function isFinned(mode: SwimmingMode): mode is FinnedMode {
+  return mode !== 'pleopod';
+}
 
 export interface SwimModeParams {
   /**
@@ -28,7 +34,7 @@ export interface SwimModeParams {
  * λ ≈ 0.6 L (Gillis 1996). Labriform swimmers row with the pectorals and keep the body stiff.
  * Fin amplitudes are visual estimates.
  */
-export const SWIM_MODES: Readonly<Record<SwimmingMode, SwimModeParams>> = {
+export const SWIM_MODES: Readonly<Record<FinnedMode, SwimModeParams>> = {
   carangiform: {
     envelope: [0.2, -0.8, 1.6],
     wavelength: 1,
@@ -60,15 +66,6 @@ export const SWIM_MODES: Readonly<Record<SwimmingMode, SwimModeParams>> = {
     pectoral: 0.09,
     medianFin: 0.035,
     pectoralIdleHz: 2.5,
-  },
-  // Walkers have no body wave; the walk deformation lands with T24 phase 4.
-  pleopod: {
-    envelope: [0, 0, 1],
-    wavelength: 1,
-    bodyWave: 0,
-    pectoral: 0,
-    medianFin: 0,
-    pectoralIdleHz: 0,
   },
 };
 

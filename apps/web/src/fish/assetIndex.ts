@@ -1,5 +1,14 @@
+/** A walker's tail-curl axis and extent, in model space; see the index's `customAttributes`. */
+export interface ShrimpRig {
+  /** The abdomen curls about +x through this point. */
+  readonly hinge: { readonly y: number; readonly z: number };
+  readonly telsonZ: number;
+  readonly legPairs: number;
+}
+
 export interface FishAssetEntry {
   readonly id: string;
+  readonly kind: 'fish' | 'shrimp';
   readonly species: string;
   /** Model-space bounds; +Z forward, +Y up, origin at the centre of mass. */
   readonly min: readonly [number, number, number];
@@ -10,6 +19,8 @@ export interface FishAssetEntry {
   readonly lodFiles: readonly string[];
   /** 1k map → its 2k map, for the maps whose 2k variant really is larger; paths as `lodFiles`. */
   readonly sharperTextures: ReadonlyMap<string, string>;
+  /** Null for a fish. */
+  readonly shrimp: ShrimpRig | null;
 }
 
 function fail(path: string, expected: string): never {
@@ -31,6 +42,26 @@ function positive(value: unknown, path: string): number {
     fail(path, 'a positive number');
   }
   return value;
+}
+
+function finite(value: unknown, path: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) fail(path, 'a finite number');
+  return value;
+}
+
+function shrimpRig(shrimp: Record<string, unknown>, at: string): ShrimpRig {
+  const hinge = record(shrimp.abdomenHinge, `${at}.abdomenHinge`);
+  const rig = {
+    hinge: {
+      y: finite(hinge.y, `${at}.abdomenHinge.y`),
+      z: finite(hinge.z, `${at}.abdomenHinge.z`),
+    },
+    telsonZ: finite(shrimp.telsonZ, `${at}.telsonZ`),
+    legPairs: positive(shrimp.legPairs, `${at}.legPairs`),
+  };
+  if (!(rig.hinge.z > rig.telsonZ)) fail(`${at}.telsonZ`, 'behind the abdomen hinge');
+  if (!Number.isInteger(rig.legPairs)) fail(`${at}.legPairs`, 'an integer');
+  return rig;
 }
 
 function vec3(value: unknown, path: string): [number, number, number] {
@@ -81,7 +112,8 @@ export function parseFishAssets(json: unknown): Map<string, FishAssetEntry> {
   const out = new Map<string, FishAssetEntry>();
   assets.forEach((raw: unknown, i) => {
     const asset = record(raw, `assets[${i}]`);
-    if (asset.kind !== 'fish') return;
+    const kind = asset.kind;
+    if (kind !== 'fish' && kind !== 'shrimp') return;
     const id = string(asset.id, `assets[${i}].id`);
     const at = `assets[${id}]`;
     const bounds = record(asset.bounds, `${at}.bounds`);
@@ -93,15 +125,17 @@ export function parseFishAssets(json: unknown): Map<string, FishAssetEntry> {
     const lodFiles = lods.map((lod: unknown, j) =>
       assetPath(record(lod, `${at}.lods[${j}]`).file, `${at}.lods[${j}].file`),
     );
-    const fish = record(asset.fish, `${at}.fish`);
+    const body = record(asset[kind], `${at}.${kind}`);
     out.set(id, {
       id,
+      kind,
       species: string(asset.species, `${at}.species`),
       min,
       max,
-      standardLengthM: positive(fish.standardLengthM, `${at}.fish.standardLengthM`),
+      standardLengthM: positive(body.standardLengthM, `${at}.${kind}.standardLengthM`),
       lodFiles,
       sharperTextures: sharperTextures(asset.textures, `${at}.textures`),
+      shrimp: kind === 'shrimp' ? shrimpRig(body, `${at}.shrimp`) : null,
     });
   });
   return out;
