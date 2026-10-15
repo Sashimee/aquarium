@@ -4,7 +4,7 @@ import type { Engine } from '../engine/Engine';
 import type { EventBus } from '../engine/events';
 import type { TankDimensions } from '../engine/tank/dimensions';
 import type { InteractionEvents } from '../interaction/events';
-import { SimUnavailableError } from '../interaction/food/clipReach';
+import { SimUnavailableError } from '../interaction/simUnavailable';
 import type { SceneAnchor } from '../scene/anemone';
 import type { Collider as SceneCollider } from '../scene/colliders';
 import type { FishSystem } from './FishSystem';
