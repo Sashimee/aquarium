@@ -1,20 +1,20 @@
 import { followAnyFish } from './interaction/follow';
 import { depthOfFieldFollowsCamera } from './engine/cameraFocus';
-import { Engine } from './engine/Engine';
+import type { Engine } from './engine/Engine';
 import { EventBus, type EngineEvents } from './engine/events';
 import { parseEngineOptions } from './engine/options';
-import { DEFAULT_TANK } from './engine/tank/dimensions';
 import { queueTankEvents, startFish, type FishHandle } from './fish/start';
 import { CameraRig } from './interaction/camera';
 import { bindCameraControls } from './interaction/controls';
-import { FeederLayer } from './interaction/decor/feederLayer';
 import { SceneDecor } from './interaction/decor/sceneDecor';
 import { STICKY_INTERACTION_EVENTS, type InteractionEvents } from './interaction/events';
 import { onPageTeardown } from './interaction/pageLifecycle';
 import { watchReducedMotion } from './interaction/motion';
 import { PlayChoices } from './interaction/play/choices';
-import { createPlaySystem, type PlaySystem } from './interaction/play/system';
-import { mountBiomeScene, parseBiome, TankBiome, withBiome, type TankScene } from './scene';
+import type { PlaySystem } from './interaction/play/system';
+import { TankBiome } from './scene/biomeScene';
+import { parseBiome, withBiome } from './scene/options';
+import type { TankScene } from './scene/TankScene';
 import { mountUi } from './ui/mount';
 import { FeedGate } from './sync/feedGate';
 
@@ -35,6 +35,7 @@ function requireElement(id: string): HTMLElement {
 async function boot(): Promise<void> {
   const container = requireElement('app');
   const uiRoot = requireElement('ui');
+  const tank = import('./tank');
 
   const events = new EventBus<EngineEvents>(undefined, ['engine:ready']);
   const interaction = new EventBus<InteractionEvents>(undefined, STICKY_INTERACTION_EVENTS);
@@ -49,8 +50,8 @@ async function boot(): Promise<void> {
   const sceneDecor = new SceneDecor<TankScene>(
     interaction,
     () =>
-      import('./interaction/decor/system').then(
-        ({ createDecorSystem }) =>
+      Promise.all([import('./interaction/decor/system'), tank]).then(
+        ([{ createDecorSystem }, { FeederLayer }]) =>
           (scene, initial) =>
             createDecorSystem(engine, scene, interaction, initial, new FeederLayer()),
       ),
@@ -71,9 +72,11 @@ async function boot(): Promise<void> {
   });
   mountUi(uiRoot, { engine: events, interaction });
 
+  let modules: Awaited<typeof tank>;
   let engine: Engine;
   try {
-    engine = await Engine.create(container, {
+    modules = await tank;
+    engine = await modules.Engine.create(container, {
       options: parseEngineOptions(window.location.search),
       events,
     });
@@ -87,6 +90,7 @@ async function boot(): Promise<void> {
     return;
   }
 
+  const { DEFAULT_TANK, createPlaySystem, mountBiomeScene } = modules;
   const canvas = engine.renderer.domElement;
   canvas.id = 'tank';
   canvas.tabIndex = 0;
