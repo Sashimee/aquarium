@@ -259,6 +259,7 @@ export class FishSystem {
       signal.throwIfAborted();
     } catch (cause) {
       system.release();
+      system.simErrors.close(cause);
       throw signal.aborted ? signal.reason : cause;
     }
     system.started = true;
@@ -909,6 +910,7 @@ export class FishSystem {
   private connectSim(worker: Worker): SimClient {
     const sim = new SimClient(worker);
     sim.onError(this.simErrors.receive);
+    worker.addEventListener('error', this.simErrors.workerFailed);
     sim.onSnapshot((snapshot) => this.stream.push(snapshot, performance.now()));
     sim.onAte((events) => {
       const bites = this.roster.translateAte(events);

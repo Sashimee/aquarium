@@ -140,6 +140,14 @@ export class SimInitTimeout extends Error {
   }
 }
 
+/** The worker failed while `init` waited for it. */
+export class SimWorkerFailure extends Error {
+  constructor(detail: string) {
+    super(`Fish sim worker failed to start: ${detail}`);
+    this.name = 'SimWorkerFailure';
+  }
+}
+
 type WorkerError = Pick<ErrorEvent, 'message'>;
 
 /** The part of the worker `initSim` watches; a `Worker` is one. */
@@ -173,7 +181,7 @@ export function initSim({ client, worker, config, signal, timeoutMs }: SimInit):
       finish();
     };
     const onError = (event: WorkerError): void =>
-      settle(() => reject(new Error(`Fish sim worker failed to start: ${event.message}`)));
+      settle(() => reject(new SimWorkerFailure(event.message)));
     const onAbort = (): void => settle(() => reject(signal.reason));
     const timer = setTimeout(() => settle(() => reject(new SimInitTimeout(timeoutMs))), timeoutMs);
     worker.addEventListener('error', onError);
@@ -187,22 +195,45 @@ export function initSim({ client, worker, config, signal, timeoutMs }: SimInit):
 
 /**
  * Takes the sim errors no request waits for from the first `init` on, so none is ever thrown as
- * unheard. Until `open` they are held: a worker failure while the system starts also rejects that
- * start, which reports it, so held errors reach `report` only once the start has succeeded.
+ * unheard. Until the start settles they are held. `open` reports them all. `close` reports all but
+ * the one the start failed with, which the start's own error reports: a worker failure reaches both
+ * `receive` and the request it rejects, and an unrelated error held before a start that failed for
+ * another reason, a timeout say, would otherwise never be heard.
  */
 export class SimErrorGate {
-  private held: string[] | null = [];
+  private held: { readonly message: string; workerFailure: boolean }[] | null = [];
 
   constructor(private readonly report: (message: string) => void) {}
 
   readonly receive = (message: string): void => {
     if (this.held === null) this.report(message);
-    else this.held.push(message);
+    else this.held.push({ message, workerFailure: false });
+  };
+
+  /**
+   * The worker raised an error event. Call it from a listener added after the `SimClient`'s, which
+   * has by then passed the failure to `receive` as the latest message.
+   */
+  readonly workerFailed = (): void => {
+    const latest = this.held?.at(-1);
+    if (latest !== undefined) latest.workerFailure = true;
   };
 
   open(): void {
+    this.flush(() => true);
+  }
+
+  close(failure: unknown): void {
+    const thrown = failure instanceof Error ? failure.message : null;
+    this.flush(
+      ({ message, workerFailure }) =>
+        message !== thrown && !(workerFailure && failure instanceof SimWorkerFailure),
+    );
+  }
+
+  private flush(keep: (held: { message: string; workerFailure: boolean }) => boolean): void {
     const held = this.held ?? [];
     this.held = null;
-    for (const message of held) this.report(message);
+    for (const entry of held) if (keep(entry)) this.report(entry.message);
   }
 }

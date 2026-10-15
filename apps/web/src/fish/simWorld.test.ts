@@ -18,6 +18,7 @@ import {
   layoutChanges,
   SimErrorGate,
   SimInitTimeout,
+  SimWorkerFailure,
   SimWorldSpec,
   startWorld,
   type SimInit,
@@ -436,24 +437,26 @@ describe('initSim', () => {
 describe('SimErrorGate', () => {
   class FakePort implements SimClientPort {
     readonly sent: unknown[] = [];
-    private readonly messages = new Set<(event: MessageEvent) => void>();
-    private readonly failures = new Set<(event: Event) => void>();
+    private readonly listeners = new Map<string, Set<(event: never) => void>>();
     postMessage(message: unknown): void {
       this.sent.push(message);
     }
     addEventListener(type: string, listener: (event: never) => void): void {
-      if (type === 'message') this.messages.add(listener as (event: MessageEvent) => void);
-      else this.failures.add(listener as (event: Event) => void);
+      const set = this.listeners.get(type) ?? new Set();
+      set.add(listener);
+      this.listeners.set(type, set);
     }
     removeEventListener(type: string, listener: (event: never) => void): void {
-      if (type === 'message') this.messages.delete(listener as (event: MessageEvent) => void);
-      else this.failures.delete(listener as (event: Event) => void);
+      this.listeners.get(type)?.delete(listener);
     }
     emit(data: unknown): void {
-      for (const l of this.messages) l(new MessageEvent('message', { data }));
+      this.dispatch('message', new MessageEvent('message', { data }));
     }
-    crash(): void {
-      for (const l of this.failures) l(new Event('error'));
+    crash(type: 'error' | 'messageerror' = 'error', message = ''): void {
+      this.dispatch(type, Object.assign(new Event(type), type === 'error' ? { message } : {}));
+    }
+    private dispatch(type: string, event: Event): void {
+      for (const l of [...(this.listeners.get(type) ?? [])]) (l as (event: Event) => void)(event);
     }
   }
 
@@ -468,7 +471,25 @@ describe('SimErrorGate', () => {
     const reported: string[] = [];
     const gate = new SimErrorGate((message) => reported.push(message));
     client.onError(gate.receive);
+    port.addEventListener('error', gate.workerFailed);
     return { port, client, reported, gate };
+  }
+
+  function starting(port: FakePort, client: SimClient, timeoutMs = 1000): Promise<SimReady> {
+    const { spec, roster } = setup();
+    const config = spec.config(roster.swimming());
+    if (config === null) throw new Error('the demo has no world');
+    const signal = new AbortController().signal;
+    return initSim({ client, worker: port, config, signal, timeoutMs });
+  }
+
+  async function failure(start: Promise<unknown>): Promise<unknown> {
+    try {
+      await start;
+    } catch (cause) {
+      return cause;
+    }
+    throw new Error('the start succeeded');
   }
 
   it('holds an unrequested error from a world still starting instead of throwing it', () => {
@@ -499,6 +520,58 @@ describe('SimErrorGate', () => {
     port.crash();
     await expect(init).rejects.toThrow();
     expect(reported).toEqual([]);
+  });
+
+  it('reports neither copy of a worker crash that failed the start', async () => {
+    const { port, client, reported, gate } = connect();
+    const start = starting(port, client);
+    port.crash('error', 'boom');
+    const cause = await failure(start);
+    expect(cause).toBeInstanceOf(SimWorkerFailure);
+    gate.close(cause);
+    expect(reported).toEqual([]);
+  });
+
+  it('reports a held error, not the unreadable message, when that message failed the start', async () => {
+    const { port, client, reported, gate } = connect();
+    const start = starting(port, client);
+    port.emit({ type: 'error', message: 'bad collider' });
+    port.crash('messageerror');
+    gate.close(await failure(start));
+    expect(reported).toEqual(['bad collider']);
+  });
+
+  it('reports what it held, crash included, when the start failed for another reason', async () => {
+    vi.useFakeTimers();
+    try {
+      const { port, client, reported, gate } = connect();
+      port.crash('error', 'boom');
+      port.emit({ type: 'error', message: 'bad collider' });
+      const start = failure(starting(port, client));
+      await vi.advanceTimersByTimeAsync(1000);
+      const cause = await start;
+      expect(cause).toBeInstanceOf(SimInitTimeout);
+      gate.close(cause);
+      expect(reported).toEqual(['sim worker failed: boom', 'bad collider']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reports an error held before a worker crash that failed the start', async () => {
+    const { port, client, reported, gate } = connect();
+    const start = starting(port, client);
+    port.emit({ type: 'error', message: 'bad collider' });
+    port.crash('error', 'boom');
+    gate.close(await failure(start));
+    expect(reported).toEqual(['bad collider']);
+  });
+
+  it('reports errors as they come once closed', async () => {
+    const { port, reported, gate } = connect();
+    gate.close(await failure(Promise.reject(new Error('species failed to load'))));
+    port.emit({ type: 'error', message: 'late' });
+    expect(reported).toEqual(['late']);
   });
 
   it('leaves an error naming a pending request to that request', async () => {

@@ -167,6 +167,28 @@ describe('the shared loader init', () => {
   });
 });
 
+describe('the shared loader dispose', () => {
+  it('leaves three able to warn about two active loaders of its own', async () => {
+    stubFetch();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const shared = createSharedKtx2(renderer);
+    await shared.loader.init();
+    shared.dispose();
+    shared.dispose();
+    const a = new KTX2Loader().setTranscoderPath('basis/');
+    const b = new KTX2Loader().setTranscoderPath('basis/');
+
+    await a.init();
+    expect(warn).not.toHaveBeenCalled();
+    await b.init();
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toMatch(/Multiple active KTX2 loaders/);
+    a.dispose();
+    b.dispose();
+  });
+});
+
 describe('the shared loader after dispose', () => {
   const texture = readFileSync(
     join(
