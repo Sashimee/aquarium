@@ -12,10 +12,10 @@ import {
 } from './profiles';
 import { SWIM_MODES } from './swim';
 
-const contentFiles = import.meta.glob<unknown>(
-  ['../../../../content/species/*.json', '../../../../content/species-pending/*.json'],
-  { eager: true, import: 'default' },
-);
+const contentFiles = import.meta.glob<unknown>(['../../../../content/species/*.json'], {
+  eager: true,
+  import: 'default',
+});
 
 interface ContentSpecies {
   readonly id: string;
@@ -164,14 +164,14 @@ describe('render profile coverage', () => {
     return raw;
   });
 
-  it('reads both the live and the pending species', () => {
+  it('reads the shipped species', () => {
     const ids = species.map((s) => s.id);
     expect(ids).toContain('neon-tetra');
     expect(ids).toContain('firefish');
     expect(ids).toContain('cherry-shrimp');
   });
 
-  it('has a profile for every species, live or pending, walkers included', () => {
+  it('has a profile for every species, walkers included', () => {
     for (const { id } of species) expect(() => renderProfile(id), id).not.toThrow();
   });
 

@@ -5,8 +5,6 @@ import { behaviourSchema, speciesContentSchema, traitSchema } from './species.js
 
 const dir = join(import.meta.dirname, '../../../content/species');
 const files = readdirSync(dir).filter((f) => f.endsWith('.json'));
-const pendingDir = join(import.meta.dirname, '../../../content/species-pending');
-const pendingFiles = readdirSync(pendingDir).filter((f) => f.endsWith('.json'));
 
 describe('content/species', () => {
   it('has species files', () => {
@@ -15,17 +13,6 @@ describe('content/species', () => {
 
   it.each(files)('%s passes the shared schema', (file) => {
     const raw: unknown = JSON.parse(readFileSync(join(dir, file), 'utf8'));
-    expect(speciesContentSchema.safeParse(raw).error).toBeUndefined();
-  });
-});
-
-describe('content/species-pending', () => {
-  it('has species files', () => {
-    expect(pendingFiles.length).toBeGreaterThan(0);
-  });
-
-  it.each(pendingFiles)('%s passes the content schema', (file) => {
-    const raw: unknown = JSON.parse(readFileSync(join(pendingDir, file), 'utf8'));
     expect(speciesContentSchema.safeParse(raw).error).toBeUndefined();
   });
 });
@@ -79,7 +66,7 @@ describe('walking invertebrates', () => {
     behaviour: { traits: string[] };
     locomotion: Record<string, unknown>;
   };
-  const cherry = JSON.parse(readFileSync(join(pendingDir, 'cherry-shrimp.json'), 'utf8')) as {
+  const cherry = JSON.parse(readFileSync(join(dir, 'cherry-shrimp.json'), 'utf8')) as {
     behaviour: Record<string, unknown>;
     locomotion: Record<string, unknown>;
   };

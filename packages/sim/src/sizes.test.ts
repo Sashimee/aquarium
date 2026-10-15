@@ -18,6 +18,7 @@ const species = new Map(
 
 interface FishModel {
   id: string;
+  kind: string;
   species: string;
   tlOverSl: number;
 }
@@ -36,12 +37,23 @@ function fishModels(): Map<string, FishModel> {
   };
   const out = new Map<string, FishModel>();
   for (const a of index.assets) {
+    if (a.kind === 'shrimp') {
+      if (a.species === undefined)
+        throw new Error(`assets/index.json: shrimp "${a.id}" lacks species`);
+      out.set(a.id, { id: a.id, kind: a.kind, species: a.species, tlOverSl: 1 });
+      continue;
+    }
     if (a.kind !== 'fish') continue;
     if (a.species === undefined || a.bounds === undefined || a.fish === undefined) {
       throw new Error(`assets/index.json: fish "${a.id}" lacks species, bounds or fish info`);
     }
     const tl = (a.bounds.max[2] ?? 0) - (a.bounds.min[2] ?? 0);
-    out.set(a.id, { id: a.id, species: a.species, tlOverSl: tl / a.fish.standardLengthM });
+    out.set(a.id, {
+      id: a.id,
+      kind: a.kind,
+      species: a.species,
+      tlOverSl: tl / a.fish.standardLengthM,
+    });
   }
   return out;
 }
@@ -138,6 +150,20 @@ const ADULT_MAX: Record<string, { model: string; maxSlM: number; maxTlM: number;
       maxSlM: 0.08 / 1.277,
       maxTlM: 0.08,
       source: 'FishBase: 8 cm TL (Ref. 7251); TL = 1.277 SL',
+    },
+    'cherry-shrimp': {
+      model: 'cherry-shrimp',
+      maxSlM: 0.035,
+      maxTlM: 0.035,
+      source:
+        'Neocaridina davidi: females reach about 3.5 cm; the shrimp standard length is rostrum to telson',
+    },
+    'cleaner-shrimp': {
+      model: 'cleaner-shrimp',
+      maxSlM: 0.055,
+      maxTlM: 0.055,
+      source:
+        'Lysmata amboinensis: up to about 5.5 cm; the shrimp standard length is rostrum to telson',
     },
     'six-line-wrasse': {
       model: 'six-line-wrasse',

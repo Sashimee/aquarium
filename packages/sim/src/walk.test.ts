@@ -394,10 +394,10 @@ describe('walkers', { timeout: LONG }, () => {
 });
 
 describe('walker species', () => {
-  const pending = join(import.meta.dirname, '../../../content/species-pending');
+  const shipped = join(import.meta.dirname, '../../../content/species');
 
   it.each(['cherry-shrimp.json', 'cleaner-shrimp.json'])('loads and runs %s', (file) => {
-    const raw: unknown = JSON.parse(readFileSync(join(pending, file), 'utf8'));
+    const raw: unknown = JSON.parse(readFileSync(join(shipped, file), 'utf8'));
     const species = speciesContentSchema.parse(raw);
     const sim = toSimSpecies(species);
     expect(sim.walking).not.toBeNull();
