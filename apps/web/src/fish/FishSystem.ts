@@ -238,7 +238,7 @@ export class FishSystem {
     const seed = options.seed ?? Math.floor(Math.random() * 0x7fffffff);
     const demo = demoTank(options.tank, seed, options.biome);
     const system = new FishSystem(engine, spawnSimWorker(), options, demo, seed);
-    const onAbort = (): void => system.dispose();
+    const onAbort = (): void => system.release();
     signal.addEventListener('abort', onAbort);
     system.cleanups.push(() => signal.removeEventListener('abort', onAbort));
     try {
@@ -248,7 +248,7 @@ export class FishSystem {
       await system.syncWorld();
       signal.throwIfAborted();
     } catch (cause) {
-      system.dispose();
+      system.release();
       throw signal.aborted ? signal.reason : cause;
     }
     system.started = true;
@@ -479,6 +479,15 @@ export class FishSystem {
     this.ateListeners.clear();
     for (const resolve of this.syncWaiters.splice(0)) resolve();
     releaseAll(this.cleanups.splice(0), 'FishSystem');
+  }
+
+  /** Disposes where no caller could catch it, so a failed cleanup is reported, not thrown. */
+  private release(): void {
+    try {
+      this.dispose();
+    } catch (cause) {
+      this.engine.events.emit('engine:error', { message: 'Fish cleanup failed', cause });
+    }
   }
 
   /** Silent once the engine is going: its teardown fails loads that are still in flight. */

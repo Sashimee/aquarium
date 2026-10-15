@@ -31,9 +31,10 @@ describe('releaseAll', () => {
       thrown = error;
     }
     expect(order).toEqual(['d', 'a']);
-    expect(thrown).toBeInstanceOf(AggregateError);
-    expect((thrown as AggregateError).errors).toEqual([late, early]);
-    expect((thrown as AggregateError).message).toBe('Owner: 2 cleanup step(s) failed');
+    if (!(thrown instanceof AggregateError))
+      throw new Error('releaseAll must throw AggregateError');
+    expect(thrown.errors).toEqual([late, early]);
+    expect(thrown.message).toBe('Owner: 2 cleanup step(s) failed');
   });
 
   it('does nothing with no steps', () => {
