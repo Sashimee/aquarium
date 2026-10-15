@@ -67,7 +67,7 @@ import {
   SimWorldSpec,
   startWorld,
 } from './simWorld';
-import { SimUnavailableError } from '../interaction/food/clipReach';
+import { SimUnavailableError } from '../interaction/simUnavailable';
 import { speciesInput } from './species';
 import type { FishBite, FishPoint, PickRay, TankEvent } from './start';
 import { SWIM_MODES, SwimState } from './swim';

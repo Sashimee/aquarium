@@ -89,19 +89,16 @@ test('a decor piece is swapped, moved, saved and still there after a reload', as
   // The new piece lands in the nearest free spot, so which neighbour blocks a nudge (a plant stem
   // inside a rock is refused) depends on the layout; step towards the first open side.
   const layoutJson = async () => JSON.stringify((await savedTanks(page))[0]?.decorLayout);
+  const status = panel.locator('.decor-status');
   let accepted = false;
   for (const side of ['Right', 'Left', 'Back', 'Forward']) {
-    const before = await layoutJson();
     await panel.getByRole('button', { name: side, exact: true }).click();
-    // The status text of an earlier refusal can still be on screen, so only the saved layout says
-    // whether this click moved the piece.
-    accepted = await expect
-      .poll(layoutJson, { timeout: 5_000 })
-      .not.toBe(before)
-      .then(
-        () => true,
-        () => false,
-      );
+    // A nudge clears the status text when it is accepted and sets it when refused, in the same
+    // render, so after two frames the text is this click's answer and not an earlier refusal's.
+    await page.evaluate(
+      () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+    );
+    accepted = ((await status.textContent()) ?? '').trim() === '';
     if (accepted) break;
   }
   expect(accepted, 'at least one side lets the piece move').toBe(true);

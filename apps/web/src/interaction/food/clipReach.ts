@@ -1,4 +1,5 @@
 import type { FoodParticle } from './particles';
+import { SimUnavailableError } from '../simUnavailable';
 
 export interface ReachBridge {
   /** The species in the tank that eat nori. */
@@ -9,14 +10,6 @@ export interface ReachBridge {
 
 /** How far a refused clip climbs per try; the #302 slot behind the reef rock clears within a few. */
 export const CLIP_STEP_M = 0.02;
-
-/** What a `ReachBridge` rejects with while the sim cannot answer; anything else is a bug. */
-export class SimUnavailableError extends Error {
-  constructor(message = 'The fish sim is not ready') {
-    super(message);
-    this.name = 'SimUnavailableError';
-  }
-}
 
 export type ClipSpot = { readonly y: number } | null;
 
