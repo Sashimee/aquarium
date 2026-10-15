@@ -45,6 +45,7 @@ import {
   smoothstep,
   step,
   texture,
+  vec2,
   vec3,
   vec4,
 } from 'three/tsl';
@@ -146,16 +147,31 @@ function rotateByQuat(q: Node<'vec4'>, v: Node<'vec3'>): Node<'vec3'> {
   return v.add(t.mul(q.w)).add(cross(q.xyz, t));
 }
 
-/** Dave Hoskins' "hash without sine" hash13: no trigonometry, so it is stable on mobile GPUs. */
-function hash13(cell: Node<'vec3'>): Node<'float'> {
-  const p = fract(cell.mul(0.1031)).toVar();
-  const q = p.add(dot(p, p.zyx.add(31.32)));
-  return fract(q.x.add(q.y).mul(q.z));
+/**
+ * Jimenez's interleaved gradient noise (2014) on a lattice of cells: neighbours take well-spread
+ * values, so a close-up membrane dithers evenly where a white-noise hash leaves clumps and gaps.
+ */
+function interleavedGradient(cell: Node<'vec2'>): Node<'float'> {
+  return fract(fract(dot(cell, vec2(0.06711056, 0.00583715))).mul(52.9829189));
+}
+
+/**
+ * IGN over the rest-pose plane a surface faces most. Each layer of cells along the third axis is
+ * shifted by the step IGN uses between frames, so the two sides of a fish (paired fins, the
+ * flanks of a fin's fold) do not share a pattern.
+ */
+function surfaceCellNoise(cell: Node<'vec3'>): Node<'float'> {
+  const n = abs(normalGeometry);
+  const facesX = n.x.greaterThanEqual(max(n.y, n.z));
+  const facesY = n.y.greaterThanEqual(n.z);
+  const plane = select(facesX, cell.yz, select(facesY, cell.zx, cell.xy));
+  const layer = select(facesX, cell.x, select(facesY, cell.y, cell.z));
+  return interleavedGradient(plane.add(layer.mul(5.588238)));
 }
 
 /**
  * Uniform noise anchored to the surface: hashed alpha testing (Wyman & McGuire 2017). Cells are
- * hashed from the rest-pose model position at about one per pixel, so the pattern rides along with
+ * cut from the rest-pose model position at about one per pixel, so the pattern rides along with
  * a beating fin instead of crawling over it as a screen-space pattern does. The cell size steps in
  * powers of two with the distance, blended between the two nearest and remapped to stay uniform.
  * The per-fish offset keeps two overlapping fins from sharing a pattern.
@@ -166,8 +182,8 @@ function surfaceNoise(seed: Node<'float'>): Node<'float'> {
   const level = log2(footprint);
   const fine = exp2(floor(level));
   const offset = vec3(seed.mul(61.3), seed.mul(29.7), seed.mul(17.1)).floor();
-  const a = hash13(floor(p.div(fine)).add(offset));
-  const b = hash13(floor(p.div(fine.mul(2))).add(offset));
+  const a = surfaceCellNoise(floor(p.div(fine)).add(offset));
+  const b = surfaceCellNoise(floor(p.div(fine.mul(2))).add(offset));
   const t = fract(level);
   const x = mix(a, b, t);
   const edge = max(min(t, t.oneMinus()), 1e-4);

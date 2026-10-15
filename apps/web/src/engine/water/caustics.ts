@@ -375,9 +375,19 @@ export class Caustics {
     const inWater = medium.submerged(p).toVar();
     const cosLight = max(this.lightDirection.y, MIN_COS_LIGHT);
     const slant = depth.div(cosLight).toVar();
-    const transmittance = exp(medium.extinction().mul(slant.mul(inWater)).negate());
-    const light = transmittance.mul(medium.hoodSpread(depth.mul(inWater))).mul(this.lightRadiance);
+    const light = this.shareAtDepth(depth.mul(inWater)).mul(this.lightRadiance);
     return { depth, inWater, slant, light };
+  }
+
+  /**
+   * The shader side of `reachAtDepth`, which feeds the once-per-frame substrate bounce: a test
+   * evaluates this graph on the CPU and holds the two together.
+   */
+  shareAtDepth(depth: Node<'float'>): Node<'vec3'> {
+    const { medium } = this;
+    const below = max(depth, 0);
+    const slant = below.div(max(this.lightDirection.y, MIN_COS_LIGHT));
+    return exp(medium.extinction().mul(slant).negate()).mul(medium.hoodSpread(below));
   }
 
   /** The hood's light at `p` without the caustic pattern, for effects shaded by hand. */
@@ -390,7 +400,10 @@ export class Caustics {
     return target.copy(this.casting);
   }
 
-  /** The share of the hood's light, per channel, that spread and absorption leave at `depth` (m). */
+  /**
+   * The share of the hood's light, per channel, that spread and absorption leave at `depth` (m).
+   * It mirrors `shareAtDepth` for the CPU.
+   */
   reachAtDepth(depth: number, target: Color): Color {
     const { medium } = this;
     const below = Math.max(depth, 0);
