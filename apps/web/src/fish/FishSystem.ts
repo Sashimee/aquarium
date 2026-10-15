@@ -258,8 +258,9 @@ export class FishSystem {
       await system.syncWorld();
       signal.throwIfAborted();
     } catch (cause) {
+      // Before release, which silences `report`; an aborted start is meant to go quietly.
+      if (!signal.aborted) system.simErrors.close(cause);
       system.release();
-      system.simErrors.close(cause);
       throw signal.aborted ? signal.reason : cause;
     }
     system.started = true;

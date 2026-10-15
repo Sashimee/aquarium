@@ -24,6 +24,8 @@ export interface RosterFish {
   /**
    * The server's hunger when this fish joined the roster, less what the server takes off for each
    * bite passed on since; unset for demo fish. A world rebuilt mid-session seeds the gut from it.
+   * The server rejects a whole batch of bite reports it finds implausible, so after a rejected
+   * batch this sits below the server's value until the fish rejoins.
    */
   hunger?: number;
 }
