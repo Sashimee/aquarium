@@ -12,6 +12,7 @@ async function open(page: Page, url: string): Promise<void> {
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await expect(page.locator('canvas#tank')).toBeVisible();
   await page.getByRole('button', { name: 'Tank report' }).click();
+  await expect(page.getByText(/Rendering with WebGL 2 at the low quality tier/)).toBeVisible();
 }
 
 const typeButton = (page: Page, name: 'Freshwater' | 'Reef') =>
