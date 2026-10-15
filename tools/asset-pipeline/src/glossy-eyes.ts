@@ -82,8 +82,68 @@ export function flattenEyeBeads(parts: Part[], spec: GlossyEyeSpec): void {
       for (let a = 0; a < 3; a++) part.positions[i * 3 + a] = positions[v * 3 + a]!;
     }
     recomputeNormals(part, welded, touched);
+    snapStrayUvs(part, welded.canon, positions, free, spheres);
   }
 }
+
+/**
+ * The source atlas gives the bead and its surround to a scatter of tiny islands. Once the bead is flattened away
+ * the triangles that kept those islands' texels show as dark shards, so any texel far from the patch's own island
+ * takes the texel of the nearest skin vertex outside the patch.
+ */
+function snapStrayUvs(
+  part: Part,
+  canon: Uint32Array | number[],
+  positions: Float32Array,
+  free: Uint8Array,
+  spheres: EyeSphere[],
+): void {
+  const nearest = (v: number): number => {
+    let best = 0;
+    let bestDistance = Infinity;
+    spheres.forEach((s, k) => {
+      const d = Math.hypot(
+        positions[v * 3]! - s.centre[0],
+        positions[v * 3 + 1]! - s.centre[1],
+        positions[v * 3 + 2]! - s.centre[2],
+      );
+      if (d < bestDistance) [best, bestDistance] = [k, d];
+    });
+    return best;
+  };
+  spheres.forEach((_, k) => {
+    const copies: number[] = [];
+    for (let i = 0; i < canon.length; i++)
+      if (free[canon[i]!] && nearest(canon[i]!) === k) copies.push(i);
+    if (copies.length === 0) return;
+    const median = (axis: number): number => {
+      const values = copies.map((i) => part.uvs[i * 2 + axis]!).sort((a, b) => a - b);
+      return values[values.length >> 1]!;
+    };
+    const [mu, mv] = [median(0), median(1)];
+    const strays = copies.filter(
+      (i) => Math.abs(part.uvs[i * 2]! - mu) + Math.abs(part.uvs[i * 2 + 1]! - mv) > STRAY_UV,
+    );
+    const skin: number[] = [];
+    for (let i = 0; i < canon.length; i++) if (!free[canon[i]!]) skin.push(i);
+    for (const i of strays) {
+      let best = skin[0]!;
+      let bestDistance = Infinity;
+      for (const j of skin) {
+        const d = Math.hypot(
+          positions[canon[j]! * 3]! - positions[canon[i]! * 3]!,
+          positions[canon[j]! * 3 + 1]! - positions[canon[i]! * 3 + 1]!,
+          positions[canon[j]! * 3 + 2]! - positions[canon[i]! * 3 + 2]!,
+        );
+        if (d < bestDistance) [best, bestDistance] = [j, d];
+      }
+      part.uvs[i * 2] = part.uvs[best * 2]!;
+      part.uvs[i * 2 + 1] = part.uvs[best * 2 + 1]!;
+    }
+  });
+}
+
+const STRAY_UV = 0.05;
 
 /**
  * The spheres that cover the eye beads a source fused into its single head mesh, one per side, -X first. The

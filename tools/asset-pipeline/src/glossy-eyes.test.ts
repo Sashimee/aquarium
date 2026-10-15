@@ -174,4 +174,24 @@ describe('flattenEyeBeads', () => {
       if (original[i + 2]! < 0) expect(bumpy.positions[i + 2]).toBe(original[i + 2]);
     }
   });
+
+  it('takes stray bead texels back to the skin around the eye', () => {
+    const bumpy = withBead();
+    const { centre } = eyeSpheres(bumpy, spec)[1]!;
+    const stray = (i: number): boolean =>
+      bumpy.positions[i * 3 + 1]! > 0 &&
+      Math.hypot(bumpy.positions[i * 3]! - centre[0], bumpy.positions[i * 3 + 2]! - centre[2]) <
+        0.05;
+    for (let i = 0; i < bumpy.positions.length / 3; i++) {
+      bumpy.uvs[i * 2] = stray(i) ? 0.9 : 0.1;
+      bumpy.uvs[i * 2 + 1] = stray(i) ? 0.9 : 0.1;
+    }
+    const strays = Array.from({ length: bumpy.positions.length / 3 }, (_, i) => i).filter(stray);
+    expect(strays.length).toBeGreaterThan(0);
+    flattenEyeBeads([bumpy], spec);
+    for (const i of strays) {
+      expect(bumpy.uvs[i * 2]).toBeCloseTo(0.1, 5);
+      expect(bumpy.uvs[i * 2 + 1]).toBeCloseTo(0.1, 5);
+    }
+  });
 });
