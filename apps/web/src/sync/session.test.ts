@@ -182,6 +182,17 @@ describe('reconciling snapshots', () => {
     expect(session.activeTank?.name).toBe('Home tank');
   });
 
+  it('emits the new hunger and health of a living fish whose server values changed', async () => {
+    const { api, rec, session } = setup();
+    await session.setUser(verified);
+    const later = '2026-02-01T12:10:00.000Z';
+    const sicker = fishFixture(FISH_1, { hunger: 0.8, health: 0.4 });
+    api.care.mockResolvedValue(tankFixture({ lastTickAt: later, fish: [sicker] }));
+    await session.careAction({ type: 'water_change' });
+    await session.careAction({ type: 'water_change' });
+    expect(rec.of('tank:fish-updated')).toEqual([{ tankId: TANK_A, fish: [sicker] }]);
+  });
+
   it('emits a death exactly once and a removal when another device nets the fish', async () => {
     const { api, rec, session } = setup();
     await session.setUser(verified);

@@ -185,8 +185,7 @@ export class PlayController {
       events.emit('feed:rejected', { reason: 'tank-full', retryAfterMs: 0 });
       return;
     }
-    const wanted = Math.max(1, Math.round(particlesPerPortion(food) * portion));
-    const placedPortion = portion * Math.min(1, particles / wanted);
+    const placedPortion = particles / particlesPerPortion(food);
     if (food === 'nori' && this.deps.reach) {
       void this.checkClips(field.particles.slice(-particles), placedPortion, fedAt);
       return;

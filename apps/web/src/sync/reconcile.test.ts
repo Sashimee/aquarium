@@ -35,10 +35,24 @@ describe('diffFish', () => {
     expect(diff.added.map((f) => f.id)).toEqual([FISH_3]);
   });
 
+  it('reports a living fish whose hunger or health changed as updated', () => {
+    const before = fishFixture(FISH_1, { hunger: 0.1, health: 1 });
+    const hungrier = { ...before, hunger: 0.9 };
+    const sicker = { ...before, health: 0.5 };
+    expect(diffFish([before], [hungrier]).updated).toEqual([hungrier]);
+    expect(diffFish([before], [sicker]).updated).toEqual([sicker]);
+  });
+
   it('ignores changes that need no scene action', () => {
-    const before = fishFixture(FISH_1, { hunger: 0.1 });
-    const diff = diffFish([before], [{ ...before, hunger: 0.9, size: 0.03 }]);
-    expect(diff).toEqual({ added: [], removed: [], died: [] });
+    const before = fishFixture(FISH_1);
+    const diff = diffFish([before], [{ ...before, size: 0.03 }]);
+    expect(diff).toEqual({ added: [], removed: [], died: [], updated: [] });
+  });
+
+  it('does not report a dying fish as updated', () => {
+    const before = fishFixture(FISH_1);
+    const diff = diffFish([before], [{ ...before, status: 'dead', health: 0 }]);
+    expect(diff.updated).toEqual([]);
   });
 });
 
