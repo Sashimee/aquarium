@@ -27,7 +27,15 @@ describe('TankRoster', () => {
     expect(fish.map((f) => f.key)).toEqual(['neon-tetra-0', 'angelfish-0']);
     expect(fish.every((f) => f.serverId === null && f.phase === 'swimming')).toBe(true);
     expect(fish[0]?.lengthM).toBe(0.03);
+    expect(fish.map((f) => f.sex)).toEqual([null, null]);
     expect(roster.tankId).toBeNull();
+  });
+
+  it('carries the sex the server stored on every saved fish, however it arrives', () => {
+    const roster = loaded([fishFixture(FISH_1, { sex: 'male' }), fishFixture(FISH_2)]);
+    roster.add({ tankId: TANK_A, fish: fishFixture(FISH_3, { sex: 'male' }), acclimate: true });
+    const sexes = [FISH_1, FISH_2, FISH_3].map((id) => roster.get(simId(roster, id))?.sex);
+    expect(sexes).toEqual(['male', 'female', 'male']);
   });
 
   it('replaces the demo stock with the saved fish on load and maps server ids', () => {

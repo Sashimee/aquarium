@@ -1,4 +1,4 @@
-import type { Biome, Fish } from '@aquarium/shared';
+import type { Biome, Fish, FishSex } from '@aquarium/shared';
 import type { AteEvent, FishSpawn } from '@aquarium/sim';
 import type { InteractionEvents } from '../interaction/events';
 
@@ -13,6 +13,8 @@ export interface RosterFish {
   /** Stable across reloads: the server id, or the demo spawn id. Seeds the fish's look. */
   readonly key: string;
   readonly species: string;
+  /** As stored by the server; null for demo fish, whose sex comes from their key. */
+  readonly sex: FishSex | null;
   /** Undefined means the species' adult length. */
   readonly lengthM: number | undefined;
   phase: FishPhase;
@@ -168,6 +170,7 @@ export class TankRoster {
         serverId: null,
         key: spawn.id,
         species: spawn.species,
+        sex: null,
         lengthM: spawn.bodyLengthM,
         phase: 'swimming',
         health: 1,
@@ -181,6 +184,7 @@ export class TankRoster {
       serverId: fish.id,
       key: fish.id,
       species: fish.species,
+      sex: fish.sex,
       lengthM: fish.size,
       phase,
       health: fish.status === 'dead' ? 0 : fish.health,

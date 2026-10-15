@@ -11,6 +11,9 @@ import {
 
 const { viewport, userAgent } = devices['iPhone 15 Pro'];
 
+// The press helper leans on the sheet and dock animations to let lazy panel bodies mount first.
+test.use({ reducedMotion: 'no-preference' });
+
 interface Menu {
   name: string;
   open(page: Page): Promise<void>;
