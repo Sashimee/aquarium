@@ -70,6 +70,8 @@ jobs:
           echo "Initial JS: $total bytes gzip -9 (budget $BUDGET_BYTES)" >> "$GITHUB_STEP_SUMMARY"
           test "$total" -le "$BUDGET_BYTES" || { echo "::error::initial JS is $total bytes gzip, over the $BUDGET_BYTES budget; split the chunk or lazy-load"; exit 1; }
       - run: pnpm run --if-present assets:check
+      - name: CI helper scripts
+        run: node --test '.github/scripts/*.test.mjs'
 
   e2e-shard:
     name: e2e shard ${{ matrix.name }}
@@ -80,28 +82,28 @@ jobs:
       fail-fast: false
       matrix:
         # part is index[,index]/count over the describe's tests, dealt round-robin; the matrix is sized
-        # so every shard's tests add up to about 7 minutes (per-test times: see PR #184 rebalance).
+        # so each shard's job stays under about 7 minutes (per-test times: see PR #527 and #533).
         include:
           - name: menus-phone-1
             args: menus.spec
             describe: menus on a phone
-            part: 1/6
+            part: 1/7
           - name: menus-phone-2
             args: menus.spec
             describe: menus on a phone
-            part: 2/6
+            part: 2,6/7
           - name: menus-phone-3
             args: menus.spec
             describe: menus on a phone
-            part: 3/6
+            part: 3/7
           - name: menus-phone-4
             args: menus.spec
             describe: menus on a phone
-            part: 4/6
+            part: 4,5/7
           - name: menus-phone-5
             args: menus.spec
             describe: menus on a phone
-            part: 5,6/6
+            part: 7/7
           - name: menus-mouse-1
             args: menus.spec
             describe: menus with a mouse
@@ -113,11 +115,17 @@ jobs:
           - name: menus-mouse-3
             args: menus.spec
             describe: menus with a mouse
-            part: 4,5/5
-          - name: decor-death
-            args: decor.spec death.spec
-          - name: switch-feed-auth
-            args: tank-type-switch.spec ktx2.spec feed.spec auth.spec
+            part: 4/5
+          - name: menus-mouse-4
+            args: menus.spec
+            describe: menus with a mouse
+            part: 5/5
+          - name: decor
+            args: decor.spec
+          - name: switch-tanks
+            args: tank-type-switch.spec
+          - name: ktx2-feed-auth-death
+            args: ktx2.spec feed.spec auth.spec death.spec
           - name: tanks-care-reset
             args: tanks.spec care.spec password-reset.spec password-reset-history.spec
     services:
@@ -182,10 +190,10 @@ jobs:
       - name: Report tests that passed only on retry
         if: ${{ always() }}
         run: |
-          flaky=$(awk '/^ +[0-9]+ flaky/ {on=1} on && /^ +[0-9]+ (passed|skipped|did not run|failed)/ {on=0} on' e2e-run.log 2>/dev/null || true)
-          if [ -n "$flaky" ]; then
+          summary=$(node .github/scripts/e2e-flaky-report.mjs e2e-run.log "${{ matrix.name }}" || true)
+          if [ -n "$summary" ]; then
             echo "::warning::e2e shard ${{ matrix.name }} had tests that passed only on retry"
-            printf '### Flaky on %s\n```\n%s\n```\n' "${{ matrix.name }}" "$flaky" >> "$GITHUB_STEP_SUMMARY"
+            printf '%s\n' "$summary" >> "$GITHUB_STEP_SUMMARY"
           fi
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
