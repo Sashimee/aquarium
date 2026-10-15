@@ -10,6 +10,8 @@ async function open(page: Page, url: string): Promise<void> {
 const typeButton = (page: Page, name: 'Freshwater' | 'Reef') =>
   page.getByRole('group', { name: 'Tank type' }).getByRole('button', { name, exact: true });
 
+const sceneBiome = (page: Page) => page.locator('#app');
+
 const biomeParam = (page: Page) => new URL(page.url()).searchParams.get('biome');
 
 test.describe('tank type switch', () => {
@@ -22,11 +24,13 @@ test.describe('tank type switch', () => {
     await expect(typeButton(page, 'Reef')).toHaveAttribute('aria-pressed', 'true');
     await expect(typeButton(page, 'Freshwater')).toHaveAttribute('aria-pressed', 'false');
     await expect(page.getByText(/300 litre reef aquarium/)).toBeVisible();
+    await expect(sceneBiome(page)).toHaveAttribute('data-scene-biome', 'reef');
     await expect.poll(() => biomeParam(page)).toBe('reef');
     expect(new URL(page.url()).searchParams.get('backend')).toBe('webgl');
 
     await typeButton(page, 'Freshwater').click();
     await expect(page.getByText(/300 litre freshwater aquarium/)).toBeVisible();
+    await expect(sceneBiome(page)).toHaveAttribute('data-scene-biome', 'freshwater');
     await expect.poll(() => biomeParam(page)).toBe('freshwater');
   });
 
@@ -34,6 +38,7 @@ test.describe('tank type switch', () => {
     await open(page, '/?backend=webgl&tier=low&biome=reef');
     await expect(typeButton(page, 'Reef')).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByText(/300 litre reef aquarium/)).toBeVisible();
+    await expect(sceneBiome(page)).toHaveAttribute('data-scene-biome', 'reef');
   });
 
   test('works by tap at phone width without overflowing', async ({ browser }) => {
