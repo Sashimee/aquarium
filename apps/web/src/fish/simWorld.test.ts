@@ -86,6 +86,22 @@ describe('SimWorldSpec', () => {
     expect(anchorsOf(spec, roster)).toEqual(sim);
   });
 
+  it('seeds each saved fish with its lifecycle hunger and leaves demo fish unset', () => {
+    const { spec, roster } = setup();
+    expect(spec.config(roster.swimming())?.fish.every((f) => f.hunger === undefined)).toBe(true);
+    roster.load({
+      tankId: TANK_A,
+      biome: 'reef',
+      decorLayout: [],
+      decorEdited: false,
+      fish: [fishFixture(FISH_1, { ...CLOWN, hunger: 0.7 })],
+    });
+    const config = spec.config(roster.swimming());
+    expect(config?.fish.map((f) => f.hunger)).toEqual([0.7]);
+    if (config === null) throw new Error('no world');
+    expect(() => new World(config)).not.toThrow();
+  });
+
   it('uses the latest anchors once the scene moves them', () => {
     const { spec, roster } = setup();
     spec.setAnchors([ANEMONE]);
@@ -117,7 +133,12 @@ describe('SimWorldSpec', () => {
     });
     const config = spec.config(roster.swimming());
     expect(config?.fish).toEqual([
-      { id: roster.simIdOf(FISH_1), species: 'ocellaris-clownfish', bodyLengthM: 0.07 },
+      {
+        id: roster.simIdOf(FISH_1),
+        species: 'ocellaris-clownfish',
+        bodyLengthM: 0.07,
+        hunger: 0.1,
+      },
     ]);
     expect(config?.species).toBe(allSpeciesInputs());
     expect(config?.seed).toBe(7);

@@ -20,6 +20,8 @@ export interface RosterFish {
   phase: FishPhase;
   /** 0 dead .. 1 healthy, as of the last server snapshot that carried this fish. */
   health: number;
+  /** The server's hunger when this fish joined the roster; unset for demo fish. */
+  readonly hunger?: number;
 }
 
 /**
@@ -188,6 +190,7 @@ export class TankRoster {
       lengthM: fish.size,
       phase,
       health: fish.status === 'dead' ? 0 : fish.health,
+      hunger: fish.hunger,
     };
     this.insert(entry);
     this.simIdByServer.set(fish.id, entry.simId);
