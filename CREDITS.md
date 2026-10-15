@@ -30,6 +30,16 @@ Assets are used under CC0, CC-BY or (reference photos only) CC-BY-SA. The in-app
 | Gelbe Segelflossendoktor Zebrasoma flavescens.jpg (`wm-yellowtang-holleday`) | Holger Krisp          | [source](https://commons.wikimedia.org/wiki/File:Gelbe_Segelflossendoktor_Zebrasoma_flavescens.jpg) | [CC-BY-3.0](https://creativecommons.org/licenses/by/3.0/) |
 | Archway Rock Formation (`sketchfab-4db2b936`)                                | NE14ABJ               | [source](https://sketchfab.com/3d-models/4db2b936751a4aa89af6b2afeca05248)                          | [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/) |
 | Fungia scutaria (Mushroom coral) (`sketchfab-e72cb3bd`)                      | Phelpst               | [source](https://sketchfab.com/3d-models/e72cb3bdfd504df3a31d38721f1f8a86)                          | [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/) |
+| Discus symphysodon (`sketchfab-f623d697`)                                    | Chenchanchong         | [source](https://sketchfab.com/3d-models/f623d69769b249a2b55025c000c97499)                          | [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/) |
+| Discus 3 (`sketchfab-e284e187`)                                              | Comitre               | [source](https://sketchfab.com/3d-models/e284e187712e4e00b001ce773398ad51)                          | [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/) |
+| Ancistrus sp. Orange (`sketchfab-65133817`)                                  | faerbogdan99          | [source](https://sketchfab.com/3d-models/65133817c7f740cbb17e92989a55da72)                          | [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/) |
+| Trigonostigma heteromorpha 251680901.jpg (`wm-rasbora-roy`)                  | Zakqary Roy           | [source](https://commons.wikimedia.org/wiki/File:Trigonostigma_heteromorpha_251680901.jpg)          | [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/) |
+| Six-line wrasse.jpg (`wm-sixline-huffman`)                                   | Lonnie Huffman        | [source](https://commons.wikimedia.org/wiki/File:Six-line_wrasse.jpg)                               | [CC-BY-3.0](https://creativecommons.org/licenses/by/3.0/) |
+| Neocaridina davidi var. Red Cherry.jpg (`wm-cherry-dagostino-1`)             | Uccio D'Agostino      | [source](https://commons.wikimedia.org/wiki/File:Neocaridina_davidi_var._Red_Cherry.jpg)            | [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/) |
+| Neocaridina davidi var. Red Cherry 2.jpg (`wm-cherry-dagostino-2`)           | Uccio D'Agostino      | [source](https://commons.wikimedia.org/wiki/File:Neocaridina_davidi_var._Red_Cherry_2.jpg)          | [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/) |
+| Lysmata amboinensis Shrimp.jpg (`wm-cleaner-huffman`)                        | Lonnie Huffman        | [source](https://commons.wikimedia.org/wiki/File:Lysmata_amboinensis_Shrimp.jpg)                    | [CC-BY-3.0](https://creativecommons.org/licenses/by/3.0/) |
+| Lysmata amboinensis 309881340.jpg (`wm-cleaner-caruso`)                      | cello caruso-turiello | [source](https://commons.wikimedia.org/wiki/File:Lysmata_amboinensis_309881340.jpg)                 | [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/) |
+| Lysmata amboinensis 85168919.jpg (`wm-cleaner-schofield`)                    | Dan Schofield         | [source](https://commons.wikimedia.org/wiki/File:Lysmata_amboinensis_85168919.jpg)                  | [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/) |
 
 ## CC-BY-SA (reference photos for procedural loft textures)
 
@@ -61,3 +71,6 @@ ShareAlike applies to any texture derived from these photos: such derived textur
 - Madrepora cytherea by The Smithsonian Institution ([source](https://sketchfab.com/3d-models/9ff5270cafce4ceab61ce84c41c26faa))
 - Goniopora columna by The Smithsonian Institution ([source](https://sketchfab.com/3d-models/6b652ae52c4d4232b26cfb5b900f7d8a))
 - Ground 101 by ambientCG ([source](https://ambientcg.com/a/Ground101))
+- Aquarium tropical de Pierrefitte-Nestalas 03082018 Trigonostigma heteromorpha 1.jpg by Vassil ([source](https://commons.wikimedia.org/wiki/File:Aquarium_tropical_de_Pierrefitte-Nestalas_03082018_Trigonostigma_heteromorpha_1.jpg))
+- Nemateleotris magnifica Prague 2011 1.jpg by Karelj ([source](https://commons.wikimedia.org/wiki/File:Nemateleotris_magnifica_Prague_2011_1.jpg))
+- Ancistrus sp. -- NOT dolichopterus -- male.jpg by Bernard Ladenthin ([source](https://commons.wikimedia.org/wiki/File:Ancistrus_sp._--_NOT_dolichopterus_--_male.jpg))

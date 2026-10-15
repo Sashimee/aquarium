@@ -1,0 +1,46 @@
+{
+  "behaviour": {
+    "boldness": 0.3,
+    "curiosity": 0.4,
+    "depthBand": [0.2, 0.7],
+    "perceptionFovDeg": 300,
+    "perceptionRangeM": 0.5,
+    "preferredZone": "mid",
+    "schooling": {
+      "minGroup": 5,
+      "tightenWhenStartled": false,
+      "topologicalNeighbours": 4
+    },
+    "territorial": false,
+    "traits": ["shoal"]
+  },
+  "biome": "freshwater",
+  "commonName": "Discus",
+  "id": "discus",
+  "lifecycle": {
+    "ammoniaPerBioloadPerHour": 0.001,
+    "ammoniaTolerance": 0.1,
+    "bioload": 1.8,
+    "birthSizeM": 0.03,
+    "diet": ["pellets", "bloodworms", "flakes"],
+    "growthPerDay": 0.00015,
+    "healthLossPerHourStarving": 0.0085,
+    "healthRecoveryPerHour": 0.004,
+    "hungerPerHour": 0.006,
+    "lifespanDays": 3650,
+    "maxSizeM": 0.137,
+    "starvationHungerThreshold": 0.75
+  },
+  "locomotion": {
+    "bodyLengthM": 0.12,
+    "cruiseSpeedMps": 0.1,
+    "gait": "cruise",
+    "massKg": 0.15,
+    "maxPitchDeg": 30,
+    "maxSpeedMps": 0.8,
+    "maxTurnRateDegPerS": 200,
+    "strouhal": 0.3,
+    "swimmingMode": "labriform"
+  },
+  "scientificName": "Symphysodon aequifasciatus"
+}

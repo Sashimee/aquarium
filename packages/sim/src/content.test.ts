@@ -34,11 +34,18 @@ const MVP_ROSTER = [
   ['banggai-cardinalfish', 'Pterapogon kauderni', 'reef'],
   ['betta', 'Betta splendens', 'freshwater'],
   ['blue-tang', 'Paracanthurus hepatus', 'reef'],
+  ['bristlenose-pleco', 'Ancistrus cirrhosus', 'freshwater'],
   ['bronze-corydoras', 'Corydoras aeneus', 'freshwater'],
+  ['cherry-shrimp', 'Neocaridina davidi', 'freshwater'],
+  ['cleaner-shrimp', 'Lysmata amboinensis', 'reef'],
+  ['discus', 'Symphysodon aequifasciatus', 'freshwater'],
+  ['firefish', 'Nemateleotris magnifica', 'reef'],
   ['guppy', 'Poecilia reticulata', 'freshwater'],
+  ['harlequin-rasbora', 'Trigonostigma heteromorpha', 'freshwater'],
   ['neon-tetra', 'Paracheirodon innesi', 'freshwater'],
   ['ocellaris-clownfish', 'Amphiprion ocellaris', 'reef'],
   ['royal-gramma', 'Gramma loreto', 'reef'],
+  ['six-line-wrasse', 'Pseudocheilinus hexataenia', 'reef'],
   ['yellow-tang', 'Zebrasoma flavescens', 'reef'],
 ] as const;
 

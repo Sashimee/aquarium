@@ -1,0 +1,46 @@
+{
+  "behaviour": {
+    "boldness": 0.5,
+    "curiosity": 0.4,
+    "depthBand": [0.3, 0.8],
+    "perceptionFovDeg": 300,
+    "perceptionRangeM": 0.3,
+    "preferredZone": "mid",
+    "schooling": {
+      "minGroup": 8,
+      "tightenWhenStartled": true,
+      "topologicalNeighbours": 7
+    },
+    "territorial": false,
+    "traits": ["shoal"]
+  },
+  "biome": "freshwater",
+  "commonName": "Harlequin rasbora",
+  "id": "harlequin-rasbora",
+  "lifecycle": {
+    "ammoniaPerBioloadPerHour": 0.001,
+    "ammoniaTolerance": 0.2,
+    "bioload": 0.3,
+    "birthSizeM": 0.015,
+    "diet": ["flakes", "brine-shrimp", "pellets"],
+    "growthPerDay": 0.00004,
+    "healthLossPerHourStarving": 0.0085,
+    "healthRecoveryPerHour": 0.004,
+    "hungerPerHour": 0.0075,
+    "lifespanDays": 1825,
+    "maxSizeM": 0.04,
+    "starvationHungerThreshold": 0.75
+  },
+  "locomotion": {
+    "bodyLengthM": 0.035,
+    "cruiseSpeedMps": 0.12,
+    "gait": "cruise",
+    "massKg": 0.001,
+    "maxPitchDeg": 45,
+    "maxSpeedMps": 0.5,
+    "maxTurnRateDegPerS": 540,
+    "strouhal": 0.3,
+    "swimmingMode": "subcarangiform"
+  },
+  "scientificName": "Trigonostigma heteromorpha"
+}
