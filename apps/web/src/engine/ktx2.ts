@@ -117,7 +117,10 @@ class DisposableKtx2Loader extends KTX2Loader {
     this.workerPool.setWorkerCreator(() => {
       throw disposedError('a texture');
     });
-    super.dispose();
+    // Not super.dispose(): it decrements three's count of active loaders, which only three's own
+    // init() increments, so the count would go negative and hide its duplicate-loader warning.
+    // The rest of it is this, since workerSourceURL stays '' without three's init().
+    this.workerPool.dispose();
     const thrown: unknown[] = [];
     for (const fail of [...this.pending]) {
       try {

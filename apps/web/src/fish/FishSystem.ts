@@ -259,6 +259,8 @@ export class FishSystem {
       await system.syncWorld();
       signal.throwIfAborted();
     } catch (cause) {
+      // Before release, which silences `report`; an aborted start is meant to go quietly.
+      if (!signal.aborted) system.simErrors.close(cause);
       system.release();
       throw signal.aborted ? signal.reason : cause;
     }
@@ -917,6 +919,7 @@ export class FishSystem {
   private connectSim(worker: Worker): SimClient {
     const sim = new SimClient(worker);
     sim.onError(this.simErrors.receive);
+    worker.addEventListener('error', this.simErrors.workerFailed);
     sim.onSnapshot((snapshot) => this.stream.push(snapshot, performance.now()));
     sim.onAte((events) => {
       const bites = this.roster.translateAte(events);

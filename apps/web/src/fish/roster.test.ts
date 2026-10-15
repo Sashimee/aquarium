@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FishSpawn } from '@aquarium/sim';
+import { HUNGER_PER_PORTION } from '@aquarium/sim/lifecycle';
 import { FISH_1, FISH_2, FISH_3, TANK_A, TANK_B, fishFixture } from '../sync/fixtures';
 import { hashString, TankRoster } from './roster';
 
@@ -277,6 +278,27 @@ describe('TankRoster', () => {
         fish: [fishFixture(FISH_3)],
       });
       expect(roster.translateAte([{ fishId: stale, foodId: 1, portion: 0.1 }])).toEqual([]);
+    });
+
+    it('takes what each fish ate off its hunger as the server does, never below zero', () => {
+      const roster = loaded([
+        fishFixture(FISH_1, { hunger: 0.7 }),
+        fishFixture(FISH_2, { hunger: 0.1 }),
+      ]);
+      roster.translateAte([
+        { fishId: simId(roster, FISH_1), foodId: 1, portion: 0.25 },
+        { fishId: simId(roster, FISH_1), foodId: 2, portion: 0.25 },
+        { fishId: simId(roster, FISH_2), foodId: 3, portion: 0.5 },
+      ]);
+      expect(roster.get(simId(roster, FISH_1))?.hunger).toBeCloseTo(0.7 - 0.5 * HUNGER_PER_PORTION);
+      expect(roster.get(simId(roster, FISH_2))?.hunger).toBe(0);
+    });
+
+    it('leaves the hunger of fish whose bites it drops alone', () => {
+      const roster = loaded([fishFixture(FISH_1, { hunger: 0.7 })]);
+      roster.add({ tankId: TANK_A, fish: fishFixture(FISH_3, { hunger: 0.6 }), acclimate: true });
+      roster.translateAte([{ fishId: simId(roster, FISH_3), foodId: 1, portion: 0.5 }]);
+      expect(roster.get(simId(roster, FISH_3))?.hunger).toBe(0.6);
     });
 
     it('passes demo bites on under the demo ids', () => {
