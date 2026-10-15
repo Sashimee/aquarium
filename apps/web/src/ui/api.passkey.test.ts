@@ -57,6 +57,23 @@ describe('api client passkeys', () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
+  it('asks for a fresh sign-in instead of showing the raw stale-session error', async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(
+        json({ code: 'SESSION_NOT_FRESH', message: 'Session is not fresh' }, 403),
+      );
+    const error = await createApiClient(fetcher)
+      .addPasskey()
+      .then(
+        () => null,
+        (cause: unknown) => cause,
+      );
+    expect(error).toBeInstanceOf(ApiRequestError);
+    expect((error as ApiRequestError).message).toMatch(/sign in again/i);
+    expect(browser.startRegistration).not.toHaveBeenCalled();
+  });
+
   it('rejects options that are not an object before opening the browser prompt', async () => {
     const fetcher = vi.fn().mockResolvedValueOnce(json(null));
     await expect(createApiClient(fetcher).addPasskey()).rejects.toBeInstanceOf(ApiRequestError);

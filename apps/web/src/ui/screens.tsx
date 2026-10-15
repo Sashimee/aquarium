@@ -236,6 +236,7 @@ export function SignInScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [unverified, setUnverified] = useState(false);
+  const [viaPassword, setViaPassword] = useState(false);
   const failureCode = submission.failure?.code;
   useEffect(() => {
     if (failureCode === 'email_not_verified') setUnverified(true);
@@ -243,6 +244,7 @@ export function SignInScreen() {
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
+    setViaPassword(true);
     void submission
       .run(() => auth.signIn({ email, password }))
       .then((ok) => {
@@ -281,12 +283,13 @@ export function SignInScreen() {
         className="secondary"
         disabled={submission.busy}
         onClick={() => {
+          setViaPassword(false);
           void submission.run(() => auth.signInWithPasskey()).then((ok) => ok && navigate('/'));
         }}
       >
         Sign in with a passkey
       </button>
-      {submission.failure?.status === 401 && (
+      {viaPassword && submission.failure?.status === 401 && (
         <p role="note" className="hint" id="sign-in-hint">
           Wrong email or password? If you verified your address on a different device or browser
           than the one you signed up with, your password was not kept. Use{' '}

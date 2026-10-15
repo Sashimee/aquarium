@@ -128,9 +128,11 @@ async function toError(res: Response): Promise<ApiRequestError> {
   }
   const loose = body as { code?: unknown; message?: unknown } | null;
   const message =
-    typeof loose?.message === 'string' && loose.message.length > 0
-      ? loose.message
-      : `Request failed (${res.status}).`;
+    loose?.code === 'SESSION_NOT_FRESH'
+      ? 'For your security, sign in again and then retry this.'
+      : typeof loose?.message === 'string' && loose.message.length > 0
+        ? loose.message
+        : `Request failed (${res.status}).`;
   return new ApiRequestError(
     res.status,
     errorCodeFor(res.status, loose?.code),
