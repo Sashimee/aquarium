@@ -343,6 +343,10 @@ export class FishSystem {
         swapped = this.roster.unload(event.payload);
         if (swapped) this.stopWorld();
         break;
+      case 'tank:none':
+        swapped = this.roster.none();
+        if (swapped) this.stopWorld();
+        break;
       case 'tank:fish-added':
         this.roster.add(event.payload);
         break;

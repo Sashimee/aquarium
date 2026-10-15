@@ -91,7 +91,7 @@ describe('SimWorldSpec', () => {
     roster.died({ tankId: TANK_A, fish: fishFixture(FISH_1, { ...CLOWN, status: 'dead' }) });
     expect(anchorsOf(spec, roster)).toEqual(sim);
 
-    roster.unload({ tankId: TANK_A, reason: 'switch' });
+    roster.unload({ tankId: TANK_A, reason: 'reset' });
     expect(anchorsOf(spec, roster)).toEqual(sim);
   });
 
