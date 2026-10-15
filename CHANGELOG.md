@@ -37,6 +37,7 @@ First release of the aquarium. `main` held only the bootstrap skeleton before th
 ### Phones and performance
 
 - Quality tiers chosen by measuring the device's GPU; an on-device stats readout behind `?stats=1`.
+- Faster tank switches and startup: shaders are smaller and compile faster.
 - Minimum Safari 16.
 - The first download is small: three.js loads after the interface shell, and textures are KTX2 with a content-hashed transcoder worker.
 
