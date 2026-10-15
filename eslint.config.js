@@ -15,7 +15,7 @@ export default tseslint.config(
   {
     files: [
       'tools/asset-pipeline/src/{anemone,emit,environment,fins,finish,fish,geometry,loft,lod,math,parts,raster,rgbe,shrimp,source,voxel}.ts',
-      'tools/asset-pipeline/src/{budgets,finish,geometry,rgbe,shrimp}.test.ts',
+      'tools/asset-pipeline/src/{budgets,finish,geometry,raster,rgbe,shrimp}.test.ts',
     ],
     rules: { '@typescript-eslint/no-non-null-assertion': 'off' },
   },

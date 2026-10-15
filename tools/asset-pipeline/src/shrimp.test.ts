@@ -6,11 +6,14 @@ import {
   LEG_ATTRIBUTE,
   SHRIMP_PART_IDS,
 } from './index-schema.ts';
+import { buildDocument } from './emit.ts';
 import {
   LEG_PAIRS,
   PLEOPOD_PAIRS,
   SHRIMP_RECIPES,
   buildShrimpGeometry,
+  SHRIMP_LOD_PLAN,
+  shrimpMaterial,
   shrimpTexture,
 } from './shrimp.ts';
 
@@ -34,6 +37,10 @@ describe.each(SHRIMP_RECIPES)('shrimp geometry $id', (recipe) => {
 
   it('is deterministic', () => {
     expect(hashOf(buildShrimpGeometry(recipe, LENGTH_M))).toBe(hashOf(geometry));
+  });
+
+  it('keeps the eye stalks on the rigid body weight', () => {
+    for (let i = 0; i < count; i++) if (id[i] === SHRIMP_PART_IDS.body) expect(weight[i]).toBe(0);
   });
 
   it('keeps every attribute aligned, finite and in range', () => {
@@ -141,13 +148,34 @@ describe.each(SHRIMP_RECIPES)('shrimp geometry $id', (recipe) => {
   });
 });
 
+describe('shrimp LOD preparation', () => {
+  it.each(SHRIMP_RECIPES)('removes every pleopod triangle only from LOD2 for $id', (recipe) => {
+    const geometry = buildShrimpGeometry(recipe, LENGTH_M);
+    const material = shrimpMaterial(recipe, shrimpTexture(recipe));
+    const pleopodTriangles = (level: number): number => {
+      const built = buildDocument(recipe.id, [geometry.part], [material]);
+      const prim = built.doc.getRoot().listMeshes()[0]!.listPrimitives()[0]!;
+      SHRIMP_LOD_PLAN.prepare!(prim, level);
+      const ids = prim.getAttribute(FIN_ID_ATTRIBUTE)!;
+      const indices = prim.getIndices()!.getArray()!;
+      let count = 0;
+      for (let t = 0; t < indices.length; t += 3)
+        if (ids.getScalar(indices[t]!) === SHRIMP_PART_IDS.pleopod) count++;
+      return count;
+    };
+    expect(pleopodTriangles(1)).toBeGreaterThan(0);
+    expect(pleopodTriangles(2)).toBe(0);
+  });
+});
+
 describe('shrimp texture', () => {
   it('is deterministic and opaque', () => {
     for (const recipe of SHRIMP_RECIPES) {
       const a = shrimpTexture(recipe);
       const b = shrimpTexture(recipe);
       expect(Buffer.compare(a.data, b.data)).toBe(0);
-      for (let i = 3; i < a.data.length; i += 4) expect(a.data[i]).toBe(255);
+      const alpha = Array.from({ length: a.data.length / 4 }, (_, i) => a.data[i * 4 + 3]);
+      expect(alpha.findIndex((v) => v !== 255)).toBe(-1);
     }
   });
 

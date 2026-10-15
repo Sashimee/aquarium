@@ -1,3 +1,5 @@
+import { compactPrimitive } from '@gltf-transform/functions';
+import type { Primitive } from '@gltf-transform/core';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { mulberry32 } from './anemone.ts';
@@ -16,7 +18,25 @@ import type { MaterialDef, Part } from './parts.ts';
 import { renderSheet } from './raster.ts';
 import type { Rgba } from './textures.ts';
 
-export const SHRIMP_LOD_PLAN: LodPlan = { ratios: [1, 0.4, 0.15], minTriangles: 150 };
+function dropPleopodsFromFarLod(prim: Primitive, level: number): void {
+  if (level < 2) return;
+  const ids = prim.getAttribute(FIN_ID_ATTRIBUTE);
+  const indices = prim.getIndices();
+  if (!ids || !indices) return;
+  const source = indices.getArray()!;
+  const kept: number[] = [];
+  for (let t = 0; t < source.length; t += 3)
+    if (ids.getScalar(source[t]!) !== SHRIMP_PART_IDS.pleopod)
+      kept.push(source[t]!, source[t + 1]!, source[t + 2]!);
+  indices.setArray(Uint32Array.from(kept));
+  compactPrimitive(prim);
+}
+
+export const SHRIMP_LOD_PLAN: LodPlan = {
+  ratios: [1, 0.4, 0.15],
+  minTriangles: 150,
+  prepare: dropPleopodsFromFarLod,
+};
 
 export const LEG_PAIRS = 5;
 export const PLEOPOD_PAIRS = 5;
@@ -405,8 +425,20 @@ function addSphere(b: Builder, centre: Vec3, radius: number, uv: [number, number
       );
     }
   }
-  const north = b.vertex([centre[0], centre[1] + radius, centre[2]], uv, 0, 0, 0);
-  const south = b.vertex([centre[0], centre[1] - radius, centre[2]], uv, 0, 0, 0);
+  const north = b.vertex(
+    [centre[0], centre[1] + radius, centre[2]],
+    uv,
+    SHRIMP_PART_IDS.body,
+    0,
+    0,
+  );
+  const south = b.vertex(
+    [centre[0], centre[1] - radius, centre[2]],
+    uv,
+    SHRIMP_PART_IDS.body,
+    0,
+    0,
+  );
   for (let i = 0; i < lat - 2; i++)
     for (let j = 0; j < lon; j++) {
       const a = fromVertex + i * lon + j;
@@ -441,10 +473,12 @@ function addEyes(b: Builder, recipe: ShrimpRecipe): void {
       root[1] + 0.016,
       root[2] + 0.024,
     ];
+    const stalkStart = b.count;
     addTube(b, [root, elbow, eye], [0.008, 0.006, 0.0055], 6, SHRIMP_PART_IDS.body, 0, () => [
       0.1,
       MID(BANDS.eye),
     ]);
+    b.weight.fill(0, stalkStart);
     addSphere(b, [eye[0] + side * 0.004, eye[1] + 0.002, eye[2] + 0.005], 0.017, [
       0.7,
       MID(BANDS.eye),
@@ -706,7 +740,7 @@ const PALETTE = {
   },
 };
 
-// Cherry translucency hint: glTF alphaMode BLEND with baseColorFactor alpha 0.86; the renderer should keep depth write on and treat it as a slightly see-through shell. Cleaner stays OPAQUE.
+// Cherry translucency hint: glTF alphaMode BLEND with baseColorFactor alpha 0.86. Cleaner stays OPAQUE. See CUSTOM_ATTRIBUTES_NOTE for the renderer contract.
 const CHERRY_ALPHA = 0.86;
 const CHERRY_SADDLE: Rgb = [0.45, 0.03, 0.04];
 const EYE_BLACK: Rgb = [0.02, 0.02, 0.025];
