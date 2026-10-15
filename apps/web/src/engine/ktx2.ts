@@ -1,4 +1,4 @@
-import { LoadingManager, REVISION, type WebGPURenderer } from 'three/webgpu';
+import { LoadingManager, type WebGPURenderer } from 'three/webgpu';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import basisTranscoderWasm from 'three/addons/libs/basis/basis_transcoder.wasm?url';
 
@@ -7,7 +7,7 @@ import basisTranscoderWasm from 'three/addons/libs/basis/basis_transcoder.wasm?u
  * of its own response, so the API can allow 'unsafe-eval' for this file alone: the basis
  * transcoder's embind glue calls new Function, which a blob: worker would need the page to allow.
  */
-export const KTX2_WORKER_URL = `/ktx2-worker.js?v=${REVISION}`;
+export const KTX2_WORKER_URL = `/ktx2-worker.js?v=${__KTX2_WORKER_HASH__}`;
 
 /**
  * KTX2Loader.init() fetches the glue script only to embed it in a blob worker this loader never

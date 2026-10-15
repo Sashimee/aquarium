@@ -57,6 +57,10 @@ describe('bundledTranscoderUrl', () => {
     expect(js).not.toBe(wasm);
   });
 
+  it('versions the worker url by content hash, not by three revision', () => {
+    expect(KTX2_WORKER_URL).toMatch(/^\/ktx2-worker\.js\?v=[0-9a-f]{12}$/);
+  });
+
   it('leaves texture urls alone, so no caller sees another caller’s variant choice', () => {
     expect(bundledTranscoderUrl('/assets/rock/a/textures/a_1k.ktx2')).toBe(
       '/assets/rock/a/textures/a_1k.ktx2',

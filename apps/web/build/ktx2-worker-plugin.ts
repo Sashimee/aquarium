@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import type { Plugin } from 'vite';
@@ -33,15 +34,21 @@ function workerSource(): string {
 }
 
 export function ktx2WorkerPlugin(): Plugin {
+  const source = workerSource();
+  // three's REVISION does not change across patch releases, so only the content can version the URL.
+  const hash = createHash('sha256').update(source).digest('hex').slice(0, 12);
   return {
     name: 'aquarium:ktx2-worker',
+    config() {
+      return { define: { __KTX2_WORKER_HASH__: JSON.stringify(hash) } };
+    },
     generateBundle() {
-      this.emitFile({ type: 'asset', fileName: FILE_NAME, source: workerSource() });
+      this.emitFile({ type: 'asset', fileName: FILE_NAME, source });
     },
     configureServer(server) {
       server.middlewares.use(`/${FILE_NAME}`, (_req, res) => {
         res.setHeader('content-type', 'text/javascript');
-        res.end(workerSource());
+        res.end(source);
       });
     },
   };
