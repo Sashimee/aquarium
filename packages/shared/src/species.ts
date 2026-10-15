@@ -247,3 +247,7 @@ export const presetLayoutSchema = z.strictObject({
   current: presetCurrentSchema.optional(),
 });
 export type PresetLayout = z.infer<typeof presetLayoutSchema>;
+
+export const speciesContentSchema = speciesSchema
+  .partial({ render: true })
+  .superRefine(checkSpeciesRules);
