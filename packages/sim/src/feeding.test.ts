@@ -1,7 +1,11 @@
 import { foodTypeSchema } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
-import { MAX_PORTIONS_PER_FISH_PER_WINDOW, FEEDING_WINDOW_MINUTES } from '../lifecycle/params.ts';
-import { FEEDING } from './feeding.ts';
+import {
+  FEEDING_WINDOW_MINUTES,
+  HUNGER_PER_PORTION,
+  MAX_PORTIONS_PER_FISH_PER_WINDOW,
+} from '../lifecycle/params.ts';
+import { FEEDING, gutForHunger } from './feeding.ts';
 import {
   ARCHETYPES,
   benchmarkConfig,
@@ -729,5 +733,90 @@ describe('feeding AI', { timeout: LONG }, () => {
     }
     expect(nnd / samples).toBeGreaterThan(0.5);
     expect(nnd / samples).toBeLessThan(2);
+  });
+});
+
+describe('gut seeded from the lifecycle hunger', { timeout: LONG }, () => {
+  /** 80 flakes laid out in front of a tetra, enough for more than a full meal. */
+  function meal(): FoodRain {
+    const rain = new FoodRain(SHOW_TANK);
+    for (let k = 0; k < 80; k++) {
+      rain.place('flakes', -0.3 + (k % 10) * 0.06, 0.2 + 0.02 * Math.floor(k / 10), 0, 0, 0);
+    }
+    return rain;
+  }
+
+  function eatenBy(hunger: number | undefined, steps: number): number {
+    const spawn: FishSpawn = { id: 'a', species: neonTetra.id };
+    const w = tank([hunger === undefined ? spawn : { ...spawn, hunger }]);
+    return feedFor(w, meal(), steps).reduce((sum, e) => sum + e.portion, 0);
+  }
+
+  it('fills the gut by the portions the lifecycle says the fish is not short of', () => {
+    expect(gutForHunger(0)).toBe(FEEDING.satiationPortions);
+    expect(gutForHunger(HUNGER_PER_PORTION / 2)).toBeCloseTo(FEEDING.satiationPortions - 0.5, 12);
+    expect(gutForHunger(HUNGER_PER_PORTION * FEEDING.satiationPortions)).toBe(0);
+    expect(gutForHunger(1)).toBe(0);
+  });
+
+  it('starts each fish with the gut its hunger gives, and an empty one without', () => {
+    const w = tank([
+      { id: 'fed', species: neonTetra.id, hunger: 0 },
+      { id: 'half', species: neonTetra.id, hunger: HUNGER_PER_PORTION / 2 },
+      { id: 'starving', species: neonTetra.id, hunger: 1 },
+      { id: 'unknown', species: neonTetra.id },
+    ]);
+    const f = w.behaviour.feeding;
+    expect(Array.from(f.gut)).toEqual([1, 0.5, 0, 0].map((g) => g * FEEDING.satiationPortions));
+    expect([0, 1, 2, 3].map((i) => f.motivation(i))).toEqual([0, 0.5, 1, 1]);
+  });
+
+  it('has a fish that was fed leave food in plain view alone', () => {
+    const look = (hunger: number): number => {
+      const w = tank([{ id: 'a', species: neonTetra.id, hunger }]);
+      pose(w, 0, 0, 0.25, 0);
+      w.setFood(records([1, 0.05, 0.25, 0, type('flakes')]));
+      w.step();
+      return at(w.behaviour.feeding.target, 0);
+    };
+    expect(look(0)).toBe(-1);
+    expect(look(1)).toBe(0);
+  });
+
+  it('eats only what a part-fed fish has room for', () => {
+    const half = eatenBy(HUNGER_PER_PORTION / 2, 3000);
+    expect(half).toBeGreaterThan(0.4 * FEEDING.satiationPortions);
+    expect(half).toBeLessThanOrEqual(0.5 * FEEDING.satiationPortions + 0.01);
+    expect(eatenBy(0, 3000)).toBeLessThan(0.05 * FEEDING.satiationPortions);
+  });
+
+  it('runs a starving fish bit for bit as one loaded without a hunger', () => {
+    const run = (hunger: number | undefined): Float64Array => {
+      const spawns = spawnMany(neonTetra.id, 6).map((f) =>
+        hunger === undefined ? f : { ...f, hunger },
+      );
+      const w = tank(spawns, 3);
+      feedFor(w, meal(), 300);
+      return w.position.slice();
+    };
+    expect(Array.from(run(1))).toEqual(Array.from(run(undefined)));
+  });
+
+  it('seeds the gut of a fish added to a running world', () => {
+    const w = tank([{ id: 'a', species: neonTetra.id }]);
+    const i = w.addFish({ id: 'b', species: neonTetra.id, hunger: HUNGER_PER_PORTION / 4 });
+    expect(at(w.behaviour.feeding.gut, i)).toBeCloseTo(0.75 * FEEDING.satiationPortions, 12);
+    expect(at(w.behaviour.feeding.gut, 0)).toBe(0);
+  });
+
+  it('rejects a hunger outside 0 to 1 at load and on add, changing nothing', () => {
+    for (const hunger of [-0.1, 1.5, Number.NaN]) {
+      expect(() => tank([{ id: 'a', species: neonTetra.id, hunger }])).toThrow(
+        /hunger must be within 0 to 1/,
+      );
+      const w = tank([{ id: 'a', species: neonTetra.id }]);
+      expect(() => w.addFish({ id: 'b', species: neonTetra.id, hunger })).toThrow(RangeError);
+      expect(w.fishIds).toEqual(['a']);
+    }
   });
 });

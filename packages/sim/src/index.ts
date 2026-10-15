@@ -22,7 +22,7 @@ export {
   MAX_FOOD_PARTICLES,
   type AteEvent,
 } from './food.ts';
-export { FEEDING } from './feeding.ts';
+export { FEEDING, gutForHunger } from './feeding.ts';
 export { CURIOSITY } from './curiosity.ts';
 export {
   compileCollider,
@@ -63,6 +63,7 @@ export {
   type SimHost,
   type SimHostOptions,
   type SimAte,
+  type SimGrazeReach,
   type SimLayout,
   type SimReady,
 } from './bridge.ts';

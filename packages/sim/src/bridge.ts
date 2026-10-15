@@ -19,7 +19,8 @@ import {
  * fish's floor where the sand is low and startles would land in the wrong place.
  *
  * `addFish` and `removeFish` change the running world in place and are answered by a `layout`
- * event carrying the same `request` number, or by an `error` event carrying it.
+ * event carrying the same `request` number, or by an `error` event carrying it. `canGrazeAt`
+ * changes nothing and is answered by a `grazeReach` event, or an `error` event, with its `request`.
  */
 export type SimCommand =
   | { readonly type: 'init'; readonly config: AnyWorldConfig }
@@ -42,7 +43,14 @@ export type SimCommand =
       readonly spawn: FishSpawn;
       readonly at?: FishPlacement;
     }
-  | { readonly type: 'removeFish'; readonly request: number; readonly id: string };
+  | { readonly type: 'removeFish'; readonly request: number; readonly id: string }
+  /** See `World.canGrazeAt`. */
+  | {
+      readonly type: 'canGrazeAt';
+      readonly request: number;
+      readonly species: string;
+      readonly position: Point3;
+    };
 
 export interface SimReady {
   readonly type: 'ready';
@@ -63,7 +71,8 @@ export type SimEvent =
     }
   | SimAte
   | SimLayout
-  /** `request` is set when the failed command was an `addFish` or `removeFish`. */
+  | SimGrazeReach
+  /** `request` is set when the failed command was an `addFish`, `removeFish` or `canGrazeAt`. */
   | { readonly type: 'error'; readonly message: string; readonly request?: number };
 
 /**
@@ -84,6 +93,13 @@ export interface SimLayout {
   readonly fishIds: readonly string[];
   readonly stride: number;
   readonly change: { readonly kind: 'add' | 'remove'; readonly id: string };
+}
+
+/** The answer to the `canGrazeAt` command with the same `request`. */
+export interface SimGrazeReach {
+  readonly type: 'grazeReach';
+  readonly request: number;
+  readonly reachable: boolean;
 }
 
 /** Bites taken in the steps leading up to the snapshot at `tick`, which follows it. */
@@ -116,8 +132,9 @@ const COMMAND_TYPES = new Set([
   'food',
   'addFish',
   'removeFish',
+  'canGrazeAt',
 ]);
-const EVENT_TYPES = new Set(['ready', 'snapshot', 'ate', 'layout', 'error']);
+const EVENT_TYPES = new Set(['ready', 'snapshot', 'ate', 'layout', 'grazeReach', 'error']);
 
 function messageType(data: unknown, allowed: ReadonlySet<string>): string {
   if (typeof data === 'object' && data !== null && 'type' in data) {
@@ -308,6 +325,13 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
         changeLayout(w, command.request, { kind: 'remove', id }, () => w.removeFish(id));
         return;
       }
+      case 'canGrazeAt': {
+        const { request, species, position } = command;
+        const [x, y, z] = position;
+        const reachable = requireWorld(command.type).canGrazeAt(species, x, y, z);
+        send({ type: 'grazeReach', request, reachable });
+        return;
+      }
     }
   };
 
@@ -345,6 +369,10 @@ export class SimClient {
     number,
     { resolve: (layout: SimLayout) => void; reject: (error: Error) => void }
   >();
+  private readonly pendingQueries = new Map<
+    number,
+    { resolve: (reachable: boolean) => void; reject: (error: Error) => void }
+  >();
   private nextRequest = 1;
   private readonly listener = (event: MessageEvent): void => this.receive(event.data);
   private epoch = 0;
@@ -380,6 +408,24 @@ export class SimClient {
   /** Takes fish `id` out of the running world; rejects if there is no such fish. */
   removeFish(id: string): Promise<SimLayout> {
     return this.requestLayout((request) => ({ type: 'removeFish', request, id }));
+  }
+
+  /**
+   * Whether a fish of `species` could feed on an item fixed at `position` (world frame) in the
+   * world as it stands when the worker reaches this request; see `World.canGrazeAt`. Rejects
+   * before `init`, or for an unknown species or a non-finite position.
+   */
+  canGrazeAt(species: string, position: Point3): Promise<boolean> {
+    const request = this.nextRequest++;
+    return new Promise((resolve, reject) => {
+      this.pendingQueries.set(request, { resolve, reject });
+      this.send({
+        type: 'canGrazeAt',
+        request,
+        species,
+        position: [position[0], position[1], position[2]],
+      });
+    });
   }
 
   start(): void {
@@ -460,10 +506,11 @@ export class SimClient {
     this.ateListeners.clear();
     this.pendingInit?.reject(new Error('sim: client disposed'));
     this.pendingInit = null;
-    for (const pending of this.pendingLayouts.values()) {
+    for (const pending of [...this.pendingLayouts.values(), ...this.pendingQueries.values()]) {
       pending.reject(new Error('sim: client disposed'));
     }
     this.pendingLayouts.clear();
+    this.pendingQueries.clear();
   }
 
   private send(command: SimCommand): void {
@@ -513,14 +560,28 @@ export class SimClient {
         pending.resolve(event);
         return;
       }
+      case 'grazeReach': {
+        const pending = this.pendingQueries.get(event.request);
+        if (pending === undefined) {
+          throw new Error(`sim: grazeReach for unknown request ${event.request}`);
+        }
+        this.pendingQueries.delete(event.request);
+        pending.resolve(event.reachable);
+        return;
+      }
       case 'error': {
-        // An error naming a request belongs to that add or remove alone, never to an init.
+        // An error naming a request belongs to that add, remove or query alone, never to an init.
         const pending =
           event.request === undefined
             ? this.pendingInit
-            : (this.pendingLayouts.get(event.request) ?? null);
+            : (this.pendingLayouts.get(event.request) ??
+              this.pendingQueries.get(event.request) ??
+              null);
         if (event.request === undefined) this.pendingInit = null;
-        else this.pendingLayouts.delete(event.request);
+        else {
+          this.pendingLayouts.delete(event.request);
+          this.pendingQueries.delete(event.request);
+        }
         pending?.reject(new Error(event.message));
         if (pending === null && this.errorListeners.size === 0) {
           throw new Error(`sim worker error with no listener: ${event.message}`);
