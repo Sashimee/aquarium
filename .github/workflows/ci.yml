@@ -51,15 +51,21 @@ jobs:
         env:
           BUDGET_BYTES: 450000
         run: |
+          set -o pipefail
           dist=apps/web/dist
-          files=$(grep -oE '<(script type="module"|link rel="modulepreload")[^>]*(src|href)="[^"]+\.js"' "$dist/index.html" | grep -oE '(src|href)="[^"]+"' | cut -d'"' -f2)
-          test -n "$files" || { echo "::error::no entry or modulepreload scripts found in $dist/index.html"; exit 1; }
+          html=$(tr '\n' ' ' < "$dist/index.html")
+          entries=$(grep -oE '<script[^>]*>' <<< "$html" | grep -E 'type="module"' | grep -oE 'src="[^"]+"' | cut -d'"' -f2 || true)
+          preloads=$(grep -oE '<link[^>]*>' <<< "$html" | grep -E 'rel="modulepreload"' | grep -oE 'href="[^"]+"' | cut -d'"' -f2 || true)
+          test -n "$entries" || { echo "::error::no module entry script found in $dist/index.html"; exit 1; }
           total=0
-          for f in $files; do
-            size=$(gzip -9 -c "$dist/${f#/}" | wc -c)
+          for f in $entries $preloads; do
+            path="$dist/${f#/}"
+            test -f "$path" || { echo "::error::$f from index.html is not in $dist"; exit 1; }
+            size=$(gzip -9 -c "$path" | wc -c)
             echo "$size $f"
             total=$((total + size))
           done
+          test "$total" -gt 0 || { echo "::error::initial JS measured 0 bytes"; exit 1; }
           echo "Initial JS: $total bytes gzip -9 (budget $BUDGET_BYTES)"
           echo "Initial JS: $total bytes gzip -9 (budget $BUDGET_BYTES)" >> "$GITHUB_STEP_SUMMARY"
           test "$total" -le "$BUDGET_BYTES" || { echo "::error::initial JS is $total bytes gzip, over the $BUDGET_BYTES budget; split the chunk or lazy-load"; exit 1; }
