@@ -7,6 +7,7 @@ import {
   MeshStandardNodeMaterial,
   Scene,
   setConsoleFunction,
+  WebGLBackend,
   type WebGPURenderer,
 } from 'three/webgpu';
 import {
@@ -131,8 +132,11 @@ describe('linkFailureMessage', () => {
   });
 });
 
-function fakeRenderer(): Pick<WebGPURenderer, 'debug'> {
+function fakeRenderer(
+  backend: object = {},
+): Pick<WebGPURenderer, 'debug'> & { readonly backend: object } {
   return {
+    backend,
     debug: {
       checkShaderErrors: true,
       diagnostics: { keywords: false },
@@ -158,6 +162,15 @@ describe('watchPipelineErrors', () => {
     setConsoleFunction(recorder);
     return { forwarded, recorder };
   }
+
+  const linkLogs: ShaderLogs = {
+    COMPILE_STATUS: 0x8b81,
+    getProgramInfoLog: () => 'link failed',
+    getShaderInfoLog: () => '',
+    getShaderParameter: () => true,
+    getShaderSource: () => null,
+  };
+  const gl = linkLogs as WebGL2RenderingContext;
 
   it('hears a pipeline failure and still forwards every message', () => {
     const { forwarded } = installRecorder();
@@ -203,6 +216,47 @@ describe('watchPipelineErrors', () => {
     stop();
     expect(renderer.debug.onShaderError).toBe(previous);
   });
+
+  it('names the material whose WebGL program failed to link, and unhooks the backend', () => {
+    installRecorder();
+    const material = new MeshBasicNodeMaterial();
+    const renderer = fakeRenderer();
+    const backend = {
+      _completeCompile(renderObject: { material: unknown }): string {
+        const onShaderError = renderer.debug.onShaderError;
+        if (renderObject.material === material && onShaderError !== null) {
+          onShaderError(gl, {}, {}, {});
+        }
+        return 'completed';
+      },
+    };
+    Object.assign(renderer, { backend });
+    const original = backend._completeCompile;
+    const failures: PipelineFailure[] = [];
+    const stop = watchPipelineErrors(renderer, (f) => failures.push(f));
+
+    expect(backend._completeCompile({ material })).toBe('completed');
+    renderer.debug.onShaderError?.(gl, {}, {}, {});
+
+    expect(failures.map((f) => f.materialId)).toEqual([materialIdOf(material), null]);
+    stop();
+    expect(backend._completeCompile).toBe(original);
+  });
+
+  it('leaves the material unknown on a backend that does not link through _completeCompile', () => {
+    installRecorder();
+    const renderer = fakeRenderer();
+    const failures: PipelineFailure[] = [];
+    const stop = watchPipelineErrors(renderer, (f) => failures.push(f));
+    renderer.debug.onShaderError?.(gl, {}, {}, {});
+    expect(failures.map((f) => f.materialId)).toEqual([null]);
+    stop();
+    expect(renderer.backend).toEqual({});
+  });
+
+  it('finds _completeCompile on the installed WebGL backend', () => {
+    expect(Reflect.get(WebGLBackend.prototype, '_completeCompile')).toBeTypeOf('function');
+  });
 });
 
 describe('usesMaterial', () => {
@@ -234,6 +288,8 @@ describe('blameEffects', () => {
   });
   const context = (overrides: Partial<FailureContext> = {}): FailureContext => ({
     effects: true,
+    dropping: false,
+    temporal: false,
     ownedByEffects: (id) => id === 1,
     inScene: (id) => id === 1 || id === 2,
     ...overrides,
@@ -244,12 +300,19 @@ describe('blameEffects', () => {
     expect(blameEffects(render(3), context())).toBe(true);
   });
 
-  it('blames them when the backend does not name the material', () => {
+  it('blames them when the backend does not name the material, unless a drop is queued', () => {
     expect(blameEffects(render(null), context())).toBe(true);
+    expect(blameEffects(render(null), context({ dropping: true }))).toBe(false);
   });
 
-  it('does not blame them for a scene material', () => {
+  it('keeps blaming named effects materials while a drop is queued', () => {
+    expect(blameEffects(render(1), context({ dropping: true }))).toBe(true);
+    expect(blameEffects(render(3), context({ dropping: true }))).toBe(true);
+  });
+
+  it('does not blame them for a scene material, unless frames have a velocity output', () => {
     expect(blameEffects(render(2), context())).toBe(false);
+    expect(blameEffects(render(2), context({ temporal: true }))).toBe(true);
   });
 
   it('never blames effects that are not there, nor for a compute pass', () => {
@@ -264,6 +327,7 @@ describe('blameEffects', () => {
 describe('PipelineFailureHandler', () => {
   class FakeEffects implements DroppableEffects {
     active = true;
+    temporal = false;
     failures: unknown[] = [];
 
     ownsMaterial(materialId: number): boolean {
@@ -322,7 +386,61 @@ describe('PipelineFailureHandler', () => {
     await settle();
     handler.handle(failure(5));
     handler.handle(failure(6));
-    expect(reports.map((r) => r.cause)).toEqual([new Error('failed')]);
+    expect(reports).toEqual([
+      {
+        message: 'A pass outside the scene failed to build and is skipped',
+        cause: new Error('failed'),
+      },
+    ]);
+  });
+
+  it('drops once and reports an unnamed failure that follows in the same frame', async () => {
+    const { effects, reports, handler } = setup();
+    handler.handle(failure(null, 'post link failed'));
+    handler.handle(failure(null, 'decor link failed'));
+    handler.handle(failure(1));
+    await settle();
+    expect(effects.failures).toEqual([new Error('post link failed')]);
+    expect(reports).toEqual([
+      {
+        message: 'A material failed to build and is not drawn',
+        cause: new Error('decor link failed'),
+      },
+    ]);
+  });
+
+  it('tries a scene material without the velocity output before reporting it', async () => {
+    const { effects, reports, handler } = setup();
+    effects.temporal = true;
+    handler.handle(failure(2, 'velocity'));
+    handler.handle(failure(2, 'velocity'));
+    await settle();
+    expect(effects.failures).toEqual([new Error('velocity')]);
+    expect(reports).toEqual([]);
+
+    handler.handle(failure(2, 'plain'));
+    handler.handle(failure(2, 'plain'));
+    expect(reports).toEqual([
+      { message: 'A material failed to build and is not drawn', cause: new Error('plain') },
+    ]);
+  });
+
+  it('keeps a scene material quiet when it builds without the velocity output', async () => {
+    const { effects, reports, handler } = setup();
+    effects.temporal = true;
+    handler.handle(failure(2));
+    await settle();
+    expect(effects.active).toBe(false);
+    expect(reports).toEqual([]);
+  });
+
+  it('keeps the effects own materials quiet after the drop', async () => {
+    const { effects, reports, handler } = setup();
+    effects.temporal = true;
+    handler.handle(failure(1));
+    await settle();
+    handler.handle(failure(1));
+    expect(reports).toEqual([]);
   });
 
   it('reports a scene material once while keeping the effects', async () => {

@@ -12,53 +12,6 @@ import {
 } from 'three/webgpu';
 import { blendsVelocity, temporalOutputs } from './post';
 
-type Rgba = readonly [number, number, number, number];
-type Factor = 'zero' | 'one' | 'srcAlpha' | 'oneMinusSrcAlpha' | 'srcColor' | 'oneMinusSrcColor';
-
-function weight(factor: Factor, src: Rgba, channel: number): number {
-  switch (factor) {
-    case 'zero':
-      return 0;
-    case 'one':
-      return 1;
-    case 'srcAlpha':
-      return src[3];
-    case 'oneMinusSrcAlpha':
-      return 1 - src[3];
-    case 'srcColor':
-      return src[channel] ?? 0;
-    case 'oneMinusSrcColor':
-      return 1 - (src[channel] ?? 0);
-  }
-}
-
-function blend(src: Rgba, dst: Rgba, srcFactor: Factor, dstFactor: Factor): number[] {
-  return dst.map(
-    (d, i) => (src[i] ?? 0) * weight(srcFactor, src, i) + d * weight(dstFactor, src, i),
-  );
-}
-
-describe('the velocity a blended material writes under TRAA', () => {
-  const opaqueVelocity: Rgba = [0.012, -0.004, 0, 1];
-  const written: Rgba = [0, 0, 0, 0];
-
-  // three's factors for its blending presets, and the custom ones the tank's in-scatter uses.
-  it.each([
-    ['normal', 'srcAlpha', 'oneMinusSrcAlpha'],
-    ['normal, premultiplied', 'one', 'oneMinusSrcAlpha'],
-    ['additive', 'srcAlpha', 'one'],
-    ['additive, premultiplied', 'one', 'one'],
-    ['subtractive', 'zero', 'oneMinusSrcColor'],
-    ['tank in-scatter', 'one', 'one'],
-  ] as const)('leaves the opaque velocity under %s blending', (_name, src, dst) => {
-    expect(blend(written, opaqueVelocity, src, dst)).toEqual([...opaqueVelocity]);
-  });
-
-  it('would zero it under multiply blending, so a multiplying material sets its own', () => {
-    expect(blend(written, opaqueVelocity, 'zero', 'srcColor')).toEqual([0, 0, 0, 0]);
-  });
-});
-
 describe('blendsVelocity', () => {
   function material(transparent: boolean, blending: Blending): MeshBasicNodeMaterial {
     const m = new MeshBasicNodeMaterial({ transparent });
