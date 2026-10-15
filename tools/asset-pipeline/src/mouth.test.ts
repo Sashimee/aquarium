@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { bakeMouthMask } from './mouth.ts';
+import { Document } from '@gltf-transform/core';
+import { bakeMouthMask, renormaliseMouth } from './mouth.ts';
 
 interface Head {
   positions: Float32Array;
@@ -83,5 +84,36 @@ describe('bakeMouthMask', () => {
     expect(() => bakeMouthMask(new Float32Array([0, 0, 0]), Float32Array.from([1]))).toThrow(
       'no body vertex',
     );
+  });
+});
+
+describe('renormaliseMouth', () => {
+  function primitiveWith(values: number[]) {
+    const doc = new Document();
+    const buffer = doc.createBuffer();
+    const accessor = doc
+      .createAccessor()
+      .setType('SCALAR')
+      .setArray(Float32Array.from(values))
+      .setBuffer(buffer);
+    return doc.createPrimitive().setAttribute('_MOUTH', accessor);
+  }
+
+  it('rescales so the highest value across primitives is 1', () => {
+    const a = primitiveWith([0, 0.25, 0.5]);
+    const b = primitiveWith([0, 0.1]);
+    renormaliseMouth([a, b]);
+    expect([...a.getAttribute('_MOUTH')!.getArray()!]).toEqual([0, 0.5, 1]);
+    expect(b.getAttribute('_MOUTH')!.getArray()![1]).toBeCloseTo(0.2, 6);
+  });
+
+  it('leaves an all-zero mask and a mask that already peaks at 1 alone', () => {
+    const zero = primitiveWith([0, 0]);
+    const full = primitiveWith([0.3, 1]);
+    renormaliseMouth([zero]);
+    renormaliseMouth([full]);
+    expect([...zero.getAttribute('_MOUTH')!.getArray()!]).toEqual([0, 0]);
+    expect(full.getAttribute('_MOUTH')!.getArray()![1]).toBe(1);
+    expect(full.getAttribute('_MOUTH')!.getArray()![0]).toBeCloseTo(0.3, 6);
   });
 });

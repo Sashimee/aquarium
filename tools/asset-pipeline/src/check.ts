@@ -44,8 +44,16 @@ export interface CheckInput {
 export function readGlbJson(buffer: Uint8Array): {
   meshes?: { primitives: { attributes: Record<string, number> }[] }[];
   images?: { uri?: string }[];
-  accessors?: { bufferView?: number; byteOffset?: number; count: number }[];
+  accessors?: {
+    bufferView?: number;
+    byteOffset?: number;
+    count: number;
+    componentType?: number;
+    normalized?: boolean;
+    type?: string;
+  }[];
   bufferViews?: {
+    byteStride?: number;
     byteOffset?: number;
     byteLength: number;
     extensions?: {
@@ -169,6 +177,21 @@ function readFloatAccessor(
   const view =
     accessor?.bufferView === undefined ? undefined : json.bufferViews?.[accessor.bufferView];
   if (!accessor || !view) throw new Error(`accessor ${index} has no buffer view`);
+  if (accessor.componentType !== 5126 || accessor.normalized || accessor.type !== 'SCALAR')
+    throw new Error(
+      `accessor ${index} must be non-normalised float32 SCALAR (got componentType ${accessor.componentType}, normalized ${accessor.normalized ?? false}, type ${accessor.type}); the check reads raw floats`,
+    );
+  if (view.byteStride !== undefined && view.byteStride !== 4)
+    throw new Error(
+      `accessor ${index} has byteStride ${view.byteStride}; the check needs a tightly packed float32 view`,
+    );
+  if (
+    view.extensions?.EXT_meshopt_compression?.byteStride !== undefined &&
+    view.extensions.EXT_meshopt_compression.byteStride !== 4
+  )
+    throw new Error(
+      `accessor ${index} has a meshopt byteStride other than 4; the check needs a tightly packed float32 view`,
+    );
   const compressed = view.extensions?.EXT_meshopt_compression;
   let bytes: Uint8Array;
   if (compressed) {

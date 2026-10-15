@@ -592,6 +592,47 @@ describe('checkAssets', () => {
     expect(checkAssets(inputFor([asset])).join('\n')).toContain('is 0 on every vertex');
   });
 
+  it('fails loudly on a mouth accessor that is not float32', () => {
+    const asset = fishAsset();
+    const lod0 = asset.lods[0];
+    if (!lod0) throw new Error('fixture has no LOD');
+    const quantised = put(
+      'fish/tetra/lod0.glb',
+      packGlb(
+        {
+          asset: { version: '2.0' },
+          buffers: [{ byteLength: 3 }],
+          bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: 3 }],
+          accessors: FISH_ATTRIBUTES.map(() => ({
+            bufferView: 0,
+            componentType: 5121,
+            normalized: true,
+            count: 3,
+            type: 'SCALAR',
+          })),
+          meshes: [
+            {
+              primitives: [
+                { attributes: Object.fromEntries(FISH_ATTRIBUTES.map((n, i) => [n, i])) },
+              ],
+            },
+          ],
+        },
+        new Uint8Array(3),
+      ),
+    );
+    const problems = checkAssets(
+      inputFor([
+        {
+          ...asset,
+          lods: [{ ...lod0, ...quantised }, ...asset.lods.slice(1)],
+          files: [quantised, ...asset.files.slice(1)],
+        },
+      ]),
+    );
+    expect(problems.join('\n')).toContain('must be non-normalised float32 SCALAR');
+  });
+
   it('fails a fish with missing LODs', () => {
     const problems = checkAssets(inputFor([fishAsset({ lodCount: 2 })])).join('\n');
     expect(problems).toContain('needs 3 LODs');

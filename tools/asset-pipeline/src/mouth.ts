@@ -1,3 +1,5 @@
+import type { Primitive } from '@gltf-transform/core';
+import { MOUTH_ATTRIBUTE } from './index-schema.ts';
 import { clamp } from './math.ts';
 
 export interface MouthHints {
@@ -70,13 +72,20 @@ export function bakeMouthMask(
   return mask;
 }
 
-export function mouthDebugColors(mask: Float32Array): Float32Array {
-  const colors = new Float32Array(mask.length * 3);
-  for (let i = 0; i < mask.length; i++) {
-    const m = mask[i]!;
-    colors[i * 3] = 0.15 + 0.85 * m;
-    colors[i * 3 + 1] = 0.15 + 0.7 * (1 - Math.abs(2 * m - 1));
-    colors[i * 3 + 2] = 0.55 * (1 - m);
+/**
+ * Simplification can drop the jaw-tip vertex, which would shrink the buccal amplitude from one LOD to the next; scales
+ * the mask over all primitives of one mesh so the highest remaining value is 1 again.
+ */
+export function renormaliseMouth(primitives: Primitive[]): void {
+  const accessors = primitives
+    .map((prim) => prim.getAttribute(MOUTH_ATTRIBUTE))
+    .filter((accessor) => accessor !== null);
+  let peak = 0;
+  for (const accessor of accessors)
+    for (const value of accessor.getArray() ?? []) peak = Math.max(peak, value);
+  if (peak <= 0 || peak === 1) return;
+  for (const accessor of accessors) {
+    const values = Float32Array.from(accessor.getArray() ?? [], (v) => Math.min(1, v / peak));
+    accessor.setArray(values);
   }
-  return colors;
 }

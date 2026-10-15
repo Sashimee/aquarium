@@ -1,8 +1,8 @@
 {
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; every texture has both files.",
-  "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Every fish LOD also carries _MOUTH, geometry attribute \"_mouth\", a float in [0, 1] for buccal motion: 1 at the jaw or lower-lip tip, easing to 0 behind the gill line and above the mouth slit; fins, eyes and attachments are 0. Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body, carapace and eyes; 6 walking leg; 7 antenna; 8 pleopod; 9 abdomen, telson and tail fan) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x; antennules 0/1, long antennae 2/3; tail-fan leaves k * 2 + side). Shrimp _fin_mask means: id 0 is 0 (eye stalks included, ignore it); ids 6 and 7 are the weight along the limb, 0 root to 1 tip; id 8 is the pleopod beat weight, 0 root to 1 tip; id 9 is the tail-curl weight clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1) of the rest position. Tail curl rotates ids 8 and 9 about +x through the shrimp.abdomenHinge {y, z} by flex * clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1), computed from the rest position, never from _fin_mask, so the pleopods follow the segment they hang from. Pleopods (id 8) exist only in LOD0 and LOD1 and are removed from LOD2; legs are simplified, so do not assume every _leg index exists at every LOD. The cherry material is alphaMode BLEND with base colour alpha 0.86: three.js GLTFLoader turns depthWrite off for BLEND, so set depthWrite true on the cherry material and expect some sorting artefacts from the self-overlapping legs and antennae.",
-  "totalBytes": 60752788,
+  "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Every fish LOD also carries _MOUTH, geometry attribute \"_mouth\", a float in [0, 1] for buccal motion: 1 at the jaw or lower-lip tip (every LOD is renormalised so its highest value is exactly 1), easing to 0 behind the gill line and above the mouth slit; fins, eyes and attachments are 0. Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body, carapace and eyes; 6 walking leg; 7 antenna; 8 pleopod; 9 abdomen, telson and tail fan) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x; antennules 0/1, long antennae 2/3; tail-fan leaves k * 2 + side). Shrimp _fin_mask means: id 0 is 0 (eye stalks included, ignore it); ids 6 and 7 are the weight along the limb, 0 root to 1 tip; id 8 is the pleopod beat weight, 0 root to 1 tip; id 9 is the tail-curl weight clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1) of the rest position. Tail curl rotates ids 8 and 9 about +x through the shrimp.abdomenHinge {y, z} by flex * clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1), computed from the rest position, never from _fin_mask, so the pleopods follow the segment they hang from. Pleopods (id 8) exist only in LOD0 and LOD1 and are removed from LOD2; legs are simplified, so do not assume every _leg index exists at every LOD. The cherry material is alphaMode BLEND with base colour alpha 0.86: three.js GLTFLoader turns depthWrite off for BLEND, so set depthWrite true on the cherry material and expect some sorting artefacts from the self-overlapping legs and antennae.",
+  "totalBytes": 60751972,
   "assets": [
     {
       "id": "angelfish",
@@ -42,17 +42,17 @@
         },
         {
           "file": "fish/angelfish/lod1.glb",
-          "bytes": 7908,
-          "sha256": "aeda1afb217db8213fa68b4b2b2d5a1e161f5e4314b50837c25a7d3310c4ddbc",
+          "bytes": 7864,
+          "sha256": "770eea4e72102a002e2c491210baa2fb9eeb2a043807685f55c778e88c432f84",
           "triangles": 308,
           "vertices": 169
         },
         {
           "file": "fish/angelfish/lod2.glb",
-          "bytes": 5816,
-          "sha256": "5e702b50e44bad9232b6d018d4700ec092a32166665c0274c1386b64ccb59cda",
+          "bytes": 5840,
+          "sha256": "f07af80af87ecd798ea30bb26fdaa43331abacbac071efe60842ed67fbd203b0",
           "triangles": 150,
-          "vertices": 83
+          "vertices": 85
         }
       ],
       "textures": [
@@ -86,13 +86,13 @@
         },
         {
           "file": "fish/angelfish/lod1.glb",
-          "bytes": 7908,
-          "sha256": "aeda1afb217db8213fa68b4b2b2d5a1e161f5e4314b50837c25a7d3310c4ddbc"
+          "bytes": 7864,
+          "sha256": "770eea4e72102a002e2c491210baa2fb9eeb2a043807685f55c778e88c432f84"
         },
         {
           "file": "fish/angelfish/lod2.glb",
-          "bytes": 5816,
-          "sha256": "5e702b50e44bad9232b6d018d4700ec092a32166665c0274c1386b64ccb59cda"
+          "bytes": 5840,
+          "sha256": "f07af80af87ecd798ea30bb26fdaa43331abacbac071efe60842ed67fbd203b0"
         },
         {
           "file": "fish/angelfish/textures/angelfish_basecolor_1k.ktx2",
@@ -168,17 +168,17 @@
         },
         {
           "file": "fish/banggai-cardinalfish/lod1.glb",
-          "bytes": 17044,
-          "sha256": "595a29a661e885da574890ad6535c42e4a2e36177809a895696df997050be910",
-          "triangles": 1306,
-          "vertices": 718
+          "bytes": 16676,
+          "sha256": "5b554f5e163064fa9393174a46bb6c734171cddb02227a10b34bea4db65eb38f",
+          "triangles": 1305,
+          "vertices": 719
         },
         {
           "file": "fish/banggai-cardinalfish/lod2.glb",
-          "bytes": 9324,
-          "sha256": "734ab2f0a245c418afd88f9b73fca196fbb52091b402ded94daa2fe000bac539",
-          "triangles": 490,
-          "vertices": 287
+          "bytes": 9192,
+          "sha256": "62f50d6fe351589be94bec7ae0021d988d5c692bd7a4c988cf312062e371cfc9",
+          "triangles": 489,
+          "vertices": 288
         }
       ],
       "textures": [
@@ -212,13 +212,13 @@
         },
         {
           "file": "fish/banggai-cardinalfish/lod1.glb",
-          "bytes": 17044,
-          "sha256": "595a29a661e885da574890ad6535c42e4a2e36177809a895696df997050be910"
+          "bytes": 16676,
+          "sha256": "5b554f5e163064fa9393174a46bb6c734171cddb02227a10b34bea4db65eb38f"
         },
         {
           "file": "fish/banggai-cardinalfish/lod2.glb",
-          "bytes": 9324,
-          "sha256": "734ab2f0a245c418afd88f9b73fca196fbb52091b402ded94daa2fe000bac539"
+          "bytes": 9192,
+          "sha256": "62f50d6fe351589be94bec7ae0021d988d5c692bd7a4c988cf312062e371cfc9"
         },
         {
           "file": "fish/banggai-cardinalfish/textures/banggai-cardinalfish_basecolor_1k.ktx2",
@@ -293,17 +293,17 @@
         },
         {
           "file": "fish/betta/lod1.glb",
-          "bytes": 60024,
-          "sha256": "1639d9bf8a3b79a6c2615de9f9f971100861ce85ba6826a78ac6897971bd6989",
-          "triangles": 4257,
-          "vertices": 2463
+          "bytes": 59976,
+          "sha256": "0f77c641b0023430b44ca15b134373a13c5a865d4399ea941fca9dacbf690e8c",
+          "triangles": 4256,
+          "vertices": 2455
         },
         {
           "file": "fish/betta/lod2.glb",
-          "bytes": 29320,
-          "sha256": "536de25bf92c01e4d355c2c22bfc9f283f95e2e5f6548abf187b9b878f55b510",
+          "bytes": 29376,
+          "sha256": "653fdc72f128a230cf8e774bc8c35dc21c99591899ab07b39ae80c4e3bc0441f",
           "triangles": 1596,
-          "vertices": 999
+          "vertices": 1002
         }
       ],
       "textures": [
@@ -358,13 +358,13 @@
         },
         {
           "file": "fish/betta/lod1.glb",
-          "bytes": 60024,
-          "sha256": "1639d9bf8a3b79a6c2615de9f9f971100861ce85ba6826a78ac6897971bd6989"
+          "bytes": 59976,
+          "sha256": "0f77c641b0023430b44ca15b134373a13c5a865d4399ea941fca9dacbf690e8c"
         },
         {
           "file": "fish/betta/lod2.glb",
-          "bytes": 29320,
-          "sha256": "536de25bf92c01e4d355c2c22bfc9f283f95e2e5f6548abf187b9b878f55b510"
+          "bytes": 29376,
+          "sha256": "653fdc72f128a230cf8e774bc8c35dc21c99591899ab07b39ae80c4e3bc0441f"
         },
         {
           "file": "fish/betta/textures/betta_basecolor_1k.ktx2",
@@ -449,17 +449,17 @@
         },
         {
           "file": "fish/blue-tang/lod1.glb",
-          "bytes": 24444,
-          "sha256": "e8b442b0ad0f1e8b7947284e1510d9f2e42d1b03e35dbd36f9503e22870d2a92",
+          "bytes": 24464,
+          "sha256": "f3fc16261aa1fbb4d097b6991c8800fdbd8d9d334ce583990f7365106920638d",
           "triangles": 1474,
           "vertices": 899
         },
         {
           "file": "fish/blue-tang/lod2.glb",
-          "bytes": 12704,
-          "sha256": "7f9cd334a538c0ab30dfa5260bf41b982445725665e3d5bf22ee0bbeb62738a4",
+          "bytes": 12728,
+          "sha256": "1071bff37ffe661bdc61014e61020a8061722937df8f8819fb347408f6136f7b",
           "triangles": 552,
-          "vertices": 359
+          "vertices": 360
         }
       ],
       "textures": [
@@ -514,13 +514,13 @@
         },
         {
           "file": "fish/blue-tang/lod1.glb",
-          "bytes": 24444,
-          "sha256": "e8b442b0ad0f1e8b7947284e1510d9f2e42d1b03e35dbd36f9503e22870d2a92"
+          "bytes": 24464,
+          "sha256": "f3fc16261aa1fbb4d097b6991c8800fdbd8d9d334ce583990f7365106920638d"
         },
         {
           "file": "fish/blue-tang/lod2.glb",
-          "bytes": 12704,
-          "sha256": "7f9cd334a538c0ab30dfa5260bf41b982445725665e3d5bf22ee0bbeb62738a4"
+          "bytes": 12728,
+          "sha256": "1071bff37ffe661bdc61014e61020a8061722937df8f8819fb347408f6136f7b"
         },
         {
           "file": "fish/blue-tang/textures/blue-tang_basecolor_1k.ktx2",
@@ -603,24 +603,24 @@
       "lods": [
         {
           "file": "fish/bristlenose-pleco/lod0.glb",
-          "bytes": 196064,
-          "sha256": "418b30abcfb3a06d5c181eabaf9b109fd58da227916d391dafc2d595083e1346",
-          "triangles": 10312,
-          "vertices": 9169
+          "bytes": 196084,
+          "sha256": "38b0ef27ca19392254c571f541e4665d383a821407d089c9869a6ff667282c57",
+          "triangles": 10302,
+          "vertices": 9180
         },
         {
           "file": "fish/bristlenose-pleco/lod1.glb",
-          "bytes": 80380,
-          "sha256": "08ca54997a69ac74366231569a8f32ae27c8a7929bf3afa15562ba5d4e7165ec",
-          "triangles": 3748,
-          "vertices": 3263
+          "bytes": 80584,
+          "sha256": "a02e50958c909fe6ee6a9e1d37b0bc6f8f4e2fe0cfac140bd45077f74a7155ca",
+          "triangles": 3750,
+          "vertices": 3274
         },
         {
           "file": "fish/bristlenose-pleco/lod2.glb",
-          "bytes": 34824,
-          "sha256": "042ab1d9f78969eb702939e2e0e327e7cbbf0175ea345df95ea623af0c7a5519",
-          "triangles": 1330,
-          "vertices": 1105
+          "bytes": 34836,
+          "sha256": "4ce4aee0e0d03b973356a15948c3d2deb45609143cee03015671e596ed1294c2",
+          "triangles": 1332,
+          "vertices": 1102
         }
       ],
       "textures": [
@@ -691,18 +691,18 @@
       "files": [
         {
           "file": "fish/bristlenose-pleco/lod0.glb",
-          "bytes": 196064,
-          "sha256": "418b30abcfb3a06d5c181eabaf9b109fd58da227916d391dafc2d595083e1346"
+          "bytes": 196084,
+          "sha256": "38b0ef27ca19392254c571f541e4665d383a821407d089c9869a6ff667282c57"
         },
         {
           "file": "fish/bristlenose-pleco/lod1.glb",
-          "bytes": 80380,
-          "sha256": "08ca54997a69ac74366231569a8f32ae27c8a7929bf3afa15562ba5d4e7165ec"
+          "bytes": 80584,
+          "sha256": "a02e50958c909fe6ee6a9e1d37b0bc6f8f4e2fe0cfac140bd45077f74a7155ca"
         },
         {
           "file": "fish/bristlenose-pleco/lod2.glb",
-          "bytes": 34824,
-          "sha256": "042ab1d9f78969eb702939e2e0e327e7cbbf0175ea345df95ea623af0c7a5519"
+          "bytes": 34836,
+          "sha256": "4ce4aee0e0d03b973356a15948c3d2deb45609143cee03015671e596ed1294c2"
         },
         {
           "file": "fish/bristlenose-pleco/textures/bristlenose-pleco_custommaterial_basecolor_1k.ktx2",
@@ -798,17 +798,17 @@
         },
         {
           "file": "fish/bronze-corydoras/lod1.glb",
-          "bytes": 16696,
-          "sha256": "6e37f8341e44c6b97822dc729704fa0ee590d5399187e3cef825a66c14bc3237",
-          "triangles": 1257,
-          "vertices": 688
+          "bytes": 16672,
+          "sha256": "fd853b349e29bf180f2aa25601fffa3c5b4178b64e096b8b758a037235e6bcd4",
+          "triangles": 1258,
+          "vertices": 690
         },
         {
           "file": "fish/bronze-corydoras/lod2.glb",
-          "bytes": 9104,
-          "sha256": "9db0775b5bd2a03a2c614697ba1febbee0f68c17bd956492c160f92813538558",
-          "triangles": 472,
-          "vertices": 270
+          "bytes": 9048,
+          "sha256": "62d7e433b3f062a137bb0adfe0bc4b93720b076da3787c71f0e8ce63ea29c379",
+          "triangles": 471,
+          "vertices": 271
         }
       ],
       "textures": [
@@ -842,13 +842,13 @@
         },
         {
           "file": "fish/bronze-corydoras/lod1.glb",
-          "bytes": 16696,
-          "sha256": "6e37f8341e44c6b97822dc729704fa0ee590d5399187e3cef825a66c14bc3237"
+          "bytes": 16672,
+          "sha256": "fd853b349e29bf180f2aa25601fffa3c5b4178b64e096b8b758a037235e6bcd4"
         },
         {
           "file": "fish/bronze-corydoras/lod2.glb",
-          "bytes": 9104,
-          "sha256": "9db0775b5bd2a03a2c614697ba1febbee0f68c17bd956492c160f92813538558"
+          "bytes": 9048,
+          "sha256": "62d7e433b3f062a137bb0adfe0bc4b93720b076da3787c71f0e8ce63ea29c379"
         },
         {
           "file": "fish/bronze-corydoras/textures/bronze-corydoras_basecolor_1k.ktx2",
@@ -925,17 +925,17 @@
         },
         {
           "file": "fish/discus/lod1.glb",
-          "bytes": 63388,
-          "sha256": "78ac47e2429f929ad2dc0a8d0d81280ced58c4382409eb66eff1d79340fea49d",
-          "triangles": 3355,
-          "vertices": 2347
+          "bytes": 63364,
+          "sha256": "136da9d1b31b574146b735f621d451e78daae2230494ec43dffc046db02431a7",
+          "triangles": 3356,
+          "vertices": 2346
         },
         {
           "file": "fish/discus/lod2.glb",
-          "bytes": 34036,
-          "sha256": "43e2a1d665b14e098e38caac1ef1bbef97c1235278856805b63b6764c3fede3b",
-          "triangles": 1440,
-          "vertices": 1063
+          "bytes": 33956,
+          "sha256": "140df6ee06b18f32cf3e1dbe0434869c73602f8e20886fe4d25a99ff0fb6372d",
+          "triangles": 1442,
+          "vertices": 1059
         }
       ],
       "textures": [
@@ -1011,13 +1011,13 @@
         },
         {
           "file": "fish/discus/lod1.glb",
-          "bytes": 63388,
-          "sha256": "78ac47e2429f929ad2dc0a8d0d81280ced58c4382409eb66eff1d79340fea49d"
+          "bytes": 63364,
+          "sha256": "136da9d1b31b574146b735f621d451e78daae2230494ec43dffc046db02431a7"
         },
         {
           "file": "fish/discus/lod2.glb",
-          "bytes": 34036,
-          "sha256": "43e2a1d665b14e098e38caac1ef1bbef97c1235278856805b63b6764c3fede3b"
+          "bytes": 33956,
+          "sha256": "140df6ee06b18f32cf3e1dbe0434869c73602f8e20886fe4d25a99ff0fb6372d"
         },
         {
           "file": "fish/discus/textures/discus_material-001_basecolor_1k.ktx2",
@@ -1113,17 +1113,17 @@
         },
         {
           "file": "fish/firefish/lod1.glb",
-          "bytes": 24404,
-          "sha256": "482885908590c123f17f78cb464aca4955cf64c7a081fd56334d7f0a28a8c78c",
-          "triangles": 1842,
-          "vertices": 1048
+          "bytes": 24352,
+          "sha256": "1a74c884cf46539bf9e37a6d14b2ea56ea735ea8489ee8d2311d6beed468ef04",
+          "triangles": 1843,
+          "vertices": 1050
         },
         {
           "file": "fish/firefish/lod2.glb",
-          "bytes": 12200,
-          "sha256": "182cf6dfb48bda409c42764f87e5acb5f4ccf2eefb8562d394ba7d82016ef498",
-          "triangles": 690,
-          "vertices": 404
+          "bytes": 12172,
+          "sha256": "69c10217392f73a7d919aabc3fd5a39cbcfb0c34a2a57fb5b99beed52e9708d3",
+          "triangles": 691,
+          "vertices": 411
         }
       ],
       "textures": [
@@ -1157,13 +1157,13 @@
         },
         {
           "file": "fish/firefish/lod1.glb",
-          "bytes": 24404,
-          "sha256": "482885908590c123f17f78cb464aca4955cf64c7a081fd56334d7f0a28a8c78c"
+          "bytes": 24352,
+          "sha256": "1a74c884cf46539bf9e37a6d14b2ea56ea735ea8489ee8d2311d6beed468ef04"
         },
         {
           "file": "fish/firefish/lod2.glb",
-          "bytes": 12200,
-          "sha256": "182cf6dfb48bda409c42764f87e5acb5f4ccf2eefb8562d394ba7d82016ef498"
+          "bytes": 12172,
+          "sha256": "69c10217392f73a7d919aabc3fd5a39cbcfb0c34a2a57fb5b99beed52e9708d3"
         },
         {
           "file": "fish/firefish/textures/firefish_basecolor_1k.ktx2",
@@ -1238,17 +1238,17 @@
         },
         {
           "file": "fish/guppy-female/lod1.glb",
-          "bytes": 41220,
-          "sha256": "adb41d5087f1e31572f16d156a50b23ec019214a2cf3b3ae34ec3e7bd3fe970b",
-          "triangles": 2377,
+          "bytes": 41224,
+          "sha256": "bfbb2317e1a19bf1707dd1891c9037a9cae0e8942dfda33dc3ecd10c4369e48c",
+          "triangles": 2376,
           "vertices": 1400
         },
         {
           "file": "fish/guppy-female/lod2.glb",
-          "bytes": 24320,
-          "sha256": "398af95e58f8f471c3b758496bee8a28513f0cee95e448d4867f8898c8a50b20",
-          "triangles": 943,
-          "vertices": 614
+          "bytes": 24220,
+          "sha256": "7829da3804a3d53857284a9b4a974f15372f242bf5c2bdafe7b11efc25debe66",
+          "triangles": 944,
+          "vertices": 615
         }
       ],
       "textures": [
@@ -1324,13 +1324,13 @@
         },
         {
           "file": "fish/guppy-female/lod1.glb",
-          "bytes": 41220,
-          "sha256": "adb41d5087f1e31572f16d156a50b23ec019214a2cf3b3ae34ec3e7bd3fe970b"
+          "bytes": 41224,
+          "sha256": "bfbb2317e1a19bf1707dd1891c9037a9cae0e8942dfda33dc3ecd10c4369e48c"
         },
         {
           "file": "fish/guppy-female/lod2.glb",
-          "bytes": 24320,
-          "sha256": "398af95e58f8f471c3b758496bee8a28513f0cee95e448d4867f8898c8a50b20"
+          "bytes": 24220,
+          "sha256": "7829da3804a3d53857284a9b4a974f15372f242bf5c2bdafe7b11efc25debe66"
         },
         {
           "file": "fish/guppy-female/textures/guppy-female_guppy-layer1-f_basecolor_1k.ktx2",
@@ -1426,17 +1426,17 @@
         },
         {
           "file": "fish/guppy-male/lod1.glb",
-          "bytes": 13972,
-          "sha256": "d14315fdedbca456360056d5de990ceb6baaa5e83f31ac9b88332d9f6facf905",
-          "triangles": 640,
-          "vertices": 335
+          "bytes": 14028,
+          "sha256": "ccfcbb913cea111ca40b2a76a21971b574e5b966fcf52b63543f72e70917ec91",
+          "triangles": 641,
+          "vertices": 334
         },
         {
           "file": "fish/guppy-male/lod2.glb",
-          "bytes": 10324,
-          "sha256": "dca395cc2c97ad4f8f067a09ae479edcce1fc2a710d91196918afad5b783d675",
-          "triangles": 332,
-          "vertices": 178
+          "bytes": 10336,
+          "sha256": "af97130e05e9727866e3872aa2a3980a11ec76a81a5aadd57311e761cbec67ee",
+          "triangles": 335,
+          "vertices": 179
         }
       ],
       "textures": [
@@ -1470,13 +1470,13 @@
         },
         {
           "file": "fish/guppy-male/lod1.glb",
-          "bytes": 13972,
-          "sha256": "d14315fdedbca456360056d5de990ceb6baaa5e83f31ac9b88332d9f6facf905"
+          "bytes": 14028,
+          "sha256": "ccfcbb913cea111ca40b2a76a21971b574e5b966fcf52b63543f72e70917ec91"
         },
         {
           "file": "fish/guppy-male/lod2.glb",
-          "bytes": 10324,
-          "sha256": "dca395cc2c97ad4f8f067a09ae479edcce1fc2a710d91196918afad5b783d675"
+          "bytes": 10336,
+          "sha256": "af97130e05e9727866e3872aa2a3980a11ec76a81a5aadd57311e761cbec67ee"
         },
         {
           "file": "fish/guppy-male/textures/guppy-male_basecolor_1k.ktx2",
@@ -1552,17 +1552,17 @@
         },
         {
           "file": "fish/harlequin-rasbora/lod1.glb",
-          "bytes": 23576,
-          "sha256": "4053242c0a2f1633631cbd9c63216fca11e6e7e4eb8c78c1b29052b85272db23",
-          "triangles": 1728,
-          "vertices": 966
+          "bytes": 23552,
+          "sha256": "a8c319a846630c54c54f8a4fe4ba3bab3c383b7a4a83818595abfe624dcd0f29",
+          "triangles": 1727,
+          "vertices": 967
         },
         {
           "file": "fish/harlequin-rasbora/lod2.glb",
-          "bytes": 11788,
-          "sha256": "134c1c8a14f3fa3ec810b0b83305fbfd34efcd25df5b1c1ad496b4b7deb605e6",
+          "bytes": 11828,
+          "sha256": "7fccbe302de6ec50877aa777eb70ecb7337d849f9f1377548b9d726d978f307a",
           "triangles": 647,
-          "vertices": 381
+          "vertices": 384
         }
       ],
       "textures": [
@@ -1596,13 +1596,13 @@
         },
         {
           "file": "fish/harlequin-rasbora/lod1.glb",
-          "bytes": 23576,
-          "sha256": "4053242c0a2f1633631cbd9c63216fca11e6e7e4eb8c78c1b29052b85272db23"
+          "bytes": 23552,
+          "sha256": "a8c319a846630c54c54f8a4fe4ba3bab3c383b7a4a83818595abfe624dcd0f29"
         },
         {
           "file": "fish/harlequin-rasbora/lod2.glb",
-          "bytes": 11788,
-          "sha256": "134c1c8a14f3fa3ec810b0b83305fbfd34efcd25df5b1c1ad496b4b7deb605e6"
+          "bytes": 11828,
+          "sha256": "7fccbe302de6ec50877aa777eb70ecb7337d849f9f1377548b9d726d978f307a"
         },
         {
           "file": "fish/harlequin-rasbora/textures/harlequin-rasbora_basecolor_1k.ktx2",
@@ -1677,17 +1677,17 @@
         },
         {
           "file": "fish/neon-tetra/lod1.glb",
-          "bytes": 17340,
-          "sha256": "736f935a757c34bc7e28105a0877d5a9c9a992f64fec57375ecfb6f8e7752667",
+          "bytes": 17416,
+          "sha256": "e1d8ecd45d17b42fe88c19cf2f484d5e49f4110a2067f1a2acf483eb4ac1de6b",
           "triangles": 660,
-          "vertices": 461
+          "vertices": 463
         },
         {
           "file": "fish/neon-tetra/lod2.glb",
-          "bytes": 12728,
-          "sha256": "48195b85e434ec5f4e9edd375848c6860027cfdf7b105c85666317ad2b51d107",
-          "triangles": 341,
-          "vertices": 258
+          "bytes": 12784,
+          "sha256": "0b0176be52d8c8cdea52a4303ba3067d936856634acb94fc1dfd29bad210f340",
+          "triangles": 337,
+          "vertices": 260
         }
       ],
       "textures": [
@@ -1742,13 +1742,13 @@
         },
         {
           "file": "fish/neon-tetra/lod1.glb",
-          "bytes": 17340,
-          "sha256": "736f935a757c34bc7e28105a0877d5a9c9a992f64fec57375ecfb6f8e7752667"
+          "bytes": 17416,
+          "sha256": "e1d8ecd45d17b42fe88c19cf2f484d5e49f4110a2067f1a2acf483eb4ac1de6b"
         },
         {
           "file": "fish/neon-tetra/lod2.glb",
-          "bytes": 12728,
-          "sha256": "48195b85e434ec5f4e9edd375848c6860027cfdf7b105c85666317ad2b51d107"
+          "bytes": 12784,
+          "sha256": "0b0176be52d8c8cdea52a4303ba3067d936856634acb94fc1dfd29bad210f340"
         },
         {
           "file": "fish/neon-tetra/textures/neon-tetra_basecolor_1k.ktx2",
@@ -1833,15 +1833,15 @@
         },
         {
           "file": "fish/ocellaris-clownfish/lod1.glb",
-          "bytes": 13440,
-          "sha256": "8a5eee930005dbeee4bab6edaacf9f76b5778f6b9bbf966d863058eecafce180",
+          "bytes": 13464,
+          "sha256": "f344fd7bc54ca165ae9c2d4e6d9618d0478012f996efdbfd01995e7b6289ff29",
           "triangles": 642,
-          "vertices": 388
+          "vertices": 389
         },
         {
           "file": "fish/ocellaris-clownfish/lod2.glb",
-          "bytes": 8004,
-          "sha256": "381e8fc0d50973c6c2e1c2dd6cb0aba989dfadcd331e551ad25fc1c3f0d001a4",
+          "bytes": 8100,
+          "sha256": "2f688ce7ee4ffef6c0a1a2245f57525b2bec377242cdf15095ba5d548b677571",
           "triangles": 240,
           "vertices": 164
         }
@@ -1898,13 +1898,13 @@
         },
         {
           "file": "fish/ocellaris-clownfish/lod1.glb",
-          "bytes": 13440,
-          "sha256": "8a5eee930005dbeee4bab6edaacf9f76b5778f6b9bbf966d863058eecafce180"
+          "bytes": 13464,
+          "sha256": "f344fd7bc54ca165ae9c2d4e6d9618d0478012f996efdbfd01995e7b6289ff29"
         },
         {
           "file": "fish/ocellaris-clownfish/lod2.glb",
-          "bytes": 8004,
-          "sha256": "381e8fc0d50973c6c2e1c2dd6cb0aba989dfadcd331e551ad25fc1c3f0d001a4"
+          "bytes": 8100,
+          "sha256": "2f688ce7ee4ffef6c0a1a2245f57525b2bec377242cdf15095ba5d548b677571"
         },
         {
           "file": "fish/ocellaris-clownfish/textures/ocellaris-clownfish_basecolor_1k.ktx2",
@@ -1988,17 +1988,17 @@
         },
         {
           "file": "fish/royal-gramma/lod1.glb",
-          "bytes": 18252,
-          "sha256": "471840bad7c45d0874be5f490501a1b08d7c0858d3ea49a143c3eed30e1c5410",
-          "triangles": 1257,
-          "vertices": 693
+          "bytes": 18060,
+          "sha256": "bf9e7999eddb886c351d095052616f6609551ca2a6d32d27ea5f70944bd8643a",
+          "triangles": 1258,
+          "vertices": 697
         },
         {
           "file": "fish/royal-gramma/lod2.glb",
-          "bytes": 9764,
-          "sha256": "b18f9b41e9fecc078ab8ecf633921877f94a28647e3fca2c6d837b38a6ee3fed",
-          "triangles": 472,
-          "vertices": 275
+          "bytes": 9604,
+          "sha256": "f3fa87940d4c3f13ef953c11d0420f6059bd50022c2ba7dbfd09c0e4ca7d9300",
+          "triangles": 471,
+          "vertices": 276
         }
       ],
       "textures": [
@@ -2032,13 +2032,13 @@
         },
         {
           "file": "fish/royal-gramma/lod1.glb",
-          "bytes": 18252,
-          "sha256": "471840bad7c45d0874be5f490501a1b08d7c0858d3ea49a143c3eed30e1c5410"
+          "bytes": 18060,
+          "sha256": "bf9e7999eddb886c351d095052616f6609551ca2a6d32d27ea5f70944bd8643a"
         },
         {
           "file": "fish/royal-gramma/lod2.glb",
-          "bytes": 9764,
-          "sha256": "b18f9b41e9fecc078ab8ecf633921877f94a28647e3fca2c6d837b38a6ee3fed"
+          "bytes": 9604,
+          "sha256": "f3fa87940d4c3f13ef953c11d0420f6059bd50022c2ba7dbfd09c0e4ca7d9300"
         },
         {
           "file": "fish/royal-gramma/textures/royal-gramma_basecolor_1k.ktx2",
@@ -2108,23 +2108,23 @@
         {
           "file": "fish/six-line-wrasse/lod0.glb",
           "bytes": 44592,
-          "sha256": "e0ce140e54540f99094f002e45bbb613d2733ad0eef0cd712dd449433d168b5e",
+          "sha256": "f3ff2cee3eb68324f7fd8913a4eb0461a0c4d317460d01fdec45a08ec475fc7d",
           "triangles": 4320,
           "vertices": 2379
         },
         {
           "file": "fish/six-line-wrasse/lod1.glb",
-          "bytes": 23712,
-          "sha256": "4dfc4bdd3fa3446b55d84def391b997088becf8ed19597614ad0b2388537b78f",
+          "bytes": 23536,
+          "sha256": "ccc9f697b419638dd52759b288e8795714dbc34da5acbaf35d1820c42b3d55f0",
           "triangles": 1727,
-          "vertices": 971
+          "vertices": 974
         },
         {
           "file": "fish/six-line-wrasse/lod2.glb",
-          "bytes": 11860,
-          "sha256": "1a81eebe11ff0c3b6d102dda632e25c503c93fc634677e6cdec20617e37c0634",
+          "bytes": 11828,
+          "sha256": "fe1aa57f7cb8be8078b43c85dd52d57bdd2c8adca0bb18a268d1feafd1af04f0",
           "triangles": 647,
-          "vertices": 377
+          "vertices": 380
         }
       ],
       "textures": [
@@ -2154,17 +2154,17 @@
         {
           "file": "fish/six-line-wrasse/lod0.glb",
           "bytes": 44592,
-          "sha256": "e0ce140e54540f99094f002e45bbb613d2733ad0eef0cd712dd449433d168b5e"
+          "sha256": "f3ff2cee3eb68324f7fd8913a4eb0461a0c4d317460d01fdec45a08ec475fc7d"
         },
         {
           "file": "fish/six-line-wrasse/lod1.glb",
-          "bytes": 23712,
-          "sha256": "4dfc4bdd3fa3446b55d84def391b997088becf8ed19597614ad0b2388537b78f"
+          "bytes": 23536,
+          "sha256": "ccc9f697b419638dd52759b288e8795714dbc34da5acbaf35d1820c42b3d55f0"
         },
         {
           "file": "fish/six-line-wrasse/lod2.glb",
-          "bytes": 11860,
-          "sha256": "1a81eebe11ff0c3b6d102dda632e25c503c93fc634677e6cdec20617e37c0634"
+          "bytes": 11828,
+          "sha256": "fe1aa57f7cb8be8078b43c85dd52d57bdd2c8adca0bb18a268d1feafd1af04f0"
         },
         {
           "file": "fish/six-line-wrasse/textures/six-line-wrasse_basecolor_1k.ktx2",
@@ -2233,23 +2233,23 @@
         {
           "file": "fish/yellow-tang/lod0.glb",
           "bytes": 17804,
-          "sha256": "8de428dc91dc8620a8ea7184345f30d686fdd8ca7cc357a3dd6804a29718a82b",
+          "sha256": "1087a547199545c165ccbf84f588aa5d232ec398f80748d0e3548e61e53dd6aa",
           "triangles": 1184,
           "vertices": 623
         },
         {
           "file": "fish/yellow-tang/lod1.glb",
-          "bytes": 10136,
-          "sha256": "7b5056f1da4458bde408bcd6a8995411ce66e7a35888957926fd3c9b58303221",
+          "bytes": 10104,
+          "sha256": "1b6021462590f80bd53ecd110435defdc27bffdfe6a4bc742dd7afb97bb7c308",
           "triangles": 473,
           "vertices": 261
         },
         {
           "file": "fish/yellow-tang/lod2.glb",
-          "bytes": 6340,
-          "sha256": "db8f7e035129cc71b0df1b3c2338f51ad477f41100a8fe901cbb1c458a107d83",
-          "triangles": 176,
-          "vertices": 107
+          "bytes": 6372,
+          "sha256": "e05dad5b05760f9193613e744fdb0906e1df7f93bec316fc513e9e51c0273d4f",
+          "triangles": 178,
+          "vertices": 108
         }
       ],
       "textures": [
@@ -2279,17 +2279,17 @@
         {
           "file": "fish/yellow-tang/lod0.glb",
           "bytes": 17804,
-          "sha256": "8de428dc91dc8620a8ea7184345f30d686fdd8ca7cc357a3dd6804a29718a82b"
+          "sha256": "1087a547199545c165ccbf84f588aa5d232ec398f80748d0e3548e61e53dd6aa"
         },
         {
           "file": "fish/yellow-tang/lod1.glb",
-          "bytes": 10136,
-          "sha256": "7b5056f1da4458bde408bcd6a8995411ce66e7a35888957926fd3c9b58303221"
+          "bytes": 10104,
+          "sha256": "1b6021462590f80bd53ecd110435defdc27bffdfe6a4bc742dd7afb97bb7c308"
         },
         {
           "file": "fish/yellow-tang/lod2.glb",
-          "bytes": 6340,
-          "sha256": "db8f7e035129cc71b0df1b3c2338f51ad477f41100a8fe901cbb1c458a107d83"
+          "bytes": 6372,
+          "sha256": "e05dad5b05760f9193613e744fdb0906e1df7f93bec316fc513e9e51c0273d4f"
         },
         {
           "file": "fish/yellow-tang/textures/yellow-tang_basecolor_1k.ktx2",

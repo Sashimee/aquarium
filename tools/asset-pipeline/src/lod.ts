@@ -21,7 +21,7 @@ const GUIDE_ATTRIBUTES: { semantic: string; size: number; weight: number }[] = [
   { semantic: 'TEXCOORD_0', size: 2, weight: 1.2 },
   { semantic: FIN_MASK_ATTRIBUTE, size: 1, weight: 3 },
   { semantic: FIN_ID_ATTRIBUTE, size: 1, weight: 3 },
-  { semantic: MOUTH_ATTRIBUTE, size: 1, weight: 3 },
+  { semantic: MOUTH_ATTRIBUTE, size: 1, weight: 0.5 },
   { semantic: SWAY_ATTRIBUTE, size: 1, weight: 3 },
   { semantic: LEG_ATTRIBUTE, size: 1, weight: 3 },
 ];
