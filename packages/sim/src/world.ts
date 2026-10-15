@@ -2,7 +2,7 @@ import type { Collider, TankSpace } from '@aquarium/shared';
 import { Basin, type TankDimensions } from './basin.ts';
 import { Behaviour, BEHAVIOUR, type Anchor, type Plan, type Stimulus } from './behaviour.ts';
 import { DecorField, UnionSdf, type Point3 } from './decor.ts';
-import { FEEDING, feedingHeight } from './feeding.ts';
+import { FEEDING, feedingHeight, gutForHunger } from './feeding.ts';
 import { FishResize } from './fishArrays.ts';
 import { FoodStore, type AteEvent } from './food.ts';
 import { clamp, DEG, quatFromYawPitchRoll, wrapAngle } from './math.ts';
@@ -99,6 +99,11 @@ export interface FishSpawn {
   readonly species: string;
   /** Overrides the species' adult body length, e.g. for a growing fish. */
   readonly bodyLengthM?: number;
+  /**
+   * The lifecycle's hunger, 0 (fed) to 1 (starving), which sets how full the fish's gut starts;
+   * see `gutForHunger`. Without it the gut starts empty.
+   */
+  readonly hunger?: number;
 }
 
 interface WorldConfigBase {
@@ -194,6 +199,7 @@ interface Fit {
   readonly length: number;
   /** Collision radius. */
   readonly r: number;
+  readonly hunger: number | undefined;
 }
 
 interface Spot {
@@ -466,12 +472,14 @@ export class World {
     this.anyNbr = new Int32Array(n * kMax);
     this.scratchDist = new Float64Array(kMax);
 
-    config.fish.forEach((spawn, i) => {
+    const fits = config.fish.map((spawn, i) => {
       const fit = this.fit(spawn);
       this.spawn(i, fit, this.randomSpot(fit));
+      return fit;
     });
     this.food = new FoodStore(this.basin);
     this.behaviour = new Behaviour(this);
+    fits.forEach((fit, i) => this.seedGut(i, fit));
     this.behaviour.setAnchors(config.anchors ?? []);
     this.behaviour.init();
     if (config.light !== undefined) this.behaviour.setLight(config.light);
@@ -589,7 +597,11 @@ export class World {
     if (2 * r >= Math.min(basin.width, basin.maxY - basin.floorMax, basin.depth)) {
       throw new RangeError(`fish "${spawn.id}" (${length} m) does not fit in the tank`);
     }
-    return { id: spawn.id, si, sp, length, r };
+    const { hunger } = spawn;
+    if (hunger !== undefined && !(hunger >= 0 && hunger <= 1)) {
+      throw new RangeError(`fish "${spawn.id}": hunger must be within 0 to 1, got ${hunger}`);
+    }
+    return { id: spawn.id, si, sp, length, r, hunger };
   }
 
   private spawn(i: number, fit: Fit, spot: Spot): void {
@@ -724,7 +736,12 @@ export class World {
     this._fishIds = [...this.fishIds, spawn.id];
     this.spawn(i, fit, spot);
     this.behaviour.addFish(i);
+    this.seedGut(i, fit);
     return i;
+  }
+
+  private seedGut(i: number, fit: Fit): void {
+    if (fit.hunger !== undefined) this.behaviour.feeding.gut[i] = gutForHunger(fit.hunger);
   }
 
   /**

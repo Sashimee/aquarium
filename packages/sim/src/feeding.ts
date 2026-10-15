@@ -1,3 +1,4 @@
+import { HUNGER_PER_PORTION } from '../lifecycle/params.ts';
 import type { BehaviourHost } from './behaviour.ts';
 import type { FishResize } from './fishArrays.ts';
 import { MAX_FEEDERS, MAX_FOOD_PARTICLES, type AteEvent } from './food.ts';
@@ -51,6 +52,15 @@ const EMPTY = 1e-9;
 export function feedingHeight(y: number, length: number, floor: number, top: number): number {
   const off = FEEDING.reachHeightBodyLengths * length;
   return clamp(y, floor + off, top - off);
+}
+
+/**
+ * The gut that matches a lifecycle `hunger` (0 fed to 1 starving). The lifecycle takes
+ * `HUNGER_PER_PORTION` off hunger for each portion eaten, so hunger / that is the portions the
+ * fish is short of; the gut lacks as much, down to empty.
+ */
+export function gutForHunger(hunger: number): number {
+  return Math.max(0, FEEDING.satiationPortions - hunger / HUNGER_PER_PORTION);
 }
 
 function at(a: ArrayLike<number>, i: number): number {

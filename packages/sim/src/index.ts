@@ -22,7 +22,7 @@ export {
   MAX_FOOD_PARTICLES,
   type AteEvent,
 } from './food.ts';
-export { FEEDING } from './feeding.ts';
+export { FEEDING, gutForHunger } from './feeding.ts';
 export { CURIOSITY } from './curiosity.ts';
 export {
   compileCollider,
