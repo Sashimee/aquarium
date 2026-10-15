@@ -1,7 +1,12 @@
 import type { Primitive } from '@gltf-transform/core';
 import { compactPrimitive } from '@gltf-transform/functions';
 import { MeshoptSimplifier } from 'meshoptimizer';
-import { FIN_ID_ATTRIBUTE, FIN_MASK_ATTRIBUTE, SWAY_ATTRIBUTE } from './index-schema.ts';
+import {
+  FIN_ID_ATTRIBUTE,
+  FIN_MASK_ATTRIBUTE,
+  LEG_ATTRIBUTE,
+  SWAY_ATTRIBUTE,
+} from './index-schema.ts';
 
 export interface SimplifyOptions {
   /** Fraction of the primitive's triangles to keep. */
@@ -16,6 +21,7 @@ const GUIDE_ATTRIBUTES: { semantic: string; size: number; weight: number }[] = [
   { semantic: FIN_MASK_ATTRIBUTE, size: 1, weight: 3 },
   { semantic: FIN_ID_ATTRIBUTE, size: 1, weight: 3 },
   { semantic: SWAY_ATTRIBUTE, size: 1, weight: 3 },
+  { semantic: LEG_ATTRIBUTE, size: 1, weight: 3 },
 ];
 
 export function triangleCountOf(prim: Primitive): number {
