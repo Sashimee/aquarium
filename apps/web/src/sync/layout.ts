@@ -23,12 +23,15 @@ export class LayoutSaver {
   private running: Promise<void> | null = null;
   private failed: { tankId: string; layout: DecorLayout } | null = null;
   private disposed = false;
+  private epoch = 0;
+  private edited = false;
 
   constructor(private readonly options: LayoutSaverOptions) {}
 
   submit(tankId: string, layout: DecorLayout): void {
     if (this.disposed) return;
     this.pending.set(tankId, layout);
+    this.edited = true;
     this.failed = null;
     this.options.report('saving', null);
     if (this.timer) clearTimeout(this.timer);
@@ -39,7 +42,20 @@ export class LayoutSaver {
   }
 
   get busy(): boolean {
-    return this.timer !== null || this.running !== null || this.pending.size > 0;
+    return (
+      this.timer !== null || this.running !== null || this.pending.size > 0 || this.failed !== null
+    );
+  }
+
+  /** Drops queued and failed saves, e.g. at sign-out, so nothing outlives the session that made it. */
+  reset(): void {
+    this.epoch++;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+    this.pending.clear();
+    this.failed = null;
+    this.edited = false;
+    this.options.report('idle', null);
   }
 
   retry(): void {
@@ -72,16 +88,26 @@ export class LayoutSaver {
       if (next.done) break;
       const [tankId, layout] = next.value;
       this.pending.delete(tankId);
+      const epoch = this.epoch;
       try {
-        await withRetry(() => this.options.send(tankId, layout), {
-          sleep: this.options.sleep ?? realSleep,
-          maxAttempts: this.options.maxAttempts ?? 4,
-        });
+        await withRetry(
+          () => {
+            if (epoch !== this.epoch) throw new SessionEnded();
+            return this.options.send(tankId, layout);
+          },
+          {
+            sleep: this.options.sleep ?? realSleep,
+            maxAttempts: this.options.maxAttempts ?? 4,
+          },
+        );
       } catch (error) {
+        if (epoch !== this.epoch) continue;
         if (!this.pending.has(tankId)) this.failed = { tankId, layout };
         this.options.report('error', describeSyncError(error));
       }
     }
-    if (!this.failed) this.options.report('saved', null);
+    if (!this.failed && this.edited) this.options.report('saved', null);
   }
 }
+
+class SessionEnded extends Error {}

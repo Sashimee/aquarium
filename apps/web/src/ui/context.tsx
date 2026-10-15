@@ -67,10 +67,13 @@ export function useCameraMode(): CameraMode {
   return useLatest(interaction, 'camera:mode-changed')?.mode ?? 'orbit';
 }
 
+let linkedBiome: Biome | undefined;
+
 export function useDemoBiome(): Biome {
   const { interaction } = useBridge();
   const latest = useLatest(interaction, 'demo:biome-changed');
-  return latest?.biome ?? parseBiome(window.location.search);
+  linkedBiome ??= parseBiome(window.location.search);
+  return latest?.biome ?? linkedBiome;
 }
 
 export function usePlayTool(): PlayTool {
@@ -81,6 +84,11 @@ export function usePlayTool(): PlayTool {
 export function useDecorState(): DecorViewState | null {
   const { interaction } = useBridge();
   return useLatest(interaction, 'decor:state') ?? null;
+}
+
+export function useDecorLoadError(): string | null {
+  const { interaction } = useBridge();
+  return useLatest(interaction, 'decor:load-failed')?.message ?? null;
 }
 
 export function useDecorSaveState(): { status: SaveStatus; message: string | null } {

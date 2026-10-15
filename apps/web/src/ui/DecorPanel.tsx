@@ -1,6 +1,6 @@
 import { VACATION_FEEDER_ASSET_ID } from '../interaction/decor/spec';
 import type { DecorCommand } from '../interaction/events';
-import { useBridge, useDecorSaveState, useDecorState } from './context';
+import { useBridge, useDecorLoadError, useDecorSaveState, useDecorState } from './context';
 
 const TURN = Math.PI / 12;
 const STEP = 0.02;
@@ -16,7 +16,23 @@ export default function DecorPanel() {
   const { interaction } = useBridge();
   const state = useDecorState();
   const save = useDecorSaveState();
+  const loadError = useDecorLoadError();
   if (!state?.active) {
+    if (loadError) {
+      return (
+        <>
+          <p role="alert" className="hint">
+            {loadError}
+          </p>
+          <button
+            type="button"
+            onClick={() => interaction.emit('decor:request-mode', { active: true })}
+          >
+            Try again
+          </button>
+        </>
+      );
+    }
     return (
       <p role="status" className="hint">
         Getting the tank ready for decorating.

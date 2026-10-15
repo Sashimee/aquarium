@@ -1,4 +1,4 @@
-import type { Biome } from '@aquarium/shared';
+import { legacyTintSeed, type Biome } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import { loadPreset } from '../../scene/preset';
 import { DecorEditor } from './editor';
@@ -209,7 +209,7 @@ describe('rotate and nudge', () => {
 
 describe('adding by biome', () => {
   it('refuses a reef-only piece in a freshwater tank and accepts it in a reef tank', () => {
-    expect(editor([], 'freshwater').add('reef-arch')).toEqual({ rejection: 'unknown-asset' });
+    expect(editor([], 'freshwater').add('reef-arch')).toEqual({ rejection: 'wrong-biome' });
     expect(editor([], 'reef').add('reef-arch')).toHaveProperty('id');
   });
 
@@ -254,3 +254,25 @@ function others(e: DecorEditor, exceptId: string) {
     .filter((p) => p.id !== exceptId)
     .map((p) => ({ spec: spec(p.item.assetId), item: p.item }));
 }
+
+describe('colour seed', () => {
+  it('keeps the seed a piece started with through moves and turns', () => {
+    const e = editor([piece('p1', 'boulder-01', 0, 0)]);
+    const seed = must(e.piece('p1')).item.tintSeed;
+    expect(seed).toBe(legacyTintSeed(item('boulder-01', 0, 0)));
+    e.nudge('p1', 0.1, 0);
+    e.rotate('p1', 0.5);
+    expect(must(e.piece('p1')).item.tintSeed).toBe(seed);
+  });
+
+  it('gives a new piece a seed from where it was placed, and keeps a saved one', () => {
+    const e = editor([{ id: 'p1', item: { ...item('boulder-01', 0, 0), tintSeed: 7 } }]);
+    expect(must(e.piece('p1')).item.tintSeed).toBe(7);
+    const added = e.add('boulder-01');
+    if (!('id' in added)) throw new Error('expected a piece');
+    const placed = must(e.piece(added.id)).item;
+    expect(placed.tintSeed).toBe(legacyTintSeed(placed));
+    e.nudge(added.id, 0.1, 0);
+    expect(must(e.piece(added.id)).item.tintSeed).toBe(placed.tintSeed);
+  });
+});

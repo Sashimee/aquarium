@@ -117,6 +117,37 @@ describe('SceneDecor', () => {
     expect(decor.system).toBeNull();
   });
 
+  describe('after the decor chunk failed to load', () => {
+    it('says so, and a new decorate request tries again', async () => {
+      let attempts = 0;
+      const { bus, decor, made, factory } = setup(() =>
+        ++attempts === 1 ? Promise.reject(new Error('chunk 404')) : Promise.resolve(factory),
+      );
+      const seen: (string | null)[] = [];
+      bus.on('decor:load-failed', ({ message }) => seen.push(message));
+      decor.mount('reef');
+      await settle();
+      expect(seen).toEqual([expect.stringMatching(/could not load/)]);
+      bus.emit('decor:request-mode', { active: true });
+      await settle();
+      expect(attempts).toBe(2);
+      expect(made).toHaveLength(1);
+      expect(seen.at(-1)).toBeNull();
+    });
+
+    it('reports each failed retry and keeps no system', async () => {
+      const { bus, decor } = setup(() => Promise.reject(new Error('chunk 404')));
+      const seen: (string | null)[] = [];
+      bus.on('decor:load-failed', ({ message }) => seen.push(message));
+      decor.mount('reef');
+      await settle();
+      bus.emit('decor:request-mode', { active: true });
+      await settle();
+      expect(seen).toHaveLength(2);
+      expect(decor.system).toBeNull();
+    });
+  });
+
   describe('a decorate request made before the system exists', () => {
     const requests = (bus: EventBus<InteractionEvents>) => {
       const seen: boolean[] = [];

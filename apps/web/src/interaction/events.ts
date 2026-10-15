@@ -97,6 +97,8 @@ export interface InteractionEvents {
   'tank:care': { tankId: string; action: CareAction['type'] };
   'decor:request-mode': { active: boolean };
   'decor:mode-changed': { active: boolean };
+  /** The decor code failed to load (message), or loaded after a failure (null). */
+  'decor:load-failed': { message: string | null };
   'decor:command': DecorCommand;
   'decor:state': DecorViewState;
   /**
@@ -120,4 +122,5 @@ export const STICKY_INTERACTION_EVENTS: readonly (keyof InteractionEvents)[] = [
   'demo:biome-changed',
   'decor:state',
   'decor:save-state',
+  'decor:load-failed',
 ];
