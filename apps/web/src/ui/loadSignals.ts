@@ -15,6 +15,8 @@ export function managerOf(loader: object): ProgressSource | null {
   return typeof manager === 'object' && manager !== null ? manager : null;
 }
 
+const PENDING_REQUESTS = 6;
+
 export interface AssetWatch {
   /** Counts only the requests made from now on, for the next load. */
   rebase(): void;
@@ -22,9 +24,13 @@ export interface AssetWatch {
 }
 
 /**
- * Feeds the share of finished asset requests (glb, textures and the rest that go through the
- * managers) to the tracker. A manager's total grows as new requests start, so the share is taken
- * against what was requested since `rebase`, summed over the sources.
+ * Feeds the progress of asset requests to the tracker. What goes through the watched managers
+ * counts: glb files, and every KTX2 texture, since the shared loader's manager is one of the
+ * sources (the substrate textures and the HDRI load through it; so do textures embedded in
+ * glTF). A manager's total keeps growing as later waves of requests start (fish lod1/lod2), so
+ * a plain done/total share would fall back after the first wave and the bar would stall. The
+ * extra `PENDING` in the denominator leaves room for requests not yet made, and every finished
+ * request moves the bar, as long as the load runs.
  */
 export function watchAssets(sources: readonly ProgressSource[], tracker: LoadTracker): AssetWatch {
   const seen = sources.map(() => ({ loaded: 0, total: 0, baseLoaded: 0, baseTotal: 0 }));
@@ -35,7 +41,7 @@ export function watchAssets(sources: readonly ProgressSource[], tracker: LoadTra
       asked += s.total - s.baseTotal;
       done += s.loaded - s.baseLoaded;
     }
-    if (asked > 0) tracker.assets(done / asked);
+    if (asked > 0) tracker.assets(done / (asked + PENDING_REQUESTS));
   };
   const before = sources.map((source) => ({ start: source.onStart, progress: source.onProgress }));
   sources.forEach((source, index) => {

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { LoadState } from '../interaction/events';
-import { useLoadState } from './context';
+import { useBridge, useLoadState } from './context';
 
 /** A load that finishes sooner than this never shows the screen. */
 export const SHOW_AFTER_MS = 150;
@@ -43,6 +43,7 @@ export function useLoadingPhase(load: LoadState | null): LoadingPhase {
 
 export function LoadingScreen() {
   const load = useLoadState();
+  const { interaction } = useBridge();
   const phase = useLoadingPhase(load);
   const retry = useRef<HTMLButtonElement>(null);
   const failed = load?.error != null;
@@ -96,6 +97,9 @@ export function LoadingScreen() {
               onClick={() => window.location.reload()}
             >
               Try again
+            </button>
+            <button type="button" onClick={() => interaction.emit('load:dismiss', {})}>
+              Dismiss
             </button>
           </>
         ) : (

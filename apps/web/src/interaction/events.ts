@@ -101,6 +101,8 @@ export interface InteractionEvents {
   'tank:water': { tankId: string; water: Water };
   /** The loading screen: from app start, and from each tank switch, until the tank has drawn. */
   'load:state': LoadState;
+  /** The failure card was closed; the loading screen stays away until the next load begins. */
+  'load:dismiss': Record<string, never>;
   /** A care action succeeded on the server; scenes can play the matching visual. */
   'tank:care': { tankId: string; action: CareAction['type'] };
   'decor:request-mode': { active: boolean };

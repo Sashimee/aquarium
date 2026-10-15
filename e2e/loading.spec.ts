@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type Route } from '@playwright/test';
 import { awaitLoaded } from './support/app.ts';
 
 declare global {
@@ -82,7 +82,7 @@ test.describe('loading screen', () => {
   });
 
   test('shows an error with a retry instead of hanging, and the retry loads', async ({ page }) => {
-    await page.route('**/assets/index.json', () => undefined);
+    await page.route('**/assets/index.json', () => undefined, { times: 1 });
     await page.goto('/?backend=webgl&tier=low&e2e&loadStallMs=4000', {
       waitUntil: 'domcontentloaded',
     });
@@ -93,7 +93,6 @@ test.describe('loading screen', () => {
     const retry = page.getByRole('button', { name: 'Try again' });
     await expect(retry).toBeFocused();
 
-    await page.unroute('**/assets/index.json');
     await page.evaluate(() =>
       window.history.replaceState(null, '', '/?backend=webgl&tier=low&e2e'),
     );
@@ -103,6 +102,44 @@ test.describe('loading screen', () => {
     });
     await awaitLoaded(page, LOAD_MS);
     await expect(alert).toHaveCount(0);
+  });
+
+  test('clears the error card when the stalled load finishes later', async ({ page }) => {
+    let held: Route | undefined;
+    await page.route(
+      '**/assets/index.json',
+      (route) => {
+        held = route;
+      },
+      { times: 1 },
+    );
+    await page.goto('/?backend=webgl&tier=low&e2e&loadStallMs=4000', {
+      waitUntil: 'domcontentloaded',
+    });
+
+    const alert = page.getByRole('alert').filter({ hasText: /taking longer than expected/ });
+    await expect(alert).toBeVisible({ timeout: 60_000 });
+    await expect.poll(() => held !== undefined).toBe(true);
+    await held?.continue();
+
+    await awaitLoaded(page, LOAD_MS);
+    await expect(alert).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Try again' })).toHaveCount(0);
+    await expect(page.locator('#app')).toHaveAttribute('data-scene-biome', 'freshwater');
+  });
+
+  test('closes the error card with Dismiss and leaves the page usable', async ({ page }) => {
+    await page.route('**/assets/index.json', () => undefined);
+    await page.goto('/?backend=webgl&tier=low&e2e&loadStallMs=4000', {
+      waitUntil: 'domcontentloaded',
+    });
+
+    await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible({ timeout: 60_000 });
+    await page.getByRole('button', { name: 'Dismiss' }).click();
+
+    await expect(page.locator('.loading')).toHaveCount(0);
+    await expect(page.locator('[inert]')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^Account/ })).toBeEnabled();
   });
 
   test('fits a phone screen', async ({ browser }) => {

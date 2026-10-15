@@ -236,6 +236,7 @@ async function boot(): Promise<void> {
       tracker.finish();
     });
   const scenes = mountBiomeScene(engine, tankBiome, window.location.search, {
+    failed: (message) => tracker.fail(message),
     mounted(scene) {
       fish.setAnchors(scene.anchors);
       container.dataset['sceneBiome'] = scene.biome;

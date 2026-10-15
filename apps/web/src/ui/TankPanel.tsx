@@ -457,7 +457,8 @@ function DeadFish({ session, tank }: { session: TankSession; tank: Tank }) {
     <section aria-label="Fish that have died" className="block loss">
       <h3>Fish that have died</h3>
       <p className="hint">
-        They float at the surface until you net them. Netting adds them to the memorial below.
+        Fish float at the surface and shrimp sink to the bottom until you net them. Netting adds
+        them to the memorial below.
       </p>
       <ul className="shop">
         {dead.map((f) => (

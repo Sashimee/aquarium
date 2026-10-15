@@ -82,6 +82,8 @@ export interface BiomeSceneOptions<S extends DisposableScene> {
   /** Called before `scene` is disposed, so whatever holds it can let go first. */
   readonly unmounting: (scene: S) => void;
   readonly onError: (message: string, cause?: unknown) => void;
+  /** Also called for the errors that leave the wanted scene unshown: a failed build or mount hook. */
+  readonly onFailure?: (message: string) => void;
   readonly timeoutMs: number;
 }
 
@@ -190,7 +192,9 @@ export class BiomeScene<S extends DisposableScene> {
     try {
       this.options[name](scene);
     } catch (cause) {
-      this.options.onError(`Scene ${name} hook failed`, cause);
+      const message = `Scene ${name} hook failed`;
+      this.options.onError(message, cause);
+      if (name === 'mounted') this.options.onFailure?.(message);
     }
   }
 
@@ -223,7 +227,9 @@ export class BiomeScene<S extends DisposableScene> {
         );
         return null;
       }
-      onError(`Could not build the ${biome} preset`, cause);
+      const message = `Could not build the ${biome} preset`;
+      onError(message, cause);
+      this.options.onFailure?.(message);
       return null;
     } finally {
       clearTimeout(timer);

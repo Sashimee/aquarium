@@ -43,6 +43,7 @@ function harness(url: Biome, options: { gate?: boolean; failing?: Biome } = {}) 
   const mounted: Biome[] = [];
   const unmounted: Biome[] = [];
   const errors: string[] = [];
+  const failures: string[] = [];
   const scenes = new BiomeScene<FakeScene>(tankBiome, {
     ready: Promise.resolve(),
     build: async (biome, signal) => {
@@ -59,6 +60,7 @@ function harness(url: Biome, options: { gate?: boolean; failing?: Biome } = {}) 
     mounted: (scene) => mounted.push(scene.biome),
     unmounting: (scene) => unmounted.push(scene.biome),
     onError: (message) => errors.push(message),
+    onFailure: (message) => failures.push(message),
     timeoutMs: 90_000,
   });
   const load = (tankId: string, biome: Biome) =>
@@ -81,6 +83,7 @@ function harness(url: Biome, options: { gate?: boolean; failing?: Biome } = {}) 
     mounted,
     unmounted,
     errors,
+    failures,
     scenes,
     load,
     unload,
@@ -380,6 +383,7 @@ describe('BiomeScene', () => {
     expect(h.errors).toEqual([
       'An abandoned preset build did not stop within 5 s; it is released when it lands',
     ]);
+    expect(h.failures).toEqual([]);
     h.gates[0]?.release();
     await vi.waitFor(() => expect(h.built.map((s) => s.disposed)).toEqual([true]));
   });
@@ -387,6 +391,7 @@ describe('BiomeScene', () => {
   it('reports a throwing mount hook instead of rejecting unobserved', async () => {
     const interaction = new EventBus<InteractionEvents>();
     const errors: string[] = [];
+    const failures: string[] = [];
     const root = new Scene();
     const scenes = new BiomeScene<FakeScene>(new TankBiome(interaction, 'reef'), {
       ready: Promise.resolve(),
@@ -394,25 +399,32 @@ describe('BiomeScene', () => {
       mounted: () => {
         throw new Error('play setup failed');
       },
-      unmounting: () => undefined,
+      unmounting: () => {
+        throw new Error('teardown failed');
+      },
       onError: (message) => errors.push(message),
+      onFailure: (message) => failures.push(message),
       timeoutMs: 90_000,
     });
     await scenes.settled();
     expect(errors).toEqual(['Scene mounted hook failed']);
+    expect(failures).toEqual(['Scene mounted hook failed']);
     expect(scenes.scene?.biome).toBe('reef');
     await scenes.dispose();
+    expect(errors).toEqual(['Scene mounted hook failed', 'Scene unmounting hook failed']);
+    expect(failures).toEqual(['Scene mounted hook failed']);
     expect(root.children).toHaveLength(0);
   });
 
   it('reports a failed build once and recovers on the next biome change', async () => {
-    const { scenes, root, errors, mounted, load, none } = harness('freshwater', {
+    const { scenes, root, errors, failures, mounted, load, none } = harness('freshwater', {
       failing: 'reef',
     });
     await scenes.settled();
     load('t1', 'reef');
     await scenes.settled();
     expect(errors).toEqual(['Could not build the reef preset']);
+    expect(failures).toEqual(['Could not build the reef preset']);
     expect(root.children).toHaveLength(0);
     none();
     await scenes.settled();
