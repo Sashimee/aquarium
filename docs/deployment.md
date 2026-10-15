@@ -85,9 +85,11 @@ curl -s  https://devfish.bas.lu/robots.txt
   asynchronously. `sendMail` succeeds and a 550 arrives later as a bounce. Verify delivery by reading a
   received test mail sent to an `@bas.lu` address. Never edit the shared relay's config.
 - **Auto Deploy on Prod:** a push to `main` deploys immediately. Only Alex asks for `dev → main`.
-- **Prod backups:** none yet. Dokploy has no backup destination configured (`destination.all` is empty), so
-  no schedule exists for aquarium-prod-db. Once Alex picks a destination (S3-compatible bucket), create it in
-  Dokploy, then add a daily backup on the prod database and a restore test, and record both here.
+- **Prod backups are off, by decision.** The owner decided on 2026-10-15 that `aquarium-prod-db` has no
+  backups, so Dokploy has no backup destination and no schedule. Losing the database or its volume loses all
+  accounts and tanks. To turn backups on later: in Dokploy add a destination (S3-compatible bucket) under
+  Settings, then on `aquarium-prod-db` (`UpLNHkjKBFMreruaR2aVW`) create a daily backup to it, run one backup
+  and restore it into a scratch database to prove it works, and replace this note.
 - **Postgres version:** CI and both Dokploy databases run `postgres:18`.
 
 ## Prod readiness (T23)
