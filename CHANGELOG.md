@@ -29,7 +29,7 @@ First release of the aquarium. `main` held only the bootstrap skeleton before th
 
 ### Accounts and data
 
-- Sign up and sign in with a passkey, or with an email and password; verification and password-reset mail comes from `fish@bas.lu`.
+- Sign up with an email and password, then add a passkey from account settings and sign in with it; verification and password-reset mail comes from `fish@bas.lu`.
 - Tanks, fish and decor are saved to your account and look the same on every device. The server is authoritative for lifecycle and care.
 - Privacy policy, credits, data export, and account deletion.
 - Rate limits on sign-up, sign-in and mail.

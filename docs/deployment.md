@@ -88,7 +88,7 @@ curl -s  https://devfish.bas.lu/robots.txt
 - **Prod backups:** none yet. Dokploy has no backup destination configured (`destination.all` is empty), so
   no schedule exists for aquarium-prod-db. Once Alex picks a destination (S3-compatible bucket), create it in
   Dokploy, then add a daily backup on the prod database and a restore test, and record both here.
-- **Postgres version:** both Dokploy databases run `postgres:18`; CI tests against `postgres:17`.
+- **Postgres version:** CI and both Dokploy databases run `postgres:18`.
 
 ## Prod readiness (T23)
 
