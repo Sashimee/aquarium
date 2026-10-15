@@ -600,7 +600,7 @@ export class World {
     const { hunger } = spawn;
     if (hunger !== undefined && (typeof hunger !== 'number' || !(hunger >= 0 && hunger <= 1))) {
       throw new RangeError(
-        `fish "${spawn.id}": hunger must be a number within 0 to 1, got ${JSON.stringify(hunger)}`,
+        `fish "${spawn.id}": hunger must be a number within 0 to 1, got ${typeof hunger === 'number' ? String(hunger) : JSON.stringify(hunger)}`,
       );
     }
     return { id: spawn.id, si, sp, length, r, hunger };
