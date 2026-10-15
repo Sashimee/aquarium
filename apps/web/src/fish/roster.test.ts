@@ -71,15 +71,58 @@ describe('TankRoster', () => {
     expect(roster.get(first)).toBeUndefined();
   });
 
-  it('restores the demo stock on unload and leaves none of the tank behind', () => {
+  it('restores the demo stock on a reset unload and leaves none of the tank behind', () => {
     const roster = loaded();
     const before = roster.revision;
-    expect(roster.unload({ tankId: TANK_A, reason: 'switch' })).toBe(true);
+    expect(roster.unload({ tankId: TANK_A, reason: 'reset' })).toBe(true);
     expect(roster.revision).toBeGreaterThan(before);
     expect(roster.tankId).toBeNull();
     expect([...roster.entries()].map((f) => f.key)).toEqual(['neon-tetra-0', 'angelfish-0']);
     expect(roster.simIdOf(FISH_1)).toBeUndefined();
     expect(roster.simIdOf(FISH_2)).toBeUndefined();
+    expect(roster.none()).toBe(false);
+  });
+
+  it('shows no fish between a switch unload and the next tank', () => {
+    const roster = loaded();
+    const before = roster.revision;
+    expect(roster.unload({ tankId: TANK_A, reason: 'switch' })).toBe(true);
+    expect(roster.revision).toBeGreaterThan(before);
+    expect(roster.tankId).toBeNull();
+    expect(roster.size).toBe(0);
+    roster.load({
+      tankId: TANK_B,
+      biome: 'reef',
+      decorLayout: [],
+      decorEdited: false,
+      fish: [fishFixture(FISH_3, { tankId: TANK_B })],
+    });
+    expect([...roster.entries()].map((f) => f.serverId)).toEqual([FISH_3]);
+    expect(roster.none()).toBe(false);
+  });
+
+  it('brings the demo stock back once no saved tank follows a switch', () => {
+    const roster = loaded();
+    roster.unload({ tankId: TANK_A, reason: 'switch' });
+    const before = roster.revision;
+    expect(roster.none()).toBe(true);
+    expect(roster.revision).toBeGreaterThan(before);
+    expect([...roster.entries()].map((f) => f.key)).toEqual(['neon-tetra-0', 'angelfish-0']);
+    const after = roster.revision;
+    expect(roster.none()).toBe(false);
+    expect(roster.revision).toBe(after);
+    expect(new TankRoster(DEMO).none()).toBe(false);
+  });
+
+  it('holds a demo swap made mid-switch until no saved tank follows', () => {
+    const roster = loaded();
+    roster.unload({ tankId: TANK_A, reason: 'switch' });
+    const before = roster.revision;
+    expect(roster.setDemo([{ id: 'ocellaris-0', species: 'ocellaris-clownfish' }])).toBe(false);
+    expect(roster.revision).toBe(before);
+    expect(roster.size).toBe(0);
+    roster.none();
+    expect([...roster.entries()].map((f) => f.key)).toEqual(['ocellaris-0']);
   });
 
   it('swaps the demo stock while no saved tank is loaded', () => {
@@ -96,7 +139,7 @@ describe('TankRoster', () => {
     expect(roster.setDemo([{ id: 'ocellaris-0', species: 'ocellaris-clownfish' }])).toBe(false);
     expect(roster.revision).toBe(before);
     expect([...roster.entries()].map((f) => f.serverId)).toEqual([FISH_1, FISH_2]);
-    roster.unload({ tankId: TANK_A, reason: 'switch' });
+    roster.unload({ tankId: TANK_A, reason: 'reset' });
     expect([...roster.entries()].map((f) => f.key)).toEqual(['ocellaris-0']);
   });
 
@@ -229,7 +272,7 @@ describe('TankRoster', () => {
       expect(roster.swimmingSpecies()).toEqual(['guppy', 'neon-tetra']);
     });
 
-    it('follows a demo swap, a load and an unload', () => {
+    it('follows a demo swap, a load, a switch and no next tank', () => {
       const roster = new TankRoster(DEMO);
       roster.setDemo([{ id: 'clownfish-0', species: 'clownfish' }]);
       expect(roster.swimmingSpecies()).toEqual(['clownfish']);
@@ -242,6 +285,8 @@ describe('TankRoster', () => {
       });
       expect(roster.swimmingSpecies()).toEqual(['betta']);
       roster.unload({ tankId: TANK_A, reason: 'switch' });
+      expect(roster.swimmingSpecies()).toEqual([]);
+      roster.none();
       expect(roster.swimmingSpecies()).toEqual(['clownfish']);
     });
 

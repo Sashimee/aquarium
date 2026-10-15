@@ -5,7 +5,7 @@ import { DynamicDrawUsage, InstancedInterleavedBuffer } from 'three/webgpu';
  * - `orientation`: the instance quaternion (x, y, z, w), needed again by the shadow pass;
  * - `swim`: scale, body-wave phase, amplitude scale, turn curvature in model units;
  * - `look`: fin phase, paling 0..1, seed 0..1, iridescent film thickness (nm);
- * - `tint`: rgb multiplier, w unused.
+ * - `tint`: rgb multiplier, gill opening 0..1.
  */
 export const INSTANCE_STRIDE = 16;
 export const InstanceSlot = {
@@ -24,6 +24,7 @@ export const InstanceSlot = {
   TintR: 12,
   TintG: 13,
   TintB: 14,
+  Gills: 15,
 } as const;
 
 export interface InstanceValues {
@@ -40,6 +41,7 @@ export interface InstanceValues {
   seed: number;
   filmThickness: number;
   tint: readonly [number, number, number];
+  gills: number;
 }
 
 export class FishInstanceData {
@@ -73,6 +75,7 @@ export class FishInstanceData {
     a[o + InstanceSlot.TintR] = v.tint[0];
     a[o + InstanceSlot.TintG] = v.tint[1];
     a[o + InstanceSlot.TintB] = v.tint[2];
+    a[o + InstanceSlot.Gills] = v.gills;
   }
 
   /** Zero scale, so the swim deformation adds nothing to a collapsed instance matrix. */

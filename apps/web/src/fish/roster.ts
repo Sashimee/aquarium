@@ -38,6 +38,8 @@ export class TankRoster {
   private readonly fish = new Map<string, RosterFish>();
   private readonly simIdByServer = new Map<string, string>();
   private loaded: { readonly tankId: string; readonly biome: Biome } | null = null;
+  /** Between a switch's unload and the session's `tank:loaded` or `tank:none`: show nothing. */
+  private switching = false;
   private nextId = 0;
   private species: { readonly revision: number; readonly list: readonly string[] } | null = null;
   revision = 0;
@@ -90,6 +92,7 @@ export class TankRoster {
   load({ tankId, biome, fish }: InteractionEvents['tank:loaded']): void {
     this.clear();
     this.loaded = { tankId, biome };
+    this.switching = false;
     for (const f of fish) this.insertSaved(f, f.status === 'dead' ? 'dead' : 'swimming');
     this.revision++;
   }
@@ -97,18 +100,31 @@ export class TankRoster {
   /** Swaps the demo stock; what is shown changes only while no saved tank is loaded. */
   setDemo(demo: readonly FishSpawn[]): boolean {
     this.demo = demo;
-    if (this.loaded !== null) return false;
+    if (this.loaded !== null || this.switching) return false;
     this.clear();
     this.showDemo();
     this.revision++;
     return true;
   }
 
-  /** False when `tankId` is not the loaded tank, e.g. a late event from a previous switch. */
-  unload({ tankId }: InteractionEvents['tank:unloaded']): boolean {
+  /**
+   * False when `tankId` is not the loaded tank, e.g. a late event from a previous switch. A switch
+   * leaves the tank empty rather than flashing the demo stock until the next tank arrives.
+   */
+  unload({ tankId, reason }: InteractionEvents['tank:unloaded']): boolean {
     if (this.loaded?.tankId !== tankId) return false;
     this.clear();
     this.loaded = null;
+    this.switching = reason === 'switch';
+    if (!this.switching) this.showDemo();
+    this.revision++;
+    return true;
+  }
+
+  /** The session says no saved tank is coming; false when the demo stock is already shown. */
+  none(): boolean {
+    if (!this.switching) return false;
+    this.switching = false;
     this.showDemo();
     this.revision++;
     return true;

@@ -13,6 +13,7 @@ import { SimColliders } from './simColliders';
 type TankEventName =
   | 'tank:loaded'
   | 'tank:unloaded'
+  | 'tank:none'
   | 'tank:fish-added'
   | 'tank:fish-released'
   | 'tank:fish-died'
@@ -104,6 +105,7 @@ export function queueTankEvents(interaction: EventBus<InteractionEvents>): TankE
   const unsubscribe = [
     interaction.on('tank:loaded', (payload) => deliver({ type: 'tank:loaded', payload })),
     interaction.on('tank:unloaded', (payload) => deliver({ type: 'tank:unloaded', payload })),
+    interaction.on('tank:none', (payload) => deliver({ type: 'tank:none', payload })),
     interaction.on('tank:fish-added', (payload) => deliver({ type: 'tank:fish-added', payload })),
     interaction.on('tank:fish-released', (payload) =>
       deliver({ type: 'tank:fish-released', payload }),

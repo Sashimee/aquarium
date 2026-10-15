@@ -5,6 +5,7 @@ import type { Engine } from '../engine/Engine';
 import { EventBus, type EngineEvents } from '../engine/events';
 import { DEFAULT_TANK } from '../engine/tank/dimensions';
 import type { InteractionEvents } from '../interaction/events';
+import { FISH_1, TANK_A, fishFixture } from '../sync/fixtures';
 import { FishSystem } from './FishSystem';
 import { SimInitTimeout } from './simWorld';
 
@@ -22,6 +23,9 @@ class FakeWorker {
   }
   removeEventListener(type: string, listener: (event: Event) => void): void {
     this.listeners.get(type)?.delete(listener);
+  }
+  inits(): { request: number; config: { fish: { id: string; species: string }[] } }[] {
+    return this.sent.filter((m) => m.type === 'init') as unknown as ReturnType<FakeWorker['inits']>;
   }
   postMessage(message: { type: string }): void {
     this.sent.push(message);
@@ -109,5 +113,58 @@ describe('FishSystem.create', () => {
 
     expect(await settled).toBe(gone);
     expect(errors.filter((m) => m.startsWith('Fish sim:'))).toEqual([]);
+  });
+
+  it('keeps the demo stock out between a switch unload and the next tank', async () => {
+    const { engine } = fakeEngine();
+    const start = create(engine);
+    const worker = await initPosted();
+    let answered = 0;
+    const answer = (): void => {
+      for (const { request, config } of worker.inits().slice(answered)) {
+        worker.emit({
+          type: 'ready',
+          request,
+          epoch: request,
+          fishIds: config.fish.map((f) => f.id),
+          stride: 8,
+          stepHz: 30,
+        });
+      }
+      answered = worker.inits().length;
+    };
+    answer();
+    const fish = await start;
+    const demo = worker.inits()[0]?.config.fish.map((f) => f.species);
+    expect(demo?.length).toBeGreaterThan(0);
+    const lastSpecies = async (count: number): Promise<string[] | undefined> => {
+      await vi.waitFor(() => {
+        if (worker.inits().length < count) throw new Error('no new world yet');
+      });
+      answer();
+      await fish.synced();
+      return worker.inits()[count - 1]?.config.fish.map((f) => f.species);
+    };
+
+    fish.handle({
+      type: 'tank:loaded',
+      payload: {
+        tankId: TANK_A,
+        biome: 'freshwater',
+        decorLayout: [],
+        decorEdited: false,
+        fish: [fishFixture(FISH_1)],
+      },
+    });
+    expect(await lastSpecies(2)).toEqual(['neon-tetra']);
+
+    fish.handle({ type: 'tank:unloaded', payload: { tankId: TANK_A, reason: 'switch' } });
+    await fish.synced();
+    expect(worker.inits()).toHaveLength(2);
+    expect(worker.sent.at(-1)?.type).toBe('stop');
+
+    fish.handle({ type: 'tank:none', payload: {} });
+    expect(await lastSpecies(3)).toEqual(demo);
+    fish.dispose();
   });
 });

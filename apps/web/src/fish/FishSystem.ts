@@ -237,6 +237,7 @@ export class FishSystem {
     seed: 0,
     filmThickness: 0,
     tint: [1, 1, 1],
+    gills: 0,
   };
 
   /**
@@ -341,6 +342,10 @@ export class FishSystem {
         break;
       case 'tank:unloaded':
         swapped = this.roster.unload(event.payload);
+        if (swapped) this.stopWorld();
+        break;
+      case 'tank:none':
+        swapped = this.roster.none();
         if (swapped) this.stopWorld();
         break;
       case 'tank:fish-added':
@@ -1126,6 +1131,7 @@ export class FishSystem {
       v.seed = rt.seed;
       v.filmThickness = rt.filmThickness;
       v.tint = rt.tint;
+      v.gills = rt.swim.gillOpening * liveliness;
       lod.instances.write(slot, v);
     }
     this.bags.end();

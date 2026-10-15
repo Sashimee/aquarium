@@ -22,6 +22,7 @@ export function featuresFor(tier: Tier, { msaa, temporal }: FeatureContext): Fis
     fins,
     iridescence: tier === 'high' || tier === 'ultra',
     clearcoat: tier !== 'low',
+    gills: tier !== 'low',
   };
 }
 
@@ -30,7 +31,8 @@ export function sameFeatures(a: FishMaterialFeatures | null, b: FishMaterialFeat
     a !== null &&
     a.fins === b.fins &&
     a.iridescence === b.iridescence &&
-    a.clearcoat === b.clearcoat
+    a.clearcoat === b.clearcoat &&
+    a.gills === b.gills
   );
 }
 

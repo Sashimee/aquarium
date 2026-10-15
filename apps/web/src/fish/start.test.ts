@@ -174,6 +174,19 @@ describe('queueTankEvents', () => {
     expect(() => queue.drain(() => undefined)).toThrow(/already drained/);
   });
 
+  it('hands a tank:none on before telling that no saved tank is coming', async () => {
+    const interaction = new EventBus<InteractionEvents>();
+    const queue = queueTankEvents(interaction);
+    const seen: string[] = [];
+    queue.drain((event) => seen.push(event.type));
+    let atDecision: string[] = [];
+    void queue.stock.then(() => (atDecision = [...seen]));
+    interaction.emit('tank:unloaded', { tankId: TANK_A, reason: 'switch' });
+    interaction.emit('tank:none', {});
+    await expect(queue.stock).resolves.toBe('none');
+    expect(atDecision).toEqual(['tank:unloaded', 'tank:none']);
+  });
+
   it('stops listening and drops the buffer on stop', () => {
     const interaction = new EventBus<InteractionEvents>();
     const queue = queueTankEvents(interaction);
