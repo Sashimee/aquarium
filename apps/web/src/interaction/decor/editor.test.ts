@@ -302,7 +302,18 @@ describe('plants', () => {
     expect(top).toBeLessThanOrEqual(0.45 - 0.03 + 1e-9);
   });
 
-  it('refuses a plant that cannot fit under the surface', () => {
+  it('shrinks a new plant that is taller than the water to fit', () => {
+    const e = plantEditor(0.3);
+    expect(e.add('vallisneria')).toHaveProperty('id');
+    finishSettling(e);
+    const placed = must(e.pieces[0]).item;
+    expect(placed.scale).toBeLessThan(1);
+    expect(placed.position[1] + spec('vallisneria').box.max[1] * placed.scale).toBeLessThanOrEqual(
+      0.3 - 0.03 + 1e-9,
+    );
+  });
+
+  it('refuses a plant that would have to shrink too far', () => {
     const e = plantEditor(0.2);
     expect(e.add('vallisneria')).toEqual({ rejection: 'too-tall' });
     expect(e.problem).toMatch(/out of the water/);

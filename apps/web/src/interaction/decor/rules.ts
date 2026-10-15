@@ -91,6 +91,8 @@ export function check(
   if (reachesSurface(spec, item, limits)) return 'too-tall';
   const mine = footprintOf(spec, item, OVERLAP_SHRINK);
   for (const other of others) {
+    // Leaves give way, so a plant never blocks a piece and is never blocked by one.
+    if (spec.kind === 'plant' || other.spec.kind === 'plant') continue;
     if (overlaps(mine, footprintOf(other.spec, other.item, OVERLAP_SHRINK), GAP)) return 'overlap';
   }
   return null;
