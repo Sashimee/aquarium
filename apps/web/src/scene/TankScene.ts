@@ -4,6 +4,7 @@ import type { Biome, DecorItem, PlantPatch, PresetLayout } from '@aquarium/share
 import type { Engine } from '../engine/Engine';
 import type { Tier, TierSettings } from '../engine/quality/tiers';
 import { substrateHeight } from '../engine/tank/substrate';
+import { raceAbort } from './abortable';
 import { AssetCatalog, ModelLibrary, type CatalogEntry, type ModelLod } from './assets';
 import {
   AnemoneGroup,
@@ -168,13 +169,29 @@ export class TankScene {
     engine: Engine,
     preset: PresetLayout,
     options: SceneOptions,
+    signal?: AbortSignal,
   ): Promise<TankScene> {
-    const catalog = await AssetCatalog.fetch();
+    const catalog = await AssetCatalog.fetch(undefined, signal);
+    signal?.throwIfAborted();
     const library = new ModelLibrary(engine.ktx2, catalog);
+    const building = TankScene.build(engine, library, catalog, preset, options);
     try {
-      const scene = await TankScene.build(engine, library, catalog, preset, options);
-      return scene;
+      return await (signal ? raceAbort(building, signal) : building);
     } catch (error) {
+      if (signal?.aborted) {
+        void building
+          .then(
+            (scene) => scene.dispose(),
+            () => library.dispose(),
+          )
+          .catch((cause: unknown) =>
+            engine.events.emit('engine:error', {
+              message: 'Could not clean up an abandoned preset build',
+              cause,
+            }),
+          );
+        throw error;
+      }
       await library.dispose();
       throw error;
     }

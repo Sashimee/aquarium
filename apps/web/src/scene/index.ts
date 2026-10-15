@@ -15,9 +15,17 @@ export { ColliderField, type Collider } from './colliders';
 const TIER_WAIT_MS = 15_000;
 const BUILD_TIMEOUT_MS = 90_000;
 
-/** Builds the biome's preset into the engine's tank; `search` carries `?colliders=1`. */
-export function mountPreset(engine: Engine, biome: Biome, search: string): Promise<TankScene> {
-  return TankScene.create(engine, loadPreset(biome), parseSceneOptions(search));
+/**
+ * Builds the biome's preset into the engine's tank; `search` carries `?colliders=1`. Aborting
+ * `signal` rejects at once and disposes whatever the abandoned build still produces.
+ */
+export function mountPreset(
+  engine: Engine,
+  biome: Biome,
+  search: string,
+  signal?: AbortSignal,
+): Promise<TankScene> {
+  return TankScene.create(engine, loadPreset(biome), parseSceneOptions(search), signal);
 }
 
 /**
@@ -34,7 +42,7 @@ export function mountBiomeScene(
 ): BiomeScene<TankScene> {
   return new BiomeScene<TankScene>(biome, {
     ready: tierKnown(engine),
-    build: (b) => mountPreset(engine, b, search),
+    build: (b, signal) => mountPreset(engine, b, search, signal),
     mounted: hooks.mounted,
     unmounting: hooks.unmounting,
     onError: (message, cause) => engine.events.emit('engine:error', { message, cause }),
