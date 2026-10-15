@@ -60,6 +60,9 @@ export function FeedToast() {
       clear.current = setTimeout(() => setMessage(''), TOAST_MS);
     };
     const offs = [
+      interaction.on('camera:follow-unavailable', () =>
+        announce('There is no fish to follow yet.'),
+      ),
       interaction.on('feed:dropped', ({ food }) =>
         announce(`Fed ${FOOD_LABEL[food].toLowerCase()}.`),
       ),
