@@ -50,11 +50,12 @@ function projectView(view: View): {
   return { u: (p) => -p[0]!, v: (p) => p[1]!, depth: (p) => -p[2]!, light: [0.3, 0.45, 0.82] };
 }
 
-function sample(image: TextureImage, u: number, v: number): [number, number, number] {
+function sample(image: TextureImage, u: number, v: number): [number, number, number, number] {
   const x = Math.min(image.width - 1, Math.max(0, Math.floor((u - Math.floor(u)) * image.width)));
   const y = Math.min(image.height - 1, Math.max(0, Math.floor((v - Math.floor(v)) * image.height)));
   const i = (y * image.width + x) * image.channels;
-  return [image.data[i]! / 255, image.data[i + 1]! / 255, image.data[i + 2]! / 255];
+  const alpha = image.channels === 4 ? image.data[i + 3]! / 255 : 1;
+  return [image.data[i]! / 255, image.data[i + 1]! / 255, image.data[i + 2]! / 255, alpha];
 }
 
 /**
@@ -138,22 +139,34 @@ export function rasterise(
         const depth = w0 * sd[0]! + w1 * sd[1]! + w2 * sd[2]!;
         const slot = y * width + x;
         if (depth <= depthBuffer[slot]!) continue;
-        depthBuffer[slot] = depth;
         let r = 0.7;
         let g = 0.7;
         let b = 0.7;
+        let alpha = 1;
         if (texture && uvs) {
           const u = w0 * uvs[ia * 2]! + w1 * uvs[ib * 2]! + w2 * uvs[ic * 2]!;
           const v = w0 * uvs[ia * 2 + 1]! + w1 * uvs[ib * 2 + 1]! + w2 * uvs[ic * 2 + 1]!;
-          [r, g, b] = sample(texture, u, v);
+          [r, g, b, alpha] = sample(texture, u, v);
         } else if (colors) {
           r = w0 * colors[ia * 3]! + w1 * colors[ib * 3]! + w2 * colors[ic * 3]!;
           g = w0 * colors[ia * 3 + 1]! + w1 * colors[ib * 3 + 1]! + w2 * colors[ic * 3 + 1]!;
           b = w0 * colors[ia * 3 + 2]! + w1 * colors[ib * 3 + 2]! + w2 * colors[ic * 3 + 2]!;
         }
-        rgb[slot * 3] = Math.min(255, Math.round(r * shade * 255));
-        rgb[slot * 3 + 1] = Math.min(255, Math.round(g * shade * 255));
-        rgb[slot * 3 + 2] = Math.min(255, Math.round(b * shade * 255));
+        if (alpha < 0.04) continue;
+        if (alpha > 0.9) depthBuffer[slot] = depth;
+        const keep = alpha > 0.9 ? 0 : 1 - alpha;
+        rgb[slot * 3] = Math.min(
+          255,
+          Math.round(r * shade * 255 * (1 - keep) + rgb[slot * 3]! * keep),
+        );
+        rgb[slot * 3 + 1] = Math.min(
+          255,
+          Math.round(g * shade * 255 * (1 - keep) + rgb[slot * 3 + 1]! * keep),
+        );
+        rgb[slot * 3 + 2] = Math.min(
+          255,
+          Math.round(b * shade * 255 * (1 - keep) + rgb[slot * 3 + 2]! * keep),
+        );
       }
     }
   }

@@ -23,7 +23,7 @@
     "healthRecoveryPerHour": 0.004,
     "hungerPerHour": 0.0068,
     "lifespanDays": 2190,
-    "maxSizeM": 0.084,
+    "maxSizeM": 0.081,
     "starvationHungerThreshold": 0.75
   },
   "locomotion": {

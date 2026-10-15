@@ -2,7 +2,7 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; every texture has both files.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Anemone tentacle sway is \"_sway\" (0 base, 1 tip).",
-  "totalBytes": 60345831,
+  "totalBytes": 60671428,
   "assets": [
     {
       "id": "angelfish",
@@ -1033,42 +1033,42 @@
         "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
         "fin mask and fin id vertex attributes generated analytically",
         "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
-        "Nemateleotris magnifica by Karelj (CC0), side view projected onto the loft; the photograph crops out the first dorsal spine, which is modelled from the species description",
+        "Nemateleotris magnifica by Karelj (CC0), side view projected onto the loft; the photograph is a three-quarter view, so the eye is repainted at its side-on position and the snout tinted yellow, and the first dorsal spine is modelled from the species description",
         "colour map re-encoded to KTX2 at 1k and 2k"
       ],
       "bounds": {
         "min": [
-          -0.006531,
-          -0.009599,
-          -0.044555
+          -0.00646,
+          -0.010571,
+          -0.050814
         ],
         "max": [
-          0.006531,
-          0.027577,
-          0.032145
+          0.00646,
+          0.031147,
+          0.028811
         ]
       },
       "lods": [
         {
           "file": "fish/firefish/lod0.glb",
-          "bytes": 31340,
-          "sha256": "7826e7db39f136f0089afbcab59e3413e1fcbca0edc823cdf4f22c634b749909",
-          "triangles": 3264,
-          "vertices": 1778
+          "bytes": 45320,
+          "sha256": "2ea22e65ae762f04f91d7030da3a9ff9d6a2afb05102d4fffed8ee8a94a9432e",
+          "triangles": 4608,
+          "vertices": 2554
         },
         {
           "file": "fish/firefish/lod1.glb",
-          "bytes": 16036,
-          "sha256": "10b174f3dbe7abb059af8d59da4d057e5bd95a975f401f02db433f70311d62cc",
-          "triangles": 1306,
-          "vertices": 731
+          "bytes": 23368,
+          "sha256": "bd845832ea240e04067904a345ac627ff72e9f2dd1899f3e678b5c57132b094b",
+          "triangles": 1843,
+          "vertices": 1055
         },
         {
           "file": "fish/firefish/lod2.glb",
-          "bytes": 8652,
-          "sha256": "f5db95a585c1c0793c4892bd24226ba6420c4cfcc6d4e9a4308bf71c85a887b3",
-          "triangles": 489,
-          "vertices": 290
+          "bytes": 11540,
+          "sha256": "9df9f066b3429b2c78dea654ba6c0dc743393b71f725248bb019a51007be37df",
+          "triangles": 690,
+          "vertices": 411
         }
       ],
       "textures": [
@@ -1079,15 +1079,15 @@
           "variants": {
             "1k": {
               "file": "fish/firefish/textures/firefish_basecolor_1k.ktx2",
-              "bytes": 49771,
-              "sha256": "d737c570b70391b9a2cbbbe35f9e9ab9adf2bd74a7d8e2c505cde3c866bda821",
+              "bytes": 101152,
+              "sha256": "4624022888a6e14c80b71e2f3c29ee26f84c2fbe075106b81d20171401c11790",
               "size": 1024,
               "codec": "etc1s"
             },
             "2k": {
               "file": "fish/firefish/textures/firefish_basecolor_2k.ktx2",
-              "bytes": 88747,
-              "sha256": "f8761119cb50d0805c18365063b1506fa9d41befbafe97bb4a700e6be0441da8",
+              "bytes": 182398,
+              "sha256": "9c76034db58e3e9662a6b9c2f3b5894797eda3d123d61113fdc2cebe741e5696",
               "size": 1024,
               "codec": "etc1s"
             }
@@ -1097,28 +1097,28 @@
       "files": [
         {
           "file": "fish/firefish/lod0.glb",
-          "bytes": 31340,
-          "sha256": "7826e7db39f136f0089afbcab59e3413e1fcbca0edc823cdf4f22c634b749909"
+          "bytes": 45320,
+          "sha256": "2ea22e65ae762f04f91d7030da3a9ff9d6a2afb05102d4fffed8ee8a94a9432e"
         },
         {
           "file": "fish/firefish/lod1.glb",
-          "bytes": 16036,
-          "sha256": "10b174f3dbe7abb059af8d59da4d057e5bd95a975f401f02db433f70311d62cc"
+          "bytes": 23368,
+          "sha256": "bd845832ea240e04067904a345ac627ff72e9f2dd1899f3e678b5c57132b094b"
         },
         {
           "file": "fish/firefish/lod2.glb",
-          "bytes": 8652,
-          "sha256": "f5db95a585c1c0793c4892bd24226ba6420c4cfcc6d4e9a4308bf71c85a887b3"
+          "bytes": 11540,
+          "sha256": "9df9f066b3429b2c78dea654ba6c0dc743393b71f725248bb019a51007be37df"
         },
         {
           "file": "fish/firefish/textures/firefish_basecolor_1k.ktx2",
-          "bytes": 49771,
-          "sha256": "d737c570b70391b9a2cbbbe35f9e9ab9adf2bd74a7d8e2c505cde3c866bda821"
+          "bytes": 101152,
+          "sha256": "4624022888a6e14c80b71e2f3c29ee26f84c2fbe075106b81d20171401c11790"
         },
         {
           "file": "fish/firefish/textures/firefish_basecolor_2k.ktx2",
-          "bytes": 88747,
-          "sha256": "f8761119cb50d0805c18365063b1506fa9d41befbafe97bb4a700e6be0441da8"
+          "bytes": 182398,
+          "sha256": "9c76034db58e3e9662a6b9c2f3b5894797eda3d123d61113fdc2cebe741e5696"
         }
       ],
       "fish": {
@@ -1463,42 +1463,42 @@
         "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
         "fin mask and fin id vertex attributes generated analytically",
         "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
-        "Trigonostigma heteromorpha by Vassil (CC0), side view projected onto the loft",
+        "Trigonostigma heteromorpha by Vassil (CC0), side view projected onto the loft; fins painted as translucent reddish membranes",
         "colour map re-encoded to KTX2 at 1k and 2k"
       ],
       "bounds": {
         "min": [
-          -0.005867,
-          -0.010013,
-          -0.030007
+          -0.006223,
+          -0.009895,
+          -0.029925
         ],
         "max": [
-          0.005867,
-          0.009336,
-          0.016543
+          0.006223,
+          0.010217,
+          0.016348
         ]
       },
       "lods": [
         {
           "file": "fish/harlequin-rasbora/lod0.glb",
-          "bytes": 30776,
-          "sha256": "1cd5184c5510a151d50cc1d415eaa6b7c527326531d5a69956d91dd204948d87",
-          "triangles": 3144,
-          "vertices": 1700
+          "bytes": 43128,
+          "sha256": "09b3152a5ff0e07cc90411dd3891e8025bf644276f3aa40357ee8e20b823d925",
+          "triangles": 4320,
+          "vertices": 2379
         },
         {
           "file": "fish/harlequin-rasbora/lod1.glb",
-          "bytes": 15948,
-          "sha256": "1e0c2af1f78804691d0157032d10d32b5b16c42cb8f076533869ed6a13c89bbe",
-          "triangles": 1258,
-          "vertices": 688
+          "bytes": 22484,
+          "sha256": "cc28481b7843fc5c74d2526413881987cb27e77f47972b88d48ed9ea384b5f69",
+          "triangles": 1727,
+          "vertices": 967
         },
         {
           "file": "fish/harlequin-rasbora/lod2.glb",
-          "bytes": 8544,
-          "sha256": "3ebb06f3b4f9415ef20e4a860741562c101933ba69af9564793bf1b0a7f808d4",
-          "triangles": 471,
-          "vertices": 271
+          "bytes": 11196,
+          "sha256": "b30e770d33e9129e0c2ef393fc31564f0c9aa2865c21f5445c2da67bb52a6de1",
+          "triangles": 647,
+          "vertices": 386
         }
       ],
       "textures": [
@@ -1509,15 +1509,15 @@
           "variants": {
             "1k": {
               "file": "fish/harlequin-rasbora/textures/harlequin-rasbora_basecolor_1k.ktx2",
-              "bytes": 48725,
-              "sha256": "9378046b545ee62bd4dddd55ebcb86ac084d2421b86a25ba837df4a3a10b7e23",
+              "bytes": 104660,
+              "sha256": "b7b6254ef48cdb9684e7fb8ddcfb810f1f0b059fa50de4f1d3d1f996fdb5fda3",
               "size": 1024,
               "codec": "etc1s"
             },
             "2k": {
               "file": "fish/harlequin-rasbora/textures/harlequin-rasbora_basecolor_2k.ktx2",
-              "bytes": 87656,
-              "sha256": "6ade76b12d57b8b8a43a5e7db96c3ab102d338460913b57a791919cf2c70181f",
+              "bytes": 104660,
+              "sha256": "b7b6254ef48cdb9684e7fb8ddcfb810f1f0b059fa50de4f1d3d1f996fdb5fda3",
               "size": 1024,
               "codec": "etc1s"
             }
@@ -1527,28 +1527,28 @@
       "files": [
         {
           "file": "fish/harlequin-rasbora/lod0.glb",
-          "bytes": 30776,
-          "sha256": "1cd5184c5510a151d50cc1d415eaa6b7c527326531d5a69956d91dd204948d87"
+          "bytes": 43128,
+          "sha256": "09b3152a5ff0e07cc90411dd3891e8025bf644276f3aa40357ee8e20b823d925"
         },
         {
           "file": "fish/harlequin-rasbora/lod1.glb",
-          "bytes": 15948,
-          "sha256": "1e0c2af1f78804691d0157032d10d32b5b16c42cb8f076533869ed6a13c89bbe"
+          "bytes": 22484,
+          "sha256": "cc28481b7843fc5c74d2526413881987cb27e77f47972b88d48ed9ea384b5f69"
         },
         {
           "file": "fish/harlequin-rasbora/lod2.glb",
-          "bytes": 8544,
-          "sha256": "3ebb06f3b4f9415ef20e4a860741562c101933ba69af9564793bf1b0a7f808d4"
+          "bytes": 11196,
+          "sha256": "b30e770d33e9129e0c2ef393fc31564f0c9aa2865c21f5445c2da67bb52a6de1"
         },
         {
           "file": "fish/harlequin-rasbora/textures/harlequin-rasbora_basecolor_1k.ktx2",
-          "bytes": 48725,
-          "sha256": "9378046b545ee62bd4dddd55ebcb86ac084d2421b86a25ba837df4a3a10b7e23"
+          "bytes": 104660,
+          "sha256": "b7b6254ef48cdb9684e7fb8ddcfb810f1f0b059fa50de4f1d3d1f996fdb5fda3"
         },
         {
           "file": "fish/harlequin-rasbora/textures/harlequin-rasbora_basecolor_2k.ktx2",
-          "bytes": 87656,
-          "sha256": "6ade76b12d57b8b8a43a5e7db96c3ab102d338460913b57a791919cf2c70181f"
+          "bytes": 104660,
+          "sha256": "b7b6254ef48cdb9684e7fb8ddcfb810f1f0b059fa50de4f1d3d1f996fdb5fda3"
         }
       ],
       "fish": {
@@ -2013,42 +2013,42 @@
         "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
         "fin mask and fin id vertex attributes generated analytically",
         "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
-        "Pseudocheilinus hexataenia by Lonnie Huffman (CC-BY-3.0), side view projected onto the loft",
+        "Pseudocheilinus hexataenia by Lonnie Huffman (CC-BY-3.0), side view projected onto the loft with the photographed body fitted to the species proportions; fins painted as translucent membranes",
         "colour map re-encoded to KTX2 at 1k and 2k"
       ],
       "bounds": {
         "min": [
-          -0.014327,
-          -0.022524,
-          -0.045578
+          -0.013884,
+          -0.01762,
+          -0.051485
         ],
         "max": [
-          0.014327,
-          0.019156,
-          0.037722
+          0.013884,
+          0.014291,
+          0.034965
         ]
       },
       "lods": [
         {
           "file": "fish/six-line-wrasse/lod0.glb",
-          "bytes": 30844,
-          "sha256": "fad57e1d74fb68ef50b996046b1555a713ed4d7204f4b50582ebc118023f60d4",
-          "triangles": 3144,
-          "vertices": 1700
+          "bytes": 43340,
+          "sha256": "c395a5e5f7d9766a9cd4e74a1c98cde561409663f81dafc2a74d46ab2cd75066",
+          "triangles": 4320,
+          "vertices": 2379
         },
         {
           "file": "fish/six-line-wrasse/lod1.glb",
-          "bytes": 16076,
-          "sha256": "29c861b22291c815f5f931d34fae5dc005e8878f035a8b5444931d05d3b91fd6",
-          "triangles": 1257,
-          "vertices": 690
+          "bytes": 22660,
+          "sha256": "2ea8d7a3dbee8df13511a9564053edb955959580b38ef795dc9d830d91a7fdff",
+          "triangles": 1727,
+          "vertices": 977
         },
         {
           "file": "fish/six-line-wrasse/lod2.glb",
-          "bytes": 8540,
-          "sha256": "9338bc0574a54c58816604aeffedf2aea31535ecfa8ff794557819a97595c66f",
-          "triangles": 472,
-          "vertices": 279
+          "bytes": 11120,
+          "sha256": "32df5bf5780c1cfd67de553c164ee207856f80b894072a02665e437869dd2972",
+          "triangles": 648,
+          "vertices": 384
         }
       ],
       "textures": [
@@ -2059,15 +2059,15 @@
           "variants": {
             "1k": {
               "file": "fish/six-line-wrasse/textures/six-line-wrasse_basecolor_1k.ktx2",
-              "bytes": 76314,
-              "sha256": "c4eb1d5e34008d4017baaa611de37861bbe04b5ad85947ab7154eab2599b7b75",
+              "bytes": 96427,
+              "sha256": "385c5e7cb1fb53e120aff7dc369bc8dc43acb1d524afd1240b4e84a0b2ce458a",
               "size": 1024,
               "codec": "etc1s"
             },
             "2k": {
               "file": "fish/six-line-wrasse/textures/six-line-wrasse_basecolor_2k.ktx2",
-              "bytes": 76314,
-              "sha256": "c4eb1d5e34008d4017baaa611de37861bbe04b5ad85947ab7154eab2599b7b75",
+              "bytes": 96427,
+              "sha256": "385c5e7cb1fb53e120aff7dc369bc8dc43acb1d524afd1240b4e84a0b2ce458a",
               "size": 1024,
               "codec": "etc1s"
             }
@@ -2077,28 +2077,28 @@
       "files": [
         {
           "file": "fish/six-line-wrasse/lod0.glb",
-          "bytes": 30844,
-          "sha256": "fad57e1d74fb68ef50b996046b1555a713ed4d7204f4b50582ebc118023f60d4"
+          "bytes": 43340,
+          "sha256": "c395a5e5f7d9766a9cd4e74a1c98cde561409663f81dafc2a74d46ab2cd75066"
         },
         {
           "file": "fish/six-line-wrasse/lod1.glb",
-          "bytes": 16076,
-          "sha256": "29c861b22291c815f5f931d34fae5dc005e8878f035a8b5444931d05d3b91fd6"
+          "bytes": 22660,
+          "sha256": "2ea8d7a3dbee8df13511a9564053edb955959580b38ef795dc9d830d91a7fdff"
         },
         {
           "file": "fish/six-line-wrasse/lod2.glb",
-          "bytes": 8540,
-          "sha256": "9338bc0574a54c58816604aeffedf2aea31535ecfa8ff794557819a97595c66f"
+          "bytes": 11120,
+          "sha256": "32df5bf5780c1cfd67de553c164ee207856f80b894072a02665e437869dd2972"
         },
         {
           "file": "fish/six-line-wrasse/textures/six-line-wrasse_basecolor_1k.ktx2",
-          "bytes": 76314,
-          "sha256": "c4eb1d5e34008d4017baaa611de37861bbe04b5ad85947ab7154eab2599b7b75"
+          "bytes": 96427,
+          "sha256": "385c5e7cb1fb53e120aff7dc369bc8dc43acb1d524afd1240b4e84a0b2ce458a"
         },
         {
           "file": "fish/six-line-wrasse/textures/six-line-wrasse_basecolor_2k.ktx2",
-          "bytes": 76314,
-          "sha256": "c4eb1d5e34008d4017baaa611de37861bbe04b5ad85947ab7154eab2599b7b75"
+          "bytes": 96427,
+          "sha256": "385c5e7cb1fb53e120aff7dc369bc8dc43acb1d524afd1240b4e84a0b2ce458a"
         }
       ],
       "fish": {

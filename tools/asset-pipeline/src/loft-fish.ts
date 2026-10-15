@@ -8,7 +8,17 @@ import {
   writeDebugRender,
   type FishContext,
 } from './fish.ts';
-import { loftFish, sideProjection, type LoftSpec, type Projection } from './loft.ts';
+import { appendFinAtlas, type FinPaint, type FinPalette } from './fin-paint.ts';
+import {
+  loftFish,
+  sectionEdges,
+  sideProjection,
+  type FinTexture,
+  type LoftSpec,
+  type Projection,
+  type SectionKey,
+} from './loft.ts';
+import { retouchPhoto, type Retouch } from './retouch.ts';
 import type { MaterialDef, Part } from './parts.ts';
 import { strictestLicence } from './manifest.ts';
 import { RAW_ROOT } from './source.ts';
@@ -23,7 +33,15 @@ interface PhotoSource {
   snoutPixel: [number, number];
   tailPixel: [number, number];
   /** Crop-space rectangle of body colour inside the fish; its mean colours every fin membrane. */
-  finSwatch: { left: number; top: number; width: number; height: number };
+  finSwatch?: { left: number; top: number; width: number; height: number };
+  /** Painted, translucent, ray-textured fins instead of the flat swatch; needs `spec.membrane`. */
+  finPalette?: FinPalette;
+  retouch?: Retouch[];
+  /**
+   * Section keys traced from the photo when the loft's own proportions differ from the pictured
+   * individual; the photo is stretched section by section onto the loft.
+   */
+  photoSections?: SectionKey[];
 }
 
 interface SyntheticSource {
@@ -64,7 +82,7 @@ const SWATCH_ROWS = 32;
 /** Adds a flat strip of the swatch's mean colour under the photo; body coordinates stay above it via `bodyVMax`. */
 export function appendSwatch(
   photo: Rgba,
-  swatch: PhotoSource['finSwatch'],
+  swatch: NonNullable<PhotoSource['finSwatch']>,
 ): { image: Rgba; finUv: [number, number]; bodyVMax: number } {
   if (
     swatch.left < 0 ||
@@ -101,16 +119,81 @@ export function appendSwatch(
   };
 }
 
+const ROOT_SAMPLE_RADIUS = 14;
+
+/** Mean colour of the photo around the end of the peduncle, in crop space. */
+export function peduncleColour(photo: Rgba, tail: [number, number]): [number, number, number] {
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  let count = 0;
+  for (
+    let y = Math.round(tail[1]) - ROOT_SAMPLE_RADIUS;
+    y <= Math.round(tail[1]) + ROOT_SAMPLE_RADIUS;
+    y++
+  )
+    for (
+      let x = Math.round(tail[0]) - ROOT_SAMPLE_RADIUS;
+      x <= Math.round(tail[0]) + ROOT_SAMPLE_RADIUS;
+      x++
+    ) {
+      if (x < 0 || y < 0 || x >= photo.width || y >= photo.height) continue;
+      const o = (y * photo.width + x) * 4;
+      r += photo.data[o] ?? 0;
+      g += photo.data[o + 1] ?? 0;
+      b += photo.data[o + 2] ?? 0;
+      count++;
+    }
+  if (count === 0) throw new Error(`peduncle pixel ${tail.join(',')} lies outside the photo`);
+  return [r / count, g / count, b / count];
+}
+
+function withPhotoRoots(photo: Rgba, source: PhotoSource): FinPalette {
+  const palette = source.finPalette;
+  if (!palette) throw new Error('recipe has no fin palette');
+  const tail: [number, number] = [
+    source.tailPixel[0] - source.crop.left,
+    source.tailPixel[1] - source.crop.top,
+  ];
+  const colour = peduncleColour(photo, tail);
+  const rooted = (paint: FinPaint): FinPaint =>
+    paint.rootFromPhoto ? { ...paint, root: colour } : paint;
+  return {
+    caudal: rooted(palette.caudal),
+    dorsal: rooted(palette.dorsal),
+    anal: rooted(palette.anal),
+    pectoral: rooted(palette.pectoral),
+    pelvic: rooted(palette.pelvic),
+    ...(palette.spine ? { spine: rooted(palette.spine) } : {}),
+  };
+}
+
+export function fitPhotoToLoft(
+  project: Projection,
+  loft: SectionKey[],
+  photo: SectionKey[],
+): Projection {
+  return (behind, y) => {
+    const t = Math.min(1, Math.max(0, behind));
+    const target = sectionEdges(loft, t);
+    const traced = sectionEdges(photo, t);
+    const h = (y - target.bottom) / Math.max(1e-6, target.top - target.bottom);
+    return project(behind, traced.bottom + h * (traced.top - traced.bottom));
+  };
+}
+
 export async function loadTexture(recipe: LoftFishRecipe): Promise<{
   image: Rgba;
   project: Projection;
   finUv?: [number, number];
+  finTexture?: FinTexture;
   sources: string[];
 }> {
   const length = 1;
   const { spec } = recipe;
-  const first = spec.sections.at(0);
-  const last = spec.sections.at(-1);
+  const photoKeys = recipe.texture.kind === 'photo' ? recipe.texture.photoSections : undefined;
+  const first = (photoKeys ?? spec.sections).at(0);
+  const last = (photoKeys ?? spec.sections).at(-1);
   if (!first || !last) throw new Error(`${recipe.id}: loft needs at least one section`);
   const snoutY = ((first.top + first.bottom) / 2) * length;
   const tailY = ((last.top + last.bottom) / 2) * length;
@@ -119,8 +202,17 @@ export async function loadTexture(recipe: LoftFishRecipe): Promise<{
   if (source.kind === 'photo') {
     const full = await decodeImage(readFileSync(join(RAW_ROOT, source.sourceId, source.file)));
     const cropped = await cropImage(full, source.crop);
-    const { image, finUv, bodyVMax } = appendSwatch(cropped, source.finSwatch);
-    const projectBody = sideProjection({
+    if (source.retouch) retouchPhoto(cropped, source.crop, source.retouch);
+    let strip: { image: Rgba; finUv?: [number, number]; finTexture?: FinTexture; bodyVMax: number };
+    if (source.finPalette) {
+      if (!spec.membrane) throw new Error(`${recipe.id}: a fin palette needs spec.membrane`);
+      strip = appendFinAtlas(cropped, withPhotoRoots(cropped, source));
+    } else {
+      if (!source.finSwatch) throw new Error(`${recipe.id}: needs a finSwatch or a finPalette`);
+      strip = appendSwatch(cropped, source.finSwatch);
+    }
+    const { image, finUv, finTexture, bodyVMax } = strip;
+    const projectPhoto = sideProjection({
       standardLengthM: length,
       snoutY,
       tailY,
@@ -128,11 +220,20 @@ export async function loadTexture(recipe: LoftFishRecipe): Promise<{
       tailPixel: source.tailPixel,
       crop: source.crop,
     });
+    const projectBody = photoKeys
+      ? fitPhotoToLoft(projectPhoto, spec.sections, photoKeys)
+      : projectPhoto;
     const project: Projection = (behind, y) => {
       const [u, v] = projectBody(behind, y);
       return [u, Math.min(1, Math.max(0, v)) * bodyVMax];
     };
-    return { image, project, finUv, sources: [source.sourceId] };
+    return {
+      image,
+      project,
+      sources: [source.sourceId],
+      ...(finUv ? { finUv } : {}),
+      ...(finTexture ? { finTexture } : {}),
+    };
   }
 
   const pixelsPerLength = Math.hypot(
@@ -405,7 +506,7 @@ export const LOFT_FISH_RECIPES: LoftFishRecipe[] = [
     species: 'harlequin-rasbora',
     fallbackLengthM: 0.04,
     roughness: 0.4,
-    note: 'Trigonostigma heteromorpha by Vassil (CC0), side view projected onto the loft',
+    note: 'Trigonostigma heteromorpha by Vassil (CC0), side view projected onto the loft; fins painted as translucent reddish membranes',
     texture: {
       kind: 'photo',
       sourceId: 'wm-rasbora-vassil',
@@ -413,9 +514,58 @@ export const LOFT_FISH_RECIPES: LoftFishRecipe[] = [
       crop: { left: 200, top: 300, width: 1500, height: 650 },
       snoutPixel: [1661, 674],
       tailPixel: [590, 530],
-      finSwatch: { left: 600, top: 240, width: 200, height: 100 },
+      finPalette: {
+        caudal: {
+          rootFromPhoto: true,
+          root: [150, 60, 40],
+          tip: [208, 78, 58],
+          rim: [186, 34, 42],
+          rimStart: 0.7,
+          rays: 16,
+          rayDepth: 0.35,
+          opacity: { root: 1, tip: 0.5 },
+          seed: 1,
+        },
+        dorsal: {
+          root: [150, 60, 40],
+          tip: [216, 96, 66],
+          rim: [150, 30, 36],
+          rimStart: 0.72,
+          rays: 10,
+          rayDepth: 0.3,
+          opacity: { root: 0.9, tip: 0.45 },
+          seed: 2,
+        },
+        anal: {
+          root: [170, 80, 55],
+          tip: [226, 122, 88],
+          rim: [190, 50, 46],
+          rimStart: 0.75,
+          rays: 8,
+          rayDepth: 0.3,
+          opacity: { root: 0.8, tip: 0.4 },
+          seed: 3,
+        },
+        pectoral: {
+          root: [200, 130, 100],
+          tip: [232, 188, 168],
+          rays: 7,
+          rayDepth: 0.2,
+          opacity: { root: 0.5, tip: 0.2 },
+          seed: 4,
+        },
+        pelvic: {
+          root: [205, 110, 85],
+          tip: [235, 165, 140],
+          rays: 5,
+          rayDepth: 0.25,
+          opacity: { root: 0.6, tip: 0.3 },
+          seed: 5,
+        },
+      },
     },
     spec: {
+      membrane: true,
       roundness: 2.2,
       sections: [
         { t: 0, top: 0, bottom: 0, halfWidth: 0.02 },
@@ -434,42 +584,45 @@ export const LOFT_FISH_RECIPES: LoftFishRecipe[] = [
       fins: [
         {
           fin: 'dorsal',
-          from: 0.48,
+          from: 0.47,
           to: 0.78,
           anchor: 'top',
-          shape: [0.07, 0.1, 0.1, 0.09, 0.06],
-          sweep: 0.9,
+          shape: [0.05, 0.1, 0.13, 0.13, 0.1, 0.06, 0.03],
+          sweep: 0.85,
         },
         {
           fin: 'anal',
-          from: 0.66,
-          to: 0.86,
+          from: 0.64,
+          to: 0.87,
           anchor: 'bottom',
-          shape: [0.12, 0.12, 0.09],
+          shape: [0.06, 0.12, 0.13, 0.1, 0.05],
           sweep: 0.6,
         },
         {
           fin: 'pelvic',
           from: 0.52,
-          to: 0.6,
+          to: 0.61,
           anchor: 'side',
           flankHeight: 0.05,
           direction: [0.3, -0.95],
-          shape: [0.1, 0.14, 0.1],
+          shape: [0.04, 0.12, 0.14, 0.08],
           sweep: 0.5,
         },
         {
           fin: 'pectoral',
           from: 0.2,
-          to: 0.26,
+          to: 0.27,
           anchor: 'side',
           flankHeight: 0.35,
           direction: [0.9, -0.3],
-          shape: [0.08, 0.12, 0.08],
+          shape: [0.03, 0.1, 0.13, 0.08],
           sweep: 0.6,
         },
       ],
-      caudal: { shape: [0.3, 0.22, 0.18, 0.24, 0.33], spread: 0.14 },
+      caudal: {
+        shape: [0.1, 0.24, 0.32, 0.3, 0.2, 0.15, 0.2, 0.3, 0.32, 0.24, 0.1],
+        spread: 0.14,
+      },
     },
   },
   {
@@ -477,71 +630,134 @@ export const LOFT_FISH_RECIPES: LoftFishRecipe[] = [
     species: 'six-line-wrasse',
     fallbackLengthM: 0.07,
     roughness: 0.35,
-    note: 'Pseudocheilinus hexataenia by Lonnie Huffman (CC-BY-3.0), side view projected onto the loft',
+    note: 'Pseudocheilinus hexataenia by Lonnie Huffman (CC-BY-3.0), side view projected onto the loft with the photographed body fitted to the species proportions; fins painted as translucent membranes',
     texture: {
       kind: 'photo',
       sourceId: 'wm-sixline-huffman',
       file: 'Six-line_wrasse.jpg',
       crop: { left: 350, top: 330, width: 1100, height: 520 },
       snoutPixel: [1383, 703],
-      tailPixel: [555, 543],
-      finSwatch: { left: 650, top: 390, width: 100, height: 50 },
+      tailPixel: [505, 545],
+      photoSections: [
+        { t: 0.0, top: 0, bottom: 0, halfWidth: 0.02 },
+        { t: 0.0378, top: 0.02, bottom: -0.045, halfWidth: 0.04 },
+        { t: 0.0945, top: 0.058, bottom: -0.085, halfWidth: 0.057 },
+        { t: 0.1891, top: 0.115, bottom: -0.13, halfWidth: 0.08 },
+        { t: 0.2836, top: 0.18, bottom: -0.158, halfWidth: 0.085 },
+        { t: 0.3781, top: 0.235, bottom: -0.178, halfWidth: 0.09 },
+        { t: 0.4727, top: 0.266, bottom: -0.183, halfWidth: 0.087 },
+        { t: 0.5672, top: 0.278, bottom: -0.184, halfWidth: 0.085 },
+        { t: 0.6617, top: 0.264, bottom: -0.178, halfWidth: 0.075 },
+        { t: 0.7562, top: 0.226, bottom: -0.152, halfWidth: 0.065 },
+        { t: 0.8508, top: 0.171, bottom: -0.1, halfWidth: 0.053 },
+        { t: 0.9453, top: 0.101, bottom: -0.092, halfWidth: 0.04 },
+        { t: 1, top: 0.105, bottom: -0.095, halfWidth: 0.035 },
+      ],
+      finPalette: {
+        caudal: {
+          root: [62, 132, 52],
+          tip: [96, 170, 72],
+          rim: [118, 184, 88],
+          rimStart: 0.8,
+          rays: 18,
+          rayDepth: 0.4,
+          opacity: { root: 1, tip: 0.55 },
+          seed: 11,
+        },
+        dorsal: {
+          root: [214, 98, 52],
+          tip: [196, 110, 80],
+          rim: [60, 130, 210],
+          rimStart: 0.78,
+          rays: 22,
+          rayDepth: 0.35,
+          opacity: { root: 0.9, tip: 0.5 },
+          seed: 12,
+        },
+        anal: {
+          root: [200, 96, 62],
+          tip: [190, 112, 100],
+          rim: [70, 140, 220],
+          rimStart: 0.78,
+          rays: 12,
+          rayDepth: 0.35,
+          opacity: { root: 0.85, tip: 0.45 },
+          seed: 13,
+        },
+        pectoral: {
+          root: [150, 172, 192],
+          tip: [200, 212, 222],
+          rays: 10,
+          rayDepth: 0.2,
+          opacity: { root: 0.45, tip: 0.15 },
+          seed: 14,
+        },
+        pelvic: {
+          root: [40, 140, 230],
+          tip: [150, 205, 255],
+          rays: 5,
+          rayDepth: 0.25,
+          opacity: { root: 0.9, tip: 0.6 },
+          seed: 15,
+        },
+      },
     },
     spec: {
+      membrane: true,
       roundness: 2.2,
       sections: [
         { t: 0, top: 0, bottom: 0, halfWidth: 0.02 },
-        { t: 0.04, top: 0.02, bottom: -0.045, halfWidth: 0.04 },
-        { t: 0.1, top: 0.058, bottom: -0.085, halfWidth: 0.057 },
-        { t: 0.2, top: 0.115, bottom: -0.13, halfWidth: 0.08 },
-        { t: 0.3, top: 0.18, bottom: -0.158, halfWidth: 0.085 },
-        { t: 0.4, top: 0.235, bottom: -0.178, halfWidth: 0.09 },
-        { t: 0.5, top: 0.266, bottom: -0.183, halfWidth: 0.087 },
-        { t: 0.6, top: 0.278, bottom: -0.184, halfWidth: 0.085 },
-        { t: 0.7, top: 0.264, bottom: -0.178, halfWidth: 0.075 },
-        { t: 0.8, top: 0.226, bottom: -0.152, halfWidth: 0.065 },
-        { t: 0.9, top: 0.171, bottom: -0.1, halfWidth: 0.053 },
-        { t: 1, top: 0.101, bottom: -0.092, halfWidth: 0.04 },
+        { t: 0.04, top: 0.03, bottom: -0.03, halfWidth: 0.033 },
+        { t: 0.1, top: 0.07, bottom: -0.07, halfWidth: 0.05 },
+        { t: 0.2, top: 0.125, bottom: -0.115, halfWidth: 0.062 },
+        { t: 0.3, top: 0.155, bottom: -0.14, halfWidth: 0.07 },
+        { t: 0.4, top: 0.168, bottom: -0.15, halfWidth: 0.072 },
+        { t: 0.5, top: 0.166, bottom: -0.148, halfWidth: 0.07 },
+        { t: 0.6, top: 0.157, bottom: -0.14, halfWidth: 0.065 },
+        { t: 0.7, top: 0.14, bottom: -0.122, halfWidth: 0.058 },
+        { t: 0.8, top: 0.116, bottom: -0.1, halfWidth: 0.05 },
+        { t: 0.9, top: 0.09, bottom: -0.08, halfWidth: 0.04 },
+        { t: 1, top: 0.07, bottom: -0.065, halfWidth: 0.03 },
       ],
       fins: [
         {
           fin: 'dorsal',
-          from: 0.3,
+          from: 0.22,
           to: 0.95,
           anchor: 'top',
-          shape: [0.03, 0.04, 0.045, 0.045, 0.045, 0.05, 0.05],
-          sweep: 0.3,
+          shape: [0.03, 0.045, 0.055, 0.062, 0.065, 0.065, 0.065, 0.062, 0.058, 0.05, 0.035],
+          sweep: 0.25,
         },
         {
           fin: 'anal',
-          from: 0.7,
-          to: 0.93,
+          from: 0.62,
+          to: 0.92,
           anchor: 'bottom',
-          shape: [0.07, 0.1, 0.1, 0.08, 0.05],
-          sweep: 0.5,
+          shape: [0.04, 0.08, 0.1, 0.1, 0.085, 0.05],
+          sweep: 0.45,
         },
         {
           fin: 'pelvic',
-          from: 0.4,
-          to: 0.5,
+          from: 0.36,
+          to: 0.45,
           anchor: 'side',
           flankHeight: 0.05,
           direction: [0.3, -0.95],
-          shape: [0.1, 0.14, 0.12],
-          sweep: 0.7,
+          shape: [0.03, 0.09, 0.115, 0.07],
+          sweep: 0.6,
         },
         {
           fin: 'pectoral',
-          from: 0.32,
-          to: 0.38,
+          from: 0.3,
+          to: 0.37,
           anchor: 'side',
-          flankHeight: 0.5,
+          flankHeight: 0.45,
           direction: [0.9, -0.2],
-          shape: [0.1, 0.14, 0.1],
+          shape: [0.04, 0.12, 0.15, 0.1],
           sweep: 0.6,
         },
       ],
-      caudal: { shape: [0.12, 0.17, 0.19, 0.17, 0.12], spread: 0.07 },
+      caudal: { shape: [0.1, 0.17, 0.21, 0.23, 0.235, 0.23, 0.21, 0.17, 0.1], spread: 0.04 },
     },
   },
   {
@@ -549,7 +765,7 @@ export const LOFT_FISH_RECIPES: LoftFishRecipe[] = [
     species: 'firefish',
     fallbackLengthM: 0.07,
     roughness: 0.35,
-    note: 'Nemateleotris magnifica by Karelj (CC0), side view projected onto the loft; the photograph crops out the first dorsal spine, which is modelled from the species description',
+    note: 'Nemateleotris magnifica by Karelj (CC0), side view projected onto the loft; the photograph is a three-quarter view, so the eye is repainted at its side-on position and the snout tinted yellow, and the first dorsal spine is modelled from the species description',
     texture: {
       kind: 'photo',
       sourceId: 'wm-firefish-karelj',
@@ -557,11 +773,13 @@ export const LOFT_FISH_RECIPES: LoftFishRecipe[] = [
       crop: { left: 350, top: 380, width: 1750, height: 750 },
       snoutPixel: [462, 547],
       tailPixel: [1791, 927],
-      finSwatch: { left: 1100, top: 470, width: 120, height: 60 },
-    },
-    spec: {
-      roundness: 2.2,
-      sections: [
+      retouch: [
+        { kind: 'wash', centre: [492, 562], radius: 64, colour: [226, 224, 244], strength: 1 },
+        { kind: 'wash', centre: [468, 554], radius: 84, colour: [250, 226, 120], strength: 0.5 },
+        { kind: 'wash', centre: [790, 650], radius: 400, colour: [252, 246, 224], strength: 0.85 },
+        { kind: 'eye', centre: [592, 572], radius: 40, iris: [70, 48, 30], rim: [215, 175, 80] },
+      ],
+      photoSections: [
         { t: 0, top: 0, bottom: 0, halfWidth: 0.015 },
         { t: 0.03, top: 0.035, bottom: -0.025, halfWidth: 0.03 },
         { t: 0.08, top: 0.056, bottom: -0.042, halfWidth: 0.045 },
@@ -575,29 +793,108 @@ export const LOFT_FISH_RECIPES: LoftFishRecipe[] = [
         { t: 0.85, top: 0.048, bottom: -0.073, halfWidth: 0.041 },
         { t: 1, top: 0.035, bottom: -0.055, halfWidth: 0.03 },
       ],
+      finPalette: {
+        caudal: {
+          rootFromPhoto: true,
+          root: [226, 82, 36],
+          tip: [150, 22, 22],
+          rim: [58, 8, 10],
+          rimStart: 0.66,
+          rays: 14,
+          rayDepth: 0.5,
+          opacity: { root: 1, tip: 0.8 },
+          seed: 21,
+        },
+        dorsal: {
+          root: [246, 192, 72],
+          tip: [216, 70, 38],
+          rim: [180, 24, 26],
+          rimStart: 0.7,
+          rays: 14,
+          rayDepth: 0.35,
+          opacity: { root: 0.85, tip: 0.5 },
+          seed: 22,
+        },
+        spine: {
+          root: [246, 236, 204],
+          tip: [212, 42, 32],
+          rim: [176, 20, 22],
+          rimStart: 0.55,
+          rays: 3,
+          rayDepth: 0.3,
+          leadingRay: 0.25,
+          opacity: { root: 0.85, tip: 0.6 },
+          seed: 23,
+        },
+        anal: {
+          root: [250, 216, 92],
+          tip: [240, 142, 52],
+          rim: [214, 70, 36],
+          rimStart: 0.75,
+          rays: 10,
+          rayDepth: 0.3,
+          opacity: { root: 0.8, tip: 0.45 },
+          seed: 24,
+        },
+        pectoral: {
+          root: [232, 232, 244],
+          tip: [246, 246, 252],
+          rays: 8,
+          rayDepth: 0.15,
+          opacity: { root: 0.35, tip: 0.1 },
+          seed: 25,
+        },
+        pelvic: {
+          root: [236, 240, 250],
+          tip: [250, 252, 255],
+          rays: 4,
+          rayDepth: 0.2,
+          leadingRay: 0.3,
+          opacity: { root: 0.8, tip: 0.5 },
+          seed: 26,
+        },
+      },
+    },
+    spec: {
+      membrane: true,
+      roundness: 2.2,
+      sections: [
+        { t: 0, top: 0, bottom: 0, halfWidth: 0.012 },
+        { t: 0.03, top: 0.04, bottom: -0.03, halfWidth: 0.026 },
+        { t: 0.08, top: 0.075, bottom: -0.06, halfWidth: 0.04 },
+        { t: 0.15, top: 0.098, bottom: -0.085, halfWidth: 0.05 },
+        { t: 0.25, top: 0.105, bottom: -0.095, halfWidth: 0.052 },
+        { t: 0.35, top: 0.102, bottom: -0.093, halfWidth: 0.05 },
+        { t: 0.5, top: 0.084, bottom: -0.077, halfWidth: 0.046 },
+        { t: 0.65, top: 0.068, bottom: -0.062, halfWidth: 0.039 },
+        { t: 0.8, top: 0.052, bottom: -0.047, halfWidth: 0.03 },
+        { t: 0.9, top: 0.042, bottom: -0.037, halfWidth: 0.024 },
+        { t: 1, top: 0.036, bottom: -0.03, halfWidth: 0.019 },
+      ],
       fins: [
         {
           fin: 'dorsal',
+          variant: 1,
           from: 0.2,
-          to: 0.225,
+          to: 0.235,
           anchor: 'top',
-          shape: [0.36, 0.08],
-          sweep: 0.5,
+          shape: [0.4, 0.24, 0.11, 0.04],
+          sweep: 0.55,
         },
         {
           fin: 'dorsal',
           from: 0.32,
           to: 0.95,
           anchor: 'top',
-          shape: [0.03, 0.04, 0.05, 0.06, 0.07, 0.075, 0.07],
+          shape: [0.04, 0.065, 0.085, 0.095, 0.1, 0.1, 0.095, 0.08, 0.05],
           sweep: 0.4,
         },
         {
           fin: 'anal',
-          from: 0.45,
-          to: 0.9,
+          from: 0.5,
+          to: 0.92,
           anchor: 'bottom',
-          shape: [0.03, 0.05, 0.06, 0.06, 0.055, 0.05],
+          shape: [0.03, 0.06, 0.08, 0.09, 0.09, 0.075, 0.04],
           sweep: 0.5,
         },
         {
@@ -607,21 +904,21 @@ export const LOFT_FISH_RECIPES: LoftFishRecipe[] = [
           anchor: 'side',
           flankHeight: 0.05,
           direction: [0.2, -1],
-          shape: [0.05, 0.08, 0.05],
+          shape: [0.03, 0.07, 0.07, 0.03],
           sweep: 0.9,
         },
         {
           fin: 'pectoral',
           from: 0.19,
-          to: 0.24,
+          to: 0.25,
           anchor: 'side',
           flankHeight: 0.4,
           direction: [0.9, -0.3],
-          shape: [0.04, 0.06, 0.04],
+          shape: [0.02, 0.06, 0.07, 0.04],
           sweep: 0.6,
         },
       ],
-      caudal: { shape: [0.14, 0.17, 0.18, 0.17, 0.14], spread: 0.02 },
+      caudal: { shape: [0.1, 0.18, 0.215, 0.225, 0.215, 0.18, 0.1], spread: 0.05 },
     },
   },
 ];
@@ -631,9 +928,10 @@ export function loftFishPart(
   standardLengthM: number,
   project: Projection,
   finUv?: [number, number],
+  finTexture?: FinTexture,
 ): Part {
   const scaled: Projection = (behind, y) => project(behind / standardLengthM, y / standardLengthM);
-  return loftFish({ ...recipe.spec, standardLengthM }, scaled, recipe.id, finUv);
+  return loftFish({ ...recipe.spec, standardLengthM }, scaled, recipe.id, finUv, finTexture);
 }
 
 export async function buildLoftFish(
@@ -643,8 +941,9 @@ export async function buildLoftFish(
   const fromSpecies = speciesLengthM(ctx.repoRoot, recipe.species);
   const standardLengthM = fromSpecies ?? recipe.fallbackLengthM;
   if (recipe.texture.kind === 'photo') ctx.verifySource(recipe.texture.sourceId);
-  const { image, project, finUv, sources } = await loadTexture(recipe);
-  const part = loftFishPart(recipe, standardLengthM, project, finUv);
+  const { image, project, finUv, finTexture, sources } = await loadTexture(recipe);
+  const part = loftFishPart(recipe, standardLengthM, project, finUv, finTexture);
+  const translucentFins = finTexture !== undefined;
 
   const material: MaterialDef = {
     name: recipe.id,
@@ -652,7 +951,7 @@ export async function buildLoftFish(
     baseColor: { role: 'baseColor', codec: 'etc1s', image },
     roughness: recipe.roughness,
     metallic: 0,
-    alphaMode: 'OPAQUE',
+    alphaMode: translucentFins ? 'BLEND' : 'OPAQUE',
     doubleSided: true,
     normalScale: 1,
   };

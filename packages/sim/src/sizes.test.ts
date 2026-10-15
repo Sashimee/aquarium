@@ -104,9 +104,9 @@ const ADULT_MAX: Record<string, { model: string; maxSlM: number; maxTlM: number;
     },
     firefish: {
       model: 'firefish',
-      maxSlM: 0.09 / 1.18,
+      maxSlM: 0.09 / 1.225,
       maxTlM: 0.09,
-      source: 'FishBase: 9 cm TL; TL = 1.18 SL, the proportion of the lofted model',
+      source: 'FishBase: 9 cm TL; TL = 1.225 SL, the proportion of the lofted model',
     },
     guppy: {
       model: 'guppy-female',
@@ -116,9 +116,9 @@ const ADULT_MAX: Record<string, { model: string; maxSlM: number; maxTlM: number;
     },
     'harlequin-rasbora': {
       model: 'harlequin-rasbora',
-      maxSlM: 0.05 / 1.33,
+      maxSlM: 0.05 / 1.322,
       maxTlM: 0.05,
-      source: 'FishBase: 5 cm TL; TL = 1.33 SL, the proportion of the lofted model',
+      source: 'FishBase: 5 cm TL; TL = 1.322 SL, the proportion of the lofted model',
     },
     'neon-tetra': {
       model: 'neon-tetra',
@@ -142,9 +142,9 @@ const ADULT_MAX: Record<string, { model: string; maxSlM: number; maxTlM: number;
     },
     'six-line-wrasse': {
       model: 'six-line-wrasse',
-      maxSlM: 0.1 / 1.19,
+      maxSlM: 0.1 / 1.235,
       maxTlM: 0.1,
-      source: 'FishBase: 10 cm TL; TL = 1.19 SL, the proportion of the lofted model',
+      source: 'FishBase: 10 cm TL; TL = 1.235 SL, the proportion of the lofted model',
     },
     'yellow-tang': {
       model: 'yellow-tang',
