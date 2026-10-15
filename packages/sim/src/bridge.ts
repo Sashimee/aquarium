@@ -397,6 +397,11 @@ export class SimClient {
     { resolve: (reachable: boolean) => void; reject: (error: Error) => void }
   >();
   private nextRequest = 1;
+  /**
+   * Requests a worker failure rejected. The worker may well have survived it, so their replies can
+   * still arrive; they are dropped, except that a layout still moves the epoch.
+   */
+  private readonly abandoned = new Set<number>();
   private readonly listener = (event: MessageEvent): void => this.receive(event.data);
   private readonly failure = (event: Event): void => this.fail(failureText(event));
   private epoch = 0;
@@ -532,6 +537,7 @@ export class SimClient {
     this.snapshotListeners.clear();
     this.errorListeners.clear();
     this.ateListeners.clear();
+    this.abandoned.clear();
     this.rejectPending('sim: client disposed');
   }
 
@@ -548,6 +554,8 @@ export class SimClient {
   }
 
   private fail(message: string): void {
+    for (const request of this.pendingLayouts.keys()) this.abandoned.add(request);
+    for (const request of this.pendingQueries.keys()) this.abandoned.add(request);
     this.rejectPending(message);
     for (const l of this.errorListeners) l(message);
   }
@@ -591,17 +599,18 @@ export class SimClient {
         return;
       case 'layout': {
         const pending = this.pendingLayouts.get(event.request);
-        if (pending === undefined) {
+        if (pending === undefined && !this.abandoned.delete(event.request)) {
           throw new Error(`sim: layout for unknown request ${event.request}`);
         }
         this.pendingLayouts.delete(event.request);
         this.epoch = event.epoch;
-        pending.resolve(event);
+        pending?.resolve(event);
         return;
       }
       case 'grazeReach': {
         const pending = this.pendingQueries.get(event.request);
         if (pending === undefined) {
+          if (this.abandoned.delete(event.request)) return;
           throw new Error(`sim: grazeReach for unknown request ${event.request}`);
         }
         this.pendingQueries.delete(event.request);
@@ -611,6 +620,7 @@ export class SimClient {
       case 'error': {
         // An error naming a request belongs to that add, remove or query alone, never to an init;
         // one without a request goes to a pending init, and to the listeners only if none is.
+        if (event.request !== undefined && this.abandoned.delete(event.request)) return;
         const pending =
           event.request === undefined
             ? this.pendingInit

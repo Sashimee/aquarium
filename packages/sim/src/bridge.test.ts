@@ -723,6 +723,55 @@ describe('sim worker bridge', () => {
     });
   }
 
+  it('drops late replies to requests a worker failure rejected, keeping the epoch', async () => {
+    const { port, post, emit, sent } = fakeWorker();
+    const client = new SimClient(port);
+    const errors: string[] = [];
+    client.onError((m) => errors.push(m));
+    const seen: number[] = [];
+    client.onAte((events) => seen.push(...events.map((e) => e.foodId)));
+    const ate = (epoch: number, foodId: number): unknown => ({
+      type: 'ate',
+      epoch,
+      tick: 1,
+      events: [{ fishId: 'f', foodId, portion: 0.025 }],
+    });
+    post({ type: 'ready', epoch: 1, fishIds: ['f'], stride: SNAPSHOT_STRIDE, stepHz: STEP_HZ });
+    const lastRequest = (): number => (sent.at(-1) as { request: number }).request;
+    const add = client.addFish({ id: 'x', species: 'neon-tetra' });
+    const addRequest = lastRequest();
+    const remove = client.removeFish('f');
+    const removeRequest = lastRequest();
+    const query = client.canGrazeAt('neon-tetra', [0, 0.3, 0]);
+    const queryRequest = lastRequest();
+    emit('messageerror', { data: null });
+    for (const pending of [add, remove, query]) await expect(pending).rejects.toThrow();
+
+    const late = [
+      {
+        type: 'layout',
+        epoch: 2,
+        request: addRequest,
+        fishIds: ['f', 'x'],
+        stride: SNAPSHOT_STRIDE,
+        change: { kind: 'add', id: 'x' },
+      },
+      { type: 'error', message: 'no fish "f"', request: removeRequest },
+      { type: 'grazeReach', request: queryRequest, reachable: true },
+    ];
+    for (const reply of late) expect(() => post(reply)).not.toThrow();
+    post(ate(1, 1));
+    post(ate(2, 2));
+    expect(seen).toEqual([2]);
+    expect(errors).toEqual(['sim: a message from the worker could not be read']);
+
+    // Each is dropped once; a second reply to the same request is as wrong as any other.
+    expect(() => post(late[0])).toThrow(/layout for unknown request/);
+    expect(() => post(late[2])).toThrow(/grazeReach for unknown request/);
+    post(late[1]);
+    expect(errors.at(-1)).toBe('no fish "f"');
+  });
+
   it('stops listening to the worker once disposed', () => {
     const { port, emit, listening } = fakeWorker();
     const client = new SimClient(port);

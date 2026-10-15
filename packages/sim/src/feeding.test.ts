@@ -810,9 +810,13 @@ describe('gut seeded from the lifecycle hunger', { timeout: LONG }, () => {
   });
 
   it('rejects a hunger outside 0 to 1 at load and on add, changing nothing', () => {
-    for (const hunger of [-0.1, 1.5, Number.NaN]) {
+    for (const [hunger, shown] of [
+      [-0.1, '-0.1'],
+      [1.5, '1.5'],
+      [Number.NaN, 'NaN'],
+    ] as const) {
       expect(() => tank([{ id: 'a', species: neonTetra.id, hunger }])).toThrow(
-        /hunger must be a number within 0 to 1/,
+        `hunger must be a number within 0 to 1, got ${shown}`,
       );
       const w = tank([{ id: 'a', species: neonTetra.id }]);
       expect(() => w.addFish({ id: 'b', species: neonTetra.id, hunger })).toThrow(RangeError);
@@ -825,7 +829,7 @@ describe('gut seeded from the lifecycle hunger', { timeout: LONG }, () => {
       const spawn = JSON.parse(
         `{"id":"b","species":"${neonTetra.id}","hunger":${hunger}}`,
       ) as FishSpawn;
-      expect(() => tank([spawn])).toThrow(/hunger must be a number within 0 to 1/);
+      expect(() => tank([spawn])).toThrow(`hunger must be a number within 0 to 1, got ${hunger}`);
       const w = tank([{ id: 'a', species: neonTetra.id }]);
       expect(() => w.addFish(spawn)).toThrow(RangeError);
       expect(w.fishIds).toEqual(['a']);
