@@ -186,7 +186,7 @@ export class TankSession {
     await this.track(async () => {
       await this.leaveActive();
       if (id !== this.switchId) return;
-      this.activate(tankId);
+      if (!this.activate(tankId)) return;
       const gen = this.loadId;
       await this.perform(async () => {
         const next = await this.deps.api.tank(tankId);
@@ -312,15 +312,12 @@ export class TankSession {
     this.emitChange();
   }
 
-  private activate(tankId: string): void {
+  /** False when the tank has gone; the first remaining tank is shown instead, else the demo. */
+  private activate(tankId: string): boolean {
     const tank = this.state.tanks.find((t) => t.id === tankId);
     if (!tank) {
-      this.patch({
-        activeId: null,
-        error: 'That tank is no longer available. Pick another tank from the tank menu.',
-      });
-      this.deps.interaction.emit('tank:none', {});
-      return;
+      this.showInstead('That tank is no longer available.');
+      return false;
     }
     this.unloadScene('switch')?.dispose();
     const gen = this.loadId;
@@ -348,6 +345,20 @@ export class TankSession {
       decorEdited: tank.decorEdited,
     });
     this.deps.interaction.emit('tank:water', { tankId, water: tank.water });
+    return true;
+  }
+
+  private showInstead(gone: string): void {
+    const next = this.state.tanks[0];
+    if (!next) {
+      this.deps.storage?.removeItem(ACTIVE_KEY);
+      this.patch({ activeId: null, notice: `${gone} You have no tanks left.` });
+      this.deps.interaction.emit('tank:none', {});
+      return;
+    }
+    this.deps.storage?.setItem(ACTIVE_KEY, next.id);
+    this.patch({ activeId: next.id, notice: `${gone} Showing ${next.name} instead.` });
+    this.activate(next.id);
   }
 
   /** Unloads synchronously, so overlapping switches unload once; only the report flush is awaited. */

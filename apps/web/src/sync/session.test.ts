@@ -577,16 +577,64 @@ describe('tank switcher and naming', () => {
     expect(rec.of('tank:unloaded')).toEqual([]);
   });
 
-  it('falls back to the demo tank when the tank to show has gone', async () => {
-    const { rec, session } = setup([tankFixture(), second]);
-    await session.setUser(verified);
-    await session.select(TANK_B);
-    const before = rec.of('tank:none').length;
-    const internals = session as unknown as { activate(tankId: string): void };
-    internals.activate('gone');
-    expect(rec.of('tank:none')).toHaveLength(before + 1);
-    expect(session.getState().activeId).toBeNull();
-    expect(session.getState().error).toMatch(/no longer available/);
+  describe('when the tank being switched to goes during the wait for feeding reports', () => {
+    function switching(storage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>) {
+      const api = {
+        species: vi.fn().mockResolvedValue([speciesFixture()]),
+        tanks: vi.fn().mockResolvedValue([tankFixture({ fish: [fishFixture(FISH_1)] }), second]),
+        tank: vi.fn().mockResolvedValue(second),
+        reportAte: vi.fn().mockReturnValue(new Promise<never>(() => undefined)),
+      };
+      const rec = recordBus();
+      const session = new TankSession({
+        api: api as unknown as ApiClient,
+        interaction: rec.bus,
+        sleep: async () => undefined,
+        now: () => Date.parse('2026-02-01T12:00:00.000Z'),
+        leaveFlushMs: 20,
+        ...(storage ? { storage } : {}),
+      });
+      const remove = (keep: Tank[]) =>
+        (session as unknown as { patch(change: { tanks: Tank[] }): void }).patch({ tanks: keep });
+      return { api, rec, session, remove };
+    }
+
+    it('shows the first remaining tank, says so and does not request the missing one', async () => {
+      const storage = { getItem: vi.fn(() => null), setItem: vi.fn(), removeItem: vi.fn() };
+      const { api, rec, session, remove } = switching(storage);
+      await session.setUser(verified);
+      rec.bus.emit('food:ate', { eaten: [{ fishId: FISH_1, portion: 0.3 }] });
+      const pending = session.select(TANK_B);
+      remove([tankFixture({ fish: [fishFixture(FISH_1)] })]);
+      await pending;
+      expect(api.tank).not.toHaveBeenCalled();
+      expect(session.getState().activeId).toBe(TANK_A);
+      expect(session.getState().notice).toBe(
+        'That tank is no longer available. Showing Home tank instead.',
+      );
+      expect(session.getState().error).toBeNull();
+      expect(storage.setItem).toHaveBeenLastCalledWith('aquarium.activeTank', TANK_A);
+      expect(rec.of('tank:loaded').at(-1)).toMatchObject({ tankId: TANK_A });
+      session.dispose();
+    });
+
+    it('brings the demo tank back when no tanks are left', async () => {
+      const storage = { getItem: vi.fn(() => null), setItem: vi.fn(), removeItem: vi.fn() };
+      const { api, rec, session, remove } = switching(storage);
+      await session.setUser(verified);
+      rec.bus.emit('food:ate', { eaten: [{ fishId: FISH_1, portion: 0.3 }] });
+      const pending = session.select(TANK_B);
+      remove([]);
+      await pending;
+      expect(api.tank).not.toHaveBeenCalled();
+      expect(session.getState().activeId).toBeNull();
+      expect(session.getState().notice).toBe(
+        'That tank is no longer available. You have no tanks left.',
+      );
+      expect(rec.of('tank:none')).toHaveLength(1);
+      expect(storage.removeItem).toHaveBeenCalledWith('aquarium.activeTank');
+      session.dispose();
+    });
   });
 
   it('creates a tank and makes it the active one', async () => {
