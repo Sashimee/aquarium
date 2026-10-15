@@ -1,5 +1,4 @@
-import type { DecorCollider } from '@aquarium/sim';
-import type { DecorItem } from '@aquarium/shared';
+import type { Collider, DecorItem } from '@aquarium/shared';
 import { footprintOf } from './footprint';
 import type { DecorSpec } from './spec';
 
@@ -9,7 +8,7 @@ const MIN_PLANT_COLLIDER_HEIGHT = 0.15;
 const MIN_PLANT_COLLIDER_RADIUS = 0.04;
 
 /** Mirrors the scene's soft plant capsule so the sim and the render agree on where a plant pushes fish. */
-function plantCollider(colliderId: string, spec: DecorSpec, item: DecorItem): DecorCollider[] {
+function plantCollider(colliderId: string, spec: DecorSpec, item: DecorItem): Collider[] {
   const s = item.scale;
   const height = spec.box.max[1] * s;
   if (height < MIN_PLANT_COLLIDER_HEIGHT) return [];
@@ -21,13 +20,11 @@ function plantCollider(colliderId: string, spec: DecorSpec, item: DecorItem): De
   return [
     {
       id: colliderId,
-      solid: false,
-      shape: {
-        kind: 'capsule',
-        a: [x, y + radius, z],
-        b: [x, y + Math.max(radius, height * 0.8), z],
-        radius,
-      },
+      hard: false,
+      kind: 'capsule',
+      a: [x, y + radius, z],
+      b: [x, y + Math.max(radius, height * 0.8), z],
+      radius,
     },
   ];
 }
@@ -36,7 +33,7 @@ function plantCollider(colliderId: string, spec: DecorSpec, item: DecorItem): De
  * Sim collision proxies for one placed piece, in tank space. Long thin driftwood becomes a
  * capsule so fish can swim under a raised end; everything else is a rounded box.
  */
-export function collidersFor(id: string, spec: DecorSpec, item: DecorItem): DecorCollider[] {
+export function collidersFor(id: string, spec: DecorSpec, item: DecorItem): Collider[] {
   const f = footprintOf(spec, item);
   const height = f.yMax - f.yMin;
   const cy = f.yMin + height / 2;
@@ -49,13 +46,11 @@ export function collidersFor(id: string, spec: DecorSpec, item: DecorItem): Deco
       return [
         {
           id: colliderId,
-          solid: true,
-          shape: {
-            kind: 'capsule',
-            a: [f.cx, f.yMin + radius, f.cz],
-            b: [f.cx, f.yMax - radius, f.cz],
-            radius,
-          },
+          hard: true,
+          kind: 'capsule',
+          a: [f.cx, f.yMin + radius, f.cz],
+          b: [f.cx, f.yMax - radius, f.cz],
+          radius,
         },
       ];
     }
@@ -68,27 +63,23 @@ export function collidersFor(id: string, spec: DecorSpec, item: DecorItem): Deco
     return [
       {
         id: colliderId,
-        solid: true,
-        shape: {
-          kind: 'capsule',
-          a: [f.cx - dx * reach, cy, f.cz - dz * reach],
-          b: [f.cx + dx * reach, cy, f.cz + dz * reach],
-          radius,
-        },
+        hard: true,
+        kind: 'capsule',
+        a: [f.cx - dx * reach, cy, f.cz - dz * reach],
+        b: [f.cx + dx * reach, cy, f.cz + dz * reach],
+        radius,
       },
     ];
   }
   return [
     {
       id: colliderId,
-      solid: true,
-      shape: {
-        kind: 'box',
-        center: [f.cx, cy, f.cz],
-        halfExtents: [f.hx, height / 2, f.hz],
-        rotationY: item.rotationY,
-        rounding: Math.min(f.hx, f.hz, height / 2) * 0.4,
-      },
+      hard: true,
+      kind: 'box',
+      center: [f.cx, cy, f.cz],
+      halfExtents: [f.hx, height / 2, f.hz],
+      rotationY: item.rotationY,
+      rounding: Math.min(f.hx, f.hz, height / 2) * 0.4,
     },
   ];
 }

@@ -8,14 +8,14 @@ const sdf = (c: ReturnType<typeof collidersFor>[number], x: number, y: number, z
   compileCollider(c).sample(x, y, z, normal);
 
 describe('collidersFor', () => {
-  it('gives a rock one solid rounded box carrying the piece id', () => {
+  it('gives a rock one hard rounded box carrying the piece id', () => {
     const [collider, ...rest] = collidersFor(
       'p3',
       spec('boulder-01'),
       item('boulder-01', 0.2, 0.1),
     );
     expect(rest).toEqual([]);
-    expect(collider).toMatchObject({ id: 'decor:p3', solid: true, shape: { kind: 'box' } });
+    expect(collider).toMatchObject({ id: 'decor:p3', hard: true, kind: 'box' });
   });
 
   it('is solid inside the piece and clear outside it', () => {
@@ -44,7 +44,7 @@ describe('collidersFor', () => {
     const c = must(
       collidersFor('p1', spec('dead-tree-trunk-02'), item('dead-tree-trunk-02', 0, 0))[0],
     );
-    expect(c.shape.kind).toBe('capsule');
+    expect(c.kind).toBe('capsule');
     expect(sdf(c, 0, 0.06 + 0.07, 0)).toBeLessThan(0);
     expect(sdf(c, 0, 0.06 + 0.3, 0)).toBeGreaterThan(0.1);
   });
@@ -53,7 +53,7 @@ describe('collidersFor', () => {
     const c = must(
       collidersFor('p1', spec('dead-quiver-trunk'), item('dead-quiver-trunk', 0, 0))[0],
     );
-    expect(c.shape.kind).toBe('capsule');
+    expect(c.kind).toBe('capsule');
     expect(sdf(c, 0, 0.06 + 0.4, 0)).toBeLessThan(0);
   });
 
@@ -81,19 +81,17 @@ describe('plant colliders', () => {
     expect(rest).toEqual([]);
     expect(collider).toEqual({
       id: 'decor:p2',
-      solid: false,
-      shape: {
-        kind: 'capsule',
-        a: [0.1, 0.06 + 0.15, 0.2],
-        b: [0.1, 0.06 + 0.187478 * 2 * 0.8, 0.2],
-        radius: 0.15,
-      },
+      hard: false,
+      kind: 'capsule',
+      a: [0.1, 0.06 + 0.15, 0.2],
+      b: [0.1, 0.06 + 0.187478 * 2 * 0.8, 0.2],
+      radius: 0.15,
     });
   });
 
   it('floors the radius at 4 cm', () => {
     const [collider] = collidersFor('p1', spec('water-plant'), item('water-plant', 0, 0));
-    expect(collider?.shape).toMatchObject({ kind: 'capsule', radius: 0.04 });
+    expect(collider).toMatchObject({ kind: 'capsule', radius: 0.04 });
   });
 
   it('has none for a plant under 15 cm tall', () => {

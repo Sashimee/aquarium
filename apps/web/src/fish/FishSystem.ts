@@ -12,6 +12,7 @@ import {
   CARCASS,
   carcassFate,
   carcassSettleS,
+  CarcassSupport,
   quatFromYawPitchRoll,
   Rng,
   SimClient,
@@ -116,12 +117,22 @@ interface SpeciesBatch {
   features: FishMaterialFeatures | null;
 }
 
-interface Script {
-  /** Fish rise and float belly-up; shrimp are denser than water and sink. */
-  readonly kind: 'dying' | 'dead' | 'sinking';
-  readonly startS: number;
-  readonly anchor: Anchor;
-}
+/** Fish rise and float belly-up; shrimp are denser than water and sink. */
+type Script =
+  | {
+      readonly kind: 'dying' | 'dead';
+      readonly startS: number;
+      readonly anchor: Anchor;
+    }
+  | {
+      readonly kind: 'sinking';
+      readonly startS: number;
+      readonly anchor: Anchor;
+      /** What it lands on: the substrate or the top of hard decor. */
+      readonly floorY: number;
+      /** How it was drawn when it died, eased out of while it goes limp; null if it never was. */
+      readonly fromQuaternion: Quaternion | null;
+    };
 
 interface FishRuntime {
   readonly fish: RosterFish;
@@ -150,6 +161,8 @@ interface FishRuntime {
 const SHADOW_LODS = 2;
 /** A fish leaving its bag, or held over a rebuilt world, glides into the sim's pose this long. */
 const HANDOVER_S = 1.2;
+/** Below this horizontal share of its forward axis a body is climbing and has no heading. */
+const CLIMBING_FORWARD_XZ = 0.5;
 /** Fingertip slop when netting a small fish, in metres. */
 const MIN_PICK_RADIUS = 0.02;
 const MIN_CAPACITY = 4;
@@ -217,6 +230,7 @@ export class FishSystem {
   );
   private readonly stream = new SimStream(STEP_DT, (snapshot) => this.sim.recycle(snapshot));
   private readonly held = new HeldFish();
+  private support = new CarcassSupport([]);
   private readonly loader: FishAssetLoader;
   private readonly bags: AcclimationBags;
   private readonly lifetime = new AbortController();
@@ -461,11 +475,16 @@ export class FishSystem {
     if (this.simReady) this.sim.setAnchors(simAnchors);
   }
 
-  /** Every collider the sim avoids, in the shared format; kept for later worlds like anchors. */
+  /**
+   * Every collider the sim avoids, in the shared format; kept for later worlds like anchors. Dead
+   * shrimp land on the hard ones.
+   */
   setColliders(colliders: readonly Collider[]): void {
     if (this.disposed) return;
     this.spec.setDecor(colliders);
     if (this.simReady) this.sim.setDecor(colliders);
+    this.support = new CarcassSupport(colliders);
+    this.resettleCarcasses();
   }
 
   setFood(buffer: Float32Array): void {
@@ -865,14 +884,49 @@ export class FishSystem {
       rt.script = this.deadScript(rt);
       return;
     }
-    this.forward.set(0, 0, 1).applyQuaternion(rt.lastQuaternion);
     const anchor: Anchor = {
       x: rt.lastPosition.x,
       y: rt.lastPosition.y,
       z: rt.lastPosition.z,
-      yaw: Math.atan2(this.forward.x, this.forward.z),
+      yaw: this.restingYaw(rt.lastQuaternion),
     };
-    rt.script = { kind: this.sinks(rt) ? 'sinking' : 'dying', startS: this.clockS, anchor };
+    rt.script = this.sinks(rt)
+      ? this.sinkingScript(rt, anchor, this.clockS, rt.lastQuaternion.clone())
+      : { kind: 'dying', startS: this.clockS, anchor };
+  }
+
+  /**
+   * The heading a body keeps as it goes down. A shrimp climbing the glass or a rock face points
+   * up or down, which has no heading, so it lies along its side axis: parallel to the surface it
+   * was on, never into it.
+   */
+  private restingYaw(q: Quaternion): number {
+    const f = this.forward.set(0, 0, 1).applyQuaternion(q);
+    if (Math.hypot(f.x, f.z) >= CLIMBING_FORWARD_XZ) return Math.atan2(f.x, f.z);
+    const side = this.forward.set(1, 0, 0).applyQuaternion(q);
+    return Math.atan2(side.x, side.z);
+  }
+
+  /** Raises `anchor` out of decor it starts inside, onto what it will land on. */
+  private sinkingScript(
+    rt: FishRuntime,
+    anchor: Anchor,
+    startS: number,
+    fromQuaternion: Quaternion | null,
+  ): Script {
+    const floorY = this.support.floorY(anchor, rt.length, this.box.ground);
+    const lowest = floorY + CARCASS.restBellyBodyLengths * rt.length;
+    const from = anchor.y >= lowest ? anchor : { ...anchor, y: lowest };
+    return { kind: 'sinking', startS, anchor: from, floorY, fromQuaternion };
+  }
+
+  /** Decor moved: a dead shrimp lands on whatever is under it now. */
+  private resettleCarcasses(): void {
+    for (const rt of this.runtimes.values()) {
+      const { script } = rt;
+      if (script?.kind !== 'sinking') continue;
+      rt.script = this.sinkingScript(rt, script.anchor, script.startS, script.fromQuaternion);
+    }
   }
 
   private sinks(rt: FishRuntime): boolean {
@@ -883,12 +937,14 @@ export class FishSystem {
   private deadScript(rt: FishRuntime): Script {
     const anchor = deadAnchor(this.box, rt.length, rt.seed);
     if (!this.sinks(rt)) return { kind: 'dead', startS: this.clockS, anchor };
-    const floorY = this.box.ground(anchor.x, anchor.z);
+    const floorY = this.support.floorY(anchor, rt.length, this.box.ground);
     const onFloor = { ...anchor, y: floorY + CARCASS.restBellyBodyLengths * rt.length };
     return {
       kind: 'sinking',
       startS: this.clockS - carcassSettleS(onFloor, rt.length, rt.seed, floorY),
       anchor: onFloor,
+      floorY,
+      fromQuaternion: null,
     };
   }
 
@@ -1133,15 +1189,18 @@ export class FishSystem {
       }
       if (rt.bagSlot === null) return false;
     }
-    if (rt.script !== null) {
-      const { kind, anchor, startS } = rt.script;
-      const t = this.clockS - startS;
-      if (kind === 'sinking') {
-        const floorY = this.box.ground(anchor.x, anchor.z);
-        sinkingCarcass(t, anchor, rt.length, rt.seed, floorY, pose);
+    let limpFrom: Quaternion | null = null;
+    let limpWeight = 0;
+    const { script } = rt;
+    if (script !== null) {
+      const t = this.clockS - script.startS;
+      if (script.kind === 'sinking') {
+        sinkingCarcass(t, script.anchor, rt.length, rt.seed, script.floorY, pose);
+        limpFrom = script.fromQuaternion;
+        limpWeight = 1 - smoothstep01(t / CARCASS.limpS);
       } else {
-        const animate = kind === 'dying' ? dyingPose : deadPose;
-        animate(t, anchor, rt.length, rt.seed, this.box, pose);
+        const animate = script.kind === 'dying' ? dyingPose : deadPose;
+        animate(t, script.anchor, rt.length, rt.seed, this.box, pose);
       }
     } else {
       rt.bagSlot ??= this.freeBagSlot();
@@ -1158,6 +1217,7 @@ export class FishSystem {
     this.position.set(pose.x, pose.y, pose.z);
     quatFromYawPitchRoll(pose.yaw, pose.pitch, pose.roll, this.quat, 0);
     this.quaternion.fromArray(this.quat);
+    if (limpFrom !== null && limpWeight > 0) this.quaternion.slerp(limpFrom, limpWeight);
     return true;
   }
 

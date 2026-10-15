@@ -9,14 +9,19 @@ import {
   type SimHostOptions,
 } from './bridge.ts';
 import type { Collider } from '@aquarium/shared';
-import type { Point3 } from './decor.ts';
+import { compileCollider, type Point3 } from './decor.ts';
 import {
+  angelfish,
   ARCHETYPES,
   benchmarkConfig,
   blueTang,
+  bronzeCorydoras,
+  cherryShrimp,
+  neonTetra,
   REEF_ANCHORS,
   REEF_DECOR,
   REEF_TANK,
+  SHOW_TANK,
   spawnMany,
   yellowTang,
 } from './fixtures.ts';
@@ -253,6 +258,61 @@ describe('sim worker bridge', () => {
     const expected = new Float32Array(local.count * SNAPSHOT_STRIDE);
     local.writeSnapshot(expected);
     expect(Array.from(remote.data)).toEqual(Array.from(expected));
+  });
+
+  it('moves fish out of a rock moved onto them through the worker, not out of where it was', async () => {
+    const rockAt = (x: number): Collider => ({
+      id: 'decor:rock',
+      hard: true,
+      kind: 'box',
+      center: [x, 0.1, 0],
+      halfExtents: [0.12, 0.1, 0.12],
+      rotationY: 0,
+      rounding: 0.02,
+    });
+    const config: WorldConfig = {
+      seed: 1,
+      tank: SHOW_TANK,
+      species: [neonTetra, bronzeCorydoras, cherryShrimp, angelfish],
+      decor: [rockAt(-0.3)],
+      fish: [
+        ...spawnMany(neonTetra.id, 12),
+        ...spawnMany(bronzeCorydoras.id, 4),
+        ...spawnMany(cherryShrimp.id, 8),
+        ...spawnMany(angelfish.id, 2),
+      ],
+    };
+    const { client } = connect();
+    await client.init(config);
+    const local = new World(config);
+    const n = new Float64Array(3);
+    const oldRock = compileCollider(rockAt(-0.3));
+    const newRock = compileCollider(rockAt(0.3));
+    const inside = (data: Float32Array, rock: typeof newRock): number => {
+      let count = 0;
+      for (let k = 0; k < data.length / SNAPSHOT_STRIDE; k++) {
+        const o = k * SNAPSHOT_STRIDE;
+        const x = data[o + SnapshotField.PosX] ?? Number.NaN;
+        const y = data[o + SnapshotField.PosY] ?? Number.NaN;
+        const z = data[o + SnapshotField.PosZ] ?? Number.NaN;
+        if (rock.sample(x, y, z, n) < 0) count++;
+      }
+      return count;
+    };
+    const settled = await stepCollecting(client, 900, 900);
+    expect(inside(settled.snapshot.data, newRock)).toBeGreaterThan(0);
+    expect(inside(settled.snapshot.data, oldRock)).toBe(0);
+
+    client.setDecor([rockAt(0.3)]);
+    const moved = await stepCollecting(client, 1, 901);
+    expect(inside(moved.snapshot.data, newRock)).toBe(0);
+
+    for (let t = 0; t < 900; t++) local.step();
+    local.setDecor([rockAt(0.3)]);
+    local.step();
+    const expected = new Float32Array(local.count * SNAPSHOT_STRIDE);
+    local.writeSnapshot(expected);
+    expect(Array.from(moved.snapshot.data)).toEqual(Array.from(expected));
   });
 
   it('applies lure commands exactly as a local world would', async () => {

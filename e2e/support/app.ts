@@ -73,8 +73,9 @@ export async function awaitLoaded(page: Page, timeout = SCENE_TIMEOUT_MS): Promi
   await expect(loadingOverlay(page)).toHaveCount(0, { timeout });
 }
 
-export async function openTank(page: Page): Promise<void> {
-  await page.goto('/?tier=low&backend=webgl');
+/** `e2e` also exposes the camera pose, swimming species and sim colliders on the canvas. */
+export async function openTank(page: Page, { e2e = false } = {}): Promise<void> {
+  await page.goto(e2e ? '/?tier=low&backend=webgl&e2e' : '/?tier=low&backend=webgl');
   await awaitLoaded(page);
   await expect(dockButton(page, 'Feed')).toBeEnabled({ timeout: SCENE_TIMEOUT_MS });
 }
