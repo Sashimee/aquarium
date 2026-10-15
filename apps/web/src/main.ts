@@ -177,6 +177,16 @@ async function boot(): Promise<void> {
   });
 
   liveFish = fish;
+  if (exposePose) {
+    let shownSpecies: readonly string[] | null = null;
+    engine.onFrame(() => {
+      const species = fish.swimmingSpecies();
+      if (species === shownSpecies) return;
+      shownSpecies = species;
+      if (species === null) delete canvas.dataset['fishSpecies'];
+      else canvas.dataset['fishSpecies'] = species.join(',');
+    });
+  }
   const feedGate = new FeedGate();
   let firstSceneMounted = (): void => undefined;
   const sceneMounted = new Promise<void>((resolve) => {
