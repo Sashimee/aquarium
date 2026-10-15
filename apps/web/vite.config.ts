@@ -1,9 +1,10 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from 'vite';
 import { ktx2WorkerPlugin } from './build/ktx2-worker-plugin.ts';
+import { tankPreloadPlugin } from './build/tank-preload-plugin.ts';
 
 export default defineConfig({
-  plugins: [ktx2WorkerPlugin()],
+  plugins: [ktx2WorkerPlugin(), tankPreloadPlugin()],
   build: {
     target: ['es2022', 'safari16'],
     sourcemap: false,

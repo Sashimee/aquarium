@@ -75,7 +75,10 @@ async function boot(): Promise<void> {
   let modules: Awaited<typeof tank>;
   let engine: Engine;
   try {
-    modules = await tank;
+    modules = await tank.catch((cause: unknown) => {
+      events.emit('engine:error', { message: 'The tank code failed to load', cause });
+      throw new Error('The tank code failed to load. Reload the page to try again.', { cause });
+    });
     engine = await modules.Engine.create(container, {
       options: parseEngineOptions(window.location.search),
       events,
