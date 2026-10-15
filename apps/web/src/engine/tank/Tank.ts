@@ -434,9 +434,16 @@ export class Tank {
     await renderer.compileAsync(this.undersideMesh, camera, scene);
   }
 
-  /** Draws the surface reflection for this frame's camera; call it before the scene is drawn. */
-  renderSurfaceReflection(renderer: WebGPURenderer, scene: Scene, camera: PerspectiveCamera): void {
-    this.reflection.render(renderer, scene, camera);
+  /**
+   * Draws the surface reflection for this frame's camera; call it before the scene is drawn.
+   * Returns whether it drew.
+   */
+  renderSurfaceReflection(
+    renderer: WebGPURenderer,
+    scene: Scene,
+    camera: PerspectiveCamera,
+  ): boolean {
+    return this.reflection.render(renderer, scene, camera);
   }
 
   /**

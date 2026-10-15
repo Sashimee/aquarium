@@ -25,6 +25,7 @@ import { installRoomLighting, DEFAULT_HDRI_URL } from './environment';
 import { createSharedKtx2, type Ktx2Textures } from './ktx2';
 import { EventBus, type BackendKind, type EngineEvents, type EngineEventBus } from './events';
 import { CullPrewarm } from './cullPrewarm';
+import { ReflectedShadow } from './reflectedShadow';
 import { buildOrRelease, DisposeStack } from './lifecycle';
 import type { EngineOptions } from './options';
 import { qualityProfile } from './quality/profile';
@@ -140,7 +141,7 @@ export class Engine {
   private sceneRevisionValue = 0;
   /** Later tier changes warm what they turn on themselves. */
   private warmedUp = false;
-  private reflectedShadowSize = 0;
+  private readonly reflectedShadow = new ReflectedShadow();
   private gpuMs: number | null = null;
   private readonly gpuTiming: boolean;
   private lastGpuMs: number | null = null;
@@ -508,23 +509,10 @@ export class Engine {
     if (nowMs - this.stats.since >= STATS_INTERVAL_MS) this.emitStats(nowMs);
   }
 
-  /**
-   * The hood's shadow map does not depend on the view, but three redraws it once per camera and
-   * frame: the mirrored camera uses the last one drawn for the scene camera. Not after the map
-   * was resized, though: three only reallocates it when it is drawn, so the reflection's objects
-   * would bind the old texture once and keep it after it is freed.
-   */
   private renderSurfaceReflection(): void {
-    const shadow = this.hood.shadow;
-    const autoUpdate = shadow.autoUpdate;
-    const shadowSize = this.hood.castShadow ? shadow.mapSize.x : 0;
-    shadow.autoUpdate = autoUpdate && shadowSize !== this.reflectedShadowSize;
-    this.reflectedShadowSize = shadowSize;
-    try {
-      this.tank.renderSurfaceReflection(this.renderer, this.scene, this.camera);
-    } finally {
-      shadow.autoUpdate = autoUpdate;
-    }
+    this.reflectedShadow.draw(this.hood.shadow, this.hood.castShadow, () =>
+      this.tank.renderSurfaceReflection(this.renderer, this.scene, this.camera),
+    );
   }
 
   /** Timestamp queries resolve asynchronously; the result lands on a later frame. */
