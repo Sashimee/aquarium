@@ -1,0 +1,49 @@
+{
+  "behaviour": {
+    "boldness": 0.15,
+    "curiosity": 0.3,
+    "depthBand": [0.3, 0.8],
+    "perceptionFovDeg": 320,
+    "perceptionRangeM": 0.4,
+    "preferredZone": "mid",
+    "refuge": {
+      "afterStartleS": 60
+    },
+    "schooling": {
+      "minGroup": 2,
+      "tightenWhenStartled": false,
+      "topologicalNeighbours": 2
+    },
+    "territorial": false,
+    "traits": ["shoal", "cave-dweller"]
+  },
+  "biome": "reef",
+  "commonName": "Firefish",
+  "id": "firefish",
+  "lifecycle": {
+    "ammoniaPerBioloadPerHour": 0.001,
+    "ammoniaTolerance": 0.1,
+    "bioload": 0.4,
+    "birthSizeM": 0.03,
+    "diet": ["brine-shrimp", "flakes", "pellets"],
+    "growthPerDay": 0.00005,
+    "healthLossPerHourStarving": 0.0085,
+    "healthRecoveryPerHour": 0.004,
+    "hungerPerHour": 0.0072,
+    "lifespanDays": 1460,
+    "maxSizeM": 0.075,
+    "starvationHungerThreshold": 0.75
+  },
+  "locomotion": {
+    "bodyLengthM": 0.065,
+    "cruiseSpeedMps": 0.03,
+    "gait": "hover",
+    "massKg": 0.004,
+    "maxPitchDeg": 50,
+    "maxSpeedMps": 1,
+    "maxTurnRateDegPerS": 540,
+    "strouhal": 0.3,
+    "swimmingMode": "subcarangiform"
+  },
+  "scientificName": "Nemateleotris magnifica"
+}

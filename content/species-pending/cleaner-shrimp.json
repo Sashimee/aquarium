@@ -1,0 +1,41 @@
+{
+  "behaviour": {
+    "boldness": 0.4,
+    "curiosity": 0.5,
+    "depthBand": [0, 0.4],
+    "perceptionFovDeg": 300,
+    "perceptionRangeM": 0.2,
+    "preferredZone": "bottom",
+    "territorial": false,
+    "traits": ["cave-dweller"]
+  },
+  "biome": "reef",
+  "commonName": "Skunk cleaner shrimp",
+  "id": "cleaner-shrimp",
+  "lifecycle": {
+    "ammoniaPerBioloadPerHour": 0.001,
+    "ammoniaTolerance": 0.09,
+    "bioload": 0.15,
+    "birthSizeM": 0.02,
+    "diet": ["brine-shrimp", "flakes", "pellets", "bloodworms"],
+    "growthPerDay": 0.00004,
+    "healthLossPerHourStarving": 0.0085,
+    "healthRecoveryPerHour": 0.004,
+    "hungerPerHour": 0.0055,
+    "lifespanDays": 1000,
+    "maxSizeM": 0.055,
+    "starvationHungerThreshold": 0.75
+  },
+  "locomotion": {
+    "bodyLengthM": 0.045,
+    "cruiseSpeedMps": 0.05,
+    "gait": "forage",
+    "massKg": 0.002,
+    "maxPitchDeg": 90,
+    "maxSpeedMps": 0.5,
+    "maxTurnRateDegPerS": 720,
+    "strouhal": 0.3,
+    "swimmingMode": "subcarangiform"
+  },
+  "scientificName": "Lysmata amboinensis"
+}

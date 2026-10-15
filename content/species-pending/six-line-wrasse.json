@@ -1,0 +1,41 @@
+{
+  "behaviour": {
+    "boldness": 0.6,
+    "curiosity": 0.7,
+    "depthBand": [0.05, 0.55],
+    "perceptionFovDeg": 300,
+    "perceptionRangeM": 0.4,
+    "preferredZone": "bottom",
+    "territorial": true,
+    "traits": ["cave-dweller"]
+  },
+  "biome": "reef",
+  "commonName": "Six-line wrasse",
+  "id": "six-line-wrasse",
+  "lifecycle": {
+    "ammoniaPerBioloadPerHour": 0.001,
+    "ammoniaTolerance": 0.12,
+    "bioload": 0.5,
+    "birthSizeM": 0.035,
+    "diet": ["brine-shrimp", "flakes", "pellets", "bloodworms"],
+    "growthPerDay": 0.00006,
+    "healthLossPerHourStarving": 0.0085,
+    "healthRecoveryPerHour": 0.004,
+    "hungerPerHour": 0.0068,
+    "lifespanDays": 2190,
+    "maxSizeM": 0.08,
+    "starvationHungerThreshold": 0.75
+  },
+  "locomotion": {
+    "bodyLengthM": 0.07,
+    "cruiseSpeedMps": 0.06,
+    "gait": "hover",
+    "massKg": 0.015,
+    "maxPitchDeg": 45,
+    "maxSpeedMps": 0.7,
+    "maxTurnRateDegPerS": 420,
+    "strouhal": 0.3,
+    "swimmingMode": "labriform"
+  },
+  "scientificName": "Pseudocheilinus hexataenia"
+}

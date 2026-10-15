@@ -1,0 +1,1 @@
+Species whose 3D model is not built yet. Nothing loads this directory, so the shop and sim do not see them. A species graduates by moving its JSON into `content/species/` in the PR that lands its model, together with its `content.test.ts` roster row and its `sizes.test.ts` `ADULT_MAX` entry.

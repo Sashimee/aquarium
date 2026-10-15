@@ -1,0 +1,41 @@
+{
+  "behaviour": {
+    "boldness": 0.3,
+    "curiosity": 0.3,
+    "depthBand": [0, 0.2],
+    "perceptionFovDeg": 300,
+    "perceptionRangeM": 0.25,
+    "preferredZone": "bottom",
+    "territorial": false,
+    "traits": ["cave-dweller"]
+  },
+  "biome": "freshwater",
+  "commonName": "Bristlenose pleco",
+  "id": "bristlenose-pleco",
+  "lifecycle": {
+    "ammoniaPerBioloadPerHour": 0.001,
+    "ammoniaTolerance": 0.2,
+    "bioload": 0.8,
+    "birthSizeM": 0.03,
+    "diet": ["algae-wafer", "pellets", "flakes"],
+    "growthPerDay": 0.00008,
+    "healthLossPerHourStarving": 0.0085,
+    "healthRecoveryPerHour": 0.004,
+    "hungerPerHour": 0.0055,
+    "lifespanDays": 2555,
+    "maxSizeM": 0.091,
+    "starvationHungerThreshold": 0.75
+  },
+  "locomotion": {
+    "bodyLengthM": 0.08,
+    "cruiseSpeedMps": 0.06,
+    "gait": "forage",
+    "massKg": 0.02,
+    "maxPitchDeg": 75,
+    "maxSpeedMps": 0.6,
+    "maxTurnRateDegPerS": 300,
+    "strouhal": 0.3,
+    "swimmingMode": "subcarangiform"
+  },
+  "scientificName": "Ancistrus cirrhosus"
+}

@@ -17,6 +17,11 @@ Curated for T05 (#5), checked 2026-10-12. Ranks are by fit for a photorealistic 
 | Bronze corydoras | only candidate is inaccurate | `wm-cory-aeneus-ack210`, `wm-cory-aeneus-ark`, `wm-cory-aeneus-gabs-01`, `wm-cory-aeneus-gabs-03` (CC BY-SA) |
 | Royal gramma | no model exists | `wm-gramma-257593001`, `wm-gramma-365520074`, `wm-gramma-loreto-llez` (CC BY-SA) |
 | Banggai cardinalfish | only wrong-species models | `wm-banggai-53953454`, `wm-banggai-holleday`, `wm-banggai-stang-8zz`, `wm-banggai-stang-10zz` (CC BY-SA) |
+| Harlequin rasbora | no model exists | `wm-rasbora-vassil`, `wm-rasbora-roy` |
+| Six-line wrasse | no model exists | `wm-sixline-huffman` |
+| Firefish | no model exists | `wm-firefish-karelj` |
+| Cherry shrimp | only cooked-prawn models; shrimp are not fish | `wm-cherry-dagostino-1`, `wm-cherry-dagostino-2` (procedural shrimp) |
+| Skunk cleaner shrimp | no model of the species | `wm-cleaner-huffman`, `wm-cleaner-caruso`, `wm-cleaner-schofield` (procedural shrimp) |
 | Anemone (host) | no photoreal free model | procedural TSL |
 
 ## CC-BY-SA (allowed for reference photos only)
@@ -196,6 +201,72 @@ Registered as LPS stand-ins so the scene has some large-polyp coral meanwhile; n
 
 **Decision: pick `ambientcg-Ground101`** (CC0, 2K PBR, tagged beige/white/fine). Poly Haven's sand textures (`sand_01..03`, `dense_sand`, `coast_sand_01..05`, `playground_sand`, `aerial_sand`) all read brown or grey. ambientCG Ground092A/B, 096A/B and 027 are pale as well but strongly rippled or pitted, which looks wrong tiled on a tank floor.
 
+## Extended roster (issue #24)
+
+Checked 2026-10-15. Licence, author and downloadable flag from the Sketchfab API model record; Commons licences from the file page metadata (API `extmetadata`). Renders are the Sketchfab thumbnails on the linked pages (not committed). Picks are downloaded and in the manifest; other candidates are listed only. Searches run on Sketchfab (CC0 and CC-BY filters) and Commons.
+
+### Discus (Symphysodon aequifasciatus)
+
+**Decision: pick `sketchfab-f623d697`**, alternate colourway `sketchfab-e284e187`.
+
+| # | Candidate | Author | Licence | Faces | Texture | Anatomy | Verdict |
+|---|---|---|---|---|---|---|---|
+| 1 | [Discus symphysodon](https://sketchfab.com/3d-models/f623d69769b249a2b55025c000c97499) | Chenchanchong | CC-BY 4.0 | 8,033 | 4 materials, 4096 maps (about 60 MB), reticulated turquoise | tall round disc, long dorsal and anal fins, red eye | PICK: downscale to 2048 or less, needs the spine rig |
+| 2 | [Discus 3](https://sketchfab.com/3d-models/e284e187712e4e00b001ce773398ad51) | Comitre | CC-BY 4.0 | 3,456 | 1024x512 photo texture, red and white | plausible disc, rigged (11 joints), authored in cm | alternate colourway for tintVariation |
+| 3 | [Discus_1](https://sketchfab.com/3d-models/07ca0c407dc54be5a449b84eafa8977e) | Comitre | CC-BY 4.0 | 3,092 | orange stripes | fine | not downloaded, spare |
+
+Other candidates seen and not used: the same mesh as #1 re-uploaded by adyatttt (`184c187d`), Comitre's Discus_Animated (`ab3afd24`, 1,276 faces) and a game drone tagged `warrobots` that is not a fish. Reference photos on Commons exist under CC0 (Bernard Spragg) and CC-BY 4.0 (Freekingdom300) but are not in the manifest because the model has its own texture.
+
+### Harlequin rasbora (Trigonostigma heteromorpha)
+
+**Decision: fallback: procedural loft**
+
+No Sketchfab model with an allowed licence exists (searches: rasbora, trigonostigma, tropical fish). Reference photos (in manifest, downloaded): `wm-rasbora-vassil` (CC0, lateral, 1989x1304, the best) and `wm-rasbora-roy` (CC BY 4.0, Zakqary Roy, 2048x904). CC BY-SA lateral photos also exist (Lascorz, NasserHalaweh) and are unused. Key traits for the loft: copper-pink body, a black pennant-shaped patch over the rear half, red-edged eye, clear fins.
+
+### Bristlenose pleco (Ancistrus sp.)
+
+**Decision: pick `sketchfab-65133817`, with caveats**
+
+| # | Candidate | Author | Licence | Faces | Texture | Anatomy | Verdict |
+|---|---|---|---|---|---|---|---|
+| 1 | [Ancistrus sp. Orange](https://sketchfab.com/3d-models/65133817c7f740cbb17e92989a55da72) | faerbogdan99 | CC-BY 4.0 | 40,000 | 2048 PBR, blocky base colour | correct genus: sucker mouth, cheek odontodes, snout tentacles | PICK: orange morph, so recolour or fall back to a loft if a lit render looks poor |
+| 2 | [Hypostomus / Coroncoro](https://sketchfab.com/3d-models/3c4466d5f0ce4b2e81a692ba89807ced) | alzarac | CC-BY 4.0 | 39,968 | 1024, spotted common pleco | good scan, wrong genus | reject: species (downloaded to the raw cache, not in the manifest) |
+
+I checked only the Sketchfab thumbnail and the downloaded texture, not a lit side render. The pipeline should decimate to 10k triangles or less, build the spine rig, and tint the body brown with pale spots using `wm-ancistrus-ladenthin` (CC0, head-on close-up of the tentacles and spot pattern, not lateral). Lateral Commons photos of Ancistrus are CC BY-SA and unused.
+
+### Cherry shrimp (Neocaridina davidi)
+
+**Decision: fallback: procedural shrimp (not the fish loft)**
+
+| # | Candidate | Author | Licence | Faces | Texture | Anatomy | Verdict |
+|---|---|---|---|---|---|---|---|
+| 1 | [Shrimp [Low Poly]](https://sketchfab.com/3d-models/652650059ff949b39bbed3bfc34d5e87) | Fecalis | CC-BY 4.0 | 2,404 | boiled-prawn look | wrong species and cooked | reject |
+| 2 | [generic shrimp](https://sketchfab.com/3d-models/2daef0734a134f35a708581fe33f23f0) | farizulazman | CC-BY 4.0 | 36,780 | generic | not checked beyond the thumbnail | reject: not a dwarf freshwater shrimp |
+
+Reference photos (in manifest, downloaded): `wm-cherry-dagostino-1` and `wm-cherry-dagostino-2` (CC BY 4.0, Uccio D'Agostino, 4288x2848). A CC0 Commons photo was dropped because it is tiny and brownish.
+
+### Six-line wrasse (Pseudocheilinus hexataenia)
+
+**Decision: fallback: procedural loft**
+
+No Sketchfab model with an allowed licence exists (searches: wrasse, pseudocheilinus). Reference photo (in manifest, downloaded): `wm-sixline-huffman` (CC BY 3.0, Lonnie Huffman, 1867x1244, lateral). It is the only good allowed-licence photo: the others are CC BY 2.0 (rejected by `assets:check`), CC BY-SA 4.0 or public-domain drawings. Key traits: six orange lines on blue-violet, green caudal with a spot at the peduncle, orange snout.
+
+### Firefish (Nemateleotris magnifica)
+
+**Decision: fallback: procedural loft**
+
+No Sketchfab model with an allowed licence exists (searches: firefish, nemateleotris, dartfish, fire goby, goby). Reference photo (in manifest, downloaded): `wm-firefish-karelj` (CC0, Karelj, 2400x1699). It is the only allowed-licence photo, and the long first dorsal spine is cropped out of the frame, so model it from the body outline (white-lilac front, orange-red rear, red dorsal and caudal fins edged black, trailing pelvic fin). The other Commons firefish photos are CC BY 2.0 or CC BY-SA.
+
+### Skunk cleaner shrimp (Lysmata amboinensis)
+
+**Decision: fallback: procedural shrimp (not the fish loft)**
+
+No model of the species exists under an allowed licence. The CC0 ffish.asia scans cover other shrimp only (for example [Saron marmoratus](https://sketchfab.com/3d-models/a4863d7e05ce4117bfda48ddf6af8af4), 282k faces, wrong species and too heavy), so at most they serve as a body-shape reference. Reference photos (in manifest, downloaded): `wm-cleaner-huffman` (CC BY 3.0), `wm-cleaner-caruso` and `wm-cleaner-schofield` (CC BY 4.0). Key traits: red body with a white dorsal stripe, white antennae and white-tipped legs.
+
+### CC-BY-SA candidates for Alex to decide
+
+Not used. Each would improve a fallback texture if approved: lateral photos of Ancistrus (the only licensed lateral ones), harlequin rasbora (Lascorz, NasserHalaweh), firefish and six-line wrasse (for example by Diego Delso). Without them the firefish and the six-line wrasse have one usable reference photo each.
+
 ## Downloaded-file check (Sketchfab)
 
 Measured from each downloaded `scene.gltf`. Rigged means the glTF has at least one skin; the clips are what the author shipped and are not the swim cycles we need.
@@ -221,5 +292,8 @@ Measured from each downloaded `scene.gltf`. Rigged means the glTF has at least o
 | Table coral (`sketchfab-9ff5270c`) | 100,000 | 3 images, largest 2048x2048 | 0 / 0 | 0 |
 | Goniopora (`sketchfab-6b652ae5`) | 100,000 | 3 images, largest 2048x2048 | 0 / 0 | 0 |
 | Fungia (`sketchfab-e72cb3bd`) | 178,319 | none (vertex colours) | 0 / 0 | 0 |
+| Discus (`sketchfab-f623d697`) | 8,033 | 8 images, largest 4096x4096 | 0 / 0 | 0 |
+| Discus 3 (`sketchfab-e284e187`) | 3,456 | 2 images, largest 1024x512 | 1 / 11 | 1 |
+| Ancistrus sp. Orange (`sketchfab-65133817`) | 40,000 | 3 images, largest 2048x2048 | 0 / 0 | 0 |
 
 Effect on the picks: none of the picks flipped. The neon tetra, betta and both guppies ship skeletons (30, 53, 44 and 191 joints) that the pipeline can reuse or replace with a spine rig; the clownfish, both tangs and the angelfish are unrigged static meshes and need the procedural spine rig. The angelfish uses unlit materials, the water plant has no textures, and the brain coral is 8192x8192 and must be downscaled. Blue and yellow tang stay as weak candidates for the auditor to weigh against the loft fallback.
