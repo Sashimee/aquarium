@@ -211,7 +211,7 @@ Checked 2026-10-15. Licence, author and downloadable flag from the Sketchfab API
 
 | # | Candidate | Author | Licence | Faces | Texture | Anatomy | Verdict |
 |---|---|---|---|---|---|---|---|
-| 1 | [Discus symphysodon](https://sketchfab.com/3d-models/f623d69769b249a2b55025c000c97499) | Chenchanchong | CC-BY 4.0 | 8,033 | 3 materials, 4096 maps (about 60 MB), reticulated turquoise | tall round disc, long dorsal and anal fins, red eye | PICK: downscale to 2048 or less, needs the spine rig |
+| 1 | [Discus symphysodon](https://sketchfab.com/3d-models/f623d69769b249a2b55025c000c97499) | Chenchanchong | CC-BY 4.0 | 8,033 | 4 materials (3 textured), 4096 maps (about 60 MB), reticulated turquoise | tall round disc, long dorsal and anal fins, red eye | PICK: downscale to 2048 or less, needs the spine rig |
 | 2 | [Discus 3](https://sketchfab.com/3d-models/e284e187712e4e00b001ce773398ad51) | Comitre | CC-BY 4.0 | 3,456 | 1024x512 photo texture, red and white | plausible disc, rigged (11 joints), authored in cm | alternate colourway for tintVariation |
 | 3 | [Discus_1](https://sketchfab.com/3d-models/07ca0c407dc54be5a449b84eafa8977e) | Comitre | CC-BY 4.0 | 3,092 | orange stripes | fine | not downloaded, spare |
 
