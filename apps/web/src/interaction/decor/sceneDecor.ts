@@ -20,6 +20,7 @@ export class SceneDecor<S> {
   private stopped = false;
   private wanted = false;
   private failed = false;
+  private loading: S | null = null;
   private readonly offs: (() => void)[];
 
   constructor(
@@ -54,8 +55,11 @@ export class SceneDecor<S> {
   mount(scene: S): void {
     if (this.stopped) return;
     this.scene = scene;
+    if (this.loading === scene) return;
+    this.loading = scene;
     this.load().then(
       (create) => {
+        if (this.loading === scene) this.loading = null;
         if (this.stopped || this.scene !== scene || this.decor) return;
         this.decor = create(scene, this.saved);
         this.setFailed(null);
@@ -64,8 +68,9 @@ export class SceneDecor<S> {
         }
       },
       (cause: unknown) => {
+        if (this.loading === scene) this.loading = null;
         this.report('Decor failed to load', cause);
-        if (!this.stopped && this.scene === scene) {
+        if (!this.stopped && this.scene === scene && !this.decor) {
           this.setFailed('Decorating could not load. Check your connection and try again.');
         }
       },

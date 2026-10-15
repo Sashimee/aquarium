@@ -163,6 +163,26 @@ describe('SceneDecor', () => {
       expect(seen.at(-1)).toBeNull();
     });
 
+    it('starts one load for two quick retries and shows no error after it succeeds', async () => {
+      let attempts = 0;
+      const { bus, decor, made, factory } = setup(() => {
+        attempts++;
+        if (attempts === 1) return Promise.reject(new Error('chunk 404'));
+        if (attempts === 2) return Promise.resolve(factory);
+        return Promise.reject(new Error('second press'));
+      });
+      const seen: (string | null)[] = [];
+      bus.on('decor:load-failed', ({ message }) => seen.push(message));
+      decor.mount('reef');
+      await settle();
+      bus.emit('decor:request-mode', { active: true });
+      bus.emit('decor:request-mode', { active: true });
+      await settle();
+      expect(attempts).toBe(2);
+      expect(made).toHaveLength(1);
+      expect(seen.at(-1)).toBeNull();
+    });
+
     it('reports each failed retry and keeps no system', async () => {
       const { bus, decor } = setup(() => Promise.reject(new Error('chunk 404')));
       const seen: (string | null)[] = [];

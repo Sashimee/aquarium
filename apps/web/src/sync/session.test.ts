@@ -468,6 +468,7 @@ describe('sign-out safety', () => {
     let fail: (e: unknown) => void = () => undefined;
     api.care.mockReturnValue(new Promise<Tank>((_r, reject) => (fail = reject)));
     const pending = session.careAction({ type: 'water_change' });
+    await vi.waitFor(() => expect(api.care).toHaveBeenCalled());
     await session.setUser(null);
     fail(apiError(500, 'internal'));
     await pending;
@@ -508,6 +509,23 @@ describe('sign-out safety', () => {
     await session.setUser(null);
     await switching;
     expect(session.getState()).toMatchObject({ phase: 'anonymous', notice: null });
+    session.dispose();
+  });
+
+  it('sends nothing that was still queued when the user signs out', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    let release: (tank: Tank) => void = () => undefined;
+    api.care.mockImplementationOnce(() => new Promise<Tank>((resolve) => (release = resolve)));
+    api.care.mockResolvedValue(tankFixture());
+    const first = session.careAction({ type: 'water_change' });
+    const second = session.careAction({ type: 'gravel_vacuum' });
+    await vi.waitFor(() => expect(api.care).toHaveBeenCalledTimes(1));
+    await session.setUser(null);
+    release(tankFixture());
+    await Promise.all([first, second]);
+    expect(api.care).toHaveBeenCalledTimes(1);
+    expect(session.getState().error).toBeNull();
     session.dispose();
   });
 

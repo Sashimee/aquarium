@@ -8,6 +8,7 @@ const STEP = 0.02;
 const SAVE_TEXT = {
   idle: '',
   saving: 'Saving the layout.',
+  retrying: 'Could not reach the server. Trying again.',
   saved: 'Layout saved.',
   error: 'The layout could not be saved.',
 } as const;

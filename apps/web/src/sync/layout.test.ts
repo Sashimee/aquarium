@@ -65,14 +65,14 @@ describe('LayoutSaver', () => {
     expect(saver.busy).toBe(false);
   });
 
-  it('retries a network failure with backoff and then succeeds quietly', async () => {
+  it('retries a network failure with backoff, says so, and then succeeds', async () => {
     vi.useFakeTimers();
     const send = vi.fn().mockRejectedValueOnce(apiError(0, 'network')).mockResolvedValue(undefined);
     const { saver, reports } = setup(send);
     saver.submit('t1', layoutAt(0.1));
     await vi.advanceTimersByTimeAsync(500);
     expect(send).toHaveBeenCalledTimes(2);
-    expect(reports.map((r) => r.status)).toEqual(['saving', 'saved']);
+    expect(reports.map((r) => r.status)).toEqual(['saving', 'retrying', 'saved']);
   });
 
   it('reports a rejected layout once and offers a retry that resends it', async () => {
@@ -168,6 +168,39 @@ describe('LayoutSaver', () => {
     await vi.advanceTimersByTimeAsync(1000);
     expect(send).toHaveBeenCalledTimes(1);
     expect(reports.map((r) => r.status)).toEqual(['saving', 'idle']);
+  });
+
+  it('holds back only the tank whose save failed', async () => {
+    vi.useFakeTimers();
+    const send = vi
+      .fn()
+      .mockRejectedValueOnce(apiError(400, 'validation_failed'))
+      .mockResolvedValue(undefined);
+    const { saver } = setup(send);
+    saver.submit('t1', layoutAt(0.1));
+    await vi.advanceTimersByTimeAsync(500);
+    expect(saver.busyFor('t1')).toBe(true);
+    expect(saver.busyFor('t2')).toBe(false);
+    saver.submit('t2', layoutAt(0.2));
+    await vi.advanceTimersByTimeAsync(500);
+    expect(saver.busyFor('t1')).toBe(true);
+    expect(saver.busyFor('t2')).toBe(false);
+  });
+
+  it('keeps every failed tank for Retry', async () => {
+    vi.useFakeTimers();
+    const send = vi.fn().mockRejectedValue(apiError(400, 'validation_failed'));
+    const { saver } = setup(send);
+    saver.submit('t1', layoutAt(0.1));
+    await vi.advanceTimersByTimeAsync(500);
+    saver.submit('t2', layoutAt(0.2));
+    await vi.advanceTimersByTimeAsync(500);
+    send.mockResolvedValue(undefined);
+    saver.retry();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(send).toHaveBeenCalledWith('t1', layoutAt(0.1));
+    expect(send).toHaveBeenCalledWith('t2', layoutAt(0.2));
+    expect(saver.busy).toBe(false);
   });
 
   it('stays busy while a failed save waits for Retry', async () => {

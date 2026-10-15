@@ -38,7 +38,7 @@ export interface DecorViewState {
   problem: string | null;
 }
 
-export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+export type SaveStatus = 'idle' | 'saving' | 'retrying' | 'saved' | 'error';
 
 /** Typed bus between the React overlay and the camera/input layer. */
 export interface InteractionEvents {
