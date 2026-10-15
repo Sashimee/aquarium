@@ -124,6 +124,17 @@ const COVERAGE_SAMPLES = 4;
 /** Golden-ratio step that decorrelates consecutive frames of the noise. */
 const FRAME_NOISE_STEP = 0.618034;
 
+/**
+ * Asset materials with this name are not skin: they keep the roughness, metalness and colour the
+ * asset authored instead of taking the species roughness and the per-fish tint. Matched by name
+ * because the asset pipeline already names the pleco's glossy eye spheres so (`glossy-eyes.ts`).
+ */
+export const AUTHORED_SURFACE_MATERIAL = 'Eye';
+
+export function keepsAuthoredSurface(source: MeshStandardMaterial): boolean {
+  return source.name === AUTHORED_SURFACE_MATERIAL;
+}
+
 /** smoothstep(a, b, x) and its derivative in x. */
 function smoothRamp(a: number, b: number, x: Node<'float'>): [Node<'float'>, Node<'float'>] {
   const t = clamp(x.sub(a).div(b - a), 0, 1);
@@ -205,8 +216,15 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
     const { source, profile } = config;
     this.name = `fish:${config.assetId}:${source.name}`;
     this.side = DoubleSide;
-    this.roughness = profile.roughness;
-    this.metalness = 0;
+    if (keepsAuthoredSurface(source)) {
+      this.roughness = source.roughness;
+      this.roughnessMap = source.roughnessMap;
+      this.metalness = source.metalness;
+      this.metalnessMap = source.metalnessMap;
+    } else {
+      this.roughness = profile.roughness;
+      this.metalness = 0;
+    }
     this.normalMap = source.normalMap;
     this.normalScale.copy(source.normalScale);
     this.clearcoatRoughness = 0.08;
@@ -350,7 +368,8 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
     const finAmount = smoothstep(0.08, 0.5, fin.x).mul(membrane);
 
     const sample = source.map !== null ? texture(source.map) : vec4(1);
-    const base = sample.rgb.mul(color(source.color)).mul(tint);
+    const authored = sample.rgb.mul(color(source.color));
+    const base = keepsAuthoredSurface(source) ? authored : authored.mul(tint);
     const grey = vec3(luminance(base).mul(0.8).add(0.06));
     const albedo = mix(base, grey, pale.mul(0.85)).toVar();
     this.colorNode = albedo;
