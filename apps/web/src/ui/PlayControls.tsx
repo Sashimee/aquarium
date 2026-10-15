@@ -1,17 +1,21 @@
 import { foodTypeSchema, type FoodType } from '@aquarium/shared';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { HAND_FEED_PORTION, type PlayTool } from '../interaction/events';
 import { useBridge, useLatest, usePlayTool } from './context';
 import { useActiveTank } from './session';
 
-const TOOLS: readonly { tool: PlayTool; label: string }[] = [
-  { tool: 'tap', label: 'Tap glass' },
-  { tool: 'feed', label: 'Hand-feed' },
-  { tool: 'laser', label: 'Laser' },
-  { tool: 'wand', label: 'Bubbles' },
+const TOOLS: readonly { tool: PlayTool; label: string; hint: string }[] = [
+  { tool: 'tap', label: 'Tap glass', hint: 'Startle the fish' },
+  { tool: 'feed', label: 'Hand-feed', hint: 'Hold food at the surface' },
+  { tool: 'laser', label: 'Laser', hint: 'Fish chase the dot' },
+  { tool: 'wand', label: 'Bubbles', hint: 'Blow a stream of bubbles' },
 ];
 
-const NET: { tool: PlayTool; label: string } = { tool: 'net', label: 'Net' };
+const NET: { tool: PlayTool; label: string; hint: string } = {
+  tool: 'net',
+  label: 'Net',
+  hint: 'Lift out a fish that has died',
+};
 
 const FOOD_LABEL: Record<FoodType, string> = {
   flakes: 'Flakes',
@@ -22,38 +26,42 @@ const FOOD_LABEL: Record<FoodType, string> = {
   'algae-wafer': 'Algae wafer',
 };
 
-export function PlayControls() {
+export function useEngineReadyForPlay(): boolean {
   const { interaction } = useBridge();
-  const tool = usePlayTool();
-  const tank = useActiveTank();
-  const tools = tank?.fish.some((f) => f.status === 'dead') ? [...TOOLS, NET] : TOOLS;
+  return useLatest(interaction, 'play:ready') !== undefined;
+}
+
+/** Keeps the engine's selected food in step for the whole session, not only while the feed sheet is open. */
+export function useFood(): [FoodType, (food: FoodType) => void] {
+  const { interaction } = useBridge();
   const [food, setFood] = useState<FoodType>('flakes');
-  const [message, setMessage] = useState('');
-  const ready = useLatest(interaction, 'play:ready') !== undefined;
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // A live region only speaks when its text changes, so clear it first to repeat a message.
-  const announce = useCallback((text: string) => {
-    if (timer.current) clearTimeout(timer.current);
-    setMessage('');
-    timer.current = setTimeout(() => setMessage(text), 60);
-  }, []);
-
-  useEffect(
-    () => () => {
-      if (timer.current) clearTimeout(timer.current);
-    },
-    [],
-  );
-
+  const ready = useEngineReadyForPlay();
   useEffect(() => {
     interaction.emit('feed:select', { food });
   }, [interaction, food, ready]);
+  return [food, setFood];
+}
+
+const TOAST_MS = 4500;
+
+/** A live region only speaks when its text changes, so the text is cleared first to repeat a message. */
+export function FeedToast() {
+  const { interaction } = useBridge();
+  const [message, setMessage] = useState('');
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clear = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    const announce = (text: string) => {
+      if (timer.current) clearTimeout(timer.current);
+      if (clear.current) clearTimeout(clear.current);
+      setMessage('');
+      timer.current = setTimeout(() => setMessage(text), 60);
+      clear.current = setTimeout(() => setMessage(''), TOAST_MS);
+    };
     const offs = [
-      interaction.on('feed:dropped', ({ food: f }) =>
-        announce(`Fed ${FOOD_LABEL[f].toLowerCase()}.`),
+      interaction.on('feed:dropped', ({ food }) =>
+        announce(`Fed ${FOOD_LABEL[food].toLowerCase()}.`),
       ),
       interaction.on('feed:rejected', ({ reason, retryAfterMs }) =>
         announce(
@@ -63,15 +71,30 @@ export function PlayControls() {
         ),
       ),
     ];
-    return () => offs.forEach((off) => off());
-  }, [interaction, announce]);
+    return () => {
+      offs.forEach((off) => off());
+      if (timer.current) clearTimeout(timer.current);
+      if (clear.current) clearTimeout(clear.current);
+    };
+  }, [interaction]);
 
   return (
-    <div role="group" aria-label="Play and feed" className="play-controls">
+    <div role="status" aria-live="polite" className="toast-live">
+      {message && <p className="toast play-message">{message}</p>}
+    </div>
+  );
+}
+
+export function FeedPanel({ food, onFood }: { food: FoodType; onFood(food: FoodType): void }) {
+  const { interaction } = useBridge();
+  const ready = useEngineReadyForPlay();
+  return (
+    <div className="feed-controls">
+      <label htmlFor="food-select">Food</label>
       <select
-        aria-label="Food"
+        id="food-select"
         value={food}
-        onChange={(e) => setFood(foodTypeSchema.parse(e.target.value))}
+        onChange={(e) => onFood(foodTypeSchema.parse(e.target.value))}
       >
         {foodTypeSchema.options.map((f) => (
           <option key={f} value={f}>
@@ -81,25 +104,39 @@ export function PlayControls() {
       </select>
       <button
         type="button"
+        className="primary big"
         disabled={!ready}
         onClick={() => interaction.emit('feed:request', { food, portion: HAND_FEED_PORTION })}
       >
-        Feed
+        Drop food
       </button>
+      <p className="hint">A little at a time. Uneaten food rots and poisons the water.</p>
+    </div>
+  );
+}
+
+export function PlayPanel() {
+  const { interaction } = useBridge();
+  const tool = usePlayTool();
+  const tank = useActiveTank();
+  const ready = useEngineReadyForPlay();
+  const tools = tank?.fish.some((f) => f.status === 'dead') ? [...TOOLS, NET] : TOOLS;
+  return (
+    <div role="group" aria-label="Play tools" className="tool-grid">
       {tools.map((t) => (
         <button
           key={t.tool}
           type="button"
+          className="tool"
+          aria-label={t.label}
           aria-pressed={tool === t.tool}
           disabled={!ready}
           onClick={() => interaction.emit('play:request-tool', { tool: t.tool })}
         >
-          {t.label}
+          <strong>{t.label}</strong>
+          <span>{t.hint}</span>
         </button>
       ))}
-      <span role="status" aria-live="polite" className="play-message">
-        {ready ? message : 'The tank is still loading.'}
-      </span>
     </div>
   );
 }

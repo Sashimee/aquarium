@@ -1,28 +1,54 @@
+import type { Biome } from '@aquarium/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useBridge, useDecorState } from './context';
 
-export type Panel = 'none' | 'tank' | 'decor';
+export const PANELS = [
+  'feed',
+  'play',
+  'decor',
+  'shop',
+  'care',
+  'tanks',
+  'report',
+  'account',
+] as const;
+
+export type OpenPanel = (typeof PANELS)[number];
+export type Panel = 'none' | OpenPanel;
+
+export interface PanelState {
+  panel: Panel;
+  /** The kind of tank the player asked to start from the type switch; shown in the tanks panel. */
+  newTank: Biome | null;
+}
 
 export type PanelAction =
-  | { type: 'toggle-tank' }
-  | { type: 'open-tank' }
-  | { type: 'toggle-decor' }
+  | { type: 'toggle'; panel: OpenPanel }
+  | { type: 'open'; panel: OpenPanel }
+  | { type: 'new-tank'; biome: Biome }
   | { type: 'close' }
-  | { type: 'decor-changed'; active: boolean };
+  | { type: 'decor-changed'; active: boolean }
+  | { type: 'route-changed'; home: boolean };
 
-export function nextPanel(current: Panel, action: PanelAction): Panel {
+export const CLOSED: PanelState = { panel: 'none', newTank: null };
+
+const opened = (panel: OpenPanel): PanelState => ({ panel, newTank: null });
+
+export function nextPanel(current: PanelState, action: PanelAction): PanelState {
   switch (action.type) {
-    case 'toggle-tank':
-      return current === 'tank' ? 'none' : 'tank';
-    case 'open-tank':
-      return 'tank';
-    case 'toggle-decor':
-      return current === 'decor' ? 'none' : 'decor';
+    case 'toggle':
+      return current.panel === action.panel ? CLOSED : opened(action.panel);
+    case 'open':
+      return opened(action.panel);
+    case 'new-tank':
+      return { panel: 'tanks', newTank: action.biome };
     case 'close':
-      return 'none';
+      return CLOSED;
     case 'decor-changed':
-      if (action.active) return 'decor';
-      return current === 'decor' ? 'none' : current;
+      if (action.active) return opened('decor');
+      return current.panel === 'decor' ? CLOSED : current;
+    case 'route-changed':
+      return action.home ? current : CLOSED;
   }
 }
 
@@ -31,21 +57,26 @@ export function decorRequestFor(before: Panel, after: Panel): { active: boolean 
   return { active: after === 'decor' };
 }
 
-// Decor mode lives in the engine, so changes it makes on its own (Done, a failed start) are folded
-// back in on a flip of its state rather than by level, which would replay a stale sticky value.
-export function usePanels(): { panel: Panel; dispatch(action: PanelAction): void } {
+/**
+ * Decorate mode lives in the engine. A start requested before the scene is ready is queued there,
+ * so the decor panel can be open while the engine is still inactive. Changes the engine makes on
+ * its own (a started or finished edit) are folded back in on a flip of its state rather than by
+ * level, which would replay a stale sticky value.
+ */
+export function usePanels(): PanelState & { dispatch(action: PanelAction): void } {
   const { interaction } = useBridge();
   const engineActive = useDecorState()?.active ?? false;
-  const [panel, setPanel] = useState<Panel>('none');
-  const current = useRef<Panel>('none');
+  const [state, setState] = useState<PanelState>(CLOSED);
+  const current = useRef<PanelState>(CLOSED);
 
   const dispatch = useCallback(
     (action: PanelAction) => {
       const before = current.current;
       const after = nextPanel(before, action);
+      if (after.panel === before.panel && after.newTank === before.newTank) return;
       current.current = after;
-      setPanel(after);
-      const request = decorRequestFor(before, after);
+      setState(after);
+      const request = decorRequestFor(before.panel, after.panel);
       if (request && action.type !== 'decor-changed') {
         interaction.emit('decor:request-mode', request);
       }
@@ -60,5 +91,5 @@ export function usePanels(): { panel: Panel; dispatch(action: PanelAction): void
     dispatch({ type: 'decor-changed', active: engineActive });
   }, [engineActive, dispatch]);
 
-  return { panel, dispatch };
+  return { ...state, dispatch };
 }

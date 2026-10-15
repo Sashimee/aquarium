@@ -1,4 +1,5 @@
 import { expect, test, type Browser, type Page } from '@playwright/test';
+import { openAccount } from './support/app.ts';
 
 interface SentMail {
   to: string;
@@ -8,6 +9,8 @@ interface SentMail {
 
 const PASSWORD = 'correct horse battery';
 const NEW_PASSWORD = 'tangerine sailboat window';
+
+const signedIn = (page: Page) => page.getByRole('button', { name: 'Account, Reset Tester' });
 
 async function open(page: Page, url: string): Promise<void> {
   await page.goto(url, { waitUntil: 'domcontentloaded' });
@@ -82,6 +85,7 @@ test.describe('password reset', () => {
     await signUp(page, email);
     await open(page, await waitForLink(page, email, /verify/i));
     await expect(page.getByRole('heading', { name: 'Email verified' })).toBeVisible();
+    await openAccount(page);
     await page.getByRole('button', { name: 'Sign out' }).click();
     await expect(page.getByRole('link', { name: 'Create account' })).toBeVisible();
 
@@ -105,7 +109,7 @@ test.describe('password reset', () => {
     await expect(page.getByRole('alert').filter({ hasText: /\S/ })).toBeVisible();
     await submitSignIn(page, email, NEW_PASSWORD);
     await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByRole('navigation', { name: 'Account' })).toContainText('Reset Tester');
+    await expect(signedIn(page)).toBeVisible();
   });
 
   test('a used reset link lands on the expired state', async ({ page }) => {
@@ -161,7 +165,7 @@ test.describe('password reset', () => {
     await page.getByRole('link', { name: 'Sign in' }).last().click();
     await submitSignIn(page, email, NEW_PASSWORD);
     await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByRole('navigation', { name: 'Account' })).toContainText('Reset Tester');
+    await expect(signedIn(page)).toBeVisible();
     await phone.context().close();
   });
 
@@ -173,7 +177,7 @@ test.describe('password reset', () => {
     await signUp(page, email);
     await open(page, await waitForLink(page, email, /verify/i));
     await expect(page.getByRole('heading', { name: 'Email verified' })).toBeVisible();
-    await expect(page.getByRole('navigation', { name: 'Account' })).toContainText('Reset Tester');
+    await expect(signedIn(page)).toBeVisible();
 
     const desktop = await newContextPage(browser);
     await open(desktop, '/forgot-password');
@@ -186,14 +190,12 @@ test.describe('password reset', () => {
     await page.getByLabel('New password', { exact: true }).fill(NEW_PASSWORD);
     await page.getByRole('button', { name: 'Set password' }).click();
     await expect(page.getByRole('heading', { name: 'Password changed' })).toBeVisible();
-    await expect(page.getByRole('navigation', { name: 'Account' })).not.toContainText(
-      'Reset Tester',
-    );
+    await expect(signedIn(page)).toBeHidden();
 
     await page.getByRole('link', { name: 'Sign in' }).last().click();
     await expect(page).toHaveURL(/\/sign-in$/);
     await submitSignIn(page, email, NEW_PASSWORD);
     await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByRole('navigation', { name: 'Account' })).toContainText('Reset Tester');
+    await expect(signedIn(page)).toBeVisible();
   });
 });

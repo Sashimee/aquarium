@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
   newIdentity,
+  openAccount,
   PASSWORD,
   registerVerifiedUser,
   verificationLinkFor,
@@ -14,6 +15,9 @@ async function skipSceneAssets(page: Page): Promise<void> {
     return /\.(js|css)$/.test(pathname) ? route.continue() : route.abort();
   });
 }
+
+const signedInAs = (page: Page, name: string) =>
+  page.getByRole('button', { name: `Account, ${name}` });
 
 async function submitSignIn(page: Page, email: string): Promise<void> {
   await page.getByLabel('Email').fill(email);
@@ -39,18 +43,19 @@ test('sign up, verify through the outbox, then sign in', async ({ page }) => {
     page.getByText('Email not verified'),
     'sign-in is refused before verifying',
   ).toBeVisible();
-  await expect(account.getByText(name)).toBeHidden();
+  await expect(signedInAs(page, name)).toBeHidden();
 
   await page.goto(await verificationLinkFor(email));
   await expect(page.getByRole('heading', { name: 'Email verified' })).toBeVisible();
-  await expect(account.getByText(name)).toBeVisible();
+  await expect(signedInAs(page, name)).toBeVisible();
 
+  await openAccount(page);
   await account.getByRole('button', { name: 'Sign out' }).click();
   await expect(account.getByRole('link', { name: 'Sign in' })).toBeVisible();
 
   await account.getByRole('link', { name: 'Sign in' }).click();
   await submitSignIn(page, email);
-  await expect(account.getByText(name)).toBeVisible();
+  await expect(signedInAs(page, name)).toBeVisible();
   await expect.poll(() => new URL(page.url()).pathname).toBe('/');
 });
 
@@ -79,12 +84,13 @@ test('a passkey on a virtual authenticator registers and signs in', async ({ pag
   await expect(page.getByText('Passkey added.')).toBeVisible();
   expect(await credentials()).toHaveLength(1);
 
+  await openAccount(page);
   await account.getByRole('button', { name: 'Sign out' }).click();
   await expect(account.getByRole('link', { name: 'Sign in' })).toBeVisible();
 
   await account.getByRole('link', { name: 'Sign in' }).click();
   await page.getByRole('button', { name: 'Sign in with a passkey' }).click();
-  await expect(account.getByText(name)).toBeVisible();
+  await expect(signedInAs(page, name)).toBeVisible();
   await expect.poll(() => new URL(page.url()).pathname).toBe('/');
   await expect.poll(async () => (await credentials())[0]?.signCount).toBeGreaterThan(0);
 });
