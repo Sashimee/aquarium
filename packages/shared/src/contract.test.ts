@@ -177,6 +177,11 @@ describe('tank and fish', () => {
     expect(
       tankSchema.parse({ ...tank, futureField: 1, fish: [{ ...fish, futureField: 1 }] }),
     ).toEqual(parsed);
+    const futureDecor = [{ ...tank.decorLayout[0], futureField: 1 }];
+    expect(tankSchema.parse({ ...tank, decorLayout: futureDecor }).decorLayout).toEqual(
+      parsed.decorLayout,
+    );
+    expect(updateTankRequestSchema.safeParse({ decorLayout: futureDecor }).success).toBe(false);
     expect(tankSchema.safeParse({ ...tank, biome: 'pond' }).success).toBe(false);
     expect(tankSchema.safeParse({ ...tank, water: { ...tank.water, algae: 2 } }).success).toBe(
       false,

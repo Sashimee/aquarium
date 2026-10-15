@@ -24,6 +24,8 @@ export const decorItemSchema = z.strictObject({
 });
 export type DecorItem = z.infer<typeof decorItemSchema>;
 
+export const decorItemResponseSchema = z.object(decorItemSchema.shape);
+
 // FNV-1a over the placement, matching the web's former coral placement key, so rows saved before
 // tintSeed existed keep the colour they already show.
 export function legacyTintSeed(item: Pick<DecorItem, 'position' | 'rotationY'>): number {
@@ -35,6 +37,7 @@ export function legacyTintSeed(item: Pick<DecorItem, 'position' | 'rotationY'>):
 }
 
 export const decorLayoutSchema = z.array(decorItemSchema).max(200);
+export const decorLayoutResponseSchema = z.array(decorItemResponseSchema).max(200);
 export type DecorLayout = z.infer<typeof decorLayoutSchema>;
 
 export const PROCEDURAL_EUPHYLLIA_ID = /^euphyllia-(hammer|torch)-(0|[1-9]\d{0,8})$/;
