@@ -1,5 +1,5 @@
 import type { DecorItem } from '@aquarium/shared';
-import { BoxGeometry, MeshStandardMaterial, Matrix4, Vector3 } from 'three/webgpu';
+import { BoxGeometry, InstancedMesh, MeshStandardMaterial, Matrix4, Vector3 } from 'three/webgpu';
 import { describe, expect, it, vi } from 'vitest';
 import { EventBus } from '../engine/events';
 import { DecorWorld, type DecorScenePort } from '../interaction/decor/world';
@@ -138,15 +138,12 @@ describe('moveHardDecor index mapping', () => {
   const wood = freshwaterItem('driftwood-branch', [0.3, 0.05, 0]);
   const fernA = freshwaterItem('java-fern', [-0.2, 0.06, 0.1]);
   const fernB = freshwaterItem('java-fern', [-0.4, 0.06, 0.1]);
-  const kinds = new Map([
-    ['boulder-01', 'rock'],
-    ['driftwood-branch', 'driftwood'],
-    ['java-fern', 'plant'],
-  ]);
-  const movable = [rock, fernA, wood, fernB].map((item) => ({
-    item,
-    kind: kinds.get(item.assetId) as string,
-  }));
+  const movable = [
+    { item: rock, kind: 'rock' },
+    { item: fernA, kind: 'plant' },
+    { item: wood, kind: 'driftwood' },
+    { item: fernB, kind: 'plant' },
+  ];
 
   function freshwaterItem(assetId: string, position: [number, number, number]): DecorItem {
     return { assetId, position, rotationY: 0, scale: 8 };
@@ -169,7 +166,8 @@ describe('moveHardDecor index mapping', () => {
     expect([...plantSlots.keys()]).toEqual([1, 3]);
     for (const [index, colliderIndex] of plantSlots) {
       const collider = colliders[colliderIndex];
-      const item = (movable[index] as { item: DecorItem }).item;
+      const item = movable[index]?.item;
+      if (!item) throw new Error('slot without a movable item');
       if (collider?.kind !== 'capsule') throw new Error('expected a plant capsule');
       expect(collider.hard).toBe(false);
       expect(collider.a[0]).toBeCloseTo(item.position[0]);
@@ -186,9 +184,8 @@ describe('moveHardDecor index mapping', () => {
     const target = locateMovable(movable, 3);
     if (target?.kind !== 'plant') throw new Error('expected a plant target');
     group.setEntry(target.ordinal, layoutPlantEntry({ ...fernB, position: [0.5, 0.06, 0.2] }));
-    const mesh = group.object.children[0] as unknown as {
-      getMatrixAt(i: number, m: Matrix4): void;
-    };
+    const mesh = group.object.children[0];
+    if (!(mesh instanceof InstancedMesh)) throw new Error('expected an instanced mesh');
     const at = (i: number) => {
       const m = new Matrix4();
       mesh.getMatrixAt(i, m);
@@ -197,5 +194,18 @@ describe('moveHardDecor index mapping', () => {
     expect(at(0).x).toBeCloseTo(-0.2);
     expect(at(1).x).toBeCloseTo(0.5);
     expect(at(2).x).toBeCloseTo(0.9);
+  });
+
+  it('stops vouching for its layout once a plant is moved, so a reset rebuilds it', () => {
+    const model: LoadedModel = {
+      primitives: [
+        { geometry: new BoxGeometry(0.1, 0.3, 0.1), material: new MeshStandardMaterial() },
+      ],
+    };
+    const preset = [layoutPlantEntry(fernA), layoutPlantEntry(fernB)];
+    const group = new PlantGroup('java-fern', model, preset, new CurrentField());
+    expect(group.layoutSignature).toBe(JSON.stringify(preset));
+    group.setEntry(0, layoutPlantEntry({ ...fernA, position: [0.5, 0.06, 0.2] }));
+    expect(group.layoutSignature).not.toBe(JSON.stringify(preset));
   });
 });

@@ -78,7 +78,6 @@ interface EuphylliaItem {
 interface BuiltPlants {
   readonly groups: PlantGroup[];
   readonly created: PlantGroup[];
-  readonly sigs: Map<string, string>;
 }
 
 interface VisualKey {
@@ -129,7 +128,6 @@ export class TankScene {
   private readonly presetMovable: readonly { item: DecorItem; kind: string }[];
   private movablePlants = false;
   private plantSlots = new Map<number, number>();
-  private plantSigs = new Map<string, string>();
   private layoutVersion = 0;
   private readonly releases: (() => void)[] = [];
 
@@ -357,7 +355,7 @@ export class TankScene {
       const key = this.installedKey;
       if (this.disposed || !key) return;
       const hardscape = new Hardscape(this.preset.biome, this.coralGlowNode);
-      let built: BuiltPlants = { groups: [], created: [], sigs: new Map() };
+      let built: BuiltPlants = { groups: [], created: [] };
       try {
         for (const { item, kind } of next) {
           if (kind === PLANT_KIND) continue;
@@ -378,7 +376,6 @@ export class TankScene {
         }
         this.hardscape = hardscape;
         this.plantGroups = built.groups;
-        this.plantSigs = built.sigs;
         this.hardItems = next;
         this.layoutVersion++;
         this.plantSlots = new Map(movable.plantSlots);
@@ -483,14 +480,12 @@ export class TankScene {
     const assetIds = new Set([...layout.keys(), ...this.patchEntries.keys()]);
     const groups: PlantGroup[] = [];
     const created: PlantGroup[] = [];
-    const sigs = new Map<string, string>();
     try {
       for (const assetId of assetIds) {
         const own = layout.get(assetId) ?? [];
         const sig = JSON.stringify(own);
-        sigs.set(assetId, sig);
         const kept = reuse.find((g) => g.assetId === assetId);
-        if (kept && this.plantSigs.get(assetId) === sig) {
+        if (kept?.layoutSignature === sig) {
           groups.push(kept);
           continue;
         }
@@ -508,7 +503,7 @@ export class TankScene {
       for (const group of created) group.dispose();
       throw error;
     }
-    return { groups, created, sigs };
+    return { groups, created };
   }
 
   private async loadSubstrate(textureSize: 1024 | 2048): Promise<SubstrateInstall | null> {
@@ -566,7 +561,7 @@ export class TankScene {
     items: readonly { item: DecorItem; kind: string }[],
   ): Promise<boolean | 'layout-changed'> {
     const hardscape = new Hardscape(this.preset.biome, this.coralGlowNode);
-    let built: BuiltPlants = { groups: [], created: [], sigs: new Map() };
+    let built: BuiltPlants = { groups: [], created: [] };
     const anemones: AnemoneGroup[] = [];
     const euphyllias: EuphylliaGroup[] = [];
     let substrate: SubstrateInstall | null = null;
@@ -608,8 +603,11 @@ export class TankScene {
       for (const anemone of anemones) anemone.dispose();
       for (const coral of euphyllias) coral.dispose();
       if (substrate) this.discardSubstrate(substrate);
-      await this.evictUnused();
-      return this.disposed || isStale() ? false : 'layout-changed';
+      if (this.disposed || isStale()) {
+        await this.evictUnused();
+        return false;
+      }
+      return 'layout-changed';
     }
     this.hardscape?.dispose();
     for (const group of this.plantGroups) group.dispose();
@@ -617,7 +615,6 @@ export class TankScene {
     for (const coral of this.euphyllias) coral.dispose();
     this.hardscape = hardscape;
     this.plantGroups = built.groups;
-    this.plantSigs = built.sigs;
     this.anemones = anemones;
     this.euphyllias = euphyllias;
     this.engine.scene.add(hardscape.group);
