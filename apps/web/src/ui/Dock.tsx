@@ -21,6 +21,11 @@ export function Dock({ panel, onPress }: { panel: Panel; onPress(panel: OpenPane
   const tool = usePlayTool();
   return (
     <nav className="dock" aria-label="Actions">
+      {!ready && (
+        <p id="dock-loading" className="dock-note" role="status">
+          The tank is still loading.
+        </p>
+      )}
       {ITEMS.map(({ panel: id, label, Icon, needsEngine }) => {
         const waiting = needsEngine && !ready;
         return (
@@ -29,10 +34,10 @@ export function Dock({ panel, onPress }: { panel: Panel; onPress(panel: OpenPane
             type="button"
             className={id === 'play' && tool !== 'tap' ? 'dock-item glow' : 'dock-item'}
             data-opener={id}
-            aria-pressed={panel === id}
+            aria-expanded={panel === id}
             aria-controls={panel === id ? `panel-${id}` : undefined}
+            aria-describedby={waiting ? 'dock-loading' : undefined}
             disabled={waiting}
-            title={waiting ? 'The tank is still loading' : undefined}
             onClick={() => onPress(id)}
           >
             <Icon />

@@ -1,9 +1,17 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { EventBus, type EngineEvents } from '../engine/events';
 import { STICKY_INTERACTION_EVENTS, type InteractionEvents } from '../interaction/events';
-import { UiProviders, useCameraMode, useEngineReady, useLatest } from './context';
+import { createApiClient } from './api';
+import {
+  UiProviders,
+  useAuth,
+  useCameraMode,
+  useEngineReady,
+  useLatest,
+  type AuthState,
+} from './context';
 
 function bridge() {
   return {
@@ -44,5 +52,35 @@ describe('late-mounting UI hooks', () => {
     const b = bridge();
     const html = render(b, () => String(useLatest(b.interaction, 'play:ready') === undefined));
     expect(html).toContain('true');
+  });
+});
+
+describe('sign-out', () => {
+  function captureAuth(signOut: () => Promise<void>): AuthState {
+    let captured: AuthState | undefined;
+    const api = { ...createApiClient(), signOut };
+    renderToStaticMarkup(
+      createElement(UiProviders, {
+        bridge: bridge(),
+        api,
+        children: createElement(() => {
+          captured = useAuth();
+          return null;
+        }),
+      }),
+    );
+    if (!captured) throw new Error('the probe did not render');
+    return captured;
+  }
+
+  it('asks the server to end the session', async () => {
+    const signOut = vi.fn().mockResolvedValue(undefined);
+    await captureAuth(signOut).signOut();
+    expect(signOut).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a failed sign-out instead of pretending the session ended', async () => {
+    const failure = new Error('offline');
+    await expect(captureAuth(vi.fn().mockRejectedValue(failure)).signOut()).rejects.toBe(failure);
   });
 });

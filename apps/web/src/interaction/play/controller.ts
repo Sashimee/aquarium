@@ -32,10 +32,11 @@ export interface PlayDeps {
   readonly gate: FeedGate;
   readonly events: EventBus<InteractionEvents>;
   startle?: ((stimulus: StimulusLike) => void) | undefined;
+  /** The swimming fish under the ray, as a position for the camera to follow. */
+  pickFish?: ((ray: Ray) => (() => Vec3 | null) | null) | undefined;
   /** Picks the fish under the ray; the fish system emits `net:tap` for a catchable one. */
   netTap?: ((ray: Ray) => void) | undefined;
   toSim(x: number, y: number, z: number, out: Float64Array): void;
-  /** TODO(#72): the sim has no lure input yet; wire this to `bridge.setLure` once it lands. */
   lure?(position: Vec3 | null): void;
   setLaserDot(point: Vec3 | null): void;
   now(): number;
@@ -101,6 +102,12 @@ export class PlayController {
       return;
     }
     if (this.activeTool === 'tap') this.tapGlass(ray);
+  }
+
+  /** The fish under a canvas point, or null; the camera follows it. */
+  fishAt(x: number, y: number): (() => Vec3 | null) | null {
+    const ray = this.deps.rayAt(x, y);
+    return ray ? (this.deps.pickFish?.(ray) ?? null) : null;
   }
 
   pointerDown(x: number, y: number): void {

@@ -121,6 +121,11 @@ async function boot(): Promise<void> {
       if (sceneDecor.system?.active) sceneDecor.system.tap(e.x, e.y);
       else play?.controller.tap(e.x, e.y);
     },
+    longPress: (e) => {
+      if (e.button !== 0 || sceneDecor.system?.active) return;
+      const target = play?.controller.fishAt(e.x, e.y);
+      if (target) rig.focusOn(target);
+    },
     claimDrag: () =>
       sceneDecor.system?.active
         ? sceneDecor.system.claimsDrag
@@ -143,6 +148,10 @@ async function boot(): Promise<void> {
   const stopRequests = interaction.on('camera:request-mode', ({ mode }) => {
     if (mode === 'dive') rig.dive();
     else if (mode === 'orbit') rig.exit();
+    else {
+      const target = liveFish?.sim.anyFish();
+      if (target) rig.focusOn(target);
+    }
   });
   const exposePose = new URLSearchParams(window.location.search).has('e2e');
   engine.onFrame((deltaS) => {

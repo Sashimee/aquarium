@@ -89,6 +89,13 @@ export function CameraControls() {
       <button type="button" aria-pressed={mode === 'dive'} onClick={() => request('dive')}>
         Dive
       </button>
+      <button
+        type="button"
+        aria-pressed={mode === 'focus'}
+        onClick={() => request(mode === 'focus' ? 'orbit' : 'focus')}
+      >
+        Follow
+      </button>
     </div>
   );
 }

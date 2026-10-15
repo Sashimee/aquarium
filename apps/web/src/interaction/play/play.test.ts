@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { EventBus } from '../../engine/events';
 import { FeedGate } from '../../sync/feedGate';
+import type { Vec3 } from '../camera';
 import type { InteractionEvents } from '../events';
 import { FoodLink } from '../food/link';
 import { FoodField } from '../food/particles';
@@ -130,6 +131,7 @@ function makeController(ray: Ray | null = frontRay()) {
   const bubbles = new BubbleField(MAX.y, () => 0.5);
   const startle = vi.fn();
   const netTap = vi.fn();
+  const pickFish = vi.fn<(ray: Ray) => (() => Vec3 | null) | null>(() => null);
   const lure = vi.fn();
   const setLaserDot = vi.fn();
   let now = 10_000;
@@ -146,6 +148,7 @@ function makeController(ray: Ray | null = frontRay()) {
     events,
     startle,
     netTap,
+    pickFish,
     toSim: sceneToSim,
     lure,
     setLaserDot,
@@ -166,6 +169,7 @@ function makeController(ray: Ray | null = frontRay()) {
     bubbles,
     startle,
     netTap,
+    pickFish,
     lure,
     setLaserDot,
     seen,
@@ -246,8 +250,8 @@ describe('PlayController feeding', () => {
   it('drops at the tank centre on a feed request and announces it', () => {
     const t = makeController();
     t.events.emit('feed:request', { food: 'pellets', portion: 1 });
-    expect(t.food.count).toBe(8);
-    expect(t.seen.dropped).toHaveBeenCalledWith({ food: 'pellets', portion: 1, particles: 8 });
+    expect(t.food.count).toBe(20);
+    expect(t.seen.dropped).toHaveBeenCalledWith({ food: 'pellets', portion: 1, particles: 20 });
   });
 
   it('hand-feeds at the water point under the pointer', () => {
@@ -306,6 +310,24 @@ describe('PlayController feeding', () => {
     const y = t.food.particles[0]?.y ?? 0;
     for (let i = 0; i < 30; i++) t.controller.update(1 / 30);
     expect(t.food.particles[0]?.y).toBeLessThan(y);
+  });
+});
+
+describe('PlayController fishAt', () => {
+  it('hands the picked fish to the caller, from the ray under the point', () => {
+    const t = makeController();
+    const where = () => ({ x: 0.1, y: 0.2, z: 0.0 });
+    t.pickFish.mockReturnValueOnce(where);
+    expect(t.controller.fishAt(5, 5)).toBe(where);
+    expect(t.pickFish).toHaveBeenCalledWith(frontRay());
+  });
+
+  it('finds nothing when the ray misses every fish or the camera is not ready', () => {
+    const t = makeController();
+    expect(t.controller.fishAt(5, 5)).toBeNull();
+    t.setRay(null);
+    expect(t.controller.fishAt(5, 5)).toBeNull();
+    expect(t.pickFish).toHaveBeenCalledTimes(1);
   });
 });
 

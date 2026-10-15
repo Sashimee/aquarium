@@ -52,7 +52,7 @@ test('Decorate pressed before the tank is ready still opens the editor', async (
   await page.goto('/?tier=low&backend=webgl', { waitUntil: 'domcontentloaded' });
   const toggle = dockButton(page, 'Decorate');
   await toggle.click();
-  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   await expect(page.getByRole('region', { name: 'Decorate the tank' })).toBeVisible({
     timeout: 60_000,
   });
