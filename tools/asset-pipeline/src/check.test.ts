@@ -92,6 +92,21 @@ describe('validateManifest', () => {
     });
 
     it.each([
+      ['wm-firefish-hobgood', 'firefish', 'Nick Hobgood (Nhobgood)', 'CC-BY-SA-3.0'],
+      ['wm-rasbora-dabrowski', 'harlequin-rasbora', 'Mariusz Dabrowski', 'CC-BY-SA-3.0'],
+      ['wm-sixline-delso-63', 'six-line-wrasse', 'Diego Delso', 'CC-BY-SA-4.0'],
+      ['wm-ancistrus-reis', 'bristlenose-pleco', 'Júlio Reis', 'CC-BY-SA-4.0'],
+      ['wm-ancistrus-l144-adolfoi', 'bristlenose-pleco', 'Corydoras-adolfoi', 'CC-BY-SA-4.0'],
+    ])('accepts the roster photo %s', (id, species, author, licence) => {
+      const photo = manifestAsset({ id, kind: 'reference-photo', species, author, licence });
+      expect(validateManifest(manifestOf(photo), `\`${id}\` ${author}`)).toEqual([]);
+      const wrongAuthor = { ...photo, author: 'Jane Doe' };
+      expect(validateManifest(manifestOf(wrongAuthor), `\`${id}\` Jane Doe`).join('\n')).toContain(
+        'only allowed for the approved reference-photo ids',
+      );
+    });
+
+    it.each([
       ['another id by the same author', { id: 'src-a' }],
       ['another species', { species: 'betta' }],
       ['a model instead of a photo', { kind: 'model' }],

@@ -5,7 +5,7 @@ import type { AssetIndex, OutputAsset } from './index-schema.ts';
 export const ALLOWED_LICENCES = ['CC0-1.0', 'CC-BY-3.0', 'CC-BY-4.0'] as const;
 export const SHARE_ALIKE_LICENCES = ['CC-BY-SA-3.0', 'CC-BY-SA-4.0'] as const;
 export const SHARE_ALIKE_KIND = 'reference-photo';
-/** CC-BY-SA is approved for exactly these reference photos (Corydoras aeneus, Gramma loreto, Pterapogon kauderni) and nothing else. */
+/** CC-BY-SA is approved for exactly these reference photos (Corydoras aeneus, Gramma loreto, Pterapogon kauderni, firefish, harlequin rasbora, six-line wrasse, bristlenose pleco) and nothing else. */
 export const SHARE_ALIKE_ALLOWLIST: readonly { id: string; species: string; author: string }[] = [
   {
     id: 'wm-cory-aeneus-gabs-01',
@@ -20,6 +20,11 @@ export const SHARE_ALIKE_ALLOWLIST: readonly { id: string; species: string; auth
   { id: 'wm-gramma-loreto-llez', species: 'royal-gramma', author: 'H. Zell (Llez)' },
   { id: 'wm-banggai-stang-8zz', species: 'banggai-cardinalfish', author: 'David J. Stang' },
   { id: 'wm-banggai-stang-10zz', species: 'banggai-cardinalfish', author: 'David J. Stang' },
+  { id: 'wm-firefish-hobgood', species: 'firefish', author: 'Nick Hobgood (Nhobgood)' },
+  { id: 'wm-rasbora-dabrowski', species: 'harlequin-rasbora', author: 'Mariusz Dabrowski' },
+  { id: 'wm-sixline-delso-63', species: 'six-line-wrasse', author: 'Diego Delso' },
+  { id: 'wm-ancistrus-reis', species: 'bristlenose-pleco', author: 'Júlio Reis' },
+  { id: 'wm-ancistrus-l144-adolfoi', species: 'bristlenose-pleco', author: 'Corydoras-adolfoi' },
 ];
 
 const sha256Schema = z.string().regex(/^[0-9a-f]{64}$/, 'must be 64 lowercase hex characters');

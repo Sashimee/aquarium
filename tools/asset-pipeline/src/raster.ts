@@ -154,6 +154,7 @@ export function rasterise(
           g = w0 * colors[ia * 3 + 1]! + w1 * colors[ib * 3 + 1]! + w2 * colors[ic * 3 + 1]!;
           b = w0 * colors[ia * 3 + 2]! + w1 * colors[ib * 3 + 2]! + w2 * colors[ic * 3 + 2]!;
         }
+        if (alpha < 0.04) continue;
         let pixelShade = shade;
         if (normals) {
           let sx2 = 0;
@@ -169,7 +170,6 @@ export function rasterise(
           const smooth = Math.abs((sx2 * light[0] + sy2 * light[1] + sz2 * light[2]) / norm);
           pixelShade = 0.35 + 0.65 * smooth;
         }
-        if (alpha < 0.04) continue;
         if (alpha > 0.9) depthBuffer[slot] = depth;
         const keep = alpha > 0.9 ? 0 : 1 - alpha;
         rgb[slot * 3] = Math.min(

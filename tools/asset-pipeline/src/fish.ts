@@ -14,7 +14,14 @@ import {
   type FinHints,
 } from './fins.ts';
 import { FIN_ID_ATTRIBUTE, FIN_IDS, FIN_MASK_ATTRIBUTE, type OutputAsset } from './index-schema.ts';
-import { extractParts, materialDefFrom, mergeParts, weldPart, type Part } from './parts.ts';
+import {
+  extractParts,
+  materialDefFrom,
+  mergeParts,
+  weldPart,
+  type MaterialDef,
+  type Part,
+} from './parts.ts';
 import { spotImage, tintImage, type SpotSpec, type TintSpec } from './finish.ts';
 import { renderSheet } from './raster.ts';
 import { bakeToWorldSpace, readGltf, type SkinPose } from './source.ts';
@@ -151,24 +158,41 @@ export async function writeDebugRender(
   repoRoot: string,
   id: string,
   parts: Part[],
+  materials: MaterialDef[],
 ): Promise<string> {
   const part = mergeParts(parts, parts[0]!.material);
   const rel = `debug/${id}.png`;
   const dir = join(repoRoot, 'tools', 'asset-pipeline', 'debug');
   mkdirSync(dir, { recursive: true });
+  const views = [
+    { view: 'side', pixelsAcross: 520 },
+    { view: 'top', pixelsAcross: 520 },
+    { view: 'front', pixelsAcross: 260 },
+  ] as const;
   const png = await renderSheet(
     {
       positions: part.positions,
       indices: part.indices,
       colors: finDebugColors(part.extra[FIN_MASK_ATTRIBUTE]!, part.extra[FIN_ID_ATTRIBUTE]!),
     },
-    [
-      { view: 'side', pixelsAcross: 520 },
-      { view: 'top', pixelsAcross: 520 },
-      { view: 'front', pixelsAcross: 260 },
-    ],
+    [...views],
   );
   writeFileSync(join(dir, `${id}.png`), png);
+
+  const image = materials.find((m) => m.name === part.material)?.baseColor?.image;
+  if (image) {
+    const textured = await renderSheet(
+      {
+        positions: part.positions,
+        indices: part.indices,
+        normals: part.normals,
+        uvs: part.uvs,
+      },
+      [...views],
+      { data: image.data, width: image.width, height: image.height, channels: 4 },
+    );
+    writeFileSync(join(dir, `${id}-textured.png`), textured);
+  }
   return rel;
 }
 
@@ -253,7 +277,7 @@ export async function buildSourceFish(recipe: FishRecipe, ctx: FishContext): Pro
       return { ...def, baseColor: { ...def.baseColor, image } };
     }),
   );
-  const debugRender = await writeDebugRender(ctx.repoRoot, recipe.id, normalised);
+  const debugRender = await writeDebugRender(ctx.repoRoot, recipe.id, normalised, materials);
   const built = buildDocument(recipe.id, normalised, materials);
   return emitAsset({
     outRoot: ctx.outRoot,

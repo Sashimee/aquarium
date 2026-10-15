@@ -35,9 +35,13 @@ export const UNRECORDED_MODIFICATION = 'modified (processed for web)';
 const FREE_LICENCES = new Set(['CC0-1.0', 'CC-BY-3.0', 'CC-BY-4.0']);
 
 const APPROVED_SHARE_ALIKE_AUTHORS = new Map([
-  ['bronze-corydoras', 'Gabriel Resende Veiga (GABS)'],
-  ['royal-gramma', 'H. Zell (Llez)'],
-  ['banggai-cardinalfish', 'David J. Stang'],
+  ['bronze-corydoras', ['Gabriel Resende Veiga (GABS)']],
+  ['royal-gramma', ['H. Zell (Llez)']],
+  ['banggai-cardinalfish', ['David J. Stang']],
+  ['firefish', ['Nick Hobgood (Nhobgood)']],
+  ['harlequin-rasbora', ['Mariusz Dabrowski']],
+  ['six-line-wrasse', ['Diego Delso']],
+  ['bristlenose-pleco', ['Júlio Reis', 'Corydoras-adolfoi']],
 ]);
 
 export const SHARE_ALIKE_NOTICE =
@@ -51,12 +55,11 @@ type ManifestAsset = z.infer<typeof manifestAssetSchema>;
 
 function assertLicenceAllowed(a: ManifestAsset): void {
   if (FREE_LICENCES.has(a.licence)) return;
-  const approvedAuthor = a.species ? APPROVED_SHARE_ALIKE_AUTHORS.get(a.species) : undefined;
+  const approvedAuthors = a.species ? APPROVED_SHARE_ALIKE_AUTHORS.get(a.species) : undefined;
   const shareAlikeOk =
     (a.licence === 'CC-BY-SA-3.0' || a.licence === 'CC-BY-SA-4.0') &&
     a.kind === 'reference-photo' &&
-    approvedAuthor !== undefined &&
-    a.author === approvedAuthor;
+    approvedAuthors?.includes(a.author) === true;
   if (!shareAlikeOk) {
     throw new Error(
       `Asset "${a.id}" has licence ${a.licence} (author ${a.author}), which is not allowed: ` +

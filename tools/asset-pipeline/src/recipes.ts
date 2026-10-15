@@ -121,7 +121,7 @@ export const FISH_RECIPES: FishRecipe[] = [
         mottleCells: 220,
         seed: 12,
       },
-      spots: { cell: 44, radius: 0.3, density: 0.55, colour: [178, 166, 134], seed: 5 },
+      spots: { cell: 30, radius: 0.27, density: 0.8, colour: [178, 166, 134], seed: 5 },
     },
     fallbackLengthM: 0.08,
     modifications: [
