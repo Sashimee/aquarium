@@ -53,6 +53,75 @@ jobs:
     name: e2e shard ${{ matrix.name }}
     if: ${{ github.event_name != 'pull_request' || startsWith(github.head_ref, 'chore/batch-') || contains(github.event.pull_request.labels.*.name, 'e2e') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: menus-phone-1
+            args: menus.spec
+            describe: menus on a phone
+            part: 1/4
+          - name: menus-phone-2
+            args: menus.spec
+            describe: menus on a phone
+            part: 2/4
+          - name: menus-phone-3
+            args: menus.spec
+            describe: menus on a phone
+            part: 3/4
+          - name: menus-phone-4
+            args: menus.spec
+            describe: menus on a phone
+            part: 4/4
+          - name: menus-mouse-1
+            args: menus.spec
+            describe: menus with a mouse
+            part: 1/2
+          - name: menus-mouse-2
+            args: menus.spec
+            describe: menus with a mouse
+            part: 2/2
+          - name: decor-death
+            args: decor.spec death.spec
+          - name: switch-tanks-feed
+            args: tank-type-switch.spec tanks.spec feed.spec
+          - name: care-auth-reset
+            args: care.spec auth.spec password-reset.spec password-reset-history.spec
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: aquarium
+          POSTGRES_PASSWORD: aquarium
+          POSTGRES_DB: aquarium_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aquarium"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://aquarium:aquarium@localhost:5432/aquarium_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm run --if-present assets:check
+
+  e2e-shard:
+    name: e2e shard ${{ matrix.name }}
+    if: ${{ github.event_name != 'pull_request' || startsWith(github.head_ref, 'chore/batch-') || contains(github.event.pull_request.labels.*.name, 'e2e') }}
+    runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
       fail-fast: false
@@ -94,20 +163,36 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm exec playwright install --with-deps chromium
-      - name: Record how many tests this shard selects
+      - name: Pick this shard's slice of the describe
+        if: ${{ matrix.part != '' }}
+        env:
+          PART: ${{ matrix.part }}
+          DESCRIBE: ${{ matrix.describe }}
+          SPEC: ${{ matrix.args }}
+        run: echo "E2E_GREP=$(node .github/scripts/e2e-slice.mjs "$PART" "$DESCRIBE" $SPEC)" >> "$GITHUB_ENV"
+      - name: Record which tests this shard selects
+        env:
+          SPEC: ${{ matrix.args }}
         run: |
-          mkdir shard-count
-          pnpm exec playwright test -c e2e/playwright.config.ts --list --reporter=list ${{ matrix.args }} \
-            | sed -nE 's/^Total: ([0-9]+) tests? in .*/\1/p' > shard-count/${{ matrix.name }}
-          test -s shard-count/${{ matrix.name }}
+          mkdir shard-tests
+          grep_args=()
+          if [ -n "$E2E_GREP" ]; then grep_args=("--grep=$E2E_GREP"); fi
+          pnpm exec playwright test -c e2e/playwright.config.ts --list --reporter=list $SPEC "${grep_args[@]}" \
+            | grep -E '^\s+\S+\.spec\.ts:[0-9]+:[0-9]+ › ' | sed -E 's/^\s+//' > shard-tests/${{ matrix.name }}.txt
+          test -s shard-tests/${{ matrix.name }}.txt
       - uses: actions/upload-artifact@v4
         with:
           name: e2e-count-${{ matrix.name }}
-          path: shard-count
+          path: shard-tests
           retention-days: 1
-      - run: pnpm run e2e ${{ matrix.args }}
+      - name: Run this shard
         env:
+          SPEC: ${{ matrix.args }}
           PLAYWRIGHT_BLOB_OUTPUT_DIR: ${{ github.workspace }}/blob-report
+        run: |
+          grep_args=()
+          if [ -n "$E2E_GREP" ]; then grep_args=("--grep=$E2E_GREP"); fi
+          pnpm run e2e $SPEC "${grep_args[@]}"
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
@@ -171,16 +256,38 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - uses: actions/download-artifact@v4
+        id: counts-1
+        continue-on-error: true
         with:
           pattern: e2e-count-*
-          path: shard-count
+          path: shard-tests
           merge-multiple: true
-      - name: Shards select exactly the tests that exist
+      - if: ${{ steps.counts-1.outcome == 'failure' }}
+        run: sleep 15
+      - uses: actions/download-artifact@v4
+        id: counts-2
+        if: ${{ steps.counts-1.outcome == 'failure' }}
+        continue-on-error: true
+        with:
+          pattern: e2e-count-*
+          path: shard-tests
+          merge-multiple: true
+      - if: ${{ steps.counts-1.outcome == 'failure' && steps.counts-2.outcome == 'failure' }}
+        run: sleep 30
+      - uses: actions/download-artifact@v4
+        if: ${{ steps.counts-1.outcome == 'failure' && steps.counts-2.outcome == 'failure' }}
+        with:
+          pattern: e2e-count-*
+          path: shard-tests
+          merge-multiple: true
+      - name: Every test runs in exactly one shard
         run: |
-          total=$(pnpm exec playwright test -c e2e/playwright.config.ts --list --reporter=list | sed -nE 's/^Total: ([0-9]+) tests? in .*/\1/p')
-          selected=$(cat shard-count/* | awk '{n+=$1} END {print n}')
-          echo "listed=$total selected=$selected"
-          test -n "$total" && test "$total" = "$selected" || { echo "::error::shards select $selected of $total e2e tests; fix the matrix args in ci.yml"; exit 1; }
+          pnpm exec playwright test -c e2e/playwright.config.ts --list --reporter=list \
+            | grep -E '^\s+\S+\.spec\.ts:[0-9]+:[0-9]+ › ' | sed -E 's/^\s+//' | sort > all-tests.txt
+          cat shard-tests/*.txt | sort > selected-tests.txt
+          echo "listed=$(wc -l < all-tests.txt) selected=$(wc -l < selected-tests.txt)"
+          test -s all-tests.txt
+          diff all-tests.txt selected-tests.txt || { echo "::error::shards must select every e2e test exactly once; fix the matrix in ci.yml"; exit 1; }
 
   docker:
     runs-on: ubuntu-latest
