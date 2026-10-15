@@ -363,14 +363,19 @@ describe('BiomeScene', () => {
     expect(h.built).toHaveLength(1);
     expect(h.mounted).toEqual([]);
     expect(h.root.children).toHaveLength(0);
+    expect(h.errors).toEqual([]);
   });
 
   it('stops waiting for an abandoned build that never settles', async () => {
     vi.useFakeTimers();
     const h = harness('freshwater', { gate: true });
     await vi.waitFor(() => expect(h.gates).toHaveLength(1));
-    const disposing = h.scenes.dispose();
-    await vi.advanceTimersByTimeAsync(5_000);
+    let resolved = false;
+    const disposing = h.scenes.dispose().then(() => (resolved = true));
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(resolved).toBe(false);
+    expect(h.errors).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1);
     await disposing;
     expect(h.errors).toEqual([
       'An abandoned preset build did not stop within 5 s; it is released when it lands',
