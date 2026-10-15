@@ -7,7 +7,7 @@ let pageErrors: string[] = [];
 
 // The fish system starts a few seconds after load, and under software rendering one read can block
 // the page for 20 s or more.
-const FIRST_LOAD_MS = 60_000;
+const FISH_START_MS = 60_000;
 
 const SPECIES_DIR = resolve(import.meta.dirname, '../content/species');
 
@@ -76,7 +76,7 @@ test.describe('tank type switch', () => {
   test('an anonymous visitor switches the demo tank and the URL follows', async ({ page }) => {
     await open(page, '/?backend=webgl&tier=low&e2e');
     await expect(typeButton(page, 'Freshwater')).toHaveAttribute('aria-pressed', 'true');
-    await expectOnly(page, 'freshwater', FIRST_LOAD_MS);
+    await expectOnly(page, 'freshwater', FISH_START_MS);
     await expect(page.getByText(/300 litre freshwater aquarium/)).toBeVisible();
 
     await typeButton(page, 'Reef').click();
@@ -84,14 +84,14 @@ test.describe('tank type switch', () => {
     await expect(typeButton(page, 'Freshwater')).toHaveAttribute('aria-pressed', 'false');
     await expect(page.getByText(/300 litre reef aquarium/)).toBeVisible();
     await expect(sceneBiome(page)).toHaveAttribute('data-scene-biome', 'reef');
-    await expectOnly(page, 'reef', FIRST_LOAD_MS);
+    await expectOnly(page, 'reef', FISH_START_MS);
     await expect.poll(() => biomeParam(page)).toBe('reef');
     expect(new URL(page.url()).searchParams.get('backend')).toBe('webgl');
 
     await typeButton(page, 'Freshwater').click();
     await expect(page.getByText(/300 litre freshwater aquarium/)).toBeVisible();
     await expect(sceneBiome(page)).toHaveAttribute('data-scene-biome', 'freshwater');
-    await expectOnly(page, 'freshwater', FIRST_LOAD_MS);
+    await expectOnly(page, 'freshwater', FISH_START_MS);
     await expect.poll(() => biomeParam(page)).toBe('freshwater');
   });
 
@@ -100,7 +100,7 @@ test.describe('tank type switch', () => {
     await expect(typeButton(page, 'Reef')).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByText(/300 litre reef aquarium/)).toBeVisible();
     await expect(sceneBiome(page)).toHaveAttribute('data-scene-biome', 'reef');
-    await expectOnly(page, 'reef', FIRST_LOAD_MS);
+    await expectOnly(page, 'reef', FISH_START_MS);
   });
 
   test('works by tap at phone width without overflowing', async ({ browser }) => {
