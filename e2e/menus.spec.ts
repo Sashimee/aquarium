@@ -36,8 +36,9 @@ async function settleAnimations(page: Page): Promise<void> {
 async function press(target: Locator): Promise<void> {
   // The HUD re-measures a frame after a panel opens or closes, and a sheet springs in over several
   // frames, so a target can briefly be moving or covered; one that still is after that settles is
-  // a real bug. Each check is a single round trip, which is what costs time under load.
+  // a real bug. Settling waits outside the poll because one stalled frame can outlast its timeout.
   let point: Point = [0, 0];
+  await settleAnimations(target.page());
   await expect
     .poll(
       async () => {
