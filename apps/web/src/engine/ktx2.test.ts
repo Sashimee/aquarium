@@ -145,7 +145,7 @@ describe('the shared loader init', () => {
 
     expect(started).toHaveLength(1);
     expect(started[0]?.url).toBe(KTX2_WORKER_URL);
-    expect(KTX2_WORKER_URL).toMatch(/^\/ktx2-worker\.js\?v=\d+$/);
+    expect(KTX2_WORKER_URL).toMatch(/^\/ktx2-worker\.js\?v=[0-9a-f]{12}$/);
     expect(started[0]?.message.transcoderBinary.byteLength).toBe(4);
     shared.dispose();
   });
