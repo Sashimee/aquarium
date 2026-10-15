@@ -22,10 +22,10 @@ export interface RosterFish {
   /** 0 dead .. 1 healthy, as of the last server snapshot that carried this fish. */
   health: number;
   /**
-   * The server's hunger when this fish joined the roster, less what the server takes off for each
-   * bite passed on since; unset for demo fish. A world rebuilt mid-session seeds the gut from it.
-   * The server rejects a whole batch of bite reports it finds implausible, so after a rejected
-   * batch this sits below the server's value until the fish rejoins.
+   * The server's hunger as of the last snapshot that carried this fish, less what the server takes
+   * off for each bite passed on since; unset for demo fish. A world rebuilt mid-session seeds the
+   * gut from it. The server rejects a whole batch of bite reports it finds implausible, so after a
+   * rejected batch this sits below the server's value until the next snapshot resets it.
    */
   hunger?: number;
 }
@@ -130,6 +130,19 @@ export class TankRoster {
     entry.phase = 'dead';
     entry.health = 0;
     return entry;
+  }
+
+  /** Moves living fish to the server's hunger and health. Never changes the swimming set. */
+  updated({ tankId, fish }: InteractionEvents['tank:fish-updated']): RosterFish[] {
+    const changed: RosterFish[] = [];
+    for (const f of fish) {
+      const entry = this.saved(tankId, f.id);
+      if (entry === undefined || entry.phase === 'dead' || f.status !== 'alive') continue;
+      entry.health = f.health;
+      entry.hunger = f.hunger;
+      changed.push(entry);
+    }
+    return changed;
   }
 
   removed({ tankId, fishId }: InteractionEvents['tank:fish-removed']): RosterFish | null {

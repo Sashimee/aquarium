@@ -4,6 +4,7 @@ import type { Engine } from '../engine/Engine';
 import type { EventBus } from '../engine/events';
 import type { TankDimensions } from '../engine/tank/dimensions';
 import type { InteractionEvents } from '../interaction/events';
+import { SimUnavailableError } from '../interaction/food/clipReach';
 import type { SceneAnchor } from '../scene/anemone';
 import type { Collider as SceneCollider } from '../scene/colliders';
 import type { FishSystem } from './FishSystem';
@@ -15,6 +16,7 @@ type TankEventName =
   | 'tank:fish-added'
   | 'tank:fish-released'
   | 'tank:fish-died'
+  | 'tank:fish-updated'
   | 'tank:fish-removed';
 
 export type TankEvent = {
@@ -105,6 +107,9 @@ export function queueTankEvents(interaction: EventBus<InteractionEvents>): TankE
       deliver({ type: 'tank:fish-released', payload }),
     ),
     interaction.on('tank:fish-died', (payload) => deliver({ type: 'tank:fish-died', payload })),
+    interaction.on('tank:fish-updated', (payload) =>
+      deliver({ type: 'tank:fish-updated', payload }),
+    ),
     interaction.on('tank:fish-removed', (payload) =>
       deliver({ type: 'tank:fish-removed', payload }),
     ),
@@ -237,7 +242,9 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
       anyFish: () => ready?.anyFish() ?? null,
       noriGrazers: () => ready?.noriGrazers() ?? [],
       canGrazeAt: (species, position) =>
-        ready ? ready.canGrazeAt(species, position) : Promise.reject(new Error('No fish yet')),
+        ready
+          ? ready.canGrazeAt(species, position)
+          : Promise.reject(new SimUnavailableError('No fish yet')),
     },
     setAnchors(next) {
       anchors = next;

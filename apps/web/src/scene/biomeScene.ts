@@ -101,6 +101,7 @@ export class BiomeScene<S extends DisposableScene> {
   private running: Promise<void> | null = null;
   private stopped = false;
   private building: { biome: Biome; controller: AbortController } | null = null;
+  private readonly abandoned = new Set<Promise<void>>();
   private readonly unfollow: () => void;
 
   /** Follows `source` until disposed. */
@@ -120,7 +121,7 @@ export class BiomeScene<S extends DisposableScene> {
   show(biome: Biome): void {
     if (this.stopped) return;
     this.wanted = biome;
-    this.abandonUnwanted();
+    queueMicrotask(() => this.abandonUnwanted());
     this.kick();
   }
 
@@ -134,6 +135,7 @@ export class BiomeScene<S extends DisposableScene> {
     this.building?.controller.abort(new DOMException('The scene was disposed', 'AbortError'));
     await this.unmount();
     await this.settled();
+    while (this.abandoned.size > 0) await Promise.all([...this.abandoned]);
   }
 
   private abandonUnwanted(): void {
@@ -194,9 +196,13 @@ export class BiomeScene<S extends DisposableScene> {
       return scene;
     } catch (cause) {
       if (controller.signal.aborted) {
-        attempt.then(
-          (late) => this.release(late),
-          () => undefined,
+        this.track(
+          attempt.then(
+            (late) => this.release(late),
+            (late: unknown) => {
+              if (!isAbort(late)) console.debug(`The abandoned ${biome} preset build failed`, late);
+            },
+          ),
         );
         return null;
       }
@@ -206,6 +212,11 @@ export class BiomeScene<S extends DisposableScene> {
       clearTimeout(timer);
       this.building = null;
     }
+  }
+
+  private track(cleanup: Promise<void>): void {
+    this.abandoned.add(cleanup);
+    void cleanup.finally(() => this.abandoned.delete(cleanup));
   }
 
   private async unmount(): Promise<void> {
@@ -223,4 +234,8 @@ export class BiomeScene<S extends DisposableScene> {
       this.options.onError('Scene dispose failed', cause);
     }
   }
+}
+
+function isAbort(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
 }

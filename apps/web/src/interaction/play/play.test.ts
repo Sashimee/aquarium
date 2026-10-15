@@ -3,7 +3,7 @@ import { EventBus } from '../../engine/events';
 import { FeedGate } from '../../sync/feedGate';
 import type { Vec3 } from '../camera';
 import type { InteractionEvents } from '../events';
-import type { ReachBridge } from '../food/clipReach';
+import { SimUnavailableError, type ReachBridge } from '../food/clipReach';
 import { FoodLink } from '../food/link';
 import { FoodField, MAX_FOOD_PARTICLES } from '../food/particles';
 import { sceneToSim } from '../food/simSpace';
@@ -311,6 +311,12 @@ describe('PlayController feeding', () => {
     expect(t.seen.dropped).not.toHaveBeenCalled();
   });
 
+  it('reports the portion the rounded particle count stands for, not the one asked for', () => {
+    const t = makeController();
+    t.events.emit('feed:request', { food: 'pellets', portion: 0.33 });
+    expect(t.seen.dropped).toHaveBeenCalledWith({ food: 'pellets', portion: 0.35, particles: 7 });
+  });
+
   it('reports only the portion that fit when the tank is nearly full', () => {
     const t = makeController();
     t.food.drop('brine-shrimp', (MAX_FOOD_PARTICLES - 10) / 50, 0, 0);
@@ -443,11 +449,23 @@ describe('PlayController nori clip placement', () => {
     expect(report).toHaveBeenCalledWith(expect.any(String), expect.any(Error));
   });
 
+  it('reports a plain error even when its message sounds like the sim is unavailable', async () => {
+    const report = vi.fn();
+    const bridge = {
+      noriGrazers: () => ['yellow-tang'],
+      canGrazeAt: () => Promise.reject(new Error('The fish sim is not ready')),
+    };
+    const t = makeController(downRay(), bridge, report);
+    clipTo(t);
+    await vi.waitFor(() => expect(t.seen.dropped).toHaveBeenCalledTimes(1));
+    expect(report).toHaveBeenCalledTimes(1);
+  });
+
   it('does not report the sim being unavailable', async () => {
     const report = vi.fn();
     const bridge = {
       noriGrazers: () => ['yellow-tang'],
-      canGrazeAt: () => Promise.reject(new Error('sim: client disposed')),
+      canGrazeAt: () => Promise.reject(new SimUnavailableError('sim: client disposed')),
     };
     const t = makeController(downRay(), bridge, report);
     clipTo(t);
@@ -458,7 +476,7 @@ describe('PlayController nori clip placement', () => {
   it('allows the clip when the sim cannot answer', async () => {
     const bridge = {
       noriGrazers: () => ['yellow-tang'],
-      canGrazeAt: () => Promise.reject(new Error('The fish sim is not ready')),
+      canGrazeAt: () => Promise.reject(new SimUnavailableError()),
     };
     const t = makeController(downRay(), bridge);
     clipTo(t);

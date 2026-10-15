@@ -67,6 +67,7 @@ import {
   SimWorldSpec,
   startWorld,
 } from './simWorld';
+import { SimUnavailableError } from '../interaction/food/clipReach';
 import { speciesInput } from './species';
 import type { FishBite, FishPoint, PickRay, TankEvent } from './start';
 import { SWIM_MODES, SwimState } from './swim';
@@ -353,6 +354,9 @@ export class FishSystem {
         if (fish !== null) this.startDeath(fish);
         break;
       }
+      case 'tank:fish-updated':
+        this.roster.updated(event.payload);
+        break;
       case 'tank:fish-removed':
         this.roster.removed(event.payload);
         break;
@@ -467,9 +471,13 @@ export class FishSystem {
   /** See `SimClient.canGrazeAt`; rejects while the sim is not up. */
   canGrazeAt(species: string, position: Point3): Promise<boolean> {
     if (this.disposed || !this.simReady) {
-      return Promise.reject(new Error('The fish sim is not ready'));
+      return Promise.reject(new SimUnavailableError());
     }
-    return this.sim.canGrazeAt(species, position);
+    return this.sim.canGrazeAt(species, position).catch((cause: unknown) => {
+      throw this.disposed || !this.simReady
+        ? new SimUnavailableError('The fish sim went away')
+        : cause;
+    });
   }
 
   /** Some swimming fish to follow, for a control that has no pointer to pick with. */

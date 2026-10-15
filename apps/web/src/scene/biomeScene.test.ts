@@ -352,11 +352,14 @@ describe('BiomeScene', () => {
   it('disposes a build that lands after the scene was disposed', async () => {
     const h = harness('freshwater', { gate: true });
     await vi.waitFor(() => expect(h.gates).toHaveLength(1));
-    const disposing = h.scenes.dispose();
-    await disposing;
+    let resolved = false;
+    const disposing = h.scenes.dispose().then(() => (resolved = true));
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(h.gates[0]?.signal.aborted).toBe(true);
+    expect(resolved).toBe(false);
     h.gates[0]?.release();
-    await vi.waitFor(() => expect(h.built.map((s) => s.disposed)).toEqual([true]));
+    await disposing;
+    expect(h.built.map((s) => s.disposed)).toEqual([true]);
     expect(h.built).toHaveLength(1);
     expect(h.mounted).toEqual([]);
     expect(h.root.children).toHaveLength(0);
@@ -415,12 +418,56 @@ describe('BiomeScene', () => {
     const h = harness('reef', { gate: true });
     await vi.waitFor(() => expect(h.gates).toHaveLength(1));
     h.tankBiome.setFallback('freshwater');
-    h.tankBiome.setFallback('reef');
     await vi.waitFor(() => expect(h.gates).toHaveLength(2));
-    expect(h.gates[1]?.biome).toBe('reef');
+    h.tankBiome.setFallback('reef');
+    await vi.waitFor(() => expect(h.gates).toHaveLength(3));
+    expect(h.gates[2]?.biome).toBe('reef');
     h.gates[1]?.release();
+    h.gates[2]?.release();
     await h.scenes.settled();
     expect(h.mounted).toEqual(['reef']);
+  });
+
+  it('keeps the in-flight build when the biome flips away and back in one tick', async () => {
+    const h = harness('reef', { gate: true });
+    await vi.waitFor(() => expect(h.gates).toHaveLength(1));
+    h.tankBiome.setFallback('freshwater');
+    h.tankBiome.setFallback('reef');
+    await Promise.resolve();
+    expect(h.gates).toHaveLength(1);
+    expect(h.gates[0]?.signal.aborted).toBe(false);
+    h.gates[0]?.release();
+    await h.scenes.settled();
+    expect(h.mounted).toEqual(['reef']);
+    expect(h.built).toHaveLength(1);
+  });
+
+  it('logs a late failure of an abandoned build unless it is an abort', async () => {
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => undefined);
+    const interaction = new EventBus<InteractionEvents>();
+    const tankBiome = new TankBiome(interaction, 'reef');
+    const rejects: ((error: Error) => void)[] = [];
+    const scenes = new BiomeScene<FakeScene>(tankBiome, {
+      ready: Promise.resolve(),
+      build: () => new Promise<FakeScene>((_, reject) => rejects.push(reject)),
+      mounted: () => undefined,
+      unmounting: () => undefined,
+      onError: () => undefined,
+      timeoutMs: 90_000,
+    });
+    await vi.waitFor(() => expect(rejects).toHaveLength(1));
+    tankBiome.setFallback('freshwater');
+    await vi.waitFor(() => expect(rejects).toHaveLength(2));
+    rejects[0]?.(new DOMException('gone', 'AbortError'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(debug).not.toHaveBeenCalled();
+    tankBiome.setFallback('reef');
+    await vi.waitFor(() => expect(rejects).toHaveLength(3));
+    rejects[1]?.(new Error('model failed to parse'));
+    await vi.waitFor(() => expect(debug).toHaveBeenCalledTimes(1));
+    rejects[2]?.(new DOMException('gone', 'AbortError'));
+    await scenes.dispose();
+    debug.mockRestore();
   });
 
   it('mounts a build that outlives the timeout once it lands', async () => {

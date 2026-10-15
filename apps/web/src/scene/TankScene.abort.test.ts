@@ -5,6 +5,7 @@ import type { PresetLayout } from '@aquarium/shared';
 import type { Engine } from '../engine/Engine';
 import { DEFAULT_TANK } from '../engine/tank/dimensions';
 import { TIER_SETTINGS } from '../engine/quality/tiers';
+import { ModelLibrary } from './assets';
 import { TankScene } from './TankScene';
 
 class GatedKtx2 extends KTX2Loader {
@@ -127,12 +128,12 @@ describe('TankScene.create abort', () => {
     );
     await vi.waitFor(() => expect(h.ktx2.pending.length).toBeGreaterThan(0));
     controller.abort();
-    expect(await outcome).toBe(controller.signal.reason);
 
     for (let i = 0; i < 10; i++) {
       h.ktx2.releaseAll();
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
+    expect(await outcome).toBe(controller.signal.reason);
 
     expect(h.engine.tank.substrate.material).toBe(h.placeholder);
     expect(h.hood.intensity).toBe(3);
@@ -142,6 +143,53 @@ describe('TankScene.create abort', () => {
     expect(h.engine.scene.children).toHaveLength(0);
     expect(h.registered).toEqual([]);
     expect(h.errors).toEqual([]);
+  });
+
+  it('disposes the model library exactly once when aborted', async () => {
+    const dispose = vi.spyOn(ModelLibrary.prototype, 'dispose');
+    stubCatalog();
+    const h = fakeEngine();
+    const controller = new AbortController();
+    const outcome = TankScene.create(
+      h.engine,
+      preset,
+      { colliders: false },
+      controller.signal,
+    ).catch(() => undefined);
+    await vi.waitFor(() => expect(h.ktx2.pending.length).toBeGreaterThan(0));
+    controller.abort();
+    for (let i = 0; i < 10; i++) {
+      h.ktx2.releaseAll();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    await outcome;
+    expect(dispose).toHaveBeenCalledTimes(1);
+    dispose.mockRestore();
+  });
+
+  it('disposes the model library exactly once when the build fails', async () => {
+    const dispose = vi.spyOn(ModelLibrary.prototype, 'dispose');
+    stubCatalog();
+    const h = fakeEngine();
+    const failing: PresetLayout = {
+      ...preset,
+      plantPatches: [
+        {
+          id: 'bad',
+          assetId: 'sand',
+          center: [0, 0],
+          radius: 0.1,
+          count: 1,
+          scale: [1, 1],
+          seed: 1,
+        },
+      ],
+    };
+    await expect(TankScene.create(h.engine, failing, { colliders: false })).rejects.toThrow(
+      'not a plant',
+    );
+    expect(dispose).toHaveBeenCalledTimes(1);
+    dispose.mockRestore();
   });
 
   it('rejects before touching the engine when aborted before the catalog arrives', async () => {

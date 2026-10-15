@@ -7,16 +7,24 @@ export interface FishDiff {
   removed: Fish[];
   /** Alive before, dead now. */
   died: Fish[];
+  /** Still alive, with a different hunger or health. */
+  updated: Fish[];
 }
 
 export function diffFish(prev: readonly Fish[] | undefined, next: readonly Fish[]): FishDiff {
   const before = new Map((prev ?? []).map((f) => [f.id, f]));
   const after = new Map(next.map((f) => [f.id, f]));
-  const diff: FishDiff = { added: [], removed: [], died: [] };
+  const diff: FishDiff = { added: [], removed: [], died: [], updated: [] };
   for (const fish of next) {
     const old = before.get(fish.id);
     if (!old) diff.added.push(fish);
     else if (old.status === 'alive' && fish.status === 'dead') diff.died.push(fish);
+    else if (
+      fish.status === 'alive' &&
+      (old.hunger !== fish.hunger || old.health !== fish.health)
+    ) {
+      diff.updated.push(fish);
+    }
   }
   for (const fish of prev ?? []) {
     if (!after.has(fish.id)) diff.removed.push(fish);

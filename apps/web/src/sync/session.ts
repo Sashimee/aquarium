@@ -458,6 +458,9 @@ export class TankSession {
         notice: `${fish.name} the ${species?.toLowerCase() ?? 'fish'} has died. You can net them when you are ready.`,
       });
     }
+    if (diff.updated.length > 0) {
+      interaction.emit('tank:fish-updated', { tankId: tank.id, fish: diff.updated });
+    }
     const incomingLayout = decorKey(tank.decorEdited, tank.decorLayout);
     if (!this.layoutSaver.busyFor(tank.id) && incomingLayout !== this.shownLayout.get(tank.id)) {
       this.shownLayout.set(tank.id, incomingLayout);
