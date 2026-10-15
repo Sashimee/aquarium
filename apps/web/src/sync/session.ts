@@ -333,9 +333,10 @@ export class TankSession {
   private async leaveActive(): Promise<void> {
     const uploader = this.unloadScene('switch');
     if (!uploader) return;
+    const gen = this.loadId;
     const finished = await this.flushBounded(uploader);
     uploader.dispose();
-    if (!finished) {
+    if (!finished && gen === this.loadId) {
       this.patch({
         notice: 'Some feeding reports could not be sent and were dropped. The tank is unaffected.',
       });

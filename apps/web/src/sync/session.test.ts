@@ -474,6 +474,31 @@ describe('sign-out safety', () => {
     expect(session.getState().error).toBeNull();
   });
 
+  it('does not leave the dropped-reports notice behind when signing out mid-switch', async () => {
+    const hang = new Promise<never>(() => undefined);
+    const api = {
+      species: vi.fn().mockResolvedValue([speciesFixture()]),
+      tanks: vi.fn().mockResolvedValue([tankFixture({ fish: [fishFixture(FISH_1)] }), second]),
+      tank: vi.fn().mockResolvedValue({ ...second, lastTickAt: '2026-02-01T12:00:00.000Z' }),
+      reportAte: vi.fn().mockReturnValue(hang),
+    };
+    const rec = recordBus();
+    const session = new TankSession({
+      api: api as unknown as ApiClient,
+      interaction: rec.bus,
+      sleep: async () => undefined,
+      now: () => Date.parse('2026-02-01T12:00:00.000Z'),
+      leaveFlushMs: 20,
+    });
+    await session.setUser(verified);
+    rec.bus.emit('food:ate', { eaten: [{ fishId: FISH_1, portion: 0.3 }] });
+    const switching = session.select(TANK_B);
+    await session.setUser(null);
+    await switching;
+    expect(session.getState()).toMatchObject({ phase: 'anonymous', notice: null });
+    session.dispose();
+  });
+
   it('announces a death as a notice and clears it with the session', async () => {
     const { api, session } = setup([tankFixture({ fish: [fishFixture(FISH_1, { name: 'Pip' })] })]);
     await session.setUser(verified);
