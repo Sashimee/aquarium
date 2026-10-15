@@ -248,6 +248,40 @@ export const otocinclus: SpeciesInput = {
   lifecycle: { diet: ['algae-wafer', 'nori'] },
 };
 
+/** The walker archetype (Neocaridina davidi); the pending content lives in content/species-pending. */
+export const cherryShrimp: SpeciesInput = {
+  id: 'cherry-shrimp',
+  behaviour: {
+    territorial: false,
+    preferredZone: 'bottom',
+    depthBand: [0, 0.5],
+    perceptionRangeM: 0.15,
+    perceptionFovDeg: 300,
+    curiosity: 0.3,
+    boldness: 0.2,
+    traits: ['cave-dweller', 'biofilm-grazer'],
+  },
+  locomotion: {
+    swimmingMode: 'pleopod',
+    gait: 'forage',
+    maxSpeedMps: 0.4,
+    cruiseSpeedMps: 0.05,
+    massKg: 0.0006,
+    maxTurnRateDegPerS: 720,
+    maxPitchDeg: 90,
+    strouhal: 0.3,
+    bodyLengthM: 0.03,
+    walking: {
+      walkSpeedMps: 0.012,
+      strideBodyLengths: 0.35,
+      legPairs: 5,
+      surfaces: ['substrate', 'decor', 'glass'],
+      tailFlip: { speedMps: 0.25, durationS: 0.15, refractoryS: 2 },
+    },
+  },
+  lifecycle: { diet: ['algae-wafer', 'flakes', 'pellets'] },
+};
+
 export const ARCHETYPES: readonly SpeciesInput[] = [
   neonTetra,
   angelfish,
@@ -383,6 +417,16 @@ export function benchmarkConfig(seed: number): WorldConfig {
       ...spawnMany('royal-gramma', 1),
       ...spawnMany('betta', 1),
     ],
+  };
+}
+
+/** The benchmark's 60 swimmers with `walkers` cherry shrimp added on the reef floor. */
+export function walkerBenchmarkConfig(seed: number, walkers = 20): WorldConfig {
+  const config = benchmarkConfig(seed);
+  return {
+    ...config,
+    species: [...config.species, cherryShrimp],
+    fish: [...config.fish, ...spawnMany(cherryShrimp.id, walkers)],
   };
 }
 

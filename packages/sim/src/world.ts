@@ -245,6 +245,8 @@ export class World {
   private _speciesIndex: Int32Array;
   private _thrust: Float64Array;
   private _contactCount: Uint32Array;
+  /** 1 for a walker, set at spawn so the step loops need not look the species up. */
+  private walker: Uint8Array;
   private _forward: Float64Array;
   private _distSq: Float64Array;
   private _maxSpeed: Float64Array;
@@ -438,6 +440,7 @@ export class World {
     this._speciesIndex = new Int32Array(n);
     this._thrust = new Float64Array(n);
     this._contactCount = new Uint32Array(n);
+    this.walker = new Uint8Array(n);
     this.coasting = new Uint8Array(n);
     this.gaitTimer = new Float64Array(n);
     this.detourSign = new Int8Array(n);
@@ -639,6 +642,7 @@ export class World {
     // Hold the spawn heading until steering has a real direction (heading hold in `steer`).
     this.targetYaw[i] = spot.yaw;
     this.speed[i] = (this.cruiseSpeed[i] ?? 0) * 0.5;
+    this.walker[i] = sp.walking === null ? 0 : 1;
     if (sp.walking !== null) {
       this.cruiseSpeed[i] = sp.walking.walkSpeed * scale;
       this.walkers.place(i);
@@ -792,6 +796,7 @@ export class World {
     this._speciesIndex = edit.array(this.speciesIndex);
     this._thrust = edit.array(this.thrust);
     this._contactCount = edit.array(this.contactCount);
+    this.walker = edit.array(this.walker);
     this.coasting = edit.array(this.coasting);
     this.gaitTimer = edit.array(this.gaitTimer);
     this.detourSign = edit.array(this.detourSign);
@@ -858,9 +863,10 @@ export class World {
     }
     pairwiseDistanceSq(this.position, n, this.distSq);
     this.behaviour.update();
-    for (let i = 0; i < n; i++) if (this.speciesOf(i).walking === null) this.steer(i);
+    const walker = this.walker;
+    for (let i = 0; i < n; i++) if (walker[i] === 0) this.steer(i);
     for (let i = 0; i < n; i++) {
-      if (this.speciesOf(i).walking === null) {
+      if (walker[i] === 0) {
         this.integrate(i);
         continue;
       }
@@ -2098,7 +2104,7 @@ export class World {
       out[o] = this.position[i * 3] ?? 0;
       out[o + 1] = this.position[i * 3 + 1] ?? 0;
       out[o + 2] = this.position[i * 3 + 2] ?? 0;
-      const walker = this.speciesOf(i).walking !== null;
+      const walker = this.walker[i] === 1;
       if (walker) this.walkers.quaternion(i, out, o + 3);
       else
         quatFromYawPitchRoll(this.yaw[i] ?? 0, this.pitch[i] ?? 0, this.roll[i] ?? 0, out, o + 3);
