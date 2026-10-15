@@ -314,7 +314,14 @@ export class TankSession {
 
   private activate(tankId: string): void {
     const tank = this.state.tanks.find((t) => t.id === tankId);
-    if (!tank) return;
+    if (!tank) {
+      this.patch({
+        activeId: null,
+        error: 'That tank is no longer available. Pick another tank from the tank menu.',
+      });
+      this.deps.interaction.emit('tank:none', {});
+      return;
+    }
     this.unloadScene('switch')?.dispose();
     const gen = this.loadId;
     this.loadedId = tankId;

@@ -577,6 +577,18 @@ describe('tank switcher and naming', () => {
     expect(rec.of('tank:unloaded')).toEqual([]);
   });
 
+  it('falls back to the demo tank when the tank to show has gone', async () => {
+    const { rec, session } = setup([tankFixture(), second]);
+    await session.setUser(verified);
+    await session.select(TANK_B);
+    const before = rec.of('tank:none').length;
+    const internals = session as unknown as { activate(tankId: string): void };
+    internals.activate('gone');
+    expect(rec.of('tank:none')).toHaveLength(before + 1);
+    expect(session.getState().activeId).toBeNull();
+    expect(session.getState().error).toMatch(/no longer available/);
+  });
+
   it('creates a tank and makes it the active one', async () => {
     const { api, rec, session } = setup();
     await session.setUser(verified);
