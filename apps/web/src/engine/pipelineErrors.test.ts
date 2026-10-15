@@ -8,7 +8,6 @@ import {
   Scene,
   setConsoleFunction,
   WebGLBackend,
-  type WebGPURenderer,
 } from 'three/webgpu';
 import {
   blameEffects,
@@ -22,6 +21,7 @@ import {
   type FailureContext,
   type PipelineFailure,
   type ShaderLogs,
+  type WatchedRenderer,
 } from './pipelineErrors';
 
 describe('parsePipelineFailure', () => {
@@ -132,19 +132,8 @@ describe('linkFailureMessage', () => {
   });
 });
 
-function fakeRenderer(
-  backend: object = {},
-): Pick<WebGPURenderer, 'debug'> & { readonly backend: object } {
-  return {
-    backend,
-    debug: {
-      checkShaderErrors: true,
-      diagnostics: { keywords: false },
-      onNodeBuilderCreated: null,
-      onShaderError: null,
-      getShaderAsync: () => Promise.resolve({ fragmentShader: null, vertexShader: null }),
-    },
-  };
+function fakeRenderer(backend: object = {}): WatchedRenderer<ShaderLogs> {
+  return { backend, debug: { onShaderError: null } };
 }
 
 describe('watchPipelineErrors', () => {
@@ -170,7 +159,6 @@ describe('watchPipelineErrors', () => {
     getShaderParameter: () => true,
     getShaderSource: () => null,
   };
-  const gl = linkLogs as WebGL2RenderingContext;
 
   it('hears a pipeline failure and still forwards every message', () => {
     const { forwarded } = installRecorder();
@@ -225,7 +213,7 @@ describe('watchPipelineErrors', () => {
       _completeCompile(renderObject: { material: unknown }): string {
         const onShaderError = renderer.debug.onShaderError;
         if (renderObject.material === material && onShaderError !== null) {
-          onShaderError(gl, {}, {}, {});
+          onShaderError(linkLogs, {}, {}, {});
         }
         return 'completed';
       },
@@ -236,7 +224,7 @@ describe('watchPipelineErrors', () => {
     const stop = watchPipelineErrors(renderer, (f) => failures.push(f));
 
     expect(backend._completeCompile({ material })).toBe('completed');
-    renderer.debug.onShaderError?.(gl, {}, {}, {});
+    renderer.debug.onShaderError?.(linkLogs, {}, {}, {});
 
     expect(failures.map((f) => f.materialId)).toEqual([materialIdOf(material), null]);
     stop();
@@ -248,7 +236,7 @@ describe('watchPipelineErrors', () => {
     const renderer = fakeRenderer();
     const failures: PipelineFailure[] = [];
     const stop = watchPipelineErrors(renderer, (f) => failures.push(f));
-    renderer.debug.onShaderError?.(gl, {}, {}, {});
+    renderer.debug.onShaderError?.(linkLogs, {}, {}, {});
     expect(failures.map((f) => f.materialId)).toEqual([null]);
     stop();
     expect(renderer.backend).toEqual({});
@@ -448,6 +436,17 @@ describe('PipelineFailureHandler', () => {
     handler.handle(failure(2));
     handler.handle(failure(2));
     await settle();
+    expect(effects.active).toBe(true);
+    expect(reports).toHaveLength(1);
+  });
+
+  it('keeps the effects when a scene material reported before fails again under TRAA', async () => {
+    const { effects, reports, handler } = setup();
+    handler.handle(failure(2));
+    effects.temporal = true;
+    handler.handle(failure(2));
+    await settle();
+    expect(effects.failures).toEqual([]);
     expect(effects.active).toBe(true);
     expect(reports).toHaveLength(1);
   });

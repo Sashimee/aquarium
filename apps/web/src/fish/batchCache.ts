@@ -43,11 +43,22 @@ export class BatchCache<V> {
     }
   }
 
+  /** A release that throws does not stop the rest; their errors are thrown together after. */
   dispose(): void {
     this.disposed = true;
     const batches = [...this.ready.values()];
     this.ready.clear();
-    for (const batch of batches) this.release(batch);
+    const errors: unknown[] = [];
+    for (const batch of batches) {
+      try {
+        this.release(batch);
+      } catch (cause) {
+        errors.push(cause);
+      }
+    }
+    if (errors.length > 0) {
+      throw new AggregateError(errors, `BatchCache: ${errors.length} batch release(s) failed`);
+    }
   }
 
   private async settle(key: string, load: () => Promise<V | null>): Promise<void> {
