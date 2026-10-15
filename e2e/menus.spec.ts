@@ -324,7 +324,7 @@ async function settledPose(page: Page): Promise<string> {
   return last;
 }
 
-// A real orbit moves the camera by over 1 within the frame that follows the drag.
+// A real orbit moves the camera by about 0.5 within the frame that follows the drag.
 function poseDistance(a: string, b: string): number {
   const left = a.split(' ').map(Number);
   const right = b.split(' ').map(Number);
