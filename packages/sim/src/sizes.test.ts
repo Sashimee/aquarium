@@ -121,29 +121,6 @@ const ADULT_MAX: Record<string, { model: string; maxSlM: number; maxTlM: number;
   };
 
 /**
- * Species whose model the asset pipeline has not built yet (issue #24). They move into ADULT_MAX
- * with their model once built, and the test below insists on it. FishBase gives TL only for the
- * rasbora, firefish and wrasse; their SL is TL over an assumed ratio of 1.25, which the loft's own
- * TL/SL replaces when the model is drawn. Shrimp lengths exclude the antennae and are from
- * hobbyist and encyclopaedic accounts, not FishBase.
- */
-const PENDING_MODEL: Readonly<Record<string, { maxSlM: number; source: string }>> = {
-  'bristlenose-pleco': { maxSlM: 0.091, source: 'FishBase, Ancistrus cirrhosus: 9.1 cm SL' },
-  'cherry-shrimp': { maxSlM: 0.035, source: 'Neocaridina davidi: females to about 3.5 cm' },
-  'cleaner-shrimp': { maxSlM: 0.055, source: 'Lysmata amboinensis: about 5.5 cm' },
-  discus: { maxSlM: 0.137, source: 'FishBase, Symphysodon aequifasciatus: 13.7 cm SL' },
-  firefish: { maxSlM: 0.09 / 1.2, source: 'FishBase, Nemateleotris magnifica: 9 cm TL' },
-  'harlequin-rasbora': {
-    maxSlM: 0.05 / 1.25,
-    source: 'FishBase, Trigonostigma heteromorpha: 5 cm TL',
-  },
-  'six-line-wrasse': {
-    maxSlM: 0.1 / 1.25,
-    source: 'FishBase, Pseudocheilinus hexataenia: 10 cm TL',
-  },
-};
-
-/**
  * Models whose own TL/SL draws the species outside the tolerance, with the issue that fixes the
  * model and a cap a little above its error when listed. The test asserts the error is still there,
  * so a fixed model forces the entry out, and that it stays under the cap, so it cannot get worse.
@@ -156,9 +133,7 @@ describe('species sizes are standard lengths', () => {
   const models = fishModels();
 
   it('documents an adult maximum for every species and every drawn fish model', () => {
-    expect([...species.keys()].sort()).toEqual(
-      [...Object.keys(ADULT_MAX), ...Object.keys(PENDING_MODEL)].sort(),
-    );
+    expect([...species.keys()].sort()).toEqual(Object.keys(ADULT_MAX).sort());
     const drawn = new Set(Object.values(ADULT_MAX).map((a) => a.model));
     for (const m of models.values()) {
       if (drawn.has(m.id)) continue;
@@ -170,18 +145,6 @@ describe('species sizes are standard lengths', () => {
       expect(models.get(adult.model)?.species, id).toBe(id);
     }
   });
-
-  it.each(Object.entries(PENDING_MODEL))(
-    '%s: has no built model yet and maxSizeM is the literature maximum SL',
-    (id, adult) => {
-      expect(
-        [...models.values()].filter((m) => m.species === id),
-        `${id} has a model now: move it from PENDING_MODEL into ADULT_MAX`,
-      ).toEqual([]);
-      const maxSizeM = species.get(id)?.lifecycle.maxSizeM ?? 0;
-      expect(Math.abs(maxSizeM / adult.maxSlM - 1), adult.source).toBeLessThan(0.02);
-    },
-  );
 
   it.each(Object.entries(ADULT_MAX))('%s: maxSizeM is the literature maximum SL', (id, adult) => {
     const lifecycle = species.get(id)?.lifecycle;
