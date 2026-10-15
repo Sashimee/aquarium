@@ -20,11 +20,19 @@ import { World, type WorldConfig } from './world.ts';
 const LONG = 120_000;
 const dir = join(import.meta.dirname, '../../../content/species');
 
-const files = readdirSync(dir).filter((f) => f.endsWith('.json'));
-const roster = files.map((file) => {
-  const raw: unknown = JSON.parse(readFileSync(join(dir, file), 'utf8'));
-  return { file, raw, species: speciesContentSchema.parse(raw) };
-});
+const pendingDir = join(import.meta.dirname, '../../../content/species-pending');
+
+function load(from: string) {
+  return readdirSync(from)
+    .filter((f) => f.endsWith('.json'))
+    .map((file) => {
+      const raw: unknown = JSON.parse(readFileSync(join(from, file), 'utf8'));
+      return { file, raw, species: speciesContentSchema.parse(raw) };
+    });
+}
+
+const roster = load(dir);
+const pending = load(pendingDir);
 
 const MVP_ROSTER = [
   ['angelfish', 'Pterophyllum scalare', 'freshwater'],
@@ -101,35 +109,38 @@ function bruteClearance(w: World, tank: TankDimensions, decor: readonly Collider
   };
 }
 
-describe('every shipped species in its decorated tank', { timeout: LONG }, () => {
-  const species = roster.map((r) => r.species);
+describe('every shipped and pending species in its decorated tank', { timeout: LONG }, () => {
+  const species = [...roster, ...pending].map((r) => r.species);
 
-  it.each(roster.map((r) => ({ id: r.species.id, biome: r.species.biome, s: r.species })))(
-    'never penetrates glass or rock over 10 000 steps: $id',
-    ({ biome, s }) => {
-      const reef = biome === 'reef';
-      const tank = reef ? REEF_TANK : SHOW_TANK;
-      const decor = reef ? REEF_DECOR : SHOW_DECOR;
-      const config: WorldConfig = {
-        seed: 11,
-        tank,
-        species,
-        decor,
-        anchors: reef ? REEF_ANCHORS : [],
-        fish: spawnMany(s.id, fishCount(s)),
-      };
-      const w = new World(config);
-      const clearance = bruteClearance(w, tank, decor);
-      let worst = Infinity;
-      for (let t = 0; t < 10_000; t++) {
-        w.step();
-        for (let i = 0; i < w.count; i++) worst = Math.min(worst, clearance(i));
-      }
-      expect(worst).toBeGreaterThanOrEqual(-1e-9);
-      // The hard constraint is a backstop; steering should keep it almost idle.
-      expect(w.contacts / (w.count * 10_000)).toBeLessThan(1e-3);
-    },
-  );
+  it.each(
+    [...roster, ...pending].map((r) => ({
+      id: r.species.id,
+      biome: r.species.biome,
+      s: r.species,
+    })),
+  )('never penetrates glass or rock over 10 000 steps: $id', ({ biome, s }) => {
+    const reef = biome === 'reef';
+    const tank = reef ? REEF_TANK : SHOW_TANK;
+    const decor = reef ? REEF_DECOR : SHOW_DECOR;
+    const config: WorldConfig = {
+      seed: 11,
+      tank,
+      species,
+      decor,
+      anchors: reef ? REEF_ANCHORS : [],
+      fish: spawnMany(s.id, fishCount(s)),
+    };
+    const w = new World(config);
+    const clearance = bruteClearance(w, tank, decor);
+    let worst = Infinity;
+    for (let t = 0; t < 10_000; t++) {
+      w.step();
+      for (let i = 0; i < w.count; i++) worst = Math.min(worst, clearance(i));
+    }
+    expect(worst).toBeGreaterThanOrEqual(-1e-9);
+    // The hard constraint is a backstop; steering should keep it almost idle.
+    expect(w.contacts / (w.count * 10_000)).toBeLessThan(1e-3);
+  });
 });
 
 describe('a mixed community left alone', { timeout: LONG }, () => {
