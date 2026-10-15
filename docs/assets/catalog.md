@@ -263,9 +263,9 @@ No Sketchfab model with an allowed licence exists (searches: firefish, nemateleo
 
 No model of the species exists under an allowed licence. The CC0 ffish.asia scans cover other shrimp only (for example [Saron marmoratus](https://sketchfab.com/3d-models/a4863d7e05ce4117bfda48ddf6af8af4), 282k faces, wrong species and too heavy), so at most they serve as a body-shape reference. Reference photos (in manifest, downloaded): `wm-cleaner-huffman` (CC BY 3.0), `wm-cleaner-caruso` and `wm-cleaner-schofield` (CC BY 4.0). Key traits: red body with a white dorsal stripe, white antennae and white-tipped legs.
 
-### CC-BY-SA candidates for Alex to decide
+### CC-BY-SA photos approved for four species (2026-10-15)
 
-Not used. Each would improve a fallback texture if approved: lateral photos of Ancistrus (the only licensed lateral ones), harlequin rasbora (Lascorz, NasserHalaweh), firefish and six-line wrasse (for example by Diego Delso). Without them the firefish and the six-line wrasse have one usable reference photo each.
+Alex approved CC BY-SA lateral reference photos for the firefish, six-line wrasse, harlequin rasbora and bristlenose pleco. Picks, chosen from a visual comparison of the Commons candidates (3.0 and 4.0 only; 2.0 and 2.5 are not on the project's list): `wm-firefish-hobgood` (Nick Hobgood, BY-SA 3.0, shows the long dorsal spine), `wm-rasbora-dabrowski` (Mariusz Dabrowski, BY-SA 3.0, true lateral), `wm-sixline-delso-63` (Diego Delso, BY-SA 4.0), `wm-ancistrus-reis` (Julio Reis, BY-SA 4.0, wild-type colour, tail cropped) and `wm-ancistrus-l144-adolfoi` (Corydoras-adolfoi, BY-SA 4.0, full outline, albino morph so shape only). Textures derived from them are CC-BY-SA. The share-alike allowlist in `tools/asset-pipeline/src/manifest.ts` must list these ids before `pnpm assets:check` accepts them.
 
 ## Downloaded-file check (Sketchfab)
 

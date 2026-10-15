@@ -5,7 +5,7 @@ import type { AssetIndex, OutputAsset } from './index-schema.ts';
 export const ALLOWED_LICENCES = ['CC0-1.0', 'CC-BY-3.0', 'CC-BY-4.0'] as const;
 export const SHARE_ALIKE_LICENCES = ['CC-BY-SA-3.0', 'CC-BY-SA-4.0'] as const;
 export const SHARE_ALIKE_KIND = 'reference-photo';
-/** CC-BY-SA is approved for exactly these reference photos (Corydoras aeneus, Gramma loreto, Pterapogon kauderni) and nothing else. */
+/** CC-BY-SA is approved for exactly these reference photos (Corydoras aeneus, Gramma loreto, Pterapogon kauderni, firefish, harlequin rasbora, six-line wrasse, bristlenose pleco) and nothing else. */
 export const SHARE_ALIKE_ALLOWLIST: readonly { id: string; species: string; author: string }[] = [
   {
     id: 'wm-cory-aeneus-gabs-01',
@@ -20,6 +20,11 @@ export const SHARE_ALIKE_ALLOWLIST: readonly { id: string; species: string; auth
   { id: 'wm-gramma-loreto-llez', species: 'royal-gramma', author: 'H. Zell (Llez)' },
   { id: 'wm-banggai-stang-8zz', species: 'banggai-cardinalfish', author: 'David J. Stang' },
   { id: 'wm-banggai-stang-10zz', species: 'banggai-cardinalfish', author: 'David J. Stang' },
+  { id: 'wm-firefish-hobgood', species: 'firefish', author: 'Nick Hobgood (Nhobgood)' },
+  { id: 'wm-rasbora-dabrowski', species: 'harlequin-rasbora', author: 'Mariusz Dabrowski' },
+  { id: 'wm-sixline-delso-63', species: 'six-line-wrasse', author: 'Diego Delso' },
+  { id: 'wm-ancistrus-reis', species: 'bristlenose-pleco', author: 'Júlio Reis' },
+  { id: 'wm-ancistrus-l144-adolfoi', species: 'bristlenose-pleco', author: 'Corydoras-adolfoi' },
 ];
 
 const sha256Schema = z.string().regex(/^[0-9a-f]{64}$/, 'must be 64 lowercase hex characters');
@@ -161,12 +166,10 @@ export function validateManifest(manifest: Manifest, credits: string): string[] 
   return problems;
 }
 
-/** Modifications of every built asset deriving from each credit-requiring source, prefixed with the asset id when a source feeds several; empty for unused sources; reference photos are never derived from. */
+/** Modifications of every built asset deriving from each credit-requiring source, prefixed with the asset id when a source feeds several; empty for unused sources; reference photos appear only when a built asset uses them as a source. */
 export function derivedModifications(index: AssetIndex, manifest: Manifest): Map<string, string[]> {
   const users = new Map<string, OutputAsset[]>(
-    manifest.assets
-      .filter((a) => requiresCredit(a.licence) && a.kind !== SHARE_ALIKE_KIND)
-      .map((a) => [a.id, []]),
+    manifest.assets.filter((a) => requiresCredit(a.licence)).map((a) => [a.id, []]),
   );
   for (const asset of index.assets) {
     for (const sourceId of asset.sources) users.get(sourceId)?.push(asset);
@@ -188,13 +191,6 @@ export function derivedModifications(index: AssetIndex, manifest: Manifest): Map
 export function modificationProblems(index: AssetIndex, manifest: Manifest): string[] {
   const byId = new Map(manifest.assets.map((a) => [a.id, a]));
   const problems: string[] = [];
-  for (const asset of manifest.assets) {
-    if (asset.kind === SHARE_ALIKE_KIND && asset.modifications.length > 0) {
-      problems.push(
-        `manifest asset ${asset.id}: reference photos are not redistributed, so modifications must stay empty`,
-      );
-    }
-  }
   for (const [sourceId, expected] of derivedModifications(index, manifest)) {
     const actual = byId.get(sourceId)?.modifications ?? [];
     if (JSON.stringify(actual) !== JSON.stringify(expected)) {
