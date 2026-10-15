@@ -89,18 +89,54 @@ const CURL_BISECTIONS = 12;
  * The tip at ventral flexion `curl`, turned about the hinge as the material turns it: positive
  * flexion is a negative turn about +x.
  */
-export function curledTip(rig: TailRig, curl: number): { y: number; z: number } {
+export function curledTip(
+  rig: TailRig,
+  curl: number,
+  out: { y: number; z: number } = { y: 0, z: 0 },
+): { y: number; z: number } {
   const { hinge, tip } = rig;
   const a = -curl * tip.share;
   const c = Math.cos(a);
   const s = Math.sin(a);
   const dy = tip.y - hinge.y;
   const dz = tip.z - hinge.z;
-  return { y: hinge.y + dy * c - dz * s, z: hinge.z + dy * s + dz * c };
+  out.y = hinge.y + dy * c - dz * s;
+  out.z = hinge.z + dy * s + dz * c;
+  return out;
 }
 
 type Quat = { readonly x: number; readonly y: number; readonly z: number; readonly w: number };
 type Point = { readonly x: number; readonly y: number; readonly z: number };
+
+const tipScratch = { y: 0, z: 0 };
+
+function floorUnderTip(
+  curl: number,
+  rig: TailRig,
+  scale: number,
+  position: Point,
+  quaternion: Quat,
+  floorAt: (x: number, z: number, fromY: number) => number,
+): number {
+  const { x, y, z, w } = quaternion;
+  const t = curledTip(rig, curl, tipScratch);
+  const tx = position.x + scale * (2 * (x * y - w * z) * t.y + 2 * (x * z + w * y) * t.z);
+  const tz = position.z + scale * (2 * (y * z + w * x) * t.y + (1 - 2 * (x * x + y * y)) * t.z);
+  return floorAt(tx, tz, position.y);
+}
+
+function tipClearance(
+  curl: number,
+  rig: TailRig,
+  scale: number,
+  bodyY: number,
+  upFromY: number,
+  upFromZ: number,
+  floor: number,
+): number {
+  const t = curledTip(rig, curl, tipScratch);
+  return bodyY + scale * (upFromY * t.y + upFromZ * t.z) - floor;
+}
 
 /**
  * The floor the tail tip sweeps over in a flexion up to `curl`: the higher of `floorAt` under the
@@ -115,14 +151,10 @@ export function floorUnderTail(
   quaternion: Quat,
   floorAt: (x: number, z: number, fromY: number) => number,
 ): number {
-  const { x, y, z, w } = quaternion;
-  const under = (c: number): number => {
-    const t = curledTip(rig, c);
-    const tx = position.x + scale * (2 * (x * y - w * z) * t.y + 2 * (x * z + w * y) * t.z);
-    const tz = position.z + scale * (2 * (y * z + w * x) * t.y + (1 - 2 * (x * x + y * y)) * t.z);
-    return floorAt(tx, tz, position.y);
-  };
-  return Math.max(under(0), under(curl));
+  return Math.max(
+    floorUnderTip(0, rig, scale, position, quaternion, floorAt),
+    floorUnderTip(curl, rig, scale, position, quaternion, floorAt),
+  );
 }
 
 /**
@@ -145,19 +177,16 @@ export function curlAboveFloor(
   const upFromY = 1 - 2 * (x * x + z * z);
   const upFromZ = 2 * (y * z - w * x);
   const floor = floorY + TAIL_FLOOR_CLEARANCE_BODY_LENGTHS * rig.bodyLength * scale;
-  const clearance = (c: number): number => {
-    const t = curledTip(rig, c);
-    return position.y + scale * (upFromY * t.y + upFromZ * t.z) - floor;
-  };
-  const limit = Math.min(clearance(0), 0);
+  const limit = Math.min(tipClearance(0, rig, scale, position.y, upFromY, upFromZ, floor), 0);
   let clear = 0;
   for (let k = 1; k <= CURL_MARCH_STEPS; k++) {
     const c = (curl * k) / CURL_MARCH_STEPS;
-    if (clearance(c) < limit) {
+    if (tipClearance(c, rig, scale, position.y, upFromY, upFromZ, floor) < limit) {
       let blocked = c;
       for (let i = 0; i < CURL_BISECTIONS; i++) {
         const mid = (clear + blocked) / 2;
-        if (clearance(mid) < limit) blocked = mid;
+        if (tipClearance(mid, rig, scale, position.y, upFromY, upFromZ, floor) < limit)
+          blocked = mid;
         else clear = mid;
       }
       return clear;

@@ -130,7 +130,7 @@ describe('curlAboveFloor', () => {
     const sand = (): number => FLOOR;
     const support = new CarcassSupport([rock]);
     const floorAt = (x: number, z: number, fromY: number): number =>
-      support.floorY({ x, y: fromY, z, yaw: 0 }, 0, sand);
+      support.columnFloorY(x, z, fromY, sand);
 
     it('clamps a flip on a rock against the rock top, not the sand below', () => {
       const at = { x: 0, y: ROCK_TOP + STANDOFF, z: 0 };
