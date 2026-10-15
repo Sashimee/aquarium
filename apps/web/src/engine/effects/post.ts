@@ -27,10 +27,10 @@ import {
   vec4,
   velocity,
 } from 'three/tsl';
-import { bloom } from 'three/addons/tsl/display/BloomNode.js';
-import { dof } from 'three/addons/tsl/display/DepthOfFieldNode.js';
-import { smaa } from 'three/addons/tsl/display/SMAANode.js';
-import { traa } from 'three/addons/tsl/display/TRAANode.js';
+import type { bloom } from 'three/addons/tsl/display/BloomNode.js';
+import type { dof } from 'three/addons/tsl/display/DepthOfFieldNode.js';
+import type { smaa } from 'three/addons/tsl/display/SMAANode.js';
+import type { traa } from 'three/addons/tsl/display/TRAANode.js';
 import type { PostChain } from '../quality/tiers';
 import type { WaterShafts } from './shafts';
 
@@ -39,6 +39,78 @@ export interface PostSettings {
   readonly godRays: boolean;
   /** Depth of field, only while the camera is in focus mode. */
   readonly depthOfField: boolean;
+}
+
+export interface PostNodes {
+  readonly bloom: typeof bloom;
+  readonly dof: typeof dof;
+  readonly smaa: typeof smaa;
+  readonly traa: typeof traa;
+}
+
+export type PostNodeName = keyof PostNodes;
+
+const NODE_IMPORTS: { readonly [K in PostNodeName]: () => Promise<PostNodes[K]> } = {
+  bloom: () => import('three/addons/tsl/display/BloomNode.js').then((m) => m.bloom),
+  dof: () => import('three/addons/tsl/display/DepthOfFieldNode.js').then((m) => m.dof),
+  smaa: () => import('three/addons/tsl/display/SMAANode.js').then((m) => m.smaa),
+  traa: () => import('three/addons/tsl/display/TRAANode.js').then((m) => m.traa),
+};
+
+export function postNodesFor(settings: PostSettings): PostNodeName[] {
+  const { chain } = settings;
+  const names: PostNodeName[] = [];
+  if (chain === 'smaa-bloom' || chain === 'taa-bloom') names.push('bloom');
+  if (settings.depthOfField) names.push('dof');
+  if (chain === 'smaa' || chain === 'smaa-bloom') names.push('smaa');
+  if (chain === 'taa-bloom') names.push('traa');
+  return names;
+}
+
+/**
+ * Each screen-space node is its own chunk, fetched when a tier first needs it rather than before
+ * the tank can show: SMAA's lookup textures alone are about 40 kB gzip.
+ */
+export class PostNodeLoader {
+  private readonly nodes: { -readonly [K in PostNodeName]?: PostNodes[K] } = {};
+  private readonly pending = new Map<PostNodeName, Promise<void>>();
+
+  constructor(private readonly imports = NODE_IMPORTS) {}
+
+  ready(settings: PostSettings): boolean {
+    return postNodesFor(settings).every((name) => this.nodes[name] !== undefined);
+  }
+
+  async load(settings: PostSettings): Promise<void> {
+    await Promise.all(postNodesFor(settings).map((name) => this.loadNode(name)));
+  }
+
+  get<K extends PostNodeName>(name: K): PostNodes[K] {
+    const node = this.nodes[name];
+    if (node === undefined) {
+      throw new Error(`Post: the ${name} node is not loaded; await PostNodeLoader.load first`);
+    }
+    return node;
+  }
+
+  private loadNode<K extends PostNodeName>(name: K): Promise<void> {
+    if (this.nodes[name] !== undefined) return Promise.resolve();
+    let pending = this.pending.get(name);
+    if (pending === undefined) {
+      pending = this.imports[name]().then(
+        (node) => {
+          this.nodes[name] = node;
+          this.pending.delete(name);
+        },
+        (cause: unknown) => {
+          this.pending.delete(name);
+          throw cause;
+        },
+      );
+      this.pending.set(name, pending);
+    }
+    return pending;
+  }
 }
 
 /** Highlights only: specular glints on scales and the water surface. */
@@ -104,8 +176,10 @@ export class PostPipeline {
   private readonly pipeline: RenderPipeline;
   private readonly owned: Disposable[] = [];
 
+  /** `nodes` must hold every node `settings` needs; see `PostNodeLoader.ready`. */
   constructor(
     renderer: WebGPURenderer,
+    private readonly nodes: Pick<PostNodeLoader, 'get'>,
     scene: Scene,
     camera: PerspectiveCamera,
     shafts: WaterShafts,
@@ -147,13 +221,13 @@ export class PostPipeline {
       colour = vec4(max(colour.rgb.add(shafts.node(depth)), 0), colour.a);
     }
     if (chain === 'smaa-bloom' || chain === 'taa-bloom') {
-      const glow = bloom(colour, BLOOM.strength, BLOOM.radius, BLOOM.threshold);
+      const glow = this.nodes.get('bloom')(colour, BLOOM.strength, BLOOM.radius, BLOOM.threshold);
       this.owned.push(glow);
       colour = colour.add(glow);
     }
     let image: Node = colour;
     if (settings.depthOfField) {
-      const blur = dof(
+      const blur = this.nodes.get('dof')(
         colour,
         scenePass.getViewZNode(),
         autofocus(depth, camera),
@@ -165,12 +239,17 @@ export class PostPipeline {
     }
 
     if (this.temporal) {
-      const resolve = traa(image, depth, scenePass.getTextureNode('velocity'), camera);
+      const resolve = this.nodes.get('traa')(
+        image,
+        depth,
+        scenePass.getTextureNode('velocity'),
+        camera,
+      );
       this.owned.push(resolve);
       return resolve;
     }
     if (chain === 'smaa' || chain === 'smaa-bloom') {
-      const aa = smaa(renderOutput(image));
+      const aa = this.nodes.get('smaa')(renderOutput(image));
       this.owned.push(aa);
       this.pipeline.outputColorTransform = false;
       return aa;

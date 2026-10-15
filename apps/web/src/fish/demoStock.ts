@@ -39,18 +39,24 @@ export interface DemoStock {
 
 /**
  * `wanted` is the count the demo asks for. A schooling species is raised to its content
- * `minGroup`, so the demo never shows a shoal the care rules would call stressed.
+ * `minGroup`, so the demo never shows a shoal the care rules would call stressed. A species with
+ * no fish to show has no count.
  */
-function stock(raw: readonly unknown[], wanted: Readonly<Record<string, number>>): DemoStock {
+export function demoStock(
+  raw: readonly unknown[],
+  wanted: Readonly<Record<string, number>>,
+): DemoStock {
   const content = raw.map((r) => contentSchema.parse(r));
   for (const id of Object.keys(wanted)) {
     if (!content.some((s) => s.id === id)) throw new Error(`demo stock: ${id} has no content`);
   }
   const counts = Object.fromEntries(
-    content.map(({ id, behaviour }) => [
-      id,
-      Math.max(wanted[id] ?? 0, behaviour.schooling?.minGroup ?? 0),
-    ]),
+    content
+      .map(
+        ({ id, behaviour }) =>
+          [id, Math.max(wanted[id] ?? 0, behaviour.schooling?.minGroup ?? 0)] as const,
+      )
+      .filter(([, count]) => count > 0),
   );
   return {
     species: content.map(({ id, behaviour, locomotion, lifecycle }) => ({
@@ -70,11 +76,11 @@ function stock(raw: readonly unknown[], wanted: Readonly<Record<string, number>>
  * (a blue tang outgrows a 120 cm tank), and as many banggai as content's smallest group.
  */
 export const DEMO_STOCKS: Readonly<Record<Biome, DemoStock>> = {
-  freshwater: stock(
+  freshwater: demoStock(
     [neonTetraContent, angelfishContent, bronzeCorydorasContent, bettaContent, guppyContent],
     { 'neon-tetra': 14, angelfish: 2, 'bronze-corydoras': 5, betta: 1, guppy: 4 },
   ),
-  reef: stock(
+  reef: demoStock(
     [ocellarisClownfishContent, yellowTangContent, royalGrammaContent, banggaiCardinalfishContent],
     { 'ocellaris-clownfish': 2, 'yellow-tang': 1, 'royal-gramma': 1, 'banggai-cardinalfish': 1 },
   ),

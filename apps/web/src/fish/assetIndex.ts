@@ -8,6 +8,8 @@ export interface FishAssetEntry {
   readonly standardLengthM: number;
   /** lod0 first, relative to the assets root. */
   readonly lodFiles: readonly string[];
+  /** 1k map → its 2k map, for the maps whose 2k variant really is larger; paths as `lodFiles`. */
+  readonly sharperTextures: ReadonlyMap<string, string>;
 }
 
 function fail(path: string, expected: string): never {
@@ -41,12 +43,35 @@ function vec3(value: unknown, path: string): [number, number, number] {
 }
 
 /** Paths are joined to the assets root, so anything climbing out of it is rejected. */
-function assetPath(value: unknown, path: string): string {
+function assetPath(value: unknown, path: string, extension = '.glb'): string {
   const file = string(value, path);
-  if (file.startsWith('/') || file.split('/').includes('..') || !file.endsWith('.glb')) {
-    fail(path, 'a relative .glb path inside the assets folder');
+  if (file.startsWith('/') || file.split('/').includes('..') || !file.endsWith(extension)) {
+    fail(path, `a relative ${extension} path inside the assets folder`);
   }
   return file;
+}
+
+function sharperTextures(value: unknown, path: string): Map<string, string> {
+  const out = new Map<string, string>();
+  if (value === undefined) return out;
+  if (!Array.isArray(value)) fail(path, 'an array');
+  value.forEach((raw: unknown, i) => {
+    const variants = record(record(raw, `${path}[${i}]`).variants, `${path}[${i}].variants`);
+    const small = variants['1k'];
+    const large = variants['2k'];
+    if (small === undefined || large === undefined) return;
+    const at = `${path}[${i}].variants`;
+    const smallVariant = record(small, `${at}.1k`);
+    const largeVariant = record(large, `${at}.2k`);
+    const smallSize = positive(smallVariant.size, `${at}.1k.size`);
+    const largeSize = positive(largeVariant.size, `${at}.2k.size`);
+    if (largeSize <= smallSize) return;
+    out.set(
+      assetPath(smallVariant.file, `${at}.1k.file`, '.ktx2'),
+      assetPath(largeVariant.file, `${at}.2k.file`, '.ktx2'),
+    );
+  });
+  return out;
 }
 
 export function parseFishAssets(json: unknown): Map<string, FishAssetEntry> {
@@ -76,6 +101,7 @@ export function parseFishAssets(json: unknown): Map<string, FishAssetEntry> {
       max,
       standardLengthM: positive(fish.standardLengthM, `${at}.fish.standardLengthM`),
       lodFiles,
+      sharperTextures: sharperTextures(asset.textures, `${at}.textures`),
     });
   });
   return out;
