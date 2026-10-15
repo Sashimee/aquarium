@@ -1,7 +1,8 @@
 import { decorPositionLimits } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
-import { item } from './fixtures';
+import { item, spec } from './fixtures';
 import { sanitizeLayout } from './layout';
+import { SURFACE_MARGIN } from '../../scene/plants';
 import { VACATION_FEEDER_ASSET_ID } from './spec';
 
 describe('sanitizeLayout', () => {
@@ -42,5 +43,34 @@ describe('sanitizeLayout', () => {
   it('leaves a clean layout untouched', () => {
     const layout = [item('boulder-01', 0, 0), item(VACATION_FEEDER_ASSET_ID, 0.3, 0.1)];
     expect(sanitizeLayout(layout, 'reef')).toEqual({ layout, dropped: 0 });
+  });
+
+  describe('plants taller than the water', () => {
+    const fern = spec('java-fern');
+    const fit = { specs: new Map([[fern.assetId, fern]]), waterTop: 0.3 };
+    const tall = (y: number, scale: number) => item('java-fern', 0, 0, { scale }, y);
+
+    it('shrinks a plant that would poke through the surface', () => {
+      const out = sanitizeLayout([tall(0.1, 1)], 'freshwater', fit);
+      expect(out.dropped).toBe(0);
+      const shrunk = out.layout[0];
+      expect(shrunk?.scale).toBeLessThan(1);
+      expect(
+        (shrunk?.position[1] ?? 0) + fern.box.max[1] * (shrunk?.scale ?? 0),
+      ).toBeLessThanOrEqual(0.3 - SURFACE_MARGIN);
+    });
+
+    it('drops a plant that would have to shrink too far', () => {
+      const out = sanitizeLayout([tall(0.285, 1)], 'freshwater', fit);
+      expect(out.layout).toEqual([]);
+      expect(out.dropped).toBe(1);
+    });
+
+    it('leaves a plant that fits, and every plant when the water level is unknown', () => {
+      const fine = tall(0.06, 0.5);
+      expect(sanitizeLayout([fine], 'freshwater', fit).layout).toEqual([fine]);
+      const poking = tall(0.2, 3);
+      expect(sanitizeLayout([poking], 'freshwater').layout).toEqual([poking]);
+    });
   });
 });

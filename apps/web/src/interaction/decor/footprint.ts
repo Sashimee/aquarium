@@ -79,6 +79,12 @@ export function overlaps(a: Footprint, b: Footprint, gap = 0): boolean {
   return true;
 }
 
+export function containsPoint(f: Footprint, x: number, z: number): boolean {
+  const dx = x - f.cx;
+  const dz = z - f.cz;
+  return Math.abs(dx * f.cos - dz * f.sin) <= f.hx && Math.abs(dx * f.sin + dz * f.cos) <= f.hz;
+}
+
 export function insideTank(f: Footprint, halfLength: number, halfDepth: number): boolean {
   const e = extentOf(f);
   return Math.abs(f.cx) + e.x <= halfLength + 1e-9 && Math.abs(f.cz) + e.z <= halfDepth + 1e-9;

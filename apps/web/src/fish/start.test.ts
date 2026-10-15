@@ -59,6 +59,12 @@ class FakeFishSystem {
   anyFish(): (() => FishPoint | null) | null {
     return null;
   }
+  noriGrazers(): string[] {
+    return [];
+  }
+  canGrazeAt(): Promise<boolean> {
+    return Promise.resolve(true);
+  }
   netTap(ray: PickRay): void {
     this.taps.push(ray);
   }

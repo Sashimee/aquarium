@@ -6,6 +6,7 @@ import { FeedGate } from '../../sync/feedGate';
 import type { Vec3 } from '../camera';
 import type { InteractionEvents } from '../events';
 import { FoodLink, type FoodBridge } from '../food/link';
+import type { ReachBridge } from '../food/clipReach';
 import { FoodField } from '../food/particles';
 import { sceneToSim } from '../food/simSpace';
 import { BubbleField } from './bubbles';
@@ -19,7 +20,7 @@ export interface PlayScene {
   readonly current: { sample(x: number, y: number, z: number, out: Float64Array | number[]): void };
 }
 
-export interface PlaySimBridge extends FoodBridge {
+export interface PlaySimBridge extends FoodBridge, ReachBridge {
   startle?(stimulus: StimulusLike): void;
   setLure?(position: readonly [number, number, number] | null): void;
   netTap?(ray: Ray): void;
@@ -90,6 +91,7 @@ export function createPlaySystem(
     netTap: sim.netTap?.bind(sim),
     pickFish: sim.pickFish?.bind(sim),
     toSim: sceneToSim,
+    reach: sim,
     lure(p) {
       if (p === null && !lured) return;
       lured = p !== null;

@@ -66,6 +66,7 @@ export class SimWorldSpec {
         id: f.simId,
         species: f.species,
         bodyLengthM: bodyLengthOf(f, input.locomotion.bodyLengthM),
+        ...(f.hunger === undefined ? {} : { hunger: f.hunger }),
       });
     }
     if (fish.length === 0) return null;

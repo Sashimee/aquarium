@@ -4,7 +4,8 @@ import {
   type DecorItem,
   type DecorLayout,
 } from '@aquarium/shared';
-import { withinServerBounds } from './rules';
+import { SURFACE_MARGIN } from '../../scene/plants';
+import { MIN_PLANT_SCALE, withinServerBounds } from './rules';
 import { VACATION_FEEDER_ASSET_ID, type DecorSpec } from './spec';
 
 export interface Piece {
@@ -21,8 +22,28 @@ export interface Sanitized {
   readonly dropped: number;
 }
 
-/** Makes a saved layout one the server accepts: wrong-biome pieces and extra feeders go, strays are pulled inside. */
-export function sanitizeLayout(layout: readonly DecorItem[], biome: Biome): Sanitized {
+export interface PlantFit {
+  readonly specs: ReadonlyMap<string, DecorSpec>;
+  readonly waterTop: number;
+}
+
+/** A plant that pokes through the surface is scaled down to fit; one that would shrink too far is dropped. */
+function fitPlant(item: DecorItem, fit: PlantFit): DecorItem | null {
+  const spec = fit.specs.get(item.assetId);
+  if (spec?.kind !== 'plant') return item;
+  const height = spec.box.max[1] * item.scale;
+  const available = fit.waterTop - SURFACE_MARGIN - item.position[1];
+  if (available >= height) return item;
+  const scale = Math.floor((item.scale * available * 1000) / height) / 1000;
+  return scale < MIN_PLANT_SCALE ? null : { ...item, scale };
+}
+
+/** Makes a saved layout one the server accepts: wrong-biome pieces and extra feeders go, strays are pulled inside, tall plants shrink. */
+export function sanitizeLayout(
+  layout: readonly DecorItem[],
+  biome: Biome,
+  fit?: PlantFit,
+): Sanitized {
   const kept: DecorItem[] = [];
   let feeder = false;
   for (const item of layout) {
@@ -32,7 +53,9 @@ export function sanitizeLayout(layout: readonly DecorItem[], biome: Biome): Sani
     } else if (!isDecorAssetForBiome(biome, item.assetId)) {
       continue;
     }
-    kept.push(withinServerBounds(item));
+    const bounded = withinServerBounds(item);
+    const fitted = fit ? fitPlant(bounded, fit) : bounded;
+    if (fitted) kept.push(fitted);
   }
   return { layout: kept, dropped: layout.length - kept.length };
 }

@@ -443,6 +443,23 @@ export class FishSystem {
     return best === null ? null : this.follow(best);
   }
 
+  /** The species in the tank that eat nori, for the clip placement check. */
+  noriGrazers(): string[] {
+    const species = new Set<string>();
+    for (const fish of this.roster.swimming()) {
+      if (speciesInput(fish.species)?.lifecycle.diet.includes('nori')) species.add(fish.species);
+    }
+    return [...species];
+  }
+
+  /** See `SimClient.canGrazeAt`; rejects while the sim is not up. */
+  canGrazeAt(species: string, position: Point3): Promise<boolean> {
+    if (this.disposed || !this.simReady) {
+      return Promise.reject(new Error('The fish sim is not ready'));
+    }
+    return this.sim.canGrazeAt(species, position);
+  }
+
   /** Some swimming fish to follow, for a control that has no pointer to pick with. */
   anyFish(): (() => FishPoint | null) | null {
     for (const rt of this.runtimes.values()) {
