@@ -448,7 +448,10 @@ export class Engine {
       if (s.shadowMapSize > 0) this.hood.shadow.mapSize.set(s.shadowMapSize, s.shadowMapSize);
     });
     this.quality.register('caustics', (s) => {
-      this.caustics.setMethod(s.causticMethod, s.causticLayers);
+      // The context node's version is in every pipeline's cache key, so this rebuilds them all.
+      if (this.caustics.setMethod(s.causticMethod, s.causticLayers)) {
+        this.renderer.contextNode.needsUpdate = true;
+      }
     });
     // A tier change can rebuild pipelines without touching a material, e.g. by toggling shadows.
     this.quality.register('cull-prewarm', () => this.cullPrewarm.invalidate());
