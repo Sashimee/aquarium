@@ -61,20 +61,21 @@ describe('bleedIslandEdges', () => {
     expect(out.data[(32 * SIZE + 20) * 4]).toBe(160);
   });
 
-  it('keeps the colour of an island narrower than twice the bleed width', () => {
+  it('replaces the dark outline of an island narrower than twice the bleed width from its own interior', () => {
     const data = new Uint8Array(SIZE * SIZE * 4);
     for (let y = 16; y < 48; y++)
-      for (let x = 8; x < 14; x++) {
+      for (let x = 8; x < 16; x++) {
         const i = (y * SIZE + x) * 4;
-        data[i] = data[i + 1] = data[i + 2] = 250;
+        const rim = x === 8 || x === 15;
+        data[i] = data[i + 1] = data[i + 2] = rim ? 5 : 250;
       }
     const out = bleedIslandEdges(
       { width: SIZE, height: SIZE, data },
-      [island(8 / SIZE, 14 / SIZE)],
+      [island(8 / SIZE, 16 / SIZE)],
       6,
       'test/m',
     );
-    for (const x of [8, 10, 13]) expect(out.data[(32 * SIZE + x) * 4]).toBe(250);
+    for (const x of [8, 10, 12, 15]) expect(out.data[(32 * SIZE + x) * 4]).toBe(250);
   });
 
   it('fails loudly, naming the material, when no texel is covered', () => {

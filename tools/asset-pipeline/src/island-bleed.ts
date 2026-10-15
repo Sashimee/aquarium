@@ -87,7 +87,7 @@ function interiorMask(parts: Part[], width: number, height: number, px: number):
   return Uint8Array.from({ length: count }, (_, i) => {
     if (!covered[i]) return 0;
     const reach = at(deepest, at(label, i));
-    const margin = reach <= px ? 0 : px;
+    const margin = Math.min(px, Math.floor(reach / 2));
     return at(depth, i) > margin ? 1 : 0;
   });
 }
@@ -149,7 +149,7 @@ function fillFrom(level: Level, coarse: Level): void {
  * gutter and show it as a dark crack. Texels within `px` of an island border, and the whole gutter,
  * are replaced by a smooth push-pull fill of the colours deeper inside, so a stretched triangle
  * blends between the two islands instead of cutting through black. The image edge counts as an island
- * border, and an island no wider than twice `px` keeps its own colour.
+ * border, and a narrower island bleeds only half its depth, from its own interior.
  */
 export function bleedIslandEdges(image: Rgba, parts: Part[], px: number, label: string): Rgba {
   const { width, height, data } = image;
