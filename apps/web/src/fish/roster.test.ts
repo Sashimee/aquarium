@@ -247,6 +247,67 @@ describe('TankRoster', () => {
     expect(roster.size).toBe(0);
   });
 
+  describe('swimmingSpecies', () => {
+    it('lists the demo species, sorted and once each', () => {
+      const roster = new TankRoster([
+        ...DEMO,
+        { id: 'neon-tetra-1', species: 'neon-tetra' },
+        { id: 'corydoras-0', species: 'corydoras' },
+      ]);
+      expect(roster.swimmingSpecies()).toEqual(['angelfish', 'corydoras', 'neon-tetra']);
+    });
+
+    it('leaves out bagged and dead fish until they swim', () => {
+      const roster = loaded([
+        fishFixture(FISH_1, { species: 'neon-tetra' }),
+        fishFixture(FISH_2, { species: 'betta', status: 'dead', health: 0 }),
+      ]);
+      roster.add({
+        tankId: TANK_A,
+        fish: fishFixture(FISH_3, { species: 'guppy' }),
+        acclimate: true,
+      });
+      expect(roster.swimmingSpecies()).toEqual(['neon-tetra']);
+      roster.release({ tankId: TANK_A, fishId: FISH_3 });
+      expect(roster.swimmingSpecies()).toEqual(['guppy', 'neon-tetra']);
+    });
+
+    it('follows a demo swap, a load and an unload', () => {
+      const roster = new TankRoster(DEMO);
+      roster.setDemo([{ id: 'clownfish-0', species: 'clownfish' }]);
+      expect(roster.swimmingSpecies()).toEqual(['clownfish']);
+      roster.load({
+        tankId: TANK_A,
+        biome: 'freshwater',
+        decorLayout: [],
+        decorEdited: false,
+        fish: [fishFixture(FISH_1, { species: 'betta' })],
+      });
+      expect(roster.swimmingSpecies()).toEqual(['betta']);
+      roster.unload({ tankId: TANK_A, reason: 'switch' });
+      expect(roster.swimmingSpecies()).toEqual(['clownfish']);
+    });
+
+    it('is empty when nothing swims', () => {
+      expect(new TankRoster([]).swimmingSpecies()).toEqual([]);
+      expect(loaded([]).swimmingSpecies()).toEqual([]);
+    });
+
+    it('hands out the same array until the swimming set changes', () => {
+      const roster = loaded([fishFixture(FISH_1, { species: 'neon-tetra' })]);
+      const first = roster.swimmingSpecies();
+      roster.updated({
+        tankId: TANK_A,
+        fish: [fishFixture(FISH_1, { species: 'neon-tetra', hunger: 0.9 })],
+      });
+      expect(roster.swimmingSpecies()).toBe(first);
+      roster.died({ tankId: TANK_A, fish: fishFixture(FISH_1, { status: 'dead', health: 0 }) });
+      const after = roster.swimmingSpecies();
+      expect(after).not.toBe(first);
+      expect(after).toEqual([]);
+    });
+  });
+
   describe('updated', () => {
     it('follows the server hunger and health of a living fish', () => {
       const roster = loaded([fishFixture(FISH_1, { hunger: 0.1, health: 1 })]);

@@ -77,6 +77,8 @@ export interface FishHandle {
   setSceneColliders(colliders: readonly SceneCollider[]): void;
   /** Swaps the demo stock; held until the fish are up. */
   setDemoBiome(biome: Biome): void;
+  /** The distinct swimming species, sorted; null until the fish are up. */
+  swimmingSpecies(): readonly string[] | null;
   stop(): void;
 }
 
@@ -259,6 +261,7 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
       demoBiome = next;
       ready?.setDemoBiome(next);
     },
+    swimmingSpecies: () => ready?.swimmingSpecies() ?? null,
     stop() {
       abort.abort();
       tankEvents.stop();

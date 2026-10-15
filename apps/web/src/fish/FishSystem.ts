@@ -464,6 +464,10 @@ export class FishSystem {
     return best === null ? null : this.follow(best);
   }
 
+  swimmingSpecies(): readonly string[] {
+    return this.roster.swimmingSpecies();
+  }
+
   /** The species in the tank that eat nori, for the clip placement check. */
   noriGrazers(): string[] {
     const species = new Set<string>();

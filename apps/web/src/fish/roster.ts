@@ -41,6 +41,7 @@ export class TankRoster {
   /** Between a switch's unload and the session's `tank:loaded` or `tank:none`: show nothing. */
   private switching = false;
   private nextId = 0;
+  private species: { readonly revision: number; readonly list: readonly string[] } | null = null;
   revision = 0;
 
   constructor(private demo: readonly FishSpawn[]) {
@@ -69,6 +70,15 @@ export class TankRoster {
 
   swimming(): RosterFish[] {
     return [...this.fish.values()].filter((f) => f.phase === 'swimming');
+  }
+
+  /** The distinct species in the sim, sorted; the same array until `revision` changes. */
+  swimmingSpecies(): readonly string[] {
+    if (this.species?.revision !== this.revision) {
+      const list = [...new Set(this.swimming().map((f) => f.species))].sort();
+      this.species = { revision: this.revision, list };
+    }
+    return this.species.list;
   }
 
   simIdOf(serverId: string): string | undefined {
