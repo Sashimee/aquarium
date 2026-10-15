@@ -126,6 +126,8 @@ type Script =
   | {
       readonly kind: 'sinking';
       readonly startS: number;
+      /** When it began falling from `anchor`: its death, or when the decor holding it moved. */
+      readonly fallS: number;
       readonly anchor: Anchor;
       /** What it lands on: the substrate or the top of hard decor. */
       readonly floorY: number;
@@ -881,7 +883,7 @@ export class FishSystem {
       yaw: this.restingYaw(rt.lastQuaternion),
     };
     rt.script = this.sinks(rt)
-      ? this.sinkingScript(rt, anchor, this.clockS, rt.lastQuaternion.clone())
+      ? this.sinkingScript(rt, anchor, this.clockS, this.clockS, rt.lastQuaternion.clone())
       : { kind: 'dying', startS: this.clockS, anchor };
   }
 
@@ -902,20 +904,32 @@ export class FishSystem {
     rt: FishRuntime,
     anchor: Anchor,
     startS: number,
+    fallS: number,
     fromQuaternion: Quaternion | null,
-  ): Script {
+  ): Extract<Script, { kind: 'sinking' }> {
     const floorY = this.support.floorY(anchor, rt.length, this.box.ground);
     const lowest = floorY + CARCASS.restBellyBodyLengths * rt.length;
     const from = anchor.y >= lowest ? anchor : { ...anchor, y: lowest };
-    return { kind: 'sinking', startS, anchor: from, floorY, fromQuaternion };
+    return { kind: 'sinking', startS, fallS, anchor: from, floorY, fromQuaternion };
   }
 
-  /** Decor moved: a dead shrimp lands on whatever is under it now. */
+  /**
+   * Decor moved: a dead shrimp lands on whatever is under it now. One whose floor changed falls
+   * again from where it is drawn, so it sinks off a removed rock instead of jumping down.
+   */
   private resettleCarcasses(): void {
     for (const rt of this.runtimes.values()) {
       const { script } = rt;
       if (script?.kind !== 'sinking') continue;
-      rt.script = this.sinkingScript(rt, script.anchor, script.startS, script.fromQuaternion);
+      const anchor = rt.shown ? { ...script.anchor, y: rt.lastPosition.y } : script.anchor;
+      const next = this.sinkingScript(
+        rt,
+        anchor,
+        script.startS,
+        this.clockS,
+        script.fromQuaternion,
+      );
+      if (next.floorY !== script.floorY) rt.script = next;
     }
   }
 
@@ -929,9 +943,11 @@ export class FishSystem {
     if (!this.sinks(rt)) return { kind: 'dead', startS: this.clockS, anchor };
     const floorY = this.support.floorY(anchor, rt.length, this.box.ground);
     const onFloor = { ...anchor, y: floorY + CARCASS.restBellyBodyLengths * rt.length };
+    const startS = this.clockS - carcassSettleS(onFloor, rt.length, rt.seed, floorY);
     return {
       kind: 'sinking',
-      startS: this.clockS - carcassSettleS(onFloor, rt.length, rt.seed, floorY),
+      startS,
+      fallS: startS,
       anchor: onFloor,
       floorY,
       fromQuaternion: null,
@@ -1185,7 +1201,8 @@ export class FishSystem {
     if (script !== null) {
       const t = this.clockS - script.startS;
       if (script.kind === 'sinking') {
-        sinkingCarcass(t, script.anchor, rt.length, rt.seed, script.floorY, pose);
+        const fallT = this.clockS - script.fallS;
+        sinkingCarcass(t, script.anchor, rt.length, rt.seed, script.floorY, pose, fallT);
         limpFrom = script.fromQuaternion;
         limpWeight = 1 - smoothstep01(t / CARCASS.limpS);
       } else {

@@ -1411,8 +1411,8 @@ export class Behaviour {
 
   /**
    * Walker `i` heads for cave `a` and shelters in its mouth. False once it has gone
-   * `walkerCaveGiveUpS` without getting closer (the way is blocked): it lets the cave go and
-   * rests where it is.
+   * `walkerCaveGiveUpS` without getting closer (the way is blocked) and finds no nook beside
+   * it either: it lets the cave go and rests where it is.
    */
   private planCave(
     i: number,
@@ -1440,9 +1440,9 @@ export class Behaviour {
       return true;
     }
     if (this.stalled(i, d, length, BEHAVIOUR.walkerCaveGiveUpS)) {
-      this.restSpotSet[i] = 2;
+      this.restSpotSet[i] = 0;
       this.anchor[i] = -1;
-      return false;
+      return this.planNook(i, plan, px, pz, length);
     }
     const [tx, ty, tz] = this.approach(i, a, py);
     plan.seek(tx, ty, tz, 0, 0.5);

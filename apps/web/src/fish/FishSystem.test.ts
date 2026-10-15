@@ -395,7 +395,7 @@ describe('FishSystem dead shrimp', () => {
     fish.dispose();
   });
 
-  it('comes to rest on top of a rock placed under it, not inside', async () => {
+  it('comes to rest on top of a rock placed under it, and sinks off it once it goes', async () => {
     const { fish, advance } = await shrimpTank();
     die(fish);
     advance(1);
@@ -416,7 +416,14 @@ describe('FishSystem dead shrimp', () => {
     expect(rest.y).toBeLessThan(0.15 + 0.12 * SHRIMP.size + 0.003);
 
     fish.setColliders([]);
-    advance(1);
+    advance(STEP_S);
+    const falling = locate(fish).y;
+    expect(falling).toBeGreaterThan(rest.y - 0.003);
+    advance(0.3);
+    const lower = locate(fish).y;
+    expect(lower).toBeLessThan(falling - 0.002);
+    expect(lower).toBeGreaterThan(0.14);
+    advance(5);
     expect(locate(fish).y).toBeLessThan(0.14);
     fish.dispose();
   });

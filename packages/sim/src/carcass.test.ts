@@ -165,6 +165,18 @@ describe('sinkingCarcass', () => {
     }
   });
 
+  it('falls again from rest when its support goes, limp and rolled as long dead', () => {
+    const from = { x: 0, y: 0.2, z: 0, yaw: 0 };
+    const p = pose();
+    sinkingCarcass(30, from, 0.03, 0.9, 0, p, 0);
+    expect(p).toMatchObject({ y: 0.2, roll: -Math.PI / 2, liveliness: 0 });
+    sinkingCarcass(30.5, from, 0.03, 0.9, 0, p, 0.5);
+    const fell = p.y;
+    expect(fell).toBeLessThan(0.2);
+    sinkingCarcass(0.5, from, 0.03, 0.9, 0, p);
+    expect(fell).toBe(p.y);
+  });
+
   it('holds the start pose before t = 0', () => {
     const from = { x: 0.3, y: 0.4, z: 0.2, yaw: 2 };
     const p = pose();
@@ -207,6 +219,14 @@ describe('CarcassSupport', () => {
     const across = { x: 0, y: 0.3, z: edge, yaw: Math.PI / 2 };
     expect(support.floorY(along, length, sand)).toBeCloseTo(0.15, 3);
     expect(support.floorY(across, length, sand)).toBe(0.02);
+  });
+
+  it('slides past a rock face it only brushes', () => {
+    const turned = { ...rock(), rotationY: Math.PI / 4 };
+    const support = new CarcassSupport([turned]);
+    const off = (0.05 + 0.0002) / Math.SQRT2;
+    const brushing = { x: off, y: 0.3, z: off, yaw: (3 * Math.PI) / 4 };
+    expect(support.floorY(brushing, length, sand)).toBe(0.02);
   });
 
   it('falls past a rock that is above where it died, as under a ledge', () => {
