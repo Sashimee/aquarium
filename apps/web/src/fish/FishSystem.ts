@@ -299,12 +299,16 @@ export class FishSystem {
         this.shadows = s;
         for (const batch of this.batches.values()) this.applyShadows(batch);
       }),
-      engine.quality.register('fish-materials', (_s, tier) => this.applyFeatures(tier)),
+      // Ahead of the materials, which skip the batches this marks stale: their retexture rebuilds
+      // them with the new tier's features anyway.
       engine.quality.register('fish-textures', (s) => {
         if (this.loader.textureSize === s.textureSize) return;
         this.loader.textureSize = s.textureSize;
         if (this.started && !this.disposed) this.requestSync();
       }),
+      engine.quality.register('fish-materials', (_s, tier) =>
+        this.applyFeatures(tier, new Set(this.staleTextures())),
+      ),
       engine.onFrame((deltaS, nowMs) => this.update(deltaS, nowMs)),
       engine.events.on('engine:daylight', ({ level }) => this.setDaylight(level)),
       engine.events.on('engine:temporal-resolve', () => this.applyFeatures(engine.quality.tier)),
@@ -631,6 +635,7 @@ export class FishSystem {
           model = await this.loader.load(assetId);
         } catch (cause) {
           this.failedRetextures.add(`${assetId}@${size}`);
+          if (this.features !== null) this.setBatchFeatures(batch, this.features);
           this.report(
             `Fish "${assetId}" ${size}px textures failed; it keeps its current ones`,
             cause,
@@ -905,7 +910,8 @@ export class FishSystem {
     });
   }
 
-  private applyFeatures(tier: Tier): void {
+  /** `retexturing` batches are left as they are: their reload builds them with these features. */
+  private applyFeatures(tier: Tier, retexturing: ReadonlySet<SpeciesBatch> = new Set()): void {
     const features = featuresFor(tier, {
       msaa: this.engine.renderer.samples > 1,
       temporal: this.engine.temporalResolve,
@@ -913,10 +919,14 @@ export class FishSystem {
     if (sameFeatures(this.features, features)) return;
     this.features = features;
     for (const batch of this.batches.values()) {
-      for (const lod of batch.lods) {
-        for (const m of lod.materials) m.setFeatures(features);
-        lod.warmed = false;
-      }
+      if (!retexturing.has(batch)) this.setBatchFeatures(batch, features);
+    }
+  }
+
+  private setBatchFeatures(batch: SpeciesBatch, features: FishMaterialFeatures): void {
+    for (const lod of batch.lods) {
+      for (const m of lod.materials) m.setFeatures(features);
+      lod.warmed = false;
     }
   }
 
