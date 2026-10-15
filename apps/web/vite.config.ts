@@ -5,7 +5,7 @@ import { ktx2WorkerPlugin } from './build/ktx2-worker-plugin.ts';
 export default defineConfig({
   plugins: [ktx2WorkerPlugin()],
   build: {
-    target: 'es2022',
+    target: ['es2022', 'safari16'],
     sourcemap: false,
   },
   server: {

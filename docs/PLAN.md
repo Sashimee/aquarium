@@ -21,7 +21,7 @@ your tanks across devices.
 | Biome | **Both, switchable**: planted freshwater and tropical reef. One user can own one of each, and the schema allows more later. |
 | Gameplay | **Full sim plus persistence**: feeding, play, decorating, growth, water quality, and **fish can die** from realistic neglect or overfeeding. |
 | Accounts | **User accounts**: passkeys first, plus email and password. Verification and reset mails go via `mailrelay` from `fish@bas.lu`. |
-| Devices | **Desktop and mobile**: WebGPU with automatic WebGL2 fallback, and quality tiers chosen by measuring the GPU. |
+| Devices | **Desktop and mobile**: WebGPU with automatic WebGL2 fallback, and quality tiers chosen by measuring the GPU. **Minimum Safari 16**: the CSP uses `wasm-unsafe-eval`, which Safari 15 and older do not know, so meshopt and the basis transcoder would not compile there. The web build targets `es2022` + `safari16`. |
 | Dev access | `devfish.bas.lu` is public, `X-Robots-Tag: noindex` plus a `robots.txt` that disallows everything. |
 | Dokploy | Both apps inside the existing **Bas.lu** project. |
 | Merging | **Repo-local override of the global rule**: the orchestrator squash-merges feature PRs into `dev` once CI is green **and** `code-reviewer` approves. `dev → main` happens **only when Alex asks**. |
