@@ -232,6 +232,7 @@ describe('startWorld', () => {
 
   const READY: SimReady = {
     type: 'ready',
+    request: 1,
     epoch: 1,
     fishIds: ['a'],
     stride: SNAPSHOT_STRIDE,
@@ -320,6 +321,7 @@ describe('startWorld', () => {
 describe('initSim', () => {
   const READY: SimReady = {
     type: 'ready',
+    request: 1,
     epoch: 1,
     fishIds: ['a'],
     stride: SNAPSHOT_STRIDE,
