@@ -392,17 +392,34 @@ describe('BiomeScene', () => {
     expect(shownNames(root)).toEqual(['freshwater']);
   });
 
-  it('disposes a build that outlives the timeout instead of showing it late', async () => {
+  it('mounts a build that outlives the timeout once it lands', async () => {
     vi.useFakeTimers();
     const h = harness('reef', { gate: true });
     await vi.waitFor(() => expect(h.gates).toHaveLength(1));
     await vi.advanceTimersByTimeAsync(90_000);
     expect(h.errors).toEqual([
-      'The reef preset did not finish loading in 90 s; showing the empty tank',
+      'The reef preset is still loading after 90 s; showing the empty tank until it arrives',
     ]);
+    expect(h.root.children).toHaveLength(0);
     h.gates[0]?.release();
     await h.scenes.settled();
+    expect(h.mounted).toEqual(['reef']);
+    expect(shownNames(h.root)).toEqual(['reef']);
+  });
+
+  it('disposes a late build when the biome changed meanwhile', async () => {
+    vi.useFakeTimers();
+    const h = harness('reef', { gate: true });
+    await vi.waitFor(() => expect(h.gates).toHaveLength(1));
+    await vi.advanceTimersByTimeAsync(90_000);
+    h.tankBiome.setFallback('freshwater');
+    h.gates[0]?.release();
+    await vi.waitFor(() => expect(h.gates).toHaveLength(2));
+    expect(h.built[0]?.disposed).toBe(true);
     expect(h.mounted).toEqual([]);
-    expect(h.root.children).toHaveLength(0);
+    h.gates[1]?.release();
+    await h.scenes.settled();
+    expect(h.mounted).toEqual(['freshwater']);
+    expect(shownNames(h.root)).toEqual(['freshwater']);
   });
 });
