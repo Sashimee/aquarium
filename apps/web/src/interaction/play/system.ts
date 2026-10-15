@@ -20,6 +20,7 @@ export interface PlayScene {
 
 export interface PlaySimBridge extends FoodBridge {
   startle?(stimulus: StimulusLike): void;
+  setLure?(position: readonly [number, number, number] | null): void;
   netTap?(ray: Ray): void;
 }
 
@@ -54,12 +55,13 @@ export function createPlaySystem(
   );
   const bubbles = new BubbleField(box.max.y);
   const ripples = new RippleField();
-  const visuals = new PlayVisuals((x, z) => scene.groundHeight(x, z));
+  const visuals = new PlayVisuals();
   engine.scene.add(visuals.group);
 
   const raycaster = new Raycaster();
   const ndc = new Vector2();
   const canvas = engine.renderer.domElement;
+  let lured = false;
   const controller = new PlayController({
     rayAt(x, y) {
       const w = canvas.clientWidth;
@@ -84,6 +86,11 @@ export function createPlaySystem(
     startle: sim.startle?.bind(sim),
     netTap: sim.netTap?.bind(sim),
     toSim: sceneToSim,
+    lure(p) {
+      if (p === null && !lured) return;
+      lured = p !== null;
+      sim.setLure?.(p ? [p.x, p.y, p.z] : null);
+    },
     setLaserDot: (p) => visuals.setLaser(p),
     now: () => performance.now(),
   });

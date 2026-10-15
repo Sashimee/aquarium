@@ -15,6 +15,7 @@ import {
   SnapshotField,
   STEP_DT,
   type FishPlacement,
+  type Point3,
   type SpeciesInput,
   type Stimulus,
   type TankSpaceWorldConfig,
@@ -363,6 +364,11 @@ export class FishSystem {
   /** `stimulus.position` is in tank space, which the sim and the scene share. */
   startle(stimulus: Stimulus): void {
     if (!this.disposed && this.simReady) this.sim.startle(stimulus);
+  }
+
+  /** A laser dot or fingertip in tank space, or null once it is gone. */
+  setLure(position: Point3 | null): void {
+    if (!this.disposed && this.simReady) this.sim.setLure(position);
   }
 
   /**

@@ -1,5 +1,5 @@
 import type { Biome, Collider } from '@aquarium/shared';
-import type { Stimulus } from '@aquarium/sim';
+import type { Point3, Stimulus } from '@aquarium/sim';
 import type { Engine } from '../engine/Engine';
 import type { EventBus } from '../engine/events';
 import type { TankDimensions } from '../engine/tank/dimensions';
@@ -36,6 +36,8 @@ export interface PickRay {
 export interface FishSimBridge {
   startle(stimulus: Stimulus): void;
   setFood(buffer: Float32Array): void;
+  /** A laser dot or fingertip in tank space that curious fish follow, or null once it is gone. */
+  setLure(position: Point3 | null): void;
   /** Bites by the ids the app knows: server fish ids while a saved tank is shown. */
   onAte(listener: (events: readonly FishBite[]) => void): () => void;
   /** The net tool tapped along `ray`; emits `net:tap` when it hits a dead fish. */
@@ -211,6 +213,7 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
     sim: {
       startle: (stimulus) => ready?.startle(stimulus),
       setFood: (buffer) => ready?.setFood(buffer),
+      setLure: (position) => ready?.setLure(position),
       onAte(listener) {
         ateListeners.add(listener);
         return () => ateListeners.delete(listener);

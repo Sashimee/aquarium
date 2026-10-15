@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Collider } from '@aquarium/shared';
+import type { Point3 } from '@aquarium/sim';
 import type { Engine } from '../engine/Engine';
 import { EventBus, type EngineEvents } from '../engine/events';
 import type { InteractionEvents } from '../interaction/events';
@@ -40,6 +41,10 @@ class FakeFishSystem {
     this.ate?.(events);
   }
   startle(): void {}
+  readonly lures: (Point3 | null)[] = [];
+  setLure(position: Point3 | null): void {
+    this.lures.push(position);
+  }
   setFood(buffer: Float32Array): void {
     this.food.push(buffer);
   }
@@ -349,13 +354,17 @@ describe('startFish', () => {
     const { handle } = setup(pending.promise);
     const ray: PickRay = { origin: { x: 0, y: 0, z: 1 }, dir: { x: 0, y: 0, z: -1 } };
     handle.sim.setFood(new Float32Array(5));
+    handle.sim.setLure([0.1, 0.2, 0.3]);
     handle.sim.netTap(ray);
     pending.resolve(fish);
     await flush();
     expect(fish.food).toHaveLength(0);
     handle.sim.setFood(new Float32Array(5));
+    handle.sim.setLure([0.1, 0.2, 0.3]);
+    handle.sim.setLure(null);
     handle.sim.netTap(ray);
     expect(fish.food).toHaveLength(1);
+    expect(fish.lures).toEqual([[0.1, 0.2, 0.3], null]);
     expect(fish.taps).toEqual([ray]);
   });
 

@@ -35,7 +35,6 @@ export interface PlayDeps {
   /** Picks the fish under the ray; the fish system emits `net:tap` for a catchable one. */
   netTap?: ((ray: Ray) => void) | undefined;
   toSim(x: number, y: number, z: number, out: Float64Array): void;
-  /** TODO(#72): the sim has no lure input yet; wire this to `bridge.setLure` once it lands. */
   lure?(position: Vec3 | null): void;
   setLaserDot(point: Vec3 | null): void;
   now(): number;
