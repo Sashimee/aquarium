@@ -51,7 +51,8 @@ describe('fixedDecorOf', () => {
       sync: vi.fn(),
       dispose: vi.fn(),
     });
-    expect(world.layout()).toHaveLength(reef.decor.length);
+    const key = (i: DecorItem) => JSON.stringify([i.assetId, i.position]);
+    expect(world.layout().map(key).sort()).toEqual(reef.decor.map(key).sort());
   });
 
   it('never asks the model catalogue for a procedural coral, in any preset', () => {
@@ -86,7 +87,8 @@ describe('fixedDecorOf', () => {
     );
     await world.showSaved(reef.decor);
     expect(setHardDecor).toHaveBeenCalledWith(hard);
-    expect(world.layout()).toHaveLength(reef.decor.length);
+    const key = (i: DecorItem) => JSON.stringify([i.assetId, i.position]);
+    expect(world.layout().map(key).sort()).toEqual(reef.decor.map(key).sort());
   });
 });
 
