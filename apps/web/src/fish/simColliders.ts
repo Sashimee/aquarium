@@ -1,5 +1,4 @@
 import { colliderListSchema, type Collider, type Point3 } from '@aquarium/shared';
-import type { DecorCollider } from '@aquarium/sim';
 import type { Collider as SceneCollider } from '../scene/colliders';
 
 const ON_PLANE_M = 1e-7;
@@ -70,34 +69,6 @@ export function sceneCollidersToSim(colliders: readonly SceneCollider[]): Collid
   });
 }
 
-export function decorCollidersToSim(colliders: readonly DecorCollider[]): Collider[] {
-  return colliders.map(({ id, solid, shape }): Collider => {
-    switch (shape.kind) {
-      case 'sphere':
-        return { id, hard: solid, kind: 'sphere', center: [...shape.center], radius: shape.radius };
-      case 'capsule':
-        return {
-          id,
-          hard: solid,
-          kind: 'capsule',
-          a: [...shape.a],
-          b: [...shape.b],
-          radius: shape.radius,
-        };
-      case 'box':
-        return {
-          id,
-          hard: solid,
-          kind: 'box',
-          center: [...shape.center],
-          halfExtents: [...shape.halfExtents],
-          rotationY: shape.rotationY ?? 0,
-          rounding: shape.rounding ?? 0,
-        };
-    }
-  });
-}
-
 /**
  * What the sim collides with. The scene's soft colliders (plants, anemones, corals) always count.
  * Its hard ones are the preset's rocks and wood, which the decor layer may move: once that layer
@@ -127,10 +98,44 @@ export class SimColliders {
     return this.current;
   }
 
-  setDecor(colliders: readonly DecorCollider[]): readonly Collider[] {
-    const decor = decorCollidersToSim(colliders);
-    this.current = validated([...this.sceneSoft, ...decor]);
+  setDecor(colliders: readonly Collider[]): readonly Collider[] {
+    this.current = validated([...this.sceneSoft, ...colliders]);
     return this.current;
+  }
+}
+
+/** Each collider's id and where it sits, `id@x,y,z` to the millimetre, in id order. */
+export function colliderDigest(colliders: readonly Collider[]): string {
+  return colliders
+    .map(
+      (c) =>
+        `${c.id}@${colliderCentre(c)
+          .map((v) => v.toFixed(3))
+          .join(',')}`,
+    )
+    .sort()
+    .join(' ');
+}
+
+function colliderCentre(c: Collider): Point3 {
+  switch (c.kind) {
+    case 'sphere':
+    case 'box':
+      return c.center;
+    case 'capsule':
+      return [(c.a[0] + c.b[0]) / 2, (c.a[1] + c.b[1]) / 2, (c.a[2] + c.b[2]) / 2];
+    case 'hull': {
+      let x = 0;
+      let y = 0;
+      let z = 0;
+      for (const v of c.vertices) {
+        x += v[0];
+        y += v[1];
+        z += v[2];
+      }
+      const n = c.vertices.length;
+      return [x / n, y / n, z / n];
+    }
   }
 }
 

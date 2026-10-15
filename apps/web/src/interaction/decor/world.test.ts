@@ -1,5 +1,4 @@
-import type { DecorItem } from '@aquarium/shared';
-import type { DecorCollider } from '@aquarium/sim';
+import type { Collider, DecorItem } from '@aquarium/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { EventBus } from '../../engine/events';
 import type { CatalogEntry } from '../../scene/assets';
@@ -41,7 +40,7 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 function setup(waterTop?: number) {
   const bus = new EventBus<InteractionEvents>();
-  const colliders: (readonly DecorCollider[])[] = [];
+  const colliders: (readonly Collider[])[] = [];
   bus.on('decor:colliders', (e) => colliders.push(e.colliders));
   const { scene, hard, moves } = fakeScene(waterTop);
   const feeders = new FeederLayer();

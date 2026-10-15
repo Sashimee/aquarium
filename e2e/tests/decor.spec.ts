@@ -78,7 +78,7 @@ test('a decor piece is swapped, moved, saved and still there after a reload', as
   const page = sharedPage();
   test.setTimeout(420_000);
   await registerVerifiedUser(page, 'decor');
-  await openTank(page);
+  await openTank(page, { e2e: true });
   await createFirstTank(page);
   expect((await savedTanks(page))[0]?.decorLayout).toEqual([]);
   expect((await savedTanks(page))[0]?.decorEdited).toBe(false);
@@ -104,6 +104,9 @@ test('a decor piece is swapped, moved, saved and still there after a reload', as
   // The new piece lands in the nearest free spot, so which neighbour blocks a nudge (a plant stem
   // inside a rock is refused) depends on the layout; step towards the first open side.
   const layoutJson = async () => JSON.stringify((await savedTanks(page))[0]?.decorLayout);
+  const simDecor = () => page.locator('canvas#tank').getAttribute('data-sim-decor');
+  await expect.poll(simDecor, { message: 'the fish are up' }).not.toBeNull();
+  const simBefore = await simDecor();
   const status = panel.locator('.decor-status');
   let accepted = false;
   for (const side of ['Right', 'Left', 'Back', 'Forward']) {
@@ -120,6 +123,7 @@ test('a decor piece is swapped, moved, saved and still there after a reload', as
   await expect
     .poll(layoutJson, { message: 'the nudge reaches the server' })
     .not.toBe(JSON.stringify(placed));
+  await expect.poll(simDecor, { message: 'the nudge reaches the fish sim' }).not.toBe(simBefore);
   const moved = (await savedTanks(page))[0]?.decorLayout;
   await panel.getByRole('button', { name: 'Done' }).click();
   await expect(panel).toBeHidden();

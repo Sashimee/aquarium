@@ -1,4 +1,5 @@
-import type { Species } from '@aquarium/shared';
+import type { Collider, Species } from '@aquarium/shared';
+import { compileCollider } from './decor.ts';
 import { clamp } from './math.ts';
 
 /** Every tunable of a sinking carcass; sources are in BEHAVIOUR.md. */
@@ -22,6 +23,8 @@ export const CARCASS = {
   limpS: 1.5,
   /** A carcass already on the floor still takes this long to tip over. */
   minSettleS: 0.8,
+  /** Fore and aft of the centre, where what holds the body up is looked for. */
+  supportReachBodyLengths: 0.4,
 } as const;
 
 export type CarcassFate = 'float' | 'sink';
@@ -143,4 +146,63 @@ export function carcassSettleS(
   const drop = from.y - carcassRestY(from, length, seed, floorY);
   const land = fallTime(drop, sinkSpeed(length), sinkTimeConstant(length));
   return Math.max(land, CARCASS.minSettleS, CARCASS.limpS);
+}
+
+type Primitive = ReturnType<typeof compileCollider>;
+
+const SURFACE_M = 5e-4;
+const MAX_MARCH_STEPS = 4096;
+
+/**
+ * The decor a carcass comes to rest on. Plants and anemones bend under a body, so only hard
+ * colliders hold one up.
+ */
+export class CarcassSupport {
+  private readonly hard: readonly Primitive[];
+  private readonly normal = new Float64Array(3);
+
+  constructor(colliders: readonly Collider[]) {
+    this.hard = colliders.filter((c) => c.hard).map(compileCollider);
+  }
+
+  /**
+   * The floor a carcass dropped from `from` lands on: the highest hard surface under its centre
+   * or either end, or the substrate `ground` there. A body that starts inside a rock lies on top.
+   */
+  floorY(from: CarcassStart, length: number, ground: (x: number, z: number) => number): number {
+    const reach = CARCASS.supportReachBodyLengths * length;
+    const dx = Math.sin(from.yaw) * reach;
+    const dz = Math.cos(from.yaw) * reach;
+    let floor = -Infinity;
+    for (const side of [0, 1, -1]) {
+      const x = from.x + side * dx;
+      const z = from.z + side * dz;
+      floor = Math.max(floor, this.columnFloor(x, z, from.y, ground(x, z)));
+    }
+    return floor;
+  }
+
+  private columnFloor(x: number, z: number, top: number, ground: number): number {
+    const under = this.hard.filter(
+      (p) => x >= p.minX && x <= p.maxX && z >= p.minZ && z <= p.maxZ && p.minY <= top,
+    );
+    if (under.length === 0) return ground;
+    let y = top;
+    let d = this.distance(under, x, y, z);
+    for (let i = 0; d < 0 && i < MAX_MARCH_STEPS; i++) {
+      y += Math.max(-d, SURFACE_M);
+      d = this.distance(under, x, y, z);
+    }
+    for (let i = 0; d > SURFACE_M && y > ground && i < MAX_MARCH_STEPS; i++) {
+      y -= d;
+      d = this.distance(under, x, y, z);
+    }
+    return Math.max(y, ground);
+  }
+
+  private distance(under: readonly Primitive[], x: number, y: number, z: number): number {
+    let d = Infinity;
+    for (const p of under) d = Math.min(d, p.sample(x, y, z, this.normal));
+    return d;
+  }
 }

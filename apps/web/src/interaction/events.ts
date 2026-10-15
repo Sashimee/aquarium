@@ -1,5 +1,4 @@
-import type { DecorCollider } from '@aquarium/sim';
-import type { CareAction, DecorLayout, Fish, FoodType, Water } from '@aquarium/shared';
+import type { CareAction, Collider, DecorLayout, Fish, FoodType, Water } from '@aquarium/shared';
 import type { CameraMode } from './camera';
 
 /** A pinch, not a pile: leftovers poison the tank, so hand-feeding stays small. */
@@ -116,7 +115,7 @@ export interface InteractionEvents {
    * ids prefixed `decor:`. Sent on load and after each edit; the sim consumer replaces its
    * `decor:` colliders with this list and leaves its own (plants) alone.
    */
-  'decor:colliders': { colliders: readonly DecorCollider[] };
+  'decor:colliders': { colliders: readonly Collider[] };
   /** The player settled an edit; the persistence layer saves it. */
   'decor:layout': { tankId: string; layout: DecorLayout };
   'decor:save-state': { status: SaveStatus; message: string | null };

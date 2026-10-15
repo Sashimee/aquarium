@@ -3,6 +3,8 @@ import { depthOfFieldFollowsCamera } from './engine/cameraFocus';
 import type { Engine } from './engine/Engine';
 import { EventBus, type EngineEvents } from './engine/events';
 import { parseEngineOptions } from './engine/options';
+import type { Collider } from '@aquarium/shared';
+import { colliderDigest } from './fish/simColliders';
 import { queueTankEvents, startFish, type FishHandle } from './fish/start';
 import { CameraRig } from './interaction/camera';
 import { bindCameraControls } from './interaction/controls';
@@ -209,6 +211,14 @@ async function boot(): Promise<void> {
       shownSpecies = species;
       if (species === null) delete canvas.dataset['fishSpecies'];
       else canvas.dataset['fishSpecies'] = species.join(',');
+    });
+    let shownColliders: readonly Collider[] | null = null;
+    engine.onFrame(() => {
+      const colliders = fish.simColliders();
+      if (colliders === shownColliders) return;
+      shownColliders = colliders;
+      if (colliders === null) delete canvas.dataset['simDecor'];
+      else canvas.dataset['simDecor'] = colliderDigest(colliders);
     });
   }
   const feedGate = new FeedGate();
