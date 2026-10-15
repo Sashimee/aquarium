@@ -444,6 +444,23 @@ describe('sim worker bridge', () => {
       client.init({ ...config, fish: [{ id: 'x', species: 'unknown-fish' }] }),
     ).rejects.toThrow(/unknown species/);
   });
+  it('refuses an init without a safe integer request and keeps the current world', async () => {
+    const { client, clientPort } = connect();
+    const config = benchmarkConfig(1);
+    const ready = await client.init(config);
+    for (const request of [undefined, '7', 1.5, Number.NaN, 2 ** 53]) {
+      const refused = nextError(client);
+      clientPort.postMessage({ type: 'init', request, config: benchmarkConfig(2) });
+      expect(await refused).toMatch(/"init" needs a safe integer request/);
+    }
+    const after = nextSnapshot(client);
+    client.step(1);
+    const snapshot = await after;
+    expect(snapshot.epoch).toBe(ready.epoch);
+    expect(snapshot.tick).toBe(1);
+    expect(snapshot.data.length).toBe(config.fish.length * SNAPSHOT_STRIDE);
+  });
+
   it('adds and removes fish in place under a new epoch, as a local world would', async () => {
     const { client } = connect();
     const config = benchmarkConfig(4);
