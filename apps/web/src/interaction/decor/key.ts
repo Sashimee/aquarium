@@ -6,12 +6,9 @@ import { legacyTintSeed, type DecorItem } from '@aquarium/shared';
  */
 export function layoutKey(layout: readonly DecorItem[]): string {
   return JSON.stringify(
-    layout.map((i) => [
-        i.assetId,
-        ...i.position,
-        i.rotationY,
-        i.scale,
-        i.tintSeed ?? legacyTintSeed(i),
-      ] as const),
+    layout.map(
+      (i) =>
+        [i.assetId, ...i.position, i.rotationY, i.scale, i.tintSeed ?? legacyTintSeed(i)] as const,
+    ),
   );
 }

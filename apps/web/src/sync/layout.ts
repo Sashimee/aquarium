@@ -43,10 +43,7 @@ export class LayoutSaver {
 
   get busy(): boolean {
     return (
-      this.timer !== null ||
-      this.running !== null ||
-      this.pending.size > 0 ||
-      this.failed !== null
+      this.timer !== null || this.running !== null || this.pending.size > 0 || this.failed !== null
     );
   }
 

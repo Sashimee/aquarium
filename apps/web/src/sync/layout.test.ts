@@ -157,7 +157,9 @@ describe('LayoutSaver', () => {
   it('reset stops retrying an in-flight save and stays quiet about its outcome', async () => {
     vi.useFakeTimers();
     let fail: (e: unknown) => void = () => undefined;
-    const send = vi.fn().mockImplementation(() => new Promise<void>((_r, reject) => (fail = reject)));
+    const send = vi
+      .fn()
+      .mockImplementation(() => new Promise<void>((_r, reject) => (fail = reject)));
     const { saver, reports } = setup(send);
     saver.submit('t1', layoutAt(0.1));
     await vi.advanceTimersByTimeAsync(500);

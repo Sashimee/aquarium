@@ -24,13 +24,7 @@ const GAP = 0.005;
 const SPIRAL_STEP = 0.04;
 
 export type Rejection =
-  | 'outside'
-  | 'overlap'
-  | 'full'
-  | 'feeder-exists'
-  | 'unknown-asset'
-  | 'wrong-biome'
-  | 'no-room';
+  'outside' | 'overlap' | 'full' | 'feeder-exists' | 'unknown-asset' | 'wrong-biome' | 'no-room';
 
 const MESSAGES: Record<Rejection, string> = {
   outside: 'That would push it through the glass.',
