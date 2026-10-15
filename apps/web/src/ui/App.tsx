@@ -243,7 +243,7 @@ export function App() {
       <div className="dock-wrap" ref={dock}>
         <Dock panel={panel} onPress={toggle} />
       </div>
-      <LoadingScreen />
+      {home && <LoadingScreen />}
     </div>
   );
 }

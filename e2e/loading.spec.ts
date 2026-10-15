@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { awaitLoaded } from './support/app.ts';
 
 declare global {
   interface Window {
@@ -63,7 +64,7 @@ test.describe('loading screen', () => {
   }) => {
     await recordProgress(page);
     await page.goto('/?backend=webgl&tier=low&e2e', { waitUntil: 'domcontentloaded' });
-    await expect(bar(page)).toBeHidden({ timeout: LOAD_MS });
+    await awaitLoaded(page, LOAD_MS);
     await expect(page.locator('#app')).toHaveAttribute('data-scene-biome', 'freshwater');
     await page.evaluate(() => {
       window.__loadValues = [];
@@ -100,7 +101,7 @@ test.describe('loading screen', () => {
     await expect(page.locator('#app')).toHaveAttribute('data-scene-biome', 'freshwater', {
       timeout: LOAD_MS,
     });
-    await expect(bar(page)).toBeHidden({ timeout: LOAD_MS });
+    await awaitLoaded(page, LOAD_MS);
     await expect(alert).toHaveCount(0);
   });
 

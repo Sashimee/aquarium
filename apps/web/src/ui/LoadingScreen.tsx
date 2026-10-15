@@ -48,13 +48,13 @@ export function LoadingScreen() {
   const failed = load?.error != null;
 
   useEffect(() => {
-    if (phase !== 'shown') return;
+    if (phase !== 'shown' || failed) return;
     const behind = [...document.querySelectorAll('#app, .shell > :not(.loading)')];
     for (const node of behind) node.setAttribute('inert', '');
     return () => {
       for (const node of behind) node.removeAttribute('inert');
     };
-  }, [phase]);
+  }, [phase, failed]);
 
   useEffect(() => {
     if (phase === 'shown' && failed) retry.current?.focus();
@@ -66,7 +66,10 @@ export function LoadingScreen() {
   const noun = load.reason === 'boot' ? 'the aquarium' : 'the tank';
 
   return (
-    <div className={phase === 'leaving' ? 'loading leaving' : 'loading'} aria-busy={!failed}>
+    <div
+      className={phase === 'leaving' ? 'loading leaving' : failed ? 'loading failed' : 'loading'}
+      aria-busy={!failed}
+    >
       <div className="loading-card">
         <div className="loading-mark" aria-hidden="true">
           <svg viewBox="0 0 64 40" focusable="false">

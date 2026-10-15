@@ -19,6 +19,19 @@
   transition: opacity 420ms ease-out;
 }
 
+.loading.failed {
+  background: none;
+  pointer-events: none;
+}
+
+.loading.failed .loading-card {
+  pointer-events: auto;
+  padding: 1.25rem;
+  border-radius: 1rem;
+  background: rgba(7, 26, 42, 0.94);
+  box-shadow: 0 0.6rem 2rem rgba(0, 0, 0, 0.45);
+}
+
 .loading-card {
   width: min(22rem, 100%);
   display: flex;
