@@ -22,6 +22,7 @@ import { PlantGroup } from './plants';
 const entries = catalogJson.assets as unknown as CatalogEntry[];
 const catalog = new AssetCatalog(entries);
 const reef = loadPreset('reef');
+const key = (i: DecorItem) => JSON.stringify([i.assetId, i.position]);
 
 describe('fixedDecorOf', () => {
   it('resolves the reef preset, keeping procedural corals as fixed decor', () => {
@@ -51,7 +52,6 @@ describe('fixedDecorOf', () => {
       sync: vi.fn(),
       dispose: vi.fn(),
     });
-    const key = (i: DecorItem) => JSON.stringify([i.assetId, i.position]);
     expect(world.layout().map(key).sort()).toEqual(reef.decor.map(key).sort());
   });
 
@@ -87,7 +87,6 @@ describe('fixedDecorOf', () => {
     );
     await world.showSaved(reef.decor, true);
     expect(setHardDecor).toHaveBeenCalledWith(hard);
-    const key = (i: DecorItem) => JSON.stringify([i.assetId, i.position]);
     expect(world.layout().map(key).sort()).toEqual(reef.decor.map(key).sort());
   });
 });
