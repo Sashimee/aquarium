@@ -170,6 +170,7 @@ describe('api client', () => {
       name: 'Home',
       biome: 'freshwater',
       decorLayout: layout,
+      decorEdited: true,
       water: { ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 0 },
       lastTickAt: '2026-02-01T00:00:00.000Z',
       fish: [],
