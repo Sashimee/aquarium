@@ -74,11 +74,15 @@ export class Effects {
   private disposed = false;
   /** A tier change that failed; thrown from the next frame so the engine drops the effects. */
   private failure: { cause: unknown } | null = null;
+  /** The node load in flight, settled only after its result is built or recorded. */
+  private loading: Promise<void> | null = null;
   private readonly unregister: () => void;
 
+  /** `changed` hears every pipeline swap or failure that lands outside a call into the effects. */
   constructor(
     private readonly host: EffectsHost,
     private readonly createPost: PostFactory,
+    private readonly changed: () => void = () => undefined,
   ) {
     const { medium, caustics, tank, scene, camera } = host;
     this.particulates = createParticulates(medium, caustics, tank.waterBounds);
@@ -96,6 +100,11 @@ export class Effects {
   /** Whether the frames drawn now go through a temporal resolve (TRAA). */
   get temporal(): boolean {
     return this.failure === null && (this.post?.temporal ?? false);
+  }
+
+  /** Resolves once the wanted pipeline is built, has failed, or the effects are disposed. */
+  async ready(): Promise<void> {
+    while (this.loading !== null && !this.disposed) await this.loading;
   }
 
   ownsMaterial(id: number): boolean {
@@ -164,26 +173,44 @@ export class Effects {
     this.buildWanted();
   }
 
-  /** Until the nodes the wanted pipeline needs arrive, frames keep the pipeline they had. */
+  private wantedKey(): string {
+    const wanted = this.wanted;
+    return wanted !== null && needsPost(wanted) ? postSettingsKey(wanted) : '';
+  }
+
+  /**
+   * Until the nodes the wanted pipeline needs arrive, frames keep the pipeline they had. A failed
+   * load only counts while its pipeline is still wanted; the loader forgets it, so the next request
+   * for those nodes fetches them again.
+   */
   private buildWanted(): void {
     const wanted = this.wanted;
     if (wanted === null) return;
-    const key = needsPost(wanted) ? postSettingsKey(wanted) : '';
+    const key = this.wantedKey();
     if (key === this.postKey) return;
     if (key !== '' && !this.createPost.ready(wanted)) {
-      void this.createPost.load(wanted).then(
-        () => {
-          if (this.disposed) return;
-          try {
-            this.buildWanted();
-          } catch (cause) {
+      const loading: Promise<void> = this.createPost
+        .load(wanted)
+        .then(
+          () => {
+            if (this.disposed) return;
+            try {
+              this.buildWanted();
+            } catch (cause) {
+              this.failure ??= { cause };
+            }
+            this.changed();
+          },
+          (cause: unknown) => {
+            if (this.disposed || this.wantedKey() !== key) return;
             this.failure ??= { cause };
-          }
-        },
-        (cause: unknown) => {
-          if (!this.disposed) this.failure ??= { cause };
-        },
-      );
+            this.changed();
+          },
+        )
+        .finally(() => {
+          if (this.loading === loading) this.loading = null;
+        });
+      this.loading = loading;
       return;
     }
     const next =

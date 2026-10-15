@@ -18,6 +18,7 @@ class FakeFishSystem {
   readonly anchors: (readonly SceneAnchor[])[] = [];
   readonly colliders: (readonly Collider[])[] = [];
   disposed = false;
+  disposeError: Error | null = null;
   /** What `synced()` hands out; resolve it to finish loading the stock handed in. */
   sync: Promise<void> = Promise.resolve();
   private ate: ((events: readonly FishBite[]) => void) | null = null;
@@ -66,6 +67,7 @@ class FakeFishSystem {
   }
   dispose(): void {
     this.disposed = true;
+    if (this.disposeError !== null) throw this.disposeError;
   }
 }
 
@@ -397,6 +399,20 @@ describe('startFish', () => {
     expect(fish.disposed).toBe(true);
     interaction.emit('tank:unloaded', { tankId: TANK_A, reason: 'switch' });
     expect(fish.handled).toHaveLength(0);
+  });
+
+  it('reports a failed fish cleanup on stop instead of letting it escape', async () => {
+    const fish = new FakeFishSystem();
+    fish.disposeError = new AggregateError(
+      [new Error('worker')],
+      'FishSystem: 1 cleanup step(s) failed',
+    );
+    const { handle, errors } = setup(Promise.resolve(fish));
+    await flush();
+    handle.stop();
+    await flush();
+    expect(fish.disposed).toBe(true);
+    expect(errors).toEqual(['Fish cleanup failed']);
   });
 
   it('reports a failed start once and drops the queued events', async () => {
