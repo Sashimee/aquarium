@@ -1964,7 +1964,7 @@
         "baked fin mask and fin id vertex attributes",
         "colour and normal maps re-encoded to KTX2 at 1k and 2k",
         "decimated from 40k to 8k triangles at LOD0",
-        "orange morph recoloured by luminance to natural brown with pale cream spots"
+        "orange morph recoloured by luminance to natural brown, with pale cream spots painted in world space so UV stretch cannot enlarge them"
       ],
       "status": "downloaded",
       "files": [

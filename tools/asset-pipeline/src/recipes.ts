@@ -121,12 +121,12 @@ export const FISH_RECIPES: FishRecipe[] = [
         mottleCells: 220,
         seed: 12,
       },
-      spots: { cell: 30, radius: 0.27, density: 0.8, colour: [178, 166, 134], seed: 5 },
+      worldSpots: { cell: 0.03, radius: 0.3, density: 0.85, colour: [178, 166, 134], seed: 5 },
     },
     fallbackLengthM: 0.08,
     modifications: [
       'decimated from 40k to 8k triangles at LOD0',
-      'orange morph recoloured by luminance to natural brown with pale cream spots',
+      'orange morph recoloured by luminance to natural brown, with pale cream spots painted in world space so UV stretch cannot enlarge them',
     ],
   },
 ];
