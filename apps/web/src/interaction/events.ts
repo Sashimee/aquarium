@@ -68,9 +68,11 @@ export interface InteractionEvents {
     biome: 'freshwater' | 'reef';
     fish: readonly Fish[];
     decorLayout: DecorLayout;
+    /** False: the player never saved a layout, so `decorLayout` is empty and the preset shows. */
+    decorEdited: boolean;
   };
   /** The server's layout changed outside this tab's own edits (another device). */
-  'tank:decor': { tankId: string; layout: DecorLayout };
+  'tank:decor': { tankId: string; layout: DecorLayout; edited: boolean };
   /**
    * The active saved tank went away; drop its fish. `switch` means another saved tank is on its
    * way (a switch, a new tank or a reload); `reset` means signed out or unverified.

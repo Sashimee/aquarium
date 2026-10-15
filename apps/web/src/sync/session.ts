@@ -1,4 +1,12 @@
-import type { AwaySummary, Biome, CareAction, FoodType, Tank, User } from '@aquarium/shared';
+import type {
+  AwaySummary,
+  Biome,
+  CareAction,
+  DecorLayout,
+  FoodType,
+  Tank,
+  User,
+} from '@aquarium/shared';
 import type { EventBus } from '../engine/events';
 import { layoutKey } from '../interaction/decor/key';
 import type { InteractionEvents } from '../interaction/events';
@@ -63,7 +71,7 @@ export class TankSession {
     });
     this.stopListening = [
       deps.interaction.on('decor:layout', ({ tankId, layout }) => {
-        this.shownLayout.set(tankId, layoutKey(layout));
+        this.shownLayout.set(tankId, decorKey(true, layout));
         this.layoutSaver.submit(tankId, layout);
       }),
       deps.interaction.on('decor:command', (command) => {
@@ -308,7 +316,7 @@ export class TankSession {
     this.unloadScene('switch')?.dispose();
     const gen = this.loadId;
     this.loadedId = tankId;
-    this.shownLayout.set(tankId, layoutKey(tank.decorLayout));
+    this.shownLayout.set(tankId, decorKey(tank.decorEdited, tank.decorLayout));
     this.uploader = new AteUploader({
       ...this.deps.ateOptions,
       sleep: this.sleep,
@@ -326,6 +334,7 @@ export class TankSession {
       biome: tank.biome,
       fish: tank.fish,
       decorLayout: tank.decorLayout,
+      decorEdited: tank.decorEdited,
     });
     this.deps.interaction.emit('tank:water', { tankId, water: tank.water });
   }
@@ -440,10 +449,14 @@ export class TankSession {
         notice: `${fish.name} the ${species?.toLowerCase() ?? 'fish'} has died. You can net them when you are ready.`,
       });
     }
-    const incomingLayout = layoutKey(tank.decorLayout);
+    const incomingLayout = decorKey(tank.decorEdited, tank.decorLayout);
     if (!this.layoutSaver.busy && incomingLayout !== this.shownLayout.get(tank.id)) {
       this.shownLayout.set(tank.id, incomingLayout);
-      interaction.emit('tank:decor', { tankId: tank.id, layout: tank.decorLayout });
+      interaction.emit('tank:decor', {
+        tankId: tank.id,
+        layout: tank.decorLayout,
+        edited: tank.decorEdited,
+      });
     }
     if (held.water !== tank.water)
       interaction.emit('tank:water', { tankId: tank.id, water: tank.water });
@@ -479,6 +492,10 @@ export class TankSession {
   private emitChange(): void {
     for (const listener of [...this.listeners]) listener();
   }
+}
+
+function decorKey(edited: boolean, layout: DecorLayout): string {
+  return `${edited ? 'edited' : 'preset'}:${layoutKey(layout)}`;
 }
 
 const CARE_DONE: Record<Exclude<CareAction['type'], 'feed'>, string> = {

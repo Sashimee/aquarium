@@ -46,39 +46,61 @@ const moved = [item('boulder-01', -0.2, 0.05)];
 describe('SceneDecor', () => {
   it('hands a scene built after the tank loaded the saved layout', async () => {
     const { bus, decor, made } = setup();
-    bus.emit('tank:loaded', { tankId: 't1', biome: 'reef', fish: [], decorLayout: layout });
+    bus.emit('tank:loaded', {
+      tankId: 't1',
+      biome: 'reef',
+      fish: [],
+      decorLayout: layout,
+      decorEdited: true,
+    });
     decor.mount('reef');
     await settle();
     expect(made).toEqual([
-      { scene: 'reef', initial: { tankId: 't1', biome: 'reef', layout }, disposed: false },
+      {
+        scene: 'reef',
+        initial: { tankId: 't1', biome: 'reef', layout, edited: true },
+        disposed: false,
+      },
     ]);
     expect(decor.system).not.toBeNull();
   });
 
   it('gives a rebuilt scene the latest layout, including another device edit between mounts', async () => {
     const { bus, decor, made } = setup();
-    bus.emit('tank:loaded', { tankId: 't1', biome: 'reef', fish: [], decorLayout: layout });
+    bus.emit('tank:loaded', {
+      tankId: 't1',
+      biome: 'reef',
+      fish: [],
+      decorLayout: layout,
+      decorEdited: true,
+    });
     decor.mount('first');
     await settle();
     decor.unmount();
     expect(made[0]?.disposed).toBe(true);
     expect(decor.system).toBeNull();
-    bus.emit('tank:decor', { tankId: 'other', layout: [] });
-    bus.emit('tank:decor', { tankId: 't1', layout: moved });
+    bus.emit('tank:decor', { tankId: 'other', layout: [], edited: true });
+    bus.emit('tank:decor', { tankId: 't1', layout: moved, edited: true });
     decor.mount('second');
     await settle();
     expect(made[1]).toEqual({
       scene: 'second',
-      initial: { tankId: 't1', biome: 'reef', layout: moved },
+      initial: { tankId: 't1', biome: 'reef', layout: moved, edited: true },
       disposed: false,
     });
   });
 
   it('forgets the saved tank once it unloads', async () => {
     const { bus, decor, made } = setup();
-    bus.emit('tank:loaded', { tankId: 't1', biome: 'reef', fish: [], decorLayout: layout });
+    bus.emit('tank:loaded', {
+      tankId: 't1',
+      biome: 'reef',
+      fish: [],
+      decorLayout: layout,
+      decorEdited: true,
+    });
     bus.emit('tank:unloaded', { tankId: 't1', reason: 'reset' });
-    bus.emit('tank:decor', { tankId: 't1', layout: moved });
+    bus.emit('tank:decor', { tankId: 't1', layout: moved, edited: true });
     decor.mount('demo');
     await settle();
     expect(made[0]?.initial).toBeNull();
@@ -102,7 +124,13 @@ describe('SceneDecor', () => {
     await settle();
     decor.dispose();
     expect(made[0]?.disposed).toBe(true);
-    bus.emit('tank:loaded', { tankId: 't1', biome: 'reef', fish: [], decorLayout: layout });
+    bus.emit('tank:loaded', {
+      tankId: 't1',
+      biome: 'reef',
+      fish: [],
+      decorLayout: layout,
+      decorEdited: true,
+    });
     decor.mount('again');
     await settle();
     expect(made).toHaveLength(1);

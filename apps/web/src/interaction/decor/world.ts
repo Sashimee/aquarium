@@ -66,9 +66,9 @@ export class DecorWorld {
     return layoutKey(splitLayout(layout, this.specs).pieces) === this.presetLayoutKey;
   }
 
-  /** Shows a saved layout. An empty one means "never edited", so the preset stays. */
-  showSaved(layout: readonly DecorItem[]): Promise<void> {
-    if (layout.length === 0) return this.showPreset();
+  /** Shows a saved layout; a tank that was never edited keeps the preset, while an emptied one shows bare. */
+  showSaved(layout: readonly DecorItem[], edited: boolean): Promise<void> {
+    if (!edited) return this.showPreset();
     const clean = sanitizeLayout(layout, this.scene.biome);
     const n = clean.dropped;
     this.notice =

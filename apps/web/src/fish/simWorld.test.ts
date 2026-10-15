@@ -70,6 +70,7 @@ describe('SimWorldSpec', () => {
       tankId: TANK_A,
       biome: 'reef',
       decorLayout: [],
+      decorEdited: false,
       fish: [fishFixture(FISH_1, CLOWN)],
     });
     expect(anchorsOf(spec, roster)).toEqual(sim);
@@ -108,6 +109,7 @@ describe('SimWorldSpec', () => {
       tankId: TANK_A,
       biome: 'reef',
       decorLayout: [],
+      decorEdited: false,
       fish: [
         fishFixture(FISH_1, { ...CLOWN, size: 0.07 }),
         fishFixture(FISH_2, { species: 'coelacanth' }),
@@ -128,6 +130,7 @@ describe('SimWorldSpec', () => {
       tankId: TANK_A,
       biome: 'freshwater',
       decorLayout: [],
+      decorEdited: false,
       fish: [
         fishFixture(FISH_2, { species: 'guppy', size: 0.04, sex: 'female' }),
         fishFixture(FISH_1, { species: 'guppy', size: 0.04, sex: 'male' }),
@@ -144,6 +147,7 @@ describe('SimWorldSpec', () => {
       tankId: TANK_A,
       biome: 'reef',
       decorLayout: [],
+      decorEdited: false,
       fish: [fishFixture(FISH_1, CLOWN)],
     });
     const config = spec.config(roster.swimming());
@@ -175,7 +179,7 @@ describe('SimWorldSpec', () => {
 
   it('has no world to run when nothing swims', () => {
     const { spec, roster } = setup();
-    roster.load({ tankId: TANK_A, biome: 'reef', decorLayout: [], fish: [] });
+    roster.load({ tankId: TANK_A, biome: 'reef', decorLayout: [], decorEdited: false, fish: [] });
     expect(spec.config(roster.swimming())).toBeNull();
   });
 });

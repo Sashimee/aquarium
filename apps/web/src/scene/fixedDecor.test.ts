@@ -84,7 +84,7 @@ describe('fixedDecorOf', () => {
       new EventBus<InteractionEvents>(),
       { sync: vi.fn(), dispose: vi.fn() },
     );
-    await world.showSaved(reef.decor);
+    await world.showSaved(reef.decor, true);
     expect(setHardDecor).toHaveBeenCalledWith(hard);
     expect(world.layout()).toHaveLength(reef.decor.length);
   });

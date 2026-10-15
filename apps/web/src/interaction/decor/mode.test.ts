@@ -88,7 +88,13 @@ function harness(layout: DecorItem[], biome: 'freshwater' | 'reef' = 'freshwater
     setReduced: (v: boolean) => (reduced = v),
     tick: (ms: number) => (now += ms),
     load: (tankId: string, decorLayout: DecorItem[] = []) =>
-      bus.emit('tank:loaded', { tankId, biome, fish: [], decorLayout }),
+      bus.emit('tank:loaded', {
+        tankId,
+        biome,
+        fish: [],
+        decorLayout,
+        decorEdited: decorLayout.length > 0,
+      }),
     last: () => must(states.at(-1)),
   };
 }
@@ -174,6 +180,7 @@ describe('DecorMode', () => {
       biome: 'reef',
       fish: [],
       decorLayout: [],
+      decorEdited: false,
     });
     expect(h.mode.start()).toBe(false);
     expect(h.mode.active).toBe(false);

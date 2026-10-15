@@ -35,11 +35,11 @@ export class SceneDecor<S> {
       interaction.on('decor:mode-changed', ({ active }) => {
         this.wanted = active;
       }),
-      interaction.on('tank:loaded', ({ tankId, biome, decorLayout }) => {
-        this.saved = { tankId, biome, layout: decorLayout };
+      interaction.on('tank:loaded', ({ tankId, biome, decorLayout, decorEdited }) => {
+        this.saved = { tankId, biome, layout: decorLayout, edited: decorEdited };
       }),
-      interaction.on('tank:decor', ({ tankId, layout }) => {
-        if (this.saved?.tankId === tankId) this.saved = { ...this.saved, layout };
+      interaction.on('tank:decor', ({ tankId, layout, edited }) => {
+        if (this.saved?.tankId === tankId) this.saved = { ...this.saved, layout, edited };
       }),
       interaction.on('tank:unloaded', () => {
         this.saved = null;

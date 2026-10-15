@@ -62,7 +62,13 @@ function harness(url: Biome, options: { gate?: boolean; failing?: Biome } = {}) 
     timeoutMs: 90_000,
   });
   const load = (tankId: string, biome: Biome) =>
-    interaction.emit('tank:loaded', { tankId, biome, fish: [], decorLayout: [] });
+    interaction.emit('tank:loaded', {
+      tankId,
+      biome,
+      fish: [],
+      decorLayout: [],
+      decorEdited: false,
+    });
   const unload = (tankId: string, reason: 'switch' | 'reset' = 'reset') =>
     interaction.emit('tank:unloaded', { tankId, reason });
   const none = () => interaction.emit('tank:none', {});

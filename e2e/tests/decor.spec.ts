@@ -66,6 +66,7 @@ test('a decor piece is swapped, moved, saved and still there after a reload', as
   await openTank(page);
   await createFirstTank(page);
   expect((await savedTanks(page))[0]?.decorLayout).toEqual([]);
+  expect((await savedTanks(page))[0]?.decorEdited).toBe(false);
 
   const panel = await startDecorating(page);
   const inTank = panel.locator('.decor-pieces');
