@@ -203,6 +203,43 @@ describe('TankRoster', () => {
     expect(roster.size).toBe(0);
   });
 
+  describe('updated', () => {
+    it('follows the server hunger and health of a living fish', () => {
+      const roster = loaded([fishFixture(FISH_1, { hunger: 0.1, health: 1 })]);
+      const changed = roster.updated({
+        tankId: TANK_A,
+        fish: [fishFixture(FISH_1, { hunger: 0.7, health: 0.4 })],
+      });
+      const entry = roster.get(simId(roster, FISH_1));
+      expect(entry?.hunger).toBe(0.7);
+      expect(entry?.health).toBe(0.4);
+      expect(changed).toEqual([entry]);
+    });
+
+    it('leaves the swimming set alone, so no new world is built', () => {
+      const roster = loaded([fishFixture(FISH_1)]);
+      const revision = roster.revision;
+      roster.updated({ tankId: TANK_A, fish: [fishFixture(FISH_1, { health: 0.3 })] });
+      expect(roster.revision).toBe(revision);
+    });
+
+    it('ignores dead fish, unknown fish and another tank', () => {
+      const roster = loaded([fishFixture(FISH_1), fishFixture(FISH_2)]);
+      roster.died({ tankId: TANK_A, fish: fishFixture(FISH_2, { status: 'dead' }) });
+      expect(
+        roster.updated({
+          tankId: TANK_A,
+          fish: [fishFixture(FISH_2, { health: 0.5 }), fishFixture(FISH_3, { health: 0.5 })],
+        }),
+      ).toEqual([]);
+      expect(
+        roster.updated({ tankId: TANK_B, fish: [fishFixture(FISH_1, { health: 0.5 })] }),
+      ).toEqual([]);
+      expect(roster.get(simId(roster, FISH_2))?.health).toBe(0);
+      expect(roster.get(simId(roster, FISH_1))?.health).toBe(1);
+    });
+  });
+
   describe('translateAte', () => {
     it('reports bites under server ids while a saved tank is loaded', () => {
       const roster = loaded();
