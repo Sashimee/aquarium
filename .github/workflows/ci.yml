@@ -87,27 +87,23 @@ jobs:
           - name: menus-phone-1
             args: menus.spec
             describe: menus on a phone
-            part: 1/6
+            part: 1/7
           - name: menus-phone-2
             args: menus.spec
             describe: menus on a phone
-            part: 2/6
+            part: 2,6/7
           - name: menus-phone-3
             args: menus.spec
             describe: menus on a phone
-            part: 3/6
+            part: 3/7
           - name: menus-phone-4
             args: menus.spec
             describe: menus on a phone
-            part: 4/6
+            part: 4,5/7
           - name: menus-phone-5
             args: menus.spec
             describe: menus on a phone
-            part: 5/6
-          - name: menus-phone-6
-            args: menus.spec
-            describe: menus on a phone
-            part: 6/6
+            part: 7/7
           - name: menus-mouse-1
             args: menus.spec
             describe: menus with a mouse
@@ -124,12 +120,12 @@ jobs:
             args: menus.spec
             describe: menus with a mouse
             part: 5/5
-          - name: decor-death
-            args: decor.spec death.spec
+          - name: decor
+            args: decor.spec
           - name: switch-tanks
             args: tank-type-switch.spec
-          - name: ktx2-feed-auth
-            args: ktx2.spec feed.spec auth.spec
+          - name: ktx2-feed-auth-death
+            args: ktx2.spec feed.spec auth.spec death.spec
           - name: tanks-care-reset
             args: tanks.spec care.spec password-reset.spec password-reset-history.spec
     services:
