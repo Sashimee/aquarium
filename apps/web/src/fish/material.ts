@@ -405,9 +405,12 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
 
     const sample = source.map !== null ? texture(source.map) : vec4(1);
     const authored = sample.rgb.mul(color(source.color));
-    const base = keepsAuthoredSurface(source) ? authored : authored.mul(tint);
+    const eye = keepsAuthoredSurface(source);
+    const base = eye ? authored : authored.mul(tint);
     const grey = vec3(luminance(base).mul(0.8).add(0.06));
-    const albedo = mix(base, grey, pale.mul(0.85)).toVar();
+    // Paling is chromatophores contracting in the skin, which an eye has none of; greying the
+    // pupil would cloud it like a cataract instead.
+    const albedo = (eye ? base : mix(base, grey, pale.mul(0.85))).toVar();
     this.colorNode = albedo;
 
     const textureAlpha = sample.a.mul(source.opacity);

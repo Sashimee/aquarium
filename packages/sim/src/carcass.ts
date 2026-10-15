@@ -294,6 +294,56 @@ export class CarcassSupport {
   }
 
   /**
+   * The top of the substrate or hard rock straight below the point (x, fromY, z), or of the rock
+   * it starts inside. Unlike `floorY` it looks down one column and allocates nothing, so it can
+   * run every frame.
+   */
+  columnFloorY(
+    x: number,
+    z: number,
+    fromY: number,
+    ground: (x: number, z: number) => number,
+  ): number {
+    const g = ground(x, z);
+    let y = fromY;
+    let d = this.columnDistance(x, y, z);
+    if (d < 0) {
+      for (let i = 0; d < 0 && i < MAX_MARCH_STEPS; i++) {
+        y += Math.max(-d, SURFACE_M);
+        d = this.columnDistance(x, y, z);
+      }
+      return Math.max(y - d, g);
+    }
+    const budget = MAX_MARCH_STEPS + Math.ceil((fromY - g) / SURFACE_M);
+    for (let i = 0; i < budget && y > g; i++) {
+      // Beside a steep face the gap stays small without closing, so only an upward face or a step
+      // into the rock ends the march there.
+      if (d <= 0 || (d <= SURFACE_M && (this.normal[1] ?? 0) >= SUPPORT_NORMAL_Y)) {
+        return Math.max(y - Math.max(d, 0), g);
+      }
+      y -= Math.max(d, SURFACE_M);
+      d = this.columnDistance(x, y, z);
+    }
+    return g;
+  }
+
+  /** `distance` to the rocks whose footprint holds the column at (x, z); none can be hit otherwise. */
+  private columnDistance(x: number, y: number, z: number): number {
+    let d = Infinity;
+    let ny = 0;
+    for (const p of this.hard) {
+      if (x < p.minX || x > p.maxX || z < p.minZ || z > p.maxZ) continue;
+      const dp = p.sample(x, y, z, this.normal);
+      if (dp < d) {
+        d = dp;
+        ny = this.normal[1] ?? 0;
+      }
+    }
+    this.normal[1] = ny;
+    return d;
+  }
+
+  /**
    * The rock that can come near a body centred at (x, z) and below `top`: anything else is more
    * than NEAR_M away, and stays over NEAR_M / 2 away until the body slides that far.
    */

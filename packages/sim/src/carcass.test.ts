@@ -319,6 +319,45 @@ describe('CarcassSupport', () => {
     expect(support.floorY({ x: 0, y: 0.07, z: 0, yaw: 0 }, length, sand)).toBeCloseTo(0.15, 3);
   });
 
+  describe('columnFloorY', () => {
+    const ball: Collider = {
+      id: 'ball',
+      kind: 'sphere',
+      hard: true,
+      center: [0, 0.1, 0],
+      radius: 0.05,
+    };
+
+    it('is the rock top or the sand straight below the point', () => {
+      const support = new CarcassSupport([rock()]);
+      expect(support.columnFloorY(0.01, -0.02, 0.3, sand)).toBeCloseTo(0.15, 3);
+      expect(support.columnFloorY(0.049, 0, 0.3, sand)).toBeCloseTo(0.15, 3);
+      expect(support.columnFloorY(0.051, 0, 0.3, sand)).toBe(0.02);
+      expect(new CarcassSupport([]).columnFloorY(0, 0, 0.3, sand)).toBe(0.02);
+      expect(new CarcassSupport([rock({ hard: false })]).columnFloorY(0, 0, 0.3, sand)).toBe(0.02);
+    });
+
+    it('finds the surface of a round rock down its steep flank', () => {
+      const support = new CarcassSupport([ball]);
+      for (const x of [0, 0.03, 0.045, 0.049]) {
+        const top = 0.1 + Math.sqrt(0.05 ** 2 - x ** 2);
+        expect(support.columnFloorY(x, 0, 0.3, sand)).toBeCloseTo(top, 3);
+      }
+      expect(support.columnFloorY(0.0505, 0, 0.3, sand)).toBe(0.02);
+    });
+
+    it('sees only what is below the point, and climbs out of rock it starts in', () => {
+      const support = new CarcassSupport([rock({ y: 0.25 })]);
+      expect(support.columnFloorY(0, 0, 0.15, sand)).toBe(0.02);
+      expect(support.columnFloorY(0, 0, 0.25, sand)).toBeCloseTo(0.3, 3);
+    });
+
+    it('never reports a floor below the sand', () => {
+      const support = new CarcassSupport([rock({ y: 0 })]);
+      expect(support.columnFloorY(0, 0, 0.3, () => 0.08)).toBe(0.08);
+    });
+  });
+
   it('rests the body on the rock, not in it', () => {
     const support = new CarcassSupport([rock()]);
     const from = { x: 0, y: 0.3, z: 0, yaw: 0 };

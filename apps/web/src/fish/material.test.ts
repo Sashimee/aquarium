@@ -21,14 +21,18 @@ function fishMaterial(source: MeshStandardMaterial): FishMaterial {
   });
 }
 
-function readsTint(node: Node | null): boolean {
+function readsSlot(node: Node | null, offset: number): boolean {
   let found = false;
   node?.traverse((n) => {
     const buffer = n as Node & { isBufferNode?: boolean; bufferOffset?: number };
-    if (buffer.isBufferNode === true && buffer.bufferOffset === InstanceSlot.TintR) found = true;
+    if (buffer.isBufferNode === true && buffer.bufferOffset === offset) found = true;
   });
   return found;
 }
+
+const readsTint = (node: Node | null): boolean => readsSlot(node, InstanceSlot.TintR);
+const readsPale = (node: Node | null): boolean =>
+  readsSlot(node, InstanceSlot.Pale - (InstanceSlot.Pale % 4));
 
 describe('keepsAuthoredSurface', () => {
   it('selects only the material named Eye', () => {
@@ -59,6 +63,13 @@ describe('FishMaterial surface', () => {
     expect(body.roughness).toBeCloseTo(pleco.roughness);
     expect(body.metalness).toBe(0);
     expect(readsTint(body.colorNode)).toBe(true);
+  });
+
+  it('pales the skin of a sick fish but not its eyes', () => {
+    const eye = fishMaterial(new MeshStandardMaterial({ name: 'Eye', color: 0x050505 }));
+    const body = fishMaterial(new MeshStandardMaterial({ name: 'CustomMaterial' }));
+    expect(readsPale(eye.colorNode)).toBe(false);
+    expect(readsPale(body.colorNode)).toBe(true);
   });
 
   it('keeps the authored surface across feature changes', () => {

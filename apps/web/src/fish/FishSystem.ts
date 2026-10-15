@@ -244,6 +244,8 @@ export class FishSystem {
   private readonly stream = new SimStream(STEP_DT, (snapshot) => this.sim.recycle(snapshot));
   private readonly held = new HeldFish();
   private support = new CarcassSupport([]);
+  private readonly tailFloorAt = (x: number, z: number, fromY: number): number =>
+    this.support.columnFloorY(x, z, fromY, this.box.ground);
   private readonly loader: FishAssetLoader;
   private readonly bags: AcclimationBags;
   private readonly lifetime = new AbortController();
@@ -1262,9 +1264,7 @@ export class FishSystem {
   private curlAboveFloor(rt: FishRuntime, tail: TailRig, curl: number): number {
     if (!(curl > 0)) return curl;
     const { position, quaternion } = this;
-    const floorY = floorUnderTail(curl, tail, rt.scale, position, quaternion, (x, z, fromY) =>
-      this.support.floorY({ x, y: fromY, z, yaw: 0 }, 0, this.box.ground),
-    );
+    const floorY = floorUnderTail(curl, tail, rt.scale, position, quaternion, this.tailFloorAt);
     return curlAboveFloor(curl, tail, rt.scale, position, quaternion, floorY);
   }
 
