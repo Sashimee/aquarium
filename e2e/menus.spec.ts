@@ -498,7 +498,8 @@ function shared(
 ) {
   let context: BrowserContext | undefined;
   let state: { page: Page; drag: Drag } | undefined;
-  test.describe.configure({ mode: 'serial' });
+  // One pair takes 3-4 minutes under software rendering on a CI runner, close to the 240 s default.
+  test.describe.configure({ mode: 'serial', timeout: 420_000 });
   test.beforeAll(async ({ browser, baseURL }) => {
     if (!baseURL) throw new Error('playwright.config.ts must set use.baseURL');
     context = await browser.newContext({ ...options, baseURL });
