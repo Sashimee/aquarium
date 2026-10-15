@@ -59,7 +59,14 @@ import {
 } from './profiles';
 import { hashString, TankRoster, type RosterFish } from './roster';
 import { SimStream } from './simStream';
-import { initSim, layoutChanges, SimInitTimeout, SimWorldSpec, startWorld } from './simWorld';
+import {
+  initSim,
+  layoutChanges,
+  SimErrorGate,
+  SimInitTimeout,
+  SimWorldSpec,
+  startWorld,
+} from './simWorld';
 import { speciesInput } from './species';
 import type { FishBite, FishPoint, PickRay, TankEvent } from './start';
 import { SWIM_MODES, SwimState } from './swim';
@@ -206,6 +213,7 @@ export class FishSystem {
   private disposed = false;
   /** False while `create` runs: a failure then fails `create`, which disposes the worker anyway. */
   private started = false;
+  private readonly simErrors = new SimErrorGate((message) => this.report(`Fish sim: ${message}`));
 
   private readonly matrix = new Matrix4();
   private readonly position = new Vector3();
@@ -254,7 +262,7 @@ export class FishSystem {
       throw signal.aborted ? signal.reason : cause;
     }
     system.started = true;
-    system.reportSimErrors();
+    system.simErrors.open();
     if (system.staleTextures().length > 0) system.requestSync();
     return system;
   }
@@ -883,6 +891,7 @@ export class FishSystem {
 
   private connectSim(worker: Worker): SimClient {
     const sim = new SimClient(worker);
+    sim.onError(this.simErrors.receive);
     sim.onSnapshot((snapshot) => this.stream.push(snapshot, performance.now()));
     sim.onAte((events) => {
       const bites = this.roster.translateAte(events);
@@ -890,11 +899,6 @@ export class FishSystem {
       for (const listener of this.ateListeners) listener(bites);
     });
     return sim;
-  }
-
-  /** Until this runs, a worker that fails while starting fails `create` instead. */
-  private reportSimErrors(): void {
-    this.sim.onError((message) => this.report(`Fish sim: ${message}`));
   }
 
   /**
@@ -908,7 +912,6 @@ export class FishSystem {
     this.worker.terminate();
     this.worker = spawnSimWorker();
     this.sim = this.connectSim(this.worker);
-    this.reportSimErrors();
   }
 
   private applyShadows(batch: SpeciesBatch): void {

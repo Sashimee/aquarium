@@ -183,3 +183,25 @@ export function initSim({ client, worker, config, signal, timeoutMs }: SimInit):
     );
   });
 }
+
+/**
+ * Takes the sim errors no request waits for from the first `init` on, so none is ever thrown as
+ * unheard. Until `open` they are held: a worker failure while the system starts also rejects that
+ * start, which reports it, so held errors reach `report` only once the start has succeeded.
+ */
+export class SimErrorGate {
+  private held: string[] | null = [];
+
+  constructor(private readonly report: (message: string) => void) {}
+
+  readonly receive = (message: string): void => {
+    if (this.held === null) this.report(message);
+    else this.held.push(message);
+  };
+
+  open(): void {
+    const held = this.held ?? [];
+    this.held = null;
+    for (const message of held) this.report(message);
+  }
+}

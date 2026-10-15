@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Collider } from '@aquarium/shared';
-import { SNAPSHOT_STRIDE, World, type SimReady } from '@aquarium/sim';
+import {
+  SimClient,
+  SNAPSHOT_STRIDE,
+  World,
+  type SimClientPort,
+  type SimReady,
+} from '@aquarium/sim';
 import { DEFAULT_TANK } from '../engine/tank/dimensions';
 import type { SceneAnchor } from '../scene/anemone';
 import { FISH_1, FISH_2, TANK_A, fishFixture } from '../sync/fixtures';
@@ -10,6 +16,7 @@ import { allSpeciesInputs } from './species';
 import {
   initSim,
   layoutChanges,
+  SimErrorGate,
   SimInitTimeout,
   SimWorldSpec,
   startWorld,
@@ -402,5 +409,87 @@ describe('initSim', () => {
     during.abort(gone);
     await expect(init).rejects.toBe(gone);
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe('SimErrorGate', () => {
+  class FakePort implements SimClientPort {
+    readonly sent: unknown[] = [];
+    private readonly messages = new Set<(event: MessageEvent) => void>();
+    private readonly failures = new Set<(event: Event) => void>();
+    postMessage(message: unknown): void {
+      this.sent.push(message);
+    }
+    addEventListener(type: string, listener: (event: never) => void): void {
+      if (type === 'message') this.messages.add(listener as (event: MessageEvent) => void);
+      else this.failures.add(listener as (event: Event) => void);
+    }
+    removeEventListener(type: string, listener: (event: never) => void): void {
+      if (type === 'message') this.messages.delete(listener as (event: MessageEvent) => void);
+      else this.failures.delete(listener as (event: Event) => void);
+    }
+    emit(data: unknown): void {
+      for (const l of this.messages) l(new MessageEvent('message', { data }));
+    }
+    crash(): void {
+      for (const l of this.failures) l(new Event('error'));
+    }
+  }
+
+  function connect(): {
+    port: FakePort;
+    client: SimClient;
+    reported: string[];
+    gate: SimErrorGate;
+  } {
+    const port = new FakePort();
+    const client = new SimClient(port);
+    const reported: string[] = [];
+    const gate = new SimErrorGate((message) => reported.push(message));
+    client.onError(gate.receive);
+    return { port, client, reported, gate };
+  }
+
+  it('holds an unrequested error from a world still starting instead of throwing it', () => {
+    const { port, reported, gate } = connect();
+    expect(() => port.emit({ type: 'error', message: 'bad collider' })).not.toThrow();
+    expect(reported).toEqual([]);
+
+    gate.open();
+    expect(reported).toEqual(['bad collider']);
+  });
+
+  it('reports errors as they come once open, after the held ones and in order', () => {
+    const { port, reported, gate } = connect();
+    port.emit({ type: 'error', message: 'first' });
+    port.emit({ type: 'error', message: 'second' });
+    gate.open();
+    port.emit({ type: 'error', message: 'third' });
+    gate.open();
+    expect(reported).toEqual(['first', 'second', 'third']);
+  });
+
+  it('never reports a worker failure that rejected the start, when the start does not open it', async () => {
+    const { port, client, reported } = connect();
+    const { spec, roster } = setup();
+    const config = spec.config(roster.swimming());
+    if (config === null) throw new Error('the demo has no world');
+    const init = client.init(config);
+    port.crash();
+    await expect(init).rejects.toThrow();
+    expect(reported).toEqual([]);
+  });
+
+  it('leaves an error naming a pending request to that request', async () => {
+    const { port, client, reported, gate } = connect();
+    gate.open();
+    const { spec, roster } = setup();
+    const config = spec.config(roster.swimming());
+    if (config === null) throw new Error('the demo has no world');
+    const init = client.init(config);
+    const { request } = port.sent[0] as { request: number };
+    port.emit({ type: 'error', request, message: 'bad config' });
+    await expect(init).rejects.toThrow('bad config');
+    expect(reported).toEqual([]);
   });
 });
