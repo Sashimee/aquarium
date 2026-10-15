@@ -90,6 +90,45 @@ export const FISH_RECIPES: FishRecipe[] = [
     keepMaterial: /^Material\.001$/,
     fallbackLengthM: 0.16,
   },
+  {
+    id: 'discus',
+    species: 'discus',
+    sourceId: 'sketchfab-f623d697',
+    axes: { forward: '+z', up: '+y' },
+    keepMaterial: /^Material\.00[123]$/,
+    // caudalScale pulls the source's flared tail fan to a discus' TL/SL of about 1.2.
+    hints: { caudalScale: 0.57 },
+    fallbackLengthM: 0.12,
+    modifications: [
+      '4096 px colour and normal maps downscaled to the 1k and 2k tiers',
+      'mouth patch material dropped: it reused the body normal map for 22 triangles',
+    ],
+  },
+  {
+    id: 'bristlenose-pleco',
+    species: 'bristlenose-pleco',
+    sourceId: 'sketchfab-65133817',
+    axes: { forward: '+z', up: '+y' },
+    keepMaterial: /^CustomMaterial$/,
+    lodPlan: { ratios: [0.2, 0.08, 0.03], minTriangles: 150 },
+    roughness: 0.5,
+    recolour: {
+      tint: {
+        ramps: [
+          { dark: [20, 15, 11], mid: [52, 40, 29], light: [98, 79, 56] },
+          { dark: [28, 21, 14], mid: [74, 57, 38], light: [124, 100, 70] },
+        ],
+        mottleCells: 220,
+        seed: 12,
+      },
+      spots: { cell: 44, radius: 0.3, density: 0.55, colour: [178, 166, 134], seed: 5 },
+    },
+    fallbackLengthM: 0.08,
+    modifications: [
+      'decimated from 40k to 8k triangles at LOD0',
+      'orange morph recoloured by luminance to natural brown with pale cream spots',
+    ],
+  },
 ];
 
 const polyhaven = (name: string): string => `${name}_2k.gltf`;

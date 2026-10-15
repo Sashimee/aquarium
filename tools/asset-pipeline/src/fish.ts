@@ -15,6 +15,7 @@ import {
 } from './fins.ts';
 import { FIN_ID_ATTRIBUTE, FIN_IDS, FIN_MASK_ATTRIBUTE, type OutputAsset } from './index-schema.ts';
 import { extractParts, materialDefFrom, mergeParts, weldPart, type Part } from './parts.ts';
+import { spotImage, tintImage, type SpotSpec, type TintSpec } from './finish.ts';
 import { renderSheet } from './raster.ts';
 import { bakeToWorldSpace, readGltf, type SkinPose } from './source.ts';
 
@@ -35,6 +36,10 @@ export interface FishRecipe {
   lengthFactor?: number;
   hints?: FinHints | undefined;
   roughness?: number;
+  /** Recolours the source's base colour by luminance, then paints spots on it. */
+  recolour?: { tint: TintSpec; spots?: SpotSpec };
+  /** For sources far denser than the other fish, whose LOD0 must itself be a decimation. */
+  lodPlan?: LodPlan;
   modifications?: string[];
 }
 
@@ -235,7 +240,14 @@ export async function buildSourceFish(recipe: FishRecipe, ctx: FishContext): Pro
   });
 
   const materials = await Promise.all(
-    sourceMaterials.map((m) => materialDefFrom(m, { roughness: recipe.roughness ?? 0.45 })),
+    sourceMaterials.map(async (m) => {
+      const def = await materialDefFrom(m, { roughness: recipe.roughness ?? 0.45 });
+      if (!recipe.recolour) return def;
+      if (!def.baseColor) throw new Error(`${recipe.id}: recolour needs a base colour texture`);
+      let image = tintImage(def.baseColor.image, recipe.recolour.tint);
+      if (recipe.recolour.spots) image = spotImage(image, recipe.recolour.spots);
+      return { ...def, baseColor: { ...def.baseColor, image } };
+    }),
   );
   const debugRender = await writeDebugRender(ctx.repoRoot, recipe.id, normalised);
   const built = buildDocument(recipe.id, normalised, materials);
@@ -244,7 +256,7 @@ export async function buildSourceFish(recipe: FishRecipe, ctx: FishContext): Pro
     kind: 'fish',
     id: recipe.id,
     built,
-    plan: FISH_LOD_PLAN,
+    plan: recipe.lodPlan ?? FISH_LOD_PLAN,
     meta: {
       species: recipe.species,
       origin: 'model',

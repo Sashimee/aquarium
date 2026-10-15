@@ -350,7 +350,10 @@ export function signedVolume(positions: Float32Array, indices: Uint32Array): num
   return volume / 6;
 }
 
-/** Similarity transform pinning the snout and the end of the peduncle to two pixels of a side-view photo. */
+/**
+ * Similarity transform pinning the snout and the end of the peduncle to two pixels of a side-view
+ * photo. A fish facing right in the photo is mirrored as well as rotated, so its back stays up.
+ */
 export function sideProjection(options: {
   standardLengthM: number;
   snoutY: number;
@@ -367,14 +370,17 @@ export function sideProjection(options: {
   const ay = tailY - snoutY;
   const px = tail[0] - snout[0];
   const py = tail[1] - snout[1];
-  const denom = ax * ax + ay * ay;
-  const fr = (px * ax + py * ay) / denom;
-  const fi = (py * ax - px * ay) / denom;
+  const axisLength = Math.hypot(ax, ay);
+  const photoLength = Math.hypot(px, py);
+  const scale = photoLength / axisLength;
+  const side = px < 0 ? -1 : 1;
   return (behind, y) => {
     const qx = behind;
     const qy = y - snoutY;
-    const x = snout[0] + fr * qx - fi * qy;
-    const yUp = snout[1] + fi * qx + fr * qy;
+    const along = (qx * ax + qy * ay) / axisLength;
+    const across = (-qx * ay + qy * ax) / axisLength;
+    const x = snout[0] + (scale * (along * px - side * across * py)) / photoLength;
+    const yUp = snout[1] + (scale * (along * py + side * across * px)) / photoLength;
     return [(x - crop.left) / crop.width, (-yUp - crop.top) / crop.height];
   };
 }

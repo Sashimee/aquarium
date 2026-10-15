@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { addPores, packArm, tintImage, upscaleTo, type Ramp, type TintSpec } from './finish.ts';
+import {
+  addPores,
+  packArm,
+  spotImage,
+  tintImage,
+  upscaleTo,
+  type Ramp,
+  type SpotSpec,
+  type TintSpec,
+} from './finish.ts';
 import type { Rgba } from './textures.ts';
 
 function solid(size: number, rgb: [number, number, number]): Rgba {
@@ -60,6 +69,39 @@ describe('tintImage', () => {
   it('does not collapse a flat image', () => {
     const out = tintImage(solid(32, [90, 90, 90]), tint);
     expect(out.data[3]).toBe(255);
+  });
+});
+
+describe('spotImage', () => {
+  const spec: SpotSpec = { cell: 16, radius: 0.4, density: 1, colour: [200, 190, 150], seed: 3 };
+
+  it('paints some pixels towards the spot colour and leaves others alone', () => {
+    const base = solid(64, [20, 20, 20]);
+    const out = spotImage(base, spec);
+    let spotted = 0;
+    let untouched = 0;
+    for (let i = 0; i < out.data.length; i += 4) {
+      if (out.data[i]! > 100) spotted++;
+      if (out.data[i] === 20) untouched++;
+    }
+    expect(spotted).toBeGreaterThan(0);
+    expect(untouched).toBeGreaterThan(0);
+  });
+
+  it('paints nothing at zero density and keeps alpha', () => {
+    const base = solid(32, [20, 20, 20]);
+    const out = spotImage(base, { ...spec, density: -1 });
+    expect(out.data).toEqual(base.data);
+    expect(
+      spotImage(base, spec)
+        .data.filter((_, i) => i % 4 === 3)
+        .every((a) => a === 255),
+    ).toBe(true);
+  });
+
+  it('is deterministic', () => {
+    const base = solid(32, [40, 30, 20]);
+    expect(spotImage(base, spec).data).toEqual(spotImage(base, spec).data);
   });
 });
 
