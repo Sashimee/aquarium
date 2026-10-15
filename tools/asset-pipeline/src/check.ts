@@ -2,12 +2,15 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, posix, relative, sep } from 'node:path';
 import { speciesLengthM } from './fish.ts';
+import { readKtx2Info } from './textures.ts';
 import { FISH_RECIPES } from './recipes.ts';
 import { shrimpLength } from './shrimp.ts';
 import { budgetProblems, loadBudgetContent, type BudgetInput } from './budgets.ts';
 import {
   FIN_ID_ATTRIBUTE,
   FIN_MASK_ATTRIBUTE,
+  IMPOSTOR_FILES,
+  IMPOSTOR_MAX_BYTES,
   LEG_ATTRIBUTE,
   LOD_COUNT,
   assetIndexSchema,
@@ -210,6 +213,91 @@ function fishProblems(asset: OutputAsset, repoRoot: string, problems: string[]):
   }
 }
 
+const ETC1S_COLOR_MODEL = 163;
+const UASTC_COLOR_MODEL = 166;
+const TRANSFER_LINEAR = 1;
+const TRANSFER_SRGB = 2;
+
+function impostorProblems(asset: OutputAsset, assetsDir: string, problems: string[]): void {
+  const at = `fish ${asset.id}`;
+  const impostor = asset.impostor;
+  if (!impostor) {
+    problems.push(`${at}: index entry has no impostor atlas (rebuild with pnpm build:assets)`);
+    return;
+  }
+  if (impostor.grid * impostor.frameSize !== impostor.atlasSize) {
+    problems.push(
+      `${at}: impostor atlasSize ${impostor.atlasSize} is not grid ${impostor.grid} x frameSize ${impostor.frameSize}`,
+    );
+  }
+  const owned = new Set(asset.files.map((f) => f.file));
+  const atlases = [
+    {
+      slot: 'albedo',
+      entry: impostor.albedo,
+      colorModel: ETC1S_COLOR_MODEL,
+      transfer: TRANSFER_SRGB,
+    },
+    {
+      slot: 'normalDepth',
+      entry: impostor.normalDepth,
+      colorModel: UASTC_COLOR_MODEL,
+      transfer: TRANSFER_LINEAR,
+    },
+  ] as const;
+  for (const { slot, entry, colorModel, transfer } of atlases) {
+    const expected = `${asset.kind}/${asset.id}/${IMPOSTOR_FILES[slot]}`;
+    if (entry.file !== expected) problems.push(`${at}: impostor ${slot} must be ${expected}`);
+    if (!owned.has(entry.file)) {
+      problems.push(`${at}: ${entry.file} is referenced but not in files[]`);
+      continue;
+    }
+    const path = join(assetsDir, entry.file);
+    if (!existsSync(path)) continue;
+    try {
+      const info = readKtx2Info(new Uint8Array(readFileSync(path)));
+      if (info.width !== impostor.atlasSize || info.height !== impostor.atlasSize) {
+        problems.push(
+          `${at}: ${entry.file} is ${info.width}x${info.height}, index says ${impostor.atlasSize}x${impostor.atlasSize}`,
+        );
+      }
+      if (info.colorModel !== colorModel) {
+        problems.push(
+          `${at}: ${entry.file} must be ${colorModel === UASTC_COLOR_MODEL ? 'UASTC' : 'ETC1S'} (colour model ${info.colorModel})`,
+        );
+      }
+      if (info.transfer !== transfer) {
+        problems.push(
+          `${at}: ${entry.file} must use the ${transfer === TRANSFER_SRGB ? 'sRGB' : 'linear'} transfer function`,
+        );
+      }
+    } catch (error) {
+      problems.push(`${at}: ${entry.file} is unreadable: ${(error as Error).message}`);
+    }
+  }
+  const bytes = impostor.albedo.bytes + impostor.normalDepth.bytes;
+  if (bytes > IMPOSTOR_MAX_BYTES) {
+    problems.push(
+      `${at}: impostor atlases are ${(bytes / 1e6).toFixed(2)} MB, over the ${IMPOSTOR_MAX_BYTES / 1e6} MB per-species budget`,
+    );
+  }
+  const { bounds } = asset;
+  if (bounds) {
+    const reach = [0, 1, 2].map((a) =>
+      Math.max(
+        Math.abs((bounds.max[a] ?? 0) - (impostor.pivot[a] ?? 0)),
+        Math.abs((impostor.pivot[a] ?? 0) - (bounds.min[a] ?? 0)),
+      ),
+    );
+    const farthest = Math.hypot(...reach);
+    if (impostor.radius < Math.max(...reach) * 0.95 || impostor.radius > farthest * 1.05) {
+      problems.push(
+        `${at}: impostor radius ${impostor.radius} does not fit the model bounds about pivot [${impostor.pivot.join(', ')}] (rebuild with pnpm build:assets)`,
+      );
+    }
+  }
+}
+
 function shrimpProblems(asset: OutputAsset, repoRoot: string, problems: string[]): void {
   const at = `shrimp ${asset.id}`;
   if (!asset.shrimp) {
@@ -247,7 +335,10 @@ export function checkAssets(input: CheckInput): string[] {
     seenAssets.add(key);
     effectiveLicenceProblems(asset, byId, problems);
     if (!TEXTURE_ONLY_KINDS.includes(asset.kind)) lodProblems(asset, assetsDir, problems);
-    if (asset.kind === 'fish') fishProblems(asset, repoRoot, problems);
+    if (asset.kind === 'fish') {
+      fishProblems(asset, repoRoot, problems);
+      impostorProblems(asset, assetsDir, problems);
+    }
     if (asset.kind === 'shrimp') shrimpProblems(asset, repoRoot, problems);
 
     for (const file of asset.files) {
@@ -276,6 +367,7 @@ export function checkAssets(input: CheckInput): string[] {
     const referenced = [
       ...asset.lods.map((l) => l.file),
       ...asset.textures.flatMap((t) => [t.variants['1k'].file, t.variants['2k'].file]),
+      ...(asset.impostor ? [asset.impostor.albedo.file, asset.impostor.normalDepth.file] : []),
     ];
     const owned = new Set(asset.files.map((f) => f.file));
     for (const file of referenced) {
