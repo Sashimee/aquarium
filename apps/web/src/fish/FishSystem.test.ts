@@ -6,7 +6,10 @@ import { EventBus, type EngineEvents } from '../engine/events';
 import { DEFAULT_TANK } from '../engine/tank/dimensions';
 import type { InteractionEvents } from '../interaction/events';
 import { FISH_1, TANK_A, fishFixture } from '../sync/fixtures';
-import { FishSystem } from './FishSystem';
+import type { FishAssetEntry } from './assetIndex';
+import { batchLocomotion, FishSystem } from './FishSystem';
+import { renderProfile, swimModeFor } from './profiles';
+import { SWIM_MODES } from './swim';
 import { SimInitTimeout } from './simWorld';
 
 class FakeWorker {
@@ -166,5 +169,40 @@ describe('FishSystem.create', () => {
     fish.handle({ type: 'tank:none', payload: {} });
     expect(await lastSpecies(3)).toEqual(demo);
     fish.dispose();
+  });
+});
+
+describe('batchLocomotion', () => {
+  const shrimp = { hinge: { y: 0, z: 0.002 }, telsonZ: -0.016, legPairs: 5 };
+  function entry(rig: FishAssetEntry['shrimp']): FishAssetEntry {
+    return {
+      id: 'model',
+      kind: rig === null ? 'fish' : 'shrimp',
+      species: 'species',
+      min: [-0.01, -0.005, -0.016],
+      max: [0.01, 0.004, 0.02],
+      standardLengthM: 0.03,
+      lodFiles: ['lod0.glb'],
+      sharperTextures: new Map(),
+      shrimp: rig,
+    };
+  }
+
+  it("swims a finned species in its own mode, shaped by the species' profile", () => {
+    const profile = renderProfile('neon-tetra');
+    expect(batchLocomotion(entry(null), 'subcarangiform', profile)).toEqual({
+      kind: 'swim',
+      mode: swimModeFor(SWIM_MODES.subcarangiform, profile),
+    });
+  });
+
+  it('walks a pleopod species on its shrimp rig', () => {
+    const profile = renderProfile('cherry-shrimp');
+    expect(batchLocomotion(entry(shrimp), 'pleopod', profile)).toEqual({ kind: 'walk', shrimp });
+  });
+
+  it('refuses a walking species whose model has no shrimp rig', () => {
+    const profile = renderProfile('cherry-shrimp');
+    expect(() => batchLocomotion(entry(null), 'pleopod', profile)).toThrow(/needs a shrimp model/);
   });
 });
