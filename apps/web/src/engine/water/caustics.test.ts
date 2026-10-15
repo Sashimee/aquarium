@@ -3,9 +3,13 @@ import {
   Box3,
   Color,
   ConstNode,
+  ConvertNode,
   LinearMipmapLinearFilter,
   MathNode,
+  OperatorNode,
+  SplitNode,
   TextureNode,
+  UniformNode,
   VarNode,
   Vector3,
   type Node,
@@ -20,12 +24,15 @@ import { WaterMedium } from './medium';
 const DARK_SAND = 0.08;
 const REEF_SAND = 0.68;
 
-function caustics(): Caustics {
-  const medium = new WaterMedium(new Box3(new Vector3(-0.5, 0, -0.2), new Vector3(0.5, 0.5, 0.2)), {
+function water(): WaterMedium {
+  return new WaterMedium(new Box3(new Vector3(-0.5, 0, -0.2), new Vector3(0.5, 0.5, 0.2)), {
     cdom440: 0,
     turbidity: 0.1,
   });
-  return new Caustics(medium);
+}
+
+function caustics(): Caustics {
+  return new Caustics(water());
 }
 
 describe('castingShare', () => {
@@ -246,5 +253,88 @@ describe('Caustics.terms', () => {
     expect(single).toBeGreaterThan(0);
     expect(layered).toBeGreaterThan(single);
     expect(dispersion).toBeGreaterThan(layered);
+  });
+});
+
+/**
+ * Evaluates the arithmetic subset of a TSL graph on the CPU, so a JS mirror of shader maths can be
+ * held to the graph itself instead of to a third copy of the formula.
+ */
+function evaluate(node: Node): number[] {
+  if (node instanceof UniformNode || node instanceof ConstNode) {
+    const value: unknown = node.value;
+    if (typeof value === 'number') return [value];
+    if (value instanceof Vector3) return value.toArray();
+    if (value instanceof Color) return value.toArray();
+    throw new Error(`evaluate: unsupported ${node.type} value`);
+  }
+  if (node instanceof VarNode || node instanceof ConvertNode) return evaluate(node.node);
+  if (node instanceof SplitNode) {
+    const v = evaluate(node.node);
+    return [...node.components].map((c) => v['xyzw'.indexOf(c)] ?? Number.NaN);
+  }
+  const zip = (a: number[], b: number[], f: (x: number, y: number) => number): number[] =>
+    Array.from({ length: Math.max(a.length, b.length) }, (_, i) =>
+      f(a.length === 1 ? (a[0] ?? 0) : (a[i] ?? 0), b.length === 1 ? (b[0] ?? 0) : (b[i] ?? 0)),
+    );
+  if (node instanceof OperatorNode) {
+    const a = evaluate(node.aNode);
+    const b = evaluate(node.bNode);
+    if (node.op === '+') return zip(a, b, (x, y) => x + y);
+    if (node.op === '-') return zip(a, b, (x, y) => x - y);
+    if (node.op === '*') return zip(a, b, (x, y) => x * y);
+    if (node.op === '/') return zip(a, b, (x, y) => x / y);
+    throw new Error(`evaluate: unsupported operator ${node.op}`);
+  }
+  if (node instanceof MathNode) {
+    const a = evaluate(node.aNode);
+    if (node.method === MathNode.EXP) return a.map(Math.exp);
+    if (node.method === MathNode.NEGATE) return a.map((x) => -x);
+    if (node.bNode === null) throw new Error(`evaluate: unsupported math ${node.method}`);
+    const b = evaluate(node.bNode);
+    if (node.method === MathNode.MAX) return zip(a, b, Math.max);
+    if (node.method === MathNode.MIN) return zip(a, b, Math.min);
+    if (node.method === MathNode.POW) return zip(a, b, Math.pow);
+    throw new Error(`evaluate: unsupported math ${node.method}`);
+  }
+  throw new Error(`evaluate: unsupported node ${node.type}`);
+}
+
+describe('Caustics.reachAtDepth', () => {
+  // The substrate bounce reads the CPU side once per frame while every lit shader reads the graph,
+  // so a change to one alone would light the sand and the fish over it differently (#275).
+  it('matches the shader graph at every depth, light angle and water quality', () => {
+    const medium = water();
+    const c = new Caustics(medium);
+    const qualities = [
+      { cdom440: 0, turbidity: 0.1 },
+      { cdom440: 1.5, turbidity: 0.6 },
+    ];
+    const directions = [new Vector3(0, 1, 0), new Vector3(1, 1, 0.3), new Vector3(1, 0.05, 0)];
+    let checked = 0;
+    for (const quality of qualities) {
+      medium.setQuality(quality);
+      for (const direction of directions) {
+        c.lightDirection.value.copy(direction).normalize();
+        for (const depth of [-0.05, 0, 0.01, 0.2, 0.45]) {
+          const cpu = c.reachAtDepth(depth, new Color()).toArray();
+          const gpu = evaluate(c.shareAtDepth(float(depth)));
+          expect(gpu).toHaveLength(3);
+          gpu.forEach((v, i) => expect(v).toBeCloseTo(cpu[i] ?? Number.NaN, 12));
+          checked++;
+        }
+      }
+    }
+    expect(checked).toBe(30);
+  });
+
+  it('evaluates the graph as built, so a changed shader formula is caught', () => {
+    const medium = water();
+    const c = new Caustics(medium);
+    const nearer = evaluate(c.shareAtDepth(float(0.3)));
+    medium.fixtureHeight.value *= 2;
+    const raised = evaluate(c.shareAtDepth(float(0.3)));
+    expect(raised[0]).toBeGreaterThan(nearer[0] ?? Number.POSITIVE_INFINITY);
+    expect(raised[0]).toBeCloseTo(c.reachAtDepth(0.3, new Color()).r, 12);
   });
 });

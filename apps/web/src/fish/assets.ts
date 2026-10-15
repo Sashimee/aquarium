@@ -12,7 +12,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { gltfKtx2Loader, rewritingKtx2Loader, type Ktx2Textures } from '../engine/ktx2';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { parseFishAssets, type FishAssetEntry } from './assetIndex';
+import { parseFishAssets, type FishAssetEntry, type ShrimpRig } from './assetIndex';
+import { curledTip, MAX_TAIL_CURL, type TailRig, type TailTip } from './walk';
 
 /** One draw per material: the merged primitives of a LOD that share it. */
 export interface FishPart {
@@ -31,6 +32,8 @@ export interface FishModel {
   readonly textureSize: FishTextureSize;
   /** `lods[level]` holds that level's parts; every level reuses lod0's materials where it can. */
   readonly lods: readonly (readonly FishPart[])[];
+  /** A walker's tail-curl rig from lod0; null for a fish. */
+  readonly tail: TailRig | null;
 }
 
 /**
@@ -40,6 +43,9 @@ export interface FishModel {
 export const FIN_ATTRIBUTE = 'fin';
 /** `_fin_id` of a shrimp's walking legs and chelipeds. */
 export const LEG_PART_ID = 6;
+/** `_fin_id` of a shrimp's pleopods and of its abdomen with the tail fan: the parts that curl. */
+export const PLEOPOD_PART_ID = 8;
+export const ABDOMEN_PART_ID = 9;
 /** Hip vertices sit at the minimum limb weight; the simplified LODs may shift it slightly. */
 const HIP_WEIGHT_SLACK = 0.02;
 const KEPT_ATTRIBUTES = ['position', 'normal', 'uv'] as const;
@@ -117,6 +123,45 @@ export function legPivots(geometry: BufferGeometry, legCount: number): (Vec3 | n
     sum[3] = (sum[3] ?? 0) + 1;
   }
   return sums.map(([x = 0, y = 0, z = 0, n = 0]) => (n > 0 ? [x / n, y / n, z / n] : null));
+}
+
+/**
+ * The curling vertex that full flexion carries lowest in model space, which is the first to meet
+ * the floor under a level body; null when the parts have no curling vertex.
+ */
+export function tailTip(parts: readonly FishPart[], rig: ShrimpRig): TailTip | null {
+  const span = rig.hinge.z - rig.telsonZ;
+  let best: TailTip | null = null;
+  let lowest = Infinity;
+  for (const { geometry } of parts) {
+    const fin = geometry.getAttribute(FIN_ATTRIBUTE);
+    const position = geometry.getAttribute('position');
+    for (let i = 0; i < fin.count; i++) {
+      const id = fin.getY(i);
+      if (id !== PLEOPOD_PART_ID && id !== ABDOMEN_PART_ID) continue;
+      const z = position.getZ(i);
+      const tip = {
+        y: position.getY(i),
+        z,
+        share: Math.min(1, Math.max(0, (rig.hinge.z - z) / span)),
+      };
+      const curled = curledTip({ hinge: rig.hinge, tip, bodyLength: 1 }, MAX_TAIL_CURL).y;
+      if (curled < lowest) {
+        lowest = curled;
+        best = tip;
+      }
+    }
+  }
+  return best;
+}
+
+function tailRig(entry: FishAssetEntry, lod0: readonly FishPart[]): TailRig | null {
+  if (entry.shrimp === null) return null;
+  const tip = tailTip(lod0, entry.shrimp);
+  if (tip === null) {
+    throw new Error(`fish ${entry.id}: lod0 has no abdomen to curl; re-run the asset pipeline`);
+  }
+  return { hinge: entry.shrimp.hinge, tip, bodyLength: entry.standardLengthM };
 }
 
 function standardMaterial(material: Material | Material[], label: string): MeshStandardMaterial {
@@ -253,15 +298,15 @@ export class FishAssetLoader {
           throw cause;
         }
       }
+      return { entry, textureSize, lods, tail: tailRig(entry, lods[0] ?? []) };
     } catch (cause) {
-      disposeFishModel({ entry, textureSize, lods });
+      disposeFishModel({ lods });
       throw cause;
     }
-    return { entry, textureSize, lods };
   }
 }
 
-export function disposeFishModel(model: FishModel): void {
+export function disposeFishModel(model: Pick<FishModel, 'lods'>): void {
   const materials = new Set<MeshStandardMaterial>();
   for (const parts of model.lods) {
     for (const part of parts) {

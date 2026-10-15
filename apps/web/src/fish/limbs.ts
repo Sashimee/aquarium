@@ -14,7 +14,7 @@ import {
   step,
   vec3,
 } from 'three/tsl';
-import { FIN_ATTRIBUTE, LEG_PART_ID, type Vec3 } from './assets';
+import { ABDOMEN_PART_ID, FIN_ATTRIBUTE, LEG_PART_ID, PLEOPOD_PART_ID, type Vec3 } from './assets';
 import { APPENDAGE_RATE, WALK_GAIT } from './walk';
 
 export interface Deformation {
@@ -42,7 +42,7 @@ export interface WalkerInputs {
   readonly act: Node<'vec4'>;
 }
 
-const PART = { antenna: 7, pleopod: 8, abdomen: 9 } as const;
+const PART = { antenna: 7, pleopod: PLEOPOD_PART_ID, abdomen: ABDOMEN_PART_ID } as const;
 
 export function idIs(id: Node<'float'>, value: number): Node<'float'> {
   return step(value - 0.5, id).mul(step(id, value + 0.5));

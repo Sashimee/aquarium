@@ -31,6 +31,7 @@ import { releaseAll } from '../engine/lifecycle';
 import type { Tier, TierSettings } from '../engine/quality/tiers';
 import { waterBounds, type TankDimensions } from '../engine/tank/dimensions';
 import type { InteractionEvents } from '../interaction/events';
+import type { FishAssetEntry, ShrimpRig } from './assetIndex';
 import { disposeFishModel, FishAssetLoader, type FishModel } from './assets';
 import { AcclimationBags } from './bag';
 import { BatchCache } from './batchCache';
@@ -82,8 +83,8 @@ import {
 import { SimUnavailableError } from '../interaction/simUnavailable';
 import { speciesInput } from './species';
 import type { FishBite, FishPoint, PickRay, TankEvent } from './start';
-import { isFinned, SWIM_MODES, SwimState } from './swim';
-import { WalkState, type WalkSample } from './walk';
+import { isFinned, SWIM_MODES, SwimState, type SwimModeParams, type SwimmingMode } from './swim';
+import { curlAboveFloor, WalkState, type WalkSample } from './walk';
 
 export interface FishSystemOptions {
   readonly tank: TankDimensions;
@@ -174,6 +175,24 @@ function capacityFor(needed: number): number {
   let capacity = MIN_CAPACITY;
   while (capacity < needed) capacity *= 2;
   return capacity;
+}
+
+export type BatchLocomotion =
+  | { readonly kind: 'swim'; readonly mode: SwimModeParams }
+  | { readonly kind: 'walk'; readonly shrimp: ShrimpRig };
+
+export function batchLocomotion(
+  entry: FishAssetEntry,
+  swimmingMode: SwimmingMode,
+  profile: FishRenderProfile,
+): BatchLocomotion {
+  if (isFinned(swimmingMode)) {
+    return { kind: 'swim', mode: swimModeFor(SWIM_MODES[swimmingMode], profile) };
+  }
+  if (entry.shrimp === null) {
+    throw new Error(`fish ${entry.id}: a walking species needs a shrimp model`);
+  }
+  return { kind: 'walk', shrimp: entry.shrimp };
 }
 
 function smoothstep01(x: number): number {
@@ -669,17 +688,13 @@ export class FishSystem {
     this.disposeLods(batch);
     const capacity = capacityFor(needed);
     const { model, profile, input } = batch;
-    const { swimmingMode } = input.locomotion;
-    const { shrimp } = model.entry;
-    if (!isFinned(swimmingMode) && shrimp === null) {
-      throw new Error(`fish ${model.entry.id}: a walking species needs a shrimp model`);
-    }
+    const locomotion = batchLocomotion(model.entry, input.locomotion.swimmingMode, profile);
     const lighting = {
       lightDirection: this.engine.caustics.lightDirection,
       light: this.engine.caustics.hoodLight(),
     };
     batch.lods = model.lods.map((parts, level) => {
-      const walking = !isFinned(swimmingMode) && shrimp !== null;
+      const walking = locomotion.kind === 'walk';
       const instances = new FishInstanceData(
         capacity,
         walking ? WALKER_INSTANCE_STRIDE : INSTANCE_STRIDE,
@@ -691,23 +706,18 @@ export class FishSystem {
           source: part.source,
           assetId: model.entry.id,
           profile,
-          locomotion: walking
-            ? {
-                kind: 'walk',
-                rig: {
-                  bodyLength: model.entry.standardLengthM,
-                  hinge: shrimp.hinge,
-                  telsonZ: shrimp.telsonZ,
-                  legPivots: part.legPivots,
-                },
-              }
-            : {
-                kind: 'swim',
-                mode: swimModeFor(
-                  SWIM_MODES[isFinned(swimmingMode) ? swimmingMode : 'carangiform'],
-                  profile,
-                ),
-              },
+          locomotion:
+            locomotion.kind === 'walk'
+              ? {
+                  kind: 'walk',
+                  rig: {
+                    bodyLength: model.entry.standardLengthM,
+                    hinge: locomotion.shrimp.hinge,
+                    telsonZ: locomotion.shrimp.telsonZ,
+                    legPivots: part.legPivots,
+                  },
+                }
+              : locomotion,
           zMin: model.entry.min[2],
           zMax: model.entry.max[2],
           instances,
@@ -1228,6 +1238,16 @@ export class FishSystem {
     return true;
   }
 
+  /** `curl` for the walker just placed, cut short where it would put the tail into the sand. */
+  private curlAboveFloor(rt: FishRuntime, curl: number): number {
+    const { tail } = rt.batch.model;
+    if (tail === null)
+      throw new Error(`fish ${rt.batch.model.entry.id}: a walker needs a tail rig`);
+    const { position } = this;
+    const floorY = this.box.ground(position.x, position.z);
+    return curlAboveFloor(curl, tail, rt.scale, position, this.quaternion, floorY);
+  }
+
   private update(deltaS: number, nowMs: number): void {
     this.clockS += deltaS;
     const frame = this.stream.sample(nowMs);
@@ -1284,7 +1304,7 @@ export class FishSystem {
       v.phase = swim?.phase ?? 0;
       v.amplitude = (swim?.amplitude ?? 0) * liveliness;
       v.curvature = (swim?.curvature ?? 0) * rt.scale * liveliness;
-      v.finPhase = swim?.finPhase ?? (motion as WalkState).clock;
+      v.finPhase = motion instanceof SwimState ? motion.finPhase : motion.clock;
       v.pale = Math.max(
         rt.condition,
         rt.fish.phase === 'dead' ? 1 - liveliness : 0,
@@ -1299,7 +1319,7 @@ export class FishSystem {
         const w = this.walker;
         w.legPhase = motion.legPhase;
         w.stride = motion.stride * liveliness;
-        w.curl = motion.curl * liveliness;
+        w.curl = this.curlAboveFloor(rt, motion.curl * liveliness);
         w.paddle = motion.paddle * liveliness;
         w.pick = motion.pick * liveliness;
         w.dance = motion.dance * liveliness;
