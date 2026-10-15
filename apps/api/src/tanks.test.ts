@@ -161,6 +161,17 @@ describe('tanks and fish', () => {
     expect(res.statusCode).toBe(409);
   });
 
+  it('assigns each fish a sex and keeps it across reads', async () => {
+    const cookie = await signedIn(h);
+    const tank = await createTank(h, cookie);
+    let latest = tank;
+    for (let i = 0; i < 12; i++) latest = await addFish(h, cookie, tank.id);
+    const sexes = latest.fish.map((f) => f.sex);
+    expect(sexes.every((s) => s === 'male' || s === 'female')).toBe(true);
+    const reread = await call(h, cookie, 'GET', `/api/tanks/${tank.id}`);
+    expect(reread.json<typeof latest>().fish.map((f) => f.sex)).toEqual(sexes);
+  });
+
   it('adds fish with the species birth size and refuses wrong-biome and unknown species', async () => {
     const cookie = await signedIn(h);
     const tank = await createTank(h, cookie);

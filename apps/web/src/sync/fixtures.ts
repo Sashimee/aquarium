@@ -40,6 +40,7 @@ export function fishFixture(id: string, overrides: Partial<Fish> = {}): Fish {
     tankId: TANK_A,
     species: 'neon-tetra',
     name: `Fish ${id.slice(-1)}`,
+    sex: 'female',
     bornAt: '2026-01-01T00:00:00.000Z',
     size: 0.02,
     hunger: 0.1,
