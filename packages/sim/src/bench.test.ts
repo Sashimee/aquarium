@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { benchmarkConfig, FoodRain, REEF_TANK } from './fixtures.ts';
+import { benchmarkConfig, FoodRain, REEF_TANK, walkerBenchmarkConfig } from './fixtures.ts';
 import { World, type WorldConfig } from './world.ts';
 
 // Host load only ever lengthens a step (preemption, a shared core, a cold cache), never shortens
@@ -13,12 +13,13 @@ const TEST_TIMEOUT_MS = 120_000;
 // A slower machine (a shared CI runner) is still slower on an idle core, so the sim is timed
 // against a fixed reference workload stepped in turn with it, and the gate is on their ratio. The
 // limits are the ratios measured on the desktop the 2 ms / 4 ms-at-4x-throttle budgets were set
-// on (Ryzen 5 7600X, Node 24: 1.12 swimming, 2.4 feeding), times 1.4 for how differently other
+// on (Ryzen 5 7600X, Node 24: 1.12 swimming, 1.65 with 20 shrimp walking, 2.4 feeding), times 1.4 for how differently other
 // CPUs and V8 builds weigh the sim's mix of work against the reference's. That catches roughly a
 // doubling of the sim's cost, not smaller slowdowns: 1.5x only just fails the feeding limit and
 // 1.3x passes. The absolute budgets are gated by `pnpm --filter @aquarium/sim bench`.
 const HEADROOM = 1.4;
 const SWIMMING_LIMIT = 1.12 * HEADROOM;
+const WALKING_LIMIT = 1.65 * HEADROOM;
 const FEEDING_LIMIT = 2.4 * HEADROOM;
 const REFERENCE_PASSES = 20;
 
@@ -36,8 +37,8 @@ interface Swimming extends Scenario {
   readonly count: number;
 }
 
-function swimming(seed: number): Swimming {
-  const world = new World(school(seed));
+function swimming(seed: number, config = school(seed)): Swimming {
+  const world = new World(config);
   return {
     count: world.count,
     step(): number {
@@ -209,6 +210,20 @@ describe('step budget', () => {
       const [swim] = last;
       expect(swim.count).toBe(60);
       expect(at(meanMs, 0) / at(meanMs, 1)).toBeLessThan(SWIMMING_LIMIT);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'steps 60 fish and 20 walking shrimp inside the budget relative to the reference workload',
+    () => {
+      const { meanMs, last } = fastestMeanMs(() => [
+        swimming(4, walkerBenchmarkConfig(4)),
+        reference(),
+      ]);
+      const [mixed] = last;
+      expect(mixed.count).toBe(80);
+      expect(at(meanMs, 0) / at(meanMs, 1)).toBeLessThan(WALKING_LIMIT);
     },
     TEST_TIMEOUT_MS,
   );

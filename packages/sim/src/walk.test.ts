@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { speciesContentSchema } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import {
+  cherryShrimp,
   neonTetra,
   REEF_ANCHORS,
   REEF_DECOR,
@@ -19,38 +20,7 @@ import { STEP_DT, World, type WorldConfig } from './world.ts';
 
 const LONG = 120_000;
 
-const cherry: SpeciesInput = {
-  id: 'cherry-shrimp',
-  behaviour: {
-    territorial: false,
-    preferredZone: 'bottom',
-    depthBand: [0, 0.5],
-    perceptionRangeM: 0.15,
-    perceptionFovDeg: 300,
-    curiosity: 0.3,
-    boldness: 0.2,
-    traits: ['cave-dweller', 'biofilm-grazer'],
-  },
-  locomotion: {
-    swimmingMode: 'pleopod',
-    gait: 'forage',
-    maxSpeedMps: 0.4,
-    cruiseSpeedMps: 0.05,
-    massKg: 0.0006,
-    maxTurnRateDegPerS: 720,
-    maxPitchDeg: 90,
-    strouhal: 0.3,
-    bodyLengthM: 0.03,
-    walking: {
-      walkSpeedMps: 0.012,
-      strideBodyLengths: 0.35,
-      legPairs: 5,
-      surfaces: ['substrate', 'decor', 'glass'],
-      tailFlip: { speedMps: 0.25, durationS: 0.15, refractoryS: 2 },
-    },
-  },
-  lifecycle: { diet: ['algae-wafer', 'flakes', 'pellets'] },
-};
+const cherry = cherryShrimp;
 
 function variant(
   id: string,
@@ -268,8 +238,8 @@ describe('walkers', { timeout: LONG }, () => {
     expect(startleUntilFlip(world, 0, 3 / STEP_DT)).toBe(true);
   });
 
-  // Only one cave-dweller holds a cave, so each approach is its own world: from the open sand,
-  // and from behind the rock whose rounded foot makes an undercut too low to walk into.
+  // Each approach is its own world: from the open sand, and from behind the rock whose rounded
+  // foot makes an undercut too low to walk into.
   it.each([-0.25, 0.3])('hide in their cave at night, starting %f m along the reef', (dx) => {
     const world = new World({
       seed: 71,
