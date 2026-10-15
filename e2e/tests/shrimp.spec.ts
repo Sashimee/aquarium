@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
+  awaitLoaded,
   dockButton,
   openDock,
   openTankPanel,
@@ -11,6 +12,7 @@ const FISH_START_MS = 90_000;
 
 async function openScene(page: Page): Promise<void> {
   await page.goto('/?tier=low&backend=webgl&e2e');
+  await awaitLoaded(page);
   await expect(dockButton(page, 'Feed')).toBeEnabled({ timeout: SCENE_TIMEOUT_MS });
 }
 

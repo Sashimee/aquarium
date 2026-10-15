@@ -126,7 +126,6 @@ describe('LoadTracker', () => {
     tracker.fail('boom');
     expect(tracker.current).toMatchObject({ active: true, error: 'boom' });
     tracker.reach('scene');
-    tracker.finish();
     expect(tracker.current.error).toBe('boom');
     tracker.begin('switch');
     expect(tracker.current.error).toBeNull();
@@ -158,6 +157,75 @@ describe('LoadTracker', () => {
     tracker.finish();
     vi.advanceTimersByTime(5000);
     expect(tracker.current.error).toBeNull();
+  });
+});
+
+describe('LoadTracker failure and progress', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('clears the failure when a stalled load finishes later', () => {
+    const { tracker, states } = setup(1000);
+    tracker.begin('boot');
+    vi.advanceTimersByTime(1000);
+    expect(tracker.current.error).toMatch(/taking longer/);
+    tracker.finish();
+    expect(tracker.current).toMatchObject({ active: false, progress: 1, error: null });
+    expect(states.at(-1)).toBe(tracker.current);
+  });
+
+  it('dismisses a failure, stays inactive, and shows again on the next begin', () => {
+    const { bus, tracker } = setup();
+    tracker.begin('switch');
+    tracker.fail('boom');
+    bus.emit('load:dismiss', {});
+    expect(tracker.current).toMatchObject({ active: false, error: null });
+    tracker.finish();
+    expect(tracker.current.progress).toBeLessThan(1);
+    tracker.begin('switch');
+    expect(tracker.current).toMatchObject({ active: true, error: null });
+  });
+
+  it('ignores a dismissal while loading without an error', () => {
+    const { tracker } = setup();
+    tracker.begin('boot');
+    tracker.dismiss();
+    expect(tracker.current.active).toBe(true);
+  });
+
+  it('stops listening for dismissals once disposed', () => {
+    const { bus, tracker } = setup();
+    tracker.begin('boot');
+    tracker.fail('boom');
+    tracker.dispose();
+    bus.emit('load:dismiss', {});
+    expect(tracker.current).toMatchObject({ active: true, error: 'boom' });
+  });
+
+  it('keeps the bar moving through later waves of asset requests', () => {
+    const { tracker } = setup();
+    const source: ProgressSource = {};
+    watchAssets([source], tracker);
+    tracker.begin('boot');
+    tracker.reach('code');
+    tracker.reach('renderer');
+    const seen: number[] = [];
+    const mark = (): number => tracker.current.progress;
+    source.onStart?.('a', 0, 10);
+    source.onProgress?.('a', 10, 10);
+    seen.push(mark());
+    source.onStart?.('lod1', 10, 20);
+    source.onProgress?.('lod1', 15, 20);
+    seen.push(mark());
+    source.onProgress?.('lod1', 20, 20);
+    seen.push(mark());
+    source.onStart?.('lod2', 20, 40);
+    source.onProgress?.('lod2', 40, 40);
+    seen.push(mark());
+    expect(seen.every((v, i) => i === 0 || v >= (seen[i - 1] ?? 0))).toBe(true);
+    expect(seen[2]).toBeGreaterThan(seen[0] ?? 1);
+    expect(seen[3]).toBeGreaterThan(seen[2] ?? 1);
+    expect(seen.at(-1)).toBeLessThan(0.99);
   });
 });
 

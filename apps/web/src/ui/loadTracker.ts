@@ -58,12 +58,14 @@ export class LoadTracker {
   private share = new Map<Part, number>();
   private stallTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly stallMs: number;
+  private readonly stopDismiss: () => void;
 
   constructor(
     private readonly bus: EventBus<InteractionEvents>,
     options: LoadTrackerOptions = {},
   ) {
     this.stallMs = options.stallMs ?? 90_000;
+    this.stopDismiss = bus.on('load:dismiss', () => this.dismiss());
     this.publish();
   }
 
@@ -107,10 +109,19 @@ export class LoadTracker {
     this.part('assets', fraction);
   }
 
+  /** A load that failed and then completes anyway is a success: the failure card goes away. */
   finish(): void {
-    if (!this.running) return;
+    if (!this.state.active) return;
     this.clearStall();
-    this.state = { ...this.state, active: false, progress: 1 };
+    this.state = { ...this.state, active: false, progress: 1, error: null };
+    this.publish();
+  }
+
+  /** Hides the failure card; the load itself is given up on. */
+  dismiss(): void {
+    if (!this.state.active || this.state.error === null) return;
+    this.clearStall();
+    this.state = { ...this.state, active: false, error: null };
     this.publish();
   }
 
@@ -122,6 +133,7 @@ export class LoadTracker {
   }
 
   dispose(): void {
+    this.stopDismiss();
     this.clearStall();
   }
 

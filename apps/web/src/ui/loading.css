@@ -122,7 +122,8 @@
   color: var(--danger);
 }
 
-#ui .loading .primary {
+#ui .loading .primary,
+#ui .loading .loading-card button {
   flex: 0 0 auto;
   min-width: 10rem;
 }

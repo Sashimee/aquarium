@@ -8,6 +8,7 @@ import {
   type Locator,
   type Page,
 } from '@playwright/test';
+import { awaitLoaded } from './support/app.ts';
 
 const { viewport, userAgent } = devices['iPhone 15 Pro'];
 
@@ -302,6 +303,7 @@ const tap = (page: Page, point: Point) => pointerOf(page)([point]);
 async function dragPath(page: Page): Promise<[[number, number], [number, number]]> {
   const viewport = page.viewportSize();
   if (!viewport) throw new Error('viewport is not set');
+  await awaitLoaded(page, WAIT_TIMEOUT_MS);
   const xs = [0.8, 0.5, 0.2].map((fraction) => Math.round(viewport.width * fraction));
   const rows = [0.6, 0.5, 0.7, 0.4, 0.8, 0.3].map((fraction) =>
     Math.round(viewport.height * fraction),

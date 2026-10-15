@@ -890,12 +890,10 @@ export function shrimpLength(
   repoRoot: string,
   species: string,
 ): { metres: number; source: 'species-json' } | null {
-  for (const directory of ['species', 'species-pending']) {
-    if (!existsSync(join(repoRoot, 'content', directory, `${species}.json`))) continue;
-    const metres = speciesLengthM(repoRoot, species, directory);
-    if (metres !== null) return { metres, source: 'species-json' };
-  }
-  return null;
+  const directory = 'species';
+  if (!existsSync(join(repoRoot, 'content', directory, `${species}.json`))) return null;
+  const metres = speciesLengthM(repoRoot, species, directory);
+  return metres === null ? null : { metres, source: 'species-json' };
 }
 
 export async function buildShrimp(recipe: ShrimpRecipe, ctx: FishContext): Promise<OutputAsset> {

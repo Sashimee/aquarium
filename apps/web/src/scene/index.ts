@@ -39,14 +39,21 @@ export function mountBiomeScene(
   engine: Engine,
   biome: TankBiome,
   search: string,
-  hooks: { mounted(scene: TankScene): void; unmounting(scene: TankScene): void },
+  hooks: {
+    mounted(scene: TankScene): void;
+    unmounting(scene: TankScene): void;
+    failed?(message: string): void;
+  },
 ): BiomeScene<TankScene> {
   return new BiomeScene<TankScene>(biome, {
     ready: tierKnown(engine),
     build: (b, signal) => mountPreset(engine, b, search, signal),
     mounted: hooks.mounted,
     unmounting: hooks.unmounting,
-    onError: (message, cause) => engine.events.emit('engine:error', { message, cause }),
+    onError: (message, cause) => {
+      engine.events.emit('engine:error', { message, cause });
+      hooks.failed?.(message);
+    },
     timeoutMs: BUILD_TIMEOUT_MS,
   });
 }
