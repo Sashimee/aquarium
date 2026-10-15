@@ -74,7 +74,7 @@ export interface DisposableScene {
 export interface BiomeSceneOptions<S extends DisposableScene> {
   /** Resolves once the first build may start (the quality tier is known). */
   readonly ready: Promise<void>;
-  /** `signal` aborts when the build is superseded, hangs past `timeoutMs` or the scene is disposed. */
+  /** `signal` aborts when the build is superseded or the scene is disposed. */
   readonly build: (biome: Biome, signal: AbortSignal) => Promise<S>;
   readonly mounted: (scene: S) => void;
   /** Called before `scene` is disposed, so whatever holds it can let go first. */
@@ -89,9 +89,9 @@ export interface BiomeSceneOptions<S extends DisposableScene> {
  * unchanged across it. The old scene is disposed before the new one is built, because a scene
  * captures and restores engine state (lighting, the substrate material) and two alive at once
  * would restore each other's. A build that is no longer wanted is aborted and abandoned at once,
- * and one that outlives `timeoutMs` reports a slow load and is abandoned the same way, so the next
- * biome never waits on it. An abandoned build never mounts: whatever it still produces is disposed
- * when it lands. A failed or timed-out biome is not retried until a different one has been asked
+ * so the next biome never waits on it, and an abandoned build never mounts: whatever it still
+ * produces is disposed when it lands. One that outlives `timeoutMs` reports a slow load and is
+ * still mounted when it lands. A failed biome is not retried until a different one has been asked
  * for.
  */
 export class BiomeScene<S extends DisposableScene> {
@@ -181,9 +181,8 @@ export class BiomeScene<S extends DisposableScene> {
     this.building = { biome, controller };
     const timer = setTimeout(() => {
       onError(
-        `The ${biome} preset is still loading after ${timeoutMs / 1000} s; abandoning it and showing the empty tank`,
+        `The ${biome} preset is still loading after ${timeoutMs / 1000} s; showing the empty tank until it arrives`,
       );
-      controller.abort(new DOMException('The preset build timed out', 'TimeoutError'));
     }, timeoutMs);
     const attempt = this.options.build(biome, controller.signal);
     try {

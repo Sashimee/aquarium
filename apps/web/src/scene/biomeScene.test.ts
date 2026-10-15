@@ -423,35 +423,42 @@ describe('BiomeScene', () => {
     expect(h.mounted).toEqual(['reef']);
   });
 
-  it('abandons a hung build after the timeout so the next biome is built', async () => {
+  it('mounts a build that outlives the timeout once it lands', async () => {
     vi.useFakeTimers();
     const h = harness('reef', { gate: true });
     await vi.waitFor(() => expect(h.gates).toHaveLength(1));
     await vi.advanceTimersByTimeAsync(90_000);
     expect(h.errors).toEqual([
-      'The reef preset is still loading after 90 s; abandoning it and showing the empty tank',
+      'The reef preset is still loading after 90 s; showing the empty tank until it arrives',
     ]);
-    expect(h.gates[0]?.signal.aborted).toBe(true);
+    expect(h.gates[0]?.signal.aborted).toBe(false);
     expect(h.root.children).toHaveLength(0);
-    h.tankBiome.setFallback('freshwater');
-    await vi.waitFor(() => expect(h.gates).toHaveLength(2));
-    h.gates[1]?.release();
+    h.gates[0]?.release();
     await h.scenes.settled();
-    expect(h.mounted).toEqual(['freshwater']);
-    expect(shownNames(h.root)).toEqual(['freshwater']);
+    expect(h.mounted).toEqual(['reef']);
+    expect(shownNames(h.root)).toEqual(['reef']);
   });
 
-  it('neither mounts nor leaks an aborted build that resolves late', async () => {
+  it('builds the next biome while a hung build is still pending, and drops the hung one when it lands', async () => {
     vi.useFakeTimers();
     const h = harness('reef', { gate: true });
     await vi.waitFor(() => expect(h.gates).toHaveLength(1));
     await vi.advanceTimersByTimeAsync(90_000);
-    h.gates[0]?.release();
+    h.tankBiome.setFallback('freshwater');
+    await vi.waitFor(() => expect(h.gates).toHaveLength(2));
+    expect(h.gates[0]?.signal.aborted).toBe(true);
+    h.gates[1]?.release();
     await h.scenes.settled();
-    await vi.waitFor(() => expect(h.built[0]?.disposed).toBe(true));
-    expect(h.built).toHaveLength(1);
-    expect(h.mounted).toEqual([]);
-    expect(h.root.children).toHaveLength(0);
+    expect(h.mounted).toEqual(['freshwater']);
+    h.gates[0]?.release();
+    await vi.waitFor(() =>
+      expect(h.built.map((s) => [s.biome, s.disposed])).toEqual([
+        ['freshwater', false],
+        ['reef', true],
+      ]),
+    );
+    expect(h.mounted).toEqual(['freshwater']);
+    expect(shownNames(h.root)).toEqual(['freshwater']);
   });
 
   it('ignores a late failure of an abandoned build', async () => {
