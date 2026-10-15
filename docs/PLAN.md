@@ -363,6 +363,6 @@ Same rules as §4: one issue, one branch and one PR each, contract first for sha
 | T67 | E2E for every expansion feature | gameplay-engineer | T29–T64 | 13 |
 | T68 | Fix wave from T65/T66, then RC2 on devfish → **stop and ask Alex** for `dev → main` | owners → devops-engineer | T65–T67 | 14 |
 
-Multi-owner tasks are split into one issue per owner when filed, chained in the order listed.
+Multi-owner tasks are split into one PR per owner when dispatched, chained in the order listed.
 Up to 6 agents at once is the default; Alex allowed more, so the orchestrator may run more when
 the tasks are independent.
