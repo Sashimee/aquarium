@@ -125,6 +125,7 @@ async function boot(): Promise<void> {
       if (e.button !== 0 || sceneDecor.system?.active) return;
       const target = play?.controller.fishAt(e.x, e.y);
       if (target) rig.focusOn(target);
+      else interaction.emit('camera:follow-unavailable', {});
     },
     claimDrag: () =>
       sceneDecor.system?.active

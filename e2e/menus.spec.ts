@@ -20,16 +20,33 @@ interface Menu {
   isOpen(page: Page): Promise<void>;
 }
 
+const WAIT_TIMEOUT_MS = 30_000;
+
+async function within<T>(wait: Promise<T>, what: string, ms = WAIT_TIMEOUT_MS): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const expired = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(`timed out after ${ms} ms waiting for ${what}`)), ms);
+  });
+  try {
+    return await Promise.race([wait, expired]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // Under software rendering the main thread can lag a running spring animation by seconds, so a
 // box measured mid-animation is not where the element ends up.
 async function settleAnimations(page: Page): Promise<void> {
-  await page.evaluate(() =>
-    Promise.all(
-      document
-        .getAnimations()
-        .filter((animation) => Number.isFinite(animation.effect?.getComputedTiming().endTime))
-        .map((animation) => animation.finished.catch(() => undefined)),
+  await within(
+    page.evaluate(() =>
+      Promise.all(
+        document
+          .getAnimations()
+          .filter((animation) => Number.isFinite(animation.effect?.getComputedTiming().endTime))
+          .map((animation) => animation.finished.catch(() => undefined)),
+      ),
     ),
+    'running animations to finish',
   );
 }
 
@@ -37,20 +54,24 @@ async function settleAnimations(page: Page): Promise<void> {
 // stalled frame can outlast the poll's timeout, so the frames are awaited here, outside it.
 async function holdStill(target: Locator): Promise<void> {
   for (let attempt = 0; attempt < 10; attempt += 1) {
-    const moved = await target.evaluate(async (element) => {
-      const earlier = element.getBoundingClientRect();
-      await new Promise((done) => requestAnimationFrame(done));
-      await new Promise((done) => requestAnimationFrame(done));
-      const later = element.getBoundingClientRect();
-      return (
-        Math.abs(later.x - earlier.x) > 0.5 ||
-        Math.abs(later.y - earlier.y) > 0.5 ||
-        Math.abs(later.width - earlier.width) > 0.5 ||
-        Math.abs(later.height - earlier.height) > 0.5
-      );
-    });
+    const moved = await within(
+      target.evaluate(async (element) => {
+        const earlier = element.getBoundingClientRect();
+        await new Promise((done) => requestAnimationFrame(done));
+        await new Promise((done) => requestAnimationFrame(done));
+        const later = element.getBoundingClientRect();
+        return (
+          Math.abs(later.x - earlier.x) > 0.5 ||
+          Math.abs(later.y - earlier.y) > 0.5 ||
+          Math.abs(later.width - earlier.width) > 0.5 ||
+          Math.abs(later.height - earlier.height) > 0.5
+        );
+      }),
+      'the target to hold still across two frames',
+    );
     if (!moved) return;
   }
+  throw new Error(`${target} was still moving after 10 two-frame checks`);
 }
 
 // Locator.tap/click wait two animation frames per action, which costs seconds each under software
@@ -324,9 +345,12 @@ async function expectOrbits(page: Page, drag: Drag, context: string) {
 }
 
 async function frames(page: Page, count: number) {
-  await page.evaluate(async (n) => {
-    for (let i = 0; i < n; i += 1) await new Promise((done) => requestAnimationFrame(done));
-  }, count);
+  await within(
+    page.evaluate(async (n) => {
+      for (let i = 0; i < n; i += 1) await new Promise((done) => requestAnimationFrame(done));
+    }, count),
+    `${count} animation frames`,
+  );
 }
 
 // Software rendering runs at a few frames a second, so a pose read twice within one frame proves

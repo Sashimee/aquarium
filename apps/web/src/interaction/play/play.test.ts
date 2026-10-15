@@ -346,6 +346,16 @@ describe('PlayController laser and wand', () => {
     expect(t.lure).toHaveBeenLastCalledWith(null);
   });
 
+  it('clears the dot and the lure when disposed while the laser is lit', () => {
+    const t = makeController();
+    t.controller.setTool('laser');
+    t.controller.pointerMove(5, 5);
+    t.lure.mockClear();
+    t.controller.dispose();
+    expect(t.setLaserDot).toHaveBeenLastCalledWith(null);
+    expect(t.lure).toHaveBeenLastCalledWith(null);
+  });
+
   it('claims the drag only for laser and wand', () => {
     const t = makeController();
     expect(t.controller.claimsDrag).toBe(false);

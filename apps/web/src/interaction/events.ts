@@ -44,6 +44,8 @@ export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 export interface InteractionEvents {
   'camera:request-mode': { mode: CameraMode };
   'camera:mode-changed': { mode: CameraMode };
+  /** Follow was requested but there is no fish to follow. */
+  'camera:follow-unavailable': Record<string, never>;
   'play:request-tool': { tool: PlayTool };
   'play:tool-changed': { tool: PlayTool };
   /** The food chosen in the UI; hand-feed drops this one. */
