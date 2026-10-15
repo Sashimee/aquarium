@@ -8,7 +8,8 @@ import {
   unitSchema,
 } from './common.js';
 
-export const waterSchema = z.strictObject({
+// Response objects are non-strict so a tab on an older bundle ignores fields added later.
+export const waterSchema = z.object({
   ammonia: z.number().nonnegative(),
   nitrate: z.number().nonnegative(),
   algae: unitSchema,
@@ -32,7 +33,7 @@ export const fishStatusSchema = z.enum(['alive', 'dead']);
 export const causeOfDeathSchema = z.enum(['starvation', 'ammonia', 'old_age', 'unknown']);
 export type CauseOfDeath = z.infer<typeof causeOfDeathSchema>;
 
-export const fishSchema = z.strictObject({
+export const fishSchema = z.object({
   id: idSchema,
   tankId: idSchema,
   species: slugSchema,
@@ -48,7 +49,7 @@ export const fishSchema = z.strictObject({
 });
 export type Fish = z.infer<typeof fishSchema>;
 
-export const memorialSchema = z.strictObject({
+export const memorialSchema = z.object({
   id: idSchema,
   tankId: idSchema,
   fishName: z.string(),
@@ -59,11 +60,11 @@ export const memorialSchema = z.strictObject({
 });
 export type Memorial = z.infer<typeof memorialSchema>;
 
-export const awaySummarySchema = z.strictObject({
+export const awaySummarySchema = z.object({
   elapsedMinutes: z.int().nonnegative(),
   capped: z.boolean(),
   deaths: z.array(
-    z.strictObject({
+    z.object({
       fishId: idSchema,
       name: z.string(),
       species: slugSchema,
@@ -74,7 +75,7 @@ export const awaySummarySchema = z.strictObject({
 });
 export type AwaySummary = z.infer<typeof awaySummarySchema>;
 
-export const tankSchema = z.strictObject({
+export const tankSchema = z.object({
   id: idSchema,
   name: z.string().trim().min(1).max(60),
   biome: biomeSchema,

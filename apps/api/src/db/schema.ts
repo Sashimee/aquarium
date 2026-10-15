@@ -149,9 +149,8 @@ export const fish = pgTable(
     species: text('species').notNull(),
     name: text('name').notNull(),
     // Assigned for every species, 50/50, even those with no male model; the client decides what it
-    // draws. The default only keeps a still-running old container's inserts working during a
-    // rolling deploy; the API always sets sex itself.
-    sex: fishSexEnum('sex').notNull().default('female'),
+    // draws.
+    sex: fishSexEnum('sex').notNull(),
     bornAt: timestamptz('born_at').notNull().defaultNow(),
     size: doublePrecision('size').notNull(),
     hunger: doublePrecision('hunger').notNull().default(0),
