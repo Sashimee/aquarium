@@ -35,6 +35,21 @@ export class DisposeStack {
   }
 }
 
+/** Runs every step, last first, then throws the failures of any that threw together. */
+export function releaseAll(steps: readonly (() => void)[], owner: string): void {
+  const errors: unknown[] = [];
+  for (const step of [...steps].reverse()) {
+    try {
+      step();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (errors.length > 0) {
+    throw new AggregateError(errors, `${owner}: ${errors.length} cleanup step(s) failed`);
+  }
+}
+
 /**
  * Runs `build`, registering cleanups on the stack as resources are acquired. If `build`
  * throws, everything acquired so far is released and the original error is rethrown;

@@ -13,7 +13,9 @@ import { substrateHeight } from '../engine/tank/substrate';
 import { anemoneAnchor, type SceneAnchor } from '../scene/anemone';
 import type { CatalogEntry } from '../scene/assets';
 import { loadPreset } from '../scene/preset';
-import { DEMO_STOCKS, demoTank, sceneAnchorsToSim } from './demoStock';
+import { DEMO_STOCKS, demoStock, demoTank, sceneAnchorsToSim } from './demoStock';
+import bettaContent from '../../../../content/species/betta.json';
+import neonTetraContent from '../../../../content/species/neon-tetra.json';
 
 const BIOMES = biomeSchema.options;
 // PLAN §2.7: the mobile tier draws at most 30 fish per tank, and the demo runs on mobile too.
@@ -151,6 +153,26 @@ describe.each(BIOMES)('demoTank(%s)', (biome) => {
 
   it('builds a world the sim accepts', () => {
     expect(() => new World(demoTank(DEFAULT_TANK, 3, biome).config)).not.toThrow();
+  });
+});
+
+describe('demoStock', () => {
+  it('throws for a wanted species with no content', () => {
+    expect(() => demoStock([bettaContent], { betta: 1, 'neon-tetra': 6 })).toThrow(
+      'demo stock: neon-tetra has no content',
+    );
+  });
+
+  it('gives no count to an unlisted species that does not school', () => {
+    const { counts, species } = demoStock([bettaContent, neonTetraContent], {});
+    expect(species.map((s) => s.id)).toEqual(['betta', 'neon-tetra']);
+    expect(counts).toEqual({ 'neon-tetra': 6 });
+  });
+
+  it('raises a schooling species asked for below its minGroup', () => {
+    expect(demoStock([neonTetraContent], { 'neon-tetra': 2 }).counts).toEqual({
+      'neon-tetra': 6,
+    });
   });
 });
 

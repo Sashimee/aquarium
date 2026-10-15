@@ -1,12 +1,10 @@
 import type { FishSex } from '@aquarium/shared';
 import { hashString } from './roster';
 
-export type Sex = FishSex;
-
 /** `sex` is the server's stored one; null for demo fish, which have no server record. */
 export interface SexedFish {
   readonly key: string;
-  readonly sex: Sex | null;
+  readonly sex: FishSex | null;
 }
 
 /** The model one fish wears, and its standard length over the species' (female) one. */
@@ -119,7 +117,7 @@ export function renderProfile(speciesId: string): FishRenderProfile {
  * editing the models can't flip it. Even 1:1, and the same draw the server backfilled saved fish
  * with. A species without a male model draws both sexes with its one model at full length.
  */
-export function sexOf(fish: SexedFish): Sex {
+export function sexOf(fish: SexedFish): FishSex {
   if (fish.sex !== null) return fish.sex;
   return hashString(`${fish.key}:variant`) < 2 ** 31 ? 'male' : 'female';
 }

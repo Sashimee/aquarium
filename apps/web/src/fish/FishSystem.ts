@@ -22,6 +22,7 @@ import {
 } from '@aquarium/sim';
 import type { Engine } from '../engine/Engine';
 import type { EventBus } from '../engine/events';
+import { releaseAll } from '../engine/lifecycle';
 import type { Tier, TierSettings } from '../engine/quality/tiers';
 import { waterBounds, type TankDimensions } from '../engine/tank/dimensions';
 import type { InteractionEvents } from '../interaction/events';
@@ -85,7 +86,8 @@ interface LodBatch {
 
 interface SpeciesBatch {
   readonly input: SpeciesInput;
-  readonly model: FishModel;
+  /** Replaced, with its LODs, when the tier's texture size changes. */
+  model: FishModel;
   readonly profile: FishRenderProfile;
   lods: readonly LodBatch[];
   capacity: number;
@@ -180,6 +182,8 @@ export class FishSystem {
   private readonly spec: SimWorldSpec;
   private readonly cleanups: (() => void)[] = [];
   private readonly ateListeners = new Set<(events: readonly FishBite[]) => void>();
+  /** `asset@size` loads that failed; the batch keeps the model it has and is not retried. */
+  private readonly failedRetextures = new Set<string>();
   /** Replaced, with its worker, when the worker stops answering. */
   private sim: SimClient;
   /** The fish in the running world once the commands sent so far land; null with no world. */
@@ -249,6 +253,7 @@ export class FishSystem {
     }
     system.started = true;
     system.reportSimErrors();
+    if (system.staleTextures().length > 0) system.requestSync();
     return system;
   }
 
@@ -282,10 +287,8 @@ export class FishSystem {
         this.worker.terminate();
       },
       () => this.bags.dispose(),
-      () => {
-        this.batches.dispose();
-        this.runtimes.clear();
-      },
+      () => this.batches.dispose(),
+      () => this.runtimes.clear(),
     );
     this.sim = this.connectSim(worker);
     this.cleanups.push(
@@ -297,6 +300,11 @@ export class FishSystem {
         for (const batch of this.batches.values()) this.applyShadows(batch);
       }),
       engine.quality.register('fish-materials', (_s, tier) => this.applyFeatures(tier)),
+      engine.quality.register('fish-textures', (s) => {
+        if (this.loader.textureSize === s.textureSize) return;
+        this.loader.textureSize = s.textureSize;
+        if (this.started && !this.disposed) this.requestSync();
+      }),
       engine.onFrame((deltaS, nowMs) => this.update(deltaS, nowMs)),
       engine.events.on('engine:daylight', ({ level }) => this.setDaylight(level)),
       engine.events.on('engine:temporal-resolve', () => this.applyFeatures(engine.quality.tier)),
@@ -466,7 +474,7 @@ export class FishSystem {
     this.lifetime.abort(new Error('fish system disposed'));
     this.ateListeners.clear();
     for (const resolve of this.syncWaiters.splice(0)) resolve();
-    for (const cleanup of this.cleanups.splice(0).reverse()) cleanup();
+    releaseAll(this.cleanups.splice(0), 'FishSystem');
   }
 
   /** Silent once the engine is going: its teardown fails loads that are still in flight. */
@@ -497,6 +505,7 @@ export class FishSystem {
       this.dirty = false;
       try {
         await this.loadSpecies();
+        await this.retexture();
         if (this.disposed) return;
         this.materialize();
         await this.syncWorld();
@@ -602,6 +611,43 @@ export class FishSystem {
     }
     batch.lods = [];
     batch.capacity = 0;
+  }
+
+  private staleTextures(): SpeciesBatch[] {
+    return [...this.batches.values()].filter(({ model }) => {
+      const size = this.loader.textureSizeFor(model.entry);
+      return size !== model.textureSize && !this.failedRetextures.has(`${model.entry.id}@${size}`);
+    });
+  }
+
+  /** Reloads each batch whose maps are not the tier's size; it keeps drawing the old ones meanwhile. */
+  private async retexture(): Promise<void> {
+    await Promise.all(
+      this.staleTextures().map(async (batch) => {
+        const assetId = batch.model.entry.id;
+        const size = this.loader.textureSizeFor(batch.model.entry);
+        let model: FishModel;
+        try {
+          model = await this.loader.load(assetId);
+        } catch (cause) {
+          this.failedRetextures.add(`${assetId}@${size}`);
+          this.report(
+            `Fish "${assetId}" ${size}px textures failed; it keeps its current ones`,
+            cause,
+          );
+          return;
+        }
+        if (this.disposed || ![...this.batches.values()].includes(batch)) {
+          disposeFishModel(model);
+          return;
+        }
+        const { capacity } = batch;
+        this.disposeLods(batch);
+        disposeFishModel(batch.model);
+        batch.model = model;
+        this.ensureCapacity(batch, capacity);
+      }),
+    );
   }
 
   private wantedBatches(): Set<string> {

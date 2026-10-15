@@ -175,9 +175,9 @@ export function rewritingKtx2Loader(
 }
 
 /**
- * The shared loader in the shape GLTFLoader.setKTX2Loader takes, unable to dispose it. Fish use
- * this because their textures stay at 1k; ModelLibrary uses rewritingKtx2Loader to swap its
- * models' textures to 2k on request without touching anyone else's loads.
+ * The shared loader in the shape GLTFLoader.setKTX2Loader takes, unable to dispose it, for loads
+ * of the textures a glTF references as they are. ModelLibrary and FishAssetLoader use
+ * rewritingKtx2Loader to swap textures to 2k on request without touching anyone else's loads.
  */
 export function gltfKtx2Loader(loader: Ktx2Textures): KTX2Loader {
   return rewritingKtx2Loader(loader, (url) => url);

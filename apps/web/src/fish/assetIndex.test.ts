@@ -28,6 +28,54 @@ describe('parseFishAssets', () => {
     expect(neon?.min).toEqual([-0.003, -0.005, -0.02]);
   });
 
+  it('maps each 1k map to its 2k file only where the 2k one is larger', () => {
+    const variant = (file: string, size: number) => ({ file, size });
+    const entry = parseFishAssets({
+      assets: [
+        fish({
+          textures: [
+            {
+              role: 'baseColor',
+              variants: {
+                '1k': variant('fish/n/textures/base_1k.ktx2', 1024),
+                '2k': variant('fish/n/textures/base_2k.ktx2', 1024),
+              },
+            },
+            {
+              role: 'normal',
+              variants: {
+                '1k': variant('fish/n/textures/normal_1k.ktx2', 512),
+                '2k': variant('fish/n/textures/normal_2k.ktx2', 1024),
+              },
+            },
+            { role: 'emissive', variants: { '1k': variant('fish/n/textures/e_1k.ktx2', 512) } },
+          ],
+        }),
+      ],
+    }).get('neon-tetra');
+    expect(entry?.sharperTextures).toEqual(
+      new Map([['fish/n/textures/normal_1k.ktx2', 'fish/n/textures/normal_2k.ktx2']]),
+    );
+  });
+
+  it('has no 2k maps for an entry without textures', () => {
+    expect(parseFishAssets({ assets: [fish()] }).get('neon-tetra')?.sharperTextures.size).toBe(0);
+  });
+
+  it.each([
+    ['a parent directory', '../normal_2k.ktx2', 1024],
+    ['a non-ktx2 file', 'fish/n/normal_2k.png', 1024],
+    ['a missing size', 'fish/n/normal_2k.ktx2', undefined],
+  ])('rejects %s in a 2k texture variant', (_, file, size) => {
+    const textures = [
+      {
+        role: 'normal',
+        variants: { '1k': { file: 'fish/n/normal_1k.ktx2', size: 512 }, '2k': { file, size } },
+      },
+    ];
+    expect(() => parseFishAssets({ assets: [fish({ textures })] })).toThrow(TypeError);
+  });
+
   it('accepts an index with no fish', () => {
     expect(parseFishAssets({ assets: [] }).size).toBe(0);
   });
@@ -67,6 +115,18 @@ describe('parseFishAssets', () => {
         expect(entry?.lodFiles.length).toBeGreaterThanOrEqual(1);
       }
     }
+  });
+
+  it('gives the shipped neon tetra its 2k normal map but keeps its single-size base colour', () => {
+    const neon = parseFishAssets(shippedIndex).get('neon-tetra');
+    expect(neon?.sharperTextures).toEqual(
+      new Map([
+        [
+          'fish/neon-tetra/textures/neon-tetra_normal_1k.ktx2',
+          'fish/neon-tetra/textures/neon-tetra_normal_2k.ktx2',
+        ],
+      ]),
+    );
   });
 
   it('scales each male model by its profile length factor, so males draw at true size', () => {
