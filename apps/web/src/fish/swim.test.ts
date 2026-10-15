@@ -6,6 +6,8 @@ import {
   IDLE_TAIL_BEAT_HZ,
   MAX_BEND,
   MAX_TAIL_BEAT_HZ,
+  EXERTED_VENTILATION_HZ,
+  RESTING_VENTILATION_HZ,
   SWIM_MODES,
   SwimState,
   tailBeatHz,
@@ -158,6 +160,63 @@ describe('SwimState', () => {
     it('treats a drive outside 0..1 as its nearest bound', () => {
       expect(amplitudeScale(speed, length, 2)).toBe(1);
       expect(amplitudeScale(speed, length, -1)).toBe(0);
+    });
+  });
+
+  describe('gill ventilation', () => {
+    const length = 0.05;
+    const step = 1 / 60;
+    const hover = { speed: 0, yawRate: 0, thrust: 0 };
+    const cruise = { speed: 2 * length, yawRate: 0, thrust: 1 };
+    const run = (state: SwimState, seconds: number, sample: typeof hover): void => {
+      for (let t = 0; t < seconds; t += step) state.advance(step, sample);
+    };
+    const rate = (state: SwimState, sample: typeof hover): number => {
+      const before = state.ventilationPhase;
+      state.advance(0.01, sample);
+      return ((state.ventilationPhase - before + TAU) % TAU) / TAU / 0.01;
+    };
+
+    it('starts closed and pumps at the resting rate while hovering', () => {
+      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0);
+      expect(state.gillOpening).toBe(0);
+      const restingRate =
+        RESTING_VENTILATION_HZ + (EXERTED_VENTILATION_HZ - RESTING_VENTILATION_HZ) * IDLE_AMPLITUDE;
+      expect(rate(state, hover)).toBeCloseTo(restingRate, 3);
+    });
+
+    it('opens and closes once per beat without leaving 0..1', () => {
+      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0);
+      const seen: number[] = [];
+      for (let i = 0; i < 600; i++) {
+        state.advance(step, cruise);
+        seen.push(state.gillOpening);
+      }
+      expect(Math.min(...seen)).toBeGreaterThanOrEqual(0);
+      expect(Math.max(...seen)).toBeLessThanOrEqual(1);
+      expect(Math.min(...seen)).toBeLessThan(0.01);
+      expect(Math.max(...seen)).toBeGreaterThan(0.9);
+      expect(state.ventilationPhase).toBeLessThan(TAU);
+    });
+
+    it('breathes harder after sustained swimming and settles back over seconds', () => {
+      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0);
+      run(state, 5, hover);
+      const resting = rate(state, hover);
+      run(state, 15, cruise);
+      expect(rate(state, cruise)).toBeCloseTo(EXERTED_VENTILATION_HZ, 1);
+      state.advance(step, hover);
+      expect(rate(state, hover)).toBeGreaterThan(EXERTED_VENTILATION_HZ * 0.95);
+      run(state, 15, hover);
+      expect(rate(state, hover)).toBeCloseTo(resting, 2);
+    });
+
+    it('does not follow a single tail kick', () => {
+      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0);
+      run(state, 5, hover);
+      const resting = rate(state, hover);
+      run(state, 0.17, cruise);
+      expect(rate(state, hover)).toBeLessThan(resting * 1.2);
     });
   });
 

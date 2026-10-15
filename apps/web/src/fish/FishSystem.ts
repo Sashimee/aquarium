@@ -237,6 +237,7 @@ export class FishSystem {
     seed: 0,
     filmThickness: 0,
     tint: [1, 1, 1],
+    gills: 0,
   };
 
   /**
@@ -1126,6 +1127,7 @@ export class FishSystem {
       v.seed = rt.seed;
       v.filmThickness = rt.filmThickness;
       v.tint = rt.tint;
+      v.gills = rt.swim.gillOpening * liveliness;
       lod.instances.write(slot, v);
     }
     this.bags.end();

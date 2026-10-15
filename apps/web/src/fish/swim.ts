@@ -86,6 +86,15 @@ const BEND_SMOOTHING_S = 0.08;
  */
 export const COAST_THRUST = 1e-3;
 const COAST_DECAY_PER_PERIOD = 3;
+/**
+ * Opercular pumping of a small teleost at rest and at full exertion, in beats per second; visual
+ * estimates within the 1-3 Hz that small tropical fish ventilate at. Exertion raises both the rate
+ * and the stroke, and both settle back over a few seconds rather than with the tail beat.
+ */
+export const RESTING_VENTILATION_HZ = 1.4;
+export const EXERTED_VENTILATION_HZ = 3;
+const RESTING_GILL_STROKE = 0.6;
+const EXERTION_SETTLE_S = 2.5;
 const DRIVE_RISE_S = 0.03;
 const TAU = Math.PI * 2;
 
@@ -150,6 +159,9 @@ export class SwimState {
   drive = 1;
   curvature = 0;
   frequency = IDLE_TAIL_BEAT_HZ;
+  /** 0 hovering .. 1 cruising, the body-wave amplitude slowly averaged. */
+  exertion = IDLE_AMPLITUDE;
+  ventilationPhase: number;
 
   constructor(
     readonly length: number,
@@ -160,6 +172,13 @@ export class SwimState {
     requirePositiveLength(length);
     this.phase = phaseOffset % TAU;
     this.finPhase = (phaseOffset * 1.618) % TAU;
+    this.ventilationPhase = (phaseOffset * 2.414) % TAU;
+  }
+
+  /** Gill covers 0 closed .. 1 fully flared. */
+  get gillOpening(): number {
+    const stroke = RESTING_GILL_STROKE + (1 - RESTING_GILL_STROKE) * this.exertion;
+    return stroke * 0.5 * (1 - Math.cos(this.ventilationPhase));
   }
 
   advance(dt: number, sample: SwimSample): void {
@@ -173,6 +192,10 @@ export class SwimState {
     this.phase = (this.phase + TAU * this.frequency * dt) % TAU;
     const finHz = Math.max(this.frequency, this.mode.pectoralIdleHz);
     this.finPhase = (this.finPhase + TAU * finHz * dt) % TAU;
+    this.exertion += (this.amplitude - this.exertion) * (1 - Math.exp(-dt / EXERTION_SETTLE_S));
+    const ventilationHz =
+      RESTING_VENTILATION_HZ + (EXERTED_VENTILATION_HZ - RESTING_VENTILATION_HZ) * this.exertion;
+    this.ventilationPhase = (this.ventilationPhase + TAU * ventilationHz * dt) % TAU;
     const target = turnCurvature(sample.yawRate, sample.speed, length);
     const k = 1 - Math.exp(-dt / BEND_SMOOTHING_S);
     this.curvature += (target - this.curvature) * k;

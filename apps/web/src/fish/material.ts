@@ -66,6 +66,8 @@ export interface FishMaterialFeatures {
   readonly fins: FinRendering;
   readonly iridescence: boolean;
   readonly clearcoat: boolean;
+  /** Opercular pumping in the vertex deformation. */
+  readonly gills: boolean;
 }
 
 export interface FishMaterialConfig {
@@ -87,6 +89,16 @@ const HEAD_BEND = 0.35;
 const CAUDAL_LAG = 0.06;
 const CAUDAL_LAG_PHASE = 1.2;
 const PELVIC_AMPLITUDE = 0.015;
+/**
+ * The models carry no gill mask, so the gill cover is placed by body proportion: its rear edge at
+ * about a fifth of the total length behind the snout, as in the small teleosts the tanks hold. The
+ * cover widens towards that edge and the flank behind it stays put, which shades the gill slit.
+ */
+const GILL_EDGE_S = 0.2;
+const GILL_COVER_S = 0.08;
+const GILL_FALLOFF_S = 0.03;
+/** Lateral widening of the head at the gill edge with the covers fully flared. */
+const GILL_FLARE = 0.08;
 /** Guanine (n ≈ 1.83) platelets are the reflectors in fish iridophores (Land 1972). */
 const GUANINE_IOR = 1.83;
 const FIN_OPACITY_FLOOR = 0.2;
@@ -101,8 +113,19 @@ const SILHOUETTE_ALPHA = 0.1;
 /** Golden-ratio-like step that decorrelates consecutive frames of the noise (Jimenez 2014). */
 const FRAME_NOISE_STEP = 5.588238;
 
+interface Deformation {
+  readonly position: Node<'vec3'>;
+  readonly normal: Node<'vec3'>;
+}
+
 function idIs(id: Node<'float'>, value: number): Node<'float'> {
   return step(value - 0.5, id).mul(step(id, value + 0.5));
+}
+
+/** smoothstep(a, b, x) and its derivative in x. */
+function smoothRamp(a: number, b: number, x: Node<'float'>): [Node<'float'>, Node<'float'>] {
+  const t = clamp(x.sub(a).div(b - a), 0, 1);
+  return [t.mul(t).mul(t.mul(-2).add(3)), t.mul(t.oneMinus()).mul(6 / (b - a))];
 }
 
 function rotateByQuat(q: Node<'vec4'>, v: Node<'vec3'>): Node<'vec3'> {
@@ -126,8 +149,9 @@ function screenDoor(alpha: Node<'float'>, seed: Node<'float'>): Node<'bool'> {
  * model space before instancing, so every instance shares one mesh.
  */
 export class FishMaterial extends MeshPhysicalNodeMaterial {
-  readonly deformedPosition: Node<'vec3'>;
-  private readonly deformedNormal: Node<'vec3'>;
+  private readonly still: Deformation;
+  private readonly breathing: Deformation;
+  private deformation: Deformation;
   private readonly config: FishMaterialConfig;
   private readonly instanceNodes = new Map<number, Node<'vec4'>>();
 
@@ -144,9 +168,10 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
     this.clearcoatRoughness = 0.08;
     this.iridescenceIOR = GUANINE_IOR;
 
-    const { position, normal } = this.buildDeformation();
-    this.deformedPosition = position;
-    this.deformedNormal = normal;
+    this.still = this.buildDeformation(false);
+    this.breathing = this.buildDeformation(true);
+    this.deformation = this.still;
+    const { position } = this.still;
 
     const orientation = this.instanceVec4(0);
     const scale = this.instanceVec4(4).x;
@@ -154,7 +179,7 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
     this.castShadowPositionNode = positionLocal.add(
       rotateByQuat(orientation, position.sub(positionGeometry).mul(scale)),
     );
-    this.setFeatures({ fins: 'coverage', iridescence: true, clearcoat: true });
+    this.setFeatures({ fins: 'coverage', iridescence: true, clearcoat: true, gills: true });
   }
 
   /** One node per slot: each call would otherwise add its own vertex attribute. */
@@ -172,7 +197,7 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
     return node;
   }
 
-  private buildDeformation(): { position: Node<'vec3'>; normal: Node<'vec3'> } {
+  private buildDeformation(gills: boolean): Deformation {
     const { mode, zMax, zMin } = this.config;
     const zLen = zMax - zMin;
     const [c0, c1, c2] = mode.envelope;
@@ -226,17 +251,32 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
       .mul(sin(finPhase.add(1)));
 
     const dx = body.add(bend).add(caudal).add(median).add(pectoralOut).add(pelvic);
-    const position = vec3(p.x.add(dx), p.y, p.z.add(pectoralRow)).toVar('fishPosition');
-
-    // x' = x + h(z) is a shear; normals transform by its inverse transpose: n_z -= h'(z)·n_x.
-    const slope = bodySlopeS.div(-zLen).add(bendSlope);
     const n = normalGeometry;
-    const normal = normalize(vec3(n.x, n.y, n.z.sub(slope.mul(n.x)))).toVar('fishNormal');
+    let x: Node<'float'> = p.x.add(dx);
+    let nx: Node<'float'> = n.x;
+    // x' = x·(1 + g(z)) + h(z); normals transform by the inverse transpose of its Jacobian:
+    // n_x /= 1 + g, then n_z -= (x·g'(z) + h'(z))·n_x.
+    let slopeS: Node<'float'> = bodySlopeS;
+    if (gills) {
+      const opening = this.instanceVec4(12).w;
+      const [cover, coverSlope] = smoothRamp(GILL_EDGE_S - GILL_COVER_S, GILL_EDGE_S, s);
+      const [behind, behindSlope] = smoothRamp(GILL_EDGE_S, GILL_EDGE_S + GILL_FALLOFF_S, s);
+      const flare = opening.mul(GILL_FLARE).mul(smoothstep(0.08, 0.5, mask).oneMinus());
+      const widen = flare.mul(cover).mul(behind.oneMinus()).add(1).toVar();
+      const widenSlopeS = flare.mul(coverSlope.mul(behind.oneMinus()).sub(cover.mul(behindSlope)));
+      x = p.x.mul(widen).add(dx);
+      nx = n.x.div(widen);
+      slopeS = slopeS.add(p.x.mul(widenSlopeS));
+    }
+    const position = vec3(x, p.y, p.z.add(pectoralRow)).toVar('fishPosition');
+    const slope = slopeS.div(-zLen).add(bendSlope);
+    const normal = normalize(vec3(nx, n.y, n.z.sub(slope.mul(nx)))).toVar('fishNormal');
     return { position, normal };
   }
 
   setFeatures(features: FishMaterialFeatures): void {
     const { source, profile, lighting } = this.config;
+    this.deformation = features.gills ? this.breathing : this.still;
     const look = this.instanceVec4(8);
     const tint = this.instanceVec4(12).xyz;
     const pale = look.y;
@@ -303,10 +343,11 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
   }
 
   override setupPosition(builder: NodeBuilder): Node {
-    positionLocal.assign(this.deformedPosition);
+    const { position, normal } = this.deformation;
+    positionLocal.assign(position);
     // Motion vectors for the temporal resolve: the swimming wave is slow next to the instance motion.
-    if (builder.needsPreviousData()) positionPrevious.assign(this.deformedPosition);
-    normalLocal.assign(this.deformedNormal);
+    if (builder.needsPreviousData()) positionPrevious.assign(position);
+    normalLocal.assign(normal);
     return super.setupPosition(builder);
   }
 }

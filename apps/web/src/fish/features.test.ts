@@ -19,6 +19,13 @@ describe('featuresFor', () => {
     expect(featuresFor('low', { msaa: true, temporal: false }).fins).toBe('cutout');
   });
 
+  it('pumps the gills on every tier but low', () => {
+    const live = { msaa: true, temporal: false };
+    expect(featuresFor('low', live).gills).toBe(false);
+    expect(featuresFor('medium', live).gills).toBe(true);
+    expect(featuresFor('ultra', { msaa: false, temporal: true }).gills).toBe(true);
+  });
+
   it('gates iridescence and clearcoat by tier alone', () => {
     const live = { msaa: true, temporal: false };
     expect(featuresFor('low', live)).toMatchObject({ iridescence: false, clearcoat: false });
@@ -36,6 +43,10 @@ describe('sameFeatures', () => {
 
   it('is false before any features were applied', () => {
     expect(sameFeatures(null, ultra)).toBe(false);
+  });
+
+  it('tells the gill motion apart', () => {
+    expect(sameFeatures(ultra, { ...ultra, gills: false })).toBe(false);
   });
 
   it('tells a change of fin rendering apart', () => {
