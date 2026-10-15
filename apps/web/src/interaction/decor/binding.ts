@@ -3,17 +3,17 @@ import type { EventBus } from '../../engine/events';
 import type { InteractionEvents } from '../events';
 import type { DecorWorld } from './world';
 
-/**
- * Keeps the scene on the active saved tank's layout, so a rearranged tank looks the same on
- * every visit. It listens from boot, because a tank usually loads before its scene is built,
- * and shows the latest layout once `attach` hands it the world.
- */
 export interface SavedTank {
   readonly tankId: string;
   readonly biome: string;
   readonly layout: DecorLayout;
 }
 
+/**
+ * Keeps the scene on the active saved tank's layout, so a rearranged tank looks the same on
+ * every visit. It follows the tank events from construction on, and shows the latest layout
+ * once `attach` hands it the world.
+ */
 export class SavedDecor {
   private world: DecorWorld | null = null;
   private latest: { biome: string; layout: DecorLayout } | null = null;

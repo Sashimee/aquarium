@@ -82,9 +82,9 @@ export function createDecorSystem(
     dispose() {
       disposed = true;
       stopRequests();
-      saved.dispose();
       stopMotion();
       mode?.dispose();
+      saved.dispose();
     },
   };
 }

@@ -83,6 +83,11 @@ export function useDecorState(): DecorViewState | null {
   return useLatest(interaction, 'decor:state') ?? null;
 }
 
+export function useDecorLoadError(): string | null {
+  const { interaction } = useBridge();
+  return useLatest(interaction, 'decor:load-failed')?.message ?? null;
+}
+
 export function useDecorSaveState(): { status: SaveStatus; message: string | null } {
   const { interaction } = useBridge();
   return useLatest(interaction, 'decor:save-state') ?? { status: 'idle', message: null };
