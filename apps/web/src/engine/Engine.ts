@@ -140,6 +140,7 @@ export class Engine {
   private sceneRevisionValue = 0;
   /** Later tier changes warm what they turn on themselves. */
   private warmedUp = false;
+  private reflectedShadowSize = 0;
   private gpuMs: number | null = null;
   private readonly gpuTiming: boolean;
   private lastGpuMs: number | null = null;
@@ -234,10 +235,6 @@ export class Engine {
       this.scene,
       config.hdriUrl ?? DEFAULT_HDRI_URL,
       (message, cause) => this.reportError(message, cause),
-      (environment) => {
-        this.tank.setSky(environment);
-        this.interior.setRoom(environment);
-      },
     );
     cleanup.add(() => roomLighting.dispose());
     const roomBackgroundIntensity = this.scene.backgroundIntensity;
@@ -248,7 +245,7 @@ export class Engine {
     this.interior = new InteriorLight(
       this.medium,
       this.caustics,
-      roomLighting.initial,
+      roomLighting.texture,
       this.substrateAlbedo,
       meanSubstrateHeight(dimensions),
     );
@@ -263,7 +260,7 @@ export class Engine {
       substrateAlbedo: this.substrateAlbedo,
       roomBackgroundIntensity,
     };
-    this.tank = new Tank(dimensions, this.medium, roomLighting.initial, this.interior);
+    this.tank = new Tank(dimensions, this.medium, roomLighting.texture, this.interior);
     cleanup.add(() => this.tank.dispose());
     this.scene.add(this.tank.group);
     this.scene.fogNode = this.medium.fogNode();
@@ -512,12 +509,16 @@ export class Engine {
 
   /**
    * The hood's shadow map does not depend on the view, but three redraws it once per camera and
-   * frame: the mirrored camera uses the last one drawn for the scene camera.
+   * frame: the mirrored camera uses the last one drawn for the scene camera. Not after the map
+   * was resized, though: three only reallocates it when it is drawn, so the reflection's objects
+   * would bind the old texture once and keep it after it is freed.
    */
   private renderSurfaceReflection(): void {
     const shadow = this.hood.shadow;
     const autoUpdate = shadow.autoUpdate;
-    shadow.autoUpdate = false;
+    const shadowSize = this.hood.castShadow ? shadow.mapSize.x : 0;
+    shadow.autoUpdate = autoUpdate && shadowSize !== this.reflectedShadowSize;
+    this.reflectedShadowSize = shadowSize;
     try {
       this.tank.renderSurfaceReflection(this.renderer, this.scene, this.camera);
     } finally {

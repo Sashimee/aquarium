@@ -45,7 +45,6 @@ export class InteriorLight {
   actinicExcitation = 0;
   private readonly reach = new Color();
   private fillShare = 0;
-  private readonly roomNodes: PMREMNode[] = [];
 
   /**
    * `substrateAlbedo` is read, not copied, so later changes to it are followed. `sandHeight` is
@@ -54,7 +53,7 @@ export class InteriorLight {
   constructor(
     private readonly medium: WaterMedium,
     private readonly caustics: Caustics,
-    private room: Texture,
+    private readonly room: Texture,
     substrateAlbedo: Color,
     private readonly sandHeight: number,
   ) {
@@ -88,11 +87,6 @@ export class InteriorLight {
       .multiplyScalar(this.fillShare / Math.PI);
   }
 
-  setRoom(texture: Texture): void {
-    this.room = texture;
-    for (const node of this.roomNodes) node.value = texture;
-  }
-
   /**
    * For `scene.environmentNode`: the PMREM lookup takes its direction and blur from the
    * environment lighting's context, so specular and diffuse both see the filtered room.
@@ -107,9 +101,7 @@ export class InteriorLight {
   }
 
   private roomNode(direction?: Node<'vec3'>, roughness?: Node<'float'>): PMREMNode {
-    const node = pmremTexture(this.room, direction, roughness);
-    this.roomNodes.push(node);
-    return node;
+    return pmremTexture(this.room, direction, roughness);
   }
 
   private around(p: Node<'vec3'>, room: Node<'vec3'>): Node<'vec3'> {

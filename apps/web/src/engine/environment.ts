@@ -48,15 +48,31 @@ export function uploadableHdri(texture: CompressedTexture): Texture {
   return raw;
 }
 
+/** Edge of each cube face in the room's PMREM: what three picks for a 1k equirectangular map. */
+export const ROOM_CUBE_SIZE = 256;
+
+/** The cube face edge three's PMREMGenerator picks for an equirectangular map `width` texels wide. */
+export function pmremCubeSize(width: number): number {
+  return 2 ** Math.floor(Math.log2(width / 4));
+}
+
 export interface RoomLighting {
-  /** The procedural studio installed at once; `onChange` reports the swap to the HDRI. */
-  readonly initial: Texture;
+  /**
+   * The room's PMREM. The procedural studio is drawn into it at once and the HDRI over it once
+   * that has loaded, so it is the same texture for the life of the scene.
+   */
+  readonly texture: Texture;
   dispose(): void;
 }
 
 /**
- * Lights the room with a procedural studio at once, then swaps in the HDRI when it has
- * loaded. A failed download keeps the procedural studio and reports through `onError`.
+ * Lights the room with a procedural studio at once, then draws the HDRI into the same PMREM when
+ * it has loaded. A failed download keeps the procedural studio and reports through `onError`.
+ *
+ * The HDRI must not get a texture of its own: three rebinds textures only for materials whose
+ * own properties changed, so materials lit through `scene.environmentNode` would go on sampling
+ * the studio's texture. Once that was freed, WebGL bound a deleted texture and the sampler unit
+ * kept whatever was bound before it, such as a shadow map.
  */
 export function installRoomLighting(
   renderer: WebGPURenderer,
@@ -64,21 +80,20 @@ export function installRoomLighting(
   scene: Scene,
   hdriUrl: string,
   onError: (message: string, cause: unknown) => void,
-  onChange: (environment: Texture) => void,
 ): RoomLighting {
-  const pmrem = new PMREMGenerator(renderer);
   const studio = new RoomEnvironment();
-  const roomTarget = pmrem.fromScene(studio, 0.04);
+  const studioGenerator = new PMREMGenerator(renderer);
+  const room = studioGenerator.fromScene(studio, 0.04, undefined, undefined, {
+    size: ROOM_CUBE_SIZE,
+  });
   studio.dispose();
-  pmrem.dispose();
+  studioGenerator.dispose();
 
-  scene.environment = roomTarget.texture;
-  scene.background = roomTarget.texture;
+  scene.environment = room.texture;
+  scene.background = room.texture;
   scene.backgroundBlurriness = 0.35;
   scene.backgroundIntensity = 0.45;
 
-  let hdri: Texture | null = null;
-  let room: typeof roomTarget | null = roomTarget;
   let disposed = false;
 
   ktx2
@@ -88,26 +103,31 @@ export function installRoomLighting(
         loaded.dispose();
         return;
       }
-      const texture = uploadableHdri(loaded);
-      texture.mapping = EquirectangularReflectionMapping;
-      hdri = texture;
-      scene.environment = texture;
-      scene.background = texture;
-      onChange(texture);
-      room?.dispose();
-      room = null;
+      const hdri = uploadableHdri(loaded);
+      try {
+        const { width } = hdri.image as { width: number };
+        if (pmremCubeSize(width) !== ROOM_CUBE_SIZE) {
+          throw new Error(
+            `The HDRI is ${width} texels wide; the room needs a 1k map (${4 * ROOM_CUBE_SIZE} wide)`,
+          );
+        }
+        hdri.mapping = EquirectangularReflectionMapping;
+        const generator = new PMREMGenerator(renderer);
+        generator.fromEquirectangular(hdri, room);
+        generator.dispose();
+      } finally {
+        hdri.dispose();
+      }
     })
     .catch((cause: unknown) => {
       if (!disposed) onError(`Could not load the room HDRI from ${hdriUrl}`, cause);
     });
 
   return {
-    initial: roomTarget.texture,
+    texture: room.texture,
     dispose() {
       disposed = true;
-      hdri?.dispose();
-      room?.dispose();
-      room = null;
+      room.dispose();
     },
   };
 }
