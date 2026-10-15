@@ -22,6 +22,10 @@ interface Menu {
 
 const WAIT_TIMEOUT_MS = 120_000;
 const HOLD_STILL_BUDGET_MS = 150_000;
+// Switching to the reef rebuilds the scene and the fish world on the main thread. On a loaded CI
+// runner under SwiftShader that has frozen the page for longer than WAIT_TIMEOUT_MS, and no frame
+// is produced until it ends, so the first frames after a switch get their own budget.
+const TANK_REBUILD_BUDGET_MS = 240_000;
 
 async function within<T>(wait: Promise<T>, what: string, ms = WAIT_TIMEOUT_MS): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
@@ -332,25 +336,26 @@ async function expectOrbits(page: Page, drag: Drag, context: string) {
   const canvas = page.locator('canvas#tank');
   // A tank switch compiles shaders on the main thread for many seconds; a drag that lands before
   // the frame loop is running again is applied too late for the wait below.
-  await frames(page, 2);
+  await frames(page, 2, TANK_REBUILD_BUDGET_MS);
   const before = await canvas.getAttribute('data-camera');
   const [from, to] = await dragPath(page);
   await drag(from, to);
   // One frame can take over 20 s while shaders compile under software rendering, longer than the
   // expect timeout, and the pose only changes in a frame.
-  await frames(page, 2);
+  await frames(page, 2, TANK_REBUILD_BUDGET_MS);
   await expect(canvas, `the camera did not orbit ${context}`).not.toHaveAttribute(
     'data-camera',
     before ?? '',
   );
 }
 
-async function frames(page: Page, count: number) {
+async function frames(page: Page, count: number, budgetMs = WAIT_TIMEOUT_MS) {
   await within(
     page.evaluate(async (n) => {
       for (let i = 0; i < n; i += 1) await new Promise((done) => requestAnimationFrame(done));
     }, count),
     `${count} animation frames`,
+    budgetMs,
   );
 }
 
