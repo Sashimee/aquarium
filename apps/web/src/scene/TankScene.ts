@@ -4,7 +4,7 @@ import type { Biome, DecorItem, PlantPatch, PresetLayout } from '@aquarium/share
 import type { Engine } from '../engine/Engine';
 import type { Tier, TierSettings } from '../engine/quality/tiers';
 import { substrateHeight } from '../engine/tank/substrate';
-import { raceAbort } from './abortable';
+import { abortError } from './abortable';
 import { AssetCatalog, ModelLibrary, type CatalogEntry, type ModelLod } from './assets';
 import {
   AnemoneGroup,
@@ -174,27 +174,28 @@ export class TankScene {
     const catalog = await AssetCatalog.fetch(undefined, signal);
     signal?.throwIfAborted();
     const library = new ModelLibrary(engine.ktx2, catalog);
-    const building = TankScene.build(engine, library, catalog, preset, options, signal);
+    let sceneOwnsLibrary = false;
+    let scene: TankScene;
     try {
-      return await (signal ? raceAbort(building, signal) : building);
+      scene = await TankScene.build(engine, library, catalog, preset, options, signal, () => {
+        sceneOwnsLibrary = true;
+      });
     } catch (error) {
-      if (signal?.aborted) {
-        void building
-          .then(
-            (scene) => scene.dispose(),
-            () => library.dispose(),
-          )
-          .catch((cause: unknown) =>
-            engine.events.emit('engine:error', {
-              message: 'Could not clean up an abandoned preset build',
-              cause,
-            }),
-          );
-        throw error;
-      }
-      await library.dispose();
+      if (!sceneOwnsLibrary) await library.dispose();
       throw error;
     }
+    if (signal?.aborted) {
+      try {
+        await scene.dispose();
+      } catch (cause) {
+        engine.events.emit('engine:error', {
+          message: 'Could not clean up an abandoned preset build',
+          cause,
+        });
+      }
+      throw abortError(signal);
+    }
+    return scene;
   }
 
   private static async build(
@@ -203,7 +204,8 @@ export class TankScene {
     catalog: AssetCatalog,
     preset: PresetLayout,
     options: SceneOptions,
-    signal?: AbortSignal,
+    signal: AbortSignal | undefined,
+    adopted: () => void,
   ): Promise<TankScene> {
     const settings = engine.quality.settings;
     const tier = engine.quality.tier;
@@ -303,6 +305,7 @@ export class TankScene {
       anchors,
       options,
     );
+    adopted();
     try {
       scene.current.configure(preset.current ?? DEFAULT_CURRENT);
       scene.releases.push(engine.onFrame((deltaS) => scene.current.advance(deltaS)));
