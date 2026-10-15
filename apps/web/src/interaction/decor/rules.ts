@@ -7,6 +7,7 @@ import {
 import { SURFACE_MARGIN } from '../../scene/plants';
 import { VACATION_FEEDER_ASSET_ID } from './spec';
 import {
+  containsPoint,
   corners,
   extentOf,
   footprintOf,
@@ -21,6 +22,7 @@ export const MAX_PIECES = 40;
 /** How far a piece sinks into the substrate, so it never seems to hover on a dune. */
 export const EMBED = 0.008;
 export const LIFT = 0.05;
+export const MIN_PLANT_SCALE = 0.4;
 const GAP = 0.005;
 const SPIRAL_STEP = 0.04;
 
@@ -91,8 +93,15 @@ export function check(
   if (reachesSurface(spec, item, limits)) return 'too-tall';
   const mine = footprintOf(spec, item, OVERLAP_SHRINK);
   for (const other of others) {
-    // Leaves give way, so a plant never blocks a piece and is never blocked by one.
-    if (spec.kind === 'plant' || other.spec.kind === 'plant') continue;
+    // Leaves give way to a neighbour's edge, but a stem inside another piece would be hidden in it.
+    if (spec.kind === 'plant' || other.spec.kind === 'plant') {
+      if (spec.kind === other.spec.kind) continue;
+      const plant = spec.kind === 'plant' ? mine : footprintOf(other.spec, other.item);
+      const solid =
+        spec.kind === 'plant' ? footprintOf(other.spec, other.item, OVERLAP_SHRINK) : mine;
+      if (containsPoint(solid, plant.cx, plant.cz)) return 'overlap';
+      continue;
+    }
     if (overlaps(mine, footprintOf(other.spec, other.item, OVERLAP_SHRINK), GAP)) return 'overlap';
   }
   return null;

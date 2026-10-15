@@ -170,6 +170,25 @@ describe('LayoutSaver', () => {
     expect(reports.map((r) => r.status)).toEqual(['saving', 'idle']);
   });
 
+  it('reset cuts a backoff sleep short and frees the tank at once', async () => {
+    vi.useFakeTimers();
+    const send = vi.fn().mockRejectedValue(apiError(0, 'network'));
+    const saver = new LayoutSaver({
+      send,
+      report: () => undefined,
+      debounceMs: 500,
+    });
+    saver.submit('t1', layoutAt(0.1));
+    await vi.advanceTimersByTimeAsync(500);
+    expect(saver.busyFor('t1')).toBe(true);
+    saver.reset();
+    expect(saver.busyFor('t1')).toBe(false);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(saver.busy).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
   it('holds back only the tank whose save failed', async () => {
     vi.useFakeTimers();
     const send = vi

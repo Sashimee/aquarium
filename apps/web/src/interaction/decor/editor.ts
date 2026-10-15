@@ -10,6 +10,7 @@ import {
   keepInside,
   LIFT,
   restHeight,
+  MIN_PLANT_SCALE,
   withinServerBounds,
   type GroundHeight,
   type Obstacle,
@@ -31,7 +32,6 @@ export type DropResult = 'moved' | 'unchanged' | 'reverted';
 
 const ROTATION_LIMIT = Math.PI;
 const NEW_PIECE_DROP_HEIGHT = 0.18;
-const MIN_PLANT_SCALE = 0.4;
 const DEFAULT_SPAWN: readonly [number, number] = [0, 0.05];
 
 const mm = (v: number) => Math.round(v * 1000) / 1000;
