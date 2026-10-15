@@ -105,8 +105,21 @@ test('a decor piece is swapped, moved, saved and still there after a reload', as
   // inside a rock is refused) depends on the layout; step towards the first open side.
   const layoutJson = async () => JSON.stringify((await savedTanks(page))[0]?.decorLayout);
   const simDecor = () => page.locator('canvas#tank').getAttribute('data-sim-decor');
-  await expect.poll(simDecor, { message: 'the fish are up' }).not.toBeNull();
-  const simBefore = await simDecor();
+  // `data-sim-decor` digests the colliders the page posts to the sim worker, not a reply from it.
+  // Two equal reads half a second apart mean the scene's colliders have stopped arriving, so a
+  // later change is the nudge's.
+  let simBefore: string | null = null;
+  await expect
+    .poll(
+      async () => {
+        const now = await simDecor();
+        const settled = now !== null && now === simBefore;
+        simBefore = now;
+        return settled;
+      },
+      { message: 'the colliders posted to the fish sim have settled', intervals: [500] },
+    )
+    .toBe(true);
   const status = panel.locator('.decor-status');
   let accepted = false;
   for (const side of ['Right', 'Left', 'Back', 'Forward']) {
@@ -123,7 +136,9 @@ test('a decor piece is swapped, moved, saved and still there after a reload', as
   await expect
     .poll(layoutJson, { message: 'the nudge reaches the server' })
     .not.toBe(JSON.stringify(placed));
-  await expect.poll(simDecor, { message: 'the nudge reaches the fish sim' }).not.toBe(simBefore);
+  await expect
+    .poll(simDecor, { message: 'the nudge is posted to the fish sim' })
+    .not.toBe(simBefore);
   const moved = (await savedTanks(page))[0]?.decorLayout;
   await panel.getByRole('button', { name: 'Done' }).click();
   await expect(panel).toBeHidden();
