@@ -14,6 +14,8 @@ const keys = (n: number): string[] => Array.from({ length: n }, (_, i) => `fish-
 const demo = (key: string) => ({ key, sex: null });
 const MALE = { key: 'guppy-2', sex: 'male' } as const;
 const FEMALE = { key: 'guppy-0', sex: 'female' } as const;
+const DEMO_MALE = 'guppy-0';
+const DEMO_FEMALE = 'guppy-2';
 
 describe('sexOf', () => {
   it('reads the sex the server stored, whatever the key would draw', () => {
@@ -86,9 +88,11 @@ describe('bodyLengthOf', () => {
 
   it('sizes a demo guppy by the sex its key draws', () => {
     expect(
-      bodyLengthOf({ ...demo(FEMALE.key), species: 'guppy', lengthM: 0.04 }, 0.027),
+      bodyLengthOf({ ...demo(DEMO_MALE), species: 'guppy', lengthM: 0.04 }, 0.027),
     ).toBeCloseTo(0.025);
-    expect(bodyLengthOf({ ...demo(MALE.key), species: 'guppy', lengthM: 0.04 }, 0.027)).toBe(0.04);
+    expect(bodyLengthOf({ ...demo(DEMO_FEMALE), species: 'guppy', lengthM: 0.04 }, 0.027)).toBe(
+      0.04,
+    );
   });
 
   it('falls back to the species length when the fish has no size', () => {

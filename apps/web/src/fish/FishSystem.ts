@@ -21,6 +21,7 @@ import {
 } from '@aquarium/sim';
 import type { Engine } from '../engine/Engine';
 import type { EventBus } from '../engine/events';
+import { releaseAll } from '../engine/lifecycle';
 import type { Tier, TierSettings } from '../engine/quality/tiers';
 import { waterBounds, type TankDimensions } from '../engine/tank/dimensions';
 import type { InteractionEvents } from '../interaction/events';
@@ -285,10 +286,8 @@ export class FishSystem {
         this.worker.terminate();
       },
       () => this.bags.dispose(),
-      () => {
-        this.batches.dispose();
-        this.runtimes.clear();
-      },
+      () => this.batches.dispose(),
+      () => this.runtimes.clear(),
     );
     this.sim = this.connectSim(worker);
     this.cleanups.push(
@@ -437,7 +436,7 @@ export class FishSystem {
     this.lifetime.abort(new Error('fish system disposed'));
     this.ateListeners.clear();
     for (const resolve of this.syncWaiters.splice(0)) resolve();
-    for (const cleanup of this.cleanups.splice(0).reverse()) cleanup();
+    releaseAll(this.cleanups.splice(0), 'FishSystem');
   }
 
   /** Silent once the engine is going: its teardown fails loads that are still in flight. */

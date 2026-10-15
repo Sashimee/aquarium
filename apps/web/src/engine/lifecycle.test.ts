@@ -1,5 +1,45 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildOrRelease, DisposeStack } from './lifecycle';
+import { buildOrRelease, DisposeStack, releaseAll } from './lifecycle';
+
+describe('releaseAll', () => {
+  it('runs the steps last first', () => {
+    const order: string[] = [];
+    releaseAll([() => void order.push('a'), () => void order.push('b')], 'Owner');
+    expect(order).toEqual(['b', 'a']);
+  });
+
+  it('runs every step past a failing one and throws the failures together', () => {
+    const order: string[] = [];
+    const late = new Error('late');
+    const early = new Error('early');
+    let thrown: unknown;
+    try {
+      releaseAll(
+        [
+          () => void order.push('a'),
+          () => {
+            throw early;
+          },
+          () => {
+            throw late;
+          },
+          () => void order.push('d'),
+        ],
+        'Owner',
+      );
+    } catch (error) {
+      thrown = error;
+    }
+    expect(order).toEqual(['d', 'a']);
+    expect(thrown).toBeInstanceOf(AggregateError);
+    expect((thrown as AggregateError).errors).toEqual([late, early]);
+    expect((thrown as AggregateError).message).toBe('Owner: 2 cleanup step(s) failed');
+  });
+
+  it('does nothing with no steps', () => {
+    expect(() => releaseAll([], 'Owner')).not.toThrow();
+  });
+});
 
 describe('DisposeStack', () => {
   it('runs cleanup steps in reverse order of acquisition', async () => {
