@@ -25,6 +25,7 @@ export class LayoutSaver {
   private sending: string | null = null;
   private disposed = false;
   private epoch = 0;
+  private session = new AbortController();
   private edited = false;
 
   constructor(private readonly options: LayoutSaverOptions) {}
@@ -56,6 +57,9 @@ export class LayoutSaver {
   /** Drops queued and failed saves, e.g. at sign-out, so nothing outlives the session that made it. */
   reset(): void {
     this.epoch++;
+    this.session.abort();
+    this.session = new AbortController();
+    this.sending = null;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     this.pending.clear();
@@ -94,6 +98,7 @@ export class LayoutSaver {
       const [tankId, layout] = next.value;
       this.pending.delete(tankId);
       const epoch = this.epoch;
+      const { signal } = this.session;
       this.sending = tankId;
       try {
         await withRetry(
@@ -103,6 +108,7 @@ export class LayoutSaver {
           },
           {
             sleep: this.options.sleep ?? realSleep,
+            signal,
             maxAttempts: this.options.maxAttempts ?? 4,
             onRetry: () => {
               if (epoch === this.epoch) this.options.report('retrying', null);

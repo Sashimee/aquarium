@@ -1,4 +1,4 @@
-import { LoadingManager, type WebGPURenderer } from 'three/webgpu';
+import { FileLoader, LoadingManager, type WebGPURenderer } from 'three/webgpu';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import basisTranscoderWasm from 'three/addons/libs/basis/basis_transcoder.wasm?url';
 
@@ -9,13 +9,8 @@ import basisTranscoderWasm from 'three/addons/libs/basis/basis_transcoder.wasm?u
  */
 export const KTX2_WORKER_URL = `/ktx2-worker.js?v=${__KTX2_WORKER_HASH__}`;
 
-/**
- * KTX2Loader.init() fetches the glue script only to embed it in a blob worker this loader never
- * starts, so it gets the worker file (same origin, as connect-src 'self' requires; a data: URL
- * would be refused) instead of a second bundled copy of the transcoder.
- */
+/** Points the transcoder binary at the bundled copy. */
 export function bundledTranscoderUrl(url: string): string {
-  if (url.endsWith('basis_transcoder.js')) return KTX2_WORKER_URL;
   if (url.endsWith('basis_transcoder.wasm')) return basisTranscoderWasm;
   return url;
 }
@@ -87,23 +82,33 @@ class DisposableKtx2Loader extends KTX2Loader {
     }
   }
 
-  /** A transcoder that arrives after dispose would otherwise install a fresh worker creator. */
+  /**
+   * Replaces three's init(), which also fetches the glue script to build a blob worker: the worker
+   * file already carries the glue, so only the binary is fetched. A transcoder that arrives after
+   * dispose would otherwise install a fresh worker creator.
+   */
   override init(): Promise<void> {
-    this.initialized ??= super.init().then(() => {
-      if (this.workerSourceURL) URL.revokeObjectURL(this.workerSourceURL);
-      this.workerSourceURL = '';
-      if (this.disposed) throw disposedError('a texture');
-      this.workerPool.setWorkerCreator(() => {
-        if (!this.transcoderBinary) throw new Error('KTX2: the transcoder binary is missing');
-        const worker = new Worker(KTX2_WORKER_URL);
-        const transcoderBinary = this.transcoderBinary.slice(0);
-        worker.postMessage({ type: 'init', config: this.workerConfig, transcoderBinary }, [
-          transcoderBinary,
-        ]);
-        return worker;
-      });
-    });
+    this.initialized ??= this.loadTranscoder();
     return this.initialized;
+  }
+
+  private async loadTranscoder(): Promise<void> {
+    const binaryLoader = new FileLoader(this.manager)
+      .setPath(this.transcoderPath)
+      .setWithCredentials(this.withCredentials)
+      .setResponseType('arraybuffer');
+    const binary = await binaryLoader.loadAsync('basis_transcoder.wasm');
+    if (this.disposed) throw disposedError('a texture');
+    if (typeof binary === 'string') throw new Error('KTX2: the transcoder binary loaded as text');
+    this.transcoderBinary = binary;
+    this.workerPool.setWorkerCreator(() => {
+      const worker = new Worker(KTX2_WORKER_URL);
+      const transcoderBinary = binary.slice(0);
+      worker.postMessage({ type: 'init', config: this.workerConfig, transcoderBinary }, [
+        transcoderBinary,
+      ]);
+      return worker;
+    });
   }
 
   override dispose(): void {

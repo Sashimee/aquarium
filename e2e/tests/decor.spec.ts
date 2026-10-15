@@ -86,11 +86,22 @@ test('a decor piece is swapped, moved, saved and still there after a reload', as
   const placed = (await savedTanks(page))[0]?.decorLayout;
   expect(placed?.length).toBeGreaterThanOrEqual(startCount);
 
-  await panel.getByRole('button', { name: 'Right', exact: true }).click();
+  // The new piece lands in the nearest free spot, so which neighbour blocks a nudge (a plant stem
+  // inside a rock is refused) depends on the layout; step towards the first open side.
+  const layoutJson = async () => JSON.stringify((await savedTanks(page))[0]?.decorLayout);
+  for (const side of ['Right', 'Left', 'Back', 'Forward']) {
+    await panel.getByRole('button', { name: side, exact: true }).click();
+    const reached = await expect
+      .poll(layoutJson, { timeout: 4_000 })
+      .not.toBe(JSON.stringify(placed))
+      .then(
+        () => true,
+        () => false,
+      );
+    if (reached) break;
+  }
   await expect
-    .poll(async () => JSON.stringify((await savedTanks(page))[0]?.decorLayout), {
-      message: 'the nudge reaches the server',
-    })
+    .poll(layoutJson, { message: 'the nudge reaches the server' })
     .not.toBe(JSON.stringify(placed));
   const moved = (await savedTanks(page))[0]?.decorLayout;
   await panel.getByRole('button', { name: 'Done' }).click();

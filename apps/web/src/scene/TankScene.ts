@@ -449,6 +449,11 @@ export class TankScene {
     return this.plantGroups.reduce((n, g) => n + g.total, 0);
   }
 
+  get waterTop(): number {
+    const { height, freeboard } = this.engine.tank.dimensions;
+    return height - freeboard;
+  }
+
   groundHeight(x: number, z: number): number {
     return substrateHeight(this.engine.tank.dimensions, x, z);
   }

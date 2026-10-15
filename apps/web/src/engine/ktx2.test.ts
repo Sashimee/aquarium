@@ -49,12 +49,10 @@ afterEach(() => {
 });
 
 describe('bundledTranscoderUrl', () => {
-  it('redirects the wasm to the bundled copy and the glue script to the same-origin worker', () => {
-    const js = bundledTranscoderUrl('https://cdn/libs/basis/basis_transcoder.js');
+  it('redirects the wasm to the bundled copy', () => {
     const wasm = bundledTranscoderUrl('https://cdn/libs/basis/basis_transcoder.wasm');
-    expect(js).toBe(KTX2_WORKER_URL);
     expect(wasm).not.toContain('cdn');
-    expect(js).not.toBe(wasm);
+    expect(wasm).toContain('basis_transcoder');
   });
 
   it('versions the worker url by content hash, not by three revision', () => {
@@ -97,25 +95,79 @@ describe('rewritingKtx2Loader', () => {
 
     expect(second).toBe(first);
     expect(view.workerPool).toBe(shared.loader.workerPool);
-    expect(
-      requested.filter((u) => u.includes('basis_transcoder') || u.includes('ktx2-worker')).length,
-    ).toBe(2);
+    expect(requested.filter((u) => u.includes('basis_transcoder'))).toHaveLength(1);
     expect(warn).not.toHaveBeenCalled();
     shared.dispose();
   });
 
-  it('is what three would warn about if it were a second loader', async () => {
-    stubFetch();
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  it('is what a second loader would cost: a second transcoder download', async () => {
+    const requested = stubFetch();
     const a = createSharedKtx2(renderer);
     const b = createSharedKtx2(renderer);
 
     await a.loader.init();
     await b.loader.init();
 
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('Multiple active KTX2 loaders'));
+    expect(requested.filter((u) => u.includes('basis_transcoder'))).toHaveLength(2);
     a.dispose();
     b.dispose();
+  });
+});
+
+describe('the shared loader init', () => {
+  it('fetches only the transcoder binary, not the glue script the worker file already carries', async () => {
+    const requested = stubFetch();
+    const shared = createSharedKtx2(renderer);
+
+    await shared.loader.init();
+
+    expect(requested).toHaveLength(1);
+    expect(requested[0]).toMatch(/basis_transcoder.*\.wasm/);
+    expect(requested.some((u) => u.endsWith('.js') || u.includes('ktx2-worker'))).toBe(false);
+    expect(shared.loader.workerSourceURL).toBe('');
+    shared.dispose();
+  });
+
+  it('starts pool workers from the versioned same-origin worker file with the binary', async () => {
+    stubFetch();
+    const started: { url: string; message: { type: string; transcoderBinary: ArrayBuffer } }[] = [];
+    vi.stubGlobal(
+      'Worker',
+      class {
+        constructor(readonly url: string) {}
+        addEventListener(): void {}
+        postMessage(message: { type: string; transcoderBinary: ArrayBuffer }): void {
+          if (message.type === 'init') started.push({ url: this.url, message });
+        }
+        terminate(): void {}
+      },
+    );
+    const shared = createSharedKtx2(renderer);
+    await shared.loader.init();
+
+    void shared.loader.workerPool.postMessage({ type: 'transcode' }, []);
+
+    expect(started).toHaveLength(1);
+    expect(started[0]?.url).toBe(KTX2_WORKER_URL);
+    expect(KTX2_WORKER_URL).toMatch(/^\/ktx2-worker\.js\?v=\d+$/);
+    expect(started[0]?.message.transcoderBinary.byteLength).toBe(4);
+    shared.dispose();
+  });
+
+  it('fails init loudly when the transcoder binary cannot be fetched', async () => {
+    vi.stubGlobal('ProgressEvent', Event);
+    vi.stubGlobal(
+      'Request',
+      class {
+        constructor(readonly url: string) {}
+      },
+    );
+    vi.stubGlobal('fetch', () => Promise.resolve(new Response('missing', { status: 404 })));
+    const shared = createSharedKtx2(renderer);
+
+    await expect(shared.loader.init()).rejects.toThrow(/404/);
+    expect(shared.loader.transcoderBinary).toBeNull();
+    shared.dispose();
   });
 });
 

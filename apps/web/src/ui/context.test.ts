@@ -8,6 +8,9 @@ import {
   UiProviders,
   useAuth,
   useCameraMode,
+  useDecorLoadError,
+  useDecorSaveState,
+  useDecorState,
   useEngineReady,
   useLatest,
   type AuthState,
@@ -46,6 +49,44 @@ describe('late-mounting UI hooks', () => {
     const b = bridge();
     b.interaction.emit('camera:mode-changed', { mode: 'dive' });
     expect(render(b, () => useCameraMode())).toContain('dive');
+  });
+
+  it('starts the decor panel from the state published before its chunk loaded', () => {
+    const b = bridge();
+    b.interaction.emit('decor:state', {
+      active: true,
+      persisted: true,
+      palette: [],
+      pieces: [],
+      selectedId: 'p3',
+      hasFeeder: false,
+      problem: null,
+    });
+    b.interaction.emit('decor:state', {
+      active: true,
+      persisted: true,
+      palette: [],
+      pieces: [],
+      selectedId: 'p4',
+      hasFeeder: false,
+      problem: null,
+    });
+    expect(render(b, () => useDecorState()?.selectedId ?? 'none')).toContain('p4');
+  });
+
+  it('has no decor state, save state or error before the editor publishes any', () => {
+    const b = bridge();
+    expect(render(b, () => String(useDecorState()))).toContain('null');
+    expect(render(b, () => useDecorSaveState().status)).toContain('idle');
+    expect(render(b, () => String(useDecorLoadError()))).toContain('null');
+  });
+
+  it('shows a decor load failure and save status that arrived before mount', () => {
+    const b = bridge();
+    b.interaction.emit('decor:load-failed', { message: 'chunk failed' });
+    b.interaction.emit('decor:save-state', { status: 'error', message: 'offline' });
+    expect(render(b, () => String(useDecorLoadError()))).toContain('chunk failed');
+    expect(render(b, () => useDecorSaveState().status)).toContain('error');
   });
 
   it('useLatest returns undefined for an event that never fired', () => {

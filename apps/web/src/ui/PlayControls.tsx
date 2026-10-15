@@ -68,9 +68,11 @@ export function FeedToast() {
       ),
       interaction.on('feed:rejected', ({ reason, retryAfterMs }) =>
         announce(
-          reason === 'tank-full'
-            ? 'There is too much uneaten food in the tank. Wait for the fish to finish.'
-            : `Feeding too often. Try again in ${Math.ceil(retryAfterMs / 1000)} seconds.`,
+          reason === 'unreachable'
+            ? 'Too tight for your fish to reach. Clip the nori somewhere roomier.'
+            : reason === 'tank-full'
+              ? 'There is too much uneaten food in the tank. Wait for the fish to finish.'
+              : `Feeding too often. Try again in ${Math.ceil(retryAfterMs / 1000)} seconds.`,
         ),
       ),
     ];

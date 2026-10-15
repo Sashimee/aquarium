@@ -67,3 +67,19 @@ export async function buildOrRelease<T>(
     throw error;
   }
 }
+
+/**
+ * Whether `work` settles within `ms`. It keeps running past the deadline, and a rejection that
+ * lands in time is rethrown.
+ */
+export async function settlesWithin(work: Promise<unknown>, ms: number): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<false>((resolve) => {
+    timer = setTimeout(() => resolve(false), ms);
+  });
+  try {
+    return await Promise.race([work.then(() => true), deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
