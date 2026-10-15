@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { speciesSchema } from '@aquarium/shared';
+import { despikeHead, type DespikeSpec } from './bristles.ts';
+import { growBristles, type BristleSpec } from './tentacles.ts';
 import { buildDocument, emitAsset, type LodPlan } from './emit.ts';
 import { seatEyes, type EyePlacement } from './eyes.ts';
 import {
@@ -43,6 +45,10 @@ export interface FishRecipe {
   /** Multiplies the species-JSON length, for sexes or morphs that differ from the species value. */
   lengthFactor?: number;
   hints?: FinHints | undefined;
+  /** Flattens rigid head spikes into the skin before anything else looks at the mesh. */
+  despike?: DespikeSpec;
+  /** Grows soft tentacles on the despiked snout, as rigid attachments outside fin classification. */
+  bristles?: BristleSpec;
   roughness?: number;
   /** Recolours the source's base colour by luminance, then paints spots on it. */
   recolour?: { tint: TintSpec; spots?: SpotSpec; worldSpots?: WorldSpotSpec };
@@ -250,6 +256,10 @@ export async function buildSourceFish(recipe: FishRecipe, ctx: FishContext): Pro
   if (parts.length === 0)
     throw new Error(`${recipe.id}: no geometry uses ${[...names].join(', ')}`);
   for (const part of parts) orient(part.positions, part.normals, recipe.axes);
+  if (recipe.despike) {
+    const moved = parts.reduce((sum, part) => sum + despikeHead(part, recipe.despike!), 0);
+    console.log(`${recipe.id}: despiked ${moved} head vertices`);
+  }
   const eyeParts = recipe.eyes ? await bakeEyes(recipe, recipe.eyes.meshes, names) : [];
   if (recipe.eyes) {
     const eyes = mergeParts(eyeParts, eyeParts[0]!.material);
@@ -257,12 +267,16 @@ export async function buildSourceFish(recipe: FishRecipe, ctx: FishContext): Pro
     eyeParts.splice(0, eyeParts.length, eyes);
   }
 
+  const bristleParts = recipe.bristles
+    ? [growBristles(mergeParts(parts, parts[0]!.material), recipe.bristles)]
+    : [];
+
   const fromSpecies = speciesLengthM(ctx.repoRoot, recipe.species);
   const standardLengthM =
     fromSpecies !== null ? fromSpecies * (recipe.lengthFactor ?? 1) : recipe.fallbackLengthM;
   const normalised = normaliseFish({
     parts,
-    attachments: eyeParts,
+    attachments: [...eyeParts, ...bristleParts],
     hints: recipe.hints,
     standardLengthM,
     recipeId: recipe.id,

@@ -166,10 +166,12 @@ export function validateManifest(manifest: Manifest, credits: string): string[] 
   return problems;
 }
 
-/** Modifications of every built asset deriving from each credit-requiring source, prefixed with the asset id when a source feeds several; empty for unused sources; reference photos appear only when a built asset uses them as a source. */
+/** Modifications of every built asset deriving from each credit-requiring source or reference photo (whatever its licence), prefixed with the asset id when a source feeds several; empty for unused sources; reference photos appear only when a built asset uses them as a source. */
 export function derivedModifications(index: AssetIndex, manifest: Manifest): Map<string, string[]> {
   const users = new Map<string, OutputAsset[]>(
-    manifest.assets.filter((a) => requiresCredit(a.licence)).map((a) => [a.id, []]),
+    manifest.assets
+      .filter((a) => requiresCredit(a.licence) || a.kind === 'reference-photo')
+      .map((a) => [a.id, []]),
   );
   for (const asset of index.assets) {
     for (const sourceId of asset.sources) users.get(sourceId)?.push(asset);

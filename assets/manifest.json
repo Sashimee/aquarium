@@ -1220,7 +1220,13 @@
       "textures": "photo 1110x832",
       "rigged": false,
       "notes": "Lateral view, good colour and barbel detail; use as the primary fallback texture reference. Download: https://upload.wikimedia.org/wikipedia/commons/8/8f/Female_Bronze_Corydoras_%28Corydoras_aeneus%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
-      "modifications": [],
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "Female Bronze Corydoras by Andrew Keller (CC0), side view projected onto the loft",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
       "status": "downloaded"
     },
     {
@@ -1970,6 +1976,7 @@
         "baked fin mask and fin id vertex attributes",
         "colour and normal maps re-encoded to KTX2 at 1k and 2k",
         "decimated from 40k to 8k triangles at LOD0",
+        "rigid spikes around the head flattened into the skin, and soft tapered tentacles added along the snout margin and top of the snout",
         "orange morph recoloured by luminance to natural brown, with pale cream spots painted in world space so UV stretch cannot enlarge them"
       ],
       "status": "downloaded",
