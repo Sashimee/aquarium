@@ -73,7 +73,7 @@ async function open(button: Locator, attribute: string, region: Locator): Promis
 }
 
 export function openDock(page: Page, label: string, region: string): Promise<Locator> {
-  return open(dockButton(page, label), 'aria-pressed', page.getByRole('region', { name: region }));
+  return open(dockButton(page, label), 'aria-expanded', page.getByRole('region', { name: region }));
 }
 
 export function openTankPanel(page: Page): Promise<Locator> {

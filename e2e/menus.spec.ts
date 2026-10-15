@@ -105,12 +105,12 @@ function panel(
 }
 
 function dockPanel(label: string, region: string): Menu {
-  return panel(label, (page) => dock(page, label), 'aria-pressed', region);
+  return panel(label, (page) => dock(page, label), 'aria-expanded', region);
 }
 
 async function openPlay(page: Page) {
   const play = dock(page, 'Play');
-  if ((await play.getAttribute('aria-pressed')) !== 'true') await press(play);
+  if ((await play.getAttribute('aria-expanded')) !== 'true') await press(play);
   await expect(playGroup(page)).toBeVisible();
 }
 
