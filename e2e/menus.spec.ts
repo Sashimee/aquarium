@@ -246,11 +246,11 @@ function pointerOf(page: Page): Pointer {
 
 const tap = (page: Page, point: Point) => pointerOf(page)([point]);
 
-// The canvas sits under the overlay controls. A drag that ends on one of them is not routed to
-// the canvas (the synthetic mouse gets no pointer capture), so the drag runs along the first row
-// where its start, middle and end are all bare canvas. No such row means the canvas has no room
-// left to drag on, which is a layout bug worth failing for. An open panel covers part of the
-// canvas and a canvas press closes it, so callers close panels first.
+// The canvas sits under the overlay controls. The drag runs along the first row where its start,
+// middle and end are all bare canvas, so the press lands on the canvas and the gesture never
+// crosses an overlay. No such row means the canvas has no room left to drag on, which is a layout
+// bug worth failing for. An open panel covers part of the canvas and a canvas press closes it, so
+// callers close panels first. The chosen row is recorded as a test annotation.
 async function dragPath(page: Page): Promise<[[number, number], [number, number]]> {
   const viewport = page.viewportSize();
   if (!viewport) throw new Error('viewport is not set');
@@ -270,6 +270,10 @@ async function dragPath(page: Page): Promise<[[number, number], [number, number]
   }
   const [start, , end] = xs;
   if (start === undefined || end === undefined) throw new Error('drag columns are missing');
+  test.info().annotations.push({
+    type: 'drag row',
+    description: `y=${clear} of ${viewport.height} (${(clear / viewport.height).toFixed(2)})`,
+  });
   return [
     [start, clear],
     [end, clear],
@@ -331,6 +335,7 @@ function poseDistance(a: string, b: string): number {
 }
 
 async function expectToolClaimsDrag(page: Page, drag: Drag) {
+  await resetBaseline(page);
   await openPlay(page);
   await expectBigTargets(page);
   const laser = playGroup(page).getByRole('button', { name: 'Laser', exact: true });
@@ -365,6 +370,19 @@ async function closeSheet(page: Page) {
   if ((await sheet(page).count()) === 0) return;
   await press(sheet(page).getByRole('button', { name: /^(Close|Done)$/ }));
   await expect(sheet(page)).toHaveCount(0);
+}
+
+async function resetCamera(page: Page) {
+  const dive = camera(page).getByRole('button', { name: 'Dive', exact: true });
+  if ((await dive.getAttribute('aria-pressed')) !== 'true') return;
+  const outside = camera(page).getByRole('button', { name: 'Outside', exact: true });
+  await press(outside);
+  await expect(outside).toHaveAttribute('aria-pressed', 'true');
+}
+
+async function resetBaseline(page: Page) {
+  await closeAllPanels(page);
+  await resetCamera(page);
 }
 
 async function closeAllPanels(page: Page) {
@@ -410,6 +428,7 @@ async function expectBigTargets(page: Page) {
 async function expectSceneTapClosesPanel(page: Page) {
   const viewport = page.viewportSize();
   if (!viewport) throw new Error('viewport is not set');
+  await resetBaseline(page);
   await press(dock(page, 'Shop'));
   await expect(sheet(page)).toHaveCount(1);
   await tap(page, [viewport.width * 0.3, viewport.height * 0.3]);
@@ -423,6 +442,7 @@ async function openMenu(page: Page, menu: Menu) {
 
 async function exercise(page: Page, drag: Drag, first: Menu, second: Menu) {
   const trail = `${first.name}, then ${second.name}`;
+  await resetBaseline(page);
   await openMenu(page, first);
   await openMenu(page, second);
   await expectOnePanel(page, trail);
@@ -442,12 +462,13 @@ const tank = MENUS.find((menu) => menu.name === 'My tank');
 if (!decorate || !tank) throw new Error('MENUS lost My tank or Decorate');
 PAIRS.push([decorate, tank]);
 
-// Tools and camera toggles do not depend on the layout, so the phone run covers them and the
-// desktop run covers the drawer.
-const DRAWER_PAIRS = PAIRS.filter(([first]) => !['Hand-feed', 'Dive'].includes(first.name));
+// Tools do not depend on the layout, so the phone run covers them. Dive sits in the top bar, which
+// is laid out by width, so both runs cover it.
+const DRAWER_PAIRS = PAIRS.filter(([first]) => first.name !== 'Hand-feed');
 
-// A cold boot costs 25-45 s on a CI runner, so the tests of one describe share a page and run in
-// order, each leaving the app as the next expects (no panel open, Tap glass selected).
+// A cold boot costs 25-45 s on a CI runner, so the tests of one describe share a page. Each test
+// first restores the baseline itself (no panel open, Tap glass, Outside), so it does not depend on
+// what the previous test left behind.
 function shared(
   options: BrowserContextOptions,
   makePointer: (page: Page, cdp: CDPSession) => Pointer,
@@ -505,7 +526,6 @@ test.describe('menus on a phone', () => {
 test.describe('menus with a mouse', () => {
   const app = shared({ viewport: { width: 800, height: 540 } }, mousePointer);
 
-  // Tests run in order on one page, so Dive and Reef stay on for the pairs after theirs.
   test('a Laser drag does not move the camera, and Tap glass gives the orbit back', async () => {
     const { page, drag } = app();
     await expectToolClaimsDrag(page, drag);
@@ -517,6 +537,7 @@ test.describe('menus with a mouse', () => {
 
   test('Escape closes a panel and gives focus back to its button', async () => {
     const { page } = app();
+    await resetBaseline(page);
     const shop = dock(page, 'Shop');
     await shop.focus();
     await page.keyboard.press('Enter');
