@@ -22,6 +22,7 @@ import { batchLocomotion, FishSystem } from './FishSystem';
 import { renderProfile, swimModeFor } from './profiles';
 import type { PickRay } from './start';
 import { SWIM_MODES } from './swim';
+import type { TailRig } from './walk';
 import { SimInitTimeout } from './simWorld';
 
 class FakeWorker {
@@ -195,36 +196,54 @@ describe('FishSystem.create', () => {
 
 describe('batchLocomotion', () => {
   const shrimp = { hinge: { y: 0, z: 0.002 }, telsonZ: -0.016, legPairs: 5 };
-  function entry(rig: FishAssetEntry['shrimp']): FishAssetEntry {
+  const tail = { hinge: shrimp.hinge, tip: { y: -0.003, z: -0.016, share: 1 }, bodyLength: 0.03 };
+  function model(
+    rig: FishAssetEntry['shrimp'],
+    tailRig: TailRig | null = rig === null ? null : tail,
+  ): Pick<FishModel, 'entry' | 'tail'> {
     return {
-      id: 'model',
-      kind: rig === null ? 'fish' : 'shrimp',
-      species: 'species',
-      min: [-0.01, -0.005, -0.016],
-      max: [0.01, 0.004, 0.02],
-      standardLengthM: 0.03,
-      lodFiles: ['lod0.glb'],
-      sharperTextures: new Map(),
-      shrimp: rig,
+      entry: {
+        id: 'model',
+        kind: rig === null ? 'fish' : 'shrimp',
+        species: 'species',
+        min: [-0.01, -0.005, -0.016],
+        max: [0.01, 0.004, 0.02],
+        standardLengthM: 0.03,
+        lodFiles: ['lod0.glb'],
+        sharperTextures: new Map(),
+        shrimp: rig,
+      },
+      tail: tailRig,
     };
   }
 
   it("swims a finned species in its own mode, shaped by the species' profile", () => {
     const profile = renderProfile('neon-tetra');
-    expect(batchLocomotion(entry(null), 'subcarangiform', profile)).toEqual({
+    expect(batchLocomotion(model(null), 'subcarangiform', profile)).toEqual({
       kind: 'swim',
       mode: swimModeFor(SWIM_MODES.subcarangiform, profile),
     });
   });
 
-  it('walks a pleopod species on its shrimp rig', () => {
+  it('walks a pleopod species on its shrimp rig and tail', () => {
     const profile = renderProfile('cherry-shrimp');
-    expect(batchLocomotion(entry(shrimp), 'pleopod', profile)).toEqual({ kind: 'walk', shrimp });
+    expect(batchLocomotion(model(shrimp), 'pleopod', profile)).toEqual({
+      kind: 'walk',
+      shrimp,
+      tail,
+    });
+  });
+
+  it('refuses a walker model without a tail rig', () => {
+    const profile = renderProfile('cherry-shrimp');
+    expect(() => batchLocomotion(model(shrimp, null), 'pleopod', profile)).toThrow(
+      /needs a shrimp model/,
+    );
   });
 
   it('refuses a walking species whose model has no shrimp rig', () => {
     const profile = renderProfile('cherry-shrimp');
-    expect(() => batchLocomotion(entry(null), 'pleopod', profile)).toThrow(/needs a shrimp model/);
+    expect(() => batchLocomotion(model(null), 'pleopod', profile)).toThrow(/needs a shrimp model/);
   });
 });
 

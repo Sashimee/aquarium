@@ -99,6 +99,32 @@ export function curledTip(rig: TailRig, curl: number): { y: number; z: number } 
   return { y: hinge.y + dy * c - dz * s, z: hinge.z + dy * s + dz * c };
 }
 
+type Quat = { readonly x: number; readonly y: number; readonly z: number; readonly w: number };
+type Point = { readonly x: number; readonly y: number; readonly z: number };
+
+/**
+ * The floor the tail tip sweeps over in a flexion up to `curl`: the higher of `floorAt` under the
+ * tip at rest and at full `curl`. `floorAt(x, z, fromY)` looks down from the body's height, so a
+ * walker on a rock gets the rock top and one beside it the sand.
+ */
+export function floorUnderTail(
+  curl: number,
+  rig: TailRig,
+  scale: number,
+  position: Point,
+  quaternion: Quat,
+  floorAt: (x: number, z: number, fromY: number) => number,
+): number {
+  const { x, y, z, w } = quaternion;
+  const under = (c: number): number => {
+    const t = curledTip(rig, c);
+    const tx = position.x + scale * (2 * (x * y - w * z) * t.y + 2 * (x * z + w * y) * t.z);
+    const tz = position.z + scale * (2 * (y * z + w * x) * t.y + (1 - 2 * (x * x + y * y)) * t.z);
+    return floorAt(tx, tz, position.y);
+  };
+  return Math.max(under(0), under(curl));
+}
+
 /**
  * The largest flexion up to `curl` that keeps the tail tip above `floorY`, for a walker at
  * `position` turned by `quaternion` and scaled by `scale`. The sim lets go of the surface as a
@@ -111,7 +137,7 @@ export function curlAboveFloor(
   rig: TailRig,
   scale: number,
   position: { readonly y: number },
-  quaternion: { readonly x: number; readonly y: number; readonly z: number; readonly w: number },
+  quaternion: Quat,
   floorY: number,
 ): number {
   if (!(curl > 0)) return curl;

@@ -155,18 +155,38 @@ function interleavedGradient(cell: Node<'vec2'>): Node<'float'> {
   return fract(fract(dot(cell, vec2(0.06711056, 0.00583715))).mul(52.9829189));
 }
 
+/** Dave Hoskins' "hash without sine" hash13: no trigonometry, so it is stable on mobile GPUs. */
+function hash13(cell: Node<'vec3'>): Node<'float'> {
+  const p = fract(cell.mul(0.1031)).toVar();
+  const q = p.add(dot(p, p.zyx.add(31.32)));
+  return fract(q.x.add(q.y).mul(q.z));
+}
+
 /**
- * IGN over the rest-pose plane a surface faces most. Each layer of cells along the third axis is
- * shifted by the step IGN uses between frames, so the two sides of a fish (paired fins, the
- * flanks of a fin's fold) do not share a pattern.
+ * Sharpness of the plane choice: only where the normal is within about 8° of a diagonal do both
+ * planes get a real share.
  */
-function surfaceCellNoise(cell: Node<'vec3'>): Node<'float'> {
+const PLANE_SHARPNESS = 8;
+
+/**
+ * IGN over a rest-pose axis plane, picked per cell at random in proportion to how much the surface
+ * faces it (stochastic triplanar). A hard pick by the dominant axis would cut a seam across a
+ * curved fin where its normal crosses a diagonal; a random pick turns that line into a narrow band
+ * of white noise, and every cell still draws one uniform IGN value. Each layer of cells along the
+ * third axis is shifted by the step IGN uses between frames, so the two sides of a fish (paired
+ * fins, the flanks of a fin's fold) do not share a pattern. `transposed` runs the gradient across
+ * the plane the other way, which keeps a coarser lattice's values from following the finer one's.
+ */
+function surfaceCellNoise(cell: Node<'vec3'>, transposed: boolean): Node<'float'> {
   const n = abs(normalGeometry);
-  const facesX = n.x.greaterThanEqual(max(n.y, n.z));
-  const facesY = n.y.greaterThanEqual(n.z);
-  const plane = select(facesX, cell.yz, select(facesY, cell.zx, cell.xy));
-  const layer = select(facesX, cell.x, select(facesY, cell.y, cell.z));
-  return interleavedGradient(plane.add(layer.mul(5.588238)));
+  const w = pow(n, vec3(PLANE_SHARPNESS));
+  const pick = hash13(cell).mul(w.x.add(w.y).add(w.z));
+  const onX = pick.lessThan(w.x);
+  const onY = pick.lessThan(w.x.add(w.y));
+  const plane = select(onX, cell.yz, select(onY, cell.zx, cell.xy));
+  const layer = select(onX, cell.x, select(onY, cell.y, cell.z));
+  const oriented = transposed ? plane.yx.add(vec2(37, 59)) : plane;
+  return interleavedGradient(oriented.add(layer.mul(5.588238)));
 }
 
 /**
@@ -182,8 +202,8 @@ function surfaceNoise(seed: Node<'float'>): Node<'float'> {
   const level = log2(footprint);
   const fine = exp2(floor(level));
   const offset = vec3(seed.mul(61.3), seed.mul(29.7), seed.mul(17.1)).floor();
-  const a = surfaceCellNoise(floor(p.div(fine)).add(offset));
-  const b = surfaceCellNoise(floor(p.div(fine.mul(2))).add(offset));
+  const a = surfaceCellNoise(floor(p.div(fine)).add(offset), false);
+  const b = surfaceCellNoise(floor(p.div(fine.mul(2))).add(offset), true);
   const t = fract(level);
   const x = mix(a, b, t);
   const edge = max(min(t, t.oneMinus()), 1e-4);
