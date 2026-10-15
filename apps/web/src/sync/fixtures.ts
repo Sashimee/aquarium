@@ -81,6 +81,7 @@ export function recordBus() {
     'tank:fish-added',
     'tank:fish-released',
     'tank:fish-died',
+    'tank:fish-updated',
     'tank:fish-removed',
     'tank:water',
     'tank:care',

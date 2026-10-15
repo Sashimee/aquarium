@@ -10,7 +10,13 @@ export interface ReachBridge {
 /** How far a refused clip climbs per try; the #302 slot behind the reef rock clears within a few. */
 export const CLIP_STEP_M = 0.02;
 
-const SIM_UNAVAILABLE = /not ready|No fish yet|disposed|before "init"/;
+/** What a `ReachBridge` rejects with while the sim cannot answer; anything else is a bug. */
+export class SimUnavailableError extends Error {
+  constructor(message = 'The fish sim is not ready') {
+    super(message);
+    this.name = 'SimUnavailableError';
+  }
+}
 
 export type ClipSpot = { readonly y: number } | null;
 
@@ -40,7 +46,7 @@ export async function reachableSpot(
       if (answers.some(Boolean)) return { y };
     }
   } catch (cause) {
-    if (!(cause instanceof Error && SIM_UNAVAILABLE.test(cause.message))) {
+    if (!(cause instanceof SimUnavailableError)) {
       report('Nori reach check failed; the clip stays where it was placed', cause);
     }
     return { y: clip.y };

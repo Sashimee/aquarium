@@ -94,6 +94,8 @@ export interface InteractionEvents {
   'tank:fish-released': { tankId: string; fishId: string };
   /** The fish died: erratic swim, then belly-up at the surface. */
   'tank:fish-died': { tankId: string; fish: Fish };
+  /** Living fish whose hunger or health changed on the server. */
+  'tank:fish-updated': { tankId: string; fish: Fish[] };
   /** Netted, or removed on another device. */
   'tank:fish-removed': { tankId: string; fishId: string; reason: 'netted' | 'gone' };
   'tank:water': { tankId: string; water: Water };
