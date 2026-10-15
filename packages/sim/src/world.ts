@@ -17,6 +17,7 @@ import {
   type SimSpecies,
   type SpeciesInput,
 } from './species.ts';
+import { Walkers } from './walk.ts';
 
 export const STEP_HZ = 30;
 export const STEP_DT = 1 / STEP_HZ;
@@ -252,6 +253,8 @@ export class World {
   readonly rng: Rng;
   readonly food: FoodStore;
   readonly behaviour: Behaviour;
+  /** Shrimp and other walkers: the surface they stand on, their heading, legs and tail-flips. */
+  readonly walkers: Walkers;
   /** Tank and hard decor: what no fish body may enter. */
   readonly sceneSdf: Sdf;
   readonly substrateSdf: Sdf;
@@ -471,6 +474,12 @@ export class World {
     this.schoolNbr = new Int32Array(n * kMax);
     this.anyNbr = new Int32Array(n * kMax);
     this.scratchDist = new Float64Array(kMax);
+    this.walkers = new Walkers(
+      this,
+      new TankSdf(this.basin, { floor: false, surface: false }),
+      this.hardDecor,
+      STEP_DT,
+    );
 
     const fits = config.fish.map((spawn, i) => {
       const fit = this.fit(spawn);
@@ -630,6 +639,10 @@ export class World {
     // Hold the spawn heading until steering has a real direction (heading hold in `steer`).
     this.targetYaw[i] = spot.yaw;
     this.speed[i] = (this.cruiseSpeed[i] ?? 0) * 0.5;
+    if (sp.walking !== null) {
+      this.cruiseSpeed[i] = sp.walking.walkSpeed * scale;
+      this.walkers.place(i);
+    }
   }
 
   /** A random free spot in the species' depth band, and a random heading. */
@@ -822,6 +835,7 @@ export class World {
       if (sp !== undefined)
         this.schoolGroup[i] = sp.schooling ? (this.speciesIndex[i] ?? 0) : -1 - i;
     }
+    this.walkers.resize(edit);
     this.behaviour.resize(edit);
   }
 
@@ -844,8 +858,19 @@ export class World {
     }
     pairwiseDistanceSq(this.position, n, this.distSq);
     this.behaviour.update();
-    for (let i = 0; i < n; i++) this.steer(i);
-    for (let i = 0; i < n; i++) this.integrate(i);
+    for (let i = 0; i < n; i++) if (this.speciesOf(i).walking === null) this.steer(i);
+    for (let i = 0; i < n; i++) {
+      if (this.speciesOf(i).walking === null) {
+        this.integrate(i);
+        continue;
+      }
+      const plan = this.behaviour.plans[i];
+      if (plan === undefined) throw new RangeError(`no plan for fish ${i}`);
+      if (this.walkers.step(i, plan, this.behaviour.startledAt[i] ?? -1)) {
+        this.contacts++;
+        this.contactCount[i] = (this.contactCount[i] ?? 0) + 1;
+      }
+    }
     this.tick++;
   }
 
@@ -2073,11 +2098,19 @@ export class World {
       out[o] = this.position[i * 3] ?? 0;
       out[o + 1] = this.position[i * 3 + 1] ?? 0;
       out[o + 2] = this.position[i * 3 + 2] ?? 0;
-      quatFromYawPitchRoll(this.yaw[i] ?? 0, this.pitch[i] ?? 0, this.roll[i] ?? 0, out, o + 3);
+      const walker = this.speciesOf(i).walking !== null;
+      if (walker) this.walkers.quaternion(i, out, o + 3);
+      else
+        quatFromYawPitchRoll(this.yaw[i] ?? 0, this.pitch[i] ?? 0, this.roll[i] ?? 0, out, o + 3);
       out[o + 7] = this.speed[i] ?? 0;
       out[o + 8] = this.yawRate[i] ?? 0;
       out[o + 9] = this.state[i] ?? 0;
       out[o + 10] = this.thrust[i] ?? 0;
+      // A phase just under 1 rounds to 1 in float32; the next cycle's 0 is the same pose.
+      const leg = walker ? Math.fround(this.walkers.legPhase[i] ?? 0) : 0;
+      out[o + 11] = leg >= 1 ? 0 : leg;
+      out[o + 12] = walker ? (this.walkers.flip[i] ?? 0) : 0;
+      out[o + 13] = walker ? (this.walkers.attached[i] ?? 0) : 0;
     }
   }
 }

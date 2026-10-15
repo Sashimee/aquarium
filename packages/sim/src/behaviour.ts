@@ -9,7 +9,7 @@ import { selectNearest } from './neighbours.ts';
 import type { Rng } from './rng.ts';
 import type { Sdf } from './sdf.ts';
 import { FishState } from './snapshot.ts';
-import type { SimSpecies } from './species.ts';
+import type { SimSpecies, SimWalking } from './species.ts';
 
 /** Every tunable of the species behaviours; sources are in BEHAVIOUR.md. */
 export const BEHAVIOUR = {
@@ -123,6 +123,17 @@ export const BEHAVIOUR = {
   yieldS: 1.5,
   yieldCruiseFactor: 2.5,
   maxQueuedStimuli: 16,
+
+  walkerFreezeMinS: 1,
+  walkerFreezeMaxS: 3,
+  walkerPickMinS: 1,
+  walkerPickMaxS: 3,
+  walkerWalkMinS: 2,
+  walkerWalkMaxS: 6,
+  grazerPickMinS: 2,
+  grazerPickMaxS: 8,
+  grazerWalkMinS: 1,
+  grazerWalkMaxS: 4,
 
   /** Fish body as a chain of spheres along the spine, in body lengths. */
   bodyThicknessBodyLengths: 0.12,
@@ -693,6 +704,7 @@ export class Behaviour {
     const { eligible, leash } = this.curiosity;
     for (let i = 0; i < this.host.count; i++) {
       eligible[i] =
+        this.speciesOf(i).walking === null &&
         at(f.eligible, i) === 1 &&
         at(f.target, i) < 0 &&
         at(f.follow, i) < 0 &&
@@ -851,12 +863,13 @@ export class Behaviour {
   private beginStartle(i: number, yaw: number, pitch: number): void {
     if (at(this.refractory, i) > 0 || at(this.startlePhase, i) !== StartlePhase.None) return;
     const sp = this.speciesOf(i);
-    this.startlePhase[i] = StartlePhase.Bend;
-    this.startleTimer[i] = BEHAVIOUR.cBendMaxS;
+    // A walker has no C-bend: its tail-flip is the whole burst.
+    this.startlePhase[i] = sp.walking === null ? StartlePhase.Bend : StartlePhase.Burst;
+    this.startleTimer[i] = sp.walking?.flipDurationS ?? BEHAVIOUR.cBendMaxS;
     this.startleElapsed[i] = 0;
     this.escapeYaw[i] = yaw;
     this.escapePitch[i] = pitch;
-    this.refractory[i] = BEHAVIOUR.refractoryS;
+    this.refractory[i] = sp.walking?.flipRefractoryS ?? BEHAVIOUR.refractoryS;
     if (sp.tightenWhenStartled) this.tighten[i] = BEHAVIOUR.tightenS;
     this.habituation[i] = at(this.habituation, i) + 1;
     this.startledAt[i] = this.host.tick;
@@ -927,6 +940,10 @@ export class Behaviour {
     const calm = 1 - (1 - BEHAVIOUR.restSpeedFactor) * rest;
     plan.cruiseScale = calm;
     plan.wander = calm;
+    if (sp.walking !== null) {
+      this.planWalker(i, sp.walking, plan, rest);
+      return;
+    }
     const school = 1 - (1 - BEHAVIOUR.restSchoolFactor) * rest;
     plan.align = school * (sp.shoal ? BEHAVIOUR.shoalAlignment : 1);
     plan.cohesion = school * (sp.shoal ? BEHAVIOUR.shoalCohesion : 1);
@@ -1201,6 +1218,104 @@ export class Behaviour {
     }
     if (left <= 0) this.startlePhase[i] = StartlePhase.None;
     else this.startleTimer[i] = left;
+  }
+
+  /**
+   * A walker's plan: the tail-flip and the freeze after it, picking food it has found, sheltering
+   * in its cave, and otherwise alternating bouts of walking and of picking at the surface.
+   * `Walkers` turns it into steps along the surface.
+   */
+  private planWalker(i: number, w: SimWalking, plan: Plan, rest: number): void {
+    const { position, rng } = this.host;
+    const px = at(position, i * 3);
+    const py = at(position, i * 3 + 1);
+    const pz = at(position, i * 3 + 2);
+    const length = at(this.host.bodyLength, i);
+    plan.state = FishState.Walk;
+    plan.align = 0;
+    plan.cohesion = 0;
+    const phase = at(this.startlePhase, i);
+    if (phase !== StartlePhase.None) {
+      const left = at(this.startleTimer, i) - DT;
+      this.startleElapsed[i] = at(this.startleElapsed, i) + DT;
+      plan.speedCap = 0;
+      plan.wander = 0;
+      if (phase === StartlePhase.Burst) {
+        const yaw = at(this.escapeYaw, i);
+        plan.state = FishState.TailFlip;
+        plan.seek(px + Math.sin(yaw), py, pz + Math.cos(yaw), 0, 1);
+        if (left <= 0) {
+          this.startlePhase[i] = StartlePhase.Flee;
+          this.startleTimer[i] = rng.range(BEHAVIOUR.walkerFreezeMinS, BEHAVIOUR.walkerFreezeMaxS);
+        } else {
+          this.startleTimer[i] = left;
+        }
+        return;
+      }
+      plan.state = FishState.Shelter;
+      if (left <= 0) this.startlePhase[i] = StartlePhase.None;
+      else this.startleTimer[i] = left;
+      return;
+    }
+
+    const f = this.feeding;
+    const k = at(f.target, i);
+    if (at(f.handling, i) > 0) {
+      plan.state = FishState.Pick;
+      plan.speedCap = 0;
+      plan.wander = 0;
+      return;
+    }
+    if (k >= 0) {
+      const { food } = this.host;
+      plan.wander *= 0.3;
+      plan.seek(
+        at(food.position, k * 3),
+        at(food.position, k * 3 + 1),
+        at(food.position, k * 3 + 2),
+        0,
+        0.5,
+      );
+      return;
+    }
+
+    const a = this.anchors[at(this.anchor, i)];
+    if (a?.kind === 'cave' && (rest > 0.5 || at(this.shelterTimer, i) > 0)) {
+      // A walker comes in along the floor at its own height, so the mouth is judged in plan view.
+      const [tx, ty, tz] = this.approach(i, a, py);
+      const [ax, , az] = a.position;
+      if (Math.hypot(px - ax, pz - az) <= a.radius + 0.5 * length) {
+        plan.state = FishState.Shelter;
+        plan.speedCap = 0;
+        plan.wander = 0;
+        return;
+      }
+      plan.seek(tx, ty, tz, 0, 0.5);
+      plan.wander *= 0.3;
+      return;
+    }
+
+    const left = at(this.forageTimer, i) - DT;
+    if (left <= 0) {
+      const pick = this.sifting[i] === 1 ? 0 : 1;
+      this.sifting[i] = pick;
+      const g = w.biofilmGrazer;
+      this.forageTimer[i] =
+        pick === 1
+          ? g
+            ? rng.range(BEHAVIOUR.grazerPickMinS, BEHAVIOUR.grazerPickMaxS)
+            : rng.range(BEHAVIOUR.walkerPickMinS, BEHAVIOUR.walkerPickMaxS)
+          : g
+            ? rng.range(BEHAVIOUR.grazerWalkMinS, BEHAVIOUR.grazerWalkMaxS)
+            : rng.range(BEHAVIOUR.walkerWalkMinS, BEHAVIOUR.walkerWalkMaxS);
+    } else {
+      this.forageTimer[i] = left;
+    }
+    if (this.sifting[i] === 1) {
+      plan.state = FishState.Pick;
+      plan.speedCap = 0;
+    }
+    if (rest > 0.5) plan.state = FishState.Rest;
   }
 
   private territoryCentre(i: number, sp: SimSpecies): [number, number, number, number] {

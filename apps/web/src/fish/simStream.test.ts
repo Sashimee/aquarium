@@ -167,7 +167,7 @@ describe('SimStream', () => {
     const { stream, recycled } = setup();
     stream.begin(1, ['a', 'b']);
     const misfit = snapshot(1, 0, [1]);
-    expect(() => stream.push(misfit, 0)).toThrow(/needs 22/);
+    expect(() => stream.push(misfit, 0)).toThrow(new RegExp(`needs ${2 * SNAPSHOT_STRIDE}\\b`));
     expect(recycled).toEqual([misfit]);
   });
 });

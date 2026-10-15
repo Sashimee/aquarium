@@ -42,7 +42,7 @@
       "legPairs": 5,
       "surfaces": ["substrate", "decor", "glass"],
       "tailFlip": {
-        "speedMps": 0.4,
+        "speedMps": 0.25,
         "durationS": 0.15,
         "refractoryS": 2
       }

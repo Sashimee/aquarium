@@ -1,16 +1,15 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { speciesSchema } from '@aquarium/shared';
+import { speciesContentSchema } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 
 const repo = join(import.meta.dirname, '../../..');
-const contentSchema = speciesSchema.partial({ render: true });
 
 const species = new Map(
   readdirSync(join(repo, 'content/species'))
     .filter((f) => f.endsWith('.json'))
     .map((f) => {
-      const s = contentSchema.parse(
+      const s = speciesContentSchema.parse(
         JSON.parse(readFileSync(join(repo, 'content/species', f), 'utf8')),
       );
       return [s.id, s] as const;
@@ -80,17 +79,45 @@ const ADULT_MAX: Record<string, { model: string; maxSlM: number; maxTlM: number;
       maxTlM: 0.31,
       source: 'FishBase: 31 cm TL (Ref. 2334); TL = 1.162 SL',
     },
+    'bristlenose-pleco': {
+      model: 'bristlenose-pleco',
+      maxSlM: 0.091,
+      maxTlM: 0.091 * 1.25,
+      source:
+        'FishBase: 9.1 cm SL; no length-length relationship was looked up, so TL = 1.25 SL is an ' +
+        'assumption for loricariids (the model draws 1.205)',
+    },
     'bronze-corydoras': {
       model: 'bronze-corydoras',
       maxSlM: 0.075,
       maxTlM: 0.075 * 1.282,
       source: 'FishBase: 7.5 cm SL (Ref. 26041); TL = 1.282 SL',
     },
+    discus: {
+      model: 'discus',
+      maxSlM: 0.137,
+      maxTlM: 0.137 * 1.2,
+      source:
+        'FishBase: 13.7 cm SL; no length-length relationship was looked up, so TL = 1.2 SL is an ' +
+        'assumption (the model draws 1.201)',
+    },
+    firefish: {
+      model: 'firefish',
+      maxSlM: 0.09 / 1.225,
+      maxTlM: 0.09,
+      source: 'FishBase: 9 cm TL; TL = 1.225 SL, the proportion of the lofted model',
+    },
     guppy: {
       model: 'guppy-female',
       maxSlM: 0.05,
       maxTlM: 0.05 / 0.761,
       source: 'FishBase: female reaches 5 cm SL; SL = 0.761 TL',
+    },
+    'harlequin-rasbora': {
+      model: 'harlequin-rasbora',
+      maxSlM: 0.05 / 1.322,
+      maxTlM: 0.05,
+      source: 'FishBase: 5 cm TL; TL = 1.322 SL, the proportion of the lofted model',
     },
     'neon-tetra': {
       model: 'neon-tetra',
@@ -111,6 +138,12 @@ const ADULT_MAX: Record<string, { model: string; maxSlM: number; maxTlM: number;
       maxSlM: 0.08 / 1.277,
       maxTlM: 0.08,
       source: 'FishBase: 8 cm TL (Ref. 7251); TL = 1.277 SL',
+    },
+    'six-line-wrasse': {
+      model: 'six-line-wrasse',
+      maxSlM: 0.1 / 1.235,
+      maxTlM: 0.1,
+      source: 'FishBase: 10 cm TL; TL = 1.235 SL, the proportion of the lofted model',
     },
     'yellow-tang': {
       model: 'yellow-tang',

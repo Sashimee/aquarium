@@ -1,5 +1,6 @@
 import type { FishSex } from '@aquarium/shared';
 import { hashString } from './roster';
+import type { SwimModeParams } from './swim';
 
 /** `sex` is the server's stored one; null for demo fish, which have no server record. */
 export interface SexedFish {
@@ -31,6 +32,14 @@ export interface FishRenderProfile {
   readonly nightPaling: number;
   /** Per-fish brightness and hue variation, 0..1. */
   readonly tintVariation: number;
+  /** Scales on the swimming mode's amplitudes, for a body or fins stiffer or longer than usual. */
+  readonly swim: SwimTuning;
+}
+
+export interface SwimTuning {
+  readonly bodyWave: number;
+  readonly pectoral: number;
+  readonly medianFin: number;
 }
 
 const DEFAULTS: FishRenderProfile = {
@@ -43,6 +52,7 @@ const DEFAULTS: FishRenderProfile = {
   finTransmission: 0.4,
   nightPaling: 0.4,
   tintVariation: 0.08,
+  swim: { bodyWave: 1, pectoral: 1, medianFin: 1 },
 };
 
 /**
@@ -102,6 +112,50 @@ export const FISH_RENDER_PROFILES: Readonly<Record<string, FishRenderProfile>> =
   'royal-gramma': { ...DEFAULTS, assetId: 'royal-gramma', iridescence: 0.2 },
   'blue-tang': { ...DEFAULTS, assetId: 'blue-tang', iridescence: 0.2, finTransmission: 0.2 },
   'yellow-tang': { ...DEFAULTS, assetId: 'yellow-tang', iridescence: 0.1, finTransmission: 0.2 },
+  // Discus hold the deep, compressed disc nearly rigid and scull with the long dorsal and anal fins.
+  discus: {
+    ...DEFAULTS,
+    assetId: 'discus',
+    iridescence: 0.35,
+    roughness: 0.35,
+    finTransmission: 0.3,
+    nightPaling: 0.5,
+    swim: { bodyWave: 0.6, pectoral: 0.8, medianFin: 1.4 },
+  },
+  // Armoured in bony scutes, no guanine sheen; a nocturnal grazer that does not pale at night.
+  'bristlenose-pleco': {
+    ...DEFAULTS,
+    assetId: 'bristlenose-pleco',
+    iridescence: 0,
+    roughness: 0.65,
+    finTransmission: 0.15,
+    nightPaling: 0.1,
+    tintVariation: 0.1,
+    swim: { bodyWave: 0.6, pectoral: 0.4, medianFin: 0.3 },
+  },
+  'harlequin-rasbora': {
+    ...DEFAULTS,
+    assetId: 'harlequin-rasbora',
+    iridescence: 0.3,
+    roughness: 0.35,
+    finTransmission: 0.6,
+    nightPaling: 0.5,
+  },
+  'six-line-wrasse': {
+    ...DEFAULTS,
+    assetId: 'six-line-wrasse',
+    iridescence: 0.25,
+    roughness: 0.35,
+    finTransmission: 0.5,
+    nightPaling: 0.3,
+  },
+  firefish: {
+    ...DEFAULTS,
+    assetId: 'firefish',
+    iridescence: 0.1,
+    finTransmission: 0.55,
+    nightPaling: 0.3,
+  },
 };
 
 export function renderProfile(speciesId: string): FishRenderProfile {
@@ -110,6 +164,17 @@ export function renderProfile(speciesId: string): FishRenderProfile {
     throw new Error(`no fish render profile for species "${speciesId}"; add it to profiles.ts`);
   }
   return profile;
+}
+
+/** The swimming mode with the species' amplitude scales applied. */
+export function swimModeFor(mode: SwimModeParams, profile: FishRenderProfile): SwimModeParams {
+  const { swim } = profile;
+  return {
+    ...mode,
+    bodyWave: mode.bodyWave * swim.bodyWave,
+    pectoral: mode.pectoral * swim.pectoral,
+    medianFin: mode.medianFin * swim.medianFin,
+  };
 }
 
 /**
