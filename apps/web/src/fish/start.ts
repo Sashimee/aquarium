@@ -27,6 +27,12 @@ export interface FishBite {
   readonly portion: number;
 }
 
+export interface FishPoint {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
 export interface PickRay {
   readonly origin: { readonly x: number; readonly y: number; readonly z: number };
   readonly dir: { readonly x: number; readonly y: number; readonly z: number };
@@ -40,6 +46,10 @@ export interface FishSimBridge {
   setLure(position: Point3 | null): void;
   /** Bites by the ids the app knows: server fish ids while a saved tank is shown. */
   onAte(listener: (events: readonly FishBite[]) => void): () => void;
+  /** The nearest swimming fish along `ray`, as a position to follow; it reads null once gone. */
+  pickFish(ray: PickRay): (() => FishPoint | null) | null;
+  /** Some swimming fish to follow, or null while there are none. */
+  anyFish(): (() => FishPoint | null) | null;
   /** The net tool tapped along `ray`; emits `net:tap` when it hits a dead fish. */
   netTap(ray: PickRay): void;
 }
@@ -219,6 +229,8 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
         return () => ateListeners.delete(listener);
       },
       netTap: (ray) => ready?.netTap(ray),
+      pickFish: (ray) => ready?.pickFish(ray) ?? null,
+      anyFish: () => ready?.anyFish() ?? null,
     },
     setAnchors(next) {
       anchors = next;

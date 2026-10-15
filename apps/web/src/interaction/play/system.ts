@@ -3,6 +3,7 @@ import type { Engine } from '../../engine/Engine';
 import type { EventBus } from '../../engine/events';
 import { waterBounds } from '../../engine/tank/dimensions';
 import { FeedGate } from '../../sync/feedGate';
+import type { Vec3 } from '../camera';
 import type { InteractionEvents } from '../events';
 import { FoodLink, type FoodBridge } from '../food/link';
 import { FoodField } from '../food/particles';
@@ -22,6 +23,7 @@ export interface PlaySimBridge extends FoodBridge {
   startle?(stimulus: StimulusLike): void;
   setLure?(position: readonly [number, number, number] | null): void;
   netTap?(ray: Ray): void;
+  pickFish?(ray: Ray): (() => Vec3 | null) | null;
 }
 
 export interface PlaySystem {
@@ -85,6 +87,7 @@ export function createPlaySystem(
     events: interaction,
     startle: sim.startle?.bind(sim),
     netTap: sim.netTap?.bind(sim),
+    pickFish: sim.pickFish?.bind(sim),
     toSim: sceneToSim,
     lure(p) {
       if (p === null && !lured) return;
