@@ -85,4 +85,14 @@ curl -s  https://devfish.bas.lu/robots.txt
   asynchronously. `sendMail` succeeds and a 550 arrives later as a bounce. Verify delivery by reading a
   received test mail sent to an `@bas.lu` address. Never edit the shared relay's config.
 - **Auto Deploy on Prod:** a push to `main` deploys immediately. Only Alex asks for `dev → main`.
-- **Prod backups:** a backup schedule for aquarium-prod-db is set up in T23 (destination to be chosen by Alex).
+- **Prod backups:** none yet. Dokploy has no backup destination configured (`destination.all` is empty), so
+  no schedule exists for aquarium-prod-db. Once Alex picks a destination (S3-compatible bucket), create it in
+  Dokploy, then add a daily backup on the prod database and a restore test, and record both here.
+- **Postgres version:** both Dokploy databases run `postgres:18`; CI tests against `postgres:17`.
+
+## Prod readiness (T23)
+
+Aquarium Prod is configured but has never been deployed (status `idle`, no deployments), so
+https://fish.bas.lu answers 502 until `main` is deployed. Its env has the same variable names as dev. Prod has
+its own `BETTER_AUTH_SECRET` and database password (alphanumeric, copies in `~/.config/aquarium/prod.*`, mode
+600), `APP_URL=https://fish.bas.lu` and `SITE_INDEXABLE=true`. The prod database has no public port.
