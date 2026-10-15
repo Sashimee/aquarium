@@ -22,6 +22,7 @@ import {
   interleavedGradientNoise,
   luminance,
   max,
+  min,
   mix,
   normalGeometry,
   normalize,
@@ -110,6 +111,8 @@ const NIGHT_IRIDESCENCE_LOSS = 0.5;
 const NIGHT_PLATELET_SHRINK = 0.12;
 /** Below this alpha a texel is outside the fin silhouette in every mode. */
 const SILHOUETTE_ALPHA = 0.1;
+/** `antialias: true` gives four MSAA samples on both backends. */
+const COVERAGE_SAMPLES = 4;
 /** Golden-ratio-like step that decorrelates consecutive frames of the noise (Jimenez 2014). */
 const FRAME_NOISE_STEP = 5.588238;
 
@@ -142,6 +145,18 @@ function screenDoor(alpha: Node<'float'>, seed: Node<'float'>): Node<'bool'> {
   const frame = float(frameId).mod(64).mul(FRAME_NOISE_STEP);
   const pixel = screenCoordinate.xy.add(vec2(seed.mul(61.3), seed.mul(29.7)).floor()).add(frame);
   return alpha.greaterThan(interleavedGradientNoise(pixel));
+}
+
+/**
+ * Alpha-to-coverage keeps only COVERAGE_SAMPLES + 1 levels, so a soft membrane edge would band and
+ * its faint rim would round to nothing. A fixed per-pixel offset of up to one sample step dithers
+ * between neighbouring levels, which the MSAA resolve averages back into a gradient. The offset
+ * shrinks to zero towards alpha 1, so opaque skin keeps every sample.
+ */
+function ditheredCoverage(alpha: Node<'float'>, seed: Node<'float'>): Node<'float'> {
+  const pixel = screenCoordinate.xy.add(vec2(seed.mul(61.3), seed.mul(29.7)).floor());
+  const reach = min(alpha.oneMinus().mul(2), 1 / COVERAGE_SAMPLES);
+  return alpha.add(interleavedGradientNoise(pixel).sub(0.5).mul(reach));
 }
 
 /**
@@ -292,8 +307,9 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
 
     const textureAlpha = sample.a.mul(source.opacity);
     const hasAlpha = source.transparent || source.alphaTest > 0;
+    const authoredCutoff = source.alphaTest > 0;
     const silhouette = hasAlpha
-      ? textureAlpha.greaterThan(source.alphaTest > 0 ? source.alphaTest : SILHOUETTE_ALPHA)
+      ? textureAlpha.greaterThan(authoredCutoff ? source.alphaTest : SILHOUETTE_ALPHA)
       : null;
     const translucent = features.fins !== 'cutout' && (hasAlpha || profile.finTransmission > 0);
     // Source alpha is only trusted as coverage on the body, where BLEND models often carry
@@ -304,9 +320,15 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
     );
     const coverage = mix(bodyAlpha, finAlpha, finAmount);
     this.alphaToCoverage = translucent && features.fins === 'coverage';
-    this.opacityNode = this.alphaToCoverage ? coverage : null;
-    this.maskNode =
-      translucent && features.fins === 'stochastic' ? screenDoor(coverage, seed) : silhouette;
+    this.opacityNode = this.alphaToCoverage ? ditheredCoverage(coverage, seed) : null;
+    if (translucent && features.fins === 'stochastic') {
+      this.maskNode = screenDoor(coverage, seed);
+    } else if (this.alphaToCoverage && hasAlpha && !authoredCutoff) {
+      // Coverage fades a membrane rim out by itself; the skin keeps its hard cut.
+      this.maskNode = textureAlpha.greaterThan(finAmount.oneMinus().mul(SILHOUETTE_ALPHA));
+    } else {
+      this.maskNode = silhouette;
+    }
 
     if (features.fins !== 'cutout' && profile.finTransmission > 0) {
       const toEye = normalize(cameraPosition.sub(positionWorld));

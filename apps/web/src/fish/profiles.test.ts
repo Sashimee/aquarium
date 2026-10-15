@@ -8,7 +8,33 @@ import {
   modelFor,
   renderProfile,
   sexOf,
+  swimModeFor,
 } from './profiles';
+import { SWIM_MODES } from './swim';
+
+const contentFiles = import.meta.glob<unknown>(
+  ['../../../../content/species/*.json', '../../../../content/species-pending/*.json'],
+  { eager: true, import: 'default' },
+);
+
+interface ContentSpecies {
+  readonly id: string;
+  readonly locomotion: { readonly swimmingMode: string };
+}
+
+function isContentSpecies(raw: unknown): raw is ContentSpecies {
+  if (typeof raw !== 'object' || raw === null || !('id' in raw) || !('locomotion' in raw)) {
+    return false;
+  }
+  const { id, locomotion } = raw;
+  return (
+    typeof id === 'string' &&
+    typeof locomotion === 'object' &&
+    locomotion !== null &&
+    'swimmingMode' in locomotion &&
+    typeof locomotion.swimmingMode === 'string'
+  );
+}
 
 const keys = (n: number): string[] => Array.from({ length: n }, (_, i) => `fish-${i}`);
 const demo = (key: string) => ({ key, sex: null });
@@ -129,5 +155,64 @@ describe('the freshwater demo', () => {
         .map((f) => modelFor(guppy, demo(f.id)).assetId),
     );
     expect(models).toEqual(new Set(['guppy-male', 'guppy-female']));
+  });
+});
+
+describe('render profile coverage', () => {
+  const species = Object.entries(contentFiles).map(([path, raw]) => {
+    if (!isContentSpecies(raw)) throw new Error(`${path} has no id or swimming mode`);
+    return raw;
+  });
+
+  it('reads both the live and the pending species', () => {
+    const ids = species.map((s) => s.id);
+    expect(ids).toContain('neon-tetra');
+    expect(ids).toContain('firefish');
+    expect(ids).toContain('cherry-shrimp');
+  });
+
+  // Walkers get their own deformation and models, not a fish profile.
+  it('has a profile for every swimming species, live or pending', () => {
+    const swimmers = species.filter((s) => s.locomotion.swimmingMode !== 'pleopod');
+    for (const { id } of swimmers) expect(() => renderProfile(id), id).not.toThrow();
+  });
+
+  it('names an unknown species when it has no profile', () => {
+    expect(() => renderProfile('mystery-fish')).toThrow(/"mystery-fish"/);
+  });
+});
+
+describe('swimModeFor', () => {
+  it('leaves a species without swim tuning on its mode', () => {
+    expect(swimModeFor(SWIM_MODES.carangiform, renderProfile('neon-tetra'))).toEqual(
+      SWIM_MODES.carangiform,
+    );
+  });
+
+  it('scales only the amplitudes', () => {
+    const mode = SWIM_MODES.labriform;
+    const discus = renderProfile('discus');
+    const tuned = swimModeFor(mode, discus);
+    expect(tuned.bodyWave).toBeCloseTo(mode.bodyWave * discus.swim.bodyWave);
+    expect(tuned.pectoral).toBeCloseTo(mode.pectoral * discus.swim.pectoral);
+    expect(tuned.medianFin).toBeCloseTo(mode.medianFin * discus.swim.medianFin);
+    expect(tuned.envelope).toBe(mode.envelope);
+    expect(tuned.wavelength).toBe(mode.wavelength);
+    expect(tuned.pectoralIdleHz).toBe(mode.pectoralIdleHz);
+  });
+
+  it('keeps the discus body stiffer than a plain labriform swimmer, and the pleco fins stiffer', () => {
+    expect(renderProfile('discus').swim.bodyWave).toBeLessThan(1);
+    expect(renderProfile('discus').swim.medianFin).toBeGreaterThan(1);
+    const pleco = renderProfile('bristlenose-pleco').swim;
+    expect(Math.max(pleco.bodyWave, pleco.pectoral, pleco.medianFin)).toBeLessThan(1);
+  });
+
+  it('gives every profile positive swim scales', () => {
+    for (const [id, { swim }] of Object.entries(FISH_RENDER_PROFILES)) {
+      for (const scale of [swim.bodyWave, swim.pectoral, swim.medianFin]) {
+        expect(scale, id).toBeGreaterThan(0);
+      }
+    }
   });
 });

@@ -55,6 +55,7 @@ import {
   bodyLengthOf,
   modelFor,
   renderProfile,
+  swimModeFor,
   type FishRenderProfile,
 } from './profiles';
 import { hashString, TankRoster, type RosterFish } from './roster';
@@ -620,7 +621,7 @@ export class FishSystem {
     this.disposeLods(batch);
     const capacity = capacityFor(needed);
     const { model, profile, input } = batch;
-    const mode = SWIM_MODES[input.locomotion.swimmingMode];
+    const mode = swimModeFor(SWIM_MODES[input.locomotion.swimmingMode], profile);
     const lighting = {
       lightDirection: this.engine.caustics.lightDirection,
       light: this.engine.caustics.hoodLight(),
@@ -754,7 +755,7 @@ export class FishSystem {
       swim: new SwimState(
         length,
         input.locomotion.strouhal,
-        SWIM_MODES[input.locomotion.swimmingMode],
+        swimModeFor(SWIM_MODES[input.locomotion.swimmingMode], profile),
         rng.next() * Math.PI * 2,
       ),
       seed,
