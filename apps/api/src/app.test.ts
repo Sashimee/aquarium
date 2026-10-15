@@ -109,14 +109,18 @@ describe('security headers', () => {
     expect(revisit.headers['content-security-policy']).toContain("'unsafe-eval'");
   });
 
-  it('does not extend the eval policy to other methods or to a 404', async () => {
+  it('does not extend the eval policy to other methods', async () => {
     const app = withDist();
     const post = await app.inject({ method: 'POST', url: '/ktx2-worker.js' });
     expect(post.headers['content-security-policy']).not.toMatch(/'unsafe-eval'/);
     const options = await app.inject({ method: 'OPTIONS', url: '/ktx2-worker.js' });
     expect(options.headers['content-security-policy']).not.toMatch(/'unsafe-eval'/);
-    const missing = await spa.app.inject('/ktx2-worker.js/missing');
-    expect(missing.headers['content-security-policy']).not.toMatch(/'unsafe-eval'/);
+  });
+
+  it('does not grant eval when the worker file is not served', async () => {
+    const res = await noDist().inject('/ktx2-worker.js');
+    expect(res.statusCode).toBe(404);
+    expect(String(res.headers['content-security-policy'])).not.toMatch(/'unsafe-eval'/);
   });
 
   describe('on every kind of response', () => {

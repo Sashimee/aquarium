@@ -32,6 +32,7 @@ const fish = {
   tankId: id2,
   species: 'neon-tetra',
   name: 'Blip',
+  sex: 'female',
   bornAt: ts,
   size: 1.2,
   hunger: 0.1,

@@ -1,6 +1,18 @@
+import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { afterAll, describe, expect, it } from 'vitest';
 import { createTestDatabase } from '../test-harness.ts';
 import { connect, runMigrations, type Database } from './index.ts';
+
+// Same hash and threshold as the web client's sexOf in apps/web/src/fish/profiles.ts.
+function fnv1a(text: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
 
 const opened: Database[] = [];
 const drops: Array<() => Promise<void>> = [];
@@ -42,6 +54,52 @@ describe('migrations', () => {
     }
   });
 
+  it('backfill fish sex with the rule the client used before sex was stored', async () => {
+    const database = await freshDatabase();
+    await runMigrations(database);
+    const q = (text: string, values: unknown[] = []) => database.pool.query(text, values);
+    await q(`alter table fish drop column sex`);
+    await q(`drop type fish_sex`);
+    await q(`insert into "user" (id, name, email) values ('u3', 'U', 'u3@bas.lu')`);
+    const tank = await q(
+      `insert into tanks (owner_id, biome, name) values ('u3', 'freshwater', 'T') returning id`,
+    );
+    const tankId = (tank.rows[0] as { id: string }).id;
+    const ids = Array.from({ length: 40 }, () => randomUUID());
+    for (const id of ids) {
+      await q(
+        `insert into fish (id, tank_id, species, name, size) values ($1, $2, 'neon-tetra', 'F', 0.03)`,
+        [id, tankId],
+      );
+    }
+
+    const migration = readFileSync(
+      new URL('../../drizzle/0004_fish_sex.sql', import.meta.url),
+      'utf8',
+    );
+    const client = await database.pool.connect();
+    try {
+      for (const statement of migration.split('--> statement-breakpoint')) {
+        await client.query(statement);
+      }
+    } finally {
+      client.release();
+    }
+
+    const { rows } = await q(`select id, sex from fish`);
+    const bySex = new Map(rows.map((r: { id: string; sex: string }) => [r.id, r.sex]));
+    for (const id of ids) {
+      expect(bySex.get(id), id).toBe(fnv1a(`${id}:variant`) < 2 ** 31 ? 'male' : 'female');
+    }
+    expect(new Set(bySex.values())).toEqual(new Set(['male', 'female']));
+
+    const legacy = await q(
+      `insert into fish (tank_id, species, name, size) values ($1, 'neon-tetra', 'Old', 0.03) returning sex`,
+      [tankId],
+    );
+    expect((legacy.rows[0] as { sex: string }).sex).toBe('female');
+  });
+
   it('fail loudly when the database is unreachable', async () => {
     const database = connect('postgres://aquarium:wrong@127.0.0.1:1/none');
     opened.push(database);
@@ -60,7 +118,7 @@ describe('schema', () => {
     );
     const tankId = (tank.rows[0] as { id: string }).id;
     await q(
-      `insert into fish (tank_id, species, name, size) values ($1, 'neon-tetra', 'F', 0.03)`,
+      `insert into fish (tank_id, species, name, sex, size) values ($1, 'neon-tetra', 'F', 'male', 0.03)`,
       [tankId],
     );
     await q(`insert into events (tank_id, kind, payload) values ($1, 'feed', '{"portion":1}')`, [

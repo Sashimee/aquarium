@@ -35,8 +35,8 @@ export interface QualityOptions {
    * Probe twice. The first probe times the empty tank and announces the starting tier, which may
    * only drop from `probeTier`, so the scene is built once at a tier the device can at least draw
    * empty. The second waits for `contentReady()`, since timing an empty tank picks a tier that is
-   * too high, and corrects it. After `contentTimeoutMs` it probes anyway, so a scene or fish that
-   * never loads cannot stall it.
+   * too high, and corrects it. `contentTimeoutMs` after `start()` it probes anyway, so a scene or
+   * fish that never loads cannot stall it.
    */
   awaitContent?: boolean;
   contentTimeoutMs?: number;
@@ -65,6 +65,7 @@ export class QualityManager {
   private readonly minGpuSamples: number;
   private readonly contentTimeoutMs: number;
   private hasContent: boolean;
+  private contentDeadline = Infinity;
   private tierAnnounced = false;
   private signal: TimingSignal | null = null;
 
@@ -108,7 +109,10 @@ export class QualityManager {
     return this.controller !== null;
   }
 
-  /** Registers a feature and applies the current tier to it immediately; not kept if that throws. */
+  /**
+   * Registers a feature and applies the current tier to it immediately; not kept if that throws.
+   * A tier change reaches the features in the order they registered.
+   */
   register(name: string, apply: ApplyTier): () => void {
     if (this.features.has(name)) {
       throw new Error(`QualityManager: feature "${name}" is already registered`);
@@ -134,6 +138,7 @@ export class QualityManager {
       this.announce(null, this.options.pinned, 'override');
       return;
     }
+    this.contentDeadline = nowMs + this.contentTimeoutMs;
     this.beginProbe(nowMs, this.hasContent);
   }
 
@@ -204,8 +209,8 @@ export class QualityManager {
     });
     if (!phase.content) {
       this.settle(result.tier);
-      if (this.hasContent) this.beginProbe(nowMs, true);
-      else this.phase = { kind: 'waiting', deadline: nowMs + this.contentTimeoutMs };
+      if (this.hasContent || nowMs >= this.contentDeadline) this.beginProbe(nowMs, true);
+      else this.phase = { kind: 'waiting', deadline: this.contentDeadline };
       return;
     }
     this.phase = { kind: 'running' };

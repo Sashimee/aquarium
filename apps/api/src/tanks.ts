@@ -30,6 +30,7 @@ import {
   type LifecycleFish,
   type LifecycleState,
 } from '@aquarium/sim/lifecycle';
+import { randomInt } from 'node:crypto';
 import { and, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -259,6 +260,7 @@ async function render(tx: Tx, ticked: Ticked, fishRows = ticked.fishRows): Promi
         tankId: f.tankId,
         species: f.species,
         name: f.name,
+        sex: f.sex,
         bornAt: f.bornAt.toISOString(),
         size: f.size,
         hunger: f.hunger,
@@ -491,6 +493,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
             tankId,
             species: spec.id,
             name: body.name,
+            sex: randomInt(2) === 0 ? 'male' : 'female',
             bornAt: new Date(clock.now()),
             size: spec.lifecycle.birthSizeM,
           })
