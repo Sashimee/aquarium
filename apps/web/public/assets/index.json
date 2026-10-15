@@ -2,7 +2,7 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; every texture has both files.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Anemone tentacle sway is \"_sway\" (0 base, 1 tip).",
-  "totalBytes": 60671428,
+  "totalBytes": 60672588,
   "assets": [
     {
       "id": "angelfish",
@@ -2019,36 +2019,36 @@
       "bounds": {
         "min": [
           -0.013884,
-          -0.01762,
-          -0.051485
+          -0.017626,
+          -0.052504
         ],
         "max": [
           0.013884,
-          0.014291,
-          0.034965
+          0.014285,
+          0.033946
         ]
       },
       "lods": [
         {
           "file": "fish/six-line-wrasse/lod0.glb",
-          "bytes": 43340,
-          "sha256": "c395a5e5f7d9766a9cd4e74a1c98cde561409663f81dafc2a74d46ab2cd75066",
+          "bytes": 43424,
+          "sha256": "1c65c40df4471c9b0d4b0038947acf2fb065b919ea1231bafc99c522bb9d654f",
           "triangles": 4320,
           "vertices": 2379
         },
         {
           "file": "fish/six-line-wrasse/lod1.glb",
-          "bytes": 22660,
-          "sha256": "2ea8d7a3dbee8df13511a9564053edb955959580b38ef795dc9d830d91a7fdff",
+          "bytes": 22644,
+          "sha256": "7655e4dc4a833bb8d8bd5369f11cd4f739c36377ac1293792929932ea46c2f3c",
           "triangles": 1727,
-          "vertices": 977
+          "vertices": 971
         },
         {
           "file": "fish/six-line-wrasse/lod2.glb",
-          "bytes": 11120,
-          "sha256": "32df5bf5780c1cfd67de553c164ee207856f80b894072a02665e437869dd2972",
-          "triangles": 648,
-          "vertices": 384
+          "bytes": 11136,
+          "sha256": "522b29f73584082a91b6b7ff4017a767976a791284e6fb6221a95f3bafd4c5c3",
+          "triangles": 647,
+          "vertices": 382
         }
       ],
       "textures": [
@@ -2059,15 +2059,15 @@
           "variants": {
             "1k": {
               "file": "fish/six-line-wrasse/textures/six-line-wrasse_basecolor_1k.ktx2",
-              "bytes": 96427,
-              "sha256": "385c5e7cb1fb53e120aff7dc369bc8dc43acb1d524afd1240b4e84a0b2ce458a",
+              "bytes": 96965,
+              "sha256": "afb5df3fd134b9fbc9e7afad2321550b8dfc69c4a870209fe3097c0ae435fc67",
               "size": 1024,
               "codec": "etc1s"
             },
             "2k": {
               "file": "fish/six-line-wrasse/textures/six-line-wrasse_basecolor_2k.ktx2",
-              "bytes": 96427,
-              "sha256": "385c5e7cb1fb53e120aff7dc369bc8dc43acb1d524afd1240b4e84a0b2ce458a",
+              "bytes": 96965,
+              "sha256": "afb5df3fd134b9fbc9e7afad2321550b8dfc69c4a870209fe3097c0ae435fc67",
               "size": 1024,
               "codec": "etc1s"
             }
@@ -2077,28 +2077,28 @@
       "files": [
         {
           "file": "fish/six-line-wrasse/lod0.glb",
-          "bytes": 43340,
-          "sha256": "c395a5e5f7d9766a9cd4e74a1c98cde561409663f81dafc2a74d46ab2cd75066"
+          "bytes": 43424,
+          "sha256": "1c65c40df4471c9b0d4b0038947acf2fb065b919ea1231bafc99c522bb9d654f"
         },
         {
           "file": "fish/six-line-wrasse/lod1.glb",
-          "bytes": 22660,
-          "sha256": "2ea8d7a3dbee8df13511a9564053edb955959580b38ef795dc9d830d91a7fdff"
+          "bytes": 22644,
+          "sha256": "7655e4dc4a833bb8d8bd5369f11cd4f739c36377ac1293792929932ea46c2f3c"
         },
         {
           "file": "fish/six-line-wrasse/lod2.glb",
-          "bytes": 11120,
-          "sha256": "32df5bf5780c1cfd67de553c164ee207856f80b894072a02665e437869dd2972"
+          "bytes": 11136,
+          "sha256": "522b29f73584082a91b6b7ff4017a767976a791284e6fb6221a95f3bafd4c5c3"
         },
         {
           "file": "fish/six-line-wrasse/textures/six-line-wrasse_basecolor_1k.ktx2",
-          "bytes": 96427,
-          "sha256": "385c5e7cb1fb53e120aff7dc369bc8dc43acb1d524afd1240b4e84a0b2ce458a"
+          "bytes": 96965,
+          "sha256": "afb5df3fd134b9fbc9e7afad2321550b8dfc69c4a870209fe3097c0ae435fc67"
         },
         {
           "file": "fish/six-line-wrasse/textures/six-line-wrasse_basecolor_2k.ktx2",
-          "bytes": 96427,
-          "sha256": "385c5e7cb1fb53e120aff7dc369bc8dc43acb1d524afd1240b4e84a0b2ce458a"
+          "bytes": 96965,
+          "sha256": "afb5df3fd134b9fbc9e7afad2321550b8dfc69c4a870209fe3097c0ae435fc67"
         }
       ],
       "fish": {

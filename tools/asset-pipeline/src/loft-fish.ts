@@ -656,6 +656,7 @@ export const LOFT_FISH_RECIPES: LoftFishRecipe[] = [
       finPalette: {
         caudal: {
           root: [62, 132, 52],
+          rootFromPhoto: true,
           tip: [96, 170, 72],
           rim: [118, 184, 88],
           rimStart: 0.8,
@@ -714,10 +715,11 @@ export const LOFT_FISH_RECIPES: LoftFishRecipe[] = [
         { t: 0.4, top: 0.168, bottom: -0.15, halfWidth: 0.072 },
         { t: 0.5, top: 0.166, bottom: -0.148, halfWidth: 0.07 },
         { t: 0.6, top: 0.157, bottom: -0.14, halfWidth: 0.065 },
-        { t: 0.7, top: 0.14, bottom: -0.122, halfWidth: 0.058 },
-        { t: 0.8, top: 0.116, bottom: -0.1, halfWidth: 0.05 },
-        { t: 0.9, top: 0.09, bottom: -0.08, halfWidth: 0.04 },
-        { t: 1, top: 0.07, bottom: -0.065, halfWidth: 0.03 },
+        { t: 0.7, top: 0.13, bottom: -0.112, halfWidth: 0.056 },
+        { t: 0.8, top: 0.1, bottom: -0.085, halfWidth: 0.046 },
+        { t: 0.9, top: 0.078, bottom: -0.066, halfWidth: 0.036 },
+        { t: 0.96, top: 0.066, bottom: -0.056, halfWidth: 0.03 },
+        { t: 1, top: 0.03, bottom: -0.026, halfWidth: 0.014 },
       ],
       fins: [
         {
