@@ -20,8 +20,10 @@ function staticClosure(bundle: OutputBundle, root: OutputChunk): Set<string> {
 /**
  * main.ts imports the three-heavy `src/tank.ts` lazily to keep it out of the initial JS budget,
  * which counts the entry and its modulepreloads. Without a hint its fetch waits for the entry to
- * run. A low-priority `rel=preload` starts it with the HTML instead, yields bandwidth to the
- * entry, and is reused by the later import because the destination and CORS mode match.
+ * run. A low-priority `rel=preload` starts it with the HTML instead and yields bandwidth to the
+ * entry. Chromium hands the preload to the later import; Firefox requests the file again and only
+ * avoids a second download because hashed assets are `immutable` (`staticCacheControl` in
+ * apps/api/src/app.ts).
  */
 export function tankPreloadPlugin(): Plugin {
   let base = '/';
