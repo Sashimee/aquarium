@@ -9,9 +9,13 @@ import {
   type InstancedBufferAttribute,
 } from 'three/webgpu';
 import {
+  CARCASS,
+  carcassFate,
+  carcassSettleS,
   quatFromYawPitchRoll,
   Rng,
   SimClient,
+  sinkingCarcass,
   SnapshotField,
   STEP_DT,
   type FishPlacement,
@@ -112,7 +116,8 @@ interface SpeciesBatch {
 }
 
 interface Script {
-  readonly kind: 'dying' | 'dead';
+  /** Fish rise and float belly-up; shrimp are denser than water and sink. */
+  readonly kind: 'dying' | 'dead' | 'sinking';
   readonly startS: number;
   readonly anchor: Anchor;
 }
@@ -827,13 +832,7 @@ export class FishSystem {
       script: null,
     };
     if (fish.phase === 'bagged') runtime.bagSlot = this.freeBagSlot();
-    if (fish.phase === 'dead') {
-      runtime.script = {
-        kind: 'dead',
-        startS: this.clockS,
-        anchor: deadAnchor(this.box, length, seed),
-      };
-    }
+    if (fish.phase === 'dead') runtime.script = this.deadScript(runtime);
     return runtime;
   }
 
@@ -853,11 +852,7 @@ export class FishSystem {
     this.held.release(fish.simId);
     rt.handover = 0;
     if (!rt.shown) {
-      rt.script = {
-        kind: 'dead',
-        startS: this.clockS,
-        anchor: deadAnchor(this.box, rt.length, rt.seed),
-      };
+      rt.script = this.deadScript(rt);
       return;
     }
     this.forward.set(0, 0, 1).applyQuaternion(rt.lastQuaternion);
@@ -867,7 +862,24 @@ export class FishSystem {
       z: rt.lastPosition.z,
       yaw: Math.atan2(this.forward.x, this.forward.z),
     };
-    rt.script = { kind: 'dying', startS: this.clockS, anchor };
+    rt.script = { kind: this.sinks(rt) ? 'sinking' : 'dying', startS: this.clockS, anchor };
+  }
+
+  private sinks(rt: FishRuntime): boolean {
+    return carcassFate(rt.batch.input.locomotion.swimmingMode) === 'sink';
+  }
+
+  /** A body that was dead before it was drawn: afloat at the surface, or a shrimp already down. */
+  private deadScript(rt: FishRuntime): Script {
+    const anchor = deadAnchor(this.box, rt.length, rt.seed);
+    if (!this.sinks(rt)) return { kind: 'dead', startS: this.clockS, anchor };
+    const floorY = this.box.ground(anchor.x, anchor.z);
+    const onFloor = { ...anchor, y: floorY + CARCASS.restBellyBodyLengths * rt.length };
+    return {
+      kind: 'sinking',
+      startS: this.clockS - carcassSettleS(onFloor, rt.length, rt.seed, floorY),
+      anchor: onFloor,
+    };
   }
 
   /** Drops the runtimes of fish that left the roster. */
@@ -1112,9 +1124,15 @@ export class FishSystem {
       if (rt.bagSlot === null) return false;
     }
     if (rt.script !== null) {
-      const t = this.clockS - rt.script.startS;
-      const animate = rt.script.kind === 'dying' ? dyingPose : deadPose;
-      animate(t, rt.script.anchor, rt.length, rt.seed, this.box, pose);
+      const { kind, anchor, startS } = rt.script;
+      const t = this.clockS - startS;
+      if (kind === 'sinking') {
+        const floorY = this.box.ground(anchor.x, anchor.z);
+        sinkingCarcass(t, anchor, rt.length, rt.seed, floorY, pose);
+      } else {
+        const animate = kind === 'dying' ? dyingPose : deadPose;
+        animate(t, anchor, rt.length, rt.seed, this.box, pose);
+      }
     } else {
       rt.bagSlot ??= this.freeBagSlot();
       bagPose(this.clockS, rt.bagSlot, rt.length, rt.seed, this.box, pose);
