@@ -101,7 +101,7 @@ export const FISH_RECIPES: FishRecipe[] = [
     fallbackLengthM: 0.12,
     modifications: [
       '4096 px colour and normal maps downscaled to the 1k and 2k tiers',
-      'mouth patch material dropped: it reused the body normal map for 22 triangles',
+      "'Material' (22 triangles, the mouth patch) dropped: it reused the body normal map; Material.001, .002 and .003 kept",
     ],
   },
   {

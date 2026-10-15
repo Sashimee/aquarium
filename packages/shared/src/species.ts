@@ -10,6 +10,7 @@ export const swimmingModeSchema = z.enum([
   'subcarangiform',
   'labriform',
   'anguilliform',
+  'pleopod',
 ]);
 export const gaitSchema = z.enum(['burst-and-coast', 'cruise', 'hover', 'forage']);
 export const zoneSchema = z.enum(['surface', 'mid', 'bottom']);
@@ -22,6 +23,8 @@ export const traitSchema = z.enum([
   'anemone-host',
   'cave-dweller',
   'flare-display',
+  'biofilm-grazer',
+  'cleaner',
 ]);
 export type Trait = z.infer<typeof traitSchema>;
 
@@ -88,6 +91,25 @@ export const behaviourSchema = z.strictObject({
     .optional(),
 });
 
+export const walkSurfaceSchema = z.enum(['substrate', 'decor', 'glass']);
+
+export const walkingSchema = z.strictObject({
+  walkSpeedMps: positive.describe('typical stepping speed on a surface'),
+  strideBodyLengths: z
+    .number()
+    .min(0.05)
+    .max(1)
+    .describe('body lengths per full leg cycle; drives the leg phase'),
+  legPairs: z.int().min(4).max(5).describe('pereiopods that walk; render only'),
+  surfaces: z.array(walkSurfaceSchema).min(1),
+  tailFlip: z.strictObject({
+    speedMps: positive.describe('mean escape speed'),
+    durationS: z.number().positive().max(0.5),
+    refractoryS: z.number().positive().max(10),
+  }),
+});
+export type Walking = z.infer<typeof walkingSchema>;
+
 export const locomotionSchema = z
   .strictObject({
     swimmingMode: swimmingModeSchema,
@@ -97,7 +119,8 @@ export const locomotionSchema = z
     massKg: positive,
     maxTurnRateDegPerS: positive,
     maxPitchDeg: z.number().min(0).max(90),
-    strouhal: z.number().min(0.2).max(0.4).default(0.3),
+    strouhal: z.number().min(0.2).max(0.4).default(0.3).describe('ignored by walkers'),
+    walking: walkingSchema.optional(),
     bodyLengthM: positive.describe(
       'standard length (snout to caudal peduncle, fin excluded) in metres of the fish the speeds and mass describe; the renderer scales the model so its standard length matches',
     ),
@@ -105,6 +128,10 @@ export const locomotionSchema = z
   .refine((l) => l.cruiseSpeedMps <= l.maxSpeedMps, {
     message: 'cruiseSpeedMps must not exceed maxSpeedMps',
     path: ['cruiseSpeedMps'],
+  })
+  .refine((l) => (l.swimmingMode === 'pleopod') === (l.walking !== undefined), {
+    message: 'walking is required for, and only valid with, swimmingMode "pleopod"',
+    path: ['walking'],
   });
 
 export const renderSchema = z.strictObject({
@@ -149,6 +176,23 @@ export const speciesSchema = z.strictObject({
   lifecycle: lifecycleSchema,
 });
 export type Species = z.infer<typeof speciesSchema>;
+
+// Cross-block rules live outside speciesSchema because refined objects cannot be .partial()-ed.
+export function checkSpeciesRules(
+  species: { behaviour: { traits: Trait[] }; locomotion: { walking?: unknown } },
+  ctx: z.RefinementCtx,
+): void {
+  if (
+    species.behaviour.traits.includes('biofilm-grazer') &&
+    species.locomotion.walking === undefined
+  ) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'trait "biofilm-grazer" requires locomotion.walking',
+      path: ['behaviour', 'traits'],
+    });
+  }
+}
 
 export const speciesSummarySchema = z.strictObject({
   id: slugSchema,
@@ -203,3 +247,7 @@ export const presetLayoutSchema = z.strictObject({
   current: presetCurrentSchema.optional(),
 });
 export type PresetLayout = z.infer<typeof presetLayoutSchema>;
+
+export const speciesContentSchema = speciesSchema
+  .partial({ render: true })
+  .superRefine(checkSpeciesRules);

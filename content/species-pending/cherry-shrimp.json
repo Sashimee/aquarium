@@ -7,7 +7,7 @@
     "perceptionRangeM": 0.15,
     "preferredZone": "bottom",
     "territorial": false,
-    "traits": ["cave-dweller"]
+    "traits": ["cave-dweller", "biofilm-grazer"]
   },
   "biome": "freshwater",
   "commonName": "Cherry shrimp",
@@ -18,7 +18,7 @@
     "bioload": 0.1,
     "birthSizeM": 0.01,
     "diet": ["algae-wafer", "flakes", "pellets"],
-    "growthPerDay": 0.00005,
+    "growthPerDay": 5e-5,
     "healthLossPerHourStarving": 0.0085,
     "healthRecoveryPerHour": 0.004,
     "hungerPerHour": 0.005,
@@ -35,7 +35,18 @@
     "maxSpeedMps": 0.4,
     "maxTurnRateDegPerS": 720,
     "strouhal": 0.3,
-    "swimmingMode": "subcarangiform"
+    "swimmingMode": "pleopod",
+    "walking": {
+      "walkSpeedMps": 0.012,
+      "strideBodyLengths": 0.35,
+      "legPairs": 5,
+      "surfaces": ["substrate", "decor", "glass"],
+      "tailFlip": {
+        "speedMps": 0.4,
+        "durationS": 0.15,
+        "refractoryS": 2
+      }
+    }
   },
   "scientificName": "Neocaridina davidi"
 }
