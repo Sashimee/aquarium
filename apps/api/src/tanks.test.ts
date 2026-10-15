@@ -854,6 +854,45 @@ describe('PATCH decor layout validation', () => {
     expect(res.statusCode).toBe(200);
   });
 
+  describe('edited flag', () => {
+    const fetchTank = async (id: string) =>
+      tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${id}`)).json());
+    const storedColumn = async (id: string) => {
+      const [row] = await h.database.db.select().from(schema.tanks).where(eq(schema.tanks.id, id));
+      return row?.decorLayout;
+    };
+
+    it('reports a new tank as never edited and stores null', async () => {
+      const tank = await createTank(h, cookie);
+      expect(tank.decorEdited).toBe(false);
+      expect(tank.decorLayout).toEqual([]);
+      expect(await storedColumn(tank.id)).toBeNull();
+    });
+
+    it('tells an emptied layout from a never-edited one', async () => {
+      const tank = await createTank(h, cookie);
+      await patch(tank.id, [piece('driftwood-branch')]);
+      expect((await fetchTank(tank.id)).decorEdited).toBe(true);
+      const emptied = tankSchema.parse((await patch(tank.id, [])).json());
+      expect(emptied.decorEdited).toBe(true);
+      expect(emptied.decorLayout).toEqual([]);
+      expect(await storedColumn(tank.id)).toEqual([]);
+      expect(await fetchTank(tank.id)).toMatchObject({ decorEdited: true, decorLayout: [] });
+    });
+
+    it('stays never edited after a rename', async () => {
+      const tank = await createTank(h, cookie);
+      await call(h, cookie, 'PATCH', `/api/tanks/${tank.id}`, { name: 'Renamed' });
+      expect((await fetchTank(tank.id)).decorEdited).toBe(false);
+    });
+
+    it('treats a null column as no vacation feeder', async () => {
+      const tank = await createTank(h, cookie);
+      expect(await storedColumn(tank.id)).toBeNull();
+      expect((await fetchTank(tank.id)).fish).toEqual([]);
+    });
+  });
+
   it('keeps old junk readable but refuses to save it again', async () => {
     const tank = await createTank(h, cookie);
     const junk = [piece('legacy-thing', [3, 0, 3]), piece('vacation-feeder')];
