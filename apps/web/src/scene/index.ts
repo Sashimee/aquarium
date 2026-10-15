@@ -17,7 +17,8 @@ const BUILD_TIMEOUT_MS = 90_000;
 
 /**
  * Builds the biome's preset into the engine's tank; `search` carries `?colliders=1`. Aborting
- * `signal` rejects at once and disposes whatever the abandoned build still produces.
+ * `signal` stops the build at its next checkpoint, disposes whatever it produced, and only then
+ * rejects with the abort reason.
  */
 export function mountPreset(
   engine: Engine,
