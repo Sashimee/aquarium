@@ -297,3 +297,33 @@ Measured from each downloaded `scene.gltf`. Rigged means the glTF has at least o
 | Ancistrus sp. Orange (`sketchfab-65133817`) | 40,000 | 3 images, largest 2048x2048 | 0 / 0 | 0 |
 
 Effect on the picks: none of the picks flipped. The neon tetra, betta and both guppies ship skeletons (30, 53, 44 and 191 joints) that the pipeline can reuse or replace with a spine rig; the clownfish, both tangs and the angelfish are unrigged static meshes and need the procedural spine rig. The angelfish uses unlit materials, the water plant has no textures, and the brain coral is 8192x8192 and must be downscaled. Blue and yellow tang stay as weak candidates for the auditor to weigh against the loft fallback.
+
+## Tank backgrounds (issue #616, T26)
+
+Checked 2026-10-16. Photographs from Wikimedia Commons; licence read from the file page metadata, and the Commons sha1 matches each download. Picks are in the manifest (`kind: "background"`, with a 2:1 `crop` box); raw files stay in `~/.cache/aquarium-assets/raw/<id>/original.jpg`. Every crop is at least 3618 px wide, so the T27 step can resize to 2048x1024 and encode KTX2. Nothing here is processed or committed as an image.
+
+Poly Haven, ambientCG and Smithsonian have no underwater or aquarium-backdrop photos, and Sketchfab holds models rather than pictures, so every candidate is from Commons. CC BY 2.0, CC BY-SA, public-domain-mark and unclear files were skipped.
+
+### Freshwater
+
+| Slot | Pick | Licence | Source | Caveat |
+|---|---|---|---|---|
+| Dense planted stream | `bg-fw-planted-stream` | CC BY 4.0, Vyacheslav Argenberg | 4032x2688 | A jungle stream bank, not underwater. Strong dappled light. |
+| Amazon root tangle | `bg-fw-root-tangle` | CC BY 4.0, Vinno Christopan | 4608x3072 | Mangrove roots, not igapo. Muted brown. |
+| Rocky riverbed | `bg-fw-rocky-riverbed` | CC0, USDA (Flickr) | 8256x4640 | Dry shore pebbles. Crop avoids the concrete lip and pale smear. |
+| Misty lake bank | `bg-fw-misty-lake` | CC BY 4.0, Vyacheslav Argenberg | 4032x2688 | Low contrast, pale at the top. |
+| Deep green plant wall | `bg-fw-plant-wall` | CC0, W.carter | 4378x2918 | Moss and ferns, rich greens. |
+
+Runners-up not taken: `Nature Aquarium Aquascape.jpg` (CC0; a glass tank with a visible rim), `Misty lake (Unsplash).jpg` and `Mist over the lake shore (Unsplash).jpg` (CC0 on Commons but re-uploaded from Unsplash, so the CC0 claim is second-hand), `Fallen tree and ferns (Unsplash).jpg` (too dark), `Mangrove Floating roots.jpg` (CC BY 4.0, brown water and a bright sky patch).
+
+### Reef
+
+| Slot | Pick | Licence | Source | Caveat |
+|---|---|---|---|---|
+| Coral reef wall | `bg-reef-coral-wall` | CC BY 4.0, 74papa | 5472x3072 | Good. A few small fish in the frame. |
+| Open blue with light rays | `bg-reef-light-rays` | CC BY 4.0, Olivier Dugornay (Ifremer) | 7360x4912 | A sun starburst in Brittany: dark teal, no reef. Weakest match to "open blue". |
+| Reef slope with fish silhouettes | `bg-reef-fish-slope` | CC BY 4.0, 74papa | 3618x2373 | Smallest source of the set. Anthias are sharp, not silhouettes. |
+| Soft-coral garden | `bg-reef-soft-coral` | CC BY 4.0, AlexeiAVA | 4000x3000 | One sea fan colony, close up. |
+| Dark deep-blue with distant reef | `bg-reef-deep-blue` | CC0, Jstuby | 5184x3888 | Mid blue rather than dark. Darken in the pipeline if wanted. |
+
+Runners-up not taken: `Beneath Sipadan Island.jpeg` (CC0; murky violet-grey), `Caribbean Reef Shark School Tiger Beach Bahamas.jpg` (CC0; the shark is the subject), `Four butterfly fish swim over a coral reef.jpg` (CC BY 4.0; the fish are the subject), `Deep blue cozumel 2018.jpg` (CC0; a diver in frame), the other Ifremer "Ambiance sous-marine" files (a diver in every frame), `Рифы бухты Шарм-Эль-Майя.jpg` (CC0; a close second for the reef wall).
