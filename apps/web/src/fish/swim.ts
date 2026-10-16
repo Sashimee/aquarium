@@ -100,6 +100,21 @@ const COAST_DECAY_PER_PERIOD = 3;
 export const RESTING_VENTILATION_HZ = 1.4;
 export const EXERTED_VENTILATION_HZ = 3;
 const RESTING_GILL_STROKE = 0.6;
+/**
+ * The mouth and the gill covers are the two pumps of one ventilation cycle (Hughes 1960, J Exp
+ * Biol 37:28): the mouth opens to fill the buccal cavity while the covers are still shut, and
+ * closes before they flare to let the water out. Its widest gape comes this share of a cycle ahead
+ * of the covers' widest flare; a visual estimate.
+ */
+export const MOUTH_LEAD_CYCLES = 0.35;
+/** A breath gapes this share of a feeding bite. */
+export const BREATH_GAPE = 0.3;
+/**
+ * A suction-feeding bite opens to its full gape in tens of milliseconds and closes again within a
+ * few hundred; stretched to the shortest that still reads at 60 Hz.
+ */
+export const BITE_OPEN_S = 0.05;
+export const BITE_CLOSE_S = 0.2;
 const EXERTION_SETTLE_S = 2.5;
 const DRIVE_RISE_S = 0.03;
 const TAU = Math.PI * 2;
@@ -153,6 +168,23 @@ export interface SwimSample {
   thrust: number;
 }
 
+/** A feeding bite's gape `t` seconds after it starts: 0 shut .. 1 wide open. */
+export function biteGape(t: number): number {
+  if (!(t >= 0) || t >= BITE_OPEN_S + BITE_CLOSE_S) return 0;
+  if (t < BITE_OPEN_S) {
+    const x = t / BITE_OPEN_S;
+    return x * x * (3 - 2 * x);
+  }
+  const x = (t - BITE_OPEN_S) / BITE_CLOSE_S;
+  return 1 - x * x * (3 - 2 * x);
+}
+
+/** The time into a bite's opening at which it has reached `gape`. */
+function openingTime(gape: number): number {
+  const g = clamp(gape, 0, 1);
+  return BITE_OPEN_S * (0.5 - Math.sin(Math.asin(1 - 2 * g) / 3));
+}
+
 /**
  * Per-fish swim phase. Frequency changes with speed, so the phase is integrated rather than
  * computed as f·t: f·t would jump whenever f changes.
@@ -168,6 +200,8 @@ export class SwimState {
   /** 0 hovering .. 1 cruising, the body-wave amplitude slowly averaged. */
   exertion = IDLE_AMPLITUDE;
   ventilationPhase: number;
+  /** Seconds since the last feeding bite started. */
+  sinceBite = Infinity;
 
   constructor(
     readonly length: number,
@@ -187,6 +221,19 @@ export class SwimState {
     return stroke * 0.5 * (1 - Math.cos(this.ventilationPhase));
   }
 
+  /** Mouth 0 shut .. 1 gaping at a bite; a breath opens it to `BREATH_GAPE` at most. */
+  get mouthOpening(): number {
+    const stroke = RESTING_GILL_STROKE + (1 - RESTING_GILL_STROKE) * this.exertion;
+    const lead = MOUTH_LEAD_CYCLES * TAU;
+    const breath = BREATH_GAPE * stroke * 0.5 * (1 - Math.cos(this.ventilationPhase + lead));
+    return breath + (1 - breath) * biteGape(this.sinceBite);
+  }
+
+  /** Starts a feeding gape, picking up from the gape of a bite still under way. */
+  bite(): void {
+    this.sinceBite = openingTime(biteGape(this.sinceBite));
+  }
+
   advance(dt: number, sample: SwimSample): void {
     if (!(dt >= 0)) throw new RangeError(`swim: dt must be >= 0, got ${dt}`);
     const { length } = this;
@@ -202,6 +249,7 @@ export class SwimState {
     const ventilationHz =
       RESTING_VENTILATION_HZ + (EXERTED_VENTILATION_HZ - RESTING_VENTILATION_HZ) * this.exertion;
     this.ventilationPhase = (this.ventilationPhase + TAU * ventilationHz * dt) % TAU;
+    this.sinceBite += dt;
     const target = turnCurvature(sample.yawRate, sample.speed, length);
     const k = 1 - Math.exp(-dt / BEND_SMOOTHING_S);
     this.curvature += (target - this.curvature) * k;

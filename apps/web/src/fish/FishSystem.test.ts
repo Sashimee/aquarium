@@ -271,6 +271,7 @@ function shrimpModel(assetId: string): FishModel {
           geometry: new BoxGeometry(0.008, 0.008, 0.025),
           source: new MeshStandardMaterial(),
           legPivots: [],
+          mouth: false,
         },
       ],
     ],

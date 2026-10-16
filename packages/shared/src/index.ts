@@ -9,3 +9,4 @@ export * from './legal.js';
 export * from './collider.js';
 export * from './tankSpace.js';
 export * from './decorRules.js';
+export * from './backgrounds.js';

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   effectiveDistance,
   markNearest,
+  MOUTH_LODS,
+  mouthFade,
   REFERENCE_LENGTH_M,
   selectLod,
   type MeshRank,
@@ -89,5 +91,44 @@ describe('markNearest', () => {
 
   it('rejects a negative limit', () => {
     expect(() => markNearest(ranks(1), -1)).toThrow(RangeError);
+  });
+});
+
+describe('mouthFade', () => {
+  it('moves the mouth fully up close and through lod0', () => {
+    expect(mouthFade(0, L, thresholds)).toBe(1);
+    expect(mouthFade(1, L, thresholds)).toBe(1);
+  });
+
+  it('fades out monotonically across the mid band', () => {
+    let last = 1;
+    for (let d = 1; d <= 2; d += 0.05) {
+      const fade = mouthFade(d, L, thresholds);
+      expect(fade).toBeLessThanOrEqual(last);
+      last = fade;
+    }
+    expect(mouthFade(1.4, L, thresholds)).toBeGreaterThan(0);
+    expect(mouthFade(1.4, L, thresholds)).toBeLessThan(1);
+  });
+
+  it('is gone wherever a fish could be drawn at a level without a moving mouth', () => {
+    for (let d = 0; d < 6; d += 0.01) {
+      for (const current of [0, 1, 2]) {
+        if (selectLod(d, L, thresholds, current) >= MOUTH_LODS) {
+          expect(mouthFade(d, L, thresholds), `at ${d} from lod${current}`).toBe(0);
+        }
+      }
+    }
+  });
+
+  it('keeps bigger fish moving their mouths further away', () => {
+    expect(mouthFade(1.5, 2 * L, thresholds)).toBe(1);
+    expect(mouthFade(1.5, L, thresholds)).toBeLessThan(1);
+  });
+
+  it('cuts at the lod2 switch when the mid band is too narrow to fade across', () => {
+    const narrow = { midDistance: 2, impostorDistance: 2 };
+    expect(mouthFade(1.8, L, narrow)).toBe(1);
+    expect(mouthFade(1.9, L, narrow)).toBe(0);
   });
 });

@@ -46,7 +46,7 @@ import {
   type InstanceValues,
   type WalkerValues,
 } from './instances';
-import { effectiveDistance, markNearest, selectLod, type LodThresholds } from './lod';
+import { effectiveDistance, markNearest, mouthFade, selectLod, type LodThresholds } from './lod';
 import { featuresFor, sameFeatures, waitsForReload } from './features';
 import {
   disposeImpostorAtlas,
@@ -179,6 +179,8 @@ interface FishRuntime {
   readonly filmThickness: number;
   readonly condition: number;
   lod: number;
+  /** Camera distance this frame, in metres. */
+  cameraDistance: number;
   /** Length-normalised camera distance this frame. */
   distance: number;
   /** One of the tier's nearest fish, drawn as a mesh at any LOD short of lod2. */
@@ -372,6 +374,7 @@ export class FishSystem {
     filmThickness: 0,
     tint: [1, 1, 1],
     gills: 0,
+    mouth: 0,
   };
 
   /**
@@ -802,6 +805,7 @@ export class FishSystem {
           zMax: model.entry.max[2],
           instances,
           lighting,
+          mouth: part.mouth,
         });
         if (this.features !== null) material.setFeatures(this.features);
         const mesh = new InstancedMesh(part.geometry, material, capacity);
@@ -1016,6 +1020,7 @@ export class FishSystem {
       filmThickness: lo + (hi - lo) * rng.next(),
       condition: Math.min(1, Math.max(0, 1 - fish.health)) * SICK_PALING,
       lod: 0,
+      cameraDistance: 0,
       distance: 0,
       full: true,
       liveliness: 1,
@@ -1243,6 +1248,11 @@ export class FishSystem {
     worker.addEventListener('error', this.simErrors.workerFailed);
     sim.onSnapshot((snapshot) => this.stream.push(snapshot, performance.now()));
     sim.onAte((events) => {
+      for (const { fishId } of events) {
+        if (this.roster.get(fishId)?.phase !== 'swimming') continue;
+        const motion = this.runtimes.get(fishId)?.motion;
+        if (motion instanceof SwimState) motion.bite();
+      }
       const bites = this.roster.translateAte(events);
       if (bites.length === 0) return;
       for (const listener of this.ateListeners) listener(bites);
@@ -1451,6 +1461,7 @@ export class FishSystem {
       rt.shown = true;
       rt.liveliness = liveliness;
       const distance = this.position.distanceTo(camera);
+      rt.cameraDistance = distance;
       rt.distance = effectiveDistance(distance, rt.length);
       rt.lod = selectLod(distance, rt.length, this.thresholds, rt.lod, rt.batch.lods.length);
       if (rt.batch.impostor !== null) ranked.push(rt);
@@ -1525,6 +1536,10 @@ export class FishSystem {
     v.filmThickness = rt.filmThickness;
     v.tint = rt.tint;
     v.gills = (swim?.gillOpening ?? 0) * liveliness;
+    v.mouth =
+      swim === null
+        ? 0
+        : swim.mouthOpening * liveliness * mouthFade(rt.cameraDistance, rt.length, this.thresholds);
     lod.instances.write(slot, v);
     const { locomotion } = rt.batch;
     if (motion instanceof WalkState && locomotion.kind === 'walk') {
