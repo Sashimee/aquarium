@@ -25,19 +25,22 @@ export function vibratorOf(nav: object | undefined): Vibrator | null {
   return nav && 'vibrate' in nav && typeof nav.vibrate === 'function' ? (nav as Vibrator) : null;
 }
 
+function localStorageOrNull(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
 export function browserHapticsDeps(): HapticsDeps {
   const nav = typeof navigator === 'undefined' ? undefined : navigator;
-  const activation = (nav as (Navigator & { userActivation?: { hasBeenActive: boolean } }) | undefined)
-    ?.userActivation;
-  let storage: Storage | null = null;
-  try {
-    storage = window.localStorage;
-  } catch {
-    storage = null;
-  }
+  const activation = (
+    nav as (Navigator & { userActivation?: { hasBeenActive: boolean } }) | undefined
+  )?.userActivation;
   return {
     vibrator: vibratorOf(nav),
-    storage,
+    storage: localStorageOrNull(),
     now: () => performance.now(),
     userHasActivated: () => activation?.hasBeenActive ?? true,
   };
