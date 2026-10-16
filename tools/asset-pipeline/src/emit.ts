@@ -132,7 +132,15 @@ export interface EmitInput {
   atlasSink?: (id: string, atlas: Atlas) => void;
   meta: Pick<
     OutputAsset,
-    'species' | 'origin' | 'sources' | 'licence' | 'modifications' | 'fish' | 'shrimp'
+    | 'species'
+    | 'origin'
+    | 'sources'
+    | 'licence'
+    | 'modifications'
+    | 'fish'
+    | 'shrimp'
+    | 'crab'
+    | 'snail'
   >;
 }
 
@@ -288,5 +296,7 @@ export async function emitAsset(input: EmitInput): Promise<OutputAsset> {
     ...(impostor ? { impostor } : {}),
     ...(input.meta.fish ? { fish: input.meta.fish } : {}),
     ...(input.meta.shrimp ? { shrimp: input.meta.shrimp } : {}),
+    ...(input.meta.crab ? { crab: input.meta.crab } : {}),
+    ...(input.meta.snail ? { snail: input.meta.snail } : {}),
   };
 }
