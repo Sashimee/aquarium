@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, posix, relative, sep } from 'node:path';
+import { MeshoptDecoder } from 'meshoptimizer';
 import { speciesLengthM } from './fish.ts';
 import { readKtx2Info } from './textures.ts';
 import { FISH_RECIPES } from './recipes.ts';
@@ -13,6 +14,7 @@ import {
   IMPOSTOR_MAX_BYTES,
   LEG_ATTRIBUTE,
   LOD_COUNT,
+  MOUTH_ATTRIBUTE,
   assetIndexSchema,
   type AssetIndex,
   type OutputAsset,
@@ -29,6 +31,8 @@ import {
   type ManifestAsset,
 } from './manifest.ts';
 
+await MeshoptDecoder.ready;
+
 export const BUDGET_BYTES = 150 * 1000 * 1000;
 
 export interface CheckInput {
@@ -43,6 +47,29 @@ export interface CheckInput {
 export function readGlbJson(buffer: Uint8Array): {
   meshes?: { primitives: { attributes: Record<string, number> }[] }[];
   images?: { uri?: string }[];
+  accessors?: {
+    bufferView?: number;
+    byteOffset?: number;
+    count: number;
+    componentType?: number;
+    normalized?: boolean;
+    type?: string;
+  }[];
+  bufferViews?: {
+    byteStride?: number;
+    byteOffset?: number;
+    byteLength: number;
+    extensions?: {
+      EXT_meshopt_compression?: {
+        byteOffset?: number;
+        byteLength: number;
+        byteStride: number;
+        count: number;
+        mode: string;
+        filter?: string;
+      };
+    };
+  }[];
 } {
   const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
   if (buffer.byteLength < 20 || view.getUint32(0, true) !== 0x46546c67) {
@@ -131,9 +158,88 @@ function safeDecodeUri(uri: string): string {
 const SHIPPED_EXTENSIONS: readonly string[] = ['.glb', '.ktx2'];
 
 function requiredAttributes(kind: OutputAsset['kind']): string[] {
-  if (kind === 'fish') return [FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE];
+  if (kind === 'fish') return [FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE, MOUTH_ATTRIBUTE];
   if (kind === 'shrimp') return [FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE, LEG_ATTRIBUTE];
   return [];
+}
+
+function readGlbBin(buffer: Uint8Array): Uint8Array {
+  const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  const binStart = 20 + view.getUint32(12, true) + 8;
+  if (buffer.byteLength < binStart || view.getUint32(binStart - 4, true) !== 0x004e4942)
+    throw new Error('second GLB chunk is not BIN');
+  return buffer.subarray(binStart, binStart + view.getUint32(binStart - 8, true));
+}
+
+function readFloatAccessor(
+  json: ReturnType<typeof readGlbJson>,
+  bin: Uint8Array,
+  index: number,
+): Float32Array {
+  const accessor = json.accessors?.[index];
+  const view =
+    accessor?.bufferView === undefined ? undefined : json.bufferViews?.[accessor.bufferView];
+  if (!accessor || !view) throw new Error(`accessor ${index} has no buffer view`);
+  if (accessor.componentType !== 5126 || accessor.normalized || accessor.type !== 'SCALAR')
+    throw new Error(
+      `accessor ${index} must be non-normalised float32 SCALAR (got componentType ${accessor.componentType}, normalized ${accessor.normalized ?? false}, type ${accessor.type}); the check reads raw floats`,
+    );
+  if (view.byteStride !== undefined && view.byteStride !== 4)
+    throw new Error(
+      `accessor ${index} has byteStride ${view.byteStride}; the check needs a tightly packed float32 view`,
+    );
+  if (
+    view.extensions?.EXT_meshopt_compression?.byteStride !== undefined &&
+    view.extensions.EXT_meshopt_compression.byteStride !== 4
+  )
+    throw new Error(
+      `accessor ${index} has a meshopt byteStride other than 4; the check needs a tightly packed float32 view`,
+    );
+  const compressed = view.extensions?.EXT_meshopt_compression;
+  let bytes: Uint8Array;
+  if (compressed) {
+    bytes = new Uint8Array(compressed.count * compressed.byteStride);
+    const source = bin.subarray(
+      compressed.byteOffset ?? 0,
+      (compressed.byteOffset ?? 0) + compressed.byteLength,
+    );
+    MeshoptDecoder.decodeGltfBuffer(
+      bytes,
+      compressed.count,
+      compressed.byteStride,
+      source,
+      compressed.mode,
+      compressed.filter ?? 'NONE',
+    );
+  } else {
+    bytes = bin.slice(view.byteOffset ?? 0, (view.byteOffset ?? 0) + view.byteLength);
+  }
+  const start = accessor.byteOffset ?? 0;
+  return new Float32Array(bytes.buffer, bytes.byteOffset + start, accessor.count);
+}
+
+function mouthProblems(
+  json: ReturnType<typeof readGlbJson>,
+  bin: Uint8Array,
+  primitives: { attributes: Record<string, number> }[],
+  at: string,
+  problems: string[],
+): void {
+  let low = Infinity;
+  let high = -Infinity;
+  for (const primitive of primitives) {
+    const index = primitive.attributes[MOUTH_ATTRIBUTE];
+    if (index === undefined) continue;
+    for (const value of readFloatAccessor(json, bin, index)) {
+      low = Math.min(low, value);
+      high = Math.max(high, value);
+    }
+  }
+  if (!Number.isFinite(low) || !Number.isFinite(high)) return;
+  if (low < 0 || high > 1)
+    problems.push(`${at}: ${MOUTH_ATTRIBUTE} range ${low}..${high} is outside 0..1`);
+  else if (high <= 0)
+    problems.push(`${at}: ${MOUTH_ATTRIBUTE} is 0 on every vertex; the mouth mask was not baked`);
 }
 
 function lodProblems(asset: OutputAsset, assetsDir: string, problems: string[]): void {
@@ -155,7 +261,8 @@ function lodProblems(asset: OutputAsset, assetsDir: string, problems: string[]):
       continue;
     }
     try {
-      const json = readGlbJson(readFileSync(path));
+      const bytes = readFileSync(path);
+      const json = readGlbJson(bytes);
       const primitives = (json.meshes ?? []).flatMap((m) => m.primitives);
       if (primitives.length === 0) problems.push(`${at}: ${lod.file} has no mesh primitives`);
       for (const image of json.images ?? []) {
@@ -172,6 +279,8 @@ function lodProblems(asset: OutputAsset, assetsDir: string, problems: string[]):
           problems.push(`${at}: ${lod.file} lacks vertex attribute ${attr}`);
         }
       }
+      if (asset.kind === 'fish')
+        mouthProblems(json, readGlbBin(bytes), primitives, `${at}: ${lod.file}`, problems);
     } catch (error) {
       problems.push(`${at}: ${lod.file} is unreadable: ${(error as Error).message}`);
     }

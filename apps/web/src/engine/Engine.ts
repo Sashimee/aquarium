@@ -228,7 +228,7 @@ export class Engine {
     this.gpuTiming = renderer.hasFeature('timestamp-query');
     const profile = qualityProfile(hasCoarsePointer());
     this.quality = new QualityManager(events, {
-      gpuTiming: this.gpuTiming,
+      gpuTiming: this.gpuTiming && profile.gpuTiming,
       pinned: config.options.tier,
       adaptive: config.options.adaptive,
       targetMs: profile.targetMs,

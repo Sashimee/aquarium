@@ -7,6 +7,7 @@ import { packGlb, sha256 } from './glb.ts';
 import {
   FIN_ID_ATTRIBUTE,
   FIN_MASK_ATTRIBUTE,
+  MOUTH_ATTRIBUTE,
   LEG_ATTRIBUTE,
   type AssetIndex,
   type OutputAsset,
@@ -187,15 +188,29 @@ describe('checkAssets', () => {
     return { file: relative, bytes: bytes.byteLength, sha256: sha256(bytes) };
   }
 
-  function glb(attributes: string[], imageUris: string[] = []): Uint8Array {
+  function glb(
+    attributes: string[],
+    imageUris: string[] = [],
+    mouth: number[] = [0, 0.4, 1],
+  ): Uint8Array {
     const attrs = Object.fromEntries(attributes.map((name, i) => [name, i]));
+    const data = new Uint8Array(Float32Array.from(mouth).buffer);
+    const accessors = attributes.map(() => ({
+      bufferView: 0,
+      componentType: 5126,
+      count: mouth.length,
+      type: 'SCALAR',
+    }));
     return packGlb(
       {
         asset: { version: '2.0' },
+        buffers: [{ byteLength: data.byteLength }],
+        bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: data.byteLength }],
+        accessors,
         meshes: [{ primitives: [{ attributes: attrs }] }],
         ...(imageUris.length > 0 ? { images: imageUris.map((uri) => ({ uri })) } : {}),
       },
-      new Uint8Array(4),
+      data,
     );
   }
 
@@ -244,20 +259,23 @@ describe('checkAssets', () => {
     };
   }
 
+  const FISH_ATTRIBUTES = ['POSITION', FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE, MOUTH_ATTRIBUTE];
+
   function fishAsset(
     options: {
       attributes?: string[];
       triangles?: number[];
       lodCount?: number;
       impostor?: Parameters<typeof impostorOf>[0] | false;
+      mouth?: number[];
     } = {},
   ): OutputAsset {
     const atlas = options.impostor === false ? null : impostorOf(options.impostor);
-    const attributes = options.attributes ?? ['POSITION', FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE];
+    const attributes = options.attributes ?? FISH_ATTRIBUTES;
     const triangles = options.triangles ?? [300, 150, 50];
     const lodCount = options.lodCount ?? 3;
     const lods = Array.from({ length: lodCount }, (_, i) => ({
-      ...put(`fish/tetra/lod${i}.glb`, glb(attributes)),
+      ...put(`fish/tetra/lod${i}.glb`, glb(attributes, [], options.mouth)),
       triangles: triangles[i] ?? 0,
       vertices: (triangles[i] ?? 0) * 2,
     }));
@@ -285,6 +303,7 @@ describe('checkAssets', () => {
           idAttribute: FIN_ID_ATTRIBUTE,
           ids: { caudal: 1, dorsal: 2, anal: 3, pectoral: 4, pelvic: 5 },
         },
+        mouthMask: { attribute: MOUTH_ATTRIBUTE },
         debugRender: 'debug/tetra.png',
       },
     };
@@ -544,10 +563,7 @@ describe('checkAssets', () => {
     const asset = fishAsset();
     const lod0 = asset.lods[0];
     if (!lod0) throw new Error('fixture has no LOD');
-    const stray = put(
-      'fish/tetra/lod0.glb',
-      glb(['POSITION', FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE], ['textures/ghost_1k.ktx2']),
-    );
+    const stray = put('fish/tetra/lod0.glb', glb(FISH_ATTRIBUTES, ['textures/ghost_1k.ktx2']));
     const problems = checkAssets(
       inputFor([
         {
@@ -564,7 +580,7 @@ describe('checkAssets', () => {
     const asset = fishAsset();
     const lod0 = asset.lods[0];
     if (!lod0) throw new Error('fixture has no LOD');
-    const attributes = ['POSITION', FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE];
+    const attributes = FISH_ATTRIBUTES;
     const texture = put('fish/tetra/textures/skin_1k.ktx2', 'ktx');
     const withImage = put('fish/tetra/lod0.glb', glb(attributes, ['textures/skin_1k.ktx2']));
     const input = inputFor([
@@ -581,7 +597,7 @@ describe('checkAssets', () => {
     const asset = fishAsset();
     const lod0 = asset.lods[0];
     if (!lod0) throw new Error('fixture has no LOD');
-    const attributes = ['POSITION', FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE];
+    const attributes = FISH_ATTRIBUTES;
     const texture = put('fish/tetra/textures/my skin_1k.ktx2', 'ktx');
     const withImage = put('fish/tetra/lod0.glb', glb(attributes, ['textures/my%20skin_1k.ktx2']));
     const input = inputFor([
@@ -606,6 +622,66 @@ describe('checkAssets', () => {
     expect(checkAssets(inputFor([asset])).join('\n')).toContain(
       `lacks vertex attribute ${FIN_MASK_ATTRIBUTE}`,
     );
+  });
+
+  it('fails a fish without a mouth mask attribute', () => {
+    const asset = fishAsset({ attributes: ['POSITION', FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE] });
+    expect(checkAssets(inputFor([asset])).join('\n')).toContain(
+      `lacks vertex attribute ${MOUTH_ATTRIBUTE}`,
+    );
+  });
+
+  it('fails a mouth mask outside 0..1', () => {
+    const above = fishAsset({ mouth: [0, 0.5, 1.25] });
+    expect(checkAssets(inputFor([above])).join('\n')).toContain('range 0..1.25 is outside 0..1');
+    const below = fishAsset({ mouth: [-0.5, 0.5, 1] });
+    expect(checkAssets(inputFor([below])).join('\n')).toContain('range -0.5..1 is outside 0..1');
+  });
+
+  it('fails a mouth mask that is zero everywhere', () => {
+    const asset = fishAsset({ mouth: [0, 0, 0] });
+    expect(checkAssets(inputFor([asset])).join('\n')).toContain('is 0 on every vertex');
+  });
+
+  it('fails loudly on a mouth accessor that is not float32', () => {
+    const asset = fishAsset();
+    const lod0 = asset.lods[0];
+    if (!lod0) throw new Error('fixture has no LOD');
+    const quantised = put(
+      'fish/tetra/lod0.glb',
+      packGlb(
+        {
+          asset: { version: '2.0' },
+          buffers: [{ byteLength: 3 }],
+          bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: 3 }],
+          accessors: FISH_ATTRIBUTES.map(() => ({
+            bufferView: 0,
+            componentType: 5121,
+            normalized: true,
+            count: 3,
+            type: 'SCALAR',
+          })),
+          meshes: [
+            {
+              primitives: [
+                { attributes: Object.fromEntries(FISH_ATTRIBUTES.map((n, i) => [n, i])) },
+              ],
+            },
+          ],
+        },
+        new Uint8Array(3),
+      ),
+    );
+    const problems = checkAssets(
+      inputFor([
+        {
+          ...asset,
+          lods: [{ ...lod0, ...quantised }, ...asset.lods.slice(1)],
+          files: [quantised, ...asset.files.slice(1)],
+        },
+      ]),
+    );
+    expect(problems.join('\n')).toContain('must be non-normalised float32 SCALAR');
   });
 
   it('fails a fish with missing LODs', () => {

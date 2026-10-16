@@ -14,8 +14,8 @@ export default tseslint.config(
   },
   {
     files: [
-      'tools/asset-pipeline/src/{anemone,bristles,tentacles,glossy-eyes,emit,environment,fins,finish,fish,geometry,impostor,loft,lod,math,parts,raster,rgbe,shrimp,source,voxel}.ts',
-      'tools/asset-pipeline/src/{bristles,budgets,emit-lods,glossy-eyes,finish,geometry,impostor,octahedral,raster,rgbe,shrimp}.test.ts',
+      'tools/asset-pipeline/src/{anemone,bristles,tentacles,glossy-eyes,emit,environment,fins,finish,fish,geometry,impostor,loft,lod,math,mouth,parts,raster,rgbe,shrimp,source,voxel}.ts',
+      'tools/asset-pipeline/src/{bristles,budgets,emit-lods,glossy-eyes,finish,geometry,impostor,mouth,octahedral,raster,rgbe,shrimp}.test.ts',
     ],
     rules: { '@typescript-eslint/no-non-null-assertion': 'off' },
   },
