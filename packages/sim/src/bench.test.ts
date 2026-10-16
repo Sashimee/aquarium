@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { benchmarkConfig, FoodRain, REEF_TANK, walkerBenchmarkConfig } from './fixtures.ts';
+import type { SimToy } from './toys.ts';
 import { World, type WorldConfig } from './world.ts';
 
 // Host load only ever lengthens a step (preemption, a shared core, a cold cache), never shortens
@@ -23,6 +24,8 @@ const SWIMMING_LIMIT = 1.14 * HEADROOM;
 const WALKING_LIMIT = 1.8 * HEADROOM;
 const FEEDING_LIMIT = 2.3 * HEADROOM;
 const REFERENCE_PASSES = 20;
+// Toys cost a few distance checks per fish; a scan over every fish per fish would double it.
+const TOYS_OVERHEAD_LIMIT = 1.3;
 
 interface Scenario {
   /** Advances one step and returns the milliseconds the sim spent on it. */
@@ -112,6 +115,41 @@ function reference(): Scenario {
       const t0 = performance.now();
       for (let p = 0; p < REFERENCE_PASSES; p++) flockPass(pos, heading, nearest);
       return performance.now() - t0;
+    },
+  };
+}
+
+/**
+ * The school with a mirror on the back glass and a ball drifting on the surface, resent every step
+ * as gameplay does while it moves, the bumps fed back into its drift.
+ */
+function playing(seed: number): Scenario {
+  const world = new World(school(seed));
+  const back = -REEF_TANK.depth / 2 + 0.004;
+  const ball = { x: 0, z: 0, vx: 0.05, vz: 0.03 };
+  return {
+    step(): number {
+      const toys: SimToy[] = [
+        { kind: 'mirror', position: [0.2, 0.45, back], normal: [0, 0, 1] },
+        {
+          kind: 'ball',
+          position: [ball.x, REEF_TANK.height + 0.012, ball.z],
+          velocity: [ball.vx, 0, ball.vz],
+        },
+      ];
+      const t0 = performance.now();
+      world.setToys(toys);
+      world.step();
+      const ms = performance.now() - t0;
+      for (const n of world.takeToyNudges()) {
+        ball.vx += n.ix;
+        ball.vz += n.iz;
+      }
+      ball.x += ball.vx / 30;
+      ball.z += ball.vz / 30;
+      if (Math.abs(ball.x) > REEF_TANK.width / 2 - 0.03) ball.vx = -ball.vx;
+      if (Math.abs(ball.z) > REEF_TANK.depth / 2 - 0.03) ball.vz = -ball.vz;
+      return ms;
     },
   };
 }
@@ -243,6 +281,15 @@ describe('step budget', () => {
       expect(fed.particleSteps / (WARMUP_STEPS + TIMED_STEPS)).toBeGreaterThan(200);
       expect(fed.eaten).toBeGreaterThan(0);
       expect(at(meanMs, 0) / at(meanMs, 1)).toBeLessThan(FEEDING_LIMIT);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'adds little to a step with a mirror and a drifting ball in the tank',
+    () => {
+      const { meanMs } = fastestMeanMs(() => [playing(5), swimming(5)]);
+      expect(at(meanMs, 0) / at(meanMs, 1)).toBeLessThan(TOYS_OVERHEAD_LIMIT);
     },
     TEST_TIMEOUT_MS,
   );
