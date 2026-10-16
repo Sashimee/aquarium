@@ -14,7 +14,15 @@ import {
   writeGlb,
   type WrittenFile,
 } from './glb.ts';
-import { LOD_COUNT, type AssetKind, type OutputAsset } from './index-schema.ts';
+import { IMPOSTOR_FILES, LOD_COUNT, type AssetKind, type OutputAsset } from './index-schema.ts';
+import {
+  IMPOSTOR_SOURCE_LOD,
+  bakeAtlas,
+  encodeAtlas,
+  meshesFromDocument,
+  type Atlas,
+} from './impostor.ts';
+import { renormaliseMouth } from './mouth.ts';
 import { simplifyPrimitive, triangleCountOf } from './lod.ts';
 import type { MaterialDef, Part, TextureSource } from './parts.ts';
 import { encodeTiers, type EncodedVariant, type TextureCodec, type Tier } from './textures.ts';
@@ -121,6 +129,7 @@ export interface EmitInput {
   id: string;
   built: BuiltDocument;
   plan: LodPlan;
+  atlasSink?: (id: string, atlas: Atlas) => void;
   meta: Pick<
     OutputAsset,
     'species' | 'origin' | 'sources' | 'licence' | 'modifications' | 'fish' | 'shrimp'
@@ -194,6 +203,7 @@ export async function emitAsset(input: EmitInput): Promise<OutputAsset> {
 
   await built.doc.transform(prune());
   const lods: OutputAsset['lods'] = [];
+  let impostor: OutputAsset['impostor'];
   for (let level = 0; level < LOD_COUNT; level++) {
     const doc = cloneDocument(built.doc).setLogger(new Logger(Logger.Verbosity.WARN));
     for (const mesh of doc.getRoot().listMeshes())
@@ -207,7 +217,33 @@ export async function emitAsset(input: EmitInput): Promise<OutputAsset> {
         plan.prepare?.(prim, level);
         simplifyPrimitive(prim, { ratio: plan.ratios[level]!, minTriangles: plan.minTriangles });
       }
+    for (const mesh of doc.getRoot().listMeshes()) renormaliseMouth(mesh.listPrimitives());
     await doc.transform(prune());
+    if (input.meta.fish && level === IMPOSTOR_SOURCE_LOD) {
+      const images = new Map(built.textures.map((t) => [t.name, t.source.image]));
+      const atlas = bakeAtlas(await meshesFromDocument(doc, images));
+      input.atlasSink?.(id, atlas);
+      const encoded = await encodeAtlas(atlas);
+      const albedo = writeFileTracked(outRoot, `${dir}/${IMPOSTOR_FILES.albedo}`, encoded.albedo);
+      const normalDepth = writeFileTracked(
+        outRoot,
+        `${dir}/${IMPOSTOR_FILES.normalDepth}`,
+        encoded.normalDepth,
+      );
+      files.push(albedo, normalDepth);
+      impostor = {
+        sourceLod: IMPOSTOR_SOURCE_LOD,
+        layout: 'octahedral',
+        pose: 'rest',
+        grid: atlas.grid,
+        frameSize: atlas.frameSize,
+        atlasSize: atlas.grid * atlas.frameSize,
+        pivot: atlas.pivot,
+        radius: atlas.radius,
+        albedo: { ...albedo, codec: 'etc1s' },
+        normalDepth: { ...normalDepth, codec: 'uastc' },
+      };
+    }
     const textureByName = new Map(
       doc
         .getRoot()
@@ -249,6 +285,7 @@ export async function emitAsset(input: EmitInput): Promise<OutputAsset> {
     lods,
     textures: textureInfo,
     files,
+    ...(impostor ? { impostor } : {}),
     ...(input.meta.fish ? { fish: input.meta.fish } : {}),
     ...(input.meta.shrimp ? { shrimp: input.meta.shrimp } : {}),
   };
