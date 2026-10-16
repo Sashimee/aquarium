@@ -1,6 +1,6 @@
 [
   {
-    "id": "coral-wall",
+    "id": "bg-reef-coral-wall",
     "biome": "reef",
     "title": "Coral wall",
     "file": null,
@@ -8,33 +8,33 @@
     "licence": null
   },
   {
-    "id": "deep-blue",
+    "id": "bg-reef-light-rays",
+    "biome": "reef",
+    "title": "Light rays",
+    "file": null,
+    "credit": null,
+    "licence": null
+  },
+  {
+    "id": "bg-reef-fish-slope",
+    "biome": "reef",
+    "title": "Fish slope",
+    "file": null,
+    "credit": null,
+    "licence": null
+  },
+  {
+    "id": "bg-reef-soft-coral",
+    "biome": "reef",
+    "title": "Soft coral",
+    "file": null,
+    "credit": null,
+    "licence": null
+  },
+  {
+    "id": "bg-reef-deep-blue",
     "biome": "reef",
     "title": "Deep blue",
-    "file": null,
-    "credit": null,
-    "licence": null
-  },
-  {
-    "id": "lagoon-shallows",
-    "biome": "reef",
-    "title": "Lagoon shallows",
-    "file": null,
-    "credit": null,
-    "licence": null
-  },
-  {
-    "id": "rock-canyon",
-    "biome": "reef",
-    "title": "Rock canyon",
-    "file": null,
-    "credit": null,
-    "licence": null
-  },
-  {
-    "id": "open-water",
-    "biome": "reef",
-    "title": "Open water",
     "file": null,
     "credit": null,
     "licence": null

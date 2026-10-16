@@ -1,40 +1,40 @@
 [
   {
-    "id": "lush-jungle",
+    "id": "bg-fw-planted-stream",
     "biome": "freshwater",
-    "title": "Lush jungle",
+    "title": "Planted stream",
     "file": null,
     "credit": null,
     "licence": null
   },
   {
-    "id": "river-bed",
+    "id": "bg-fw-root-tangle",
     "biome": "freshwater",
-    "title": "River bed",
+    "title": "Root tangle",
     "file": null,
     "credit": null,
     "licence": null
   },
   {
-    "id": "sunlit-pond",
+    "id": "bg-fw-rocky-riverbed",
     "biome": "freshwater",
-    "title": "Sunlit pond",
+    "title": "Rocky riverbed",
     "file": null,
     "credit": null,
     "licence": null
   },
   {
-    "id": "dark-slate",
+    "id": "bg-fw-misty-lake",
     "biome": "freshwater",
-    "title": "Dark slate",
+    "title": "Misty lake",
     "file": null,
     "credit": null,
     "licence": null
   },
   {
-    "id": "blue-gradient",
+    "id": "bg-fw-plant-wall",
     "biome": "freshwater",
-    "title": "Blue gradient",
+    "title": "Plant wall",
     "file": null,
     "credit": null,
     "licence": null

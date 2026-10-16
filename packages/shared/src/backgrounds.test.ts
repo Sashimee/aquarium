@@ -52,9 +52,9 @@ describe('background schema', () => {
   });
 
   it('checks an id against its biome', () => {
-    expect(backgroundIdSchema.safeParse('coral-wall').success).toBe(true);
-    expect(isBackgroundForBiome('reef', 'coral-wall')).toBe(true);
-    expect(isBackgroundForBiome('freshwater', 'coral-wall')).toBe(false);
+    expect(backgroundIdSchema.safeParse('bg-reef-coral-wall').success).toBe(true);
+    expect(isBackgroundForBiome('reef', 'bg-reef-coral-wall')).toBe(true);
+    expect(isBackgroundForBiome('freshwater', 'bg-reef-coral-wall')).toBe(false);
     expect(backgroundIdSchema.safeParse('nope').success).toBe(false);
   });
 });

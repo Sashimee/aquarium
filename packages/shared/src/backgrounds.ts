@@ -2,10 +2,23 @@ import { z } from 'zod';
 import { biomeSchema, slugSchema, type Biome } from './common.js';
 
 // content/backgrounds/<biome>.json lists the same ids; backgrounds.test.ts keeps both in step.
+// Ids name slots and stay fixed even when the picture in a slot changes.
 // Adding a biome means adding its list here and its file there.
 export const BACKGROUND_IDS = {
-  freshwater: ['lush-jungle', 'river-bed', 'sunlit-pond', 'dark-slate', 'blue-gradient'],
-  reef: ['coral-wall', 'deep-blue', 'lagoon-shallows', 'rock-canyon', 'open-water'],
+  freshwater: [
+    'bg-fw-planted-stream',
+    'bg-fw-root-tangle',
+    'bg-fw-rocky-riverbed',
+    'bg-fw-misty-lake',
+    'bg-fw-plant-wall',
+  ],
+  reef: [
+    'bg-reef-coral-wall',
+    'bg-reef-light-rays',
+    'bg-reef-fish-slope',
+    'bg-reef-soft-coral',
+    'bg-reef-deep-blue',
+  ],
 } as const satisfies Record<Biome, readonly [string, ...string[]]>;
 
 export const backgroundIdSchema = z.enum([...BACKGROUND_IDS.freshwater, ...BACKGROUND_IDS.reef]);

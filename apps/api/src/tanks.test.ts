@@ -147,24 +147,24 @@ describe('tanks and fish', () => {
     expect(reef.backgroundId).toBe(DEFAULT_BACKGROUND_ID.reef);
 
     const set = await call(h, cookie, 'PATCH', `/api/tanks/${fresh.id}`, {
-      backgroundId: 'dark-slate',
+      backgroundId: 'bg-fw-misty-lake',
     });
     expect(set.statusCode).toBe(200);
-    expect(tankSchema.parse(set.json()).backgroundId).toBe('dark-slate');
+    expect(tankSchema.parse(set.json()).backgroundId).toBe('bg-fw-misty-lake');
     const reloaded = tankSchema.parse(
       (await call(h, cookie, 'GET', `/api/tanks/${fresh.id}`)).json(),
     );
-    expect(reloaded.backgroundId).toBe('dark-slate');
+    expect(reloaded.backgroundId).toBe('bg-fw-misty-lake');
 
     const renamed = await call(h, cookie, 'PATCH', `/api/tanks/${fresh.id}`, { name: 'Again' });
-    expect(tankSchema.parse(renamed.json()).backgroundId).toBe('dark-slate');
+    expect(tankSchema.parse(renamed.json()).backgroundId).toBe('bg-fw-misty-lake');
   });
 
   it('rejects a background from another biome or an unknown one', async () => {
     const cookie = await signedIn(h);
     const tank = await createTank(h, cookie);
     const wrongBiome = await call(h, cookie, 'PATCH', `/api/tanks/${tank.id}`, {
-      backgroundId: 'coral-wall',
+      backgroundId: 'bg-reef-coral-wall',
     });
     expect(wrongBiome.statusCode).toBe(400);
     expect(apiErrorSchema.parse(wrongBiome.json()).error.code).toBe('validation_failed');
@@ -180,7 +180,9 @@ describe('tanks and fish', () => {
     const alice = await signedIn(h);
     const bob = await signedIn(h);
     const tank = await createTank(h, alice);
-    const res = await call(h, bob, 'PATCH', `/api/tanks/${tank.id}`, { backgroundId: 'river-bed' });
+    const res = await call(h, bob, 'PATCH', `/api/tanks/${tank.id}`, {
+      backgroundId: 'bg-fw-root-tangle',
+    });
     expect(res.statusCode).toBe(404);
   });
 

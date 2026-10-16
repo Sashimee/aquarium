@@ -166,7 +166,7 @@ describe('tank and fish', () => {
       biome: 'reef',
       decorLayout: [{ assetId: 'rock-1', position: [0, 0, 0] }],
       decorEdited: true,
-      backgroundId: 'coral-wall',
+      backgroundId: 'bg-reef-coral-wall',
       water: { ammonia: 0, nitrate: 2, algae: 0.1, uneatenFood: 0 },
       lastTickAt: ts,
       fish: [fish],
