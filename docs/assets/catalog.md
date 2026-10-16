@@ -297,3 +297,35 @@ Measured from each downloaded `scene.gltf`. Rigged means the glTF has at least o
 | Ancistrus sp. Orange (`sketchfab-65133817`) | 40,000 | 3 images, largest 2048x2048 | 0 / 0 | 0 |
 
 Effect on the picks: none of the picks flipped. The neon tetra, betta and both guppies ship skeletons (30, 53, 44 and 191 joints) that the pipeline can reuse or replace with a spine rig; the clownfish, both tangs and the angelfish are unrigged static meshes and need the procedural spine rig. The angelfish uses unlit materials, the water plant has no textures, and the brain coral is 8192x8192 and must be downscaled. Blue and yellow tang stay as weak candidates for the auditor to weigh against the loft fallback.
+
+## Sound (issue #649, T59)
+
+Checked 2026-10-16 on each Freesound sound page (licence link read from the page; every pick is CC0, so no attribution is required, though CREDITS.md lists them). Searches were restricted to CC0 and CC-BY on Freesound. Raw files are the Freesound `lq` preview OGGs (lossy, about 64 to 80 kbps; the originals need a login and are better quality, so fetching them is the upgrade path if artefacts are audible after the transcode, the low-pass and the normalisation), kept in `~/.cache/aquarium-assets/raw/freesound-<id>/`; the originals need a login. Manifest `kind` is the free string `audio`, so the manifest schema needed no change.
+
+**Format and size plan.** Ship each sound as AAC in `.m4a` only, as decided in PLAN 9.1 (no Opus/OGG). Encoders (ffmpeg and similar) are not installed on the sourcing machine, so encoding, loudness normalisation and loop crossfading are left to the pipeline or gameplay agent; the intended steps are in each manifest entry's `notes`, and `modifications` stays empty until they are done. Size: the nine picks total about 0.49 MB as source previews, well within the repo budget; a per-preset audio budget is left to the pipeline PR's size check (T59 audio encoding + size check). Loops are to be trimmed to 12 to 16 s. The built-asset index schema (`tools/asset-pipeline/src/index-schema.ts`) may need an `audio` kind when the pipeline starts emitting these.
+
+| Sound | Pick | Why |
+|---|---|---|
+| Filter hum (loop) | `freesound-197804` | steady pump hum, no bubble strips, long enough to find a stationary 12 s section |
+| Air bubbles (loop) | `freesound-188223` | authored as a loop, 8.4 s |
+| Underwater ambience (loop) | `freesound-862788` | explicitly muffled and tagged loop |
+| Glass tap | `freesound-427389` | clean single tap, 0.49 s |
+| Food plop | `freesound-853279` | small plop, 0.38 s |
+| Net splash | `freesound-398032` | shallow splash, 1.3 s, most downloaded of the splash set |
+| UI clicks (3) | `freesound-528561`, `freesound-629020`, `freesound-342200` | soft, plain and wooden click, each under 0.3 s |
+| Calm music (optional) | **skipped** | the only short CC0 loop found is Freesound 826622 (xkeril, 20 s), but it is a lo-fi electric piano that does not suit an underwater bed; revisit if music is wanted |
+
+### Candidates
+
+All CC0 unless marked.
+
+- **Filter hum:** 1. [Indoor Fish Tank without Bubble strips Ambiance](https://freesound.org/s/197804/) by 7778, 31.2 s (PICK); 2. [fish-tank-fltr-edit](https://freesound.org/s/369861/) by doubleDog, 6.6 s (short, likely an edit with audible repetition); 3. [Aquarium Lobster Filter](https://freesound.org/s/522987/) by vero.marengere, 24 s. CC-BY alternative not needed: Freesound 167748 (ultradust).
+- **Air bubbles:** 1. [Bubble Loop](https://freesound.org/s/188223/) by MikeRat, 8.4 s (PICK); 2. [Water bubbles loop](https://freesound.org/s/521392/) by GoldenTricycle, 11.8 s (fizzier, more boiling than aquarium); 3. [Aquarium aerator y bubbles](https://freesound.org/s/418198/) by ddaedalus, 38 s (also carries a pump).
+- **Underwater ambience:** 1. [Ambience, designed, deep, muffled, wavy, underwater, dream, memory, loop](https://freesound.org/s/862788/) by Oldome, 25.3 s (PICK); 2. [Underwater Ambience](https://freesound.org/s/504641/) by Fission9, 46.9 s (12k downloads, brighter and longer); 3. [Ambiance_Underwater_Stereo](https://freesound.org/s/482116/) by Nox_Sound, 45 s.
+- **Glass tap:** 1. [Glass Tap](https://freesound.org/s/427389/) by zembacraftworks, 0.49 s (PICK); 2. [Glass Tap.wav](https://freesound.org/s/262958/) by Unicornaphobist, 0.2 s (a ting on a bottle, too ringy); 3. [Glass Tap](https://freesound.org/s/668384/) by CJspellsfish, 0.3 s.
+- **Food plop:** 1. [Fishing Lure Plop Water - Game SFX (2 or 2)](https://freesound.org/s/853279/) by el_boss, 0.38 s (PICK); 2. [Water.wav](https://freesound.org/s/530359/) by danielpodlovics, 0.33 s; 3. [Water drop (splash)](https://freesound.org/s/451126/) by bolkmar, 1.1 s.
+- **Net splash:** 1. [Splash](https://freesound.org/s/398032/) by swordofkings128, 1.3 s (PICK); 2. [WaterSplash](https://freesound.org/s/646568/) by Ryanz-Official, 1.3 s; 3. [water splash 2](https://freesound.org/s/398039/) by swordofkings128, 1.9 s.
+- **UI clicks:** picks [Soft UI Button Click](https://freesound.org/s/528561/) by Jummit, 0.24 s, [Button click](https://freesound.org/s/629020/) by Kolombooo, 0.29 s, [Videogame Menu BUTTON CLICK](https://freesound.org/s/342200/) by Christopherderp, 0.14 s; reserves [Button Hover Click](https://freesound.org/s/623990/) by eqylizer, 0.1 s and [Water Click](https://freesound.org/s/371274/) by Mafon2, 0.1 s.
+- **Calm music (not picked):** [Memories of a sweet summer (loop)](https://freesound.org/s/826622/) by xkeril, 20 s; [Calming Piano Loop 60bpm](https://freesound.org/s/679738/) by Seth_Makes_Sounds, 109 s (too long for the budget); [Synth pad deep ambience with beach waves](https://freesound.org/s/222448/) by waveplaySFX, 34 s.
+
+Not verified here (no audio tools on the machine): the loop seams. The pipeline must audition each loop and crossfade as planned in the entry notes.
