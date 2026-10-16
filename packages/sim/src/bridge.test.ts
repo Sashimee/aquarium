@@ -65,12 +65,12 @@ function nextError(client: SimClient): Promise<string> {
   });
 }
 
-function flakeGrid(count: number): Float32Array {
+function flakeGrid(count: number, firstId = 1): Float32Array {
   const records = new Float32Array(count * FOOD_STRIDE);
   for (let k = 0; k < count; k++) {
     records.set(
       [
-        k + 1,
+        firstId + k,
         -0.5 + (k % 10) * 0.1,
         0.3,
         -0.1 + Math.floor(k / 10) * 0.1,
@@ -637,6 +637,8 @@ describe('sim worker bridge', () => {
     client.setFood(flakeGrid(30));
     client.step(90);
     const layout = await client.removeFish('neon-tetra-0');
+    // A fresh meal, so bites in the new epoch do not hinge on the old one having leftovers.
+    client.setFood(flakeGrid(30, 1000));
     await stepCollecting(client, 30, 120);
 
     const at = seen.findIndex((m) => m.type === 'layout');
