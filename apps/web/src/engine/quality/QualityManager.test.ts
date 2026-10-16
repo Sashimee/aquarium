@@ -170,15 +170,40 @@ describe('QualityManager', () => {
     expect(announced).toEqual([{ from: 'high', to: 'low', reason: 'manual' }]);
   });
 
-  it('keeps a phone that holds the display rate at its tier cap however fast it runs', () => {
+  it('climbs a phone that holds the display rate on medium to high, and no further', () => {
     const { quality, announced } = setup({ ...MOBILE_PROFILE, gpuTiming: false });
     expect(quality.tier).toBe('medium');
     quality.start(0);
     const t = feed(quality, TARGET, null, 0, 2400);
     expect(quality.tier).toBe('medium');
     feed(quality, TARGET, null, t, t + 60_000);
-    expect(quality.tier).toBe('medium');
-    expect(announced).toEqual([{ from: null, to: 'medium', reason: 'probe' }]);
+    expect(quality.tier).toBe('high');
+    expect(announced).toEqual([
+      { from: null, to: 'medium', reason: 'probe' },
+      { from: 'medium', to: 'high', reason: 'headroom' },
+    ]);
+  });
+
+  it('keeps a phone on high while it holds 30 fps there', () => {
+    const { quality } = setup({ ...MOBILE_PROFILE, gpuTiming: false });
+    quality.start(0);
+    let t = feed(quality, TARGET, null, 0, 2400);
+    t = feed(quality, TARGET, null, t, t + 20_000);
+    expect(quality.tier).toBe('high');
+    feed(quality, 1000 / 32, null, t, t + 30_000);
+    expect(quality.tier).toBe('high');
+  });
+
+  it('steps a phone on high down once it falls under 30 fps', () => {
+    const { quality, announced } = setup({ ...MOBILE_PROFILE, gpuTiming: false });
+    quality.start(0);
+    let t = feed(quality, TARGET, null, 0, 2400);
+    t = feed(quality, TARGET, null, t, t + 20_000);
+    expect(quality.tier).toBe('high');
+    feed(quality, 1000 / 25, null, t, t + 8000);
+    expect(announced.at(-1)).toEqual(
+      expect.objectContaining({ from: 'high', to: 'medium', reason: 'over-budget' }),
+    );
   });
 
   it('starts a phone stuck at 30 fps on low', () => {
@@ -188,12 +213,22 @@ describe('QualityManager', () => {
     expect(quality.tier).toBe('low');
   });
 
-  it('caps gpu-timed phones at maxTier', () => {
+  it('adapts a phone on frame time even when its timestamps read over budget', () => {
     const { quality } = setup({ ...MOBILE_PROFILE });
     quality.start(0);
-    feed(quality, TARGET, 1, 0, 2400);
-    expect(quality.timingSignal).toBe('gpu');
+    const t = feed(quality, TARGET, 45, 0, 2400);
+    expect(quality.timingSignal).toBe('frame');
     expect(quality.tier).toBe('medium');
+    feed(quality, TARGET, 45, t, t + 60_000);
+    expect(quality.tier).toBe('high');
+  });
+
+  it('distrusts gpu timestamps that add up to more than the frame interval', () => {
+    const { quality } = setup();
+    quality.start(0);
+    feed(quality, TARGET, 40, 0, 2400);
+    expect(quality.timingSignal).toBe('frame');
+    expect(quality.tier).toBe('high');
   });
 
   it('keeps a manual tier above the cap until it runs over budget', () => {
@@ -204,7 +239,7 @@ describe('QualityManager', () => {
     t = feed(quality, TARGET, null, t, t + 30_000);
     expect(quality.tier).toBe('ultra');
     feed(quality, 50, null, t, t + 15_000);
-    expect(announced.slice(2)[0]).toEqual({ from: 'ultra', to: 'low', reason: 'over-budget' });
+    expect(announced.slice(2)[0]).toEqual({ from: 'ultra', to: 'medium', reason: 'over-budget' });
   });
 
   it('rejects a probe tier above the tier cap', () => {

@@ -23,7 +23,8 @@ import type { MaterialDef, Part } from './parts.ts';
 import { strictestLicence } from './manifest.ts';
 import { RAW_ROOT } from './source.ts';
 import { cropImage, decodeImage, type Rgba } from './textures.ts';
-import type { OutputAsset } from './index-schema.ts';
+import { MOUTH_ATTRIBUTE, FIN_ID_ATTRIBUTE, type OutputAsset } from './index-schema.ts';
+import { bakeMouthMask } from './mouth.ts';
 
 interface PhotoSource {
   kind: 'photo';
@@ -944,7 +945,12 @@ export function loftFishPart(
   finTexture?: FinTexture,
 ): Part {
   const scaled: Projection = (behind, y) => project(behind / standardLengthM, y / standardLengthM);
-  return loftFish({ ...recipe.spec, standardLengthM }, scaled, recipe.id, finUv, finTexture);
+  const part = loftFish({ ...recipe.spec, standardLengthM }, scaled, recipe.id, finUv, finTexture);
+  const finId = part.extra[FIN_ID_ATTRIBUTE];
+  if (!finId)
+    throw new Error(`${recipe.id}: the loft has no ${FIN_ID_ATTRIBUTE} to bake the mouth from`);
+  part.extra[MOUTH_ATTRIBUTE] = bakeMouthMask(part.positions, finId);
+  return part;
 }
 
 export async function buildLoftFish(
@@ -977,6 +983,7 @@ export async function buildLoftFish(
     id: recipe.id,
     built,
     plan: FISH_LOD_PLAN,
+    ...(ctx.atlasSink ? { atlasSink: ctx.atlasSink } : {}),
     meta: {
       species: recipe.species,
       origin: 'procedural-loft',

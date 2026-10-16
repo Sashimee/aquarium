@@ -15,6 +15,7 @@ export function createDevPanel(engine: Engine): () => void {
     fps: '',
     frame: '',
     gpu: '',
+    gpuSpansFrames: false,
     dpr: '',
     pixelRatio: '',
     canvas: '',
@@ -32,6 +33,7 @@ export function createDevPanel(engine: Engine): () => void {
   perf.add(readout, 'fps').disable().listen();
   perf.add(readout, 'frame').name('frame ms').disable().listen();
   perf.add(readout, 'gpu').name('gpu ms').disable().listen();
+  perf.add(readout, 'gpuSpansFrames').name('gpu spans frames').disable().listen();
   perf.add(readout, 'dpr').name('device px ratio').disable().listen();
   perf.add(readout, 'pixelRatio').name('render px ratio').disable().listen();
   perf.add(readout, 'canvas').disable().listen();

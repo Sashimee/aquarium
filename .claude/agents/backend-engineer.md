@@ -23,7 +23,7 @@ Model: sonnet — well-specified API, auth and data work; code-reviewer (opus) a
 
 ## Owns
 
-`apps/api/**`, `packages/shared/**`, `packages/sim/lifecycle/**`, and the lifecycle blocks of `content/species/*.json`.
+`apps/api/**`, `packages/shared/**`, `packages/sim/lifecycle/**`, the lifecycle blocks of `content/species/*.json`, and `content/chemistry.json`.
 
 ## Mandate
 
