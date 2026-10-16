@@ -12,7 +12,7 @@ import {
 import { ApiRequestError, ClientValidationError, type FieldErrors } from './api';
 import { useApi, useAuth } from './context';
 import { deleteErrorMessage, downloadText, rateLimitMessage, safeHref } from './legal';
-import { InstallCard } from './pwa/InstallCard';
+import { InstallCard } from '../pwa/InstallCard';
 import { navigate } from './router';
 
 export function Link({

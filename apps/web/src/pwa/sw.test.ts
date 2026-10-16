@@ -1,8 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
+import { buildId, stampWorker } from '../../build/sw-build-id-plugin';
 
-const SOURCE = readFileSync(new URL('../../../public/sw.js', import.meta.url), 'utf8');
+const BUILD = 'abc123';
+const SOURCE = stampWorker(
+  readFileSync(new URL('../../public/sw.js', import.meta.url), 'utf8'),
+  BUILD,
+);
 const ORIGIN = 'https://fish.test';
 
 type Listener = (event: unknown) => void;
@@ -92,7 +97,7 @@ describe('service worker', () => {
   it('precaches the offline page, manifest and icons on install', async () => {
     const sw = boot(online);
     await sw.lifecycle('install');
-    const shell = sw.stores.get('aquarium-shell-v1');
+    const shell = sw.stores.get(`aquarium-shell-${BUILD}`);
     expect([...(shell?.entries.keys() ?? [])]).toEqual(
       expect.arrayContaining([
         `${ORIGIN}/offline.html`,
@@ -111,7 +116,7 @@ describe('service worker', () => {
       expect(await sw.request(path), path).toBeUndefined();
       expect(await sw.request(path, { mode: 'navigate' }), path).toBeUndefined();
     }
-    expect(sw.stores.has('aquarium-assets-v1')).toBe(false);
+    expect(sw.stores.has(`aquarium-assets-${BUILD}`)).toBe(false);
   });
 
   it('ignores non-GET and cross-origin requests', async () => {
@@ -152,11 +157,17 @@ describe('service worker', () => {
     expect(await (await sw.request('/tank/3', { mode: 'navigate' }))?.text()).toBe('net /tank/3');
   });
 
+  it('names its caches after the build, so a new deploy starts with empty ones', () => {
+    expect(buildId(['assets/index-a.js'])).not.toBe(buildId(['assets/index-b.js']));
+    expect(buildId(['b.js', 'a.js'])).toBe(buildId(['a.js', 'b.js']));
+    expect(() => stampWorker('no placeholder', BUILD)).toThrow(/__BUILD_ID__/);
+  });
+
   it('drops caches from older versions on activate', async () => {
     const sw = boot(online);
     await sw.lifecycle('install');
-    sw.stores.set('aquarium-shell-v0', new FakeCache());
+    sw.stores.set('aquarium-shell-old', new FakeCache());
     await sw.lifecycle('activate');
-    expect([...sw.stores.keys()]).toEqual(['aquarium-shell-v1']);
+    expect([...sw.stores.keys()]).toEqual([`aquarium-shell-${BUILD}`]);
   });
 });

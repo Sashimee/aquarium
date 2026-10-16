@@ -1,6 +1,8 @@
-const VERSION = 'v1';
-const SHELL_CACHE = `aquarium-shell-${VERSION}`;
-const ASSET_CACHE = `aquarium-assets-${VERSION}`;
+// Replaced with a hash of the emitted bundle names at build time (build/sw-build-id-plugin.ts),
+// so every deploy gets fresh caches and activate drops the old ones.
+const BUILD_ID = '__BUILD_ID__';
+const SHELL_CACHE = `aquarium-shell-${BUILD_ID}`;
+const ASSET_CACHE = `aquarium-assets-${BUILD_ID}`;
 const OFFLINE_URL = '/offline.html';
 const SHELL = [
   OFFLINE_URL,

@@ -2,7 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { UiProviders, type UiBridge } from './context';
-import { startPwa } from './pwa/register';
+import { startPwa } from '../pwa/register';
 import { SessionProvider } from './session';
 import './styles.css';
 import './game.css';

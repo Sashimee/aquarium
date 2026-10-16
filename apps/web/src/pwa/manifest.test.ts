@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const PUBLIC = new URL('../../../public/', import.meta.url);
+const PUBLIC = new URL('../../public/', import.meta.url);
 const read = (name: string): string => readFileSync(new URL(name, PUBLIC), 'utf8');
 
 interface Icon {
@@ -65,7 +65,7 @@ describe('web app manifest installability', () => {
 
   it('ships the 180x180 Apple touch icon and links everything from index.html', () => {
     expect(pngSize('/icons/apple-touch-icon.png')).toEqual({ width: 180, height: 180 });
-    const html = readFileSync(new URL('../../../index.html', import.meta.url), 'utf8');
+    const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
     expect(html).toContain('<link rel="manifest" href="/manifest.webmanifest" />');
     expect(html).toContain('<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />');
     expect(html).toContain('name="apple-mobile-web-app-capable"');

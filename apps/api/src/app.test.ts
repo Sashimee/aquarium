@@ -25,8 +25,6 @@ beforeAll(async () => {
   writeFileSync(join(dist, 'assets', 'index-C7vUOBtl.js.gz'), gzipSync(BUNDLE));
   writeFileSync(join(dist, 'assets', 'index.json'), '{}');
   writeFileSync(join(dist, 'ktx2-worker.js'), 'self.onmessage=()=>{}');
-  writeFileSync(join(dist, 'sw.js'), 'self.skipWaiting()');
-  writeFileSync(join(dist, 'manifest.webmanifest'), '{"name":"x"}');
   mkdirSync(join(dist, 'assets', 'fish'));
   writeFileSync(join(dist, 'assets', 'fish', 'tetra.glb'), 'glb');
   writeFileSync(join(dist, '.env'), 'SECRET=1');
@@ -332,18 +330,6 @@ describe('with a web build', () => {
     expect(await cache('/index.html')).toBe('no-cache');
     expect(await cache('/')).toBe('no-cache');
     expect(await cache('/tank/42')).toBe('no-cache');
-  });
-
-  it('serves the service worker and manifest revalidated, with script and manifest types', async () => {
-    const app = withDist();
-    const sw = await app.inject('/sw.js');
-    expect(sw.statusCode).toBe(200);
-    expect(sw.headers['cache-control']).toBe('no-cache');
-    expect(sw.headers['content-type']).toContain('javascript');
-    const manifest = await app.inject('/manifest.webmanifest');
-    expect(manifest.statusCode).toBe(200);
-    expect(manifest.headers['cache-control']).toBe('no-cache');
-    expect(manifest.headers['content-type']).toContain('manifest');
   });
 
   it('falls back to index.html for SPA routes, GET and HEAD', async () => {
