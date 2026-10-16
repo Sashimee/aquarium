@@ -37,7 +37,7 @@ export interface TierSettings {
 
 export const TIER_SETTINGS: Readonly<Record<Tier, Readonly<TierSettings>>> = {
   low: {
-    resolutionScale: 0.75,
+    resolutionScale: 1,
     maxPixelRatio: 1,
     shadowMapSize: 0,
     postChain: 'none',

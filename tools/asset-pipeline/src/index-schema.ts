@@ -85,6 +85,25 @@ export const shrimpInfoSchema = z.strictObject({
   debugPartsRender: z.string().min(1),
 });
 
+export const IMPOSTOR_MAX_BYTES = 1_000_000;
+export const IMPOSTOR_FILES = {
+  albedo: 'impostor_albedo.ktx2',
+  normalDepth: 'impostor_normal.ktx2',
+} as const;
+
+export const impostorSchema = z.strictObject({
+  sourceLod: z.literal(1),
+  layout: z.literal('octahedral'),
+  pose: z.literal('rest'),
+  grid: z.int().min(2),
+  frameSize: z.int().positive(),
+  atlasSize: z.int().positive(),
+  pivot: vec3,
+  radius: z.number().positive(),
+  albedo: fileEntry.extend({ codec: z.literal('etc1s') }),
+  normalDepth: fileEntry.extend({ codec: z.literal('uastc') }),
+});
+
 export const assetKindSchema = z.enum([
   'fish',
   'shrimp',
@@ -112,6 +131,7 @@ export const outputAssetSchema = z.strictObject({
   textures: z.array(textureSchema),
   files: z.array(fileEntry),
   fish: fishInfoSchema.optional(),
+  impostor: impostorSchema.optional(),
   shrimp: shrimpInfoSchema.optional(),
 });
 export type OutputAsset = z.infer<typeof outputAssetSchema>;
