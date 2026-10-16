@@ -69,15 +69,29 @@ type Triple = readonly [number, number, number];
 /**
  * A toy in the world's frame. A mirror's `position` is the centre of its glass and `normal` points
  * into the tank, horizontal; a ball's `position` is its centre and `velocity` its drift in m/s.
+ * `id`, unique among the toys, keeps a toy the same one across `setToys` calls whatever its place
+ * in the list; a toy without one is matched by its order among the id-less toys of its kind.
  */
 export type SimToy =
-  | { readonly kind: 'mirror'; readonly position: Triple; readonly normal: Triple }
-  | { readonly kind: 'ball'; readonly position: Triple; readonly velocity: Triple };
+  | {
+      readonly kind: 'mirror';
+      readonly id?: string;
+      readonly position: Triple;
+      readonly normal: Triple;
+    }
+  | {
+      readonly kind: 'ball';
+      readonly id?: string;
+      readonly position: Triple;
+      readonly velocity: Triple;
+    };
 
 /** A fish bumped a ball: the velocity change it gave it, m/s in the world's x and z. */
 export interface ToyNudge {
   readonly fishId: string;
-  /** Index of the ball in the toys last given to `setToys`. */
+  /** The ball's `id`, or null for a ball given without one. */
+  readonly toyId: string | null;
+  /** Index of the ball in the toys given to `setToys` before the step that bumped it. */
   readonly toy: number;
   readonly ix: number;
   readonly iz: number;
@@ -87,6 +101,7 @@ export const MirrorPhase = { Idle: 0, Approach: 1, Frontal: 2, Lateral: 3, Pause
 export const BallPhase = { Idle: 0, Approach: 1, Push: 2, BackOff: 3 } as const;
 
 interface Mirror {
+  readonly key: string;
   readonly x: number;
   readonly y: number;
   readonly z: number;
@@ -95,6 +110,8 @@ interface Mirror {
 }
 
 interface Ball {
+  readonly key: string;
+  readonly id: string | null;
   readonly x: number;
   readonly y: number;
   readonly z: number;
@@ -128,20 +145,45 @@ function parseToys(toys: readonly SimToy[]): { mirrors: Mirror[]; balls: Ball[] 
   }
   const mirrors: Mirror[] = [];
   const balls: Ball[] = [];
-  toys.forEach((toy: SimToy, index) => {
-    const kind: unknown = toy.kind;
+  const ids = new Set<string>();
+  const unnamed = { mirror: 0, ball: 0 };
+  toys.forEach((toy: unknown, index) => {
+    if (typeof toy !== 'object' || toy === null) {
+      throw new TypeError(`toys: toy ${index} must be an object, got ${JSON.stringify(toy)}`);
+    }
+    const { kind, id } = toy as { kind: unknown; id: unknown };
+    if (id !== undefined && (typeof id !== 'string' || id === '')) {
+      throw new TypeError(`toys: toy ${index} id must be a non-empty string`);
+    }
+    if (id !== undefined && ids.has(id)) {
+      throw new RangeError(`toys: toy ${index} repeats id ${JSON.stringify(id)}`);
+    }
+    if (id !== undefined) ids.add(id);
+    const keyOf = (k: 'mirror' | 'ball'): string =>
+      id !== undefined ? `id:${id}` : `${k}#${unnamed[k]++}`;
     if (kind === 'mirror') {
-      const [x, y, z] = triple(toy.position, `toy ${index} position`);
-      const n = triple((toy as { normal: unknown }).normal, `toy ${index} normal`);
+      const mirror = toy as SimToy & { kind: 'mirror' };
+      const [x, y, z] = triple(mirror.position, `toy ${index} position`);
+      const n = triple(mirror.normal, `toy ${index} normal`);
       const h = Math.hypot(n[0], n[2]);
       if (h < 1e-3) {
         throw new RangeError(`toys: mirror ${index} normal must point into the tank horizontally`);
       }
-      mirrors.push({ x, y, z, nx: n[0] / h, nz: n[2] / h });
+      mirrors.push({ key: keyOf('mirror'), x, y, z, nx: n[0] / h, nz: n[2] / h });
     } else if (kind === 'ball') {
-      const [x, y, z] = triple(toy.position, `toy ${index} position`);
-      const v = triple((toy as { velocity: unknown }).velocity, `toy ${index} velocity`);
-      balls.push({ x, y, z, vx: v[0], vz: v[2], index });
+      const ball = toy as SimToy & { kind: 'ball' };
+      const [x, y, z] = triple(ball.position, `toy ${index} position`);
+      const v = triple(ball.velocity, `toy ${index} velocity`);
+      balls.push({
+        key: keyOf('ball'),
+        id: id ?? null,
+        x,
+        y,
+        z,
+        vx: v[0],
+        vz: v[2],
+        index,
+      });
     } else {
       throw new RangeError(`toys: toy ${index} has unknown kind ${JSON.stringify(kind)}`);
     }
@@ -249,8 +291,9 @@ export class Toys {
   }
 
   /**
-   * Replaces the toys. Mirrors and balls are matched by their order among their own kind, so a
-   * ball resent each tick as it drifts stays the one a fish is playing with. A fish whose mirror
+   * Replaces the toys. A toy is the same one as before if it has the same `id`, or, without one,
+   * the same place among the id-less toys of its kind, so a ball resent each tick as it drifts
+   * stays the one a fish is playing with wherever it sits in the list. A fish whose mirror
    * was taken away, moved or turned, or whose ball is gone, stops at once; habituation stays.
    * Throws, changing nothing, on a malformed toy.
    */
@@ -258,15 +301,20 @@ export class Toys {
     const { mirrors, balls } = parseToys(toys);
     for (let i = 0; i < this.host.count; i++) {
       if (at(this.mirrorPhase, i) !== MirrorPhase.Idle) {
-        const k = at(this.mirrorToy, i);
-        const before = this.mirrors[k];
+        const before = this.mirrors[at(this.mirrorToy, i)];
+        const k = before === undefined ? -1 : mirrors.findIndex((m) => m.key === before.key);
         const now = mirrors[k];
         if (before === undefined || now === undefined || moved(before, now)) {
           this.endMirror(i, 0, -1);
+        } else {
+          this.mirrorToy[i] = k;
         }
       }
-      if (at(this.ballPhase, i) !== BallPhase.Idle && at(this.ballToy, i) >= balls.length) {
-        this.endBall(i, 0);
+      if (at(this.ballPhase, i) !== BallPhase.Idle) {
+        const before = this.balls[at(this.ballToy, i)];
+        const k = before === undefined ? -1 : balls.findIndex((b) => b.key === before.key);
+        if (k < 0) this.endBall(i, 0);
+        else this.ballToy[i] = k;
       }
     }
     if (mirrors.length === 0) {
@@ -356,6 +404,10 @@ export class Toys {
     if (!free || at(this.ballPhase, i) !== BallPhase.Idle) return;
     const k = this.mirrorInView(i);
     if (k < 0) return;
+    if (at(this.mirrorHabituation, i) > TOYS.mirrorRecoverLevel) {
+      this.mirrorNotice[i] = -TOYS.mirrorRetryS;
+      return;
+    }
     const { rng } = this.host;
     let latency = at(this.mirrorLatency, i);
     if (latency < 0) {
@@ -369,10 +421,6 @@ export class Toys {
     const watched = notice + DT;
     this.mirrorNotice[i] = watched;
     if (watched < latency) return;
-    if (at(this.mirrorHabituation, i) > TOYS.mirrorRecoverLevel) {
-      this.mirrorNotice[i] = -TOYS.mirrorRetryS;
-      return;
-    }
     this._mirrorPhase[i] = MirrorPhase.Approach;
     this.mirrorToy[i] = k;
     this.mirrorTimer[i] = TOYS.mirrorApproachS;
@@ -631,6 +679,7 @@ export class Toys {
         if (fishId === undefined) throw new RangeError(`no fish id at index ${i}`);
         this.nudges.push({
           fishId,
+          toyId: b.id,
           toy: b.index,
           ix: share * closing * ux,
           iz: share * closing * uz,

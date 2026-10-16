@@ -434,7 +434,7 @@ describe('sim worker bridge', () => {
     const client = new SimClient(worker.port);
     const received: ToyNudge[] = [];
     client.onToyNudge((n) => received.push(n));
-    const nudge: ToyNudge = { fishId: 'betta-0', toy: 0, ix: 0.01, iz: 0 };
+    const nudge: ToyNudge = { fishId: 'betta-0', toyId: 'ball', toy: 0, ix: 0.01, iz: 0 };
     const first = client.init(benchmarkConfig(1));
     worker.ready(1);
     await first;
