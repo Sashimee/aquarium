@@ -22,10 +22,10 @@ async function recordVibration(page: Page): Promise<void> {
   });
 }
 
-async function tapGlass(page: Page): Promise<void> {
+async function tapGlass(page: Page, at = 0.5): Promise<void> {
   const box = await page.locator('#tank').boundingBox();
   if (!box) throw new Error('the tank canvas has no box');
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.click(box.x + box.width * at, box.y + box.height * at);
 }
 
 test.describe('haptics', () => {
@@ -54,20 +54,26 @@ test.describe('haptics', () => {
     await expect(page.locator('#tank')).toBeVisible();
     const before = (await buzzes(page)).length;
     await tapGlass(page);
-    await page.waitForTimeout(500);
     expect(await buzzes(page)).toHaveLength(before);
   });
 
-  test('stay silent under reduced motion', async ({ page }) => {
-    await page.emulateMedia({ reducedMotion: 'reduce' });
+  test('stay silent under reduced motion and resume when it ends', async ({ page }) => {
     await recordVibration(page);
+    await registerVerifiedUser(page, 'haptics-motion');
     await openTank(page);
-    await tapGlass(page);
-    await page.waitForTimeout(500);
-    expect(await buzzes(page)).toEqual([]);
+    await tapGlass(page, 0.48);
+    await expect.poll(() => buzzes(page)).toHaveLength(1);
+
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await tapGlass(page, 0.5);
+    expect(await buzzes(page)).toHaveLength(1);
+
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await tapGlass(page, 0.52);
+    await expect.poll(() => buzzes(page)).toHaveLength(2);
   });
 
-  test('offer no switch where the browser has no vibration (iOS Safari)', async ({ page }) => {
+  test('disable the switch where the browser has no vibration (iOS Safari)', async ({ page }) => {
     await page.addInitScript(() => {
       Object.defineProperty(Navigator.prototype, 'vibrate', { value: undefined });
       Object.defineProperty(navigator, 'vibrate', { value: undefined });

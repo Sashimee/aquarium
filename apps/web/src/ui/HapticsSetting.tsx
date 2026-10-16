@@ -1,8 +1,8 @@
 import { useSyncExternalStore } from 'react';
-import { haptics } from '../interaction/haptics';
+import { haptics as shared, type Haptics } from '../interaction/haptics';
 
-export function HapticsSetting() {
-  useSyncExternalStore(haptics.subscribe, haptics.getVersion);
+export function HapticsSetting({ haptics = shared }: { haptics?: Haptics }) {
+  useSyncExternalStore(haptics.subscribe, haptics.getVersion, haptics.getVersion);
   const note = !haptics.supported
     ? 'This device or browser does not support vibration, so there is nothing to turn on.'
     : haptics.reducedMotion
