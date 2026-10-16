@@ -6,6 +6,22 @@ export interface ShrimpRig {
   readonly legPairs: number;
 }
 
+/** A fish's octahedral impostor atlas pair; see `tools/asset-pipeline/IMPOSTOR.md`. */
+export interface ImpostorAtlasInfo {
+  /** Frames per side; frame (i, j) looks along the octahedral grid point (i, j). */
+  readonly grid: number;
+  /** Pixels per frame side. */
+  readonly frameSize: number;
+  /** Model-space centre of every frame. */
+  readonly pivot: readonly [number, number, number];
+  /** Half-extent of every frame in model metres. */
+  readonly radius: number;
+  /** sRGB base colour and coverage; paths as `lodFiles`. */
+  readonly albedoFile: string;
+  /** View-space normal xy, fin mask and depth. */
+  readonly normalFile: string;
+}
+
 export interface FishAssetEntry {
   readonly id: string;
   readonly kind: 'fish' | 'shrimp';
@@ -21,6 +37,8 @@ export interface FishAssetEntry {
   readonly sharperTextures: ReadonlyMap<string, string>;
   /** Null for a fish. */
   readonly shrimp: ShrimpRig | null;
+  /** Null where the pipeline baked none, which keeps the lod2 mesh at every distance. */
+  readonly impostor: ImpostorAtlasInfo | null;
 }
 
 function fail(path: string, expected: string): never {
@@ -105,6 +123,33 @@ function sharperTextures(value: unknown, path: string): Map<string, string> {
   return out;
 }
 
+function impostorAtlas(value: unknown, at: string): ImpostorAtlasInfo | null {
+  if (value === undefined) return null;
+  const block = record(value, at);
+  if (block.layout !== 'octahedral') fail(`${at}.layout`, '"octahedral"');
+  const grid = positive(block.grid, `${at}.grid`);
+  if (!Number.isInteger(grid) || grid < 3 || grid % 2 === 0)
+    fail(`${at}.grid`, 'an odd integer >= 3');
+  const frameSize = positive(block.frameSize, `${at}.frameSize`);
+  if (!Number.isInteger(Math.log2(frameSize))) fail(`${at}.frameSize`, 'a power of two');
+  const atlasSize = positive(block.atlasSize, `${at}.atlasSize`);
+  if (atlasSize !== grid * frameSize) fail(`${at}.atlasSize`, 'grid * frameSize');
+  const pivot = vec3(block.pivot, `${at}.pivot`);
+  if (!pivot.every(Number.isFinite)) fail(`${at}.pivot`, 'three finite numbers');
+  return {
+    grid,
+    frameSize,
+    pivot,
+    radius: positive(block.radius, `${at}.radius`),
+    albedoFile: assetPath(record(block.albedo, `${at}.albedo`).file, `${at}.albedo.file`, '.ktx2'),
+    normalFile: assetPath(
+      record(block.normalDepth, `${at}.normalDepth`).file,
+      `${at}.normalDepth.file`,
+      '.ktx2',
+    ),
+  };
+}
+
 export function parseFishAssets(json: unknown): Map<string, FishAssetEntry> {
   const root = record(json, 'root');
   const assets = root.assets;
@@ -136,6 +181,7 @@ export function parseFishAssets(json: unknown): Map<string, FishAssetEntry> {
       lodFiles,
       sharperTextures: sharperTextures(asset.textures, `${at}.textures`),
       shrimp: kind === 'shrimp' ? shrimpRig(body, `${at}.shrimp`) : null,
+      impostor: impostorAtlas(asset.impostor, `${at}.impostor`),
     });
   });
   return out;

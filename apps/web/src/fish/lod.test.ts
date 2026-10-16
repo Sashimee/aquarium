@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { effectiveDistance, REFERENCE_LENGTH_M, selectLod } from './lod';
+import {
+  effectiveDistance,
+  markNearest,
+  REFERENCE_LENGTH_M,
+  selectLod,
+  type MeshRank,
+} from './lod';
 
 const thresholds = { midDistance: 1, impostorDistance: 2 };
 const L = REFERENCE_LENGTH_M;
@@ -39,5 +45,49 @@ describe('selectLod', () => {
   it('rejects a non-positive length', () => {
     expect(() => effectiveDistance(1, 0)).toThrow(RangeError);
     expect(() => selectLod(1, -1, thresholds, 0)).toThrow(RangeError);
+  });
+});
+
+describe('markNearest', () => {
+  const ranks = (...distances: number[]): MeshRank[] =>
+    distances.map((distance) => ({ distance, full: false }));
+  const fullDistances = (items: MeshRank[]): number[] =>
+    items.filter((i) => i.full).map((i) => i.distance);
+
+  it('keeps the nearest fish as meshes and nothing past the limit', () => {
+    const items = ranks(3, 1, 4, 2, 5);
+    markNearest(items, 3);
+    expect(fullDistances(items).sort()).toEqual([1, 2, 3]);
+  });
+
+  it('meshes everything under the limit, and nothing at a limit of 0', () => {
+    const items = ranks(3, 1);
+    markNearest(items, 30);
+    expect(items.every((i) => i.full)).toBe(true);
+    markNearest(items, 0);
+    expect(items.some((i) => i.full)).toBe(false);
+  });
+
+  it('lets a mesh keep its place until a newcomer is clearly nearer', () => {
+    const held = { distance: 1, full: true };
+    const rival = { distance: 0.95, full: false };
+    markNearest([held, rival], 1);
+    expect(held.full).toBe(true);
+    expect(rival.full).toBe(false);
+    rival.distance = 0.9;
+    markNearest([held, rival], 1);
+    expect(held.full).toBe(false);
+    expect(rival.full).toBe(true);
+  });
+
+  it('never exceeds the limit, however the incumbents are spread', () => {
+    const items = ranks(1, 1.01, 1.02, 1.03, 1.04, 1.05);
+    items.forEach((item, k) => (item.full = k % 2 === 0));
+    markNearest(items, 2);
+    expect(items.filter((i) => i.full)).toHaveLength(2);
+  });
+
+  it('rejects a negative limit', () => {
+    expect(() => markNearest(ranks(1), -1)).toThrow(RangeError);
   });
 });
