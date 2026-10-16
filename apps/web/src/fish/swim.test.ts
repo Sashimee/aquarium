@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
   amplitudeScale,
+  BITE_CLOSE_S,
+  BITE_OPEN_S,
+  biteGape,
+  BREATH_GAPE,
   envelopeAt,
   IDLE_AMPLITUDE,
   IDLE_TAIL_BEAT_HZ,
   MAX_BEND,
   MAX_TAIL_BEAT_HZ,
+  MOUTH_LEAD_CYCLES,
   EXERTED_VENTILATION_HZ,
   RESTING_VENTILATION_HZ,
   SWIM_MODES,
@@ -220,7 +225,121 @@ describe('SwimState', () => {
     });
   });
 
+  describe('buccal pumping', () => {
+    const length = 0.05;
+    const step = 1 / 240;
+    const hover = { speed: 0, yawRate: 0, thrust: 0 };
+    const cruise = { speed: 2 * length, yawRate: 0, thrust: 1 };
+    const run = (state: SwimState, seconds: number, sample: typeof hover): void => {
+      for (let t = 0; t < seconds; t += step) state.advance(step, sample);
+    };
+    /** Mouth and gill-cover openings over `seconds`, sampled every step. */
+    const trace = (state: SwimState, seconds: number, sample: typeof hover) => {
+      const mouth: number[] = [];
+      const gills: number[] = [];
+      const phase: number[] = [];
+      for (let t = 0; t < seconds; t += step) {
+        state.advance(step, sample);
+        mouth.push(state.mouthOpening);
+        gills.push(state.gillOpening);
+        phase.push(state.ventilationPhase);
+      }
+      return { mouth, gills, phase };
+    };
+    const peaks = (xs: readonly number[]): number =>
+      xs.filter((x, i) => x > (xs[i - 1] ?? Infinity) && x >= (xs[i + 1] ?? Infinity)).length;
+    const argmax = (xs: readonly number[]): number => xs.indexOf(Math.max(...xs));
+
+    it('gapes a breath no wider than a share of a bite and closes fully between breaths', () => {
+      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0);
+      const { mouth } = trace(state, 20, cruise);
+      expect(Math.min(...mouth)).toBeGreaterThanOrEqual(0);
+      expect(Math.min(...mouth)).toBeLessThan(0.002);
+      expect(Math.max(...mouth)).toBeLessThanOrEqual(BREATH_GAPE + 1e-9);
+      expect(Math.max(...mouth)).toBeGreaterThan(BREATH_GAPE * 0.95);
+    });
+
+    it('opens its widest a fixed share of a cycle ahead of the gill covers', () => {
+      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0);
+      run(state, 10, hover);
+      const { mouth, gills, phase } = trace(state, 1 / 1.2, hover);
+      const atMouth = phase[argmax(mouth)] ?? Number.NaN;
+      const atGills = phase[argmax(gills)] ?? Number.NaN;
+      const lead = (((atGills - atMouth) / TAU) % 1) + 1;
+      expect(lead % 1).toBeCloseTo(MOUTH_LEAD_CYCLES, 2);
+    });
+
+    it('pumps once per ventilation beat, faster and wider after sustained swimming', () => {
+      const resting = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0);
+      run(resting, 15, hover);
+      const atRest = trace(resting, 10, hover);
+      const working = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0);
+      run(working, 15, cruise);
+      const atWork = trace(working, 10, cruise);
+      expect(peaks(atRest.mouth)).toBe(peaks(atRest.gills));
+      expect(peaks(atWork.mouth)).toBe(peaks(atWork.gills));
+      expect(peaks(atWork.mouth)).toBeGreaterThan(peaks(atRest.mouth) * 1.5);
+      expect(Math.max(...atWork.mouth)).toBeGreaterThan(Math.max(...atRest.mouth) * 1.4);
+    });
+
+    it('gapes fully on a bite and is back to breathing once it closes', () => {
+      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0);
+      run(state, 2, hover);
+      state.bite();
+      expect(state.mouthOpening).toBeGreaterThanOrEqual(0);
+      state.advance(BITE_OPEN_S, hover);
+      expect(state.mouthOpening).toBeCloseTo(1, 6);
+      state.advance(BITE_CLOSE_S, hover);
+      expect(state.mouthOpening).toBeLessThanOrEqual(BREATH_GAPE);
+      expect(state.sinceBite).toBeCloseTo(BITE_OPEN_S + BITE_CLOSE_S, 9);
+    });
+
+    it('carries on from the current gape when it bites again mid-bite', () => {
+      for (const into of [0.02, 0.08, 0.15, 0.24]) {
+        const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0);
+        state.bite();
+        state.advance(into, hover);
+        const before = state.mouthOpening;
+        state.bite();
+        expect(state.mouthOpening, `bite again ${into} s in`).toBeCloseTo(before, 6);
+        const { mouth } = trace(state, BITE_OPEN_S, hover);
+        expect(Math.max(...mouth)).toBeGreaterThan(0.99);
+      }
+    });
+
+    it('is shut on the first frame of a fish that never bit, and only a breath wide', () => {
+      const state = new SwimState(length, 0.3, SWIM_MODES.subcarangiform, 0);
+      expect(state.sinceBite).toBe(Infinity);
+      expect(state.mouthOpening).toBeLessThanOrEqual(BREATH_GAPE);
+    });
+  });
+
   it('rejects a non-positive length', () => {
     expect(() => new SwimState(0, 0.3, SWIM_MODES.carangiform, 0)).toThrow(RangeError);
+  });
+});
+
+describe('biteGape', () => {
+  it('opens to 1 and closes to 0 over the bite', () => {
+    expect(biteGape(0)).toBe(0);
+    expect(biteGape(BITE_OPEN_S)).toBe(1);
+    expect(biteGape(BITE_OPEN_S + BITE_CLOSE_S)).toBe(0);
+    expect(biteGape(BITE_OPEN_S + BITE_CLOSE_S / 2)).toBeCloseTo(0.5, 9);
+  });
+
+  it('rises monotonically, then falls monotonically', () => {
+    const at = (n: number, from: number, span: number): number[] =>
+      Array.from({ length: n + 1 }, (_, i) => biteGape(from + (span * i) / n));
+    const rise = at(50, 0, BITE_OPEN_S);
+    const fall = at(50, BITE_OPEN_S, BITE_CLOSE_S);
+    expect(rise).toEqual([...rise].sort((a, b) => a - b));
+    expect(fall).toEqual([...fall].sort((a, b) => b - a));
+  });
+
+  it('is shut before, after and outside any bite', () => {
+    expect(biteGape(-0.01)).toBe(0);
+    expect(biteGape(Infinity)).toBe(0);
+    expect(biteGape(Number.NaN)).toBe(0);
+    expect(biteGape(10)).toBe(0);
   });
 });

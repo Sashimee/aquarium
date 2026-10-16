@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CompressedTexture } from 'three';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { disposeFishModel, FIN_ATTRIBUTE, FishAssetLoader, LEG_PART_ID } from './assets';
+import { MOUTH_LODS } from './lod';
 import { curlAboveFloor, curledTip, MAX_TAIL_CURL } from './walk';
 
 const ROOT = '/assets/';
@@ -147,15 +148,56 @@ describe('FishAssetLoader', () => {
     },
   );
 
-  it('keeps a fish on the two-component fin attribute with no hips', async () => {
+  it('keeps a fish without hips', async () => {
     serveShippedAssets();
     spyTextureLoads();
     const model = await new FishAssetLoader(new KTX2Loader(), ROOT).load('neon-tetra');
-    for (const part of model.lods.flat()) {
-      expect(part.geometry.getAttribute(FIN_ATTRIBUTE).itemSize).toBe(2);
-      expect(part.legPivots).toEqual([]);
-    }
+    for (const part of model.lods.flat()) expect(part.legPivots).toEqual([]);
     expect(model.tail).toBeNull();
     disposeFishModel(model);
   });
+
+  it.each([
+    'angelfish',
+    'banggai-cardinalfish',
+    'betta',
+    'blue-tang',
+    'bristlenose-pleco',
+    'bronze-corydoras',
+    'firefish',
+    'guppy-female',
+    'guppy-male',
+    'harlequin-rasbora',
+    'neon-tetra',
+    'ocellaris-clownfish',
+    'royal-gramma',
+    'six-line-wrasse',
+    'yellow-tang',
+  ])(
+    'packs the mouth weight of %s into its near LODs only, peaking at 1 off the fins',
+    async (id) => {
+      serveShippedAssets();
+      spyTextureLoads();
+      const model = await new FishAssetLoader(new KTX2Loader(), ROOT).load(id);
+      expect(model.lods.length).toBeGreaterThan(MOUTH_LODS);
+      for (const [level, parts] of model.lods.entries()) {
+        let peak = 0;
+        for (const part of parts) {
+          const fin = part.geometry.getAttribute(FIN_ATTRIBUTE);
+          expect(part.mouth).toBe(level < MOUTH_LODS && fin.itemSize === 3);
+          expect(fin.itemSize).toBe(part.mouth ? 3 : 2);
+          if (!part.mouth) continue;
+          for (let i = 0; i < fin.count; i++) {
+            const weight = fin.getZ(i);
+            expect(weight).toBeGreaterThanOrEqual(0);
+            expect(weight).toBeLessThanOrEqual(1);
+            if (fin.getY(i) !== 0) expect(weight).toBe(0);
+            peak = Math.max(peak, weight);
+          }
+        }
+        expect(peak, `${id} lod${level}`).toBe(level < MOUTH_LODS ? 1 : 0);
+      }
+      disposeFishModel(model);
+    },
+  );
 });

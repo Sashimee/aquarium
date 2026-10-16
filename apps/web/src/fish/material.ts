@@ -74,7 +74,7 @@ export interface FishMaterialFeatures {
   readonly fins: FinRendering;
   readonly iridescence: boolean;
   readonly clearcoat: boolean;
-  /** Opercular pumping in the vertex deformation. */
+  /** Opercular and buccal pumping in the vertex deformation. */
   readonly gills: boolean;
 }
 
@@ -91,6 +91,8 @@ export interface FishMaterialConfig {
   readonly zMin: number;
   readonly instances: FishInstanceData;
   readonly lighting: FishLighting;
+  /** The fin attribute is a vec3 whose third component is the `_mouth` weight. */
+  readonly mouth: boolean;
 }
 
 const FIN_ID = { caudal: 1, dorsal: 2, anal: 3, pectoral: 4, pelvic: 5 } as const;
@@ -109,6 +111,17 @@ const GILL_COVER_S = 0.08;
 const GILL_FALLOFF_S = 0.03;
 /** Lateral widening of the head at the gill edge with the covers fully flared. */
 const GILL_FLARE = 0.08;
+/**
+ * Drop of the jaw tip at a feeding bite's full gape, in body lengths: a lower jaw a tenth of the
+ * body long swung down by about 14°.
+ */
+const JAW_DROP = 0.025;
+/**
+ * The baked mouth weight is about 0.5 along the mouth slit and the jaw line, and its soft upper
+ * edge reaches the lower rim of the eye. Only the part above this moves, so the eye and the upper
+ * lip stay put and the jaw swings from its rear.
+ */
+const JAW_WEIGHT_FROM = 0.45;
 /** Guanine (n ≈ 1.83) platelets are the reflectors in fish iridophores (Land 1972). */
 const GUANINE_IOR = 1.83;
 const FIN_OPACITY_FLOOR = 0.2;
@@ -273,8 +286,8 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
       }
       const walker = walkerDeformation(locomotion.rig, {
         look: this.instanceVec4(8),
-        walk: this.instanceVec4(16),
-        act: this.instanceVec4(20),
+        walk: this.instanceVec4(20),
+        act: this.instanceVec4(24),
       });
       this.still = walker;
       this.breathing = walker;
@@ -309,6 +322,13 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
     return node;
   }
 
+  /** `_fin_mask` and `_fin_id`, whichever layout the fin attribute has. */
+  private finMaskAndId(): Node<'vec2'> {
+    return this.config.locomotion.kind === 'walk' || this.config.mouth
+      ? attribute<'vec3'>(FIN_ATTRIBUTE, 'vec3').xy
+      : attribute<'vec2'>(FIN_ATTRIBUTE, 'vec2');
+  }
+
   private buildDeformation(mode: SwimModeParams, gills: boolean): Deformation {
     const { zMax, zMin } = this.config;
     const zLen = zMax - zMin;
@@ -320,7 +340,7 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
     const amp = swim.z;
     const curvature = swim.w;
     const finPhase = look.x;
-    const fin = attribute<'vec2'>(FIN_ATTRIBUTE, 'vec2');
+    const fin = this.finMaskAndId();
     const mask = fin.x;
     const id = fin.y;
     const p = positionGeometry;
@@ -380,7 +400,16 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
       nx = n.x.div(widen);
       slopeS = slopeS.add(p.x.mul(widenSlopeS));
     }
-    const position = vec3(x, p.y, p.z.add(pectoralRow)).toVar('fishPosition');
+    let y: Node<'float'> = p.y;
+    if (gills && this.config.mouth) {
+      const jaw = smoothstep(JAW_WEIGHT_FROM, 1, attribute<'vec3'>(FIN_ATTRIBUTE, 'vec3').z);
+      const weight = jaw.mul(smoothstep(GILL_EDGE_S, 0, s));
+      const opening = this.instanceVec4(16).x;
+      // The baked weight carries no gradient to bend the normal with; at this drop the shading
+      // error stays within a few degrees.
+      y = p.y.sub(opening.mul(weight).mul(JAW_DROP * zLen));
+    }
+    const position = vec3(x, y, p.z.add(pectoralRow)).toVar('fishPosition');
     const slope = slopeS.div(-zLen).add(bendSlope);
     const normal = normalize(vec3(nx, n.y, n.z.sub(slope.mul(nx)))).toVar('fishNormal');
     return { position, normal };
@@ -394,9 +423,7 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
     const pale = look.y;
     const seed = look.z;
     const walker = this.config.locomotion.kind === 'walk';
-    const fin = walker
-      ? attribute<'vec3'>(FIN_ATTRIBUTE, 'vec3').xy
-      : attribute<'vec2'>(FIN_ATTRIBUTE, 'vec2');
+    const fin = this.finMaskAndId();
     // A shrimp's limbs are its translucent membranes; its abdomen weight is the tail curl's.
     const membrane = walker
       ? step(LEG_PART_ID - 0.5, fin.y).mul(step(fin.y, 8.5))
