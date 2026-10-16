@@ -37,7 +37,6 @@ describe('web app manifest installability', () => {
     expect(manifest.short_name.length).toBeGreaterThan(0);
     expect(manifest.short_name.length).toBeLessThanOrEqual(12);
     expect(manifest.start_url.startsWith(manifest.scope)).toBe(true);
-    expect(['standalone', 'fullscreen', 'minimal-ui']).toContain(manifest.display);
     expect(manifest.display).toBe('standalone');
   });
 
@@ -73,9 +72,7 @@ describe('web app manifest installability', () => {
     expect(html).toContain(`<meta name="theme-color" content="${manifest.theme_color}" />`);
   });
 
-  it('ships a service worker with a fetch handler and the offline page it falls back to', () => {
-    expect(read('sw.js')).toContain("addEventListener('fetch'");
-    expect(read('sw.js')).toContain('/offline.html');
+  it('ships the offline page the service worker falls back to', () => {
     expect(read('offline.html')).toContain('The tank is asleep');
   });
 });

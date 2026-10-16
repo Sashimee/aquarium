@@ -2,7 +2,9 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { crc32, deflateSync } from 'node:zlib';
 
-const OUT = fileURLToPath(new URL('../public/icons/', import.meta.url));
+const OUT = process.argv[2]
+  ? `${process.argv[2].replace(/\/$/, '')}/`
+  : fileURLToPath(new URL('../public/icons/', import.meta.url));
 const SAMPLES = 3;
 
 const TOP = [14, 63, 94];

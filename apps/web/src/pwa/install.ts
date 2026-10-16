@@ -3,6 +3,8 @@ export interface InstallPromptEvent extends Event {
   readonly userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
+export type PromptPhase = 'idle' | 'asking' | 'accepted' | 'dismissed' | 'failed';
+
 export type InstallMode = 'installed' | 'prompt' | 'ios-hint' | 'none';
 
 export interface Environment {
@@ -41,6 +43,7 @@ export function readEnvironment(win: Window = window): Environment {
 export class InstallState {
   private deferred: InstallPromptEvent | null = null;
   private installed = false;
+  private current: PromptPhase = 'idle';
   private readonly listeners = new Set<() => void>();
   private version = 0;
 
@@ -48,6 +51,7 @@ export class InstallState {
     const onPrompt = (event: Event) => {
       event.preventDefault();
       this.deferred = event as InstallPromptEvent;
+      this.current = 'idle';
       this.changed();
     };
     const onInstalled = () => {
@@ -63,8 +67,13 @@ export class InstallState {
     };
   }
 
+  /** True from the moment the browser offers an install until the player's answer is known. */
   get hasPrompt(): boolean {
-    return this.deferred !== null;
+    return this.deferred !== null || this.current !== 'idle';
+  }
+
+  get phase(): PromptPhase {
+    return this.current;
   }
 
   get wasInstalled(): boolean {
@@ -78,14 +87,22 @@ export class InstallState {
 
   getVersion = (): number => this.version;
 
-  /** The browser allows one prompt per event, so the event is dropped whatever the answer. */
-  async prompt(): Promise<'accepted' | 'dismissed' | 'unavailable'> {
+  /** The event is kept while the dialog is open and dropped once answered: one prompt per event. */
+  async prompt(): Promise<PromptPhase | 'unavailable'> {
     const event = this.deferred;
-    if (!event) return 'unavailable';
+    if (!event || this.current === 'asking') return 'unavailable';
+    this.current = 'asking';
+    this.changed();
+    try {
+      await event.prompt();
+      this.current = (await event.userChoice).outcome;
+    } catch (cause) {
+      console.error('The install prompt failed', cause);
+      this.current = 'failed';
+    }
     this.deferred = null;
     this.changed();
-    await event.prompt();
-    return (await event.userChoice).outcome;
+    return this.current;
   }
 
   private changed(): void {

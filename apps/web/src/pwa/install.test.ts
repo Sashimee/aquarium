@@ -88,9 +88,66 @@ describe('InstallState', () => {
 
     expect(await state.prompt()).toBe('accepted');
     expect(prompt).toHaveBeenCalledTimes(1);
-    expect(state.hasPrompt).toBe(false);
+    expect(state.phase).toBe('accepted');
     expect(await state.prompt()).toBe('unavailable');
     expect(prompt).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps offering the install until the dialog is answered', async () => {
+    const target = new EventTarget();
+    const state = new InstallState();
+    state.attach(target as unknown as Window);
+    const event = new Event('beforeinstallprompt', { cancelable: true }) as InstallPromptEvent;
+    let answer: (choice: { outcome: 'accepted' | 'dismissed' }) => void = () => undefined;
+    Object.assign(event, {
+      prompt: async () => undefined,
+      userChoice: new Promise((resolve) => {
+        answer = resolve;
+      }),
+    });
+    target.dispatchEvent(event);
+
+    const pending = state.prompt();
+    await Promise.resolve();
+    expect(state.phase).toBe('asking');
+    expect(state.hasPrompt).toBe(true);
+    expect(await state.prompt()).toBe('unavailable');
+
+    answer({ outcome: 'dismissed' });
+    expect(await pending).toBe('dismissed');
+    expect(state.phase).toBe('dismissed');
+    expect(state.hasPrompt).toBe(true);
+  });
+
+  it('reports a rejected prompt() instead of leaving the card stuck', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const target = new EventTarget();
+    const state = new InstallState();
+    state.attach(target as unknown as Window);
+    const event = new Event('beforeinstallprompt', { cancelable: true }) as InstallPromptEvent;
+    Object.assign(event, {
+      prompt: async () => {
+        throw new Error('not allowed');
+      },
+      userChoice: new Promise(() => undefined),
+    });
+    target.dispatchEvent(event);
+
+    expect(await state.prompt()).toBe('failed');
+    expect(state.phase).toBe('failed');
+    expect(error).toHaveBeenCalled();
+    error.mockRestore();
+  });
+
+  it('starts a fresh round when the browser offers another prompt', async () => {
+    const target = new EventTarget();
+    const state = new InstallState();
+    state.attach(target as unknown as Window);
+    target.dispatchEvent(fakePrompt('dismissed').event);
+    await state.prompt();
+    expect(state.phase).toBe('dismissed');
+    target.dispatchEvent(fakePrompt('accepted').event);
+    expect(state.phase).toBe('idle');
   });
 
   it('forgets the prompt and records the install on appinstalled', () => {

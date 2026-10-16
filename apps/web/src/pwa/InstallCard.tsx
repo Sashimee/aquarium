@@ -1,14 +1,26 @@
-import { useState, useSyncExternalStore } from 'react';
-import { installMode, installState, readEnvironment } from './install';
+import { useSyncExternalStore } from 'react';
+import {
+  installMode,
+  installState,
+  readEnvironment,
+  type Environment,
+  type InstallState,
+} from './install';
 
-export function InstallCard() {
-  useSyncExternalStore(installState.subscribe, installState.getVersion);
-  const [declined, setDeclined] = useState(false);
+interface Props {
+  state?: InstallState;
+  environment?: Environment;
+}
+
+export function InstallCard({ state = installState, environment }: Props) {
+  useSyncExternalStore(state.subscribe, state.getVersion, state.getVersion);
+  const env = environment ?? readEnvironment();
   const mode = installMode(
-    installState.wasInstalled ? { ...readEnvironment(), standalone: true } : readEnvironment(),
-    installState.hasPrompt,
+    state.wasInstalled ? { ...env, standalone: true } : env,
+    state.hasPrompt,
   );
   if (mode === 'none') return null;
+  const { phase } = state;
 
   return (
     <section aria-labelledby="install-title" data-testid="install-card">
@@ -17,14 +29,18 @@ export function InstallCard() {
       {mode === 'prompt' && (
         <>
           <p>Add Aquarium to your home screen to open it full screen, like any other app.</p>
-          <button
-            type="button"
-            onClick={() =>
-              void installState.prompt().then((outcome) => setDeclined(outcome === 'dismissed'))
-            }
-          >
-            Install Aquarium
-          </button>
+          {(phase === 'idle' || phase === 'asking') && (
+            <button type="button" disabled={phase === 'asking'} onClick={() => void state.prompt()}>
+              {phase === 'asking' ? 'Waiting for your browser…' : 'Install Aquarium'}
+            </button>
+          )}
+          <p role="status" className="hint">
+            {phase === 'accepted' && 'Installing…'}
+            {phase === 'dismissed' &&
+              'Installation was cancelled. Reload the page if you change your mind.'}
+            {phase === 'failed' &&
+              'Your browser could not start the install. Use its menu to add Aquarium to your home screen.'}
+          </p>
         </>
       )}
       {mode === 'ios-hint' && (
@@ -33,9 +49,6 @@ export function InstallCard() {
           <strong>Add to Home Screen</strong>.
         </p>
       )}
-      <p role="status" className="hint">
-        {declined ? 'No problem. You can install it later from this page.' : ''}
-      </p>
     </section>
   );
 }

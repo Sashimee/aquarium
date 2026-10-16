@@ -1,11 +1,11 @@
-// Replaced with a hash of the emitted bundle names at build time (build/sw-build-id-plugin.ts),
+// Replaced at build time with a hash of the bundle names and every precached file (build/sw-build-id-plugin.ts),
 // so every deploy gets fresh caches and activate drops the old ones.
 const BUILD_ID = '__BUILD_ID__';
 const SHELL_CACHE = `aquarium-shell-${BUILD_ID}`;
 const ASSET_CACHE = `aquarium-assets-${BUILD_ID}`;
 const OFFLINE_URL = '/offline.html';
 const SHELL = [
-  OFFLINE_URL,
+  '/offline.html',
   '/manifest.webmanifest',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
@@ -28,10 +28,13 @@ self.addEventListener('install', (event) => {
   );
 });
 
+// skipWaiting + claim + dropping old caches means open tabs of the previous build lose their
+// cached bundles; they fall back to the network, which still serves the old hashed files until
+// the deploy replaces them. Fresh code beats waiting for every tab to close.
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches
-      .keys()
+    Promise.resolve(self.registration.navigationPreload?.enable())
+      .then(() => caches.keys())
       .then((keys) =>
         Promise.all(
           keys
@@ -52,9 +55,9 @@ async function cacheFirst(request) {
   return response;
 }
 
-async function navigate(request) {
+async function navigate(event) {
   try {
-    return await fetch(request);
+    return (await event.preloadResponse) ?? (await fetch(event.request));
   } catch {
     const cache = await caches.open(SHELL_CACHE);
     return (await cache.match(OFFLINE_URL)) ?? Response.error();
@@ -73,7 +76,7 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin || isApi(url.pathname)) return;
 
   if (request.mode === 'navigate') {
-    event.respondWith(navigate(request));
+    event.respondWith(navigate(event));
   } else if (HASHED_ASSET.test(url.pathname)) {
     event.respondWith(cacheFirst(request));
   } else if (SHELL.includes(url.pathname)) {

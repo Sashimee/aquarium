@@ -1,13 +1,13 @@
-import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
-import { describe, expect, it } from 'vitest';
-import { buildId, stampWorker } from '../../build/sw-build-id-plugin';
+import { afterAll, describe, expect, it } from 'vitest';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { buildId, buildIdForOutput, shellPaths, stampWorker } from '../../build/sw-build-id-plugin';
 
 const BUILD = 'abc123';
-const SOURCE = stampWorker(
-  readFileSync(new URL('../../public/sw.js', import.meta.url), 'utf8'),
-  BUILD,
-);
+const RAW_SOURCE = readFileSync(new URL('../../public/sw.js', import.meta.url), 'utf8');
+const SOURCE = stampWorker(RAW_SOURCE, BUILD);
 const ORIGIN = 'https://fish.test';
 
 type Listener = (event: unknown) => void;
@@ -31,6 +31,7 @@ function boot(network: (request: Request) => Promise<Response>) {
   const stores = new Map<string, FakeCache>();
   const listeners = new Map<string, Listener>();
   const fetched: string[] = [];
+  let preloadEnabled = false;
   const caches = {
     async open(name: string) {
       if (!stores.has(name)) stores.set(name, new FakeCache());
@@ -47,6 +48,7 @@ function boot(network: (request: Request) => Promise<Response>) {
     location: new URL(`${ORIGIN}/sw.js`),
     addEventListener: (type: string, listener: Listener) => listeners.set(type, listener),
     skipWaiting: async () => undefined,
+    registration: { navigationPreload: { enable: async () => void (preloadEnabled = true) } },
     clients: { claim: async () => undefined },
   };
   runInNewContext(SOURCE, {
@@ -70,7 +72,10 @@ function boot(network: (request: Request) => Promise<Response>) {
     await pending;
   };
 
-  const request = async (path: string, init: { mode?: string; method?: string } = {}) => {
+  const request = async (
+    path: string,
+    init: { mode?: string; method?: string; preload?: Response } = {},
+  ) => {
     const req = new Request(path.startsWith('http') ? path : `${ORIGIN}${path}`, {
       method: init.method ?? 'GET',
     });
@@ -78,6 +83,7 @@ function boot(network: (request: Request) => Promise<Response>) {
     let answer: Promise<Response> | undefined;
     listeners.get('fetch')?.({
       request: req,
+      preloadResponse: Promise.resolve(init.preload),
       respondWith: (p: Promise<Response>) => {
         answer = p;
       },
@@ -85,7 +91,7 @@ function boot(network: (request: Request) => Promise<Response>) {
     return answer ? await answer : undefined;
   };
 
-  return { stores, fetched, lifecycle, request };
+  return { stores, fetched, lifecycle, request, preloadEnabled: () => preloadEnabled };
 }
 
 const online = async (request: Request) => new Response(`net ${new URL(request.url).pathname}`);
@@ -157,10 +163,13 @@ describe('service worker', () => {
     expect(await (await sw.request('/tank/3', { mode: 'navigate' }))?.text()).toBe('net /tank/3');
   });
 
-  it('names its caches after the build, so a new deploy starts with empty ones', () => {
-    expect(buildId(['assets/index-a.js'])).not.toBe(buildId(['assets/index-b.js']));
-    expect(buildId(['b.js', 'a.js'])).toBe(buildId(['a.js', 'b.js']));
-    expect(() => stampWorker('no placeholder', BUILD)).toThrow(/__BUILD_ID__/);
+  it('uses the navigation preload response instead of fetching twice', async () => {
+    const sw = boot(online);
+    await sw.lifecycle('activate');
+    expect(sw.preloadEnabled()).toBe(true);
+    const res = await sw.request('/', { mode: 'navigate', preload: new Response('preloaded') });
+    expect(await res?.text()).toBe('preloaded');
+    expect(sw.fetched).toHaveLength(0);
   });
 
   it('drops caches from older versions on activate', async () => {
@@ -169,5 +178,50 @@ describe('service worker', () => {
     sw.stores.set('aquarium-shell-old', new FakeCache());
     await sw.lifecycle('activate');
     expect([...sw.stores.keys()]).toEqual([`aquarium-shell-${BUILD}`]);
+  });
+});
+
+describe('build id', () => {
+  const dirs: string[] = [];
+  const outputDir = (offlinePage: string) => {
+    const dir = mkdtempSync(join(tmpdir(), 'sw-build-'));
+    dirs.push(dir);
+    mkdirSync(join(dir, 'icons'));
+    for (const path of shellPaths(RAW_SOURCE)) {
+      writeFileSync(join(dir, path), path === '/offline.html' ? offlinePage : `content of ${path}`);
+    }
+    return dir;
+  };
+  afterAll(() => dirs.forEach((dir) => rmSync(dir, { recursive: true, force: true })));
+
+  it('reads the precached paths from the worker source', () => {
+    expect(shellPaths(RAW_SOURCE)).toEqual(
+      expect.arrayContaining(['/offline.html', '/manifest.webmanifest', '/icons/icon-512.png']),
+    );
+    expect(() => shellPaths('const nothing = 1;')).toThrow(/SHELL/);
+  });
+
+  it('changes when a bundle name changes, and ignores their order', () => {
+    expect(buildId({ a: '1' })).not.toBe(buildId({ b: '1' }));
+    expect(buildId({ b: '1', a: '2' })).toBe(buildId({ a: '2', b: '1' }));
+  });
+
+  it('changes when only the offline page content changes', () => {
+    const bundles = ['assets/index-a.js'];
+    const before = buildIdForOutput(outputDir('<p>asleep</p>'), bundles, RAW_SOURCE);
+    const same = buildIdForOutput(outputDir('<p>asleep</p>'), bundles, RAW_SOURCE);
+    const edited = buildIdForOutput(outputDir('<p>napping</p>'), bundles, RAW_SOURCE);
+    expect(same).toBe(before);
+    expect(edited).not.toBe(before);
+  });
+
+  it('changes when the worker source changes', () => {
+    const dir = outputDir('<p>asleep</p>');
+    const base = buildIdForOutput(dir, [], RAW_SOURCE);
+    expect(buildIdForOutput(dir, [], `${RAW_SOURCE}\n// edit`)).not.toBe(base);
+  });
+
+  it('refuses to stamp a worker without the placeholder', () => {
+    expect(() => stampWorker('no placeholder', BUILD)).toThrow(/__BUILD_ID__/);
   });
 });
