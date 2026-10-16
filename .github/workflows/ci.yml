@@ -125,7 +125,7 @@ jobs:
           - name: switch-tanks
             args: tank-type-switch.spec
           - name: loading
-            args: loading.spec
+            args: loading.spec pwa.spec haptics.spec
           - name: ktx2-feed-auth-death
             args: ktx2.spec feed.spec auth.spec death.spec
           - name: tanks-care-reset

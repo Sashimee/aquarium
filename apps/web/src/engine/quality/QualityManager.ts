@@ -1,6 +1,6 @@
 import type { EngineEventBus } from '../events';
 import { DEFAULT_CONTROLLER_CONFIG, TierController } from './controller';
-import { selectInitialTier, type TimingSignal } from './probe';
+import { gpuTimeSpansFrames, median, selectInitialTier, type TimingSignal } from './probe';
 import {
   TIER_SETTINGS,
   tierIndex,
@@ -180,7 +180,7 @@ export class QualityManager {
   /**
    * Manual override from the dev panel or settings; adaptation restarts from there. A pick above
    * `maxTier` is shown as picked, but the controller restarts clamped to `maxTier`, so its first
-   * step over budget lands one below the cap: on a phone, ultra drops straight to low.
+   * step over budget lands one below the cap: on a phone, ultra drops straight to medium.
    */
   setTier(tier: Tier, nowMs: number): void {
     if (this.probing) this.phase = { kind: 'running' };
@@ -194,8 +194,7 @@ export class QualityManager {
   }
 
   private finishProbe(phase: Extract<Phase, { kind: 'probing' }>, nowMs: number): void {
-    const signal: TimingSignal =
-      this.options.gpuTiming && phase.gpu.length >= this.minGpuSamples ? 'gpu' : 'frame';
+    const signal: TimingSignal = this.trustsGpu(phase) ? 'gpu' : 'frame';
     this.signal = signal;
     const measured = this.current;
     const result = selectInitialTier({
@@ -225,6 +224,13 @@ export class QualityManager {
       this.controller.reset(result.tier, nowMs);
     }
     this.settle(result.tier);
+  }
+
+  private trustsGpu(phase: Extract<Phase, { kind: 'probing' }>): boolean {
+    if (!this.options.gpuTiming || phase.gpu.length < this.minGpuSamples) return false;
+    const gpuMs = median(phase.gpu);
+    const frameMs = median(phase.frame);
+    return gpuMs !== null && (frameMs === null || !gpuTimeSpansFrames(gpuMs, frameMs));
   }
 
   /** Applies a probe's pick; the first pick is announced even when it keeps the probe tier. */
