@@ -454,7 +454,8 @@ describe('feeding AI', { timeout: LONG }, () => {
     let highest = 0;
     const events = feedFor(w, rain, 2400, () => {
       for (let i = 0; i < w.count; i++) {
-        highest = Math.max(highest, at(w.position, i * 3 + 1));
+        // A dash to the surface for air is not swimming up to the food.
+        if (w.state[i] !== FishState.Gulp) highest = Math.max(highest, at(w.position, i * 3 + 1));
         const k = at(feeding.target, i);
         if (k >= 0 && firstHeight === Infinity) firstHeight = at(w.food.position, k * 3 + 1);
       }

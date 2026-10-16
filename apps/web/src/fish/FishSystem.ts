@@ -46,7 +46,7 @@ import {
   type InstanceValues,
   type WalkerValues,
 } from './instances';
-import { selectLod, type LodThresholds } from './lod';
+import { mouthFade, selectLod, type LodThresholds } from './lod';
 import { featuresFor, sameFeatures, waitsForReload } from './features';
 import { FishMaterial, type FishMaterialFeatures } from './material';
 import { commitLodDraw } from './prewarm';
@@ -314,6 +314,7 @@ export class FishSystem {
     filmThickness: 0,
     tint: [1, 1, 1],
     gills: 0,
+    mouth: 0,
   };
 
   /**
@@ -736,6 +737,7 @@ export class FishSystem {
           zMax: model.entry.max[2],
           instances,
           lighting,
+          mouth: part.mouth,
         });
         if (this.features !== null) material.setFeatures(this.features);
         const mesh = new InstancedMesh(part.geometry, material, capacity);
@@ -1097,6 +1099,11 @@ export class FishSystem {
     worker.addEventListener('error', this.simErrors.workerFailed);
     sim.onSnapshot((snapshot) => this.stream.push(snapshot, performance.now()));
     sim.onAte((events) => {
+      for (const { fishId } of events) {
+        if (this.roster.get(fishId)?.phase !== 'swimming') continue;
+        const motion = this.runtimes.get(fishId)?.motion;
+        if (motion instanceof SwimState) motion.bite();
+      }
       const bites = this.roster.translateAte(events);
       if (bites.length === 0) return;
       for (const listener of this.ateListeners) listener(bites);
@@ -1301,13 +1308,8 @@ export class FishSystem {
       rt.shown = true;
 
       const lods = rt.batch.lods;
-      rt.lod = selectLod(
-        this.position.distanceTo(camera),
-        rt.length,
-        this.thresholds,
-        rt.lod,
-        lods.length,
-      );
+      const distance = this.position.distanceTo(camera);
+      rt.lod = selectLod(distance, rt.length, this.thresholds, rt.lod, lods.length);
       const lod = lods[rt.lod];
       if (lod === undefined) continue;
       const slot = lod.count++;
@@ -1334,6 +1336,10 @@ export class FishSystem {
       v.filmThickness = rt.filmThickness;
       v.tint = rt.tint;
       v.gills = (swim?.gillOpening ?? 0) * liveliness;
+      v.mouth =
+        swim === null
+          ? 0
+          : swim.mouthOpening * liveliness * mouthFade(distance, rt.length, this.thresholds);
       lod.instances.write(slot, v);
       const { locomotion } = rt.batch;
       if (motion instanceof WalkState && locomotion.kind === 'walk') {

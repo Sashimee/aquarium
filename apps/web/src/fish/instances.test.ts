@@ -24,6 +24,7 @@ const values: InstanceValues = {
   filmThickness: 320,
   tint: [0.9, 1, 1.1],
   gills: 0.375,
+  mouth: 0.125,
 };
 
 describe('FishInstanceData', () => {
@@ -40,10 +41,12 @@ describe('FishInstanceData', () => {
     expect(data.array[o + InstanceSlot.FilmThickness]).toBe(320);
     expect(data.array[o + InstanceSlot.TintB]).toBeCloseTo(1.1, 6);
     expect(data.array[o + InstanceSlot.Gills]).toBe(0.375);
+    expect(data.array[o + InstanceSlot.Mouth]).toBe(0.125);
   });
 
   it('keeps every slot inside one stride', () => {
     for (const slot of Object.values(InstanceSlot)) expect(slot).toBeLessThan(INSTANCE_STRIDE);
+    expect(INSTANCE_STRIDE % 4).toBe(0);
     expect(new Set(Object.values(InstanceSlot)).size).toBe(Object.values(InstanceSlot).length);
   });
 
@@ -106,6 +109,7 @@ describe('FishInstanceData', () => {
       expect(data.array[o + WalkerSlot.Curl]).toBeCloseTo(1.2, 6);
       expect(data.array[o + WalkerSlot.Paddle]).toBe(0.75);
       expect(data.array[o + WalkerSlot.Dance]).toBe(0.125);
+      expect(data.array[o + InstanceSlot.Mouth]).toBe(0.125);
     });
 
     it('collapses the whole walker stride', () => {
