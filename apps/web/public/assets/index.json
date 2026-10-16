@@ -2,7 +2,7 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; every texture has both files.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Every fish LOD also carries _MOUTH, geometry attribute \"_mouth\", a float in [0, 1] for buccal motion: 1 at the jaw or lower-lip tip (every LOD is renormalised so its highest value is exactly 1), easing to 0 behind the gill line and above the mouth slit; fins, eyes and attachments are 0. Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body, carapace and eyes; 6 walking leg; 7 antenna; 8 pleopod; 9 abdomen, telson and tail fan) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x; antennules 0/1, long antennae 2/3; tail-fan leaves k * 2 + side). Shrimp _fin_mask means: id 0 is 0 (eye stalks included, ignore it); ids 6 and 7 are the weight along the limb, 0 root to 1 tip; id 8 is the pleopod beat weight, 0 root to 1 tip; id 9 is the tail-curl weight clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1) of the rest position. Tail curl rotates ids 8 and 9 about +x through the shrimp.abdomenHinge {y, z} by flex * clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1), computed from the rest position, never from _fin_mask, so the pleopods follow the segment they hang from. Pleopods (id 8) exist only in LOD0 and LOD1 and are removed from LOD2; legs are simplified, so do not assume every _leg index exists at every LOD. The cherry material is alphaMode BLEND with base colour alpha 0.86: three.js GLTFLoader turns depthWrite off for BLEND, so set depthWrite true on the cherry material and expect some sorting artefacts from the self-overlapping legs and antennae.",
-  "totalBytes": 68878842,
+  "totalBytes": 68882466,
   "assets": [
     {
       "id": "angelfish",
@@ -1134,22 +1134,22 @@
       "lods": [
         {
           "file": "fish/discus/lod0.glb",
-          "bytes": 124360,
-          "sha256": "722faa8eff96cb8080ee14a711dc0500902dc631adb65fcf538ac8990f0b3922",
+          "bytes": 125624,
+          "sha256": "ab1863a869242b2adba443150c8275ebef4abce9a31353961f94826eb90ed26e",
           "triangles": 8011,
           "vertices": 5331
         },
         {
           "file": "fish/discus/lod1.glb",
-          "bytes": 63364,
-          "sha256": "136da9d1b31b574146b735f621d451e78daae2230494ec43dffc046db02431a7",
+          "bytes": 64544,
+          "sha256": "b5d7e7a061ab33b709a70ad92de9fc93740799fb5caea7228c0230d8604ee542",
           "triangles": 3356,
           "vertices": 2346
         },
         {
           "file": "fish/discus/lod2.glb",
-          "bytes": 33956,
-          "sha256": "140df6ee06b18f32cf3e1dbe0434869c73602f8e20886fe4d25a99ff0fb6372d",
+          "bytes": 35136,
+          "sha256": "30b4aca4f3717c241b0e9e720197b033a72fe583dbf695c9e7734e3679c9d713",
           "triangles": 1442,
           "vertices": 1059
         }
@@ -1232,18 +1232,18 @@
         },
         {
           "file": "fish/discus/lod0.glb",
-          "bytes": 124360,
-          "sha256": "722faa8eff96cb8080ee14a711dc0500902dc631adb65fcf538ac8990f0b3922"
+          "bytes": 125624,
+          "sha256": "ab1863a869242b2adba443150c8275ebef4abce9a31353961f94826eb90ed26e"
         },
         {
           "file": "fish/discus/lod1.glb",
-          "bytes": 63364,
-          "sha256": "136da9d1b31b574146b735f621d451e78daae2230494ec43dffc046db02431a7"
+          "bytes": 64544,
+          "sha256": "b5d7e7a061ab33b709a70ad92de9fc93740799fb5caea7228c0230d8604ee542"
         },
         {
           "file": "fish/discus/lod2.glb",
-          "bytes": 33956,
-          "sha256": "140df6ee06b18f32cf3e1dbe0434869c73602f8e20886fe4d25a99ff0fb6372d"
+          "bytes": 35136,
+          "sha256": "30b4aca4f3717c241b0e9e720197b033a72fe583dbf695c9e7734e3679c9d713"
         },
         {
           "file": "fish/discus/textures/discus_material-001_basecolor_1k.ktx2",
