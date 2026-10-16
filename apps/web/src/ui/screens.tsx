@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { ApiRequestError, ClientValidationError, type FieldErrors } from './api';
 import { useApi, useAuth } from './context';
+import { HapticsSetting } from './HapticsSetting';
 import { deleteErrorMessage, downloadText, rateLimitMessage, safeHref } from './legal';
 import { navigate } from './router';
 
@@ -749,6 +750,7 @@ export function SettingsScreen() {
         </p>
         <FormError message={passkey.error} />
       </section>
+      <HapticsSetting />
       <section aria-labelledby="export-title">
         <h2 id="export-title">Your data</h2>
         <p>Download everything we store about you as a JSON file.</p>
