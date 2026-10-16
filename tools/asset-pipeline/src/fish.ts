@@ -10,6 +10,7 @@ import {
 } from './glossy-eyes.ts';
 import { BRISTLE_DETAIL, growBristles, pickSkinUv, type BristleSpec } from './tentacles.ts';
 import { buildDocument, emitAsset, type LodPlan } from './emit.ts';
+import type { Atlas } from './impostor.ts';
 import { seatEyes, type EyePlacement } from './eyes.ts';
 import {
   bodyCentreOfMass,
@@ -85,6 +86,7 @@ export interface FishContext {
   licenceOf(sourceId: string): string;
   /** Throws unless the raw files of the source match the manifest hashes. */
   verifySource(sourceId: string): void;
+  atlasSink?: (id: string, atlas: Atlas) => void;
 }
 
 const speciesFileSchema = speciesSchema.partial({
@@ -366,6 +368,7 @@ export async function buildSourceFish(recipe: FishRecipe, ctx: FishContext): Pro
     id: recipe.id,
     built,
     plan: recipe.lodPlan ?? FISH_LOD_PLAN,
+    ...(ctx.atlasSink ? { atlasSink: ctx.atlasSink } : {}),
     meta: {
       species: recipe.species,
       origin: 'model',

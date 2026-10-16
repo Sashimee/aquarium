@@ -983,6 +983,7 @@ export async function buildLoftFish(
     id: recipe.id,
     built,
     plan: FISH_LOD_PLAN,
+    ...(ctx.atlasSink ? { atlasSink: ctx.atlasSink } : {}),
     meta: {
       species: recipe.species,
       origin: 'procedural-loft',
