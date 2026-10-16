@@ -22,6 +22,8 @@ Curated for T05 (#5), checked 2026-10-12. Ranks are by fit for a photorealistic 
 | Firefish | no model exists | `wm-firefish-karelj` |
 | Cherry shrimp | only cooked-prawn models; shrimp are not fish | `wm-cherry-dagostino-1`, `wm-cherry-dagostino-2` (procedural shrimp) |
 | Skunk cleaner shrimp | no model of the species | `wm-cleaner-huffman`, `wm-cleaner-caruso`, `wm-cleaner-schofield` (procedural shrimp) |
+| Cleaner wrasse (T44) | no Labroides model exists | `wm-labroides-jens`, `wm-labroides-hylton` |
+| Nerite snail (soft body only) | the scan is a shell without foot, head or tentacles | `wm-nerite-baldonado-2`, `wm-nerite-obsidian-05` (procedural body) |
 | Anemone (host) | no photoreal free model | procedural TSL |
 
 ## CC-BY-SA (allowed for reference photos only)
@@ -267,6 +269,42 @@ No model of the species exists under an allowed licence. The CC0 ffish.asia scan
 
 Alex approved CC BY-SA lateral reference photos for the firefish, six-line wrasse, harlequin rasbora and bristlenose pleco. Picks, chosen from a visual comparison of the Commons candidates (3.0 and 4.0 only; 2.0 and 2.5 are not on the project's list): `wm-firefish-hobgood` (Nick Hobgood, BY-SA 3.0, shows the long dorsal spine), `wm-rasbora-dabrowski` (Mariusz Dabrowski, BY-SA 3.0, true lateral), `wm-sixline-delso-63` (Diego Delso, BY-SA 4.0), `wm-ancistrus-reis` (Julio Reis, BY-SA 4.0, wild-type colour, tail cropped) and `wm-ancistrus-l144-adolfoi` (Corydoras-adolfoi, BY-SA 4.0, full outline, albino morph so shape only). Textures derived from them are CC-BY-SA. The share-alike allowlist in `tools/asset-pipeline/src/manifest.ts` must list these ids before `pnpm assets:check` accepts them.
 
+## Clean-up crew and cleaner wrasse (issue #630, T40 and T44)
+
+Checked 2026-10-16. Sketchfab was searched for CC0 and CC-BY downloadable models; every candidate below carries the licence and downloadable flag on its Sketchfab record. The ffish.asia scans considered here (the two picks and the rejected alternatives) are CC0 photogrammetry of preserved specimens, so they are heavy (390k to 1.3M faces, 8192x8192 base colour) and need the pipeline to decimate and downscale. Each scan also contains a 2 cm colour-checker cube mesh that must be dropped.
+
+**Fallback summary:** hermit crab uses a scan. Nerite snail uses a scan for the shell only; the foot, head and tentacles are **procedural** (reference photos below). Cleaner wrasse has no model and uses the **procedural loft**.
+
+### Nerite snail (freshwater; Neritina/Clithon family)
+
+**Decision: pick `sketchfab-70b8866a` for the shell, procedural soft body**
+
+| # | Candidate | Author | Licence | Faces | Texture | Anatomy | Verdict |
+|---|---|---|---|---|---|---|---|
+| 1 | [Clithon sowerbianus](https://sketchfab.com/3d-models/70b8866a910f49a68982888e64a3f900) ([render](https://media.sketchfab.com/models/70b8866a910f49a68982888e64a3f900/thumbnails/4fddac3303a740c6ac86650a41244aff/350c96af28e44b2da0fd5f5209573055.jpeg)) | ffishAsia-and-floraZia | CC0 | 394,418 | 8192x8192 base colour, gold and dark zig-zag banding like the aquarium zebra nerite | correct shell, about 0.7 cm, no soft body | PICK |
+| 2 | [Neritina plumbea](https://sketchfab.com/3d-models/d779869759434a9e9372c1a9c9969399) ([render](https://media.sketchfab.com/models/d779869759434a9e9372c1a9c9969399/thumbnails/c75ca8948c634a4987b44ed68a27c058/32a6f4a6d5fb47b3925b79deba2bccd4.jpeg)) | ffishAsia-and-floraZia | CC0 | 388,084 | plain brown, worn | true Neritina, but dull and no pattern | reject: nothing to recognise as a nerite in a tank |
+| 3 | [Red Nerite Shell](https://sketchfab.com/3d-models/5cf3efaedfc44b2db97f24d29a427be4) ([render](https://media.sketchfab.com/models/5cf3efaedfc44b2db97f24d29a427be4/thumbnails/67caa7c7037a409498d5306207a0c82d/9ada68fb4c3749b6a72df4e33af673ae.jpeg)) | RISDNaturelab | CC-BY 4.0 | 38,234 | red with dark dots, low resolution | a marine Nerita with a partly broken base | reject: wrong look for a freshwater nerite |
+
+Reference photos (in manifest, downloaded): `wm-nerite-baldonado-1` and `wm-nerite-baldonado-2` (CC BY 4.0, Evan Baldonado; the second shows the foot and operculum from below) and `wm-nerite-obsidian-05` (CC0, shows the dark foot, head and tentacles). All other Commons zebra nerite photos are CC BY-SA and were not used. Key traits: dome-shaped shell with banding, thick dark grey foot, two short tentacles, no visible spire.
+
+### Hermit crab (reef; Clibanarius)
+
+**Decision: pick `sketchfab-5ebe7794`**
+
+| # | Candidate | Author | Licence | Faces | Texture | Anatomy | Verdict |
+|---|---|---|---|---|---|---|---|
+| 1 | [Clibanarius longitarsus](https://sketchfab.com/3d-models/5ebe7794183346e998afb97b68021158) ([render](https://media.sketchfab.com/models/5ebe7794183346e998afb97b68021158/thumbnails/68eefea4d6244d208b89596e991cd50c/d2c2d2f3b7fd40d69aaa995be71845e7.jpeg)) | ffishAsia-and-floraZia | CC0 | 495,292 | 8192x8192 base colour, olive legs with banding | real hermit crab in a conical shell, legs and eyestalks intact | PICK |
+| 2 | [Dardanus aspersus](https://sketchfab.com/3d-models/8e1a156487bf4c0c8fc684e08ee16006) ([render](https://media.sketchfab.com/models/8e1a156487bf4c0c8fc684e08ee16006/thumbnails/3d291e42ff1e49dda40ce659a48568f5/4e6b43ebca8a498cb8b4382147bbba29.jpeg)) | ffishAsia-and-floraZia | CC0 | 794,059 | 8k photogrammetry | good, a large anemone-carrying species | reserve: heavier and less like the common reef hermit |
+| 3 | [Dardanus crassimanus](https://sketchfab.com/3d-models/a7216d61f2d7401a97da99a4a8ee6823) ([render](https://media.sketchfab.com/models/a7216d61f2d7401a97da99a4a8ee6823/thumbnails/775655e536764d34a8f33b9da4d9d239/f3533ceee3094991b010456ca4db4701.jpeg)) | ffishAsia-and-floraZia | CC0 | 963,500 | 8k, red-orange, spiny murex shell | good | reserve: too large and ornate for a small cleaner |
+
+The CC-BY hermit crabs (Wermin 319,616 faces fimo-clay magnet, Blaast 25,184, Xfdfgd 40,154) are modelled by hand or stylised and were not considered further. The scan has no rig; legs are one fused mesh, so the pipeline needs a simple walk rig or procedural leg motion.
+
+### Bluestreak cleaner wrasse (Labroides dimidiatus)
+
+**Decision: fallback: procedural loft** (for T44, #634)
+
+No Sketchfab model exists under any licence for the species (searches: labroides, cleaner wrasse, bluestreak, Labridae, wrasse; the only hits are other wrasses such as the CC0 ffish.asia scans of *Pseudolabrus*, *Bodianus* and *Choerodon*, which are the wrong shape and 590k to 1.3M faces). Reference photos (in manifest, downloaded): `wm-labroides-jens` (CC BY 4.0, 1571x1066, near-lateral, sharp head) and `wm-labroides-hylton` (CC BY 4.0, 1459x973, true lateral, outline only). Key traits: long slender body, terminal mouth, a black lateral stripe that widens to the tail, white-blue belly, blue and black caudal. The Commons CC0 photo (`georgiasteel`, 881x881) is too small and distant to use. The sharper Commons shots by Diego Delso are CC BY-SA 4.0 and are not used, since the approval for CC BY-SA photos covers other species only.
+
 ## Downloaded-file check (Sketchfab)
 
 Measured from each downloaded `scene.gltf`. Rigged means the glTF has at least one skin; the clips are what the author shipped and are not the swim cycles we need.
@@ -295,5 +333,39 @@ Measured from each downloaded `scene.gltf`. Rigged means the glTF has at least o
 | Discus (`sketchfab-f623d697`) | 8,033 | 8 images, largest 4096x4096 | 0 / 0 | 0 |
 | Discus 3 (`sketchfab-e284e187`) | 3,456 | 2 images, largest 1024x512 | 1 / 11 | 1 |
 | Ancistrus sp. Orange (`sketchfab-65133817`) | 40,000 | 3 images, largest 2048x2048 | 0 / 0 | 0 |
+| Hermit crab (`sketchfab-5ebe7794`) | 495,292 | 2 images, largest 8192x8192 | 0 / 0 | 0 |
+| Nerite shell (`sketchfab-70b8866a`) | 394,418 | 2 images, largest 8192x8192 | 0 / 0 | 0 |
 
 Effect on the picks: none of the picks flipped. The neon tetra, betta and both guppies ship skeletons (30, 53, 44 and 191 joints) that the pipeline can reuse or replace with a spine rig; the clownfish, both tangs and the angelfish are unrigged static meshes and need the procedural spine rig. The angelfish uses unlit materials, the water plant has no textures, and the brain coral is 8192x8192 and must be downscaled. Blue and yellow tang stay as weak candidates for the auditor to weigh against the loft fallback.
+
+## Sound (issue #649, T59)
+
+Checked 2026-10-16 on each Freesound sound page (licence link read from the page; every pick is CC0, so no attribution is required, though CREDITS.md lists them). Searches were restricted to CC0 and CC-BY on Freesound. Raw files are the Freesound `lq` preview OGGs (lossy, about 60 to 80 kbps; the originals need a login and are better quality, so fetching them is the upgrade path if artefacts are audible after the transcode, the low-pass and the normalisation), kept in `~/.cache/aquarium-assets/raw/freesound-<id>/`. Manifest `kind` is the free string `audio`, so the manifest schema needed no change.
+
+**Format and size plan.** Ship each sound as AAC in `.m4a` only, as decided in PLAN 9.1 (no Opus/OGG). Encoders (ffmpeg and similar) are not installed on the sourcing machine, so encoding, loudness normalisation and loop crossfading are left to the pipeline or gameplay agent; the intended steps are in each manifest entry's `notes`, and `modifications` stays empty until they are done. Size: the nine picks total about 0.49 MB as source previews, well within the repo budget; a per-preset audio budget is left to the pipeline PR's size check (T59 audio encoding + size check). Loops are to be trimmed to 12 to 16 s. The built-asset index schema (`tools/asset-pipeline/src/index-schema.ts`) may need an `audio` kind when the pipeline starts emitting these.
+
+| Sound | Pick | Why |
+|---|---|---|
+| Filter hum (loop) | `freesound-197804` | steady pump hum, no bubble strips, long enough to find a stationary 12 s section |
+| Air bubbles (loop) | `freesound-188223` | authored as a loop, 8.4 s |
+| Underwater ambience (loop) | `freesound-862788` | explicitly muffled and tagged loop |
+| Glass tap | `freesound-427389` | clean single tap, 0.49 s |
+| Food plop | `freesound-853279` | small plop, 0.38 s |
+| Net splash | `freesound-398032` | shallow splash, 1.3 s, most downloaded of the splash set |
+| UI clicks (3) | `freesound-528561`, `freesound-629020`, `freesound-342200` | soft, plain and wooden click, each under 0.3 s |
+| Calm music (optional) | **skipped** | the only short CC0 loop found is Freesound 826622 (xkeril, 20 s), but it is a lo-fi electric piano that does not suit an underwater bed; revisit if music is wanted |
+
+### Candidates
+
+All CC0 unless marked.
+
+- **Filter hum:** 1. [Indoor Fish Tank without Bubble strips Ambiance](https://freesound.org/s/197804/) by 7778, 31.2 s (PICK); 2. [fish-tank-fltr-edit](https://freesound.org/s/369861/) by doubleDog, 6.6 s (short, likely an edit with audible repetition); 3. [Aquarium Lobster Filter](https://freesound.org/s/522987/) by vero.marengere, 24 s. CC-BY alternative not needed: Freesound 167748 (ultradust).
+- **Air bubbles:** 1. [Bubble Loop](https://freesound.org/s/188223/) by MikeRat, 8.4 s (PICK); 2. [Water bubbles loop](https://freesound.org/s/521392/) by GoldenTricycle, 11.8 s (fizzier, more boiling than aquarium); 3. [Aquarium aerator y bubbles](https://freesound.org/s/418198/) by ddaedalus, 38 s (also carries a pump).
+- **Underwater ambience:** 1. [Ambience, designed, deep, muffled, wavy, underwater, dream, memory, loop](https://freesound.org/s/862788/) by Oldome, 25.3 s (PICK); 2. [Underwater Ambience](https://freesound.org/s/504641/) by Fission9, 46.9 s (12k downloads, brighter and longer); 3. [Ambiance_Underwater_Stereo](https://freesound.org/s/482116/) by Nox_Sound, 45 s.
+- **Glass tap:** 1. [Glass Tap](https://freesound.org/s/427389/) by zembacraftworks, 0.49 s (PICK); 2. [Glass Tap.wav](https://freesound.org/s/262958/) by Unicornaphobist, 0.2 s (a ting on a bottle, too ringy); 3. [Glass Tap](https://freesound.org/s/668384/) by CJspellsfish, 0.3 s.
+- **Food plop:** 1. [Fishing Lure Plop Water - Game SFX (2 or 2)](https://freesound.org/s/853279/) by el_boss, 0.38 s (PICK); 2. [Water.wav](https://freesound.org/s/530359/) by danielpodlovics, 0.33 s; 3. [Water drop (splash)](https://freesound.org/s/451126/) by bolkmar, 1.1 s.
+- **Net splash:** 1. [Splash](https://freesound.org/s/398032/) by swordofkings128, 1.3 s (PICK); 2. [WaterSplash](https://freesound.org/s/646568/) by Ryanz-Official, 1.3 s; 3. [water splash 2](https://freesound.org/s/398039/) by swordofkings128, 1.9 s.
+- **UI clicks:** picks [Soft UI Button Click](https://freesound.org/s/528561/) by Jummit, 0.24 s, [Button click](https://freesound.org/s/629020/) by Kolombooo, 0.29 s, [Videogame Menu BUTTON CLICK](https://freesound.org/s/342200/) by Christopherderp, 0.14 s; reserves [Button Hover Click](https://freesound.org/s/623990/) by eqylizer, 0.1 s and [Water Click](https://freesound.org/s/371274/) by Mafon2, 0.1 s.
+- **Calm music (not picked):** [Memories of a sweet summer (loop)](https://freesound.org/s/826622/) by xkeril, 20 s; [Calming Piano Loop 60bpm](https://freesound.org/s/679738/) by Seth_Makes_Sounds, 109 s (too long for the budget); [Synth pad deep ambience with beach waves](https://freesound.org/s/222448/) by waveplaySFX, 34 s.
+
+Not verified here (no audio tools on the machine): the loop seams. The pipeline must audition each loop and crossfade as planned in the entry notes.
