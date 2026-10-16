@@ -541,3 +541,26 @@
     transform: translateY(0.6rem) scale(0.85);
   }
 }
+
+.toy-shelf {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.game {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.9rem;
+}
+
+.game h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.game-status {
+  margin: 0;
+  font-weight: 600;
+}
