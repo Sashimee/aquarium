@@ -15,6 +15,7 @@ export const dataExportSchema = z.strictObject({
     id: authIdSchema,
     email: z.string(),
     name: z.string(),
+    handle: z.string().nullable(),
     emailVerified: z.boolean(),
     createdAt: timestampSchema,
     updatedAt: timestampSchema,

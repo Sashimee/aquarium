@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { biomeSchema, unitSchema } from './common.js';
+import { biomeSchema, unitSchema, type Biome } from './common.js';
 
 export const bacteriaSchema = z.strictObject({
   ammoniaOxidisers: unitSchema.describe('colony size 0..1: ammonia to nitrite'),
@@ -12,24 +12,33 @@ export const chemistrySchema = z.object({
   ph: z.number().min(0).max(14),
   kh: z.number().min(0).max(40).describe('carbonate hardness in dKH'),
   temperatureC: z.number().min(0).max(45),
+  salinity: z.number().min(0).max(45).describe('parts per thousand; 0 is fresh, 35 is sea'),
   bacteria: bacteriaSchema,
 });
 export type Chemistry = z.infer<typeof chemistrySchema>;
 
-// A new tank starts uncycled: no bacteria until the filter media grows them.
-export const NEW_TANK_CHEMISTRY: Chemistry = {
-  nitrite: 0,
-  ph: 7,
-  kh: 4,
-  temperatureC: 25,
-  bacteria: { ammoniaOxidisers: 0, nitriteOxidisers: 0 },
+const SEEDED_FILTER: Bacteria = { ammoniaOxidisers: 1, nitriteOxidisers: 1 };
+
+// A new tank comes with a seeded filter, so it starts cycled (PLAN 9.1).
+export const NEW_TANK_CHEMISTRY_BY_BIOME: Readonly<Record<Biome, Chemistry>> = {
+  freshwater: { nitrite: 0, ph: 7, kh: 4, temperatureC: 25, salinity: 0, bacteria: SEEDED_FILTER },
+  reef: { nitrite: 0, ph: 8.2, kh: 8, temperatureC: 25.5, salinity: 35, bacteria: SEEDED_FILTER },
+  cichlid: { nitrite: 0, ph: 8.2, kh: 10, temperatureC: 25, salinity: 0, bacteria: SEEDED_FILTER },
+  blackwater: {
+    nitrite: 0,
+    ph: 5.5,
+    kh: 1,
+    temperatureC: 27,
+    salinity: 0,
+    bacteria: SEEDED_FILTER,
+  },
+  mangrove: { nitrite: 0, ph: 8, kh: 8, temperatureC: 26, salinity: 15, bacteria: SEEDED_FILTER },
 };
 
-// Tanks that existed before chemistry v2 were running, so they keep an established colony.
-export const ESTABLISHED_TANK_CHEMISTRY: Chemistry = {
-  ...NEW_TANK_CHEMISTRY,
-  bacteria: { ammoniaOxidisers: 1, nitriteOxidisers: 1 },
-};
+export const newTankChemistry = (biome: Biome): Chemistry => ({
+  ...NEW_TANK_CHEMISTRY_BY_BIOME[biome],
+  bacteria: { ...SEEDED_FILTER },
+});
 
 const rate = z.number().nonnegative();
 const perBiome = <T extends z.ZodType>(value: T) => z.record(biomeSchema, value);
@@ -55,6 +64,10 @@ export const chemistryParametersSchema = z.strictObject({
     target: perBiome(z.number().min(0).max(14)),
     driftPerHour: rate.describe('fraction of the gap to the buffered target closed per hour'),
     acidificationPerNitrate: rate,
+  }),
+  salinity: z.strictObject({
+    target: perBiome(z.number().min(0).max(45)),
+    driftPerHour: rate.describe('fraction of the gap to the target closed per hour'),
   }),
   kh: z.strictObject({
     consumedPerNitrate: rate,

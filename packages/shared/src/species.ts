@@ -247,6 +247,10 @@ export const speciesChemistrySchema = z.strictObject({
     .refine(([lo, hi]) => lo <= hi, 'phRange must be [low, high]')
     .default([6, 8.5]),
   khMin: z.number().min(0).max(40).default(0),
+  salinityPpt: z
+    .tuple([z.number().min(0).max(45), z.number().min(0).max(45)])
+    .refine(([lo, hi]) => lo <= hi, 'salinityPpt must be [low, high]')
+    .default([0, 1]),
   temperatureC: z
     .tuple([z.number().min(0).max(45), z.number().min(0).max(45)])
     .refine(([lo, hi]) => lo <= hi, 'temperatureC must be [low, high]')

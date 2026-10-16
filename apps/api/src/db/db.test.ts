@@ -3,9 +3,9 @@ import { readFileSync } from 'node:fs';
 import {
   DEFAULT_EQUIPMENT,
   NEUTRAL_PERSONALITY,
-  NEW_TANK_CHEMISTRY,
   chemistrySchema,
   equipmentSchema,
+  newTankChemistry,
 } from '@aquarium/shared';
 import { afterAll, describe, expect, it } from 'vitest';
 import { createTestDatabase } from '../test-harness.ts';
@@ -107,48 +107,62 @@ describe('migrations', () => {
     expect((legacy.rows[0] as { sex: string }).sex).toBe('female');
   });
 
-  it('gives existing tanks established colonies and existing fish adult defaults (0007)', async () => {
+  it('backfills existing tanks as cycled, reefs salty, and fish as adults (0007)', async () => {
     const database = await freshDatabase();
-    await runMigrations(database);
     const q = (text: string, values: unknown[] = []) => database.pool.query(text, values);
-    await q(`alter table tanks drop column chemistry, drop column equipment`);
-    await q(`alter table fish drop column stage, drop column personality, drop column disease`);
-    await q(`drop type fish_stage`);
+    const apply = async (file: string) => {
+      const sql = readFileSync(new URL(`../../drizzle/${file}`, import.meta.url), 'utf8');
+      for (const statement of sql.split('--> statement-breakpoint')) await q(statement);
+    };
+    const before = [
+      '0000_init.sql',
+      '0001_mail_limit_hits.sql',
+      '0002_mail_limit_hits_at_idx.sql',
+      '0003_ate_batches.sql',
+      '0004_fish_sex.sql',
+      '0005_decor_layout_nullable.sql',
+      '0006_fish_sex_drop_default.sql',
+    ];
+    for (const file of before) await apply(file);
     await q(`insert into "user" (id, name, email) values ('u7', 'U', 'u7@bas.lu')`);
-    const tank = await q(
-      `insert into tanks (owner_id, biome, name) values ('u7', 'reef', 'Old') returning id`,
-    );
-    const tankId = (tank.rows[0] as { id: string }).id;
+    const insertTank = async (biome: string, name: string) =>
+      (
+        (
+          await q(`insert into tanks (owner_id, biome, name) values ('u7', $1, $2) returning id`, [
+            biome,
+            name,
+          ])
+        ).rows[0] as { id: string }
+      ).id;
+    const freshId = await insertTank('freshwater', 'Old fresh');
+    const reefId = await insertTank('reef', 'Old reef');
     await q(
       `insert into fish (tank_id, species, name, size, sex) values ($1, 'neon-tetra', 'F', 0.03, 'male')`,
-      [tankId],
+      [freshId],
     );
 
-    const migration = readFileSync(
-      new URL('../../drizzle/0007_expansion_contract.sql', import.meta.url),
-      'utf8',
+    await apply('0007_expansion_contract.sql');
+
+    const rows = await q(
+      `select id, chemistry, equipment, size, quarantine, share_token from tanks`,
     );
-    for (const statement of migration.split('--> statement-breakpoint')) {
-      await q(statement);
+    const byId = new Map(
+      rows.rows.map((r: { id: string }) => [r.id, r as Record<string, unknown>]),
+    );
+    const fresh = byId.get(freshId);
+    const reef = byId.get(reefId);
+    expect(chemistrySchema.parse(fresh?.['chemistry'])).toEqual(newTankChemistry('freshwater'));
+    expect(chemistrySchema.parse(reef?.['chemistry'])).toEqual(newTankChemistry('reef'));
+    for (const tank of [fresh, reef]) {
+      expect(equipmentSchema.parse(tank?.['equipment'])).toEqual(DEFAULT_EQUIPMENT);
+      expect(tank).toMatchObject({ size: 'standard', quarantine: false, share_token: null });
     }
-
-    const old = await q(`select chemistry, equipment from tanks where id = $1`, [tankId]);
-    expect(chemistrySchema.parse(old.rows[0]?.chemistry).bacteria).toEqual({
-      ammoniaOxidisers: 1,
-      nitriteOxidisers: 1,
-    });
-    expect(equipmentSchema.parse(old.rows[0]?.equipment)).toEqual(DEFAULT_EQUIPMENT);
     const fish = await q(`select stage, personality, disease from fish`);
     expect(fish.rows[0]).toEqual({
       stage: 'adult',
       personality: NEUTRAL_PERSONALITY,
       disease: null,
     });
-
-    const fresh = await q(
-      `insert into tanks (owner_id, biome, name) values ('u7', 'reef', 'New') returning chemistry`,
-    );
-    expect(chemistrySchema.parse(fresh.rows[0]?.chemistry)).toEqual(NEW_TANK_CHEMISTRY);
   });
 
   it('turns an empty stored decor layout into NULL and leaves edited ones alone (0005)', async () => {

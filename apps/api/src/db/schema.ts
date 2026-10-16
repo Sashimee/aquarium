@@ -21,6 +21,7 @@ export const user = pgTable('user', {
   name: text('name').notNull(),
   email: text('email').notNull().unique(),
   emailVerified: boolean('email_verified').notNull().default(false),
+  handle: text('handle').unique(),
   image: text('image'),
   createdAt: timestamptz('created_at').notNull().defaultNow(),
   updatedAt: timestamptz('updated_at').notNull().defaultNow(),
@@ -101,13 +102,22 @@ export const passkey = pgTable(
   ],
 );
 
-export const biomeEnum = pgEnum('biome', ['freshwater', 'reef']);
+export const biomeEnum = pgEnum('biome', [
+  'freshwater',
+  'reef',
+  'cichlid',
+  'blackwater',
+  'mangrove',
+]);
 export const fishSexEnum = pgEnum('fish_sex', ['male', 'female']);
+export const tankSizeEnum = pgEnum('tank_size', ['nano30', 'standard', 'std200', 'long300']);
 export const fishStageEnum = pgEnum('fish_stage', ['fry', 'juvenile', 'adult']);
 export const fishStatusEnum = pgEnum('fish_status', ['alive', 'dead']);
 export const causeOfDeathEnum = pgEnum('cause_of_death', [
   'starvation',
   'ammonia',
+  'nitrite',
+  'disease',
   'old_age',
   'unknown',
 ]);
@@ -128,6 +138,9 @@ export const tanks = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
     biome: biomeEnum('biome').notNull(),
+    size: tankSizeEnum('size').notNull().default('standard'),
+    quarantine: boolean('quarantine').notNull().default(false),
+    shareToken: text('share_token').unique(),
     name: text('name').notNull(),
     decorLayout: jsonb('decor_layout'),
     water: jsonb('water')
@@ -139,7 +152,7 @@ export const tanks = pgTable(
     chemistry: jsonb('chemistry')
       .notNull()
       .default(
-        sql`'{"nitrite":0,"ph":7,"kh":4,"temperatureC":25,"bacteria":{"ammoniaOxidisers":0,"nitriteOxidisers":0}}'::jsonb`,
+        sql`'{"nitrite":0,"ph":7,"kh":4,"temperatureC":25,"salinity":0,"bacteria":{"ammoniaOxidisers":1,"nitriteOxidisers":1}}'::jsonb`,
       ),
     equipment: jsonb('equipment')
       .notNull()

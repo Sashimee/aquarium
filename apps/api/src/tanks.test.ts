@@ -3,9 +3,11 @@ import {
   decorLayoutSchema,
   DEFAULT_EQUIPMENT,
   NEUTRAL_PERSONALITY,
-  NEW_TANK_CHEMISTRY,
   decorPositionLimits,
   legacyTintSeed,
+  newTankChemistry,
+  shareTokenSchema,
+  TANK_SIZES,
   speciesListSchema,
   tankListSchema,
   tankSchema,
@@ -14,6 +16,7 @@ import { eq } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
+import { MAX_FISH_PER_TANK } from '@aquarium/sim/lifecycle';
 import { schema } from './db/index.ts';
 import { pruneExpired } from './maintenance.ts';
 import { APP_ORIGIN, createHarness, type Harness } from './test-harness.ts';
@@ -120,10 +123,10 @@ describe('tanks and fish', () => {
     expect(list.find((s) => s.id === 'blue-tang')?.biome).toBe('reef');
   });
 
-  it('serves uncycled chemistry, default equipment and adult neutral fish on a new tank', async () => {
+  it('serves cycled chemistry, default equipment and adult neutral fish on a new tank', async () => {
     const cookie = await signedIn(h);
     const tank = await createTank(h, cookie);
-    expect(tank.chemistry).toEqual(NEW_TANK_CHEMISTRY);
+    expect(tank.chemistry).toEqual(newTankChemistry('freshwater'));
     expect(tank.equipment).toEqual(DEFAULT_EQUIPMENT);
     const stocked = await addFish(h, cookie, tank.id);
     expect(stocked.fish[0]).toMatchObject({
@@ -178,11 +181,28 @@ describe('tanks and fish', () => {
     expect(tankListSchema.parse((await call(h, bob, 'GET', '/api/tanks')).json())).toEqual([]);
   });
 
-  it('limits tanks per user', async () => {
+  it('limits a user to six display tanks and one quarantine tank', async () => {
     const cookie = await signedIn(h);
-    for (let i = 0; i < 5; i++) await createTank(h, cookie);
-    const res = await call(h, cookie, 'POST', '/api/tanks', { name: 'Six', biome: 'reef' });
-    expect(res.statusCode).toBe(409);
+    for (let i = 0; i < 6; i++) await createTank(h, cookie, i % 2 ? 'reef' : 'freshwater');
+    const seventh = await call(h, cookie, 'POST', '/api/tanks', { name: 'Seven', biome: 'reef' });
+    expect(seventh.statusCode).toBe(409);
+
+    const quarantine = await call(h, cookie, 'POST', '/api/tanks', {
+      name: 'Quarantine',
+      biome: 'freshwater',
+      size: 'nano30',
+      quarantine: true,
+    });
+    expect(quarantine.statusCode).toBe(201);
+    expect(tankSchema.parse(quarantine.json())).toMatchObject({ quarantine: true, size: 'nano30' });
+
+    const second = await call(h, cookie, 'POST', '/api/tanks', {
+      name: 'Quarantine 2',
+      biome: 'freshwater',
+      size: 'nano30',
+      quarantine: true,
+    });
+    expect(second.statusCode).toBe(409);
   });
 
   it('assigns each fish a sex and keeps it across reads', async () => {
@@ -940,5 +960,172 @@ describe('PATCH decor layout validation', () => {
     const renamed = await call(h, cookie, 'PATCH', `/api/tanks/${tank.id}`, { name: 'Renamed' });
     expect(renamed.statusCode).toBe(200);
     expectRejected(await patch(tank.id, junk), ['decorLayout', 0, 'assetId']);
+  });
+});
+
+describe('tank sizes, quarantine and sharing', () => {
+  let h: Harness;
+  beforeAll(async () => {
+    h = await createHarness();
+  });
+  afterAll(() => h.close());
+
+  const create = (cookie: string, body: object) => call(h, cookie, 'POST', '/api/tanks', body);
+
+  it('agrees with the sim on the standard tank cap', () => {
+    expect(TANK_SIZES.standard.maxAnimals).toBe(MAX_FISH_PER_TANK);
+  });
+
+  it('creates standard tanks by default and every other size on request', async () => {
+    const cookie = await signedIn(h);
+    const standard = tankSchema.parse((await create(cookie, { name: 'A', biome: 'reef' })).json());
+    expect(standard).toMatchObject({ size: 'standard', quarantine: false, shareToken: null });
+    expect(standard.chemistry).toEqual(newTankChemistry('reef'));
+    for (const size of ['nano30', 'std200', 'long300'] as const) {
+      const res = await create(cookie, { name: size, biome: 'freshwater', size });
+      expect(res.statusCode).toBe(201);
+      expect(tankSchema.parse(res.json()).size).toBe(size);
+    }
+  });
+
+  it('refuses a non-nano quarantine tank, an unknown size and an unplayable biome', async () => {
+    const cookie = await signedIn(h);
+    for (const body of [
+      { name: 'Q', biome: 'freshwater', quarantine: true },
+      { name: 'Q', biome: 'freshwater', size: 'huge' },
+      { name: 'Q', biome: 'mangrove' },
+    ]) {
+      expect((await create(cookie, body)).statusCode).toBe(400);
+    }
+  });
+
+  it('does not count the quarantine tank towards the six', async () => {
+    const cookie = await signedIn(h);
+    await create(cookie, { name: 'Q', biome: 'freshwater', size: 'nano30', quarantine: true });
+    for (let i = 0; i < 6; i++) {
+      expect((await create(cookie, { name: `T${i}`, biome: 'freshwater' })).statusCode).toBe(201);
+    }
+  });
+
+  it('caps a nano tank at 12 animals and a standard tank at its own limit', async () => {
+    const cookie = await signedIn(h);
+    const nano = tankSchema.parse(
+      (await create(cookie, { name: 'Nano', biome: 'freshwater', size: 'nano30' })).json(),
+    );
+    for (let i = 0; i < 12; i++) await addFish(h, cookie, nano.id, 'neon-tetra', `N${i}`);
+    const res = await call(h, cookie, 'POST', `/api/tanks/${nano.id}/fish`, {
+      species: 'neon-tetra',
+      name: 'Thirteen',
+    });
+    expect(res.statusCode).toBe(409);
+    expect(apiErrorSchema.parse(res.json()).error.code).toBe('conflict');
+  });
+
+  it('keeps every animal in an over-cap tank and only blocks additions', async () => {
+    const cookie = await signedIn(h);
+    const nano = tankSchema.parse(
+      (await create(cookie, { name: 'Nano', biome: 'freshwater', size: 'nano30' })).json(),
+    );
+    for (let i = 0; i < 12; i++) await addFish(h, cookie, nano.id, 'neon-tetra', `N${i}`);
+    const [row] = await h.database.db
+      .select()
+      .from(schema.fish)
+      .where(eq(schema.fish.tankId, nano.id))
+      .limit(1);
+    if (!row) throw new Error('no fish');
+    await h.database.db.insert(schema.fish).values({
+      tankId: nano.id,
+      species: row.species,
+      name: 'Extra 1',
+      size: row.size,
+      sex: row.sex,
+    });
+    await h.database.db.insert(schema.fish).values({
+      tankId: nano.id,
+      species: row.species,
+      name: 'Extra 2',
+      size: row.size,
+      sex: row.sex,
+    });
+    const reread = tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${nano.id}`)).json());
+    expect(reread.fish).toHaveLength(14);
+    const blocked = await call(h, cookie, 'POST', `/api/tanks/${nano.id}/fish`, {
+      species: 'neon-tetra',
+      name: 'Nope',
+    });
+    expect(blocked.statusCode).toBe(409);
+  });
+
+  describe('share token', () => {
+    it('is null while private, then created, rotated and revoked by the owner', async () => {
+      const cookie = await signedIn(h);
+      const tank = await createTank(h, cookie);
+      expect(tank.shareToken).toBeNull();
+
+      const created = await call(h, cookie, 'POST', `/api/tanks/${tank.id}/share`);
+      expect(created.statusCode).toBe(200);
+      const first = shareTokenSchema.parse(tankSchema.parse(created.json()).shareToken);
+
+      const rotated = await call(h, cookie, 'POST', `/api/tanks/${tank.id}/share`);
+      const second = shareTokenSchema.parse(tankSchema.parse(rotated.json()).shareToken);
+      expect(second).not.toBe(first);
+
+      const read = tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${tank.id}`)).json());
+      expect(read.shareToken).toBe(second);
+
+      const revoked = await call(h, cookie, 'DELETE', `/api/tanks/${tank.id}/share`);
+      expect(revoked.statusCode).toBe(200);
+      expect(tankSchema.parse(revoked.json()).shareToken).toBeNull();
+      const [row] = await h.database.db
+        .select()
+        .from(schema.tanks)
+        .where(eq(schema.tanks.id, tank.id));
+      expect(row?.shareToken).toBeNull();
+    });
+
+    it('is at least 128 bits and unique per tank', async () => {
+      const cookie = await signedIn(h);
+      const a = await createTank(h, cookie);
+      const b = await createTank(h, cookie);
+      const tokenOf = async (id: string) =>
+        shareTokenSchema.parse(
+          tankSchema.parse((await call(h, cookie, 'POST', `/api/tanks/${id}/share`)).json())
+            .shareToken,
+        );
+      const [ta, tb] = [await tokenOf(a.id), await tokenOf(b.id)];
+      expect(ta).not.toBe(tb);
+      expect(Buffer.from(ta, 'base64url').length).toBeGreaterThanOrEqual(16);
+    });
+
+    it('is owner-only and needs a session', async () => {
+      const owner = await signedIn(h);
+      const other = await signedIn(h);
+      const tank = await createTank(h, owner);
+      expect((await call(h, other, 'POST', `/api/tanks/${tank.id}/share`)).statusCode).toBe(404);
+      expect((await call(h, other, 'DELETE', `/api/tanks/${tank.id}/share`)).statusCode).toBe(404);
+      const anon = await h.app.inject({
+        method: 'POST',
+        url: `/api/tanks/${tank.id}/share`,
+        headers: jsonHeaders,
+      });
+      expect(anon.statusCode).toBe(401);
+    });
+  });
+
+  it('stores disease and nitrite as causes of death', async () => {
+    const cookie = await signedIn(h);
+    const tank = await createTank(h, cookie);
+    for (const cause of ['disease', 'nitrite'] as const) {
+      await h.database.db.insert(schema.memorials).values({
+        tankId: tank.id,
+        fishName: cause,
+        species: 'neon-tetra',
+        bornAt: new Date(),
+        diedAt: new Date(),
+        cause,
+      });
+    }
+    const read = tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${tank.id}`)).json());
+    expect(read.memorials.map((m) => m.cause).sort()).toEqual(['disease', 'nitrite']);
   });
 });

@@ -1,5 +1,5 @@
 {
-  "id": "48148ea2-76ea-4168-8726-65fbb3178941",
+  "id": "483f172f-9cb9-4142-a057-7fca4566c6f2",
   "prevId": "14f875de-e4c6-40d7-96cc-c5b5e1489224",
   "version": "7",
   "dialect": "postgresql",
@@ -795,6 +795,27 @@
           "primaryKey": false,
           "notNull": true
         },
+        "size": {
+          "name": "size",
+          "type": "tank_size",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'standard'"
+        },
+        "quarantine": {
+          "name": "quarantine",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "share_token": {
+          "name": "share_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "name": {
           "name": "name",
           "type": "text",
@@ -840,7 +861,7 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true,
-          "default": "'{\"nitrite\":0,\"ph\":7,\"kh\":4,\"temperatureC\":25,\"bacteria\":{\"ammoniaOxidisers\":0,\"nitriteOxidisers\":0}}'::jsonb"
+          "default": "'{\"nitrite\":0,\"ph\":7,\"kh\":4,\"temperatureC\":25,\"salinity\":0,\"bacteria\":{\"ammoniaOxidisers\":1,\"nitriteOxidisers\":1}}'::jsonb"
         },
         "equipment": {
           "name": "equipment",
@@ -879,7 +900,13 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "tanks_share_token_unique": {
+          "name": "tanks_share_token_unique",
+          "nullsNotDistinct": false,
+          "columns": ["share_token"]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -913,6 +940,12 @@
           "notNull": true,
           "default": false
         },
+        "handle": {
+          "name": "handle",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "image": {
           "name": "image",
           "type": "text",
@@ -942,6 +975,11 @@
           "name": "user_email_unique",
           "nullsNotDistinct": false,
           "columns": ["email"]
+        },
+        "user_handle_unique": {
+          "name": "user_handle_unique",
+          "nullsNotDistinct": false,
+          "columns": ["handle"]
         }
       },
       "policies": {},
@@ -1020,12 +1058,12 @@
     "public.biome": {
       "name": "biome",
       "schema": "public",
-      "values": ["freshwater", "reef"]
+      "values": ["freshwater", "reef", "cichlid", "blackwater", "mangrove"]
     },
     "public.cause_of_death": {
       "name": "cause_of_death",
       "schema": "public",
-      "values": ["starvation", "ammonia", "old_age", "unknown"]
+      "values": ["starvation", "ammonia", "nitrite", "disease", "old_age", "unknown"]
     },
     "public.event_kind": {
       "name": "event_kind",
@@ -1046,6 +1084,11 @@
       "name": "fish_status",
       "schema": "public",
       "values": ["alive", "dead"]
+    },
+    "public.tank_size": {
+      "name": "tank_size",
+      "schema": "public",
+      "values": ["nano30", "standard", "std200", "long300"]
     }
   },
   "schemas": {},

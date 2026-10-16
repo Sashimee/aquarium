@@ -26,6 +26,7 @@ import { createClock, type Clock } from './clock.ts';
 import { schema, type Database } from './db/index.ts';
 import { apiError } from './errors.ts';
 import { loadCredits } from './credits.ts';
+import { DEFAULT_HANDLE_LIMIT, registerHandleRoutes } from './handle.ts';
 import { DEFAULT_LEGAL_LIMITS, registerLegalRoutes, type LegalLimits } from './legal.ts';
 import type { IpAdmission, Mailer } from './mail.ts';
 import { RateLimiter, type Limit, type ResettableHitStore } from './rate-limit.ts';
@@ -575,6 +576,14 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     clock,
     limiter,
     limits: opts.careLimits ?? DEFAULT_CARE_LIMITS,
+    currentUser: async (req) => (await currentSession(req))?.user ?? null,
+  });
+
+  registerHandleRoutes({
+    app,
+    database,
+    limiter,
+    limit: DEFAULT_HANDLE_LIMIT,
     currentUser: async (req) => (await currentSession(req))?.user ?? null,
   });
 

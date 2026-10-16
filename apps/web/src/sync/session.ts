@@ -1,6 +1,6 @@
 import type {
   AwaySummary,
-  Biome,
+  PlayableBiome,
   CareAction,
   DecorLayout,
   FoodType,
@@ -195,7 +195,7 @@ export class TankSession {
     });
   }
 
-  async createTank(name: string, biome: Biome): Promise<boolean> {
+  async createTank(name: string, biome: PlayableBiome): Promise<boolean> {
     if (this.state.phase !== 'ready') return false;
     const generation = this.loadId;
     const made: { tank?: Tank } = {};

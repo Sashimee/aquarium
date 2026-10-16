@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   biomeSchema,
+  playableBiomeSchema,
   decorLayoutResponseSchema,
   decorLayoutSchema,
   idSchema,
@@ -10,6 +11,7 @@ import {
 } from './common.js';
 import { chemistrySchema } from './chemistry.js';
 import { equipmentSchema } from './equipment.js';
+import { QUARANTINE_TANK_SIZE, tankSizeSchema } from './tankSize.js';
 import { diseaseStateSchema, fishStageSchema, personalitySchema } from './fishState.js';
 
 // Response objects are non-strict so a tab on an older bundle ignores fields added later.
@@ -34,7 +36,14 @@ export const fishSexSchema = z.enum(['male', 'female']);
 export type FishSex = z.infer<typeof fishSexSchema>;
 
 export const fishStatusSchema = z.enum(['alive', 'dead']);
-export const causeOfDeathSchema = z.enum(['starvation', 'ammonia', 'old_age', 'unknown']);
+export const causeOfDeathSchema = z.enum([
+  'starvation',
+  'ammonia',
+  'nitrite',
+  'disease',
+  'old_age',
+  'unknown',
+]);
 export type CauseOfDeath = z.infer<typeof causeOfDeathSchema>;
 
 export const fishSchema = z.object({
@@ -82,10 +91,18 @@ export const awaySummarySchema = z.object({
 });
 export type AwaySummary = z.infer<typeof awaySummarySchema>;
 
+export const shareTokenSchema = z
+  .string()
+  .regex(/^[A-Za-z0-9_-]{43}$/)
+  .describe('256 random bits, base64url');
+
 export const tankSchema = z.object({
   id: idSchema,
   name: z.string().trim().min(1).max(60),
   biome: biomeSchema,
+  size: tankSizeSchema,
+  quarantine: z.boolean().describe('the one nano tank kept apart for new fish and treatment'),
+  shareToken: shareTokenSchema.nullable().describe('null while the tank is private'),
   decorLayout: decorLayoutResponseSchema,
   // false: the player never saved a layout, so decorLayout is [] and the client shows the biome preset.
   // true: decorLayout is what the player saved, and [] means they emptied the tank.
@@ -100,11 +117,18 @@ export const tankSchema = z.object({
 });
 export type Tank = z.infer<typeof tankSchema>;
 
-export const createTankRequestSchema = z.strictObject({
-  name: z.string().trim().min(1).max(60),
-  biome: biomeSchema,
-});
-export type CreateTankRequest = z.infer<typeof createTankRequestSchema>;
+export const createTankRequestSchema = z
+  .strictObject({
+    name: z.string().trim().min(1).max(60),
+    biome: playableBiomeSchema,
+    size: tankSizeSchema.default('standard'),
+    quarantine: z.boolean().default(false),
+  })
+  .refine((v) => !v.quarantine || v.size === QUARANTINE_TANK_SIZE, {
+    message: 'a quarantine tank is always nano30',
+    path: ['size'],
+  });
+export type CreateTankRequest = z.input<typeof createTankRequestSchema>;
 
 export const updateTankRequestSchema = z
   .strictObject({

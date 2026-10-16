@@ -143,6 +143,7 @@ export function registerLegalRoutes(deps: LegalDeps): void {
             id: user.id,
             email: user.email,
             name: user.name,
+            handle: user.handle,
             emailVerified: user.emailVerified,
             createdAt: user.createdAt,
             updatedAt: user.updatedAt,

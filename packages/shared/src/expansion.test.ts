@@ -2,8 +2,8 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  ESTABLISHED_TANK_CHEMISTRY,
-  NEW_TANK_CHEMISTRY,
+  NEW_TANK_CHEMISTRY_BY_BIOME,
+  newTankChemistry,
   chemistryParametersSchema,
   chemistrySchema,
 } from './chemistry.js';
@@ -14,6 +14,7 @@ import {
   fishStageSchema,
   personalitySchema,
 } from './fishState.js';
+import { biomeSchema } from './common.js';
 import { breedingSchema, speciesChemistrySchema, speciesSummarySchema } from './species.js';
 
 const content = join(import.meta.dirname, '../../../content');
@@ -38,20 +39,45 @@ describe('chemistry v2', () => {
     ).toBe(false);
   });
 
-  it('starts a new tank uncycled and keeps older tanks established', () => {
-    expect(chemistrySchema.parse(NEW_TANK_CHEMISTRY).bacteria).toEqual({
-      ammoniaOxidisers: 0,
-      nitriteOxidisers: 0,
-    });
-    expect(chemistrySchema.parse(ESTABLISHED_TANK_CHEMISTRY).bacteria.nitriteOxidisers).toBe(1);
+  it('starts every new tank cycled with a seeded filter', () => {
+    for (const biome of biomeSchema.options) {
+      const chemistry = chemistrySchema.parse(newTankChemistry(biome));
+      expect(chemistry.bacteria).toEqual({ ammoniaOxidisers: 1, nitriteOxidisers: 1 });
+      expect(chemistry.nitrite).toBe(0);
+    }
+  });
+
+  it('hands out a fresh object each time', () => {
+    const a = newTankChemistry('reef');
+    a.bacteria.ammoniaOxidisers = 0;
+    expect(newTankChemistry('reef').bacteria.ammoniaOxidisers).toBe(1);
+  });
+
+  it('starts at the biome targets in content/chemistry.json', () => {
+    const params = chemistryParametersSchema.parse(readJson('chemistry.json'));
+    for (const biome of biomeSchema.options) {
+      const start = NEW_TANK_CHEMISTRY_BY_BIOME[biome];
+      expect(start.ph).toBe(params.ph.target[biome]);
+      expect(start.temperatureC).toBe(params.temperature.target[biome]);
+      expect(start.salinity).toBe(params.salinity.target[biome]);
+    }
+  });
+
+  it('puts reefs at sea salinity and freshwater at none', () => {
+    expect(newTankChemistry('reef').salinity).toBe(35);
+    expect(newTankChemistry('freshwater').salinity).toBe(0);
   });
 
   it('bounds the readings', () => {
-    expect(chemistrySchema.safeParse({ ...NEW_TANK_CHEMISTRY, ph: 15 }).success).toBe(false);
-    expect(chemistrySchema.safeParse({ ...NEW_TANK_CHEMISTRY, nitrite: -1 }).success).toBe(false);
+    expect(chemistrySchema.safeParse({ ...newTankChemistry('freshwater'), ph: 15 }).success).toBe(
+      false,
+    );
+    expect(
+      chemistrySchema.safeParse({ ...newTankChemistry('freshwater'), nitrite: -1 }).success,
+    ).toBe(false);
     expect(
       chemistrySchema.safeParse({
-        ...NEW_TANK_CHEMISTRY,
+        ...newTankChemistry('freshwater'),
         bacteria: { ammoniaOxidisers: 2, nitriteOxidisers: 0 },
       }).success,
     ).toBe(false);
@@ -82,6 +108,13 @@ describe('species additions', () => {
   it('rejects a breeder missing its brood or growth block', () => {
     expect(breedingSchema.safeParse({ mode: 'mouthbrooder' }).success).toBe(false);
     expect(breedingSchema.safeParse({ ...livebearer, fryGrowth: undefined }).success).toBe(false);
+  });
+
+  it('gives reef species a saltwater range and freshwater the default', () => {
+    const reef = speciesSummarySchema.loose().parse(readJson('species/ocellaris-clownfish.json'));
+    expect(reef.chemistry.salinityPpt).toEqual([30, 36]);
+    expect(speciesChemistrySchema.parse({}).salinityPpt).toEqual([0, 1]);
+    expect(speciesChemistrySchema.safeParse({ salinityPpt: [36, 30] }).success).toBe(false);
   });
 
   it('rejects inverted ranges and fry stages', () => {

@@ -18,6 +18,7 @@
     "traits": ["shoal", "cave-dweller"]
   },
   "biome": "reef",
+  "chemistry": { "salinityPpt": [30, 36] },
   "commonName": "Firefish",
   "id": "firefish",
   "lifecycle": {

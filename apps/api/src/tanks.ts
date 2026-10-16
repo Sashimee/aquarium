@@ -10,6 +10,11 @@ import {
   findDecorProblems,
   idSchema,
   legacyTintSeed,
+  MAX_DISPLAY_TANKS,
+  MAX_QUARANTINE_TANKS,
+  newTankChemistry,
+  shareTokenSchema,
+  TANK_SIZES,
   personalitySchema,
   speciesListSchema,
   tankListSchema,
@@ -28,13 +33,12 @@ import {
   FEEDING_WINDOW_MINUTES,
   GRACE_PERIOD_MS,
   hasCapacityFor,
-  MAX_FISH_PER_TANK,
   TANK_BIOLOAD_CAPACITY,
   VACATION_FEEDER_ASSET_ID,
   type LifecycleFish,
   type LifecycleState,
 } from '@aquarium/sim/lifecycle';
-import { randomInt } from 'node:crypto';
+import { randomBytes, randomInt } from 'node:crypto';
 import { and, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -58,7 +62,6 @@ export const DEFAULT_CARE_LIMITS: CareLimits = {
   addFish: { max: 20, windowMs: 60 * 60_000 },
 };
 
-export const MAX_TANKS_PER_USER = 5;
 const EVENT_RETENTION_MS = 90 * 86_400_000;
 
 export interface SessionUser {
@@ -254,6 +257,9 @@ async function render(tx: Tx, ticked: Ticked, fishRows = ticked.fishRows): Promi
     id: tank.id,
     name: tank.name,
     biome: tank.biome,
+    size: tank.size,
+    quarantine: tank.quarantine,
+    shareToken: tank.shareToken === null ? null : shareTokenSchema.parse(tank.shareToken),
     decorLayout: storedLayout(tank).map((item) => ({
       ...item,
       tintSeed: item.tintSeed ?? legacyTintSeed(item),
@@ -371,14 +377,18 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       const body = createTankRequestSchema.parse(req.body);
       const created = await database.db.transaction(async (tx) => {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`tanks:${user.id}`}))`);
-        const [{ count } = { count: 0 }] = await tx
-          .select({ count: sql<number>`count(*)::int` })
+        const owned = await tx
+          .select({ quarantine: schema.tanks.quarantine })
           .from(schema.tanks)
           .where(eq(schema.tanks.ownerId, user.id));
-        if (count >= MAX_TANKS_PER_USER) {
+        const quarantined = owned.filter((t) => t.quarantine).length;
+        if (body.quarantine && quarantined >= MAX_QUARANTINE_TANKS) {
+          throw new HttpError(409, apiError('conflict', 'You already have a quarantine tank.'));
+        }
+        if (!body.quarantine && owned.length - quarantined >= MAX_DISPLAY_TANKS) {
           throw new HttpError(
             409,
-            apiError('conflict', `You can have at most ${MAX_TANKS_PER_USER} tanks.`),
+            apiError('conflict', `You can have at most ${MAX_DISPLAY_TANKS} display tanks.`),
           );
         }
         const [row] = await tx
@@ -387,6 +397,9 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
             ownerId: user.id,
             name: body.name,
             biome: body.biome,
+            size: body.size,
+            quarantine: body.quarantine,
+            chemistry: newTankChemistry(body.biome),
             lastTickAt: new Date(clock.now()),
           })
           .returning();
@@ -461,6 +474,40 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
   );
 
   app.post(
+    '/api/tanks/:tankId/share',
+    guarded(async (req) => {
+      const user = await authorize(req);
+      const { tankId } = tankParamsSchema.parse(req.params);
+      throttle(user.id, 'care');
+      return withTank(user, tankId, async (tx, ticked) => {
+        const [row] = await tx
+          .update(schema.tanks)
+          .set({ shareToken: randomBytes(32).toString('base64url') })
+          .where(eq(schema.tanks.id, tankId))
+          .returning();
+        return render(tx, { ...ticked, tank: row ?? ticked.tank });
+      });
+    }),
+  );
+
+  app.delete(
+    '/api/tanks/:tankId/share',
+    guarded(async (req) => {
+      const user = await authorize(req);
+      const { tankId } = tankParamsSchema.parse(req.params);
+      throttle(user.id, 'care');
+      return withTank(user, tankId, async (tx, ticked) => {
+        const [row] = await tx
+          .update(schema.tanks)
+          .set({ shareToken: null })
+          .where(eq(schema.tanks.id, tankId))
+          .returning();
+        return render(tx, { ...ticked, tank: row ?? ticked.tank });
+      });
+    }),
+  );
+
+  app.post(
     '/api/tanks/:tankId/fish',
     guarded(async (req, reply) => {
       const user = await authorize(req);
@@ -489,7 +536,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
             existing,
             spec.lifecycle.bioload,
             TANK_BIOLOAD_CAPACITY,
-            MAX_FISH_PER_TANK,
+            TANK_SIZES[ticked.tank.size].maxAnimals,
           )
         ) {
           throw new HttpError(
