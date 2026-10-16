@@ -6,7 +6,7 @@ import { DynamicDrawUsage, InstancedInterleavedBuffer } from 'three/webgpu';
  * - `swim`: scale, body-wave phase, amplitude scale, turn curvature in model units;
  * - `look`: fin phase, paling 0..1, seed 0..1, iridescent film thickness (nm);
  * - `tint`: rgb multiplier, gill opening 0..1;
- * - `breath`: mouth opening 0..1, unused, unused, unused.
+ * - `breath`: mouth opening 0..1, unused, unused, unused; walkers have no mouth and leave it at 0.
  * Walkers add two more: `walk` (leg phase 0..1, stride weight, tail curl in radians, pleopod
  * paddling) and `act` (cheliped picking, antenna display, unused, unused).
  */

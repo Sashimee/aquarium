@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { MeshStandardMaterial, Vector3, type Node } from 'three/webgpu';
-import { uniform, vec3 } from 'three/tsl';
+import {
+  AttributeNode,
+  ConstNode,
+  MathNode,
+  MeshStandardMaterial,
+  Vector3,
+  type Node,
+} from 'three/webgpu';
+import { float, smoothstep, uniform, vec3 } from 'three/tsl';
 import {
   FishInstanceData,
   INSTANCE_STRIDE,
@@ -47,8 +54,7 @@ function shrimpMaterial(): FishMaterial {
 
 const FEATURES = { fins: 'coverage', iridescence: true, clearcoat: true, gills: true } as const;
 
-/** The vertex position the material draws with its current features. */
-const deformed = (material: FishMaterial): Node => material['deformation'].position;
+const deformed = (material: FishMaterial): Node => material.deformed.position;
 
 function readsSlot(node: Node | null, offset: number): boolean {
   let found = false;
@@ -67,8 +73,24 @@ const readsMouth = (node: Node | null): boolean => readsSlot(node, InstanceSlot.
 function readsAttribute(node: Node | null, name: string, type: string): boolean {
   let found = false;
   node?.traverse((n) => {
-    const a = n as Node & { _attributeName?: string; nodeType?: string | null };
-    if (a._attributeName === name && a.nodeType === type) found = true;
+    if (!(n instanceof AttributeNode) || n.nodeType !== type) return;
+    // AttributeNode only exposes its name through a builder; a test has none to hand it.
+    if ((n as AttributeNode & { _attributeName?: string })._attributeName === name) found = true;
+  });
+  return found;
+}
+
+const constant = (node: Node | null): number | null =>
+  node instanceof ConstNode && typeof node.value === 'number' ? node.value : null;
+
+/** smoothstep with edge0 >= edge1 is undefined in GLSL ES 3.00 and MSL. */
+function reversedSmoothsteps(node: Node | null): string[] {
+  const found: string[] = [];
+  node?.traverse((n) => {
+    if (!(n instanceof MathNode) || n.method !== MathNode.SMOOTHSTEP) return;
+    const low = constant(n.aNode);
+    const high = constant(n.bNode);
+    if (low !== null && high !== null && low >= high) found.push(`smoothstep(${low}, ${high}, x)`);
   });
   return found;
 }
@@ -116,6 +138,37 @@ describe('FishMaterial surface', () => {
     eye.setFeatures({ fins: 'cutout', iridescence: false, clearcoat: false, gills: false });
     expect(eye.roughness).toBeCloseTo(0.12);
     expect(readsTint(eye.colorNode)).toBe(false);
+  });
+});
+
+describe('FishMaterial shader graph', () => {
+  it.each([
+    ['a fish with a mouth', () => fishMaterial(new MeshStandardMaterial(), true)],
+    ['a fish without one', () => fishMaterial(new MeshStandardMaterial(), false)],
+    ['a walker', shrimpMaterial],
+  ])('orders every constant smoothstep edge low to high for %s', (_, make) => {
+    for (const gills of [false, true]) {
+      const material = make();
+      material.setFeatures({ ...FEATURES, gills });
+      const graphs = [
+        material.deformed.position,
+        material.deformed.normal,
+        material.castShadowPositionNode,
+        material.colorNode,
+        material.opacityNode,
+        material.roughnessNode,
+        material.clearcoatNode,
+        material.iridescenceNode,
+        material.transmissionNode,
+        material.emissiveNode,
+      ];
+      expect(graphs.flatMap(reversedSmoothsteps)).toEqual([]);
+    }
+  });
+
+  it('catches a smoothstep written high to low', () => {
+    expect(reversedSmoothsteps(smoothstep(0.2, 0, float(0.1)))).toEqual(['smoothstep(0.2, 0, x)']);
+    expect(reversedSmoothsteps(smoothstep(0, 0.2, float(0.1)))).toEqual([]);
   });
 });
 

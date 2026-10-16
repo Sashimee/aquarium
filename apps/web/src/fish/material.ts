@@ -403,7 +403,7 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
     let y: Node<'float'> = p.y;
     if (gills && this.config.mouth) {
       const jaw = smoothstep(JAW_WEIGHT_FROM, 1, attribute<'vec3'>(FIN_ATTRIBUTE, 'vec3').z);
-      const weight = jaw.mul(smoothstep(GILL_EDGE_S, 0, s));
+      const weight = jaw.mul(smoothstep(0, GILL_EDGE_S, s).oneMinus());
       const opening = this.instanceVec4(16).x;
       // The baked weight carries no gradient to bend the normal with; at this drop the shading
       // error stays within a few degrees.
@@ -504,6 +504,11 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
       this.iridescenceThicknessNode = null;
     }
     this.needsUpdate = true;
+  }
+
+  /** The model-space vertex position and normal the current features draw with. */
+  get deformed(): Readonly<Deformation> {
+    return this.deformation;
   }
 
   override setupPosition(builder: NodeBuilder): Node {

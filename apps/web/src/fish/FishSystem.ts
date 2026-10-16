@@ -1100,6 +1100,7 @@ export class FishSystem {
     sim.onSnapshot((snapshot) => this.stream.push(snapshot, performance.now()));
     sim.onAte((events) => {
       for (const { fishId } of events) {
+        if (this.roster.get(fishId)?.phase !== 'swimming') continue;
         const motion = this.runtimes.get(fishId)?.motion;
         if (motion instanceof SwimState) motion.bite();
       }

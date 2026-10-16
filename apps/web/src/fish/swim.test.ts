@@ -233,7 +233,7 @@ describe('SwimState', () => {
     const run = (state: SwimState, seconds: number, sample: typeof hover): void => {
       for (let t = 0; t < seconds; t += step) state.advance(step, sample);
     };
-    /** Mouth and gill-cover openings over `seconds`, sampled every step. */
+    /** Mouth and gill-cover openings and the ventilation phase over `seconds`, sampled every step. */
     const trace = (state: SwimState, seconds: number, sample: typeof hover) => {
       const mouth: number[] = [];
       const gills: number[] = [];

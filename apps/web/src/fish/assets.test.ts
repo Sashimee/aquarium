@@ -3,12 +3,19 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CompressedTexture } from 'three';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
+import { parseFishAssets } from './assetIndex';
 import { disposeFishModel, FIN_ATTRIBUTE, FishAssetLoader, LEG_PART_ID } from './assets';
 import { MOUTH_LODS } from './lod';
 import { curlAboveFloor, curledTip, MAX_TAIL_CURL } from './walk';
 
 const ROOT = '/assets/';
 const PUBLIC = fileURLToPath(new URL('../../public/assets/', import.meta.url));
+/** Discus is left out until #663: one of its primitives has no UVs and the loader rejects it. */
+const SWIMMERS = [
+  ...parseFishAssets(JSON.parse(readFileSync(`${PUBLIC}index.json`, 'utf8'))).values(),
+]
+  .filter((entry) => entry.shrimp === null && entry.id !== 'discus')
+  .map((entry) => entry.id);
 
 function serveShippedAssets(): void {
   vi.stubGlobal('self', globalThis);
@@ -157,23 +164,12 @@ describe('FishAssetLoader', () => {
     disposeFishModel(model);
   });
 
-  it.each([
-    'angelfish',
-    'banggai-cardinalfish',
-    'betta',
-    'blue-tang',
-    'bristlenose-pleco',
-    'bronze-corydoras',
-    'firefish',
-    'guppy-female',
-    'guppy-male',
-    'harlequin-rasbora',
-    'neon-tetra',
-    'ocellaris-clownfish',
-    'royal-gramma',
-    'six-line-wrasse',
-    'yellow-tang',
-  ])(
+  it('checks the mouth packing of every shipped swimmer', () => {
+    expect(SWIMMERS).toContain('neon-tetra');
+    expect(SWIMMERS.length).toBeGreaterThanOrEqual(15);
+  });
+
+  it.each(SWIMMERS)(
     'packs the mouth weight of %s into its near LODs only, peaking at 1 off the fins',
     async (id) => {
       serveShippedAssets();
