@@ -9,6 +9,7 @@ import {
   findDecorProblems,
   idSchema,
   isBackgroundForBiome,
+  isPlayableBiome,
   legacyTintSeed,
   speciesListSchema,
   tankListSchema,
@@ -116,9 +117,19 @@ function storedLayout(row: TankRow) {
 }
 
 function storedBackground(row: TankRow) {
-  return row.backgroundId === null
-    ? DEFAULT_BACKGROUND_ID[row.biome]
-    : backgroundIdSchema.parse(row.backgroundId);
+  if (row.backgroundId !== null) {
+    const stored = backgroundIdSchema.safeParse(row.backgroundId);
+    if (!stored.success) {
+      throw new Error(
+        `tank ${row.id} stores unknown background "${row.backgroundId}"; migrate it to NULL`,
+      );
+    }
+    return stored.data;
+  }
+  if (!isPlayableBiome(row.biome)) {
+    throw new Error(`tank ${row.id} is in the ${row.biome} biome, which has no backgrounds yet`);
+  }
+  return DEFAULT_BACKGROUND_ID[row.biome];
 }
 
 function hasVacationFeeder(row: TankRow): boolean {
@@ -442,6 +453,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
         }
         if (
           body.backgroundId !== undefined &&
+          body.backgroundId !== null &&
           !isBackgroundForBiome(ticked.tank.biome, body.backgroundId)
         ) {
           throw new HttpError(

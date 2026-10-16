@@ -104,7 +104,7 @@ export const updateTankRequestSchema = z
   .strictObject({
     name: z.string().trim().min(1).max(60).optional(),
     decorLayout: decorLayoutSchema.optional(),
-    backgroundId: backgroundIdSchema.optional(),
+    backgroundId: backgroundIdSchema.nullable().optional(),
   })
   .refine(
     (v) => v.name !== undefined || v.decorLayout !== undefined || v.backgroundId !== undefined,

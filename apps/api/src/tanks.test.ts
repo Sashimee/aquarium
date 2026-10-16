@@ -172,8 +172,49 @@ describe('tanks and fish', () => {
       backgroundId: 'nope',
     });
     expect(unknown.statusCode).toBe(400);
+    for (const res of [wrongBiome, unknown]) {
+      expect(apiErrorSchema.parse(res.json()).error.code).toBe('validation_failed');
+    }
+    expect(JSON.stringify(wrongBiome.json())).toContain('backgroundId');
     const after = tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${tank.id}`)).json());
     expect(after.backgroundId).toBe(DEFAULT_BACKGROUND_ID.freshwater);
+  });
+
+  it('leaves the name alone when the background in the same PATCH is rejected', async () => {
+    const cookie = await signedIn(h);
+    const tank = await createTank(h, cookie);
+    const res = await call(h, cookie, 'PATCH', `/api/tanks/${tank.id}`, {
+      name: 'Renamed',
+      backgroundId: 'bg-reef-coral-wall',
+    });
+    expect(res.statusCode).toBe(400);
+    const after = tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${tank.id}`)).json());
+    expect(after.name).toBe(tank.name);
+  });
+
+  it('returns to the biome default when the background is set to null', async () => {
+    const cookie = await signedIn(h);
+    const tank = await createTank(h, cookie);
+    await call(h, cookie, 'PATCH', `/api/tanks/${tank.id}`, { backgroundId: 'bg-fw-misty-lake' });
+    const res = await call(h, cookie, 'PATCH', `/api/tanks/${tank.id}`, { backgroundId: null });
+    expect(res.statusCode).toBe(200);
+    expect(tankSchema.parse(res.json()).backgroundId).toBe(DEFAULT_BACKGROUND_ID.freshwater);
+    const [row] = await h.database.db
+      .select()
+      .from(schema.tanks)
+      .where(eq(schema.tanks.id, tank.id));
+    expect(row?.backgroundId).toBeNull();
+  });
+
+  it('fails loudly when a stored background id is no longer a known slot', async () => {
+    const cookie = await signedIn(h);
+    const tank = await createTank(h, cookie);
+    await h.database.db
+      .update(schema.tanks)
+      .set({ backgroundId: 'bg-retired' })
+      .where(eq(schema.tanks.id, tank.id));
+    const res = await call(h, cookie, 'GET', `/api/tanks/${tank.id}`);
+    expect(res.statusCode).toBe(500);
   });
 
   it('does not let another user set a background', async () => {

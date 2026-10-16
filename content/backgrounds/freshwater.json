@@ -4,39 +4,34 @@
     "biome": "freshwater",
     "title": "Planted stream",
     "file": null,
-    "credit": null,
-    "licence": null
+    "asset": null
   },
   {
     "id": "bg-fw-root-tangle",
     "biome": "freshwater",
     "title": "Root tangle",
     "file": null,
-    "credit": null,
-    "licence": null
+    "asset": null
   },
   {
     "id": "bg-fw-rocky-riverbed",
     "biome": "freshwater",
     "title": "Rocky riverbed",
     "file": null,
-    "credit": null,
-    "licence": null
+    "asset": null
   },
   {
     "id": "bg-fw-misty-lake",
     "biome": "freshwater",
     "title": "Misty lake",
     "file": null,
-    "credit": null,
-    "licence": null
+    "asset": null
   },
   {
     "id": "bg-fw-plant-wall",
     "biome": "freshwater",
     "title": "Plant wall",
     "file": null,
-    "credit": null,
-    "licence": null
+    "asset": null
   }
 ]
