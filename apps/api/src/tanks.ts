@@ -1,11 +1,15 @@
 import {
   addFishRequestSchema,
   ateBatchRequestSchema,
+  backgroundIdSchema,
   careActionSchema,
   createTankRequestSchema,
+  DEFAULT_BACKGROUND_ID,
   decorLayoutSchema,
   findDecorProblems,
   idSchema,
+  isBackgroundForBiome,
+  isPlayableBiome,
   legacyTintSeed,
   speciesListSchema,
   tankListSchema,
@@ -110,6 +114,22 @@ function toLifecycleFish(row: FishRow): LifecycleFish {
 
 function storedLayout(row: TankRow) {
   return row.decorLayout === null ? [] : decorLayoutSchema.parse(row.decorLayout);
+}
+
+function storedBackground(row: TankRow) {
+  if (row.backgroundId !== null) {
+    const stored = backgroundIdSchema.safeParse(row.backgroundId);
+    if (!stored.success) {
+      throw new Error(
+        `tank ${row.id} stores unknown background "${row.backgroundId}"; migrate it to NULL`,
+      );
+    }
+    return stored.data;
+  }
+  if (!isPlayableBiome(row.biome)) {
+    throw new Error(`tank ${row.id} is in the ${row.biome} biome, which has no backgrounds yet`);
+  }
+  return DEFAULT_BACKGROUND_ID[row.biome];
 }
 
 function hasVacationFeeder(row: TankRow): boolean {
@@ -255,6 +275,7 @@ async function render(tx: Tx, ticked: Ticked, fishRows = ticked.fishRows): Promi
       tintSeed: item.tintSeed ?? legacyTintSeed(item),
     })),
     decorEdited: tank.decorLayout !== null,
+    backgroundId: storedBackground(tank),
     water: tank.water,
     lastTickAt: tank.lastTickAt.toISOString(),
     fish: fishRows
@@ -430,9 +451,24 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
             );
           }
         }
+        if (
+          body.backgroundId !== undefined &&
+          body.backgroundId !== null &&
+          !isBackgroundForBiome(ticked.tank.biome, body.backgroundId)
+        ) {
+          throw new HttpError(
+            400,
+            apiError(
+              'validation_failed',
+              `That background does not belong in a ${ticked.tank.biome} tank.`,
+              [{ path: ['backgroundId'], message: 'not a background for this tank biome' }],
+            ),
+          );
+        }
         const [row] = await tx
           .update(schema.tanks)
           .set({
+            ...(body.backgroundId !== undefined ? { backgroundId: body.backgroundId } : {}),
             ...(body.name !== undefined ? { name: body.name } : {}),
             ...(body.decorLayout !== undefined
               ? {

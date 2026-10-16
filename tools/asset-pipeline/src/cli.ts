@@ -38,10 +38,17 @@ async function main(argv: string[]): Promise<number> {
   }
   if (command === 'build') {
     const { build } = await import('./build.ts');
-    await build({ repoRoot: REPO_ROOT, only: rest.filter((a) => !a.startsWith('--')) });
+    const sheets = rest.find((a) => a.startsWith('--impostor-sheets='));
+    await build({
+      repoRoot: REPO_ROOT,
+      only: rest.filter((a) => !a.startsWith('--')),
+      ...(sheets ? { impostorSheetDir: resolve(sheets.slice('--impostor-sheets='.length)) } : {}),
+    });
     return 0;
   }
-  console.error('usage: cli.ts check | sync-manifest | build [asset-id ...]');
+  console.error(
+    'usage: cli.ts check | sync-manifest | build [asset-id ...] [--impostor-sheets=dir]',
+  );
   return 2;
 }
 

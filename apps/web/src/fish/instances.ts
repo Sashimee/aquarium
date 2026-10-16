@@ -1,16 +1,17 @@
 import { DynamicDrawUsage, InstancedInterleavedBuffer } from 'three/webgpu';
 
 /**
- * Per-instance swim and look data, interleaved as four vec4s:
+ * Per-instance swim and look data, interleaved as five vec4s:
  * - `orientation`: the instance quaternion (x, y, z, w), needed again by the shadow pass;
  * - `swim`: scale, body-wave phase, amplitude scale, turn curvature in model units;
  * - `look`: fin phase, paling 0..1, seed 0..1, iridescent film thickness (nm);
- * - `tint`: rgb multiplier, gill opening 0..1.
+ * - `tint`: rgb multiplier, gill opening 0..1;
+ * - `breath`: mouth opening 0..1, unused, unused, unused; walkers have no mouth and leave it at 0.
  * Walkers add two more: `walk` (leg phase 0..1, stride weight, tail curl in radians, pleopod
  * paddling) and `act` (cheliped picking, antenna display, unused, unused).
  */
-export const INSTANCE_STRIDE = 16;
-export const WALKER_INSTANCE_STRIDE = 24;
+export const INSTANCE_STRIDE = 20;
+export const WALKER_INSTANCE_STRIDE = 28;
 export const InstanceSlot = {
   QuatX: 0,
   QuatY: 1,
@@ -28,14 +29,15 @@ export const InstanceSlot = {
   TintG: 13,
   TintB: 14,
   Gills: 15,
+  Mouth: 16,
 } as const;
 export const WalkerSlot = {
-  LegPhase: 16,
-  Stride: 17,
-  Curl: 18,
-  Paddle: 19,
-  Pick: 20,
-  Dance: 21,
+  LegPhase: 20,
+  Stride: 21,
+  Curl: 22,
+  Paddle: 23,
+  Pick: 24,
+  Dance: 25,
 } as const;
 
 export interface InstanceValues {
@@ -53,6 +55,7 @@ export interface InstanceValues {
   filmThickness: number;
   tint: readonly [number, number, number];
   gills: number;
+  mouth: number;
 }
 
 export interface WalkerValues {
@@ -99,6 +102,7 @@ export class FishInstanceData {
     a[o + InstanceSlot.TintG] = v.tint[1];
     a[o + InstanceSlot.TintB] = v.tint[2];
     a[o + InstanceSlot.Gills] = v.gills;
+    a[o + InstanceSlot.Mouth] = v.mouth;
   }
 
   writeWalker(index: number, v: WalkerValues): void {

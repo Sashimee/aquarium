@@ -173,6 +173,7 @@ describe('api client', () => {
       biome: 'freshwater',
       decorLayout: layout,
       decorEdited: true,
+      backgroundId: 'bg-fw-planted-stream',
       water: { ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 0 },
       lastTickAt: '2026-02-01T00:00:00.000Z',
       fish: [],
