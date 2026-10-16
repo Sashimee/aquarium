@@ -173,6 +173,8 @@ describe('checkAssets', () => {
     writeFileSync(join(root, 'tools', 'asset-pipeline', 'debug', 'tetra.png'), 'png');
     writeFileSync(join(root, 'tools', 'asset-pipeline', 'debug', 'prawn.png'), 'png');
     writeFileSync(join(root, 'tools', 'asset-pipeline', 'debug', 'prawn-parts.png'), 'png');
+    writeFileSync(join(root, 'tools', 'asset-pipeline', 'debug', 'limpet.png'), 'png');
+    writeFileSync(join(root, 'tools', 'asset-pipeline', 'debug', 'limpet-parts.png'), 'png');
   });
 
   afterEach(() => rmSync(root, { recursive: true, force: true }));
@@ -344,6 +346,36 @@ describe('checkAssets', () => {
     };
   }
 
+  function snailAsset(attributes?: string[]): OutputAsset {
+    const attrs = attributes ?? ['POSITION', FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE];
+    const lods = [300, 150, 50].map((triangles, i) => ({
+      ...put(`snail/limpet/lod${i}.glb`, glb(attrs)),
+      triangles,
+      vertices: triangles * 2,
+    }));
+    return {
+      id: 'limpet',
+      kind: 'snail',
+      origin: 'model',
+      sources: ['src-a'],
+      licence: 'CC0-1.0',
+      modifications: [],
+      lods,
+      textures: [],
+      files: lods.map(({ file, bytes, sha256: digest }) => ({ file, bytes, sha256: digest })),
+      snail: {
+        standardLengthM: 0.02,
+        lengthSource: 'recipe',
+        axes: { forward: '+z', up: '+y' },
+        origin: 'foot-centre',
+        attributes: { partId: FIN_ID_ATTRIBUTE, weight: FIN_MASK_ATTRIBUTE },
+        partIds: { shell: 0, foot: 10, head: 11, tentacle: 12 },
+        debugRender: 'debug/limpet.png',
+        debugPartsRender: 'debug/limpet-parts.png',
+      },
+    };
+  }
+
   function inputFor(
     assets: OutputAsset[],
     manifest = manifestOf(manifestAsset()),
@@ -370,6 +402,45 @@ describe('checkAssets', () => {
     rmSync(join(root, 'tools', 'asset-pipeline', 'debug', 'prawn-parts.png'));
     expect(checkAssets(inputFor([shrimpAsset()])).join('\n')).toContain(
       'debug render debug/prawn-parts.png is missing',
+    );
+  });
+
+  it('passes a complete snail and fails one without its mask, snail block or renders', () => {
+    expect(checkAssets(inputFor([snailAsset()]))).toEqual([]);
+    const noMask = snailAsset(['POSITION', FIN_ID_ATTRIBUTE]);
+    expect(checkAssets(inputFor([noMask])).join('\n')).toContain(
+      `lacks vertex attribute ${FIN_MASK_ATTRIBUTE}`,
+    );
+    const bare = { ...snailAsset(), snail: undefined };
+    expect(checkAssets(inputFor([bare])).join('\n')).toContain('has no snail block');
+    rmSync(join(root, 'tools', 'asset-pipeline', 'debug', 'limpet-parts.png'));
+    expect(checkAssets(inputFor([snailAsset()])).join('\n')).toContain(
+      'debug render debug/limpet-parts.png is missing',
+    );
+  });
+
+  it('checks a crab through its crab block and accepts a walker without pleopods', () => {
+    const prawn = shrimpAsset();
+    if (!prawn.shrimp) throw new Error('fixture lost its shrimp block');
+    const lods = prawn.lods.map((lod) => ({
+      ...lod,
+      ...put(
+        lod.file.replace('shrimp/prawn', 'crab/prawn'),
+        glb(['POSITION', FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE, LEG_ATTRIBUTE]),
+      ),
+    }));
+    rmSync(join(assetsDir, 'shrimp'), { recursive: true });
+    const crab: OutputAsset = {
+      ...prawn,
+      kind: 'crab',
+      lods,
+      files: lods.map(({ file, bytes, sha256: digest }) => ({ file, bytes, sha256: digest })),
+      shrimp: undefined,
+      crab: { ...prawn.shrimp, pleopodPairs: 0 },
+    };
+    expect(checkAssets(inputFor([crab]))).toEqual([]);
+    expect(checkAssets(inputFor([{ ...crab, crab: undefined }])).join('\n')).toContain(
+      'has no crab block',
     );
   });
 
