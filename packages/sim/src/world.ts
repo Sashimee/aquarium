@@ -26,6 +26,7 @@ export const STEP_DT = 1 / STEP_HZ;
 export const STEERING = {
   separationZoneBodyLengths: 1,
   separationWeight: 2,
+  separationVerticalFraction: 0.5,
   coGrazeSeparation: 0.25,
   alignmentWeight: 1.5,
   cohesionRatePerS: 1,
@@ -62,6 +63,8 @@ export const STEERING = {
   intentSmoothingS: 0.15,
   turnGainPerS: 6,
   turnSmoothingS: 0.1,
+  pitchGainPerS: 4,
+  steeredPitchRateRadPerS: 60 * DEG,
   speedResponseS: 0.4,
   maxBankRad: 35 * DEG,
   bankReferenceAccel: 1,
@@ -1029,14 +1032,19 @@ export class World {
       const j = this.anyNbr[i * k + m] ?? 0;
       let zone = 0.5 * (length + (this.bodyLength[j] ?? 0)) * STEERING.separationZoneBodyLengths;
       if (plan.arrival > 0 && this.coGrazing(plan, j)) zone *= STEERING.coGrazeSeparation;
-      const d2 = this.distSq[i * n + j] ?? Infinity;
+      // Shoalers stack in ladders, a neighbour above or below being no collision risk
+      // (Ko et al. 2025), so the personal space is flattened: half as tall as it is wide.
+      const ox = px - (this.position[j * 3] ?? 0);
+      const oy = (py - (this.position[j * 3 + 1] ?? 0)) / STEERING.separationVerticalFraction;
+      const oz = pz - (this.position[j * 3 + 2] ?? 0);
+      const d2 = ox * ox + oy * oy + oz * oz;
       if (d2 >= zone * zone) continue;
       const d = Math.sqrt(d2);
       if (d < 1e-9) continue;
       const s = (zone - d) / (zone * d);
-      sx += (px - (this.position[j * 3] ?? 0)) * s;
-      sy += (py - (this.position[j * 3 + 1] ?? 0)) * s;
-      sz += (pz - (this.position[j * 3 + 2] ?? 0)) * s;
+      sx += ox * s;
+      sy += oy * s * STEERING.separationVerticalFraction;
+      sz += oz * s;
     }
     const ws = STEERING.separationWeight * cruiseBase * plan.separation;
     dx += sx * ws;
@@ -1445,7 +1453,11 @@ export class World {
         const urgency = Math.min(1, horizontal / (cruiseBase * STEERING.fullTurnSpeedFraction));
         this.targetYaw[i] = yaw + wrapAngle(Math.atan2(dx, dz) - yaw) * urgency;
       }
-      this.targetPitch[i] = clamp(Math.atan2(dy, Math.hypot(dx, dz)), -sp.maxPitch, sp.maxPitch);
+      // The climb angle that gives the wished vertical speed at the speed actually swum. The
+      // wish's own elevation swings to the pitch limit whenever its horizontal part cancels out
+      // (avoidance against a pane, a fish outrunning its shoal), bobbing the body.
+      const climb = clamp(dy / Math.max(mag, this.speed[i] ?? 0, 1e-9), -1, 1);
+      this.targetPitch[i] = clamp(Math.asin(climb), -sp.maxPitch, sp.maxPitch);
       this.targetSpeed[i] = clamp(
         Math.max(mag * (0.5 + 0.5 * cosAhead), minSpeed),
         0,
@@ -1792,7 +1804,17 @@ export class World {
       const wTurn = this.turnRateLimit(i, sp, plan);
       const yawCmd = clamp(yawError * gain, -wTurn, wTurn);
       yawRate = (this.yawRate[i] ?? 0) + (yawCmd - (this.yawRate[i] ?? 0)) * smooth;
-      const pitchCmd = clamp(((this.targetPitch[i] ?? 0) - pitch) * gain, -wmax, wmax);
+      // Depth is trimmed by the fins through the whole stroke, not by the tail beat, so pitch
+      // does not follow the burst-and-coast steering gain. Only a held posture (a cory nosing
+      // down, a dart for air) pitches as fast as the fish can turn.
+      const pitchLimit = Number.isNaN(plan.pitch)
+        ? Math.min(wmax, STEERING.steeredPitchRateRadPerS)
+        : wmax;
+      const pitchCmd = clamp(
+        ((this.targetPitch[i] ?? 0) - pitch) * STEERING.pitchGainPerS,
+        -pitchLimit,
+        pitchLimit,
+      );
       pitchRate = (this.pitchRate[i] ?? 0) + (pitchCmd - (this.pitchRate[i] ?? 0)) * smooth;
     }
     this.yawRate[i] = yawRate;
