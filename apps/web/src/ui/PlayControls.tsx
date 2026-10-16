@@ -1,6 +1,11 @@
 import { foodTypeSchema, type FoodType } from '@aquarium/shared';
 import { useEffect, useRef, useState } from 'react';
-import { HAND_FEED_PORTION, type PlayTool } from '../interaction/events';
+import {
+  HAND_FEED_PORTION,
+  type GameFishRef,
+  type InteractionEvents,
+  type PlayTool,
+} from '../interaction/events';
 import { useBridge, useLatest, usePlayTool } from './context';
 import { useActiveTank } from './session';
 
@@ -147,12 +152,16 @@ export function PlayPanel() {
         ))}
       </div>
       <ToyShelf />
-      <FeedingGamePanel />
+      <FeedingGamePanel
+        fish={(tank?.fish ?? [])
+          .filter((f) => f.status === 'alive')
+          .map((f) => ({ id: f.id, name: f.name, species: f.species }))}
+      />
     </>
   );
 }
 
-function ToyShelf() {
+export function ToyShelf() {
   const { interaction } = useBridge();
   const toys = useLatest(interaction, 'toys:changed');
   if (!toys || (!toys.mirror && !toys.ball)) return null;
@@ -172,20 +181,26 @@ function ToyShelf() {
   );
 }
 
-function FeedingGamePanel() {
+export function gameRequestFor(
+  running: boolean,
+  fish: readonly GameFishRef[],
+): InteractionEvents['game:request'] {
+  return running ? { action: 'stop' } : { action: 'start', fish };
+}
+
+export function FeedingGamePanel({ fish }: { fish: readonly GameFishRef[] }) {
   const { interaction } = useBridge();
-  const tank = useActiveTank();
   const ready = useEngineReadyForPlay();
   const state = useLatest(interaction, 'game:state');
   const view = state?.view;
-  const live = (tank?.fish ?? []).filter((f) => f.status === 'alive');
   const running = view?.phase === 'running';
   return (
     <section className="game" aria-labelledby="game-title">
       <h3 id="game-title">Shy fish feeding game</h3>
       <p className="hint">
         Tap the tank to drop five pinches in before the bold fish take them. The shy fish scores,
-        the others cost you.
+        the others cost you. Every pinch is a real feed: it counts toward the feeding limit and
+        leftovers foul the water.
       </p>
       {view?.phase === 'running' && (
         <p role="status" className="game-status">
@@ -207,14 +222,7 @@ function FeedingGamePanel() {
         type="button"
         className="primary"
         disabled={!ready}
-        onClick={() =>
-          running
-            ? interaction.emit('game:request', { action: 'stop' })
-            : interaction.emit('game:request', {
-                action: 'start',
-                fish: live.map((f) => ({ id: f.id, name: f.name, species: f.species })),
-              })
-        }
+        onClick={() => interaction.emit('game:request', gameRequestFor(running, fish))}
       >
         {running ? 'Stop round' : 'Start round'}
       </button>

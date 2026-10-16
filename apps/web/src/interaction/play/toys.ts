@@ -155,13 +155,22 @@ interface Box {
   readonly max: Vec3;
 }
 
+export const MIRROR_GROUND_MARGIN_M = 0.01;
+export const MIRROR_SURFACE_MARGIN_M = 0.01;
+
 /**
  * Where the mirror hangs for a tap along `origin` + `dir`: the back or side wall the ray reaches
- * through the water, kept clear of the corners, the surface and the substrate. A ray that leaves
- * through the floor or the top is mounted on the back wall at the same x and y. Null when the ray
- * points away from the back wall and reaches no side wall.
+ * through the water, kept clear of the corners, the substrate and the water line. A ray that
+ * leaves through the floor or the top is mounted on the back wall at the same x and y. Null when
+ * the ray points away from the back wall and reaches no side wall. `ground` is the visible
+ * substrate height at (x, z).
  */
-export function mirrorMountFor(origin: Vec3, dir: Vec3, box: Box): MirrorMount | null {
+export function mirrorMountFor(
+  origin: Vec3,
+  dir: Vec3,
+  box: Box,
+  ground: (x: number, z: number) => number = () => box.min.y,
+): MirrorMount | null {
   const { min, max } = box;
   const walls: { axis: 'x' | 'z'; at: number; normal: Vec3 }[] = [
     { axis: 'z', at: min.z, normal: { x: 0, y: 0, z: 1 } },
@@ -174,10 +183,13 @@ export function mirrorMountFor(origin: Vec3, dir: Vec3, box: Box): MirrorMount |
     if (d === 0) continue;
     const t = (wall.at - origin[wall.axis]) / d;
     if (!(t > 0) || (best !== null && t >= best.t)) continue;
+    // The hit wall's own coordinate is the wall by construction; testing it against its own
+    // bound only fails on float noise and sends the mirror to the wrong wall.
     const x = origin.x + dir.x * t;
     const y = origin.y + dir.y * t;
     const z = origin.z + dir.z * t;
-    if (x < min.x || x > max.x || z < min.z || z > max.z || y < min.y || y > max.y) continue;
+    const along = wall.axis === 'z' ? x >= min.x && x <= max.x : z >= min.z && z <= max.z;
+    if (!along || y < min.y || y > max.y) continue;
     best = { t, wall };
   }
   let wall = best?.wall;
@@ -191,12 +203,30 @@ export function mirrorMountFor(origin: Vec3, dir: Vec3, box: Box): MirrorMount |
     t = backT;
   }
   const hit = { x: origin.x + dir.x * t, y: origin.y + dir.y * t, z: origin.z + dir.z * t };
-  const y = clamp(hit.y, min.y + MIRROR_HEIGHT_M / 2, max.y - MIRROR_HEIGHT_M / 2);
+  let x: number;
+  let z: number;
+  let atX: number;
+  let atZ: number;
   if (wall.axis === 'z') {
-    const x = clamp(hit.x, min.x + MIRROR_WIDTH_M / 2, max.x - MIRROR_WIDTH_M / 2);
-    return { position: { x, y, z: wall.at + MIRROR_GAP_M }, normal: wall.normal };
+    x = clamp(hit.x, min.x + MIRROR_WIDTH_M / 2, max.x - MIRROR_WIDTH_M / 2);
+    z = wall.at + MIRROR_GAP_M;
+    atX = x;
+    atZ = wall.at;
+  } else {
+    z = clamp(hit.z, min.z + MIRROR_WIDTH_M / 2, max.z - MIRROR_WIDTH_M / 2);
+    x = wall.at + wall.normal.x * MIRROR_GAP_M;
+    atX = wall.at;
+    atZ = z;
   }
-  const z = clamp(hit.z, min.z + MIRROR_WIDTH_M / 2, max.z - MIRROR_WIDTH_M / 2);
-  const x = wall.at + wall.normal.x * MIRROR_GAP_M;
+  const half = MIRROR_WIDTH_M / 2;
+  const floor = Math.max(
+    min.y,
+    ground(atX, atZ),
+    wall.axis === 'z' ? ground(atX - half, atZ) : ground(atX, atZ - half),
+    wall.axis === 'z' ? ground(atX + half, atZ) : ground(atX, atZ + half),
+  );
+  const lowest = floor + MIRROR_GROUND_MARGIN_M + MIRROR_HEIGHT_M / 2;
+  const highest = max.y - MIRROR_SURFACE_MARGIN_M - MIRROR_HEIGHT_M / 2;
+  const y = Math.min(highest, Math.max(lowest, hit.y));
   return { position: { x, y, z }, normal: wall.normal };
 }

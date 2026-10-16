@@ -38,6 +38,17 @@ export type SimToy =
   | { readonly kind: 'mirror'; readonly position: Triple; readonly normal: Triple }
   | { readonly kind: 'ball'; readonly position: Triple; readonly velocity: Triple };
 
+type MutableMirrorToy = {
+  kind: 'mirror';
+  position: [number, number, number];
+  normal: [number, number, number];
+};
+type MutableBallToy = {
+  kind: 'ball';
+  position: [number, number, number];
+  velocity: [number, number, number];
+};
+
 export interface ToyNudge {
   /** Velocity a fish gave the ball, m/s in the sim's x and z. */
   readonly ix: number;
@@ -49,6 +60,17 @@ export interface ToyVisuals {
   setBall(position: Vec3 | null): void;
   setHighlight(position: Vec3 | null): void;
 }
+
+export interface GameTraits {
+  /** 0..1. */
+  readonly boldness: number;
+  readonly eatsFlakes: boolean;
+  /** Top of the depth band, 0 = sand, 1 = surface. */
+  readonly depthHigh: number;
+}
+
+/** Floating flakes only last a few seconds at the surface, so a fish has to live in the top of the water. */
+export const GAME_MIN_DEPTH_HIGH = 0.85;
 
 const stillWater: SurfaceCurrent = (_x, _y, _z, out) => {
   out[0] = 0;
@@ -66,6 +88,8 @@ export interface PlayDeps {
   readonly bubbles: BubbleField;
   readonly ripples: RippleField;
   readonly gate: FeedGate;
+  /** Visible substrate height at (x, z); unset means the floor is flat at the tank bottom. */
+  readonly groundHeight?: ((x: number, z: number) => number) | undefined;
   readonly events: EventBus<InteractionEvents>;
   startle?: ((stimulus: StimulusLike) => void) | undefined;
   /** The swimming fish under the ray, as a position for the camera to follow. */
@@ -86,8 +110,8 @@ export interface PlayDeps {
   onToyNudge?: ((listener: (nudge: ToyNudge) => void) => () => void) | undefined;
   /** Where a fish is, in scene space, for the game's highlight; unset until the sim exposes it. */
   fishPoint?: ((fishId: string) => Vec3 | null) | undefined;
-  /** Species boldness, 0..1, for choosing the shy fish. */
-  boldnessOf?: ((species: string) => number | undefined) | undefined;
+  /** What the game needs to know about a species; unset or undefined rules the fish out. */
+  gameTraitsOf?: ((species: string) => GameTraits | undefined) | undefined;
   game?: FeedingGame | undefined;
   report?: ((message: string, cause: unknown) => void) | undefined;
   now(): number;
@@ -101,7 +125,6 @@ const FLICK_SAMPLE_MAX_AGE_MS = 120;
 const FLICK_SMOOTHING = 0.5;
 const GAME_PINCH_PORTION = 0.3;
 const HIGHLIGHT_LIFT_M = 0.03;
-const DEFAULT_BOLDNESS = 0.5;
 
 export class PlayController {
   private activeTool: PlayTool = 'tap';
@@ -116,6 +139,20 @@ export class PlayController {
   private mirror: MirrorMount | null = null;
   private flick = { x: 0, z: 0, vx: 0, vz: 0, atMs: 0 };
   private ballWasMoving = false;
+  private toolBeforeGame: PlayTool = 'tap';
+  private readonly ballPoint: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
+  private readonly highlightPoint: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 };
+  private readonly simToys: (MutableMirrorToy | MutableBallToy)[] = [];
+  private readonly mirrorToy: MutableMirrorToy = {
+    kind: 'mirror',
+    position: [0, 0, 0],
+    normal: [0, 0, 0],
+  };
+  private readonly ballToy: MutableBallToy = {
+    kind: 'ball',
+    position: [0, 0, 0],
+    velocity: [0, 0, 0],
+  };
   private lastToys = '';
   private lastGameKey = '';
 
@@ -130,7 +167,7 @@ export class PlayController {
       }),
       deps.events.on('toys:remove', ({ toy }) => this.removeToy(toy)),
       deps.events.on('game:request', (request) => {
-        if (request.action === 'stop') this.publishGame(this.deps.game?.cancel());
+        if (request.action === 'stop') this.stopGame();
         else this.startGame(request.fish);
       }),
       deps.events.on('food:ate', ({ eaten }) => this.publishGame(this.deps.game?.ate(eaten))),
@@ -143,6 +180,11 @@ export class PlayController {
 
   get hasBall(): boolean {
     return this.ball !== null;
+  }
+
+  /** Scene-space x and z of the ball, or null without one. */
+  get ballAt(): { x: number; z: number } | null {
+    return this.ball ? { x: this.ball.x, z: this.ball.z } : null;
   }
 
   get hasMirror(): boolean {
@@ -161,6 +203,8 @@ export class PlayController {
   setTool(tool: PlayTool): void {
     if (tool === this.activeTool) return;
     this.releaseBall();
+    if (this.activeTool === 'game' && this.deps.game?.running)
+      this.publishGame(this.deps.game.cancel());
     this.activeTool = tool;
     this.pressed = false;
     this.wandPoint = null;
@@ -263,7 +307,7 @@ export class PlayController {
   }
 
   private placeMirror(ray: Ray): void {
-    const mount = mirrorMountFor(ray.origin, ray.dir, this.deps);
+    const mount = mirrorMountFor(ray.origin, ray.dir, this.deps, this.deps.groundHeight);
     if (!mount) return;
     this.mirror = mount;
     this.deps.toyVisuals?.setMirror(mount);
@@ -358,24 +402,31 @@ export class PlayController {
 
   private syncSim(): void {
     if (!this.deps.setToys) return;
-    const toys: SimToy[] = [];
+    const toys = this.simToys;
+    toys.length = 0;
     const out = this.sim;
     if (this.mirror) {
       const { position: p, normal: n } = this.mirror;
+      const toy = this.mirrorToy;
       this.deps.toSim(p.x, p.y, p.z, out);
-      toys.push({
-        kind: 'mirror',
-        position: [out[0] ?? 0, out[1] ?? 0, out[2] ?? 0],
-        normal: [n.x, n.y, n.z],
-      });
+      toy.position[0] = out[0] ?? 0;
+      toy.position[1] = out[1] ?? 0;
+      toy.position[2] = out[2] ?? 0;
+      toy.normal[0] = n.x;
+      toy.normal[1] = n.y;
+      toy.normal[2] = n.z;
+      toys.push(toy);
     }
     if (this.ball) {
+      const toy = this.ballToy;
       this.deps.toSim(this.ball.x, this.ball.y, this.ball.z, out);
-      toys.push({
-        kind: 'ball',
-        position: [out[0] ?? 0, out[1] ?? 0, out[2] ?? 0],
-        velocity: [this.ball.vx, 0, this.ball.vz],
-      });
+      toy.position[0] = out[0] ?? 0;
+      toy.position[1] = out[1] ?? 0;
+      toy.position[2] = out[2] ?? 0;
+      toy.velocity[0] = this.ball.vx;
+      toy.velocity[1] = 0;
+      toy.velocity[2] = this.ball.vz;
+      toys.push(toy);
     }
     this.deps.setToys(toys);
   }
@@ -384,16 +435,29 @@ export class PlayController {
     const { toyVisuals, game } = this.deps;
     if (this.ball) {
       this.ball.step(deltaS);
-      toyVisuals?.setBall({ x: this.ball.x, y: this.ball.y, z: this.ball.z });
+      const point = this.ballPoint;
+      point.x = this.ball.x;
+      point.y = this.ball.y;
+      point.z = this.ball.z;
+      toyVisuals?.setBall(point);
       const moving = this.ball.isHeld || this.ball.speed > 1e-4;
       if (moving || this.ballWasMoving) this.syncSim();
       this.ballWasMoving = moving;
     }
     if (game?.running) {
       this.publishGame(game.update(deltaS));
+      if (!game.running) this.leaveGame();
       const view = game.view;
       const at = view.phase === 'running' ? (this.deps.fishPoint?.(view.targetId) ?? null) : null;
-      toyVisuals?.setHighlight(at ? { x: at.x, y: at.y + HIGHLIGHT_LIFT_M, z: at.z } : null);
+      if (at) {
+        const lifted = this.highlightPoint;
+        lifted.x = at.x;
+        lifted.y = at.y + HIGHLIGHT_LIFT_M;
+        lifted.z = at.z;
+        toyVisuals?.setHighlight(lifted);
+      } else {
+        toyVisuals?.setHighlight(null);
+      }
     } else {
       toyVisuals?.setHighlight(null);
     }
@@ -402,14 +466,29 @@ export class PlayController {
   private startGame(fish: readonly { id: string; name: string; species: string }[]): void {
     const game = this.deps.game;
     if (!game) return;
-    const roster: GameFish[] = fish.map((f) => ({
-      id: f.id,
-      name: f.name,
-      boldness: this.deps.boldnessOf?.(f.species) ?? DEFAULT_BOLDNESS,
-    }));
+    const roster: GameFish[] = fish.map((f) => {
+      const traits = this.deps.gameTraitsOf?.(f.species);
+      return {
+        id: f.id,
+        name: f.name,
+        boldness: traits?.boldness ?? 1,
+        eligible:
+          traits !== undefined && traits.eatsFlakes && traits.depthHigh >= GAME_MIN_DEPTH_HIGH,
+      };
+    });
+    if (this.activeTool !== 'game') this.toolBeforeGame = this.activeTool;
     const view = game.start(roster);
     if (view.phase === 'running') this.setTool('game');
     this.publishGame(view);
+  }
+
+  private stopGame(): void {
+    this.publishGame(this.deps.game?.cancel());
+    this.leaveGame();
+  }
+
+  private leaveGame(): void {
+    if (this.activeTool === 'game') this.setTool(this.toolBeforeGame);
   }
 
   private gameTap(ray: Ray): void {
@@ -418,7 +497,9 @@ export class PlayController {
     const hit = this.surfaceUnder(ray);
     if (!hit) return;
     if (!game.pinch()) return;
-    if (!this.feed('flakes', GAME_PINCH_PORTION, hit)) game.refund();
+    const made = this.feed('flakes', GAME_PINCH_PORTION, hit);
+    if (made === 0) game.refund();
+    else game.track(this.deps.food.particles.slice(-made).map((p) => p.id));
     this.publishGame(game.view);
   }
 
@@ -433,13 +514,14 @@ export class PlayController {
     this.deps.events.emit('game:state', { view });
   }
 
-  private feed(food: FoodType, portion: number, at: Vec3 | null): boolean {
+  /** Drops the food and returns how many particles went in; 0 when it was refused. */
+  private feed(food: FoodType, portion: number, at: Vec3 | null): number {
     const { gate, events, food: field, min, max } = this.deps;
     const fedAt = this.deps.now();
     const decision = gate.tryFeed(fedAt);
     if (!decision.ok) {
       events.emit('feed:rejected', { reason: 'rate-limited', retryAfterMs: decision.retryAfterMs });
-      return false;
+      return 0;
     }
     const x = at ? at.x : (min.x + max.x) / 2;
     const z = at ? at.z : (min.z + max.z) / 2;
@@ -447,15 +529,15 @@ export class PlayController {
     if (particles === 0) {
       gate.release(fedAt);
       events.emit('feed:rejected', { reason: 'tank-full', retryAfterMs: 0 });
-      return false;
+      return 0;
     }
     const placedPortion = particles / particlesPerPortion(food);
     if (food === 'nori' && this.deps.reach) {
       void this.checkClips(field.particles.slice(-particles), placedPortion, fedAt);
-      return true;
+      return particles;
     }
     events.emit('feed:dropped', { food, portion: placedPortion, particles });
-    return true;
+    return particles;
   }
 
   private async checkClips(

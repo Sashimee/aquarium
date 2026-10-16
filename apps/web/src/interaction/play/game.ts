@@ -10,6 +10,8 @@ export interface GameFish {
   readonly id: string;
   readonly name: string;
   readonly boldness: number;
+  /** Eats flakes and swims high enough to reach them floating, so it can win. */
+  readonly eligible: boolean;
 }
 
 export type GameView =
@@ -85,12 +87,15 @@ type Round = {
 export class FeedingGame {
   private round: Round | null = null;
   private last: GameView;
+  private best: number;
+  private readonly dropped = new Set<number>();
 
   constructor(
     private readonly store: BestStore,
     private readonly random: () => number = Math.random,
   ) {
-    this.last = { phase: 'idle', best: store.read() };
+    this.best = store.read();
+    this.last = { phase: 'idle', best: this.best };
   }
 
   get view(): GameView {
@@ -102,17 +107,27 @@ export class FeedingGame {
   }
 
   start(fish: readonly GameFish[]): GameView {
-    const best = this.store.read();
+    const best = (this.best = this.store.read());
+    this.round = null;
+    this.dropped.clear();
     if (fish.length < 2) {
-      this.round = null;
       return (this.last = {
         phase: 'unavailable',
         reason: 'You need at least two fish: one shy one to feed and a bold one to race.',
         best,
       });
     }
-    const lowest = Math.min(...fish.map((f) => f.boldness));
-    const shy = fish.filter((f) => f.boldness - lowest < 1e-9);
+    const candidates = fish.filter((f) => f.eligible);
+    if (candidates.length === 0) {
+      return (this.last = {
+        phase: 'unavailable',
+        reason:
+          'None of your fish can win this round: the shy one has to eat flakes and swim up to the surface for them.',
+        best,
+      });
+    }
+    const lowest = Math.min(...candidates.map((f) => f.boldness));
+    const shy = candidates.filter((f) => f.boldness - lowest < 1e-9);
     const target = shy[Math.floor(this.random() * shy.length)] ?? shy[0];
     if (!target) throw new Error('FeedingGame.start: no target fish');
     this.round = {
@@ -145,10 +160,16 @@ export class FeedingGame {
     this.last = this.runningView(round);
   }
 
-  ate(eaten: readonly { fishId: string; portion: number }[]): GameView {
+  /** Marks food particles dropped by this round's pinches; only bites of these score. */
+  track(foodIds: Iterable<number>): void {
+    for (const id of foodIds) this.dropped.add(id);
+  }
+
+  ate(eaten: readonly { fishId: string; portion: number; foodId?: number }[]): GameView {
     const round = this.round;
     if (!round) return this.last;
-    for (const { fishId, portion } of eaten) {
+    for (const { fishId, portion, foodId } of eaten) {
+      if (foodId === undefined || !this.dropped.has(foodId)) continue;
       if (fishId === round.target.id) round.targetPortion += portion;
       else round.rivalPortion += portion;
     }
@@ -169,9 +190,12 @@ export class FeedingGame {
     if (!round) return this.last;
     this.round = null;
     const score = scoreOf(round);
-    const previous = this.store.read();
+    const previous = this.best;
     const newBest = score > previous;
-    if (newBest) this.store.write(score);
+    if (newBest) {
+      this.store.write(score);
+      this.best = score;
+    }
     return (this.last = {
       phase: 'done',
       targetName: round.target.name,
@@ -184,7 +208,8 @@ export class FeedingGame {
 
   cancel(): GameView {
     this.round = null;
-    return (this.last = { phase: 'idle', best: this.store.read() });
+    this.dropped.clear();
+    return (this.last = { phase: 'idle', best: this.best });
   }
 
   private runningView(round: Round): GameView {
@@ -195,7 +220,7 @@ export class FeedingGame {
       timeLeftS: Math.max(0, round.timeLeftS),
       pinchesLeft: round.pinchesLeft,
       score: scoreOf(round),
-      best: this.store.read(),
+      best: this.best,
     };
   }
 }

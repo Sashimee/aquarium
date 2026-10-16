@@ -2,6 +2,7 @@ import { Raycaster, Vector2 } from 'three/webgpu';
 import type { Engine } from '../../engine/Engine';
 import type { EventBus } from '../../engine/events';
 import { waterBounds } from '../../engine/tank/dimensions';
+import { speciesInput } from '../../fish/species';
 import { FeedGate } from '../../sync/feedGate';
 import type { Vec3 } from '../camera';
 import type { InteractionEvents } from '../events';
@@ -12,6 +13,7 @@ import { sceneToSim } from '../food/simSpace';
 import { BubbleField } from './bubbles';
 import {
   PlayController,
+  type GameTraits,
   type Ray,
   type SimToy,
   type StimulusLike,
@@ -20,7 +22,6 @@ import {
 import { FeedingGame, localBest } from './game';
 import { RippleField } from './ripples';
 import { PlayVisuals } from './visuals';
-import { speciesInput } from '../../fish/species';
 
 /** The parts of the scene the play layer reads. */
 export interface PlayScene {
@@ -73,9 +74,8 @@ export function createPlaySystem(
   const bubbles = new BubbleField(box.max.y);
   const ripples = new RippleField();
   const visuals = new PlayVisuals();
-  const game = new FeedingGame(
-    localBest(safeStorage(), (message, cause) => console.error(message, cause)),
-  );
+  const reportStorage = (message: string, cause: unknown): void => console.error(message, cause);
+  const game = new FeedingGame(localBest(safeStorage(reportStorage), reportStorage));
   engine.scene.add(visuals.group);
 
   const raycaster = new Raycaster();
@@ -122,16 +122,19 @@ export function createPlaySystem(
     setToys: sim.setToys?.bind(sim),
     onToyNudge: sim.onToyNudge?.bind(sim),
     fishPoint: sim.fishPoint?.bind(sim),
-    boldnessOf: (species) => speciesInput(species)?.behaviour.boldness,
+    gameTraitsOf: gameTraits,
+    groundHeight: (x, z) => scene.groundHeight(x, z),
     game,
     report: (message, cause) => console.error(message, cause),
     now: () => performance.now(),
   });
 
   const stopRequests = interaction.on('play:request-tool', ({ tool }) => controller.setTool(tool));
+  const exposeBall = new URLSearchParams(window.location.search).has('e2e');
   const stopFrame = engine.onFrame((deltaS) => {
     controller.update(deltaS);
     visuals.update(food, bubbles, ripples);
+    if (exposeBall) showBall(canvas, controller.ballAt);
   });
 
   interaction.emit('play:ready', {});
@@ -152,11 +155,33 @@ export function createPlaySystem(
   };
 }
 
-function safeStorage(): Storage | null {
+function showBall(canvas: HTMLCanvasElement, at: { x: number; z: number } | null): void {
+  if (!at) {
+    delete canvas.dataset['ball'];
+    return;
+  }
+  const text = `${at.x.toFixed(3)} ${at.z.toFixed(3)}`;
+  if (canvas.dataset['ball'] !== text) canvas.dataset['ball'] = text;
+}
+
+function safeStorage(report: (message: string, cause: unknown) => void): Storage | null {
   try {
     return window.localStorage;
-  } catch {
-    // Blocked storage (cookies off) throws on access; the best then lasts the session only.
+  } catch (cause) {
+    report(
+      'The feeding game could not open local storage, so its best score lasts this visit only',
+      cause,
+    );
     return null;
   }
+}
+
+function gameTraits(species: string): GameTraits | undefined {
+  const input = speciesInput(species);
+  if (!input) return undefined;
+  return {
+    boldness: input.behaviour.boldness,
+    eatsFlakes: input.lifecycle.diet.includes('flakes'),
+    depthHigh: input.behaviour.depthBand[1],
+  };
 }

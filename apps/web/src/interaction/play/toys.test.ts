@@ -9,6 +9,7 @@ import { sceneToSim } from '../food/simSpace';
 import { BubbleField } from './bubbles';
 import {
   PlayController,
+  type GameTraits,
   type SimToy,
   type ToyNudge,
   type ToyVisuals,
@@ -26,7 +27,9 @@ import { RippleField } from './ripples';
 import {
   BALL_RADIUS_M,
   MAX_BALL_SPEED,
+  MIRROR_GROUND_MARGIN_M,
   MIRROR_HEIGHT_M,
+  MIRROR_SURFACE_MARGIN_M,
   MIRROR_WIDTH_M,
   mirrorMountFor,
   PingPongBall,
@@ -168,15 +171,58 @@ describe('mirrorMountFor', () => {
     expect(mount).not.toBeNull();
     const p = mount?.position as Vec3;
     expect(p.x).toBeLessThanOrEqual(MAX.x - MIRROR_WIDTH_M / 2 + 1e-9);
-    expect(p.y).toBeLessThanOrEqual(MAX.y - MIRROR_HEIGHT_M / 2 + 1e-9);
+    expect(p.y).toBeLessThanOrEqual(MAX.y - MIRROR_SURFACE_MARGIN_M - MIRROR_HEIGHT_M / 2 + 1e-9);
     const low = mirrorMountFor({ x: 0, y: 0.02, z: 1.6 }, { x: 0, y: 0, z: -1 }, box);
-    expect(low?.position.y).toBeGreaterThanOrEqual(MIN.y + MIRROR_HEIGHT_M / 2 - 1e-9);
+    expect(low?.position.y).toBeGreaterThanOrEqual(
+      MIN.y + MIRROR_GROUND_MARGIN_M + MIRROR_HEIGHT_M / 2 - 1e-9,
+    );
   });
 
   it('mounts on the back wall for a ray that would leave through the floor', () => {
     const mount = mirrorMountFor({ x: 0, y: 1, z: 1 }, { x: 0, y: -1, z: -0.2 }, box);
     expect(mount?.normal).toEqual({ x: 0, y: 0, z: 1 });
-    expect(mount?.position.y).toBeCloseTo(MIN.y + MIRROR_HEIGHT_M / 2);
+    expect(mount?.position.y).toBeCloseTo(MIN.y + MIRROR_GROUND_MARGIN_M + MIRROR_HEIGHT_M / 2);
+  });
+
+  it('mounts on the wall the ray was aimed at, whatever the float noise', () => {
+    let seed = 12345;
+    const random = () => {
+      seed = (seed * 1664525 + 1013904223) % 4294967296;
+      return seed / 4294967296;
+    };
+    for (let i = 0; i < 2000; i++) {
+      const y = MIN.y + random() * (MAX.y - MIN.y);
+      const z = MIN.z + random() * (MAX.z - MIN.z);
+      const origin = { x: -1.2 - random(), y: 0.1 + random() * 0.5, z: 0.6 + random() };
+      const aimed = { x: MIN.x, y, z };
+      const dir = { x: aimed.x - origin.x, y: aimed.y - origin.y, z: aimed.z - origin.z };
+      const left = mirrorMountFor(origin, dir, box);
+      expect(left?.normal).toEqual({ x: 1, y: 0, z: 0 });
+
+      const mirrored = mirrorMountFor({ ...origin, x: -origin.x }, { ...dir, x: -dir.x }, box);
+      expect(mirrored?.normal).toEqual({ x: -1, y: 0, z: 0 });
+    }
+  });
+
+  it('keeps the mirror above a raised substrate and its top edge under the water line', () => {
+    const sand = (x: number) => 0.1 + 0.05 * Math.sin(x * 8);
+    for (const y of [MIN.y, 0.05, 0.2, MAX.y]) {
+      for (const x of [-0.5, -0.2, 0, 0.3, 0.5]) {
+        const mount = mirrorMountFor({ x, y, z: 1.6 }, { x: 0, y: 0, z: -1 }, box, sand);
+        const p = mount?.position as Vec3;
+        const worst = Math.max(
+          sand(p.x - MIRROR_WIDTH_M / 2),
+          sand(p.x),
+          sand(p.x + MIRROR_WIDTH_M / 2),
+        );
+        expect(p.y - MIRROR_HEIGHT_M / 2).toBeGreaterThanOrEqual(
+          worst + MIRROR_GROUND_MARGIN_M - 1e-9,
+        );
+        expect(p.y + MIRROR_HEIGHT_M / 2).toBeLessThanOrEqual(
+          MAX.y - MIRROR_SURFACE_MARGIN_M + 1e-9,
+        );
+      }
+    }
   });
 
   it('refuses a ray that points away from the back wall and misses the sides', () => {
@@ -197,9 +243,9 @@ function memoryStore(initial = 0): BestStore & { value: number } {
 }
 
 const FISH = [
-  { id: 'a', name: 'Bold', boldness: 0.9 },
-  { id: 'b', name: 'Shy', boldness: 0.2 },
-  { id: 'c', name: 'Middle', boldness: 0.5 },
+  { id: 'a', name: 'Bold', boldness: 0.9, eligible: true },
+  { id: 'b', name: 'Shy', boldness: 0.2, eligible: true },
+  { id: 'c', name: 'Middle', boldness: 0.5, eligible: true },
 ];
 
 describe('FeedingGame', () => {
@@ -214,13 +260,14 @@ describe('FeedingGame', () => {
   it('picks the shyest fish as the target', () => {
     const game = new FeedingGame(memoryStore());
     const view = game.start(FISH);
+    game.track([1]);
     expect(view).toMatchObject({ phase: 'running', targetId: 'b', targetName: 'Shy' });
   });
 
   it('breaks a boldness tie with the random source', () => {
     const tied = [
-      { id: 'x', name: 'X', boldness: 0.3 },
-      { id: 'y', name: 'Y', boldness: 0.3 },
+      { id: 'x', name: 'X', boldness: 0.3, eligible: true },
+      { id: 'y', name: 'Y', boldness: 0.3, eligible: true },
     ];
     expect(new FeedingGame(memoryStore(), () => 0).start(tied)).toMatchObject({ targetId: 'x' });
     expect(new FeedingGame(memoryStore(), () => 0.99).start(tied)).toMatchObject({
@@ -231,6 +278,7 @@ describe('FeedingGame', () => {
   it('gives five pinches and refuses a sixth', () => {
     const game = new FeedingGame(memoryStore());
     game.start(FISH);
+    game.track([1]);
     for (let i = 0; i < PINCHES_PER_ROUND; i++) expect(game.pinch()).toBe(true);
     expect(game.pinch()).toBe(false);
   });
@@ -238,6 +286,7 @@ describe('FeedingGame', () => {
   it('refunds a pinch that never reached the water', () => {
     const game = new FeedingGame(memoryStore());
     game.start(FISH);
+    game.track([1]);
     game.pinch();
     game.refund();
     expect(game.view).toMatchObject({ pinchesLeft: PINCHES_PER_ROUND });
@@ -252,24 +301,67 @@ describe('FeedingGame', () => {
   it('scores the shy fish up and the rivals down, never below zero', () => {
     const game = new FeedingGame(memoryStore());
     game.start(FISH);
-    game.ate([{ fishId: 'a', portion: 0.5 }]);
+    game.track([1]);
+    game.ate([{ fishId: 'a', portion: 0.5, foodId: 1 }]);
     expect(game.view).toMatchObject({ score: 0 });
-    game.ate([{ fishId: 'b', portion: 0.4 }]);
+    game.ate([{ fishId: 'b', portion: 0.4, foodId: 1 }]);
     expect(game.view).toMatchObject({ score: 25 });
-    game.ate([{ fishId: 'b', portion: 0.1 }]);
+    game.ate([{ fishId: 'b', portion: 0.1, foodId: 1 }]);
     expect(game.view).toMatchObject({ score: 35 });
+  });
+
+  it('scores only bites of food the round dropped', () => {
+    const game = new FeedingGame(memoryStore());
+    game.start(FISH);
+    game.track([7]);
+    game.ate([{ fishId: 'b', portion: 0.5, foodId: 8 }]);
+    game.ate([{ fishId: 'b', portion: 0.5 }]);
+    expect(game.view).toMatchObject({ score: 0 });
+    game.ate([{ fishId: 'b', portion: 0.5, foodId: 7 }]);
+    expect(game.view).toMatchObject({ score: 50 });
+    game.start(FISH);
+    game.ate([{ fishId: 'b', portion: 0.5, foodId: 7 }]);
+    expect(game.view).toMatchObject({ score: 0 });
+  });
+
+  it('only picks a target that can win, and says so when none can', () => {
+    const game = new FeedingGame(memoryStore());
+    const walker = { id: 'w', name: 'Walker', boldness: 0.05, eligible: false };
+    const view = game.start([walker, ...FISH]);
+    expect(view).toMatchObject({ phase: 'running', targetId: 'b' });
+    const none = game.start([
+      walker,
+      { ...walker, id: 'w2' },
+      { ...walker, id: 'w3', boldness: 0.9 },
+    ]);
+    expect(none).toMatchObject({ phase: 'unavailable', reason: expect.stringMatching(/flakes/) });
+    expect(game.running).toBe(false);
+  });
+
+  it('reads the stored best when a round starts, not on every update', () => {
+    const store = memoryStore(4);
+    const read = vi.spyOn(store, 'read');
+    const game = new FeedingGame(store);
+    game.start(FISH);
+    const before = read.mock.calls.length;
+    for (let i = 0; i < 100; i++) game.update(0.016);
+    game.pinch();
+    game.ate([{ fishId: 'b', portion: 0.1, foodId: 1 }]);
+    expect(read.mock.calls.length).toBe(before);
+    expect(game.view).toMatchObject({ best: 4 });
   });
 
   it('ignores bites when no round is on', () => {
     const game = new FeedingGame(memoryStore());
-    expect(game.ate([{ fishId: 'b', portion: 1 }]).phase).toBe('idle');
+    expect(game.ate([{ fishId: 'b', portion: 1, foodId: 1 }]).phase).toBe('idle');
   });
 
   it('ends when the time is up and keeps a new best', () => {
     const store = memoryStore(10);
     const game = new FeedingGame(store);
     game.start(FISH);
-    game.ate([{ fishId: 'b', portion: 0.6 }]);
+    game.track([1]);
+    game.ate([{ fishId: 'b', portion: 0.6, foodId: 1 }]);
     expect(game.update(ROUND_S - 1).phase).toBe('running');
     const done = game.update(1.5);
     expect(done).toMatchObject({ phase: 'done', score: 60, newBest: true, targetAte: true });
@@ -280,6 +372,7 @@ describe('FeedingGame', () => {
   it('ends early once the last pinch has had time to be eaten', () => {
     const game = new FeedingGame(memoryStore());
     game.start(FISH);
+    game.track([1]);
     for (let i = 0; i < PINCHES_PER_ROUND; i++) game.pinch();
     expect(game.update(LAST_PINCH_GRACE_S - 0.5).phase).toBe('running');
     expect(game.update(1).phase).toBe('done');
@@ -289,7 +382,8 @@ describe('FeedingGame', () => {
     const store = memoryStore(80);
     const game = new FeedingGame(store);
     game.start(FISH);
-    game.ate([{ fishId: 'a', portion: 1 }]);
+    game.track([1]);
+    game.ate([{ fishId: 'a', portion: 1, foodId: 1 }]);
     const done = game.finish();
     expect(done).toMatchObject({
       phase: 'done',
@@ -305,7 +399,8 @@ describe('FeedingGame', () => {
     const store = memoryStore(5);
     const game = new FeedingGame(store);
     game.start(FISH);
-    game.ate([{ fishId: 'b', portion: 1 }]);
+    game.track([1]);
+    game.ate([{ fishId: 'b', portion: 1, foodId: 1 }]);
     expect(game.cancel()).toEqual({ phase: 'idle', best: 5 });
     expect(store.value).toBe(5);
   });
@@ -352,7 +447,7 @@ describe('localBest', () => {
   });
 });
 
-function makeToyController() {
+function makeToyController({ cooldownMs = 0 } = {}) {
   const events = new EventBus<InteractionEvents>();
   const food = new FoodField(
     { bounds: BOUNDS, groundHeight: () => 0.06, current: still },
@@ -376,7 +471,7 @@ function makeToyController() {
     link: new FoodLink(food, {}, sceneToSim, () => undefined),
     bubbles: new BubbleField(MAX.y, () => 0.5),
     ripples: new RippleField(),
-    gate: new FeedGate({ cooldownMs: 0 }),
+    gate: new FeedGate({ cooldownMs }),
     events,
     startle: vi.fn<(s: StimulusLike) => void>(),
     toSim: sceneToSim,
@@ -390,7 +485,7 @@ function makeToyController() {
         nudge = null;
       };
     },
-    boldnessOf: (species) => (species === 'shy-fish' ? 0.1 : 0.8),
+    gameTraitsOf: (species) => TRAITS[species],
     game,
     now: () => now,
   });
@@ -415,6 +510,13 @@ function makeToyController() {
     nudgeBound: () => nudge !== null,
   };
 }
+
+const TRAITS: Record<string, GameTraits> = {
+  'shy-fish': { boldness: 0.1, eatsFlakes: true, depthHigh: 0.95 },
+  'bold-fish': { boldness: 0.8, eatsFlakes: true, depthHigh: 0.95 },
+  'bottom-fish': { boldness: 0.05, eatsFlakes: true, depthHigh: 0.3 },
+  'pellet-fish': { boldness: 0.05, eatsFlakes: false, depthHigh: 0.95 },
+};
 
 const ROSTER = [
   { id: 'f1', name: 'Rex', species: 'bold-fish' },
@@ -476,11 +578,11 @@ describe('ping-pong ball in the controller', () => {
     }
     t.controller.pointerUp();
     t.controller.update(0.1);
-    const early = t.visuals.setBall.mock.calls.at(-1)?.[0];
-    expect(early?.x).toBeGreaterThan(0.032);
+    const earlyX = t.visuals.setBall.mock.calls.at(-1)?.[0]?.x;
+    expect(earlyX).toBeGreaterThan(0.032);
     for (let i = 0; i < 60 * 8; i++) t.controller.update(1 / 60);
     const late = t.visuals.setBall.mock.calls.at(-1)?.[0];
-    expect(late?.x).toBeGreaterThan(early?.x ?? 0);
+    expect(late?.x).toBeGreaterThan(earlyX ?? 0);
     expect(late?.x).toBeLessThan(MAX.x - BALL_RADIUS_M + 1e-6);
   });
 
@@ -658,12 +760,114 @@ describe('feeding game in the controller', () => {
   it('scores from what the fish eat and records the best when time is up', () => {
     const t = makeToyController();
     t.events.emit('game:request', { action: 'start', fish: ROSTER });
-    t.events.emit('food:ate', { eaten: [{ fishId: 'f2', portion: 0.5 }] });
+    t.controller.tap(0.1, 0.1);
+    const foodId = t.food.particles[0]?.id ?? -1;
+    t.events.emit('food:ate', { eaten: [{ fishId: 'f2', portion: 0.5, foodId }] });
     for (let i = 0; i < ROUND_S * 60 + 5; i++) t.controller.update(1 / 60);
     expect(t.gameSeen).toHaveBeenLastCalledWith({
       view: expect.objectContaining({ phase: 'done', score: 50, newBest: true }),
     });
     expect(t.store.value).toBe(50);
+  });
+
+  it('ignores bites of food that did not come from a game pinch', () => {
+    const t = makeToyController();
+    t.events.emit('game:request', { action: 'start', fish: ROSTER });
+    t.events.emit('feed:request', { food: 'flakes', portion: 0.5 });
+    const handFed = t.food.particles.map((p) => p.id);
+    expect(handFed.length).toBeGreaterThan(0);
+    t.events.emit('food:ate', {
+      eaten: handFed.map((foodId) => ({ fishId: 'f2', portion: 0.5, foodId })),
+    });
+    expect(t.game.view).toMatchObject({ score: 0 });
+    t.controller.tap(0.1, 0.1);
+    const pinched = t.food.particles.filter((p) => !handFed.includes(p.id)).map((p) => p.id);
+    expect(pinched.length).toBeGreaterThan(0);
+    t.events.emit('food:ate', {
+      eaten: pinched.map((foodId) => ({ fishId: 'f2', portion: 0.1, foodId })),
+    });
+    expect(t.game.view).toMatchObject({ score: expect.any(Number) });
+    expect((t.game.view as { score: number }).score).toBeGreaterThan(0);
+  });
+
+  it('will not pick a fish that cannot reach floating flakes or does not eat them', () => {
+    const t = makeToyController();
+    t.events.emit('game:request', {
+      action: 'start',
+      fish: [
+        { id: 'g1', name: 'Digger', species: 'bottom-fish' },
+        { id: 'g2', name: 'Pellet', species: 'pellet-fish' },
+        { id: 'g3', name: 'Bold', species: 'bold-fish' },
+      ],
+    });
+    expect(t.game.view).toMatchObject({ phase: 'running', targetId: 'g3' });
+    t.events.emit('game:request', { action: 'stop' });
+    t.events.emit('game:request', {
+      action: 'start',
+      fish: [
+        { id: 'g1', name: 'Digger', species: 'bottom-fish' },
+        { id: 'g2', name: 'Pellet', species: 'pellet-fish' },
+        { id: 'g4', name: 'Stranger', species: 'unknown-fish' },
+      ],
+    });
+    expect(t.gameSeen).toHaveBeenLastCalledWith({
+      view: expect.objectContaining({ phase: 'unavailable' }),
+    });
+    expect(t.controller.tool).toBe('tap');
+  });
+
+  it('cancels the round when another tool is picked and goes back to the tool before it', () => {
+    const t = makeToyController();
+    t.controller.setTool('laser');
+    t.events.emit('game:request', { action: 'start', fish: ROSTER });
+    expect(t.controller.tool).toBe('game');
+    t.controller.setTool('wand');
+    expect(t.game.running).toBe(false);
+    expect(t.gameSeen).toHaveBeenLastCalledWith({
+      view: expect.objectContaining({ phase: 'idle' }),
+    });
+    expect(t.controller.tool).toBe('wand');
+  });
+
+  it('restores the previous tool when the round is stopped or runs out', () => {
+    const t = makeToyController();
+    t.controller.setTool('laser');
+    t.events.emit('game:request', { action: 'start', fish: ROSTER });
+    t.events.emit('game:request', { action: 'stop' });
+    expect(t.controller.tool).toBe('laser');
+
+    t.events.emit('game:request', { action: 'start', fish: ROSTER });
+    expect(t.controller.tool).toBe('game');
+    for (let i = 0; i < ROUND_S * 60 + 5; i++) t.controller.update(1 / 60);
+    expect(t.gameSeen).toHaveBeenLastCalledWith({
+      view: expect.objectContaining({ phase: 'done' }),
+    });
+    expect(t.controller.tool).toBe('laser');
+  });
+
+  it('restarting a round keeps the tool from before the first one', () => {
+    const t = makeToyController();
+    t.controller.setTool('wand');
+    t.events.emit('game:request', { action: 'start', fish: ROSTER });
+    t.events.emit('game:request', { action: 'start', fish: ROSTER });
+    t.events.emit('game:request', { action: 'stop' });
+    expect(t.controller.tool).toBe('wand');
+  });
+
+  it('holds a pinch back for the real feed cooldown and refunds the one it refused', () => {
+    const t = makeToyController({ cooldownMs: 1500 });
+    const rejected = vi.fn();
+    t.events.on('feed:rejected', rejected);
+    t.events.emit('game:request', { action: 'start', fish: ROSTER });
+    t.controller.tap(0.1, 0.1);
+    expect(t.game.view).toMatchObject({ pinchesLeft: 4 });
+    t.advance(400);
+    t.controller.tap(0.1, 0.1);
+    expect(rejected).toHaveBeenCalledWith(expect.objectContaining({ reason: 'rate-limited' }));
+    expect(t.game.view).toMatchObject({ pinchesLeft: 4 });
+    t.advance(1200);
+    t.controller.tap(0.1, 0.1);
+    expect(t.game.view).toMatchObject({ pinchesLeft: 3 });
   });
 
   it('stops on request', () => {
@@ -683,5 +887,89 @@ describe('feeding game in the controller', () => {
     expect(t.visuals.setBall).toHaveBeenLastCalledWith(null);
     expect(t.visuals.setHighlight).toHaveBeenLastCalledWith(null);
     expect(t.nudgeBound()).toBe(false);
+  });
+});
+
+describe('controller without the sim toy hooks', () => {
+  function bare() {
+    const events = new EventBus<InteractionEvents>();
+    const food = new FoodField({ bounds: BOUNDS, groundHeight: () => 0, current: still });
+    const visuals = { setMirror: vi.fn(), setBall: vi.fn(), setHighlight: vi.fn() };
+    const game = new FeedingGame(memoryStore());
+    const controller = new PlayController({
+      rayAt: (x, y) => ({ origin: { x, y: 1, z: y }, dir: { x: 0, y: -1, z: 0 } }),
+      min: MIN,
+      max: MAX,
+      food,
+      link: new FoodLink(food, {}, sceneToSim, () => undefined),
+      bubbles: new BubbleField(MAX.y),
+      ripples: new RippleField(),
+      gate: new FeedGate({ cooldownMs: 0 }),
+      events,
+      toSim: sceneToSim,
+      setLaserDot: vi.fn(),
+      toyVisuals: visuals,
+      game,
+      now: () => 0,
+    });
+    return { controller, events, visuals, game };
+  }
+
+  it('runs a ball, a mirror and a game round with no setToys, onToyNudge or fishPoint', () => {
+    const t = bare();
+    t.controller.setTool('ball');
+    t.controller.pointerDown(0, 0);
+    t.controller.pointerUp();
+    t.controller.update(0.5);
+    expect(t.controller.hasBall).toBe(true);
+
+    t.controller.setTool('mirror');
+    t.controller.tap(0, 0);
+    t.events.emit('toys:remove', { toy: 'ball' });
+    t.events.emit('game:request', {
+      action: 'start',
+      fish: [
+        { id: 'a', name: 'A', species: 'x' },
+        { id: 'b', name: 'B', species: 'y' },
+      ],
+    });
+    expect(t.game.view.phase).toBe('unavailable');
+    t.controller.update(1);
+    expect(() => t.controller.dispose()).not.toThrow();
+    expect(t.visuals.setHighlight).toHaveBeenLastCalledWith(null);
+  });
+
+  it('keeps the highlight off while the sim cannot say where the target is', () => {
+    const t = bare();
+    const traits = (id: string) => ({
+      id,
+      name: id,
+      boldness: id === 'a' ? 0.1 : 0.9,
+      eligible: true,
+    });
+    t.game.start([traits('a'), traits('b')]);
+    t.controller.update(0.5);
+    expect(t.visuals.setHighlight).toHaveBeenLastCalledWith(null);
+  });
+});
+
+describe('toy sync to the sim', () => {
+  it('reuses one array and one object per toy for every frame', () => {
+    const t = makeToyController();
+    t.controller.setTool('ball');
+    t.controller.pointerDown(0, 0);
+    t.controller.pointerUp();
+    const seen = new Set<unknown>();
+    const toyObjects = new Set<unknown>();
+    t.nudge({ ix: 0.3, iz: 0 });
+    for (let i = 0; i < 20; i++) {
+      t.controller.update(1 / 60);
+      const call = t.setToys.mock.calls.at(-1)?.[0];
+      seen.add(call);
+      toyObjects.add(call?.[0]);
+    }
+    expect(seen.size).toBe(1);
+    expect(toyObjects.size).toBe(1);
+    expect(t.setToys.mock.calls.length).toBeGreaterThan(5);
   });
 });
