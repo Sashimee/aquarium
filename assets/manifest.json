@@ -2319,6 +2319,193 @@
       "status": "downloaded"
     },
     {
+      "id": "sketchfab-5ebe7794",
+      "kind": "invertebrate",
+      "species": "hermit-crab",
+      "title": "CC0 ツメナガヨコバサミ Blue-stripped Hermit Crab",
+      "author": "ffishAsia-and-floraZia",
+      "author_url": "https://sketchfab.com/ffishAsia-and-floraZia",
+      "source_url": "https://sketchfab.com/3d-models/5ebe7794183346e998afb97b68021158",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-16",
+      "sha256": "6da31bb5909c20d6599073145f7aeeb91bf012aca8cc5b46ab17aedd2082be32",
+      "polycount": 495292,
+      "textures": "Q12210-1-1_baseColor.jpeg 8192x8192, Material.001_baseColor.jpeg 1024x1024 (colour-checker cube)",
+      "rigged": false,
+      "notes": "Photogrammetry scan of a hermit crab (Clibanarius longitarsus, the genus of the usual reef-tank hermit crabs; the common trade species is C. tricolor, the blue-leg hermit, so match its colour with the render engineer rather than this scan's olive legs) in its shell, with the legs and eyestalks intact. Verified from the downloaded glTF: 495292 triangles, not rigged (no skins), CC0-1.0 per license.txt and the Sketchfab record (downloadable). Zip sha256 550b1f09f44d609801b266d02fb75c81e53665301a27070d3d15be793b81a9e2; sha256 is the aggregate over files[]. The scene also contains a 2 cm colour-checker cube (Material.001, 1024x1024) that must be dropped. Units appear to be centimetres (colour-checker cube 2 units, shell about 6). Legs are fused to the body in one mesh, so walking needs a rig built by the pipeline. Planned processing, none done yet: drop the colour-checker cube mesh and its texture; merge meshes, drop unused attributes; origin at the shell base, scale so the shell is about 2 cm long; decimate to LOD0 25000 triangles, LOD1 and LOD2 simplify further; downscale the base colour and re-encode it to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness.",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "gltf/license.txt",
+          "sha256": "e22aaf8b323163d7aa1e886d191f5546764d6ec4771c54b950e6a89901f3ee23",
+          "bytes": 434
+        },
+        {
+          "path": "gltf/scene.bin",
+          "sha256": "acf3bf1be458f37e5e06374d8c13752e0eadf6b41561453de64ef4bdc1347f2a",
+          "bytes": 19055024
+        },
+        {
+          "path": "gltf/scene.gltf",
+          "sha256": "ead86e56d22f2f08f9cee62d46fd380b4973a30749969b29a505d72d3bc06aae",
+          "bytes": 15405
+        },
+        {
+          "path": "gltf/textures/Material.001_baseColor.jpeg",
+          "sha256": "804db2ac981b05d940be1c568f75914e13631c2191c8973ef3d1cb96612f1511",
+          "bytes": 184018
+        },
+        {
+          "path": "gltf/textures/Q12210-1-1_baseColor.jpeg",
+          "sha256": "e06b1c978a34fcd011e86ba2d763d7519bc41e752358084c4ed52ba6d2186f59",
+          "bytes": 32491664
+        }
+      ]
+    },
+    {
+      "id": "sketchfab-70b8866a",
+      "kind": "invertebrate",
+      "species": "nerite-snail",
+      "title": "CC0 カノコガイ 🐚, Clithon sowerbianus",
+      "author": "ffishAsia-and-floraZia",
+      "author_url": "https://sketchfab.com/ffishAsia-and-floraZia",
+      "source_url": "https://sketchfab.com/3d-models/70b8866a910f49a68982888e64a3f900",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-16",
+      "sha256": "010a0aeb994df22b5ef22ed0c79793de9a8fc46b5dd6d3f62f78edf78c846636",
+      "polycount": 394418,
+      "textures": "Q10681-1all_baseColor.jpeg 8192x8192, Material.001_baseColor.jpeg 1024x1024 (colour-checker cube)",
+      "rigged": false,
+      "notes": "Photogrammetry scan of a nerite shell (Clithon sowerbianus: dark and gold zig-zag banding close to the aquarium zebra and tiger nerites), shell only, no soft body. Verified from the downloaded glTF: 394418 triangles, not rigged (no skins), CC0-1.0 per license.txt and the Sketchfab record (downloadable). Zip sha256 f173178ce159b7230cbf3341574128421fe32d806aa083d924fe9641afda057b; sha256 is the aggregate over files[]. The scene also contains a 2 cm colour-checker cube (Material.001, 1024x1024) that must be dropped. Units appear to be centimetres (colour-checker cube 2 units, shell about 0.7); scale to a 1.5 to 2.5 cm shell. The foot, head and tentacles are not in the scan: build them procedurally (see wm-nerite-baldonado-2 for the foot and operculum). Planned processing, none done yet: drop the colour-checker cube mesh and its texture; merge meshes, drop unused attributes; scale so the shell is 2 cm long, origin at the shell base; decimate to LOD0 8000 triangles, LOD1 and LOD2 simplify further; downscale the base colour and re-encode it to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness; add a procedural foot, head and tentacles.",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "gltf/license.txt",
+          "sha256": "5d8efa408b2a10274d2f7989f28dcda2fc3c8f3cbf0c46f3d5c4db5bbef6a033",
+          "bytes": 416
+        },
+        {
+          "path": "gltf/scene.bin",
+          "sha256": "09e488ce627c369feb4785090ed07136bdc9406f1b42145e2caaf80a7682fdc2",
+          "bytes": 19634968
+        },
+        {
+          "path": "gltf/scene.gltf",
+          "sha256": "e0b4a3e766ad1ca768977cf23a8d835f8b013668e453f5ebe8fbd4438bec32c5",
+          "bytes": 17046
+        },
+        {
+          "path": "gltf/textures/Material.001_baseColor.jpeg",
+          "sha256": "804db2ac981b05d940be1c568f75914e13631c2191c8973ef3d1cb96612f1511",
+          "bytes": 184018
+        },
+        {
+          "path": "gltf/textures/Q10681-1all_baseColor.jpeg",
+          "sha256": "1546615f3ab3b5605b92a8956bcce61b9bb6f5f68298f141b8a16d93cd96800e",
+          "bytes": 27716545
+        }
+      ]
+    },
+    {
+      "id": "wm-labroides-jens",
+      "kind": "reference-photo",
+      "species": "cleaner-wrasse",
+      "title": "Labroides dimidiatus 460169626.jpg",
+      "author": "Jens",
+      "author_url": "https://www.inaturalist.org/users/4338319",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Labroides_dimidiatus_460169626.jpg",
+      "licence": "CC-BY-4.0",
+      "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+      "checked_at": "2026-10-16",
+      "sha256": "431ed4a90cd0e583755b72720102769d9faadca53673e74e3ad78720b1482d4d",
+      "polycount": null,
+      "textures": "photo 1571x1066",
+      "rigged": false,
+      "notes": "Bluestreak cleaner wrasse (Labroides dimidiatus), 1571x1066, near-lateral view with the head and snout sharp: use for the colour (brownish-grey back, pale blue-white belly, black lateral stripe widening to the tail with a blue edge, blue and black caudal) and the slender body outline. Licence read from the Commons file page metadata (CC BY 4.0).",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "wm-labroides-hylton",
+      "kind": "reference-photo",
+      "species": "cleaner-wrasse",
+      "title": "Labroides dimidiatus 499838269.jpg",
+      "author": "Lawrence Hylton",
+      "author_url": "https://www.inaturalist.org/users/3305049",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Labroides_dimidiatus_499838269.jpg",
+      "licence": "CC-BY-4.0",
+      "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+      "checked_at": "2026-10-16",
+      "sha256": "b72b3a9a496b767b413298ced7d0ea99c91f9f26ef2b09357310222e167f7b53",
+      "polycount": null,
+      "textures": "photo 1459x973",
+      "rigged": false,
+      "notes": "Bluestreak cleaner wrasse (Labroides dimidiatus) in an aquarium, 1459x973, true lateral view: use for the proportions (elongate, terminal mouth, rounded caudal with a white upper and lower edge). Soft focus and a small watermark in the lower middle, so it is an outline reference only. Licence read from the Commons file page metadata (CC BY 4.0).",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "wm-nerite-baldonado-1",
+      "kind": "reference-photo",
+      "species": "nerite-snail",
+      "title": "Zebra Nerite Snail (Neritina natalensis sp. zebra).jpg",
+      "author": "Evan Baldonado",
+      "author_url": "https://commons.wikimedia.org/wiki/User:Evanbaldonado",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Zebra_Nerite_Snail_(Neritina_natalensis_sp._zebra).jpg",
+      "licence": "CC-BY-4.0",
+      "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+      "checked_at": "2026-10-16",
+      "sha256": "f4cefbba733a1683551c11146e5fe334b73f8bdcf54b07a103eff7fae74b2045",
+      "polycount": null,
+      "textures": "photo 5312x2988",
+      "rigged": false,
+      "notes": "Zebra nerite on aquarium sand, 5312x2988, side view: use for the shell banding (black and gold stripes) and the overall dome profile. The soft body is hidden. Licence read from the Commons file page metadata (CC BY 4.0).",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "wm-nerite-baldonado-2",
+      "kind": "reference-photo",
+      "species": "nerite-snail",
+      "title": "Zebra Nerite Snail (Neritina natalensis sp. zebra) on glass.jpg",
+      "author": "Evan Baldonado",
+      "author_url": "https://commons.wikimedia.org/wiki/User:Evanbaldonado",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Zebra_Nerite_Snail_(Neritina_natalensis_sp._zebra)_on_glass.jpg",
+      "licence": "CC-BY-4.0",
+      "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+      "checked_at": "2026-10-16",
+      "sha256": "76fae04a56676105cb3ff4c35941ea74c4e15a3a8f8118f1c26366f64550dbf0",
+      "polycount": null,
+      "textures": "photo 5312x2988",
+      "rigged": false,
+      "notes": "Zebra nerite on the glass, seen from the foot side, 5312x2988: shows the operculum, the flat foot and the shell opening. Use for the procedural foot and operculum. Licence read from the Commons file page metadata (CC BY 4.0).",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "wm-nerite-obsidian-05",
+      "kind": "reference-photo",
+      "species": "nerite-snail",
+      "title": "Red racer nerite, Vittina waigiensis from the Philippines 05.jpg",
+      "author": "Obsidian Soul",
+      "author_url": "https://commons.wikimedia.org/wiki/User:Obsidian_Soul",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Red_racer_nerite,_Vittina_waigiensis_from_the_Philippines_05.jpg",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-16",
+      "sha256": "faee699aa628d18c4a00076bd7de4bd874ba02871cbde9475b3df12f2d0896a1",
+      "polycount": null,
+      "textures": "photo 4032x3024",
+      "rigged": false,
+      "notes": "Red racer nerite (Vittina waigiensis) grazing algae on rock, 4032x3024: shows the dark grey-black foot and head with tentacles at the shell edge and the algae-covered surface it grazes, so it serves as the body colour reference. CC0, so it is the safe texture source. Licence read from the Commons file page metadata (CC0).",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
       "id": "freesound-197804",
       "kind": "audio",
       "title": "Indoor Fish Tank without Bubble strips Ambiance.wav",
