@@ -10,6 +10,7 @@
     "traits": ["rock-grazer"]
   },
   "biome": "reef",
+  "chemistry": { "salinityPpt": [30, 36] },
   "commonName": "Yellow tang",
   "id": "yellow-tang",
   "lifecycle": {

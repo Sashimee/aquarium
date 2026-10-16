@@ -57,6 +57,13 @@
       "when": 1792108269883,
       "tag": "0007_tank_background",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792112575000,
+      "tag": "0008_expansion_contract",
+      "breakpoints": true
     }
   ]
 }

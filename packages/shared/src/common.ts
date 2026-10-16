@@ -4,7 +4,7 @@ export const idSchema = z.uuid();
 export const authIdSchema = z.string().min(1).max(64);
 export const timestampSchema = z.iso.datetime();
 export const unitSchema = z.number().min(0).max(1);
-export const biomeSchema = z.enum(['freshwater', 'reef']);
+export const biomeSchema = z.enum(['freshwater', 'reef', 'cichlid', 'blackwater', 'mangrove']);
 export type Biome = z.infer<typeof biomeSchema>;
 
 // Biomes a player can start a tank in. A biome joins when its preset, species and backgrounds ship.
