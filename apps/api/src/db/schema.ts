@@ -252,3 +252,8 @@ export const mailLimitHits = pgTable(
     index('mail_limit_hits_at_idx').on(t.at),
   ],
 );
+
+export const releasedHandles = pgTable('released_handles', {
+  handle: text('handle').primaryKey(),
+  releasedAt: timestamptz('released_at').notNull().defaultNow(),
+});

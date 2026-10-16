@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import {
   DEFAULT_EQUIPMENT,
   NEUTRAL_PERSONALITY,
+  personalitySchema,
   chemistrySchema,
   equipmentSchema,
   newTankChemistry,
@@ -138,7 +139,7 @@ describe('migrations', () => {
     const freshId = await insertTank('freshwater', 'Old fresh');
     const reefId = await insertTank('reef', 'Old reef');
     await q(
-      `insert into fish (tank_id, species, name, size, sex) values ($1, 'neon-tetra', 'F', 0.03, 'male')`,
+      `insert into fish (tank_id, species, name, size, sex) values ($1, 'neon-tetra', 'F', 0.03, 'male'), ($1, 'neon-tetra', 'G', 0.03, 'female')`,
       [freshId],
     );
 
@@ -158,12 +159,22 @@ describe('migrations', () => {
       expect(equipmentSchema.parse(tank?.['equipment'])).toEqual(DEFAULT_EQUIPMENT);
       expect(tank).toMatchObject({ size: 'standard', quarantine: false, share_token: null });
     }
-    const fish = await q(`select stage, personality, disease from fish`);
-    expect(fish.rows[0]).toEqual({
-      stage: 'adult',
-      personality: NEUTRAL_PERSONALITY,
-      disease: null,
-    });
+    const fish = await q(`select id, stage, personality, disease from fish order by name`);
+    expect(fish.rows.map((r: { stage: string; disease: unknown }) => [r.stage, r.disease])).toEqual(
+      [
+        ['adult', null],
+        ['adult', null],
+      ],
+    );
+    const [a, b] = fish.rows.map((r: { personality: unknown }) =>
+      personalitySchema.parse(r.personality),
+    );
+    expect(a).not.toEqual(NEUTRAL_PERSONALITY);
+    expect(a).not.toEqual(b);
+    const again = await q(
+      `select jsonb_build_object('boldness', round(((('x' || substr(md5("id"::text || 'boldness'), 1, 8))::bit(32)::bigint)::numeric / 4294967295), 3)) as p from fish order by name`,
+    );
+    expect((again.rows[0] as { p: { boldness: number } }).p.boldness).toBe(a?.boldness);
   });
 
   it('turns an empty stored decor layout into NULL and leaves edited ones alone (0005)', async () => {

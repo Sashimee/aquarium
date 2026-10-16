@@ -1,5 +1,9 @@
-import { handleResponseSchema, setHandleRequestSchema } from '@aquarium/shared';
-import { eq } from 'drizzle-orm';
+import {
+  HANDLE_COOLDOWN_DAYS,
+  handleResponseSchema,
+  setHandleRequestSchema,
+} from '@aquarium/shared';
+import { and, eq, gt, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { schema, type Database } from './db/index.ts';
 import { apiError } from './errors.ts';
@@ -15,6 +19,8 @@ export interface HandleRouteDeps {
   limit: Limit;
   currentUser: (req: FastifyRequest) => Promise<SessionUser | null>;
 }
+
+class HandleCoolingDown extends Error {}
 
 const UNIQUE_VIOLATION = '23505';
 
@@ -63,11 +69,51 @@ export function registerHandleRoutes({
         .send(apiError('rate_limited', `Too many requests. Try again in ${wait} s.`));
     }
     try {
-      await database.db
-        .update(schema.user)
-        .set({ handle, updatedAt: new Date() })
-        .where(eq(schema.user.id, user.id));
+      await database.db.transaction(async (tx) => {
+        const [held] = await tx
+          .select({ handle: schema.user.handle })
+          .from(schema.user)
+          .where(eq(schema.user.id, user.id))
+          .for('update');
+        if (held?.handle === handle) return;
+        const [cooling] = await tx
+          .select({ handle: schema.releasedHandles.handle })
+          .from(schema.releasedHandles)
+          .where(
+            and(
+              eq(schema.releasedHandles.handle, handle),
+              gt(
+                schema.releasedHandles.releasedAt,
+                sql`now() - make_interval(days => ${HANDLE_COOLDOWN_DAYS})`,
+              ),
+            ),
+          );
+        if (cooling) throw new HandleCoolingDown();
+        await tx
+          .update(schema.user)
+          .set({ handle, updatedAt: new Date() })
+          .where(eq(schema.user.id, user.id));
+        if (held?.handle) {
+          await tx
+            .insert(schema.releasedHandles)
+            .values({ handle: held.handle })
+            .onConflictDoUpdate({
+              target: schema.releasedHandles.handle,
+              set: { releasedAt: sql`now()` },
+            });
+        }
+      });
     } catch (err) {
+      if (err instanceof HandleCoolingDown) {
+        return reply
+          .code(409)
+          .send(
+            apiError(
+              'conflict',
+              `That handle was released recently. It can be claimed again after ${HANDLE_COOLDOWN_DAYS} days.`,
+            ),
+          );
+      }
       if (isUniqueViolation(err)) {
         return reply.code(409).send(apiError('conflict', 'That handle is taken. Pick another.'));
       }

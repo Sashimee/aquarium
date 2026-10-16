@@ -103,6 +103,14 @@ class HttpError extends Error {
   }
 }
 
+const rollTrait = () => randomInt(0, 1001) / 1000;
+
+const rollPersonality = () => ({
+  boldness: rollTrait(),
+  greed: rollTrait(),
+  sociability: rollTrait(),
+});
+
 const notFound = () => new HttpError(404, apiError('not_found', 'Tank not found.'));
 
 function toLifecycleFish(row: FishRow): LifecycleFish {
@@ -516,6 +524,24 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       const { tankId } = tankParamsSchema.parse(req.params);
       throttle(user.id, 'care');
       return withTank(user, tankId, async (tx, ticked) => {
+        if (ticked.tank.shareToken !== null) return render(tx, ticked);
+        const [row] = await tx
+          .update(schema.tanks)
+          .set({ shareToken: randomBytes(32).toString('base64url') })
+          .where(eq(schema.tanks.id, tankId))
+          .returning();
+        return render(tx, { ...ticked, tank: row ?? ticked.tank });
+      });
+    }),
+  );
+
+  app.post(
+    '/api/tanks/:tankId/share/rotate',
+    guarded(async (req) => {
+      const user = await authorize(req);
+      const { tankId } = tankParamsSchema.parse(req.params);
+      throttle(user.id, 'care');
+      return withTank(user, tankId, async (tx, ticked) => {
         const [row] = await tx
           .update(schema.tanks)
           .set({ shareToken: randomBytes(32).toString('base64url') })
@@ -590,6 +616,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
             species: spec.id,
             name: body.name,
             sex: randomInt(2) === 0 ? 'male' : 'female',
+            personality: rollPersonality(),
             bornAt: new Date(clock.now()),
             size: spec.lifecycle.birthSizeM,
           })

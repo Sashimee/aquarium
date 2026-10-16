@@ -10,14 +10,19 @@ const hourSchema = z.int().min(0).max(23);
 export const equipmentSchema = z.strictObject({
   filter: z.strictObject({ tier: tierSchema }),
   heater: z.strictObject({ tier: tierSchema }),
-  light: z.strictObject({
-    tier: tierSchema,
-    intensity: unitSchema,
-    onHour: hourSchema,
-    offHour: hourSchema,
-  }),
-  co2: z.strictObject({ tier: tierSchema }).describe('freshwater only'),
-  waveMaker: z.strictObject({ tier: tierSchema }).describe('reef only'),
+  light: z
+    .strictObject({
+      tier: tierSchema,
+      intensity: unitSchema,
+      onHour: hourSchema,
+      offHour: hourSchema,
+    })
+    .refine((l) => l.onHour !== l.offHour, {
+      message: 'onHour and offHour must differ',
+      path: ['offHour'],
+    }),
+  co2: z.strictObject({ tier: tierSchema }).describe('fresh water only'),
+  waveMaker: z.strictObject({ tier: tierSchema }).describe('salt and brackish water only'),
 });
 export type Equipment = z.infer<typeof equipmentSchema>;
 
@@ -30,11 +35,23 @@ export const DEFAULT_EQUIPMENT: Equipment = {
   waveMaker: { tier: 0 },
 };
 
+// Per biome, which of the two water-specific devices fit. Cichlid and blackwater are fresh water,
+// so CO2 is fine and a wave maker is not. Mangrove is brackish: planted-tank CO2 does not belong
+// in it, while a wave maker (tidal flow) does.
+const DEVICES_BY_BIOME: Readonly<Record<Biome, { co2: boolean; waveMaker: boolean }>> = {
+  freshwater: { co2: true, waveMaker: false },
+  cichlid: { co2: true, waveMaker: false },
+  blackwater: { co2: true, waveMaker: false },
+  reef: { co2: false, waveMaker: true },
+  mangrove: { co2: false, waveMaker: true },
+};
+
 export function equipmentProblems(biome: Biome, equipment: Equipment): string[] {
+  const allowed = DEVICES_BY_BIOME[biome];
   const problems: string[] = [];
-  if (biome === 'reef' && equipment.co2.tier > 0) problems.push('co2 is for freshwater tanks');
-  if (biome === 'freshwater' && equipment.waveMaker.tier > 0) {
-    problems.push('a wave maker is for reef tanks');
+  if (!allowed.co2 && equipment.co2.tier > 0) problems.push(`co2 is not used in ${biome} tanks`);
+  if (!allowed.waveMaker && equipment.waveMaker.tier > 0) {
+    problems.push(`a wave maker is not used in ${biome} tanks`);
   }
   return problems;
 }

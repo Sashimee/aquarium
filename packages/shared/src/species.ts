@@ -196,7 +196,7 @@ export const breedingModeSchema = z.enum([
 ]);
 export type BreedingMode = z.infer<typeof breedingModeSchema>;
 
-const dayRange = z
+const countRange = z
   .tuple([z.int().positive(), z.int().positive()])
   .refine(([lo, hi]) => lo <= hi, 'range must be [low, high]');
 
@@ -214,7 +214,7 @@ export const breedingSchema = z
     needsPair: z.boolean().default(true).describe('needs a living male and female'),
     needsCave: z.boolean().default(false),
     intervalDays: positive.optional().describe('minimum days between broods'),
-    broodSize: dayRange.optional().describe('fry per brood, [min, max]'),
+    broodSize: countRange.optional().describe('fry per brood, [min, max]'),
     fryGrowth: z
       .strictObject({
         juvenileAfterDays: positive,

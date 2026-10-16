@@ -2,7 +2,7 @@ import {
   apiErrorSchema,
   decorLayoutSchema,
   DEFAULT_EQUIPMENT,
-  NEUTRAL_PERSONALITY,
+  personalitySchema,
   decorPositionLimits,
   DEFAULT_BACKGROUND_ID,
   legacyTintSeed,
@@ -19,6 +19,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { randomUUID } from 'node:crypto';
 import { MAX_FISH_PER_TANK } from '@aquarium/sim/lifecycle';
 import { schema } from './db/index.ts';
+import { DEFAULT_CARE_LIMITS } from './tanks.ts';
 import { pruneExpired } from './maintenance.ts';
 import { APP_ORIGIN, createHarness, type Harness } from './test-harness.ts';
 
@@ -132,9 +133,9 @@ describe('tanks and fish', () => {
     const stocked = await addFish(h, cookie, tank.id);
     expect(stocked.fish[0]).toMatchObject({
       stage: 'adult',
-      personality: NEUTRAL_PERSONALITY,
       disease: null,
     });
+    expect(personalitySchema.safeParse(stocked.fish[0]?.personality).success).toBe(true);
   });
 
   it('serves breeding and chemistry tolerances with defaults for species that declare none', async () => {
@@ -1155,7 +1156,7 @@ describe('tank sizes, quarantine and sharing', () => {
       expect(created.statusCode).toBe(200);
       const first = shareTokenSchema.parse(tankSchema.parse(created.json()).shareToken);
 
-      const rotated = await call(h, cookie, 'POST', `/api/tanks/${tank.id}/share`);
+      const rotated = await call(h, cookie, 'POST', `/api/tanks/${tank.id}/share/rotate`);
       const second = shareTokenSchema.parse(tankSchema.parse(rotated.json()).shareToken);
       expect(second).not.toBe(first);
 
@@ -1170,6 +1171,23 @@ describe('tank sizes, quarantine and sharing', () => {
         .from(schema.tanks)
         .where(eq(schema.tanks.id, tank.id));
       expect(row?.shareToken).toBeNull();
+    });
+
+    it('keeps the token when POST is repeated, and rotates it only on request', async () => {
+      const cookie = await signedIn(h);
+      const tank = await createTank(h, cookie);
+      const tokenOf = (res: LightMyRequestResponse) =>
+        shareTokenSchema.parse(tankSchema.parse(res.json()).shareToken);
+      const first = tokenOf(await call(h, cookie, 'POST', `/api/tanks/${tank.id}/share`));
+      const again = tokenOf(await call(h, cookie, 'POST', `/api/tanks/${tank.id}/share`));
+      expect(again).toBe(first);
+      const rotated = tokenOf(await call(h, cookie, 'POST', `/api/tanks/${tank.id}/share/rotate`));
+      expect(rotated).not.toBe(first);
+      expect(tokenOf(await call(h, cookie, 'GET', `/api/tanks/${tank.id}`))).toBe(rotated);
+      const other = await signedIn(h);
+      expect((await call(h, other, 'POST', `/api/tanks/${tank.id}/share/rotate`)).statusCode).toBe(
+        404,
+      );
     });
 
     it('is at least 128 bits and unique per tank', async () => {
@@ -1216,5 +1234,24 @@ describe('tank sizes, quarantine and sharing', () => {
     }
     const read = tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${tank.id}`)).json());
     expect(read.memorials.map((m) => m.cause).sort()).toEqual(['disease', 'nitrite']);
+  });
+});
+
+describe('share throttle', () => {
+  it('shares the care bucket and answers 429 past it', async () => {
+    const h = await createHarness({
+      careLimits: { ...DEFAULT_CARE_LIMITS, care: { max: 2, windowMs: 60_000 } },
+    });
+    try {
+      const cookie = await signedIn(h);
+      const tank = await createTank(h, cookie);
+      const codes: number[] = [];
+      for (let i = 0; i < 3; i++) {
+        codes.push((await call(h, cookie, 'POST', `/api/tanks/${tank.id}/share`)).statusCode);
+      }
+      expect(codes).toEqual([200, 200, 429]);
+    } finally {
+      await h.close();
+    }
   });
 });

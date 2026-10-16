@@ -206,6 +206,19 @@ export function registerLegalRoutes(deps: LegalDeps): void {
             eq(schema.verification.value, userId),
           ),
         );
+      const [leaving] = await tx
+        .select({ handle: schema.user.handle })
+        .from(schema.user)
+        .where(eq(schema.user.id, userId));
+      if (leaving?.handle) {
+        await tx
+          .insert(schema.releasedHandles)
+          .values({ handle: leaving.handle })
+          .onConflictDoUpdate({
+            target: schema.releasedHandles.handle,
+            set: { releasedAt: sql`now()` },
+          });
+      }
       await tx.delete(schema.user).where(eq(schema.user.id, userId));
     });
 

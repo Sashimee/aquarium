@@ -46,6 +46,7 @@ export interface AppOptions {
   clock?: Clock;
   careLimits?: CareLimits;
   legalLimits?: LegalLimits;
+  handleLimit?: Limit;
   testHooks?: boolean;
   logger?: boolean;
   logStream?: { write(chunk: string): void };
@@ -583,7 +584,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     app,
     database,
     limiter,
-    limit: DEFAULT_HANDLE_LIMIT,
+    limit: opts.handleLimit ?? DEFAULT_HANDLE_LIMIT,
     currentUser: async (req) => (await currentSession(req))?.user ?? null,
   });
 

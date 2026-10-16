@@ -133,7 +133,7 @@ export const PRIVACY_POLICY: PrivacyPolicy = privacyPolicySchema.parse({
       id: 'data',
       title: 'What we store',
       paragraphs: [
-        'Account: your email address, display name and a salted hash of your password (never the password itself).',
+        'Account: your email address, display name, the public handle you may choose (other players can see it; you can change it, and it is deleted with your account, after which the bare handle, with no link to you, is held back from reuse for 30 days) and a salted hash of your password (never the password itself).',
         'Passkeys you register: credential ID, public key, signature counter, device type, backed-up flag, transports, AAGUID (authenticator model identifier), the label you give it and its creation time. No biometric data ever leaves your device.',
         'Sessions: for every signed-in browser, a session record with its creation and expiry time, IP address and browser user-agent, so you can review and revoke sessions. Session records are kept until they expire (30 days after your last activity) and are then deleted by an hourly cleanup, or immediately when you sign out, revoke them or delete your account.',
         'Game data: your tanks, fish, their care history and memorials of fish that have died.',

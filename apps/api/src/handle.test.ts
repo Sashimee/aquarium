@@ -139,12 +139,68 @@ describe('public handle', () => {
     ).toHaveLength(0);
   });
 
-  it('frees a handle for reuse once its owner is gone', async () => {
+  it('holds a deleted account’s handle for the cooldown too', async () => {
     const alice = await account(h);
     const handle = unique();
     await call(h, alice.cookie, 'PUT', '/api/me/handle', { handle });
     await call(h, alice.cookie, 'POST', '/api/me/delete', { password: PASSWORD });
     const bob = await account(h);
+    expect((await call(h, bob.cookie, 'PUT', '/api/me/handle', { handle })).statusCode).toBe(409);
+    await h.database.pool.query(
+      `update released_handles set released_at = now() - interval '31 days' where handle = $1`,
+      [handle],
+    );
     expect((await call(h, bob.cookie, 'PUT', '/api/me/handle', { handle })).statusCode).toBe(200);
+  });
+
+  it('holds a released handle for the cooldown, then frees it', async () => {
+    const alice = await account(h);
+    const bob = await account(h);
+    const old = unique();
+    await call(h, alice.cookie, 'PUT', '/api/me/handle', { handle: old });
+    await call(h, alice.cookie, 'PUT', '/api/me/handle', { handle: unique() });
+    const early = await call(h, bob.cookie, 'PUT', '/api/me/handle', { handle: old });
+    expect(early.statusCode).toBe(409);
+    await h.database.pool.query(
+      `update released_handles set released_at = now() - interval '31 days' where handle = $1`,
+      [old],
+    );
+    expect((await call(h, bob.cookie, 'PUT', '/api/me/handle', { handle: old })).statusCode).toBe(
+      200,
+    );
+  });
+
+  it('keeps stored handles readable after the filter learns new words', async () => {
+    const { cookie, userId } = await account(h);
+    await h.database.db
+      .update(schema.user)
+      .set({ handle: 'admin' })
+      .where(eq(schema.user.id, userId));
+    const res = await call(h, cookie, 'GET', '/api/me/handle');
+    expect(res.statusCode).toBe(200);
+    expect(handleResponseSchema.parse(res.json()).handle).toBe('admin');
+  });
+});
+
+describe('handle rate limit', () => {
+  it('answers 429 past the limit, and rejected input spends none of it', async () => {
+    const h = await createHarness({ handleLimit: { max: 2, windowMs: 60_000 } });
+    try {
+      const { cookie } = await account(h);
+      for (let i = 0; i < 5; i++) {
+        expect(
+          (await call(h, cookie, 'PUT', '/api/me/handle', { handle: 'fuck' })).statusCode,
+        ).toBe(400);
+      }
+      const codes: number[] = [];
+      for (let i = 0; i < 3; i++) {
+        codes.push(
+          (await call(h, cookie, 'PUT', '/api/me/handle', { handle: unique() })).statusCode,
+        );
+      }
+      expect(codes).toEqual([200, 200, 429]);
+    } finally {
+      await h.close();
+    }
   });
 });

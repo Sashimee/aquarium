@@ -59,6 +59,7 @@ export interface HarnessOptions {
   signInThrottle?: Limit;
   careLimits?: CareLimits;
   legalLimits?: LegalLimits;
+  handleLimit?: Limit;
   testHooks?: boolean;
   mailDelayMs?: number;
   appOrigin?: string;
@@ -184,6 +185,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     testHooks: opts.testHooks ?? true,
     ...(opts.careLimits ? { careLimits: opts.careLimits } : {}),
     ...(opts.legalLimits ? { legalLimits: opts.legalLimits } : {}),
+    ...(opts.handleLimit ? { handleLimit: opts.handleLimit } : {}),
     logger: opts.logStream !== undefined,
     ...(opts.logStream ? { logStream: opts.logStream } : {}),
   });

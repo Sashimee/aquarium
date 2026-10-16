@@ -1,5 +1,5 @@
 {
-  "id": "5411c2e8-535f-4a32-afe9-871696c87faa",
+  "id": "2bbd39d6-a170-45d4-bb2b-6feb12051d6d",
   "prevId": "20fb5c62-96c5-4b76-ae03-d2806a460451",
   "version": "7",
   "dialect": "postgresql",
@@ -671,6 +671,32 @@
           "onUpdate": "no action"
         }
       },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.released_handles": {
+      "name": "released_handles",
+      "schema": "",
+      "columns": {
+        "handle": {
+          "name": "handle",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "released_at": {
+          "name": "released_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

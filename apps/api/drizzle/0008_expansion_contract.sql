@@ -1,3 +1,5 @@
+-- The migrator runs every pending migration in one transaction, and Postgres refuses to use an enum
+-- value in the transaction that added it. This file only adds values; a later migration may use them.
 CREATE TYPE "public"."fish_stage" AS ENUM('fry', 'juvenile', 'adult');--> statement-breakpoint
 CREATE TYPE "public"."tank_size" AS ENUM('nano30', 'standard', 'std200', 'long300');--> statement-breakpoint
 ALTER TYPE "public"."biome" ADD VALUE 'cichlid';--> statement-breakpoint
@@ -5,6 +7,11 @@ ALTER TYPE "public"."biome" ADD VALUE 'blackwater';--> statement-breakpoint
 ALTER TYPE "public"."biome" ADD VALUE 'mangrove';--> statement-breakpoint
 ALTER TYPE "public"."cause_of_death" ADD VALUE 'nitrite' BEFORE 'old_age';--> statement-breakpoint
 ALTER TYPE "public"."cause_of_death" ADD VALUE 'disease' BEFORE 'old_age';--> statement-breakpoint
+CREATE TABLE "released_handles" (
+	"handle" text PRIMARY KEY NOT NULL,
+	"released_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 ALTER TABLE "fish" ADD COLUMN "stage" "fish_stage" DEFAULT 'adult' NOT NULL;--> statement-breakpoint
 ALTER TABLE "fish" ADD COLUMN "personality" jsonb DEFAULT '{"boldness":0.5,"greed":0.5,"sociability":0.5}'::jsonb NOT NULL;--> statement-breakpoint
 ALTER TABLE "fish" ADD COLUMN "disease" jsonb;--> statement-breakpoint
@@ -16,4 +23,5 @@ ALTER TABLE "tanks" ADD COLUMN "equipment" jsonb DEFAULT '{"filter":{"tier":1},"
 ALTER TABLE "user" ADD COLUMN "handle" text;--> statement-breakpoint
 ALTER TABLE "tanks" ADD CONSTRAINT "tanks_share_token_unique" UNIQUE("share_token");--> statement-breakpoint
 ALTER TABLE "user" ADD CONSTRAINT "user_handle_unique" UNIQUE("handle");--> statement-breakpoint
-UPDATE "tanks" SET "chemistry" = "chemistry" || '{"ph":8.2,"kh":8,"temperatureC":25.5,"salinity":35}'::jsonb WHERE "biome" = 'reef';
+UPDATE "tanks" SET "chemistry" = "chemistry" || '{"ph":8.2,"kh":8,"temperatureC":25.5,"salinity":35}'::jsonb WHERE "biome" = 'reef';--> statement-breakpoint
+UPDATE "fish" SET "personality" = jsonb_build_object('boldness', round(((('x' || substr(md5("id"::text || 'boldness'), 1, 8))::bit(32)::bigint)::numeric / 4294967295), 3), 'greed', round(((('x' || substr(md5("id"::text || 'greed'), 1, 8))::bit(32)::bigint)::numeric / 4294967295), 3), 'sociability', round(((('x' || substr(md5("id"::text || 'sociability'), 1, 8))::bit(32)::bigint)::numeric / 4294967295), 3));

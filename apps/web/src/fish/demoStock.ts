@@ -1,5 +1,6 @@
 import {
   createTankSpace,
+  isPlayableBiome,
   sampleFloor,
   speciesSchema,
   tankWaterTop,
@@ -109,15 +110,9 @@ export function tankSpaceOf(tank: TankDimensions): TankSpace {
   );
 }
 
-function playableDemoStock(biome: Biome): DemoStock {
-  const stock = (DEMO_STOCKS as Readonly<Partial<Record<Biome, DemoStock>>>)[biome];
-  if (stock === undefined) throw new Error(`demo stock: no stock for the ${biome} biome yet`);
-  return stock;
-}
-
 export function demoTank(tank: TankDimensions, seed: number, biome: Biome): DemoTank {
-  const stock = playableDemoStock(biome);
-  const { species, counts, maxLengthM } = stock;
+  if (!isPlayableBiome(biome)) throw new Error(`demo stock: no stock for the ${biome} biome yet`);
+  const { species, counts, maxLengthM } = DEMO_STOCKS[biome];
   const rng = new Rng(seed);
   const fish: FishSpawn[] = [];
   for (const s of species) {
