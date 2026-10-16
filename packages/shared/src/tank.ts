@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { backgroundIdSchema } from './backgrounds.js';
 import {
   biomeSchema,
   playableBiomeSchema,
@@ -107,6 +108,7 @@ export const tankSchema = z.object({
   // false: the player never saved a layout, so decorLayout is [] and the client shows the biome preset.
   // true: decorLayout is what the player saved, and [] means they emptied the tank.
   decorEdited: z.boolean(),
+  backgroundId: backgroundIdSchema,
   water: waterSchema,
   lastTickAt: timestampSchema,
   chemistry: chemistrySchema,
@@ -134,8 +136,12 @@ export const updateTankRequestSchema = z
   .strictObject({
     name: z.string().trim().min(1).max(60).optional(),
     decorLayout: decorLayoutSchema.optional(),
+    backgroundId: backgroundIdSchema.nullable().optional(),
   })
-  .refine((v) => v.name !== undefined || v.decorLayout !== undefined, 'nothing to update');
+  .refine(
+    (v) => v.name !== undefined || v.decorLayout !== undefined || v.backgroundId !== undefined,
+    'nothing to update',
+  );
 export type UpdateTankRequest = z.infer<typeof updateTankRequestSchema>;
 
 export const addFishRequestSchema = z.strictObject({

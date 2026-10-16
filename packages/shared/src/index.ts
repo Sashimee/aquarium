@@ -14,3 +14,4 @@ export * from './fishState.js';
 export * from './equipment.js';
 export * from './tankSize.js';
 export * from './wordFilter.js';
+export * from './backgrounds.js';

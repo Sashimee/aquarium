@@ -143,6 +143,8 @@ export const tanks = pgTable(
     shareToken: text('share_token').unique(),
     name: text('name').notNull(),
     decorLayout: jsonb('decor_layout'),
+    // null: the player never chose one, so the biome's default shows.
+    backgroundId: text('background_id'),
     water: jsonb('water')
       .notNull()
       .default(sql`'{"ammonia":0,"nitrate":0,"algae":0,"uneatenFood":0}'::jsonb`),

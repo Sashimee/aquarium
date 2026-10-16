@@ -107,7 +107,7 @@ describe('migrations', () => {
     expect((legacy.rows[0] as { sex: string }).sex).toBe('female');
   });
 
-  it('backfills existing tanks as cycled, reefs salty, and fish as adults (0007)', async () => {
+  it('backfills existing tanks as cycled, reefs salty, and fish as adults (0008)', async () => {
     const database = await freshDatabase();
     const q = (text: string, values: unknown[] = []) => database.pool.query(text, values);
     const apply = async (file: string) => {
@@ -122,6 +122,7 @@ describe('migrations', () => {
       '0004_fish_sex.sql',
       '0005_decor_layout_nullable.sql',
       '0006_fish_sex_drop_default.sql',
+      '0007_tank_background.sql',
     ];
     for (const file of before) await apply(file);
     await q(`insert into "user" (id, name, email) values ('u7', 'U', 'u7@bas.lu')`);
@@ -141,7 +142,7 @@ describe('migrations', () => {
       [freshId],
     );
 
-    await apply('0007_expansion_contract.sql');
+    await apply('0008_expansion_contract.sql');
 
     const rows = await q(
       `select id, chemistry, equipment, size, quarantine, share_token from tanks`,
