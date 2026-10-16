@@ -145,6 +145,56 @@ describe('SnapshotInterpolator', () => {
     expect(interp.push(snap(2, fish(9, 0, 0, FishState.Cruise), 2), 166)).toBe(fresh);
   });
 
+  it('keeps render time monotonic when snapshots arrive early, late or bunched', () => {
+    const interp = new SnapshotInterpolator(1 / 30);
+    const arrivals = [0, 33, 50, 100, 133, 140, 141, 230, 233, 266, 300, 301, 302, 400, 433, 466];
+    let previous = -Infinity;
+    let k = 0;
+    for (let now = 0; now <= 600; now += 5) {
+      while (k < arrivals.length && (arrivals[k] ?? Infinity) <= now) {
+        interp.push(snap(k, fish(k, 0, 0, FishState.Cruise)), arrivals[k] ?? 0);
+        k++;
+      }
+      const t = interp.renderTime(now);
+      if (k >= 2) expect(t).toBeGreaterThanOrEqual(previous);
+      previous = t;
+    }
+  });
+
+  it('runs at wall-clock rate and settles one step behind the newest snapshot', () => {
+    const interp = new SnapshotInterpolator(1 / 30);
+    const step = 1000 / 30;
+    // Deterministic jitter of up to 12 ms either way around the true arrival time.
+    const jitter = (k: number): number => 12 * Math.sin(k * 2.3);
+    for (let k = 0; k < 300; k++)
+      interp.push(snap(k, fish(k, 0, 0, FishState.Cruise)), k * step + jitter(k));
+    const end = 299 * step + jitter(299);
+    const rate = (interp.renderTime(end + 30) - interp.renderTime(end)) / 0.03;
+    expect(rate).toBeGreaterThan(0.8);
+    expect(rate).toBeLessThan(1.2);
+    expect(Math.abs(interp.renderTime(end) - (299 / 30 - 1 / 30))).toBeLessThan(0.015);
+  });
+
+  it('jumps forward instead of crawling after a long stall', () => {
+    const interp = new SnapshotInterpolator(1 / 30);
+    interp.push(snap(0, fish(0, 0, 0, FishState.Cruise)), 0);
+    interp.push(snap(1, fish(1, 0, 0, FishState.Cruise)), 1000 / 30);
+    const before = interp.renderTime(1000 / 30);
+    interp.push(snap(60, fish(60, 0, 0, FishState.Cruise)), 1000 / 30 + 1);
+    expect(interp.renderTime(1000 / 30 + 1)).toBeCloseTo(59 / 30, 6);
+    expect(interp.renderTime(1000 / 30 + 1)).toBeGreaterThan(before);
+  });
+
+  it('never renders past the newest snapshot while waiting for the next', () => {
+    const interp = new SnapshotInterpolator(1 / 30);
+    interp.push(snap(0, fish(0, 0, 0, FishState.Cruise)), 0);
+    interp.push(snap(1, fish(1, 0, 0, FishState.Cruise)), 1000 / 30);
+    expect(interp.renderTime(5000)).toBe(1 / 30);
+    interp.push(snap(2, fish(2, 0, 0, FishState.Cruise)), 5000);
+    expect(interp.renderTime(5000)).toBe(1 / 30);
+    expect(interp.renderTime(5010)).toBeGreaterThan(1 / 30);
+  });
+
   it('forgets everything on reset', () => {
     const interp = new SnapshotInterpolator(1 / 30);
     interp.push(snap(5, fish(1, 0, 0, FishState.Cruise)), 0);

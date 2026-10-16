@@ -1,3 +1,5 @@
+import { clamp } from './math.ts';
+
 export const FishState = {
   Cruise: 0,
   School: 1,
@@ -132,14 +134,28 @@ export function interpolateSnapshots(
   }
 }
 
+/** Clock-error horizon: the render clock closes its lag behind the newest snapshot over this. */
+const SLEW_SECONDS = 0.5;
+/** Largest fraction by which the render clock may run fast or slow while it slews. */
+const MAX_SLEW = 0.2;
+/** A render clock this far behind (a stalled tab, a long worker pause) jumps instead of slewing. */
+const RESYNC_SECONDS = 0.25;
+const ON_TIME_SECONDS = 1e-6;
+
 /**
  * Keeps the two newest snapshots and renders slightly in the past (one step by default) so there
  * is always a pair to interpolate between. Times are caller-supplied, so this stays DOM-free.
+ *
+ * Render time runs on its own clock at wall-clock rate, nudged faster or slower toward the newest
+ * snapshot's time minus the delay. Re-basing it on each arrival would make it step backwards after
+ * an early post and leap after a late one, and every fish would hitch.
  */
 export class SnapshotInterpolator {
   private previous: Snapshot | null = null;
   private latest: Snapshot | null = null;
-  private latestArrivalMs = 0;
+  private anchorMs = 0;
+  private anchorTime = 0;
+  private rate = 1;
   private readonly delaySeconds: number;
 
   constructor(delaySeconds: number) {
@@ -158,22 +174,42 @@ export class SnapshotInterpolator {
       if (snapshot.epoch > latest.epoch) this.reset();
       else if (snapshot.tick <= latest.tick) return snapshot;
     }
+    const target = snapshot.time - this.delaySeconds;
+    if (this.latest === null || this.previous === null) {
+      // Nothing has been interpolated yet, so the clock can still be set outright.
+      this.anchor(Math.max(arrivalMs, this.anchorMs), target, 1);
+    } else {
+      const at = Math.max(arrivalMs, this.anchorMs);
+      const now = this.renderTime(at);
+      const lag = target - now;
+      // An on-time arrival lands exactly on target, so a window re-pushed after a layout change
+      // samples the same frames as the one it replaced, not ones a rounding error apart.
+      if (lag > RESYNC_SECONDS || Math.abs(lag) < ON_TIME_SECONDS) this.anchor(at, target, 1);
+      else this.anchor(at, now, 1 + clamp(lag / SLEW_SECONDS, -MAX_SLEW, MAX_SLEW));
+    }
     const evicted = this.previous;
     this.previous = this.latest;
     this.latest = snapshot;
-    this.latestArrivalMs = arrivalMs;
     return evicted;
   }
 
   reset(): void {
     this.previous = null;
     this.latest = null;
-    this.latestArrivalMs = 0;
+    this.anchorMs = 0;
+    this.anchorTime = 0;
+    this.rate = 1;
   }
 
+  /**
+   * Never decreases as `nowMs` grows. It stops at the newest snapshot's time, since rendering past
+   * it shows the same frame, which also bounds how far ahead the clock can get before the next one.
+   */
   renderTime(nowMs: number): number {
-    if (this.latest === null) return 0;
-    return this.latest.time + (nowMs - this.latestArrivalMs) / 1000 - this.delaySeconds;
+    const latest = this.latest;
+    if (latest === null) return 0;
+    const elapsed = Math.max(0, nowMs - this.anchorMs) / 1000;
+    return Math.min(this.anchorTime + elapsed * this.rate, latest.time);
   }
 
   /** Writes the interpolated state at `nowMs` into `out`; false until a snapshot has arrived. */
@@ -189,5 +225,11 @@ export class SnapshotInterpolator {
     const alpha = span > 0 ? (this.renderTime(nowMs) - previous.time) / span : 1;
     interpolateSnapshots(previous.data, latest.data, alpha, out);
     return true;
+  }
+
+  private anchor(atMs: number, time: number, rate: number): void {
+    this.anchorMs = atMs;
+    this.anchorTime = time;
+    this.rate = rate;
   }
 }
