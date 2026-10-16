@@ -2,7 +2,7 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; every texture has both files.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body, carapace and eyes; 6 walking leg; 7 antenna; 8 pleopod; 9 abdomen, telson and tail fan) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x; antennules 0/1, long antennae 2/3; tail-fan leaves k * 2 + side). Shrimp _fin_mask means: id 0 is 0 (eye stalks included, ignore it); ids 6 and 7 are the weight along the limb, 0 root to 1 tip; id 8 is the pleopod beat weight, 0 root to 1 tip; id 9 is the tail-curl weight clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1) of the rest position. Tail curl rotates ids 8 and 9 about +x through the shrimp.abdomenHinge {y, z} by flex * clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1), computed from the rest position, never from _fin_mask, so the pleopods follow the segment they hang from. Pleopods (id 8) exist only in LOD0 and LOD1 and are removed from LOD2; legs are simplified, so do not assume every _leg index exists at every LOD. The cherry material is alphaMode BLEND with base colour alpha 0.86: three.js GLTFLoader turns depthWrite off for BLEND, so set depthWrite true on the cherry material and expect some sorting artefacts from the self-overlapping legs and antennae.",
-  "totalBytes": 67723060,
+  "totalBytes": 68792474,
   "assets": [
     {
       "id": "angelfish",
@@ -81,13 +81,13 @@
       "files": [
         {
           "file": "fish/angelfish/impostor_albedo.ktx2",
-          "bytes": 117320,
-          "sha256": "7d8771abf6e9d0e165176a14b3a6b58561d8481ebf56ce2544fdebec7c50c15c"
+          "bytes": 141207,
+          "sha256": "e9801043674a20308afbd6d5210a3b451d1a75521528a08ba041e415d0caf75b"
         },
         {
           "file": "fish/angelfish/impostor_normal.ktx2",
-          "bytes": 338293,
-          "sha256": "9d731df64ced31ed8b16dabb2c7c3c2d47fab097e6fb6f3260d20010d7ac71bb"
+          "bytes": 390001,
+          "sha256": "acd62c30f1baf099a7c56581b860c05363e672cdd00a6c5994faa527410511ca"
         },
         {
           "file": "fish/angelfish/lod0.glb",
@@ -140,25 +140,25 @@
         "sourceLod": 1,
         "layout": "octahedral",
         "pose": "rest",
-        "grid": 8,
+        "grid": 9,
         "frameSize": 128,
-        "atlasSize": 1024,
+        "atlasSize": 1152,
         "pivot": [
           0,
           -0.019014,
           -0.021904
         ],
-        "radius": 0.091903,
+        "radius": 0.096408,
         "albedo": {
           "file": "fish/angelfish/impostor_albedo.ktx2",
-          "bytes": 117320,
-          "sha256": "7d8771abf6e9d0e165176a14b3a6b58561d8481ebf56ce2544fdebec7c50c15c",
+          "bytes": 141207,
+          "sha256": "e9801043674a20308afbd6d5210a3b451d1a75521528a08ba041e415d0caf75b",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/angelfish/impostor_normal.ktx2",
-          "bytes": 338293,
-          "sha256": "9d731df64ced31ed8b16dabb2c7c3c2d47fab097e6fb6f3260d20010d7ac71bb",
+          "bytes": 390001,
+          "sha256": "acd62c30f1baf099a7c56581b860c05363e672cdd00a6c5994faa527410511ca",
           "codec": "uastc"
         }
       }
@@ -240,13 +240,13 @@
       "files": [
         {
           "file": "fish/banggai-cardinalfish/impostor_albedo.ktx2",
-          "bytes": 108250,
-          "sha256": "c698c6aef162413e5affe189db046aba81045e762ce9be46b02245056d3398bb"
+          "bytes": 137118,
+          "sha256": "6ce2e8c11cca46fa18186088ddc0def631a7242ba7ebc577e699d41e91282328"
         },
         {
           "file": "fish/banggai-cardinalfish/impostor_normal.ktx2",
-          "bytes": 359469,
-          "sha256": "320bfe8625dbf0517434fd14ebc2cd83247f99e4038ee2031d50e7f8ae710e67"
+          "bytes": 399374,
+          "sha256": "7b623ea9e72826df0c402906bf27cbb71afc5be82884ee7c7040c1c58ac9f641"
         },
         {
           "file": "fish/banggai-cardinalfish/lod0.glb",
@@ -299,25 +299,25 @@
         "sourceLod": 1,
         "layout": "octahedral",
         "pose": "rest",
-        "grid": 8,
+        "grid": 9,
         "frameSize": 128,
-        "atlasSize": 1024,
+        "atlasSize": 1152,
         "pivot": [
           0,
           0.002018,
           -0.008273
         ],
-        "radius": 0.029661,
+        "radius": 0.031115,
         "albedo": {
           "file": "fish/banggai-cardinalfish/impostor_albedo.ktx2",
-          "bytes": 108250,
-          "sha256": "c698c6aef162413e5affe189db046aba81045e762ce9be46b02245056d3398bb",
+          "bytes": 137118,
+          "sha256": "6ce2e8c11cca46fa18186088ddc0def631a7242ba7ebc577e699d41e91282328",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/banggai-cardinalfish/impostor_normal.ktx2",
-          "bytes": 359469,
-          "sha256": "320bfe8625dbf0517434fd14ebc2cd83247f99e4038ee2031d50e7f8ae710e67",
+          "bytes": 399374,
+          "sha256": "7b623ea9e72826df0c402906bf27cbb71afc5be82884ee7c7040c1c58ac9f641",
           "codec": "uastc"
         }
       }
@@ -419,13 +419,13 @@
       "files": [
         {
           "file": "fish/betta/impostor_albedo.ktx2",
-          "bytes": 132463,
-          "sha256": "3b640851e3bc8020b3dd090bee3161b1281c5c4b9c924516897592a7dc0c63ea"
+          "bytes": 158232,
+          "sha256": "db840646ce0df1236902e91ee8e9db07c8c1b8167745382ca1aef0d23095ae79"
         },
         {
           "file": "fish/betta/impostor_normal.ktx2",
-          "bytes": 374758,
-          "sha256": "6b17fe6025d8336535815da8d0552265bda0bfe9ab5e46b0e9917de6d2f3c7d5"
+          "bytes": 414585,
+          "sha256": "4113e50e58b9ae6f3ae36989021b2d852e58f568108405fd52e424c178a9066d"
         },
         {
           "file": "fish/betta/lod0.glb",
@@ -488,25 +488,25 @@
         "sourceLod": 1,
         "layout": "octahedral",
         "pose": "rest",
-        "grid": 8,
+        "grid": 9,
         "frameSize": 128,
-        "atlasSize": 1024,
+        "atlasSize": 1152,
         "pivot": [
           0,
           -0.014136,
           -0.015253
         ],
-        "radius": 0.043861,
+        "radius": 0.046011,
         "albedo": {
           "file": "fish/betta/impostor_albedo.ktx2",
-          "bytes": 132463,
-          "sha256": "3b640851e3bc8020b3dd090bee3161b1281c5c4b9c924516897592a7dc0c63ea",
+          "bytes": 158232,
+          "sha256": "db840646ce0df1236902e91ee8e9db07c8c1b8167745382ca1aef0d23095ae79",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/betta/impostor_normal.ktx2",
-          "bytes": 374758,
-          "sha256": "6b17fe6025d8336535815da8d0552265bda0bfe9ab5e46b0e9917de6d2f3c7d5",
+          "bytes": 414585,
+          "sha256": "4113e50e58b9ae6f3ae36989021b2d852e58f568108405fd52e424c178a9066d",
           "codec": "uastc"
         }
       }
@@ -608,13 +608,13 @@
       "files": [
         {
           "file": "fish/blue-tang/impostor_albedo.ktx2",
-          "bytes": 139316,
-          "sha256": "bb2109fbbed38a8f3c96cee6d079894150745ad89f443892a3d0cea670e9b9c5"
+          "bytes": 168510,
+          "sha256": "9d44970a20e571995ea9a94de3469f7a187dc7f3fede30c1aac604d9fa7132cf"
         },
         {
           "file": "fish/blue-tang/impostor_normal.ktx2",
-          "bytes": 465161,
-          "sha256": "8317705c1094154dda49b1389465dc8d3ff3cac60b4dede26d333d235af56aac"
+          "bytes": 545647,
+          "sha256": "2be8fa709fbcd835329d0a496d66f1da85c478c3eaaef8c0b11e03ae11df65c0"
         },
         {
           "file": "fish/blue-tang/lod0.glb",
@@ -677,25 +677,25 @@
         "sourceLod": 1,
         "layout": "octahedral",
         "pose": "rest",
-        "grid": 8,
+        "grid": 9,
         "frameSize": 128,
-        "atlasSize": 1024,
+        "atlasSize": 1152,
         "pivot": [
           0,
           0.007065,
           -0.014534
         ],
-        "radius": 0.108474,
+        "radius": 0.113791,
         "albedo": {
           "file": "fish/blue-tang/impostor_albedo.ktx2",
-          "bytes": 139316,
-          "sha256": "bb2109fbbed38a8f3c96cee6d079894150745ad89f443892a3d0cea670e9b9c5",
+          "bytes": 168510,
+          "sha256": "9d44970a20e571995ea9a94de3469f7a187dc7f3fede30c1aac604d9fa7132cf",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/blue-tang/impostor_normal.ktx2",
-          "bytes": 465161,
-          "sha256": "8317705c1094154dda49b1389465dc8d3ff3cac60b4dede26d333d235af56aac",
+          "bytes": 545647,
+          "sha256": "2be8fa709fbcd835329d0a496d66f1da85c478c3eaaef8c0b11e03ae11df65c0",
           "codec": "uastc"
         }
       }
@@ -823,13 +823,13 @@
       "files": [
         {
           "file": "fish/bristlenose-pleco/impostor_albedo.ktx2",
-          "bytes": 98679,
-          "sha256": "fe72d0ec964686271024e9080b9f83112950a2001766a49fe13aa98513bf82f9"
+          "bytes": 119130,
+          "sha256": "4050a9e1ce329d283d07e2cd41d18a4bf90c2ae531329644c10dd39ebe538dd3"
         },
         {
           "file": "fish/bristlenose-pleco/impostor_normal.ktx2",
-          "bytes": 308671,
-          "sha256": "0fc16406c80cb8ff1ea80e1a51714d5ebb89e2d9703147f689e15ca9fefee86e"
+          "bytes": 358840,
+          "sha256": "a8ba0a314edbe35a5436eb6dc2cd7c9d5f4f2313982478eda4a95a04368e236e"
         },
         {
           "file": "fish/bristlenose-pleco/lod0.glb",
@@ -902,25 +902,25 @@
         "sourceLod": 1,
         "layout": "octahedral",
         "pose": "rest",
-        "grid": 8,
+        "grid": 9,
         "frameSize": 128,
-        "atlasSize": 1024,
+        "atlasSize": 1152,
         "pivot": [
           -0.000017,
           0.002454,
           -0.010215
         ],
-        "radius": 0.052564,
+        "radius": 0.05514,
         "albedo": {
           "file": "fish/bristlenose-pleco/impostor_albedo.ktx2",
-          "bytes": 98679,
-          "sha256": "fe72d0ec964686271024e9080b9f83112950a2001766a49fe13aa98513bf82f9",
+          "bytes": 119130,
+          "sha256": "4050a9e1ce329d283d07e2cd41d18a4bf90c2ae531329644c10dd39ebe538dd3",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/bristlenose-pleco/impostor_normal.ktx2",
-          "bytes": 308671,
-          "sha256": "0fc16406c80cb8ff1ea80e1a51714d5ebb89e2d9703147f689e15ca9fefee86e",
+          "bytes": 358840,
+          "sha256": "a8ba0a314edbe35a5436eb6dc2cd7c9d5f4f2313982478eda4a95a04368e236e",
           "codec": "uastc"
         }
       }
@@ -1002,13 +1002,13 @@
       "files": [
         {
           "file": "fish/bronze-corydoras/impostor_albedo.ktx2",
-          "bytes": 95120,
-          "sha256": "95fb69ecc84d3d20ab22613cd4244815bb1ad81d3c80068803db09cce7465a41"
+          "bytes": 117377,
+          "sha256": "d887863ceb457c4a946a834dff6b01fbf14c1ad182f8de16cd106adf8334b573"
         },
         {
           "file": "fish/bronze-corydoras/impostor_normal.ktx2",
-          "bytes": 287860,
-          "sha256": "8e49ded361ce87bb5b7d9080fd4cc813d3b69a95058c9f3ad5fb46ddccac50e7"
+          "bytes": 319313,
+          "sha256": "fc6ca18f0c71213829fd9883a58176825ee7ee31c1ae698d318b12c506c54467"
         },
         {
           "file": "fish/bronze-corydoras/lod0.glb",
@@ -1061,25 +1061,25 @@
         "sourceLod": 1,
         "layout": "octahedral",
         "pose": "rest",
-        "grid": 8,
+        "grid": 9,
         "frameSize": 128,
-        "atlasSize": 1024,
+        "atlasSize": 1152,
         "pivot": [
           0,
           0.000834,
           -0.008243
         ],
-        "radius": 0.03028,
+        "radius": 0.031765,
         "albedo": {
           "file": "fish/bronze-corydoras/impostor_albedo.ktx2",
-          "bytes": 95120,
-          "sha256": "95fb69ecc84d3d20ab22613cd4244815bb1ad81d3c80068803db09cce7465a41",
+          "bytes": 117377,
+          "sha256": "d887863ceb457c4a946a834dff6b01fbf14c1ad182f8de16cd106adf8334b573",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/bronze-corydoras/impostor_normal.ktx2",
-          "bytes": 287860,
-          "sha256": "8e49ded361ce87bb5b7d9080fd4cc813d3b69a95058c9f3ad5fb46ddccac50e7",
+          "bytes": 319313,
+          "sha256": "fc6ca18f0c71213829fd9883a58176825ee7ee31c1ae698d318b12c506c54467",
           "codec": "uastc"
         }
       }
@@ -1204,13 +1204,13 @@
       "files": [
         {
           "file": "fish/discus/impostor_albedo.ktx2",
-          "bytes": 134786,
-          "sha256": "b34e1847b6e9c3a3db113572482f0d883716b2b80001e459069cc3ba93d84756"
+          "bytes": 161466,
+          "sha256": "9690d5900acba769a26eef58af15973b99320ebf0c265f3f5e42d34bfbb2e0dc"
         },
         {
           "file": "fish/discus/impostor_normal.ktx2",
-          "bytes": 447452,
-          "sha256": "3e1fd7f4db23c677c5d6451868c80e86532ee34eb4e63556fc6f0cc82713fd1a"
+          "bytes": 524281,
+          "sha256": "934eb2819cd6822786406816b539109c61338ad567f0ebb661ce61a49278c2bd"
         },
         {
           "file": "fish/discus/lod0.glb",
@@ -1283,25 +1283,25 @@
         "sourceLod": 1,
         "layout": "octahedral",
         "pose": "rest",
-        "grid": 8,
+        "grid": 9,
         "frameSize": 128,
-        "atlasSize": 1024,
+        "atlasSize": 1152,
         "pivot": [
           0,
           0.002216,
           -0.018658
         ],
-        "radius": 0.083482,
+        "radius": 0.087575,
         "albedo": {
           "file": "fish/discus/impostor_albedo.ktx2",
-          "bytes": 134786,
-          "sha256": "b34e1847b6e9c3a3db113572482f0d883716b2b80001e459069cc3ba93d84756",
+          "bytes": 161466,
+          "sha256": "9690d5900acba769a26eef58af15973b99320ebf0c265f3f5e42d34bfbb2e0dc",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/discus/impostor_normal.ktx2",
-          "bytes": 447452,
-          "sha256": "3e1fd7f4db23c677c5d6451868c80e86532ee34eb4e63556fc6f0cc82713fd1a",
+          "bytes": 524281,
+          "sha256": "934eb2819cd6822786406816b539109c61338ad567f0ebb661ce61a49278c2bd",
           "codec": "uastc"
         }
       }
@@ -1383,13 +1383,13 @@
       "files": [
         {
           "file": "fish/firefish/impostor_albedo.ktx2",
-          "bytes": 91225,
-          "sha256": "7dce579a203f39096213336fa7eb3a190275c1ffb7e83c17b615521093850f85"
+          "bytes": 110624,
+          "sha256": "65213262845eaafcb0fbba5f127b2c6a35c5f541a1b3335f5ffc6a16f047b1c6"
         },
         {
           "file": "fish/firefish/impostor_normal.ktx2",
-          "bytes": 240475,
-          "sha256": "b708005aad904e76ab91ef9b2d883794f3cf6615b8c3ec7feaa1925b034d4c2a"
+          "bytes": 262816,
+          "sha256": "26f0b61b65129faf039097b6b3a421051a628041aa06a50fef5795562fbef352"
         },
         {
           "file": "fish/firefish/lod0.glb",
@@ -1442,25 +1442,25 @@
         "sourceLod": 1,
         "layout": "octahedral",
         "pose": "rest",
-        "grid": 8,
+        "grid": 9,
         "frameSize": 128,
-        "atlasSize": 1024,
+        "atlasSize": 1152,
         "pivot": [
           -0.000005,
           0.010288,
           -0.011001
         ],
-        "radius": 0.042066,
+        "radius": 0.044128,
         "albedo": {
           "file": "fish/firefish/impostor_albedo.ktx2",
-          "bytes": 91225,
-          "sha256": "7dce579a203f39096213336fa7eb3a190275c1ffb7e83c17b615521093850f85",
+          "bytes": 110624,
+          "sha256": "65213262845eaafcb0fbba5f127b2c6a35c5f541a1b3335f5ffc6a16f047b1c6",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/firefish/impostor_normal.ktx2",
-          "bytes": 240475,
-          "sha256": "b708005aad904e76ab91ef9b2d883794f3cf6615b8c3ec7feaa1925b034d4c2a",
+          "bytes": 262816,
+          "sha256": "26f0b61b65129faf039097b6b3a421051a628041aa06a50fef5795562fbef352",
           "codec": "uastc"
         }
       }
@@ -1583,13 +1583,13 @@
       "files": [
         {
           "file": "fish/guppy-female/impostor_albedo.ktx2",
-          "bytes": 107086,
-          "sha256": "de5cf76eee630ddb41cbff8c13638b250cd6914105529b4e145a03e8326ec98d"
+          "bytes": 128834,
+          "sha256": "5f74f590eec41a800b605bc595d7222467db0f103bb99913b311d67b0311a558"
         },
         {
           "file": "fish/guppy-female/impostor_normal.ktx2",
-          "bytes": 346878,
-          "sha256": "e2ccdfce941825a2e91d4942b434fbba1e0673b66a2686c95dad59bff4a8f5cd"
+          "bytes": 397228,
+          "sha256": "bdebe1d6e8cbc86f9cd64d3116087206f55fc0804682032f971f1e4fc6565bbe"
         },
         {
           "file": "fish/guppy-female/lod0.glb",
@@ -1662,25 +1662,25 @@
         "sourceLod": 1,
         "layout": "octahedral",
         "pose": "rest",
-        "grid": 8,
+        "grid": 9,
         "frameSize": 128,
-        "atlasSize": 1024,
+        "atlasSize": 1152,
         "pivot": [
           -0.00003,
           0.000067,
           -0.005414
         ],
-        "radius": 0.018712,
+        "radius": 0.019629,
         "albedo": {
           "file": "fish/guppy-female/impostor_albedo.ktx2",
-          "bytes": 107086,
-          "sha256": "de5cf76eee630ddb41cbff8c13638b250cd6914105529b4e145a03e8326ec98d",
+          "bytes": 128834,
+          "sha256": "5f74f590eec41a800b605bc595d7222467db0f103bb99913b311d67b0311a558",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/guppy-female/impostor_normal.ktx2",
-          "bytes": 346878,
-          "sha256": "e2ccdfce941825a2e91d4942b434fbba1e0673b66a2686c95dad59bff4a8f5cd",
+          "bytes": 397228,
+          "sha256": "bdebe1d6e8cbc86f9cd64d3116087206f55fc0804682032f971f1e4fc6565bbe",
           "codec": "uastc"
         }
       }
@@ -1762,13 +1762,13 @@
       "files": [
         {
           "file": "fish/guppy-male/impostor_albedo.ktx2",
-          "bytes": 101271,
-          "sha256": "301e671c54f5da69250db7aecc86afe8cce0ba94c5e39f1d26b6c53fca30df5f"
+          "bytes": 121056,
+          "sha256": "3f9c2135d12a8cab9c567a84d4adda522951a2918f0e8840f0bd9776cbd6b5cd"
         },
         {
           "file": "fish/guppy-male/impostor_normal.ktx2",
-          "bytes": 259823,
-          "sha256": "8b24635a26412b4d8e3bf50661b4c7f97ef29dceb96a2153ca87c66ec5d3d210"
+          "bytes": 277966,
+          "sha256": "8529942dbc2fa9a2faefaef21b1b1095a180d81799f1de9d0b2e690f1df66783"
         },
         {
           "file": "fish/guppy-male/lod0.glb",
@@ -1821,25 +1821,25 @@
         "sourceLod": 1,
         "layout": "octahedral",
         "pose": "rest",
-        "grid": 8,
+        "grid": 9,
         "frameSize": 128,
-        "atlasSize": 1024,
+        "atlasSize": 1152,
         "pivot": [
           0,
           -0.002798,
           -0.00805
         ],
-        "radius": 0.01726,
+        "radius": 0.018106,
         "albedo": {
           "file": "fish/guppy-male/impostor_albedo.ktx2",
-          "bytes": 101271,
-          "sha256": "301e671c54f5da69250db7aecc86afe8cce0ba94c5e39f1d26b6c53fca30df5f",
+          "bytes": 121056,
+          "sha256": "3f9c2135d12a8cab9c567a84d4adda522951a2918f0e8840f0bd9776cbd6b5cd",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/guppy-male/impostor_normal.ktx2",
-          "bytes": 259823,
-          "sha256": "8b24635a26412b4d8e3bf50661b4c7f97ef29dceb96a2153ca87c66ec5d3d210",
+          "bytes": 277966,
+          "sha256": "8529942dbc2fa9a2faefaef21b1b1095a180d81799f1de9d0b2e690f1df66783",
           "codec": "uastc"
         }
       }
@@ -1921,13 +1921,13 @@
       "files": [
         {
           "file": "fish/harlequin-rasbora/impostor_albedo.ktx2",
-          "bytes": 104261,
-          "sha256": "e58f405dada9fbde4e05aa5e6ea3adcb872ed5b84cf994aa978bdd895a235c2e"
+          "bytes": 123979,
+          "sha256": "2dada3767a08da7f3625c986be3b935fbb6f321261f8d3f81e58dc9b08c6e943"
         },
         {
           "file": "fish/harlequin-rasbora/impostor_normal.ktx2",
-          "bytes": 285745,
-          "sha256": "48260335d993c28419b3a4fd27431e8a815a3cfd1ae460de97346fc70968b3ab"
+          "bytes": 317777,
+          "sha256": "40a33b38db968e0c9197c5e7fa11f42672b98d8ad9e5bf0cc381d4934dd501ab"
         },
         {
           "file": "fish/harlequin-rasbora/lod0.glb",
@@ -1980,25 +1980,25 @@
         "sourceLod": 1,
         "layout": "octahedral",
         "pose": "rest",
-        "grid": 8,
+        "grid": 9,
         "frameSize": 128,
-        "atlasSize": 1024,
+        "atlasSize": 1152,
         "pivot": [
           -0.000005,
           0.000163,
           -0.006864
         ],
-        "radius": 0.023943,
+        "radius": 0.025117,
         "albedo": {
           "file": "fish/harlequin-rasbora/impostor_albedo.ktx2",
-          "bytes": 104261,
-          "sha256": "e58f405dada9fbde4e05aa5e6ea3adcb872ed5b84cf994aa978bdd895a235c2e",
+          "bytes": 123979,
+          "sha256": "2dada3767a08da7f3625c986be3b935fbb6f321261f8d3f81e58dc9b08c6e943",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/harlequin-rasbora/impostor_normal.ktx2",
-          "bytes": 285745,
-          "sha256": "48260335d993c28419b3a4fd27431e8a815a3cfd1ae460de97346fc70968b3ab",
+          "bytes": 317777,
+          "sha256": "40a33b38db968e0c9197c5e7fa11f42672b98d8ad9e5bf0cc381d4934dd501ab",
           "codec": "uastc"
         }
       }
@@ -2100,13 +2100,13 @@
       "files": [
         {
           "file": "fish/neon-tetra/impostor_albedo.ktx2",
-          "bytes": 105139,
-          "sha256": "6038cb207047796370f6b5e264a8a604593aebddad8fb3814c223f203f753347"
+          "bytes": 123263,
+          "sha256": "90f3778657ab8cd8482a182ad4261dd4e58c553a7c06edde8ff0dc9f76770169"
         },
         {
           "file": "fish/neon-tetra/impostor_normal.ktx2",
-          "bytes": 286332,
-          "sha256": "00cb675c03a8ebf81cb475845a7657dad63c8fdcefbff0d4dd6fa5003d3a7ab4"
+          "bytes": 321442,
+          "sha256": "cbca3972947b406321afd28b82b5a4912e582a5a614b311b6ed8cfb133e313bf"
         },
         {
           "file": "fish/neon-tetra/lod0.glb",
@@ -2169,25 +2169,25 @@
         "sourceLod": 1,
         "layout": "octahedral",
         "pose": "rest",
-        "grid": 8,
+        "grid": 9,
         "frameSize": 128,
-        "atlasSize": 1024,
+        "atlasSize": 1152,
         "pivot": [
           0,
           0.00016,
           -0.003684
         ],
-        "radius": 0.013765,
+        "radius": 0.01444,
         "albedo": {
           "file": "fish/neon-tetra/impostor_albedo.ktx2",
-          "bytes": 105139,
-          "sha256": "6038cb207047796370f6b5e264a8a604593aebddad8fb3814c223f203f753347",
+          "bytes": 123263,
+          "sha256": "90f3778657ab8cd8482a182ad4261dd4e58c553a7c06edde8ff0dc9f76770169",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/neon-tetra/impostor_normal.ktx2",
-          "bytes": 286332,
-          "sha256": "00cb675c03a8ebf81cb475845a7657dad63c8fdcefbff0d4dd6fa5003d3a7ab4",
+          "bytes": 321442,
+          "sha256": "cbca3972947b406321afd28b82b5a4912e582a5a614b311b6ed8cfb133e313bf",
           "codec": "uastc"
         }
       }
@@ -2289,13 +2289,13 @@
       "files": [
         {
           "file": "fish/ocellaris-clownfish/impostor_albedo.ktx2",
-          "bytes": 113908,
-          "sha256": "977937625a1429e3def4c63e576ccfc539eafc163f9c1a9e713d063e26a89420"
+          "bytes": 139520,
+          "sha256": "e2c0f24818bf1f35e113d2988f12fd11ae31a26e890c620e5b8d527ba6580c59"
         },
         {
           "file": "fish/ocellaris-clownfish/impostor_normal.ktx2",
-          "bytes": 354160,
-          "sha256": "8e4039249fe83ad2a636deeb45eeec074cd0d5e61a45bb44c1d49290a6b249e6"
+          "bytes": 408027,
+          "sha256": "1c6f666f6249d84cc9d67496858cdd316fd83d2ae7b62efaab7363ce0ad60c60"
         },
         {
           "file": "fish/ocellaris-clownfish/lod0.glb",
@@ -2358,25 +2358,25 @@
         "sourceLod": 1,
         "layout": "octahedral",
         "pose": "rest",
-        "grid": 8,
+        "grid": 9,
         "frameSize": 128,
-        "atlasSize": 1024,
+        "atlasSize": 1152,
         "pivot": [
           0,
           -0.000392,
           -0.013024
         ],
-        "radius": 0.041959,
+        "radius": 0.044016,
         "albedo": {
           "file": "fish/ocellaris-clownfish/impostor_albedo.ktx2",
-          "bytes": 113908,
-          "sha256": "977937625a1429e3def4c63e576ccfc539eafc163f9c1a9e713d063e26a89420",
+          "bytes": 139520,
+          "sha256": "e2c0f24818bf1f35e113d2988f12fd11ae31a26e890c620e5b8d527ba6580c59",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/ocellaris-clownfish/impostor_normal.ktx2",
-          "bytes": 354160,
-          "sha256": "8e4039249fe83ad2a636deeb45eeec074cd0d5e61a45bb44c1d49290a6b249e6",
+          "bytes": 408027,
+          "sha256": "1c6f666f6249d84cc9d67496858cdd316fd83d2ae7b62efaab7363ce0ad60c60",
           "codec": "uastc"
         }
       }
@@ -2456,13 +2456,13 @@
       "files": [
         {
           "file": "fish/royal-gramma/impostor_albedo.ktx2",
-          "bytes": 97432,
-          "sha256": "97988ea078fb46332ab9efb9bf4b689d5beb52706ea372cd4860f01d1fbc8007"
+          "bytes": 120393,
+          "sha256": "d72a254dd911a2109f95afef70543a66ed07bd619025d0043ef7f737509709d4"
         },
         {
           "file": "fish/royal-gramma/impostor_normal.ktx2",
-          "bytes": 331214,
-          "sha256": "0f252e3a5e389b99ff4f0880fa77b83e569d0568f7d3bb7a235e4842a21ec1b2"
+          "bytes": 367369,
+          "sha256": "60f46ed75147cc8641589fa8455709f08a930555ad80cf0505cf64fc14698a10"
         },
         {
           "file": "fish/royal-gramma/lod0.glb",
@@ -2515,25 +2515,25 @@
         "sourceLod": 1,
         "layout": "octahedral",
         "pose": "rest",
-        "grid": 8,
+        "grid": 9,
         "frameSize": 128,
-        "atlasSize": 1024,
+        "atlasSize": 1152,
         "pivot": [
           0,
           -0.000521,
           -0.007646
         ],
-        "radius": 0.03439,
+        "radius": 0.036076,
         "albedo": {
           "file": "fish/royal-gramma/impostor_albedo.ktx2",
-          "bytes": 97432,
-          "sha256": "97988ea078fb46332ab9efb9bf4b689d5beb52706ea372cd4860f01d1fbc8007",
+          "bytes": 120393,
+          "sha256": "d72a254dd911a2109f95afef70543a66ed07bd619025d0043ef7f737509709d4",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/royal-gramma/impostor_normal.ktx2",
-          "bytes": 331214,
-          "sha256": "0f252e3a5e389b99ff4f0880fa77b83e569d0568f7d3bb7a235e4842a21ec1b2",
+          "bytes": 367369,
+          "sha256": "60f46ed75147cc8641589fa8455709f08a930555ad80cf0505cf64fc14698a10",
           "codec": "uastc"
         }
       }
@@ -2615,13 +2615,13 @@
       "files": [
         {
           "file": "fish/six-line-wrasse/impostor_albedo.ktx2",
-          "bytes": 91367,
-          "sha256": "c8813196a3386dc2525e87f5e7ac12b4fd4b9ae4538b4493c3a1b792ad433e65"
+          "bytes": 108133,
+          "sha256": "79bfc1505ff235ce8002fc22868296e50325cebae6c3751e8885e8a03807448d"
         },
         {
           "file": "fish/six-line-wrasse/impostor_normal.ktx2",
-          "bytes": 247282,
-          "sha256": "dbec03db36309e8fd96fa08050d6a88fcb8cf94529870986842d5da0b0b315e9"
+          "bytes": 268025,
+          "sha256": "6dfe61e0b7b09b167f55654c187206d47786b91d82054635a724e85e99829db0"
         },
         {
           "file": "fish/six-line-wrasse/lod0.glb",
@@ -2674,25 +2674,25 @@
         "sourceLod": 1,
         "layout": "octahedral",
         "pose": "rest",
-        "grid": 8,
+        "grid": 9,
         "frameSize": 128,
-        "atlasSize": 1024,
+        "atlasSize": 1152,
         "pivot": [
           0,
           -0.000239,
           -0.008334
         ],
-        "radius": 0.0441,
+        "radius": 0.046261,
         "albedo": {
           "file": "fish/six-line-wrasse/impostor_albedo.ktx2",
-          "bytes": 91367,
-          "sha256": "c8813196a3386dc2525e87f5e7ac12b4fd4b9ae4538b4493c3a1b792ad433e65",
+          "bytes": 108133,
+          "sha256": "79bfc1505ff235ce8002fc22868296e50325cebae6c3751e8885e8a03807448d",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/six-line-wrasse/impostor_normal.ktx2",
-          "bytes": 247282,
-          "sha256": "dbec03db36309e8fd96fa08050d6a88fcb8cf94529870986842d5da0b0b315e9",
+          "bytes": 268025,
+          "sha256": "6dfe61e0b7b09b167f55654c187206d47786b91d82054635a724e85e99829db0",
           "codec": "uastc"
         }
       }
@@ -2773,13 +2773,13 @@
       "files": [
         {
           "file": "fish/yellow-tang/impostor_albedo.ktx2",
-          "bytes": 108612,
-          "sha256": "61478eeb5b54241291c673d3dc5301ff553bdd9f1e08ef720f23dc499430ae31"
+          "bytes": 135444,
+          "sha256": "3ed4a91bbd98855c46921f56b125bea9a538ca585ad4cede85385be8053ca264"
         },
         {
           "file": "fish/yellow-tang/impostor_normal.ktx2",
-          "bytes": 374588,
-          "sha256": "b91d880013cb53344887ef803f608bc04d9164d23902a755bd3a581f9c2ba142"
+          "bytes": 436833,
+          "sha256": "92530e50afe6a015291386c68f2f2e7a34d633f1977debda86e06e4042f4d993"
         },
         {
           "file": "fish/yellow-tang/lod0.glb",
@@ -2832,25 +2832,25 @@
         "sourceLod": 1,
         "layout": "octahedral",
         "pose": "rest",
-        "grid": 8,
+        "grid": 9,
         "frameSize": 128,
-        "atlasSize": 1024,
+        "atlasSize": 1152,
         "pivot": [
           -0.000181,
           0.005615,
           -0.016176
         ],
-        "radius": 0.084989,
+        "radius": 0.089155,
         "albedo": {
           "file": "fish/yellow-tang/impostor_albedo.ktx2",
-          "bytes": 108612,
-          "sha256": "61478eeb5b54241291c673d3dc5301ff553bdd9f1e08ef720f23dc499430ae31",
+          "bytes": 135444,
+          "sha256": "3ed4a91bbd98855c46921f56b125bea9a538ca585ad4cede85385be8053ca264",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/yellow-tang/impostor_normal.ktx2",
-          "bytes": 374588,
-          "sha256": "b91d880013cb53344887ef803f608bc04d9164d23902a755bd3a581f9c2ba142",
+          "bytes": 436833,
+          "sha256": "92530e50afe6a015291386c68f2f2e7a34d633f1977debda86e06e4042f4d993",
           "codec": "uastc"
         }
       }

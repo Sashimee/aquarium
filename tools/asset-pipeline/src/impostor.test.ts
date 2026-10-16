@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { bakeAtlas, boundingSphere, type BakeMesh } from './impostor.ts';
-import { uvToDirection } from './octahedral.ts';
+import { cellDirection, decodeViewNormal, viewBasis } from './octahedral.ts';
 
 const GRID = 5;
 const FRAME = 16;
@@ -62,12 +62,25 @@ describe('bakeAtlas', () => {
   it('stores the normal facing the camera, in fish space', () => {
     const decoded = (cell: Cell) => {
       const [r, g] = pixel(atlas.normalDepth.data, cell, ...lowerLeft);
-      return uvToDirection(r! / 255, g! / 255);
+      return decodeViewNormal(r! / 255, g! / 255, viewBasis(cellDirection(cell.i, cell.j, GRID)));
     };
     const [fx, fy, fz] = decoded(front);
     expect(fz).toBeGreaterThan(0.99);
     expect(Math.abs(fx) + Math.abs(fy)).toBeLessThan(0.05);
     expect(decoded(back)[2]).toBeLessThan(-0.99);
+  });
+
+  it('decodes to the fish-space normal in a tilted frame', () => {
+    const tilted = bakeAtlas([triangle(0)], GRID, FRAME);
+    const cell: Cell = { i: 3, j: 4 };
+    const d = cellDirection(cell.i, cell.j, GRID);
+    const at = ((cell.j * FRAME + 8) * SIZE + cell.i * FRAME + 8) * 4;
+    const n = decodeViewNormal(
+      tilted.normalDepth.data[at]! / 255,
+      tilted.normalDepth.data[at + 1]! / 255,
+      viewBasis(d),
+    );
+    expect(n[2]).toBeGreaterThan(0.99);
   });
 
   it('stores depth 0.5 on the pivot plane and the fin mask in blue', () => {
@@ -95,5 +108,41 @@ describe('bakeAtlas', () => {
     expect(Buffer.from(again.normalDepth.data).equals(Buffer.from(atlas.normalDepth.data))).toBe(
       true,
     );
+  });
+});
+
+describe('bakeAtlas albedo encoding', () => {
+  it('keeps a mid-grey textured surface at the same sRGB byte', () => {
+    const grey = new Uint8Array(4 * 4 * 4).fill(128);
+    for (let p = 3; p < grey.length; p += 4) grey[p] = 255;
+    const mesh: BakeMesh = {
+      ...triangle(),
+      uvs: new Float32Array([0, 0, 1, 0, 0, 1]),
+      material: {
+        baseColorFactor: [1, 1, 1, 1],
+        baseColor: { width: 4, height: 4, data: grey },
+        alphaCutoff: 0.5,
+      },
+    };
+    const atlas = bakeAtlas([mesh], GRID, FRAME);
+    const [r, g, b, a] = pixel(atlas.albedo.data, { i: 2, j: 4 }, 3, FRAME - 4);
+    expect(a).toBe(255);
+    for (const channel of [r!, g!, b!]) expect(Math.abs(channel - 128)).toBeLessThanOrEqual(1);
+  });
+
+  it('applies the linear base colour factor on top of the decoded texture', () => {
+    const white = new Uint8Array(4 * 4 * 4).fill(255);
+    const mesh: BakeMesh = {
+      ...triangle(),
+      uvs: new Float32Array([0, 0, 1, 0, 0, 1]),
+      material: {
+        baseColorFactor: [0.5, 0.5, 0.5, 1],
+        baseColor: { width: 4, height: 4, data: white },
+        alphaCutoff: 0.5,
+      },
+    };
+    const atlas = bakeAtlas([mesh], GRID, FRAME);
+    const [r] = pixel(atlas.albedo.data, { i: 2, j: 4 }, 3, FRAME - 4);
+    expect(Math.abs(r! - 188)).toBeLessThanOrEqual(1);
   });
 });

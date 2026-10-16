@@ -1,17 +1,24 @@
 import type { Document, Material, Primitive } from '@gltf-transform/core';
 import sharp from 'sharp';
 import { FIN_ID_ATTRIBUTE, FIN_MASK_ATTRIBUTE, type OutputAsset } from './index-schema.ts';
-import { cellDirection, directionToUv, uvToDirection, viewBasis, type Vec3 } from './octahedral.ts';
+import {
+  cellDirection,
+  decodeViewNormal,
+  encodeViewNormal,
+  viewBasis,
+  type Vec3,
+} from './octahedral.ts';
 import { encodeKtx2, resizeImage, type Rgba } from './textures.ts';
 
 export const IMPOSTOR_SOURCE_LOD = 1;
-export const IMPOSTOR_GRID = 8;
+export const IMPOSTOR_GRID = 9;
 export const IMPOSTOR_FRAME_SIZE = 128;
 const SUPERSAMPLE = 4;
 const BLEED_PASSES = 4;
 const TEXTURE_MAX_DIM = 512;
 const BLEND_CUTOFF = 0.15;
-const RADIUS_MARGIN = 1.02;
+export const IMPOSTOR_MAX_MIP_LEVEL = 3;
+const RADIUS_MARGIN = 1.07;
 const BACKGROUND = 30;
 
 export interface BakeMaterial {
@@ -105,7 +112,11 @@ export async function meshesFromDocument(
   return out;
 }
 
-/** Sphere around the bounding-box centre that contains every vertex, with a small margin so frame rims stay empty. */
+/**
+ * Sphere around the bounding-box centre that contains every vertex. The margin leaves a rim of about
+ * half a texel of the coarsest sampled mip level (`IMPOSTOR_MAX_MIP_LEVEL`) empty, which is where the
+ * shader clamps its UVs.
+ */
 export function boundingSphere(meshes: BakeMesh[]): { pivot: Vec3; radius: number } {
   const min = [Infinity, Infinity, Infinity];
   const max = [-Infinity, -Infinity, -Infinity];
@@ -130,6 +141,12 @@ export function boundingSphere(meshes: BakeMesh[]): { pivot: Vec3; radius: numbe
   return { pivot, radius: Math.ceil(farthest * RADIUS_MARGIN * 1e6) / 1e6 };
 }
 
+const SRGB_TO_LINEAR = Float32Array.from({ length: 256 }, (_, b) => {
+  const v = b / 255;
+  return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+});
+
+/** Bilinear tap of an sRGB image; the colour channels come out linear, alpha unchanged. */
 function sampleBilinear(image: Rgba, u: number, v: number, out: number[]): void {
   const x = (u - Math.floor(u)) * image.width - 0.5;
   const y = (v - Math.floor(v)) * image.height - 0.5;
@@ -143,7 +160,9 @@ function sampleBilinear(image: Rgba, u: number, v: number, out: number[]): void 
     const sy = (((y0 + (k >> 1)) % image.height) + image.height) % image.height;
     const weight = (k & 1 ? fx : 1 - fx) * (k >> 1 ? fy : 1 - fy);
     const at = (sy * image.width + sx) * 4;
-    for (let c = 0; c < 4; c++) out[c]! += weight * (image.data[at + c]! / 255);
+    for (let c = 0; c < 4; c++)
+      out[c]! +=
+        weight * (c < 3 ? SRGB_TO_LINEAR[image.data[at + c]!]! : image.data[at + c]! / 255);
   }
 }
 
@@ -358,6 +377,7 @@ export function bakeAtlas(
   for (let j = 0; j < grid; j++)
     for (let i = 0; i < grid; i++) {
       const d = cellDirection(i, j, grid);
+      const basis = viewBasis(d);
       const frame = resolveFrame(
         renderView(meshes, d, pivot, radius, frameSize * SUPERSAMPLE),
         frameSize,
@@ -376,7 +396,7 @@ export function bakeAtlas(
             ? [frame.normal[local * 3]!, frame.normal[local * 3 + 1]!, frame.normal[local * 3 + 2]!]
             : d;
           const length = Math.hypot(n[0], n[1], n[2]) || 1;
-          const [u, v] = directionToUv([n[0] / length, n[1] / length, n[2] / length]);
+          const [u, v] = encodeViewNormal([n[0] / length, n[1] / length, n[2] / length], basis);
           normalDepth.data[at] = byte(u);
           normalDepth.data[at + 1] = byte(v);
           normalDepth.data[at + 2] = known ? byte(frame.fin[local]!) : 0;
@@ -412,13 +432,20 @@ export async function contactSheet(atlases: Atlas[]): Promise<Buffer> {
   const panels = await Promise.all(
     atlases.flatMap((atlas) => {
       const { width, height } = atlas.albedo;
+      const bases = Array.from({ length: atlas.grid * atlas.grid }, (_, f) =>
+        viewBasis(cellDirection(f % atlas.grid, Math.floor(f / atlas.grid), atlas.grid)),
+      );
       const colour = Buffer.alloc(width * height * 3);
       const normal = Buffer.alloc(width * height * 3);
       for (let p = 0; p < width * height; p++) {
         const a = atlas.albedo.data[p * 4 + 3]! / 255;
-        const n = uvToDirection(
+        const frameAt =
+          Math.floor(((p / width) | 0) / atlas.frameSize) * atlas.grid +
+          Math.floor((p % width) / atlas.frameSize);
+        const n = decodeViewNormal(
           atlas.normalDepth.data[p * 4]! / 255,
           atlas.normalDepth.data[p * 4 + 1]! / 255,
+          bases[frameAt]!,
         );
         for (let k = 0; k < 3; k++) {
           colour[p * 3 + k] = Math.round(atlas.albedo.data[p * 4 + k]! * a + BACKGROUND * (1 - a));

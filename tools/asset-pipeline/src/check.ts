@@ -290,7 +290,7 @@ function impostorProblems(asset: OutputAsset, assetsDir: string, problems: strin
       ),
     );
     const farthest = Math.hypot(...reach);
-    if (impostor.radius < Math.max(...reach) * 0.95 || impostor.radius > farthest * 1.05) {
+    if (impostor.radius < Math.max(...reach) * 0.95 || impostor.radius > farthest * 1.1) {
       problems.push(
         `${at}: impostor radius ${impostor.radius} does not fit the model bounds about pivot [${impostor.pivot.join(', ')}] (rebuild with pnpm build:assets)`,
       );
