@@ -28,6 +28,37 @@ async function tapGlass(page: Page, at = 0.5): Promise<void> {
   await page.mouse.click(box.x + box.width * at, box.y + box.height * at);
 }
 
+async function setReducedMotion(page: Page, reduced: boolean): Promise<void> {
+  await page.emulateMedia({ reducedMotion: reduced ? 'reduce' : 'no-preference' });
+  // The page's media-query listeners run in the update-the-rendering step, so two frames after the
+  // query flips the app has observed the change; software rendering can make that take seconds.
+  await page.evaluate(
+    (expected) =>
+      new Promise<void>((resolve) => {
+        const query = window.matchMedia('(prefers-reduced-motion: reduce)');
+        const settle = () => {
+          if (query.matches !== expected) {
+            requestAnimationFrame(settle);
+            return;
+          }
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        };
+        settle();
+      }),
+    reduced,
+  );
+}
+
+async function setHapticsSwitch(page: Page, on: boolean): Promise<void> {
+  const menu = await openAccount(page);
+  await menu.getByRole('link', { name: 'Settings' }).click();
+  const toggle = page.getByRole('checkbox', { name: 'Haptic feedback' });
+  await toggle.setChecked(on);
+  await expect(toggle).toBeChecked({ checked: on });
+  await page.getByRole('link', { name: 'Back to the tank' }).click();
+  await expect(page.locator('#tank')).toBeVisible();
+}
+
 test.describe('haptics', () => {
   test.use({ reducedMotion: 'no-preference' });
 
@@ -43,33 +74,31 @@ test.describe('haptics', () => {
     await page.getByRole('button', { name: 'Drop food' }).click();
     await expect.poll(() => buzzes(page)).toContainEqual([10, 40, 10]);
 
-    const menu = await openAccount(page);
-    await menu.getByRole('link', { name: 'Settings' }).click();
-    const toggle = page.getByRole('checkbox', { name: 'Haptic feedback' });
-    await expect(toggle).toBeChecked();
-    await toggle.uncheck();
-    await expect(toggle).not.toBeChecked();
-
-    await page.getByRole('link', { name: 'Back to the tank' }).click();
-    await expect(page.locator('#tank')).toBeVisible();
+    await setHapticsSwitch(page, false);
     const before = (await buzzes(page)).length;
     await tapGlass(page);
+    await openDock(page, 'Feed', 'Feed the fish');
+    await page.getByRole('button', { name: 'Drop food' }).click();
     expect(await buzzes(page)).toHaveLength(before);
+
+    await setHapticsSwitch(page, true);
+    await tapGlass(page);
+    await expect.poll(() => buzzes(page)).toHaveLength(before + 1);
   });
 
   test('stay silent under reduced motion and resume when it ends', async ({ page }) => {
     await recordVibration(page);
     await registerVerifiedUser(page, 'haptics-motion');
     await openTank(page);
-    await tapGlass(page, 0.48);
+    await tapGlass(page);
     await expect.poll(() => buzzes(page)).toHaveLength(1);
 
-    await page.emulateMedia({ reducedMotion: 'reduce' });
-    await tapGlass(page, 0.5);
+    await setReducedMotion(page, true);
+    await tapGlass(page);
     expect(await buzzes(page)).toHaveLength(1);
 
-    await page.emulateMedia({ reducedMotion: 'no-preference' });
-    await tapGlass(page, 0.52);
+    await setReducedMotion(page, false);
+    await tapGlass(page);
     await expect.poll(() => buzzes(page)).toHaveLength(2);
   });
 
