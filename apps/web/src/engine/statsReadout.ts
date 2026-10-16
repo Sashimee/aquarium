@@ -1,4 +1,5 @@
 import type { BackendKind, EngineStats } from './events';
+import { gpuTimeSpansFrames } from './quality/probe';
 import type { Tier } from './quality/tiers';
 
 /** What the readout needs from the engine, so it can be computed without a GPU. */
@@ -18,6 +19,8 @@ export interface StatsReadout {
   fps: string;
   frame: string;
   gpu: string;
+  /** The GPU time exceeds the frame interval, so it is not one frame's GPU cost. */
+  gpuSpansFrames: boolean;
   dpr: string;
   pixelRatio: string;
   canvas: string;
@@ -38,6 +41,7 @@ export function readStats(
     fps: stats.fps.toFixed(1),
     frame: stats.frameMs.toFixed(2),
     gpu: stats.gpuMs === null ? 'n/a' : stats.gpuMs.toFixed(2),
+    gpuSpansFrames: stats.gpuMs !== null && gpuTimeSpansFrames(stats.gpuMs, stats.frameMs),
     dpr: devicePixelRatio.toFixed(2),
     pixelRatio: source.renderer.getPixelRatio().toFixed(2),
     canvas: `${width}x${height}`,
@@ -60,7 +64,7 @@ export function formatReadout(r: StatsReadout): string {
   return [
     formatHeader(r),
     `fps ${r.fps}  frame ${r.frame} ms`,
-    `gpu ${r.gpu} ms`,
+    `gpu ${r.gpu} ms${r.gpuSpansFrames ? ' (spans frames)' : ''}`,
     `dpr ${r.dpr}  render ${r.pixelRatio}`,
     `canvas ${r.canvas}`,
     `draws ${r.draws}  tris ${r.triangles.toLocaleString('en-US')}`,
