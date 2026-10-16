@@ -3,11 +3,19 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CompressedTexture } from 'three';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
+import { parseFishAssets } from './assetIndex';
 import { disposeFishModel, FIN_ATTRIBUTE, FishAssetLoader, LEG_PART_ID } from './assets';
+import { MOUTH_LODS } from './lod';
 import { curlAboveFloor, curledTip, MAX_TAIL_CURL } from './walk';
 
 const ROOT = '/assets/';
 const PUBLIC = fileURLToPath(new URL('../../public/assets/', import.meta.url));
+/** Discus is left out until #663: one of its primitives has no UVs and the loader rejects it. */
+const SWIMMERS = [
+  ...parseFishAssets(JSON.parse(readFileSync(`${PUBLIC}index.json`, 'utf8'))).values(),
+]
+  .filter((entry) => entry.shrimp === null && entry.id !== 'discus')
+  .map((entry) => entry.id);
 
 function serveShippedAssets(): void {
   vi.stubGlobal('self', globalThis);
@@ -147,15 +155,45 @@ describe('FishAssetLoader', () => {
     },
   );
 
-  it('keeps a fish on the two-component fin attribute with no hips', async () => {
+  it('keeps a fish without hips', async () => {
     serveShippedAssets();
     spyTextureLoads();
     const model = await new FishAssetLoader(new KTX2Loader(), ROOT).load('neon-tetra');
-    for (const part of model.lods.flat()) {
-      expect(part.geometry.getAttribute(FIN_ATTRIBUTE).itemSize).toBe(2);
-      expect(part.legPivots).toEqual([]);
-    }
+    for (const part of model.lods.flat()) expect(part.legPivots).toEqual([]);
     expect(model.tail).toBeNull();
     disposeFishModel(model);
   });
+
+  it('checks the mouth packing of every shipped swimmer', () => {
+    expect(SWIMMERS).toContain('neon-tetra');
+    expect(SWIMMERS.length).toBeGreaterThanOrEqual(15);
+  });
+
+  it.each(SWIMMERS)(
+    'packs the mouth weight of %s into its near LODs only, peaking at 1 off the fins',
+    async (id) => {
+      serveShippedAssets();
+      spyTextureLoads();
+      const model = await new FishAssetLoader(new KTX2Loader(), ROOT).load(id);
+      expect(model.lods.length).toBeGreaterThan(MOUTH_LODS);
+      for (const [level, parts] of model.lods.entries()) {
+        let peak = 0;
+        for (const part of parts) {
+          const fin = part.geometry.getAttribute(FIN_ATTRIBUTE);
+          expect(part.mouth).toBe(level < MOUTH_LODS && fin.itemSize === 3);
+          expect(fin.itemSize).toBe(part.mouth ? 3 : 2);
+          if (!part.mouth) continue;
+          for (let i = 0; i < fin.count; i++) {
+            const weight = fin.getZ(i);
+            expect(weight).toBeGreaterThanOrEqual(0);
+            expect(weight).toBeLessThanOrEqual(1);
+            if (fin.getY(i) !== 0) expect(weight).toBe(0);
+            peak = Math.max(peak, weight);
+          }
+        }
+        expect(peak, `${id} lod${level}`).toBe(level < MOUTH_LODS ? 1 : 0);
+      }
+      disposeFishModel(model);
+    },
+  );
 });
