@@ -15,6 +15,9 @@ const BLOCKED_SUBSTRINGS = [
   'bastard',
   'pussy',
   'hitler',
+  'neonazi',
+  'siegheil',
+  'whitepower',
 ];
 const BLOCKED_WORDS = new Set([
   'ass',
@@ -33,6 +36,8 @@ const BLOCKED_WORDS = new Set([
   'porn',
   'nazi',
   'nazis',
+  'nazism',
+  'nazist',
   'retard',
   'retarded',
   'retards',
