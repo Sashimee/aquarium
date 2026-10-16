@@ -35,7 +35,7 @@ describe('selectInitialTier', () => {
         probeTier: 'high',
         targetMs: TARGET,
       }).tier;
-    // Budget 0.8 x 16.67 = 13.33 ms; tier costs relative to high: 0.35, 0.6, 1, 1.7.
+    // Budget 0.8 x 16.67 = 13.33 ms; tier costs relative to high: 0.45, 0.6, 1, 1.7.
     expect(pick(5)).toBe('ultra');
     expect(pick(7.84)).toBe('ultra');
     expect(pick(8)).toBe('high');

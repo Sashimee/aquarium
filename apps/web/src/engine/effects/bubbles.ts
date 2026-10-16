@@ -80,9 +80,11 @@ export function createBubbles(medium: WaterMedium, bounds: Box3): SpriteEffect {
   const radiance = vertexStage(light.mul(toCamera).mul(popping.oneMinus()));
   const r = length(uv().sub(0.5)).mul(2);
   const rim = smoothstep(0.55, 0.9, r)
-    .mul(smoothstep(1, 0.9, r))
+    .mul(smoothstep(0.9, 1, r).oneMinus())
     .mul(0.35);
-  const highlight = smoothstep(0.22, 0, length(uv().sub(vec2(0.62, 0.68)))).mul(0.6);
+  const highlight = smoothstep(0, 0.22, length(uv().sub(vec2(0.62, 0.68))))
+    .oneMinus()
+    .mul(0.6);
   material.colorNode = radiance.mul(max(rim, highlight));
 
   const sprite = new Sprite(material);
