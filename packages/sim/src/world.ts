@@ -1823,7 +1823,9 @@ export class World {
     const reflex = !Number.isNaN(plan.turnRate);
     const wmax = reflex ? plan.turnRate : sp.maxTurnRate;
     const burstAndCoast = sp.gait === 'burst-and-coast' && !plan.continuous;
-    const coasting = burstAndCoast && this.coasting[i] === 1;
+    // Heading changes are made at the kicks (Calovi et al. 2018): a fish turning off a pane
+    // kicks round rather than gliding on into it.
+    const coasting = burstAndCoast && this.coasting[i] === 1 && this.state[i] !== FishState.Avoid;
     const gain = STEERING.turnGainPerS * (coasting ? BEHAVIOUR.coastTurnGain : 1);
     const smooth = Math.min(1, dt / STEERING.turnSmoothingS);
 
