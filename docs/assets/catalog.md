@@ -308,11 +308,15 @@ Poly Haven, ambientCG and Smithsonian have no underwater or aquarium-backdrop ph
 
 | Slot | Pick | Licence | Source | Caveat |
 |---|---|---|---|---|
-| Dense planted stream | `bg-fw-planted-stream` | CC BY 4.0, Vyacheslav Argenberg | 4032x2688 | A jungle stream bank, not underwater. Strong dappled light. |
+| Dense planted stream | `bg-fw-planted-stream` | CC BY 4.0, Sofia Sadogurska | 3968x2976 | Underwater eelgrass (Zostera marina, a marine plant) that reads as vallisneria. No fish. Crop 3968x1984. |
 | Amazon root tangle | `bg-fw-root-tangle` | CC BY 4.0, Vinno Christopan | 4608x3072 | Mangrove roots, not igapo. Muted brown. |
-| Rocky riverbed | `bg-fw-rocky-riverbed` | CC0, USDA (Flickr) | 8256x4640 | Dry shore pebbles. Crop avoids the concrete lip and pale smear. |
-| Misty lake bank | `bg-fw-misty-lake` | CC BY 4.0, Vyacheslav Argenberg | 4032x2688 | Low contrast, pale at the top. |
+| Rocky riverbed | `bg-fw-rocky-riverbed` | CC0, USDA (Flickr) | 8256x4640 | Wet dark pebbles on a shore, not submerged. Tight crop (6000x3000 at 900,700) excludes the concrete lip and the pale blue smear. |
+| Misty planted scene | `bg-fw-misty-lake` | render (T27), CC BY 4.0 via plant credits | n/a | Pending render, see below. The above-water lake and stream bank photos were dropped as horizon shots. |
 | Deep green plant wall | `bg-fw-plant-wall` | CC0, W.carter | 4378x2918 | Moss and ferns, rich greens. |
+
+Render spec for `bg-fw-misty-lake` (T27, asset-pipeline-engineer; manifest `source: "render"`, status `selected-pending-download`, sha256 null until committed): a dense planted tank from the front glass, 2:1, at least 4096x2048, no fish, no text. Plants (CC-BY, credit Nullified and Valery.Li): Java fern and vallisneria from `sketchfab-f34fac65` mid and back, Pond Weed `sketchfab-b34ed521` clumps left and right. Hardscape and substrate (CC0): `polyhaven-dead_quiver_trunk` as a diagonal root left of centre, `polyhaven-boulder_01` and `polyhaven-coast_rocks_05` as 2 to 3 stacked rocks, `polyhaven-clean_pebbles` foreground with `ambientcg-Ground101` blended as sand. Composition: tall plants and driftwood on the outer thirds, an open lower centre, a soft misty blue-green gradient (pale top, darker base), soft top light and no hard shafts. Camera at plant midline height, 35 mm equivalent, shallow depth of field on the far plants. The licence stays CC-BY because the plant models are CC-BY.
+
+Searched for a real underwater freshwater photo and found none usable: the River Sherbourne and Coventry series (CC BY 4.0) are murky and carry an Insta360 watermark; `Alnus glutinosa 02 by-dpc.jpg` (CC BY 3.0) is a cluttered close-up.
 
 Runners-up not taken: `Nature Aquarium Aquascape.jpg` (CC0; a glass tank with a visible rim), `Misty lake (Unsplash).jpg` and `Mist over the lake shore (Unsplash).jpg` (CC0 on Commons but re-uploaded from Unsplash, so the CC0 claim is second-hand), `Fallen tree and ferns (Unsplash).jpg` (too dark), `Mangrove Floating roots.jpg` (CC BY 4.0, brown water and a bright sky patch).
 
@@ -321,9 +325,13 @@ Runners-up not taken: `Nature Aquarium Aquascape.jpg` (CC0; a glass tank with a 
 | Slot | Pick | Licence | Source | Caveat |
 |---|---|---|---|---|
 | Coral reef wall | `bg-reef-coral-wall` | CC BY 4.0, 74papa | 5472x3072 | Good. A few small fish in the frame. |
-| Open blue with light rays | `bg-reef-light-rays` | CC BY 4.0, Olivier Dugornay (Ifremer) | 7360x4912 | A sun starburst in Brittany: dark teal, no reef. Weakest match to "open blue". |
+| Open blue with light rays | `bg-reef-light-rays` | CC0, Sirrob01 | 3648x2736 | Staghorn reef under bright cyan water with a cloud of small fish and light from the upper right. Soft light fall-off, not distinct shafts. Crop 3648x1824. |
 | Reef slope with fish silhouettes | `bg-reef-fish-slope` | CC BY 4.0, 74papa | 3618x2373 | Smallest source of the set. Anthias are sharp, not silhouettes. |
 | Soft-coral garden | `bg-reef-soft-coral` | CC BY 4.0, AlexeiAVA | 4000x3000 | One sea fan colony, close up. |
 | Dark deep-blue with distant reef | `bg-reef-deep-blue` | CC0, Jstuby | 5184x3888 | Mid blue rather than dark. Darken in the pipeline if wanted. |
 
+Replaced the earlier Brittany sun-starburst pick (dark, no reef). Also seen: `Posidonia oceanica meadow and school of Salema porgy ... Calanque de Sormiou` (CC BY 4.0, marine seagrass, no rays).
+
 Runners-up not taken: `Beneath Sipadan Island.jpeg` (CC0; murky violet-grey), `Caribbean Reef Shark School Tiger Beach Bahamas.jpg` (CC0; the shark is the subject), `Four butterfly fish swim over a coral reef.jpg` (CC BY 4.0; the fish are the subject), `Deep blue cozumel 2018.jpg` (CC0; a diver in frame), the other Ifremer "Ambiance sous-marine" files (a diver in every frame), `Рифы бухты Шарм-Эль-Майя.jpg` (CC0; a close second for the reef wall).
+
+Banding check (2026-10-16): the blue channel of an 800x400 gradient region of the deep-blue, light-rays and coral-wall originals holds a contiguous run of levels (81 of 81, 89 of 90, about 180 of 202), so the banding seen in the contact sheet is the preview PNG palette, not the sources.
