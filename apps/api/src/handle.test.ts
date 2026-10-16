@@ -170,6 +170,69 @@ describe('public handle', () => {
     );
   });
 
+  it('tells a user who changed handle that their old one is held for the cooldown', async () => {
+    const { cookie } = await account(h);
+    const old = unique();
+    await call(h, cookie, 'PUT', '/api/me/handle', { handle: old });
+    await call(h, cookie, 'PUT', '/api/me/handle', { handle: unique() });
+    const back = await call(h, cookie, 'PUT', '/api/me/handle', { handle: old });
+    expect(back.statusCode).toBe(409);
+    const message = apiErrorSchema.parse(back.json()).error.message;
+    expect(message).toContain('possibly by you');
+    expect(message).toContain('your own previous one');
+    expect(message).toContain('30 days');
+  });
+
+  it('serialises a claim behind a release of the same handle', async () => {
+    const alice = await account(h);
+    const bob = await account(h);
+    const old = unique();
+    await call(h, alice.cookie, 'PUT', '/api/me/handle', { handle: old });
+    const results = await Promise.all([
+      call(h, alice.cookie, 'PUT', '/api/me/handle', { handle: unique() }),
+      call(h, bob.cookie, 'PUT', '/api/me/handle', { handle: old }),
+    ]);
+    expect(results[0].statusCode).toBe(200);
+    expect(results[1].statusCode).toBe(409);
+    const owners = await h.database.db
+      .select()
+      .from(schema.user)
+      .where(eq(schema.user.handle, old));
+    expect(owners).toHaveLength(0);
+  });
+
+  it('waits on the per-handle lock before claiming or releasing', async () => {
+    const alice = await account(h);
+    const bob = await account(h);
+    const held = unique();
+    const target = unique();
+    await call(h, alice.cookie, 'PUT', '/api/me/handle', { handle: held });
+    const key = (handle: string) => `handle:${handle}`;
+    const lockSql = 'select pg_advisory_xact_lock(hashtextextended($1, 0))';
+    for (const [cookie, handle] of [
+      [bob.cookie, target],
+      [alice.cookie, unique()],
+    ] as const) {
+      const locked = key(cookie === bob.cookie ? target : held);
+      const client = await h.database.pool.connect();
+      try {
+        await client.query('begin');
+        await client.query(lockSql, [locked]);
+        let done = false;
+        const pending = call(h, cookie, 'PUT', '/api/me/handle', { handle }).then((res) => {
+          done = true;
+          return res;
+        });
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        expect(done).toBe(false);
+        await client.query('commit');
+        expect((await pending).statusCode).toBe(200);
+      } finally {
+        client.release();
+      }
+    }
+  });
+
   it('keeps stored handles readable after the filter learns new words', async () => {
     const { cookie, userId } = await account(h);
     await h.database.db

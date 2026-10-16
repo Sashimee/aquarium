@@ -76,6 +76,12 @@ export function registerHandleRoutes({
           .where(eq(schema.user.id, user.id))
           .for('update');
         if (held?.handle === handle) return;
+        const lockKeys = [handle, ...(held?.handle ? [held.handle] : [])].sort();
+        for (const key of lockKeys) {
+          await tx.execute(
+            sql`select pg_advisory_xact_lock(hashtextextended(${`handle:${key}`}, 0))`,
+          );
+        }
         const [cooling] = await tx
           .select({ handle: schema.releasedHandles.handle })
           .from(schema.releasedHandles)
@@ -110,7 +116,7 @@ export function registerHandleRoutes({
           .send(
             apiError(
               'conflict',
-              `That handle was released recently. It can be claimed again after ${HANDLE_COOLDOWN_DAYS} days.`,
+              `That handle was released recently, possibly by you. A released handle, including your own previous one, can be claimed again after ${HANDLE_COOLDOWN_DAYS} days.`,
             ),
           );
       }
