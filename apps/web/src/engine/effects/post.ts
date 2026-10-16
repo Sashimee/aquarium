@@ -31,14 +31,17 @@ import type { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import type { dof } from 'three/addons/tsl/display/DepthOfFieldNode.js';
 import type { smaa } from 'three/addons/tsl/display/SMAANode.js';
 import type { traa } from 'three/addons/tsl/display/TRAANode.js';
+import type { PhotoLook } from '../photo/look';
 import type { PostChain } from '../quality/tiers';
 import type { WaterShafts } from './shafts';
 
 export interface PostSettings {
   readonly chain: PostChain;
   readonly godRays: boolean;
-  /** Depth of field, only while the camera is in focus mode. */
+  /** Depth of field, only while the camera is in focus mode or photo mode asks for it. */
   readonly depthOfField: boolean;
+  /** Photo mode's lens and grade; without it depth of field focuses itself. */
+  readonly photo: PhotoLook | null;
 }
 
 export interface PostNodes {
@@ -127,12 +130,18 @@ const FOCUS_TAPS = [
 ] as const;
 
 export function postSettingsKey(settings: PostSettings): string {
-  return `${settings.chain}|${settings.godRays}|${settings.depthOfField}`;
+  const photo = settings.photo !== null;
+  return `${settings.chain}|${settings.godRays}|${settings.depthOfField}|${photo}`;
 }
 
 /** Whether a frame needs the post pipeline at all, or can go straight to the canvas. */
 export function needsPost(settings: PostSettings): boolean {
-  return settings.chain !== 'none' || settings.godRays || settings.depthOfField;
+  return (
+    settings.chain !== 'none' ||
+    settings.godRays ||
+    settings.depthOfField ||
+    settings.photo !== null
+  );
 }
 
 /**
@@ -225,14 +234,18 @@ export class PostPipeline {
       this.owned.push(glow);
       colour = colour.add(glow);
     }
+    const { photo } = settings;
+    // The colour matrix commutes with the blur and the gentle contrast curve nearly does, so the
+    // grade can go ahead of depth of field and serve the sharp and the blurred path alike.
+    if (photo !== null) colour = photo.grade(colour);
     let image: Node = colour;
     if (settings.depthOfField) {
       const blur = this.nodes.get('dof')(
         colour,
         scenePass.getViewZNode(),
-        autofocus(depth, camera),
-        DOF.focalLength,
-        DOF.bokehScale,
+        photo?.focusDistance ?? autofocus(depth, camera),
+        photo?.focalRange ?? DOF.focalLength,
+        photo?.bokehScale ?? DOF.bokehScale,
       );
       this.owned.push(blur);
       image = blur;

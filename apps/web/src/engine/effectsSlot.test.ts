@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { EffectsSlot, type FrameEffects } from './effectsSlot';
+import { EffectsSlot, type FrameEffects, type PhotoPost } from './effectsSlot';
+import { PhotoLook } from './photo/look';
 
 class FakeEffects implements FrameEffects {
   temporal = false;
   renders = 0;
   disposed = 0;
   focus: boolean[] = [];
+  photo: (PhotoPost | null)[] = [];
   renderError: Error | null = null;
   focusError: Error | null = null;
   disposeError: Error | null = null;
@@ -18,6 +20,10 @@ class FakeEffects implements FrameEffects {
   setFocusMode(on: boolean): void {
     if (this.focusError !== null) throw this.focusError;
     this.focus.push(on);
+  }
+
+  setPhoto(photo: PhotoPost | null): void {
+    this.photo.push(photo);
   }
 
   ownsMaterial(id: number): boolean {
@@ -64,6 +70,16 @@ describe('EffectsSlot', () => {
     slot.attach(effects);
     slot.setFocusMode(false);
     expect(effects.focus).toEqual([true, false]);
+  });
+
+  it('applies the photo look chosen before the effects arrived, then each change', () => {
+    const { slot } = setup();
+    const shot = { look: new PhotoLook(), depthOfField: true };
+    slot.setPhoto(shot);
+    const effects = new FakeEffects();
+    slot.attach(effects);
+    slot.setPhoto(null);
+    expect(effects.photo).toEqual([shot, null]);
   });
 
   it('refuses a second set of effects', () => {

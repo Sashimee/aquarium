@@ -6,6 +6,7 @@ import {
   PerspectiveCamera,
   SRGBColorSpace,
   Scene,
+  type Vector3,
   WebGPURenderer,
 } from 'three/webgpu';
 import { applyDayLighting, type DayLightingRig, FRESHWATER_FILL_LEVEL } from './dayLighting';
@@ -28,6 +29,9 @@ import { createSharedKtx2, type Ktx2Textures } from './ktx2';
 import { EventBus, type BackendKind, type EngineEvents, type EngineEventBus } from './events';
 import { CullPrewarm } from './cullPrewarm';
 import { ReflectedShadow } from './reflectedShadow';
+import { photoBounds } from './photo/bounds';
+import { deviceTextureLimit } from './photo/capture';
+import { PhotoMode } from './photo/PhotoMode';
 import { RenderLoop } from './renderLoop';
 import { buildOrRelease, DisposeStack, settlesWithin } from './lifecycle';
 import type { EngineOptions } from './options';
@@ -132,6 +136,7 @@ export class Engine {
   readonly quality: QualityManager;
   /** The only KTX2 transcoder for this renderer; every texture loader shares it. */
   readonly ktx2: Ktx2Textures;
+  readonly photo: PhotoMode;
 
   private readonly clock: number | null;
   private readonly showStats: boolean;
@@ -299,6 +304,20 @@ export class Engine {
     this.camera.position.set(0, 0.35, 1.6);
     this.camera.lookAt(0, 0.25, 0);
 
+    this.photo = new PhotoMode({
+      camera: this.camera,
+      scene: this.scene,
+      renderer,
+      events,
+      bounds: photoBounds(dimensions),
+      depthOfFieldTier: () => this.quality.settings.depthOfField,
+      temporal: () => this.effects.temporal,
+      maxTextureSize: () => deviceTextureLimit(renderer.backend),
+      setPost: (post) => this.effects.setPhoto(post),
+      draw: () => this.draw(),
+    });
+    cleanup.add(() => this.photo.dispose());
+
     this.registerQualityFeatures();
 
     const resizeObserver = new ResizeObserver(() => this.resize());
@@ -329,6 +348,11 @@ export class Engine {
   /** Whether frames go through a temporal resolve; `engine:temporal-resolve` tells changes. */
   get temporalResolve(): boolean {
     return this.effects.temporal;
+  }
+
+  /** Where the scene is seen from this frame; LOD and audio should measure from here. */
+  get viewPosition(): Vector3 {
+    return this.photo.viewPosition;
   }
 
   /** Depth of field follows the focus camera, on tiers that allow it. */
@@ -523,13 +547,15 @@ export class Engine {
     this.lastFrameAt = nowMs;
     const deltaS = Math.min(frameMs / 1000, MAX_DELTA_S);
 
+    // Before the callbacks so they see the photo camera, and after so a camera rig can't move it.
+    this.photo.apply();
     for (const callback of this.frameCallbacks) callback(deltaS, nowMs);
+    this.photo.apply();
     this.updateDaylight(nowMs);
     applyDayLighting(this.dayRig, this.daylightLevel);
     if (this.cullPrewarm.begin(nowMs) > 0) this.sceneRevisionValue++;
     try {
-      this.renderSurfaceReflection();
-      if (!this.effects.render()) this.renderer.render(this.scene, this.camera);
+      this.draw();
     } finally {
       this.cullPrewarm.end();
     }
@@ -542,6 +568,11 @@ export class Engine {
       this.stats.frameMsSum += frameMs;
     }
     if (nowMs - this.stats.since >= STATS_INTERVAL_MS) this.emitStats(nowMs);
+  }
+
+  private draw(): void {
+    this.renderSurfaceReflection();
+    if (!this.effects.render()) this.renderer.render(this.scene, this.camera);
   }
 
   private renderSurfaceReflection(): void {

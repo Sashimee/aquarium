@@ -10,7 +10,14 @@ import {
   SubtractiveBlending,
   type Blending,
 } from 'three/webgpu';
-import { blendsVelocity, temporalOutputs } from './post';
+import { PhotoLook } from '../photo/look';
+import {
+  blendsVelocity,
+  needsPost,
+  postSettingsKey,
+  type PostSettings,
+  temporalOutputs,
+} from './post';
 
 describe('blendsVelocity', () => {
   function material(transparent: boolean, blending: Blending): MeshBasicNodeMaterial {
@@ -51,5 +58,20 @@ describe('temporalOutputs', () => {
     expect(outputs.getBlendMode('velocity').blending).toBe(MaterialBlending);
     expect(outputs.getBlendMode('output').blending).toBe(MaterialBlending);
     expect(Object.keys(outputs.outputNodes)).toEqual(['output', 'velocity']);
+  });
+});
+
+describe('photo post settings', () => {
+  const plain: PostSettings = { chain: 'none', godRays: false, depthOfField: false, photo: null };
+
+  it('needs a post pass for the photo grade alone, even with no chain', () => {
+    expect(needsPost(plain)).toBe(false);
+    expect(needsPost({ ...plain, photo: new PhotoLook() })).toBe(true);
+  });
+
+  it('keys a pipeline by whether it grades, not by which look, which lives in uniforms', () => {
+    const graded = postSettingsKey({ ...plain, photo: new PhotoLook() });
+    expect(graded).not.toBe(postSettingsKey(plain));
+    expect(postSettingsKey({ ...plain, photo: new PhotoLook() })).toBe(graded);
   });
 });

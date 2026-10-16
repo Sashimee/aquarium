@@ -69,7 +69,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { InteriorLight } from '../water/interior';
 import type { WaterMedium } from '../water/medium';
 import { AIR_IOR, fresnelDielectric, WATER_IOR } from '../water/optics';
-import { type TankDimensions, validateTank, waterBounds } from './dimensions';
+import { STAND_HEIGHT, type TankDimensions, validateTank, waterBounds } from './dimensions';
 import { createSubstrateGeometry, createSubstrateMaterial } from './substrate';
 import { SurfaceReflection, UNREFLECTED_LAYER } from './surfaceReflection';
 
@@ -637,7 +637,7 @@ export class Tank {
 
   private addStand(): void {
     const { length: l, depth: d } = this.dimensions;
-    const height = 0.75;
+    const height = STAND_HEIGHT;
     const material = new MeshStandardNodeMaterial({ color: new Color(0x1d1c1b), roughness: 0.55 });
     material.name = 'stand';
     const mesh = this.track(new Mesh(new BoxGeometry(l + 0.04, height, d + 0.04), material));
