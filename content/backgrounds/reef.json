@@ -1,0 +1,37 @@
+[
+  {
+    "id": "bg-reef-coral-wall",
+    "biome": "reef",
+    "title": "Coral wall",
+    "file": null,
+    "asset": null
+  },
+  {
+    "id": "bg-reef-light-rays",
+    "biome": "reef",
+    "title": "Light rays",
+    "file": null,
+    "asset": null
+  },
+  {
+    "id": "bg-reef-fish-slope",
+    "biome": "reef",
+    "title": "Fish slope",
+    "file": null,
+    "asset": null
+  },
+  {
+    "id": "bg-reef-soft-coral",
+    "biome": "reef",
+    "title": "Soft coral",
+    "file": null,
+    "asset": null
+  },
+  {
+    "id": "bg-reef-deep-blue",
+    "biome": "reef",
+    "title": "Deep blue",
+    "file": null,
+    "asset": null
+  }
+]

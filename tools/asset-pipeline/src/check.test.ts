@@ -214,6 +214,51 @@ describe('checkAssets', () => {
     );
   }
 
+  function ktx2(width: number, colorModel: number, transfer: number, extra = 0): Uint8Array {
+    const out = new Uint8Array(104 + 32 + 16 + extra);
+    out.set([0xab, 0x4b, 0x54, 0x58, 0x20, 0x32, 0x30, 0xbb, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const view = new DataView(out.buffer);
+    view.setUint32(20, width, true);
+    view.setUint32(24, width, true);
+    view.setUint32(40, 1, true);
+    view.setUint32(48, 104, true);
+    view.setUint32(52, 32, true);
+    view.setBigUint64(80, 136n, true);
+    view.setBigUint64(88, BigInt(16 + extra), true);
+    out[104 + 12] = colorModel;
+    out[104 + 14] = transfer;
+    return out;
+  }
+
+  function impostorOf(
+    options: { size?: number; albedoModel?: number; normalModel?: number; extra?: number } = {},
+  ): { impostor: NonNullable<OutputAsset['impostor']>; files: OutputAsset['files'] } {
+    const size = options.size ?? 64;
+    const albedo = put(
+      'fish/tetra/impostor_albedo.ktx2',
+      ktx2(size, options.albedoModel ?? 163, 2),
+    );
+    const normalDepth = put(
+      'fish/tetra/impostor_normal.ktx2',
+      ktx2(size, options.normalModel ?? 166, 1, options.extra ?? 0),
+    );
+    return {
+      impostor: {
+        sourceLod: 1,
+        layout: 'octahedral',
+        pose: 'rest',
+        grid: 4,
+        frameSize: 16,
+        atlasSize: 64,
+        pivot: [0, 0, 0],
+        radius: 0.02,
+        albedo: { ...albedo, codec: 'etc1s' },
+        normalDepth: { ...normalDepth, codec: 'uastc' },
+      },
+      files: [albedo, normalDepth],
+    };
+  }
+
   const FISH_ATTRIBUTES = ['POSITION', FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE, MOUTH_ATTRIBUTE];
 
   function fishAsset(
@@ -221,9 +266,11 @@ describe('checkAssets', () => {
       attributes?: string[];
       triangles?: number[];
       lodCount?: number;
+      impostor?: Parameters<typeof impostorOf>[0] | false;
       mouth?: number[];
     } = {},
   ): OutputAsset {
+    const atlas = options.impostor === false ? null : impostorOf(options.impostor);
     const attributes = options.attributes ?? FISH_ATTRIBUTES;
     const triangles = options.triangles ?? [300, 150, 50];
     const lodCount = options.lodCount ?? 3;
@@ -241,7 +288,11 @@ describe('checkAssets', () => {
       modifications: [],
       lods,
       textures: [],
-      files: lods.map(({ file, bytes, sha256: digest }) => ({ file, bytes, sha256: digest })),
+      files: [
+        ...lods.map(({ file, bytes, sha256: digest }) => ({ file, bytes, sha256: digest })),
+        ...(atlas?.files ?? []),
+      ],
+      ...(atlas ? { impostor: atlas.impostor } : {}),
       fish: {
         standardLengthM: 0.03,
         lengthSource: 'recipe',
@@ -641,6 +692,41 @@ describe('checkAssets', () => {
   it('fails a fish whose LODs do not get lighter', () => {
     const problems = checkAssets(inputFor([fishAsset({ triangles: [300, 300, 50] })])).join('\n');
     expect(problems).toContain('is not lighter than LOD 0');
+  });
+
+  describe('impostor atlas', () => {
+    const problemsOf = (asset: OutputAsset): string => checkAssets(inputFor([asset])).join('\n');
+
+    it('fails a fish with no impostor', () => {
+      expect(problemsOf(fishAsset({ impostor: false }))).toContain('has no impostor atlas');
+    });
+
+    it('fails an atlas whose pixel size differs from the index', () => {
+      expect(problemsOf(fishAsset({ impostor: { size: 32 } }))).toContain('is 32x32');
+    });
+
+    it('fails when the codec split is swapped', () => {
+      const problems = problemsOf(fishAsset({ impostor: { albedoModel: 166, normalModel: 163 } }));
+      expect(problems).toContain('impostor_albedo.ktx2 must be ETC1S');
+      expect(problems).toContain('impostor_normal.ktx2 must be UASTC');
+    });
+
+    it('fails atlases over the per-species budget', () => {
+      expect(problemsOf(fishAsset({ impostor: { extra: 1_000_000 } }))).toContain(
+        'per-species budget',
+      );
+    });
+
+    it('fails a radius that cannot hold the model bounds', () => {
+      const asset = {
+        ...fishAsset(),
+        bounds: {
+          min: [-0.1, -0.1, -0.1] as [number, number, number],
+          max: [0.1, 0.1, 0.1] as [number, number, number],
+        },
+      };
+      expect(problemsOf(asset)).toContain('impostor radius');
+    });
   });
 
   it('fails a fish without its debug render or fish block', () => {
