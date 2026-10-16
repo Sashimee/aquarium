@@ -70,9 +70,9 @@ describe('security headers', () => {
     expect(csp).toContain("script-src 'self' 'wasm-unsafe-eval';");
     expect(csp).not.toMatch(/'unsafe-eval'/);
     expect(csp).not.toMatch(/script-src[^;]*'unsafe-inline'/);
-    expect(csp).toContain("worker-src 'self' blob:");
-    expect(csp).toContain("manifest-src 'self'");
-    expect(csp).toContain("img-src 'self' data: blob:");
+    expect(csp).toMatch(/(^|; )worker-src 'self' blob:(;|$)/);
+    expect(csp).toMatch(/(^|; )manifest-src 'self'(;|$)/);
+    expect(csp).toMatch(/(^|; )img-src 'self' data: blob:(;|$)/);
     expect(csp).toContain("frame-ancestors 'none'");
     expect(csp).not.toContain('polyhaven');
     expect(res.headers['x-content-type-options']).toBe('nosniff');
