@@ -74,6 +74,7 @@ export const STEERING = {
   plantSlowdown: 0.3,
   spawnAttempts: 200,
   tiltClearanceThickness: 1.5,
+  liftOffPitchRad: 10 * DEG,
   detourS: 1.5,
   minTurnRadiusBodyLengths: 0.4,
   pivotTurnRateRadPerS: 1,
@@ -1499,7 +1500,10 @@ export class World {
     // swings the snout or tail into it (a tang lifting off the rock it grazed, a cory nosing the
     // sand with the floor masked), so the tilt is capped to what the clearance allows.
     this.capTilt(i, dHere, verticalHere);
-    if (!plan.floor) this.capTilt(i, py - ground, 1);
+    // A fish resting where the floor leaves no room to tilt could never nose up to leave it;
+    // the dash for air kicks off at a small angle and the climb itself makes the room.
+    const liftOff = plan.state === FishState.Gulp ? STEERING.liftOffPitchRad : 0;
+    if (!plan.floor) this.capTilt(i, py - ground, 1, liftOff);
     if (!plan.surface) this.capTilt(i, top - py, 1);
   }
 
@@ -1761,12 +1765,12 @@ export class World {
     return worst;
   }
 
-  private capTilt(i: number, clearance: number, verticality: number): void {
+  private capTilt(i: number, clearance: number, verticality: number, minNoseUp = 0): void {
     const half = (BEHAVIOUR.bodySampleOffsets[0] ?? 0) * (this.bodyLength[i] ?? 0) * verticality;
     const room = clearance - (this.thickness[i] ?? 0) * STEERING.tiltClearanceThickness;
     if (room >= half) return;
     const tilt = room > 0 ? Math.asin(room / half) : 0;
-    this.targetPitch[i] = clamp(this.targetPitch[i] ?? 0, -tilt, tilt);
+    this.targetPitch[i] = clamp(this.targetPitch[i] ?? 0, -tilt, Math.max(tilt, minNoseUp));
   }
 
   private integrate(i: number): void {
@@ -1806,10 +1810,9 @@ export class World {
       yawRate = (this.yawRate[i] ?? 0) + (yawCmd - (this.yawRate[i] ?? 0)) * smooth;
       // Depth is trimmed by the fins through the whole stroke, not by the tail beat, so pitch
       // does not follow the burst-and-coast steering gain. Only a held posture (a cory nosing
-      // down, a dart for air) pitches as fast as the fish can turn.
-      const pitchLimit = Number.isNaN(plan.pitch)
-        ? Math.min(wmax, STEERING.steeredPitchRateRadPerS)
-        : wmax;
+      // down) and the dash for air pitch as fast as the fish can turn.
+      const fastPitch = !Number.isNaN(plan.pitch) || plan.state === FishState.Gulp;
+      const pitchLimit = fastPitch ? wmax : Math.min(wmax, STEERING.steeredPitchRateRadPerS);
       const pitchCmd = clamp(
         ((this.targetPitch[i] ?? 0) - pitch) * STEERING.pitchGainPerS,
         -pitchLimit,

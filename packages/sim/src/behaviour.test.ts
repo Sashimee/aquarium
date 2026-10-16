@@ -151,6 +151,8 @@ describe('corydoras', { timeout: LONG }, () => {
     expect(perHour).toBeGreaterThan(1);
     expect(perHour).toBeLessThan(45);
     expect(reachedSurface).toBeGreaterThanOrEqual(Math.max(1, gulps - w.count));
+    // A dash that times out short of the air is a failed breath, not a slow one.
+    expect(reachedSurface / gulps).toBeGreaterThanOrEqual(0.8);
   });
 });
 

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { speciesContentSchema } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
+import { FishState } from './snapshot.ts';
 import { World, type FishSpawn } from './world.ts';
 
 const dir = join(import.meta.dirname, '../../../content/species');
@@ -25,7 +26,8 @@ const PRESETS: Record<string, Record<string, number>> = {
     'banggai-cardinalfish': 1,
   },
 };
-const SHOALERS = new Set(['neon-tetra', 'guppy']);
+/** Held postures pitch at the full turn rate by design: nosing into the sand, the dash for air. */
+const HELD_POSTURES: ReadonlySet<number> = new Set([FishState.Forage, FishState.Gulp]);
 
 function load(id: string) {
   return speciesContentSchema.parse(JSON.parse(readFileSync(join(dir, `${id}.json`), 'utf8')));
@@ -60,6 +62,7 @@ function signFlips(x: readonly number[], deadband: number): number {
 interface Cruise {
   /** High-pass vertical displacement, RMS in body lengths. */
   bob: number;
+  /** Outside held postures. */
   maxPitchRate: number;
   nodsPerS: number;
 }
@@ -78,12 +81,14 @@ function cruise(preset: string, seed: number): Map<string, Cruise[]> {
   });
   const ys: number[][] = fish.map(() => []);
   const rates: number[][] = fish.map(() => []);
+  const steered: number[][] = fish.map(() => []);
   for (let t = 0; t < SETTLE_STEPS + SECONDS * HZ; t++) {
     w.step();
     if (t < SETTLE_STEPS) continue;
     for (let i = 0; i < w.count; i++) {
       ys[i]?.push(w.position[i * 3 + 1] ?? 0);
       rates[i]?.push(w.pitchRate[i] ?? 0);
+      if (!HELD_POSTURES.has(w.state[i] ?? -1)) steered[i]?.push(Math.abs(w.pitchRate[i] ?? 0));
     }
   }
   const out = new Map<string, Cruise[]>();
@@ -93,7 +98,7 @@ function cruise(preset: string, seed: number): Map<string, Cruise[]> {
     const runs = out.get(w.speciesOf(i).id) ?? [];
     runs.push({
       bob: rms(highPass(y)) / (w.bodyLength[i] ?? 1),
-      maxPitchRate: Math.max(...rate.map(Math.abs)),
+      maxPitchRate: Math.max(0, ...(steered[i] ?? [])),
       nodsPerS: signFlips(rate, NOD_DEADBAND) / SECONDS,
     });
     out.set(w.speciesOf(i).id, runs);
@@ -115,11 +120,10 @@ describe('cruising fish swim level, without bobbing or nodding', { timeout: 120_
       const bob = mean(runs.map((r) => r.bob));
       const worstRate = Math.max(...runs.map((r) => r.maxPitchRate));
       const nods = mean(runs.map((r) => r.nodsPerS));
-      // Shoalers jostle for place in a moving school; loners hold a depth.
-      expect(bob, `${id} bob (body lengths)`).toBeLessThan(SHOALERS.has(id) ? 0.04 : 0.0175);
-      // Nosing into the sand and darting up for air are held postures, pitched at full turn rate.
-      const peakCap = load(id).behaviour.traits.includes('air-gulp') ? 150 : 90;
-      expect(worstRate / DEG, `${id} peak pitch rate (°/s)`).toBeLessThan(peakCap);
+      // Fish in a group jostle for place in it; loners hold a depth.
+      const grouped = load(id).behaviour.schooling !== undefined;
+      expect(bob, `${id} bob (body lengths)`).toBeLessThan(grouped ? 0.04 : 0.0175);
+      expect(worstRate / DEG, `${id} peak steered pitch rate (°/s)`).toBeLessThan(90);
       expect(nods, `${id} nods per second`).toBeLessThan(0.5);
     }
   });
