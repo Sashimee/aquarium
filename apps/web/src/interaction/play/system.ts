@@ -10,9 +10,17 @@ import type { ReachBridge } from '../food/clipReach';
 import { FoodField } from '../food/particles';
 import { sceneToSim } from '../food/simSpace';
 import { BubbleField } from './bubbles';
-import { PlayController, type Ray, type StimulusLike } from './controller';
+import {
+  PlayController,
+  type Ray,
+  type SimToy,
+  type StimulusLike,
+  type ToyNudge,
+} from './controller';
+import { FeedingGame, localBest } from './game';
 import { RippleField } from './ripples';
 import { PlayVisuals } from './visuals';
+import { speciesInput } from '../../fish/species';
 
 /** The parts of the scene the play layer reads. */
 export interface PlayScene {
@@ -25,6 +33,12 @@ export interface PlaySimBridge extends FoodBridge, ReachBridge {
   setLure?(position: readonly [number, number, number] | null): void;
   netTap?(ray: Ray): void;
   pickFish?(ray: Ray): (() => Vec3 | null) | null;
+  /** The toys as points of interest. A mirror is where a betta flares; a ball is a thing to nudge. */
+  setToys?(toys: readonly SimToy[]): void;
+  /** Fish bumping the ball; returns the unsubscribe. */
+  onToyNudge?(listener: (nudge: ToyNudge) => void): () => void;
+  /** A swimming fish's position by server id, in scene space, or null. */
+  fishPoint?(fishId: string): Vec3 | null;
 }
 
 export interface PlaySystem {
@@ -59,6 +73,9 @@ export function createPlaySystem(
   const bubbles = new BubbleField(box.max.y);
   const ripples = new RippleField();
   const visuals = new PlayVisuals();
+  const game = new FeedingGame(
+    localBest(safeStorage(), (message, cause) => console.error(message, cause)),
+  );
   engine.scene.add(visuals.group);
 
   const raycaster = new Raycaster();
@@ -100,6 +117,13 @@ export function createPlaySystem(
       sim.setLure?.([lureSim[0] ?? 0, lureSim[1] ?? 0, lureSim[2] ?? 0]);
     },
     setLaserDot: (p) => visuals.setLaser(p),
+    current: (x, y, z, out) => scene.current.sample(x, y, z, out),
+    toyVisuals: visuals,
+    setToys: sim.setToys?.bind(sim),
+    onToyNudge: sim.onToyNudge?.bind(sim),
+    fishPoint: sim.fishPoint?.bind(sim),
+    boldnessOf: (species) => speciesInput(species)?.behaviour.boldness,
+    game,
     report: (message, cause) => console.error(message, cause),
     now: () => performance.now(),
   });
@@ -120,8 +144,19 @@ export function createPlaySystem(
       stopRequests();
       controller.dispose();
       sim.setLure?.(null);
+      interaction.emit('toys:changed', { mirror: false, ball: false });
+      interaction.emit('game:state', { view: game.cancel() });
       link.dispose();
       visuals.dispose();
     },
   };
+}
+
+function safeStorage(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    // Blocked storage (cookies off) throws on access; the best then lasts the session only.
+    return null;
+  }
 }
