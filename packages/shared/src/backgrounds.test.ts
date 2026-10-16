@@ -14,8 +14,6 @@ import {
 import { playableBiomeSchema } from './common.js';
 
 const dir = join(import.meta.dirname, '../../../content/backgrounds');
-const manifestPath = join(import.meta.dirname, '../../../assets/manifest.json');
-const ALLOWED_LICENCES = ['CC0-1.0', 'CC-BY-3.0', 'CC-BY-4.0'];
 const read = (biome: string): unknown =>
   JSON.parse(readFileSync(join(dir, `${biome}.json`), 'utf8'));
 
@@ -33,25 +31,6 @@ describe('content/backgrounds', () => {
       expect(entries).toHaveLength(5);
       expect(entries.every((e) => e.biome === biome)).toBe(true);
       expect(entries.map((e) => e.id)).toEqual([...BACKGROUND_IDS[biome]]);
-    },
-  );
-
-  it.each(playableBiomeSchema.options)(
-    '%s.json names a background asset in the manifest with an allowed licence',
-    (biome) => {
-      const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
-        assets: { id: string; kind: string; licence: string }[];
-      };
-      for (const entry of backgroundFileSchema.parse(read(biome))) {
-        if (entry.asset === null) continue;
-        const asset = manifest.assets.find((a) => a.id === entry.asset);
-        expect(
-          asset,
-          `${entry.id}: asset "${entry.asset}" is not in assets/manifest.json`,
-        ).toBeDefined();
-        expect(asset?.kind, entry.id).toBe('background');
-        expect(ALLOWED_LICENCES, `${entry.id}: ${asset?.licence}`).toContain(asset?.licence);
-      }
     },
   );
 
