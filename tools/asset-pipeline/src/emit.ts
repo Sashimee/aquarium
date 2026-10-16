@@ -15,6 +15,7 @@ import {
   type WrittenFile,
 } from './glb.ts';
 import { LOD_COUNT, type AssetKind, type OutputAsset } from './index-schema.ts';
+import { renormaliseMouth } from './mouth.ts';
 import { simplifyPrimitive, triangleCountOf } from './lod.ts';
 import type { MaterialDef, Part, TextureSource } from './parts.ts';
 import { encodeTiers, type EncodedVariant, type TextureCodec, type Tier } from './textures.ts';
@@ -207,6 +208,7 @@ export async function emitAsset(input: EmitInput): Promise<OutputAsset> {
         plan.prepare?.(prim, level);
         simplifyPrimitive(prim, { ratio: plan.ratios[level]!, minTriangles: plan.minTriangles });
       }
+    for (const mesh of doc.getRoot().listMeshes()) renormaliseMouth(mesh.listPrimitives());
     await doc.transform(prune());
     const textureByName = new Map(
       doc
