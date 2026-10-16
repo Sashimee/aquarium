@@ -26,6 +26,7 @@ describe('readStats', () => {
       fps: '29.9',
       frame: '33.40',
       gpu: 'n/a',
+      gpuSpansFrames: false,
       dpr: '3.00',
       pixelRatio: '1.50',
       canvas: '590x1278',
@@ -35,7 +36,19 @@ describe('readStats', () => {
   });
 
   it('shows gpu time when the backend can measure it', () => {
-    expect(readStats(source, { ...stats, gpuMs: 7.125 }, 1).gpu).toBe('7.13');
+    const r = readStats(source, { ...stats, gpuMs: 7.125 }, 1);
+    expect(r.gpu).toBe('7.13');
+    expect(r.gpuSpansFrames).toBe(false);
+  });
+
+  it('flags a gpu time longer than the frame interval as spanning frames', () => {
+    const r = readStats(source, { ...stats, frameMs: 16.7, gpuMs: 45.4 }, 3);
+    expect(r.gpuSpansFrames).toBe(true);
+    expect(formatReadout(r).split('\n')[2]).toBe('gpu 45.40 ms (spans frames)');
+  });
+
+  it('accepts a gpu time up to the frame interval on a GPU-bound device', () => {
+    expect(readStats(source, { ...stats, frameMs: 33.4, gpuMs: 33 }, 1).gpuSpansFrames).toBe(false);
   });
 });
 

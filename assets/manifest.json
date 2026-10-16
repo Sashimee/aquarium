@@ -366,7 +366,7 @@
       "modifications": [
         "merged meshes, dropped skeleton, animation and unused attributes",
         "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
-        "baked fin mask and fin id vertex attributes",
+        "baked fin mask, fin id and mouth mask vertex attributes",
         "colour and normal maps re-encoded to KTX2 at 1k and 2k"
       ],
       "status": "downloaded",
@@ -427,7 +427,7 @@
       "modifications": [
         "merged meshes, dropped skeleton, animation and unused attributes",
         "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
-        "baked fin mask and fin id vertex attributes",
+        "baked fin mask, fin id and mouth mask vertex attributes",
         "colour and normal maps re-encoded to KTX2 at 1k and 2k",
         "eyeballs kept from their own mesh and re-seated on the head, outside fin classification"
       ],
@@ -484,7 +484,7 @@
       "modifications": [
         "merged meshes, dropped skeleton, animation and unused attributes",
         "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
-        "baked fin mask and fin id vertex attributes",
+        "baked fin mask, fin id and mouth mask vertex attributes",
         "colour and normal maps re-encoded to KTX2 at 1k and 2k"
       ],
       "status": "downloaded",
@@ -540,7 +540,7 @@
       "modifications": [
         "merged meshes, dropped skeleton, animation and unused attributes",
         "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
-        "baked fin mask and fin id vertex attributes",
+        "baked fin mask, fin id and mouth mask vertex attributes",
         "colour and normal maps re-encoded to KTX2 at 1k and 2k"
       ],
       "status": "downloaded",
@@ -596,7 +596,7 @@
       "modifications": [
         "merged meshes, dropped skeleton, animation and unused attributes",
         "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
-        "baked fin mask and fin id vertex attributes",
+        "baked fin mask, fin id and mouth mask vertex attributes",
         "colour and normal maps re-encoded to KTX2 at 1k and 2k"
       ],
       "status": "downloaded",
@@ -642,7 +642,7 @@
       "modifications": [
         "merged meshes, dropped skeleton, animation and unused attributes",
         "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
-        "baked fin mask and fin id vertex attributes",
+        "baked fin mask, fin id and mouth mask vertex attributes",
         "colour and normal maps re-encoded to KTX2 at 1k and 2k",
         "kept one of four colourways, KHR_materials_unlit replaced by PBR"
       ],
@@ -704,7 +704,7 @@
       "modifications": [
         "merged meshes, dropped skeleton, animation and unused attributes",
         "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
-        "baked fin mask and fin id vertex attributes",
+        "baked fin mask, fin id and mouth mask vertex attributes",
         "colour and normal maps re-encoded to KTX2 at 1k and 2k"
       ],
       "status": "downloaded",
@@ -760,7 +760,7 @@
       "modifications": [
         "merged meshes, dropped skeleton, animation and unused attributes",
         "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
-        "baked fin mask and fin id vertex attributes",
+        "baked fin mask, fin id and mouth mask vertex attributes",
         "colour and normal maps re-encoded to KTX2 at 1k and 2k"
       ],
       "status": "downloaded",
@@ -1844,7 +1844,7 @@
       "modifications": [
         "merged meshes, dropped skeleton, animation and unused attributes",
         "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
-        "baked fin mask and fin id vertex attributes",
+        "baked fin mask, fin id and mouth mask vertex attributes",
         "colour and normal maps re-encoded to KTX2 at 1k and 2k",
         "4096 px colour and normal maps downscaled to the 1k and 2k tiers",
         "'Material' (22 triangles, the mouth patch) dropped: it reused the body normal map; Material.001, .002 and .003 kept"
@@ -1973,7 +1973,7 @@
       "modifications": [
         "merged meshes, dropped skeleton, animation and unused attributes",
         "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
-        "baked fin mask and fin id vertex attributes",
+        "baked fin mask, fin id and mouth mask vertex attributes",
         "colour and normal maps re-encoded to KTX2 at 1k and 2k",
         "decimated from 40k to 8k triangles at LOD0",
         "rigid spikes around the head flattened into the skin, and soft tapered tentacles added along the snout margin and top of the snout, with fewer segments and sides per LOD, forks only at LOD0 and only the two front tentacles per side at LOD2",

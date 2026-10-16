@@ -2,6 +2,8 @@ import { TIER_COST, TIERS, tierIndex, type Tier } from './tiers';
 
 export type TimingSignal = 'gpu' | 'frame';
 
+const GPU_SPAN_TOLERANCE = 1.1;
+
 export interface ProbeInput {
   /** Per-frame timings in ms measured while rendering at `probeTier`. */
   samples: readonly number[];
@@ -33,6 +35,14 @@ export function median(values: readonly number[]): number | null {
   const upper = sorted[sorted.length >> 1];
   if (lower === undefined || upper === undefined) return null;
   return (lower + upper) / 2;
+}
+
+/**
+ * A GPU time over the frame interval cannot be one frame's work, so the timestamps it sums span
+ * several frames (seen on iOS, where they read 23-56 ms at a steady 60 fps) and mean nothing.
+ */
+export function gpuTimeSpansFrames(gpuMs: number, frameMs: number): boolean {
+  return frameMs > 0 && gpuMs > frameMs * GPU_SPAN_TOLERANCE;
 }
 
 function highestTierWithin(
