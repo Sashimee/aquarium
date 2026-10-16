@@ -1,4 +1,4 @@
-import type { Biome } from '@aquarium/shared';
+import type { Biome, PlayableBiome } from '@aquarium/shared';
 import { useEffect, useState } from 'react';
 import type { CameraMode } from '../interaction/camera';
 import { useAuth, useBridge, useCameraMode, useDemoBiome } from './context';
@@ -9,9 +9,15 @@ import { useActiveTank, useOptionalSession, useSessionState } from './session';
 import { canSwitch, planSwitch, shownBiome } from './tankSwitch';
 import { gaugeSummary, tankGauges, timeOfDay, type TimeOfDay } from './tankStatus';
 
-const BIOME_LABEL: Record<Biome, string> = { freshwater: 'Freshwater', reef: 'Reef' };
+const BIOME_LABEL: Record<Biome, string> = {
+  freshwater: 'Freshwater',
+  reef: 'Reef',
+  cichlid: 'Cichlid',
+  blackwater: 'Blackwater',
+  mangrove: 'Mangrove',
+};
 
-const TANK_TYPES: readonly { biome: Biome; label: string }[] = [
+const TANK_TYPES: readonly { biome: PlayableBiome; label: string }[] = [
   { biome: 'freshwater', label: 'Freshwater' },
   { biome: 'reef', label: 'Reef' },
 ];
@@ -100,14 +106,14 @@ export function CameraControls() {
   );
 }
 
-export function TankTypeSwitch({ onCreate }: { onCreate(biome: Biome): void }) {
+export function TankTypeSwitch({ onCreate }: { onCreate(biome: PlayableBiome): void }) {
   const { interaction } = useBridge();
   const session = useOptionalSession();
   const state = useSessionState();
   const demo = useDemoBiome();
   const shown = shownBiome(state, demo);
   const enabled = canSwitch(state);
-  const choose = (target: Biome) => {
+  const choose = (target: PlayableBiome) => {
     const plan = planSwitch(state, demo, target);
     switch (plan.kind) {
       case 'none':

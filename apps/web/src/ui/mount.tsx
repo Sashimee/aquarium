@@ -4,6 +4,7 @@ import { haptics } from '../interaction/haptics';
 import { watchReducedMotion } from '../interaction/motion';
 import { App } from './App';
 import { UiProviders, type UiBridge } from './context';
+import { startPwa } from '../pwa/register';
 import { SessionProvider } from './session';
 import './styles.css';
 import './game.css';
@@ -13,6 +14,7 @@ import './loading.css';
 export function mountUi(container: HTMLElement, bridge: UiBridge): () => void {
   const stopHaptics = haptics.attach(bridge.interaction);
   const stopMotion = watchReducedMotion((reduced) => haptics.setReducedMotion(reduced));
+  startPwa();
   const root = createRoot(container);
   root.render(
     <StrictMode>

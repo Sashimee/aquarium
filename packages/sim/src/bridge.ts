@@ -3,6 +3,7 @@ import type { Anchor, Stimulus } from './behaviour.ts';
 import type { Point3 } from './decor.ts';
 import { FOOD_STRIDE, type AteEvent } from './food.ts';
 import { SNAPSHOT_STRIDE, type Snapshot } from './snapshot.ts';
+import type { SimToy, ToyNudge } from './toys.ts';
 import {
   STEP_HZ,
   World,
@@ -38,6 +39,8 @@ export type SimCommand =
   /** The full collider set in the shared format; hard ones block fish, soft ones (plants) push them aside. */
   | { readonly type: 'decor'; readonly colliders: readonly Collider[] }
   | { readonly type: 'anchors'; readonly anchors: readonly Anchor[] }
+  /** Every toy in the tank, `[]` for none; resend a drifting ball as it moves. See `World.setToys`. */
+  | { readonly type: 'toys'; readonly toys: readonly SimToy[] }
   /** Float32 records of `[id, x, y, z, typeIndex]`; see `World.setFood`. */
   | { readonly type: 'food'; readonly buffer: ArrayBuffer }
   | {
@@ -75,6 +78,7 @@ export type SimEvent =
       readonly buffer: ArrayBuffer;
     }
   | SimAte
+  | SimToyNudges
   | SimLayout
   | SimGrazeReach
   /** `request` is set when the failed command was an `init`, `addFish`, `removeFish` or `canGrazeAt`. */
@@ -115,6 +119,14 @@ export interface SimAte {
   readonly events: readonly AteEvent[];
 }
 
+/** Balls fish bumped in the steps leading up to the snapshot at `tick`, which follows it. */
+export interface SimToyNudges {
+  readonly type: 'toyNudge';
+  readonly epoch: number;
+  readonly tick: number;
+  readonly nudges: readonly ToyNudge[];
+}
+
 /** The structural slice of `Worker`, `DedicatedWorkerGlobalScope` and `MessagePort` we use. */
 export interface MessagePortLike {
   postMessage(message: unknown, transfer: ArrayBuffer[]): void;
@@ -151,12 +163,21 @@ const COMMAND_TYPES = new Set([
   'lure',
   'decor',
   'anchors',
+  'toys',
   'food',
   'addFish',
   'removeFish',
   'canGrazeAt',
 ]);
-const EVENT_TYPES = new Set(['ready', 'snapshot', 'ate', 'layout', 'grazeReach', 'error']);
+const EVENT_TYPES = new Set([
+  'ready',
+  'snapshot',
+  'ate',
+  'toyNudge',
+  'layout',
+  'grazeReach',
+  'error',
+]);
 
 function messageType(data: unknown, allowed: ReadonlySet<string>): string {
   if (typeof data === 'object' && data !== null && 'type' in data) {
@@ -200,9 +221,15 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
     port.postMessage(event, transfer);
   };
 
-  const emitSnapshot = (w: World): void => {
+  const emitEvents = (w: World): void => {
     const events = w.takeAteEvents();
     if (events.length > 0) send({ type: 'ate', epoch, tick: w.tick, events });
+    const nudges = w.takeToyNudges();
+    if (nudges.length > 0) send({ type: 'toyNudge', epoch, tick: w.tick, nudges });
+  };
+
+  const emitSnapshot = (w: World): void => {
+    emitEvents(w);
     const bytes = w.count * SNAPSHOT_STRIDE * Float32Array.BYTES_PER_ELEMENT;
     let buffer = pool.pop();
     while (buffer !== undefined && buffer.byteLength !== bytes) buffer = pool.pop();
@@ -256,9 +283,8 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
     change: SimLayout['change'],
     apply: () => void,
   ): void => {
-    // Bites taken so far belong to the old layout's epoch, so they go out before it changes.
-    const events = w.takeAteEvents();
-    if (events.length > 0) send({ type: 'ate', epoch, tick: w.tick, events });
+    // Bites and bumps so far belong to the old layout's epoch, so they go out before it changes.
+    emitEvents(w);
     apply();
     epoch++;
     send({ type: 'layout', epoch, request, fishIds: w.fishIds, stride: SNAPSHOT_STRIDE, change });
@@ -327,6 +353,9 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
         return;
       case 'anchors':
         requireWorld(command.type).setAnchors(command.anchors);
+        return;
+      case 'toys':
+        requireWorld(command.type).setToys(command.toys);
         return;
       case 'food': {
         const w = requireWorld(command.type);
@@ -397,6 +426,12 @@ export class SimClient {
   private readonly snapshotListeners = new Set<(snapshot: Snapshot) => void>();
   private readonly errorListeners = new Set<(message: string) => void>();
   private readonly ateListeners = new Set<(events: readonly AteEvent[], ate: SimAte) => void>();
+  private readonly nudgeListeners = new Set<(nudge: ToyNudge) => void>();
+  /** The fish order of the newest layout, and the latest positions in it, x, y, z per fish. */
+  private fishIds: readonly string[] = [];
+  private fishEpoch = -1;
+  private positions = new Float32Array(0);
+  private positionsEpoch = -1;
   private pendingInit: {
     request: number;
     resolve: (ready: SimReady) => void;
@@ -510,6 +545,26 @@ export class SimClient {
     this.send({ type: 'anchors', anchors });
   }
 
+  /** Every toy in the tank (world frame), `[]` for none; see `World.setToys`. */
+  setToys(toys: readonly SimToy[]): void {
+    this.send({ type: 'toys', toys });
+  }
+
+  /**
+   * Where fish `id` (a sim fish id) was in the latest snapshot, world frame, or null when no
+   * snapshot of the current layout has it. A step behind the interpolated pose a renderer shows.
+   */
+  fishPoint(id: string): [number, number, number] | null {
+    if (this.positionsEpoch !== this.fishEpoch) return null;
+    const i = this.fishIds.indexOf(id);
+    if (i < 0 || i * 3 + 2 >= this.positions.length) return null;
+    return [
+      this.positions[i * 3] ?? 0,
+      this.positions[i * 3 + 1] ?? 0,
+      this.positions[i * 3 + 2] ?? 0,
+    ];
+  }
+
   /**
    * Sends this tick's food particles, `FOOD_STRIDE` floats each: id, x, y, z in the world's frame, and
    * the index of the food type in `foodTypeSchema`. The array is copied, so the caller keeps it.
@@ -540,6 +595,12 @@ export class SimClient {
     return () => this.ateListeners.delete(listener);
   }
 
+  /** Each bump a fish gave a ball in the current world, in order; gameplay applies it to the ball. */
+  onToyNudge(listener: (nudge: ToyNudge) => void): () => void {
+    this.nudgeListeners.add(listener);
+    return () => this.nudgeListeners.delete(listener);
+  }
+
   onError(listener: (message: string) => void): () => void {
     this.errorListeners.add(listener);
     return () => this.errorListeners.delete(listener);
@@ -552,6 +613,7 @@ export class SimClient {
     this.snapshotListeners.clear();
     this.errorListeners.clear();
     this.ateListeners.clear();
+    this.nudgeListeners.clear();
     this.abandoned.clear();
     this.rejectPending('sim: client disposed');
   }
@@ -588,6 +650,23 @@ export class SimClient {
     });
   }
 
+  /** Copied before listeners run, since a listener may hand the buffer back with `recycle`. */
+  private keepPositions(snapshot: Snapshot): void {
+    const n = this.fishIds.length;
+    if (snapshot.data.length !== n * SNAPSHOT_STRIDE) {
+      throw new Error(
+        `sim: snapshot of epoch ${snapshot.epoch} holds ${snapshot.data.length} floats, its layout of ${n} fish needs ${n * SNAPSHOT_STRIDE}`,
+      );
+    }
+    if (this.positions.length !== n * 3) this.positions = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      this.positions[i * 3] = snapshot.data[i * SNAPSHOT_STRIDE] ?? 0;
+      this.positions[i * 3 + 1] = snapshot.data[i * SNAPSHOT_STRIDE + 1] ?? 0;
+      this.positions[i * 3 + 2] = snapshot.data[i * SNAPSHOT_STRIDE + 2] ?? 0;
+    }
+    this.positionsEpoch = snapshot.epoch;
+  }
+
   private receive(data: unknown): void {
     messageType(data, EVENT_TYPES);
     const event = data as SimEvent;
@@ -598,6 +677,8 @@ export class SimClient {
           throw new Error(`sim: ready for unknown request ${event.request}`);
         }
         this.epoch = event.epoch;
+        this.fishIds = event.fishIds;
+        this.fishEpoch = event.epoch;
         if (pending !== null) {
           this.pendingInit = null;
           pending.resolve(event);
@@ -611,6 +692,7 @@ export class SimClient {
           time: event.time,
           data: new Float32Array(event.buffer),
         };
+        if (event.epoch === this.fishEpoch) this.keepPositions(snapshot);
         for (const l of this.snapshotListeners) l(snapshot);
         return;
       }
@@ -620,6 +702,10 @@ export class SimClient {
         if (this.pendingInit !== null || event.epoch !== this.epoch) return;
         for (const l of this.ateListeners) l(event.events, event);
         return;
+      case 'toyNudge':
+        if (this.pendingInit !== null || event.epoch !== this.epoch) return;
+        for (const nudge of event.nudges) for (const l of this.nudgeListeners) l(nudge);
+        return;
       case 'layout': {
         const pending = this.pendingLayouts.get(event.request);
         if (pending === undefined && !this.abandoned.delete(event.request)) {
@@ -627,6 +713,8 @@ export class SimClient {
         }
         this.pendingLayouts.delete(event.request);
         this.epoch = event.epoch;
+        this.fishIds = event.fishIds;
+        this.fishEpoch = event.epoch;
         pending?.resolve(event);
         return;
       }

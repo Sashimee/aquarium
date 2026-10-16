@@ -56,6 +56,17 @@ describe('interpolateSnapshots', () => {
     expect(out[SnapshotField.Thrust]).toBe(1);
   });
 
+  it('lerps the display and gill flare so fins and gill covers open smoothly', () => {
+    const a = fish(0, 0, 0, FishState.Station);
+    const b = fish(0, 0, 0, FishState.Display);
+    b[SnapshotField.Display] = 1;
+    b[SnapshotField.GillFlare] = 0.5;
+    const out = new Float32Array(SNAPSHOT_STRIDE);
+    interpolateSnapshots(a, b, 0.5, out);
+    expect(out[SnapshotField.Display]).toBeCloseTo(0.5, 6);
+    expect(out[SnapshotField.GillFlare]).toBeCloseTo(0.25, 6);
+  });
+
   it('takes the short way round when the quaternions are in opposite hemispheres', () => {
     const a = fish(0, Math.PI - 0.1, 0, FishState.Cruise);
     const b = fish(0, -Math.PI + 0.1, 0, FishState.Cruise);

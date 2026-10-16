@@ -1,3 +1,4 @@
+import { TANK_SIZES } from '@aquarium/shared';
 import type {
   AwaySummary,
   CauseOfDeath,
@@ -8,7 +9,7 @@ import type {
   Water,
 } from '@aquarium/shared';
 import { speciesNameMap, type SpeciesNames } from './speciesNames';
-import { hasCapacityFor, MAX_FISH_PER_TANK, TANK_BIOLOAD_CAPACITY } from '@aquarium/sim/lifecycle';
+import { hasCapacityFor, TANK_BIOLOAD_CAPACITY } from '@aquarium/sim/lifecycle';
 
 export { speciesNameMap, type SpeciesNames } from './speciesNames';
 
@@ -19,6 +20,8 @@ function speciesName(names: SpeciesNames, id: string): string {
 export const CAUSE_TEXT: Record<CauseOfDeath, string> = {
   starvation: 'went too long without food',
   ammonia: 'was poisoned by ammonia in the water',
+  nitrite: 'was poisoned by nitrite in the water',
+  disease: 'died of an illness',
   old_age: 'died of old age after a full life',
   unknown: 'died of a cause we could not tell',
 };
@@ -26,6 +29,8 @@ export const CAUSE_TEXT: Record<CauseOfDeath, string> = {
 const CAUSE_ADVICE: Record<CauseOfDeath, string> = {
   starvation: 'A little food each day keeps hunger away.',
   ammonia: 'Vacuuming the gravel and changing some water keeps ammonia down.',
+  nitrite: 'Changing some water brings nitrite down while the filter catches up.',
+  disease: 'Catching illness early and keeping the water clean helps.',
   old_age: 'Nothing could have been done.',
   unknown: '',
 };
@@ -136,7 +141,7 @@ export function tankCapacity(tank: Tank, species: readonly SpeciesSummary[]): Ca
     usedBioload: living.reduce((sum, f) => sum + (bioload.get(f.species) ?? 0), 0),
     capacity: TANK_BIOLOAD_CAPACITY,
     livingFish: living.length,
-    maxFish: MAX_FISH_PER_TANK,
+    maxFish: TANK_SIZES[tank.size].maxAnimals,
   };
 }
 
@@ -159,7 +164,7 @@ export function canBuy(
     existing,
     candidate.lifecycle.bioload,
     TANK_BIOLOAD_CAPACITY,
-    MAX_FISH_PER_TANK,
+    TANK_SIZES[tank.size].maxAnimals,
   );
   if (fits) return { ok: true };
   return { ok: false, reason: 'This tank is full. Start another tank for more fish.' };

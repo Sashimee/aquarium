@@ -10,6 +10,7 @@
     "traits": ["cave-dweller", "cleaner"]
   },
   "biome": "reef",
+  "chemistry": { "salinityPpt": [30, 36] },
   "commonName": "Skunk cleaner shrimp",
   "id": "cleaner-shrimp",
   "lifecycle": {
