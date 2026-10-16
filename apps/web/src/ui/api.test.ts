@@ -1,4 +1,4 @@
-import type { DecorLayout } from '@aquarium/shared';
+import { DEFAULT_EQUIPMENT, NEW_TANK_CHEMISTRY, type DecorLayout } from '@aquarium/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ApiRequestError,
@@ -175,6 +175,8 @@ describe('api client', () => {
       decorEdited: true,
       water: { ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 0 },
       lastTickAt: '2026-02-01T00:00:00.000Z',
+      chemistry: NEW_TANK_CHEMISTRY,
+      equipment: DEFAULT_EQUIPMENT,
       fish: [],
       memorials: [],
     };

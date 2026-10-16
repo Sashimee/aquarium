@@ -103,6 +103,7 @@ export const passkey = pgTable(
 
 export const biomeEnum = pgEnum('biome', ['freshwater', 'reef']);
 export const fishSexEnum = pgEnum('fish_sex', ['male', 'female']);
+export const fishStageEnum = pgEnum('fish_stage', ['fry', 'juvenile', 'adult']);
 export const fishStatusEnum = pgEnum('fish_status', ['alive', 'dead']);
 export const causeOfDeathEnum = pgEnum('cause_of_death', [
   'starvation',
@@ -135,6 +136,16 @@ export const tanks = pgTable(
     lastTickAt: timestamptz('last_tick_at').notNull().defaultNow(),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
     updatedAt: timestamptz('updated_at').notNull().defaultNow(),
+    chemistry: jsonb('chemistry')
+      .notNull()
+      .default(
+        sql`'{"nitrite":0,"ph":7,"kh":4,"temperatureC":25,"bacteria":{"ammoniaOxidisers":0,"nitriteOxidisers":0}}'::jsonb`,
+      ),
+    equipment: jsonb('equipment')
+      .notNull()
+      .default(
+        sql`'{"filter":{"tier":1},"heater":{"tier":0},"light":{"tier":1,"intensity":0.8,"onHour":8,"offHour":20},"co2":{"tier":0},"waveMaker":{"tier":0}}'::jsonb`,
+      ),
   },
   (t) => [index('tanks_owner_id_idx').on(t.ownerId)],
 );
@@ -158,6 +169,11 @@ export const fish = pgTable(
     status: fishStatusEnum('status').notNull().default('alive'),
     diedAt: timestamptz('died_at'),
     cause: causeOfDeathEnum('cause'),
+    stage: fishStageEnum('stage').notNull().default('adult'),
+    personality: jsonb('personality')
+      .notNull()
+      .default(sql`'{"boldness":0.5,"greed":0.5,"sociability":0.5}'::jsonb`),
+    disease: jsonb('disease'),
   },
   (t) => [index('fish_tank_id_idx').on(t.tankId)],
 );

@@ -1,0 +1,29 @@
+{
+  "bacteria": {
+    "ammoniaOxidisers": {
+      "growthPerHour": 0.012,
+      "dieOffPerHour": 0.004,
+      "conversionPerHour": 0.6
+    },
+    "nitriteOxidisers": {
+      "growthPerHour": 0.008,
+      "dieOffPerHour": 0.004,
+      "conversionPerHour": 0.6
+    },
+    "bottledBoost": 0.25,
+    "mediaCapacityPerFilterTier": 0.4
+  },
+  "nitrite": { "toxicityPerUnit": 1.5 },
+  "ph": {
+    "target": { "freshwater": 7, "reef": 8.2 },
+    "driftPerHour": 0.02,
+    "acidificationPerNitrate": 0.002
+  },
+  "kh": { "consumedPerNitrate": 0.01, "restoredPerWaterChange": 0.5, "sourceWater": 6 },
+  "temperature": {
+    "target": { "freshwater": 25, "reef": 25.5 },
+    "roomC": 21,
+    "driftPerHour": 0.15,
+    "heaterWarmingPerHourPerTier": 0.6
+  }
+}

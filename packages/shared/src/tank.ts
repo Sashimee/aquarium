@@ -8,6 +8,9 @@ import {
   timestampSchema,
   unitSchema,
 } from './common.js';
+import { chemistrySchema } from './chemistry.js';
+import { equipmentSchema } from './equipment.js';
+import { diseaseStateSchema, fishStageSchema, personalitySchema } from './fishState.js';
 
 // Response objects are non-strict so a tab on an older bundle ignores fields added later.
 export const waterSchema = z.object({
@@ -40,6 +43,9 @@ export const fishSchema = z.object({
   species: slugSchema,
   name: z.string().trim().min(1).max(40),
   sex: fishSexSchema,
+  stage: fishStageSchema,
+  personality: personalitySchema,
+  disease: diseaseStateSchema.nullable(),
   bornAt: timestampSchema,
   size: z.number().positive().describe('body length in metres'),
   hunger: unitSchema,
@@ -86,6 +92,8 @@ export const tankSchema = z.object({
   decorEdited: z.boolean(),
   water: waterSchema,
   lastTickAt: timestampSchema,
+  chemistry: chemistrySchema,
+  equipment: equipmentSchema,
   fish: z.array(fishSchema),
   memorials: z.array(memorialSchema),
   away: awaySummarySchema.optional(),

@@ -1,4 +1,13 @@
-import type { Fish, SpeciesSummary, Tank } from '@aquarium/shared';
+import {
+  DEFAULT_EQUIPMENT,
+  NEUTRAL_PERSONALITY,
+  NEW_TANK_CHEMISTRY,
+  breedingSchema,
+  speciesChemistrySchema,
+  type Fish,
+  type SpeciesSummary,
+  type Tank,
+} from '@aquarium/shared';
 import { EventBus } from '../engine/events';
 import type { InteractionEvents } from '../interaction/events';
 import { ApiRequestError } from '../ui/api';
@@ -30,6 +39,8 @@ export function speciesFixture(overrides: Partial<SpeciesSummary> = {}): Species
       bioload: 0.25,
       ammoniaPerBioloadPerHour: 0.01,
     },
+    chemistry: speciesChemistrySchema.parse({}),
+    breeding: breedingSchema.parse({}),
     ...overrides,
   };
 }
@@ -41,6 +52,9 @@ export function fishFixture(id: string, overrides: Partial<Fish> = {}): Fish {
     species: 'neon-tetra',
     name: `Fish ${id.slice(-1)}`,
     sex: 'female',
+    stage: 'adult',
+    personality: NEUTRAL_PERSONALITY,
+    disease: null,
     bornAt: '2026-01-01T00:00:00.000Z',
     size: 0.02,
     hunger: 0.1,
@@ -61,6 +75,8 @@ export function tankFixture(overrides: Partial<Tank> = {}): Tank {
     decorEdited: (overrides.decorLayout?.length ?? 0) > 0,
     water: { ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 0 },
     lastTickAt: '2026-02-01T00:00:00.000Z',
+    chemistry: NEW_TANK_CHEMISTRY,
+    equipment: DEFAULT_EQUIPMENT,
     fish: [],
     memorials: [],
     ...overrides,

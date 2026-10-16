@@ -9,3 +9,6 @@ export * from './legal.js';
 export * from './collider.js';
 export * from './tankSpace.js';
 export * from './decorRules.js';
+export * from './chemistry.js';
+export * from './fishState.js';
+export * from './equipment.js';

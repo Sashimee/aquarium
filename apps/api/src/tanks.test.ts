@@ -1,6 +1,9 @@
 import {
   apiErrorSchema,
   decorLayoutSchema,
+  DEFAULT_EQUIPMENT,
+  NEUTRAL_PERSONALITY,
+  NEW_TANK_CHEMISTRY,
   decorPositionLimits,
   legacyTintSeed,
   speciesListSchema,
@@ -115,6 +118,27 @@ describe('tanks and fish', () => {
     const list = speciesListSchema.parse(res.json());
     expect(list.map((s) => s.id)).toContain('neon-tetra');
     expect(list.find((s) => s.id === 'blue-tang')?.biome).toBe('reef');
+  });
+
+  it('serves uncycled chemistry, default equipment and adult neutral fish on a new tank', async () => {
+    const cookie = await signedIn(h);
+    const tank = await createTank(h, cookie);
+    expect(tank.chemistry).toEqual(NEW_TANK_CHEMISTRY);
+    expect(tank.equipment).toEqual(DEFAULT_EQUIPMENT);
+    const stocked = await addFish(h, cookie, tank.id);
+    expect(stocked.fish[0]).toMatchObject({
+      stage: 'adult',
+      personality: NEUTRAL_PERSONALITY,
+      disease: null,
+    });
+  });
+
+  it('serves breeding and chemistry tolerances with defaults for species that declare none', async () => {
+    const cookie = await signedIn(h);
+    const list = speciesListSchema.parse((await call(h, cookie, 'GET', '/api/species')).json());
+    const neon = list.find((s) => s.id === 'neon-tetra');
+    expect(neon?.breeding).toEqual({ mode: 'none', needsPair: true, needsCave: false });
+    expect(neon?.chemistry.phRange).toEqual([6, 8.5]);
   });
 
   it('creates, lists, renames and re-lays-out a tank, and validates input', async () => {
