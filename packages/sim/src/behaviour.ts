@@ -10,6 +10,7 @@ import type { Rng } from './rng.ts';
 import type { Sdf } from './sdf.ts';
 import { FishState } from './snapshot.ts';
 import type { SimSpecies, SimWalking } from './species.ts';
+import { TOYS, Toys, type SimToy } from './toys.ts';
 
 /** Every tunable of the species behaviours; sources are in BEHAVIOUR.md. */
 export const BEHAVIOUR = {
@@ -180,6 +181,7 @@ export interface BehaviourHost {
   readonly position: Float64Array;
   readonly forward: Float64Array;
   readonly yaw: Float64Array;
+  readonly speed: Float64Array;
   readonly bodyLength: Float64Array;
   readonly radius: Float64Array;
   readonly maxSpeed: Float64Array;
@@ -233,6 +235,16 @@ export class Plan {
   roll = NaN;
   continuous = false;
   pivot = false;
+  /** A point to keep `shunRadius` away from, pushed off with `shunWeight`; radius 0 for none. */
+  shunX = 0;
+  shunY = 0;
+  shunZ = 0;
+  shunRadius = 0;
+  shunWeight = 0;
+  /** 0 to 1: how far the fins are spread in display. */
+  display = 0;
+  /** 0 to 1: how far the gill covers are raised in display. */
+  gillFlare = 0;
 
   reset(bandLo: number, bandHi: number): void {
     this.state = FishState.Cruise;
@@ -258,6 +270,9 @@ export class Plan {
     this.roll = NaN;
     this.continuous = false;
     this.pivot = false;
+    this.shunRadius = 0;
+    this.display = 0;
+    this.gillFlare = 0;
   }
 
   seek(x: number, y: number, z: number, speed: number, tau: number, weight = 1): void {
@@ -267,6 +282,14 @@ export class Plan {
     this.seekSpeed = speed;
     this.seekTau = tau;
     this.seekWeight = weight;
+  }
+
+  shun(x: number, y: number, z: number, radius: number, weight: number): void {
+    this.shunX = x;
+    this.shunY = y;
+    this.shunZ = z;
+    this.shunRadius = radius;
+    this.shunWeight = weight;
   }
 }
 
@@ -294,6 +317,7 @@ export class Behaviour {
   readonly plans: Plan[];
   readonly feeding: Feeding;
   readonly curiosity: Curiosity;
+  readonly toys: Toys;
   light = 1;
   night = false;
 
@@ -363,6 +387,9 @@ export class Behaviour {
 
   private readonly nbr: Int32Array;
   private readonly nbrDist: Float64Array;
+  private _display: Float64Array;
+  private _gillFlare: Float64Array;
+
   private readonly n3 = new Float64Array(3);
   private bandLo = 0;
   private bandHi = 0;
@@ -392,6 +419,16 @@ export class Behaviour {
     return this._territoryTarget;
   }
 
+  /** 0 to 1 per fish: fin spread in display, eased in and out. */
+  get display(): Float64Array {
+    return this._display;
+  }
+
+  /** 0 to 1 per fish: gill covers raised in display, eased in and out. */
+  get gillFlare(): Float64Array {
+    return this._gillFlare;
+  }
+
   constructor(host: BehaviourHost) {
     this.host = host;
     const n = host.count;
@@ -399,6 +436,7 @@ export class Behaviour {
     this.plans = Array.from({ length: n }, () => new Plan());
     this.feeding = new Feeding(host);
     this.curiosity = new Curiosity(host);
+    this.toys = new Toys(host);
     this.startlePhase = new Uint8Array(n);
     this.startleTimer = new Float64Array(n);
     this.startleElapsed = new Float64Array(n);
@@ -441,6 +479,8 @@ export class Behaviour {
     this.excursion = new Uint8Array(n);
     this.excursionTimer = new Float64Array(n);
     this.excursionTarget = new Float64Array(n * 3);
+    this._display = new Float64Array(n);
+    this._gillFlare = new Float64Array(n);
     this.groupHome = new Float64Array(s * 3);
     this.groupTimer = new Float64Array(s);
     this.groupSize = new Int32Array(s);
@@ -514,8 +554,11 @@ export class Behaviour {
     this.excursion = edit.array(this.excursion);
     this.excursionTimer = edit.array(this.excursionTimer);
     this.excursionTarget = edit.array(this.excursionTarget, 3);
+    this._display = edit.array(this.display);
+    this._gillFlare = edit.array(this.gillFlare);
     this.feeding.resize(edit);
     this.curiosity.resize(edit);
+    this.toys.resize(edit);
     if (edit.removed < 0) return;
     for (let i = 0; i < this.territoryTarget.length; i++) {
       const j = edit.index(at(this.territoryTarget, i));
@@ -692,6 +735,10 @@ export class Behaviour {
     this.curiosity.setLure(position);
   }
 
+  setToys(toys: readonly SimToy[]): void {
+    this.toys.setToys(toys);
+  }
+
   setLight(level: number): void {
     if (!(level >= 0 && level <= 1)) {
       throw new RangeError(`light level must be within [0, 1], got ${level}`);
@@ -731,7 +778,20 @@ export class Behaviour {
     this.feeding.update();
     this.prepareCuriosity();
     this.curiosity.update(this.feeding);
-    for (let i = 0; i < n; i++) this.plan(i);
+    this.toys.update(this.curiosity.follow);
+    const ease = 1 - Math.exp(-DT / TOYS.displayTauS);
+    for (let i = 0; i < n; i++) {
+      this.plan(i);
+      const plan = this.plans[i];
+      if (plan === undefined) throw new RangeError(`no plan for fish ${i}`);
+      if (plan.state !== FishState.Startle && plan.state !== FishState.Feed) {
+        this.toys.shun(i, this.speciesOf(i), plan);
+      }
+      const d = at(this.display, i);
+      this.display[i] = d + (plan.display - d) * ease;
+      const g = at(this.gillFlare, i);
+      this.gillFlare[i] = g + (plan.gillFlare - g) * ease;
+    }
   }
 
   /** Who may feed this step, and how far an anchored fish will leave its anemone or cave. */
@@ -762,31 +822,35 @@ export class Behaviour {
 
   /**
    * A fish busy with food, a rival or anything that already stops it feeding has no attention
-   * for a lure or its feeding spot; an anchored fish goes no further for them than an excursion.
+   * for a lure, a toy or its feeding spot, and one playing with a toy none for a lure; an
+   * anchored fish goes no further for them than an excursion.
    */
   private prepareCuriosity(): void {
     const f = this.feeding;
     const { eligible, leash } = this.curiosity;
+    const toys = this.toys;
     for (let i = 0; i < this.host.count; i++) {
-      eligible[i] =
+      const free =
         this.speciesOf(i).walking === null &&
         at(f.eligible, i) === 1 &&
         at(f.target, i) < 0 &&
         at(f.follow, i) < 0 &&
         at(f.handling, i) <= 0 &&
-        at(this.territoryPhase, i) === TerritoryPhase.Idle
-          ? 1
-          : 0;
+        at(this.territoryPhase, i) === TerritoryPhase.Idle;
+      eligible[i] = free && !toys.engaged(i) ? 1 : 0;
+      toys.eligible[i] = free ? 1 : 0;
       const a = this.anchors[at(this.anchor, i)];
       const o = i * 4;
       if (a === undefined) {
         leash[o + 3] = Infinity;
+        toys.leash[o + 3] = Infinity;
         continue;
       }
       leash[o] = a.position[0];
       leash[o + 1] = a.position[1];
       leash[o + 2] = a.position[2];
       leash[o + 3] = a.radius + CURIOSITY.lureLeashBodyLengths * at(this.host.bodyLength, i);
+      toys.leash.set(leash.subarray(o, o + 4), o);
     }
   }
 
@@ -1067,6 +1131,8 @@ export class Behaviour {
       return;
     }
     if (this.planShelter(i, sp, plan)) return;
+    if (this.toys.planMirror(i, sp, plan)) return;
+    if (this.toys.planBall(i, sp, plan)) return;
     if (this.planLure(i, sp, plan)) return;
     if (this.planSpot(i, sp, plan)) return;
     if (sp.gait === 'forage') {
@@ -1694,6 +1760,8 @@ export class Behaviour {
     }
     if (phase === TerritoryPhase.Flare) {
       plan.state = FishState.Display;
+      plan.display = 1;
+      plan.gillFlare = 1;
       plan.speedCap = BEHAVIOUR.siftSpeedFactor * cruise;
       plan.yaw = Math.atan2(jx - px, jz - pz);
       if (left <= 0) {
@@ -1703,6 +1771,7 @@ export class Behaviour {
       return;
     }
     plan.state = FishState.Display;
+    plan.display = 1;
     plan.continuous = true;
     plan.seek(jx, jy, jz, BEHAVIOUR.chargeSpeedFraction * vmax, 0.2);
     if (d < 0.6 * (li + lj)) {
