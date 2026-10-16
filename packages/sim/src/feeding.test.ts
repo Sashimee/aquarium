@@ -406,6 +406,52 @@ describe('feeding AI', { timeout: LONG }, () => {
     }
   });
 
+  it('has a lone tetra bite the flake it goes for instead of circling it, on every seed', () => {
+    // A flake beside the fish lies inside the circle it sweeps on its cruising arc; swimming on
+    // only orbits it (#668), so it has to brake and turn onto it.
+    let pursuits = 0;
+    let bitten = 0;
+    let slowest = 0;
+    for (let seed = 1; seed <= 8; seed++) {
+      const w = tank([{ id: 'a', species: neonTetra.id }], seed);
+      const rain = new FoodRain(SHOW_TANK);
+      for (let k = 0; k < 80; k++) {
+        rain.place('flakes', -0.3 + (k % 10) * 0.06, 0.2 + 0.02 * Math.floor(k / 10), 0, 0, 0);
+      }
+      let chasing = -1;
+      let since = 0;
+      let eaten = 0;
+      let satedAt = Infinity;
+      for (let t = 0; t < 3000; t++) {
+        rain.feed(w);
+        w.step();
+        const events = w.takeAteEvents();
+        rain.eat(events);
+        const k = at(w.behaviour.feeding.target, 0);
+        const id = k >= 0 ? at(w.food.id, k) : -1;
+        const bite = events.find((e) => e.foodId === chasing);
+        for (const e of events) eaten += e.portion;
+        if (eaten >= 0.9 * FEEDING.satiationPortions) satedAt = Math.min(satedAt, t);
+        since++;
+        if (bite !== undefined) {
+          bitten++;
+          slowest = Math.max(slowest, since);
+          chasing = -1;
+        } else if (id !== chasing) {
+          chasing = -1;
+        }
+        if (chasing < 0 && id >= 0 && events.length === 0) {
+          chasing = id;
+          since = 0;
+          pursuits++;
+        }
+      }
+      expect(satedAt, `seed ${seed}`).toBeLessThan(3000);
+    }
+    expect(bitten / pursuits).toBeGreaterThan(0.95);
+    expect(slowest * STEP_DT).toBeLessThan(4);
+  });
+
   it('takes its favourite food and leaves food off its diet alone', () => {
     const tang = new World({
       seed: 2,

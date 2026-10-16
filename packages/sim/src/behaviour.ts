@@ -201,6 +201,8 @@ export interface BehaviourHost {
    * of its own length clear to turn round in.
    */
   canTurnAt(i: number, x: number, y: number, z: number): boolean;
+  /** The tightest arc fish `i` turns on while swimming, before it brakes to pivot. */
+  cruiseTurnRadius(i: number): number;
 }
 
 /** One fish's intent for this step, consumed by steering and integration. */
@@ -1223,9 +1225,37 @@ export class Behaviour {
       plan.wander = 0;
       // Browsers work an attached item (a nori clip, a wafer) head-on, manoeuvring on the spot
       // with their fins as they do over rock rather than swimming arcs past it.
-      plan.pivot = f.grazes(k) && d < length;
+      const grazed = f.grazes(k);
+      plan.pivot = grazed && d < length;
+      const facing = grazed ? NaN : this.facingInsideTurnCircle(i, fx, fz);
+      if (!Number.isNaN(facing)) {
+        // Swimming on at any speed past food abeam only circles it; the fish holds back until
+        // the turn on the spot has brought the food round in front of it.
+        plan.pivot = true;
+        plan.speedCap *= Math.max(0, facing);
+      }
     }
     return true;
+  }
+
+  /**
+   * For (x, z) inside either circle fish `i` sweeps turning on its cruising arc, the cosine of its
+   * bearing off the heading; NaN outside them. Food there can never be brought onto the heading by
+   * swimming on, so the fish brakes and turns on the spot instead, as fish do in a strike turn.
+   */
+  private facingInsideTurnCircle(i: number, x: number, z: number): number {
+    const o = i * 3;
+    const fx = at(this.host.forward, o);
+    const fz = at(this.host.forward, o + 2);
+    const h = Math.hypot(fx, fz);
+    const rx = x - at(this.host.position, o);
+    const rz = z - at(this.host.position, o + 2);
+    const d = Math.hypot(rx, rz);
+    if (h < 1e-9 || d < 1e-9) return NaN;
+    const ahead = (rx * fx + rz * fz) / h;
+    const side = Math.abs(rx * fz - rz * fx) / h;
+    const r = this.host.cruiseTurnRadius(i);
+    return (side - r) * (side - r) + ahead * ahead < r * r ? ahead / d : NaN;
   }
 
   /**

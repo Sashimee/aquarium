@@ -1555,8 +1555,7 @@ export class World {
     const arcLimited =
       plan.state === FishState.Feed || (plan.state === FishState.Cruise && plan.seekWeight === 0);
     if (!arcLimited || plan.pivot || this.cramped[i] === 1) return sp.maxTurnRate;
-    const radius = STEERING.minTurnRadiusBodyLengths * (this.bodyLength[i] ?? 1);
-    const arc = (this.speed[i] ?? 0) / radius;
+    const arc = (this.speed[i] ?? 0) / this.cruiseTurnRadius(i);
     return Math.min(sp.maxTurnRate, Math.max(arc, STEERING.pivotTurnRateRadPerS));
   }
 
@@ -1715,6 +1714,11 @@ export class World {
    */
   canTurnAt(i: number, x: number, y: number, z: number): boolean {
     return this.bodyCanTurnAt(this.bodyLength[i] ?? 0, this.thickness[i] ?? 0, x, y, z);
+  }
+
+  /** The tightest arc fish `i` turns on while swimming, before it brakes to pivot. */
+  cruiseTurnRadius(i: number): number {
+    return STEERING.minTurnRadiusBodyLengths * (this.bodyLength[i] ?? 0);
   }
 
   /**
