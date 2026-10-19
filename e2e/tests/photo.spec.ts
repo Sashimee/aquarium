@@ -1,6 +1,13 @@
 import { expect, test, type Page } from '@playwright/test';
 import { dockButton, openTank } from '../support/app.ts';
 
+/**
+ * SwiftShader draws every pixel on the CPU, and a capture waits for all the frames queued before
+ * it. A small canvas keeps each action and each capture quick; at the capture's 2x scale it still
+ * yields a picture wider than 800 px.
+ */
+test.use({ viewport: { width: 480, height: 340 } });
+
 interface Pixels {
   width: number;
   height: number;
