@@ -9,6 +9,7 @@ import { createMailer } from '../apps/api/src/mail.ts';
 import { createPushSender, parseVapidKeys } from '../apps/api/src/push.ts';
 import { postgresHitStore } from '../apps/api/src/rate-limit.ts';
 import { loadChemistryParameters } from '../apps/api/src/chemistry.ts';
+import { loadEconomy } from '../apps/api/src/economy.ts';
 import { loadCatalog } from '../apps/api/src/species.ts';
 import { createTestDatabase } from '../apps/api/src/test-harness.ts';
 
@@ -67,6 +68,12 @@ const auth = createAuth({
   },
 });
 
+const baseEconomy = loadEconomy();
+const economy = {
+  ...baseEconomy,
+  grants: { ...baseEconomy.grants, starting: 100_000 },
+};
+
 const ecdh = createECDH('prime256v1');
 ecdh.generateKeys();
 const vapid = parseVapidKeys(
@@ -88,6 +95,7 @@ const app = buildApp({
   species: loadCatalog(),
   chemistryParams: loadChemistryParameters(),
   clock: createClock(),
+  economy,
   testHooks: true,
   logger: false,
 });
