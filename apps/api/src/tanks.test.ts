@@ -136,6 +136,10 @@ describe('tanks and fish', () => {
       disease: null,
     });
     expect(personalitySchema.safeParse(stocked.fish[0]?.personality).success).toBe(true);
+    const restocked = await addFish(h, cookie, tank.id);
+    const [first, second] = restocked.fish;
+    expect(second).toBeDefined();
+    expect(second?.personality).not.toEqual(first?.personality);
   });
 
   it('serves species chemistry tolerances and breeding defaults', async () => {
