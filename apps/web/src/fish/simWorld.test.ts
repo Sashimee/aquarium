@@ -77,6 +77,7 @@ describe('SimWorldSpec', () => {
     expect(anchorsOf(spec, roster)).toEqual(sim);
 
     roster.load({
+      backgroundId: 'bg-fw-planted-stream',
       tankId: TANK_A,
       biome: 'reef',
       decorLayout: [],
@@ -100,6 +101,7 @@ describe('SimWorldSpec', () => {
     const { spec, roster } = setup();
     expect(spec.config(roster.swimming())?.fish.every((f) => f.hunger === undefined)).toBe(true);
     roster.load({
+      backgroundId: 'bg-fw-planted-stream',
       tankId: TANK_A,
       biome: 'reef',
       decorLayout: [],
@@ -115,6 +117,7 @@ describe('SimWorldSpec', () => {
   it('seeds a world rebuilt mid-session with what the fish ate since it joined', () => {
     const { spec, roster } = setup();
     roster.load({
+      backgroundId: 'bg-fw-planted-stream',
       tankId: TANK_A,
       biome: 'reef',
       decorLayout: [],
@@ -150,6 +153,7 @@ describe('SimWorldSpec', () => {
   it('spawns saved fish under their sim ids and sizes, skipping species with no content', () => {
     const { spec, roster } = setup();
     roster.load({
+      backgroundId: 'bg-fw-planted-stream',
       tankId: TANK_A,
       biome: 'reef',
       decorLayout: [],
@@ -176,6 +180,7 @@ describe('SimWorldSpec', () => {
   it('spawns a stored male guppy at the male length, so it swims at its own body lengths', () => {
     const { spec, roster } = setup();
     roster.load({
+      backgroundId: 'bg-fw-planted-stream',
       tankId: TANK_A,
       biome: 'freshwater',
       decorLayout: [],
@@ -193,6 +198,7 @@ describe('SimWorldSpec', () => {
   it('builds a world that can take in a fish of a species it started without', () => {
     const { spec, roster } = setup();
     roster.load({
+      backgroundId: 'bg-fw-planted-stream',
       tankId: TANK_A,
       biome: 'reef',
       decorLayout: [],
@@ -228,7 +234,14 @@ describe('SimWorldSpec', () => {
 
   it('has no world to run when nothing swims', () => {
     const { spec, roster } = setup();
-    roster.load({ tankId: TANK_A, biome: 'reef', decorLayout: [], decorEdited: false, fish: [] });
+    roster.load({
+      backgroundId: 'bg-fw-planted-stream',
+      tankId: TANK_A,
+      biome: 'reef',
+      decorLayout: [],
+      decorEdited: false,
+      fish: [],
+    });
     expect(spec.config(roster.swimming())).toBeNull();
   });
 });

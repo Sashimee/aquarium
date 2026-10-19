@@ -3,10 +3,11 @@ import { depthOfFieldFollowsCamera } from './engine/cameraFocus';
 import type { Engine } from './engine/Engine';
 import { EventBus, type EngineEvents } from './engine/events';
 import { parseEngineOptions } from './engine/options';
-import type { Collider } from '@aquarium/shared';
+import type { Biome, Collider } from '@aquarium/shared';
 import { colliderDigest } from './fish/simColliders';
 import { queueTankEvents, startFish, type FishHandle } from './fish/start';
 import { CameraRig } from './interaction/camera';
+import { BackgroundChoice } from './interaction/background';
 import { bindCameraControls } from './interaction/controls';
 import { SceneDecor } from './interaction/decor/sceneDecor';
 import { STICKY_INTERACTION_EVENTS, type InteractionEvents } from './interaction/events';
@@ -65,6 +66,7 @@ async function boot(): Promise<void> {
   const tankBiome = new TankBiome(interaction, parseBiome(window.location.search));
   const switches = watchSwitches(interaction, tracker, tankBiome.fallback);
   const playChoices = new PlayChoices(interaction);
+  const backgrounds = new BackgroundChoice(interaction, tankBiome.fallback);
   const sceneDecor = new SceneDecor<TankScene>(
     interaction,
     () =>
@@ -114,6 +116,7 @@ async function boot(): Promise<void> {
     tankBiome.stop();
     stopDemoRequests();
     playChoices.stop();
+    backgrounds.stop();
     sceneDecor.dispose();
     showFatal(container, message);
     return;
@@ -264,12 +267,18 @@ async function boot(): Promise<void> {
       tracker.reach('warmup');
       tracker.finish();
     });
+  let sceneBiome: Biome | null = null;
+  const showBackground = (state: InteractionEvents['background:state'] | undefined): void => {
+    if (!state || state.biome !== sceneBiome) return;
+    container.dataset['backgroundId'] = state.backgroundId ?? '';
+    void engine.setBackground(state.biome, state.backgroundId);
+  };
+  const stopBackground = interaction.on('background:state', showBackground);
   const scenes = mountBiomeScene(engine, tankBiome, window.location.search, {
     failed: (message) => tracker.fail(message),
     mounted(scene) {
-      // TODO(gameplay-engineer): pass the saved tank's backgroundId here with the chooser (T29, #619);
-      // until then every tank shows its biome's default picture.
-      void engine.setBackground(scene.biome, null);
+      sceneBiome = scene.biome;
+      showBackground(interaction.peek('background:state'));
       void engine.useBackgroundIndex({ assets: [...scene.catalogEntries()] });
       fish.setAnchors(scene.anchors);
       container.dataset['sceneBiome'] = scene.biome;
@@ -284,6 +293,8 @@ async function boot(): Promise<void> {
     },
     unmounting() {
       delete container.dataset['sceneBiome'];
+      delete container.dataset['backgroundId'];
+      sceneBiome = null;
       sceneDecor.unmount();
       play?.dispose();
       play = null;
@@ -308,6 +319,8 @@ async function boot(): Promise<void> {
     tankBiome.stop();
     stopDemoRequests();
     playChoices.stop();
+    backgrounds.stop();
+    stopBackground();
     stopMotionWatch();
     unbindControls();
     unbindPhotoKeys();

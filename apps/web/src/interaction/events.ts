@@ -1,4 +1,5 @@
 import type {
+  BackgroundId,
   Biome,
   CareAction,
   Collider,
@@ -125,7 +126,16 @@ export interface InteractionEvents {
     decorLayout: DecorLayout;
     /** False: the player never saved a layout, so `decorLayout` is empty and the preset shows. */
     decorEdited: boolean;
+    backgroundId: BackgroundId;
   };
+  /** The server's background for the tank changed outside this tab's own choice (another device). */
+  'tank:background': { tankId: string; backgroundId: BackgroundId };
+  /** The player picked a background in the decorate panel; ignored if it is not for the shown biome. */
+  'background:choose': { backgroundId: BackgroundId };
+  /** The background on show, never null; `tankId` is null for the demo tank, which has nowhere to save. */
+  'background:state': { tankId: string | null; biome: Biome; backgroundId: BackgroundId | null };
+  /** The player chose a background for a saved tank; the persistence layer saves it. */
+  'background:save': { tankId: string; backgroundId: BackgroundId };
   /** The server's layout changed outside this tab's own edits (another device). */
   'tank:decor': { tankId: string; layout: DecorLayout; edited: boolean };
   /**
@@ -201,6 +211,7 @@ export const STICKY_INTERACTION_EVENTS: readonly (keyof InteractionEvents)[] = [
   'game:state',
   'demo:biome-changed',
   'decor:state',
+  'background:state',
   'decor:save-state',
   'decor:load-failed',
   'load:state',

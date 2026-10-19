@@ -1,6 +1,13 @@
 import { VACATION_FEEDER_ASSET_ID } from '../interaction/decor/spec';
 import type { DecorCommand } from '../interaction/events';
-import { useBridge, useDecorLoadError, useDecorSaveState, useDecorState } from './context';
+import { backgroundOptions } from './backgroundTitles';
+import {
+  useBackgroundState,
+  useBridge,
+  useDecorLoadError,
+  useDecorSaveState,
+  useDecorState,
+} from './context';
 
 const TURN = Math.PI / 12;
 const STEP = 0.02;
@@ -12,6 +19,31 @@ const SAVE_TEXT = {
   saved: 'Layout saved.',
   error: 'The layout could not be saved.',
 } as const;
+
+export function BackgroundChooser() {
+  const { interaction } = useBridge();
+  const shown = useBackgroundState();
+  const options = shown ? backgroundOptions(shown.biome) : [];
+  if (!shown || options.length === 0) return null;
+  return (
+    <div className="block" role="group" aria-labelledby="background-heading">
+      <h3 id="background-heading">Background</h3>
+      <ul className="decor-pieces">
+        {options.map(({ id, title }) => (
+          <li key={id}>
+            <button
+              type="button"
+              aria-pressed={id === shown.backgroundId}
+              onClick={() => interaction.emit('background:choose', { backgroundId: id })}
+            >
+              {title}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 export default function DecorPanel() {
   const { interaction } = useBridge();
@@ -49,6 +81,8 @@ export default function DecorPanel() {
         Drag a piece in the tank to move it, or pick it from the list and use the buttons. Pieces
         drop onto the gravel and cannot overlap.
       </p>
+
+      <BackgroundChooser />
 
       <div className="block">
         <h3>Add a piece</h3>

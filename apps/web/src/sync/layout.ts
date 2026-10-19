@@ -1,10 +1,9 @@
-import type { DecorLayout } from '@aquarium/shared';
 import type { SaveStatus } from '../interaction/events';
 import { withRetry, realSleep, type Sleep } from './backoff';
 import { describeSyncError } from './messages';
 
-export interface LayoutSaverOptions {
-  send(tankId: string, layout: DecorLayout): Promise<void>;
+export interface LayoutSaverOptions<T> {
+  send(tankId: string, layout: T): Promise<void>;
   report(status: SaveStatus, message: string | null): void;
   debounceMs?: number | undefined;
   sleep?: Sleep;
@@ -14,23 +13,23 @@ export interface LayoutSaverOptions {
 const DEBOUNCE_MS = 700;
 
 /**
- * Saves the newest layout per tank. Edits arrive in bursts (nudge, nudge, rotate), so it waits a
+ * Saves the newest value per tank (a decor layout, a background id). Edits arrive in bursts (nudge, nudge, rotate), so it waits a
  * moment, sends only the latest, and sends one request at a time so the server sees them in order.
  */
-export class LayoutSaver {
-  private readonly pending = new Map<string, DecorLayout>();
+export class LayoutSaver<T> {
+  private readonly pending = new Map<string, T>();
   private timer: ReturnType<typeof setTimeout> | null = null;
   private running: Promise<void> | null = null;
-  private readonly failed = new Map<string, DecorLayout>();
+  private readonly failed = new Map<string, T>();
   private sending: string | null = null;
   private disposed = false;
   private epoch = 0;
   private session = new AbortController();
   private edited = false;
 
-  constructor(private readonly options: LayoutSaverOptions) {}
+  constructor(private readonly options: LayoutSaverOptions<T>) {}
 
-  submit(tankId: string, layout: DecorLayout): void {
+  submit(tankId: string, layout: T): void {
     if (this.disposed) return;
     this.pending.set(tankId, layout);
     this.edited = true;

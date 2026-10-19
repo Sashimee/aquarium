@@ -185,6 +185,7 @@ describe('FishSystem.create', () => {
     fish.handle({
       type: 'tank:loaded',
       payload: {
+        backgroundId: 'bg-fw-planted-stream',
         tankId: TANK_A,
         biome: 'freshwater',
         decorLayout: [],
@@ -351,6 +352,7 @@ describe('FishSystem dead shrimp', () => {
     fish.handle({
       type: 'tank:loaded',
       payload: {
+        backgroundId: 'bg-fw-planted-stream',
         tankId: TANK_A,
         biome: 'freshwater',
         decorLayout: [],
@@ -707,6 +709,7 @@ describe('FishSystem toys and display', () => {
       fish.handle({
         type: 'tank:loaded',
         payload: {
+          backgroundId: 'bg-fw-planted-stream',
           tankId: TANK_A,
           biome,
           decorLayout: [],

@@ -1,5 +1,6 @@
 import type {
   AwaySummary,
+  BackgroundId,
   PlayableBiome,
   CareAction,
   DecorLayout,
@@ -56,7 +57,9 @@ export class TankSession {
   private switchId = 0;
   private loadedId: string | null = null;
   private readonly shownLayout = new Map<string, string>();
-  private readonly layoutSaver: LayoutSaver;
+  private readonly shownBackground = new Map<string, BackgroundId>();
+  private readonly layoutSaver: LayoutSaver<DecorLayout>;
+  private readonly backgroundSaver: LayoutSaver<BackgroundId>;
   private readonly releaseTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly stopListening: (() => void)[];
   private readonly now: () => number;
@@ -75,16 +78,34 @@ export class TankSession {
         if (gen === this.loadId) this.apply(next);
       },
     });
+    this.backgroundSaver = new LayoutSaver({
+      sleep: this.sleep,
+      debounceMs: deps.layoutDebounceMs,
+      report: (status, message) => deps.interaction.emit('decor:save-state', { status, message }),
+      send: async (tankId, backgroundId) => {
+        const gen = this.loadId;
+        const next = await this.enqueue(() => deps.api.saveBackground(tankId, backgroundId));
+        if (gen === this.loadId) this.apply(next);
+      },
+    });
     this.stopListening = [
+      deps.interaction.on('background:save', ({ tankId, backgroundId }) => {
+        this.shownBackground.set(tankId, backgroundId);
+        this.backgroundSaver.submit(tankId, backgroundId);
+      }),
       deps.interaction.on('decor:layout', ({ tankId, layout }) => {
         this.shownLayout.set(tankId, decorKey(true, layout));
         this.layoutSaver.submit(tankId, layout);
       }),
       deps.interaction.on('decor:command', (command) => {
-        if (command.type === 'retry-save') this.layoutSaver.retry();
+        if (command.type !== 'retry-save') return;
+        this.layoutSaver.retry();
+        this.backgroundSaver.retry();
       }),
       deps.interaction.on('decor:mode-changed', ({ active }) => {
-        if (!active) void this.layoutSaver.flush();
+        if (active) return;
+        void this.layoutSaver.flush();
+        void this.backgroundSaver.flush();
       }),
       deps.interaction.on('feed:dropped', ({ food, portion }) => void this.feed(food, portion)),
       deps.interaction.on('food:ate', ({ eaten }) => {
@@ -112,6 +133,7 @@ export class TankSession {
     this.uploader?.dispose();
     this.uploader = null;
     this.layoutSaver.dispose();
+    this.backgroundSaver.dispose();
     this.listeners.clear();
   }
 
@@ -331,7 +353,9 @@ export class TankSession {
     this.queueEpoch++;
     this.unloadScene('reset')?.dispose();
     this.layoutSaver.reset();
+    this.backgroundSaver.reset();
     this.shownLayout.clear();
+    this.shownBackground.clear();
     this.deps.storage?.removeItem(ACTIVE_KEY);
     this.deps.interaction.emit('tank:none', {});
     for (const timer of this.releaseTimers.values()) clearTimeout(timer);
@@ -351,6 +375,7 @@ export class TankSession {
     const gen = this.loadId;
     this.loadedId = tankId;
     this.shownLayout.set(tankId, decorKey(tank.decorEdited, tank.decorLayout));
+    this.shownBackground.set(tankId, tank.backgroundId);
     this.uploader = new AteUploader({
       ...this.deps.ateOptions,
       sleep: this.sleep,
@@ -371,6 +396,7 @@ export class TankSession {
       fish: tank.fish,
       decorLayout: tank.decorLayout,
       decorEdited: tank.decorEdited,
+      backgroundId: tank.backgroundId,
     });
     this.deps.interaction.emit('tank:water', { tankId, water: tank.water });
     return true;
@@ -515,6 +541,13 @@ export class TankSession {
         layout: tank.decorLayout,
         edited: tank.decorEdited,
       });
+    }
+    if (
+      !this.backgroundSaver.busyFor(tank.id) &&
+      tank.backgroundId !== this.shownBackground.get(tank.id)
+    ) {
+      this.shownBackground.set(tank.id, tank.backgroundId);
+      interaction.emit('tank:background', { tankId: tank.id, backgroundId: tank.backgroundId });
     }
     if (held.water !== tank.water)
       interaction.emit('tank:water', { tankId: tank.id, water: tank.water });
