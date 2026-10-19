@@ -1,3 +1,4 @@
+import { DEFAULT_TANK_SIZE, tankSizeSchema, type TankSize } from '@aquarium/shared';
 import { parseClock } from './daylight';
 import { isTier, TIERS, type Tier } from './quality/tiers';
 
@@ -12,6 +13,8 @@ export interface EngineOptions {
   clock: number | null;
   /** Shows the on-device performance readout. */
   stats: boolean;
+  /** The tank size drawn until a saved tank brings its own: the demo tank's. */
+  tankSize: TankSize;
 }
 
 const BACKENDS: readonly BackendPreference[] = ['auto', 'webgpu', 'webgl'];
@@ -20,7 +23,10 @@ function isBackend(value: string): value is BackendPreference {
   return (BACKENDS as readonly string[]).includes(value);
 }
 
-/** Reads `?backend=`, `?tier=`, `?adaptive=`, `?clock=` and `?stats=` from a URL query string. */
+/**
+ * Reads `?backend=`, `?tier=`, `?adaptive=`, `?clock=`, `?stats=` and `?size=` from a URL query
+ * string.
+ */
 export function parseEngineOptions(search: string): EngineOptions {
   const params = new URLSearchParams(search);
 
@@ -47,6 +53,12 @@ export function parseEngineOptions(search: string): EngineOptions {
     throw new Error(`Unknown ?stats=${statsParam}; use 0 or 1`);
   }
 
+  const sizeParam = params.get('size');
+  const size = sizeParam === null ? null : tankSizeSchema.safeParse(sizeParam);
+  if (size?.success === false) {
+    throw new Error(`Unknown ?size=${sizeParam}; use one of ${tankSizeSchema.options.join(', ')}`);
+  }
+
   const tier = tierParam ?? null;
   return {
     backend,
@@ -54,5 +66,6 @@ export function parseEngineOptions(search: string): EngineOptions {
     adaptive: tier === null && adaptiveParam !== '0',
     clock,
     stats: statsParam === '1',
+    tankSize: size?.data ?? DEFAULT_TANK_SIZE,
   };
 }
