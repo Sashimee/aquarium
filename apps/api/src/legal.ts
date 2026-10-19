@@ -9,6 +9,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Auth } from './auth.ts';
 import { schema, type Database } from './db/index.ts';
 import { apiError } from './errors.ts';
+import { lockHandles } from './handle.ts';
 import type { Limit, RateLimiter } from './rate-limit.ts';
 
 export interface LegalLimits {
@@ -209,8 +210,10 @@ export function registerLegalRoutes(deps: LegalDeps): void {
       const [leaving] = await tx
         .select({ handle: schema.user.handle })
         .from(schema.user)
-        .where(eq(schema.user.id, userId));
+        .where(eq(schema.user.id, userId))
+        .for('update');
       if (leaving?.handle) {
+        await lockHandles(tx, [leaving.handle]);
         await tx
           .insert(schema.releasedHandles)
           .values({ handle: leaving.handle })

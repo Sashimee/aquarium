@@ -118,6 +118,7 @@ export const causeOfDeathEnum = pgEnum('cause_of_death', [
   'ammonia',
   'nitrite',
   'disease',
+  'water_quality',
   'old_age',
   'unknown',
 ]);
@@ -126,8 +127,11 @@ export const eventKindEnum = pgEnum('event_kind', [
   'water_change',
   'gravel_vacuum',
   'algae_scrape',
+  'bottled_bacteria',
+  'filter_rinse',
   'ate',
   'death',
+  'born',
 ]);
 
 export const tanks = pgTable(
@@ -159,7 +163,7 @@ export const tanks = pgTable(
     equipment: jsonb('equipment')
       .notNull()
       .default(
-        sql`'{"filter":{"tier":1},"heater":{"tier":0},"light":{"tier":1,"intensity":0.8,"onHour":8,"offHour":20},"co2":{"tier":0},"waveMaker":{"tier":0}}'::jsonb`,
+        sql`'{"filter":{"tier":1},"heater":{"tier":1},"light":{"tier":1,"intensity":0.8,"onHour":8,"offHour":20},"co2":{"tier":0},"waveMaker":{"tier":0}}'::jsonb`,
       ),
   },
   (t) => [index('tanks_owner_id_idx').on(t.ownerId)],
@@ -185,6 +189,7 @@ export const fish = pgTable(
     diedAt: timestamptz('died_at'),
     cause: causeOfDeathEnum('cause'),
     stage: fishStageEnum('stage').notNull().default('adult'),
+    lastBroodAt: timestamptz('last_brood_at'),
     personality: jsonb('personality')
       .notNull()
       .default(sql`'{"boldness":0.5,"greed":0.5,"sociability":0.5}'::jsonb`),

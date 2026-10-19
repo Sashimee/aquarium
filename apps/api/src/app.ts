@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { relative, resolve, sep } from 'node:path';
 import fastifyStatic from '@fastify/static';
 import {
+  type ChemistryParameters,
   revokeSessionRequestSchema,
   signUpRequestSchema,
   signInRequestSchema,
@@ -43,6 +44,7 @@ export interface AppOptions {
   mailer: Mailer;
   signInThrottle: { store: ResettableHitStore; limit: Limit };
   species: SpeciesCatalog;
+  chemistryParams: ChemistryParameters;
   clock?: Clock;
   careLimits?: CareLimits;
   legalLimits?: LegalLimits;
@@ -574,6 +576,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     app,
     database,
     species: opts.species,
+    chemistryParams: opts.chemistryParams,
     clock,
     limiter,
     limits: opts.careLimits ?? DEFAULT_CARE_LIMITS,

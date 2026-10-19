@@ -55,15 +55,29 @@ export const chemistryParametersSchema = z.strictObject({
     ammoniaOxidisers: colonySchema,
     nitriteOxidisers: colonySchema,
     bottledBoost: unitSchema.describe('colony added by one dose of bottled bacteria'),
+    overCapacityDieOffPerHour: rate.describe(
+      'colony loss per hour above what the filter media can host',
+    ),
+    rinseSurvival: unitSchema.describe(
+      'share of each colony left after rinsing media in tap water',
+    ),
+    ambientSeed: rate.describe('colony-equivalent that lets a colony start from nothing'),
+    minSubstrate: rate.describe(
+      'ammonia or nitrite present plus the supply of one step, below which a colony starves',
+    ),
     mediaCapacityPerFilterTier: unitSchema.describe('share of full colony one filter tier hosts'),
   }),
   nitrite: z.strictObject({
     toxicityPerUnit: rate.describe('health loss multiplier per unit nitrite above tolerance'),
   }),
+  nitrate: z.strictObject({
+    yieldPerNitrite: rate.describe('nitrate units made by one unit of nitrite oxidised'),
+  }),
   ph: z.strictObject({
     target: perBiome(z.number().min(0).max(14)),
     driftPerHour: rate.describe('fraction of the gap to the buffered target closed per hour'),
-    acidificationPerNitrate: rate,
+    acidificationPerNitrate: rate.describe('pH drop per nitrate unit at 1 dKH, divided by KH'),
+    minBufferKh: rate.describe('KH below which the buffer stops getting weaker'),
   }),
   salinity: z.strictObject({
     target: perBiome(z.number().min(0).max(45)),
@@ -72,7 +86,9 @@ export const chemistryParametersSchema = z.strictObject({
   kh: z.strictObject({
     consumedPerNitrate: rate,
     restoredPerWaterChange: unitSchema.describe('fraction of the gap to the source water closed'),
-    sourceWater: z.number().min(0).max(40),
+    sourceWater: perBiome(z.number().min(0).max(40)).describe(
+      'dKH of the water a change adds: tap for fresh biomes, salt mix for marine and brackish',
+    ),
   }),
   temperature: z.strictObject({
     target: perBiome(z.number().min(0).max(45)),
@@ -80,5 +96,19 @@ export const chemistryParametersSchema = z.strictObject({
     driftPerHour: rate.describe('fraction of the gap to the room temperature closed per hour'),
     heaterWarmingPerHourPerTier: rate,
   }),
+  stress: z.strictObject({
+    healthLossFraction: unitSchema.describe(
+      'health loss per hour at full stress, as a share of the species starvation rate',
+    ),
+    fullStressDeviation: z.strictObject({
+      ph: rate.describe('pH units outside the species range that count as full stress'),
+      temperatureC: rate,
+      salinity: rate.describe('ppt outside the species range'),
+      kh: rate.describe('dKH below the species minimum'),
+    }),
+  }),
+  sources: z
+    .record(z.string(), z.array(z.string().min(1)).min(1))
+    .describe('where each section of rates comes from'),
 });
 export type ChemistryParameters = z.infer<typeof chemistryParametersSchema>;

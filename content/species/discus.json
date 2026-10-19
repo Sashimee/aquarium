@@ -15,6 +15,28 @@
     "traits": ["shoal"]
   },
   "biome": "freshwater",
+  "breeding": {
+    "broodSize": [3, 8],
+    "fryGrowth": {
+      "adultAfterDays": 450,
+      "juvenileAfterDays": 45
+    },
+    "intervalDays": 21,
+    "minAgeDays": 450,
+    "mode": "substrate-spawner",
+    "temperatureC": [28, 31]
+  },
+  "chemistry": {
+    "khMin": 0,
+    "nitriteTolerance": 0.2,
+    "phRange": [5.5, 7],
+    "salinityPpt": [0, 1],
+    "sources": [
+      "FishBase (fishbase.se) species summary",
+      "SeriouslyFish species profile (seriouslyfish.com)"
+    ],
+    "temperatureC": [28, 31]
+  },
   "commonName": "Discus",
   "id": "discus",
   "lifecycle": {

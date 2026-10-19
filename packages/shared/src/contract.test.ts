@@ -433,9 +433,7 @@ describe('memorial and water', () => {
   });
   it('validates water parameters', () => {
     const params = {
-      filterRemovalPerHour: 0.2,
       foodDecayMinutes: 60,
-      nitratePerHour: 0.05,
       ammoniaPerPortion: 0.1,
       algaePerHour: 0.001,
     };
