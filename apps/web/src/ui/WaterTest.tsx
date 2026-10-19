@@ -11,6 +11,7 @@ import {
   padsFor,
   rawValues,
   suitability,
+  verdictHazard,
   type PadId,
   type PadReading,
   type StripResult,
@@ -25,6 +26,7 @@ interface Dip {
   revealed: boolean;
 }
 
+const MAX_REMEMBERED_DIPS = 20;
 const lastDip = new Map<string, Dip>();
 
 const SUIT_KEY: Partial<Record<PadId, SuitKey>> = { ph: 'ph', kh: 'kh', salinity: 'salinity' };
@@ -112,7 +114,6 @@ function Readings({
   dip: Dip;
   now: number;
 }) {
-  const values = rawValues(tank);
   const temperatureFit = suitability(tank, species, 'temperatureC', dip.temperatureC);
   return (
     <table className="readings" aria-label="Chemistry readings">
@@ -129,19 +130,20 @@ function Readings({
           const reading = dip.strip[id];
           const known = reading !== undefined && (dip.revealed || dip.guesses[id] !== undefined);
           const suitKey = SUIT_KEY[id];
+          const hazard = reading ? verdictHazard(tank, species, reading) : 'safe';
           const verdict = !reading
             ? 'No reading'
             : !known
               ? 'Read the pad first'
               : suitKey
-                ? SUIT_LABEL[suitability(tank, species, suitKey, values[id])]
-                : HAZARD_LABEL[reading.hazard];
+                ? SUIT_LABEL[suitability(tank, species, suitKey, reading.value)]
+                : HAZARD_LABEL[hazard];
           return (
-            <tr key={id} data-reading={id} data-hazard={known ? reading.hazard : 'unread'}>
+            <tr key={id} data-reading={id} data-hazard={known ? hazard : 'unread'}>
               <th scope="row">{PADS[id].label}</th>
               <td>{known ? describeReading(reading) : 'Not read yet'}</td>
               <td>
-                {known && reading.hazard !== 'safe' && !suitKey ? '! ' : ''}
+                {known && hazard !== 'safe' && !suitKey ? '! ' : ''}
                 {verdict}
               </td>
             </tr>
@@ -178,7 +180,10 @@ export default function WaterTest({
   }, []);
 
   const store = (next: Dip) => {
+    lastDip.delete(tank.id);
     lastDip.set(tank.id, next);
+    const oldest = lastDip.keys().next().value;
+    if (lastDip.size > MAX_REMEMBERED_DIPS && oldest !== undefined) lastDip.delete(oldest);
     setDip(next);
   };
 

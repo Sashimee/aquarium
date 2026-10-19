@@ -1,5 +1,5 @@
 import type { Biome, SpeciesSummary, Tank } from '@aquarium/shared';
-import { livingFish } from './life';
+import { livingFish, waterReport, type WaterQuality } from './life';
 
 export type PadId = 'ph' | 'ammonia' | 'nitrite' | 'nitrate' | 'kh' | 'salinity';
 
@@ -25,6 +25,20 @@ const step = (value: number, colour: string, hazard: Hazard = 'safe'): ChartStep
   hazard,
 });
 
+const channel = (hex: string, i: number): number => parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
+
+function ramp(from: number, to: number, stepBy: number, colours: readonly [string, string]) {
+  const count = Math.round((to - from) / stepBy);
+  return Array.from({ length: count + 1 }, (_, i) => {
+    const t = count === 0 ? 0 : i / count;
+    const mix = [0, 1, 2]
+      .map((c) => Math.round(channel(colours[0], c) * (1 - t) + channel(colours[1], c) * t))
+      .map((n) => n.toString(16).padStart(2, '0'))
+      .join('');
+    return step(Math.round((from + i * stepBy) * 100) / 100, `#${mix}`);
+  });
+}
+
 // Colour ramps follow the look of common dip strips; the numbers are the sim's own units.
 export const PADS: Readonly<Record<PadId, PadSpec>> = {
   ph: {
@@ -32,17 +46,7 @@ export const PADS: Readonly<Record<PadId, PadSpec>> = {
     label: 'pH',
     unit: '',
     decimals: 1,
-    steps: [
-      step(5, '#e9d24a'),
-      step(5.5, '#f0b23d'),
-      step(6, '#f09a3a'),
-      step(6.5, '#e8784a'),
-      step(7, '#d9605f'),
-      step(7.5, '#c24f78'),
-      step(8, '#a2457f'),
-      step(8.5, '#7e3f86'),
-      step(9, '#5b3a86'),
-    ],
+    steps: [step(5, '#e9d24a'), ...ramp(5.5, 8.5, 0.1, ['#f0b23d', '#7e3f86']), step(9, '#5b3a86')],
   },
   ammonia: {
     id: 'ammonia',
@@ -106,11 +110,8 @@ export const PADS: Readonly<Record<PadId, PadSpec>> = {
     unit: 'ppt',
     decimals: 0,
     steps: [
-      step(0, '#dfe8f2'),
-      step(10, '#b6d0e6'),
-      step(20, '#86b4d6'),
-      step(30, '#5b97c6'),
-      step(35, '#3f7fb4'),
+      ...ramp(0, 25, 5, ['#dfe8f2', '#a4c4de']),
+      ...ramp(30, 38, 1, ['#6aa0cb', '#386fa8']),
       step(40, '#2e659c'),
     ],
   },
@@ -132,6 +133,17 @@ export interface PadReading {
   offscale: Offscale;
   value: number;
 }
+
+export const verdictHazard = (
+  tank: Tank,
+  species: readonly SpeciesSummary[],
+  reading: PadReading,
+): Hazard => {
+  if (reading.id !== 'ammonia' && reading.id !== 'nitrate') return reading.hazard;
+  const water = { ...tank.water, [reading.id]: reading.value };
+  const quality: WaterQuality = waterReport(water, tank, species)[reading.id];
+  return quality === 'poor' ? 'danger' : quality === 'fair' ? 'caution' : 'safe';
+};
 
 export type RawValues = Readonly<Partial<Record<PadId | 'temperatureC', number | undefined>>>;
 
