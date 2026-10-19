@@ -445,6 +445,8 @@ const VELVET_GRAIN_EDGE = 0.12;
 const VELVET_MAX_COVER = 0.55;
 /** Fins dust over a little sooner than the flank, not as a solid sheet. */
 const VELVET_FIN_WEIGHT = 0.8;
+/** The body's dust weight averaged over a fish seen from any side: 0.35 at the belly, 1 on the back. */
+const VELVET_MEAN_BODY_WEIGHT = 0.6;
 /** Linear albedo of the rusty-gold dust. */
 const VELVET_GOLD = vec3(0.52, 0.37, 0.13);
 const VELVET_ROUGHNESS = 0.85;
@@ -580,8 +582,37 @@ const diseaseMarks = Fn(
   },
 );
 
+/**
+ * `diseaseMarks` as a distant fish shows them, where no single cyst, grain or notch is resolved:
+ * ich and velvet as their expected cover, the fin rot front without its notches. Every input is a
+ * blend of atlas texels, so nothing here needs the rest-pose position. A healthy fish's marks are
+ * exactly (0, 0, 1, 1), as `diseaseMarks` gives.
+ */
+export function distantDiseaseMarks(
+  signs: Node<'vec3'>,
+  finMask: Node<'float'>,
+  finAmount: Node<'float'>,
+): Node<'vec4'> {
+  const lattice = signs.x.mul(ICH_MAX_DENSITY * ichLatticeCover());
+  const ich = lattice.mul(2).sub(lattice.mul(lattice));
+  const where = max(float(VELVET_MEAN_BODY_WEIGHT), finAmount.mul(VELVET_FIN_WEIGHT));
+  const dust = min(signs.z.mul(where), 1).mul(VELVET_MAX_COVER);
+  const rot = signs.y;
+  const rotting = rot.greaterThan(0);
+  const front = float(1).sub(rot.mul(ROT_DEPTH));
+  const width = max(fwidth(finMask), 1e-4);
+  const kept = smoothstep(front.sub(width), front.add(width), finMask).oneMinus();
+  const depth = clamp(front.sub(finMask).div(ROT_BAND), 0, 1);
+  return vec4(ich, dust, select(rotting, kept, float(1)), select(rotting, depth, float(1)));
+}
+
+/** `materialRoughness` under the velvet dust of `marks`. */
+export function dustedRoughness(marks: Node<'vec4'>): Node<'float'> {
+  return mix(materialRoughness, float(VELVET_ROUGHNESS), marks.y);
+}
+
 /** `albedo` with the signs in `marks` painted on, for the severities `signs`. */
-function diseasedAlbedo(
+export function diseasedAlbedo(
   albedo: Node<'vec3'>,
   marks: Node<'vec4'>,
   signs: Node<'vec3'>,
@@ -825,8 +856,7 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
     this.colorNode = albedo;
     // Dust is matte and hides the mucus gloss and the iridophores under it.
     const undusted = marks === null ? null : marks.y.oneMinus();
-    this.roughnessNode =
-      marks === null ? null : mix(materialRoughness, float(VELVET_ROUGHNESS), marks.y);
+    this.roughnessNode = marks === null ? null : dustedRoughness(marks);
 
     const textureAlpha = sample.a.mul(source.opacity);
     const hasAlpha = source.transparent || source.alphaTest > 0;
