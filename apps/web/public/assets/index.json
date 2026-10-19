@@ -2,7 +2,7 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; every texture has both files.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Every fish LOD also carries _MOUTH, geometry attribute \"_mouth\", a float in [0, 1] for buccal motion: 1 at the jaw or lower-lip tip (every LOD is renormalised so its highest value is exactly 1), easing to 0 behind the gill line and above the mouth slit; fins, eyes and attachments are 0. Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body, carapace and eyes; 6 walking leg; 7 antenna; 8 pleopod; 9 abdomen, telson and tail fan) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x; antennules 0/1, long antennae 2/3; tail-fan leaves k * 2 + side). Shrimp _fin_mask means: id 0 is 0 (eye stalks included, ignore it); ids 6 and 7 are the weight along the limb, 0 root to 1 tip; id 8 is the pleopod beat weight, 0 root to 1 tip; id 9 is the tail-curl weight clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1) of the rest position. Tail curl rotates ids 8 and 9 about +x through the shrimp.abdomenHinge {y, z} by flex * clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1), computed from the rest position, never from _fin_mask, so the pleopods follow the segment they hang from. Pleopods (id 8) exist only in LOD0 and LOD1 and are removed from LOD2; legs are simplified, so do not assume every _leg index exists at every LOD. The cherry material is alphaMode BLEND with base colour alpha 0.86: three.js GLTFLoader turns depthWrite off for BLEND, so set depthWrite true on the cherry material and expect some sorting artefacts from the self-overlapping legs and antennae.",
-  "totalBytes": 68882466,
+  "totalBytes": 80365621,
   "assets": [
     {
       "id": "angelfish",
@@ -6034,6 +6034,811 @@
           "sha256": "d748abc03e32f952c7c2f614369ffe30dc636df310caf53fe60425bae0e722d0"
         }
       ]
+    },
+    {
+      "id": "bg-fw-misty-lake",
+      "kind": "background",
+      "origin": "render",
+      "sources": [
+        "bg-fw-misty-lake"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "composed and rendered by the Aquarium project from Java fern and vallisneria (Nullified), pond weed (Valery.Li), driftwood, rocks and ground textures (CC0), at 4096x2048 with depth-of-field blur and a water haze",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-fw-misty-lake/ultra.ktx2",
+          "bytes": 336462,
+          "sha256": "2284c6e7ecacc6389e93d5b83cb51d6455255450185068a937d637028dd595e5"
+        },
+        {
+          "file": "background/bg-fw-misty-lake/high.ktx2",
+          "bytes": 336462,
+          "sha256": "2284c6e7ecacc6389e93d5b83cb51d6455255450185068a937d637028dd595e5"
+        },
+        {
+          "file": "background/bg-fw-misty-lake/medium.ktx2",
+          "bytes": 106958,
+          "sha256": "291fdac1117a82a99bb95a5791c635c6a639f3187e15fc6e403b7e71d2af04c7"
+        },
+        {
+          "file": "background/bg-fw-misty-lake/low.ktx2",
+          "bytes": 38454,
+          "sha256": "e5f63f9f669953fbfa3ccc99d5ad714eab915b7a9db4d4df680ecd3ebd293cc3"
+        }
+      ],
+      "background": {
+        "crop": null,
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-fw-misty-lake/ultra.ktx2",
+            "bytes": 336462,
+            "sha256": "2284c6e7ecacc6389e93d5b83cb51d6455255450185068a937d637028dd595e5",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-fw-misty-lake/high.ktx2",
+            "bytes": 336462,
+            "sha256": "2284c6e7ecacc6389e93d5b83cb51d6455255450185068a937d637028dd595e5",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-fw-misty-lake/medium.ktx2",
+            "bytes": 106958,
+            "sha256": "291fdac1117a82a99bb95a5791c635c6a639f3187e15fc6e403b7e71d2af04c7",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-fw-misty-lake/low.ktx2",
+            "bytes": 38454,
+            "sha256": "e5f63f9f669953fbfa3ccc99d5ad714eab915b7a9db4d4df680ecd3ebd293cc3",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
+      "id": "bg-fw-plant-wall",
+      "kind": "background",
+      "origin": "photo",
+      "sources": [
+        "bg-fw-plant-wall"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "cropped to the 2:1 box left 0, top 400, 4032x2016 px of the original photo",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-fw-plant-wall/ultra.ktx2",
+          "bytes": 525229,
+          "sha256": "891061a8bde00191e46311a5b8c364bae54821dd492b3c4c00ecba79aac06f84"
+        },
+        {
+          "file": "background/bg-fw-plant-wall/high.ktx2",
+          "bytes": 525229,
+          "sha256": "891061a8bde00191e46311a5b8c364bae54821dd492b3c4c00ecba79aac06f84"
+        },
+        {
+          "file": "background/bg-fw-plant-wall/medium.ktx2",
+          "bytes": 155335,
+          "sha256": "9c1be18efcb07f0c5e600d8b57c3d3b7172ec1f79994ac49c39ed75d3888e713"
+        },
+        {
+          "file": "background/bg-fw-plant-wall/low.ktx2",
+          "bytes": 50680,
+          "sha256": "20b7134fadb7263d69c245a15fec64eea6cc7e0eb38ee7c7b037ff83630811ec"
+        }
+      ],
+      "background": {
+        "crop": {
+          "left": 0,
+          "top": 400,
+          "width": 4032,
+          "height": 2016
+        },
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-fw-plant-wall/ultra.ktx2",
+            "bytes": 525229,
+            "sha256": "891061a8bde00191e46311a5b8c364bae54821dd492b3c4c00ecba79aac06f84",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-fw-plant-wall/high.ktx2",
+            "bytes": 525229,
+            "sha256": "891061a8bde00191e46311a5b8c364bae54821dd492b3c4c00ecba79aac06f84",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-fw-plant-wall/medium.ktx2",
+            "bytes": 155335,
+            "sha256": "9c1be18efcb07f0c5e600d8b57c3d3b7172ec1f79994ac49c39ed75d3888e713",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-fw-plant-wall/low.ktx2",
+            "bytes": 50680,
+            "sha256": "20b7134fadb7263d69c245a15fec64eea6cc7e0eb38ee7c7b037ff83630811ec",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
+      "id": "bg-fw-planted-stream",
+      "kind": "background",
+      "origin": "photo",
+      "sources": [
+        "bg-fw-planted-stream"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "cropped to the 2:1 box left 0, top 700, 4724x2362 px of the original photo",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-fw-planted-stream/ultra.ktx2",
+          "bytes": 538319,
+          "sha256": "a5cdbe07d496ae57cd46a180297a408cb96a9fea00f094a20079a77b595eeecb"
+        },
+        {
+          "file": "background/bg-fw-planted-stream/high.ktx2",
+          "bytes": 538319,
+          "sha256": "a5cdbe07d496ae57cd46a180297a408cb96a9fea00f094a20079a77b595eeecb"
+        },
+        {
+          "file": "background/bg-fw-planted-stream/medium.ktx2",
+          "bytes": 158216,
+          "sha256": "b331045d50405997d48cd5ee3e824a0977e2ce067531b23779caca6b8b8e1f26"
+        },
+        {
+          "file": "background/bg-fw-planted-stream/low.ktx2",
+          "bytes": 51293,
+          "sha256": "9cfe5ae90503e2ae8817632121862823e4c828751441c1f04169604983ed04eb"
+        }
+      ],
+      "background": {
+        "crop": {
+          "left": 0,
+          "top": 700,
+          "width": 4724,
+          "height": 2362
+        },
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-fw-planted-stream/ultra.ktx2",
+            "bytes": 538319,
+            "sha256": "a5cdbe07d496ae57cd46a180297a408cb96a9fea00f094a20079a77b595eeecb",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-fw-planted-stream/high.ktx2",
+            "bytes": 538319,
+            "sha256": "a5cdbe07d496ae57cd46a180297a408cb96a9fea00f094a20079a77b595eeecb",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-fw-planted-stream/medium.ktx2",
+            "bytes": 158216,
+            "sha256": "b331045d50405997d48cd5ee3e824a0977e2ce067531b23779caca6b8b8e1f26",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-fw-planted-stream/low.ktx2",
+            "bytes": 51293,
+            "sha256": "9cfe5ae90503e2ae8817632121862823e4c828751441c1f04169604983ed04eb",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
+      "id": "bg-fw-rocky-riverbed",
+      "kind": "background",
+      "origin": "photo",
+      "sources": [
+        "bg-fw-rocky-riverbed"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "cropped to the 2:1 box left 0, top 600, 7360x3680 px of the original photo",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-fw-rocky-riverbed/ultra.ktx2",
+          "bytes": 438826,
+          "sha256": "5d7076e8ab438ce74b695ca867e5b18bb0c4e961f1897dfc2d3c9bc31d4a96c7"
+        },
+        {
+          "file": "background/bg-fw-rocky-riverbed/high.ktx2",
+          "bytes": 438826,
+          "sha256": "5d7076e8ab438ce74b695ca867e5b18bb0c4e961f1897dfc2d3c9bc31d4a96c7"
+        },
+        {
+          "file": "background/bg-fw-rocky-riverbed/medium.ktx2",
+          "bytes": 130864,
+          "sha256": "0dbf4f7e4a309dce5b7c654c6e28f2037b7dd0e2d55213f5403bb3c87d9cb556"
+        },
+        {
+          "file": "background/bg-fw-rocky-riverbed/low.ktx2",
+          "bytes": 43008,
+          "sha256": "da67a34678f6672cc25a2cec49150987daf91eb8c36de2cb6514983f972ba8ff"
+        }
+      ],
+      "background": {
+        "crop": {
+          "left": 0,
+          "top": 600,
+          "width": 7360,
+          "height": 3680
+        },
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-fw-rocky-riverbed/ultra.ktx2",
+            "bytes": 438826,
+            "sha256": "5d7076e8ab438ce74b695ca867e5b18bb0c4e961f1897dfc2d3c9bc31d4a96c7",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-fw-rocky-riverbed/high.ktx2",
+            "bytes": 438826,
+            "sha256": "5d7076e8ab438ce74b695ca867e5b18bb0c4e961f1897dfc2d3c9bc31d4a96c7",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-fw-rocky-riverbed/medium.ktx2",
+            "bytes": 130864,
+            "sha256": "0dbf4f7e4a309dce5b7c654c6e28f2037b7dd0e2d55213f5403bb3c87d9cb556",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-fw-rocky-riverbed/low.ktx2",
+            "bytes": 43008,
+            "sha256": "da67a34678f6672cc25a2cec49150987daf91eb8c36de2cb6514983f972ba8ff",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
+      "id": "bg-fw-root-tangle",
+      "kind": "background",
+      "origin": "photo",
+      "sources": [
+        "bg-fw-root-tangle"
+      ],
+      "licence": "CC-BY-3.0",
+      "modifications": [
+        "cropped to the 2:1 box left 0, top 400, 3872x1936 px of the original photo",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-fw-root-tangle/ultra.ktx2",
+          "bytes": 520418,
+          "sha256": "c8c3953bc2793f605e0dbe547eda754b3f3e73ce3edd818a9694dbd4c4688118"
+        },
+        {
+          "file": "background/bg-fw-root-tangle/high.ktx2",
+          "bytes": 520418,
+          "sha256": "c8c3953bc2793f605e0dbe547eda754b3f3e73ce3edd818a9694dbd4c4688118"
+        },
+        {
+          "file": "background/bg-fw-root-tangle/medium.ktx2",
+          "bytes": 152858,
+          "sha256": "9db493308560bd6884c2481774b5a05fe09c222deebe30a94c211fdd0af2cad3"
+        },
+        {
+          "file": "background/bg-fw-root-tangle/low.ktx2",
+          "bytes": 48932,
+          "sha256": "cd1e7aa7ec1054df3f0f6a98f3b456b0ee7d607ba28f31bc49e4d69eb40a272e"
+        }
+      ],
+      "background": {
+        "crop": {
+          "left": 0,
+          "top": 400,
+          "width": 3872,
+          "height": 1936
+        },
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-fw-root-tangle/ultra.ktx2",
+            "bytes": 520418,
+            "sha256": "c8c3953bc2793f605e0dbe547eda754b3f3e73ce3edd818a9694dbd4c4688118",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-fw-root-tangle/high.ktx2",
+            "bytes": 520418,
+            "sha256": "c8c3953bc2793f605e0dbe547eda754b3f3e73ce3edd818a9694dbd4c4688118",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-fw-root-tangle/medium.ktx2",
+            "bytes": 152858,
+            "sha256": "9db493308560bd6884c2481774b5a05fe09c222deebe30a94c211fdd0af2cad3",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-fw-root-tangle/low.ktx2",
+            "bytes": 48932,
+            "sha256": "cd1e7aa7ec1054df3f0f6a98f3b456b0ee7d607ba28f31bc49e4d69eb40a272e",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
+      "id": "bg-reef-coral-wall",
+      "kind": "background",
+      "origin": "photo",
+      "sources": [
+        "bg-reef-coral-wall"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "cropped to the 2:1 box left 0, top 336, 5472x2736 px of the original photo",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-reef-coral-wall/ultra.ktx2",
+          "bytes": 471595,
+          "sha256": "24354f63ccdabf8ed04488d5e9c983630c7879b3cfbb95093869e300dfe9f84f"
+        },
+        {
+          "file": "background/bg-reef-coral-wall/high.ktx2",
+          "bytes": 471595,
+          "sha256": "24354f63ccdabf8ed04488d5e9c983630c7879b3cfbb95093869e300dfe9f84f"
+        },
+        {
+          "file": "background/bg-reef-coral-wall/medium.ktx2",
+          "bytes": 140746,
+          "sha256": "4272d186d0a4f6304a2a0ce2ea682a66690510a85f4d7339526b6be3167205ff"
+        },
+        {
+          "file": "background/bg-reef-coral-wall/low.ktx2",
+          "bytes": 47656,
+          "sha256": "a16b041f67453f32bcc2af801d4f9f4d759bd10d26ca2b098489b509143fc4cc"
+        }
+      ],
+      "background": {
+        "crop": {
+          "left": 0,
+          "top": 336,
+          "width": 5472,
+          "height": 2736
+        },
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-reef-coral-wall/ultra.ktx2",
+            "bytes": 471595,
+            "sha256": "24354f63ccdabf8ed04488d5e9c983630c7879b3cfbb95093869e300dfe9f84f",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-reef-coral-wall/high.ktx2",
+            "bytes": 471595,
+            "sha256": "24354f63ccdabf8ed04488d5e9c983630c7879b3cfbb95093869e300dfe9f84f",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-reef-coral-wall/medium.ktx2",
+            "bytes": 140746,
+            "sha256": "4272d186d0a4f6304a2a0ce2ea682a66690510a85f4d7339526b6be3167205ff",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-reef-coral-wall/low.ktx2",
+            "bytes": 47656,
+            "sha256": "a16b041f67453f32bcc2af801d4f9f4d759bd10d26ca2b098489b509143fc4cc",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
+      "id": "bg-reef-deep-blue",
+      "kind": "background",
+      "origin": "photo",
+      "sources": [
+        "bg-reef-deep-blue"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "cropped to the 2:1 box left 0, top 600, 5184x2592 px of the original photo",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-reef-deep-blue/ultra.ktx2",
+          "bytes": 455830,
+          "sha256": "64276df25c2e87804472c9865d7eeec0d0ae7b776a636c65009c8c1dff08a080"
+        },
+        {
+          "file": "background/bg-reef-deep-blue/high.ktx2",
+          "bytes": 455830,
+          "sha256": "64276df25c2e87804472c9865d7eeec0d0ae7b776a636c65009c8c1dff08a080"
+        },
+        {
+          "file": "background/bg-reef-deep-blue/medium.ktx2",
+          "bytes": 136204,
+          "sha256": "dd11f66a805d610fef6e4e562a32b5053a36e267203cb0d02d0d4bd857c000ee"
+        },
+        {
+          "file": "background/bg-reef-deep-blue/low.ktx2",
+          "bytes": 45188,
+          "sha256": "43b6914d0da4a7afaba42a3ea23474664e96e72a4531bf1240d5778eb7fbccec"
+        }
+      ],
+      "background": {
+        "crop": {
+          "left": 0,
+          "top": 600,
+          "width": 5184,
+          "height": 2592
+        },
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-reef-deep-blue/ultra.ktx2",
+            "bytes": 455830,
+            "sha256": "64276df25c2e87804472c9865d7eeec0d0ae7b776a636c65009c8c1dff08a080",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-reef-deep-blue/high.ktx2",
+            "bytes": 455830,
+            "sha256": "64276df25c2e87804472c9865d7eeec0d0ae7b776a636c65009c8c1dff08a080",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-reef-deep-blue/medium.ktx2",
+            "bytes": 136204,
+            "sha256": "dd11f66a805d610fef6e4e562a32b5053a36e267203cb0d02d0d4bd857c000ee",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-reef-deep-blue/low.ktx2",
+            "bytes": 45188,
+            "sha256": "43b6914d0da4a7afaba42a3ea23474664e96e72a4531bf1240d5778eb7fbccec",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
+      "id": "bg-reef-fish-slope",
+      "kind": "background",
+      "origin": "photo",
+      "sources": [
+        "bg-reef-fish-slope"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "cropped to the 2:1 box left 0, top 300, 3618x1809 px of the original photo",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-reef-fish-slope/ultra.ktx2",
+          "bytes": 457296,
+          "sha256": "16c82bb4115c193c8f43adbbb80dfd233ce1632d55769a2a782228685b37ecab"
+        },
+        {
+          "file": "background/bg-reef-fish-slope/high.ktx2",
+          "bytes": 457296,
+          "sha256": "16c82bb4115c193c8f43adbbb80dfd233ce1632d55769a2a782228685b37ecab"
+        },
+        {
+          "file": "background/bg-reef-fish-slope/medium.ktx2",
+          "bytes": 139646,
+          "sha256": "f2c27372e5df22a259bd58e0edd5d1126cf261e3caa152bfbb52c7cbd6496e1f"
+        },
+        {
+          "file": "background/bg-reef-fish-slope/low.ktx2",
+          "bytes": 48087,
+          "sha256": "97cebff797c8853737dbea9292cd5543fe4c7db64cdcaf1637f45daed7938f2d"
+        }
+      ],
+      "background": {
+        "crop": {
+          "left": 0,
+          "top": 300,
+          "width": 3618,
+          "height": 1809
+        },
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-reef-fish-slope/ultra.ktx2",
+            "bytes": 457296,
+            "sha256": "16c82bb4115c193c8f43adbbb80dfd233ce1632d55769a2a782228685b37ecab",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-reef-fish-slope/high.ktx2",
+            "bytes": 457296,
+            "sha256": "16c82bb4115c193c8f43adbbb80dfd233ce1632d55769a2a782228685b37ecab",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-reef-fish-slope/medium.ktx2",
+            "bytes": 139646,
+            "sha256": "f2c27372e5df22a259bd58e0edd5d1126cf261e3caa152bfbb52c7cbd6496e1f",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-reef-fish-slope/low.ktx2",
+            "bytes": 48087,
+            "sha256": "97cebff797c8853737dbea9292cd5543fe4c7db64cdcaf1637f45daed7938f2d",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
+      "id": "bg-reef-light-rays",
+      "kind": "background",
+      "origin": "photo",
+      "sources": [
+        "bg-reef-light-rays"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "cropped to the 2:1 box left 0, top 300, 3648x1824 px of the original photo",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-reef-light-rays/ultra.ktx2",
+          "bytes": 497669,
+          "sha256": "3d2f15ffe6d7ab9bc8ac054ad3d086526df4197def37e4e4afd8f179e5a553ef"
+        },
+        {
+          "file": "background/bg-reef-light-rays/high.ktx2",
+          "bytes": 497669,
+          "sha256": "3d2f15ffe6d7ab9bc8ac054ad3d086526df4197def37e4e4afd8f179e5a553ef"
+        },
+        {
+          "file": "background/bg-reef-light-rays/medium.ktx2",
+          "bytes": 147144,
+          "sha256": "7cd74b2af355d9189988d0340ac8242e2598e08789dc1e3c2f189f1c919e1ae5"
+        },
+        {
+          "file": "background/bg-reef-light-rays/low.ktx2",
+          "bytes": 47631,
+          "sha256": "895b072b2e76d40ab7c290f0eb47fa5303c898927f9a7ecc64d9455b0d2da4d2"
+        }
+      ],
+      "background": {
+        "crop": {
+          "left": 0,
+          "top": 300,
+          "width": 3648,
+          "height": 1824
+        },
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-reef-light-rays/ultra.ktx2",
+            "bytes": 497669,
+            "sha256": "3d2f15ffe6d7ab9bc8ac054ad3d086526df4197def37e4e4afd8f179e5a553ef",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-reef-light-rays/high.ktx2",
+            "bytes": 497669,
+            "sha256": "3d2f15ffe6d7ab9bc8ac054ad3d086526df4197def37e4e4afd8f179e5a553ef",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-reef-light-rays/medium.ktx2",
+            "bytes": 147144,
+            "sha256": "7cd74b2af355d9189988d0340ac8242e2598e08789dc1e3c2f189f1c919e1ae5",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-reef-light-rays/low.ktx2",
+            "bytes": 47631,
+            "sha256": "895b072b2e76d40ab7c290f0eb47fa5303c898927f9a7ecc64d9455b0d2da4d2",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
+      "id": "bg-reef-soft-coral",
+      "kind": "background",
+      "origin": "photo",
+      "sources": [
+        "bg-reef-soft-coral"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "cropped to the 2:1 box left 0, top 500, 4000x2000 px of the original photo",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-reef-soft-coral/ultra.ktx2",
+          "bytes": 548951,
+          "sha256": "b569bc003c5f203fd5e4d03cc32d8ec908e0df26a64b7aa7679675e7678f8665"
+        },
+        {
+          "file": "background/bg-reef-soft-coral/high.ktx2",
+          "bytes": 548951,
+          "sha256": "b569bc003c5f203fd5e4d03cc32d8ec908e0df26a64b7aa7679675e7678f8665"
+        },
+        {
+          "file": "background/bg-reef-soft-coral/medium.ktx2",
+          "bytes": 161443,
+          "sha256": "54809d9a7e455776ff38254e1f828f7ae8b29e364b30431ea1bbb52b916254aa"
+        },
+        {
+          "file": "background/bg-reef-soft-coral/low.ktx2",
+          "bytes": 51622,
+          "sha256": "26f82403abb742804e0508c0761e5c8e79a9479381170bc8fb0c18fed8972b64"
+        }
+      ],
+      "background": {
+        "crop": {
+          "left": 0,
+          "top": 500,
+          "width": 4000,
+          "height": 2000
+        },
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-reef-soft-coral/ultra.ktx2",
+            "bytes": 548951,
+            "sha256": "b569bc003c5f203fd5e4d03cc32d8ec908e0df26a64b7aa7679675e7678f8665",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-reef-soft-coral/high.ktx2",
+            "bytes": 548951,
+            "sha256": "b569bc003c5f203fd5e4d03cc32d8ec908e0df26a64b7aa7679675e7678f8665",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-reef-soft-coral/medium.ktx2",
+            "bytes": 161443,
+            "sha256": "54809d9a7e455776ff38254e1f828f7ae8b29e364b30431ea1bbb52b916254aa",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-reef-soft-coral/low.ktx2",
+            "bytes": 51622,
+            "sha256": "26f82403abb742804e0508c0761e5c8e79a9479381170bc8fb0c18fed8972b64",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
     }
   ]
 }

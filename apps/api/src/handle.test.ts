@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { schema } from './db/index.ts';
+import { lockHandles } from './handle.ts';
 import { APP_ORIGIN, createHarness, type Harness } from './test-harness.ts';
 
 const PASSWORD = 'correct horse battery';
@@ -168,6 +169,95 @@ describe('public handle', () => {
     expect((await call(h, bob.cookie, 'PUT', '/api/me/handle', { handle: old })).statusCode).toBe(
       200,
     );
+  });
+
+  it('tells a user who changed handle that their old one is held for the cooldown', async () => {
+    const { cookie } = await account(h);
+    const old = unique();
+    await call(h, cookie, 'PUT', '/api/me/handle', { handle: old });
+    await call(h, cookie, 'PUT', '/api/me/handle', { handle: unique() });
+    const back = await call(h, cookie, 'PUT', '/api/me/handle', { handle: old });
+    expect(back.statusCode).toBe(409);
+    const message = apiErrorSchema.parse(back.json()).error.message;
+    expect(message).toContain('possibly by you');
+    expect(message).toContain('your own previous one');
+    expect(message).toContain('30 days');
+  });
+
+  async function whileHolding(handle: string, run: (open: () => void) => Promise<void>) {
+    let open!: () => void;
+    let locked!: () => void;
+    const gate = new Promise<void>((resolve) => (open = resolve));
+    const ready = new Promise<void>((resolve) => (locked = resolve));
+    const holder = h.database.db.transaction(async (tx) => {
+      await lockHandles(tx, [handle]);
+      locked();
+      await gate;
+    });
+    await ready;
+    try {
+      await run(open);
+    } finally {
+      open();
+      await holder;
+    }
+  }
+
+  async function expectBlockedUntilReleased(
+    handle: string,
+    request: () => Promise<LightMyRequestResponse>,
+    expected: number,
+  ) {
+    await whileHolding(handle, async (open) => {
+      let done = false;
+      const pending = request().then((res) => {
+        done = true;
+        return res;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(done).toBe(false);
+      open();
+      expect((await pending).statusCode).toBe(expected);
+    });
+  }
+
+  it('waits on the per-handle lock before claiming', async () => {
+    const alice = await account(h);
+    const bob = await account(h);
+    const target = unique();
+    await call(h, alice.cookie, 'PUT', '/api/me/handle', { handle: unique() });
+    await expectBlockedUntilReleased(
+      target,
+      () => call(h, bob.cookie, 'PUT', '/api/me/handle', { handle: target }),
+      200,
+    );
+  });
+
+  it('waits on the per-handle lock before releasing by change', async () => {
+    const alice = await account(h);
+    const held = unique();
+    await call(h, alice.cookie, 'PUT', '/api/me/handle', { handle: held });
+    await expectBlockedUntilReleased(
+      held,
+      () => call(h, alice.cookie, 'PUT', '/api/me/handle', { handle: unique() }),
+      200,
+    );
+  });
+
+  it('waits on the per-handle lock before releasing by account deletion', async () => {
+    const alice = await account(h);
+    const held = unique();
+    await call(h, alice.cookie, 'PUT', '/api/me/handle', { handle: held });
+    await expectBlockedUntilReleased(
+      held,
+      () => call(h, alice.cookie, 'POST', '/api/me/delete', { password: PASSWORD }),
+      204,
+    );
+    const rows = await h.database.db
+      .select()
+      .from(schema.releasedHandles)
+      .where(eq(schema.releasedHandles.handle, held));
+    expect(rows).toHaveLength(1);
   });
 
   it('keeps stored handles readable after the filter learns new words', async () => {
