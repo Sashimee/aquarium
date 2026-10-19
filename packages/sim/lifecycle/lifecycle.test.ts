@@ -272,7 +272,11 @@ describe('a tank stocked to capacity at full size under perfect daily care', () 
     expect(state.fish.every((f) => f.alive && f.health === 1)).toBe(true);
   });
 
-  it.each(parsedSpecies.map((s) => [s.id, s.biome] as const))(
+  it.each(
+    parsedSpecies
+      .filter((s) => s.lifecycle.ammoniaTolerance >= 0.1)
+      .map((s) => [s.id, s.biome] as const),
+  )(
     'a nano stocked at the old cap of 12 keeps every %s for 120 days of weekly water changes',
     (id, biome) => {
       const spec = species.get(id);
@@ -1054,5 +1058,105 @@ describe('water volume', () => {
     expect(BIOLOAD_CAPACITY_BY_SIZE.nano30).toBeLessThan(BIOLOAD_CAPACITY_BY_SIZE.std200);
     expect(BIOLOAD_CAPACITY_BY_SIZE.std200).toBeLessThan(BIOLOAD_CAPACITY_BY_SIZE.long300);
     expect(BIOLOAD_CAPACITY_BY_SIZE.standard).toBe(TANK_BIOLOAD_CAPACITY);
+  });
+
+  const full = (id: string, litres: number, capacity: number) => {
+    const spec = species.get(id);
+    if (!spec) throw new Error(`no species ${id}`);
+    const count = Math.floor(capacity / spec.bioload + 1e-9);
+    return {
+      litres,
+      bioloadCapacity: capacity,
+      state: tank(
+        Array.from({ length: count }, (_, i) =>
+          fishOf(`${id}-${i}`, id, { size: spec.maxSizeM, hunger: 0 }),
+        ),
+        { uneatenFood: 1 },
+      ),
+    };
+  };
+
+  it('declines faster in a full 30 L nano than in a full 300 L tank when the filter fails', () => {
+    const afterFailure = (litres: number, capacity: number) => {
+      const { state, ...size } = full('guppy', litres, capacity);
+      const r = run(state, 10 * DAY, {
+        env: size,
+        equipment: { ...DEFAULT_EQUIPMENT, filter: { tier: 0 } },
+      });
+      const firstDeathMs = Math.min(...r.deaths.map((d) => d.diedAtMs));
+      return { firstDeathDay: (firstDeathMs - T0) / DAY, deaths: r.deaths.length };
+    };
+    const nano = afterFailure(TANK_SIZES.nano30.litres, BIOLOAD_CAPACITY_BY_SIZE.nano30);
+    const big = afterFailure(TANK_SIZES.long300.litres, BIOLOAD_CAPACITY_BY_SIZE.long300);
+    expect(nano.deaths).toBeGreaterThan(0);
+    expect(big.deaths).toBeGreaterThan(0);
+    expect(big.firstDeathDay).toBeGreaterThan(nano.firstDeathDay + 0.25);
+  });
+});
+
+describe('overfeeding by tank size', () => {
+  const empty = (litres: number) => (hours: number) =>
+    run(tank([], { uneatenFood: 1 }), hours * HOUR, { env: { litres } }).state.water.ammonia;
+
+  it('raises ammonia about twice as much in 30 L as in 300 L for one portion', () => {
+    const ratio = empty(30)(3) / empty(300)(3);
+    expect(ratio).toBeGreaterThan(1.6);
+    expect(ratio).toBeLessThan(2.1);
+  });
+
+  it('never lets one portion in a nano reach the lowest species tolerance', () => {
+    const lowest = Math.min(...[...species.values()].map((s) => s.ammoniaTolerance));
+    expect(lowest).toBe(0.09);
+    const nano = empty(TANK_SIZES.nano30.litres);
+    const peak = Math.max(...Array.from({ length: 48 }, (_, i) => nano((i + 1) / 2)));
+    expect(peak).toBeLessThan(lowest);
+  });
+
+  it.each(parsedSpecies.map((s) => [s.id] as const))(
+    'one portion in a nano does not harm %s even outside the grace period',
+    (id) => {
+      const spec = species.get(id);
+      if (!spec) throw new Error(`no species ${id}`);
+      const biome = parsedSpecies.find((p) => p.id === id)?.biome ?? 'freshwater';
+      const state = {
+        ...tank([fishOf('a', id, { size: spec.maxSizeM })], { uneatenFood: 1 }),
+        chemistry: newTankChemistry(biome),
+      };
+      const r = run(state, 2 * DAY, {
+        env: {
+          biome,
+          litres: TANK_SIZES.nano30.litres,
+          bioloadCapacity: BIOLOAD_CAPACITY_BY_SIZE.nano30,
+        },
+      });
+      expect(only(r).alive).toBe(true);
+      expect(only(r).health).toBeGreaterThan(0.95);
+    },
+  );
+
+  it('keeps 12 neon tetras alive in a nano for 120 days of ordinary care', () => {
+    const neons = Array.from({ length: 12 }, (_, i) =>
+      fishOf(`n${i}`, 'neon-tetra', { size: 0.04 }),
+    );
+    let state = tank(neons);
+    for (let day = 0; day < 120; day++) {
+      state = {
+        ...state,
+        water: { ...state.water, uneatenFood: state.water.uneatenFood + 1 },
+        fish: state.fish.map((f) => ({ ...f, hunger: 0 })),
+      };
+      if (day % 7 === 0) {
+        const changed = applyCare(state, { type: 'water_change' }, 'freshwater', chemistryParams);
+        if (!changed.ok) throw new Error(changed.reason);
+        state = changed.value;
+      }
+      const r = run(state, DAY, {
+        from: day * DAY,
+        env: { litres: TANK_SIZES.nano30.litres, bioloadCapacity: BIOLOAD_CAPACITY_BY_SIZE.nano30 },
+      });
+      expect(r.deaths).toEqual([]);
+      state = r.state;
+    }
+    expect(state.fish.every((f) => f.alive && f.health === 1)).toBe(true);
   });
 });
