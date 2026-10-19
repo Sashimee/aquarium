@@ -20,6 +20,7 @@ import {
 import { context, mrt, output } from 'three/tsl';
 import { EffectsSlot } from '../effectsSlot';
 import { EventBus, type EngineEvents } from '../events';
+import { PhotoLook } from '../photo/look';
 import { materialIdOf } from '../pipelineErrors';
 import { QualityManager } from '../quality/QualityManager';
 import type { Tier } from '../quality/tiers';
@@ -335,6 +336,48 @@ describe('Effects', () => {
     expect(built.at(-1)?.settings.depthOfField).toBe(false);
   });
 
+  it('lets photo mode decide depth of field over focus mode, and grades even on low', () => {
+    const { host, createPost, built, quality, renderer } = setup('high');
+    const effects = new Effects(host, createPost);
+    const look = new PhotoLook();
+    effects.setFocusMode(true);
+    effects.setPhoto({ look, depthOfField: false, graded: true });
+    expect(built.at(-1)?.settings).toMatchObject({ depthOfField: false, photo: look, grade: true });
+
+    effects.setPhoto({ look, depthOfField: true, graded: true });
+    expect(built.at(-1)?.settings).toMatchObject({ depthOfField: true, photo: look });
+
+    quality.setTier('low', 0);
+    expect(built.at(-1)?.settings).toMatchObject({
+      chain: 'none',
+      depthOfField: false,
+      photo: look,
+      grade: true,
+    });
+    const rendersBefore = renderer.renders;
+    effects.render();
+    expect(built.at(-1)?.renders).toBe(1);
+    expect(renderer.renders).toBe(rendersBefore);
+
+    const graded = built.length;
+    effects.setPhoto(null);
+    expect(built).toHaveLength(graded);
+    expect(built.at(-1)?.disposed).toBe(1);
+    effects.render();
+    expect(renderer.renders).toBe(rendersBefore + 1);
+  });
+
+  it('draws the natural filter on low without a post pass', () => {
+    const { host, createPost, built, renderer } = setup('low');
+    const effects = new Effects(host, createPost);
+    const before = built.length;
+    effects.setPhoto({ look: new PhotoLook(), depthOfField: true, graded: false });
+    expect(built).toHaveLength(before);
+    const rendersBefore = renderer.renders;
+    effects.render();
+    expect(renderer.renders).toBe(rendersBefore + 1);
+  });
+
   it('resolves temporally only while a TRAA pipeline is up and has not failed', () => {
     const { host, createPost, quality, failWith } = setup('ultra');
     const effects = new Effects(host, createPost);
@@ -519,22 +562,38 @@ describe('PostNodeLoader', () => {
   }
 
   it('needs only the nodes in the chain', () => {
-    const plain = { godRays: true, depthOfField: false } as const;
+    const plain = { godRays: true, depthOfField: false, photo: null, grade: false } as const;
     expect(postNodesFor({ ...plain, chain: 'none' })).toEqual([]);
     expect(postNodesFor({ ...plain, chain: 'smaa' })).toEqual(['smaa']);
     expect(postNodesFor({ ...plain, chain: 'smaa-bloom' })).toEqual(['bloom', 'smaa']);
-    expect(postNodesFor({ chain: 'taa-bloom', godRays: true, depthOfField: true })).toEqual([
-      'bloom',
-      'dof',
-      'traa',
-    ]);
+    expect(
+      postNodesFor({
+        chain: 'taa-bloom',
+        godRays: true,
+        depthOfField: true,
+        photo: null,
+        grade: false,
+      }),
+    ).toEqual(['bloom', 'dof', 'traa']);
   });
 
   it('fetches each node once and is ready when all of a chain are in', async () => {
     const { calls, imports } = fakeImports();
     const nodes = new PostNodeLoader(imports);
-    const smaa: PostSettings = { chain: 'smaa', godRays: false, depthOfField: false };
-    const bloom: PostSettings = { chain: 'smaa-bloom', godRays: false, depthOfField: false };
+    const smaa: PostSettings = {
+      chain: 'smaa',
+      godRays: false,
+      depthOfField: false,
+      photo: null,
+      grade: false,
+    };
+    const bloom: PostSettings = {
+      chain: 'smaa-bloom',
+      godRays: false,
+      depthOfField: false,
+      photo: null,
+      grade: false,
+    };
     expect(nodes.ready(smaa)).toBe(false);
     expect(() => nodes.get('smaa')).toThrow(/not loaded/);
 
@@ -556,7 +615,13 @@ describe('PostNodeLoader', () => {
       },
     };
     const nodes = new PostNodeLoader(flaky);
-    const smaa: PostSettings = { chain: 'smaa', godRays: false, depthOfField: false };
+    const smaa: PostSettings = {
+      chain: 'smaa',
+      godRays: false,
+      depthOfField: false,
+      photo: null,
+      grade: false,
+    };
     await expect(nodes.load(smaa)).rejects.toThrow('offline');
     expect(nodes.ready(smaa)).toBe(false);
     await nodes.load(smaa);

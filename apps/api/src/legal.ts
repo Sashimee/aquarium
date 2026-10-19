@@ -9,6 +9,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Auth } from './auth.ts';
 import { schema, type Database } from './db/index.ts';
 import { apiError } from './errors.ts';
+import { publicName } from './public.ts';
 import { lockHandles } from './handle.ts';
 import type { Limit, RateLimiter } from './rate-limit.ts';
 
@@ -71,46 +72,81 @@ export function registerLegalRoutes(deps: LegalDeps): void {
     const [user] = await db.select().from(schema.user).where(eq(schema.user.id, userId));
     if (!user) return unauthenticated(reply);
 
-    const [sessions, accounts, passkeys, tanks] = await Promise.all([
-      db
-        .select({
-          id: schema.session.id,
-          createdAt: schema.session.createdAt,
-          expiresAt: schema.session.expiresAt,
-          ipAddress: schema.session.ipAddress,
-          userAgent: schema.session.userAgent,
-        })
-        .from(schema.session)
-        .where(eq(schema.session.userId, userId))
-        .orderBy(asc(schema.session.createdAt)),
-      db
-        .select({
-          id: schema.account.id,
-          providerId: schema.account.providerId,
-          hasPassword: schema.account.password,
-          createdAt: schema.account.createdAt,
-        })
-        .from(schema.account)
-        .where(eq(schema.account.userId, userId))
-        .orderBy(asc(schema.account.createdAt)),
-      db
-        .select({
-          id: schema.passkey.id,
-          name: schema.passkey.name,
-          deviceType: schema.passkey.deviceType,
-          backedUp: schema.passkey.backedUp,
-          transports: schema.passkey.transports,
-          createdAt: schema.passkey.createdAt,
-        })
-        .from(schema.passkey)
-        .where(eq(schema.passkey.userId, userId))
-        .orderBy(asc(schema.passkey.createdAt)),
-      db
-        .select()
-        .from(schema.tanks)
-        .where(eq(schema.tanks.ownerId, userId))
-        .orderBy(asc(schema.tanks.createdAt)),
-    ]);
+    const [sessions, accounts, passkeys, tanks, [prefs], subscriptions, reactions, auditRows] =
+      await Promise.all([
+        db
+          .select({
+            id: schema.session.id,
+            createdAt: schema.session.createdAt,
+            expiresAt: schema.session.expiresAt,
+            ipAddress: schema.session.ipAddress,
+            userAgent: schema.session.userAgent,
+          })
+          .from(schema.session)
+          .where(eq(schema.session.userId, userId))
+          .orderBy(asc(schema.session.createdAt)),
+        db
+          .select({
+            id: schema.account.id,
+            providerId: schema.account.providerId,
+            hasPassword: schema.account.password,
+            createdAt: schema.account.createdAt,
+          })
+          .from(schema.account)
+          .where(eq(schema.account.userId, userId))
+          .orderBy(asc(schema.account.createdAt)),
+        db
+          .select({
+            id: schema.passkey.id,
+            name: schema.passkey.name,
+            deviceType: schema.passkey.deviceType,
+            backedUp: schema.passkey.backedUp,
+            transports: schema.passkey.transports,
+            createdAt: schema.passkey.createdAt,
+          })
+          .from(schema.passkey)
+          .where(eq(schema.passkey.userId, userId))
+          .orderBy(asc(schema.passkey.createdAt)),
+        db
+          .select()
+          .from(schema.tanks)
+          .where(eq(schema.tanks.ownerId, userId))
+          .orderBy(asc(schema.tanks.createdAt)),
+        db.select().from(schema.reminderPrefs).where(eq(schema.reminderPrefs.userId, userId)),
+        db
+          .select({
+            id: schema.pushSubscriptions.id,
+            endpoint: schema.pushSubscriptions.endpoint,
+            createdAt: schema.pushSubscriptions.createdAt,
+            lastUsedAt: schema.pushSubscriptions.lastUsedAt,
+          })
+          .from(schema.pushSubscriptions)
+          .where(eq(schema.pushSubscriptions.userId, userId))
+          .orderBy(asc(schema.pushSubscriptions.createdAt)),
+        db
+          .select({
+            tankName: schema.tanks.name,
+            shared: sql<boolean>`${schema.tanks.shareTokenHash} is not null`,
+            kind: schema.tankReactions.kind,
+            createdAt: schema.tankReactions.createdAt,
+          })
+          .from(schema.tankReactions)
+          .innerJoin(schema.tanks, eq(schema.tanks.id, schema.tankReactions.tankId))
+          .where(eq(schema.tankReactions.userId, userId))
+          .orderBy(asc(schema.tankReactions.createdAt)),
+        db
+          .select({
+            at: schema.auditLog.at,
+            action: schema.auditLog.action,
+            detail: schema.auditLog.detail,
+            tankName: schema.tanks.name,
+            visible: sql<boolean>`(${schema.tanks.ownerId} = ${userId} or ${schema.tanks.shareTokenHash} is not null)`,
+          })
+          .from(schema.auditLog)
+          .leftJoin(schema.tanks, eq(schema.tanks.id, schema.auditLog.tankId))
+          .where(eq(schema.auditLog.actorId, userId))
+          .orderBy(asc(schema.auditLog.at)),
+      ]);
 
     const perTank = await Promise.all(
       tanks.map(async (tank) => {
@@ -131,7 +167,8 @@ export function registerLegalRoutes(deps: LegalDeps): void {
             .where(eq(schema.memorials.tankId, tank.id))
             .orderBy(asc(schema.memorials.diedAt)),
         ]);
-        return { tank, fish, events, memorials };
+        const { shareTokenHash, ...rest } = tank;
+        return { tank: { ...rest, shared: shareTokenHash !== null }, fish, events, memorials };
       }),
     );
 
@@ -155,6 +192,20 @@ export function registerLegalRoutes(deps: LegalDeps): void {
             hasPassword: hasPassword !== null,
           })),
           passkeys,
+          reminders: {
+            mail: prefs?.mailEnabled ?? false,
+            push: prefs?.pushEnabled ?? false,
+            lastSentAt: prefs?.lastSentAt ?? null,
+            pushSubscriptions: subscriptions,
+          },
+          reactions: reactions.map(({ tankName, shared, ...rest }) => ({
+            ...rest,
+            tank: shared ? publicName(tankName) : null,
+          })),
+          auditLog: auditRows.map(({ tankName, visible, ...rest }) => ({
+            ...rest,
+            tank: tankName === null || !visible ? null : publicName(tankName),
+          })),
           tanks: perTank,
         }),
       ),

@@ -1,3 +1,14 @@
+import type { PhotoLook } from './photo/look';
+
+/** What photo mode asks of the post chain. */
+export interface PhotoPost {
+  readonly look: PhotoLook;
+  /** Wanted by the photographer; tiers without depth of field still go without. */
+  readonly depthOfField: boolean;
+  /** Whether the filter changes the picture; without a grade or depth of field, no post pass. */
+  readonly graded: boolean;
+}
+
 /** What the engine needs from the lazily loaded render effects. */
 export interface FrameEffects {
   /** Whether the frames drawn now go through a temporal resolve (TRAA). */
@@ -5,6 +16,9 @@ export interface FrameEffects {
   /** Draws the whole frame, restoring the renderer state it changed even when it throws. */
   render(): void;
   setFocusMode(on: boolean): void;
+  setPhoto(photo: PhotoPost | null): void;
+  /** Resolves once the pipeline the settings ask for is built, or has failed. */
+  ready(): Promise<void>;
   /** Whether the effects draw with material `id` (three's runtime material id). */
   ownsMaterial(id: number): boolean;
   dispose(): void;
@@ -21,6 +35,7 @@ export type TemporalChanged = (on: boolean) => void;
 export class EffectsSlot {
   private effects: FrameEffects | null = null;
   private focus = false;
+  private photo: PhotoPost | null = null;
   private temporalOn = false;
 
   /** `temporalChanged` hears every change of `temporal`, whatever caused it. */
@@ -41,7 +56,10 @@ export class EffectsSlot {
   attach(effects: FrameEffects): void {
     if (this.effects !== null) throw new Error('EffectsSlot: effects are already attached');
     this.effects = effects;
-    this.guard(() => effects.setFocusMode(this.focus));
+    this.guard(() => {
+      effects.setFocusMode(this.focus);
+      effects.setPhoto(this.photo);
+    });
     this.refresh();
   }
 
@@ -50,6 +68,18 @@ export class EffectsSlot {
     const effects = this.effects;
     if (effects !== null) this.guard(() => effects.setFocusMode(on));
     this.refresh();
+  }
+
+  setPhoto(photo: PhotoPost | null): void {
+    this.photo = photo;
+    const effects = this.effects;
+    if (effects !== null) this.guard(() => effects.setPhoto(photo));
+    this.refresh();
+  }
+
+  /** Resolves once the attached effects draw what was last asked of them; at once without any. */
+  async ready(): Promise<void> {
+    await this.effects?.ready();
   }
 
   /** True when the effects drew the frame; false means the caller must render it plainly. */

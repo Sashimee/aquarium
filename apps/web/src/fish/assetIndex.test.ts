@@ -198,4 +198,56 @@ describe('parseFishAssets', () => {
       expect(own / female, male.assetId).toBeCloseTo(male.lengthFactor, 3);
     }
   });
+  describe('impostor atlas', () => {
+    const atlas = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
+      sourceLod: 1,
+      layout: 'octahedral',
+      pose: 'rest',
+      grid: 9,
+      frameSize: 128,
+      atlasSize: 1152,
+      pivot: [0, 0.0002, -0.0037],
+      radius: 0.0144,
+      albedo: { file: 'fish/neon-tetra/impostor_albedo.ktx2', codec: 'etc1s' },
+      normalDepth: { file: 'fish/neon-tetra/impostor_normal.ktx2', codec: 'uastc' },
+      ...overrides,
+    });
+
+    it('reads the frame layout and both files', () => {
+      const entry = parseFishAssets({ assets: [fish({ impostor: atlas() })] }).get('neon-tetra');
+      expect(entry?.impostor).toEqual({
+        grid: 9,
+        frameSize: 128,
+        pivot: [0, 0.0002, -0.0037],
+        radius: 0.0144,
+        albedoFile: 'fish/neon-tetra/impostor_albedo.ktx2',
+        normalFile: 'fish/neon-tetra/impostor_normal.ktx2',
+      });
+    });
+
+    it('is null for an entry the pipeline baked none for', () => {
+      expect(parseFishAssets({ assets: [fish()] }).get('neon-tetra')?.impostor).toBeNull();
+    });
+
+    it.each([
+      ['another layout', { layout: 'hemi-octahedral' }],
+      ['an even grid, which has no frame on the axes', { grid: 8, atlasSize: 1024 }],
+      ['an atlas that is not grid * frameSize', { atlasSize: 1024 }],
+      ['a frame size that is not a power of two', { frameSize: 100, atlasSize: 900 }],
+      ['no radius', { radius: 0 }],
+      ['a non-finite pivot', { pivot: [0, Number.NaN, 0] }],
+      ['an albedo outside the assets folder', { albedo: { file: '../albedo.ktx2' } }],
+      ['a normal atlas that is not KTX2', { normalDepth: { file: 'fish/n/normal.png' } }],
+    ])('rejects %s', (_, override) => {
+      expect(() => parseFishAssets({ assets: [fish({ impostor: atlas(override) })] })).toThrow(
+        TypeError,
+      );
+    });
+
+    it('is shipped for every fish model', () => {
+      for (const entry of parseFishAssets(shippedIndex).values()) {
+        if (entry.kind === 'fish') expect(entry.impostor?.grid, entry.id).toBe(9);
+      }
+    });
+  });
 });
