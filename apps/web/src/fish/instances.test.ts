@@ -56,6 +56,12 @@ describe('FishInstanceData', () => {
     expect(new Set(Object.values(InstanceSlot)).size).toBe(Object.values(InstanceSlot).length);
   });
 
+  it('reads the ich, fin rot and velvet severities as the xyz of one vec4', () => {
+    expect(InstanceSlot.Ich % 4).toBe(0);
+    expect(InstanceSlot.FinRot).toBe(InstanceSlot.Ich + 1);
+    expect(InstanceSlot.Velvet).toBe(InstanceSlot.Ich + 2);
+  });
+
   it('rejects indices outside the capacity', () => {
     const data = new FishInstanceData(2);
     expect(() => data.write(2, values)).toThrow(RangeError);

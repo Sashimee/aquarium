@@ -55,7 +55,12 @@ import {
   vec4,
 } from 'three/tsl';
 import { FIN_ATTRIBUTE, LEG_PART_ID } from './assets';
-import { WALKER_INSTANCE_STRIDE, type FishInstanceData } from './instances';
+import {
+  InstanceSlot,
+  WALKER_INSTANCE_STRIDE,
+  WalkerSlot,
+  type FishInstanceData,
+} from './instances';
 import { idIs, walkerDeformation, type Deformation, type WalkerRig } from './limbs';
 import type { FishRenderProfile } from './profiles';
 import { TAIL_AMPLITUDE_BODY_LENGTHS, type SwimModeParams } from './swim';
@@ -273,8 +278,15 @@ const ICH_WHITE = vec3(0.78, 0.78, 0.73);
 const VELVET_PATCH_M = 0.004;
 const VELVET_GRAIN_M = 0.00012;
 const VELVET_GRAIN_EDGE = 0.12;
+/**
+ * Even a fish about to die of velvet keeps its pattern visible through the dust, which is why
+ * keepers spot it with a torch at a glancing angle; past this share of the skin it reads as paint.
+ */
+const VELVET_MAX_COVER = 0.55;
+/** Fins dust over a little sooner than the flank, not as a solid sheet. */
+const VELVET_FIN_WEIGHT = 0.8;
 /** Linear albedo of the rusty-gold dust. */
-const VELVET_GOLD = vec3(0.55, 0.36, 0.09);
+const VELVET_GOLD = vec3(0.52, 0.37, 0.13);
 const VELVET_ROUGHNESS = 0.85;
 /** The dust film's coverage grows with the path through it, up to this grazing cosine. */
 const VELVET_MIN_COSINE = 0.2;
@@ -387,9 +399,13 @@ const diseaseMarks = Fn(
 
     If(signs.z.greaterThan(0), () => {
       const dorsal = smoothstep(-0.3, 0.9, normalGeometry.y);
-      const where = max(mix(float(0.35), float(1), dorsal), membrane);
+      const where = max(mix(float(0.35), float(1), dorsal), membrane.mul(VELVET_FIN_WEIGHT));
       const patch = mx_noise_float(p.div(VELVET_PATCH_M)).mul(0.5).add(0.5);
-      const cover = clamp(signs.z.mul(where).mul(patch.mul(0.9).add(0.55)), 0, 1).toVar();
+      const cover = clamp(
+        signs.z.mul(where).mul(patch.mul(0.9).add(0.55)).mul(VELVET_MAX_COVER),
+        0,
+        VELVET_MAX_COVER,
+      ).toVar();
       const grain = mx_noise_float(p.div(VELVET_GRAIN_M)).mul(0.5).add(0.5);
       const edge = VELVET_GRAIN_EDGE;
       const threshold = float(1 + edge).sub(cover.mul(1 + 2 * edge));
@@ -462,8 +478,8 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
       }
       const walker = walkerDeformation(locomotion.rig, {
         look: this.instanceVec4(8),
-        walk: this.instanceVec4(20),
-        act: this.instanceVec4(24),
+        walk: this.instanceVec4(WalkerSlot.LegPhase),
+        act: this.instanceVec4(WalkerSlot.Pick),
       });
       this.still = walker;
       this.breathing = walker;
@@ -615,7 +631,7 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
     // pupil would cloud it like a cataract instead.
     const paled = eye ? base : mix(base, grey, pale.mul(0.85));
     // Shrimp catch none of these diseases, and the cysts and dust sit on skin, not on the cornea.
-    const signs = walker || eye ? null : this.instanceVec4(16).yzw;
+    const signs = walker || eye ? null : this.instanceVec4(InstanceSlot.Ich).xyz;
     const marks =
       signs === null ? null : diseaseMarks(signs, fin.x, fin.y, membrane).toVar('diseaseMarks');
     const albedo = (
