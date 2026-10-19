@@ -38,10 +38,14 @@ async function buyShrimp(page: Page, commonName: string, fishName: string): Prom
   const release = page.getByRole('button', { name: `Release ${fishName} now` });
   // The bag releases itself after the acclimation, which removes the button; a click delayed past
   // that point on a loaded runner has nothing left to hit, and the fish is already free.
+  let path: 'manual' | 'auto' = 'auto';
   await expect(async () => {
     if ((await release.count()) === 0) return;
     await release.click({ timeout: 5_000 });
+    path = 'manual';
   }).toPass({ timeout: FISH_START_MS });
+  await expect(page.getByRole('region', { name: 'Fish in bags' })).toBeHidden();
+  test.info().annotations.push({ type: 'release-path', description: `${fishName}: ${path}` });
 }
 
 const swimming = async (page: Page): Promise<string[]> => {

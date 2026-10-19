@@ -532,7 +532,7 @@ export function browserAudioDeps(): AudioDeps {
         const target = event.target;
         if (!(target instanceof Element)) return;
         const button = target.closest('#ui button.primary');
-        if (button && !(button as HTMLButtonElement).disabled) listener();
+        if (button instanceof HTMLButtonElement && !button.disabled) listener();
       };
       doc?.addEventListener('click', onClick, { capture: true });
       return () => doc?.removeEventListener('click', onClick, { capture: true });
