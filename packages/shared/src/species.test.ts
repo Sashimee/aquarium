@@ -118,7 +118,7 @@ describe('walking invertebrates', () => {
   });
 
   it('accepts boundary values', () => {
-    expect(ok(withWalking({ strideBodyLengths: 0.05, legPairs: 4 }))).toBe(true);
+    expect(ok(withWalking({ strideBodyLengths: 0.05, legPairs: 0 }))).toBe(true);
     const upper = { speedMps: 0.25, durationS: 0.5, refractoryS: 10 };
     expect(ok(withWalking({ strideBodyLengths: 1, legPairs: 5, tailFlip: upper }))).toBe(true);
   });
@@ -130,7 +130,7 @@ describe('walking invertebrates', () => {
       [{ walkSpeedMps: 0 }, `${w}.walkSpeedMps`],
       [{ strideBodyLengths: 0.049 }, `${w}.strideBodyLengths`],
       [{ strideBodyLengths: 1.01 }, `${w}.strideBodyLengths`],
-      [{ legPairs: 3 }, `${w}.legPairs`],
+      [{ legPairs: -1 }, `${w}.legPairs`],
       [{ legPairs: 6 }, `${w}.legPairs`],
       [{ legPairs: 4.5 }, `${w}.legPairs`],
       [{ surfaces: [] }, `${w}.surfaces`],
@@ -146,6 +146,51 @@ describe('walking invertebrates', () => {
     for (const [patch, path] of bad) {
       expect(issuePaths(withWalking(patch)), JSON.stringify(patch)).toEqual([path]);
     }
+  });
+
+  describe('walkers that never swim', () => {
+    const shelled = {
+      walkSpeedMps: walking.walkSpeedMps,
+      strideBodyLengths: 0.1,
+      legPairs: 0,
+      surfaces: walking.surfaces,
+      withdraw: { minS: 10, maxS: 60 },
+    };
+    const snail = (patch: Record<string, unknown> = {}, mode = 'none'): unknown =>
+      shrimp({ swimmingMode: mode, walking: { ...shelled, ...patch } });
+
+    it('accepts swimmingMode none with a withdraw escape and no legs', () => {
+      expect(ok(snail())).toBe(true);
+      expect(ok(snail({ withdraw: { minS: 600, maxS: 600 } }))).toBe(true);
+    });
+
+    it('requires walking for swimmingMode none', () => {
+      expect(issuePaths(shrimp({ swimmingMode: 'none', walking: undefined }, []))).toEqual([
+        'locomotion.walking',
+      ]);
+    });
+
+    it('gives a non-swimmer the withdraw escape and a swimmer the tail-flip, never the other', () => {
+      const w = 'locomotion.walking';
+      expect(issuePaths(snail({ withdraw: undefined }))).toEqual([`${w}.withdraw`]);
+      expect(issuePaths(snail({ tailFlip: walking.tailFlip }))).toEqual([`${w}.tailFlip`]);
+      expect(issuePaths(snail({}, 'pleopod'))).toEqual([`${w}.tailFlip`, `${w}.withdraw`]);
+      expect(issuePaths(withWalking({ withdraw: shelled.withdraw }))).toEqual([`${w}.withdraw`]);
+    });
+
+    it('rejects a malformed withdraw at the offending field', () => {
+      const w = 'locomotion.walking.withdraw';
+      const bad: [Record<string, unknown>, string][] = [
+        [{ minS: 0, maxS: 60 }, `${w}.minS`],
+        [{ minS: 10, maxS: 601 }, `${w}.maxS`],
+        [{ minS: 30, maxS: 20 }, `${w}.minS`],
+        [{ minS: 10 }, `${w}.maxS`],
+        [{ minS: 10, maxS: 60, extra: 1 }, w],
+      ];
+      for (const [withdraw, path] of bad) {
+        expect(issuePaths(snail({ withdraw })), JSON.stringify(withdraw)).toEqual([path]);
+      }
+    });
   });
 
   it('requires walker traits to come with walking, naming each trait', () => {
