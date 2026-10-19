@@ -50,6 +50,8 @@ export interface HermitRecipe {
   minPieceReach: number;
   /** Walking legs a side shows; welded legs on a side with fewer pieces are split apart by direction from the hip. */
   legsPerSide: number;
+  /** A leg whose centroid is nearer the hip plane than this fraction of the shell length may land on the wrong side. */
+  minLegLateralFraction: number;
   note: string;
 }
 
@@ -69,6 +71,7 @@ export const HERMIT_RECIPES: HermitRecipe[] = [
     limbCutFraction: 0.35,
     minPieceReach: 0.15,
     legsPerSide: 3,
+    minLegLateralFraction: 0.01,
     note: 'legs and antennae recoloured towards Clibanarius tricolor (blue legs, orange joints and antennae) by eye from the reference description; the scan is Clibanarius longitarsus',
   },
 ];
@@ -293,12 +296,18 @@ export function segmentCrab(
     }
   for (let a = 0; a < 3; a++) shell[a]! /= Math.max(1, shellCount);
   if (options.legsPerSide !== undefined)
-    splitWeldedLegs({ positions, piece, weight, pieces, radius, hip, shell }, options.legsPerSide);
+    splitWeldedLegs(
+      { positions, indices, canon, kind, piece, weight, pieces, radius, hip, shell },
+      options.legsPerSide,
+    );
   return { kind, piece, weight, pieces, hip, shellCentroid: shell };
 }
 
 interface WeldState {
   positions: Float32Array;
+  indices: Uint32Array;
+  canon: Int32Array;
+  kind: Uint8Array;
   piece: Int32Array;
   weight: Float32Array;
   pieces: LimbPiece[];
@@ -307,8 +316,121 @@ interface WeldState {
   shell: Vec3;
 }
 
+class MinHeap {
+  private readonly items: [number, number][] = [];
+
+  get size(): number {
+    return this.items.length;
+  }
+
+  push(cost: number, node: number): void {
+    const items = this.items;
+    items.push([cost, node]);
+    let at = items.length - 1;
+    while (at > 0) {
+      const parent = (at - 1) >> 1;
+      if (items[parent]![0] <= items[at]![0]) break;
+      [items[parent], items[at]] = [items[at]!, items[parent]!];
+      at = parent;
+    }
+  }
+
+  pop(): [number, number] {
+    const items = this.items;
+    const top = items[0]!;
+    const last = items.pop()!;
+    if (items.length > 0) {
+      items[0] = last;
+      let at = 0;
+      for (;;) {
+        const left = at * 2 + 1;
+        const right = left + 1;
+        let least = at;
+        if (left < items.length && items[left]![0] < items[least]![0]) least = left;
+        if (right < items.length && items[right]![0] < items[least]![0]) least = right;
+        if (least === at) break;
+        [items[least], items[at]] = [items[at]!, items[least]!];
+        at = least;
+      }
+    }
+    return top;
+  }
+}
+
+/**
+ * Grows each leg's region over the mesh from its own root, so every region is one connected piece that
+ * touches the body. Roots are the welded piece's vertices that border the exposed soft body; they are
+ * grouped by direction from the hip only to seed the growth. A vertex joins the root it is nearest to
+ * along the surface, which cuts touching legs at the contact between them.
+ */
+export function growLegRegions(
+  positions: ArrayLike<number>,
+  indices: ArrayLike<number>,
+  canon: Int32Array,
+  members: ReadonlySet<number>,
+  isRoot: (vertex: number) => boolean,
+  hip: Vec3,
+  parts: number,
+): Map<number, number> {
+  const inside = (v: number): boolean => members.has(canon[v]!);
+  const edges = new Map<number, Map<number, number>>();
+  const roots = new Set<number>();
+  const link = (a: number, b: number): void => {
+    const length = Math.hypot(
+      positions[a * 3]! - positions[b * 3]!,
+      positions[a * 3 + 1]! - positions[b * 3 + 1]!,
+      positions[a * 3 + 2]! - positions[b * 3 + 2]!,
+    );
+    let out = edges.get(a);
+    if (!out) edges.set(a, (out = new Map()));
+    out.set(b, length);
+  };
+  for (let t = 0; t < indices.length; t += 3)
+    for (let k = 0; k < 3; k++) {
+      const a = indices[t + k]!;
+      const b = indices[t + ((k + 1) % 3)]!;
+      const ca = canon[a]!;
+      const cb = canon[b]!;
+      if (ca === cb) continue;
+      if (inside(a) && inside(b)) {
+        link(ca, cb);
+        link(cb, ca);
+      } else if (inside(a) && isRoot(b)) roots.add(ca);
+      else if (inside(b) && isRoot(a)) roots.add(cb);
+    }
+  if (roots.size < parts)
+    throw new Error(
+      `growLegRegions: ${roots.size} root vertices touch the body, fewer than the ${parts} legs to separate`,
+    );
+  const rootList = [...roots].sort((a, b) => a - b);
+  const seeds = clusterByDirection(
+    rootList.map((v) => [positions[v * 3]!, positions[v * 3 + 1]!, positions[v * 3 + 2]!] as Vec3),
+    hip,
+    parts,
+  );
+  const best = new Map<number, { cost: number; part: number }>();
+  const heap = new MinHeap();
+  rootList.forEach((v, i) => {
+    best.set(v, { cost: 0, part: seeds[i]! });
+    heap.push(0, v);
+  });
+  while (heap.size > 0) {
+    const [cost, v] = heap.pop();
+    const here = best.get(v)!;
+    if (cost > here.cost) continue;
+    for (const [w, length] of edges.get(v) ?? []) {
+      const known = best.get(w);
+      if (!known || cost + length < known.cost) {
+        best.set(w, { cost: cost + length, part: here.part });
+        heap.push(cost + length, w);
+      }
+    }
+  }
+  return new Map([...best].map(([v, b]) => [v, b.part]));
+}
+
 function splitWeldedLegs(state: WeldState, legsPerSide: number): void {
-  const { positions, piece, weight, pieces, radius, hip, shell } = state;
+  const { positions, indices, canon, kind, piece, weight, pieces, radius, hip, shell } = state;
   const toCrab = sub(hip, shell);
   const forward = unit([toCrab[0], 0, toCrab[2]]);
   const right = unit(cross([0, 1, 0], forward));
@@ -324,8 +446,12 @@ function splitWeldedLegs(state: WeldState, legsPerSide: number): void {
     const welded = onSide.reduce((a, b) => (b.p.vertices > a.p.vertices ? b : a));
     const members: number[] = [];
     for (let v = 0; v < piece.length; v++) if (piece[v] === welded.i) members.push(v);
-    const label = clusterByDirection(
-      members.map((v) => pointAt(positions, v)),
+    const region = growLegRegions(
+      positions,
+      indices,
+      canon,
+      new Set(members.map((v) => canon[v]!)),
+      (v) => kind[v] === CRAB_KIND.stem,
       hip,
       missing + 1,
     );
@@ -335,7 +461,7 @@ function splitWeldedLegs(state: WeldState, legsPerSide: number): void {
       pieces.push({ ...welded.p });
     }
     for (let k = 0; k <= missing; k++) {
-      const own = members.filter((_, j) => label[j] === k);
+      const own = members.filter((v) => region.get(canon[v]!) === k);
       if (own.length < 50)
         throw new Error(
           `segmentCrab: splitting the welded legs left a ${own.length}-vertex leg; recheck legsPerSide`,
@@ -495,6 +621,13 @@ export async function buildHermit(recipe: HermitRecipe, ctx: FishContext): Promi
     for (const v of members)
       for (let a = 0; a < 3; a++) c[a]! += part.positions[v * 3 + a]! / members.length;
     return { kind: p.kind as number, lateral: c[0] - hipLateral, ahead: c[2] };
+  });
+  const margin = recipe.minLegLateralFraction * standardLengthM;
+  pieceFrame.forEach((p, i) => {
+    if (p.kind === CRAB_KIND.leg && Math.abs(p.lateral) < margin)
+      throw new Error(
+        `hermit: leg piece ${i} sits ${(Math.abs(p.lateral) * 1000).toFixed(2)} mm from the hip plane, under the ${(margin * 1000).toFixed(2)} mm margin, so its side is unreliable; adjust the segmentation recipe`,
+      );
   });
   const limbIndex = assignLimbIndices(pieceFrame);
 

@@ -1,8 +1,8 @@
 {
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; every texture has both files.",
-  "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Every fish LOD also carries _MOUTH, geometry attribute \"_mouth\", a float in [0, 1] for buccal motion: 1 at the jaw or lower-lip tip (every LOD is renormalised so its highest value is exactly 1), easing to 0 behind the gill line and above the mouth slit; fins, eyes and attachments are 0. Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body, carapace and eyes; 6 walking leg; 7 antenna; 8 pleopod; 9 abdomen, telson and tail fan) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x; antennules 0/1, long antennae 2/3; tail-fan leaves k * 2 + side). Shrimp _fin_mask means: id 0 is 0 (eye stalks included, ignore it); ids 6 and 7 are the weight along the limb, 0 root to 1 tip; id 8 is the pleopod beat weight, 0 root to 1 tip; id 9 is the tail-curl weight clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1) of the rest position. Tail curl rotates ids 8 and 9 about +x through the shrimp.abdomenHinge {y, z} by flex * clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1), computed from the rest position, never from _fin_mask, so the pleopods follow the segment they hang from. Pleopods (id 8) exist only in LOD0 and LOD1 and are removed from LOD2; legs are simplified, so do not assume every _leg index exists at every LOD. Snails use _fin_id (0 shell, 10 foot, 11 head, 12 tentacle) and _fin_mask (foot: 0 at the sole centre to 1 at the mantle edge, for ripple; tentacle: 0 base to 1 tip; shell and head 0). The hermit crab is a crab-kind asset whose walker data sits in its crab block, same fields as a shrimp block; its shell is id 0, exposed soft body id 9 (rigid, hinge sits in front of it so it never curls), legs id 6 and antennae id 7 with _leg index pair * 2 + side; pairs 0 and 1 are the picking legs, and it has no pleopods. The cherry material is alphaMode BLEND with base colour alpha 0.86: three.js GLTFLoader turns depthWrite off for BLEND, so set depthWrite true on the cherry material and expect some sorting artefacts from the self-overlapping legs and antennae.",
-  "totalBytes": 77269234,
+  "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Every fish LOD also carries _MOUTH, geometry attribute \"_mouth\", a float in [0, 1] for buccal motion: 1 at the jaw or lower-lip tip (every LOD is renormalised so its highest value is exactly 1), easing to 0 behind the gill line and above the mouth slit; fins, eyes and attachments are 0. Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body, carapace and eyes; 6 walking leg; 7 antenna; 8 pleopod; 9 abdomen, telson and tail fan) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x; antennules 0/1, long antennae 2/3; tail-fan leaves k * 2 + side). Shrimp _fin_mask means: id 0 is 0 (eye stalks included, ignore it); ids 6 and 7 are the weight along the limb, 0 root to 1 tip; id 8 is the pleopod beat weight, 0 root to 1 tip; id 9 is the tail-curl weight clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1) of the rest position. Tail curl rotates ids 8 and 9 about +x through the shrimp.abdomenHinge {y, z} by flex * clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1), computed from the rest position, never from _fin_mask, so the pleopods follow the segment they hang from. Pleopods (id 8) exist only in LOD0 and LOD1 and are removed from LOD2; legs are simplified, so do not assume every _leg index exists at every LOD. Snails use _fin_id (0 shell, 10 foot, 11 head, 12 tentacle) and _fin_mask (foot: 0 at the sole centre to 1 at the mantle edge, for ripple; tentacle: 0 base to 1 tip; shell and head 0). The hermit crab is a crab-kind asset whose walker data sits in its crab block, same fields as a shrimp block; its shell is id 0, exposed soft body id 9 (rigid, hinge sits in front of it so it never curls), legs id 6 and antennae id 7 with _leg index pair * 2 + side; pair 0 is the claws and every pair behind it walks, and it has no pleopods. The cherry material is alphaMode BLEND with base colour alpha 0.86: three.js GLTFLoader turns depthWrite off for BLEND, so set depthWrite true on the cherry material and expect some sorting artefacts from the self-overlapping legs and antennae.",
+  "totalBytes": 77278701,
   "assets": [
     {
       "id": "angelfish",
@@ -3193,31 +3193,31 @@
         ],
         "max": [
           0.009088,
-          0.006615,
-          0.017519
+          0.006629,
+          0.017441
         ]
       },
       "lods": [
         {
           "file": "crab/hermit-crab/lod0.glb",
-          "bytes": 193052,
-          "sha256": "3af1840ff92c385665b9c4879cb6de953a8b27d322421044cab898f1d2caa3cd",
-          "triangles": 11926,
-          "vertices": 9330
+          "bytes": 194708,
+          "sha256": "530515f77d5676e1b4cb8e5c9da8c7638637e1da2eaaf40d83e8db52940895ce",
+          "triangles": 11964,
+          "vertices": 9426
         },
         {
           "file": "crab/hermit-crab/lod1.glb",
-          "bytes": 100864,
-          "sha256": "267aa2aca603bc311c7db0cf695e0058539ff9fc1d639def79bcb88fdf8c3d92",
-          "triangles": 4762,
-          "vertices": 4651
+          "bytes": 101940,
+          "sha256": "3afa5c1ca282a0cab8f1a002f6d961217dd88c119a515d4567a2996f0a7a69f8",
+          "triangles": 4780,
+          "vertices": 4703
         },
         {
           "file": "crab/hermit-crab/lod2.glb",
-          "bytes": 53056,
-          "sha256": "2913eedc0a5725860d7722af0d41032b7d1633569b351fdaaea323ea176ce52f",
-          "triangles": 1784,
-          "vertices": 2277
+          "bytes": 53232,
+          "sha256": "ddea1ae55907ec9c72973cf7bc9f99345e695be6fa11abfc858ecd2c705a8515",
+          "triangles": 1792,
+          "vertices": 2290
         }
       ],
       "textures": [
@@ -3228,15 +3228,15 @@
           "variants": {
             "1k": {
               "file": "crab/hermit-crab/textures/hermit-crab_basecolor_1k.ktx2",
-              "bytes": 114105,
-              "sha256": "4992d0057d0984d03828f0895c63ef7f99dd343e0190b54ed912e0b7fdbef99d",
+              "bytes": 115196,
+              "sha256": "b43e6c6765584ecdaa764038352cd097bf8f8c664a9ad208dcb6bfb643e28ff5",
               "size": 1024,
               "codec": "etc1s"
             },
             "2k": {
               "file": "crab/hermit-crab/textures/hermit-crab_basecolor_2k.ktx2",
-              "bytes": 359776,
-              "sha256": "7379fa0185adf03a80c8ba0f99269a929e52648591046a28faa74962996871cc",
+              "bytes": 365244,
+              "sha256": "a1b0a748ddab79e9ec6c38ea0d10858469e790a490aacc85f57f940b1a2ff0b0",
               "size": 2048,
               "codec": "etc1s"
             }
@@ -3246,28 +3246,28 @@
       "files": [
         {
           "file": "crab/hermit-crab/lod0.glb",
-          "bytes": 193052,
-          "sha256": "3af1840ff92c385665b9c4879cb6de953a8b27d322421044cab898f1d2caa3cd"
+          "bytes": 194708,
+          "sha256": "530515f77d5676e1b4cb8e5c9da8c7638637e1da2eaaf40d83e8db52940895ce"
         },
         {
           "file": "crab/hermit-crab/lod1.glb",
-          "bytes": 100864,
-          "sha256": "267aa2aca603bc311c7db0cf695e0058539ff9fc1d639def79bcb88fdf8c3d92"
+          "bytes": 101940,
+          "sha256": "3afa5c1ca282a0cab8f1a002f6d961217dd88c119a515d4567a2996f0a7a69f8"
         },
         {
           "file": "crab/hermit-crab/lod2.glb",
-          "bytes": 53056,
-          "sha256": "2913eedc0a5725860d7722af0d41032b7d1633569b351fdaaea323ea176ce52f"
+          "bytes": 53232,
+          "sha256": "ddea1ae55907ec9c72973cf7bc9f99345e695be6fa11abfc858ecd2c705a8515"
         },
         {
           "file": "crab/hermit-crab/textures/hermit-crab_basecolor_1k.ktx2",
-          "bytes": 114105,
-          "sha256": "4992d0057d0984d03828f0895c63ef7f99dd343e0190b54ed912e0b7fdbef99d"
+          "bytes": 115196,
+          "sha256": "b43e6c6765584ecdaa764038352cd097bf8f8c664a9ad208dcb6bfb643e28ff5"
         },
         {
           "file": "crab/hermit-crab/textures/hermit-crab_basecolor_2k.ktx2",
-          "bytes": 359776,
-          "sha256": "7379fa0185adf03a80c8ba0f99269a929e52648591046a28faa74962996871cc"
+          "bytes": 365244,
+          "sha256": "a1b0a748ddab79e9ec6c38ea0d10858469e790a490aacc85f57f940b1a2ff0b0"
         }
       ],
       "crab": {

@@ -13,7 +13,13 @@ import {
   recolourDense,
   segmentCrab,
 } from './hermit.ts';
-import { FIN_ID_ATTRIBUTE, LEG_ATTRIBUTE, SHRIMP_PART_IDS } from './index-schema.ts';
+import { canonicalVertices } from './crew-scan.ts';
+import {
+  FIN_ID_ATTRIBUTE,
+  FIN_MASK_ATTRIBUTE,
+  LEG_ATTRIBUTE,
+  SHRIMP_PART_IDS,
+} from './index-schema.ts';
 import type { Vec3 } from './math.ts';
 import type { Dense } from './rebake.ts';
 
@@ -283,27 +289,48 @@ describe('clusterByDirection', () => {
 describe('the shipped hermit crab', () => {
   const assets = fileURLToPath(new URL('../../../apps/web/public/assets', import.meta.url));
 
-  it('gives each of its three legs a side its own anatomical slot, front to back', async () => {
+  interface ShippedLegs {
+    position: ArrayLike<number>;
+    part: ArrayLike<number>;
+    leg: ArrayLike<number>;
+    weight: ArrayLike<number>;
+    indices: ArrayLike<number>;
+  }
+
+  async function readCrab(level: number): Promise<ShippedLegs> {
     const io = new NodeIO()
       .registerExtensions(ALL_EXTENSIONS)
       .registerDependencies({ 'meshopt.decoder': MeshoptDecoder });
-    const doc = await io.read(join(assets, 'crab', 'hermit-crab', 'lod0.glb'));
+    const doc = await io.read(join(assets, 'crab', 'hermit-crab', `lod${level}.glb`));
+    const prims = doc
+      .getRoot()
+      .listMeshes()
+      .flatMap((mesh) => mesh.listPrimitives());
+    expect(prims).toHaveLength(1);
+    const prim = prims[0]!;
+    return {
+      position: prim.getAttribute('POSITION')!.getArray()!,
+      part: prim.getAttribute(FIN_ID_ATTRIBUTE)!.getArray()!,
+      leg: prim.getAttribute(LEG_ATTRIBUTE)!.getArray()!,
+      weight: prim.getAttribute(FIN_MASK_ATTRIBUTE)!.getArray()!,
+      indices: prim.getIndices()!.getArray()!,
+    };
+  }
+
+  const isLeg = (crab: ShippedLegs, v: number): boolean => crab.part[v] === SHRIMP_PART_IDS.leg;
+
+  it('gives each of its three legs a side its own anatomical slot, front to back', async () => {
+    const crab = await readCrab(0);
     const slots = new Map<number, { x: number; z: number; count: number }>();
-    for (const mesh of doc.getRoot().listMeshes())
-      for (const prim of mesh.listPrimitives()) {
-        const position = prim.getAttribute('POSITION')!.getArray()!;
-        const part = prim.getAttribute(FIN_ID_ATTRIBUTE)!.getArray()!;
-        const leg = prim.getAttribute(LEG_ATTRIBUTE)!.getArray()!;
-        for (let v = 0; v < part.length; v++) {
-          if (part[v] !== SHRIMP_PART_IDS.leg) continue;
-          const slot = slots.get(leg[v]!) ?? { x: 0, z: 0, count: 0 };
-          slot.x += position[v * 3]!;
-          slot.z += position[v * 3 + 2]!;
-          slot.count++;
-          slots.set(leg[v]!, slot);
-        }
-      }
-    expect([...slots.keys()].sort()).toEqual([0, 1, 2, 3, 4, 5]);
+    for (let v = 0; v < crab.part.length; v++) {
+      if (!isLeg(crab, v)) continue;
+      const slot = slots.get(crab.leg[v]!) ?? { x: 0, z: 0, count: 0 };
+      slot.x += crab.position[v * 3]!;
+      slot.z += crab.position[v * 3 + 2]!;
+      slot.count++;
+      slots.set(crab.leg[v]!, slot);
+    }
+    expect([...slots.keys()].sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4, 5]);
     for (const slot of slots.values()) expect(slot.count).toBeGreaterThan(200);
     const mean = (slot: number, axis: 'x' | 'z'): number =>
       slots.get(slot)![axis] / slots.get(slot)!.count;
@@ -313,4 +340,52 @@ describe('the shipped hermit crab', () => {
     }
     for (const pair of [0, 2, 4]) expect(mean(pair, 'x')).toBeLessThan(mean(pair + 1, 'x'));
   });
+
+  it.each([0, 1, 2])(
+    'LOD%i: every leg slot is one connected piece whose root touches the body',
+    async (level) => {
+      const crab = await readCrab(level);
+      const canon = canonicalVertices(crab.position, 1e-7);
+      const parent = new Map<number, number>();
+      const find = (a: number): number => {
+        let root = a;
+        while (parent.get(root) !== root) root = parent.get(root)!;
+        return root;
+      };
+      const slotOf = new Map<number, number>();
+      for (let v = 0; v < crab.part.length; v++)
+        if (isLeg(crab, v)) {
+          parent.set(canon[v]!, canon[v]!);
+          slotOf.set(canon[v]!, crab.leg[v]!);
+        }
+      const rooted = new Set<number>();
+      for (let t = 0; t < crab.indices.length; t += 3)
+        for (let k = 0; k < 3; k++) {
+          const a = crab.indices[t + k]!;
+          const b = crab.indices[t + ((k + 1) % 3)]!;
+          if (isLeg(crab, a) && isLeg(crab, b) && crab.leg[a] === crab.leg[b])
+            parent.set(find(canon[a]!), find(canon[b]!));
+          else if (isLeg(crab, a) !== isLeg(crab, b)) {
+            const leg = isLeg(crab, a) ? a : b;
+            const other = leg === a ? b : a;
+            if (crab.part[other] === SHRIMP_PART_IDS.abdomen) rooted.add(canon[leg]!);
+          }
+        }
+      const pieces = new Map<number, Map<number, { size: number; touchesBody: boolean }>>();
+      for (const [node, slot] of slotOf) {
+        const bySlot = pieces.get(slot) ?? new Map();
+        const piece = bySlot.get(find(node)) ?? { size: 0, touchesBody: false };
+        piece.size++;
+        piece.touchesBody ||= rooted.has(node);
+        bySlot.set(find(node), piece);
+        pieces.set(slot, bySlot);
+      }
+      expect([...pieces.keys()].sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4, 5]);
+      for (const [slot, bySlot] of pieces) {
+        const real = [...bySlot.values()].filter((p) => p.size > 5);
+        expect(real, `slot ${slot}`).toHaveLength(1);
+        expect(real[0]!.touchesBody, `slot ${slot} root`).toBe(true);
+      }
+    },
+  );
 });
