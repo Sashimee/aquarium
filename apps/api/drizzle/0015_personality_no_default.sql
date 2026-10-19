@@ -1,0 +1,1 @@
+ALTER TABLE "fish" ALTER COLUMN "personality" DROP DEFAULT;

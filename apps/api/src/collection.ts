@@ -74,16 +74,19 @@ export async function recordCollection(
     bySpecies.set(id, slot);
   }
   const col = schema.collectionEntries;
+  // Fixed lock order: concurrent ticks for one user must not lock species rows in opposite orders.
   await tx
     .insert(col)
     .values(
-      [...bySpecies].map(([id, at]) => ({
-        userId,
-        species: id,
-        keptAt: new Date(at.kept),
-        bredAt: at.bred === undefined ? null : new Date(at.bred),
-        raisedAt: at.raised === undefined ? null : new Date(at.raised),
-      })),
+      [...bySpecies]
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([id, at]) => ({
+          userId,
+          species: id,
+          keptAt: new Date(at.kept),
+          bredAt: at.bred === undefined ? null : new Date(at.bred),
+          raisedAt: at.raised === undefined ? null : new Date(at.raised),
+        })),
     )
     .onConflictDoUpdate({
       target: [col.userId, col.species],

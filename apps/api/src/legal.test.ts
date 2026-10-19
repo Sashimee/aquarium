@@ -4,6 +4,7 @@ import {
   apiErrorSchema,
   creditsSchema,
   dataExportSchema,
+  personalitySchema,
   privacyPolicySchema,
   tankSchema,
 } from '@aquarium/shared';
@@ -12,6 +13,7 @@ import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildCredits, loadCredits, UNRECORDED_MODIFICATION } from './credits.ts';
 import { schema } from './db/index.ts';
+import { personalityFromFishId } from './personality.ts';
 import { pruneExpired } from './maintenance.ts';
 import { APP_ORIGIN, createHarness, type Harness } from './test-harness.ts';
 
@@ -404,6 +406,8 @@ describe('data export', () => {
       backedUp: true,
     });
 
+    await call(h, alice.cookie, 'GET', `/api/tanks/${tank.id}`);
+
     const res = await call(h, alice.cookie, 'POST', '/api/me/export', {});
     expect(res.statusCode).toBe(200);
     expect(res.headers['cache-control']).toBe('no-store');
@@ -420,6 +424,10 @@ describe('data export', () => {
     expect(exported?.tank).toMatchObject({ size: 'standard', quarantine: false });
     expect(exported?.fish).toHaveLength(1);
     expect(exported?.events.length).toBeGreaterThan(0);
+    expect(personalitySchema.parse(exported?.fish[0]?.['personality'])).toEqual(
+      personalityFromFishId(String(exported?.fish[0]?.['id'])),
+    );
+    expect(exported?.visits.length).toBeGreaterThan(0);
 
     const raw = res.body;
     expect(raw).not.toContain(bob.email);

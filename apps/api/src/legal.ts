@@ -178,7 +178,7 @@ export function registerLegalRoutes(deps: LegalDeps): void {
 
     const perTank = await Promise.all(
       tanks.map(async (tank) => {
-        const [fish, events, memorials] = await Promise.all([
+        const [fish, events, memorials, visits] = await Promise.all([
           db
             .select()
             .from(schema.fish)
@@ -194,9 +194,20 @@ export function registerLegalRoutes(deps: LegalDeps): void {
             .from(schema.memorials)
             .where(eq(schema.memorials.tankId, tank.id))
             .orderBy(asc(schema.memorials.diedAt)),
+          db
+            .select({ day: schema.tankVisits.day })
+            .from(schema.tankVisits)
+            .where(eq(schema.tankVisits.tankId, tank.id))
+            .orderBy(asc(schema.tankVisits.day)),
         ]);
         const { shareTokenHash, ...rest } = tank;
-        return { tank: { ...rest, shared: shareTokenHash !== null }, fish, events, memorials };
+        return {
+          tank: { ...rest, shared: shareTokenHash !== null },
+          fish,
+          events,
+          memorials,
+          visits,
+        };
       }),
     );
 

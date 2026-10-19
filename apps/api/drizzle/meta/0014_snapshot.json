@@ -1,5 +1,5 @@
 {
-  "id": "ab6d671c-3abd-4c0c-8ba5-6a6e0acf483a",
+  "id": "16c1bfcd-d571-4c35-8cdc-dce75c00314e",
   "prevId": "2fbf3f5d-7e37-4583-9138-0548bebb3127",
   "version": "7",
   "dialect": "postgresql",
@@ -117,52 +117,6 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.achievement_awards": {
-      "name": "achievement_awards",
-      "schema": "",
-      "columns": {
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "achievement_id": {
-          "name": "achievement_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "earned_at": {
-          "name": "earned_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "achievement_awards_user_id_user_id_fk": {
-          "name": "achievement_awards_user_id_user_id_fk",
-          "tableFrom": "achievement_awards",
-          "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "achievement_awards_user_id_achievement_id_pk": {
-          "name": "achievement_awards_user_id_achievement_id_pk",
-          "columns": ["user_id", "achievement_id"]
-        }
-      },
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
@@ -318,64 +272,6 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.collection_entries": {
-      "name": "collection_entries",
-      "schema": "",
-      "columns": {
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "species": {
-          "name": "species",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "kept_at": {
-          "name": "kept_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "bred_at": {
-          "name": "bred_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "raised_at": {
-          "name": "raised_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "collection_entries_user_id_user_id_fk": {
-          "name": "collection_entries_user_id_user_id_fk",
-          "tableFrom": "collection_entries",
-          "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "collection_entries_user_id_species_pk": {
-          "name": "collection_entries_user_id_species_pk",
-          "columns": ["user_id", "species"]
-        }
-      },
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
@@ -1209,6 +1105,46 @@
         "tank_reactions_tank_id_user_id_pk": {
           "name": "tank_reactions_tank_id_user_id_pk",
           "columns": ["tank_id", "user_id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.tank_visits": {
+      "name": "tank_visits",
+      "schema": "",
+      "columns": {
+        "tank_id": {
+          "name": "tank_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "day": {
+          "name": "day",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "tank_visits_tank_id_tanks_id_fk": {
+          "name": "tank_visits_tank_id_tanks_id_fk",
+          "tableFrom": "tank_visits",
+          "tableTo": "tanks",
+          "columnsFrom": ["tank_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "tank_visits_tank_id_day_pk": {
+          "name": "tank_visits_tank_id_day_pk",
+          "columns": ["tank_id", "day"]
         }
       },
       "uniqueConstraints": {},
