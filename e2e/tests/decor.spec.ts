@@ -93,13 +93,14 @@ test('a decor piece is swapped, moved, saved and still there after a reload', as
   await expect(inTank.getByRole('button')).toHaveCount(startCount - 1);
 
   // Once the layout is saved, adding a piece needs its licence; the Remove above is that first save.
+  // A boulder is compact enough to keep a free side for the nudge below; a long branch can be boxed in.
   const tankId = (await savedTanks(page))[0]?.id;
   const licence = await page.request.post('/api/shop/purchase', {
     headers: { origin: APP_URL },
-    data: { idempotencyKey: crypto.randomUUID(), itemRef: 'decor:driftwood-branch', tankId },
+    data: { idempotencyKey: crypto.randomUUID(), itemRef: 'decor:boulder-01', tankId },
   });
   expect(licence.status(), await licence.text()).toBe(200);
-  await panel.getByRole('button', { name: 'Add Driftwood branch' }).click();
+  await panel.getByRole('button', { name: 'Add Boulder', exact: true }).click();
   await expect(inTank.getByRole('button')).toHaveCount(startCount);
   await expect(panel.getByText('Layout saved.')).toBeVisible();
   await expect
@@ -167,7 +168,7 @@ test('the palette follows the tank biome and the server refuses what it hides', 
   if (!tank) throw new Error('the first tank was not saved');
 
   const panel = await startDecorating(page);
-  await expect(panel.getByRole('button', { name: 'Add Driftwood branch' })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Add Boulder', exact: true })).toBeVisible();
   await expect(panel.getByRole('button', { name: 'Add Reef arch' })).toHaveCount(0);
   await expect(panel.getByRole('button', { name: 'Add Vacation feeder' })).toBeEnabled();
 
