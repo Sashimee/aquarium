@@ -7,8 +7,9 @@ import {
   Quaternion,
   Scene,
   Vector3,
+  type Node,
 } from 'three/webgpu';
-import { SNAPSHOT_STRIDE, SnapshotField, type SimToy } from '@aquarium/sim';
+import { CARCASS, SNAPSHOT_STRIDE, SnapshotField, type SimToy } from '@aquarium/sim';
 import type { Collider } from '@aquarium/shared';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import type { Engine } from '../engine/Engine';
@@ -18,7 +19,8 @@ import type { InteractionEvents } from '../interaction/events';
 import { FISH_1, TANK_A, fishFixture } from '../sync/fixtures';
 import type { FishAssetEntry } from './assetIndex';
 import { FishAssetLoader, type FishModel } from './assets';
-import { FishInstanceData, type InstanceValues } from './instances';
+import { FishInstanceData, InstanceSlot, type InstanceValues } from './instances';
+import { FishMaterial } from './material';
 import { batchLocomotion, FishSystem } from './FishSystem';
 import { renderProfile, swimModeFor } from './profiles';
 import type { BallNudge, PickRay } from './start';
@@ -629,7 +631,9 @@ describe('FishSystem toys and display', () => {
     vi.stubGlobal('Worker', FakeWorker);
     vi.stubGlobal('fetch', () => Promise.reject(new Error('offline')));
     vi.spyOn(FishAssetLoader.prototype, 'load').mockImplementation((assetId) =>
-      assetId === 'betta' ? Promise.resolve(bettaModel()) : Promise.reject(new Error('offline')),
+      assetId === 'betta' || assetId === 'royal-gramma'
+        ? Promise.resolve(bettaModel())
+        : Promise.reject(new Error('offline')),
     );
   });
 
@@ -639,7 +643,7 @@ describe('FishSystem toys and display', () => {
   });
 
   /** A saved tank with one betta, its world up; `snapshot` sends one sim step and draws it. */
-  async function bettaTank() {
+  async function bettaTank(shown = BETTA, biome: 'freshwater' | 'reef' = 'freshwater') {
     const { engine, frames } = fakeEngine();
     const start = FishSystem.create(engine, {
       tank: DEFAULT_TANK,
@@ -671,10 +675,10 @@ describe('FishSystem toys and display', () => {
         type: 'tank:loaded',
         payload: {
           tankId: TANK_A,
-          biome: 'freshwater',
+          biome,
           decorLayout: [],
           decorEdited: false,
-          fish: [BETTA],
+          fish: [shown],
         },
       });
     const nextWorld = async (): Promise<void> => {
@@ -701,7 +705,7 @@ describe('FishSystem toys and display', () => {
       });
       for (const frame of frames) frame(STEP_S, performance.now());
     };
-    return { fish, worker, load, nextWorld, snapshot, epoch: () => answered };
+    return { fish, engine, worker, load, nextWorld, snapshot, epoch: () => answered };
   }
 
   it('sends the toys to the running world and again to every new one', async () => {
@@ -787,8 +791,77 @@ describe('FishSystem toys and display', () => {
         fish: { ...BETTA, status: 'dead', diedAt: '2026-10-16T00:00:00.000Z' },
       },
     });
-    snapshot(0.8, 0.6);
+    const closing: number[] = [];
+    for (let i = 0; i < Math.ceil(CARCASS.limpS / STEP_S) + 2; i++) {
+      snapshot(0.8, 0.6);
+      closing.push(written.at(-1)?.display ?? NaN);
+    }
+    expect(closing[0]).toBeGreaterThan(0.5);
+    for (let i = 1; i < closing.length; i++) {
+      expect(closing[i]).toBeLessThanOrEqual(closing[i - 1] ?? NaN);
+    }
     expect(written.at(-1)).toMatchObject({ display: 0, gillFlare: 0 });
+    fish.dispose();
+  });
+
+  it('closes the fins over a moment when a new world restarts them at 0', async () => {
+    const written: InstanceValues[] = [];
+    const write = FishInstanceData.prototype.write;
+    vi.spyOn(FishInstanceData.prototype, 'write').mockImplementation(function (
+      this: FishInstanceData,
+      index,
+      values,
+    ) {
+      written.push({ ...values });
+      write.call(this, index, values);
+    });
+    const { fish, load, nextWorld, snapshot } = await bettaTank();
+    load();
+    await nextWorld();
+    for (let i = 0; i < 3; i++) snapshot(1, 1);
+    snapshot(0, 0);
+    snapshot(0, 0);
+    const after = written.at(-1)?.display ?? NaN;
+    expect(after).toBeGreaterThan(0.8);
+    expect(after).toBeLessThan(1);
+    fish.dispose();
+  });
+
+  it.each([
+    ['betta', BETTA, 'freshwater', true],
+    [
+      'royal gramma, territorial without the flare trait',
+      fishFixture(FISH_1, { species: 'royal-gramma', size: 0.06 }),
+      'reef',
+      false,
+    ],
+  ] as const)('builds the display deformation for the %s: %s', async (_, shown, biome, flares) => {
+    const { fish, engine, load, nextWorld, snapshot } = await bettaTank(shown, biome);
+    load();
+    await nextWorld();
+    snapshot(0, 0);
+    const materials: FishMaterial[] = [];
+    engine.scene.traverse((object) => {
+      if (object instanceof InstancedMesh && object.material instanceof FishMaterial) {
+        materials.push(object.material);
+      }
+    });
+    expect(materials.length).toBeGreaterThan(0);
+    for (const material of materials) {
+      let readsDisplay = false;
+      material.deformed.position.traverse((n) => {
+        const split = n as Node & { isSplitNode?: boolean; components?: string; node?: Node };
+        const buffer = split.node as (Node & { bufferOffset?: number }) | undefined;
+        if (
+          split.isSplitNode === true &&
+          split.components === 'xyzw'[InstanceSlot.Display % 4] &&
+          buffer?.bufferOffset === InstanceSlot.Display - (InstanceSlot.Display % 4)
+        ) {
+          readsDisplay = true;
+        }
+      });
+      expect(readsDisplay).toBe(flares);
+    }
     fish.dispose();
   });
 });

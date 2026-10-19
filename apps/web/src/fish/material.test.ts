@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AttributeNode, MeshStandardMaterial, Vector3, type Node } from 'three/webgpu';
-import { uniform, vec3 } from 'three/tsl';
+import { float, uniform, vec3 } from 'three/tsl';
 import {
   FishInstanceData,
   INSTANCE_STRIDE,
@@ -9,7 +9,12 @@ import {
   WalkerSlot,
 } from './instances';
 import { reversedSmoothsteps } from '../engine/reversedSmoothsteps';
-import { AUTHORED_SURFACE_MATERIAL, FishMaterial, keepsAuthoredSurface } from './material';
+import {
+  AUTHORED_SURFACE_MATERIAL,
+  finDisplay,
+  FishMaterial,
+  keepsAuthoredSurface,
+} from './material';
 import { renderProfile } from './profiles';
 import { SWIM_MODES } from './swim';
 
@@ -232,5 +237,149 @@ describe('FishMaterial display', () => {
     shrimp.setFeatures(FEATURES);
     expect(readsSlotComponent(deformed(shrimp), InstanceSlot.Display)).toBe(false);
     expect(readsSlotComponent(deformed(shrimp), InstanceSlot.GillFlare)).toBe(false);
+  });
+});
+
+type EvalNode = Node & {
+  isConstNode?: boolean;
+  isVarNode?: boolean;
+  isOperatorNode?: boolean;
+  isMathNode?: boolean;
+  value?: unknown;
+  node?: Node;
+  op?: string;
+  method?: string;
+  aNode?: Node;
+  bNode?: Node | null;
+  cNode?: Node | null;
+};
+
+/** Evaluates the scalar arithmetic `finDisplay` builds, so its geometry can be checked on the CPU. */
+function evaluate(node: Node | null | undefined): number {
+  const n = node as EvalNode | null | undefined;
+  if (n == null) throw new Error('missing operand');
+  if (n.isConstNode === true && typeof n.value === 'number') return n.value;
+  if (n.isVarNode === true) return evaluate(n.node);
+  const a = (): number => evaluate(n.aNode);
+  const b = (): number => evaluate(n.bNode);
+  const c = (): number => evaluate(n.cNode);
+  if (n.isOperatorNode === true) {
+    switch (n.op) {
+      case '+':
+        return a() + b();
+      case '-':
+        return a() - b();
+      case '*':
+        return a() * b();
+      case '/':
+        return a() / b();
+    }
+  }
+  if (n.isMathNode === true) {
+    switch (n.method) {
+      case 'cos':
+        return Math.cos(a());
+      case 'sin':
+        return Math.sin(a());
+      case 'atan':
+        return n.bNode == null ? Math.atan(a()) : Math.atan2(a(), b());
+      case 'max':
+        return Math.max(a(), b());
+      case 'negate':
+        return -a();
+      case 'step':
+        return b() >= a() ? 1 : 0;
+      case 'smoothstep': {
+        const t = Math.min(Math.max((c() - a()) / (b() - a()), 0), 1);
+        return t * t * (3 - 2 * t);
+      }
+    }
+  }
+  throw new Error(`cannot evaluate ${n.type} ${n.op ?? n.method ?? ''}`);
+}
+
+describe('finDisplay geometry', () => {
+  const zMax = 0.0365;
+  const zLen = 0.073;
+  const zAt = (s: number): number => zMax - s * zLen;
+  const fins = {
+    dorsal: { isDorsal: 1, isAnal: 0, isCaudal: 0, pivotS: 0.4 },
+    anal: { isDorsal: 0, isAnal: 1, isCaudal: 0, pivotS: 0.3 },
+    caudal: { isDorsal: 0, isAnal: 0, isCaudal: 1, pivotS: 0.65 },
+  } as const;
+  type FinName = keyof typeof fins;
+
+  function at(fin: FinName, y: number, z: number, mask: number, display: number) {
+    const { isDorsal, isAnal, isCaudal } = fins[fin];
+    const out = finDisplay({
+      y: float(y),
+      z: float(z),
+      mask: float(mask),
+      display: float(display),
+      isDorsal: float(isDorsal),
+      isAnal: float(isAnal),
+      isCaudal: float(isCaudal),
+      zMax,
+      zLen,
+    });
+    return { y: evaluate(out.y), z: evaluate(out.z) };
+  }
+
+  it.each(Object.keys(fins) as FinName[])('keeps the %s root where it is', (fin) => {
+    const z = zAt(fins[fin].pivotS + 0.1);
+    const moved = at(fin, 0.004, z, 0, 1);
+    expect(moved.y).toBeCloseTo(0.004, 9);
+    expect(moved.z).toBeCloseTo(z, 9);
+  });
+
+  it('raises the dorsal edge, lowers the anal edge and lifts the tail, stretched outwards', () => {
+    const dorsal = at('dorsal', 0.01, zAt(0.6), 1, 1);
+    expect(dorsal.y).toBeGreaterThan(0.01);
+    const anal = at('anal', -0.01, zAt(0.55), 1, 1);
+    expect(anal.y).toBeLessThan(-0.01);
+    const tail = at('caudal', 0, zAt(0.95), 1, 1);
+    expect(tail.y).toBeGreaterThan(0);
+    const pivot = zAt(0.65);
+    expect(Math.hypot(tail.y, tail.z - pivot)).toBeGreaterThan(Math.abs(zAt(0.95) - pivot));
+  });
+
+  it.each([
+    ['dorsal', 0.006, 0.18],
+    ['dorsal', 0.006, 0.39],
+    ['anal', -0.005, 0.2],
+    ['caudal', 0.0004, 0.62],
+    ['caudal', -0.0004, 0.62],
+    ['caudal', 0, 0.65],
+  ] as const)('leaves a %s ray at y %f ahead of its pivot (s %f) in place', (fin, y, s) => {
+    const moved = at(fin, y, zAt(s), 1, 1);
+    expect(Number.isFinite(moved.y) && Number.isFinite(moved.z)).toBe(true);
+    expect(moved.y).toBeCloseTo(y, 9);
+    expect(moved.z).toBeCloseTo(zAt(s), 9);
+  });
+
+  it('fans the tail continuously across its axis', () => {
+    const z = zAt(0.7);
+    const above = at('caudal', 1e-5, z, 1, 1);
+    const below = at('caudal', -1e-5, z, 1, 1);
+    expect(Math.hypot(above.y - below.y, above.z - below.z)).toBeLessThan(1e-4);
+  });
+
+  it('moves no fin vertex further than the stretched turn allows at full display', () => {
+    for (const fin of Object.keys(fins) as FinName[]) {
+      const pivot = zAt(fins[fin].pivotS);
+      for (let s = 0; s <= 1; s += 0.05) {
+        for (const y of [-0.012, -0.004, 0, 0.004, 0.012]) {
+          const z = zAt(s);
+          const moved = at(fin, y, z, 1, 1);
+          const reach = Math.hypot(y, z - pivot);
+          expect(Number.isFinite(moved.y) && Number.isFinite(moved.z)).toBe(true);
+          expect(Math.hypot(moved.y, moved.z - pivot)).toBeLessThanOrEqual(reach * 1.12 + 1e-12);
+          if (z >= pivot) {
+            expect(moved.y).toBeCloseTo(y, 12);
+            expect(moved.z).toBeCloseTo(z, 12);
+          }
+        }
+      }
+    }
   });
 });

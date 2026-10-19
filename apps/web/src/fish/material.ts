@@ -94,7 +94,7 @@ export interface FishMaterialConfig {
   readonly lighting: FishLighting;
   /** The fin attribute is a vec3 whose third component is the `_mouth` weight. */
   readonly mouth: boolean;
-  /** The species ever displays (all territorial ones do), so it gets fin spread and gill flare. */
+  /** The species flares (trait `flare-display`), so it gets fin spread and gill flare. */
   readonly displays: boolean;
 }
 
@@ -133,6 +133,11 @@ const CAUDAL_FAN = 0.3;
 const FIN_STRETCH = 0.12;
 /** Pelvic fins splay sideways in display, in body lengths at the fin tip. */
 const PELVIC_SPLAY = 0.06;
+/**
+ * Fin rays at or ahead of their pivot stay put, and the turn grows over this share of the body
+ * length behind it; a turn about the pivot would fold them into the body.
+ */
+const DISPLAY_PIVOT_RAMP_S = 0.04;
 /** Median fins held taut in display ripple at this share of their swimming undulation. */
 const DISPLAY_FIN_RIPPLE = 0.4;
 /**
@@ -276,6 +281,61 @@ function screenDoor(alpha: Node<'float'>, seed: Node<'float'>): Node<'bool'> {
 function ditheredCoverage(alpha: Node<'float'>, seed: Node<'float'>): Node<'float'> {
   const reach = min(alpha.oneMinus().mul(2), 1 / COVERAGE_SAMPLES);
   return alpha.add(surfaceNoise(seed).sub(0.5).mul(reach));
+}
+
+export interface FinDisplayInput {
+  readonly y: Node<'float'>;
+  readonly z: Node<'float'>;
+  readonly mask: Node<'float'>;
+  readonly display: Node<'float'>;
+  readonly isDorsal: Node<'float'>;
+  readonly isAnal: Node<'float'>;
+  readonly isCaudal: Node<'float'>;
+  readonly zMax: number;
+  readonly zLen: number;
+}
+
+/**
+ * The display turn and stretch of an unpaired fin vertex in the body's plane, as model-space y and
+ * z, with the turn's cosine and sine for the normal.
+ */
+export function finDisplay(input: FinDisplayInput): {
+  y: Node<'float'>;
+  z: Node<'float'>;
+  turnCos: Node<'float'>;
+  turnSin: Node<'float'>;
+} {
+  const { y, z, mask, display, isDorsal, isAnal, isCaudal, zMax, zLen } = input;
+  const pivotZ = isDorsal
+    .mul(zMax - DORSAL_PIVOT_S * zLen)
+    .add(isAnal.mul(zMax - ANAL_PIVOT_S * zLen))
+    .add(isCaudal.mul(zMax - PEDUNCLE_S * zLen));
+  const fromPivotZ = z.sub(pivotZ).toVar();
+  const behindPivot = fromPivotZ.negate().toVar();
+  const spread = display
+    .mul(mask)
+    .mul(smoothstep(0, DISPLAY_PIVOT_RAMP_S * zLen, behindPivot))
+    .toVar();
+  // Clamped off zero: atan2(0, 0) is undefined in GLSL, and ahead of the pivot it would wrap by 2π.
+  const offAxis = atan(y, max(behindPivot, 1e-6 * zLen));
+  const turn = spread
+    .mul(
+      isDorsal
+        .mul(DORSAL_ERECT)
+        .sub(isAnal.mul(ANAL_ERECT))
+        .add(isCaudal.mul(offAxis.mul(CAUDAL_FAN).add(CAUDAL_LIFT))),
+    )
+    .toVar();
+  const stretch = spread.mul(isDorsal.add(isAnal).add(isCaudal)).mul(FIN_STRETCH).add(1).toVar();
+  const turnCos = cos(turn).toVar();
+  const turnSin = sin(turn).toVar();
+  // Turned towards +y from the tail, z' = z·cos + y·sin and y' = y·cos − z·sin about the pivot.
+  return {
+    y: y.mul(turnCos).sub(fromPivotZ.mul(turnSin)).mul(stretch),
+    z: fromPivotZ.mul(turnCos).add(y.mul(turnSin)).mul(stretch).add(pivotZ),
+    turnCos,
+    turnSin,
+  };
 }
 
 /**
@@ -447,24 +507,18 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
     let ny: Node<'float'> = n.y;
     let nz: Node<'float'> = n.z;
     if (displays) {
-      const spread = display.mul(mask).toVar();
-      const pivotZ = isDorsal
-        .mul(zMax - DORSAL_PIVOT_S * zLen)
-        .add(isAnal.mul(zMax - ANAL_PIVOT_S * zLen))
-        .add(isCaudal.mul(zMax - PEDUNCLE_S * zLen));
-      const fromPivotZ = p.z.sub(pivotZ).toVar();
-      const offAxis = atan(p.y, fromPivotZ.negate());
-      const turn = spread
-        .mul(
-          isDorsal
-            .mul(DORSAL_ERECT)
-            .sub(isAnal.mul(ANAL_ERECT))
-            .add(isCaudal.mul(offAxis.mul(CAUDAL_FAN).add(CAUDAL_LIFT))),
-        )
-        .toVar();
-      const stretch = spread.mul(isMedian.add(isCaudal)).mul(FIN_STRETCH).add(1);
-      const turnCos = cos(turn).toVar();
-      const turnSin = sin(turn).toVar();
+      const fin = finDisplay({
+        y: p.y,
+        z: p.z,
+        mask,
+        display,
+        isDorsal,
+        isAnal,
+        isCaudal,
+        zMax,
+        zLen,
+      });
+      const { turnCos, turnSin } = fin;
       const throat = gillFlare
         .mul(GILL_DISPLAY_DROP)
         .mul(skin)
@@ -472,10 +526,9 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
         .mul(step(p.y, 0))
         .add(1)
         .toVar();
-      // Turned towards +y from the tail, z' = z·cos + y·sin and y' = y·cos − z·sin about the pivot.
       // The membranes face ±x, so the stretch and the fin mask's missing gradient barely turn them.
-      y = p.y.mul(turnCos).sub(fromPivotZ.mul(turnSin)).mul(stretch).mul(throat);
-      z = fromPivotZ.mul(turnCos).add(p.y.mul(turnSin)).mul(stretch).add(pivotZ);
+      y = fin.y.mul(throat);
+      z = fin.z;
       ny = n.y.mul(turnCos).sub(n.z.mul(turnSin)).div(throat);
       nz = n.z.mul(turnCos).add(n.y.mul(turnSin));
     }

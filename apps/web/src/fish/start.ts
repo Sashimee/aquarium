@@ -69,9 +69,12 @@ export interface FishSimBridge {
   netTap(ray: PickRay): void;
   /** Every toy in the tank, in tank space, `[]` for none; the last ones reach the fish once up. */
   setToys(toys: readonly SimToy[]): void;
-  /** Fish bumping the ball; returns the unsubscribe. */
+  /** Fish bumping the ball, each nudge reused for the next; returns the unsubscribe. */
   onToyNudge(listener: (nudge: BallNudge) => void): () => void;
-  /** Where the swimming fish with this server id is, in tank space, or null. */
+  /**
+   * Where the swimming fish with this server id is, in scene space (the same as tank space, as the
+   * fish group sits at the scene origin), or null; the point is reused by the next call.
+   */
   fishPoint(fishId: string): FishPoint | null;
 }
 
