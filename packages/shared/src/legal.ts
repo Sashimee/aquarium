@@ -27,6 +27,10 @@ export const dataExportSchema = z.strictObject({
   reminders: exportedReminderSchema,
   reactions: z.array(exportedRow),
   auditLog: z.array(exportedRow),
+  collection: z.strictObject({
+    entries: z.array(exportedRow),
+    achievements: z.array(exportedRow),
+  }),
   tanks: z.array(
     z.strictObject({
       tank: exportedRow,

@@ -27,6 +27,7 @@ import { createClock, type Clock } from './clock.ts';
 import { schema, type Database } from './db/index.ts';
 import { apiError } from './errors.ts';
 import { loadCredits } from './credits.ts';
+import { DEFAULT_COLLECTION_LIMIT, registerCollectionRoutes } from './collection.ts';
 import { DEFAULT_HANDLE_LIMIT, registerHandleRoutes } from './handle.ts';
 import { DEFAULT_PUBLIC_LIMITS, registerPublicRoutes, type PublicLimits } from './public.ts';
 import { normalizedPathname } from './url.ts';
@@ -61,6 +62,7 @@ export interface AppOptions {
   push?: PushSender | null;
   reminderLimits?: ReminderLimits;
   handleLimit?: Limit;
+  collectionLimit?: Limit;
   publicLimits?: PublicLimits;
   testHooks?: boolean;
   logger?: boolean;
@@ -621,6 +623,16 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     clock,
     limiter,
     limits: opts.careLimits ?? DEFAULT_CARE_LIMITS,
+    currentUser: async (req) => (await currentSession(req))?.user ?? null,
+  });
+
+  registerCollectionRoutes({
+    app,
+    database,
+    species: opts.species,
+    limiter,
+    limit: opts.collectionLimit ?? DEFAULT_COLLECTION_LIMIT,
+    now: () => clock.now(),
     currentUser: async (req) => (await currentSession(req))?.user ?? null,
   });
 

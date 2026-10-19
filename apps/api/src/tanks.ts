@@ -53,6 +53,7 @@ import { audit } from './audit.ts';
 import { issueShareToken } from './shareToken.ts';
 import type { Clock } from './clock.ts';
 import { schema, type Database } from './db/index.ts';
+import { recordCollection, type CollectionObservation } from './collection.ts';
 import { apiError } from './errors.ts';
 import type { Limit, RateLimiter } from './rate-limit.ts';
 import type { SpeciesCatalog } from './species.ts';
@@ -237,6 +238,20 @@ async function lockAndTick(
 
   const updatedRows = await persistFish(tx, fishRows, result.state);
   const bornRows = await insertNewborns(tx, tank.id, result.births, result.state, deps);
+  const observed: CollectionObservation[] = [];
+  const nextStage = new Map(result.state.fish.map((f) => [f.id, f]));
+  for (const row of fishRows) {
+    if (row.stage !== 'adult' && nextStage.get(row.id)?.stage === 'adult') {
+      observed.push({ species: row.species, kind: 'raised', atMs: result.advancedToMs });
+    }
+  }
+  for (const b of result.births) {
+    observed.push({ species: b.species, kind: 'bred', atMs: b.bornAtMs });
+    if (nextStage.get(b.fishId)?.stage === 'adult') {
+      observed.push({ species: b.species, kind: 'raised', atMs: result.advancedToMs });
+    }
+  }
+  await recordCollection(tx, user.id, deps.species, observed, new Date(now));
   const byId = new Map([...fishRows, ...bornRows.values()].map((r) => [r.id, r]));
   const away: AwaySummary = {
     elapsedMinutes: result.elapsedMinutes,
@@ -774,6 +789,13 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           })
           .returning();
         if (!row) throw new Error('fish insert returned no row');
+        await recordCollection(
+          tx,
+          user.id,
+          species,
+          [{ species: spec.id, kind: 'kept', atMs: row.bornAt.getTime() }],
+          row.bornAt,
+        );
         return { tank: await render(tx, { ...ticked, fishRows: [...ticked.fishRows, row] }) };
       });
       return reply.code(201).send(result.tank);

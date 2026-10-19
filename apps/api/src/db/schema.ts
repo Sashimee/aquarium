@@ -322,3 +322,29 @@ export const auditLog = pgTable(
   },
   (t) => [index('audit_log_tank_id_at_idx').on(t.tankId, t.at)],
 );
+
+export const collectionEntries = pgTable(
+  'collection_entries',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    species: text('species').notNull(),
+    keptAt: timestamptz('kept_at').notNull(),
+    bredAt: timestamptz('bred_at'),
+    raisedAt: timestamptz('raised_at'),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.species] })],
+);
+
+export const achievementAwards = pgTable(
+  'achievement_awards',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    achievementId: text('achievement_id').notNull(),
+    earnedAt: timestamptz('earned_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.achievementId] })],
+);
