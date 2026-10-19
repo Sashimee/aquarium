@@ -198,9 +198,19 @@ describe('privacy and credits', () => {
     expect(bySpecies('banggai-cardinalfish')[0]?.author).toBe('David J. Stang');
     expect(credits.entries.filter((e) => e.licence === 'CC-BY-3.0').length).toBeGreaterThan(0);
     expect(credits.shareAlikeNotice).toMatch(/BY-SA/);
+    const index = JSON.parse(
+      readFileSync(
+        fileURLToPath(new URL('../../web/public/assets/index.json', import.meta.url)),
+        'utf8',
+      ),
+    ) as { assets: { kind: string; sources: string[] }[] };
+    const builtSounds = new Set(
+      index.assets.filter((a) => a.kind === 'audio').flatMap((a) => a.sources),
+    );
     for (const e of credits.entries) {
       expect(e.referenceOnly).toBe(e.kind === 'reference-photo' && e.modifications.length === 0);
-      if (e.kind === 'background') expect(e.modifications.length).toBeGreaterThan(0);
+      if (e.kind === 'background' || (e.kind === 'audio' && builtSounds.has(e.id)))
+        expect(e.modifications.length).toBeGreaterThan(0);
       else if ((e.licence === 'CC0-1.0' && e.kind !== 'reference-photo') || e.referenceOnly)
         expect(e.modifications).toEqual([]);
       else expect(e.modifications.length).toBeGreaterThan(0);
