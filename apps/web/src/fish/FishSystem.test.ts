@@ -56,11 +56,17 @@ class FakeWorker {
 
 type FrameListener = (deltaS: number, nowMs: number) => void;
 
-function fakeEngine(): { engine: Engine; errors: string[]; frames: FrameListener[] } {
+function fakeEngine(): {
+  engine: Engine;
+  errors: string[];
+  frames: FrameListener[];
+  photo: { simPaused: boolean };
+} {
   const events = new EventBus<EngineEvents>();
   const errors: string[] = [];
   const frames: FrameListener[] = [];
   events.on('engine:error', ({ message }) => errors.push(message));
+  const photo = { simPaused: false };
   const engine = {
     scene: new Scene(),
     ktx2: new KTX2Loader(),
@@ -73,10 +79,12 @@ function fakeEngine(): { engine: Engine; errors: string[]; frames: FrameListener
       return () => undefined;
     },
     camera: { position: new Vector3(0, 0.25, 1.5) },
+    viewPosition: new Vector3(0, 0.25, 1.5),
+    photo,
     sceneRevision: 0,
     caustics: { lightDirection: new Vector3(0, -1, 0), hoodLight: () => null },
   };
-  return { engine: engine as unknown as Engine, errors, frames };
+  return { engine: engine as unknown as Engine, errors, frames, photo };
 }
 
 async function initPosted(): Promise<FakeWorker> {
@@ -301,6 +309,8 @@ describe('FishSystem dead shrimp', () => {
   interface ShrimpTank {
     readonly fish: FishSystem;
     readonly scene: Scene;
+    readonly worker: FakeWorker;
+    readonly photo: { simPaused: boolean };
     advance(seconds: number): void;
   }
 
@@ -309,7 +319,7 @@ describe('FishSystem dead shrimp', () => {
    * out in the tank where the sim holds it at `climbing` (position, then quaternion).
    */
   async function shrimpTank(climbing: readonly number[] | null = null): Promise<ShrimpTank> {
-    const { engine, frames } = fakeEngine();
+    const { engine, frames, photo } = fakeEngine();
     const start = FishSystem.create(engine, {
       tank: DEFAULT_TANK,
       assetRoot: '/assets/',
@@ -376,7 +386,7 @@ describe('FishSystem dead shrimp', () => {
       }
     };
     advance(0.5);
-    return { fish, scene: engine.scene, advance };
+    return { fish, scene: engine.scene, worker, photo, advance };
   }
 
   /** How the shrimp is drawn: the first instance of its LOD 0 mesh. */
@@ -586,6 +596,26 @@ describe('FishSystem dead shrimp', () => {
     expect(Math.abs(lying.y)).toBeLessThan(1e-3);
     expect(Math.abs(lying.z)).toBeLessThan(1e-3);
     expect(locate(fish).z).toBeCloseTo(back, 2);
+    fish.dispose();
+  });
+
+  it('holds still while photo mode pauses the sim, and goes on after', async () => {
+    const { fish, scene, worker, photo, advance } = await shrimpTank([0.1, 0.25, 0, 0, 0, 0, 1]);
+    photo.simPaused = true;
+    advance(STEP_S);
+    expect(worker.sent.at(-1)?.type).toBe('stop');
+
+    die(fish);
+    advance(STEP_S);
+    const held = drawnPosition(scene);
+    advance(2);
+    expect(drawnPosition(scene).distanceTo(held)).toBe(0);
+
+    photo.simPaused = false;
+    advance(STEP_S);
+    expect(worker.sent.at(-1)?.type).toBe('start');
+    advance(2);
+    expect(drawnPosition(scene).distanceTo(held)).toBeGreaterThan(0.01);
     fish.dispose();
   });
 });
