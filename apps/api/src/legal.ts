@@ -70,7 +70,7 @@ export function registerLegalRoutes(deps: LegalDeps): void {
     const [user] = await db.select().from(schema.user).where(eq(schema.user.id, userId));
     if (!user) return unauthenticated(reply);
 
-    const [sessions, accounts, passkeys, tanks] = await Promise.all([
+    const [sessions, accounts, passkeys, tanks, [prefs], subscriptions] = await Promise.all([
       db
         .select({
           id: schema.session.id,
@@ -109,6 +109,16 @@ export function registerLegalRoutes(deps: LegalDeps): void {
         .from(schema.tanks)
         .where(eq(schema.tanks.ownerId, userId))
         .orderBy(asc(schema.tanks.createdAt)),
+      db.select().from(schema.reminderPrefs).where(eq(schema.reminderPrefs.userId, userId)),
+      db
+        .select({
+          id: schema.pushSubscriptions.id,
+          endpoint: schema.pushSubscriptions.endpoint,
+          createdAt: schema.pushSubscriptions.createdAt,
+        })
+        .from(schema.pushSubscriptions)
+        .where(eq(schema.pushSubscriptions.userId, userId))
+        .orderBy(asc(schema.pushSubscriptions.createdAt)),
     ]);
 
     const perTank = await Promise.all(
@@ -154,6 +164,12 @@ export function registerLegalRoutes(deps: LegalDeps): void {
             hasPassword: hasPassword !== null,
           })),
           passkeys,
+          reminders: {
+            mail: prefs?.mailEnabled ?? false,
+            push: prefs?.pushEnabled ?? false,
+            lastSentAt: prefs?.lastSentAt ?? null,
+            pushSubscriptions: subscriptions,
+          },
           tanks: perTank,
         }),
       ),

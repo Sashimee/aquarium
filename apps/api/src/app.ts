@@ -30,6 +30,13 @@ import { DEFAULT_HANDLE_LIMIT, registerHandleRoutes } from './handle.ts';
 import { DEFAULT_LEGAL_LIMITS, registerLegalRoutes, type LegalLimits } from './legal.ts';
 import type { IpAdmission, Mailer } from './mail.ts';
 import { RateLimiter, type Limit, type ResettableHitStore } from './rate-limit.ts';
+import type { PushSender } from './push.ts';
+import {
+  DEFAULT_REMINDER_LIMITS,
+  registerReminderRoutes,
+  UNSUBSCRIBE_PATH,
+  type ReminderLimits,
+} from './reminders.ts';
 import type { SpeciesCatalog } from './species.ts';
 import { DEFAULT_CARE_LIMITS, registerTankRoutes, type CareLimits } from './tanks.ts';
 
@@ -46,6 +53,9 @@ export interface AppOptions {
   clock?: Clock;
   careLimits?: CareLimits;
   legalLimits?: LegalLimits;
+  authSecret: string;
+  push?: PushSender | null;
+  reminderLimits?: ReminderLimits;
   handleLimit?: Limit;
   testHooks?: boolean;
   logger?: boolean;
@@ -229,6 +239,7 @@ function carriesUrlToken(url: string): boolean {
   return (
     TOKEN_PAGES.has(path) ||
     path === `${AUTH_BASE_PATH}/verify-email` ||
+    path === UNSUBSCRIBE_PATH ||
     TOKEN_PATH_PREFIXES.some((prefix) => path.startsWith(prefix))
   );
 }
@@ -320,6 +331,17 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     } catch {
       done(Object.assign(new Error('Body must be valid JSON.'), { statusCode: 400 }), undefined);
     }
+  });
+
+  // Mail providers post the RFC 8058 one-click body as a form; no other route may accept one.
+  app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (req, body, done) => {
+    if (normalizedPathname(req.url) !== UNSUBSCRIBE_PATH) {
+      return done(
+        Object.assign(new Error('Unsupported content type.'), { statusCode: 415 }),
+        undefined,
+      );
+    }
+    done(null, body);
   });
 
   app.addHook('onSend', async (req, reply) => {
@@ -568,6 +590,16 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     limiter: new RateLimiter(),
     limits: opts.legalLimits ?? DEFAULT_LEGAL_LIMITS,
     currentSession,
+  });
+
+  registerReminderRoutes({
+    app,
+    database,
+    push: opts.push ?? null,
+    authSecret: opts.authSecret,
+    limiter,
+    limits: opts.reminderLimits ?? DEFAULT_REMINDER_LIMITS,
+    currentUser: async (req) => (await currentSession(req))?.user ?? null,
   });
 
   registerTankRoutes({

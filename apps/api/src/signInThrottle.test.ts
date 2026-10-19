@@ -160,6 +160,7 @@ describe('per-account sign-in throttle (#121)', () => {
       appOrigin: APP_ORIGIN,
       trustedProxies: ['127.0.0.1'],
       database: h.database,
+      authSecret: TEST_SECRET,
       auth: h.auth,
       mailer: h.mailer,
       signInThrottle: { store: postgresHitStore(h.database, TEST_SECRET), limit: LIMIT },

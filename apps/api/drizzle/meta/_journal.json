@@ -64,6 +64,13 @@
       "when": 1792112575000,
       "tag": "0008_expansion_contract",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792395780481,
+      "tag": "0009_reminders",
+      "breakpoints": true
     }
   ]
 }

@@ -12,6 +12,8 @@ import { postgresHitStore, type HitStore } from './rate-limit.ts';
 import { loadCatalog } from './species.ts';
 import type { LegalLimits } from './legal.ts';
 import type { CareLimits } from './tanks.ts';
+import type { PushSender } from './push.ts';
+import type { ReminderLimits } from './reminders.ts';
 
 const cheapKey = (password: string, salt: Buffer) =>
   new Promise<Buffer>((resolve, reject) =>
@@ -52,6 +54,7 @@ export interface SentMail {
   to: string;
   subject: string;
   text: string;
+  headers: Record<string, string>;
 }
 
 type PromiseInject = (opts: string | InjectOptions) => Promise<LightMyRequestResponse>;
@@ -82,6 +85,8 @@ export interface HarnessOptions {
   legalLimits?: LegalLimits;
   handleLimit?: Limit;
   testHooks?: boolean;
+  push?: PushSender | null;
+  reminderLimits?: ReminderLimits;
   mailDelayMs?: number;
   appOrigin?: string;
   logStream?: { write(chunk: string): void };
@@ -144,6 +149,9 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
             to: String(data.to),
             subject: String(data.subject),
             text: String(data.text),
+            headers: Object.fromEntries(
+              Object.entries((data.headers ?? {}) as Record<string, unknown>).map(([k, v]) => [k, String(v)]),
+            ),
           });
           done(null, {
             envelope: { from: false, to: [] },
@@ -205,6 +213,9 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     species: loadCatalog(),
     clock,
     testHooks: opts.testHooks ?? true,
+    authSecret: TEST_SECRET,
+    push: opts.push ?? null,
+    ...(opts.reminderLimits ? { reminderLimits: opts.reminderLimits } : {}),
     ...(opts.careLimits ? { careLimits: opts.careLimits } : {}),
     ...(opts.legalLimits ? { legalLimits: opts.legalLimits } : {}),
     ...(opts.handleLimit ? { handleLimit: opts.handleLimit } : {}),

@@ -6,6 +6,8 @@ import { connect, runMigrations } from './db/index.ts';
 import { createMailer, createSmtpTransport } from './mail.ts';
 import { postgresHitStore } from './rate-limit.ts';
 import { startMaintenance } from './maintenance.ts';
+import { createPushSender } from './push.ts';
+import { startReminders } from './reminders.ts';
 import { loadCatalog } from './species.ts';
 
 // Docker's default stop grace is 10 s; finish well inside it.
@@ -30,6 +32,8 @@ const auth = createAuth({
   runInBackground: (task) => background.run(task),
 });
 
+const push = config.vapid ? createPushSender(config.vapid, config.vapidSubject) : null;
+
 const app = buildApp({
   indexable: config.indexable,
   webRoot: config.webRoot,
@@ -44,16 +48,29 @@ const app = buildApp({
   },
   species: loadCatalog(),
   testHooks: config.testHooks,
+  authSecret: config.authSecret,
+  push,
 });
 
 const stopMaintenance = startMaintenance(database);
+const stopReminders = startReminders({
+  database,
+  mailer,
+  push,
+  appOrigin: config.appUrl.origin,
+  authSecret: config.authSecret,
+  dailyCap: config.reminderDailyCap,
+});
 
 let shuttingDown: Promise<void> | undefined;
 
 const stop = () => {
   if (shuttingDown) return;
   shuttingDown = shutdown({
-    stopMaintenance,
+    stopMaintenance: () => {
+      stopMaintenance();
+      stopReminders();
+    },
     closeApp: () => app.close(),
     tasks: background,
     closeDatabase: () => database.close(),

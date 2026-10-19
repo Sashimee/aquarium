@@ -79,6 +79,25 @@ export function passwordResetMessage(url: string): { text: string; html: string 
   return { text, html };
 }
 
+export function reminderMessage(
+  appUrl: string,
+  unsubscribeUrl: string,
+): { text: string; html: string } {
+  const app = escapeHtml(appUrl);
+  const unsub = escapeHtml(unsubscribeUrl);
+  const text = `Your fish have not been fed for a while. Drop in to check on them:\n\n<${appUrl}>\n\nYou get this because you turned on care reminders. At most one a day. Stop them any time:\n\n<${unsubscribeUrl}>\n`;
+  const html = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="color-scheme" content="light"><title>Your aquarium needs a visit</title></head><body style="margin:0;padding:24px;background:#f4f7f9;font-family:Arial,Helvetica,sans-serif;color:#12202b">
+<div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:8px;padding:24px">
+<h1 style="font-size:20px;margin:0 0 16px">Your aquarium needs a visit</h1>
+<p style="font-size:15px;line-height:1.5;margin:0 0 24px">Your fish have not been fed for a while.</p>
+<p style="margin:0 0 24px"><a href="${app}" style="display:inline-block;background:#0b7285;color:#ffffff;font-size:16px;font-weight:bold;text-decoration:none;padding:14px 28px;border-radius:6px">Check on my fish</a></p>
+<p style="font-size:13px;color:#5b6b78;margin:0">You get this because you turned on care reminders, at most one a day. <a href="${unsub}" style="color:#0b7285">Stop reminders</a></p>
+</div></body></html>
+`;
+  return { text, html };
+}
+
 export function createSmtpTransport(host: string, port: number): Transporter {
   return nodemailer.createTransport({ host, port, secure: false });
 }
@@ -88,6 +107,8 @@ export interface Mailer {
   sendVerification(to: string, url: string): Promise<void>;
   /** Same limits as sendVerification, tracked separately so one flow cannot starve the other. */
   sendPasswordReset(to: string, url: string): Promise<void>;
+  /** Same limits again, tracked separately. Carries RFC 8058 one-click unsubscribe headers. */
+  sendReminder(to: string, appUrl: string, unsubscribeUrl: string): Promise<void>;
   /**
    * Charges one flat per-IP slot per mail-triggering request, whatever the recipient; the mail slot is not charged while the global cap is spent.
    * A separate request counter is always charged first, in the shared store, so an IP cannot outrun its limit during a cap outage.
@@ -226,7 +247,7 @@ export function createMailer(
     throw new MailThrottledError(retryAfterSeconds);
   };
 
-  const admit = async (flow: 'verify' | 'reset', to: string) => {
+  const admit = async (flow: 'verify' | 'reset' | 'reminder', to: string) => {
     // The cap may have freed since consumeIp skipped the IP charge; sending now would be unmetered per IP.
     const admission = admissions.getStore();
     if (admission && admission.mailBlockedFor > 0) {
@@ -274,6 +295,20 @@ export function createMailer(
         subject: 'Reset your Aquarium password',
         ...passwordResetMessage(url),
         textEncoding: 'base64',
+      });
+    },
+    async sendReminder(to, appUrl, unsubscribeUrl) {
+      await admit('reminder', to);
+      await transport.sendMail({
+        from,
+        to,
+        subject: 'Your fish are waiting',
+        ...reminderMessage(appUrl, unsubscribeUrl),
+        textEncoding: 'base64',
+        headers: {
+          'List-Unsubscribe': `<${unsubscribeUrl}>`,
+          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+        },
       });
     },
     // The charge is flat per request: refunding it for a recipient or cooldown refusal would let the

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { authIdSchema, slugSchema, timestampSchema } from './common.js';
+import { exportedReminderSchema } from './reminders.js';
 
 export const deleteAccountRequestSchema = z.strictObject({
   password: z.string().min(1).max(128).optional(),
@@ -23,6 +24,7 @@ export const dataExportSchema = z.strictObject({
   sessions: z.array(exportedRow),
   signInMethods: z.array(exportedRow),
   passkeys: z.array(exportedRow),
+  reminders: exportedReminderSchema,
   tanks: z.array(
     z.strictObject({
       tank: exportedRow,
