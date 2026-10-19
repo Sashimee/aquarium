@@ -1,6 +1,7 @@
 import { expect, test, type Browser, type Page } from '@playwright/test';
 import {
   APP_URL,
+  PASSWORD,
   awaitLoaded,
   createFirstTank,
   dockButton,
@@ -57,6 +58,8 @@ test('share, view read-only, react, rotate and revoke a public link', async ({ p
     'content',
     'noindex, nofollow',
   );
+  await expect(visitor.locator('meta[name="referrer"]')).toHaveAttribute('content', 'no-referrer');
+  await expect(visitor.getByRole('main')).toBeVisible();
   await expect(dockButton(visitor, 'Feed')).toHaveCount(0);
   await expect(visitor.getByRole('navigation', { name: 'Actions' })).toHaveCount(0);
   await expect(visitor.getByRole('button', { name: 'My tank' })).toHaveCount(0);
@@ -72,8 +75,18 @@ test('share, view read-only, react, rotate and revoke a public link', async ({ p
   await heart(visitor).click();
   await expect(visitor.getByRole('status').filter({ hasText: 'Sign in' })).toBeVisible();
 
-  await registerVerifiedUser(visitor, 'viewer');
+  const viewer = await registerVerifiedUser(visitor, 'viewer');
+  await visitor.context().clearCookies();
   await openLink(visitor, link);
+  await awaitLoaded(visitor);
+  await heart(visitor).click();
+  await visitor.getByRole('link', { name: 'Sign in', exact: true }).click();
+  await expect(visitor).toHaveURL(/\/sign-in(\?|$)/);
+  await visitor.getByLabel('Email').fill(viewer.email);
+  await visitor.getByLabel('Password').fill(PASSWORD);
+  await visitor.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(visitor).toHaveURL(new RegExp(`/t/${link.split('/').pop()}`), { timeout: 120_000 });
+  expect(visitor.url()).not.toContain('next=');
   await awaitLoaded(visitor);
   await heart(visitor).click();
   await expect(heart(visitor)).toHaveAccessibleName('Heart, 1 reaction, your choice');
@@ -97,10 +110,8 @@ test('share, view read-only, react, rotate and revoke a public link', async ({ p
   expect(fresh).not.toBe(link);
 
   await openLink(visitor, link);
-  await expect(visitor.getByRole('heading', { name: 'Tank not found' })).toBeVisible({
-    timeout: 120_000,
-  });
-  await expect(visitor.getByRole('main')).toContainText('not shared any more');
+  await expect(visitor.locator('#public-notice-h')).toHaveText('Tank not found', { timeout: 120_000 });
+  await expect(visitor.locator('main')).toContainText('not shared any more');
 
   await openLink(visitor, fresh);
   await awaitLoaded(visitor);
@@ -113,9 +124,7 @@ test('share, view read-only, react, rotate and revoke a public link', async ({ p
   const gone = await visitor.request.get(`/api/public/${fresh.split('/').pop()}`);
   expect(gone.status()).toBe(404);
   await openLink(visitor, fresh);
-  await expect(visitor.getByRole('heading', { name: 'Tank not found' })).toBeVisible({
-    timeout: 120_000,
-  });
+  await expect(visitor.locator('#public-notice-h')).toHaveText('Tank not found', { timeout: 120_000 });
   const late = await visitor.request.put(`/api/public/${fresh.split('/').pop()}/reaction`, {
     data: { kind: 'wow' },
     headers: { origin: APP_URL },

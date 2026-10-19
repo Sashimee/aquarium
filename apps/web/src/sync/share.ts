@@ -8,6 +8,7 @@ import {
 } from '@aquarium/shared';
 import type { InteractionEvents } from '../interaction/events';
 import { ApiRequestError } from '../ui/api';
+import { bundledCommonName } from './bundledSpecies';
 
 export const PUBLIC_PATH_PREFIX = '/t/';
 
@@ -81,7 +82,11 @@ export function reactionProblem(error: unknown): ReactionProblem {
     case 401:
       return { kind: 'sign-in' };
     case 403:
-      return error.code === 'email_not_verified' ? { kind: 'verify' } : { kind: 'own' };
+      if (error.code === 'email_not_verified') return { kind: 'verify' };
+      // The API uses one 'forbidden' code for both the own-tank and the cross-origin refusal.
+      return error.code === 'forbidden' && /own tank/i.test(error.message)
+        ? { kind: 'own' }
+        : { kind: 'failed', message: error.message };
     case 404:
       return { kind: 'gone' };
     case 429:
@@ -152,10 +157,6 @@ export function publicTankLoaded(tank: PublicTank): InteractionEvents['tank:load
   };
 }
 
-function plainSpecies(slug: string): string {
-  return slug.replaceAll('-', ' ');
-}
-
 export function publicReportLines(tank: PublicTank): string[] {
   const living = tank.fish.filter((f) => f.status === 'alive');
   const dead = tank.fish.filter((f) => f.status === 'dead');
@@ -164,7 +165,7 @@ export function publicReportLines(tank: PublicTank): string[] {
     living.length === 0
       ? 'No fish are alive in this tank.'
       : `${living.length} fish alive: ${living
-          .map((f) => `${f.name} the ${plainSpecies(f.species)}`)
+          .map((f) => `${f.name} the ${bundledCommonName(f.species)}`)
           .join('; ')}.`,
   ];
   if (dead.length > 0) {

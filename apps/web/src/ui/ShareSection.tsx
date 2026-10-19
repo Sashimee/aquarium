@@ -5,6 +5,12 @@ import type { SessionState, TankSession } from '../sync/session';
 
 type Pending = 'rotate' | 'revoke' | null;
 
+const SHARE_DONE = {
+  share: 'Your tank is shared. Copy the link now.',
+  rotate: 'You have a new link. The old one no longer works.',
+  revoke: 'Sharing is off. The link no longer works.',
+} as const;
+
 export function ShareSection({
   session,
   state,
@@ -18,15 +24,18 @@ export function ShareSection({
   const [issued, setIssued] = useState<string | null>(null);
   const [pending, setPending] = useState<Pending>(null);
   const [copied, setCopied] = useState<'copied' | 'manual' | null>(null);
+  const [done, setDone] = useState<keyof typeof SHARE_DONE | null>(null);
   const field = useRef<HTMLInputElement>(null);
   const view = shareView(tank, issued);
 
   const change = async (kind: 'share' | 'rotate' | 'revoke') => {
     setPending(null);
     setCopied(null);
+    setDone(null);
     const outcome = await session.changeSharing(kind);
     if (!outcome.ok) return;
     setIssued(kind === 'revoke' ? null : outcome.token);
+    setDone(kind);
   };
 
   const copy = async (link: string) => {
@@ -89,6 +98,7 @@ export function ShareSection({
         </p>
       )}
       <p role="status" className="hint">
+        {copied === null && done !== null && SHARE_DONE[done]}
         {copied === 'copied' && 'Link copied.'}
         {copied === 'manual' && 'Copying is blocked here. The link is selected, copy it by hand.'}
       </p>

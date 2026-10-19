@@ -121,11 +121,11 @@ export function carryQuery(path: string, currentSearch: string): string {
 
 const NAVIGATE_EVENT = 'aquarium:navigate';
 
-export function navigate(destination: string, replace = false): void {
+export function navigate(destination: string, replace = false, state: unknown = null): void {
   const path = carryQuery(destination, window.location.search);
   if (path === window.location.pathname + window.location.search) return;
-  if (replace) window.history.replaceState(null, '', path);
-  else window.history.pushState(null, '', path);
+  if (replace) window.history.replaceState(state, '', path);
+  else window.history.pushState(state, '', path);
   window.dispatchEvent(new Event(NAVIGATE_EVENT));
 }
 
@@ -140,4 +140,31 @@ export function subscribeToLocation(listener: () => void): () => void {
 
 export function currentHref(): string {
   return window.location.pathname + window.location.search;
+}
+
+/**
+ * Kept in history.state, never the URL, so the share token stays out of address-bar and server logs.
+ * Only a well-formed public tank path is honoured.
+ */
+export function returnPathFromState(state: unknown): string | null {
+  if (typeof state !== 'object' || state === null || !('returnTo' in state)) return null;
+  const { returnTo } = state;
+  return typeof returnTo === 'string' && tokenFromPath(returnTo) !== null ? returnTo : null;
+}
+
+export function currentReturnPath(): string | null {
+  return returnPathFromState(window.history.state);
+}
+
+export function leaveToViewerSignIn(path: string): void {
+  navigate('/sign-in', false, { returnTo: path });
+}
+
+/** The viewer needs a full page load, so a return trip is a hard navigation. */
+export function finishSignIn(returnTo: string | null): void {
+  if (returnTo === null) {
+    navigate('/');
+    return;
+  }
+  window.location.assign(carryQuery(returnTo, window.location.search));
 }

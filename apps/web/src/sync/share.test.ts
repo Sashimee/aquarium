@@ -121,7 +121,8 @@ describe('reaction problems', () => {
   it.each([
     [failure(401, 'unauthenticated'), 'sign-in'],
     [failure(403, 'email_not_verified'), 'verify'],
-    [failure(403, 'forbidden'), 'own'],
+    [new ApiRequestError(403, 'forbidden', 'You cannot react to your own tank.', {}, null), 'own'],
+    [new ApiRequestError(403, 'forbidden', 'Cross-origin request rejected.', {}, null), 'failed'],
     [failure(404, 'not_found'), 'gone'],
     [failure(429, 'rate_limited', 12), 'slow'],
     [failure(500, 'internal'), 'failed'],
@@ -176,7 +177,7 @@ describe('public tank to scene', () => {
       tank({ fish: [fish(), fish({ name: 'Old', status: 'dead', seed: 1 })] }),
     );
     expect(lines[0]).toContain('Reef of Ann, a shared freshwater tank');
-    expect(lines[1]).toBe('1 fish alive: Zip the neon tetra.');
+    expect(lines[1]).toBe('1 fish alive: Zip the Neon tetra.');
     expect(lines[2]).toBe('Old has died.');
     expect(publicReportLines(tank({ fish: [] }))[1]).toBe('No fish are alive in this tank.');
   });

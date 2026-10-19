@@ -1,6 +1,13 @@
 import type { User } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
-import { guardRoute, parseRoute, carryQuery, redirectFor, routePath } from './router';
+import {
+  guardRoute,
+  parseRoute,
+  carryQuery,
+  redirectFor,
+  returnPathFromState,
+  routePath,
+} from './router';
 
 const user: User = {
   id: 'u1',
@@ -62,6 +69,20 @@ describe('public tank route', () => {
     expect(guardRoute(route, user)).toEqual(route);
     expect(redirectFor(`/t/${token}`, user)).toBeNull();
     expect(redirectFor(`/t/${token}/?backend=webgl`, null)).toBeNull();
+  });
+});
+
+describe('return path after sign-in', () => {
+  const token = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNO_-';
+
+  it('honours only a well-formed public tank path from history state', () => {
+    expect(returnPathFromState({ returnTo: `/t/${token}` })).toBe(`/t/${token}`);
+    expect(returnPathFromState({ returnTo: '/t/short' })).toBeNull();
+    expect(returnPathFromState({ returnTo: 'https://evil.example/' })).toBeNull();
+    expect(returnPathFromState({ returnTo: '//evil.example' })).toBeNull();
+    expect(returnPathFromState({ returnTo: 5 })).toBeNull();
+    expect(returnPathFromState({})).toBeNull();
+    expect(returnPathFromState(null)).toBeNull();
   });
 });
 

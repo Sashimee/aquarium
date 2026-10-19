@@ -40,12 +40,6 @@ export interface ShareOutcome {
   token: string | null;
 }
 
-const SHARE_DONE = {
-  share: 'Your tank is shared. Copy the link now.',
-  rotate: 'You have a new link. The old one no longer works.',
-  revoke: 'Sharing is off. The link no longer works.',
-} as const;
-
 const ACTIVE_KEY = 'aquarium.activeTank';
 const LOAD_ATTEMPTS = 4;
 const LEAVE_FLUSH_MS = 3_000;
@@ -262,7 +256,6 @@ export class TankSession {
       token = next.shareToken;
       if (gen !== this.loadId) return;
       this.apply({ ...next, shareToken: null });
-      this.patch({ notice: SHARE_DONE[change] });
     });
     return { ok, token };
   }

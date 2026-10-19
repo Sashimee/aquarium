@@ -1,6 +1,7 @@
 import { REACTION_KINDS, type PublicTank, type ReactionKind } from '@aquarium/shared';
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import {
+  publicPath,
   MISSING_MESSAGE,
   publicReportLines,
   publicTankId,
@@ -16,6 +17,7 @@ import {
 } from '../sync/share';
 import { useApi, useAuth, useBridge } from './context';
 import { CameraControls } from './Hud';
+import { leaveToViewerSignIn } from './router';
 
 const GLYPH: Record<ReactionKind, string> = { heart: '♥', star: '★', wow: '!' };
 
@@ -150,7 +152,17 @@ function Reactions({
         {problem?.kind === 'sign-in' && (
           <>
             {' '}
-            <a href="/sign-in">Sign in</a> or <a href="/sign-up">create an account</a>.
+            <a
+              href="/sign-in"
+              onClick={(e) => {
+                if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                e.preventDefault();
+                leaveToViewerSignIn(publicPath(token));
+              }}
+            >
+              Sign in
+            </a>{' '}
+            or <a href="/sign-up">create an account</a>.
           </>
         )}
       </p>
@@ -227,7 +239,7 @@ export function PublicTankView({ token }: { token: string }) {
       );
     case 'ready':
       return (
-        <header className="public-bar">
+        <main className="public-bar">
           <div className="public-title">
             <h1>{phase.tank.name}</h1>
             <p className="hint">A shared tank. You can look, not change.</p>
@@ -238,7 +250,7 @@ export function PublicTankView({ token }: { token: string }) {
           <a className="public-own" href="/">
             Make your own tank
           </a>
-        </header>
+        </main>
       );
   }
 }

@@ -14,7 +14,7 @@ import { useApi, useAuth } from './context';
 import { HapticsSetting } from './HapticsSetting';
 import { deleteErrorMessage, downloadText, rateLimitMessage, safeHref } from './legal';
 import { InstallCard } from '../pwa/InstallCard';
-import { navigate } from './router';
+import { currentReturnPath, finishSignIn, navigate } from './router';
 
 export function Link({
   to,
@@ -233,6 +233,7 @@ function ResendButton({
 }
 
 export function SignInScreen() {
+  const [returnTo] = useState(currentReturnPath);
   const auth = useAuth();
   const submission = useSubmission();
   const [email, setEmail] = useState('');
@@ -250,7 +251,7 @@ export function SignInScreen() {
     void submission
       .run(() => auth.signIn({ email, password }))
       .then((ok) => {
-        if (ok) navigate('/');
+        if (ok) finishSignIn(returnTo);
       });
   };
 
@@ -286,7 +287,9 @@ export function SignInScreen() {
         disabled={submission.busy}
         onClick={() => {
           setViaPassword(false);
-          void submission.run(() => auth.signInWithPasskey()).then((ok) => ok && navigate('/'));
+          void submission
+            .run(() => auth.signInWithPasskey())
+            .then((ok) => ok && finishSignIn(returnTo));
         }}
       >
         Sign in with a passkey
