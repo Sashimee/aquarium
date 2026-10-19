@@ -53,3 +53,65 @@ export function selectNearest(
   }
   return count;
 }
+
+/** Work space for `selectBalanced`: `idx` and `dist` hold at least the pool, `dir` 3 × k. */
+export interface BalancedScratch {
+  readonly idx: Int32Array;
+  readonly dist: Float64Array;
+  readonly dir: Float64Array;
+}
+
+/**
+ * Spatially balanced topological neighbourhood (Camperi et al. 2012): the nearest others of fish
+ * `i` within `maxDistSq`, nearest first, skipping any seen within the angle whose cosine is
+ * `minAngleCos` of one already taken, up to `k`, from the `pool` nearest. Plain k-nearest lets a
+ * large school break into subgroups of about k that each see only themselves; skipping a crowded
+ * bearing reaches past the fish's own clump to the next one.
+ */
+export function selectBalanced(
+  distSq: Float64Array,
+  pos: Float64Array,
+  n: number,
+  i: number,
+  k: number,
+  pool: number,
+  group: Int32Array | null,
+  maxDistSq: number,
+  minAngleCos: number,
+  out: Int32Array,
+  outOffset: number,
+  scratch: BalancedScratch,
+): number {
+  const { idx, dist, dir } = scratch;
+  const found = selectNearest(distSq, n, i, pool, group, maxDistSq, idx, 0, dist);
+  const px = pos[i * 3] ?? 0;
+  const py = pos[i * 3 + 1] ?? 0;
+  const pz = pos[i * 3 + 2] ?? 0;
+  let count = 0;
+  let directions = 0;
+  for (let c = 0; c < found && count < k; c++) {
+    const j = idx[c] ?? 0;
+    const dj = Math.sqrt(dist[c] ?? 0);
+    if (dj < 1e-12) {
+      out[outOffset + count++] = j;
+      continue;
+    }
+    const ux = ((pos[j * 3] ?? 0) - px) / dj;
+    const uy = ((pos[j * 3 + 1] ?? 0) - py) / dj;
+    const uz = ((pos[j * 3 + 2] ?? 0) - pz) / dj;
+    let crowded = false;
+    for (let m = 0; m < directions * 3; m += 3) {
+      if (ux * (dir[m] ?? 0) + uy * (dir[m + 1] ?? 0) + uz * (dir[m + 2] ?? 0) > minAngleCos) {
+        crowded = true;
+        break;
+      }
+    }
+    if (crowded) continue;
+    out[outOffset + count++] = j;
+    dir[directions * 3] = ux;
+    dir[directions * 3 + 1] = uy;
+    dir[directions * 3 + 2] = uz;
+    directions++;
+  }
+  return count;
+}

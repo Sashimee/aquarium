@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pairwiseDistanceSq, selectNearest } from './neighbours.ts';
+import { pairwiseDistanceSq, selectBalanced, selectNearest } from './neighbours.ts';
 
 function setup(points: readonly (readonly [number, number, number])[]): {
   n: number;
@@ -74,5 +74,94 @@ describe('selectNearest', () => {
 
   it('returns nothing for k = 0', () => {
     expect(nearest(line, 0, 0)).toEqual([]);
+  });
+});
+
+function balanced(
+  points: readonly (readonly [number, number, number])[],
+  i: number,
+  k: number,
+  angleRad: number,
+  pool = 16,
+  maxDistSq = Infinity,
+): number[] {
+  const n = points.length;
+  const pos = new Float64Array(points.flat());
+  const dist = new Float64Array(n * n);
+  pairwiseDistanceSq(pos, n, dist);
+  const out = new Int32Array(k + 2).fill(-9);
+  const found = selectBalanced(
+    dist,
+    pos,
+    n,
+    i,
+    k,
+    pool,
+    null,
+    maxDistSq,
+    Math.cos(angleRad),
+    out,
+    1,
+    { idx: new Int32Array(pool), dist: new Float64Array(pool), dir: new Float64Array(3 * k) },
+  );
+  expect(out[0]).toBe(-9);
+  expect(out[k + 1]).toBe(-9);
+  return Array.from(out.subarray(1, 1 + found));
+}
+
+describe('selectBalanced', () => {
+  // Fish 0 sits at the edge of its own clump (1-4, all toward +x) with another clump at -x.
+  const twoClumps: [number, number, number][] = [
+    [0, 0, 0],
+    [1, 0, 0],
+    [1.1, 0.1, 0],
+    [1.2, -0.1, 0],
+    [1.3, 0, 0.1],
+    [-3, 0, 0],
+    [-3.2, 0.2, 0],
+  ];
+
+  it('reaches past a crowded bearing to the next clump, where k-nearest does not', () => {
+    expect(nearest(twoClumps, 0, 3)).toEqual([1, 2, 3]);
+    expect(balanced(twoClumps, 0, 3, 0.7)).toEqual([1, 5]);
+  });
+
+  it('keeps every candidate when the exclusion angle is zero, as k-nearest does', () => {
+    expect(balanced(twoClumps, 0, 3, 0)).toEqual(nearest(twoClumps, 0, 3));
+  });
+
+  it('stops at k and looks only at the nearest pool', () => {
+    const star: [number, number, number][] = [
+      [0, 0, 0],
+      [1, 0, 0],
+      [-1.1, 0, 0],
+      [0, 1.2, 0],
+      [0, -1.3, 0],
+      [0, 0, 1.4],
+    ];
+    expect(balanced(star, 0, 2, 0.7)).toEqual([1, 2]);
+    expect(balanced(star, 0, 7, 0.7)).toEqual([1, 2, 3, 4, 5]);
+    expect(balanced(twoClumps, 0, 3, 0.7, 4)).toEqual([1]);
+  });
+
+  it('respects the distance cap and returns nothing for k = 0 or a lone fish', () => {
+    expect(balanced(twoClumps, 0, 3, 0.7, 16, 4)).toEqual([1]);
+    expect(balanced(twoClumps, 0, 0, 0.7)).toEqual([]);
+    expect(balanced([[0, 0, 0]], 0, 3, 0.7)).toEqual([]);
+  });
+
+  it('takes a fish at the same point without letting it block a bearing', () => {
+    expect(
+      balanced(
+        [
+          [0, 0, 0],
+          [0, 0, 0],
+          [1, 0, 0],
+        ],
+        0,
+        3,
+        0.7,
+      ),
+    ).toEqual([1, 2]);
   });
 });

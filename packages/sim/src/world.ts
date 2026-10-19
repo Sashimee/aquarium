@@ -8,7 +8,12 @@ import { FEEDING, feedingHeight, gutForHunger } from './feeding.ts';
 import { FishResize } from './fishArrays.ts';
 import { FoodStore, type AteEvent } from './food.ts';
 import { clamp, DEG, quatFromYawPitchRoll, wrapAngle } from './math.ts';
-import { pairwiseDistanceSq, selectNearest } from './neighbours.ts';
+import {
+  pairwiseDistanceSq,
+  selectBalanced,
+  selectNearest,
+  type BalancedScratch,
+} from './neighbours.ts';
 import { Rng } from './rng.ts';
 import { smoothGradient, TankSdf, type Sdf } from './sdf.ts';
 import { FishState, SNAPSHOT_STRIDE } from './snapshot.ts';
@@ -33,6 +38,8 @@ export const STEERING = {
   coGrazeSeparation: 0.25,
   alignmentWeight: 1.5,
   cohesionRatePerS: 1,
+  schoolBalanceRad: 0.7,
+  schoolPoolFactor: 4,
   anyNeighbours: 6,
   wanderTurnSdRadPerS: 0.5,
   wanderTurnTauS: 0.8,
@@ -325,6 +332,7 @@ export class World {
   private schoolNbr: Int32Array;
   private anyNbr: Int32Array;
   private readonly scratchDist: Float64Array;
+  private readonly schoolScratch: BalancedScratch;
   private readonly normal = new Float64Array(3);
   private readonly probeNormal = new Float64Array(3);
   private readonly previous = new Float64Array(3);
@@ -515,6 +523,11 @@ export class World {
     this.schoolNbr = new Int32Array(n * kMax);
     this.anyNbr = new Int32Array(n * kMax);
     this.scratchDist = new Float64Array(kMax);
+    this.schoolScratch = {
+      idx: new Int32Array(kMax * STEERING.schoolPoolFactor),
+      dist: new Float64Array(kMax * STEERING.schoolPoolFactor),
+      dir: new Float64Array(kMax * 3),
+    };
     this.walkers = new Walkers(
       this,
       new TankSdf(this.basin, { floor: false, surface: false }),
@@ -1174,16 +1187,19 @@ export class World {
     let state: FishState = FishState.Cruise;
     if (sp.schooling && (plan.align > 0 || plan.cohesion > 0)) {
       const range = sp.perceptionRange;
-      const count = selectNearest(
+      const count = selectBalanced(
         this.distSq,
+        this.position,
         n,
         i,
         sp.neighbours,
+        sp.neighbours * STEERING.schoolPoolFactor,
         this.schoolGroup,
         range * range,
+        Math.cos(STEERING.schoolBalanceRad),
         this.schoolNbr,
         i * k,
-        this.scratchDist,
+        this.schoolScratch,
       );
       if (count > 0) {
         state = FishState.School;
