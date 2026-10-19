@@ -1,4 +1,4 @@
-import { CareIcon, DecorIcon, FeedIcon, PlayIcon, ShopIcon } from './icons';
+import { CareIcon, DecorIcon, FeedIcon, PhotoIcon, PlayIcon, ShopIcon } from './icons';
 import { usePlayTool } from './context';
 import type { OpenPanel, Panel } from './panels';
 import { useEngineReadyForPlay } from './PlayControls';
@@ -16,7 +16,15 @@ const ITEMS: readonly {
   { panel: 'care', label: 'Care', Icon: CareIcon, needsEngine: false },
 ];
 
-export function Dock({ panel, onPress }: { panel: Panel; onPress(panel: OpenPanel): void }) {
+export function Dock({
+  panel,
+  onPress,
+  onPhoto,
+}: {
+  panel: Panel;
+  onPress(panel: OpenPanel): void;
+  onPhoto(): void;
+}) {
   const ready = useEngineReadyForPlay();
   const tool = usePlayTool();
   return (
@@ -45,6 +53,17 @@ export function Dock({ panel, onPress }: { panel: Panel; onPress(panel: OpenPane
           </button>
         );
       })}
+      <button
+        type="button"
+        className="dock-item"
+        data-opener="photo"
+        aria-describedby={ready ? undefined : 'dock-loading'}
+        disabled={!ready}
+        onClick={onPhoto}
+      >
+        <PhotoIcon />
+        <span>Photo</span>
+      </button>
     </nav>
   );
 }

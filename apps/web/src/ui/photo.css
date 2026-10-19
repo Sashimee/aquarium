@@ -1,0 +1,185 @@
+.chrome {
+  display: contents;
+}
+
+.shell.photo-on .hud,
+.shell.photo-on .dock-wrap {
+  visibility: hidden;
+}
+
+.photo-bar {
+  position: absolute;
+  z-index: 5;
+  left: 50%;
+  bottom: max(0.6rem, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: min(30rem, calc(100% - 1.2rem));
+  padding: 0.35rem;
+  border-radius: 1.7rem;
+  background: var(--glass);
+  border: 1px solid var(--glass-edge);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.3);
+  pointer-events: auto;
+}
+
+#ui .photo-bar button {
+  flex: 1 1 0;
+  min-height: 3.5rem;
+  border-radius: 1.35rem;
+}
+
+#ui .photo-bar .shutter {
+  flex: 1.4 1 0;
+  font-weight: 700;
+}
+
+.photo-tools {
+  position: absolute;
+  z-index: 4;
+  left: max(0.5rem, env(safe-area-inset-left));
+  right: max(0.5rem, env(safe-area-inset-right));
+  bottom: calc(var(--dock-h, 5rem) + 0.5rem);
+  max-height: 46dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.8rem 1rem 1rem;
+  border-radius: 1.5rem;
+  background: var(--glass-strong);
+  border: 1px solid var(--glass-edge);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.3);
+  pointer-events: auto;
+}
+
+.photo-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.photo-filters legend {
+  padding: 0 0 0.3rem;
+  font-weight: 600;
+}
+
+.photo-filters .chip {
+  position: relative;
+}
+
+.photo-filters .chip input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+}
+
+.photo-filters .chip span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 99rem;
+  border: 1px solid var(--edge);
+  background: var(--surface);
+}
+
+.photo-filters .chip input:checked + span {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.photo-filters .chip input:focus-visible + span {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.photo-field {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.1rem 0.75rem;
+}
+
+.photo-field input[type='range'] {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-height: 2.75rem;
+}
+
+.photo-tools .check {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 2.75rem;
+}
+
+.photo-tools .check input {
+  width: 1.4rem;
+  height: 1.4rem;
+}
+
+.photo-pad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.4rem;
+}
+
+#ui .pad-button {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.photo-notice {
+  position: absolute;
+  z-index: 6;
+  top: max(0.6rem, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: min(32rem, calc(100% - 1.2rem));
+  padding: 0.5rem 0.6rem 0.5rem 1rem;
+  border-radius: 1.2rem;
+  background: var(--glass-strong);
+  border: 1px solid var(--danger);
+  pointer-events: auto;
+}
+
+.photo-notice p {
+  flex: 1;
+  margin: 0;
+}
+
+.photo-preview {
+  display: block;
+  width: 100%;
+  max-height: 55dvh;
+  object-fit: contain;
+  border-radius: 0.8rem;
+  background: #000;
+}
+
+@media (min-width: 721px) {
+  .photo-tools {
+    left: auto;
+    right: 0.75rem;
+    top: 1rem;
+    bottom: 6.5rem;
+    width: 22rem;
+    max-height: none;
+  }
+}

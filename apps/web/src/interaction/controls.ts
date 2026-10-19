@@ -6,7 +6,15 @@ const KEY_STEP_RADIANS = 0.12;
 const KEY_ZOOM_FACTOR = 0.85;
 const WHEEL_ZOOM_RATE = 0.12;
 
+/** Takes the camera gestures from the orbit rig while it returns non-null (photo mode). */
+export interface CameraOverride {
+  drag(dx: number, dy: number): void;
+  /** Above 1 moves away (widens), below 1 moves closer. */
+  zoom(factor: number): void;
+}
+
 export interface ControlHandlers {
+  override?(): CameraOverride | null;
   tap?(event: TapEvent): void;
   longPress?(event: TapEvent): void;
   /** While true a one-finger drag belongs to a tool, not the camera. */
@@ -59,18 +67,20 @@ export function bindCameraControls(
 ): () => void {
   const recognizer = new GestureRecognizer({
     drag: (e) => {
-      if (!handlers.claimDrag?.()) rig.drag(e.dx, e.dy);
+      const override = handlers.override?.();
+      if (override) override.drag(e.dx, e.dy);
+      else if (!handlers.claimDrag?.()) rig.drag(e.dx, e.dy);
     },
-    pinch: (e) => rig.zoom(1 / e.scale),
+    pinch: (e) => (handlers.override?.() ?? rig).zoom(1 / e.scale),
     tap: (e) => handlers.tap?.(e),
     longPress: (e) => handlers.longPress?.(e),
   });
   const detachPointer = attachPointerInput(element, recognizer, {
-    wheel: (e) => rig.zoom(Math.exp(e.delta * WHEEL_ZOOM_RATE)),
+    wheel: (e) => (handlers.override?.() ?? rig).zoom(Math.exp(e.delta * WHEEL_ZOOM_RATE)),
   });
 
   const onKey = (e: KeyboardEvent) => {
-    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    if (e.altKey || e.ctrlKey || e.metaKey || handlers.override?.()) return;
     if (applyCameraKey(rig, e.key)) e.preventDefault();
   };
   const onDown = (e: PointerEvent) => {

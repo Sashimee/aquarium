@@ -1,8 +1,8 @@
 {
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; every texture has both files.",
-  "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Every fish LOD also carries _MOUTH, geometry attribute \"_mouth\", a float in [0, 1] for buccal motion: 1 at the jaw or lower-lip tip (every LOD is renormalised so its highest value is exactly 1), easing to 0 behind the gill line and above the mouth slit; fins, eyes and attachments are 0. Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body, carapace and eyes; 6 walking leg; 7 antenna; 8 pleopod; 9 abdomen, telson and tail fan) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x; antennules 0/1, long antennae 2/3; tail-fan leaves k * 2 + side). Shrimp _fin_mask means: id 0 is 0 (eye stalks included, ignore it); ids 6 and 7 are the weight along the limb, 0 root to 1 tip; id 8 is the pleopod beat weight, 0 root to 1 tip; id 9 is the tail-curl weight clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1) of the rest position. Tail curl rotates ids 8 and 9 about +x through the shrimp.abdomenHinge {y, z} by flex * clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1), computed from the rest position, never from _fin_mask, so the pleopods follow the segment they hang from. Pleopods (id 8) exist only in LOD0 and LOD1 and are removed from LOD2; legs are simplified, so do not assume every _leg index exists at every LOD. The cherry material is alphaMode BLEND with base colour alpha 0.86: three.js GLTFLoader turns depthWrite off for BLEND, so set depthWrite true on the cherry material and expect some sorting artefacts from the self-overlapping legs and antennae.",
-  "totalBytes": 80365621,
+  "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Every fish LOD also carries _MOUTH, geometry attribute \"_mouth\", a float in [0, 1] for buccal motion: 1 at the jaw or lower-lip tip (every LOD is renormalised so its highest value is exactly 1), easing to 0 behind the gill line and above the mouth slit; fins, eyes and attachments are 0. Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body, carapace and eyes; 6 walking leg; 7 antenna; 8 pleopod; 9 abdomen, telson and tail fan) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x; antennules 0/1, long antennae 2/3; tail-fan leaves k * 2 + side). Shrimp _fin_mask means: id 0 is 0 (eye stalks included, ignore it); ids 6 and 7 are the weight along the limb, 0 root to 1 tip; id 8 is the pleopod beat weight, 0 root to 1 tip; id 9 is the tail-curl weight clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1) of the rest position. Tail curl rotates ids 8 and 9 about +x through the shrimp.abdomenHinge {y, z} by flex * clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1), computed from the rest position, never from _fin_mask, so the pleopods follow the segment they hang from. Pleopods (id 8) exist only in LOD0 and LOD1 and are removed from LOD2; legs are simplified, so do not assume every _leg index exists at every LOD. Snails use _fin_id (0 shell, 10 foot, 11 head, 12 tentacle) and _fin_mask (foot: 0 at the sole centre to 1 at the mantle edge, for ripple; tentacle: 0 base to 1 tip; shell and head 0). The hermit crab is a crab-kind asset whose walker data sits in its crab block, same fields as a shrimp block; its shell is id 0, exposed soft body id 9 (rigid, hinge sits in front of it so it never curls), legs id 6 and antennae id 7 with _leg index pair * 2 + side; pairs 0 and 1 are the picking legs, and it has no pleopods. The cherry material is alphaMode BLEND with base colour alpha 0.86: three.js GLTFLoader turns depthWrite off for BLEND, so set depthWrite true on the cherry material and expect some sorting artefacts from the self-overlapping legs and antennae.",
+  "totalBytes": 82116045,
   "assets": [
     {
       "id": "angelfish",
@@ -3166,6 +3166,302 @@
       }
     },
     {
+      "id": "hermit-crab",
+      "kind": "crab",
+      "species": "hermit-crab",
+      "origin": "model",
+      "sources": [
+        "sketchfab-5ebe7794"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "photogrammetry scan: colour-checker cube removed, merged and welded by position",
+        "segmented into rigid shell, exposed soft body and limbs by a voxel opening; limb pieces carry a root-to-tip weight and a leg index",
+        "oriented to +Z forward (towards the legs) / +Y up, origin at the area centroid, scaled so the shell longest edge is the standard length",
+        "_FIN_ID part ids 0 shell, 6 walking leg, 7 antenna, 9 exposed soft body (rigid); _FIN_MASK weight along the limb; _LEG limb index pair * 2 + side, side 0 = -x",
+        "re-simplified to 12000 triangles for LOD0 (LOD1 and LOD2 at 40% and 15% of that, simplified with UV seams kept), box-projected into a fresh 2048 px atlas and the colour re-baked from the scan's vertex colours, so simplification cannot scramble the scan texture",
+        "limb and soft-body colours painted per vertex from the segmentation before the bake; every LOD keeps only its largest connected component, so no antenna fragment floats free",
+        "length is the shell length (0.03 m) taken from the recipe: no content/species/hermit-crab.json exists yet, and a species file is a separate contract PR",
+        "legs and antennae recoloured towards Clibanarius tricolor (blue legs, orange joints and antennae) by eye from the reference description; the scan is Clibanarius longitarsus"
+      ],
+      "bounds": {
+        "min": [
+          -0.012386,
+          -0.008035,
+          -0.015509
+        ],
+        "max": [
+          0.009088,
+          0.006629,
+          0.017494
+        ]
+      },
+      "lods": [
+        {
+          "file": "crab/hermit-crab/lod0.glb",
+          "bytes": 194300,
+          "sha256": "078cad2a739b1e458537fe15c825f4761333a4e486c116b9f12a59d1078e9282",
+          "triangles": 11960,
+          "vertices": 9401
+        },
+        {
+          "file": "crab/hermit-crab/lod1.glb",
+          "bytes": 100504,
+          "sha256": "5d127e48b94788d01fb6fc5b05feb6dbc3a2a40e97145087a49edd33bf4c404d",
+          "triangles": 4768,
+          "vertices": 4628
+        },
+        {
+          "file": "crab/hermit-crab/lod2.glb",
+          "bytes": 52832,
+          "sha256": "548faf33dd05f3d2101048a7966ca7801906cc059faeaa706cb6b0a40fefb329",
+          "triangles": 1786,
+          "vertices": 2275
+        }
+      ],
+      "textures": [
+        {
+          "name": "hermit-crab_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "crab/hermit-crab/textures/hermit-crab_basecolor_1k.ktx2",
+              "bytes": 114652,
+              "sha256": "1ca8b3fc0a6ac72916dbf7bad99cdd602428dc0332466e9fdda0c68dcd21bad9",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "crab/hermit-crab/textures/hermit-crab_basecolor_2k.ktx2",
+              "bytes": 364069,
+              "sha256": "d1dd551673043b492541538ff9e716198f783fc35add825d26e7188771a357bb",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "crab/hermit-crab/lod0.glb",
+          "bytes": 194300,
+          "sha256": "078cad2a739b1e458537fe15c825f4761333a4e486c116b9f12a59d1078e9282"
+        },
+        {
+          "file": "crab/hermit-crab/lod1.glb",
+          "bytes": 100504,
+          "sha256": "5d127e48b94788d01fb6fc5b05feb6dbc3a2a40e97145087a49edd33bf4c404d"
+        },
+        {
+          "file": "crab/hermit-crab/lod2.glb",
+          "bytes": 52832,
+          "sha256": "548faf33dd05f3d2101048a7966ca7801906cc059faeaa706cb6b0a40fefb329"
+        },
+        {
+          "file": "crab/hermit-crab/textures/hermit-crab_basecolor_1k.ktx2",
+          "bytes": 114652,
+          "sha256": "1ca8b3fc0a6ac72916dbf7bad99cdd602428dc0332466e9fdda0c68dcd21bad9"
+        },
+        {
+          "file": "crab/hermit-crab/textures/hermit-crab_basecolor_2k.ktx2",
+          "bytes": 364069,
+          "sha256": "d1dd551673043b492541538ff9e716198f783fc35add825d26e7188771a357bb"
+        }
+      ],
+      "crab": {
+        "standardLengthM": 0.03,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "standoffM": 0.008241362869739532,
+        "attributes": {
+          "partId": "_FIN_ID",
+          "weight": "_FIN_MASK",
+          "limb": "_LEG"
+        },
+        "partIds": {
+          "body": 0,
+          "leg": 6,
+          "antenna": 7,
+          "pleopod": 8,
+          "abdomen": 9
+        },
+        "legPairs": 5,
+        "pleopodPairs": 0,
+        "abdomenHinge": {
+          "y": 0.0005953594274457969,
+          "z": 0.005671394988894463
+        },
+        "telsonZ": -0.015511763282120228,
+        "debugRender": "debug/hermit-crab.png",
+        "debugPartsRender": "debug/hermit-crab-parts.png"
+      }
+    },
+    {
+      "id": "nerite-snail",
+      "kind": "snail",
+      "species": "nerite-snail",
+      "origin": "model",
+      "sources": [
+        "sketchfab-70b8866a"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "shell from the photogrammetry scan: colour-checker cube removed, merged and welded, oriented to +Z forward / +Y up from the crusty aperture side and the dome peak, scaled so its longest edge is the standard length",
+        "tunnels the scan leaves through the paper-thin lip are cut out with small spheres through every wall layer and closed by clipping ears of the cut loop, shortest diagonal first, so the lip sheet stays continuous; small boundary holes are filled",
+        "retouched the scan texture: white marker ring on the dome, painted over from the surrounding shell colours",
+        "retouched the scan texture: white scar near the rear, painted over from the surrounding shell colours",
+        "re-simplified to 9000 triangles, box-projected into a fresh atlas and the colour re-baked from the scan's vertex colours, 2048 px KTX2",
+        "shell pitched 18 degrees nose-down and sunk into the foot so the lip edge tucks into the body mass",
+        "foot, mantle, head and two tentacles generated procedurally: lens-section foot with edge colour variation from a small ramp texture, mantle filling under the aperture, head and slender curved tentacles in front of the lip, deterministic",
+        "origin moved to the centre of the foot on the ground",
+        "_FIN_ID part ids 0 shell, 10 foot, 11 head, 12 tentacle; _FIN_MASK foot ripple weight and tentacle base-to-tip weight",
+        "LOD1 and LOD2 shell simplified to 3600 and 1300 triangles",
+        "foot, head and tentacle colour matched by eye to the Wikimedia nerite photo, no photo pixels shipped"
+      ],
+      "bounds": {
+        "min": [
+          -0.009434,
+          -0.000007,
+          -0.01292
+        ],
+        "max": [
+          0.009772,
+          0.012663,
+          0.01335
+        ]
+      },
+      "lods": [
+        {
+          "file": "snail/nerite-snail/lod0.glb",
+          "bytes": 113968,
+          "sha256": "6f1e8eb750f180b67790eb695ac6825c9fda1172047b669e88fde6b4e8f24dc4",
+          "triangles": 10208,
+          "vertices": 6025
+        },
+        {
+          "file": "snail/nerite-snail/lod1.glb",
+          "bytes": 58100,
+          "sha256": "e7ae472df11d905692f55d3aae524ef5d45959ca0f9db5e2f64b28abc7b86f76",
+          "triangles": 4332,
+          "vertices": 2804
+        },
+        {
+          "file": "snail/nerite-snail/lod2.glb",
+          "bytes": 29044,
+          "sha256": "856da83f5993af78828569d6d26ef20f6608ef8340d391212ebad7e25f5d0400",
+          "triangles": 1728,
+          "vertices": 1201
+        }
+      ],
+      "textures": [
+        {
+          "name": "nerite-snail_nerite-shell_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "snail/nerite-snail/textures/nerite-snail_nerite-shell_basecolor_1k.ktx2",
+              "bytes": 103511,
+              "sha256": "97ff85659198bb8a0a1e882dbb68d650f7e93c25a73f12a17fecff618a055d2d",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "snail/nerite-snail/textures/nerite-snail_nerite-shell_basecolor_2k.ktx2",
+              "bytes": 336958,
+              "sha256": "3fe07a0111fdf74e24e79032405da7b30d94772132be20540373b9e34aede011",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        },
+        {
+          "name": "nerite-snail_nerite-body_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "snail/nerite-snail/textures/nerite-snail_nerite-body_basecolor_1k.ktx2",
+              "bytes": 693,
+              "sha256": "e0e0884d384ea17e5c5adfc8b10908116b2e31a1b9bc010080cc81681dc6fb8c",
+              "size": 64,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "snail/nerite-snail/textures/nerite-snail_nerite-body_basecolor_2k.ktx2",
+              "bytes": 693,
+              "sha256": "e0e0884d384ea17e5c5adfc8b10908116b2e31a1b9bc010080cc81681dc6fb8c",
+              "size": 64,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "snail/nerite-snail/lod0.glb",
+          "bytes": 113968,
+          "sha256": "6f1e8eb750f180b67790eb695ac6825c9fda1172047b669e88fde6b4e8f24dc4"
+        },
+        {
+          "file": "snail/nerite-snail/lod1.glb",
+          "bytes": 58100,
+          "sha256": "e7ae472df11d905692f55d3aae524ef5d45959ca0f9db5e2f64b28abc7b86f76"
+        },
+        {
+          "file": "snail/nerite-snail/lod2.glb",
+          "bytes": 29044,
+          "sha256": "856da83f5993af78828569d6d26ef20f6608ef8340d391212ebad7e25f5d0400"
+        },
+        {
+          "file": "snail/nerite-snail/textures/nerite-snail_nerite-body_basecolor_1k.ktx2",
+          "bytes": 693,
+          "sha256": "e0e0884d384ea17e5c5adfc8b10908116b2e31a1b9bc010080cc81681dc6fb8c"
+        },
+        {
+          "file": "snail/nerite-snail/textures/nerite-snail_nerite-body_basecolor_2k.ktx2",
+          "bytes": 693,
+          "sha256": "e0e0884d384ea17e5c5adfc8b10908116b2e31a1b9bc010080cc81681dc6fb8c"
+        },
+        {
+          "file": "snail/nerite-snail/textures/nerite-snail_nerite-shell_basecolor_1k.ktx2",
+          "bytes": 103511,
+          "sha256": "97ff85659198bb8a0a1e882dbb68d650f7e93c25a73f12a17fecff618a055d2d"
+        },
+        {
+          "file": "snail/nerite-snail/textures/nerite-snail_nerite-shell_basecolor_2k.ktx2",
+          "bytes": 336958,
+          "sha256": "3fe07a0111fdf74e24e79032405da7b30d94772132be20540373b9e34aede011"
+        }
+      ],
+      "snail": {
+        "standardLengthM": 0.02,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "foot-centre",
+        "attributes": {
+          "partId": "_FIN_ID",
+          "weight": "_FIN_MASK"
+        },
+        "partIds": {
+          "shell": 0,
+          "foot": 10,
+          "head": 11,
+          "tentacle": 12
+        },
+        "debugRender": "debug/nerite-snail.png",
+        "debugPartsRender": "debug/nerite-snail-parts.png"
+      }
+    },
+    {
       "id": "host-anemone",
       "kind": "anemone",
       "origin": "procedural",
@@ -6034,6 +6330,326 @@
           "sha256": "d748abc03e32f952c7c2f614369ffe30dc636df310caf53fe60425bae0e722d0"
         }
       ]
+    },
+    {
+      "id": "air-bubbles",
+      "kind": "audio",
+      "origin": "recording",
+      "sources": [
+        "freesound-188223"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "downmixed to mono and resampled to 48 kHz",
+        "high-pass at 200 Hz",
+        "0.25 s equal-power crossfade of the loop seam",
+        "normalised to -26 LUFS",
+        "encoded as AAC-LC 64 kbit/s in .m4a"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "audio/air-bubbles/air-bubbles.m4a",
+          "bytes": 68512,
+          "sha256": "c05daaf1cedc81e646b2b30d2e85b35bed4180ace4e06b6e46c81e45396dc293"
+        }
+      ],
+      "audio": {
+        "role": "air-bubbles",
+        "loop": true,
+        "frames": 391958,
+        "durationS": 8.166,
+        "sampleRate": 48000,
+        "channels": 1,
+        "bitrateKbps": 64,
+        "loudnessLufs": -26,
+        "file": "audio/air-bubbles/air-bubbles.m4a"
+      }
+    },
+    {
+      "id": "filter-hum",
+      "kind": "audio",
+      "origin": "recording",
+      "sources": [
+        "freesound-197804"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "downmixed to mono and resampled to 48 kHz",
+        "high-pass at 60 Hz",
+        "trimmed to a 12 s stationary section; 1 s equal-power crossfade of the loop seam",
+        "normalised to -23 LUFS",
+        "encoded as AAC-LC 64 kbit/s in .m4a"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "audio/filter-hum/filter-hum.m4a",
+          "bytes": 100052,
+          "sha256": "3ce282e4c8740955c305f39e5662c3659b1a3caf9af5f42b743b0946521a2647"
+        }
+      ],
+      "audio": {
+        "role": "filter-hum",
+        "loop": true,
+        "frames": 576000,
+        "durationS": 12,
+        "sampleRate": 48000,
+        "channels": 1,
+        "bitrateKbps": 64,
+        "loudnessLufs": -23,
+        "file": "audio/filter-hum/filter-hum.m4a"
+      }
+    },
+    {
+      "id": "food-plop",
+      "kind": "audio",
+      "origin": "recording",
+      "sources": [
+        "freesound-853279"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "downmixed to mono and resampled to 48 kHz",
+        "low-pass at 6000 Hz",
+        "trimmed leading and trailing silence, 2 ms fade-in",
+        "gain limited by the -1 dBFS peak ceiling, so the loudness is -22.7 LUFS instead of the -22 LUFS target",
+        "encoded as AAC-LC 64 kbit/s in .m4a"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "audio/food-plop/food-plop.m4a",
+          "bytes": 3445,
+          "sha256": "4cb1a2d9355b473252f732c45dbbba5b2487a5ede31f659f0164fa9e27f13887"
+        }
+      ],
+      "audio": {
+        "role": "food-plop",
+        "loop": false,
+        "frames": 13984,
+        "durationS": 0.291,
+        "sampleRate": 48000,
+        "channels": 1,
+        "bitrateKbps": 64,
+        "loudnessLufs": -22.7,
+        "file": "audio/food-plop/food-plop.m4a"
+      }
+    },
+    {
+      "id": "glass-tap",
+      "kind": "audio",
+      "origin": "recording",
+      "sources": [
+        "freesound-427389"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "downmixed to mono and resampled to 48 kHz",
+        "trimmed leading and trailing silence, 2 ms fade-in",
+        "gain limited by the -1 dBFS peak ceiling, so the loudness is -22.4 LUFS instead of the -18 LUFS target",
+        "encoded as AAC-LC 64 kbit/s in .m4a"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "audio/glass-tap/glass-tap.m4a",
+          "bytes": 2981,
+          "sha256": "c9745c6ee47736d7e27db058d89cd8b7d1336e49d383a147039df74d7ff19ae5"
+        }
+      ],
+      "audio": {
+        "role": "glass-tap",
+        "loop": false,
+        "frames": 11305,
+        "durationS": 0.236,
+        "sampleRate": 48000,
+        "channels": 1,
+        "bitrateKbps": 64,
+        "loudnessLufs": -22.4,
+        "file": "audio/glass-tap/glass-tap.m4a"
+      }
+    },
+    {
+      "id": "net-splash",
+      "kind": "audio",
+      "origin": "recording",
+      "sources": [
+        "freesound-398032"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "downmixed to mono and resampled to 48 kHz",
+        "trimmed leading and trailing silence, 2 ms fade-in",
+        "80 ms fade-out",
+        "gain limited by the -1 dBFS peak ceiling, so the loudness is -26.4 LUFS instead of the -18 LUFS target",
+        "encoded as AAC-LC 64 kbit/s in .m4a"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "audio/net-splash/net-splash.m4a",
+          "bytes": 11963,
+          "sha256": "98e649664f123384644910ad3fa8e417b3c325b09ada105465fabee1efed7fb3"
+        }
+      ],
+      "audio": {
+        "role": "net-splash",
+        "loop": false,
+        "frames": 64125,
+        "durationS": 1.336,
+        "sampleRate": 48000,
+        "channels": 1,
+        "bitrateKbps": 64,
+        "loudnessLufs": -26.4,
+        "file": "audio/net-splash/net-splash.m4a"
+      }
+    },
+    {
+      "id": "ui-click-1",
+      "kind": "audio",
+      "origin": "recording",
+      "sources": [
+        "freesound-528561"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "downmixed to mono and resampled to 48 kHz",
+        "trimmed leading and trailing silence, 2 ms fade-in",
+        "normalised to -26 LUFS",
+        "encoded as AAC-LC 64 kbit/s in .m4a"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "audio/ui-click-1/ui-click-1.m4a",
+          "bytes": 1682,
+          "sha256": "884acacaa6dd68e4f7be0b186e7148e58eb73a63f725c0406c21e044ff2410ce"
+        }
+      ],
+      "audio": {
+        "role": "ui-click",
+        "loop": false,
+        "frames": 3764,
+        "durationS": 0.078,
+        "sampleRate": 48000,
+        "channels": 1,
+        "bitrateKbps": 64,
+        "loudnessLufs": -26,
+        "file": "audio/ui-click-1/ui-click-1.m4a"
+      }
+    },
+    {
+      "id": "ui-click-2",
+      "kind": "audio",
+      "origin": "recording",
+      "sources": [
+        "freesound-629020"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "downmixed to mono and resampled to 48 kHz",
+        "trimmed leading and trailing silence, 2 ms fade-in",
+        "gain limited by the -1 dBFS peak ceiling, so the loudness is -27.9 LUFS instead of the -26 LUFS target",
+        "encoded as AAC-LC 64 kbit/s in .m4a"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "audio/ui-click-2/ui-click-2.m4a",
+          "bytes": 3463,
+          "sha256": "6129642d16b083a3d488e4d17105f4820699b22e7a28d505f4d13145dcff51d6"
+        }
+      ],
+      "audio": {
+        "role": "ui-click",
+        "loop": false,
+        "frames": 14414,
+        "durationS": 0.3,
+        "sampleRate": 48000,
+        "channels": 1,
+        "bitrateKbps": 64,
+        "loudnessLufs": -27.9,
+        "file": "audio/ui-click-2/ui-click-2.m4a"
+      }
+    },
+    {
+      "id": "ui-click-3",
+      "kind": "audio",
+      "origin": "recording",
+      "sources": [
+        "freesound-342200"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "downmixed to mono and resampled to 48 kHz",
+        "trimmed leading and trailing silence, 2 ms fade-in",
+        "normalised to -26 LUFS",
+        "encoded as AAC-LC 64 kbit/s in .m4a"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "audio/ui-click-3/ui-click-3.m4a",
+          "bytes": 2023,
+          "sha256": "bc0bb09816e64aa49bb814cdf93648a1656ee22086cdb37d2367fd364c48e557"
+        }
+      ],
+      "audio": {
+        "role": "ui-click",
+        "loop": false,
+        "frames": 6032,
+        "durationS": 0.126,
+        "sampleRate": 48000,
+        "channels": 1,
+        "bitrateKbps": 64,
+        "loudnessLufs": -26,
+        "file": "audio/ui-click-3/ui-click-3.m4a"
+      }
+    },
+    {
+      "id": "underwater-bed",
+      "kind": "audio",
+      "origin": "recording",
+      "sources": [
+        "freesound-862788"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "downmixed to mono and resampled to 48 kHz",
+        "low-pass at 1500 Hz",
+        "trimmed to a 16 s stationary section; 2 s equal-power crossfade of the loop seam",
+        "normalised to -28 LUFS",
+        "encoded as AAC-LC 64 kbit/s in .m4a"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "audio/underwater-bed/underwater-bed.m4a",
+          "bytes": 86979,
+          "sha256": "59a82c555cc6580156471b0dc1606d780fefe37812babcc24e2bc238cdb5609d"
+        }
+      ],
+      "audio": {
+        "role": "underwater-ambience",
+        "loop": true,
+        "frames": 768000,
+        "durationS": 16,
+        "sampleRate": 48000,
+        "channels": 1,
+        "bitrateKbps": 64,
+        "loudnessLufs": -28,
+        "file": "audio/underwater-bed/underwater-bed.m4a"
+      }
     },
     {
       "id": "bg-fw-misty-lake",

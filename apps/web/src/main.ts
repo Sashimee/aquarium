@@ -11,6 +11,8 @@ import { bindCameraControls } from './interaction/controls';
 import { SceneDecor } from './interaction/decor/sceneDecor';
 import { STICKY_INTERACTION_EVENTS, type InteractionEvents } from './interaction/events';
 import { onPageTeardown } from './interaction/pageLifecycle';
+import { PhotoController } from './interaction/photo/controller';
+import { bindPhotoKeys } from './interaction/photo/keys';
 import { watchReducedMotion } from './interaction/motion';
 import { PlayChoices } from './interaction/play/choices';
 import type { PlaySystem } from './interaction/play/system';
@@ -152,14 +154,25 @@ async function boot(): Promise<void> {
 
   const stopMotionWatch = watchReducedMotion((reduced) => rig.setReducedMotion(reduced));
   let play: PlaySystem | null = null;
+  const photo = new PhotoController({
+    port: engine.photo,
+    interaction,
+    engineEvents: events,
+    uiLayer: () => document.getElementById('photo-chrome'),
+    viewHeight: () => canvas.clientHeight,
+    dialogOpen: () => document.querySelector('[role="dialog"]') !== null,
+  });
+  const unbindPhotoKeys = bindPhotoKeys(document, photo);
   const unbindControls = bindCameraControls(canvas, rig, {
+    override: () => (photo.active ? photo : null),
     tap: (e) => {
       if (e.button !== 0) return;
+      if (photo.active) return photo.tap(e.x, e.y);
       if (sceneDecor.system?.active) sceneDecor.system.tap(e.x, e.y);
       else play?.controller.tap(e.x, e.y);
     },
     longPress: (e) => {
-      if (e.button !== 0 || sceneDecor.system?.active) return;
+      if (e.button !== 0 || photo.active || sceneDecor.system?.active) return;
       const target = play?.controller.fishAt(e.x, e.y);
       if (target) rig.focusOn(target);
     },
@@ -168,16 +181,21 @@ async function boot(): Promise<void> {
         ? sceneDecor.system.claimsDrag
         : (play?.controller.claimsDrag ?? false),
     pointerDown: (x, y) =>
-      sceneDecor.system?.active
-        ? sceneDecor.system.pointerDown(x, y)
-        : play?.controller.pointerDown(x, y),
+      photo.active
+        ? undefined
+        : sceneDecor.system?.active
+          ? sceneDecor.system.pointerDown(x, y)
+          : play?.controller.pointerDown(x, y),
     pointerMove: (x, y) =>
-      sceneDecor.system?.active
-        ? sceneDecor.system.pointerMove(x, y)
-        : play?.controller.pointerMove(x, y),
+      photo.active
+        ? undefined
+        : sceneDecor.system?.active
+          ? sceneDecor.system.pointerMove(x, y)
+          : play?.controller.pointerMove(x, y),
     pointerUp: () =>
       sceneDecor.system?.active ? sceneDecor.system.pointerUp() : play?.controller.pointerUp(),
     pointerLeave: () => {
+      if (photo.active) return;
       if (sceneDecor.system?.active) sceneDecor.system.pointerUp();
       else play?.controller.pointerLeave();
     },
@@ -192,6 +210,7 @@ async function boot(): Promise<void> {
   const exposePose = new URLSearchParams(window.location.search).has('e2e');
   engine.onFrame((deltaS) => {
     rig.update(deltaS);
+    photo.update(deltaS);
     if (!exposePose) return;
     const { x, y, z } = rig.lookAtPoint;
     const p = rig.position;
@@ -293,6 +312,8 @@ async function boot(): Promise<void> {
     stopBackground();
     stopMotionWatch();
     unbindControls();
+    unbindPhotoKeys();
+    photo.dispose();
     stopRequests();
     fish.stop();
     engine.dispose().catch((cause: unknown) => console.error('Engine dispose failed', cause));

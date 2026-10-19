@@ -83,3 +83,30 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(shell(request));
   }
 });
+
+// The server sends no payload, so nothing about the tank leaves it; the text here is fixed.
+self.addEventListener('push', (event) => {
+  event.waitUntil(
+    self.registration.showNotification('Your fish are hungry', {
+      body: 'It has been a while since the last feeding. Tap to check on your tank.',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      tag: 'care-reminder',
+    }),
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (windows) => {
+      const onTank = windows.find((client) => new URL(client.url).pathname === '/');
+      const open = onTank ?? windows[0];
+      if (!open) return self.clients.openWindow('/');
+      if (onTank) return open.focus();
+      // Navigating is refused for tabs this worker does not control, so fall back to a new tab.
+      const moved = await open.navigate('/').catch(() => null);
+      return moved ? moved.focus() : self.clients.openWindow('/');
+    }),
+  );
+});
