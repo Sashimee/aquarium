@@ -152,6 +152,8 @@ interface SpeciesBatch {
   /** Follows `model`. */
   locomotion: BatchLocomotion;
   readonly profile: FishRenderProfile;
+  /** Spreads its fins in display; every territorial species reports display, only these show it. */
+  readonly displays: boolean;
   lods: readonly LodBatch[];
   atlas: AtlasState;
   /** Built with the LODs once the atlas is ready; null without one, and for walkers. */
@@ -217,6 +219,8 @@ interface FishRuntime {
   /** Fin spread and gill-cover flare in display, 0..1, from the sim; closing to 0 off it. */
   display: number;
   gillFlare: number;
+  /** Fins left spread by a dropped world, closing over `DISPLAY_CLOSE_S` until the sim's catch up. */
+  finsSettling: boolean;
 }
 
 /** LOD levels near enough for their self-shadowing to read. */
@@ -353,6 +357,7 @@ export class FishSystem {
     lod: 0,
     full: true,
     castsShadow: false,
+    display: 0,
   };
   private features: FishMaterialFeatures | null = null;
   private night = 0;
@@ -878,6 +883,7 @@ export class FishSystem {
       model,
       locomotion,
       profile,
+      displays: input.behaviour.traits.includes('flare-display'),
       lods: [],
       atlas: { kind: 'none' },
       impostor: null,
@@ -891,7 +897,7 @@ export class FishSystem {
     if (needed <= batch.capacity) return;
     this.disposeLods(batch);
     const capacity = capacityFor(needed);
-    const { input, model, profile, locomotion } = batch;
+    const { model, profile, locomotion } = batch;
     const lighting = this.lighting();
     batch.lods = model.lods.map((parts, level) => {
       const walking = locomotion.kind === 'walk';
@@ -923,7 +929,7 @@ export class FishSystem {
           instances,
           lighting,
           mouth: part.mouth,
-          displays: input.behaviour.traits.includes('flare-display'),
+          displays: batch.displays,
         });
         if (this.features !== null) material.setFeatures(this.features);
         const mesh = new InstancedMesh(part.geometry, material, capacity);
@@ -1163,6 +1169,7 @@ export class FishSystem {
       script: null,
       display: 0,
       gillFlare: 0,
+      finsSettling: false,
     };
     if (fish.phase === 'bagged') runtime.bagSlot = this.freeBagSlot();
     if (fish.phase === 'dead') runtime.script = this.deadScript(runtime);
@@ -1283,6 +1290,7 @@ export class FishSystem {
     this.generation++;
     this.stream.reset();
     this.held.releaseAll();
+    for (const rt of this.runtimes.values()) rt.finsSettling = true;
   }
 
   /** Every swimming fish on screen waits where it is for the next world. */
@@ -1529,10 +1537,17 @@ export class FishSystem {
         walk.legPhase = frame[o + SnapshotField.LegPhase] ?? 0;
         walk.flip = frame[o + SnapshotField.Flip] ?? 0;
         walk.attached = frame[o + SnapshotField.Attached] ?? 1;
-        // A world restarting at 0 closes the fins over a moment too.
-        const closing = deltaS / DISPLAY_CLOSE_S;
-        rt.display = Math.max(frame[o + SnapshotField.Display] ?? 0, rt.display - closing);
-        rt.gillFlare = Math.max(frame[o + SnapshotField.GillFlare] ?? 0, rt.gillFlare - closing);
+        const display = frame[o + SnapshotField.Display] ?? 0;
+        const gillFlare = frame[o + SnapshotField.GillFlare] ?? 0;
+        if (rt.finsSettling) {
+          const closing = deltaS / DISPLAY_CLOSE_S;
+          rt.display = Math.max(display, rt.display - closing);
+          rt.gillFlare = Math.max(gillFlare, rt.gillFlare - closing);
+          rt.finsSettling = rt.display > display || rt.gillFlare > gillFlare;
+        } else {
+          rt.display = display;
+          rt.gillFlare = gillFlare;
+        }
         if (rt.handover > 0) {
           const w = smoothstep01(rt.handover / HANDOVER_S);
           this.position.lerp(rt.fromPosition, w);
@@ -1650,6 +1665,7 @@ export class FishSystem {
       choice.lod = rt.lod;
       choice.full = rt.full;
       choice.castsShadow = castsShadow && rt.lod < SHADOW_LODS;
+      choice.display = rt.batch.displays ? Math.max(rt.display, rt.gillFlare) : 0;
       if (impostor !== null && motion instanceof SwimState && drawsAsImpostor(choice)) {
         this.drawImpostor(rt, motion, impostor, camera);
       } else {

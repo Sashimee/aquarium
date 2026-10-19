@@ -103,6 +103,7 @@ describe('drawsAsImpostor', () => {
     lod: 0,
     full: true,
     castsShadow: false,
+    display: 0,
   };
   const choose = (overrides: Partial<typeof swimmerOnImpostorTier>): boolean =>
     drawsAsImpostor({ ...swimmerOnImpostorTier, ...overrides });
@@ -130,6 +131,16 @@ describe('drawsAsImpostor', () => {
   it('draws the mesh when the species has no impostor', () => {
     expect(choose({ available: false, lod: IMPOSTOR_LOD })).toBe(false);
     expect(choose({ available: false, lod: 0, full: false })).toBe(false);
+  });
+
+  it('keeps a fish in display as a mesh at any distance, as its atlas has the fins at rest', () => {
+    expect(choose({ display: 0.5, lod: IMPOSTOR_LOD })).toBe(false);
+    expect(choose({ display: 0.05, lod: 0, full: false })).toBe(false);
+  });
+
+  it('lets a fish whose display has eased to almost nothing go back to its impostor', () => {
+    expect(choose({ display: 0.005, lod: IMPOSTOR_LOD })).toBe(true);
+    expect(choose({ display: 0, lod: IMPOSTOR_LOD })).toBe(true);
   });
 
   it('never swaps on a tier without impostors', () => {
