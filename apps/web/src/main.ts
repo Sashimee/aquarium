@@ -129,11 +129,6 @@ async function boot(): Promise<void> {
     'Aquarium view. Arrow keys orbit, plus and minus zoom, Escape leaves dive mode.',
   );
 
-  // TODO(gameplay-engineer): pass the saved tank's backgroundId here with the chooser (T29, #619);
-  // until then every tank shows its biome's default picture.
-  void engine.setBackground(tankBiome.current, null);
-  const stopBackground = tankBiome.onChange((biome) => void engine.setBackground(biome, null));
-
   const followFocus = depthOfFieldFollowsCamera(engine);
   const rig = new CameraRig(
     engine.camera,
@@ -272,6 +267,10 @@ async function boot(): Promise<void> {
   const scenes = mountBiomeScene(engine, tankBiome, window.location.search, {
     failed: (message) => tracker.fail(message),
     mounted(scene) {
+      // TODO(gameplay-engineer): pass the saved tank's backgroundId here with the chooser (T29, #619);
+      // until then every tank shows its biome's default picture.
+      void engine.setBackground(scene.biome, null);
+      void engine.useBackgroundIndex({ assets: [...scene.catalogEntries()] });
       fish.setAnchors(scene.anchors);
       container.dataset['sceneBiome'] = scene.biome;
       scene.enableMovablePlants();
@@ -309,7 +308,6 @@ async function boot(): Promise<void> {
     tankBiome.stop();
     stopDemoRequests();
     playChoices.stop();
-    stopBackground();
     stopMotionWatch();
     unbindControls();
     unbindPhotoKeys();

@@ -87,9 +87,10 @@ async function showing(
   return picture;
 }
 
-function setup(tier: Tier = 'high', fetchIndex: () => Promise<unknown> = async () => assetIndex) {
+function setup(tier: Tier = 'high', withIndex = true) {
   const loader = new FakeLoader();
-  const background = new TankBackground(loader, tier, { assetRoot: ROOT, fetchIndex });
+  const background = new TankBackground(loader, tier, ROOT);
+  if (withIndex) void background.useIndex(assetIndex);
   const film = background.map.value;
   return { loader, background, film };
 }
@@ -227,15 +228,21 @@ describe('TankBackground', () => {
     expect(highGone()).toBe(true);
   });
 
-  it('only fetches what is still wanted once requests made together are resolved', async () => {
+  it('shows the last of several requests made together and frees the rest', async () => {
     const { loader, background } = setup();
     await showing(background, loader, CORAL);
     const requests = [STREAM, ROOTS, STREAM].map((id) => background.show('freshwater', id));
     await settle();
-    expect(loader.urls()).toEqual([`${ROOT}${file(STREAM, 'high')}`]);
+    expect(loader.urls()).toEqual([
+      `${ROOT}${file(STREAM, 'high')}`,
+      `${ROOT}${file(ROOTS, 'high')}`,
+    ]);
+    const roots = loader.land(file(ROOTS, 'high'));
+    const rootsGone = disposed(roots);
     const stream = loader.land(file(STREAM, 'high'));
     await Promise.all(requests);
     expect(background.map.value).toBe(stream);
+    expect(rootsGone()).toBe(true);
   });
 
   it('frees a load overtaken by a later request, and shows only the latest', async () => {
@@ -301,20 +308,51 @@ describe('TankBackground', () => {
     expect(coralGone()).toBe(true);
   });
 
-  it('retries the index after it failed to load', async () => {
-    let calls = 0;
-    const { loader, background } = setup('low', async () => {
-      calls += 1;
-      if (calls === 1) throw new Error('offline');
-      return assetIndex;
-    });
-    await expect(background.show('freshwater', null)).rejects.toThrow('offline');
-    const retry = background.show('freshwater', null);
+  it('keeps the previous tier of the same picture when the new tier fails', async () => {
+    const { loader, background } = setup('high');
+    const high = await showing(background, loader, CORAL);
+    const highGone = disposed(high);
+    const lowered = background.setTier('low');
     await settle();
-    loader.land(file(STREAM, 'low'));
-    await retry;
-    expect(calls).toBe(2);
-    expect(background.file).toBe(file(STREAM, 'low'));
+    loader.fail(file(CORAL, 'low'));
+    await expect(lowered).rejects.toThrow(`/assets/${file(CORAL, 'low')}`);
+    expect(background.map.value).toBe(high);
+    expect(highGone()).toBe(false);
+  });
+
+  it('fetches nothing until it is given the index, then loads what was asked for', async () => {
+    const { loader, background, film } = setup('low', false);
+    await background.show('freshwater', null);
+    await settle();
+    expect(loader.urls()).toEqual([]);
+    expect(background.map.value).toBe(film);
+    const indexed = background.useIndex(assetIndex);
+    await settle();
+    expect(loader.urls()).toEqual([`${ROOT}${file(STREAM, 'low')}`]);
+    const picture = loader.land(file(STREAM, 'low'));
+    await indexed;
+    expect(background.map.value).toBe(picture);
+  });
+
+  it('rejects a malformed index and keeps waiting for a good one', async () => {
+    const { loader, background } = setup('low', false);
+    await background.show('reef', null);
+    await expect(background.useIndex({ assets: 'nope' })).rejects.toThrow(/re-run the asset/);
+    expect(loader.urls()).toEqual([]);
+    const indexed = background.useIndex(assetIndex);
+    await settle();
+    loader.land(file(CORAL, 'low'));
+    await indexed;
+    expect(background.file).toBe(file(CORAL, 'low'));
+  });
+
+  it('settles quietly when a load fails because it was disposed mid-flight', async () => {
+    const { loader, background } = setup();
+    const shown = background.show('reef', null);
+    await settle();
+    background.dispose();
+    loader.fail(file(CORAL, 'high'));
+    await expect(shown).resolves.toBeUndefined();
   });
 
   it('frees the picture and the film on dispose, and a load that lands afterwards', async () => {

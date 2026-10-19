@@ -8,6 +8,7 @@ import {
 } from '@aquarium/shared';
 import { Color, DataTexture, SRGBColorSpace, type Texture, type TextureNode } from 'three/webgpu';
 import { texture } from 'three/tsl';
+import { fail, record } from '../../fish/assetIndex';
 import { TIERS, type Tier } from '../quality/tiers';
 
 /** Linear albedo of the plain dark blue film shown while no picture is loaded, or none exists. */
@@ -20,15 +21,6 @@ export function pickBackgroundId(biome: Biome, id: string | null): BackgroundId 
   if (!isPlayableBiome(biome)) return null;
   if (id !== null && isBackgroundForBiome(biome, id)) return id;
   return DEFAULT_BACKGROUND_ID[biome];
-}
-
-function fail(path: string, expected: string): never {
-  throw new TypeError(`assets/index.json: ${path} must be ${expected}; re-run the asset pipeline`);
-}
-
-function record(value: unknown, path: string): Record<string, unknown> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) fail(path, 'an object');
-  return value as Record<string, unknown>;
 }
 
 /** Paths are joined to the assets root, so anything climbing out of it is rejected. */
@@ -97,33 +89,34 @@ export interface BackgroundLoader {
   loadAsync(url: string): Promise<Texture>;
 }
 
-export interface TankBackgroundOptions {
-  /** Folder holding `index.json` and the pictures, with a trailing slash. */
-  readonly assetRoot: string;
-  readonly fetchIndex: () => Promise<unknown>;
+interface Shown {
+  readonly id: BackgroundId;
+  readonly file: string;
+  readonly texture: Texture;
 }
 
 /**
  * The picture behind the back glass. `map` keeps its node for the life of the tank and only its
  * texture changes, so a new picture or tier never rebuilds a pipeline. One picture is alive at a
  * time: the one it replaces is freed as it goes in, and a load nobody wants by the time it lands
- * is freed at once.
+ * is freed at once. It never fetches `index.json` itself; the scene's copy comes in through
+ * `useIndex`, so the loading screen tracks the only request for it.
  */
 export class TankBackground {
   readonly map: TextureNode;
   private readonly film = filmTexture();
   private wanted: BackgroundId | null = null;
   private currentTier: Tier;
-  private shown: { readonly file: string; readonly texture: Texture } | null = null;
+  private shown: Shown | null = null;
   private files: BackgroundFiles | null = null;
-  private filesLoad: Promise<BackgroundFiles> | null = null;
   private readonly loads = new Map<string, Promise<void>>();
   private disposed = false;
 
+  /** `assetRoot` is the folder holding the pictures, with a trailing slash. */
   constructor(
     private readonly loader: BackgroundLoader,
     tier: Tier,
-    private readonly options: TankBackgroundOptions,
+    private readonly assetRoot: string,
   ) {
     this.currentTier = tier;
     this.map = texture(this.film);
@@ -145,12 +138,20 @@ export class TankBackground {
 
   /**
    * Shows `id`, or the biome's default when it is null or not one of the biome's. Resolves once
-   * that picture is drawn, or once a later call has taken over.
+   * that picture is drawn, once a later call has taken over, or at once while no index is in;
+   * `useIndex` then loads it.
    */
   show(biome: Biome, id: string | null): Promise<void> {
     this.assertLive('show');
     this.wanted = pickBackgroundId(biome, id);
     return this.refresh();
+  }
+
+  /** Takes the parsed `assets/index.json`; throws if its background entries are malformed. */
+  async useIndex(json: unknown): Promise<void> {
+    this.assertLive('useIndex');
+    this.files = parseBackgroundFiles(json);
+    await this.refresh();
   }
 
   setTier(tier: Tier): Promise<void> {
@@ -172,7 +173,6 @@ export class TankBackground {
   }
 
   private async refresh(): Promise<void> {
-    if (this.wanted !== null) await this.index();
     const file = this.wantedFile();
     if (file === undefined) return;
     if (file === null) {
@@ -191,38 +191,27 @@ export class TankBackground {
     return backgroundFile(this.files, this.wanted, this.currentTier);
   }
 
-  private index(): Promise<BackgroundFiles> {
-    this.filesLoad ??= this.options.fetchIndex().then(
-      (json) => {
-        this.files = parseBackgroundFiles(json);
-        return this.files;
-      },
-      (cause: unknown) => {
-        this.filesLoad = null;
-        throw cause;
-      },
-    );
-    return this.filesLoad;
-  }
-
   /** One download per file however often it is asked for while in flight. */
   private load(file: string): Promise<void> {
     const pending = this.loads.get(file);
     if (pending) return pending;
-    const url = `${this.options.assetRoot}${file}`;
+    const url = `${this.assetRoot}${file}`;
     const load = this.loader.loadAsync(url).then(
       (loaded) => {
         this.loads.delete(file);
-        if (this.wantedFile() !== file) {
+        const id = this.wanted;
+        if (this.wantedFile() !== file || id === null) {
           loaded.dispose();
           return;
         }
-        this.swap({ file, texture: loaded });
+        this.swap({ id, file, texture: loaded });
       },
       (cause: unknown) => {
         this.loads.delete(file);
-        // A wrong picture left up (another biome's) is worse than the plain film.
-        if (this.wantedFile() === file) this.swap(null);
+        if (this.disposed) return;
+        // Another biome's picture left up is worse than the plain film; the same picture at the
+        // previous tier's size is not.
+        if (this.wantedFile() === file && this.shown?.id !== this.wanted) this.swap(null);
         throw new Error(`Could not load the tank background ${url}`, { cause });
       },
     );
@@ -230,7 +219,7 @@ export class TankBackground {
     return load;
   }
 
-  private swap(next: { readonly file: string; readonly texture: Texture } | null): void {
+  private swap(next: Shown | null): void {
     const old = this.shown;
     this.shown = next;
     this.map.value = next?.texture ?? this.film;

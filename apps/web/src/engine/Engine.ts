@@ -117,14 +117,6 @@ export async function initRenderer<R extends StartableRenderer>(
   return { renderer, backend, deviceLoss };
 }
 
-async function fetchAssetIndex(url: string): Promise<unknown> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`${url} returned HTTP ${response.status}; is public/assets deployed?`);
-  }
-  return response.json();
-}
-
 function configureRenderer(renderer: WebGPURenderer): void {
   renderer.toneMapping = AgXToneMapping;
   renderer.toneMappingExposure = 1;
@@ -309,10 +301,7 @@ export class Engine {
       substrateAlbedo: this.substrateAlbedo,
       roomBackgroundIntensity,
     };
-    this.background = new TankBackground(this.ktx2, this.quality.tier, {
-      assetRoot: ASSET_BASE,
-      fetchIndex: () => fetchAssetIndex(`${ASSET_BASE}index.json`),
-    });
+    this.background = new TankBackground(this.ktx2, this.quality.tier, ASSET_BASE);
     cleanup.add(() => this.background.dispose());
     this.tank = new Tank(
       dimensions,
@@ -399,6 +388,14 @@ export class Engine {
     if (this.disposed) return Promise.resolve();
     return this.background
       .show(biome, id)
+      .catch((cause: unknown) => this.reportError('The tank background failed to load', cause));
+  }
+
+  /** Hands the background the scene's parsed `assets/index.json`; until then it shows the film. */
+  useBackgroundIndex(json: unknown): Promise<void> {
+    if (this.disposed) return Promise.resolve();
+    return this.background
+      .useIndex(json)
       .catch((cause: unknown) => this.reportError('The tank background failed to load', cause));
   }
 
