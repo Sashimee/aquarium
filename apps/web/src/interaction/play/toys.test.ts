@@ -159,11 +159,15 @@ describe('mirrorMountFor', () => {
     expect(mount?.position.z).toBeLessThan(MIN.z + 0.01);
   });
 
-  it('hangs on a side wall when the ray reaches that one first', () => {
+  it('hangs on the far side wall seen from the side, never on the near glass', () => {
     const mount = mirrorMountFor({ x: 1.5, y: 0.3, z: 0.2 }, { x: -1, y: 0, z: -0.05 }, box);
-    expect(mount?.normal).toEqual({ x: -1, y: 0, z: 0 });
-    expect(mount?.position.x).toBeLessThan(MAX.x);
-    expect(mount?.position.x).toBeGreaterThan(MAX.x - 0.01);
+    expect(mount?.normal).toEqual({ x: 1, y: 0, z: 0 });
+    expect(mount?.position.x).toBeGreaterThan(MIN.x);
+    expect(mount?.position.x).toBeLessThan(MIN.x + 0.01);
+  });
+
+  it('has no wall to hang on when seen from behind through the back glass', () => {
+    expect(mirrorMountFor({ x: 0, y: 0.3, z: -1.5 }, { x: 0, y: 0, z: 1 }, box)).toBeNull();
   });
 
   it('keeps the whole mirror inside the wall, clear of the corners and the water line', () => {
@@ -184,7 +188,7 @@ describe('mirrorMountFor', () => {
     expect(mount?.position.y).toBeCloseTo(MIN.y + MIRROR_GROUND_MARGIN_M + MIRROR_HEIGHT_M / 2);
   });
 
-  it('mounts on the wall the ray was aimed at, whatever the float noise', () => {
+  it('mounts on the far wall the ray was aimed at, whatever the float noise', () => {
     let seed = 12345;
     const random = () => {
       seed = (seed * 1664525 + 1013904223) % 4294967296;
@@ -194,13 +198,13 @@ describe('mirrorMountFor', () => {
       const y = MIN.y + random() * (MAX.y - MIN.y);
       const z = MIN.z + random() * (MAX.z - MIN.z);
       const origin = { x: -1.2 - random(), y: 0.1 + random() * 0.5, z: 0.6 + random() };
-      const aimed = { x: MIN.x, y, z };
+      const aimed = { x: MAX.x, y, z };
       const dir = { x: aimed.x - origin.x, y: aimed.y - origin.y, z: aimed.z - origin.z };
-      const left = mirrorMountFor(origin, dir, box);
-      expect(left?.normal).toEqual({ x: 1, y: 0, z: 0 });
+      const right = mirrorMountFor(origin, dir, box);
+      expect(right?.normal).toEqual({ x: -1, y: 0, z: 0 });
 
       const mirrored = mirrorMountFor({ ...origin, x: -origin.x }, { ...dir, x: -dir.x }, box);
-      expect(mirrored?.normal).toEqual({ x: -1, y: 0, z: 0 });
+      expect(mirrored?.normal).toEqual({ x: 1, y: 0, z: 0 });
     }
   });
 
@@ -733,6 +737,18 @@ describe('feeding game in the controller', () => {
     expect(t.gameSeen).toHaveBeenLastCalledWith({
       view: expect.objectContaining({ pinchesLeft: 4 }),
     });
+  });
+
+  it('picks the shyest individual, not only the shyest species', () => {
+    const t = makeToyController();
+    t.events.emit('game:request', {
+      action: 'start',
+      fish: [
+        { id: 'f1', name: 'Rex', species: 'shy-fish', boldness: 0.9 },
+        { id: 'f2', name: 'Pip', species: 'shy-fish', boldness: 0 },
+      ],
+    });
+    expect(t.game.view).toMatchObject({ phase: 'running', targetId: 'f2' });
   });
 
   it('does not drop food on a game-tool tap when no round is on', () => {

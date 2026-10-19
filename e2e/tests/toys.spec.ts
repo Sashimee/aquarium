@@ -46,6 +46,7 @@ async function flickAcross(
   from: { x: number; y: number },
   to: { x: number; y: number },
 ): Promise<void> {
+  await page.mouse.move(from.x, from.y);
   await page.evaluate(
     ({ from, to }) => {
       const canvas = document.querySelector('canvas#tank');
@@ -53,7 +54,7 @@ async function flickAcross(
       const fire = (type: string, x: number, y: number): void => {
         canvas.dispatchEvent(
           new PointerEvent(type, {
-            pointerId: 41,
+            pointerId: 1,
             pointerType: 'mouse',
             isPrimary: true,
             button: 0,
@@ -101,6 +102,8 @@ test('the mirror, the ping-pong ball and the shy-fish feeding game work from the
   page,
 }) => {
   test.slow();
+  const pageErrors: string[] = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
   await registerVerifiedUser(page, 'toys');
   await openTank(page, { e2e: true });
   await createFirstTank(page);
@@ -116,25 +119,33 @@ test('the mirror, the ping-pong ball and the shy-fish feeding game work from the
     'true',
   );
   await tapCanvas(page, ...LEFT_TANK);
+  await expect.poll(() => ballAt(page), { message: 'the ball is in the water' }).not.toBeNull();
+  const dropPoint = await ballAt(page);
   await openPlay(page);
-  await expect(play.getByRole('button', { name: 'Remove ball' })).toBeVisible();
+  await play.getByRole('button', { name: 'Remove ball' }).click();
+  await expect.poll(() => ballAt(page)).toBeNull();
 
+  await tapCanvas(page, ...RIGHT_TANK);
   await expect.poll(() => ballAt(page), { message: 'the ball is in the water' }).not.toBeNull();
   const before = await ballAt(page);
-  const start = await canvasPoint(page, ...LEFT_TANK);
-  const end = await canvasPoint(page, ...RIGHT_TANK);
-  await flickAcross(page, start, end);
+  await flickAcross(
+    page,
+    await canvasPoint(page, ...RIGHT_TANK),
+    await canvasPoint(page, ...LEFT_TANK),
+  );
+  // The default current pushes the ball towards +x, so only a drag and a flick take it to -x,
+  // and only a flick takes it past the point where the finger let go.
+  let furthest = Infinity;
   await expect
-    .poll(async () => ((await ballAt(page))?.x ?? NaN) - (before?.x ?? 0), {
-      message: 'the ball follows the finger',
-    })
+    .poll(
+      async () => {
+        furthest = Math.min(furthest, (await ballAt(page))?.x ?? Infinity);
+        return (dropPoint?.x ?? NaN) - furthest;
+      },
+      { message: 'the flick carries the ball past the release point' },
+    )
     .toBeGreaterThan(0.02);
-  const released = await ballAt(page);
-  await expect
-    .poll(async () => ((await ballAt(page))?.x ?? NaN) - (released?.x ?? 0), {
-      message: 'the flick carries the ball on after the release',
-    })
-    .toBeGreaterThan(0.05);
+  expect((before?.x ?? NaN) - furthest, 'the ball followed the finger').toBeGreaterThan(0.2);
 
   await openPlay(page);
   await play.getByRole('button', { name: 'Remove ball' }).click();
@@ -158,7 +169,7 @@ test('the mirror, the ping-pong ball and the shy-fish feeding game work from the
 
   await dismissToasts(page);
   await play.getByRole('button', { name: 'Start round' }).click();
-  const round = play.getByRole('status').filter({ hasText: /^Feed Glint\./ });
+  const round = play.getByRole('status').filter({ hasText: /^Feed (Glint|Bolt)\./ });
   await expect(round).toBeVisible();
   await expect(play.getByRole('button', { name: 'Stop round' })).toBeVisible();
   await expect(play.getByRole('button', { name: 'Tap glass' })).toHaveAttribute(
@@ -184,4 +195,6 @@ test('the mirror, the ping-pong ball and the shy-fish feeding game work from the
     'aria-pressed',
     'true',
   );
+
+  expect(pageErrors).toEqual([]);
 });

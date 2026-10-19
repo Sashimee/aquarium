@@ -2,7 +2,12 @@ import type { FoodType } from '@aquarium/shared';
 import type { FeedGate } from '../../sync/feedGate';
 import type { EventBus } from '../../engine/events';
 import type { Vec3 } from '../camera';
-import { HAND_FEED_PORTION, type InteractionEvents, type PlayTool } from '../events';
+import {
+  HAND_FEED_PORTION,
+  type GameFishRef,
+  type InteractionEvents,
+  type PlayTool,
+} from '../events';
 import { reachableSpot, type ReachBridge } from '../food/clipReach';
 import type { FoodField, FoodParticle } from '../food/particles';
 import { FoodLink } from '../food/link';
@@ -483,7 +488,7 @@ export class PlayController {
     }
   }
 
-  private startGame(fish: readonly { id: string; name: string; species: string }[]): void {
+  private startGame(fish: readonly GameFishRef[]): void {
     const game = this.deps.game;
     if (!game) return;
     const roster: GameFish[] = fish.map((f) => {
@@ -491,7 +496,12 @@ export class PlayController {
       return {
         id: f.id,
         name: f.name,
-        boldness: traits?.boldness ?? 1,
+        boldness:
+          traits === undefined
+            ? 1
+            : f.boldness === undefined
+              ? traits.boldness
+              : (traits.boldness + f.boldness) / 2,
         eligible:
           traits !== undefined && traits.eatsFlakes && traits.depthHigh >= GAME_MIN_DEPTH_HIGH,
       };

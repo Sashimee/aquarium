@@ -21,6 +21,8 @@ export interface GameFishRef {
   id: string;
   name: string;
   species: string;
+  /** The fish's own boldness, 0 to 1; the species figure alone is used without it. */
+  boldness?: number;
 }
 
 export type DecorCommand =

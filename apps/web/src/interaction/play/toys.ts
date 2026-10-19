@@ -159,8 +159,8 @@ export const MIRROR_GROUND_MARGIN_M = 0.01;
 export const MIRROR_SURFACE_MARGIN_M = 0.01;
 
 /**
- * Where the mirror hangs for a tap along `origin` + `dir`: the back or side wall the ray reaches
- * through the water, kept clear of the corners, the substrate and the water line. A ray that
+ * Where the mirror hangs for a tap along `origin` + `dir`: the back or side wall the ray leaves
+ * through, so seen from the side the far glass and never the near one,  kept clear of the corners, the substrate and the water line. A ray that
  * leaves through the floor or the top is mounted on the back wall at the same x and y. Null when
  * the ray points away from the back wall and reaches no side wall. `ground` is the visible
  * substrate height at (x, z).
@@ -180,7 +180,7 @@ export function mirrorMountFor(
   let best: { t: number; wall: (typeof walls)[number] } | null = null;
   for (const wall of walls) {
     const d = dir[wall.axis];
-    if (d === 0) continue;
+    if (d === 0 || dir.x * wall.normal.x + dir.z * wall.normal.z >= 0) continue;
     const t = (wall.at - origin[wall.axis]) / d;
     if (!(t > 0) || (best !== null && t >= best.t)) continue;
     // The hit wall's own coordinate is the wall by construction; testing it against its own
@@ -196,7 +196,7 @@ export function mirrorMountFor(
   let t = best?.t;
   if (!wall || t === undefined) {
     const back = walls[0];
-    if (!back || dir.z === 0) return null;
+    if (!back || dir.z >= 0) return null;
     const backT = (back.at - origin.z) / dir.z;
     if (!(backT > 0)) return null;
     wall = back;

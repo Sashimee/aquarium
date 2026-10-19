@@ -213,13 +213,27 @@ export class FeedingGame {
   }
 
   private runningView(round: Round): GameView {
+    const timeLeftS = Math.max(0, round.timeLeftS);
+    const score = scoreOf(round);
+    const last = this.last;
+    // The panel shows whole seconds, so a frame that changes nothing it shows reuses the view.
+    if (
+      last.phase === 'running' &&
+      last.targetId === round.target.id &&
+      Math.ceil(last.timeLeftS) === Math.ceil(timeLeftS) &&
+      last.pinchesLeft === round.pinchesLeft &&
+      last.score === score &&
+      last.best === this.best
+    ) {
+      return last;
+    }
     return {
       phase: 'running',
       targetId: round.target.id,
       targetName: round.target.name,
-      timeLeftS: Math.max(0, round.timeLeftS),
+      timeLeftS,
       pinchesLeft: round.pinchesLeft,
-      score: scoreOf(round),
+      score,
       best: this.best,
     };
   }

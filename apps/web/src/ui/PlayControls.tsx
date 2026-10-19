@@ -155,7 +155,12 @@ export function PlayPanel() {
       <FeedingGamePanel
         fish={(tank?.fish ?? [])
           .filter((f) => f.status === 'alive')
-          .map((f) => ({ id: f.id, name: f.name, species: f.species }))}
+          .map((f) => ({
+            id: f.id,
+            name: f.name,
+            species: f.species,
+            boldness: f.personality.boldness,
+          }))}
       />
     </>
   );
