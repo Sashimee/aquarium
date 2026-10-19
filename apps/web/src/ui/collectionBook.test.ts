@@ -25,7 +25,7 @@ const collection: Collection = {
         raisedAt: null,
       },
     },
-    { species: 'secret-fish', commonName: 'Hidden angel', biome: 'reef', entry: null },
+    { species: 'hidden-angelfish', commonName: 'Hidden angel', biome: 'reef', entry: null },
   ],
   kept: 1,
   bred: 1,
@@ -73,7 +73,7 @@ describe('collection helpers', () => {
       keptOn: '2 Mar 2026',
       milestones: ['Bred 10 Apr 2026'],
     });
-    expect(locked).toEqual({ kind: 'locked', species: 'secret-fish', biome: 'reef' });
+    expect(locked).toEqual({ kind: 'locked', species: 'hidden-angelfish', biome: 'reef' });
   });
 
   it('describes progress and earned state', () => {
@@ -126,6 +126,7 @@ describe('CollectionBody', () => {
     expect(html).toContain('First kept 2 Mar 2026');
     expect(html).toContain('data-state="locked"');
     expect(html).not.toContain('Hidden angel');
+    expect(html).not.toContain('hidden-angelfish');
     expect(html).toContain('class="book"');
   });
 

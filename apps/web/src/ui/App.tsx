@@ -150,6 +150,7 @@ export function App() {
   const panel: Panel = home ? requested : 'none';
   const [food, setFood] = useFood();
   const [bookOpen, setBookOpen] = useState(false);
+  const { user } = useAuth();
   const { interaction } = useBridge();
   const photoActive = usePhotoView()?.state.active ?? false;
   const shell = useRef<HTMLDivElement>(null);
@@ -220,7 +221,7 @@ export function App() {
           </div>
           <div className="hud-right">
             <div className="hud-buttons">
-              <CollectionButton onPress={() => setBookOpen(true)} />
+              {user && <CollectionButton onPress={() => setBookOpen(true)} />}
               <TankButton open={panel === 'tanks'} onPress={() => toggle('tanks')} />
               <AvatarButton open={panel === 'account'} onPress={() => toggle('account')} />
             </div>

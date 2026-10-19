@@ -488,8 +488,13 @@ progress {
 }
 
 .book-actions {
+  position: sticky;
+  top: -1.25rem;
+  z-index: 1;
   display: flex;
   justify-content: flex-end;
+  padding: 0.5rem 0;
+  background: var(--surface);
 }
 
 .book-error {

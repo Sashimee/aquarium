@@ -31,6 +31,11 @@ export function CollectionBody({
 }) {
   return (
     <div className="book">
+      <div className="book-actions">
+        <button type="button" onClick={onClose}>
+          Close
+        </button>
+      </div>
       {state.status === 'loading' && <p role="status">Opening the book.</p>}
       {state.status === 'error' && (
         <div role="alert" className="book-error">
@@ -62,11 +67,6 @@ export function CollectionBody({
           )}
         </>
       )}
-      <div className="book-actions">
-        <button type="button" onClick={onClose}>
-          Close
-        </button>
-      </div>
     </div>
   );
 }
@@ -81,7 +81,6 @@ function SpeciesList({ collection }: { collection: Collection }) {
             <li
               key={card.species}
               className="book-card locked"
-              data-species={card.species}
               data-state="locked"
               tabIndex={0}
               aria-label={`Undiscovered ${card.biome} species. Keep one to unlock it.`}

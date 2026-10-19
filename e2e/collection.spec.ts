@@ -51,6 +51,13 @@ test('the collection book shows kept species, locked silhouettes and achievement
     expect(inside, `focus escaped the dialog after ${i + 1} Tab presses`).toBe(true);
   }
 
+  await dialog.getByRole('heading', { name: 'Collection book' }).focus();
+  await page.keyboard.press('Shift+Tab');
+  const wrapped = await page.evaluate(
+    () => document.querySelector('[role="dialog"]')?.contains(document.activeElement) ?? false,
+  );
+  expect(wrapped, 'Shift+Tab from the heading left the dialog').toBe(true);
+
   await dialog.getByRole('button', { name: 'Achievements' }).click();
   const first = dialog.locator('[data-achievement="first-fish"]');
   await expect(first).toHaveAttribute('data-earned', 'true');
@@ -111,6 +118,10 @@ test.describe('on a phone', () => {
     const dialog = bookDialog(page);
     await expect(dialog).toBeVisible();
     await expect(dialog.locator('.book-summary')).toBeVisible();
+    const close = dialog.getByRole('button', { name: 'Close', exact: true });
+    await dialog.evaluate((el) => el.scrollTo(0, el.scrollHeight));
+    await expect(close).toBeInViewport();
+    await dialog.evaluate((el) => el.scrollTo(0, 0));
     const box = await dialog.boundingBox();
     expect(box).not.toBeNull();
     expect(box?.x ?? -1).toBeGreaterThanOrEqual(0);
