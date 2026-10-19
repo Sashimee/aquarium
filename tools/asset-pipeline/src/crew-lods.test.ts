@@ -201,10 +201,10 @@ describe('nerite seating', () => {
   beforeAll(() => MeshoptDecoder.ready);
 
   for (const level of [0, 1, 2])
-    it(`LOD${level} lip underside sits within 0.06 L of the body across the full lip width`, async () => {
+    it(`LOD${level} lip underside sits within 0.01 L of the body across the full lip width`, async () => {
       const length = 0.02;
       const gap = lipGapAcrossWidth(await readLod('snail/nerite-snail', level), length);
-      expect(gap).toBeLessThan(0.06 * length);
+      expect(gap).toBeLessThan(0.01 * length);
     });
 });
 

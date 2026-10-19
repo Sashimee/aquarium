@@ -332,7 +332,18 @@ export interface ShellFootprint {
   lipUnderY: number;
   /** Height of the roof of the aperture cavity. */
   ceilingY: number;
+  /** Lowest shell point of the front half at evenly spaced x across the width; the rim bead is laid along it. */
+  lipEdge?: { x: number; y: number; z: number }[];
 }
+
+const LIP_RIM_SAMPLES = 25;
+const LIP_RIM_SIDES = 12;
+const LIP_RIM_SMOOTH_PASSES = 3;
+const LIP_RIM_RADIUS = 0.035;
+const LIP_FACE_DEPTH = 0.1;
+const LIP_TRIM = 0.055;
+const LIP_RIM_SPAN = 0.85;
+const LIP_RIM_V = 0.92;
 
 function signedPow(v: number, exponent: number): number {
   return Math.sign(v) * Math.abs(v) ** exponent;
@@ -414,6 +425,44 @@ export function buildNeriteBody(footprint: ShellFootprint, length: number): Neri
   for (let r = 0; r + 1 < footRings.length; r++)
     stitch(rings, footRings[r]!, footRings[r + 1]!, FOOT_SEGMENTS);
   fan(rings, footRings[footRings.length - 1]!, topCentre, FOOT_SEGMENTS, true);
+
+  if (footprint.lipEdge) {
+    const edge = footprint.lipEdge;
+    const radius = length * LIP_RIM_RADIUS;
+    const sections: number[] = [];
+    for (const sample of edge) {
+      const centreY = Math.max(radius, sample.y + radius * 0.5);
+      const points: Vec3[] = [];
+      for (let k = 0; k < LIP_RIM_SIDES; k++) {
+        const angle = (k / LIP_RIM_SIDES) * Math.PI * 2;
+        points.push([
+          sample.x,
+          centreY + radius * Math.sin(angle),
+          sample.z + radius * Math.cos(angle),
+        ]);
+      }
+      sections.push(pushRing(rings, points, SNAIL_PART_IDS.foot, 0));
+      pushUv(LIP_RIM_SIDES, () => LIP_RIM_V);
+    }
+    for (let s = 0; s + 1 < sections.length; s++)
+      stitch(rings, sections[s]!, sections[s + 1]!, LIP_RIM_SIDES);
+    for (const [end, flip] of [
+      [0, false],
+      [sections.length - 1, true],
+    ] as const) {
+      const first = edge[end]!;
+      const ring = sections[end]!;
+      let cy = 0;
+      let cz = 0;
+      for (let k = 0; k < LIP_RIM_SIDES; k++) {
+        cy += rings.positions[(ring + k) * 3 + 1]! / LIP_RIM_SIDES;
+        cz += rings.positions[(ring + k) * 3 + 2]! / LIP_RIM_SIDES;
+      }
+      const cap = pushPoint(rings, [first.x, cy, cz], SNAIL_PART_IDS.foot, 0);
+      pushUv(1, () => LIP_RIM_V);
+      fan(rings, ring, cap, LIP_RIM_SIDES, flip);
+    }
+  }
 
   const headCentre: Vec3 = [0, footH * 0.72, front - length * 0.12];
   const headRadius: Vec3 = [halfWidth * 0.27, footH * 0.55, length * 0.12];
@@ -517,6 +566,103 @@ export interface PlacedShell {
   length: number;
 }
 
+function measureLipEdge(
+  positions: Float32Array,
+  halfWidth: number,
+  midZ: number,
+  frontZ: number,
+  rimY: number,
+  length: number,
+): NonNullable<ShellFootprint['lipEdge']> {
+  const lipEdge = Array.from({ length: LIP_RIM_SAMPLES }, (_, s) => ({
+    x: (-1 + (2 * s) / (LIP_RIM_SAMPLES - 1)) * halfWidth,
+    y: Infinity,
+    z: frontZ,
+    zAtY: undefined as number | undefined,
+  }));
+  const reach = halfWidth / (LIP_RIM_SAMPLES - 1);
+  for (const sample of lipEdge) sample.z = -Infinity;
+  for (let i = 0; i < positions.length; i += 3)
+    for (const sample of lipEdge)
+      if (Math.abs(positions[i]! - sample.x) <= reach && positions[i + 2]! > midZ)
+        sample.z = Math.max(sample.z, positions[i + 2]!);
+  for (let i = 0; i < positions.length; i += 3)
+    for (const sample of lipEdge)
+      if (
+        Math.abs(positions[i]! - sample.x) <= reach &&
+        positions[i + 2]! > sample.z - length * LIP_FACE_DEPTH &&
+        positions[i + 1]! < sample.y
+      ) {
+        sample.y = positions[i + 1]!;
+        sample.zAtY = positions[i + 2]!;
+      }
+  for (const sample of lipEdge) if (sample.zAtY !== undefined) sample.z = sample.zAtY;
+  for (const sample of lipEdge) if (!Number.isFinite(sample.y)) sample.y = rimY;
+  for (let pass = 0; pass < LIP_RIM_SMOOTH_PASSES; pass++) {
+    const y = lipEdge.map((s) => s.y);
+    const z = lipEdge.map((s) => s.z);
+    for (let s = 1; s + 1 < lipEdge.length; s++) {
+      lipEdge[s]!.y = (y[s - 1]! + y[s]! + y[s + 1]!) / 3;
+      lipEdge[s]!.z = (z[s - 1]! + z[s]! + z[s + 1]!) / 3;
+    }
+  }
+  return lipEdge.map(({ x, y, z }) => ({ x, y, z }));
+}
+
+function compactPart(part: Part): void {
+  const used = new Uint8Array(part.positions.length / 3);
+  for (const v of part.indices) used[v] = 1;
+  const remap = new Uint32Array(used.length);
+  let kept = 0;
+  for (let i = 0; i < used.length; i++) if (used[i]) remap[i] = kept++;
+  const take = (source: Float32Array<ArrayBuffer>, width: number): Float32Array<ArrayBuffer> => {
+    const out = new Float32Array(kept * width);
+    for (let i = 0; i < used.length; i++)
+      if (used[i]) out.set(source.subarray(i * width, (i + 1) * width), remap[i]! * width);
+    return out;
+  };
+  part.positions = take(part.positions, 3);
+  part.normals = take(part.normals, 3);
+  part.uvs = take(part.uvs, 2);
+  for (const key of Object.keys(part.extra)) part.extra[key] = take(part.extra[key]!, 1);
+  part.indices = Uint32Array.from(part.indices, (v) => remap[v]!);
+}
+
+/** Cuts away the ragged hanging flaps of the front lip below a smooth curve, so the rim bead hides one clean edge. */
+function trimLip(
+  part: Part,
+  halfWidth: number,
+  midZ: number,
+  frontZ: number,
+  rimY: number,
+  length: number,
+): void {
+  const edge = measureLipEdge(part.positions, halfWidth, midZ, frontZ, rimY, length);
+  const cutAt = (x: number): number => {
+    const t = (x / halfWidth + 1) / 2;
+    const f = clamp(t * (edge.length - 1), 0, edge.length - 1);
+    const lo = Math.floor(f);
+    const hi = Math.min(edge.length - 1, lo + 1);
+    const y = edge[lo]!.y + (edge[hi]!.y - edge[lo]!.y) * (f - lo);
+    const across = Math.abs(x) / halfWidth;
+    const weight = smoothstep(0.1, 0.3, across) * (1 - smoothstep(0.8, 0.9, across));
+    return y + length * LIP_TRIM * weight;
+  };
+  const { positions, indices } = part;
+  const kept: number[] = [];
+  for (let t = 0; t < indices.length; t += 3) {
+    let cut = false;
+    for (let k = 0; k < 3; k++) {
+      const v = indices[t + k]! * 3;
+      if (positions[v + 2]! > midZ && positions[v + 1]! < cutAt(positions[v]!)) cut = true;
+    }
+    if (!cut) kept.push(indices[t]!, indices[t + 1]!, indices[t + 2]!);
+  }
+  part.indices = Uint32Array.from(kept);
+  compactPart(part);
+  part.normals = vertexNormals(part.positions, part.indices);
+}
+
 /**
  * Tips the aperture end of the placed shell down about the rear of its underside and sits it back on the ground,
  * so the lip comes down onto the foot. Returns where the lip and the aperture ceiling end up.
@@ -568,7 +714,12 @@ export function tiltShell(part: Part, length: number, degrees: number): ShellFoo
   let ceilingY = 0;
   for (const [slice, y] of sliceFloor)
     if (slice >= 3 && slice <= 10) ceilingY = Math.max(ceilingY, y);
-  return { halfWidth, rearZ, frontZ, rimY, lipUnderY, ceilingY };
+  const midZ = (rearZ + frontZ) / 2;
+  trimLip(part, halfWidth, midZ, frontZ, rimY, length);
+  const lipEdge = measureLipEdge(part.positions, halfWidth, midZ, frontZ, rimY, length).filter(
+    (sample) => Math.abs(sample.x) <= halfWidth * LIP_RIM_SPAN,
+  );
+  return { halfWidth, rearZ, frontZ, rimY, lipUnderY, ceilingY, lipEdge };
 }
 
 /** Orients, scales and seats the scanned shell: +z forward, +y up, ground at y = 0, origin under the shell's centre. */
@@ -781,6 +932,7 @@ export async function buildNerite(recipe: NeriteRecipe, ctx: FishContext): Promi
         ),
         `re-simplified to ${recipe.bakeTriangles} triangles, box-projected into a fresh atlas and the colour re-baked from the scan's vertex colours, ${recipe.textureSize} px KTX2`,
         `shell pitched ${recipe.pitchDegrees} degrees nose-down and sunk into the foot so the lip edge tucks into the body mass`,
+        'ragged hanging flaps of the front lip cut away below a smooth curve and the cut edge covered by a closed rim bead (a tube of the body part, foot part id, weight 0) laid along the lip',
         'foot, mantle, head and two tentacles generated procedurally: lens-section foot with edge colour variation from a small ramp texture, mantle filling under the aperture, head and slender curved tentacles in front of the lip, deterministic',
         'origin moved to the centre of the foot on the ground',
         '_FIN_ID part ids 0 shell, 10 foot, 11 head, 12 tentacle; _FIN_MASK foot ripple weight and tentacle base-to-tip weight',
