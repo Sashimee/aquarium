@@ -93,6 +93,26 @@ describe.each(['freshwater', 'reef'] as const)('%s preset at every tank size', (
       }
     });
 
+    it('keeps every hardscape collider inside the glass and under the waterline', async () => {
+      const preset = fitted();
+      const hard = preset.decor
+        .filter((item) => !parseEuphylliaId(item.assetId))
+        .map((item) => ({ item, kind: catalog.get(item.assetId).kind }))
+        .filter(({ kind }) => kind !== 'anemone');
+      const { colliders } = await movableColliders(library, hard, waterTop);
+      const innerHalfLength = dimensions.length / 2 - dimensions.glass;
+      const innerHalfDepth = dimensions.depth / 2 - dimensions.glass;
+      for (const c of colliders) {
+        const ends = c.kind === 'capsule' ? [c.a, c.b] : [c.centre];
+        const pad = c.kind === 'capsule' ? c.radius : 0;
+        for (const [x, y, z] of ends) {
+          expect(Math.abs(x) + pad, c.kind).toBeLessThanOrEqual(innerHalfLength);
+          expect(Math.abs(z) + pad, c.kind).toBeLessThanOrEqual(innerHalfDepth);
+          expect(y + pad, c.kind).toBeLessThanOrEqual(waterTop);
+        }
+      }
+    });
+
     it('builds hardscape colliders and places plants in every patch', async () => {
       const preset = fitted();
       const hard = preset.decor
