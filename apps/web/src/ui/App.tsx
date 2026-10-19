@@ -9,7 +9,7 @@ import {
   TankButton,
   TankTypeSwitch,
 } from './Hud';
-import { LifeStatus } from './LifeStatus';
+import { BirthStatus, LifeStatus } from './LifeStatus';
 import { LoadingScreen } from './LoadingScreen';
 import { PhotoLayer, PhotoTools } from './PhotoControls';
 import { usePanels, type OpenPanel, type Panel } from './panels';
@@ -261,6 +261,7 @@ function Shell() {
         </header>
         <div className="toasts">
           <LifeStatus />
+          <BirthStatus />
           <FeedToast />
         </div>
         {isOpen(panel) && (

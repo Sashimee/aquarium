@@ -1,4 +1,4 @@
-import type { Collider } from '@aquarium/shared';
+import type { Collider, FishStage } from '@aquarium/shared';
 import type { Anchor, FishSpawn, SimReady, SimToy, TankSpaceWorldConfig } from '@aquarium/sim';
 import type { SceneAnchor } from '../scene/anemone';
 import { sceneAnchorsToSim, type DemoTank } from './demoStock';
@@ -77,6 +77,7 @@ export class SimWorldSpec {
         species: f.species,
         bodyLengthM: bodyLengthOf(f, input.locomotion.bodyLengthM),
         ...(f.hunger === undefined ? {} : { hunger: f.hunger }),
+        ...(f.stage === null ? {} : { stage: f.stage }),
       });
     }
     if (fish.length === 0) return null;
@@ -102,6 +103,24 @@ export function layoutChanges(
     remove: [...present].filter((id) => !keep.has(id)),
     add: wanted.filter((f) => !present.has(f.id)),
   };
+}
+
+/**
+ * The fish of `changed` that grew into a new stage and are in the running world. A fish not in
+ * the world yet spawns at its new stage, and the sim rejects a stage for a fish it does not hold.
+ */
+export function stageChanges(
+  before: ReadonlyMap<string, FishStage | null>,
+  changed: readonly RosterFish[],
+  inWorld: ReadonlySet<string> | null,
+): { readonly id: string; readonly stage: FishStage }[] {
+  if (inWorld === null) return [];
+  const out: { id: string; stage: FishStage }[] = [];
+  for (const f of changed) {
+    if (f.stage === null || !inWorld.has(f.simId) || before.get(f.simId) === f.stage) continue;
+    out.push({ id: f.simId, stage: f.stage });
+  }
+  return out;
 }
 
 /** The part of `SimClient` that brings up a world once its `init` has answered. */

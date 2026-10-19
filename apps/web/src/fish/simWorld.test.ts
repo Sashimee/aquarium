@@ -22,6 +22,7 @@ import {
   SimInitTimeout,
   SimWorkerFailure,
   SimWorldSpec,
+  stageChanges,
   startWorld,
   type SimInit,
   type WorldControls,
@@ -166,6 +167,7 @@ describe('SimWorldSpec', () => {
         species: 'ocellaris-clownfish',
         bodyLengthM: 0.07,
         hunger: 0.1,
+        stage: 'adult',
       },
     ]);
     expect(config?.species).toBe(allSpeciesInputs());
@@ -230,6 +232,68 @@ describe('SimWorldSpec', () => {
     const { spec, roster } = setup();
     roster.load({ tankId: TANK_A, biome: 'reef', decorLayout: [], decorEdited: false, fish: [] });
     expect(spec.config(roster.swimming())).toBeNull();
+  });
+});
+
+describe('stage in the sim', () => {
+  const load = (roster: TankRoster, stage: 'fry' | 'juvenile' | 'adult') =>
+    roster.load({
+      tankId: TANK_A,
+      biome: 'reef',
+      decorLayout: [],
+      decorEdited: false,
+      fish: [fishFixture(FISH_1, { ...CLOWN, stage })],
+    });
+
+  it('spawns a saved fish at its stage and leaves demo fish without one', () => {
+    const { spec, roster } = setup();
+    expect(spec.config(roster.swimming())?.fish.every((f) => f.stage === undefined)).toBe(true);
+    load(roster, 'fry');
+    const config = spec.config(roster.swimming());
+    expect(config?.fish.map((f) => f.stage)).toEqual(['fry']);
+    if (config === null) throw new Error('no world');
+    expect(() => new World(config)).not.toThrow();
+  });
+
+  it('lists a fish that grew while in the world, once', () => {
+    const roster = new TankRoster(DEMO.config.fish);
+    load(roster, 'fry');
+    const simId = roster.simIdOf(FISH_1) as string;
+    const payload = {
+      tankId: TANK_A,
+      fish: [fishFixture(FISH_1, { ...CLOWN, stage: 'juvenile' as const })],
+    };
+    const before = roster.stagesOf(payload);
+    const changed = roster.updated(payload);
+    expect(stageChanges(before, changed, new Set([simId]))).toEqual([
+      { id: simId, stage: 'juvenile' },
+    ]);
+    expect(
+      stageChanges(roster.stagesOf(payload), roster.updated(payload), new Set([simId])),
+    ).toEqual([]);
+  });
+
+  it('skips fish the world does not hold yet, and a world that is not up', () => {
+    const roster = new TankRoster(DEMO.config.fish);
+    load(roster, 'fry');
+    const payload = {
+      tankId: TANK_A,
+      fish: [fishFixture(FISH_1, { ...CLOWN, stage: 'adult' as const })],
+    };
+    const before = roster.stagesOf(payload);
+    const changed = roster.updated(payload);
+    expect(stageChanges(before, changed, new Set())).toEqual([]);
+    expect(stageChanges(before, changed, null)).toEqual([]);
+  });
+
+  it('is accepted by a running world', () => {
+    const { spec, roster } = setup();
+    load(roster, 'fry');
+    const config = spec.config(roster.swimming());
+    if (config === null) throw new Error('no world');
+    const world = new World(config);
+    const id = roster.simIdOf(FISH_1) as string;
+    expect(() => world.setStage(id, 'juvenile')).not.toThrow();
   });
 });
 

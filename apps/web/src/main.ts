@@ -202,6 +202,28 @@ async function boot(): Promise<void> {
       followAnyFish(liveFish?.sim.anyFish(), (target) => rig.focusOn(target), interaction);
     }
   });
+  const stopFocusFish = interaction.on('camera:focus-fish', ({ fishIds }) => {
+    const sim = liveFish?.sim;
+    const centre = { x: 0, y: 0, z: 0 };
+    const brood = (): { x: number; y: number; z: number } | null => {
+      let n = 0;
+      centre.x = centre.y = centre.z = 0;
+      for (const id of fishIds) {
+        const p = sim?.fishPoint(id);
+        if (!p) continue;
+        centre.x += p.x;
+        centre.y += p.y;
+        centre.z += p.z;
+        n++;
+      }
+      if (n === 0) return null;
+      centre.x /= n;
+      centre.y /= n;
+      centre.z /= n;
+      return centre;
+    };
+    followAnyFish(brood() ? brood : null, (target) => rig.focusOn(target), interaction);
+  });
   const exposePose = new URLSearchParams(window.location.search).has('e2e');
   engine.onFrame((deltaS) => {
     rig.update(deltaS);
@@ -313,6 +335,7 @@ async function boot(): Promise<void> {
     unbindPhotoKeys();
     photo.dispose();
     stopRequests();
+    stopFocusFish();
     fish.stop();
     engine.dispose().catch((cause: unknown) => console.error('Engine dispose failed', cause));
   });

@@ -100,6 +100,7 @@ import {
   SimErrorGate,
   SimInitTimeout,
   SimWorldSpec,
+  stageChanges,
   startWorld,
 } from './simWorld';
 import { SimUnavailableError } from '../interaction/simUnavailable';
@@ -544,12 +545,20 @@ export class FishSystem {
         if (fish !== null) this.startDeath(fish);
         break;
       }
-      case 'tank:fish-updated':
-        for (const fish of this.roster.updated(event.payload)) {
+      case 'tank:fish-updated': {
+        const stagesBefore = this.roster.stagesOf(event.payload);
+        const updated = this.roster.updated(event.payload);
+        for (const fish of updated) {
           const rt = this.runtimes.get(fish.simId);
           if (rt !== undefined) rt.youth = youthOfFish(fish);
         }
+        if (this.simReady) {
+          for (const { id, stage } of stageChanges(stagesBefore, updated, this.inWorld)) {
+            this.sim.setStage(id, stage);
+          }
+        }
         break;
+      }
       case 'tank:fish-removed':
         this.roster.removed(event.payload);
         break;

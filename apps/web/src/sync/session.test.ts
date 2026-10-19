@@ -196,6 +196,58 @@ describe('reconciling snapshots', () => {
     expect(rec.of('tank:fish-updated')).toEqual([{ tankId: TANK_A, fish: [sicker] }]);
   });
 
+  it('emits an update when only the stage or size of a fish changed', async () => {
+    const fry = fishFixture(FISH_1, { stage: 'fry', size: 0.01 });
+    const { api, rec, session } = setup([tankFixture({ fish: [fry] })]);
+    await session.setUser(verified);
+    const grown = { ...fry, stage: 'juvenile' as const, size: 0.015 };
+    api.care.mockResolvedValue(
+      tankFixture({ lastTickAt: '2026-02-01T12:10:00.000Z', fish: [grown] }),
+    );
+    await session.careAction({ type: 'water_change' });
+    expect(rec.of('tank:fish-updated')).toEqual([{ tankId: TANK_A, fish: [grown] }]);
+  });
+
+  it('announces newborn fry, and focusing the brood tells the camera and clears the notice', async () => {
+    const { api, rec, session } = setup();
+    await session.setUser(verified);
+    const born = fishFixture(FISH_2, { stage: 'fry', name: 'Tiny' });
+    api.care.mockResolvedValue(
+      tankFixture({
+        lastTickAt: '2026-02-01T12:10:00.000Z',
+        fish: [fishFixture(FISH_1), born],
+      }),
+    );
+    await session.careAction({ type: 'water_change' });
+    expect(session.getState().birth).toEqual({
+      tankId: TANK_A,
+      fishIds: [FISH_2],
+      text: 'A neon tetra fry was born. Say hello to Tiny.',
+    });
+    session.focusBrood();
+    expect(rec.of('camera:focus-fish')).toEqual([{ fishIds: [FISH_2] }]);
+    expect(session.getState().birth).toBeNull();
+    session.focusBrood();
+    expect(rec.of('camera:focus-fish')).toHaveLength(1);
+  });
+
+  it('does not announce a fry the player bought, and drops the notice on a tank switch', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    api.care.mockResolvedValue(
+      tankFixture({
+        lastTickAt: '2026-02-01T12:10:00.000Z',
+        fish: [fishFixture(FISH_1), fishFixture(FISH_2, { stage: 'fry' })],
+      }),
+    );
+    await session.careAction({ type: 'water_change' });
+    expect(session.getState().birth).not.toBeNull();
+    session.dismissBirth();
+    expect(session.getState().birth).toBeNull();
+    session.dismissBirth();
+    expect(session.getState().birth).toBeNull();
+  });
+
   it('emits a death exactly once and a removal when another device nets the fish', async () => {
     const { api, rec, session } = setup();
     await session.setUser(verified);
