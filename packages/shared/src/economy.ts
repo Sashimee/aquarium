@@ -1,7 +1,12 @@
 import { z } from 'zod';
-import { authIdSchema, idSchema, slugSchema, timestampSchema } from './common.js';
+import {
+  authIdSchema,
+  idSchema,
+  PROCEDURAL_EUPHYLLIA_ID,
+  slugSchema,
+  timestampSchema,
+} from './common.js';
 import { diseaseKindSchema } from './fishState.js';
-import { PROCEDURAL_EUPHYLLIA_ID } from './common.js';
 import { tankSizeSchema } from './tankSize.js';
 
 // Planned tables (T70, PLAN 9.2); this contract ships no DB or routes.
@@ -40,7 +45,7 @@ import { tankSizeSchema } from './tankSize.js';
 //
 // Plants and decor are priced by the ids of DECOR_ASSET_IDS (the ids a layout holds), not by
 // manifest ids. The procedural euphyllia-<hammer|torch>-<n> pieces share items.euphyllia; see
-// decorPrice(). The vacation-feeder is free: it is survival care, and basic care is never priced.
+// decorPrice(), which ignores the biome: T70 must check the biome before charging. The vacation-feeder is free: it is survival care, and basic care is never priced.
 
 export const pearlsSchema = z.int();
 export const priceSchema = z
@@ -241,5 +246,8 @@ export type Economy = z.infer<typeof economySchema>;
 
 export function decorPrice(economy: Economy, assetId: string): number | undefined {
   if (PROCEDURAL_EUPHYLLIA_ID.test(assetId)) return economy.items.euphyllia;
-  return economy.items.plant.prices[assetId] ?? economy.items.decor.prices[assetId];
+  const { plant, decor } = economy.items;
+  if (Object.hasOwn(plant.prices, assetId)) return plant.prices[assetId];
+  if (Object.hasOwn(decor.prices, assetId)) return decor.prices[assetId];
+  return undefined;
 }

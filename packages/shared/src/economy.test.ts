@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { addFishRequestSchema } from './tank.js';
+import { VACATION_FEEDER_ASSET_ID } from '../../sim/lifecycle/params.js';
 import { DECOR_ASSET_IDS } from './decorRules.js';
 import { diseaseKindSchema } from './fishState.js';
 import {
@@ -85,8 +86,15 @@ describe('content/economy.json', () => {
     expect([...plants, ...decor].sort()).toEqual([...placeableIds].sort());
   });
 
+  it.each(['constructor', 'toString', 'valueOf', 'hasOwnProperty', '__proto__'])(
+    'prices no inherited property name such as %s',
+    (id) => {
+      expect(decorPrice(economy, id)).toBeUndefined();
+    },
+  );
+
   it('leaves the vacation feeder free', () => {
-    expect(decorPrice(economy, 'vacation-feeder')).toBeUndefined();
+    expect(decorPrice(economy, VACATION_FEEDER_ASSET_ID)).toBeUndefined();
   });
 
   it('rejects a euphyllia price outside the decor range', () => {
