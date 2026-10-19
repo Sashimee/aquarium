@@ -776,9 +776,6 @@ describe('World kinematic limits', { timeout: LONG }, () => {
 
 describe('World schooling', { timeout: LONG }, () => {
   it('holds tetra shoals within literature bands for spacing and local alignment', () => {
-    const w = new World(benchmarkConfig(1));
-    const tetras: number[] = [];
-    for (let i = 0; i < w.count; i++) if (w.speciesOf(i).id === 'neon-tetra') tetras.push(i);
     const k = toSimSpecies(neonTetra).neighbours;
     let nnd = 0;
     let localPol = 0;
@@ -787,38 +784,43 @@ describe('World schooling', { timeout: LONG }, () => {
     let clusters = 0;
     let largestShare = 0;
     let snapshots = 0;
-    for (let t = 0; t < 6000; t++) {
-      w.step();
-      if (t < 600 || t % 15 !== 0) continue;
-      const linked = shoalClusters(w, tetras, 4 * toSimSpecies(neonTetra).bodyLength);
-      clusters += linked.length;
-      largestShare += Math.max(...linked) / tetras.length;
-      snapshots++;
-      for (const i of tetras) {
-        const byDistance = tetras
-          .filter((j) => j !== i)
-          .map((j) => ({
-            j,
-            d: Math.hypot(
-              at(w.position, i * 3) - at(w.position, j * 3),
-              at(w.position, i * 3 + 1) - at(w.position, j * 3 + 1),
-              at(w.position, i * 3 + 2) - at(w.position, j * 3 + 2),
-            ),
-          }))
-          .sort((a, b) => a.d - b.d)
-          .slice(0, k);
-        const bl = at(w.bodyLength, i);
-        const nearestBl = (byDistance[0]?.d ?? Infinity) / bl;
-        nnd += nearestBl;
-        if (nearestBl > 4) isolated++;
-        let hx = Math.sin(at(w.yaw, i));
-        let hz = Math.cos(at(w.yaw, i));
-        for (const { j } of byDistance) {
-          hx += Math.sin(at(w.yaw, j));
-          hz += Math.cos(at(w.yaw, j));
+    for (const seed of [1, 2, 3, 4]) {
+      const w = new World(benchmarkConfig(seed));
+      const tetras: number[] = [];
+      for (let i = 0; i < w.count; i++) if (w.speciesOf(i).id === 'neon-tetra') tetras.push(i);
+      for (let t = 0; t < 6000; t++) {
+        w.step();
+        if (t < 600 || t % 15 !== 0) continue;
+        const linked = shoalClusters(w, tetras, 4 * toSimSpecies(neonTetra).bodyLength);
+        clusters += linked.length;
+        largestShare += Math.max(...linked) / tetras.length;
+        snapshots++;
+        for (const i of tetras) {
+          const byDistance = tetras
+            .filter((j) => j !== i)
+            .map((j) => ({
+              j,
+              d: Math.hypot(
+                at(w.position, i * 3) - at(w.position, j * 3),
+                at(w.position, i * 3 + 1) - at(w.position, j * 3 + 1),
+                at(w.position, i * 3 + 2) - at(w.position, j * 3 + 2),
+              ),
+            }))
+            .sort((a, b) => a.d - b.d)
+            .slice(0, k);
+          const bl = at(w.bodyLength, i);
+          const nearestBl = (byDistance[0]?.d ?? Infinity) / bl;
+          nnd += nearestBl;
+          if (nearestBl > 4) isolated++;
+          let hx = Math.sin(at(w.yaw, i));
+          let hz = Math.cos(at(w.yaw, i));
+          for (const { j } of byDistance) {
+            hx += Math.sin(at(w.yaw, j));
+            hz += Math.cos(at(w.yaw, j));
+          }
+          localPol += Math.hypot(hx, hz) / (byDistance.length + 1);
+          samples++;
         }
-        localPol += Math.hypot(hx, hz) / (byDistance.length + 1);
-        samples++;
       }
     }
     // Pitcher & Partridge 1979: nearest neighbour ≈ 1 body length in cruising schools.
@@ -827,7 +829,10 @@ describe('World schooling', { timeout: LONG }, () => {
     expect(localPol / samples).toBeGreaterThan(0.7);
     expect(isolated / samples).toBeLessThan(0.05);
     expect(clusters / snapshots).toBeLessThanOrEqual(3);
-    expect(largestShare / snapshots).toBeGreaterThanOrEqual(0.5);
+    // Shoals split and merge (fission-fusion), so the largest group's share swings from seed to
+    // seed: on origin/dev (d4dd476) it averages 0.53 over seeds 1-16 with an SD of 0.06, and 6 of
+    // the 16 fall below 0.5. The four-seed mean has an SE of 0.03; 0.45 sits about three below.
+    expect(largestShare / snapshots).toBeGreaterThanOrEqual(0.45);
   });
 });
 

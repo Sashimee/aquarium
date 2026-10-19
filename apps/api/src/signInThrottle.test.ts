@@ -3,6 +3,7 @@ import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from './app.ts';
 import { postgresHitStore } from './rate-limit.ts';
+import { loadChemistryParameters } from './chemistry.ts';
 import { loadCatalog } from './species.ts';
 import { APP_ORIGIN, createHarness, TEST_SECRET, type Harness } from './test-harness.ts';
 
@@ -160,10 +161,12 @@ describe('per-account sign-in throttle (#121)', () => {
       appOrigin: APP_ORIGIN,
       trustedProxies: ['127.0.0.1'],
       database: h.database,
+      authSecret: TEST_SECRET,
       auth: h.auth,
       mailer: h.mailer,
       signInThrottle: { store: postgresHitStore(h.database, TEST_SECRET), limit: LIMIT },
       species: loadCatalog(),
+      chemistryParams: loadChemistryParameters(),
       logger: false,
     });
     await rebuilt.ready();

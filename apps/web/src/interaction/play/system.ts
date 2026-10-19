@@ -2,6 +2,7 @@ import { Raycaster, Vector2 } from 'three/webgpu';
 import type { Engine } from '../../engine/Engine';
 import type { EventBus } from '../../engine/events';
 import { waterBounds } from '../../engine/tank/dimensions';
+import { speciesInput } from '../../fish/species';
 import { FeedGate } from '../../sync/feedGate';
 import type { Vec3 } from '../camera';
 import type { InteractionEvents } from '../events';
@@ -10,7 +11,15 @@ import type { ReachBridge } from '../food/clipReach';
 import { FoodField } from '../food/particles';
 import { sceneToSim } from '../food/simSpace';
 import { BubbleField } from './bubbles';
-import { PlayController, type Ray, type StimulusLike } from './controller';
+import {
+  PlayController,
+  type GameTraits,
+  type Ray,
+  type SimToy,
+  type StimulusLike,
+  type ToyNudge,
+} from './controller';
+import { FeedingGame, localBest } from './game';
 import { RippleField } from './ripples';
 import { PlayVisuals } from './visuals';
 
@@ -25,6 +34,12 @@ export interface PlaySimBridge extends FoodBridge, ReachBridge {
   setLure?(position: readonly [number, number, number] | null): void;
   netTap?(ray: Ray): void;
   pickFish?(ray: Ray): (() => Vec3 | null) | null;
+  /** The toys as points of interest. A mirror is where a betta flares; a ball is a thing to nudge. */
+  setToys?(toys: readonly SimToy[]): void;
+  /** Fish bumping the ball; returns the unsubscribe. */
+  onToyNudge?(listener: (nudge: ToyNudge) => void): () => void;
+  /** A swimming fish's position by server id, in scene space, or null. */
+  fishPoint?(fishId: string): Vec3 | null;
 }
 
 export interface PlaySystem {
@@ -59,6 +74,8 @@ export function createPlaySystem(
   const bubbles = new BubbleField(box.max.y);
   const ripples = new RippleField();
   const visuals = new PlayVisuals();
+  const reportStorage = (message: string, cause: unknown): void => console.error(message, cause);
+  const game = new FeedingGame(localBest(safeStorage(reportStorage), reportStorage));
   engine.scene.add(visuals.group);
 
   const raycaster = new Raycaster();
@@ -100,14 +117,24 @@ export function createPlaySystem(
       sim.setLure?.([lureSim[0] ?? 0, lureSim[1] ?? 0, lureSim[2] ?? 0]);
     },
     setLaserDot: (p) => visuals.setLaser(p),
+    current: (x, y, z, out) => scene.current.sample(x, y, z, out),
+    toyVisuals: visuals,
+    setToys: sim.setToys?.bind(sim),
+    onToyNudge: sim.onToyNudge?.bind(sim),
+    fishPoint: sim.fishPoint?.bind(sim),
+    gameTraitsOf: gameTraits,
+    groundHeight: (x, z) => scene.groundHeight(x, z),
+    game,
     report: (message, cause) => console.error(message, cause),
     now: () => performance.now(),
   });
 
   const stopRequests = interaction.on('play:request-tool', ({ tool }) => controller.setTool(tool));
+  const exposeBall = new URLSearchParams(window.location.search).has('e2e');
   const stopFrame = engine.onFrame((deltaS) => {
     controller.update(deltaS);
     visuals.update(food, bubbles, ripples);
+    if (exposeBall) showBall(canvas, controller.ballAt);
   });
 
   interaction.emit('play:ready', {});
@@ -120,8 +147,41 @@ export function createPlaySystem(
       stopRequests();
       controller.dispose();
       sim.setLure?.(null);
+      interaction.emit('toys:changed', { mirror: false, ball: false });
+      interaction.emit('game:state', { view: game.cancel() });
       link.dispose();
       visuals.dispose();
     },
+  };
+}
+
+function showBall(canvas: HTMLCanvasElement, at: { x: number; z: number } | null): void {
+  if (!at) {
+    delete canvas.dataset['ball'];
+    return;
+  }
+  const text = `${at.x.toFixed(3)} ${at.z.toFixed(3)}`;
+  if (canvas.dataset['ball'] !== text) canvas.dataset['ball'] = text;
+}
+
+function safeStorage(report: (message: string, cause: unknown) => void): Storage | null {
+  try {
+    return window.localStorage;
+  } catch (cause) {
+    report(
+      'The feeding game could not open local storage, so its best score lasts this visit only',
+      cause,
+    );
+    return null;
+  }
+}
+
+function gameTraits(species: string): GameTraits | undefined {
+  const input = speciesInput(species);
+  if (!input) return undefined;
+  return {
+    boldness: input.behaviour.boldness,
+    eatsFlakes: input.lifecycle.diet.includes('flakes'),
+    depthHigh: input.behaviour.depthBand[1],
   };
 }

@@ -15,6 +15,28 @@
     "traits": ["shoal", "air-gulp"]
   },
   "biome": "freshwater",
+  "breeding": {
+    "broodSize": [3, 8],
+    "fryGrowth": {
+      "adultAfterDays": 240,
+      "juvenileAfterDays": 30
+    },
+    "intervalDays": 14,
+    "minAgeDays": 240,
+    "mode": "egg-scatterer",
+    "temperatureC": [22, 26]
+  },
+  "chemistry": {
+    "khMin": 0,
+    "nitriteTolerance": 0.4,
+    "phRange": [6, 8],
+    "salinityPpt": [0, 1],
+    "sources": [
+      "FishBase (fishbase.se) species summary",
+      "SeriouslyFish species profile (seriouslyfish.com)"
+    ],
+    "temperatureC": [22, 27]
+  },
   "commonName": "Bronze corydoras",
   "id": "bronze-corydoras",
   "lifecycle": {

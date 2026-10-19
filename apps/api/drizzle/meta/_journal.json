@@ -64,6 +64,34 @@
       "when": 1792112575000,
       "tag": "0008_expansion_contract",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792113714034,
+      "tag": "0009_breeding",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792396813402,
+      "tag": "0010_chemistry_v2",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792398807158,
+      "tag": "0011_public_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792401045550,
+      "tag": "0012_reminders",
+      "breakpoints": true
     }
   ]
 }

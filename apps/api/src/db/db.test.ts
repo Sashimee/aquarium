@@ -156,7 +156,10 @@ describe('migrations', () => {
     expect(chemistrySchema.parse(fresh?.['chemistry'])).toEqual(newTankChemistry('freshwater'));
     expect(chemistrySchema.parse(reef?.['chemistry'])).toEqual(newTankChemistry('reef'));
     for (const tank of [fresh, reef]) {
-      expect(equipmentSchema.parse(tank?.['equipment'])).toEqual(DEFAULT_EQUIPMENT);
+      expect(equipmentSchema.parse(tank?.['equipment'])).toEqual({
+        ...DEFAULT_EQUIPMENT,
+        heater: { tier: 0 },
+      });
       expect(tank).toMatchObject({ size: 'standard', quarantine: false, share_token: null });
     }
     const fish = await q(`select id, stage, personality, disease from fish order by name`);

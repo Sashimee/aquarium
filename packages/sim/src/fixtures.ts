@@ -220,6 +220,34 @@ export const royalGramma: SpeciesInput = {
   lifecycle: { diet: ['flakes', 'brine-shrimp', 'pellets'] },
 };
 
+/** A livebearer, from content/species/guppy.json; not in `ARCHETYPES`, so the benchmark is unchanged. */
+export const guppy: SpeciesInput = {
+  id: 'guppy',
+  behaviour: {
+    schooling: { minGroup: 3, topologicalNeighbours: 6, tightenWhenStartled: true },
+    territorial: false,
+    preferredZone: 'surface',
+    depthBand: [0.5, 0.95],
+    perceptionRangeM: 0.3,
+    perceptionFovDeg: 300,
+    curiosity: 0.7,
+    boldness: 0.5,
+    traits: ['shoal'],
+  },
+  locomotion: {
+    swimmingMode: 'subcarangiform',
+    gait: 'cruise',
+    maxSpeedMps: 0.45,
+    cruiseSpeedMps: 0.08,
+    massKg: 0.0004,
+    maxTurnRateDegPerS: 450,
+    maxPitchDeg: 30,
+    strouhal: 0.3,
+    bodyLengthM: 0.027,
+  },
+  lifecycle: { diet: ['flakes', 'brine-shrimp', 'bloodworms'] },
+};
+
 /** Not in the shipped roster: the glass-grazer archetype (Otocinclus). */
 export const otocinclus: SpeciesInput = {
   id: 'otocinclus',
