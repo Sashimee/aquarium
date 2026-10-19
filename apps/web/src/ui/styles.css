@@ -505,6 +505,8 @@ progress {
       filter: saturate(0.2);
     }
   }
+}
+
 .dialog:has(> .book) {
   width: min(36rem, 100%);
 }
