@@ -63,7 +63,12 @@ function pose(w: World, i: number, x: number, y: number, z: number, yaw = Math.P
   w.pitch[i] = 0;
 }
 
-function feedFor(w: World, rain: FoodRain, steps: number, each?: (t: number) => void): AteEvent[] {
+function feedFor(
+  w: World,
+  rain: FoodRain,
+  steps: number,
+  each?: (t: number, events: readonly AteEvent[]) => void,
+): AteEvent[] {
   const all: AteEvent[] = [];
   for (let t = 0; t < steps; t++) {
     rain.feed(w);
@@ -71,7 +76,7 @@ function feedFor(w: World, rain: FoodRain, steps: number, each?: (t: number) => 
     const events = w.takeAteEvents();
     rain.eat(events);
     all.push(...events);
-    each?.(t);
+    each?.(t, events);
   }
   return all;
 }
@@ -382,28 +387,76 @@ describe('feeding AI', { timeout: LONG }, () => {
   });
 
   it('eats until sated, then ignores food, within the lifecycle cap per window', () => {
-    const w = tank([{ id: 'a', species: neonTetra.id }]);
-    const rain = new FoodRain(SHOW_TANK);
-    for (let k = 0; k < 80; k++) {
-      rain.place('flakes', -0.3 + (k % 10) * 0.06, 0.2 + 0.02 * Math.floor(k / 10), 0, 0, 0);
-    }
-    const events = feedFor(w, rain, 9000);
-    const eaten = events.reduce((s, e) => s + e.portion, 0);
-    expect(eaten).toBeGreaterThan(0.9 * FEEDING.satiationPortions);
-    expect(eaten).toBeLessThanOrEqual(FEEDING.satiationPortions + 1e-9);
-    expect(rain.count).toBeGreaterThan(0);
-    expect(at(w.behaviour.feeding.target, 0)).toBe(-1);
-    expect(w.state[0]).not.toBe(FishState.Feed);
     // The stomach empties with time constant τ; over one lifecycle window the most a fish can eat
     // is a full meal plus what has been evacuated since.
     const window = FEEDING_WINDOW_MINUTES * 60;
     const most =
       FEEDING.satiationPortions * (1 + (1 - Math.exp(-window / FEEDING.gastricEvacuationTauS)));
     expect(most).toBeLessThanOrEqual(MAX_PORTIONS_PER_FISH_PER_WINDOW);
-    for (const e of events) {
-      expect(e.fishId).toBe('a');
-      expect(e.portion).toBeGreaterThan(0);
+    for (let seed = 1; seed <= 4; seed++) {
+      const w = tank([{ id: 'a', species: neonTetra.id }], seed);
+      const rain = new FoodRain(SHOW_TANK);
+      for (let k = 0; k < 80; k++) {
+        rain.place('flakes', -0.3 + (k % 10) * 0.06, 0.2 + 0.02 * Math.floor(k / 10), 0, 0, 0);
+      }
+      const events = feedFor(w, rain, 9000);
+      const eaten = events.reduce((s, e) => s + e.portion, 0);
+      expect(eaten, `seed ${seed}`).toBeGreaterThan(0.9 * FEEDING.satiationPortions);
+      expect(eaten, `seed ${seed}`).toBeLessThanOrEqual(FEEDING.satiationPortions + 1e-9);
+      expect(rain.count, `seed ${seed}`).toBeGreaterThan(0);
+      expect(at(w.behaviour.feeding.target, 0), `seed ${seed}`).toBe(-1);
+      expect(w.state[0], `seed ${seed}`).not.toBe(FishState.Feed);
+      for (const e of events) {
+        expect(e.fishId).toBe('a');
+        expect(e.portion).toBeGreaterThan(0);
+      }
     }
+  });
+
+  it('has a lone tetra bite the flake it goes for instead of circling it, on every seed', () => {
+    // A flake beside the fish lies inside the circle it sweeps on its cruising arc; swimming on
+    // only orbits it (#668), so it has to brake and turn onto it.
+    let pursuits = 0;
+    let bitten = 0;
+    let slowest = 0;
+    for (let seed = 1; seed <= 8; seed++) {
+      const w = tank([{ id: 'a', species: neonTetra.id }], seed);
+      const rain = new FoodRain(SHOW_TANK);
+      for (let k = 0; k < 80; k++) {
+        rain.place('flakes', -0.3 + (k % 10) * 0.06, 0.2 + 0.02 * Math.floor(k / 10), 0, 0, 0);
+      }
+      let chasing = -1;
+      let since = 0;
+      let eaten = 0;
+      let satedAt = Infinity;
+      for (let t = 0; t < 3000; t++) {
+        rain.feed(w);
+        w.step();
+        const events = w.takeAteEvents();
+        rain.eat(events);
+        const k = at(w.behaviour.feeding.target, 0);
+        const id = k >= 0 ? at(w.food.id, k) : -1;
+        const bite = events.find((e) => e.foodId === chasing);
+        for (const e of events) eaten += e.portion;
+        if (eaten >= 0.9 * FEEDING.satiationPortions) satedAt = Math.min(satedAt, t);
+        since++;
+        if (bite !== undefined) {
+          bitten++;
+          slowest = Math.max(slowest, since);
+          chasing = -1;
+        } else if (id !== chasing) {
+          chasing = -1;
+        }
+        if (chasing < 0 && id >= 0 && events.length === 0) {
+          chasing = id;
+          since = 0;
+          pursuits++;
+        }
+      }
+      expect(satedAt, `seed ${seed}`).toBeLessThan(3000);
+    }
+    expect(bitten / pursuits).toBeGreaterThan(0.95);
+    expect(slowest * STEP_DT).toBeLessThan(4);
   });
 
   it('takes its favourite food and leaves food off its diet alone', () => {
@@ -452,7 +505,11 @@ describe('feeding AI', { timeout: LONG }, () => {
     const { feeding } = w.behaviour;
     let firstHeight = Infinity;
     let highest = 0;
-    const events = feedFor(w, rain, 2400, () => {
+    let gulpBites = 0;
+    const events = feedFor(w, rain, 2400, (_, bites) => {
+      for (const e of bites) {
+        if (w.state[w.fishIds.indexOf(e.fishId)] === FishState.Gulp) gulpBites++;
+      }
       for (let i = 0; i < w.count; i++) {
         // A dash to the surface for air is not swimming up to the food.
         if (w.state[i] !== FishState.Gulp) highest = Math.max(highest, at(w.position, i * 3 + 1));
@@ -464,6 +521,8 @@ describe('feeding AI', { timeout: LONG }, () => {
     const reach = (cory.depthHigh + FEEDING.bottomZoneReach) * SHOW_TANK.height;
     expect(firstHeight).toBeLessThanOrEqual(reach);
     expect(events.length).toBeGreaterThan(4);
+    // Leaving gulps out of the height check must not hide food taken during a dash.
+    expect(gulpBites).toBe(0);
     expect(highest).toBeLessThan(SHOW_TANK.height - 0.05);
   });
 
@@ -747,9 +806,9 @@ describe('gut seeded from the lifecycle hunger', { timeout: LONG }, () => {
     return rain;
   }
 
-  function eatenBy(hunger: number | undefined, steps: number): number {
+  function eatenBy(hunger: number | undefined, steps: number, seed = 1): number {
     const spawn: FishSpawn = { id: 'a', species: neonTetra.id };
-    const w = tank([hunger === undefined ? spawn : { ...spawn, hunger }]);
+    const w = tank([hunger === undefined ? spawn : { ...spawn, hunger }], seed);
     return feedFor(w, meal(), steps).reduce((sum, e) => sum + e.portion, 0);
   }
 
@@ -785,10 +844,12 @@ describe('gut seeded from the lifecycle hunger', { timeout: LONG }, () => {
   });
 
   it('eats only what a part-fed fish has room for', () => {
-    const half = eatenBy(HUNGER_PER_PORTION / 2, 3000);
-    expect(half).toBeGreaterThan(0.4 * FEEDING.satiationPortions);
-    expect(half).toBeLessThanOrEqual(0.5 * FEEDING.satiationPortions + 0.01);
-    expect(eatenBy(0, 3000)).toBeLessThan(0.05 * FEEDING.satiationPortions);
+    for (let seed = 1; seed <= 4; seed++) {
+      const half = eatenBy(HUNGER_PER_PORTION / 2, 3000, seed);
+      expect(half, `seed ${seed}`).toBeGreaterThan(0.4 * FEEDING.satiationPortions);
+      expect(half, `seed ${seed}`).toBeLessThanOrEqual(0.5 * FEEDING.satiationPortions + 0.01);
+      expect(eatenBy(0, 3000, seed), `seed ${seed}`).toBeLessThan(0.05 * FEEDING.satiationPortions);
+    }
   });
 
   it('runs a starving fish bit for bit as one loaded without a hunger', () => {
