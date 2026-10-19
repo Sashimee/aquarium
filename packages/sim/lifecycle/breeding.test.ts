@@ -43,6 +43,8 @@ const chemistryParams = chemistryParametersSchema.parse(
 );
 const chemistryEnv = {
   biome: 'freshwater',
+  litres: 300,
+  bioloadCapacity: 12,
   equipment: DEFAULT_EQUIPMENT,
   speciesChemistry,
   chemistryParams,

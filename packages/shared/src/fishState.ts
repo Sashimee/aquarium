@@ -23,3 +23,5 @@ export const diseaseStateSchema = z.strictObject({
   treatedUntil: timestampSchema.nullable().describe('end of the running medicine dose, if any'),
 });
 export type DiseaseState = z.infer<typeof diseaseStateSchema>;
+
+export const VISIT_WINDOW_DAYS = 14;

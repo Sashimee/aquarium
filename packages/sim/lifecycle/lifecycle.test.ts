@@ -5,21 +5,25 @@ import {
   DEFAULT_EQUIPMENT,
   newTankChemistry,
   speciesSummarySchema,
+  TANK_SIZES,
   type Chemistry,
   type Equipment,
   type SpeciesChemistry,
   type SpeciesLifecycle,
+  type TankSize,
   type Water,
 } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import {
   applyCare,
   applyEating,
+  BIOLOAD_CAPACITY_BY_SIZE,
   catchUp,
   DEFAULT_WATER_PARAMETERS,
   GRACE_PERIOD_MS,
   hasCapacityFor,
   MAX_CATCH_UP_MS,
+  REFERENCE_TANK_LITRES,
   STEP_MS,
   TANK_BIOLOAD_CAPACITY,
   type LifecycleFish,
@@ -46,6 +50,8 @@ const chemistryParams = chemistryParametersSchema.parse(
 );
 const env: TankEnvironment = {
   biome: 'freshwater',
+  litres: 300,
+  bioloadCapacity: TANK_BIOLOAD_CAPACITY,
   equipment: DEFAULT_EQUIPMENT,
   species,
   speciesChemistry,
@@ -264,6 +270,50 @@ describe('a tank stocked to capacity at full size under perfect daily care', () 
     }
     expect(state.fish.every((f) => f.alive && f.health === 1)).toBe(true);
   });
+
+  it.each(parsedSpecies.map((s) => [s.id, s.biome] as const))(
+    'a nano stocked at the old cap of 12 keeps every %s for 120 days of weekly water changes',
+    (id, biome) => {
+      const spec = species.get(id);
+      if (!spec) throw new Error(`no species ${id}`);
+      const count = Math.min(60, Math.floor(TANK_BIOLOAD_CAPACITY / spec.bioload));
+      let state: LifecycleState = {
+        water: cleanWater,
+        chemistry: newTankChemistry(biome),
+        fish: Array.from({ length: count }, (_, i) =>
+          fishOf(`${id}-${i}`, id, { size: spec.maxSizeM }),
+        ),
+      };
+      let now = T0;
+      for (let day = 0; day < 120; day++) {
+        state = {
+          ...state,
+          water: { ...state.water, uneatenFood: state.water.uneatenFood + 0.5 },
+          fish: state.fish.map((f) => ({ ...f, hunger: 0 })),
+        };
+        if (day % 7 === 0) {
+          const changed = applyCare(state, { type: 'water_change' }, biome, chemistryParams);
+          if (!changed.ok) throw new Error(changed.reason);
+          state = changed.value;
+        }
+        const r = catchUp({
+          state,
+          fromMs: now,
+          toMs: now + DAY,
+          ...env,
+          litres: TANK_SIZES.nano30.litres,
+          bioloadCapacity: BIOLOAD_CAPACITY_BY_SIZE.nano30,
+          biome,
+          graceEndsAtMs: NO_GRACE,
+          vacationFeeder: false,
+          ...NO_BREEDING,
+        });
+        expect(r.deaths).toEqual([]);
+        state = r.state;
+        now += DAY;
+      }
+    },
+  );
 
   it('keeps bioload-only ammonia below the most sensitive tolerance with margin', () => {
     const lowest = Math.min(...[...species.values()].map((s) => s.ammoniaTolerance));
@@ -894,13 +944,31 @@ describe('offline catch-up with chemistry', () => {
   });
 });
 
-describe('every species in a default tank of its own biome under good care', () => {
-  it.each(parsedSpecies.map((s) => [s.id, s.biome] as const))(
-    '%s lives 120 days unharmed with daily food and a weekly water change',
-    (id, biome) => {
+describe('every species in every tank size under good care', () => {
+  const cases = Object.entries(TANK_SIZES).flatMap(([size, { litres }]) =>
+    parsedSpecies
+      .filter(
+        (s) =>
+          Math.floor(
+            BIOLOAD_CAPACITY_BY_SIZE[size as TankSize] / (species.get(s.id)?.bioload ?? NaN),
+          ) >= 1,
+      )
+      .map((s) => [size as TankSize, litres, s.id, s.biome] as const),
+  );
+
+  it('covers every species in every size', () => {
+    expect(cases.length).toBeGreaterThan(parsedSpecies.length * 3);
+  });
+
+  it.each(cases)(
+    '%s (%d L): %s lives 120 days unharmed with daily food and a weekly water change',
+    (size, litres, id, biome) => {
       const spec = species.get(id);
       if (!spec) throw new Error(`no species ${id}`);
-      const count = Math.min(3, Math.floor(TANK_BIOLOAD_CAPACITY / spec.bioload));
+      const count = Math.min(
+        TANK_SIZES[size].maxAnimals,
+        Math.floor(BIOLOAD_CAPACITY_BY_SIZE[size] / spec.bioload),
+      );
       let state: LifecycleState = {
         water: cleanWater,
         chemistry: newTankChemistry(biome),
@@ -925,6 +993,8 @@ describe('every species in a default tank of its own biome under good care', () 
           fromMs: now,
           toMs: now + DAY,
           ...env,
+          litres,
+          bioloadCapacity: BIOLOAD_CAPACITY_BY_SIZE[size],
           biome,
           graceEndsAtMs: NO_GRACE,
           vacationFeeder: false,
@@ -948,5 +1018,39 @@ describe('every species in a default tank of its own biome under good care', () 
     expect(r.steps).toBe((60 * DAY) / STEP_MS);
     expect(r.setpointComputations).toBeLessThanOrEqual(1 + events);
     expect(r.setpointComputations).toBeLessThan(r.steps / 10);
+  });
+});
+
+describe('water volume', () => {
+  const crowd = () =>
+    tank(Array.from({ length: 12 }, (_, i) => fishOf(`n${i}`, 'neon-tetra', { hunger: 0 })));
+  const nitrogen = (litres: number) => {
+    const r = run(crowd(), 6 * HOUR, {
+      env: { litres },
+      equipment: { ...DEFAULT_EQUIPMENT, filter: { tier: 0 } },
+    });
+    return r.state.water.ammonia + r.state.chemistry.nitrite;
+  };
+
+  it('never damps the waste of an over-capacity standard tank', () => {
+    const over = run(crowd(), 6 * HOUR, {
+      env: { litres: REFERENCE_TANK_LITRES, bioloadCapacity: 0.5 },
+    });
+    const normal = run(crowd(), 6 * HOUR, { env: { litres: REFERENCE_TANK_LITRES } });
+    expect(over.state.water.ammonia).toBeCloseTo(normal.state.water.ammonia, 10);
+    expect(over.state.chemistry.nitrite).toBeCloseTo(normal.state.chemistry.nitrite, 10);
+  });
+
+  it('concentrates the same waste in less water, but less than linearly', () => {
+    expect(nitrogen(30)).toBeGreaterThan(nitrogen(300) * 2);
+    expect(nitrogen(30)).toBeLessThan(nitrogen(300) * 10);
+    expect(nitrogen(200)).toBeGreaterThan(nitrogen(300));
+    expect(nitrogen(200)).toBeLessThan(nitrogen(30));
+  });
+
+  it('has a bioload cap per size that grows with the tank', () => {
+    expect(BIOLOAD_CAPACITY_BY_SIZE.nano30).toBeLessThan(BIOLOAD_CAPACITY_BY_SIZE.std200);
+    expect(BIOLOAD_CAPACITY_BY_SIZE.std200).toBeLessThan(BIOLOAD_CAPACITY_BY_SIZE.long300);
+    expect(BIOLOAD_CAPACITY_BY_SIZE.standard).toBe(TANK_BIOLOAD_CAPACITY);
   });
 });

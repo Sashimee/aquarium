@@ -1,4 +1,4 @@
-import { HANDLE_COOLDOWN_DAYS } from '@aquarium/shared';
+import { HANDLE_COOLDOWN_DAYS, VISIT_WINDOW_DAYS } from '@aquarium/shared';
 import { lt, sql } from 'drizzle-orm';
 import { schema, type Database } from './db/index.ts';
 
@@ -17,6 +17,9 @@ export async function pruneExpired({ db }: Database): Promise<{ sessions: number
     .delete(schema.ateBatches)
     .where(lt(schema.ateBatches.createdAt, sql`now() - interval '1 day'`));
   await db.delete(schema.auditLog).where(lt(schema.auditLog.at, sql`now() - interval '180 days'`));
+  await db
+    .delete(schema.tankVisits)
+    .where(lt(schema.tankVisits.day, sql`current_date - ${VISIT_WINDOW_DAYS - 1}::int`));
   await db
     .delete(schema.releasedHandles)
     .where(
