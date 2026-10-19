@@ -15,6 +15,7 @@ import {
   speciesNameMap,
   tankCapacity,
   tankSizeLabel,
+  tankSizeShort,
   TANK_SIZE_ORDER,
   tankReportLines,
   waterReport,
@@ -185,8 +186,8 @@ describe('shop capacity', () => {
     const tank = tankFixture({ fish: oscars });
     const verdict = canBuy(tank, oscar, species);
     expect(verdict.ok).toBe(false);
-    expect(verdict.ok ? '' : verdict.reason).toBe(
-      'This tank is full. Start another tank for more fish.',
+    expect(verdict.ok ? '' : verdict.reason).toMatch(
+      /^This tank is full: Oscar would push the water load past \d+\. Start another tank/,
     );
   });
 
@@ -258,11 +259,24 @@ describe('shop capacity per tank size', () => {
       true,
     );
     expect(canBuy(tankFixture({ size: 'nano30', fish }), tiny, [tiny]).ok).toBe(false);
+    const full = canBuy(tankFixture({ size: 'nano30', fish }), tiny, [tiny]);
+    expect(full.ok ? '' : full.reason).toContain('holds at most 12 animals');
   });
 
-  it('labels each size with litres and capacity', () => {
-    expect(tankSizeLabel('nano30')).toBe('Nano, 30 L (up to 12 animals, load 3)');
-    expect(tankSizeLabel('long300')).toContain('300 L');
+  it('labels each size with litres, length and capacity', () => {
+    expect(tankSizeLabel('nano30')).toBe('Nano, 30 L, 0.4 m long (up to 12 animals, load 3)');
+    expect(tankSizeLabel('std200')).toContain('1.0 m long');
+  });
+
+  it('tells the two 300 L tanks apart by their length', () => {
+    expect(tankSizeLabel('standard')).toContain('300 L, 1.2 m long');
+    expect(tankSizeLabel('long300')).toContain('300 L, 1.5 m long');
+    expect(tankSizeLabel('standard')).not.toBe(tankSizeLabel('long300'));
+  });
+
+  it('shortens a size to name and litres for the tank switcher', () => {
+    expect(tankSizeShort('nano30')).toBe('Nano 30 L');
+    expect(tankSizeShort('long300')).toBe('Long 300 L');
   });
 });
 

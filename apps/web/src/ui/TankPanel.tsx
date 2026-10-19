@@ -16,6 +16,7 @@ import {
   TANK_SIZE_ORDER,
   tankCapacity,
   tankSizeLabel,
+  tankSizeShort,
   waterReport,
   type SpeciesNames,
 } from '../sync/life';
@@ -176,7 +177,7 @@ function TankSwitcher({
         >
           {state.tanks.map((t) => (
             <option key={t.id} value={t.id}>
-              {t.name} ({BIOME_LABEL[t.biome]})
+              {t.name} ({BIOME_LABEL[t.biome]}, {tankSizeShort(t.size)})
             </option>
           ))}
         </select>
@@ -410,7 +411,8 @@ function Shop({ session, state, tank }: { session: TankSession; state: SessionSt
           value={Math.min(cap.usedBioload, cap.capacity)}
           aria-label="Tank load"
         />{' '}
-        {cap.livingFish} fish, load {cap.usedBioload.toFixed(1)} of {cap.capacity}
+        {cap.livingFish} of {cap.maxFish} animals, load {cap.usedBioload.toFixed(1)} of{' '}
+        {cap.capacity}
       </p>
       <label htmlFor={`${id}-n`}>Name for the new fish</label>
       <input

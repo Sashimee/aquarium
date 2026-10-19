@@ -33,13 +33,13 @@ test('switching tanks swaps the fish and keeps both saved', async ({ page }) => 
   await expect(await openReport(page)).toContainText('Sprite');
 
   await openTankPanel(page);
-  await switcher.selectOption({ label: `${firstName} (Freshwater)` });
+  await switcher.selectOption({ label: `${firstName} (Freshwater, Standard 300 L)` });
   const report = await openReport(page);
   await expect(report).toContainText(`${firstName}, a freshwater tank.`);
   await expect(report).toContainText('No fish are alive in this tank.');
 
   await openTankPanel(page);
-  await switcher.selectOption({ label: 'Second tank (Freshwater)' });
+  await switcher.selectOption({ label: 'Second tank (Freshwater, Standard 300 L)' });
   await expect(await openReport(page)).toContainText('1 fish alive: Sprite');
 
   const tanks = await savedTanks(page);

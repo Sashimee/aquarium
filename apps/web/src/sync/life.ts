@@ -181,9 +181,13 @@ const SIZE_NAME: Record<TankSize, string> = {
 
 export const TANK_SIZE_ORDER: readonly TankSize[] = ['nano30', 'standard', 'std200', 'long300'];
 
+export function tankSizeShort(size: TankSize): string {
+  return `${SIZE_NAME[size]} ${TANK_SIZES[size].litres} L`;
+}
+
 export function tankSizeLabel(size: TankSize): string {
   const spec = TANK_SIZES[size];
-  return `${SIZE_NAME[size]}, ${spec.litres} L (up to ${spec.maxAnimals} animals, load ${BIOLOAD_CAPACITY_BY_SIZE[size]})`;
+  return `${SIZE_NAME[size]}, ${spec.litres} L, ${spec.dimensions.length.toFixed(1)} m long (up to ${spec.maxAnimals} animals, load ${BIOLOAD_CAPACITY_BY_SIZE[size]})`;
 }
 
 export type ShopVerdict = { ok: true } | { ok: false; reason: string };
@@ -201,14 +205,23 @@ export function canBuy(
     alive: f.status === 'alive',
     maxBioload: bioload.get(f.species) ?? 0,
   }));
-  const fits = hasCapacityFor(
-    existing,
-    candidate.lifecycle.bioload,
-    BIOLOAD_CAPACITY_BY_SIZE[tank.size],
-    TANK_SIZES[tank.size].maxAnimals,
-  );
-  if (fits) return { ok: true };
-  return { ok: false, reason: 'This tank is full. Start another tank for more fish.' };
+  const capacity = BIOLOAD_CAPACITY_BY_SIZE[tank.size];
+  const maxAnimals = TANK_SIZES[tank.size].maxAnimals;
+  if (hasCapacityFor(existing, candidate.lifecycle.bioload, capacity, maxAnimals)) {
+    return { ok: true };
+  }
+  const living = existing.filter((f) => f.alive).length;
+  const advice = 'Start another tank for more fish.';
+  if (living + 1 > maxAnimals) {
+    return {
+      ok: false,
+      reason: `This tank is full: it holds at most ${maxAnimals} animals. ${advice}`,
+    };
+  }
+  return {
+    ok: false,
+    reason: `This tank is full: ${candidate.commonName} would push the water load past ${capacity}. ${advice}`,
+  };
 }
 
 export const ACCLIMATION_SECONDS = 45;
