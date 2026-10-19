@@ -62,7 +62,35 @@ export function buildShaders(
     builder.lightsNode?.setLights([...lights]);
   }
   builder.build();
-  return { vertex: builder.vertexShader, fragment: builder.fragmentShader };
+  const shaders = { vertex: builder.vertexShader, fragment: builder.fragmentShader };
+  if (backend === 'webgpu') {
+    assertSamplersDeclared(shaders.vertex, 'vertex');
+    assertSamplersDeclared(shaders.fragment, 'fragment');
+  }
+  return shaders;
+}
+
+/**
+ * three declares no sampler for a texture it deems unfilterable (both filters nearest, for one),
+ * yet a biased sample and a few others still name one, so the WGSL fails to compile and the
+ * device is lost. three 0.186.1, `WGSLNodeBuilder.generateTextureBias`.
+ */
+export function assertSamplersDeclared(source: string, stage: string): void {
+  const declared = new Set(
+    [...source.matchAll(/\bvar\s+(\w+_sampler)\s*:\s*sampler(?:_comparison)?\b/g)].map((m) => m[1]),
+  );
+  const missing = new Set(
+    [...source.matchAll(/\b(\w+_sampler)\b/g)]
+      .map((m) => m[1])
+      .filter((name): name is string => name !== undefined && !declared.has(name)),
+  );
+  if (missing.size > 0) {
+    throw new Error(
+      `${stage} shader samples through undeclared ${[...missing].join(', ')}: the texture is ` +
+        'unfilterable (both filters nearest?) yet sampled with a bias or similar. Give it a ' +
+        'linear filter or sample it with .level().',
+    );
+  }
 }
 
 /**
