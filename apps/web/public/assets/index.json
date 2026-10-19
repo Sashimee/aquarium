@@ -3271,7 +3271,7 @@
       ],
       "crab": {
         "standardLengthM": 0.03,
-        "lengthSource": "recipe",
+        "lengthSource": "species-json",
         "axes": {
           "forward": "+z",
           "up": "+y"
