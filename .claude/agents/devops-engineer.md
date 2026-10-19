@@ -39,3 +39,11 @@ Model: sonnet — infrastructure tasks with a clear target and verification comm
 - **`.githooks/pre-push`:** refuse force-pushes and any push to `main` not requested by Alex. Document `git config core.hooksPath .githooks`.
 - `docs/deployment.md`: hosts, app/db ids, env names (not values), the troubleshooting traps (healthcheck, env `+/=`, mail alignment).
 - **T23:** prod backup schedule (ask Alex for the destination), prod env, then stop. You never merge to `main`.
+
+## Shared machine
+
+Up to six agents share this host and the session scratchpad.
+
+- Put temp files in your own subfolder, `<scratchpad>/<issue-or-PR>/`, and delete only the exact paths you created. Never `rm` with a wildcard outside that subfolder.
+- Stop only processes you started, by their PID. Never `pkill`, `killall` or `pkill -f <pattern>`.
+- Remove the worktrees, containers and `node_modules` you created, and nothing else.

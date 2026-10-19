@@ -36,3 +36,11 @@ Model: sonnet — scoped feature implementation with tests against a defined con
 - **Sync:** the server is authoritative for lifecycle. Batch `ate` events, and reconcile server snapshots without visible popping.
 - Accessibility: keyboard-reachable UI, `prefers-reduced-motion`, contrast, and a text "tank report".
 - **E2E (T19):** Playwright on the WebGL2 path. Auth with a virtual WebAuthn authenticator for passkeys. A time-travel test hook (server-side, enabled only when `NODE_ENV=test`) for catch-up and death.
+
+## Shared machine
+
+Up to six agents share this host and the session scratchpad.
+
+- Put temp files in your own subfolder, `<scratchpad>/<issue-or-PR>/`, and delete only the exact paths you created. Never `rm` with a wildcard outside that subfolder.
+- Stop only processes you started, by their PID. Never `pkill`, `killall` or `pkill -f <pattern>`.
+- Remove the worktrees, containers and `node_modules` you created, and nothing else.
