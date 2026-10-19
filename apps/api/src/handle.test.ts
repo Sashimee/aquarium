@@ -7,7 +7,7 @@ import {
 } from '@aquarium/shared';
 import { eq } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { schema } from './db/index.ts';
 import { lockHandles } from './handle.ts';
 import { APP_ORIGIN, createHarness, type Harness } from './test-harness.ts';
@@ -215,29 +215,32 @@ describe('public handle', () => {
 
   it('answers 409 when the account is deleted while the change waits on its row', async () => {
     const { cookie, userId } = await account(h);
-    let locked!: () => void;
-    let proceed!: () => void;
-    const ready = new Promise<void>((resolve) => (locked = resolve));
-    const gate = new Promise<void>((resolve) => (proceed = resolve));
-    const deleting = h.database.db.transaction(async (tx) => {
-      await tx.select().from(schema.user).where(eq(schema.user.id, userId)).for('update');
-      locked();
-      await gate;
-      await tx.delete(schema.user).where(eq(schema.user.id, userId));
-    });
-    await ready;
-    const pending = call(h, cookie, 'PUT', '/api/me/handle', { handle: unique() });
-    for (;;) {
-      const waiting = await h.database.pool.query(
-        `select 1 from pg_stat_activity
-         where wait_event_type = 'Lock' and query ilike '%for update%' and query ilike '%"user"%'`,
+    const conn = await h.database.pool.connect();
+    let committed = false;
+    try {
+      await conn.query('begin');
+      const { rows } = await conn.query<{ pid: number }>('select pg_backend_pid() as pid');
+      const holder = rows[0]!.pid;
+      await conn.query('select 1 from "user" where id = $1 for update', [userId]);
+      const pending = call(h, cookie, 'PUT', '/api/me/handle', { handle: unique() });
+      await vi.waitFor(
+        async () => {
+          const blocked = await h.database.pool.query(
+            'select 1 from pg_stat_activity where $1 = any(pg_blocking_pids(pid))',
+            [holder],
+          );
+          expect(blocked.rowCount).toBeGreaterThan(0);
+        },
+        { timeout: 4000, interval: 10 },
       );
-      if (waiting.rowCount) break;
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await conn.query('delete from "user" where id = $1', [userId]);
+      await conn.query('commit');
+      committed = true;
+      expect((await pending).statusCode).toBe(409);
+    } finally {
+      if (!committed) await conn.query('rollback');
+      conn.release();
     }
-    proceed();
-    await deleting;
-    expect((await pending).statusCode).toBe(409);
   });
 
   async function expectBlockedUntilReleased(
