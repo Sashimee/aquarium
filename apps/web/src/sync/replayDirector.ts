@@ -115,7 +115,9 @@ export function createReplayDirector(options: ReplayDirectorOptions): ReplayDire
             apply(command.index);
             break;
           case 'time-scale':
-            interaction.emit('replay:time-scale', { scale: command.scale });
+            interaction.emit('replay:time-scale', {
+              scale: Number.isFinite(command.scale) ? command.scale : 1,
+            });
             break;
           case 'restore':
             // The player switched tanks meanwhile; the new tank has loaded itself.

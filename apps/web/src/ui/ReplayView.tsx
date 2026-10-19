@@ -38,6 +38,7 @@ export interface ReplayPanelProps {
   onSkip(): void;
   onToggle(): void;
   onScrub(shown: number): void;
+  onScrubEnd(): void;
   onSpeed(speed: ReplaySpeed): void;
   onRetry(): void;
 }
@@ -98,6 +99,10 @@ export function ReplayPanel(props: ReplayPanelProps) {
               value={playback.shown}
               aria-valuetext={`${playback.shown} of ${load.lines.length} events`}
               onChange={(e) => props.onScrub(Number(e.currentTarget.value))}
+              onPointerUp={props.onScrubEnd}
+              onPointerCancel={props.onScrubEnd}
+              onKeyUp={props.onScrubEnd}
+              onBlur={props.onScrubEnd}
             />
           </label>
         </>
@@ -204,7 +209,8 @@ function ReplayBody({
         speed={state.speed}
         onSkip={onSkip}
         onToggle={() => controller.toggle()}
-        onScrub={(shown) => controller.scrub(shown)}
+        onScrub={(shown) => controller.previewScrub(shown)}
+        onScrubEnd={() => controller.commitScrub()}
         onSpeed={(speed) => controller.setSpeed(speed)}
         onRetry={() => controller.retry()}
       />

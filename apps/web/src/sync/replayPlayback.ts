@@ -27,6 +27,7 @@ export type PlaybackAction =
   | { type: 'start'; reducedMotion: boolean }
   | { type: 'tick' }
   | { type: 'toggle' }
+  | { type: 'preview'; shown: number }
   | { type: 'scrub'; shown: number }
   | { type: 'end' };
 
@@ -98,6 +99,13 @@ export function stepPlayback(state: PlaybackState, action: PlaybackAction): Play
         state: { ...state, playing: true },
         commands: [{ type: 'time-scale', scale: scaleFor(state) }],
       };
+    case 'preview': {
+      const shown = Math.max(0, Math.min(state.total, Math.round(action.shown)));
+      return {
+        state: { ...state, shown, playing: false, veiled: false, dirty: true },
+        commands: calm(),
+      };
+    }
     case 'scrub': {
       const shown = Math.max(0, Math.min(state.total, Math.round(action.shown)));
       return {
