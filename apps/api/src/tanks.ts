@@ -203,7 +203,6 @@ async function lockAndTick(
     vacationFeeder: hasVacationFeeder(tank),
     breeding: new Map([...deps.species].map(([id, s]) => [id, s.breeding])),
     breedingEnvironment: {
-      temperatureC: chemistrySchema.parse(tank.chemistry).temperatureC,
       hasCave: hasShelter(tank),
       maxAnimals: TANK_SIZES[tank.size].maxAnimals,
       bioloadCapacity: TANK_BIOLOAD_CAPACITY,

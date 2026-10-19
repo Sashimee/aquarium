@@ -1,6 +1,6 @@
-import type { Bacteria, Chemistry, Water } from '@aquarium/shared';
+import type { Bacteria, Biome, Chemistry, ChemistryParameters, Water } from '@aquarium/shared';
 import { fishBioload } from './fish.ts';
-import type { LifecycleFish, SpeciesTable, StepContext } from './types.ts';
+import type { LifecycleFish, SpeciesChemistryTable, SpeciesTable, StepContext } from './types.ts';
 
 export function ammoniaProduction(
   fish: readonly LifecycleFish[],
@@ -54,17 +54,27 @@ function stepColony(
  * or when the biome target already suits them, that is the biome target; otherwise the middle of the
  * temperatures where the stocked fish are least stressed, so a discus tank warms to its own range.
  */
-export function heaterSetpoint(fish: readonly LifecycleFish[], ctx: StepContext): number {
-  const target = ctx.chemistryParams.temperature.target[ctx.biome];
-  const ranges: (readonly [number, number])[] = [];
-  for (const f of fish) {
-    const range = f.alive ? ctx.speciesChemistry.get(f.species)?.temperatureC : undefined;
-    if (range) ranges.push(range);
+export function heaterSetpoint(
+  fish: readonly LifecycleFish[],
+  biome: Biome,
+  speciesChemistry: SpeciesChemistryTable,
+  params: ChemistryParameters,
+): number {
+  const target = params.temperature.target[biome];
+  const stocked = new Map<string, number>();
+  for (const f of fish) if (f.alive) stocked.set(f.species, (stocked.get(f.species) ?? 0) + 1);
+  const ranges: { range: readonly [number, number]; count: number }[] = [];
+  for (const [id, count] of stocked) {
+    const range = speciesChemistry.get(id)?.temperatureC;
+    if (range) ranges.push({ range, count });
   }
   if (ranges.length === 0) return target;
   const discomfort = (t: number): number =>
-    ranges.reduce((sum, [lo, hi]) => sum + Math.max(lo - t, t - hi, 0), 0);
-  const candidates = [target, ...ranges.flatMap(([lo, hi]) => [lo, hi])];
+    ranges.reduce(
+      (sum, { range: [lo, hi], count }) => sum + count * Math.max(lo - t, t - hi, 0),
+      0,
+    );
+  const candidates = [target, ...ranges.flatMap(({ range: [lo, hi] }) => [lo, hi])];
   const best = Math.min(...candidates.map(discomfort));
   const optimal = candidates.filter((t) => discomfort(t) <= best + 1e-9);
   const low = Math.min(...optimal);
@@ -125,7 +135,7 @@ export function stepWater(
 
   const heater = ctx.equipment.heater.tier;
   const heatedTo = Math.min(
-    heaterSetpoint(fish, ctx),
+    ctx.heaterSetpointC,
     cp.temperature.roomC +
       (cp.temperature.heaterWarmingPerHourPerTier * heater) / cp.temperature.driftPerHour,
   );

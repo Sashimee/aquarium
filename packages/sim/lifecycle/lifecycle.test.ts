@@ -60,7 +60,6 @@ const NO_GRACE = T0 - 1;
 const NO_BREEDING = {
   breeding: new Map(),
   breedingEnvironment: {
-    temperatureC: 25,
     hasCave: false,
     maxAnimals: 60,
     bioloadCapacity: TANK_BIOLOAD_CAPACITY,
@@ -938,4 +937,16 @@ describe('every species in a default tank of its own biome under good care', () 
       expect(state.fish.every((f) => f.alive && f.health === 1)).toBe(true);
     },
   );
+
+  it('computes the heater setpoint a bounded number of times in a long catch-up', () => {
+    const ids = [...species.keys()];
+    const crowd = Array.from({ length: 60 }, (_, i) =>
+      fishOf(`f${i}`, ids[i % ids.length] ?? 'guppy'),
+    );
+    const r = run(tank(crowd), 60 * DAY);
+    const events = r.deaths.length + r.births.length;
+    expect(r.steps).toBe((60 * DAY) / STEP_MS);
+    expect(r.setpointComputations).toBeLessThanOrEqual(1 + events);
+    expect(r.setpointComputations).toBeLessThan(r.steps / 10);
+  });
 });

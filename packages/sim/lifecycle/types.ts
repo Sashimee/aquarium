@@ -51,6 +51,8 @@ export interface StepContext extends TankEnvironment {
   readonly dtHours: number;
   readonly vacationFeeder: boolean;
   readonly grace: boolean;
+  /** Where the thermostat holds the water; changes only when the live stock does (see `heaterSetpoint`). */
+  readonly heaterSetpointC: number;
 }
 
 export interface DeathRecord {
