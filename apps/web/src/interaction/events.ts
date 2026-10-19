@@ -7,6 +7,8 @@ import type {
   FoodType,
   Water,
 } from '@aquarium/shared';
+import type { PhotoFilter } from '../engine/photo/grade';
+import type { PhotoState } from '../engine/photo/PhotoMode';
 import type { CameraMode } from './camera';
 import type { GameView } from './play/game';
 
@@ -57,6 +59,32 @@ export interface DecorViewState {
 }
 
 export type SaveStatus = 'idle' | 'saving' | 'retrying' | 'saved' | 'error';
+
+export type PhotoMove = 'left' | 'right' | 'up' | 'down' | 'forward' | 'back';
+
+export type PhotoCommand =
+  | { type: 'enter' }
+  | { type: 'exit' }
+  | { type: 'filter'; filter: PhotoFilter }
+  | { type: 'dof'; enabled?: boolean; focusDistance?: number; fStop?: number }
+  | { type: 'fov'; degrees: number }
+  | { type: 'freeze'; paused: boolean }
+  | { type: 'hide-ui'; hidden: boolean }
+  /** Starts or stops moving the eye, for an on-screen pad; the keyboard does the same. */
+  | { type: 'hold'; move: PhotoMove; down: boolean }
+  | { type: 'capture' };
+
+export type PhotoCaptureFailure = 'timeout' | 'concurrent' | 'exited' | 'failed';
+
+export type PhotoCaptureOutcome =
+  | { status: 'done'; blob: Blob }
+  | { status: 'failed'; reason: PhotoCaptureFailure; message: string };
+
+export interface PhotoView {
+  state: PhotoState;
+  /** A capture is waiting for the render effects or drawing. */
+  capturing: boolean;
+}
 
 /** Typed bus between the React overlay and the camera/input layer. */
 export interface InteractionEvents {
@@ -146,6 +174,9 @@ export interface InteractionEvents {
   'decor:layout': { tankId: string; layout: DecorLayout };
   'decor:save-state': { status: SaveStatus; message: string | null };
   /** The player tapped the tank glass; `intensity` is 0.5 for a tap and 1 for knocking. */
+  'photo:request': PhotoCommand;
+  'photo:view': PhotoView;
+  'photo:capture': PhotoCaptureOutcome;
   'glass:tapped': { intensity: number };
   /** Emitted by the fish system when the net tool taps a dead fish. */
   'net:tap': { fishId: string };
@@ -173,4 +204,5 @@ export const STICKY_INTERACTION_EVENTS: readonly (keyof InteractionEvents)[] = [
   'decor:save-state',
   'decor:load-failed',
   'load:state',
+  'photo:view',
 ];
