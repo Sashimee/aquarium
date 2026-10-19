@@ -88,6 +88,9 @@ function setup(over: Partial<AudioDeps> = {}, index: unknown = INDEX, stored?: s
     suspend: vi.fn(async () => {
       state.value = 'suspended';
     }),
+    close: vi.fn(async () => {
+      state.value = 'closed';
+    }),
     decodeAudioData: vi.fn(async (): Promise<BufferLike> => ({ duration: 100 })),
     createGain: () => {
       const g = { ...node(), gain: param() };
@@ -142,6 +145,7 @@ function setup(over: Partial<AudioDeps> = {}, index: unknown = INDEX, stored?: s
         gesture = null;
       };
     },
+    defer: (work) => queueMicrotask(work),
     random: () => 0,
     warn,
     ...over,
@@ -217,6 +221,58 @@ describe('AudioEngine unlock', () => {
     expect(loopEnds).toContain(768000 / 48000);
   });
 
+  it('unlocks on a later gesture when the first resume never settles', async () => {
+    const t = setup();
+    vi.mocked(t.ctx.resume).mockImplementationOnce(() => new Promise<void>(() => {}));
+    await t.gesture();
+    expect(t.engine.status).toBe('locked');
+    expect(t.hasGestureListener()).toBe(true);
+    await t.gesture();
+    expect(t.ctx.resume).toHaveBeenCalledTimes(2);
+    expect(t.engine.status).toBe('running');
+    expect(t.sources.filter((s) => s.loop)).toHaveLength(3);
+  });
+
+  it('suspends a context that resolves after the tab went hidden', async () => {
+    const t = setup();
+    let release: () => void = () => {};
+    vi.mocked(t.ctx.resume).mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    await t.gesture();
+    t.setHidden(true);
+    expect(t.ctx.suspend).toHaveBeenCalledTimes(1);
+    release();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(t.ctx.suspend).toHaveBeenCalledTimes(2);
+  });
+
+  it('fetches nothing while muted, and loads once unmuted', async () => {
+    const t = setup({}, INDEX, JSON.stringify({ muted: true, volume: 0.6, quiet: false }));
+    await t.gesture();
+    expect(t.engine.status).toBe('running');
+    expect(t.deps.fetchBytes).not.toHaveBeenCalled();
+    expect(t.sources).toHaveLength(0);
+    t.engine.setMuted(false);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(t.deps.fetchBytes).toHaveBeenCalled();
+    expect(t.sources.filter((s) => s.loop)).toHaveLength(3);
+  });
+
+  it('stops the loops and closes the context on stop', async () => {
+    const t = setup();
+    await t.gesture();
+    const loops = t.sources.filter((s) => s.loop);
+    t.engine.stop();
+    expect(loops.every((s) => vi.mocked(s.stop).mock.calls.length === 1)).toBe(true);
+    expect(t.ctx.close).toHaveBeenCalledTimes(1);
+    expect(t.engine.status).toBe('locked');
+    expect(t.engine.glassTap(1)).toBe(false);
+  });
+
   it('reports no support without throwing', async () => {
     const t = setup({ createContext: () => null });
     await t.gesture();
@@ -266,6 +322,14 @@ describe('AudioEngine gain routing', () => {
     t.engine.setQuiet(false);
     expect(effects.gain.target).toBe(1);
     expect(compressor.ratio.target).toBe(1);
+  });
+
+  it('maps a non-finite volume or tap intensity to zero', async () => {
+    const t = setup();
+    await t.gesture();
+    t.engine.setVolume(Number.NaN);
+    expect(t.engine.settings.volume).toBe(0);
+    expect(() => t.engine.glassTap(Number.NaN)).not.toThrow();
   });
 
   it('clamps an out-of-range volume', () => {

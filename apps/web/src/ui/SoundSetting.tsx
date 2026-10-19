@@ -57,6 +57,7 @@ export function SoundButton({ audio = shared }: { audio?: AudioEngine }) {
 }
 
 export function SoundSetting({ audio = shared }: { audio?: AudioEngine }) {
+  useAudioUser(audio);
   useAudio(audio);
   const { muted, volume, quiet } = audio.settings;
   const unsupported = audio.status === 'unsupported';

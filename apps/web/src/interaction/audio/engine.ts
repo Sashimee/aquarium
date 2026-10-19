@@ -67,6 +67,7 @@ export interface ContextLike {
   readonly destination: NodeLike;
   resume(): Promise<void>;
   suspend(): Promise<void>;
+  close(): Promise<void>;
   decodeAudioData(bytes: ArrayBuffer): Promise<BufferLike>;
   createGain(): GainLike;
   createBiquadFilter(): FilterLike;
@@ -86,6 +87,8 @@ export interface AudioDeps {
   onVisibility(listener: () => void): () => void;
   /** Calls back on each user gesture; returns the unsubscribe. */
   onGesture(listener: () => void): () => void;
+  /** Runs work off the gesture's critical path, once the page has had time to render. */
+  defer(work: () => void): void;
   random(): number;
   warn(message: string): void;
 }
@@ -113,6 +116,7 @@ export function storageKey(userId: string | null): string {
 }
 
 function clamp01(value: number): number {
+  if (!Number.isFinite(value)) return 0;
   return Math.min(1, Math.max(0, value));
 }
 
@@ -148,7 +152,8 @@ export class AudioEngine {
   private readonly failed = new Set<string>();
   private dived = false;
   private started = false;
-  private unlocking: Promise<void> | null = null;
+  private loadScheduled = false;
+  private readonly loops: SourceLike[] = [];
   private version = 0;
   private readonly listeners = new Set<() => void>();
   private offGesture: (() => void) | null = null;
@@ -177,8 +182,7 @@ export class AudioEngine {
 
   /** Waits for the first gesture, then builds the graph; also pauses with the tab. */
   start(): () => void {
-    if (this.statusValue === 'locked')
-      this.offGesture ??= this.deps.onGesture(() => void this.unlock());
+    if (this.statusValue === 'locked') this.offGesture ??= this.deps.onGesture(() => this.unlock());
     this.offVisibility ??= this.deps.onVisibility(() => this.syncVisibility());
     return () => this.stop();
   }
@@ -188,6 +192,23 @@ export class AudioEngine {
     this.offVisibility?.();
     this.offGesture = null;
     this.offVisibility = null;
+    const graph = this.graph;
+    if (!graph) return;
+    for (const source of this.loops.splice(0)) {
+      try {
+        source.stop();
+      } catch (cause) {
+        this.deps.warn(`Sound loop could not stop: ${reason(cause)}`);
+      }
+    }
+    this.graph = null;
+    this.started = false;
+    this.loadScheduled = false;
+    this.buffers.clear();
+    if (this.statusValue === 'running') this.statusValue = 'locked';
+    graph.ctx
+      .close()
+      .catch((cause: unknown) => this.deps.warn(`Sound could not close: ${reason(cause)}`));
   }
 
   attach(bus: EventBus<InteractionEvents>): () => void {
@@ -205,6 +226,7 @@ export class AudioEngine {
     this.user = userId;
     this.settingsValue = this.read();
     this.applySettings();
+    this.scheduleLoad();
     this.changed();
   }
 
@@ -261,35 +283,61 @@ export class AudioEngine {
     return entries[Math.min(entries.length - 1, Math.floor(this.deps.random() * entries.length))];
   }
 
-  private unlock(): Promise<void> {
-    this.unlocking ??= this.doUnlock().catch((cause: unknown) => {
-      this.unlocking = null;
-      this.deps.warn(`Sound could not start: ${reason(cause)}`);
-    });
-    return this.unlocking;
-  }
-
-  private async doUnlock(): Promise<void> {
+  private unlock(): void {
+    if (this.statusValue !== 'locked' || this.deps.isHidden()) return;
     if (!this.graph) {
-      const ctx = this.deps.createContext();
-      if (!ctx) {
-        this.statusValue = 'unsupported';
-        this.offGesture?.();
-        this.offGesture = null;
-        this.changed();
+      try {
+        const ctx = this.deps.createContext();
+        if (!ctx) {
+          this.statusValue = 'unsupported';
+          this.offGesture?.();
+          this.offGesture = null;
+          this.changed();
+          return;
+        }
+        this.graph = this.buildGraph(ctx);
+      } catch (cause) {
+        this.deps.warn(`Sound could not start: ${reason(cause)}`);
         return;
       }
-      this.graph = this.buildGraph(ctx);
       this.applySettings();
       this.applyDive(true);
     }
-    if (!this.deps.isHidden()) await this.graph.ctx.resume();
+    const graph = this.graph;
+    // A resume outside user activation can stay pending forever, so every gesture asks again.
+    graph.ctx.resume().then(
+      () => this.resumed(graph),
+      (cause: unknown) => this.deps.warn(`Sound could not start: ${reason(cause)}`),
+    );
+  }
+
+  private resumed(graph: Graph): void {
+    if (this.graph !== graph || this.statusValue !== 'locked') return;
     this.statusValue = 'running';
     this.offGesture?.();
     this.offGesture = null;
     this.changed();
-    await this.loadSounds();
-    this.startLoops();
+    if (this.deps.isHidden()) this.syncVisibility();
+    this.scheduleLoad();
+  }
+
+  private scheduleLoad(): void {
+    const graph = this.graph;
+    if (!graph || this.statusValue !== 'running' || this.loadScheduled || this.settingsValue.muted)
+      return;
+    this.loadScheduled = true;
+    this.deps.defer(() => {
+      if (this.graph !== graph) return;
+      if (this.settingsValue.muted) {
+        this.loadScheduled = false;
+        return;
+      }
+      this.loadSounds(graph)
+        .then(() => {
+          if (this.graph === graph) this.startLoops();
+        })
+        .catch((cause: unknown) => this.deps.warn(`Sound could not load: ${reason(cause)}`));
+    });
   }
 
   private buildGraph(ctx: ContextLike): Graph {
@@ -310,9 +358,8 @@ export class AudioEngine {
     return { ctx, master, tone, humGain, underwaterGain, effects, compressor };
   }
 
-  private async loadSounds(): Promise<void> {
-    const ctx = this.graph?.ctx;
-    if (!ctx) return;
+  private async loadSounds(graph: Graph): Promise<void> {
+    const ctx = graph.ctx;
     try {
       this.catalog ??= parseSoundCatalog(await this.deps.fetchIndex(), this.deps.assetRoot);
     } catch (cause) {
@@ -331,7 +378,8 @@ export class AudioEngine {
         return entries.map(async (entry) => {
           try {
             const bytes = await this.deps.fetchBytes(entry.url);
-            this.buffers.set(entry, await ctx.decodeAudioData(bytes));
+            const buffer = await ctx.decodeAudioData(bytes);
+            if (this.graph === graph) this.buffers.set(entry, buffer);
           } catch (cause) {
             this.failed.add(entry.id);
             this.deps.warn(`Sound "${entry.id}" failed to load: ${reason(cause)}`);
@@ -365,6 +413,7 @@ export class AudioEngine {
       source.connect(gain);
       gain.connect(bus);
       source.start();
+      this.loops.push(source);
     }
   }
 
@@ -376,6 +425,7 @@ export class AudioEngine {
       // Storage can be full or blocked; the choice then lasts for this session only.
     }
     this.applySettings();
+    this.scheduleLoad();
     this.changed();
   }
 
@@ -402,8 +452,9 @@ export class AudioEngine {
 
   private syncVisibility(): void {
     const ctx = this.graph?.ctx;
-    if (!ctx || this.statusValue !== 'running') return;
+    if (!ctx) return;
     const hidden = this.deps.isHidden();
+    if (!hidden && this.statusValue !== 'running') return;
     (hidden ? ctx.suspend() : ctx.resume()).catch((cause: unknown) =>
       this.deps.warn(`Sound could not ${hidden ? 'pause' : 'resume'}: ${reason(cause)}`),
     );
@@ -457,11 +508,17 @@ export function browserAudioDeps(): AudioDeps {
       return () => doc?.removeEventListener('visibilitychange', listener);
     },
     onGesture: (listener) => {
-      const events = ['pointerdown', 'keydown', 'touchend'] as const;
+      const events = ['click', 'keydown', 'touchend', 'pointerup'] as const;
       for (const type of events) doc?.addEventListener(type, listener, { capture: true });
       return () => {
         for (const type of events) doc?.removeEventListener(type, listener, { capture: true });
       };
+    },
+    defer: (work) => {
+      setTimeout(() => {
+        if (typeof requestIdleCallback === 'function') requestIdleCallback(work, { timeout: 4000 });
+        else work();
+      }, 1500);
     },
     random: Math.random,
     warn: (message) => console.warn(message),
