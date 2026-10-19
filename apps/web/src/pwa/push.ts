@@ -1,4 +1,4 @@
-import type { PushSubscriptionRequest } from '@aquarium/shared';
+import type { PushSubscriptionRequest, RemovePushResult } from '@aquarium/shared';
 import { ApiRequestError } from '../ui/api';
 
 export const WORKER_READY_TIMEOUT_MS = 10_000;
@@ -23,9 +23,8 @@ export interface PushHost {
 }
 
 export interface PushApi {
-  reminders(): Promise<{ subscriptions: number }>;
   addPushSubscription(subscription: PushSubscriptionRequest): Promise<void>;
-  removePushSubscription(endpoint: string): Promise<void>;
+  removePushSubscription(endpoint: string): Promise<RemovePushResult>;
 }
 
 export class PushSetupError extends Error {
@@ -103,6 +102,12 @@ async function drop(subscription: PushSubscriptionLike): Promise<void> {
   }
 }
 
+async function discard(subscription: PushSubscriptionLike): Promise<void> {
+  await subscription.unsubscribe().catch((cause: unknown) => {
+    console.error('Could not drop an unused push subscription', cause);
+  });
+}
+
 const lostResponse = (cause: unknown): boolean =>
   cause instanceof ApiRequestError && cause.status === 0;
 
@@ -131,9 +136,7 @@ function toRequest(subscription: PushSubscriptionLike): PushSubscriptionRequest 
 }
 
 export const isOwnedByAnotherAccount = (cause: unknown): boolean =>
-  cause instanceof ApiRequestError &&
-  cause.status === 409 &&
-  /another account/i.test(cause.message);
+  cause instanceof ApiRequestError && cause.code === 'push_device_owned';
 
 /** Must run inside a click handler: the permission prompt needs a user gesture. */
 export async function subscribeThisDevice(
@@ -160,7 +163,9 @@ export async function subscribeThisDevice(
   let created = false;
   if (subscription && !sameKey(subscription, key)) {
     // The old endpoint is useless for the new key but still counts toward the device limit.
-    await api.removePushSubscription(subscription.endpoint).catch(() => undefined);
+    await api.removePushSubscription(subscription.endpoint).catch((cause: unknown) => {
+      console.error('Could not delete the outdated push subscription on the server', cause);
+    });
     await drop(subscription);
     subscription = null;
   }
@@ -182,12 +187,12 @@ export async function subscribeThisDevice(
   } catch (cause) {
     if (!isOwnedByAnotherAccount(cause)) {
       // After a lost response the server may have stored the row; keeping the subscription lets a retry match it.
-      if (created && !lostResponse(cause)) await subscription.unsubscribe().catch(() => undefined);
+      if (created && !lostResponse(cause)) await discard(subscription);
       throw cause;
     }
   }
 
-  // A shared browser: another account owns this endpoint, so drop it and take a fresh one.
+  // The server refuses an endpoint whose keys differ from the registered ones, so take a fresh one.
   await drop(subscription);
   let fresh: PushSubscriptionLike;
   try {
@@ -200,7 +205,7 @@ export async function subscribeThisDevice(
   try {
     await api.addPushSubscription(toRequest(fresh));
   } catch (cause) {
-    if (!lostResponse(cause)) await fresh.unsubscribe().catch(() => undefined);
+    if (!lostResponse(cause)) await discard(fresh);
     if (isOwnedByAnotherAccount(cause)) {
       throw new PushSetupError(
         'This browser is still registered to another account. Remove the site from your browser notification settings, then try again.',
@@ -213,14 +218,12 @@ export async function subscribeThisDevice(
 
 export type RemoveResult = 'none' | 'removed' | 'not-registered';
 
-/** The browser subscription is dropped only when the server's device count fell, so another account's endpoint on a shared browser survives. */
+/** The browser subscription is dropped only when the server deleted this account's row, so another account's endpoint on a shared browser survives. */
 export async function removeThisDevice(host: PushHost, api: PushApi): Promise<RemoveResult> {
   const subscription = await (await host.pushManager()).getSubscription();
   if (!subscription) return 'none';
-  const before = (await api.reminders()).subscriptions;
-  await api.removePushSubscription(subscription.endpoint);
-  const after = (await api.reminders()).subscriptions;
-  if (after >= before) return 'not-registered';
+  const { removed } = await api.removePushSubscription(subscription.endpoint);
+  if (!removed) return 'not-registered';
   await drop(subscription);
   return 'removed';
 }

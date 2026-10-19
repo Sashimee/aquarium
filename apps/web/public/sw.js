@@ -103,8 +103,10 @@ self.addEventListener('notificationclick', (event) => {
       const onTank = windows.find((client) => new URL(client.url).pathname === '/');
       const open = onTank ?? windows[0];
       if (!open) return self.clients.openWindow('/');
-      const target = onTank ? open : ((await open.navigate('/')) ?? open);
-      return target.focus();
+      if (onTank) return open.focus();
+      // Navigating is refused for tabs this worker does not control, so fall back to a new tab.
+      const moved = await open.navigate('/').catch(() => null);
+      return moved ? moved.focus() : self.clients.openWindow('/');
     }),
   );
 });

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { registerVerifiedUser } from '../support/app.ts';
+import { APP_URL, registerVerifiedUser } from '../support/app.ts';
 
 test.use({ serviceWorkers: 'allow' });
 
@@ -96,7 +96,7 @@ test('mail reminders start off, opt in, persist across reload, then opt out', as
   await expect(mail(page)).not.toBeChecked();
 });
 
-test('push: permission on click, device list, remove, and a shared browser takes a fresh endpoint', async ({
+test('push: permission on click, device list, remove, and a shared browser is handed over', async ({
   page,
 }) => {
   await skipSceneAssets(page);
@@ -106,49 +106,81 @@ test('push: permission on click, device list, remove, and a shared browser takes
   await page.evaluate(() => navigator.serviceWorker.ready);
   await openSettings(page);
 
+  const thisBrowser = page.getByText('(this browser)');
+  const notRegistered = page.getByText('This browser is not registered on your account.');
+  const removeThisBrowser = page.getByRole('button', { name: /^Remove .*\(this browser\)/ });
+  const endpointOf = () => page.evaluate(() => localStorage.getItem('e2e-fake-push'));
+
   await expect(push(page)).toBeEnabled();
-  await expect(page.getByText('This browser has no push subscription')).toBeVisible();
-  await expect(page.evaluate(() => localStorage.getItem('e2e-fake-push'))).resolves.toBeNull();
+  await expect(notRegistered).toBeVisible();
+  await expect(endpointOf()).resolves.toBeNull();
 
   await expect(page.evaluate(() => localStorage.getItem('e2e-fake-prompted'))).resolves.toBeNull();
   await push(page).click();
   await expect(page.getByText('Push notifications are on.')).toBeVisible();
   await expect(page.evaluate(() => localStorage.getItem('e2e-fake-prompted'))).resolves.toBe('yes');
-  await expect(page.getByText('This browser has push set up.')).toBeVisible();
+  await expect(thisBrowser).toBeVisible();
   await shot(page, 'push-on');
 
   await page.reload();
   await expect(push(page)).toBeChecked();
-  await expect(page.getByText('This browser has push set up.')).toBeVisible();
+  await expect(thisBrowser).toBeVisible();
 
   await push(page).click();
   await expect(page.getByText('Push notifications are off.')).toBeVisible();
-  await expect(page.getByText('This browser has push set up.')).toBeVisible();
+  await expect(thisBrowser).toBeVisible();
 
-  await page.getByRole('button', { name: 'Remove this browser' }).click();
-  await expect(page.getByText('This browser was removed from push.')).toBeVisible();
-  await expect(page.getByText('This browser has no push subscription')).toBeVisible();
-  await expect(page.evaluate(() => localStorage.getItem('e2e-fake-push'))).resolves.toBeNull();
+  await removeThisBrowser.click();
+  await expect(page.getByText('Device removed.')).toBeVisible();
+  await expect(notRegistered).toBeVisible();
+  await expect(endpointOf()).resolves.toBeNull();
   const afterRemove = await page.request.get('/api/me/reminders');
   expect(((await afterRemove.json()) as { subscriptions: number }).subscriptions).toBe(0);
 
   await page.getByRole('button', { name: 'Set up this browser' }).click();
-  await expect(page.getByText('This browser has push set up.')).toBeVisible();
-  const first = await page.evaluate(() => localStorage.getItem('e2e-fake-push'));
+  await expect(thisBrowser).toBeVisible();
+  const first = await endpointOf();
+  expect(first).not.toBeNull();
+  const firstEndpoint = (JSON.parse(first ?? 'null') as { endpoint: string }).endpoint;
 
   await registerVerifiedUser(page, 'remindpush2');
   await openSettings(page);
-  await expect(page.getByText('0 devices registered on your account')).toBeVisible();
+  await expect(notRegistered).toBeVisible();
   await expect(push(page)).not.toBeChecked();
-  await page.getByRole('button', { name: 'Remove this browser' }).click();
-  await expect(page.getByText('Nothing was removed')).toBeVisible();
-  await expect(page.evaluate(() => localStorage.getItem('e2e-fake-push'))).resolves.toBe(first);
   await push(page).click();
   await expect(page.getByText('Push notifications are on.')).toBeVisible();
-  const second = await page.evaluate(() => localStorage.getItem('e2e-fake-push'));
-  expect(second, 'the shared browser got a fresh endpoint').not.toBe(first);
-  const settings = await page.request.get('/api/me/reminders');
-  expect(await settings.json()).toMatchObject({ push: true, subscriptions: 1 });
+  await expect(thisBrowser).toBeVisible();
+  expect(await endpointOf(), 'the same keys take the endpoint over without a new one').toBe(first);
+  expect(await (await page.request.get('/api/me/reminders')).json()).toMatchObject({
+    push: true,
+    subscriptions: 1,
+  });
+
+  const remove = () =>
+    page.request.post('/api/me/push-subscriptions/remove', {
+      data: { endpoint: firstEndpoint },
+      headers: { origin: APP_URL },
+    });
+  const removed = await remove();
+  expect(removed.status()).toBe(200);
+  expect(await removed.json()).toEqual({ removed: true });
+  expect(await (await remove()).json()).toEqual({ removed: false });
+
+  await page.reload();
+  await expect(notRegistered).toBeVisible();
+  await page.getByRole('button', { name: 'Set up this browser' }).click();
+  await expect(thisBrowser).toBeVisible();
+
+  await registerVerifiedUser(page, 'remindpush3');
+  const stolen = await page.request.post('/api/me/push-subscriptions', {
+    data: {
+      endpoint: firstEndpoint,
+      keys: { p256dh: 'C'.padEnd(87, 'y'), auth: 'b'.repeat(22) },
+    },
+    headers: { origin: APP_URL },
+  });
+  expect(stolen.status()).toBe(409);
+  expect(await stolen.json()).toMatchObject({ error: { code: 'push_device_owned' } });
 });
 
 test('notifications blocked in the browser are explained, not attempted', async ({ page }) => {

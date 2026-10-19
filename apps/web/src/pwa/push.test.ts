@@ -59,7 +59,14 @@ function makeHost(
   return { host, created, requestPermission };
 }
 
-const conflict = (message: string) => new ApiRequestError(409, 'conflict', message);
+const owned = () =>
+  new ApiRequestError(
+    409,
+    'push_device_owned',
+    'This device is already registered to another account.',
+  );
+const limit = () =>
+  new ApiRequestError(409, 'push_device_limit', 'At most 10 devices can get push.');
 
 function makeApi(
   failures: ApiRequestError[] = [],
@@ -71,7 +78,6 @@ function makeApi(
   return {
     added,
     rows,
-    reminders: vi.fn(async () => ({ subscriptions: rows.size })),
     addPushSubscription: vi.fn(async (sub) => {
       const failure = failures.shift();
       if (failure) throw failure;
@@ -79,7 +85,7 @@ function makeApi(
       rows.add(sub.endpoint);
     }),
     removePushSubscription: vi.fn(async (endpoint) => {
-      if (!foreign.has(endpoint)) rows.delete(endpoint);
+      return { removed: !foreign.has(endpoint) && rows.delete(endpoint) };
     }),
   };
 }
@@ -199,7 +205,7 @@ describe('subscribeThisDevice', () => {
 
   it('drops a new browser subscription when the server rejects it, and rethrows', async () => {
     const { host, created } = makeHost('granted');
-    const api = makeApi([conflict('At most 10 devices can get push.')]);
+    const api = makeApi([limit()]);
     await expect(subscribeThisDevice(host, api, SERVER_KEY)).rejects.toThrow(/At most 10/);
     expect(created[0]?.unsubscribed).toBe(true);
   });
@@ -215,7 +221,7 @@ describe('subscribeThisDevice', () => {
   it('takes a fresh endpoint when another account owns this one', async () => {
     const existing = new FakeSubscription('https://fcm.googleapis.com/fcm/send/shared');
     const { host, created } = makeHost('granted', { existing });
-    const api = makeApi([conflict('This device is already registered to another account.')]);
+    const api = makeApi([owned()]);
     const endpoint = await subscribeThisDevice(host, api, SERVER_KEY);
     expect(existing.unsubscribed).toBe(true);
     expect(endpoint).toBe(created[0]?.endpoint);
@@ -225,8 +231,7 @@ describe('subscribeThisDevice', () => {
   it('explains clearly when the fresh endpoint is refused too', async () => {
     const existing = new FakeSubscription('https://fcm.googleapis.com/fcm/send/shared');
     const { host, created } = makeHost('granted', { existing });
-    const owned = 'This device is already registered to another account.';
-    const api = makeApi([conflict(owned), conflict(owned)]);
+    const api = makeApi([owned(), owned()]);
     await expect(subscribeThisDevice(host, api, SERVER_KEY)).rejects.toThrow(/another account/);
     expect(created[0]?.unsubscribed).toBe(true);
   });
@@ -234,7 +239,7 @@ describe('subscribeThisDevice', () => {
   it('explains when the browser cannot resubscribe after a handover conflict', async () => {
     const existing = new FakeSubscription('https://fcm.googleapis.com/fcm/send/shared');
     const { host } = makeHost('granted', { existing, subscribeFails: true });
-    const api = makeApi([conflict('This device is already registered to another account.')]);
+    const api = makeApi([owned()]);
     await expect(subscribeThisDevice(host, api, SERVER_KEY)).rejects.toThrow(
       /browser notification settings/,
     );
@@ -243,11 +248,14 @@ describe('subscribeThisDevice', () => {
 
 describe('isOwnedByAnotherAccount', () => {
   it('tells the shared-browser conflict from the device limit', () => {
-    expect(
-      isOwnedByAnotherAccount(conflict('This device is already registered to another account.')),
-    ).toBe(true);
-    expect(isOwnedByAnotherAccount(conflict('At most 10 devices can get push.'))).toBe(false);
+    expect(isOwnedByAnotherAccount(owned())).toBe(true);
+    expect(isOwnedByAnotherAccount(limit())).toBe(false);
     expect(isOwnedByAnotherAccount(new Error('another account'))).toBe(false);
+    expect(
+      isOwnedByAnotherAccount(
+        new ApiRequestError(409, 'conflict', 'registered to another account'),
+      ),
+    ).toBe(false);
   });
 });
 

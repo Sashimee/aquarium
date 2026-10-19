@@ -1,4 +1,4 @@
-import type { ReminderSettings } from '@aquarium/shared';
+import type { PushDevice, ReminderSettings } from '@aquarium/shared';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -34,6 +34,7 @@ function render(support: PushSupport, s: ReminderSettings, over: Partial<Reminde
     createElement(RemindersView, {
       settings: s,
       support,
+      devices: [],
       busy: false,
       error: null,
       status: '',
@@ -49,20 +50,17 @@ function render(support: PushSupport, s: ReminderSettings, over: Partial<Reminde
 describe('pushSupport', () => {
   it('is off when the server has no VAPID keys', () => {
     expect(
-      pushSupport(settings({ pushAvailable: false, vapidPublicKey: null }), host('default'), null),
+      pushSupport(settings({ pushAvailable: false, vapidPublicKey: null }), host('default')),
     ).toEqual({ kind: 'server-off' });
   });
   it('is unsupported without a browser host', () => {
-    expect(pushSupport(settings(), null, null)).toEqual({ kind: 'browser-unsupported' });
+    expect(pushSupport(settings(), null)).toEqual({ kind: 'browser-unsupported' });
   });
   it('is blocked once the user denied notifications', () => {
-    expect(pushSupport(settings(), host('denied'), null)).toEqual({ kind: 'blocked' });
+    expect(pushSupport(settings(), host('denied'))).toEqual({ kind: 'blocked' });
   });
-  it('is ready otherwise and carries this device endpoint', () => {
-    expect(pushSupport(settings(), host('default'), 'https://fcm.googleapis.com/x')).toEqual({
-      kind: 'ready',
-      endpoint: 'https://fcm.googleapis.com/x',
-    });
+  it('is ready otherwise', () => {
+    expect(pushSupport(settings(), host('default'))).toEqual({ kind: 'ready' });
   });
 });
 
@@ -76,6 +74,14 @@ describe('reminderErrorMessage', () => {
       '5 minutes',
     );
     expect(reminderErrorMessage(new ApiRequestError(429, 'rate_limited', 'x'))).toMatch(/later/);
+  });
+  it('gives the device limit and shared-browser errors their own guidance', () => {
+    expect(reminderErrorMessage(new ApiRequestError(409, 'push_device_limit', 'x'))).toMatch(
+      /Remove one/,
+    );
+    expect(reminderErrorMessage(new ApiRequestError(409, 'push_device_owned', 'x'))).toMatch(
+      /another account/,
+    );
   });
   it('passes other server messages through', () => {
     expect(reminderErrorMessage(new ApiRequestError(409, 'conflict', 'Nope.'))).toBe('Nope.');
@@ -100,26 +106,48 @@ describe('RemindersView', () => {
     expect(html).toMatch(/<input[^>]*aria-describedby="reminders-mail-note"[^>]*checked/);
   });
 
-  it('offers to add this device and counts other devices', () => {
-    const html = render(
-      { kind: 'ready', endpoint: null },
-      settings({ push: true, subscriptions: 2 }),
-    );
-    expect(html).toContain('Set up this browser');
-    expect(html).toContain('2 devices');
+  it('lists devices, marks this browser and offers removal for each', () => {
+    const devices: PushDevice[] = [
+      {
+        id: 'a',
+        label: 'fcm.googleapis.com',
+        createdAt: '2026-10-01T00:00:00.000Z',
+        lastUsedAt: null,
+        current: true,
+      },
+      {
+        id: 'b',
+        label: 'push.apple.com',
+        createdAt: '2026-10-02T00:00:00.000Z',
+        lastUsedAt: null,
+        current: false,
+      },
+    ];
+    const html = render({ kind: 'ready' }, settings({ push: true, subscriptions: 2 }), { devices });
+    expect(html).toContain('fcm.googleapis.com (this browser)');
+    expect(html).toContain('push.apple.com');
+    expect(html.match(/>Remove</g)).toHaveLength(2);
+    expect(html).not.toContain('Set up this browser');
   });
 
-  it('offers removal when this device is subscribed', () => {
-    const html = render(
-      { kind: 'ready', endpoint: 'https://fcm.googleapis.com/x' },
-      settings({ push: true, subscriptions: 1 }),
-    );
-    expect(html).toContain('Remove this browser');
-    expect(html).toContain('1 device');
+  it('offers setup when this browser is not on the account', () => {
+    const html = render({ kind: 'ready' }, settings({ push: true }), {
+      devices: [
+        {
+          id: 'b',
+          label: 'push.apple.com',
+          createdAt: '2026-10-02T00:00:00.000Z',
+          lastUsedAt: null,
+          current: false,
+        },
+      ],
+    });
+    expect(html).toContain('This browser is not registered on your account.');
+    expect(html).toContain('Set up this browser');
   });
 
   it('disables the controls while a change is in flight and shows errors', () => {
-    const html = render({ kind: 'ready', endpoint: null }, settings(), {
+    const html = render({ kind: 'ready' }, settings(), {
       busy: true,
       error: 'Could not change mail reminders: boom',
     });
@@ -193,6 +221,53 @@ describe('reminder api client', () => {
     await expect(api.updateReminders({ mail: true })).rejects.toMatchObject({
       status: 403,
       code: 'email_not_verified',
+    });
+  });
+});
+
+describe('push device api client', () => {
+  it('asks for the list with the current endpoint and returns the devices', async () => {
+    const urls: string[] = [];
+    const body = JSON.stringify({
+      devices: [
+        {
+          id: '0b8f2f58-6f65-4d3c-9d3e-3f1f7f0f8a11',
+          label: 'fcm.googleapis.com',
+          createdAt: '2026-10-01T00:00:00.000Z',
+          lastUsedAt: null,
+          current: true,
+        },
+      ],
+    });
+    const api = createApiClient(async (url) => {
+      urls.push(url);
+      return new Response(body, { status: 200 });
+    });
+    const devices = await api.pushDevices('https://fcm.googleapis.com/fcm/send/x');
+    expect(urls[0]).toBe(
+      '/api/me/push-subscriptions?endpoint=https%3A%2F%2Ffcm.googleapis.com%2Ffcm%2Fsend%2Fx',
+    );
+    expect(devices[0]?.current).toBe(true);
+  });
+
+  it('removes by id with DELETE and parses the result', async () => {
+    const calls: { url: string; method?: string | undefined }[] = [];
+    const api = createApiClient(async (url, init) => {
+      calls.push({ url, method: init?.method });
+      return new Response('{"removed":true}', { status: 200 });
+    });
+    expect(await api.removePushDevice('a b')).toEqual({ removed: true });
+    expect(calls[0]).toEqual({ url: '/api/me/push-subscriptions/a%20b', method: 'DELETE' });
+  });
+
+  it('parses the remove-by-endpoint result and rejects a malformed one', async () => {
+    const ok = createApiClient(async () => new Response('{"removed":false}', { status: 200 }));
+    expect(await ok.removePushSubscription('https://fcm.googleapis.com/x')).toEqual({
+      removed: false,
+    });
+    const bad = createApiClient(async () => new Response('{}', { status: 200 }));
+    await expect(bad.removePushSubscription('https://fcm.googleapis.com/x')).rejects.toMatchObject({
+      code: 'unexpected_response',
     });
   });
 });

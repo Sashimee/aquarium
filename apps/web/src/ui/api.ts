@@ -11,7 +11,9 @@ import {
   creditsSchema,
   dataExportSchema,
   privacyPolicySchema,
+  pushDeviceListSchema,
   pushSubscriptionRequestSchema,
+  removePushResultSchema,
   reminderSettingsSchema,
   removePushSubscriptionRequestSchema,
   updateReminderSettingsRequestSchema,
@@ -31,7 +33,9 @@ import {
   type Tank,
   type ErrorCode,
   type PrivacyPolicy,
+  type PushDevice,
   type PushSubscriptionRequest,
+  type RemovePushResult,
   type ReminderSettings,
   type SessionInfo,
   type SignInRequest,
@@ -169,7 +173,9 @@ export interface ApiClient {
   reminders(): Promise<ReminderSettings>;
   updateReminders(change: { mail?: boolean; push?: boolean }): Promise<ReminderSettings>;
   addPushSubscription(subscription: PushSubscriptionRequest): Promise<void>;
-  removePushSubscription(endpoint: string): Promise<void>;
+  removePushSubscription(endpoint: string): Promise<RemovePushResult>;
+  pushDevices(currentEndpoint?: string | null): Promise<PushDevice[]>;
+  removePushDevice(id: string): Promise<RemovePushResult>;
   species(): Promise<SpeciesSummary[]>;
   tanks(): Promise<Tank[]>;
   tank(tankId: string): Promise<Tank>;
@@ -522,10 +528,21 @@ export function createApiClient(
       );
     },
     async removePushSubscription(endpoint) {
-      await post(
-        '/api/me/push-subscriptions/remove',
-        validate(removePushSubscriptionRequestSchema, { endpoint }),
-      );
+      const body = validate(removePushSubscriptionRequestSchema, { endpoint });
+      return parsed(await post('/api/me/push-subscriptions/remove', body), removePushResultSchema);
+    },
+    async pushDevices(currentEndpoint) {
+      const query = currentEndpoint ? `?endpoint=${encodeURIComponent(currentEndpoint)}` : '';
+      const res = await send(`/api/me/push-subscriptions${query}`);
+      if (!res.ok) throw await toError(res);
+      return (await parsed(res, pushDeviceListSchema)).devices;
+    },
+    async removePushDevice(id) {
+      const res = await send(`/api/me/push-subscriptions/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw await toError(res);
+      return parsed(res, removePushResultSchema);
     },
     async privacy() {
       const res = await send('/api/privacy');

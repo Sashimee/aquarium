@@ -36,6 +36,7 @@ function boot(network: (request: Request) => Promise<Response>) {
   const opened: string[] = [];
   const focused: string[] = [];
   const navigated: string[] = [];
+  let navigateFails = false;
   let windows: { url: string }[] = [];
   const caches = {
     async open(name: string) {
@@ -65,6 +66,7 @@ function boot(network: (request: Request) => Promise<Response>) {
         windows.map((w) => ({
           url: w.url,
           navigate: async (url: string) => {
+            if (navigateFails) throw new TypeError('Cannot navigate an uncontrolled client');
             navigated.push(url);
             const moved = { url: `${ORIGIN}${url}`, focus: async () => void focused.push(url) };
             return moved;
@@ -143,6 +145,7 @@ function boot(network: (request: Request) => Promise<Response>) {
     opened,
     focused,
     navigated,
+    failNavigation: () => void (navigateFails = true),
     setWindows: (next: { url: string }[]) => void (windows = next),
     preloadEnabled: () => preloadEnabled,
   };
@@ -251,6 +254,14 @@ describe('push reminders', () => {
     expect(sw.navigated).toEqual(['/']);
     expect(sw.focused).toEqual(['/']);
     expect(sw.opened).toEqual([]);
+  });
+
+  it('opens a new tab when the open one cannot be navigated', async () => {
+    const sw = boot(online);
+    sw.setWindows([{ url: `${ORIGIN}/settings` }]);
+    sw.failNavigation();
+    await sw.dispatch('notificationclick');
+    expect(sw.opened).toEqual(['/']);
   });
 
   it('prefers a tab already on the tank without navigating', async () => {
