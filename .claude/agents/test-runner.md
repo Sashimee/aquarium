@@ -18,7 +18,7 @@ pnpm build
 pnpm assets:check
 ```
 
-Don't run `pnpm e2e`: CI runs the e2e suite on `dev` pushes and `chore/batch-*` branches. Reproduce one failing spec locally only when the orchestrator asks for it.
+Don't run `pnpm e2e`: the orchestrator runs the e2e suite in CI on demand, once before a release. Reproduce one failing spec locally only when the orchestrator asks for it.
 
 Report pass or fail for each command. For failures, give the file:line, the test or rule name, and the first relevant lines of the message, not the whole log.
 Do not edit any file. Never suggest skipping tests, `any`, `@ts-ignore`, eslint-disable or deleting assertions as a fix.
