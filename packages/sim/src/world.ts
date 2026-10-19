@@ -10,9 +10,9 @@ import { FoodStore, type AteEvent } from './food.ts';
 import { clamp, DEG, quatFromYawPitchRoll, wrapAngle } from './math.ts';
 import {
   pairwiseDistanceSq,
+  resetNeighbourOrder,
   selectBalanced,
-  selectNearest,
-  type BalancedScratch,
+  sortNeighbours,
 } from './neighbours.ts';
 import { Rng } from './rng.ts';
 import { smoothGradient, TankSdf, type Sdf } from './sdf.ts';
@@ -331,8 +331,8 @@ export class World {
   private readonly speciesById: ReadonlyMap<string, number>;
   private schoolNbr: Int32Array;
   private anyNbr: Int32Array;
-  private readonly scratchDist: Float64Array;
-  private readonly schoolScratch: BalancedScratch;
+  private neighbourOrder: Int32Array;
+  private readonly schoolDir: Float64Array;
   private readonly normal = new Float64Array(3);
   private readonly probeNormal = new Float64Array(3);
   private readonly previous = new Float64Array(3);
@@ -522,12 +522,9 @@ export class World {
     this.kMax = kMax;
     this.schoolNbr = new Int32Array(n * kMax);
     this.anyNbr = new Int32Array(n * kMax);
-    this.scratchDist = new Float64Array(kMax);
-    this.schoolScratch = {
-      idx: new Int32Array(kMax * STEERING.schoolPoolFactor),
-      dist: new Float64Array(kMax * STEERING.schoolPoolFactor),
-      dir: new Float64Array(kMax * 3),
-    };
+    this.neighbourOrder = new Int32Array(n * n);
+    resetNeighbourOrder(this.neighbourOrder, n);
+    this.schoolDir = new Float64Array(kMax * 3);
     this.walkers = new Walkers(
       this,
       new TankSdf(this.basin, { floor: false, surface: false }),
@@ -1064,6 +1061,8 @@ export class World {
     edit.remap(this.anyNbr);
     // Rebuilt by every step before anything reads it.
     this._distSq = new Float64Array(n * n);
+    this.neighbourOrder = new Int32Array(n * n);
+    resetNeighbourOrder(this.neighbourOrder, n);
     // A loner's group is its own index, so loners after the removed fish need theirs renumbered.
     for (let i = 0; i < n; i++) this.schoolGroup[i] = this.groupOf(i);
     this.walkers.resize(edit);
@@ -1184,11 +1183,14 @@ export class World {
     let dz = Math.cos(wy) * cwp * wander;
 
     const k = this.kMax;
+    const order = this.neighbourOrder;
+    sortNeighbours(this.distSq, n, i, order);
     let state: FishState = FishState.Cruise;
     if (sp.schooling && (plan.align > 0 || plan.cohesion > 0)) {
       const range = sp.perceptionRange;
       const count = selectBalanced(
         this.distSq,
+        order,
         this.position,
         n,
         i,
@@ -1199,7 +1201,7 @@ export class World {
         Math.cos(STEERING.schoolBalanceRad),
         this.schoolNbr,
         i * k,
-        this.schoolScratch,
+        this.schoolDir,
       );
       if (count > 0) {
         state = FishState.School;
@@ -1231,17 +1233,8 @@ export class World {
       }
     }
 
-    const anyCount = selectNearest(
-      this.distSq,
-      n,
-      i,
-      STEERING.anyNeighbours,
-      null,
-      Infinity,
-      this.anyNbr,
-      i * k,
-      this.scratchDist,
-    );
+    const anyCount = Math.min(STEERING.anyNeighbours, n - 1);
+    for (let m = 0; m < anyCount; m++) this.anyNbr[i * k + m] = order[i * n + m] ?? 0;
     let sx = 0;
     let sy = 0;
     let sz = 0;

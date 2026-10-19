@@ -54,11 +54,39 @@ export function selectNearest(
   return count;
 }
 
-/** Work space for `selectBalanced`: `idx` and `dist` hold at least the pool, `dir` 3 × k. */
-export interface BalancedScratch {
-  readonly idx: Int32Array;
-  readonly dist: Float64Array;
-  readonly dir: Float64Array;
+/** Fills each fish's row of `order` (stride `n`, `n` − 1 used) with every other fish by index. */
+export function resetNeighbourOrder(order: Int32Array, n: number): void {
+  for (let i = 0; i < n; i++) {
+    for (let m = 0; m < n - 1; m++) order[i * n + m] = m < i ? m : m + 1;
+  }
+}
+
+/**
+ * Sorts fish `i`'s row of `order` (from `resetNeighbourOrder`) nearest first, ties to the lower
+ * index, so the result depends only on `distSq`. Fish move a few millimetres a step, so the row
+ * left by the last step is nearly sorted and the insertion sort costs little more than one pass.
+ */
+export function sortNeighbours(
+  distSq: Float64Array,
+  n: number,
+  i: number,
+  order: Int32Array,
+): void {
+  const row = i * n;
+  const end = row + n - 1;
+  for (let a = row + 1; a < end; a++) {
+    const j = order[a] ?? 0;
+    const d = distSq[row + j] ?? Infinity;
+    let b = a;
+    while (b > row) {
+      const pj = order[b - 1] ?? 0;
+      const pd = distSq[row + pj] ?? Infinity;
+      if (pd < d || (pd === d && pj < j)) break;
+      order[b] = pj;
+      b--;
+    }
+    order[b] = j;
+  }
 }
 
 /**
@@ -66,10 +94,12 @@ export interface BalancedScratch {
  * `i` within `maxDistSq`, nearest first, skipping any seen within the angle whose cosine is
  * `minAngleCos` of one already taken, up to `k`, from the `pool` nearest. Plain k-nearest lets a
  * large school break into subgroups of about k that each see only themselves; skipping a crowded
- * bearing reaches past the fish's own clump to the next one.
+ * bearing reaches past the fish's own clump to the next one. `order` is fish `i`'s row sorted by
+ * `sortNeighbours`; `dir` holds 3 × k.
  */
 export function selectBalanced(
   distSq: Float64Array,
+  order: Int32Array,
   pos: Float64Array,
   n: number,
   i: number,
@@ -80,18 +110,23 @@ export function selectBalanced(
   minAngleCos: number,
   out: Int32Array,
   outOffset: number,
-  scratch: BalancedScratch,
+  dir: Float64Array,
 ): number {
-  const { idx, dist, dir } = scratch;
-  const found = selectNearest(distSq, n, i, pool, group, maxDistSq, idx, 0, dist);
+  const g = group === null ? -1 : (group[i] ?? -1);
+  const row = i * n;
   const px = pos[i * 3] ?? 0;
   const py = pos[i * 3 + 1] ?? 0;
   const pz = pos[i * 3 + 2] ?? 0;
   let count = 0;
   let directions = 0;
-  for (let c = 0; c < found && count < k; c++) {
-    const j = idx[c] ?? 0;
-    const dj = Math.sqrt(dist[c] ?? 0);
+  let seen = 0;
+  for (let c = row; c < row + n - 1 && count < k && seen < pool; c++) {
+    const j = order[c] ?? 0;
+    if (group !== null && group[j] !== g) continue;
+    const d = distSq[row + j] ?? Infinity;
+    if (d > maxDistSq) break;
+    seen++;
+    const dj = Math.sqrt(d);
     if (dj < 1e-12) {
       out[outOffset + count++] = j;
       continue;
