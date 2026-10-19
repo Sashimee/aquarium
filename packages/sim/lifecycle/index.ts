@@ -30,3 +30,4 @@ export {
   type BreedingEnvironment,
   type BreedingTable,
 } from './breeding.ts';
+export * from './timeline.ts';

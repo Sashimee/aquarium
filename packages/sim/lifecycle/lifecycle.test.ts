@@ -113,6 +113,7 @@ function run(
   ms: number,
   opts: {
     grace?: number;
+    from?: number;
     feeder?: boolean;
     equipment?: Equipment;
     env?: Partial<TankEnvironment>;
@@ -123,7 +124,7 @@ function run(
     ...opts.env,
     equipment: opts.equipment ?? DEFAULT_EQUIPMENT,
     state,
-    fromMs: T0,
+    fromMs: T0 + (opts.from ?? 0),
     toMs: T0 + ms,
     graceEndsAtMs: opts.grace ?? NO_GRACE,
     vacationFeeder: opts.feeder ?? false,
@@ -479,7 +480,8 @@ describe('catch-up resolution and cap', () => {
     expect(r.capped).toBe(true);
     expect(r.steps).toBe(MAX_CATCH_UP_MS / STEP_MS);
     expect(r.advancedToMs).toBe(T0 + 400 * DAY);
-    expect(r.state).toEqual(run(state, 60 * DAY).state);
+    expect(r.state).toEqual(run(state, 400 * DAY, { from: 340 * DAY }).state);
+    expect(r.deaths.every((d) => d.diedAtMs > T0 + 340 * DAY)).toBe(true);
   });
 
   it('is deterministic and splitting a window changes nothing', () => {
@@ -917,7 +919,7 @@ describe('offline catch-up with chemistry', () => {
     const start = tank([fishOf('a', 'neon-tetra')], { uneatenFood: 4 });
     const year = run(start, 365 * DAY);
     expect(year.capped).toBe(true);
-    expect(year.state).toEqual(run(start, 60 * DAY).state);
+    expect(year.state).toEqual(run(start, 365 * DAY, { from: 305 * DAY }).state);
   });
 
   it('keeps every reading finite and in range over 60 days', () => {
