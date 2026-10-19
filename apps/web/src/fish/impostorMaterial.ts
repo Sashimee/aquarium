@@ -39,7 +39,9 @@ import { ImpostorSlot, type ImpostorAtlas, type ImpostorInstanceData } from './i
 import {
   bodyBend,
   FIN_OPACITY_FLOOR,
+  juvenileLivery,
   rotateByQuat,
+  translucentShare,
   type FishLighting,
   type FishMaterialFeatures,
 } from './material';
@@ -148,7 +150,9 @@ export class FishImpostorMaterial extends MeshPhysicalNodeMaterial {
     const view = this.instanceVec4(ImpostorSlot.View);
     const toCamera = view.xyz;
     const pale = view.w;
-    const tint = this.instanceVec4(ImpostorSlot.Tint).xyz;
+    const tintBlock = this.instanceVec4(ImpostorSlot.Tint);
+    const tint = tintBlock.xyz;
+    const youth = tintBlock.w;
     const frames = this.instanceVec4(ImpostorSlot.Frames);
     const q = this.surface.xyz;
     const slope = this.surface.w;
@@ -206,13 +210,14 @@ export class FishImpostorMaterial extends MeshPhysicalNodeMaterial {
     // Without a map the clearcoat would take the flat strip's own normal.
     this.clearcoatNormalNode = viewNormal;
 
-    const base = colour.rgb.mul(tint);
+    const base = juvenileLivery(colour.rgb.mul(tint), youth);
     const grey = vec3(luminance(base).mul(0.8).add(0.06));
     const albedo = mix(base, grey, pale.mul(0.85)).toVar();
     this.colorNode = albedo;
 
     const finAmount = smoothstep(0.08, 0.5, finMask);
     const translucent = features.fins !== 'cutout' && profile.finTransmission > 0;
+    const glows = features.fins !== 'cutout';
     const finAlpha = coverage.mul(
       float(1).sub(finAmount.mul(profile.finTransmission * (1 - FIN_OPACITY_FLOOR))),
     );
@@ -225,15 +230,16 @@ export class FishImpostorMaterial extends MeshPhysicalNodeMaterial {
       this.maskNode = coverage.greaterThan(0.5);
     }
 
-    if (translucent) {
+    if (glows) {
       const toEye = normalize(cameraPosition.sub(positionWorld));
       const l = lighting.lightDirection;
       const diffuse = abs(dot(normalWorld, l)).mul(0.3);
       const forward = pow(max(dot(toEye, l.negate()), 0), 3).mul(0.7);
+      const share = translucentShare(finAmount.mul(profile.finTransmission), youth);
       this.emissiveNode = albedo
         .mul(lighting.light)
         .mul(diffuse.add(forward))
-        .mul(finAmount.mul(profile.finTransmission / Math.PI));
+        .mul(share.mul(1 / Math.PI));
     } else {
       this.emissiveNode = null;
     }

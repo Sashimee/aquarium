@@ -89,6 +89,7 @@ const readsTint = (node: Node | null): boolean => readsSlot(node, InstanceSlot.T
 const readsPale = (node: Node | null): boolean =>
   readsSlot(node, InstanceSlot.Pale - (InstanceSlot.Pale % 4));
 const readsMouth = (node: Node | null): boolean => readsSlotComponent(node, InstanceSlot.Mouth);
+const readsYouth = (node: Node | null): boolean => readsSlotComponent(node, InstanceSlot.Youth);
 
 function readsAttribute(node: Node | null, name: string, type: string): boolean {
   let found = false;
@@ -136,6 +137,39 @@ describe('FishMaterial surface', () => {
     const body = fishMaterial(new MeshStandardMaterial({ name: 'CustomMaterial' }));
     expect(readsPale(eye.colorNode)).toBe(false);
     expect(readsPale(body.colorNode)).toBe(true);
+  });
+
+  it('fades a young fish from a pale, glassy body into its livery, but not its eyes', () => {
+    const eye = fishMaterial(new MeshStandardMaterial({ name: 'Eye', color: 0x050505 }));
+    const body = fishMaterial(new MeshStandardMaterial({ name: 'CustomMaterial' }));
+    expect(readsYouth(eye.colorNode)).toBe(false);
+    expect(readsYouth(body.colorNode)).toBe(true);
+    expect(readsYouth(shrimpMaterial().colorNode)).toBe(true);
+  });
+
+  it('lets light through a young body of any species once fins are translucent', () => {
+    const body = fishMaterial(new MeshStandardMaterial({ name: 'CustomMaterial' }), false, false, {
+      ...pleco,
+      finTransmission: 0,
+    });
+    body.setFeatures(FEATURES);
+    expect(readsYouth(body.emissiveNode)).toBe(true);
+    body.setFeatures({ ...FEATURES, fins: 'cutout' });
+    expect(body.emissiveNode).toBeNull();
+    const eye = fishMaterial(new MeshStandardMaterial({ name: 'Eye' }));
+    eye.setFeatures(FEATURES);
+    expect(readsYouth(eye.emissiveNode)).toBe(false);
+  });
+
+  it('holds back the iridescence of a fish whose iridophores are still forming', () => {
+    const neon = fishMaterial(
+      new MeshStandardMaterial({ name: 'CustomMaterial' }),
+      false,
+      false,
+      iridescent,
+    );
+    neon.setFeatures(FEATURES);
+    expect(readsYouth(neon.iridescenceNode)).toBe(true);
   });
 
   it('keeps the authored surface across feature changes', () => {
