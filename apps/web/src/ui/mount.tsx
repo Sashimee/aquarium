@@ -1,5 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { audio } from '../interaction/audio/engine';
 import { haptics } from '../interaction/haptics';
 import { watchReducedMotion } from '../interaction/motion';
 import { App } from './App';
@@ -15,6 +16,8 @@ import './loading.css';
 export function mountUi(container: HTMLElement, bridge: UiBridge): () => void {
   const stopHaptics = haptics.attach(bridge.interaction);
   const stopMotion = watchReducedMotion((reduced) => haptics.setReducedMotion(reduced));
+  const stopAudioBus = audio.attach(bridge.interaction);
+  const stopAudio = audio.start();
   startPwa();
   const root = createRoot(container);
   root.render(
@@ -28,6 +31,8 @@ export function mountUi(container: HTMLElement, bridge: UiBridge): () => void {
   );
   return () => {
     stopHaptics();
+    stopAudioBus();
+    stopAudio();
     stopMotion();
     root.unmount();
   };

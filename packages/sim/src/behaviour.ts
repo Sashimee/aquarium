@@ -1310,6 +1310,19 @@ export class Behaviour {
         plan.pivot = true;
         plan.speedCap *= Math.max(0, facing);
       }
+    } else if (sp.gait === 'forage') {
+      // Food smelt behind a bottom forager: it turns round on the spot over the sand, as a cory
+      // does, where swinging a cruising arc near the floor loses way and dithers.
+      const o = i * 3;
+      const hx = at(this.host.forward, o);
+      const hz = at(this.host.forward, o + 2);
+      const ahead =
+        (hx * (fx - px) + hz * (fz - pz)) /
+        (Math.hypot(hx, hz) * Math.hypot(fx - px, fz - pz) || 1);
+      if (ahead < 0) {
+        plan.pivot = true;
+        plan.speedCap = 0;
+      }
     }
     return true;
   }

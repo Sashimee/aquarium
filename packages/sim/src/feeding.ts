@@ -4,6 +4,7 @@ import type { FishResize } from './fishArrays.ts';
 import { MAX_FEEDERS, MAX_FOOD_PARTICLES, type AteEvent } from './food.ts';
 import { clamp } from './math.ts';
 import { selectNearest } from './neighbours.ts';
+import type { SimSpecies } from './species.ts';
 
 /** Every tunable of the feeding AI; sources are in BEHAVIOUR.md. */
 export const FEEDING = {
@@ -41,6 +42,11 @@ export const FEEDING = {
   buriedM: 0.005,
   /** Walkers pick food off the surface under them and leave anything farther off it. */
   walkerReachBodyLengths: 0.6,
+  /** Scavengers smell food lying on a surface out to this many times their perception range. */
+  scavengerChemoRangeFactor: 2,
+  /** Food slower than this and within `settledHeightM` of a surface has settled. */
+  settledSpeedMps: 0.005,
+  settledHeightM: 0.01,
 } as const;
 
 const DT = 1 / 30;
@@ -65,6 +71,11 @@ export function gutForHunger(hunger: number): number {
   return Math.max(0, FEEDING.satiationPortions - hunger / HUNGER_PER_PORTION);
 }
 
+/** Walkers and bottom foragers find food lying on the substrate by smell and touch. */
+export function isScavenger(sp: SimSpecies): boolean {
+  return sp.walking !== null || sp.gait === 'forage';
+}
+
 function at(a: ArrayLike<number>, i: number): number {
   return a[i] ?? 0;
 }
@@ -82,6 +93,8 @@ export class Feeding {
   private _eligible: Uint8Array;
   private _leash: Float64Array;
   readonly events: AteEvent[] = [];
+  /** Portions of settled food each fish id ate since `takeSettled`, in first-bite order. */
+  private readonly settledEaten = new Map<string, number>();
 
   private readonly host: BehaviourHost;
   private targetId: Int32Array;
@@ -106,6 +119,7 @@ export class Feeding {
   private readonly buried = new Uint8Array(MAX_FOOD_PARTICLES);
   /** Each particle's distance to the sand, glass or rock nearest it. */
   private readonly surfaceDist = new Float64Array(MAX_FOOD_PARTICLES);
+  private readonly settled = new Uint8Array(MAX_FOOD_PARTICLES);
   private readonly n3 = new Float64Array(3);
   private readonly nbr = new Int32Array(FEEDING.followNeighbours);
   private readonly nbrDist = new Float64Array(FEEDING.followNeighbours);
@@ -245,6 +259,8 @@ export class Feeding {
       );
       this.buried[k] = d < -FEEDING.buriedM ? 1 : 0;
       this.surfaceDist[k] = d;
+      this.settled[k] =
+        d <= FEEDING.settledHeightM && at(food.speed, k) < FEEDING.settledSpeedMps ? 1 : 0;
     }
 
     for (let i = 0; i < n; i++) {
@@ -349,7 +365,17 @@ export class Feeding {
     );
   }
 
-  /** A pursued particle is followed out to a wider range and outside the visual cone. */
+  /** Settled food fish `i` ate since the last call, by fish id; removed fish keep their share. */
+  takeSettled(): ReadonlyMap<string, number> {
+    const out = new Map(this.settledEaten);
+    this.settledEaten.clear();
+    return out;
+  }
+
+  /**
+   * A pursued particle is followed out to a wider range and outside the visual cone; a scavenger
+   * keeps settled food as far as it can smell it.
+   */
   private keeps(i: number, k: number): boolean {
     const { food, position } = this.host;
     const sp = this.host.species[at(this.host.speciesIndex, i)];
@@ -362,7 +388,11 @@ export class Feeding {
       y - at(position, i * 3 + 1),
       z - at(position, i * 3 + 2),
     );
-    return d <= sp.perceptionRange * FEEDING.keepRangeFactor && this.withinLeash(i, x, y, z);
+    const range =
+      this.settled[k] === 1 && isScavenger(sp)
+        ? sp.perceptionRange * Math.max(FEEDING.keepRangeFactor, FEEDING.scavengerChemoRangeFactor)
+        : sp.perceptionRange * FEEDING.keepRangeFactor;
+    return d <= range && this.withinLeash(i, x, y, z);
   }
 
   /**
@@ -431,11 +461,12 @@ export class Feeding {
     const fy = at(forward, i * 3 + 1);
     const fz = at(forward, i * 3 + 2);
     const range = sp.perceptionRange;
+    const chemoRange = isScavenger(sp) ? FEEDING.scavengerChemoRangeFactor * range : 0;
     const cone = sp.perceptionFov >= 2 * Math.PI ? -2 : Math.cos(sp.perceptionFov / 2);
     const motivation = this.motivation(i);
     const walker = sp.walking !== null;
     const surfaceReach = FEEDING.walkerReachBodyLengths * at(this.host.bodyLength, i);
-    const found = food.near(px, py, pz, range, this.candidates);
+    const found = food.near(px, py, pz, Math.max(range, chemoRange), this.candidates);
     let best = -1;
     let bestScore = 0;
     for (let m = 0; m < found; m++) {
@@ -453,13 +484,17 @@ export class Feeding {
       const dy = y - py;
       const dz = z - pz;
       const d = Math.hypot(dx, dy, dz);
-      if (d > 1e-9 && (dx * fx + dy * fy + dz * fz) / d < cone) continue;
+      const smelt = this.settled[k] === 1 && d < chemoRange;
+      if (!smelt) {
+        if (d > range) continue;
+        if (d > 1e-9 && (dx * fx + dy * fy + dz * fz) / d < cone) continue;
+      }
       if (!this.withinLeash(i, x, y, z)) continue;
       if (contested && this.full(k, d)) continue;
       const motion = Math.min(1, at(food.speed, k) / FEEDING.motionReferenceMps);
+      const sight = d < range ? (1 - d / range) * (1 + FEEDING.motionSalienceGain * motion) : 0;
       const salience =
-        (1 - d / range) *
-        (1 + FEEDING.motionSalienceGain * motion) *
+        Math.max(sight, smelt ? 1 - d / chemoRange : 0) *
         (walker ? 1 : this.zone(i, y, at(food.ground, k)));
       const score = salience * preference * motivation;
       if (score > bestScore) {
@@ -584,7 +619,12 @@ export class Feeding {
       food.consume(k, portion);
       this.gut[i] = at(this.gut, i) + portion;
       const fishId = fishIds[i];
-      if (fishId !== undefined) this.events.push({ fishId, foodId: at(food.id, k), portion });
+      if (fishId !== undefined) {
+        this.events.push({ fishId, foodId: at(food.id, k), portion });
+        if (this.settled[k] === 1) {
+          this.settledEaten.set(fishId, (this.settledEaten.get(fishId) ?? 0) + portion);
+        }
+      }
       this.handling[i] = grazed ? FEEDING.grazeBiteS : FEEDING.handlingS;
       this.pursuit[i] = 0;
       if (!grazed || food.remaining(k) <= EMPTY || !this.hungry(i)) this.drop(i);
