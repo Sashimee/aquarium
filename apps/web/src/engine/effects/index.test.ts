@@ -26,7 +26,9 @@ import { QualityManager } from '../quality/QualityManager';
 import type { Tier } from '../quality/tiers';
 import { Caustics } from '../water/caustics';
 import { WaterMedium } from '../water/medium';
-import { Effects, type Post, type PostFactory } from './index';
+import { DEFAULT_TANK, TANK_DIMENSIONS, waterBounds } from '../tank/dimensions';
+import { TIER_SETTINGS } from '../quality/tiers';
+import { Effects, spriteShares, type Post, type PostFactory } from './index';
 import {
   PostNodeLoader,
   postNodesFor,
@@ -540,6 +542,50 @@ describe('Effects', () => {
     effects.dispose();
     await arrive(0);
     expect(built).toHaveLength(0);
+  });
+
+  it('thins the sprites for a smaller water box and follows it when it changes', () => {
+    const { host, createPost, scene } = setup('ultra');
+    host.tank.waterBounds.copy(waterBounds(DEFAULT_TANK));
+    const effects = new Effects(host, createPost);
+    const [particles, bubbles] = scene.children as Sprite[];
+    expect(particles?.count).toBe(TIER_SETTINGS.ultra.particleCount);
+    expect(bubbles?.count).toBe(TIER_SETTINGS.ultra.bubbleCount);
+
+    waterBounds(TANK_DIMENSIONS.nano30, host.tank.waterBounds);
+    effects.tankResized();
+    const share = spriteShares(host.tank.waterBounds);
+    expect(particles?.count).toBe(Math.round(TIER_SETTINGS.ultra.particleCount * share.particles));
+    expect(bubbles?.count).toBe(Math.round(TIER_SETTINGS.ultra.bubbleCount * share.bubbles));
+    expect(particles?.count).toBeLessThan(TIER_SETTINGS.ultra.particleCount / 5);
+    expect(particles?.visible).toBe(true);
+  });
+});
+
+describe('spriteShares', () => {
+  it('is whole for the standard tank and never grows past the tier for a larger one', () => {
+    expect(spriteShares(waterBounds(DEFAULT_TANK))).toEqual({ particles: 1, bubbles: 1 });
+    const long = spriteShares(waterBounds(TANK_DIMENSIONS.long300));
+    expect(long.particles).toBeLessThanOrEqual(1);
+    expect(long.bubbles).toBeLessThan(1);
+  });
+
+  it('keeps the particle density by volume and the bubble column by height', () => {
+    const standard = waterBounds(DEFAULT_TANK).getSize(new Vector3());
+    const nano = waterBounds(TANK_DIMENSIONS.nano30).getSize(new Vector3());
+    const share = spriteShares(waterBounds(TANK_DIMENSIONS.nano30));
+    expect(share.particles).toBeCloseTo(
+      (nano.x * nano.y * nano.z) / (standard.x * standard.y * standard.z),
+      12,
+    );
+    expect(share.bubbles).toBeCloseTo(nano.y / standard.y, 12);
+  });
+
+  it('gives no sprites to an empty box', () => {
+    expect(spriteShares(new Box3(new Vector3(), new Vector3()))).toEqual({
+      particles: 0,
+      bubbles: 0,
+    });
   });
 });
 

@@ -48,14 +48,14 @@ export class InteriorLight {
 
   /**
    * `substrateAlbedo` is read, not copied, so later changes to it are followed. `sandHeight` is
-   * the mean height of the substrate's top, where the bounce leaves it.
+   * the mean height of the substrate's top, where the bounce leaves it; it follows the tank's size.
    */
   constructor(
     private readonly medium: WaterMedium,
     private readonly caustics: Caustics,
     private readonly room: Texture,
     substrateAlbedo: Color,
-    private readonly sandHeight: number,
+    public sandHeight: number,
   ) {
     this.substrateAlbedo = uniform(substrateAlbedo);
   }

@@ -33,16 +33,20 @@ export function Dialog({
       return;
     }
     if (e.key !== 'Tab' || !box.current) return;
-    const focusable = box.current.querySelectorAll<HTMLElement>(
-      'button:not(:disabled), a[href], input, select, [tabindex="0"]',
+    const focusable = Array.from(
+      box.current.querySelectorAll<HTMLElement>(
+        'button:not(:disabled), a[href], input, select, [tabindex="0"]',
+      ),
     );
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
     if (!first || !last) return;
-    if (e.shiftKey && document.activeElement === first) {
+    const active = document.activeElement;
+    const outside = !(active instanceof Node) || !focusable.includes(active as HTMLElement);
+    if (e.shiftKey && (active === first || outside)) {
       e.preventDefault();
       last.focus();
-    } else if (!e.shiftKey && document.activeElement === last) {
+    } else if (!e.shiftKey && (active === last || outside)) {
       e.preventDefault();
       first.focus();
     }
