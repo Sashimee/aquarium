@@ -29,6 +29,7 @@ describe('parseRoute', () => {
   it('falls back to not-found', () => {
     expect(parseRoute('/nope')).toEqual({ name: 'not-found' });
     expect(parseRoute('/sessions/extra')).toEqual({ name: 'not-found' });
+    expect(parseRoute('/t/short')).toEqual({ name: 'not-found' });
   });
 });
 
@@ -44,6 +45,23 @@ describe('routePath', () => {
     ]) {
       expect(parseRoute(routePath(parseRoute(href)))).toEqual(parseRoute(href));
     }
+  });
+});
+
+describe('public tank route', () => {
+  const token = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNO_-';
+
+  it('parses a share link and round-trips it', () => {
+    expect(parseRoute(`/t/${token}`)).toEqual({ name: 'public-tank', token });
+    expect(routePath({ name: 'public-tank', token })).toBe(`/t/${token}`);
+  });
+
+  it('is reachable signed in or out and is never redirected', () => {
+    const route = parseRoute(`/t/${token}`);
+    expect(guardRoute(route, null)).toEqual(route);
+    expect(guardRoute(route, user)).toEqual(route);
+    expect(redirectFor(`/t/${token}`, user)).toBeNull();
+    expect(redirectFor(`/t/${token}/?backend=webgl`, null)).toBeNull();
   });
 });
 

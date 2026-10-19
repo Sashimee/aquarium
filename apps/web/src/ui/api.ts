@@ -11,6 +11,9 @@ import {
   creditsSchema,
   dataExportSchema,
   privacyPolicySchema,
+  publicTankSchema,
+  reactionStateSchema,
+  setReactionRequestSchema,
   emailSchema,
   passwordSchema,
   sessionListSchema,
@@ -27,6 +30,9 @@ import {
   type Tank,
   type ErrorCode,
   type PrivacyPolicy,
+  type PublicTank,
+  type ReactionKind,
+  type ReactionState,
   type SessionInfo,
   type SignInRequest,
   type SignUpRequest,
@@ -170,6 +176,13 @@ export interface ApiClient {
   netFish(tankId: string, fishId: string): Promise<Tank>;
   care(tankId: string, action: CareAction): Promise<Tank>;
   reportAte(tankId: string, reports: readonly AteReport[], batchId?: string): Promise<Tank>;
+  /** The only call whose response carries the share token, together with `rotateShare`. */
+  shareTank(tankId: string): Promise<Tank>;
+  rotateShare(tankId: string): Promise<Tank>;
+  revokeShare(tankId: string): Promise<Tank>;
+  publicTank(token: string): Promise<PublicTank>;
+  setReaction(token: string, kind: ReactionKind): Promise<ReactionState>;
+  clearReaction(token: string): Promise<ReactionState>;
 }
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
@@ -563,6 +576,44 @@ export function createApiClient(
     async reportAte(tankId, reports, batchId) {
       const body = validate(ateBatchRequestSchema, { reports, ...(batchId ? { batchId } : {}) });
       return parsed(await post(`/api/tanks/${encodeURIComponent(tankId)}/ate`, body), tankSchema);
+    },
+    async shareTank(tankId) {
+      return parsed(await post(`/api/tanks/${encodeURIComponent(tankId)}/share`, {}), tankSchema);
+    },
+    async rotateShare(tankId) {
+      return parsed(
+        await post(`/api/tanks/${encodeURIComponent(tankId)}/share/rotate`, {}),
+        tankSchema,
+      );
+    },
+    async revokeShare(tankId) {
+      const res = await send(`/api/tanks/${encodeURIComponent(tankId)}/share`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw await toError(res);
+      return parsed(res, tankSchema);
+    },
+    async publicTank(token) {
+      const res = await send(`/api/public/${encodeURIComponent(token)}`);
+      if (!res.ok) throw await toError(res);
+      return parsed(res, publicTankSchema);
+    },
+    async setReaction(token, kind) {
+      const body = validate(setReactionRequestSchema, { kind });
+      const res = await send(`/api/public/${encodeURIComponent(token)}/reaction`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw await toError(res);
+      return parsed(res, reactionStateSchema);
+    },
+    async clearReaction(token) {
+      const res = await send(`/api/public/${encodeURIComponent(token)}/reaction`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw await toError(res);
+      return parsed(res, reactionStateSchema);
     },
   };
 }

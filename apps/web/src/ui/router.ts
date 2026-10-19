@@ -1,4 +1,5 @@
 import type { User } from '@aquarium/shared';
+import { publicPath, tokenFromPath } from '../sync/share';
 
 export type Route =
   | { name: 'home' }
@@ -11,11 +12,14 @@ export type Route =
   | { name: 'settings' }
   | { name: 'privacy' }
   | { name: 'credits' }
+  | { name: 'public-tank'; token: string }
   | { name: 'not-found' };
 
 export function parseRoute(href: string): Route {
   const url = new URL(href, 'http://localhost');
   const path = url.pathname.replace(/\/+$/, '') || '/';
+  const token = tokenFromPath(path);
+  if (token) return { name: 'public-tank', token };
   switch (path) {
     case '/': {
       // Better Auth sends failed verifications to the bare callback root with ?error=.
@@ -55,6 +59,8 @@ export function routePath(route: Route): string {
       return '/';
     case 'not-found':
       return '/';
+    case 'public-tank':
+      return publicPath(route.token);
     case 'verify-email':
       return route.error
         ? `/verify-email?error=${encodeURIComponent(route.error)}`

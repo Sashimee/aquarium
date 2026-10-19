@@ -35,6 +35,17 @@ export interface SessionDeps {
   layoutDebounceMs?: number;
 }
 
+export interface ShareOutcome {
+  ok: boolean;
+  token: string | null;
+}
+
+const SHARE_DONE = {
+  share: 'Your tank is shared. Copy the link now.',
+  rotate: 'You have a new link. The old one no longer works.',
+  revoke: 'Sharing is off. The link no longer works.',
+} as const;
+
 const ACTIVE_KEY = 'aquarium.activeTank';
 const LOAD_ATTEMPTS = 4;
 const LEAVE_FLUSH_MS = 3_000;
@@ -230,6 +241,30 @@ export class TankSession {
       this.apply(next);
       this.patch({ notice: 'Tank renamed.' });
     });
+  }
+
+  /**
+   * The share token is in the response of share and rotate only. It goes to the caller and is
+   * stripped from the stored tank, so it never lingers in session state.
+   */
+  async changeSharing(change: 'share' | 'rotate' | 'revoke'): Promise<ShareOutcome> {
+    const tank = this.activeTank;
+    if (!tank) return { ok: false, token: null };
+    const gen = this.loadId;
+    let token: string | null = null;
+    const ok = await this.perform(async () => {
+      const { api } = this.deps;
+      const next = await (change === 'share'
+        ? api.shareTank(tank.id)
+        : change === 'rotate'
+          ? api.rotateShare(tank.id)
+          : api.revokeShare(tank.id));
+      token = next.shareToken;
+      if (gen !== this.loadId) return;
+      this.apply({ ...next, shareToken: null });
+      this.patch({ notice: SHARE_DONE[change] });
+    });
+    return { ok, token };
   }
 
   async feed(food: FoodType, portion: number): Promise<boolean> {

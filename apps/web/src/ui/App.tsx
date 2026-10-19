@@ -62,6 +62,8 @@ function Screen() {
       return <CreditsScreen />;
     case 'not-found':
       return <NotFoundScreen />;
+    case 'public-tank':
+      return null;
   }
 }
 
@@ -72,6 +74,9 @@ const ResetPasswordScreen = lazy(() =>
   import('./PasswordReset').then((m) => ({ default: m.ResetPasswordScreen })),
 );
 
+const PublicTankView = lazy(() =>
+  import('./PublicTank').then((m) => ({ default: m.PublicTankView })),
+);
 const DecorBody = lazy(() => import('./DecorPanel'));
 const TankReportBody = lazy(() => import('./TankReport'));
 const TanksPanel = lazy(() => import('./TankPanel').then((m) => ({ default: m.TanksPanel })));
@@ -138,6 +143,33 @@ function isOpen(panel: Panel): panel is OpenPanel {
 
 export function App() {
   useRedirect();
+  const route = useRoute();
+  if (route.name === 'public-tank') return <PublicShell token={route.token} />;
+  return <Shell />;
+}
+
+function PublicShell({ token }: { token: string }) {
+  return (
+    <div className="shell">
+      <a
+        className="skip"
+        href="#tank"
+        onClick={(e) => {
+          e.preventDefault();
+          document.getElementById('tank')?.focus();
+        }}
+      >
+        Skip to the tank
+      </a>
+      <Suspense fallback={null}>
+        <PublicTankView token={token} />
+      </Suspense>
+      <LoadingScreen />
+    </div>
+  );
+}
+
+function Shell() {
   const route = useRoute();
   const home = route.name === 'home';
   const { panel: requested, newTank, dispatch } = usePanels();

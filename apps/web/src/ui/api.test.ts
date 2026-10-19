@@ -10,6 +10,7 @@ import {
   TOTAL_TIMEOUT_FACTOR,
   createApiClient,
 } from './api';
+import { TANK_A, tankFixture } from '../sync/fixtures';
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -246,6 +247,75 @@ describe('api client', () => {
       createApiClient(fetcher).resetPassword('tok', 'a'.repeat(129)),
     ).rejects.toMatchObject({ fields: { password: 'Use at most 128 characters.' } });
     expect(fetcher).not.toHaveBeenCalled();
+  });
+});
+
+describe('api client sharing', () => {
+  const TOKEN = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNO_-';
+  const state = { reactions: { heart: 1, star: 0, wow: 0 }, myReaction: 'heart' };
+
+  it('posts share and rotate, deletes to revoke, and reads the issued token', async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(json(tankFixture({ shared: true, shareToken: TOKEN })))
+      .mockResolvedValueOnce(json(tankFixture({ shared: true, shareToken: TOKEN })))
+      .mockResolvedValueOnce(json(tankFixture({ shared: false })));
+    const api = createApiClient(fetcher);
+    expect((await api.shareTank(TANK_A)).shareToken).toBe(TOKEN);
+    await api.rotateShare(TANK_A);
+    expect((await api.revokeShare(TANK_A)).shared).toBe(false);
+    const calls = fetcher.mock.calls as [string, RequestInit][];
+    expect(calls.map(([url, init]) => [init.method, url])).toEqual([
+      ['POST', `/api/tanks/${TANK_A}/share`],
+      ['POST', `/api/tanks/${TANK_A}/share/rotate`],
+      ['DELETE', `/api/tanks/${TANK_A}/share`],
+    ]);
+  });
+
+  it('sets and clears a reaction on the public path and reads the new state', async () => {
+    const fetcher = vi.fn().mockImplementation(async () => json(state));
+    const api = createApiClient(fetcher);
+    expect(await api.setReaction(TOKEN, 'heart')).toEqual(state);
+    await api.clearReaction(TOKEN);
+    const calls = fetcher.mock.calls as [string, RequestInit][];
+    expect(calls[0]?.[0]).toBe(`/api/public/${TOKEN}/reaction`);
+    expect(calls[0]?.[1]).toMatchObject({ method: 'PUT', body: '{"kind":"heart"}' });
+    expect(calls[1]?.[1]).toMatchObject({ method: 'DELETE' });
+  });
+
+  it('rejects an unknown reaction without calling the server', async () => {
+    const fetcher = vi.fn();
+    await expect(
+      createApiClient(fetcher).setReaction(TOKEN, 'thumbs' as never),
+    ).rejects.toBeInstanceOf(ClientValidationError);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('turns 404, 429 and 401 into errors a viewer can act on', async () => {
+    const reply = (status: number, code: string, headers: Record<string, string> = {}) =>
+      new Response(JSON.stringify({ error: { code, message: 'nope' } }), {
+        status,
+        headers: { 'content-type': 'application/json', ...headers },
+      });
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(reply(404, 'not_found'))
+      .mockResolvedValueOnce(reply(429, 'rate_limited', { 'retry-after': '17' }))
+      .mockResolvedValueOnce(reply(401, 'unauthenticated'));
+    const api = createApiClient(fetcher);
+    await expect(api.publicTank(TOKEN)).rejects.toMatchObject({ status: 404, code: 'not_found' });
+    await expect(api.publicTank(TOKEN)).rejects.toMatchObject({
+      status: 429,
+      retryAfterSeconds: 17,
+    });
+    await expect(api.setReaction(TOKEN, 'star')).rejects.toMatchObject({ status: 401 });
+  });
+
+  it('refuses a public tank response it cannot read', async () => {
+    const fetcher = vi.fn().mockResolvedValue(json({ name: 'x' }));
+    await expect(createApiClient(fetcher).publicTank(TOKEN)).rejects.toMatchObject({
+      code: 'unexpected_response',
+    });
   });
 });
 
