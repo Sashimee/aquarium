@@ -77,7 +77,7 @@ describe('migrations', () => {
     const ids = Array.from({ length: 40 }, () => randomUUID());
     for (const id of ids) {
       await q(
-        `insert into fish (id, tank_id, species, name, size) values ($1, $2, 'neon-tetra', 'F', 0.03)`,
+        `insert into fish (id, tank_id, species, name, size, personality) values ($1, $2, 'neon-tetra', 'F', 0.03, '{}')`,
         [id, tankId],
       );
     }
@@ -103,7 +103,7 @@ describe('migrations', () => {
     expect(new Set(bySex.values())).toEqual(new Set(['male', 'female']));
 
     const legacy = await q(
-      `insert into fish (tank_id, species, name, size) values ($1, 'neon-tetra', 'Old', 0.03) returning sex`,
+      `insert into fish (tank_id, species, name, size, personality) values ($1, 'neon-tetra', 'Old', 0.03, '{}') returning sex`,
       [tankId],
     );
     expect((legacy.rows[0] as { sex: string }).sex).toBe('female');
