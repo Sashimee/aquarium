@@ -29,7 +29,13 @@ import {
   UNSUBSCRIBE_PATH,
   verifyUnsubscribeToken,
 } from './reminders.ts';
-import { APP_ORIGIN, createHarness, TEST_SECRET, type Harness } from './test-harness.ts';
+import {
+  APP_ORIGIN,
+  createHarness,
+  fishPayload,
+  TEST_SECRET,
+  type Harness,
+} from './test-harness.ts';
 
 const PASSWORD = 'correct horse battery';
 const jsonHeaders = { 'content-type': 'application/json', origin: APP_ORIGIN };
@@ -102,10 +108,13 @@ async function withFish(h: Harness, cookie: string) {
     biome: 'freshwater',
   });
   const tank = tankSchema.parse(created.json());
-  const fish = await call(h, cookie, 'POST', `/api/tanks/${tank.id}/fish`, {
-    species: 'neon-tetra',
-    name: 'Blip',
-  });
+  const fish = await call(
+    h,
+    cookie,
+    'POST',
+    `/api/tanks/${tank.id}/fish`,
+    fishPayload('neon-tetra', 'Blip'),
+  );
   expect(fish.statusCode).toBe(201);
   return tank;
 }
@@ -238,7 +247,9 @@ describe('shutdown release', () => {
   it('keeps a claim whose reminder already went out', async () => {
     const h = await harness();
     const a = await optedIn(h);
-    const inflight = new Map([[a.userId, { previous: null, delivered: true }]]);
+    const inflight = new Map<string, InflightClaim>([
+      [a.userId, { previous: null, delivered: true }],
+    ]);
     await h.database.db
       .update(schema.reminderPrefs)
       .set({ lastSentAt: new Date() })

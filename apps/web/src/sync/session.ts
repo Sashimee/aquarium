@@ -415,6 +415,7 @@ export class TankSession {
     this.deps.interaction.emit('tank:loaded', {
       tankId,
       biome: tank.biome,
+      size: tank.size,
       fish: tank.fish,
       decorLayout: tank.decorLayout,
       decorEdited: tank.decorEdited,

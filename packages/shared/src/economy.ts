@@ -9,7 +9,7 @@ import {
 import { diseaseKindSchema } from './fishState.js';
 import { tankSizeSchema } from './tankSize.js';
 
-// Planned tables (T70, PLAN 9.2); this contract ships no DB or routes.
+// Tables and routes live in apps/api (T70, PLAN 9.2).
 //   wallet(user_id PK -> user ON DELETE CASCADE, balance integer): cache of the ledger sum, kept
 //     apart from Better Auth's user table.
 //   ledger(id, user_id -> user ON DELETE SET NULL, delta, reason, source, item_ref, idempotency_key,
@@ -39,9 +39,9 @@ import { tankSizeSchema } from './tankSize.js';
 //                 delta < 0, itemRef names the original pack or subscription row
 //   restore       Pearls returned after a won dispute, source stripe|apple, delta > 0
 //
-// T70 must require stage and idempotencyKey on every paid add-fish and must not charge the
-// DEFAULT_PURCHASE_STAGE silently (an old client that sends no stage gets a 400 asking it to
-// reload). A fish is bought through add-fish only; purchase rejects species:* refs.
+// A request without stage is priced as DEFAULT_PURCHASE_STAGE and one without idempotencyKey gets a
+// server-made key, for clients that predate the shop (apps/api/src/legacyRequests.ts, #765).
+// A fish is bought through add-fish only; purchase rejects species:* refs.
 //
 // Plants and decor are priced by the ids of DECOR_ASSET_IDS (the ids a layout holds), not by
 // manifest ids. The procedural euphyllia-<hammer|torch>-<n> pieces share items.euphyllia; see
@@ -77,6 +77,13 @@ export const idempotencyKeySchema = z
   .max(128)
   .regex(/^[A-Za-z0-9_-]+$/);
 
+// What the ledger stores: a client key, or a server reward key with a ':' no client key may hold.
+export const ledgerKeySchema = z
+  .string()
+  .min(8)
+  .max(160)
+  .regex(/^[A-Za-z0-9_:-]+$/);
+
 export const itemRefSchema = z
   .string()
   .min(1)
@@ -94,7 +101,7 @@ export const ledgerEntrySchema = z.strictObject({
   reason: ledgerReasonSchema,
   source: ledgerSourceSchema,
   itemRef: itemRefSchema.nullable(),
-  idempotencyKey: idempotencyKeySchema,
+  idempotencyKey: ledgerKeySchema,
   createdAt: timestampSchema,
 });
 export type LedgerEntry = z.infer<typeof ledgerEntrySchema>;

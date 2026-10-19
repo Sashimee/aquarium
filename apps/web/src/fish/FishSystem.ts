@@ -32,7 +32,7 @@ import type { Engine } from '../engine/Engine';
 import type { EventBus } from '../engine/events';
 import { releaseAll } from '../engine/lifecycle';
 import type { Tier, TierSettings } from '../engine/quality/tiers';
-import { waterBounds, type TankDimensions } from '../engine/tank/dimensions';
+import { sameTank, waterBounds, type TankDimensions } from '../engine/tank/dimensions';
 import type { InteractionEvents } from '../interaction/events';
 import type { ImpostorAtlasInfo, ShrimpRig } from './assetIndex';
 import { disposeFishModel, FishAssetLoader, type FishModel } from './assets';
@@ -316,8 +316,10 @@ export class FishSystem {
   private readonly loader: FishAssetLoader;
   private readonly bags: AcclimationBags;
   private readonly lifetime = new AbortController();
-  private readonly box: WaterBox;
+  private box: WaterBox;
   private readonly spec: SimWorldSpec;
+  private demoBiome: Biome;
+  private tank: TankDimensions;
   private readonly cleanups: (() => void)[] = [];
   private readonly ateListeners = new Set<(events: readonly FishBite[]) => void>();
   private readonly nudgeListeners = new Set<(nudge: BallNudge) => void>();
@@ -473,16 +475,9 @@ export class FishSystem {
     demo: DemoTank,
     private readonly seed: number,
   ) {
-    const bounds = waterBounds(options.tank);
-    const space = demo.config.space;
-    this.box = {
-      minX: bounds.min.x,
-      maxX: bounds.max.x,
-      ground: (x, z) => sampleFloor(space, x, z),
-      minZ: bounds.min.z,
-      maxZ: bounds.max.z,
-      top: bounds.max.y,
-    };
+    this.demoBiome = options.biome;
+    this.tank = options.tank;
+    this.box = waterBoxOf(options.tank, demo);
     this.roster = new TankRoster(demo.config.fish);
     this.spec = new SimWorldSpec(demo, seed);
     this.loader = new FishAssetLoader(engine.ktx2, options.assetRoot);
@@ -583,10 +578,33 @@ export class FishSystem {
     this.requestSync();
   }
 
+  /**
+   * Moves the swimming space to `tank`: the fish box and the sim's world are rebuilt around it, so
+   * nobody swims outside the new glass. Stock and the saved tank stay as they are.
+   */
+  setTank(tank: TankDimensions): void {
+    if (this.disposed || sameTank(tank, this.tank)) return;
+    this.tank = tank;
+    const demo = demoTank(tank, this.seed, this.demoBiome);
+    this.box = waterBoxOf(tank, demo);
+    for (const rt of this.runtimes.values()) {
+      if (rt.script !== null) rt.script = this.deadScript(rt);
+    }
+    this.spec.setDemo(demo);
+    this.spec.setAnchors([]);
+    this.roster.setDemo(demo.config.fish);
+    this.stopWorld();
+    this.prune();
+    this.batches.evictUnwanted();
+    this.materialize();
+    this.requestSync();
+  }
+
   /** Replaces the demo stock with `biome`'s; a loaded saved tank is left alone. */
   setDemoBiome(biome: Biome): void {
     if (this.disposed) return;
-    const demo = demoTank(this.options.tank, this.seed, biome);
+    this.demoBiome = biome;
+    const demo = demoTank(this.tank, this.seed, biome);
     const swapped = this.roster.setDemo(demo.config.fish);
     if (swapped) this.stopWorld();
     this.prune();
@@ -1780,4 +1798,17 @@ export class FishSystem {
     writeDiseaseSigns(rt.fish.disease, false, v);
     draw.instances.write(slot, v);
   }
+}
+
+function waterBoxOf(tank: TankDimensions, demo: DemoTank): WaterBox {
+  const bounds = waterBounds(tank);
+  const space = demo.config.space;
+  return {
+    minX: bounds.min.x,
+    maxX: bounds.max.x,
+    ground: (x, z) => sampleFloor(space, x, z),
+    minZ: bounds.min.z,
+    maxZ: bounds.max.z,
+    top: bounds.max.y,
+  };
 }

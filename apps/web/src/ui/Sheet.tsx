@@ -27,6 +27,8 @@ export function Sheet({
   const start = useRef<number | null>(null);
 
   useEffect(() => {
+    const active = document.activeElement;
+    const opener = active instanceof HTMLElement && active !== document.body ? active : null;
     heading.current?.focus({ preventScroll: true });
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
@@ -39,9 +41,10 @@ export function Sheet({
       document.removeEventListener('keydown', onKey);
       const active = document.activeElement;
       if (active && active !== document.body && !node?.contains(active)) return;
-      document
-        .querySelector<HTMLElement>(`[data-opener="${panel}"]`)
-        ?.focus({ preventScroll: true });
+      const target = opener?.isConnected
+        ? opener
+        : document.querySelector<HTMLElement>(`[data-opener="${panel}"]`);
+      target?.focus({ preventScroll: true });
     };
   }, [panel]);
 

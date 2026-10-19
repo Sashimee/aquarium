@@ -1,7 +1,9 @@
 import type { Biome, PlayableBiome } from '@aquarium/shared';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { CameraMode } from '../interaction/camera';
+import { chipState, type ChipStatus } from './chemistryChip';
 import { useAuth, useBridge, useCameraMode, useDemoBiome } from './context';
+import { getDip, subscribeDips } from './dipStore';
 import { BookIcon, DuskIcon, MoonIcon, PersonIcon, SunIcon, TankIcon } from './icons';
 import type { OpenPanel } from './panels';
 import { Link } from './screens';
@@ -75,6 +77,63 @@ export function StatusCard({ open, onPress }: { open: boolean; onPress(): void }
               <span className="gauge-bar">
                 <span style={{ width: `${Math.round(g.value * 100)}%` }} />
               </span>
+            </span>
+          ))}
+        </span>
+      )}
+    </button>
+  );
+}
+
+const CHIP_ICON: Record<ChipStatus, string> = {
+  none: '-',
+  unread: '?',
+  partial: '?',
+  stale: '~',
+  safe: 'OK',
+  warning: '!',
+  danger: '!!',
+};
+
+export function ChemistryChip({ open, onPress }: { open: boolean; onPress(): void }) {
+  const tank = useActiveTank();
+  const { species } = useSessionState();
+  const dip = useSyncExternalStore(
+    subscribeDips,
+    () => (tank ? getDip(tank.id) : null),
+    () => null,
+  );
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    if (dip) setNow(Date.now());
+  }, [dip]);
+  if (!tank) return null;
+  const state = chipState(tank, species, dip, now);
+  return (
+    <button
+      type="button"
+      className="chem-chip"
+      data-status={state.status}
+      aria-expanded={open}
+      aria-controls={open ? 'panel-care' : undefined}
+      aria-label={state.ariaLabel}
+      onClick={onPress}
+    >
+      <span className="chem-verdict">
+        <span className="chem-mark" aria-hidden="true">
+          {CHIP_ICON[state.status]}
+        </span>
+        {state.verdict}
+      </span>
+      {state.values.length > 0 && (
+        <span className="chem-values" aria-hidden="true">
+          {state.values.map((v) => (
+            <span key={v.key} data-chem={v.key}>
+              {v.label} {v.text}
             </span>
           ))}
         </span>

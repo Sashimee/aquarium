@@ -22,7 +22,9 @@ export {
   type Rejection,
 } from './care.ts';
 export {
+  JUVENILE_ADULT_SIZE_FRACTION,
   stageAt,
+  stageBySize,
   stepBreeding,
   unitHash,
   type BirthRecord,

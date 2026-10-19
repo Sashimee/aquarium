@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { AttributeNode, MeshStandardMaterial, Vector3, type Node } from 'three/webgpu';
+import {
+  AttributeNode,
+  BoxGeometry,
+  BufferAttribute,
+  DirectionalLight,
+  InstancedMesh,
+  MeshStandardMaterial,
+  Vector3,
+  type Node,
+} from 'three/webgpu';
 import { float, uniform, vec3 } from 'three/tsl';
 import {
   FishInstanceData,
@@ -9,6 +18,8 @@ import {
   WalkerSlot,
 } from './instances';
 import { reversedSmoothsteps } from '../engine/reversedSmoothsteps';
+import { buildShaders, mainBodyDepths } from '../engine/shaderFixtures';
+import { FIN_ATTRIBUTE } from './assets';
 import {
   AUTHORED_SURFACE_MATERIAL,
   finDisplay,
@@ -295,6 +306,28 @@ describe('FishMaterial disease', () => {
       expect(readsDisease(node)).toBe(false);
     }
     expect(shrimp.roughnessNode).toBeNull();
+  });
+
+  it('shades every fish with its normal, not only those the disease branches run for', () => {
+    for (const features of [
+      FEATURES,
+      { fins: 'cutout', iridescence: false, clearcoat: false, gills: false } as const,
+    ]) {
+      const body = fishMaterial(new MeshStandardMaterial({ name: 'CustomMaterial' }));
+      body.setFeatures(features);
+      const geometry = new BoxGeometry(0.1, 0.03, 0.1);
+      geometry.setAttribute(
+        FIN_ATTRIBUTE,
+        new BufferAttribute(new Float32Array(geometry.getAttribute('position').count * 2), 2),
+      );
+      const mesh = new InstancedMesh(geometry, body, 1);
+      const { fragment } = buildShaders(mesh, 'webgl', [new DirectionalLight()]);
+      const assignments = mainBodyDepths(fragment).filter(({ line }) =>
+        /^normalView\s*=/.test(line),
+      );
+      expect(assignments.length).toBeGreaterThan(0);
+      for (const { depth } of assignments) expect(depth).toBe(0);
+    }
   });
 });
 

@@ -11,6 +11,7 @@ export const errorCodeSchema = z.enum([
   'push_device_limit',
   'rate_limited',
   'email_not_verified',
+  'insufficient_pearls',
   'feeding_rejected',
   'payload_too_large',
   'unsupported_media_type',

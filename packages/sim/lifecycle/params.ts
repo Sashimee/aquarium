@@ -6,7 +6,7 @@ export const MAX_CATCH_UP_DAYS = 60;
 export const MAX_CATCH_UP_MS = MAX_CATCH_UP_DAYS * 86_400_000;
 export const GRACE_PERIOD_MS = 48 * 3_600_000;
 
-export const VACATION_FEEDER_ASSET_ID = 'vacation-feeder';
+export { VACATION_FEEDER_ASSET_ID } from '@aquarium/shared';
 export const VACATION_HUNGER_FACTOR = 0.5;
 
 /** Fish below this health stop growing; above it, growth resumes. */
@@ -30,8 +30,9 @@ export const REFERENCE_TANK_LITRES = 300;
  * still survive one portion in a nano, whose peak stays below that tolerance. The food exponent is the
  * largest that keeps every species alive in a cap-stocked nano on 0.5 portions a day.
  * Bioload above the tank's capacity (stock added before sizes had caps) adds no further concentration: the
- * waste of an over-cap tank is held at that of a full one, never below the unscaled waste, so its animals
- * are not wiped out on catch-up.
+ * waste of an over-cap tank is held at that of a full one, never below the unscaled waste. That caps the
+ * harshness but does not spare the stock: shrimp nanos stocked before the cap existed (dev data only) still
+ * all die within about 120 days.
  */
 export const VOLUME_CONCENTRATION_EXPONENT = 0.7;
 export const FOOD_CONCENTRATION_EXPONENT = 0.25;

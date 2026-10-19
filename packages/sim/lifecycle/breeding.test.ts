@@ -12,7 +12,9 @@ import { describe, expect, it } from 'vitest';
 import {
   catchUp,
   DEFAULT_WATER_PARAMETERS,
+  JUVENILE_ADULT_SIZE_FRACTION,
   stageAt,
+  stageBySize,
   STEP_MS,
   stepBreeding,
   TANK_BIOLOAD_CAPACITY,
@@ -243,6 +245,44 @@ describe('caps', () => {
       env({ bioloadCapacity: 0.5 + 0.25 }),
     );
     expect(births.length).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('juveniles of species with no fry timeline', () => {
+  const neonLife = lifecycles.get('neon-tetra');
+  const neonBreeding = breedings.get('neon-tetra');
+  if (!neonLife || !neonBreeding) throw new Error('neon-tetra missing');
+
+  it('has no fryGrowth, so age cannot mature it', () => {
+    expect(neonBreeding.fryGrowth).toBeUndefined();
+    const juvenile = fishOf('j', 'neon-tetra', { stage: 'juvenile', bornAtMs: T0 });
+    expect(stageAt(juvenile, neonBreeding, T0 + 3650 * DAY)).toBe('juvenile');
+  });
+
+  it('matures once it has grown to the adult size fraction', () => {
+    const at = (size: number) =>
+      stageBySize(fishOf('j', 'neon-tetra', { stage: 'juvenile', size }), neonLife);
+    expect(at(neonLife.maxSizeM * JUVENILE_ADULT_SIZE_FRACTION - 1e-6)).toBe('juvenile');
+    expect(at(neonLife.maxSizeM * JUVENILE_ADULT_SIZE_FRACTION)).toBe('adult');
+  });
+
+  it('leaves an adult an adult and an unknown species alone', () => {
+    expect(stageBySize(fishOf('a', 'neon-tetra', { stage: 'adult', size: 0.001 }), neonLife)).toBe(
+      'adult',
+    );
+    expect(stageBySize(fishOf('j', 'neon-tetra', { stage: 'juvenile', size: 9 }), undefined)).toBe(
+      'juvenile',
+    );
+  });
+
+  it('promotes a grown juvenile inside the step', () => {
+    const grown = fishOf('j', 'neon-tetra', {
+      stage: 'juvenile',
+      size: neonLife.maxSizeM,
+      bornAtMs: T0,
+    });
+    const { state } = stepBreeding(tank([grown]), ctxAt(T0 + STEP_MS));
+    expect(state.fish[0]?.stage).toBe('adult');
   });
 });
 

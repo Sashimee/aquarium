@@ -18,6 +18,7 @@ function setup(demo: Biome = 'freshwater') {
     bus.emit('tank:loaded', {
       tankId,
       biome,
+      size: 'standard',
       fish: [],
       decorLayout: [],
       decorEdited: false,

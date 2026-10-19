@@ -2,14 +2,14 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { addFishRequestSchema } from './tank.js';
-import { VACATION_FEEDER_ASSET_ID } from '../../sim/lifecycle/params.js';
-import { DECOR_ASSET_IDS } from './decorRules.js';
+import { DECOR_ASSET_IDS, VACATION_FEEDER_ASSET_ID } from './decorRules.js';
 import { diseaseKindSchema } from './fishState.js';
 import {
   DEFAULT_PURCHASE_STAGE,
   decorPrice,
   economySchema,
   idempotencyKeySchema,
+  ledgerKeySchema,
   type Economy,
   ledgerEntrySchema,
   purchaseRequestSchema,
@@ -237,6 +237,11 @@ describe('economy contract', () => {
     ['abcd_ef-GH12', true],
   ])('idempotency key %j valid: %s', (key, valid) => {
     expect(idempotencyKeySchema.safeParse(key).success).toBe(valid);
+  });
+
+  it('lets the ledger hold a server key that no client key can equal', () => {
+    expect(ledgerKeySchema.safeParse('server:daily-care-2026-10-19').success).toBe(true);
+    expect(idempotencyKeySchema.safeParse('server:daily-care-2026-10-19').success).toBe(false);
   });
 
   it('keeps add-fish backward compatible and takes a stage', () => {

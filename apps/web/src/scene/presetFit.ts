@@ -83,7 +83,7 @@ function fitItem(item: DecorItem, dimensions: TankDimensions, boundsOf: BoundsOf
   let z = item.position[2] * depR;
   const seatOffset =
     item.position[1] - substrateHeight(DEFAULT_TANK, item.position[0], item.position[2]);
-  const y = substrateHeight(dimensions, x, z) + seatOffset * k;
+  let y = substrateHeight(dimensions, x, z) + seatOffset * k;
   let scale = item.scale * k;
 
   const model = boundsOf(item.assetId);
@@ -110,6 +110,8 @@ function fitItem(item: DecorItem, dimensions: TankDimensions, boundsOf: BoundsOf
     const limitZ = Math.max(0, halfD - reachZ(scale));
     x = Math.max(-limitX, Math.min(limitX, x));
     z = Math.max(-limitZ, Math.min(limitZ, z));
+    y = substrateHeight(dimensions, x, z) + seatOffset * k;
+    if (height > 0) scale = Math.min(scale, (waterTop - SURFACE_MARGIN - y) / height);
   }
   return { ...item, position: [x, y, z], scale: Math.max(scale, MIN_PLANT_SCALE) };
 }
@@ -149,10 +151,11 @@ export function fitPresetToTank(
   boundsOf: BoundsOf,
   patchReach: (patch: PlantPatch) => number,
 ): PresetLayout {
-  if (sameTank(dimensions, DEFAULT_TANK)) return preset;
   return {
     ...preset,
     decor: preset.decor.map((item) => fitItem(item, dimensions, boundsOf)),
-    plantPatches: preset.plantPatches.map((patch) => fitPatch(patch, dimensions, patchReach)),
+    plantPatches: sameTank(dimensions, DEFAULT_TANK)
+      ? preset.plantPatches
+      : preset.plantPatches.map((patch) => fitPatch(patch, dimensions, patchReach)),
   };
 }
