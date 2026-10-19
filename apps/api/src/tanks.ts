@@ -33,13 +33,13 @@ import {
 import {
   applyCare,
   applyEating,
+  BIOLOAD_CAPACITY_BY_SIZE,
   BREEDING_SHELTER_ASSET_IDS,
   catchUp,
   DEFAULT_WATER_PARAMETERS,
   FEEDING_WINDOW_MINUTES,
   GRACE_PERIOD_MS,
   hasCapacityFor,
-  TANK_BIOLOAD_CAPACITY,
   VACATION_FEEDER_ASSET_ID,
   type BirthRecord,
   type LifecycleFish,
@@ -206,6 +206,7 @@ async function lockAndTick(
     fromMs: tank.lastTickAt.getTime(),
     toMs: now,
     biome: tank.biome,
+    litres: TANK_SIZES[tank.size].litres,
     equipment: equipmentSchema.parse(tank.equipment),
     species: new Map([...deps.species].map(([id, s]) => [id, s.lifecycle])),
     speciesChemistry: new Map([...deps.species].map(([id, s]) => [id, s.chemistry])),
@@ -217,7 +218,7 @@ async function lockAndTick(
     breedingEnvironment: {
       hasCave: hasShelter(tank),
       maxAnimals: TANK_SIZES[tank.size].maxAnimals,
-      bioloadCapacity: TANK_BIOLOAD_CAPACITY,
+      bioloadCapacity: BIOLOAD_CAPACITY_BY_SIZE[tank.size],
       newId: randomUUID,
     },
   });
@@ -747,7 +748,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           !hasCapacityFor(
             existing,
             spec.lifecycle.bioload,
-            TANK_BIOLOAD_CAPACITY,
+            BIOLOAD_CAPACITY_BY_SIZE[ticked.tank.size],
             TANK_SIZES[ticked.tank.size].maxAnimals,
           )
         ) {

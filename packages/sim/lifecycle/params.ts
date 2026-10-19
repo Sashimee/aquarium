@@ -1,4 +1,4 @@
-import type { WaterParameters } from '@aquarium/shared';
+import type { TankSize, WaterParameters } from '@aquarium/shared';
 
 export const STEP_MINUTES = 10;
 export const STEP_MS = STEP_MINUTES * 60_000;
@@ -20,7 +20,16 @@ export const CARCASS_BIOLOAD_FACTOR = 1;
 
 export const WATER_CHANGE_FRACTION = 0.5;
 
+/** The tank the water and bioload constants are tuned for: the `standard` size. */
+export const REFERENCE_TANK_LITRES = 300;
 export const TANK_BIOLOAD_CAPACITY = 12;
+/** Not linear in litres: a 30 L nano holds 12 small animals (12 neon tetras are 2.4), which a linear 1.2 would forbid. */
+export const BIOLOAD_CAPACITY_BY_SIZE: Readonly<Record<TankSize, number>> = {
+  nano30: 3,
+  standard: TANK_BIOLOAD_CAPACITY,
+  std200: 8,
+  long300: TANK_BIOLOAD_CAPACITY,
+};
 export const MAX_FISH_PER_TANK = 60;
 export const MAX_UNEATEN_FOOD = 20;
 

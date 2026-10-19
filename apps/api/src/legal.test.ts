@@ -407,6 +407,7 @@ describe('data export', () => {
     expect(data.tanks).toHaveLength(1);
     const [exported] = data.tanks;
     expect(exported?.tank['id']).toBe(tank.id);
+    expect(exported?.tank).toMatchObject({ size: 'standard', quarantine: false });
     expect(exported?.fish).toHaveLength(1);
     expect(exported?.events.length).toBeGreaterThan(0);
 

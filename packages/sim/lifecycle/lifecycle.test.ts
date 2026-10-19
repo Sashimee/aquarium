@@ -15,11 +15,13 @@ import { describe, expect, it } from 'vitest';
 import {
   applyCare,
   applyEating,
+  BIOLOAD_CAPACITY_BY_SIZE,
   catchUp,
   DEFAULT_WATER_PARAMETERS,
   GRACE_PERIOD_MS,
   hasCapacityFor,
   MAX_CATCH_UP_MS,
+  REFERENCE_TANK_LITRES,
   STEP_MS,
   TANK_BIOLOAD_CAPACITY,
   type LifecycleFish,
@@ -46,6 +48,7 @@ const chemistryParams = chemistryParametersSchema.parse(
 );
 const env: TankEnvironment = {
   biome: 'freshwater',
+  litres: 300,
   equipment: DEFAULT_EQUIPMENT,
   species,
   speciesChemistry,
@@ -948,5 +951,31 @@ describe('every species in a default tank of its own biome under good care', () 
     expect(r.steps).toBe((60 * DAY) / STEP_MS);
     expect(r.setpointComputations).toBeLessThanOrEqual(1 + events);
     expect(r.setpointComputations).toBeLessThan(r.steps / 10);
+  });
+});
+
+describe('water volume', () => {
+  const fed = () => tank([fishOf('a', 'neon-tetra', { hunger: 0 })], { uneatenFood: 4 });
+  const nitrogen = (litres: number) => {
+    const r = run(fed(), 6 * HOUR, {
+      env: { litres },
+      equipment: { ...DEFAULT_EQUIPMENT, filter: { tier: 0 } },
+    });
+    return r.state.water.ammonia + r.state.chemistry.nitrite;
+  };
+
+  it('leaves the standard tank unchanged', () => {
+    expect(nitrogen(300)).toBeCloseTo(nitrogen(REFERENCE_TANK_LITRES), 10);
+  });
+
+  it('concentrates the same waste in less water, in proportion to litres', () => {
+    expect(nitrogen(30)).toBeGreaterThan(nitrogen(300) * 5);
+    expect(nitrogen(200)).toBeGreaterThan(nitrogen(300));
+  });
+
+  it('has a bioload cap per size that grows with the tank', () => {
+    expect(BIOLOAD_CAPACITY_BY_SIZE.nano30).toBeLessThan(BIOLOAD_CAPACITY_BY_SIZE.std200);
+    expect(BIOLOAD_CAPACITY_BY_SIZE.std200).toBeLessThan(BIOLOAD_CAPACITY_BY_SIZE.long300);
+    expect(BIOLOAD_CAPACITY_BY_SIZE.standard).toBe(TANK_BIOLOAD_CAPACITY);
   });
 });

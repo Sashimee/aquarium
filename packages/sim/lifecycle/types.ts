@@ -39,6 +39,7 @@ export type SpeciesChemistryTable = ReadonlyMap<string, SpeciesChemistry>;
 
 export interface TankEnvironment {
   readonly biome: Biome;
+  readonly litres: number;
   readonly equipment: Equipment;
   readonly species: SpeciesTable;
   readonly speciesChemistry: SpeciesChemistryTable;
