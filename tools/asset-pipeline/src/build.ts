@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { readyCodecs } from './glb.ts';
 import { contactSheet, type Atlas } from './impostor.ts';
 import { buildSourceFish, type FishContext } from './fish.ts';
@@ -16,7 +16,13 @@ import {
   type AssetIndex,
   type OutputAsset,
 } from './index-schema.ts';
-import { aggregateSha256, manifestSchema } from './manifest.ts';
+import { aggregateSha256, manifestSchema, type ManifestAsset } from './manifest.ts';
+import {
+  buildBackground,
+  contactSheet as backgroundSheet,
+  syncContentFiles,
+} from './backgrounds.ts';
+import type { Rgba } from './textures.ts';
 import { verifyRawSource } from './source.ts';
 import { ENVIRONMENT_RECIPES, FISH_RECIPES, HDRI_RECIPES, SUBSTRATE_RECIPES } from './recipes.ts';
 
@@ -24,6 +30,8 @@ export interface BuildOptions {
   repoRoot: string;
   only: string[];
   impostorSheetDir?: string;
+  /** Writes a contact sheet of the built backgrounds' low tier to this PNG path. */
+  backgroundSheet?: string;
 }
 
 interface Task {
@@ -45,9 +53,10 @@ const KIND_ORDER: OutputAsset['kind'][] = [
   'decor',
   'substrate',
   'hdri',
+  'background',
 ];
 
-function tasks(): Task[] {
+function tasks(backgrounds: readonly ManifestAsset[], previews: Map<string, Rgba>): Task[] {
   return [
     ...FISH_RECIPES.map((recipe) => ({
       kind: 'fish' as const,
@@ -90,11 +99,21 @@ function tasks(): Task[] {
       id: recipe.id,
       run: (ctx: FishContext) => buildLoftFish(recipe, ctx),
     })),
+    ...backgrounds.map((entry) => ({
+      kind: 'background' as const,
+      id: entry.id,
+      run: async (ctx: FishContext) => {
+        const built = await buildBackground(entry, ctx);
+        previews.set(entry.id, built.preview);
+        return built.asset;
+      },
+    })),
   ];
 }
 
 export async function build(options: BuildOptions): Promise<void> {
   const { repoRoot, only, impostorSheetDir } = options;
+  const previews = new Map<string, Rgba>();
   const atlases = new Map<string, Atlas>();
   const outRoot = join(repoRoot, 'apps', 'web', 'public', 'assets');
   const manifest = manifestSchema.parse(
@@ -139,9 +158,12 @@ export async function build(options: BuildOptions): Promise<void> {
   }
 
   await readyCodecs();
-  const selected = tasks().filter((t) => only.length === 0 || only.includes(t.id));
+  const backgrounds = manifest.assets.filter((a) => a.kind === 'background');
+  const selected = tasks(backgrounds, previews).filter(
+    (t) => only.length === 0 || only.includes(t.id),
+  );
   if (only.length > 0 && selected.length !== only.length) {
-    const known = tasks().map((t) => t.id);
+    const known = tasks(backgrounds, previews).map((t) => t.id);
     throw new Error(`unknown asset id in [${only.join(', ')}]; known: ${known.join(', ')}`);
   }
   for (const task of selected) {
@@ -164,6 +186,18 @@ export async function build(options: BuildOptions): Promise<void> {
         join(impostorSheetDir, 'contact-sheet.png'),
         await contactSheet([...atlases.values()]),
       );
+  }
+
+  if (previews.size > 0) {
+    const builtIds = new Set(previews.keys());
+    for (const path of syncContentFiles(repoRoot, builtIds)) console.log(`updated ${path}`);
+    if (options.backgroundSheet) {
+      mkdirSync(dirname(options.backgroundSheet), { recursive: true });
+      writeFileSync(
+        options.backgroundSheet,
+        await backgroundSheet([...previews].map(([id, image]) => ({ id, image }))),
+      );
+    }
   }
 
   const assets = [...previous.values()].sort((a, b) => {

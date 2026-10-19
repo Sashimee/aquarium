@@ -125,6 +125,29 @@ export const impostorSchema = z.strictObject({
   normalDepth: fileEntry.extend({ codec: z.literal('uastc') }),
 });
 
+export const backgroundTierSchema = fileEntry.extend({
+  width: z.int().positive(),
+  height: z.int().positive(),
+  qualityLevel: z.int().min(1).max(255),
+});
+
+export const backgroundInfoSchema = z.strictObject({
+  crop: z
+    .strictObject({
+      left: z.int().nonnegative(),
+      top: z.int().nonnegative(),
+      width: z.int().positive(),
+      height: z.int().positive(),
+    })
+    .nullable(),
+  tiers: z.strictObject({
+    ultra: backgroundTierSchema,
+    high: backgroundTierSchema,
+    medium: backgroundTierSchema,
+    low: backgroundTierSchema,
+  }),
+});
+
 export const assetKindSchema = z.enum([
   'fish',
   'shrimp',
@@ -138,6 +161,7 @@ export const assetKindSchema = z.enum([
   'decor',
   'substrate',
   'hdri',
+  'background',
 ]);
 export type AssetKind = z.infer<typeof assetKindSchema>;
 
@@ -145,7 +169,15 @@ export const outputAssetSchema = z.strictObject({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
   kind: assetKindSchema,
   species: z.string().min(1).optional(),
-  origin: z.enum(['model', 'procedural-loft', 'procedural', 'texture-set', 'passthrough']),
+  origin: z.enum([
+    'model',
+    'procedural-loft',
+    'procedural',
+    'texture-set',
+    'passthrough',
+    'photo',
+    'render',
+  ]),
   sources: z.array(z.string().min(1)),
   licence: z.string().min(1),
   modifications: z.array(z.string().min(1)),
@@ -158,6 +190,7 @@ export const outputAssetSchema = z.strictObject({
   shrimp: shrimpInfoSchema.optional(),
   crab: shrimpInfoSchema.optional(),
   snail: snailInfoSchema.optional(),
+  background: backgroundInfoSchema.optional(),
 });
 export type OutputAsset = z.infer<typeof outputAssetSchema>;
 

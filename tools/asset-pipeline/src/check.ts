@@ -1,11 +1,18 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, posix, relative, sep } from 'node:path';
+import { backgroundFileSchema } from '@aquarium/shared';
 import { MeshoptDecoder } from 'meshoptimizer';
 import { speciesLengthM } from './fish.ts';
 import { readKtx2Info } from './textures.ts';
 import { FISH_RECIPES } from './recipes.ts';
 import { shrimpLength } from './shrimp.ts';
+import {
+  backgroundContentProblems,
+  backgroundFileProblems,
+  missingBackgroundProblems,
+  type ContentBackground,
+} from './backgrounds.ts';
 import { budgetProblems, loadBudgetContent, type BudgetInput } from './budgets.ts';
 import {
   FIN_ID_ATTRIBUTE,
@@ -42,6 +49,7 @@ export interface CheckInput {
   assetsDir: string;
   repoRoot: string;
   content?: Pick<BudgetInput, 'presets' | 'speciesBiome' | 'hdri'>;
+  backgrounds?: ContentBackground[];
 }
 
 export function readGlbJson(buffer: Uint8Array): {
@@ -145,7 +153,7 @@ function effectiveLicenceProblems(
   }
 }
 
-const TEXTURE_ONLY_KINDS: readonly string[] = ['substrate', 'hdri'];
+const TEXTURE_ONLY_KINDS: readonly string[] = ['substrate', 'hdri', 'background'];
 
 function safeDecodeUri(uri: string): string {
   try {
@@ -465,6 +473,14 @@ export function checkAssets(input: CheckInput): string[] {
     }
     if (asset.kind === 'shrimp' || asset.kind === 'crab') shrimpProblems(asset, repoRoot, problems);
     if (asset.kind === 'snail') snailProblems(asset, repoRoot, problems);
+    if (asset.kind === 'background') {
+      problems.push(
+        ...backgroundFileProblems(asset, (relative) => {
+          const path = join(assetsDir, relative);
+          return existsSync(path) ? new Uint8Array(readFileSync(path)) : null;
+        }),
+      );
+    }
 
     for (const file of asset.files) {
       if (!file.file.startsWith(`${asset.kind}/${asset.id}/`)) {
@@ -524,6 +540,13 @@ export function checkAssets(input: CheckInput): string[] {
       `index.json totalBytes ${index.totalBytes} does not match the files on disk (rebuild with pnpm build:assets)`,
     );
   }
+  const builtBackgrounds = new Map(
+    index.assets.filter((a) => a.kind === 'background').map((a) => [a.id, a]),
+  );
+  problems.push(...missingBackgroundProblems(manifest.assets, builtBackgrounds));
+  if (input.backgrounds) {
+    problems.push(...backgroundContentProblems(input.backgrounds, builtBackgrounds));
+  }
   if (input.content) problems.push(...budgetProblems({ index, ...input.content }));
   return problems;
 }
@@ -539,5 +562,21 @@ export function loadCheckInput(repoRoot: string): CheckInput {
     throw new Error(`${indexPath} is missing; run pnpm build:assets`);
   }
   const index = assetIndexSchema.parse(JSON.parse(readFileSync(indexPath, 'utf8')));
-  return { manifest, credits, index, assetsDir, repoRoot, content: loadBudgetContent(repoRoot) };
+  const backgrounds = readdirSync(join(repoRoot, 'content', 'backgrounds'))
+    .filter((name) => name.endsWith('.json'))
+    .sort()
+    .flatMap((name) =>
+      backgroundFileSchema.parse(
+        JSON.parse(readFileSync(join(repoRoot, 'content', 'backgrounds', name), 'utf8')),
+      ),
+    );
+  return {
+    manifest,
+    credits,
+    index,
+    assetsDir,
+    repoRoot,
+    content: loadBudgetContent(repoRoot),
+    backgrounds,
+  };
 }

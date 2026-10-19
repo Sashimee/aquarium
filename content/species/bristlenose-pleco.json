@@ -10,6 +10,15 @@
     "traits": ["cave-dweller"]
   },
   "biome": "freshwater",
+  "breeding": {
+    "broodSize": [3, 8],
+    "fryGrowth": { "adultAfterDays": 365, "juvenileAfterDays": 45 },
+    "intervalDays": 45,
+    "minAgeDays": 365,
+    "mode": "substrate-spawner",
+    "needsCave": true,
+    "temperatureC": [24, 28]
+  },
   "commonName": "Bristlenose pleco",
   "id": "bristlenose-pleco",
   "lifecycle": {

@@ -15,6 +15,14 @@
     "traits": ["shoal"]
   },
   "biome": "reef",
+  "breeding": {
+    "broodSize": [3, 8],
+    "fryGrowth": { "adultAfterDays": 270, "juvenileAfterDays": 30 },
+    "intervalDays": 30,
+    "minAgeDays": 270,
+    "mode": "mouthbrooder",
+    "temperatureC": [24, 27]
+  },
   "chemistry": { "salinityPpt": [30, 36] },
   "commonName": "Banggai cardinalfish",
   "id": "banggai-cardinalfish",

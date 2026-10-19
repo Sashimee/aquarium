@@ -1,4 +1,11 @@
-import type { CauseOfDeath, SpeciesLifecycle, Water, WaterParameters } from '@aquarium/shared';
+import type {
+  CauseOfDeath,
+  FishSex,
+  FishStage,
+  SpeciesLifecycle,
+  Water,
+  WaterParameters,
+} from '@aquarium/shared';
 
 export interface LifecycleFish {
   readonly id: string;
@@ -10,6 +17,9 @@ export interface LifecycleFish {
   readonly alive: boolean;
   readonly diedAtMs: number | null;
   readonly cause: CauseOfDeath | null;
+  readonly sex: FishSex;
+  readonly stage: FishStage;
+  readonly lastBroodAtMs: number | null;
 }
 
 export interface LifecycleState {
