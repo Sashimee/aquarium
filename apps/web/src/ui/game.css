@@ -110,6 +110,60 @@
   height: 1.2rem;
 }
 
+#ui .chem-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  min-height: 2.75rem;
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--glass-edge);
+  border-left-width: 0.35rem;
+  border-radius: 1.1rem;
+  background: var(--glass);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.3);
+  font-size: 0.8rem;
+  text-align: left;
+}
+
+.chem-verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 600;
+}
+
+.chem-mark {
+  min-width: 1.4rem;
+  font-size: 0.7rem;
+  text-align: center;
+}
+
+.chem-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.6rem;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+}
+
+#ui .chem-chip[data-status='safe'] {
+  border-left-color: var(--good);
+}
+
+#ui .chem-chip[data-status='warning'] {
+  border-left-color: var(--fair);
+}
+
+#ui .chem-chip[data-status='danger'] {
+  border-left-color: var(--poor);
+}
+
+#ui .chem-chip[data-status='stale'] {
+  border-left-style: dashed;
+  opacity: 0.85;
+}
+
 .gauges {
   display: grid;
   gap: 0.3rem;
