@@ -108,7 +108,7 @@ export class Effects {
     private readonly createPost: PostFactory,
     private readonly changed: () => void = () => undefined,
   ) {
-    const { medium, caustics, tank, scene, camera } = host;
+    const { medium, caustics, scene, camera } = host;
     this.particulates = createParticulates(medium, caustics);
     this.bubbles = createBubbles(medium);
     this.shafts = new WaterShafts(camera, medium, caustics);

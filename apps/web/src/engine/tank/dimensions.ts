@@ -83,3 +83,17 @@ export function waterLitres(d: TankDimensions): number {
 export function framingScale(d: TankDimensions): number {
   return Math.max(d.length / DEFAULT_TANK.length, d.height / DEFAULT_TANK.height);
 }
+
+/** The front view of the standard tank: 1.6 m out, a little above the middle of the water. */
+const STANDARD_VIEW_DISTANCE = 1.6;
+const STANDARD_VIEW_RISE = 0.1;
+
+/** The engine's front view of this tank, scaled from the standard tank's by `framingScale`. */
+export function defaultView(d: TankDimensions): { eye: Vector3; target: Vector3 } {
+  const scale = framingScale(d);
+  const middle = d.height / 2;
+  return {
+    eye: new Vector3(0, middle + STANDARD_VIEW_RISE * scale, STANDARD_VIEW_DISTANCE * scale),
+    target: new Vector3(0, middle, 0),
+  };
+}

@@ -3,21 +3,34 @@ import { Box3, Color, Mesh, type MeshBasicNodeMaterial, Texture, Vector3 } from 
 import { Caustics } from '../water/caustics';
 import { InteriorLight } from '../water/interior';
 import { WaterMedium } from '../water/medium';
-import { DEFAULT_TANK, TANK_DIMENSIONS, waterBounds } from './dimensions';
+import { tankSizeSchema } from '@aquarium/shared';
+import {
+  DEFAULT_TANK,
+  STAND_HEIGHT,
+  TANK_DIMENSIONS,
+  type TankDimensions,
+  waterBounds,
+} from './dimensions';
 import { meanSubstrateHeight } from './substrate';
 import { UNREFLECTED_LAYER } from './surfaceReflection';
 import { Tank } from './Tank';
 
-function tank(): Tank {
-  const medium = new WaterMedium(waterBounds(DEFAULT_TANK), { cdom440: 0.05, turbidity: 0.08 });
+function tank(d: TankDimensions = DEFAULT_TANK): Tank {
+  const medium = new WaterMedium(waterBounds(d), { cdom440: 0.05, turbidity: 0.08 });
   const interior = new InteriorLight(
     medium,
     new Caustics(medium),
     new Texture(),
     new Color(0.13, 0.09, 0.055),
-    meanSubstrateHeight(DEFAULT_TANK),
+    meanSubstrateHeight(d),
   );
-  return new Tank(DEFAULT_TANK, medium, new Texture(), interior);
+  return new Tank(d, medium, new Texture(), interior);
+}
+
+function boxOf(t: Tank, name: string): Box3 {
+  const mesh = meshes(t).get(name);
+  if (mesh === undefined) throw new Error(`no mesh named ${name}`);
+  return new Box3().setFromObject(mesh);
 }
 
 function meshes(t: Tank): Map<string, Mesh> {
@@ -103,6 +116,57 @@ describe('Tank', () => {
     expect(surface.getSize(new Vector3()).x).toBeCloseTo(bounds.max.x - bounds.min.x, 6);
     const stand = new Box3().setFromObject(after.get('stand') as Mesh);
     expect(stand.max.x).toBeCloseTo(nano.length / 2 + 0.02, 6);
+  });
+
+  it.each(tankSizeSchema.options)('builds the %s tank to its own size', (size) => {
+    const d = TANK_DIMENSIONS[size];
+    const t = tank(d);
+    const near = (a: Vector3, b: Vector3): number => a.distanceTo(b);
+
+    const glass = boxOf(t, 'glass-faces');
+    expect(near(glass.min, new Vector3(-d.length / 2, 0, -d.depth / 2))).toBeLessThan(1e-6);
+    expect(near(glass.max, new Vector3(d.length / 2, d.height, d.depth / 2))).toBeLessThan(1e-6);
+    expect(boxOf(t, 'glass-edges').equals(glass)).toBe(true);
+
+    const water = waterBounds(d);
+    expect(t.waterBounds.equals(water)).toBe(true);
+    for (const name of ['water-volume-absorb', 'water-volume-scatter']) {
+      const box = boxOf(t, name);
+      expect(near(box.min, water.min), name).toBeLessThan(1e-6);
+      expect(near(box.max, water.max), name).toBeLessThan(1e-6);
+    }
+    for (const name of ['water-surface', 'water-surface-underside']) {
+      const box = boxOf(t, name);
+      expect(box.min.y, name).toBeCloseTo(water.max.y, 6);
+      expect(box.max.y, name).toBeCloseTo(water.max.y, 6);
+      expect(box.min.x, name).toBeCloseTo(water.min.x, 6);
+      expect(box.max.x, name).toBeCloseTo(water.max.x, 6);
+      expect(box.min.z, name).toBeCloseTo(water.min.z, 6);
+      expect(box.max.z, name).toBeCloseTo(water.max.z, 6);
+    }
+
+    const backdrop = boxOf(t, 'backdrop');
+    expect(backdrop.max.z).toBeLessThan(-d.depth / 2);
+    expect(backdrop.max.z).toBeGreaterThan(-d.depth / 2 - 0.01);
+    expect(backdrop.min.x).toBeCloseTo(-d.length / 2, 6);
+    expect(backdrop.max.x).toBeCloseTo(d.length / 2, 6);
+    expect(backdrop.min.y).toBeCloseTo(0, 6);
+    expect(backdrop.max.y).toBeCloseTo(d.height, 6);
+
+    const sand = boxOf(t, 'substrate');
+    const innerX = d.length / 2 - d.glass;
+    const innerZ = d.depth / 2 - d.glass;
+    expect(sand.min.x).toBeCloseTo(-innerX, 6);
+    expect(sand.max.x).toBeCloseTo(innerX, 6);
+    expect(sand.min.z).toBeCloseTo(-innerZ, 6);
+    expect(sand.max.z).toBeCloseTo(innerZ, 6);
+    expect(sand.max.y).toBeLessThan(water.max.y);
+
+    const stand = boxOf(t, 'stand');
+    expect(stand.max.y).toBeCloseTo(0, 6);
+    expect(stand.min.y).toBeCloseTo(-STAND_HEIGHT, 6);
+    expect(stand.max.x).toBeGreaterThan(d.length / 2);
+    expect(stand.max.z).toBeGreaterThan(d.depth / 2);
   });
 
   it('keeps its meshes and materials across a resize', () => {

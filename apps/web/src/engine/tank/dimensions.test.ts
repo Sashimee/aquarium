@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { TANK_SIZES, tankSizeSchema } from '@aquarium/shared';
-import { Box3 } from 'three/webgpu';
+import { TANK_SIZES, tankSizeSchema, type TankSize } from '@aquarium/shared';
+import { Box3, PerspectiveCamera, Vector3 } from 'three/webgpu';
 import {
   DEFAULT_TANK,
+  defaultView,
   framingScale,
   sameTank,
   TANK_DIMENSIONS,
+  type TankDimensions,
   validateTank,
   WATER_INSET,
   waterBounds,
@@ -88,6 +90,55 @@ describe('framingScale', () => {
     expect(framingScale(TANK_DIMENSIONS.long300)).toBeCloseTo(1.25, 12);
     expect(framingScale(TANK_DIMENSIONS.nano30)).toBeCloseTo(0.6, 12);
     expect(framingScale(TANK_DIMENSIONS.std200)).toBe(1);
+  });
+});
+
+describe('defaultView', () => {
+  const corners = (d: TankDimensions): Vector3[] =>
+    [-1, 1].flatMap((x) =>
+      [0, 1].flatMap((y) =>
+        [-1, 1].map((z) => new Vector3((x * d.length) / 2, y * d.height, (z * d.depth) / 2)),
+      ),
+    );
+  const projected = (size: TankSize): Vector3[] => {
+    const d = TANK_DIMENSIONS[size];
+    const camera = new PerspectiveCamera(40, 16 / 9, 0.05, 50);
+    const { eye, target } = defaultView(d);
+    camera.position.copy(eye);
+    camera.lookAt(target);
+    camera.updateMatrixWorld();
+    return corners(d).map((c) => c.project(camera));
+  };
+  const screenHeight = (points: Vector3[]): number =>
+    Math.max(...points.map((p) => p.y)) - Math.min(...points.map((p) => p.y));
+
+  it('keeps the standard view the engine always had', () => {
+    const { eye, target } = defaultView(DEFAULT_TANK);
+    expect(eye.toArray()).toEqual([0, 0.35, 1.6]);
+    expect(target.toArray()).toEqual([0, 0.25, 0]);
+  });
+
+  it.each(tankSizeSchema.options)('shows the whole %s tank on a 16:9 screen', (size) => {
+    for (const p of projected(size)) {
+      expect(Math.abs(p.x)).toBeLessThan(1);
+      expect(Math.abs(p.y)).toBeLessThan(1);
+      expect(p.z).toBeLessThan(1);
+    }
+  });
+
+  it.each(tankSizeSchema.options)(
+    'fills no more of the screen with %s than the standard',
+    (size) => {
+      expect(screenHeight(projected(size))).toBeLessThanOrEqual(
+        screenHeight(projected('standard')) + 1e-9,
+      );
+    },
+  );
+
+  it('brings the nano close enough to fill the screen like the standard does', () => {
+    expect(screenHeight(projected('nano30'))).toBeGreaterThan(
+      0.9 * screenHeight(projected('standard')),
+    );
   });
 });
 

@@ -38,7 +38,13 @@ import { qualityProfile } from './quality/profile';
 import { QualityManager } from './quality/QualityManager';
 import { renderPixelRatio } from './quality/tiers';
 import type { TankSize } from '@aquarium/shared';
-import { TANK_DIMENSIONS, type TankDimensions, waterBounds, waterLitres } from './tank/dimensions';
+import {
+  defaultView,
+  TANK_DIMENSIONS,
+  type TankDimensions,
+  waterBounds,
+  waterLitres,
+} from './tank/dimensions';
 import { meanSubstrateHeight } from './tank/substrate';
 import { UNREFLECTED_LAYER } from './tank/surfaceReflection';
 import { Tank } from './tank/Tank';
@@ -310,15 +316,14 @@ export class Engine {
     cleanup.add(() => this.hood.shadow.dispose());
 
     this.camera.layers.enable(UNREFLECTED_LAYER);
-    this.camera.position.set(0, 0.35, 1.6);
-    this.camera.lookAt(0, 0.25, 0);
+    this.frameTank(dimensions);
 
     this.photo = new PhotoMode({
       camera: this.camera,
       scene: this.scene,
       renderer,
       events,
-      tank: dimensions,
+      tank: () => this.tank.dimensions,
       depthOfFieldTier: () => this.quality.settings.depthOfField,
       temporal: () => this.effects.temporal,
       maxTextureSize: () => deviceTextureLimit(renderer.backend),
@@ -352,7 +357,8 @@ export class Engine {
   /**
    * Rebuilds the glass, water volume and sand for `size` and moves the water box every water
    * effect reads (fog, caustics, light shafts, particulates, bubbles) and the hood's shadow with
-   * it. No pipeline is rebuilt. Emits `engine:tank-resized` when the size changed.
+   * it, and frames the new tank unless photo mode holds the camera. No pipeline is rebuilt. Emits
+   * `engine:tank-resized` when the size changed.
    */
   setTankSize(size: TankSize): void {
     if (size === this.size) return;
@@ -362,6 +368,7 @@ export class Engine {
     this.medium.setBounds(this.tank.waterBounds);
     this.interior.sandHeight = meanSubstrateHeight(dimensions);
     this.fitHood(dimensions);
+    if (!this.photo.active) this.frameTank(dimensions);
     this.effects.tankResized();
     this.sceneRevisionValue++;
     this.events.emit('engine:tank-resized', { size, dimensions, litres: this.waterLitres });
@@ -479,6 +486,13 @@ export class Engine {
     hood.shadow.bias = -0.0005;
     hood.shadow.normalBias = 0.01;
     hood.colorNode = this.caustics.lightColorNode();
+  }
+
+  /** A camera rig that drives the camera every frame overrides this. */
+  private frameTank(d: TankDimensions): void {
+    const { eye, target } = defaultView(d);
+    this.camera.position.copy(eye);
+    this.camera.lookAt(target);
   }
 
   /** The hood hangs the same height over every tank; its shadow frustum covers the tank. */
