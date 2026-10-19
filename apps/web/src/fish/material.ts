@@ -124,7 +124,7 @@ const JAW_DROP = 0.025;
 const JAW_WEIGHT_FROM = 0.45;
 /** Guanine (n ≈ 1.83) platelets are the reflectors in fish iridophores (Land 1972). */
 const GUANINE_IOR = 1.83;
-const FIN_OPACITY_FLOOR = 0.2;
+export const FIN_OPACITY_FLOOR = 0.2;
 /**
  * A resting or stressed fish tilts its iridophore platelets closer together: the reflection dims
  * and shifts towards violet, as the neon tetra's stripe does at night (Yoshioka et al. 2011).
@@ -155,7 +155,53 @@ function smoothRamp(a: number, b: number, x: Node<'float'>): [Node<'float'>, Nod
   return [t.mul(t).mul(t.mul(-2).add(3)), t.mul(t.oneMinus()).mul(6 / (b - a))];
 }
 
-function rotateByQuat(q: Node<'vec4'>, v: Node<'vec3'>): Node<'vec3'> {
+export interface BodyBend {
+  /** 0 at the snout, 1 at the tail tip. */
+  readonly s: Node<'float'>;
+  /** Body-wave phase at `s`. */
+  readonly arg: Node<'float'>;
+  /** Lateral (model x) offset of the body wave and the turn bend. */
+  readonly offset: Node<'float'>;
+  /** d(body wave)/ds. */
+  readonly slopeS: Node<'float'>;
+  /** d(turn bend)/dz. */
+  readonly bendSlope: Node<'float'>;
+}
+
+/**
+ * The travelling body wave and the turn bend at model z, from the instance's `swim` vec4 (scale,
+ * phase, amplitude scale, curvature); shared by the meshes and the impostor so the two bend alike.
+ */
+export function bodyBend(
+  mode: SwimModeParams,
+  zMin: number,
+  zMax: number,
+  swim: Node<'vec4'>,
+  z: Node<'float'>,
+): BodyBend {
+  const zLen = zMax - zMin;
+  const [c0, c1, c2] = mode.envelope;
+  const k = (2 * Math.PI) / mode.wavelength;
+  const phase = swim.y;
+  const amp = swim.z;
+  const curvature = swim.w;
+
+  const s = clamp(float(zMax).sub(z).div(zLen), 0, 1).toVar();
+  const envelope = float(c0).add(s.mul(c1)).add(s.mul(s).mul(c2));
+  const envelopeSlope = float(c1).add(s.mul(2 * c2));
+  const arg = s.mul(k).sub(phase).toVar();
+  const bodyAmplitude = amp.mul((TAIL_AMPLITUDE_BODY_LENGTHS / 2) * zLen * mode.bodyWave);
+  const body = bodyAmplitude.mul(envelope).mul(sin(arg));
+  const slopeS = bodyAmplitude.mul(envelopeSlope.mul(sin(arg)).add(envelope.mul(k).mul(cos(arg))));
+
+  const headSide = step(0, z);
+  const bendWeight = mix(float(1), float(HEAD_BEND), headSide);
+  const bend = curvature.mul(0.5).mul(z).mul(z).mul(bendWeight);
+  const bendSlope = curvature.mul(z).mul(bendWeight);
+  return { s, arg, offset: body.add(bend), slopeS, bendSlope };
+}
+
+export function rotateByQuat(q: Node<'vec4'>, v: Node<'vec3'>): Node<'vec3'> {
   const t = cross(q.xyz, v).mul(2);
   return v.add(t.mul(q.w)).add(cross(q.xyz, t));
 }
@@ -332,33 +378,16 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
   private buildDeformation(mode: SwimModeParams, gills: boolean): Deformation {
     const { zMax, zMin } = this.config;
     const zLen = zMax - zMin;
-    const [c0, c1, c2] = mode.envelope;
     const k = (2 * Math.PI) / mode.wavelength;
     const swim = this.instanceVec4(4);
     const look = this.instanceVec4(8);
-    const phase = swim.y;
     const amp = swim.z;
-    const curvature = swim.w;
     const finPhase = look.x;
     const fin = this.finMaskAndId();
     const mask = fin.x;
     const id = fin.y;
     const p = positionGeometry;
-
-    const s = clamp(float(zMax).sub(p.z).div(zLen), 0, 1).toVar();
-    const envelope = float(c0).add(s.mul(c1)).add(s.mul(s).mul(c2));
-    const envelopeSlope = float(c1).add(s.mul(2 * c2));
-    const arg = s.mul(k).sub(phase).toVar();
-    const bodyAmplitude = amp.mul((TAIL_AMPLITUDE_BODY_LENGTHS / 2) * zLen * mode.bodyWave);
-    const body = bodyAmplitude.mul(envelope).mul(sin(arg));
-    const bodySlopeS = bodyAmplitude.mul(
-      envelopeSlope.mul(sin(arg)).add(envelope.mul(k).mul(cos(arg))),
-    );
-
-    const headSide = step(0, p.z);
-    const bendWeight = mix(float(1), float(HEAD_BEND), headSide);
-    const bend = curvature.mul(0.5).mul(p.z).mul(p.z).mul(bendWeight);
-    const bendSlope = curvature.mul(p.z).mul(bendWeight);
+    const { s, arg, offset, slopeS: bodySlopeS, bendSlope } = bodyBend(mode, zMin, zMax, swim, p.z);
 
     const side = sign(p.x);
     const caudal = idIs(id, FIN_ID.caudal)
@@ -382,7 +411,7 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
       .mul(PELVIC_AMPLITUDE * zLen)
       .mul(sin(finPhase.add(1)));
 
-    const dx = body.add(bend).add(caudal).add(median).add(pectoralOut).add(pelvic);
+    const dx = offset.add(caudal).add(median).add(pectoralOut).add(pelvic);
     const n = normalGeometry;
     let x: Node<'float'> = p.x.add(dx);
     let nx: Node<'float'> = n.x;
