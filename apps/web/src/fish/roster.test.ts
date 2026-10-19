@@ -11,7 +11,14 @@ const DEMO: readonly FishSpawn[] = [
 
 function loaded(fish = [fishFixture(FISH_1), fishFixture(FISH_2)]): TankRoster {
   const roster = new TankRoster(DEMO);
-  roster.load({ tankId: TANK_A, biome: 'freshwater', decorLayout: [], decorEdited: false, fish });
+  roster.load({
+    backgroundId: 'bg-fw-planted-stream',
+    tankId: TANK_A,
+    biome: 'freshwater',
+    decorLayout: [],
+    decorEdited: false,
+    fish,
+  });
   return roster;
 }
 
@@ -62,6 +69,7 @@ describe('TankRoster', () => {
     const first = simId(roster, FISH_1);
     roster.unload({ tankId: TANK_A, reason: 'switch' });
     roster.load({
+      backgroundId: 'bg-fw-planted-stream',
       tankId: TANK_A,
       biome: 'freshwater',
       decorLayout: [],
@@ -92,6 +100,7 @@ describe('TankRoster', () => {
     expect(roster.tankId).toBeNull();
     expect(roster.size).toBe(0);
     roster.load({
+      backgroundId: 'bg-fw-planted-stream',
       tankId: TANK_B,
       biome: 'reef',
       decorLayout: [],
@@ -156,6 +165,7 @@ describe('TankRoster', () => {
   it('switching tanks keeps only the new tank, with no demo fish', () => {
     const roster = loaded();
     roster.load({
+      backgroundId: 'bg-fw-planted-stream',
       tankId: TANK_B,
       biome: 'reef',
       decorLayout: [],
@@ -278,6 +288,7 @@ describe('TankRoster', () => {
       roster.setDemo([{ id: 'clownfish-0', species: 'clownfish' }]);
       expect(roster.swimmingSpecies()).toEqual(['clownfish']);
       roster.load({
+        backgroundId: 'bg-fw-planted-stream',
         tankId: TANK_A,
         biome: 'freshwater',
         decorLayout: [],
@@ -409,6 +420,7 @@ describe('TankRoster', () => {
       const roster = loaded();
       const stale = simId(roster, FISH_1);
       roster.load({
+        backgroundId: 'bg-fw-planted-stream',
         tankId: TANK_B,
         biome: 'freshwater',
         decorLayout: [],

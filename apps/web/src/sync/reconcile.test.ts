@@ -43,9 +43,32 @@ describe('diffFish', () => {
     expect(diffFish([before], [sicker]).updated).toEqual([sicker]);
   });
 
+  it('reports a living fish whose stage or size alone changed as updated', () => {
+    const fry = fishFixture(FISH_1, { stage: 'fry', size: 0.01 });
+    const juvenile = { ...fry, stage: 'juvenile' as const };
+    const bigger = { ...fry, size: 0.012 };
+    expect(diffFish([fry], [juvenile]).updated).toEqual([juvenile]);
+    expect(diffFish([fry], [bigger]).updated).toEqual([bigger]);
+    expect(diffFish([fry], [fry]).updated).toEqual([]);
+  });
+
+  it('does not report a stage change on a fish that died', () => {
+    const fry = fishFixture(FISH_1, { stage: 'fry' });
+    const dead = {
+      ...fry,
+      stage: 'juvenile' as const,
+      status: 'dead' as const,
+      diedAt: '2026-02-01T00:00:00.000Z',
+      cause: 'starvation' as const,
+    };
+    const diff = diffFish([fry], [dead]);
+    expect(diff.updated).toEqual([]);
+    expect(diff.died).toEqual([dead]);
+  });
+
   it('ignores changes that need no scene action', () => {
     const before = fishFixture(FISH_1);
-    const diff = diffFish([before], [{ ...before, size: 0.03 }]);
+    const diff = diffFish([before], [{ ...before, name: 'Renamed' }]);
     expect(diff).toEqual({ added: [], removed: [], died: [], updated: [] });
   });
 

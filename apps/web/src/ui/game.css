@@ -693,3 +693,13 @@
   flex: 1 1 100%;
   margin: 0;
 }
+
+.birth-status:not(:empty) {
+  flex-wrap: wrap;
+  border-radius: 1.4rem;
+}
+
+#ui .birth-status button {
+  min-height: 2.75rem;
+  min-width: 2.75rem;
+}

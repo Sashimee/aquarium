@@ -23,15 +23,18 @@ export const WATER_CHANGE_FRACTION = 0.5;
 /** The tank the water and bioload constants are tuned for: the `standard` size. */
 export const REFERENCE_TANK_LITRES = 300;
 /**
- * Fish waste concentrates as (reference / litres)^exponent, not linearly: the nano stock cap is only 4x
- * tighter than standard for 10x less water, so 0.6 (4x at 30 L) makes a full nano as concentrated as a full
- * standard tank. Uneaten food is not scaled: a portion is a fixed player action, and species with an
- * ammonia tolerance of 0.09 already sit just under the limit from one portion at any size.
+ * Fish waste concentrates as (reference / litres)^exponent, not linearly. The nano stock cap is 4x tighter
+ * than standard for 10x less water, so 0.7 (5x at 30 L) makes a full nano about 25% harsher than a full
+ * standard tank: size buys stability as well as more fish. Uneaten food scales more gently, at 0.25
+ * (1.8x at 30 L): a portion is a fixed player action, and species with an ammonia tolerance of 0.09 must
+ * still survive one portion in a nano, whose peak stays below that tolerance. The food exponent is the
+ * largest that keeps every species alive in a cap-stocked nano on 0.5 portions a day.
  * Bioload above the tank's capacity (stock added before sizes had caps) adds no further concentration: the
  * waste of an over-cap tank is held at that of a full one, never below the unscaled waste, so its animals
  * are not wiped out on catch-up.
  */
-export const VOLUME_CONCENTRATION_EXPONENT = 0.6;
+export const VOLUME_CONCENTRATION_EXPONENT = 0.7;
+export const FOOD_CONCENTRATION_EXPONENT = 0.25;
 export const TANK_BIOLOAD_CAPACITY = 12;
 /** Not linear in litres: a 30 L nano holds 12 small animals (12 neon tetras are 2.4), which a linear 1.2 would forbid. */
 export const BIOLOAD_CAPACITY_BY_SIZE: Readonly<Record<TankSize, number>> = {

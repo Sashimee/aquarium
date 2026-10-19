@@ -102,7 +102,7 @@ test('a decor piece is swapped, moved, saved and still there after a reload', as
   expect(licence.status(), await licence.text()).toBe(200);
   await panel.getByRole('button', { name: 'Add Boulder', exact: true }).click();
   await expect(inTank.getByRole('button')).toHaveCount(startCount);
-  await expect(panel.getByText('Layout saved.')).toBeVisible();
+  await expect(panel.getByText('Changes saved.')).toBeVisible();
   await expect
     .poll(async () => (await savedTanks(page))[0]?.decorLayout.length, {
       message: 'the added piece reaches the server',

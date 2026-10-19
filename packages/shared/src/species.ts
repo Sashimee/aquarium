@@ -11,7 +11,13 @@ export const swimmingModeSchema = z.enum([
   'labriform',
   'anguilliform',
   'pleopod',
+  'none',
 ]);
+/** Swimming modes of the walking invertebrates, which `locomotion.walking` moves. */
+export const WALKER_SWIMMING_MODES: readonly z.infer<typeof swimmingModeSchema>[] = [
+  'pleopod',
+  'none',
+];
 export const gaitSchema = z.enum(['burst-and-coast', 'cruise', 'hover', 'forage']);
 export const zoneSchema = z.enum(['surface', 'mid', 'bottom']);
 
@@ -103,18 +109,35 @@ export const walkingSchema = z.strictObject({
     .min(0.05)
     .max(1)
     .describe('body lengths per full leg cycle; drives the leg phase'),
-  legPairs: z.int().min(4).max(5).describe('pereiopods that walk; render only'),
+  legPairs: z
+    .int()
+    .min(0)
+    .max(5)
+    .describe('pereiopods that walk, 0 for a snail gliding on its foot; render only'),
   surfaces: z
     .array(walkSurfaceSchema)
     .min(1)
     .describe(
       'extra surfaces a walker may climb; any surface within 45 degrees of horizontal counts as ground whatever is listed',
     ),
-  tailFlip: z.strictObject({
-    speedMps: positive.describe('mean escape speed'),
-    durationS: z.number().positive().max(0.5),
-    refractoryS: z.number().positive().max(10),
-  }),
+  tailFlip: z
+    .strictObject({
+      speedMps: positive.describe('mean escape speed'),
+      durationS: z.number().positive().max(0.5),
+      refractoryS: z.number().positive().max(10),
+    })
+    .optional()
+    .describe('the escape of a walker that swims (swimmingMode "pleopod")'),
+  withdraw: z
+    .strictObject({
+      minS: z.number().positive().max(600),
+      maxS: z.number().positive().max(600),
+    })
+    .refine((w) => w.minS <= w.maxS, { message: 'minS must not exceed maxS', path: ['minS'] })
+    .optional()
+    .describe(
+      'the escape of a walker that never swims (swimmingMode "none"): it pulls into its shell where it stands and stays there for minS to maxS seconds',
+    ),
 });
 export type Walking = z.infer<typeof walkingSchema>;
 
@@ -137,17 +160,37 @@ export const locomotionSchema = z
     message: 'cruiseSpeedMps must not exceed maxSpeedMps',
     path: ['cruiseSpeedMps'],
   })
-  .refine((l) => (l.swimmingMode === 'pleopod') === (l.walking !== undefined), {
-    message: 'walking is required for, and only valid with, swimmingMode "pleopod"',
+  .refine((l) => WALKER_SWIMMING_MODES.includes(l.swimmingMode) === (l.walking !== undefined), {
+    message: 'walking is required for, and only valid with, swimmingMode "pleopod" or "none"',
     path: ['walking'],
   })
+  .refine(
+    (l) =>
+      l.walking === undefined ||
+      !WALKER_SWIMMING_MODES.includes(l.swimmingMode) ||
+      (l.swimmingMode === 'pleopod') === (l.walking.tailFlip !== undefined),
+    {
+      message: 'walking.tailFlip is required for, and only valid with, swimmingMode "pleopod"',
+      path: ['walking', 'tailFlip'],
+    },
+  )
+  .refine(
+    (l) =>
+      l.walking === undefined ||
+      !WALKER_SWIMMING_MODES.includes(l.swimmingMode) ||
+      (l.swimmingMode === 'none') === (l.walking.withdraw !== undefined),
+    {
+      message: 'walking.withdraw is required for, and only valid with, swimmingMode "none"',
+      path: ['walking', 'withdraw'],
+    },
+  )
   .refine((l) => l.walking === undefined || l.walking.walkSpeedMps <= l.cruiseSpeedMps, {
     message: 'walking.walkSpeedMps must not exceed cruiseSpeedMps',
     path: ['walking', 'walkSpeedMps'],
   })
   .refine(
     (l) =>
-      l.walking === undefined ||
+      l.walking?.tailFlip === undefined ||
       l.walking.tailFlip.speedMps * FLIP_PEAK_OVER_MEAN <= l.maxSpeedMps * (1 + 1e-6),
     {
       message:

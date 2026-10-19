@@ -108,7 +108,9 @@ export function recordBus() {
     'tank:water',
     'tank:care',
     'tank:decor',
+    'tank:background',
     'decor:save-state',
+    'camera:focus-fish',
   ];
   for (const type of types) bus.on(type, (payload) => seen.push({ type, payload }));
   return {
