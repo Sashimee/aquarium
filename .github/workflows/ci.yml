@@ -121,7 +121,9 @@ jobs:
             describe: menus with a mouse
             part: 5/5
           - name: decor
-            args: decor.spec reminders.spec photo.spec
+            args: decor.spec reminders.spec
+          - name: photo
+            args: photo.spec
           - name: switch-tanks
             args: tank-type-switch.spec toys.spec
           - name: loading
