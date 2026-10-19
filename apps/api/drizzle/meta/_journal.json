@@ -113,6 +113,13 @@
       "when": 1792421226826,
       "tag": "0015_personality_no_default",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792423349430,
+      "tag": "0016_collection",
+      "breakpoints": true
     }
   ]
 }
