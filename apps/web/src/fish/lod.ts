@@ -74,16 +74,26 @@ export interface ImpostorChoice {
   full: boolean;
   /** Its mesh at `lod` casts a shadow on this tier. */
   castsShadow: boolean;
+  /** The larger of its fin spread and gill flare in display, 0..1; the atlas has neither. */
+  display: number;
 }
 
+/** Below this the sim's easing display has faded to nothing visible, if not yet to 0. */
+const DISPLAY_SHOWN = 0.01;
+
 /**
- * Whether a fish draws as an impostor instead of its LOD mesh. Past lod2 it always does. Nearer, a
+ * Whether a fish draws as an impostor instead of its LOD mesh. Past lod2 it does. Nearer, a
  * fish outside the nearest few swaps too, unless its mesh casts a shadow: the impostor casts none,
  * and a shadow vanishing as a fish drops a rank pops, while a tier with fish shadows already pays
  * for that mesh in its shadow pass.
+ *
+ * A fish in display keeps its mesh at any distance. The atlas is baked with the fins at rest, and a
+ * second, flared atlas per displaying species would cost more than the few such fish (a betta at a
+ * mirror or a rival) drawn as meshes. The swap happens with the fins all but closed, so it does
+ * not pop.
  */
 export function drawsAsImpostor(c: Readonly<ImpostorChoice>): boolean {
-  if (!c.tierImpostors || !c.available) return false;
+  if (!c.tierImpostors || !c.available || c.display > DISPLAY_SHOWN) return false;
   if (c.lod >= IMPOSTOR_LOD) return true;
   return !c.full && !c.castsShadow;
 }
