@@ -1,5 +1,12 @@
 import type { Collider, FishStage } from '@aquarium/shared';
-import type { Anchor, FishSpawn, SimReady, SimToy, TankSpaceWorldConfig } from '@aquarium/sim';
+import type {
+  Anchor,
+  FishSpawn,
+  SimReady,
+  SimToy,
+  TankSpaceWorldConfig,
+  Visitor,
+} from '@aquarium/sim';
 import type { SceneAnchor } from '../scene/anemone';
 import { sceneAnchorsToSim, type DemoTank } from './demoStock';
 import { bodyLengthOf } from './profiles';
@@ -83,6 +90,7 @@ export class SimWorldSpec {
         bodyLengthM: bodyLengthOf(f, input.locomotion.bodyLengthM),
         ...(f.hunger === undefined ? {} : { hunger: f.hunger }),
         ...(f.stage === null ? {} : { stage: f.stage }),
+        ...(f.personality === undefined ? {} : { personality: f.personality }),
       });
     }
     if (fish.length === 0) return null;
@@ -153,6 +161,7 @@ export interface WorldControls {
   setDecor(colliders: readonly Collider[]): void;
   setAnchors(anchors: readonly Anchor[]): void;
   setToys(toys: readonly SimToy[]): void;
+  setVisitor(visitor: Visitor | null): void;
   start(): void;
 }
 
@@ -162,6 +171,8 @@ export interface WorldStart {
   light(): number;
   /** The fish's stage now; see `staleStages`. */
   stage(simId: string): FishStage | null | undefined;
+  /** How many recent days the owner opened this tank; null for the demo and tanks that are not theirs. */
+  visitDays(): number | null;
   /** Runs before the world starts, so nothing it posts can arrive ahead of its layout. */
   begin(ready: SimReady): void;
 }
@@ -188,6 +199,8 @@ export async function startWorld(
   for (const { id, stage } of staleStages(config.fish, (simId) => hooks.stage(simId))) {
     sim.setStage(id, stage);
   }
+  const visitDays = hooks.visitDays();
+  if (visitDays !== null) sim.setVisitor({ recentVisitDays: visitDays });
   hooks.begin(ready);
   sim.start();
 }

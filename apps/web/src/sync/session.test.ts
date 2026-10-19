@@ -123,6 +123,24 @@ describe('loading and catch-up', () => {
     expect(session.getState().awayByTank).toEqual({});
   });
 
+  it('loads each saved tank with its own visit days and fish personalities', async () => {
+    const bold = { boldness: 0.9, greed: 0.1, sociability: 0.5 };
+    const { rec, session } = setup([
+      tankFixture({
+        id: TANK_A,
+        recentVisitDays: 6,
+        fish: [fishFixture(FISH_1, { personality: bold })],
+      }),
+      tankFixture({ id: TANK_B, recentVisitDays: 0 }),
+    ]);
+    await session.setUser(verified);
+    expect(rec.of('tank:loaded')).toMatchObject([
+      { tankId: TANK_A, recentVisitDays: 6, fish: [{ personality: bold }] },
+    ]);
+    await session.select(TANK_B);
+    expect(rec.of('tank:loaded').at(-1)).toMatchObject({ tankId: TANK_B, recentVisitDays: 0 });
+  });
+
   it('loads each saved tank with its own size', async () => {
     const { rec, session } = setup([
       tankFixture({ id: TANK_A, size: 'nano30' }),

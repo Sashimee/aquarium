@@ -426,6 +426,7 @@ export class TankSession {
       decorLayout: tank.decorLayout,
       decorEdited: tank.decorEdited,
       backgroundId: tank.backgroundId,
+      recentVisitDays: tank.recentVisitDays,
     });
     this.deps.interaction.emit('tank:water', { tankId, water: tank.water });
     return true;

@@ -118,6 +118,33 @@ describe('SimWorldSpec', () => {
     expect(() => new World(config)).not.toThrow();
   });
 
+  it('hands each saved fish its personality to the world and builds a valid world', () => {
+    const { spec, roster } = setup();
+    const p = { boldness: 0.9, greed: 0.2, sociability: 0.4 };
+    roster.load({
+      backgroundId: 'bg-fw-planted-stream',
+      tankId: TANK_A,
+      biome: 'reef',
+      size: 'standard',
+      decorLayout: [],
+      decorEdited: false,
+      fish: [fishFixture(FISH_1, { ...CLOWN, personality: p }), fishFixture(FISH_2, CLOWN)],
+    });
+    const config = spec.config(roster.swimming());
+    if (config === null) throw new Error('no world');
+    expect(config.fish[0]?.personality).toEqual(p);
+    expect(config.fish[1]?.personality).toEqual({ boldness: 0.5, greed: 0.5, sociability: 0.5 });
+    const world = new World(config);
+    expect(world.personalityOf(config.fish[0]?.id ?? '')).toEqual(p);
+  });
+
+  it('leaves demo fish without a personality', () => {
+    const { spec, roster } = setup();
+    expect(spec.config(roster.swimming())?.fish.every((f) => f.personality === undefined)).toBe(
+      true,
+    );
+  });
+
   it('seeds a world rebuilt mid-session with what the fish ate since it joined', () => {
     const { spec, roster } = setup();
     roster.load({
@@ -177,6 +204,7 @@ describe('SimWorldSpec', () => {
         bodyLengthM: 0.07,
         hunger: 0.1,
         stage: 'adult',
+        personality: { boldness: 0.5, greed: 0.5, sociability: 0.5 },
       },
     ]);
     expect(config?.species).toBe(allSpeciesInputs());
@@ -391,6 +419,7 @@ describe('startWorld', () => {
         setDecor: (decor) => calls.push(['decor', decor]),
         setAnchors: (anchors) => calls.push(['anchors', anchors]),
         setToys: (toys) => calls.push(['toys', toys]),
+        setVisitor: (visitor) => calls.push(['visitor', visitor]),
         start: () => calls.push(['start']),
       },
     };
@@ -429,6 +458,7 @@ describe('startWorld', () => {
       current: () => true,
       light: () => light,
       stage: () => undefined,
+      visitDays: () => null,
       begin: (ready) => calls.push(['begin', ready]),
     });
 
@@ -457,6 +487,7 @@ describe('startWorld', () => {
       current: () => true,
       light: () => 1,
       stage: () => undefined,
+      visitDays: () => null,
       begin: () => undefined,
     });
     expect(calls).toEqual([['light', 1], ['start']]);
@@ -473,6 +504,7 @@ describe('startWorld', () => {
         current: () => true,
         light: () => 1,
         stage: () => undefined,
+        visitDays: () => null,
         begin: () => undefined,
       });
       expect(calls).toEqual([['light', 1], ['toys', [mirror]], ['start']]);
@@ -488,6 +520,7 @@ describe('startWorld', () => {
       current: () => true,
       light: () => 1,
       stage: () => undefined,
+      visitDays: () => null,
       begin: () => undefined,
     });
     expect(calls).toEqual([['light', 1], ['start']]);
@@ -502,6 +535,7 @@ describe('startWorld', () => {
       current: () => current,
       light: () => 1,
       stage: () => undefined,
+      visitDays: () => null,
       begin: (ready) => calls.push(['begin', ready]),
     });
     spec.setDecor([ROCK]);
@@ -532,6 +566,7 @@ describe('startWorld', () => {
       current: () => true,
       light: () => 1,
       stage: (id) => roster.get(id)?.stage,
+      visitDays: () => null,
       begin: (ready) => calls.push(['begin', ready]),
     });
 
@@ -547,6 +582,36 @@ describe('startWorld', () => {
     ]);
   });
 
+  it('tells the new world the owner is at the glass before it starts, from the visit days', async () => {
+    const { spec, roster } = setup();
+    const { sim, calls } = recorder();
+    await startWorld(sim, spec, demoConfig(spec, roster), Promise.resolve(READY), {
+      current: () => true,
+      light: () => 1,
+      stage: () => undefined,
+      visitDays: () => 6,
+      begin: () => calls.push(['begin']),
+    });
+    expect(calls.slice(-3)).toEqual([['visitor', { recentVisitDays: 6 }], ['begin'], ['start']]);
+  });
+
+  it('sends a visitor for zero visit days but none when the days are unknown', async () => {
+    const { spec, roster } = setup();
+    const run = async (days: number | null) => {
+      const { sim, calls } = recorder();
+      await startWorld(sim, spec, demoConfig(spec, roster), Promise.resolve(READY), {
+        current: () => true,
+        light: () => 1,
+        stage: () => undefined,
+        visitDays: () => days,
+        begin: () => undefined,
+      });
+      return calls.filter((c) => c[0] === 'visitor');
+    };
+    expect(await run(0)).toEqual([['visitor', { recentVisitDays: 0 }]]);
+    expect(await run(null)).toEqual([]);
+  });
+
   it('passes on a failed init without starting anything', async () => {
     const { spec, roster } = setup();
     const { sim, calls } = recorder();
@@ -556,6 +621,7 @@ describe('startWorld', () => {
         current: () => true,
         light: () => 1,
         stage: () => undefined,
+        visitDays: () => null,
         begin: () => undefined,
       }),
     ).rejects.toBe(failure);
