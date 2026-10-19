@@ -63,7 +63,12 @@ function pose(w: World, i: number, x: number, y: number, z: number, yaw = Math.P
   w.pitch[i] = 0;
 }
 
-function feedFor(w: World, rain: FoodRain, steps: number, each?: (t: number) => void): AteEvent[] {
+function feedFor(
+  w: World,
+  rain: FoodRain,
+  steps: number,
+  each?: (t: number, events: readonly AteEvent[]) => void,
+): AteEvent[] {
   const all: AteEvent[] = [];
   for (let t = 0; t < steps; t++) {
     rain.feed(w);
@@ -71,7 +76,7 @@ function feedFor(w: World, rain: FoodRain, steps: number, each?: (t: number) => 
     const events = w.takeAteEvents();
     rain.eat(events);
     all.push(...events);
-    each?.(t);
+    each?.(t, events);
   }
   return all;
 }
@@ -500,7 +505,11 @@ describe('feeding AI', { timeout: LONG }, () => {
     const { feeding } = w.behaviour;
     let firstHeight = Infinity;
     let highest = 0;
-    const events = feedFor(w, rain, 2400, () => {
+    let gulpBites = 0;
+    const events = feedFor(w, rain, 2400, (_, bites) => {
+      for (const e of bites) {
+        if (w.state[w.fishIds.indexOf(e.fishId)] === FishState.Gulp) gulpBites++;
+      }
       for (let i = 0; i < w.count; i++) {
         // A dash to the surface for air is not swimming up to the food.
         if (w.state[i] !== FishState.Gulp) highest = Math.max(highest, at(w.position, i * 3 + 1));
@@ -512,6 +521,8 @@ describe('feeding AI', { timeout: LONG }, () => {
     const reach = (cory.depthHigh + FEEDING.bottomZoneReach) * SHOW_TANK.height;
     expect(firstHeight).toBeLessThanOrEqual(reach);
     expect(events.length).toBeGreaterThan(4);
+    // Leaving gulps out of the height check must not hide food taken during a dash.
+    expect(gulpBites).toBe(0);
     expect(highest).toBeLessThan(SHOW_TANK.height - 0.05);
   });
 
