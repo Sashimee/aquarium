@@ -45,6 +45,46 @@ describe('maxSway', () => {
   });
 });
 
+describe('maxSway per axis', () => {
+  const current = { direction: [1, 0] as const, speed: 0.05, gustPeriodS: 8, gustDepth: 0.45 };
+
+  it('puts the forward lean on the flow axis and only the meander across it', () => {
+    const x = maxSway('vallisneria', 0.4, current, 'x');
+    const z = maxSway('vallisneria', 0.4, current, 'z');
+    expect(z).toBeLessThan(x / 3);
+    expect(x).toBeLessThanOrEqual(maxSway('vallisneria', 0.4, current));
+  });
+
+  it('normalises the direction like the shader, so a longer vector sways no further', () => {
+    const unit = { ...current, direction: [0.6, 0.8] as const };
+    const long = { ...current, direction: [3, 4] as const };
+    for (const axis of ['x', 'z'] as const) {
+      expect(maxSway('vallisneria', 0.4, long, axis)).toBeCloseTo(
+        maxSway('vallisneria', 0.4, unit, axis),
+        12,
+      );
+    }
+  });
+
+  it('rejects a zero direction, as the current field does', () => {
+    expect(() => maxSway('vallisneria', 0.4, { ...current, direction: [0, 0] }, 'x')).toThrow(
+      RangeError,
+    );
+  });
+
+  it('swaps axes when the current runs along z', () => {
+    const turned = { ...current, direction: [0, 1] as const };
+    expect(maxSway('vallisneria', 0.4, turned, 'z')).toBeCloseTo(
+      maxSway('vallisneria', 0.4, current, 'x'),
+      12,
+    );
+    expect(maxSway('vallisneria', 0.4, turned, 'x')).toBeCloseTo(
+      maxSway('vallisneria', 0.4, current, 'z'),
+      12,
+    );
+  });
+});
+
 const bounds = { min: [-0.05, 0, -0.05], max: [0.05, 0.4, 0.05] };
 const half = Math.hypot(0.05, 0.05);
 const planarLean = Math.sin(MAX_TILT_RAD) * Math.sqrt(1 + Math.cos(MAX_TILT_RAD) ** 2) * 0.4;
@@ -66,6 +106,12 @@ describe('plantReach', () => {
     }
   });
 
+  it('reaches less towards z than x when the current runs along x', () => {
+    const reach = plantReach('vallisneria', bounds, DEFAULT_CURRENT);
+    expect(reach(1, 'z')).toBeLessThan(reach(1, 'x'));
+    expect(reach(1, 'x')).toBeLessThanOrEqual(reach(1));
+  });
+
   it('uses the widest corner of an asymmetric footprint', () => {
     const lopsided = { min: [-0.02, 0, -0.1], max: [0.06, 0.4, 0.03] };
     const reach = plantReach('vallisneria', lopsided, DEFAULT_CURRENT);
@@ -83,7 +129,8 @@ describe('plantReach', () => {
 
 describe('plant placement against the glass', () => {
   const extent = { halfLength: 0.5, halfDepth: 0.4 };
-  const sway = maxSway('vallisneria', 0.4, DEFAULT_CURRENT);
+  const swayX = maxSway('vallisneria', 0.4, DEFAULT_CURRENT, 'x');
+  const swayZ = maxSway('vallisneria', 0.4, DEFAULT_CURRENT, 'z');
   const reach = plantReach('vallisneria', bounds, DEFAULT_CURRENT);
   const patch: PlantPatch = {
     id: 'edge',
@@ -118,8 +165,8 @@ describe('plant placement against the glass', () => {
 
   const expectInside = (plant: Parameters<typeof worldCorners>[0]) => {
     for (const c of worldCorners(plant)) {
-      expect(Math.abs(c.x) + sway).toBeLessThanOrEqual(extent.halfLength + 1e-9);
-      expect(Math.abs(c.z) + sway).toBeLessThanOrEqual(extent.halfDepth + 1e-9);
+      expect(Math.abs(c.x) + swayX).toBeLessThanOrEqual(extent.halfLength + 1e-9);
+      expect(Math.abs(c.z) + swayZ).toBeLessThanOrEqual(extent.halfDepth + 1e-9);
     }
   };
 
@@ -143,11 +190,12 @@ describe('plant placement against the glass', () => {
     for (const yaw of [0, Math.PI / 4, Math.PI / 2, (3 * Math.PI) / 4, Math.PI]) {
       for (const sx of [-1, 1]) {
         for (const sz of [-1, 1]) {
-          const r = reach(scale);
+          const rx = reach(scale, 'x');
+          const rz = reach(scale, 'z');
           expectInside({
-            x: sx * (extent.halfLength - r),
+            x: sx * (extent.halfLength - rx),
             y: 0,
-            z: sz * (extent.halfDepth - r),
+            z: sz * (extent.halfDepth - rz),
             yaw,
             tiltX: sx * MAX_TILT_RAD,
             tiltZ: sz * MAX_TILT_RAD,

@@ -120,7 +120,7 @@ function fitItem(item: DecorItem, dimensions: TankDimensions, boundsOf: BoundsOf
 function fitPatch(
   patch: PlantPatch,
   dimensions: TankDimensions,
-  reachOf: (patch: PlantPatch) => number,
+  reachOf: (patch: PlantPatch, axis: 'x' | 'z') => number,
 ): PlantPatch {
   const k = layoutScale(dimensions);
   const halfL = dimensions.length / 2 - dimensions.glass - WALL_MARGIN;
@@ -131,9 +131,9 @@ function fitPatch(
   ];
   const fitted = { ...patch, scale, radius: patch.radius * k };
   const smallest = scale[0] * GLASS_SHRINK_FLOOR;
-  const reach = reachOf({ ...fitted, scale: [smallest, smallest] });
-  const limitX = Math.max(0, halfL - reach);
-  const limitZ = Math.max(0, halfD - reach);
+  const smallestPatch = { ...fitted, scale: [smallest, smallest] as [number, number] };
+  const limitX = Math.max(0, halfL - reachOf(smallestPatch, 'x'));
+  const limitZ = Math.max(0, halfD - reachOf(smallestPatch, 'z'));
   const x = (patch.center[0] * dimensions.length) / DEFAULT_TANK.length;
   const z = (patch.center[1] * dimensions.depth) / DEFAULT_TANK.depth;
   return {
@@ -151,7 +151,7 @@ export function fitPresetToTank(
   preset: PresetLayout,
   dimensions: TankDimensions,
   boundsOf: BoundsOf,
-  patchReach: (patch: PlantPatch) => number,
+  patchReach: (patch: PlantPatch, axis: 'x' | 'z') => number,
 ): PresetLayout {
   return {
     ...preset,
