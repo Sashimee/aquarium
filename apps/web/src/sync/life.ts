@@ -6,10 +6,11 @@ import type {
   Memorial,
   SpeciesSummary,
   Tank,
+  TankSize,
   Water,
 } from '@aquarium/shared';
 import { speciesNameMap, type SpeciesNames } from './speciesNames';
-import { hasCapacityFor, TANK_BIOLOAD_CAPACITY } from '@aquarium/sim/lifecycle';
+import { BIOLOAD_CAPACITY_BY_SIZE, hasCapacityFor } from '@aquarium/sim/lifecycle';
 
 export { speciesNameMap, type SpeciesNames } from './speciesNames';
 
@@ -165,10 +166,24 @@ export function tankCapacity(tank: Tank, species: readonly SpeciesSummary[]): Ca
   const living = livingFish(tank);
   return {
     usedBioload: living.reduce((sum, f) => sum + (bioload.get(f.species) ?? 0), 0),
-    capacity: TANK_BIOLOAD_CAPACITY,
+    capacity: BIOLOAD_CAPACITY_BY_SIZE[tank.size],
     livingFish: living.length,
     maxFish: TANK_SIZES[tank.size].maxAnimals,
   };
+}
+
+const SIZE_NAME: Record<TankSize, string> = {
+  nano30: 'Nano',
+  standard: 'Standard',
+  std200: 'Medium',
+  long300: 'Long',
+};
+
+export const TANK_SIZE_ORDER: readonly TankSize[] = ['nano30', 'standard', 'std200', 'long300'];
+
+export function tankSizeLabel(size: TankSize): string {
+  const spec = TANK_SIZES[size];
+  return `${SIZE_NAME[size]}, ${spec.litres} L (up to ${spec.maxAnimals} animals, load ${BIOLOAD_CAPACITY_BY_SIZE[size]})`;
 }
 
 export type ShopVerdict = { ok: true } | { ok: false; reason: string };
@@ -189,7 +204,7 @@ export function canBuy(
   const fits = hasCapacityFor(
     existing,
     candidate.lifecycle.bioload,
-    TANK_BIOLOAD_CAPACITY,
+    BIOLOAD_CAPACITY_BY_SIZE[tank.size],
     TANK_SIZES[tank.size].maxAnimals,
   );
   if (fits) return { ok: true };

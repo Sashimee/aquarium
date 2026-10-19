@@ -4,13 +4,18 @@ import {
   type PlayableBiome,
   type SpeciesSummary,
   type Tank,
+  type TankSize,
+  DEFAULT_TANK_SIZE,
+  tankSizeSchema,
 } from '@aquarium/shared';
 import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react';
 import {
   canBuy,
   deadFish,
   memorialLine,
+  TANK_SIZE_ORDER,
   tankCapacity,
+  tankSizeLabel,
   waterReport,
   type SpeciesNames,
 } from '../sync/life';
@@ -260,6 +265,7 @@ function NewTankForm({
 }) {
   const id = useId();
   const [biome, setBiome] = useState<PlayableBiome>(initialBiome);
+  const [size, setSize] = useState<TankSize>(DEFAULT_TANK_SIZE);
   const taken = state.tanks.map((t) => t.name);
   const [name, setName] = useState(() => suggestTankName(initialBiome, taken));
   const [problem, setProblem] = useState<string | null>(null);
@@ -269,7 +275,7 @@ function NewTankForm({
     const checked = checkTankName(name);
     if (!checked.ok) return setProblem(checked.message);
     setProblem(null);
-    void session.createTank(checked.name, biome).then((ok) => {
+    void session.createTank(checked.name, biome, size).then((ok) => {
       if (ok) onDone?.();
     });
   };
@@ -288,6 +294,18 @@ function NewTankForm({
         {playableBiomeSchema.options.map((b) => (
           <option key={b} value={b}>
             {BIOME_LABEL[b]}
+          </option>
+        ))}
+      </select>
+      <label htmlFor={`${id}-s`}>Size</label>
+      <select
+        id={`${id}-s`}
+        value={size}
+        onChange={(e) => setSize(tankSizeSchema.parse(e.target.value))}
+      >
+        {TANK_SIZE_ORDER.map((s) => (
+          <option key={s} value={s}>
+            {tankSizeLabel(s)}
           </option>
         ))}
       </select>

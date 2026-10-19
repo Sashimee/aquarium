@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   BoxGeometry,
+  CompressedTexture,
   InstancedMesh,
   Matrix4,
   MeshStandardMaterial,
@@ -13,12 +14,14 @@ import { CARCASS, SNAPSHOT_STRIDE, SnapshotField, WALK, type SimToy } from '@aqu
 import type { Collider } from '@aquarium/shared';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import type { Engine } from '../engine/Engine';
+import { TIER_SETTINGS, type TierSettings } from '../engine/quality/tiers';
 import { EventBus, type EngineEvents } from '../engine/events';
-import { DEFAULT_TANK, waterBounds } from '../engine/tank/dimensions';
+import { DEFAULT_TANK, TANK_DIMENSIONS, waterBounds } from '../engine/tank/dimensions';
 import type { InteractionEvents } from '../interaction/events';
-import { FISH_1, TANK_A, fishFixture } from '../sync/fixtures';
-import type { FishAssetEntry } from './assetIndex';
+import { FISH_1, FISH_2, TANK_A, fishFixture } from '../sync/fixtures';
+import type { FishAssetEntry, ImpostorAtlasInfo } from './assetIndex';
 import { FishAssetLoader, type FishModel, type ShellRig } from './assets';
+import { ImpostorInstanceData } from './impostor';
 import { FishInstanceData, InstanceSlot, type InstanceValues } from './instances';
 import { FishMaterial } from './material';
 import { batchLocomotion, FishSystem, walkerLift } from './FishSystem';
@@ -188,6 +191,7 @@ describe('FishSystem.create', () => {
         backgroundId: 'bg-fw-planted-stream',
         tankId: TANK_A,
         biome: 'freshwater',
+        size: 'standard',
         decorLayout: [],
         decorEdited: false,
         fish: [fishFixture(FISH_1)],
@@ -452,6 +456,7 @@ describe('FishSystem dead shrimp', () => {
         backgroundId: 'bg-fw-planted-stream',
         tankId: TANK_A,
         biome: 'freshwater',
+        size: 'standard',
         decorLayout: [],
         decorEdited: false,
         fish: climbing === null ? [] : [SHRIMP],
@@ -577,6 +582,38 @@ describe('FishSystem dead shrimp', () => {
     expect(locate(fish).y).toBe(last.y);
     expect(picked(fish, { x: -1, y: last.y, z: last.z }, { x: 1, y: 0, z: 0 })).toBe(true);
     expect(picked(fish, { x: -1, y: start.y, z: start.z }, { x: 1, y: 0, z: 0 })).toBe(false);
+    fish.dispose();
+  });
+
+  it('brings a dead shrimp into the smaller glass when the tank shrinks, and back out again', async () => {
+    const { fish, scene, advance } = await shrimpTank();
+    die(fish);
+    advance(30);
+    const nano = waterBounds(TANK_DIMENSIONS.nano30);
+    const inNano = (p: Vector3): boolean =>
+      p.x >= nano.min.x &&
+      p.x <= nano.max.x &&
+      p.z >= nano.min.z &&
+      p.z <= nano.max.z &&
+      p.y >= nano.min.y &&
+      p.y <= nano.max.y;
+    expect(inNano(drawnPosition(scene))).toBe(false);
+
+    fish.setTank(TANK_DIMENSIONS.nano30);
+    advance(STEP_S);
+    expect(inNano(drawnPosition(scene))).toBe(true);
+    fish.setTank(TANK_DIMENSIONS.nano30);
+    advance(STEP_S);
+    expect(inNano(drawnPosition(scene))).toBe(true);
+
+    fish.setTank(DEFAULT_TANK);
+    advance(30);
+    const standard = waterBounds(DEFAULT_TANK);
+    const back = drawnPosition(scene);
+    expect(back.x).toBeGreaterThanOrEqual(standard.min.x);
+    expect(back.x).toBeLessThanOrEqual(standard.max.x);
+    expect(back.z).toBeGreaterThanOrEqual(standard.min.z);
+    expect(back.z).toBeLessThanOrEqual(standard.max.z);
     fish.dispose();
   });
 
@@ -723,7 +760,7 @@ describe('FishSystem dead shrimp', () => {
 });
 
 /** A betta drawn as one box, enough to place and draw it. */
-function bettaModel(): FishModel {
+function bettaModel(impostor: ImpostorAtlasInfo | null = null): FishModel {
   return {
     entry: {
       id: 'betta',
@@ -736,7 +773,7 @@ function bettaModel(): FishModel {
       lodFiles: [],
       sharperTextures: new Map(),
       shrimp: null,
-      impostor: null,
+      impostor,
     },
     tail: null,
     shell: null,
@@ -777,8 +814,18 @@ describe('FishSystem toys and display', () => {
   });
 
   /** A saved tank with one betta, its world up; `snapshot` sends one sim step and draws it. */
-  async function bettaTank(shown = BETTA, biome: 'freshwater' | 'reef' = 'freshwater') {
+  async function bettaTank(
+    shown = BETTA,
+    biome: 'freshwater' | 'reef' = 'freshwater',
+    tier: Partial<TierSettings> | null = null,
+  ) {
     const { engine, frames } = fakeEngine();
+    if (tier !== null) {
+      engine.quality.register = (name, apply) => {
+        if (name === 'fish-lod') apply({ ...TIER_SETTINGS.low, ...tier }, 'low');
+        return () => undefined;
+      };
+    }
     const start = FishSystem.create(engine, {
       tank: DEFAULT_TANK,
       assetRoot: '/assets/',
@@ -789,8 +836,10 @@ describe('FishSystem toys and display', () => {
     });
     const worker = await initPosted();
     let answered = 0;
+    let epoch = 0;
     const answer = (): void => {
       for (const { request, config } of worker.inits().slice(answered)) {
+        epoch = request;
         worker.emit({
           type: 'ready',
           request,
@@ -810,6 +859,7 @@ describe('FishSystem toys and display', () => {
         payload: {
           backgroundId: 'bg-fw-planted-stream',
           tankId: TANK_A,
+          size: 'standard',
           biome,
           decorLayout: [],
           decorEdited: false,
@@ -825,22 +875,25 @@ describe('FishSystem toys and display', () => {
       await fish.synced();
     };
     let tick = 0;
-    const snapshot = (display: number, gillFlare: number): void => {
-      const data = new Float32Array(SNAPSHOT_STRIDE);
-      data.set([...AT, 0, 0, 0, 1]);
-      data[SnapshotField.Display] = display;
-      data[SnapshotField.GillFlare] = gillFlare;
+    const snapshot = (display: number, gillFlare: number, count = 1): void => {
+      const data = new Float32Array(SNAPSHOT_STRIDE * count);
+      for (let i = 0; i < count; i++) {
+        const o = i * SNAPSHOT_STRIDE;
+        data.set([...AT, 0, 0, 0, 1], o);
+        data[o + SnapshotField.Display] = display;
+        data[o + SnapshotField.GillFlare] = gillFlare;
+      }
       tick++;
       worker.emit({
         type: 'snapshot',
-        epoch: answered,
+        epoch,
         tick,
         time: tick * STEP_S,
         buffer: data.buffer,
       });
       for (const frame of frames) frame(STEP_S, performance.now());
     };
-    return { fish, engine, worker, load, nextWorld, snapshot, epoch: () => answered };
+    return { fish, engine, worker, load, nextWorld, snapshot, epoch: () => epoch };
   }
 
   it('sends the toys to the running world and again to every new one', async () => {
@@ -939,7 +992,7 @@ describe('FishSystem toys and display', () => {
     fish.dispose();
   });
 
-  it('closes the fins over a moment when a new world restarts them at 0', async () => {
+  it("follows the sim's own easing as a living fish closes its fins in the same world", async () => {
     const written: InstanceValues[] = [];
     const write = FishInstanceData.prototype.write;
     vi.spyOn(FishInstanceData.prototype, 'write').mockImplementation(function (
@@ -954,13 +1007,103 @@ describe('FishSystem toys and display', () => {
     load();
     await nextWorld();
     for (let i = 0; i < 3; i++) snapshot(1, 1);
-    snapshot(0, 0);
-    snapshot(0, 0);
-    const after = written.at(-1)?.display ?? NaN;
-    expect(after).toBeGreaterThan(0.8);
-    expect(after).toBeLessThan(1);
+    snapshot(0.3, 0.2);
+    snapshot(0.3, 0.2);
+    expect(written.at(-1)?.display).toBeCloseTo(0.3, 6);
+    expect(written.at(-1)?.gillFlare).toBeCloseTo(0.2, 6);
     fish.dispose();
   });
+
+  it('closes the fins over a moment when a rebuilt world restarts them at 0', async () => {
+    const written: { data: FishInstanceData; values: InstanceValues }[] = [];
+    const write = FishInstanceData.prototype.write;
+    vi.spyOn(FishInstanceData.prototype, 'write').mockImplementation(function (
+      this: FishInstanceData,
+      index,
+      values,
+    ) {
+      written.push({ data: this, values: { ...values } });
+      write.call(this, index, values);
+    });
+    const { fish, worker, load, nextWorld, snapshot } = await bettaTank();
+    load();
+    await nextWorld();
+    for (let i = 0; i < 3; i++) snapshot(1, 1);
+    const betta = written.at(-1)?.data;
+    const bettaDisplay = (): number =>
+      written.filter((w) => w.data === betta).at(-1)?.values.display ?? NaN;
+    const gramma = fishFixture(FISH_2, { species: 'royal-gramma', size: 0.06 });
+    fish.handle({
+      type: 'tank:fish-added',
+      payload: { tankId: TANK_A, fish: gramma, acclimate: false },
+    });
+    const request = await vi.waitFor(() => {
+      const add = worker.sent.find((m) => m.type === 'addFish');
+      if (add === undefined || !('request' in add)) throw new Error('no addFish yet');
+      return add.request;
+    });
+    worker.emit({ type: 'error', request, message: 'no room' });
+    await nextWorld();
+    snapshot(0, 0, 2);
+    snapshot(0, 0, 2);
+    expect(bettaDisplay()).toBeGreaterThan(0.8);
+    expect(bettaDisplay()).toBeLessThan(1);
+    for (let i = 0; i < Math.ceil(CARCASS.limpS / STEP_S) + 2; i++) snapshot(0, 0, 2);
+    expect(bettaDisplay()).toBe(0);
+    snapshot(0.4, 0.4, 2);
+    snapshot(0.4, 0.4, 2);
+    snapshot(0.2, 0.2, 2);
+    snapshot(0.2, 0.2, 2);
+    expect(bettaDisplay()).toBeCloseTo(0.2, 6);
+    fish.dispose();
+  });
+
+  it.each([
+    ['betta', BETTA, 'freshwater', false],
+    [
+      'royal gramma, whose territorial display the sim reports but no mesh shows',
+      fishFixture(FISH_1, { species: 'royal-gramma', size: 0.06 }),
+      'reef',
+      true,
+    ],
+  ] as const)(
+    'draws a distant %s in display as an impostor only without the flare trait',
+    async (_, shown, biome, far) => {
+      const atlas: ImpostorAtlasInfo = {
+        grid: 8,
+        frameSize: 64,
+        pivot: [0, 0, 0],
+        radius: 0.04,
+        albedoFile: 'atlas-albedo.ktx2',
+        normalFile: 'atlas-normal.ktx2',
+      };
+      vi.mocked(FishAssetLoader.prototype.load).mockResolvedValue(bettaModel(atlas));
+      vi.spyOn(KTX2Loader.prototype, 'loadAsync').mockImplementation(() =>
+        Promise.resolve(new CompressedTexture([], 1, 1)),
+      );
+      const impostorWrites = vi.spyOn(ImpostorInstanceData.prototype, 'write');
+      const meshWrites = vi.spyOn(FishInstanceData.prototype, 'write');
+      const tier = {
+        fishLod: { midDistance: 0.01, impostorDistance: 0.02 },
+        fishImpostors: { fullMeshes: 0 },
+      };
+      const { fish, load, nextWorld, snapshot } = await bettaTank(shown, biome, tier);
+      load();
+      await nextWorld();
+      snapshot(0, 0);
+      await vi.waitFor(() => {
+        snapshot(0, 0);
+        if (impostorWrites.mock.calls.length === 0) throw new Error('no impostor drawn yet');
+      });
+      for (let i = 0; i < 3; i++) snapshot(0.8, 0.6);
+      impostorWrites.mockClear();
+      meshWrites.mockClear();
+      snapshot(0.8, 0.6);
+      expect(impostorWrites.mock.calls.length > 0).toBe(far);
+      expect(meshWrites.mock.calls.length > 0).toBe(!far);
+      fish.dispose();
+    },
+  );
 
   it.each([
     ['betta', BETTA, 'freshwater', true],

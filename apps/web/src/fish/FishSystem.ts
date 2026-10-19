@@ -32,7 +32,7 @@ import type { Engine } from '../engine/Engine';
 import type { EventBus } from '../engine/events';
 import { releaseAll } from '../engine/lifecycle';
 import type { Tier, TierSettings } from '../engine/quality/tiers';
-import { waterBounds, type TankDimensions } from '../engine/tank/dimensions';
+import { sameTank, waterBounds, type TankDimensions } from '../engine/tank/dimensions';
 import type { InteractionEvents } from '../interaction/events';
 import type { FishAssetEntry, ImpostorAtlasInfo, ShrimpRig } from './assetIndex';
 import {
@@ -175,6 +175,8 @@ interface SpeciesBatch {
   /** Follows `model`. */
   locomotion: BatchLocomotion;
   readonly profile: FishRenderProfile;
+  /** Spreads its fins in display; every territorial species reports display, only these show it. */
+  readonly displays: boolean;
   lods: readonly LodBatch[];
   atlas: AtlasState;
   /** Built with the LODs once the atlas is ready; null without one, and for walkers. */
@@ -240,6 +242,8 @@ interface FishRuntime {
   /** Fin spread and gill-cover flare in display, 0..1, from the sim; closing to 0 off it. */
   display: number;
   gillFlare: number;
+  /** Fins left spread by a dropped world, closing over `DISPLAY_CLOSE_S` until the sim's catch up. */
+  finsSettling: boolean;
 }
 
 /** LOD levels near enough for their self-shadowing to read. */
@@ -426,8 +430,10 @@ export class FishSystem {
   private readonly loader: FishAssetLoader;
   private readonly bags: AcclimationBags;
   private readonly lifetime = new AbortController();
-  private readonly box: WaterBox;
+  private box: WaterBox;
   private readonly spec: SimWorldSpec;
+  private demoBiome: Biome;
+  private tank: TankDimensions;
   private readonly cleanups: (() => void)[] = [];
   private readonly ateListeners = new Set<(events: readonly FishBite[]) => void>();
   private readonly nudgeListeners = new Set<(nudge: BallNudge) => void>();
@@ -464,6 +470,7 @@ export class FishSystem {
     lod: 0,
     full: true,
     castsShadow: false,
+    display: 0,
   };
   private features: FishMaterialFeatures | null = null;
   private night = 0;
@@ -582,16 +589,9 @@ export class FishSystem {
     demo: DemoTank,
     private readonly seed: number,
   ) {
-    const bounds = waterBounds(options.tank);
-    const space = demo.config.space;
-    this.box = {
-      minX: bounds.min.x,
-      maxX: bounds.max.x,
-      ground: (x, z) => sampleFloor(space, x, z),
-      minZ: bounds.min.z,
-      maxZ: bounds.max.z,
-      top: bounds.max.y,
-    };
+    this.demoBiome = options.biome;
+    this.tank = options.tank;
+    this.box = waterBoxOf(options.tank, demo);
     this.roster = new TankRoster(demo.config.fish);
     this.spec = new SimWorldSpec(demo, seed);
     this.loader = new FishAssetLoader(engine.ktx2, options.assetRoot);
@@ -688,10 +688,33 @@ export class FishSystem {
     this.requestSync();
   }
 
+  /**
+   * Moves the swimming space to `tank`: the fish box and the sim's world are rebuilt around it, so
+   * nobody swims outside the new glass. Stock and the saved tank stay as they are.
+   */
+  setTank(tank: TankDimensions): void {
+    if (this.disposed || sameTank(tank, this.tank)) return;
+    this.tank = tank;
+    const demo = demoTank(tank, this.seed, this.demoBiome);
+    this.box = waterBoxOf(tank, demo);
+    for (const rt of this.runtimes.values()) {
+      if (rt.script !== null) rt.script = this.deadScript(rt);
+    }
+    this.spec.setDemo(demo);
+    this.spec.setAnchors([]);
+    this.roster.setDemo(demo.config.fish);
+    this.stopWorld();
+    this.prune();
+    this.batches.evictUnwanted();
+    this.materialize();
+    this.requestSync();
+  }
+
   /** Replaces the demo stock with `biome`'s; a loaded saved tank is left alone. */
   setDemoBiome(biome: Biome): void {
     if (this.disposed) return;
-    const demo = demoTank(this.options.tank, this.seed, biome);
+    this.demoBiome = biome;
+    const demo = demoTank(this.tank, this.seed, biome);
     const swapped = this.roster.setDemo(demo.config.fish);
     if (swapped) this.stopWorld();
     this.prune();
@@ -975,6 +998,7 @@ export class FishSystem {
       model,
       locomotion,
       profile,
+      displays: input.behaviour.traits.includes('flare-display'),
       lods: [],
       atlas: { kind: 'none' },
       impostor: null,
@@ -988,7 +1012,7 @@ export class FishSystem {
     if (needed <= batch.capacity) return;
     this.disposeLods(batch);
     const capacity = capacityFor(needed);
-    const { input, model, profile, locomotion } = batch;
+    const { model, profile, locomotion } = batch;
     const lighting = this.lighting();
     batch.lods = model.lods.map((parts, level) => {
       const instances = new FishInstanceData(
@@ -1008,7 +1032,7 @@ export class FishSystem {
           instances,
           lighting,
           mouth: part.mouth,
-          displays: input.behaviour.traits.includes('flare-display'),
+          displays: batch.displays,
         });
         if (this.features !== null) material.setFeatures(this.features);
         const mesh = new InstancedMesh(part.geometry, material, capacity);
@@ -1244,6 +1268,7 @@ export class FishSystem {
       script: null,
       display: 0,
       gillFlare: 0,
+      finsSettling: false,
     };
     if (fish.phase === 'bagged') runtime.bagSlot = this.freeBagSlot();
     if (fish.phase === 'dead') runtime.script = this.deadScript(runtime);
@@ -1364,6 +1389,7 @@ export class FishSystem {
     this.generation++;
     this.stream.reset();
     this.held.releaseAll();
+    for (const rt of this.runtimes.values()) rt.finsSettling = true;
   }
 
   /** Every swimming fish on screen waits where it is for the next world. */
@@ -1610,10 +1636,17 @@ export class FishSystem {
         walk.legPhase = frame[o + SnapshotField.LegPhase] ?? 0;
         walk.flip = frame[o + SnapshotField.Flip] ?? 0;
         walk.attached = frame[o + SnapshotField.Attached] ?? 1;
-        // A world restarting at 0 closes the fins over a moment too.
-        const closing = deltaS / DISPLAY_CLOSE_S;
-        rt.display = Math.max(frame[o + SnapshotField.Display] ?? 0, rt.display - closing);
-        rt.gillFlare = Math.max(frame[o + SnapshotField.GillFlare] ?? 0, rt.gillFlare - closing);
+        const display = frame[o + SnapshotField.Display] ?? 0;
+        const gillFlare = frame[o + SnapshotField.GillFlare] ?? 0;
+        if (rt.finsSettling) {
+          const closing = deltaS / DISPLAY_CLOSE_S;
+          rt.display = Math.max(display, rt.display - closing);
+          rt.gillFlare = Math.max(gillFlare, rt.gillFlare - closing);
+          rt.finsSettling = rt.display > display || rt.gillFlare > gillFlare;
+        } else {
+          rt.display = display;
+          rt.gillFlare = gillFlare;
+        }
         const { locomotion } = rt.batch;
         if (locomotion.kind !== 'swim' && locomotion.lift !== 0) {
           this.liftUp.set(0, locomotion.lift * rt.scale, 0).applyQuaternion(this.quaternion);
@@ -1736,6 +1769,7 @@ export class FishSystem {
       choice.lod = rt.lod;
       choice.full = rt.full;
       choice.castsShadow = castsShadow && rt.lod < SHADOW_LODS;
+      choice.display = rt.batch.displays ? Math.max(rt.display, rt.gillFlare) : 0;
       if (impostor !== null && motion instanceof SwimState && drawsAsImpostor(choice)) {
         this.drawImpostor(rt, motion, impostor, camera);
       } else {
@@ -1868,4 +1902,17 @@ export class FishSystem {
     writeDiseaseSigns(rt.fish.disease, false, v);
     draw.instances.write(slot, v);
   }
+}
+
+function waterBoxOf(tank: TankDimensions, demo: DemoTank): WaterBox {
+  const bounds = waterBounds(tank);
+  const space = demo.config.space;
+  return {
+    minX: bounds.min.x,
+    maxX: bounds.max.x,
+    ground: (x, z) => sampleFloor(space, x, z),
+    minZ: bounds.min.z,
+    maxZ: bounds.max.z,
+    top: bounds.max.y,
+  };
 }

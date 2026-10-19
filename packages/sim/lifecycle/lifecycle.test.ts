@@ -272,11 +272,9 @@ describe('a tank stocked to capacity at full size under perfect daily care', () 
     expect(state.fish.every((f) => f.alive && f.health === 1)).toBe(true);
   });
 
-  it.each(
-    parsedSpecies
-      .filter((s) => s.lifecycle.ammoniaTolerance >= 0.1)
-      .map((s) => [s.id, s.biome] as const),
-  )(
+  const SHRIMP_IDS = new Set(['cherry-shrimp', 'cleaner-shrimp']);
+
+  it.each(parsedSpecies.filter((s) => !SHRIMP_IDS.has(s.id)).map((s) => [s.id, s.biome] as const))(
     'a nano stocked at the old cap of 12 keeps every %s for 120 days of weekly water changes',
     (id, biome) => {
       const spec = species.get(id);
@@ -1095,6 +1093,12 @@ describe('water volume', () => {
 });
 
 describe('overfeeding by tank size', () => {
+  const nanoStock = (bioload: number) =>
+    Math.min(
+      TANK_SIZES.nano30.maxAnimals,
+      Math.max(1, Math.floor(BIOLOAD_CAPACITY_BY_SIZE.nano30 / bioload)),
+    );
+
   const empty = (litres: number) => (hours: number) =>
     run(tank([], { uneatenFood: 1 }), hours * HOUR, { env: { litres } }).state.water.ammonia;
 
@@ -1131,6 +1135,85 @@ describe('overfeeding by tank size', () => {
       });
       expect(only(r).alive).toBe(true);
       expect(only(r).health).toBeGreaterThan(0.95);
+    },
+  );
+
+  it.each(parsedSpecies.map((s) => [s.id] as const))(
+    'one portion in a clean stocked nano costs %s less than 1% of its health',
+    (id) => {
+      const spec = species.get(id);
+      if (!spec) throw new Error(`no species ${id}`);
+      const biome = parsedSpecies.find((p) => p.id === id)?.biome ?? 'freshwater';
+      const count = nanoStock(spec.bioload);
+      const state = {
+        ...tank(
+          Array.from({ length: count }, (_, i) =>
+            fishOf(`${id}-${i}`, id, { size: spec.maxSizeM }),
+          ),
+          { uneatenFood: 1 },
+        ),
+        chemistry: newTankChemistry(biome),
+      };
+      const r = run(state, 3 * DAY, {
+        env: {
+          biome,
+          litres: TANK_SIZES.nano30.litres,
+          bioloadCapacity: BIOLOAD_CAPACITY_BY_SIZE.nano30,
+        },
+      });
+      expect(r.state.fish.every((f) => f.alive)).toBe(true);
+      expect(Math.min(...r.state.fish.map((f) => f.health))).toBeGreaterThan(0.99);
+    },
+  );
+
+  it.each(parsedSpecies.map((s) => [s.id] as const))(
+    'one extra portion in a stocked nano on the steady routine costs %s under 30% health and no life',
+    (id) => {
+      const spec = species.get(id);
+      if (!spec) throw new Error(`no species ${id}`);
+      const biome = parsedSpecies.find((p) => p.id === id)?.biome ?? 'freshwater';
+      const nano = {
+        biome,
+        litres: TANK_SIZES.nano30.litres,
+        bioloadCapacity: BIOLOAD_CAPACITY_BY_SIZE.nano30,
+      };
+      let state: LifecycleState = {
+        water: cleanWater,
+        chemistry: newTankChemistry(biome),
+        fish: Array.from({ length: nanoStock(spec.bioload) }, (_, i) =>
+          fishOf(`${id}-${i}`, id, { size: spec.maxSizeM }),
+        ),
+      };
+      const steadyDays = 27;
+      for (let day = 0; day < steadyDays; day++) {
+        state = {
+          ...state,
+          water: { ...state.water, uneatenFood: state.water.uneatenFood + 0.5 },
+          fish: state.fish.map((f) => ({ ...f, hunger: 0 })),
+        };
+        if (day % 7 === 0) {
+          const changed = applyCare(state, { type: 'water_change' }, biome, chemistryParams);
+          if (!changed.ok) throw new Error(changed.reason);
+          state = changed.value;
+        }
+        const r = run(state, (day + 1) * DAY, { from: day * DAY, env: nano });
+        expect(r.deaths).toEqual([]);
+        state = r.state;
+      }
+      state = {
+        ...state,
+        water: { ...state.water, uneatenFood: state.water.uneatenFood + 1 },
+        fish: state.fish.map((f) => ({ ...f, hunger: 0 })),
+      };
+      let minHealth = 1;
+      for (let hour = 0; hour < 36; hour++) {
+        const from = steadyDays * DAY + hour * HOUR;
+        const r = run(state, from + HOUR, { from, env: nano });
+        expect(r.deaths).toEqual([]);
+        state = r.state;
+        minHealth = Math.min(minHealth, ...state.fish.map((f) => f.health));
+      }
+      expect(minHealth).toBeGreaterThan(0.7);
     },
   );
 

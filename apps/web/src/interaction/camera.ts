@@ -1,3 +1,5 @@
+import type { TankDimensions } from '../engine/tank/dimensions';
+
 export type CameraMode = 'orbit' | 'focus' | 'dive';
 
 export interface Vec3 {
@@ -24,7 +26,26 @@ export interface TankBounds {
 
 export interface CameraOptions {
   reducedMotion?: boolean;
+  /** Orbit distance to start at; the standard tank's front view when omitted. */
+  orbitDistance?: number;
   onModeChange?: (mode: CameraMode) => void;
+}
+
+const DIVE_FLOOR_ABOVE_SUBSTRATE = 0.05;
+const STANDARD_ORBIT_DISTANCE = 1.6;
+
+export function tankBounds(d: TankDimensions): TankBounds {
+  return {
+    halfLength: d.length / 2,
+    halfDepth: d.depth / 2,
+    height: d.height,
+    waterTop: d.height - d.freeboard,
+    floor: d.substrateBack + DIVE_FLOOR_ABOVE_SUBSTRATE,
+  };
+}
+
+export function orbitDistanceFor(scale: number): number {
+  return STANDARD_ORBIT_DISTANCE * scale;
 }
 
 export type FocusTarget = () => Vec3 | null;
@@ -96,7 +117,7 @@ export class CameraRig {
   private orbitTarget: Vec3 = { x: 0, y: 0.25, z: 0 };
   private yaw = 0;
   private pitch = 0.1;
-  private distance = 1.6;
+  private distance: number;
 
   private focusTarget: FocusTarget | null = null;
   private focusLast: Vec3 = { x: 0, y: 0.25, z: 0 };
@@ -112,10 +133,11 @@ export class CameraRig {
 
   constructor(
     private readonly camera: CameraLike,
-    private readonly bounds: TankBounds,
+    private bounds: TankBounds,
     private readonly options: CameraOptions = {},
   ) {
     this.reducedMotion = options.reducedMotion ?? false;
+    this.distance = options.orbitDistance ?? STANDARD_ORBIT_DISTANCE;
     this.orbitTarget = { x: 0, y: bounds.height / 2, z: 0 };
     this.focusLast = { ...this.orbitTarget };
     const goal = this.goal();
@@ -130,6 +152,18 @@ export class CameraRig {
 
   setReducedMotion(value: boolean): void {
     this.reducedMotion = value;
+  }
+
+  /**
+   * Re-fits the rig to another tank: the orbit circles its middle at `orbitDistance` (kept clear of
+   * the new glass), and a dive or focus eye inside the water is pulled back within it.
+   */
+  setBounds(bounds: TankBounds, orbitDistance: number): void {
+    this.bounds = bounds;
+    this.orbitTarget = { x: 0, y: bounds.height / 2, z: 0 };
+    this.distance = orbitDistance;
+    this.clampOrbit();
+    this.divePosition = this.clampDive(this.divePosition);
   }
 
   setOrbit(yaw: number, pitch: number, distance: number): void {

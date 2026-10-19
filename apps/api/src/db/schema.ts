@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import {
   bigserial,
   boolean,
+  check,
   date,
   doublePrecision,
   index,
@@ -12,6 +13,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
 
@@ -149,6 +151,9 @@ export const tanks = pgTable(
     quarantine: boolean('quarantine').notNull().default(false),
     shareTokenHash: text('share_token_hash').unique(),
     name: text('name').notNull(),
+    // The client's idempotency key of the request that made the tank. Free tanks leave no ledger
+    // row, so this is what lets a retry find the tank it already got.
+    creationKey: text('creation_key'),
     decorLayout: jsonb('decor_layout'),
     // null: the player never chose one, so the biome's default shows.
     backgroundId: text('background_id'),
@@ -169,7 +174,12 @@ export const tanks = pgTable(
         sql`'{"filter":{"tier":1},"heater":{"tier":1},"light":{"tier":1,"intensity":0.8,"onHour":8,"offHour":20},"co2":{"tier":0},"waveMaker":{"tier":0}}'::jsonb`,
       ),
   },
-  (t) => [index('tanks_owner_id_idx').on(t.ownerId)],
+  (t) => [
+    index('tanks_owner_id_idx').on(t.ownerId),
+    uniqueIndex('tanks_owner_creation_key_idx')
+      .on(t.ownerId, t.creationKey)
+      .where(sql`${t.creationKey} is not null`),
+  ],
 );
 
 export const fish = pgTable(
@@ -359,4 +369,51 @@ export const achievementAwards = pgTable(
     earnedAt: timestamptz('earned_at').notNull(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.achievementId] })],
+);
+
+export const ledgerReasonEnum = pgEnum('ledger_reason', [
+  'purchase',
+  'earn',
+  'grant',
+  'pack',
+  'subscription',
+  'refund',
+  'clawback',
+  'restore',
+]);
+export const ledgerSourceEnum = pgEnum('ledger_source', ['stripe', 'apple', 'game']);
+
+export const wallet = pgTable('wallet', {
+  userId: text('user_id')
+    .primaryKey()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  balance: integer('balance').notNull().default(0),
+});
+
+// SET NULL, not cascade: real-money rows outlive the account, pseudonymised, for 10 years. Play rows
+// (source 'game') are deleted explicitly before the user row, and ledger_game_has_user turns a
+// forgotten delete into an error instead of an orphan.
+export const ledger = pgTable(
+  'ledger',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id').references(() => user.id, { onDelete: 'set null' }),
+    delta: integer('delta').notNull(),
+    reason: ledgerReasonEnum('reason').notNull(),
+    source: ledgerSourceEnum('source').notNull(),
+    itemRef: text('item_ref'),
+    idempotencyKey: text('idempotency_key').notNull(),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('ledger_payment_key_idx')
+      .on(t.source, t.idempotencyKey)
+      .where(sql`${t.source} <> 'game'`),
+    uniqueIndex('ledger_play_key_idx')
+      .on(t.userId, t.idempotencyKey)
+      .where(sql`${t.source} = 'game'`),
+    index('ledger_user_id_created_at_idx').on(t.userId, t.createdAt),
+    check('ledger_delta_nonzero', sql`${t.delta} <> 0`),
+    check('ledger_game_has_user', sql`${t.source} <> 'game' or ${t.userId} is not null`),
+  ],
 );
