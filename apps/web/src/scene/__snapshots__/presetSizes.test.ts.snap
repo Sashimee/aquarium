@@ -1,0 +1,14 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`freshwater preset at the standard tank > is only changed where it crossed the glass 1`] = `
+[
+  "coast-rocks-05:0.12,0.055,0.0695178792267224:0.7",
+]
+`;
+
+exports[`reef preset at the standard tank > is only changed where it crossed the glass 1`] = `
+[
+  "boulder-01:-0.4674604706633427,0.1,-0.09:0.7",
+  "acropora-cytherea:0.065,0.064,0.13681877444645008:0.58",
+]
+`;
