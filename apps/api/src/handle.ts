@@ -29,6 +29,7 @@ export async function lockHandles(tx: Tx, handles: string[]): Promise<void> {
 }
 
 class HandleCoolingDown extends Error {}
+class AccountGone extends Error {}
 
 const UNIQUE_VIOLATION = '23505';
 
@@ -83,8 +84,9 @@ export function registerHandleRoutes({
           .from(schema.user)
           .where(eq(schema.user.id, user.id))
           .for('update');
-        if (held?.handle === handle) return;
-        await lockHandles(tx, [handle, ...(held?.handle ? [held.handle] : [])]);
+        if (!held) throw new AccountGone();
+        if (held.handle === handle) return;
+        await lockHandles(tx, [handle, ...(held.handle ? [held.handle] : [])]);
         const [cooling] = await tx
           .select({ handle: schema.releasedHandles.handle })
           .from(schema.releasedHandles)
@@ -102,7 +104,7 @@ export function registerHandleRoutes({
           .update(schema.user)
           .set({ handle, updatedAt: new Date() })
           .where(eq(schema.user.id, user.id));
-        if (held?.handle) {
+        if (held.handle) {
           await tx
             .insert(schema.releasedHandles)
             .values({ handle: held.handle })
@@ -113,6 +115,13 @@ export function registerHandleRoutes({
         }
       });
     } catch (err) {
+      if (err instanceof AccountGone) {
+        return reply
+          .code(409)
+          .send(
+            apiError('conflict', 'This account is being deleted, so the handle was not saved.'),
+          );
+      }
       if (err instanceof HandleCoolingDown) {
         return reply
           .code(409)
