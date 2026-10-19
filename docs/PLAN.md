@@ -181,7 +181,7 @@ missing from the manifest or carries a licence outside CC0 / CC-BY, except CC-BY
 ## 4. Delivery: tasks, owners, dependencies, waves
 
 Each task becomes a GitHub issue (labels `wave:N`, `agent:<name>`), one branch, one PR into `dev`.
-Branch names are `feat/<issue>-<slug>`. Every PR must pass CI and `code-reviewer` before the
+Branch names are `feat/<issue>-<slug>`. Every PR must pass the `check` and `docker` jobs and `code-reviewer` before the
 orchestrator merges it. A task is *ready* once all of its dependencies are **merged into dev**.
 
 | ID | Task | Agent | Depends on | Wave |
@@ -257,12 +257,15 @@ Dokploy API: `https://dok.seil.pro/api`, header `x-api-key`, token read from
 `.githooks/pre-push` refuses pushes to `main` that aren't fast-forwards from a merged `dev` PR, and
 refuses all force-pushes. Set it up with `git config core.hooksPath .githooks`.
 
-## 6. Quality gates (every PR)
+## 6. Quality gates
 
 `pnpm typecheck` · `pnpm lint` · `pnpm test` (vitest: sim and lifecycle deterministic tests, API
 tests against real Postgres in CI) · `pnpm build` · `pnpm assets:check` (licences and manifest) ·
-Docker image builds · from T19 on: `pnpm e2e` (Playwright, WebGL2 path; WebGPU path run locally
-where a GPU exists).
+Docker image builds. Every PR must pass the `check` and `docker` jobs.
+
+Release gate (on demand, once after all planned work is merged and before the `dev → main` ask):
+`pnpm e2e` (Playwright, WebGL2 path; WebGPU path run locally where a GPU exists), triggered with
+`gh workflow run ci.yml --ref dev`.
 
 ## 7. Risks
 

@@ -1,6 +1,6 @@
 ---
 name: test-runner
-description: Runs the aquarium's checks (typecheck, lint, test, build, assets:check, e2e) and reports failures concisely. Use after changes, before commits, and when CI is red to get a local repro.
+description: Runs the aquarium's checks (typecheck, lint, test, build, assets:check) and reports failures concisely. Use after changes, before commits, and when CI is red to get a local repro.
 tools: Bash, Read
 model: haiku
 ---
