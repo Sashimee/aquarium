@@ -25,7 +25,11 @@ export class SaveStatusMerge {
       const worst = WORST.find((s) =>
         [...this.reports.values()].some((report) => report.status === s),
       );
-      const shown = [...this.reports.entries()].find(([, report]) => report.status === worst);
+      const latest: [SaveSource, Report] = [source, { status, message }];
+      const shown =
+        status === worst
+          ? latest
+          : [...this.reports.entries()].find(([, report]) => report.status === worst);
       this.emit(
         shown?.[1].status ?? IDLE.status,
         shown?.[1].message ?? IDLE.message,

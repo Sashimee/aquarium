@@ -944,7 +944,7 @@ describe('decor layout', () => {
     expect(rec.of('decor:save-state').at(-1)).toMatchObject({ status: 'saving', source: 'layout' });
     finishLayout(tankFixture(fresh));
     await vi.advanceTimersByTimeAsync(0);
-    expect(rec.of('decor:save-state').at(-1)).toMatchObject({ status: 'saved' });
+    expect(rec.of('decor:save-state').at(-1)).toMatchObject({ status: 'saved', source: 'layout' });
     session.dispose();
   });
 
