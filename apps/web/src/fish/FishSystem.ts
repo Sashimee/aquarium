@@ -101,6 +101,7 @@ import {
   SimInitTimeout,
   SimWorldSpec,
   stageChanges,
+  staleStages,
   startWorld,
 } from './simWorld';
 import { SimUnavailableError } from '../interaction/simUnavailable';
@@ -1304,6 +1305,12 @@ export class FishSystem {
           : this.sim.addFish(spawn, at));
         if (generation !== this.generation) return;
         this.stream.change(layout.epoch, layout.fishIds);
+        for (const { id, stage } of staleStages(
+          [spawn],
+          (simId) => this.roster.get(simId)?.stage,
+        )) {
+          this.sim.setStage(id, stage);
+        }
       }
     } catch (cause) {
       if (this.disposed || generation !== this.generation) return;
@@ -1348,6 +1355,7 @@ export class FishSystem {
       await startWorld(this.sim, this.spec, config, init, {
         current: () => !this.disposed && generation === this.generation,
         light: () => this.light,
+        stage: (simId) => this.roster.get(simId)?.stage,
         begin: (ready) => {
           this.simReady = true;
           this.inWorld = new Set(ready.fishIds);

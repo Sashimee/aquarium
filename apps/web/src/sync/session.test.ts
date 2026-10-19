@@ -231,7 +231,45 @@ describe('reconciling snapshots', () => {
     expect(rec.of('camera:focus-fish')).toHaveLength(1);
   });
 
-  it('does not announce a fry the player bought, and drops the notice on a tank switch', async () => {
+  it('does not announce a fry the player bought', async () => {
+    vi.useFakeTimers();
+    const { api, session } = setup();
+    await session.setUser(verified);
+    api.addFish.mockResolvedValue(
+      tankFixture({
+        lastTickAt: '2026-02-01T12:01:00.000Z',
+        fish: [fishFixture(FISH_1), fishFixture(FISH_2, { stage: 'fry', name: 'Dot' })],
+      }),
+    );
+    expect(await session.buy('neon-tetra', 'Dot')).toBe(true);
+    expect(session.getState().bagged.map((b) => b.name)).toEqual(['Dot']);
+    expect(session.getState().birth).toBeNull();
+  });
+
+  it('drops the birth notice on a tank switch and does not repeat it on the way back', async () => {
+    const reef = tankFixture({ id: TANK_B, name: 'Reef', biome: 'reef', fish: [] });
+    const { api, session } = setup([tankFixture({ fish: [fishFixture(FISH_1)] }), reef]);
+    await session.setUser(verified);
+    const withFry = tankFixture({
+      lastTickAt: '2026-02-01T12:10:00.000Z',
+      fish: [fishFixture(FISH_1), fishFixture(FISH_2, { stage: 'fry' })],
+    });
+    api.care.mockResolvedValue(withFry);
+    await session.careAction({ type: 'water_change' });
+    expect(session.getState().birth).not.toBeNull();
+
+    api.tank.mockResolvedValueOnce(reef);
+    await session.select(TANK_B);
+    expect(session.getState().activeId).toBe(TANK_B);
+    expect(session.getState().birth).toBeNull();
+
+    api.tank.mockResolvedValueOnce(withFry);
+    await session.select(TANK_A);
+    expect(session.getState().activeId).toBe(TANK_A);
+    expect(session.getState().birth).toBeNull();
+  });
+
+  it('clears the birth notice on dismiss, and a second dismiss changes nothing', async () => {
     const { api, session } = setup();
     await session.setUser(verified);
     api.care.mockResolvedValue(

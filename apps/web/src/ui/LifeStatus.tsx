@@ -1,6 +1,6 @@
 import { useOptionalSession, useSessionState } from './session';
 
-/** Speaks and shows what just happened: chores done, errors, and a fish dying while you watch. */
+/** Both buttons unmount the notice, so focus goes to the tank rather than falling to the page. */
 export function BirthStatus() {
   const session = useOptionalSession();
   const { birth } = useSessionState();
@@ -9,13 +9,22 @@ export function BirthStatus() {
       {birth && session && (
         <>
           <span>{birth.text}</span>
-          <button type="button" onClick={() => session.focusBrood()}>
+          <button
+            type="button"
+            onClick={() => {
+              document.getElementById('tank')?.focus();
+              session.focusBrood();
+            }}
+          >
             Show them
           </button>
           <button
             type="button"
             aria-label="Dismiss birth message"
-            onClick={() => session.dismissBirth()}
+            onClick={() => {
+              document.getElementById('tank')?.focus();
+              session.dismissBirth();
+            }}
           >
             Dismiss
           </button>
@@ -25,6 +34,7 @@ export function BirthStatus() {
   );
 }
 
+/** Speaks and shows what just happened: chores done, errors, and a fish dying while you watch. */
 export function LifeStatus() {
   const session = useOptionalSession();
   const state = useSessionState();

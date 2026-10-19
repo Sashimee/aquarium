@@ -123,9 +123,28 @@ export function stageChanges(
   return out;
 }
 
+/**
+ * The spawns whose fish has since grown into another stage, by `stageOf` (null or undefined for a
+ * fish with no saved stage or no longer held). A spawn carries the stage its config was built with,
+ * and a stage change that lands while the spawn is in flight finds the fish not in the world yet.
+ */
+export function staleStages(
+  spawns: readonly FishSpawn[],
+  stageOf: (simId: string) => FishStage | null | undefined,
+): { readonly id: string; readonly stage: FishStage }[] {
+  const out: { id: string; stage: FishStage }[] = [];
+  for (const spawn of spawns) {
+    const stage = stageOf(spawn.id);
+    if (stage === null || stage === undefined || stage === spawn.stage) continue;
+    out.push({ id: spawn.id, stage });
+  }
+  return out;
+}
+
 /** The part of `SimClient` that brings up a world once its `init` has answered. */
 export interface WorldControls {
   setLight(level: number): void;
+  setStage(id: string, stage: FishStage): void;
   setDecor(colliders: readonly Collider[]): void;
   setAnchors(anchors: readonly Anchor[]): void;
   setToys(toys: readonly SimToy[]): void;
@@ -136,14 +155,16 @@ export interface WorldStart {
   /** False once the world being started was dropped, so it must not run. */
   current(): boolean;
   light(): number;
+  /** The fish's stage now; see `staleStages`. */
+  stage(simId: string): FishStage | null | undefined;
   /** Runs before the world starts, so nothing it posts can arrive ahead of its layout. */
   begin(ready: SimReady): void;
 }
 
 /**
  * Starts the world `init` was asked to build from `config`. Light, colliders and homes that changed
- * while it was starting reached neither the config nor the world, so they follow first, with the
- * toys, which no config carries. A world dropped before `init` answered is left unstarted.
+ * while it was starting reached neither the config nor the world, so they follow first, as do fish
+ * that grew meanwhile, with the toys, which no config carries. A world dropped before `init` answered is left unstarted.
  */
 export async function startWorld(
   sim: WorldControls,
@@ -159,6 +180,9 @@ export async function startWorld(
   if (decor !== null) sim.setDecor(decor);
   if (anchors !== null) sim.setAnchors(anchors);
   if (spec.toys.length > 0) sim.setToys(spec.toys);
+  for (const { id, stage } of staleStages(config.fish, (simId) => hooks.stage(simId))) {
+    sim.setStage(id, stage);
+  }
   hooks.begin(ready);
   sim.start();
 }

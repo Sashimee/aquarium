@@ -1,4 +1,4 @@
-import { followAnyFish } from './interaction/follow';
+import { broodTarget, followAnyFish } from './interaction/follow';
 import { depthOfFieldFollowsCamera } from './engine/cameraFocus';
 import type { Engine } from './engine/Engine';
 import { EventBus, type EngineEvents } from './engine/events';
@@ -204,25 +204,11 @@ async function boot(): Promise<void> {
   });
   const stopFocusFish = interaction.on('camera:focus-fish', ({ fishIds }) => {
     const sim = liveFish?.sim;
-    const centre = { x: 0, y: 0, z: 0 };
-    const brood = (): { x: number; y: number; z: number } | null => {
-      let n = 0;
-      centre.x = centre.y = centre.z = 0;
-      for (const id of fishIds) {
-        const p = sim?.fishPoint(id);
-        if (!p) continue;
-        centre.x += p.x;
-        centre.y += p.y;
-        centre.z += p.z;
-        n++;
-      }
-      if (n === 0) return null;
-      centre.x /= n;
-      centre.y /= n;
-      centre.z /= n;
-      return centre;
-    };
-    followAnyFish(brood() ? brood : null, (target) => rig.focusOn(target), interaction);
+    followAnyFish(
+      broodTarget(fishIds, (id) => sim?.fishPoint(id)),
+      (target) => rig.focusOn(target),
+      interaction,
+    );
   });
   const exposePose = new URLSearchParams(window.location.search).has('e2e');
   engine.onFrame((deltaS) => {
