@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import {
   DEFAULT_EQUIPMENT,
   NEUTRAL_PERSONALITY,
@@ -179,6 +179,44 @@ describe('migrations', () => {
       `select jsonb_build_object('boldness', round(((('x' || substr(md5("id"::text || 'boldness'), 1, 8))::bit(32)::bigint)::numeric / 4294967295), 3)) as p from fish order by name`,
     );
     expect((again.rows[0] as { p: { boldness: number } }).p.boldness).toBe(a?.boldness);
+  });
+
+  it('installs a basic heater in every existing tank and keeps what they already own (0010)', async () => {
+    const database = await freshDatabase();
+    const q = (text: string, values: unknown[] = []) => database.pool.query(text, values);
+    const apply = async (file: string) => {
+      const sql = readFileSync(new URL(`../../drizzle/${file}`, import.meta.url), 'utf8');
+      for (const statement of sql.split('--> statement-breakpoint')) await q(statement);
+    };
+    const files = readdirSync(new URL('../../drizzle/', import.meta.url))
+      .filter((f) => f.endsWith('.sql') && f < '0008')
+      .sort();
+    for (const file of files) await apply(file);
+    await q(`insert into "user" (id, name, email) values ('u10', 'U', 'u10@bas.lu')`);
+    await q(`insert into tanks (owner_id, biome, name) values ('u10', 'freshwater', 'Old')`);
+    await q(`insert into tanks (owner_id, biome, name) values ('u10', 'reef', 'Older')`);
+    await apply('0008_expansion_contract.sql');
+    await q(
+      `update tanks set equipment = jsonb_set(equipment, '{filter,tier}', '2') where name = 'Older'`,
+    );
+    await apply('0009_breeding.sql');
+    await apply('0010_chemistry_v2.sql');
+
+    const { rows } = await q(`select name, equipment from tanks order by name`);
+    const tanks = new Map(
+      rows.map((r: { name: string; equipment: unknown }) => [
+        r.name,
+        equipmentSchema.parse(r.equipment),
+      ]),
+    );
+    expect(tanks.get('Old')).toEqual(DEFAULT_EQUIPMENT);
+    expect(tanks.get('Older')).toEqual({ ...DEFAULT_EQUIPMENT, filter: { tier: 2 } });
+
+    await q(`insert into tanks (owner_id, biome, name) values ('u10', 'freshwater', 'New')`);
+    const created = await q(`select equipment from tanks where name = 'New'`);
+    expect(equipmentSchema.parse((created.rows[0] as { equipment: unknown }).equipment)).toEqual(
+      DEFAULT_EQUIPMENT,
+    );
   });
 
   it('backfills only neutral-default personalities, deterministically and idempotently (0014)', async () => {

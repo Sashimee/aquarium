@@ -4,9 +4,8 @@ import {
   chemistryParametersSchema,
   DEFAULT_EQUIPMENT,
   newTankChemistry,
-  speciesSummarySchema,
+  speciesContentSummarySchema,
   type Breeding,
-  type SpeciesSummary,
 } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import {
@@ -26,11 +25,11 @@ import {
 } from './index.ts';
 
 const speciesDir = join(import.meta.dirname, '../../../content/species');
-const catalog = new Map<string, SpeciesSummary>(
+const catalog = new Map(
   readdirSync(speciesDir)
     .filter((name) => name.endsWith('.json'))
     .map((name) => {
-      const parsed = speciesSummarySchema
+      const parsed = speciesContentSummarySchema
         .loose()
         .parse(JSON.parse(readFileSync(join(speciesDir, name), 'utf8')));
       return [parsed.id, parsed] as const;

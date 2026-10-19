@@ -11,7 +11,7 @@ import {
   unitSchema,
 } from './common.js';
 import { chemistrySchema } from './chemistry.js';
-import { equipmentSchema } from './equipment.js';
+import { equipmentSchema, lightScheduleSchema } from './equipment.js';
 import { QUARANTINE_TANK_SIZE, tankSizeSchema } from './tankSize.js';
 import {
   idempotencyKeySchema,
@@ -179,9 +179,14 @@ export const updateTankRequestSchema = z
     name: z.string().trim().min(1).max(60).optional(),
     decorLayout: decorLayoutSchema.optional(),
     backgroundId: backgroundIdSchema.nullable().optional(),
+    light: lightScheduleSchema.optional().describe('free: the lamp schedule and intensity'),
   })
   .refine(
-    (v) => v.name !== undefined || v.decorLayout !== undefined || v.backgroundId !== undefined,
+    (v) =>
+      v.name !== undefined ||
+      v.decorLayout !== undefined ||
+      v.backgroundId !== undefined ||
+      v.light !== undefined,
     'nothing to update',
   );
 export type UpdateTankRequest = z.infer<typeof updateTankRequestSchema>;

@@ -863,6 +863,17 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           .set({
             ...(body.backgroundId !== undefined ? { backgroundId: body.backgroundId } : {}),
             ...(body.name !== undefined ? { name: body.name } : {}),
+            ...(body.light !== undefined
+              ? {
+                  equipment: {
+                    ...equipmentSchema.parse(ticked.tank.equipment),
+                    light: {
+                      tier: equipmentSchema.parse(ticked.tank.equipment).light.tier,
+                      ...body.light,
+                    },
+                  },
+                }
+              : {}),
             ...(body.decorLayout !== undefined
               ? {
                   decorLayout: body.decorLayout.map((item) => ({
