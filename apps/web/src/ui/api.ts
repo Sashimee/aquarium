@@ -183,8 +183,6 @@ export interface WalletView {
   owned: readonly string[];
   /** Item refs whose latest ledger entry is a refund, so an earlier purchase no longer counts. */
   released?: readonly string[];
-  /** Idempotency keys of the recent ledger entries, to settle a purchase whose reply was lost. */
-  keys?: readonly string[];
 }
 
 /** The T70 contract: every add-fish names a stage and carries a key, so a retry cannot charge twice. */
@@ -696,7 +694,6 @@ export function createApiClient(
         balance: body.wallet.balance,
         owned: refs.filter(([, bought]) => bought).map(([ref]) => ref),
         released: refs.filter(([, bought]) => !bought).map(([ref]) => ref),
-        keys: body.ledger.map((e) => e.idempotencyKey),
       };
     },
     async purchase(request) {

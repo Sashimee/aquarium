@@ -738,7 +738,6 @@ describe('api client Pearls contract', () => {
       balance: 420,
       owned: ['plant:java-fern'],
       released: [],
-      keys: ['key-aaaaaaaa', 'key-bbbbbbbb', 'key-cccccccc', 'key-dddddddd'],
     });
     expect(fetcher.mock.calls[0]?.[0]).toBe('/api/wallet');
   });

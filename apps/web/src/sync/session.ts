@@ -59,6 +59,8 @@ const ACTIVE_KEY = 'aquarium.activeTank';
 const LOAD_ATTEMPTS = 4;
 const LEAVE_FLUSH_MS = 3_000;
 
+const ONE_TIME_REF = /^(plant|decor|background):/;
+
 export class TankSession {
   private state: SessionState = INITIAL_STATE;
   private readonly listeners = new Set<() => void>();
@@ -68,7 +70,7 @@ export class TankSession {
   private lastRefreshMs = 0;
   private walletSeq = 0;
   private walletApplied = 0;
-  private walletRead: Promise<void> | null = null;
+  private walletRead: { load: number; promise: Promise<void> } | null = null;
   private loadId = 0;
   private queueEpoch = 0;
   private switchId = 0;
@@ -86,7 +88,7 @@ export class TankSession {
   constructor(private readonly deps: SessionDeps) {
     this.now = deps.now ?? (() => Date.now());
     this.sleep = deps.sleep ?? realSleep;
-    this.keys = new IntentKeys(deps.newKey, this.now);
+    this.keys = new IntentKeys(deps.newKey);
     const saveStatus = new SaveStatusMerge((status, message, source, reported) =>
       deps.interaction.emit('decor:save-state', { status, message, source, reported }),
     );
@@ -175,6 +177,7 @@ export class TankSession {
       tanks: [],
       activeId: null,
       awayByTank: {},
+      owned: [],
       pendingNet: null,
       error: null,
       notice: null,
@@ -264,12 +267,16 @@ export class TankSession {
    * that lands after a newer one, or after a purchase reply, is dropped.
    */
   refreshWallet(options: { afterWrite?: boolean } = {}): Promise<void> {
-    if (!options.afterWrite && this.walletRead) return this.walletRead;
-    const read = this.readWallet().finally(() => {
-      if (this.walletRead === read) this.walletRead = null;
-    });
-    this.walletRead = read;
-    return read;
+    const joined = this.walletRead;
+    if (!options.afterWrite && joined?.load === this.loadId) return joined.promise;
+    const entry = {
+      load: this.loadId,
+      promise: this.readWallet().finally(() => {
+        if (this.walletRead === entry) this.walletRead = null;
+      }),
+    };
+    this.walletRead = entry;
+    return entry.promise;
   }
 
   private async readWallet(): Promise<void> {
@@ -285,7 +292,6 @@ export class TankSession {
       const owned = [...new Set([...this.state.owned, ...wallet.owned])].filter(
         (ref) => !released.has(ref),
       );
-      this.keys.settleSeen(new Set(wallet.keys ?? []));
       this.patch({
         balance: wallet.balance,
         owned,
@@ -439,7 +445,11 @@ export class TankSession {
       try {
         bought = await this.deps.api.purchase({ itemRef, idempotencyKey, tankId: tank.id });
       } catch (error) {
-        if (error instanceof ApiRequestError && error.code === 'conflict') {
+        if (
+          error instanceof ApiRequestError &&
+          error.code === 'conflict' &&
+          ONE_TIME_REF.test(itemRef)
+        ) {
           this.patch({ owned: [...new Set([...this.state.owned, itemRef])] });
         }
         throw error;

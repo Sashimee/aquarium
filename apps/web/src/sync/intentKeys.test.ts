@@ -18,14 +18,10 @@ describe('IntentKeys', () => {
     expect(keys.keyFor('fish:a')).not.toBe(first);
   });
 
-  it('lets an abandoned intent go after the window, so the same intent later is a new purchase', () => {
-    let at = 0;
-    const keys = new IntentKeys(counter(), () => at, 1000);
+  it('keeps the key of an unsettled intent however long it takes to retry', () => {
+    const keys = new IntentKeys(counter());
     const first = keys.keyFor('fish:a');
-    at = 999;
     expect(keys.keyFor('fish:a')).toBe(first);
-    at = 1000;
-    expect(keys.keyFor('fish:a')).not.toBe(first);
   });
 
   it('forgets everything on clear', () => {
@@ -39,17 +35,6 @@ describe('IntentKeys', () => {
     const made = new Set(Array.from({ length: 50 }, newIdempotencyKey));
     expect(made.size).toBe(50);
     for (const key of made) expect(idempotencyKeySchema.safeParse(key).success).toBe(true);
-  });
-});
-
-describe('IntentKeys.settleSeen', () => {
-  it('lets go of an intent whose key the ledger shows and keeps the others', () => {
-    const keys = new IntentKeys(counter());
-    const a = keys.keyFor('fish:a');
-    const b = keys.keyFor('fish:b');
-    keys.settleSeen(new Set([a]));
-    expect(keys.keyFor('fish:b')).toBe(b);
-    expect(keys.keyFor('fish:a')).not.toBe(a);
   });
 });
 

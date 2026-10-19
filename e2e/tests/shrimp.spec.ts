@@ -32,7 +32,12 @@ async function createTank(
   await expect(page.locator('.life-status')).toContainText(`${name} is ready.`);
 }
 
-async function buyShrimp(page: Page, commonName: string, fishName: string): Promise<void> {
+async function buyShrimp(
+  page: Page,
+  commonName: string,
+  fishName: string,
+  options: { confirm: boolean },
+): Promise<void> {
   const shop = await openDock(page, 'Shop', 'Fish shop');
   await page.getByLabel('Name for the new fish').fill(fishName);
   await shop
@@ -40,8 +45,7 @@ async function buyShrimp(page: Page, commonName: string, fishName: string): Prom
     .filter({ hasText: commonName })
     .getByRole('button', { name: 'Add', exact: true })
     .click();
-  const confirm = page.getByRole('button', { name: 'Yes, buy it' });
-  if (await confirm.isVisible()) await confirm.click();
+  if (options.confirm) await page.getByRole('button', { name: 'Yes, buy it' }).click();
   await expect(page.locator('.life-status')).toContainText(`${fishName} is in a bag`);
   const release = page.getByRole('button', { name: `Release ${fishName} now` });
   // The bag releases itself after the acclimation, which removes the button; a click delayed past
@@ -69,7 +73,7 @@ test('cherry shrimp are sold for freshwater and cleaner shrimp for reef only', a
   const shop = await openDock(page, 'Shop', 'Fish shop');
   await expect(shop.getByRole('listitem').filter({ hasText: 'Cherry shrimp' })).toHaveCount(1);
   await expect(shop.getByText('Cleaner shrimp')).toHaveCount(0);
-  await buyShrimp(page, 'Cherry shrimp', 'Ruby');
+  await buyShrimp(page, 'Cherry shrimp', 'Ruby', { confirm: false });
   await expect
     .poll(() => swimming(page), { timeout: FISH_START_MS, message: 'a cherry shrimp swims' })
     .toContain('cherry-shrimp');
@@ -78,7 +82,7 @@ test('cherry shrimp are sold for freshwater and cleaner shrimp for reef only', a
   const reefShop = await openDock(page, 'Shop', 'Fish shop');
   await expect(reefShop.getByRole('listitem').filter({ hasText: 'Cleaner shrimp' })).toHaveCount(1);
   await expect(reefShop.getByText('Cherry shrimp')).toHaveCount(0);
-  await buyShrimp(page, 'Cleaner shrimp', 'Scarlet');
+  await buyShrimp(page, 'Cleaner shrimp', 'Scarlet', { confirm: true });
   await expect
     .poll(() => swimming(page), { timeout: FISH_START_MS, message: 'a cleaner shrimp swims' })
     .toContain('cleaner-shrimp');

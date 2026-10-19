@@ -1525,34 +1525,32 @@ describe('a balance that moves on the server', () => {
     expect(api.wallet).toHaveBeenCalledTimes(2);
   });
 
-  it('settles a purchase key once the ledger shows it, so a late retry is a new intent', async () => {
+  it('replays the same key on a retry even after a wallet read that shows it spent', async () => {
     const { api, session } = setup();
     await session.setUser(verified);
-    api.tank.mockResolvedValue(tankFixture({ lastTickAt: '2026-02-01T12:01:00.000Z' }));
-    api.purchase
-      .mockRejectedValueOnce(apiError(0, 'network'))
-      .mockResolvedValue({ wallet: { balance: 250 }, entry: {}, replayed: false });
-    await session.purchase('equipment:filter:2', 'Installed.');
-    const first = keyOf(api.purchase.mock.calls[0]?.[0]);
-    api.wallet.mockResolvedValue({ balance: 250, owned: [], keys: [first] });
+    api.addFish
+      .mockRejectedValueOnce(apiError(0, 'timeout'))
+      .mockResolvedValue(tankFixture({ lastTickAt: '2026-02-01T12:01:00.000Z' }));
+    await session.buy('neon-tetra', 'Pip', 'juvenile');
+    api.wallet.mockResolvedValue({ balance: 485, owned: [] });
     await session.refreshWallet();
-    await session.purchase('equipment:filter:2', 'Installed.');
-    expect(keyOf(api.purchase.mock.calls[1]?.[0])).not.toBe(first);
+    await session.buy('neon-tetra', 'Pip', 'juvenile');
+    const keys = api.addFish.mock.calls.map((c) => keyOf(c[1]));
+    expect(keys[1]).toBe(keys[0]);
   });
 
-  it('keeps an unspent key when the ledger does not show it', async () => {
+  it('does not let a new load join a wallet read started by the previous one', async () => {
     const { api, session } = setup();
     await session.setUser(verified);
-    api.tank.mockResolvedValue(tankFixture({ lastTickAt: '2026-02-01T12:01:00.000Z' }));
-    api.purchase
-      .mockRejectedValueOnce(apiError(0, 'network'))
-      .mockResolvedValue({ wallet: { balance: 250 }, entry: {}, replayed: true });
-    await session.purchase('equipment:filter:2', 'Installed.');
-    api.wallet.mockResolvedValue({ balance: 500, owned: [], keys: ['other-key-1'] });
-    await session.refreshWallet();
-    await session.purchase('equipment:filter:2', 'Installed.');
-    const keys = api.purchase.mock.calls.map((c) => keyOf(c[0]));
-    expect(keys[1]).toBe(keys[0]);
+    await vi.waitFor(() => expect(session.getState().balance).toBe(500));
+    let land: (v: { balance: number; owned: string[] }) => void = () => {};
+    api.wallet.mockReturnValueOnce(new Promise((resolve) => (land = resolve)));
+    void session.refreshWallet();
+    await session.setUser(null);
+    api.wallet.mockResolvedValue(wallet(300));
+    await session.setUser(verified);
+    await vi.waitFor(() => expect(session.getState().balance).toBe(300));
+    land({ balance: 999, owned: [] });
   });
 
   it('forgets an ownership the ledger shows refunded and marks one the server calls a conflict', async () => {
@@ -1600,7 +1598,7 @@ describe('a balance that moves on the server', () => {
     expect(session.getState().balance).toBe(450);
   });
 
-  it('gives an intent abandoned after an unknown outcome a new key once the window has passed', async () => {
+  it('keeps the key of an intent with an unknown outcome however late the retry comes', async () => {
     let now = Date.parse('2026-02-01T12:00:00.000Z');
     const { api, rec } = (() => {
       const made = apiMocks();
@@ -1625,7 +1623,7 @@ describe('a balance that moves on the server', () => {
       (c) => (c[1] as { idempotencyKey: string }).idempotencyKey,
     );
     expect(keys[1]).toBe(keys[0]);
-    expect(keys[2]).not.toBe(keys[0]);
+    expect(keys[2]).toBe(keys[0]);
     session.dispose();
   });
 });
