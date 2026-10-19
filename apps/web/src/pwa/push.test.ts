@@ -19,10 +19,13 @@ const AUTH = 'a'.repeat(22);
 
 class FakeSubscription implements PushSubscriptionLike {
   unsubscribed = false;
+  readonly options: { applicationServerKey: ArrayBuffer | null; userVisibleOnly: boolean };
   constructor(
     readonly endpoint: string,
-    readonly options?: { applicationServerKey: ArrayBuffer | null },
-  ) {}
+    applicationServerKey: ArrayBuffer | null = null,
+  ) {
+    this.options = { applicationServerKey, userVisibleOnly: true };
+  }
   toJSON() {
     return { endpoint: this.endpoint, keys: { p256dh: P256DH, auth: AUTH } };
   }
@@ -58,16 +61,26 @@ function makeHost(
 
 const conflict = (message: string) => new ApiRequestError(409, 'conflict', message);
 
-function makeApi(failures: ApiRequestError[] = []): PushApi & { added: string[] } {
+function makeApi(
+  failures: ApiRequestError[] = [],
+  server: { rows?: string[]; foreign?: string[] } = {},
+): PushApi & { added: string[]; rows: Set<string> } {
   const added: string[] = [];
+  const rows = new Set(server.rows ?? []);
+  const foreign = new Set(server.foreign ?? []);
   return {
     added,
+    rows,
+    reminders: vi.fn(async () => ({ subscriptions: rows.size })),
     addPushSubscription: vi.fn(async (sub) => {
       const failure = failures.shift();
       if (failure) throw failure;
       added.push(sub.endpoint);
+      rows.add(sub.endpoint);
     }),
-    removePushSubscription: vi.fn(async () => undefined),
+    removePushSubscription: vi.fn(async (endpoint) => {
+      if (!foreign.has(endpoint)) rows.delete(endpoint);
+    }),
   };
 }
 
@@ -167,9 +180,10 @@ describe('subscribeThisDevice', () => {
   });
 
   it('replaces a subscription made for a different server key', async () => {
-    const existing = new FakeSubscription('https://fcm.googleapis.com/fcm/send/old', {
-      applicationServerKey: new Uint8Array([4, 1, 2, 3]).buffer,
-    });
+    const existing = new FakeSubscription(
+      'https://fcm.googleapis.com/fcm/send/old',
+      new Uint8Array([4, 1, 2, 3]).buffer,
+    );
     const { host, created } = makeHost('granted', { existing });
     await subscribeThisDevice(host, makeApi(), SERVER_KEY);
     expect(existing.unsubscribed).toBe(true);
@@ -238,28 +252,65 @@ describe('isOwnedByAnotherAccount', () => {
 });
 
 describe('removeThisDevice', () => {
-  it('removes the endpoint on the server and unsubscribes the browser', async () => {
-    const existing = new FakeSubscription('https://fcm.googleapis.com/fcm/send/mine');
+  const endpoint = 'https://fcm.googleapis.com/fcm/send/mine';
+
+  it('removes the row on the server, then unsubscribes the browser', async () => {
+    const existing = new FakeSubscription(endpoint);
     const { host } = makeHost('granted', { existing });
-    const api = makeApi();
-    await removeThisDevice(host, api);
-    expect(api.removePushSubscription).toHaveBeenCalledWith(existing.endpoint);
+    const api = makeApi([], { rows: [endpoint, 'https://fcm.googleapis.com/fcm/send/other'] });
+    expect(await removeThisDevice(host, api)).toBe('removed');
+    expect(api.removePushSubscription).toHaveBeenCalledWith(endpoint);
     expect(existing.unsubscribed).toBe(true);
   });
 
-  it('keeps the browser subscription when the server call fails', async () => {
-    const existing = new FakeSubscription('https://fcm.googleapis.com/fcm/send/mine');
+  it("leaves another account's subscription alone on a shared browser", async () => {
+    const existing = new FakeSubscription(endpoint);
     const { host } = makeHost('granted', { existing });
-    const api = makeApi();
+    const api = makeApi([], { rows: [endpoint], foreign: [endpoint] });
+    expect(await removeThisDevice(host, api)).toBe('not-registered');
+    expect(existing.unsubscribed).toBe(false);
+  });
+
+  it('keeps the browser subscription when the server call fails', async () => {
+    const existing = new FakeSubscription(endpoint);
+    const { host } = makeHost('granted', { existing });
+    const api = makeApi([], { rows: [endpoint] });
     vi.mocked(api.removePushSubscription).mockRejectedValueOnce(new Error('down'));
     await expect(removeThisDevice(host, api)).rejects.toThrow('down');
     expect(existing.unsubscribed).toBe(false);
   });
 
+  it('turns a browser refusal to unsubscribe into a clear message', async () => {
+    const existing = new FakeSubscription(endpoint);
+    vi.spyOn(existing, 'unsubscribe').mockRejectedValueOnce(new Error('InvalidStateError'));
+    const { host } = makeHost('granted', { existing });
+    const api = makeApi([], { rows: [endpoint] });
+    await expect(removeThisDevice(host, api)).rejects.toBeInstanceOf(PushSetupError);
+  });
+
   it('does nothing without a subscription', async () => {
     const { host } = makeHost('granted');
     const api = makeApi();
-    await removeThisDevice(host, api);
+    expect(await removeThisDevice(host, api)).toBe('none');
     expect(api.removePushSubscription).not.toHaveBeenCalled();
+  });
+});
+
+describe('subscribeThisDevice cleanup', () => {
+  it('deletes the old server row when the server key changed', async () => {
+    const old = 'https://fcm.googleapis.com/fcm/send/old';
+    const existing = new FakeSubscription(old, new Uint8Array([4, 1, 2, 3]).buffer);
+    const { host } = makeHost('granted', { existing });
+    const api = makeApi([], { rows: [old] });
+    await subscribeThisDevice(host, api, SERVER_KEY);
+    expect(api.rows.has(old)).toBe(false);
+    expect(api.rows.size).toBe(1);
+  });
+
+  it('keeps a new subscription when the response was lost, so a retry matches the stored row', async () => {
+    const { host, created } = makeHost('granted');
+    const api = makeApi([new ApiRequestError(0, 'network', 'Could not reach the server.')]);
+    await expect(subscribeThisDevice(host, api, SERVER_KEY)).rejects.toMatchObject({ status: 0 });
+    expect(created[0]?.unsubscribed).toBe(false);
   });
 });

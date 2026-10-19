@@ -15,6 +15,7 @@ import { HapticsSetting } from './HapticsSetting';
 import { RemindersSetting } from './RemindersSetting';
 import { deleteErrorMessage, downloadText, rateLimitMessage, safeHref } from './legal';
 import { InstallCard } from '../pwa/InstallCard';
+import { PushSetupError } from '../pwa/push';
 import { navigate } from './router';
 
 export function Link({
@@ -139,6 +140,8 @@ export function useSubmission(): Submission {
       } else if (cause instanceof ApiRequestError) {
         setFields(cause.fields);
         setFailure(cause);
+        setError(cause.message);
+      } else if (cause instanceof PushSetupError) {
         setError(cause.message);
       } else {
         console.error(cause);

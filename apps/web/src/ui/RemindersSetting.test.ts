@@ -105,8 +105,8 @@ describe('RemindersView', () => {
       { kind: 'ready', endpoint: null },
       settings({ push: true, subscriptions: 2 }),
     );
-    expect(html).toContain('Add this device');
-    expect(html).toContain('2 other devices');
+    expect(html).toContain('Set up this browser');
+    expect(html).toContain('2 devices');
   });
 
   it('offers removal when this device is subscribed', () => {
@@ -114,8 +114,8 @@ describe('RemindersView', () => {
       { kind: 'ready', endpoint: 'https://fcm.googleapis.com/x' },
       settings({ push: true, subscriptions: 1 }),
     );
-    expect(html).toContain('Remove this device');
-    expect(html).not.toContain('other device');
+    expect(html).toContain('Remove this browser');
+    expect(html).toContain('1 device');
   });
 
   it('disables the controls while a change is in flight and shows errors', () => {
@@ -125,6 +125,26 @@ describe('RemindersView', () => {
     });
     expect(html).toContain('Could not change mail reminders: boom');
     expect(html.match(/disabled/g)?.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it.each([
+    ['blocked', { kind: 'blocked' }],
+    ['browser-unsupported', { kind: 'browser-unsupported' }],
+    ['server-off', { kind: 'server-off' }],
+  ] as const)(
+    'keeps push checked and switchable off when it is on and support is %s',
+    (_name, support) => {
+      const html = render(support, settings({ push: true }));
+      const input = /<input[^>]*aria-describedby="reminders-push-note"[^>]*>/.exec(html)?.[0] ?? '';
+      expect(input).toContain('checked');
+      expect(input).not.toContain('disabled');
+    },
+  );
+
+  it('does not let push be turned on without support', () => {
+    const html = render({ kind: 'blocked' }, settings({ push: false }));
+    const input = /<input[^>]*aria-describedby="reminders-push-note"[^>]*>/.exec(html)?.[0] ?? '';
+    expect(input).toContain('disabled');
   });
 
   it('explains a blocked or unsupported browser', () => {

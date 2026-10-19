@@ -75,7 +75,6 @@ export function RemindersView({
 }: RemindersViewProps) {
   const pushReady = support.kind === 'ready';
   const thisDevice = support.kind === 'ready' ? support.endpoint : null;
-  const others = Math.max(0, settings.subscriptions - (thisDevice ? 1 : 0));
   return (
     <section aria-labelledby="reminders-title">
       <h2 id="reminders-title">Care reminders</h2>
@@ -99,8 +98,8 @@ export function RemindersView({
       <label>
         <input
           type="checkbox"
-          checked={settings.push && pushReady}
-          disabled={busy || !pushReady}
+          checked={settings.push}
+          disabled={busy || (!pushReady && !settings.push)}
           aria-describedby="reminders-push-note"
           onChange={(e) => onPush(e.target.checked)}
         />{' '}
@@ -116,7 +115,9 @@ export function RemindersView({
           <h3 id="reminders-devices-title">Push devices</h3>
           <ul aria-labelledby="reminders-devices-title" className="devices">
             <li>
-              This device: {thisDevice ? 'receiving push' : 'not set up'}{' '}
+              {thisDevice
+                ? 'This browser has push set up.'
+                : 'This browser has no push subscription.'}{' '}
               {thisDevice ? (
                 <button
                   type="button"
@@ -124,20 +125,18 @@ export function RemindersView({
                   disabled={busy}
                   onClick={onRemoveDevice}
                 >
-                  Remove this device
+                  Remove this browser
                 </button>
               ) : (
                 <button type="button" className="secondary" disabled={busy} onClick={onAddDevice}>
-                  Add this device
+                  Set up this browser
                 </button>
               )}
             </li>
-            {others > 0 && (
-              <li>
-                {others} other {others === 1 ? 'device' : 'devices'}. Remove one by opening this
-                page on it.
-              </li>
-            )}
+            <li>
+              {settings.subscriptions} {settings.subscriptions === 1 ? 'device' : 'devices'}{' '}
+              registered on your account. Remove others by opening this page on them.
+            </li>
           </ul>
         </>
       )}
@@ -214,9 +213,8 @@ export function RemindersSetting() {
         try {
           setSettings(await action());
         } catch (cause) {
-          if (cause instanceof PushSetupError) {
-            throw new ApiRequestError(0, 'validation_failed', cause.message);
-          }
+          // A step may have succeeded before a later one failed, so the shown state could be stale.
+          void refresh();
           if (cause instanceof ApiRequestError) {
             throw new ApiRequestError(
               cause.status,
@@ -265,21 +263,24 @@ export function RemindersSetting() {
         )
       }
       onAddDevice={() =>
-        update(
-          'Could not add this device',
-          enableDevice,
-          'This device will get push notifications.',
-        )
+        update('Could not set up this browser', enableDevice, 'Push is set up in this browser.')
       }
       onRemoveDevice={() =>
         update(
-          'Could not remove this device',
+          'Could not remove this browser',
           async () => {
-            if (host) await removeThisDevice(host, api);
+            if (host) {
+              const result = await removeThisDevice(host, api);
+              if (result === 'not-registered') {
+                throw new PushSetupError(
+                  'Nothing was removed: this browser’s push subscription is not registered to your account, so it was left in place.',
+                );
+              }
+            }
             setEndpoint(null);
             return api.reminders();
           },
-          'This device was removed.',
+          'This browser was removed from push.',
         )
       }
     />

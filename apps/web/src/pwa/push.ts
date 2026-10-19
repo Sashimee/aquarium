@@ -3,12 +3,10 @@ import { ApiRequestError } from '../ui/api';
 
 export const WORKER_READY_TIMEOUT_MS = 10_000;
 
-export interface PushSubscriptionLike {
-  readonly endpoint: string;
-  readonly options?: undefined | { readonly applicationServerKey: ArrayBuffer | null };
-  toJSON(): { endpoint?: string | undefined; keys?: Record<string, string> | undefined };
-  unsubscribe(): Promise<boolean>;
-}
+export type PushSubscriptionLike = Pick<
+  PushSubscription,
+  'endpoint' | 'options' | 'toJSON' | 'unsubscribe'
+>;
 
 export interface PushManagerLike {
   getSubscription(): Promise<PushSubscriptionLike | null>;
@@ -25,6 +23,7 @@ export interface PushHost {
 }
 
 export interface PushApi {
+  reminders(): Promise<{ subscriptions: number }>;
   addPushSubscription(subscription: PushSubscriptionRequest): Promise<void>;
   removePushSubscription(endpoint: string): Promise<void>;
 }
@@ -74,7 +73,7 @@ export function browserPushHost(
       });
       try {
         const registration = await Promise.race([scope.navigator.serviceWorker.ready, timeout]);
-        return registration.pushManager as unknown as PushManagerLike;
+        return registration.pushManager;
       } finally {
         clearTimeout(timer);
       }
@@ -92,6 +91,20 @@ export function decodeServerKey(key: string): Uint8Array<ArrayBuffer> {
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return bytes;
 }
+
+async function drop(subscription: PushSubscriptionLike): Promise<void> {
+  try {
+    await subscription.unsubscribe();
+  } catch (cause) {
+    const detail = cause instanceof Error && cause.message ? ` (${cause.message})` : '';
+    throw new PushSetupError(
+      `The browser could not drop its push subscription${detail}. Reload the page and try again.`,
+    );
+  }
+}
+
+const lostResponse = (cause: unknown): boolean =>
+  cause instanceof ApiRequestError && cause.status === 0;
 
 function sameKey(subscription: PushSubscriptionLike, key: Uint8Array): boolean {
   const current = subscription.options?.applicationServerKey;
@@ -146,7 +159,9 @@ export async function subscribeThisDevice(
   let subscription = await manager.getSubscription();
   let created = false;
   if (subscription && !sameKey(subscription, key)) {
-    await subscription.unsubscribe();
+    // The old endpoint is useless for the new key but still counts toward the device limit.
+    await api.removePushSubscription(subscription.endpoint).catch(() => undefined);
+    await drop(subscription);
     subscription = null;
   }
   if (!subscription) {
@@ -166,13 +181,14 @@ export async function subscribeThisDevice(
     return subscription.endpoint;
   } catch (cause) {
     if (!isOwnedByAnotherAccount(cause)) {
-      if (created) await subscription.unsubscribe().catch(() => undefined);
+      // After a lost response the server may have stored the row; keeping the subscription lets a retry match it.
+      if (created && !lostResponse(cause)) await subscription.unsubscribe().catch(() => undefined);
       throw cause;
     }
   }
 
   // A shared browser: another account owns this endpoint, so drop it and take a fresh one.
-  await subscription.unsubscribe();
+  await drop(subscription);
   let fresh: PushSubscriptionLike;
   try {
     fresh = await subscribe();
@@ -184,7 +200,7 @@ export async function subscribeThisDevice(
   try {
     await api.addPushSubscription(toRequest(fresh));
   } catch (cause) {
-    await fresh.unsubscribe().catch(() => undefined);
+    if (!lostResponse(cause)) await fresh.unsubscribe().catch(() => undefined);
     if (isOwnedByAnotherAccount(cause)) {
       throw new PushSetupError(
         'This browser is still registered to another account. Remove the site from your browser notification settings, then try again.',
@@ -195,9 +211,16 @@ export async function subscribeThisDevice(
   return fresh.endpoint;
 }
 
-export async function removeThisDevice(host: PushHost, api: PushApi): Promise<void> {
+export type RemoveResult = 'none' | 'removed' | 'not-registered';
+
+/** The browser subscription is dropped only when the server's device count fell, so another account's endpoint on a shared browser survives. */
+export async function removeThisDevice(host: PushHost, api: PushApi): Promise<RemoveResult> {
   const subscription = await (await host.pushManager()).getSubscription();
-  if (!subscription) return;
+  if (!subscription) return 'none';
+  const before = (await api.reminders()).subscriptions;
   await api.removePushSubscription(subscription.endpoint);
-  await subscription.unsubscribe();
+  const after = (await api.reminders()).subscriptions;
+  if (after >= before) return 'not-registered';
+  await drop(subscription);
+  return 'removed';
 }

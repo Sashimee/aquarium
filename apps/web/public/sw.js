@@ -99,9 +99,12 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
-      const open = windows.find((client) => new URL(client.url).origin === self.location.origin);
-      return open ? open.focus() : self.clients.openWindow('/');
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (windows) => {
+      const onTank = windows.find((client) => new URL(client.url).pathname === '/');
+      const open = onTank ?? windows[0];
+      if (!open) return self.clients.openWindow('/');
+      const target = onTank ? open : ((await open.navigate('/')) ?? open);
+      return target.focus();
     }),
   );
 });

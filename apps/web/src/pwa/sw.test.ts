@@ -35,6 +35,7 @@ function boot(network: (request: Request) => Promise<Response>) {
   const notifications: { title: string; options: Record<string, unknown> }[] = [];
   const opened: string[] = [];
   const focused: string[] = [];
+  const navigated: string[] = [];
   let windows: { url: string }[] = [];
   const caches = {
     async open(name: string) {
@@ -63,6 +64,11 @@ function boot(network: (request: Request) => Promise<Response>) {
       matchAll: async () =>
         windows.map((w) => ({
           url: w.url,
+          navigate: async (url: string) => {
+            navigated.push(url);
+            const moved = { url: `${ORIGIN}${url}`, focus: async () => void focused.push(url) };
+            return moved;
+          },
           focus: async () => {
             focused.push(w.url);
             return w;
@@ -136,6 +142,7 @@ function boot(network: (request: Request) => Promise<Response>) {
     notifications,
     opened,
     focused,
+    navigated,
     setWindows: (next: { url: string }[]) => void (windows = next),
     preloadEnabled: () => preloadEnabled,
   };
@@ -237,17 +244,26 @@ describe('push reminders', () => {
     expect(sw.notifications[0]?.options['tag']).toBe('care-reminder');
   });
 
-  it('focuses an open tab of the app on click and closes the notification', async () => {
+  it('takes an open tab that is elsewhere in the app to the tank and focuses it', async () => {
     const sw = boot(online);
-    sw.setWindows([{ url: 'https://elsewhere.test/' }, { url: `${ORIGIN}/settings` }]);
+    sw.setWindows([{ url: `${ORIGIN}/settings` }]);
     expect(await sw.dispatch('notificationclick')).toBe(true);
-    expect(sw.focused).toEqual([`${ORIGIN}/settings`]);
+    expect(sw.navigated).toEqual(['/']);
+    expect(sw.focused).toEqual(['/']);
     expect(sw.opened).toEqual([]);
+  });
+
+  it('prefers a tab already on the tank without navigating', async () => {
+    const sw = boot(online);
+    sw.setWindows([{ url: `${ORIGIN}/settings` }, { url: `${ORIGIN}/?backend=webgl` }]);
+    await sw.dispatch('notificationclick');
+    expect(sw.navigated).toEqual([]);
+    expect(sw.focused).toEqual([`${ORIGIN}/?backend=webgl`]);
   });
 
   it('opens the tank when no tab of the app is open', async () => {
     const sw = boot(online);
-    sw.setWindows([{ url: 'https://elsewhere.test/' }]);
+    sw.setWindows([]);
     await sw.dispatch('notificationclick');
     expect(sw.opened).toEqual(['/']);
     expect(sw.focused).toEqual([]);
