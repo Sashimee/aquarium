@@ -16,7 +16,7 @@ async function measurePreview(page: Page): Promise<Pixels> {
     await img.decode();
     const bitmap = await createImageBitmap(img);
     const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) throw new Error('no 2d context');
     ctx.drawImage(bitmap, 0, 0);
     const { data } = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
