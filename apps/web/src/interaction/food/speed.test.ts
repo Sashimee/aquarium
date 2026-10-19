@@ -16,7 +16,10 @@ const presets = Object.entries(
   .filter((p): p is { path: string; current: CurrentParameters } => p.current !== undefined);
 
 function slowestEaterCruise(food: (typeof FOOD_TYPES)[number]): number {
-  const eaters = species.filter((s) => s.lifecycle.diet.includes(food));
+  // Shelled walkers (snail, hermit crab) graze food that has settled; they never strike drifting food.
+  const eaters = species.filter(
+    (s) => s.lifecycle.diet.includes(food) && s.locomotion.swimmingMode !== 'none',
+  );
   expect(eaters.length, food).toBeGreaterThan(0);
   return Math.min(...eaters.map((s) => s.locomotion.cruiseSpeedMps));
 }

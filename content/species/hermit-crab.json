@@ -1,0 +1,65 @@
+{
+  "behaviour": {
+    "boldness": 0.4,
+    "curiosity": 0.4,
+    "depthBand": [0, 1],
+    "perceptionFovDeg": 360,
+    "perceptionRangeM": 0.1,
+    "preferredZone": "bottom",
+    "territorial": false,
+    "traits": ["biofilm-grazer"]
+  },
+  "biome": "reef",
+  "breeding": {
+    "mode": "none"
+  },
+  "chemistry": {
+    "khMin": 6,
+    "nitriteTolerance": 0.05,
+    "phRange": [8, 8.4],
+    "salinityPpt": [30, 36],
+    "sources": [
+      "FishBase (fishbase.se) species summary",
+      "Reef2Reef husbandry ranges for captive marine animals"
+    ],
+    "temperatureC": [23, 28]
+  },
+  "commonName": "Blue-leg hermit crab",
+  "id": "hermit-crab",
+  "lifecycle": {
+    "ammoniaPerBioloadPerHour": 0.001,
+    "ammoniaTolerance": 0.09,
+    "bioload": 0.15,
+    "birthSizeM": 0.015,
+    "diet": ["pellets", "algae-wafer", "flakes"],
+    "growthPerDay": 0.00004,
+    "healthLossPerHourStarving": 0.0085,
+    "healthRecoveryPerHour": 0.004,
+    "hungerPerHour": 0.0055,
+    "lifespanDays": 1095,
+    "maxSizeM": 0.035,
+    "starvationHungerThreshold": 0.75
+  },
+  "locomotion": {
+    "bodyLengthM": 0.03,
+    "cruiseSpeedMps": 0.01,
+    "gait": "forage",
+    "massKg": 0.003,
+    "maxPitchDeg": 90,
+    "maxSpeedMps": 0.03,
+    "maxTurnRateDegPerS": 180,
+    "strouhal": 0.3,
+    "swimmingMode": "none",
+    "walking": {
+      "legPairs": 2,
+      "strideBodyLengths": 0.4,
+      "surfaces": ["substrate", "decor"],
+      "walkSpeedMps": 0.01,
+      "withdraw": {
+        "maxS": 90,
+        "minS": 15
+      }
+    }
+  },
+  "scientificName": "Clibanarius tricolor"
+}

@@ -37,9 +37,9 @@ function fishModels(): Map<string, FishModel> {
   };
   const out = new Map<string, FishModel>();
   for (const a of index.assets) {
-    if (a.kind === 'shrimp') {
+    if (a.kind === 'shrimp' || a.kind === 'snail' || a.kind === 'crab') {
       if (a.species === undefined)
-        throw new Error(`assets/index.json: shrimp "${a.id}" lacks species`);
+        throw new Error(`assets/index.json: ${a.kind} "${a.id}" lacks species`);
       out.set(a.id, { id: a.id, kind: a.kind, species: a.species, tlOverSl: 1 });
       continue;
     }
@@ -157,6 +157,20 @@ const ADULT_MAX: Record<string, { model: string; maxSlM: number; maxTlM: number;
       maxTlM: 0.035,
       source:
         'Neocaridina davidi: females reach about 3.5 cm; the shrimp standard length is rostrum to telson',
+    },
+    'hermit-crab': {
+      model: 'hermit-crab',
+      maxSlM: 0.035,
+      maxTlM: 0.035,
+      source:
+        'Clibanarius tricolor: shell length up to about 3.5 cm; the crab standard length is the shell length',
+    },
+    'nerite-snail': {
+      model: 'nerite-snail',
+      maxSlM: 0.025,
+      maxTlM: 0.025,
+      source:
+        'Neritina natalensis: shell up to about 2.5 cm; the snail standard length is the shell length',
     },
     'cleaner-shrimp': {
       model: 'cleaner-shrimp',

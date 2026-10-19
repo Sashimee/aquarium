@@ -1,0 +1,65 @@
+{
+  "behaviour": {
+    "boldness": 0.3,
+    "curiosity": 0.1,
+    "depthBand": [0, 1],
+    "perceptionFovDeg": 360,
+    "perceptionRangeM": 0.06,
+    "preferredZone": "bottom",
+    "territorial": false,
+    "traits": ["biofilm-grazer"]
+  },
+  "biome": "freshwater",
+  "breeding": {
+    "mode": "none"
+  },
+  "chemistry": {
+    "khMin": 3,
+    "nitriteTolerance": 0.1,
+    "phRange": [7, 8.4],
+    "salinityPpt": [0, 1],
+    "sources": [
+      "FishBase (fishbase.se) species summary",
+      "SeriouslyFish species profile (seriouslyfish.com)"
+    ],
+    "temperatureC": [20, 28]
+  },
+  "commonName": "Nerite snail",
+  "id": "nerite-snail",
+  "lifecycle": {
+    "ammoniaPerBioloadPerHour": 0.001,
+    "ammoniaTolerance": 0.09,
+    "bioload": 0.1,
+    "birthSizeM": 0.012,
+    "diet": ["algae-wafer", "pellets"],
+    "growthPerDay": 0.00003,
+    "healthLossPerHourStarving": 0.0085,
+    "healthRecoveryPerHour": 0.004,
+    "hungerPerHour": 0.005,
+    "lifespanDays": 540,
+    "maxSizeM": 0.025,
+    "starvationHungerThreshold": 0.75
+  },
+  "locomotion": {
+    "bodyLengthM": 0.02,
+    "cruiseSpeedMps": 0.002,
+    "gait": "forage",
+    "massKg": 0.0015,
+    "maxPitchDeg": 90,
+    "maxSpeedMps": 0.003,
+    "maxTurnRateDegPerS": 60,
+    "strouhal": 0.3,
+    "swimmingMode": "none",
+    "walking": {
+      "legPairs": 0,
+      "strideBodyLengths": 0.1,
+      "surfaces": ["substrate", "decor", "glass"],
+      "walkSpeedMps": 0.002,
+      "withdraw": {
+        "maxS": 60,
+        "minS": 10
+      }
+    }
+  },
+  "scientificName": "Neritina natalensis"
+}
