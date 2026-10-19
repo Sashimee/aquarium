@@ -48,6 +48,7 @@ const tank = (overrides: Partial<PublicTank> = {}): PublicTank => ({
   seed: 4096,
   backgroundId: 'bg-fw-planted-stream',
   decorLayout: [],
+  decorEdited: false,
   water: { ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 0 },
   chemistry: newTankChemistry('freshwater'),
   equipment: DEFAULT_EQUIPMENT,
@@ -162,14 +163,25 @@ describe('public tank to scene', () => {
     expect(a.tankId).toBe('public:1000');
   });
 
-  it('loads the layout as edited only when it has items', () => {
+  it('follows the server flag on whether the decor was edited', () => {
     expect(publicTankLoaded(tank()).decorEdited).toBe(false);
-    const loaded = publicTankLoaded(
-      tank({ decorLayout: [{ assetId: 'rock-a', position: [0, 0, 0], rotationY: 0, scale: 1 }] }),
-    );
+    const item = {
+      assetId: 'rock-a',
+      position: [0, 0, 0] as [number, number, number],
+      rotationY: 0,
+      scale: 1,
+    };
+    const edited = publicTankLoaded(tank({ decorEdited: true, decorLayout: [item] }));
+    expect(edited.decorEdited).toBe(true);
+    expect(edited.decorLayout).toHaveLength(1);
+    expect(edited.fish).toHaveLength(1);
+    expect(edited.biome).toBe('freshwater');
+  });
+
+  it('keeps an emptied layout empty instead of showing the preset', () => {
+    const loaded = publicTankLoaded(tank({ decorEdited: true, decorLayout: [] }));
     expect(loaded.decorEdited).toBe(true);
-    expect(loaded.fish).toHaveLength(1);
-    expect(loaded.biome).toBe('freshwater');
+    expect(loaded.decorLayout).toEqual([]);
   });
 
   it('writes a plain text report, dead fish included', () => {

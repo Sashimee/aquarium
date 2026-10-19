@@ -109,22 +109,31 @@ test('share, view read-only, react, rotate and revoke a public link', async ({ p
   const fresh = await reopened.getByLabel('Public link').inputValue();
   expect(fresh).not.toBe(link);
 
+  await page.goto('about:blank');
   await openLink(visitor, link);
-  await expect(visitor.locator('#public-notice-h')).toHaveText('Tank not found', { timeout: 120_000 });
+  await expect(visitor.locator('#public-notice-h')).toHaveText('Tank not found', {
+    timeout: 120_000,
+  });
   await expect(visitor.locator('main')).toContainText('not shared any more');
 
   await openLink(visitor, fresh);
   await awaitLoaded(visitor);
   await expect(heart(visitor)).toHaveAccessibleName('Heart, 1 reaction, your choice');
+  await visitor.goto('about:blank');
 
-  await reopened.getByRole('button', { name: 'Stop sharing' }).click();
-  await reopened.getByRole('button', { name: 'Yes, stop sharing' }).click();
-  await expect(reopened.getByRole('button', { name: 'Create a public link' })).toBeVisible();
+  await openTank(page);
+  const again = await openTankPanel(page);
+  await again.getByRole('button', { name: 'Stop sharing' }).click();
+  await again.getByRole('button', { name: 'Yes, stop sharing' }).click();
+  await expect(again.getByRole('button', { name: 'Create a public link' })).toBeVisible();
+  await page.goto('about:blank');
 
   const gone = await visitor.request.get(`/api/public/${fresh.split('/').pop()}`);
   expect(gone.status()).toBe(404);
   await openLink(visitor, fresh);
-  await expect(visitor.locator('#public-notice-h')).toHaveText('Tank not found', { timeout: 120_000 });
+  await expect(visitor.locator('#public-notice-h')).toHaveText('Tank not found', {
+    timeout: 120_000,
+  });
   const late = await visitor.request.put(`/api/public/${fresh.split('/').pop()}/reaction`, {
     data: { kind: 'wow' },
     headers: { origin: APP_URL },
