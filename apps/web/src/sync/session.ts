@@ -6,8 +6,10 @@ import type {
   DecorLayout,
   FoodType,
   Tank,
+  TankSize,
   User,
 } from '@aquarium/shared';
+import { DEFAULT_TANK_SIZE } from '@aquarium/shared';
 import type { EventBus } from '../engine/events';
 import { layoutKey } from '../interaction/decor/key';
 import type { InteractionEvents } from '../interaction/events';
@@ -244,12 +246,16 @@ export class TankSession {
     });
   }
 
-  async createTank(name: string, biome: PlayableBiome): Promise<boolean> {
+  async createTank(
+    name: string,
+    biome: PlayableBiome,
+    size: TankSize = DEFAULT_TANK_SIZE,
+  ): Promise<boolean> {
     if (this.state.phase !== 'ready') return false;
     const generation = this.loadId;
     const made: { tank?: Tank } = {};
     const ok = await this.perform(async () => {
-      made.tank = await this.deps.api.createTank({ name, biome });
+      made.tank = await this.deps.api.createTank({ name, biome, size });
     });
     const tank = made.tank;
     if (!ok || !tank) return false;
