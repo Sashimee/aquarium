@@ -1,4 +1,4 @@
-import type { Collider, FishSex, FishStage, TankSpace } from '@aquarium/shared';
+import type { Collider, FishSex, FishStage, Personality, TankSpace } from '@aquarium/shared';
 import { Basin, type TankDimensions } from './basin.ts';
 import { Behaviour, BEHAVIOUR, type Anchor, type Plan, type Stimulus } from './behaviour.ts';
 import { sexCode, StageCode, stageCode, type SimBrood } from './brood.ts';
@@ -6,6 +6,7 @@ import { algaeGrazer, grazeAreaRate, type CrewTally } from './crew.ts';
 import { DecorField, UnionSdf, type Point3 } from './decor.ts';
 import { FEEDING, feedingHeight, gutForHunger } from './feeding.ts';
 import { FishResize } from './fishArrays.ts';
+import type { Visitor } from './greeting.ts';
 import { FoodStore, type AteEvent } from './food.ts';
 import { clamp, DEG, quatFromYawPitchRoll, wrapAngle } from './math.ts';
 import {
@@ -14,6 +15,7 @@ import {
   selectBalanced,
   sortNeighbours,
 } from './neighbours.ts';
+import { parsePersonality } from './personality.ts';
 import { Rng } from './rng.ts';
 import { smoothGradient, TankSdf, type Sdf } from './sdf.ts';
 import { FishState, SNAPSHOT_STRIDE } from './snapshot.ts';
@@ -123,6 +125,8 @@ export interface FishSpawn {
   readonly stage?: FishStage;
   /** Decides who tends a clutch more; unknown when left out. */
   readonly sex?: FishSex;
+  /** The fish's own boldness, greed and sociability; neutral (all 0.5) when left out. */
+  readonly personality?: Personality;
 }
 
 interface WorldConfigBase {
@@ -221,6 +225,7 @@ interface Fit {
   readonly hunger: number | undefined;
   readonly stage: number;
   readonly sex: number;
+  readonly personality: Personality | undefined;
 }
 
 interface Spot {
@@ -539,7 +544,7 @@ export class World {
     });
     this.food = new FoodStore(this.basin);
     this.behaviour = new Behaviour(this);
-    fits.forEach((fit, i) => this.seedGut(i, fit));
+    fits.forEach((fit, i) => this.seedFish(i, fit));
     this.behaviour.setAnchors(config.anchors ?? []);
     this.behaviour.init();
     if (config.light !== undefined) this.behaviour.setLight(config.light);
@@ -585,6 +590,14 @@ export class World {
    */
   setToys(toys: readonly SimToy[]): void {
     this.behaviour.setToys(toys);
+  }
+
+  /**
+   * The owner arrives at the front glass, moves along it, or leaves (null). Fish that know them
+   * well (see `Visitor.familiarity`) come to the glass where they stand for a while.
+   */
+  setVisitor(visitor: Visitor | null): void {
+    this.behaviour.setVisitor(visitor);
   }
 
   /** The bumps fish gave balls since the last call, in the order they happened. */
@@ -822,6 +835,10 @@ export class World {
         `fish "${spawn.id}": hunger must be a number within 0 to 1, got ${shown}`,
       );
     }
+    const personality =
+      spawn.personality === undefined
+        ? undefined
+        : parsePersonality(spawn.personality, `fish "${spawn.id}"`);
     return {
       id: spawn.id,
       si,
@@ -830,6 +847,7 @@ export class World {
       r,
       hunger,
       stage: stageCode(stage),
+      personality,
       sex: sexCode(sex),
     };
   }
@@ -981,12 +999,27 @@ export class World {
     this._fishIds = [...this.fishIds, spawn.id];
     this.spawn(i, fit, spot);
     this.behaviour.addFish(i);
-    this.seedGut(i, fit);
+    this.seedFish(i, fit);
     return i;
   }
 
-  private seedGut(i: number, fit: Fit): void {
+  private seedFish(i: number, fit: Fit): void {
     if (fit.hunger !== undefined) this.behaviour.feeding.gut[i] = gutForHunger(fit.hunger);
+    if (fit.personality !== undefined) this.behaviour.personality.set(i, fit.personality);
+  }
+
+  /** Gives fish `id` its boldness, greed and sociability, each 0 to 1; takes effect next step. */
+  setPersonality(id: string, personality: Personality): void {
+    const i = this.fishIds.indexOf(id);
+    if (i < 0) throw new Error(`no fish "${id}" in the world to give a personality`);
+    this.behaviour.personality.set(i, parsePersonality(personality, `fish "${id}"`));
+  }
+
+  /** Fish `id`'s boldness, greed and sociability. */
+  personalityOf(id: string): Personality {
+    const i = this.fishIds.indexOf(id);
+    if (i < 0) throw new Error(`no fish "${id}" in the world`);
+    return this.behaviour.personality.get(i);
   }
 
   /**
