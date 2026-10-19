@@ -523,7 +523,7 @@ export class FishSystem {
       ),
       engine.onFrame((deltaS, nowMs) => this.update(deltaS, nowMs)),
       options.interaction.on('replay:time-scale', ({ scale }) => {
-        this.timeScale = Math.min(Math.max(scale, 1), MAX_TIME_SCALE);
+        this.timeScale = Number.isFinite(scale) ? Math.min(Math.max(scale, 1), MAX_TIME_SCALE) : 1;
         this.extraSteps = 0;
       }),
       engine.events.on('engine:daylight', ({ level }) => this.setDaylight(level)),

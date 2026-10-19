@@ -72,6 +72,16 @@ describe('rosterAt', () => {
 });
 
 describe('ReplayDirector', () => {
+  it('sends a non-finite time scale as normal speed', () => {
+    const { director, seen } = setup();
+    director.run([
+      { type: 'time-scale', scale: Number.NaN },
+      { type: 'time-scale', scale: Number.POSITIVE_INFINITY },
+      { type: 'time-scale', scale: 20 },
+    ]);
+    expect(seen.map((s) => s.payload)).toEqual([{ scale: 1 }, { scale: 1 }, { scale: 20 }]);
+  });
+
   it('loads the starting roster, then adds and kills fish as their events come up', () => {
     const { director, seen } = setup();
     director.run([

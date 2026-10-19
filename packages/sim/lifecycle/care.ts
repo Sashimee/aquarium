@@ -178,6 +178,10 @@ export interface CapacityFish {
   readonly maxBioload: number;
 }
 
+export function isAnimalCapReached(existing: readonly CapacityFish[], maxFish: number): boolean {
+  return existing.filter((f) => f.alive).length + 1 > maxFish;
+}
+
 export function hasCapacityFor(
   existing: readonly CapacityFish[],
   incomingBioload: number,
@@ -185,7 +189,7 @@ export function hasCapacityFor(
   maxFish: number,
 ): boolean {
   const living = existing.filter((f) => f.alive);
-  if (living.length + 1 > maxFish) return false;
+  if (isAnimalCapReached(existing, maxFish)) return false;
   const load = living.reduce((sum, f) => sum + f.maxBioload, 0);
   return load + incomingBioload <= capacity + 1e-9;
 }

@@ -194,6 +194,37 @@ describe('ReplayController playback', () => {
     expect(after.at(-1)).toEqual({ type: 'replay:time-scale', payload: { scale: 1 } });
   });
 
+  it('rebuilds the roster once for a drag across several events, on release', async () => {
+    const { controller, seen } = setup();
+    await settle();
+    const loads = () => seen.filter((m) => m.type === 'tank:loaded').length;
+    controller.previewScrub(2);
+    const before = loads();
+    controller.previewScrub(1);
+    controller.previewScrub(2);
+    controller.previewScrub(0);
+    expect(loads()).toBe(before);
+    expect(controller.getSnapshot().playback).toMatchObject({ shown: 0, playing: false });
+    controller.commitScrub();
+    controller.commitScrub();
+    expect(loads()).toBe(before + 1);
+  });
+
+  it('commits a pending drag when play is pressed, before the first tick', async () => {
+    const { controller, seen, fire } = setup();
+    await settle();
+    controller.previewScrub(1);
+    const before = seen.length;
+    controller.toggle();
+    const loads = seen.slice(before).filter((m) => m.type === 'tank:loaded');
+    expect(loads).toHaveLength(1);
+    const roster = (loads[0]?.payload as { fish: { id: string; status: string }[] }).fish;
+    expect(roster.find((f) => f.id === FISH_2)?.status).toBe('dead');
+    expect(controller.getSnapshot().playback).toMatchObject({ shown: 1, playing: true });
+    fire();
+    expect(controller.getSnapshot().playback.shown).toBe(2);
+  });
+
   it('under reduced motion shows everything at once and never starts a timer', async () => {
     const { controller, timers, seen } = setup({ reducedMotion: true });
     await settle();

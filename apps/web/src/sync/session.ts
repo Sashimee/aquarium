@@ -84,8 +84,8 @@ export class TankSession {
     this.now = deps.now ?? (() => Date.now());
     this.sleep = deps.sleep ?? realSleep;
     this.keys = new IntentKeys(deps.newKey);
-    const saveStatus = new SaveStatusMerge((status, message, source) =>
-      deps.interaction.emit('decor:save-state', { status, message, source }),
+    const saveStatus = new SaveStatusMerge((status, message, source, reported) =>
+      deps.interaction.emit('decor:save-state', { status, message, source, reported }),
     );
     this.layoutSaver = new LayoutSaver({
       sleep: this.sleep,

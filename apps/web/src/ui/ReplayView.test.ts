@@ -1,4 +1,4 @@
-import { createElement } from 'react';
+import { createElement, isValidElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { ReplayLine } from '../sync/replay';
@@ -19,6 +19,7 @@ function render(load: ReplayPanelLoad, shown = 0, playing = false) {
     onSkip: vi.fn(),
     onToggle: vi.fn(),
     onScrub: vi.fn(),
+    onScrubEnd: vi.fn(),
     onSpeed: vi.fn(),
     onRetry: vi.fn(),
   };
@@ -72,11 +73,53 @@ describe('ReplayPanel', () => {
       onSkip: vi.fn(),
       onToggle: vi.fn(),
       onScrub: vi.fn(),
+      onScrubEnd: vi.fn(),
       onSpeed: vi.fn(),
       onRetry: vi.fn(),
     };
     expect(renderToStaticMarkup(createElement(ReplayPanel, crossfade))).toContain(
       'fades between snapshots',
     );
+  });
+});
+
+describe('ReplayPanel scrub release', () => {
+  function findRange(node: ReactNode): { props: Record<string, unknown> } | null {
+    if (!isValidElement(node)) return null;
+    const props = node.props as Record<string, unknown>;
+    if (node.type === 'input' && props.type === 'range') return { props };
+    const children = props.children;
+    for (const child of Array.isArray(children) ? children.flat() : [children]) {
+      const found = findRange(child as ReactNode);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  it('commits the drag on pointer up, pointer cancel, key up and blur', () => {
+    const onScrubEnd = vi.fn();
+    const onScrub = vi.fn();
+    const tree = ReplayPanel({
+      load: { status: 'ready', lines, truncated: false },
+      since: SINCE,
+      playback: { shown: 0, playing: false, mode: 'crossfade' },
+      speed: 2,
+      onSkip: vi.fn(),
+      onToggle: vi.fn(),
+      onScrub,
+      onScrubEnd,
+      onSpeed: vi.fn(),
+      onRetry: vi.fn(),
+    });
+    const range = findRange(tree);
+    expect(range).not.toBeNull();
+    const props = range?.props ?? {};
+    for (const handler of ['onPointerUp', 'onPointerCancel', 'onKeyUp', 'onBlur']) {
+      (props[handler] as () => void)();
+    }
+    expect(onScrubEnd).toHaveBeenCalledTimes(4);
+    (props.onChange as (e: unknown) => void)({ currentTarget: { value: '2' } });
+    expect(onScrub).toHaveBeenCalledWith(2);
+    expect(onScrubEnd).toHaveBeenCalledTimes(4);
   });
 });
