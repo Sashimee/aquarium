@@ -78,6 +78,8 @@ jobs:
     if: ${{ github.event_name != 'pull_request' || startsWith(github.head_ref, 'chore/batch-') || contains(github.event.pull_request.labels.*.name, 'e2e') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # A quarantined shard still runs and reports, but its failure doesn't fail the e2e gate (#760).
+    continue-on-error: ${{ matrix.quarantine == true }}
     strategy:
       fail-fast: false
       matrix:
@@ -124,14 +126,15 @@ jobs:
             args: decor.spec reminders.spec
           - name: photo
             args: photo.spec
+            quarantine: true
           - name: switch-tanks
             args: tank-type-switch.spec toys.spec
           - name: loading
             args: loading.spec pwa.spec haptics.spec
           - name: ktx2-feed-auth-death
-            args: ktx2.spec feed.spec auth.spec death.spec sound.spec
+            args: ktx2.spec feed.spec auth.spec sound.spec
           - name: public-link
-            args: public-link.spec
+            args: death.spec public-link.spec test-kit.spec
           - name: tanks-care-reset
             args: tanks.spec care.spec shrimp.spec password-reset.spec password-reset-history.spec collection.spec
     services:

@@ -16,7 +16,7 @@ class FakeRenderer implements StartableRenderer {
 }
 
 function options(backend: EngineOptions['backend']): EngineOptions {
-  return { backend, tier: null, adaptive: true, clock: null, stats: false };
+  return { backend, tier: null, adaptive: true, clock: null, stats: false, tankSize: 'standard' };
 }
 
 describe('initRenderer', () => {

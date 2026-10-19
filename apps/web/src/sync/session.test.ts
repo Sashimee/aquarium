@@ -36,6 +36,9 @@ function apiMocks() {
     netFish: vi.fn(),
     care: vi.fn(),
     reportAte: vi.fn(),
+    shareTank: vi.fn(),
+    rotateShare: vi.fn(),
+    revokeShare: vi.fn(),
   };
 }
 
@@ -950,5 +953,53 @@ describe('telling the scene no saved tank is coming', () => {
     const { rec, session } = setup();
     await session.setUser(verified);
     expect(rec.of('tank:none')).toEqual([]);
+  });
+});
+
+describe('public sharing', () => {
+  const TOKEN = 'A'.repeat(43);
+  const NEXT_TOKEN = 'B'.repeat(43);
+
+  it('hands the issued token to the caller and keeps it out of the stored tank', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    api.shareTank.mockResolvedValue(tankFixture({ shared: true, shareToken: TOKEN }));
+    const outcome = await session.changeSharing('share');
+    expect(api.shareTank).toHaveBeenCalledWith(TANK_A);
+    expect(outcome).toEqual({ ok: true, token: TOKEN });
+    expect(session.activeTank).toMatchObject({ shared: true, shareToken: null });
+    expect(JSON.stringify(session.getState())).not.toContain(TOKEN);
+  });
+
+  it('rotates a link that was shared before the token could be read back', async () => {
+    const { api, session } = setup([tankFixture({ shared: true })]);
+    await session.setUser(verified);
+    api.rotateShare.mockResolvedValue(tankFixture({ shared: true, shareToken: NEXT_TOKEN }));
+    expect(await session.changeSharing('rotate')).toEqual({ ok: true, token: NEXT_TOKEN });
+    expect(session.activeTank?.shareToken).toBeNull();
+  });
+
+  it('revokes without returning a token', async () => {
+    const { api, session } = setup([tankFixture({ shared: true })]);
+    await session.setUser(verified);
+    api.revokeShare.mockResolvedValue(tankFixture({ shared: false }));
+    expect(await session.changeSharing('revoke')).toEqual({ ok: true, token: null });
+    expect(session.activeTank?.shared).toBe(false);
+  });
+
+  it('reports a failure and changes nothing', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    api.shareTank.mockRejectedValue(apiError(400, 'validation_failed'));
+    expect(await session.changeSharing('share')).toEqual({ ok: false, token: null });
+    expect(session.activeTank?.shared).toBe(false);
+    expect(session.getState().error).not.toBeNull();
+  });
+
+  it('does nothing without an active tank', async () => {
+    const { api, session } = setup([]);
+    await session.setUser(verified);
+    expect(await session.changeSharing('share')).toEqual({ ok: false, token: null });
+    expect(api.shareTank).not.toHaveBeenCalled();
   });
 });
