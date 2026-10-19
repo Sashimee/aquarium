@@ -15,7 +15,8 @@ import {
   type OutputAsset,
 } from './index-schema.ts';
 import { aggregateSha256, manifestSchema } from './manifest.ts';
-import { verifyRawSource } from './source.ts';
+import { AUDIO_RECIPES, buildAudio } from './audio.ts';
+import { RAW_ROOT, verifyRawSource } from './source.ts';
 import { ENVIRONMENT_RECIPES, FISH_RECIPES, HDRI_RECIPES, SUBSTRATE_RECIPES } from './recipes.ts';
 
 export interface BuildOptions {
@@ -41,6 +42,7 @@ const KIND_ORDER: OutputAsset['kind'][] = [
   'decor',
   'substrate',
   'hdri',
+  'audio',
 ];
 
 function tasks(): Task[] {
@@ -75,6 +77,12 @@ function tasks(): Task[] {
       kind: 'fish' as const,
       id: recipe.id,
       run: (ctx: FishContext) => buildLoftFish(recipe, ctx),
+    })),
+    ...AUDIO_RECIPES.map((recipe) => ({
+      kind: 'audio' as const,
+      id: recipe.id,
+      run: (ctx: FishContext) =>
+        Promise.resolve(buildAudio(recipe, ctx, RAW_ROOT, ctx.licenceOf(recipe.source))),
     })),
   ];
 }

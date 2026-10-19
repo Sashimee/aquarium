@@ -104,6 +104,20 @@ export const impostorSchema = z.strictObject({
   normalDepth: fileEntry.extend({ codec: z.literal('uastc') }),
 });
 
+export const AUDIO_MAX_TOTAL_BYTES = 5_000_000;
+export const AUDIO_MAX_FILE_BYTES = 1_000_000;
+
+export const audioInfoSchema = z.strictObject({
+  role: z.string().min(1),
+  loop: z.boolean(),
+  durationS: z.number().positive(),
+  sampleRate: z.int().positive(),
+  channels: z.int().positive(),
+  bitrateKbps: z.int().positive(),
+  loudnessLufs: z.number(),
+  file: z.string().min(1),
+});
+
 export const assetKindSchema = z.enum([
   'fish',
   'shrimp',
@@ -115,6 +129,7 @@ export const assetKindSchema = z.enum([
   'decor',
   'substrate',
   'hdri',
+  'audio',
 ]);
 export type AssetKind = z.infer<typeof assetKindSchema>;
 
@@ -122,7 +137,14 @@ export const outputAssetSchema = z.strictObject({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
   kind: assetKindSchema,
   species: z.string().min(1).optional(),
-  origin: z.enum(['model', 'procedural-loft', 'procedural', 'texture-set', 'passthrough']),
+  origin: z.enum([
+    'model',
+    'procedural-loft',
+    'procedural',
+    'texture-set',
+    'passthrough',
+    'recording',
+  ]),
   sources: z.array(z.string().min(1)),
   licence: z.string().min(1),
   modifications: z.array(z.string().min(1)),
@@ -133,6 +155,7 @@ export const outputAssetSchema = z.strictObject({
   fish: fishInfoSchema.optional(),
   impostor: impostorSchema.optional(),
   shrimp: shrimpInfoSchema.optional(),
+  audio: audioInfoSchema.optional(),
 });
 export type OutputAsset = z.infer<typeof outputAssetSchema>;
 
