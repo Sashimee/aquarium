@@ -42,7 +42,12 @@ afterAll(async () => {
     plain.close(),
     spa.close(),
     indexable.close(),
-    broken.app.close().then(broken.dropDatabase),
+    // The 503 test already ended this pool; a second end rejects, and -t may skip that test.
+    broken.database.pool
+      .end()
+      .catch(() => {})
+      .then(() => broken.app.close())
+      .then(broken.dropDatabase),
   ]);
   rmSync(dist, { recursive: true, force: true });
 });
