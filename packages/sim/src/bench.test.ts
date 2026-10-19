@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { benchmarkConfig, FoodRain, REEF_TANK, walkerBenchmarkConfig } from './fixtures.ts';
 import type { SimToy } from './toys.ts';
+import { WAVE_MAKER } from './waveMaker.ts';
 import { World, type WorldConfig } from './world.ts';
 
 // Host load only ever lengthens a step (preemption, a shared core, a cold cache), never shortens
@@ -26,6 +27,10 @@ const FEEDING_LIMIT = 2.3 * HEADROOM;
 const REFERENCE_PASSES = 20;
 // Toys cost a few distance checks per fish; a scan over every fish per fish would double it.
 const TOYS_OVERHEAD_LIMIT = 1.3;
+// The current costs a field sample and two SDF probes per fish, more only beside a surface or while
+// sheltering: 1.20 on the budget desktop (2026-10-19, 0.27 ms against 0.22 ms a step). Doubling
+// that extra work fails the limit.
+const CURRENT_OVERHEAD_LIMIT = 1.4;
 
 interface Scenario {
   /** Advances one step and returns the milliseconds the sim spent on it. */
@@ -290,6 +295,24 @@ describe('step budget', () => {
     () => {
       const { meanMs } = fastestMeanMs(() => [playing(5), swimming(5)]);
       expect(at(meanMs, 0) / at(meanMs, 1)).toBeLessThan(TOYS_OVERHEAD_LIMIT);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'adds little to a step with a full-power wave maker running',
+    () => {
+      const current = {
+        ...school(6),
+        waveMaker: {
+          direction: [1, 0] as const,
+          speedMps: WAVE_MAKER.maxSpeedMps,
+          mode: 'steady' as const,
+          periodS: WAVE_MAKER.pulsePeriodS,
+        },
+      };
+      const { meanMs } = fastestMeanMs(() => [swimming(6, current), swimming(6)]);
+      expect(at(meanMs, 0) / at(meanMs, 1)).toBeLessThan(CURRENT_OVERHEAD_LIMIT);
     },
     TEST_TIMEOUT_MS,
   );
