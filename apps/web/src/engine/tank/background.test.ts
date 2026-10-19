@@ -5,13 +5,17 @@ import {
   DepthTexture,
   FloatType,
   HalfFloatType,
+  IntType,
   LinearFilter,
   Mesh,
   MeshBasicNodeMaterial,
   NearestFilter,
   PlaneGeometry,
   RGBAIntegerFormat,
+  ShortType,
   Texture,
+  UnsignedIntType,
+  UnsignedShortType,
 } from 'three/webgpu';
 import { positionWorld } from 'three/tsl';
 import { describe, expect, it } from 'vitest';
@@ -278,6 +282,25 @@ describe('TankBackground', () => {
     expect(background.map.value).toBe(roots);
   });
 
+  it('still reports an unfilterable picture whose load was overtaken, and keeps the latest', async () => {
+    const { loader, background } = setup();
+    await showing(background, loader, CORAL);
+    const first = background.show('freshwater', STREAM);
+    await settle();
+    const second = background.show('freshwater', ROOTS);
+    await settle();
+    const roots = loader.land(file(ROOTS, 'high'));
+    await second;
+    const stream = loader.land(file(STREAM, 'high'), (texture) => {
+      texture.minFilter = NearestFilter;
+      texture.magFilter = NearestFilter;
+    });
+    const streamGone = disposed(stream);
+    await expect(first).rejects.toThrow(`/assets/${file(STREAM, 'high')}`);
+    expect(streamGone()).toBe(true);
+    expect(background.map.value).toBe(roots);
+  });
+
   it('downloads a file once while it is in flight, however often it is asked for', async () => {
     const { loader, background } = setup();
     await showing(background, loader, CORAL);
@@ -449,6 +472,19 @@ describe('assertFilterable', () => {
     expect(() => assertFilterable(float, 'picture')).toThrow(/float32-filterable/);
     const integer = made((t) => (t.format = RGBAIntegerFormat));
     expect(() => assertFilterable(integer, 'picture')).toThrow(/integer formats/);
+    for (const type of [IntType, UnsignedIntType]) {
+      const integerType = made((t) => (t.type = type));
+      expect(() => assertFilterable(integerType, 'picture')).toThrow(/UnsignedIntType textures/);
+    }
+    for (const type of [ShortType, UnsignedShortType]) {
+      const unorm16 = made((t) => {
+        t.type = type;
+        t.normalized = true;
+      });
+      expect(() => assertFilterable(unorm16, 'picture')).toThrow(
+        /16-bit normalized formats cannot be filtered\).*not 16-bit normalized/,
+      );
+    }
     const depth = made(
       (t) => {
         t.minFilter = LinearFilter;

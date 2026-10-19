@@ -26,7 +26,7 @@ const SAMPLER_SITES_WITH_FIXTURE_TESTS: Record<string, number> = {
   'engine/water/caustics.ts': 2,
 };
 
-const TEXTURE_CALL = /(?<![.\w])(?:texture|cubeTexture|texture3D|textureBase)\s*\(/g;
+const TEXTURE_CALL = /(?<![.\w])(?:texture|textureBase|cubeTexture|cubeTextureBase)\s*\(/g;
 
 function biasedPlane(
   minFilter: MinificationTextureFilter,
@@ -38,6 +38,54 @@ function biasedPlane(
   const material = new MeshBasicNodeMaterial();
   material.colorNode = texture(map, uv()).bias(float(1)).rgb;
   return new Mesh(new PlaneGeometry(), material);
+}
+
+/**
+ * `source` with comments and the bodies of string, template and regex literals blanked to spaces,
+ * so a parenthesis or a call quoted in them is not read as code. Offsets are kept.
+ */
+function codeOnly(source: string): string {
+  const out = source.split('');
+  const blank = (from: number, to: number) => {
+    for (let k = from; k < to; k++) if (out[k] !== '\n') out[k] = ' ';
+  };
+  let i = 0;
+  while (i < source.length) {
+    const c = source[i];
+    const next = source[i + 1];
+    if (c === '/' && next === '/') {
+      const end = source.indexOf('\n', i);
+      const stop = end < 0 ? source.length : end;
+      blank(i, stop);
+      i = stop;
+    } else if (c === '/' && next === '*') {
+      const end = source.indexOf('*/', i + 2);
+      const stop = end < 0 ? source.length : end + 2;
+      blank(i, stop);
+      i = stop;
+    } else if (c === "'" || c === '"' || c === '`' || (c === '/' && startsRegex(source, i))) {
+      let j = i + 1;
+      let inClass = false;
+      while (j < source.length) {
+        const d = source[j];
+        if (d === '\\') j++;
+        else if (c === '/' && d === '[') inClass = true;
+        else if (c === '/' && d === ']') inClass = false;
+        else if (d === c && !inClass) break;
+        j++;
+      }
+      blank(i + 1, j);
+      i = j + 1;
+    } else {
+      i++;
+    }
+  }
+  return out.join('');
+}
+
+function startsRegex(source: string, slash: number): boolean {
+  const before = source.slice(0, slash).trimEnd();
+  return before === '' || /[(,=:[!&|?{};]$|\breturn$/.test(before);
 }
 
 /** The top-level arguments of the call whose opening parenthesis ends just before `from`. */
@@ -64,10 +112,11 @@ function callArguments(source: string, from: number): string[] {
 
 /**
  * Lookups three's WGSL builder emits with a sampler even when the texture has none: `.bias()`,
- * `.grad()`, and a bias passed as the fourth argument of `texture()` and its kin.
+ * `.blur()`, `.grad()`, and a bias passed as the fourth argument of `texture()` and its kin.
  */
-function samplerCallSites(source: string): number {
-  const chained = (source.match(/\.(?:bias|grad)\s*\(/g) ?? []).length;
+function samplerCallSites(text: string): number {
+  const source = codeOnly(text);
+  const chained = (source.match(/\.(?:bias|blur|grad)\s*\(/g) ?? []).length;
   const biasArgument = [...source.matchAll(TEXTURE_CALL)].filter((m) => {
     const bias = callArguments(source, m.index + m[0].length)[3];
     return bias !== undefined && bias !== 'null' && bias !== 'undefined';
@@ -114,13 +163,22 @@ describe('buildShaders sampler guard', () => {
     ).toThrow(/fragment shader samples through undeclared a_sampler, b_sampler/);
   });
 
-  it('counts chained and fourth-argument bias and gradient lookups', () => {
+  it('counts chained and fourth-argument bias, blur and gradient lookups', () => {
     expect(samplerCallSites('texture(a, b).bias(x).rgb; texture(c, d).bias( y )')).toBe(2);
     expect(samplerCallSites('texture(a, vec2(u, v), null, float(2))')).toBe(1);
     expect(samplerCallSites('cubeTexture(e, dir, null, blur)')).toBe(1);
     expect(samplerCallSites('texture(a, b).grad(dx, dy)')).toBe(1);
+    expect(samplerCallSites('texture(a, b).blur(amount); cubeTextureBase(e, d, null, x)')).toBe(2);
     expect(samplerCallSites('texture(a, f(b, c), lod); texture(a, b, null, null)')).toBe(0);
     expect(samplerCallSites('map.texture(a, b, c, d); textureLoad(a, b, c, d)')).toBe(0);
+  });
+
+  it('ignores lookups and parentheses in comments, strings and regexes', () => {
+    expect(samplerCallSites('// see texture(a, b\nconst s = ")";')).toBe(0);
+    expect(samplerCallSites('/* t.bias(1) */ const s = `.grad(`; const r = /\\.blur\\(/;')).toBe(0);
+    expect(samplerCallSites("texture(a, f(')'), null, b)")).toBe(1);
+    expect(samplerCallSites('const r = /[\'"]/; texture(a, b).bias(x)')).toBe(1);
+    expect(samplerCallSites('const half = w / 2; texture(a, b).bias(x)')).toBe(1);
   });
 
   it('covers every biased or gradient lookup with a fixture-built shader', () => {

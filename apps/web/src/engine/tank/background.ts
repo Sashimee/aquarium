@@ -11,13 +11,17 @@ import {
   DataTexture,
   DepthTexture,
   FloatType,
+  IntType,
   LinearFilter,
   NearestFilter,
   RedIntegerFormat,
   RGBAIntegerFormat,
   RGIntegerFormat,
   RGBIntegerFormat,
+  ShortType,
   SRGBColorSpace,
+  UnsignedIntType,
+  UnsignedShortType,
   type Texture,
   type TextureNode,
 } from 'three/webgpu';
@@ -110,27 +114,36 @@ const INTEGER_FORMATS: readonly number[] = [
   RGBAIntegerFormat,
 ];
 
+function unfilterableReason(texture: Texture): string | null {
+  if (texture instanceof DepthTexture) return 'it is a depth texture';
+  if (texture.type === IntType || texture.type === UnsignedIntType) {
+    return 'IntType and UnsignedIntType textures cannot be filtered';
+  }
+  if (texture.type === FloatType) return 'FloatType needs the optional float32-filterable feature';
+  if (texture.minFilter === NearestFilter && texture.magFilter === NearestFilter) {
+    return 'both filters are NearestFilter';
+  }
+  if (texture.normalized && (texture.type === ShortType || texture.type === UnsignedShortType)) {
+    return '16-bit normalized formats cannot be filtered';
+  }
+  if (INTEGER_FORMATS.includes(texture.format)) return 'integer formats cannot be filtered';
+  return null;
+}
+
 /**
  * The poster samples its map with a bias, and three's WGSL builder emits that with a sampler it
  * never declares for a texture it deems unfilterable, so the pipeline fails and the device is
  * lost. Shader fixtures only see the texture bound at build time, hence this check on every swap.
- * three 0.186.1, `WGSLNodeBuilder.isUnfilterable`.
+ * Mirrors three 0.186.1 `WGSLNodeBuilder.isUnfilterable`, except multisampling, which no loaded
+ * picture has.
  */
 export function assertFilterable(texture: Texture, what: string): void {
-  const reason =
-    texture.minFilter === NearestFilter && texture.magFilter === NearestFilter
-      ? 'both filters are NearestFilter'
-      : texture.type === FloatType
-        ? 'FloatType needs the optional float32-filterable feature'
-        : INTEGER_FORMATS.includes(texture.format)
-          ? 'integer formats cannot be filtered'
-          : texture instanceof DepthTexture
-            ? 'it is a depth texture'
-            : null;
+  const reason = unfilterableReason(texture);
   if (reason !== null) {
     throw new Error(
       `${what} is unfilterable (${reason}), yet the poster samples it with a bias. Give it ` +
-        'LinearFilter min and mag filters and an 8-bit, half-float or compressed format.',
+        'LinearFilter min and mag filters and an 8-bit, half-float or block-compressed format; ' +
+        'not 16-bit normalized, 32-bit float or integer.',
     );
   }
 }
