@@ -2426,7 +2426,13 @@
       "textures": "photo 1571x1066",
       "rigged": false,
       "notes": "Bluestreak cleaner wrasse (Labroides dimidiatus), 1571x1066, near-lateral view with the head and snout sharp: use for the colour (brownish-grey back, pale blue-white belly, black lateral stripe widening to the tail with a blue edge, blue and black caudal) and the slender body outline. Licence read from the Commons file page metadata (CC BY 4.0).",
-      "modifications": [],
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "Labroides dimidiatus: no model exists, so the body is a procedural loft and the colour map is painted from the species pattern, with the stripe layout taken from the CC-BY photo by Mike Bowie, colours from Jens and proportions from Lawrence Hylton; no photo pixels are reused",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
       "status": "downloaded"
     },
     {
@@ -2445,7 +2451,13 @@
       "textures": "photo 1459x973",
       "rigged": false,
       "notes": "Bluestreak cleaner wrasse (Labroides dimidiatus) in an aquarium, 1459x973, true lateral view: use for the proportions (elongate, terminal mouth, straight-edged to slightly rounded caudal with a white upper and lower edge). Soft focus and a small watermark in the lower middle, so it is an outline reference only. Licence read from the Commons file page metadata (CC BY 4.0).",
-      "modifications": [],
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "Labroides dimidiatus: no model exists, so the body is a procedural loft and the colour map is painted from the species pattern, with the stripe layout taken from the CC-BY photo by Mike Bowie, colours from Jens and proportions from Lawrence Hylton; no photo pixels are reused",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
       "status": "downloaded"
     },
     {
@@ -2464,7 +2476,13 @@
       "textures": "photo 2048x1536",
       "rigged": false,
       "notes": "Bluestreak cleaner wrasse (Labroides dimidiatus), 2048x1536, side view of a fish about 600 px long: best allowed-licence reference for the stripe layout. The black lateral stripe runs from the snout through the eye, widens toward the tail and continues into the lower caudal lobe, with a pale blue band below it and a white-blue belly. Use it for the stripe edges and the caudal pattern. Licence read from the Commons file page metadata (CC BY 4.0).",
-      "modifications": [],
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "Labroides dimidiatus: no model exists, so the body is a procedural loft and the colour map is painted from the species pattern, with the stripe layout taken from the CC-BY photo by Mike Bowie, colours from Jens and proportions from Lawrence Hylton; no photo pixels are reused",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
       "status": "downloaded"
     },
     {
