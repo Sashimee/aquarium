@@ -97,7 +97,7 @@ test('a decor piece is swapped, moved, saved and still there after a reload', as
     .first()
     .click();
   await expect(inTank.getByRole('button')).toHaveCount(startCount);
-  await expect(panel.getByText('Layout saved.')).toBeVisible();
+  await expect(panel.getByText('Changes saved.')).toBeVisible();
   const placed = (await savedTanks(page))[0]?.decorLayout;
   expect(placed?.length).toBeGreaterThanOrEqual(startCount);
 

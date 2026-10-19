@@ -227,3 +227,8 @@ export function useRedirect(): void {
     if (target) navigate(target, true);
   }, [href, status, user]);
 }
+
+export function useBackgroundState(): InteractionEvents['background:state'] | null {
+  const { interaction } = useBridge();
+  return useLatest(interaction, 'background:state') ?? null;
+}

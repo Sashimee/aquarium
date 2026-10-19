@@ -21,16 +21,19 @@ type Typed = Float64Array | Int32Array | Int8Array | Uint8Array | Uint16Array | 
 
 /** Arrays holding fish indices; compared by the id of the fish they point at. */
 const FISH_INDEX_ARRAYS = new Set(['schoolNbr', 'anyNbr', 'territoryTarget', 'follow']);
-/** Rebuilt before every read (`distSq`) or scratch within one call (the rest). */
+/**
+ * Rebuilt before every read (`distSq`, and `neighbourOrder`, re-sorted from whatever it held) or
+ * scratch within one call (the rest).
+ */
 const SCRATCH = new Set([
   'distSq',
+  'neighbourOrder',
   'lost',
   'lostNext',
   'normal',
   'probeNormal',
   'previous',
   'turnNormal',
-  'scratchDist',
   'n3',
 ]);
 
