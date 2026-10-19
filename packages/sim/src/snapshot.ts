@@ -182,9 +182,11 @@ export class SnapshotInterpolator {
       const at = Math.max(arrivalMs, this.anchorMs);
       const now = this.renderTime(at);
       const lag = target - now;
-      // An on-time arrival lands exactly on target, so a window re-pushed after a layout change
-      // samples the same frames as the one it replaced, not ones a rounding error apart.
-      if (lag > RESYNC_SECONDS || Math.abs(lag) < ON_TIME_SECONDS) this.anchor(at, target, 1);
+      // Slewing would leave the clock before the snapshot about to become `previous`, where the
+      // fraction clamps to 0 and fish step unsmoothed until it catches up. Jitter under half a
+      // delay is worth that brief hold to stay smooth; a stall's late or bunched arrivals are not.
+      const resync = Math.min(RESYNC_SECONDS, this.delaySeconds / 2);
+      if (lag > resync || Math.abs(lag) < ON_TIME_SECONDS) this.anchor(at, target, 1);
       else this.anchor(at, now, 1 + clamp(lag / SLEW_SECONDS, -MAX_SLEW, MAX_SLEW));
     }
     const evicted = this.previous;

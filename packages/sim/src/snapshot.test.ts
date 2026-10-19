@@ -185,6 +185,36 @@ describe('SnapshotInterpolator', () => {
     expect(interp.renderTime(1000 / 30 + 1)).toBeGreaterThan(before);
   });
 
+  it.each([60, 150, 200])(
+    'keeps interpolating after a %i ms stall delivers snapshots bunched',
+    (stallMs) => {
+      const interp = new SnapshotInterpolator(1 / 30);
+      const step = 1000 / 30;
+      const stallStart = 1000 + 5;
+      const stallEnd = stallStart + stallMs;
+      const deliver = (k: number): number => {
+        const made = k * step;
+        return made >= stallStart && made < stallEnd ? stallEnd : made;
+      };
+      let k = 0;
+      let older = -Infinity;
+      let newest = -Infinity;
+      let lagging = 0;
+      for (let frame = 0; frame * (1000 / 120) <= 3000; frame++) {
+        const now = frame * (1000 / 120);
+        if (now > stallStart && now < stallEnd) continue;
+        while (deliver(k) <= now) {
+          interp.push(snap(k, fish(k, 0, 0, FishState.Cruise)), deliver(k));
+          older = newest;
+          newest = k / 30;
+          k++;
+        }
+        if (interp.renderTime(now) < older - 0.005) lagging++;
+      }
+      expect(lagging).toBe(0);
+    },
+  );
+
   it('never renders past the newest snapshot while waiting for the next', () => {
     const interp = new SnapshotInterpolator(1 / 30);
     interp.push(snap(0, fish(0, 0, 0, FishState.Cruise)), 0);
