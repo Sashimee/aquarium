@@ -248,7 +248,10 @@ export function registerReminderRoutes(deps: ReminderRouteDeps): void {
       .update(schema.reminderPrefs)
       .set({ mailEnabled: false })
       .where(eq(schema.reminderPrefs.userId, userId));
-    return reply.header('cache-control', 'no-store').type('text/html; charset=utf-8').send(DONE_PAGE);
+    return reply
+      .header('cache-control', 'no-store')
+      .type('text/html; charset=utf-8')
+      .send(DONE_PAGE);
   });
 }
 

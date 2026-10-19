@@ -1,4 +1,5 @@
 import { buildApp, DEFAULT_SIGN_IN_THROTTLE } from './app.ts';
+import { loadChemistryParameters } from './chemistry.ts';
 import { createBackgroundTasks, shutdown } from './background.ts';
 import { createAuth } from './auth.ts';
 import { loadConfig } from './config.ts';
@@ -33,6 +34,11 @@ const auth = createAuth({
 });
 
 const push = config.vapid ? createPushSender(config.vapid, config.vapidSubject) : null;
+if (!push) {
+  console.warn(
+    'web push is off: VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY are not set. Mail reminders still work.',
+  );
+}
 
 const app = buildApp({
   indexable: config.indexable,
@@ -47,6 +53,7 @@ const app = buildApp({
     limit: DEFAULT_SIGN_IN_THROTTLE,
   },
   species: loadCatalog(),
+  chemistryParams: loadChemistryParameters(),
   testHooks: config.testHooks,
   authSecret: config.authSecret,
   push,

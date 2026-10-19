@@ -25,6 +25,8 @@ export const dataExportSchema = z.strictObject({
   signInMethods: z.array(exportedRow),
   passkeys: z.array(exportedRow),
   reminders: exportedReminderSchema,
+  reactions: z.array(exportedRow),
+  auditLog: z.array(exportedRow),
   tanks: z.array(
     z.strictObject({
       tank: exportedRow,
@@ -92,8 +94,8 @@ export const PRIVACY_CONTROLLER = 'Alexandre Baskewitsch';
 export const PRIVACY_CONTACT = 'fish@bas.lu';
 
 export const PRIVACY_POLICY: PrivacyPolicy = privacyPolicySchema.parse({
-  version: '2026-10-13',
-  updatedAt: '2026-10-13',
+  version: '2026-10-20',
+  updatedAt: '2026-10-20',
   controller: PRIVACY_CONTROLLER,
   contact: PRIVACY_CONTACT,
   analytics: false,
@@ -139,7 +141,11 @@ export const PRIVACY_POLICY: PrivacyPolicy = privacyPolicySchema.parse({
         'Passkeys you register: credential ID, public key, signature counter, device type, backed-up flag, transports, AAGUID (authenticator model identifier), the label you give it and its creation time. No biometric data ever leaves your device.',
         'Sessions: for every signed-in browser, a session record with its creation and expiry time, IP address and browser user-agent, so you can review and revoke sessions. Session records are kept until they expire (30 days after your last activity) and are then deleted by an hourly cleanup, or immediately when you sign out, revoke them or delete your account.',
         'Game data: your tanks, fish, their care history and memorials of fish that have died.',
-        'Email: verification mail is sent from fish@bas.lu through the operator mail relay. Nothing else is mailed to you.',
+        'Shared tanks: if you turn on a public link for a tank, anyone who has the link can see that tank read-only without signing in: its name (after a word filter), layout, water and fish. Your email address, display name, handle and account are never shown through the link, and the page is marked noindex. You can revoke or replace the link at any time, which stops the old one working at once.',
+        'Reactions: when you react to a shared tank (heart, star or wow) we store which tank, your account and the kind, one reaction per tank. Reaction counts are public; who reacted is not. A shared tank also shows when it was last updated, rounded down to the hour.',
+        'Audit log: turning a link on, replacing or revoking it, and setting or removing a reaction are recorded with the time, your account and the tank, never the link itself. Entries are deleted after 180 days, and immediately when you delete your account. The same data is included in your JSON export.',
+        'Email: verification and password-reset mail is sent from fish@bas.lu through the operator mail relay. Care reminders are mailed only if you turn them on.',
+        "Care reminders: both channels are off until you turn them on in your account settings. If you do, we store your choices, the time of the last reminder and, for web push, the push endpoint and encryption keys your browser gives us for each device you enable. At most one reminder per day is sent, only when your fish have not been fed for a while, and it never contains details about your tank. Every reminder email has a one-click unsubscribe link that works without signing in, and you can switch either channel off or remove a device at any time. This data is included in your JSON export. Web push goes through your browser vendor's push service (Google, Mozilla, Apple or Microsoft), which sees the endpoint and that a message was sent.",
         "Server logs of this application record the request method and path without query strings, never email addresses, passwords or tokens. The hosting platform's reverse proxy keeps standard access logs (including IP addresses) and the mail relay logs delivery of verification mail (including the recipient address); both are operated by the same operator and kept only as long as needed for security and troubleshooting.",
       ],
     },
@@ -162,8 +168,8 @@ export const PRIVACY_POLICY: PrivacyPolicy = privacyPolicySchema.parse({
       id: 'retention',
       title: 'How long we keep it',
       paragraphs: [
-        'Account and game data are kept until you delete your account. Care events older than 90 days are pruned.',
-        'Deleting your account removes your user record, sessions, sign-in methods, passkeys, tanks, fish, care history and memorials from the database immediately. Backup retention is to be defined before production; until then, deleted data may persist in backups no longer than that period.',
+        'Account and game data are kept until you delete your account. Care events older than 90 days are pruned, and audit log entries older than 180 days.',
+        'Deleting your account removes your user record, sessions, sign-in methods, passkeys, reminder settings and push subscriptions, tanks, fish, care history, reactions and memorials from the database immediately. Backup retention is to be defined before production; until then, deleted data may persist in backups no longer than that period.',
       ],
     },
     {

@@ -6,7 +6,8 @@ import type { InteractionEvents, PlayTool } from '../events';
  * The play tool and food the UI last asked for. A play system is rebuilt with every scene and its
  * controller starts at tap and flakes, while the UI keeps showing the user's choice, so this
  * outlives the play systems and hands the choice to each new controller. A tool picked while a
- * scene was building, when no controller listened, is applied the same way. Taps and feeds in
+ * scene was building, when no controller listened, is applied the same way.
+ * The game tool belongs to a running round, which a rebuilt scene does not carry, so it is never kept. Taps and feeds in
  * that window are dropped: there is no water to drop food into, and no `feed:dropped` fires, so
  * nothing is posted or announced.
  */
@@ -18,10 +19,10 @@ export class PlayChoices {
   constructor(private readonly interaction: EventBus<InteractionEvents>) {
     this.unsubscribe = [
       interaction.on('play:request-tool', ({ tool }) => {
-        this.tool = tool;
+        if (tool !== 'game') this.tool = tool;
       }),
       interaction.on('play:tool-changed', ({ tool }) => {
-        this.tool = tool;
+        if (tool !== 'game') this.tool = tool;
       }),
       interaction.on('feed:select', ({ food }) => {
         this.food = food;

@@ -1,4 +1,4 @@
-import { createPrivateKey, createPublicKey, sign, type KeyObject } from 'node:crypto';
+import { createECDH, createPrivateKey, sign, type KeyObject } from 'node:crypto';
 
 export interface VapidKeys {
   publicKey: string;
@@ -43,6 +43,9 @@ export function parseVapidKeys(publicKey: string, privateKey: string): VapidKeys
   const d = Buffer.from(privateKey, 'base64url');
   if (pub.length !== 65 || pub[0] !== 0x04) bad('public key must be an uncompressed P-256 point');
   if (d.length !== 32) bad('private key must be 32 bytes');
+  const ecdh = createECDH('prime256v1');
+  ecdh.setPrivateKey(d);
+  if (!ecdh.getPublicKey().equals(pub)) bad('the public key does not belong to the private key');
   const key = createPrivateKey({
     key: {
       kty: 'EC',
@@ -53,13 +56,6 @@ export function parseVapidKeys(publicKey: string, privateKey: string): VapidKeys
     },
     format: 'jwk',
   });
-  const derived = createPublicKey(key).export({ format: 'jwk' });
-  if (
-    derived.x !== pub.subarray(1, 33).toString('base64url') ||
-    derived.y !== pub.subarray(33).toString('base64url')
-  ) {
-    bad('the public key does not belong to the private key');
-  }
   return { publicKey, privateKey: key };
 }
 

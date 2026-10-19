@@ -1,5 +1,5 @@
 {
-  "id": "dbc31dd6-2bea-4ff1-9c98-72976f415240",
+  "id": "0bef019c-fe75-4821-a425-532b55aeb3d3",
   "prevId": "2bbd39d6-a170-45d4-bb2b-6feb12051d6d",
   "version": "7",
   "dialect": "postgresql",
@@ -110,12 +110,8 @@
           "name": "account_user_id_user_id_fk",
           "tableFrom": "account",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -172,12 +168,8 @@
           "name": "ate_batches_tank_id_tanks_id_fk",
           "tableFrom": "ate_batches",
           "tableTo": "tanks",
-          "columnsFrom": [
-            "tank_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["tank_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -185,10 +177,7 @@
       "compositePrimaryKeys": {
         "ate_batches_tank_id_batch_id_pk": {
           "name": "ate_batches_tank_id_batch_id_pk",
-          "columns": [
-            "tank_id",
-            "batch_id"
-          ]
+          "columns": ["tank_id", "batch_id"]
         }
       },
       "uniqueConstraints": {},
@@ -263,12 +252,8 @@
           "name": "events_tank_id_tanks_id_fk",
           "tableFrom": "events",
           "tableTo": "tanks",
-          "columnsFrom": [
-            "tank_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["tank_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -371,6 +356,12 @@
           "notNull": true,
           "default": "'adult'"
         },
+        "last_brood_at": {
+          "name": "last_brood_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "personality": {
           "name": "personality",
           "type": "jsonb",
@@ -407,12 +398,8 @@
           "name": "fish_tank_id_tanks_id_fk",
           "tableFrom": "fish",
           "tableTo": "tanks",
-          "columnsFrom": [
-            "tank_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["tank_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -563,12 +550,8 @@
           "name": "memorials_tank_id_tanks_id_fk",
           "tableFrom": "memorials",
           "tableTo": "tanks",
-          "columnsFrom": [
-            "tank_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["tank_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -688,107 +671,14 @@
           "name": "passkey_user_id_user_id_fk",
           "tableFrom": "passkey",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.push_subscriptions": {
-      "name": "push_subscriptions",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "endpoint": {
-          "name": "endpoint",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "p256dh": {
-          "name": "p256dh",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "auth": {
-          "name": "auth",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "push_subscriptions_user_id_idx": {
-          "name": "push_subscriptions_user_id_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "push_subscriptions_user_id_user_id_fk": {
-          "name": "push_subscriptions_user_id_user_id_fk",
-          "tableFrom": "push_subscriptions",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "push_subscriptions_endpoint_unique": {
-          "name": "push_subscriptions_endpoint_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "endpoint"
-          ]
-        }
-      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -813,59 +703,6 @@
       },
       "indexes": {},
       "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.reminder_prefs": {
-      "name": "reminder_prefs",
-      "schema": "",
-      "columns": {
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "mail_enabled": {
-          "name": "mail_enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "push_enabled": {
-          "name": "push_enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "last_sent_at": {
-          "name": "last_sent_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "reminder_prefs_user_id_user_id_fk": {
-          "name": "reminder_prefs_user_id_user_id_fk",
-          "tableFrom": "reminder_prefs",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -948,12 +785,8 @@
           "name": "session_user_id_user_id_fk",
           "tableFrom": "session",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -963,9 +796,7 @@
         "session_token_unique": {
           "name": "session_token_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "token"
-          ]
+          "columns": ["token"]
         }
       },
       "policies": {},
@@ -1100,12 +931,8 @@
           "name": "tanks_owner_id_user_id_fk",
           "tableFrom": "tanks",
           "tableTo": "user",
-          "columnsFrom": [
-            "owner_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["owner_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1115,9 +942,7 @@
         "tanks_share_token_unique": {
           "name": "tanks_share_token_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "share_token"
-          ]
+          "columns": ["share_token"]
         }
       },
       "policies": {},
@@ -1187,16 +1012,12 @@
         "user_email_unique": {
           "name": "user_email_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "email"
-          ]
+          "columns": ["email"]
         },
         "user_handle_unique": {
           "name": "user_handle_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "handle"
-          ]
+          "columns": ["handle"]
         }
       },
       "policies": {},
@@ -1275,72 +1096,37 @@
     "public.biome": {
       "name": "biome",
       "schema": "public",
-      "values": [
-        "freshwater",
-        "reef",
-        "cichlid",
-        "blackwater",
-        "mangrove"
-      ]
+      "values": ["freshwater", "reef", "cichlid", "blackwater", "mangrove"]
     },
     "public.cause_of_death": {
       "name": "cause_of_death",
       "schema": "public",
-      "values": [
-        "starvation",
-        "ammonia",
-        "nitrite",
-        "disease",
-        "old_age",
-        "unknown"
-      ]
+      "values": ["starvation", "ammonia", "nitrite", "disease", "old_age", "unknown"]
     },
     "public.event_kind": {
       "name": "event_kind",
       "schema": "public",
-      "values": [
-        "feed",
-        "water_change",
-        "gravel_vacuum",
-        "algae_scrape",
-        "ate",
-        "death"
-      ]
+      "values": ["feed", "water_change", "gravel_vacuum", "algae_scrape", "ate", "death", "born"]
     },
     "public.fish_sex": {
       "name": "fish_sex",
       "schema": "public",
-      "values": [
-        "male",
-        "female"
-      ]
+      "values": ["male", "female"]
     },
     "public.fish_stage": {
       "name": "fish_stage",
       "schema": "public",
-      "values": [
-        "fry",
-        "juvenile",
-        "adult"
-      ]
+      "values": ["fry", "juvenile", "adult"]
     },
     "public.fish_status": {
       "name": "fish_status",
       "schema": "public",
-      "values": [
-        "alive",
-        "dead"
-      ]
+      "values": ["alive", "dead"]
     },
     "public.tank_size": {
       "name": "tank_size",
       "schema": "public",
-      "values": [
-        "nano30",
-        "standard",
-        "std200",
-        "long300"
-      ]
+      "values": ["nano30", "standard", "std200", "long300"]
     }
   },
   "schemas": {},

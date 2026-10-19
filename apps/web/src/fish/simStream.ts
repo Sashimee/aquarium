@@ -46,7 +46,7 @@ function remap(from: Snapshot, old: StreamLayout, next: StreamLayout, fresh: Sna
  * announced is never read, so a stale record can't land on another fish.
  *
  * On a change to the running world the interpolation window is rewritten into the new layout by
- * fish id, keeping its times and arrival, so every fish that stayed moves on without a jump.
+ * fish id, keeping its times and the render clock, so every fish that stayed moves on without a jump.
  */
 export class SimStream {
   private readonly interpolator: SnapshotInterpolator;
@@ -55,7 +55,6 @@ export class SimStream {
   private started = false;
   private previous: Snapshot | null = null;
   private latest: Snapshot | null = null;
-  private latestArrivalMs = 0;
 
   constructor(
     delaySeconds: number,
@@ -91,7 +90,6 @@ export class SimStream {
     this.interpolator.reset();
     this.previous = null;
     this.latest = null;
-    this.latestArrivalMs = 0;
   }
 
   push(snapshot: Snapshot, arrivalMs: number): void {
@@ -118,18 +116,15 @@ export class SimStream {
     }
     const previous = this.previous;
     const latest = this.latest;
-    const arrival = this.latestArrivalMs;
-    this.interpolator.reset();
-    this.previous = null;
-    this.latest = null;
     this.current = layout;
     if (next.carry && current !== null && latest !== null) {
-      if (previous !== null) {
-        this.accept(remap(previous, current, layout, snapshot), arrival);
-        this.recycle(previous);
-      }
-      this.accept(remap(latest, current, layout, snapshot), arrival);
-      this.recycle(latest);
+      this.previous = previous === null ? null : remap(previous, current, layout, snapshot);
+      this.latest = remap(latest, current, layout, snapshot);
+      for (const old of this.interpolator.relayout(this.previous, this.latest)) this.recycle(old);
+    } else {
+      this.interpolator.reset();
+      this.previous = null;
+      this.latest = null;
     }
     this.accept(snapshot, arrivalMs);
   }
@@ -148,7 +143,6 @@ export class SimStream {
     }
     this.previous = this.latest;
     this.latest = snapshot;
-    this.latestArrivalMs = arrivalMs;
     if (evicted !== null) this.recycle(evicted);
   }
 }

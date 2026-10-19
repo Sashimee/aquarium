@@ -2,18 +2,12 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { backgroundFileSchema, playableBiomeSchema } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
-import { ALLOWED_LICENCES } from './manifest.ts';
+import { ALLOWED_LICENCES, manifestSchema } from './manifest.ts';
 
 const root = join(import.meta.dirname, '../../..');
 const readJson = (path: string): unknown => JSON.parse(readFileSync(join(root, path), 'utf8'));
 
-interface ManifestAsset {
-  id: string;
-  kind: string;
-  biome?: string;
-  licence: string;
-}
-const manifest = readJson('assets/manifest.json') as { assets: ManifestAsset[] };
+const manifest = manifestSchema.parse(readJson('assets/manifest.json'));
 
 describe('content/backgrounds against assets/manifest.json', () => {
   it('names each background by its own manifest entry, once, in its biome, under an allowed licence', () => {
@@ -29,7 +23,7 @@ describe('content/backgrounds against assets/manifest.json', () => {
         const asset = manifest.assets.find((a) => a.id === entry.asset);
         expect(asset, `${entry.id}: "${entry.asset}" is not in assets/manifest.json`).toBeDefined();
         expect(asset?.kind, entry.id).toBe('background');
-        expect(asset?.biome, `${entry.id}: manifest biome differs from its content file`).toBe(
+        expect(asset?.['biome'], `${entry.id}: manifest biome differs from its content file`).toBe(
           biome,
         );
         expect(ALLOWED_LICENCES as readonly string[], `${entry.id}: ${asset?.licence}`).toContain(

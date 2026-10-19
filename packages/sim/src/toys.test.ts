@@ -207,6 +207,45 @@ describe('mirror', { timeout: LONG }, () => {
     expect(at(w.behaviour.toys.mirrorPhase, 0)).toBe(MirrorPhase.Idle);
   });
 
+  it('takes the mirror up again within seconds after a long display is interrupted (#691)', () => {
+    const MOVED: SimToy = { ...MIRROR, position: [0.3, 0.38, BACK] };
+    const engaged = (w: World) => at(w.behaviour.toys.mirrorPhase, 0) !== MirrorPhase.Idle;
+    const within = (w: World, s: number): boolean => {
+      for (let t = 0; t < seconds(s); t++) {
+        w.step();
+        if (engaged(w)) return true;
+      }
+      return false;
+    };
+    for (const seed of [1, 2, 3]) {
+      for (const interrupt of ['move', 'tap'] as const) {
+        const w = bettaAtMirror(seed);
+        untilDisplaying(w);
+        for (let t = 0; t < seconds(180); t++) w.step();
+        expect(engaged(w), `seed ${seed}`).toBe(true);
+        const h = at(w.behaviour.toys.mirrorHabituation, 0);
+        expect(h, `seed ${seed}`).toBeGreaterThan(TOYS.mirrorRecoverLevel);
+        expect(h, `seed ${seed}`).toBeLessThan(1);
+        if (interrupt === 'move') {
+          w.setToys([MOVED]);
+          expect(engaged(w), `seed ${seed}`).toBe(false);
+          for (let t = 0; t < seconds(2); t++) w.step();
+          w.setToys([MIRROR]);
+          expect(within(w, 5), `seed ${seed}: back after the mirror returned`).toBe(true);
+        } else {
+          const [x, y, z] = [at(w.position, 0), at(w.position, 1), at(w.position, 2)];
+          for (let t = 0; t < seconds(10) && at(w.behaviour.startledAt, 0) < 0; t++) {
+            w.startle({ position: [x, y, z + 0.05], intensity: 1 });
+            w.step();
+          }
+          expect(at(w.behaviour.startledAt, 0), `seed ${seed}`).toBeGreaterThanOrEqual(0);
+          const back = TOYS.mirrorInterruptRetryS + 3;
+          expect(within(w, back), `seed ${seed}: back after the tap`).toBe(true);
+        }
+      }
+    }
+  });
+
   it('lets a betta tired of its reflection ignore it without drawing on the RNG', () => {
     const watching = bettaAtMirror();
     const cleared = bettaAtMirror();
