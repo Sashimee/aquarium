@@ -24,6 +24,10 @@ Curated for T05 (#5), checked 2026-10-12. Ranks are by fit for a photorealistic 
 | Skunk cleaner shrimp | no model of the species | `wm-cleaner-huffman`, `wm-cleaner-caruso`, `wm-cleaner-schofield` (procedural shrimp) |
 | Cleaner wrasse (T44) | no Labroides model exists | `wm-labroides-jens`, `wm-labroides-hylton` |
 | Nerite snail (soft body only) | the scan is a shell without foot, head or tentacles | `wm-nerite-baldonado-2`, `wm-nerite-obsidian-05` (procedural body) |
+| Electric yellow cichlid (T48) | no allowed model of the species | `wm-labidochromis-chmee2`, `wm-labidochromis-severni` |
+| Golden mbuna, Melanochromis auratus (T48) | no allowed model of the species | `wm-melanochromis-5snake5-female`, `wm-melanochromis-5snake5-male`, `wm-melanochromis-lee-1` |
+| Black calvus, Altolamprologus calvus (T48) | no allowed model of the species | `wm-altolamprologus-5snake5` |
+| Fairy cichlid, Neolamprologus brichardi (T48) | no allowed model of the species | `wm-brichardi-marrabbio2` (single photo) |
 | Anemone (host) | no photoreal free model | procedural TSL |
 
 ## CC-BY-SA (allowed for reference photos only)
@@ -375,6 +379,56 @@ Replaced the earlier Brittany sun-starburst pick (dark, no reef). Also seen: `Po
 Runners-up not taken: `Beneath Sipadan Island.jpeg` (CC0; murky violet-grey), `Caribbean Reef Shark School Tiger Beach Bahamas.jpg` (CC0; the shark is the subject), `Four butterfly fish swim over a coral reef.jpg` (CC BY 4.0; the fish are the subject), `Deep blue cozumel 2018.jpg` (CC0; a diver in frame), the other Ifremer "Ambiance sous-marine" files (a diver in every frame), `Рифы бухты Шарм-Эль-Майя.jpg` (CC0; a close second for the reef wall).
 
 Banding check (2026-10-16): the blue channel of an 800x400 gradient region of the deep-blue, light-rays and coral-wall originals holds a contiguous run of levels (81 of 81, 89 of 90, about 180 of 202), so the banding seen in the contact sheet is the preview PNG palette, not the sources.
+
+## African cichlid lake (issue #638, T48)
+
+Checked 2026-10-19. Sources searched in order: Smithsonian (no fish models of these species), Sketchfab with the CC0 and CC-BY filters and the downloadable flag, Poly Haven, ambientCG, Wikimedia Commons. Licences were read from the Sketchfab model record and bundled `license.txt`, the Poly Haven asset page and the Commons file-page metadata. Raw files are in `~/.cache/aquarium-assets/raw/<id>/`. No CC-BY-SA was used or added.
+
+### Species
+
+| Species | Decision | Pick | Polycount | Notes |
+|---|---|---|---|---|
+| Demason's cichlid (Pseudotropheus demasoni, Malawi) | model | `sketchfab-f7f3faca` (Ra_in_coat, CC-BY-4.0) | 2174 faces | Rigged (64 joints, one `SWIM_CYCLE` animation, stray `Cube_helper` node). Right outline and bar pattern; painted texture, 2 maps. Only allowed cichlid model found. |
+| Electric yellow cichlid (Labidochromis caeruleus, Malawi) | fallback: procedural loft | `wm-labidochromis-chmee2` (CC BY 3.0), `wm-labidochromis-severni` (CC0) | n/a | No allowed model. A third photo (`Labidochromis caeruleus F.jpg`, Stacnbake) is smaller and was not downloaded. |
+| Golden mbuna (Melanochromis auratus, Malawi) | fallback: procedural loft | `wm-melanochromis-5snake5-female`, `-male` (CC0), `wm-melanochromis-lee-1` (CC BY 3.0) | n/a | Male and female differ strongly (gold with dark stripes versus blue-black with pale stripes): loft needs two texture sets. |
+| Black calvus (Altolamprologus calvus, Tanganyika) | fallback: procedural loft | `wm-altolamprologus-5snake5` (CC0) | n/a | One photo. Tall dorsal fin and compressed body. |
+| Fairy cichlid (Neolamprologus brichardi, Tanganyika) | fallback: procedural loft | `wm-brichardi-marrabbio2` (CC BY 3.0) | n/a | One 1404x924 photo. The trailing filaments need fin-geometry work, not just texture. |
+
+The PLAN lists 4 or more species. With the five above the biome has one model and four lofts. Gaps Alex may want to know about: no Aulonocara (peacock) and no shell-dweller (Neolamprologus multifasciatus) photo or model exists under an allowed licence (everything found was CC BY-SA, CC BY 2.0 or a public-domain mark). Species ids are proposals; `content/species/*.json` belongs to the later owners.
+
+### Hardscape and decor
+
+| Item | Pick | Licence | Notes |
+|---|---|---|---|
+| Rock pile, anchor | `polyhaven-namaqualand_boulder_03` | CC0 | 121546 triangles, about 2.4 m wide in the source: decimate hard. |
+| Rock pile, mid tier | `polyhaven-namaqualand_boulder_05` | CC0 | 117622 triangles. |
+| Rock pile, top and rubble | `polyhaven-rock_07` | CC0 | 27830 triangles, small angular rock. |
+| Also reused | `polyhaven-boulder_01`, `polyhaven-coast_rocks_05` | CC0 | Already in the manifest. |
+| Sand | `ambientcg-Ground101` (pale fine sand), `polyhaven-coast_sand_01`, `-coast_sand_04` | CC0 | Already in the manifest. The other Poly Haven sands checked (coast_sand_05, sand_02, sand_03) are too dark for a cichlid sand bed. |
+| Shell decor | `sketchfab-1bedca25` (Meshfinder, CC-BY-4.0) | CC-BY-4.0 | 3727 faces. A land-snail shell, fine at 2.5 cm. Meshfinder is an aggregator account, so the licence statement is only as good as the Sketchfab record. |
+
+### Backgrounds (all renders, `selected-pending-download`)
+
+The only Commons photos of Lake Tanganyika under CC0 or CC BY (Edouard mhg, Bujumbura shoreline) are above water with people, boats and buildings, so none are usable posters. No allowed underwater Malawi or Tanganyika scene exists. Rock and sand are CC0 on Poly Haven, so the five slots are renders in the `bg-fw-misty-lake` pattern, each with its spec in the manifest `notes`.
+
+| Slot | Id | Licence |
+|---|---|---|
+| Malawi rock pile | `bg-cichlid-malawi-rock-pile` | CC0 |
+| Granite rock wall | `bg-cichlid-rock-wall` | CC0 |
+| Tanganyika shell bed | `bg-cichlid-tanganyika-shell-bed` | CC-BY-4.0 (shell credit) |
+| Rock cave | `bg-cichlid-rock-cave` | CC0 |
+| Open blue water | `bg-cichlid-open-blue` | CC0 |
+
+The manifest uses `biome: "cichlid"`. `content/backgrounds/cichlid.json` and the ids in `packages/shared/src/backgrounds.ts` are not added here: `playableBiomeSchema` does not yet include `cichlid`, so the file would fail validation. Add both in the PR that makes the biome playable.
+
+### Handoff to asset-pipeline-engineer
+
+1. Demasoni: drop `Cube_helper`, replace the 64-joint skeleton with the pipeline fish rig, orient, scale, bake masks, KTX2 at 1k and 2k, LODs.
+2. Loft four species (electric yellow, golden mbuna in two sexes, black calvus, fairy cichlid) from the listed photos. Check each photo against `docs/assets/catalog.md` licences when crediting: three are CC BY 3.0 (Chmee2, lienyuan lee, Marrabbio2), the rest CC0.
+3. Rocks: decimate the three Poly Haven boulders to tank budgets, bake normals, ship as a `rock-pile` decor set with at least two arrangements.
+4. Shell: decimate to three LODs, 1k KTX2, instance-friendly origin.
+5. Substrate: reuse existing sand textures; no new asset.
+6. Backgrounds: render the five slots to the specs in the manifest, strip metadata, build the three KTX2 tiers, then fill `sha256`, `files[]`, `modifications[]` and set status `downloaded`.
 
 ## Sound (issue #649, T59)
 
