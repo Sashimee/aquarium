@@ -1347,7 +1347,7 @@ describe('the clean-up crew: nerite snail and hermit crab', () => {
           fish: state.fish.map((f) => ({ ...f, hunger: 0 })),
         };
         if (day % 7 === 0) {
-          const changed = applyCare(state, { type: 'water_change' }, biome, chemistryParams);
+          const changed = applyCare(state, { type: 'water_change' }, biome, chemistryParams, now);
           if (!changed.ok) throw new Error(changed.reason);
           state = changed.value;
         }
