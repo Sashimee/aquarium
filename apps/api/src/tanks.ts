@@ -82,7 +82,7 @@ import {
 import { registerShopRoutes } from './shop.ts';
 import { backgroundRef, licenseFor } from './items.ts';
 import { legacyKey, legacyStage } from './legacyRequests.ts';
-import { findReplay, lockWallet, owns, spend } from './wallet.ts';
+import { findReplay, lockUserRow, lockWallet, owns, spend } from './wallet.ts';
 import { apiError, HttpError } from './errors.ts';
 import type { Limit, RateLimiter } from './rate-limit.ts';
 import type { SpeciesCatalog } from './species.ts';
@@ -230,6 +230,7 @@ async function lockAndTick(
   user: SessionUser,
 ): Promise<Ticked> {
   const now = deps.clock.now();
+  await lockUserRow(tx, user.id);
   const [tank] = await tx
     .select()
     .from(schema.tanks)

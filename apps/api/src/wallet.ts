@@ -31,7 +31,18 @@ export const utcDay = (nowMs: number) => {
 };
 
 // Every wallet mutation of one user runs under this lock, so a daily cap read and the credit that
-// follows it can't interleave. Lock order everywhere: tank row, then wallet.
+// follows it can't interleave. Lock order everywhere: user row (FOR KEY SHARE), tank row, wallet.
+// Account deletion locks the user row FOR UPDATE first and then cascades into tanks, so taking the
+// user row before any tank row keeps both sides in the same order and rules out a deadlock.
+export async function lockUserRow(tx: Tx, userId: string): Promise<void> {
+  const [row] = await tx
+    .select({ id: schema.user.id })
+    .from(schema.user)
+    .where(eq(schema.user.id, userId))
+    .for('key share');
+  if (!row) throw new HttpError(401, apiError('unauthenticated', 'Sign in required.'));
+}
+
 export async function lockWallet(
   tx: Tx,
   economy: Economy,
@@ -39,6 +50,7 @@ export async function lockWallet(
   nowMs: number,
 ): Promise<void> {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`wallet:${userId}`}))`);
+  await lockUserRow(tx, userId);
   const created = await tx
     .insert(schema.wallet)
     .values({ userId, balance: economy.grants.starting })

@@ -1048,23 +1048,88 @@ describe('account deletion racing a purchase', () => {
   });
   afterAll(() => h.close());
 
-  it('never fails the delete or leaves a play row behind, whichever side wins', async () => {
-    for (let round = 0; round < 6; round++) {
+  const waitForBlocked = async (count: number) => {
+    for (let i = 0; i < 200; i++) {
+      const { rows } = await h.database.pool.query<{ n: string }>(
+        `select count(*) as n from pg_stat_activity
+         where datname = current_database() and wait_event_type = 'Lock'`,
+      );
+      if (Number(rows[0]?.n) >= count) return;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    throw new Error(`fewer than ${count} requests are waiting on the user row lock`);
+  };
+
+  const expectGone = async (who: Account) => {
+    expect(await ledgerOf(h, who)).toEqual([]);
+    expect(
+      await h.database.db.select().from(schema.wallet).where(eq(schema.wallet.userId, who.userId)),
+    ).toEqual([]);
+  };
+
+  it('answers 401 and leaves no play row when the delete commits first', async () => {
+    const who = await account(h);
+    await walletOf(h, who);
+    const holder = await h.database.pool.connect();
+    try {
+      await holder.query('begin');
+      await holder.query('select id from "user" where id = $1 for update', [who.userId]);
+      const spent = purchase(h, who, 'background:bg-fw-misty-lake');
+      await waitForBlocked(1);
+      await holder.query('delete from ledger where user_id = $1 and source = $2', [
+        who.userId,
+        'game',
+      ]);
+      await holder.query('delete from "user" where id = $1', [who.userId]);
+      await holder.query('commit');
+      const res = await spent;
+      expect(res.statusCode, res.body).toBe(401);
+    } finally {
+      holder.release();
+    }
+    await expectGone(who);
+  });
+
+  it('lets the purchase finish and then deletes everything when the purchase commits first', async () => {
+    const who = await account(h);
+    await walletOf(h, who);
+    const holder = await h.database.pool.connect();
+    try {
+      await holder.query('begin');
+      await holder.query('select id from "user" where id = $1 for key share', [who.userId]);
+      const spent = purchase(h, who, 'background:bg-fw-misty-lake');
+      expect((await spent).statusCode).toBe(200);
+      const deleted = call(h, who, 'POST', '/api/me/delete', { password: PASSWORD });
+      await waitForBlocked(1);
+      await holder.query('commit');
+      expect((await deleted).statusCode).toBe(204);
+    } finally {
+      holder.release();
+    }
+    await expectGone(who);
+  });
+
+  it('does not deadlock a tank-scoped purchase against the delete cascade', async () => {
+    for (let round = 0; round < 3; round++) {
       const who = await account(h);
       await walletOf(h, who);
-      const [spent, deleted] = await Promise.all([
-        purchase(h, who, 'background:bg-fw-misty-lake'),
-        call(h, who, 'POST', '/api/me/delete', { password: PASSWORD }),
-      ]);
-      expect(deleted.statusCode, deleted.body).toBe(204);
-      expect(spent.statusCode, spent.body).toBeLessThan(500);
-      expect(await ledgerOf(h, who)).toEqual([]);
-      expect(
-        await h.database.db
-          .select()
-          .from(schema.wallet)
-          .where(eq(schema.wallet.userId, who.userId)),
-      ).toEqual([]);
+      const tank = await freeTank(h, who);
+      const holder = await h.database.pool.connect();
+      try {
+        await holder.query('begin');
+        await holder.query('select id from tanks where id = $1 for update', [tank.id]);
+        const spent = buyFish(h, who, tank.id, 'neon-tetra', 'juvenile');
+        await waitForBlocked(1);
+        const deleted = call(h, who, 'POST', '/api/me/delete', { password: PASSWORD });
+        await waitForBlocked(2);
+        await holder.query('commit');
+        const [spentRes, deletedRes] = await Promise.all([spent, deleted]);
+        expect(deletedRes.statusCode, deletedRes.body).toBe(204);
+        expect(spentRes.statusCode, spentRes.body).toBeLessThan(500);
+      } finally {
+        holder.release();
+      }
+      await expectGone(who);
     }
   });
 });
