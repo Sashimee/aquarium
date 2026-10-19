@@ -93,6 +93,40 @@ export function fillSmallHoles(dense: Dense, maxLoop: number): Dense {
   return result;
 }
 
+/**
+ * Closes every boundary loop of at most `maxLoop` vertices by clipping ears, shortest diagonal first. Unlike a centroid
+ * fan this adds no vertices and zips the two sides of a long thin ribbon (a cut through a paper-thin wall) together.
+ */
+export function earClipLoops(dense: Dense, maxLoop: number): Dense {
+  const at = (v: number, c: number): number => dense.positions[v * 3 + c]!;
+  const span = (a: number, b: number): number =>
+    Math.hypot(at(a, 0) - at(b, 0), at(a, 1) - at(b, 1), at(a, 2) - at(b, 2));
+  const indices = Array.from(dense.indices);
+  for (const loop of boundaryLoops(dense.indices)) {
+    if (loop.length > maxLoop) continue;
+    const ring = [...loop];
+    while (ring.length > 3) {
+      let best = 0;
+      let shortest = Infinity;
+      for (let i = 0; i < ring.length; i++) {
+        const d = span(ring[(i + ring.length - 1) % ring.length]!, ring[(i + 1) % ring.length]!);
+        if (d < shortest) {
+          shortest = d;
+          best = i;
+        }
+      }
+      indices.push(
+        ring[(best + 1) % ring.length]!,
+        ring[best]!,
+        ring[(best + ring.length - 1) % ring.length]!,
+      );
+      ring.splice(best, 1);
+    }
+    indices.push(ring[1]!, ring[0]!, ring[2]!);
+  }
+  return { ...dense, indices: Uint32Array.from(indices) };
+}
+
 /** Replaces the colour of every masked vertex with what diffuses in from the unmasked ones around it. */
 export function inpaintColours(dense: Dense, masked: Uint8Array, relax = 12): void {
   const count = dense.positions.length / 3;

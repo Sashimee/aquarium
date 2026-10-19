@@ -22,8 +22,8 @@ import {
 import { signedVolume, vertexNormals } from './loft.ts';
 import { clamp, cross, percentile, smoothstep, type Vec3 } from './math.ts';
 import type { MaterialDef, Part } from './parts.ts';
-import { simplifyPrimitive, triangleCountOf } from './lod.ts';
-import { cutSphere, fillSmallHoles, growMask, inpaintColours, smoothMasked } from './dense-edit.ts';
+import { keepMainComponent, simplifyPrimitive, triangleCountOf } from './lod.ts';
+import { cutSphere, earClipLoops, growMask, inpaintColours, smoothMasked } from './dense-edit.ts';
 import { writeShippedDebugRenders } from './crew-debug.ts';
 import { weldDense, type Dense } from './rebake.ts';
 import { bakeScanPart } from './scan-bake.ts';
@@ -80,8 +80,13 @@ export const NERITE_RECIPES: NeriteRecipe[] = [
     patches: [
       {
         centre: [0.357, 0.24, 0.385],
-        radius: 0.1,
+        radius: 0.06,
         note: 'tunnels through the thin front-right lip',
+      },
+      {
+        centre: [0.27, 0.27, 0.4],
+        radius: 0.045,
+        note: 'second small tunnel beside it',
       },
     ],
     retouch: [
@@ -265,11 +270,13 @@ const TENTACLE_STEPS = 8;
 
 /** Foot rows as (height as a fraction of footH, outline scale, ripple weight): flat sole, widest near the bottom, domed top. */
 const FOOT_PROFILE: [number, number, number][] = [
-  [0, 0.88, 0.5],
-  [0.12, 1, 1],
-  [0.45, 0.96, 1],
-  [0.8, 0.76, 0.5],
-  [1, 0.42, 0.15],
+  [0, 0.62, 0.5],
+  [0.1, 0.86, 1],
+  [0.3, 0.98, 1],
+  [0.55, 1, 1],
+  [0.8, 0.9, 0.6],
+  [0.95, 0.66, 0.3],
+  [1, 0.4, 0.15],
 ];
 
 const RAMP_HEIGHT = 64;
@@ -372,13 +379,13 @@ export function buildNeriteBody(footprint: ShellFootprint, length: number): Neri
   const pushUv = (count: number, v: (k: number) => number): void => {
     for (let k = 0; k < count; k++) uvs.push(0.5, v(k));
   };
-  const footH = length * 0.062;
-  const halfWidth = footprint.halfWidth * 0.95;
-  const rear = footprint.rearZ + length * 0.05;
-  const front = footprint.frontZ + length * 0.17;
+  const footH = length * 0.09;
+  const halfWidth = footprint.halfWidth * 0.78;
+  const rear = footprint.rearZ + length * 0.12;
+  const front = footprint.frontZ + length * 0.14;
   const centreZ = (rear + front) / 2;
   const halfLength = (front - rear) / 2;
-  const edgeV = (scale: number): number => 0.3 * clamp((1 - scale) / 0.58, 0, 1);
+  const edgeV = (scale: number): number => 0.3 * clamp((1 - scale) / 0.6, 0, 1);
 
   const footRings: number[] = [];
   for (const [rise, scale, weight] of FOOT_PROFILE) {
@@ -408,7 +415,7 @@ export function buildNeriteBody(footprint: ShellFootprint, length: number): Neri
     stitch(rings, footRings[r]!, footRings[r + 1]!, FOOT_SEGMENTS);
   fan(rings, footRings[footRings.length - 1]!, topCentre, FOOT_SEGMENTS, true);
 
-  const headCentre: Vec3 = [0, footH * 0.72, front - length * 0.1];
+  const headCentre: Vec3 = [0, footH * 0.72, front - length * 0.12];
   const headRadius: Vec3 = [halfWidth * 0.27, footH * 0.55, length * 0.12];
   const ellipsoid = (centre: Vec3, radius: Vec3, id: number, weight: number, v: number): void => {
     const ringStarts: number[] = [];
@@ -628,7 +635,7 @@ export function cleanShell(
   for (let i = 0; i < count; i++) lowest = Math.min(lowest, scanned.positions[i * 3 + 1]!);
   let dense = scanned;
   for (const patch of patches)
-    dense = fillSmallHoles(
+    dense = earClipLoops(
       cutSphere(
         dense,
         [patch.centre[0] * length, lowest + patch.centre[1] * length, patch.centre[2] * length],
@@ -749,6 +756,9 @@ export async function buildNerite(recipe: NeriteRecipe, ctx: FishContext): Promi
     ratios: [1, 1, 1],
     minTriangles: 100,
     prepare: (prim, level) => decimateByMaterial(prim, level, recipe),
+    finish: (prim) => {
+      if (prim.getMaterial()?.getName() === SHELL_MATERIAL) keepMainComponent(prim);
+    },
   };
   const built = buildDocument(recipe.id, [baked.part, body.part], materials);
   const asset = await emitAsset({
@@ -764,7 +774,7 @@ export async function buildNerite(recipe: NeriteRecipe, ctx: FishContext): Promi
       licence: ctx.licenceOf(recipe.sourceId),
       modifications: [
         'shell from the photogrammetry scan: colour-checker cube removed, merged and welded, oriented to +Z forward / +Y up from the crusty aperture side and the dome peak, scaled so its longest edge is the standard length',
-        'holes the scan leaves through the paper-thin lip are cut out with a sphere through every wall layer and capped, and small boundary holes are filled',
+        'tunnels the scan leaves through the paper-thin lip are cut out with small spheres through every wall layer and closed by clipping ears of the cut loop, shortest diagonal first, so the lip sheet stays continuous; small boundary holes are filled',
         ...recipe.retouch.map(
           (r) =>
             `retouched the scan texture: ${r.note}, painted over from the surrounding shell colours`,

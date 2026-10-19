@@ -4,6 +4,7 @@ import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { MeshoptDecoder } from 'meshoptimizer';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { boundsOf, canonicalVertices, connectedComponents } from './crew-scan.ts';
 import { uvStretchShare } from './rebake.ts';
 
 const ASSETS = fileURLToPath(new URL('../../../apps/web/public/assets', import.meta.url));
@@ -219,6 +220,22 @@ describe('shipped scan LODs', () => {
           expect(enclosedBackgroundPixels(prims, 'top', 2), `${dir} LOD${level}`).toBeLessThan(10);
         },
       );
+
+      it(`${dir} LOD${level} scan mesh is one connected piece`, async () => {
+        for (const prim of (await readLod(dir, level)).filter((p) => p.material === material)) {
+          const { min, max } = boundsOf(prim.positions);
+          const diagonal = Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2]);
+          const canon = canonicalVertices(prim.positions, diagonal / 4000);
+          const solid: number[] = [];
+          for (let t = 0; t < prim.indices.length; t += 3) {
+            const [a, b, c] = [0, 1, 2].map((k) => canon[prim.indices[t + k]!]!);
+            if (a !== b && b !== c && a !== c) solid.push(...prim.indices.subarray(t, t + 3));
+          }
+          const used = new Set(solid);
+          const parts = connectedComponents(canon, solid, (v) => used.has(v)).sizes.length;
+          expect(parts, `${dir} LOD${level} ${prim.material}`).toBe(1);
+        }
+      });
 
       it(`${dir} LOD${level} keeps the baked texture mapping unscrambled`, async () => {
         const prims = (await readLod(dir, level)).filter((p) => p.material === material);

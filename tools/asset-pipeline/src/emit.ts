@@ -34,6 +34,8 @@ export interface LodPlan {
   keepSeams?: boolean;
   /** Runs on each primitive of LOD `level` before simplification. */
   prepare?: (prim: Primitive, level: number) => void;
+  /** Runs on each primitive of LOD `level` after simplification. */
+  finish?: (prim: Primitive, level: number) => void;
 }
 
 export interface TextureEntry {
@@ -231,6 +233,7 @@ export async function emitAsset(input: EmitInput): Promise<OutputAsset> {
           minTriangles: plan.minTriangles,
           ...(plan.keepSeams ? { keepSeams: true } : {}),
         });
+        plan.finish?.(prim, level);
       }
     for (const mesh of doc.getRoot().listMeshes()) renormaliseMouth(mesh.listPrimitives());
     await doc.transform(prune(pruneOptions));

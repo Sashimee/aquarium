@@ -1,6 +1,7 @@
 import type { Primitive } from '@gltf-transform/core';
 import { compactPrimitive } from '@gltf-transform/functions';
 import { MeshoptSimplifier } from 'meshoptimizer';
+import { boundsOf, canonicalVertices, connectedComponents } from './crew-scan.ts';
 import {
   FIN_ID_ATTRIBUTE,
   FIN_MASK_ATTRIBUTE,
@@ -27,6 +28,34 @@ const GUIDE_ATTRIBUTES: { semantic: string; size: number; weight: number }[] = [
   { semantic: SWAY_ATTRIBUTE, size: 1, weight: 3 },
   { semantic: LEG_ATTRIBUTE, size: 1, weight: 3 },
 ];
+
+/** Drops zero-area triangles, then every triangle outside the largest position-welded component, so simplified thin parts cannot leave floating flecks. */
+export function keepMainComponent(prim: Primitive): void {
+  const indicesAccessor = prim.getIndices();
+  if (!indicesAccessor) throw new Error('keepMainComponent: primitive must be indexed');
+  const positions = prim.getAttribute('POSITION')!.getArray()!;
+  const bounds = boundsOf(positions);
+  const diagonal = Math.hypot(
+    bounds.max[0] - bounds.min[0],
+    bounds.max[1] - bounds.min[1],
+    bounds.max[2] - bounds.min[2],
+  );
+  const canon = canonicalVertices(positions, diagonal / 4000);
+  const source = indicesAccessor.getArray()!;
+  const solid: number[] = [];
+  for (let t = 0; t < source.length; t += 3) {
+    const a = canon[source[t]!]!;
+    const b = canon[source[t + 1]!]!;
+    const c = canon[source[t + 2]!]!;
+    if (a !== b && b !== c && a !== c) solid.push(source[t]!, source[t + 1]!, source[t + 2]!);
+  }
+  const components = connectedComponents(canon, solid, () => true);
+  const kept: number[] = [];
+  for (let t = 0; t < solid.length; t += 3)
+    if (components.label[solid[t]!] === 0) kept.push(solid[t]!, solid[t + 1]!, solid[t + 2]!);
+  indicesAccessor.setArray(Uint32Array.from(kept));
+  compactPrimitive(prim);
+}
 
 export function triangleCountOf(prim: Primitive): number {
   const indices = prim.getIndices();

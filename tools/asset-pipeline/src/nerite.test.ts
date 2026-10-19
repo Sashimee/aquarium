@@ -189,7 +189,7 @@ describe('buildNeriteBody', () => {
       .map((i) => body.positions[i * 3 + 1]!)
       .sort((a, b) => a - b);
     expect(footHeights.at(-1)!).toBeLessThanOrEqual(footprint.ceilingY);
-    expect(footHeights[Math.floor(footHeights.length / 2)]!).toBeLessThan(length * 0.08);
+    expect(footHeights[Math.floor(footHeights.length / 2)]!).toBeLessThan(length * 0.11);
     const radiusAt = (weight: number): number => {
       const points = [...ids.keys()].filter(
         (i) =>
@@ -208,6 +208,33 @@ describe('buildNeriteBody', () => {
     );
     const zs = side.map((i) => body.positions[i * 3 + 2]!);
     expect(Math.max(...zs) - Math.min(...zs)).toBeGreaterThan(length * 0.2);
+  });
+
+  it('keeps the sole inside the shell footprint and ending at the head, with a rounded thick edge', () => {
+    const sole = [...ids.keys()].filter(
+      (i) => ids[i] === SNAIL_PART_IDS.foot && body.positions[i * 3 + 1]! < length * 0.02,
+    );
+    const at = (axis: number): number[] => sole.map((i) => body.positions[i * 3 + axis]!);
+    expect(Math.max(...at(0).map(Math.abs))).toBeLessThanOrEqual(footprint.halfWidth);
+    expect(Math.min(...at(2))).toBeGreaterThanOrEqual(footprint.rearZ);
+    const headNose = Math.max(
+      ...[...ids.keys()]
+        .filter((i) => ids[i] === SNAIL_PART_IDS.head)
+        .map((i) => body.positions[i * 3 + 2]!),
+    );
+    expect(Math.max(...at(2))).toBeLessThanOrEqual(headNose + length * 0.01);
+    const footTop = Math.max(
+      ...[...ids.keys()]
+        .filter((i) => ids[i] === SNAIL_PART_IDS.foot)
+        .map((i) => body.positions[i * 3 + 1]!),
+    );
+    const footIds = [...ids.keys()].filter((i) => ids[i] === SNAIL_PART_IDS.foot);
+    const widest = Math.max(...footIds.map((i) => Math.abs(body.positions[i * 3]!)));
+    const edge = footIds
+      .filter((i) => Math.abs(body.positions[i * 3]!) > widest * 0.9)
+      .map((i) => body.positions[i * 3 + 1]!);
+    expect(footTop).toBeGreaterThan(length * 0.06);
+    expect(Math.max(...edge) - Math.min(...edge)).toBeGreaterThan(length * 0.03);
   });
 
   it('gives every vertex a ramp coordinate in [0, 1] and puts the foot centre on the reported z', () => {
