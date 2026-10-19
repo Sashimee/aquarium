@@ -120,7 +120,8 @@ describe('shellFrame', () => {
 describe('buildNeriteBody', () => {
   const length = 0.02;
   const footprint = { halfWidth: 0.007, rearZ: -0.008, frontZ: 0.006, rimY: 0.002 };
-  const body = buildNeriteBody(footprint, length);
+  const built = buildNeriteBody(footprint, length);
+  const body = built.part;
   const count = body.positions.length / 3;
   const ids = body.extra[FIN_ID_ATTRIBUTE]!;
   const weights = body.extra[FIN_MASK_ATTRIBUTE]!;
@@ -164,8 +165,59 @@ describe('buildNeriteBody', () => {
     expect(min[2]).toBeGreaterThan(footprint.rearZ - length * 0.1);
   });
 
+  it('keeps the tentacles and the head clear of the shell, in front of its lip', () => {
+    for (let i = 0; i < count; i++) {
+      const z = body.positions[i * 3 + 2]!;
+      if (ids[i] === SNAIL_PART_IDS.tentacle) expect(z).toBeGreaterThan(footprint.frontZ);
+    }
+    const headZ = [...ids.keys()]
+      .filter((i) => ids[i] === SNAIL_PART_IDS.head)
+      .map((i) => body.positions[i * 3 + 2]!);
+    expect(headZ.reduce((a, b) => a + b, 0) / headZ.length).toBeGreaterThan(footprint.frontZ);
+  });
+
+  it('has a thin foot and slender tentacles that taper to the tip', () => {
+    const footTop = Math.max(
+      ...[...ids.keys()]
+        .filter((i) => ids[i] === SNAIL_PART_IDS.foot)
+        .map((i) => body.positions[i * 3 + 1]!),
+    );
+    expect(footTop).toBeLessThan(length * 0.08);
+    const radiusAt = (weight: number): number => {
+      const points = [...ids.keys()].filter(
+        (i) =>
+          ids[i] === SNAIL_PART_IDS.tentacle &&
+          Math.abs(weights[i]! - weight) < 1e-6 &&
+          body.positions[i * 3]! > 0,
+      );
+      const xs = points.map((i) => body.positions[i * 3]!);
+      const ys = points.map((i) => body.positions[i * 3 + 1]!);
+      return Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) / 2;
+    };
+    expect(radiusAt(0.5)).toBeLessThan(length * 0.017);
+    expect(radiusAt(0.875)).toBeLessThan(radiusAt(0.25));
+    const side = [...ids.keys()].filter(
+      (i) => ids[i] === SNAIL_PART_IDS.tentacle && body.positions[i * 3]! > 0,
+    );
+    const zs = side.map((i) => body.positions[i * 3 + 2]!);
+    expect(Math.max(...zs) - Math.min(...zs)).toBeGreaterThan(length * 0.2);
+  });
+
+  it('gives every vertex a ramp coordinate in [0, 1] and puts the foot centre on the reported z', () => {
+    expect(body.uvs.length).toBe(count * 2);
+    for (let i = 0; i < count; i++) {
+      expect(body.uvs[i * 2 + 1]!).toBeGreaterThanOrEqual(0);
+      expect(body.uvs[i * 2 + 1]!).toBeLessThanOrEqual(1);
+    }
+    const footZ = [...ids.keys()]
+      .filter((i) => ids[i] === SNAIL_PART_IDS.foot)
+      .map((i) => body.positions[i * 3 + 2]!);
+    expect(built.footCentreZ).toBeGreaterThan(Math.min(...footZ));
+    expect(built.footCentreZ).toBeLessThan(Math.max(...footZ));
+  });
+
   it('is deterministic', () => {
     const again = buildNeriteBody(footprint, length);
-    expect(Array.from(again.positions)).toEqual(Array.from(body.positions));
+    expect(Array.from(again.part.positions)).toEqual(Array.from(body.positions));
   });
 });

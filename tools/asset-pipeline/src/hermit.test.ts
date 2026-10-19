@@ -4,11 +4,11 @@ import {
   HERMIT_RECIPES,
   assignLimbIndices,
   crabColour,
-  paintMask,
-  recolour,
+  recolourDense,
   segmentCrab,
 } from './hermit.ts';
 import type { Vec3 } from './math.ts';
+import type { Dense } from './rebake.ts';
 
 interface Mesh {
   positions: number[];
@@ -208,57 +208,41 @@ describe('crabColour', () => {
   });
 });
 
-describe('paintMask and recolour', () => {
-  const uvs = Float32Array.from([0.1, 0.1, 0.4, 0.1, 0.1, 0.4, 0.6, 0.6, 0.9, 0.6, 0.6, 0.9]);
-  const indices = Uint32Array.from([0, 1, 2, 3, 4, 5]);
-  const kind = Uint8Array.from([
-    CRAB_KIND.leg,
-    CRAB_KIND.leg,
-    CRAB_KIND.leg,
-    CRAB_KIND.leg,
-    CRAB_KIND.shell,
-    CRAB_KIND.leg,
-  ]);
-  const weight = Float32Array.from([0, 0.5, 1, 0, 0, 0]);
+describe('recolourDense', () => {
+  function dense(colours: number[]): Dense {
+    const count = colours.length / 3;
+    return {
+      positions: new Float32Array(count * 3),
+      indices: new Uint32Array(0),
+      colours: Float32Array.from(colours),
+      extra: {},
+    };
+  }
 
-  it('paints only triangles made entirely of crab vertices', () => {
-    const mask = paintMask(uvs, indices, kind, weight, 32, 0);
-    expect(mask.kind[Math.floor(0.2 * 32) * 32 + Math.floor(0.2 * 32)]).toBe(CRAB_KIND.leg);
-    expect(mask.kind[Math.floor(0.7 * 32) * 32 + Math.floor(0.7 * 32)]).toBe(CRAB_KIND.shell);
+  it('recolours stem vertices, keeps shell vertices and preserves relative shading', () => {
+    const d = dense([0.5, 0.5, 0.5, 0.78, 0.78, 0.78, 0.24, 0.24, 0.24, 0.3, 0.2, 0.1]);
+    const kind = Uint8Array.from([
+      CRAB_KIND.shell,
+      CRAB_KIND.stem,
+      CRAB_KIND.stem,
+      CRAB_KIND.shell,
+    ]);
+    recolourDense(d, kind, new Float32Array(4));
+    expect(Array.from(d.colours.slice(0, 3))).toEqual([0.5, 0.5, 0.5].map((v) => Math.fround(v)));
+    expect(Array.from(d.colours.slice(9, 12))).toEqual([0.3, 0.2, 0.1].map((v) => Math.fround(v)));
+    expect(d.colours[3]!).toBeGreaterThan(d.colours[6]!);
+    expect(d.colours[3]!).toBeGreaterThan(d.colours[4]!);
   });
 
-  it('grows the mask into neighbouring texels', () => {
-    const plain = paintMask(uvs, indices, kind, weight, 32, 0);
-    const grown = paintMask(uvs, indices, kind, weight, 32, 2);
-    const painted = (m: { kind: Uint8Array }): number => m.kind.filter(Boolean).length;
-    expect(painted(grown)).toBeGreaterThan(painted(plain));
-  });
-
-  it('recolours masked texels, keeps the rest and preserves relative shading', () => {
-    const size = 4;
-    const data = new Uint8Array(size * size * 4).fill(128);
-    for (let i = 0; i < size * size; i++) data[i * 4 + 3] = 255;
-    data.set([200, 200, 200, 255], 4);
-    data.set([60, 60, 60, 255], 8);
-    const kinds = new Uint8Array(size * size);
-    kinds[1] = CRAB_KIND.stem;
-    kinds[2] = CRAB_KIND.stem;
-    const out = recolour(
-      { width: size, height: size, data },
-      { kind: kinds, weight: new Float32Array(size * size), width: size, height: size },
+  it('colours legs by their weight along the limb', () => {
+    const d = dense([0.4, 0.4, 0.4, 0.4, 0.4, 0.4]);
+    recolourDense(
+      d,
+      Uint8Array.from([CRAB_KIND.leg, CRAB_KIND.leg]),
+      Float32Array.from([0.05, 0.99]),
     );
-    expect(Array.from(out.data.slice(0, 4))).toEqual([128, 128, 128, 255]);
-    expect(out.data[4]!).toBeGreaterThan(out.data[8]!);
-    expect(out.data[4]!).toBeGreaterThan(out.data[5]!);
-  });
-
-  it('rejects a mask whose size differs from the image', () => {
-    expect(() =>
-      recolour(
-        { width: 2, height: 2, data: new Uint8Array(16) },
-        { kind: new Uint8Array(9), weight: new Float32Array(9), width: 3, height: 3 },
-      ),
-    ).toThrow(/sizes differ/);
+    expect(d.colours[2]!).toBeGreaterThan(d.colours[0]!);
+    expect(Math.max(d.colours[3]!, d.colours[4]!, d.colours[5]!)).toBeLessThan(0.1);
   });
 });
 
@@ -266,6 +250,7 @@ describe('HERMIT_RECIPES', () => {
   it('defines a recipe with a positive size budget', () => {
     for (const recipe of HERMIT_RECIPES) {
       expect(recipe.maxTriangles).toBeGreaterThan(0);
+      expect(recipe.maxTriangles).toBeLessThanOrEqual(15000);
       expect(recipe.fallbackLengthM).toBeGreaterThan(0);
     }
   });

@@ -1,5 +1,3 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { buildDocument, emitAsset, type LodPlan } from './emit.ts';
 import {
   areaCentroid,
@@ -22,9 +20,10 @@ import {
 } from './index-schema.ts';
 import { vertexNormals } from './loft.ts';
 import { clamp, cross, type Vec3 } from './math.ts';
-import type { MaterialDef, Part } from './parts.ts';
-import { renderSheet } from './raster.ts';
-import type { Rgba } from './textures.ts';
+import type { MaterialDef } from './parts.ts';
+import { writeShippedDebugRenders } from './crew-debug.ts';
+import { weldDense, type Dense } from './rebake.ts';
+import { bakeScanPart } from './scan-bake.ts';
 import { createGrid, fillSolid, open, rasteriseSurface, toCell, voxelIndex } from './voxel.ts';
 
 export interface HermitRecipe {
@@ -57,7 +56,7 @@ export const HERMIT_RECIPES: HermitRecipe[] = [
     sourceId: 'sketchfab-5ebe7794',
     dropMeshes: /^Object_0$/,
     fallbackLengthM: 0.02,
-    maxTriangles: 25000,
+    maxTriangles: 12000,
     textureSize: 2048,
     voxelFraction: 1 / 200,
     bodyOpeningFraction: 0.03,
@@ -300,110 +299,29 @@ export function crabColour(kind: number, weight: number): Rgb {
   return phase > 1 - RING_WIDTH ? LEG_RING : LEG_BLUE;
 }
 
-export interface PaintMask {
-  kind: Uint8Array;
-  weight: Float32Array;
-  width: number;
-  height: number;
-}
-
-/** Rasterises every triangle whose three vertices are crab into UV space, then grows the mask to cover seams. */
-export function paintMask(
-  uvs: Float32Array,
-  indices: Uint32Array,
-  kind: Uint8Array,
-  weight: Float32Array,
-  size: number,
-  growTexels = 2,
-): PaintMask {
-  const texKind = new Uint8Array(size * size);
-  const texWeight = new Float32Array(size * size);
-  for (let t = 0; t < indices.length; t += 3) {
-    const a = indices[t]!;
-    const b = indices[t + 1]!;
-    const c = indices[t + 2]!;
-    const k = kind[a]!;
-    if (k === CRAB_KIND.shell || kind[b] === CRAB_KIND.shell || kind[c] === CRAB_KIND.shell)
-      continue;
-    const ux = [uvs[a * 2]! * size, uvs[b * 2]! * size, uvs[c * 2]! * size];
-    const uy = [uvs[a * 2 + 1]! * size, uvs[b * 2 + 1]! * size, uvs[c * 2 + 1]! * size];
-    const x0 = Math.max(0, Math.floor(Math.min(...ux)));
-    const x1 = Math.min(size - 1, Math.ceil(Math.max(...ux)));
-    const y0 = Math.max(0, Math.floor(Math.min(...uy)));
-    const y1 = Math.min(size - 1, Math.ceil(Math.max(...uy)));
-    const det = (uy[1]! - uy[2]!) * (ux[0]! - ux[2]!) + (ux[2]! - ux[1]!) * (uy[0]! - uy[2]!);
-    if (Math.abs(det) < 1e-9) {
-      const x = clamp(Math.floor((ux[0]! + ux[1]! + ux[2]!) / 3), 0, size - 1);
-      const y = clamp(Math.floor((uy[0]! + uy[1]! + uy[2]!) / 3), 0, size - 1);
-      texKind[y * size + x] = k;
-      texWeight[y * size + x] = (weight[a]! + weight[b]! + weight[c]!) / 3;
-      continue;
-    }
-    for (let y = y0; y <= y1; y++)
-      for (let x = x0; x <= x1; x++) {
-        const px = x + 0.5;
-        const py = y + 0.5;
-        const l0 = ((uy[1]! - uy[2]!) * (px - ux[2]!) + (ux[2]! - ux[1]!) * (py - uy[2]!)) / det;
-        const l1 = ((uy[2]! - uy[0]!) * (px - ux[2]!) + (ux[0]! - ux[2]!) * (py - uy[2]!)) / det;
-        const l2 = 1 - l0 - l1;
-        if (l0 < -0.05 || l1 < -0.05 || l2 < -0.05) continue;
-        texKind[y * size + x] = k;
-        texWeight[y * size + x] = l0 * weight[a]! + l1 * weight[b]! + l2 * weight[c]!;
-      }
-  }
-  for (let pass = 0; pass < growTexels; pass++) {
-    const nextKind = texKind.slice();
-    const nextWeight = texWeight.slice();
-    for (let y = 0; y < size; y++)
-      for (let x = 0; x < size; x++) {
-        if (texKind[y * size + x]) continue;
-        for (const [dx, dy] of [
-          [1, 0],
-          [-1, 0],
-          [0, 1],
-          [0, -1],
-        ] as const) {
-          const nx = x + dx;
-          const ny = y + dy;
-          if (nx < 0 || ny < 0 || nx >= size || ny >= size) continue;
-          const source = texKind[ny * size + nx]!;
-          if (source) {
-            nextKind[y * size + x] = source;
-            nextWeight[y * size + x] = texWeight[ny * size + nx]!;
-            break;
-          }
-        }
-      }
-    texKind.set(nextKind);
-    texWeight.set(nextWeight);
-  }
-  return { kind: texKind, weight: texWeight, width: size, height: size };
-}
-
-/** Recolours the masked texels, keeping the scan's own light and shadow as a multiplier. */
-export function recolour(image: Rgba, mask: PaintMask): Rgba {
-  if (image.width !== mask.width || image.height !== mask.height)
-    throw new Error('recolour: mask and image sizes differ');
-  const data = new Uint8Array(image.data);
-  const lum = (o: number): number =>
-    (0.2126 * data[o]! + 0.7152 * data[o + 1]! + 0.0722 * data[o + 2]!) / 255;
+/** Recolours every non-shell vertex by its kind and limb weight, keeping the scan's own light and shadow as a multiplier. */
+export function recolourDense(dense: Dense, kind: Uint8Array, weight: Float32Array): void {
+  const count = kind.length;
+  const lum = (v: number): number =>
+    0.2126 * dense.colours[v * 3]! +
+    0.7152 * dense.colours[v * 3 + 1]! +
+    0.0722 * dense.colours[v * 3 + 2]!;
   const sums: Record<number, { sum: number; n: number }> = {};
-  for (let i = 0; i < mask.kind.length; i++) {
-    const k = mask.kind[i]!;
-    if (!k) continue;
+  for (let v = 0; v < count; v++) {
+    const k = kind[v]!;
+    if (k === CRAB_KIND.shell) continue;
     const entry = (sums[k] ??= { sum: 0, n: 0 });
-    entry.sum += lum(i * 4);
+    entry.sum += lum(v);
     entry.n++;
   }
-  for (let i = 0; i < mask.kind.length; i++) {
-    const k = mask.kind[i]!;
-    if (!k) continue;
+  for (let v = 0; v < count; v++) {
+    const k = kind[v]!;
+    if (k === CRAB_KIND.shell) continue;
     const mean = sums[k]!.sum / sums[k]!.n || 1;
-    const shade = clamp(lum(i * 4) / mean, 0.55, 1.45);
-    const rgb = crabColour(k, mask.weight[i]!);
-    for (let c = 0; c < 3; c++) data[i * 4 + c] = Math.round(clamp(rgb[c]! * shade, 0, 1) * 255);
+    const shade = clamp(lum(v) / mean, 0.55, 1.45);
+    const rgb = crabColour(k, weight[v]!);
+    for (let c = 0; c < 3; c++) dense.colours[v * 3 + c] = clamp(rgb[c]! * shade, 0, 1);
   }
-  return { ...image, data };
 }
 
 const PART_RGB: Record<number, Vec3> = {
@@ -413,40 +331,14 @@ const PART_RGB: Record<number, Vec3> = {
   9: [0.75, 0.55, 0.35],
 };
 
-async function writeHermitDebugRenders(
-  repoRoot: string,
-  id: string,
-  part: Part,
-  image: Rgba,
-): Promise<{ textured: string; parts: string }> {
-  const dir = join(repoRoot, 'tools', 'asset-pipeline', 'debug');
-  mkdirSync(dir, { recursive: true });
-  const views = [
-    { view: 'side', pixelsAcross: 1100 },
-    { view: 'top', pixelsAcross: 1100 },
-    { view: 'front', pixelsAcross: 1100 },
-  ] as const;
-  const mesh = { positions: part.positions, indices: part.indices, normals: part.normals };
-  const textured = await renderSheet({ ...mesh, uvs: part.uvs }, [...views], {
-    data: image.data,
-    width: image.width,
-    height: image.height,
-    channels: 4,
-  });
-  const ids = part.extra[FIN_ID_ATTRIBUTE]!;
-  const weights = part.extra[FIN_MASK_ATTRIBUTE]!;
-  const limbs = part.extra[LEG_ATTRIBUTE]!;
+function partColours(ids: Float32Array, weights: Float32Array): Float32Array {
   const colors = new Float32Array(ids.length * 3);
   for (let i = 0; i < ids.length; i++) {
     const base = PART_RGB[ids[i]!] ?? PART_RGB[0]!;
     const k = ids[i] === 0 || ids[i] === 9 ? 1 : 0.4 + 0.6 * weights[i]!;
-    const tint = ids[i] === 6 ? 0.8 + 0.2 * ((limbs[i]! % 5) / 4) : 1;
-    for (let c = 0; c < 3; c++) colors[i * 3 + c] = base[c]! * k * tint;
+    for (let c = 0; c < 3; c++) colors[i * 3 + c] = base[c]! * k;
   }
-  const partsSheet = await renderSheet({ ...mesh, colors }, [...views]);
-  writeFileSync(join(dir, `${id}.png`), textured);
-  writeFileSync(join(dir, `${id}-parts.png`), partsSheet);
-  return { textured: `debug/${id}.png`, parts: `debug/${id}-parts.png` };
+  return colors;
 }
 
 export async function buildHermit(recipe: HermitRecipe, ctx: FishContext): Promise<OutputAsset> {
@@ -524,9 +416,25 @@ export async function buildHermit(recipe: HermitRecipe, ctx: FishContext): Promi
   part.extra[FIN_MASK_ATTRIBUTE] = weights;
   part.extra[LEG_ATTRIBUTE] = limb;
 
-  const mask = paintMask(part.uvs, part.indices, seg.kind, seg.weight, scan.image.width);
-  const image = recolour(scan.image, mask);
-  const debug = await writeHermitDebugRenders(ctx.repoRoot, recipe.id, part, image);
+  const dense = weldDense(part, scan.image, standardLengthM / 4000);
+  const denseKind = Uint8Array.from(dense.extra[FIN_ID_ATTRIBUTE]!, (id) =>
+    id === SHRIMP_PART_IDS.abdomen
+      ? CRAB_KIND.stem
+      : id === SHRIMP_PART_IDS.leg
+        ? CRAB_KIND.leg
+        : id === SHRIMP_PART_IDS.antenna
+          ? CRAB_KIND.antenna
+          : CRAB_KIND.shell,
+  );
+  recolourDense(dense, denseKind, dense.extra[FIN_MASK_ATTRIBUTE]!);
+  const baked = bakeScanPart(dense, HERMIT_MATERIAL, {
+    targetTriangles: recipe.maxTriangles,
+    atlasSize: recipe.textureSize,
+    gutter: 4,
+    bleed: 6,
+    colourWeight: 0.5,
+  });
+  const image = baked.image;
 
   const material: MaterialDef = {
     name: HERMIT_MATERIAL,
@@ -538,11 +446,9 @@ export async function buildHermit(recipe: HermitRecipe, ctx: FishContext): Promi
     doubleSided: false,
     normalScale: 1,
   };
-  const triangles = part.indices.length / 3;
-  const lod0 = Math.min(1, recipe.maxTriangles / triangles);
-  const plan: LodPlan = { ratios: [lod0, lod0 * 0.4, lod0 * 0.15], minTriangles: 400 };
-  const built = buildDocument(recipe.id, [part], [material]);
-  return emitAsset({
+  const plan: LodPlan = { ratios: [1, 0.5, 0.25], minTriangles: 400 };
+  const built = buildDocument(recipe.id, [baked.part], [material]);
+  const asset = await emitAsset({
     outRoot: ctx.outRoot,
     kind: 'crab',
     id: recipe.id,
@@ -554,11 +460,12 @@ export async function buildHermit(recipe: HermitRecipe, ctx: FishContext): Promi
       sources: [recipe.sourceId],
       licence: ctx.licenceOf(recipe.sourceId),
       modifications: [
-        'photogrammetry scan: colour-checker cube removed, merged and welded, texture downscaled to 2048 px and re-encoded to KTX2',
+        'photogrammetry scan: colour-checker cube removed, merged and welded by position',
         'segmented into rigid shell, exposed soft body and limbs by a voxel opening; limb pieces carry a root-to-tip weight and a leg index',
         'oriented to +Z forward (towards the legs) / +Y up, origin at the area centroid, scaled so the shell longest edge is the standard length',
         '_FIN_ID part ids 0 shell, 6 walking leg, 7 antenna, 9 exposed soft body (rigid); _FIN_MASK weight along the limb; _LEG limb index pair * 2 + side, side 0 = -x',
-        `LOD0 capped at ${recipe.maxTriangles} triangles, LOD1 and LOD2 simplified further`,
+        `re-simplified to ${recipe.maxTriangles} triangles for LOD0 (LOD1 and LOD2 at 50% and 25% of that), box-projected into a fresh ${recipe.textureSize} px atlas and the colour re-baked from the scan's vertex colours, so simplification cannot scramble the scan texture`,
+        'limb and soft-body colours painted per vertex from the segmentation before the bake',
         recipe.note,
       ],
       crab: {
@@ -573,9 +480,18 @@ export async function buildHermit(recipe: HermitRecipe, ctx: FishContext): Promi
         pleopodPairs: 0,
         abdomenHinge: { y: stemY / stemCount, z: stemMinZ },
         telsonZ: rearZ,
-        debugRender: debug.textured,
-        debugPartsRender: debug.parts,
+        debugRender: `debug/${recipe.id}.png`,
+        debugPartsRender: `debug/${recipe.id}-parts.png`,
       },
     },
   });
+  await writeShippedDebugRenders(
+    ctx.repoRoot,
+    ctx.outRoot,
+    'crab',
+    recipe.id,
+    { [HERMIT_MATERIAL]: image },
+    partColours,
+  );
+  return asset;
 }
