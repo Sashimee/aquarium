@@ -53,22 +53,17 @@ export function boundaryLoops(indices: Uint32Array): number[][] {
   return loops;
 }
 
-/** Drops every triangle touching the open boundary, `layers` times over: removes scan fuzz and slivers on a rim. */
-export function peelBoundary(dense: Dense, layers: number): Dense {
-  let indices = dense.indices;
-  for (let layer = 0; layer < layers; layer++) {
-    const edge = new Set<number>();
-    for (const [a, ends] of boundaryHalfEdges(indices)) {
-      edge.add(a);
-      for (const b of ends) edge.add(b);
-    }
-    const kept: number[] = [];
-    for (let t = 0; t < indices.length; t += 3)
-      if (!edge.has(indices[t]!) && !edge.has(indices[t + 1]!) && !edge.has(indices[t + 2]!))
-        kept.push(indices[t]!, indices[t + 1]!, indices[t + 2]!);
-    indices = Uint32Array.from(kept);
+/** Drops every triangle whose centroid lies inside the sphere, through all layers of a thin wall, so its tunnels and folds go with it. */
+export function cutSphere(dense: Dense, centre: [number, number, number], radius: number): Dense {
+  const kept: number[] = [];
+  const at = (v: number, c: number): number => dense.positions[v * 3 + c]!;
+  for (let t = 0; t < dense.indices.length; t += 3) {
+    const [a, b, c] = [dense.indices[t]!, dense.indices[t + 1]!, dense.indices[t + 2]!];
+    const mean = [0, 1, 2].map((k) => (at(a, k) + at(b, k) + at(c, k)) / 3);
+    if (Math.hypot(mean[0]! - centre[0], mean[1]! - centre[1], mean[2]! - centre[2]) > radius)
+      kept.push(a, b, c);
   }
-  return compactDense(dense, indices);
+  return compactDense(dense, Uint32Array.from(kept));
 }
 
 /** Closes every boundary loop of at most `maxLoop` vertices with a fan around its centroid. */
@@ -96,54 +91,6 @@ export function fillSmallHoles(dense: Dense, maxLoop: number): Dense {
   };
   for (const [key, values] of Object.entries(extra)) result.extra[key] = Float32Array.from(values);
   return result;
-}
-
-/** Relaxes the open rim, then the rings inside it, so a ragged scan edge becomes one smooth curve. */
-export function smoothRim(dense: Dense, iterations: number, rings: number, minLoop = 8): void {
-  const count = dense.positions.length / 3;
-  const loops = boundaryLoops(dense.indices).filter((l) => l.length > minLoop);
-  for (let it = 0; it < iterations; it++) {
-    const next = Float32Array.from(dense.positions);
-    for (const loop of loops)
-      loop.forEach((v, k) => {
-        const a = loop[(k + loop.length - 1) % loop.length]!;
-        const b = loop[(k + 1) % loop.length]!;
-        for (let c = 0; c < 3; c++)
-          next[v * 3 + c] =
-            0.5 * dense.positions[v * 3 + c]! +
-            0.25 * (dense.positions[a * 3 + c]! + dense.positions[b * 3 + c]!);
-      });
-    dense.positions.set(next);
-  }
-  const neighbours = vertexNeighbours(dense.indices, count);
-  const inside = new Uint8Array(count);
-  let frontier = loops.flat();
-  const seen = new Uint8Array(count);
-  frontier.forEach((v) => (seen[v] = 1));
-  for (let ring = 1; ring <= rings; ring++) {
-    const grown: number[] = [];
-    for (const v of frontier)
-      for (const n of neighbours[v]!)
-        if (!seen[n]) {
-          seen[n] = 1;
-          inside[n] = 1;
-          grown.push(n);
-        }
-    frontier = grown;
-  }
-  for (let it = 0; it < iterations; it++) {
-    const next = Float32Array.from(dense.positions);
-    for (let v = 0; v < count; v++) {
-      if (!inside[v]) continue;
-      const around = neighbours[v]!;
-      for (let c = 0; c < 3; c++) {
-        let sum = 0;
-        for (const n of around) sum += dense.positions[n * 3 + c]!;
-        next[v * 3 + c] = 0.5 * dense.positions[v * 3 + c]! + 0.5 * (sum / around.length);
-      }
-    }
-    dense.positions.set(next);
-  }
 }
 
 /** Replaces the colour of every masked vertex with what diffuses in from the unmasked ones around it. */

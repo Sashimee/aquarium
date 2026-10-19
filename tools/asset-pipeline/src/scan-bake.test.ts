@@ -112,7 +112,7 @@ describe('bakeScanPart', { timeout: 30000 }, () => {
     expect(part.indices.length / 3).toBeLessThanOrEqual(400);
     expect(charts).toBeGreaterThan(0);
     expect(part.uvs.every((u) => u >= 0 && u <= 1)).toBe(true);
-    expect(uvStretchShare(part)).toBeLessThan(0.1);
+    expect(uvStretchShare(part)).toBeLessThan(0.01);
     let checked = 0;
     for (let i = 0; i < part.positions.length / 3; i++) {
       const y = part.positions[i * 3 + 1]!;

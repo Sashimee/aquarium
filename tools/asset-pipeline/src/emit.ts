@@ -31,6 +31,7 @@ export interface LodPlan {
   /** Triangle ratios for LOD0..LOD2 against the welded input. */
   ratios: [number, number, number];
   minTriangles: number;
+  keepSeams?: boolean;
   /** Runs on each primitive of LOD `level` before simplification. */
   prepare?: (prim: Primitive, level: number) => void;
 }
@@ -225,7 +226,11 @@ export async function emitAsset(input: EmitInput): Promise<OutputAsset> {
           continue;
         }
         plan.prepare?.(prim, level);
-        simplifyPrimitive(prim, { ratio: plan.ratios[level]!, minTriangles: plan.minTriangles });
+        simplifyPrimitive(prim, {
+          ratio: plan.ratios[level]!,
+          minTriangles: plan.minTriangles,
+          ...(plan.keepSeams ? { keepSeams: true } : {}),
+        });
       }
     for (const mesh of doc.getRoot().listMeshes()) renormaliseMouth(mesh.listPrimitives());
     await doc.transform(prune(pruneOptions));

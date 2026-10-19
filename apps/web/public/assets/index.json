@@ -2,7 +2,7 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; every texture has both files.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Every fish LOD also carries _MOUTH, geometry attribute \"_mouth\", a float in [0, 1] for buccal motion: 1 at the jaw or lower-lip tip (every LOD is renormalised so its highest value is exactly 1), easing to 0 behind the gill line and above the mouth slit; fins, eyes and attachments are 0. Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body, carapace and eyes; 6 walking leg; 7 antenna; 8 pleopod; 9 abdomen, telson and tail fan) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x; antennules 0/1, long antennae 2/3; tail-fan leaves k * 2 + side). Shrimp _fin_mask means: id 0 is 0 (eye stalks included, ignore it); ids 6 and 7 are the weight along the limb, 0 root to 1 tip; id 8 is the pleopod beat weight, 0 root to 1 tip; id 9 is the tail-curl weight clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1) of the rest position. Tail curl rotates ids 8 and 9 about +x through the shrimp.abdomenHinge {y, z} by flex * clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1), computed from the rest position, never from _fin_mask, so the pleopods follow the segment they hang from. Pleopods (id 8) exist only in LOD0 and LOD1 and are removed from LOD2; legs are simplified, so do not assume every _leg index exists at every LOD. Snails use _fin_id (0 shell, 10 foot, 11 head, 12 tentacle) and _fin_mask (foot: 0 at the sole centre to 1 at the mantle edge, for ripple; tentacle: 0 base to 1 tip; shell and head 0). The hermit crab is a crab-kind asset whose walker data sits in its crab block, same fields as a shrimp block; its shell is id 0, exposed soft body id 9 (rigid, hinge sits in front of it so it never curls), legs id 6 and antennae id 7 with _leg index pair * 2 + side; pairs 0 and 1 are the picking legs, and it has no pleopods. The cherry material is alphaMode BLEND with base colour alpha 0.86: three.js GLTFLoader turns depthWrite off for BLEND, so set depthWrite true on the cherry material and expect some sorting artefacts from the self-overlapping legs and antennae.",
-  "totalBytes": 70352664,
+  "totalBytes": 81831179,
   "assets": [
     {
       "id": "angelfish",
@@ -3179,43 +3179,44 @@
         "segmented into rigid shell, exposed soft body and limbs by a voxel opening; limb pieces carry a root-to-tip weight and a leg index",
         "oriented to +Z forward (towards the legs) / +Y up, origin at the area centroid, scaled so the shell longest edge is the standard length",
         "_FIN_ID part ids 0 shell, 6 walking leg, 7 antenna, 9 exposed soft body (rigid); _FIN_MASK weight along the limb; _LEG limb index pair * 2 + side, side 0 = -x",
-        "re-simplified to 12000 triangles for LOD0 (LOD1 and LOD2 at 50% and 25% of that), box-projected into a fresh 2048 px atlas and the colour re-baked from the scan's vertex colours, so simplification cannot scramble the scan texture",
-        "limb and soft-body colours painted per vertex from the segmentation before the bake",
+        "re-simplified to 12000 triangles for LOD0 (LOD1 and LOD2 at 40% and 15% of that, simplified with UV seams kept), box-projected into a fresh 2048 px atlas and the colour re-baked from the scan's vertex colours, so simplification cannot scramble the scan texture",
+        "limb and soft-body colours painted per vertex from the segmentation before the bake; antenna fragments below a vertex floor dropped",
+        "length is the shell length (0.03 m) taken from the recipe: no content/species/hermit-crab.json exists yet, and a species file is a separate contract PR",
         "legs and antennae recoloured towards Clibanarius tricolor (blue legs, orange joints and antennae) by eye from the reference description; the scan is Clibanarius longitarsus"
       ],
       "bounds": {
         "min": [
-          -0.00822,
-          -0.005397,
-          -0.010339
+          -0.012386,
+          -0.008035,
+          -0.015509
         ],
         "max": [
-          0.006064,
-          0.00442,
-          0.01146
+          0.009088,
+          0.006629,
+          0.017494
         ]
       },
       "lods": [
         {
           "file": "crab/hermit-crab/lod0.glb",
-          "bytes": 192992,
-          "sha256": "508f9c0e924aaaafc842b219e79db2cd9047751ad90b25138648d8eb5e7696e4",
-          "triangles": 11940,
-          "vertices": 9331
+          "bytes": 194360,
+          "sha256": "eb0252ace85ddaf79cad5de15a9f6498dd4977ccca0c79d156e2919a38a8e0cf",
+          "triangles": 11941,
+          "vertices": 9407
         },
         {
           "file": "crab/hermit-crab/lod1.glb",
-          "bytes": 111196,
-          "sha256": "4ee3c9d218f61d3666bc4d1921466f7b68edda2b52ea106af33308034bcd678e",
-          "triangles": 5970,
-          "vertices": 5165
+          "bytes": 101328,
+          "sha256": "2d54e4f65e7ed2e321dda6d47f795dc869fa8eeaac42b166168b1ae7abbac4e5",
+          "triangles": 4775,
+          "vertices": 4656
         },
         {
           "file": "crab/hermit-crab/lod2.glb",
-          "bytes": 56468,
-          "sha256": "439da021ed0295d34c1270d14b208d5f8a1ae19e7111b5c7f10465d7f8bf0f41",
-          "triangles": 2984,
-          "vertices": 2493
+          "bytes": 53452,
+          "sha256": "961050cf9041dbe816aa8db7ca7fac22a9d6db4085253d344e7cc353c2367bed",
+          "triangles": 1790,
+          "vertices": 2302
         }
       ],
       "textures": [
@@ -3226,15 +3227,15 @@
           "variants": {
             "1k": {
               "file": "crab/hermit-crab/textures/hermit-crab_basecolor_1k.ktx2",
-              "bytes": 113581,
-              "sha256": "d7f9d818f157823537df8af734401871a9c0bca0e56c94ef337a42b1467ea1a0",
+              "bytes": 114652,
+              "sha256": "1ca8b3fc0a6ac72916dbf7bad99cdd602428dc0332466e9fdda0c68dcd21bad9",
               "size": 1024,
               "codec": "etc1s"
             },
             "2k": {
               "file": "crab/hermit-crab/textures/hermit-crab_basecolor_2k.ktx2",
-              "bytes": 357729,
-              "sha256": "ae51882c39330bbc001ac0dbe7a6369f3d9f239a68288549497451f9d0dbd235",
+              "bytes": 364069,
+              "sha256": "d1dd551673043b492541538ff9e716198f783fc35add825d26e7188771a357bb",
               "size": 2048,
               "codec": "etc1s"
             }
@@ -3244,39 +3245,39 @@
       "files": [
         {
           "file": "crab/hermit-crab/lod0.glb",
-          "bytes": 192992,
-          "sha256": "508f9c0e924aaaafc842b219e79db2cd9047751ad90b25138648d8eb5e7696e4"
+          "bytes": 194360,
+          "sha256": "eb0252ace85ddaf79cad5de15a9f6498dd4977ccca0c79d156e2919a38a8e0cf"
         },
         {
           "file": "crab/hermit-crab/lod1.glb",
-          "bytes": 111196,
-          "sha256": "4ee3c9d218f61d3666bc4d1921466f7b68edda2b52ea106af33308034bcd678e"
+          "bytes": 101328,
+          "sha256": "2d54e4f65e7ed2e321dda6d47f795dc869fa8eeaac42b166168b1ae7abbac4e5"
         },
         {
           "file": "crab/hermit-crab/lod2.glb",
-          "bytes": 56468,
-          "sha256": "439da021ed0295d34c1270d14b208d5f8a1ae19e7111b5c7f10465d7f8bf0f41"
+          "bytes": 53452,
+          "sha256": "961050cf9041dbe816aa8db7ca7fac22a9d6db4085253d344e7cc353c2367bed"
         },
         {
           "file": "crab/hermit-crab/textures/hermit-crab_basecolor_1k.ktx2",
-          "bytes": 113581,
-          "sha256": "d7f9d818f157823537df8af734401871a9c0bca0e56c94ef337a42b1467ea1a0"
+          "bytes": 114652,
+          "sha256": "1ca8b3fc0a6ac72916dbf7bad99cdd602428dc0332466e9fdda0c68dcd21bad9"
         },
         {
           "file": "crab/hermit-crab/textures/hermit-crab_basecolor_2k.ktx2",
-          "bytes": 357729,
-          "sha256": "ae51882c39330bbc001ac0dbe7a6369f3d9f239a68288549497451f9d0dbd235"
+          "bytes": 364069,
+          "sha256": "d1dd551673043b492541538ff9e716198f783fc35add825d26e7188771a357bb"
         }
       ],
       "crab": {
-        "standardLengthM": 0.02,
+        "standardLengthM": 0.03,
         "lengthSource": "recipe",
         "axes": {
           "forward": "+z",
           "up": "+y"
         },
         "origin": "centre-of-mass",
-        "standoffM": 0.00549424160271883,
+        "standoffM": 0.008241362869739532,
         "attributes": {
           "partId": "_FIN_ID",
           "weight": "_FIN_MASK",
@@ -3292,10 +3293,10 @@
         "legPairs": 5,
         "pleopodPairs": 0,
         "abdomenHinge": {
-          "y": 0.000396906285002466,
-          "z": 0.003780930070206523
+          "y": 0.0005953594274457969,
+          "z": 0.005671394988894463
         },
-        "telsonZ": -0.010341175831854343,
+        "telsonZ": -0.015511763282120228,
         "debugRender": "debug/hermit-crab.png",
         "debugPartsRender": "debug/hermit-crab-parts.png"
       }
@@ -3311,11 +3312,12 @@
       "licence": "CC0-1.0",
       "modifications": [
         "shell from the photogrammetry scan: colour-checker cube removed, merged and welded, oriented to +Z forward / +Y up from the crusty aperture side and the dome peak, scaled so its longest edge is the standard length",
-        "aperture lip relaxed with a roughness-masked Laplacian smooth so the decimated rim has no saw-teeth, holes that decimation opened are closed",
+        "holes the scan leaves through the paper-thin lip are cut out with a sphere through every wall layer and capped, and small boundary holes are filled",
         "retouched the scan texture: white marker ring on the dome, painted over from the surrounding shell colours",
         "retouched the scan texture: white scar near the rear, painted over from the surrounding shell colours",
         "re-simplified to 9000 triangles, box-projected into a fresh atlas and the colour re-baked from the scan's vertex colours, 2048 px KTX2",
-        "foot, head and two tentacles generated procedurally: lens-section foot with edge colour variation from a small ramp texture, head and slender curved tentacles in front of the lip, deterministic",
+        "shell pitched 12 degrees nose-down so the lip rests on the foot",
+        "foot, mantle, head and two tentacles generated procedurally: lens-section foot with edge colour variation from a small ramp texture, mantle filling under the aperture, head and slender curved tentacles in front of the lip, deterministic",
         "origin moved to the centre of the foot on the ground",
         "_FIN_ID part ids 0 shell, 10 foot, 11 head, 12 tentacle; _FIN_MASK foot ripple weight and tentacle base-to-tip weight",
         "LOD1 and LOD2 shell simplified to 3600 and 1300 triangles",
@@ -3325,35 +3327,35 @@
         "min": [
           -0.009434,
           0,
-          -0.013015
+          -0.012554
         ],
         "max": [
           0.009772,
-          0.013807,
-          0.015702
+          0.013123,
+          0.015248
         ]
       },
       "lods": [
         {
           "file": "snail/nerite-snail/lod0.glb",
-          "bytes": 112080,
-          "sha256": "a77e229680dfd73953c2e8733b95aaea7eccbe8576e875b97e7e26cba96708f4",
-          "triangles": 9840,
-          "vertices": 5874
+          "bytes": 112648,
+          "sha256": "adfaa795a9437363809516df9d77250fa8e720b8232cd86dbbb353252ccdd56d",
+          "triangles": 10062,
+          "vertices": 5950
         },
         {
           "file": "snail/nerite-snail/lod1.glb",
-          "bytes": 56668,
-          "sha256": "09699ae3cc80a8771799af3abea6975b53be90a4b62241bf8372a82b8015f05e",
-          "triangles": 4104,
-          "vertices": 2708
+          "bytes": 56660,
+          "sha256": "eb27253b219ad9458e3e33fb61026f83e650442d9de4d526939525c536fd611f",
+          "triangles": 4238,
+          "vertices": 2733
         },
         {
           "file": "snail/nerite-snail/lod2.glb",
-          "bytes": 27972,
-          "sha256": "08343cc781e09913ef4f0b81187d4876a8b1e48ecc3105fb8649e10f9a803704",
-          "triangles": 1590,
-          "vertices": 1154
+          "bytes": 28344,
+          "sha256": "96b47cfdfd1e123ee8c1c461f142641256a827c249fee97494f966f77ffd2159",
+          "triangles": 1672,
+          "vertices": 1166
         }
       ],
       "textures": [
@@ -3364,15 +3366,15 @@
           "variants": {
             "1k": {
               "file": "snail/nerite-snail/textures/nerite-snail_nerite-shell_basecolor_1k.ktx2",
-              "bytes": 103152,
-              "sha256": "66f4ca2eca2e385bfc9c7e6546fbba0333962bd2ca6a0693f3c7242ed7b38e9e",
+              "bytes": 103137,
+              "sha256": "8b4c51f85806abd28a948f27c021b11485a5136d61f037c654728b108949283c",
               "size": 1024,
               "codec": "etc1s"
             },
             "2k": {
               "file": "snail/nerite-snail/textures/nerite-snail_nerite-shell_basecolor_2k.ktx2",
-              "bytes": 336974,
-              "sha256": "c618b4f6a27a358b7026cdfedfa65b746c675ca415f5573e20b4dc3c04a676f6",
+              "bytes": 335522,
+              "sha256": "4adb1d62b07394a1348d2b3a0a1077b2a7a0081dab7059acb84c1e9b8f5aa35a",
               "size": 2048,
               "codec": "etc1s"
             }
@@ -3403,18 +3405,18 @@
       "files": [
         {
           "file": "snail/nerite-snail/lod0.glb",
-          "bytes": 112080,
-          "sha256": "a77e229680dfd73953c2e8733b95aaea7eccbe8576e875b97e7e26cba96708f4"
+          "bytes": 112648,
+          "sha256": "adfaa795a9437363809516df9d77250fa8e720b8232cd86dbbb353252ccdd56d"
         },
         {
           "file": "snail/nerite-snail/lod1.glb",
-          "bytes": 56668,
-          "sha256": "09699ae3cc80a8771799af3abea6975b53be90a4b62241bf8372a82b8015f05e"
+          "bytes": 56660,
+          "sha256": "eb27253b219ad9458e3e33fb61026f83e650442d9de4d526939525c536fd611f"
         },
         {
           "file": "snail/nerite-snail/lod2.glb",
-          "bytes": 27972,
-          "sha256": "08343cc781e09913ef4f0b81187d4876a8b1e48ecc3105fb8649e10f9a803704"
+          "bytes": 28344,
+          "sha256": "96b47cfdfd1e123ee8c1c461f142641256a827c249fee97494f966f77ffd2159"
         },
         {
           "file": "snail/nerite-snail/textures/nerite-snail_nerite-body_basecolor_1k.ktx2",
@@ -3428,13 +3430,13 @@
         },
         {
           "file": "snail/nerite-snail/textures/nerite-snail_nerite-shell_basecolor_1k.ktx2",
-          "bytes": 103152,
-          "sha256": "66f4ca2eca2e385bfc9c7e6546fbba0333962bd2ca6a0693f3c7242ed7b38e9e"
+          "bytes": 103137,
+          "sha256": "8b4c51f85806abd28a948f27c021b11485a5136d61f037c654728b108949283c"
         },
         {
           "file": "snail/nerite-snail/textures/nerite-snail_nerite-shell_basecolor_2k.ktx2",
-          "bytes": 336974,
-          "sha256": "c618b4f6a27a358b7026cdfedfa65b746c675ca415f5573e20b4dc3c04a676f6"
+          "bytes": 335522,
+          "sha256": "4adb1d62b07394a1348d2b3a0a1077b2a7a0081dab7059acb84c1e9b8f5aa35a"
         }
       ],
       "snail": {

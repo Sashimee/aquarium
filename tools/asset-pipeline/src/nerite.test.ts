@@ -119,7 +119,14 @@ describe('shellFrame', () => {
 
 describe('buildNeriteBody', () => {
   const length = 0.02;
-  const footprint = { halfWidth: 0.007, rearZ: -0.008, frontZ: 0.006, rimY: 0.002 };
+  const footprint = {
+    halfWidth: 0.007,
+    rearZ: -0.008,
+    frontZ: 0.006,
+    rimY: 0.002,
+    lipUnderY: 0.003,
+    ceilingY: 0.006,
+  };
   const built = buildNeriteBody(footprint, length);
   const body = built.part;
   const count = body.positions.length / 3;
@@ -177,12 +184,12 @@ describe('buildNeriteBody', () => {
   });
 
   it('has a thin foot and slender tentacles that taper to the tip', () => {
-    const footTop = Math.max(
-      ...[...ids.keys()]
-        .filter((i) => ids[i] === SNAIL_PART_IDS.foot)
-        .map((i) => body.positions[i * 3 + 1]!),
-    );
-    expect(footTop).toBeLessThan(length * 0.08);
+    const footHeights = [...ids.keys()]
+      .filter((i) => ids[i] === SNAIL_PART_IDS.foot)
+      .map((i) => body.positions[i * 3 + 1]!)
+      .sort((a, b) => a - b);
+    expect(footHeights.at(-1)!).toBeLessThanOrEqual(footprint.ceilingY);
+    expect(footHeights[Math.floor(footHeights.length / 2)]!).toBeLessThan(length * 0.08);
     const radiusAt = (weight: number): number => {
       const points = [...ids.keys()].filter(
         (i) =>

@@ -23,7 +23,7 @@ import { signedVolume, vertexNormals } from './loft.ts';
 import { clamp, cross, percentile, smoothstep, type Vec3 } from './math.ts';
 import type { MaterialDef, Part } from './parts.ts';
 import { simplifyPrimitive, triangleCountOf } from './lod.ts';
-import { growMask, inpaintColours, smoothMasked } from './dense-edit.ts';
+import { cutSphere, fillSmallHoles, growMask, inpaintColours, smoothMasked } from './dense-edit.ts';
 import { writeShippedDebugRenders } from './crew-debug.ts';
 import { weldDense, type Dense } from './rebake.ts';
 import { bakeScanPart } from './scan-bake.ts';
@@ -35,6 +35,13 @@ export interface ShellRetouch {
   radius: number;
   /** Pale pixels (every channel above this) inside the sphere are repainted. */
   minChannel: number;
+  note: string;
+}
+
+export interface ShellPatch {
+  /** Sphere centre as fractions of the shell length; height counts up from the shell's lowest point. */
+  centre: Vec3;
+  radius: number;
   note: string;
 }
 
@@ -51,6 +58,10 @@ export interface NeriteRecipe {
   bakeTriangles: number;
   /** White marks of the scan's colour checker and handling, painted over from the shell around them. */
   retouch: ShellRetouch[];
+  /** Spots of the scan's paper-thin lip where the wall has tunnels or folds, cut out and capped before the bake. */
+  patches: ShellPatch[];
+  /** How far the aperture end is tipped down so the lip rests on the foot. */
+  pitchDegrees: number;
   note: string;
 }
 
@@ -65,6 +76,14 @@ export const NERITE_RECIPES: NeriteRecipe[] = [
     bodyRatios: [1, 0.6, 0.35],
     textureSize: 2048,
     bakeTriangles: 9000,
+    pitchDegrees: 12,
+    patches: [
+      {
+        centre: [0.357, 0.24, 0.385],
+        radius: 0.1,
+        note: 'tunnels through the thin front-right lip',
+      },
+    ],
     retouch: [
       {
         centre: [0.024, 0.5965, -0.2705],
@@ -302,6 +321,10 @@ export interface ShellFootprint {
   frontZ: number;
   /** Height of the lowest rim points above the ground. */
   rimY: number;
+  /** Height of the underside of the front lip. */
+  lipUnderY: number;
+  /** Height of the roof of the aperture cavity. */
+  ceilingY: number;
 }
 
 function signedPow(v: number, exponent: number): number {
@@ -387,39 +410,41 @@ export function buildNeriteBody(footprint: ShellFootprint, length: number): Neri
 
   const headCentre: Vec3 = [0, footH * 0.72, front - length * 0.1];
   const headRadius: Vec3 = [halfWidth * 0.27, footH * 0.55, length * 0.12];
-  const headRings: number[] = [];
-  for (let r = 1; r < HEAD_RINGS; r++) {
-    const phi = (r / HEAD_RINGS) * Math.PI;
-    const points: Vec3[] = [];
-    for (let k = 0; k < HEAD_SEGMENTS; k++) {
-      const angle = (k / HEAD_SEGMENTS) * Math.PI * 2;
-      points.push([
-        headCentre[0] + headRadius[0] * Math.sin(phi) * Math.cos(angle),
-        headCentre[1] + headRadius[1] * Math.sin(phi) * Math.sin(angle),
-        headCentre[2] + headRadius[2] * Math.cos(phi),
-      ]);
+  const ellipsoid = (centre: Vec3, radius: Vec3, id: number, weight: number, v: number): void => {
+    const ringStarts: number[] = [];
+    for (let r = 1; r < HEAD_RINGS; r++) {
+      const phi = (r / HEAD_RINGS) * Math.PI;
+      const points: Vec3[] = [];
+      for (let k = 0; k < HEAD_SEGMENTS; k++) {
+        const angle = (k / HEAD_SEGMENTS) * Math.PI * 2;
+        points.push([
+          centre[0] + radius[0] * Math.sin(phi) * Math.cos(angle),
+          centre[1] + radius[1] * Math.sin(phi) * Math.sin(angle),
+          centre[2] + radius[2] * Math.cos(phi),
+        ]);
+      }
+      ringStarts.push(pushRing(rings, points, id, weight));
+      pushUv(HEAD_SEGMENTS, () => v);
     }
-    headRings.push(pushRing(rings, points, SNAIL_PART_IDS.head, 0));
-    pushUv(HEAD_SEGMENTS, () => 0.4);
-  }
-  const headTip = pushPoint(
-    rings,
-    [headCentre[0], headCentre[1], headCentre[2] - headRadius[2]],
-    SNAIL_PART_IDS.head,
-    0,
+    const tip = pushPoint(rings, [centre[0], centre[1], centre[2] - radius[2]], id, weight);
+    pushUv(1, () => v);
+    const nose = pushPoint(rings, [centre[0], centre[1], centre[2] + radius[2]], id, weight);
+    pushUv(1, () => v);
+    fan(rings, ringStarts[0]!, nose, HEAD_SEGMENTS, false);
+    for (let r = 0; r + 1 < ringStarts.length; r++)
+      stitch(rings, ringStarts[r]!, ringStarts[r + 1]!, HEAD_SEGMENTS);
+    fan(rings, ringStarts[ringStarts.length - 1]!, tip, HEAD_SEGMENTS, true);
+  };
+  const mantleTop = Math.max(footH * 1.8, footprint.ceilingY - length * 0.03);
+  const mantleBottom = footH * 0.4;
+  ellipsoid(
+    [0, (mantleTop + mantleBottom) / 2, front - length * 0.3],
+    [halfWidth * 0.55, (mantleTop - mantleBottom) / 2, length * 0.26],
+    SNAIL_PART_IDS.foot,
+    0.4,
+    0.3,
   );
-  pushUv(1, () => 0.4);
-  const headNose = pushPoint(
-    rings,
-    [headCentre[0], headCentre[1], headCentre[2] + headRadius[2]],
-    SNAIL_PART_IDS.head,
-    0,
-  );
-  pushUv(1, () => 0.4);
-  fan(rings, headRings[0]!, headNose, HEAD_SEGMENTS, false);
-  for (let r = 0; r + 1 < headRings.length; r++)
-    stitch(rings, headRings[r]!, headRings[r + 1]!, HEAD_SEGMENTS);
-  fan(rings, headRings[headRings.length - 1]!, headTip, HEAD_SEGMENTS, true);
+  ellipsoid(headCentre, headRadius, SNAIL_PART_IDS.head, 0, 0.4);
 
   const tentacleLength = length * 0.34;
   for (const side of [-1, 1]) {
@@ -482,8 +507,61 @@ export function buildNeriteBody(footprint: ShellFootprint, length: number): Neri
 
 export interface PlacedShell {
   part: Part;
-  footprint: ShellFootprint;
   length: number;
+}
+
+/**
+ * Tips the aperture end of the placed shell down about the rear of its underside and sits it back on the ground,
+ * so the lip comes down onto the foot. Returns where the lip and the aperture ceiling end up.
+ */
+export function tiltShell(part: Part, length: number, degrees: number): ShellFootprint {
+  const positions = part.positions;
+  const count = positions.length / 3;
+  const rimY = length * 0.05;
+  const lowest = (): number =>
+    percentile(
+      Array.from({ length: count }, (_, i) => positions[i * 3 + 1]!).sort((a, b) => a - b),
+      0.01,
+    );
+  const before = boundsOf(positions);
+  const pivotY = lowest();
+  const pivotZ = before.min[2] + 0.2 * (before.max[2] - before.min[2]);
+  const sin = Math.sin((degrees * Math.PI) / 180);
+  const cos = Math.cos((degrees * Math.PI) / 180);
+  for (let i = 0; i < positions.length; i += 3) {
+    const dy = positions[i + 1]! - pivotY;
+    const dz = positions[i + 2]! - pivotZ;
+    positions[i + 1] = pivotY + dy * cos - dz * sin;
+    positions[i + 2] = pivotZ + dz * cos + dy * sin;
+  }
+  const drop = lowest() - rimY;
+  for (let i = 1; i < positions.length; i += 3) positions[i] = positions[i]! - drop;
+  part.normals.set(vertexNormals(positions, part.indices));
+
+  const { max } = boundsOf(positions);
+  const rimBand = rimY + (max[1] - rimY) * 0.1;
+  let rearZ = Infinity;
+  let halfWidth = 0;
+  for (let i = 0; i < positions.length; i += 3)
+    if (positions[i + 1]! < rimBand) {
+      rearZ = Math.min(rearZ, positions[i + 2]!);
+      halfWidth = Math.max(halfWidth, Math.abs(positions[i]!));
+    }
+  const frontZ = max[2];
+  let lipUnderY = Infinity;
+  const sliceFloor = new Map<number, number>();
+  for (let i = 0; i < positions.length; i += 3) {
+    if (Math.abs(positions[i]!) > 0.15 * length) continue;
+    const y = positions[i + 1]!;
+    const z = positions[i + 2]!;
+    if (z > frontZ - 0.12 * length) lipUnderY = Math.min(lipUnderY, y);
+    const slice = Math.floor((frontZ - z) / (0.05 * length));
+    sliceFloor.set(slice, Math.min(sliceFloor.get(slice) ?? Infinity, y));
+  }
+  let ceilingY = 0;
+  for (const [slice, y] of sliceFloor)
+    if (slice >= 3 && slice <= 10) ceilingY = Math.max(ceilingY, y);
+  return { halfWidth, rearZ, frontZ, rimY, lipUnderY, ceilingY };
 }
 
 /** Orients, scales and seats the scanned shell: +z forward, +y up, ground at y = 0, origin under the shell's centre. */
@@ -511,14 +589,6 @@ export function placeShell(part: Part, standardLengthM: number): PlacedShell {
   ).sort((a, b) => a - b);
   const rimLevel = percentile(heights, 0.01);
   const rimY = standardLengthM * 0.05;
-  const rimBand = rimLevel + (placed.max[1] - rimLevel) * 0.1;
-  let zMin = Infinity;
-  let xMax = 0;
-  for (let i = 0; i < part.positions.length; i += 3)
-    if (part.positions[i + 1]! < rimBand) {
-      zMin = Math.min(zMin, part.positions[i + 2]!);
-      xMax = Math.max(xMax, Math.abs(part.positions[i]!));
-    }
   for (let i = 0; i < part.positions.length; i += 3) {
     part.positions[i] = part.positions[i]! * scale;
     part.positions[i + 1] = (part.positions[i + 1]! - rimLevel) * scale + rimY;
@@ -526,16 +596,7 @@ export function placeShell(part: Part, standardLengthM: number): PlacedShell {
   }
   const normals = vertexNormals(part.positions, part.indices);
   part.normals.set(normals);
-  return {
-    part,
-    length: standardLengthM,
-    footprint: {
-      halfWidth: xMax * scale,
-      rearZ: zMin * scale,
-      frontZ: boundsOf(part.positions).max[2],
-      rimY,
-    },
-  };
+  return { part, length: standardLengthM };
 }
 
 const SMOOTH_ROUGHNESS = 0.04;
@@ -544,29 +605,45 @@ const SMOOTH_REACH = 8;
 const RETOUCH_REACH = 8;
 const RETOUCH_MAX_SATURATION = 0.3;
 const CLOSE_HOLES_UP_TO = 12;
+const PATCH_LOOP_LIMIT = 600;
 
 /**
  * Cleans the welded dense shell before it is baked: the crusty aperture lip is relaxed (so decimation does not
  * leave saw-teeth), then the pale scan marks listed in the recipe are painted over from the colours around them.
  */
-export function cleanShell(dense: Dense, length: number, retouch: ShellRetouch[]): void {
-  const count = dense.positions.length / 3;
+export function cleanShell(
+  scanned: Dense,
+  length: number,
+  retouch: ShellRetouch[],
+  patches: ShellPatch[],
+): Dense {
+  const count = scanned.positions.length / 3;
   const identity = Int32Array.from({ length: count }, (_, i) => i);
-  const rough = vertexRoughness(dense.positions, dense.indices, identity);
+  const rough = vertexRoughness(scanned.positions, scanned.indices, identity);
   const crusty = new Uint8Array(count);
   for (let i = 0; i < count; i++) if (rough[i]! > SMOOTH_ROUGHNESS) crusty[i] = 1;
-  smoothMasked(dense, growMask(dense, crusty, SMOOTH_REACH), SMOOTH_PASSES);
+  smoothMasked(scanned, growMask(scanned, crusty, SMOOTH_REACH), SMOOTH_PASSES);
 
   let lowest = Infinity;
-  for (let i = 0; i < count; i++) lowest = Math.min(lowest, dense.positions[i * 3 + 1]!);
-  const marks = new Uint8Array(count);
+  for (let i = 0; i < count; i++) lowest = Math.min(lowest, scanned.positions[i * 3 + 1]!);
+  let dense = scanned;
+  for (const patch of patches)
+    dense = fillSmallHoles(
+      cutSphere(
+        dense,
+        [patch.centre[0] * length, lowest + patch.centre[1] * length, patch.centre[2] * length],
+        patch.radius * length,
+      ),
+      PATCH_LOOP_LIMIT,
+    );
+  const marks = new Uint8Array(dense.positions.length / 3);
   for (const spot of retouch) {
     const centre: Vec3 = [
       spot.centre[0] * length,
       lowest + spot.centre[1] * length,
       spot.centre[2] * length,
     ];
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < marks.length; i++) {
       const distance = Math.hypot(
         dense.positions[i * 3]! - centre[0],
         dense.positions[i * 3 + 1]! - centre[1],
@@ -582,6 +659,7 @@ export function cleanShell(dense: Dense, length: number, retouch: ShellRetouch[]
     }
   }
   inpaintColours(dense, growMask(dense, marks, RETOUCH_REACH));
+  return dense;
 }
 
 function shiftZ(positions: Float32Array, dz: number): void {
@@ -620,8 +698,12 @@ export async function buildNerite(recipe: NeriteRecipe, ctx: FishContext): Promi
   const standardLengthM = fromSpecies ?? recipe.fallbackLengthM;
   const scan = await loadScan(ctx, recipe.sourceId, recipe.dropMeshes, recipe.textureSize);
   const placed = placeShell(scan.part, standardLengthM);
-  const dense = weldDense(placed.part, scan.image, standardLengthM / 4000);
-  cleanShell(dense, standardLengthM, recipe.retouch);
+  const dense = cleanShell(
+    weldDense(placed.part, scan.image, standardLengthM / 4000),
+    standardLengthM,
+    recipe.retouch,
+    recipe.patches,
+  );
   dense.extra[FIN_ID_ATTRIBUTE] = new Float32Array(dense.positions.length / 3).fill(
     SNAIL_PART_IDS.shell,
   );
@@ -635,7 +717,8 @@ export async function buildNerite(recipe: NeriteRecipe, ctx: FishContext): Promi
     colourWeight: 0.5,
     closeHolesUpTo: CLOSE_HOLES_UP_TO,
   });
-  const body = buildNeriteBody(placed.footprint, standardLengthM);
+  const footprint = tiltShell(baked.part, standardLengthM, recipe.pitchDegrees);
+  const body = buildNeriteBody(footprint, standardLengthM);
   shiftZ(baked.part.positions, -body.footCentreZ);
   shiftZ(body.part.positions, -body.footCentreZ);
   const ramp = bodyRamp();
@@ -681,13 +764,14 @@ export async function buildNerite(recipe: NeriteRecipe, ctx: FishContext): Promi
       licence: ctx.licenceOf(recipe.sourceId),
       modifications: [
         'shell from the photogrammetry scan: colour-checker cube removed, merged and welded, oriented to +Z forward / +Y up from the crusty aperture side and the dome peak, scaled so its longest edge is the standard length',
-        'aperture lip relaxed with a roughness-masked Laplacian smooth so the decimated rim has no saw-teeth, holes that decimation opened are closed',
+        'holes the scan leaves through the paper-thin lip are cut out with a sphere through every wall layer and capped, and small boundary holes are filled',
         ...recipe.retouch.map(
           (r) =>
             `retouched the scan texture: ${r.note}, painted over from the surrounding shell colours`,
         ),
         `re-simplified to ${recipe.bakeTriangles} triangles, box-projected into a fresh atlas and the colour re-baked from the scan's vertex colours, ${recipe.textureSize} px KTX2`,
-        'foot, head and two tentacles generated procedurally: lens-section foot with edge colour variation from a small ramp texture, head and slender curved tentacles in front of the lip, deterministic',
+        `shell pitched ${recipe.pitchDegrees} degrees nose-down so the lip rests on the foot`,
+        'foot, mantle, head and two tentacles generated procedurally: lens-section foot with edge colour variation from a small ramp texture, mantle filling under the aperture, head and slender curved tentacles in front of the lip, deterministic',
         'origin moved to the centre of the foot on the ground',
         '_FIN_ID part ids 0 shell, 10 foot, 11 head, 12 tentacle; _FIN_MASK foot ripple weight and tentacle base-to-tip weight',
         `LOD1 and LOD2 shell simplified to ${recipe.shellTriangles[1]} and ${recipe.shellTriangles[2]} triangles`,

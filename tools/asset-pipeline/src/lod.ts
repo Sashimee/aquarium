@@ -14,6 +14,8 @@ export interface SimplifyOptions {
   ratio: number;
   /** Never reduce below this many triangles. */
   minTriangles: number;
+  /** Forbid collapses across attribute seams, so a UV chart boundary survives simplification. */
+  keepSeams?: boolean;
 }
 
 const GUIDE_ATTRIBUTES: { semantic: string; size: number; weight: number }[] = [
@@ -57,7 +59,8 @@ export function simplifyPrimitive(prim: Primitive, options: SimplifyOptions): vo
       accessor.getElement(v, element);
       for (let k = 0; k < guide.size; k++) attributes[v * stride + offset + k] = element[k]!;
     }
-    for (let k = 0; k < guide.size; k++) weights.push(guide.weight);
+    const weight = options.keepSeams && guide.semantic === 'NORMAL' ? 8 : guide.weight;
+    for (let k = 0; k < guide.size; k++) weights.push(weight);
     offset += guide.size;
   }
 
@@ -72,7 +75,7 @@ export function simplifyPrimitive(prim: Primitive, options: SimplifyOptions): vo
     null,
     target * 3,
     1,
-    ['Permissive'],
+    options.keepSeams ? [] : ['Permissive'],
   );
   if (simplified.length === 0)
     throw new Error('simplifyPrimitive: simplification removed every triangle');

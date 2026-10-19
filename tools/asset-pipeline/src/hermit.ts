@@ -20,7 +20,7 @@ import {
 } from './index-schema.ts';
 import { vertexNormals } from './loft.ts';
 import { clamp, cross, type Vec3 } from './math.ts';
-import type { MaterialDef } from './parts.ts';
+import type { MaterialDef, Part } from './parts.ts';
 import { writeShippedDebugRenders } from './crew-debug.ts';
 import { weldDense, type Dense } from './rebake.ts';
 import { bakeScanPart } from './scan-bake.ts';
@@ -33,6 +33,8 @@ export interface HermitRecipe {
   dropMeshes: RegExp;
   fallbackLengthM: number;
   maxTriangles: number;
+  /** Antenna islands smaller than this many vertices after simplification are loose debris and are removed. */
+  minAntennaVertices: number;
   textureSize: number;
   /** Voxel edge as a fraction of the scan's longest edge. */
   voxelFraction: number;
@@ -55,8 +57,9 @@ export const HERMIT_RECIPES: HermitRecipe[] = [
     species: 'hermit-crab',
     sourceId: 'sketchfab-5ebe7794',
     dropMeshes: /^Object_0$/,
-    fallbackLengthM: 0.02,
+    fallbackLengthM: 0.03,
     maxTriangles: 12000,
+    minAntennaVertices: 25,
     textureSize: 2048,
     voxelFraction: 1 / 200,
     bodyOpeningFraction: 0.03,
@@ -324,6 +327,45 @@ export function recolourDense(dense: Dense, kind: Uint8Array, weight: Float32Arr
   }
 }
 
+/** Removes antenna islands of fewer than `minVertices` vertices: simplified hair-thin antennae leave loose orange flecks. */
+export function dropAntennaFlecks(part: Part, quantum: number, minVertices: number): Part {
+  const ids = part.extra[FIN_ID_ATTRIBUTE]!;
+  const count = ids.length;
+  const canon = canonicalVertices(part.positions, quantum);
+  const antenna = (v: number): boolean => ids[v] === SHRIMP_PART_IDS.antenna;
+  const islands = connectedComponents(canon, part.indices, antenna);
+  const kept: number[] = [];
+  for (let t = 0; t < part.indices.length; t += 3) {
+    const tri = [part.indices[t]!, part.indices[t + 1]!, part.indices[t + 2]!];
+    const fleck = tri.some((v) => antenna(v) && islands.sizes[islands.label[v]!]! < minVertices);
+    if (!fleck) kept.push(...tri);
+  }
+  const remap = new Int32Array(count).fill(-1);
+  const order: number[] = [];
+  const indices = Uint32Array.from(kept, (v) => {
+    if (remap[v]! < 0) {
+      remap[v] = order.length;
+      order.push(v);
+    }
+    return remap[v]!;
+  });
+  const gather = (source: Float32Array<ArrayBuffer>, size: number): Float32Array<ArrayBuffer> => {
+    const out = new Float32Array(order.length * size);
+    order.forEach((v, k) => out.set(source.subarray(v * size, v * size + size), k * size));
+    return out;
+  };
+  const extra: Part['extra'] = {};
+  for (const [key, values] of Object.entries(part.extra)) extra[key] = gather(values, 1);
+  return {
+    ...part,
+    positions: gather(part.positions, 3),
+    normals: gather(part.normals, 3),
+    uvs: gather(part.uvs, 2),
+    indices,
+    extra,
+  };
+}
+
 const PART_RGB: Record<number, Vec3> = {
   0: [0.55, 0.55, 0.6],
   6: [0.2, 0.55, 0.95],
@@ -435,6 +477,7 @@ export async function buildHermit(recipe: HermitRecipe, ctx: FishContext): Promi
     colourWeight: 0.5,
   });
   const image = baked.image;
+  const cleaned = dropAntennaFlecks(baked.part, standardLengthM / 4000, recipe.minAntennaVertices);
 
   const material: MaterialDef = {
     name: HERMIT_MATERIAL,
@@ -446,8 +489,8 @@ export async function buildHermit(recipe: HermitRecipe, ctx: FishContext): Promi
     doubleSided: false,
     normalScale: 1,
   };
-  const plan: LodPlan = { ratios: [1, 0.5, 0.25], minTriangles: 400 };
-  const built = buildDocument(recipe.id, [baked.part], [material]);
+  const plan: LodPlan = { ratios: [1, 0.4, 0.15], minTriangles: 400, keepSeams: true };
+  const built = buildDocument(recipe.id, [cleaned], [material]);
   const asset = await emitAsset({
     outRoot: ctx.outRoot,
     kind: 'crab',
@@ -464,8 +507,9 @@ export async function buildHermit(recipe: HermitRecipe, ctx: FishContext): Promi
         'segmented into rigid shell, exposed soft body and limbs by a voxel opening; limb pieces carry a root-to-tip weight and a leg index',
         'oriented to +Z forward (towards the legs) / +Y up, origin at the area centroid, scaled so the shell longest edge is the standard length',
         '_FIN_ID part ids 0 shell, 6 walking leg, 7 antenna, 9 exposed soft body (rigid); _FIN_MASK weight along the limb; _LEG limb index pair * 2 + side, side 0 = -x',
-        `re-simplified to ${recipe.maxTriangles} triangles for LOD0 (LOD1 and LOD2 at 50% and 25% of that), box-projected into a fresh ${recipe.textureSize} px atlas and the colour re-baked from the scan's vertex colours, so simplification cannot scramble the scan texture`,
-        'limb and soft-body colours painted per vertex from the segmentation before the bake',
+        `re-simplified to ${recipe.maxTriangles} triangles for LOD0 (LOD1 and LOD2 at 40% and 15% of that, simplified with UV seams kept), box-projected into a fresh ${recipe.textureSize} px atlas and the colour re-baked from the scan's vertex colours, so simplification cannot scramble the scan texture`,
+        'limb and soft-body colours painted per vertex from the segmentation before the bake; antenna fragments below a vertex floor dropped',
+        `length is the shell length (${standardLengthM} m) taken from the recipe: no content/species/hermit-crab.json exists yet, and a species file is a separate contract PR`,
         recipe.note,
       ],
       crab: {
