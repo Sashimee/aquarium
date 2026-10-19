@@ -5,6 +5,8 @@ export interface FrameEffects {
   /** Draws the whole frame, restoring the renderer state it changed even when it throws. */
   render(): void;
   setFocusMode(on: boolean): void;
+  /** The tank's water box changed size. */
+  tankResized(): void;
   /** Whether the effects draw with material `id` (three's runtime material id). */
   ownsMaterial(id: number): boolean;
   dispose(): void;
@@ -50,6 +52,11 @@ export class EffectsSlot {
     const effects = this.effects;
     if (effects !== null) this.guard(() => effects.setFocusMode(on));
     this.refresh();
+  }
+
+  tankResized(): void {
+    const effects = this.effects;
+    if (effects !== null) this.guard(() => effects.tankResized());
   }
 
   /** True when the effects drew the frame; false means the caller must render it plainly. */

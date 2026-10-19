@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { Color, Mesh, type MeshBasicNodeMaterial, Texture } from 'three/webgpu';
+import { Box3, Color, Mesh, type MeshBasicNodeMaterial, Texture, Vector3 } from 'three/webgpu';
 import { Caustics } from '../water/caustics';
 import { InteriorLight } from '../water/interior';
 import { WaterMedium } from '../water/medium';
-import { DEFAULT_TANK, waterBounds } from './dimensions';
+import { DEFAULT_TANK, TANK_DIMENSIONS, waterBounds } from './dimensions';
 import { meanSubstrateHeight } from './substrate';
 import { UNREFLECTED_LAYER } from './surfaceReflection';
 import { Tank } from './Tank';
@@ -69,5 +69,60 @@ describe('Tank', () => {
     expect(t.surfaceReflection).toBe(false);
     expect(material.outputNode).not.toBe(mirrored);
     expect(material.version).toBeGreaterThan(version);
+  });
+
+  it('rebuilds the glass, water and stand for a new size and moves its water box in place', () => {
+    const t = tank();
+    const bounds = t.waterBounds;
+    const before = meshes(t);
+    const oldGlass = before.get('glass-faces')?.geometry;
+    let disposed = false;
+    oldGlass?.addEventListener('dispose', () => {
+      disposed = true;
+    });
+
+    const nano = TANK_DIMENSIONS.nano30;
+    expect(t.resize(nano)).toBe(true);
+    expect(t.dimensions).toEqual(nano);
+    expect(t.waterBounds).toBe(bounds);
+    expect(bounds.equals(waterBounds(nano))).toBe(true);
+    expect(disposed).toBe(true);
+
+    const after = meshes(t);
+    const glass = new Box3().setFromObject(after.get('glass-faces') as Mesh);
+    expect(glass.max.x).toBeCloseTo(nano.length / 2, 6);
+    expect(glass.max.z).toBeCloseTo(nano.depth / 2, 6);
+    expect(glass.max.y).toBeCloseTo(nano.height, 6);
+    for (const name of ['water-volume-absorb', 'water-volume-scatter']) {
+      const water = new Box3().setFromObject(after.get(name) as Mesh);
+      expect(water.min.distanceTo(bounds.min), name).toBeLessThan(1e-6);
+      expect(water.max.distanceTo(bounds.max), name).toBeLessThan(1e-6);
+    }
+    const surface = new Box3().setFromObject(after.get('water-surface') as Mesh);
+    expect(surface.max.y).toBeCloseTo(bounds.max.y, 6);
+    expect(surface.getSize(new Vector3()).x).toBeCloseTo(bounds.max.x - bounds.min.x, 6);
+    const stand = new Box3().setFromObject(after.get('stand') as Mesh);
+    expect(stand.max.x).toBeCloseTo(nano.length / 2 + 0.02, 6);
+  });
+
+  it('keeps its meshes and materials across a resize', () => {
+    const t = tank();
+    const before = meshes(t);
+    t.resize(TANK_DIMENSIONS.long300);
+    const after = meshes(t);
+    expect([...after.keys()]).toEqual([...before.keys()]);
+    for (const [name, mesh] of after) {
+      expect(mesh, name).toBe(before.get(name));
+      expect(mesh.material, name).toBe(before.get(name)?.material);
+    }
+  });
+
+  it('does nothing for the size it already has, and rejects a broken one', () => {
+    const t = tank();
+    const geometry = meshes(t).get('glass-faces')?.geometry;
+    expect(t.resize({ ...DEFAULT_TANK })).toBe(false);
+    expect(meshes(t).get('glass-faces')?.geometry).toBe(geometry);
+    expect(() => t.resize({ ...DEFAULT_TANK, length: 0 })).toThrow(/length/);
+    expect(t.dimensions).toEqual(DEFAULT_TANK);
   });
 });

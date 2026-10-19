@@ -69,7 +69,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { InteriorLight } from '../water/interior';
 import type { WaterMedium } from '../water/medium';
 import { AIR_IOR, fresnelDielectric, WATER_IOR } from '../water/optics';
-import { type TankDimensions, validateTank, waterBounds } from './dimensions';
+import { sameTank, type TankDimensions, validateTank, waterBounds } from './dimensions';
 import { createSubstrateGeometry, createSubstrateMaterial } from './substrate';
 import { SurfaceReflection, UNREFLECTED_LAYER } from './surfaceReflection';
 
@@ -234,7 +234,6 @@ function waterAlongRay(
 function createGlassFaceMaterial(
   medium: WaterMedium,
   interior: InteriorLight,
-  centre: Vector3,
   algae: UniformNode<'float', number>,
   sky: Texture,
 ): MeshStandardNodeMaterial {
@@ -245,7 +244,8 @@ function createGlassFaceMaterial(
   premultipliedBlend(material);
   material.fog = false;
 
-  const towardsWater = step(dot(normalWorldGeometry, positionWorld.sub(vec3(centre))), 0);
+  const centre = medium.boxMin.add(medium.boxMax).mul(0.5);
+  const towardsWater = step(dot(normalWorldGeometry, positionWorld.sub(centre)), 0);
   const inWater = medium.waterRayDirection().toVar();
   const cosWater = abs(dot(inWater, normalWorldGeometry));
   const reflectance = fresnelDielectric(cosWater, WATER_IOR / AIR_IOR).toVar();
@@ -353,53 +353,150 @@ function createSurfaceUnderside(
   return { material, normal, output };
 }
 
+/**
+ * Most tanks have a dark backdrop on the back pane. It hides the room behind the tank, so what
+ * is seen through the water is the water itself, darkening with depth. The camera can orbit
+ * behind the tank, where the film's back shows, lit by the room.
+ */
+function createBackdropMaterial(
+  medium: WaterMedium,
+  interior: InteriorLight,
+): MeshBasicNodeMaterial {
+  const material = new MeshBasicNodeMaterial({ side: DoubleSide });
+  material.name = 'backdrop';
+  material.fog = false;
+  const back = interior.ambientAt(positionWorld, FORWARD.negate()).mul(color(BACKDROP_ALBEDO));
+  material.colorNode = select(frontFacing, backdropRadiance(medium, interior, positionWorld), back);
+  return material;
+}
+
+/** Every pane as a box: the reflective faces and the green cut edges, each merged into one geometry. */
+function glassGeometries(d: TankDimensions): [BufferGeometry, BufferGeometry] {
+  const { length: l, depth: w, height: h, glass: g } = d;
+  const panes: {
+    size: [number, number, number];
+    at: [number, number, number];
+    thin: 'x' | 'y' | 'z';
+  }[] = [
+    { size: [l, h, g], at: [0, h / 2, w / 2 - g / 2], thin: 'z' },
+    { size: [l, h, g], at: [0, h / 2, -w / 2 + g / 2], thin: 'z' },
+    { size: [g, h, w - 2 * g], at: [-l / 2 + g / 2, h / 2, 0], thin: 'x' },
+    { size: [g, h, w - 2 * g], at: [l / 2 - g / 2, h / 2, 0], thin: 'x' },
+    { size: [l - 2 * g, g, w - 2 * g], at: [0, g / 2, 0], thin: 'y' },
+  ];
+  const faces: BufferGeometry[] = [];
+  const edges: BufferGeometry[] = [];
+  for (const pane of panes) {
+    const box = new BoxGeometry(...pane.size).translate(...pane.at);
+    const faceGroups: readonly number[] = FACE_GROUPS[pane.thin];
+    faces.push(boxGroups(box, faceGroups));
+    edges.push(
+      boxGroups(
+        box,
+        [0, 1, 2, 3, 4, 5].filter((i) => !faceGroups.includes(i)),
+      ),
+    );
+    box.dispose();
+  }
+  const merge = (parts: BufferGeometry[]): BufferGeometry => {
+    const merged = mergeGeometries(parts);
+    for (const part of parts) part.dispose();
+    return merged;
+  };
+  return [merge(faces), merge(edges)];
+}
+
+const STAND_HEIGHT = 0.75;
+/** Stands in for a mesh's geometry until `fit` builds the real one. */
+const UNBUILT = new BufferGeometry();
+
 export class Tank {
   readonly group = new Group();
-  readonly waterBounds: Box3;
+  /** The water box. A resize changes it in place, so whoever holds it follows the tank. */
+  readonly waterBounds = new Box3();
   readonly substrate: Mesh;
   readonly rippleAmplitude = uniform(0.12);
   /** 0 clean glass .. 1 neglected for weeks. */
   readonly algae = uniform(0);
+  private size: Readonly<TankDimensions>;
   private readonly disposables: { dispose(): void }[] = [];
+  /** The geometries of the current size, replaced together on a resize. */
+  private geometries: BufferGeometry[] = [];
   /** Blended materials that multiply, and the velocity each must write to leave it unchanged. */
   private readonly blended: [NodeMaterial, Node<'vec4'>][] = [];
+  private readonly glassFaces: Mesh;
+  private readonly glassEdges: Mesh;
+  private readonly backdrop: Mesh;
+  private readonly volume: readonly Mesh[];
+  private readonly surface: Mesh;
+  private readonly stand: Mesh;
+  private readonly surfaceBox = new Box3();
   private readonly reflection: SurfaceReflection;
   private readonly underside: SurfaceUnderside;
   private readonly undersideMesh: Mesh;
 
   /** `sky` is the room environment, seen from below through Snell's window. */
   constructor(
-    readonly dimensions: TankDimensions,
+    dimensions: TankDimensions,
     medium: WaterMedium,
     sky: Texture,
     interior: InteriorLight,
   ) {
     validateTank(dimensions);
+    this.size = { ...dimensions };
     this.group.name = 'tank';
-    this.waterBounds = waterBounds(dimensions);
+    waterBounds(dimensions, this.waterBounds);
 
-    this.substrate = this.track(
-      new Mesh(createSubstrateGeometry(dimensions), createSubstrateMaterial()),
-    );
-    this.substrate.name = 'substrate';
+    this.substrate = this.addMesh('substrate', createSubstrateMaterial());
     this.substrate.receiveShadow = true;
     this.substrate.castShadow = true;
-    this.group.add(this.substrate);
 
-    this.addGlass(medium, sky, interior);
-    this.addBackdrop(medium, interior);
-    this.addWaterVolume(medium);
-    [this.underside, this.undersideMesh] = this.addWaterSurface(medium, sky, interior);
-    this.addStand();
-
-    const top = this.waterBounds.max.y;
-    this.reflection = new SurfaceReflection(
-      new Box3(
-        new Vector3(this.waterBounds.min.x, top, this.waterBounds.min.z),
-        new Vector3(this.waterBounds.max.x, top, this.waterBounds.max.z),
-      ),
+    this.glassFaces = this.addMesh(
+      'glass-faces',
+      createGlassFaceMaterial(medium, interior, this.algae, sky),
     );
+    this.glassEdges = this.addMesh('glass-edges', createGlassEdgeMaterial());
+    for (const mesh of [this.glassFaces, this.glassEdges]) mesh.renderOrder = 2;
+    // The faces trace the eye's ray as refracted into the water where it meets the box, which
+    // for the mirrored camera above the surface is the wrong boundary.
+    this.glassFaces.layers.set(UNREFLECTED_LAYER);
+
+    this.backdrop = this.addMesh('backdrop', createBackdropMaterial(medium, interior));
+    this.volume = this.addWaterVolume(medium);
+    [this.surface, this.underside, this.undersideMesh] = this.addWaterSurface(
+      medium,
+      sky,
+      interior,
+    );
+    const standMaterial = new MeshStandardNodeMaterial({
+      color: new Color(0x1d1c1b),
+      roughness: 0.55,
+    });
+    standMaterial.name = 'stand';
+    this.stand = this.addMesh('stand', standMaterial);
+    this.stand.receiveShadow = true;
+
+    this.reflection = new SurfaceReflection(this.surfaceBox);
     this.disposables.push(this.reflection);
+    this.fit();
+  }
+
+  get dimensions(): Readonly<TankDimensions> {
+    return this.size;
+  }
+
+  /**
+   * Rebuilds the glass, sand, water and stand for `dimensions`. Only geometry changes: every
+   * material reads the water box from the medium's uniforms, so no pipeline is rebuilt. Returns
+   * whether anything changed.
+   */
+  resize(dimensions: TankDimensions): boolean {
+    validateTank(dimensions);
+    if (sameTank(dimensions, this.size)) return false;
+    this.size = { ...dimensions };
+    waterBounds(dimensions, this.waterBounds);
+    this.fit();
+    return true;
   }
 
   /**
@@ -469,88 +566,62 @@ export class Tank {
   dispose(): void {
     for (const d of this.disposables) d.dispose();
     this.disposables.length = 0;
+    for (const g of this.geometries) g.dispose();
+    this.geometries = [];
     this.group.removeFromParent();
   }
 
-  private track(mesh: Mesh): Mesh {
-    this.disposables.push(mesh.geometry);
-    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-    for (const m of materials) if (!this.disposables.includes(m)) this.disposables.push(m);
+  private addMesh(name: string, material: Material): Mesh {
+    this.disposables.push(material);
+    const mesh = new Mesh(UNBUILT, material);
+    mesh.name = name;
+    this.group.add(mesh);
     return mesh;
   }
 
-  /** All panes share two draws: the reflective faces and the green cut edges. */
-  private addGlass(medium: WaterMedium, sky: Texture, interior: InteriorLight): void {
-    const { length: l, depth: d, height: h, glass: g } = this.dimensions;
-    const panes: {
-      size: [number, number, number];
-      at: [number, number, number];
-      thin: 'x' | 'y' | 'z';
-    }[] = [
-      { size: [l, h, g], at: [0, h / 2, d / 2 - g / 2], thin: 'z' },
-      { size: [l, h, g], at: [0, h / 2, -d / 2 + g / 2], thin: 'z' },
-      { size: [g, h, d - 2 * g], at: [-l / 2 + g / 2, h / 2, 0], thin: 'x' },
-      { size: [g, h, d - 2 * g], at: [l / 2 - g / 2, h / 2, 0], thin: 'x' },
-      { size: [l - 2 * g, g, d - 2 * g], at: [0, g / 2, 0], thin: 'y' },
-    ];
-    const faces: BufferGeometry[] = [];
-    const edges: BufferGeometry[] = [];
-    for (const pane of panes) {
-      const box = new BoxGeometry(...pane.size).translate(...pane.at);
-      const faceGroups: readonly number[] = FACE_GROUPS[pane.thin];
-      faces.push(boxGroups(box, faceGroups));
-      edges.push(
-        boxGroups(
-          box,
-          [0, 1, 2, 3, 4, 5].filter((i) => !faceGroups.includes(i)),
-        ),
-      );
-      box.dispose();
-    }
-    const faceMaterial = createGlassFaceMaterial(
-      medium,
-      interior,
-      this.waterBounds.getCenter(new Vector3()),
-      this.algae,
-      sky,
-    );
-    const parts: [string, BufferGeometry[], Material][] = [
-      ['glass-faces', faces, faceMaterial],
-      ['glass-edges', edges, createGlassEdgeMaterial()],
-    ];
-    for (const [name, geometries, material] of parts) {
-      const merged = mergeGeometries(geometries);
-      for (const geometry of geometries) geometry.dispose();
-      const mesh = this.track(new Mesh(merged, material));
-      mesh.name = name;
-      mesh.renderOrder = 2;
-      // The faces trace the eye's ray as refracted into the water where it meets the box, which
-      // for the mirrored camera above the surface is the wrong boundary.
-      if (material === faceMaterial) mesh.layers.set(UNREFLECTED_LAYER);
-      this.group.add(mesh);
-    }
+  private build<G extends BufferGeometry>(geometry: G): G {
+    this.geometries.push(geometry);
+    return geometry;
   }
 
-  /**
-   * Most tanks have a dark backdrop on the back pane. It hides the room behind the tank, so what
-   * is seen through the water is the water itself, darkening with depth. The camera can orbit
-   * behind the tank, where the film's back shows, lit by the room.
-   */
-  private addBackdrop(medium: WaterMedium, interior: InteriorLight): void {
-    const { length: l, depth: d, height: h } = this.dimensions;
-    const material = new MeshBasicNodeMaterial({ side: DoubleSide });
-    material.name = 'backdrop';
-    material.fog = false;
-    const back = interior.ambientAt(positionWorld, FORWARD.negate()).mul(color(BACKDROP_ALBEDO));
-    material.colorNode = select(
-      frontFacing,
-      backdropRadiance(medium, interior, positionWorld),
-      back,
+  /** Gives every mesh its geometry and place for the current size. */
+  private fit(): void {
+    const d = this.size;
+    const old = this.geometries;
+    this.geometries = [];
+
+    this.substrate.geometry = this.build(createSubstrateGeometry(d));
+    const [faces, edges] = glassGeometries(d);
+    this.glassFaces.geometry = this.build(faces);
+    this.glassEdges.geometry = this.build(edges);
+
+    this.backdrop.geometry = this.build(new PlaneGeometry(d.length, d.height));
+    this.backdrop.position.set(0, d.height / 2, -d.depth / 2 - BACKDROP_GAP);
+
+    const bounds = this.waterBounds;
+    const size = bounds.getSize(new Vector3());
+    const centre = bounds.getCenter(new Vector3());
+    const box = this.build(new BoxGeometry(size.x, size.y, size.z));
+    for (const mesh of this.volume) {
+      mesh.geometry = box;
+      mesh.position.copy(centre);
+    }
+
+    const top = bounds.max.y;
+    const plane = this.build(new PlaneGeometry(size.x, size.z));
+    for (const mesh of [this.surface, this.undersideMesh]) {
+      mesh.geometry = plane;
+      mesh.position.set(0, top, 0);
+    }
+    this.surfaceBox.min.set(bounds.min.x, top, bounds.min.z);
+    this.surfaceBox.max.set(bounds.max.x, top, bounds.max.z);
+
+    this.stand.geometry = this.build(
+      new BoxGeometry(d.length + 0.04, STAND_HEIGHT, d.depth + 0.04),
     );
-    const mesh = this.track(new Mesh(new PlaneGeometry(l, h), material));
-    mesh.name = 'backdrop';
-    mesh.position.set(0, h / 2, -d / 2 - BACKDROP_GAP);
-    this.group.add(mesh);
+    this.stand.position.set(0, -STAND_HEIGHT / 2, 0);
+
+    for (const g of old) g.dispose();
   }
 
   /**
@@ -559,12 +630,7 @@ export class Tank {
    * transmittance, then add the in-scattered light. Objects inside the water occlude
    * these faces and are fogged by the scene fog node instead.
    */
-  private addWaterVolume(medium: WaterMedium): void {
-    const size = this.waterBounds.getSize(this.waterBounds.max.clone());
-    const centre = this.waterBounds.getCenter(this.waterBounds.min.clone());
-    const geometry = new BoxGeometry(size.x, size.y, size.z);
-    this.disposables.push(geometry);
-
+  private addWaterVolume(medium: WaterMedium): Mesh[] {
     const absorb = new MeshBasicNodeMaterial();
     absorb.name = 'water-volume-absorb';
     absorb.side = BackSide;
@@ -592,12 +658,10 @@ export class Tank {
     scatter.blendDstAlpha = OneFactor;
     scatter.outputNode = vec4(medium.volumeInScatter(), 0);
 
-    [absorb, scatter].forEach((material, i) => {
-      const mesh = this.track(new Mesh(geometry, material));
-      mesh.name = material.name;
-      mesh.position.copy(centre);
+    return [absorb, scatter].map((material, i) => {
+      const mesh = this.addMesh(material.name, material);
       mesh.renderOrder = i - 2;
-      this.group.add(mesh);
+      return mesh;
     });
   }
 
@@ -605,8 +669,7 @@ export class Tank {
     medium: WaterMedium,
     sky: Texture,
     interior: InteriorLight,
-  ): [SurfaceUnderside, Mesh] {
-    const size = this.waterBounds.getSize(this.waterBounds.max.clone());
+  ): [Mesh, SurfaceUnderside, Mesh] {
     const material = new MeshPhysicalNodeMaterial({ roughness: 0.02, metalness: 0, ior: 1.333 });
     material.name = 'water-surface';
     material.colorNode = vec3(0);
@@ -617,34 +680,17 @@ export class Tank {
     material.fog = false;
     material.outputNode = medium.applyPremultiplied(output);
 
-    const mesh = this.track(new Mesh(new PlaneGeometry(size.x, size.z), material));
-    mesh.name = 'water-surface';
-    mesh.rotation.x = -Math.PI / 2;
-    mesh.position.set(0, this.waterBounds.max.y, 0);
-    mesh.renderOrder = 1;
-    mesh.layers.set(UNREFLECTED_LAYER);
-    this.group.add(mesh);
-
     const below = createSurfaceUnderside(medium, interior, normal, sky);
-    const underside = this.track(new Mesh(mesh.geometry, below.material));
-    underside.name = 'water-surface-underside';
-    underside.rotation.copy(mesh.rotation);
-    underside.position.copy(mesh.position);
-    underside.renderOrder = 1;
-    underside.layers.set(UNREFLECTED_LAYER);
-    this.group.add(underside);
-    return [below, underside];
-  }
-
-  private addStand(): void {
-    const { length: l, depth: d } = this.dimensions;
-    const height = 0.75;
-    const material = new MeshStandardNodeMaterial({ color: new Color(0x1d1c1b), roughness: 0.55 });
-    material.name = 'stand';
-    const mesh = this.track(new Mesh(new BoxGeometry(l + 0.04, height, d + 0.04), material));
-    mesh.name = 'stand';
-    mesh.position.set(0, -height / 2, 0);
-    mesh.receiveShadow = true;
-    this.group.add(mesh);
+    const meshes = [
+      this.addMesh('water-surface', material),
+      this.addMesh('water-surface-underside', below.material),
+    ];
+    for (const mesh of meshes) {
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.renderOrder = 1;
+      mesh.layers.set(UNREFLECTED_LAYER);
+    }
+    const [surface, underside] = meshes as [Mesh, Mesh];
+    return [surface, below, underside];
   }
 }

@@ -34,7 +34,8 @@ import type { EngineOptions } from './options';
 import { qualityProfile } from './quality/profile';
 import { QualityManager } from './quality/QualityManager';
 import { renderPixelRatio } from './quality/tiers';
-import { DEFAULT_TANK, type TankDimensions, waterBounds } from './tank/dimensions';
+import type { TankSize } from '@aquarium/shared';
+import { TANK_DIMENSIONS, type TankDimensions, waterBounds, waterLitres } from './tank/dimensions';
 import { meanSubstrateHeight } from './tank/substrate';
 import { UNREFLECTED_LAYER } from './tank/surfaceReflection';
 import { Tank } from './tank/Tank';
@@ -47,7 +48,6 @@ export type FrameCallback = (deltaS: number, nowMs: number) => void;
 export interface EngineConfig {
   options: EngineOptions;
   events?: EngineEventBus;
-  tank?: TankDimensions;
   water?: WaterQuality;
   hdriUrl?: string;
 }
@@ -133,6 +133,7 @@ export class Engine {
   /** The only KTX2 transcoder for this renderer; every texture loader shares it. */
   readonly ktx2: Ktx2Textures;
 
+  private size: TankSize;
   private readonly clock: number | null;
   private readonly showStats: boolean;
   private daylightLevel = 1;
@@ -222,7 +223,8 @@ export class Engine {
     const preference = config.options.backend;
     this.loop = new RenderLoop(renderer, (t) => this.frame(t));
     deviceLoss.onLost((info) => this.deviceLost(info, preference));
-    const dimensions = config.tank ?? DEFAULT_TANK;
+    this.size = config.options.tankSize;
+    const dimensions = TANK_DIMENSIONS[this.size];
     this.clock = config.options.clock;
     this.showStats = config.options.stats;
     this.gpuTiming = renderer.hasFeature('timestamp-query');
@@ -292,7 +294,8 @@ export class Engine {
     this.scene.environmentNode = this.interior.environmentNode();
 
     this.caustics.bake(renderer);
-    this.setupHood(dimensions);
+    this.setupHood();
+    this.fitHood(dimensions);
     cleanup.add(() => this.hood.shadow.dispose());
 
     this.camera.layers.enable(UNREFLECTED_LAYER);
@@ -305,6 +308,33 @@ export class Engine {
     cleanup.add(() => resizeObserver.disconnect());
     resizeObserver.observe(container);
     this.resize();
+  }
+
+  get tankSize(): TankSize {
+    return this.size;
+  }
+
+  /** Litres of water in the tank as drawn, glass to waterline. */
+  get waterLitres(): number {
+    return waterLitres(this.tank.dimensions);
+  }
+
+  /**
+   * Rebuilds the glass, water volume and sand for `size` and moves the water box every water
+   * effect reads (fog, caustics, light shafts, particulates, bubbles) and the hood's shadow with
+   * it. No pipeline is rebuilt. Emits `engine:tank-resized` when the size changed.
+   */
+  setTankSize(size: TankSize): void {
+    if (size === this.size) return;
+    const dimensions = TANK_DIMENSIONS[size];
+    this.size = size;
+    this.tank.resize(dimensions);
+    this.medium.setBounds(this.tank.waterBounds);
+    this.interior.sandHeight = meanSubstrateHeight(dimensions);
+    this.fitHood(dimensions);
+    this.effects.tankResized();
+    this.sceneRevisionValue++;
+    this.events.emit('engine:tank-resized', { size, dimensions, litres: this.waterLitres });
   }
 
   /** The room backdrop at full daylight; `scene.backgroundIntensity` is this times the room level. */
@@ -406,13 +436,22 @@ export class Engine {
     );
   }
 
-  private setupHood(d: TankDimensions): void {
+  private setupHood(): void {
     const hood = this.hood;
     hood.name = 'hood';
+    this.scene.add(hood, hood.target);
+    hood.shadow.camera.near = 0.2;
+    hood.shadow.bias = -0.0005;
+    hood.shadow.normalBias = 0.01;
+    hood.colorNode = this.caustics.lightColorNode();
+  }
+
+  /** The hood hangs the same height over every tank; its shadow frustum covers the tank. */
+  private fitHood(d: TankDimensions): void {
+    const hood = this.hood;
     hood.position.set(0.12, d.height + 1.2, 0.2);
     hood.target.position.set(0, d.height / 2, 0);
     this.medium.fixtureHeight.value = hood.position.y - this.medium.boxMax.value.y;
-    this.scene.add(hood, hood.target);
 
     const shadowCam = hood.shadow.camera;
     const halfExtent = Math.max(d.length, d.depth) / 2 + 0.05;
@@ -420,12 +459,8 @@ export class Engine {
     shadowCam.right = halfExtent;
     shadowCam.top = halfExtent;
     shadowCam.bottom = -halfExtent;
-    shadowCam.near = 0.2;
     shadowCam.far = d.height + 2;
-    hood.shadow.bias = -0.0005;
-    hood.shadow.normalBias = 0.01;
-
-    hood.colorNode = this.caustics.lightColorNode();
+    shadowCam.updateProjectionMatrix();
     applyDayLighting(this.dayRig, this.daylightLevel);
   }
 

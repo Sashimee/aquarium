@@ -1,4 +1,4 @@
-import { AdditiveBlending, Sprite, SpriteNodeMaterial, Vector3, type Box3 } from 'three/webgpu';
+import { AdditiveBlending, Sprite, SpriteNodeMaterial } from 'three/webgpu';
 import {
   cos,
   float,
@@ -11,7 +11,6 @@ import {
   smoothstep,
   sqrt,
   time,
-  uniform,
   uv,
   vec2,
   vec3,
@@ -41,21 +40,16 @@ const AIRSTONE_HEIGHT_M = 0.03;
 /**
  * An airstone's bubble column as one instanced sprite draw. A bubble is drawn as its bright rim
  * and the hood's highlight: the refraction through its body is too small to see at this size.
+ * The airstone sits in the medium's water box, so it follows the tank's size.
  */
-export function createBubbles(medium: WaterMedium, bounds: Box3): SpriteEffect {
+export function createBubbles(medium: WaterMedium): SpriteEffect {
   const material = new SpriteNodeMaterial({ transparent: true, depthWrite: false });
   material.name = 'bubbles';
   material.blending = AdditiveBlending;
   material.fog = false;
 
-  const source = uniform(
-    new Vector3(
-      bounds.min.x + AIRSTONE_INSET_M,
-      bounds.min.y + AIRSTONE_HEIGHT_M,
-      bounds.min.z + AIRSTONE_INSET_M,
-    ),
-  );
-  const height = bounds.max.y - bounds.min.y - AIRSTONE_HEIGHT_M;
+  const source = medium.boxMin.add(vec3(AIRSTONE_INSET_M, AIRSTONE_HEIGHT_M, AIRSTONE_INSET_M));
+  const height = medium.boxMax.y.sub(medium.boxMin.y).sub(AIRSTONE_HEIGHT_M).toVar();
 
   const i = float(instanceIndex);
   const size = hash(i.add(0.17));
@@ -72,7 +66,7 @@ export function createBubbles(medium: WaterMedium, bounds: Box3): SpriteEffect {
   const centre = source.add(vec3(offset.x, y, offset.y)).toVar();
   material.positionNode = centre;
 
-  const popping = smoothstep(height - POP_ZONE_M, height, y);
+  const popping = smoothstep(height.sub(POP_ZONE_M), height, y);
   material.scaleNode = radius.mul(2).mul(popping.mul(0.4).add(1));
 
   const light = medium.inScatterRadiance(medium.boxMax.y.sub(centre.y)).mul(4 * Math.PI);

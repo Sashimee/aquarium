@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_TANK, validateTank, WATER_INSET, waterBounds } from './dimensions';
+import { TANK_SIZES, tankSizeSchema } from '@aquarium/shared';
+import { Box3 } from 'three/webgpu';
+import {
+  DEFAULT_TANK,
+  framingScale,
+  sameTank,
+  TANK_DIMENSIONS,
+  validateTank,
+  WATER_INSET,
+  waterBounds,
+  waterLitres,
+} from './dimensions';
 import { meanSubstrateHeight, substrateHeight } from './substrate';
 
 describe('validateTank', () => {
@@ -27,6 +38,56 @@ describe('waterBounds', () => {
     expect(b.max.z).toBeCloseTo(depth / 2 - glass - WATER_INSET, 9);
     expect(b.min.y).toBeCloseTo(glass + WATER_INSET, 9);
     expect(b.max.y).toBeCloseTo(height - freeboard, 9);
+  });
+});
+
+describe('TANK_DIMENSIONS', () => {
+  it.each(tankSizeSchema.options)('builds a valid %s tank on the shared glass size', (size) => {
+    const d = TANK_DIMENSIONS[size];
+    expect(() => validateTank(d)).not.toThrow();
+    expect(d).toMatchObject(TANK_SIZES[size].dimensions);
+  });
+
+  it('keeps the standard tank as the default one', () => {
+    expect(DEFAULT_TANK).toBe(TANK_DIMENSIONS.standard);
+  });
+
+  it.each(tankSizeSchema.options)('holds a bit less than the %s label says', (size) => {
+    const litres = waterLitres(TANK_DIMENSIONS[size]);
+    expect(litres).toBeLessThan(TANK_SIZES[size].litres);
+    expect(litres).toBeGreaterThan(TANK_SIZES[size].litres * 0.8);
+  });
+
+  it('orders the sizes by the water they hold', () => {
+    const litres = (['nano30', 'std200', 'long300'] as const).map((s) =>
+      waterLitres(TANK_DIMENSIONS[s]),
+    );
+    expect(litres).toEqual([...litres].sort((a, b) => a - b));
+  });
+});
+
+describe('waterBounds target', () => {
+  it('writes into the box it is given', () => {
+    const box = new Box3();
+    expect(waterBounds(TANK_DIMENSIONS.nano30, box)).toBe(box);
+    expect(box.equals(waterBounds(TANK_DIMENSIONS.nano30))).toBe(true);
+  });
+});
+
+describe('sameTank', () => {
+  it('compares every dimension', () => {
+    expect(sameTank(DEFAULT_TANK, { ...DEFAULT_TANK })).toBe(true);
+    expect(sameTank(DEFAULT_TANK, { ...DEFAULT_TANK, freeboard: 0.031 })).toBe(false);
+    expect(sameTank(TANK_DIMENSIONS.std200, TANK_DIMENSIONS.long300)).toBe(false);
+  });
+});
+
+describe('framingScale', () => {
+  it('stands back for the longer tank and closer for the nano', () => {
+    expect(framingScale(DEFAULT_TANK)).toBe(1);
+    expect(framingScale(TANK_DIMENSIONS.long300)).toBeCloseTo(1.25, 12);
+    expect(framingScale(TANK_DIMENSIONS.nano30)).toBeCloseTo(0.6, 12);
+    expect(framingScale(TANK_DIMENSIONS.std200)).toBe(1);
   });
 });
 

@@ -6,6 +6,8 @@ class FakeEffects implements FrameEffects {
   renders = 0;
   disposed = 0;
   focus: boolean[] = [];
+  resized = 0;
+  resizeError: Error | null = null;
   renderError: Error | null = null;
   focusError: Error | null = null;
   disposeError: Error | null = null;
@@ -22,6 +24,11 @@ class FakeEffects implements FrameEffects {
 
   ownsMaterial(id: number): boolean {
     return id === 7;
+  }
+
+  tankResized(): void {
+    if (this.resizeError !== null) throw this.resizeError;
+    this.resized += 1;
   }
 
   dispose(): void {
@@ -101,6 +108,21 @@ describe('EffectsSlot', () => {
     expect(effects.disposed).toBe(1);
     expect(reports.map((r) => r.cause)).toEqual([broken]);
     expect(slot.render()).toBe(false);
+  });
+
+  it('passes a tank resize on, and drops the effects when it fails', () => {
+    const { slot, reports } = setup();
+    slot.tankResized();
+    const effects = new FakeEffects();
+    slot.attach(effects);
+    slot.tankResized();
+    expect(effects.resized).toBe(1);
+
+    const broken = new Error('resize failed');
+    effects.resizeError = broken;
+    expect(() => slot.tankResized()).not.toThrow();
+    expect(slot.active).toBe(false);
+    expect(reports.map((r) => r.cause)).toEqual([broken]);
   });
 
   it('drops effects that fail while being attached', () => {

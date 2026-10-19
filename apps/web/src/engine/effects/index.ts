@@ -1,7 +1,14 @@
-import type { PerspectiveCamera, Scene, WebGPURenderer } from 'three/webgpu';
+import {
+  Vector3,
+  type Box3,
+  type PerspectiveCamera,
+  type Scene,
+  type WebGPURenderer,
+} from 'three/webgpu';
 import { materialIdOf } from '../pipelineErrors';
 import type { QualityManager } from '../quality/QualityManager';
 import type { TierSettings } from '../quality/tiers';
+import { DEFAULT_TANK, waterBounds } from '../tank/dimensions';
 import type { Tank } from '../tank/Tank';
 import type { Caustics } from '../water/caustics';
 import type { WaterMedium } from '../water/medium';
@@ -27,6 +34,21 @@ export interface EffectsHost {
   readonly caustics: Caustics;
   readonly tank: Pick<Tank, 'waterBounds' | 'setVelocityPassthrough'>;
   readonly quality: Pick<QualityManager, 'register'>;
+}
+
+const STANDARD_WATER = waterBounds(DEFAULT_TANK).getSize(new Vector3());
+
+/**
+ * The tier's sprite counts are for the standard tank. A smaller one keeps their density with
+ * fewer: particulates by water volume, the bubble column by its height. None grows past the tier.
+ */
+export function spriteShares(bounds: Box3): { particles: number; bubbles: number } {
+  const size = bounds.getSize(new Vector3());
+  const volume = (v: Vector3): number => v.x * v.y * v.z;
+  return {
+    particles: Math.min(1, volume(size) / volume(STANDARD_WATER)),
+    bubbles: Math.min(1, size.y / STANDARD_WATER.y),
+  };
 }
 
 /** A built post pipeline for one combination of settings. */
@@ -85,8 +107,8 @@ export class Effects {
     private readonly changed: () => void = () => undefined,
   ) {
     const { medium, caustics, tank, scene, camera } = host;
-    this.particulates = createParticulates(medium, caustics, tank.waterBounds);
-    this.bubbles = createBubbles(medium, tank.waterBounds);
+    this.particulates = createParticulates(medium, caustics);
+    this.bubbles = createBubbles(medium);
     this.shafts = new WaterShafts(camera, medium, caustics);
     scene.add(this.particulates.sprite, this.bubbles.sprite);
     try {
@@ -109,6 +131,11 @@ export class Effects {
 
   ownsMaterial(id: number): boolean {
     return [this.particulates, this.bubbles].some(({ material }) => materialIdOf(material) === id);
+  }
+
+  /** Call after the tank's water box changed, so the sprite counts follow its size. */
+  tankResized(): void {
+    if (this.settings !== null) this.applyCounts(this.settings);
   }
 
   setFocusMode(on: boolean): void {
@@ -157,11 +184,18 @@ export class Effects {
 
   private applySettings(settings: Readonly<TierSettings>): void {
     this.settings = settings;
-    this.particulates.sprite.count = settings.particleCount;
-    this.particulates.sprite.visible = settings.particleCount > 0;
-    this.bubbles.sprite.count = settings.bubbleCount;
-    this.bubbles.sprite.visible = settings.bubbleCount > 0;
+    this.applyCounts(settings);
     this.configurePost(settings);
+  }
+
+  private applyCounts(settings: Readonly<TierSettings>): void {
+    const share = spriteShares(this.host.tank.waterBounds);
+    const particles = Math.round(settings.particleCount * share.particles);
+    const bubbles = Math.round(settings.bubbleCount * share.bubbles);
+    this.particulates.sprite.count = particles;
+    this.particulates.sprite.visible = particles > 0;
+    this.bubbles.sprite.count = bubbles;
+    this.bubbles.sprite.visible = bubbles > 0;
   }
 
   private configurePost(settings: Readonly<TierSettings>): void {

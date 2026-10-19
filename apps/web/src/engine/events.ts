@@ -1,4 +1,6 @@
+import type { TankSize } from '@aquarium/shared';
 import type { LossRecovery } from './deviceLoss';
+import type { TankDimensions } from './tank/dimensions';
 import type { Tier, TierChangeReason } from './quality/tiers';
 
 export type BackendKind = 'webgpu' | 'webgl2';
@@ -22,6 +24,12 @@ export interface EngineEvents {
   'engine:daylight': { level: number };
   /** Frames started or stopped going through a temporal resolve (TRAA). */
   'engine:temporal-resolve': { on: boolean };
+  /** The tank was rebuilt at another size; `litres` is its water volume as drawn. */
+  'engine:tank-resized': {
+    size: TankSize;
+    dimensions: Readonly<TankDimensions>;
+    litres: number;
+  };
   'quality:tier-changed': { from: Tier | null; to: Tier; reason: TierChangeReason };
 }
 
