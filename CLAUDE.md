@@ -56,7 +56,7 @@ agents in `.claude/agents/`.
    - CI is green and there's no review yet → launch `code-reviewer` on it.
    - Approved and green → `gh pr merge <n> --squash --delete-branch`. Then check the devfish deploy with `curl -sI https://devfish.bas.lu/api/health`.
    - Changes requested → back to the author with the review.
-4. **Dispatch.** Ready tasks are open issues whose dependencies are all merged into `dev`. Launch every ready task at once; there is no cap on concurrent agents (Alex, 2026-10-19, PLAN §9.1). Use `Agent` with `subagent_type` = the owner agent, `isolation: "worktree"` and `run_in_background: true`. Send independent launches in **one message**. The prompt gives the issue number, the branch name, the acceptance criteria and the dependencies already merged, and says: "commit, push, open a PR into dev with Closes #N, report the PR number".
+4. **Dispatch.** Ready tasks are open issues whose dependencies are all merged into `dev`. Launch ready tasks up to **6 running agents at once**, reviewers included (Alex, 2026-10-19, PLAN §9.1); queue the rest, PRs closest to merge first. Use `Agent` with `subagent_type` = the owner agent, `isolation: "worktree"` and `run_in_background: true`. Send independent launches in **one message**. The prompt gives the issue number, the branch name, the acceptance criteria and the dependencies already merged, and says: "commit, push, open a PR into dev with Closes #N, report the PR number".
 5. **Record.** Rewrite `RESUME.md` (Goal / Status / State / Blockers / Files; done-log capped at 10).
 6. **Pace.** Background agents wake the loop when they finish, so schedule a 1800 s fallback wakeup only.
 7. **Stop the loop and notify Alex** (`PushNotification`, then `ScheduleWakeup stop`) when:

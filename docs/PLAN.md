@@ -25,7 +25,7 @@ your tanks across devices.
 | Dev access | `devfish.bas.lu` is public, `X-Robots-Tag: noindex` plus a `robots.txt` that disallows everything. |
 | Dokploy | Both apps inside the existing **Bas.lu** project. |
 | Merging | **Repo-local override of the global rule**: the orchestrator squash-merges feature PRs into `dev` once CI is green **and** `code-reviewer` approves. `dev → main` happens **only when Alex asks**. |
-| Concurrency | No cap on concurrent agents (Alex, 2026-10-19, see §9.1). |
+| Concurrency | At most 6 running agents, reviewers included (Alex, 2026-10-19, see §9.1). |
 
 ## 2. Architecture
 
@@ -227,7 +227,7 @@ Wave 8  ┃ T24 roster expansion (pipelined per species)
 ```
 
 Waves are not barriers. The orchestrator starts **any** task as soon as its dependencies are
-merged, with no cap on running agents (§9.1). The wave column only shows the earliest a task can
+merged, with at most 6 running agents, reviewers included (§9.1). The wave column only shows the earliest a task can
 start.
 
 **Conflict avoidance:** each agent owns directories (see its agent file). Shared files
@@ -305,7 +305,7 @@ done (T68); Alex confirmed on 2026-10-19 that there is no release before that.
 | Tanks per user | Replaces §1's "one of each": a user may own up to 6 display tanks, any mix of biomes and sizes, plus one quarantine tank (nano, not counted in the 6). Confirmed by Alex 2026-10-19. |
 | Window weather | Simulated from the tank's seed and the local clock. No location, no third-party weather API. |
 | Budgets | §2.7 and the < 150 MB repo asset budget (§3) stay. Backgrounds, audio, new species and biomes stream per preset. If the budget can't hold a new biome, the orchestrator stops and asks Alex before raising it. |
-| Agent concurrency | Alex, 2026-10-19: "remove the maximum agents limit". The orchestrator launches every ready task at once, with no cap (`CLAUDE.md` loop step 4). |
+| Agent concurrency | At most 6 running agents, reviewers included (`CLAUDE.md` loop step 4). Alex lifted the cap on 2026-10-19, then restored it the same day: 21 parallel agents pushed the load average to 110 and filled RAM. |
 
 ### 9.2 Architecture notes
 
