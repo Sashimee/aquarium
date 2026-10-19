@@ -64,22 +64,35 @@ export function createReplayDirector(options: ReplayDirectorOptions): ReplayDire
   // The session emits tank:loaded for a new tank before React unmounts the replay, so the
   // cached Tank cannot say whether the player has moved on.
   let shownTankId = tankId;
+  let emittingOwn = false;
+  // A foreign load of our own tank (a batched A -> B -> A switch, or a reload) replaces the roster
+  // with the live one. Re-emitting from inside that handler would reach later listeners before
+  // the foreign load itself, so the repair waits for the next command.
+  let rosterStale = false;
+  let shown = 0;
   const offLoaded = interaction.on('tank:loaded', (loaded) => {
     shownTankId = loaded.tankId;
+    if (!emittingOwn && loaded.tankId === tankId) rosterStale = true;
   });
   const onScreen = (): boolean => shownTankId === tankId;
 
   const loadRoster = (fish: readonly Fish[]): void => {
     const tank = options.getTank();
-    interaction.emit('tank:loaded', {
-      tankId: tank.id,
-      biome: tank.biome,
-      size: tank.size,
-      fish,
-      decorLayout: tank.decorLayout,
-      decorEdited: tank.decorEdited,
-      backgroundId: tank.backgroundId,
-    });
+    emittingOwn = true;
+    try {
+      interaction.emit('tank:loaded', {
+        tankId: tank.id,
+        biome: tank.biome,
+        size: tank.size,
+        fish,
+        decorLayout: tank.decorLayout,
+        decorEdited: tank.decorEdited,
+        backgroundId: tank.backgroundId,
+      });
+    } finally {
+      emittingOwn = false;
+    }
+    rosterStale = false;
   };
 
   const apply = (index: number): void => {
@@ -108,10 +121,13 @@ export function createReplayDirector(options: ReplayDirectorOptions): ReplayDire
         switch (command.type) {
           case 'reset-roster':
             if (!onScreen()) break;
-            loadRoster(rosterAt(options.getTank().fish, events, command.shown));
+            shown = command.shown;
+            loadRoster(rosterAt(options.getTank().fish, events, shown));
             break;
           case 'apply':
             if (!onScreen()) break;
+            if (rosterStale) loadRoster(rosterAt(options.getTank().fish, events, shown));
+            shown = command.index + 1;
             apply(command.index);
             break;
           case 'time-scale':

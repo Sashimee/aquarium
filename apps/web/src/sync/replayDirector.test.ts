@@ -153,4 +153,57 @@ describe('ReplayDirector', () => {
     director.dispose();
     expect(seen.slice(before)).toEqual([{ type: 'replay:time-scale', payload: { scale: 1 } }]);
   });
+
+  describe('foreign loads of the replayed tank', () => {
+    const loadOf = (tank: Tank): InteractionEvents['tank:loaded'] => ({
+      tankId: tank.id,
+      biome: tank.biome,
+      size: tank.size,
+      fish: tank.fish,
+      decorLayout: tank.decorLayout,
+      decorEdited: tank.decorEdited,
+      backgroundId: tank.backgroundId,
+    });
+    const idsOf = (payload: unknown): string[] =>
+      (payload as InteractionEvents['tank:loaded']).fish.map((f: Fish) => f.id);
+
+    it('resets the roster before the next event after a batched A, B, A switch', () => {
+      const { director, seen, bus } = setup();
+      director.run([{ type: 'reset-roster', shown: 1 }]);
+      bus.emit('tank:loaded', loadOf(tankFixture({ id: TANK_B, fish: [] })));
+      bus.emit('tank:loaded', loadOf(tankFixture({ fish: live })));
+      const before = seen.length;
+      director.run([{ type: 'apply', index: 1 }]);
+      const after = seen.slice(before);
+      expect(after.map((s) => s.type)).toEqual(['tank:loaded', 'tank:fish-added']);
+      expect(idsOf(after[0]?.payload)).toEqual([FISH_1, FISH_2]);
+    });
+
+    it('resets after a single foreign reload of its tank', () => {
+      const { director, seen, bus } = setup();
+      director.run([{ type: 'reset-roster', shown: 0 }]);
+      bus.emit('tank:loaded', loadOf(tankFixture({ fish: live })));
+      const before = seen.length;
+      director.run([{ type: 'apply', index: 2 }]);
+      const after = seen.slice(before);
+      expect(after.map((s) => s.type)).toEqual(['tank:loaded', 'tank:fish-died']);
+      expect(idsOf(after[0]?.payload)).toEqual([FISH_1, FISH_2]);
+    });
+
+    it('does not reset because of its own loads', () => {
+      const { director, seen } = setup();
+      director.run([
+        { type: 'reset-roster', shown: 0 },
+        { type: 'apply', index: 1 },
+        { type: 'reset-roster', shown: 2 },
+        { type: 'apply', index: 2 },
+      ]);
+      expect(seen.map((s) => s.type)).toEqual([
+        'tank:loaded',
+        'tank:fish-added',
+        'tank:loaded',
+        'tank:fish-died',
+      ]);
+    });
+  });
 });
