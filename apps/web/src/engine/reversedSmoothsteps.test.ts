@@ -74,8 +74,8 @@ describe('sprite effects', () => {
   ];
 
   it.each([
-    ['bubbles', () => createBubbles(medium, bounds).material],
-    ['particulates', () => createParticulates(medium, new Caustics(medium), bounds).material],
+    ['bubbles', () => createBubbles(medium).material],
+    ['particulates', () => createParticulates(medium, new Caustics(medium)).material],
   ])('orders every constant smoothstep edge low to high in the %s', (_, make) => {
     const material = make();
     expect(material.colorNode).not.toBeNull();

@@ -10,7 +10,7 @@ import {
 } from 'three/webgpu';
 import type { PhotoPost } from '../effectsSlot';
 import { EventBus, type EngineEvents } from '../events';
-import { DEFAULT_TANK } from '../tank/dimensions';
+import { DEFAULT_TANK, TANK_DIMENSIONS, type TankDimensions } from '../tank/dimensions';
 import { nearPlaneReach, photoBounds } from './bounds';
 import { F_STOP_RANGE } from './lens';
 import { FOV_RANGE, type PhotoHost, PhotoMode, type PhotoState } from './PhotoMode';
@@ -25,6 +25,7 @@ function setup(options: { dof?: boolean; temporal?: boolean } = {}) {
   camera.position.set(0, 0.35, 1.6);
   camera.lookAt(0, 0.25, 0);
   const scene = new Scene();
+  const tank: { current: Readonly<TankDimensions> } = { current: DEFAULT_TANK };
   let pixelRatio = 1;
   const draws: number[] = [];
   const encodedAt: number[] = [];
@@ -52,7 +53,7 @@ function setup(options: { dof?: boolean; temporal?: boolean } = {}) {
       },
     },
     events,
-    tank: DEFAULT_TANK,
+    tank: () => tank.current,
     ready: () => {
       effects.waits++;
       return effects.ready;
@@ -78,6 +79,7 @@ function setup(options: { dof?: boolean; temporal?: boolean } = {}) {
   return {
     photo,
     host,
+    tank,
     camera,
     scene,
     events,
@@ -175,6 +177,22 @@ describe('PhotoMode', () => {
     photo.setPose({ position: { x: 0, y: 0.3, z: 1.6 }, yaw: 0, pitch: 0 });
     photo.move(0, 0, 10);
     const lens = { near: camera.near, fov: camera.fov, aspect: camera.aspect };
+    expect(photo.pose.position.z).toBe(photoBounds(DEFAULT_TANK, lens).solid.max.z);
+  });
+
+  it('follows the tank to another size: the eye stops at the glass of the tank there now', () => {
+    const { photo, camera, tank } = setup();
+    photo.enter();
+    photo.setPose({ position: { x: 0, y: 0.2, z: 1.6 }, yaw: 0, pitch: 0 });
+    tank.current = TANK_DIMENSIONS.nano30;
+    photo.move(0, 0, 10);
+    const lens = { near: camera.near, fov: camera.fov, aspect: camera.aspect };
+    const nanoGlass = photoBounds(TANK_DIMENSIONS.nano30, lens).solid.max.z;
+    expect(photo.pose.position.z).toBe(nanoGlass);
+    expect(nanoGlass).toBeLessThan(photoBounds(DEFAULT_TANK, lens).solid.max.z);
+
+    tank.current = DEFAULT_TANK;
+    photo.apply();
     expect(photo.pose.position.z).toBe(photoBounds(DEFAULT_TANK, lens).solid.max.z);
   });
 

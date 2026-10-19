@@ -1,4 +1,4 @@
-import { AdditiveBlending, Sprite, SpriteNodeMaterial, type Box3 } from 'three/webgpu';
+import { AdditiveBlending, Sprite, SpriteNodeMaterial } from 'three/webgpu';
 import {
   cameraPosition,
   dot,
@@ -35,12 +35,9 @@ const BRIGHTNESS = 0.6;
  * Particles suspended in the water, one instanced sprite draw. Each drifts on its own slow
  * current and wraps around the water box, fading out near the walls so the wrap never shows.
  * They are lit by the hood through the water, with a forward-scattering glint towards the light.
+ * The box is the medium's, so they follow the tank's size.
  */
-export function createParticulates(
-  medium: WaterMedium,
-  caustics: Caustics,
-  bounds: Box3,
-): SpriteEffect {
+export function createParticulates(medium: WaterMedium, caustics: Caustics): SpriteEffect {
   const material = new SpriteNodeMaterial({ transparent: true, depthWrite: false });
   material.name = 'particulates';
   material.blending = AdditiveBlending;
@@ -48,7 +45,7 @@ export function createParticulates(
 
   const i = float(instanceIndex);
   const seed = vec3(hash(i), hash(i.add(0.37)), hash(i.add(0.71)));
-  const size = vec3(bounds.max).sub(vec3(bounds.min));
+  const size = medium.boxMax.sub(medium.boxMin).toVar();
   const velocity = vec3(
     hash(i.add(0.13)).sub(0.5).mul(DRIFT_M_PER_S),
     hash(i.add(0.29)).mul(-SINK_M_PER_S),
@@ -56,7 +53,7 @@ export function createParticulates(
   );
   const wobble = sin(time.mul(0.6).add(seed.mul(40))).mul(0.002);
   const cell = fract(seed.add(velocity.mul(time).add(wobble).div(size))).toVar();
-  const centre = vec3(bounds.min).add(cell.mul(size)).toVar();
+  const centre = medium.boxMin.add(cell.mul(size)).toVar();
   material.positionNode = centre;
   material.scaleNode = float(MIN_SIZE_M).add(hash(i.add(0.91)).mul(MAX_SIZE_M - MIN_SIZE_M));
 

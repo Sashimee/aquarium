@@ -65,6 +65,14 @@ export const TankIcon = () => (
   </Icon>
 );
 
+export const BookIcon = () => (
+  <Icon>
+    <path d="M5 4.5h10.5a3 3 0 0 1 3 3V20H8a3 3 0 0 1-3-3V4.5Z" />
+    <path d="M5 17a3 3 0 0 1 3-3h10.5" />
+    <path d="M9.5 8.5c1.2-1.2 3-1.2 4 0-1 1.2-2.8 1.2-4 0Z" />
+  </Icon>
+);
+
 export const PersonIcon = () => (
   <Icon>
     <circle cx="12" cy="8.5" r="3.5" />
