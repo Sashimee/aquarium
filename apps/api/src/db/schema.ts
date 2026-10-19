@@ -191,9 +191,7 @@ export const fish = pgTable(
     cause: causeOfDeathEnum('cause'),
     stage: fishStageEnum('stage').notNull().default('adult'),
     lastBroodAt: timestamptz('last_brood_at'),
-    personality: jsonb('personality')
-      .notNull()
-      .default(sql`'{"boldness":0.5,"greed":0.5,"sociability":0.5}'::jsonb`),
+    personality: jsonb('personality').notNull(),
     disease: jsonb('disease'),
   },
   (t) => [index('fish_tank_id_idx').on(t.tankId)],

@@ -532,10 +532,33 @@ describe('server-authoritative lifecycle', () => {
     expect((await read()).recentVisitDays).toBe(2);
     await advance(h, DAY);
     const list = tankListSchema.parse((await call(h, cookie, 'GET', '/api/tanks')).json());
-    expect(list.find((t) => t.id === tank.id)?.recentVisitDays).toBe(3);
+    expect(list.find((t) => t.id === tank.id)?.recentVisitDays).toBe(2);
 
     await advance(h, 30 * DAY);
     expect((await read()).recentVisitDays).toBe(1);
+  });
+
+  it('does not record a visit when the tank list is loaded, and prunes visits past the window', async () => {
+    const cookie = await signedIn(h);
+    const tank = await createTank(h, cookie);
+    await call(h, cookie, 'GET', '/api/tanks');
+    expect(await h.database.db.select().from(schema.tankVisits)).not.toContainEqual(
+      expect.objectContaining({ tankId: tank.id }),
+    );
+
+    const iso = (daysAgo: number) =>
+      new Date(Date.now() - daysAgo * 86_400_000).toISOString().slice(0, 10);
+    await h.database.db.insert(schema.tankVisits).values([
+      { tankId: tank.id, day: iso(13) },
+      { tankId: tank.id, day: iso(14) },
+      { tankId: tank.id, day: iso(40) },
+    ]);
+    await pruneExpired(h.database);
+    const kept = await h.database.db
+      .select()
+      .from(schema.tankVisits)
+      .where(eq(schema.tankVisits.tankId, tank.id));
+    expect(kept.map((r) => r.day)).toEqual([iso(13)]);
   });
 
   it('survives a long catch-up in which fry are born and then starve', async () => {
@@ -1323,6 +1346,7 @@ describe('tank sizes, quarantine and sharing', () => {
       name: 'Extra 1',
       size: row.size,
       sex: row.sex,
+      personality: row.personality,
     });
     await h.database.db.insert(schema.fish).values({
       tankId: nano.id,
@@ -1330,6 +1354,7 @@ describe('tank sizes, quarantine and sharing', () => {
       name: 'Extra 2',
       size: row.size,
       sex: row.sex,
+      personality: row.personality,
     });
     const reread = tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${nano.id}`)).json());
     expect(reread.fish).toHaveLength(14);

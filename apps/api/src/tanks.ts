@@ -508,12 +508,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
         .orderBy(schema.tanks.createdAt);
       const tanks: Tank[] = [];
       for (const { id } of owned) {
-        tanks.push(
-          await withTank(user, id, async (tx, ticked) => {
-            await recordVisit(tx, ticked.tank.id, ticked.nowMs);
-            return render(tx, ticked);
-          }),
-        );
+        tanks.push(await withTank(user, id, (tx, ticked) => render(tx, ticked)));
       }
       return tankListSchema.parse(tanks);
     }),

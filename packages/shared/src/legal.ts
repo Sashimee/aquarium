@@ -95,7 +95,7 @@ export const PRIVACY_CONTROLLER = 'Alexandre Baskewitsch';
 export const PRIVACY_CONTACT = 'fish@bas.lu';
 
 export const PRIVACY_POLICY: PrivacyPolicy = privacyPolicySchema.parse({
-  version: '2026-10-19',
+  version: '2026-10-19.2',
   updatedAt: '2026-10-19',
   controller: PRIVACY_CONTROLLER,
   contact: PRIVACY_CONTACT,
@@ -142,6 +142,7 @@ export const PRIVACY_POLICY: PrivacyPolicy = privacyPolicySchema.parse({
         'Passkeys you register: credential ID, public key, signature counter, device type, backed-up flag, transports, AAGUID (authenticator model identifier), the label you give it and its creation time. No biometric data ever leaves your device.',
         'Sessions: for every signed-in browser, a session record with its creation and expiry time, IP address and browser user-agent, so you can review and revoke sessions. Session records are kept until they expire (30 days after your last activity) and are then deleted by an hourly cleanup, or immediately when you sign out, revoke them or delete your account.',
         'Game data: your tanks, fish, their care history and memorials of fish that have died.',
+        'Tank visits: for each tank you open we store the date (no time of day, IP address or device) on which you opened it, used only so your fish can recognise you when you come back often. It is included in your JSON export and deleted with the tank or your account.',
         'Shared tanks: if you turn on a public link for a tank, anyone who has the link can see that tank read-only without signing in: its name (after a word filter), layout, water and fish. Your email address, display name, handle and account are never shown through the link, and the page is marked noindex. You can revoke or replace the link at any time, which stops the old one working at once.',
         'Reactions: when you react to a shared tank (heart, star or wow) we store which tank, your account and the kind, one reaction per tank. Reaction counts are public; who reacted is not. A shared tank also shows when it was last updated, rounded down to the hour.',
         'Audit log: turning a link on, replacing or revoking it, and setting or removing a reaction are recorded with the time, your account and the tank, never the link itself. Entries are deleted after 180 days, and immediately when you delete your account. The same data is included in your JSON export.',
@@ -169,8 +170,8 @@ export const PRIVACY_POLICY: PrivacyPolicy = privacyPolicySchema.parse({
       id: 'retention',
       title: 'How long we keep it',
       paragraphs: [
-        'Account and game data are kept until you delete your account. Care events older than 90 days are pruned, and audit log entries older than 180 days.',
-        'Deleting your account removes your user record, sessions, sign-in methods, passkeys, reminder settings and push subscriptions, tanks, fish, care history, reactions and memorials from the database immediately. Backup retention is to be defined before production; until then, deleted data may persist in backups no longer than that period.',
+        'Account and game data are kept until you delete your account. Care events older than 90 days are pruned, audit log entries older than 180 days, and tank visit dates older than 14 days.',
+        'Deleting your account removes your user record, sessions, sign-in methods, passkeys, reminder settings and push subscriptions, tanks, fish, care history, tank visit dates, reactions and memorials from the database immediately. Backup retention is to be defined before production; until then, deleted data may persist in backups no longer than that period.',
       ],
     },
     {
