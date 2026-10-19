@@ -80,7 +80,7 @@
     {
       "id": "vallisneria-left",
       "assetId": "vallisneria",
-      "center": [-0.5, 0.05],
+      "center": [-0.08, 0.02],
       "radius": 0.1,
       "count": 14,
       "scale": [0.6, 0.9],

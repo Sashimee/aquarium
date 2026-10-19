@@ -1,8 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { apiErrorSchema, dataExportSchema, handleResponseSchema } from '@aquarium/shared';
+import {
+  apiErrorSchema,
+  containsBlockedWord,
+  dataExportSchema,
+  handleResponseSchema,
+} from '@aquarium/shared';
 import { eq } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { schema } from './db/index.ts';
 import { lockHandles } from './handle.ts';
 import { APP_ORIGIN, createHarness, type Harness } from './test-harness.ts';
@@ -59,7 +64,12 @@ const call = (
     ...(payload ? { payload } : {}),
   });
 
-const unique = () => `u${randomUUID().replaceAll('-', '').slice(0, 12)}`;
+function unique(): string {
+  for (;;) {
+    const handle = `u${randomUUID().replaceAll('-', '').slice(0, 12)}`;
+    if (!containsBlockedWord(handle)) return handle;
+  }
+}
 
 describe('public handle', () => {
   let h: Harness;
@@ -194,7 +204,7 @@ describe('public handle', () => {
       locked();
       await gate;
     });
-    await ready;
+    await Promise.race([ready, holder]);
     try {
       await run(open);
     } finally {
@@ -202,6 +212,37 @@ describe('public handle', () => {
       await holder;
     }
   }
+
+  it('answers 409 when the account is deleted while the change waits on its row', async () => {
+    const { cookie, userId } = await account(h);
+    const conn = await h.database.pool.connect();
+    let committed = false;
+    try {
+      await conn.query('begin');
+      const { rows } = await conn.query<{ pid: number }>('select pg_backend_pid() as pid');
+      const holder = rows[0]?.pid;
+      expect(holder).toBeTypeOf('number');
+      await conn.query('select 1 from "user" where id = $1 for update', [userId]);
+      const pending = call(h, cookie, 'PUT', '/api/me/handle', { handle: unique() });
+      await vi.waitFor(
+        async () => {
+          const blocked = await h.database.pool.query(
+            'select 1 from pg_stat_activity where $1 = any(pg_blocking_pids(pid))',
+            [holder],
+          );
+          expect(blocked.rowCount).toBeGreaterThan(0);
+        },
+        { timeout: 4000, interval: 10 },
+      );
+      await conn.query('delete from "user" where id = $1', [userId]);
+      await conn.query('commit');
+      committed = true;
+      expect((await pending).statusCode).toBe(409);
+    } finally {
+      if (!committed) await conn.query('rollback');
+      conn.release();
+    }
+  });
 
   async function expectBlockedUntilReleased(
     handle: string,

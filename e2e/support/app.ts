@@ -125,6 +125,7 @@ export interface TankView {
   water: { uneatenFood: number; ammonia: number; algae: number };
   decorLayout: { assetId: string; position: number[]; rotationY: number }[];
   decorEdited: boolean;
+  backgroundId: string;
   fish: { id: string; name: string; status: 'alive' | 'dead' }[];
   memorials: { fishName: string }[];
 }

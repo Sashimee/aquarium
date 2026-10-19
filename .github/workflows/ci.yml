@@ -128,7 +128,7 @@ jobs:
             args: photo.spec
             quarantine: true
           - name: switch-tanks
-            args: tank-type-switch.spec toys.spec
+            args: tank-type-switch.spec toys.spec background.spec
           - name: loading
             args: loading.spec pwa.spec haptics.spec
           - name: ktx2-feed-auth-death

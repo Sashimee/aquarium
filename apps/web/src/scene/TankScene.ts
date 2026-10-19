@@ -2,6 +2,7 @@ import type { Material, MeshStandardNodeMaterial, Texture } from 'three/webgpu';
 import { uniform } from 'three/tsl';
 import type { Biome, DecorItem, PlantPatch, PresetLayout } from '@aquarium/shared';
 import type { Engine } from '../engine/Engine';
+import type { TankDimensions } from '../engine/tank/dimensions';
 import type { Tier, TierSettings } from '../engine/quality/tiers';
 import { substrateHeight } from '../engine/tank/substrate';
 import { abortError } from './abortable';
@@ -34,10 +35,16 @@ import {
   HARDSCAPE_KINDS,
   PLANT_KIND,
 } from './hardscape';
+import { boundsFromCatalog, fitPresetToTank } from './presetFit';
 import { applyBiomeLighting } from './lighting';
 import type { SceneOptions } from './options';
 import { ColliderOverlay } from './overlay';
-import { MAX_TILT_RAD as MAX_PLANT_TILT, scatterPatch, type Extent } from './placement';
+import {
+  MAX_TILT_RAD as MAX_PLANT_TILT,
+  scatterPatch,
+  type Extent,
+  type PlantInstance,
+} from './placement';
 import { RebuildQueue } from './rebuildQueue';
 import {
   PlantGroup,
@@ -202,7 +209,7 @@ export class TankScene {
     engine: Engine,
     library: ModelLibrary,
     catalog: AssetCatalog,
-    preset: PresetLayout,
+    authored: PresetLayout,
     options: SceneOptions,
     signal: AbortSignal | undefined,
     adopted: () => void,
@@ -210,6 +217,7 @@ export class TankScene {
     const settings = engine.quality.settings;
     const tier = engine.quality.tier;
     const dimensions = engine.tank.dimensions;
+    const preset = fitPresetToCatalog(authored, dimensions, catalog);
 
     const hardItems: { item: DecorItem; kind: string }[] = [];
     const layoutPlants: DecorItem[] = [];
@@ -244,12 +252,7 @@ export class TankScene {
     const colliders: Collider[] = [...movable.colliders];
     const movableColliderCount = colliders.length;
     const hard = new ColliderField(colliders);
-
     const extent = glassExtent(dimensions);
-    const ground = (x: number, z: number) => substrateHeight(dimensions, x, z);
-    const normal = new Float64Array(3);
-    const blocked = (x: number, y: number, z: number) =>
-      hard.hard(x, y + 0.02, z, normal) < BLOCKED_CLEARANCE;
 
     const patchEntries = new Map<string, PlantEntry[]>();
     const entriesFor = (assetId: string) => {
@@ -258,23 +261,14 @@ export class TankScene {
       return list;
     };
 
-    for (const patch of preset.plantPatches) {
-      const bounds = catalog.get(patch.assetId).bounds;
-      const reach = plantReach(patch.assetId, bounds, preset.current ?? DEFAULT_CURRENT);
-      const ceiling = surfaceScaleCeiling(waterTop, bounds?.max[1] ?? FALLBACK_PLANT_HEIGHT);
-      const instances = scatterPatch(patch, ground, blocked, extent, reach, ceiling);
-      if (instances.length < patch.count) {
-        console.warn(
-          `Plant patch "${patch.id}" fitted ${instances.length} of ${patch.count} plants; move it clear of hardscape and glass`,
+    colliders.push(
+      ...scatterPresetPatches(preset, catalog, hard, dimensions, (patch, instances) => {
+        const list = entriesFor(patch.assetId);
+        instances.forEach((instance, i) =>
+          list.push({ ...instance, rank: i / Math.max(1, instances.length) }),
         );
-      }
-      const list = entriesFor(patch.assetId);
-      instances.forEach((instance, i) =>
-        list.push({ ...instance, rank: i / Math.max(1, instances.length) }),
-      );
-      const soft = softPatchCollider(patch, instances, catalog.get(patch.assetId).bounds?.max[1]);
-      if (soft) colliders.push(soft);
-    }
+      }),
+    );
     const anchors: SceneAnchor[] = [];
     anemoneItems.forEach((item, i) => {
       const entry = catalog.get(item.assetId);
@@ -703,6 +697,48 @@ export class TankScene {
     }
     await this.library.dispose();
   }
+}
+
+export function fitPresetToCatalog(
+  preset: PresetLayout,
+  dimensions: TankDimensions,
+  catalog: Pick<AssetCatalog, 'get'>,
+): PresetLayout {
+  const current = preset.current ?? DEFAULT_CURRENT;
+  return fitPresetToTank(preset, dimensions, boundsFromCatalog(catalog, current), (patch) =>
+    plantReach(patch.assetId, catalog.get(patch.assetId).bounds, current)(patch.scale[1]),
+  );
+}
+
+export function scatterPresetPatches(
+  preset: PresetLayout,
+  catalog: Pick<AssetCatalog, 'get'>,
+  hard: ColliderField,
+  dimensions: TankDimensions,
+  onPatch: (patch: PlantPatch, instances: PlantInstance[]) => void,
+): CapsuleCollider[] {
+  const waterTop = dimensions.height - dimensions.freeboard;
+  const extent = glassExtent(dimensions);
+  const ground = (x: number, z: number) => substrateHeight(dimensions, x, z);
+  const normal = new Float64Array(3);
+  const blocked = (x: number, y: number, z: number) =>
+    hard.hard(x, y + 0.02, z, normal) < BLOCKED_CLEARANCE;
+  const soft: CapsuleCollider[] = [];
+  for (const patch of preset.plantPatches) {
+    const bounds = catalog.get(patch.assetId).bounds;
+    const reach = plantReach(patch.assetId, bounds, preset.current ?? DEFAULT_CURRENT);
+    const ceiling = surfaceScaleCeiling(waterTop, bounds?.max[1] ?? FALLBACK_PLANT_HEIGHT);
+    const instances = scatterPatch(patch, ground, blocked, extent, reach, ceiling);
+    if (instances.length < patch.count) {
+      console.warn(
+        `Plant patch "${patch.id}" fitted ${instances.length} of ${patch.count} plants; move it clear of hardscape and glass`,
+      );
+    }
+    onPatch(patch, instances);
+    const collider = softPatchCollider(patch, instances, bounds?.max[1]);
+    if (collider) soft.push(collider);
+  }
+  return soft;
 }
 
 export function glassExtent(dimensions: {
