@@ -13,6 +13,7 @@ import {
 import { chemistrySchema } from './chemistry.js';
 import { equipmentSchema } from './equipment.js';
 import { QUARANTINE_TANK_SIZE, tankSizeSchema } from './tankSize.js';
+import { idempotencyKeySchema, purchasableStageSchema } from './economy.js';
 import { diseaseStateSchema, fishStageSchema, personalitySchema } from './fishState.js';
 
 // Response objects are non-strict so a tab on an older bundle ignores fields added later.
@@ -160,6 +161,8 @@ export type UpdateTankRequest = z.infer<typeof updateTankRequestSchema>;
 export const addFishRequestSchema = z.strictObject({
   species: slugSchema,
   name: z.string().trim().min(1).max(40),
+  stage: purchasableStageSchema.optional().describe('missing means DEFAULT_PURCHASE_STAGE'),
+  idempotencyKey: idempotencyKeySchema.optional(),
 });
 export type AddFishRequest = z.infer<typeof addFishRequestSchema>;
 

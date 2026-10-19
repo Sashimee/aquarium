@@ -1,0 +1,65 @@
+{
+  "pearlValueCents": 1,
+  "species": {
+    "neon-tetra": { "juvenile": 15, "adult": 40 },
+    "guppy": { "juvenile": 15, "adult": 40 },
+    "harlequin-rasbora": { "juvenile": 25, "adult": 60 },
+    "bronze-corydoras": { "juvenile": 30, "adult": 75 },
+    "bristlenose-pleco": { "juvenile": 40, "adult": 100 },
+    "angelfish": { "juvenile": 60, "adult": 150 },
+    "ocellaris-clownfish": { "juvenile": 80, "adult": 200 },
+    "royal-gramma": { "juvenile": 120, "adult": 300 },
+    "discus": { "juvenile": 150, "adult": 350 },
+    "betta": { "juvenile": 120, "adult": 300 },
+    "six-line-wrasse": { "juvenile": 130, "adult": 325 },
+    "firefish": { "juvenile": 120, "adult": 300 },
+    "banggai-cardinalfish": { "juvenile": 140, "adult": 350 },
+    "blue-tang": { "juvenile": 200, "adult": 500 },
+    "yellow-tang": { "juvenile": 180, "adult": 450 },
+    "cherry-shrimp": { "juvenile": 20, "adult": 50 },
+    "cleaner-shrimp": { "juvenile": 150, "adult": 375 },
+    "nerite-snail": { "juvenile": 15, "adult": 38 },
+    "hermit-crab": { "juvenile": 40, "adult": 100 }
+  },
+  "items": {
+    "plant": { "min": 10, "max": 60 },
+    "decor": { "min": 30, "max": 250 },
+    "background": { "price": 150, "freePerBiome": 1 },
+    "equipment": {
+      "heater": [50, 150, 400],
+      "filter": [80, 250, 600],
+      "light": [100, 300, 800],
+      "co2": [300, 700],
+      "waveMaker": [400, 1000]
+    },
+    "consumables": {
+      "premiumFood": 5,
+      "premiumMedicine": { "min": 30, "max": 80 },
+      "bottledBacteria": 40,
+      "testKit": 25
+    },
+    "tankSlots": [500, 1000, 1500, 2500, 4000],
+    "tankSizes": { "nano30": 300, "std200": 1200, "long300": 2500 }
+  },
+  "earn": {
+    "dailyCare": { "reward": { "min": 30, "max": 50 }, "dailyCap": 50 },
+    "healthyTankStreak": { "perDay": 10, "dailyCap": 30 },
+    "achievement": { "reward": { "min": 50, "max": 500 }, "dailyCap": 500 },
+    "frySale": { "percentOfJuvenilePrice": 30, "dailyCap": 200 }
+  },
+  "grants": { "starting": 500, "migration": 1000 },
+  "packs": [
+    { "id": "pearls-100", "priceCents": 99, "pearls": 100, "webAvailable": false },
+    { "id": "pearls-550", "priceCents": 499, "pearls": 550, "webAvailable": true },
+    { "id": "pearls-1200", "priceCents": 999, "pearls": 1200, "webAvailable": true },
+    { "id": "pearls-2500", "priceCents": 1999, "pearls": 2500, "webAvailable": true },
+    { "id": "pearls-6500", "priceCents": 4999, "pearls": 6500, "webAvailable": true },
+    { "id": "pearls-14000", "priceCents": 9999, "pearls": 14000, "webAvailable": true }
+  ],
+  "subscription": {
+    "id": "aquarist-club",
+    "priceCents": 499,
+    "interval": "month",
+    "pearlsPerDay": 20
+  }
+}
