@@ -1,5 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { apiErrorSchema, dataExportSchema, handleResponseSchema } from '@aquarium/shared';
+import {
+  apiErrorSchema,
+  containsBlockedWord,
+  dataExportSchema,
+  handleResponseSchema,
+} from '@aquarium/shared';
 import { eq } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -59,7 +64,12 @@ const call = (
     ...(payload ? { payload } : {}),
   });
 
-const unique = () => `u${randomUUID().replaceAll('-', '').slice(0, 12)}`;
+function unique(): string {
+  for (;;) {
+    const handle = `u${randomUUID().replaceAll('-', '').slice(0, 12)}`;
+    if (!containsBlockedWord(handle)) return handle;
+  }
+}
 
 describe('public handle', () => {
   let h: Harness;
