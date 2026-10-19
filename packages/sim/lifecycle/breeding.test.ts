@@ -83,6 +83,8 @@ function fishOf(id: string, speciesId: string, over: Partial<LifecycleFish> = {}
     sex: 'female',
     stage: 'adult',
     lastBroodAtMs: null,
+    disease: null,
+    introducedAtMs: null,
     ...over,
   };
 }
@@ -91,6 +93,7 @@ const tank = (fish: LifecycleFish[], water = cleanWater): LifecycleState => ({
   water,
   chemistry: newTankChemistry('freshwater'),
   fish,
+  medicine: null,
 });
 
 function ctxAt(nowMs: number, environment = env(), breeding = breedings): BreedingContext {

@@ -16,6 +16,7 @@ import {
   isBackgroundForBiome,
   isPlayableBiome,
   legacyTintSeed,
+  medicineSchema,
   MAX_DISPLAY_TANKS,
   MAX_QUARANTINE_TANKS,
   newTankChemistry,
@@ -68,6 +69,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { audit } from './audit.ts';
 import { personalityFromFishId } from './personality.ts';
+import { simDisease, simMedicine, wireDisease, wireMedicine } from './disease.ts';
 import { issueShareToken } from './shareToken.ts';
 import type { Clock } from './clock.ts';
 import { schema, type Database } from './db/index.ts';
@@ -80,6 +82,7 @@ import {
   claimAchievementRewards,
 } from './earn.ts';
 import { registerShopRoutes } from './shop.ts';
+import { registerTreatmentRoutes } from './treatment.ts';
 import { backgroundRef, licenseFor } from './items.ts';
 import { legacyKey, legacyStage } from './legacyRequests.ts';
 import { findReplay, lockUserRow, lockWallet, owns, spend } from './wallet.ts';
@@ -184,6 +187,8 @@ function toLifecycleFish(row: FishRow): LifecycleFish {
     sex: row.sex,
     stage: row.stage,
     lastBroodAtMs: row.lastBroodAt?.getTime() ?? null,
+    disease: simDisease(row.disease),
+    introducedAtMs: row.introducedAt?.getTime() ?? null,
   };
 }
 
@@ -243,6 +248,7 @@ async function lockAndTick(
     water: waterSchema.parse(tank.water),
     chemistry: chemistrySchema.parse(tank.chemistry),
     fish: fishRows.map(toLifecycleFish),
+    medicine: simMedicine(tank.medicine),
   };
   const result = catchUp({
     state: initial,
@@ -329,6 +335,7 @@ async function lockAndTick(
     .set({
       water: result.state.water,
       chemistry: result.state.chemistry,
+      medicine: wireMedicine(result.state.medicine),
       lastTickAt: advancedTo,
       updatedAt: new Date(now),
     })
@@ -380,6 +387,7 @@ async function lockAndTick(
       ...tank,
       water: result.state.water,
       chemistry: result.state.chemistry,
+      medicine: wireMedicine(result.state.medicine),
       lastTickAt: advancedTo,
     },
     fishRows: [...updatedRows, ...bornRows.values()],
@@ -445,6 +453,7 @@ async function persistFish(
       cause: f.cause,
       stage: f.stage,
       lastBroodAt: f.lastBroodAtMs === null ? null : new Date(f.lastBroodAtMs),
+      disease: wireDisease(f.disease),
     };
     const dirty =
       changed.hunger !== row.hunger ||
@@ -452,7 +461,8 @@ async function persistFish(
       changed.size !== row.size ||
       changed.status !== row.status ||
       changed.stage !== row.stage ||
-      changed.lastBroodAt?.getTime() !== row.lastBroodAt?.getTime();
+      changed.lastBroodAt?.getTime() !== row.lastBroodAt?.getTime() ||
+      JSON.stringify(changed.disease) !== JSON.stringify(row.disease);
     if (dirty) await tx.update(schema.fish).set(changed).where(eq(schema.fish.id, row.id));
     out.push(dirty ? { ...row, ...changed } : row);
   }
@@ -462,7 +472,7 @@ async function persistFish(
 async function persistState(tx: Tx, tank: TankRow, fishRows: FishRow[], state: LifecycleState) {
   await tx
     .update(schema.tanks)
-    .set({ water: state.water, chemistry: state.chemistry })
+    .set({ water: state.water, chemistry: state.chemistry, medicine: wireMedicine(state.medicine) })
     .where(eq(schema.tanks.id, tank.id));
   return persistFish(tx, fishRows, state);
 }
@@ -493,6 +503,7 @@ async function render(
       tintSeed: item.tintSeed ?? legacyTintSeed(item),
     })),
     decorEdited: tank.decorLayout !== null,
+    medicine: tank.medicine === null ? null : medicineSchema.parse(tank.medicine),
     backgroundId: storedBackground(tank),
     water: tank.water,
     lastTickAt: tank.lastTickAt.toISOString(),
@@ -725,6 +736,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
               water: waterSchema.parse(row.water),
               chemistry: chemistrySchema.parse(row.chemistry),
               fish: [],
+              medicine: null,
             },
             away: null,
             nowMs,
@@ -1036,6 +1048,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
             sex: randomInt(2) === 0 ? 'male' : 'female',
             stage,
             personality: personalityFromFishId(id),
+            introducedAt: new Date(nowMs),
             bornAt: new Date(nowMs - ageDays * 86_400_000),
             size: stage === 'adult' ? spec.lifecycle.maxSizeM : spec.lifecycle.birthSizeM,
           })
@@ -1102,7 +1115,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           const replay = await findReplay(tx, user.id, bacteriaKey, bacteriaRef);
           if (replay) return { tank: await render(tx, ticked) };
         }
-        const applied = applyCare(ticked.state, action, ticked.tank.biome, chemistryParams);
+        const applied = applyCare(ticked.state, action, ticked.tank.biome, chemistryParams, nowMs);
         if (!applied.ok) {
           throw new HttpError(422, apiError('feeding_rejected', applied.reason));
         }
@@ -1125,6 +1138,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           ...ticked.tank,
           water: applied.value.water,
           chemistry: applied.value.chemistry,
+          medicine: wireMedicine(applied.value.medicine),
         };
         if ((CARE_EARN_KINDS as readonly string[]).includes(action.type)) {
           await awardDailyCare(tx, economy, user.id, nowMs);
@@ -1235,5 +1249,27 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
     guarded,
     withTank,
     render: (tx, ticked, fishRows) => render(tx, ticked, fishRows),
+  });
+
+  registerTreatmentRoutes({
+    app,
+    database,
+    economy,
+    clock,
+    authorize,
+    throttle,
+    guarded,
+    withTank,
+    render: (tx, ticked, fishRows) => render(tx, ticked, fishRows),
+    persist: async (tx, ticked, state) => {
+      const fishRows = await persistState(tx, ticked.tank, ticked.fishRows, state);
+      const tank = {
+        ...ticked.tank,
+        water: state.water,
+        chemistry: state.chemistry,
+        medicine: wireMedicine(state.medicine),
+      };
+      return render(tx, { ...ticked, tank, state }, fishRows);
+    },
   });
 }

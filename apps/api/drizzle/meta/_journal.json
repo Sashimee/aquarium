@@ -141,6 +141,13 @@
       "when": 1792441227301,
       "tag": "0019_tank_creation_key",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792445789762,
+      "tag": "0020_disease_treatment",
+      "breakpoints": true
     }
   ]
 }

@@ -25,6 +25,8 @@ const fish = (id: string, over: Partial<LifecycleFish> = {}): LifecycleFish => (
   sex: 'female',
   stage: 'adult',
   lastBroodAtMs: null,
+  disease: null,
+  introducedAtMs: null,
   ...over,
 });
 
@@ -32,6 +34,7 @@ const tank = (ammonia: number, fishList: LifecycleFish[] = []): LifecycleState =
   water: { ammonia, nitrate: 0, algae: 0, uneatenFood: 0 },
   chemistry: newTankChemistry('freshwater'),
   fish: fishList,
+  medicine: null,
 });
 
 describe('timeline transitions', () => {

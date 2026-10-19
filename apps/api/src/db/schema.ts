@@ -154,6 +154,8 @@ export const tanks = pgTable(
     // The client's idempotency key of the request that made the tank. Free tanks leave no ledger
     // row, so this is what lets a retry find the tank it already got.
     creationKey: text('creation_key'),
+    // The medicine in the water: one course at a time (see medicineSchema). null: none.
+    medicine: jsonb('medicine'),
     decorLayout: jsonb('decor_layout'),
     // null: the player never chose one, so the biome's default shows.
     backgroundId: text('background_id'),
@@ -205,6 +207,8 @@ export const fish = pgTable(
     lastBroodAt: timestamptz('last_brood_at'),
     personality: jsonb('personality').notNull(),
     disease: jsonb('disease'),
+    // When the player bought the fish; null for fry born in the tank. Starts the new-fish disease window.
+    introducedAt: timestamptz('introduced_at'),
   },
   (t) => [index('fish_tank_id_idx').on(t.tankId)],
 );
