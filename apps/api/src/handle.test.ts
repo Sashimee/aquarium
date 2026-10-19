@@ -220,7 +220,8 @@ describe('public handle', () => {
     try {
       await conn.query('begin');
       const { rows } = await conn.query<{ pid: number }>('select pg_backend_pid() as pid');
-      const holder = rows[0]!.pid;
+      const holder = rows[0]?.pid;
+      expect(holder).toBeTypeOf('number');
       await conn.query('select 1 from "user" where id = $1 for update', [userId]);
       const pending = call(h, cookie, 'PUT', '/api/me/handle', { handle: unique() });
       await vi.waitFor(
