@@ -89,8 +89,8 @@ export interface PhotoHost {
     setPixelRatio(value: number): void;
   };
   readonly events: EngineEventBus;
-  /** The tank the free camera keeps outside of. */
-  readonly tank: TankDimensions;
+  /** The tank the free camera keeps outside of, as it is now: a resize changes it. */
+  tank(): Readonly<TankDimensions>;
   /** Whether the current tier draws depth of field. */
   depthOfFieldTier(): boolean;
   /** Whether frames go through a temporal resolve. */
@@ -137,6 +137,7 @@ export class PhotoMode {
   private entry: Entry | null = null;
   private bounds: PhotoBounds | null = null;
   private readonly boundsLens = { near: 0, fov: 0, aspect: 0 };
+  private boundsTank: Readonly<TankDimensions> | null = null;
   private readonly eye = new Vector3();
   private yaw = 0;
   private pitch = 0;
@@ -400,12 +401,17 @@ export class PhotoMode {
     }
   }
 
-  /** The bounds for the photo lens as it is now; a wider view or frame keeps the eye farther off. */
+  /**
+   * The bounds for the photo lens and tank as they are now; a wider view or frame keeps the eye
+   * farther off.
+   */
   private currentBounds(): PhotoBounds {
-    const { camera, tank } = this.host;
+    const { camera } = this.host;
+    const tank = this.host.tank();
     const lens = this.boundsLens;
     if (
       this.bounds === null ||
+      this.boundsTank !== tank ||
       lens.near !== camera.near ||
       lens.fov !== this.fov ||
       lens.aspect !== camera.aspect
@@ -413,6 +419,7 @@ export class PhotoMode {
       lens.near = camera.near;
       lens.fov = this.fov;
       lens.aspect = camera.aspect;
+      this.boundsTank = tank;
       this.bounds = photoBounds(tank, lens);
     }
     return this.bounds;

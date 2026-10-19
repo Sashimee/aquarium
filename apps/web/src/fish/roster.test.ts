@@ -35,6 +35,7 @@ describe('TankRoster', () => {
     expect(fish.map((f) => f.key)).toEqual(['neon-tetra-0', 'angelfish-0']);
     expect(fish.every((f) => f.serverId === null && f.phase === 'swimming')).toBe(true);
     expect(fish[0]?.lengthM).toBe(0.03);
+    expect(fish.every((f) => f.stage === null && Number.isNaN(f.bornAtMs))).toBe(true);
     expect(fish.map((f) => f.sex)).toEqual([null, null]);
     expect(roster.tankId).toBeNull();
   });
@@ -332,6 +333,19 @@ describe('TankRoster', () => {
       expect(entry?.hunger).toBe(0.7);
       expect(entry?.health).toBe(0.4);
       expect(changed).toEqual([entry]);
+    });
+
+    it('follows a young fish growing into the next stage', () => {
+      const bornAt = '2026-10-01T00:00:00.000Z';
+      const roster = loaded([fishFixture(FISH_1, { stage: 'fry', bornAt })]);
+      const entry = roster.get(simId(roster, FISH_1));
+      expect(entry?.stage).toBe('fry');
+      expect(entry?.bornAtMs).toBe(Date.parse(bornAt));
+      roster.updated({
+        tankId: TANK_A,
+        fish: [fishFixture(FISH_1, { stage: 'juvenile', bornAt })],
+      });
+      expect(entry?.stage).toBe('juvenile');
     });
 
     it('follows a disease from its onset through its cure', () => {

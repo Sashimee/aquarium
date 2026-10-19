@@ -9,6 +9,7 @@ describe('parseEngineOptions', () => {
       adaptive: true,
       clock: null,
       stats: false,
+      tankSize: 'standard',
     });
   });
 
@@ -24,6 +25,7 @@ describe('parseEngineOptions', () => {
       adaptive: false,
       clock: null,
       stats: false,
+      tankSize: 'standard',
     });
     expect(parseEngineOptions('?tier=low&adaptive=1').adaptive).toBe(false);
   });
@@ -35,6 +37,7 @@ describe('parseEngineOptions', () => {
       adaptive: false,
       clock: null,
       stats: false,
+      tankSize: 'standard',
     });
   });
 
@@ -49,7 +52,14 @@ describe('parseEngineOptions', () => {
     expect(parseEngineOptions('?tier=low&stats=1')).toMatchObject({ tier: 'low', stats: true });
   });
 
+  it('reads the demo tank size, the standard tank by default', () => {
+    expect(parseEngineOptions('?size=nano30').tankSize).toBe('nano30');
+    expect(parseEngineOptions('?size=long300').tankSize).toBe('long300');
+    expect(parseEngineOptions('?size=standard').tankSize).toBe('standard');
+  });
+
   it('rejects unknown values with a message naming the valid ones', () => {
+    expect(() => parseEngineOptions('?size=huge')).toThrow(/nano30, standard, std200, long300/);
     expect(() => parseEngineOptions('?backend=vulkan')).toThrow(/auto, webgpu, webgl/);
     expect(() => parseEngineOptions('?tier=extreme')).toThrow(/low, medium, high, ultra/);
     expect(() => parseEngineOptions('?adaptive=yes')).toThrow(/0 or 1/);

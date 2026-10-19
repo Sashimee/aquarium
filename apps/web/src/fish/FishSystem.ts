@@ -69,6 +69,7 @@ import {
 import { FishImpostorMaterial } from './impostorMaterial';
 import { FishMaterial, type FishMaterialFeatures, type FishLighting } from './material';
 import { fishViewDirection, selectFrames, type FrameSelection } from './octahedral';
+import { ageDaysAt, maturityOf, youthOf } from './maturity';
 import { commitLodDraw } from './prewarm';
 import {
   bagCentre,
@@ -102,7 +103,7 @@ import {
   startWorld,
 } from './simWorld';
 import { SimUnavailableError } from '../interaction/simUnavailable';
-import { speciesInput } from './species';
+import { speciesGrowth, speciesInput } from './species';
 import type { BallNudge, FishBite, FishPoint, PickRay, TankEvent } from './start';
 import { isFinned, SWIM_MODES, SwimState, type SwimModeParams, type SwimmingMode } from './swim';
 import { curlAboveFloor, floorUnderTail, WalkState, type TailRig, type WalkSample } from './walk';
@@ -189,6 +190,8 @@ interface FishRuntime {
   readonly tint: readonly [number, number, number];
   readonly filmThickness: number;
   readonly condition: number;
+  /** 0 adult livery .. 1 newborn fry; see `youthOf`. */
+  youth: number;
   lod: number;
   /** Camera distance this frame, in metres. */
   cameraDistance: number;
@@ -227,6 +230,11 @@ const MIN_PICK_RADIUS = 0.02;
 const MIN_CAPACITY = 4;
 /** How much a sick fish (health 0) pales; death pales it fully. */
 const SICK_PALING = 0.7;
+
+function youthOfFish(fish: RosterFish): number {
+  const growth = speciesGrowth(fish.species)?.fryGrowth;
+  return youthOf(maturityOf(fish.stage, ageDaysAt(fish.bornAtMs, Date.now()), growth));
+}
 
 function capacityFor(needed: number): number {
   let capacity = MIN_CAPACITY;
@@ -373,6 +381,7 @@ export class FishSystem {
     viewZ: 0,
     pale: 0,
     tint: [1, 1, 1],
+    youth: 0,
     frames: this.frames,
   };
   private readonly pose = createPose();
@@ -409,6 +418,7 @@ export class FishSystem {
     mouth: 0,
     display: 0,
     gillFlare: 0,
+    youth: 0,
     ich: 0,
     finRot: 0,
     velvet: 0,
@@ -535,7 +545,10 @@ export class FishSystem {
         break;
       }
       case 'tank:fish-updated':
-        this.roster.updated(event.payload);
+        for (const fish of this.roster.updated(event.payload)) {
+          const rt = this.runtimes.get(fish.simId);
+          if (rt !== undefined) rt.youth = youthOfFish(fish);
+        }
         break;
       case 'tank:fish-removed':
         this.roster.removed(event.payload);
@@ -1102,6 +1115,7 @@ export class FishSystem {
       ],
       filmThickness: lo + (hi - lo) * rng.next(),
       condition: Math.min(1, Math.max(0, 1 - fish.health)) * SICK_PALING,
+      youth: youthOfFish(fish),
       lod: 0,
       cameraDistance: 0,
       distance: 0,
@@ -1670,6 +1684,7 @@ export class FishSystem {
         : swim.mouthOpening * liveliness * mouthFade(rt.cameraDistance, rt.length, this.thresholds);
     v.display = swim === null ? 0 : rt.display * liveliness;
     v.gillFlare = swim === null ? 0 : rt.gillFlare * liveliness;
+    v.youth = rt.youth;
     writeDiseaseSigns(rt.fish.disease, motion instanceof WalkState, v);
     lod.instances.write(slot, v);
     const { locomotion } = rt.batch;
@@ -1716,6 +1731,7 @@ export class FishSystem {
     v.viewZ = view.z;
     v.pale = this.paleOf(rt);
     v.tint = rt.tint;
+    v.youth = rt.youth;
     const direction = this.viewDirection;
     direction[0] = view.x;
     direction[1] = view.y;
