@@ -14,6 +14,12 @@ import {
   publicTankSchema,
   reactionStateSchema,
   setReactionRequestSchema,
+  pushDeviceListSchema,
+  pushSubscriptionRequestSchema,
+  removePushResultSchema,
+  reminderSettingsSchema,
+  removePushSubscriptionRequestSchema,
+  updateReminderSettingsRequestSchema,
   emailSchema,
   passwordSchema,
   sessionListSchema,
@@ -33,6 +39,10 @@ import {
   type PublicTank,
   type ReactionKind,
   type ReactionState,
+  type PushDevice,
+  type PushSubscriptionRequest,
+  type RemovePushResult,
+  type ReminderSettings,
   type SessionInfo,
   type SignInRequest,
   type SignUpRequest,
@@ -166,6 +176,12 @@ export interface ApiClient {
   credits(): Promise<Credits>;
   exportData(): Promise<{ filename: string; text: string }>;
   deleteAccount(password: string): Promise<void>;
+  reminders(): Promise<ReminderSettings>;
+  updateReminders(change: { mail?: boolean; push?: boolean }): Promise<ReminderSettings>;
+  addPushSubscription(subscription: PushSubscriptionRequest): Promise<void>;
+  removePushSubscription(endpoint: string): Promise<RemovePushResult>;
+  pushDevices(currentEndpoint?: string | null): Promise<PushDevice[]>;
+  removePushDevice(id: string): Promise<RemovePushResult>;
   species(): Promise<SpeciesSummary[]>;
   tanks(): Promise<Tank[]>;
   tank(tankId: string): Promise<Tank>;
@@ -363,6 +379,16 @@ export function createApiClient(
     return res;
   }
 
+  async function put(path: string, body: unknown): Promise<Response> {
+    const res = await send(path, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw await toError(res);
+    return res;
+  }
+
   async function patch(path: string, body: unknown): Promise<Response> {
     const res = await send(path, {
       method: 'PATCH',
@@ -498,6 +524,38 @@ export function createApiClient(
     },
     async revokeSession(sessionId) {
       await post('/api/sessions/revoke', { sessionId });
+    },
+    async reminders() {
+      const res = await send('/api/me/reminders');
+      if (!res.ok) throw await toError(res);
+      return parsed(res, reminderSettingsSchema);
+    },
+    async updateReminders(change) {
+      const body = validate(updateReminderSettingsRequestSchema, change);
+      return parsed(await put('/api/me/reminders', body), reminderSettingsSchema);
+    },
+    async addPushSubscription(subscription) {
+      await post(
+        '/api/me/push-subscriptions',
+        validate(pushSubscriptionRequestSchema, subscription),
+      );
+    },
+    async removePushSubscription(endpoint) {
+      const body = validate(removePushSubscriptionRequestSchema, { endpoint });
+      return parsed(await post('/api/me/push-subscriptions/remove', body), removePushResultSchema);
+    },
+    async pushDevices(currentEndpoint) {
+      const query = currentEndpoint ? `?endpoint=${encodeURIComponent(currentEndpoint)}` : '';
+      const res = await send(`/api/me/push-subscriptions${query}`);
+      if (!res.ok) throw await toError(res);
+      return (await parsed(res, pushDeviceListSchema)).devices;
+    },
+    async removePushDevice(id) {
+      const res = await send(`/api/me/push-subscriptions/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw await toError(res);
+      return parsed(res, removePushResultSchema);
     },
     async privacy() {
       const res = await send('/api/privacy');
