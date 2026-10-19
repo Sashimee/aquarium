@@ -22,7 +22,7 @@ describe('SaveStatusMerge', () => {
     layout('error', 'nope');
     background('saving', null);
     background('saved', null);
-    expect(seen.at(-1)).toEqual({ status: 'error', message: 'nope', source: 'background' });
+    expect(seen.at(-1)).toEqual({ status: 'error', message: 'nope', source: 'layout' });
   });
 
   it('clears the error once the failed saver succeeds', () => {

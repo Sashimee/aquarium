@@ -28,7 +28,7 @@ export function BackgroundChooser() {
   return (
     <div className="block" role="group" aria-labelledby="background-heading">
       <h3 id="background-heading">Background</h3>
-      <ul className="decor-pieces">
+      <ul className="decor-backgrounds">
         {options.map(({ id, title }) => (
           <li key={id}>
             <button

@@ -904,7 +904,10 @@ describe('decor layout', () => {
       submit(failing === 'layout' ? 'background' : 'layout');
       await vi.advanceTimersByTimeAsync(700);
       expect(okCall).toHaveBeenCalledTimes(1);
-      expect(rec.of('decor:save-state').at(-1)).toMatchObject({ status: 'error' });
+      expect(rec.of('decor:save-state').at(-1)).toMatchObject({
+        status: 'error',
+        source: failing,
+      });
       failedCall.mockResolvedValue(tankFixture(fresh));
       rec.bus.emit('decor:command', { type: 'retry-save' });
       await vi.advanceTimersByTimeAsync(700);
@@ -913,6 +916,24 @@ describe('decor layout', () => {
       session.dispose();
     },
   );
+
+  it('names the saver still running when the other one finishes', async () => {
+    vi.useFakeTimers();
+    const { api, rec, session } = setup();
+    await session.setUser(verified);
+    api.saveBackground.mockReturnValue(new Promise(() => undefined));
+    api.saveDecorLayout.mockResolvedValue(tankFixture({ lastTickAt: '2026-02-01T12:00:00.000Z' }));
+    rec.bus.emit('background:save', { tankId: TANK_A, backgroundId: 'bg-fw-plant-wall' });
+    await vi.advanceTimersByTimeAsync(700);
+    rec.bus.emit('decor:layout', { tankId: TANK_A, layout });
+    await vi.advanceTimersByTimeAsync(700);
+    expect(api.saveDecorLayout).toHaveBeenCalledTimes(1);
+    expect(rec.of('decor:save-state').at(-1)).toMatchObject({
+      status: 'saving',
+      source: 'background',
+    });
+    session.dispose();
+  });
 
   it('keeps a failed background save for Retry', async () => {
     vi.useFakeTimers();

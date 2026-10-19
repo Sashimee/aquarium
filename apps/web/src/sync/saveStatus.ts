@@ -25,8 +25,12 @@ export class SaveStatusMerge {
       const worst = WORST.find((s) =>
         [...this.reports.values()].some((report) => report.status === s),
       );
-      const shown = [...this.reports.values()].find((report) => report.status === worst) ?? IDLE;
-      this.emit(shown.status, shown.message, source);
+      const shown = [...this.reports.entries()].find(([, report]) => report.status === worst);
+      this.emit(
+        shown?.[1].status ?? IDLE.status,
+        shown?.[1].message ?? IDLE.message,
+        shown?.[0] ?? source,
+      );
     };
   }
 }
