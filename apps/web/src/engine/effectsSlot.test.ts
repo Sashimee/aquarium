@@ -30,6 +30,10 @@ class FakeEffects implements FrameEffects {
     return id === 7;
   }
 
+  ready(): Promise<void> {
+    return Promise.resolve();
+  }
+
   dispose(): void {
     this.disposed += 1;
     if (this.disposeError !== null) throw this.disposeError;
@@ -74,12 +78,33 @@ describe('EffectsSlot', () => {
 
   it('applies the photo look chosen before the effects arrived, then each change', () => {
     const { slot } = setup();
-    const shot = { look: new PhotoLook(), depthOfField: true };
+    const shot = { look: new PhotoLook(), depthOfField: true, graded: true };
     slot.setPhoto(shot);
     const effects = new FakeEffects();
     slot.attach(effects);
     slot.setPhoto(null);
     expect(effects.photo).toEqual([shot, null]);
+  });
+
+  it('is ready at once without effects, and when the attached ones are', async () => {
+    const { slot } = setup();
+    await expect(slot.ready()).resolves.toBeUndefined();
+    const effects = new FakeEffects();
+    let settle: () => void = () => undefined;
+    effects.ready = () =>
+      new Promise<void>((resolve) => {
+        settle = () => resolve();
+      });
+    slot.attach(effects);
+    let done = false;
+    const ready = slot.ready().then(() => {
+      done = true;
+    });
+    await Promise.resolve();
+    expect(done).toBe(false);
+    settle();
+    await ready;
+    expect(done).toBe(true);
   });
 
   it('refuses a second set of effects', () => {

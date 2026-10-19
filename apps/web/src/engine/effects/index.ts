@@ -179,6 +179,7 @@ export class Effects {
       godRays: settings.godRays,
       depthOfField: settings.depthOfField && (photo === null ? this.focus : photo.depthOfField),
       photo: photo?.look ?? null,
+      grade: photo?.graded ?? false,
     };
     this.buildWanted();
   }

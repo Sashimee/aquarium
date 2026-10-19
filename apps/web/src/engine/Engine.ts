@@ -29,7 +29,6 @@ import { createSharedKtx2, type Ktx2Textures } from './ktx2';
 import { EventBus, type BackendKind, type EngineEvents, type EngineEventBus } from './events';
 import { CullPrewarm } from './cullPrewarm';
 import { ReflectedShadow } from './reflectedShadow';
-import { photoBounds } from './photo/bounds';
 import { deviceTextureLimit } from './photo/capture';
 import { PhotoMode } from './photo/PhotoMode';
 import { RenderLoop } from './renderLoop';
@@ -61,6 +60,8 @@ const DEFAULT_WATER: WaterQuality = { cdom440: 0.05, turbidity: 0.08 };
 const MAX_DELTA_S = 0.1;
 /** A stalled effects chunk never settles; past this the tank starts plain and they attach later. */
 const EFFECTS_BOOT_WAIT_MS = 5000;
+/** A capture waits this long for the look's pipeline before giving up rather than encode another. */
+const CAPTURE_EFFECTS_WAIT_MS = 15000;
 
 /** Hood LED, roughly 6500 K. */
 const HOOD_COLOR = new Color(1, 0.97, 0.92);
@@ -161,6 +162,10 @@ export class Engine {
   private lastGpuMs: number | null = null;
   private gpuPending = false;
   private stats = { frames: 0, frameMsSum: 0, since: 0 };
+  private effectsLoad: Promise<void> = Promise.resolve();
+  /** A photo capture's oversized draws, which must not move the quality tier. */
+  private skipFrameSample = false;
+  private skipGpuSample = false;
 
   /** Everything is released through `cleanup`, both on dispose() and on a failed start. */
   static async create(container: HTMLElement, config: EngineConfig): Promise<Engine> {
@@ -194,7 +199,8 @@ export class Engine {
             );
           }
           await engine.warmUp();
-          if (!(await settlesWithin(engine.loadEffects(), EFFECTS_BOOT_WAIT_MS))) {
+          engine.effectsLoad = engine.loadEffects();
+          if (!(await settlesWithin(engine.effectsLoad, EFFECTS_BOOT_WAIT_MS))) {
             engine.reportError(
               'Render effects are slow to load; starting without them until they arrive',
               new Error(`effects not ready after ${EFFECTS_BOOT_WAIT_MS} ms`),
@@ -309,12 +315,17 @@ export class Engine {
       scene: this.scene,
       renderer,
       events,
-      bounds: photoBounds(dimensions),
+      tank: dimensions,
       depthOfFieldTier: () => this.quality.settings.depthOfField,
       temporal: () => this.effects.temporal,
       maxTextureSize: () => deviceTextureLimit(renderer.backend),
       setPost: (post) => this.effects.setPhoto(post),
+      ready: () => this.effectsReady(),
       draw: () => this.draw(),
+      captured: () => {
+        this.skipFrameSample = true;
+        this.skipGpuSample = true;
+      },
     });
     cleanup.add(() => this.photo.dispose());
 
@@ -524,6 +535,15 @@ export class Engine {
     }
   }
 
+  private async effectsReady(): Promise<void> {
+    const ready = this.effectsLoad.then(() => this.effects.ready());
+    if (!(await settlesWithin(ready, CAPTURE_EFFECTS_WAIT_MS))) {
+      throw new Error(
+        `Render effects not ready after ${CAPTURE_EFFECTS_WAIT_MS} ms; try the capture again`,
+      );
+    }
+  }
+
   private async loadStatsOverlay(): Promise<void> {
     try {
       const { createStatsOverlay } = await import('./statsOverlay');
@@ -562,7 +582,8 @@ export class Engine {
     this.pollGpuTime();
 
     if (frameMs > 0) {
-      this.quality.sample(frameMs, this.gpuMs, nowMs);
+      if (this.skipFrameSample) this.skipFrameSample = false;
+      else this.quality.sample(frameMs, this.gpuMs, nowMs);
       this.gpuMs = null;
       this.stats.frames++;
       this.stats.frameMsSum += frameMs;
@@ -585,10 +606,13 @@ export class Engine {
   private pollGpuTime(): void {
     if (this.gpuPending || !this.gpuTiming) return;
     this.gpuPending = true;
+    // Queries pile up until resolved, so the first resolve begun after a capture holds its draws.
+    const skip = this.skipGpuSample;
+    this.skipGpuSample = false;
     this.renderer
       .resolveTimestampsAsync('render')
       .then((ms) => {
-        if (typeof ms === 'number' && ms > 0) {
+        if (!skip && typeof ms === 'number' && ms > 0) {
           this.gpuMs = ms;
           this.lastGpuMs = ms;
         }

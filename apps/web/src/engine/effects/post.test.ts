@@ -1,23 +1,39 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AdditiveBlending,
+  AgXToneMapping,
   CustomBlending,
   MaterialBlending,
   MeshBasicNodeMaterial,
   MultiplyBlending,
   NoBlending,
+  Node as NodeClass,
   NormalBlending,
+  PerspectiveCamera,
+  RenderTarget,
+  Scene,
+  SRGBColorSpace,
   SubtractiveBlending,
   type Blending,
+  type Node,
+  type WebGPURenderer,
 } from 'three/webgpu';
+import { bloom } from 'three/addons/tsl/display/BloomNode.js';
+import { dof } from 'three/addons/tsl/display/DepthOfFieldNode.js';
+import { smaa } from 'three/addons/tsl/display/SMAANode.js';
+import { traa } from 'three/addons/tsl/display/TRAANode.js';
 import { PhotoLook } from '../photo/look';
 import {
   blendsVelocity,
   needsPost,
+  PostPipeline,
+  type PostNodeName,
+  type PostNodes,
   postSettingsKey,
   type PostSettings,
   temporalOutputs,
 } from './post';
+import type { WaterShafts } from './shafts';
 
 describe('blendsVelocity', () => {
   function material(transparent: boolean, blending: Blending): MeshBasicNodeMaterial {
@@ -62,16 +78,110 @@ describe('temporalOutputs', () => {
 });
 
 describe('photo post settings', () => {
-  const plain: PostSettings = { chain: 'none', godRays: false, depthOfField: false, photo: null };
+  const plain: PostSettings = {
+    chain: 'none',
+    godRays: false,
+    depthOfField: false,
+    photo: null,
+    grade: false,
+  };
 
   it('needs a post pass for the photo grade alone, even with no chain', () => {
     expect(needsPost(plain)).toBe(false);
-    expect(needsPost({ ...plain, photo: new PhotoLook() })).toBe(true);
+    expect(needsPost({ ...plain, photo: new PhotoLook(), grade: true })).toBe(true);
+  });
+
+  it('goes straight to the canvas in photo mode when nothing grades or blurs', () => {
+    expect(needsPost({ ...plain, photo: new PhotoLook() })).toBe(false);
+    expect(needsPost({ ...plain, photo: new PhotoLook(), depthOfField: true })).toBe(true);
   });
 
   it('keys a pipeline by whether it grades, not by which look, which lives in uniforms', () => {
-    const graded = postSettingsKey({ ...plain, photo: new PhotoLook() });
+    const graded = postSettingsKey({ ...plain, photo: new PhotoLook(), grade: true });
     expect(graded).not.toBe(postSettingsKey(plain));
-    expect(postSettingsKey({ ...plain, photo: new PhotoLook() })).toBe(graded);
+    expect(postSettingsKey({ ...plain, photo: new PhotoLook(), grade: true })).toBe(graded);
   });
+
+  it('keys the photo lens only where depth of field uses it', () => {
+    const smaa: PostSettings = { ...plain, chain: 'smaa' };
+    expect(postSettingsKey({ ...smaa, photo: new PhotoLook() })).toBe(postSettingsKey(smaa));
+    const blurred: PostSettings = { ...smaa, depthOfField: true };
+    expect(postSettingsKey({ ...blurred, photo: new PhotoLook() })).not.toBe(
+      postSettingsKey(blurred),
+    );
+  });
+});
+
+describe('PostPipeline disposal', () => {
+  const renderer = {
+    toneMapping: AgXToneMapping,
+    outputColorSpace: SRGBColorSpace,
+  } as unknown as WebGPURenderer;
+  const loaded: PostNodes = { bloom, dof, smaa, traa };
+  const nodes = { get: <K extends PostNodeName>(name: K): PostNodes[K] => loaded[name] };
+  const shafts = {} as unknown as WaterShafts;
+
+  // SMAA decodes its lookup tables through an <img>, which Node lacks.
+  beforeEach(() => {
+    vi.stubGlobal(
+      'Image',
+      class {
+        src = '';
+        onload: (() => void) | null = null;
+      },
+    );
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /** Every render target the graph under `root` holds, its nodes' private ones included. */
+  function renderTargets(root: Node): Set<RenderTarget> {
+    const seen = new Set<Node>();
+    const targets = new Set<RenderTarget>();
+    const collect = (value: unknown): void => {
+      if (value instanceof RenderTarget) targets.add(value);
+      else if (Array.isArray(value)) for (const item of value) collect(item);
+      else if (value instanceof NodeClass) visit(value);
+    };
+    const visit = (node: Node): void => {
+      if (seen.has(node)) return;
+      seen.add(node);
+      for (const value of Object.values(node)) collect(value);
+      for (const child of node.getChildren()) visit(child);
+    };
+    visit(root);
+    return targets;
+  }
+
+  const chains = ['none', 'smaa', 'smaa-bloom', 'taa-bloom'] as const;
+  const cases = chains.flatMap((chain) =>
+    [false, true].flatMap((depthOfField) =>
+      [false, true].map((grade) => ({ chain, depthOfField, grade })),
+    ),
+  );
+
+  it.each(cases)(
+    'frees every render target it made: $chain, dof $depthOfField, grade $grade',
+    ({ chain, depthOfField, grade }) => {
+      const camera = new PerspectiveCamera(40, 16 / 9, 0.05, 50);
+      const settings: PostSettings = {
+        chain,
+        godRays: false,
+        depthOfField,
+        photo: grade ? new PhotoLook() : null,
+        grade,
+      };
+      const pipeline = new PostPipeline(renderer, nodes, new Scene(), camera, shafts, settings);
+      const targets = renderTargets(pipeline.outputNode);
+      expect(targets.size).toBeGreaterThan(0);
+      const disposed = new Set<RenderTarget>();
+      for (const target of targets) {
+        target.addEventListener('dispose', () => disposed.add(target));
+      }
+
+      pipeline.dispose();
+      expect([...targets].filter((target) => !disposed.has(target))).toEqual([]);
+    },
+  );
 });

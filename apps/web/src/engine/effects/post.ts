@@ -13,6 +13,7 @@ import {
   type WebGPURenderer,
 } from 'three/webgpu';
 import {
+  convertToTexture,
   float,
   Fn,
   max,
@@ -42,6 +43,8 @@ export interface PostSettings {
   readonly depthOfField: boolean;
   /** Photo mode's lens and grade; without it depth of field focuses itself. */
   readonly photo: PhotoLook | null;
+  /** Whether `photo` grades the picture; the natural filter leaves it as it is. */
+  readonly grade: boolean;
 }
 
 export interface PostNodes {
@@ -129,19 +132,19 @@ const FOCUS_TAPS = [
   [0, -0.04],
 ] as const;
 
+function grades(settings: PostSettings): boolean {
+  return settings.grade && settings.photo !== null;
+}
+
 export function postSettingsKey(settings: PostSettings): string {
-  const photo = settings.photo !== null;
-  return `${settings.chain}|${settings.godRays}|${settings.depthOfField}|${photo}`;
+  const { depthOfField } = settings;
+  const lens = depthOfField && settings.photo !== null;
+  return `${settings.chain}|${settings.godRays}|${depthOfField}|${lens}|${grades(settings)}`;
 }
 
 /** Whether a frame needs the post pipeline at all, or can go straight to the canvas. */
 export function needsPost(settings: PostSettings): boolean {
-  return (
-    settings.chain !== 'none' ||
-    settings.godRays ||
-    settings.depthOfField ||
-    settings.photo !== null
-  );
+  return settings.chain !== 'none' || settings.godRays || settings.depthOfField || grades(settings);
 }
 
 /**
@@ -204,6 +207,10 @@ export class PostPipeline {
     }
   }
 
+  get outputNode(): Node {
+    return this.pipeline.outputNode;
+  }
+
   render(): void {
     this.pipeline.render();
   }
@@ -237,11 +244,11 @@ export class PostPipeline {
     const { photo } = settings;
     // The colour matrix commutes with the blur and the gentle contrast curve nearly does, so the
     // grade can go ahead of depth of field and serve the sharp and the blurred path alike.
-    if (photo !== null) colour = photo.grade(colour);
+    if (photo !== null && settings.grade) colour = photo.grade(colour);
     let image: Node = colour;
     if (settings.depthOfField) {
       const blur = this.nodes.get('dof')(
-        colour,
+        this.texture(colour),
         scenePass.getViewZNode(),
         photo?.focusDistance ?? autofocus(depth, camera),
         photo?.focalRange ?? DOF.focalLength,
@@ -253,7 +260,7 @@ export class PostPipeline {
 
     if (this.temporal) {
       const resolve = this.nodes.get('traa')(
-        image,
+        this.texture(image),
         depth,
         scenePass.getTextureNode('velocity'),
         camera,
@@ -262,12 +269,23 @@ export class PostPipeline {
       return resolve;
     }
     if (chain === 'smaa' || chain === 'smaa-bloom') {
-      const aa = this.nodes.get('smaa')(renderOutput(image));
+      const aa = this.nodes.get('smaa')(this.texture(renderOutput(image)));
       this.owned.push(aa);
       this.pipeline.outputColorTransform = false;
       return aa;
     }
     return image;
+  }
+
+  /**
+   * `node` as a texture the screen-space nodes can sample around. They would convert it
+   * themselves, but none of them disposes the render target that takes, so it is made and owned
+   * here; a pass's own texture is returned as it is.
+   */
+  private texture(node: Node): TextureNode {
+    const texture = convertToTexture(node);
+    if (texture !== node) this.owned.push(texture);
+    return texture;
   }
 }
 

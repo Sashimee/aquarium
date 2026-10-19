@@ -11,13 +11,15 @@ import {
 import type { PhotoPost } from '../effectsSlot';
 import { EventBus, type EngineEvents } from '../events';
 import { DEFAULT_TANK } from '../tank/dimensions';
-import { photoBounds } from './bounds';
+import { nearPlaneReach, photoBounds } from './bounds';
 import { F_STOP_RANGE } from './lens';
 import { FOV_RANGE, type PhotoHost, PhotoMode, type PhotoState } from './PhotoMode';
 
 const CSS = { width: 800, height: 450 };
 
 function setup(options: { dof?: boolean; temporal?: boolean } = {}) {
+  let ready: () => void = () => undefined;
+  const effects = { ready: Promise.resolve(), waits: 0, captured: 0 };
   const events = new EventBus<EngineEvents>();
   const camera = new PerspectiveCamera(40, CSS.width / CSS.height, 0.05, 50);
   camera.position.set(0, 0.35, 1.6);
@@ -50,7 +52,14 @@ function setup(options: { dof?: boolean; temporal?: boolean } = {}) {
       },
     },
     events,
-    bounds: photoBounds(DEFAULT_TANK),
+    tank: DEFAULT_TANK,
+    ready: () => {
+      effects.waits++;
+      return effects.ready;
+    },
+    captured: () => {
+      effects.captured++;
+    },
     depthOfFieldTier: () => tier.dof,
     temporal: () => options.temporal ?? false,
     maxTextureSize: () => 8192,
@@ -60,7 +69,27 @@ function setup(options: { dof?: boolean; temporal?: boolean } = {}) {
   const states: PhotoState[] = [];
   events.on('photo:changed', (state) => states.push(state));
   const photo = new PhotoMode(host);
-  return { photo, host, camera, scene, events, states, posts, draws, encodedAt, tier };
+  const holdEffects = (): void => {
+    effects.ready = new Promise<void>((resolve) => {
+      ready = () => resolve();
+    });
+  };
+  const releaseEffects = (): void => ready();
+  return {
+    photo,
+    host,
+    camera,
+    scene,
+    events,
+    states,
+    posts,
+    draws,
+    encodedAt,
+    tier,
+    effects,
+    holdEffects,
+    releaseEffects,
+  };
 }
 
 function uiLayer(): HTMLElement {
@@ -77,7 +106,6 @@ describe('PhotoMode', () => {
     expect(camera.getWorldDirection(new Vector3()).distanceTo(before)).toBeLessThan(1e-9);
     expect(states.at(-1)).toMatchObject({
       active: true,
-      region: 'room',
       filter: 'natural',
       fov: 40,
     });
@@ -112,7 +140,6 @@ describe('PhotoMode', () => {
     expect(posts.at(-1)).toBeNull();
     expect(states.at(-1)).toMatchObject({
       active: false,
-      region: null,
       simPaused: false,
       uiHidden: false,
     });
@@ -143,20 +170,39 @@ describe('PhotoMode', () => {
   });
 
   it('stops at the glass however far it flies at it', () => {
-    const { photo, host } = setup();
+    const { photo, camera } = setup();
     photo.enter();
     photo.setPose({ position: { x: 0, y: 0.3, z: 1.6 }, yaw: 0, pitch: 0 });
     photo.move(0, 0, 10);
-    expect(photo.pose.position.z).toBe(host.bounds.solid.max.z);
+    const lens = { near: camera.near, fov: camera.fov, aspect: camera.aspect };
+    expect(photo.pose.position.z).toBe(photoBounds(DEFAULT_TANK, lens).solid.max.z);
   });
 
-  it('stays in the water when it starts there', () => {
-    const { photo, camera, host } = setup();
+  it('keeps the near plane off the glass when the view widens at the glass', () => {
+    const { photo, camera } = setup();
+    photo.enter();
+    photo.setPose({ position: { x: 0, y: 0.3, z: 1.6 }, yaw: 0, pitch: 0 });
+    photo.move(0, 0, 10);
+    const narrow = photo.pose.position.z;
+    photo.setFov(FOV_RANGE.max);
+    camera.aspect = 19.5 / 9;
+    photo.apply();
+    const reach = nearPlaneReach({ near: camera.near, fov: FOV_RANGE.max, aspect: 19.5 / 9 });
+    expect(photo.pose.position.z).toBeGreaterThan(narrow);
+    expect(photo.pose.position.z - DEFAULT_TANK.depth / 2).toBeGreaterThan(reach);
+    expect(camera.position.z).toBe(photo.pose.position.z);
+  });
+
+  it('starts outside the glass even from a camera in the water', () => {
+    const { photo, camera } = setup();
     camera.position.set(0, 0.25, 0);
     photo.enter();
-    expect(photo.state.region).toBe('water');
-    photo.move(0, 5, 0);
-    expect(photo.pose.position.y).toBe(host.bounds.water.max.y);
+    const { position } = photo.pose;
+    const outside =
+      Math.abs(position.x) > DEFAULT_TANK.length / 2 ||
+      Math.abs(position.z) > DEFAULT_TANK.depth / 2 ||
+      position.y > DEFAULT_TANK.height;
+    expect(outside).toBe(true);
   });
 
   it('clamps the field of view and the lens', () => {
@@ -210,13 +256,51 @@ describe('PhotoMode', () => {
   });
 
   it('captures at twice the canvas size and puts the canvas back', async () => {
-    const { photo, draws, encodedAt } = setup();
+    const { photo, draws, encodedAt, effects } = setup();
     photo.enter();
     const blob = await photo.capture();
     expect(blob.type).toBe('image/png');
     expect(draws).toEqual([2]);
     expect(encodedAt).toEqual([2]);
     expect(photo.look.bokehScale.value).toBeCloseTo(2.5 * (450 / 1080), 6);
+    expect(effects.captured).toBe(1);
+  });
+
+  it('waits for the pipeline photo mode asked for before drawing', async () => {
+    const { photo, draws, holdEffects, releaseEffects } = setup();
+    photo.enter();
+    holdEffects();
+    photo.setFilter('vivid');
+    const shot = photo.capture();
+    await Promise.resolve();
+    expect(draws).toEqual([]);
+    releaseEffects();
+    await shot;
+    expect(draws).toEqual([2]);
+  });
+
+  it('refuses a second capture while one is running, and a capture outside photo mode', async () => {
+    const { photo, holdEffects, releaseEffects } = setup();
+    await expect(photo.capture()).rejects.toThrow(/enter\(\) first/);
+    photo.enter();
+    holdEffects();
+    const first = photo.capture();
+    await expect(photo.capture()).rejects.toThrow(/already running/);
+    releaseEffects();
+    await expect(first).resolves.toBeInstanceOf(Blob);
+    await expect(photo.capture()).resolves.toBeInstanceOf(Blob);
+  });
+
+  it('drops a capture whose photo mode ended while it waited', async () => {
+    const { photo, draws, host, holdEffects, releaseEffects } = setup();
+    photo.enter();
+    holdEffects();
+    const shot = photo.capture();
+    photo.exit();
+    releaseEffects();
+    await expect(shot).rejects.toThrow(/photo mode ended/);
+    expect(draws).toEqual([]);
+    expect(host.renderer.getPixelRatio()).toBe(1);
   });
 
   it('lets a temporal resolve settle before capturing', async () => {
@@ -228,10 +312,27 @@ describe('PhotoMode', () => {
   });
 
   it('refuses a scale above 2 and leaves the canvas as it was', async () => {
-    const { photo, host } = setup();
+    const { photo, host, effects } = setup();
     photo.enter();
     await expect(photo.capture({ scale: 3 })).rejects.toThrow(/scale/);
     expect(host.renderer.getPixelRatio()).toBe(1);
+    expect(effects.captured).toBe(0);
+  });
+
+  it('asks for the grade only for a filter that changes the picture', () => {
+    const { photo, posts } = setup();
+    photo.enter();
+    expect(posts.at(-1)?.graded).toBe(false);
+    photo.setFilter('warm');
+    expect(posts.at(-1)?.graded).toBe(true);
+    const count = posts.length;
+    photo.setFilter('bw');
+    expect(posts).toHaveLength(count);
+    photo.setFilter('natural');
+    expect(posts.at(-1)?.graded).toBe(false);
+    photo.exit();
+    photo.setFilter('vivid');
+    expect(posts.at(-1)).toBeNull();
   });
 
   it('hides only a layer it was given, and gives back its own style', () => {

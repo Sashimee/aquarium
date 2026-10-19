@@ -1,4 +1,4 @@
-import { STAND_HEIGHT, type TankDimensions, validateTank, waterBounds } from '../tank/dimensions';
+import { STAND_HEIGHT, type TankDimensions, validateTank } from '../tank/dimensions';
 
 export interface Vec3 {
   x: number;
@@ -11,61 +11,65 @@ export interface Box {
   readonly max: Readonly<Vec3>;
 }
 
-/** Where the free camera is: it stays on its side of the glass, since the glass has no inside. */
-export type PhotoRegion = 'room' | 'water';
-
+/** The free camera stays in the room: the water has no inside to see from. */
 export interface PhotoBounds {
-  /** The room the eye may roam outside the tank. */
+  /** The room the eye may roam. */
   readonly room: Box;
-  /** Tank and stand, grown by the clearance the near plane needs; the room eye stays out of it. */
+  /** Tank and stand, grown by the reach of the near plane; the eye stays out of it. */
   readonly solid: Box;
-  /** Where the eye may be inside the water. */
-  readonly water: Box;
-  /** The water itself, which decides the region an eye starts in. */
-  readonly waterVolume: Box;
+}
+
+/** The view the bounds are for: how far the near plane reaches decides how close the eye gets. */
+export interface PhotoLens {
+  readonly near: number;
+  /** Vertical field of view in degrees. */
+  readonly fov: number;
+  /** Width over height. */
+  readonly aspect: number;
 }
 
 /** The orbit camera reaches 4 m from the tank, so every pose it can hand over is in the room. */
 const ROOM_MARGIN = 4.5;
 const ROOM_CEILING = 4.5;
 const FLOOR_EYE = 0.1;
-/** Past the camera's 5 cm near plane, so the glass never slices the picture. */
-const GLASS_CLEARANCE = 0.08;
 const STAND_OVERHANG = 0.02;
-const SUBSTRATE_CLEARANCE = 0.05;
-const SURFACE_CLEARANCE = 0.02;
+/** Past the near plane's reach, so a corner of the picture never grazes the glass. */
+const NEAR_MARGIN = 0.01;
 
-export function photoBounds(d: TankDimensions): PhotoBounds {
+/**
+ * How far the near plane's farthest point, a corner, is from the eye. Kept at least that far from
+ * a face, the near plane can't cross it whichever way the camera looks.
+ */
+export function nearPlaneReach(lens: PhotoLens): number {
+  const { near, fov, aspect } = lens;
+  if (!(near > 0 && near < Infinity && fov > 0 && fov < 180 && aspect > 0 && aspect < Infinity)) {
+    throw new RangeError(
+      `photo lens: need near > 0, 0 < fov < 180 and aspect > 0, got ${near}, ${fov}, ${aspect}`,
+    );
+  }
+  const halfHeight = Math.tan((fov * Math.PI) / 360);
+  const halfWidth = halfHeight * aspect;
+  return near * Math.sqrt(1 + halfHeight * halfHeight + halfWidth * halfWidth);
+}
+
+export function photoBounds(d: TankDimensions, lens: PhotoLens): PhotoBounds {
   validateTank(d);
   const halfL = d.length / 2;
   const halfD = d.depth / 2;
-  const volume = waterBounds(d);
-  const sideClear = STAND_OVERHANG + GLASS_CLEARANCE;
-  const waterInset = GLASS_CLEARANCE;
+  const clearance = nearPlaneReach(lens) + NEAR_MARGIN;
+  const sideClear = STAND_OVERHANG + clearance;
   return {
     room: {
-      min: { x: -halfL - ROOM_MARGIN, y: -STAND_HEIGHT + FLOOR_EYE, z: -halfD - ROOM_MARGIN },
+      min: {
+        x: -halfL - ROOM_MARGIN,
+        y: -STAND_HEIGHT + Math.max(FLOOR_EYE, clearance),
+        z: -halfD - ROOM_MARGIN,
+      },
       max: { x: halfL + ROOM_MARGIN, y: d.height + ROOM_CEILING, z: halfD + ROOM_MARGIN },
     },
     solid: {
       min: { x: -halfL - sideClear, y: -Infinity, z: -halfD - sideClear },
-      max: { x: halfL + sideClear, y: d.height + GLASS_CLEARANCE, z: halfD + sideClear },
-    },
-    water: {
-      min: {
-        x: volume.min.x + waterInset,
-        y: d.glass + Math.max(d.substrateFront, d.substrateBack) + SUBSTRATE_CLEARANCE,
-        z: volume.min.z + waterInset,
-      },
-      max: {
-        x: volume.max.x - waterInset,
-        y: volume.max.y - SURFACE_CLEARANCE,
-        z: volume.max.z - waterInset,
-      },
-    },
-    waterVolume: {
-      min: { x: volume.min.x, y: volume.min.y, z: volume.min.z },
-      max: { x: volume.max.x, y: volume.max.y, z: volume.max.z },
+      max: { x: halfL + sideClear, y: d.height + clearance, z: halfD + sideClear },
     },
   };
 }
@@ -82,10 +86,6 @@ function clampInto(p: Vec3, box: Box): Vec3 {
     y: Math.min(max.y, Math.max(min.y, p.y)),
     z: Math.min(max.z, Math.max(min.z, p.z)),
   };
-}
-
-export function regionOf(eye: Vec3, bounds: PhotoBounds): PhotoRegion {
-  return inside(eye, bounds.waterVolume) ? 'water' : 'room';
 }
 
 /** Moves an eye inside `solid` out through the nearest of its sides or its top. */
@@ -109,28 +109,27 @@ function requireFinite(name: string, p: Vec3): void {
   }
 }
 
-/** The nearest allowed eye position to `eye` in `region`. */
-export function clampEye(eye: Vec3, region: PhotoRegion, bounds: PhotoBounds): Vec3 {
+/** The nearest allowed eye position to `eye`. */
+export function clampEye(eye: Vec3, bounds: PhotoBounds): Vec3 {
   requireFinite('eye', eye);
-  if (region === 'water') return clampInto(eye, bounds.water);
   return pushOut(clampInto(eye, bounds.room), bounds.solid);
 }
 
 const AXES = ['x', 'y', 'z'] as const;
 
 /**
- * Where an eye moving from `from` to `to` ends. In the room a move into the tank slides along the
- * side it would have entered through, so a long step can't tunnel out at the far side.
+ * Where an eye moving from `from` to `to` ends. A move into the tank slides along the side it
+ * would have entered through, so a long step can't tunnel out at the far side.
  */
-export function moveEye(from: Vec3, to: Vec3, region: PhotoRegion, bounds: PhotoBounds): Vec3 {
+export function moveEye(from: Vec3, to: Vec3, bounds: PhotoBounds): Vec3 {
   requireFinite('eye', from);
   requireFinite('target', to);
   const { solid } = bounds;
-  const target = region === 'room' ? clampInto(to, bounds.room) : to;
-  if (region === 'water' || inside(from, solid)) return clampEye(target, region, bounds);
+  const target = clampInto(to, bounds.room);
+  if (inside(from, solid)) return clampEye(target, bounds);
   const entry = segmentEntry(from, target, solid);
-  if (entry === null) return clampEye(target, region, bounds);
-  return clampEye({ ...target, [entry.axis]: entry.face }, region, bounds);
+  if (entry === null) return clampEye(target, bounds);
+  return clampEye({ ...target, [entry.axis]: entry.face }, bounds);
 }
 
 /** Where the segment `from`-`to` first enters the open box, by the slab method; null if never. */

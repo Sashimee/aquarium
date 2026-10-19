@@ -5,6 +5,8 @@ export interface PhotoPost {
   readonly look: PhotoLook;
   /** Wanted by the photographer; tiers without depth of field still go without. */
   readonly depthOfField: boolean;
+  /** Whether the filter changes the picture; without a grade or depth of field, no post pass. */
+  readonly graded: boolean;
 }
 
 /** What the engine needs from the lazily loaded render effects. */
@@ -15,6 +17,8 @@ export interface FrameEffects {
   render(): void;
   setFocusMode(on: boolean): void;
   setPhoto(photo: PhotoPost | null): void;
+  /** Resolves once the pipeline the settings ask for is built, or has failed. */
+  ready(): Promise<void>;
   /** Whether the effects draw with material `id` (three's runtime material id). */
   ownsMaterial(id: number): boolean;
   dispose(): void;
@@ -71,6 +75,11 @@ export class EffectsSlot {
     const effects = this.effects;
     if (effects !== null) this.guard(() => effects.setPhoto(photo));
     this.refresh();
+  }
+
+  /** Resolves once the attached effects draw what was last asked of them; at once without any. */
+  async ready(): Promise<void> {
+    await this.effects?.ready();
   }
 
   /** True when the effects drew the frame; false means the caller must render it plainly. */

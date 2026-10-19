@@ -12,14 +12,8 @@ import {
 } from 'three/webgpu';
 import type { PhotoPost } from '../effectsSlot';
 import type { EngineEventBus } from '../events';
-import {
-  clampEye,
-  moveEye,
-  type PhotoBounds,
-  type PhotoRegion,
-  regionOf,
-  type Vec3,
-} from './bounds';
+import type { TankDimensions } from '../tank/dimensions';
+import { clampEye, moveEye, type PhotoBounds, photoBounds, type Vec3 } from './bounds';
 import { captureSize } from './capture';
 import { isPhotoFilter, type PhotoFilter } from './grade';
 import {
@@ -49,8 +43,6 @@ export interface PhotoDepthOfField {
 
 export interface PhotoState {
   readonly active: boolean;
-  /** Which side of the glass the camera is held on; null outside photo mode. */
-  readonly region: PhotoRegion | null;
   readonly filter: PhotoFilter;
   readonly depthOfField: PhotoDepthOfField;
   readonly simPaused: boolean;
@@ -97,7 +89,8 @@ export interface PhotoHost {
     setPixelRatio(value: number): void;
   };
   readonly events: EngineEventBus;
-  readonly bounds: PhotoBounds;
+  /** The tank the free camera keeps outside of. */
+  readonly tank: TankDimensions;
   /** Whether the current tier draws depth of field. */
   depthOfFieldTier(): boolean;
   /** Whether frames go through a temporal resolve. */
@@ -105,8 +98,12 @@ export interface PhotoHost {
   /** Largest texture side the device allows. */
   maxTextureSize(): number;
   setPost(post: PhotoPost | null): void;
+  /** Resolves once the post pipeline `setPost` last asked for is drawing, or has failed. */
+  ready(): Promise<void>;
   /** Draws one frame of the scene as it stands, through the same path as the render loop. */
   draw(): void;
+  /** Called after the capture draws, which no frame-time sample should count. */
+  captured(): void;
 }
 
 interface Entry {
@@ -131,14 +128,15 @@ function canvasBlob(canvas: HTMLCanvasElement): Promise<Blob> {
 }
 
 /**
- * Photo mode: a free camera held on its side of the glass, a lens with a focus distance and an
+ * Photo mode: a free camera held outside the glass, a lens with a focus distance and an
  * aperture, colour filters, a sim pause and PNG capture. The engine calls `apply` every frame;
  * everything else is for the UI.
  */
 export class PhotoMode {
   readonly look = new PhotoLook();
   private entry: Entry | null = null;
-  private region: PhotoRegion | null = null;
+  private bounds: PhotoBounds | null = null;
+  private readonly boundsLens = { near: 0, fov: 0, aspect: 0 };
   private readonly eye = new Vector3();
   private yaw = 0;
   private pitch = 0;
@@ -176,7 +174,6 @@ export class PhotoMode {
   get state(): PhotoState {
     return {
       active: this.entry !== null,
-      region: this.region,
       filter: this.filter,
       depthOfField: {
         enabled: this.dofEnabled,
@@ -215,8 +212,7 @@ export class PhotoMode {
     this.yaw = Math.atan2(-this.forward.x, -this.forward.z);
     this.pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, Math.asin(this.forward.y)));
     this.fov = camera.fov;
-    this.region = regionOf(camera.position, this.host.bounds);
-    this.eye.copy(clampEye(camera.position, this.region, this.host.bounds));
+    this.eye.copy(clampEye(camera.position, this.currentBounds()));
     this.pushPost();
     this.apply();
     this.announce();
@@ -228,7 +224,6 @@ export class PhotoMode {
     if (entry === null) return;
     this.showUi();
     this.entry = null;
-    this.region = null;
     this.paused = false;
     this.host.setPost(null);
     const { camera } = this.host;
@@ -269,16 +264,16 @@ export class PhotoMode {
       y: this.eye.y + up + forward * sp,
       z: this.eye.z - right * sy - forward * cy * cp,
     };
-    this.eye.copy(moveEye(this.eye, to, this.region ?? 'room', this.host.bounds));
+    this.eye.copy(moveEye(this.eye, to, this.currentBounds()));
   }
 
-  /** Puts the eye at `pose`, held inside the region photo mode started in. */
+  /** Puts the eye at `pose`, or the nearest place to it outside the tank. */
   setPose(pose: PhotoPose): void {
     this.requireActive('setPose');
     if (!Number.isFinite(pose.yaw) || !Number.isFinite(pose.pitch)) {
       throw new RangeError(`photo pose: angles must be finite, got ${pose.yaw}, ${pose.pitch}`);
     }
-    this.eye.copy(clampEye(pose.position, this.region ?? 'room', this.host.bounds));
+    this.eye.copy(clampEye(pose.position, this.currentBounds()));
     this.yaw = pose.yaw % (2 * Math.PI);
     this.pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, pose.pitch));
   }
@@ -294,8 +289,10 @@ export class PhotoMode {
   setFilter(filter: PhotoFilter): void {
     if (!isPhotoFilter(filter))
       throw new RangeError(`photo filter: unknown filter ${String(filter)}`);
+    const graded = this.graded;
     this.filter = filter;
     this.look.setFilter(filter);
+    if (this.entry !== null && this.graded !== graded) this.pushPost();
     this.announce();
   }
 
@@ -340,40 +337,29 @@ export class PhotoMode {
 
   /**
    * The current view as a PNG, at `scale` times the canvas's CSS size. The frame is drawn at
-   * that size through the live tier's pipeline, so it matches the preview, only sharper.
+   * that size through the live tier's pipeline, so it matches the preview, only sharper. It waits
+   * for the pipeline the look asks for, and rejects outside photo mode, if photo mode ends while
+   * it waits, or while another capture is running.
    */
   async capture(options: CaptureOptions = {}): Promise<Blob> {
+    this.requireActive('capture');
     if (this.capturing) throw new Error('capture: a capture is already running');
-    const { renderer } = this.host;
-    renderer.getSize(this.size);
-    const size = captureSize(
-      this.size.x,
-      this.size.y,
-      options.scale ?? 2,
-      this.host.maxTextureSize(),
-    );
-    const before = renderer.getPixelRatio();
     this.capturing = true;
-    let blob: Promise<Blob>;
     try {
-      renderer.setPixelRatio(size.pixelRatio);
-      this.apply();
-      const frames = this.host.temporal() ? TEMPORAL_CAPTURE_FRAMES : 1;
-      for (let i = 0; i < frames; i++) this.host.draw();
-      // The canvas is copied when toBlob is called, before the pixel ratio goes back.
-      blob = canvasBlob(renderer.domElement);
+      await this.host.ready();
+      if (this.entry === null) throw new Error('capture: photo mode ended before the capture');
+      return await this.drawCapture(options.scale ?? 2);
     } finally {
-      renderer.setPixelRatio(before);
-      this.apply();
       this.capturing = false;
     }
-    return blob;
   }
 
   /** Puts the photo camera and lens in place for the next draw; the engine calls it every frame. */
   apply(): void {
     if (this.entry === null) return;
     const { camera, renderer } = this.host;
+    const bounds = this.bounds;
+    if (this.currentBounds() !== bounds) this.eye.copy(clampEye(this.eye, this.currentBounds()));
     camera.position.copy(this.eye);
     this.euler.set(this.pitch, this.yaw, 0, 'YXZ');
     camera.quaternion.setFromEuler(this.euler);
@@ -391,13 +377,54 @@ export class PhotoMode {
     this.stopTierWatch();
   }
 
+  private get graded(): boolean {
+    return this.filter !== 'natural';
+  }
+
+  private drawCapture(scale: number): Promise<Blob> {
+    const { renderer } = this.host;
+    renderer.getSize(this.size);
+    const size = captureSize(this.size.x, this.size.y, scale, this.host.maxTextureSize());
+    const before = renderer.getPixelRatio();
+    try {
+      renderer.setPixelRatio(size.pixelRatio);
+      this.apply();
+      const frames = this.host.temporal() ? TEMPORAL_CAPTURE_FRAMES : 1;
+      for (let i = 0; i < frames; i++) this.host.draw();
+      // The canvas is copied when toBlob is called, before the pixel ratio goes back.
+      return canvasBlob(renderer.domElement);
+    } finally {
+      renderer.setPixelRatio(before);
+      this.apply();
+      this.host.captured();
+    }
+  }
+
+  /** The bounds for the photo lens as it is now; a wider view or frame keeps the eye farther off. */
+  private currentBounds(): PhotoBounds {
+    const { camera, tank } = this.host;
+    const lens = this.boundsLens;
+    if (
+      this.bounds === null ||
+      lens.near !== camera.near ||
+      lens.fov !== this.fov ||
+      lens.aspect !== camera.aspect
+    ) {
+      lens.near = camera.near;
+      lens.fov = this.fov;
+      lens.aspect = camera.aspect;
+      this.bounds = photoBounds(tank, lens);
+    }
+    return this.bounds;
+  }
+
   private requireActive(call: string): void {
     if (this.entry === null)
       throw new Error(`photo mode: ${call}() outside photo mode; enter() first`);
   }
 
   private pushPost(): void {
-    this.host.setPost({ look: this.look, depthOfField: this.dofEnabled });
+    this.host.setPost({ look: this.look, depthOfField: this.dofEnabled, graded: this.graded });
   }
 
   private announce(): void {

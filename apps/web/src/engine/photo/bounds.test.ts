@@ -1,82 +1,104 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_TANK } from '../tank/dimensions';
-import { clampEye, moveEye, photoBounds, regionOf } from './bounds';
+import { clampEye, moveEye, nearPlaneReach, photoBounds } from './bounds';
 
-const bounds = photoBounds(DEFAULT_TANK);
-const { solid, room, water, waterVolume } = bounds;
+const LENS = { near: 0.05, fov: 40, aspect: 16 / 9 };
+const bounds = photoBounds(DEFAULT_TANK, LENS);
+const { solid, room } = bounds;
 const FRONT = { x: 0, y: 0.35, z: 1.6 };
 
-describe('photoBounds', () => {
-  it('nests the water inside the tank inside the room', () => {
-    for (const axis of ['x', 'z'] as const) {
-      expect(room.min[axis]).toBeLessThan(solid.min[axis]);
-      expect(solid.min[axis]).toBeLessThan(waterVolume.min[axis]);
-      expect(waterVolume.min[axis]).toBeLessThan(water.min[axis]);
-      expect(water.max[axis]).toBeLessThan(waterVolume.max[axis]);
-      expect(waterVolume.max[axis]).toBeLessThan(solid.max[axis]);
-      expect(solid.max[axis]).toBeLessThan(room.max[axis]);
-    }
-    expect(water.min.y).toBeGreaterThan(DEFAULT_TANK.glass + DEFAULT_TANK.substrateBack);
-    expect(water.max.y).toBeLessThan(waterVolume.max.y);
-    expect(solid.max.y).toBeGreaterThan(DEFAULT_TANK.height);
-    expect(room.min.y).toBeLessThan(0);
+describe('nearPlaneReach', () => {
+  it('is the distance from the eye to a corner of the near plane', () => {
+    expect(nearPlaneReach({ near: 0.05, fov: 75, aspect: 16 / 9 })).toBeCloseTo(0.0929, 4);
+    expect(nearPlaneReach({ near: 0.05, fov: 75, aspect: 19.5 / 9 })).toBeCloseTo(0.1043, 4);
+  });
+
+  it('is the near distance itself for a vanishing field of view', () => {
+    expect(nearPlaneReach({ near: 0.05, fov: 1e-9, aspect: 2 })).toBeCloseTo(0.05, 12);
+  });
+
+  it('refuses a lens that cannot be', () => {
+    expect(() => nearPlaneReach({ near: 0, fov: 40, aspect: 1 })).toThrow(RangeError);
+    expect(() => nearPlaneReach({ near: 0.05, fov: 180, aspect: 1 })).toThrow(RangeError);
+    expect(() => nearPlaneReach({ near: 0.05, fov: 40, aspect: Number.NaN })).toThrow(RangeError);
   });
 });
 
-describe('regionOf', () => {
-  it('is water inside the water and room everywhere else, the glass included', () => {
-    expect(regionOf({ x: 0, y: 0.25, z: 0 }, bounds)).toBe('water');
-    expect(regionOf(FRONT, bounds)).toBe('room');
-    expect(regionOf({ x: 0, y: 0.25, z: waterVolume.max.z + 0.002 }, bounds)).toBe('room');
-    expect(regionOf({ x: 0, y: DEFAULT_TANK.height + 0.01, z: 0 }, bounds)).toBe('room');
+describe('photoBounds', () => {
+  it('puts the tank inside the room', () => {
+    for (const axis of ['x', 'z'] as const) {
+      expect(room.min[axis]).toBeLessThan(solid.min[axis]);
+      expect(solid.max[axis]).toBeLessThan(room.max[axis]);
+    }
+    expect(solid.max.y).toBeGreaterThan(DEFAULT_TANK.height);
+    expect(room.min.y).toBeLessThan(0);
+  });
+
+  it.each([
+    [75, 16 / 9],
+    [75, 19.5 / 9],
+    [75, 32 / 9],
+    [15, 9 / 19.5],
+  ])('keeps every near-plane corner off the glass and lid at %d° and aspect %f', (fov, aspect) => {
+    const lens = { near: 0.05, fov, aspect };
+    const reach = nearPlaneReach(lens);
+    const wide = photoBounds(DEFAULT_TANK, lens);
+    expect(wide.solid.max.z - DEFAULT_TANK.depth / 2).toBeGreaterThan(reach);
+    expect(-DEFAULT_TANK.depth / 2 - wide.solid.min.z).toBeGreaterThan(reach);
+    expect(wide.solid.max.x - DEFAULT_TANK.length / 2).toBeGreaterThan(reach);
+    expect(wide.solid.max.y - DEFAULT_TANK.height).toBeGreaterThan(reach);
+  });
+
+  it('gives a wider view more room', () => {
+    const wide = photoBounds(DEFAULT_TANK, { ...LENS, fov: 75 });
+    expect(wide.solid.max.z).toBeGreaterThan(solid.max.z);
   });
 });
 
 describe('clampEye', () => {
-  it('leaves a room eye clear of the tank where it is', () => {
-    expect(clampEye(FRONT, 'room', bounds)).toEqual(FRONT);
+  it('leaves an eye clear of the tank where it is', () => {
+    expect(clampEye(FRONT, bounds)).toEqual(FRONT);
   });
 
-  it('keeps a room eye inside the room', () => {
-    const eye = clampEye({ x: 40, y: -5, z: 2 }, 'room', bounds);
+  it('keeps the eye inside the room', () => {
+    const eye = clampEye({ x: 40, y: -5, z: 2 }, bounds);
     expect(eye).toEqual({ x: room.max.x, y: room.min.y, z: 2 });
   });
 
-  it('pushes a room eye out of the tank through the nearest face', () => {
-    const nearFront = clampEye({ x: 0.1, y: 0.25, z: solid.max.z - 0.01 }, 'room', bounds);
+  it('pushes an eye out of the tank through the nearest face', () => {
+    const nearFront = clampEye({ x: 0.1, y: 0.25, z: solid.max.z - 0.01 }, bounds);
     expect(nearFront).toEqual({ x: 0.1, y: 0.25, z: solid.max.z });
-    const nearTop = clampEye({ x: 0.1, y: solid.max.y - 0.01, z: 0 }, 'room', bounds);
+    const nearTop = clampEye({ x: 0.1, y: solid.max.y - 0.01, z: 0 }, bounds);
     expect(nearTop).toEqual({ x: 0.1, y: solid.max.y, z: 0 });
-    const nearLeft = clampEye({ x: solid.min.x + 0.01, y: -0.3, z: 0 }, 'room', bounds);
+    const nearLeft = clampEye({ x: solid.min.x + 0.01, y: -0.3, z: 0 }, bounds);
     expect(nearLeft).toEqual({ x: solid.min.x, y: -0.3, z: 0 });
   });
 
-  it('keeps a water eye off the glass, the sand and the surface', () => {
-    const eye = clampEye({ x: 5, y: -1, z: -5 }, 'water', bounds);
-    expect(eye).toEqual({ x: water.max.x, y: water.min.y, z: water.min.z });
-    expect(clampEye({ x: 0, y: 2, z: 0 }, 'water', bounds).y).toBe(water.max.y);
+  it('takes an eye in the water out through the nearest glass', () => {
+    const eye = clampEye({ x: 0, y: 0.25, z: DEFAULT_TANK.depth / 2 - 0.05 }, bounds);
+    expect(eye).toEqual({ x: 0, y: 0.25, z: solid.max.z });
   });
 
   it('refuses a position that is not a number', () => {
-    expect(() => clampEye({ x: Number.NaN, y: 0, z: 0 }, 'room', bounds)).toThrow(RangeError);
+    expect(() => clampEye({ x: Number.NaN, y: 0, z: 0 }, bounds)).toThrow(RangeError);
   });
 });
 
 describe('moveEye', () => {
   it('moves freely through the room', () => {
     const to = { x: 0.5, y: 0.6, z: 1.2 };
-    expect(moveEye(FRONT, to, 'room', bounds)).toEqual(to);
+    expect(moveEye(FRONT, to, bounds)).toEqual(to);
   });
 
   it('stops a long step at the front glass instead of tunnelling out the back', () => {
-    const eye = moveEye(FRONT, { x: 0, y: 0.35, z: -1.6 }, 'room', bounds);
+    const eye = moveEye(FRONT, { x: 0, y: 0.35, z: -1.6 }, bounds);
     expect(eye).toEqual({ x: 0, y: 0.35, z: solid.max.z });
   });
 
   it('holds an eye resting on the glass there, and lets it move along it', () => {
     const resting = { x: 0, y: 0.3, z: solid.max.z };
-    expect(moveEye(resting, { x: 0, y: 0.3, z: -1 }, 'room', bounds)).toEqual(resting);
-    expect(moveEye(resting, { x: 0.2, y: 0.32, z: solid.max.z }, 'room', bounds)).toEqual({
+    expect(moveEye(resting, { x: 0, y: 0.3, z: -1 }, bounds)).toEqual(resting);
+    expect(moveEye(resting, { x: 0.2, y: 0.32, z: solid.max.z }, bounds)).toEqual({
       x: 0.2,
       y: 0.32,
       z: solid.max.z,
@@ -86,39 +108,29 @@ describe('moveEye', () => {
   it('passes beside the tank without touching it', () => {
     const from = { x: solid.max.x + 0.3, y: 0.3, z: 1 };
     const to = { x: solid.max.x + 0.3, y: 0.3, z: -1 };
-    expect(moveEye(from, to, 'room', bounds)).toEqual(to);
+    expect(moveEye(from, to, bounds)).toEqual(to);
   });
 
   it('slides along the glass a step meets at an angle', () => {
-    const eye = moveEye(FRONT, { x: 0.3, y: 0.3, z: 0 }, 'room', bounds);
+    const eye = moveEye(FRONT, { x: 0.3, y: 0.3, z: 0 }, bounds);
     expect(eye).toEqual({ x: 0.3, y: 0.3, z: solid.max.z });
   });
 
   it('lands on the lid from above', () => {
-    const eye = moveEye({ x: 0, y: 1.2, z: 0 }, { x: 0.1, y: 0.2, z: 0 }, 'room', bounds);
+    const eye = moveEye({ x: 0, y: 1.2, z: 0 }, { x: 0.1, y: 0.2, z: 0 }, bounds);
     expect(eye).toEqual({ x: 0.1, y: solid.max.y, z: 0 });
   });
 
   it('slides along a side the step enters last', () => {
     const from = { x: solid.max.x + 0.5, y: 0.3, z: solid.max.z + 0.1 };
-    const eye = moveEye(
-      from,
-      { x: solid.max.x - 0.2, y: 0.3, z: solid.max.z - 0.3 },
-      'room',
-      bounds,
-    );
+    const eye = moveEye(from, { x: solid.max.x - 0.2, y: 0.3, z: solid.max.z - 0.3 }, bounds);
     expect(eye.x).toBe(solid.max.x);
     expect(eye.z).toBeCloseTo(solid.max.z - 0.3, 10);
   });
 
-  it('keeps a water eye in the water however far it is moved', () => {
-    const eye = moveEye({ x: 0, y: 0.25, z: 0 }, { x: 0, y: 0.25, z: 3 }, 'water', bounds);
-    expect(eye).toEqual({ x: 0, y: 0.25, z: water.max.z });
-  });
-
   it('refuses a target that is not a number', () => {
-    expect(() =>
-      moveEye(FRONT, { x: 0, y: Number.POSITIVE_INFINITY, z: 0 }, 'room', bounds),
-    ).toThrow(RangeError);
+    expect(() => moveEye(FRONT, { x: 0, y: Number.POSITIVE_INFINITY, z: 0 }, bounds)).toThrow(
+      RangeError,
+    );
   });
 });
