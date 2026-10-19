@@ -22,6 +22,7 @@ export const CAUSE_TEXT: Record<CauseOfDeath, string> = {
   ammonia: 'was poisoned by ammonia in the water',
   nitrite: 'was poisoned by nitrite in the water',
   disease: 'died of an illness',
+  water_quality: 'could not cope with the water chemistry',
   old_age: 'died of old age after a full life',
   unknown: 'died of a cause we could not tell',
 };
@@ -31,6 +32,8 @@ const CAUSE_ADVICE: Record<CauseOfDeath, string> = {
   ammonia: 'Vacuuming the gravel and changing some water keeps ammonia down.',
   nitrite: 'Changing some water brings nitrite down while the filter catches up.',
   disease: 'Catching illness early and keeping the water clean helps.',
+  water_quality:
+    'Check the water test: pH, hardness, salinity and temperature must suit the species.',
   old_age: 'Nothing could have been done.',
   unknown: '',
 };

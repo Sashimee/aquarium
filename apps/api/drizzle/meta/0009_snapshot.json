@@ -1095,7 +1095,15 @@
     "public.cause_of_death": {
       "name": "cause_of_death",
       "schema": "public",
-      "values": ["starvation", "ammonia", "nitrite", "disease", "old_age", "unknown"]
+      "values": [
+        "starvation",
+        "ammonia",
+        "nitrite",
+        "disease",
+        "water_quality",
+        "old_age",
+        "unknown"
+      ]
     },
     "public.event_kind": {
       "name": "event_kind",

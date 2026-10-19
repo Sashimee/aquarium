@@ -38,7 +38,7 @@
   "kh": {
     "consumedPerNitrate": 0.01,
     "restoredPerWaterChange": 0.5,
-    "sourceWater": 6
+    "sourceWater": { "freshwater": 6, "reef": 8, "cichlid": 10, "blackwater": 1, "mangrove": 8 }
   },
   "temperature": {
     "target": {
@@ -50,7 +50,7 @@
     },
     "roomC": 21,
     "driftPerHour": 0.15,
-    "heaterWarmingPerHourPerTier": 0.6
+    "heaterWarmingPerHourPerTier": 1.5
   },
   "salinity": {
     "target": {
@@ -90,10 +90,10 @@
     ],
     "kh": [
       "Wurts & Durborow 1992, SRAC 464: nitrification consumes about 7 mg alkalinity as CaCO3 per mg ammonia-N",
-      "sourceWater is a typical mains-water carbonate hardness"
+      "sourceWater is a typical mains-water carbonate hardness for fresh biomes and a typical salt-mix hardness for marine and brackish ones"
     ],
     "temperature": [
-      "Newton's law of cooling toward room temperature; heater power per tier is a game abstraction",
+      "Newton's law of cooling toward room temperature; a thermostat heater holds the setpoint that suits the stocked fish (their shared comfort range, else the biome target), and one tier is strong enough to reach 31 C in a 21 C room",
       "Biome targets are typical hobby values (reef 24 to 27 C)"
     ],
     "salinity": [

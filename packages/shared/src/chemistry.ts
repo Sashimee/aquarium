@@ -63,7 +63,7 @@ export const chemistryParametersSchema = z.strictObject({
     ),
     ambientSeed: rate.describe('colony-equivalent that lets a colony start from nothing'),
     minSubstrate: rate.describe(
-      'ammonia or nitrite level plus one hour of supply below which a colony starves',
+      'ammonia or nitrite present plus the supply of one step, below which a colony starves',
     ),
     mediaCapacityPerFilterTier: unitSchema.describe('share of full colony one filter tier hosts'),
   }),
@@ -86,7 +86,9 @@ export const chemistryParametersSchema = z.strictObject({
   kh: z.strictObject({
     consumedPerNitrate: rate,
     restoredPerWaterChange: unitSchema.describe('fraction of the gap to the source water closed'),
-    sourceWater: z.number().min(0).max(40),
+    sourceWater: perBiome(z.number().min(0).max(40)).describe(
+      'dKH of the water a change adds: tap for fresh biomes, salt mix for marine and brackish',
+    ),
   }),
   temperature: z.strictObject({
     target: perBiome(z.number().min(0).max(45)),

@@ -68,7 +68,7 @@ export function applyCare(
           nitrite: chemistry.nitrite * (1 - WATER_CHANGE_FRACTION),
           kh:
             chemistry.kh +
-            (params.kh.sourceWater - chemistry.kh) * params.kh.restoredPerWaterChange,
+            (params.kh.sourceWater[biome] - chemistry.kh) * params.kh.restoredPerWaterChange,
         },
       );
     case 'bottled_bacteria': {

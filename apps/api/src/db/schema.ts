@@ -118,6 +118,7 @@ export const causeOfDeathEnum = pgEnum('cause_of_death', [
   'ammonia',
   'nitrite',
   'disease',
+  'water_quality',
   'old_age',
   'unknown',
 ]);

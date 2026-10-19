@@ -76,14 +76,12 @@ export function stepFish(
       chemSpec.nitriteTolerance,
       chemistryParams.nitrite.toxicityPerUnit,
     );
-  const stressLoss =
-    unit *
-    chemistryParams.stress.healthLossFraction *
-    waterStress(input.chemistry, chemSpec, chemistryParams);
-  const harmed = starving || ammoniaLoss + nitriteLoss + stressLoss > 0;
+  const stress = waterStress(input.chemistry, chemSpec, chemistryParams);
+  const stressLoss = unit * chemistryParams.stress.healthLossFraction * stress;
+  const harmed = starving || ammoniaLoss + nitriteLoss > 0;
 
   const loss = input.grace ? 0 : starveLoss + ammoniaLoss + nitriteLoss + stressLoss;
-  const gain = harmed ? 0 : spec.healthRecoveryPerHour * dtHours;
+  const gain = harmed ? 0 : spec.healthRecoveryPerHour * dtHours * (1 - Math.min(1, stress));
   const health = clamp01(fish.health - loss + gain);
 
   const size =
@@ -111,7 +109,7 @@ function dominantCause(
   if (worst === starve) return 'starvation';
   if (worst === ammonia) return 'ammonia';
   if (worst === nitrite) return 'nitrite';
-  return 'unknown';
+  return worst > 0 ? 'water_quality' : 'unknown';
 }
 
 export function fishBioload(fish: LifecycleFish, spec: SpeciesLifecycle): number {

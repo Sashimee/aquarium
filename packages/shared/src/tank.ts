@@ -40,6 +40,7 @@ export const causeOfDeathSchema = z.enum([
   'ammonia',
   'nitrite',
   'disease',
+  'water_quality',
   'old_age',
   'unknown',
 ]);

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { chemistrySchema, equipmentSchema } from '@aquarium/shared';
+import { chemistrySchema, DEFAULT_EQUIPMENT, equipmentSchema } from '@aquarium/shared';
 import { connect, runMigrations, type Database } from './db/index.ts';
 import { createTestDatabase } from './test-harness.ts';
 
@@ -41,6 +41,11 @@ describe('the chemistry v2 migration on tanks that already exist', () => {
         ('00000000-0000-4000-8000-000000000001', 'u1', 'freshwater', 'Old tank', '{"ammonia":0.1,"nitrate":3,"algae":0.2,"uneatenFood":0}'),
         ('00000000-0000-4000-8000-000000000002', 'u1', 'reef', 'Old reef', '{"ammonia":0,"nitrate":1,"algae":0,"uneatenFood":0}')`,
     );
+    await database.pool.query(
+      `insert into tanks (id, owner_id, biome, name, equipment) values
+        ('00000000-0000-4000-8000-000000000004', 'u1', 'freshwater', 'Warm tank', $1)`,
+      [JSON.stringify({ ...DEFAULT_EQUIPMENT, heater: { tier: 2 } })],
+    );
     await runMigrations(database);
   });
 
@@ -54,7 +59,7 @@ describe('the chemistry v2 migration on tanks that already exist', () => {
     const { rows } = await database.pool.query<{ chemistry: unknown }>(
       'select chemistry from tanks order by name',
     );
-    expect(rows).toHaveLength(2);
+    expect(rows).toHaveLength(3);
     for (const row of rows) {
       const chemistry = chemistrySchema.parse(row.chemistry);
       expect(chemistry.bacteria).toEqual({ ammoniaOxidisers: 1, nitriteOxidisers: 1 });
@@ -70,6 +75,13 @@ describe('the chemistry v2 migration on tanks that already exist', () => {
     expect(equipment.heater.tier).toBe(1);
     expect(equipment.filter.tier).toBe(1);
     expect(rows[0]?.water.nitrate).toBe(3);
+  });
+
+  it('keeps a heater that was already above tier 0', async () => {
+    const { rows } = await database.pool.query<{ equipment: unknown }>(
+      `select equipment from tanks where name = 'Warm tank'`,
+    );
+    expect(equipmentSchema.parse(rows[0]?.equipment).heater.tier).toBe(2);
   });
 
   it('gives a tank created afterwards the same seeded filter and heater', async () => {

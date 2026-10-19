@@ -49,6 +49,29 @@ function stepColony(
   return Math.min(capacity, grown);
 }
 
+/**
+ * A thermostat heater holds the temperature that costs the stocked fish the least comfort. With no fish,
+ * or when the biome target already suits them, that is the biome target; otherwise the middle of the
+ * temperatures where the stocked fish are least stressed, so a discus tank warms to its own range.
+ */
+export function heaterSetpoint(fish: readonly LifecycleFish[], ctx: StepContext): number {
+  const target = ctx.chemistryParams.temperature.target[ctx.biome];
+  const ranges: (readonly [number, number])[] = [];
+  for (const f of fish) {
+    const range = f.alive ? ctx.speciesChemistry.get(f.species)?.temperatureC : undefined;
+    if (range) ranges.push(range);
+  }
+  if (ranges.length === 0) return target;
+  const discomfort = (t: number): number =>
+    ranges.reduce((sum, [lo, hi]) => sum + Math.max(lo - t, t - hi, 0), 0);
+  const candidates = [target, ...ranges.flatMap(([lo, hi]) => [lo, hi])];
+  const best = Math.min(...candidates.map(discomfort));
+  const optimal = candidates.filter((t) => discomfort(t) <= best + 1e-9);
+  const low = Math.min(...optimal);
+  const high = Math.max(...optimal);
+  return target >= low && target <= high ? target : (low + high) / 2;
+}
+
 export function stepWater(
   state: { water: Water; chemistry: Chemistry },
   fish: readonly LifecycleFish[],
@@ -79,7 +102,7 @@ export function stepWater(
     ammoniaOxidisers: stepColony(
       nh3Bugs,
       capacity,
-      water.ammonia + perHour > cp.bacteria.minSubstrate,
+      water.ammonia + perHour * dtHours > cp.bacteria.minSubstrate,
       cp.bacteria.ammoniaOxidisers,
       cp.bacteria,
       dtHours,
@@ -87,7 +110,7 @@ export function stepWater(
     nitriteOxidisers: stepColony(
       no2Bugs,
       capacity,
-      chemistry.nitrite + toNitrite / dtHours > cp.bacteria.minSubstrate,
+      chemistry.nitrite + toNitrite > cp.bacteria.minSubstrate,
       cp.bacteria.nitriteOxidisers,
       cp.bacteria,
       dtHours,
@@ -102,7 +125,7 @@ export function stepWater(
 
   const heater = ctx.equipment.heater.tier;
   const heatedTo = Math.min(
-    cp.temperature.target[ctx.biome],
+    heaterSetpoint(fish, ctx),
     cp.temperature.roomC +
       (cp.temperature.heaterWarmingPerHourPerTier * heater) / cp.temperature.driftPerHour,
   );

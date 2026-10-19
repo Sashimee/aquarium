@@ -706,7 +706,8 @@ describe('nitrogen cycle', () => {
     if (!r.ok) throw new Error(r.reason);
     expect(r.value.chemistry.nitrite).toBeCloseTo(0.5);
     expect(r.value.chemistry.kh).toBeCloseTo(
-      2 + (chemistryParams.kh.sourceWater - 2) * chemistryParams.kh.restoredPerWaterChange,
+      2 +
+        (chemistryParams.kh.sourceWater.freshwater - 2) * chemistryParams.kh.restoredPerWaterChange,
     );
   });
 });
@@ -759,6 +760,65 @@ describe('pH, KH, temperature and salinity', () => {
   it('a fish within its ranges takes no stress damage', () => {
     expect(fedDaily(stocked(), 30).fish.every((f) => f.health === 1)).toBe(true);
   });
+
+  it('a heater warms the tank to what the stocked fish need, and to the biome target when empty', () => {
+    const discus = run(tank([fishOf('d', 'discus')]), 3 * DAY).state.chemistry.temperatureC;
+    expect(discus).toBeGreaterThanOrEqual(28);
+    expect(discus).toBeLessThanOrEqual(31);
+    const empty = run(tank([]), 3 * DAY).state.chemistry.temperatureC;
+    expect(empty).toBeCloseTo(25, 1);
+  });
+
+  it('a mixed tank settles where the stocked fish are least stressed overall', () => {
+    const mixed = tank([fishOf('d', 'discus'), fishOf('d2', 'discus'), fishOf('n', 'neon-tetra')]);
+    const t = run(mixed, 3 * DAY).state.chemistry.temperatureC;
+    expect(t).toBeGreaterThan(27.9);
+  });
+
+  it('one heater tier reaches the blackwater target', () => {
+    const state = {
+      ...tank([]),
+      chemistry: { ...newTankChemistry('freshwater'), temperatureC: 22 },
+    };
+    const t = run(state, 3 * DAY, { env: { biome: 'blackwater' } }).state.chemistry.temperatureC;
+    expect(t).toBeCloseTo(27, 1);
+  });
+
+  it('a water change pulls KH towards the biome source water, not one global value', () => {
+    const reef = {
+      ...tank([fishOf('a', 'ocellaris-clownfish')]),
+      chemistry: { ...newTankChemistry('reef'), kh: 5 },
+    };
+    const r = applyCare(reef, { type: 'water_change' }, 'reef', chemistryParams);
+    if (!r.ok) throw new Error(r.reason);
+    const { sourceWater, restoredPerWaterChange } = chemistryParams.kh;
+    expect(r.value.chemistry.kh).toBeCloseTo(5 + (sourceWater.reef - 5) * restoredPerWaterChange);
+    expect(r.value.chemistry.kh).toBeGreaterThan(5);
+  });
+
+  it('names water quality as the cause when out-of-range water kills a fish', () => {
+    const wrong = {
+      ...tank([fishOf('a', 'ocellaris-clownfish', { health: 0.001 })]),
+      chemistry: newTankChemistry('freshwater'),
+    };
+    const result = run(wrong, 5 * DAY);
+    expect(only(result).alive).toBe(false);
+    expect(only(result).cause).toBe('water_quality');
+  });
+
+  it('mild stress slows recovery after a meal instead of stopping it', () => {
+    const mildlyCold = {
+      ...tank([fishOf('a', 'neon-tetra', { health: 0.5 })]),
+      chemistry: { ...newTankChemistry('freshwater'), temperatureC: 19 },
+    };
+    const heaterless = { ...DEFAULT_EQUIPMENT, heater: { tier: 0 } };
+    const stressed = only(run(mildlyCold, 12 * HOUR, { equipment: heaterless })).health;
+    const comfortable = only(
+      run(tank([fishOf('a', 'neon-tetra', { health: 0.5 })]), 12 * HOUR),
+    ).health;
+    expect(stressed).toBeGreaterThan(0.5);
+    expect(stressed).toBeLessThan(comfortable);
+  });
 });
 
 describe('offline catch-up with chemistry', () => {
@@ -810,4 +870,48 @@ describe('offline catch-up with chemistry', () => {
     if (!ate.ok) throw new Error(ate.reason);
     expect(ate.value.chemistry.nitrite).toBe(0.7);
   });
+});
+
+describe('every species in a default tank of its own biome under good care', () => {
+  it.each(parsedSpecies.map((s) => [s.id, s.biome] as const))(
+    '%s lives 120 days unharmed with daily food and a weekly water change',
+    (id, biome) => {
+      const spec = species.get(id);
+      if (!spec) throw new Error(`no species ${id}`);
+      const count = Math.min(3, Math.floor(TANK_BIOLOAD_CAPACITY / spec.bioload));
+      let state: LifecycleState = {
+        water: cleanWater,
+        chemistry: newTankChemistry(biome),
+        fish: Array.from({ length: count }, (_, i) =>
+          fishOf(`${id}-${i}`, id, { size: spec.maxSizeM }),
+        ),
+      };
+      let now = T0;
+      for (let day = 0; day < 120; day++) {
+        state = {
+          ...state,
+          water: { ...state.water, uneatenFood: state.water.uneatenFood + 0.5 },
+          fish: state.fish.map((f) => ({ ...f, hunger: 0 })),
+        };
+        if (day % 7 === 0) {
+          const changed = applyCare(state, { type: 'water_change' }, biome, chemistryParams);
+          if (!changed.ok) throw new Error(changed.reason);
+          state = changed.value;
+        }
+        const r = catchUp({
+          state,
+          fromMs: now,
+          toMs: now + DAY,
+          ...env,
+          biome,
+          graceEndsAtMs: NO_GRACE,
+          vacationFeeder: false,
+        });
+        expect(r.deaths).toEqual([]);
+        state = r.state;
+        now += DAY;
+      }
+      expect(state.fish.every((f) => f.alive && f.health === 1)).toBe(true);
+    },
+  );
 });
