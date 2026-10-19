@@ -1,3 +1,4 @@
+import { HANDLE_COOLDOWN_DAYS } from '@aquarium/shared';
 import { lt, sql } from 'drizzle-orm';
 import { schema, type Database } from './db/index.ts';
 
@@ -15,6 +16,14 @@ export async function pruneExpired({ db }: Database): Promise<{ sessions: number
   await db
     .delete(schema.ateBatches)
     .where(lt(schema.ateBatches.createdAt, sql`now() - interval '1 day'`));
+  await db
+    .delete(schema.releasedHandles)
+    .where(
+      lt(
+        schema.releasedHandles.releasedAt,
+        sql`now() - make_interval(days => ${HANDLE_COOLDOWN_DAYS})`,
+      ),
+    );
   return { sessions: sessions.length };
 }
 

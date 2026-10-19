@@ -1,4 +1,10 @@
-import { biomeSchema, type Biome, type SpeciesSummary, type Tank } from '@aquarium/shared';
+import {
+  playableBiomeSchema,
+  type Biome,
+  type PlayableBiome,
+  type SpeciesSummary,
+  type Tank,
+} from '@aquarium/shared';
 import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react';
 import {
   canBuy,
@@ -14,7 +20,13 @@ import { useAuth } from './context';
 import { Link } from './screens';
 import { useActiveTank, useSessionState, useOptionalSession, useSpeciesNames } from './session';
 
-const BIOME_LABEL: Record<Biome, string> = { freshwater: 'Freshwater', reef: 'Reef' };
+const BIOME_LABEL: Record<Biome, string> = {
+  freshwater: 'Freshwater',
+  reef: 'Reef',
+  cichlid: 'Cichlid',
+  blackwater: 'Blackwater',
+  mangrove: 'Mangrove',
+};
 
 interface Ready {
   session: TankSession;
@@ -74,7 +86,7 @@ const needTank = (): ReactNode => (
   <p>You have no tank yet. Open My tank at the top to start one.</p>
 );
 
-export function TanksPanel({ newTankBiome }: { newTankBiome: Biome | null }) {
+export function TanksPanel({ newTankBiome }: { newTankBiome: PlayableBiome | null }) {
   return (
     <Gate
       noTank={(session, state) => (
@@ -133,7 +145,7 @@ function TankSwitcher({
   session: TankSession;
   state: SessionState;
   tank: Tank;
-  newTankBiome: Biome | null;
+  newTankBiome: PlayableBiome | null;
 }) {
   const selectId = useId();
   const [adding, setAdding] = useState(newTankBiome !== null);
@@ -237,11 +249,11 @@ function NewTankForm({
 }: {
   session: TankSession;
   state: SessionState;
-  initialBiome: Biome;
+  initialBiome: PlayableBiome;
   onDone?: () => void;
 }) {
   const id = useId();
-  const [biome, setBiome] = useState<Biome>(initialBiome);
+  const [biome, setBiome] = useState<PlayableBiome>(initialBiome);
   const taken = state.tanks.map((t) => t.name);
   const [name, setName] = useState(() => suggestTankName(initialBiome, taken));
   const [problem, setProblem] = useState<string | null>(null);
@@ -262,12 +274,12 @@ function NewTankForm({
         id={`${id}-b`}
         value={biome}
         onChange={(e) => {
-          const next = biomeSchema.parse(e.target.value);
+          const next = playableBiomeSchema.parse(e.target.value);
           setBiome(next);
           setName(suggestTankName(next, taken));
         }}
       >
-        {biomeSchema.options.map((b) => (
+        {playableBiomeSchema.options.map((b) => (
           <option key={b} value={b}>
             {BIOME_LABEL[b]}
           </option>

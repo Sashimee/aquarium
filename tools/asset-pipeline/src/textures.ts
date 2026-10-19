@@ -159,6 +159,29 @@ export function isCompleteKtx2(bytes: Uint8Array): boolean {
   return true;
 }
 
+export interface Ktx2Info {
+  width: number;
+  height: number;
+  levels: number;
+  /** DFD colour model: 163 is ETC1S, 166 is UASTC. */
+  colorModel: number;
+  /** DFD transfer function: 1 linear, 2 sRGB. */
+  transfer: number;
+}
+
+export function readKtx2Info(bytes: Uint8Array): Ktx2Info {
+  if (!isCompleteKtx2(bytes)) throw new Error('not a complete KTX2 file');
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const dfd = view.getUint32(48, true);
+  return {
+    width: view.getUint32(20, true),
+    height: view.getUint32(24, true),
+    levels: Math.max(1, view.getUint32(40, true)),
+    colorModel: view.getUint8(dfd + 12),
+    transfer: view.getUint8(dfd + 14),
+  };
+}
+
 /** The `KTXmapRange` scale basisu stores when it had to rescale an HDR image; 1 when absent. three ignores it. */
 export function ktx2MapRangeScale(bytes: Uint8Array): number {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -222,7 +245,7 @@ export async function encodeHdrKtx2(hdr: Uint8Array): Promise<Uint8Array> {
   }
 }
 
-async function encodeKtx2(
+export async function encodeKtx2(
   image: Rgba,
   spec: Pick<TextureSpec, 'codec' | 'colorSpace' | 'role'>,
 ): Promise<Uint8Array> {

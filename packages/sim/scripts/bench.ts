@@ -107,6 +107,39 @@ for (let i = 0; i < feedSteps; i++) {
 }
 const feedMean = feedMs / feedSteps;
 
+// Toys in the reef: a mirror on the back glass and a ball drifting on the surface, resent every
+// step as gameplay does while it moves, with the bumps fed back into its drift.
+const played = new World(benchmarkConfig(11));
+const back = -REEF_TANK.depth / 2 + 0.004;
+const ball = { x: 0, z: 0, vx: 0.05, vz: 0.03 };
+const toySteps = 3000;
+let toyMs = 0;
+const toySamples: number[] = [];
+for (let i = 0; i < toySteps; i++) {
+  const t0 = performance.now();
+  played.setToys([
+    { kind: 'mirror', position: [0.2, 0.45, back], normal: [0, 0, 1] },
+    {
+      kind: 'ball',
+      position: [ball.x, REEF_TANK.height + 0.012, ball.z],
+      velocity: [ball.vx, 0, ball.vz],
+    },
+  ]);
+  played.step();
+  const ms = performance.now() - t0;
+  toyMs += ms;
+  toySamples.push(ms);
+  for (const n of played.takeToyNudges()) {
+    ball.vx += n.ix;
+    ball.vz += n.iz;
+  }
+  ball.x += ball.vx / 30;
+  ball.z += ball.vz / 30;
+  if (Math.abs(ball.x) > REEF_TANK.width / 2 - 0.03) ball.vx = -ball.vx;
+  if (Math.abs(ball.z) > REEF_TANK.depth / 2 - 0.03) ball.vz = -ball.vz;
+}
+const toyMean = toyMs / toySteps;
+
 // Node queues gc entries to the observer only once the event loop turns.
 await new Promise((resolve) => setTimeout(resolve, 0));
 gc.disconnect();
@@ -114,6 +147,7 @@ const gcMs = gcPauses.reduce((sum, e) => sum + e.duration, 0);
 
 samples.sort((a, b) => a - b);
 feedSamples.sort((a, b) => a - b);
+toySamples.sort((a, b) => a - b);
 walkerSamples.sort((a, b) => a - b);
 const mean = means.reduce((a, b) => a + b, 0) / means.length;
 console.log(
@@ -135,6 +169,8 @@ console.log(
     feedingMeanParticles: Math.round(particleSteps / feedSteps),
     feedingMeanMsPerStep: Number(feedMean.toFixed(4)),
     feedingP99Ms: Number(percentile(feedSamples, 0.99).toFixed(4)),
+    withToysMeanMsPerStep: Number(toyMean.toFixed(4)),
+    withToysP99Ms: Number(percentile(toySamples, 0.99).toFixed(4)),
     gcPauses: gcPauses.length,
     gcPauseMs: Number(gcMs.toFixed(4)),
   }),
@@ -144,6 +180,7 @@ const gates: [string, number][] = [
   ['p99 step', percentile(samples, 0.99)],
   ['p99 feeding step', percentile(feedSamples, 0.99)],
   ['p99 step with walkers', percentile(walkerSamples, 0.99)],
+  ['p99 step with toys', percentile(toySamples, 0.99)],
 ];
 const over: string[] = [];
 for (const [name, ms] of gates) {

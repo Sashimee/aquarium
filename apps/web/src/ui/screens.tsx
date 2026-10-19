@@ -12,6 +12,7 @@ import {
 import { ApiRequestError, ClientValidationError, type FieldErrors } from './api';
 import { useApi, useAuth } from './context';
 import { deleteErrorMessage, downloadText, rateLimitMessage, safeHref } from './legal';
+import { InstallCard } from '../pwa/InstallCard';
 import { navigate } from './router';
 
 export function Link({
@@ -731,6 +732,7 @@ export function SettingsScreen() {
 
   return (
     <Panel title="Settings">
+      <InstallCard />
       <section aria-labelledby="passkey-title">
         <h2 id="passkey-title">Passkeys</h2>
         <p>Sign in with this device instead of a password.</p>

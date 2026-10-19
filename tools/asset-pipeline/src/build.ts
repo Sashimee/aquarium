@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readyCodecs } from './glb.ts';
+import { contactSheet, type Atlas } from './impostor.ts';
 import { buildSourceFish, type FishContext } from './fish.ts';
 import { buildAnemone } from './anemone.ts';
 import { SHRIMP_RECIPES, buildShrimp } from './shrimp.ts';
@@ -20,6 +21,7 @@ import { ENVIRONMENT_RECIPES, FISH_RECIPES, HDRI_RECIPES, SUBSTRATE_RECIPES } fr
 export interface BuildOptions {
   repoRoot: string;
   only: string[];
+  impostorSheetDir?: string;
 }
 
 interface Task {
@@ -78,7 +80,8 @@ function tasks(): Task[] {
 }
 
 export async function build(options: BuildOptions): Promise<void> {
-  const { repoRoot, only } = options;
+  const { repoRoot, only, impostorSheetDir } = options;
+  const atlases = new Map<string, Atlas>();
   const outRoot = join(repoRoot, 'apps', 'web', 'public', 'assets');
   const manifest = manifestSchema.parse(
     JSON.parse(readFileSync(join(repoRoot, 'assets', 'manifest.json'), 'utf8')),
@@ -87,6 +90,9 @@ export async function build(options: BuildOptions): Promise<void> {
   const byId = new Map(manifest.assets.map((a) => [a.id, a]));
   const verified = new Set<string>();
   const ctx: FishContext = {
+    ...(impostorSheetDir
+      ? { atlasSink: (id: string, atlas: Atlas) => atlases.set(id, atlas) }
+      : {}),
     repoRoot,
     outRoot,
     verifySource: (sourceId) => {
@@ -127,6 +133,17 @@ export async function build(options: BuildOptions): Promise<void> {
     console.log(
       `${task.kind}/${task.id}: ${(bytes / 1e6).toFixed(2)} MB in ${((Date.now() - started) / 1000).toFixed(1)} s`,
     );
+  }
+
+  if (impostorSheetDir && atlases.size > 0) {
+    mkdirSync(impostorSheetDir, { recursive: true });
+    for (const [id, atlas] of atlases)
+      writeFileSync(join(impostorSheetDir, `${id}.png`), await contactSheet([atlas]));
+    if (atlases.size > 1)
+      writeFileSync(
+        join(impostorSheetDir, 'contact-sheet.png'),
+        await contactSheet([...atlases.values()]),
+      );
   }
 
   const assets = [...previous.values()].sort((a, b) => {

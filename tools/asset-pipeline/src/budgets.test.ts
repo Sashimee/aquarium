@@ -104,6 +104,36 @@ describe('presetDownloadBytes', () => {
     expect(presetDownloadBytes(input, input.presets[0]!, 'mobile')).toBe(1000 + 200 + 1700 + 100);
   });
 
+  it('counts the impostor atlases of a fish on both budgets', () => {
+    const albedo = entry('fish/tetra/impostor_albedo.ktx2', 300);
+    const normalDepth = entry('fish/tetra/impostor_normal.ktx2', 700);
+    const base = textured('tetra', 'fish', 100, 400);
+    const tetra: OutputAsset = {
+      ...base,
+      species: 'tetra',
+      files: [...base.files, albedo, normalDepth],
+      impostor: {
+        sourceLod: 1,
+        layout: 'octahedral',
+        pose: 'rest',
+        grid: 8,
+        frameSize: 128,
+        atlasSize: 1024,
+        pivot: [0, 0, 0],
+        radius: 0.02,
+        albedo: { ...albedo, codec: 'etc1s' },
+        normalDepth: { ...normalDepth, codec: 'uastc' },
+      },
+    };
+    const input = inputOf([hdri(0), textured('rock', 'rock', 0, 0), tetra]);
+    expect(presetDownloadBytes(input, input.presets[0]!, 'mobile')).toBe(
+      1000 + 200 + 1700 + 100 + 1000,
+    );
+    expect(presetDownloadBytes(input, input.presets[0]!, 'desktop')).toBe(
+      1000 + 200 + 1700 + 500 + 1000,
+    );
+  });
+
   it('skips procedural Euphyllia ids', () => {
     const input = inputOf([hdri(2000)]);
     input.presets[0]!.assetIds = ['euphyllia-hammer-3', 'euphyllia-torch-8'];

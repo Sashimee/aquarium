@@ -9,16 +9,16 @@ const BUNDLED = import.meta.url.endsWith('/src/species.ts')
   : fileURLToPath(new URL('./species.json', import.meta.url));
 const SOURCE_DIR = fileURLToPath(new URL('../../../content/species', import.meta.url));
 
-// Behaviour, locomotion and render blocks belong to the client; the server only needs these four.
+// Behaviour, locomotion and render blocks belong to the client; the server only needs these.
 const entrySchema = speciesSummarySchema.loose();
 
 export function parseCatalog(entries: readonly unknown[]): SpeciesCatalog {
   const catalog = new Map<string, SpeciesSummary>();
   for (const entry of entries) {
     const parsed = entrySchema.parse(entry);
-    const { id, commonName, scientificName, biome, lifecycle } = parsed;
+    const { id, commonName, scientificName, biome, lifecycle, chemistry, breeding } = parsed;
     if (catalog.has(id)) throw new Error(`Duplicate species id "${id}" in content/species.`);
-    catalog.set(id, { id, commonName, scientificName, biome, lifecycle });
+    catalog.set(id, { id, commonName, scientificName, biome, lifecycle, chemistry, breeding });
   }
   if (catalog.size === 0) throw new Error('No species found: content/species is empty.');
   return catalog;

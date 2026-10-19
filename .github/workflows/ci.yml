@@ -123,9 +123,9 @@ jobs:
           - name: decor
             args: decor.spec
           - name: switch-tanks
-            args: tank-type-switch.spec
+            args: tank-type-switch.spec toys.spec
           - name: loading
-            args: loading.spec
+            args: loading.spec pwa.spec haptics.spec
           - name: ktx2-feed-auth-death
             args: ktx2.spec feed.spec auth.spec death.spec
           - name: tanks-care-reset

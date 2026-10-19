@@ -516,4 +516,13 @@ describe('capacity', () => {
     expect(hasCapacityFor(group, 7.1, 12, 60)).toBe(false);
     expect(hasCapacityFor(group, 0.1, 12, 1)).toBe(false);
   });
+
+  it('blocks additions to an over-cap tank without touching the animals in it', () => {
+    const crowded = Array.from({ length: 14 }, () => ({ alive: true, maxBioload: 0.1 }));
+    expect(hasCapacityFor(crowded, 0.1, 100, 12)).toBe(false);
+    expect(crowded).toHaveLength(14);
+    const atCap = crowded.slice(0, 12);
+    expect(hasCapacityFor(atCap, 0.1, 100, 12)).toBe(false);
+    expect(hasCapacityFor(atCap.slice(0, 11), 0.1, 100, 12)).toBe(true);
+  });
 });

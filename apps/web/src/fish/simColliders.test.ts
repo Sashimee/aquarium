@@ -214,7 +214,10 @@ describe('colliderDigest', () => {
   });
 });
 
-describe('demo sim with scene hull colliders', () => {
+// Seconds of CPU-bound simulation: a 5 s default times out when the full suite saturates the cores.
+const LONG = 60_000;
+
+describe('demo sim with scene hull colliders', { timeout: LONG }, () => {
   const rocks = [rock(-0.2, -0.08, 21), rock(0.15, 0.02, 22), rock(0.35, -0.12, 23)];
   const field = new ColliderField(rocks);
   const normal = new Float64Array(3);
@@ -223,12 +226,12 @@ describe('demo sim with scene hull colliders', () => {
     return new World({ ...demoTank(DEFAULT_TANK, 4, 'freshwater').config, decor });
   }
 
-  function insideCount(decor: readonly Collider[]) {
+  function insideCount(decor: readonly Collider[], steps: number) {
     const w = world(decor);
     let inside = 0;
     let near = 0;
     let clearance = Infinity;
-    for (let step = 0; step < 6000; step++) {
+    for (let step = 0; step < steps; step++) {
       w.step();
       for (let i = 0; i < w.count; i++) {
         const d = field.hard(
@@ -246,9 +249,9 @@ describe('demo sim with scene hull colliders', () => {
   }
 
   it('keeps every fish out of the rocks, which they swim through without them', () => {
-    const without = insideCount([]);
+    const without = insideCount([], 2000);
     expect(without.inside).toBeGreaterThan(100);
-    const withRocks = insideCount(sceneCollidersToSim(rocks));
+    const withRocks = insideCount(sceneCollidersToSim(rocks), 6000);
     expect(withRocks.inside).toBe(0);
     expect(withRocks.clearance).toBeGreaterThan(-1e-6);
     expect(withRocks.near).toBeGreaterThan(100);
