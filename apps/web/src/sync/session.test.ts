@@ -752,6 +752,24 @@ describe('tank switcher and naming', () => {
     expect(rec.of('tank:unloaded')).toEqual([{ tankId: TANK_A, reason: 'switch' }]);
   });
 
+  it('sends the chosen size, and the standard size by default', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    api.createTank.mockResolvedValue(second);
+    await session.createTank('Den', 'freshwater', 'nano30');
+    expect(api.createTank).toHaveBeenLastCalledWith({
+      name: 'Den',
+      biome: 'freshwater',
+      size: 'nano30',
+    });
+    await session.createTank('Big', 'freshwater');
+    expect(api.createTank).toHaveBeenLastCalledWith({
+      name: 'Big',
+      biome: 'freshwater',
+      size: 'standard',
+    });
+  });
+
   it('surfaces the tank limit and stays on the current tank', async () => {
     const { api, session } = setup();
     await session.setUser(verified);
