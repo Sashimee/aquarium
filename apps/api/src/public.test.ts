@@ -103,6 +103,21 @@ describe('public tank links', () => {
     expect(apiErrorSchema.parse(closed.json()).error.code).toBe('not_found');
   });
 
+  it('tells an emptied decor layout from a never-edited one', async () => {
+    const owner = await account(h);
+    const { id, token } = await sharedTank(h, owner.cookie);
+    const view = async () =>
+      publicTankSchema.parse((await call(h, null, 'GET', `/api/public/${token}`)).json());
+    const untouched = await view();
+    expect(untouched.decorEdited).toBe(false);
+    expect(untouched.decorLayout).toEqual([]);
+
+    await call(h, owner.cookie, 'PATCH', `/api/tanks/${id}`, { decorLayout: [] });
+    const emptied = await view();
+    expect(emptied.decorEdited).toBe(true);
+    expect(emptied.decorLayout).toEqual([]);
+  });
+
   it('answers 404 for unknown and malformed tokens alike', async () => {
     const unknown = await call(h, null, 'GET', `/api/public/${'A'.repeat(43)}`);
     const malformed = await call(h, null, 'GET', '/api/public/short');

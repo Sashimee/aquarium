@@ -41,6 +41,7 @@ export const publicTankSchema = reactionStateSchema.extend({
   seed: z.int().min(0).max(0xffffffff).describe('stable tank sim seed'),
   backgroundId: backgroundIdSchema,
   decorLayout: decorLayoutResponseSchema,
+  decorEdited: z.boolean().describe('false while the owner never edited the decor'),
   water: waterSchema,
   chemistry: chemistrySchema,
   equipment: equipmentSchema,
