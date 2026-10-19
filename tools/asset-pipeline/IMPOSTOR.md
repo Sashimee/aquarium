@@ -32,17 +32,28 @@ the fins.
 ## The quad
 
 The quad is `2 * radius` metres on a side, centred on `pivot`, the same size for every view, so the
-silhouette does not jump between frames. It is oriented **by the camera**, not by a frame: with
-`dCamera` = unit vector from the pivot to the camera in fish space (camera position through the
-inverse fish transform, minus pivot, normalised), build `viewBasis(dCamera)` and place the corners at
+silhouette does not jump between frames. It stays in the plane through the pivot that faces the
+camera, but it is oriented **by the fish's body as the camera sees it**, not by a frame and not by
+`viewBasis(dCamera)`. With `v` (`dCamera` below) = unit vector from the pivot to the camera in fish space (camera position
+through the inverse fish transform, minus pivot, normalised; the `View` instance slot), the strip's
+normal is `v` and its axes are
 
 ```
-pivot + radius * (+-1 * right + +-1 * up)      // fish space, then the fish's world transform
+along  = normalize(Z - v * dot(v, Z) + 1e-4 * viewBasis(v).right)   // Z = +Z, the fish's long axis
+across = cross(v, along)
+corner = pivot + radius * (+-1 * along + +-1 * across)               // fish space, then the world transform
 ```
 
-so the quad faces the camera with fish-space up as screen up (`reference = +Y`; at the poles it is
-`+Z`, so the roll is undefined within 1e-6 of +-Y and does not matter there). The wave bend is
-applied to the quad afterwards.
+`Z - v * dot(v, Z)` is the fish's +Z axis projected into the camera-facing plane. Head-on, `v` is
+parallel to `Z` and that projection vanishes, so the `1e-4` nudge along `viewBasis(v).right` keeps the
+normalisation defined; the body has no on-screen axis there and the strip's roll changes nothing.
+
+Roll about `v` is free because the atlas lookup (`framePointUv` below) only needs the strip point `q`
+to lie in the camera-facing plane; it never assumes fish-space up is screen up. Aligning the long axis
+with the body has two effects: every cross-section of the strip sits at one model z, so the swim-wave
+bend applies along the strip as it does on the mesh, and the quad stays tight around a narrow fish.
+The wave bend is applied to the strip's corners, and the atlas lookup uses the undeformed point `q`, so
+the picture rides along with the bend.
 
 ## Why a full octahedron
 
@@ -91,7 +102,7 @@ rotated by up to 180 degrees against each other (`viewBasis` of the -Y corner fr
 `right = +X`, its neighbour (1,0) has `right = -X`, and (0,1) has `right = +Z`). **Each frame needs its
 own UV.** Sampling all four at the same UV blends three differently rotated copies of the fish.
 
-For a point `q` on the camera quad (`q = radius * (sx * right + sy * up)` of `viewBasis(dCamera)`,
+For a point `q` on the camera quad (`q = radius * (sx * along + sy * across)` of the strip above,
 `sx, sy` in [-1, 1], relative to the pivot) and the frame `(i, j)` with `dFrame = cellDirection(i, j, grid)`
 and `viewBasis(dFrame)` = `(rightK, upK)`:
 
