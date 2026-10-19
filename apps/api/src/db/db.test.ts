@@ -9,6 +9,7 @@ import {
   newTankChemistry,
 } from '@aquarium/shared';
 import { afterAll, describe, expect, it } from 'vitest';
+import { personalityFromFishId } from '../personality.ts';
 import { createTestDatabase } from '../test-harness.ts';
 import { connect, runMigrations, type Database } from './index.ts';
 
@@ -178,6 +179,48 @@ describe('migrations', () => {
       `select jsonb_build_object('boldness', round(((('x' || substr(md5("id"::text || 'boldness'), 1, 8))::bit(32)::bigint)::numeric / 4294967295), 3)) as p from fish order by name`,
     );
     expect((again.rows[0] as { p: { boldness: number } }).p.boldness).toBe(a?.boldness);
+  });
+
+  it('backfills only neutral-default personalities, deterministically and idempotently (0014)', async () => {
+    const database = await freshDatabase();
+    await runMigrations(database);
+    const q = (text: string, values: unknown[] = []) => database.pool.query(text, values);
+    await q(`insert into "user" (id, name, email) values ('u14', 'U', 'u14@bas.lu')`);
+    const tank = await q(
+      `insert into tanks (owner_id, biome, name) values ('u14', 'freshwater', 'T') returning id`,
+    );
+    const tankId = (tank.rows[0] as { id: string }).id;
+    const neutralId = randomUUID();
+    const chosenId = randomUUID();
+    const chosen = { boldness: 0.1, greed: 0.9, sociability: 0.2 };
+    await q(
+      `insert into fish (id, tank_id, species, name, size, sex) values ($1, $3, 'neon-tetra', 'N', 0.03, 'male'), ($2, $3, 'neon-tetra', 'C', 0.03, 'male')`,
+      [neutralId, chosenId, tankId],
+    );
+    await q(`update fish set personality = $1 where id = $2`, [JSON.stringify(chosen), chosenId]);
+
+    const sql = readFileSync(
+      new URL('../../drizzle/0014_personality_visits.sql', import.meta.url),
+      'utf8',
+    );
+    const backfill = sql.split('--> statement-breakpoint').find((s) => s.includes('UPDATE "fish"'));
+    if (!backfill) throw new Error('0014 has no fish backfill');
+    const read = async () =>
+      new Map(
+        (await q(`select id, personality from fish`)).rows.map(
+          (r: { id: string; personality: unknown }) => [
+            r.id,
+            personalitySchema.parse(r.personality),
+          ],
+        ),
+      );
+
+    await q(backfill);
+    const once = await read();
+    expect(once.get(neutralId)).toEqual(personalityFromFishId(neutralId));
+    expect(once.get(chosenId)).toEqual(chosen);
+    await q(backfill);
+    expect(await read()).toEqual(once);
   });
 
   it('turns an empty stored decor layout into NULL and leaves edited ones alone (0005)', async () => {

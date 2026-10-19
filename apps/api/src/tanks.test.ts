@@ -19,6 +19,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { randomUUID } from 'node:crypto';
 import { MAX_FISH_PER_TANK } from '@aquarium/sim/lifecycle';
 import { schema } from './db/index.ts';
+import { personalityFromFishId } from './personality.ts';
 import { hashShareToken } from './shareToken.ts';
 import { DEFAULT_CARE_LIMITS } from './tanks.ts';
 import { pruneExpired } from './maintenance.ts';
@@ -473,6 +474,68 @@ describe('server-authoritative lifecycle', () => {
     const again = tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${tank.id}`)).json());
     expect(again.away?.births ?? []).toHaveLength(0);
     expect(again.fish.filter((f) => f.stage === 'fry')).toHaveLength(fry.length);
+  });
+
+  it('derives a bought fish personality from its id, and a fry from its own id, not its mother', async () => {
+    const cookie = await signedIn(h);
+    const tank = await createTank(h, cookie);
+    await addFish(h, cookie, tank.id, 'guppy', 'Mum');
+    const withBoth = await addFish(h, cookie, tank.id, 'guppy', 'Dad');
+    const [mum, dad] = withBoth.fish;
+    for (const f of withBoth.fish) expect(f.personality).toEqual(personalityFromFishId(f.id));
+    const grownUp = new Date(h.clock.now() - 400 * DAY * 60_000);
+    await h.database.db
+      .update(schema.fish)
+      .set({ sex: 'female', bornAt: grownUp })
+      .where(eq(schema.fish.id, mum?.id ?? ''));
+    await h.database.db
+      .update(schema.fish)
+      .set({ sex: 'male', bornAt: grownUp })
+      .where(eq(schema.fish.id, dad?.id ?? ''));
+
+    let seen = null;
+    for (let i = 0; i < 40 && !seen; i++) {
+      await h.database.db
+        .update(schema.fish)
+        .set({ hunger: 0 })
+        .where(eq(schema.fish.tankId, tank.id));
+      await advance(h, 6 * 60);
+      const read = tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${tank.id}`)).json());
+      if (read.away?.births?.length) seen = read;
+    }
+    if (!seen) throw new Error('no brood within 10 simulated days');
+    const fry = seen.fish.filter((f) => f.stage === 'fry');
+    expect(fry.length).toBeGreaterThan(0);
+    for (const f of fry) {
+      expect(f.personality).toEqual(personalityFromFishId(f.id));
+      expect(f.personality).not.toEqual(mum?.personality);
+    }
+    const reread = tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${tank.id}`)).json());
+    expect(new Map(reread.fish.map((f) => [f.id, f.personality]))).toEqual(
+      new Map(seen.fish.map((f) => [f.id, f.personality])),
+    );
+  });
+
+  it('counts the distinct days the owner opened a tank within the visit window', async () => {
+    const cookie = await signedIn(h);
+    const tank = await createTank(h, cookie);
+    expect(tank.recentVisitDays).toBe(0);
+
+    const read = async () =>
+      tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${tank.id}`)).json());
+    expect((await read()).recentVisitDays).toBe(1);
+    expect((await read()).recentVisitDays).toBe(1);
+    const stocked = await addFish(h, cookie, tank.id);
+    expect(stocked.recentVisitDays).toBe(1);
+
+    await advance(h, 2 * DAY);
+    expect((await read()).recentVisitDays).toBe(2);
+    await advance(h, DAY);
+    const list = tankListSchema.parse((await call(h, cookie, 'GET', '/api/tanks')).json());
+    expect(list.find((t) => t.id === tank.id)?.recentVisitDays).toBe(3);
+
+    await advance(h, 30 * DAY);
+    expect((await read()).recentVisitDays).toBe(1);
   });
 
   it('survives a long catch-up in which fry are born and then starve', async () => {

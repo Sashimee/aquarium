@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import {
   bigserial,
   boolean,
+  date,
   doublePrecision,
   index,
   integer,
@@ -196,6 +197,17 @@ export const fish = pgTable(
     disease: jsonb('disease'),
   },
   (t) => [index('fish_tank_id_idx').on(t.tankId)],
+);
+
+export const tankVisits = pgTable(
+  'tank_visits',
+  {
+    tankId: uuid('tank_id')
+      .notNull()
+      .references(() => tanks.id, { onDelete: 'cascade' }),
+    day: date('day', { mode: 'string' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.tankId, t.day] })],
 );
 
 export const events = pgTable(

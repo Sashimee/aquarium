@@ -33,6 +33,7 @@ export const dataExportSchema = z.strictObject({
       fish: z.array(exportedRow),
       events: z.array(exportedRow),
       memorials: z.array(exportedRow),
+      visits: z.array(exportedRow),
     }),
   ),
 });
