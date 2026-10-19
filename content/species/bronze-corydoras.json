@@ -15,6 +15,14 @@
     "traits": ["shoal", "air-gulp"]
   },
   "biome": "freshwater",
+  "breeding": {
+    "broodSize": [3, 8],
+    "fryGrowth": { "adultAfterDays": 240, "juvenileAfterDays": 30 },
+    "intervalDays": 14,
+    "minAgeDays": 240,
+    "mode": "egg-scatterer",
+    "temperatureC": [22, 26]
+  },
   "commonName": "Bronze corydoras",
   "id": "bronze-corydoras",
   "lifecycle": {

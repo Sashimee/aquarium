@@ -1,4 +1,10 @@
 import type { WaterParameters } from '@aquarium/shared';
+import {
+  stepBreeding,
+  type BirthRecord,
+  type BreedingEnvironment,
+  type BreedingTable,
+} from './breeding.ts';
 import { MAX_CATCH_UP_MS, STEP_MINUTES, STEP_MS } from './params.ts';
 import { stepTank } from './step.ts';
 import type { DeathRecord, LifecycleState, SpeciesTable } from './types.ts';
@@ -11,6 +17,8 @@ export interface CatchUpInput {
   readonly params: WaterParameters;
   readonly graceEndsAtMs: number;
   readonly vacationFeeder: boolean;
+  readonly breeding: BreedingTable;
+  readonly breedingEnvironment: BreedingEnvironment;
 }
 
 export interface CatchUpResult {
@@ -21,6 +29,7 @@ export interface CatchUpResult {
   /** New last_tick_at: the end of the last whole step, or `toMs` when the cap applied. */
   readonly advancedToMs: number;
   readonly deaths: readonly DeathRecord[];
+  readonly births: readonly BirthRecord[];
 }
 
 export function catchUp(input: CatchUpInput): CatchUpResult {
@@ -31,6 +40,7 @@ export function catchUp(input: CatchUpInput): CatchUpResult {
 
   let state = input.state;
   const deaths: DeathRecord[] = [];
+  const births: BirthRecord[] = [];
   for (let i = 0; i < steps; i++) {
     const startMs = fromMs + i * STEP_MS;
     const result = stepTank(state, {
@@ -41,8 +51,15 @@ export function catchUp(input: CatchUpInput): CatchUpResult {
       species: input.species,
       params: input.params,
     });
-    state = result.state;
+    const bred = stepBreeding(result.state, {
+      nowMs: startMs + STEP_MS,
+      species: input.species,
+      breeding: input.breeding,
+      environment: input.breedingEnvironment,
+    });
+    state = bred.state;
     deaths.push(...result.deaths);
+    births.push(...bred.births);
   }
 
   return {
@@ -52,5 +69,6 @@ export function catchUp(input: CatchUpInput): CatchUpResult {
     capped,
     advancedToMs: capped ? toMs : fromMs + steps * STEP_MS,
     deaths,
+    births,
   };
 }
