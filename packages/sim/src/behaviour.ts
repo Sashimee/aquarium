@@ -237,6 +237,8 @@ export class Plan {
   roll = NaN;
   continuous = false;
   pivot = false;
+  /** The seek point is the fish's cave, which it works round rock to reach. */
+  homing = false;
   /** A point to keep `shunRadius` away from, pushed off with `shunWeight`; radius 0 for none. */
   shunX = 0;
   shunY = 0;
@@ -272,6 +274,7 @@ export class Plan {
     this.roll = NaN;
     this.continuous = false;
     this.pivot = false;
+    this.homing = false;
     this.shunRadius = 0;
     this.display = 0;
     this.gillFlare = 0;
@@ -1397,6 +1400,7 @@ export class Behaviour {
     if (a !== undefined) {
       const [tx, ty, tz] = this.approach(i, a);
       plan.seek(tx, ty, tz, speed, 0.3);
+      plan.homing = a.kind === 'cave';
       plan.comfort = BEHAVIOUR.shelterComfort;
       this.widenBand(plan, a.position[1], a.radius);
     } else if (sp.home === 'station') {
@@ -1542,6 +1546,7 @@ export class Behaviour {
     }
     const [tx, ty, tz] = this.approach(i, a, py);
     plan.seek(tx, ty, tz, 0, 0.5);
+    plan.homing = true;
     plan.wander *= 0.3;
     return true;
   }
@@ -1954,6 +1959,7 @@ export class Behaviour {
       BEHAVIOUR.caveLeashBodyLengths * length,
       FishState.Station,
     );
+    plan.homing = a.kind === 'cave';
     this.bellyToSurface(i, sp, plan);
   }
 
@@ -1987,6 +1993,7 @@ export class Behaviour {
       Math.max(0.6 * a.radius, 0.5 * length),
       FishState.Shelter,
     );
+    plan.homing = a.kind === 'cave';
     if (plan.state === FishState.Shelter) this.bellyToSurface(i, sp, plan);
     return true;
   }
@@ -2011,6 +2018,15 @@ export class Behaviour {
     if (Math.hypot(rx, ry, rz) <= a.radius || (along > 0 && lateral < a.radius))
       return [ax, ay, az];
     const out = a.radius + BEHAVIOUR.caveMouthBodyLengths * at(this.host.bodyLength, i);
+    if (along < 0.5 * out && lateral >= a.radius) {
+      // Beside the rock, the straight line to the mouth cuts through the cave's own wall: the
+      // fish comes out past the face on its own side first, then crosses to the mouth.
+      return [
+        ax + ux * out + rx - along * ux,
+        ay + uy * out,
+        az + uz * out + rz - along * uz,
+      ];
+    }
     return [ax + ux * out, ay + uy * out, az + uz * out];
   }
 

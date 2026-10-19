@@ -1348,11 +1348,15 @@ export class World {
           }
           // Within one engagement the slide direction stays continuous as the wall normal turns
           // (pane to corner to next pane); only a fresh engagement picks a side from the heading.
-          // Closing on food, a clear wish along the wall (further along the pane, into the
-          // corner) overrides both: sliding against it parks a fish beside food it cannot turn
-          // back to. Cruising keeps continuity, or a wandering heading flips the slide.
+          // Closing on food or heading home, a clear wish along the wall (further along the
+          // pane, into the corner, round the rock to the cave) overrides both: sliding against
+          // it parks a fish beside food it cannot turn back to, or carries a gramma hugging a
+          // rock face away from its cave for as long as it hugs the face. Cruising keeps
+          // continuity, or a wandering heading flips the slide.
           const along = dx * tx + dz * tz;
-          const wished = standOff && Math.abs(along) > STEERING.slideWishFraction * cruiseBase;
+          const wished =
+            (standOff || plan.homing) &&
+            Math.abs(along) > STEERING.slideWishFraction * cruiseBase;
           if (wished && Math.sign(along) * (tx * px0 + tz * pz0) < 0) {
             px0 = 0;
             pz0 = 0;
