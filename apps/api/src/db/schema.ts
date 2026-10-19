@@ -144,7 +144,7 @@ export const tanks = pgTable(
     biome: biomeEnum('biome').notNull(),
     size: tankSizeEnum('size').notNull().default('standard'),
     quarantine: boolean('quarantine').notNull().default(false),
-    shareToken: text('share_token').unique(),
+    shareTokenHash: text('share_token_hash').unique(),
     name: text('name').notNull(),
     decorLayout: jsonb('decor_layout'),
     // null: the player never chose one, so the biome's default shows.
@@ -288,7 +288,7 @@ export const auditLog = pgTable(
   {
     id: bigserial('id', { mode: 'number' }).primaryKey(),
     at: timestamptz('at').notNull().defaultNow(),
-    actorId: text('actor_id').references(() => user.id, { onDelete: 'set null' }),
+    actorId: text('actor_id').references(() => user.id, { onDelete: 'cascade' }),
     tankId: uuid('tank_id').references(() => tanks.id, { onDelete: 'set null' }),
     action: text('action').notNull(),
     detail: jsonb('detail')

@@ -16,9 +16,13 @@ CREATE TABLE "tank_reactions" (
 	CONSTRAINT "tank_reactions_tank_id_user_id_pk" PRIMARY KEY("tank_id","user_id")
 );
 --> statement-breakpoint
-ALTER TABLE "audit_log" ADD CONSTRAINT "audit_log_actor_id_user_id_fk" FOREIGN KEY ("actor_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "tanks" RENAME COLUMN "share_token" TO "share_token_hash";--> statement-breakpoint
+UPDATE "tanks" SET "share_token_hash" = encode(sha256(convert_to("share_token_hash", 'UTF8')), 'hex') WHERE "share_token_hash" IS NOT NULL;--> statement-breakpoint
+ALTER TABLE "tanks" DROP CONSTRAINT "tanks_share_token_unique";--> statement-breakpoint
+ALTER TABLE "audit_log" ADD CONSTRAINT "audit_log_actor_id_user_id_fk" FOREIGN KEY ("actor_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "audit_log" ADD CONSTRAINT "audit_log_tank_id_tanks_id_fk" FOREIGN KEY ("tank_id") REFERENCES "public"."tanks"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tank_reactions" ADD CONSTRAINT "tank_reactions_tank_id_tanks_id_fk" FOREIGN KEY ("tank_id") REFERENCES "public"."tanks"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "tank_reactions" ADD CONSTRAINT "tank_reactions_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "audit_log_tank_id_at_idx" ON "audit_log" USING btree ("tank_id","at");--> statement-breakpoint
-CREATE INDEX "tank_reactions_user_id_idx" ON "tank_reactions" USING btree ("user_id");
+CREATE INDEX "tank_reactions_user_id_idx" ON "tank_reactions" USING btree ("user_id");--> statement-breakpoint
+ALTER TABLE "tanks" ADD CONSTRAINT "tanks_share_token_hash_unique" UNIQUE("share_token_hash");

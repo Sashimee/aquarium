@@ -179,6 +179,7 @@ describe('api client', () => {
       chemistry: newTankChemistry('freshwater'),
       size: 'standard',
       quarantine: false,
+      shared: false,
       shareToken: null,
       equipment: DEFAULT_EQUIPMENT,
       fish: [],

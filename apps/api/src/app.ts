@@ -29,6 +29,7 @@ import { apiError } from './errors.ts';
 import { loadCredits } from './credits.ts';
 import { DEFAULT_HANDLE_LIMIT, registerHandleRoutes } from './handle.ts';
 import { DEFAULT_PUBLIC_LIMITS, registerPublicRoutes, type PublicLimits } from './public.ts';
+import { normalizedPathname } from './url.ts';
 import { DEFAULT_LEGAL_LIMITS, registerLegalRoutes, type LegalLimits } from './legal.ts';
 import type { IpAdmission, Mailer } from './mail.ts';
 import { RateLimiter, type Limit, type ResettableHitStore } from './rate-limit.ts';
@@ -208,18 +209,6 @@ function hasAmbiguousPath(url: string): boolean {
     }
     return decoded === '.' || decoded === '..' || decoded.includes('/') || decoded.includes('\\');
   });
-}
-
-// Collapsing // matters outside the auth proxy (which refuses it): referrer policy and log redaction.
-function normalizedPathname(url: string): string {
-  const raw = url.split('?')[0]?.split('#')[0] ?? '/';
-  let decoded: string;
-  try {
-    decoded = decodeURIComponent(raw);
-  } catch {
-    decoded = raw;
-  }
-  return '/' + decoded.replace(/^\/+/, '').replace(/\/{2,}/g, '/');
 }
 
 const PUBLIC_PATH_PREFIX = '/api/public/';

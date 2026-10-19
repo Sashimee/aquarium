@@ -18,7 +18,6 @@ import {
   MAX_DISPLAY_TANKS,
   MAX_QUARANTINE_TANKS,
   newTankChemistry,
-  shareTokenSchema,
   TANK_SIZES,
   personalitySchema,
   speciesListSchema,
@@ -46,11 +45,12 @@ import {
   type LifecycleFish,
   type LifecycleState,
 } from '@aquarium/sim/lifecycle';
-import { randomBytes, randomInt, randomUUID } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
 import { and, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { audit } from './audit.ts';
+import { issueShareToken } from './shareToken.ts';
 import type { Clock } from './clock.ts';
 import { schema, type Database } from './db/index.ts';
 import { apiError } from './errors.ts';
@@ -385,7 +385,12 @@ async function persistState(tx: Tx, tank: TankRow, fishRows: FishRow[], state: L
   return persistFish(tx, fishRows, state);
 }
 
-async function render(tx: Tx, ticked: Ticked, fishRows = ticked.fishRows): Promise<Tank> {
+async function render(
+  tx: Tx,
+  ticked: Ticked,
+  fishRows = ticked.fishRows,
+  issuedShareToken: string | null = null,
+): Promise<Tank> {
   const { tank, away } = ticked;
   const memorials = await tx
     .select()
@@ -398,7 +403,8 @@ async function render(tx: Tx, ticked: Ticked, fishRows = ticked.fishRows): Promi
     biome: tank.biome,
     size: tank.size,
     quarantine: tank.quarantine,
-    shareToken: tank.shareToken === null ? null : shareTokenSchema.parse(tank.shareToken),
+    shared: tank.shareTokenHash !== null,
+    shareToken: issuedShareToken,
     decorLayout: storedLayout(tank).map((item) => ({
       ...item,
       tintSeed: item.tintSeed ?? legacyTintSeed(item),
@@ -578,7 +584,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       return withTank(user, tankId, async (tx, ticked) => {
         if (
           body.name !== undefined &&
-          ticked.tank.shareToken !== null &&
+          ticked.tank.shareTokenHash !== null &&
           containsBlockedWord(body.name)
         ) {
           throw nameNotPublic();
@@ -646,7 +652,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       const { tankId } = tankParamsSchema.parse(req.params);
       throttle(user.id, 'care');
       return withTank(user, tankId, async (tx, ticked) => {
-        if (ticked.tank.shareToken !== null) return render(tx, ticked);
+        if (ticked.tank.shareTokenHash !== null) return render(tx, ticked);
         if (containsBlockedWord(ticked.tank.name)) {
           throw new HttpError(
             400,
@@ -657,13 +663,14 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
             ),
           );
         }
+        const issued = issueShareToken();
         const [row] = await tx
           .update(schema.tanks)
-          .set({ shareToken: randomBytes(32).toString('base64url') })
+          .set({ shareTokenHash: issued.hash })
           .where(eq(schema.tanks.id, tankId))
           .returning();
         await audit(tx, { action: 'share_enabled', actorId: user.id, tankId });
-        return render(tx, { ...ticked, tank: row ?? ticked.tank });
+        return render(tx, { ...ticked, tank: row ?? ticked.tank }, undefined, issued.token);
       });
     }),
   );
@@ -675,19 +682,20 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       const { tankId } = tankParamsSchema.parse(req.params);
       throttle(user.id, 'care');
       return withTank(user, tankId, async (tx, ticked) => {
-        if (ticked.tank.shareToken === null) {
+        if (ticked.tank.shareTokenHash === null) {
           throw new HttpError(
             409,
             apiError('conflict', 'This tank is not shared. Share it first.'),
           );
         }
+        const issued = issueShareToken();
         const [row] = await tx
           .update(schema.tanks)
-          .set({ shareToken: randomBytes(32).toString('base64url') })
+          .set({ shareTokenHash: issued.hash })
           .where(eq(schema.tanks.id, tankId))
           .returning();
         await audit(tx, { action: 'share_rotated', actorId: user.id, tankId });
-        return render(tx, { ...ticked, tank: row ?? ticked.tank });
+        return render(tx, { ...ticked, tank: row ?? ticked.tank }, undefined, issued.token);
       });
     }),
   );
@@ -699,10 +707,10 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       const { tankId } = tankParamsSchema.parse(req.params);
       throttle(user.id, 'care');
       return withTank(user, tankId, async (tx, ticked) => {
-        const wasShared = ticked.tank.shareToken !== null;
+        const wasShared = ticked.tank.shareTokenHash !== null;
         const [row] = await tx
           .update(schema.tanks)
-          .set({ shareToken: null })
+          .set({ shareTokenHash: null })
           .where(eq(schema.tanks.id, tankId))
           .returning();
         if (wasShared) await audit(tx, { action: 'share_revoked', actorId: user.id, tankId });

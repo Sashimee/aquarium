@@ -19,6 +19,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { randomUUID } from 'node:crypto';
 import { MAX_FISH_PER_TANK } from '@aquarium/sim/lifecycle';
 import { schema } from './db/index.ts';
+import { hashShareToken } from './shareToken.ts';
 import { DEFAULT_CARE_LIMITS } from './tanks.ts';
 import { pruneExpired } from './maintenance.ts';
 import { APP_ORIGIN, createHarness, type Harness } from './test-harness.ts';
@@ -1277,10 +1278,11 @@ describe('tank sizes, quarantine and sharing', () => {
   });
 
   describe('share token', () => {
-    it('is null while private, then created, rotated and revoked by the owner', async () => {
+    it('is issued once, never readable again, rotated and revoked by the owner', async () => {
       const cookie = await signedIn(h);
       const tank = await createTank(h, cookie);
       expect(tank.shareToken).toBeNull();
+      expect(tank.shared).toBe(false);
 
       const created = await call(h, cookie, 'POST', `/api/tanks/${tank.id}/share`);
       expect(created.statusCode).toBe(200);
@@ -1291,29 +1293,41 @@ describe('tank sizes, quarantine and sharing', () => {
       expect(second).not.toBe(first);
 
       const read = tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${tank.id}`)).json());
-      expect(read.shareToken).toBe(second);
+      expect(read.shared).toBe(true);
+      expect(read.shareToken).toBeNull();
+      const [stored] = await h.database.db
+        .select()
+        .from(schema.tanks)
+        .where(eq(schema.tanks.id, tank.id));
+      expect(stored?.shareTokenHash).toBe(hashShareToken(second));
+      expect(JSON.stringify(stored)).not.toContain(second);
 
       const revoked = await call(h, cookie, 'DELETE', `/api/tanks/${tank.id}/share`);
       expect(revoked.statusCode).toBe(200);
-      expect(tankSchema.parse(revoked.json()).shareToken).toBeNull();
+      expect(tankSchema.parse(revoked.json())).toMatchObject({ shared: false, shareToken: null });
       const [row] = await h.database.db
         .select()
         .from(schema.tanks)
         .where(eq(schema.tanks.id, tank.id));
-      expect(row?.shareToken).toBeNull();
+      expect(row?.shareTokenHash).toBeNull();
     });
 
-    it('keeps the token when POST is repeated, and rotates it only on request', async () => {
+    it('keeps the link when POST is repeated, and rotates it only on request', async () => {
       const cookie = await signedIn(h);
       const tank = await createTank(h, cookie);
       const tokenOf = (res: LightMyRequestResponse) =>
         shareTokenSchema.parse(tankSchema.parse(res.json()).shareToken);
       const first = tokenOf(await call(h, cookie, 'POST', `/api/tanks/${tank.id}/share`));
-      const again = tokenOf(await call(h, cookie, 'POST', `/api/tanks/${tank.id}/share`));
-      expect(again).toBe(first);
+      const again = tankSchema.parse(
+        (await call(h, cookie, 'POST', `/api/tanks/${tank.id}/share`)).json(),
+      );
+      expect(again).toMatchObject({ shared: true, shareToken: null });
+      const kept = await h.app.inject(`/api/public/${first}`);
+      expect(kept.statusCode).toBe(200);
       const rotated = tokenOf(await call(h, cookie, 'POST', `/api/tanks/${tank.id}/share/rotate`));
       expect(rotated).not.toBe(first);
-      expect(tokenOf(await call(h, cookie, 'GET', `/api/tanks/${tank.id}`))).toBe(rotated);
+      expect((await h.app.inject(`/api/public/${first}`)).statusCode).toBe(404);
+      expect((await h.app.inject(`/api/public/${rotated}`)).statusCode).toBe(200);
       const other = await signedIn(h);
       expect((await call(h, other, 'POST', `/api/tanks/${tank.id}/share/rotate`)).statusCode).toBe(
         404,

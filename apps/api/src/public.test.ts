@@ -10,6 +10,8 @@ import { eq } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { schema } from './db/index.ts';
+import { pruneExpired } from './maintenance.ts';
+import { hashShareToken } from './shareToken.ts';
 import { APP_ORIGIN, createHarness, type Harness } from './test-harness.ts';
 
 const PASSWORD = 'correct horse battery';
@@ -132,7 +134,7 @@ describe('public tank links', () => {
       .select()
       .from(schema.tanks)
       .where(eq(schema.tanks.id, tank.id));
-    expect(row?.shareToken).toBeNull();
+    expect(row?.shareTokenHash).toBeNull();
   });
 
   it('sends noindex, no-store and no-referrer headers, even on a miss', async () => {
@@ -144,6 +146,35 @@ describe('public tank links', () => {
       expect(res.headers['cache-control']).toBe('no-store');
       expect(res.headers['referrer-policy']).toBe('no-referrer');
     }
+  });
+
+  it('sends the headers on percent-encoded paths too', async () => {
+    const owner = await account(h);
+    const { token } = await sharedTank(h, owner.cookie);
+    for (const url of [
+      `/api/%70ublic/${token}`,
+      `/api/public%2F${token}`,
+      `/API/Public/${token}`,
+    ]) {
+      const res = await h.app.inject(url);
+      expect(res.headers['x-robots-tag']).toBe('noindex, nofollow');
+      expect(res.headers['cache-control']).toBe('no-store');
+      expect(res.headers['referrer-policy']).toBe('no-referrer');
+    }
+  });
+
+  it('stores only a hash of the token and rounds the snapshot time to the hour', async () => {
+    const owner = await account(h);
+    const { id, token } = await sharedTank(h, owner.cookie);
+    const [row] = await h.database.db.select().from(schema.tanks).where(eq(schema.tanks.id, id));
+    expect(row?.shareTokenHash).toBe(hashShareToken(token));
+    expect(JSON.stringify(row)).not.toContain(token);
+    const read = tankSchema.parse((await call(h, owner.cookie, 'GET', `/api/tanks/${id}`)).json());
+    expect(read).toMatchObject({ shared: true, shareToken: null });
+    const body = publicTankSchema.parse((await h.app.inject(`/api/public/${token}`)).json());
+    const at = new Date(body.snapshotAt);
+    expect([at.getUTCMinutes(), at.getUTCSeconds(), at.getUTCMilliseconds()]).toEqual([0, 0, 0]);
+    expect(at.getTime()).toBeLessThanOrEqual((row?.lastTickAt ?? new Date(0)).getTime());
   });
 
   it('exposes no owner identity, ids or email', async () => {
@@ -312,8 +343,14 @@ describe('public tank links', () => {
         (await call(h, guest.cookie, 'POST', '/api/me/export', {})).json(),
       );
       expect(exported.reactions).toHaveLength(1);
-      expect(exported.reactions[0]).toMatchObject({ tankId: id, kind: 'star' });
-      expect(JSON.stringify(exported)).not.toContain(token);
+      expect(exported.reactions[0]).toMatchObject({ tank: 'Reef corner', kind: 'star' });
+      expect(exported.auditLog).toEqual([
+        expect.objectContaining({ action: 'reaction_set', tank: 'Reef corner' }),
+      ]);
+      const dump = JSON.stringify(exported);
+      for (const secret of [token, id, hashShareToken(token), owner.userId, owner.email]) {
+        expect(dump).not.toContain(secret);
+      }
 
       const deleted = await call(h, guest.cookie, 'POST', '/api/me/delete', { password: PASSWORD });
       expect(deleted.statusCode).toBe(204);
@@ -322,6 +359,23 @@ describe('public tank links', () => {
         .from(schema.tankReactions)
         .where(eq(schema.tankReactions.tankId, id));
       expect(left).toHaveLength(0);
+      const audited = await h.database.db
+        .select()
+        .from(schema.auditLog)
+        .where(eq(schema.auditLog.actorId, guest.userId));
+      expect(audited).toHaveLength(0);
+    });
+
+    it('exports the owner’s tank as shared without any token or hash', async () => {
+      const owner = await account(h);
+      const { token } = await sharedTank(h, owner.cookie);
+      const exported = dataExportSchema.parse(
+        (await call(h, owner.cookie, 'POST', '/api/me/export', {})).json(),
+      );
+      expect(exported.tanks[0]?.tank).toMatchObject({ shared: true });
+      const dump = JSON.stringify(exported);
+      expect(dump).not.toContain(token);
+      expect(dump).not.toContain(hashShareToken(token));
     });
   });
 
@@ -366,6 +420,7 @@ describe('public rate limits', () => {
       publicLimits: {
         view: { max: 2, windowMs: 60_000 },
         react: { max: 2, windowMs: 60_000 },
+        reactIp: { max: 50, windowMs: 60_000 },
       },
     });
     try {
@@ -458,11 +513,58 @@ describe('public link abuse and isolation', () => {
     expect(rows.filter((r) => r.userId === guest.userId)).toHaveLength(0);
   });
 
+  it('limits reactions per IP even across different accounts', async () => {
+    const limited = await createHarness({
+      publicLimits: {
+        view: { max: 50, windowMs: 60_000 },
+        react: { max: 50, windowMs: 60_000 },
+        reactIp: { max: 2, windowMs: 60_000 },
+      },
+    });
+    try {
+      const owner = await account(limited);
+      const { token } = await sharedTank(limited, owner.cookie);
+      const codes: number[] = [];
+      for (let i = 0; i < 3; i++) {
+        const guest = await account(limited);
+        codes.push(
+          (
+            await call(limited, guest.cookie, 'PUT', `/api/public/${token}/reaction`, {
+              kind: 'heart',
+            })
+          ).statusCode,
+        );
+      }
+      expect(codes).toEqual([200, 200, 429]);
+    } finally {
+      await limited.close();
+    }
+  });
+
+  it('purges audit entries older than 180 days', async () => {
+    const owner = await account(h);
+    const { id } = await sharedTank(h, owner.cookie);
+    await h.database.db.insert(schema.auditLog).values({
+      action: 'share_enabled',
+      actorId: owner.userId,
+      tankId: id,
+      at: new Date(Date.now() - 181 * 86_400_000),
+    });
+    await pruneExpired(h.database);
+    const rows = await h.database.db
+      .select()
+      .from(schema.auditLog)
+      .where(eq(schema.auditLog.actorId, owner.userId));
+    expect(rows).toHaveLength(1);
+    expect(Date.now() - (rows[0]?.at.getTime() ?? 0)).toBeLessThan(86_400_000);
+  });
+
   it('throttles guessing: misses count against the per-IP read limit', async () => {
     const limited = await createHarness({
       publicLimits: {
         view: { max: 3, windowMs: 60_000 },
         react: { max: 3, windowMs: 60_000 },
+        reactIp: { max: 50, windowMs: 60_000 },
       },
     });
     try {

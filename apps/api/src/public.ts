@@ -22,17 +22,21 @@ import { audit } from './audit.ts';
 import { schema, type Database } from './db/index.ts';
 import { apiError } from './errors.ts';
 import type { Limit, RateLimiter } from './rate-limit.ts';
+import { hashShareToken } from './shareToken.ts';
 import { storedBackground } from './tanks.ts';
+import { normalizedPathname } from './url.ts';
 import type { SessionUser } from './tanks.ts';
 
 export interface PublicLimits {
   view: Limit;
   react: Limit;
+  reactIp: Limit;
 }
 
 export const DEFAULT_PUBLIC_LIMITS: PublicLimits = {
   view: { max: 120, windowMs: 60_000 },
   react: { max: 30, windowMs: 10 * 60_000 },
+  reactIp: { max: 60, windowMs: 10 * 60_000 },
 };
 
 export interface PublicRouteDeps {
@@ -52,6 +56,10 @@ function seedOf(label: string, id: string): number {
   return createHash('sha256').update(`${label}:${id}`).digest().readUInt32BE(0);
 }
 
+const HOUR_MS = 3_600_000;
+
+const hourOf = (at: Date) => new Date(Math.floor(at.getTime() / HOUR_MS) * HOUR_MS).toISOString();
+
 export function publicName(name: string): string {
   return containsBlockedWord(name) ? PUBLIC_NAME_FALLBACK : name;
 }
@@ -68,7 +76,7 @@ export function registerPublicRoutes({
   // Set in onSend so validation errors and unknown sub-paths carry them too. indexable hosts
   // would otherwise leave a share link crawlable.
   app.addHook('onSend', async (req, reply) => {
-    if (!req.url.toLowerCase().startsWith('/api/public/')) return;
+    if (!normalizedPathname(req.url).toLowerCase().startsWith('/api/public/')) return;
     reply
       .header('x-robots-tag', 'noindex, nofollow')
       .header('cache-control', 'no-store')
@@ -107,13 +115,19 @@ export function registerPublicRoutes({
     });
   }
 
-  async function tankByToken(raw: string) {
+  async function tankByToken(
+    raw: string,
+    executor: Pick<Database['db'], 'select'> = db,
+    lock = false,
+  ) {
     const token = shareTokenSchema.safeParse(raw);
     if (!token.success) return undefined;
-    const [tank] = await db
+    const query = executor
       .select()
       .from(schema.tanks)
-      .where(eq(schema.tanks.shareToken, token.data));
+      .where(eq(schema.tanks.shareTokenHash, hashShareToken(token.data)));
+    // FOR SHARE makes a concurrent revoke wait for this transaction, so a revoked link never gains a reaction.
+    const [tank] = await (lock ? query.for('share') : query);
     return tank;
   }
 
@@ -162,7 +176,7 @@ export function registerPublicRoutes({
           cause: f.cause,
           seed: seedOf('fish', f.id),
         })),
-      snapshotAt: tank.lastTickAt.toISOString(),
+      snapshotAt: hourOf(tank.lastTickAt),
       ...state,
     });
   });
@@ -179,7 +193,10 @@ export function registerPublicRoutes({
         .send(apiError('email_not_verified', 'Verify your email address before reacting.'));
       return null;
     }
-    const wait = limiter.consume(`public-react:${user.id}`, limits.react);
+    const wait = Math.max(
+      limiter.consume(`public-react:${user.id}`, limits.react),
+      limiter.consume(`public-react-ip:${req.ip}`, limits.reactIp),
+    );
     if (wait > 0) {
       throttled(reply, wait);
       return null;
@@ -192,12 +209,10 @@ export function registerPublicRoutes({
     if (!user) return reply;
     const { token } = paramsSchema.parse(req.params);
     const { kind } = setReactionRequestSchema.parse(req.body);
-    const tank = await tankByToken(token);
-    if (!tank) return notFound(reply);
-    if (tank.ownerId === user.id) {
-      return reply.code(403).send(apiError('forbidden', 'You cannot react to your own tank.'));
-    }
-    await db.transaction(async (tx) => {
+    const outcome = await db.transaction(async (tx) => {
+      const tank = await tankByToken(token, tx, true);
+      if (!tank) return 'not_found' as const;
+      if (tank.ownerId === user.id) return 'own' as const;
       await tx
         .insert(schema.tankReactions)
         .values({ tankId: tank.id, userId: user.id, kind })
@@ -211,8 +226,13 @@ export function registerPublicRoutes({
         tankId: tank.id,
         detail: { kind },
       });
+      return tank.id;
     });
-    return reactionState(tank.id, user.id);
+    if (outcome === 'not_found') return notFound(reply);
+    if (outcome === 'own') {
+      return reply.code(403).send(apiError('forbidden', 'You cannot react to your own tank.'));
+    }
+    return reactionState(outcome, user.id);
   });
 
   app.delete('/api/public/:token/reaction', async (req, reply) => {

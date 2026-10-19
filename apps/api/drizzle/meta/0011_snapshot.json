@@ -1,5 +1,5 @@
 {
-  "id": "591fe568-79df-4ac2-bcad-f9b2cbdfd52b",
+  "id": "8c63b858-6484-474a-9e65-666427884d63",
   "prevId": "01486f20-3341-465e-94e1-a6322e19c269",
   "version": "7",
   "dialect": "postgresql",
@@ -258,7 +258,7 @@
           "tableTo": "user",
           "columnsFrom": ["actor_id"],
           "columnsTo": ["id"],
-          "onDelete": "set null",
+          "onDelete": "cascade",
           "onUpdate": "no action"
         },
         "audit_log_tank_id_tanks_id_fk": {
@@ -1013,8 +1013,8 @@
           "notNull": true,
           "default": false
         },
-        "share_token": {
-          "name": "share_token",
+        "share_token_hash": {
+          "name": "share_token_hash",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -1110,10 +1110,10 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "tanks_share_token_unique": {
-          "name": "tanks_share_token_unique",
+        "tanks_share_token_hash_unique": {
+          "name": "tanks_share_token_hash_unique",
           "nullsNotDistinct": false,
-          "columns": ["share_token"]
+          "columns": ["share_token_hash"]
         }
       },
       "policies": {},
