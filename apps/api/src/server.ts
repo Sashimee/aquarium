@@ -60,14 +60,17 @@ const app = buildApp({
 });
 
 const stopMaintenance = startMaintenance(database);
-const stopReminders = startReminders({
-  database,
-  mailer,
-  push,
-  appOrigin: config.appUrl.origin,
-  authSecret: config.authSecret,
-  dailyCap: config.reminderDailyCap,
-});
+const stopReminders = startReminders(
+  {
+    database,
+    mailer,
+    push,
+    appOrigin: config.appUrl.origin,
+    authSecret: config.authSecret,
+    dailyCap: config.reminderDailyCap,
+  },
+  (task) => background.run(task),
+);
 
 let shuttingDown: Promise<void> | undefined;
 

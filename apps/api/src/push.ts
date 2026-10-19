@@ -108,6 +108,7 @@ export function createPushSender(
             'content-length': '0',
           },
         });
+        await res.body?.cancel();
         if (res.ok) return 'sent';
         return res.status === 404 || res.status === 410 ? 'gone' : 'failed';
       } catch {

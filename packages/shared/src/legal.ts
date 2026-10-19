@@ -94,8 +94,8 @@ export const PRIVACY_CONTROLLER = 'Alexandre Baskewitsch';
 export const PRIVACY_CONTACT = 'fish@bas.lu';
 
 export const PRIVACY_POLICY: PrivacyPolicy = privacyPolicySchema.parse({
-  version: '2026-10-20',
-  updatedAt: '2026-10-20',
+  version: '2026-10-19',
+  updatedAt: '2026-10-19',
   controller: PRIVACY_CONTROLLER,
   contact: PRIVACY_CONTACT,
   analytics: false,
@@ -146,7 +146,7 @@ export const PRIVACY_POLICY: PrivacyPolicy = privacyPolicySchema.parse({
         'Audit log: turning a link on, replacing or revoking it, and setting or removing a reaction are recorded with the time, your account and the tank, never the link itself. Entries are deleted after 180 days, and immediately when you delete your account. The same data is included in your JSON export.',
         'Email: verification and password-reset mail is sent from fish@bas.lu through the operator mail relay. Care reminders are mailed only if you turn them on.',
         "Care reminders: both channels are off until you turn them on in your account settings. If you do, we store your choices, the time of the last reminder and, for web push, the push endpoint and encryption keys your browser gives us for each device you enable. At most one reminder per day is sent, only when your fish have not been fed for a while, and it never contains details about your tank. Every reminder email has a one-click unsubscribe link that works without signing in, and you can switch either channel off or remove a device at any time. This data is included in your JSON export. Web push goes through your browser vendor's push service (Google, Mozilla, Apple or Microsoft), which sees the endpoint and that a message was sent.",
-        "Server logs of this application record the request method and path without query strings, never email addresses, passwords or tokens. The hosting platform's reverse proxy keeps standard access logs (including IP addresses) and the mail relay logs delivery of verification mail (including the recipient address); both are operated by the same operator and kept only as long as needed for security and troubleshooting.",
+        "Server logs of this application record the request method and path without query strings, never email addresses, passwords or tokens. The hosting platform's reverse proxy keeps standard access logs (including IP addresses) and the mail relay logs delivery of the mail we send you (including the recipient address); both are operated by the same operator and kept only as long as needed for security and troubleshooting.",
       ],
     },
     {

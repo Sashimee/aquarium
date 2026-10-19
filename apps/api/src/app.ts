@@ -330,11 +330,10 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     }
   });
 
-  // Mail providers post the RFC 8058 one-click body as a form; no other route may accept one.
-  app.addContentTypeParser(
-    'application/x-www-form-urlencoded',
-    { parseAs: 'string' },
-    (req, body, done) => {
+  // Mail providers post the RFC 8058 one-click body as a form (urlencoded or multipart); the
+  // body is never read, so no other route may accept one.
+  for (const type of ['application/x-www-form-urlencoded', 'multipart/form-data']) {
+    app.addContentTypeParser(type, { parseAs: 'string' }, (req, body, done) => {
       if (normalizedPathname(req.url) !== UNSUBSCRIBE_PATH) {
         return done(
           Object.assign(new Error('Unsupported content type.'), { statusCode: 415 }),
@@ -342,8 +341,8 @@ export function buildApp(opts: AppOptions): FastifyInstance {
         );
       }
       done(null, body);
-    },
-  );
+    });
+  }
 
   app.addHook('onSend', async (req, reply) => {
     applySecurityHeaders(reply);
@@ -360,6 +359,8 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   app.addHook('onRequest', async (req, reply) => {
     if (SAFE_METHODS.has(req.method) || !normalizedPathname(req.url).startsWith('/api/')) return;
     if (!req.headers.cookie) return;
+    // The confirm page posts under no-referrer, so browsers send Origin: null; the signed token is the credential here.
+    if (normalizedPathname(req.url) === UNSUBSCRIBE_PATH) return;
     const sent = req.headers.origin ?? originOf(req.headers.referer);
     if (sent !== appOrigin) {
       return reply.code(403).send(apiError('forbidden', 'Cross-origin request rejected.'));

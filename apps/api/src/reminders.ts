@@ -20,12 +20,16 @@ export const UNSUBSCRIBE_PATH = '/api/reminders/unsubscribe';
 
 export interface ReminderLimits {
   write: Limit;
+  /** Per signed token, so mail providers behind a shared IP are not throttled together. */
   unsubscribe: Limit;
+  /** Per IP, only for requests whose token does not verify. */
+  invalidUnsubscribe: Limit;
 }
 
 export const DEFAULT_REMINDER_LIMITS: ReminderLimits = {
   write: { max: 30, windowMs: 15 * 60_000 },
   unsubscribe: { max: 30, windowMs: 60 * 60_000 },
+  invalidUnsubscribe: { max: 60, windowMs: 60 * 60_000 },
 };
 
 const signature = (secret: string, userId: string) =>
@@ -179,18 +183,25 @@ export function registerReminderRoutes(deps: ReminderRouteDeps): void {
           .select({ count: sql<number>`count(*)::int` })
           .from(schema.pushSubscriptions)
           .where(eq(schema.pushSubscriptions.userId, user.id));
-        if (count >= MAX_PUSH_SUBSCRIPTIONS) return false;
+        if (count >= MAX_PUSH_SUBSCRIPTIONS) return 'limit' as const;
       }
-      await tx
+      const written = await tx
         .insert(schema.pushSubscriptions)
         .values({ userId: user.id, endpoint, p256dh: keys.p256dh, auth: keys.auth })
         .onConflictDoUpdate({
           target: schema.pushSubscriptions.endpoint,
-          set: { userId: user.id, p256dh: keys.p256dh, auth: keys.auth },
-        });
-      return true;
+          set: { p256dh: keys.p256dh, auth: keys.auth },
+          setWhere: eq(schema.pushSubscriptions.userId, user.id),
+        })
+        .returning({ id: schema.pushSubscriptions.id });
+      return written.length === 0 ? ('taken' as const) : ('ok' as const);
     });
-    if (!stored) {
+    if (stored === 'taken') {
+      return reply
+        .code(409)
+        .send(apiError('conflict', 'This device is already registered to another account.'));
+    }
+    if (stored === 'limit') {
       return reply
         .code(409)
         .send(apiError('conflict', `At most ${MAX_PUSH_SUBSCRIPTIONS} devices can get push.`));
@@ -232,15 +243,17 @@ export function registerReminderRoutes(deps: ReminderRouteDeps): void {
   // RFC 8058: the mail provider POSTs `List-Unsubscribe=One-Click` with no cookies, so the signed
   // token is the only credential.
   app.post(UNSUBSCRIBE_PATH, async (req, reply) => {
-    const wait = limiter.consume(`unsubscribe:${req.ip}`, limits.unsubscribe);
+    const token = tokenOf(req);
+    const userId = token ? verifyUnsubscribeToken(authSecret, token) : null;
+    const wait = userId
+      ? limiter.consume(`unsubscribe:${userId}`, limits.unsubscribe)
+      : limiter.consume(`unsubscribe-invalid:${req.ip}`, limits.invalidUnsubscribe);
     if (wait > 0) {
       return reply
         .code(429)
         .header('retry-after', String(wait))
         .send(apiError('rate_limited', 'Too many requests. Try again later.'));
     }
-    const token = tokenOf(req);
-    const userId = token ? verifyUnsubscribeToken(authSecret, token) : null;
     if (!userId) {
       return reply.code(400).send(apiError('validation_failed', 'Invalid unsubscribe link.'));
     }
@@ -263,6 +276,7 @@ export interface ReminderSweepDeps {
   authSecret: string;
   dailyCap: number;
   batch?: number;
+  shouldStop?: () => boolean;
   log?: (message: string) => void;
 }
 
@@ -274,10 +288,40 @@ interface Candidate extends Record<string, unknown> {
   last_sent_at: Date | null;
 }
 
+type Claim = 'claimed' | 'lost' | 'capped';
+
+// The lock serialises the count and the update, so overlapping sweeps cannot overshoot the cap.
+async function claimReminder(db: Database['db'], userId: string, dailyCap: number): Promise<Claim> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('reminder-daily-cap'))`);
+    const [{ count } = { count: 0 }] = await tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(schema.reminderPrefs)
+      .where(
+        sql`${schema.reminderPrefs.lastSentAt} > now() - make_interval(hours => ${REMINDER_COOLDOWN_HOURS})`,
+      );
+    if (count >= dailyCap) return 'capped';
+    const claimed = await tx
+      .update(schema.reminderPrefs)
+      .set({ lastSentAt: sql`now()` })
+      .where(
+        and(
+          eq(schema.reminderPrefs.userId, userId),
+          sql`(${schema.reminderPrefs.lastSentAt} is null or ${schema.reminderPrefs.lastSentAt} <= now() - make_interval(hours => ${REMINDER_COOLDOWN_HOURS}))`,
+        ),
+      )
+      .returning({ userId: schema.reminderPrefs.userId });
+    return claimed.length === 0 ? 'lost' : 'claimed';
+  });
+}
+
 export interface ReminderSweepResult {
   sent: number;
   capped: boolean;
 }
+
+// Mail goes out one by one at 10-minute sweeps, so the relay never sees more than ~120 reminders an hour.
+const DEFAULT_SWEEP_BATCH = 20;
 
 export async function sweepReminders(deps: ReminderSweepDeps): Promise<ReminderSweepResult> {
   const { database, mailer, push, appOrigin, authSecret, log = console.error } = deps;
@@ -310,21 +354,14 @@ export async function sweepReminders(deps: ReminderSweepDeps): Promise<ReminderS
         where t.owner_id = p.user_id and e.kind = 'feed'
           and e.at > now() - make_interval(hours => ${REMINDER_AFTER_UNFED_HOURS}))
     order by p.last_sent_at nulls first
-    limit ${Math.min(deps.batch ?? 50, remaining)}`);
+    limit ${Math.min(deps.batch ?? DEFAULT_SWEEP_BATCH, remaining)}`);
 
   let sent = 0;
   for (const row of rows) {
-    const claimed = await db
-      .update(schema.reminderPrefs)
-      .set({ lastSentAt: sql`now()` })
-      .where(
-        and(
-          eq(schema.reminderPrefs.userId, row.user_id),
-          sql`(${schema.reminderPrefs.lastSentAt} is null or ${schema.reminderPrefs.lastSentAt} <= now() - make_interval(hours => ${REMINDER_COOLDOWN_HOURS}))`,
-        ),
-      )
-      .returning({ userId: schema.reminderPrefs.userId });
-    if (claimed.length === 0) continue;
+    if (deps.shouldStop?.()) break;
+    const claim = await claimReminder(db, row.user_id, deps.dailyCap);
+    if (claim === 'capped') return { sent, capped: true };
+    if (claim === 'lost') continue;
 
     const release = () =>
       db
@@ -374,20 +411,27 @@ export async function sweepReminders(deps: ReminderSweepDeps): Promise<ReminderS
 
 const SWEEP_INTERVAL_MS = 10 * 60_000;
 
-export function startReminders(deps: ReminderSweepDeps): () => void {
+export function startReminders(
+  deps: Omit<ReminderSweepDeps, 'shouldStop'>,
+  runInBackground: (task: Promise<void>) => void,
+): () => void {
   let running = false;
+  let stopped = false;
   const run = async () => {
-    if (running) return;
+    if (running || stopped) return;
     running = true;
     try {
-      await sweepReminders(deps);
+      await sweepReminders({ ...deps, shouldStop: () => stopped });
     } catch (err) {
       console.error('reminder sweep failed:', err instanceof Error ? err.name : 'unknown');
     } finally {
       running = false;
     }
   };
-  const timer = setInterval(() => void run(), SWEEP_INTERVAL_MS);
+  const timer = setInterval(() => runInBackground(run()), SWEEP_INTERVAL_MS);
   timer.unref();
-  return () => clearInterval(timer);
+  return () => {
+    stopped = true;
+    clearInterval(timer);
+  };
 }

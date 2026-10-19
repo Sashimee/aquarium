@@ -227,6 +227,52 @@ describe('daily caps', () => {
   });
 });
 
+describe('mail budget', () => {
+  it('keeps verification mail flowing while reminders run at their cap', async () => {
+    const window = 60 * 60_000;
+    const h = await createHarness({
+      mailLimits: {
+        perRecipient: { max: 100, windowMs: window },
+        verificationCooldown: { max: 100, windowMs: 1000 },
+        perIpSignup: { max: 100, windowMs: window },
+        global: { max: 4, windowMs: window },
+      },
+    });
+    harnesses.push(h);
+    const users = [await optedIn(h), await optedIn(h), await optedIn(h)];
+    expect(await sweep(h, null, 3)).toEqual({ sent: 3, capped: true });
+    expect(users.every((u) => reminderMails(h, u.email).length === 1)).toBe(true);
+    const next = await account(h);
+    expect(h.outbox.some((m) => m.to === next.email)).toBe(true);
+  });
+
+  it('holds the global cap across overlapping sweeps', async () => {
+    const h = await harness();
+    for (let i = 0; i < 5; i++) await optedIn(h);
+    const results = await Promise.all([sweep(h, null, 2), sweep(h, null, 2), sweep(h, null, 2)]);
+    expect(results.reduce((n, r) => n + r.sent, 0)).toBe(2);
+    const rows = await h.database.db.select().from(schema.reminderPrefs);
+    expect(rows.filter((r) => r.lastSentAt !== null)).toHaveLength(2);
+  });
+
+  it('stops claiming once asked to stop', async () => {
+    const h = await harness();
+    await optedIn(h);
+    const result = await sweepReminders({
+      database: h.database,
+      mailer: h.mailer,
+      push: null,
+      appOrigin: APP_ORIGIN,
+      authSecret: TEST_SECRET,
+      dailyCap: 10,
+      shouldStop: () => true,
+    });
+    expect(result.sent).toBe(0);
+    const rows = await h.database.db.select().from(schema.reminderPrefs);
+    expect(rows.every((r) => r.lastSentAt === null)).toBe(true);
+  });
+});
+
 describe('unsubscribe', () => {
   const urlFor = (token: string) => `${UNSUBSCRIBE_PATH}?token=${encodeURIComponent(token)}`;
 
@@ -299,6 +345,68 @@ describe('unsubscribe', () => {
       }
     }
     expect(await mailSetting(h, a.cookie)).toBe(true);
+  });
+
+  it('accepts the RFC 8058 body as multipart/form-data too', async () => {
+    const h = await harness();
+    const a = await optedIn(h);
+    const boundary = 'xBOUNDARYx';
+    const res = await h.app.inject({
+      method: 'POST',
+      url: urlFor(unsubscribeToken(TEST_SECRET, a.userId)),
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      payload: `--${boundary}\r\nContent-Disposition: form-data; name="List-Unsubscribe"\r\n\r\nOne-Click\r\n--${boundary}--\r\n`,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(await mailSetting(h, a.cookie)).toBe(false);
+  });
+
+  it('lets the confirm page post with Origin: null while signed in, but only on this path', async () => {
+    const h = await harness();
+    const a = await optedIn(h);
+    const res = await h.app.inject({
+      method: 'POST',
+      url: urlFor(unsubscribeToken(TEST_SECRET, a.userId)),
+      headers: { ...formHeaders, origin: 'null', cookie: a.cookie },
+      payload: '',
+    });
+    expect(res.statusCode).toBe(200);
+    expect(await mailSetting(h, a.cookie)).toBe(false);
+
+    const other = await h.app.inject({
+      method: 'PUT',
+      url: '/api/me/reminders',
+      headers: { 'content-type': 'application/json', origin: 'null', cookie: a.cookie },
+      payload: { mail: true },
+    });
+    expect(other.statusCode).toBe(403);
+  });
+
+  it('throttles per token, and invalid tokens per IP, so a shared provider IP still works', async () => {
+    const window = 60_000;
+    const h = await createHarness({
+      reminderLimits: {
+        write: { max: 1000, windowMs: window },
+        unsubscribe: { max: 2, windowMs: window },
+        invalidUnsubscribe: { max: 2, windowMs: window },
+      },
+    });
+    harnesses.push(h);
+    const post = (token: string) =>
+      h.app.inject({ method: 'POST', url: urlFor(token), headers: formHeaders, payload: 'x=1' });
+    const first = unsubscribeToken(TEST_SECRET, 'user-a');
+    expect([200, 200, 429]).toEqual([
+      (await post(first)).statusCode,
+      (await post(first)).statusCode,
+      (await post(first)).statusCode,
+    ]);
+    expect((await post(unsubscribeToken(TEST_SECRET, 'user-b'))).statusCode).toBe(200);
+    expect([400, 400, 429]).toEqual([
+      (await post('bad')).statusCode,
+      (await post('bad')).statusCode,
+      (await post('bad')).statusCode,
+    ]);
+    expect((await post(unsubscribeToken(TEST_SECRET, 'user-c'))).statusCode).toBe(200);
   });
 
   it('does not accept form bodies on other routes', async () => {
@@ -448,6 +556,28 @@ describe('web push', () => {
     expect((await sweep(h, gone.sender)).sent).toBe(0);
     const settings = await call(h, a.cookie, 'GET', '/api/me/reminders');
     expect(reminderSettingsSchema.parse(settings.json()).subscriptions).toBe(0);
+  });
+
+  it('does not let another account take over a registered device', async () => {
+    const { sender } = pushStub();
+    const h = await harness(sender);
+    const a = await account(h);
+    const b = await account(h);
+    const body = { endpoint: ENDPOINT, keys: KEYS };
+    expect((await call(h, a.cookie, 'POST', '/api/me/push-subscriptions', body)).statusCode).toBe(
+      204,
+    );
+    const taken = await call(h, b.cookie, 'POST', '/api/me/push-subscriptions', {
+      endpoint: ENDPOINT,
+      keys: { p256dh: 'C'.repeat(87), auth: 'b'.repeat(22) },
+    });
+    expect(taken.statusCode).toBe(409);
+    expect((await call(h, a.cookie, 'POST', '/api/me/push-subscriptions', body)).statusCode).toBe(
+      204,
+    );
+    const rows = await h.database.db.select().from(schema.pushSubscriptions);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ userId: a.userId, p256dh: KEYS.p256dh });
   });
 
   it('rejects an endpoint on a non-push host and a malformed key', async () => {

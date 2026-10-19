@@ -256,6 +256,14 @@ export function createMailer(
       throw new MailThrottledError(admission.mailBlockedFor);
     }
     const k = recipientKey(to);
+    if (flow === 'reminder') {
+      // Reminders are metered by their own daily cap, so they never draw on the budget auth mail needs.
+      const wait = await consume(`reminder:cooldown:${k}`, limits.verificationCooldown);
+      if (wait > 0) throw new MailThrottledError(wait);
+      const capped = await consume(`reminder:recipient:${k}`, limits.perRecipient);
+      if (capped > 0) throw new MailThrottledError(capped);
+      return;
+    }
     if (admission?.globalCharged) {
       const wait = await consume(`${flow}:cooldown:${k}`, limits.verificationCooldown);
       if (wait > 0) throw new MailThrottledError(wait);
