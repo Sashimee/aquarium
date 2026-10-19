@@ -50,12 +50,34 @@ async function measurePreview(page: Page): Promise<Pixels> {
   });
 }
 
+async function fps(page: Page): Promise<number> {
+  return page.evaluate(
+    () =>
+      new Promise<number>((resolve) => {
+        let n = 0;
+        const t0 = performance.now();
+        const tick = (): void => {
+          n++;
+          if (performance.now() - t0 > 3000) resolve(n / 3);
+          else requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }),
+  );
+}
+
 async function takePhoto(page: Page): Promise<Pixels> {
+  const t0 = Date.now();
+  console.log(`TIMING fps before capture ${await fps(page)} (${Date.now() - t0} ms)`);
+  const t1 = Date.now();
   await page.getByRole('button', { name: 'Take photo' }).click();
+  console.log(`TIMING click ${Date.now() - t1} ms`);
   const dialog = page.getByRole('dialog', { name: 'Your photo' });
   await expect(dialog).toBeVisible({ timeout: 120_000 });
+  console.log(`TIMING dialog visible ${Date.now() - t1} ms`);
   await expect(dialog.locator('img.photo-preview')).toBeVisible();
   const pixels = await measurePreview(page);
+  console.log(`TIMING measured ${Date.now() - t1} ms`);
   await dialog.getByRole('button', { name: 'Keep shooting' }).click();
   await expect(dialog).toHaveCount(0);
   return pixels;
