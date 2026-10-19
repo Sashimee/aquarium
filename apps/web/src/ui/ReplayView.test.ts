@@ -2,7 +2,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { ReplayLine } from '../sync/replay';
-import { ReplayPanel, type ReplayLoad, type ReplayPanelProps } from './ReplayView';
+import { ReplayPanel, type ReplayPanelLoad, type ReplayPanelProps } from './ReplayView';
 
 const SINCE = '2026-10-18T10:00:00.000Z';
 const lines: ReplayLine[] = [
@@ -10,11 +10,11 @@ const lines: ReplayLine[] = [
   { id: 'b', at: '2026-10-18T13:00:00.000Z', text: 'Bubbles fell ill.', tone: 'warn' },
 ];
 
-function render(load: ReplayLoad, shown = 0, playing = false) {
+function render(load: ReplayPanelLoad, shown = 0, playing = false) {
   const props: ReplayPanelProps = {
     load,
     since: SINCE,
-    playback: { shown, playing },
+    playback: { shown, playing, mode: 'simulate' },
     speed: 2,
     onSkip: vi.fn(),
     onToggle: vi.fn(),
@@ -27,7 +27,7 @@ function render(load: ReplayLoad, shown = 0, playing = false) {
 
 describe('ReplayPanel', () => {
   it('always offers the skip control', () => {
-    const loads: ReplayLoad[] = [
+    const loads: ReplayPanelLoad[] = [
       { status: 'loading' },
       { status: 'error', message: 'nope' },
       { status: 'ready', lines: [], truncated: false },
@@ -59,5 +59,24 @@ describe('ReplayPanel', () => {
 
   it('notes a truncated timeline', () => {
     expect(render({ status: 'ready', lines, truncated: true }, 2)).toContain('Only the first part');
+  });
+
+  it('tells simulate and crossfade apart', () => {
+    const base: ReplayPanelLoad = { status: 'ready', lines, truncated: false };
+    expect(render(base)).toContain('fast-forward');
+    const crossfade: ReplayPanelProps = {
+      load: base,
+      since: SINCE,
+      playback: { shown: 0, playing: false, mode: 'crossfade' },
+      speed: 1,
+      onSkip: vi.fn(),
+      onToggle: vi.fn(),
+      onScrub: vi.fn(),
+      onSpeed: vi.fn(),
+      onRetry: vi.fn(),
+    };
+    expect(renderToStaticMarkup(createElement(ReplayPanel, crossfade))).toContain(
+      'fades between snapshots',
+    );
   });
 });

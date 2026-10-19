@@ -1,22 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Tank } from '@aquarium/shared';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import type { AwaySummary, Tank } from '@aquarium/shared';
 import {
   REPLAY_SPEEDS,
   describeEvent,
-  loadTimeline,
+  fishNamesFor,
   offsetLabel,
-  replayFailureText,
-  scrubTo,
-  startPlayback,
-  stepIntervalMs,
-  tickPlayback,
-  togglePlayback,
-  type PlaybackState,
   type ReplayLine,
   type ReplaySpeed,
-  type Timeline,
 } from '../sync/replay';
-import { useApi } from './context';
+import { ReplayController } from '../sync/replayController';
+import { replayModeFor, type ReplayMode } from '../sync/replayPlayback';
+import { useApi, useBridge, useEngineReady } from './context';
 import { useSpeciesNames } from './session';
 
 function prefersReducedMotion(): boolean {
@@ -25,15 +19,21 @@ function prefersReducedMotion(): boolean {
     : false;
 }
 
-export type ReplayLoad =
+function hasCoarsePointer(): boolean {
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    ? window.matchMedia('(pointer: coarse)').matches
+    : false;
+}
+
+export type ReplayPanelLoad =
   | { status: 'loading' }
   | { status: 'error'; message: string }
   | { status: 'ready'; lines: ReplayLine[]; truncated: boolean };
 
 export interface ReplayPanelProps {
-  load: ReplayLoad;
+  load: ReplayPanelLoad;
   since: string;
-  playback: PlaybackState;
+  playback: { shown: number; playing: boolean; mode: ReplayMode };
   speed: ReplaySpeed;
   onSkip(): void;
   onToggle(): void;
@@ -45,7 +45,7 @@ export interface ReplayPanelProps {
 export function ReplayPanel(props: ReplayPanelProps) {
   const { load, since, playback, speed } = props;
   return (
-    <section className="replay" aria-label="Away replay">
+    <section className="panel replay" aria-label="Away replay">
       <h3>What happened while you were away</h3>
       {load.status === 'loading' && <p role="status">Loading the replay...</p>}
       {load.status === 'error' && (
@@ -61,7 +61,12 @@ export function ReplayPanel(props: ReplayPanelProps) {
       )}
       {load.status === 'ready' && load.lines.length > 0 && (
         <>
-          <ol className="replay-list" aria-live="off">
+          <p className="hint">
+            {playback.mode === 'simulate'
+              ? 'The tank runs fast-forward between events.'
+              : 'The tank fades between snapshots of each event.'}
+          </p>
+          <ol className="replay-list" aria-label="Captions" aria-live="polite">
             {load.lines.slice(0, playback.shown).map((line) => (
               <li key={line.id} className={`replay-${line.tone}`}>
                 <span className="hint">{offsetLabel(since, line.at)}</span> {line.text}
@@ -106,61 +111,103 @@ export function ReplayPanel(props: ReplayPanelProps) {
   );
 }
 
-export function ReplayView({ tank, since, onSkip }: { tank: Tank; since: string; onSkip(): void }) {
+export function ReplayView({
+  tank,
+  away,
+  since,
+  onSkip,
+}: {
+  tank: Tank;
+  away: AwaySummary;
+  since: string;
+  onSkip(): void;
+}) {
   const api = useApi();
-  const names = useSpeciesNames();
-  const [load, setLoad] = useState<ReplayLoad>({ status: 'loading' });
-  const [playback, setPlayback] = useState<PlaybackState>({ shown: 0, playing: false });
-  const [speed, setSpeed] = useState<ReplaySpeed>(2);
-  const [attempt, setAttempt] = useState(0);
-  const fishNames = useMemo(() => new Map(tank.fish.map((f) => [f.id, f.name])), [tank.fish]);
-  const total = load.status === 'ready' ? load.lines.length : 0;
-  const totalRef = useRef(total);
-  totalRef.current = total;
+  const { interaction } = useBridge();
+  const ready = useEngineReady();
+  // Fixed for the replay: a tier change mid-watch must not refetch or restart it.
+  const [mode] = useState(() => replayModeFor(ready?.tier ?? 'medium', hasCoarsePointer()));
+  const latestTank = useRef(tank);
+  latestTank.current = tank;
+  const [controller, setController] = useState<ReplayController | null>(null);
 
   useEffect(() => {
-    const ctl = new AbortController();
-    setLoad({ status: 'loading' });
-    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-      setLoad({ status: 'error', message: replayFailureText(null, false) });
-      return () => ctl.abort();
-    }
-    loadTimeline(api, tank.id, since, { signal: ctl.signal }).then(
-      (tl: Timeline) => {
-        if (ctl.signal.aborted) return;
-        const lines = tl.events.map((e) => describeEvent(e, fishNames, names));
-        setLoad({ status: 'ready', lines, truncated: tl.truncated });
-        setPlayback(startPlayback(lines.length, prefersReducedMotion()));
+    const next = new ReplayController({
+      api,
+      interaction,
+      tank: latestTank.current,
+      since,
+      mode,
+      reducedMotion: prefersReducedMotion(),
+      timers: {
+        setInterval: (cb, ms) => window.setInterval(cb, ms),
+        clearInterval: (handle) => window.clearInterval(handle as number),
       },
-      (error: unknown) => {
-        if (ctl.signal.aborted) return;
-        setLoad({ status: 'error', message: replayFailureText(error, true) });
-      },
-    );
-    return () => ctl.abort();
-  }, [api, tank.id, since, attempt, fishNames, names]);
+      online: () => typeof navigator === 'undefined' || navigator.onLine !== false,
+      now: () => Date.now(),
+    });
+    setController(next);
+    return () => {
+      next.dispose();
+      setController(null);
+    };
+  }, [api, interaction, mode, tank.id, since]);
 
   useEffect(() => {
-    if (!playback.playing) return;
-    const timer = window.setInterval(
-      () => setPlayback((s) => tickPlayback(s, totalRef.current)),
-      stepIntervalMs(speed),
-    );
-    return () => window.clearInterval(timer);
-  }, [playback.playing, speed]);
+    controller?.setTank(tank);
+  }, [controller, tank]);
 
-  const retry = useCallback(() => setAttempt((n) => n + 1), []);
+  if (!controller) return null;
   return (
-    <ReplayPanel
-      load={load}
-      since={since}
-      playback={playback}
-      speed={speed}
-      onSkip={onSkip}
-      onToggle={() => setPlayback((s) => togglePlayback(s, total))}
-      onScrub={(shown) => setPlayback(scrubTo(total, shown))}
-      onSpeed={setSpeed}
-      onRetry={retry}
-    />
+    <ReplayBody controller={controller} tank={tank} away={away} since={since} onSkip={onSkip} />
+  );
+}
+
+function ReplayBody({
+  controller,
+  tank,
+  away,
+  since,
+  onSkip,
+}: {
+  controller: ReplayController;
+  tank: Tank;
+  away: AwaySummary;
+  since: string;
+  onSkip(): void;
+}) {
+  const names = useSpeciesNames();
+  const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
+  const fishNames = useMemo(() => fishNamesFor(tank.fish, away), [tank.fish, away]);
+  const events = state.load.status === 'ready' ? state.load.events : null;
+  const lines = useMemo(
+    () => events?.map((e) => describeEvent(e, fishNames, names)) ?? null,
+    [events, fishNames, names],
+  );
+  const load: ReplayPanelLoad =
+    state.load.status === 'ready'
+      ? { status: 'ready', lines: lines ?? [], truncated: state.load.truncated }
+      : state.load;
+
+  return (
+    <div
+      className="replay-bar"
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') onSkip();
+      }}
+    >
+      <div className={`replay-veil${state.playback.veiled ? ' on' : ''}`} aria-hidden="true" />
+      <ReplayPanel
+        load={load}
+        since={since}
+        playback={state.playback}
+        speed={state.speed}
+        onSkip={onSkip}
+        onToggle={() => controller.toggle()}
+        onScrub={(shown) => controller.scrub(shown)}
+        onSpeed={(speed) => controller.setSpeed(speed)}
+        onRetry={() => controller.retry()}
+      />
+    </div>
   );
 }

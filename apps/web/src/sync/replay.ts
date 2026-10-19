@@ -1,4 +1,10 @@
-import { REPLAY_MAX_LIMIT, type CareEvent, type FoodType } from '@aquarium/shared';
+import {
+  REPLAY_MAX_LIMIT,
+  type AwaySummary,
+  type CareEvent,
+  type Fish,
+  type FoodType,
+} from '@aquarium/shared';
 import type { ApiClient } from '../ui/api';
 import { CAUSE_TEXT, formatDuration, speciesName, type SpeciesNames } from './life';
 
@@ -29,7 +35,7 @@ export async function loadTimeline(
   api: ReplayApi,
   tankId: string,
   since: string,
-  options: { pageSize?: number; maxPages?: number; signal?: AbortSignal } = {},
+  options: { pageSize?: number; maxPages?: number; until?: string; signal?: AbortSignal } = {},
 ): Promise<Timeline> {
   const limit = options.pageSize ?? REPLAY_MAX_LIMIT;
   const maxPages = options.maxPages ?? MAX_REPLAY_PAGES;
@@ -37,7 +43,16 @@ export async function loadTimeline(
   let cursor: string | undefined;
   for (let page = 0; page < maxPages; page += 1) {
     options.signal?.throwIfAborted();
-    const res = await api.replay(tankId, { since, limit, ...(cursor ? { cursor } : {}) });
+    const res = await api.replay(
+      tankId,
+      {
+        since,
+        limit,
+        ...(options.until ? { until: options.until } : {}),
+        ...(cursor ? { cursor } : {}),
+      },
+      options.signal,
+    );
     collected.push(...res.events);
     if (res.nextCursor === null) return { events: orderEvents(collected), truncated: false };
     cursor = res.nextCursor;
@@ -46,6 +61,15 @@ export async function loadTimeline(
 }
 
 export type FishNames = ReadonlyMap<string, string>;
+
+/** Names for the fish in the tank, plus those the away summary names that have since been netted. */
+export function fishNamesFor(fish: readonly Fish[], away: AwaySummary | undefined): FishNames {
+  const names = new Map<string, string>();
+  for (const d of away?.deaths ?? []) names.set(d.fishId, d.name);
+  for (const b of away?.births ?? []) names.set(b.fishId, b.name);
+  for (const f of fish) names.set(f.id, f.name);
+  return names;
+}
 
 const FOOD_TEXT: Record<FoodType, string> = {
   flakes: 'flakes',
@@ -115,35 +139,6 @@ export function offsetLabel(since: string, at: string): string {
   const minutes = (Date.parse(at) - Date.parse(since)) / 60_000;
   if (minutes < 1) return 'right away';
   return `${formatDuration(minutes)} in`;
-}
-
-export interface PlaybackState {
-  /** How many events are revealed. */
-  shown: number;
-  playing: boolean;
-}
-
-export function startPlayback(total: number, reducedMotion: boolean): PlaybackState {
-  return reducedMotion ? { shown: total, playing: false } : { shown: 0, playing: total > 0 };
-}
-
-export function tickPlayback(state: PlaybackState, total: number): PlaybackState {
-  if (!state.playing) return state;
-  const shown = Math.min(total, state.shown + 1);
-  return { shown, playing: shown < total };
-}
-
-export function scrubTo(total: number, shown: number): PlaybackState {
-  return { shown: Math.max(0, Math.min(total, Math.round(shown))), playing: false };
-}
-
-export function togglePlayback(state: PlaybackState, total: number): PlaybackState {
-  if (state.playing) return { ...state, playing: false };
-  return state.shown >= total ? { shown: 0, playing: total > 0 } : { ...state, playing: true };
-}
-
-export function stepIntervalMs(speed: ReplaySpeed): number {
-  return REPLAY_STEP_MS / speed;
 }
 
 export function replayFailureText(error: unknown, online: boolean): string {

@@ -1,17 +1,14 @@
 import type { CareEvent } from '@aquarium/shared';
 import { describe, expect, it, vi } from 'vitest';
-import { FISH_1, FISH_2, TANK_A, speciesFixture } from './fixtures';
+import { FISH_1, FISH_2, TANK_A, fishFixture, speciesFixture } from './fixtures';
 import { speciesNameMap } from './life';
 import {
   describeEvent,
+  fishNamesFor,
   loadTimeline,
   offsetLabel,
   orderEvents,
   replayFailureText,
-  scrubTo,
-  startPlayback,
-  tickPlayback,
-  togglePlayback,
 } from './replay';
 
 const names = speciesNameMap([speciesFixture()]);
@@ -49,8 +46,13 @@ describe('loadTimeline', () => {
     const tl = await loadTimeline({ replay }, TANK_A, SINCE);
     expect(tl.events).toEqual([e1, e2, e3]);
     expect(tl.truncated).toBe(false);
-    expect(replay).toHaveBeenNthCalledWith(1, TANK_A, { since: SINCE, limit: 500 });
-    expect(replay).toHaveBeenNthCalledWith(2, TANK_A, { since: SINCE, limit: 500, cursor: 'c1' });
+    expect(replay).toHaveBeenNthCalledWith(1, TANK_A, { since: SINCE, limit: 500 }, undefined);
+    expect(replay).toHaveBeenNthCalledWith(
+      2,
+      TANK_A,
+      { since: SINCE, limit: 500, cursor: 'c1' },
+      undefined,
+    );
   });
 
   it('returns an empty timeline for an empty page', async () => {
@@ -65,6 +67,20 @@ describe('loadTimeline', () => {
     expect(tl.truncated).toBe(true);
   });
 
+  it('pins until and hands the abort signal to every request', async () => {
+    const replay = vi
+      .fn()
+      .mockResolvedValueOnce({ events: [ev(1, SINCE)], nextCursor: 'c1' })
+      .mockResolvedValueOnce({ events: [], nextCursor: null });
+    const ctl = new AbortController();
+    const until = '2026-10-18T14:00:00.000Z';
+    await loadTimeline({ replay }, TANK_A, SINCE, { until, signal: ctl.signal });
+    for (const call of replay.mock.calls) {
+      expect(call[1]).toMatchObject({ until });
+      expect(call[2]).toBe(ctl.signal);
+    }
+  });
+
   it('propagates fetch errors', async () => {
     const replay = vi.fn().mockRejectedValue(new Error('boom'));
     await expect(loadTimeline({ replay }, TANK_A, SINCE)).rejects.toThrow('boom');
@@ -76,38 +92,6 @@ describe('loadTimeline', () => {
     ctl.abort();
     await expect(loadTimeline({ replay }, TANK_A, SINCE, { signal: ctl.signal })).rejects.toThrow();
     expect(replay).not.toHaveBeenCalled();
-  });
-});
-
-describe('playback', () => {
-  it('reveals one event per tick and stops at the end', () => {
-    let s = startPlayback(2, false);
-    expect(s).toEqual({ shown: 0, playing: true });
-    s = tickPlayback(s, 2);
-    expect(s).toEqual({ shown: 1, playing: true });
-    s = tickPlayback(s, 2);
-    expect(s).toEqual({ shown: 2, playing: false });
-    expect(tickPlayback(s, 2)).toBe(s);
-  });
-
-  it('does not play an empty timeline', () => {
-    expect(startPlayback(0, false)).toEqual({ shown: 0, playing: false });
-  });
-
-  it('shows everything at once under reduced motion', () => {
-    expect(startPlayback(5, true)).toEqual({ shown: 5, playing: false });
-  });
-
-  it('scrubbing pauses and clamps', () => {
-    expect(scrubTo(4, 99)).toEqual({ shown: 4, playing: false });
-    expect(scrubTo(4, -3)).toEqual({ shown: 0, playing: false });
-    expect(scrubTo(4, 2.4)).toEqual({ shown: 2, playing: false });
-  });
-
-  it('toggle restarts from the top after the end', () => {
-    expect(togglePlayback({ shown: 4, playing: false }, 4)).toEqual({ shown: 0, playing: true });
-    expect(togglePlayback({ shown: 1, playing: true }, 4)).toEqual({ shown: 1, playing: false });
-    expect(togglePlayback({ shown: 1, playing: false }, 4)).toEqual({ shown: 1, playing: true });
   });
 });
 
@@ -152,5 +136,34 @@ describe('labels and failures', () => {
     expect(replayFailureText({ code: 'network' }, true)).toContain('connection');
     expect(replayFailureText({ code: 'rate_limited' }, true)).toContain('too often');
     expect(replayFailureText(new Error('x'), true)).toContain('could not be loaded');
+  });
+});
+
+describe('fishNamesFor', () => {
+  it('names fish that were netted after dying from the away summary, and prefers the tank', () => {
+    const away = {
+      elapsedMinutes: 600,
+      capped: false,
+      deaths: [
+        {
+          fishId: FISH_2,
+          name: 'Gone',
+          species: 'neon-tetra',
+          cause: 'ammonia' as const,
+          diedAt: SINCE,
+        },
+        {
+          fishId: FISH_1,
+          name: 'Old',
+          species: 'neon-tetra',
+          cause: 'ammonia' as const,
+          diedAt: SINCE,
+        },
+      ],
+    };
+    const names = fishNamesFor([fishFixture(FISH_1, { name: 'Bubbles' })], away);
+    expect(names.get(FISH_2)).toBe('Gone');
+    expect(names.get(FISH_1)).toBe('Bubbles');
+    expect(fishNamesFor([], undefined).size).toBe(0);
   });
 });

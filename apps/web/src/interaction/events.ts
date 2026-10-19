@@ -193,6 +193,11 @@ export interface InteractionEvents {
   'photo:view': PhotoView;
   'photo:capture': PhotoCaptureOutcome;
   'glass:tapped': { intensity: number };
+  /**
+   * The away replay asks the fish sim to run faster than real time. 1 is normal speed; above 1 the
+   * fish system steps the running sim the extra steps itself. Always sent back to 1 when the replay ends.
+   */
+  'replay:time-scale': { scale: number };
   /** Emitted by the fish system when the net tool taps a dead fish. */
   'net:tap': { fishId: string };
 }

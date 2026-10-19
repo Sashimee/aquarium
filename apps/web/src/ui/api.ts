@@ -208,6 +208,7 @@ export interface ApiClient {
   replay(
     tankId: string,
     query: { since: string; until?: string; cursor?: string; limit?: number },
+    signal?: AbortSignal,
   ): Promise<ReplayResponse>;
   reportAte(tankId: string, reports: readonly AteReport[], batchId?: string): Promise<Tank>;
   /** The only call whose response carries the share token, together with `rotateShare`. */
@@ -659,12 +660,15 @@ export function createApiClient(
       if (!res.ok) throw await toError(res);
       return parsed(res, tankSchema);
     },
-    async replay(tankId, query) {
+    async replay(tankId, query, signal) {
       const checked = validate(replayQuerySchema, query);
       const params = new URLSearchParams({ since: checked.since, limit: String(checked.limit) });
       if (checked.until) params.set('until', checked.until);
       if (checked.cursor) params.set('cursor', checked.cursor);
-      const res = await send(`/api/tanks/${encodeURIComponent(tankId)}/replay?${params}`);
+      const res = await send(
+        `/api/tanks/${encodeURIComponent(tankId)}/replay?${params}`,
+        signal ? { signal } : {},
+      );
       if (!res.ok) throw await toError(res);
       return parsed(res, replayResponseSchema);
     },
