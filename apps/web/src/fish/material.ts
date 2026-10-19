@@ -9,6 +9,7 @@ import {
 } from 'three/webgpu';
 import {
   abs,
+  atan,
   attribute,
   cameraPosition,
   clamp,
@@ -93,6 +94,8 @@ export interface FishMaterialConfig {
   readonly lighting: FishLighting;
   /** The fin attribute is a vec3 whose third component is the `_mouth` weight. */
   readonly mouth: boolean;
+  /** The species flares (trait `flare-display`), so it gets fin spread and gill flare. */
+  readonly displays: boolean;
 }
 
 const FIN_ID = { caudal: 1, dorsal: 2, anal: 3, pectoral: 4, pelvic: 5 } as const;
@@ -111,6 +114,38 @@ const GILL_COVER_S = 0.08;
 const GILL_FALLOFF_S = 0.03;
 /** Lateral widening of the head at the gill edge with the covers fully flared. */
 const GILL_FLARE = 0.08;
+/**
+ * A displaying fish erects its dorsal and anal fins and fans its tail into a half
+ * disc, so the three read as one ring around the body (Simpson 1968, Anim Behav Monogr 1:1, for
+ * Betta splendens). Each fin turns in the body's plane about a pivot on the axis, by an angle that
+ * grows from 0 at the root to these at the edge, so the root stays on the body. Pivots are placed
+ * by body proportion, as the gill edge is; angles are visual estimates, in radians.
+ */
+const DORSAL_PIVOT_S = 0.4;
+const DORSAL_ERECT = 0.4;
+const ANAL_PIVOT_S = 0.3;
+const ANAL_ERECT = 0.22;
+const PEDUNCLE_S = 0.65;
+/** The tail turns up by this, and each ray further from its rest angle off the axis by this share. */
+const CAUDAL_LIFT = 0.35;
+const CAUDAL_FAN = 0.3;
+/** Unpaired fin edges stretch this far again from their pivot. */
+const FIN_STRETCH = 0.12;
+/** Pelvic fins splay sideways in display, in body lengths at the fin tip. */
+const PELVIC_SPLAY = 0.06;
+/**
+ * Fin rays at or ahead of their pivot stay put, and the turn grows over this share of the body
+ * length behind it; a turn about the pivot would fold them into the body.
+ */
+const DISPLAY_PIVOT_RAMP_S = 0.04;
+/** Median fins held taut in display ripple at this share of their swimming undulation. */
+const DISPLAY_FIN_RIPPLE = 0.4;
+/**
+ * A flaring betta swings its opercula out to show the branchiostegal membrane beneath (Simpson
+ * 1968): the head widens at the gill edge and the throat drops. Visual estimates.
+ */
+const GILL_DISPLAY_FLARE = 0.8;
+const GILL_DISPLAY_DROP = 0.45;
 /**
  * Drop of the jaw tip at a feeding bite's full gape, in body lengths: a lower jaw a tenth of the
  * body long swung down by about 14°.
@@ -294,6 +329,61 @@ function ditheredCoverage(alpha: Node<'float'>, seed: Node<'float'>): Node<'floa
   return alpha.add(surfaceNoise(seed).sub(0.5).mul(reach));
 }
 
+export interface FinDisplayInput {
+  readonly y: Node<'float'>;
+  readonly z: Node<'float'>;
+  readonly mask: Node<'float'>;
+  readonly display: Node<'float'>;
+  readonly isDorsal: Node<'float'>;
+  readonly isAnal: Node<'float'>;
+  readonly isCaudal: Node<'float'>;
+  readonly zMax: number;
+  readonly zLen: number;
+}
+
+/**
+ * The display turn and stretch of an unpaired fin vertex in the body's plane, as model-space y and
+ * z, with the turn's cosine and sine for the normal.
+ */
+export function finDisplay(input: FinDisplayInput): {
+  y: Node<'float'>;
+  z: Node<'float'>;
+  turnCos: Node<'float'>;
+  turnSin: Node<'float'>;
+} {
+  const { y, z, mask, display, isDorsal, isAnal, isCaudal, zMax, zLen } = input;
+  const pivotZ = isDorsal
+    .mul(zMax - DORSAL_PIVOT_S * zLen)
+    .add(isAnal.mul(zMax - ANAL_PIVOT_S * zLen))
+    .add(isCaudal.mul(zMax - PEDUNCLE_S * zLen));
+  const fromPivotZ = z.sub(pivotZ).toVar();
+  const behindPivot = fromPivotZ.negate().toVar();
+  const spread = display
+    .mul(mask)
+    .mul(smoothstep(0, DISPLAY_PIVOT_RAMP_S * zLen, behindPivot))
+    .toVar();
+  // Clamped off zero: atan2(0, 0) is undefined in GLSL, and ahead of the pivot it would wrap by 2π.
+  const offAxis = atan(y, max(behindPivot, 1e-6 * zLen));
+  const turn = spread
+    .mul(
+      isDorsal
+        .mul(DORSAL_ERECT)
+        .sub(isAnal.mul(ANAL_ERECT))
+        .add(isCaudal.mul(offAxis.mul(CAUDAL_FAN).add(CAUDAL_LIFT))),
+    )
+    .toVar();
+  const stretch = spread.mul(isDorsal.add(isAnal).add(isCaudal)).mul(FIN_STRETCH).add(1).toVar();
+  const turnCos = cos(turn).toVar();
+  const turnSin = sin(turn).toVar();
+  // Turned towards +y from the tail, z' = z·cos + y·sin and y' = y·cos − z·sin about the pivot.
+  return {
+    y: y.mul(turnCos).sub(fromPivotZ.mul(turnSin)).mul(stretch),
+    z: fromPivotZ.mul(turnCos).add(y.mul(turnSin)).mul(stretch).add(pivotZ),
+    turnCos,
+    turnSin,
+  };
+}
+
 /**
  * Fish skin and fins on top of three's physical model, with the swimming deformation applied in
  * model space before instancing, so every instance shares one mesh.
@@ -389,13 +479,20 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
     const p = positionGeometry;
     const { s, arg, offset, slopeS: bodySlopeS, bendSlope } = bodyBend(mode, zMin, zMax, swim, p.z);
 
+    const breath = this.instanceVec4(16);
+    const display = breath.y;
+    const gillFlare = breath.z;
+    const { displays } = this.config;
     const side = sign(p.x);
-    const caudal = idIs(id, FIN_ID.caudal)
+    const isCaudal = idIs(id, FIN_ID.caudal);
+    const isDorsal = idIs(id, FIN_ID.dorsal);
+    const isAnal = idIs(id, FIN_ID.anal);
+    const isMedian = isDorsal.add(isAnal);
+    const caudal = isCaudal
       .mul(mask.mul(mask))
       .mul(amp.mul(CAUDAL_LAG * zLen))
       .mul(sin(arg.sub(CAUDAL_LAG_PHASE)));
-    const median = idIs(id, FIN_ID.dorsal)
-      .add(idIs(id, FIN_ID.anal))
+    let median: Node<'float'> = isMedian
       .mul(mask)
       .mul(mode.medianFin * zLen)
       .mul(sin(s.mul(k * 1.5).sub(finPhase)))
@@ -405,42 +502,76 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
       .mul(mode.pectoral * zLen);
     const pectoralOut = pectoral.mul(side).mul(sin(finPhase).mul(0.5).add(0.5));
     const pectoralRow = pectoral.mul(0.6).mul(cos(finPhase));
-    const pelvic = idIs(id, FIN_ID.pelvic)
-      .mul(mask)
-      .mul(side)
-      .mul(PELVIC_AMPLITUDE * zLen)
-      .mul(sin(finPhase.add(1)));
+    const pelvicFin = idIs(id, FIN_ID.pelvic).mul(mask).mul(side);
+    let pelvic: Node<'float'> = pelvicFin.mul(PELVIC_AMPLITUDE * zLen).mul(sin(finPhase.add(1)));
+    if (displays) {
+      median = median.mul(display.mul(DISPLAY_FIN_RIPPLE - 1).add(1));
+      pelvic = pelvic.add(pelvicFin.mul(display).mul(PELVIC_SPLAY * zLen));
+    }
 
     const dx = offset.add(caudal).add(median).add(pectoralOut).add(pelvic);
     const n = normalGeometry;
     let x: Node<'float'> = p.x.add(dx);
     let nx: Node<'float'> = n.x;
-    // x' = x·(1 + g(z)) + h(z); normals transform by the inverse transpose of its Jacobian:
-    // n_x /= 1 + g, then n_z -= (x·g'(z) + h'(z))·n_x.
     let slopeS: Node<'float'> = bodySlopeS;
-    if (gills) {
-      const opening = this.instanceVec4(12).w;
-      const [cover, coverSlope] = smoothRamp(GILL_EDGE_S - GILL_COVER_S, GILL_EDGE_S, s);
-      const [behind, behindSlope] = smoothRamp(GILL_EDGE_S, GILL_EDGE_S + GILL_FALLOFF_S, s);
-      const flare = opening.mul(GILL_FLARE).mul(smoothstep(0.08, 0.5, mask).oneMinus());
-      const widen = flare.mul(cover).mul(behind.oneMinus()).add(1).toVar();
+    const [cover, coverSlope] = smoothRamp(GILL_EDGE_S - GILL_COVER_S, GILL_EDGE_S, s);
+    const [behind, behindSlope] = smoothRamp(GILL_EDGE_S, GILL_EDGE_S + GILL_FALLOFF_S, s);
+    const opercular = cover.mul(behind.oneMinus()).toVar();
+    const skin = smoothstep(0.08, 0.5, mask).oneMinus().toVar();
+    const pumped = gills ? this.instanceVec4(12).w.mul(GILL_FLARE) : null;
+    const flared = displays ? gillFlare.mul(GILL_DISPLAY_FLARE) : null;
+    const opening = pumped !== null && flared !== null ? pumped.add(flared) : (pumped ?? flared);
+    if (opening !== null) {
+      // x' = x·(1 + g(z)) + h(z); normals transform by the inverse transpose of its Jacobian:
+      // n_x /= 1 + g, then n_z -= (x·g'(z) + h'(z))·n_x.
+      const flare = opening.mul(skin);
+      const widen = flare.mul(opercular).add(1).toVar();
       const widenSlopeS = flare.mul(coverSlope.mul(behind.oneMinus()).sub(cover.mul(behindSlope)));
       x = p.x.mul(widen).add(dx);
       nx = n.x.div(widen);
       slopeS = slopeS.add(p.x.mul(widenSlopeS));
     }
     let y: Node<'float'> = p.y;
+    let z: Node<'float'> = p.z;
+    let ny: Node<'float'> = n.y;
+    let nz: Node<'float'> = n.z;
+    if (displays) {
+      const fin = finDisplay({
+        y: p.y,
+        z: p.z,
+        mask,
+        display,
+        isDorsal,
+        isAnal,
+        isCaudal,
+        zMax,
+        zLen,
+      });
+      const { turnCos, turnSin } = fin;
+      const throat = gillFlare
+        .mul(GILL_DISPLAY_DROP)
+        .mul(skin)
+        .mul(opercular)
+        .mul(step(p.y, 0))
+        .add(1)
+        .toVar();
+      // The membranes face ±x, so the stretch and the fin mask's missing gradient barely turn them.
+      y = fin.y.mul(throat);
+      z = fin.z;
+      ny = n.y.mul(turnCos).sub(n.z.mul(turnSin)).div(throat);
+      nz = n.z.mul(turnCos).add(n.y.mul(turnSin));
+    }
     if (gills && this.config.mouth) {
       const jaw = smoothstep(JAW_WEIGHT_FROM, 1, attribute<'vec3'>(FIN_ATTRIBUTE, 'vec3').z);
       const weight = jaw.mul(smoothstep(0, GILL_EDGE_S, s).oneMinus());
-      const opening = this.instanceVec4(16).x;
+      const opening = breath.x;
       // The baked weight carries no gradient to bend the normal with; at this drop the shading
       // error stays within a few degrees.
-      y = p.y.sub(opening.mul(weight).mul(JAW_DROP * zLen));
+      y = y.sub(opening.mul(weight).mul(JAW_DROP * zLen));
     }
-    const position = vec3(x, y, p.z.add(pectoralRow)).toVar('fishPosition');
+    const position = vec3(x, y, z.add(pectoralRow)).toVar('fishPosition');
     const slope = slopeS.div(-zLen).add(bendSlope);
-    const normal = normalize(vec3(nx, n.y, n.z.sub(slope.mul(nx)))).toVar('fishNormal');
+    const normal = normalize(vec3(nx, ny, nz.sub(slope.mul(nx)))).toVar('fishNormal');
     return { position, normal };
   }
 
