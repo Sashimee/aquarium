@@ -8,7 +8,13 @@ export {
   waterStress,
   type FishStepInput,
 } from './fish.ts';
-export { ammoniaProduction, colonyCapacity, stepWater } from './water.ts';
+export {
+  algaeMultiplier,
+  ammoniaProduction,
+  colonyCapacity,
+  lampIsOn,
+  stepWater,
+} from './water.ts';
 export { stepTank } from './step.ts';
 export { catchUp, type CatchUpInput, type CatchUpResult } from './catchup.ts';
 export {

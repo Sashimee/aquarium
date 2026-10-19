@@ -494,6 +494,63 @@ describe('wallet, shop and ledger', () => {
       expect((await purchase(h, who, 'equipment:heater:3', tank.id)).statusCode).toBe(200);
     });
 
+    it('refuses an equipment upgrade the balance cannot cover, changing nothing', async () => {
+      const { who, tank } = await primed(h);
+      const [, tier2] = economy.items.equipment.heater;
+      await setBalance(h, who, (tier2 ?? 0) - 1);
+      const res = await purchase(h, who, 'equipment:heater:2', tank.id);
+      expect(res.statusCode).toBe(402);
+      expect(await balance(h, who)).toBe((tier2 ?? 0) - 1);
+      expect(await sumLedger(h, who)).toBe((tier2 ?? 0) - 1);
+      const read = tankSchema.parse((await call(h, who, 'GET', `/api/tanks/${tank.id}`)).json());
+      expect(read.equipment.heater.tier).toBe(1);
+    });
+
+    it('replays an equipment purchase by key, charges once and refuses the key for another tier', async () => {
+      const { who, tank } = await primed(h);
+      const [, tier2] = economy.items.equipment.filter;
+      const before = await balance(h, who);
+      const k = key();
+      const first = purchaseResponseSchema.parse(
+        (await purchase(h, who, 'equipment:filter:2', tank.id, k)).json(),
+      );
+      const again = purchaseResponseSchema.parse(
+        (await purchase(h, who, 'equipment:filter:2', tank.id, k)).json(),
+      );
+      expect(first.replayed).toBe(false);
+      expect(again.replayed).toBe(true);
+      expect(again.entry.id).toBe(first.entry.id);
+      expect(await balance(h, who)).toBe(before - (tier2 ?? 0));
+      const clash = await purchase(h, who, 'equipment:filter:3', tank.id, k);
+      expect(clash.statusCode).toBe(409);
+      expect(await balance(h, who)).toBe(before - (tier2 ?? 0));
+    });
+
+    it('charges only the tier bought when skipping a tier, never refunds a downgrade', async () => {
+      const { who, tank } = await primed(h);
+      const [, , tier3] = economy.items.equipment.light;
+      await setBalance(h, who, (tier3 ?? 0) + 100);
+      const before = await balance(h, who);
+      expect((await purchase(h, who, 'equipment:light:3', tank.id)).statusCode).toBe(200);
+      expect(await balance(h, who)).toBe(before - (tier3 ?? 0));
+      expect((await purchase(h, who, 'equipment:light:2', tank.id)).statusCode).toBe(409);
+      expect(await balance(h, who)).toBe(before - (tier3 ?? 0));
+      const read = tankSchema.parse((await call(h, who, 'GET', `/api/tanks/${tank.id}`)).json());
+      expect(read.equipment.light).toMatchObject({ tier: 3, intensity: 0.8 });
+    });
+
+    it('keeps the lamp schedule when a better lamp is bought and refuses a wave maker in fresh water', async () => {
+      const { who, tank } = await primed(h);
+      const set = await call(h, who, 'PATCH', `/api/tanks/${tank.id}`, {
+        light: { intensity: 0.5, onHour: 9, offHour: 17 },
+      });
+      expect(set.statusCode).toBe(200);
+      await purchase(h, who, 'equipment:light:2', tank.id);
+      const read = tankSchema.parse((await call(h, who, 'GET', `/api/tanks/${tank.id}`)).json());
+      expect(read.equipment.light).toEqual({ tier: 2, intensity: 0.5, onHour: 9, offHour: 17 });
+      expect((await purchase(h, who, 'equipment:waveMaker:1', tank.id)).statusCode).toBe(400);
+    });
+
     it('refuses a device that does not belong in the tank biome before charging', async () => {
       const who = await account(h);
       const reef = await freeTank(h, who, 'reef');

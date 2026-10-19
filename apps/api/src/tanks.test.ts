@@ -166,6 +166,44 @@ describe('tanks and fish', () => {
     expect(neon?.chemistry).toMatchObject({ phRange: [5.5, 7.5], nitriteTolerance: 0.3 });
   });
 
+  it('flags warm-water species in the catalogue by their comfort range against room temperature', async () => {
+    const cookie = await signedIn(h);
+    const list = speciesListSchema.parse((await call(h, cookie, 'GET', '/api/species')).json());
+    const warm = (id: string) => list.find((s) => s.id === id)?.warmWater;
+    expect(warm('discus')).toBe(true);
+    expect(warm('betta')).toBe(true);
+    expect(warm('neon-tetra')).toBe(false);
+    expect(warm('blue-tang')).toBe(true);
+  });
+
+  it('sets the lamp schedule for free, keeps the tier and rejects a schedule with no night', async () => {
+    const cookie = await signedIn(h);
+    const tank = await createTank(h, cookie);
+    const light = { intensity: 0.4, onHour: 22, offHour: 6 };
+    const res = await call(h, cookie, 'PATCH', `/api/tanks/${tank.id}`, { light });
+    expect(res.statusCode).toBe(200);
+    expect(tankSchema.parse(res.json()).equipment.light).toEqual({ tier: 1, ...light });
+    for (const bad of [
+      { ...light, offHour: 22 },
+      { ...light, onHour: 24 },
+      { ...light, intensity: 1.5 },
+      { ...light, tier: 3 },
+    ]) {
+      const refused = await call(h, cookie, 'PATCH', `/api/tanks/${tank.id}`, { light: bad });
+      expect(refused.statusCode, JSON.stringify(bad)).toBe(400);
+    }
+    const read = tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${tank.id}`)).json());
+    expect(read.equipment.light).toEqual({ tier: 1, ...light });
+  });
+
+  it('gives a new tank of every biome a heater', async () => {
+    const cookie = await signedIn(h);
+    for (const biome of ['freshwater', 'reef'] as const) {
+      const created = await createTank(h, cookie, biome);
+      expect(created.equipment.heater.tier, biome).toBeGreaterThanOrEqual(1);
+    }
+  });
+
   it('creates, lists, renames and re-lays-out a tank, and validates input', async () => {
     const cookie = await signedIn(h);
     const tank = await createTank(h, cookie);

@@ -302,6 +302,9 @@ export const speciesChemistrySchema = z.strictObject({
 });
 export type SpeciesChemistry = z.infer<typeof speciesChemistrySchema>;
 
+export const isWarmWater = (chemistry: SpeciesChemistry, roomC: number): boolean =>
+  chemistry.temperatureC[0] > roomC;
+
 export const speciesSchema = z.strictObject({
   id: slugSchema,
   commonName: z.string().min(1),
@@ -358,7 +361,7 @@ export function checkSpeciesRules(
   }
 }
 
-export const speciesSummarySchema = z.strictObject({
+export const speciesContentSummarySchema = z.strictObject({
   id: slugSchema,
   commonName: z.string().min(1),
   scientificName: z.string().min(1),
@@ -366,6 +369,12 @@ export const speciesSummarySchema = z.strictObject({
   lifecycle: lifecycleSchema,
   chemistry: speciesChemistrySchema.prefault({}),
   breeding: breedingSchema.prefault({}),
+});
+
+export const speciesSummarySchema = speciesContentSummarySchema.extend({
+  warmWater: z
+    .boolean()
+    .describe('its comfort range starts above room temperature, so it needs a heater'),
 });
 export type SpeciesSummary = z.infer<typeof speciesSummarySchema>;
 
