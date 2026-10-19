@@ -66,6 +66,9 @@ export class TankSession {
   private inFlight = 0;
   private uploader: AteUploader | null = null;
   private lastRefreshMs = 0;
+  private walletSeq = 0;
+  private walletApplied = 0;
+  private walletRead: Promise<void> | null = null;
   private loadId = 0;
   private queueEpoch = 0;
   private switchId = 0;
@@ -255,17 +258,37 @@ export class TankSession {
     });
   }
 
-  /** The balance the server reports. A failed read keeps the last one shown rather than hiding it. */
-  async refreshWallet(): Promise<void> {
+  /**
+   * The balance the server reports. A failed read keeps the last one shown rather than hiding it.
+   * Reads started while another is in flight share it; a read after a write never does, and a read
+   * that lands after a newer one, or after a purchase reply, is dropped.
+   */
+  refreshWallet(options: { afterWrite?: boolean } = {}): Promise<void> {
+    if (!options.afterWrite && this.walletRead) return this.walletRead;
+    const read = this.readWallet().finally(() => {
+      if (this.walletRead === read) this.walletRead = null;
+    });
+    this.walletRead = read;
+    return read;
+  }
+
+  private async readWallet(): Promise<void> {
     const gen = this.loadId;
+    const seq = ++this.walletSeq;
     try {
       const wallet = await this.deps.api.wallet();
-      if (gen !== this.loadId) return;
+      if (gen !== this.loadId || seq < this.walletApplied) return;
+      this.walletApplied = seq;
       const before = this.state.balance;
       const gained = before !== null && wallet.balance > before ? wallet.balance - before : 0;
+      const released = new Set(wallet.released ?? []);
+      const owned = [...new Set([...this.state.owned, ...wallet.owned])].filter(
+        (ref) => !released.has(ref),
+      );
+      this.keys.settleSeen(new Set(wallet.keys ?? []));
       this.patch({
         balance: wallet.balance,
-        owned: wallet.owned,
+        owned,
         ...(gained > 0 ? { earned: (this.state.earned ?? 0) + gained } : {}),
       });
     } catch (error) {
@@ -295,7 +318,7 @@ export class TankSession {
       }
       this.keys.settle(intent);
     });
-    await this.refreshWallet();
+    await this.refreshWallet({ afterWrite: true });
     if (refused) this.patch({ pearlsRefused: true });
     return ok;
   }
@@ -381,7 +404,7 @@ export class TankSession {
     };
     if (action.type !== 'bottled_bacteria') {
       const ok = await this.perform(() => run(action));
-      await this.refreshWallet();
+      await this.refreshWallet({ afterWrite: true });
       return ok;
     }
     return this.paid(`bacteria:${tank.id}`, (idempotencyKey) =>
@@ -412,8 +435,17 @@ export class TankSession {
     if (!tank) return false;
     const gen = this.loadId;
     return this.paid(`buy:${tank.id}:${itemRef}`, async (idempotencyKey) => {
-      const bought = await this.deps.api.purchase({ itemRef, idempotencyKey, tankId: tank.id });
+      let bought;
+      try {
+        bought = await this.deps.api.purchase({ itemRef, idempotencyKey, tankId: tank.id });
+      } catch (error) {
+        if (error instanceof ApiRequestError && error.code === 'conflict') {
+          this.patch({ owned: [...new Set([...this.state.owned, itemRef])] });
+        }
+        throw error;
+      }
       if (gen !== this.loadId) return;
+      this.walletApplied = ++this.walletSeq;
       this.patch({
         balance: bought.wallet.balance,
         owned: [...new Set([...this.state.owned, itemRef])],
@@ -466,7 +498,7 @@ export class TankSession {
       this.apply(next, { removal: 'netted' });
       this.patch({ notice: fish ? `${fish.name} was netted and added to the memorial.` : null });
     });
-    await this.refreshWallet();
+    await this.refreshWallet({ afterWrite: true });
     return ok;
   }
 

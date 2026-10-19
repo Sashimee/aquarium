@@ -40,6 +40,8 @@ async function buyShrimp(page: Page, commonName: string, fishName: string): Prom
     .filter({ hasText: commonName })
     .getByRole('button', { name: 'Add', exact: true })
     .click();
+  const confirm = page.getByRole('button', { name: 'Yes, buy it' });
+  if (await confirm.isVisible()) await confirm.click();
   await expect(page.locator('.life-status')).toContainText(`${fishName} is in a bag`);
   const release = page.getByRole('button', { name: `Release ${fishName} now` });
   // The bag releases itself after the acclimation, which removes the button; a click delayed past

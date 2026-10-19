@@ -34,6 +34,11 @@ export class IntentKeys {
     this.keys.delete(intent);
   }
 
+  /** A key the ledger now shows was spent, so the intent happened and a late retry must be new. */
+  settleSeen(seen: ReadonlySet<string>): void {
+    for (const [intent, held] of this.keys) if (seen.has(held.key)) this.keys.delete(intent);
+  }
+
   clear(): void {
     this.keys.clear();
   }

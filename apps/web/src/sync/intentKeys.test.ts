@@ -42,6 +42,17 @@ describe('IntentKeys', () => {
   });
 });
 
+describe('IntentKeys.settleSeen', () => {
+  it('lets go of an intent whose key the ledger shows and keeps the others', () => {
+    const keys = new IntentKeys(counter());
+    const a = keys.keyFor('fish:a');
+    const b = keys.keyFor('fish:b');
+    keys.settleSeen(new Set([a]));
+    expect(keys.keyFor('fish:b')).toBe(b);
+    expect(keys.keyFor('fish:a')).not.toBe(a);
+  });
+});
+
 describe('outcomeUnknown', () => {
   it('keeps the key when the request may have been processed', () => {
     expect(outcomeUnknown(apiError(0, 'network'))).toBe(true);

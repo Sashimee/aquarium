@@ -1442,6 +1442,7 @@ describe('Pearls and the T70 request contract', () => {
 describe('a balance that moves on the server', () => {
   const fresh = () => tankFixture({ lastTickAt: '2026-02-01T12:01:00.000Z' });
   const wallet = (balance: number, owned: string[] = []) => ({ balance, owned });
+  const keyOf = (call: unknown) => (call as { idempotencyKey: string }).idempotencyKey;
 
   it('re-reads the wallet after free care and reports what was earned', async () => {
     const { api, session } = setup();
@@ -1493,6 +1494,78 @@ describe('a balance that moves on the server', () => {
     await vi.waitFor(() => expect(api.wallet).toHaveBeenCalledTimes(1));
     await session.onVisible();
     expect(api.wallet).toHaveBeenCalledTimes(2);
+  });
+
+  it('drops a wallet read that lands after a purchase reply, so no earning is announced', async () => {
+    const { api, session } = setup();
+    api.wallet.mockResolvedValueOnce(wallet(500));
+    await session.setUser(verified);
+    await vi.waitFor(() => expect(session.getState().balance).toBe(500));
+    let land: (v: { balance: number; owned: string[] }) => void = () => {};
+    api.wallet.mockReturnValueOnce(new Promise((resolve) => (land = resolve)));
+    const stale = session.refreshWallet();
+    api.purchase.mockResolvedValue({ wallet: { balance: 450 }, entry: {}, replayed: false });
+    api.tank.mockResolvedValue(tankFixture({ lastTickAt: '2026-02-01T12:01:00.000Z' }));
+    api.wallet.mockResolvedValue(wallet(450, ['plant:java-fern']));
+    await session.purchase('plant:java-fern', 'Planted.');
+    land({ balance: 500, owned: [] });
+    await stale;
+    expect(session.getState()).toMatchObject({ balance: 450, earned: null });
+  });
+
+  it('shares one wallet read between callers that ask while it is in flight', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    await vi.waitFor(() => expect(api.wallet).toHaveBeenCalledTimes(1));
+    let land: (v: { balance: number; owned: string[] }) => void = () => {};
+    api.wallet.mockReturnValueOnce(new Promise((resolve) => (land = resolve)));
+    const reads = [session.refreshWallet(), session.refreshWallet(), session.onVisible()];
+    land({ balance: 500, owned: [] });
+    await Promise.all(reads);
+    expect(api.wallet).toHaveBeenCalledTimes(2);
+  });
+
+  it('settles a purchase key once the ledger shows it, so a late retry is a new intent', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    api.tank.mockResolvedValue(tankFixture({ lastTickAt: '2026-02-01T12:01:00.000Z' }));
+    api.purchase
+      .mockRejectedValueOnce(apiError(0, 'network'))
+      .mockResolvedValue({ wallet: { balance: 250 }, entry: {}, replayed: false });
+    await session.purchase('equipment:filter:2', 'Installed.');
+    const first = keyOf(api.purchase.mock.calls[0]?.[0]);
+    api.wallet.mockResolvedValue({ balance: 250, owned: [], keys: [first] });
+    await session.refreshWallet();
+    await session.purchase('equipment:filter:2', 'Installed.');
+    expect(keyOf(api.purchase.mock.calls[1]?.[0])).not.toBe(first);
+  });
+
+  it('keeps an unspent key when the ledger does not show it', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    api.tank.mockResolvedValue(tankFixture({ lastTickAt: '2026-02-01T12:01:00.000Z' }));
+    api.purchase
+      .mockRejectedValueOnce(apiError(0, 'network'))
+      .mockResolvedValue({ wallet: { balance: 250 }, entry: {}, replayed: true });
+    await session.purchase('equipment:filter:2', 'Installed.');
+    api.wallet.mockResolvedValue({ balance: 500, owned: [], keys: ['other-key-1'] });
+    await session.refreshWallet();
+    await session.purchase('equipment:filter:2', 'Installed.');
+    const keys = api.purchase.mock.calls.map((c) => keyOf(c[0]));
+    expect(keys[1]).toBe(keys[0]);
+  });
+
+  it('forgets an ownership the ledger shows refunded and marks one the server calls a conflict', async () => {
+    const { api, session } = setup();
+    api.wallet.mockResolvedValueOnce(wallet(500, ['plant:java-fern']));
+    await session.setUser(verified);
+    await vi.waitFor(() => expect(session.getState().owned).toEqual(['plant:java-fern']));
+    api.wallet.mockResolvedValue({ balance: 525, owned: [], released: ['plant:java-fern'] });
+    await session.refreshWallet();
+    expect(session.getState().owned).toEqual([]);
+    api.purchase.mockRejectedValue(apiError(409, 'conflict'));
+    await session.purchase('decor:boulder-01', 'Placed.');
+    expect(session.getState().owned).toEqual(['decor:boulder-01']);
   });
 
   it('marks a refusal for too few Pearls with the balance the server holds now', async () => {

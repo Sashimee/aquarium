@@ -737,8 +737,33 @@ describe('api client Pearls contract', () => {
     expect(await createApiClient(fetcher).wallet()).toEqual({
       balance: 420,
       owned: ['plant:java-fern'],
+      released: [],
+      keys: ['key-aaaaaaaa', 'key-bbbbbbbb', 'key-cccccccc', 'key-dddddddd'],
     });
     expect(fetcher.mock.calls[0]?.[0]).toBe('/api/wallet');
+  });
+
+  it('treats a purchase whose newest entry is a refund as released', async () => {
+    const entry = (delta: number, reason: string, itemRef: string, key: string) => ({
+      id: crypto.randomUUID(),
+      userId: 'u1',
+      delta,
+      reason,
+      source: 'game',
+      itemRef,
+      idempotencyKey: key,
+      createdAt: '2026-02-01T12:00:00.000Z',
+    });
+    const ledger = [
+      entry(25, 'refund', 'plant:java-fern', 'key-aaaaaaaa'),
+      entry(-25, 'purchase', 'plant:java-fern', 'key-bbbbbbbb'),
+      entry(-80, 'purchase', 'decor:boulder-01', 'key-cccccccc'),
+    ];
+    const fetcher = vi.fn().mockResolvedValue(json({ wallet: { balance: 420 }, ledger }));
+    expect(await createApiClient(fetcher).wallet()).toMatchObject({
+      owned: ['decor:boulder-01'],
+      released: ['plant:java-fern'],
+    });
   });
 
   it('surfaces a 402 as a request error with its code', async () => {

@@ -26,9 +26,9 @@ export interface SessionState {
   pendingNet: string | null;
   /** Pearls the server reports; null until the first read. */
   balance: number | null;
-  /** Pearls that arrived since the player last looked; shown once, then dismissed. */
   /** Item refs already bought, as far as the recent ledger shows. */
   owned: readonly string[];
+  /** Pearls that arrived since the player last looked; shown once, then dismissed. */
   earned: number | null;
   /** The last paid request was refused for too few Pearls. */
   pearlsRefused: boolean;
