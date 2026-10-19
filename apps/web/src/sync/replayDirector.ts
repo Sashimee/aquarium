@@ -64,22 +64,41 @@ export function createReplayDirector(options: ReplayDirectorOptions): ReplayDire
   // The session emits tank:loaded for a new tank before React unmounts the replay, so the
   // cached Tank cannot say whether the player has moved on.
   let shownTankId = tankId;
+  let emittingOwn = false;
+  let midReplay = false;
+  let disposed = false;
+  let shown = 0;
+  // A foreign load of our own tank (a batched A -> B -> A switch, or a reload) replaces the roster
+  // with the live one. The repair runs in a microtask so the session's own tank:loaded and
+  // tank:water reach every listener first, and it still lands before paint. It cannot wait for
+  // the next command: a paused replay sends none. `loaded.fish` is the source because getTank()
+  // lags until React's effect runs.
   const offLoaded = interaction.on('tank:loaded', (loaded) => {
     shownTankId = loaded.tankId;
+    if (emittingOwn || loaded.tankId !== tankId || !midReplay) return;
+    queueMicrotask(() => {
+      if (disposed || !midReplay || !onScreen()) return;
+      loadRoster(rosterAt(loaded.fish, events, shown));
+    });
   });
   const onScreen = (): boolean => shownTankId === tankId;
 
   const loadRoster = (fish: readonly Fish[]): void => {
     const tank = options.getTank();
-    interaction.emit('tank:loaded', {
-      tankId: tank.id,
-      biome: tank.biome,
-      size: tank.size,
-      fish,
-      decorLayout: tank.decorLayout,
-      decorEdited: tank.decorEdited,
-      backgroundId: tank.backgroundId,
-    });
+    emittingOwn = true;
+    try {
+      interaction.emit('tank:loaded', {
+        tankId: tank.id,
+        biome: tank.biome,
+        size: tank.size,
+        fish,
+        decorLayout: tank.decorLayout,
+        decorEdited: tank.decorEdited,
+        backgroundId: tank.backgroundId,
+      });
+    } finally {
+      emittingOwn = false;
+    }
   };
 
   const apply = (index: number): void => {
@@ -102,16 +121,22 @@ export function createReplayDirector(options: ReplayDirectorOptions): ReplayDire
   };
 
   return {
-    dispose: offLoaded,
+    dispose() {
+      disposed = true;
+      offLoaded();
+    },
     run(commands) {
       for (const command of commands) {
         switch (command.type) {
           case 'reset-roster':
             if (!onScreen()) break;
-            loadRoster(rosterAt(options.getTank().fish, events, command.shown));
+            shown = command.shown;
+            midReplay = true;
+            loadRoster(rosterAt(options.getTank().fish, events, shown));
             break;
           case 'apply':
             if (!onScreen()) break;
+            shown = command.index + 1;
             apply(command.index);
             break;
           case 'time-scale':
@@ -121,6 +146,7 @@ export function createReplayDirector(options: ReplayDirectorOptions): ReplayDire
             break;
           case 'restore':
             // The player switched tanks meanwhile; the new tank has loaded itself.
+            midReplay = false;
             if (!onScreen()) break;
             loadRoster(options.getTank().fish);
             break;

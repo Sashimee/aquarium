@@ -194,6 +194,32 @@ describe('ReplayController playback', () => {
     expect(after.at(-1)).toEqual({ type: 'replay:time-scale', payload: { scale: 1 } });
   });
 
+  it('repairs the roster of a paused replay after a batched A, B, A switch', async () => {
+    const { controller, bus, seen, fire } = setup();
+    await settle();
+    fire();
+    controller.toggle();
+    controller.scrub(0);
+    const load = (t: Tank) => ({
+      tankId: t.id,
+      biome: t.biome,
+      size: t.size,
+      fish: t.fish,
+      decorLayout: t.decorLayout,
+      decorEdited: t.decorEdited,
+      backgroundId: t.backgroundId,
+    });
+    bus.emit('tank:loaded', load(tankFixture({ id: TANK_B, fish: [] })));
+    bus.emit('tank:loaded', load(tank));
+    const before = seen.length;
+    await settle();
+    const after = seen.slice(before).filter((s) => s.type === 'tank:loaded');
+    expect(after).toHaveLength(1);
+    expect(
+      (after[0]?.payload as InteractionEvents['tank:loaded']).fish.find((f) => f.id === FISH_2),
+    ).toMatchObject({ status: 'alive' });
+  });
+
   it('rebuilds the roster once for a drag across several events, on release', async () => {
     const { controller, seen } = setup();
     await settle();
