@@ -59,6 +59,9 @@ export interface DecorViewState {
   problem: string | null;
 }
 
+/** What a save status report came from; the decor notice only clears for a layout save. */
+export type SaveSource = 'layout' | 'background';
+
 export type SaveStatus = 'idle' | 'saving' | 'retrying' | 'saved' | 'error';
 
 export type PhotoMove = 'left' | 'right' | 'up' | 'down' | 'forward' | 'back';
@@ -182,7 +185,7 @@ export interface InteractionEvents {
   'decor:colliders': { colliders: readonly Collider[] };
   /** The player settled an edit; the persistence layer saves it. */
   'decor:layout': { tankId: string; layout: DecorLayout };
-  'decor:save-state': { status: SaveStatus; message: string | null };
+  'decor:save-state': { status: SaveStatus; message: string | null; source?: SaveSource };
   /** The player tapped the tank glass; `intensity` is 0.5 for a tap and 1 for knocking. */
   'photo:request': PhotoCommand;
   'photo:view': PhotoView;

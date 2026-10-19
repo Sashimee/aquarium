@@ -24,8 +24,13 @@ export interface BackgroundOption {
 export function backgroundOptions(biome: Biome): BackgroundOption[] {
   const ids: readonly BackgroundId[] =
     (BACKGROUND_IDS as Readonly<Partial<Record<Biome, readonly BackgroundId[]>>>)[biome] ?? [];
-  return ids.map((id) => ({
-    id,
-    title: TITLES.get(id) ?? id.replace(/^bg-[a-z]+-/, '').replaceAll('-', ' '),
-  }));
+  return ids.map((id) => {
+    const title = TITLES.get(id);
+    if (title === undefined) {
+      throw new Error(
+        `Background "${id}" has no entry in content/backgrounds; add its title there`,
+      );
+    }
+    return { id, title };
+  });
 }

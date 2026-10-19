@@ -13,8 +13,9 @@ export interface LayoutSaverOptions<T> {
 const DEBOUNCE_MS = 700;
 
 /**
- * Saves the newest value per tank (a decor layout, a background id). Edits arrive in bursts (nudge, nudge, rotate), so it waits a
- * moment, sends only the latest, and sends one request at a time so the server sees them in order.
+ * Saves the newest value per tank (a decor layout, a background id). Edits arrive in bursts
+ * (nudge, nudge, rotate), so it waits a moment, sends only the latest, and sends one request at a
+ * time so the server sees them in order.
  */
 export class LayoutSaver<T> {
   private readonly pending = new Map<string, T>();

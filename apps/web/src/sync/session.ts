@@ -15,6 +15,7 @@ import type { ApiClient } from '../ui/api';
 import { AteUploader, type AteUploaderOptions } from './ateUploader';
 import { withRetry, realSleep, type Sleep } from './backoff';
 import { LayoutSaver } from './layout';
+import { SaveStatusMerge } from './saveStatus';
 import { ACCLIMATION_SECONDS, shouldShowAway } from './life';
 import { describeSyncError } from './messages';
 import { INITIAL_STATE, type SessionState } from './state';
@@ -68,10 +69,13 @@ export class TankSession {
   constructor(private readonly deps: SessionDeps) {
     this.now = deps.now ?? (() => Date.now());
     this.sleep = deps.sleep ?? realSleep;
+    const saveStatus = new SaveStatusMerge((status, message, source) =>
+      deps.interaction.emit('decor:save-state', { status, message, source }),
+    );
     this.layoutSaver = new LayoutSaver({
       sleep: this.sleep,
       debounceMs: deps.layoutDebounceMs,
-      report: (status, message) => deps.interaction.emit('decor:save-state', { status, message }),
+      report: saveStatus.reporter('layout'),
       send: async (tankId, layout) => {
         const gen = this.loadId;
         const next = await this.enqueue(() => deps.api.saveDecorLayout(tankId, layout));
@@ -81,7 +85,7 @@ export class TankSession {
     this.backgroundSaver = new LayoutSaver({
       sleep: this.sleep,
       debounceMs: deps.layoutDebounceMs,
-      report: (status, message) => deps.interaction.emit('decor:save-state', { status, message }),
+      report: saveStatus.reporter('background'),
       send: async (tankId, backgroundId) => {
         const gen = this.loadId;
         const next = await this.enqueue(() => deps.api.saveBackground(tankId, backgroundId));

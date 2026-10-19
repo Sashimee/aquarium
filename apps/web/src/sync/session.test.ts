@@ -840,7 +840,7 @@ describe('decor layout', () => {
     expect(api.saveDecorLayout).toHaveBeenCalledWith(TANK_A, later);
     expect(session.activeTank?.decorLayout).toEqual(later);
     expect(rec.of('tank:decor')).toEqual([]);
-    expect(rec.of('decor:save-state').at(-1)).toEqual({ status: 'saved', message: null });
+    expect(rec.of('decor:save-state').at(-1)).toMatchObject({ status: 'saved', message: null });
     session.dispose();
   });
 
@@ -859,7 +859,7 @@ describe('decor layout', () => {
     expect(api.saveBackground).toHaveBeenCalledWith(TANK_A, 'bg-fw-misty-lake');
     expect(session.activeTank?.backgroundId).toBe('bg-fw-misty-lake');
     expect(rec.of('tank:background')).toEqual([]);
-    expect(rec.of('decor:save-state').at(-1)).toEqual({ status: 'saved', message: null });
+    expect(rec.of('decor:save-state').at(-1)).toMatchObject({ status: 'saved', message: null });
     session.dispose();
   });
 
@@ -883,6 +883,37 @@ describe('decor layout', () => {
     ]);
   });
 
+  it.each(['layout', 'background'] as const)(
+    'keeps a failed %s save on show when the other save succeeds, and Retry resends it',
+    async (failing) => {
+      vi.useFakeTimers();
+      const { api, rec, session } = setup();
+      await session.setUser(verified);
+      const fresh = { lastTickAt: '2026-02-01T12:00:00.000Z' };
+      const failedCall = failing === 'layout' ? api.saveDecorLayout : api.saveBackground;
+      const okCall = failing === 'layout' ? api.saveBackground : api.saveDecorLayout;
+      failedCall.mockRejectedValueOnce(apiError(400, 'validation_failed'));
+      okCall.mockResolvedValue(tankFixture(fresh));
+      const submit = (what: 'layout' | 'background') =>
+        what === 'layout'
+          ? rec.bus.emit('decor:layout', { tankId: TANK_A, layout })
+          : rec.bus.emit('background:save', { tankId: TANK_A, backgroundId: 'bg-fw-plant-wall' });
+      submit(failing);
+      await vi.advanceTimersByTimeAsync(700);
+      expect(rec.of('decor:save-state').at(-1)).toMatchObject({ status: 'error' });
+      submit(failing === 'layout' ? 'background' : 'layout');
+      await vi.advanceTimersByTimeAsync(700);
+      expect(okCall).toHaveBeenCalledTimes(1);
+      expect(rec.of('decor:save-state').at(-1)).toMatchObject({ status: 'error' });
+      failedCall.mockResolvedValue(tankFixture(fresh));
+      rec.bus.emit('decor:command', { type: 'retry-save' });
+      await vi.advanceTimersByTimeAsync(700);
+      expect(failedCall).toHaveBeenCalledTimes(2);
+      expect(rec.of('decor:save-state').at(-1)).toMatchObject({ status: 'saved' });
+      session.dispose();
+    },
+  );
+
   it('keeps a failed background save for Retry', async () => {
     vi.useFakeTimers();
     const { api, rec, session } = setup();
@@ -897,7 +928,7 @@ describe('decor layout', () => {
     rec.bus.emit('decor:command', { type: 'retry-save' });
     await vi.advanceTimersByTimeAsync(700);
     expect(api.saveBackground).toHaveBeenCalledTimes(2);
-    expect(rec.of('decor:save-state').at(-1)).toEqual({ status: 'saved', message: null });
+    expect(rec.of('decor:save-state').at(-1)).toMatchObject({ status: 'saved', message: null });
     session.dispose();
   });
 
@@ -927,7 +958,7 @@ describe('decor layout', () => {
     await session.setUser(null);
     await vi.advanceTimersByTimeAsync(2_000);
     expect(api.saveDecorLayout).not.toHaveBeenCalled();
-    expect(rec.of('decor:save-state').at(-1)).toEqual({ status: 'idle', message: null });
+    expect(rec.of('decor:save-state').at(-1)).toMatchObject({ status: 'idle', message: null });
     session.dispose();
   });
 
@@ -973,7 +1004,7 @@ describe('decor layout', () => {
     );
     rec.bus.emit('decor:command', { type: 'retry-save' });
     await vi.advanceTimersByTimeAsync(700);
-    expect(rec.of('decor:save-state').at(-1)).toEqual({ status: 'saved', message: null });
+    expect(rec.of('decor:save-state').at(-1)).toMatchObject({ status: 'saved', message: null });
     session.dispose();
   });
 });

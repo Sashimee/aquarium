@@ -14,10 +14,10 @@ const STEP = 0.02;
 
 const SAVE_TEXT = {
   idle: '',
-  saving: 'Saving the layout.',
+  saving: 'Saving your changes.',
   retrying: 'Could not reach the server. Trying again.',
-  saved: 'Layout saved.',
-  error: 'The layout could not be saved.',
+  saved: 'Changes saved.',
+  error: 'Your changes could not be saved.',
 } as const;
 
 export function BackgroundChooser() {
