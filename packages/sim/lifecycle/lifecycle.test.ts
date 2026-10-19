@@ -272,9 +272,24 @@ describe('a tank stocked to capacity at full size under perfect daily care', () 
     expect(state.fish.every((f) => f.alive && f.health === 1)).toBe(true);
   });
 
-  const SHRIMP_IDS = new Set(['cherry-shrimp', 'cleaner-shrimp']);
+  // Invertebrates are more ammonia-sensitive than any fish, and the old cap of 12 was a fish cap.
+  const LEAST_TOLERANT_FISH_AMMONIA = 0.1;
+  const belowFishTolerance = (s: (typeof parsedSpecies)[number]) =>
+    s.lifecycle.ammoniaTolerance < LEAST_TOLERANT_FISH_AMMONIA;
+  const walks = (s: (typeof parsedSpecies)[number]) =>
+    typeof s.locomotion === 'object' && s.locomotion !== null && 'walking' in s.locomotion;
+  const nanoCapSpecies = parsedSpecies.filter((s) => !belowFishTolerance(s));
 
-  it.each(parsedSpecies.filter((s) => !SHRIMP_IDS.has(s.id)).map((s) => [s.id, s.biome] as const))(
+  it('excludes only walking invertebrates, the shrimp among them, from the nano cap run', () => {
+    const excluded = parsedSpecies.filter(belowFishTolerance);
+    expect(excluded.map((s) => s.id)).toEqual(
+      expect.arrayContaining(['cherry-shrimp', 'cleaner-shrimp']),
+    );
+    expect(excluded.filter((s) => !walks(s)).map((s) => s.id)).toEqual([]);
+    expect(nanoCapSpecies.length).toBeGreaterThan(0);
+  });
+
+  it.each(nanoCapSpecies.map((s) => [s.id, s.biome] as const))(
     'a nano stocked at the old cap of 12 keeps every %s for 120 days of weekly water changes',
     (id, biome) => {
       const spec = species.get(id);
