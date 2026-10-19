@@ -209,7 +209,7 @@ orchestrator merges it. A task is *ready* once all of its dependencies are **mer
 | T20 | GDPR + legal: account deletion, export, privacy page, `/credits` page from manifest | backend-engineer | T12, T05 | 3 |
 | T21 | Security review of auth, rate limits, mail abuse, CSRF, headers (CSP for WebGPU/workers) | code-reviewer | T16, T20 | 5 |
 | T22 | Fix wave from T18/T21 issues (fanned out to owners) | owners | T18, T21 | 6 |
-| T23 | Release candidate on devfish: full checks, prod Postgres backup schedule, prod env, `CHANGELOG`, then **stop and ask Alex** for `dev → main` | devops-engineer | T19, T22 | 7 |
+| T23 | Release candidate on devfish: full checks, prod Postgres backup schedule, prod env, `CHANGELOG`, then **stop and ask Alex** for `dev → main` (superseded: the release waits for T68, §9) | devops-engineer | T19, T22 | 7 |
 | T24 | Extended roster: discus, rasbora, pleco, shrimp, wrasse, firefish, cleaner shrimp | curator → pipeline → behaviour → render | T22 | 8 |
 
 ### Concurrency map (6 by default)
@@ -286,8 +286,8 @@ where a GPU exists).
 ## 9. Expansion (asked by Alex 2026-10-16, #612)
 
 Alex asked for every proposed extra feature to be built, and for a choice of **5 tank background
-pictures per tank type**. The release (`dev → main`) waits until every task in this section is done (T68); Alex
-confirmed on 2026-10-19 that there is no release before that.
+pictures per tank type**. The release (`dev → main`) waits until every task in this section is
+done (T68); Alex confirmed on 2026-10-19 that there is no release before that.
 
 ### 9.1 Decisions
 
