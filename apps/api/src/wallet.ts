@@ -8,6 +8,10 @@ type LedgerRow = typeof schema.ledger.$inferSelect;
 
 export const DAY_MS = 86_400_000;
 
+// idempotencyKeySchema forbids ':', so a client can never send a key that collides with one the
+// server made for its own rewards.
+export const serverKey = (name: string): string => `server:${name}`;
+
 export function toEntry(row: LedgerRow): LedgerEntry {
   return {
     id: row.id,
@@ -47,7 +51,7 @@ export async function lockWallet(
     reason: 'grant',
     source: 'game',
     itemRef: 'grant:starting',
-    idempotencyKey: 'grant-starting',
+    idempotencyKey: serverKey('grant-starting'),
     createdAt: new Date(nowMs),
   });
 }

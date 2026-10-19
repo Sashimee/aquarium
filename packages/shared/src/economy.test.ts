@@ -9,6 +9,7 @@ import {
   decorPrice,
   economySchema,
   idempotencyKeySchema,
+  ledgerKeySchema,
   type Economy,
   ledgerEntrySchema,
   purchaseRequestSchema,
@@ -236,6 +237,11 @@ describe('economy contract', () => {
     ['abcd_ef-GH12', true],
   ])('idempotency key %j valid: %s', (key, valid) => {
     expect(idempotencyKeySchema.safeParse(key).success).toBe(valid);
+  });
+
+  it('lets the ledger hold a server key that no client key can equal', () => {
+    expect(ledgerKeySchema.safeParse('server:daily-care-2026-10-19').success).toBe(true);
+    expect(idempotencyKeySchema.safeParse('server:daily-care-2026-10-19').success).toBe(false);
   });
 
   it('keeps add-fish backward compatible and takes a stage', () => {

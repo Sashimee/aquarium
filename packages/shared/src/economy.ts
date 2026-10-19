@@ -77,6 +77,13 @@ export const idempotencyKeySchema = z
   .max(128)
   .regex(/^[A-Za-z0-9_-]+$/);
 
+// What the ledger stores: a client key, or a server reward key with a ':' no client key may hold.
+export const ledgerKeySchema = z
+  .string()
+  .min(8)
+  .max(160)
+  .regex(/^[A-Za-z0-9_:-]+$/);
+
 export const itemRefSchema = z
   .string()
   .min(1)
@@ -94,7 +101,7 @@ export const ledgerEntrySchema = z.strictObject({
   reason: ledgerReasonSchema,
   source: ledgerSourceSchema,
   itemRef: itemRefSchema.nullable(),
-  idempotencyKey: idempotencyKeySchema,
+  idempotencyKey: ledgerKeySchema,
   createdAt: timestampSchema,
 });
 export type LedgerEntry = z.infer<typeof ledgerEntrySchema>;

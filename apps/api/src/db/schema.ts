@@ -151,6 +151,9 @@ export const tanks = pgTable(
     quarantine: boolean('quarantine').notNull().default(false),
     shareTokenHash: text('share_token_hash').unique(),
     name: text('name').notNull(),
+    // The client's idempotency key of the request that made the tank. Free tanks leave no ledger
+    // row, so this is what lets a retry find the tank it already got.
+    creationKey: text('creation_key'),
     decorLayout: jsonb('decor_layout'),
     // null: the player never chose one, so the biome's default shows.
     backgroundId: text('background_id'),
@@ -171,7 +174,12 @@ export const tanks = pgTable(
         sql`'{"filter":{"tier":1},"heater":{"tier":1},"light":{"tier":1,"intensity":0.8,"onHour":8,"offHour":20},"co2":{"tier":0},"waveMaker":{"tier":0}}'::jsonb`,
       ),
   },
-  (t) => [index('tanks_owner_id_idx').on(t.ownerId)],
+  (t) => [
+    index('tanks_owner_id_idx').on(t.ownerId),
+    uniqueIndex('tanks_owner_creation_key_idx')
+      .on(t.ownerId, t.creationKey)
+      .where(sql`${t.creationKey} is not null`),
+  ],
 );
 
 export const fish = pgTable(

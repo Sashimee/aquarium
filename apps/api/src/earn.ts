@@ -1,7 +1,7 @@
 import { ACHIEVEMENTS, type Economy } from '@aquarium/shared';
 import { and, asc, eq, gte, inArray, lt } from 'drizzle-orm';
 import { schema, type Database } from './db/index.ts';
-import { credit, earnedToday, hasKey, lockWallet, utcDay, DAY_MS } from './wallet.ts';
+import { credit, earnedToday, hasKey, lockWallet, utcDay, DAY_MS, serverKey } from './wallet.ts';
 
 type Tx = Parameters<Parameters<Database['db']['transaction']>[0]>[0];
 
@@ -47,12 +47,12 @@ export async function awardDailyCare(
       amount: Math.min(reward.min, base),
       reason: 'earn',
       itemRef: `${PREFIX.dailyCare}:base`,
-      key: `daily-care-${date}`,
+      key: serverKey(`daily-care-${date}`),
       nowMs,
     });
   }
 
-  const fullKey = `daily-care-full-${date}`;
+  const fullKey = serverKey(`daily-care-full-${date}`);
   if (reward.max <= reward.min || (await hasKey(tx, userId, fullKey))) return;
   const today = await tx
     .selectDistinct({ kind: schema.events.kind })
@@ -91,7 +91,7 @@ export async function awardHealthyStreak(
   if (!isHealthyTank(fish)) return;
   const { perDay, dailyCap } = economy.earn.healthyTankStreak;
   const { startMs, date } = utcDay(nowMs);
-  const key = `streak-${tankId}-${date}`;
+  const key = serverKey(`streak-${tankId}-${date}`);
   await lockWallet(tx, economy, userId, nowMs);
   if (await hasKey(tx, userId, key)) return;
   const yesterday = await tx
@@ -144,7 +144,7 @@ export async function claimAchievementRewards(
     .orderBy(asc(schema.achievementAwards.earnedAt), asc(schema.achievementAwards.achievementId));
   let left = await room(tx, userId, PREFIX.achievement, economy.earn.achievement.dailyCap, nowMs);
   for (const award of awards) {
-    const key = `achievement-${award.id}`;
+    const key = serverKey(`achievement-${award.id}`);
     if (await hasKey(tx, userId, key)) continue;
     const reward = achievementReward(economy, award.id);
     if (reward > left) break;

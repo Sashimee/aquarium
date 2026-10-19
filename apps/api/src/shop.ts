@@ -30,6 +30,7 @@ import {
   findReplay,
   lockWallet,
   owns,
+  serverKey,
   spend,
   toEntry,
   type Charged,
@@ -228,10 +229,10 @@ export function registerShopRoutes(ctx: ShopContext): void {
         const price = Object.hasOwn(economy.species, row.species)
           ? economy.species[row.species]
           : undefined;
-        if (!price) throw conflict('This species cannot be sold.');
-        const amount = Math.floor(
-          (price.juvenile * economy.earn.frySale.percentOfJuvenilePrice) / 100,
-        );
+        const amount = price
+          ? Math.floor((price.juvenile * economy.earn.frySale.percentOfJuvenilePrice) / 100)
+          : 0;
+        if (amount <= 0) throw conflict('This species cannot be sold.');
         const nowMs = clock.now();
         await lockWallet(tx, economy, user.id, nowMs);
         const room = await fryRoom(tx, economy, user.id, nowMs);
@@ -244,7 +245,7 @@ export function registerShopRoutes(ctx: ShopContext): void {
           amount,
           reason: 'earn',
           itemRef: fryItemRef(fishId),
-          key: `fry-${fishId}`,
+          key: serverKey(`fry-${fishId}`),
           nowMs,
         });
         if (!paid) throw conflict('This fry was already sold.');

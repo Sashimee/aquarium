@@ -307,6 +307,10 @@ export function registerLegalRoutes(deps: LegalDeps): void {
             eq(schema.verification.value, userId),
           ),
         );
+      // Wallet and ledger inserts take FOR KEY SHARE on this user row through their foreign key, so
+      // locking it before the ledger delete makes a concurrent spend finish first (and get deleted
+      // below) or fail once the user is gone. Locking after the delete would let a play row outlive
+      // the account.
       const [leaving] = await tx
         .select({ handle: schema.user.handle })
         .from(schema.user)

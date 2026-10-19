@@ -4,6 +4,7 @@ import {
   ACHIEVEMENTS,
   apiErrorSchema,
   dataExportSchema,
+  idempotencyKeySchema,
   PRIVACY_POLICY,
   purchaseResponseSchema,
   sellFryResponseSchema,
@@ -382,6 +383,23 @@ describe('wallet, shop and ledger', () => {
       expect(owned).toHaveLength(2);
     });
 
+    it('replays the free first tank without charging for a second one', async () => {
+      const who = await account(h);
+      const k = key();
+      const first = await createTank(h, who, { key: k });
+      expect(first.statusCode).toBe(201);
+      const replay = await createTank(h, who, { key: k });
+      expect(replay.statusCode).toBe(200);
+      expect(tankSchema.parse(replay.json()).id).toBe(tankSchema.parse(first.json()).id);
+      expect(await balance(h, who)).toBe(economy.grants.starting);
+      const owned = await h.database.db
+        .select()
+        .from(schema.tanks)
+        .where(eq(schema.tanks.ownerId, who.userId));
+      expect(owned).toHaveLength(1);
+      expect((await createTank(h, who, { size: 'nano30', key: k })).statusCode).toBe(409);
+    });
+
     it('keeps the quarantine tank free', async () => {
       const who = await account(h);
       await freeTank(h, who);
@@ -606,6 +624,19 @@ describe('wallet, shop and ledger', () => {
         .where(eq(schema.events.tankId, tank.id));
       expect(events.map((e) => e.kind)).not.toContain('bottled_bacteria');
     });
+  });
+
+  it('keeps server reward keys out of the namespace a client can send', async () => {
+    const { who } = await primed(h);
+    const rewards = (await ledgerOf(h, who)).filter(
+      (r) => r.reason === 'earn' || r.reason === 'grant',
+    );
+    expect(rewards.length).toBeGreaterThan(0);
+    for (const row of rewards) {
+      if (row.idempotencyKey === 'grant-migration') continue;
+      expect(row.idempotencyKey.startsWith('server:')).toBe(true);
+      expect(idempotencyKeySchema.safeParse(row.idempotencyKey).success).toBe(false);
+    }
   });
 
   it('limits the wallet and the shop per user', async () => {
@@ -1007,6 +1038,73 @@ describe('export, deletion and retention', () => {
     expect(text).toContain('10 years');
     expect(text).toContain('Luxembourg');
     expect(text).toContain('wallet and in-game Pearl ledger');
+  });
+});
+
+describe('account deletion racing a purchase', () => {
+  let h: Harness;
+  beforeAll(async () => {
+    h = await createHarness();
+  });
+  afterAll(() => h.close());
+
+  it('never fails the delete or leaves a play row behind, whichever side wins', async () => {
+    for (let round = 0; round < 6; round++) {
+      const who = await account(h);
+      await walletOf(h, who);
+      const [spent, deleted] = await Promise.all([
+        purchase(h, who, 'background:bg-fw-misty-lake'),
+        call(h, who, 'POST', '/api/me/delete', { password: PASSWORD }),
+      ]);
+      expect(deleted.statusCode, deleted.body).toBe(204);
+      expect(spent.statusCode, spent.body).toBeLessThan(500);
+      expect(await ledgerOf(h, who)).toEqual([]);
+      expect(
+        await h.database.db
+          .select()
+          .from(schema.wallet)
+          .where(eq(schema.wallet.userId, who.userId)),
+      ).toEqual([]);
+    }
+  });
+});
+
+describe('fry that sell for nothing', () => {
+  let h: Harness;
+  beforeAll(async () => {
+    const base = loadEconomy();
+    const discus = base.species['discus'];
+    if (!discus) throw new Error('discus missing from economy.json');
+    h = await createHarness({
+      economy: {
+        ...base,
+        earn: { ...base.earn, frySale: { ...base.earn.frySale, percentOfJuvenilePrice: 1 } },
+        species: { ...base.species, discus: { ...discus, juvenile: 50 } },
+      },
+    });
+  });
+  afterAll(() => h.close());
+
+  it('refuses the sale with 409 and keeps the fry and the ledger untouched', async () => {
+    const { who, tank } = await primed(h);
+    const id = randomUUID();
+    await h.database.db.insert(schema.fish).values({
+      id,
+      tankId: tank.id,
+      species: 'discus',
+      name: 'Fry',
+      size: 0.01,
+      sex: 'female',
+      stage: 'fry',
+      bornAt: new Date(h.clock.now()),
+      personality: personalityFromFishId(id),
+    });
+    const before = (await ledgerOf(h, who)).length;
+    const res = await call(h, who, 'POST', `/api/tanks/${tank.id}/fish/${id}/sell`);
+    expect(res.statusCode).toBe(409);
+    expect((await ledgerOf(h, who)).length).toBe(before);
+    const [row] = await h.database.db.select().from(schema.fish).where(eq(schema.fish.id, id));
+    expect(row?.status).toBe('alive');
   });
 });
 

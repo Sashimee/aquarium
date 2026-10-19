@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID, scrypt, timingSafeEqual } from 'node:crypto';
 import { sql } from 'drizzle-orm';
+import type { Economy } from '@aquarium/shared';
 import nodemailer from 'nodemailer';
 import pg from 'pg';
 import type { FastifyInstance, InjectOptions, LightMyRequestResponse } from 'fastify';
@@ -95,6 +96,7 @@ export interface HarnessOptions {
   reminderLimits?: ReminderLimits;
   mailDelayMs?: number;
   appOrigin?: string;
+  economy?: Economy;
   logStream?: { write(chunk: string): void };
 }
 
@@ -221,7 +223,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     },
     species: loadCatalog(),
     chemistryParams: loadChemistryParameters(),
-    economy: loadEconomy(),
+    economy: opts.economy ?? loadEconomy(),
     clock,
     testHooks: opts.testHooks ?? true,
     authSecret: TEST_SECRET,

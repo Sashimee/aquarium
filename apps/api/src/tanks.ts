@@ -653,6 +653,19 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`tanks:${user.id}`}))`);
         const nowMs = clock.now();
         await lockWallet(tx, economy, user.id, nowMs);
+        const [keyed] = await tx
+          .select({ id: schema.tanks.id, size: schema.tanks.size })
+          .from(schema.tanks)
+          .where(and(eq(schema.tanks.ownerId, user.id), eq(schema.tanks.creationKey, tankKey)));
+        if (keyed) {
+          if (keyed.size !== body.size) {
+            throw new HttpError(
+              409,
+              apiError('conflict', 'This request key was already used for a different tank.'),
+            );
+          }
+          return { existingId: keyed.id };
+        }
         const replay = await findReplay(tx, user.id, tankKey, sizeRef, (stored, requested) =>
           stored.startsWith(requested),
         );
@@ -693,6 +706,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           .values({
             id,
             ownerId: user.id,
+            creationKey: tankKey,
             name: body.name,
             biome: body.biome,
             size: body.size,
