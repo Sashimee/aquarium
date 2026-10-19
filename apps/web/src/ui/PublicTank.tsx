@@ -162,7 +162,18 @@ function Reactions({
             >
               Sign in
             </a>{' '}
-            or <a href="/sign-up">create an account</a>.
+            or{' '}
+            <a
+              href="/sign-up"
+              onClick={(e) => {
+                if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                e.preventDefault();
+                leaveToViewerSignIn(publicPath(token), '/sign-up');
+              }}
+            >
+              create an account
+            </a>
+            .
           </>
         )}
       </p>

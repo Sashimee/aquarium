@@ -156,8 +156,12 @@ export function currentReturnPath(): string | null {
   return returnPathFromState(window.history.state);
 }
 
-export function leaveToViewerSignIn(path: string): void {
-  navigate('/sign-in', false, { returnTo: path });
+export function leaveToViewerSignIn(path: string, destination = '/sign-in'): void {
+  navigate(destination, false, { returnTo: path });
+}
+
+export function returnState(returnTo: string | null): { returnTo: string } | null {
+  return returnTo === null ? null : { returnTo };
 }
 
 /** The viewer needs a full page load, so a return trip is a hard navigation. */

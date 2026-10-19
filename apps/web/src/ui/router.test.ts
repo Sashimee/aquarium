@@ -6,6 +6,7 @@ import {
   carryQuery,
   redirectFor,
   returnPathFromState,
+  returnState,
   routePath,
 } from './router';
 
@@ -83,6 +84,11 @@ describe('return path after sign-in', () => {
     expect(returnPathFromState({ returnTo: 5 })).toBeNull();
     expect(returnPathFromState({})).toBeNull();
     expect(returnPathFromState(null)).toBeNull();
+  });
+
+  it('carries the return path between sign-in and sign-up as history state', () => {
+    expect(returnPathFromState(returnState(`/t/${token}`))).toBe(`/t/${token}`);
+    expect(returnState(null)).toBeNull();
   });
 });
 

@@ -16,22 +16,24 @@ import { RemindersSetting } from './RemindersSetting';
 import { deleteErrorMessage, downloadText, rateLimitMessage, safeHref } from './legal';
 import { InstallCard } from '../pwa/InstallCard';
 import { PushSetupError } from '../pwa/push';
-import { currentReturnPath, finishSignIn, navigate } from './router';
+import { currentReturnPath, finishSignIn, navigate, returnState } from './router';
 
 export function Link({
   to,
   children,
   className,
+  state = null,
 }: {
   to: string;
   children: ReactNode;
   className?: string;
+  state?: unknown;
 }) {
   const onClick = (e: MouseEvent<HTMLAnchorElement>) => {
     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)
       return;
     e.preventDefault();
-    navigate(to);
+    navigate(to, false, state);
   };
   return (
     <a href={to} onClick={onClick} className={className}>
@@ -310,13 +312,17 @@ export function SignInScreen() {
         <Link to="/forgot-password">Forgot password?</Link>
       </p>
       <p className="alt">
-        New here? <Link to="/sign-up">Create an account</Link>
+        New here?{' '}
+        <Link to="/sign-up" state={returnState(returnTo)}>
+          Create an account
+        </Link>
       </p>
     </Panel>
   );
 }
 
 export function SignUpScreen() {
+  const [returnTo] = useState(currentReturnPath);
   const auth = useAuth();
   const submission = useSubmission();
   const [name, setName] = useState('');
@@ -347,7 +353,9 @@ export function SignUpScreen() {
         </p>
         <ResendButton email={sentTo} justSent />
         <p className="alt">
-          <Link to="/sign-in">Go to sign in</Link>
+          <Link to="/sign-in" state={returnState(returnTo)}>
+            Go to sign in
+          </Link>
         </p>
       </Panel>
     );
@@ -390,7 +398,10 @@ export function SignUpScreen() {
         </button>
       </form>
       <p className="alt">
-        Already have an account? <Link to="/sign-in">Sign in</Link>
+        Already have an account?{' '}
+        <Link to="/sign-in" state={returnState(returnTo)}>
+          Sign in
+        </Link>
       </p>
     </Panel>
   );

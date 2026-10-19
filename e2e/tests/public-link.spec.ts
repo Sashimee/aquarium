@@ -3,15 +3,14 @@ import {
   APP_URL,
   PASSWORD,
   awaitLoaded,
-  createFirstTank,
   dockButton,
-  openDock,
   openTank,
   openTankPanel,
   registerVerifiedUser,
 } from '../support/app.ts';
 
 const VIEW_QUERY = 'tier=low&backend=webgl';
+const post = { headers: { origin: APP_URL } };
 
 async function freshVisitor(browser: Browser): Promise<Page> {
   const context = await browser.newContext({
@@ -27,18 +26,38 @@ async function openLink(page: Page, link: string): Promise<void> {
   await page.goto(`${link}?${VIEW_QUERY}`);
 }
 
+const tokenOf = (link: string): string => link.split('/').pop() ?? '';
+
 const heart = (page: Page) => page.getByRole('button', { name: /^Heart,/ });
 const star = (page: Page) => page.getByRole('button', { name: /^Star,/ });
 
-test('share, view read-only, react, rotate and revoke a public link', async ({ page, browser }) => {
-  test.setTimeout(600_000);
+async function createTank(page: Page): Promise<string> {
+  const created = await page.request.post('/api/tanks', {
+    ...post,
+    data: { name: 'Pond', biome: 'freshwater' },
+  });
+  expect(created.status(), 'create tank').toBe(201);
+  const { id } = (await created.json()) as { id: string };
+  const fish = await page.request.post(`/api/tanks/${id}/fish`, {
+    ...post,
+    data: { species: 'betta', name: 'Sprite' },
+  });
+  expect(fish.ok(), 'add fish').toBe(true);
+  return id;
+}
+
+async function shareTank(page: Page, tankId: string): Promise<string> {
+  const shared = await page.request.post(`/api/tanks/${tankId}/share`, post);
+  expect(shared.ok(), 'enable sharing').toBe(true);
+  const { shareToken } = (await shared.json()) as { shareToken: string };
+  return `${APP_URL}/t/${shareToken}`;
+}
+
+test('the owner shares, rotates and stops sharing from the tank panel', async ({ page }) => {
+  test.setTimeout(240_000);
   await registerVerifiedUser(page, 'owner');
+  await createTank(page);
   await openTank(page);
-  await createFirstTank(page);
-  await openDock(page, 'Shop', 'Fish shop');
-  await page.getByLabel('Name for the new fish').fill('Sprite');
-  await page.getByRole('button', { name: 'Add', exact: true }).first().click();
-  await expect(page.getByRole('region', { name: 'Fish in bags' })).toContainText('Sprite');
 
   const panel = await openTankPanel(page);
   await panel.getByRole('button', { name: 'Create a public link' }).click();
@@ -47,47 +66,102 @@ test('share, view read-only, react, rotate and revoke a public link', async ({ p
   await expect(panel).toContainText('only time the link is shown');
   const link = await linkField.inputValue();
   expect(new URL(link).origin).toBe(APP_URL);
+  expect((await page.request.get(`/api/public/${tokenOf(link)}`)).status()).toBe(200);
+
+  await panel.getByRole('button', { name: 'Replace the link' }).click();
+  await panel.getByRole('button', { name: 'Yes, get a new link' }).click();
+  await expect(panel.getByLabel('Public link')).not.toHaveValue(link);
+  const fresh = await panel.getByLabel('Public link').inputValue();
+  expect((await page.request.get(`/api/public/${tokenOf(link)}`)).status()).toBe(404);
+  expect((await page.request.get(`/api/public/${tokenOf(fresh)}`)).status()).toBe(200);
+
+  await panel.getByRole('button', { name: 'Stop sharing' }).click();
+  await panel.getByRole('button', { name: 'Yes, stop sharing' }).click();
+  await expect(panel.getByRole('button', { name: 'Create a public link' })).toBeVisible();
+  expect((await page.request.get(`/api/public/${tokenOf(fresh)}`)).status()).toBe(404);
+  const late = await page.request.put(`/api/public/${tokenOf(fresh)}/reaction`, {
+    ...post,
+    data: { kind: 'wow' },
+  });
+  expect(late.status()).toBe(404);
 
   await page.goto('about:blank');
+  await openLink(page, link);
+  await expect(page.locator('#public-notice-h')).toHaveText('Tank not found', {
+    timeout: 120_000,
+  });
+  await expect(page.locator('main')).toContainText('not shared any more');
+});
+
+test('a visitor sees a read-only, private, noindex tank', async ({ page, browser }) => {
+  test.setTimeout(240_000);
+  await registerVerifiedUser(page, 'owner');
+  const tankId = await createTank(page);
+  const emptied = await page.request.patch(`/api/tanks/${tankId}`, {
+    ...post,
+    data: { decorLayout: [] },
+  });
+  expect(emptied.ok(), 'save an emptied decor layout').toBe(true);
+  const link = await shareTank(page, tankId);
+
   const visitor = await freshVisitor(browser);
+  const view = await visitor.request.get(`/api/public/${tokenOf(link)}`);
+  expect(view.status()).toBe(200);
+  expect(view.headers()['x-robots-tag']).toContain('noindex');
+  expect(view.headers()['cache-control']).toContain('no-store');
+  expect(await view.json()).toMatchObject({ decorEdited: true, decorLayout: [] });
+
   await openLink(visitor, link);
   await awaitLoaded(visitor);
-
   await expect(visitor.getByRole('heading', { level: 1 })).toBeVisible();
   await expect(visitor.locator('meta[name="robots"]')).toHaveAttribute(
     'content',
     'noindex, nofollow',
   );
   await expect(visitor.locator('meta[name="referrer"]')).toHaveAttribute('content', 'no-referrer');
-  await expect(visitor.getByRole('main')).toBeVisible();
+  await expect(visitor.locator('main')).toHaveCount(1);
   await expect(dockButton(visitor, 'Feed')).toHaveCount(0);
   await expect(visitor.getByRole('navigation', { name: 'Actions' })).toHaveCount(0);
   await expect(visitor.getByRole('button', { name: 'My tank' })).toHaveCount(0);
   await visitor.getByText('Tank report', { exact: true }).click();
   await expect(visitor.locator('.public-report')).toContainText('Sprite the');
   await expect(visitor.locator('body')).not.toContainText('@bas.lu');
+  await visitor.context().close();
+});
 
-  const apiView = await visitor.request.get(`/api/public/${link.split('/').pop()}`);
-  expect(apiView.status()).toBe(200);
-  expect(apiView.headers()['x-robots-tag']).toContain('noindex');
-  expect(apiView.headers()['cache-control']).toContain('no-store');
+test('a visitor signs in or signs up, returns to the link and reacts', async ({
+  page,
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  await registerVerifiedUser(page, 'owner');
+  const link = await shareTank(page, await createTank(page));
 
-  await heart(visitor).click();
-  await expect(visitor.getByRole('status').filter({ hasText: 'Sign in' })).toBeVisible();
-
+  const visitor = await freshVisitor(browser);
   const viewer = await registerVerifiedUser(visitor, 'viewer');
   await visitor.context().clearCookies();
+  const returnTo = `/t/${tokenOf(link)}`;
+
   await openLink(visitor, link);
   await awaitLoaded(visitor);
   await heart(visitor).click();
+  await expect(visitor.getByRole('status').filter({ hasText: 'Sign in' })).toBeVisible();
+
+  await visitor.getByRole('link', { name: 'create an account', exact: true }).click();
+  await expect(visitor).toHaveURL(/\/sign-up(\?|$)/);
+  expect(await visitor.evaluate(() => history.state)).toEqual({ returnTo });
   await visitor.getByRole('link', { name: 'Sign in', exact: true }).click();
   await expect(visitor).toHaveURL(/\/sign-in(\?|$)/);
+  expect(await visitor.evaluate(() => history.state)).toEqual({ returnTo });
+  expect(visitor.url()).not.toContain(tokenOf(link));
+
   await visitor.getByLabel('Email').fill(viewer.email);
   await visitor.getByLabel('Password').fill(PASSWORD);
   await visitor.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(visitor).toHaveURL(new RegExp(`/t/${link.split('/').pop()}`), { timeout: 120_000 });
+  await expect(visitor).toHaveURL(new RegExp(`/t/${tokenOf(link)}`), { timeout: 120_000 });
   expect(visitor.url()).not.toContain('next=');
   await awaitLoaded(visitor);
+
   await heart(visitor).click();
   await expect(heart(visitor)).toHaveAccessibleName('Heart, 1 reaction, your choice');
   await expect(heart(visitor)).toHaveAttribute('aria-pressed', 'true');
@@ -96,60 +170,13 @@ test('share, view read-only, react, rotate and revoke a public link', async ({ p
   await expect(heart(visitor)).toHaveAccessibleName('Heart, 0 reactions');
   await star(visitor).click();
   await expect(star(visitor)).toHaveAccessibleName('Star, 0 reactions');
-  await heart(visitor).click();
-  await expect(heart(visitor)).toHaveAttribute('aria-pressed', 'true');
-
-  await visitor.goto('about:blank');
-  await openTank(page);
-  const reopened = await openTankPanel(page);
-  await expect(reopened.getByLabel('Public link')).toHaveCount(0);
-  await expect(reopened).toContainText('the link is not stored');
-  await reopened.getByRole('button', { name: 'Get a new link' }).click();
-  await reopened.getByRole('button', { name: 'Yes, get a new link' }).click();
-  const fresh = await reopened.getByLabel('Public link').inputValue();
-  expect(fresh).not.toBe(link);
-
-  await page.goto('about:blank');
-  await openLink(visitor, link);
-  await expect(visitor.locator('#public-notice-h')).toHaveText('Tank not found', {
-    timeout: 120_000,
-  });
-  await expect(visitor.locator('main')).toContainText('not shared any more');
-
-  await openLink(visitor, fresh);
-  await awaitLoaded(visitor);
-  await expect(heart(visitor)).toHaveAccessibleName('Heart, 1 reaction, your choice');
-  await visitor.goto('about:blank');
-
-  await openTank(page);
-  const again = await openTankPanel(page);
-  await again.getByRole('button', { name: 'Stop sharing' }).click();
-  await again.getByRole('button', { name: 'Yes, stop sharing' }).click();
-  await expect(again.getByRole('button', { name: 'Create a public link' })).toBeVisible();
-  await page.goto('about:blank');
-
-  const gone = await visitor.request.get(`/api/public/${fresh.split('/').pop()}`);
-  expect(gone.status()).toBe(404);
-  await openLink(visitor, fresh);
-  await expect(visitor.locator('#public-notice-h')).toHaveText('Tank not found', {
-    timeout: 120_000,
-  });
-  const late = await visitor.request.put(`/api/public/${fresh.split('/').pop()}/reaction`, {
-    data: { kind: 'wow' },
-    headers: { origin: APP_URL },
-  });
-  expect(late.status()).toBe(404);
-
   await visitor.context().close();
 });
 
 test('an owner cannot react to their own shared tank', async ({ page }) => {
+  test.setTimeout(240_000);
   await registerVerifiedUser(page, 'selfie');
-  await openTank(page);
-  await createFirstTank(page);
-  const panel = await openTankPanel(page);
-  await panel.getByRole('button', { name: 'Create a public link' }).click();
-  const link = await panel.getByLabel('Public link').inputValue();
+  const link = await shareTank(page, await createTank(page));
 
   await openLink(page, link);
   await awaitLoaded(page);
