@@ -350,6 +350,8 @@ describe('sim worker bridge', () => {
     expect(Array.from(remote.data)).toEqual(Array.from(expected));
   });
 
+  // Two 60-fish worlds step 1800 times each: about 1 s on a quiet machine, but past the 5 s
+  // default on a shared one under heavy load.
   it('applies toys as a local world would and passes on its nudges in order', async () => {
     const { client } = connect();
     const config = benchmarkConfig(6);
@@ -396,7 +398,7 @@ describe('sim worker bridge', () => {
       ),
     );
     expect(client.fishPoint('nobody')).toBeNull();
-  });
+  }, 20_000);
 
   it('answers fishPoint only from a snapshot of the current layout', async () => {
     const { client } = connect();
