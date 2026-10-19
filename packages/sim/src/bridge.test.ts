@@ -5,10 +5,12 @@ import {
   SimClient,
   type SimAte,
   type SimClientPort,
+  type SimCrew,
   type SimHost,
   type SimHostOptions,
 } from './bridge.ts';
 import type { Collider } from '@aquarium/shared';
+import type { CrewTally } from './crew.ts';
 import { compileCollider, type Point3 } from './decor.ts';
 import {
   angelfish,
@@ -506,6 +508,73 @@ describe('sim worker bridge', () => {
     const data = new Float32Array(local.count * SNAPSHOT_STRIDE);
     local.writeSnapshot(data);
     expect(Array.from(snapshot.data)).toEqual(Array.from(data));
+  });
+
+  it('grazes the algae it is sent and reports the crew tally as a local world would', async () => {
+    const { client } = connect();
+    const config: WorldConfig = {
+      seed: 4,
+      tank: SHOW_TANK,
+      species: [...ARCHETYPES, cherryShrimp],
+      decor: [],
+      fish: spawnMany(cherryShrimp.id, 3),
+    };
+    const ready = await client.init(config);
+    const tallies: SimCrew[] = [];
+    client.onCrew((tally, crew) => {
+      expect(tally).toBe(crew.tally);
+      tallies.push(crew);
+    });
+    client.setAlgae(0.6);
+    await stepCollecting(client, 95, 95);
+
+    const local = new World(config);
+    local.setAlgae(0.6);
+    for (let t = 0; t < 95; t++) local.step();
+    const expected = local.takeCrewTally();
+    expect(expected.length).toBe(3);
+    expect(tallies).toEqual([{ type: 'crew', epoch: ready.epoch, tick: 95, tally: expected }]);
+    expect(() => client.setAlgae(1.5)).toThrow(/algae/);
+  });
+
+  it('sends the crew tally at most once a second, and all of it before a layout change', async () => {
+    const { client } = connect();
+    const config: WorldConfig = {
+      seed: 4,
+      tank: SHOW_TANK,
+      species: [...ARCHETYPES, cherryShrimp],
+      decor: [],
+      fish: spawnMany(cherryShrimp.id, 3),
+    };
+    const ready = await client.init(config);
+    const ticks: number[] = [];
+    client.onCrew((_, crew) => ticks.push(crew.tick));
+    client.setAlgae(1);
+    for (let t = 1; t <= 40; t++) await stepCollecting(client, 1, t);
+    expect(ticks).toEqual([STEP_HZ]);
+    const gone = await client.removeFish('cherry-shrimp-0');
+    expect(gone.epoch).toBe(ready.epoch + 1);
+    expect(ticks).toEqual([STEP_HZ, 40]);
+  });
+
+  it('passes on crew tallies of the current world only', async () => {
+    const worker = fakeWorker();
+    const client = new SimClient(worker.port);
+    const seen: CrewTally[] = [];
+    client.onCrew((tally) => seen.push(...tally));
+    const entry: CrewTally = { fishId: 'cherry-shrimp-0', algaeM2: 1e-5, settledPortions: 0 };
+    const first = client.init(benchmarkConfig(1));
+    worker.ready(1);
+    await first;
+    worker.post({ type: 'crew', epoch: 0, tick: 30, tally: [entry] });
+    expect(seen).toEqual([]);
+    worker.post({ type: 'crew', epoch: 1, tick: 30, tally: [entry] });
+    expect(seen).toEqual([entry]);
+    const second = client.init(benchmarkConfig(2));
+    worker.post({ type: 'crew', epoch: 1, tick: 60, tally: [entry] });
+    expect(seen).toEqual([entry]);
+    client.dispose();
+    await expect(second).rejects.toThrow(/client disposed/);
   });
 
   it('rejects bad food as a whole, keeps the previous food, and refuses food before init', async () => {
