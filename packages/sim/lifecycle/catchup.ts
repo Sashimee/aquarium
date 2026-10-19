@@ -53,6 +53,7 @@ export function catchUp(input: CatchUpInput): CatchUpResult {
       grace: startMs < input.graceEndsAtMs,
       biome: input.biome,
       litres: input.litres,
+      bioloadCapacity: input.bioloadCapacity,
       equipment: input.equipment,
       species: input.species,
       speciesChemistry: input.speciesChemistry,

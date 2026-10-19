@@ -207,6 +207,7 @@ async function lockAndTick(
     toMs: now,
     biome: tank.biome,
     litres: TANK_SIZES[tank.size].litres,
+    bioloadCapacity: BIOLOAD_CAPACITY_BY_SIZE[tank.size],
     equipment: equipmentSchema.parse(tank.equipment),
     species: new Map([...deps.species].map(([id, s]) => [id, s.lifecycle])),
     speciesChemistry: new Map([...deps.species].map(([id, s]) => [id, s.chemistry])),

@@ -90,9 +90,10 @@ export function stepWater(
 ): { water: Water; chemistry: Chemistry } {
   const { water, chemistry } = state;
   const { dtHours, params, chemistryParams: cp } = ctx;
-  const { perHour: massPerHour } = ammoniaProduction(fish, ctx.species);
+  const { bioload, perHour: massPerHour } = ammoniaProduction(fish, ctx.species);
   const concentration = (REFERENCE_TANK_LITRES / ctx.litres) ** VOLUME_CONCENTRATION_EXPONENT;
-  const perHour = massPerHour * concentration;
+  const withinCapacity = bioload > ctx.bioloadCapacity ? ctx.bioloadCapacity / bioload : 1;
+  const perHour = massPerHour * Math.max(1, concentration * withinCapacity);
 
   const decayed = water.uneatenFood * (1 - Math.exp((-dtHours * 60) / params.foodDecayMinutes));
   const withFood = water.ammonia + decayed * params.ammoniaPerPortion;

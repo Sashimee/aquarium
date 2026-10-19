@@ -27,6 +27,9 @@ export const REFERENCE_TANK_LITRES = 300;
  * tighter than standard for 10x less water, so 0.6 (4x at 30 L) makes a full nano as concentrated as a full
  * standard tank. Uneaten food is not scaled: a portion is a fixed player action, and species with an
  * ammonia tolerance of 0.09 already sit just under the limit from one portion at any size.
+ * Bioload above the tank's capacity (stock added before sizes had caps) adds no further concentration: the
+ * waste of an over-cap tank is held at that of a full one, never below the unscaled waste, so its animals
+ * are not wiped out on catch-up.
  */
 export const VOLUME_CONCENTRATION_EXPONENT = 0.6;
 export const TANK_BIOLOAD_CAPACITY = 12;
