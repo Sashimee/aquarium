@@ -79,6 +79,7 @@ export function tankFixture(overrides: Partial<Tank> = {}): Tank {
     chemistry: newTankChemistry('freshwater'),
     size: 'standard',
     quarantine: false,
+    shared: false,
     shareToken: null,
     equipment: DEFAULT_EQUIPMENT,
     fish: [],

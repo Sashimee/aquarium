@@ -249,6 +249,7 @@ export class World {
   private _speed: Float64Array;
   private _yawRate: Float64Array;
   private _pitchRate: Float64Array;
+  private _pitchHeld: Uint8Array;
   private _state: Uint8Array;
 
   private _bodyLength: Float64Array;
@@ -360,6 +361,11 @@ export class World {
     return this._pitchRate;
   }
 
+  /** 1 where this step's pitch ran at the full turn rate (C-bend, held posture, air dash). */
+  get pitchHeld(): Uint8Array {
+    return this._pitchHeld;
+  }
+
   get state(): Uint8Array {
     return this._state;
   }
@@ -457,6 +463,7 @@ export class World {
     this._speed = new Float64Array(n);
     this._yawRate = new Float64Array(n);
     this._pitchRate = new Float64Array(n);
+    this._pitchHeld = new Uint8Array(n);
     this._state = new Uint8Array(n);
     this._bodyLength = new Float64Array(n);
     this._radius = new Float64Array(n);
@@ -962,6 +969,7 @@ export class World {
     this._speed = edit.array(this.speed);
     this._yawRate = edit.array(this.yawRate);
     this._pitchRate = edit.array(this.pitchRate);
+    this._pitchHeld = edit.array(this.pitchHeld);
     this._state = edit.array(this.state);
     this._bodyLength = edit.array(this.bodyLength);
     this._radius = edit.array(this.radius);
@@ -1450,11 +1458,14 @@ export class World {
           }
           // Within one engagement the slide direction stays continuous as the wall normal turns
           // (pane to corner to next pane); only a fresh engagement picks a side from the heading.
-          // Closing on food, a clear wish along the wall (further along the pane, into the
-          // corner) overrides both: sliding against it parks a fish beside food it cannot turn
-          // back to. Cruising keeps continuity, or a wandering heading flips the slide.
+          // Closing on food or heading home, a clear wish along the wall (further along the
+          // pane, into the corner, round the rock to the cave) overrides both: sliding against
+          // it parks a fish beside food it cannot turn back to, or carries a gramma hugging a
+          // rock face away from its cave for as long as it hugs the face. Cruising keeps
+          // continuity, or a wandering heading flips the slide.
           const along = dx * tx + dz * tz;
-          const wished = standOff && Math.abs(along) > STEERING.slideWishFraction * cruiseBase;
+          const wished =
+            (standOff || plan.homing) && Math.abs(along) > STEERING.slideWishFraction * cruiseBase;
           if (wished && Math.sign(along) * (tx * px0 + tz * pz0) < 0) {
             px0 = 0;
             pz0 = 0;
@@ -1657,8 +1668,7 @@ export class World {
     const arcLimited =
       plan.state === FishState.Feed || (plan.state === FishState.Cruise && plan.seekWeight === 0);
     if (!arcLimited || plan.pivot || this.cramped[i] === 1) return sp.maxTurnRate;
-    const radius = STEERING.minTurnRadiusBodyLengths * (this.bodyLength[i] ?? 1);
-    const arc = (this.speed[i] ?? 0) / radius;
+    const arc = (this.speed[i] ?? 0) / this.cruiseTurnRadius(i);
     return Math.min(sp.maxTurnRate, Math.max(arc, STEERING.pivotTurnRateRadPerS));
   }
 
@@ -1819,6 +1829,11 @@ export class World {
     return this.bodyCanTurnAt(this.bodyLength[i] ?? 0, this.thickness[i] ?? 0, x, y, z);
   }
 
+  /** The tightest arc fish `i` turns on while swimming, before it brakes to pivot. */
+  cruiseTurnRadius(i: number): number {
+    return STEERING.minTurnRadiusBodyLengths * (this.bodyLength[i] ?? 0);
+  }
+
   /**
    * Whether a fish of `speciesId` could feed on an item fixed at (x, y, z), as the feeding AI
    * judges it: the item is not buried in sand or rock, and the fish can turn round, level, at the
@@ -1921,7 +1936,9 @@ export class World {
     const reflex = !Number.isNaN(plan.turnRate);
     const wmax = reflex ? plan.turnRate : sp.maxTurnRate;
     const burstAndCoast = sp.gait === 'burst-and-coast' && !plan.continuous;
-    const coasting = burstAndCoast && this.coasting[i] === 1;
+    // Heading changes are made at the kicks (Calovi et al. 2018): a fish turning off a pane
+    // kicks round rather than gliding on into it.
+    const coasting = burstAndCoast && this.coasting[i] === 1 && this.state[i] !== FishState.Avoid;
     const gain = STEERING.turnGainPerS * (coasting ? BEHAVIOUR.coastTurnGain : 1);
     const smooth = Math.min(1, dt / STEERING.turnSmoothingS);
 
@@ -1940,6 +1957,7 @@ export class World {
     if (detour > 0 && yawError * detourSign < 0) yawError += 2 * Math.PI * detourSign;
     let yawRate: number;
     let pitchRate: number;
+    let held = reflex;
     if (reflex) {
       // The C-start bend is a dead-beat reflex turn, not a smoothed steering correction.
       yawRate = clamp(yawError / dt, -wmax, wmax);
@@ -1952,6 +1970,7 @@ export class World {
       // does not follow the burst-and-coast steering gain. Only a held posture (a cory nosing
       // down) and the dash for air pitch as fast as the fish can turn.
       const fastPitch = !Number.isNaN(plan.pitch) || plan.state === FishState.Gulp;
+      held = fastPitch;
       const pitchLimit = fastPitch ? wmax : Math.min(wmax, STEERING.steeredPitchRateRadPerS);
       const pitchCmd = clamp(
         ((this.targetPitch[i] ?? 0) - pitch) * STEERING.pitchGainPerS,
@@ -1963,6 +1982,7 @@ export class World {
     this.yawRate[i] = yawRate;
     this.yaw[i] = wrapAngle(yaw + yawRate * dt);
     this.pitchRate[i] = pitchRate;
+    this.pitchHeld[i] = held ? 1 : 0;
     this.pitch[i] = clamp(pitch + pitchRate * dt, -sp.maxPitch, sp.maxPitch);
 
     const v = this.speed[i] ?? 0;
@@ -2142,6 +2162,7 @@ export class World {
     const prev = this.previous;
     this.speed[i] = 0;
     this.pitchRate[i] = 0;
+    this.pitchHeld[i] = 0;
     const wTurn = this.turnRateLimit(i, sp, plan);
     const yawRate = clamp(wrapAngle((this.targetYaw[i] ?? 0) - yaw) / dt, -wTurn, wTurn);
     this.yaw[i] = wrapAngle(yaw + yawRate * dt);

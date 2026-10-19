@@ -7,6 +7,7 @@ import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { chemistrySchema, DEFAULT_EQUIPMENT, equipmentSchema } from '@aquarium/shared';
 import { connect, runMigrations, type Database } from './db/index.ts';
+import { hashShareToken } from './shareToken.ts';
 import { createTestDatabase } from './test-harness.ts';
 
 const DRIZZLE = fileURLToPath(new URL('../drizzle', import.meta.url));
@@ -93,5 +94,45 @@ describe('the chemistry v2 migration on tanks that already exist', () => {
     );
     expect(equipmentSchema.parse(rows[0]?.equipment).heater.tier).toBe(1);
     expect(chemistrySchema.parse(rows[0]?.chemistry).bacteria.ammoniaOxidisers).toBe(1);
+  });
+});
+
+describe('the public links migration on tanks that are already shared', () => {
+  let testDb: Awaited<ReturnType<typeof createTestDatabase>>;
+  let database: Database;
+  let oldDir: string;
+  const token = 'A'.repeat(43);
+
+  beforeAll(async () => {
+    testDb = await createTestDatabase();
+    database = connect(testDb.url);
+    oldDir = migrationsUpTo(10);
+    await migrate(drizzle(database.pool), { migrationsFolder: oldDir });
+    await database.pool.query(
+      `insert into "user" (id, name, email) values ('u1', 'Sharer', 'sharer@bas.lu')`,
+    );
+    await database.pool.query(
+      `insert into tanks (id, owner_id, biome, name, share_token) values
+        ('00000000-0000-4000-8000-000000000001', 'u1', 'freshwater', 'Shared', $1),
+        ('00000000-0000-4000-8000-000000000002', 'u1', 'freshwater', 'Private', null)`,
+      [token],
+    );
+    await runMigrations(database);
+  });
+
+  afterAll(async () => {
+    await database.close();
+    await testDb.drop();
+    rmSync(oldDir, { recursive: true, force: true });
+  });
+
+  it('keeps existing links working by storing their sha256 and drops the plain token', async () => {
+    const { rows } = await database.pool.query<{ name: string; share_token_hash: string | null }>(
+      'select name, share_token_hash from tanks order by name',
+    );
+    expect(rows).toEqual([
+      { name: 'Private', share_token_hash: null },
+      { name: 'Shared', share_token_hash: hashShareToken(token) },
+    ]);
   });
 });

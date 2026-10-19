@@ -503,27 +503,39 @@ describe('World decor', () => {
     const centre = (w: World, field: typeof OLD, k: number): number =>
       field.sample(at(w.position, k * 3), at(w.position, k * 3 + 1), at(w.position, k * 3 + 2), n);
 
+    // Three seeds of 1800 steps take under 1 s on a quiet machine, but ran past the 5 s default
+    // on a shared one under heavy load.
     it('keeps every body, sand dwellers under it included, out of the new place', () => {
+      const posed: [string, string, [number, number, number]][] = [
+        ['cory-under', bronzeCorydoras.id, [0.3, 0.01, 0]],
+        ['tetra-under', neonTetra.id, [0.34, 0.1, 0.05]],
+        ['shrimp-under', cherryShrimp.id, [0.26, 0, -0.06]],
+      ];
       for (const seed of [1, 2, 3]) {
         const w = community(seed);
-        const underNew = [];
-        for (let k = 0; k < w.count; k++) if (centre(w, NEW, k) < 0) underNew.push(k);
-        expect(
-          underNew.length,
-          `seed ${seed}: some fish sit where the rock will land`,
-        ).toBeGreaterThan(0);
+        for (const [id, species, position] of posed) {
+          const k = w.addFish({ id, species }, { position, heading: 0 });
+          expect(
+            centre(w, NEW, k),
+            `seed ${seed}: ${id} sits where the rock will land`,
+          ).toBeLessThan(0);
+        }
         w.setDecor([rockAt(0.3)]);
+        let worst = Infinity;
+        let where = '';
         for (let t = 0; t <= 900; t++) {
           for (let k = 0; k < w.count; k++) {
-            expect(
-              w.bodyClearance(k),
-              `seed ${seed} step ${t} ${w.fishIds[k]}`,
-            ).toBeGreaterThanOrEqual(-PENETRATION_EPSILON);
+            const c = w.bodyClearance(k);
+            if (c < worst) {
+              worst = c;
+              where = `step ${t} ${w.fishIds[k]}`;
+            }
           }
           w.step();
         }
+        expect(worst, `seed ${seed} ${where}`).toBeGreaterThanOrEqual(-PENETRATION_EPSILON);
       }
-    });
+    }, 20_000);
 
     it('lets fish into the space the rock left', () => {
       const w = community(1);

@@ -208,6 +208,8 @@ export interface BehaviourHost {
    * of its own length clear to turn round in.
    */
   canTurnAt(i: number, x: number, y: number, z: number): boolean;
+  /** The tightest arc fish `i` turns on while swimming, before it brakes to pivot. */
+  cruiseTurnRadius(i: number): number;
 }
 
 /** One fish's intent for this step, consumed by steering and integration. */
@@ -242,6 +244,8 @@ export class Plan {
   roll = NaN;
   continuous = false;
   pivot = false;
+  /** The seek point is the fish's cave, which it works round rock to reach. */
+  homing = false;
   /** A point to keep `shunRadius` away from, pushed off with `shunWeight`; radius 0 for none. */
   shunX = 0;
   shunY = 0;
@@ -279,6 +283,7 @@ export class Plan {
     this.roll = NaN;
     this.continuous = false;
     this.pivot = false;
+    this.homing = false;
     this.shunRadius = 0;
     this.display = 0;
     this.gillFlare = 0;
@@ -1295,9 +1300,37 @@ export class Behaviour {
       plan.wander = 0;
       // Browsers work an attached item (a nori clip, a wafer) head-on, manoeuvring on the spot
       // with their fins as they do over rock rather than swimming arcs past it.
-      plan.pivot = f.grazes(k) && d < length;
+      const grazed = f.grazes(k);
+      plan.pivot = grazed && d < length;
+      const facing = grazed ? NaN : this.facingInsideTurnCircle(i, fx, fz);
+      if (!Number.isNaN(facing)) {
+        // Swimming on at any speed past food abeam only circles it; the fish holds back until
+        // the turn on the spot has brought the food round in front of it.
+        plan.pivot = true;
+        plan.speedCap *= Math.max(0, facing);
+      }
     }
     return true;
+  }
+
+  /**
+   * For (x, z) inside either circle fish `i` sweeps turning on its cruising arc, the cosine of its
+   * bearing off the heading; NaN outside them. Food there can never be brought onto the heading by
+   * swimming on, so the fish brakes and turns on the spot instead, as fish do in a strike turn.
+   */
+  private facingInsideTurnCircle(i: number, x: number, z: number): number {
+    const o = i * 3;
+    const fx = at(this.host.forward, o);
+    const fz = at(this.host.forward, o + 2);
+    const h = Math.hypot(fx, fz);
+    const rx = x - at(this.host.position, o);
+    const rz = z - at(this.host.position, o + 2);
+    const d = Math.hypot(rx, rz);
+    if (h < 1e-9 || d < 1e-9) return NaN;
+    const ahead = (rx * fx + rz * fz) / h;
+    const side = Math.abs(rx * fz - rz * fx) / h;
+    const r = this.host.cruiseTurnRadius(i);
+    return (side - r) * (side - r) + ahead * ahead < r * r ? ahead / d : NaN;
   }
 
   /**
@@ -1443,6 +1476,7 @@ export class Behaviour {
     } else if (a !== undefined) {
       const [tx, ty, tz] = this.approach(i, a);
       plan.seek(tx, ty, tz, speed, 0.3);
+      plan.homing = a.kind === 'cave';
       plan.comfort = BEHAVIOUR.shelterComfort;
       this.widenBand(plan, a.position[1], a.radius);
     } else if (sp.home === 'station') {
@@ -1588,6 +1622,7 @@ export class Behaviour {
     }
     const [tx, ty, tz] = this.approach(i, a, py);
     plan.seek(tx, ty, tz, 0, 0.5);
+    plan.homing = true;
     plan.wander *= 0.3;
     return true;
   }
@@ -2037,6 +2072,7 @@ export class Behaviour {
       BEHAVIOUR.caveLeashBodyLengths * length,
       FishState.Station,
     );
+    plan.homing = a.kind === 'cave';
     this.bellyToSurface(i, sp, plan);
   }
 
@@ -2070,6 +2106,7 @@ export class Behaviour {
       Math.max(0.6 * a.radius, 0.5 * length),
       FishState.Shelter,
     );
+    plan.homing = a.kind === 'cave';
     if (plan.state === FishState.Shelter) this.bellyToSurface(i, sp, plan);
     return true;
   }
@@ -2094,6 +2131,11 @@ export class Behaviour {
     if (Math.hypot(rx, ry, rz) <= a.radius || (along > 0 && lateral < a.radius))
       return [ax, ay, az];
     const out = a.radius + BEHAVIOUR.caveMouthBodyLengths * at(this.host.bodyLength, i);
+    if (along < 0.5 * out && lateral >= a.radius) {
+      // Beside the rock, the straight line to the mouth cuts through the cave's own wall: the
+      // fish comes out past the face on its own side first, then crosses to the mouth.
+      return [ax + ux * out + rx - along * ux, ay + uy * out, az + uz * out + rz - along * uz];
+    }
     return [ax + ux * out, ay + uy * out, az + uz * out];
   }
 
