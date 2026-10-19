@@ -16,7 +16,7 @@ const RELATIVE_GATE_LU = 10;
 
 function biquad(
   input: Float64Array,
-  { b, a }: { b: readonly number[]; a: readonly number[] },
+  { b, a }: { b: readonly [number, number, number]; a: readonly [number, number, number] },
 ): Float64Array {
   const out = new Float64Array(input.length);
   let x1 = 0;
@@ -25,7 +25,7 @@ function biquad(
   let y2 = 0;
   for (let i = 0; i < input.length; i++) {
     const x0 = input[i]!;
-    const y0 = b[0]! * x0 + b[1]! * x1 + b[2]! * x2 - a[1]! * y1 - a[2]! * y2;
+    const y0 = b[0] * x0 + b[1] * x1 + b[2] * x2 - a[1] * y1 - a[2] * y2;
     out[i] = y0;
     x2 = x1;
     x1 = x0;

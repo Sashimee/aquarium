@@ -53,7 +53,7 @@ export const AUDIO_RECIPES: readonly AudioRecipe[] = [
     loop: { crossfadeS: 0.25 },
   },
   {
-    id: 'underwater-ambience',
+    id: 'underwater-bed',
     source: 'freesound-862788',
     role: 'underwater-ambience',
     targetLufs: -28,
@@ -194,7 +194,7 @@ function modificationNotes(recipe: AudioRecipe, processed: ProcessedAudio): stri
       : '';
     notes.push(`${window}${recipe.loop.crossfadeS} s equal-power crossfade of the loop seam`);
   } else {
-    notes.push('trimmed leading and trailing silence');
+    notes.push(`trimmed leading and trailing silence, ${ONE_SHOT_FADE_IN_S * 1000} ms fade-in`);
     if (recipe.fadeOutS) notes.push(`${Math.round(recipe.fadeOutS * 1000)} ms fade-out`);
   }
   notes.push(
@@ -209,10 +209,11 @@ function modificationNotes(recipe: AudioRecipe, processed: ProcessedAudio): stri
 export function rawAudioPath(rawRoot: string, sourceId: string): string {
   const dir = join(rawRoot, sourceId);
   const files = readdirSync(dir).filter((name) => name.endsWith('.ogg'));
-  if (files.length !== 1) {
+  const [file] = files;
+  if (files.length !== 1 || file === undefined) {
     throw new Error(`${sourceId}: expected exactly one .ogg in ${dir}, found ${files.length}`);
   }
-  return join(dir, files[0]!);
+  return join(dir, file);
 }
 
 export function buildAudio(
@@ -246,6 +247,7 @@ export function buildAudio(
     audio: {
       role: recipe.role,
       loop: recipe.loop !== undefined,
+      frames: processed.samples.length,
       durationS: Number((processed.samples.length / AUDIO_SAMPLE_RATE).toFixed(3)),
       sampleRate: AUDIO_SAMPLE_RATE,
       channels: 1,

@@ -2594,7 +2594,7 @@
       "notes": "Role: glass-tap. 0.49 s, one-shot. Single knuckle tap on glass. Use as the glass tap one-shot; vary pitch +-6% per play. Licence read from the Freesound sound page (Creative Commons 0). The raw file is the Freesound lq preview OGG (427389_8617763-lq.ogg, 7087 bytes) because the original WAV needs a login; sha256 is of that file. Planned processing, none done yet: trim silence; normalise to -18 LUFS; encode to AAC .m4a only (PLAN 9.1). The login-only original on Freesound is higher quality than this lossy preview and is the upgrade path if transcoding artefacts are audible.",
       "modifications": [
         "downmixed to mono and resampled to 48 kHz",
-        "trimmed leading and trailing silence",
+        "trimmed leading and trailing silence, 2 ms fade-in",
         "gain limited by the -1 dBFS peak ceiling, so the loudness is -22.4 LUFS instead of the -18 LUFS target",
         "encoded as AAC-LC 64 kbit/s in .m4a"
       ],
@@ -2618,7 +2618,7 @@
       "modifications": [
         "downmixed to mono and resampled to 48 kHz",
         "low-pass at 6000 Hz",
-        "trimmed leading and trailing silence",
+        "trimmed leading and trailing silence, 2 ms fade-in",
         "gain limited by the -1 dBFS peak ceiling, so the loudness is -22.7 LUFS instead of the -22 LUFS target",
         "encoded as AAC-LC 64 kbit/s in .m4a"
       ],
@@ -2641,7 +2641,7 @@
       "notes": "Role: net-splash. 1.33 s, one-shot. Shallow splash recorded on a Sony IC recorder. Use as the net splash one-shot. Licence read from the Freesound sound page (Creative Commons 0). The raw file is the Freesound lq preview OGG (398032_7586736-lq.ogg, 18281 bytes) because the original WAV needs a login; sha256 is of that file. Planned processing, none done yet: trim silence; short fade-out; normalise to -18 LUFS; encode to AAC .m4a only (PLAN 9.1). The login-only original on Freesound is higher quality than this lossy preview and is the upgrade path if transcoding artefacts are audible.",
       "modifications": [
         "downmixed to mono and resampled to 48 kHz",
-        "trimmed leading and trailing silence",
+        "trimmed leading and trailing silence, 2 ms fade-in",
         "80 ms fade-out",
         "gain limited by the -1 dBFS peak ceiling, so the loudness is -26.4 LUFS instead of the -18 LUFS target",
         "encoded as AAC-LC 64 kbit/s in .m4a"
@@ -2665,7 +2665,7 @@
       "notes": "Role: ui-click. 0.24 s, one-shot. Soft synthetic click. UI click 1 of 3 (primary press). Licence read from the Freesound sound page (Creative Commons 0). The raw file is the Freesound lq preview OGG (528561_10360410-lq.ogg, 3946 bytes) because the original WAV needs a login; sha256 is of that file. Planned processing, none done yet: trim silence; normalise to -26 LUFS; encode to AAC .m4a only (PLAN 9.1). The login-only original on Freesound is higher quality than this lossy preview and is the upgrade path if transcoding artefacts are audible.",
       "modifications": [
         "downmixed to mono and resampled to 48 kHz",
-        "trimmed leading and trailing silence",
+        "trimmed leading and trailing silence, 2 ms fade-in",
         "normalised to -26 LUFS",
         "encoded as AAC-LC 64 kbit/s in .m4a"
       ],
@@ -2688,7 +2688,7 @@
       "notes": "Role: ui-click. 0.29 s, one-shot. Plain button click. UI click 2 of 3 (toggle). Licence read from the Freesound sound page (Creative Commons 0). The raw file is the Freesound lq preview OGG (629020_12471724-lq.ogg, 6799 bytes) because the original WAV needs a login; sha256 is of that file. Planned processing, none done yet: trim silence; normalise to -26 LUFS; encode to AAC .m4a only (PLAN 9.1). The login-only original on Freesound is higher quality than this lossy preview and is the upgrade path if transcoding artefacts are audible.",
       "modifications": [
         "downmixed to mono and resampled to 48 kHz",
-        "trimmed leading and trailing silence",
+        "trimmed leading and trailing silence, 2 ms fade-in",
         "gain limited by the -1 dBFS peak ceiling, so the loudness is -27.9 LUFS instead of the -26 LUFS target",
         "encoded as AAC-LC 64 kbit/s in .m4a"
       ],
@@ -2711,7 +2711,7 @@
       "notes": "Role: ui-click. 0.14 s, one-shot. Short wooden-sounding menu click. UI click 3 of 3 (menu navigation). Licence read from the Freesound sound page (Creative Commons 0). The raw file is the Freesound lq preview OGG (342200_3908740-lq.ogg, 5141 bytes) because the original WAV needs a login; sha256 is of that file. Planned processing, none done yet: trim silence; normalise to -26 LUFS; encode to AAC .m4a only (PLAN 9.1). The login-only original on Freesound is higher quality than this lossy preview and is the upgrade path if transcoding artefacts are audible.",
       "modifications": [
         "downmixed to mono and resampled to 48 kHz",
-        "trimmed leading and trailing silence",
+        "trimmed leading and trailing silence, 2 ms fade-in",
         "normalised to -26 LUFS",
         "encoded as AAC-LC 64 kbit/s in .m4a"
       ],

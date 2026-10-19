@@ -6062,6 +6062,7 @@
       "audio": {
         "role": "air-bubbles",
         "loop": true,
+        "frames": 391958,
         "durationS": 8.166,
         "sampleRate": 48000,
         "channels": 1,
@@ -6097,6 +6098,7 @@
       "audio": {
         "role": "filter-hum",
         "loop": true,
+        "frames": 576000,
         "durationS": 12,
         "sampleRate": 48000,
         "channels": 1,
@@ -6116,7 +6118,7 @@
       "modifications": [
         "downmixed to mono and resampled to 48 kHz",
         "low-pass at 6000 Hz",
-        "trimmed leading and trailing silence",
+        "trimmed leading and trailing silence, 2 ms fade-in",
         "gain limited by the -1 dBFS peak ceiling, so the loudness is -22.7 LUFS instead of the -22 LUFS target",
         "encoded as AAC-LC 64 kbit/s in .m4a"
       ],
@@ -6132,6 +6134,7 @@
       "audio": {
         "role": "food-plop",
         "loop": false,
+        "frames": 13984,
         "durationS": 0.291,
         "sampleRate": 48000,
         "channels": 1,
@@ -6150,7 +6153,7 @@
       "licence": "CC0-1.0",
       "modifications": [
         "downmixed to mono and resampled to 48 kHz",
-        "trimmed leading and trailing silence",
+        "trimmed leading and trailing silence, 2 ms fade-in",
         "gain limited by the -1 dBFS peak ceiling, so the loudness is -22.4 LUFS instead of the -18 LUFS target",
         "encoded as AAC-LC 64 kbit/s in .m4a"
       ],
@@ -6166,6 +6169,7 @@
       "audio": {
         "role": "glass-tap",
         "loop": false,
+        "frames": 11305,
         "durationS": 0.236,
         "sampleRate": 48000,
         "channels": 1,
@@ -6184,7 +6188,7 @@
       "licence": "CC0-1.0",
       "modifications": [
         "downmixed to mono and resampled to 48 kHz",
-        "trimmed leading and trailing silence",
+        "trimmed leading and trailing silence, 2 ms fade-in",
         "80 ms fade-out",
         "gain limited by the -1 dBFS peak ceiling, so the loudness is -26.4 LUFS instead of the -18 LUFS target",
         "encoded as AAC-LC 64 kbit/s in .m4a"
@@ -6201,6 +6205,7 @@
       "audio": {
         "role": "net-splash",
         "loop": false,
+        "frames": 64125,
         "durationS": 1.336,
         "sampleRate": 48000,
         "channels": 1,
@@ -6219,7 +6224,7 @@
       "licence": "CC0-1.0",
       "modifications": [
         "downmixed to mono and resampled to 48 kHz",
-        "trimmed leading and trailing silence",
+        "trimmed leading and trailing silence, 2 ms fade-in",
         "normalised to -26 LUFS",
         "encoded as AAC-LC 64 kbit/s in .m4a"
       ],
@@ -6235,6 +6240,7 @@
       "audio": {
         "role": "ui-click",
         "loop": false,
+        "frames": 3764,
         "durationS": 0.078,
         "sampleRate": 48000,
         "channels": 1,
@@ -6253,7 +6259,7 @@
       "licence": "CC0-1.0",
       "modifications": [
         "downmixed to mono and resampled to 48 kHz",
-        "trimmed leading and trailing silence",
+        "trimmed leading and trailing silence, 2 ms fade-in",
         "gain limited by the -1 dBFS peak ceiling, so the loudness is -27.9 LUFS instead of the -26 LUFS target",
         "encoded as AAC-LC 64 kbit/s in .m4a"
       ],
@@ -6269,6 +6275,7 @@
       "audio": {
         "role": "ui-click",
         "loop": false,
+        "frames": 14414,
         "durationS": 0.3,
         "sampleRate": 48000,
         "channels": 1,
@@ -6287,7 +6294,7 @@
       "licence": "CC0-1.0",
       "modifications": [
         "downmixed to mono and resampled to 48 kHz",
-        "trimmed leading and trailing silence",
+        "trimmed leading and trailing silence, 2 ms fade-in",
         "normalised to -26 LUFS",
         "encoded as AAC-LC 64 kbit/s in .m4a"
       ],
@@ -6303,6 +6310,7 @@
       "audio": {
         "role": "ui-click",
         "loop": false,
+        "frames": 6032,
         "durationS": 0.126,
         "sampleRate": 48000,
         "channels": 1,
@@ -6312,7 +6320,7 @@
       }
     },
     {
-      "id": "underwater-ambience",
+      "id": "underwater-bed",
       "kind": "audio",
       "origin": "recording",
       "sources": [
@@ -6330,7 +6338,7 @@
       "textures": [],
       "files": [
         {
-          "file": "audio/underwater-ambience/underwater-ambience.m4a",
+          "file": "audio/underwater-bed/underwater-bed.m4a",
           "bytes": 86979,
           "sha256": "59a82c555cc6580156471b0dc1606d780fefe37812babcc24e2bc238cdb5609d"
         }
@@ -6338,12 +6346,13 @@
       "audio": {
         "role": "underwater-ambience",
         "loop": true,
+        "frames": 768000,
         "durationS": 16,
         "sampleRate": 48000,
         "channels": 1,
         "bitrateKbps": 64,
         "loudnessLufs": -28,
-        "file": "audio/underwater-ambience/underwater-ambience.m4a"
+        "file": "audio/underwater-bed/underwater-bed.m4a"
       }
     },
     {

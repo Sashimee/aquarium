@@ -60,7 +60,7 @@ describe('processAudio', () => {
     const recipe = { id: 'o', source: 's', role: 'o', targetLufs: -20, fadeOutS: 0.05 };
     const processed = processAudio(source, recipe);
     expect(processed.samples.length / AUDIO_SAMPLE_RATE).toBeCloseTo(0.21, 2);
-    expect(Math.abs(processed.samples[processed.samples.length - 1]!)).toBeLessThan(0.01);
+    expect(Math.abs(processed.samples.at(-1) ?? 1)).toBeLessThan(0.01);
     expect(integratedLoudness(processed.samples)).toBeCloseTo(processed.loudnessLufs, 5);
   });
 
@@ -161,6 +161,7 @@ describe('audio checks', () => {
             audio: {
               role: 'filter-hum',
               loop: true,
+              frames: AUDIO_SAMPLE_RATE,
               durationS: 1,
               sampleRate: AUDIO_SAMPLE_RATE,
               channels: 1,
@@ -199,6 +200,28 @@ describe('audio checks', () => {
     expect(problemsFor(audioAsset(wav))).toContain('not an MP4/M4A container');
   });
 
+  it('fails an MP4 file whose codec is not AAC', () => {
+    const bytes = new Uint8Array(encodeM4a(tone(0.2)));
+    const at = Buffer.from(bytes).indexOf('mp4a');
+    bytes.set(new TextEncoder().encode('alac'), at);
+    expect(problemsFor(audioAsset(bytes))).toContain('mp4a sample entry');
+  });
+
+  it('fails a frame count that disagrees with the duration', () => {
+    const asset = audioAsset(encodeM4a(tone(1)));
+    if (!asset.audio) throw new Error('fixture has no audio block');
+    const audio = { ...asset.audio, frames: AUDIO_SAMPLE_RATE + 480 };
+    expect(problemsFor({ ...asset, audio })).toContain('does not match frames');
+  });
+
+  it('fails an .m4a file on a non-audio asset', () => {
+    const asset = audioAsset(encodeM4a(tone(0.2)), {
+      id: 'tetra',
+      file: 'fish/tetra/tetra.m4a',
+    });
+    expect(problemsFor({ ...asset, kind: 'fish' })).toContain('only the audio kind may ship');
+  });
+
   it('fails a sound without its audio block', () => {
     expect(problemsFor(audioAsset(encodeM4a(tone(0.2)), { audio: false }))).toContain(
       'has no audio block',
@@ -233,7 +256,7 @@ describe('audio checks', () => {
       version: 1,
       textureVariants: '',
       customAttributes: '',
-      totalBytes: asset.files[0]!.bytes,
+      totalBytes: asset.files.reduce((sum, f) => sum + f.bytes, 0),
       assets: [asset],
     };
     const problems = checkAssets({

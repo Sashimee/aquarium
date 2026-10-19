@@ -426,6 +426,38 @@ function hasM4aBrand(bytes: Uint8Array): boolean {
   );
 }
 
+function aacProblem(bytes: Uint8Array): string | null {
+  const find = (tag: string, from = 0) => {
+    const needle = [...tag].map((c) => c.charCodeAt(0));
+    for (let i = from; i + needle.length <= bytes.length; i++) {
+      if (needle.every((c, k) => bytes[i + k] === c)) return i;
+    }
+    return -1;
+  };
+  const mp4a = find('mp4a');
+  const esds = mp4a < 0 ? -1 : find('esds', mp4a);
+  if (esds < 0) return 'has no mp4a sample entry with an esds descriptor';
+  let at = esds + 4 + 4;
+  const skipLength = () => {
+    while (((bytes[at] ?? 0) & 0x80) !== 0) at++;
+    at++;
+  };
+  if (bytes[at] !== 0x03) return 'has no ES descriptor';
+  at++;
+  skipLength();
+  at += 3;
+  if (bytes[at] !== 0x04) return 'has no decoder config descriptor';
+  at++;
+  skipLength();
+  if (bytes[at] !== 0x40) return 'is not MPEG-4 audio (object type indication is not 0x40)';
+  at += 13;
+  if (bytes[at] !== 0x05) return 'has no AudioSpecificConfig';
+  at++;
+  skipLength();
+  if ((bytes[at] ?? 0) >> 3 !== 2) return 'is not AAC-LC (audio object type is not 2)';
+  return null;
+}
+
 function audioProblems(asset: OutputAsset, assetsDir: string, problems: string[]): number {
   const at = `audio ${asset.id}`;
   const audio = asset.audio;
@@ -447,10 +479,20 @@ function audioProblems(asset: OutputAsset, assetsDir: string, problems: string[]
     );
   }
   const path = join(assetsDir, audio.file);
-  if (existsSync(path) && !hasM4aBrand(readFileSync(path))) {
-    problems.push(
-      `${at}: ${audio.file} is not an MP4/M4A container (AAC in .m4a per PLAN section 9.1)`,
-    );
+  if (existsSync(path)) {
+    const bytes = new Uint8Array(readFileSync(path));
+    if (!hasM4aBrand(bytes)) {
+      problems.push(
+        `${at}: ${audio.file} is not an MP4/M4A container (AAC in .m4a per PLAN section 9.1)`,
+      );
+    } else {
+      const codec = aacProblem(bytes);
+      if (codec)
+        problems.push(`${at}: ${audio.file} ${codec} (AAC-LC in .m4a per PLAN section 9.1)`);
+    }
+  }
+  if (Math.abs(audio.frames / audio.sampleRate - audio.durationS) > 0.001) {
+    problems.push(`${at}: durationS ${audio.durationS} does not match frames / sampleRate`);
   }
   return entry.bytes;
 }
@@ -517,6 +559,9 @@ export function checkAssets(input: CheckInput): string[] {
         problems.push(`file ${file.file} is claimed by both ${previous} and ${key}`);
       }
       listed.set(file.file, key);
+      if (file.file.endsWith('.m4a') && asset.kind !== 'audio') {
+        problems.push(`${key}: ${file.file} is .m4a, which only the audio kind may ship`);
+      }
       if (!SHIPPED_EXTENSIONS.some((extension) => file.file.endsWith(extension))) {
         problems.push(
           `${key}: ${file.file} is not a ${SHIPPED_EXTENSIONS.join(' or ')} file; PLAN section 3 and 9.1 commit only processed GLB, KTX2 and M4A`,

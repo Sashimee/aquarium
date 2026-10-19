@@ -110,6 +110,7 @@ export const AUDIO_MAX_FILE_BYTES = 1_000_000;
 export const audioInfoSchema = z.strictObject({
   role: z.string().min(1),
   loop: z.boolean(),
+  frames: z.int().positive(),
   durationS: z.number().positive(),
   sampleRate: z.int().positive(),
   channels: z.int().positive(),
