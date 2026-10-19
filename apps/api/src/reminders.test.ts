@@ -349,6 +349,32 @@ describe('mail budget', () => {
     expect(rows.filter((r) => r.lastSentAt !== null)).toHaveLength(2);
   });
 
+  it('releases a claim that commits after the stop signal', async () => {
+    const h = await harness();
+    const a = await optedIn(h);
+    const mailed = h.outbox.length;
+    let stops = 0;
+    const inflight = new Map();
+    const result = await sweepReminders({
+      database: h.database,
+      mailer: h.mailer,
+      push: null,
+      appOrigin: APP_ORIGIN,
+      authSecret: TEST_SECRET,
+      dailyCap: 10,
+      inflight,
+      shouldStop: () => stops++ > 0,
+    });
+    expect(result.sent).toBe(0);
+    expect(inflight.size).toBe(0);
+    expect(h.outbox).toHaveLength(mailed);
+    const [row] = await h.database.db
+      .select()
+      .from(schema.reminderPrefs)
+      .where(eq(schema.reminderPrefs.userId, a.userId));
+    expect(row?.lastSentAt).toBeNull();
+  });
+
   it('stops claiming once asked to stop', async () => {
     const h = await harness();
     await optedIn(h);
