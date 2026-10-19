@@ -55,3 +55,17 @@ export function parseClock(value: string): number {
 export function minuteOfDay(date: Date): number {
   return date.getHours() * 60 + date.getMinutes() + date.getSeconds() / 60;
 }
+
+/**
+ * Minutes after midnight on the wall clock `utcOffsetMinutes` ahead of UTC, from epoch time alone.
+ * The day is cut at UTC midnight shifted by the offset, as the lamp schedule cuts its UTC hours,
+ * so a daylight-saving change reaches the result only through the offset the caller passes.
+ */
+export function localMinuteOfDay(nowMs: number, utcOffsetMinutes: number): number {
+  if (!Number.isFinite(nowMs) || !Number.isFinite(utcOffsetMinutes)) {
+    throw new RangeError(
+      `localMinuteOfDay: time and offset must be finite, got ${nowMs} and ${utcOffsetMinutes}`,
+    );
+  }
+  return wrapMinutes(nowMs / 60_000 + utcOffsetMinutes);
+}
