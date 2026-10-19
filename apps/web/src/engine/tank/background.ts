@@ -6,7 +6,14 @@ import {
   type BackgroundId,
   type Biome,
 } from '@aquarium/shared';
-import { Color, DataTexture, SRGBColorSpace, type Texture, type TextureNode } from 'three/webgpu';
+import {
+  Color,
+  DataTexture,
+  LinearFilter,
+  SRGBColorSpace,
+  type Texture,
+  type TextureNode,
+} from 'three/webgpu';
 import { texture } from 'three/tsl';
 import { fail, record } from '../../fish/assetIndex';
 import { TIERS, type Tier } from '../quality/tiers';
@@ -79,6 +86,10 @@ function filmTexture(): DataTexture {
   const srgb = BACKDROP_FILM.clone().convertLinearToSRGB();
   const texel = new Uint8Array([srgb.r, srgb.g, srgb.b, 1].map((c) => Math.round(c * 255)));
   const film = new DataTexture(texel, 1, 1);
+  // A DataTexture defaults to nearest filtering, which three's WGSL builder treats as
+  // unfilterable and binds without a sampler; the poster's biased lookup still needs one (#790).
+  film.magFilter = LinearFilter;
+  film.minFilter = LinearFilter;
   film.colorSpace = SRGBColorSpace;
   film.name = 'backdrop-film';
   film.needsUpdate = true;
