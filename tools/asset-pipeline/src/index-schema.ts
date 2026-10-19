@@ -118,6 +118,29 @@ export const audioInfoSchema = z.strictObject({
   file: z.string().min(1),
 });
 
+export const backgroundTierSchema = fileEntry.extend({
+  width: z.int().positive(),
+  height: z.int().positive(),
+  qualityLevel: z.int().min(1).max(255),
+});
+
+export const backgroundInfoSchema = z.strictObject({
+  crop: z
+    .strictObject({
+      left: z.int().nonnegative(),
+      top: z.int().nonnegative(),
+      width: z.int().positive(),
+      height: z.int().positive(),
+    })
+    .nullable(),
+  tiers: z.strictObject({
+    ultra: backgroundTierSchema,
+    high: backgroundTierSchema,
+    medium: backgroundTierSchema,
+    low: backgroundTierSchema,
+  }),
+});
+
 export const assetKindSchema = z.enum([
   'fish',
   'shrimp',
@@ -130,6 +153,7 @@ export const assetKindSchema = z.enum([
   'substrate',
   'hdri',
   'audio',
+  'background',
 ]);
 export type AssetKind = z.infer<typeof assetKindSchema>;
 
@@ -144,6 +168,8 @@ export const outputAssetSchema = z.strictObject({
     'texture-set',
     'passthrough',
     'recording',
+    'photo',
+    'render',
   ]),
   sources: z.array(z.string().min(1)),
   licence: z.string().min(1),
@@ -156,6 +182,7 @@ export const outputAssetSchema = z.strictObject({
   impostor: impostorSchema.optional(),
   shrimp: shrimpInfoSchema.optional(),
   audio: audioInfoSchema.optional(),
+  background: backgroundInfoSchema.optional(),
 });
 export type OutputAsset = z.infer<typeof outputAssetSchema>;
 

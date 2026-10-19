@@ -157,6 +157,9 @@ describe('privacy and credits', () => {
       'reverse proxy',
       'mail relay',
       'Backup',
+      'public link',
+      'Reactions',
+      'Audit log',
     ]) {
       expect(text).toContain(term);
     }
@@ -197,7 +200,8 @@ describe('privacy and credits', () => {
     expect(credits.shareAlikeNotice).toMatch(/BY-SA/);
     for (const e of credits.entries) {
       expect(e.referenceOnly).toBe(e.kind === 'reference-photo' && e.modifications.length === 0);
-      if ((e.licence === 'CC0-1.0' && e.kind !== 'reference-photo') || e.referenceOnly)
+      if (e.kind === 'background') expect(e.modifications.length).toBeGreaterThan(0);
+      else if ((e.licence === 'CC0-1.0' && e.kind !== 'reference-photo') || e.referenceOnly)
         expect(e.modifications).toEqual([]);
       else expect(e.modifications.length).toBeGreaterThan(0);
     }
@@ -680,6 +684,73 @@ describe('account deletion rate limit', () => {
     }
     const blocked = await call(h, frank.cookie, 'POST', '/api/me/delete', { password: PASSWORD });
     expect(blocked.statusCode).toBe(429);
+  });
+});
+
+describe('export of reacted-to tanks', () => {
+  let h: Harness;
+  beforeAll(async () => {
+    h = await createHarness({
+      legalLimits: {
+        export: { max: 100, windowMs: 60_000 },
+        deleteAttempt: { max: 100, windowMs: 60_000 },
+      },
+    });
+  });
+  afterAll(() => h.close());
+
+  async function reaction(owner: Awaited<ReturnType<typeof account>>) {
+    const reactor = await account(h);
+    const tank = await populate(h, owner.cookie);
+    const { db } = h.database;
+    await db
+      .update(schema.tanks)
+      .set({ shareTokenHash: `hash-${tank.id}` })
+      .where(eq(schema.tanks.id, tank.id));
+    await db
+      .insert(schema.tankReactions)
+      .values({ tankId: tank.id, userId: reactor.userId, kind: 'heart' });
+    await db
+      .insert(schema.auditLog)
+      .values({ action: 'reaction_set', actorId: reactor.userId, tankId: tank.id });
+    return { reactor, tankId: tank.id };
+  }
+
+  const exported = async (cookie: string) =>
+    dataExportSchema.parse((await call(h, cookie, 'POST', '/api/me/export', {})).json());
+
+  it('names the tank while it is shared', async () => {
+    const { reactor } = await reaction(await account(h));
+    const data = await exported(reactor.cookie);
+    expect(data.reactions[0]?.['tank']).toBe('Home');
+    expect(data.auditLog[0]?.['tank']).toBe('Home');
+  });
+
+  it('does not reveal a private name chosen after the link was revoked', async () => {
+    const { reactor, tankId } = await reaction(await account(h));
+    await h.database.db
+      .update(schema.tanks)
+      .set({ shareTokenHash: null, name: 'Private Name' })
+      .where(eq(schema.tanks.id, tankId));
+    const data = await exported(reactor.cookie);
+    expect(data.reactions).toHaveLength(1);
+    expect(data.reactions[0]?.['tank']).toBeNull();
+    expect(data.auditLog[0]?.['tank']).toBeNull();
+    expect(JSON.stringify(data)).not.toContain('Private Name');
+  });
+
+  it("still names the owner's own tank in their audit log after unsharing", async () => {
+    const owner = await account(h);
+    const { tankId } = await reaction(owner);
+    await h.database.db
+      .insert(schema.auditLog)
+      .values({ action: 'share_revoked', actorId: owner.userId, tankId });
+    await h.database.db
+      .update(schema.tanks)
+      .set({ shareTokenHash: null, name: 'Mine' })
+      .where(eq(schema.tanks.id, tankId));
+    const data = await exported(owner.cookie);
+    expect(data.auditLog[0]?.['tank']).toBe('Mine');
   });
 });
 

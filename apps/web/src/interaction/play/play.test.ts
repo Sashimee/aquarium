@@ -205,6 +205,19 @@ describe('PlayController glass tap', () => {
     expect(stimulus.intensity).toBe(0.5);
   });
 
+  it('announces each glass tap with its intensity, and nothing for a miss', () => {
+    const t = makeController();
+    const tapped = vi.fn();
+    t.events.on('glass:tapped', tapped);
+    t.controller.tap(0, 0);
+    t.advance(200);
+    t.controller.tap(0, 0);
+    expect(tapped.mock.calls).toEqual([[{ intensity: 0.5 }], [{ intensity: 1 }]]);
+    t.setRay(null);
+    t.controller.tap(0, 0);
+    expect(tapped).toHaveBeenCalledTimes(2);
+  });
+
   it('makes a repeat tap harder', () => {
     const t = makeController();
     t.controller.tap(0, 0);

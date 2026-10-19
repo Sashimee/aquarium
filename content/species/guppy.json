@@ -15,6 +15,28 @@
     "traits": ["shoal"]
   },
   "biome": "freshwater",
+  "breeding": {
+    "broodSize": [3, 8],
+    "fryGrowth": {
+      "adultAfterDays": 90,
+      "juvenileAfterDays": 21
+    },
+    "intervalDays": 28,
+    "minAgeDays": 90,
+    "mode": "livebearer",
+    "temperatureC": [22, 28]
+  },
+  "chemistry": {
+    "khMin": 3,
+    "nitriteTolerance": 0.8,
+    "phRange": [6.8, 8.5],
+    "salinityPpt": [0, 1],
+    "sources": [
+      "FishBase (fishbase.se) species summary",
+      "SeriouslyFish species profile (seriouslyfish.com)"
+    ],
+    "temperatureC": [22, 28]
+  },
   "commonName": "Guppy",
   "id": "guppy",
   "lifecycle": {

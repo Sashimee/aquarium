@@ -7,6 +7,7 @@ import {
   Mesh,
   MeshBasicNodeMaterial,
   MeshStandardNodeMaterial,
+  PlaneGeometry,
   Quaternion,
   RingGeometry,
   SphereGeometry,
@@ -20,6 +21,7 @@ import { FoodField, MAX_FOOD_PARTICLES } from '../food/particles';
 import { BubbleField, MAX_BUBBLES } from './bubbles';
 import { NoriLayer } from './nori';
 import { MAX_RIPPLES, RippleField } from './ripples';
+import { BALL_RADIUS_M, MIRROR_HEIGHT_M, MIRROR_WIDTH_M, type MirrorMount } from './toys';
 
 const FOOD_COLORS: Readonly<Record<FoodType, number>> = {
   flakes: 0xc8742a,
@@ -32,6 +34,7 @@ const FOOD_COLORS: Readonly<Record<FoodType, number>> = {
 
 const FADE_TAIL_S = 12;
 const LASER_RADIUS_M = 0.006;
+const HIGHLIGHT_RADIUS_M = 0.04;
 const Z_AXIS = new Vector3(0, 0, 1);
 
 /** Everything the play layer draws: food, bubbles, glass ripples and the laser dot. */
@@ -42,6 +45,9 @@ export class PlayVisuals {
   private readonly bubbles: InstancedMesh;
   private readonly rings: Mesh<RingGeometry, MeshBasicNodeMaterial>[] = [];
   private readonly laser: Mesh;
+  private readonly mirror: Mesh;
+  private readonly ball: Mesh;
+  private readonly highlight: Mesh;
   private readonly disposables: { dispose(): void }[] = [];
   private readonly matrix = new Matrix4();
   private readonly pos = new Vector3();
@@ -92,7 +98,43 @@ export class PlayVisuals {
     this.laser.visible = false;
     this.laser.renderOrder = 10;
 
-    this.group.add(this.food, this.nori.mesh, this.bubbles, this.laser);
+    const mirrorGeometry = new PlaneGeometry(MIRROR_WIDTH_M, MIRROR_HEIGHT_M);
+    const mirrorMaterial = new MeshStandardNodeMaterial({
+      color: 0xdfe8ef,
+      metalness: 1,
+      roughness: 0.04,
+    });
+    this.mirror = new Mesh(mirrorGeometry, mirrorMaterial);
+    this.mirror.visible = false;
+
+    const ballGeometry = new SphereGeometry(BALL_RADIUS_M, 16, 12);
+    const ballMaterial = new MeshStandardNodeMaterial({ color: 0xfaf6ee, roughness: 0.35 });
+    this.ball = new Mesh(ballGeometry, ballMaterial);
+    this.ball.visible = false;
+
+    const highlightGeometry = new RingGeometry(0.9, 1, 32);
+    const highlightMaterial = new MeshBasicNodeMaterial({
+      color: 0xffd34d,
+      transparent: true,
+      depthWrite: false,
+      depthTest: false,
+      side: DoubleSide,
+      toneMapped: false,
+    });
+    this.highlight = new Mesh(highlightGeometry, highlightMaterial);
+    this.highlight.scale.setScalar(HIGHLIGHT_RADIUS_M);
+    this.highlight.renderOrder = 11;
+    this.highlight.visible = false;
+
+    this.group.add(
+      this.food,
+      this.nori.mesh,
+      this.bubbles,
+      this.laser,
+      this.mirror,
+      this.ball,
+      this.highlight,
+    );
     this.disposables.push(
       foodGeometry,
       foodMaterial,
@@ -101,12 +143,38 @@ export class PlayVisuals {
       ringGeometry,
       this.laser.geometry,
       laserMaterial,
+      mirrorGeometry,
+      mirrorMaterial,
+      ballGeometry,
+      ballMaterial,
+      highlightGeometry,
+      highlightMaterial,
     );
   }
 
   setLaser(point: Vec3 | null): void {
     this.laser.visible = point !== null;
     if (point) this.laser.position.set(point.x, point.y, point.z);
+  }
+
+  setMirror(mount: MirrorMount | null): void {
+    this.mirror.visible = mount !== null;
+    if (!mount) return;
+    this.mirror.position.set(mount.position.x, mount.position.y, mount.position.z);
+    this.normal.set(mount.normal.x, mount.normal.y, mount.normal.z);
+    this.mirror.quaternion.setFromUnitVectors(Z_AXIS, this.normal);
+  }
+
+  setBall(point: Vec3 | null): void {
+    this.ball.visible = point !== null;
+    if (point) this.ball.position.set(point.x, point.y, point.z);
+  }
+
+  setHighlight(point: Vec3 | null): void {
+    this.highlight.visible = point !== null;
+    if (!point) return;
+    this.highlight.position.set(point.x, point.y, point.z);
+    this.highlight.rotation.x = -Math.PI / 2;
   }
 
   update(food: FoodField, bubbles: BubbleField, ripples: RippleField): void {

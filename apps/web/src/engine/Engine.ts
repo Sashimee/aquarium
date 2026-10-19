@@ -6,6 +6,7 @@ import {
   PerspectiveCamera,
   SRGBColorSpace,
   Scene,
+  type Vector3,
   WebGPURenderer,
 } from 'three/webgpu';
 import { applyDayLighting, type DayLightingRig, FRESHWATER_FILL_LEVEL } from './dayLighting';
@@ -28,6 +29,8 @@ import { createSharedKtx2, type Ktx2Textures } from './ktx2';
 import { EventBus, type BackendKind, type EngineEvents, type EngineEventBus } from './events';
 import { CullPrewarm } from './cullPrewarm';
 import { ReflectedShadow } from './reflectedShadow';
+import { deviceTextureLimit } from './photo/capture';
+import { PhotoMode } from './photo/PhotoMode';
 import { RenderLoop } from './renderLoop';
 import { buildOrRelease, DisposeStack, settlesWithin } from './lifecycle';
 import type { EngineOptions } from './options';
@@ -57,6 +60,8 @@ const DEFAULT_WATER: WaterQuality = { cdom440: 0.05, turbidity: 0.08 };
 const MAX_DELTA_S = 0.1;
 /** A stalled effects chunk never settles; past this the tank starts plain and they attach later. */
 const EFFECTS_BOOT_WAIT_MS = 5000;
+/** A capture waits this long for the look's pipeline before giving up rather than encode another. */
+const CAPTURE_EFFECTS_WAIT_MS = 15000;
 
 /** Hood LED, roughly 6500 K. */
 const HOOD_COLOR = new Color(1, 0.97, 0.92);
@@ -132,6 +137,7 @@ export class Engine {
   readonly quality: QualityManager;
   /** The only KTX2 transcoder for this renderer; every texture loader shares it. */
   readonly ktx2: Ktx2Textures;
+  readonly photo: PhotoMode;
 
   private readonly clock: number | null;
   private readonly showStats: boolean;
@@ -156,6 +162,10 @@ export class Engine {
   private lastGpuMs: number | null = null;
   private gpuPending = false;
   private stats = { frames: 0, frameMsSum: 0, since: 0 };
+  private effectsLoad: Promise<void> = Promise.resolve();
+  /** A photo capture's oversized draws, which must not move the quality tier. */
+  private skipFrameSample = false;
+  private skipGpuSample = false;
 
   /** Everything is released through `cleanup`, both on dispose() and on a failed start. */
   static async create(container: HTMLElement, config: EngineConfig): Promise<Engine> {
@@ -189,7 +199,8 @@ export class Engine {
             );
           }
           await engine.warmUp();
-          if (!(await settlesWithin(engine.loadEffects(), EFFECTS_BOOT_WAIT_MS))) {
+          engine.effectsLoad = engine.loadEffects();
+          if (!(await settlesWithin(engine.effectsLoad, EFFECTS_BOOT_WAIT_MS))) {
             engine.reportError(
               'Render effects are slow to load; starting without them until they arrive',
               new Error(`effects not ready after ${EFFECTS_BOOT_WAIT_MS} ms`),
@@ -299,6 +310,25 @@ export class Engine {
     this.camera.position.set(0, 0.35, 1.6);
     this.camera.lookAt(0, 0.25, 0);
 
+    this.photo = new PhotoMode({
+      camera: this.camera,
+      scene: this.scene,
+      renderer,
+      events,
+      tank: dimensions,
+      depthOfFieldTier: () => this.quality.settings.depthOfField,
+      temporal: () => this.effects.temporal,
+      maxTextureSize: () => deviceTextureLimit(renderer.backend),
+      setPost: (post) => this.effects.setPhoto(post),
+      ready: () => this.effectsReady(),
+      draw: () => this.draw(),
+      captured: () => {
+        this.skipFrameSample = true;
+        this.skipGpuSample = true;
+      },
+    });
+    cleanup.add(() => this.photo.dispose());
+
     this.registerQualityFeatures();
 
     const resizeObserver = new ResizeObserver(() => this.resize());
@@ -329,6 +359,11 @@ export class Engine {
   /** Whether frames go through a temporal resolve; `engine:temporal-resolve` tells changes. */
   get temporalResolve(): boolean {
     return this.effects.temporal;
+  }
+
+  /** Where the scene is seen from this frame; LOD and audio should measure from here. */
+  get viewPosition(): Vector3 {
+    return this.photo.viewPosition;
   }
 
   /** Depth of field follows the focus camera, on tiers that allow it. */
@@ -500,6 +535,15 @@ export class Engine {
     }
   }
 
+  private async effectsReady(): Promise<void> {
+    const ready = this.effectsLoad.then(() => this.effects.ready());
+    if (!(await settlesWithin(ready, CAPTURE_EFFECTS_WAIT_MS))) {
+      throw new Error(
+        `Render effects not ready after ${CAPTURE_EFFECTS_WAIT_MS} ms; try the capture again`,
+      );
+    }
+  }
+
   private async loadStatsOverlay(): Promise<void> {
     try {
       const { createStatsOverlay } = await import('./statsOverlay');
@@ -523,25 +567,33 @@ export class Engine {
     this.lastFrameAt = nowMs;
     const deltaS = Math.min(frameMs / 1000, MAX_DELTA_S);
 
+    // Before the callbacks so they see the photo camera, and after so a camera rig can't move it.
+    this.photo.apply();
     for (const callback of this.frameCallbacks) callback(deltaS, nowMs);
+    this.photo.apply();
     this.updateDaylight(nowMs);
     applyDayLighting(this.dayRig, this.daylightLevel);
     if (this.cullPrewarm.begin(nowMs) > 0) this.sceneRevisionValue++;
     try {
-      this.renderSurfaceReflection();
-      if (!this.effects.render()) this.renderer.render(this.scene, this.camera);
+      this.draw();
     } finally {
       this.cullPrewarm.end();
     }
     this.pollGpuTime();
 
     if (frameMs > 0) {
-      this.quality.sample(frameMs, this.gpuMs, nowMs);
+      if (this.skipFrameSample) this.skipFrameSample = false;
+      else this.quality.sample(frameMs, this.gpuMs, nowMs);
       this.gpuMs = null;
       this.stats.frames++;
       this.stats.frameMsSum += frameMs;
     }
     if (nowMs - this.stats.since >= STATS_INTERVAL_MS) this.emitStats(nowMs);
+  }
+
+  private draw(): void {
+    this.renderSurfaceReflection();
+    if (!this.effects.render()) this.renderer.render(this.scene, this.camera);
   }
 
   private renderSurfaceReflection(): void {
@@ -554,10 +606,13 @@ export class Engine {
   private pollGpuTime(): void {
     if (this.gpuPending || !this.gpuTiming) return;
     this.gpuPending = true;
+    // Queries pile up until resolved, so the first resolve begun after a capture holds its draws.
+    const skip = this.skipGpuSample;
+    this.skipGpuSample = false;
     this.renderer
       .resolveTimestampsAsync('render')
       .then((ms) => {
-        if (typeof ms === 'number' && ms > 0) {
+        if (!skip && typeof ms === 'number' && ms > 0) {
           this.gpuMs = ms;
           this.lastGpuMs = ms;
         }

@@ -24,9 +24,14 @@ const median = (xs: number[]) => {
 // the faster half (the repeat itself) and a second hash ~1.0. Load stretches both halves of an
 // adjacent pair together, so the median pair gap is bounded relative to the faster median (dividing
 // by the slower would let a faster repeat inflate its own denominator) instead of in absolute
-// milliseconds. Detection floor is 25% of that, ~16 ms on a quiet host. The bound grows with load:
-// fine for CPU-bound leaks like a hash, looser for I/O-bound ones. A repeat is legitimately ~1-3 ms
-// faster (Better Auth's extra inserts for a new address); that skew is accepted.
+// milliseconds. The bound is 50%, so the detection floor is half a hash, ~33 ms on a quiet host,
+// while a hash skipped or doubled shows ~1.0 or more. A tighter 25% flaked under load (0.2532,
+// #218) because the median gap of a loaded runner moves by that much without any leak. The bound
+// grows with load: fine for CPU-bound leaks like a hash, looser for I/O-bound ones. A repeat is
+// legitimately ~1-3 ms faster
+// (Better Auth's extra inserts for a new address); that skew is accepted.
+const TIMING_SKEW_BOUND = 0.5;
+
 function expectNoTimingSkew(pairs: { fresh: number; repeat: number }[]) {
   const gap = median(pairs.map((p) => p.repeat - p.fresh));
   const fresh = median(pairs.map((p) => p.fresh));
@@ -35,7 +40,7 @@ function expectNoTimingSkew(pairs: { fresh: number; repeat: number }[]) {
   expect(
     Math.abs(gap) / base,
     `median repeat - fresh = ${gap.toFixed(1)} ms of ${base.toFixed(1)} ms`,
-  ).toBeLessThan(0.25);
+  ).toBeLessThan(TIMING_SKEW_BOUND);
 }
 
 function cookieJar(res: LightMyRequestResponse): string {
@@ -110,6 +115,24 @@ describe('timing skew bound', () => {
         Array.from({ length: 9 }, () => ({ fresh, repeat: fresh - SLOW_MAIL_MS })),
       ),
     ).toThrow();
+  });
+
+  it('flags a repeat that skips the password hash', () => {
+    expect(() =>
+      expectNoTimingSkew(Array.from({ length: 9 }, () => ({ fresh: 70, repeat: 5 }))),
+    ).toThrow();
+  });
+
+  it('flags a repeat that hashes twice', () => {
+    expect(() =>
+      expectNoTimingSkew(Array.from({ length: 9 }, () => ({ fresh: 65, repeat: 130 }))),
+    ).toThrow();
+  });
+
+  it('accepts the load noise that failed CI at a ratio of 0.2532', () => {
+    expect(() =>
+      expectNoTimingSkew(Array.from({ length: 9 }, () => ({ fresh: 65, repeat: 65 * 1.2532 }))),
+    ).not.toThrow();
   });
 
   it('accepts pairs that differ by a couple of milliseconds', () => {

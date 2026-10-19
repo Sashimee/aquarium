@@ -21,6 +21,9 @@ export const DEFAULT_TANK: Readonly<TankDimensions> = {
   substrateBack: 0.1,
 };
 
+/** The cabinet under the tank; the room's floor is at its foot, y = -STAND_HEIGHT. */
+export const STAND_HEIGHT = 0.75;
+
 /** Keeps the water box off the inner glass faces so they never z-fight or self-attenuate. */
 export const WATER_INSET = 0.001;
 

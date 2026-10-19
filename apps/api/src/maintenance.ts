@@ -16,6 +16,7 @@ export async function pruneExpired({ db }: Database): Promise<{ sessions: number
   await db
     .delete(schema.ateBatches)
     .where(lt(schema.ateBatches.createdAt, sql`now() - interval '1 day'`));
+  await db.delete(schema.auditLog).where(lt(schema.auditLog.at, sql`now() - interval '180 days'`));
   await db
     .delete(schema.releasedHandles)
     .where(

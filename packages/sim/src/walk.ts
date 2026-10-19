@@ -624,7 +624,10 @@ export class Walkers {
       const gx = at(g, 0);
       const gy = at(g, 1);
       const gz = at(g, 2);
-      if (!this.walkable(w, qx, qy, qz, dq, gy)) {
+      // A surface ahead facing back at the one underfoot (a rock resting on the glass) closes
+      // into a crack thinner than the body; walking on into it only wedges the walker there.
+      const closing = gx * nx + gy * ny + gz * nz < -WALK.footingCos;
+      if (closing || !this.walkable(w, qx, qy, qz, dq, gy)) {
         dx += gx * WALK.forbiddenWeight;
         dy += gy * WALK.forbiddenWeight;
         dz += gz * WALK.forbiddenWeight;

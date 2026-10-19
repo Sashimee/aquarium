@@ -1,6 +1,7 @@
-import type { Collider, TankSpace } from '@aquarium/shared';
+import type { Collider, FishSex, FishStage, TankSpace } from '@aquarium/shared';
 import { Basin, type TankDimensions } from './basin.ts';
 import { Behaviour, BEHAVIOUR, type Anchor, type Plan, type Stimulus } from './behaviour.ts';
+import { sexCode, StageCode, stageCode, type SimBrood } from './brood.ts';
 import { DecorField, UnionSdf, type Point3 } from './decor.ts';
 import { FEEDING, feedingHeight, gutForHunger } from './feeding.ts';
 import { FishResize } from './fishArrays.ts';
@@ -110,6 +111,10 @@ export interface FishSpawn {
    * see `gutForHunger`. Without it the gut starts empty.
    */
   readonly hunger?: number;
+  /** Fry hide in cover and juveniles keep clear of big fish; adult when left out. */
+  readonly stage?: FishStage;
+  /** Decides who tends a clutch more; unknown when left out. */
+  readonly sex?: FishSex;
 }
 
 interface WorldConfigBase {
@@ -206,6 +211,8 @@ interface Fit {
   /** Collision radius. */
   readonly r: number;
   readonly hunger: number | undefined;
+  readonly stage: number;
+  readonly sex: number;
 }
 
 interface Spot {
@@ -242,12 +249,15 @@ export class World {
   private _speed: Float64Array;
   private _yawRate: Float64Array;
   private _pitchRate: Float64Array;
+  private _pitchHeld: Uint8Array;
   private _state: Uint8Array;
 
   private _bodyLength: Float64Array;
   private _radius: Float64Array;
   private _thickness: Float64Array;
   private _speciesIndex: Int32Array;
+  private _stage: Uint8Array;
+  private _sex: Uint8Array;
   private _thrust: Float64Array;
   private _contactCount: Uint32Array;
   /** 1 for a walker, set at spawn so the step loops need not look the species up. */
@@ -351,6 +361,11 @@ export class World {
     return this._pitchRate;
   }
 
+  /** 1 where this step's pitch ran at the full turn rate (C-bend, held posture, air dash). */
+  get pitchHeld(): Uint8Array {
+    return this._pitchHeld;
+  }
+
   get state(): Uint8Array {
     return this._state;
   }
@@ -370,6 +385,16 @@ export class World {
 
   get speciesIndex(): Int32Array {
     return this._speciesIndex;
+  }
+
+  /** Per fish `StageCode`. */
+  get stage(): Uint8Array {
+    return this._stage;
+  }
+
+  /** Per fish `SexCode`. */
+  get sex(): Uint8Array {
+    return this._sex;
   }
 
   /** Caudal thrust as a fraction of the maximum; 0 while coasting. */
@@ -438,11 +463,14 @@ export class World {
     this._speed = new Float64Array(n);
     this._yawRate = new Float64Array(n);
     this._pitchRate = new Float64Array(n);
+    this._pitchHeld = new Uint8Array(n);
     this._state = new Uint8Array(n);
     this._bodyLength = new Float64Array(n);
     this._radius = new Float64Array(n);
     this._thickness = new Float64Array(n);
     this._speciesIndex = new Int32Array(n);
+    this._stage = new Uint8Array(n);
+    this._sex = new Uint8Array(n);
     this._thrust = new Float64Array(n);
     this._contactCount = new Uint32Array(n);
     this.walker = new Uint8Array(n);
@@ -510,6 +538,10 @@ export class World {
     return this.hardDecor.size > 0 ? this.hardDecor : null;
   }
 
+  get plantSdf(): Sdf | null {
+    return this.softDecor.size > 0 ? this.softDecor : null;
+  }
+
   get light(): number {
     return this.behaviour.light;
   }
@@ -543,6 +575,64 @@ export class World {
   /** The bumps fish gave balls since the last call, in the order they happened. */
   takeToyNudges(): readonly ToyNudge[] {
     return this.behaviour.toys.takeNudges();
+  }
+
+  /**
+   * Replaces the clutches being tended and the pregnancies; `{ clutches: [], gravid: [] }` ends
+   * them all. Resend whenever either changes. See `Brood.setBrood`.
+   */
+  setBrood(brood: SimBrood): void {
+    this.behaviour.setBrood(brood);
+  }
+
+  /** The brood input in force, less parents that have left the tank. */
+  brood(): SimBrood {
+    return this.behaviour.brood.brood();
+  }
+
+  /**
+   * Where the fish `parentIds` would lay their eggs: on rock (else sand or glass) beside the
+   * anemone or cave of the first that has one, else by its station or where it is; null if no
+   * surface there has room. Changes no state and draws no RNG.
+   */
+  nestSite(parentIds: readonly string[]): Point3 | null {
+    if (!Array.isArray(parentIds) || parentIds.length === 0) {
+      throw new RangeError('nestSite: needs at least one parent id');
+    }
+    const indices = parentIds.map((id) => {
+      const i = this.fishIds.indexOf(id);
+      if (i < 0) throw new RangeError(`nestSite: no fish "${String(id)}" in the tank`);
+      return i;
+    });
+    return this.behaviour.nestSite(indices);
+  }
+
+  /**
+   * Moves fish `id` on to `stage` as it grows, without respawning it. A fry leaving cover, or a
+   * juvenile joining the adults' school, takes effect on the next step. Throws for a parent or a
+   * pregnant fish made young.
+   */
+  setStage(id: string, stage: FishStage): void {
+    const i = this.fishIds.indexOf(id);
+    if (i < 0) throw new RangeError(`setStage: no fish "${id}" in the tank`);
+    if (stage !== 'fry' && stage !== 'juvenile' && stage !== 'adult') {
+      throw new RangeError(`setStage: stage must be fry, juvenile or adult, got ${String(stage)}`);
+    }
+    const code = stageCode(stage);
+    const b = this.behaviour.brood;
+    if (code !== StageCode.Adult && ((b.clutchOf[i] ?? -1) >= 0 || (b.gravid[i] ?? 0) > 0)) {
+      throw new RangeError(`setStage: fish "${id}" has a brood and must stay adult`);
+    }
+    this._stage[i] = code;
+    this.schoolGroup[i] = this.groupOf(i);
+  }
+
+  /** Schooling fish school by species, and their young with young of their species only. */
+  private groupOf(i: number): number {
+    const si = this.speciesIndex[i] ?? 0;
+    const sp = this.species[si];
+    if (sp === undefined || !sp.schooling) return -1 - i;
+    return (this.stage[i] ?? 0) === StageCode.Adult ? si : this.species.length + si;
   }
 
   /** Writes fish `id`'s position into `out`; false, leaving `out` alone, when there is no such fish. */
@@ -670,7 +760,17 @@ export class World {
     if (2 * r >= Math.min(basin.width, basin.maxY - basin.floorMax, basin.depth)) {
       throw new RangeError(`fish "${spawn.id}" (${length} m) does not fit in the tank`);
     }
-    const { hunger } = spawn;
+    const { hunger, stage, sex } = spawn;
+    if (stage !== undefined && stage !== 'fry' && stage !== 'juvenile' && stage !== 'adult') {
+      throw new RangeError(
+        `fish "${spawn.id}": stage must be fry, juvenile or adult, got ${JSON.stringify(stage)}`,
+      );
+    }
+    if (sex !== undefined && sex !== 'male' && sex !== 'female') {
+      throw new RangeError(
+        `fish "${spawn.id}": sex must be male or female, got ${JSON.stringify(sex)}`,
+      );
+    }
     if (hunger !== undefined && (typeof hunger !== 'number' || !(hunger >= 0 && hunger <= 1))) {
       // JSON.stringify would print NaN as null.
       const shown = typeof hunger === 'number' ? String(hunger) : JSON.stringify(hunger);
@@ -678,7 +778,16 @@ export class World {
         `fish "${spawn.id}": hunger must be a number within 0 to 1, got ${shown}`,
       );
     }
-    return { id: spawn.id, si, sp, length, r, hunger };
+    return {
+      id: spawn.id,
+      si,
+      sp,
+      length,
+      r,
+      hunger,
+      stage: stageCode(stage),
+      sex: sexCode(sex),
+    };
   }
 
   private spawn(i: number, fit: Fit, spot: Spot): void {
@@ -686,7 +795,9 @@ export class World {
     // Isometric scaling: mass ∝ L³, drag area ∝ L², speeds in body lengths per second.
     const scale = length / sp.bodyLength;
     this.speciesIndex[i] = si;
-    this.schoolGroup[i] = sp.schooling ? si : -1 - i;
+    this._stage[i] = fit.stage;
+    this._sex[i] = fit.sex;
+    this.schoolGroup[i] = this.groupOf(i);
     this.bodyLength[i] = length;
     this.radius[i] = r;
     this.thickness[i] = length * BEHAVIOUR.bodyThicknessBodyLengths;
@@ -858,11 +969,14 @@ export class World {
     this._speed = edit.array(this.speed);
     this._yawRate = edit.array(this.yawRate);
     this._pitchRate = edit.array(this.pitchRate);
+    this._pitchHeld = edit.array(this.pitchHeld);
     this._state = edit.array(this.state);
     this._bodyLength = edit.array(this.bodyLength);
     this._radius = edit.array(this.radius);
     this._thickness = edit.array(this.thickness);
     this._speciesIndex = edit.array(this.speciesIndex);
+    this._stage = edit.array(this.stage);
+    this._sex = edit.array(this.sex);
     this._thrust = edit.array(this.thrust);
     this._contactCount = edit.array(this.contactCount);
     this.walker = edit.array(this.walker);
@@ -904,11 +1018,7 @@ export class World {
     // Rebuilt by every step before anything reads it.
     this._distSq = new Float64Array(n * n);
     // A loner's group is its own index, so loners after the removed fish need theirs renumbered.
-    for (let i = 0; i < n; i++) {
-      const sp = this.species[this.speciesIndex[i] ?? -1];
-      if (sp !== undefined)
-        this.schoolGroup[i] = sp.schooling ? (this.speciesIndex[i] ?? 0) : -1 - i;
-    }
+    for (let i = 0; i < n; i++) this.schoolGroup[i] = this.groupOf(i);
     this.walkers.resize(edit);
     this.behaviour.resize(edit);
   }
@@ -1348,11 +1458,14 @@ export class World {
           }
           // Within one engagement the slide direction stays continuous as the wall normal turns
           // (pane to corner to next pane); only a fresh engagement picks a side from the heading.
-          // Closing on food, a clear wish along the wall (further along the pane, into the
-          // corner) overrides both: sliding against it parks a fish beside food it cannot turn
-          // back to. Cruising keeps continuity, or a wandering heading flips the slide.
+          // Closing on food or heading home, a clear wish along the wall (further along the
+          // pane, into the corner, round the rock to the cave) overrides both: sliding against
+          // it parks a fish beside food it cannot turn back to, or carries a gramma hugging a
+          // rock face away from its cave for as long as it hugs the face. Cruising keeps
+          // continuity, or a wandering heading flips the slide.
           const along = dx * tx + dz * tz;
-          const wished = standOff && Math.abs(along) > STEERING.slideWishFraction * cruiseBase;
+          const wished =
+            (standOff || plan.homing) && Math.abs(along) > STEERING.slideWishFraction * cruiseBase;
           if (wished && Math.sign(along) * (tx * px0 + tz * pz0) < 0) {
             px0 = 0;
             pz0 = 0;
@@ -1555,8 +1668,7 @@ export class World {
     const arcLimited =
       plan.state === FishState.Feed || (plan.state === FishState.Cruise && plan.seekWeight === 0);
     if (!arcLimited || plan.pivot || this.cramped[i] === 1) return sp.maxTurnRate;
-    const radius = STEERING.minTurnRadiusBodyLengths * (this.bodyLength[i] ?? 1);
-    const arc = (this.speed[i] ?? 0) / radius;
+    const arc = (this.speed[i] ?? 0) / this.cruiseTurnRadius(i);
     return Math.min(sp.maxTurnRate, Math.max(arc, STEERING.pivotTurnRateRadPerS));
   }
 
@@ -1717,6 +1829,11 @@ export class World {
     return this.bodyCanTurnAt(this.bodyLength[i] ?? 0, this.thickness[i] ?? 0, x, y, z);
   }
 
+  /** The tightest arc fish `i` turns on while swimming, before it brakes to pivot. */
+  cruiseTurnRadius(i: number): number {
+    return STEERING.minTurnRadiusBodyLengths * (this.bodyLength[i] ?? 0);
+  }
+
   /**
    * Whether a fish of `speciesId` could feed on an item fixed at (x, y, z), as the feeding AI
    * judges it: the item is not buried in sand or rock, and the fish can turn round, level, at the
@@ -1819,7 +1936,9 @@ export class World {
     const reflex = !Number.isNaN(plan.turnRate);
     const wmax = reflex ? plan.turnRate : sp.maxTurnRate;
     const burstAndCoast = sp.gait === 'burst-and-coast' && !plan.continuous;
-    const coasting = burstAndCoast && this.coasting[i] === 1;
+    // Heading changes are made at the kicks (Calovi et al. 2018): a fish turning off a pane
+    // kicks round rather than gliding on into it.
+    const coasting = burstAndCoast && this.coasting[i] === 1 && this.state[i] !== FishState.Avoid;
     const gain = STEERING.turnGainPerS * (coasting ? BEHAVIOUR.coastTurnGain : 1);
     const smooth = Math.min(1, dt / STEERING.turnSmoothingS);
 
@@ -1838,6 +1957,7 @@ export class World {
     if (detour > 0 && yawError * detourSign < 0) yawError += 2 * Math.PI * detourSign;
     let yawRate: number;
     let pitchRate: number;
+    let held = reflex;
     if (reflex) {
       // The C-start bend is a dead-beat reflex turn, not a smoothed steering correction.
       yawRate = clamp(yawError / dt, -wmax, wmax);
@@ -1850,6 +1970,7 @@ export class World {
       // does not follow the burst-and-coast steering gain. Only a held posture (a cory nosing
       // down) and the dash for air pitch as fast as the fish can turn.
       const fastPitch = !Number.isNaN(plan.pitch) || plan.state === FishState.Gulp;
+      held = fastPitch;
       const pitchLimit = fastPitch ? wmax : Math.min(wmax, STEERING.steeredPitchRateRadPerS);
       const pitchCmd = clamp(
         ((this.targetPitch[i] ?? 0) - pitch) * STEERING.pitchGainPerS,
@@ -1861,6 +1982,7 @@ export class World {
     this.yawRate[i] = yawRate;
     this.yaw[i] = wrapAngle(yaw + yawRate * dt);
     this.pitchRate[i] = pitchRate;
+    this.pitchHeld[i] = held ? 1 : 0;
     this.pitch[i] = clamp(pitch + pitchRate * dt, -sp.maxPitch, sp.maxPitch);
 
     const v = this.speed[i] ?? 0;
@@ -2040,6 +2162,7 @@ export class World {
     const prev = this.previous;
     this.speed[i] = 0;
     this.pitchRate[i] = 0;
+    this.pitchHeld[i] = 0;
     const wTurn = this.turnRateLimit(i, sp, plan);
     const yawRate = clamp(wrapAngle((this.targetYaw[i] ?? 0) - yaw) / dt, -wTurn, wTurn);
     this.yaw[i] = wrapAngle(yaw + yawRate * dt);
@@ -2222,6 +2345,7 @@ export class World {
       out[o + 13] = walker ? (this.walkers.attached[i] ?? 0) : 0;
       out[o + 14] = this.behaviour.display[i] ?? 0;
       out[o + 15] = this.behaviour.gillFlare[i] ?? 0;
+      out[o + 16] = this.behaviour.brood.fan[i] ?? 0;
     }
   }
 }

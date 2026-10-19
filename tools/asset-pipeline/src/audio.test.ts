@@ -63,6 +63,32 @@ describe('processAudio', () => {
     expect(Math.abs(processed.samples[processed.samples.length - 1]!)).toBeLessThan(0.01);
     expect(integratedLoudness(processed.samples)).toBeCloseTo(processed.loudnessLufs, 5);
   });
+
+  it('refuses a silent one-shot', () => {
+    const recipe = { id: 'o', source: 's', role: 'o', targetLufs: -20 };
+    expect(() => processAudio(new Float32Array(AUDIO_SAMPLE_RATE), recipe)).toThrow();
+  });
+
+  it('refuses a silent loop', () => {
+    const recipe = { id: 'l', source: 's', role: 'l', targetLufs: -23, loop: { crossfadeS: 0.1 } };
+    expect(() => processAudio(new Float32Array(AUDIO_SAMPLE_RATE), recipe)).toThrow();
+  });
+
+  it('refuses a loop source shorter than its crossfade', () => {
+    const recipe = { id: 'l', source: 's', role: 'l', targetLufs: -23, loop: { crossfadeS: 1 } };
+    expect(() => processAudio(tone(0.5), recipe)).toThrow();
+  });
+
+  it('refuses a source shorter than the requested stationary loop window', () => {
+    const recipe = {
+      id: 'l',
+      source: 's',
+      role: 'l',
+      targetLufs: -23,
+      loop: { crossfadeS: 0.2, loopS: 5 },
+    };
+    expect(() => processAudio(tone(2), recipe)).toThrow();
+  });
 });
 
 describe('rawAudioPath', () => {
@@ -188,6 +214,36 @@ describe('audio checks', () => {
       audioAsset(padded(900_000), { id: `hum-${i}` }),
     );
     expect(problemsFor(...sounds)).toContain('audio budget');
+  });
+
+  it('fails a sound whose source is not in the manifest', () => {
+    const asset = audioAsset(encodeM4a(tone(0.2)));
+    expect(problemsFor({ ...asset, sources: ['freesound-missing'] })).toContain(
+      'freesound-missing',
+    );
+  });
+
+  it('fails a sound whose source has a disallowed licence', () => {
+    const asset = audioAsset(encodeM4a(tone(0.2)));
+    const restricted: Manifest = {
+      ...manifest,
+      assets: manifest.assets.map((a) => ({ ...a, licence: 'CC-BY-NC-4.0' })),
+    };
+    const index: AssetIndex = {
+      version: 1,
+      textureVariants: '',
+      customAttributes: '',
+      totalBytes: asset.files[0]!.bytes,
+      assets: [asset],
+    };
+    const problems = checkAssets({
+      manifest: restricted,
+      credits: '',
+      index,
+      assetsDir,
+      repoRoot: root,
+    });
+    expect(problems.join('\n')).toContain('disallowed licence');
   });
 
   it('fails an audio file outside its asset directory', () => {

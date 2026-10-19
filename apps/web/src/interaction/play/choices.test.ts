@@ -108,4 +108,15 @@ describe('PlayChoices', () => {
     choices.applyTo(controller);
     expect(controller.tool).toBe('tap');
   });
+
+  it('never keeps the game tool, which belongs to a round the next scene does not have', () => {
+    const events = new EventBus<InteractionEvents>();
+    const choices = new PlayChoices(events);
+    events.emit('play:request-tool', { tool: 'laser' });
+    events.emit('play:tool-changed', { tool: 'game' });
+    events.emit('play:request-tool', { tool: 'game' });
+    const next = controllerOn(events);
+    choices.applyTo(next);
+    expect(next.tool).toBe('laser');
+  });
 });
