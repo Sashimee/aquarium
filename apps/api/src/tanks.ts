@@ -3,6 +3,7 @@ import {
   ateBatchRequestSchema,
   backgroundIdSchema,
   careActionSchema,
+  careEventSchema,
   chemistrySchema,
   containsBlockedWord,
   createTankRequestSchema,
@@ -20,6 +21,8 @@ import {
   newTankChemistry,
   TANK_SIZES,
   personalitySchema,
+  replayQuerySchema,
+  replayResponseSchema,
   speciesListSchema,
   tankListSchema,
   tankSchema,
@@ -40,13 +43,14 @@ import {
   FEEDING_WINDOW_MINUTES,
   GRACE_PERIOD_MS,
   hasCapacityFor,
+  STEP_MS,
   VACATION_FEEDER_ASSET_ID,
   type BirthRecord,
   type LifecycleFish,
   type LifecycleState,
 } from '@aquarium/sim/lifecycle';
 import { randomInt, randomUUID } from 'node:crypto';
-import { and, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, inArray, lt, lte, or, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { audit } from './audit.ts';
@@ -65,6 +69,7 @@ export interface CareLimits {
   care: Limit;
   ate: Limit;
   addFish: Limit;
+  replay: Limit;
 }
 
 export const DEFAULT_CARE_LIMITS: CareLimits = {
@@ -72,6 +77,7 @@ export const DEFAULT_CARE_LIMITS: CareLimits = {
   care: { max: 60, windowMs: 10 * 60_000 },
   ate: { max: 30, windowMs: 60_000 },
   addFish: { max: 20, windowMs: 60 * 60_000 },
+  replay: { max: 30, windowMs: 60_000 },
 };
 
 const EVENT_RETENTION_MS = 90 * 86_400_000;
@@ -102,6 +108,24 @@ const atePayloadSchema = z.looseObject({ fishId: idSchema, portion: z.number().p
 
 const tankParamsSchema = z.strictObject({ tankId: idSchema });
 const fishParamsSchema = z.strictObject({ tankId: idSchema, fishId: idSchema });
+
+function encodeReplayCursor(row: { at: Date; id: string }): string {
+  return Buffer.from(`${row.at.getTime()}.${row.id}`).toString('base64url');
+}
+
+function decodeReplayCursor(raw: string): { at: Date; id: string } {
+  const [ms, id] = Buffer.from(raw, 'base64url').toString().split('.');
+  const parsedId = idSchema.safeParse(id);
+  if (!ms || !/^\d{1,15}$/.test(ms) || !parsedId.success) {
+    throw new HttpError(
+      400,
+      apiError('validation_failed', 'The cursor is not valid. Start again without one.', [
+        { path: ['cursor'], message: 'not a cursor this server issued' },
+      ]),
+    );
+  }
+  return { at: new Date(Number(ms)), id: parsedId.data };
+}
 
 class HttpError extends Error {
   constructor(
@@ -249,6 +273,7 @@ async function lockAndTick(
   await recordCollection(tx, user.id, deps.species, observed, new Date(now));
   const byId = new Map([...fishRows, ...bornRows.values()].map((r) => [r.id, r]));
   const away: AwaySummary = {
+    fromAt: tank.lastTickAt.toISOString(),
     elapsedMinutes: result.elapsedMinutes,
     capped: result.capped,
     deaths: result.deaths.map((d) => {
@@ -284,26 +309,55 @@ async function lockAndTick(
       updatedAt: new Date(now),
     })
     .where(eq(schema.tanks.id, tank.id));
-  const recentDeaths = result.deaths.filter((d) => d.diedAtMs >= now - EVENT_RETENTION_MS);
+  // A capped catch-up simulates only the first 60 days of a longer absence but moves last-tick to now;
+  // its events are placed in the 60 days before now so retention keeps them and the replay can show them.
+  const shiftMs = result.advancedToMs - (tank.lastTickAt.getTime() + result.steps * STEP_MS);
+  const recentDeaths = result.deaths.filter(
+    (d) => d.diedAtMs + shiftMs >= now - EVENT_RETENTION_MS,
+  );
   if (recentDeaths.length > 0) {
     await tx.insert(schema.events).values(
       recentDeaths.map((d) => ({
         tankId: tank.id,
-        at: new Date(d.diedAtMs),
+        at: new Date(d.diedAtMs + shiftMs),
         kind: 'death' as const,
         payload: { fishId: d.fishId, cause: d.cause },
       })),
     );
   }
-  const recentBirths = result.births.filter((b) => b.bornAtMs >= now - EVENT_RETENTION_MS);
+  const recentBirths = result.births.filter(
+    (b) => b.bornAtMs + shiftMs >= now - EVENT_RETENTION_MS,
+  );
   if (recentBirths.length > 0) {
     await tx.insert(schema.events).values(
       recentBirths.map((b) => ({
         tankId: tank.id,
-        at: new Date(b.bornAtMs),
+        at: new Date(b.bornAtMs + shiftMs),
         kind: 'born' as const,
         payload: { fishId: b.fishId, parentId: b.parentId, species: b.species },
       })),
+    );
+  }
+  const recentTimeline = result.timeline.filter(
+    (e) => e.atMs + shiftMs >= now - EVENT_RETENTION_MS,
+  );
+  if (recentTimeline.length > 0) {
+    await tx.insert(schema.events).values(
+      recentTimeline.map((e) =>
+        e.kind === 'sick'
+          ? {
+              tankId: tank.id,
+              at: new Date(e.atMs + shiftMs),
+              kind: 'sick' as const,
+              payload: { fishId: e.fishId },
+            }
+          : {
+              tankId: tank.id,
+              at: new Date(e.atMs + shiftMs),
+              kind: 'water_alert' as const,
+              payload: { metric: e.metric, state: e.state },
+            },
+      ),
     );
   }
   return {
@@ -589,6 +643,55 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       return withTank(user, tankId, async (tx, ticked) => {
         await recordVisit(tx, ticked.tank.id, ticked.nowMs);
         return render(tx, ticked);
+      });
+    }),
+  );
+
+  app.get(
+    '/api/tanks/:tankId/replay',
+    guarded(async (req) => {
+      const user = await authorize(req);
+      const { tankId } = tankParamsSchema.parse(req.params);
+      const query = replayQuerySchema.parse(req.query);
+      throttle(user.id, 'replay');
+      const since = new Date(query.since);
+      const cursor = query.cursor ? decodeReplayCursor(query.cursor) : null;
+      return withTank(user, tankId, async (tx, ticked) => {
+        const until = query.until ? new Date(query.until) : new Date(ticked.nowMs);
+        const rows = await tx
+          .select()
+          .from(schema.events)
+          .where(
+            and(
+              eq(schema.events.tankId, tankId),
+              gt(schema.events.at, since),
+              lte(schema.events.at, until),
+              ...(cursor
+                ? [
+                    or(
+                      gt(schema.events.at, cursor.at),
+                      and(eq(schema.events.at, cursor.at), gt(schema.events.id, cursor.id)),
+                    ),
+                  ]
+                : []),
+            ),
+          )
+          .orderBy(asc(schema.events.at), asc(schema.events.id))
+          .limit(query.limit + 1);
+        const page = rows.slice(0, query.limit);
+        const last = page.at(-1);
+        return replayResponseSchema.parse({
+          events: page.map((r) =>
+            careEventSchema.parse({
+              id: r.id,
+              tankId: r.tankId,
+              at: r.at.toISOString(),
+              kind: r.kind,
+              payload: r.payload,
+            }),
+          ),
+          nextCursor: rows.length > query.limit && last ? encodeReplayCursor(last) : null,
+        });
       });
     }),
   );

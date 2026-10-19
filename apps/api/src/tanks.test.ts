@@ -688,6 +688,7 @@ describe('care actions and feeding validation', () => {
         care: { max: 5, windowMs: 60_000 },
         ate: { max: 4, windowMs: 60_000 },
         addFish: { max: 100, windowMs: 60_000 },
+        replay: { max: 100, windowMs: 60_000 },
       },
     });
   });

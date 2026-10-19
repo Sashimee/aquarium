@@ -83,6 +83,9 @@ export const memorialSchema = z.object({
 export type Memorial = z.infer<typeof memorialSchema>;
 
 export const awaySummarySchema = z.object({
+  fromAt: timestampSchema
+    .optional()
+    .describe('where the offline catch-up started: pass it as `since` to the replay route'),
   elapsedMinutes: z.int().nonnegative(),
   capped: z.boolean(),
   deaths: z.array(

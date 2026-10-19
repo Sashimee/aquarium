@@ -61,7 +61,12 @@ export const careEventKindSchema = z.enum([
   'ate',
   'death',
   'born',
+  'sick',
+  'water_alert',
 ]);
+
+export const waterAlertMetricSchema = z.enum(['ammonia', 'nitrite', 'algae']);
+export type WaterAlertMetric = z.infer<typeof waterAlertMetricSchema>;
 
 const eventBase = {
   id: idSchema,
@@ -97,5 +102,37 @@ export const careEventSchema = z.discriminatedUnion('kind', [
     kind: z.literal('born'),
     payload: z.strictObject({ fishId: idSchema, parentId: idSchema, species: slugSchema }),
   }),
+  z.strictObject({
+    ...eventBase,
+    kind: z.literal('sick'),
+    payload: z.strictObject({ fishId: idSchema }),
+  }),
+  z.strictObject({
+    ...eventBase,
+    kind: z.literal('water_alert'),
+    payload: z.strictObject({ metric: waterAlertMetricSchema, state: z.enum(['high', 'normal']) }),
+  }),
 ]);
 export type CareEvent = z.infer<typeof careEventSchema>;
+
+export const REPLAY_DEFAULT_LIMIT = 200;
+export const REPLAY_MAX_LIMIT = 500;
+
+export const replayCursorSchema = z
+  .string()
+  .regex(/^[A-Za-z0-9_-]{1,200}$/)
+  .describe('opaque; pass back the nextCursor of the previous page unchanged');
+
+export const replayQuerySchema = z.strictObject({
+  since: timestampSchema.describe('exclusive lower bound; use away.fromAt from the tank read'),
+  until: timestampSchema.optional().describe('inclusive upper bound, default now'),
+  cursor: replayCursorSchema.optional(),
+  limit: z.coerce.number().int().min(1).max(REPLAY_MAX_LIMIT).default(REPLAY_DEFAULT_LIMIT),
+});
+export type ReplayQuery = z.infer<typeof replayQuerySchema>;
+
+export const replayResponseSchema = z.strictObject({
+  events: z.array(careEventSchema).describe('ordered by time, then id'),
+  nextCursor: replayCursorSchema.nullable().describe('null on the last page'),
+});
+export type ReplayResponse = z.infer<typeof replayResponseSchema>;

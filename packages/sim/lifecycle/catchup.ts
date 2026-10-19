@@ -6,6 +6,13 @@ import {
 } from './breeding.ts';
 import { MAX_CATCH_UP_MS, STEP_MINUTES, STEP_MS } from './params.ts';
 import { stepTank } from './step.ts';
+import {
+  detectTransitions,
+  initialFlags,
+  MAX_TIMELINE_ENTRIES,
+  type TimelineEntry,
+  type TimelineFlags,
+} from './timeline.ts';
 import { heaterSetpoint } from './water.ts';
 import type { DeathRecord, LifecycleState, TankEnvironment } from './types.ts';
 
@@ -28,6 +35,7 @@ export interface CatchUpResult {
   readonly advancedToMs: number;
   readonly deaths: readonly DeathRecord[];
   readonly births: readonly BirthRecord[];
+  readonly timeline: readonly TimelineEntry[];
   readonly setpointComputations: number;
 }
 
@@ -40,6 +48,8 @@ export function catchUp(input: CatchUpInput): CatchUpResult {
   let state = input.state;
   const deaths: DeathRecord[] = [];
   const births: BirthRecord[] = [];
+  const timeline: TimelineEntry[] = [];
+  let flags: TimelineFlags = initialFlags(state);
   const computeSetpoint = () =>
     heaterSetpoint(state.fish, input.biome, input.speciesChemistry, input.chemistryParams);
   let setpointComputations = 1;
@@ -71,6 +81,11 @@ export function catchUp(input: CatchUpInput): CatchUpResult {
       },
     });
     state = bred.state;
+    const seen = detectTransitions(state, flags, startMs + STEP_MS);
+    flags = seen.flags;
+    for (const entry of seen.entries) {
+      if (timeline.length < MAX_TIMELINE_ENTRIES) timeline.push(entry);
+    }
     deaths.push(...result.deaths);
     births.push(...bred.births);
     if (result.deaths.length > 0 || bred.births.length > 0) {
@@ -87,6 +102,7 @@ export function catchUp(input: CatchUpInput): CatchUpResult {
     advancedToMs: capped ? toMs : fromMs + steps * STEP_MS,
     deaths,
     births,
+    timeline,
     setpointComputations,
   };
 }
