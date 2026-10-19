@@ -10,6 +10,29 @@
     "traits": ["cave-dweller"]
   },
   "biome": "freshwater",
+  "breeding": {
+    "broodSize": [3, 8],
+    "fryGrowth": {
+      "adultAfterDays": 365,
+      "juvenileAfterDays": 45
+    },
+    "intervalDays": 45,
+    "minAgeDays": 365,
+    "mode": "substrate-spawner",
+    "needsCave": true,
+    "temperatureC": [24, 28]
+  },
+  "chemistry": {
+    "khMin": 0,
+    "nitriteTolerance": 0.8,
+    "phRange": [6, 7.8],
+    "salinityPpt": [0, 1],
+    "sources": [
+      "FishBase (fishbase.se) species summary",
+      "SeriouslyFish species profile (seriouslyfish.com)"
+    ],
+    "temperatureC": [22, 28]
+  },
   "commonName": "Bristlenose pleco",
   "id": "bristlenose-pleco",
   "lifecycle": {
@@ -18,7 +41,7 @@
     "bioload": 0.8,
     "birthSizeM": 0.03,
     "diet": ["algae-wafer", "pellets", "flakes"],
-    "growthPerDay": 0.00008,
+    "growthPerDay": 8e-5,
     "healthLossPerHourStarving": 0.0085,
     "healthRecoveryPerHour": 0.004,
     "hungerPerHour": 0.0055,

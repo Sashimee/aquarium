@@ -255,6 +255,7 @@ export const speciesChemistrySchema = z.strictObject({
     .tuple([z.number().min(0).max(45), z.number().min(0).max(45)])
     .refine(([lo, hi]) => lo <= hi, 'temperatureC must be [low, high]')
     .default([20, 30]),
+  sources: z.array(z.string().min(1)).default([]).describe('where the ranges come from'),
 });
 export type SpeciesChemistry = z.infer<typeof speciesChemistrySchema>;
 

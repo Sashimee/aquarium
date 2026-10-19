@@ -26,10 +26,11 @@ export const equipmentSchema = z.strictObject({
 });
 export type Equipment = z.infer<typeof equipmentSchema>;
 
-// What every tank had before equipment existed: the implicit filter and light, nothing else.
+// The implicit filter and light every tank had, plus a thermostat heater: without one a tank cools to
+// room temperature, which the chemistry model would punish before the shop sells heaters.
 export const DEFAULT_EQUIPMENT: Equipment = {
   filter: { tier: 1 },
-  heater: { tier: 0 },
+  heater: { tier: 1 },
   light: { tier: 1, intensity: 0.8, onHour: 8, offHour: 20 },
   co2: { tier: 0 },
   waveMaker: { tier: 0 },

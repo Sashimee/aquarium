@@ -15,7 +15,9 @@ const BLOCKED_SUBSTRINGS = [
   'bastard',
   'pussy',
   'hitler',
+  'neonazi',
 ];
+const BLOCKED_PHRASES = ['siegheil', 'whitepower'];
 const BLOCKED_WORDS = new Set([
   'ass',
   'cunt',
@@ -33,6 +35,8 @@ const BLOCKED_WORDS = new Set([
   'porn',
   'nazi',
   'nazis',
+  'nazism',
+  'nazist',
   'retard',
   'retarded',
   'retards',
@@ -99,9 +103,20 @@ function tokensOf(text: string): string[] {
 }
 
 export function containsBlockedWord(text: string): boolean {
-  return tokensOf(text).some((token) => {
+  const tokens = tokensOf(text);
+  const joinsPhrase = tokens.some((token, i) => {
+    const next = tokens[i + 1];
+    if (next === undefined) return false;
+    return BLOCKED_PHRASES.some((phrase) => `${token}${next}` === phrase);
+  });
+  if (joinsPhrase) return true;
+  return tokens.some((token) => {
     if (ALLOWED_TOKENS.has(token)) return false;
-    return BLOCKED_WORDS.has(token) || BLOCKED_SUBSTRINGS.some((w) => token.includes(w));
+    return (
+      BLOCKED_WORDS.has(token) ||
+      BLOCKED_SUBSTRINGS.some((w) => token.includes(w)) ||
+      BLOCKED_PHRASES.some((w) => token.includes(w))
+    );
   });
 }
 

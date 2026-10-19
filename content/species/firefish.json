@@ -18,7 +18,17 @@
     "traits": ["shoal", "cave-dweller"]
   },
   "biome": "reef",
-  "chemistry": { "salinityPpt": [30, 36] },
+  "chemistry": {
+    "khMin": 5,
+    "nitriteTolerance": 0.2,
+    "phRange": [8, 8.4],
+    "salinityPpt": [30, 36],
+    "sources": [
+      "FishBase (fishbase.se) species summary",
+      "Reef2Reef husbandry ranges for captive marine animals"
+    ],
+    "temperatureC": [24, 27]
+  },
   "commonName": "Firefish",
   "id": "firefish",
   "lifecycle": {
