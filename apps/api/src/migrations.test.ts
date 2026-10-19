@@ -31,7 +31,7 @@ describe('the chemistry v2 migration on tanks that already exist', () => {
   beforeAll(async () => {
     testDb = await createTestDatabase();
     database = connect(testDb.url);
-    oldDir = migrationsUpTo(8);
+    oldDir = migrationsUpTo(9);
     await migrate(drizzle(database.pool), { migrationsFolder: oldDir });
     await database.pool.query(
       `insert into "user" (id, name, email) values ('u1', 'Old timer', 'old@bas.lu')`,

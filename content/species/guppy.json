@@ -15,6 +15,17 @@
     "traits": ["shoal"]
   },
   "biome": "freshwater",
+  "breeding": {
+    "broodSize": [3, 8],
+    "fryGrowth": {
+      "adultAfterDays": 90,
+      "juvenileAfterDays": 21
+    },
+    "intervalDays": 28,
+    "minAgeDays": 90,
+    "mode": "livebearer",
+    "temperatureC": [22, 28]
+  },
   "chemistry": {
     "khMin": 3,
     "nitriteTolerance": 0.8,

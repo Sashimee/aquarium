@@ -4,6 +4,8 @@ import type {
   Chemistry,
   ChemistryParameters,
   Equipment,
+  FishSex,
+  FishStage,
   SpeciesChemistry,
   SpeciesLifecycle,
   Water,
@@ -20,6 +22,9 @@ export interface LifecycleFish {
   readonly alive: boolean;
   readonly diedAtMs: number | null;
   readonly cause: CauseOfDeath | null;
+  readonly sex: FishSex;
+  readonly stage: FishStage;
+  readonly lastBroodAtMs: number | null;
 }
 
 export interface LifecycleState {

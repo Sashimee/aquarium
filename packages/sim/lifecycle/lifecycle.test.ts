@@ -57,6 +57,18 @@ const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 const T0 = Date.UTC(2026, 0, 1);
 const NO_GRACE = T0 - 1;
+const NO_BREEDING = {
+  breeding: new Map(),
+  breedingEnvironment: {
+    temperatureC: 25,
+    hasCave: false,
+    maxAnimals: 60,
+    bioloadCapacity: TANK_BIOLOAD_CAPACITY,
+    newId: () => {
+      throw new Error('no births expected');
+    },
+  },
+};
 const cleanWater: Water = { ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 0 };
 
 function fishOf(id: string, speciesId: string, over: Partial<LifecycleFish> = {}): LifecycleFish {
@@ -72,6 +84,9 @@ function fishOf(id: string, speciesId: string, over: Partial<LifecycleFish> = {}
     alive: true,
     diedAtMs: null,
     cause: null,
+    sex: 'female',
+    stage: 'adult',
+    lastBroodAtMs: null,
     ...over,
   };
 }
@@ -107,6 +122,7 @@ function run(
     toMs: T0 + ms,
     graceEndsAtMs: opts.grace ?? NO_GRACE,
     vacationFeeder: opts.feeder ?? false,
+    ...NO_BREEDING,
   });
 }
 
@@ -185,6 +201,7 @@ describe('one visit a day keeps a tank healthy', () => {
         ...env,
         graceEndsAtMs: NO_GRACE,
         vacationFeeder: false,
+        ...NO_BREEDING,
       });
       state = r.state;
       now += DAY;
@@ -240,6 +257,7 @@ describe('a tank stocked to capacity at full size under perfect daily care', () 
         biome,
         graceEndsAtMs: NO_GRACE,
         vacationFeeder: false,
+        ...NO_BREEDING,
       });
       expect(r.deaths).toEqual([]);
       state = r.state;
@@ -282,6 +300,7 @@ describe('overfeeding poisons the tank', () => {
         ...env,
         graceEndsAtMs: NO_GRACE,
         vacationFeeder: false,
+        ...NO_BREEDING,
       });
       state = r.state;
       now += DAY;
@@ -399,6 +418,7 @@ describe('catch-up resolution and cap', () => {
       equipment: DEFAULT_EQUIPMENT,
       graceEndsAtMs: NO_GRACE,
       vacationFeeder: false,
+      ...NO_BREEDING,
     });
     expect(back.steps).toBe(0);
     expect(back.state).toBe(state);
@@ -426,6 +446,7 @@ describe('catch-up resolution and cap', () => {
       equipment: DEFAULT_EQUIPMENT,
       graceEndsAtMs: NO_GRACE,
       vacationFeeder: false,
+      ...NO_BREEDING,
     });
     expect(rest.state).toEqual(whole.state);
   });
@@ -615,6 +636,7 @@ describe('nitrogen cycle', () => {
         toMs: now + DAY,
         graceEndsAtMs: NO_GRACE,
         vacationFeeder: false,
+        ...NO_BREEDING,
       });
       state = r.state;
       now += DAY;
@@ -837,6 +859,7 @@ describe('offline catch-up with chemistry', () => {
       toMs: T0 + 5 * DAY,
       graceEndsAtMs: NO_GRACE,
       vacationFeeder: false,
+      ...NO_BREEDING,
     });
     expect(rest.state).toEqual(whole.state);
   });
@@ -906,6 +929,7 @@ describe('every species in a default tank of its own biome under good care', () 
           biome,
           graceEndsAtMs: NO_GRACE,
           vacationFeeder: false,
+          ...NO_BREEDING,
         });
         expect(r.deaths).toEqual([]);
         state = r.state;

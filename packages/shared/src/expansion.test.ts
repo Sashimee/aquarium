@@ -15,7 +15,12 @@ import {
   personalitySchema,
 } from './fishState.js';
 import { biomeSchema } from './common.js';
-import { breedingSchema, speciesChemistrySchema, speciesSummarySchema } from './species.js';
+import {
+  breedingModeSchema,
+  breedingSchema,
+  speciesChemistrySchema,
+  speciesSummarySchema,
+} from './species.js';
 
 const content = join(import.meta.dirname, '../../../content');
 const readJson = (path: string): unknown => JSON.parse(readFileSync(join(content, path), 'utf8'));
@@ -103,9 +108,9 @@ describe('chemistry v2', () => {
 describe('species additions', () => {
   const files = readdirSync(join(content, 'species')).filter((f) => f.endsWith('.json'));
 
-  it.each(files)('%s gets non-breeding defaults without edits', (file) => {
+  it.each(files)('%s parses with a valid breeding and chemistry block', (file) => {
     const parsed = speciesSummarySchema.loose().parse(readJson(`species/${file}`));
-    expect(parsed.breeding.mode).toBe('none');
+    expect(breedingModeSchema.options).toContain(parsed.breeding.mode);
     expect(parsed.chemistry.phRange[0]).toBeLessThan(parsed.chemistry.phRange[1]);
   });
 

@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { checkAssets, loadCheckInput } from './check.ts';
+import { sha256 } from './glb.ts';
 import { derivedModifications } from './manifest.ts';
 
 export const REPO_ROOT = resolve(import.meta.dirname, '..', '..', '..');
@@ -39,15 +40,39 @@ async function main(argv: string[]): Promise<number> {
   if (command === 'build') {
     const { build } = await import('./build.ts');
     const sheets = rest.find((a) => a.startsWith('--impostor-sheets='));
+    const backgroundSheet = rest.find((a) => a.startsWith('--background-sheet='));
     await build({
       repoRoot: REPO_ROOT,
+      ...(backgroundSheet
+        ? { backgroundSheet: resolve(backgroundSheet.slice('--background-sheet='.length)) }
+        : {}),
       only: rest.filter((a) => !a.startsWith('--')),
       ...(sheets ? { impostorSheetDir: resolve(sheets.slice('--impostor-sheets='.length)) } : {}),
     });
     return 0;
   }
+  if (command === 'render-misty-lake') {
+    const { MISTY_LAKE_ID, renderMistyLake } = await import('./misty-lake.ts');
+    const rendered = await renderMistyLake(REPO_ROOT);
+    const manifestPath = join(REPO_ROOT, 'assets', 'manifest.json');
+    const raw = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+      assets: { id: string; sha256: string | null; status: string }[];
+    };
+    const entry = raw.assets.find((a) => a.id === MISTY_LAKE_ID);
+    if (!entry) throw new Error(`${MISTY_LAKE_ID} is not in assets/manifest.json`);
+    entry.sha256 = sha256(readFileSync(rendered));
+    entry.status = 'downloaded';
+    const { format, resolveConfig } = await import('prettier');
+    const options = (await resolveConfig(manifestPath)) ?? {};
+    writeFileSync(
+      manifestPath,
+      await format(JSON.stringify(raw), { ...options, filepath: manifestPath }),
+    );
+    console.log(`rendered ${rendered}; recorded sha256 ${entry.sha256} in assets/manifest.json`);
+    return 0;
+  }
   console.error(
-    'usage: cli.ts check | sync-manifest | build [asset-id ...] [--impostor-sheets=dir]',
+    'usage: cli.ts check | sync-manifest | render-misty-lake | build [asset-id ...] [--impostor-sheets=dir] [--background-sheet=file.png]',
   );
   return 2;
 }

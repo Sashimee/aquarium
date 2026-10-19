@@ -10,6 +10,17 @@
     "traits": ["cave-dweller", "biofilm-grazer"]
   },
   "biome": "freshwater",
+  "breeding": {
+    "broodSize": [3, 8],
+    "fryGrowth": {
+      "adultAfterDays": 90,
+      "juvenileAfterDays": 14
+    },
+    "intervalDays": 30,
+    "minAgeDays": 90,
+    "mode": "livebearer",
+    "temperatureC": [22, 28]
+  },
   "chemistry": {
     "khMin": 2,
     "nitriteTolerance": 0.1,

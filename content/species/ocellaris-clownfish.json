@@ -10,6 +10,17 @@
     "traits": ["anemone-host"]
   },
   "biome": "reef",
+  "breeding": {
+    "broodSize": [3, 8],
+    "fryGrowth": {
+      "adultAfterDays": 365,
+      "juvenileAfterDays": 30
+    },
+    "intervalDays": 14,
+    "minAgeDays": 365,
+    "mode": "substrate-spawner",
+    "temperatureC": [25, 28]
+  },
   "chemistry": {
     "khMin": 5,
     "nitriteTolerance": 0.2,

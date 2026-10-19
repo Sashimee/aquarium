@@ -10,6 +10,17 @@
     "traits": ["flare-display"]
   },
   "biome": "freshwater",
+  "breeding": {
+    "broodSize": [4, 10],
+    "fryGrowth": {
+      "adultAfterDays": 150,
+      "juvenileAfterDays": 21
+    },
+    "intervalDays": 21,
+    "minAgeDays": 150,
+    "mode": "substrate-spawner",
+    "temperatureC": [26, 30]
+  },
   "chemistry": {
     "khMin": 0,
     "nitriteTolerance": 0.5,

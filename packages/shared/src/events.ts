@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { idSchema, timestampSchema } from './common.js';
+import { idSchema, slugSchema, timestampSchema } from './common.js';
 import { causeOfDeathSchema } from './tank.js';
 
 export const foodTypeSchema = z.enum([
@@ -60,6 +60,7 @@ export const careEventKindSchema = z.enum([
   'filter_rinse',
   'ate',
   'death',
+  'born',
 ]);
 
 const eventBase = {
@@ -90,6 +91,11 @@ export const careEventSchema = z.discriminatedUnion('kind', [
     ...eventBase,
     kind: z.literal('death'),
     payload: z.strictObject({ fishId: idSchema, cause: causeOfDeathSchema }),
+  }),
+  z.strictObject({
+    ...eventBase,
+    kind: z.literal('born'),
+    payload: z.strictObject({ fishId: idSchema, parentId: idSchema, species: slugSchema }),
   }),
 ]);
 export type CareEvent = z.infer<typeof careEventSchema>;

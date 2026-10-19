@@ -1,5 +1,5 @@
 {
-  "id": "a6a3b847-3b9f-41c6-ba17-05859da08264",
+  "id": "0bef019c-fe75-4821-a425-532b55aeb3d3",
   "prevId": "2bbd39d6-a170-45d4-bb2b-6feb12051d6d",
   "version": "7",
   "dialect": "postgresql",
@@ -355,6 +355,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'adult'"
+        },
+        "last_brood_at": {
+          "name": "last_brood_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         },
         "personality": {
           "name": "personality",
@@ -900,7 +906,7 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true,
-          "default": "'{\"filter\":{\"tier\":1},\"heater\":{\"tier\":1},\"light\":{\"tier\":1,\"intensity\":0.8,\"onHour\":8,\"offHour\":20},\"co2\":{\"tier\":0},\"waveMaker\":{\"tier\":0}}'::jsonb"
+          "default": "'{\"filter\":{\"tier\":1},\"heater\":{\"tier\":0},\"light\":{\"tier\":1,\"intensity\":0.8,\"onHour\":8,\"offHour\":20},\"co2\":{\"tier\":0},\"waveMaker\":{\"tier\":0}}'::jsonb"
         }
       },
       "indexes": {
@@ -1095,29 +1101,12 @@
     "public.cause_of_death": {
       "name": "cause_of_death",
       "schema": "public",
-      "values": [
-        "starvation",
-        "ammonia",
-        "nitrite",
-        "disease",
-        "water_quality",
-        "old_age",
-        "unknown"
-      ]
+      "values": ["starvation", "ammonia", "nitrite", "disease", "old_age", "unknown"]
     },
     "public.event_kind": {
       "name": "event_kind",
       "schema": "public",
-      "values": [
-        "feed",
-        "water_change",
-        "gravel_vacuum",
-        "algae_scrape",
-        "bottled_bacteria",
-        "filter_rinse",
-        "ate",
-        "death"
-      ]
+      "values": ["feed", "water_change", "gravel_vacuum", "algae_scrape", "ate", "death", "born"]
     },
     "public.fish_sex": {
       "name": "fish_sex",

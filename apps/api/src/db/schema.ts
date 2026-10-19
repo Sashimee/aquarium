@@ -131,6 +131,7 @@ export const eventKindEnum = pgEnum('event_kind', [
   'filter_rinse',
   'ate',
   'death',
+  'born',
 ]);
 
 export const tanks = pgTable(
@@ -188,6 +189,7 @@ export const fish = pgTable(
     diedAt: timestamptz('died_at'),
     cause: causeOfDeathEnum('cause'),
     stage: fishStageEnum('stage').notNull().default('adult'),
+    lastBroodAt: timestamptz('last_brood_at'),
     personality: jsonb('personality')
       .notNull()
       .default(sql`'{"boldness":0.5,"greed":0.5,"sociability":0.5}'::jsonb`),
