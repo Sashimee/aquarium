@@ -286,7 +286,8 @@ where a GPU exists).
 ## 9. Expansion (asked by Alex 2026-10-16, #612)
 
 Alex asked for every proposed extra feature to be built, and for a choice of **5 tank background
-pictures per tank type**. The release (`dev → main`) waits until this section is done (T68).
+pictures per tank type**. The release (`dev → main`) waits until every task in this section is done (T68); Alex
+confirmed on 2026-10-19 that there is no release before that.
 
 ### 9.1 Decisions
 
@@ -301,7 +302,7 @@ pictures per tank type**. The release (`dev → main`) waits until this section 
 | Haptics | The Vibration API where it exists (Android). iOS Safari has none, so iOS gets no haptics; no workaround hacks. |
 | Sound | Off until the first user gesture, a master volume, a mute button and a separate "no sudden loud sounds" setting. AAC in `.m4a`, which every Safari since 16 and every other target browser plays. CC0 / CC-BY audio in the manifest. |
 | New biomes | African cichlid lake, Amazon blackwater, brackish mangrove. Each one is a preset, 5 backgrounds and at least 4 species. The biome enum in `packages/shared` grows in T30. |
-| Tanks per user | Replaces §1's "one of each": a user may own up to 6 display tanks, any mix of biomes and sizes, plus one quarantine tank (nano, not counted in the 6). |
+| Tanks per user | Replaces §1's "one of each": a user may own up to 6 display tanks, any mix of biomes and sizes, plus one quarantine tank (nano, not counted in the 6). Confirmed by Alex 2026-10-19. |
 | Window weather | Simulated from the tank's seed and the local clock. No location, no third-party weather API. |
 | Budgets | §2.7 and the < 150 MB repo asset budget (§3) stay. Backgrounds, audio, new species and biomes stream per preset. If the budget can't hold a new biome, the orchestrator stops and asks Alex before raising it. |
 | Agent concurrency | Alex said on 2026-10-14: "You can run more then 6 agents if you want to". The orchestrator may run more than 6 when tasks are independent (`CLAUDE.md` loop step 4). |
