@@ -118,7 +118,9 @@ export function registerHandleRoutes({
       if (err instanceof AccountGone) {
         return reply
           .code(409)
-          .send(apiError('conflict', 'This account is being deleted, so the handle was not saved.'));
+          .send(
+            apiError('conflict', 'This account is being deleted, so the handle was not saved.'),
+          );
       }
       if (err instanceof HandleCoolingDown) {
         return reply
