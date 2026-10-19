@@ -1,5 +1,5 @@
 import type { Biome, Collider } from '@aquarium/shared';
-import type { Point3, Stimulus } from '@aquarium/sim';
+import type { Point3, SimToy, Stimulus } from '@aquarium/sim';
 import type { Engine } from '../engine/Engine';
 import type { EventBus } from '../engine/events';
 import type { TankDimensions } from '../engine/tank/dimensions';
@@ -28,6 +28,14 @@ export interface FishBite {
   readonly fishId: string;
   readonly foodId: number;
   readonly portion: number;
+}
+
+/** A fish bumped a ball: the velocity change it gave it, m/s in tank x and z. */
+export interface BallNudge {
+  /** The ball's `SimToy` id, or null for a ball given without one. */
+  readonly toyId: string | null;
+  readonly ix: number;
+  readonly iz: number;
 }
 
 export interface FishPoint {
@@ -59,6 +67,12 @@ export interface FishSimBridge {
   anyFish(): (() => FishPoint | null) | null;
   /** The net tool tapped along `ray`; emits `net:tap` when it hits a dead fish. */
   netTap(ray: PickRay): void;
+  /** Every toy in the tank, in tank space, `[]` for none; the last ones reach the fish once up. */
+  setToys(toys: readonly SimToy[]): void;
+  /** Fish bumping the ball; returns the unsubscribe. */
+  onToyNudge(listener: (nudge: BallNudge) => void): () => void;
+  /** Where the swimming fish with this server id is, in tank space, or null. */
+  fishPoint(fishId: string): FishPoint | null;
 }
 
 export interface FishHandle {
@@ -165,6 +179,8 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
   const { interaction, tankEvents } = options;
   const abort = new AbortController();
   const ateListeners = new Set<(events: readonly FishBite[]) => void>();
+  const nudgeListeners = new Set<(nudge: BallNudge) => void>();
+  let toys: readonly SimToy[] = [];
   let ready: FishSystem | null = null;
   let anchors: readonly SceneAnchor[] | null = null;
   let demoBiome = options.biome;
@@ -206,7 +222,11 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
       fish.onAte((events) => {
         for (const listener of ateListeners) listener(events);
       });
+      fish.onToyNudge((nudge) => {
+        for (const listener of nudgeListeners) listener(nudge);
+      });
       ready = fish;
+      if (toys.length > 0) fish.setToys(toys);
       if (anchors !== null) fish.setAnchors(anchors);
       fish.setColliders(colliders.list);
       if (demoBiome !== options.biome) fish.setDemoBiome(demoBiome);
@@ -246,6 +266,15 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
         return () => ateListeners.delete(listener);
       },
       netTap: (ray) => ready?.netTap(ray),
+      setToys(next) {
+        toys = next;
+        ready?.setToys(next);
+      },
+      onToyNudge(listener) {
+        nudgeListeners.add(listener);
+        return () => nudgeListeners.delete(listener);
+      },
+      fishPoint: (fishId) => ready?.fishPoint(fishId) ?? null,
       pickFish: (ray) => ready?.pickFish(ray) ?? null,
       anyFish: () => ready?.anyFish() ?? null,
       noriGrazers: () => ready?.noriGrazers() ?? [],
@@ -273,6 +302,7 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
       tankEvents.stop();
       stopDecor();
       ateListeners.clear();
+      nudgeListeners.clear();
       ready = null;
       void system.then((fish) => {
         try {

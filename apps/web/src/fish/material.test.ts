@@ -15,7 +15,7 @@ import { SWIM_MODES } from './swim';
 
 const pleco = renderProfile('bristlenose-pleco');
 
-function fishMaterial(source: MeshStandardMaterial, mouth = false): FishMaterial {
+function fishMaterial(source: MeshStandardMaterial, mouth = false, displays = false): FishMaterial {
   return new FishMaterial({
     source,
     assetId: 'bristlenose-pleco',
@@ -26,6 +26,7 @@ function fishMaterial(source: MeshStandardMaterial, mouth = false): FishMaterial
     instances: new FishInstanceData(1, INSTANCE_STRIDE),
     lighting: { lightDirection: uniform(new Vector3(0, 1, 0)), light: vec3(1) },
     mouth,
+    displays,
   });
 }
 
@@ -43,6 +44,7 @@ function shrimpMaterial(): FishMaterial {
     instances: new FishInstanceData(1, WALKER_INSTANCE_STRIDE),
     lighting: { lightDirection: uniform(new Vector3(0, 1, 0)), light: vec3(1) },
     mouth: false,
+    displays: false,
   });
 }
 
@@ -59,10 +61,23 @@ function readsSlot(node: Node | null, offset: number): boolean {
   return found;
 }
 
+/** Whether `node` reads instance float `slot`, as a component of the vec4 block that holds it. */
+function readsSlotComponent(node: Node | null, slot: number): boolean {
+  const component = 'xyzw'[slot % 4];
+  let found = false;
+  node?.traverse((n) => {
+    const split = n as Node & { isSplitNode?: boolean; components?: string; node?: Node };
+    if (split.isSplitNode !== true || split.components !== component) return;
+    const buffer = split.node as Node & { isBufferNode?: boolean; bufferOffset?: number };
+    if (buffer.isBufferNode === true && buffer.bufferOffset === slot - (slot % 4)) found = true;
+  });
+  return found;
+}
+
 const readsTint = (node: Node | null): boolean => readsSlot(node, InstanceSlot.TintR);
 const readsPale = (node: Node | null): boolean =>
   readsSlot(node, InstanceSlot.Pale - (InstanceSlot.Pale % 4));
-const readsMouth = (node: Node | null): boolean => readsSlot(node, InstanceSlot.Mouth);
+const readsMouth = (node: Node | null): boolean => readsSlotComponent(node, InstanceSlot.Mouth);
 
 function readsAttribute(node: Node | null, name: string, type: string): boolean {
   let found = false;
@@ -184,5 +199,38 @@ describe('FishMaterial mouth', () => {
     shrimp.setFeatures(FEATURES);
     expect(readsSlot(deformed(shrimp), WalkerSlot.LegPhase)).toBe(true);
     expect(readsMouth(deformed(shrimp))).toBe(false);
+  });
+});
+
+describe('FishMaterial display', () => {
+  it.each([false, true])(
+    'spreads the fins and flares the gill covers with gills %s, shadow included',
+    (gills) => {
+      const material = fishMaterial(new MeshStandardMaterial(), true, true);
+      material.setFeatures({ ...FEATURES, gills });
+      for (const graph of [deformed(material), material.castShadowPositionNode]) {
+        expect(readsSlotComponent(graph, InstanceSlot.Display)).toBe(true);
+        expect(readsSlotComponent(graph, InstanceSlot.GillFlare)).toBe(true);
+      }
+      expect(readsSlotComponent(material.deformed.normal, InstanceSlot.GillFlare)).toBe(true);
+    },
+  );
+
+  it('leaves a species that never displays out of it, gill pumping and jaw included', () => {
+    const material = fishMaterial(new MeshStandardMaterial(), true, false);
+    material.setFeatures(FEATURES);
+    for (const graph of [deformed(material), material.castShadowPositionNode]) {
+      expect(readsSlotComponent(graph, InstanceSlot.Display)).toBe(false);
+      expect(readsSlotComponent(graph, InstanceSlot.GillFlare)).toBe(false);
+    }
+    expect(readsSlotComponent(deformed(material), InstanceSlot.Gills)).toBe(true);
+    expect(readsMouth(deformed(material))).toBe(true);
+  });
+
+  it('leaves a walker out of it', () => {
+    const shrimp = shrimpMaterial();
+    shrimp.setFeatures(FEATURES);
+    expect(readsSlotComponent(deformed(shrimp), InstanceSlot.Display)).toBe(false);
+    expect(readsSlotComponent(deformed(shrimp), InstanceSlot.GillFlare)).toBe(false);
   });
 });
