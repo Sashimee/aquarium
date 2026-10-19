@@ -86,6 +86,7 @@ export interface HarnessOptions {
   careLimits?: CareLimits;
   legalLimits?: LegalLimits;
   handleLimit?: Limit;
+  collectionLimit?: Limit;
   publicLimits?: PublicLimits;
   testHooks?: boolean;
   push?: PushSender | null;
@@ -226,6 +227,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     ...(opts.careLimits ? { careLimits: opts.careLimits } : {}),
     ...(opts.legalLimits ? { legalLimits: opts.legalLimits } : {}),
     ...(opts.handleLimit ? { handleLimit: opts.handleLimit } : {}),
+    ...(opts.collectionLimit ? { collectionLimit: opts.collectionLimit } : {}),
     ...(opts.publicLimits ? { publicLimits: opts.publicLimits } : {}),
     logger: opts.logStream !== undefined,
     ...(opts.logStream ? { logStream: opts.logStream } : {}),
