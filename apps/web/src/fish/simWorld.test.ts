@@ -261,6 +261,7 @@ describe('stage in the sim', () => {
     roster.load({
       tankId: TANK_A,
       biome: 'reef',
+      size: 'standard',
       backgroundId: 'bg-reef-deep-blue',
       decorLayout: [],
       decorEdited: false,
@@ -516,6 +517,7 @@ describe('startWorld', () => {
     const payload = (stage: 'fry' | 'juvenile') => ({
       tankId: TANK_A,
       biome: 'reef' as const,
+      size: 'standard' as const,
       backgroundId: 'bg-reef-deep-blue' as const,
       decorLayout: [],
       decorEdited: false,
