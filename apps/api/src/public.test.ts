@@ -1,0 +1,390 @@
+import {
+  apiErrorSchema,
+  dataExportSchema,
+  PUBLIC_NAME_FALLBACK,
+  publicTankSchema,
+  reactionStateSchema,
+  tankSchema,
+} from '@aquarium/shared';
+import { eq } from 'drizzle-orm';
+import type { LightMyRequestResponse } from 'fastify';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { schema } from './db/index.ts';
+import { APP_ORIGIN, createHarness, type Harness } from './test-harness.ts';
+
+const PASSWORD = 'correct horse battery';
+const jsonHeaders = { 'content-type': 'application/json', origin: APP_ORIGIN };
+let counter = 0;
+
+const cookieOf = (res: LightMyRequestResponse) =>
+  res.cookies.map((c) => `${c.name}=${c.value}`).join('; ');
+
+async function account(h: Harness, verified = true) {
+  const email = `t61-${Date.now()}-${counter++}@bas.lu`;
+  await h.app.inject({
+    method: 'POST',
+    url: '/api/auth/sign-up/email',
+    headers: jsonHeaders,
+    payload: { email, password: PASSWORD, name: 'Tester', callbackURL: '/verify-email' },
+  });
+  const [user] = await h.database.db.select().from(schema.user).where(eq(schema.user.email, email));
+  if (!user) throw new Error('user missing');
+  const link = /https?:\/\/\S+verify-email\?\S+/.exec(
+    h.outbox.findLast((m) => m.to === email)?.text ?? '',
+  )?.[0];
+  if (!link) throw new Error('no verification link');
+  const url = new URL(link);
+  const cookie = cookieOf(await h.app.inject(url.pathname + url.search));
+  if (!verified) {
+    await h.database.db
+      .update(schema.user)
+      .set({ emailVerified: false })
+      .where(eq(schema.user.id, user.id));
+  }
+  return { cookie, userId: user.id, email };
+}
+
+const call = (
+  h: Harness,
+  cookie: string | null,
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+  url: string,
+  payload?: object,
+) =>
+  h.app.inject({
+    method,
+    url,
+    headers: { ...jsonHeaders, ...(cookie ? { cookie } : {}) },
+    ...(payload ? { payload } : {}),
+  });
+
+async function sharedTank(h: Harness, cookie: string, name = 'Reef corner') {
+  const created = await call(h, cookie, 'POST', '/api/tanks', { name, biome: 'freshwater' });
+  const tank = tankSchema.parse(created.json());
+  await call(h, cookie, 'POST', `/api/tanks/${tank.id}/fish`, {
+    species: 'neon-tetra',
+    name: 'Blip',
+  });
+  const shared = tankSchema.parse(
+    (await call(h, cookie, 'POST', `/api/tanks/${tank.id}/share`)).json(),
+  );
+  if (!shared.shareToken) throw new Error('no share token');
+  return { id: tank.id, token: shared.shareToken };
+}
+
+describe('public tank links', () => {
+  let h: Harness;
+  beforeAll(async () => {
+    h = await createHarness();
+  });
+  afterAll(() => h.close());
+
+  it('is private by default and opens only while shared', async () => {
+    const owner = await account(h);
+    const created = await call(h, owner.cookie, 'POST', '/api/tanks', {
+      name: 'Home',
+      biome: 'freshwater',
+    });
+    const tank = tankSchema.parse(created.json());
+    expect(tank.shareToken).toBeNull();
+
+    const { token } = await sharedTank(h, owner.cookie);
+    const open = await call(h, null, 'GET', `/api/public/${token}`);
+    expect(open.statusCode).toBe(200);
+    publicTankSchema.parse(open.json());
+
+    await call(h, owner.cookie, 'DELETE', `/api/tanks/${tank.id}/share`);
+    const mine = await sharedTank(h, owner.cookie);
+    await call(h, owner.cookie, 'DELETE', `/api/tanks/${mine.id}/share`);
+    const closed = await call(h, null, 'GET', `/api/public/${mine.token}`);
+    expect(closed.statusCode).toBe(404);
+    expect(apiErrorSchema.parse(closed.json()).error.code).toBe('not_found');
+  });
+
+  it('answers 404 for unknown and malformed tokens alike', async () => {
+    const unknown = await call(h, null, 'GET', `/api/public/${'A'.repeat(43)}`);
+    const malformed = await call(h, null, 'GET', '/api/public/short');
+    expect(unknown.statusCode).toBe(404);
+    expect(malformed.statusCode).toBe(404);
+    expect(malformed.json()).toEqual(unknown.json());
+  });
+
+  it('stops serving the old token after a rotation', async () => {
+    const owner = await account(h);
+    const { id, token } = await sharedTank(h, owner.cookie);
+    const rotated = tankSchema.parse(
+      (await call(h, owner.cookie, 'POST', `/api/tanks/${id}/share/rotate`)).json(),
+    );
+    expect((await call(h, null, 'GET', `/api/public/${token}`)).statusCode).toBe(404);
+    expect((await call(h, null, 'GET', `/api/public/${rotated.shareToken}`)).statusCode).toBe(200);
+  });
+
+  it('refuses to rotate a private tank, so rotation cannot publish it', async () => {
+    const owner = await account(h);
+    const tank = tankSchema.parse(
+      (
+        await call(h, owner.cookie, 'POST', '/api/tanks', { name: 'Home', biome: 'freshwater' })
+      ).json(),
+    );
+    const res = await call(h, owner.cookie, 'POST', `/api/tanks/${tank.id}/share/rotate`);
+    expect(res.statusCode).toBe(409);
+    const [row] = await h.database.db
+      .select()
+      .from(schema.tanks)
+      .where(eq(schema.tanks.id, tank.id));
+    expect(row?.shareToken).toBeNull();
+  });
+
+  it('sends noindex, no-store and no-referrer headers, even on a miss', async () => {
+    const owner = await account(h);
+    const { token } = await sharedTank(h, owner.cookie);
+    for (const url of [`/api/public/${token}`, `/api/public/${'B'.repeat(43)}`]) {
+      const res = await call(h, null, 'GET', url);
+      expect(res.headers['x-robots-tag']).toBe('noindex, nofollow');
+      expect(res.headers['cache-control']).toBe('no-store');
+      expect(res.headers['referrer-policy']).toBe('no-referrer');
+    }
+  });
+
+  it('exposes no owner identity, ids or email', async () => {
+    const owner = await account(h);
+    await call(h, owner.cookie, 'PUT', '/api/me/handle', { handle: `own${counter}xyz` });
+    const { id, token } = await sharedTank(h, owner.cookie);
+    const res = await call(h, null, 'GET', `/api/public/${token}`);
+    const text = res.body;
+    expect(text).not.toContain(owner.userId);
+    expect(text).not.toContain(owner.email);
+    expect(text).not.toContain(id);
+    expect(text).not.toContain(token);
+    expect(text).not.toContain(`own${counter}xyz`);
+    const [fish] = await h.database.db.select().from(schema.fish).where(eq(schema.fish.tankId, id));
+    expect(text).not.toContain(fish?.id ?? 'missing');
+    const body = publicTankSchema.parse(res.json());
+    expect(body.fish).toHaveLength(1);
+    expect(body.fish[0]?.name).toBe('Blip');
+  });
+
+  it('gives the same seeds on every read', async () => {
+    const owner = await account(h);
+    const { token } = await sharedTank(h, owner.cookie);
+    const a = publicTankSchema.parse((await call(h, null, 'GET', `/api/public/${token}`)).json());
+    const b = publicTankSchema.parse((await call(h, null, 'GET', `/api/public/${token}`)).json());
+    expect(b.seed).toBe(a.seed);
+    expect(b.fish[0]?.seed).toBe(a.fish[0]?.seed);
+  });
+
+  describe('word filter', () => {
+    it('refuses to share a tank whose name is blocked, then allows it once renamed', async () => {
+      const owner = await account(h);
+      const tank = tankSchema.parse(
+        (
+          await call(h, owner.cookie, 'POST', '/api/tanks', {
+            name: 'fuck tank',
+            biome: 'freshwater',
+          })
+        ).json(),
+      );
+      const refused = await call(h, owner.cookie, 'POST', `/api/tanks/${tank.id}/share`);
+      expect(refused.statusCode).toBe(400);
+      expect(apiErrorSchema.parse(refused.json()).error.code).toBe('validation_failed');
+      await call(h, owner.cookie, 'PATCH', `/api/tanks/${tank.id}`, { name: 'Calm tank' });
+      expect((await call(h, owner.cookie, 'POST', `/api/tanks/${tank.id}/share`)).statusCode).toBe(
+        200,
+      );
+    });
+
+    it('refuses a blocked rename while shared, but allows it while private', async () => {
+      const owner = await account(h);
+      const { id } = await sharedTank(h, owner.cookie);
+      const refused = await call(h, owner.cookie, 'PATCH', `/api/tanks/${id}`, {
+        name: 'big dick tank',
+      });
+      expect(refused.statusCode).toBe(400);
+      await call(h, owner.cookie, 'DELETE', `/api/tanks/${id}/share`);
+      const allowed = await call(h, owner.cookie, 'PATCH', `/api/tanks/${id}`, {
+        name: 'big dick tank',
+      });
+      expect(allowed.statusCode).toBe(200);
+    });
+
+    it('masks names the filter has since learned to block', async () => {
+      const owner = await account(h);
+      const { id, token } = await sharedTank(h, owner.cookie);
+      await h.database.db
+        .update(schema.tanks)
+        .set({ name: 'shit show' })
+        .where(eq(schema.tanks.id, id));
+      await h.database.db
+        .update(schema.fish)
+        .set({ name: 'Fuckface' })
+        .where(eq(schema.fish.tankId, id));
+      const body = publicTankSchema.parse(
+        (await call(h, null, 'GET', `/api/public/${token}`)).json(),
+      );
+      expect(body.name).toBe(PUBLIC_NAME_FALLBACK);
+      expect(body.fish[0]?.name).toBe('neon-tetra');
+    });
+  });
+
+  describe('reactions', () => {
+    it('needs a signed-in, verified user', async () => {
+      const owner = await account(h);
+      const { token } = await sharedTank(h, owner.cookie);
+      const url = `/api/public/${token}/reaction`;
+      expect((await call(h, null, 'PUT', url, { kind: 'heart' })).statusCode).toBe(401);
+      expect((await call(h, null, 'DELETE', url)).statusCode).toBe(401);
+      const unverified = await account(h, false);
+      const res = await call(h, unverified.cookie, 'PUT', url, { kind: 'heart' });
+      expect(res.statusCode).toBe(403);
+      expect(apiErrorSchema.parse(res.json()).error.code).toBe('email_not_verified');
+    });
+
+    it('counts one reaction per user, lets them change it and take it back', async () => {
+      const owner = await account(h);
+      const alice = await account(h);
+      const bob = await account(h);
+      const { token } = await sharedTank(h, owner.cookie);
+      const url = `/api/public/${token}/reaction`;
+
+      const first = reactionStateSchema.parse(
+        (await call(h, alice.cookie, 'PUT', url, { kind: 'heart' })).json(),
+      );
+      expect(first).toEqual({ reactions: { heart: 1, star: 0, wow: 0 }, myReaction: 'heart' });
+      await call(h, bob.cookie, 'PUT', url, { kind: 'heart' });
+      const changed = reactionStateSchema.parse(
+        (await call(h, alice.cookie, 'PUT', url, { kind: 'wow' })).json(),
+      );
+      expect(changed).toEqual({ reactions: { heart: 1, star: 0, wow: 1 }, myReaction: 'wow' });
+
+      const anon = publicTankSchema.parse(
+        (await call(h, null, 'GET', `/api/public/${token}`)).json(),
+      );
+      expect(anon.reactions).toEqual({ heart: 1, star: 0, wow: 1 });
+      expect(anon.myReaction).toBeNull();
+      const asBob = publicTankSchema.parse(
+        (await call(h, bob.cookie, 'GET', `/api/public/${token}`)).json(),
+      );
+      expect(asBob.myReaction).toBe('heart');
+
+      const removed = reactionStateSchema.parse(
+        (await call(h, alice.cookie, 'DELETE', url)).json(),
+      );
+      expect(removed).toEqual({ reactions: { heart: 1, star: 0, wow: 0 }, myReaction: null });
+    });
+
+    it('rejects unknown kinds, unknown tokens and the owner’s own tank', async () => {
+      const owner = await account(h);
+      const guest = await account(h);
+      const { token } = await sharedTank(h, owner.cookie);
+      const url = `/api/public/${token}/reaction`;
+      expect((await call(h, guest.cookie, 'PUT', url, { kind: 'poop' })).statusCode).toBe(400);
+      expect(
+        (await call(h, guest.cookie, 'PUT', url, { kind: 'heart', extra: 1 })).statusCode,
+      ).toBe(400);
+      expect(
+        (
+          await call(h, guest.cookie, 'PUT', `/api/public/${'C'.repeat(43)}/reaction`, {
+            kind: 'heart',
+          })
+        ).statusCode,
+      ).toBe(404);
+      expect((await call(h, owner.cookie, 'PUT', url, { kind: 'heart' })).statusCode).toBe(403);
+    });
+
+    it('stops counting once the link is revoked', async () => {
+      const owner = await account(h);
+      const guest = await account(h);
+      const { id, token } = await sharedTank(h, owner.cookie);
+      await call(h, guest.cookie, 'PUT', `/api/public/${token}/reaction`, { kind: 'star' });
+      await call(h, owner.cookie, 'DELETE', `/api/tanks/${id}/share`);
+      const res = await call(h, guest.cookie, 'PUT', `/api/public/${token}/reaction`, {
+        kind: 'heart',
+      });
+      expect(res.statusCode).toBe(404);
+    });
+
+    it('is exported with the account and deleted with it', async () => {
+      const owner = await account(h);
+      const guest = await account(h);
+      const { id, token } = await sharedTank(h, owner.cookie);
+      await call(h, guest.cookie, 'PUT', `/api/public/${token}/reaction`, { kind: 'star' });
+      const exported = dataExportSchema.parse(
+        (await call(h, guest.cookie, 'POST', '/api/me/export', {})).json(),
+      );
+      expect(exported.reactions).toHaveLength(1);
+      expect(exported.reactions[0]).toMatchObject({ tankId: id, kind: 'star' });
+      expect(JSON.stringify(exported)).not.toContain(token);
+
+      const deleted = await call(h, guest.cookie, 'POST', '/api/me/delete', { password: PASSWORD });
+      expect(deleted.statusCode).toBe(204);
+      const left = await h.database.db
+        .select()
+        .from(schema.tankReactions)
+        .where(eq(schema.tankReactions.tankId, id));
+      expect(left).toHaveLength(0);
+    });
+  });
+
+  describe('audit', () => {
+    it('records share changes and reactions without any token', async () => {
+      const owner = await account(h);
+      const guest = await account(h);
+      const { id, token } = await sharedTank(h, owner.cookie);
+      await call(h, owner.cookie, 'POST', `/api/tanks/${id}/share`);
+      const rotated = tankSchema.parse(
+        (await call(h, owner.cookie, 'POST', `/api/tanks/${id}/share/rotate`)).json(),
+      );
+      const url = `/api/public/${rotated.shareToken}/reaction`;
+      await call(h, guest.cookie, 'PUT', url, { kind: 'wow' });
+      await call(h, guest.cookie, 'DELETE', url);
+      await call(h, guest.cookie, 'DELETE', url);
+      await call(h, owner.cookie, 'DELETE', `/api/tanks/${id}/share`);
+
+      const rows = await h.database.db
+        .select()
+        .from(schema.auditLog)
+        .where(eq(schema.auditLog.tankId, id))
+        .orderBy(schema.auditLog.id);
+      expect(rows.map((r) => [r.action, r.actorId])).toEqual([
+        ['share_enabled', owner.userId],
+        ['share_rotated', owner.userId],
+        ['reaction_set', guest.userId],
+        ['reaction_removed', guest.userId],
+        ['share_revoked', owner.userId],
+      ]);
+      expect(rows[2]?.detail).toEqual({ kind: 'wow' });
+      const dump = JSON.stringify(rows);
+      expect(dump).not.toContain(token);
+      expect(dump).not.toContain(rotated.shareToken ?? 'missing');
+    });
+  });
+});
+
+describe('public rate limits', () => {
+  it('answers 429 on reads past the per-IP limit', async () => {
+    const h = await createHarness({
+      publicLimits: {
+        view: { max: 2, windowMs: 60_000 },
+        react: { max: 2, windowMs: 60_000 },
+      },
+    });
+    try {
+      const owner = await account(h);
+      const guest = await account(h);
+      const { token } = await sharedTank(h, owner.cookie);
+      const codes: number[] = [];
+      for (let i = 0; i < 3; i++)
+        codes.push((await call(h, null, 'GET', `/api/public/${token}`)).statusCode);
+      expect(codes).toEqual([200, 200, 429]);
+
+      const url = `/api/public/${token}/reaction`;
+      const reacts: number[] = [];
+      for (const kind of ['heart', 'star', 'wow'] as const) {
+        reacts.push((await call(h, guest.cookie, 'PUT', url, { kind })).statusCode);
+      }
+      expect(reacts).toEqual([200, 200, 429]);
+    } finally {
+      await h.close();
+    }
+  });
+});

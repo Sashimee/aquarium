@@ -70,7 +70,7 @@ export function registerLegalRoutes(deps: LegalDeps): void {
     const [user] = await db.select().from(schema.user).where(eq(schema.user.id, userId));
     if (!user) return unauthenticated(reply);
 
-    const [sessions, accounts, passkeys, tanks] = await Promise.all([
+    const [sessions, accounts, passkeys, tanks, reactions] = await Promise.all([
       db
         .select({
           id: schema.session.id,
@@ -109,6 +109,15 @@ export function registerLegalRoutes(deps: LegalDeps): void {
         .from(schema.tanks)
         .where(eq(schema.tanks.ownerId, userId))
         .orderBy(asc(schema.tanks.createdAt)),
+      db
+        .select({
+          tankId: schema.tankReactions.tankId,
+          kind: schema.tankReactions.kind,
+          createdAt: schema.tankReactions.createdAt,
+        })
+        .from(schema.tankReactions)
+        .where(eq(schema.tankReactions.userId, userId))
+        .orderBy(asc(schema.tankReactions.createdAt)),
     ]);
 
     const perTank = await Promise.all(
@@ -154,6 +163,7 @@ export function registerLegalRoutes(deps: LegalDeps): void {
             hasPassword: hasPassword !== null,
           })),
           passkeys,
+          reactions,
           tanks: perTank,
         }),
       ),

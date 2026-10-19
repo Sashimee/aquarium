@@ -4,6 +4,7 @@ import {
   backgroundIdSchema,
   careActionSchema,
   chemistrySchema,
+  containsBlockedWord,
   createTankRequestSchema,
   DEFAULT_BACKGROUND_ID,
   decorLayoutSchema,
@@ -46,6 +47,7 @@ import { randomBytes, randomInt } from 'node:crypto';
 import { and, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { audit } from './audit.ts';
 import type { Clock } from './clock.ts';
 import { schema, type Database } from './db/index.ts';
 import { apiError } from './errors.ts';
@@ -111,6 +113,16 @@ const rollPersonality = () => ({
   sociability: rollTrait(),
 });
 
+const nameNotPublic = () =>
+  new HttpError(
+    400,
+    apiError(
+      'validation_failed',
+      'A shared tank is shown by name, and this name is not allowed. Pick another name.',
+      [{ path: ['name'], message: 'this name is not allowed on a shared tank' }],
+    ),
+  );
+
 const notFound = () => new HttpError(404, apiError('not_found', 'Tank not found.'));
 
 function toLifecycleFish(row: FishRow): LifecycleFish {
@@ -131,7 +143,7 @@ function storedLayout(row: TankRow) {
   return row.decorLayout === null ? [] : decorLayoutSchema.parse(row.decorLayout);
 }
 
-function storedBackground(row: TankRow) {
+export function storedBackground(row: TankRow) {
   if (row.backgroundId !== null) {
     const stored = backgroundIdSchema.safeParse(row.backgroundId);
     if (!stored.success) {
@@ -461,6 +473,13 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       const body = updateTankRequestSchema.parse(req.body);
       throttle(user.id, 'care');
       return withTank(user, tankId, async (tx, ticked) => {
+        if (
+          body.name !== undefined &&
+          ticked.tank.shareToken !== null &&
+          containsBlockedWord(body.name)
+        ) {
+          throw nameNotPublic();
+        }
         if (body.decorLayout !== undefined) {
           const problems = findDecorProblems(
             ticked.tank.biome,
@@ -525,11 +544,22 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       throttle(user.id, 'care');
       return withTank(user, tankId, async (tx, ticked) => {
         if (ticked.tank.shareToken !== null) return render(tx, ticked);
+        if (containsBlockedWord(ticked.tank.name)) {
+          throw new HttpError(
+            400,
+            apiError(
+              'validation_failed',
+              'This tank name is not allowed on a shared tank. Rename the tank first.',
+              [{ path: ['name'], message: 'this name is not allowed on a shared tank' }],
+            ),
+          );
+        }
         const [row] = await tx
           .update(schema.tanks)
           .set({ shareToken: randomBytes(32).toString('base64url') })
           .where(eq(schema.tanks.id, tankId))
           .returning();
+        await audit(tx, { action: 'share_enabled', actorId: user.id, tankId });
         return render(tx, { ...ticked, tank: row ?? ticked.tank });
       });
     }),
@@ -542,11 +572,18 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       const { tankId } = tankParamsSchema.parse(req.params);
       throttle(user.id, 'care');
       return withTank(user, tankId, async (tx, ticked) => {
+        if (ticked.tank.shareToken === null) {
+          throw new HttpError(
+            409,
+            apiError('conflict', 'This tank is not shared. Share it first.'),
+          );
+        }
         const [row] = await tx
           .update(schema.tanks)
           .set({ shareToken: randomBytes(32).toString('base64url') })
           .where(eq(schema.tanks.id, tankId))
           .returning();
+        await audit(tx, { action: 'share_rotated', actorId: user.id, tankId });
         return render(tx, { ...ticked, tank: row ?? ticked.tank });
       });
     }),
@@ -559,11 +596,13 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       const { tankId } = tankParamsSchema.parse(req.params);
       throttle(user.id, 'care');
       return withTank(user, tankId, async (tx, ticked) => {
+        const wasShared = ticked.tank.shareToken !== null;
         const [row] = await tx
           .update(schema.tanks)
           .set({ shareToken: null })
           .where(eq(schema.tanks.id, tankId))
           .returning();
+        if (wasShared) await audit(tx, { action: 'share_revoked', actorId: user.id, tankId });
         return render(tx, { ...ticked, tank: row ?? ticked.tank });
       });
     }),

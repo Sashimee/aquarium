@@ -23,6 +23,7 @@ export const dataExportSchema = z.strictObject({
   sessions: z.array(exportedRow),
   signInMethods: z.array(exportedRow),
   passkeys: z.array(exportedRow),
+  reactions: z.array(exportedRow),
   tanks: z.array(
     z.strictObject({
       tank: exportedRow,

@@ -257,3 +257,38 @@ export const releasedHandles = pgTable('released_handles', {
   handle: text('handle').primaryKey(),
   releasedAt: timestamptz('released_at').notNull().defaultNow(),
 });
+
+export const reactionKindEnum = pgEnum('reaction_kind', ['heart', 'star', 'wow']);
+
+export const tankReactions = pgTable(
+  'tank_reactions',
+  {
+    tankId: uuid('tank_id')
+      .notNull()
+      .references(() => tanks.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    kind: reactionKindEnum('kind').notNull(),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.tankId, t.userId] }),
+    index('tank_reactions_user_id_idx').on(t.userId),
+  ],
+);
+
+export const auditLog = pgTable(
+  'audit_log',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    at: timestamptz('at').notNull().defaultNow(),
+    actorId: text('actor_id').references(() => user.id, { onDelete: 'set null' }),
+    tankId: uuid('tank_id').references(() => tanks.id, { onDelete: 'set null' }),
+    action: text('action').notNull(),
+    detail: jsonb('detail')
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+  },
+  (t) => [index('audit_log_tank_id_at_idx').on(t.tankId, t.at)],
+);

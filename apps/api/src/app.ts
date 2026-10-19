@@ -27,6 +27,7 @@ import { schema, type Database } from './db/index.ts';
 import { apiError } from './errors.ts';
 import { loadCredits } from './credits.ts';
 import { DEFAULT_HANDLE_LIMIT, registerHandleRoutes } from './handle.ts';
+import { DEFAULT_PUBLIC_LIMITS, registerPublicRoutes, type PublicLimits } from './public.ts';
 import { DEFAULT_LEGAL_LIMITS, registerLegalRoutes, type LegalLimits } from './legal.ts';
 import type { IpAdmission, Mailer } from './mail.ts';
 import { RateLimiter, type Limit, type ResettableHitStore } from './rate-limit.ts';
@@ -47,6 +48,7 @@ export interface AppOptions {
   careLimits?: CareLimits;
   legalLimits?: LegalLimits;
   handleLimit?: Limit;
+  publicLimits?: PublicLimits;
   testHooks?: boolean;
   logger?: boolean;
   logStream?: { write(chunk: string): void };
@@ -218,6 +220,7 @@ function normalizedPathname(url: string): string {
   return '/' + decoded.replace(/^\/+/, '').replace(/\/{2,}/g, '/');
 }
 
+const PUBLIC_PATH_PREFIX = '/api/public/';
 const TOKEN_PATH_PREFIXES = [`${AUTH_BASE_PATH}/reset-password/`, `${AUTH_BASE_PATH}/callback/`];
 // Pages and links whose URL holds a one-time token. The strict-origin-when-cross-origin default
 // would still send the full URL to same-origin subresources (JS, CSS, /api/me) on first load. The
@@ -229,6 +232,7 @@ function carriesUrlToken(url: string): boolean {
   return (
     TOKEN_PAGES.has(path) ||
     path === `${AUTH_BASE_PATH}/verify-email` ||
+    path.startsWith(PUBLIC_PATH_PREFIX) ||
     TOKEN_PATH_PREFIXES.some((prefix) => path.startsWith(prefix))
   );
 }
@@ -238,6 +242,8 @@ const TOKEN_LIKE_SEGMENT = /^[A-Za-z0-9]{20,}$/;
 export function redactUrl(url: string): string {
   const path = normalizedPathname(url);
   const lower = path.toLowerCase();
+  if (lower.startsWith(PUBLIC_PATH_PREFIX))
+    return `${path.slice(0, PUBLIC_PATH_PREFIX.length)}[redacted]`;
   const prefix = TOKEN_PATH_PREFIXES.find((p) => lower.startsWith(p));
   if (prefix) {
     const rest = path.slice(prefix.length);
@@ -585,6 +591,14 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     database,
     limiter,
     limit: opts.handleLimit ?? DEFAULT_HANDLE_LIMIT,
+    currentUser: async (req) => (await currentSession(req))?.user ?? null,
+  });
+
+  registerPublicRoutes({
+    app,
+    database,
+    limiter,
+    limits: opts.publicLimits ?? DEFAULT_PUBLIC_LIMITS,
     currentUser: async (req) => (await currentSession(req))?.user ?? null,
   });
 
