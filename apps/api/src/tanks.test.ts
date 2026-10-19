@@ -136,6 +136,10 @@ describe('tanks and fish', () => {
       disease: null,
     });
     expect(personalitySchema.safeParse(stocked.fish[0]?.personality).success).toBe(true);
+    const restocked = await addFish(h, cookie, tank.id);
+    const [first, second] = restocked.fish;
+    expect(second).toBeDefined();
+    expect(second?.personality).not.toEqual(first?.personality);
   });
 
   it('serves breeding and chemistry tolerances with defaults for species that declare none', async () => {
@@ -414,6 +418,99 @@ describe('server-authoritative lifecycle', () => {
     const lagMs = h.clock.now() - (row?.lastTickAt.getTime() ?? 0);
     expect(lagMs).toBeGreaterThanOrEqual(0);
     expect(lagMs).toBeLessThan(10 * 60_000 + 5_000);
+  });
+
+  it('breeds a fed pair in range, stores the fry and reports them as away', async () => {
+    const cookie = await signedIn(h);
+    const tank = await createTank(h, cookie);
+    await addFish(h, cookie, tank.id, 'guppy', 'Mum');
+    const withBoth = await addFish(h, cookie, tank.id, 'guppy', 'Dad');
+    const [mum, dad] = withBoth.fish;
+    const grownUp = new Date(h.clock.now() - 400 * DAY * 60_000);
+    await h.database.db
+      .update(schema.fish)
+      .set({ sex: 'female', bornAt: grownUp })
+      .where(eq(schema.fish.id, mum?.id ?? ''));
+    await h.database.db
+      .update(schema.fish)
+      .set({ sex: 'male', bornAt: grownUp })
+      .where(eq(schema.fish.id, dad?.id ?? ''));
+
+    let seen = null;
+    for (let i = 0; i < 40 && !seen; i++) {
+      await h.database.db
+        .update(schema.fish)
+        .set({ hunger: 0 })
+        .where(eq(schema.fish.tankId, tank.id));
+      await advance(h, 6 * 60);
+      const read = tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${tank.id}`)).json());
+      if (read.away?.births?.length) seen = read;
+    }
+    if (!seen) throw new Error('no brood within 10 simulated days');
+
+    const fry = seen.fish.filter((f) => f.stage === 'fry');
+    expect(fry.length).toBe(seen.away?.births?.length);
+    expect(fry.length).toBeGreaterThanOrEqual(3);
+    expect(fry.length).toBeLessThanOrEqual(8);
+    expect(fry.every((f) => f.species === 'guppy' && f.status === 'alive')).toBe(true);
+    expect(seen.away?.births?.every((b) => b.parentId === mum?.id)).toBe(true);
+    expect(seen.fish.filter((f) => f.status === 'alive').length).toBeLessThanOrEqual(
+      TANK_SIZES.standard.maxAnimals,
+    );
+
+    const [parent] = await h.database.db
+      .select()
+      .from(schema.fish)
+      .where(eq(schema.fish.id, mum?.id ?? ''));
+    expect(parent?.lastBroodAt).not.toBeNull();
+    const events = await h.database.db
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.tankId, tank.id));
+    expect(events.filter((e) => e.kind === 'born')).toHaveLength(fry.length);
+
+    const again = tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${tank.id}`)).json());
+    expect(again.away?.births ?? []).toHaveLength(0);
+    expect(again.fish.filter((f) => f.stage === 'fry')).toHaveLength(fry.length);
+  });
+
+  it('survives a long catch-up in which fry are born and then starve', async () => {
+    const cookie = await signedIn(h);
+    let found = false;
+    for (let attempt = 0; attempt < 12 && !found; attempt++) {
+      const tank = await createTank(h, cookie);
+      await addFish(h, cookie, tank.id, 'guppy', 'Mum');
+      const withBoth = await addFish(h, cookie, tank.id, 'guppy', 'Dad');
+      const [mum, dad] = withBoth.fish;
+      const grownUp = new Date(h.clock.now() - 400 * DAY * 60_000);
+      await h.database.db
+        .update(schema.fish)
+        .set({ sex: 'female', bornAt: grownUp })
+        .where(eq(schema.fish.id, mum?.id ?? ''));
+      await h.database.db
+        .update(schema.fish)
+        .set({ sex: 'male', bornAt: grownUp })
+        .where(eq(schema.fish.id, dad?.id ?? ''));
+      await advance(h, 25 * 24 * 60);
+
+      const res = await call(h, cookie, 'GET', `/api/tanks/${tank.id}`);
+      expect(res.statusCode).toBe(200);
+      const read = tankSchema.parse(res.json());
+      const births = read.away?.births ?? [];
+      const bornIds = new Set(births.map((b) => b.fishId));
+      const fryDeaths = (read.away?.deaths ?? []).filter((d) => bornIds.has(d.fishId));
+      for (const d of fryDeaths) {
+        expect(read.fish.find((f) => f.id === d.fishId)?.status).toBe('dead');
+      }
+      for (const f of read.fish.filter((x) => bornIds.has(x.id))) {
+        const died = fryDeaths.some((d) => d.fishId === f.id);
+        expect(f.status).toBe(died ? 'dead' : 'alive');
+      }
+      const again = await call(h, cookie, 'GET', `/api/tanks/${tank.id}`);
+      expect(again.statusCode).toBe(200);
+      if (fryDeaths.length > 0) found = true;
+    }
+    expect(found).toBe(true);
   });
 
   it('gives a new account 48 h of grace, then the fish starve', async () => {

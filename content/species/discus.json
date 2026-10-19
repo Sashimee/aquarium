@@ -15,6 +15,14 @@
     "traits": ["shoal"]
   },
   "biome": "freshwater",
+  "breeding": {
+    "broodSize": [3, 8],
+    "fryGrowth": { "adultAfterDays": 450, "juvenileAfterDays": 45 },
+    "intervalDays": 21,
+    "minAgeDays": 450,
+    "mode": "substrate-spawner",
+    "temperatureC": [28, 31]
+  },
   "commonName": "Discus",
   "id": "discus",
   "lifecycle": {

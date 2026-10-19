@@ -197,7 +197,8 @@ describe('privacy and credits', () => {
     expect(credits.shareAlikeNotice).toMatch(/BY-SA/);
     for (const e of credits.entries) {
       expect(e.referenceOnly).toBe(e.kind === 'reference-photo' && e.modifications.length === 0);
-      if ((e.licence === 'CC0-1.0' && e.kind !== 'reference-photo') || e.referenceOnly)
+      if (e.kind === 'background') expect(e.modifications.length).toBeGreaterThan(0);
+      else if ((e.licence === 'CC0-1.0' && e.kind !== 'reference-photo') || e.referenceOnly)
         expect(e.modifications).toEqual([]);
       else expect(e.modifications.length).toBeGreaterThan(0);
     }
