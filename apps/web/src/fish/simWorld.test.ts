@@ -22,6 +22,8 @@ import {
   SimInitTimeout,
   SimWorkerFailure,
   SimWorldSpec,
+  stageChanges,
+  staleStages,
   startWorld,
   type SimInit,
   type WorldControls,
@@ -174,6 +176,7 @@ describe('SimWorldSpec', () => {
         species: 'ocellaris-clownfish',
         bodyLengthM: 0.07,
         hunger: 0.1,
+        stage: 'adult',
       },
     ]);
     expect(config?.species).toBe(allSpeciesInputs());
@@ -253,6 +256,105 @@ describe('SimWorldSpec', () => {
   });
 });
 
+describe('stage in the sim', () => {
+  const load = (roster: TankRoster, stage: 'fry' | 'juvenile' | 'adult') =>
+    roster.load({
+      tankId: TANK_A,
+      biome: 'reef',
+      backgroundId: 'bg-reef-deep-blue',
+      decorLayout: [],
+      decorEdited: false,
+      fish: [fishFixture(FISH_1, { ...CLOWN, stage })],
+    });
+
+  it('spawns a saved fish at its stage and leaves demo fish without one', () => {
+    const { spec, roster } = setup();
+    expect(spec.config(roster.swimming())?.fish.every((f) => f.stage === undefined)).toBe(true);
+    load(roster, 'fry');
+    const config = spec.config(roster.swimming());
+    expect(config?.fish.map((f) => f.stage)).toEqual(['fry']);
+    if (config === null) throw new Error('no world');
+    expect(() => new World(config)).not.toThrow();
+  });
+
+  it('lists a fish that grew while in the world, once', () => {
+    const roster = new TankRoster(DEMO.config.fish);
+    load(roster, 'fry');
+    const simId = roster.simIdOf(FISH_1) as string;
+    const payload = {
+      tankId: TANK_A,
+      fish: [fishFixture(FISH_1, { ...CLOWN, stage: 'juvenile' as const })],
+    };
+    const before = roster.stagesOf(payload);
+    const changed = roster.updated(payload);
+    expect(stageChanges(before, changed, new Set([simId]))).toEqual([
+      { id: simId, stage: 'juvenile' },
+    ]);
+    expect(
+      stageChanges(roster.stagesOf(payload), roster.updated(payload), new Set([simId])),
+    ).toEqual([]);
+  });
+
+  it('skips fish the world does not hold yet, and a world that is not up', () => {
+    const roster = new TankRoster(DEMO.config.fish);
+    load(roster, 'fry');
+    const payload = {
+      tankId: TANK_A,
+      fish: [fishFixture(FISH_1, { ...CLOWN, stage: 'adult' as const })],
+    };
+    const before = roster.stagesOf(payload);
+    const changed = roster.updated(payload);
+    expect(stageChanges(before, changed, new Set())).toEqual([]);
+    expect(stageChanges(before, changed, null)).toEqual([]);
+  });
+
+  it('is accepted by a running world', () => {
+    const { spec, roster } = setup();
+    load(roster, 'fry');
+    const config = spec.config(roster.swimming());
+    if (config === null) throw new Error('no world');
+    const world = new World(config);
+    const id = roster.simIdOf(FISH_1) as string;
+    expect(() => world.setStage(id, 'juvenile')).not.toThrow();
+  });
+});
+
+describe('staleStages', () => {
+  const spawn = (id: string, stage?: 'fry' | 'juvenile' | 'adult') => ({
+    id,
+    species: 'neon-tetra',
+    ...(stage === undefined ? {} : { stage }),
+  });
+
+  it('lists only spawns whose fish is now at another saved stage', () => {
+    const now = new Map<string, 'fry' | 'juvenile' | 'adult' | null>([
+      ['grew', 'juvenile'],
+      ['same', 'fry'],
+      ['demo', null],
+      ['unstaged', 'adult'],
+    ]);
+    expect(
+      staleStages(
+        [
+          spawn('grew', 'fry'),
+          spawn('same', 'fry'),
+          spawn('demo'),
+          spawn('gone', 'fry'),
+          spawn('unstaged'),
+        ],
+        (id) => now.get(id),
+      ),
+    ).toEqual([
+      { id: 'grew', stage: 'juvenile' },
+      { id: 'unstaged', stage: 'adult' },
+    ]);
+  });
+
+  it('is empty with no spawns', () => {
+    expect(staleStages([], () => 'adult')).toEqual([]);
+  });
+});
+
 describe('layoutChanges', () => {
   const spawn = (id: string) => ({ id, species: 'neon-tetra' });
 
@@ -284,6 +386,7 @@ describe('startWorld', () => {
       calls,
       sim: {
         setLight: (level) => calls.push(['light', level]),
+        setStage: (id, stage) => calls.push(['stage', { id, stage }]),
         setDecor: (decor) => calls.push(['decor', decor]),
         setAnchors: (anchors) => calls.push(['anchors', anchors]),
         setToys: (toys) => calls.push(['toys', toys]),
@@ -324,6 +427,7 @@ describe('startWorld', () => {
     const started = startWorld(sim, spec, config, init.promise, {
       current: () => true,
       light: () => light,
+      stage: () => undefined,
       begin: (ready) => calls.push(['begin', ready]),
     });
 
@@ -351,6 +455,7 @@ describe('startWorld', () => {
     await startWorld(sim, spec, demoConfig(spec, roster), Promise.resolve(READY), {
       current: () => true,
       light: () => 1,
+      stage: () => undefined,
       begin: () => undefined,
     });
     expect(calls).toEqual([['light', 1], ['start']]);
@@ -366,6 +471,7 @@ describe('startWorld', () => {
       await startWorld(sim, spec, config, Promise.resolve(READY), {
         current: () => true,
         light: () => 1,
+        stage: () => undefined,
         begin: () => undefined,
       });
       expect(calls).toEqual([['light', 1], ['toys', [mirror]], ['start']]);
@@ -380,6 +486,7 @@ describe('startWorld', () => {
     await startWorld(sim, spec, demoConfig(spec, roster), Promise.resolve(READY), {
       current: () => true,
       light: () => 1,
+      stage: () => undefined,
       begin: () => undefined,
     });
     expect(calls).toEqual([['light', 1], ['start']]);
@@ -393,6 +500,7 @@ describe('startWorld', () => {
     const started = startWorld(sim, spec, demoConfig(spec, roster), init.promise, {
       current: () => current,
       light: () => 1,
+      stage: () => undefined,
       begin: (ready) => calls.push(['begin', ready]),
     });
     spec.setDecor([ROCK]);
@@ -400,6 +508,41 @@ describe('startWorld', () => {
     init.answer(READY);
     await started;
     expect(calls).toEqual([]);
+  });
+
+  it('sends the stage a fish grew into while its world was starting, before it begins', async () => {
+    const { spec } = setup();
+    const roster = new TankRoster(DEMO.config.fish);
+    const payload = (stage: 'fry' | 'juvenile') => ({
+      tankId: TANK_A,
+      biome: 'reef' as const,
+      backgroundId: 'bg-reef-deep-blue' as const,
+      decorLayout: [],
+      decorEdited: false,
+      fish: [fishFixture(FISH_1, { ...CLOWN, stage })],
+    });
+    roster.load(payload('fry'));
+    const simId = roster.simIdOf(FISH_1) as string;
+    const config = demoConfig(spec, roster);
+    const { sim, calls } = recorder();
+    const init = pending();
+    const started = startWorld(sim, spec, config, init.promise, {
+      current: () => true,
+      light: () => 1,
+      stage: (id) => roster.get(id)?.stage,
+      begin: (ready) => calls.push(['begin', ready]),
+    });
+
+    const update = { tankId: TANK_A, fish: payload('juvenile').fish };
+    expect(stageChanges(roster.stagesOf(update), roster.updated(update), null)).toEqual([]);
+    init.answer(READY);
+    await started;
+    expect(calls).toEqual([
+      ['light', 1],
+      ['stage', { id: simId, stage: 'juvenile' }],
+      ['begin', READY],
+      ['start'],
+    ]);
   });
 
   it('passes on a failed init without starting anything', async () => {
@@ -410,6 +553,7 @@ describe('startWorld', () => {
       startWorld(sim, spec, demoConfig(spec, roster), Promise.reject(failure), {
         current: () => true,
         light: () => 1,
+        stage: () => undefined,
         begin: () => undefined,
       }),
     ).rejects.toBe(failure);

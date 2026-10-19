@@ -15,8 +15,14 @@ import type { ApiClient } from '../ui/api';
 import { AteUploader, type AteUploaderOptions } from './ateUploader';
 import { withRetry, realSleep, type Sleep } from './backoff';
 import { LayoutSaver } from './layout';
+import {
+  ACCLIMATION_SECONDS,
+  birthSentence,
+  newborns,
+  shouldShowAway,
+  speciesNameMap,
+} from './life';
 import { SaveStatusMerge } from './saveStatus';
-import { ACCLIMATION_SECONDS, shouldShowAway } from './life';
 import { describeSyncError } from './messages';
 import { INITIAL_STATE, type SessionState } from './state';
 import { diffFish, isStaleSnapshot, upsertTank } from './reconcile';
@@ -160,6 +166,7 @@ export class TankSession {
       pendingNet: null,
       error: null,
       notice: null,
+      birth: null,
     });
     try {
       const [species, tanks] = await withRetry(
@@ -206,6 +213,17 @@ export class TankSession {
 
   clearMessages(): void {
     this.patch({ error: null, notice: null });
+  }
+
+  dismissBirth(): void {
+    if (this.state.birth) this.patch({ birth: null });
+  }
+
+  focusBrood(): void {
+    const { birth } = this.state;
+    if (!birth) return;
+    this.deps.interaction.emit('camera:focus-fish', { fishIds: birth.fishIds });
+    this.patch({ birth: null });
   }
 
   async select(tankId: string): Promise<void> {
@@ -440,7 +458,7 @@ export class TankSession {
     this.loadedId = null;
     this.uploader = null;
     for (const bag of this.state.bagged) this.cancelRelease(bag.fishId);
-    this.patch({ bagged: [] });
+    this.patch({ bagged: [], birth: null });
     if (tankId) this.deps.interaction.emit('tank:unloaded', { tankId, reason });
     return uploader;
   }
@@ -526,6 +544,16 @@ export class TankSession {
       const acclimate = options.acclimateNew === true && fish.status === 'alive';
       interaction.emit('tank:fish-added', { tankId: tank.id, fish, acclimate });
       if (acclimate) this.bag(tank.id, fish.id, fish.name);
+    }
+    const brood = newborns(diff.added, options.acclimateNew === true);
+    if (brood.length > 0) {
+      this.patch({
+        birth: {
+          tankId: tank.id,
+          fishIds: brood.map((f) => f.id),
+          text: birthSentence(brood, speciesNameMap(this.state.species)),
+        },
+      });
     }
     for (const fish of diff.died) {
       this.cancelRelease(fish.id);

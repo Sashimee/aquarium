@@ -164,6 +164,19 @@ export class TankRoster {
     return entry;
   }
 
+  /** The stage each of `fish` has here, by sim id, for the fish this roster holds. */
+  stagesOf({
+    tankId,
+    fish,
+  }: InteractionEvents['tank:fish-updated']): Map<string, FishStage | null> {
+    const stages = new Map<string, FishStage | null>();
+    for (const f of fish) {
+      const entry = this.saved(tankId, f.id);
+      if (entry !== undefined) stages.set(entry.simId, entry.stage);
+    }
+    return stages;
+  }
+
   /**
    * Moves living fish to the server's hunger, health, disease and stage. Never changes the swimming
    * set.

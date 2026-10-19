@@ -38,6 +38,9 @@ import {
 import { ImpostorSlot, type ImpostorAtlas, type ImpostorInstanceData } from './impostor';
 import {
   bodyBend,
+  diseasedAlbedo,
+  distantDiseaseMarks,
+  dustedRoughness,
   FIN_OPACITY_FLOOR,
   juvenileLivery,
   rotateByQuat,
@@ -210,24 +213,30 @@ export class FishImpostorMaterial extends MeshPhysicalNodeMaterial {
     // Without a map the clearcoat would take the flat strip's own normal.
     this.clearcoatNormalNode = viewNormal;
 
+    const finAmount = smoothstep(0.08, 0.5, finMask);
+    const signs = this.instanceVec4(ImpostorSlot.Illness).xyz;
+    const marks = distantDiseaseMarks(signs, finMask, finAmount).toVar('impostorDiseaseMarks');
     const base = juvenileLivery(colour.rgb.mul(tint), youth);
     const grey = vec3(luminance(base).mul(0.8).add(0.06));
-    const albedo = mix(base, grey, pale.mul(0.85)).toVar();
+    const albedo = diseasedAlbedo(mix(base, grey, pale.mul(0.85)), marks, signs).toVar();
     this.colorNode = albedo;
+    this.roughnessNode = dustedRoughness(marks);
 
-    const finAmount = smoothstep(0.08, 0.5, finMask);
     const translucent = features.fins !== 'cutout' && profile.finTransmission > 0;
     const glows = features.fins !== 'cutout';
     const finAlpha = coverage.mul(
       float(1).sub(finAmount.mul(profile.finTransmission * (1 - FIN_OPACITY_FLOOR))),
     );
+    // Ich cysts are opaque even on a clear fin, as on the mesh.
+    const membraneAlpha = mix(finAlpha, coverage, marks.x);
+    const kept = marks.z;
     this.alphaToCoverage = features.fins === 'coverage';
     if (this.alphaToCoverage) {
-      this.opacityNode = translucent ? finAlpha : coverage;
+      this.opacityNode = (translucent ? membraneAlpha : coverage).mul(kept);
       this.maskNode = coverage.greaterThan(0.02);
     } else {
       this.opacityNode = null;
-      this.maskNode = coverage.greaterThan(0.5);
+      this.maskNode = coverage.greaterThan(0.5).and(kept.greaterThan(0.5));
     }
 
     if (glows) {
@@ -243,7 +252,9 @@ export class FishImpostorMaterial extends MeshPhysicalNodeMaterial {
     } else {
       this.emissiveNode = null;
     }
-    this.clearcoatNode = features.clearcoat ? mix(float(0.6), float(0.2), finAmount) : null;
+    this.clearcoatNode = features.clearcoat
+      ? mix(float(0.6), float(0.2), finAmount).mul(marks.y.oneMinus())
+      : null;
     this.clearcoat = 0;
 
     // The strip runs through the pivot; push each fragment out to the baked surface, so the fish
