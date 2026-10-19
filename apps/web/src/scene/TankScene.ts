@@ -42,6 +42,7 @@ import { ColliderOverlay } from './overlay';
 import {
   MAX_TILT_RAD as MAX_PLANT_TILT,
   scatterPatch,
+  type ReachFn,
   type Extent,
   type PlantInstance,
 } from './placement';
@@ -705,8 +706,8 @@ export function fitPresetToCatalog(
   catalog: Pick<AssetCatalog, 'get'>,
 ): PresetLayout {
   const current = preset.current ?? DEFAULT_CURRENT;
-  return fitPresetToTank(preset, dimensions, boundsFromCatalog(catalog, current), (patch) =>
-    plantReach(patch.assetId, catalog.get(patch.assetId).bounds, current)(patch.scale[1]),
+  return fitPresetToTank(preset, dimensions, boundsFromCatalog(catalog, current), (patch, axis) =>
+    plantReach(patch.assetId, catalog.get(patch.assetId).bounds, current)(patch.scale[1], axis),
   );
 }
 
@@ -884,7 +885,7 @@ export function plantReach(
   assetId: string,
   bounds: { readonly min: readonly number[]; readonly max: readonly number[] } | undefined,
   current: CurrentParameters,
-): (scale: number) => number {
+): ReachFn {
   const height = bounds
     ? Math.max(Math.abs(bounds.min[1] ?? 0), bounds.max[1] ?? 0)
     : FALLBACK_PLANT_HEIGHT;
@@ -896,8 +897,12 @@ export function plantReach(
     : 0.1;
   // Euler YXZ tilts both axes at once: tip offset is h*sqrt(sin²Z + sin²X cos²Z), max when both equal T.
   const lean = Math.sin(MAX_PLANT_TILT) * Math.sqrt(1 + Math.cos(MAX_PLANT_TILT) ** 2) * height;
-  const sway = maxSway(assetId, height, current);
-  return (scale) => (half + lean) * scale + sway;
+  const sway = {
+    x: maxSway(assetId, height, current, 'x'),
+    z: maxSway(assetId, height, current, 'z'),
+  };
+  const swayAny = maxSway(assetId, height, current);
+  return (scale, axis) => (half + lean) * scale + (axis ? sway[axis] : swayAny);
 }
 
 function plantCapsule(

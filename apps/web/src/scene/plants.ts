@@ -59,12 +59,25 @@ export interface PlantEntry extends PlantInstance {
   readonly rank: number;
 }
 
-/** Furthest a plant of unit scale and the given height leans, bounded over the whole gust cycle. */
-export function maxSway(assetId: string, height: number, current: CurrentParameters): number {
+/**
+ * Furthest a plant of unit scale and the given height leans, bounded over the whole gust cycle.
+ * With an `axis`, only the part of the lean that lands on that tank axis: flow runs along
+ * `current.direction` and the meander across it, so a current along x barely reaches towards z.
+ */
+export function maxSway(
+  assetId: string,
+  height: number,
+  current: CurrentParameters,
+  axis?: 'x' | 'z',
+): number {
   const forward = current.speed * (1 + current.gustDepth);
   const sideways = current.speed * current.gustDepth * MEANDER_AMPLITUDE;
-  const lean = Math.hypot(forward, sideways) * leanSeconds(assetId, height);
-  return lean + FLUTTER_METRES * 1.6;
+  const [dx, dz] = current.direction;
+  const along = axis === 'x' ? Math.abs(dx) : Math.abs(dz);
+  const across = axis === 'x' ? Math.abs(dz) : Math.abs(dx);
+  const flow =
+    axis === undefined ? Math.hypot(forward, sideways) : forward * along + sideways * across;
+  return flow * leanSeconds(assetId, height) + FLUTTER_METRES * 1.6;
 }
 
 /** Number of entries shown at `density`: those whose thinning rank is below it; layout plants (-1) always show. */
