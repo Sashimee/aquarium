@@ -72,7 +72,7 @@ export const NERITE_RECIPES: NeriteRecipe[] = [
     sourceId: 'sketchfab-70b8866a',
     dropMeshes: /^Object_0$/,
     fallbackLengthM: 0.02,
-    shellTriangles: [9000, 3600, 1300],
+    shellTriangles: [6000, 2200, 800],
     bodyRatios: [1, 0.6, 0.35],
     textureSize: 2048,
     bakeTriangles: 9000,
