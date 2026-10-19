@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { speciesContentSchema, type Collider } from '@aquarium/shared';
+import { speciesContentSchema, WALKER_SWIMMING_MODES, type Collider } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import {
   CARCASS,
@@ -54,7 +54,7 @@ describe('carcassFate', () => {
     expect(shrimp.length).toBeGreaterThanOrEqual(2);
     for (const s of species) {
       expect(carcassFate(s.locomotion.swimmingMode), s.id).toBe(
-        s.locomotion.swimmingMode === 'pleopod' ? 'sink' : 'float',
+        WALKER_SWIMMING_MODES.includes(s.locomotion.swimmingMode) ? 'sink' : 'float',
       );
     }
   });

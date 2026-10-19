@@ -105,6 +105,7 @@ describe('FishInstanceData', () => {
       paddle: 0.75,
       pick: 0.3,
       dance: 0.125,
+      withdraw: 0.625,
     };
 
     it('keeps the fish slots and adds the walker slots after them, inside the stride', () => {
@@ -127,6 +128,7 @@ describe('FishInstanceData', () => {
       expect(data.array[o + WalkerSlot.Curl]).toBeCloseTo(1.2, 6);
       expect(data.array[o + WalkerSlot.Paddle]).toBe(0.75);
       expect(data.array[o + WalkerSlot.Dance]).toBe(0.125);
+      expect(data.array[o + WalkerSlot.Withdraw]).toBe(0.625);
       expect(data.array[o + InstanceSlot.Mouth]).toBe(0.125);
     });
 

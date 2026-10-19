@@ -11,7 +11,8 @@ import { DynamicDrawUsage, InstancedInterleavedBuffer } from 'three/webgpu';
  * - `illness`: ich, fin rot and velvet severities 0..1, unused; walkers catch none of these
  *   diseases and leave the block at 0.
  * Walkers add two more: `walk` (leg phase 0..1, stride weight, tail curl in radians, pleopod
- * paddling) and `act` (cheliped picking, antenna display, unused, unused).
+ * paddling) and `act` (cheliped picking or a snail's rasping, antenna display, withdrawal into the
+ * shell 0..1, unused).
  */
 export const INSTANCE_STRIDE = 24;
 export const WALKER_INSTANCE_STRIDE = 32;
@@ -47,6 +48,7 @@ export const WalkerSlot = {
   Paddle: 27,
   Pick: 28,
   Dance: 29,
+  Withdraw: 30,
 } as const;
 
 export interface InstanceValues {
@@ -80,6 +82,7 @@ export interface WalkerValues {
   paddle: number;
   pick: number;
   dance: number;
+  withdraw: number;
 }
 
 export class FishInstanceData {
@@ -138,6 +141,7 @@ export class FishInstanceData {
     a[o + WalkerSlot.Paddle] = v.paddle;
     a[o + WalkerSlot.Pick] = v.pick;
     a[o + WalkerSlot.Dance] = v.dance;
+    a[o + WalkerSlot.Withdraw] = v.withdraw;
   }
 
   /** Zero scale, so the swim deformation adds nothing to a collapsed instance matrix. */
