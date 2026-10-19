@@ -9,11 +9,14 @@ export function stepTank(
   const deaths: DeathRecord[] = [];
   const fish = state.fish.map((f) => {
     const spec = ctx.species.get(f.species);
-    if (!spec) throw new Error(`lifecycle: unknown species "${f.species}"`);
-    const next = stepFish(f, spec, {
+    const chemSpec = ctx.speciesChemistry.get(f.species);
+    if (!spec || !chemSpec) throw new Error(`lifecycle: unknown species "${f.species}"`);
+    const next = stepFish(f, spec, chemSpec, {
       nowMs: ctx.nowMs,
       dtHours: ctx.dtHours,
       ammonia: state.water.ammonia,
+      chemistry: state.chemistry,
+      chemistryParams: ctx.chemistryParams,
       vacationFeeder: ctx.vacationFeeder,
       grace: ctx.grace,
     });
@@ -22,5 +25,6 @@ export function stepTank(
     }
     return next;
   });
-  return { state: { water: stepWater(state.water, state.fish, ctx), fish }, deaths };
+  const { water, chemistry } = stepWater(state, state.fish, ctx);
+  return { state: { water, chemistry, fish }, deaths };
 }

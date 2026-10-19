@@ -53,8 +53,8 @@ describe('FoodLink', () => {
     link.handleAte(events);
     expect(field.count).toBe(before - 2);
     expect(onEaten).toHaveBeenCalledWith([
-      { fishId: 'f1', portion: 0.3 },
-      { fishId: 'f2', portion: 0.2 },
+      { fishId: 'f1', portion: 0.3, foodId: a?.id },
+      { fishId: 'f2', portion: 0.2, foodId: b?.id },
     ]);
   });
 
@@ -70,8 +70,8 @@ describe('FoodLink', () => {
     expect(field.count).toBe(1);
     expect(field.particles[0]?.eaten).toBeCloseTo(0.02, 9);
     expect(onEaten).toHaveBeenCalledWith([
-      { fishId: 'f1', portion: 0.01 },
-      { fishId: 'f2', portion: 0.01 },
+      { fishId: 'f1', portion: 0.01, foodId: id },
+      { fishId: 'f2', portion: 0.01, foodId: id },
     ]);
     link.handleAte([{ fishId: 'f1', foodId: id, portion: 0.48 }]);
     expect(field.count).toBe(0);
