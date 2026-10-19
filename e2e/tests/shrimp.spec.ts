@@ -16,13 +16,19 @@ async function openScene(page: Page): Promise<void> {
   await expect(dockButton(page, 'Feed')).toBeEnabled({ timeout: SCENE_TIMEOUT_MS });
 }
 
-async function createTank(page: Page, kind: 'Freshwater' | 'Reef', name: string): Promise<void> {
+async function createTank(
+  page: Page,
+  kind: 'Freshwater' | 'Reef',
+  name: string,
+  paid: boolean,
+): Promise<void> {
   await openTankPanel(page);
   const newTank = page.getByRole('button', { name: 'New tank' });
   if (await newTank.isVisible()) await newTank.click();
   await page.getByLabel('Kind of tank').selectOption({ label: kind });
   await page.getByLabel('Tank name').fill(name);
   await page.getByRole('button', { name: 'Create tank' }).click();
+  if (paid) await page.getByRole('button', { name: 'Yes, buy it' }).click();
   await expect(page.locator('.life-status')).toContainText(`${name} is ready.`);
 }
 
@@ -57,7 +63,7 @@ test('cherry shrimp are sold for freshwater and cleaner shrimp for reef only', a
   await registerVerifiedUser(page, 'shrimp');
   await openScene(page);
 
-  await createTank(page, 'Freshwater', 'Shrimp pond');
+  await createTank(page, 'Freshwater', 'Shrimp pond', false);
   const shop = await openDock(page, 'Shop', 'Fish shop');
   await expect(shop.getByRole('listitem').filter({ hasText: 'Cherry shrimp' })).toHaveCount(1);
   await expect(shop.getByText('Cleaner shrimp')).toHaveCount(0);
@@ -66,7 +72,7 @@ test('cherry shrimp are sold for freshwater and cleaner shrimp for reef only', a
     .poll(() => swimming(page), { timeout: FISH_START_MS, message: 'a cherry shrimp swims' })
     .toContain('cherry-shrimp');
 
-  await createTank(page, 'Reef', 'Shrimp reef');
+  await createTank(page, 'Reef', 'Shrimp reef', true);
   const reefShop = await openDock(page, 'Shop', 'Fish shop');
   await expect(reefShop.getByRole('listitem').filter({ hasText: 'Cleaner shrimp' })).toHaveCount(1);
   await expect(reefShop.getByText('Cherry shrimp')).toHaveCount(0);
