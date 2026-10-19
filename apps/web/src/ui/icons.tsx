@@ -91,3 +91,10 @@ export const DuskIcon = () => (
     <path d="M3 17h18M12 5v3M5.6 9.6 7 11M18.4 9.6 17 11" />
   </Icon>
 );
+
+export const PhotoIcon = () => (
+  <Icon>
+    <path d="M4 8h3l1.5-2.5h7L17 8h3v11H4V8Z" />
+    <circle cx="12" cy="13.5" r="3.5" />
+  </Icon>
+);
