@@ -196,6 +196,20 @@ describe('api client', () => {
     expect(saved.decorLayout).toEqual(layout);
   });
 
+  it('patches only the background id, and refuses one the contract does not know', async () => {
+    const fetcher = vi.fn().mockResolvedValue(json({}));
+    await createApiClient(fetcher)
+      .saveBackground('t', 'bg-reef-deep-blue')
+      .catch(() => undefined);
+    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/tanks/t');
+    expect(init.method).toBe('PATCH');
+    expect(JSON.parse(init.body as string)).toEqual({ backgroundId: 'bg-reef-deep-blue' });
+    await expect(
+      createApiClient(vi.fn()).saveBackground('t', 'bg-nope' as never),
+    ).rejects.toBeInstanceOf(ClientValidationError);
+  });
+
   it('refuses to send a layout the server would reject', async () => {
     const fetcher = vi.fn();
     const outside = [

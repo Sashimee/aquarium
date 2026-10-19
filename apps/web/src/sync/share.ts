@@ -154,6 +154,7 @@ export function publicTankLoaded(tank: PublicTank): InteractionEvents['tank:load
     fish: tank.fish.map((f) => publicFishAsFish(tank, f)),
     decorLayout: tank.decorLayout,
     decorEdited: tank.decorEdited,
+    backgroundId: tank.backgroundId,
   };
 }
 

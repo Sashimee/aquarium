@@ -47,6 +47,7 @@ describe('SceneDecor', () => {
   it('hands a scene built after the tank loaded the saved layout', async () => {
     const { bus, decor, made } = setup();
     bus.emit('tank:loaded', {
+      backgroundId: 'bg-fw-planted-stream',
       tankId: 't1',
       biome: 'reef',
       fish: [],
@@ -68,6 +69,7 @@ describe('SceneDecor', () => {
   it('gives a rebuilt scene the latest layout, including another device edit between mounts', async () => {
     const { bus, decor, made } = setup();
     bus.emit('tank:loaded', {
+      backgroundId: 'bg-fw-planted-stream',
       tankId: 't1',
       biome: 'reef',
       fish: [],
@@ -93,6 +95,7 @@ describe('SceneDecor', () => {
   it('forgets the saved tank once it unloads', async () => {
     const { bus, decor, made } = setup();
     bus.emit('tank:loaded', {
+      backgroundId: 'bg-fw-planted-stream',
       tankId: 't1',
       biome: 'reef',
       fish: [],
@@ -125,6 +128,7 @@ describe('SceneDecor', () => {
     decor.dispose();
     expect(made[0]?.disposed).toBe(true);
     bus.emit('tank:loaded', {
+      backgroundId: 'bg-fw-planted-stream',
       tankId: 't1',
       biome: 'reef',
       fish: [],
