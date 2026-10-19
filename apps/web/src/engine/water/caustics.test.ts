@@ -6,7 +6,10 @@ import {
   ConvertNode,
   LinearMipmapLinearFilter,
   MathNode,
+  Mesh,
+  MeshBasicNodeMaterial,
   OperatorNode,
+  PlaneGeometry,
   SplitNode,
   TextureNode,
   UniformNode,
@@ -15,11 +18,12 @@ import {
   type Node,
   type Texture,
 } from 'three/webgpu';
-import { float, time, uniform, vec2 } from 'three/tsl';
+import { float, time, uniform, vec2, vec3 } from 'three/tsl';
 import { Caustics, castingShare, causticContrast } from './caustics';
 import { daylightAt, parseClock } from '../daylight';
 import { BAKE } from './causticPattern';
 import { WaterMedium } from './medium';
+import { buildShaders } from '../shaderFixtures';
 
 const DARK_SAND = 0.08;
 const REEF_SAND = 0.68;
@@ -336,5 +340,16 @@ describe('Caustics.reachAtDepth', () => {
     const raised = evaluate(c.shareAtDepth(float(0.3)));
     expect(raised[0]).toBeGreaterThan(nearer[0] ?? Number.POSITIVE_INFINITY);
     expect(raised[0]).toBeCloseTo(c.reachAtDepth(0.3, new Color()).r, 12);
+  });
+});
+
+describe('Caustics on WebGPU', () => {
+  it('builds the defocused baked net with a sampler for every biased tap', () => {
+    const material = new MeshBasicNodeMaterial();
+    material.colorNode = vec3(
+      caustics().bakedPattern(uniform(vec2(3, 4)), uniform(vec2(0, 0)), float(1), float(0.5)),
+    );
+    const { fragment } = buildShaders(new Mesh(new PlaneGeometry(), material), 'webgpu');
+    expect(fragment.match(/textureSampleBias\(/g)).toHaveLength(2);
   });
 });
