@@ -9,7 +9,7 @@ import {
   Vector3,
   type Node,
 } from 'three/webgpu';
-import { CARCASS, SNAPSHOT_STRIDE, SnapshotField, type SimToy } from '@aquarium/sim';
+import { CARCASS, SNAPSHOT_STRIDE, SnapshotField, WALK, type SimToy } from '@aquarium/sim';
 import type { Collider } from '@aquarium/shared';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import type { Engine } from '../engine/Engine';
@@ -18,14 +18,14 @@ import { DEFAULT_TANK, waterBounds } from '../engine/tank/dimensions';
 import type { InteractionEvents } from '../interaction/events';
 import { FISH_1, TANK_A, fishFixture } from '../sync/fixtures';
 import type { FishAssetEntry } from './assetIndex';
-import { FishAssetLoader, type FishModel } from './assets';
+import { FishAssetLoader, type FishModel, type ShellRig } from './assets';
 import { FishInstanceData, InstanceSlot, type InstanceValues } from './instances';
 import { FishMaterial } from './material';
-import { batchLocomotion, FishSystem } from './FishSystem';
+import { batchLocomotion, FishSystem, walkerLift } from './FishSystem';
 import { renderProfile, swimModeFor } from './profiles';
 import type { BallNudge, PickRay } from './start';
 import { SWIM_MODES } from './swim';
-import type { TailRig } from './walk';
+import { CRAB_GAIT, SHRIMP_GAIT, SNAIL_GAIT, type TailRig } from './walk';
 import { SimInitTimeout } from './simWorld';
 
 class FakeWorker {
@@ -209,54 +209,149 @@ describe('FishSystem.create', () => {
 describe('batchLocomotion', () => {
   const shrimp = { hinge: { y: 0, z: 0.002 }, telsonZ: -0.016, legPairs: 5 };
   const tail = { hinge: shrimp.hinge, tip: { y: -0.003, z: -0.016, share: 1 }, bodyLength: 0.03 };
+  const shell: ShellRig = { centre: [0, 0.004, -0.002], drop: 0.001 };
+  const finned = { swimmingMode: 'subcarangiform' } as const;
+  const pleopod = { swimmingMode: 'pleopod', walking: { legPairs: 5 } } as const;
+  const crawler = (legPairs: number) => ({ swimmingMode: 'none', walking: { legPairs } }) as const;
   function model(
-    rig: FishAssetEntry['shrimp'],
-    tailRig: TailRig | null = rig === null ? null : tail,
-  ): Pick<FishModel, 'entry' | 'tail'> {
+    kind: FishAssetEntry['kind'],
+    {
+      rig = kind === 'fish' || kind === 'snail' ? null : shrimp,
+      tailRig = rig === null ? null : tail,
+      shellRig = kind === 'crab' || kind === 'snail' ? shell : null,
+      standoff = kind === 'fish' ? null : 0.0045,
+    }: {
+      rig?: FishAssetEntry['shrimp'];
+      tailRig?: TailRig | null;
+      shellRig?: ShellRig | null;
+      standoff?: number | null;
+    } = {},
+  ): Pick<FishModel, 'entry' | 'tail' | 'shell'> {
     return {
       entry: {
         id: 'model',
-        kind: rig === null ? 'fish' : 'shrimp',
+        kind,
         species: 'species',
         min: [-0.01, -0.005, -0.016],
         max: [0.01, 0.004, 0.02],
         standardLengthM: 0.03,
+        standoff,
         lodFiles: ['lod0.glb'],
         sharperTextures: new Map(),
         shrimp: rig,
         impostor: null,
       },
       tail: tailRig,
+      shell: shellRig,
     };
   }
 
   it("swims a finned species in its own mode, shaped by the species' profile", () => {
     const profile = renderProfile('neon-tetra');
-    expect(batchLocomotion(model(null), 'subcarangiform', profile)).toEqual({
+    expect(batchLocomotion(model('fish'), finned, profile)).toEqual({
       kind: 'swim',
       mode: swimModeFor(SWIM_MODES.subcarangiform, profile),
     });
   });
 
-  it('walks a pleopod species on its shrimp rig and tail', () => {
+  it('walks a pleopod species on its shrimp rig and tail, two cheliped pairs and no shell', () => {
     const profile = renderProfile('cherry-shrimp');
-    expect(batchLocomotion(model(shrimp), 'pleopod', profile)).toEqual({
+    expect(batchLocomotion(model('shrimp'), pleopod, profile)).toEqual({
       kind: 'walk',
       shrimp,
       tail,
+      chelipedPairs: 2,
+      shell: null,
+      gait: SHRIMP_GAIT,
+      lift: 0.0045 - WALK.standoffBodyLengths * 0.03,
+    });
+  });
+
+  it('walks a legged species that never swims on a crab rig with one cheliped pair and its shell', () => {
+    const profile = renderProfile('hermit-crab');
+    expect(batchLocomotion(model('crab'), crawler(2), profile)).toEqual({
+      kind: 'walk',
+      shrimp,
+      tail,
+      chelipedPairs: 1,
+      shell,
+      gait: CRAB_GAIT,
+      lift: 0.0045 - WALK.standoffBodyLengths * 0.03,
+    });
+  });
+
+  it('glides a legless species on a snail model, lifted to the sole the sim holds off the glass', () => {
+    const profile = renderProfile('nerite-snail');
+    expect(batchLocomotion(model('snail', { standoff: 0 }), crawler(0), profile)).toEqual({
+      kind: 'glide',
+      shell,
+      gait: SNAIL_GAIT,
+      lift: -WALK.standoffBodyLengths * 0.03,
     });
   });
 
   it('refuses a walker model without a tail rig', () => {
     const profile = renderProfile('cherry-shrimp');
-    expect(() => batchLocomotion(model(shrimp, null), 'pleopod', profile)).toThrow(
+    expect(() => batchLocomotion(model('shrimp', { tailRig: null }), pleopod, profile)).toThrow(
       /needs a shrimp model/,
     );
   });
 
-  it('refuses a walking species whose model has no shrimp rig', () => {
+  it('refuses a pleopod species on a fish or crab model', () => {
     const profile = renderProfile('cherry-shrimp');
-    expect(() => batchLocomotion(model(null), 'pleopod', profile)).toThrow(/needs a shrimp model/);
+    expect(() => batchLocomotion(model('fish'), pleopod, profile)).toThrow(/needs a shrimp model/);
+    expect(() => batchLocomotion(model('crab'), pleopod, profile)).toThrow(/needs a shrimp model/);
+  });
+
+  it('refuses a legless walker on a legged model, and a legged one on a snail', () => {
+    const profile = renderProfile('hermit-crab');
+    expect(() => batchLocomotion(model('crab'), crawler(0), profile)).toThrow(
+      /needs a snail model/,
+    );
+    expect(() => batchLocomotion(model('snail'), crawler(2), profile)).toThrow(
+      /needs a crab model/,
+    );
+    expect(() => batchLocomotion(model('shrimp'), crawler(2), profile)).toThrow(
+      /needs a crab model/,
+    );
+  });
+
+  it('refuses a crab or snail model without its shell rig', () => {
+    const profile = renderProfile('hermit-crab');
+    expect(() => batchLocomotion(model('crab', { shellRig: null }), crawler(2), profile)).toThrow(
+      /needs a crab model/,
+    );
+    expect(() => batchLocomotion(model('snail', { shellRig: null }), crawler(0), profile)).toThrow(
+      /needs a snail model/,
+    );
+  });
+
+  it("refuses more walking pairs than fit behind the crab's chelipeds", () => {
+    const profile = renderProfile('hermit-crab');
+    expect(batchLocomotion(model('crab'), crawler(4), profile).kind).toBe('walk');
+    expect(() => batchLocomotion(model('crab'), crawler(5), profile)).toThrow(
+      /5 walking leg pairs .* do not fit the model's 5 leg slots/,
+    );
+  });
+});
+
+describe('walkerLift', () => {
+  it("is zero where the model's feet sit where the sim holds the body", () => {
+    expect(
+      walkerLift({ standoff: WALK.standoffBodyLengths * 0.02, standardLengthM: 0.02 }),
+    ).toBeCloseTo(0, 12);
+  });
+
+  it('raises a model whose feet reach further below its origin than the sim standoff', () => {
+    expect(walkerLift({ standoff: 0.008, standardLengthM: 0.03 })).toBeCloseTo(
+      0.008 - WALK.standoffBodyLengths * 0.03,
+      12,
+    );
+  });
+
+  it('lowers a snail whose origin is already on its sole, and a fish has no standoff', () => {
+    expect(walkerLift({ standoff: 0, standardLengthM: 0.02 })).toBeLessThan(0);
+    expect(walkerLift({ standoff: null, standardLengthM: 0.02 })).toBeLessThan(0);
   });
 });
 
@@ -270,12 +365,14 @@ function shrimpModel(assetId: string): FishModel {
       min: [-0.004, -0.004, -0.0125],
       max: [0.004, 0.004, 0.0125],
       standardLengthM: 0.025,
+      standoff: WALK.standoffBodyLengths * 0.025,
       lodFiles: [],
       sharperTextures: new Map(),
       shrimp: { hinge: { y: 0, z: 0 }, telsonZ: -0.0125, legPairs: 5 },
       impostor: null,
     },
     tail: { hinge: { y: 0, z: 0 }, tip: { y: -0.004, z: -0.0125, share: 1 }, bodyLength: 0.025 },
+    shell: null,
     textureSize: 1024,
     lods: [
       [
@@ -635,12 +732,14 @@ function bettaModel(): FishModel {
       min: [-0.006, -0.015, -0.0365],
       max: [0.006, 0.011, 0.0365],
       standardLengthM: 0.073,
+      standoff: null,
       lodFiles: [],
       sharperTextures: new Map(),
       shrimp: null,
       impostor: null,
     },
     tail: null,
+    shell: null,
     textureSize: 1024,
     lods: [
       [

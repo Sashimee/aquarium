@@ -55,14 +55,21 @@ import {
   vec3,
   vec4,
 } from 'three/tsl';
-import { FIN_ATTRIBUTE, LEG_PART_ID } from './assets';
+import { FIN_ATTRIBUTE, LEG_PART_ID, SNAIL_FOOT_PART_ID } from './assets';
 import {
   InstanceSlot,
   WALKER_INSTANCE_STRIDE,
   WalkerSlot,
   type FishInstanceData,
 } from './instances';
-import { idIs, walkerDeformation, type Deformation, type WalkerRig } from './limbs';
+import {
+  gliderDeformation,
+  idIs,
+  walkerDeformation,
+  type Deformation,
+  type GliderRig,
+  type WalkerRig,
+} from './limbs';
 import type { FishRenderProfile } from './profiles';
 import { TAIL_AMPLITUDE_BODY_LENGTHS, type SwimModeParams } from './swim';
 
@@ -96,7 +103,8 @@ export interface FishMaterialConfig {
   readonly profile: FishRenderProfile;
   readonly locomotion:
     | { readonly kind: 'swim'; readonly mode: SwimModeParams }
-    | { readonly kind: 'walk'; readonly rig: WalkerRig };
+    | { readonly kind: 'walk'; readonly rig: WalkerRig }
+    | { readonly kind: 'glide'; readonly rig: GliderRig };
   /** Model-space z of the snout and of the tail tip. */
   readonly zMax: number;
   readonly zMin: number;
@@ -663,15 +671,19 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
     this.iridescenceIOR = GUANINE_IOR;
 
     const { locomotion } = config;
-    if (locomotion.kind === 'walk') {
+    if (locomotion.kind !== 'swim') {
       if (config.instances.stride !== WALKER_INSTANCE_STRIDE) {
         throw new Error(`${this.name}: a walker needs instance data with the walker stride`);
       }
-      const walker = walkerDeformation(locomotion.rig, {
+      const inputs = {
         look: this.instanceVec4(8),
         walk: this.instanceVec4(WalkerSlot.LegPhase),
         act: this.instanceVec4(WalkerSlot.Pick),
-      });
+      };
+      const walker =
+        locomotion.kind === 'walk'
+          ? walkerDeformation(locomotion.rig, inputs)
+          : gliderDeformation(locomotion.rig, inputs);
       this.still = walker;
       this.breathing = walker;
     } else {
@@ -829,12 +841,17 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
     const tint = this.instanceVec4(12).xyz;
     const pale = look.y;
     const seed = look.z;
-    const walker = this.config.locomotion.kind === 'walk';
+    const { kind } = this.config.locomotion;
+    const walker = kind !== 'swim';
     const fin = this.finMaskAndId();
-    // A shrimp's limbs are its translucent membranes; its abdomen weight is the tail curl's.
-    const membrane = walker
-      ? step(LEG_PART_ID - 0.5, fin.y).mul(step(fin.y, 8.5))
-      : step(0.5, fin.y);
+    // A shrimp's limbs are its translucent membranes; its abdomen weight is the tail curl's. A
+    // snail's foot edge and tentacle tips are the thin tissue that lets light through.
+    const membrane =
+      kind === 'walk'
+        ? step(LEG_PART_ID - 0.5, fin.y).mul(step(fin.y, 8.5))
+        : kind === 'glide'
+          ? step(SNAIL_FOOT_PART_ID - 0.5, fin.y)
+          : step(0.5, fin.y);
     const finAmount = smoothstep(0.08, 0.5, fin.x).mul(membrane);
 
     const sample = source.map !== null ? texture(source.map) : vec4(1);
