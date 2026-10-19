@@ -120,6 +120,32 @@ describe('shutdown', () => {
     expect(results).toEqual([1, 1]);
   });
 
+  it('runs afterDrain before closing the database, only when tasks were abandoned', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const run = async (hang: boolean) => {
+      const tasks = createBackgroundTasks();
+      const gate = deferred();
+      if (hang) tasks.run(gate.promise);
+      const order: string[] = [];
+      await shutdown({
+        stopMaintenance: () => undefined,
+        closeApp: async () => undefined,
+        tasks,
+        afterDrain: async (abandoned) => {
+          order.push(`release:${abandoned}`);
+        },
+        closeDatabase: async () => {
+          order.push('db');
+        },
+        budgetMs: 30,
+      });
+      gate.resolve();
+      return order;
+    };
+    expect(await run(true)).toEqual(['release:1', 'db']);
+    expect(await run(false)).toEqual(['db']);
+  });
+
   it('logs the abandoned count on timeout, then still closes the database', async () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
     const tasks = createBackgroundTasks();

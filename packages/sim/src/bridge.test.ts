@@ -17,6 +17,8 @@ import {
   blueTang,
   bronzeCorydoras,
   cherryShrimp,
+  clownfish,
+  guppy,
   neonTetra,
   REEF_ANCHORS,
   REEF_DECOR,
@@ -868,6 +870,72 @@ describe('sim worker bridge', () => {
       removeEventListener: () => undefined,
     });
     const pending = client.canGrazeAt('neon-tetra', [0, 0.3, 0]);
+    client.dispose();
+    await expect(pending).rejects.toThrow(/disposed/);
+  });
+
+  it('answers nestSite and applies brood and stage changes as a local world would', async () => {
+    const { client } = connect();
+    const config: WorldConfig = {
+      seed: 5,
+      tank: REEF_TANK,
+      species: [...ARCHETYPES, guppy],
+      decor: REEF_DECOR,
+      anchors: REEF_ANCHORS,
+      fish: [
+        { id: 'm', species: clownfish.id, sex: 'male' },
+        { id: 'f', species: clownfish.id, sex: 'female' },
+        { id: 'g', species: guppy.id, sex: 'female' },
+        { id: 'fry', species: guppy.id, stage: 'fry', bodyLengthM: 0.007 },
+      ],
+    };
+    const local = new World(config);
+    await client.init(config);
+    const site = await client.nestSite(['m', 'f']);
+    expect(site).toEqual(local.nestSite(['m', 'f']));
+    if (site === null) throw new Error('no nest site beside the anemone');
+    const brood = {
+      clutches: [{ id: 'c', parents: ['m', 'f'], position: site }],
+      gravid: [{ fishId: 'g', term: 0.9 }],
+    };
+    client.setBrood(brood);
+    client.setStage('fry', 'juvenile');
+    local.setBrood(brood);
+    local.setStage('fry', 'juvenile');
+    const { snapshot } = await stepCollecting(client, 60, 60);
+    for (let t = 0; t < 60; t++) local.step();
+    const data = new Float32Array(local.count * SNAPSHOT_STRIDE);
+    local.writeSnapshot(data);
+    expect(Array.from(snapshot.data)).toEqual(Array.from(data));
+  });
+
+  it('rejects a bad nestSite with its own error and keeps answering', async () => {
+    const { client } = connect();
+    await expect(client.nestSite(['m'])).rejects.toThrow(/"nestSite" before "init"/);
+    await client.init({
+      seed: 5,
+      tank: REEF_TANK,
+      species: ARCHETYPES,
+      decor: REEF_DECOR,
+      anchors: REEF_ANCHORS,
+      fish: spawnMany(clownfish.id, 2),
+    });
+    const errors: string[] = [];
+    client.onError((m) => errors.push(m));
+    const unknown = client.nestSite(['ghost']);
+    const fine = client.nestSite([`${clownfish.id}-0`]);
+    await expect(unknown).rejects.toThrow(/no fish "ghost"/);
+    await expect(fine).resolves.toHaveLength(3);
+    expect(errors).toEqual([]);
+  });
+
+  it('rejects pending nestSite queries when the client is disposed', async () => {
+    const client = new SimClient({
+      postMessage: () => undefined,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    });
+    const pending = client.nestSite(['m']);
     client.dispose();
     await expect(pending).rejects.toThrow(/disposed/);
   });

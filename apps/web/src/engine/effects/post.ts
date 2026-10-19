@@ -13,6 +13,7 @@ import {
   type WebGPURenderer,
 } from 'three/webgpu';
 import {
+  convertToTexture,
   float,
   Fn,
   max,
@@ -31,14 +32,19 @@ import type { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import type { dof } from 'three/addons/tsl/display/DepthOfFieldNode.js';
 import type { smaa } from 'three/addons/tsl/display/SMAANode.js';
 import type { traa } from 'three/addons/tsl/display/TRAANode.js';
+import type { PhotoLook } from '../photo/look';
 import type { PostChain } from '../quality/tiers';
 import type { WaterShafts } from './shafts';
 
 export interface PostSettings {
   readonly chain: PostChain;
   readonly godRays: boolean;
-  /** Depth of field, only while the camera is in focus mode. */
+  /** Depth of field, only while the camera is in focus mode or photo mode asks for it. */
   readonly depthOfField: boolean;
+  /** Photo mode's lens and grade; without it depth of field focuses itself. */
+  readonly photo: PhotoLook | null;
+  /** Whether `photo` grades the picture; the natural filter leaves it as it is. */
+  readonly grade: boolean;
 }
 
 export interface PostNodes {
@@ -126,13 +132,19 @@ const FOCUS_TAPS = [
   [0, -0.04],
 ] as const;
 
+function grades(settings: PostSettings): boolean {
+  return settings.grade && settings.photo !== null;
+}
+
 export function postSettingsKey(settings: PostSettings): string {
-  return `${settings.chain}|${settings.godRays}|${settings.depthOfField}`;
+  const { depthOfField } = settings;
+  const lens = depthOfField && settings.photo !== null;
+  return `${settings.chain}|${settings.godRays}|${depthOfField}|${lens}|${grades(settings)}`;
 }
 
 /** Whether a frame needs the post pipeline at all, or can go straight to the canvas. */
 export function needsPost(settings: PostSettings): boolean {
-  return settings.chain !== 'none' || settings.godRays || settings.depthOfField;
+  return settings.chain !== 'none' || settings.godRays || settings.depthOfField || grades(settings);
 }
 
 /**
@@ -195,6 +207,10 @@ export class PostPipeline {
     }
   }
 
+  get outputNode(): Node {
+    return this.pipeline.outputNode;
+  }
+
   render(): void {
     this.pipeline.render();
   }
@@ -225,14 +241,18 @@ export class PostPipeline {
       this.owned.push(glow);
       colour = colour.add(glow);
     }
+    const { photo } = settings;
+    // The colour matrix commutes with the blur and the gentle contrast curve nearly does, so the
+    // grade can go ahead of depth of field and serve the sharp and the blurred path alike.
+    if (photo !== null && settings.grade) colour = photo.grade(colour);
     let image: Node = colour;
     if (settings.depthOfField) {
       const blur = this.nodes.get('dof')(
-        colour,
+        this.texture(colour),
         scenePass.getViewZNode(),
-        autofocus(depth, camera),
-        DOF.focalLength,
-        DOF.bokehScale,
+        photo?.focusDistance ?? autofocus(depth, camera),
+        photo?.focalRange ?? DOF.focalLength,
+        photo?.bokehScale ?? DOF.bokehScale,
       );
       this.owned.push(blur);
       image = blur;
@@ -240,7 +260,7 @@ export class PostPipeline {
 
     if (this.temporal) {
       const resolve = this.nodes.get('traa')(
-        image,
+        this.texture(image),
         depth,
         scenePass.getTextureNode('velocity'),
         camera,
@@ -249,12 +269,23 @@ export class PostPipeline {
       return resolve;
     }
     if (chain === 'smaa' || chain === 'smaa-bloom') {
-      const aa = this.nodes.get('smaa')(renderOutput(image));
+      const aa = this.nodes.get('smaa')(this.texture(renderOutput(image)));
       this.owned.push(aa);
       this.pipeline.outputColorTransform = false;
       return aa;
     }
     return image;
+  }
+
+  /**
+   * `node` as a texture the screen-space nodes can sample around. They would convert it
+   * themselves, but none of them disposes the render target that takes, so it is made and owned
+   * here; a pass's own texture is returned as it is.
+   */
+  private texture(node: Node): TextureNode {
+    const texture = convertToTexture(node);
+    if (texture !== node) this.owned.push(texture);
+    return texture;
   }
 }
 

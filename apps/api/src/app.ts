@@ -33,6 +33,13 @@ import { normalizedPathname } from './url.ts';
 import { DEFAULT_LEGAL_LIMITS, registerLegalRoutes, type LegalLimits } from './legal.ts';
 import type { IpAdmission, Mailer } from './mail.ts';
 import { RateLimiter, type Limit, type ResettableHitStore } from './rate-limit.ts';
+import type { PushSender } from './push.ts';
+import {
+  DEFAULT_REMINDER_LIMITS,
+  registerReminderRoutes,
+  UNSUBSCRIBE_PATH,
+  type ReminderLimits,
+} from './reminders.ts';
 import type { SpeciesCatalog } from './species.ts';
 import { DEFAULT_CARE_LIMITS, registerTankRoutes, type CareLimits } from './tanks.ts';
 
@@ -50,6 +57,9 @@ export interface AppOptions {
   clock?: Clock;
   careLimits?: CareLimits;
   legalLimits?: LegalLimits;
+  authSecret: string;
+  push?: PushSender | null;
+  reminderLimits?: ReminderLimits;
   handleLimit?: Limit;
   publicLimits?: PublicLimits;
   testHooks?: boolean;
@@ -212,18 +222,25 @@ function hasAmbiguousPath(url: string): boolean {
 }
 
 const PUBLIC_PATH_PREFIX = '/api/public/';
+const VIEWER_PATH_PREFIX = '/t/';
 const TOKEN_PATH_PREFIXES = [`${AUTH_BASE_PATH}/reset-password/`, `${AUTH_BASE_PATH}/callback/`];
 // Pages and links whose URL holds a one-time token. The strict-origin-when-cross-origin default
 // would still send the full URL to same-origin subresources (JS, CSS, /api/me) on first load. The
 // policy stays scoped: the CSRF check falls back to Referer and the default suits every other route.
 const TOKEN_PAGES = new Set(['/reset-password', '/verify-email']);
 
+function isViewerPath(url: string): boolean {
+  return normalizedPathname(url).toLowerCase().startsWith(VIEWER_PATH_PREFIX);
+}
+
 function carriesUrlToken(url: string): boolean {
   const path = normalizedPathname(url).toLowerCase().replace(/\/+$/, '');
   return (
     TOKEN_PAGES.has(path) ||
     path === `${AUTH_BASE_PATH}/verify-email` ||
+    path === UNSUBSCRIBE_PATH ||
     path.startsWith(PUBLIC_PATH_PREFIX) ||
+    path.startsWith(VIEWER_PATH_PREFIX) ||
     TOKEN_PATH_PREFIXES.some((prefix) => path.startsWith(prefix))
   );
 }
@@ -235,6 +252,8 @@ export function redactUrl(url: string): string {
   const lower = path.toLowerCase();
   if (lower.startsWith(PUBLIC_PATH_PREFIX))
     return `${path.slice(0, PUBLIC_PATH_PREFIX.length)}[redacted]`;
+  if (lower.startsWith(VIEWER_PATH_PREFIX))
+    return `${path.slice(0, VIEWER_PATH_PREFIX.length)}[redacted]`;
   const prefix = TOKEN_PATH_PREFIXES.find((p) => lower.startsWith(p));
   if (prefix) {
     const rest = path.slice(prefix.length);
@@ -319,6 +338,20 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     }
   });
 
+  // Mail providers post the RFC 8058 one-click body as a form (urlencoded or multipart); the
+  // body is never read, so no other route may accept one.
+  for (const type of ['application/x-www-form-urlencoded', 'multipart/form-data']) {
+    app.addContentTypeParser(type, { parseAs: 'string' }, (req, body, done) => {
+      if (normalizedPathname(req.url) !== UNSUBSCRIBE_PATH) {
+        return done(
+          Object.assign(new Error('Unsupported content type.'), { statusCode: 415 }),
+          undefined,
+        );
+      }
+      done(null, body);
+    });
+  }
+
   app.addHook('onSend', async (req, reply) => {
     applySecurityHeaders(reply);
     if (
@@ -329,11 +362,14 @@ export function buildApp(opts: AppOptions): FastifyInstance {
       reply.header('content-security-policy', KTX2_WORKER_CSP);
     }
     if (carriesUrlToken(req.url)) reply.header('referrer-policy', 'no-referrer');
+    if (isViewerPath(req.url)) reply.header('x-robots-tag', 'noindex, nofollow');
   });
 
   app.addHook('onRequest', async (req, reply) => {
     if (SAFE_METHODS.has(req.method) || !normalizedPathname(req.url).startsWith('/api/')) return;
     if (!req.headers.cookie) return;
+    // The confirm page posts under no-referrer, so browsers send Origin: null; the signed token is the credential here.
+    if (normalizedPathname(req.url) === UNSUBSCRIBE_PATH) return;
     const sent = req.headers.origin ?? originOf(req.headers.referer);
     if (sent !== appOrigin) {
       return reply.code(403).send(apiError('forbidden', 'Cross-origin request rejected.'));
@@ -565,6 +601,16 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     limiter: new RateLimiter(),
     limits: opts.legalLimits ?? DEFAULT_LEGAL_LIMITS,
     currentSession,
+  });
+
+  registerReminderRoutes({
+    app,
+    database,
+    push: opts.push ?? null,
+    authSecret: opts.authSecret,
+    limiter,
+    limits: opts.reminderLimits ?? DEFAULT_REMINDER_LIMITS,
+    currentUser: async (req) => (await currentSession(req))?.user ?? null,
   });
 
   registerTankRoutes({

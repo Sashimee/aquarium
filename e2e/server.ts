@@ -69,6 +69,7 @@ const app = buildApp({
   indexable: false,
   webRoot: resolve(process.cwd(), 'apps/web/dist'),
   appOrigin: origin,
+  authSecret: secret,
   trustedProxies: ['127.0.0.1'],
   database,
   auth,

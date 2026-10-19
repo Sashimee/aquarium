@@ -6,6 +6,8 @@ export const errorCodeSchema = z.enum([
   'forbidden',
   'not_found',
   'conflict',
+  'push_device_owned',
+  'push_device_limit',
   'rate_limited',
   'email_not_verified',
   'feeding_rejected',
