@@ -29,6 +29,7 @@ import { schema, type Database } from './db/index.ts';
 import { apiError } from './errors.ts';
 import { loadCredits } from './credits.ts';
 import { loadEconomy } from './economy.ts';
+import { loadPresets, type Presets } from './presets.ts';
 import { DEFAULT_COLLECTION_LIMIT, registerCollectionRoutes } from './collection.ts';
 import { DEFAULT_HANDLE_LIMIT, registerHandleRoutes } from './handle.ts';
 import { DEFAULT_PUBLIC_LIMITS, registerPublicRoutes, type PublicLimits } from './public.ts';
@@ -58,6 +59,7 @@ export interface AppOptions {
   species: SpeciesCatalog;
   chemistryParams: ChemistryParameters;
   economy?: Economy;
+  presets?: Presets;
   clock?: Clock;
   careLimits?: CareLimits;
   legalLimits?: LegalLimits;
@@ -626,6 +628,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     species: opts.species,
     chemistryParams: opts.chemistryParams,
     economy,
+    presets: opts.presets ?? loadPresets(),
     clock,
     limiter,
     limits: opts.careLimits ?? DEFAULT_CARE_LIMITS,

@@ -42,10 +42,8 @@ afterAll(async () => {
     plain.close(),
     spa.close(),
     indexable.close(),
-    // The 503 test already ended this pool; a second end rejects, and -t may skip that test.
-    broken.database.pool
-      .end()
-      .catch(() => {})
+    // The 503 test already ended this pool, and -t may skip that test; ending twice rejects.
+    (broken.database.pool.ended ? Promise.resolve() : broken.database.pool.end())
       .then(() => broken.app.close())
       .then(broken.dropDatabase),
   ]);
