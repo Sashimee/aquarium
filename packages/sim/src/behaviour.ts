@@ -11,6 +11,7 @@ import type { Sdf } from './sdf.ts';
 import { FishState } from './snapshot.ts';
 import type { SimSpecies, SimWalking } from './species.ts';
 import { TOYS, Toys, type SimToy } from './toys.ts';
+import { BROOD, Brood, type SimBrood } from './brood.ts';
 
 /** Every tunable of the species behaviours; sources are in BEHAVIOUR.md. */
 export const BEHAVIOUR = {
@@ -195,6 +196,12 @@ export interface BehaviourHost {
   readonly substrateSdf: Sdf;
   /** Hard decor alone, or null when the tank is bare. */
   readonly decorSdf: Sdf | null;
+  /** Plants and other soft decor, or null when there are none. */
+  readonly plantSdf: Sdf | null;
+  /** Per fish `StageCode`. */
+  readonly stage: Uint8Array;
+  /** Per fish `SexCode`. */
+  readonly sex: Uint8Array;
   readonly food: FoodStore;
   /**
    * Whether fish `i`, holding station beside the glass or rock at (x, y, z), has a level disc
@@ -245,6 +252,8 @@ export class Plan {
   display = 0;
   /** 0 to 1: how far the gill covers are raised in display. */
   gillFlare = 0;
+  /** 0 to 1: pectoral fanning over a clutch. */
+  fan = 0;
 
   reset(bandLo: number, bandHi: number): void {
     this.state = FishState.Cruise;
@@ -273,6 +282,7 @@ export class Plan {
     this.shunRadius = 0;
     this.display = 0;
     this.gillFlare = 0;
+    this.fan = 0;
   }
 
   seek(x: number, y: number, z: number, speed: number, tau: number, weight = 1): void {
@@ -318,6 +328,7 @@ export class Behaviour {
   readonly feeding: Feeding;
   readonly curiosity: Curiosity;
   readonly toys: Toys;
+  readonly brood: Brood;
   light = 1;
   night = false;
 
@@ -437,6 +448,7 @@ export class Behaviour {
     this.feeding = new Feeding(host);
     this.curiosity = new Curiosity(host);
     this.toys = new Toys(host);
+    this.brood = new Brood(host);
     this.startlePhase = new Uint8Array(n);
     this.startleTimer = new Float64Array(n);
     this.startleElapsed = new Float64Array(n);
@@ -559,6 +571,7 @@ export class Behaviour {
     this.feeding.resize(edit);
     this.curiosity.resize(edit);
     this.toys.resize(edit);
+    this.brood.resize(edit);
     if (edit.removed < 0) return;
     for (let i = 0; i < this.territoryTarget.length; i++) {
       const j = edit.index(at(this.territoryTarget, i));
@@ -739,6 +752,34 @@ export class Behaviour {
     this.toys.setToys(toys);
   }
 
+  setBrood(brood: SimBrood): void {
+    this.brood.setBrood(brood);
+  }
+
+  /**
+   * A spot for the clutch of the parents at `indices`: beside the anemone or cave of the first
+   * that has one, else its station or where it is.
+   */
+  nestSite(indices: readonly number[]): Point3 | null {
+    const first = indices[0];
+    if (first === undefined) throw new RangeError('nestSite: needs at least one parent');
+    let length = 0;
+    for (const i of indices) length = Math.max(length, at(this.host.bodyLength, i));
+    for (const i of indices) {
+      const a = this.anchors[at(this.anchor, i)];
+      if (a === undefined) continue;
+      return this.brood.nestSite(...a.position, a.radius + length, length);
+    }
+    const src = this.speciesOf(first).home === 'none' ? this.host.position : this.home;
+    return this.brood.nestSite(
+      at(src, first * 3),
+      at(src, first * 3 + 1),
+      at(src, first * 3 + 2),
+      2 * length,
+      length,
+    );
+  }
+
   setLight(level: number): void {
     if (!(level >= 0 && level <= 1)) {
       throw new RangeError(`light level must be within [0, 1], got ${level}`);
@@ -774,6 +815,7 @@ export class Behaviour {
         this.beginStartle(i, at(this.scheduledYaw, i), at(this.scheduledPitch, i));
       }
     }
+    this.brood.update();
     this.prepareFeeding();
     this.feeding.update();
     this.prepareCuriosity();
@@ -787,6 +829,8 @@ export class Behaviour {
       if (plan.state !== FishState.Startle && plan.state !== FishState.Feed) {
         this.toys.shun(i, this.speciesOf(i), plan);
       }
+      if (plan.state !== FishState.Startle) this.brood.shunPredator(i, plan);
+      this.brood.ease(i, plan);
       const d = at(this.display, i);
       this.display[i] = d + (plan.display - d) * ease;
       const g = at(this.gillFlare, i);
@@ -807,10 +851,17 @@ export class Behaviour {
         at(this.rest, i) <= 0.5
           ? 1
           : 0;
+      if (this.brood.fryLeash(i, leash)) continue;
       const a = this.anchors[at(this.anchor, i)];
       const o = i * 4;
       if (a === undefined) {
-        leash[o + 3] = Infinity;
+        const c = this.brood.clutchPoint(i);
+        if (c === null) {
+          leash[o + 3] = Infinity;
+          continue;
+        }
+        leash.set(c, o);
+        leash[o + 3] = FEEDING.leashBodyLengths * at(this.host.bodyLength, i);
         continue;
       }
       leash[o] = a.position[0];
@@ -836,7 +887,8 @@ export class Behaviour {
         at(f.target, i) < 0 &&
         at(f.follow, i) < 0 &&
         at(f.handling, i) <= 0 &&
-        at(this.territoryPhase, i) === TerritoryPhase.Idle;
+        at(this.territoryPhase, i) === TerritoryPhase.Idle &&
+        !this.brood.busy(i);
       eligible[i] = free && !toys.engaged(i) ? 1 : 0;
       toys.eligible[i] = free ? 1 : 0;
       const a = this.anchors[at(this.anchor, i)];
@@ -1108,8 +1160,9 @@ export class Behaviour {
       plan.cohesion *= BEHAVIOUR.tightenCohesion;
       plan.separation *= BEHAVIOUR.tightenSeparation;
     }
+    this.brood.adjust(i, plan);
     if (sp.gait === 'cruise') {
-      plan.speedFloor = BEHAVIOUR.cruiseSpeedFloor * at(this.host.cruiseSpeed, i) * calm;
+      plan.speedFloor = BEHAVIOUR.cruiseSpeedFloor * at(this.host.cruiseSpeed, i) * plan.cruiseScale;
     }
 
     if (at(this.startlePhase, i) !== StartlePhase.None) {
@@ -1131,11 +1184,31 @@ export class Behaviour {
       return;
     }
     if (this.planShelter(i, sp, plan)) return;
+    if (rest <= 0.5 && this.brood.planTend(i, plan)) return;
+    if (this.brood.hides(i)) {
+      const o = i * 3;
+      const { cover } = this.brood;
+      this.holdStation(
+        i,
+        plan,
+        at(cover, o),
+        at(cover, o + 1),
+        at(cover, o + 2),
+        BROOD.coverRadiusBodyLengths * at(this.host.bodyLength, i),
+        FishState.Shelter,
+      );
+      return;
+    }
     if (this.toys.planMirror(i, sp, plan)) return;
     if (this.toys.planBall(i, sp, plan)) return;
     if (this.planLure(i, sp, plan)) return;
     if (this.planSpot(i, sp, plan)) return;
-    if (sp.gait === 'forage') {
+    const guard = at(this.anchor, i) < 0 ? this.brood.guard(i) : null;
+    if (guard !== null) {
+      const [gx, gy, gz] = guard;
+      const length = at(this.host.bodyLength, i);
+      this.holdStation(i, plan, gx, gy + length, gz, BROOD.guardBodyLengths * length, FishState.Station);
+    } else if (sp.gait === 'forage') {
       this.planForage(i, sp, plan);
     } else if (sp.grazer === 'glass') {
       this.planGlassGrazer(i, plan);
@@ -1364,7 +1437,11 @@ export class Behaviour {
     }
     const speed = BEHAVIOUR.fleeSpeedFraction * vmax;
     const a = this.anchors[at(this.anchor, i)];
-    if (a !== undefined) {
+    if (this.brood.hides(i)) {
+      const { cover } = this.brood;
+      plan.seek(at(cover, i * 3), at(cover, i * 3 + 1), at(cover, i * 3 + 2), speed, 0.3);
+      plan.comfort = BEHAVIOUR.shelterComfort;
+    } else if (a !== undefined) {
       const [tx, ty, tz] = this.approach(i, a);
       plan.seek(tx, ty, tz, speed, 0.3);
       plan.comfort = BEHAVIOUR.shelterComfort;
@@ -1663,6 +1740,8 @@ export class Behaviour {
       return [a.position[0], a.position[1], a.position[2], r];
     }
     const r = BEHAVIOUR.territoryBodyLengths * length;
+    const clutch = this.brood.clutchPoint(i);
+    if (clutch !== null) return [clutch[0], clutch[1], clutch[2], r];
     const src = sp.home === 'none' ? this.host.position : this.home;
     return [at(src, i * 3), at(src, i * 3 + 1), at(src, i * 3 + 2), r];
   }
