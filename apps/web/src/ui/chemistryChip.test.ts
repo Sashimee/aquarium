@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { speciesFixture, tankFixture } from '../sync/fixtures';
+import { fishFixture, speciesFixture, tankFixture } from '../sync/fixtures';
 import { dipStrip, rawValues } from '../sync/waterTest';
 import { STALE_AFTER_MS, chipState } from './chemistryChip';
 import { getDip, putDip, subscribeDips, type Dip } from './dipStore';
@@ -20,7 +20,7 @@ function dipFor(tank: ReturnType<typeof tankFixture>, over: Partial<Dip> = {}): 
 
 function withAmmonia(ammonia: number) {
   const base = tankFixture();
-  return tankFixture({ water: { ...base.water, ammonia } });
+  return tankFixture({ water: { ...base.water, ammonia }, fish: [fishFixture('fish-1')] });
 }
 
 describe('chipState', () => {
@@ -40,7 +40,7 @@ describe('chipState', () => {
   });
 
   it('warns on moderate ammonia', () => {
-    const tank = withAmmonia(0.05);
+    const tank = withAmmonia(0.15);
     expect(chipState(tank, species, dipFor(tank), NOW).status).toBe('warning');
   });
 
@@ -76,11 +76,49 @@ describe('chipState', () => {
     expect(chipState(tank, species, dip, NOW).status).toBe('safe');
   });
 
+  it('never says safe while a pad is unread, but still shows a read unsafe pad', () => {
+    const tank = withAmmonia(8);
+    const onlyPh = dipFor(tank, { revealed: false, guesses: { ph: 7 } });
+    const s = chipState(tank, species, onlyPh, NOW);
+    expect(s.status).toBe('partial');
+    expect(s.verdict).not.toMatch(/safe/i);
+    expect(s.ariaLabel).toContain('Ammonia not read yet');
+
+    const clean = withAmmonia(0);
+    const cleanPartial = dipFor(clean, { revealed: false, guesses: { ph: 7 } });
+    expect(chipState(clean, species, cleanPartial, NOW).status).toBe('partial');
+
+    const onlyAmmonia = dipFor(tank, { revealed: false, guesses: { ammonia: 0 } });
+    expect(chipState(tank, species, onlyAmmonia, NOW).status).toBe('danger');
+  });
+
+  it('warns on a temperature outside what the fish like', () => {
+    const tank = withAmmonia(0);
+    expect(chipState(tank, species, dipFor(tank), NOW).status).toBe('safe');
+    expect(chipState(tank, species, dipFor(tank, { temperatureC: 44 }), NOW).status).toBe(
+      'warning',
+    );
+    expect(chipState(tank, species, dipFor(tank, { temperatureC: 4 }), NOW).status).toBe('warning');
+  });
+
+  it('flags a bad temperature even when no pad is read', () => {
+    const tank = withAmmonia(0);
+    const hot = dipFor(tank, { revealed: false, temperatureC: 44 });
+    expect(chipState(tank, species, hot, NOW).status).toBe('warning');
+    const fine = dipFor(tank, { revealed: false });
+    expect(chipState(tank, species, fine, NOW).status).toBe('unread');
+  });
+
   it('updates when a newer dip replaces the old one', () => {
     const bad = withAmmonia(8);
     const good = withAmmonia(0);
-    expect(chipState(bad, species, dipFor(bad), NOW).status).toBe('danger');
-    expect(chipState(good, species, dipFor(good), NOW).status).toBe('safe');
+    putDip('replace-tank', dipFor(bad));
+    const first = getDip('replace-tank');
+    expect(first && chipState(bad, species, first, NOW).status).toBe('danger');
+    putDip('replace-tank', dipFor(good));
+    const second = getDip('replace-tank');
+    expect(second && chipState(good, species, second, NOW).status).toBe('safe');
+    expect(second).not.toBe(first);
   });
 
   it('gives a screen reader the verdict in words, not colour', () => {

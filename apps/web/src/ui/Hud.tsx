@@ -88,6 +88,7 @@ export function StatusCard({ open, onPress }: { open: boolean; onPress(): void }
 const CHIP_ICON: Record<ChipStatus, string> = {
   none: '-',
   unread: '?',
+  partial: '?',
   stale: '~',
   safe: 'OK',
   warning: '!',
@@ -116,7 +117,6 @@ export function ChemistryChip({ open, onPress }: { open: boolean; onPress(): voi
     <button
       type="button"
       className="chem-chip"
-      data-opener="care"
       data-status={state.status}
       aria-expanded={open}
       aria-controls={open ? 'panel-care' : undefined}
