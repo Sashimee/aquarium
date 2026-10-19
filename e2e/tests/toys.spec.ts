@@ -171,7 +171,10 @@ test('the mirror, the ping-pong ball and the shy-fish feeding game work from the
   await play.getByRole('button', { name: 'Start round' }).click();
   const shyest = (await savedTanks(page))[0]?.fish
     .filter((f) => f.name === 'Glint' || f.name === 'Bolt')
-    .reduce((a, b) => (b.personality.boldness < a.personality.boldness ? b : a));
+    .reduce<{ name: string; personality: { boldness: number } } | undefined>(
+      (a, b) => (a && a.personality.boldness <= b.personality.boldness ? a : b),
+      undefined,
+    );
   if (!shyest) throw new Error('Glint and Bolt are not in the saved tank');
   const round = play.getByRole('status').filter({ hasText: new RegExp(`^Feed ${shyest.name}\\.`) });
   await expect(round).toBeVisible();
