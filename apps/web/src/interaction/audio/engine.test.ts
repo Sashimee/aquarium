@@ -59,6 +59,9 @@ const INDEX = {
     audioAsset('underwater-bed', 'underwater-ambience', true, 768000),
     audioAsset('air-bubbles', 'air-bubbles', true, 391958),
     audioAsset('glass-tap', 'glass-tap', false, 11305),
+    audioAsset('food-plop', 'food-plop', false, 9000),
+    audioAsset('net-splash', 'net-splash', false, 20000),
+    audioAsset('ui-click-1', 'ui-click', false, 3000),
   ],
 };
 
@@ -125,6 +128,7 @@ function setup(over: Partial<AudioDeps> = {}, index: unknown = INDEX, stored?: s
   let hidden = false;
   let gesture: (() => void) | null = null;
   let visibility: (() => void) | null = null;
+  let primaryClick: (() => void) | null = null;
   const warn = vi.fn();
   const deps: AudioDeps = {
     createContext: () => ctx,
@@ -137,6 +141,12 @@ function setup(over: Partial<AudioDeps> = {}, index: unknown = INDEX, stored?: s
       visibility = l;
       return () => {
         visibility = null;
+      };
+    },
+    onPrimaryClick: (l) => {
+      primaryClick = l;
+      return () => {
+        primaryClick = null;
       };
     },
     onGesture: (l) => {
@@ -171,6 +181,8 @@ function setup(over: Partial<AudioDeps> = {}, index: unknown = INDEX, stored?: s
       await new Promise((r) => setTimeout(r, 0));
     },
     hasGestureListener: () => gesture !== null,
+    click: () => primaryClick?.(),
+    hasClickListener: () => primaryClick !== null,
     setHidden: (value: boolean) => {
       hidden = value;
       visibility?.();
@@ -408,6 +420,45 @@ describe('AudioEngine effects and failure', () => {
     const levels = t.gains.slice(-2).map((g) => g.gain.value);
     expect(levels[0]).toBeLessThan(levels[1] ?? 0);
     expect(levels[1]).toBe(1);
+  });
+
+  it.each([
+    [
+      'food-plop',
+      (t: ReturnType<typeof setup>) =>
+        t.bus.emit('feed:dropped', { food: 'flakes', portion: 1, particles: 5 }),
+    ],
+    [
+      'net-splash',
+      (t: ReturnType<typeof setup>) =>
+        t.bus.emit('tank:fish-removed', { tankId: 't', fishId: 'f', reason: 'netted' }),
+    ],
+    ['ui-click', (t: ReturnType<typeof setup>) => t.click()],
+  ])('plays %s once, and not while muted', async (_role, trigger) => {
+    const t = setup();
+    await t.gesture();
+    const before = t.sources.length;
+    trigger(t);
+    expect(t.sources).toHaveLength(before + 1);
+    expect(t.gains.at(-1)?.gain.value).toBeGreaterThan(0);
+    t.engine.setMuted(true);
+    trigger(t);
+    expect(t.sources).toHaveLength(before + 1);
+  });
+
+  it('does not splash for a fish removed on another device', async () => {
+    const t = setup();
+    await t.gesture();
+    const before = t.sources.length;
+    t.bus.emit('tank:fish-removed', { tankId: 't', fishId: 'f', reason: 'gone' });
+    expect(t.sources).toHaveLength(before);
+  });
+
+  it('stops listening for button presses on stop', () => {
+    const t = setup();
+    expect(t.hasClickListener()).toBe(true);
+    t.engine.stop();
+    expect(t.hasClickListener()).toBe(false);
   });
 
   it('is silent for taps while muted or locked', async () => {

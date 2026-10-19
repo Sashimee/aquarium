@@ -122,7 +122,11 @@ describe('reaction problems', () => {
   it.each([
     [failure(401, 'unauthenticated'), 'sign-in'],
     [failure(403, 'email_not_verified'), 'verify'],
-    [new ApiRequestError(403, 'forbidden', 'You cannot react to your own tank.', {}, null), 'own'],
+    [new ApiRequestError(403, 'own_tank', 'Reworded server copy.', {}, null), 'own'],
+    [
+      new ApiRequestError(403, 'forbidden', 'You cannot react to your own tank.', {}, null),
+      'failed',
+    ],
     [new ApiRequestError(403, 'forbidden', 'Cross-origin request rejected.', {}, null), 'failed'],
     [failure(404, 'not_found'), 'gone'],
     [failure(429, 'rate_limited', 12), 'slow'],
