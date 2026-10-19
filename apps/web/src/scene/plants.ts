@@ -14,6 +14,7 @@ import {
 import { float, fract, instanceIndex, positionGeometry, positionLocal, sin, vec3 } from 'three/tsl';
 import {
   FLUTTER_HZ,
+  normaliseDirection,
   MEANDER_AMPLITUDE,
   type CurrentField,
   type CurrentParameters,
@@ -72,7 +73,7 @@ export function maxSway(
 ): number {
   const forward = current.speed * (1 + current.gustDepth);
   const sideways = current.speed * current.gustDepth * MEANDER_AMPLITUDE;
-  const [dx, dz] = current.direction;
+  const [dx, dz] = normaliseDirection(current.direction);
   const along = axis === 'x' ? Math.abs(dx) : Math.abs(dz);
   const across = axis === 'x' ? Math.abs(dz) : Math.abs(dx);
   const flow =

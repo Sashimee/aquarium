@@ -55,6 +55,23 @@ describe('maxSway per axis', () => {
     expect(x).toBeLessThanOrEqual(maxSway('vallisneria', 0.4, current));
   });
 
+  it('normalises the direction like the shader, so a longer vector sways no further', () => {
+    const unit = { ...current, direction: [0.6, 0.8] as const };
+    const long = { ...current, direction: [3, 4] as const };
+    for (const axis of ['x', 'z'] as const) {
+      expect(maxSway('vallisneria', 0.4, long, axis)).toBeCloseTo(
+        maxSway('vallisneria', 0.4, unit, axis),
+        12,
+      );
+    }
+  });
+
+  it('rejects a zero direction, as the current field does', () => {
+    expect(() => maxSway('vallisneria', 0.4, { ...current, direction: [0, 0] }, 'x')).toThrow(
+      RangeError,
+    );
+  });
+
   it('swaps axes when the current runs along z', () => {
     const turned = { ...current, direction: [0, 1] as const };
     expect(maxSway('vallisneria', 0.4, turned, 'z')).toBeCloseTo(
