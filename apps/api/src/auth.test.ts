@@ -28,8 +28,7 @@ const median = (xs: number[]) => {
 // while a hash skipped or doubled shows ~1.0 or more. A tighter 25% flaked under load (0.2532,
 // #218) because the median gap of a loaded runner moves by that much without any leak. The bound
 // grows with load: fine for CPU-bound leaks like a hash, looser for I/O-bound ones. A repeat is
-// legitimately ~1-3 ms faster (Better Auth's extra inserts for a new address); that skew is
-// accepted.
+// legitimately ~1-3 ms faster (Better Auth's extra inserts for a new address); accepted skew.
 const TIMING_SKEW_BOUND = 0.5;
 
 function expectNoTimingSkew(pairs: { fresh: number; repeat: number }[]) {

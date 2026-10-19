@@ -14,6 +14,7 @@ let dist: string;
 let plain: Harness;
 let spa: Harness;
 let indexable: Harness;
+let broken: Harness;
 
 beforeAll(async () => {
   dist = mkdtempSync(join(tmpdir(), 'aquarium-dist-'));
@@ -28,15 +29,21 @@ beforeAll(async () => {
   mkdirSync(join(dist, 'assets', 'fish'));
   writeFileSync(join(dist, 'assets', 'fish', 'tetra.glb'), 'glb');
   writeFileSync(join(dist, '.env'), 'SECRET=1');
-  [plain, spa, indexable] = await Promise.all([
+  [plain, spa, indexable, broken] = await Promise.all([
     createHarness(),
     createHarness({ webRoot: dist }),
     createHarness({ webRoot: dist, indexable: true }),
+    createHarness(),
   ]);
 });
 
 afterAll(async () => {
-  await Promise.all([plain.close(), spa.close(), indexable.close()]);
+  await Promise.all([
+    plain.close(),
+    spa.close(),
+    indexable.close(),
+    broken.app.close().then(broken.dropDatabase),
+  ]);
   rmSync(dist, { recursive: true, force: true });
 });
 
@@ -50,13 +57,10 @@ describe('health', () => {
   });
 
   it('reports 503 when the database is gone', async () => {
-    const broken = await createHarness();
     await broken.database.pool.end();
     const res = await broken.app.inject('/api/health');
     expect(res.statusCode).toBe(503);
     expect(res.headers['x-robots-tag']).toBe(NOINDEX);
-    await broken.app.close();
-    await broken.dropDatabase();
   });
 });
 

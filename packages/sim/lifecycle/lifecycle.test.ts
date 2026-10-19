@@ -272,11 +272,9 @@ describe('a tank stocked to capacity at full size under perfect daily care', () 
     expect(state.fish.every((f) => f.alive && f.health === 1)).toBe(true);
   });
 
-  it.each(
-    parsedSpecies
-      .filter((s) => s.lifecycle.ammoniaTolerance >= 0.1)
-      .map((s) => [s.id, s.biome] as const),
-  )(
+  const SHRIMP_IDS = new Set(['cherry-shrimp', 'cleaner-shrimp']);
+
+  it.each(parsedSpecies.filter((s) => !SHRIMP_IDS.has(s.id)).map((s) => [s.id, s.biome] as const))(
     'a nano stocked at the old cap of 12 keeps every %s for 120 days of weekly water changes',
     (id, biome) => {
       const spec = species.get(id);
@@ -1131,6 +1129,34 @@ describe('overfeeding by tank size', () => {
       });
       expect(only(r).alive).toBe(true);
       expect(only(r).health).toBeGreaterThan(0.95);
+    },
+  );
+
+  it.each(parsedSpecies.map((s) => [s.id] as const))(
+    'one portion in a stocked nano costs %s less than 1% of its health',
+    (id) => {
+      const spec = species.get(id);
+      if (!spec) throw new Error(`no species ${id}`);
+      const biome = parsedSpecies.find((p) => p.id === id)?.biome ?? 'freshwater';
+      const count = Math.max(1, Math.floor(BIOLOAD_CAPACITY_BY_SIZE.nano30 / spec.bioload));
+      const state = {
+        ...tank(
+          Array.from({ length: count }, (_, i) =>
+            fishOf(`${id}-${i}`, id, { size: spec.maxSizeM }),
+          ),
+          { uneatenFood: 1 },
+        ),
+        chemistry: newTankChemistry(biome),
+      };
+      const r = run(state, 3 * DAY, {
+        env: {
+          biome,
+          litres: TANK_SIZES.nano30.litres,
+          bioloadCapacity: BIOLOAD_CAPACITY_BY_SIZE.nano30,
+        },
+      });
+      expect(r.state.fish.every((f) => f.alive)).toBe(true);
+      expect(Math.min(...r.state.fish.map((f) => f.health))).toBeGreaterThan(0.99);
     },
   );
 
