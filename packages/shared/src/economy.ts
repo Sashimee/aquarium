@@ -39,9 +39,9 @@ import { tankSizeSchema } from './tankSize.js';
 //                 delta < 0, itemRef names the original pack or subscription row
 //   restore       Pearls returned after a won dispute, source stripe|apple, delta > 0
 //
-// T70 must require stage and idempotencyKey on every paid add-fish and must not charge the
-// DEFAULT_PURCHASE_STAGE silently (an old client that sends no stage gets a 400 asking it to
-// reload). A fish is bought through add-fish only; purchase rejects species:* refs.
+// A request without stage is priced as DEFAULT_PURCHASE_STAGE and one without idempotencyKey gets a
+// server-made key, for clients that predate the shop (apps/api/src/legacyRequests.ts, #765).
+// A fish is bought through add-fish only; purchase rejects species:* refs.
 //
 // Plants and decor are priced by the ids of DECOR_ASSET_IDS (the ids a layout holds), not by
 // manifest ids. The procedural euphyllia-<hammer|torch>-<n> pieces share items.euphyllia; see

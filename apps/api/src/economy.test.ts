@@ -223,21 +223,6 @@ describe('wallet, shop and ledger', () => {
       expect(await sumLedger(h, who)).toBe(await balance(h, who));
     });
 
-    it('asks an old client for a stage and a key instead of charging a default', async () => {
-      const who = await account(h);
-      const tank = await freeTank(h, who);
-      for (const body of [
-        { species: 'neon-tetra', name: 'x' },
-        { species: 'neon-tetra', name: 'x', stage: 'adult' },
-        { species: 'neon-tetra', name: 'x', idempotencyKey: key() },
-      ]) {
-        const res = await call(h, who, 'POST', `/api/tanks/${tank.id}/fish`, body);
-        expect(res.statusCode).toBe(400);
-        expect(errorCode(res)).toBe('validation_failed');
-      }
-      expect(await balance(h, who)).toBe(economy.grants.starting);
-    });
-
     it('never overdraws: the purchase that does not fit is refused and leaves no trace', async () => {
       const { who, tank } = await primed(h);
       await setBalance(h, who, 449);
@@ -349,10 +334,6 @@ describe('wallet, shop and ledger', () => {
       const who = await account(h);
       const first = await createTank(h, who);
       expect(first.statusCode).toBe(201);
-      expect(await balance(h, who)).toBe(economy.grants.starting);
-
-      const unkeyed = await createTank(h, who);
-      expect(unkeyed.statusCode).toBe(400);
       expect(await balance(h, who)).toBe(economy.grants.starting);
 
       const slot = economy.items.tankSlots[0] ?? 0;
@@ -595,15 +576,11 @@ describe('wallet, shop and ledger', () => {
       expect(await balance(h, who)).toBeGreaterThanOrEqual(start);
     });
 
-    it('charges bottled bacteria once, only with a key, and applies it once', async () => {
+    it('charges bottled bacteria once per key and applies it once', async () => {
       const { who, tank } = await primed(h);
       const bacteria = (body: object) =>
         call(h, who, 'POST', `/api/tanks/${tank.id}/care`, { type: 'bottled_bacteria', ...body });
       const before = await balance(h, who);
-      const unkeyed = await bacteria({});
-      expect(unkeyed.statusCode).toBe(400);
-      expect(await balance(h, who)).toBe(before);
-
       const k = key();
       expect((await bacteria({ idempotencyKey: k })).statusCode).toBe(200);
       expect((await bacteria({ idempotencyKey: k })).statusCode).toBe(200);
@@ -650,6 +627,100 @@ describe('wallet, shop and ledger', () => {
     } finally {
       await limited.close();
     }
+  });
+});
+
+describe('requests from a client that predates the shop (#765)', () => {
+  let h: Harness;
+  beforeAll(async () => {
+    h = await createHarness();
+  });
+  afterAll(() => h.close());
+
+  const legacyFish = (who: Account, tankId: string, species = 'angelfish') =>
+    call(h, who, 'POST', `/api/tanks/${tankId}/fish`, { species, name: 'Old' });
+
+  it('prices a fish without a stage as an adult and stores an adult', async () => {
+    const { who, tank } = await primed(h);
+    const before = await balance(h, who);
+    const res = await legacyFish(who, tank.id);
+    expect(res.statusCode).toBe(201);
+    const fish = tankSchema.parse(res.json()).fish.find((f) => f.species === 'angelfish');
+    expect(fish?.stage).toBe('adult');
+    expect(await balance(h, who)).toBe(before - (economy.species['angelfish']?.adult ?? 0));
+    const row = (await ledgerOf(h, who)).findLast((r) => r.reason === 'purchase');
+    expect(row?.itemRef).toBe('species:angelfish:adult');
+    expect(await sumLedger(h, who)).toBe(await balance(h, who));
+  });
+
+  it('honours a stage sent without a key, and a key sent without a stage', async () => {
+    const { who, tank } = await primed(h);
+    const juvenile = await call(h, who, 'POST', `/api/tanks/${tank.id}/fish`, {
+      species: 'angelfish',
+      name: 'Old',
+      stage: 'juvenile',
+    });
+    expect(juvenile.statusCode).toBe(201);
+    const k = key();
+    const body = { species: 'angelfish', name: 'Old', idempotencyKey: k };
+    expect((await call(h, who, 'POST', `/api/tanks/${tank.id}/fish`, body)).statusCode).toBe(201);
+    expect((await call(h, who, 'POST', `/api/tanks/${tank.id}/fish`, body)).statusCode).toBe(200);
+    const refs = (await ledgerOf(h, who))
+      .filter((r) => r.reason === 'purchase')
+      .map((r) => r.itemRef);
+    expect(refs.filter((r) => r === 'species:angelfish:juvenile')).toHaveLength(1);
+    expect(refs.filter((r) => r === 'species:angelfish:adult')).toHaveLength(1);
+  });
+
+  it('refuses a fish it cannot pay for with 402 and no trace', async () => {
+    const { who, tank } = await primed(h);
+    await setBalance(h, who, (economy.species['angelfish']?.adult ?? 0) - 1);
+    const before = (await ledgerOf(h, who)).length;
+    const res = await legacyFish(who, tank.id);
+    expect(res.statusCode).toBe(402);
+    expect(errorCode(res)).toBe('insufficient_pearls');
+    expect(await ledgerOf(h, who)).toHaveLength(before);
+    const read = tankSchema.parse((await call(h, who, 'GET', `/api/tanks/${tank.id}`)).json());
+    expect(read.fish.some((f) => f.species === 'angelfish')).toBe(false);
+  });
+
+  it('charges the slot price for a second tank without a key, and 402s on overdraft', async () => {
+    const who = await account(h);
+    expect((await createTank(h, who)).statusCode).toBe(201);
+    expect(await balance(h, who)).toBe(economy.grants.starting);
+    const second = await createTank(h, who);
+    expect(second.statusCode).toBe(201);
+    const slot = economy.items.tankSlots[0] ?? 0;
+    expect(await balance(h, who)).toBe(economy.grants.starting - slot);
+    const poor = await createTank(h, who);
+    expect(poor.statusCode).toBe(402);
+    const owned = await h.database.db
+      .select()
+      .from(schema.tanks)
+      .where(eq(schema.tanks.ownerId, who.userId));
+    expect(owned).toHaveLength(2);
+  });
+
+  it('opens the wallet itself when a keyless paid tank is the first thing an account does', async () => {
+    const who = await account(h);
+    expect((await createTank(h, who)).statusCode).toBe(201);
+    expect((await createTank(h, who)).statusCode).toBe(201);
+    const slot = economy.items.tankSlots[0] ?? 0;
+    expect(await balance(h, who)).toBe(economy.grants.starting - slot);
+  });
+
+  it('charges bottled bacteria without a key, and 402s on overdraft', async () => {
+    const { who, tank } = await primed(h);
+    const bacteria = () =>
+      call(h, who, 'POST', `/api/tanks/${tank.id}/care`, { type: 'bottled_bacteria' });
+    const price = economy.items.consumables.bottledBacteria;
+    await setBalance(h, who, price);
+    expect((await bacteria()).statusCode).toBe(200);
+    expect(await balance(h, who)).toBe(0);
+    const refused = await bacteria();
+    expect(refused.statusCode).toBe(402);
+    expect(errorCode(refused)).toBe('insufficient_pearls');
+    expect(await balance(h, who)).toBe(0);
   });
 });
 

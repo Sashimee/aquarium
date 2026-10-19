@@ -65,6 +65,7 @@ import {
 } from './earn.ts';
 import { registerShopRoutes } from './shop.ts';
 import { backgroundRef, licenseFor } from './items.ts';
+import { legacyKey, legacyStage } from './legacyRequests.ts';
 import { findReplay, lockWallet, owns, spend } from './wallet.ts';
 import { apiError, HttpError } from './errors.ts';
 import type { Limit, RateLimiter } from './rate-limit.ts';
@@ -587,21 +588,16 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       const user = await authorize(req);
       const body = createTankRequestSchema.parse(req.body);
       const sizeRef = `tank:${body.size}:`;
+      const tankKey = legacyKey(body.idempotencyKey);
       const outcome = await database.db.transaction(async (tx) => {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`tanks:${user.id}`}))`);
         const nowMs = clock.now();
-        if (body.idempotencyKey !== undefined) {
-          await lockWallet(tx, economy, user.id, nowMs);
-          const replay = await findReplay(
-            tx,
-            user.id,
-            body.idempotencyKey,
-            sizeRef,
-            (stored, requested) => stored.startsWith(requested),
-          );
-          if (replay?.entry.itemRef) {
-            return { existingId: replay.entry.itemRef.slice(sizeRef.length) };
-          }
+        await lockWallet(tx, economy, user.id, nowMs);
+        const replay = await findReplay(tx, user.id, tankKey, sizeRef, (stored, requested) =>
+          stored.startsWith(requested),
+        );
+        if (replay?.entry.itemRef) {
+          return { existingId: replay.entry.itemRef.slice(sizeRef.length) };
         }
         const owned = await tx
           .select({ quarantine: schema.tanks.quarantine })
@@ -622,20 +618,10 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
         const price = body.quarantine ? 0 : slotPrice + (economy.items.tankSizes[body.size] ?? 0);
         const id = randomUUID();
         if (price > 0) {
-          if (body.idempotencyKey === undefined) {
-            throw new HttpError(
-              400,
-              apiError(
-                'validation_failed',
-                'This tank costs Pearls. Send an idempotencyKey, or reload the page to update the app.',
-                [{ path: ['idempotencyKey'], message: 'required for a paid tank' }],
-              ),
-            );
-          }
           const charged = await spend(
             tx,
             user.id,
-            { amount: price, itemRef: `${sizeRef}${id}`, key: body.idempotencyKey, nowMs },
+            { amount: price, itemRef: `${sizeRef}${id}`, key: tankKey, nowMs },
             (stored, requested) => stored.startsWith(requested),
           );
           if (charged.replayed && charged.entry.itemRef) {
@@ -850,17 +836,8 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           .code(400)
           .send(apiError('validation_failed', `Unknown species "${body.species}".`));
       }
-      const { stage, idempotencyKey } = body;
-      if (stage === undefined || idempotencyKey === undefined) {
-        throw new HttpError(
-          400,
-          apiError(
-            'validation_failed',
-            'Choose juvenile or adult and send an idempotencyKey. Reload the page to update the app.',
-            [{ path: [stage === undefined ? 'stage' : 'idempotencyKey'], message: 'required' }],
-          ),
-        );
-      }
+      const stage = legacyStage(body.stage);
+      const idempotencyKey = legacyKey(body.idempotencyKey);
       const price = Object.hasOwn(economy.species, spec.id)
         ? economy.species[spec.id]?.[stage]
         : undefined;
@@ -977,30 +954,22 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       const result = await withTank(user, tankId, async (tx, ticked) => {
         const nowMs = clock.now();
         const bacteriaRef = 'consumable:bottled-bacteria';
+        const bacteriaKey =
+          action.type === 'bottled_bacteria' ? legacyKey(action.idempotencyKey) : '';
         if (action.type === 'bottled_bacteria') {
-          if (action.idempotencyKey === undefined) {
-            throw new HttpError(
-              400,
-              apiError(
-                'validation_failed',
-                'Bottled bacteria costs Pearls. Send an idempotencyKey, or reload the page to update the app.',
-                [{ path: ['idempotencyKey'], message: 'required' }],
-              ),
-            );
-          }
           await lockWallet(tx, economy, user.id, nowMs);
-          const replay = await findReplay(tx, user.id, action.idempotencyKey, bacteriaRef);
+          const replay = await findReplay(tx, user.id, bacteriaKey, bacteriaRef);
           if (replay) return { tank: await render(tx, ticked) };
         }
         const applied = applyCare(ticked.state, action, ticked.tank.biome, chemistryParams);
         if (!applied.ok) {
           throw new HttpError(422, apiError('feeding_rejected', applied.reason));
         }
-        if (action.type === 'bottled_bacteria' && action.idempotencyKey !== undefined) {
+        if (action.type === 'bottled_bacteria') {
           await spend(tx, user.id, {
             amount: economy.items.consumables.bottledBacteria,
             itemRef: bacteriaRef,
-            key: action.idempotencyKey,
+            key: bacteriaKey,
             nowMs,
           });
         }
