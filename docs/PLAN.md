@@ -25,7 +25,7 @@ your tanks across devices.
 | Dev access | `devfish.bas.lu` is public, `X-Robots-Tag: noindex` plus a `robots.txt` that disallows everything. |
 | Dokploy | Both apps inside the existing **Bas.lu** project. |
 | Merging | **Repo-local override of the global rule**: the orchestrator squash-merges feature PRs into `dev` once CI is green **and** `code-reviewer` approves. `dev → main` happens **only when Alex asks**. |
-| Concurrency | **6** agents at once by default; more when the tasks are independent (Alex, 2026-10-14, see §9.1). |
+| Concurrency | No cap on concurrent agents (Alex, 2026-10-19, see §9.1). |
 
 ## 2. Architecture
 
@@ -209,10 +209,10 @@ orchestrator merges it. A task is *ready* once all of its dependencies are **mer
 | T20 | GDPR + legal: account deletion, export, privacy page, `/credits` page from manifest | backend-engineer | T12, T05 | 3 |
 | T21 | Security review of auth, rate limits, mail abuse, CSRF, headers (CSP for WebGPU/workers) | code-reviewer | T16, T20 | 5 |
 | T22 | Fix wave from T18/T21 issues (fanned out to owners) | owners | T18, T21 | 6 |
-| T23 | Release candidate on devfish: full checks, prod Postgres backup schedule, prod env, `CHANGELOG`, then **stop and ask Alex** for `dev → main` | devops-engineer | T19, T22 | 7 |
+| T23 | Release candidate on devfish: full checks, prod Postgres backup schedule, prod env, `CHANGELOG`, then **stop and ask Alex** for `dev → main` (superseded: the release waits for T68, §9) | devops-engineer | T19, T22 | 7 |
 | T24 | Extended roster: discus, rasbora, pleco, shrimp, wrasse, firefish, cleaner shrimp | curator → pipeline → behaviour → render | T22 | 8 |
 
-### Concurrency map (6 by default)
+### Concurrency map
 
 ```
 Wave 0  ┃ T00 (inline) ─► T01 ──────────────────────────────────────────────────────
@@ -227,8 +227,8 @@ Wave 8  ┃ T24 roster expansion (pipelined per species)
 ```
 
 Waves are not barriers. The orchestrator starts **any** task as soon as its dependencies are
-merged, with 6 running agents (reviewers included) by default and more when the tasks are independent (§9.1). The wave column only shows the earliest a task
-can start.
+merged, with no cap on running agents (§9.1). The wave column only shows the earliest a task can
+start.
 
 **Conflict avoidance:** each agent owns directories (see its agent file). Shared files
 (`packages/shared`, `content/species/*.json`, root `package.json`) change only through small PRs
@@ -275,7 +275,7 @@ where a GPU exists).
 | Mail bounces arriving asynchronously | `fish@bas.lu` stays on the `bas.lu` domain; delivery verified by reading an actual received mail |
 | Signup used to spam via the shared relay | Per-IP and per-recipient rate limits, verification-mail cooldown |
 | Death mechanic feels punishing | 48 h grace, vacation feeder, tunable rates, a "while you were away" warning before deaths when possible |
-| Merge conflicts at 6-way concurrency | Directory ownership, contract-first PRs, fast review and merge of shared-file PRs |
+| Merge conflicts at high concurrency | Directory ownership, contract-first PRs, fast review and merge of shared-file PRs |
 | Repo bloat from assets | Only processed assets committed, budget < 150 MB enforced by `assets:check` |
 
 ## 8. Open items for later (not blocking)
@@ -286,7 +286,8 @@ where a GPU exists).
 ## 9. Expansion (asked by Alex 2026-10-16, #612)
 
 Alex asked for every proposed extra feature to be built, and for a choice of **5 tank background
-pictures per tank type**. The release (`dev → main`) waits until this section is done (T68).
+pictures per tank type**. The release (`dev → main`) waits until every task in this section is
+done (T68); Alex confirmed on 2026-10-19 that there is no release before that.
 
 ### 9.1 Decisions
 
@@ -301,10 +302,10 @@ pictures per tank type**. The release (`dev → main`) waits until this section 
 | Haptics | The Vibration API where it exists (Android). iOS Safari has none, so iOS gets no haptics; no workaround hacks. |
 | Sound | Off until the first user gesture, a master volume, a mute button and a separate "no sudden loud sounds" setting. AAC in `.m4a`, which every Safari since 16 and every other target browser plays. CC0 / CC-BY audio in the manifest. |
 | New biomes | African cichlid lake, Amazon blackwater, brackish mangrove. Each one is a preset, 5 backgrounds and at least 4 species. The biome enum in `packages/shared` grows in T30. |
-| Tanks per user | Replaces §1's "one of each": a user may own up to 6 display tanks, any mix of biomes and sizes, plus one quarantine tank (nano, not counted in the 6). |
+| Tanks per user | Replaces §1's "one of each": a user may own up to 6 display tanks, any mix of biomes and sizes, plus one quarantine tank (nano, not counted in the 6). Confirmed by Alex 2026-10-19. |
 | Window weather | Simulated from the tank's seed and the local clock. No location, no third-party weather API. |
 | Budgets | §2.7 and the < 150 MB repo asset budget (§3) stay. Backgrounds, audio, new species and biomes stream per preset. If the budget can't hold a new biome, the orchestrator stops and asks Alex before raising it. |
-| Agent concurrency | Alex said on 2026-10-14: "You can run more then 6 agents if you want to". The orchestrator may run more than 6 when tasks are independent (`CLAUDE.md` loop step 4). |
+| Agent concurrency | Alex, 2026-10-19: "remove the maximum agents limit". The orchestrator launches every ready task at once, with no cap (`CLAUDE.md` loop step 4). |
 
 ### 9.2 Architecture notes
 
