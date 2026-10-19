@@ -1103,6 +1103,44 @@ describe('water volume', () => {
     expect(over.state.chemistry.nitrite).toBeCloseTo(normal.state.chemistry.nitrite, 10);
   });
 
+  describe('above the size cap', () => {
+    const nanoLitres = TANK_SIZES.nano30.litres;
+    const nanoCap = BIOLOAD_CAPACITY_BY_SIZE.nano30;
+    const neon = species.get('neon-tetra');
+    if (!neon) throw new Error('no species neon-tetra');
+    const nitrogenOf = (count: number, litres: number, bioloadCapacity: number) => {
+      const stock = tank(
+        Array.from({ length: count }, (_, i) =>
+          fishOf(`n${i}`, 'neon-tetra', { size: neon.maxSizeM, hunger: 0 }),
+        ),
+      );
+      const r = run(stock, 6 * HOUR, {
+        env: { litres, bioloadCapacity },
+        equipment: { ...DEFAULT_EQUIPMENT, filter: { tier: 0 } },
+      });
+      return r.state.water.ammonia + r.state.chemistry.nitrite;
+    };
+    const fullCount = Math.floor(nanoCap / neon.bioload + 1e-9);
+
+    it('keeps waste flat however far the stock is over the cap of a nano', () => {
+      const atCap = nitrogenOf(fullCount, nanoLitres, nanoCap);
+      expect(atCap).toBeGreaterThan(0);
+      expect(nitrogenOf(fullCount * 2, nanoLitres, nanoCap)).toBeCloseTo(atCap, 6);
+      expect(nitrogenOf(fullCount * 4, nanoLitres, nanoCap)).toBeCloseTo(atCap, 6);
+    });
+
+    it('still lets waste grow with stock below the cap', () => {
+      const half = nitrogenOf(Math.floor(fullCount / 2), nanoLitres, nanoCap);
+      expect(nitrogenOf(fullCount, nanoLitres, nanoCap)).toBeGreaterThan(half * 1.5);
+    });
+
+    it('never drops below the unscaled waste when the cap is far under the stock', () => {
+      const stockCount = 8;
+      const unscaled = nitrogenOf(stockCount, REFERENCE_TANK_LITRES, 100);
+      expect(nitrogenOf(stockCount, nanoLitres, 0.01)).toBeCloseTo(unscaled, 6);
+    });
+  });
+
   it('concentrates the same waste in less water, but less than linearly', () => {
     expect(nitrogen(30)).toBeGreaterThan(nitrogen(300) * 2);
     expect(nitrogen(30)).toBeLessThan(nitrogen(300) * 10);
@@ -1471,7 +1509,7 @@ describe('equipment effects', () => {
     expect(waves[1]).toBeLessThan(waves[0] ?? 0);
   });
 
-  it('lowers the pH target with CO2, harder at a higher tier, and stresses a fish that needs harder water', () => {
+  it('lowers the pH target with CO2, harder at a higher tier, and never improves the health of a fish that needs harder water', () => {
     const phAfter = (tier: number) =>
       run(stocked(), 10 * DAY, { equipment: withEquipment({ co2: { tier } }) }).state.chemistry.ph;
     const [none, one, two] = [phAfter(0), phAfter(1), phAfter(2)];
@@ -1536,7 +1574,7 @@ describe('warm-water species and the heater', () => {
     }
   });
 
-  it('takes longer than a day for a heaterless warm tank to hurt, then keeps hurting', () => {
+  it('costs a discus in a heaterless warm tank more health over a week than over a day', () => {
     const start = {
       ...tank([fishOf('a', 'discus')]),
       chemistry: newTankChemistry('freshwater'),

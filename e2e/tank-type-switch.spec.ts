@@ -144,6 +144,7 @@ test.describe('tank type switch', () => {
     await typeButton(page, 'Freshwater').click();
     await expect(page.getByLabel('Kind of tank')).toHaveValue('freshwater');
     await page.getByRole('button', { name: 'Create tank' }).click();
+    await page.getByRole('button', { name: 'Yes, buy it' }).click();
     await expect(typeButton(page, 'Freshwater')).toHaveAttribute('aria-pressed', 'true');
 
     await typeButton(page, 'Reef').click();
