@@ -145,7 +145,7 @@ export function rasterise(
         let g = 0.7;
         let b = 0.7;
         let alpha = 1;
-        if (texture && uvs) {
+        if (texture && uvs && !Number.isNaN(uvs[ia * 2]!)) {
           const u = w0 * uvs[ia * 2]! + w1 * uvs[ib * 2]! + w2 * uvs[ic * 2]!;
           const v = w0 * uvs[ia * 2 + 1]! + w1 * uvs[ib * 2 + 1]! + w2 * uvs[ic * 2 + 1]!;
           [r, g, b, alpha] = sample(texture, u, v);

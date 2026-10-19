@@ -167,7 +167,9 @@ const SHIPPED_EXTENSIONS: readonly string[] = ['.glb', '.ktx2'];
 
 function requiredAttributes(kind: OutputAsset['kind']): string[] {
   if (kind === 'fish') return ['TEXCOORD_0', FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE, MOUTH_ATTRIBUTE];
-  if (kind === 'shrimp') return [FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE, LEG_ATTRIBUTE];
+  if (kind === 'shrimp' || kind === 'crab')
+    return [FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE, LEG_ATTRIBUTE];
+  if (kind === 'snail') return [FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE];
   return [];
 }
 
@@ -416,25 +418,38 @@ function impostorProblems(asset: OutputAsset, assetsDir: string, problems: strin
 }
 
 function shrimpProblems(asset: OutputAsset, repoRoot: string, problems: string[]): void {
-  const at = `shrimp ${asset.id}`;
-  if (!asset.shrimp) {
-    problems.push(`${at}: index entry has no shrimp block (part ids, rig, standard length)`);
+  const at = `${asset.kind} ${asset.id}`;
+  const rig = asset.kind === 'crab' ? asset.crab : asset.shrimp;
+  if (!rig) {
+    problems.push(`${at}: index entry has no ${asset.kind} block (part ids, rig, standard length)`);
     return;
   }
-  for (const render of [asset.shrimp.debugRender, asset.shrimp.debugPartsRender]) {
+  for (const render of [rig.debugRender, rig.debugPartsRender]) {
     if (!existsSync(join(repoRoot, 'tools', 'asset-pipeline', render)))
       problems.push(`${at}: debug render ${render} is missing`);
   }
   const expected = asset.species ? shrimpLength(repoRoot, asset.species) : null;
   if (expected === null) return;
-  if (asset.shrimp.lengthSource !== 'species-json') {
+  if (rig.lengthSource !== 'species-json') {
     problems.push(
-      `${at}: built with lengthSource ${asset.shrimp.lengthSource} but the species JSON has bodyLengthM ${expected.metres} (rebuild with pnpm build:assets)`,
+      `${at}: built with lengthSource ${rig.lengthSource} but the species JSON has bodyLengthM ${expected.metres} (rebuild with pnpm build:assets)`,
     );
-  } else if (Math.abs(asset.shrimp.standardLengthM - expected.metres) > 1e-9) {
+  } else if (Math.abs(rig.standardLengthM - expected.metres) > 1e-9) {
     problems.push(
-      `${at}: standardLengthM ${asset.shrimp.standardLengthM} differs from the species JSON bodyLengthM ${expected.metres} (rebuild with pnpm build:assets)`,
+      `${at}: standardLengthM ${rig.standardLengthM} differs from the species JSON bodyLengthM ${expected.metres} (rebuild with pnpm build:assets)`,
     );
+  }
+}
+
+function snailProblems(asset: OutputAsset, repoRoot: string, problems: string[]): void {
+  const at = `snail ${asset.id}`;
+  if (!asset.snail) {
+    problems.push(`${at}: index entry has no snail block (part ids, standard length)`);
+    return;
+  }
+  for (const render of [asset.snail.debugRender, asset.snail.debugPartsRender]) {
+    if (!existsSync(join(repoRoot, 'tools', 'asset-pipeline', render)))
+      problems.push(`${at}: debug render ${render} is missing`);
   }
 }
 
@@ -456,7 +471,8 @@ export function checkAssets(input: CheckInput): string[] {
       fishProblems(asset, repoRoot, problems);
       impostorProblems(asset, assetsDir, problems);
     }
-    if (asset.kind === 'shrimp') shrimpProblems(asset, repoRoot, problems);
+    if (asset.kind === 'shrimp' || asset.kind === 'crab') shrimpProblems(asset, repoRoot, problems);
+    if (asset.kind === 'snail') snailProblems(asset, repoRoot, problems);
     if (asset.kind === 'background') {
       problems.push(
         ...backgroundFileProblems(asset, (relative) => {

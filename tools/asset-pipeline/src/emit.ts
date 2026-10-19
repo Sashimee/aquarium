@@ -31,8 +31,11 @@ export interface LodPlan {
   /** Triangle ratios for LOD0..LOD2 against the welded input. */
   ratios: [number, number, number];
   minTriangles: number;
+  keepSeams?: boolean;
   /** Runs on each primitive of LOD `level` before simplification. */
   prepare?: (prim: Primitive, level: number) => void;
+  /** Runs on each primitive of LOD `level` after simplification. */
+  finish?: (prim: Primitive, level: number) => void;
 }
 
 export interface TextureEntry {
@@ -132,7 +135,15 @@ export interface EmitInput {
   atlasSink?: (id: string, atlas: Atlas) => void;
   meta: Pick<
     OutputAsset,
-    'species' | 'origin' | 'sources' | 'licence' | 'modifications' | 'fish' | 'shrimp'
+    | 'species'
+    | 'origin'
+    | 'sources'
+    | 'licence'
+    | 'modifications'
+    | 'fish'
+    | 'shrimp'
+    | 'crab'
+    | 'snail'
   >;
 }
 
@@ -217,7 +228,12 @@ export async function emitAsset(input: EmitInput): Promise<OutputAsset> {
           continue;
         }
         plan.prepare?.(prim, level);
-        simplifyPrimitive(prim, { ratio: plan.ratios[level]!, minTriangles: plan.minTriangles });
+        simplifyPrimitive(prim, {
+          ratio: plan.ratios[level]!,
+          minTriangles: plan.minTriangles,
+          ...(plan.keepSeams ? { keepSeams: true } : {}),
+        });
+        plan.finish?.(prim, level);
       }
     for (const mesh of doc.getRoot().listMeshes()) renormaliseMouth(mesh.listPrimitives());
     await doc.transform(prune(pruneOptions));
@@ -290,5 +306,7 @@ export async function emitAsset(input: EmitInput): Promise<OutputAsset> {
     ...(impostor ? { impostor } : {}),
     ...(input.meta.fish ? { fish: input.meta.fish } : {}),
     ...(input.meta.shrimp ? { shrimp: input.meta.shrimp } : {}),
+    ...(input.meta.crab ? { crab: input.meta.crab } : {}),
+    ...(input.meta.snail ? { snail: input.meta.snail } : {}),
   };
 }

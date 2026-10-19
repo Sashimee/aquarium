@@ -1,6 +1,7 @@
 import type { Primitive } from '@gltf-transform/core';
 import { compactPrimitive } from '@gltf-transform/functions';
 import { MeshoptSimplifier } from 'meshoptimizer';
+import { boundsOf, canonicalVertices, connectedComponents } from './crew-scan.ts';
 import {
   FIN_ID_ATTRIBUTE,
   FIN_MASK_ATTRIBUTE,
@@ -14,6 +15,8 @@ export interface SimplifyOptions {
   ratio: number;
   /** Never reduce below this many triangles. */
   minTriangles: number;
+  /** Forbid collapses across attribute seams, so a UV chart boundary survives simplification. */
+  keepSeams?: boolean;
 }
 
 const GUIDE_ATTRIBUTES: { semantic: string; size: number; weight: number }[] = [
@@ -25,6 +28,34 @@ const GUIDE_ATTRIBUTES: { semantic: string; size: number; weight: number }[] = [
   { semantic: SWAY_ATTRIBUTE, size: 1, weight: 3 },
   { semantic: LEG_ATTRIBUTE, size: 1, weight: 3 },
 ];
+
+/** Drops zero-area triangles, then every triangle outside the largest position-welded component, so simplified thin parts cannot leave floating flecks. */
+export function keepMainComponent(prim: Primitive): void {
+  const indicesAccessor = prim.getIndices();
+  if (!indicesAccessor) throw new Error('keepMainComponent: primitive must be indexed');
+  const positions = prim.getAttribute('POSITION')!.getArray()!;
+  const bounds = boundsOf(positions);
+  const diagonal = Math.hypot(
+    bounds.max[0] - bounds.min[0],
+    bounds.max[1] - bounds.min[1],
+    bounds.max[2] - bounds.min[2],
+  );
+  const canon = canonicalVertices(positions, diagonal / 4000);
+  const source = indicesAccessor.getArray()!;
+  const solid: number[] = [];
+  for (let t = 0; t < source.length; t += 3) {
+    const a = canon[source[t]!]!;
+    const b = canon[source[t + 1]!]!;
+    const c = canon[source[t + 2]!]!;
+    if (a !== b && b !== c && a !== c) solid.push(source[t]!, source[t + 1]!, source[t + 2]!);
+  }
+  const components = connectedComponents(canon, solid, () => true);
+  const kept: number[] = [];
+  for (let t = 0; t < solid.length; t += 3)
+    if (components.label[solid[t]!] === 0) kept.push(solid[t]!, solid[t + 1]!, solid[t + 2]!);
+  indicesAccessor.setArray(Uint32Array.from(kept));
+  compactPrimitive(prim);
+}
 
 export function triangleCountOf(prim: Primitive): number {
   const indices = prim.getIndices();
@@ -57,7 +88,8 @@ export function simplifyPrimitive(prim: Primitive, options: SimplifyOptions): vo
       accessor.getElement(v, element);
       for (let k = 0; k < guide.size; k++) attributes[v * stride + offset + k] = element[k]!;
     }
-    for (let k = 0; k < guide.size; k++) weights.push(guide.weight);
+    const weight = options.keepSeams && guide.semantic === 'NORMAL' ? 8 : guide.weight;
+    for (let k = 0; k < guide.size; k++) weights.push(weight);
     offset += guide.size;
   }
 
@@ -72,7 +104,7 @@ export function simplifyPrimitive(prim: Primitive, options: SimplifyOptions): vo
     null,
     target * 3,
     1,
-    ['Permissive'],
+    options.keepSeams ? [] : ['Permissive'],
   );
   if (simplified.length === 0)
     throw new Error('simplifyPrimitive: simplification removed every triangle');

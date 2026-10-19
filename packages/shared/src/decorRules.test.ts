@@ -20,7 +20,16 @@ describe('decor rules', () => {
     );
   });
 
-  const NOT_DECOR = new Set(['fish', 'shrimp', 'substrate', 'hdri', 'background', 'audio']);
+  const NOT_DECOR = new Set([
+    'fish',
+    'shrimp',
+    'crab',
+    'snail',
+    'substrate',
+    'hdri',
+    'background',
+    'audio',
+  ]);
   const unclassified = (assets: { id: string; kind: string }[]) =>
     assets
       .filter((a) => !NOT_DECOR.has(a.kind))
