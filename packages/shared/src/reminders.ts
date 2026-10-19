@@ -38,6 +38,28 @@ export const removePushSubscriptionRequestSchema = z.strictObject({
   endpoint: z.url({ protocol: /^https$/ }).max(2048),
 });
 
+export const pushDeviceSchema = z.strictObject({
+  id: idSchema,
+  label: z.string().min(1),
+  createdAt: timestampSchema,
+  lastUsedAt: timestampSchema.nullable(),
+  current: z.boolean(),
+});
+export type PushDevice = z.infer<typeof pushDeviceSchema>;
+
+export const pushDeviceListSchema = z.strictObject({ devices: z.array(pushDeviceSchema) });
+export type PushDeviceList = z.infer<typeof pushDeviceListSchema>;
+
+export const pushDeviceQuerySchema = z.strictObject({
+  endpoint: z
+    .url({ protocol: /^https$/ })
+    .max(2048)
+    .optional(),
+});
+
+export const removePushResultSchema = z.strictObject({ removed: z.boolean() });
+export type RemovePushResult = z.infer<typeof removePushResultSchema>;
+
 export const exportedReminderSchema = z.strictObject({
   mail: z.boolean(),
   push: z.boolean(),

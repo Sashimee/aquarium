@@ -43,6 +43,7 @@ export interface ShutdownDeps {
   closeApp(): Promise<unknown>;
   tasks: BackgroundTasks;
   closeDatabase(): Promise<void>;
+  afterDrain?(abandoned: number): Promise<void>;
   budgetMs: number;
 }
 
@@ -68,5 +69,6 @@ export async function shutdown(deps: ShutdownDeps): Promise<void> {
       `shutdown: abandoned ${abandoned} background task(s) at the ${deps.budgetMs} ms budget`,
     );
   }
+  if (abandoned > 0) await deps.afterDrain?.(abandoned);
   await deps.closeDatabase();
 }
