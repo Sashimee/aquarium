@@ -167,27 +167,66 @@ describe('ReplayDirector', () => {
     const idsOf = (payload: unknown): string[] =>
       (payload as InteractionEvents['tank:loaded']).fish.map((f: Fish) => f.id);
 
-    it('resets the roster before the next event after a batched A, B, A switch', () => {
+    const flush = () => Promise.resolve();
+
+    it('repairs the roster after a batched A, B, A switch with no further command', async () => {
       const { director, seen, bus } = setup();
       director.run([{ type: 'reset-roster', shown: 1 }]);
       bus.emit('tank:loaded', loadOf(tankFixture({ id: TANK_B, fish: [] })));
       bus.emit('tank:loaded', loadOf(tankFixture({ fish: live })));
       const before = seen.length;
-      director.run([{ type: 'apply', index: 1 }]);
+      await flush();
       const after = seen.slice(before);
-      expect(after.map((s) => s.type)).toEqual(['tank:loaded', 'tank:fish-added']);
+      expect(after.map((s) => s.type)).toEqual(['tank:loaded']);
       expect(idsOf(after[0]?.payload)).toEqual([FISH_1, FISH_2]);
     });
 
-    it('resets after a single foreign reload of its tank', () => {
+    it('repairs from the fish in the foreign load, not the cached tank', async () => {
+      const { director, seen, bus } = setup(tankFixture({ fish: [] }));
+      director.run([{ type: 'reset-roster', shown: 0 }]);
+      bus.emit('tank:loaded', loadOf(tankFixture({ fish: live })));
+      const before = seen.length;
+      await flush();
+      expect(idsOf(seen.slice(before)[0]?.payload)).toEqual([FISH_1, FISH_2]);
+    });
+
+    it('repairs after a single foreign reload and keeps applying from there', async () => {
+      const { director, seen, bus } = setup();
+      director.run([{ type: 'reset-roster', shown: 0 }]);
+      bus.emit('tank:loaded', loadOf(tankFixture({ fish: live })));
+      await flush();
+      const before = seen.length;
+      director.run([{ type: 'apply', index: 2 }]);
+      expect(seen.slice(before).map((s) => s.type)).toEqual(['tank:fish-died']);
+    });
+
+    it('emits nothing when disposed before the microtask runs', async () => {
       const { director, seen, bus } = setup();
       director.run([{ type: 'reset-roster', shown: 0 }]);
       bus.emit('tank:loaded', loadOf(tankFixture({ fish: live })));
       const before = seen.length;
-      director.run([{ type: 'apply', index: 2 }]);
-      const after = seen.slice(before);
-      expect(after.map((s) => s.type)).toEqual(['tank:loaded', 'tank:fish-died']);
-      expect(idsOf(after[0]?.payload)).toEqual([FISH_1, FISH_2]);
+      director.dispose();
+      await flush();
+      expect(seen).toHaveLength(before);
+    });
+
+    it('emits nothing for a reload after restore', async () => {
+      const { director, seen, bus } = setup();
+      director.run([{ type: 'reset-roster', shown: 0 }, { type: 'restore' }]);
+      const before = seen.length;
+      bus.emit('tank:loaded', loadOf(tankFixture({ fish: live })));
+      await flush();
+      expect(seen).toHaveLength(before + 1);
+    });
+
+    it('emits nothing when the session moved on to another tank', async () => {
+      const { director, seen, bus } = setup();
+      director.run([{ type: 'reset-roster', shown: 0 }]);
+      bus.emit('tank:loaded', loadOf(tankFixture({ fish: live })));
+      bus.emit('tank:loaded', loadOf(tankFixture({ id: TANK_B, fish: [] })));
+      const before = seen.length;
+      await flush();
+      expect(seen).toHaveLength(before);
     });
 
     it('does not reset because of its own loads', () => {
