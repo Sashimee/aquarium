@@ -16,6 +16,7 @@ import { usePanels, type OpenPanel, type Panel } from './panels';
 import { FeedPanel, FeedToast, PlayPanel, useFood } from './PlayControls';
 import { navigate } from './router';
 import { Sheet } from './Sheet';
+import { SoundButton } from './SoundSetting';
 import { useSessionState } from './session';
 import {
   CreditsScreen,
@@ -246,6 +247,7 @@ function Shell() {
           </div>
           <div className="hud-right">
             <div className="hud-buttons">
+              <SoundButton />
               <TankButton open={panel === 'tanks'} onPress={() => toggle('tanks')} />
               <AvatarButton open={panel === 'account'} onPress={() => toggle('account')} />
             </div>
