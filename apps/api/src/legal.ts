@@ -118,6 +118,7 @@ export function registerLegalRoutes(deps: LegalDeps): void {
             id: schema.pushSubscriptions.id,
             endpoint: schema.pushSubscriptions.endpoint,
             createdAt: schema.pushSubscriptions.createdAt,
+            lastUsedAt: schema.pushSubscriptions.lastUsedAt,
           })
           .from(schema.pushSubscriptions)
           .where(eq(schema.pushSubscriptions.userId, userId))
@@ -125,6 +126,7 @@ export function registerLegalRoutes(deps: LegalDeps): void {
         db
           .select({
             tankName: schema.tanks.name,
+            shared: sql<boolean>`${schema.tanks.shareTokenHash} is not null`,
             kind: schema.tankReactions.kind,
             createdAt: schema.tankReactions.createdAt,
           })
@@ -138,6 +140,7 @@ export function registerLegalRoutes(deps: LegalDeps): void {
             action: schema.auditLog.action,
             detail: schema.auditLog.detail,
             tankName: schema.tanks.name,
+            visible: sql<boolean>`(${schema.tanks.ownerId} = ${userId} or ${schema.tanks.shareTokenHash} is not null)`,
           })
           .from(schema.auditLog)
           .leftJoin(schema.tanks, eq(schema.tanks.id, schema.auditLog.tankId))
@@ -195,13 +198,13 @@ export function registerLegalRoutes(deps: LegalDeps): void {
             lastSentAt: prefs?.lastSentAt ?? null,
             pushSubscriptions: subscriptions,
           },
-          reactions: reactions.map(({ tankName, ...rest }) => ({
+          reactions: reactions.map(({ tankName, shared, ...rest }) => ({
             ...rest,
-            tank: publicName(tankName),
+            tank: shared ? publicName(tankName) : null,
           })),
-          auditLog: auditRows.map(({ tankName, ...rest }) => ({
+          auditLog: auditRows.map(({ tankName, visible, ...rest }) => ({
             ...rest,
-            tank: tankName === null ? null : publicName(tankName),
+            tank: tankName === null || !visible ? null : publicName(tankName),
           })),
           tanks: perTank,
         }),

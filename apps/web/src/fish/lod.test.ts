@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { effectiveDistance, MOUTH_LODS, mouthFade, REFERENCE_LENGTH_M, selectLod } from './lod';
+import {
+  drawsAsImpostor,
+  effectiveDistance,
+  IMPOSTOR_LOD,
+  markNearest,
+  MOUTH_LODS,
+  mouthFade,
+  REFERENCE_LENGTH_M,
+  selectLod,
+  type MeshRank,
+} from './lod';
 
 const thresholds = { midDistance: 1, impostorDistance: 2 };
 const L = REFERENCE_LENGTH_M;
@@ -39,6 +49,92 @@ describe('selectLod', () => {
   it('rejects a non-positive length', () => {
     expect(() => effectiveDistance(1, 0)).toThrow(RangeError);
     expect(() => selectLod(1, -1, thresholds, 0)).toThrow(RangeError);
+  });
+});
+
+describe('markNearest', () => {
+  const ranks = (...distances: number[]): MeshRank[] =>
+    distances.map((distance) => ({ distance, full: false, rankKey: 0 }));
+  const fullDistances = (items: MeshRank[]): number[] =>
+    items.filter((i) => i.full).map((i) => i.distance);
+
+  it('keeps the nearest fish as meshes and nothing past the limit', () => {
+    const items = ranks(3, 1, 4, 2, 5);
+    markNearest(items, 3);
+    expect(fullDistances(items).sort()).toEqual([1, 2, 3]);
+  });
+
+  it('meshes everything under the limit, and nothing at a limit of 0', () => {
+    const items = ranks(3, 1);
+    markNearest(items, 30);
+    expect(items.every((i) => i.full)).toBe(true);
+    markNearest(items, 0);
+    expect(items.some((i) => i.full)).toBe(false);
+  });
+
+  it('lets a mesh keep its place until a newcomer is clearly nearer', () => {
+    const held = { distance: 1, full: true, rankKey: 0 };
+    const rival = { distance: 0.95, full: false, rankKey: 0 };
+    markNearest([held, rival], 1);
+    expect(held.full).toBe(true);
+    expect(rival.full).toBe(false);
+    rival.distance = 0.9;
+    markNearest([held, rival], 1);
+    expect(held.full).toBe(false);
+    expect(rival.full).toBe(true);
+  });
+
+  it('never exceeds the limit, however the incumbents are spread', () => {
+    const items = ranks(1, 1.01, 1.02, 1.03, 1.04, 1.05);
+    items.forEach((item, k) => (item.full = k % 2 === 0));
+    markNearest(items, 2);
+    expect(items.filter((i) => i.full)).toHaveLength(2);
+  });
+
+  it('rejects a negative limit', () => {
+    expect(() => markNearest(ranks(1), -1)).toThrow(RangeError);
+  });
+});
+
+describe('drawsAsImpostor', () => {
+  const swimmerOnImpostorTier = {
+    tierImpostors: true,
+    available: true,
+    lod: 0,
+    full: true,
+    castsShadow: false,
+  };
+  const choose = (overrides: Partial<typeof swimmerOnImpostorTier>): boolean =>
+    drawsAsImpostor({ ...swimmerOnImpostorTier, ...overrides });
+
+  it('swaps a fish past the impostor level, shadow or not', () => {
+    expect(choose({ lod: IMPOSTOR_LOD })).toBe(true);
+    expect(choose({ lod: IMPOSTOR_LOD, castsShadow: true })).toBe(true);
+  });
+
+  it('swaps a near fish outside the nearest few at lod0 and lod1', () => {
+    expect(choose({ lod: 0, full: false })).toBe(true);
+    expect(choose({ lod: 1, full: false })).toBe(true);
+  });
+
+  it('keeps one of the nearest few as a mesh', () => {
+    expect(choose({ lod: 0 })).toBe(false);
+    expect(choose({ lod: 1 })).toBe(false);
+  });
+
+  it('keeps a near shadow caster as a mesh, so its shadow does not pop', () => {
+    expect(choose({ lod: 0, full: false, castsShadow: true })).toBe(false);
+    expect(choose({ lod: 1, full: false, castsShadow: true })).toBe(false);
+  });
+
+  it('draws the mesh when the species has no impostor', () => {
+    expect(choose({ available: false, lod: IMPOSTOR_LOD })).toBe(false);
+    expect(choose({ available: false, lod: 0, full: false })).toBe(false);
+  });
+
+  it('never swaps on a tier without impostors', () => {
+    expect(choose({ tierImpostors: false, lod: IMPOSTOR_LOD })).toBe(false);
+    expect(choose({ tierImpostors: false, lod: 0, full: false })).toBe(false);
   });
 });
 

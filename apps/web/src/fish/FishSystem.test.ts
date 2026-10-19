@@ -220,6 +220,7 @@ describe('batchLocomotion', () => {
         lodFiles: ['lod0.glb'],
         sharperTextures: new Map(),
         shrimp: rig,
+        impostor: null,
       },
       tail: tailRig,
     };
@@ -268,6 +269,7 @@ function shrimpModel(assetId: string): FishModel {
       lodFiles: [],
       sharperTextures: new Map(),
       shrimp: { hinge: { y: 0, z: 0 }, telsonZ: -0.0125, legPairs: 5 },
+      impostor: null,
     },
     tail: { hinge: { y: 0, z: 0 }, tip: { y: -0.004, z: -0.0125, share: 1 }, bodyLength: 0.025 },
     textureSize: 1024,

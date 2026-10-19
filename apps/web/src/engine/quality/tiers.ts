@@ -31,6 +31,11 @@ export interface TierSettings {
   /** Bubbles in the airstone column. */
   bubbleCount: number;
   fishLod: { midDistance: number; impostorDistance: number };
+  /**
+   * Fish past `fishLod.impostorDistance` draw as octahedral impostors instead of their lod2 mesh,
+   * and only the `fullMeshes` nearest draw as meshes at all (PLAN §9.1); null keeps every mesh.
+   */
+  fishImpostors: { readonly fullMeshes: number } | null;
   plantDensity: number;
   textureSize: 1024 | 2048;
 }
@@ -49,6 +54,7 @@ export const TIER_SETTINGS: Readonly<Record<Tier, Readonly<TierSettings>>> = {
     particleCount: 150,
     bubbleCount: 12,
     fishLod: { midDistance: 0.6, impostorDistance: 1.6 },
+    fishImpostors: { fullMeshes: 30 },
     plantDensity: 0.4,
     textureSize: 1024,
   },
@@ -65,6 +71,7 @@ export const TIER_SETTINGS: Readonly<Record<Tier, Readonly<TierSettings>>> = {
     particleCount: 400,
     bubbleCount: 24,
     fishLod: { midDistance: 0.9, impostorDistance: 2.4 },
+    fishImpostors: { fullMeshes: 30 },
     plantDensity: 0.7,
     textureSize: 1024,
   },
@@ -81,6 +88,7 @@ export const TIER_SETTINGS: Readonly<Record<Tier, Readonly<TierSettings>>> = {
     particleCount: 900,
     bubbleCount: 40,
     fishLod: { midDistance: 1.4, impostorDistance: 3.5 },
+    fishImpostors: null,
     plantDensity: 1,
     textureSize: 2048,
   },
@@ -97,6 +105,7 @@ export const TIER_SETTINGS: Readonly<Record<Tier, Readonly<TierSettings>>> = {
     particleCount: 1600,
     bubbleCount: 64,
     fishLod: { midDistance: 2, impostorDistance: 5 },
+    fishImpostors: null,
     plantDensity: 1,
     textureSize: 2048,
   },

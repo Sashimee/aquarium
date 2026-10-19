@@ -1,6 +1,10 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import {
+  idSchema,
   MAX_PUSH_SUBSCRIPTIONS,
+  pushDeviceListSchema,
+  pushDeviceQuerySchema,
+  removePushResultSchema,
   pushSubscriptionRequestSchema,
   REMINDER_AFTER_UNFED_HOURS,
   REMINDER_COOLDOWN_HOURS,
@@ -8,13 +12,16 @@ import {
   removePushSubscriptionRequestSchema,
   updateReminderSettingsRequestSchema,
 } from '@aquarium/shared';
-import { and, eq, sql } from 'drizzle-orm';
+import { z } from 'zod';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { schema, type Database } from './db/index.ts';
 import { apiError } from './errors.ts';
 import { MailThrottledError, type Mailer } from './mail.ts';
 import { isAllowedPushEndpoint, type PushSender } from './push.ts';
 import type { Limit, RateLimiter } from './rate-limit.ts';
+
+const deviceParamsSchema = z.object({ id: idSchema });
 
 export const UNSUBSCRIBE_PATH = '/api/reminders/unsubscribe';
 
@@ -31,6 +38,15 @@ export const DEFAULT_REMINDER_LIMITS: ReminderLimits = {
   unsubscribe: { max: 30, windowMs: 60 * 60_000 },
   invalidUnsubscribe: { max: 60, windowMs: 60 * 60_000 },
 };
+
+const safeEqual = (x: string, y: string) => {
+  const bx = Buffer.from(x);
+  const by = Buffer.from(y);
+  return bx.length === by.length && timingSafeEqual(bx, by);
+};
+
+const sameKeys = (row: { p256dh: string; auth: string }, keys: { p256dh: string; auth: string }) =>
+  safeEqual(row.p256dh, keys.p256dh) && safeEqual(row.auth, keys.auth);
 
 const signature = (secret: string, userId: string) =>
   createHmac('sha256', `${secret}:reminder-unsubscribe`).update(userId).digest('base64url');
@@ -168,60 +184,126 @@ export function registerReminderRoutes(deps: ReminderRouteDeps): void {
         );
     }
     const stored = await db.transaction(async (tx) => {
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`push:${user.id}`}))`);
-      const [existing] = await tx
-        .select({ id: schema.pushSubscriptions.id })
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`push-endpoint:${endpoint}`}, 0))`,
+      );
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`push:${user.id}`}, 0))`,
+      );
+      const [row] = await tx
+        .select()
         .from(schema.pushSubscriptions)
-        .where(
-          and(
-            eq(schema.pushSubscriptions.userId, user.id),
-            eq(schema.pushSubscriptions.endpoint, endpoint),
-          ),
-        );
-      if (!existing) {
+        .where(eq(schema.pushSubscriptions.endpoint, endpoint));
+      if (row && row.userId !== user.id && !sameKeys(row, keys)) {
+        return 'taken' as const;
+      }
+      if (!row || row.userId !== user.id) {
         const [{ count } = { count: 0 }] = await tx
           .select({ count: sql<number>`count(*)::int` })
           .from(schema.pushSubscriptions)
           .where(eq(schema.pushSubscriptions.userId, user.id));
         if (count >= MAX_PUSH_SUBSCRIPTIONS) return 'limit' as const;
       }
-      const written = await tx
-        .insert(schema.pushSubscriptions)
-        .values({ userId: user.id, endpoint, p256dh: keys.p256dh, auth: keys.auth })
-        .onConflictDoUpdate({
-          target: schema.pushSubscriptions.endpoint,
-          set: { p256dh: keys.p256dh, auth: keys.auth },
-          setWhere: eq(schema.pushSubscriptions.userId, user.id),
-        })
-        .returning({ id: schema.pushSubscriptions.id });
-      return written.length === 0 ? ('taken' as const) : ('ok' as const);
+      // The row can be deleted between the read and here (device removal, a gone push, account
+      // deletion do not take these locks), so a missed update falls through to an insert.
+      const handover = row !== undefined && row.userId !== user.id;
+      const updated = row
+        ? await tx
+            .update(schema.pushSubscriptions)
+            .set({
+              userId: user.id,
+              p256dh: keys.p256dh,
+              auth: keys.auth,
+              ...(handover ? { createdAt: sql`now()`, lastUsedAt: null } : {}),
+            })
+            .where(eq(schema.pushSubscriptions.id, row.id))
+            .returning({ id: schema.pushSubscriptions.id })
+        : [];
+      if (updated.length === 0) {
+        await tx
+          .insert(schema.pushSubscriptions)
+          .values({ userId: user.id, endpoint, p256dh: keys.p256dh, auth: keys.auth });
+      }
+      return 'ok' as const;
     });
     if (stored === 'taken') {
       return reply
         .code(409)
-        .send(apiError('conflict', 'This device is already registered to another account.'));
+        .send(
+          apiError('push_device_owned', 'This device is already registered to another account.'),
+        );
     }
     if (stored === 'limit') {
       return reply
         .code(409)
-        .send(apiError('conflict', `At most ${MAX_PUSH_SUBSCRIPTIONS} devices can get push.`));
+        .send(
+          apiError(
+            'push_device_limit',
+            `At most ${MAX_PUSH_SUBSCRIPTIONS} devices can get push. Remove one first.`,
+          ),
+        );
     }
     return reply.code(204).send();
+  });
+
+  app.get('/api/me/push-subscriptions', async (req, reply) => {
+    const user = await authed(req, reply);
+    if (!user) return reply;
+    const { endpoint: mine } = pushDeviceQuerySchema.parse(req.query);
+    const rows = await db
+      .select({
+        id: schema.pushSubscriptions.id,
+        endpoint: schema.pushSubscriptions.endpoint,
+        createdAt: schema.pushSubscriptions.createdAt,
+        lastUsedAt: schema.pushSubscriptions.lastUsedAt,
+      })
+      .from(schema.pushSubscriptions)
+      .where(eq(schema.pushSubscriptions.userId, user.id))
+      .orderBy(asc(schema.pushSubscriptions.createdAt));
+    reply.header('cache-control', 'no-store');
+    return pushDeviceListSchema.parse({
+      devices: rows.map(({ endpoint, ...rest }) => ({
+        id: rest.id,
+        createdAt: rest.createdAt.toISOString(),
+        lastUsedAt: rest.lastUsedAt?.toISOString() ?? null,
+        label: new URL(endpoint).hostname,
+        current: endpoint === mine,
+      })),
+    });
+  });
+
+  app.delete('/api/me/push-subscriptions/:id', async (req, reply) => {
+    const user = await authed(req, reply);
+    if (!user) return reply;
+    const id = deviceParamsSchema.safeParse(req.params);
+    const removed = id.success
+      ? await db
+          .delete(schema.pushSubscriptions)
+          .where(
+            and(
+              eq(schema.pushSubscriptions.id, id.data.id),
+              eq(schema.pushSubscriptions.userId, user.id),
+            ),
+          )
+          .returning({ id: schema.pushSubscriptions.id })
+      : [];
+    return removePushResultSchema.parse({ removed: removed.length > 0 });
   });
 
   app.post('/api/me/push-subscriptions/remove', async (req, reply) => {
     const user = await authed(req, reply);
     if (!user) return reply;
     const { endpoint } = removePushSubscriptionRequestSchema.parse(req.body);
-    await db
+    const removed = await db
       .delete(schema.pushSubscriptions)
       .where(
         and(
           eq(schema.pushSubscriptions.userId, user.id),
           eq(schema.pushSubscriptions.endpoint, endpoint),
         ),
-      );
-    return reply.code(204).send();
+      )
+      .returning({ id: schema.pushSubscriptions.id });
+    return removePushResultSchema.parse({ removed: removed.length > 0 });
   });
 
   const tokenOf = (req: FastifyRequest): string | null => {
@@ -277,6 +359,7 @@ export interface ReminderSweepDeps {
   dailyCap: number;
   batch?: number;
   shouldStop?: () => boolean;
+  inflight?: InflightClaims;
   log?: (message: string) => void;
 }
 
@@ -288,12 +371,34 @@ interface Candidate extends Record<string, unknown> {
   last_sent_at: Date | null;
 }
 
+export interface InflightClaim {
+  previous: Date | null;
+  delivered: boolean;
+}
+
+export type InflightClaims = Map<string, InflightClaim>;
+
+export async function releaseInflightClaims(
+  database: Database,
+  inflight: InflightClaims,
+): Promise<number> {
+  const unsent = [...inflight].filter(([, claim]) => !claim.delivered);
+  for (const [userId, claim] of unsent) {
+    await database.db
+      .update(schema.reminderPrefs)
+      .set({ lastSentAt: claim.previous })
+      .where(eq(schema.reminderPrefs.userId, userId));
+    inflight.delete(userId);
+  }
+  return unsent.length;
+}
+
 type Claim = 'claimed' | 'lost' | 'capped';
 
 // The lock serialises the count and the update, so overlapping sweeps cannot overshoot the cap.
 async function claimReminder(db: Database['db'], userId: string, dailyCap: number): Promise<Claim> {
   return db.transaction(async (tx) => {
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('reminder-daily-cap'))`);
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended('reminder-daily-cap', 0))`);
     const [{ count } = { count: 0 }] = await tx
       .select({ count: sql<number>`count(*)::int` })
       .from(schema.reminderPrefs)
@@ -359,9 +464,20 @@ export async function sweepReminders(deps: ReminderSweepDeps): Promise<ReminderS
   let sent = 0;
   for (const row of rows) {
     if (deps.shouldStop?.()) break;
-    const claim = await claimReminder(db, row.user_id, deps.dailyCap);
-    if (claim === 'capped') return { sent, capped: true };
-    if (claim === 'lost') continue;
+    // Tracked before the claim commits so a shutdown during the claim cannot leave it unreleased.
+    // The flag flips only after a send returns, so a release that lands mid-send can let the next
+    // sweep after a restart send a second reminder; that is preferred to a user missing a day.
+    const tracked: InflightClaim = { previous: row.last_sent_at, delivered: false };
+    deps.inflight?.set(row.user_id, tracked);
+    const claim = await claimReminder(db, row.user_id, deps.dailyCap).catch((err: unknown) => {
+      deps.inflight?.delete(row.user_id);
+      throw err;
+    });
+    if (claim !== 'claimed') {
+      deps.inflight?.delete(row.user_id);
+      if (claim === 'capped') return { sent, capped: true };
+      continue;
+    }
 
     const release = () =>
       db
@@ -369,59 +485,76 @@ export async function sweepReminders(deps: ReminderSweepDeps): Promise<ReminderS
         .set({ lastSentAt: row.last_sent_at })
         .where(eq(schema.reminderPrefs.userId, row.user_id));
 
-    let delivered = false;
-    if (push && row.push_enabled) {
-      const subs = await db
-        .select()
-        .from(schema.pushSubscriptions)
-        .where(eq(schema.pushSubscriptions.userId, row.user_id));
-      for (const sub of subs) {
-        const result = await push.send(sub.endpoint);
-        if (result === 'sent') delivered = true;
-        if (result === 'gone') {
-          await db.delete(schema.pushSubscriptions).where(eq(schema.pushSubscriptions.id, sub.id));
+    try {
+      if (push && row.push_enabled) {
+        const subs = await db
+          .select()
+          .from(schema.pushSubscriptions)
+          .where(eq(schema.pushSubscriptions.userId, row.user_id));
+        for (const sub of subs) {
+          const result = await push.send(sub.endpoint);
+          if (result === 'sent') {
+            tracked.delivered = true;
+            await db
+              .update(schema.pushSubscriptions)
+              .set({ lastUsedAt: sql`now()` })
+              .where(eq(schema.pushSubscriptions.id, sub.id));
+          }
+          if (result === 'gone') {
+            await db
+              .delete(schema.pushSubscriptions)
+              .where(eq(schema.pushSubscriptions.id, sub.id));
+          }
         }
       }
-    }
-    let stop = false;
-    if (row.mail_enabled) {
-      try {
-        await mailer.sendReminder(
-          row.email,
-          appOrigin,
-          unsubscribeUrl(appOrigin, authSecret, row.user_id),
-        );
-        delivered = true;
-      } catch (err) {
-        stop = true;
-        if (!(err instanceof MailThrottledError)) {
-          log(`reminder mail failed: ${err instanceof Error ? err.name : 'unknown'}`);
+      let stop = false;
+      if (row.mail_enabled) {
+        try {
+          await mailer.sendReminder(
+            row.email,
+            appOrigin,
+            unsubscribeUrl(appOrigin, authSecret, row.user_id),
+          );
+          tracked.delivered = true;
+        } catch (err) {
+          stop = true;
+          if (!(err instanceof MailThrottledError)) {
+            log(`reminder mail failed: ${err instanceof Error ? err.name : 'unknown'}`);
+          }
         }
       }
+      if (!tracked.delivered) await release();
+      else {
+        sent++;
+        remaining--;
+      }
+      if (stop || remaining <= 0) break;
+    } finally {
+      deps.inflight?.delete(row.user_id);
     }
-    if (!delivered) await release();
-    else {
-      sent++;
-      remaining--;
-    }
-    if (stop || remaining <= 0) break;
   }
   return { sent, capped: remaining <= 0 };
 }
 
 const SWEEP_INTERVAL_MS = 10 * 60_000;
 
+export interface RunningReminders {
+  stop(): void;
+  releaseUnsent(): Promise<number>;
+}
+
 export function startReminders(
-  deps: Omit<ReminderSweepDeps, 'shouldStop'>,
+  deps: Omit<ReminderSweepDeps, 'shouldStop' | 'inflight'>,
   runInBackground: (task: Promise<void>) => void,
-): () => void {
+): RunningReminders {
+  const inflight: InflightClaims = new Map();
   let running = false;
   let stopped = false;
   const run = async () => {
     if (running || stopped) return;
     running = true;
     try {
-      await sweepReminders({ ...deps, shouldStop: () => stopped });
+      await sweepReminders({ ...deps, inflight, shouldStop: () => stopped });
     } catch (err) {
       console.error('reminder sweep failed:', err instanceof Error ? err.name : 'unknown');
     } finally {
@@ -430,8 +563,11 @@ export function startReminders(
   };
   const timer = setInterval(() => runInBackground(run()), SWEEP_INTERVAL_MS);
   timer.unref();
-  return () => {
-    stopped = true;
-    clearInterval(timer);
+  return {
+    stop() {
+      stopped = true;
+      clearInterval(timer);
+    },
+    releaseUnsent: () => releaseInflightClaims(deps.database, inflight),
   };
 }

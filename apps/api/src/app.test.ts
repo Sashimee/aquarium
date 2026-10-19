@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { brotliCompressSync, brotliDecompressSync, gunzipSync, gzipSync } from 'node:zlib';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { staticCacheControl, stripTokensFromBody } from './app.ts';
+import { redactUrl, staticCacheControl, stripTokensFromBody } from './app.ts';
 import { createHarness, type Harness } from './test-harness.ts';
 
 const NOINDEX = 'noindex, nofollow';
@@ -412,11 +412,27 @@ describe('indexing', () => {
     expect((await app.inject('/robots.txt')).body).toContain('Disallow: /');
   });
 
+  it('sends noindex on the public viewer pages even when indexable', async () => {
+    const app = withDist(true);
+    for (const url of ['/t/abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG', '/T/abc', '/t/%61bc/']) {
+      const res = await app.inject(url);
+      expect(res.headers['x-robots-tag'], url).toBe(NOINDEX);
+      expect(res.headers['referrer-policy'], url).toBe('no-referrer');
+    }
+    expect((await app.inject('/')).headers['x-robots-tag']).toBeUndefined();
+    expect((await app.inject('/tank/42')).headers['x-robots-tag']).toBeUndefined();
+  });
+
+  it('redacts the viewer token from logs and leaves /t/ crawlable so noindex is seen', async () => {
+    expect((await withDist(true).inject('/robots.txt')).body).not.toContain('Disallow');
+    expect(redactUrl('/t/abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG')).toBe('/t/[redacted]');
+  });
+
   it('omits noindex and allows crawling when indexable', async () => {
     const app = withDist(true);
     const res = await app.inject('/');
     expect(res.headers['x-robots-tag']).toBeUndefined();
-    expect((await app.inject('/robots.txt')).body).not.toContain('Disallow: /');
+    expect((await app.inject('/robots.txt')).body).not.toContain('Disallow');
   });
 });
 

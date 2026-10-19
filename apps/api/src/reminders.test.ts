@@ -2,6 +2,9 @@ import { createPublicKey, generateKeyPairSync, verify } from 'node:crypto';
 import {
   apiErrorSchema,
   dataExportSchema,
+  MAX_PUSH_SUBSCRIPTIONS,
+  pushDeviceListSchema,
+  removePushResultSchema,
   reminderSettingsSchema,
   tankSchema,
 } from '@aquarium/shared';
@@ -18,6 +21,7 @@ import {
   type PushSender,
 } from './push.ts';
 import {
+  releaseInflightClaims,
   sweepReminders,
   unsubscribeToken,
   unsubscribeUrl,
@@ -80,7 +84,7 @@ async function account(h: Harness) {
 const call = (
   h: Harness,
   cookie: string,
-  method: 'GET' | 'POST' | 'PUT',
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
   url: string,
   payload?: object,
 ) =>
@@ -189,6 +193,96 @@ describe('mail reminders', () => {
     });
     expect(fed.statusCode).toBe(200);
     expect((await sweep(h)).sent).toBe(0);
+  });
+});
+
+describe('shutdown release', () => {
+  it('puts an unsent claim back when the drain gives up on a stuck push', async () => {
+    const stuck: PushSender = { publicKey: 'PUBKEY', send: () => new Promise(() => undefined) };
+    const h = await harness(stuck);
+    const a = await account(h);
+    await withFish(h, a.cookie);
+    await call(h, a.cookie, 'POST', '/api/me/push-subscriptions', {
+      endpoint: ENDPOINT,
+      keys: KEYS,
+    });
+    await call(h, a.cookie, 'PUT', '/api/me/reminders', { push: true });
+    const inflight = new Map();
+    void sweepReminders({
+      database: h.database,
+      mailer: h.mailer,
+      push: stuck,
+      appOrigin: APP_ORIGIN,
+      authSecret: TEST_SECRET,
+      dailyCap: 10,
+      inflight,
+      log: () => undefined,
+    });
+    await vi.waitFor(() => expect(inflight.size).toBe(1));
+    const claimed = async () =>
+      (
+        await h.database.db
+          .select()
+          .from(schema.reminderPrefs)
+          .where(eq(schema.reminderPrefs.userId, a.userId))
+      )[0]?.lastSentAt;
+    expect(await claimed()).not.toBeNull();
+
+    expect(await releaseInflightClaims(h.database, inflight)).toBe(1);
+    expect(await claimed()).toBeNull();
+    expect(inflight.size).toBe(0);
+    expect(await releaseInflightClaims(h.database, inflight)).toBe(0);
+  });
+
+  it('keeps a claim whose reminder already went out', async () => {
+    const h = await harness();
+    const a = await optedIn(h);
+    const inflight = new Map([[a.userId, { previous: null, delivered: true }]]);
+    await h.database.db
+      .update(schema.reminderPrefs)
+      .set({ lastSentAt: new Date() })
+      .where(eq(schema.reminderPrefs.userId, a.userId));
+    expect(await releaseInflightClaims(h.database, inflight)).toBe(0);
+    const [row] = await h.database.db.select().from(schema.reminderPrefs);
+    expect(row?.lastSentAt).not.toBeNull();
+  });
+
+  it('does not track a claim another sweep already holds', async () => {
+    const h = await harness();
+    const a = await optedIn(h);
+    await h.database.db
+      .update(schema.reminderPrefs)
+      .set({ lastSentAt: new Date() })
+      .where(eq(schema.reminderPrefs.userId, a.userId));
+    const inflight = new Map();
+    await sweepReminders({
+      database: h.database,
+      mailer: h.mailer,
+      push: null,
+      appOrigin: APP_ORIGIN,
+      authSecret: TEST_SECRET,
+      dailyCap: 10,
+      inflight,
+    });
+    expect(inflight.size).toBe(0);
+    expect(reminderMails(h, a.email)).toHaveLength(0);
+  });
+
+  it('leaves nothing tracked after a normal sweep', async () => {
+    const h = await harness();
+    await optedIn(h);
+    const inflight = new Map();
+    const result = await sweepReminders({
+      database: h.database,
+      mailer: h.mailer,
+      push: null,
+      appOrigin: APP_ORIGIN,
+      authSecret: TEST_SECRET,
+      dailyCap: 10,
+      inflight,
+    });
+    expect(result.sent).toBe(1);
+    expect(inflight.size).toBe(0);
   });
 });
 
@@ -572,12 +666,249 @@ describe('web push', () => {
       keys: { p256dh: 'C'.repeat(87), auth: 'b'.repeat(22) },
     });
     expect(taken.statusCode).toBe(409);
+    expect(apiErrorSchema.parse(taken.json()).error.code).toBe('push_device_owned');
     expect((await call(h, a.cookie, 'POST', '/api/me/push-subscriptions', body)).statusCode).toBe(
       204,
     );
     const rows = await h.database.db.select().from(schema.pushSubscriptions);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ userId: a.userId, p256dh: KEYS.p256dh });
+  });
+
+  it('hands a device over when both keys match, so a shared browser works for the second account', async () => {
+    const { sender } = pushStub();
+    const h = await harness(sender);
+    const a = await account(h);
+    const b = await account(h);
+    const body = { endpoint: ENDPOINT, keys: KEYS };
+    await call(h, a.cookie, 'POST', '/api/me/push-subscriptions', body);
+    expect((await call(h, b.cookie, 'POST', '/api/me/push-subscriptions', body)).statusCode).toBe(
+      204,
+    );
+    const rows = await h.database.db.select().from(schema.pushSubscriptions);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ userId: b.userId, endpoint: ENDPOINT });
+    const listA = pushDeviceListSchema.parse(
+      (await call(h, a.cookie, 'GET', '/api/me/push-subscriptions')).json(),
+    );
+    expect(listA.devices).toEqual([]);
+  });
+
+  it('gives the new owner fresh timestamps on handover', async () => {
+    const { sender } = pushStub();
+    const h = await harness(sender);
+    const a = await account(h);
+    const b = await account(h);
+    const body = { endpoint: ENDPOINT, keys: KEYS };
+    await call(h, a.cookie, 'POST', '/api/me/push-subscriptions', body);
+    const old = new Date('2020-01-01T00:00:00Z');
+    await h.database.db.update(schema.pushSubscriptions).set({ createdAt: old, lastUsedAt: old });
+    await call(h, b.cookie, 'POST', '/api/me/push-subscriptions', body);
+    const [row] = await h.database.db.select().from(schema.pushSubscriptions);
+    expect(row?.userId).toBe(b.userId);
+    expect(row?.lastUsedAt).toBeNull();
+    expect(row?.createdAt.getTime()).toBeGreaterThan(old.getTime());
+    await call(h, b.cookie, 'POST', '/api/me/push-subscriptions', body);
+    const [again] = await h.database.db.select().from(schema.pushSubscriptions);
+    expect(again?.createdAt).toEqual(row?.createdAt);
+  });
+
+  it('still stores the device when it is deleted between the read and the update', async () => {
+    const { sender } = pushStub();
+    const h = await harness(sender);
+    const a = await account(h);
+    const b = await account(h);
+    const body = { endpoint: ENDPOINT, keys: KEYS };
+    await call(h, a.cookie, 'POST', '/api/me/push-subscriptions', body);
+    const conn = await h.database.pool.connect();
+    try {
+      await conn.query('begin');
+      await conn.query('delete from push_subscriptions where endpoint = $1', [ENDPOINT]);
+      const racing = call(h, b.cookie, 'POST', '/api/me/push-subscriptions', body);
+      await vi.waitFor(async () => {
+        const waiting = await h.database.pool.query(
+          "select 1 from pg_stat_activity where wait_event_type = 'Lock' and query ilike '%update \"push_subscriptions\"%'",
+        );
+        expect(waiting.rowCount).toBeGreaterThan(0);
+      });
+      await conn.query('commit');
+      expect((await racing).statusCode).toBe(204);
+    } finally {
+      conn.release();
+    }
+    const rows = await h.database.db.select().from(schema.pushSubscriptions);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ userId: b.userId, endpoint: ENDPOINT });
+  });
+
+  it('does not hand over when only one key matches', async () => {
+    const { sender } = pushStub();
+    const h = await harness(sender);
+    const a = await account(h);
+    const b = await account(h);
+    await call(h, a.cookie, 'POST', '/api/me/push-subscriptions', {
+      endpoint: ENDPOINT,
+      keys: KEYS,
+    });
+    for (const keys of [
+      { p256dh: KEYS.p256dh, auth: 'z'.repeat(22) },
+      { p256dh: 'C'.repeat(87), auth: KEYS.auth },
+    ]) {
+      const res = await call(h, b.cookie, 'POST', '/api/me/push-subscriptions', {
+        endpoint: ENDPOINT,
+        keys,
+      });
+      expect(res.statusCode).toBe(409);
+      expect(apiErrorSchema.parse(res.json()).error.code).toBe('push_device_owned');
+    }
+    const [row] = await h.database.db.select().from(schema.pushSubscriptions);
+    expect(row?.userId).toBe(a.userId);
+  });
+
+  it('applies the device limit to a handover, with its own error code', async () => {
+    const { sender } = pushStub();
+    const h = await harness(sender);
+    const a = await account(h);
+    const b = await account(h);
+    const endpointOf = (i: number) => `https://fcm.googleapis.com/fcm/send/dev${i}`;
+    for (let i = 0; i < MAX_PUSH_SUBSCRIPTIONS; i++) {
+      const res = await call(h, b.cookie, 'POST', '/api/me/push-subscriptions', {
+        endpoint: endpointOf(i),
+        keys: KEYS,
+      });
+      expect(res.statusCode).toBe(204);
+    }
+    const extra = { endpoint: ENDPOINT, keys: KEYS };
+    await call(h, a.cookie, 'POST', '/api/me/push-subscriptions', extra);
+    const handover = await call(h, b.cookie, 'POST', '/api/me/push-subscriptions', extra);
+    expect(handover.statusCode).toBe(409);
+    expect(apiErrorSchema.parse(handover.json()).error.code).toBe('push_device_limit');
+    const fresh = await call(h, b.cookie, 'POST', '/api/me/push-subscriptions', {
+      endpoint: 'https://fcm.googleapis.com/fcm/send/new',
+      keys: KEYS,
+    });
+    expect(fresh.statusCode).toBe(409);
+    expect(apiErrorSchema.parse(fresh.json()).error.code).toBe('push_device_limit');
+    const refresh = await call(h, b.cookie, 'POST', '/api/me/push-subscriptions', {
+      endpoint: endpointOf(0),
+      keys: KEYS,
+    });
+    expect(refresh.statusCode).toBe(204);
+    const [kept] = await h.database.db
+      .select()
+      .from(schema.pushSubscriptions)
+      .where(eq(schema.pushSubscriptions.endpoint, ENDPOINT));
+    expect(kept?.userId).toBe(a.userId);
+  });
+
+  it('lists devices with a coarse label and last use, and removes one by id', async () => {
+    const { sender } = pushStub('sent');
+    const h = await harness(sender);
+    const a = await account(h);
+    const b = await account(h);
+    await withFish(h, a.cookie);
+    const mozilla = 'https://updates.push.services.mozilla.com/wpush/v2/secretpath';
+    await call(h, a.cookie, 'POST', '/api/me/push-subscriptions', {
+      endpoint: ENDPOINT,
+      keys: KEYS,
+    });
+    await call(h, a.cookie, 'POST', '/api/me/push-subscriptions', {
+      endpoint: mozilla,
+      keys: KEYS,
+    });
+    await call(h, a.cookie, 'PUT', '/api/me/reminders', { push: true });
+
+    const before = await call(h, a.cookie, 'GET', '/api/me/push-subscriptions');
+    expect(before.headers['cache-control']).toBe('no-store');
+    const listed = pushDeviceListSchema.parse(before.json());
+    expect(listed.devices.map((d) => d.label)).toEqual([
+      'fcm.googleapis.com',
+      'updates.push.services.mozilla.com',
+    ]);
+    expect(listed.devices.every((d) => d.lastUsedAt === null)).toBe(true);
+    expect(JSON.stringify(before.json())).not.toContain('secretpath');
+    expect(JSON.stringify(before.json())).not.toContain(KEYS.p256dh);
+
+    await sweep(h, sender);
+    const used = pushDeviceListSchema.parse(
+      (await call(h, a.cookie, 'GET', '/api/me/push-subscriptions')).json(),
+    );
+    expect(used.devices.every((d) => d.lastUsedAt !== null)).toBe(true);
+
+    const [first, second] = used.devices;
+    const url = (id: string | undefined) => `/api/me/push-subscriptions/${id}`;
+    const removed = async (cookie: string, id: string | undefined) => {
+      const res = await call(h, cookie, 'DELETE', url(id));
+      expect(res.statusCode).toBe(200);
+      return removePushResultSchema.parse(res.json()).removed;
+    };
+    expect(await removed(b.cookie, first?.id)).toBe(false);
+    expect(await removed(a.cookie, 'not-a-uuid')).toBe(false);
+    expect(await removed(a.cookie, first?.id)).toBe(true);
+    expect(await removed(a.cookie, first?.id)).toBe(false);
+    const after = pushDeviceListSchema.parse(
+      (await call(h, a.cookie, 'GET', '/api/me/push-subscriptions')).json(),
+    );
+    expect(after.devices.map((d) => d.id)).toEqual([second?.id]);
+  });
+
+  it("flags the caller's own endpoint and nothing about other accounts", async () => {
+    const h = await harness(pushStub().sender);
+    const a = await account(h);
+    const b = await account(h);
+    await call(h, a.cookie, 'POST', '/api/me/push-subscriptions', {
+      endpoint: ENDPOINT,
+      keys: KEYS,
+    });
+    const ask = async (cookie: string, endpoint?: string) =>
+      pushDeviceListSchema.parse(
+        (
+          await call(
+            h,
+            cookie,
+            'GET',
+            `/api/me/push-subscriptions${endpoint ? `?endpoint=${encodeURIComponent(endpoint)}` : ''}`,
+          )
+        ).json(),
+      ).devices;
+    expect((await ask(a.cookie, ENDPOINT)).map((d) => d.current)).toEqual([true]);
+    expect((await ask(a.cookie)).map((d) => d.current)).toEqual([false]);
+    expect(
+      (await ask(a.cookie, 'https://fcm.googleapis.com/fcm/send/other')).map((d) => d.current),
+    ).toEqual([false]);
+    expect(await ask(b.cookie, ENDPOINT)).toEqual([]);
+    const bad = await call(h, a.cookie, 'GET', '/api/me/push-subscriptions?endpoint=nope');
+    expect(bad.statusCode).toBe(400);
+  });
+
+  it('remove by endpoint reports whether a row was deleted', async () => {
+    const h = await harness(pushStub().sender);
+    const a = await account(h);
+    const b = await account(h);
+    await call(h, a.cookie, 'POST', '/api/me/push-subscriptions', {
+      endpoint: ENDPOINT,
+      keys: KEYS,
+    });
+    const remove = async (cookie: string) =>
+      removePushResultSchema.parse(
+        (
+          await call(h, cookie, 'POST', '/api/me/push-subscriptions/remove', { endpoint: ENDPOINT })
+        ).json(),
+      ).removed;
+    expect(await remove(b.cookie)).toBe(false);
+    expect(await remove(a.cookie)).toBe(true);
+    expect(await remove(a.cookie)).toBe(false);
+  });
+
+  it('needs a session to list or remove devices', async () => {
+    const h = await harness(pushStub().sender);
+    expect((await h.app.inject('/api/me/push-subscriptions')).statusCode).toBe(401);
+    const res = await h.app.inject({
+      method: 'DELETE',
+      url: `/api/me/push-subscriptions/${'0'.repeat(8)}-0000-4000-8000-${'0'.repeat(12)}`,
+      headers: jsonHeaders,
+    });
+    expect(res.statusCode).toBe(401);
   });
 
   it('rejects an endpoint on a non-push host and a malformed key', async () => {
@@ -616,6 +947,7 @@ describe('export and deletion', () => {
     expect(exported.reminders.lastSentAt).not.toBeNull();
     expect(exported.reminders.pushSubscriptions).toHaveLength(1);
     expect(exported.reminders.pushSubscriptions[0]?.endpoint).toBe(ENDPOINT);
+    expect(exported.reminders.pushSubscriptions[0]?.lastUsedAt).toEqual(expect.any(String));
 
     const del = await call(h, a.cookie, 'POST', '/api/me/delete', { password: PASSWORD });
     expect(del.statusCode).toBeLessThan(300);
