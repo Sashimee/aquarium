@@ -48,9 +48,10 @@ export async function lockWallet(
   economy: Economy,
   userId: string,
   nowMs: number,
+  userRowLocked = false,
 ): Promise<void> {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`wallet:${userId}`}))`);
-  await lockUserRow(tx, userId);
+  if (!userRowLocked) await lockUserRow(tx, userId);
   const created = await tx
     .insert(schema.wallet)
     .values({ userId, balance: economy.grants.starting })
