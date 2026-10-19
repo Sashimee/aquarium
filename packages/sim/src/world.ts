@@ -594,7 +594,7 @@ export class World {
 
   /**
    * The owner arrives at the front glass, moves along it, or leaves (null). Fish that know them
-   * well (see `Visitor.familiarity`) come to the glass where they stand for a while.
+   * well (see `familiarityFromVisits`) come to the glass where they stand for a while.
    */
   setVisitor(visitor: Visitor | null): void {
     this.behaviour.setVisitor(visitor);

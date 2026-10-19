@@ -373,7 +373,7 @@ export class Behaviour {
   private home: Float64Array;
   private homeTimer: Float64Array;
   private _anchor: Int32Array;
-  private shelterTimer: Float64Array;
+  private _shelterTimer: Float64Array;
 
   private territoryPhase: Uint8Array;
   private territoryTimer: Float64Array;
@@ -434,6 +434,11 @@ export class Behaviour {
     return this._anchor;
   }
 
+  /** Seconds each fish has left hiding in shelter after a startle. */
+  get shelterTimer(): Float64Array {
+    return this._shelterTimer;
+  }
+
   get yieldTimer(): Float64Array {
     return this._yieldTimer;
   }
@@ -484,7 +489,7 @@ export class Behaviour {
     this.home = new Float64Array(n * 3);
     this.homeTimer = new Float64Array(n);
     this._anchor = new Int32Array(n).fill(-1);
-    this.shelterTimer = new Float64Array(n);
+    this._shelterTimer = new Float64Array(n);
     this.territoryPhase = new Uint8Array(n);
     this.territoryTimer = new Float64Array(n);
     this.territoryCheck = new Float64Array(n);
@@ -559,7 +564,7 @@ export class Behaviour {
     this.home = edit.array(this.home, 3);
     this.homeTimer = edit.array(this.homeTimer);
     this._anchor = edit.array(this.anchor, 1, -1);
-    this.shelterTimer = edit.array(this.shelterTimer);
+    this._shelterTimer = edit.array(this._shelterTimer);
     this.territoryPhase = edit.array(this.territoryPhase);
     this.territoryTimer = edit.array(this.territoryTimer);
     this.territoryCheck = edit.array(this.territoryCheck);
@@ -820,7 +825,7 @@ export class Behaviour {
     for (let i = 0; i < n; i++) {
       this.refractory[i] = Math.max(0, at(this.refractory, i) - DT);
       this.tighten[i] = Math.max(0, at(this.tighten, i) - DT);
-      this.shelterTimer[i] = Math.max(0, at(this.shelterTimer, i) - DT);
+      this._shelterTimer[i] = Math.max(0, at(this._shelterTimer, i) - DT);
       this.habituation[i] = at(this.habituation, i) * habDecay;
       const r = at(this.rest, i);
       this.rest[i] = r + (restTarget - r) * (1 - Math.exp(-DT / at(this.restTau, i)));
@@ -868,7 +873,7 @@ export class Behaviour {
         at(this.startleAt, i) < 0 &&
         at(this.yieldTimer, i) <= 0 &&
         at(this.gulpPhase, i) === GulpPhase.None &&
-        at(this.shelterTimer, i) <= 0 &&
+        at(this._shelterTimer, i) <= 0 &&
         at(this.rest, i) <= 0.5
           ? 1
           : 0;
@@ -1122,7 +1127,7 @@ export class Behaviour {
     if (this.grazePhase[i] !== GrazePhase.Roam) this.grazePhase[i] = GrazePhase.None;
     this.excursion[i] = 0;
     if (sp.home === 'cave') {
-      this.shelterTimer[i] = sp.shelterAfterStartleS * this.personality.shelter(i);
+      this._shelterTimer[i] = sp.shelterAfterStartleS * this.personality.shelter(i);
     }
     this.relay(i, yaw, pitch);
   }
@@ -1658,7 +1663,7 @@ export class Behaviour {
       return;
     }
 
-    const sheltering = rest > 0.5 || at(this.shelterTimer, i) > 0;
+    const sheltering = rest > 0.5 || at(this._shelterTimer, i) > 0;
     if (!sheltering) {
       this.restSpotSet[i] = 0;
     } else if (this.speciesOf(i).home === 'cave') {
@@ -2190,7 +2195,7 @@ export class Behaviour {
   private planShelter(i: number, sp: SimSpecies, plan: Plan): boolean {
     const a = this.anchors[at(this.anchor, i)];
     if (a?.kind !== 'cave') return false;
-    if (at(this.rest, i) <= 0.5 && at(this.shelterTimer, i) <= 0) return false;
+    if (at(this.rest, i) <= 0.5 && at(this._shelterTimer, i) <= 0) return false;
     plan.comfort = BEHAVIOUR.shelterComfort;
     const length = at(this.host.bodyLength, i);
     let entryY = a.position[1];

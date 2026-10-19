@@ -203,8 +203,7 @@ describe('boldness', { timeout: LONG }, () => {
     const shelter = (p: Personality): number => {
       const w = new World(community(3, p));
       const g = w.fishIds.indexOf('royal-gramma-0');
-      const timer: unknown = Reflect.get(w.behaviour, 'shelterTimer');
-      if (!(timer instanceof Float64Array)) throw new Error('no shelterTimer');
+      const timer = w.behaviour.shelterTimer;
       for (let t = 0; t < seconds(3); t++) {
         const o = g * 3;
         w.startle({

@@ -96,6 +96,11 @@ export class Greeting {
     return this._offset;
   }
 
+  /** Seconds left before fish `i` sets off for the glass, or null when it is not waiting to. */
+  waitLeft(i: number): number | null {
+    return this.phase[i] === Phase.Waiting ? at(this.timer, i) : null;
+  }
+
   /** Where the visitor stands: x and height on the front glass. */
   get point(): Float64Array {
     return this._point;
