@@ -12,6 +12,7 @@ import {
 import { ApiRequestError, ClientValidationError, type FieldErrors } from './api';
 import { useApi, useAuth } from './context';
 import { HapticsSetting } from './HapticsSetting';
+import { SoundSetting } from './SoundSetting';
 import { RemindersSetting } from './RemindersSetting';
 import { deleteErrorMessage, downloadText, rateLimitMessage, safeHref } from './legal';
 import { InstallCard } from '../pwa/InstallCard';
@@ -757,6 +758,7 @@ export function SettingsScreen() {
         <FormError message={passkey.error} />
       </section>
       <RemindersSetting />
+      <SoundSetting />
       <HapticsSetting />
       <section aria-labelledby="export-title">
         <h2 id="export-title">Your data</h2>
