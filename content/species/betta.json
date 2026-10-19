@@ -10,6 +10,17 @@
     "traits": ["flare-display"]
   },
   "biome": "freshwater",
+  "chemistry": {
+    "khMin": 0,
+    "nitriteTolerance": 0.5,
+    "phRange": [6, 7.5],
+    "salinityPpt": [0, 1],
+    "sources": [
+      "FishBase (fishbase.se) species summary",
+      "SeriouslyFish species profile (seriouslyfish.com)"
+    ],
+    "temperatureC": [24, 30]
+  },
   "commonName": "Betta",
   "id": "betta",
   "lifecycle": {

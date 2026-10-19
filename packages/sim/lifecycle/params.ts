@@ -25,9 +25,7 @@ export const MAX_FISH_PER_TANK = 60;
 export const MAX_UNEATEN_FOOD = 20;
 
 export const DEFAULT_WATER_PARAMETERS: WaterParameters = {
-  filterRemovalPerHour: 0.2,
   foodDecayMinutes: 180,
-  nitratePerHour: 0.02,
   ammoniaPerPortion: 0.15,
   algaePerHour: 0.002,
 };

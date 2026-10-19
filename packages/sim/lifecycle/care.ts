@@ -1,4 +1,11 @@
-import type { Biome, CareAction, FoodType, Water } from '@aquarium/shared';
+import type {
+  Biome,
+  CareAction,
+  Chemistry,
+  ChemistryParameters,
+  FoodType,
+  Water,
+} from '@aquarium/shared';
 import {
   FUTURE_SKEW_MS,
   HUNGER_PER_PORTION,
@@ -21,16 +28,21 @@ const FOODS_BY_BIOME: Record<Biome, readonly FoodType[]> = {
 export type Rejection = { ok: false; reason: string };
 export type Accepted<T> = { ok: true; value: T };
 
-function accept(state: LifecycleState, patch: Partial<Water>): Accepted<LifecycleState> {
-  return { ok: true, value: { ...state, water: { ...state.water, ...patch } } };
+function accept(
+  state: LifecycleState,
+  patch: Partial<Water>,
+  chemistry: Chemistry = state.chemistry,
+): Accepted<LifecycleState> {
+  return { ok: true, value: { ...state, water: { ...state.water, ...patch }, chemistry } };
 }
 
 export function applyCare(
   state: LifecycleState,
   action: CareAction,
   biome: Biome,
+  params: ChemistryParameters,
 ): Accepted<LifecycleState> | Rejection {
-  const { water } = state;
+  const { water, chemistry } = state;
   switch (action.type) {
     case 'feed': {
       if (!FOODS_BY_BIOME[biome].includes(action.food)) {
@@ -45,10 +57,48 @@ export function applyCare(
       return accept(state, { uneatenFood: water.uneatenFood + action.portion });
     }
     case 'water_change':
-      return accept(state, {
-        ammonia: water.ammonia * (1 - WATER_CHANGE_FRACTION),
-        nitrate: water.nitrate * (1 - WATER_CHANGE_FRACTION),
-      });
+      return accept(
+        state,
+        {
+          ammonia: water.ammonia * (1 - WATER_CHANGE_FRACTION),
+          nitrate: water.nitrate * (1 - WATER_CHANGE_FRACTION),
+        },
+        {
+          ...chemistry,
+          nitrite: chemistry.nitrite * (1 - WATER_CHANGE_FRACTION),
+          kh:
+            chemistry.kh +
+            (params.kh.sourceWater - chemistry.kh) * params.kh.restoredPerWaterChange,
+        },
+      );
+    case 'bottled_bacteria': {
+      const dose = params.bacteria.bottledBoost;
+      return accept(
+        state,
+        {},
+        {
+          ...chemistry,
+          bacteria: {
+            ammoniaOxidisers: Math.min(1, chemistry.bacteria.ammoniaOxidisers + dose),
+            nitriteOxidisers: Math.min(1, chemistry.bacteria.nitriteOxidisers + dose),
+          },
+        },
+      );
+    }
+    case 'filter_rinse': {
+      const kept = params.bacteria.rinseSurvival;
+      return accept(
+        state,
+        {},
+        {
+          ...chemistry,
+          bacteria: {
+            ammoniaOxidisers: chemistry.bacteria.ammoniaOxidisers * kept,
+            nitriteOxidisers: chemistry.bacteria.nitriteOxidisers * kept,
+          },
+        },
+      );
+    }
     case 'gravel_vacuum':
       return accept(state, { uneatenFood: 0 });
     case 'algae_scrape':
@@ -111,6 +161,7 @@ export function applyEating(
   return {
     ok: true,
     value: {
+      chemistry: state.chemistry,
       water: { ...state.water, uneatenFood: Math.max(0, state.water.uneatenFood - total) },
       fish: state.fish.map((f) => {
         const eaten = eatenNow.get(f.id);

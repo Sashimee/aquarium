@@ -22,11 +22,16 @@ export const waterChangeEventSchema = z.strictObject({ type: z.literal('water_ch
 export const gravelVacuumEventSchema = z.strictObject({ type: z.literal('gravel_vacuum') });
 export const algaeScrapeEventSchema = z.strictObject({ type: z.literal('algae_scrape') });
 
+export const bottledBacteriaEventSchema = z.strictObject({ type: z.literal('bottled_bacteria') });
+export const filterRinseEventSchema = z.strictObject({ type: z.literal('filter_rinse') });
+
 export const careActionSchema = z.discriminatedUnion('type', [
   feedEventSchema,
   waterChangeEventSchema,
   gravelVacuumEventSchema,
   algaeScrapeEventSchema,
+  bottledBacteriaEventSchema,
+  filterRinseEventSchema,
 ]);
 export type CareAction = z.infer<typeof careActionSchema>;
 
@@ -51,6 +56,8 @@ export const careEventKindSchema = z.enum([
   'water_change',
   'gravel_vacuum',
   'algae_scrape',
+  'bottled_bacteria',
+  'filter_rinse',
   'ate',
   'death',
 ]);
@@ -72,6 +79,8 @@ export const careEventSchema = z.discriminatedUnion('kind', [
   z.strictObject({ ...eventBase, kind: z.literal('water_change'), payload: emptyPayload }),
   z.strictObject({ ...eventBase, kind: z.literal('gravel_vacuum'), payload: emptyPayload }),
   z.strictObject({ ...eventBase, kind: z.literal('algae_scrape'), payload: emptyPayload }),
+  z.strictObject({ ...eventBase, kind: z.literal('bottled_bacteria'), payload: emptyPayload }),
+  z.strictObject({ ...eventBase, kind: z.literal('filter_rinse'), payload: emptyPayload }),
   z.strictObject({
     ...eventBase,
     kind: z.literal('ate'),

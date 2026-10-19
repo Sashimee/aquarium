@@ -10,6 +10,17 @@
     "traits": []
   },
   "biome": "freshwater",
+  "chemistry": {
+    "khMin": 0,
+    "nitriteTolerance": 0.4,
+    "phRange": [6, 7.5],
+    "salinityPpt": [0, 1],
+    "sources": [
+      "FishBase (fishbase.se) species summary",
+      "SeriouslyFish species profile (seriouslyfish.com)"
+    ],
+    "temperatureC": [24, 29]
+  },
   "commonName": "Angelfish",
   "id": "angelfish",
   "lifecycle": {

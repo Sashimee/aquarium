@@ -138,12 +138,12 @@ describe('tanks and fish', () => {
     expect(personalitySchema.safeParse(stocked.fish[0]?.personality).success).toBe(true);
   });
 
-  it('serves breeding and chemistry tolerances with defaults for species that declare none', async () => {
+  it('serves species chemistry tolerances and breeding defaults', async () => {
     const cookie = await signedIn(h);
     const list = speciesListSchema.parse((await call(h, cookie, 'GET', '/api/species')).json());
     const neon = list.find((s) => s.id === 'neon-tetra');
     expect(neon?.breeding).toEqual({ mode: 'none', needsPair: true, needsCave: false });
-    expect(neon?.chemistry.phRange).toEqual([6, 8.5]);
+    expect(neon?.chemistry).toMatchObject({ phRange: [5.5, 7.5], nitriteTolerance: 0.3 });
   });
 
   it('creates, lists, renames and re-lays-out a tank, and validates input', async () => {
@@ -787,6 +787,39 @@ describe('care actions and feeding validation', () => {
     expect(
       (await call(h, cookie, 'POST', `/api/tanks/${tank.id}/care`, { type: 'nuke' })).statusCode,
     ).toBe(400);
+  });
+
+  it('rinsing the filter in tap water costs bacteria and bottled bacteria add them back', async () => {
+    const { cookie, tank } = await setup();
+    const post = (type: string) => call(h, cookie, 'POST', `/api/tanks/${tank.id}/care`, { type });
+    const rinsed = tankSchema.parse((await post('filter_rinse')).json());
+    expect(rinsed.chemistry.bacteria.ammoniaOxidisers).toBeLessThan(0.2);
+    expect(rinsed.chemistry.bacteria.nitriteOxidisers).toBeLessThan(0.2);
+    const dosed = tankSchema.parse((await post('bottled_bacteria')).json());
+    expect(dosed.chemistry.bacteria.ammoniaOxidisers).toBeGreaterThan(
+      rinsed.chemistry.bacteria.ammoniaOxidisers,
+    );
+    const kinds = await h.database.db
+      .select({ kind: schema.events.kind })
+      .from(schema.events)
+      .where(eq(schema.events.tankId, tank.id));
+    expect(kinds.map((k) => k.kind)).toEqual(['filter_rinse', 'bottled_bacteria']);
+  });
+
+  it('water change also halves nitrite', async () => {
+    const { cookie, tank } = await setup();
+    await h.database.db
+      .update(schema.tanks)
+      .set({
+        chemistry: { ...newTankChemistry('freshwater'), nitrite: 1.2 },
+      })
+      .where(eq(schema.tanks.id, tank.id));
+    const wc = tankSchema.parse(
+      (
+        await call(h, cookie, 'POST', `/api/tanks/${tank.id}/care`, { type: 'water_change' })
+      ).json(),
+    );
+    expect(wc.chemistry.nitrite).toBeCloseTo(0.6, 1);
   });
 });
 

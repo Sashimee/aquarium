@@ -15,6 +15,17 @@
     "traits": ["shoal", "air-gulp"]
   },
   "biome": "freshwater",
+  "chemistry": {
+    "khMin": 0,
+    "nitriteTolerance": 0.4,
+    "phRange": [6, 8],
+    "salinityPpt": [0, 1],
+    "sources": [
+      "FishBase (fishbase.se) species summary",
+      "SeriouslyFish species profile (seriouslyfish.com)"
+    ],
+    "temperatureC": [22, 27]
+  },
   "commonName": "Bronze corydoras",
   "id": "bronze-corydoras",
   "lifecycle": {

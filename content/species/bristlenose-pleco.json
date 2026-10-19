@@ -10,6 +10,17 @@
     "traits": ["cave-dweller"]
   },
   "biome": "freshwater",
+  "chemistry": {
+    "khMin": 0,
+    "nitriteTolerance": 0.8,
+    "phRange": [6, 7.8],
+    "salinityPpt": [0, 1],
+    "sources": [
+      "FishBase (fishbase.se) species summary",
+      "SeriouslyFish species profile (seriouslyfish.com)"
+    ],
+    "temperatureC": [22, 28]
+  },
   "commonName": "Bristlenose pleco",
   "id": "bristlenose-pleco",
   "lifecycle": {

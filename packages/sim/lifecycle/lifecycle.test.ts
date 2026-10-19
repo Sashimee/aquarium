@@ -1,6 +1,16 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { speciesSummarySchema, type SpeciesLifecycle, type Water } from '@aquarium/shared';
+import {
+  chemistryParametersSchema,
+  DEFAULT_EQUIPMENT,
+  newTankChemistry,
+  speciesSummarySchema,
+  type Chemistry,
+  type Equipment,
+  type SpeciesChemistry,
+  type SpeciesLifecycle,
+  type Water,
+} from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import {
   applyCare,
@@ -14,20 +24,34 @@ import {
   TANK_BIOLOAD_CAPACITY,
   type LifecycleFish,
   type LifecycleState,
+  type SpeciesChemistryTable,
   type SpeciesTable,
+  type TankEnvironment,
 } from './index.ts';
 
 const speciesDir = join(import.meta.dirname, '../../../content/species');
+const parsedSpecies = readdirSync(speciesDir)
+  .filter((name) => name.endsWith('.json'))
+  .map((name) =>
+    speciesSummarySchema.loose().parse(JSON.parse(readFileSync(join(speciesDir, name), 'utf8'))),
+  );
 const species: SpeciesTable = new Map(
-  readdirSync(speciesDir)
-    .filter((name) => name.endsWith('.json'))
-    .map((name) => {
-      const parsed = speciesSummarySchema
-        .loose()
-        .parse(JSON.parse(readFileSync(join(speciesDir, name), 'utf8')));
-      return [parsed.id, parsed.lifecycle satisfies SpeciesLifecycle] as const;
-    }),
+  parsedSpecies.map((s) => [s.id, s.lifecycle satisfies SpeciesLifecycle] as const),
 );
+const speciesChemistry: SpeciesChemistryTable = new Map(
+  parsedSpecies.map((s) => [s.id, s.chemistry satisfies SpeciesChemistry] as const),
+);
+const chemistryParams = chemistryParametersSchema.parse(
+  JSON.parse(readFileSync(join(import.meta.dirname, '../../../content/chemistry.json'), 'utf8')),
+);
+const env: TankEnvironment = {
+  biome: 'freshwater',
+  equipment: DEFAULT_EQUIPMENT,
+  species,
+  speciesChemistry,
+  params: DEFAULT_WATER_PARAMETERS,
+  chemistryParams,
+};
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -52,24 +76,35 @@ function fishOf(id: string, speciesId: string, over: Partial<LifecycleFish> = {}
   };
 }
 
-function tank(fish: LifecycleFish[], water: Partial<Water> = {}): LifecycleState {
-  return { water: { ...cleanWater, ...water }, fish };
+function tank(
+  fish: LifecycleFish[],
+  water: Partial<Water> = {},
+  chemistry: Partial<Chemistry> = {},
+): LifecycleState {
+  return {
+    water: { ...cleanWater, ...water },
+    chemistry: { ...newTankChemistry('freshwater'), ...chemistry },
+    fish,
+  };
 }
 
 function run(
   state: LifecycleState,
   ms: number,
-  opts: { grace?: number; feeder?: boolean; filter?: number } = {},
+  opts: {
+    grace?: number;
+    feeder?: boolean;
+    equipment?: Equipment;
+    env?: Partial<TankEnvironment>;
+  } = {},
 ) {
   return catchUp({
+    ...env,
+    ...opts.env,
+    equipment: opts.equipment ?? DEFAULT_EQUIPMENT,
     state,
     fromMs: T0,
     toMs: T0 + ms,
-    species,
-    params: {
-      ...DEFAULT_WATER_PARAMETERS,
-      filterRemovalPerHour: opts.filter ?? DEFAULT_WATER_PARAMETERS.filterRemovalPerHour,
-    },
     graceEndsAtMs: opts.grace ?? NO_GRACE,
     vacationFeeder: opts.feeder ?? false,
   });
@@ -124,7 +159,12 @@ describe('one visit a day keeps a tank healthy', () => {
     let state = tank([fishOf('a', 'neon-tetra'), fishOf('b', 'neon-tetra'), fishOf('c', 'guppy')]);
     let now = T0;
     for (let day = 0; day < 30; day++) {
-      const fed = applyCare(state, { type: 'feed', food: 'flakes', portion: 3 }, 'freshwater');
+      const fed = applyCare(
+        state,
+        { type: 'feed', food: 'flakes', portion: 3 },
+        'freshwater',
+        chemistryParams,
+      );
       if (!fed.ok) throw new Error(fed.reason);
       const eaten = applyEating(
         fed.value,
@@ -142,8 +182,7 @@ describe('one visit a day keeps a tank healthy', () => {
         state: eaten.value,
         fromMs: now,
         toMs: now + DAY,
-        species,
-        params: DEFAULT_WATER_PARAMETERS,
+        ...env,
         graceEndsAtMs: NO_GRACE,
         vacationFeeder: false,
       });
@@ -182,21 +221,23 @@ describe('a tank stocked to capacity at full size under perfect daily care', () 
     const capacity = fish.reduce((sum, f) => sum + (species.get(f.species)?.bioload ?? 0), 0);
     expect(capacity).toBeLessThanOrEqual(TANK_BIOLOAD_CAPACITY);
     expect(capacity).toBeGreaterThan(TANK_BIOLOAD_CAPACITY - 3.1);
-    let state = tank(fish);
+    const biome = parsedSpecies.find((p) => p.id === groups[0]?.[0])?.biome ?? 'freshwater';
+    let state = { ...tank(fish), chemistry: newTankChemistry(biome) };
     let now = T0;
     for (let day = 0; day < 30; day++) {
       state = {
+        ...state,
         water: { ...state.water, uneatenFood: state.water.uneatenFood + 1 },
         fish: state.fish.map((f) => ({ ...f, hunger: 0 })),
       };
-      const changed = applyCare(state, { type: 'water_change' }, 'freshwater');
+      const changed = applyCare(state, { type: 'water_change' }, biome, chemistryParams);
       if (!changed.ok) throw new Error(changed.reason);
       const r = catchUp({
         state: changed.value,
         fromMs: now,
         toMs: now + DAY,
-        species,
-        params: DEFAULT_WATER_PARAMETERS,
+        ...env,
+        biome,
         graceEndsAtMs: NO_GRACE,
         vacationFeeder: false,
       });
@@ -210,8 +251,11 @@ describe('a tank stocked to capacity at full size under perfect daily care', () 
   it('keeps bioload-only ammonia below the most sensitive tolerance with margin', () => {
     const lowest = Math.min(...[...species.values()].map((s) => s.ammoniaTolerance));
     const worst = Math.max(...[...species.values()].map((s) => s.ammoniaPerBioloadPerHour));
+    const colony =
+      chemistryParams.bacteria.mediaCapacityPerFilterTier * DEFAULT_EQUIPMENT.filter.tier;
     const equilibrium =
-      (TANK_BIOLOAD_CAPACITY * worst) / DEFAULT_WATER_PARAMETERS.filterRemovalPerHour;
+      (TANK_BIOLOAD_CAPACITY * worst) /
+      (chemistryParams.bacteria.ammoniaOxidisers.conversionPerHour * colony);
     expect(equilibrium).toBeLessThan(lowest * 0.75);
   });
 });
@@ -222,16 +266,20 @@ describe('overfeeding poisons the tank', () => {
     let now = T0;
     const deaths: string[] = [];
     for (let day = 0; day < 14; day++) {
-      for (let i = 0; i < 2; i++) {
-        const fed = applyCare(state, { type: 'feed', food: 'flakes', portion: 5 }, 'freshwater');
+      for (let i = 0; i < 4; i++) {
+        const fed = applyCare(
+          state,
+          { type: 'feed', food: 'flakes', portion: 5 },
+          'freshwater',
+          chemistryParams,
+        );
         if (fed.ok) state = fed.value;
       }
       const r = catchUp({
         state,
         fromMs: now,
         toMs: now + DAY,
-        species,
-        params: DEFAULT_WATER_PARAMETERS,
+        ...env,
         graceEndsAtMs: NO_GRACE,
         vacationFeeder: false,
       });
@@ -253,8 +301,8 @@ describe('overfeeding poisons the tank', () => {
   });
 
   it('attributes the death to ammonia, not starvation, when the filter has failed', () => {
-    const state = tank([fishOf('a', 'blue-tang')], { ammonia: 3 });
-    const r = run(state, 5 * DAY, { filter: 0 });
+    const state = tank([fishOf('a', 'blue-tang')], { ammonia: 3 }, { bacteria: UNCYCLED });
+    const r = run(state, 5 * DAY, { equipment: { ...DEFAULT_EQUIPMENT, filter: { tier: 0 } } });
     expect(only(r).alive).toBe(false);
     expect(only(r).cause).toBe('ammonia');
   });
@@ -271,7 +319,7 @@ describe('recovery', () => {
   it('a water change and gravel vacuum bring a poisoned tank back below tolerance', () => {
     let state = tank([fishOf('a', 'neon-tetra')], { ammonia: 0.6, nitrate: 8, uneatenFood: 6 });
     for (const type of ['water_change', 'gravel_vacuum'] as const) {
-      const r = applyCare(state, { type }, 'freshwater');
+      const r = applyCare(state, { type }, 'freshwater', chemistryParams);
       if (!r.ok) throw new Error(r.reason);
       state = r.value;
     }
@@ -347,8 +395,8 @@ describe('catch-up resolution and cap', () => {
       state,
       fromMs: T0,
       toMs: T0 - HOUR,
-      species,
-      params: DEFAULT_WATER_PARAMETERS,
+      ...env,
+      equipment: DEFAULT_EQUIPMENT,
       graceEndsAtMs: NO_GRACE,
       vacationFeeder: false,
     });
@@ -374,8 +422,8 @@ describe('catch-up resolution and cap', () => {
       state: half.state,
       fromMs: half.advancedToMs,
       toMs: T0 + 3 * DAY,
-      species,
-      params: DEFAULT_WATER_PARAMETERS,
+      ...env,
+      equipment: DEFAULT_EQUIPMENT,
       graceEndsAtMs: NO_GRACE,
       vacationFeeder: false,
     });
@@ -495,14 +543,18 @@ describe('feeding validation', () => {
   });
 
   it('refuses food the biome does not support and food beyond the tank limit', () => {
-    expect(applyCare(state, { type: 'feed', food: 'nori', portion: 1 }, 'freshwater').ok).toBe(
-      false,
-    );
-    expect(applyCare(state, { type: 'feed', food: 'nori', portion: 1 }, 'reef').ok).toBe(true);
+    expect(
+      applyCare(state, { type: 'feed', food: 'nori', portion: 1 }, 'freshwater', chemistryParams)
+        .ok,
+    ).toBe(false);
+    expect(
+      applyCare(state, { type: 'feed', food: 'nori', portion: 1 }, 'reef', chemistryParams).ok,
+    ).toBe(true);
     const full = tank(state.fish as LifecycleFish[], { uneatenFood: 19.5 });
-    expect(applyCare(full, { type: 'feed', food: 'flakes', portion: 1 }, 'freshwater').ok).toBe(
-      false,
-    );
+    expect(
+      applyCare(full, { type: 'feed', food: 'flakes', portion: 1 }, 'freshwater', chemistryParams)
+        .ok,
+    ).toBe(false);
   });
 });
 
@@ -524,5 +576,238 @@ describe('capacity', () => {
     const atCap = crowded.slice(0, 12);
     expect(hasCapacityFor(atCap, 0.1, 100, 12)).toBe(false);
     expect(hasCapacityFor(atCap.slice(0, 11), 0.1, 100, 12)).toBe(true);
+  });
+});
+
+function fedDaily(state: LifecycleState, days: number, opts: Parameters<typeof run>[2] = {}) {
+  let current = state;
+  for (let d = 0; d < days; d++) {
+    const r = run({ ...current, fish: current.fish.map((f) => ({ ...f, hunger: 0 })) }, DAY, opts);
+    current = r.state;
+  }
+  return current;
+}
+
+const guppies = (n: number) =>
+  Array.from({ length: n }, (_, i) => fishOf(`g${i}`, 'guppy', { size: 0.05 }));
+
+const UNCYCLED = { ammoniaOxidisers: 0, nitriteOxidisers: 0 };
+const stocked = () => tank([fishOf('a', 'neon-tetra'), fishOf('b', 'neon-tetra')]);
+
+describe('nitrogen cycle', () => {
+  it('a cycled tank keeps ammonia and nitrite near zero under daily bioload', () => {
+    const end = fedDaily(stocked(), 20);
+    expect(end.water.ammonia).toBeLessThan(0.1);
+    expect(end.chemistry.nitrite).toBeLessThan(0.1);
+    expect(end.fish.every((f) => f.alive && f.health === 1)).toBe(true);
+  });
+
+  it('an uncycled tank sees ammonia climb, then a nitrite spike, then both fall as colonies grow', () => {
+    const eggs = tank(guppies(10), {}, { bacteria: UNCYCLED });
+    const peaks = { ammonia: 0, nitrite: 0, ammoniaDay: 0, nitriteDay: 0 };
+    let state = eggs;
+    let now = T0;
+    for (let day = 1; day <= 60; day++) {
+      const r = catchUp({
+        ...env,
+        state: { ...state, fish: state.fish.map((f) => ({ ...f, health: 1, hunger: 0 })) },
+        fromMs: now,
+        toMs: now + DAY,
+        graceEndsAtMs: NO_GRACE,
+        vacationFeeder: false,
+      });
+      state = r.state;
+      now += DAY;
+      if (state.water.ammonia > peaks.ammonia) {
+        peaks.ammonia = state.water.ammonia;
+        peaks.ammoniaDay = day;
+      }
+      if (state.chemistry.nitrite > peaks.nitrite) {
+        peaks.nitrite = state.chemistry.nitrite;
+        peaks.nitriteDay = day;
+      }
+    }
+    expect(peaks.ammonia).toBeGreaterThan(0.3);
+    expect(peaks.nitrite).toBeGreaterThan(0.3);
+    expect(peaks.nitriteDay).toBeGreaterThan(peaks.ammoniaDay);
+    expect(state.water.ammonia).toBeLessThan(0.1);
+    expect(state.chemistry.nitrite).toBeLessThan(0.1);
+    expect(state.water.nitrate).toBeGreaterThan(1);
+    expect(state.chemistry.bacteria.ammoniaOxidisers).toBeGreaterThan(0.2);
+    expect(state.chemistry.bacteria.nitriteOxidisers).toBeGreaterThan(0.2);
+  });
+
+  it('nitrite kills a sensitive fish and is blamed as the cause', () => {
+    const state = tank(
+      [fishOf('a', 'cherry-shrimp')],
+      {},
+      { nitrite: 3, bacteria: { ammoniaOxidisers: 1, nitriteOxidisers: 0 } },
+    );
+    const r = run(state, 20 * DAY);
+    expect(only(r).alive).toBe(false);
+    expect(only(r).cause).toBe('nitrite');
+  });
+
+  it('bottled bacteria cut the time to recover a crashed filter', () => {
+    const crashed = tank(guppies(10), {}, { bacteria: UNCYCLED });
+    const dosed = applyCare(crashed, { type: 'bottled_bacteria' }, 'freshwater', chemistryParams);
+    if (!dosed.ok) throw new Error(dosed.reason);
+    expect(dosed.value.chemistry.bacteria.ammoniaOxidisers).toBe(
+      chemistryParams.bacteria.bottledBoost,
+    );
+    const days = (state: LifecycleState): number => {
+      let s = state;
+      for (let d = 1; d <= 60; d++) {
+        s = fedDaily(s, 1);
+        if (s.water.ammonia < 0.05 && s.chemistry.nitrite < 0.05) return d;
+      }
+      return 61;
+    };
+    expect(days(dosed.value)).toBeLessThan(days(crashed));
+  });
+
+  it('bottled bacteria never push a colony past 1', () => {
+    const full = tank([fishOf('a', 'neon-tetra')]);
+    const dosed = applyCare(full, { type: 'bottled_bacteria' }, 'freshwater', chemistryParams);
+    if (!dosed.ok) throw new Error(dosed.reason);
+    expect(dosed.value.chemistry.bacteria).toEqual({ ammoniaOxidisers: 1, nitriteOxidisers: 1 });
+  });
+
+  it('rinsing the filter in tap water kills most of the colonies and ammonia rises', () => {
+    const rinsed = applyCare(stocked(), { type: 'filter_rinse' }, 'freshwater', chemistryParams);
+    if (!rinsed.ok) throw new Error(rinsed.reason);
+    expect(rinsed.value.chemistry.bacteria.ammoniaOxidisers).toBeCloseTo(
+      chemistryParams.bacteria.rinseSurvival,
+    );
+    const after = run(rinsed.value, 5 * DAY).state;
+    const normal = run(stocked(), 5 * DAY).state;
+    expect(after.water.ammonia).toBeGreaterThan(normal.water.ammonia);
+  });
+
+  it('a filter hosts no colonies without media and shrinks them over days', () => {
+    const none = run(stocked(), 30 * DAY, {
+      equipment: { ...DEFAULT_EQUIPMENT, filter: { tier: 0 } },
+    }).state.chemistry.bacteria;
+    expect(none.ammoniaOxidisers).toBeLessThan(0.01);
+    const roomy = fedDaily(stocked(), 30, {
+      equipment: { ...DEFAULT_EQUIPMENT, filter: { tier: 3 } },
+    }).chemistry.bacteria;
+    expect(roomy.ammoniaOxidisers).toBeGreaterThan(0.95);
+    const standard = fedDaily(stocked(), 30).chemistry.bacteria;
+    expect(standard.ammoniaOxidisers).toBeCloseTo(
+      chemistryParams.bacteria.mediaCapacityPerFilterTier,
+      1,
+    );
+  });
+
+  it('a water change halves nitrite and moves KH towards the source water', () => {
+    const state = tank([fishOf('a', 'neon-tetra')], {}, { nitrite: 1, kh: 2 });
+    const r = applyCare(state, { type: 'water_change' }, 'freshwater', chemistryParams);
+    if (!r.ok) throw new Error(r.reason);
+    expect(r.value.chemistry.nitrite).toBeCloseTo(0.5);
+    expect(r.value.chemistry.kh).toBeCloseTo(
+      2 + (chemistryParams.kh.sourceWater - 2) * chemistryParams.kh.restoredPerWaterChange,
+    );
+  });
+});
+
+describe('pH, KH, temperature and salinity', () => {
+  it('holds a cycled, heated freshwater tank at its biome targets', () => {
+    const r = run(stocked(), 10 * DAY).state.chemistry;
+    expect(r.temperatureC).toBeCloseTo(25, 1);
+    expect(r.salinity).toBe(0);
+    expect(r.ph).toBeGreaterThan(6.8);
+    expect(r.ph).toBeLessThanOrEqual(7);
+  });
+
+  it('cools an unheated tank towards room temperature and a heater holds it', () => {
+    const cold = run(stocked(), 2 * DAY, {
+      equipment: { ...DEFAULT_EQUIPMENT, heater: { tier: 0 } },
+    }).state.chemistry.temperatureC;
+    expect(cold).toBeLessThan(21.1);
+    const warm = run(stocked(), 2 * DAY).state.chemistry.temperatureC;
+    expect(warm).toBeCloseTo(25, 1);
+  });
+
+  it('drives a reef tank to sea salinity', () => {
+    const state = {
+      ...tank([fishOf('a', 'ocellaris-clownfish')]),
+      chemistry: { ...newTankChemistry('reef'), salinity: 20 },
+    };
+    const r = run(state, 20 * DAY, { env: { biome: 'reef' } });
+    expect(r.state.chemistry.salinity).toBeGreaterThan(30);
+  });
+
+  it('accumulating nitrate consumes KH and then lets pH sag', () => {
+    const start = tank([fishOf('a', 'angelfish', { size: 0.15 })], {}, { kh: 3 });
+    const end = run(start, 40 * DAY).state;
+    expect(end.water.nitrate).toBeGreaterThan(5);
+    expect(end.chemistry.kh).toBeLessThan(3);
+    expect(end.chemistry.ph).toBeLessThan(7);
+  });
+
+  it('stress from a wrong-salinity tank harms slowly, far below ammonia', () => {
+    const wrong = {
+      ...tank([fishOf('a', 'ocellaris-clownfish')]),
+      chemistry: newTankChemistry('freshwater'),
+    };
+    const sea = run(wrong, 5 * DAY, { env: { biome: 'freshwater' } });
+    expect(only(sea).health).toBeLessThan(1);
+    expect(only(sea).alive).toBe(true);
+  });
+
+  it('a fish within its ranges takes no stress damage', () => {
+    expect(fedDaily(stocked(), 30).fish.every((f) => f.health === 1)).toBe(true);
+  });
+});
+
+describe('offline catch-up with chemistry', () => {
+  it('is deterministic and splitting a window changes nothing', () => {
+    const start = tank(
+      [fishOf('a', 'neon-tetra'), fishOf('b', 'guppy')],
+      { uneatenFood: 4 },
+      { bacteria: { ammoniaOxidisers: 0.1, nitriteOxidisers: 0.05 } },
+    );
+    const whole = run(start, 5 * DAY);
+    const half = run(start, 2 * DAY);
+    const rest = catchUp({
+      ...env,
+      state: half.state,
+      fromMs: half.advancedToMs,
+      toMs: T0 + 5 * DAY,
+      graceEndsAtMs: NO_GRACE,
+      vacationFeeder: false,
+    });
+    expect(rest.state).toEqual(whole.state);
+  });
+
+  it('bounds a year away to 60 days of chemistry', () => {
+    const start = tank([fishOf('a', 'neon-tetra')], { uneatenFood: 4 });
+    const year = run(start, 365 * DAY);
+    expect(year.capped).toBe(true);
+    expect(year.state).toEqual(run(start, 60 * DAY).state);
+  });
+
+  it('keeps every reading finite and in range over 60 days', () => {
+    const r = run(stocked(), 60 * DAY, { feeder: true }).state.chemistry;
+    for (const v of [r.nitrite, r.ph, r.kh, r.temperatureC, r.salinity]) {
+      expect(Number.isFinite(v)).toBe(true);
+    }
+    expect(r.ph).toBeGreaterThanOrEqual(0);
+    expect(r.ph).toBeLessThanOrEqual(14);
+    expect(r.kh).toBeGreaterThanOrEqual(0);
+  });
+
+  it('applyEating keeps the chemistry', () => {
+    const state = tank([fishOf('a', 'neon-tetra')], { uneatenFood: 2 }, { nitrite: 0.7 });
+    const ate = applyEating(state, [{ fishId: 'a', portion: 1, atMs: T0 }], {
+      nowMs: T0,
+      windowMs: HOUR,
+      fedInWindow: 2,
+      eatenInWindow: 0,
+      eatenByFishInWindow: new Map(),
+    });
+    if (!ate.ok) throw new Error(ate.reason);
+    expect(ate.value.chemistry.nitrite).toBe(0.7);
   });
 });

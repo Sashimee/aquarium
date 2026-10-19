@@ -1,14 +1,11 @@
-import type { WaterParameters } from '@aquarium/shared';
 import { MAX_CATCH_UP_MS, STEP_MINUTES, STEP_MS } from './params.ts';
 import { stepTank } from './step.ts';
-import type { DeathRecord, LifecycleState, SpeciesTable } from './types.ts';
+import type { DeathRecord, LifecycleState, TankEnvironment } from './types.ts';
 
-export interface CatchUpInput {
+export interface CatchUpInput extends TankEnvironment {
   readonly state: LifecycleState;
   readonly fromMs: number;
   readonly toMs: number;
-  readonly species: SpeciesTable;
-  readonly params: WaterParameters;
   readonly graceEndsAtMs: number;
   readonly vacationFeeder: boolean;
 }
@@ -38,8 +35,12 @@ export function catchUp(input: CatchUpInput): CatchUpResult {
       dtHours: STEP_MINUTES / 60,
       vacationFeeder: input.vacationFeeder,
       grace: startMs < input.graceEndsAtMs,
+      biome: input.biome,
+      equipment: input.equipment,
       species: input.species,
+      speciesChemistry: input.speciesChemistry,
       params: input.params,
+      chemistryParams: input.chemistryParams,
     });
     state = result.state;
     deaths.push(...result.deaths);

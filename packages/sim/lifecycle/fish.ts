@@ -1,4 +1,10 @@
-import type { CauseOfDeath, SpeciesLifecycle } from '@aquarium/shared';
+import type {
+  CauseOfDeath,
+  Chemistry,
+  ChemistryParameters,
+  SpeciesChemistry,
+  SpeciesLifecycle,
+} from '@aquarium/shared';
 import {
   CARCASS_BIOLOAD_FACTOR,
   GROWTH_MIN_HEALTH,
@@ -14,6 +20,8 @@ export interface FishStepInput {
   readonly nowMs: number;
   readonly dtHours: number;
   readonly ammonia: number;
+  readonly chemistry: Chemistry;
+  readonly chemistryParams: ChemistryParameters;
   readonly vacationFeeder: boolean;
   readonly grace: boolean;
 }
@@ -23,24 +31,58 @@ export function toxicityFactor(ammonia: number, tolerance: number): number {
   return tolerance > 0 ? Math.min(ammonia / tolerance, MAX_TOXICITY_FACTOR) : MAX_TOXICITY_FACTOR;
 }
 
+export function nitriteFactor(nitrite: number, tolerance: number, perUnit: number): number {
+  return Math.min(Math.max(0, nitrite - tolerance) * perUnit, MAX_TOXICITY_FACTOR);
+}
+
+const outside = (value: number, [lo, hi]: readonly [number, number]): number =>
+  Math.max(lo - value, value - hi, 0);
+
+/** Sum of how far pH, temperature, salinity and hardness sit outside the species' comfort, in units of full stress. */
+export function waterStress(
+  chemistry: Chemistry,
+  spec: SpeciesChemistry,
+  params: ChemistryParameters,
+): number {
+  const full = params.stress.fullStressDeviation;
+  const stress =
+    outside(chemistry.ph, spec.phRange) / full.ph +
+    outside(chemistry.temperatureC, spec.temperatureC) / full.temperatureC +
+    outside(chemistry.salinity, spec.salinityPpt) / full.salinity +
+    Math.max(0, spec.khMin - chemistry.kh) / full.kh;
+  return Math.min(stress, MAX_TOXICITY_FACTOR);
+}
+
 export function stepFish(
   fish: LifecycleFish,
   spec: SpeciesLifecycle,
+  chemSpec: SpeciesChemistry,
   input: FishStepInput,
 ): LifecycleFish {
   if (!fish.alive) return fish;
-  const { dtHours, nowMs } = input;
+  const { dtHours, nowMs, chemistryParams } = input;
 
   const hungerRate = spec.hungerPerHour * (input.vacationFeeder ? VACATION_HUNGER_FACTOR : 1);
   const hunger = clamp01(fish.hunger + hungerRate * dtHours);
 
   const starving = hunger > spec.starvationHungerThreshold;
-  const toxicity = toxicityFactor(input.ammonia, spec.ammoniaTolerance);
-  const starveLoss = starving ? spec.healthLossPerHourStarving * dtHours : 0;
-  const toxicLoss = spec.healthLossPerHourStarving * toxicity * dtHours;
-  const harmed = starving || toxicity > 0;
+  const unit = spec.healthLossPerHourStarving * dtHours;
+  const starveLoss = starving ? unit : 0;
+  const ammoniaLoss = unit * toxicityFactor(input.ammonia, spec.ammoniaTolerance);
+  const nitriteLoss =
+    unit *
+    nitriteFactor(
+      input.chemistry.nitrite,
+      chemSpec.nitriteTolerance,
+      chemistryParams.nitrite.toxicityPerUnit,
+    );
+  const stressLoss =
+    unit *
+    chemistryParams.stress.healthLossFraction *
+    waterStress(input.chemistry, chemSpec, chemistryParams);
+  const harmed = starving || ammoniaLoss + nitriteLoss + stressLoss > 0;
 
-  const loss = input.grace ? 0 : starveLoss + toxicLoss;
+  const loss = input.grace ? 0 : starveLoss + ammoniaLoss + nitriteLoss + stressLoss;
   const gain = harmed ? 0 : spec.healthRecoveryPerHour * dtHours;
   const health = clamp01(fish.health - loss + gain);
 
@@ -51,12 +93,25 @@ export function stepFish(
 
   let cause: CauseOfDeath | null = null;
   if (nowMs - fish.bornAtMs >= spec.lifespanDays * DAY_MS) cause = 'old_age';
-  else if (health <= 0) cause = toxicLoss > starveLoss ? 'ammonia' : 'starvation';
+  else if (health <= 0) cause = dominantCause(starveLoss, ammoniaLoss, nitriteLoss, stressLoss);
 
   if (cause) {
     return { ...fish, hunger, health, size, alive: false, diedAtMs: nowMs, cause };
   }
   return { ...fish, hunger, health, size };
+}
+
+function dominantCause(
+  starve: number,
+  ammonia: number,
+  nitrite: number,
+  stress: number,
+): CauseOfDeath {
+  const worst = Math.max(starve, ammonia, nitrite, stress);
+  if (worst === starve) return 'starvation';
+  if (worst === ammonia) return 'ammonia';
+  if (worst === nitrite) return 'nitrite';
+  return 'unknown';
 }
 
 export function fishBioload(fish: LifecycleFish, spec: SpeciesLifecycle): number {

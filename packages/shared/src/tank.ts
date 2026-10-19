@@ -25,9 +25,7 @@ export const waterSchema = z.object({
 export type Water = z.infer<typeof waterSchema>;
 
 export const waterParametersSchema = z.strictObject({
-  filterRemovalPerHour: z.number().nonnegative(),
   foodDecayMinutes: z.number().positive(),
-  nitratePerHour: z.number().nonnegative(),
   ammoniaPerPortion: z.number().nonnegative(),
   algaePerHour: z.number().nonnegative(),
 });
