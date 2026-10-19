@@ -37,9 +37,9 @@ function isContentSpecies(raw: unknown): raw is ContentSpecies {
 }
 
 const keys = (n: number): string[] => Array.from({ length: n }, (_, i) => `fish-${i}`);
-const demo = (key: string) => ({ key, sex: null });
-const MALE = { key: 'guppy-2', sex: 'male' } as const;
-const FEMALE = { key: 'guppy-0', sex: 'female' } as const;
+const demo = (key: string) => ({ key, sex: null, stage: null });
+const MALE = { key: 'guppy-2', sex: 'male', stage: 'adult' } as const;
+const FEMALE = { key: 'guppy-0', sex: 'female', stage: 'adult' } as const;
 const DEMO_MALE = 'guppy-0';
 const DEMO_FEMALE = 'guppy-2';
 
@@ -130,6 +130,20 @@ describe('bodyLengthOf', () => {
 
   it('leaves a species with no profile at its size', () => {
     expect(bodyLengthOf({ ...MALE, species: 'mystery-fish', lengthM: 0.1 }, 0.2)).toBe(0.1);
+  });
+
+  it('draws a fry at its size, not at the adult length', () => {
+    const fry = { ...FEMALE, stage: 'fry', species: 'guppy', lengthM: 0.008 } as const;
+    expect(bodyLengthOf(fry, 0.027)).toBe(0.008);
+  });
+
+  it('sizes a young fish without a usable size by its stage', () => {
+    const young = (stage: 'fry' | 'juvenile', lengthM: number | undefined) =>
+      bodyLengthOf({ ...FEMALE, stage, species: 'guppy', lengthM }, 0.027);
+    expect(young('fry', undefined)).toBe(0.008);
+    expect(young('fry', Number.NaN)).toBe(0.008);
+    expect(young('fry', 0)).toBe(0.008);
+    expect(young('juvenile', undefined)).toBeCloseTo(0.008 + (0.027 - 0.008) * (21 / 90));
   });
 });
 

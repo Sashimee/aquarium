@@ -2,7 +2,7 @@ import type { Biome, PlayableBiome } from '@aquarium/shared';
 import { useEffect, useState } from 'react';
 import type { CameraMode } from '../interaction/camera';
 import { useAuth, useBridge, useCameraMode, useDemoBiome } from './context';
-import { DuskIcon, MoonIcon, PersonIcon, SunIcon, TankIcon } from './icons';
+import { BookIcon, DuskIcon, MoonIcon, PersonIcon, SunIcon, TankIcon } from './icons';
 import type { OpenPanel } from './panels';
 import { Link } from './screens';
 import { useActiveTank, useOptionalSession, useSessionState } from './session';
@@ -185,6 +185,21 @@ export function TankButton({ open, onPress }: { open: boolean; onPress(): void }
   );
 }
 
+export function CollectionButton({ onPress }: { onPress(): void }) {
+  return (
+    <button
+      type="button"
+      className="round"
+      data-opener="collection"
+      aria-haspopup="dialog"
+      aria-label="Collection book"
+      onClick={onPress}
+    >
+      <BookIcon />
+    </button>
+  );
+}
+
 export function AvatarButton({ open, onPress }: { open: boolean; onPress(): void }) {
   const { user, status } = useAuth();
   const initial = user?.name.trim().charAt(0).toUpperCase();
@@ -201,7 +216,7 @@ export function AvatarButton({ open, onPress }: { open: boolean; onPress(): void
   );
 }
 
-export function AccountPanel() {
+export function AccountPanel({ onCollection }: { onCollection(): void }) {
   const { user, status, signOut } = useAuth();
   const [error, setError] = useState<string | null>(null);
   return (
@@ -211,6 +226,9 @@ export function AccountPanel() {
       ) : user ? (
         <nav aria-label="Account" className="account">
           <p className="account-name">{user.name}</p>
+          <button type="button" aria-haspopup="dialog" onClick={onCollection}>
+            Collection book
+          </button>
           <Link to="/sessions">Sessions</Link>
           <Link to="/settings">Settings</Link>
           <button
