@@ -224,6 +224,7 @@ interface FishRuntime {
 const SHADOW_LODS = 2;
 /** The away replay's fast-forward, per PLAN §9.2. */
 const MAX_TIME_SCALE = 20;
+const MAX_OWED_STEPS = 60;
 /** A fish leaving its bag, or held over a rebuilt world, glides into the sim's pose this long. */
 const HANDOVER_S = 1.2;
 /** Fins spread in display close over the carcass's limp time once the sim lets them go. */
@@ -346,6 +347,7 @@ export class FishSystem {
   /** Above 1 during the away replay; `update` sends the sim the steps the worker's own loop will not run. */
   private timeScale = 1;
   private extraSteps = 0;
+  private stepAwaitingSnapshot = false;
   /** When photo mode froze the fish; the stream is sampled at this instant until they go on. */
   private pausedAtMs: number | null = null;
   private thresholds: LodThresholds = { midDistance: 1, impostorDistance: 3 };
@@ -1406,7 +1408,10 @@ export class FishSystem {
     const sim = new SimClient(worker);
     sim.onError(this.simErrors.receive);
     worker.addEventListener('error', this.simErrors.workerFailed);
-    sim.onSnapshot((snapshot) => this.stream.push(snapshot, performance.now()));
+    sim.onSnapshot((snapshot) => {
+      this.stepAwaitingSnapshot = false;
+      this.stream.push(snapshot, performance.now());
+    });
     sim.onAte((events) => {
       for (const { fishId } of events) {
         if (this.roster.get(fishId)?.phase !== 'swimming') continue;
@@ -1600,10 +1605,14 @@ export class FishSystem {
 
   private fastForward(deltaS: number): void {
     if (this.timeScale <= 1 || deltaS <= 0 || !this.simReady || this.disposed) return;
-    this.extraSteps += (this.timeScale - 1) * STEP_HZ * Math.min(deltaS, 0.1);
+    const owed = this.extraSteps + (this.timeScale - 1) * STEP_HZ * Math.min(deltaS, 0.1);
+    // A worker that cannot keep up must not queue steps that outlive the fast-forward.
+    this.extraSteps = Math.min(owed, MAX_OWED_STEPS);
+    if (this.stepAwaitingSnapshot) return;
     const steps = Math.floor(this.extraSteps);
     if (steps < 1) return;
     this.extraSteps -= steps;
+    this.stepAwaitingSnapshot = true;
     this.sim.step(steps);
   }
 

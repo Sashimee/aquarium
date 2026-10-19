@@ -2,7 +2,7 @@ import type { CareEvent, Tank } from '@aquarium/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { EventBus } from '../engine/events';
 import type { InteractionEvents } from '../interaction/events';
-import { FISH_1, FISH_2, TANK_A, fishFixture, tankFixture } from './fixtures';
+import { FISH_1, FISH_2, TANK_A, TANK_B, fishFixture, tankFixture } from './fixtures';
 import { ReplayController, type ReplayControllerDeps } from './replayController';
 
 const SINCE = '2026-10-18T10:00:00.000Z';
@@ -54,7 +54,7 @@ function setup(overrides: Partial<ReplayControllerDeps> = {}, tankOverride: Tank
   const fire = () => {
     for (const t of [...timers.values()]) t.cb();
   };
-  return { controller, replay, seen, timers, fire };
+  return { controller, replay, seen, timers, fire, bus };
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -171,6 +171,27 @@ describe('ReplayController playback', () => {
     controller.dispose();
     fire();
     expect(seen).toHaveLength(count);
+  });
+
+  it('does not put the old tank back when the session switched tanks before the unmount', async () => {
+    const { controller, bus, seen, fire } = setup();
+    await settle();
+    fire();
+    const other = tankFixture({ id: TANK_B, fish: [] });
+    bus.emit('tank:loaded', {
+      tankId: other.id,
+      biome: other.biome,
+      size: other.size,
+      fish: other.fish,
+      decorLayout: other.decorLayout,
+      decorEdited: other.decorEdited,
+      backgroundId: other.backgroundId,
+    });
+    const before = seen.length;
+    controller.dispose();
+    const after = seen.slice(before);
+    expect(after.filter((s) => s.type === 'tank:loaded')).toEqual([]);
+    expect(after.at(-1)).toEqual({ type: 'replay:time-scale', payload: { scale: 1 } });
   });
 
   it('under reduced motion shows everything at once and never starts a timer', async () => {

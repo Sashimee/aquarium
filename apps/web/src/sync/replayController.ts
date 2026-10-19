@@ -30,7 +30,7 @@ export interface ReplayTimers {
 
 export interface ReplayControllerDeps {
   api: ReplayApi;
-  interaction: Pick<EventBus<InteractionEvents>, 'emit'>;
+  interaction: Pick<EventBus<InteractionEvents>, 'emit' | 'on'>;
   tank: Tank;
   since: string;
   mode: ReplayMode;
@@ -100,6 +100,7 @@ export class ReplayController {
   dispose(): void {
     if (this.disposed) return;
     this.dispatch({ type: 'end' });
+    this.director?.dispose();
     this.disposed = true;
     this.abort?.abort();
     this.listeners.clear();

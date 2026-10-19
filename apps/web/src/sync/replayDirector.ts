@@ -3,7 +3,7 @@ import type { EventBus } from '../engine/events';
 import type { InteractionEvents } from '../interaction/events';
 import type { PlaybackCommand } from './replayPlayback';
 
-type Bus = Pick<EventBus<InteractionEvents>, 'emit'>;
+type Bus = Pick<EventBus<InteractionEvents>, 'emit' | 'on'>;
 
 /** A fish that died during the absence was swimming when it began. */
 function aliveAgain(fish: Fish): Fish {
@@ -48,24 +48,33 @@ export function rosterAt(
 
 export interface ReplayDirectorOptions {
   interaction: Bus;
-  /** The tank as it is now; read at the moment of each command, so a restore is never stale. */
+  /** The replayed tank's latest snapshot, for the roster to restore. Which tank is on screen is tracked from the bus, not from here. */
   getTank(): Tank;
   events: readonly CareEvent[];
 }
 
 export interface ReplayDirector {
   run(commands: readonly PlaybackCommand[]): void;
+  dispose(): void;
 }
 
 export function createReplayDirector(options: ReplayDirectorOptions): ReplayDirector {
   const { interaction, events } = options;
   const tankId = options.getTank().id;
+  // The session emits tank:loaded for a new tank before React unmounts the replay, so the
+  // cached Tank cannot say whether the player has moved on.
+  let shownTankId = tankId;
+  const offLoaded = interaction.on('tank:loaded', (loaded) => {
+    shownTankId = loaded.tankId;
+  });
+  const onScreen = (): boolean => shownTankId === tankId;
 
   const loadRoster = (fish: readonly Fish[]): void => {
     const tank = options.getTank();
     interaction.emit('tank:loaded', {
       tankId: tank.id,
       biome: tank.biome,
+      size: tank.size,
       fish,
       decorLayout: tank.decorLayout,
       decorEdited: tank.decorEdited,
@@ -93,15 +102,16 @@ export function createReplayDirector(options: ReplayDirectorOptions): ReplayDire
   };
 
   return {
+    dispose: offLoaded,
     run(commands) {
       for (const command of commands) {
         switch (command.type) {
           case 'reset-roster':
-            if (options.getTank().id !== tankId) break;
+            if (!onScreen()) break;
             loadRoster(rosterAt(options.getTank().fish, events, command.shown));
             break;
           case 'apply':
-            if (options.getTank().id !== tankId) break;
+            if (!onScreen()) break;
             apply(command.index);
             break;
           case 'time-scale':
@@ -109,7 +119,7 @@ export function createReplayDirector(options: ReplayDirectorOptions): ReplayDire
             break;
           case 'restore':
             // The player switched tanks meanwhile; the new tank has loaded itself.
-            if (options.getTank().id !== tankId) break;
+            if (!onScreen()) break;
             loadRoster(options.getTank().fish);
             break;
         }

@@ -45,6 +45,7 @@ function setup(tank: Tank = tankFixture({ fish: live })) {
   });
   return {
     director,
+    bus,
     seen,
     setTank(next: Tank) {
       current = next;
@@ -109,15 +110,37 @@ describe('ReplayDirector', () => {
     expect(seen.at(-2)).toEqual({ type: 'replay:time-scale', payload: { scale: 1 } });
   });
 
-  it('leaves the scene alone once the player has moved to another tank', () => {
-    const { director, seen, setTank } = setup();
-    setTank(tankFixture({ id: TANK_B, fish: [] }));
+  it('carries the tank size in every roster it loads', () => {
+    const { director, seen } = setup(tankFixture({ fish: live, size: 'long300' }));
+    director.run([{ type: 'reset-roster', shown: 0 }, { type: 'restore' }]);
+    const loads = seen.filter((s) => s.type === 'tank:loaded');
+    expect(loads).toHaveLength(2);
+    for (const load of loads) {
+      expect((load.payload as InteractionEvents['tank:loaded']).size).toBe('long300');
+    }
+  });
+
+  it('leaves the scene alone once the session has loaded another tank, with no setTank', () => {
+    const { director, seen, bus } = setup();
+    director.run([{ type: 'reset-roster', shown: 0 }]);
+    const other = tankFixture({ id: TANK_B, fish: [] });
+    bus.emit('tank:loaded', {
+      tankId: other.id,
+      biome: other.biome,
+      size: other.size,
+      fish: other.fish,
+      decorLayout: other.decorLayout,
+      decorEdited: other.decorEdited,
+      backgroundId: other.backgroundId,
+    });
+    const before = seen.length;
     director.run([
       { type: 'reset-roster', shown: 0 },
       { type: 'apply', index: 1 },
-      { type: 'restore' },
       { type: 'time-scale', scale: 1 },
+      { type: 'restore' },
     ]);
-    expect(seen).toEqual([{ type: 'replay:time-scale', payload: { scale: 1 } }]);
+    director.dispose();
+    expect(seen.slice(before)).toEqual([{ type: 'replay:time-scale', payload: { scale: 1 } }]);
   });
 });
