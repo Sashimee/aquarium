@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react';
 import type { OpenPanel } from './panels';
+import { ownOpener } from './sheetFocus';
 
 const DISMISS_DRAG_PX = 80;
 
@@ -28,7 +29,10 @@ export function Sheet({
 
   useEffect(() => {
     const active = document.activeElement;
-    const opener = active instanceof HTMLElement && active !== document.body ? active : null;
+    const opener = ownOpener(
+      active instanceof HTMLElement && active !== document.body ? active : null,
+      panel,
+    );
     heading.current?.focus({ preventScroll: true });
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;

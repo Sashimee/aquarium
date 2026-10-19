@@ -109,6 +109,24 @@ describe('chipState', () => {
     expect(chipState(tank, species, fine, NOW).status).toBe('unread');
   });
 
+  it('prompts to read the other pads when only the temperature is out of range', () => {
+    const tank = withAmmonia(0);
+    const partial = dipFor(tank, { revealed: false, guesses: { ph: 7 }, temperatureC: 44 });
+    const s = chipState(tank, species, partial, NOW);
+    expect(s.status).toBe('warning');
+    expect(s.verdict).toBe('Warning, read the other pads');
+    expect(s.ariaLabel).toContain('Warning, read the other pads');
+    const none = dipFor(tank, { revealed: false, temperatureC: 44 });
+    expect(chipState(tank, species, none, NOW).verdict).toBe('Warning, read the pads');
+  });
+
+  it('keeps the plain warning once every pad is read', () => {
+    const tank = withAmmonia(0);
+    expect(chipState(tank, species, dipFor(tank, { temperatureC: 44 }), NOW).verdict).toBe(
+      'Warning',
+    );
+  });
+
   it('updates when a newer dip replaces the old one', () => {
     const bad = withAmmonia(8);
     const good = withAmmonia(0);

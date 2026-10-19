@@ -126,7 +126,12 @@ export interface TankView {
   decorLayout: { assetId: string; position: number[]; rotationY: number }[];
   decorEdited: boolean;
   backgroundId: string;
-  fish: { id: string; name: string; status: 'alive' | 'dead' }[];
+  fish: {
+    id: string;
+    name: string;
+    status: 'alive' | 'dead';
+    personality: { boldness: number };
+  }[];
   memorials: { fishName: string }[];
 }
 

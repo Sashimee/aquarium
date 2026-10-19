@@ -21,7 +21,10 @@ export type GameView =
       readonly phase: 'running';
       readonly targetId: string;
       readonly targetName: string;
-      /** Rounded up to whole seconds for display: the view is reused, so this can lag by up to 1 s. */
+      /**
+       * Fractional seconds left. The view is reused while the whole second shown is unchanged, so
+       * it can lag by up to 1 s: round up to display it, and do not treat it as exact.
+       */
       readonly timeLeftS: number;
       readonly pinchesLeft: number;
       readonly score: number;
