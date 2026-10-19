@@ -1,10 +1,14 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { BACKGROUND_IDS, DEFAULT_BACKGROUND_ID } from '@aquarium/shared';
-import { Texture } from 'three/webgpu';
+import { Mesh, MeshBasicNodeMaterial, PlaneGeometry, Texture } from 'three/webgpu';
+import { positionWorld } from 'three/tsl';
 import { describe, expect, it } from 'vitest';
 import assetIndex from '../../../public/assets/index.json';
 import { TIERS, type Tier } from '../quality/tiers';
+import { buildShaders } from '../shaderFixtures';
+import { DEFAULT_TANK } from './dimensions';
+import { Poster } from './Tank';
 import {
   backgroundFile,
   parseBackgroundFiles,
@@ -375,5 +379,19 @@ describe('TankBackground', () => {
     expect(lateGone()).toBe(true);
     expect(() => background.show('reef', null)).toThrow(/after dispose/);
     background.dispose();
+  });
+});
+
+describe('TankBackground on WebGPU', () => {
+  it('binds a sampler for every texture the defocused poster samples', () => {
+    const background = new TankBackground(new FakeLoader(), 'high', ROOT);
+    const material = new MeshBasicNodeMaterial();
+    material.colorNode = new Poster(background.map, DEFAULT_TANK).albedo(positionWorld);
+    const { fragment } = buildShaders(new Mesh(new PlaneGeometry(), material), 'webgpu');
+    const sampled = [...fragment.matchAll(/textureSample\w*\(\s*(\w+)\s*,\s*(\w+)/g)];
+    expect(sampled.length).toBeGreaterThan(0);
+    for (const [, , sampler] of sampled) {
+      expect(fragment).toMatch(new RegExp(`var\\s+${sampler}\\s*:\\s*sampler\\b`));
+    }
   });
 });

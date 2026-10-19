@@ -516,6 +516,8 @@ function ichLattice(
  * and id, and the membrane weight. A healthy fish branches past every sign, so it costs one
  * comparison per disease, and its marks are exactly (0, 0, 1, 1), which leaves every blend as it
  * was. Derivatives are taken before the branches: WGSL allows them only in uniform control flow.
+ * So is the shading normal: three declares it where it is first built and assigns it there only,
+ * so built inside a branch it stays zero for every fish that skips it (#763, #777).
  */
 const diseaseMarks = Fn(
   ([signs, finMask, finId, membrane]: [
@@ -527,6 +529,8 @@ const diseaseMarks = Fn(
     const p = positionGeometry;
     const footprint = max(max(length(dFdx(p)), length(dFdy(p))), 1e-9).toVar();
     const maskWidth = max(fwidth(finMask), 1e-4).toVar();
+    const toEye = normalize(cameraPosition.sub(positionWorld));
+    const facing = abs(dot(normalWorld, toEye)).toVar();
     const ich = float(0).toVar();
     const dust = float(0).toVar();
     const kept = float(1).toVar();
@@ -571,8 +575,7 @@ const diseaseMarks = Fn(
       const threshold = float(1 + edge).sub(cover.mul(1 + 2 * edge));
       const near = smoothstep(threshold.sub(edge), threshold.add(edge), grain);
       const film = mix(near, cover, smoothstep(0.5, 2, footprint.div(VELVET_GRAIN_M)));
-      const toEye = normalize(cameraPosition.sub(positionWorld));
-      const cosine = max(abs(dot(normalWorld, toEye)), VELVET_MIN_COSINE);
+      const cosine = max(facing, VELVET_MIN_COSINE);
       dust.assign(float(1).sub(pow(film.oneMinus(), cosine.reciprocal())));
     });
 
