@@ -4,8 +4,10 @@ import type { Point3 } from './decor.ts';
 import { FEEDING, Feeding, feedingHeight } from './feeding.ts';
 import type { FishResize } from './fishArrays.ts';
 import type { FoodStore } from './food.ts';
+import { GREETING, Greeting, type Visitor } from './greeting.ts';
 import { clamp, DEG, wrapAngle } from './math.ts';
 import { selectNearest } from './neighbours.ts';
+import { Personalities } from './personality.ts';
 import type { Rng } from './rng.ts';
 import type { Sdf } from './sdf.ts';
 import { FishState } from './snapshot.ts';
@@ -334,6 +336,8 @@ export class Behaviour {
   readonly curiosity: Curiosity;
   readonly toys: Toys;
   readonly brood: Brood;
+  readonly personality: Personalities;
+  readonly greeting: Greeting;
   light = 1;
   night = false;
 
@@ -369,7 +373,7 @@ export class Behaviour {
   private home: Float64Array;
   private homeTimer: Float64Array;
   private _anchor: Int32Array;
-  private shelterTimer: Float64Array;
+  private _shelterTimer: Float64Array;
 
   private territoryPhase: Uint8Array;
   private territoryTimer: Float64Array;
@@ -407,6 +411,9 @@ export class Behaviour {
   private _gillFlare: Float64Array;
 
   private readonly n3 = new Float64Array(3);
+  private readonly greetBoldness = (i: number): number =>
+    this.personality.effectiveBoldness(i, this.speciesOf(i).boldness);
+  private readonly greetHunger = (i: number): number => this.feeding.motivation(i);
   private bandLo = 0;
   private bandHi = 0;
 
@@ -425,6 +432,11 @@ export class Behaviour {
 
   get anchor(): Int32Array {
     return this._anchor;
+  }
+
+  /** Seconds each fish has left hiding in shelter after a startle. */
+  get shelterTimer(): Float64Array {
+    return this._shelterTimer;
   }
 
   get yieldTimer(): Float64Array {
@@ -450,10 +462,12 @@ export class Behaviour {
     const n = host.count;
     const s = host.species.length;
     this.plans = Array.from({ length: n }, () => new Plan());
-    this.feeding = new Feeding(host);
+    this.personality = new Personalities(n);
+    this.feeding = new Feeding(host, this.personality);
     this.curiosity = new Curiosity(host);
-    this.toys = new Toys(host);
+    this.toys = new Toys(host, this.personality);
     this.brood = new Brood(host);
+    this.greeting = new Greeting(host);
     this.startlePhase = new Uint8Array(n);
     this.startleTimer = new Float64Array(n);
     this.startleElapsed = new Float64Array(n);
@@ -475,7 +489,7 @@ export class Behaviour {
     this.home = new Float64Array(n * 3);
     this.homeTimer = new Float64Array(n);
     this._anchor = new Int32Array(n).fill(-1);
-    this.shelterTimer = new Float64Array(n);
+    this._shelterTimer = new Float64Array(n);
     this.territoryPhase = new Uint8Array(n);
     this.territoryTimer = new Float64Array(n);
     this.territoryCheck = new Float64Array(n);
@@ -550,7 +564,7 @@ export class Behaviour {
     this.home = edit.array(this.home, 3);
     this.homeTimer = edit.array(this.homeTimer);
     this._anchor = edit.array(this.anchor, 1, -1);
-    this.shelterTimer = edit.array(this.shelterTimer);
+    this._shelterTimer = edit.array(this._shelterTimer);
     this.territoryPhase = edit.array(this.territoryPhase);
     this.territoryTimer = edit.array(this.territoryTimer);
     this.territoryCheck = edit.array(this.territoryCheck);
@@ -577,6 +591,8 @@ export class Behaviour {
     this.curiosity.resize(edit);
     this.toys.resize(edit);
     this.brood.resize(edit);
+    this.personality.resize(edit);
+    this.greeting.resize(edit);
     if (edit.removed < 0) return;
     for (let i = 0; i < this.territoryTarget.length; i++) {
       const j = edit.index(at(this.territoryTarget, i));
@@ -785,6 +801,10 @@ export class Behaviour {
     );
   }
 
+  setVisitor(visitor: Visitor | null): void {
+    this.greeting.setVisitor(visitor);
+  }
+
   setLight(level: number): void {
     if (!(level >= 0 && level <= 1)) {
       throw new RangeError(`light level must be within [0, 1], got ${level}`);
@@ -805,7 +825,7 @@ export class Behaviour {
     for (let i = 0; i < n; i++) {
       this.refractory[i] = Math.max(0, at(this.refractory, i) - DT);
       this.tighten[i] = Math.max(0, at(this.tighten, i) - DT);
-      this.shelterTimer[i] = Math.max(0, at(this.shelterTimer, i) - DT);
+      this._shelterTimer[i] = Math.max(0, at(this._shelterTimer, i) - DT);
       this.habituation[i] = at(this.habituation, i) * habDecay;
       const r = at(this.rest, i);
       this.rest[i] = r + (restTarget - r) * (1 - Math.exp(-DT / at(this.restTau, i)));
@@ -826,6 +846,7 @@ export class Behaviour {
     this.prepareCuriosity();
     this.curiosity.update(this.feeding);
     this.toys.update(this.curiosity.follow);
+    this.greeting.update(this.greetBoldness, this.greetHunger);
     const ease = 1 - Math.exp(-DT / TOYS.displayTauS);
     for (let i = 0; i < n; i++) {
       this.plan(i);
@@ -852,7 +873,7 @@ export class Behaviour {
         at(this.startleAt, i) < 0 &&
         at(this.yieldTimer, i) <= 0 &&
         at(this.gulpPhase, i) === GulpPhase.None &&
-        at(this.shelterTimer, i) <= 0 &&
+        at(this._shelterTimer, i) <= 0 &&
         at(this.rest, i) <= 0.5
           ? 1
           : 0;
@@ -896,6 +917,7 @@ export class Behaviour {
         !this.brood.busy(i);
       eligible[i] = free && !toys.engaged(i) ? 1 : 0;
       toys.eligible[i] = free ? 1 : 0;
+      this.greeting.eligible[i] = eligible[i] ?? 0;
       const a = this.anchors[at(this.anchor, i)];
       const o = i * 4;
       if (a === undefined) {
@@ -1058,7 +1080,7 @@ export class Behaviour {
       const p =
         s.intensity *
         (1 - d / range) *
-        (1 - BEHAVIOUR.boldnessDamping * sp.boldness) *
+        (1 - BEHAVIOUR.boldnessDamping * this.personality.effectiveBoldness(i, sp.boldness)) *
         this.responsiveness(i);
       if (rng.next() >= p) continue;
       // Escape trajectories are bimodal, straight away (~180°) or ~130° from the stimulus.
@@ -1104,7 +1126,9 @@ export class Behaviour {
     this.gulpPhase[i] = GulpPhase.None;
     if (this.grazePhase[i] !== GrazePhase.Roam) this.grazePhase[i] = GrazePhase.None;
     this.excursion[i] = 0;
-    if (sp.home === 'cave') this.shelterTimer[i] = sp.shelterAfterStartleS;
+    if (sp.home === 'cave') {
+      this._shelterTimer[i] = sp.shelterAfterStartleS * this.personality.shelter(i);
+    }
     this.relay(i, yaw, pitch);
   }
 
@@ -1165,15 +1189,16 @@ export class Behaviour {
     plan.reset(this.bandLo, this.bandHi);
     const rest = at(this.rest, i);
     const calm = 1 - (1 - BEHAVIOUR.restSpeedFactor) * rest;
-    plan.cruiseScale = calm;
+    plan.cruiseScale = calm * this.personality.activity(i);
     plan.wander = calm;
     if (sp.walking !== null) {
       this.planWalker(i, sp.walking, plan, rest);
       return;
     }
     const school = 1 - (1 - BEHAVIOUR.restSchoolFactor) * rest;
-    plan.align = school * (sp.shoal ? BEHAVIOUR.shoalAlignment : 1);
-    plan.cohesion = school * (sp.shoal ? BEHAVIOUR.shoalCohesion : 1);
+    plan.align = school * (sp.shoal ? BEHAVIOUR.shoalAlignment : 1) * this.personality.alignment(i);
+    plan.cohesion =
+      school * (sp.shoal ? BEHAVIOUR.shoalCohesion : 1) * this.personality.cohesion(i);
     if (at(this.tighten, i) > 0) {
       plan.cohesion *= BEHAVIOUR.tightenCohesion;
       plan.separation *= BEHAVIOUR.tightenSeparation;
@@ -1211,6 +1236,7 @@ export class Behaviour {
     if (this.toys.planMirror(i, sp, plan)) return;
     if (this.toys.planBall(i, sp, plan)) return;
     if (this.planLure(i, sp, plan)) return;
+    if (this.planGreet(i, sp, plan)) return;
     if (this.planSpot(i, sp, plan)) return;
     const guard = at(this.anchor, i) < 0 ? this.brood.guard(i) : null;
     if (guard !== null) {
@@ -1388,6 +1414,68 @@ export class Behaviour {
     plan.speedFloor = 0;
     plan.speedCap = speed * clamp((d - plan.arrival) / (2 * length), 0, 1);
     return true;
+  }
+
+  /**
+   * Comes to the front glass where the owner stands and hovers a little way off it, facing out;
+   * bottom foragers come along the sand. A fish anchored too far from the spot stays home.
+   */
+  private planGreet(i: number, sp: SimSpecies, plan: Plan): boolean {
+    const g = this.greeting;
+    if (at(g.active, i) !== 1) return false;
+    const { basin, position } = this.host;
+    const length = at(this.host.bodyLength, i);
+    const x = clamp(
+      at(g.point, 0) + at(g.offset, i * 2) * length,
+      basin.minX + length,
+      basin.maxX - length,
+    );
+    if (sp.gait === 'forage') {
+      // Seeking the corner where sand meets glass drives a bottom forager's snout into one or
+      // the other, so it holds station on the sand a little way back from the pane instead.
+      const z = basin.maxZ - (FEEDING.mouthBodyLengths + GREETING.standoffBodyLengths + 1) * length;
+      const ground = basin.ground(at(position, i * 3), at(position, i * 3 + 2));
+      const mid = 0.5 * (BEHAVIOUR.forageBandLowBodyLengths + BEHAVIOUR.forageBandHighBodyLengths);
+      const y = basin.ground(x, z) + mid * length;
+      if (!this.withinCuriosityLeash(i, x, y, z)) return false;
+      plan.floor = false;
+      plan.bandLo = ground + BEHAVIOUR.forageBandLowBodyLengths * length;
+      plan.bandHi = ground + BEHAVIOUR.forageBandHighBodyLengths * length;
+      plan.align *= GREETING.schoolFactor;
+      plan.cohesion *= GREETING.schoolFactor;
+      this.holdStation(i, plan, x, y, z, GREETING.arrivedBodyLengths * length, FishState.Station);
+      return true;
+    }
+    const z = basin.maxZ;
+    this.bandAt(i, x, z);
+    const y = clamp(at(g.point, 1) + at(g.offset, i * 2 + 1) * length, this.bandLo, this.bandHi);
+    if (!this.withinCuriosityLeash(i, x, y, z)) return false;
+    const o = i * 3;
+    const d = Math.hypot(x - at(position, o), y - at(position, o + 1), z - at(position, o + 2));
+    const cruise = at(this.host.cruiseSpeed, i);
+    const vmax = at(this.host.maxSpeed, i);
+    plan.align *= GREETING.schoolFactor;
+    plan.cohesion *= GREETING.schoolFactor;
+    plan.wander *= 0.3;
+    this.widenBand(plan, y, length);
+    plan.arrival = (FEEDING.mouthBodyLengths + GREETING.standoffBodyLengths) * length;
+    const speed = Math.min(
+      FEEDING.pursuitSpeedFraction * vmax,
+      Math.max(cruise * GREETING.approachSpeedFactor, (d - plan.arrival) / GREETING.catchUpS),
+    );
+    plan.seek(x, y, z, speed, 0.5);
+    plan.speedFloor = 0;
+    plan.speedCap = speed * clamp((d - plan.arrival) / (2 * length), 0, 1);
+    if (d < plan.arrival + GREETING.arrivedBodyLengths * length) plan.state = FishState.Station;
+    return true;
+  }
+
+  private withinCuriosityLeash(i: number, x: number, y: number, z: number): boolean {
+    const { leash } = this.curiosity;
+    const o = i * 4;
+    const r = at(leash, o + 3);
+    if (r === Infinity) return true;
+    return Math.hypot(x - at(leash, o), y - at(leash, o + 1), z - at(leash, o + 2)) <= r;
   }
 
   /**
@@ -1575,7 +1663,7 @@ export class Behaviour {
       return;
     }
 
-    const sheltering = rest > 0.5 || at(this.shelterTimer, i) > 0;
+    const sheltering = rest > 0.5 || at(this._shelterTimer, i) > 0;
     if (!sheltering) {
       this.restSpotSet[i] = 0;
     } else if (this.speciesOf(i).home === 'cave') {
@@ -2107,7 +2195,7 @@ export class Behaviour {
   private planShelter(i: number, sp: SimSpecies, plan: Plan): boolean {
     const a = this.anchors[at(this.anchor, i)];
     if (a?.kind !== 'cave') return false;
-    if (at(this.rest, i) <= 0.5 && at(this.shelterTimer, i) <= 0) return false;
+    if (at(this.rest, i) <= 0.5 && at(this._shelterTimer, i) <= 0) return false;
     plan.comfort = BEHAVIOUR.shelterComfort;
     const length = at(this.host.bodyLength, i);
     let entryY = a.position[1];

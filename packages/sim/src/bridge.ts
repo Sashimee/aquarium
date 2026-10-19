@@ -1,9 +1,10 @@
-import type { Collider, FishStage } from '@aquarium/shared';
+import type { Collider, FishStage, Personality } from '@aquarium/shared';
 import type { Anchor, Stimulus } from './behaviour.ts';
 import type { SimBrood } from './brood.ts';
 import type { Point3 } from './decor.ts';
 import type { CrewTally } from './crew.ts';
 import { FOOD_STRIDE, type AteEvent } from './food.ts';
+import type { Visitor } from './greeting.ts';
 import { SNAPSHOT_STRIDE, type Snapshot } from './snapshot.ts';
 import type { SimToy, ToyNudge } from './toys.ts';
 import {
@@ -48,6 +49,10 @@ export type SimCommand =
   | { readonly type: 'brood'; readonly brood: SimBrood }
   /** A fish grew into `stage`; see `World.setStage`. */
   | { readonly type: 'stage'; readonly id: string; readonly stage: FishStage }
+  /** Fish `id`'s boldness, greed and sociability; see `World.setPersonality`. */
+  | { readonly type: 'personality'; readonly id: string; readonly personality: Personality }
+  /** The owner at the front glass, or null once they leave; see `World.setVisitor`. */
+  | { readonly type: 'visitor'; readonly visitor: Visitor | null }
   /** Float32 records of `[id, x, y, z, typeIndex]`; see `World.setFood`. */
   | { readonly type: 'food'; readonly buffer: ArrayBuffer }
   /** The lifecycle's algae cover, 0 to 1; see `World.setAlgae`. */
@@ -200,6 +205,8 @@ const COMMAND_TYPES = new Set([
   'toys',
   'brood',
   'stage',
+  'personality',
+  'visitor',
   'food',
   'algae',
   'addFish',
@@ -409,6 +416,12 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
         return;
       case 'stage':
         requireWorld(command.type).setStage(command.id, command.stage);
+        return;
+      case 'personality':
+        requireWorld(command.type).setPersonality(command.id, command.personality);
+        return;
+      case 'visitor':
+        requireWorld(command.type).setVisitor(command.visitor);
         return;
       case 'food': {
         const w = requireWorld(command.type);
@@ -637,6 +650,16 @@ export class SimClient {
   /** Fish `id` grew into `stage`; see `World.setStage`. */
   setStage(id: string, stage: FishStage): void {
     this.send({ type: 'stage', id, stage });
+  }
+
+  /** Fish `id`'s boldness, greed and sociability, each 0 to 1; see `World.setPersonality`. */
+  setPersonality(id: string, personality: Personality): void {
+    this.send({ type: 'personality', id, personality });
+  }
+
+  /** The owner at the front glass (world frame), or null once they leave; see `World.setVisitor`. */
+  setVisitor(visitor: Visitor | null): void {
+    this.send({ type: 'visitor', visitor });
   }
 
   /**
