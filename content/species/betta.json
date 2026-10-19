@@ -12,11 +12,25 @@
   "biome": "freshwater",
   "breeding": {
     "broodSize": [4, 10],
-    "fryGrowth": { "adultAfterDays": 150, "juvenileAfterDays": 21 },
+    "fryGrowth": {
+      "adultAfterDays": 150,
+      "juvenileAfterDays": 21
+    },
     "intervalDays": 21,
     "minAgeDays": 150,
     "mode": "substrate-spawner",
     "temperatureC": [26, 30]
+  },
+  "chemistry": {
+    "khMin": 0,
+    "nitriteTolerance": 0.5,
+    "phRange": [6, 7.5],
+    "salinityPpt": [0, 1],
+    "sources": [
+      "FishBase (fishbase.se) species summary",
+      "SeriouslyFish species profile (seriouslyfish.com)"
+    ],
+    "temperatureC": [24, 30]
   },
   "commonName": "Betta",
   "id": "betta",

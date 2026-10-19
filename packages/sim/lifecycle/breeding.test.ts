@@ -1,6 +1,13 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { speciesSummarySchema, type Breeding, type SpeciesSummary } from '@aquarium/shared';
+import {
+  chemistryParametersSchema,
+  DEFAULT_EQUIPMENT,
+  newTankChemistry,
+  speciesSummarySchema,
+  type Breeding,
+  type SpeciesSummary,
+} from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import {
   catchUp,
@@ -29,6 +36,17 @@ const catalog = new Map<string, SpeciesSummary>(
 );
 const lifecycles = new Map([...catalog].map(([id, s]) => [id, s.lifecycle]));
 const breedings = new Map([...catalog].map(([id, s]) => [id, s.breeding]));
+
+const speciesChemistry = new Map([...catalog].map(([id, s]) => [id, s.chemistry]));
+const chemistryParams = chemistryParametersSchema.parse(
+  JSON.parse(readFileSync(join(import.meta.dirname, '../../../content/chemistry.json'), 'utf8')),
+);
+const chemistryEnv = {
+  biome: 'freshwater',
+  equipment: DEFAULT_EQUIPMENT,
+  speciesChemistry,
+  chemistryParams,
+} as const;
 
 const DAY = 86_400_000;
 const T0 = Date.UTC(2026, 0, 1);
@@ -66,7 +84,11 @@ function fishOf(id: string, speciesId: string, over: Partial<LifecycleFish> = {}
   };
 }
 
-const tank = (fish: LifecycleFish[], water = cleanWater): LifecycleState => ({ water, fish });
+const tank = (fish: LifecycleFish[], water = cleanWater): LifecycleState => ({
+  water,
+  chemistry: newTankChemistry('freshwater'),
+  fish,
+});
 
 function ctxAt(nowMs: number, environment = env(), breeding = breedings): BreedingContext {
   return { nowMs, species: lifecycles, breeding, environment };
@@ -260,7 +282,8 @@ describe('fry growth', () => {
       fromMs: T0,
       toMs: T0 + 10 * DAY,
       species: wellFed,
-      params: { ...DEFAULT_WATER_PARAMETERS, filterRemovalPerHour: 5 },
+      params: DEFAULT_WATER_PARAMETERS,
+      ...chemistryEnv,
       graceEndsAtMs: T0,
       vacationFeeder: false,
       breeding: breedings,
@@ -284,6 +307,7 @@ describe('fry growth', () => {
       toMs: T0 + 40 * DAY,
       species: lifecycles,
       params: DEFAULT_WATER_PARAMETERS,
+      ...chemistryEnv,
       graceEndsAtMs: T0,
       vacationFeeder: false,
       breeding: breedings,
@@ -292,5 +316,53 @@ describe('fry growth', () => {
     const known = new Set([...state.fish.map((f) => f.id), ...result.births.map((b) => b.fishId)]);
     expect(result.deaths.length).toBeGreaterThan(0);
     expect(result.deaths.every((d) => known.has(d.fishId))).toBe(true);
+  });
+
+  describe('catch-up granularity', () => {
+    const discusLife = lifecycles.get('discus');
+    if (!discusLife) throw new Error('discus missing');
+    const fed = new Map([...lifecycles, ['discus', { ...discusLife, hungerPerHour: 0.0002 }]]);
+    const pair = () => [
+      fishOf('f1', 'discus', { sex: 'female', hunger: 0, bornAtMs: T0 - 900 * DAY }),
+      fishOf('m1', 'discus', { sex: 'male', hunger: 0, bornAtMs: T0 - 900 * DAY }),
+    ];
+    const window = (state: LifecycleState, fromMs: number, toMs: number, newId: () => string) =>
+      catchUp({
+        state,
+        fromMs,
+        toMs,
+        species: fed,
+        params: DEFAULT_WATER_PARAMETERS,
+        ...chemistryEnv,
+        graceEndsAtMs: T0,
+        vacationFeeder: false,
+        breeding: breedings,
+        breedingEnvironment: { ...env(), newId },
+      });
+
+    it('gives the same births in one 30 day window as in 30 daily windows', () => {
+      let n = 0;
+      const newId = () => `fry-${++n}`;
+      const whole = window(tank(pair()), T0, T0 + 30 * DAY, newId);
+
+      n = 0;
+      let state = tank(pair());
+      const daily: string[] = [];
+      for (let d = 0; d < 30; d++) {
+        const r = window(state, T0 + d * DAY, T0 + (d + 1) * DAY, newId);
+        state = r.state;
+        daily.push(...r.births.map((b) => b.fishId));
+      }
+      expect(whole.births.length).toBeGreaterThan(0);
+      expect(whole.births.map((b) => b.fishId)).toEqual(daily);
+      expect(whole.state.chemistry.temperatureC).toBeCloseTo(state.chemistry.temperatureC, 9);
+    });
+
+    it('breeds on the temperature the thermostat reaches inside the window', () => {
+      const cold = tank(pair());
+      expect(cold.chemistry.temperatureC).toBeLessThan(28);
+      const r = window(cold, T0, T0 + 30 * DAY, () => 'x');
+      expect(r.births.length).toBeGreaterThan(0);
+    });
   });
 });

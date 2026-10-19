@@ -17,13 +17,26 @@
   "biome": "reef",
   "breeding": {
     "broodSize": [3, 8],
-    "fryGrowth": { "adultAfterDays": 270, "juvenileAfterDays": 30 },
+    "fryGrowth": {
+      "adultAfterDays": 270,
+      "juvenileAfterDays": 30
+    },
     "intervalDays": 30,
     "minAgeDays": 270,
     "mode": "mouthbrooder",
     "temperatureC": [24, 27]
   },
-  "chemistry": { "salinityPpt": [30, 36] },
+  "chemistry": {
+    "khMin": 5,
+    "nitriteTolerance": 0.2,
+    "phRange": [8, 8.4],
+    "salinityPpt": [30, 36],
+    "sources": [
+      "FishBase (fishbase.se) species summary",
+      "Reef2Reef husbandry ranges for captive marine animals"
+    ],
+    "temperatureC": [24, 27]
+  },
   "commonName": "Banggai cardinalfish",
   "id": "banggai-cardinalfish",
   "lifecycle": {

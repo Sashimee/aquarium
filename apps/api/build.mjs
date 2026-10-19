@@ -14,6 +14,11 @@ if (species.length === 0) throw new Error('content/species has no species files.
 mkdirSync(new URL('./dist/', import.meta.url), { recursive: true });
 writeFileSync(new URL('./dist/species.json', import.meta.url), JSON.stringify(species));
 
+writeFileSync(
+  new URL('./dist/chemistry.json', import.meta.url),
+  readFileSync(new URL('../../content/chemistry.json', import.meta.url)),
+);
+
 const manifest = JSON.parse(
   readFileSync(new URL('../../assets/manifest.json', import.meta.url), 'utf8'),
 );
