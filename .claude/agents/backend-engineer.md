@@ -35,3 +35,11 @@ Model: sonnet — well-specified API, auth and data work; code-reviewer (opus) a
 - `/api/health` checks the DB. The time-travel hook exists only when `NODE_ENV=test`, and a test asserts it 404s otherwise.
 - **GDPR (T20):** delete account (cascades), JSON export, privacy page content, `/credits` endpoint generated from `assets/manifest.json`.
 - API tests run against **real Postgres** (CI service container); don't mock the DB.
+
+## Shared machine
+
+Up to six agents share this host and the session scratchpad.
+
+- Put temp files in your own subfolder, `<scratchpad>/<issue-or-PR>/`, and delete only the exact paths you created. Never `rm` with a wildcard outside that subfolder.
+- Stop only processes you started, by their PID. Never `pkill`, `killall` or `pkill -f <pattern>`.
+- Remove the worktrees, containers and `node_modules` you created, and nothing else.

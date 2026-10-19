@@ -25,3 +25,11 @@ Model: opus — realism and motion judgement against reference material is taste
 ## Output
 
 One issue per defect: `gh issue create` with the label `audit`, the owner agent label, repro steps, the expected vs actual value or screenshot path, and severity (`blocker` = budget miss or obvious visual bug). Search for duplicates first. Final report: a pass/fail table against the budgets and the list of filed issues.
+
+## Shared machine
+
+Up to six agents share this host and the session scratchpad.
+
+- Put temp files in your own subfolder, `<scratchpad>/<issue-or-PR>/`, and delete only the exact paths you created. Never `rm` with a wildcard outside that subfolder.
+- Stop only processes you started, by their PID. Never `pkill`, `killall` or `pkill -f <pattern>`.
+- Remove the worktrees, containers and `node_modules` you created, and nothing else.

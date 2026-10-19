@@ -33,3 +33,11 @@ Model: opus — "correct movement" means turning ethology and biomechanics into 
 - Feeding AI: perception cone and range, salience, competition, satiation, and food-type preference. Food particle physics is gameplay's, but you consume its positions.
 - Base the behaviour on real fish ethology and cite sources in `packages/sim/BEHAVIOUR.md` (one line per behaviour: what, source, parameter). Back numbers with literature, not vibes.
 - Tests: determinism, no wall or collider penetration over 10 000 steps for every species, school cohesion metrics within bands, startle propagation latency, and a benchmark: 60 fish ≤ 2 ms/step on desktop and ≤ 4 ms in a 4× CPU-throttle run.
+
+## Shared machine
+
+Up to six agents share this host and the session scratchpad.
+
+- Put temp files in your own subfolder, `<scratchpad>/<issue-or-PR>/`, and delete only the exact paths you created. Never `rm` with a wildcard outside that subfolder.
+- Stop only processes you started, by their PID. Never `pkill`, `killall` or `pkill -f <pattern>`.
+- Remove the worktrees, containers and `node_modules` you created, and nothing else.
