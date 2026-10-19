@@ -11,20 +11,22 @@ import type { ImpostorAtlasInfo } from './assetIndex';
 import type { FrameSelection } from './octahedral';
 
 /**
- * Per-instance impostor data, interleaved as five vec4s:
+ * Per-instance impostor data, interleaved as six vec4s:
  * - `orientation`: the instance quaternion, to light the baked fish-space normals;
  * - `swim`: as the meshes' (scale, body-wave phase, amplitude scale, turn curvature in model units);
  * - `view`: unit direction from the pivot to the camera in fish space, paling 0..1;
  * - `tint`: rgb multiplier, youth as the meshes';
- * - `frames`: the blended frames' (i, j) and bilinear weights (fx, fy), see `selectFrames`.
+ * - `frames`: the blended frames' (i, j) and bilinear weights (fx, fy), see `selectFrames`;
+ * - `illness`: ich, fin rot and velvet severities 0..1, unused, at the meshes' offset.
  */
-export const IMPOSTOR_STRIDE = 20;
+export const IMPOSTOR_STRIDE = 24;
 export const ImpostorSlot = {
   Orientation: 0,
   Swim: 4,
   View: 8,
   Tint: 12,
   Frames: 16,
+  Illness: 20,
 } as const;
 
 export interface ImpostorValues {
@@ -43,6 +45,9 @@ export interface ImpostorValues {
   tint: readonly [number, number, number];
   youth: number;
   frames: Readonly<FrameSelection>;
+  ich: number;
+  finRot: number;
+  velvet: number;
 }
 
 export class ImpostorInstanceData {
@@ -82,6 +87,9 @@ export class ImpostorInstanceData {
     a[o + 17] = v.frames.j;
     a[o + 18] = v.frames.fx;
     a[o + 19] = v.frames.fy;
+    a[o + 20] = v.ich;
+    a[o + 21] = v.finRot;
+    a[o + 22] = v.velvet;
   }
 
   /**

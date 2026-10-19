@@ -383,6 +383,9 @@ export class FishSystem {
     tint: [1, 1, 1],
     youth: 0,
     frames: this.frames,
+    ich: 0,
+    finRot: 0,
+    velvet: 0,
   };
   private readonly pose = createPose();
   private readonly walkSample: WalkSample = {
@@ -1737,6 +1740,7 @@ export class FishSystem {
     direction[1] = view.y;
     direction[2] = view.z;
     selectFrames(direction, grid, this.frames);
+    writeDiseaseSigns(rt.fish.disease, false, v);
     draw.instances.write(slot, v);
   }
 }
