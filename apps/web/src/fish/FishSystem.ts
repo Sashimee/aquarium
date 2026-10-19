@@ -310,6 +310,7 @@ export class FishSystem {
   private shadows: Readonly<TierSettings> | null = null;
   private impostors: TierSettings['fishImpostors'] = null;
   private readonly ranked: FishRuntime[] = [];
+  private readonly draws: (LodBatch | ImpostorDraw)[] = [];
   private features: FishMaterialFeatures | null = null;
   private night = 0;
   private light = 1;
@@ -1475,11 +1476,9 @@ export class FishSystem {
       this.position.copy(rt.lastPosition);
       this.quaternion.copy(rt.lastQuaternion);
       const { impostor } = rt.batch;
-      if (impostors !== null && impostor !== null && (rt.lod >= IMPOSTOR_LOD || !rt.full)) {
-        this.drawImpostor(rt, impostor, camera);
-      } else {
-        this.drawMesh(rt);
-      }
+      const asImpostor =
+        impostors !== null && impostor !== null && (rt.lod >= IMPOSTOR_LOD || !rt.full);
+      if (!asImpostor || !this.drawImpostor(rt, impostor, camera)) this.drawMesh(rt);
     }
 
     for (const batch of this.batches.values()) {
@@ -1491,8 +1490,13 @@ export class FishSystem {
     }
   }
 
-  private drawsOf(batch: SpeciesBatch): (LodBatch | ImpostorDraw)[] {
-    return batch.impostor === null ? [...batch.lods] : [...batch.lods, batch.impostor];
+  /** Reuses one array, so callers must not nest it. */
+  private drawsOf(batch: SpeciesBatch): readonly (LodBatch | ImpostorDraw)[] {
+    const draws = this.draws;
+    draws.length = 0;
+    draws.push(...batch.lods);
+    if (batch.impostor !== null) draws.push(batch.impostor);
+    return draws;
   }
 
   private placeInstance(
@@ -1554,9 +1558,10 @@ export class FishSystem {
     }
   }
 
-  private drawImpostor(rt: FishRuntime, draw: ImpostorDraw, camera: Vector3): void {
+  /** False when the fish cannot be drawn as an impostor and needs its mesh instead. */
+  private drawImpostor(rt: FishRuntime, draw: ImpostorDraw, camera: Vector3): boolean {
     const { atlas } = rt.batch;
-    if (atlas.kind !== 'ready' || !(rt.motion instanceof SwimState)) return;
+    if (atlas.kind !== 'ready' || !(rt.motion instanceof SwimState)) return false;
     const { grid, pivot } = atlas.atlas.info;
     const slot = this.placeInstance(draw, rt);
     const { motion, liveliness } = rt;
@@ -1588,5 +1593,6 @@ export class FishSystem {
     direction[2] = view.z;
     selectFrames(direction, grid, this.frames);
     draw.instances.write(slot, v);
+    return true;
   }
 }
