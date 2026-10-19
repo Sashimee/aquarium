@@ -6,6 +6,7 @@ import type { CrewTally } from './crew.ts';
 import { FOOD_STRIDE, type AteEvent } from './food.ts';
 import { SNAPSHOT_STRIDE, type Snapshot } from './snapshot.ts';
 import type { SimToy, ToyNudge } from './toys.ts';
+import type { WaveMakerSettings } from './waveMaker.ts';
 import {
   STEP_HZ,
   World,
@@ -37,6 +38,8 @@ export type SimCommand =
   | { readonly type: 'recycle'; readonly buffer: ArrayBuffer }
   | { readonly type: 'startle'; readonly stimulus: Stimulus }
   | { readonly type: 'light'; readonly level: number }
+  /** The wave maker, or null when there is none; see `World.setWaveMaker`. */
+  | { readonly type: 'waveMaker'; readonly settings: WaveMakerSettings | null }
   /** A laser dot or fingertip on the glass, or null once it is gone; see `World.setLure`. */
   | { readonly type: 'lure'; readonly position: Point3 | null }
   /** The full collider set in the shared format; hard ones block fish, soft ones (plants) push them aside. */
@@ -194,6 +197,7 @@ const COMMAND_TYPES = new Set([
   'recycle',
   'startle',
   'light',
+  'waveMaker',
   'lure',
   'decor',
   'anchors',
@@ -391,6 +395,9 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
         return;
       case 'light':
         requireWorld(command.type).setLight(command.level);
+        return;
+      case 'waveMaker':
+        requireWorld(command.type).setWaveMaker(command.settings);
         return;
       case 'lure':
         requireWorld(command.type).setLure(command.position);
@@ -608,6 +615,11 @@ export class SimClient {
   /** 0 = lights off (night rest), 1 = full day. */
   setLight(level: number): void {
     this.send({ type: 'light', level });
+  }
+
+  /** Installs, changes or (with null) removes the wave maker; see `waveMakerForTier`. */
+  setWaveMaker(settings: WaveMakerSettings | null): void {
+    this.send({ type: 'waveMaker', settings });
   }
 
   /** Where the lure is (world frame), or null when it is switched off or lifted from the glass. */

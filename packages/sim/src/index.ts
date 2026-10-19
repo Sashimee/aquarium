@@ -19,6 +19,7 @@ export {
   type SimSpecies,
   type SimWalking,
   type SpeciesInput,
+  type SwimmingMode,
   type Trait,
 } from './species.ts';
 export { BEHAVIOUR, type Anchor, type Stimulus } from './behaviour.ts';
@@ -32,6 +33,18 @@ export {
   type AteEvent,
 } from './food.ts';
 export { WALK, Walkers } from './walk.ts';
+export {
+  checkWaveMaker,
+  Currents,
+  DEFAULT_WAVE_MAKER_DIRECTION,
+  FlowField,
+  WAVE_MAKER,
+  waveMakerForTier,
+  type FlowBounds,
+  type FlowSway,
+  type WaveMakerMode,
+  type WaveMakerSettings,
+} from './waveMaker.ts';
 export {
   CARCASS,
   carcassFate,
