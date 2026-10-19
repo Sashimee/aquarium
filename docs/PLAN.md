@@ -248,7 +248,7 @@ that are reviewed and merged fast. An agent that needs a contract change opens t
 Env vars (set in Dokploy, never in the repo; local copies at `~/.config/aquarium/`, mode 600):
 `DATABASE_URL`, `BETTER_AUTH_SECRET` (**alphanumeric only**: Dokploy's env panel corrupts `+/=`;
 generate with `LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 48`), `APP_URL`, `SMTP_HOST=mailrelay`,
-`SMTP_PORT=587`, `MAIL_FROM=fish@bas.lu`, `SITE_INDEXABLE`, `NODE_ENV=production`; from §9: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` (test-mode keys on devfish only; these keep their provider format, see §9.1).
+`SMTP_PORT=587`, `MAIL_FROM=fish@bas.lu`, `SITE_INDEXABLE`, `NODE_ENV=production`; from §9: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` (test-mode keys on devfish only; these keep their provider format, see §9.1).
 
 Dokploy API: `https://dok.seil.pro/api`, header `x-api-key`, token read from
 `~/.config/dokploy/seil.token`. Never print the token or any env value. GitHub provider: *GitHub Alex*.
