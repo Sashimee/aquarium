@@ -1,7 +1,8 @@
-import type { Collider } from '@aquarium/shared';
+import type { Collider, Personality } from '@aquarium/shared';
 import type { Anchor, Stimulus } from './behaviour.ts';
 import type { Point3 } from './decor.ts';
 import { FOOD_STRIDE, type AteEvent } from './food.ts';
+import type { Visitor } from './greeting.ts';
 import { SNAPSHOT_STRIDE, type Snapshot } from './snapshot.ts';
 import type { SimToy, ToyNudge } from './toys.ts';
 import {
@@ -41,6 +42,10 @@ export type SimCommand =
   | { readonly type: 'anchors'; readonly anchors: readonly Anchor[] }
   /** Every toy in the tank, `[]` for none; resend a drifting ball as it moves. See `World.setToys`. */
   | { readonly type: 'toys'; readonly toys: readonly SimToy[] }
+  /** Fish `id`'s boldness, greed and sociability; see `World.setPersonality`. */
+  | { readonly type: 'personality'; readonly id: string; readonly personality: Personality }
+  /** The owner at the front glass, or null once they leave; see `World.setVisitor`. */
+  | { readonly type: 'visitor'; readonly visitor: Visitor | null }
   /** Float32 records of `[id, x, y, z, typeIndex]`; see `World.setFood`. */
   | { readonly type: 'food'; readonly buffer: ArrayBuffer }
   | {
@@ -164,6 +169,8 @@ const COMMAND_TYPES = new Set([
   'decor',
   'anchors',
   'toys',
+  'personality',
+  'visitor',
   'food',
   'addFish',
   'removeFish',
@@ -357,6 +364,12 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
       case 'toys':
         requireWorld(command.type).setToys(command.toys);
         return;
+      case 'personality':
+        requireWorld(command.type).setPersonality(command.id, command.personality);
+        return;
+      case 'visitor':
+        requireWorld(command.type).setVisitor(command.visitor);
+        return;
       case 'food': {
         const w = requireWorld(command.type);
         const { buffer } = command;
@@ -548,6 +561,16 @@ export class SimClient {
   /** Every toy in the tank (world frame), `[]` for none; see `World.setToys`. */
   setToys(toys: readonly SimToy[]): void {
     this.send({ type: 'toys', toys });
+  }
+
+  /** Fish `id`'s boldness, greed and sociability, each 0 to 1; see `World.setPersonality`. */
+  setPersonality(id: string, personality: Personality): void {
+    this.send({ type: 'personality', id, personality });
+  }
+
+  /** The owner at the front glass (world frame), or null once they leave; see `World.setVisitor`. */
+  setVisitor(visitor: Visitor | null): void {
+    this.send({ type: 'visitor', visitor });
   }
 
   /**

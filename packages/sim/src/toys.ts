@@ -3,6 +3,7 @@ import { CURIOSITY } from './curiosity.ts';
 import { FEEDING, feedingHeight } from './feeding.ts';
 import type { FishResize } from './fishArrays.ts';
 import { clamp, DEG, wrapAngle } from './math.ts';
+import type { Personalities } from './personality.ts';
 import { FishState } from './snapshot.ts';
 import type { SimSpecies } from './species.ts';
 
@@ -217,6 +218,7 @@ export class Toys {
   private _ballHabituation: Float64Array;
 
   private readonly host: BehaviourHost;
+  private readonly personality: Personalities;
   private mirrors: readonly Mirror[] = [];
   private balls: readonly Ball[] = [];
   private readonly nudges: ToyNudge[] = [];
@@ -254,8 +256,9 @@ export class Toys {
     return this.mirrors.length + this.balls.length;
   }
 
-  constructor(host: BehaviourHost) {
+  constructor(host: BehaviourHost, personality: Personalities) {
     this.host = host;
+    this.personality = personality;
     const n = host.count;
     this._eligible = new Uint8Array(n);
     this._leash = new Float64Array(n * 4);
@@ -345,7 +348,7 @@ export class Toys {
       if (sp.walking !== null) continue;
       const free = at(this.eligible, i) === 1 && at(occupied, i) !== 1;
       if (sp.flare) this.updateMirror(i, free, mirrorRecover);
-      if (plays(sp)) this.updateBall(i, sp, free, ballRecover);
+      if (this.plays(i, sp)) this.updateBall(i, sp, free, ballRecover);
     }
   }
 
@@ -637,7 +640,7 @@ export class Toys {
     const latency =
       TOYS.ballLatencyMinS + (TOYS.ballLatencyMaxS - TOYS.ballLatencyMinS) * (1 - sp.curiosity);
     if (watched < latency) return;
-    const interest = 0.5 * (sp.curiosity + sp.boldness);
+    const interest = 0.5 * (sp.curiosity + this.boldness(i, sp));
     if (at(this.ballHabituation, i) > TOYS.ballRecoverLevel || this.host.rng.next() >= interest) {
       this.ballNotice[i] = -TOYS.ballRetryS;
       return;
@@ -800,7 +803,9 @@ export class Toys {
 
   /** A shy fish near a floating ball keeps it at a distance. */
   shun(i: number, sp: SimSpecies, plan: Plan): void {
-    if (this.balls.length === 0 || sp.walking !== null || sp.boldness > TOYS.shyBoldness) return;
+    if (this.balls.length === 0 || sp.walking !== null || this.boldness(i, sp) > TOYS.shyBoldness) {
+      return;
+    }
     const { position } = this.host;
     const r = TOYS.ballShunBodyLengths * at(this.host.bodyLength, i) + TOYS.ballRadiusM;
     let best: Ball | null = null;
@@ -829,16 +834,20 @@ export class Toys {
     );
   }
 
+  /** Bold enough to approach a novel object, and living high enough to reach one at the surface. */
+  private plays(i: number, sp: SimSpecies): boolean {
+    return this.boldness(i, sp) > TOYS.shyBoldness && sp.depthHigh >= TOYS.ballMinDepthHigh;
+  }
+
+  private boldness(i: number, sp: SimSpecies): number {
+    return this.personality.effectiveBoldness(i, sp.boldness);
+  }
+
   private speciesOf(i: number): SimSpecies {
     const sp = this.host.species[at(this.host.speciesIndex, i)];
     if (sp === undefined) throw new RangeError(`no fish at index ${i}`);
     return sp;
   }
-}
-
-/** Bold enough to approach a novel object, and living high enough to reach one at the surface. */
-function plays(sp: SimSpecies): boolean {
-  return sp.boldness > TOYS.shyBoldness && sp.depthHigh >= TOYS.ballMinDepthHigh;
 }
 
 function moved(a: Mirror, b: Mirror): boolean {

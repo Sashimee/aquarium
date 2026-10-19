@@ -4,8 +4,10 @@ import type { Point3 } from './decor.ts';
 import { FEEDING, Feeding, feedingHeight } from './feeding.ts';
 import type { FishResize } from './fishArrays.ts';
 import type { FoodStore } from './food.ts';
+import { GREETING, Greeting, type Visitor } from './greeting.ts';
 import { clamp, DEG, wrapAngle } from './math.ts';
 import { selectNearest } from './neighbours.ts';
+import { Personalities } from './personality.ts';
 import type { Rng } from './rng.ts';
 import type { Sdf } from './sdf.ts';
 import { FishState } from './snapshot.ts';
@@ -318,6 +320,8 @@ export class Behaviour {
   readonly feeding: Feeding;
   readonly curiosity: Curiosity;
   readonly toys: Toys;
+  readonly personality: Personalities;
+  readonly greeting: Greeting;
   light = 1;
   night = false;
 
@@ -391,6 +395,9 @@ export class Behaviour {
   private _gillFlare: Float64Array;
 
   private readonly n3 = new Float64Array(3);
+  private readonly greetBoldness = (i: number): number =>
+    this.personality.effectiveBoldness(i, this.speciesOf(i).boldness);
+  private readonly greetHunger = (i: number): number => this.feeding.motivation(i);
   private bandLo = 0;
   private bandHi = 0;
 
@@ -434,9 +441,11 @@ export class Behaviour {
     const n = host.count;
     const s = host.species.length;
     this.plans = Array.from({ length: n }, () => new Plan());
-    this.feeding = new Feeding(host);
+    this.personality = new Personalities(n);
+    this.feeding = new Feeding(host, this.personality);
     this.curiosity = new Curiosity(host);
-    this.toys = new Toys(host);
+    this.toys = new Toys(host, this.personality);
+    this.greeting = new Greeting(host);
     this.startlePhase = new Uint8Array(n);
     this.startleTimer = new Float64Array(n);
     this.startleElapsed = new Float64Array(n);
@@ -559,6 +568,8 @@ export class Behaviour {
     this.feeding.resize(edit);
     this.curiosity.resize(edit);
     this.toys.resize(edit);
+    this.personality.resize(edit);
+    this.greeting.resize(edit);
     if (edit.removed < 0) return;
     for (let i = 0; i < this.territoryTarget.length; i++) {
       const j = edit.index(at(this.territoryTarget, i));
@@ -739,6 +750,10 @@ export class Behaviour {
     this.toys.setToys(toys);
   }
 
+  setVisitor(visitor: Visitor | null): void {
+    this.greeting.setVisitor(visitor);
+  }
+
   setLight(level: number): void {
     if (!(level >= 0 && level <= 1)) {
       throw new RangeError(`light level must be within [0, 1], got ${level}`);
@@ -779,6 +794,7 @@ export class Behaviour {
     this.prepareCuriosity();
     this.curiosity.update(this.feeding);
     this.toys.update(this.curiosity.follow);
+    this.greeting.update(this.greetBoldness, this.greetHunger);
     const ease = 1 - Math.exp(-DT / TOYS.displayTauS);
     for (let i = 0; i < n; i++) {
       this.plan(i);
@@ -839,6 +855,7 @@ export class Behaviour {
         at(this.territoryPhase, i) === TerritoryPhase.Idle;
       eligible[i] = free && !toys.engaged(i) ? 1 : 0;
       toys.eligible[i] = free ? 1 : 0;
+      this.greeting.eligible[i] = eligible[i] ?? 0;
       const a = this.anchors[at(this.anchor, i)];
       const o = i * 4;
       if (a === undefined) {
@@ -1000,7 +1017,7 @@ export class Behaviour {
       const p =
         s.intensity *
         (1 - d / range) *
-        (1 - BEHAVIOUR.boldnessDamping * sp.boldness) *
+        (1 - BEHAVIOUR.boldnessDamping * this.personality.effectiveBoldness(i, sp.boldness)) *
         this.responsiveness(i);
       if (rng.next() >= p) continue;
       // Escape trajectories are bimodal, straight away (~180°) or ~130° from the stimulus.
@@ -1034,7 +1051,9 @@ export class Behaviour {
     this.gulpPhase[i] = GulpPhase.None;
     if (this.grazePhase[i] !== GrazePhase.Roam) this.grazePhase[i] = GrazePhase.None;
     this.excursion[i] = 0;
-    if (sp.home === 'cave') this.shelterTimer[i] = sp.shelterAfterStartleS;
+    if (sp.home === 'cave') {
+      this.shelterTimer[i] = sp.shelterAfterStartleS * this.personality.shelter(i);
+    }
     this.relay(i, yaw, pitch);
   }
 
@@ -1095,15 +1114,16 @@ export class Behaviour {
     plan.reset(this.bandLo, this.bandHi);
     const rest = at(this.rest, i);
     const calm = 1 - (1 - BEHAVIOUR.restSpeedFactor) * rest;
-    plan.cruiseScale = calm;
+    plan.cruiseScale = calm * this.personality.activity(i);
     plan.wander = calm;
     if (sp.walking !== null) {
       this.planWalker(i, sp.walking, plan, rest);
       return;
     }
     const school = 1 - (1 - BEHAVIOUR.restSchoolFactor) * rest;
-    plan.align = school * (sp.shoal ? BEHAVIOUR.shoalAlignment : 1);
-    plan.cohesion = school * (sp.shoal ? BEHAVIOUR.shoalCohesion : 1);
+    plan.align = school * (sp.shoal ? BEHAVIOUR.shoalAlignment : 1) * this.personality.alignment(i);
+    plan.cohesion =
+      school * (sp.shoal ? BEHAVIOUR.shoalCohesion : 1) * this.personality.cohesion(i);
     if (at(this.tighten, i) > 0) {
       plan.cohesion *= BEHAVIOUR.tightenCohesion;
       plan.separation *= BEHAVIOUR.tightenSeparation;
@@ -1134,6 +1154,7 @@ export class Behaviour {
     if (this.toys.planMirror(i, sp, plan)) return;
     if (this.toys.planBall(i, sp, plan)) return;
     if (this.planLure(i, sp, plan)) return;
+    if (this.planGreet(i, sp, plan)) return;
     if (this.planSpot(i, sp, plan)) return;
     if (sp.gait === 'forage') {
       this.planForage(i, sp, plan);
@@ -1257,6 +1278,61 @@ export class Behaviour {
     plan.speedFloor = 0;
     plan.speedCap = speed * clamp((d - plan.arrival) / (2 * length), 0, 1);
     return true;
+  }
+
+  /**
+   * Comes to the front glass where the owner stands and hovers a little way off it, facing out;
+   * bottom foragers come along the sand. A fish anchored too far from the spot stays home.
+   */
+  private planGreet(i: number, sp: SimSpecies, plan: Plan): boolean {
+    const g = this.greeting;
+    if (at(g.active, i) !== 1) return false;
+    const { basin, position } = this.host;
+    const length = at(this.host.bodyLength, i);
+    const x = clamp(
+      at(g.point, 0) + at(g.offset, i * 2) * length,
+      basin.minX + length,
+      basin.maxX - length,
+    );
+    const z = basin.maxZ;
+    let y: number;
+    if (sp.gait === 'forage') {
+      const ground = basin.ground(at(position, i * 3), at(position, i * 3 + 2));
+      const mid = 0.5 * (BEHAVIOUR.forageBandLowBodyLengths + BEHAVIOUR.forageBandHighBodyLengths);
+      plan.bandLo = ground + BEHAVIOUR.forageBandLowBodyLengths * length;
+      plan.bandHi = ground + BEHAVIOUR.forageBandHighBodyLengths * length;
+      y = basin.ground(x, z) + mid * length;
+    } else {
+      this.bandAt(i, x, z);
+      y = clamp(at(g.point, 1) + at(g.offset, i * 2 + 1) * length, this.bandLo, this.bandHi);
+    }
+    if (!this.withinCuriosityLeash(i, x, y, z)) return false;
+    const o = i * 3;
+    const d = Math.hypot(x - at(position, o), y - at(position, o + 1), z - at(position, o + 2));
+    const cruise = at(this.host.cruiseSpeed, i);
+    const vmax = at(this.host.maxSpeed, i);
+    plan.align *= GREETING.schoolFactor;
+    plan.cohesion *= GREETING.schoolFactor;
+    plan.wander *= 0.3;
+    this.widenBand(plan, y, length);
+    plan.arrival = (FEEDING.mouthBodyLengths + GREETING.standoffBodyLengths) * length;
+    const speed = Math.min(
+      FEEDING.pursuitSpeedFraction * vmax,
+      Math.max(cruise * GREETING.approachSpeedFactor, (d - plan.arrival) / GREETING.catchUpS),
+    );
+    plan.seek(x, y, z, speed, 0.5);
+    plan.speedFloor = 0;
+    plan.speedCap = speed * clamp((d - plan.arrival) / (2 * length), 0, 1);
+    if (d < plan.arrival + GREETING.arrivedBodyLengths * length) plan.state = FishState.Station;
+    return true;
+  }
+
+  private withinCuriosityLeash(i: number, x: number, y: number, z: number): boolean {
+    const { leash } = this.curiosity;
+    const o = i * 4;
+    const r = at(leash, o + 3);
+    if (r === Infinity) return true;
+    return Math.hypot(x - at(leash, o), y - at(leash, o + 1), z - at(leash, o + 2)) <= r;
   }
 
   /**

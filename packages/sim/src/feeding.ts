@@ -4,6 +4,7 @@ import type { FishResize } from './fishArrays.ts';
 import { MAX_FEEDERS, MAX_FOOD_PARTICLES, type AteEvent } from './food.ts';
 import { clamp } from './math.ts';
 import { selectNearest } from './neighbours.ts';
+import type { Personalities } from './personality.ts';
 
 /** Every tunable of the feeding AI; sources are in BEHAVIOUR.md. */
 export const FEEDING = {
@@ -84,6 +85,7 @@ export class Feeding {
   readonly events: AteEvent[] = [];
 
   private readonly host: BehaviourHost;
+  private readonly personality: Personalities;
   private targetId: Int32Array;
   private targetScore: Float64Array;
   private pursuit: Float64Array;
@@ -140,8 +142,9 @@ export class Feeding {
     return this._leash;
   }
 
-  constructor(host: BehaviourHost) {
+  constructor(host: BehaviourHost, personality: Personalities) {
     this.host = host;
+    this.personality = personality;
     const n = host.count;
     this._gut = new Float64Array(n);
     this._target = new Int32Array(n).fill(-1);
@@ -337,7 +340,10 @@ export class Feeding {
   }
 
   private hungry(i: number): boolean {
-    return this.eligible[i] === 1 && this.motivation(i) > FEEDING.satiatedMotivation;
+    return (
+      this.eligible[i] === 1 &&
+      this.motivation(i) > FEEDING.satiatedMotivation * this.personality.satiation(i)
+    );
   }
 
   private withinLeash(i: number, x: number, y: number, z: number): boolean {
@@ -432,7 +438,7 @@ export class Feeding {
     const fz = at(forward, i * 3 + 2);
     const range = sp.perceptionRange;
     const cone = sp.perceptionFov >= 2 * Math.PI ? -2 : Math.cos(sp.perceptionFov / 2);
-    const motivation = this.motivation(i);
+    const motivation = this.motivation(i) * this.personality.appetite(i);
     const walker = sp.walking !== null;
     const surfaceReach = FEEDING.walkerReachBodyLengths * at(this.host.bodyLength, i);
     const found = food.near(px, py, pz, range, this.candidates);
@@ -455,7 +461,7 @@ export class Feeding {
       const d = Math.hypot(dx, dy, dz);
       if (d > 1e-9 && (dx * fx + dy * fy + dz * fz) / d < cone) continue;
       if (!this.withinLeash(i, x, y, z)) continue;
-      if (contested && this.full(k, d)) continue;
+      if (contested && this.full(k, d * this.personality.competition(i))) continue;
       const motion = Math.min(1, at(food.speed, k) / FEEDING.motionReferenceMps);
       const salience =
         (1 - d / range) *
@@ -504,13 +510,15 @@ export class Feeding {
     return out;
   }
 
-  private distanceTo(i: number, k: number): number {
+  /** Fish `i`'s distance to particle `k` as it counts in competition, shortened by greed. */
+  private claimDistance(i: number, k: number): number {
     const { food, position } = this.host;
-    return Math.hypot(
+    const d = Math.hypot(
       at(food.position, k * 3) - at(position, i * 3),
       at(food.position, k * 3 + 1) - at(position, i * 3 + 1),
       at(food.position, k * 3 + 2) - at(position, i * 3 + 2),
     );
+    return d * this.personality.competition(i);
   }
 
   /**
@@ -525,7 +533,7 @@ export class Feeding {
     for (let i = 0; i < n; i++) {
       const k = at(this.target, i);
       if (k < 0) continue;
-      const out = this.claim(k, i, this.distanceTo(i, k));
+      const out = this.claim(k, i, this.claimDistance(i, k));
       if (out >= 0) this.lost[lost++] = out;
     }
     for (let round = 0; round < FEEDING.resolveRounds && lost > 0; round++) {
@@ -536,7 +544,7 @@ export class Feeding {
         const k = this.choose(i, true);
         if (k < 0) continue;
         this.aim(i, k, this.chosenScore);
-        const out = this.claim(k, i, this.distanceTo(i, k));
+        const out = this.claim(k, i, this.claimDistance(i, k));
         if (out >= 0) this.lostNext[next++] = out;
       }
       for (let m = 0; m < next; m++) this.lost[m] = at(this.lostNext, m);
