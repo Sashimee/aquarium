@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { TANK_SIZES, type TankSize } from '@aquarium/shared';
 import type { WebGPURenderer } from 'three/webgpu';
-import { TANK_DIMENSIONS } from '../engine/tank/dimensions';
+import { DEFAULT_TANK, TANK_DIMENSIONS } from '../engine/tank/dimensions';
 import { createSharedKtx2 } from '../engine/ktx2';
 import { AssetCatalog, ModelLibrary } from './assets';
 import { ColliderField } from './colliders';
@@ -11,6 +11,7 @@ import { generateEuphyllia, parseEuphylliaId } from './euphyllia';
 import { loadPreset } from './preset';
 import { hullCorners } from '../fish/simColliders';
 import { boundsFromCatalog } from './presetFit';
+import { GLASS_SHRINK_FLOOR } from './placement';
 import { SURFACE_MARGIN } from './plants';
 import {
   DEFAULT_CURRENT,
@@ -19,6 +20,7 @@ import {
   fitPresetToCatalog,
   glassExtent,
   movableColliders,
+  plantReach,
   scatterPresetPatches,
 } from './TankScene';
 
@@ -154,6 +156,46 @@ describe.each(['freshwater', 'reef'] as const)('%s preset at every tank size', (
       warn.mockRestore();
       for (const patch of preset.plantPatches) {
         expect(placed.get(patch.id), patch.id).toBeGreaterThanOrEqual(Math.ceil(patch.count / 2));
+      }
+    });
+
+    it('keeps every patch at its authored depth', async () => {
+      const preset = fitted();
+      const hard = preset.decor
+        .filter((item) => !parseEuphylliaId(item.assetId))
+        .map((item) => ({ item, kind: catalog.get(item.assetId).kind }))
+        .filter(({ kind }) => kind !== 'anemone');
+      const { colliders } = await movableColliders(library, hard, waterTop);
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      // A nano's half-depth is barely wider than one plant's sway, so only half of a patch fits.
+      const keptShare = size === 'nano30' ? 0.5 : 0.75;
+      const roots = new Map<string, { x: number; z: number }[]>();
+      scatterPresetPatches(
+        preset,
+        catalog,
+        new ColliderField(colliders),
+        dimensions,
+        (patch, instances) => roots.set(patch.id, instances),
+      );
+      warn.mockRestore();
+      const authored = loadPreset(biome).plantPatches;
+      for (const patch of preset.plantPatches) {
+        const plants = roots.get(patch.id) ?? [];
+        expect(plants.length, patch.id).toBeGreaterThanOrEqual(Math.ceil(patch.count * keptShare));
+        const meanX = plants.reduce((sum, p) => sum + p.x, 0) / plants.length;
+        const meanZ = plants.reduce((sum, p) => sum + p.z, 0) / plants.length;
+        const wanted = authored.find((a) => a.id === patch.id)?.center ?? [0, 0];
+        const authoredZ = (wanted[1] * dimensions.depth) / DEFAULT_TANK.depth;
+        const reach = plantReach(
+          patch.assetId,
+          catalog.get(patch.assetId).bounds,
+          preset.current ?? DEFAULT_CURRENT,
+        );
+        const room = Math.max(0, extent.halfDepth - reach(patch.scale[0] * GLASS_SHRINK_FLOOR));
+        const wantZ = Math.sign(authoredZ) * Math.min(Math.abs(authoredZ), room);
+        const slack = Math.max(patch.radius, 0.06);
+        expect(Math.abs(meanZ - wantZ), `${patch.id} z`).toBeLessThanOrEqual(slack);
+        expect(Math.abs(meanX - patch.center[0]), `${patch.id} x`).toBeLessThanOrEqual(slack * 2);
       }
     });
   });
