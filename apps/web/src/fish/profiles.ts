@@ -177,6 +177,26 @@ export const FISH_RENDER_PROFILES: Readonly<Record<string, FishRenderProfile>> =
     finTransmission: 0.4,
     nightPaling: 0.2,
   },
+  // A glossy calcite shell with no thin-film sheen; the "fin" here is the translucent foot.
+  'nerite-snail': {
+    ...DEFAULTS,
+    assetId: 'nerite-snail',
+    iridescence: 0,
+    roughness: 0.35,
+    finTransmission: 0.3,
+    nightPaling: 0.05,
+    tintVariation: 0.06,
+  },
+  // A matte borrowed shell over a chitin body; crabs change colour over moults, not at night.
+  'hermit-crab': {
+    ...DEFAULTS,
+    assetId: 'hermit-crab',
+    iridescence: 0,
+    roughness: 0.5,
+    finTransmission: 0.2,
+    nightPaling: 0.1,
+    tintVariation: 0.08,
+  },
 };
 
 export function renderProfile(speciesId: string): FishRenderProfile {

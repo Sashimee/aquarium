@@ -16,7 +16,10 @@ const presets = Object.entries(
   .filter((p): p is { path: string; current: CurrentParameters } => p.current !== undefined);
 
 function slowestEaterCruise(food: (typeof FOOD_TYPES)[number]): number {
-  const eaters = species.filter((s) => s.lifecycle.diet.includes(food));
+  // The sim lets a walker take only food lying within reach of its surface, so drift never outruns it.
+  const eaters = species.filter(
+    (s) => s.lifecycle.diet.includes(food) && s.locomotion.walking === undefined,
+  );
   expect(eaters.length, food).toBeGreaterThan(0);
   return Math.min(...eaters.map((s) => s.locomotion.cruiseSpeedMps));
 }

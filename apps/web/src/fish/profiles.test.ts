@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_TANK } from '../engine/tank/dimensions';
+import shippedIndex from '../../public/assets/index.json';
+import { parseFishAssets, type FishAssetKind } from './assetIndex';
 import { demoTank } from './demoStock';
 import {
   batchKeyOf,
@@ -11,6 +13,7 @@ import {
   swimModeFor,
 } from './profiles';
 import { SWIM_MODES } from './swim';
+import { WALK_GAIT } from './walk';
 
 const contentFiles = import.meta.glob<unknown>(['../../../../content/species/*.json'], {
   eager: true,
@@ -19,7 +22,10 @@ const contentFiles = import.meta.glob<unknown>(['../../../../content/species/*.j
 
 interface ContentSpecies {
   readonly id: string;
-  readonly locomotion: { readonly swimmingMode: string };
+  readonly locomotion: {
+    readonly swimmingMode: string;
+    readonly walking?: { readonly legPairs: number };
+  };
 }
 
 function isContentSpecies(raw: unknown): raw is ContentSpecies {
@@ -32,8 +38,19 @@ function isContentSpecies(raw: unknown): raw is ContentSpecies {
     typeof locomotion === 'object' &&
     locomotion !== null &&
     'swimmingMode' in locomotion &&
-    typeof locomotion.swimmingMode === 'string'
+    typeof locomotion.swimmingMode === 'string' &&
+    (!('walking' in locomotion) ||
+      (typeof locomotion.walking === 'object' &&
+        locomotion.walking !== null &&
+        'legPairs' in locomotion.walking &&
+        typeof locomotion.walking.legPairs === 'number'))
   );
+}
+
+function modelKindFor({ swimmingMode, walking }: ContentSpecies['locomotion']): FishAssetKind {
+  if (swimmingMode === 'pleopod') return 'shrimp';
+  if (swimmingMode !== 'none') return 'fish';
+  return (walking?.legPairs ?? 0) === 0 ? 'snail' : 'crab';
 }
 
 const keys = (n: number): string[] => Array.from({ length: n }, (_, i) => `fish-${i}`);
@@ -190,9 +207,29 @@ describe('render profile coverage', () => {
   });
 
   it('gives no species a profile for a model of another kind', () => {
+    const models = parseFishAssets(shippedIndex);
     for (const { id, locomotion } of species) {
-      const walker = locomotion.swimmingMode === 'pleopod';
-      expect(renderProfile(id).assetId.endsWith('shrimp'), id).toBe(walker);
+      const kind = modelKindFor(locomotion);
+      const profile = renderProfile(id);
+      for (const assetId of [profile.assetId, profile.male?.assetId]) {
+        if (assetId === undefined) continue;
+        const model = models.get(assetId);
+        expect(model, `${id}: ${assetId} is in the shipped asset index`).toBeDefined();
+        expect(model?.kind, `${id}: ${assetId}`).toBe(kind);
+      }
+    }
+  });
+
+  it('gives a crab species no more walking legs than its model has slots behind the claws', () => {
+    const models = parseFishAssets(shippedIndex);
+    for (const { id, locomotion } of species) {
+      if (modelKindFor(locomotion) !== 'crab') continue;
+      const rig = models.get(renderProfile(id).assetId)?.shrimp;
+      expect(rig, id).toBeDefined();
+      expect(
+        (locomotion.walking?.legPairs ?? 0) + WALK_GAIT.crabChelipedPairs,
+        id,
+      ).toBeLessThanOrEqual(rig?.legPairs ?? 0);
     }
   });
 

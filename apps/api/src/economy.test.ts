@@ -18,6 +18,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { schema } from './db/index.ts';
 import { loadEconomy } from './economy.ts';
 import { personalityFromFishId } from './personality.ts';
+import { loadPresets } from './presets.ts';
 import { loadCatalog } from './species.ts';
 import { DEFAULT_CARE_LIMITS } from './tanks.ts';
 import { APP_ORIGIN, createHarness, type Harness } from './test-harness.ts';
@@ -26,6 +27,7 @@ const PASSWORD = 'correct horse battery';
 const jsonHeaders = { 'content-type': 'application/json', origin: APP_ORIGIN };
 const DAY_MS = 86_400_000;
 const economy = loadEconomy();
+const presets = loadPresets();
 let counter = 0;
 
 const cookieOf = (res: LightMyRequestResponse) =>
@@ -583,6 +585,37 @@ describe('wallet, shop and ledger', () => {
       expect((await save([feeder])).statusCode).toBe(200);
       expect((await save([feeder, piece('java-fern')])).statusCode).toBe(200);
       expect((await save([feeder, piece('java-fern'), piece('vallisneria')])).statusCode).toBe(403);
+    });
+
+    it('licence-checks the first save of a tank that still shows the preset', async () => {
+      const { who, tank } = await primed(h);
+      const preset = presets.freshwater;
+      if (!preset) throw new Error('freshwater preset missing');
+      const save = (layout: object[]) =>
+        call(h, who, 'PATCH', `/api/tanks/${tank.id}`, { decorLayout: layout });
+
+      const locked = await save([
+        ...preset.decor,
+        { assetId: 'vallisneria', position: [0, 0.05, 0] },
+      ]);
+      expect(locked.statusCode).toBe(403);
+      expect(errorCode(locked)).toBe('forbidden');
+      expect((await save(preset.decor)).statusCode).toBe(200);
+      expect((await save(preset.decor.slice(0, 3))).statusCode).toBe(200);
+    });
+
+    it('charges a copy added beyond what the preset shows', async () => {
+      const { who, tank } = await primed(h);
+      const preset = presets.freshwater;
+      if (!preset) throw new Error('freshwater preset missing');
+      const extra = { assetId: 'java-fern', position: [0.1, 0.05, 0] };
+      expect(
+        (
+          await call(h, who, 'PATCH', `/api/tanks/${tank.id}`, {
+            decorLayout: [...preset.decor, extra],
+          })
+        ).statusCode,
+      ).toBe(403);
     });
 
     it('shares one licence between every procedural euphyllia piece', async () => {
@@ -1147,7 +1180,7 @@ describe('account deletion racing a purchase', () => {
     await expectGone(who);
   });
 
-  it('lets the purchase finish and then deletes everything when the purchase commits first', async () => {
+  it('deletes everything after a purchase that finished before the delete started', async () => {
     const who = await account(h);
     await walletOf(h, who);
     const holder = await h.database.pool.connect();

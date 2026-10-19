@@ -5,6 +5,8 @@ import type {
   CareAction,
   DecorLayout,
   FoodType,
+  LightSchedule,
+  PurchasableStage,
   Tank,
   TankSize,
   User,
@@ -13,9 +15,10 @@ import { DEFAULT_TANK_SIZE } from '@aquarium/shared';
 import type { EventBus } from '../engine/events';
 import { layoutKey } from '../interaction/decor/key';
 import type { InteractionEvents } from '../interaction/events';
-import type { ApiClient } from '../ui/api';
+import { ApiRequestError, type ApiClient } from '../ui/api';
 import { AteUploader, type AteUploaderOptions } from './ateUploader';
 import { withRetry, realSleep, type Sleep } from './backoff';
+import { IntentKeys, outcomeUnknown } from './intentKeys';
 import { LayoutSaver } from './layout';
 import {
   ACCLIMATION_SECONDS,
@@ -43,6 +46,8 @@ export interface SessionDeps {
   /** Longest a tank switch waits for pending eating reports; the rest are dropped with a notice. */
   leaveFlushMs?: number;
   layoutDebounceMs?: number;
+  /** Makes the idempotency key of a new purchase intent; tests inject a counter. */
+  newKey?: () => string;
 }
 
 export interface ShareOutcome {
@@ -73,10 +78,12 @@ export class TankSession {
   private readonly stopListening: (() => void)[];
   private readonly now: () => number;
   private readonly sleep: Sleep;
+  private readonly keys: IntentKeys;
 
   constructor(private readonly deps: SessionDeps) {
     this.now = deps.now ?? (() => Date.now());
     this.sleep = deps.sleep ?? realSleep;
+    this.keys = new IntentKeys(deps.newKey, this.now);
     const saveStatus = new SaveStatusMerge((status, message, source, reported) =>
       deps.interaction.emit('decor:save-state', { status, message, source, reported }),
     );
@@ -182,6 +189,7 @@ export class TankSession {
       const stored = this.deps.storage?.getItem(ACTIVE_KEY) ?? null;
       const activeId = tanks.find((t) => t.id === stored)?.id ?? tanks[0]?.id ?? null;
       this.patch({ phase: 'ready', species, tanks, awayByTank, activeId });
+      void this.refreshWallet();
       if (activeId) this.activate(activeId);
       else this.deps.interaction.emit('tank:none', {});
     } catch (error) {
@@ -195,6 +203,7 @@ export class TankSession {
   async onVisible(): Promise<void> {
     const { phase, activeId } = this.state;
     if (phase !== 'ready' || !activeId) return;
+    await this.refreshWallet();
     if (this.now() - this.lastRefreshMs < (this.deps.refreshAfterMs ?? 10 * 60_000)) return;
     const gen = this.loadId;
     await this.perform(async () => {
@@ -246,6 +255,51 @@ export class TankSession {
     });
   }
 
+  /** The balance the server reports. A failed read keeps the last one shown rather than hiding it. */
+  async refreshWallet(): Promise<void> {
+    const gen = this.loadId;
+    try {
+      const wallet = await this.deps.api.wallet();
+      if (gen !== this.loadId) return;
+      const before = this.state.balance;
+      const gained = before !== null && wallet.balance > before ? wallet.balance - before : 0;
+      this.patch({
+        balance: wallet.balance,
+        owned: wallet.owned,
+        ...(gained > 0 ? { earned: (this.state.earned ?? 0) + gained } : {}),
+      });
+    } catch (error) {
+      if (!(error instanceof ApiRequestError)) throw error;
+    }
+  }
+
+  dismissEarned(): void {
+    if (this.state.earned !== null) this.patch({ earned: null });
+  }
+
+  /**
+   * Runs one paid request under the key of its intent. Where the outcome is unknown the key stays,
+   * so pressing the button again is a retry that cannot charge twice.
+   */
+  private async paid(intent: string, call: (key: string) => Promise<void>): Promise<boolean> {
+    const key = this.keys.keyFor(intent);
+    if (this.state.pearlsRefused) this.patch({ pearlsRefused: false });
+    let refused = false;
+    const ok = await this.perform(async () => {
+      try {
+        await call(key);
+      } catch (error) {
+        if (!outcomeUnknown(error)) this.keys.settle(intent);
+        refused = error instanceof ApiRequestError && error.code === 'insufficient_pearls';
+        throw error;
+      }
+      this.keys.settle(intent);
+    });
+    await this.refreshWallet();
+    if (refused) this.patch({ pearlsRefused: true });
+    return ok;
+  }
+
   async createTank(
     name: string,
     biome: PlayableBiome,
@@ -254,8 +308,8 @@ export class TankSession {
     if (this.state.phase !== 'ready') return false;
     const generation = this.loadId;
     const made: { tank?: Tank } = {};
-    const ok = await this.perform(async () => {
-      made.tank = await this.deps.api.createTank({ name, biome, size });
+    const ok = await this.paid(`tank:${biome}:${size}:${name}`, async (idempotencyKey) => {
+      made.tank = await this.deps.api.createTank({ name, biome, size, idempotencyKey });
     });
     const tank = made.tank;
     if (!ok || !tank) return false;
@@ -318,24 +372,68 @@ export class TankSession {
     const tank = this.activeTank;
     if (!tank) return false;
     const gen = this.loadId;
-    return this.perform(async () => {
-      const next = await this.deps.api.care(tank.id, action);
+    const run = async (sent: CareAction) => {
+      const next = await this.deps.api.care(tank.id, sent);
       if (gen !== this.loadId) return;
       this.apply(next);
-      this.deps.interaction.emit('tank:care', { tankId: tank.id, action: action.type });
-      if (action.type !== 'feed') this.patch({ notice: CARE_DONE[action.type] });
+      this.deps.interaction.emit('tank:care', { tankId: tank.id, action: sent.type });
+      if (sent.type !== 'feed') this.patch({ notice: CARE_DONE[sent.type] });
+    };
+    if (action.type !== 'bottled_bacteria') {
+      const ok = await this.perform(() => run(action));
+      await this.refreshWallet();
+      return ok;
+    }
+    return this.paid(`bacteria:${tank.id}`, (idempotencyKey) =>
+      run({ type: 'bottled_bacteria', idempotencyKey }),
+    );
+  }
+
+  async buy(speciesId: string, name: string, stage: PurchasableStage): Promise<boolean> {
+    const tank = this.activeTank;
+    if (!tank) return false;
+    const gen = this.loadId;
+    return this.paid(`fish:${tank.id}:${speciesId}:${stage}:${name}`, async (idempotencyKey) => {
+      const next = await this.deps.api.addFish(tank.id, {
+        species: speciesId,
+        name,
+        stage,
+        idempotencyKey,
+      });
+      if (gen !== this.loadId) return;
+      this.apply(next, { acclimateNew: true });
+      this.patch({ notice: `${name} is in a bag, getting used to the water.` });
     });
   }
 
-  async buy(speciesId: string, name: string): Promise<boolean> {
+  /** Equipment, plants, decor and backgrounds: priced and charged by the server from its own list. */
+  async purchase(itemRef: string, doneNotice: string): Promise<boolean> {
+    const tank = this.activeTank;
+    if (!tank) return false;
+    const gen = this.loadId;
+    return this.paid(`buy:${tank.id}:${itemRef}`, async (idempotencyKey) => {
+      const bought = await this.deps.api.purchase({ itemRef, idempotencyKey, tankId: tank.id });
+      if (gen !== this.loadId) return;
+      this.patch({
+        balance: bought.wallet.balance,
+        owned: [...new Set([...this.state.owned, itemRef])],
+      });
+      const next = await this.deps.api.tank(tank.id);
+      if (gen !== this.loadId) return;
+      this.apply(next);
+      this.patch({ notice: doneNotice });
+    });
+  }
+
+  async setLight(light: LightSchedule): Promise<boolean> {
     const tank = this.activeTank;
     if (!tank) return false;
     const gen = this.loadId;
     return this.perform(async () => {
-      const next = await this.deps.api.addFish(tank.id, { species: speciesId, name });
+      const next = await this.deps.api.saveLight(tank.id, light);
       if (gen !== this.loadId) return;
-      this.apply(next, { acclimateNew: true });
-      this.patch({ notice: `${name} is in a bag, getting used to the water.` });
+      this.apply(next);
+      this.patch({ notice: 'The lamp schedule is saved.' });
     });
   }
 
@@ -361,13 +459,15 @@ export class TankSession {
     const tank = this.activeTank;
     if (!tank) return false;
     const gen = this.loadId;
-    return this.perform(async () => {
+    const ok = await this.perform(async () => {
       const fish = tank.fish.find((f) => f.id === fishId);
       const next = await this.deps.api.netFish(tank.id, fishId);
       if (gen !== this.loadId) return;
       this.apply(next, { removal: 'netted' });
       this.patch({ notice: fish ? `${fish.name} was netted and added to the memorial.` : null });
     });
+    await this.refreshWallet();
+    return ok;
   }
 
   /** Releases a bagged fish now instead of waiting out the acclimation. */
@@ -382,6 +482,7 @@ export class TankSession {
     this.unloadScene('reset')?.dispose();
     this.layoutSaver.reset();
     this.backgroundSaver.reset();
+    this.keys.clear();
     this.shownLayout.clear();
     this.shownBackground.clear();
     this.deps.storage?.removeItem(ACTIVE_KEY);
@@ -426,6 +527,7 @@ export class TankSession {
       decorLayout: tank.decorLayout,
       decorEdited: tank.decorEdited,
       backgroundId: tank.backgroundId,
+      recentVisitDays: tank.recentVisitDays,
     });
     this.deps.interaction.emit('tank:water', { tankId, water: tank.water });
     return true;
