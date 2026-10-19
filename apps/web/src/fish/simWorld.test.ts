@@ -6,6 +6,7 @@ import {
   World,
   type SimClientPort,
   type SimReady,
+  type SimToy,
 } from '@aquarium/sim';
 import { HUNGER_PER_PORTION } from '@aquarium/sim/lifecycle';
 import { DEFAULT_TANK } from '../engine/tank/dimensions';
@@ -265,6 +266,7 @@ describe('startWorld', () => {
         setLight: (level) => calls.push(['light', level]),
         setDecor: (decor) => calls.push(['decor', decor]),
         setAnchors: (anchors) => calls.push(['anchors', anchors]),
+        setToys: (toys) => calls.push(['toys', toys]),
         start: () => calls.push(['start']),
       },
     };
@@ -325,6 +327,35 @@ describe('startWorld', () => {
     const { spec, roster } = setup();
     spec.setDecor([ROCK]);
     spec.setAnchors([ANEMONE]);
+    const { sim, calls } = recorder();
+    await startWorld(sim, spec, demoConfig(spec, roster), Promise.resolve(READY), {
+      current: () => true,
+      light: () => 1,
+      begin: () => undefined,
+    });
+    expect(calls).toEqual([['light', 1], ['start']]);
+  });
+
+  it('gives every new world the toys in the tank, before it starts', async () => {
+    const { spec, roster } = setup();
+    const mirror: SimToy = { kind: 'mirror', position: [0, 0.2, -0.1], normal: [0, 0, 1] };
+    spec.setToys([mirror]);
+    const config = demoConfig(spec, roster);
+    for (let world = 0; world < 2; world++) {
+      const { sim, calls } = recorder();
+      await startWorld(sim, spec, config, Promise.resolve(READY), {
+        current: () => true,
+        light: () => 1,
+        begin: () => undefined,
+      });
+      expect(calls).toEqual([['light', 1], ['toys', [mirror]], ['start']]);
+    }
+  });
+
+  it('sends no toys while there are none', async () => {
+    const { spec, roster } = setup();
+    spec.setToys([{ kind: 'mirror', position: [0, 0.2, -0.1], normal: [0, 0, 1] }]);
+    spec.setToys([]);
     const { sim, calls } = recorder();
     await startWorld(sim, spec, demoConfig(spec, roster), Promise.resolve(READY), {
       current: () => true,

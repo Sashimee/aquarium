@@ -2520,7 +2520,13 @@
       "textures": null,
       "rigged": false,
       "notes": "Role: filter-hum. 31.2 s, loopable. Steady aquarium filter and pump hum with light water gurgle, no bubble strips. Use as the filter hum loop. Licence read from the Freesound sound page (Creative Commons 0). The raw file is the Freesound lq preview OGG (197804_3184722-lq.ogg, 225912 bytes) because the original WAV needs a login; sha256 is of that file. Planned processing, none done yet: trim to a 12 s stationary section; high-pass at 60 Hz; equal-power crossfade of the loop seam (about 1 s); normalise to -23 LUFS; encode to AAC .m4a only (PLAN 9.1). The login-only original on Freesound is higher quality than this lossy preview and is the upgrade path if transcoding artefacts are audible.",
-      "modifications": [],
+      "modifications": [
+        "downmixed to mono and resampled to 48 kHz",
+        "high-pass at 60 Hz",
+        "trimmed to a 12 s stationary section; 1 s equal-power crossfade of the loop seam",
+        "normalised to -23 LUFS",
+        "encoded as AAC-LC 64 kbit/s in .m4a"
+      ],
       "status": "downloaded"
     },
     {
@@ -2538,7 +2544,13 @@
       "textures": null,
       "rigged": false,
       "notes": "Role: air-bubbles. 8.4 s, loopable. Air-stone bubbling, authored as a loop. Use as the air bubbles loop. Licence read from the Freesound sound page (Creative Commons 0). The raw file is the Freesound lq preview OGG (188223_1311042-lq.ogg, 92589 bytes) because the original WAV needs a login; sha256 is of that file. Planned processing, none done yet: check the seam and add a short crossfade if it clicks; high-pass at 200 Hz; normalise to -26 LUFS; encode to AAC .m4a only (PLAN 9.1). The login-only original on Freesound is higher quality than this lossy preview and is the upgrade path if transcoding artefacts are audible.",
-      "modifications": [],
+      "modifications": [
+        "downmixed to mono and resampled to 48 kHz",
+        "high-pass at 200 Hz",
+        "0.25 s equal-power crossfade of the loop seam",
+        "normalised to -26 LUFS",
+        "encoded as AAC-LC 64 kbit/s in .m4a"
+      ],
       "status": "downloaded"
     },
     {
@@ -2556,7 +2568,13 @@
       "textures": null,
       "rigged": false,
       "notes": "Role: underwater-ambience. 25.3 s, loopable. Muffled deep underwater bed, tagged loop. Use as the underwater ambience loop. Licence read from the Freesound sound page (Creative Commons 0). The raw file is the Freesound lq preview OGG (862788_12380230-lq.ogg, 121710 bytes) because the original WAV needs a login; sha256 is of that file. Planned processing, none done yet: trim to 16 s; low-pass at 1.5 kHz for the muffled feel; equal-power crossfade of the loop seam (about 2 s); normalise to -28 LUFS; encode to AAC .m4a only (PLAN 9.1). The login-only original on Freesound is higher quality than this lossy preview and is the upgrade path if transcoding artefacts are audible.",
-      "modifications": [],
+      "modifications": [
+        "downmixed to mono and resampled to 48 kHz",
+        "low-pass at 1500 Hz",
+        "trimmed to a 16 s stationary section; 2 s equal-power crossfade of the loop seam",
+        "normalised to -28 LUFS",
+        "encoded as AAC-LC 64 kbit/s in .m4a"
+      ],
       "status": "downloaded"
     },
     {
@@ -2574,7 +2592,12 @@
       "textures": null,
       "rigged": false,
       "notes": "Role: glass-tap. 0.49 s, one-shot. Single knuckle tap on glass. Use as the glass tap one-shot; vary pitch +-6% per play. Licence read from the Freesound sound page (Creative Commons 0). The raw file is the Freesound lq preview OGG (427389_8617763-lq.ogg, 7087 bytes) because the original WAV needs a login; sha256 is of that file. Planned processing, none done yet: trim silence; normalise to -18 LUFS; encode to AAC .m4a only (PLAN 9.1). The login-only original on Freesound is higher quality than this lossy preview and is the upgrade path if transcoding artefacts are audible.",
-      "modifications": [],
+      "modifications": [
+        "downmixed to mono and resampled to 48 kHz",
+        "trimmed leading and trailing silence, 2 ms fade-in",
+        "gain limited by the -1 dBFS peak ceiling, so the loudness is -22.4 LUFS instead of the -18 LUFS target",
+        "encoded as AAC-LC 64 kbit/s in .m4a"
+      ],
       "status": "downloaded"
     },
     {
@@ -2592,7 +2615,13 @@
       "textures": null,
       "rigged": false,
       "notes": "Role: food-plop. 0.38 s, one-shot. Small plop of an object hitting water. Use as the food drop one-shot. Licence read from the Freesound sound page (Creative Commons 0). The raw file is the Freesound lq preview OGG (853279_9129912-lq.ogg, 7257 bytes) because the original WAV needs a login; sha256 is of that file. Planned processing, none done yet: trim silence; low-pass at 6 kHz; normalise to -22 LUFS; encode to AAC .m4a only (PLAN 9.1). The login-only original on Freesound is higher quality than this lossy preview and is the upgrade path if transcoding artefacts are audible.",
-      "modifications": [],
+      "modifications": [
+        "downmixed to mono and resampled to 48 kHz",
+        "low-pass at 6000 Hz",
+        "trimmed leading and trailing silence, 2 ms fade-in",
+        "gain limited by the -1 dBFS peak ceiling, so the loudness is -22.7 LUFS instead of the -22 LUFS target",
+        "encoded as AAC-LC 64 kbit/s in .m4a"
+      ],
       "status": "downloaded"
     },
     {
@@ -2610,7 +2639,13 @@
       "textures": null,
       "rigged": false,
       "notes": "Role: net-splash. 1.33 s, one-shot. Shallow splash recorded on a Sony IC recorder. Use as the net splash one-shot. Licence read from the Freesound sound page (Creative Commons 0). The raw file is the Freesound lq preview OGG (398032_7586736-lq.ogg, 18281 bytes) because the original WAV needs a login; sha256 is of that file. Planned processing, none done yet: trim silence; short fade-out; normalise to -18 LUFS; encode to AAC .m4a only (PLAN 9.1). The login-only original on Freesound is higher quality than this lossy preview and is the upgrade path if transcoding artefacts are audible.",
-      "modifications": [],
+      "modifications": [
+        "downmixed to mono and resampled to 48 kHz",
+        "trimmed leading and trailing silence, 2 ms fade-in",
+        "80 ms fade-out",
+        "gain limited by the -1 dBFS peak ceiling, so the loudness is -26.4 LUFS instead of the -18 LUFS target",
+        "encoded as AAC-LC 64 kbit/s in .m4a"
+      ],
       "status": "downloaded"
     },
     {
@@ -2628,7 +2663,12 @@
       "textures": null,
       "rigged": false,
       "notes": "Role: ui-click. 0.24 s, one-shot. Soft synthetic click. UI click 1 of 3 (primary press). Licence read from the Freesound sound page (Creative Commons 0). The raw file is the Freesound lq preview OGG (528561_10360410-lq.ogg, 3946 bytes) because the original WAV needs a login; sha256 is of that file. Planned processing, none done yet: trim silence; normalise to -26 LUFS; encode to AAC .m4a only (PLAN 9.1). The login-only original on Freesound is higher quality than this lossy preview and is the upgrade path if transcoding artefacts are audible.",
-      "modifications": [],
+      "modifications": [
+        "downmixed to mono and resampled to 48 kHz",
+        "trimmed leading and trailing silence, 2 ms fade-in",
+        "normalised to -26 LUFS",
+        "encoded as AAC-LC 64 kbit/s in .m4a"
+      ],
       "status": "downloaded"
     },
     {
@@ -2646,7 +2686,12 @@
       "textures": null,
       "rigged": false,
       "notes": "Role: ui-click. 0.29 s, one-shot. Plain button click. UI click 2 of 3 (toggle). Licence read from the Freesound sound page (Creative Commons 0). The raw file is the Freesound lq preview OGG (629020_12471724-lq.ogg, 6799 bytes) because the original WAV needs a login; sha256 is of that file. Planned processing, none done yet: trim silence; normalise to -26 LUFS; encode to AAC .m4a only (PLAN 9.1). The login-only original on Freesound is higher quality than this lossy preview and is the upgrade path if transcoding artefacts are audible.",
-      "modifications": [],
+      "modifications": [
+        "downmixed to mono and resampled to 48 kHz",
+        "trimmed leading and trailing silence, 2 ms fade-in",
+        "gain limited by the -1 dBFS peak ceiling, so the loudness is -27.9 LUFS instead of the -26 LUFS target",
+        "encoded as AAC-LC 64 kbit/s in .m4a"
+      ],
       "status": "downloaded"
     },
     {
@@ -2664,7 +2709,12 @@
       "textures": null,
       "rigged": false,
       "notes": "Role: ui-click. 0.14 s, one-shot. Short wooden-sounding menu click. UI click 3 of 3 (menu navigation). Licence read from the Freesound sound page (Creative Commons 0). The raw file is the Freesound lq preview OGG (342200_3908740-lq.ogg, 5141 bytes) because the original WAV needs a login; sha256 is of that file. Planned processing, none done yet: trim silence; normalise to -26 LUFS; encode to AAC .m4a only (PLAN 9.1). The login-only original on Freesound is higher quality than this lossy preview and is the upgrade path if transcoding artefacts are audible.",
-      "modifications": [],
+      "modifications": [
+        "downmixed to mono and resampled to 48 kHz",
+        "trimmed leading and trailing silence, 2 ms fade-in",
+        "normalised to -26 LUFS",
+        "encoded as AAC-LC 64 kbit/s in .m4a"
+      ],
       "status": "downloaded"
     },
     {
@@ -2684,13 +2734,13 @@
       "textures": "photo 5472x3072",
       "rigged": false,
       "notes": "Tank background (reef, coral-reef-wall). Reef wall, Naama Bay (Red Sea): dense hard corals filling the lower two thirds under turquoise water, a few small fish, no people. Source 5472x3072; 2:1 crop box left=0 top=336 width=5472 height=2736 is at least 2048 px wide. Licence read from the Commons file page metadata on 2026-10-16 (Creative Commons Attribution 4.0); Commons sha1 44db1ccd84c6d966d04e9f87c25e88ae413c648c matches the download. Raw file: ~/.cache/aquarium-assets/raw/bg-reef-coral-wall/original.jpg (not committed). Checked by eye at preview scale for watermarks, text and people: none seen. T27 must strip all EXIF, XMP and GPS metadata from the derived image and record the crop, resize and KTX2 encoding in modifications[] (CC-BY requires changes to be indicated).",
-      "crop": {
-        "left": 0,
-        "top": 336,
-        "width": 5472,
-        "height": 2736
-      },
-      "modifications": [],
+      "crop": { "left": 0, "top": 336, "width": 5472, "height": 2736 },
+      "modifications": [
+        "cropped to the 2:1 box left 0, top 336, 5472x2736 px of the original photo",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
       "status": "downloaded"
     },
     {
@@ -2710,13 +2760,13 @@
       "textures": "photo 3648x2736",
       "rigged": false,
       "notes": "Tank background (reef, open-blue-light-rays). Staghorn reef under bright cyan open water with a dense cloud of small fish and light falling from the upper right. Soft light fall-off rather than distinct sun shafts: no Commons photo with an allowed licence showed clear rays over a reef. Source 3648x2736; 2:1 crop box left=0 top=300 width=3648 height=1824 is at least 2048 px wide. Licence read from the Commons file page metadata on 2026-10-16 (Creative Commons Zero, Public Domain Dedication); Commons sha1 1648b72f7d06cb0d0aee4d9d78b1fead0c4fc173 matches the download. Raw file: ~/.cache/aquarium-assets/raw/bg-reef-light-rays/original.jpg (not committed). Checked by eye at preview scale for watermarks, text and people: none seen. T27 must strip all EXIF, XMP and GPS metadata from the derived image and record the crop, resize and KTX2 encoding in modifications[] (CC-BY requires changes to be indicated).",
-      "crop": {
-        "left": 0,
-        "top": 300,
-        "width": 3648,
-        "height": 1824
-      },
-      "modifications": [],
+      "crop": { "left": 0, "top": 300, "width": 3648, "height": 1824 },
+      "modifications": [
+        "cropped to the 2:1 box left 0, top 300, 3648x1824 px of the original photo",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
       "status": "downloaded"
     },
     {
@@ -2736,13 +2786,13 @@
       "textures": "photo 3618x2373",
       "rigged": false,
       "notes": "Tank background (reef, reef-slope-fish). Coral pinnacle in saturated blue water with a cloud of orange anthias (Coral Bay, Sharm el-Sheikh). The smallest source of the set; the crop is 3618 px wide. Source 3618x2373; 2:1 crop box left=0 top=300 width=3618 height=1809 is at least 2048 px wide. Licence read from the Commons file page metadata on 2026-10-16 (Creative Commons Attribution 4.0); Commons sha1 0f3d7e91cc8173d92bbd974435fe43d96f0a3515 matches the download. Raw file: ~/.cache/aquarium-assets/raw/bg-reef-fish-slope/original.jpg (not committed). Checked by eye at preview scale for watermarks, text and people: none seen. T27 must strip all EXIF, XMP and GPS metadata from the derived image and record the crop, resize and KTX2 encoding in modifications[] (CC-BY requires changes to be indicated).",
-      "crop": {
-        "left": 0,
-        "top": 300,
-        "width": 3618,
-        "height": 1809
-      },
-      "modifications": [],
+      "crop": { "left": 0, "top": 300, "width": 3618, "height": 1809 },
+      "modifications": [
+        "cropped to the 2:1 box left 0, top 300, 3618x1809 px of the original photo",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
       "status": "downloaded"
     },
     {
@@ -2762,13 +2812,13 @@
       "textures": "photo 4000x3000",
       "rigged": false,
       "notes": "Tank background (reef, soft-coral-garden). Large red gorgonian sea fan filling the frame against turquoise water, Bali. A close-up of one colony, so it reads as a soft-coral garden rather than a wide scene. Source 4000x3000; 2:1 crop box left=0 top=500 width=4000 height=2000 is at least 2048 px wide. Licence read from the Commons file page metadata on 2026-10-16 (Creative Commons Attribution 4.0); Commons sha1 19cee16a681125186ed55576093efb5631714796 matches the download. Raw file: ~/.cache/aquarium-assets/raw/bg-reef-soft-coral/original.jpg (not committed). Checked by eye at preview scale for watermarks, text and people: none seen. T27 must strip all EXIF, XMP and GPS metadata from the derived image and record the crop, resize and KTX2 encoding in modifications[] (CC-BY requires changes to be indicated).",
-      "crop": {
-        "left": 0,
-        "top": 500,
-        "width": 4000,
-        "height": 2000
-      },
-      "modifications": [],
+      "crop": { "left": 0, "top": 500, "width": 4000, "height": 2000 },
+      "modifications": [
+        "cropped to the 2:1 box left 0, top 500, 4000x2000 px of the original photo",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
       "status": "downloaded"
     },
     {
@@ -2788,13 +2838,13 @@
       "textures": "photo 5184x3888",
       "rigged": false,
       "notes": "Tank background (reef, deep-blue-distant-reef). Davy Crocker Reef (Florida Keys): upper half is open blue water with a faint school of snapper over a distant reef, reef floor along the bottom. Source 5184x3888; 2:1 crop box left=0 top=600 width=5184 height=2592 is at least 2048 px wide. Licence read from the Commons file page metadata on 2026-10-16 (Creative Commons Zero, Public Domain Dedication); Commons sha1 e4a02235276279db96d5af85787073af42ca97c1 matches the download. Raw file: ~/.cache/aquarium-assets/raw/bg-reef-deep-blue/original.jpg (not committed). Checked by eye at preview scale for watermarks, text and people: none seen. T27 must strip all EXIF, XMP and GPS metadata from the derived image and record the crop, resize and KTX2 encoding in modifications[] (CC-BY requires changes to be indicated).",
-      "crop": {
-        "left": 0,
-        "top": 600,
-        "width": 5184,
-        "height": 2592
-      },
-      "modifications": [],
+      "crop": { "left": 0, "top": 600, "width": 5184, "height": 2592 },
+      "modifications": [
+        "cropped to the 2:1 box left 0, top 600, 5184x2592 px of the original photo",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
       "status": "downloaded"
     },
     {
@@ -2814,13 +2864,13 @@
       "textures": "photo 4724x3543",
       "rigged": false,
       "notes": "Tank background (freshwater, planted-stream). Underwater bed of Canadian waterweed (Elodea canadensis) in a freshwater lake or river, plants streaming in the current over a sand bottom, blue-green water above. Real freshwater, no fish, no people. Source 4724x3543; 2:1 crop box left=0 top=700 width=4724 height=2362 is at least 2048 px wide. Licence read from the Commons file page metadata on 2026-10-16 (Creative Commons Zero, Public Domain Dedication); Commons sha1 996c70e07ed7e7df52af73463c7e73bc2ceed959 matches the download. Raw file: ~/.cache/aquarium-assets/raw/bg-fw-planted-stream/original.jpg (not committed). Checked by eye at preview scale for watermarks, text and people: none seen. T27 must strip all EXIF, XMP and GPS metadata from the derived image and record the crop, resize and KTX2 encoding in modifications[] (CC-BY requires changes to be indicated).",
-      "crop": {
-        "left": 0,
-        "top": 700,
-        "width": 4724,
-        "height": 2362
-      },
-      "modifications": [],
+      "crop": { "left": 0, "top": 700, "width": 4724, "height": 2362 },
+      "modifications": [
+        "cropped to the 2:1 box left 0, top 700, 4724x2362 px of the original photo",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
       "status": "downloaded"
     },
     {
@@ -2840,13 +2890,13 @@
       "textures": "photo 3872x2592",
       "rigged": false,
       "notes": "Tank background (freshwater, root-tangle). Common alder (Alnus glutinosa) roots trailing red in a clear freshwater stream over stones, rippled light from the surface. Dark and contrasty, a close view of the roots rather than a wide tangle. Source 3872x2592; 2:1 crop box left=0 top=400 width=3872 height=1936 is at least 2048 px wide. Licence read from the Commons file page metadata on 2026-10-16 (Creative Commons Attribution 3.0); Commons sha1 75afecabfb8639f1277d5493c80d51c2ce72bb13 matches the download. Raw file: ~/.cache/aquarium-assets/raw/bg-fw-root-tangle/original.jpg (not committed). Checked by eye at preview scale for watermarks, text and people: none seen. T27 must strip all EXIF, XMP and GPS metadata from the derived image and record the crop, resize and KTX2 encoding in modifications[] (CC-BY requires changes to be indicated).",
-      "crop": {
-        "left": 0,
-        "top": 400,
-        "width": 3872,
-        "height": 1936
-      },
-      "modifications": [],
+      "crop": { "left": 0, "top": 400, "width": 3872, "height": 1936 },
+      "modifications": [
+        "cropped to the 2:1 box left 0, top 400, 3872x1936 px of the original photo",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
       "status": "downloaded"
     },
     {
@@ -2866,13 +2916,13 @@
       "textures": "photo 7360x4912",
       "rigged": false,
       "notes": "Tank background (freshwater, rocky-riverbed). Stones and gravel of the Rio Doce (Brazil) seen through shallow clear water with rippled sunlight. Submerged riverbed, warm brown-gold; soft and slightly hazy, no fish. Source 7360x4912; 2:1 crop box left=0 top=600 width=7360 height=3680 is at least 2048 px wide. Licence read from the Commons file page metadata on 2026-10-16 (Creative Commons Zero, Public Domain Dedication); Commons sha1 ea5496f627b56e765851d13914a63b345ed6f6bd matches the download. Raw file: ~/.cache/aquarium-assets/raw/bg-fw-rocky-riverbed/original.jpg (not committed). Checked by eye at preview scale for watermarks, text and people: none seen. T27 must strip all EXIF, XMP and GPS metadata from the derived image and record the crop, resize and KTX2 encoding in modifications[] (CC-BY requires changes to be indicated).",
-      "crop": {
-        "left": 0,
-        "top": 600,
-        "width": 7360,
-        "height": 3680
-      },
-      "modifications": [],
+      "crop": { "left": 0, "top": 600, "width": 7360, "height": 3680 },
+      "modifications": [
+        "cropped to the 2:1 box left 0, top 600, 7360x3680 px of the original photo",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
       "status": "downloaded"
     },
     {
@@ -2892,13 +2942,13 @@
       "textures": "photo 4032x3024",
       "rigged": false,
       "notes": "Tank background (freshwater, deep-green-plant-wall). Densely planted freshwater aquarium shot from inside the planting: stem plants, grasses and a few small neon-type tetras, deep greens with bright lime accents. The closest thing to an aquascape plant wall in the set; no glass rim or hardware visible. Source 4032x3024; 2:1 crop box left=0 top=400 width=4032 height=2016 is at least 2048 px wide. Licence read from the Commons file page metadata on 2026-10-16 (Creative Commons Zero, Public Domain Dedication); Commons sha1 388d900fb10aea93d1d40323cf8741a9f430a4af matches the download. Raw file: ~/.cache/aquarium-assets/raw/bg-fw-plant-wall/original.jpg (not committed). Checked by eye at preview scale for watermarks, text and people: none seen. T27 must strip all EXIF, XMP and GPS metadata from the derived image and record the crop, resize and KTX2 encoding in modifications[] (CC-BY requires changes to be indicated).",
-      "crop": {
-        "left": 0,
-        "top": 400,
-        "width": 4032,
-        "height": 2016
-      },
-      "modifications": [],
+      "crop": { "left": 0, "top": 400, "width": 4032, "height": 2016 },
+      "modifications": [
+        "cropped to the 2:1 box left 0, top 400, 4032x2016 px of the original photo",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
       "status": "downloaded"
     },
     {
@@ -2914,13 +2964,18 @@
       "licence": "CC-BY-4.0",
       "licence_url": "https://creativecommons.org/licenses/by/4.0/",
       "checked_at": "2026-10-16",
-      "sha256": null,
+      "sha256": "a94460e8e9374afd1da89ef24ab1d3ba6a6e92e42bcfb078ca0e40b7fbcecfbe",
       "polycount": null,
       "textures": "render, at least 4096x2048 (2:1)",
       "rigged": false,
       "notes": "Tank background (freshwater, slot misty-lake-planted), to be rendered by T27 (asset-pipeline-engineer). No Commons photo with an allowed licence shows a convincing underwater freshwater scene, and the above-water lake and stream shots were rejected as posters. Render spec (freshwater only: every plant and rock is a freshwater subject, nothing marine or brackish): a dense planted tank seen from the front glass, 2:1, at least 4096x2048, no fish and no text. Plants (CC-BY-4.0, credit Nullified for sketchfab-f34fac65, Valery.Li for sketchfab-b34ed521): Java fern and vallisneria from sketchfab-f34fac65 in the mid and back ground, Pond Weed sketchfab-b34ed521 in clumps to the left and right. Hardscape and substrate (CC0): polyhaven-dead_quiver_trunk as a diagonal driftwood root left of centre, polyhaven-boulder_01 and polyhaven-coast_rocks_05 as 2 to 3 stacked rocks, polyhaven-clean_pebbles for the foreground bed and ambientcg-Ground101 blended in as sand. Composition: tallest plants and the driftwood on the outer thirds, the centre third lower and open, soft misty blue-green water gradient (pale at the top, darker toward the base), a soft light fall-off from the top and no hard sun shafts. Camera: eye level at the plant midline, 35 mm equivalent, shallow depth of field on the far plants. Licence is CC-BY-4.0 because the plant models are CC-BY; the credit lines for both plant authors must stay in CREDITS.md. The render must carry no EXIF or other metadata, and modifications[] must record the composition, render and KTX2 encoding. Entry stays selected-pending-download with sha256 null until the render is committed; set sha256 and status then.",
-      "modifications": [],
-      "status": "selected-pending-download"
+      "modifications": [
+        "composed and rendered by the Aquarium project from Java fern and vallisneria (Nullified), pond weed (Valery.Li), driftwood, rocks and ground textures (CC0), at 4096x2048 with depth-of-field blur and a water haze",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "status": "downloaded"
     }
   ]
 }

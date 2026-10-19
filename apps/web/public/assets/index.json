@@ -1,8 +1,8 @@
 {
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; every texture has both files.",
-  "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Every fish LOD also carries _MOUTH, geometry attribute \"_mouth\", a float in [0, 1] for buccal motion: 1 at the jaw or lower-lip tip (every LOD is renormalised so its highest value is exactly 1), easing to 0 behind the gill line and above the mouth slit; fins, eyes and attachments are 0. Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body, carapace and eyes; 6 walking leg; 7 antenna; 8 pleopod; 9 abdomen, telson and tail fan) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x; antennules 0/1, long antennae 2/3; tail-fan leaves k * 2 + side). Shrimp _fin_mask means: id 0 is 0 (eye stalks included, ignore it); ids 6 and 7 are the weight along the limb, 0 root to 1 tip; id 8 is the pleopod beat weight, 0 root to 1 tip; id 9 is the tail-curl weight clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1) of the rest position. Tail curl rotates ids 8 and 9 about +x through the shrimp.abdomenHinge {y, z} by flex * clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1), computed from the rest position, never from _fin_mask, so the pleopods follow the segment they hang from. Pleopods (id 8) exist only in LOD0 and LOD1 and are removed from LOD2; legs are simplified, so do not assume every _leg index exists at every LOD. The cherry material is alphaMode BLEND with base colour alpha 0.86: three.js GLTFLoader turns depthWrite off for BLEND, so set depthWrite true on the cherry material and expect some sorting artefacts from the self-overlapping legs and antennae.",
-  "totalBytes": 68882466,
+  "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Every fish LOD also carries _MOUTH, geometry attribute \"_mouth\", a float in [0, 1] for buccal motion: 1 at the jaw or lower-lip tip (every LOD is renormalised so its highest value is exactly 1), easing to 0 behind the gill line and above the mouth slit; fins, eyes and attachments are 0. Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body, carapace and eyes; 6 walking leg; 7 antenna; 8 pleopod; 9 abdomen, telson and tail fan) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x; antennules 0/1, long antennae 2/3; tail-fan leaves k * 2 + side). Shrimp _fin_mask means: id 0 is 0 (eye stalks included, ignore it); ids 6 and 7 are the weight along the limb, 0 root to 1 tip; id 8 is the pleopod beat weight, 0 root to 1 tip; id 9 is the tail-curl weight clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1) of the rest position. Tail curl rotates ids 8 and 9 about +x through the shrimp.abdomenHinge {y, z} by flex * clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1), computed from the rest position, never from _fin_mask, so the pleopods follow the segment they hang from. Pleopods (id 8) exist only in LOD0 and LOD1 and are removed from LOD2; legs are simplified, so do not assume every _leg index exists at every LOD. Snails use _fin_id (0 shell, 10 foot, 11 head, 12 tentacle) and _fin_mask (foot: 0 at the sole centre to 1 at the mantle edge, for ripple; tentacle: 0 base to 1 tip; shell and head 0). The hermit crab is a crab-kind asset whose walker data sits in its crab block, same fields as a shrimp block; its shell is id 0, exposed soft body id 9 (rigid, hinge sits in front of it so it never curls), legs id 6 and antennae id 7 with _leg index pair * 2 + side; pairs 0 and 1 are the picking legs, and it has no pleopods. The cherry material is alphaMode BLEND with base colour alpha 0.86: three.js GLTFLoader turns depthWrite off for BLEND, so set depthWrite true on the cherry material and expect some sorting artefacts from the self-overlapping legs and antennae.",
+  "totalBytes": 82116045,
   "assets": [
     {
       "id": "angelfish",
@@ -3166,6 +3166,302 @@
       }
     },
     {
+      "id": "hermit-crab",
+      "kind": "crab",
+      "species": "hermit-crab",
+      "origin": "model",
+      "sources": [
+        "sketchfab-5ebe7794"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "photogrammetry scan: colour-checker cube removed, merged and welded by position",
+        "segmented into rigid shell, exposed soft body and limbs by a voxel opening; limb pieces carry a root-to-tip weight and a leg index",
+        "oriented to +Z forward (towards the legs) / +Y up, origin at the area centroid, scaled so the shell longest edge is the standard length",
+        "_FIN_ID part ids 0 shell, 6 walking leg, 7 antenna, 9 exposed soft body (rigid); _FIN_MASK weight along the limb; _LEG limb index pair * 2 + side, side 0 = -x",
+        "re-simplified to 12000 triangles for LOD0 (LOD1 and LOD2 at 40% and 15% of that, simplified with UV seams kept), box-projected into a fresh 2048 px atlas and the colour re-baked from the scan's vertex colours, so simplification cannot scramble the scan texture",
+        "limb and soft-body colours painted per vertex from the segmentation before the bake; every LOD keeps only its largest connected component, so no antenna fragment floats free",
+        "length is the shell length (0.03 m) taken from the recipe: no content/species/hermit-crab.json exists yet, and a species file is a separate contract PR",
+        "legs and antennae recoloured towards Clibanarius tricolor (blue legs, orange joints and antennae) by eye from the reference description; the scan is Clibanarius longitarsus"
+      ],
+      "bounds": {
+        "min": [
+          -0.012386,
+          -0.008035,
+          -0.015509
+        ],
+        "max": [
+          0.009088,
+          0.006629,
+          0.017494
+        ]
+      },
+      "lods": [
+        {
+          "file": "crab/hermit-crab/lod0.glb",
+          "bytes": 194300,
+          "sha256": "078cad2a739b1e458537fe15c825f4761333a4e486c116b9f12a59d1078e9282",
+          "triangles": 11960,
+          "vertices": 9401
+        },
+        {
+          "file": "crab/hermit-crab/lod1.glb",
+          "bytes": 100504,
+          "sha256": "5d127e48b94788d01fb6fc5b05feb6dbc3a2a40e97145087a49edd33bf4c404d",
+          "triangles": 4768,
+          "vertices": 4628
+        },
+        {
+          "file": "crab/hermit-crab/lod2.glb",
+          "bytes": 52832,
+          "sha256": "548faf33dd05f3d2101048a7966ca7801906cc059faeaa706cb6b0a40fefb329",
+          "triangles": 1786,
+          "vertices": 2275
+        }
+      ],
+      "textures": [
+        {
+          "name": "hermit-crab_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "crab/hermit-crab/textures/hermit-crab_basecolor_1k.ktx2",
+              "bytes": 114652,
+              "sha256": "1ca8b3fc0a6ac72916dbf7bad99cdd602428dc0332466e9fdda0c68dcd21bad9",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "crab/hermit-crab/textures/hermit-crab_basecolor_2k.ktx2",
+              "bytes": 364069,
+              "sha256": "d1dd551673043b492541538ff9e716198f783fc35add825d26e7188771a357bb",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "crab/hermit-crab/lod0.glb",
+          "bytes": 194300,
+          "sha256": "078cad2a739b1e458537fe15c825f4761333a4e486c116b9f12a59d1078e9282"
+        },
+        {
+          "file": "crab/hermit-crab/lod1.glb",
+          "bytes": 100504,
+          "sha256": "5d127e48b94788d01fb6fc5b05feb6dbc3a2a40e97145087a49edd33bf4c404d"
+        },
+        {
+          "file": "crab/hermit-crab/lod2.glb",
+          "bytes": 52832,
+          "sha256": "548faf33dd05f3d2101048a7966ca7801906cc059faeaa706cb6b0a40fefb329"
+        },
+        {
+          "file": "crab/hermit-crab/textures/hermit-crab_basecolor_1k.ktx2",
+          "bytes": 114652,
+          "sha256": "1ca8b3fc0a6ac72916dbf7bad99cdd602428dc0332466e9fdda0c68dcd21bad9"
+        },
+        {
+          "file": "crab/hermit-crab/textures/hermit-crab_basecolor_2k.ktx2",
+          "bytes": 364069,
+          "sha256": "d1dd551673043b492541538ff9e716198f783fc35add825d26e7188771a357bb"
+        }
+      ],
+      "crab": {
+        "standardLengthM": 0.03,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "standoffM": 0.008241362869739532,
+        "attributes": {
+          "partId": "_FIN_ID",
+          "weight": "_FIN_MASK",
+          "limb": "_LEG"
+        },
+        "partIds": {
+          "body": 0,
+          "leg": 6,
+          "antenna": 7,
+          "pleopod": 8,
+          "abdomen": 9
+        },
+        "legPairs": 5,
+        "pleopodPairs": 0,
+        "abdomenHinge": {
+          "y": 0.0005953594274457969,
+          "z": 0.005671394988894463
+        },
+        "telsonZ": -0.015511763282120228,
+        "debugRender": "debug/hermit-crab.png",
+        "debugPartsRender": "debug/hermit-crab-parts.png"
+      }
+    },
+    {
+      "id": "nerite-snail",
+      "kind": "snail",
+      "species": "nerite-snail",
+      "origin": "model",
+      "sources": [
+        "sketchfab-70b8866a"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "shell from the photogrammetry scan: colour-checker cube removed, merged and welded, oriented to +Z forward / +Y up from the crusty aperture side and the dome peak, scaled so its longest edge is the standard length",
+        "tunnels the scan leaves through the paper-thin lip are cut out with small spheres through every wall layer and closed by clipping ears of the cut loop, shortest diagonal first, so the lip sheet stays continuous; small boundary holes are filled",
+        "retouched the scan texture: white marker ring on the dome, painted over from the surrounding shell colours",
+        "retouched the scan texture: white scar near the rear, painted over from the surrounding shell colours",
+        "re-simplified to 9000 triangles, box-projected into a fresh atlas and the colour re-baked from the scan's vertex colours, 2048 px KTX2",
+        "shell pitched 18 degrees nose-down and sunk into the foot so the lip edge tucks into the body mass",
+        "foot, mantle, head and two tentacles generated procedurally: lens-section foot with edge colour variation from a small ramp texture, mantle filling under the aperture, head and slender curved tentacles in front of the lip, deterministic",
+        "origin moved to the centre of the foot on the ground",
+        "_FIN_ID part ids 0 shell, 10 foot, 11 head, 12 tentacle; _FIN_MASK foot ripple weight and tentacle base-to-tip weight",
+        "LOD1 and LOD2 shell simplified to 3600 and 1300 triangles",
+        "foot, head and tentacle colour matched by eye to the Wikimedia nerite photo, no photo pixels shipped"
+      ],
+      "bounds": {
+        "min": [
+          -0.009434,
+          -0.000007,
+          -0.01292
+        ],
+        "max": [
+          0.009772,
+          0.012663,
+          0.01335
+        ]
+      },
+      "lods": [
+        {
+          "file": "snail/nerite-snail/lod0.glb",
+          "bytes": 113968,
+          "sha256": "6f1e8eb750f180b67790eb695ac6825c9fda1172047b669e88fde6b4e8f24dc4",
+          "triangles": 10208,
+          "vertices": 6025
+        },
+        {
+          "file": "snail/nerite-snail/lod1.glb",
+          "bytes": 58100,
+          "sha256": "e7ae472df11d905692f55d3aae524ef5d45959ca0f9db5e2f64b28abc7b86f76",
+          "triangles": 4332,
+          "vertices": 2804
+        },
+        {
+          "file": "snail/nerite-snail/lod2.glb",
+          "bytes": 29044,
+          "sha256": "856da83f5993af78828569d6d26ef20f6608ef8340d391212ebad7e25f5d0400",
+          "triangles": 1728,
+          "vertices": 1201
+        }
+      ],
+      "textures": [
+        {
+          "name": "nerite-snail_nerite-shell_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "snail/nerite-snail/textures/nerite-snail_nerite-shell_basecolor_1k.ktx2",
+              "bytes": 103511,
+              "sha256": "97ff85659198bb8a0a1e882dbb68d650f7e93c25a73f12a17fecff618a055d2d",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "snail/nerite-snail/textures/nerite-snail_nerite-shell_basecolor_2k.ktx2",
+              "bytes": 336958,
+              "sha256": "3fe07a0111fdf74e24e79032405da7b30d94772132be20540373b9e34aede011",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        },
+        {
+          "name": "nerite-snail_nerite-body_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "snail/nerite-snail/textures/nerite-snail_nerite-body_basecolor_1k.ktx2",
+              "bytes": 693,
+              "sha256": "e0e0884d384ea17e5c5adfc8b10908116b2e31a1b9bc010080cc81681dc6fb8c",
+              "size": 64,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "snail/nerite-snail/textures/nerite-snail_nerite-body_basecolor_2k.ktx2",
+              "bytes": 693,
+              "sha256": "e0e0884d384ea17e5c5adfc8b10908116b2e31a1b9bc010080cc81681dc6fb8c",
+              "size": 64,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "snail/nerite-snail/lod0.glb",
+          "bytes": 113968,
+          "sha256": "6f1e8eb750f180b67790eb695ac6825c9fda1172047b669e88fde6b4e8f24dc4"
+        },
+        {
+          "file": "snail/nerite-snail/lod1.glb",
+          "bytes": 58100,
+          "sha256": "e7ae472df11d905692f55d3aae524ef5d45959ca0f9db5e2f64b28abc7b86f76"
+        },
+        {
+          "file": "snail/nerite-snail/lod2.glb",
+          "bytes": 29044,
+          "sha256": "856da83f5993af78828569d6d26ef20f6608ef8340d391212ebad7e25f5d0400"
+        },
+        {
+          "file": "snail/nerite-snail/textures/nerite-snail_nerite-body_basecolor_1k.ktx2",
+          "bytes": 693,
+          "sha256": "e0e0884d384ea17e5c5adfc8b10908116b2e31a1b9bc010080cc81681dc6fb8c"
+        },
+        {
+          "file": "snail/nerite-snail/textures/nerite-snail_nerite-body_basecolor_2k.ktx2",
+          "bytes": 693,
+          "sha256": "e0e0884d384ea17e5c5adfc8b10908116b2e31a1b9bc010080cc81681dc6fb8c"
+        },
+        {
+          "file": "snail/nerite-snail/textures/nerite-snail_nerite-shell_basecolor_1k.ktx2",
+          "bytes": 103511,
+          "sha256": "97ff85659198bb8a0a1e882dbb68d650f7e93c25a73f12a17fecff618a055d2d"
+        },
+        {
+          "file": "snail/nerite-snail/textures/nerite-snail_nerite-shell_basecolor_2k.ktx2",
+          "bytes": 336958,
+          "sha256": "3fe07a0111fdf74e24e79032405da7b30d94772132be20540373b9e34aede011"
+        }
+      ],
+      "snail": {
+        "standardLengthM": 0.02,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "foot-centre",
+        "attributes": {
+          "partId": "_FIN_ID",
+          "weight": "_FIN_MASK"
+        },
+        "partIds": {
+          "shell": 0,
+          "foot": 10,
+          "head": 11,
+          "tentacle": 12
+        },
+        "debugRender": "debug/nerite-snail.png",
+        "debugPartsRender": "debug/nerite-snail-parts.png"
+      }
+    },
+    {
       "id": "host-anemone",
       "kind": "anemone",
       "origin": "procedural",
@@ -6034,6 +6330,1131 @@
           "sha256": "d748abc03e32f952c7c2f614369ffe30dc636df310caf53fe60425bae0e722d0"
         }
       ]
+    },
+    {
+      "id": "air-bubbles",
+      "kind": "audio",
+      "origin": "recording",
+      "sources": [
+        "freesound-188223"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "downmixed to mono and resampled to 48 kHz",
+        "high-pass at 200 Hz",
+        "0.25 s equal-power crossfade of the loop seam",
+        "normalised to -26 LUFS",
+        "encoded as AAC-LC 64 kbit/s in .m4a"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "audio/air-bubbles/air-bubbles.m4a",
+          "bytes": 68512,
+          "sha256": "c05daaf1cedc81e646b2b30d2e85b35bed4180ace4e06b6e46c81e45396dc293"
+        }
+      ],
+      "audio": {
+        "role": "air-bubbles",
+        "loop": true,
+        "frames": 391958,
+        "durationS": 8.166,
+        "sampleRate": 48000,
+        "channels": 1,
+        "bitrateKbps": 64,
+        "loudnessLufs": -26,
+        "file": "audio/air-bubbles/air-bubbles.m4a"
+      }
+    },
+    {
+      "id": "filter-hum",
+      "kind": "audio",
+      "origin": "recording",
+      "sources": [
+        "freesound-197804"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "downmixed to mono and resampled to 48 kHz",
+        "high-pass at 60 Hz",
+        "trimmed to a 12 s stationary section; 1 s equal-power crossfade of the loop seam",
+        "normalised to -23 LUFS",
+        "encoded as AAC-LC 64 kbit/s in .m4a"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "audio/filter-hum/filter-hum.m4a",
+          "bytes": 100052,
+          "sha256": "3ce282e4c8740955c305f39e5662c3659b1a3caf9af5f42b743b0946521a2647"
+        }
+      ],
+      "audio": {
+        "role": "filter-hum",
+        "loop": true,
+        "frames": 576000,
+        "durationS": 12,
+        "sampleRate": 48000,
+        "channels": 1,
+        "bitrateKbps": 64,
+        "loudnessLufs": -23,
+        "file": "audio/filter-hum/filter-hum.m4a"
+      }
+    },
+    {
+      "id": "food-plop",
+      "kind": "audio",
+      "origin": "recording",
+      "sources": [
+        "freesound-853279"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "downmixed to mono and resampled to 48 kHz",
+        "low-pass at 6000 Hz",
+        "trimmed leading and trailing silence, 2 ms fade-in",
+        "gain limited by the -1 dBFS peak ceiling, so the loudness is -22.7 LUFS instead of the -22 LUFS target",
+        "encoded as AAC-LC 64 kbit/s in .m4a"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "audio/food-plop/food-plop.m4a",
+          "bytes": 3445,
+          "sha256": "4cb1a2d9355b473252f732c45dbbba5b2487a5ede31f659f0164fa9e27f13887"
+        }
+      ],
+      "audio": {
+        "role": "food-plop",
+        "loop": false,
+        "frames": 13984,
+        "durationS": 0.291,
+        "sampleRate": 48000,
+        "channels": 1,
+        "bitrateKbps": 64,
+        "loudnessLufs": -22.7,
+        "file": "audio/food-plop/food-plop.m4a"
+      }
+    },
+    {
+      "id": "glass-tap",
+      "kind": "audio",
+      "origin": "recording",
+      "sources": [
+        "freesound-427389"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "downmixed to mono and resampled to 48 kHz",
+        "trimmed leading and trailing silence, 2 ms fade-in",
+        "gain limited by the -1 dBFS peak ceiling, so the loudness is -22.4 LUFS instead of the -18 LUFS target",
+        "encoded as AAC-LC 64 kbit/s in .m4a"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "audio/glass-tap/glass-tap.m4a",
+          "bytes": 2981,
+          "sha256": "c9745c6ee47736d7e27db058d89cd8b7d1336e49d383a147039df74d7ff19ae5"
+        }
+      ],
+      "audio": {
+        "role": "glass-tap",
+        "loop": false,
+        "frames": 11305,
+        "durationS": 0.236,
+        "sampleRate": 48000,
+        "channels": 1,
+        "bitrateKbps": 64,
+        "loudnessLufs": -22.4,
+        "file": "audio/glass-tap/glass-tap.m4a"
+      }
+    },
+    {
+      "id": "net-splash",
+      "kind": "audio",
+      "origin": "recording",
+      "sources": [
+        "freesound-398032"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "downmixed to mono and resampled to 48 kHz",
+        "trimmed leading and trailing silence, 2 ms fade-in",
+        "80 ms fade-out",
+        "gain limited by the -1 dBFS peak ceiling, so the loudness is -26.4 LUFS instead of the -18 LUFS target",
+        "encoded as AAC-LC 64 kbit/s in .m4a"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "audio/net-splash/net-splash.m4a",
+          "bytes": 11963,
+          "sha256": "98e649664f123384644910ad3fa8e417b3c325b09ada105465fabee1efed7fb3"
+        }
+      ],
+      "audio": {
+        "role": "net-splash",
+        "loop": false,
+        "frames": 64125,
+        "durationS": 1.336,
+        "sampleRate": 48000,
+        "channels": 1,
+        "bitrateKbps": 64,
+        "loudnessLufs": -26.4,
+        "file": "audio/net-splash/net-splash.m4a"
+      }
+    },
+    {
+      "id": "ui-click-1",
+      "kind": "audio",
+      "origin": "recording",
+      "sources": [
+        "freesound-528561"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "downmixed to mono and resampled to 48 kHz",
+        "trimmed leading and trailing silence, 2 ms fade-in",
+        "normalised to -26 LUFS",
+        "encoded as AAC-LC 64 kbit/s in .m4a"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "audio/ui-click-1/ui-click-1.m4a",
+          "bytes": 1682,
+          "sha256": "884acacaa6dd68e4f7be0b186e7148e58eb73a63f725c0406c21e044ff2410ce"
+        }
+      ],
+      "audio": {
+        "role": "ui-click",
+        "loop": false,
+        "frames": 3764,
+        "durationS": 0.078,
+        "sampleRate": 48000,
+        "channels": 1,
+        "bitrateKbps": 64,
+        "loudnessLufs": -26,
+        "file": "audio/ui-click-1/ui-click-1.m4a"
+      }
+    },
+    {
+      "id": "ui-click-2",
+      "kind": "audio",
+      "origin": "recording",
+      "sources": [
+        "freesound-629020"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "downmixed to mono and resampled to 48 kHz",
+        "trimmed leading and trailing silence, 2 ms fade-in",
+        "gain limited by the -1 dBFS peak ceiling, so the loudness is -27.9 LUFS instead of the -26 LUFS target",
+        "encoded as AAC-LC 64 kbit/s in .m4a"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "audio/ui-click-2/ui-click-2.m4a",
+          "bytes": 3463,
+          "sha256": "6129642d16b083a3d488e4d17105f4820699b22e7a28d505f4d13145dcff51d6"
+        }
+      ],
+      "audio": {
+        "role": "ui-click",
+        "loop": false,
+        "frames": 14414,
+        "durationS": 0.3,
+        "sampleRate": 48000,
+        "channels": 1,
+        "bitrateKbps": 64,
+        "loudnessLufs": -27.9,
+        "file": "audio/ui-click-2/ui-click-2.m4a"
+      }
+    },
+    {
+      "id": "ui-click-3",
+      "kind": "audio",
+      "origin": "recording",
+      "sources": [
+        "freesound-342200"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "downmixed to mono and resampled to 48 kHz",
+        "trimmed leading and trailing silence, 2 ms fade-in",
+        "normalised to -26 LUFS",
+        "encoded as AAC-LC 64 kbit/s in .m4a"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "audio/ui-click-3/ui-click-3.m4a",
+          "bytes": 2023,
+          "sha256": "bc0bb09816e64aa49bb814cdf93648a1656ee22086cdb37d2367fd364c48e557"
+        }
+      ],
+      "audio": {
+        "role": "ui-click",
+        "loop": false,
+        "frames": 6032,
+        "durationS": 0.126,
+        "sampleRate": 48000,
+        "channels": 1,
+        "bitrateKbps": 64,
+        "loudnessLufs": -26,
+        "file": "audio/ui-click-3/ui-click-3.m4a"
+      }
+    },
+    {
+      "id": "underwater-bed",
+      "kind": "audio",
+      "origin": "recording",
+      "sources": [
+        "freesound-862788"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "downmixed to mono and resampled to 48 kHz",
+        "low-pass at 1500 Hz",
+        "trimmed to a 16 s stationary section; 2 s equal-power crossfade of the loop seam",
+        "normalised to -28 LUFS",
+        "encoded as AAC-LC 64 kbit/s in .m4a"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "audio/underwater-bed/underwater-bed.m4a",
+          "bytes": 86979,
+          "sha256": "59a82c555cc6580156471b0dc1606d780fefe37812babcc24e2bc238cdb5609d"
+        }
+      ],
+      "audio": {
+        "role": "underwater-ambience",
+        "loop": true,
+        "frames": 768000,
+        "durationS": 16,
+        "sampleRate": 48000,
+        "channels": 1,
+        "bitrateKbps": 64,
+        "loudnessLufs": -28,
+        "file": "audio/underwater-bed/underwater-bed.m4a"
+      }
+    },
+    {
+      "id": "bg-fw-misty-lake",
+      "kind": "background",
+      "origin": "render",
+      "sources": [
+        "bg-fw-misty-lake"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "composed and rendered by the Aquarium project from Java fern and vallisneria (Nullified), pond weed (Valery.Li), driftwood, rocks and ground textures (CC0), at 4096x2048 with depth-of-field blur and a water haze",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-fw-misty-lake/ultra.ktx2",
+          "bytes": 336462,
+          "sha256": "2284c6e7ecacc6389e93d5b83cb51d6455255450185068a937d637028dd595e5"
+        },
+        {
+          "file": "background/bg-fw-misty-lake/high.ktx2",
+          "bytes": 336462,
+          "sha256": "2284c6e7ecacc6389e93d5b83cb51d6455255450185068a937d637028dd595e5"
+        },
+        {
+          "file": "background/bg-fw-misty-lake/medium.ktx2",
+          "bytes": 106958,
+          "sha256": "291fdac1117a82a99bb95a5791c635c6a639f3187e15fc6e403b7e71d2af04c7"
+        },
+        {
+          "file": "background/bg-fw-misty-lake/low.ktx2",
+          "bytes": 38454,
+          "sha256": "e5f63f9f669953fbfa3ccc99d5ad714eab915b7a9db4d4df680ecd3ebd293cc3"
+        }
+      ],
+      "background": {
+        "crop": null,
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-fw-misty-lake/ultra.ktx2",
+            "bytes": 336462,
+            "sha256": "2284c6e7ecacc6389e93d5b83cb51d6455255450185068a937d637028dd595e5",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-fw-misty-lake/high.ktx2",
+            "bytes": 336462,
+            "sha256": "2284c6e7ecacc6389e93d5b83cb51d6455255450185068a937d637028dd595e5",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-fw-misty-lake/medium.ktx2",
+            "bytes": 106958,
+            "sha256": "291fdac1117a82a99bb95a5791c635c6a639f3187e15fc6e403b7e71d2af04c7",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-fw-misty-lake/low.ktx2",
+            "bytes": 38454,
+            "sha256": "e5f63f9f669953fbfa3ccc99d5ad714eab915b7a9db4d4df680ecd3ebd293cc3",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
+      "id": "bg-fw-plant-wall",
+      "kind": "background",
+      "origin": "photo",
+      "sources": [
+        "bg-fw-plant-wall"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "cropped to the 2:1 box left 0, top 400, 4032x2016 px of the original photo",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-fw-plant-wall/ultra.ktx2",
+          "bytes": 525229,
+          "sha256": "891061a8bde00191e46311a5b8c364bae54821dd492b3c4c00ecba79aac06f84"
+        },
+        {
+          "file": "background/bg-fw-plant-wall/high.ktx2",
+          "bytes": 525229,
+          "sha256": "891061a8bde00191e46311a5b8c364bae54821dd492b3c4c00ecba79aac06f84"
+        },
+        {
+          "file": "background/bg-fw-plant-wall/medium.ktx2",
+          "bytes": 155335,
+          "sha256": "9c1be18efcb07f0c5e600d8b57c3d3b7172ec1f79994ac49c39ed75d3888e713"
+        },
+        {
+          "file": "background/bg-fw-plant-wall/low.ktx2",
+          "bytes": 50680,
+          "sha256": "20b7134fadb7263d69c245a15fec64eea6cc7e0eb38ee7c7b037ff83630811ec"
+        }
+      ],
+      "background": {
+        "crop": {
+          "left": 0,
+          "top": 400,
+          "width": 4032,
+          "height": 2016
+        },
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-fw-plant-wall/ultra.ktx2",
+            "bytes": 525229,
+            "sha256": "891061a8bde00191e46311a5b8c364bae54821dd492b3c4c00ecba79aac06f84",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-fw-plant-wall/high.ktx2",
+            "bytes": 525229,
+            "sha256": "891061a8bde00191e46311a5b8c364bae54821dd492b3c4c00ecba79aac06f84",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-fw-plant-wall/medium.ktx2",
+            "bytes": 155335,
+            "sha256": "9c1be18efcb07f0c5e600d8b57c3d3b7172ec1f79994ac49c39ed75d3888e713",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-fw-plant-wall/low.ktx2",
+            "bytes": 50680,
+            "sha256": "20b7134fadb7263d69c245a15fec64eea6cc7e0eb38ee7c7b037ff83630811ec",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
+      "id": "bg-fw-planted-stream",
+      "kind": "background",
+      "origin": "photo",
+      "sources": [
+        "bg-fw-planted-stream"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "cropped to the 2:1 box left 0, top 700, 4724x2362 px of the original photo",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-fw-planted-stream/ultra.ktx2",
+          "bytes": 538319,
+          "sha256": "a5cdbe07d496ae57cd46a180297a408cb96a9fea00f094a20079a77b595eeecb"
+        },
+        {
+          "file": "background/bg-fw-planted-stream/high.ktx2",
+          "bytes": 538319,
+          "sha256": "a5cdbe07d496ae57cd46a180297a408cb96a9fea00f094a20079a77b595eeecb"
+        },
+        {
+          "file": "background/bg-fw-planted-stream/medium.ktx2",
+          "bytes": 158216,
+          "sha256": "b331045d50405997d48cd5ee3e824a0977e2ce067531b23779caca6b8b8e1f26"
+        },
+        {
+          "file": "background/bg-fw-planted-stream/low.ktx2",
+          "bytes": 51293,
+          "sha256": "9cfe5ae90503e2ae8817632121862823e4c828751441c1f04169604983ed04eb"
+        }
+      ],
+      "background": {
+        "crop": {
+          "left": 0,
+          "top": 700,
+          "width": 4724,
+          "height": 2362
+        },
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-fw-planted-stream/ultra.ktx2",
+            "bytes": 538319,
+            "sha256": "a5cdbe07d496ae57cd46a180297a408cb96a9fea00f094a20079a77b595eeecb",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-fw-planted-stream/high.ktx2",
+            "bytes": 538319,
+            "sha256": "a5cdbe07d496ae57cd46a180297a408cb96a9fea00f094a20079a77b595eeecb",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-fw-planted-stream/medium.ktx2",
+            "bytes": 158216,
+            "sha256": "b331045d50405997d48cd5ee3e824a0977e2ce067531b23779caca6b8b8e1f26",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-fw-planted-stream/low.ktx2",
+            "bytes": 51293,
+            "sha256": "9cfe5ae90503e2ae8817632121862823e4c828751441c1f04169604983ed04eb",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
+      "id": "bg-fw-rocky-riverbed",
+      "kind": "background",
+      "origin": "photo",
+      "sources": [
+        "bg-fw-rocky-riverbed"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "cropped to the 2:1 box left 0, top 600, 7360x3680 px of the original photo",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-fw-rocky-riverbed/ultra.ktx2",
+          "bytes": 438826,
+          "sha256": "5d7076e8ab438ce74b695ca867e5b18bb0c4e961f1897dfc2d3c9bc31d4a96c7"
+        },
+        {
+          "file": "background/bg-fw-rocky-riverbed/high.ktx2",
+          "bytes": 438826,
+          "sha256": "5d7076e8ab438ce74b695ca867e5b18bb0c4e961f1897dfc2d3c9bc31d4a96c7"
+        },
+        {
+          "file": "background/bg-fw-rocky-riverbed/medium.ktx2",
+          "bytes": 130864,
+          "sha256": "0dbf4f7e4a309dce5b7c654c6e28f2037b7dd0e2d55213f5403bb3c87d9cb556"
+        },
+        {
+          "file": "background/bg-fw-rocky-riverbed/low.ktx2",
+          "bytes": 43008,
+          "sha256": "da67a34678f6672cc25a2cec49150987daf91eb8c36de2cb6514983f972ba8ff"
+        }
+      ],
+      "background": {
+        "crop": {
+          "left": 0,
+          "top": 600,
+          "width": 7360,
+          "height": 3680
+        },
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-fw-rocky-riverbed/ultra.ktx2",
+            "bytes": 438826,
+            "sha256": "5d7076e8ab438ce74b695ca867e5b18bb0c4e961f1897dfc2d3c9bc31d4a96c7",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-fw-rocky-riverbed/high.ktx2",
+            "bytes": 438826,
+            "sha256": "5d7076e8ab438ce74b695ca867e5b18bb0c4e961f1897dfc2d3c9bc31d4a96c7",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-fw-rocky-riverbed/medium.ktx2",
+            "bytes": 130864,
+            "sha256": "0dbf4f7e4a309dce5b7c654c6e28f2037b7dd0e2d55213f5403bb3c87d9cb556",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-fw-rocky-riverbed/low.ktx2",
+            "bytes": 43008,
+            "sha256": "da67a34678f6672cc25a2cec49150987daf91eb8c36de2cb6514983f972ba8ff",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
+      "id": "bg-fw-root-tangle",
+      "kind": "background",
+      "origin": "photo",
+      "sources": [
+        "bg-fw-root-tangle"
+      ],
+      "licence": "CC-BY-3.0",
+      "modifications": [
+        "cropped to the 2:1 box left 0, top 400, 3872x1936 px of the original photo",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-fw-root-tangle/ultra.ktx2",
+          "bytes": 520418,
+          "sha256": "c8c3953bc2793f605e0dbe547eda754b3f3e73ce3edd818a9694dbd4c4688118"
+        },
+        {
+          "file": "background/bg-fw-root-tangle/high.ktx2",
+          "bytes": 520418,
+          "sha256": "c8c3953bc2793f605e0dbe547eda754b3f3e73ce3edd818a9694dbd4c4688118"
+        },
+        {
+          "file": "background/bg-fw-root-tangle/medium.ktx2",
+          "bytes": 152858,
+          "sha256": "9db493308560bd6884c2481774b5a05fe09c222deebe30a94c211fdd0af2cad3"
+        },
+        {
+          "file": "background/bg-fw-root-tangle/low.ktx2",
+          "bytes": 48932,
+          "sha256": "cd1e7aa7ec1054df3f0f6a98f3b456b0ee7d607ba28f31bc49e4d69eb40a272e"
+        }
+      ],
+      "background": {
+        "crop": {
+          "left": 0,
+          "top": 400,
+          "width": 3872,
+          "height": 1936
+        },
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-fw-root-tangle/ultra.ktx2",
+            "bytes": 520418,
+            "sha256": "c8c3953bc2793f605e0dbe547eda754b3f3e73ce3edd818a9694dbd4c4688118",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-fw-root-tangle/high.ktx2",
+            "bytes": 520418,
+            "sha256": "c8c3953bc2793f605e0dbe547eda754b3f3e73ce3edd818a9694dbd4c4688118",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-fw-root-tangle/medium.ktx2",
+            "bytes": 152858,
+            "sha256": "9db493308560bd6884c2481774b5a05fe09c222deebe30a94c211fdd0af2cad3",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-fw-root-tangle/low.ktx2",
+            "bytes": 48932,
+            "sha256": "cd1e7aa7ec1054df3f0f6a98f3b456b0ee7d607ba28f31bc49e4d69eb40a272e",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
+      "id": "bg-reef-coral-wall",
+      "kind": "background",
+      "origin": "photo",
+      "sources": [
+        "bg-reef-coral-wall"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "cropped to the 2:1 box left 0, top 336, 5472x2736 px of the original photo",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-reef-coral-wall/ultra.ktx2",
+          "bytes": 471595,
+          "sha256": "24354f63ccdabf8ed04488d5e9c983630c7879b3cfbb95093869e300dfe9f84f"
+        },
+        {
+          "file": "background/bg-reef-coral-wall/high.ktx2",
+          "bytes": 471595,
+          "sha256": "24354f63ccdabf8ed04488d5e9c983630c7879b3cfbb95093869e300dfe9f84f"
+        },
+        {
+          "file": "background/bg-reef-coral-wall/medium.ktx2",
+          "bytes": 140746,
+          "sha256": "4272d186d0a4f6304a2a0ce2ea682a66690510a85f4d7339526b6be3167205ff"
+        },
+        {
+          "file": "background/bg-reef-coral-wall/low.ktx2",
+          "bytes": 47656,
+          "sha256": "a16b041f67453f32bcc2af801d4f9f4d759bd10d26ca2b098489b509143fc4cc"
+        }
+      ],
+      "background": {
+        "crop": {
+          "left": 0,
+          "top": 336,
+          "width": 5472,
+          "height": 2736
+        },
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-reef-coral-wall/ultra.ktx2",
+            "bytes": 471595,
+            "sha256": "24354f63ccdabf8ed04488d5e9c983630c7879b3cfbb95093869e300dfe9f84f",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-reef-coral-wall/high.ktx2",
+            "bytes": 471595,
+            "sha256": "24354f63ccdabf8ed04488d5e9c983630c7879b3cfbb95093869e300dfe9f84f",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-reef-coral-wall/medium.ktx2",
+            "bytes": 140746,
+            "sha256": "4272d186d0a4f6304a2a0ce2ea682a66690510a85f4d7339526b6be3167205ff",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-reef-coral-wall/low.ktx2",
+            "bytes": 47656,
+            "sha256": "a16b041f67453f32bcc2af801d4f9f4d759bd10d26ca2b098489b509143fc4cc",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
+      "id": "bg-reef-deep-blue",
+      "kind": "background",
+      "origin": "photo",
+      "sources": [
+        "bg-reef-deep-blue"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "cropped to the 2:1 box left 0, top 600, 5184x2592 px of the original photo",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-reef-deep-blue/ultra.ktx2",
+          "bytes": 455830,
+          "sha256": "64276df25c2e87804472c9865d7eeec0d0ae7b776a636c65009c8c1dff08a080"
+        },
+        {
+          "file": "background/bg-reef-deep-blue/high.ktx2",
+          "bytes": 455830,
+          "sha256": "64276df25c2e87804472c9865d7eeec0d0ae7b776a636c65009c8c1dff08a080"
+        },
+        {
+          "file": "background/bg-reef-deep-blue/medium.ktx2",
+          "bytes": 136204,
+          "sha256": "dd11f66a805d610fef6e4e562a32b5053a36e267203cb0d02d0d4bd857c000ee"
+        },
+        {
+          "file": "background/bg-reef-deep-blue/low.ktx2",
+          "bytes": 45188,
+          "sha256": "43b6914d0da4a7afaba42a3ea23474664e96e72a4531bf1240d5778eb7fbccec"
+        }
+      ],
+      "background": {
+        "crop": {
+          "left": 0,
+          "top": 600,
+          "width": 5184,
+          "height": 2592
+        },
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-reef-deep-blue/ultra.ktx2",
+            "bytes": 455830,
+            "sha256": "64276df25c2e87804472c9865d7eeec0d0ae7b776a636c65009c8c1dff08a080",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-reef-deep-blue/high.ktx2",
+            "bytes": 455830,
+            "sha256": "64276df25c2e87804472c9865d7eeec0d0ae7b776a636c65009c8c1dff08a080",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-reef-deep-blue/medium.ktx2",
+            "bytes": 136204,
+            "sha256": "dd11f66a805d610fef6e4e562a32b5053a36e267203cb0d02d0d4bd857c000ee",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-reef-deep-blue/low.ktx2",
+            "bytes": 45188,
+            "sha256": "43b6914d0da4a7afaba42a3ea23474664e96e72a4531bf1240d5778eb7fbccec",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
+      "id": "bg-reef-fish-slope",
+      "kind": "background",
+      "origin": "photo",
+      "sources": [
+        "bg-reef-fish-slope"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "cropped to the 2:1 box left 0, top 300, 3618x1809 px of the original photo",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-reef-fish-slope/ultra.ktx2",
+          "bytes": 457296,
+          "sha256": "16c82bb4115c193c8f43adbbb80dfd233ce1632d55769a2a782228685b37ecab"
+        },
+        {
+          "file": "background/bg-reef-fish-slope/high.ktx2",
+          "bytes": 457296,
+          "sha256": "16c82bb4115c193c8f43adbbb80dfd233ce1632d55769a2a782228685b37ecab"
+        },
+        {
+          "file": "background/bg-reef-fish-slope/medium.ktx2",
+          "bytes": 139646,
+          "sha256": "f2c27372e5df22a259bd58e0edd5d1126cf261e3caa152bfbb52c7cbd6496e1f"
+        },
+        {
+          "file": "background/bg-reef-fish-slope/low.ktx2",
+          "bytes": 48087,
+          "sha256": "97cebff797c8853737dbea9292cd5543fe4c7db64cdcaf1637f45daed7938f2d"
+        }
+      ],
+      "background": {
+        "crop": {
+          "left": 0,
+          "top": 300,
+          "width": 3618,
+          "height": 1809
+        },
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-reef-fish-slope/ultra.ktx2",
+            "bytes": 457296,
+            "sha256": "16c82bb4115c193c8f43adbbb80dfd233ce1632d55769a2a782228685b37ecab",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-reef-fish-slope/high.ktx2",
+            "bytes": 457296,
+            "sha256": "16c82bb4115c193c8f43adbbb80dfd233ce1632d55769a2a782228685b37ecab",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-reef-fish-slope/medium.ktx2",
+            "bytes": 139646,
+            "sha256": "f2c27372e5df22a259bd58e0edd5d1126cf261e3caa152bfbb52c7cbd6496e1f",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-reef-fish-slope/low.ktx2",
+            "bytes": 48087,
+            "sha256": "97cebff797c8853737dbea9292cd5543fe4c7db64cdcaf1637f45daed7938f2d",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
+      "id": "bg-reef-light-rays",
+      "kind": "background",
+      "origin": "photo",
+      "sources": [
+        "bg-reef-light-rays"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "cropped to the 2:1 box left 0, top 300, 3648x1824 px of the original photo",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-reef-light-rays/ultra.ktx2",
+          "bytes": 497669,
+          "sha256": "3d2f15ffe6d7ab9bc8ac054ad3d086526df4197def37e4e4afd8f179e5a553ef"
+        },
+        {
+          "file": "background/bg-reef-light-rays/high.ktx2",
+          "bytes": 497669,
+          "sha256": "3d2f15ffe6d7ab9bc8ac054ad3d086526df4197def37e4e4afd8f179e5a553ef"
+        },
+        {
+          "file": "background/bg-reef-light-rays/medium.ktx2",
+          "bytes": 147144,
+          "sha256": "7cd74b2af355d9189988d0340ac8242e2598e08789dc1e3c2f189f1c919e1ae5"
+        },
+        {
+          "file": "background/bg-reef-light-rays/low.ktx2",
+          "bytes": 47631,
+          "sha256": "895b072b2e76d40ab7c290f0eb47fa5303c898927f9a7ecc64d9455b0d2da4d2"
+        }
+      ],
+      "background": {
+        "crop": {
+          "left": 0,
+          "top": 300,
+          "width": 3648,
+          "height": 1824
+        },
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-reef-light-rays/ultra.ktx2",
+            "bytes": 497669,
+            "sha256": "3d2f15ffe6d7ab9bc8ac054ad3d086526df4197def37e4e4afd8f179e5a553ef",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-reef-light-rays/high.ktx2",
+            "bytes": 497669,
+            "sha256": "3d2f15ffe6d7ab9bc8ac054ad3d086526df4197def37e4e4afd8f179e5a553ef",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-reef-light-rays/medium.ktx2",
+            "bytes": 147144,
+            "sha256": "7cd74b2af355d9189988d0340ac8242e2598e08789dc1e3c2f189f1c919e1ae5",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-reef-light-rays/low.ktx2",
+            "bytes": 47631,
+            "sha256": "895b072b2e76d40ab7c290f0eb47fa5303c898927f9a7ecc64d9455b0d2da4d2",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
+      "id": "bg-reef-soft-coral",
+      "kind": "background",
+      "origin": "photo",
+      "sources": [
+        "bg-reef-soft-coral"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "cropped to the 2:1 box left 0, top 500, 4000x2000 px of the original photo",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-reef-soft-coral/ultra.ktx2",
+          "bytes": 548951,
+          "sha256": "b569bc003c5f203fd5e4d03cc32d8ec908e0df26a64b7aa7679675e7678f8665"
+        },
+        {
+          "file": "background/bg-reef-soft-coral/high.ktx2",
+          "bytes": 548951,
+          "sha256": "b569bc003c5f203fd5e4d03cc32d8ec908e0df26a64b7aa7679675e7678f8665"
+        },
+        {
+          "file": "background/bg-reef-soft-coral/medium.ktx2",
+          "bytes": 161443,
+          "sha256": "54809d9a7e455776ff38254e1f828f7ae8b29e364b30431ea1bbb52b916254aa"
+        },
+        {
+          "file": "background/bg-reef-soft-coral/low.ktx2",
+          "bytes": 51622,
+          "sha256": "26f82403abb742804e0508c0761e5c8e79a9479381170bc8fb0c18fed8972b64"
+        }
+      ],
+      "background": {
+        "crop": {
+          "left": 0,
+          "top": 500,
+          "width": 4000,
+          "height": 2000
+        },
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-reef-soft-coral/ultra.ktx2",
+            "bytes": 548951,
+            "sha256": "b569bc003c5f203fd5e4d03cc32d8ec908e0df26a64b7aa7679675e7678f8665",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-reef-soft-coral/high.ktx2",
+            "bytes": 548951,
+            "sha256": "b569bc003c5f203fd5e4d03cc32d8ec908e0df26a64b7aa7679675e7678f8665",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-reef-soft-coral/medium.ktx2",
+            "bytes": 161443,
+            "sha256": "54809d9a7e455776ff38254e1f828f7ae8b29e364b30431ea1bbb52b916254aa",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-reef-soft-coral/low.ktx2",
+            "bytes": 51622,
+            "sha256": "26f82403abb742804e0508c0761e5c8e79a9479381170bc8fb0c18fed8972b64",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
     }
   ]
 }

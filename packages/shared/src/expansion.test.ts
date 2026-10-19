@@ -15,7 +15,12 @@ import {
   personalitySchema,
 } from './fishState.js';
 import { biomeSchema } from './common.js';
-import { breedingSchema, speciesChemistrySchema, speciesSummarySchema } from './species.js';
+import {
+  breedingModeSchema,
+  breedingSchema,
+  speciesChemistrySchema,
+  speciesSummarySchema,
+} from './species.js';
 
 const content = join(import.meta.dirname, '../../../content');
 const readJson = (path: string): unknown => JSON.parse(readFileSync(join(content, path), 'utf8'));
@@ -23,6 +28,22 @@ const readJson = (path: string): unknown => JSON.parse(readFileSync(join(content
 describe('chemistry v2', () => {
   it('content/chemistry.json passes the strict schema', () => {
     expect(chemistryParametersSchema.safeParse(readJson('chemistry.json')).error).toBeUndefined();
+  });
+
+  it('cites a source for every section of rates', () => {
+    const params = chemistryParametersSchema.parse(readJson('chemistry.json'));
+    const sections = Object.keys(params).filter((k) => k !== 'sources');
+    for (const section of sections) expect(params.sources[section], section).toBeDefined();
+  });
+
+  it('every species states its water needs and where they come from', () => {
+    const dir = join(content, 'species');
+    for (const name of readdirSync(dir).filter((n) => n.endsWith('.json'))) {
+      const raw = JSON.parse(readFileSync(join(dir, name), 'utf8')) as { chemistry?: unknown };
+      const parsed = speciesChemistrySchema.parse(raw.chemistry);
+      expect(raw.chemistry, name).toBeDefined();
+      expect(parsed.sources.length, name).toBeGreaterThan(0);
+    }
   });
 
   it('rejects an unknown rate and a missing biome target', () => {
@@ -87,9 +108,9 @@ describe('chemistry v2', () => {
 describe('species additions', () => {
   const files = readdirSync(join(content, 'species')).filter((f) => f.endsWith('.json'));
 
-  it.each(files)('%s gets non-breeding defaults without edits', (file) => {
+  it.each(files)('%s parses with a valid breeding and chemistry block', (file) => {
     const parsed = speciesSummarySchema.loose().parse(readJson(`species/${file}`));
-    expect(parsed.breeding.mode).toBe('none');
+    expect(breedingModeSchema.options).toContain(parsed.breeding.mode);
     expect(parsed.chemistry.phRange[0]).toBeLessThan(parsed.chemistry.phRange[1]);
   });
 

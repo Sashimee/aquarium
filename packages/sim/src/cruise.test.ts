@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { speciesContentSchema } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
-import { FishState } from './snapshot.ts';
 import { World, type FishSpawn } from './world.ts';
 
 const dir = join(import.meta.dirname, '../../../content/species');
@@ -26,8 +25,6 @@ const PRESETS: Record<string, Record<string, number>> = {
     'banggai-cardinalfish': 1,
   },
 };
-/** Held postures pitch at the full turn rate by design: nosing into the sand, the dash for air. */
-const HELD_POSTURES: ReadonlySet<number> = new Set([FishState.Forage, FishState.Gulp]);
 
 function load(id: string) {
   return speciesContentSchema.parse(JSON.parse(readFileSync(join(dir, `${id}.json`), 'utf8')));
@@ -64,6 +61,8 @@ interface Cruise {
   bob: number;
   /** Outside held postures. */
   maxPitchRate: number;
+  /** Share of samples outside held postures. */
+  steeredShare: number;
   nodsPerS: number;
 }
 
@@ -88,7 +87,9 @@ function cruise(preset: string, seed: number): Map<string, Cruise[]> {
     for (let i = 0; i < w.count; i++) {
       ys[i]?.push(w.position[i * 3 + 1] ?? 0);
       rates[i]?.push(w.pitchRate[i] ?? 0);
-      if (!HELD_POSTURES.has(w.state[i] ?? -1)) steered[i]?.push(Math.abs(w.pitchRate[i] ?? 0));
+      // Held postures (nosing into the sand, the dash for air, the C-bend) pitch at the full
+      // turn rate by design.
+      if (w.pitchHeld[i] !== 1) steered[i]?.push(Math.abs(w.pitchRate[i] ?? 0));
     }
   }
   const out = new Map<string, Cruise[]>();
@@ -99,6 +100,7 @@ function cruise(preset: string, seed: number): Map<string, Cruise[]> {
     runs.push({
       bob: rms(highPass(y)) / (w.bodyLength[i] ?? 1),
       maxPitchRate: Math.max(0, ...(steered[i] ?? [])),
+      steeredShare: (steered[i]?.length ?? 0) / y.length,
       nodsPerS: signFlips(rate, NOD_DEADBAND) / SECONDS,
     });
     out.set(w.speciesOf(i).id, runs);
@@ -120,9 +122,11 @@ describe('cruising fish swim level, without bobbing or nodding', { timeout: 120_
       const bob = mean(runs.map((r) => r.bob));
       const worstRate = Math.max(...runs.map((r) => r.maxPitchRate));
       const nods = mean(runs.map((r) => r.nodsPerS));
+      const steeredShare = mean(runs.map((r) => r.steeredShare));
       // Fish in a group jostle for place in it; loners hold a depth.
       const grouped = load(id).behaviour.schooling !== undefined;
       expect(bob, `${id} bob (body lengths)`).toBeLessThan(grouped ? 0.04 : 0.0175);
+      expect(steeredShare, `${id} share of steered samples`).toBeGreaterThan(0.25);
       expect(worstRate / DEG, `${id} peak steered pitch rate (°/s)`).toBeLessThan(90);
       expect(nods, `${id} nods per second`).toBeLessThan(0.5);
     }

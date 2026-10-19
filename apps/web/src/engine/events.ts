@@ -1,6 +1,7 @@
 import type { TankSize } from '@aquarium/shared';
 import type { LossRecovery } from './deviceLoss';
 import type { TankDimensions } from './tank/dimensions';
+import type { PhotoState } from './photo/PhotoMode';
 import type { Tier, TierChangeReason } from './quality/tiers';
 
 export type BackendKind = 'webgpu' | 'webgl2';
@@ -31,6 +32,8 @@ export interface EngineEvents {
     litres: number;
   };
   'quality:tier-changed': { from: Tier | null; to: Tier; reason: TierChangeReason };
+  /** Anything about photo mode changed, including entering and leaving it. */
+  'photo:changed': PhotoState;
 }
 
 type Handler<T> = (payload: T) => void;

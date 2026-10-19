@@ -33,6 +33,9 @@ export const TANK_DIMENSIONS: Readonly<Record<TankSize, Readonly<TankDimensions>
 /** A standard 120 x 50 x 50 cm (300 l) rimless tank with 10 mm glass. */
 export const DEFAULT_TANK: Readonly<TankDimensions> = TANK_DIMENSIONS.standard;
 
+/** The cabinet under the tank; the room's floor is at its foot, y = -STAND_HEIGHT. */
+export const STAND_HEIGHT = 0.75;
+
 /** Keeps the water box off the inner glass faces so they never z-fight or self-attenuate. */
 export const WATER_INSET = 0.001;
 

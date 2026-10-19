@@ -121,13 +121,13 @@ jobs:
             describe: menus with a mouse
             part: 5/5
           - name: decor
-            args: decor.spec
+            args: decor.spec reminders.spec photo.spec
           - name: switch-tanks
             args: tank-type-switch.spec toys.spec
           - name: loading
             args: loading.spec pwa.spec haptics.spec
           - name: ktx2-feed-auth-death
-            args: ktx2.spec feed.spec auth.spec death.spec
+            args: ktx2.spec feed.spec auth.spec death.spec public-link.spec
           - name: tanks-care-reset
             args: tanks.spec care.spec shrimp.spec password-reset.spec password-reset-history.spec
     services:

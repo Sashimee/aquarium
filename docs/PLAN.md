@@ -25,7 +25,7 @@ your tanks across devices.
 | Dev access | `devfish.bas.lu` is public, `X-Robots-Tag: noindex` plus a `robots.txt` that disallows everything. |
 | Dokploy | Both apps inside the existing **Bas.lu** project. |
 | Merging | **Repo-local override of the global rule**: the orchestrator squash-merges feature PRs into `dev` once CI is green **and** `code-reviewer` approves. `dev → main` happens **only when Alex asks**. |
-| Concurrency | **6** agents at once by default; more when the tasks are independent (Alex, 2026-10-14, see §9.1). |
+| Concurrency | At most 6 running agents, reviewers included (Alex, 2026-10-19, see §9.1). |
 
 ## 2. Architecture
 
@@ -117,7 +117,7 @@ authoritative** and the client shows predictions from the same code. Every rate 
 - **Offline catch-up:** on load the server steps the lifecycle from `last_tick_at` to now at 10-minute resolution, capped at 60 days, then persists the result. The client shows a "while you were away" summary that includes deaths.
 - **Death presentation:** the fish swims erratically, then floats belly-up at the surface. The user removes it with the net tool, and it is recorded in a small memorial list on the tank.
 - **Feeding validation:** the client simulates eating and reports `ate(fishId, portion)` events in batches. The server rejects consumption larger than the food dropped in that window, and rate-limits feeding.
-- **New fish:** free "shop" limited by tank capacity (bioload). New fish arrive in a bag that floats for acclimation, then are released.
+- **New fish:** free "shop" limited by tank capacity (bioload). New fish arrive in a bag that floats for acclimation, then are released. *(Superseded by the Pearl economy in §9.1/§9.2, T69–T72: fish and items cost Pearls; basic care stays free.)*
 
 ### 2.5 Interaction and play
 
@@ -209,10 +209,10 @@ orchestrator merges it. A task is *ready* once all of its dependencies are **mer
 | T20 | GDPR + legal: account deletion, export, privacy page, `/credits` page from manifest | backend-engineer | T12, T05 | 3 |
 | T21 | Security review of auth, rate limits, mail abuse, CSRF, headers (CSP for WebGPU/workers) | code-reviewer | T16, T20 | 5 |
 | T22 | Fix wave from T18/T21 issues (fanned out to owners) | owners | T18, T21 | 6 |
-| T23 | Release candidate on devfish: full checks, prod Postgres backup schedule, prod env, `CHANGELOG`, then **stop and ask Alex** for `dev → main` | devops-engineer | T19, T22 | 7 |
+| T23 | Release candidate on devfish: full checks, prod Postgres backup schedule, prod env, `CHANGELOG`, then **stop and ask Alex** for `dev → main` (superseded: the release waits for T68, §9) | devops-engineer | T19, T22 | 7 |
 | T24 | Extended roster: discus, rasbora, pleco, shrimp, wrasse, firefish, cleaner shrimp | curator → pipeline → behaviour → render | T22 | 8 |
 
-### Concurrency map (6 by default)
+### Concurrency map
 
 ```
 Wave 0  ┃ T00 (inline) ─► T01 ──────────────────────────────────────────────────────
@@ -227,8 +227,8 @@ Wave 8  ┃ T24 roster expansion (pipelined per species)
 ```
 
 Waves are not barriers. The orchestrator starts **any** task as soon as its dependencies are
-merged, with 6 running agents (reviewers included) by default and more when the tasks are independent (§9.1). The wave column only shows the earliest a task
-can start.
+merged, with at most 6 running agents, reviewers included (§9.1). The wave column only shows the earliest a task can
+start.
 
 **Conflict avoidance:** each agent owns directories (see its agent file). Shared files
 (`packages/shared`, `content/species/*.json`, root `package.json`) change only through small PRs
@@ -248,7 +248,7 @@ that are reviewed and merged fast. An agent that needs a contract change opens t
 Env vars (set in Dokploy, never in the repo; local copies at `~/.config/aquarium/`, mode 600):
 `DATABASE_URL`, `BETTER_AUTH_SECRET` (**alphanumeric only**: Dokploy's env panel corrupts `+/=`;
 generate with `LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 48`), `APP_URL`, `SMTP_HOST=mailrelay`,
-`SMTP_PORT=587`, `MAIL_FROM=fish@bas.lu`, `SITE_INDEXABLE`, `NODE_ENV=production`.
+`SMTP_PORT=587`, `MAIL_FROM=fish@bas.lu`, `SITE_INDEXABLE`, `NODE_ENV=production`; from §9: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` (test-mode keys on devfish only; these keep their provider format, see §9.1).
 
 Dokploy API: `https://dok.seil.pro/api`, header `x-api-key`, token read from
 `~/.config/dokploy/seil.token`. Never print the token or any env value. GitHub provider: *GitHub Alex*.
@@ -275,7 +275,7 @@ where a GPU exists).
 | Mail bounces arriving asynchronously | `fish@bas.lu` stays on the `bas.lu` domain; delivery verified by reading an actual received mail |
 | Signup used to spam via the shared relay | Per-IP and per-recipient rate limits, verification-mail cooldown |
 | Death mechanic feels punishing | 48 h grace, vacation feeder, tunable rates, a "while you were away" warning before deaths when possible |
-| Merge conflicts at 6-way concurrency | Directory ownership, contract-first PRs, fast review and merge of shared-file PRs |
+| Merge conflicts at high concurrency | Directory ownership, contract-first PRs, fast review and merge of shared-file PRs |
 | Repo bloat from assets | Only processed assets committed, budget < 150 MB enforced by `assets:check` |
 
 ## 8. Open items for later (not blocking)
@@ -286,7 +286,8 @@ where a GPU exists).
 ## 9. Expansion (asked by Alex 2026-10-16, #612)
 
 Alex asked for every proposed extra feature to be built, and for a choice of **5 tank background
-pictures per tank type**. The release (`dev → main`) waits until this section is done (T68).
+pictures per tank type**. The release (`dev → main`) waits until every task in this section is
+done (T68); Alex confirmed on 2026-10-19 that there is no release before that.
 
 ### 9.1 Decisions
 
@@ -301,10 +302,15 @@ pictures per tank type**. The release (`dev → main`) waits until this section 
 | Haptics | The Vibration API where it exists (Android). iOS Safari has none, so iOS gets no haptics; no workaround hacks. |
 | Sound | Off until the first user gesture, a master volume, a mute button and a separate "no sudden loud sounds" setting. AAC in `.m4a`, which every Safari since 16 and every other target browser plays. CC0 / CC-BY audio in the manifest. |
 | New biomes | African cichlid lake, Amazon blackwater, brackish mangrove. Each one is a preset, 5 backgrounds and at least 4 species. The biome enum in `packages/shared` grows in T30. |
-| Tanks per user | Replaces §1's "one of each": a user may own up to 6 display tanks, any mix of biomes and sizes, plus one quarantine tank (nano, not counted in the 6). |
+| Tanks per user | Replaces §1's "one of each": a user may own up to 6 display tanks, any mix of biomes and sizes, plus one quarantine tank (nano, not counted in the 6). Confirmed by Alex 2026-10-19. |
 | Window weather | Simulated from the tank's seed and the local clock. No location, no third-party weather API. |
 | Budgets | §2.7 and the < 150 MB repo asset budget (§3) stay. Backgrounds, audio, new species and biomes stream per preset. If the budget can't hold a new biome, the orchestrator stops and asks Alex before raising it. |
-| Agent concurrency | Alex said on 2026-10-14: "You can run more then 6 agents if you want to". The orchestrator may run more than 6 when tasks are independent (`CLAUDE.md` loop step 4). |
+| Agent concurrency | At most 6 running agents, reviewers included (`CLAUDE.md` loop step 4). Alex lifted the cap on 2026-10-19, then restored it the same day: 21 parallel agents pushed the load average to 110 and filled RAM. |
+| Juvenile or adult | Alex, 2026-10-19: the shop sells every species as a juvenile or an adult, at two prices. A juvenile is smaller, cheaper, and grows into an adult over the species' `juvenileAfterDays → adultAfterDays` (T33). An adult costs about 2.5× as much and arrives at full size and colour. |
+| Heaters | Alex, 2026-10-19: warm-water species need a heater. Without one, the tank drifts to room temperature (21 °C), and a species whose range starts above that is stressed and can get sick (T37). New tanks come with a basic heater. Existing tanks migrate with one installed so no current fish suffers. The shop warns before a warm species goes into a tank without a heater, but does not block it. |
+| In-game currency | One currency, **Pearls**, earned by playing and bought with real money. Every shop item has a price in Pearls, and the balance is always visible in the HUD. Basic care is never charged and never blocked by the balance: feeding with the standard food, water changes, gravel vacuum, algae scrape and the standard treatment for each disease are free, so no fish dies because the player did not pay, even with a negative balance after a chargeback. Pearls buy fish, plants, decor, equipment upgrades, premium foods, backgrounds and tank slots and sizes. There is no consumable inventory for basic care. No loot boxes and no random paid rewards. Every price lives in `content/economy.json`, so tuning prices is a data change. |
+| Real-money packs | Pearl packs at App Store price points, VAT included: €0.99 → 100, €4.99 → 550, €9.99 → 1 200, €19.99 → 2 500, €49.99 → 6 500, €99.99 → 14 000. Plus an optional "Aquarist Club" subscription at €4.99 a month: 20 Pearls a day and cosmetic extras. On the web, payments go through Stripe Checkout. In a future iOS app, they go through Apple in-app purchase at the same price points. Following the EU consumer-protection principles for virtual currencies (CPC 2024): packs show their real price, every shop item also shows its approximate euro value next to the Pearl price, a purchase never forces a large pack to cover a small shortfall (the not-enough-Pearls flow offers the smallest pack that covers it, and shows the leftover), there are no countdowns, limited-time pressure or purchase prompts mid-care, and no purchase prompts are aimed at children (buying needs an adult confirmation in the account settings). Checkout asks for explicit consent to immediate delivery **and** acknowledgement that this loses the 14-day withdrawal right; the receipt mail confirms both. The subscription can be cancelled in one step from the settings screen. Devfish runs in Stripe test mode only. **Live payments wait for Alex**: business permit, VAT/OSS registration, Stripe account and terms of sale. |
+| Revenue target | Alex asked for €10k profit a month. Each euro a player spends keeps €0.73 after 17 % Luxembourg VAT and Apple's 15 % (Small Business Program), or about €0.81 on the web through Stripe for Luxembourg buyers. Web sales to other EU countries carry the buyer's country VAT through OSS (17–27 %), and Stripe's fixed fee (about €0.25 plus 1.5 % for EU cards) takes about a quarter of the €0.99 pack, so the web shop starts at the €4.99 pack. €10k profit before income tax therefore needs about €13.8k of player spending a month. €10k in pocket after Luxembourg income tax and social contributions needs roughly €27.5k. These are estimates for a fiduciaire to confirm. With 100 users (Alex's planning figure, not a measured base) that is €138–275 per user per month, about 50–100 times what casual sim games earn (ARPU €1–4 a month). Prices are therefore set at market level, and the target comes from players: about 3 500–14 000 monthly active players for €10k before tax. |
 
 ### 9.2 Architecture notes
 
@@ -319,6 +325,8 @@ pictures per tank type**. The release (`dev → main`) waits until this section 
 - **Social:** a public link carries a random share token (≥ 128 bits), which the owner can revoke and rotate. `GET /api/public/:token` returns a sanitised read-only snapshot (tank state and seed, filtered tank name, no owner identity), and the visitor's client runs the same sim from it. No server-side rendering. Public pages send `X-Robots-Tag: noindex` on every host, prod included. Gifts and trades find users by a **public handle** (unique, word-filtered, changeable, defined in T30); emails are never exposed. The handle is in the account export and deleted with the account. On account deletion, pending gifts return to their sender and incoming offers are declined. Reactions, votes and gifts are rate-limited, authenticated and audited. The community tank is one shared server-authoritative tank: everyone feeds it, there's a per-user daily food quota, and its state is pushed over SSE.
 - **Reminders:** push subscriptions are personal data, so they are in the account export and deleted with the account. Unsubscribe is a POST with a signed token (RFC 8058 `List-Unsubscribe-Post`), so mail scanners following links can't unsubscribe anyone. A global daily cap (env, default 500) protects the shared relay.
 - **Replay:** the lifecycle step records an event timeline (`fed`, `born`, `sick`, `died`, `algae`). The "while you were away" screen plays it as a fast-forward: 20× sim speed between events on high and mid, and on low and mobile a crossfade between event snapshots instead of simulating.
+- **Economy:** `packages/shared` adds `wallet` (a balance in integer Pearls) and an append-only `ledger` table: id, user, delta, reason (`purchase`, `earn`, `grant`, `pack`, `refund`), item ref, idempotency key and created time. The balance is the sum of the ledger, cached in a separate `wallet` table (not Better Auth's user table) and updated in the same transaction. Every paid shop route (fish, plants, decor, equipment upgrades, premium food, backgrounds, tank slots and sizes) charges through one `spend()`: a conditional `UPDATE wallet SET balance = balance - n WHERE user_id = u AND balance >= n RETURNING balance`, so two parallel purchases can't both spend the same Pearls. The debit, its ledger row and the item grant commit in one transaction, and each purchase carries a client idempotency key (unique per user in the ledger), so a retried request can't buy twice. An add-fish request carries `stage: juvenile | adult`. Earning is decided on the server: daily care, healthy-tank streaks, achievements (T51), and fry sold back to the shop at 30 % of the juvenile price. Each earn source has a daily cap. New accounts get a starting grant; existing accounts get a one-off migration grant and keep everything they own. The wallet and ledger are in the account export. On account deletion, play rows (earn, spend, grant) are deleted; rows for real-money transactions are pseudonymised (user reference removed) and kept for the 10 years Luxembourg accounting law requires, which GDPR Art. 17(3)(b) allows. The privacy page names Stripe as a processor. The delete-account confirmation and the terms of sale both say that unspent Pearls, bought ones included, are lost when the account is deleted. In the T69 contract the ledger's user reference is `ON DELETE SET NULL` (not cascade) and payment keys are unique on `(source, idempotency_key)`, independent of the user.
+- **Payments:** a Stripe Checkout session is created on the server. Credit happens only from the signature-verified webhook (its own raw-body route, since the app replaces the JSON parser), only once the session is actually paid (`checkout.session.completed` with `payment_status = paid`, or `checkout.session.async_payment_succeeded`), and is idempotent on the **Checkout Session id** (unique in the ledger), because one payment produces several events with different ids. Refunds are keyed on the refund id and disputes on the dispute id: a partial refund claws back Pearls in proportion, repeated refunds add up and never exceed the pack, a lost dispute claws back the rest, and a won dispute restores what it took. The Aquarist Club subscription is created through Checkout (`mode: subscription`); each renewal arrives as `invoice.paid` with no new session. The daily 20 Pearls are granted on the server on the player's first visit of each UTC day while the subscription is `active` and the day falls inside the paid period from the latest paid invoice, keyed on subscription id + UTC day, so a day is never granted twice. Grants stop at cancellation (end of the paid period), on `past_due` or `unpaid`, and when the period ends without a new paid invoice. A refunded subscription invoice claws back the Pearls granted for that invoice's period. A clawback may take the balance negative, which blocks paid purchases until it recovers but never basic care. A receipt mail goes through the relay. Prices come from `content/economy.json` and are mirrored as Stripe Prices, and the client never sends an amount. Secrets live in Dokploy env (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`; Stripe's `sk_…`/`whsec_…` format contains underscores, an accepted exception to the alphanumeric rule like VAPID). The ledger has a `source` (`stripe`, later `apple`), so StoreKit can be added for the iOS app without a schema change.
 
 ### 9.3 Tasks
 
@@ -347,7 +355,7 @@ follow the dependencies: a task's wave is one more than its latest dependency's.
 | T42 | Growing plants: growth state, spread, nutrient uptake vs algae, trimming tool | backend-engineer → scene-builder → gameplay-engineer | T31 | 11 |
 | T43 | Corals: growth, fragging, bleaching on bad water | backend-engineer → scene-builder → gameplay-engineer | T31 | 11 |
 | T44 | Cleaner wrasse (Labroides dimidiatus) cleaning-station behaviour and material (model comes from T40) | fish-behavior-engineer → render-engineer | T40 | 10 |
-| T45 | Equipment: lifecycle effects + shop tiers | backend-engineer → gameplay-engineer | T31 | 11 |
+| T45 | Equipment: lifecycle effects + shop tiers. Warm-water species need a heater (§9.1): migration installs a basic heater in existing tanks and new tanks come with one (the shop warning is T71) | backend-engineer → gameplay-engineer | T31 | 11 |
 | T46 | Wave maker current field in sim + coral/plant sway + light schedule ramp | fish-behavior-engineer → scene-builder → render-engineer | T45 | 12 |
 | T47 | Tank sizes: nano 30 L, 200 L, long 300 L (capacity, sim bounds, layout, glass and water volume, size picker) | backend-engineer → fish-behavior-engineer → scene-builder → render-engineer → gameplay-engineer | T30 | 10 |
 | T48 | New biome: African cichlid lake (preset, 5 backgrounds, 4+ species) | curator → pipeline → backend → scene → behaviour → render → gameplay | T29, T31, T47 | 14 |
@@ -367,14 +375,18 @@ follow the dependencies: a task's wave is one more than its latest dependency's.
 | T62 | Tank of the week gallery + votes | backend-engineer → gameplay-engineer | T61 | 11 |
 | T63 | Gift/trade fish between users by public handle (escrow, both accept, acclimation bag) | backend-engineer → gameplay-engineer | T61 | 11 |
 | T64 | Community tank: shared server tank, food quota, SSE state | backend-engineer → gameplay-engineer | T61, T31 | 11 |
-| T65 | Security review of social, push and mail features | code-reviewer | T52, T61, T62, T63, T64 | 12 |
+| T65 | Security review of social, push, mail, wallet and payment features (incl. the EU virtual-currency consumer rules) | code-reviewer | T52, T61, T62, T63, T64, T70, T72 | 13 |
 | T66 | Audit pass 2: realism, perf budgets on all biomes and sizes, iPhone 15 Pro Max numbers | visual-perf-auditor | T47, T48, T49, T50, T57, T58 | 15 |
-| T67 | E2E for every expansion feature | gameplay-engineer | T29–T64 | 15 |
+| T67 | E2E for every expansion feature | gameplay-engineer | T29–T64, T69–T72 | 15 |
 | T68 | Fix wave from T65/T66, then RC2 on devfish → **stop and ask Alex** for `dev → main` | owners of each finding → devops-engineer | T65, T66, T67 | 16 |
+| T69 | Contract: wallet, ledger, `content/economy.json` (a price for every shop item, juvenile and adult prices per species, earn rules and caps, Pearl packs, subscription), add-fish `stage` | backend-engineer | T30 | 10 |
+| T70 | Server economy: wallet and ledger with migration, atomic `spend()` with idempotency keys on every paid shop route, basic care never charged, juvenile or adult purchase, earn rules with daily caps, starting and migration grants, export and deletion with retention | backend-engineer | T69, T33 | 11 |
+| T71 | Shop UI: categories, a price on every item, juvenile/adult toggle (price and size), Pearl balance in the HUD, not-enough-Pearls flow, heater warning, purchase confirmation, earn feedback, euro value per item, no pressure design (the adult purchase confirmation belongs to T72) | gameplay-engineer | T70, T45, T35 | 12 |
+| T72 | Pearl packs and subscription on the web: Stripe Checkout, verified raw-body webhook, credit once per paid Checkout Session, refund and dispute handling, receipt mail, real price shown, withdrawal-waiver consent and acknowledgement, subscription grants (daily, keyed on subscription id + UTC day, stop on cancel/past_due/unpaid/period end, clawback on refunded invoice), one-step subscription cancel, adult confirmation (owner of the rule and its UI: T72), lost-Pearls warning on account deletion, terms of sale; test mode on devfish, live only once Alex sets it up | backend-engineer → gameplay-engineer | T70 | 12 |
 
 Multi-owner tasks are split into one PR per owner when dispatched, chained in the order shown by
 the arrows: the data owner first, the visuals and UI after it.
 
 **Ownership added for §9:** `content/backgrounds/*.json` → asset-curator. `content/chemistry.json`
-→ backend-engineer. `apps/web/index.html`, `apps/web/public/` outside `assets/`,
+→ backend-engineer. `content/economy.json` → backend-engineer. `apps/web/index.html`, `apps/web/public/` outside `assets/`,
 `apps/web/vite.config.ts` and `apps/web/src/pwa/**` → gameplay-engineer.

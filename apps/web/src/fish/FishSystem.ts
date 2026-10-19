@@ -22,6 +22,7 @@ import {
   STEP_DT,
   type FishPlacement,
   type Point3,
+  type SimToy,
   type SpeciesInput,
   type Stimulus,
   type TankSpaceWorldConfig,
@@ -32,7 +33,7 @@ import { releaseAll } from '../engine/lifecycle';
 import type { Tier, TierSettings } from '../engine/quality/tiers';
 import { waterBounds, type TankDimensions } from '../engine/tank/dimensions';
 import type { InteractionEvents } from '../interaction/events';
-import type { ShrimpRig } from './assetIndex';
+import type { ImpostorAtlasInfo, ShrimpRig } from './assetIndex';
 import { disposeFishModel, FishAssetLoader, type FishModel } from './assets';
 import { AcclimationBags } from './bag';
 import { BatchCache } from './batchCache';
@@ -46,9 +47,28 @@ import {
   type InstanceValues,
   type WalkerValues,
 } from './instances';
-import { mouthFade, selectLod, type LodThresholds } from './lod';
+import {
+  drawsAsImpostor,
+  effectiveDistance,
+  markNearest,
+  mouthFade,
+  selectLod,
+  type ImpostorChoice,
+  type LodThresholds,
+} from './lod';
+import { writeDiseaseSigns } from './disease';
 import { featuresFor, sameFeatures, waitsForReload } from './features';
-import { FishMaterial, type FishMaterialFeatures } from './material';
+import {
+  disposeImpostorAtlas,
+  ImpostorInstanceData,
+  impostorStrip,
+  loadImpostorAtlas,
+  type ImpostorAtlas,
+  type ImpostorValues,
+} from './impostor';
+import { FishImpostorMaterial } from './impostorMaterial';
+import { FishMaterial, type FishMaterialFeatures, type FishLighting } from './material';
+import { fishViewDirection, selectFrames, type FrameSelection } from './octahedral';
 import { commitLodDraw } from './prewarm';
 import {
   bagCentre,
@@ -83,7 +103,7 @@ import {
 } from './simWorld';
 import { SimUnavailableError } from '../interaction/simUnavailable';
 import { speciesInput } from './species';
-import type { FishBite, FishPoint, PickRay, TankEvent } from './start';
+import type { BallNudge, FishBite, FishPoint, PickRay, TankEvent } from './start';
 import { isFinned, SWIM_MODES, SwimState, type SwimModeParams, type SwimmingMode } from './swim';
 import { curlAboveFloor, floorUnderTail, WalkState, type TailRig, type WalkSample } from './walk';
 
@@ -107,6 +127,21 @@ interface LodBatch {
   warmed: boolean;
 }
 
+interface ImpostorDraw {
+  readonly info: ImpostorAtlasInfo;
+  readonly instances: ImpostorInstanceData;
+  readonly matrices: InstancedBufferAttribute;
+  readonly meshes: readonly InstancedMesh[];
+  readonly materials: readonly FishImpostorMaterial[];
+  count: number;
+  warmed: boolean;
+}
+
+/** Loaded on the first frame of a tier that draws impostors; kept for the batch's life after. */
+type AtlasState =
+  | { readonly kind: 'none' | 'loading' | 'failed' }
+  | { readonly kind: 'ready'; readonly atlas: ImpostorAtlas };
+
 interface SpeciesBatch {
   readonly input: SpeciesInput;
   /** Replaced, with its LODs, when the tier's texture size changes. */
@@ -115,6 +150,9 @@ interface SpeciesBatch {
   locomotion: BatchLocomotion;
   readonly profile: FishRenderProfile;
   lods: readonly LodBatch[];
+  atlas: AtlasState;
+  /** Built with the LODs once the atlas is ready; null without one, and for walkers. */
+  impostor: ImpostorDraw | null;
   capacity: number;
   /** What its materials draw with; behind `FishSystem.features` while a texture reload is due. */
   features: FishMaterialFeatures | null;
@@ -152,6 +190,15 @@ interface FishRuntime {
   readonly filmThickness: number;
   readonly condition: number;
   lod: number;
+  /** Camera distance this frame, in metres. */
+  cameraDistance: number;
+  /** Length-normalised camera distance this frame. */
+  distance: number;
+  /** One of the tier's nearest fish, drawn as a mesh at any LOD short of lod2. */
+  full: boolean;
+  rankKey: number;
+  /** The pose's liveliness this frame. */
+  liveliness: number;
   /** Drawn last frame, at `lastPosition`/`lastQuaternion`. */
   shown: boolean;
   readonly lastPosition: Vector3;
@@ -162,12 +209,17 @@ interface FishRuntime {
   readonly fromQuaternion: Quaternion;
   bagSlot: number | null;
   script: Script | null;
+  /** Fin spread and gill-cover flare in display, 0..1, from the sim; closing to 0 off it. */
+  display: number;
+  gillFlare: number;
 }
 
 /** LOD levels near enough for their self-shadowing to read. */
 const SHADOW_LODS = 2;
 /** A fish leaving its bag, or held over a rebuilt world, glides into the sim's pose this long. */
 const HANDOVER_S = 1.2;
+/** Fins spread in display close over the carcass's limp time once the sim lets them go. */
+const DISPLAY_CLOSE_S = CARCASS.limpS;
 /** Below this horizontal share of its forward axis a body is climbing and has no heading. */
 const CLIMBING_FORWARD_XZ = 0.5;
 /** Fingertip slop when netting a small fish, in metres. */
@@ -237,6 +289,8 @@ export class FishSystem {
   private readonly batches = new BatchCache<SpeciesBatch>(
     (batch) => {
       this.disposeLods(batch);
+      if (batch.atlas.kind === 'ready') disposeImpostorAtlas(batch.atlas.atlas);
+      batch.atlas = { kind: 'failed' };
       disposeFishModel(batch.model);
     },
     () => this.wantedBatches(),
@@ -253,6 +307,13 @@ export class FishSystem {
   private readonly spec: SimWorldSpec;
   private readonly cleanups: (() => void)[] = [];
   private readonly ateListeners = new Set<(events: readonly FishBite[]) => void>();
+  private readonly nudgeListeners = new Set<(nudge: BallNudge) => void>();
+  private readonly nudge: { toyId: string | null; ix: number; iz: number } = {
+    toyId: null,
+    ix: 0,
+    iz: 0,
+  };
+  private readonly point = { x: 0, y: 0, z: 0 };
   /** `asset@size` loads that failed; the batch keeps the model it has and is not retried. */
   private readonly failedRetextures = new Set<string>();
   /** Replaced, with its worker, when the worker stops answering. */
@@ -267,8 +328,20 @@ export class FishSystem {
   private syncing = false;
   private readonly syncWaiters: (() => void)[] = [];
   private clockS = 0;
+  /** When photo mode froze the fish; the stream is sampled at this instant until they go on. */
+  private pausedAtMs: number | null = null;
   private thresholds: LodThresholds = { midDistance: 1, impostorDistance: 3 };
   private shadows: Readonly<TierSettings> | null = null;
+  private impostors: TierSettings['fishImpostors'] = null;
+  private readonly ranked: FishRuntime[] = [];
+  private readonly draws: (LodBatch | ImpostorDraw)[] = [];
+  private readonly impostorChoice: ImpostorChoice = {
+    tierImpostors: false,
+    available: false,
+    lod: 0,
+    full: true,
+    castsShadow: false,
+  };
   private features: FishMaterialFeatures | null = null;
   private night = 0;
   private light = 1;
@@ -283,6 +356,25 @@ export class FishSystem {
   private readonly scale = new Vector3();
   private readonly forward = new Vector3();
   private readonly quat = new Float32Array(4);
+  private readonly toCamera = new Vector3();
+  private readonly viewDirection: [number, number, number] = [1, 0, 0];
+  private readonly frames: FrameSelection = { i: 0, j: 0, fx: 0, fy: 0 };
+  private readonly impostorValues: ImpostorValues = {
+    qx: 0,
+    qy: 0,
+    qz: 0,
+    qw: 1,
+    scale: 1,
+    phase: 0,
+    amplitude: 0,
+    curvature: 0,
+    viewX: 1,
+    viewY: 0,
+    viewZ: 0,
+    pale: 0,
+    tint: [1, 1, 1],
+    frames: this.frames,
+  };
   private readonly pose = createPose();
   private readonly walkSample: WalkSample = {
     speed: 0,
@@ -315,6 +407,11 @@ export class FishSystem {
     tint: [1, 1, 1],
     gills: 0,
     mouth: 0,
+    display: 0,
+    gillFlare: 0,
+    ich: 0,
+    finRot: 0,
+    velvet: 0,
   };
 
   /**
@@ -385,6 +482,7 @@ export class FishSystem {
     this.cleanups.push(
       engine.quality.register('fish-lod', (s) => {
         this.thresholds = s.fishLod;
+        this.impostors = s.fishImpostors;
       }),
       engine.quality.register('fish-shadows', (s) => {
         this.shadows = s;
@@ -507,6 +605,41 @@ export class FishSystem {
     if (!this.disposed && this.simReady) this.sim.setFood(buffer);
   }
 
+  /**
+   * Every toy in the tank, in tank space, `[]` for none; kept for later worlds like anchors. A
+   * drifting ball is meant to be sent again every tick.
+   */
+  setToys(toys: readonly SimToy[]): void {
+    if (this.disposed) return;
+    this.spec.setToys(toys);
+    if (this.simReady) this.sim.setToys(toys);
+  }
+
+  /**
+   * Each bump a fish gave the ball, as the velocity change in tank x and z. The nudge is reused for
+   * the next one, so read it before returning.
+   */
+  onToyNudge(listener: (nudge: BallNudge) => void): () => void {
+    this.nudgeListeners.add(listener);
+    return () => this.nudgeListeners.delete(listener);
+  }
+
+  /**
+   * Where the swimming fish with this server id is drawn, in scene space (the same as tank space,
+   * as the fish group sits at the scene origin), or null when it is not on screen. The point is
+   * reused by the next call.
+   */
+  fishPoint(serverId: string): FishPoint | null {
+    const simId = this.roster.simIdOf(serverId);
+    const rt = simId === undefined ? undefined : this.runtimes.get(simId);
+    if (this.disposed || rt === undefined || !rt.shown || rt.fish.phase !== 'swimming') return null;
+    const { point } = this;
+    point.x = rt.lastPosition.x;
+    point.y = rt.lastPosition.y;
+    point.z = rt.lastPosition.z;
+    return point;
+  }
+
   /** Bites by the ids the app knows: server fish ids while a saved tank is shown. */
   onAte(listener: (events: readonly FishBite[]) => void): () => void {
     this.ateListeners.add(listener);
@@ -605,6 +738,7 @@ export class FishSystem {
     this.disposed = true;
     this.lifetime.abort(new Error('fish system disposed'));
     this.ateListeners.clear();
+    this.nudgeListeners.clear();
     for (const resolve of this.syncWaiters.splice(0)) resolve();
     releaseAll(this.cleanups.splice(0), 'FishSystem');
   }
@@ -695,7 +829,17 @@ export class FishSystem {
       this.report(`Fish "${species}" has no visual; it swims and eats unseen`, cause);
       return null;
     }
-    return { input, model, locomotion, profile, lods: [], capacity: 0, features: null };
+    return {
+      input,
+      model,
+      locomotion,
+      profile,
+      lods: [],
+      atlas: { kind: 'none' },
+      impostor: null,
+      capacity: 0,
+      features: null,
+    };
   }
 
   /** Grows a species' instance buffers; the materials are rebuilt around the new ones. */
@@ -703,11 +847,8 @@ export class FishSystem {
     if (needed <= batch.capacity) return;
     this.disposeLods(batch);
     const capacity = capacityFor(needed);
-    const { model, profile, locomotion } = batch;
-    const lighting = {
-      lightDirection: this.engine.caustics.lightDirection,
-      light: this.engine.caustics.hoodLight(),
-    };
+    const { input, model, profile, locomotion } = batch;
+    const lighting = this.lighting();
     batch.lods = model.lods.map((parts, level) => {
       const walking = locomotion.kind === 'walk';
       const instances = new FishInstanceData(
@@ -738,6 +879,7 @@ export class FishSystem {
           instances,
           lighting,
           mouth: part.mouth,
+          displays: input.behaviour.traits.includes('flare-display'),
         });
         if (this.features !== null) material.setFeatures(this.features);
         const mesh = new InstancedMesh(part.geometry, material, capacity);
@@ -758,8 +900,85 @@ export class FishSystem {
       return { instances, matrices, meshes, materials, count: 0, warmed: false };
     });
     batch.capacity = capacity;
+    batch.impostor = this.buildImpostor(batch, lighting, this.features);
     batch.features = this.features;
     this.applyShadows(batch);
+  }
+
+  private lighting(): FishLighting {
+    return {
+      lightDirection: this.engine.caustics.lightDirection,
+      light: this.engine.caustics.hoodLight(),
+    };
+  }
+
+  private buildImpostor(
+    batch: SpeciesBatch,
+    lighting: FishLighting,
+    features: FishMaterialFeatures | null,
+  ): ImpostorDraw | null {
+    const { model, profile, locomotion, capacity, atlas } = batch;
+    if (atlas.kind !== 'ready' || locomotion.kind !== 'swim' || capacity === 0) return null;
+    const instances = new ImpostorInstanceData(capacity);
+    const material = new FishImpostorMaterial({
+      assetId: model.entry.id,
+      atlas: atlas.atlas,
+      profile,
+      mode: locomotion.mode,
+      zMin: model.entry.min[2],
+      zMax: model.entry.max[2],
+      instances,
+      lighting,
+    });
+    if (features !== null) material.setFeatures(features);
+    const mesh = new InstancedMesh(impostorStrip(), material, capacity);
+    mesh.name = `${model.entry.id}:impostor`;
+    mesh.frustumCulled = false;
+    mesh.receiveShadow = true;
+    mesh.castShadow = false;
+    mesh.count = 0;
+    mesh.visible = false;
+    mesh.instanceMatrix.setUsage(DynamicDrawUsage);
+    this.group.add(mesh);
+    return {
+      info: atlas.atlas.info,
+      instances,
+      matrices: mesh.instanceMatrix,
+      meshes: [mesh],
+      materials: [material],
+      count: 0,
+      warmed: false,
+    };
+  }
+
+  /** Starts the atlas load the first time a tier wants impostors; a fish without one keeps lod2. */
+  private requestAtlas(batch: SpeciesBatch): void {
+    if (batch.atlas.kind !== 'none') return;
+    const info = batch.model.entry.impostor;
+    if (info === null || batch.locomotion.kind !== 'swim') {
+      batch.atlas = { kind: 'failed' };
+      return;
+    }
+    batch.atlas = { kind: 'loading' };
+    const assetId = batch.model.entry.id;
+    loadImpostorAtlas(this.engine.ktx2, this.options.assetRoot, info).then(
+      (atlas) => {
+        if (this.disposed || batch.atlas.kind !== 'loading') {
+          disposeImpostorAtlas(atlas);
+          return;
+        }
+        batch.atlas = { kind: 'ready', atlas };
+        batch.impostor = this.buildImpostor(
+          batch,
+          this.lighting(),
+          batch.features ?? this.features,
+        );
+      },
+      (cause: unknown) => {
+        if (batch.atlas.kind === 'loading') batch.atlas = { kind: 'failed' };
+        this.report(`Fish "${assetId}" impostor atlas failed; distant ones keep their mesh`, cause);
+      },
+    );
   }
 
   /** Keeps the model: only the instanced meshes and their materials go. */
@@ -772,6 +991,15 @@ export class FishSystem {
       for (const material of lod.materials) material.dispose();
     }
     batch.lods = [];
+    if (batch.impostor !== null) {
+      for (const mesh of batch.impostor.meshes) {
+        mesh.removeFromParent();
+        mesh.geometry.dispose();
+        mesh.dispose();
+      }
+      for (const material of batch.impostor.materials) material.dispose();
+      batch.impostor = null;
+    }
     batch.capacity = 0;
   }
 
@@ -875,6 +1103,11 @@ export class FishSystem {
       filmThickness: lo + (hi - lo) * rng.next(),
       condition: Math.min(1, Math.max(0, 1 - fish.health)) * SICK_PALING,
       lod: 0,
+      cameraDistance: 0,
+      distance: 0,
+      full: true,
+      rankKey: 0,
+      liveliness: 1,
       shown: false,
       lastPosition: new Vector3(),
       lastQuaternion: new Quaternion(),
@@ -883,6 +1116,8 @@ export class FishSystem {
       fromQuaternion: new Quaternion(),
       bagSlot: null,
       script: null,
+      display: 0,
+      gillFlare: 0,
     };
     if (fish.phase === 'bagged') runtime.bagSlot = this.freeBagSlot();
     if (fish.phase === 'dead') runtime.script = this.deadScript(runtime);
@@ -1068,6 +1303,15 @@ export class FishSystem {
     };
   }
 
+  private followPause(nowMs: number): void {
+    const paused = this.engine.photo.simPaused;
+    if (paused === (this.pausedAtMs !== null)) return;
+    this.pausedAtMs = paused ? nowMs : null;
+    if (!this.simReady || this.inWorld === null) return;
+    if (paused) this.sim.stop();
+    else this.sim.start();
+  }
+
   private async reinit(config: TankSpaceWorldConfig): Promise<void> {
     const generation = this.generation;
     const init = initSim({
@@ -1087,6 +1331,9 @@ export class FishSystem {
           this.stream.begin(ready.epoch, ready.fishIds);
         },
       });
+      if (this.pausedAtMs !== null && !this.disposed && generation === this.generation) {
+        this.sim.stop();
+      }
     } catch (cause) {
       if (cause instanceof SimInitTimeout && this.started && !this.disposed) this.replaceWorker();
       throw cause;
@@ -1107,6 +1354,13 @@ export class FishSystem {
       const bites = this.roster.translateAte(events);
       if (bites.length === 0) return;
       for (const listener of this.ateListeners) listener(bites);
+    });
+    sim.onToyNudge(({ toyId, ix, iz }) => {
+      const { nudge } = this;
+      nudge.toyId = toyId;
+      nudge.ix = ix;
+      nudge.iz = iz;
+      for (const listener of this.nudgeListeners) listener(nudge);
     });
     return sim;
   }
@@ -1163,7 +1417,7 @@ export class FishSystem {
   }
 
   private setBatchFeatures(batch: SpeciesBatch, features: FishMaterialFeatures): void {
-    for (const lod of batch.lods) {
+    for (const lod of this.drawsOf(batch)) {
       for (const m of lod.materials) m.setFeatures(features);
       lod.warmed = false;
     }
@@ -1223,6 +1477,10 @@ export class FishSystem {
         walk.legPhase = frame[o + SnapshotField.LegPhase] ?? 0;
         walk.flip = frame[o + SnapshotField.Flip] ?? 0;
         walk.attached = frame[o + SnapshotField.Attached] ?? 1;
+        // A world restarting at 0 closes the fins over a moment too.
+        const closing = deltaS / DISPLAY_CLOSE_S;
+        rt.display = Math.max(frame[o + SnapshotField.Display] ?? 0, rt.display - closing);
+        rt.gillFlare = Math.max(frame[o + SnapshotField.GillFlare] ?? 0, rt.gillFlare - closing);
         if (rt.handover > 0) {
           const w = smoothstep01(rt.handover / HANDOVER_S);
           this.position.lerp(rt.fromPosition, w);
@@ -1233,6 +1491,9 @@ export class FishSystem {
       }
       if (rt.bagSlot === null) return false;
     }
+    // Off the sim the fins close over a moment, as the carcass goes limp, instead of in one frame.
+    rt.display = Math.max(0, rt.display - deltaS / DISPLAY_CLOSE_S);
+    rt.gillFlare = Math.max(0, rt.gillFlare - deltaS / DISPLAY_CLOSE_S);
     let limpFrom: Quaternion | null = null;
     let limpWeight = 0;
     const { script } = rt;
@@ -1275,21 +1536,28 @@ export class FishSystem {
     return curlAboveFloor(curl, tail, rt.scale, position, quaternion, floorY);
   }
 
-  private update(deltaS: number, nowMs: number): void {
+  private update(frameDeltaS: number, frameNowMs: number): void {
+    this.followPause(frameNowMs);
+    const deltaS = this.pausedAtMs === null ? frameDeltaS : 0;
+    const nowMs = this.pausedAtMs ?? frameNowMs;
     this.clockS += deltaS;
     const frame = this.stream.sample(nowMs);
     const sceneRevision = this.engine.sceneRevision;
     const rewarm = sceneRevision !== this.sceneRevision;
     this.sceneRevision = sceneRevision;
+    const impostors = this.impostors;
     for (const batch of this.batches.values()) {
-      for (const lod of batch.lods) {
+      for (const lod of this.drawsOf(batch)) {
         lod.count = 0;
         if (rewarm) lod.warmed = false;
       }
+      if (impostors !== null) this.requestAtlas(batch);
     }
     this.bags.begin();
 
-    const camera = this.engine.camera.position;
+    const camera = this.engine.viewPosition;
+    const ranked = this.ranked;
+    ranked.length = 0;
     for (const rt of this.runtimes.values()) {
       if (!this.place(rt, deltaS, frame)) {
         rt.shown = false;
@@ -1306,61 +1574,153 @@ export class FishSystem {
       rt.lastPosition.copy(this.position);
       rt.lastQuaternion.copy(this.quaternion);
       rt.shown = true;
-
-      const lods = rt.batch.lods;
+      rt.liveliness = liveliness;
       const distance = this.position.distanceTo(camera);
-      rt.lod = selectLod(distance, rt.length, this.thresholds, rt.lod, lods.length);
-      const lod = lods[rt.lod];
-      if (lod === undefined) continue;
-      const slot = lod.count++;
-      this.scale.setScalar(rt.scale);
-      this.matrix.compose(this.position, this.quaternion, this.scale);
-      lod.matrices.set(this.matrix.elements, slot * 16);
-      const v = this.values;
-      v.qx = this.quaternion.x;
-      v.qy = this.quaternion.y;
-      v.qz = this.quaternion.z;
-      v.qw = this.quaternion.w;
-      v.scale = rt.scale;
-      const swim = motion instanceof SwimState ? motion : null;
-      v.phase = swim?.phase ?? 0;
-      v.amplitude = (swim?.amplitude ?? 0) * liveliness;
-      v.curvature = (swim?.curvature ?? 0) * rt.scale * liveliness;
-      v.finPhase = motion instanceof SwimState ? motion.finPhase : motion.clock;
-      v.pale = Math.max(
-        rt.condition,
-        rt.fish.phase === 'dead' ? 1 - liveliness : 0,
-        this.night * rt.batch.profile.nightPaling,
-      );
-      v.seed = rt.seed;
-      v.filmThickness = rt.filmThickness;
-      v.tint = rt.tint;
-      v.gills = (swim?.gillOpening ?? 0) * liveliness;
-      v.mouth =
-        swim === null
-          ? 0
-          : swim.mouthOpening * liveliness * mouthFade(distance, rt.length, this.thresholds);
-      lod.instances.write(slot, v);
-      const { locomotion } = rt.batch;
-      if (motion instanceof WalkState && locomotion.kind === 'walk') {
-        const w = this.walker;
-        w.legPhase = motion.legPhase;
-        w.stride = motion.stride * liveliness;
-        w.curl = this.curlAboveFloor(rt, locomotion.tail, motion.curl * liveliness);
-        w.paddle = motion.paddle * liveliness;
-        w.pick = motion.pick * liveliness;
-        w.dance = motion.dance * liveliness;
-        lod.instances.writeWalker(slot, w);
-      }
+      rt.cameraDistance = distance;
+      rt.distance = effectiveDistance(distance, rt.length);
+      rt.lod = selectLod(distance, rt.length, this.thresholds, rt.lod, rt.batch.lods.length);
+      if (rt.batch.impostor !== null) ranked.push(rt);
+      else rt.full = true;
     }
     this.bags.end();
+    if (impostors !== null) markNearest(ranked, impostors.fullMeshes);
+    const castsShadow = (this.shadows?.shadowMapSize ?? 0) > 0;
+
+    for (const rt of this.runtimes.values()) {
+      if (!rt.shown) continue;
+      this.position.copy(rt.lastPosition);
+      this.quaternion.copy(rt.lastQuaternion);
+      const { impostor } = rt.batch;
+      const { motion } = rt;
+      const choice = this.impostorChoice;
+      choice.tierImpostors = impostors !== null;
+      choice.available = impostor !== null && motion instanceof SwimState;
+      choice.lod = rt.lod;
+      choice.full = rt.full;
+      choice.castsShadow = castsShadow && rt.lod < SHADOW_LODS;
+      if (impostor !== null && motion instanceof SwimState && drawsAsImpostor(choice)) {
+        this.drawImpostor(rt, motion, impostor, camera);
+      } else {
+        this.drawMesh(rt);
+      }
+    }
 
     for (const batch of this.batches.values()) {
-      for (const lod of batch.lods) {
+      for (const lod of this.drawsOf(batch)) {
         commitLodDraw(lod);
         lod.matrices.needsUpdate = true;
         lod.instances.commit();
       }
     }
+  }
+
+  /** Reuses one array, so callers must not nest it. */
+  private drawsOf(batch: SpeciesBatch): readonly (LodBatch | ImpostorDraw)[] {
+    const draws = this.draws;
+    draws.length = 0;
+    for (const lod of batch.lods) draws.push(lod);
+    if (batch.impostor !== null) draws.push(batch.impostor);
+    return draws;
+  }
+
+  private placeInstance(
+    lod: { count: number; matrices: InstancedBufferAttribute },
+    rt: FishRuntime,
+  ): number {
+    const slot = lod.count++;
+    this.scale.setScalar(rt.scale);
+    this.matrix.compose(this.position, this.quaternion, this.scale);
+    lod.matrices.set(this.matrix.elements, slot * 16);
+    return slot;
+  }
+
+  private paleOf(rt: FishRuntime): number {
+    return Math.max(
+      rt.condition,
+      rt.fish.phase === 'dead' ? 1 - rt.liveliness : 0,
+      this.night * rt.batch.profile.nightPaling,
+    );
+  }
+
+  /** Draws the runtime placed in `position`/`quaternion` with its LOD's mesh. */
+  private drawMesh(rt: FishRuntime): void {
+    const lod = rt.batch.lods[rt.lod];
+    if (lod === undefined) return;
+    const slot = this.placeInstance(lod, rt);
+    const { motion, liveliness } = rt;
+    const v = this.values;
+    v.qx = this.quaternion.x;
+    v.qy = this.quaternion.y;
+    v.qz = this.quaternion.z;
+    v.qw = this.quaternion.w;
+    v.scale = rt.scale;
+    const swim = motion instanceof SwimState ? motion : null;
+    v.phase = swim?.phase ?? 0;
+    v.amplitude = (swim?.amplitude ?? 0) * liveliness;
+    v.curvature = (swim?.curvature ?? 0) * rt.scale * liveliness;
+    v.finPhase = motion instanceof SwimState ? motion.finPhase : motion.clock;
+    v.pale = this.paleOf(rt);
+    v.seed = rt.seed;
+    v.filmThickness = rt.filmThickness;
+    v.tint = rt.tint;
+    v.gills = (swim?.gillOpening ?? 0) * liveliness;
+    v.mouth =
+      swim === null
+        ? 0
+        : swim.mouthOpening * liveliness * mouthFade(rt.cameraDistance, rt.length, this.thresholds);
+    v.display = swim === null ? 0 : rt.display * liveliness;
+    v.gillFlare = swim === null ? 0 : rt.gillFlare * liveliness;
+    writeDiseaseSigns(rt.fish.disease, motion instanceof WalkState, v);
+    lod.instances.write(slot, v);
+    const { locomotion } = rt.batch;
+    if (motion instanceof WalkState && locomotion.kind === 'walk') {
+      const w = this.walker;
+      w.legPhase = motion.legPhase;
+      w.stride = motion.stride * liveliness;
+      w.curl = this.curlAboveFloor(rt, locomotion.tail, motion.curl * liveliness);
+      w.paddle = motion.paddle * liveliness;
+      w.pick = motion.pick * liveliness;
+      w.dance = motion.dance * liveliness;
+      lod.instances.writeWalker(slot, w);
+    }
+  }
+
+  private drawImpostor(
+    rt: FishRuntime,
+    motion: SwimState,
+    draw: ImpostorDraw,
+    camera: Vector3,
+  ): void {
+    const { grid, pivot } = draw.info;
+    const slot = this.placeInstance(draw, rt);
+    const { liveliness } = rt;
+    const view = fishViewDirection(
+      camera,
+      this.position,
+      this.quaternion,
+      rt.scale,
+      pivot,
+      this.toCamera,
+    );
+    const v = this.impostorValues;
+    v.qx = this.quaternion.x;
+    v.qy = this.quaternion.y;
+    v.qz = this.quaternion.z;
+    v.qw = this.quaternion.w;
+    v.scale = rt.scale;
+    v.phase = motion.phase;
+    v.amplitude = motion.amplitude * liveliness;
+    v.curvature = motion.curvature * rt.scale * liveliness;
+    v.viewX = view.x;
+    v.viewY = view.y;
+    v.viewZ = view.z;
+    v.pale = this.paleOf(rt);
+    v.tint = rt.tint;
+    const direction = this.viewDirection;
+    direction[0] = view.x;
+    direction[1] = view.y;
+    direction[2] = view.z;
+    selectFrames(direction, grid, this.frames);
+    draw.instances.write(slot, v);
   }
 }

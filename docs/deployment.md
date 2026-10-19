@@ -23,6 +23,15 @@ Set in the Dokploy app, never in the repo: `DATABASE_URL`, `BETTER_AUTH_SECRET`,
 `SMTP_PORT`, `MAIL_FROM` (must be `@bas.lu`), `SITE_INDEXABLE`, `NODE_ENV`. Optional: `TRUSTED_PROXIES` (comma-separated
 IPs/CIDRs of the reverse proxy, default private ranges) so rate limits key on the real client IP.
 
+Care reminders (T52): `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` (base64url, set both or neither) turn on web push;
+without them the server logs `web push is off` once at start and mail reminders keep working. `VAPID_SUBJECT`
+(`mailto:` or `https:`, default `mailto:$MAIL_FROM`) and `REMINDER_DAILY_CAP` (global reminders per 24 h, default 500) are
+optional. Generate a pair with:
+
+```bash
+node -e "const c=require('node:crypto');const k=c.generateKeyPairSync('ec',{namedCurve:'P-256'});const j=k.privateKey.export({format:'jwk'});const pub=Buffer.concat([Buffer.from([4]),Buffer.from(j.x,'base64url'),Buffer.from(j.y,'base64url')]);console.log('VAPID_PUBLIC_KEY='+pub.toString('base64url'));console.log('VAPID_PRIVATE_KEY='+j.d)"
+```
+
 Local copies of generated secrets live in `~/.config/aquarium/<env>.<name>` (mode 600):
 `dev.db_password`, `dev.BETTER_AUTH_SECRET`, `prod.db_password`, `prod.BETTER_AUTH_SECRET`.
 Generate new ones with `LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 48`.

@@ -19,6 +19,7 @@ export interface FoodBridge {
 export interface EatenFood {
   readonly fishId: string;
   readonly portion: number;
+  readonly foodId: number;
 }
 
 export type ToSimSpace = (x: number, y: number, z: number, out: Float64Array) => void;
@@ -53,7 +54,7 @@ export class FoodLink {
     const eaten: EatenFood[] = [];
     for (const e of events) {
       if (!this.field.bite(e.foodId, e.portion)) continue;
-      eaten.push({ fishId: e.fishId, portion: e.portion });
+      eaten.push({ fishId: e.fishId, portion: e.portion, foodId: e.foodId });
     }
     if (eaten.length > 0) this.onEaten(eaten);
   }

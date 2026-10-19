@@ -7,12 +7,25 @@ import type {
   FoodType,
   Water,
 } from '@aquarium/shared';
+import type { PhotoFilter } from '../engine/photo/grade';
+import type { PhotoState } from '../engine/photo/PhotoMode';
 import type { CameraMode } from './camera';
+import type { GameView } from './play/game';
 
 /** A pinch, not a pile: leftovers poison the tank, so hand-feeding stays small. */
 export const HAND_FEED_PORTION = 0.5;
 
-export type PlayTool = 'tap' | 'feed' | 'laser' | 'wand' | 'net';
+export type PlayTool = 'tap' | 'feed' | 'laser' | 'wand' | 'net' | 'mirror' | 'ball' | 'game';
+
+export type Toy = 'mirror' | 'ball';
+
+export interface GameFishRef {
+  id: string;
+  name: string;
+  species: string;
+  /** The fish's own boldness, 0 to 1; the species figure alone is used without it. */
+  boldness?: number;
+}
 
 export type DecorCommand =
   | { type: 'add'; assetId: string }
@@ -47,6 +60,32 @@ export interface DecorViewState {
 
 export type SaveStatus = 'idle' | 'saving' | 'retrying' | 'saved' | 'error';
 
+export type PhotoMove = 'left' | 'right' | 'up' | 'down' | 'forward' | 'back';
+
+export type PhotoCommand =
+  | { type: 'enter' }
+  | { type: 'exit' }
+  | { type: 'filter'; filter: PhotoFilter }
+  | { type: 'dof'; enabled?: boolean; focusDistance?: number; fStop?: number }
+  | { type: 'fov'; degrees: number }
+  | { type: 'freeze'; paused: boolean }
+  | { type: 'hide-ui'; hidden: boolean }
+  /** Starts or stops moving the eye, for an on-screen pad; the keyboard does the same. */
+  | { type: 'hold'; move: PhotoMove; down: boolean }
+  | { type: 'capture' };
+
+export type PhotoCaptureFailure = 'timeout' | 'concurrent' | 'exited' | 'failed';
+
+export type PhotoCaptureOutcome =
+  | { status: 'done'; blob: Blob }
+  | { status: 'failed'; reason: PhotoCaptureFailure; message: string };
+
+export interface PhotoView {
+  state: PhotoState;
+  /** A capture is waiting for the render effects or drawing. */
+  capturing: boolean;
+}
+
 /** Typed bus between the React overlay and the camera/input layer. */
 export interface InteractionEvents {
   'camera:request-mode': { mode: CameraMode };
@@ -55,6 +94,13 @@ export interface InteractionEvents {
   'camera:follow-unavailable': Record<string, never>;
   'play:request-tool': { tool: PlayTool };
   'play:tool-changed': { tool: PlayTool };
+  /** Which toys are in the tank; the play panel offers to remove them. */
+  'toys:changed': { mirror: boolean; ball: boolean };
+  'toys:remove': { toy: Toy };
+  /** The feeding game's round, for the play panel. */
+  'game:state': { view: GameView };
+  /** `start` takes the live fish of the active tank; the game picks the shy one. */
+  'game:request': { action: 'start'; fish: readonly GameFishRef[] } | { action: 'stop' };
   /** The food chosen in the UI; hand-feed drops this one. */
   'feed:select': { food: FoodType };
   /** The tank scene is built and the play tools work. */
@@ -64,7 +110,7 @@ export interface InteractionEvents {
   'feed:dropped': { food: FoodType; portion: number; particles: number };
   'feed:rejected': { reason: 'rate-limited' | 'tank-full' | 'unreachable'; retryAfterMs: number };
   /** Fish ate food; the persistence layer batches these into ate reports. */
-  'food:ate': { eaten: readonly { fishId: string; portion: number }[] };
+  'food:ate': { eaten: readonly { fishId: string; portion: number; foodId?: number }[] };
   /** Uneaten food dissolved on the substrate. */
   'food:expired': { count: number };
 
@@ -127,6 +173,11 @@ export interface InteractionEvents {
   /** The player settled an edit; the persistence layer saves it. */
   'decor:layout': { tankId: string; layout: DecorLayout };
   'decor:save-state': { status: SaveStatus; message: string | null };
+  /** The player tapped the tank glass; `intensity` is 0.5 for a tap and 1 for knocking. */
+  'photo:request': PhotoCommand;
+  'photo:view': PhotoView;
+  'photo:capture': PhotoCaptureOutcome;
+  'glass:tapped': { intensity: number };
   /** Emitted by the fish system when the net tool taps a dead fish. */
   'net:tap': { fishId: string };
 }
@@ -146,9 +197,12 @@ export const STICKY_INTERACTION_EVENTS: readonly (keyof InteractionEvents)[] = [
   'camera:mode-changed',
   'play:tool-changed',
   'play:ready',
+  'toys:changed',
+  'game:state',
   'demo:biome-changed',
   'decor:state',
   'decor:save-state',
   'decor:load-failed',
   'load:state',
+  'photo:view',
 ];

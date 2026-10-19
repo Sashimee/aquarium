@@ -5,6 +5,7 @@ import {
   type Scene,
   type WebGPURenderer,
 } from 'three/webgpu';
+import type { PhotoPost } from '../effectsSlot';
 import { materialIdOf } from '../pipelineErrors';
 import type { QualityManager } from '../quality/QualityManager';
 import type { TierSettings } from '../quality/tiers';
@@ -93,6 +94,7 @@ export class Effects {
   private wanted: PostSettings | null = null;
   private settings: Readonly<TierSettings> | null = null;
   private focus = false;
+  private photo: PhotoPost | null = null;
   private disposed = false;
   /** A tier change that failed; thrown from the next frame so the engine drops the effects. */
   private failure: { cause: unknown } | null = null;
@@ -140,6 +142,12 @@ export class Effects {
 
   setFocusMode(on: boolean): void {
     this.focus = on;
+    if (this.settings !== null) this.configurePost(this.settings);
+  }
+
+  /** Photo mode's look, or null outside it; it overrides focus mode while set. */
+  setPhoto(photo: PhotoPost | null): void {
+    this.photo = photo;
     if (this.settings !== null) this.configurePost(this.settings);
   }
 
@@ -199,10 +207,13 @@ export class Effects {
   }
 
   private configurePost(settings: Readonly<TierSettings>): void {
+    const { photo } = this;
     this.wanted = {
       chain: settings.postChain,
       godRays: settings.godRays,
-      depthOfField: settings.depthOfField && this.focus,
+      depthOfField: settings.depthOfField && (photo === null ? this.focus : photo.depthOfField),
+      photo: photo?.look ?? null,
+      grade: photo?.graded ?? false,
     };
     this.buildWanted();
   }

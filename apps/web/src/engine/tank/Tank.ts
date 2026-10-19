@@ -69,7 +69,13 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { InteriorLight } from '../water/interior';
 import type { WaterMedium } from '../water/medium';
 import { AIR_IOR, fresnelDielectric, WATER_IOR } from '../water/optics';
-import { sameTank, type TankDimensions, validateTank, waterBounds } from './dimensions';
+import {
+  sameTank,
+  STAND_HEIGHT,
+  type TankDimensions,
+  validateTank,
+  waterBounds,
+} from './dimensions';
 import { createSubstrateGeometry, createSubstrateMaterial } from './substrate';
 import { SurfaceReflection, UNREFLECTED_LAYER } from './surfaceReflection';
 
@@ -406,7 +412,6 @@ function glassGeometries(d: TankDimensions): [BufferGeometry, BufferGeometry] {
   return [merge(faces), merge(edges)];
 }
 
-const STAND_HEIGHT = 0.75;
 /** Stands in for a mesh's geometry until `fit` builds the real one. */
 const UNBUILT = new BufferGeometry();
 
