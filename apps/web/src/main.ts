@@ -6,11 +6,12 @@ import { parseEngineOptions } from './engine/options';
 import type { Biome, Collider } from '@aquarium/shared';
 import { colliderDigest } from './fish/simColliders';
 import { queueTankEvents, startFish, type FishHandle } from './fish/start';
-import { CameraRig } from './interaction/camera';
+import { CameraRig, orbitDistanceFor, tankBounds } from './interaction/camera';
 import { BackgroundChoice } from './interaction/background';
 import { bindCameraControls } from './interaction/controls';
 import { SceneDecor } from './interaction/decor/sceneDecor';
 import { STICKY_INTERACTION_EVENTS, type InteractionEvents } from './interaction/events';
+import { followTankSize, TankSizeSource } from './interaction/tankSize';
 import { onPageTeardown } from './interaction/pageLifecycle';
 import { PhotoController } from './interaction/photo/controller';
 import { bindPhotoKeys } from './interaction/photo/keys';
@@ -63,6 +64,7 @@ async function boot(): Promise<void> {
   const tracker = new LoadTracker(interaction, stallMs === undefined ? {} : { stallMs });
   tracker.begin('boot');
   const tankEvents = queueTankEvents(interaction);
+  const tankSize = new TankSizeSource(interaction);
   const tankBiome = new TankBiome(interaction, parseBiome(window.location.search));
   const switches = watchSwitches(interaction, tracker, tankBiome.fallback);
   const playChoices = new PlayChoices(interaction);
@@ -112,6 +114,7 @@ async function boot(): Promise<void> {
     const message = cause instanceof Error ? cause.message : String(cause);
     tracker.fail(message);
     switches.stop();
+    tankSize.stop();
     tankEvents.stop();
     tankBiome.stop();
     stopDemoRequests();
@@ -122,7 +125,7 @@ async function boot(): Promise<void> {
     return;
   }
 
-  const { DEFAULT_TANK, createPlaySystem, mountBiomeScene } = modules;
+  const { framingScale, createPlaySystem, mountBiomeScene } = modules;
   const canvas = engine.renderer.domElement;
   canvas.id = 'tank';
   canvas.tabIndex = 0;
@@ -133,22 +136,13 @@ async function boot(): Promise<void> {
   );
 
   const followFocus = depthOfFieldFollowsCamera(engine);
-  const rig = new CameraRig(
-    engine.camera,
-    {
-      halfLength: DEFAULT_TANK.length / 2,
-      halfDepth: DEFAULT_TANK.depth / 2,
-      height: DEFAULT_TANK.height,
-      waterTop: DEFAULT_TANK.height - DEFAULT_TANK.freeboard,
-      floor: DEFAULT_TANK.substrateBack + 0.05,
+  const rig = new CameraRig(engine.camera, tankBounds(engine.tank.dimensions), {
+    orbitDistance: orbitDistanceFor(framingScale(engine.tank.dimensions)),
+    onModeChange: (mode) => {
+      followFocus(mode);
+      interaction.emit('camera:mode-changed', { mode });
     },
-    {
-      onModeChange: (mode) => {
-        followFocus(mode);
-        interaction.emit('camera:mode-changed', { mode });
-      },
-    },
-  );
+  });
 
   const stopMotionWatch = watchReducedMotion((reduced) => rig.setReducedMotion(reduced));
   let play: PlaySystem | null = null;
@@ -225,7 +219,7 @@ async function boot(): Promise<void> {
   });
 
   const fish = startFish(engine, {
-    tank: DEFAULT_TANK,
+    tank: engine.tank.dimensions,
     assetRoot: `${import.meta.env.BASE_URL}assets/`,
     biome: tankBiome.fallback,
     interaction,
@@ -311,6 +305,13 @@ async function boot(): Promise<void> {
     },
   });
 
+  const stopResize = engine.events.on('engine:tank-resized', ({ dimensions }) => {
+    rig.setBounds(tankBounds(dimensions), orbitDistanceFor(framingScale(dimensions)));
+    fish.setTank(dimensions);
+    scenes.rebuild();
+  });
+  const stopTankSize = followTankSize(engine, tankSize, engine.tankSize);
+
   switches.attach({
     assets: assetWatch,
     sceneSettled: () => scenes.settled(),
@@ -320,6 +321,9 @@ async function boot(): Promise<void> {
 
   onPageTeardown(window, () => {
     switches.stop();
+    stopResize();
+    stopTankSize();
+    tankSize.stop();
     assetWatch.stop();
     tracker.dispose();
     scenes.dispose().catch((cause: unknown) => console.error('Scene dispose failed', cause));

@@ -94,6 +94,8 @@ export interface FishHandle {
   setSceneColliders(colliders: readonly SceneCollider[]): void;
   /** Swaps the demo stock; held until the fish are up. */
   setDemoBiome(biome: Biome): void;
+  /** Moves the swimming space to another tank size; the fish stay inside its glass. */
+  setTank(tank: TankDimensions): void;
   /** Resolves once the stock handed in so far has joined the sim, or at once while the fish are not up. */
   synced(): Promise<void>;
   /** The distinct swimming species, sorted; null until the fish are up. */
@@ -187,6 +189,8 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
   let ready: FishSystem | null = null;
   let anchors: readonly SceneAnchor[] | null = null;
   let demoBiome = options.biome;
+  let tank = options.tank;
+  let built = tank;
   const colliders = new SimColliders();
   const updateColliders = (update: () => readonly Collider[]): void => {
     const before = colliders.list;
@@ -211,15 +215,16 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
   );
 
   const system = import('./FishSystem')
-    .then(({ FishSystem }) =>
-      FishSystem.create(engine, {
-        tank: options.tank,
+    .then(({ FishSystem }) => {
+      built = tank;
+      return FishSystem.create(engine, {
+        tank: built,
         assetRoot: options.assetRoot,
         biome: options.biome,
         interaction,
         signal: abort.signal,
-      }),
-    )
+      });
+    })
     .then((fish) => {
       if (abort.signal.aborted) return fish;
       fish.onAte((events) => {
@@ -229,6 +234,7 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
         for (const listener of nudgeListeners) listener(nudge);
       });
       ready = fish;
+      if (tank !== built) fish.setTank(tank);
       if (toys.length > 0) fish.setToys(toys);
       if (anchors !== null) fish.setAnchors(anchors);
       fish.setColliders(colliders.list);
@@ -296,6 +302,10 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
     setDemoBiome(next) {
       demoBiome = next;
       ready?.setDemoBiome(next);
+    },
+    setTank(next) {
+      tank = next;
+      ready?.setTank(next);
     },
     synced: () => ready?.synced() ?? Promise.resolve(),
     swimmingSpecies: () => ready?.swimmingSpecies() ?? null,

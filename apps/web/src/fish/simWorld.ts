@@ -17,9 +17,14 @@ export class SimWorldSpec {
   private simToys: readonly SimToy[] = [];
 
   constructor(
-    private readonly demo: DemoTank,
+    private demo: DemoTank,
     private readonly seed: number,
   ) {}
+
+  /** The tank space a world is built in; the next world takes it, the running one is rebuilt by the caller. */
+  setDemo(demo: DemoTank): void {
+    this.demo = demo;
+  }
 
   get anchors(): readonly Anchor[] {
     return this.simAnchors;

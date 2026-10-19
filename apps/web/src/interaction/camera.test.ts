@@ -5,8 +5,11 @@ import {
   type CameraLike,
   type CameraMode,
   type TankBounds,
+  orbitDistanceFor,
+  tankBounds,
   type Vec3,
 } from './camera';
+import { framingScale, TANK_DIMENSIONS, type TankDimensions } from '../engine/tank/dimensions';
 import { applyCameraKey } from './controls';
 
 const BOUNDS: TankBounds = {
@@ -325,6 +328,113 @@ describe('CameraRig dive', () => {
     ).toBeLessThan(0.2);
     settle(rig, 4);
     expect(insideGlass(cam.pos)).toBe(true);
+  });
+});
+
+function insideTank(p: Vec3, d: TankDimensions): boolean {
+  return Math.abs(p.x) < d.length / 2 && Math.abs(p.z) < d.depth / 2 && p.y > 0 && p.y < d.height;
+}
+
+function rigFor(d: TankDimensions, cam = fakeCamera()) {
+  const rig = new CameraRig(cam, tankBounds(d), {
+    reducedMotion: true,
+    orbitDistance: orbitDistanceFor(framingScale(d)),
+  });
+  return { rig, cam };
+}
+
+describe('tankBounds', () => {
+  it('reads the glass, the waterline and the dive floor from the tank', () => {
+    const d = TANK_DIMENSIONS.nano30;
+    expect(tankBounds(d)).toEqual({
+      halfLength: d.length / 2,
+      halfDepth: d.depth / 2,
+      height: d.height,
+      waterTop: d.height - d.freeboard,
+      floor: d.substrateBack + 0.05,
+    });
+  });
+});
+
+describe('CameraRig setBounds', () => {
+  it('stands back by the framing scale of the tank it was built for', () => {
+    for (const size of ['nano30', 'standard', 'long300'] as const) {
+      const d = TANK_DIMENSIONS[size];
+      const { rig, cam } = rigFor(d);
+      rig.update(0.016);
+      const toEye = Math.hypot(
+        cam.pos.x - cam.look.x,
+        cam.pos.y - cam.look.y,
+        cam.pos.z - cam.look.z,
+      );
+      expect(toEye).toBeCloseTo(orbitDistanceFor(framingScale(d)), 6);
+      expect(cam.look.y).toBeCloseTo(d.height / 2, 6);
+    }
+  });
+
+  it('frames another tank after a resize and keeps the eye outside its glass', () => {
+    const nano = TANK_DIMENSIONS.nano30;
+    const { rig, cam } = rigFor(TANK_DIMENSIONS.standard);
+    rig.setBounds(tankBounds(nano), orbitDistanceFor(framingScale(nano)));
+    rig.update(0.016);
+    expect(cam.look.y).toBeCloseTo(nano.height / 2, 6);
+    expect(Math.hypot(cam.pos.x, cam.pos.z)).toBeCloseTo(
+      orbitDistanceFor(framingScale(nano)) * Math.cos(0.1),
+      6,
+    );
+    for (let i = 0; i < 40; i++) rig.zoom(0.2);
+    for (const yaw of [0, 1, 2, 3, 4, 5]) {
+      rig.setOrbit(yaw, 0.6, 0.1);
+      rig.update(0.016);
+      expect(insideTank(cam.pos, nano)).toBe(false);
+    }
+  });
+
+  it('clamps against a larger tank too', () => {
+    const big = TANK_DIMENSIONS.long300;
+    const { rig, cam } = rigFor(TANK_DIMENSIONS.nano30);
+    rig.setBounds(tankBounds(big), orbitDistanceFor(framingScale(big)));
+    for (const yaw of [0, 0.7, 1.6, 2.5, 3.5, 4.5]) {
+      rig.setOrbit(yaw, 0.2, 0.1);
+      rig.update(0.016);
+      expect(insideTank(cam.pos, big)).toBe(false);
+    }
+  });
+
+  it('pulls a diving eye back inside the smaller water volume', () => {
+    const nano = TANK_DIMENSIONS.nano30;
+    const { rig, cam } = rigFor(TANK_DIMENSIONS.long300);
+    rig.dive();
+    rig.zoom(0.4);
+    rig.setBounds(tankBounds(nano), orbitDistanceFor(framingScale(nano)));
+    rig.update(0.016);
+    expect(rig.mode).toBe('dive');
+    expect(insideTank(cam.pos, nano)).toBe(true);
+    expect(cam.pos.y).toBeGreaterThanOrEqual(tankBounds(nano).floor);
+    expect(cam.pos.y).toBeLessThanOrEqual(tankBounds(nano).waterTop);
+  });
+
+  it('ends up where a fresh rig would after switching sizes twice', () => {
+    const [nano, big, std] = [
+      TANK_DIMENSIONS.nano30,
+      TANK_DIMENSIONS.long300,
+      TANK_DIMENSIONS.standard,
+    ];
+    const { rig, cam } = rigFor(std);
+    rig.setBounds(tankBounds(big), orbitDistanceFor(framingScale(big)));
+    rig.setBounds(tankBounds(nano), orbitDistanceFor(framingScale(nano)));
+    rig.update(0.016);
+    const fresh = rigFor(nano);
+    fresh.rig.update(0.016);
+    expect(cam.pos).toEqual(fresh.cam.pos);
+    expect(cam.look).toEqual(fresh.cam.look);
+    for (let i = 0; i < 40; i++) {
+      rig.zoom(0.2);
+      fresh.rig.zoom(0.2);
+    }
+    rig.update(0.016);
+    fresh.rig.update(0.016);
+    expect(cam.pos).toEqual(fresh.cam.pos);
   });
 });
 
