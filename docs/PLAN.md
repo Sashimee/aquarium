@@ -212,7 +212,7 @@ orchestrator merges it. A task is *ready* once all of its dependencies are **mer
 | T23 | Release candidate on devfish: full checks, prod Postgres backup schedule, prod env, `CHANGELOG`, then **stop and ask Alex** for `dev → main` | devops-engineer | T19, T22 | 7 |
 | T24 | Extended roster: discus, rasbora, pleco, shrimp, wrasse, firefish, cleaner shrimp | curator → pipeline → behaviour → render | T22 | 8 |
 
-### Concurrency map (6 by default)
+### Concurrency map
 
 ```
 Wave 0  ┃ T00 (inline) ─► T01 ──────────────────────────────────────────────────────
@@ -227,8 +227,8 @@ Wave 8  ┃ T24 roster expansion (pipelined per species)
 ```
 
 Waves are not barriers. The orchestrator starts **any** task as soon as its dependencies are
-merged, with 6 running agents (reviewers included) by default and more when the tasks are independent (§9.1). The wave column only shows the earliest a task
-can start.
+merged, with no cap on running agents (§9.1). The wave column only shows the earliest a task can
+start.
 
 **Conflict avoidance:** each agent owns directories (see its agent file). Shared files
 (`packages/shared`, `content/species/*.json`, root `package.json`) change only through small PRs
@@ -275,7 +275,7 @@ where a GPU exists).
 | Mail bounces arriving asynchronously | `fish@bas.lu` stays on the `bas.lu` domain; delivery verified by reading an actual received mail |
 | Signup used to spam via the shared relay | Per-IP and per-recipient rate limits, verification-mail cooldown |
 | Death mechanic feels punishing | 48 h grace, vacation feeder, tunable rates, a "while you were away" warning before deaths when possible |
-| Merge conflicts at 6-way concurrency | Directory ownership, contract-first PRs, fast review and merge of shared-file PRs |
+| Merge conflicts at high concurrency | Directory ownership, contract-first PRs, fast review and merge of shared-file PRs |
 | Repo bloat from assets | Only processed assets committed, budget < 150 MB enforced by `assets:check` |
 
 ## 8. Open items for later (not blocking)
