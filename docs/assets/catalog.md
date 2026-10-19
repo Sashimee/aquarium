@@ -27,7 +27,7 @@ Curated for T05 (#5), checked 2026-10-12. Ranks are by fit for a photorealistic 
 | Electric yellow cichlid (T48) | no allowed model of the species | `wm-labidochromis-chmee2`, `wm-labidochromis-severni` |
 | Golden mbuna, Melanochromis auratus (T48) | no allowed model of the species | `wm-melanochromis-5snake5-female`, `wm-melanochromis-5snake5-male`, `wm-melanochromis-lee-1` |
 | Black calvus, Altolamprologus calvus (T48) | no allowed model of the species | `wm-altolamprologus-5snake5` |
-| Fairy cichlid, Neolamprologus brichardi (T48) | no allowed model of the species | `wm-brichardi-marrabbio2` (single photo) |
+| Fairy cichlid, Neolamprologus brichardi (T48) | no usable reference photo (gap) | none: the only candidate, `Neolamprologus brichardi femmina.jpg`, is described by its author as N. olivaceus |
 | Anemone (host) | no photoreal free model | procedural TSL |
 
 ## CC-BY-SA (allowed for reference photos only)
@@ -392,9 +392,9 @@ Checked 2026-10-19. Sources searched in order: Smithsonian (no fish models of th
 | Electric yellow cichlid (Labidochromis caeruleus, Malawi) | fallback: procedural loft | `wm-labidochromis-chmee2` (CC BY 3.0), `wm-labidochromis-severni` (CC0) | n/a | No allowed model. A third photo (`Labidochromis caeruleus F.jpg`, Stacnbake) is smaller and was not downloaded. |
 | Golden mbuna (Melanochromis auratus, Malawi) | fallback: procedural loft | `wm-melanochromis-5snake5-female`, `-male` (CC0), `wm-melanochromis-lee-1` (CC BY 3.0) | n/a | Male and female differ strongly (gold with dark stripes versus blue-black with pale stripes): loft needs two texture sets. |
 | Black calvus (Altolamprologus calvus, Tanganyika) | fallback: procedural loft | `wm-altolamprologus-5snake5` (CC0) | n/a | One photo. Tall dorsal fin and compressed body. |
-| Fairy cichlid (Neolamprologus brichardi, Tanganyika) | fallback: procedural loft | `wm-brichardi-marrabbio2` (CC BY 3.0) | n/a | One 1404x924 photo. The trailing filaments need fin-geometry work, not just texture. |
+| Fairy cichlid (Neolamprologus brichardi, Tanganyika) | gap: no reference | none | n/a | The only CC0 or CC-BY photo found, Marrabbio2's `Neolamprologus brichardi femmina.jpg` (CC BY 3.0), is described on its Commons page as "Neolamprologus olivaceus female" and sits in the olivaceus category, so it is not in the manifest. Everything else under Neolamprologus brichardi or pulcher on Commons is a journal figure page. The species needs a correctly identified photo (or a Sketchfab model) before it can be lofted; without one the biome ships with the four species above, which meets the 4-species minimum. |
 
-The PLAN lists 4 or more species. With the five above the biome has one model and four lofts. Gaps Alex may want to know about: no Aulonocara (peacock) and no shell-dweller (Neolamprologus multifasciatus) photo or model exists under an allowed licence (everything found was CC BY-SA, CC BY 2.0 or a public-domain mark). Species ids are proposals; `content/species/*.json` belongs to the later owners.
+The PLAN lists 4 or more species. With the four that have references the biome has one model and three lofts. Gaps Alex may want to know about: no Aulonocara (peacock) and no shell-dweller (Neolamprologus multifasciatus) photo or model exists under an allowed licence (everything found was CC BY-SA, CC BY 2.0 or a public-domain mark). Species ids are proposals; `content/species/*.json` belongs to the later owners.
 
 ### Hardscape and decor
 
@@ -405,30 +405,42 @@ The PLAN lists 4 or more species. With the five above the biome has one model an
 | Rock pile, top and rubble | `polyhaven-rock_07` | CC0 | 27830 triangles, small angular rock. |
 | Also reused | `polyhaven-boulder_01`, `polyhaven-coast_rocks_05` | CC0 | Already in the manifest. |
 | Sand | `ambientcg-Ground101` (pale fine sand), `polyhaven-coast_sand_01`, `-coast_sand_04` | CC0 | Already in the manifest. The other Poly Haven sands checked (coast_sand_05, sand_02, sand_03) are too dark for a cichlid sand bed. |
-| Shell decor | `sketchfab-1bedca25` (Meshfinder, CC-BY-4.0) | CC-BY-4.0 | 3727 faces. A land-snail shell, fine at 2.5 cm. Meshfinder is an aggregator account, so the licence statement is only as good as the Sketchfab record. |
+| Shell decor | `sketchfab-1bedca25` (Meshfinder, CC-BY-4.0) | CC-BY-4.0 | 3727 faces, photogrammetry scan published by Meshfinder (a Munich 3D-scanning startup) itself. A land-snail shell, scaled to Neothauma size (3.5 to 5 cm). |
 
-### Backgrounds (all renders, `selected-pending-download`)
+### Backgrounds (render specs, not yet in the manifest)
 
-The only Commons photos of Lake Tanganyika under CC0 or CC BY (Edouard mhg, Bujumbura shoreline) are above water with people, boats and buildings, so none are usable posters. No allowed underwater Malawi or Tanganyika scene exists. Rock and sand are CC0 on Poly Haven, so the five slots are renders in the `bg-fw-misty-lake` pattern, each with its spec in the manifest `notes`.
+The only Commons photos of Lake Tanganyika under CC0 or CC BY (Edouard mhg, Bujumbura shoreline) are above water with people, boats and buildings, so none are usable posters. No allowed underwater Malawi or Tanganyika scene exists. Rock and sand are CC0 on Poly Haven, so the five slots are renders in the `bg-fw-misty-lake` pattern. They are not in `assets/manifest.json` yet: the committed-backgrounds suite in the asset-pipeline package expects every background entry to be built. The pipeline PR that renders them adds them as `downloaded` entries with `kind: "background"`, `biome: "cichlid"`, `source: "render"` and the slot below.
 
 | Slot | Id | Licence |
 |---|---|---|
 | Malawi rock pile | `bg-cichlid-malawi-rock-pile` | CC0 |
 | Granite rock wall | `bg-cichlid-rock-wall` | CC0 |
-| Tanganyika shell bed | `bg-cichlid-tanganyika-shell-bed` | CC-BY-4.0 (shell credit) |
+| Tanganyika shell bed | `bg-cichlid-tanganyika-shell-bed` | CC-BY-4.0 (shell credit, Meshfinder) |
 | Rock cave | `bg-cichlid-rock-cave` | CC0 |
 | Open blue water | `bg-cichlid-open-blue` | CC0 |
 
-The manifest uses `biome: "cichlid"`. `content/backgrounds/cichlid.json` and the ids in `packages/shared/src/backgrounds.ts` are not added here: `playableBiomeSchema` does not yet include `cichlid`, so the file would fail validation. Add both in the PR that makes the biome playable.
+Every render: The render must carry no EXIF or other metadata, no fish, no text and no people. 2:1, at least 4096x2048, graded underwater by the pipeline (the renderer tints the poster once more with water absorption, so keep the grade light), soft light fall-off from the top and no hard sun shafts. Freshwater only: nothing marine.
+
+- `bg-cichlid-malawi-rock-pile`: A three-tier rock pile seen from the front glass: polyhaven-namaqualand_boulder_03, polyhaven-namaqualand_boulder_05, polyhaven-rock_07 and polyhaven-boulder_01 (all CC0), with polyhaven-namaqualand_boulder_03 as the large anchor left of centre, boulder_05 and rock_07 stacked on and beside it, rubble at the base on ambientcg-Ground101 pale sand. Gaps between rocks stay dark (caves for mbuna). Clear blue-green water above, centre third lower and open.
+- `bg-cichlid-rock-wall`: A near-vertical wall of stacked granite built from polyhaven-namaqualand_boulder_03, polyhaven-namaqualand_boulder_05, polyhaven-rock_07 and polyhaven-boulder_01 (all CC0), filling the left and right thirds, with a diagonal ledge and narrow cracks, pale sand strip at the base, a lighter water gap in the centre third. Warm grey rock against cool blue-green water.
+- `bg-cichlid-tanganyika-shell-bed`: A wide pale sand floor (ambientcg-Ground101, polyhaven-coast_sand_04) scattered with 30 to 60 instances of sketchfab-1bedca25 (Snail Shell, Meshfinder, CC-BY-4.0) at varied scale and rotation, a few half-buried, with 2 to 3 small rocks (polyhaven-rock_07, polyhaven-boulder_01) and soft blue-green water above. Licence is CC-BY-4.0 because the shell model is CC-BY: the Meshfinder credit must stay in CREDITS.md.
+- `bg-cichlid-rock-cave`: A dark cave mouth framed by polyhaven-namaqualand_boulder_03, polyhaven-namaqualand_boulder_05, polyhaven-rock_07 and polyhaven-boulder_01 (all CC0): an arch built from boulder_03 and boulder_05, lit from the left, sand at the foot and a deep shadow gradient inside. Cichlid caves for spawning. Cooler and darker than the other slots.
+- `bg-cichlid-open-blue`: Open blue water with a distant rock slope (small boulders from polyhaven-namaqualand_boulder_03, polyhaven-namaqualand_boulder_05, polyhaven-rock_07 and polyhaven-boulder_01 (all CC0), heavy depth haze) running along the bottom third, the upper two thirds open and smoothly graded blue-green, a faint lighter patch top right. The calmest slot, for tanks with a lot of foreground decor.
+
+For the shell-bed render, `source_url` and `author_url` should point to the shell (`https://sketchfab.com/3d-models/snail-shell-photogrammetry-1bedca252e4d46d7b92826271a578154`, `https://sketchfab.com/meshfinder`), because it is the CC-BY component that sets the licence, and its CREDITS row should link the same source. The other four slots credit the Poly Haven rocks (CC0).
+
+The manifest biome will be `cichlid`. `content/backgrounds/cichlid.json` and the ids in `packages/shared/src/backgrounds.ts` are not added here: `playableBiomeSchema` does not yet include `cichlid`, so the file would fail validation. Add both in the PR that makes the biome playable.
 
 ### Handoff to asset-pipeline-engineer
 
-1. Demasoni: drop `Cube_helper`, replace the 64-joint skeleton with the pipeline fish rig, orient, scale, bake masks, KTX2 at 1k and 2k, LODs.
-2. Loft four species (electric yellow, golden mbuna in two sexes, black calvus, fairy cichlid) from the listed photos. Check each photo against `docs/assets/catalog.md` licences when crediting: three are CC BY 3.0 (Chmee2, lienyuan lee, Marrabbio2), the rest CC0.
-3. Rocks: decimate the three Poly Haven boulders to tank budgets, bake normals, ship as a `rock-pile` decor set with at least two arrangements.
-4. Shell: decimate to three LODs, 1k KTX2, instance-friendly origin.
+Adult target lengths (total length, approximate): Pseudotropheus demasoni 7 to 8 cm, Labidochromis caeruleus 8 to 10 cm, Melanochromis auratus 10 to 11 cm, Altolamprologus calvus 13 to 15 cm.
+
+1. Demasoni (`sketchfab-f7f3faca`): drop `Cube_helper`, replace the 64-joint skeleton with the pipeline fish rig, orient, scale to 7.5 cm, bake masks, KTX2 at 1k and 2k, LODs.
+2. Loft three species from the listed photos: electric yellow (9 cm), golden mbuna in two sexes (10.5 cm), black calvus (14 cm). Credits: `wm-labidochromis-chmee2` (Chmee2) and `wm-melanochromis-lee-1` (lienyuan lee) are CC BY 3.0, the rest CC0. Fairy cichlid (9 to 10 cm) is blocked on a correctly identified reference photo, see the species table.
+3. Rocks (`polyhaven-namaqualand_boulder_03`, `-05`, `polyhaven-rock_07`): decimate to LOD0 targets of about 12,000 triangles for boulder_03, 8,000 for boulder_05 and 4,000 for rock_07, then LOD1 at about a quarter of that. Bake normals, ship as a `rock-pile` decor set with at least two arrangements.
+4. Shell (`sketchfab-1bedca25`): decimate to three LODs, 1k KTX2, instance-friendly origin, scale to 3.5 to 5 cm (Neothauma-like). The shell normal map is 11.9 MB at source and must be downscaled.
 5. Substrate: reuse existing sand textures; no new asset.
-6. Backgrounds: render the five slots to the specs in the manifest, strip metadata, build the three KTX2 tiers, then fill `sha256`, `files[]`, `modifications[]` and set status `downloaded`.
+6. Backgrounds: render the five slots to the specs above, strip metadata, build the three KTX2 tiers, then add the entries to the manifest with `sha256`, `files[]`, `modifications[]` and status `downloaded`.
 
 ## Sound (issue #649, T59)
 
