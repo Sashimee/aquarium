@@ -60,7 +60,7 @@ agents in `.claude/agents/`.
 5. **Record.** Rewrite `RESUME.md` (Goal / Status / State / Blockers / Files; done-log capped at 10).
 6. **Pace.** Background agents wake the loop when they finish, so schedule a 1800 s fallback wakeup only.
 7. **Stop the loop and notify Alex** (`PushNotification`, then `ScheduleWakeup stop`) when:
-   - T23 is done (RC on devfish), so Alex can decide on `dev → main`;
+   - T68 is done (RC2 on devfish, after every §9 task), so Alex can decide on `dev → main`;
    - a task has failed 3 times: file an issue, label it `blocked`, keep other work going, and stop only if nothing else is ready;
    - something needs Alex: a credential, a licence question (CC-BY-SA), a budget, or a prod action.
 
