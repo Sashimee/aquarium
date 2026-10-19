@@ -5,6 +5,7 @@ import {
   AccountPanel,
   AvatarButton,
   CameraControls,
+  ChemistryChip,
   CollectionButton,
   StatusCard,
   TankButton,
@@ -250,6 +251,7 @@ function Shell() {
         <header className="hud">
           <div className="hud-left">
             <StatusCard open={panel === 'report'} onPress={() => toggle('report')} />
+            <ChemistryChip open={panel === 'care'} onPress={() => toggle('care')} />
             <CameraControls />
           </div>
           <div className="hud-right">

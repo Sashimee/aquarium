@@ -14,20 +14,9 @@ import {
   verdictHazard,
   type PadId,
   type PadReading,
-  type StripResult,
   type SuitKey,
 } from '../sync/waterTest';
-
-interface Dip {
-  at: number;
-  strip: StripResult;
-  temperatureC: number;
-  guesses: Partial<Record<PadId, number>>;
-  revealed: boolean;
-}
-
-const MAX_REMEMBERED_DIPS = 20;
-const lastDip = new Map<string, Dip>();
+import { getDip, putDip, type Dip } from './dipStore';
 
 const SUIT_KEY: Partial<Record<PadId, SuitKey>> = { ph: 'ph', kh: 'kh', salinity: 'salinity' };
 
@@ -167,11 +156,11 @@ export default function WaterTest({
   species: readonly SpeciesSummary[];
 }) {
   const id = useId();
-  const [dip, setDip] = useState<Dip | null>(() => lastDip.get(tank.id) ?? null);
+  const [dip, setDip] = useState<Dip | null>(() => getDip(tank.id));
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    setDip(lastDip.get(tank.id) ?? null);
+    setDip(getDip(tank.id));
   }, [tank.id]);
 
   useEffect(() => {
@@ -180,10 +169,7 @@ export default function WaterTest({
   }, []);
 
   const store = (next: Dip) => {
-    lastDip.delete(tank.id);
-    lastDip.set(tank.id, next);
-    const oldest = lastDip.keys().next().value;
-    if (lastDip.size > MAX_REMEMBERED_DIPS && oldest !== undefined) lastDip.delete(oldest);
+    putDip(tank.id, next);
     setDip(next);
   };
 
