@@ -93,11 +93,12 @@ test('a decor piece is swapped, moved, saved and still there after a reload', as
   await expect(inTank.getByRole('button')).toHaveCount(startCount - 1);
 
   // Once the layout is saved, adding a piece needs its licence; the Remove above is that first save.
+  const tankId = (await savedTanks(page))[0]?.id;
   const licence = await page.request.post('/api/shop/purchase', {
     headers: { origin: APP_URL },
-    data: { idempotencyKey: crypto.randomUUID(), itemRef: 'decor:driftwood-branch' },
+    data: { idempotencyKey: crypto.randomUUID(), itemRef: 'decor:driftwood-branch', tankId },
   });
-  expect(licence.status()).toBe(200);
+  expect(licence.status(), await licence.text()).toBe(200);
   await panel.getByRole('button', { name: 'Add Driftwood branch' }).click();
   await expect(inTank.getByRole('button')).toHaveCount(startCount);
   await expect(panel.getByText('Layout saved.')).toBeVisible();
