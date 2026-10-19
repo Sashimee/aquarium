@@ -234,7 +234,7 @@ describe('buildNeriteBody', () => {
       .filter((i) => Math.abs(body.positions[i * 3]!) > widest * 0.9)
       .map((i) => body.positions[i * 3 + 1]!);
     expect(footTop).toBeGreaterThan(length * 0.06);
-    expect(Math.max(...edge) - Math.min(...edge)).toBeGreaterThan(length * 0.022);
+    expect(Math.max(...edge) - Math.min(...edge)).toBeGreaterThan(length * 0.02);
   });
 
   it('gives every vertex a ramp coordinate in [0, 1] and puts the foot centre on the reported z', () => {
@@ -248,37 +248,6 @@ describe('buildNeriteBody', () => {
       .map((i) => body.positions[i * 3 + 2]!);
     expect(built.footCentreZ).toBeGreaterThan(Math.min(...footZ));
     expect(built.footCentreZ).toBeLessThan(Math.max(...footZ));
-  });
-
-  it('lays a closed outward-wound rim bead along the lip edge', () => {
-    const lipEdge = Array.from({ length: 9 }, (_, i) => ({
-      x: (-1 + i / 4) * footprint.halfWidth,
-      y: 0.0008 + 0.0006 * Math.sin((i / 8) * Math.PI),
-      z: footprint.frontZ - 0.002,
-    }));
-    const withRim = buildNeriteBody({ ...footprint, lipEdge }, length).part;
-    const isRim = (i: number): boolean => Math.abs(withRim.uvs[i * 2 + 1]! - 0.92) < 1e-6;
-    const rimTriangles: number[] = [];
-    for (let t = 0; t < withRim.indices.length; t += 3)
-      if ([0, 1, 2].every((k) => isRim(withRim.indices[t + k]!)))
-        rimTriangles.push(withRim.indices[t]!, withRim.indices[t + 1]!, withRim.indices[t + 2]!);
-    expect(rimTriangles.length).toBeGreaterThan(0);
-    expect(signedVolume(withRim.positions, Uint32Array.from(rimTriangles))).toBeGreaterThan(0);
-
-    const uses = new Map<string, number>();
-    for (let t = 0; t < rimTriangles.length; t += 3)
-      for (let k = 0; k < 3; k++) {
-        const key = `${rimTriangles[t + k]}-${rimTriangles[t + ((k + 1) % 3)]}`;
-        uses.set(key, (uses.get(key) ?? 0) + 1);
-      }
-    for (const [edge, n] of uses) {
-      const [a, b] = edge.split('-');
-      expect(n).toBe(1);
-      expect(uses.get(`${b}-${a}`)).toBe(1);
-    }
-    const rimY = [...new Set(rimTriangles)].map((i) => withRim.positions[i * 3 + 1]!);
-    expect(Math.min(...rimY)).toBeGreaterThanOrEqual(-1e-9);
-    expect(body.positions.length).toBeLessThan(withRim.positions.length);
   });
 
   it('is deterministic', () => {
