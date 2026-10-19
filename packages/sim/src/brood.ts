@@ -11,8 +11,8 @@ export const BROOD = {
   maxClutches: 16,
 
   /** Long-run share of time at the clutch: anemonefish fathers and mothers. */
-  nestShareMale: 0.67,
-  nestShareFemale: 0.12,
+  nestShareMale: 0.55,
+  nestShareFemale: 0.25,
   /** Biparental tenders without a known division of labour share it equally. */
   nestShareEqual: 0.5,
   nestBoutMeanS: 60,
@@ -47,7 +47,7 @@ export const BROOD = {
   gravidSpeedLoss: 0.3,
   /** From this far into pregnancy a female keeps to cover and away from the shoal. */
   gravidCoverTerm: 0.85,
-  gravidSchoolFactor: 0.3,
+  gravidSchoolFactor: 0,
 
   coverCandidates: 12,
   coverMinS: 30,
@@ -55,6 +55,9 @@ export const BROOD = {
   /** Hiding spots are this far, in the fish's lengths plus its radius, from a plant or rock. */
   coverOffsetBodyLengths: 0.5,
   coverRadiusBodyLengths: 1.5,
+  hideWander: 0.3,
+  /** A hider returns to its spot at no more than its distance over this many seconds. */
+  hideApproachS: 2,
   coverTravelWeight: 0.2,
   fryLeashBodyLengths: 12,
   fryCohesion: 0.3,
@@ -228,15 +231,17 @@ export class Brood {
     this.parents = parents;
   }
 
-  /** The current input in `setBrood`'s form, with parents that left the tank dropped. */
+  /**
+   * The current input in `setBrood`'s form, with parents that left the tank dropped, and a clutch
+   * none of whose parents is left dropped with them, so it can be passed back to `setBrood`.
+   */
   brood(): SimBrood {
     const ids = this.host.fishIds;
     return {
-      clutches: this.clutches.map((c, k) => ({
-        id: c.id,
-        parents: this.parents[k] ?? [],
-        position: [c.x, c.y, c.z],
-      })),
+      clutches: this.clutches.flatMap((c, k) => {
+        const parents = this.parents[k] ?? [];
+        return parents.length === 0 ? [] : [{ id: c.id, parents, position: [c.x, c.y, c.z] }];
+      }),
       gravid: ids.flatMap((fishId, i) => {
         const term = at(this.gravid, i);
         return term > 0 ? [{ fishId, term }] : [];
@@ -258,7 +263,9 @@ export class Brood {
       throw new TypeError('brood: clutches and gravid must be arrays');
     }
     if (inClutches.length > BROOD.maxClutches) {
-      throw new RangeError(`brood: at most ${BROOD.maxClutches} clutches, got ${inClutches.length}`);
+      throw new RangeError(
+        `brood: at most ${BROOD.maxClutches} clutches, got ${inClutches.length}`,
+      );
     }
     const n = this.host.count;
     const owner = new Int32Array(n).fill(-1);
@@ -418,9 +425,7 @@ export class Brood {
 
   /** Whether fish `i` keeps to a hiding spot: fry, and mothers near term. */
   hides(i: number): boolean {
-    return (
-      at(this.host.stage, i) === StageCode.Fry || at(this.gravid, i) >= BROOD.gravidCoverTerm
-    );
+    return at(this.host.stage, i) === StageCode.Fry || at(this.gravid, i) >= BROOD.gravidCoverTerm;
   }
 
   /** A young fish, which schools with young of its kind only and keeps away from big fish. */
@@ -554,7 +559,8 @@ export class Brood {
 
   /**
    * A hiding spot clear of everything: beside a plant if the tank has any, else beside rock,
-   * else against the glass or sand, inside the fish's band and not far from where it is.
+   * else against the glass or sand, inside the fish's band and not far from where it is. Random
+   * points in the band are drawn onto the cover's offset surface, as thin stems are rarely hit.
    */
   private chooseCover(i: number): void {
     const { basin, rng, sceneSdf, decorSdf, plantSdf, position } = this.host;
@@ -573,14 +579,21 @@ export class Brood {
     let by = py;
     let bz = pz;
     for (let c = 0; c < BROOD.coverCandidates; c++) {
-      const x = rng.range(basin.minX + margin, basin.maxX - margin);
+      let x = rng.range(basin.minX + margin, basin.maxX - margin);
       const t = rng.next();
-      const z = rng.range(basin.minZ + margin, basin.maxZ - margin);
+      let z = rng.range(basin.minZ + margin, basin.maxZ - margin);
       const g = basin.ground(x, z);
       const h = basin.maxY - g;
       const yLo = Math.max(g + sp.depthLow * h, g + margin);
       const yHi = Math.max(yLo, Math.min(g + sp.depthHigh * h, basin.maxY - margin));
-      const y = yLo + (yHi - yLo) * t;
+      let y = yLo + (yHi - yLo) * t;
+      for (let pass = 0; pass < BROOD.nestProjectPasses; pass++) {
+        const d = cover.sample(x, y, z, n3) - margin;
+        x = clamp(x - at(n3, 0) * d, basin.minX + margin, basin.maxX - margin);
+        y = clamp(y - at(n3, 1) * d, yLo, yHi);
+        z = clamp(z - at(n3, 2) * d, basin.minZ + margin, basin.maxZ - margin);
+      }
+      if (y < basin.ground(x, z) + margin) continue;
       if (sceneSdf.sample(x, y, z, n3) < margin) continue;
       if (plantSdf !== null && plantSdf.sample(x, y, z, n3) < radius) continue;
       const off = Math.abs(cover.sample(x, y, z, n3) - margin);
@@ -628,15 +641,13 @@ export class Brood {
       let x = hx + Math.cos(a) * r * reach;
       let y = hy + cy * reach;
       let z = hz + Math.sin(a) * r * reach;
-      let d = Infinity;
       for (let pass = 0; pass < BROOD.nestProjectPasses; pass++) {
-        d = substrateSdf.sample(x, y, z, n3);
+        const d = substrateSdf.sample(x, y, z, n3);
         x -= at(n3, 0) * d;
         y -= at(n3, 1) * d;
         z -= at(n3, 2) * d;
       }
-      d = substrateSdf.sample(x, y, z, n3);
-      if (Math.abs(d) > BROOD.nestSurfaceM) continue;
+      if (Math.abs(substrateSdf.sample(x, y, z, n3)) > BROOD.nestSurfaceM) continue;
       if (x < basin.minX || x > basin.maxX || z < basin.minZ || z > basin.maxZ) continue;
       if (y >= basin.maxY - room) continue;
       const nx = at(n3, 0);

@@ -129,7 +129,7 @@ export function interpolateSnapshots(
     // A new flip starting between the two snapshots would otherwise rewind through the old one.
     out[o + 12] = flipB >= flip ? flip + (flipB - flip) * t : t < 0.5 ? flip : flipB;
     out[o + 13] = (t < 0.5 ? a[o + 13] : b[o + 13]) ?? 0;
-    for (let f = 14; f < 17; f++) {
+    for (let f = SnapshotField.Display; f < SNAPSHOT_STRIDE; f++) {
       const av = a[o + f] ?? 0;
       out[o + f] = av + ((b[o + f] ?? 0) - av) * t;
     }

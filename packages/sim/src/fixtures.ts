@@ -220,7 +220,6 @@ export const royalGramma: SpeciesInput = {
   lifecycle: { diet: ['flakes', 'brine-shrimp', 'pellets'] },
 };
 
-/** Not in the shipped roster: the glass-grazer archetype (Otocinclus). */
 /** A livebearer, from content/species/guppy.json; not in `ARCHETYPES`, so the benchmark is unchanged. */
 export const guppy: SpeciesInput = {
   id: 'guppy',
@@ -249,6 +248,7 @@ export const guppy: SpeciesInput = {
   lifecycle: { diet: ['flakes', 'brine-shrimp', 'bloodworms'] },
 };
 
+/** Not in the shipped roster: the glass-grazer archetype (Otocinclus). */
 export const otocinclus: SpeciesInput = {
   id: 'otocinclus',
   behaviour: {

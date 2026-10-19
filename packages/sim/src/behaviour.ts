@@ -1162,7 +1162,8 @@ export class Behaviour {
     }
     this.brood.adjust(i, plan);
     if (sp.gait === 'cruise') {
-      plan.speedFloor = BEHAVIOUR.cruiseSpeedFloor * at(this.host.cruiseSpeed, i) * plan.cruiseScale;
+      plan.speedFloor =
+        BEHAVIOUR.cruiseSpeedFloor * at(this.host.cruiseSpeed, i) * plan.cruiseScale;
     }
 
     if (at(this.startlePhase, i) !== StartlePhase.None) {
@@ -1186,17 +1187,7 @@ export class Behaviour {
     if (this.planShelter(i, sp, plan)) return;
     if (rest <= 0.5 && this.brood.planTend(i, plan)) return;
     if (this.brood.hides(i)) {
-      const o = i * 3;
-      const { cover } = this.brood;
-      this.holdStation(
-        i,
-        plan,
-        at(cover, o),
-        at(cover, o + 1),
-        at(cover, o + 2),
-        BROOD.coverRadiusBodyLengths * at(this.host.bodyLength, i),
-        FishState.Shelter,
-      );
+      this.planHide(i, plan);
       return;
     }
     if (this.toys.planMirror(i, sp, plan)) return;
@@ -1207,7 +1198,15 @@ export class Behaviour {
     if (guard !== null) {
       const [gx, gy, gz] = guard;
       const length = at(this.host.bodyLength, i);
-      this.holdStation(i, plan, gx, gy + length, gz, BROOD.guardBodyLengths * length, FishState.Station);
+      this.holdStation(
+        i,
+        plan,
+        gx,
+        gy + length,
+        gz,
+        BROOD.guardBodyLengths * length,
+        FishState.Station,
+      );
     } else if (sp.gait === 'forage') {
       this.planForage(i, sp, plan);
     } else if (sp.grazer === 'glass') {
@@ -1869,6 +1868,41 @@ export class Behaviour {
   private widenBand(plan: Plan, y: number, r: number): void {
     plan.bandLo = Math.min(plan.bandLo, y - r);
     plan.bandHi = Math.max(plan.bandHi, y + r);
+  }
+
+  /**
+   * Keeps close by a hiding spot. Unlike `holdStation` the pull never lets go and fades only as the
+   * fish arrives, so a hider hangs by its plant rather than drifting off and being reeled back.
+   */
+  private planHide(i: number, plan: Plan): void {
+    const { cover } = this.brood;
+    const o = i * 3;
+    const hx = at(cover, o);
+    const hy = at(cover, o + 1);
+    const hz = at(cover, o + 2);
+    const length = at(this.host.bodyLength, i);
+    const radius = BROOD.coverRadiusBodyLengths * length;
+    const cruise = at(this.host.cruiseSpeed, i) * plan.cruiseScale;
+    const d = Math.hypot(
+      hx - at(this.host.position, o),
+      hy - at(this.host.position, o + 1),
+      hz - at(this.host.position, o + 2),
+    );
+    this.widenBand(plan, hy, radius);
+    plan.wander *= BROOD.hideWander;
+    plan.speedFloor = 0;
+    plan.seek(
+      hx,
+      hy,
+      hz,
+      Math.min(cruise, d / BROOD.hideApproachS),
+      0.5,
+      clamp(d / radius, 0.2, 1),
+    );
+    if (d <= radius) {
+      plan.cruiseScale *= BEHAVIOUR.stationCruiseFactor;
+      plan.state = FishState.Shelter;
+    }
   }
 
   /** Hover inside `radius` of a home point; outside it, swim back with a soft leash. */
