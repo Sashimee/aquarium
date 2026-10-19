@@ -69,7 +69,7 @@ class SoftwareAuthenticator {
     const attestationObject = cbor(
       new Map<Cbor, Cbor>([
         ['fmt', 'none'],
-        ['attStmt', new Map()],
+        ['attStmt', new Map<Cbor, Cbor>()],
         ['authData', authData],
       ]),
     );

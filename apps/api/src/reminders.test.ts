@@ -238,7 +238,9 @@ describe('shutdown release', () => {
   it('keeps a claim whose reminder already went out', async () => {
     const h = await harness();
     const a = await optedIn(h);
-    const inflight = new Map([[a.userId, { previous: null, delivered: true }]]);
+    const inflight = new Map<string, InflightClaim>([
+      [a.userId, { previous: null, delivered: true }],
+    ]);
     await h.database.db
       .update(schema.reminderPrefs)
       .set({ lastSentAt: new Date() })
