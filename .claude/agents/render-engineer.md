@@ -33,3 +33,11 @@ Model: opus — photoreal shading and the swim-deformation maths are design-heav
 - Fish (PLAN §2.3 kinematics): travelling body wave along +Z with a per-swimming-mode envelope, tail-beat frequency from **Strouhal** (`f = St·U/A`, St≈0.3), turn bend, fin-mask-driven fin motion. Per-instance phase, speed and colour in instance attributes. Physical material with clearcoat, iridescence, fin transmission and condition/night paling uniforms.
 - The sim gives you positions, orientations, speeds and states at 30 Hz. Interpolate; never step behaviour in the renderer.
 - Budgets (PLAN §2.7) are hard limits. Report frame time per tier with `renderer.info` draw calls in your PR.
+
+## Shared machine
+
+Up to six agents share this host and the session scratchpad.
+
+- Put temp files in your own subfolder, `<scratchpad>/<issue-or-PR>/`, and delete only the exact paths you created. Never `rm` with a wildcard outside that subfolder.
+- Stop only processes you started, by their PID. Never `pkill`, `killall` or `pkill -f <pattern>`.
+- Remove the worktrees, containers and `node_modules` you created, and nothing else.
