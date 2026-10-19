@@ -207,6 +207,48 @@ describe('mirror', { timeout: LONG }, () => {
     expect(at(w.behaviour.toys.mirrorPhase, 0)).toBe(MirrorPhase.Idle);
   });
 
+  it('lets a betta tired of its reflection ignore it without drawing on the RNG', () => {
+    const watching = bettaAtMirror();
+    const cleared = bettaAtMirror();
+    let left = false;
+    for (let t = 0; t < seconds(TOYS.mirrorAttentionS * 2) && !left; t++) {
+      watching.step();
+      cleared.step();
+      left = at(watching.behaviour.toys.mirrorHabituation, 0) >= 1;
+    }
+    expect(left).toBe(true);
+    expect(at(watching.behaviour.toys.mirrorPhase, 0)).toBe(MirrorPhase.Idle);
+    cleared.setToys([]);
+    // Still above the recovery level throughout: the mirror in view must change nothing.
+    for (let t = 0; t < seconds(600); t++) {
+      watching.step();
+      cleared.step();
+    }
+    expect(at(watching.behaviour.toys.mirrorHabituation, 0)).toBeGreaterThan(
+      TOYS.mirrorRecoverLevel,
+    );
+    expect(Array.from(watching.position)).toEqual(Array.from(cleared.position));
+  });
+
+  it('keeps a betta at a mirror with an id when the toy list is reordered', () => {
+    const w = bettaAtMirror();
+    const named: SimToy = { ...MIRROR, id: 'mirror' };
+    const ball: SimToy = {
+      kind: 'ball',
+      id: 'ball',
+      position: [0.4, BALL_Y, 0],
+      velocity: [0, 0, 0],
+    };
+    w.setToys([named, ball]);
+    untilDisplaying(w);
+    w.setToys([ball, named]);
+    expect(at(w.behaviour.toys.mirrorPhase, 0)).not.toBe(MirrorPhase.Idle);
+    for (let t = 0; t < seconds(2); t++) w.step();
+    expect(at(w.behaviour.toys.mirrorPhase, 0)).not.toBe(MirrorPhase.Idle);
+    w.setToys([ball, { ...MIRROR, id: 'other' }]);
+    expect(at(w.behaviour.toys.mirrorPhase, 0)).toBe(MirrorPhase.Idle);
+  });
+
   it('leaves fish that do not display to rivals alone, without drawing on the RNG', () => {
     const fish = [...spawnMany('angelfish', 3), ...spawnMany('neon-tetra', 6)];
     const plain = show(fish, 7);
@@ -251,6 +293,7 @@ describe('ball', { timeout: LONG }, () => {
     expect(ball.nudges.length).toBeGreaterThan(0);
     for (const n of ball.nudges) {
       expect(n.toy).toBe(1);
+      expect(n.toyId).toBeNull();
       expect(n.fishId.startsWith('angelfish') || n.fishId === 'betta-0').toBe(true);
       expect(Number.isFinite(n.ix) && Number.isFinite(n.iz)).toBe(true);
       expect(Math.hypot(n.ix, n.iz)).toBeGreaterThan(0);
@@ -272,6 +315,42 @@ describe('ball', { timeout: LONG }, () => {
       expect(w.takeToyNudges()).toEqual([]);
       expect(Array.from(w.behaviour.toys.ballPhase).every((p) => p === BallPhase.Idle)).toBe(true);
     }
+  });
+
+  it('names the ball in each nudge by id, whatever its place in the list', () => {
+    const w = show(spawnMany('angelfish', 3), 2);
+    const ball = new FloatingBall(0, 0);
+    const decoy: SimToy = {
+      kind: 'ball',
+      id: 'decoy',
+      position: [9, BALL_Y, 0],
+      velocity: [0, 0, 0],
+    };
+    let playing = -1;
+    let t = 0;
+    for (; t < seconds(600) && playing < 0; t++) {
+      w.setToys([{ ...ball.toy(), id: 'ping' }, decoy]);
+      w.step();
+      ball.apply(w.takeToyNudges());
+      playing = Array.from(w.behaviour.toys.ballPhase).findIndex((p) => p !== BallPhase.Idle);
+    }
+    expect(playing).toBeGreaterThanOrEqual(0);
+    const nudges: ToyNudge[] = [];
+    for (; t < seconds(900); t++) {
+      const toys: SimToy[] = [{ ...ball.toy(), id: 'ping' }, decoy];
+      // Swapped every other step: the ball a fish is playing with must stay the same one.
+      if (t % 2 === 0) toys.reverse();
+      w.setToys(toys);
+      w.step();
+      const taken = w.takeToyNudges();
+      for (const n of taken) {
+        expect(n.toyId).toBe('ping');
+        expect(n.toy).toBe(t % 2 === 0 ? 1 : 0);
+      }
+      nudges.push(...taken);
+      ball.apply(taken);
+    }
+    expect(nudges.length).toBeGreaterThan(0);
   });
 
   it('ends a fish’s play when its ball is taken away', () => {
@@ -365,9 +444,15 @@ describe('toys', { timeout: LONG }, () => {
       [{ kind: 'ball', position: [0, BALL_Y, 0], velocity: [0, 0] }],
       Array.from({ length: 9 }, () => MIRROR),
       'mirror',
+      [null],
+      [{ ...MIRROR, id: '' }],
+      [
+        { ...MIRROR, id: 'same' },
+        { kind: 'ball', id: 'same', position: [0, BALL_Y, 0], velocity: [0, 0, 0] },
+      ],
     ];
     for (const toys of bad) {
-      expect(() => w.setToys(toys as SimToy[])).toThrow();
+      expect(() => w.setToys(toys as SimToy[])).toThrow(/^toys: /);
       expect(w.behaviour.toys.count).toBe(1);
       expect(at(w.behaviour.toys.mirrorPhase, 0)).not.toBe(MirrorPhase.Idle);
     }

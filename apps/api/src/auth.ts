@@ -36,6 +36,10 @@ export interface AuthDeps {
   mailer: Mailer;
   rateLimits?: AuthRateLimits;
   runInBackground?: (task: Promise<void>) => void;
+  password?: {
+    hash: (password: string) => Promise<string>;
+    verify: (data: { hash: string; password: string }) => Promise<boolean>;
+  };
 }
 
 export function createAuth({
@@ -44,6 +48,7 @@ export function createAuth({
   mailer,
   rateLimits = DEFAULT_AUTH_RATE_LIMITS,
   runInBackground = (task) => void task,
+  password,
 }: AuthDeps) {
   const origin = config.appUrl.origin;
   const secure = config.appUrl.protocol === 'https:';
@@ -119,6 +124,7 @@ export function createAuth({
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: true,
+      ...(password ? { password } : {}),
       minPasswordLength: MIN_PASSWORD_LENGTH,
       maxPasswordLength: MAX_PASSWORD_LENGTH,
       revokeSessionsOnPasswordReset: true,

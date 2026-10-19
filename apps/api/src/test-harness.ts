@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 import nodemailer from 'nodemailer';
 import pg from 'pg';
 import type { FastifyInstance, InjectOptions, LightMyRequestResponse } from 'fastify';
@@ -12,6 +12,27 @@ import { postgresHitStore, type HitStore } from './rate-limit.ts';
 import { loadCatalog } from './species.ts';
 import type { LegalLimits } from './legal.ts';
 import type { CareLimits } from './tanks.ts';
+
+const cheapKey = (password: string, salt: Buffer) =>
+  new Promise<Buffer>((resolve, reject) =>
+    scrypt(password, salt, 32, { N: 1024, r: 8, p: 1 }, (err, key) =>
+      err ? reject(err) : resolve(key),
+    ),
+  );
+
+const TEST_PASSWORD_HASHER = {
+  hash: async (password: string) => {
+    const salt = randomBytes(16);
+    return `${salt.toString('hex')}:${(await cheapKey(password, salt)).toString('hex')}`;
+  },
+  verify: async ({ hash, password }: { hash: string; password: string }) => {
+    const [salt, key] = hash.split(':');
+    if (!salt || !key) return false;
+    const expected = Buffer.from(key, 'hex');
+    const actual = await cheapKey(password, Buffer.from(salt, 'hex'));
+    return actual.length === expected.length && timingSafeEqual(actual, expected);
+  },
+};
 
 export const TEST_SECRET = 'testsecrettestsecrettestsecret0123456789';
 export const APP_ORIGIN = 'https://fish.test';
@@ -151,6 +172,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     },
     database,
     mailer,
+    password: TEST_PASSWORD_HASHER,
     runInBackground: (task) => {
       background.add(task);
       void task.finally(() => background.delete(task));

@@ -15,6 +15,7 @@ export default defineConfig({
     baseURL: `http://localhost:${port}`,
     viewport: { width: 800, height: 540 },
     reducedMotion: 'reduce',
+    serviceWorkers: 'block',
     trace: 'retain-on-failure',
     launchOptions: {
       args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],

@@ -4,7 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Aquarium</title>
-    <link rel="icon" href="data:," />
+    <meta name="theme-color" content="#0b0d10" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Aquarium" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="96x96" href="/icons/icon-96.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <style>
       html,
       body {
@@ -12,6 +19,7 @@
         height: 100%;
         background: #0b0d10;
         overflow: hidden;
+        overscroll-behavior: none;
       }
       #app {
         position: fixed;
