@@ -144,7 +144,7 @@ export const tanks = pgTable(
     biome: biomeEnum('biome').notNull(),
     size: tankSizeEnum('size').notNull().default('standard'),
     quarantine: boolean('quarantine').notNull().default(false),
-    shareToken: text('share_token').unique(),
+    shareTokenHash: text('share_token_hash').unique(),
     name: text('name').notNull(),
     decorLayout: jsonb('decor_layout'),
     // null: the player never chose one, so the biome's default shows.
@@ -258,7 +258,67 @@ export const mailLimitHits = pgTable(
   ],
 );
 
+export const reminderPrefs = pgTable('reminder_prefs', {
+  userId: text('user_id')
+    .primaryKey()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  mailEnabled: boolean('mail_enabled').notNull().default(false),
+  pushEnabled: boolean('push_enabled').notNull().default(false),
+  lastSentAt: timestamptz('last_sent_at'),
+});
+
+export const pushSubscriptions = pgTable(
+  'push_subscriptions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    endpoint: text('endpoint').notNull().unique(),
+    p256dh: text('p256dh').notNull(),
+    auth: text('auth').notNull(),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+    lastUsedAt: timestamptz('last_used_at'),
+  },
+  (t) => [index('push_subscriptions_user_id_idx').on(t.userId)],
+);
+
 export const releasedHandles = pgTable('released_handles', {
   handle: text('handle').primaryKey(),
   releasedAt: timestamptz('released_at').notNull().defaultNow(),
 });
+
+export const reactionKindEnum = pgEnum('reaction_kind', ['heart', 'star', 'wow']);
+
+export const tankReactions = pgTable(
+  'tank_reactions',
+  {
+    tankId: uuid('tank_id')
+      .notNull()
+      .references(() => tanks.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    kind: reactionKindEnum('kind').notNull(),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.tankId, t.userId] }),
+    index('tank_reactions_user_id_idx').on(t.userId),
+  ],
+);
+
+export const auditLog = pgTable(
+  'audit_log',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    at: timestamptz('at').notNull().defaultNow(),
+    actorId: text('actor_id').references(() => user.id, { onDelete: 'cascade' }),
+    tankId: uuid('tank_id').references(() => tanks.id, { onDelete: 'set null' }),
+    action: text('action').notNull(),
+    detail: jsonb('detail')
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+  },
+  (t) => [index('audit_log_tank_id_at_idx').on(t.tankId, t.at)],
+);

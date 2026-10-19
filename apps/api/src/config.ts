@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { parseVapidKeys, type VapidKeys } from './push.ts';
 
 const MAIL_DOMAIN = 'bas.lu';
 
@@ -25,6 +26,10 @@ const envSchema = z.object({
   WEB_DIST: z.string().default('../web/dist'),
   TRUSTED_PROXIES: z.string().optional(),
   NODE_ENV: z.string().optional(),
+  VAPID_PUBLIC_KEY: z.string().optional(),
+  VAPID_PRIVATE_KEY: z.string().optional(),
+  VAPID_SUBJECT: z.string().optional(),
+  REMINDER_DAILY_CAP: z.coerce.number().int().min(0).max(100_000).default(500),
 });
 
 export interface Config {
@@ -38,6 +43,9 @@ export interface Config {
   webRoot: string;
   trustedProxies: string[];
   testHooks: boolean;
+  vapid: VapidKeys | null;
+  vapidSubject: string;
+  reminderDailyCap: number;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv): Config {
@@ -59,6 +67,18 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     throw new Error('APP_URL must be https in production: session cookies are Secure.');
   }
 
+  if (Boolean(e.VAPID_PUBLIC_KEY) !== Boolean(e.VAPID_PRIVATE_KEY)) {
+    throw new Error('VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY must be set together or not at all.');
+  }
+  const vapid =
+    e.VAPID_PUBLIC_KEY && e.VAPID_PRIVATE_KEY
+      ? parseVapidKeys(e.VAPID_PUBLIC_KEY, e.VAPID_PRIVATE_KEY)
+      : null;
+  const vapidSubject = e.VAPID_SUBJECT ?? `mailto:${e.MAIL_FROM}`;
+  if (!/^(mailto:|https:\/\/)/.test(vapidSubject)) {
+    throw new Error('VAPID_SUBJECT must be a mailto: or https: URL.');
+  }
+
   return {
     databaseUrl: e.DATABASE_URL,
     authSecret: e.BETTER_AUTH_SECRET,
@@ -69,6 +89,9 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     port: e.PORT,
     webRoot: e.WEB_DIST,
     testHooks: e.NODE_ENV === 'test',
+    vapid,
+    vapidSubject,
+    reminderDailyCap: e.REMINDER_DAILY_CAP,
     trustedProxies: e.TRUSTED_PROXIES
       ? e.TRUSTED_PROXIES.split(',')
           .map((s) => s.trim())
