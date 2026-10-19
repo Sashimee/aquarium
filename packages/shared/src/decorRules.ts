@@ -39,6 +39,9 @@ export const DECOR_ASSET_IDS: Readonly<Record<Biome, ReadonlySet<string>>> = {
     'blue-sea-anemone',
     'host-anemone',
   ]),
+  cichlid: new Set(),
+  blackwater: new Set(),
+  mangrove: new Set(),
 };
 
 export function isDecorAssetForBiome(biome: Biome, assetId: string): boolean {

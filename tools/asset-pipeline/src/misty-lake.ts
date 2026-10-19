@@ -67,6 +67,73 @@ export function applyDepthOfField(
   return out;
 }
 
+const ABSORPTION = [0.34, 0.085, 0.06] as const;
+const VEIL_DENSITY = 0.13;
+const VEIL_TOP = [64, 148, 138] as const;
+const VEIL_BOTTOM = [6, 34, 40] as const;
+const RAY_COLOUR = [190, 245, 225] as const;
+
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function godRayStrength(u: number, v: number): number {
+  const slant = u + v * 0.35;
+  const beams =
+    0.5 +
+    0.5 * Math.sin(slant * 17 + 0.7) * 0.5 +
+    0.25 * Math.sin(slant * 41 + 2.1) +
+    0.25 * Math.sin(slant * 7.3 + 4.0);
+  const soft = Math.max(0, beams - 0.35);
+  return soft * Math.pow(Math.max(0, 1 - v * 1.25), 1.6);
+}
+
+/**
+ * Colour-dependent absorption (red dies first), a veil that thickens with distance and
+ * brightens toward the surface, soft god rays, vignette and seeded film grain.
+ */
+export function gradeUnderwater(
+  rgb: Uint8Array,
+  depthRed: Uint8Array,
+  params: DepthParams,
+  width: number,
+  height: number,
+): Uint8Array {
+  const out = new Uint8Array(rgb.length);
+  const grain = mulberry32(617);
+  for (let y = 0; y < height; y++) {
+    const v = y / (height - 1);
+    const veil = VEIL_TOP.map(
+      (top, c) => (VEIL_BOTTOM[c] ?? 0) + (top - (VEIL_BOTTOM[c] ?? 0)) * Math.pow(1 - v, 1.4),
+    );
+    for (let x = 0; x < width; x++) {
+      const p = y * width + x;
+      const u = x / (width - 1);
+      const distance = distanceFromDepthByte(depthRed[p] ?? 255, params);
+      const veilAmount = 1 - Math.exp(-VEIL_DENSITY * Math.max(0, distance - 1.2));
+      const rays = godRayStrength(u, v) * (0.25 + 0.75 * veilAmount) * 0.34;
+      const edge = Math.hypot(u - 0.5, (v - 0.5) * 0.9) * 1.4;
+      const vignette = 1 - 0.38 * edge * edge;
+      const noise = (grain() + grain() - 1) * 5;
+      for (let c = 0; c < 3; c++) {
+        const transmit = Math.exp(-(ABSORPTION[c] ?? 0) * Math.max(0, distance - 1.2));
+        const lit = (rgb[p * 3 + c] ?? 0) * transmit * (1 - veilAmount * 0.5);
+        const hazed = lit * (1 - veilAmount) + (veil[c] ?? 0) * veilAmount;
+        const value = (hazed + (RAY_COLOUR[c] ?? 0) * rays) * vignette + noise;
+        out[p * 3 + c] = Math.max(0, Math.min(255, Math.round(value)));
+      }
+    }
+  }
+  return out;
+}
+
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -168,13 +235,10 @@ export async function renderMistyLake(repoRoot: string): Promise<string> {
   }
   const blurred = applyDepthOfField(levels, depthRed, passes, pixels, 3);
 
-  const haze = Buffer.from(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${info.width}" height="${info.height}"><defs><linearGradient id="h" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e4f6f1" stop-opacity="0.34"/><stop offset="0.5" stop-color="#e4f6f1" stop-opacity="0"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#h)"/></svg>`,
-  );
-  const png = await sharp(Buffer.from(blurred), {
+  const graded = gradeUnderwater(blurred, depthRed, passes, info.width, info.height);
+  const png = await sharp(Buffer.from(graded), {
     raw: { width: info.width, height: info.height, channels: 3 },
   })
-    .composite([{ input: haze }])
     .png({ compressionLevel: 9 })
     .toBuffer();
   mkdirSync(join(RAW_ROOT, MISTY_LAKE_ID), { recursive: true });

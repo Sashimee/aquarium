@@ -17,6 +17,7 @@ import {
   type SimSpecies,
   type SpeciesInput,
 } from './species.ts';
+import type { SimToy, ToyNudge } from './toys.ts';
 import { Walkers } from './walk.ts';
 
 export const STEP_HZ = 30;
@@ -528,6 +529,30 @@ export class World {
    */
   setLure(position: Point3 | null): void {
     this.behaviour.setLure(position);
+  }
+
+  /**
+   * Replaces the toys: mirrors on the glass that a displaying fish takes its reflection in for a
+   * rival, and floating balls that bold fish bump and shy ones avoid. `[]` takes them all away.
+   * Resend a drifting ball as it moves; see `Toys.setToys`.
+   */
+  setToys(toys: readonly SimToy[]): void {
+    this.behaviour.setToys(toys);
+  }
+
+  /** The bumps fish gave balls since the last call, in the order they happened. */
+  takeToyNudges(): readonly ToyNudge[] {
+    return this.behaviour.toys.takeNudges();
+  }
+
+  /** Writes fish `id`'s position into `out`; false, leaving `out` alone, when there is no such fish. */
+  fishPosition(id: string, out: Float64Array | Float32Array | number[]): boolean {
+    const i = this.fishIds.indexOf(id);
+    if (i < 0) return false;
+    out[0] = this.position[i * 3] ?? 0;
+    out[1] = this.position[i * 3 + 1] ?? 0;
+    out[2] = this.position[i * 3 + 2] ?? 0;
+    return true;
   }
 
   /**
@@ -1051,6 +1076,19 @@ export class World {
     dx += sx * ws;
     dy += sy * ws;
     dz += sz * ws;
+    if (plan.shunRadius > 0) {
+      const ex = px - plan.shunX;
+      const ey = py - plan.shunY;
+      const ez = pz - plan.shunZ;
+      const d = Math.hypot(ex, ey, ez);
+      if (d < plan.shunRadius && d > 1e-9) {
+        const shove =
+          ((plan.shunRadius - d) / (plan.shunRadius * d)) * plan.shunWeight * cruiseBase;
+        dx += ex * shove;
+        dy += ey * shove;
+        dz += ez * shove;
+      }
+    }
 
     const ground = this.basin.ground(px, pz);
     const top = this.basin.maxY;
@@ -2182,6 +2220,8 @@ export class World {
       out[o + 11] = leg >= 1 ? 0 : leg;
       out[o + 12] = walker ? (this.walkers.flip[i] ?? 0) : 0;
       out[o + 13] = walker ? (this.walkers.attached[i] ?? 0) : 0;
+      out[o + 14] = this.behaviour.display[i] ?? 0;
+      out[o + 15] = this.behaviour.gillFlare[i] ?? 0;
     }
   }
 }

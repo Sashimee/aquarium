@@ -216,7 +216,7 @@ describe('blur and depth of field', () => {
 });
 
 function fakeBackground(bytes: number): OutputAsset {
-  const tier = (name: 'high' | 'mid' | 'low') => ({
+  const tier = (name: 'ultra' | 'high' | 'medium' | 'low') => ({
     file: backgroundFile('bg-x', name),
     bytes,
     sha256: 'a'.repeat(64),
@@ -234,7 +234,15 @@ function fakeBackground(bytes: number): OutputAsset {
     lods: [],
     textures: [],
     files: [],
-    background: { crop: null, tiers: { high: tier('high'), mid: tier('mid'), low: tier('low') } },
+    background: {
+      crop: null,
+      tiers: {
+        ultra: tier('ultra'),
+        high: tier('high'),
+        medium: tier('medium'),
+        low: tier('low'),
+      },
+    },
   };
 }
 
@@ -245,13 +253,13 @@ describe('background checks', () => {
 
   it('fails a tier one byte over the budget', () => {
     const problems = backgroundFileProblems(fakeBackground(BACKGROUND_MAX_BYTES + 1), () => null);
-    expect(problems).toHaveLength(3);
+    expect(problems).toHaveLength(4);
     expect(problems[0]).toContain(`over the ${BACKGROUND_MAX_BYTES} byte background budget`);
   });
 
   it('fails a tier file that is not a complete KTX2', () => {
     const problems = backgroundFileProblems(fakeBackground(100), () => new Uint8Array(10));
-    expect(problems).toHaveLength(3);
+    expect(problems).toHaveLength(4);
     expect(problems[0]).toContain('is unreadable');
   });
 

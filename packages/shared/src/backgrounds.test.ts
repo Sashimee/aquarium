@@ -61,6 +61,9 @@ describe('background schema', () => {
       '../x.ktx2',
       'a/../x.ktx2',
       'x.KTX2',
+      'a//x.ktx2',
+      './x.ktx2',
+      'a/./x.ktx2',
     ]) {
       expect(backgroundEntrySchema.safeParse({ ...entry, file, asset: 'bg-x' }).success, file).toBe(
         false,
@@ -77,8 +80,13 @@ describe('background schema', () => {
   });
 
   it('fixes the tier sizes and the byte budget from PLAN 9.2', () => {
-    expect(BACKGROUND_TIERS).toEqual({ high: [2048, 1024], mid: [1024, 512], low: [512, 256] });
-    expect(BACKGROUND_MAX_BYTES).toBe(600 * 1024);
+    expect(BACKGROUND_TIERS).toEqual({
+      ultra: [2048, 1024],
+      high: [2048, 1024],
+      medium: [1024, 512],
+      low: [512, 256],
+    });
+    expect(BACKGROUND_MAX_BYTES).toBe(600_000);
   });
 
   it('rejects duplicate ids and unknown fields', () => {

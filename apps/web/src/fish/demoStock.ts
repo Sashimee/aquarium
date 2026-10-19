@@ -1,9 +1,11 @@
 import {
   createTankSpace,
+  isPlayableBiome,
   sampleFloor,
   speciesSchema,
   tankWaterTop,
   type Biome,
+  type PlayableBiome,
   type TankSpace,
 } from '@aquarium/shared';
 import {
@@ -75,7 +77,7 @@ export function demoStock(
  * The reef has one clownfish pair for its one host anemone, a yellow rather than a blue tang
  * (a blue tang outgrows a 120 cm tank), and as many banggai as content's smallest group.
  */
-export const DEMO_STOCKS: Readonly<Record<Biome, DemoStock>> = {
+export const DEMO_STOCKS: Readonly<Record<PlayableBiome, DemoStock>> = {
   freshwater: demoStock(
     [neonTetraContent, angelfishContent, bronzeCorydorasContent, bettaContent, guppyContent],
     { 'neon-tetra': 14, angelfish: 2, 'bronze-corydoras': 5, betta: 1, guppy: 4 },
@@ -109,6 +111,7 @@ export function tankSpaceOf(tank: TankDimensions): TankSpace {
 }
 
 export function demoTank(tank: TankDimensions, seed: number, biome: Biome): DemoTank {
+  if (!isPlayableBiome(biome)) throw new Error(`demo stock: no stock for the ${biome} biome yet`);
   const { species, counts, maxLengthM } = DEMO_STOCKS[biome];
   const rng = new Rng(seed);
   const fish: FishSpawn[] = [];

@@ -10,11 +10,10 @@ import { curlAboveFloor, curledTip, MAX_TAIL_CURL } from './walk';
 
 const ROOT = '/assets/';
 const PUBLIC = fileURLToPath(new URL('../../public/assets/', import.meta.url));
-/** Discus is left out until #663: one of its primitives has no UVs and the loader rejects it. */
 const SWIMMERS = [
   ...parseFishAssets(JSON.parse(readFileSync(`${PUBLIC}index.json`, 'utf8'))).values(),
 ]
-  .filter((entry) => entry.shrimp === null && entry.id !== 'discus')
+  .filter((entry) => entry.shrimp === null)
   .map((entry) => entry.id);
 
 function serveShippedAssets(): void {
@@ -166,6 +165,7 @@ describe('FishAssetLoader', () => {
 
   it('checks the mouth packing of every shipped swimmer', () => {
     expect(SWIMMERS).toContain('neon-tetra');
+    expect(SWIMMERS).toContain('discus');
     expect(SWIMMERS.length).toBeGreaterThanOrEqual(15);
   });
 

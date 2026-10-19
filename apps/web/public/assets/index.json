@@ -2,7 +2,7 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; every texture has both files.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Every fish LOD also carries _MOUTH, geometry attribute \"_mouth\", a float in [0, 1] for buccal motion: 1 at the jaw or lower-lip tip (every LOD is renormalised so its highest value is exactly 1), easing to 0 behind the gill line and above the mouth slit; fins, eyes and attachments are 0. Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body, carapace and eyes; 6 walking leg; 7 antenna; 8 pleopod; 9 abdomen, telson and tail fan) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x; antennules 0/1, long antennae 2/3; tail-fan leaves k * 2 + side). Shrimp _fin_mask means: id 0 is 0 (eye stalks included, ignore it); ids 6 and 7 are the weight along the limb, 0 root to 1 tip; id 8 is the pleopod beat weight, 0 root to 1 tip; id 9 is the tail-curl weight clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1) of the rest position. Tail curl rotates ids 8 and 9 about +x through the shrimp.abdomenHinge {y, z} by flex * clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1), computed from the rest position, never from _fin_mask, so the pleopods follow the segment they hang from. Pleopods (id 8) exist only in LOD0 and LOD1 and are removed from LOD2; legs are simplified, so do not assume every _leg index exists at every LOD. The cherry material is alphaMode BLEND with base colour alpha 0.86: three.js GLTFLoader turns depthWrite off for BLEND, so set depthWrite true on the cherry material and expect some sorting artefacts from the self-overlapping legs and antennae.",
-  "totalBytes": 75561909,
+  "totalBytes": 80365621,
   "assets": [
     {
       "id": "angelfish",
@@ -1134,22 +1134,22 @@
       "lods": [
         {
           "file": "fish/discus/lod0.glb",
-          "bytes": 124360,
-          "sha256": "722faa8eff96cb8080ee14a711dc0500902dc631adb65fcf538ac8990f0b3922",
+          "bytes": 125624,
+          "sha256": "ab1863a869242b2adba443150c8275ebef4abce9a31353961f94826eb90ed26e",
           "triangles": 8011,
           "vertices": 5331
         },
         {
           "file": "fish/discus/lod1.glb",
-          "bytes": 63364,
-          "sha256": "136da9d1b31b574146b735f621d451e78daae2230494ec43dffc046db02431a7",
+          "bytes": 64544,
+          "sha256": "b5d7e7a061ab33b709a70ad92de9fc93740799fb5caea7228c0230d8604ee542",
           "triangles": 3356,
           "vertices": 2346
         },
         {
           "file": "fish/discus/lod2.glb",
-          "bytes": 33956,
-          "sha256": "140df6ee06b18f32cf3e1dbe0434869c73602f8e20886fe4d25a99ff0fb6372d",
+          "bytes": 35136,
+          "sha256": "30b4aca4f3717c241b0e9e720197b033a72fe583dbf695c9e7734e3679c9d713",
           "triangles": 1442,
           "vertices": 1059
         }
@@ -1232,18 +1232,18 @@
         },
         {
           "file": "fish/discus/lod0.glb",
-          "bytes": 124360,
-          "sha256": "722faa8eff96cb8080ee14a711dc0500902dc631adb65fcf538ac8990f0b3922"
+          "bytes": 125624,
+          "sha256": "ab1863a869242b2adba443150c8275ebef4abce9a31353961f94826eb90ed26e"
         },
         {
           "file": "fish/discus/lod1.glb",
-          "bytes": 63364,
-          "sha256": "136da9d1b31b574146b735f621d451e78daae2230494ec43dffc046db02431a7"
+          "bytes": 64544,
+          "sha256": "b5d7e7a061ab33b709a70ad92de9fc93740799fb5caea7228c0230d8604ee542"
         },
         {
           "file": "fish/discus/lod2.glb",
-          "bytes": 33956,
-          "sha256": "140df6ee06b18f32cf3e1dbe0434869c73602f8e20886fe4d25a99ff0fb6372d"
+          "bytes": 35136,
+          "sha256": "30b4aca4f3717c241b0e9e720197b033a72fe583dbf695c9e7734e3679c9d713"
         },
         {
           "file": "fish/discus/textures/discus_material-001_basecolor_1k.ktx2",
@@ -6053,44 +6053,57 @@
       "textures": [],
       "files": [
         {
-          "file": "background/bg-fw-misty-lake/high.ktx2",
-          "bytes": 325949,
-          "sha256": "61bc3e6a0d8ae61bf9e5de23038997bb71b7379207c1f35d49a28ff4b818bafa"
+          "file": "background/bg-fw-misty-lake/ultra.ktx2",
+          "bytes": 336462,
+          "sha256": "2284c6e7ecacc6389e93d5b83cb51d6455255450185068a937d637028dd595e5"
         },
         {
-          "file": "background/bg-fw-misty-lake/mid.ktx2",
-          "bytes": 107620,
-          "sha256": "6960edc854ec79c672fb037145052c521a51005320e523118589ab772429315f"
+          "file": "background/bg-fw-misty-lake/high.ktx2",
+          "bytes": 336462,
+          "sha256": "2284c6e7ecacc6389e93d5b83cb51d6455255450185068a937d637028dd595e5"
+        },
+        {
+          "file": "background/bg-fw-misty-lake/medium.ktx2",
+          "bytes": 106958,
+          "sha256": "291fdac1117a82a99bb95a5791c635c6a639f3187e15fc6e403b7e71d2af04c7"
         },
         {
           "file": "background/bg-fw-misty-lake/low.ktx2",
-          "bytes": 38812,
-          "sha256": "8099294c82809bcd9e9627382e417d589fc020ab3bb4d1ea81f44e089649aa8e"
+          "bytes": 38454,
+          "sha256": "e5f63f9f669953fbfa3ccc99d5ad714eab915b7a9db4d4df680ecd3ebd293cc3"
         }
       ],
       "background": {
         "crop": null,
         "tiers": {
-          "high": {
-            "file": "background/bg-fw-misty-lake/high.ktx2",
-            "bytes": 325949,
-            "sha256": "61bc3e6a0d8ae61bf9e5de23038997bb71b7379207c1f35d49a28ff4b818bafa",
+          "ultra": {
+            "file": "background/bg-fw-misty-lake/ultra.ktx2",
+            "bytes": 336462,
+            "sha256": "2284c6e7ecacc6389e93d5b83cb51d6455255450185068a937d637028dd595e5",
             "width": 2048,
             "height": 1024,
             "qualityLevel": 192
           },
-          "mid": {
-            "file": "background/bg-fw-misty-lake/mid.ktx2",
-            "bytes": 107620,
-            "sha256": "6960edc854ec79c672fb037145052c521a51005320e523118589ab772429315f",
+          "high": {
+            "file": "background/bg-fw-misty-lake/high.ktx2",
+            "bytes": 336462,
+            "sha256": "2284c6e7ecacc6389e93d5b83cb51d6455255450185068a937d637028dd595e5",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-fw-misty-lake/medium.ktx2",
+            "bytes": 106958,
+            "sha256": "291fdac1117a82a99bb95a5791c635c6a639f3187e15fc6e403b7e71d2af04c7",
             "width": 1024,
             "height": 512,
             "qualityLevel": 192
           },
           "low": {
             "file": "background/bg-fw-misty-lake/low.ktx2",
-            "bytes": 38812,
-            "sha256": "8099294c82809bcd9e9627382e417d589fc020ab3bb4d1ea81f44e089649aa8e",
+            "bytes": 38454,
+            "sha256": "e5f63f9f669953fbfa3ccc99d5ad714eab915b7a9db4d4df680ecd3ebd293cc3",
             "width": 512,
             "height": 256,
             "qualityLevel": 192
@@ -6116,12 +6129,17 @@
       "textures": [],
       "files": [
         {
+          "file": "background/bg-fw-plant-wall/ultra.ktx2",
+          "bytes": 525229,
+          "sha256": "891061a8bde00191e46311a5b8c364bae54821dd492b3c4c00ecba79aac06f84"
+        },
+        {
           "file": "background/bg-fw-plant-wall/high.ktx2",
           "bytes": 525229,
           "sha256": "891061a8bde00191e46311a5b8c364bae54821dd492b3c4c00ecba79aac06f84"
         },
         {
-          "file": "background/bg-fw-plant-wall/mid.ktx2",
+          "file": "background/bg-fw-plant-wall/medium.ktx2",
           "bytes": 155335,
           "sha256": "9c1be18efcb07f0c5e600d8b57c3d3b7172ec1f79994ac49c39ed75d3888e713"
         },
@@ -6139,6 +6157,14 @@
           "height": 2016
         },
         "tiers": {
+          "ultra": {
+            "file": "background/bg-fw-plant-wall/ultra.ktx2",
+            "bytes": 525229,
+            "sha256": "891061a8bde00191e46311a5b8c364bae54821dd492b3c4c00ecba79aac06f84",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
           "high": {
             "file": "background/bg-fw-plant-wall/high.ktx2",
             "bytes": 525229,
@@ -6147,8 +6173,8 @@
             "height": 1024,
             "qualityLevel": 192
           },
-          "mid": {
-            "file": "background/bg-fw-plant-wall/mid.ktx2",
+          "medium": {
+            "file": "background/bg-fw-plant-wall/medium.ktx2",
             "bytes": 155335,
             "sha256": "9c1be18efcb07f0c5e600d8b57c3d3b7172ec1f79994ac49c39ed75d3888e713",
             "width": 1024,
@@ -6184,12 +6210,17 @@
       "textures": [],
       "files": [
         {
+          "file": "background/bg-fw-planted-stream/ultra.ktx2",
+          "bytes": 538319,
+          "sha256": "a5cdbe07d496ae57cd46a180297a408cb96a9fea00f094a20079a77b595eeecb"
+        },
+        {
           "file": "background/bg-fw-planted-stream/high.ktx2",
           "bytes": 538319,
           "sha256": "a5cdbe07d496ae57cd46a180297a408cb96a9fea00f094a20079a77b595eeecb"
         },
         {
-          "file": "background/bg-fw-planted-stream/mid.ktx2",
+          "file": "background/bg-fw-planted-stream/medium.ktx2",
           "bytes": 158216,
           "sha256": "b331045d50405997d48cd5ee3e824a0977e2ce067531b23779caca6b8b8e1f26"
         },
@@ -6207,6 +6238,14 @@
           "height": 2362
         },
         "tiers": {
+          "ultra": {
+            "file": "background/bg-fw-planted-stream/ultra.ktx2",
+            "bytes": 538319,
+            "sha256": "a5cdbe07d496ae57cd46a180297a408cb96a9fea00f094a20079a77b595eeecb",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
           "high": {
             "file": "background/bg-fw-planted-stream/high.ktx2",
             "bytes": 538319,
@@ -6215,8 +6254,8 @@
             "height": 1024,
             "qualityLevel": 192
           },
-          "mid": {
-            "file": "background/bg-fw-planted-stream/mid.ktx2",
+          "medium": {
+            "file": "background/bg-fw-planted-stream/medium.ktx2",
             "bytes": 158216,
             "sha256": "b331045d50405997d48cd5ee3e824a0977e2ce067531b23779caca6b8b8e1f26",
             "width": 1024,
@@ -6252,12 +6291,17 @@
       "textures": [],
       "files": [
         {
+          "file": "background/bg-fw-rocky-riverbed/ultra.ktx2",
+          "bytes": 438826,
+          "sha256": "5d7076e8ab438ce74b695ca867e5b18bb0c4e961f1897dfc2d3c9bc31d4a96c7"
+        },
+        {
           "file": "background/bg-fw-rocky-riverbed/high.ktx2",
           "bytes": 438826,
           "sha256": "5d7076e8ab438ce74b695ca867e5b18bb0c4e961f1897dfc2d3c9bc31d4a96c7"
         },
         {
-          "file": "background/bg-fw-rocky-riverbed/mid.ktx2",
+          "file": "background/bg-fw-rocky-riverbed/medium.ktx2",
           "bytes": 130864,
           "sha256": "0dbf4f7e4a309dce5b7c654c6e28f2037b7dd0e2d55213f5403bb3c87d9cb556"
         },
@@ -6275,6 +6319,14 @@
           "height": 3680
         },
         "tiers": {
+          "ultra": {
+            "file": "background/bg-fw-rocky-riverbed/ultra.ktx2",
+            "bytes": 438826,
+            "sha256": "5d7076e8ab438ce74b695ca867e5b18bb0c4e961f1897dfc2d3c9bc31d4a96c7",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
           "high": {
             "file": "background/bg-fw-rocky-riverbed/high.ktx2",
             "bytes": 438826,
@@ -6283,8 +6335,8 @@
             "height": 1024,
             "qualityLevel": 192
           },
-          "mid": {
-            "file": "background/bg-fw-rocky-riverbed/mid.ktx2",
+          "medium": {
+            "file": "background/bg-fw-rocky-riverbed/medium.ktx2",
             "bytes": 130864,
             "sha256": "0dbf4f7e4a309dce5b7c654c6e28f2037b7dd0e2d55213f5403bb3c87d9cb556",
             "width": 1024,
@@ -6320,12 +6372,17 @@
       "textures": [],
       "files": [
         {
+          "file": "background/bg-fw-root-tangle/ultra.ktx2",
+          "bytes": 520418,
+          "sha256": "c8c3953bc2793f605e0dbe547eda754b3f3e73ce3edd818a9694dbd4c4688118"
+        },
+        {
           "file": "background/bg-fw-root-tangle/high.ktx2",
           "bytes": 520418,
           "sha256": "c8c3953bc2793f605e0dbe547eda754b3f3e73ce3edd818a9694dbd4c4688118"
         },
         {
-          "file": "background/bg-fw-root-tangle/mid.ktx2",
+          "file": "background/bg-fw-root-tangle/medium.ktx2",
           "bytes": 152858,
           "sha256": "9db493308560bd6884c2481774b5a05fe09c222deebe30a94c211fdd0af2cad3"
         },
@@ -6343,6 +6400,14 @@
           "height": 1936
         },
         "tiers": {
+          "ultra": {
+            "file": "background/bg-fw-root-tangle/ultra.ktx2",
+            "bytes": 520418,
+            "sha256": "c8c3953bc2793f605e0dbe547eda754b3f3e73ce3edd818a9694dbd4c4688118",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
           "high": {
             "file": "background/bg-fw-root-tangle/high.ktx2",
             "bytes": 520418,
@@ -6351,8 +6416,8 @@
             "height": 1024,
             "qualityLevel": 192
           },
-          "mid": {
-            "file": "background/bg-fw-root-tangle/mid.ktx2",
+          "medium": {
+            "file": "background/bg-fw-root-tangle/medium.ktx2",
             "bytes": 152858,
             "sha256": "9db493308560bd6884c2481774b5a05fe09c222deebe30a94c211fdd0af2cad3",
             "width": 1024,
@@ -6388,12 +6453,17 @@
       "textures": [],
       "files": [
         {
+          "file": "background/bg-reef-coral-wall/ultra.ktx2",
+          "bytes": 471595,
+          "sha256": "24354f63ccdabf8ed04488d5e9c983630c7879b3cfbb95093869e300dfe9f84f"
+        },
+        {
           "file": "background/bg-reef-coral-wall/high.ktx2",
           "bytes": 471595,
           "sha256": "24354f63ccdabf8ed04488d5e9c983630c7879b3cfbb95093869e300dfe9f84f"
         },
         {
-          "file": "background/bg-reef-coral-wall/mid.ktx2",
+          "file": "background/bg-reef-coral-wall/medium.ktx2",
           "bytes": 140746,
           "sha256": "4272d186d0a4f6304a2a0ce2ea682a66690510a85f4d7339526b6be3167205ff"
         },
@@ -6411,6 +6481,14 @@
           "height": 2736
         },
         "tiers": {
+          "ultra": {
+            "file": "background/bg-reef-coral-wall/ultra.ktx2",
+            "bytes": 471595,
+            "sha256": "24354f63ccdabf8ed04488d5e9c983630c7879b3cfbb95093869e300dfe9f84f",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
           "high": {
             "file": "background/bg-reef-coral-wall/high.ktx2",
             "bytes": 471595,
@@ -6419,8 +6497,8 @@
             "height": 1024,
             "qualityLevel": 192
           },
-          "mid": {
-            "file": "background/bg-reef-coral-wall/mid.ktx2",
+          "medium": {
+            "file": "background/bg-reef-coral-wall/medium.ktx2",
             "bytes": 140746,
             "sha256": "4272d186d0a4f6304a2a0ce2ea682a66690510a85f4d7339526b6be3167205ff",
             "width": 1024,
@@ -6456,12 +6534,17 @@
       "textures": [],
       "files": [
         {
+          "file": "background/bg-reef-deep-blue/ultra.ktx2",
+          "bytes": 455830,
+          "sha256": "64276df25c2e87804472c9865d7eeec0d0ae7b776a636c65009c8c1dff08a080"
+        },
+        {
           "file": "background/bg-reef-deep-blue/high.ktx2",
           "bytes": 455830,
           "sha256": "64276df25c2e87804472c9865d7eeec0d0ae7b776a636c65009c8c1dff08a080"
         },
         {
-          "file": "background/bg-reef-deep-blue/mid.ktx2",
+          "file": "background/bg-reef-deep-blue/medium.ktx2",
           "bytes": 136204,
           "sha256": "dd11f66a805d610fef6e4e562a32b5053a36e267203cb0d02d0d4bd857c000ee"
         },
@@ -6479,6 +6562,14 @@
           "height": 2592
         },
         "tiers": {
+          "ultra": {
+            "file": "background/bg-reef-deep-blue/ultra.ktx2",
+            "bytes": 455830,
+            "sha256": "64276df25c2e87804472c9865d7eeec0d0ae7b776a636c65009c8c1dff08a080",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
           "high": {
             "file": "background/bg-reef-deep-blue/high.ktx2",
             "bytes": 455830,
@@ -6487,8 +6578,8 @@
             "height": 1024,
             "qualityLevel": 192
           },
-          "mid": {
-            "file": "background/bg-reef-deep-blue/mid.ktx2",
+          "medium": {
+            "file": "background/bg-reef-deep-blue/medium.ktx2",
             "bytes": 136204,
             "sha256": "dd11f66a805d610fef6e4e562a32b5053a36e267203cb0d02d0d4bd857c000ee",
             "width": 1024,
@@ -6524,12 +6615,17 @@
       "textures": [],
       "files": [
         {
+          "file": "background/bg-reef-fish-slope/ultra.ktx2",
+          "bytes": 457296,
+          "sha256": "16c82bb4115c193c8f43adbbb80dfd233ce1632d55769a2a782228685b37ecab"
+        },
+        {
           "file": "background/bg-reef-fish-slope/high.ktx2",
           "bytes": 457296,
           "sha256": "16c82bb4115c193c8f43adbbb80dfd233ce1632d55769a2a782228685b37ecab"
         },
         {
-          "file": "background/bg-reef-fish-slope/mid.ktx2",
+          "file": "background/bg-reef-fish-slope/medium.ktx2",
           "bytes": 139646,
           "sha256": "f2c27372e5df22a259bd58e0edd5d1126cf261e3caa152bfbb52c7cbd6496e1f"
         },
@@ -6547,6 +6643,14 @@
           "height": 1809
         },
         "tiers": {
+          "ultra": {
+            "file": "background/bg-reef-fish-slope/ultra.ktx2",
+            "bytes": 457296,
+            "sha256": "16c82bb4115c193c8f43adbbb80dfd233ce1632d55769a2a782228685b37ecab",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
           "high": {
             "file": "background/bg-reef-fish-slope/high.ktx2",
             "bytes": 457296,
@@ -6555,8 +6659,8 @@
             "height": 1024,
             "qualityLevel": 192
           },
-          "mid": {
-            "file": "background/bg-reef-fish-slope/mid.ktx2",
+          "medium": {
+            "file": "background/bg-reef-fish-slope/medium.ktx2",
             "bytes": 139646,
             "sha256": "f2c27372e5df22a259bd58e0edd5d1126cf261e3caa152bfbb52c7cbd6496e1f",
             "width": 1024,
@@ -6592,12 +6696,17 @@
       "textures": [],
       "files": [
         {
+          "file": "background/bg-reef-light-rays/ultra.ktx2",
+          "bytes": 497669,
+          "sha256": "3d2f15ffe6d7ab9bc8ac054ad3d086526df4197def37e4e4afd8f179e5a553ef"
+        },
+        {
           "file": "background/bg-reef-light-rays/high.ktx2",
           "bytes": 497669,
           "sha256": "3d2f15ffe6d7ab9bc8ac054ad3d086526df4197def37e4e4afd8f179e5a553ef"
         },
         {
-          "file": "background/bg-reef-light-rays/mid.ktx2",
+          "file": "background/bg-reef-light-rays/medium.ktx2",
           "bytes": 147144,
           "sha256": "7cd74b2af355d9189988d0340ac8242e2598e08789dc1e3c2f189f1c919e1ae5"
         },
@@ -6615,6 +6724,14 @@
           "height": 1824
         },
         "tiers": {
+          "ultra": {
+            "file": "background/bg-reef-light-rays/ultra.ktx2",
+            "bytes": 497669,
+            "sha256": "3d2f15ffe6d7ab9bc8ac054ad3d086526df4197def37e4e4afd8f179e5a553ef",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
           "high": {
             "file": "background/bg-reef-light-rays/high.ktx2",
             "bytes": 497669,
@@ -6623,8 +6740,8 @@
             "height": 1024,
             "qualityLevel": 192
           },
-          "mid": {
-            "file": "background/bg-reef-light-rays/mid.ktx2",
+          "medium": {
+            "file": "background/bg-reef-light-rays/medium.ktx2",
             "bytes": 147144,
             "sha256": "7cd74b2af355d9189988d0340ac8242e2598e08789dc1e3c2f189f1c919e1ae5",
             "width": 1024,
@@ -6660,12 +6777,17 @@
       "textures": [],
       "files": [
         {
+          "file": "background/bg-reef-soft-coral/ultra.ktx2",
+          "bytes": 548951,
+          "sha256": "b569bc003c5f203fd5e4d03cc32d8ec908e0df26a64b7aa7679675e7678f8665"
+        },
+        {
           "file": "background/bg-reef-soft-coral/high.ktx2",
           "bytes": 548951,
           "sha256": "b569bc003c5f203fd5e4d03cc32d8ec908e0df26a64b7aa7679675e7678f8665"
         },
         {
-          "file": "background/bg-reef-soft-coral/mid.ktx2",
+          "file": "background/bg-reef-soft-coral/medium.ktx2",
           "bytes": 161443,
           "sha256": "54809d9a7e455776ff38254e1f828f7ae8b29e364b30431ea1bbb52b916254aa"
         },
@@ -6683,6 +6805,14 @@
           "height": 2000
         },
         "tiers": {
+          "ultra": {
+            "file": "background/bg-reef-soft-coral/ultra.ktx2",
+            "bytes": 548951,
+            "sha256": "b569bc003c5f203fd5e4d03cc32d8ec908e0df26a64b7aa7679675e7678f8665",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
           "high": {
             "file": "background/bg-reef-soft-coral/high.ktx2",
             "bytes": 548951,
@@ -6691,8 +6821,8 @@
             "height": 1024,
             "qualityLevel": 192
           },
-          "mid": {
-            "file": "background/bg-reef-soft-coral/mid.ktx2",
+          "medium": {
+            "file": "background/bg-reef-soft-coral/medium.ktx2",
             "bytes": 161443,
             "sha256": "54809d9a7e455776ff38254e1f828f7ae8b29e364b30431ea1bbb52b916254aa",
             "width": 1024,

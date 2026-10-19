@@ -10,6 +10,7 @@
     "traits": ["cave-dweller"]
   },
   "biome": "reef",
+  "chemistry": { "salinityPpt": [30, 36] },
   "commonName": "Royal gramma",
   "id": "royal-gramma",
   "lifecycle": {

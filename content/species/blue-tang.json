@@ -10,6 +10,7 @@
     "traits": []
   },
   "biome": "reef",
+  "chemistry": { "salinityPpt": [30, 36] },
   "commonName": "Blue tang",
   "id": "blue-tang",
   "lifecycle": {

@@ -1,11 +1,11 @@
-import type { Biome } from '@aquarium/shared';
+import type { Biome, PlayableBiome } from '@aquarium/shared';
 import type { SessionState } from '../sync/state';
 
 export type SwitchPlan =
   | { kind: 'none' }
   | { kind: 'demo'; biome: Biome }
   | { kind: 'select'; tankId: string }
-  | { kind: 'create'; biome: Biome };
+  | { kind: 'create'; biome: PlayableBiome };
 
 type SwitchState = Pick<SessionState, 'phase' | 'tanks' | 'activeId'>;
 
@@ -25,7 +25,7 @@ export function canSwitch(state: Pick<SessionState, 'phase' | 'busy'>): boolean 
 }
 
 /** What choosing `target` does: retarget the demo, pick one of the player's tanks, or start a new one. */
-export function planSwitch(state: SwitchState, demo: Biome, target: Biome): SwitchPlan {
+export function planSwitch(state: SwitchState, demo: Biome, target: PlayableBiome): SwitchPlan {
   if (state.phase !== 'ready') {
     return target === demo ? { kind: 'none' } : { kind: 'demo', biome: target };
   }

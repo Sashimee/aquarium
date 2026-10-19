@@ -1,13 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import {
-  AttributeNode,
-  ConstNode,
-  MathNode,
-  MeshStandardMaterial,
-  Vector3,
-  type Node,
-} from 'three/webgpu';
-import { float, smoothstep, uniform, vec3 } from 'three/tsl';
+import { AttributeNode, MeshStandardMaterial, Vector3, type Node } from 'three/webgpu';
+import { uniform, vec3 } from 'three/tsl';
 import {
   FishInstanceData,
   INSTANCE_STRIDE,
@@ -15,6 +8,7 @@ import {
   WALKER_INSTANCE_STRIDE,
   WalkerSlot,
 } from './instances';
+import { reversedSmoothsteps } from '../engine/reversedSmoothsteps';
 import { AUTHORED_SURFACE_MATERIAL, FishMaterial, keepsAuthoredSurface } from './material';
 import { renderProfile } from './profiles';
 import { SWIM_MODES } from './swim';
@@ -76,21 +70,6 @@ function readsAttribute(node: Node | null, name: string, type: string): boolean 
     if (!(n instanceof AttributeNode) || n.nodeType !== type) return;
     // AttributeNode only exposes its name through a builder; a test has none to hand it.
     if ((n as AttributeNode & { _attributeName?: string })._attributeName === name) found = true;
-  });
-  return found;
-}
-
-const constant = (node: Node | null): number | null =>
-  node instanceof ConstNode && typeof node.value === 'number' ? node.value : null;
-
-/** smoothstep with edge0 >= edge1 is undefined in GLSL ES 3.00 and MSL. */
-function reversedSmoothsteps(node: Node | null): string[] {
-  const found: string[] = [];
-  node?.traverse((n) => {
-    if (!(n instanceof MathNode) || n.method !== MathNode.SMOOTHSTEP) return;
-    const low = constant(n.aNode);
-    const high = constant(n.bNode);
-    if (low !== null && high !== null && low >= high) found.push(`smoothstep(${low}, ${high}, x)`);
   });
   return found;
 }
@@ -164,11 +143,6 @@ describe('FishMaterial shader graph', () => {
       ];
       expect(graphs.flatMap(reversedSmoothsteps)).toEqual([]);
     }
-  });
-
-  it('catches a smoothstep written high to low', () => {
-    expect(reversedSmoothsteps(smoothstep(0.2, 0, float(0.1)))).toEqual(['smoothstep(0.2, 0, x)']);
-    expect(reversedSmoothsteps(smoothstep(0, 0.2, float(0.1)))).toEqual([]);
   });
 });
 

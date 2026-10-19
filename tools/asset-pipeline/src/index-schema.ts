@@ -120,8 +120,9 @@ export const backgroundInfoSchema = z.strictObject({
     })
     .nullable(),
   tiers: z.strictObject({
+    ultra: backgroundTierSchema,
     high: backgroundTierSchema,
-    mid: backgroundTierSchema,
+    medium: backgroundTierSchema,
     low: backgroundTierSchema,
   }),
 });

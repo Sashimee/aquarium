@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  biomeSchema,
+  playableBiomeSchema,
   sampleFloor,
   speciesSchema,
   tankWaterBounds,
@@ -17,7 +17,7 @@ import { DEMO_STOCKS, demoStock, demoTank, sceneAnchorsToSim } from './demoStock
 import bettaContent from '../../../../content/species/betta.json';
 import neonTetraContent from '../../../../content/species/neon-tetra.json';
 
-const BIOMES = biomeSchema.options;
+const BIOMES = playableBiomeSchema.options;
 // PLAN §2.7: the mobile tier draws at most 30 fish per tank, and the demo runs on mobile too.
 const MOBILE_FISH_BUDGET = 30;
 

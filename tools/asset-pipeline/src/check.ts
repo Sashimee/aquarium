@@ -166,7 +166,7 @@ function safeDecodeUri(uri: string): string {
 const SHIPPED_EXTENSIONS: readonly string[] = ['.glb', '.ktx2'];
 
 function requiredAttributes(kind: OutputAsset['kind']): string[] {
-  if (kind === 'fish') return [FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE, MOUTH_ATTRIBUTE];
+  if (kind === 'fish') return ['TEXCOORD_0', FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE, MOUTH_ATTRIBUTE];
   if (kind === 'shrimp') return [FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE, LEG_ATTRIBUTE];
   return [];
 }
