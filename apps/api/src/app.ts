@@ -222,11 +222,16 @@ function hasAmbiguousPath(url: string): boolean {
 }
 
 const PUBLIC_PATH_PREFIX = '/api/public/';
+const VIEWER_PATH_PREFIX = '/t/';
 const TOKEN_PATH_PREFIXES = [`${AUTH_BASE_PATH}/reset-password/`, `${AUTH_BASE_PATH}/callback/`];
 // Pages and links whose URL holds a one-time token. The strict-origin-when-cross-origin default
 // would still send the full URL to same-origin subresources (JS, CSS, /api/me) on first load. The
 // policy stays scoped: the CSRF check falls back to Referer and the default suits every other route.
 const TOKEN_PAGES = new Set(['/reset-password', '/verify-email']);
+
+function isViewerPath(url: string): boolean {
+  return normalizedPathname(url).toLowerCase().startsWith(VIEWER_PATH_PREFIX);
+}
 
 function carriesUrlToken(url: string): boolean {
   const path = normalizedPathname(url).toLowerCase().replace(/\/+$/, '');
@@ -235,6 +240,7 @@ function carriesUrlToken(url: string): boolean {
     path === `${AUTH_BASE_PATH}/verify-email` ||
     path === UNSUBSCRIBE_PATH ||
     path.startsWith(PUBLIC_PATH_PREFIX) ||
+    path.startsWith(VIEWER_PATH_PREFIX) ||
     TOKEN_PATH_PREFIXES.some((prefix) => path.startsWith(prefix))
   );
 }
@@ -246,6 +252,8 @@ export function redactUrl(url: string): string {
   const lower = path.toLowerCase();
   if (lower.startsWith(PUBLIC_PATH_PREFIX))
     return `${path.slice(0, PUBLIC_PATH_PREFIX.length)}[redacted]`;
+  if (lower.startsWith(VIEWER_PATH_PREFIX))
+    return `${path.slice(0, VIEWER_PATH_PREFIX.length)}[redacted]`;
   const prefix = TOKEN_PATH_PREFIXES.find((p) => lower.startsWith(p));
   if (prefix) {
     const rest = path.slice(prefix.length);
@@ -354,6 +362,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
       reply.header('content-security-policy', KTX2_WORKER_CSP);
     }
     if (carriesUrlToken(req.url)) reply.header('referrer-policy', 'no-referrer');
+    if (isViewerPath(req.url)) reply.header('x-robots-tag', 'noindex, nofollow');
   });
 
   app.addHook('onRequest', async (req, reply) => {
@@ -409,7 +418,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
 
   app.get('/robots.txt', async (_req, reply) => {
     reply.type('text/plain');
-    return indexable ? 'User-agent: *\nAllow: /\n' : 'User-agent: *\nDisallow: /\n';
+    return indexable ? 'User-agent: *\nDisallow: /t/\nAllow: /\n' : 'User-agent: *\nDisallow: /\n';
   });
 
   async function currentSession(req: FastifyRequest) {
