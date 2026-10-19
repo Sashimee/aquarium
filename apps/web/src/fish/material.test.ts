@@ -59,10 +59,59 @@ function shrimpMaterial(): FishMaterial {
     profile: renderProfile('cherry-shrimp'),
     locomotion: {
       kind: 'walk',
-      rig: { bodyLength: 0.025, hinge: { y: 0, z: 0 }, telsonZ: -0.0125, legPivots: [] },
+      rig: {
+        bodyLength: 0.025,
+        hinge: { y: 0, z: 0 },
+        telsonZ: -0.0125,
+        legPivots: [],
+        chelipedPairs: 2,
+        shell: null,
+      },
     },
     zMin: -0.0125,
     zMax: 0.0125,
+    instances: new FishInstanceData(1, WALKER_INSTANCE_STRIDE),
+    lighting: { lightDirection: uniform(new Vector3(0, 1, 0)), light: vec3(1) },
+    mouth: false,
+    displays: false,
+  });
+}
+
+const SHELL = { centre: [0, 0.004, -0.002], drop: 0.001 } as const;
+
+function crabMaterial(): FishMaterial {
+  return new FishMaterial({
+    source: new MeshStandardMaterial(),
+    assetId: 'hermit-crab',
+    profile: renderProfile('hermit-crab'),
+    locomotion: {
+      kind: 'walk',
+      rig: {
+        bodyLength: 0.03,
+        hinge: { y: 0.0006, z: 0.0057 },
+        telsonZ: -0.0155,
+        legPivots: [],
+        chelipedPairs: 1,
+        shell: SHELL,
+      },
+    },
+    zMin: -0.0155,
+    zMax: 0.0175,
+    instances: new FishInstanceData(1, WALKER_INSTANCE_STRIDE),
+    lighting: { lightDirection: uniform(new Vector3(0, 1, 0)), light: vec3(1) },
+    mouth: false,
+    displays: false,
+  });
+}
+
+function snailMaterial(): FishMaterial {
+  return new FishMaterial({
+    source: new MeshStandardMaterial(),
+    assetId: 'nerite-snail',
+    profile: renderProfile('nerite-snail'),
+    locomotion: { kind: 'glide', rig: { bodyLength: 0.02, shell: SHELL } },
+    zMin: -0.0129,
+    zMax: 0.0134,
     instances: new FishInstanceData(1, WALKER_INSTANCE_STRIDE),
     lighting: { lightDirection: uniform(new Vector3(0, 1, 0)), light: vec3(1) },
     mouth: false,
@@ -196,6 +245,8 @@ describe('FishMaterial shader graph', () => {
     ['a fish with a mouth', () => fishMaterial(new MeshStandardMaterial(), true)],
     ['a fish without one', () => fishMaterial(new MeshStandardMaterial(), false)],
     ['a walker', shrimpMaterial],
+    ['a crab', crabMaterial],
+    ['a snail', snailMaterial],
   ])('orders every constant smoothstep edge low to high for %s', (_, make) => {
     for (const gills of [false, true]) {
       const material = make();
@@ -255,6 +306,53 @@ describe('FishMaterial mouth', () => {
     shrimp.setFeatures(FEATURES);
     expect(readsSlot(deformed(shrimp), WalkerSlot.LegPhase)).toBe(true);
     expect(readsMouth(deformed(shrimp))).toBe(false);
+  });
+});
+
+describe('FishMaterial shell', () => {
+  const readsWithdraw = (node: Node | null): boolean =>
+    readsSlotComponent(node, WalkerSlot.Withdraw);
+
+  it('pulls a crab or a snail into its shell, shadow included', () => {
+    for (const make of [crabMaterial, snailMaterial]) {
+      const material = make();
+      material.setFeatures(FEATURES);
+      expect(readsWithdraw(deformed(material))).toBe(true);
+      expect(readsWithdraw(material.castShadowPositionNode)).toBe(true);
+    }
+  });
+
+  it('leaves a shrimp, which has no shell, out of it', () => {
+    const shrimp = shrimpMaterial();
+    shrimp.setFeatures(FEATURES);
+    expect(readsWithdraw(deformed(shrimp))).toBe(false);
+  });
+
+  it("ripples a snail's foot with the stride, reading the fin attribute as the snail packs it", () => {
+    const snail = snailMaterial();
+    snail.setFeatures(FEATURES);
+    expect(readsSlotComponent(deformed(snail), WalkerSlot.Stride)).toBe(true);
+    expect(readsSlotComponent(deformed(snail), WalkerSlot.LegPhase)).toBe(true);
+    expect(readsAttribute(deformed(snail), 'fin', 'vec2')).toBe(true);
+    expect(readsAttribute(deformed(snail), 'fin', 'vec3')).toBe(false);
+    expect(readsAttribute(snail.clearcoatNode, 'fin', 'vec3')).toBe(false);
+  });
+
+  it("reads a crab's leg slot from the fin attribute like a shrimp's", () => {
+    const crab = crabMaterial();
+    crab.setFeatures(FEATURES);
+    expect(readsAttribute(deformed(crab), 'fin', 'vec3')).toBe(true);
+    expect(readsSlot(deformed(crab), WalkerSlot.LegPhase)).toBe(true);
+  });
+
+  it('keeps disease signs and the mouth off both', () => {
+    const diseaseBlock = InstanceSlot.Ich - (InstanceSlot.Ich % 4);
+    for (const make of [crabMaterial, snailMaterial]) {
+      const material = make();
+      material.setFeatures(FEATURES);
+      expect(readsSlot(material.colorNode, diseaseBlock)).toBe(false);
+      expect(readsMouth(deformed(material))).toBe(false);
+    }
   });
 });
 

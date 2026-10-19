@@ -16,8 +16,10 @@ export const WALK_GAIT = {
   sweep: 0.3,
   /** Hip roll that lifts the foot during its swing, radians. */
   lift: 0.35,
-  /** The first two pairs are chelipeds, which pick at the surface instead of stepping. */
+  /** A shrimp's first two pairs are chelipeds, which pick at the surface instead of stepping. */
   chelipedPairs: 2,
+  /** A hermit crab has one: the claws. Every leg slot behind them steps. */
+  crabChelipedPairs: 1,
   /** Cheliped pitch towards the mouth at full picking, radians. */
   pickPitch: 0.45,
   /** Antenna tip sway at rest and at full display, in body lengths. */
@@ -31,7 +33,7 @@ export const WALK_GAIT = {
 } as const;
 
 /** Rates in multiples of APPENDAGE_HZ; each times APPENDAGE_WRAP_CYCLES must be whole. */
-export const APPENDAGE_RATE = { pick: 3, pleopod: 5, antenna: 0.7 } as const;
+export const APPENDAGE_RATE = { pick: 3, pleopod: 5, antenna: 0.7, rasp: 1 } as const;
 export const APPENDAGE_HZ = 1;
 /** The clock wraps after this many cycles, where every rate above completes whole cycles too. */
 export const APPENDAGE_WRAP_CYCLES = 10;
@@ -42,6 +44,11 @@ export const MAX_TAIL_CURL = 1.4;
 export const TAIL_CURL_PEAK = 0.3;
 /** Walking speed (body lengths per second) from which the legs take full strides. */
 export const FULL_STRIDE_BODY_LENGTHS_PER_S = 0.2;
+/**
+ * A snail glides its full pedal wave at its cruising pace: water snails crawl up to about 2 mm/s
+ * (Lee, Bush, Hosoi & Lauga 2008, Phys Fluids 20:082106), 0.1 body lengths a second for a nerite.
+ */
+export const FULL_GLIDE_BODY_LENGTHS_PER_S = 0.1;
 /** Share of full picking a standing or walking shrimp keeps up anyway: they graze constantly. */
 export const PICK_IDLE = 0.3;
 const STRIDE_SETTLE_S = 0.15;
@@ -49,6 +56,9 @@ const PADDLE_START_S = 0.05;
 const PADDLE_STOP_S = 0.4;
 const PICK_SETTLE_S = 0.3;
 const DANCE_SETTLE_S = 0.5;
+/** A startled snail or hermit crab is in its shell within a blink and comes out slowly. */
+const WITHDRAW_IN_S = 0.12;
+const WITHDRAW_OUT_S = 1.5;
 const TAU = Math.PI * 2;
 
 function smooth01(x: number): number {
@@ -226,8 +236,29 @@ export interface WalkSample {
   attached: number;
 }
 
+/** How a kind of walker moves, beyond what the sim reports. */
+export interface WalkerGait {
+  /** Pace, in body lengths per second, from which it takes full strides or pedal waves. */
+  readonly fullStrideBodyLengthsPerS: number;
+  /** It pulls into a shell while the sim holds it attached in `Shelter`. */
+  readonly withdraws: boolean;
+}
+
+export const SHRIMP_GAIT: WalkerGait = {
+  fullStrideBodyLengthsPerS: FULL_STRIDE_BODY_LENGTHS_PER_S,
+  withdraws: false,
+};
+export const CRAB_GAIT: WalkerGait = {
+  fullStrideBodyLengthsPerS: FULL_STRIDE_BODY_LENGTHS_PER_S,
+  withdraws: true,
+};
+export const SNAIL_GAIT: WalkerGait = {
+  fullStrideBodyLengthsPerS: FULL_GLIDE_BODY_LENGTHS_PER_S,
+  withdraws: true,
+};
+
 /**
- * Per-shrimp appendage state. The sim owns the leg phase and the flip; this only eases the
+ * Per-walker appendage state. The sim owns the leg phase and the flip; this only eases the
  * weights that switch with the sim's discrete state, so a leg never snaps between poses.
  */
 export class WalkState {
@@ -238,10 +269,12 @@ export class WalkState {
   paddle = 0;
   pick = PICK_IDLE;
   dance = 0;
+  withdraw = 0;
 
   constructor(
     readonly length: number,
     phaseOffset: number,
+    readonly gait: WalkerGait = SHRIMP_GAIT,
   ) {
     if (!(length > 0)) throw new RangeError(`walk: body length must be > 0, got ${length}`);
     this.clock = phaseOffset % (TAU * APPENDAGE_WRAP_CYCLES);
@@ -253,12 +286,18 @@ export class WalkState {
     this.legPhase = sample.legPhase - Math.floor(sample.legPhase);
     this.curl = tailCurl(sample.flip);
     const attached = sample.attached >= 0.5;
-    const pace = Math.max(sample.speed, 0) / this.length / FULL_STRIDE_BODY_LENGTHS_PER_S;
+    const pace = Math.max(sample.speed, 0) / this.length / this.gait.fullStrideBodyLengthsPerS;
     const ease = (from: number, to: number, tau: number): number =>
       from + (to - from) * (1 - Math.exp(-dt / tau));
+    const withdrawn = this.gait.withdraws && attached && sample.state === FishState.Shelter;
+    this.withdraw = ease(
+      this.withdraw,
+      withdrawn ? 1 : 0,
+      withdrawn ? WITHDRAW_IN_S : WITHDRAW_OUT_S,
+    );
     this.stride = ease(this.stride, attached ? smooth01(pace) : 0, STRIDE_SETTLE_S);
     this.paddle = ease(this.paddle, attached ? 0 : 1, attached ? PADDLE_STOP_S : PADDLE_START_S);
-    const pickTarget = !attached ? 0 : sample.state === FishState.Pick ? 1 : PICK_IDLE;
+    const pickTarget = !attached || withdrawn ? 0 : sample.state === FishState.Pick ? 1 : PICK_IDLE;
     this.pick = ease(this.pick, pickTarget, PICK_SETTLE_S);
     this.dance = ease(this.dance, sample.state === FishState.Dance ? 1 : 0, DANCE_SETTLE_S);
   }

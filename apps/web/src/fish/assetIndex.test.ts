@@ -127,6 +127,7 @@ describe('parseFishAssets', () => {
         abdomenHinge: { y: 0.001, z: -0.002 },
         telsonZ: -0.016,
         legPairs: 5,
+        standoffM: 0.0046,
       },
     });
     const entries = parseFishAssets({ assets: [fish(), shrimp] });
@@ -135,6 +136,8 @@ describe('parseFishAssets', () => {
     const cherry = entries.get('cherry-shrimp');
     expect(cherry?.kind).toBe('shrimp');
     expect(cherry?.standardLengthM).toBe(0.037);
+    expect(cherry?.standoff).toBe(0.0046);
+    expect(entries.get('neon-tetra')?.standoff).toBeNull();
     expect(cherry?.shrimp).toEqual({
       hinge: { y: 0.001, z: -0.002 },
       telsonZ: -0.016,
@@ -147,20 +150,84 @@ describe('parseFishAssets', () => {
     ['a telson ahead of the hinge', { telsonZ: 0.01 }],
     ['a telson on the hinge', { telsonZ: -0.002 }],
     ['a fractional leg count', { legPairs: 4.5 }],
-    ['no legs', { legPairs: 0 }],
+    ['no leg slots, which only a snail model may have', { legPairs: 0 }],
     ['a non-finite hinge', { abdomenHinge: { y: Number.NaN, z: -0.002 } }],
-  ])('rejects a shrimp with %s', (_, override) => {
-    const shrimp = fish({
-      kind: 'shrimp',
-      shrimp: {
-        standardLengthM: 0.037,
-        abdomenHinge: { y: 0, z: -0.002 },
-        telsonZ: -0.016,
+    ['no standoff', { standoffM: undefined }],
+    ['feet above its origin', { standoffM: -0.001 }],
+  ])('rejects a shrimp or a crab with %s', (_, override) => {
+    for (const kind of ['shrimp', 'crab']) {
+      const walker = fish({
+        kind,
+        fish: undefined,
+        [kind]: {
+          standardLengthM: 0.037,
+          abdomenHinge: { y: 0, z: -0.002 },
+          telsonZ: -0.016,
+          legPairs: 5,
+          standoffM: 0.0046,
+          ...override,
+        },
+      });
+      expect(() => parseFishAssets({ assets: [walker] }), kind).toThrow(TypeError);
+    }
+  });
+
+  it('reads a crab with the same leg rig as a shrimp', () => {
+    const crab = fish({
+      id: 'hermit-crab',
+      kind: 'crab',
+      fish: undefined,
+      crab: {
+        standardLengthM: 0.03,
+        abdomenHinge: { y: 0.0006, z: 0.0057 },
+        telsonZ: -0.0155,
         legPairs: 5,
-        ...override,
+        standoffM: 0.0082,
       },
     });
-    expect(() => parseFishAssets({ assets: [shrimp] })).toThrow(TypeError);
+    const entry = parseFishAssets({ assets: [crab] }).get('hermit-crab');
+    expect(entry?.kind).toBe('crab');
+    expect(entry?.standoff).toBe(0.0082);
+    expect(entry?.shrimp).toEqual({
+      hinge: { y: 0.0006, z: 0.0057 },
+      telsonZ: -0.0155,
+      legPairs: 5,
+    });
+  });
+
+  it('reads a snail with no leg rig, standing on its origin', () => {
+    const snail = fish({
+      id: 'nerite-snail',
+      kind: 'snail',
+      fish: undefined,
+      snail: { standardLengthM: 0.02, origin: 'foot-centre' },
+    });
+    const entry = parseFishAssets({ assets: [snail] }).get('nerite-snail');
+    expect(entry?.kind).toBe('snail');
+    expect(entry?.standardLengthM).toBe(0.02);
+    expect(entry?.shrimp).toBeNull();
+    expect(entry?.standoff).toBe(0);
+  });
+
+  it('rejects a snail whose origin is not on its sole', () => {
+    const snail = fish({
+      kind: 'snail',
+      fish: undefined,
+      snail: { standardLengthM: 0.02, origin: 'centre-of-mass' },
+    });
+    expect(() => parseFishAssets({ assets: [snail] })).toThrow(/snail\.origin/);
+  });
+
+  it('parses the shipped hermit crab and nerite snail as their own kinds', () => {
+    const entries = parseFishAssets(shippedIndex);
+    const crab = entries.get('hermit-crab');
+    expect(crab?.kind).toBe('crab');
+    expect(crab?.shrimp?.legPairs).toBe(5);
+    expect(crab?.standoff).toBeGreaterThan(0);
+    const snail = entries.get('nerite-snail');
+    expect(snail?.kind).toBe('snail');
+    expect(snail?.shrimp).toBeNull();
+    expect(snail?.standoff).toBe(0);
   });
 
   it('parses both shipped shrimp with a hinge ahead of the telson', () => {

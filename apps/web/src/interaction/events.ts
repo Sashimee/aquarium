@@ -134,6 +134,11 @@ export interface InteractionEvents {
     /** False: the player never saved a layout, so `decorLayout` is empty and the preset shows. */
     decorEdited: boolean;
     backgroundId: BackgroundId;
+    /**
+     * Distinct days of the last `VISIT_WINDOW_DAYS` the owner opened the tank. The fish know the
+     * owner from it and come to the glass. Left out for tanks the viewer does not own.
+     */
+    recentVisitDays?: number;
   };
   /** The server's background for the tank changed outside this tab's own choice (another device). */
   'tank:background': { tankId: string; backgroundId: BackgroundId };

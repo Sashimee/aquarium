@@ -5,13 +5,17 @@ import {
   APPENDAGE_HZ,
   APPENDAGE_RATE,
   APPENDAGE_WRAP_CYCLES,
+  CRAB_GAIT,
   curlAboveFloor,
   curledTip,
   floorUnderTail,
   legCyclePhase,
   legSwing,
+  FULL_GLIDE_BODY_LENGTHS_PER_S,
   MAX_TAIL_CURL,
   PICK_IDLE,
+  SHRIMP_GAIT,
+  SNAIL_GAIT,
   TAIL_CURL_PEAK,
   TAIL_FLOOR_CLEARANCE_BODY_LENGTHS,
   tailCurl,
@@ -297,6 +301,48 @@ describe('WalkState', () => {
     expect(state.clock).toBe(1);
     expect(state.stride).toBe(0);
     expect(state.pick).toBe(PICK_IDLE);
+  });
+
+  it('withdraws into its shell while it shelters on a surface, and comes out again', () => {
+    for (const gait of [CRAB_GAIT, SNAIL_GAIT]) {
+      const state = new WalkState(LENGTH, 0, gait);
+      expect(state.withdraw).toBe(0);
+      settle(state, sample({ state: FishState.Shelter }));
+      expect(state.withdraw).toBeCloseTo(1, 6);
+      expect(state.pick).toBeCloseTo(0, 6);
+      settle(state, sample());
+      expect(state.withdraw).toBeCloseTo(0, 2);
+      expect(state.pick).toBeCloseTo(PICK_IDLE, 6);
+    }
+  });
+
+  it('snaps into the shell and creeps back out', () => {
+    const state = new WalkState(LENGTH, 0, CRAB_GAIT);
+    settle(state, sample({ state: FishState.Shelter }), 0.25);
+    expect(state.withdraw).toBeGreaterThan(0.8);
+    settle(state, sample({ state: FishState.Shelter }));
+    settle(state, sample(), 0.25);
+    expect(state.withdraw).toBeGreaterThan(0.8);
+  });
+
+  it('stays out of its shell off the surface, and a shrimp has none to withdraw into', () => {
+    const falling = new WalkState(LENGTH, 0, SNAIL_GAIT);
+    settle(falling, sample({ state: FishState.Shelter, attached: 0 }));
+    expect(falling.withdraw).toBe(0);
+    const shrimp = new WalkState(LENGTH, 0, SHRIMP_GAIT);
+    settle(shrimp, sample({ state: FishState.Shelter }));
+    expect(shrimp.withdraw).toBe(0);
+    expect(shrimp.pick).toBeCloseTo(PICK_IDLE, 6);
+  });
+
+  it("ripples a snail's foot fully at its slower gliding pace", () => {
+    const snail = new WalkState(LENGTH, 0, SNAIL_GAIT);
+    const shrimp = new WalkState(LENGTH, 0);
+    const glide = sample({ speed: FULL_GLIDE_BODY_LENGTHS_PER_S * LENGTH });
+    settle(snail, glide);
+    settle(shrimp, glide);
+    expect(snail.stride).toBeCloseTo(1, 6);
+    expect(shrimp.stride).toBeLessThan(0.9);
   });
 
   it('rejects a bad length or step', () => {

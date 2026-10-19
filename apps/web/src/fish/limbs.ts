@@ -10,11 +10,22 @@ import {
   normalGeometry,
   normalize,
   positionGeometry,
+  sign,
   sin,
+  smoothstep,
   step,
   vec3,
 } from 'three/tsl';
-import { ABDOMEN_PART_ID, FIN_ATTRIBUTE, LEG_PART_ID, PLEOPOD_PART_ID, type Vec3 } from './assets';
+import {
+  ABDOMEN_PART_ID,
+  FIN_ATTRIBUTE,
+  LEG_PART_ID,
+  PLEOPOD_PART_ID,
+  SHELL_PART_ID,
+  SNAIL_FOOT_PART_ID,
+  type ShellRig,
+  type Vec3,
+} from './assets';
 import { APPENDAGE_RATE, WALK_GAIT } from './walk';
 
 export interface Deformation {
@@ -30,6 +41,16 @@ export interface WalkerRig {
   readonly telsonZ: number;
   /** Hip of each `_leg` index; null where the LOD dropped that leg. */
   readonly legPivots: readonly (Vec3 | null)[];
+  /** Leading pairs that pick at the surface; the pairs behind them step. */
+  readonly chelipedPairs: number;
+  /** Null for a walker without a shell to withdraw into. */
+  readonly shell: ShellRig | null;
+}
+
+/** A snail's model-space rig: no legs, a foot, a head with tentacles, and its shell. */
+export interface GliderRig {
+  readonly bodyLength: number;
+  readonly shell: ShellRig;
 }
 
 /** The instance values a walker's deformation reads; see `instances.ts` for the layout. */
@@ -38,11 +59,30 @@ export interface WalkerInputs {
   readonly look: Node<'vec4'>;
   /** Leg phase 0..1, stride weight, tail curl (radians), pleopod paddling. */
   readonly walk: Node<'vec4'>;
-  /** Picking, display. */
+  /** Picking, display, withdrawal into the shell. */
   readonly act: Node<'vec4'>;
 }
 
 const PART = { antenna: 7, pleopod: PLEOPOD_PART_ID, abdomen: ABDOMEN_PART_ID } as const;
+const SNAIL_PART = {
+  foot: SNAIL_FOOT_PART_ID,
+  head: SNAIL_FOOT_PART_ID + 1,
+  tentacle: SNAIL_FOOT_PART_ID + 2,
+} as const;
+/** Size of the soft parts, against their rest size, fully withdrawn into the shell. */
+export const WITHDRAWN_SCALE = 0.3;
+/**
+ * The snail's pedal waves, in body lengths: crest spacing along the sole and the lift of a crest
+ * at the foot's edge. Neritina's sole is not measured, so the direction (retrograde, running
+ * tail-wards), spacing and lift are estimates by eye.
+ */
+export const PEDAL_WAVE = { wavelength: 0.25, lift: 0.012 } as const;
+/** Head and tentacles reach forward this far at a full glide, in body lengths. */
+export const HEAD_REACH = 0.04;
+/** Head dip at the bottom of each radula stroke while grazing, in body lengths. */
+export const RASP_DIP = 0.03;
+/** Tentacle tip sway, in body lengths. */
+export const TENTACLE_SWAY = 0.04;
 
 export function idIs(id: Node<'float'>, value: number): Node<'float'> {
   return step(value - 0.5, id).mul(step(id, value + 0.5));
@@ -87,7 +127,7 @@ export function walkerDeformation(rig: WalkerRig, inputs: WalkerInputs): Deforma
   });
 
   const isLeg = idIs(id, LEG_PART_ID);
-  const walking = step(g.chelipedPairs - 0.5, pair).mul(isLeg);
+  const walking = step(rig.chelipedPairs - 0.5, pair).mul(isLeg);
   const u = fract(walk.x.sub(pair.mul(g.pairLag)).add(side.mul(0.5)));
   const planted = step(u, g.dutyFactor);
   const v = clamp(u.sub(g.dutyFactor).div(1 - g.dutyFactor), 0, 1);
@@ -150,7 +190,91 @@ export function walkerDeformation(rig: WalkerRig, inputs: WalkerInputs): Deforma
   const cc = cos(curl);
   const sc = sin(curl);
   const centre = vec3(0, hinge.y, hinge.z);
-  const position = centre.add(rotateX(bent.sub(centre), cc, sc)).toVar('walkerPosition');
+  const curled = centre.add(rotateX(bent.sub(centre), cc, sc));
+  const withdraw = act.z;
+  const position = (
+    rig.shell === null ? curled : withdrawn(curled, id, rig.shell, withdraw, withdraw)
+  ).toVar('walkerPosition');
   const normal = normalize(rotateX(bentNormal, cc, sc)).toVar('walkerNormal');
+  return { position, normal };
+}
+
+/**
+ * The soft parts shrunk towards the shell's centre by `tuck`, and the whole body settled onto its
+ * shell by `withdraw`. A uniform scale about a point turns no normal.
+ */
+function withdrawn(
+  position: Node<'vec3'>,
+  id: Node<'float'>,
+  shell: ShellRig,
+  withdraw: Node<'float'>,
+  tuck: Node<'float'>,
+): Node<'vec3'> {
+  const centre = vec3(...shell.centre);
+  const soft = idIs(id, SHELL_PART_ID).oneMinus();
+  const scale = tuck
+    .mul(soft)
+    .mul(WITHDRAWN_SCALE - 1)
+    .add(1);
+  return centre.add(position.sub(centre).mul(scale)).sub(vec3(0, withdraw.mul(shell.drop), 0));
+}
+
+/**
+ * A snail gliding on its foot, in model space before instancing. Pedal waves lift the edge of the
+ * sole, locked to the sim's leg phase so they keep pace with the ground; the head reaches forward
+ * at a glide and dips with each radula stroke while grazing; the tentacles sway; withdrawing pulls
+ * head and tentacles in first, then the foot.
+ */
+export function gliderDeformation(rig: GliderRig, inputs: WalkerInputs): Deformation {
+  const { look, walk, act } = inputs;
+  const fin = attribute<'vec2'>(FIN_ATTRIBUTE, 'vec2');
+  const weight = fin.x;
+  const id = fin.y;
+  const p = positionGeometry;
+  const clock = look.x;
+  const seed = look.z;
+  const length = rig.bodyLength;
+  const stride = walk.y;
+
+  const isFoot = idIs(id, SNAIL_PART.foot);
+  const isTentacle = idIs(id, SNAIL_PART.tentacle);
+  const front = idIs(id, SNAIL_PART.head).add(isTentacle);
+  // The phase rises as the snail advances, so a crest at fixed arg runs back along the sole.
+  const waveArg = p.z
+    .div(PEDAL_WAVE.wavelength * length)
+    .add(walk.x)
+    .mul(Math.PI * 2);
+  const ripple = sin(waveArg)
+    .mul(0.5)
+    .add(0.5)
+    .mul(
+      isFoot
+        .mul(weight)
+        .mul(stride)
+        .mul(PEDAL_WAVE.lift * length),
+    );
+  const reach = front.mul(stride).mul(HEAD_REACH * length);
+  const rasp = front
+    .mul(act.x)
+    .mul(sin(clock.mul(APPENDAGE_RATE.rasp)).mul(0.5).add(0.5))
+    .mul(RASP_DIP * length);
+  const swayArg = clock
+    .mul(APPENDAGE_RATE.antenna)
+    .add(seed.mul(Math.PI * 2))
+    .add(sign(p.x).mul(1.7))
+    .sub(weight.mul(2.5));
+  const sway = isTentacle.mul(weight.mul(weight)).mul(TENTACLE_SWAY * length);
+  const moved = p.add(
+    vec3(
+      sway.mul(sin(swayArg)),
+      ripple.sub(rasp).add(sway.mul(0.6).mul(cos(swayArg.add(1.1)))),
+      reach,
+    ),
+  );
+
+  const withdraw = act.z;
+  const tuck = mix(smoothstep(0.3, 1, withdraw), smoothstep(0, 0.5, withdraw), front);
+  const position = withdrawn(moved, id, rig.shell, withdraw, tuck).toVar('gliderPosition');
+  const normal = normalize(normalGeometry).toVar('gliderNormal');
   return { position, normal };
 }
