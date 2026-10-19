@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { EffectsSlot, type FrameEffects } from './effectsSlot';
+import { EffectsSlot, type FrameEffects, type PhotoPost } from './effectsSlot';
+import { PhotoLook } from './photo/look';
 
 class FakeEffects implements FrameEffects {
   temporal = false;
   renders = 0;
   disposed = 0;
   focus: boolean[] = [];
+  photo: (PhotoPost | null)[] = [];
   renderError: Error | null = null;
   focusError: Error | null = null;
   disposeError: Error | null = null;
@@ -20,8 +22,16 @@ class FakeEffects implements FrameEffects {
     this.focus.push(on);
   }
 
+  setPhoto(photo: PhotoPost | null): void {
+    this.photo.push(photo);
+  }
+
   ownsMaterial(id: number): boolean {
     return id === 7;
+  }
+
+  ready(): Promise<void> {
+    return Promise.resolve();
   }
 
   dispose(): void {
@@ -64,6 +74,37 @@ describe('EffectsSlot', () => {
     slot.attach(effects);
     slot.setFocusMode(false);
     expect(effects.focus).toEqual([true, false]);
+  });
+
+  it('applies the photo look chosen before the effects arrived, then each change', () => {
+    const { slot } = setup();
+    const shot = { look: new PhotoLook(), depthOfField: true, graded: true };
+    slot.setPhoto(shot);
+    const effects = new FakeEffects();
+    slot.attach(effects);
+    slot.setPhoto(null);
+    expect(effects.photo).toEqual([shot, null]);
+  });
+
+  it('is ready at once without effects, and when the attached ones are', async () => {
+    const { slot } = setup();
+    await expect(slot.ready()).resolves.toBeUndefined();
+    const effects = new FakeEffects();
+    let settle: () => void = () => undefined;
+    effects.ready = () =>
+      new Promise<void>((resolve) => {
+        settle = () => resolve();
+      });
+    slot.attach(effects);
+    let done = false;
+    const ready = slot.ready().then(() => {
+      done = true;
+    });
+    await Promise.resolve();
+    expect(done).toBe(false);
+    settle();
+    await ready;
+    expect(done).toBe(true);
   });
 
   it('refuses a second set of effects', () => {
