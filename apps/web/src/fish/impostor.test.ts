@@ -9,6 +9,7 @@ import {
   loadImpostorAtlas,
   type ImpostorValues,
 } from './impostor';
+import { InstanceSlot } from './instances';
 
 const values: ImpostorValues = {
   qx: 0.1,
@@ -26,6 +27,9 @@ const values: ImpostorValues = {
   tint: [1.1, 0.9, 1],
   youth: 0.375,
   frames: { i: 3, j: 7, fx: 0.25, fy: 0.75 },
+  ich: 0.9,
+  finRot: 0.5,
+  velvet: 0.125,
 };
 
 describe('ImpostorInstanceData', () => {
@@ -41,7 +45,15 @@ describe('ImpostorInstanceData', () => {
     near(at(ImpostorSlot.View), [0.6, 0.8, 0, 0.25]);
     near(at(ImpostorSlot.Tint), [1.1, 0.9, 1, 0.375]);
     near(at(ImpostorSlot.Frames), [3, 7, 0.25, 0.75]);
+    near(at(ImpostorSlot.Illness), [0.9, 0.5, 0.125, 0]);
     expect(data.array.subarray(0, 2 * IMPOSTOR_STRIDE).every((x) => x === 0)).toBe(true);
+  });
+
+  it('keeps the disease signs at the offset the meshes read them from', () => {
+    expect(ImpostorSlot.Illness).toBe(InstanceSlot.Ich);
+    expect(ImpostorSlot.Illness + 1).toBe(InstanceSlot.FinRot);
+    expect(ImpostorSlot.Illness + 2).toBe(InstanceSlot.Velvet);
+    expect(ImpostorSlot.Illness + 4).toBe(IMPOSTOR_STRIDE);
   });
 
   it('collapses a slot to zero scale with a finite, unit view direction', () => {

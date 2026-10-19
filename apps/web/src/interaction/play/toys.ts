@@ -160,9 +160,10 @@ export const MIRROR_SURFACE_MARGIN_M = 0.01;
 
 /**
  * Where the mirror hangs for a tap along `origin` + `dir`: the back or side wall the ray leaves
- * through, so seen from the side the far glass and never the near one,  kept clear of the corners, the substrate and the water line. A ray that
- * leaves through the floor or the top is mounted on the back wall at the same x and y. Null when
- * the ray points away from the back wall and reaches no side wall. `ground` is the visible
+ * through, so seen from the side it is the far glass and never the near one. Only walls the ray
+ * leaves through count. It is kept clear of the corners, the substrate and the water line. A ray
+ * that leaves through the floor or the top is mounted on the back wall at the same x and y. Null
+ * when the ray points away from the back wall and reaches no side wall. `ground` is the visible
  * substrate height at (x, z).
  */
 export function mirrorMountFor(

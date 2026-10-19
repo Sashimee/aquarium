@@ -21,6 +21,7 @@ export type GameView =
       readonly phase: 'running';
       readonly targetId: string;
       readonly targetName: string;
+      /** Rounded up to whole seconds for display: the view is reused, so this can lag by up to 1 s. */
       readonly timeLeftS: number;
       readonly pinchesLeft: number;
       readonly score: number;

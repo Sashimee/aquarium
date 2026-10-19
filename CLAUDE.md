@@ -31,13 +31,13 @@ pnpm lint
 pnpm test           # vitest, all packages
 pnpm build
 pnpm assets:check   # licence + manifest + size budget
-pnpm e2e            # Playwright; CI runs it, agents don't run it locally
+pnpm e2e            # Playwright; run on demand in CI before a release, never by agents
 git config core.hooksPath .githooks   # once per clone: guards main
 ```
 
 ## Repo rules (overrides of the global file)
 
-- **Merging into `dev` is allowed for the orchestrator**: squash-merge a feature PR once its `check` and `docker` jobs are green **and** `code-reviewer` approved it. The full e2e suite gates `chore/batch-*` branches and runs on every `dev` push; a red `dev` e2e gets a top-priority fix-forward issue. Feature PRs don't carry the `e2e` label by default. Never merge into `main`. `dev → main` happens only on Alex's explicit request.
+- **Merging into `dev` is allowed for the orchestrator**: squash-merge a feature PR once its `check` and `docker` jobs are green **and** `code-reviewer` approved it. The e2e suite runs only on demand (`gh workflow run ci.yml --ref dev`): once, after all planned work is merged and before the `dev → main` ask, and every failure is fixed in one batch then. Never merge into `main`. `dev → main` happens only on Alex's explicit request.
 - Branches: `feat/<issue>-<slug>`, `fix/<issue>-<slug>`, `chore/<issue>-<slug>`, always off **latest `dev`**. One task = one issue = one branch = one PR into `dev`, and the PR body says `Closes #<issue>`.
 - **Directory ownership:** every agent file lists the paths it owns. Touching another agent's paths needs a separate small PR. Shared contract files (`packages/shared/**`, `content/species/*.json`, root configs) change in small, contract-first PRs.
 - **Assets:** CC0 or CC-BY only. Every asset is in `assets/manifest.json`. Raw downloads live in `~/.cache/aquarium-assets/raw/`: never committed, never executed, and read with `python3 -I` only.
@@ -56,8 +56,7 @@ agents in `.claude/agents/`.
    - `check` and `docker` are green and there's no review yet → launch `code-reviewer` on it.
    - Approved, `check` and `docker` green → `gh pr merge <n> --squash --delete-branch`. Then check the devfish deploy with `curl -sI https://devfish.bas.lu/api/health`.
    - Changes requested → back to the author with the review.
-   - The latest `dev` push has a red e2e job → file a top-priority fix-forward issue and dispatch it before new feature work.
-4. **Dispatch.** Ready tasks are open issues whose dependencies are all merged into `dev`. Launch ready tasks up to **8 running agents at once**, reviewers included (Alex, 2026-10-19, PLAN §9.1). Queue the rest, PRs closest to merge first. Agents don't run Playwright locally; CI runs e2e. Use `Agent` with `subagent_type` = the owner agent, `isolation: "worktree"` and `run_in_background: true`. Send independent launches in **one message**. The prompt gives the issue number, the branch name, the acceptance criteria and the dependencies already merged, and says: "commit, push, open a PR into dev with Closes #N, report the PR number".
+4. **Dispatch.** Ready tasks are open issues whose dependencies are all merged into `dev`. Launch ready tasks up to **8 running agents at once**, reviewers included (Alex, 2026-10-19, PLAN §9.1). Queue the rest, PRs closest to merge first. Agents don't run the e2e suite, locally or by triggering CI e2e. Use `Agent` with `subagent_type` = the owner agent, `isolation: "worktree"` and `run_in_background: true`. Send independent launches in **one message**. The prompt gives the issue number, the branch name, the acceptance criteria and the dependencies already merged, and says: "commit, push, open a PR into dev with Closes #N, report the PR number".
 5. **Record.** Rewrite `RESUME.md` (Goal / Status / State / Blockers / Files; done-log capped at 10).
 6. **Pace.** Background agents wake the loop when they finish, so schedule a 1800 s fallback wakeup only.
 7. **Stop the loop and notify Alex** (`PushNotification`, then `ScheduleWakeup stop`) when:
