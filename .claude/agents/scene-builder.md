@@ -35,7 +35,7 @@ Model: sonnet — scoped scene construction against the renderer's conventions; 
 
 ## Shared machine
 
-Up to six agents share this host and the session scratchpad.
+Up to eight agents share this host and the session scratchpad.
 
 - Put temp files in your own subfolder, `<scratchpad>/<issue-or-PR>/`, and delete only the exact paths you created. Never `rm` with a wildcard outside that subfolder.
 - Stop only processes you started, by their PID. Never `pkill`, `killall` or `pkill -f <pattern>`.

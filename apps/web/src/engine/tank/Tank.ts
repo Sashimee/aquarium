@@ -24,6 +24,7 @@ import {
   type PMREMNode,
   type Scene,
   type Texture,
+  type TextureNode,
   type UniformNode,
   type WebGPURenderer,
 } from 'three/webgpu';
@@ -66,6 +67,7 @@ import {
   vec4,
 } from 'three/tsl';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { BACKGROUND_TIERS } from '@aquarium/shared';
 import type { InteriorLight } from '../water/interior';
 import type { WaterMedium } from '../water/medium';
 import { AIR_IOR, fresnelDielectric, WATER_IOR } from '../water/optics';
@@ -149,8 +151,12 @@ function overlayAlgae(
   })();
 }
 
-/** Linear albedo of the dark blue backdrop film stuck to the outside of the back pane. */
-const BACKDROP_ALBEDO = new Color(0.01, 0.025, 0.08);
+/** The poster's back: opaque black film, as on a real tank. */
+const BACKING_ALBEDO = new Color(0.012, 0.012, 0.012);
+/** Width over height of every background picture (PLAN 9.2). */
+const POSTER_ASPECT = BACKGROUND_TIERS.high[0] / BACKGROUND_TIERS.high[1];
+/** Mip bias that softens the picture a little, as if seen out of focus past the fish. */
+const POSTER_DEFOCUS = 0.75;
 /** Irradiance of the hood's beam on the backdrop relative to the surface: it only grazes it. */
 const BACKDROP_GRAZE = 0.35;
 /** Mirrored rays leaving the water this close to the back face end on the backdrop. */
@@ -170,6 +176,25 @@ function hoodIrradiance(medium: WaterMedium, depth: Node<'float'>, share: number
     .mul(4 * share);
 }
 
+/** Linear albedo of the backdrop at a world point on or just off the back pane. */
+type BackdropAlbedo = (p: Node<'vec3'>) => Node<'vec3'>;
+
+/**
+ * The background picture across the back pane, which spans the tank's length and height: scaled
+ * to cover it and cropped about its centre, so a tank of any proportions shows no bars.
+ */
+function posterAlbedo(map: TextureNode, d: TankDimensions): BackdropAlbedo {
+  const paneAspect = d.length / d.height;
+  const [spanU, spanV] =
+    paneAspect >= POSTER_ASPECT ? [1, POSTER_ASPECT / paneAspect] : [paneAspect / POSTER_ASPECT, 1];
+  return (p) => {
+    const u = p.x.div(d.length).mul(spanU).add(0.5);
+    const v = p.y.div(d.height).sub(0.5).mul(spanV).add(0.5);
+    // KTX2 cannot be flipped on upload, so its first row, the top of the picture, is at v = 0.
+    return map.sample(vec2(u, v.oneMinus())).bias(float(POSTER_DEFOCUS)).rgb;
+  };
+}
+
 /**
  * Radiance of the inside of the backdrop at `p` on the back face of the water: grazed by the
  * hood, and lit by the light bouncing around the tank.
@@ -178,10 +203,11 @@ function backdropRadiance(
   medium: WaterMedium,
   interior: InteriorLight,
   p: Node<'vec3'>,
+  albedo: BackdropAlbedo,
 ): Node<'vec3'> {
   const inside = medium.clampInside(p);
   const hood = hoodIrradiance(medium, medium.boxMax.y.sub(p.y), BACKDROP_GRAZE);
-  return hood.add(interior.ambientAt(inside, FORWARD)).mul(color(BACKDROP_ALBEDO));
+  return hood.add(interior.ambientAt(inside, FORWARD)).mul(albedo(p));
 }
 
 /**
@@ -208,6 +234,7 @@ function waterAlongRay(
   interior: InteriorLight,
   dir: Node<'vec3'>,
   room: PMREMNode,
+  backdrop: BackdropAlbedo,
 ): Node<'vec3'> {
   const exitDistance = medium.exitDistance(positionWorld, dir).toVar();
   const across = medium.transmittance(exitDistance).toVar();
@@ -215,7 +242,7 @@ function waterAlongRay(
   const onBackdrop = step(exitPoint.z, medium.boxMin.z.add(BACKDROP_TOLERANCE));
   const onFloor = step(exitPoint.y, medium.boxMin.y.add(BACKDROP_TOLERANCE));
   const inTank = mix(
-    backdropRadiance(medium, interior, exitPoint),
+    backdropRadiance(medium, interior, exitPoint, backdrop),
     mirroredSubstrate(medium, interior, exitPoint),
     onFloor,
   );
@@ -237,6 +264,7 @@ function createGlassFaceMaterial(
   centre: Vector3,
   algae: UniformNode<'float', number>,
   sky: Texture,
+  backdrop: BackdropAlbedo,
 ): MeshStandardNodeMaterial {
   const material = new MeshStandardNodeMaterial({ roughness: 0.03, metalness: 0 });
   material.name = 'glass-face';
@@ -251,7 +279,7 @@ function createGlassFaceMaterial(
   const reflectance = fresnelDielectric(cosWater, WATER_IOR / AIR_IOR).toVar();
   const mirrored = reflect(inWater, normalWorldGeometry).toVar();
   const skyNode = pmremTexture(sky, mirrored, float(SURFACE_ROUGHNESS));
-  const mirroredScene = waterAlongRay(medium, interior, mirrored, skyNode);
+  const mirroredScene = waterAlongRay(medium, interior, mirrored, skyNode, backdrop);
   const inner = vec4(mirroredScene.mul(reflectance), reflectance);
   const pane = mix(output, inner, towardsWater);
   material.outputNode = medium.applyPremultiplied(overlayAlgae(pane, algae, medium));
@@ -331,6 +359,7 @@ function createSurfaceUnderside(
   interior: InteriorLight,
   normal: Node<'vec3'>,
   sky: Texture,
+  backdrop: BackdropAlbedo,
 ): SurfaceUnderside {
   const material = new MeshBasicNodeMaterial();
   material.name = 'water-surface-underside';
@@ -346,7 +375,7 @@ function createSurfaceUnderside(
   // A ripple can tip a grazing ray back up; it still has to go down into the water.
   const mirrored = normalize(vec3(bounced.x, min(bounced.y, -1e-3), bounced.z)).toVar();
   const mirroredSky = pmremTexture(sky, mirrored, float(SURFACE_ROUGHNESS));
-  const traced = waterAlongRay(medium, interior, mirrored, mirroredSky);
+  const traced = waterAlongRay(medium, interior, mirrored, mirroredSky, backdrop);
   const output = (mirror: Node<'vec3'> = traced): Node<'vec4'> =>
     medium.applyPremultiplied(vec4(mix(room, mirror, reflectance), 1));
   material.outputNode = output();
@@ -366,15 +395,21 @@ export class Tank {
   private readonly reflection: SurfaceReflection;
   private readonly underside: SurfaceUnderside;
   private readonly undersideMesh: Mesh;
+  private readonly backdrop: BackdropAlbedo;
 
-  /** `sky` is the room environment, seen from below through Snell's window. */
+  /**
+   * `sky` is the room environment, seen from below through Snell's window. `background` is the
+   * picture behind the back pane; its texture may change at any time.
+   */
   constructor(
     readonly dimensions: TankDimensions,
     medium: WaterMedium,
     sky: Texture,
     interior: InteriorLight,
+    background: TextureNode,
   ) {
     validateTank(dimensions);
+    this.backdrop = posterAlbedo(background, dimensions);
     this.group.name = 'tank';
     this.waterBounds = waterBounds(dimensions);
 
@@ -513,6 +548,7 @@ export class Tank {
       this.waterBounds.getCenter(new Vector3()),
       this.algae,
       sky,
+      this.backdrop,
     );
     const parts: [string, BufferGeometry[], Material][] = [
       ['glass-faces', faces, faceMaterial],
@@ -532,19 +568,20 @@ export class Tank {
   }
 
   /**
-   * Most tanks have a dark backdrop on the back pane. It hides the room behind the tank, so what
-   * is seen through the water is the water itself, darkening with depth. The camera can orbit
-   * behind the tank, where the film's back shows, lit by the room.
+   * The background picture on the back pane, outside the water and its caustics. It hides the
+   * room behind the tank, and seen from the front it is tinted once by the water volume drawn
+   * over it. The camera can orbit behind the tank, where the film's black back shows, lit by the
+   * room.
    */
   private addBackdrop(medium: WaterMedium, interior: InteriorLight): void {
     const { length: l, depth: d, height: h } = this.dimensions;
     const material = new MeshBasicNodeMaterial({ side: DoubleSide });
     material.name = 'backdrop';
     material.fog = false;
-    const back = interior.ambientAt(positionWorld, FORWARD.negate()).mul(color(BACKDROP_ALBEDO));
+    const back = interior.ambientAt(positionWorld, FORWARD.negate()).mul(color(BACKING_ALBEDO));
     material.colorNode = select(
       frontFacing,
-      backdropRadiance(medium, interior, positionWorld),
+      backdropRadiance(medium, interior, positionWorld, this.backdrop),
       back,
     );
     const mesh = this.track(new Mesh(new PlaneGeometry(l, h), material));
@@ -625,7 +662,7 @@ export class Tank {
     mesh.layers.set(UNREFLECTED_LAYER);
     this.group.add(mesh);
 
-    const below = createSurfaceUnderside(medium, interior, normal, sky);
+    const below = createSurfaceUnderside(medium, interior, normal, sky, this.backdrop);
     const underside = this.track(new Mesh(mesh.geometry, below.material));
     underside.name = 'water-surface-underside';
     underside.rotation.copy(mesh.rotation);

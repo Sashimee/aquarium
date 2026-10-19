@@ -24,6 +24,7 @@ const values: ImpostorValues = {
   viewZ: 0,
   pale: 0.25,
   tint: [1.1, 0.9, 1],
+  youth: 0.375,
   frames: { i: 3, j: 7, fx: 0.25, fy: 0.75 },
 };
 
@@ -38,7 +39,7 @@ describe('ImpostorInstanceData', () => {
     near(at(ImpostorSlot.Orientation), [0.1, 0.2, 0.3, 0.9]);
     near(at(ImpostorSlot.Swim), [1.5, 2, 0.7, -3]);
     near(at(ImpostorSlot.View), [0.6, 0.8, 0, 0.25]);
-    near(at(ImpostorSlot.Tint).slice(0, 3), [1.1, 0.9, 1]);
+    near(at(ImpostorSlot.Tint), [1.1, 0.9, 1, 0.375]);
     near(at(ImpostorSlot.Frames), [3, 7, 0.25, 0.75]);
     expect(data.array.subarray(0, 2 * IMPOSTOR_STRIDE).every((x) => x === 0)).toBe(true);
   });

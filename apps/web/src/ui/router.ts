@@ -1,4 +1,5 @@
 import type { User } from '@aquarium/shared';
+import { publicPath, tokenFromPath } from '../sync/share';
 
 export type Route =
   | { name: 'home' }
@@ -11,11 +12,14 @@ export type Route =
   | { name: 'settings' }
   | { name: 'privacy' }
   | { name: 'credits' }
+  | { name: 'public-tank'; token: string }
   | { name: 'not-found' };
 
 export function parseRoute(href: string): Route {
   const url = new URL(href, 'http://localhost');
   const path = url.pathname.replace(/\/+$/, '') || '/';
+  const token = tokenFromPath(path);
+  if (token) return { name: 'public-tank', token };
   switch (path) {
     case '/': {
       // Better Auth sends failed verifications to the bare callback root with ?error=.
@@ -55,6 +59,8 @@ export function routePath(route: Route): string {
       return '/';
     case 'not-found':
       return '/';
+    case 'public-tank':
+      return publicPath(route.token);
     case 'verify-email':
       return route.error
         ? `/verify-email?error=${encodeURIComponent(route.error)}`
@@ -115,11 +121,11 @@ export function carryQuery(path: string, currentSearch: string): string {
 
 const NAVIGATE_EVENT = 'aquarium:navigate';
 
-export function navigate(destination: string, replace = false): void {
+export function navigate(destination: string, replace = false, state: unknown = null): void {
   const path = carryQuery(destination, window.location.search);
   if (path === window.location.pathname + window.location.search) return;
-  if (replace) window.history.replaceState(null, '', path);
-  else window.history.pushState(null, '', path);
+  if (replace) window.history.replaceState(state, '', path);
+  else window.history.pushState(state, '', path);
   window.dispatchEvent(new Event(NAVIGATE_EVENT));
 }
 
@@ -134,4 +140,35 @@ export function subscribeToLocation(listener: () => void): () => void {
 
 export function currentHref(): string {
   return window.location.pathname + window.location.search;
+}
+
+/**
+ * Kept in history.state, never the URL, so the share token stays out of address-bar and server logs.
+ * Only a well-formed public tank path is honoured.
+ */
+export function returnPathFromState(state: unknown): string | null {
+  if (typeof state !== 'object' || state === null || !('returnTo' in state)) return null;
+  const { returnTo } = state;
+  return typeof returnTo === 'string' && tokenFromPath(returnTo) !== null ? returnTo : null;
+}
+
+export function currentReturnPath(): string | null {
+  return returnPathFromState(window.history.state);
+}
+
+export function leaveToViewerSignIn(path: string, destination = '/sign-in'): void {
+  navigate(destination, false, { returnTo: path });
+}
+
+export function returnState(returnTo: string | null): { returnTo: string } | null {
+  return returnTo === null ? null : { returnTo };
+}
+
+/** The viewer needs a full page load, so a return trip is a hard navigation. */
+export function finishSignIn(returnTo: string | null): void {
+  if (returnTo === null) {
+    navigate('/');
+    return;
+  }
+  window.location.assign(carryQuery(returnTo, window.location.search));
 }

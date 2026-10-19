@@ -1,6 +1,14 @@
 import type { User } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
-import { guardRoute, parseRoute, carryQuery, redirectFor, routePath } from './router';
+import {
+  guardRoute,
+  parseRoute,
+  carryQuery,
+  redirectFor,
+  returnPathFromState,
+  returnState,
+  routePath,
+} from './router';
 
 const user: User = {
   id: 'u1',
@@ -29,6 +37,7 @@ describe('parseRoute', () => {
   it('falls back to not-found', () => {
     expect(parseRoute('/nope')).toEqual({ name: 'not-found' });
     expect(parseRoute('/sessions/extra')).toEqual({ name: 'not-found' });
+    expect(parseRoute('/t/short')).toEqual({ name: 'not-found' });
   });
 });
 
@@ -44,6 +53,42 @@ describe('routePath', () => {
     ]) {
       expect(parseRoute(routePath(parseRoute(href)))).toEqual(parseRoute(href));
     }
+  });
+});
+
+describe('public tank route', () => {
+  const token = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNO_-';
+
+  it('parses a share link and round-trips it', () => {
+    expect(parseRoute(`/t/${token}`)).toEqual({ name: 'public-tank', token });
+    expect(routePath({ name: 'public-tank', token })).toBe(`/t/${token}`);
+  });
+
+  it('is reachable signed in or out and is never redirected', () => {
+    const route = parseRoute(`/t/${token}`);
+    expect(guardRoute(route, null)).toEqual(route);
+    expect(guardRoute(route, user)).toEqual(route);
+    expect(redirectFor(`/t/${token}`, user)).toBeNull();
+    expect(redirectFor(`/t/${token}/?backend=webgl`, null)).toBeNull();
+  });
+});
+
+describe('return path after sign-in', () => {
+  const token = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNO_-';
+
+  it('honours only a well-formed public tank path from history state', () => {
+    expect(returnPathFromState({ returnTo: `/t/${token}` })).toBe(`/t/${token}`);
+    expect(returnPathFromState({ returnTo: '/t/short' })).toBeNull();
+    expect(returnPathFromState({ returnTo: 'https://evil.example/' })).toBeNull();
+    expect(returnPathFromState({ returnTo: '//evil.example' })).toBeNull();
+    expect(returnPathFromState({ returnTo: 5 })).toBeNull();
+    expect(returnPathFromState({})).toBeNull();
+    expect(returnPathFromState(null)).toBeNull();
+  });
+
+  it('carries the return path between sign-in and sign-up as history state', () => {
+    expect(returnPathFromState(returnState(`/t/${token}`))).toBe(`/t/${token}`);
+    expect(returnState(null)).toBeNull();
   });
 });
 

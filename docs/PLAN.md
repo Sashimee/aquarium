@@ -24,8 +24,8 @@ your tanks across devices.
 | Devices | **Desktop and mobile**: WebGPU with automatic WebGL2 fallback, and quality tiers chosen by measuring the GPU. **Minimum Safari 16**: the CSP uses `wasm-unsafe-eval`, which Safari 15 and older do not know, so meshopt and the basis transcoder would not compile there. The web build targets `es2022` + `safari16`, and `safari16` is also what keeps three loading on Safari 16.0 to 16.3: it makes the bundler lower class static blocks, which those versions cannot parse. Do not revert it to a bare `es2022`. |
 | Dev access | `devfish.bas.lu` is public, `X-Robots-Tag: noindex` plus a `robots.txt` that disallows everything. |
 | Dokploy | Both apps inside the existing **Bas.lu** project. |
-| Merging | **Repo-local override of the global rule**: the orchestrator squash-merges feature PRs into `dev` once CI is green **and** `code-reviewer` approves. `dev → main` happens **only when Alex asks**. |
-| Concurrency | At most 6 running agents, reviewers included (Alex, 2026-10-19, see §9.1). |
+| Merging | **Repo-local override of the global rule**: the orchestrator squash-merges feature PRs into `dev` once the `check` and `docker` jobs are green **and** `code-reviewer` approves. Full e2e gates `chore/batch-*` branches and runs on every `dev` push (Alex, 2026-10-19). `dev → main` happens **only when Alex asks**. |
+| Concurrency | At most 8 running agents, reviewers included (Alex, 2026-10-19, see §9.1). |
 
 ## 2. Architecture
 
@@ -227,7 +227,7 @@ Wave 8  ┃ T24 roster expansion (pipelined per species)
 ```
 
 Waves are not barriers. The orchestrator starts **any** task as soon as its dependencies are
-merged, with at most 6 running agents, reviewers included (§9.1). The wave column only shows the earliest a task can
+merged, with at most 8 running agents, reviewers included (§9.1). The wave column only shows the earliest a task can
 start.
 
 **Conflict avoidance:** each agent owns directories (see its agent file). Shared files
@@ -305,7 +305,7 @@ done (T68); Alex confirmed on 2026-10-19 that there is no release before that.
 | Tanks per user | Replaces §1's "one of each": a user may own up to 6 display tanks, any mix of biomes and sizes, plus one quarantine tank (nano, not counted in the 6). Confirmed by Alex 2026-10-19. |
 | Window weather | Simulated from the tank's seed and the local clock. No location, no third-party weather API. |
 | Budgets | §2.7 and the < 150 MB repo asset budget (§3) stay. Backgrounds, audio, new species and biomes stream per preset. If the budget can't hold a new biome, the orchestrator stops and asks Alex before raising it. |
-| Agent concurrency | At most 6 running agents, reviewers included (`CLAUDE.md` loop step 4). Alex lifted the cap on 2026-10-19, then restored it the same day: 21 parallel agents pushed the load average to 110 and filled RAM. |
+| Agent concurrency | At most 8 running agents, reviewers included (`CLAUDE.md` loop step 4). Alex lifted the cap on 2026-10-19, restored 6 the same day after 21 parallel agents pushed the load average to 110 and filled RAM, then raised it to 8 with agents leaving Playwright e2e to CI. |
 | Juvenile or adult | Alex, 2026-10-19: the shop sells every species as a juvenile or an adult, at two prices. A juvenile is smaller, cheaper, and grows into an adult over the species' `juvenileAfterDays → adultAfterDays` (T33). An adult costs about 2.5× as much and arrives at full size and colour. |
 | Heaters | Alex, 2026-10-19: warm-water species need a heater. Without one, the tank drifts to room temperature (21 °C), and a species whose range starts above that is stressed and can get sick (T37). New tanks come with a basic heater. Existing tanks migrate with one installed so no current fish suffers. The shop warns before a warm species goes into a tank without a heater, but does not block it. |
 | In-game currency | One currency, **Pearls**, earned by playing and bought with real money. Every shop item has a price in Pearls, and the balance is always visible in the HUD. Basic care is never charged and never blocked by the balance: feeding with the standard food, water changes, gravel vacuum, algae scrape and the standard treatment for each disease are free, so no fish dies because the player did not pay, even with a negative balance after a chargeback. Pearls buy fish, plants, decor, equipment upgrades, premium foods, backgrounds and tank slots and sizes. There is no consumable inventory for basic care. No loot boxes and no random paid rewards. Every price lives in `content/economy.json`, so tuning prices is a data change. |

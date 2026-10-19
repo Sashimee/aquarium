@@ -2,6 +2,7 @@ import type { Collider, FishStage } from '@aquarium/shared';
 import type { Anchor, Stimulus } from './behaviour.ts';
 import type { SimBrood } from './brood.ts';
 import type { Point3 } from './decor.ts';
+import type { CrewTally } from './crew.ts';
 import { FOOD_STRIDE, type AteEvent } from './food.ts';
 import { SNAPSHOT_STRIDE, type Snapshot } from './snapshot.ts';
 import type { SimToy, ToyNudge } from './toys.ts';
@@ -49,6 +50,8 @@ export type SimCommand =
   | { readonly type: 'stage'; readonly id: string; readonly stage: FishStage }
   /** Float32 records of `[id, x, y, z, typeIndex]`; see `World.setFood`. */
   | { readonly type: 'food'; readonly buffer: ArrayBuffer }
+  /** The lifecycle's algae cover, 0 to 1; see `World.setAlgae`. */
+  | { readonly type: 'algae'; readonly cover: number }
   | {
       readonly type: 'addFish';
       readonly request: number;
@@ -87,6 +90,7 @@ export type SimEvent =
     }
   | SimAte
   | SimToyNudges
+  | SimCrew
   | SimLayout
   | SimGrazeReach
   | SimNestSite
@@ -146,6 +150,17 @@ export interface SimToyNudges {
   readonly nudges: readonly ToyNudge[];
 }
 
+/**
+ * Algae grazed and settled food scavenged since the last `crew` event, up to the snapshot at
+ * `tick`, which follows it. Sent about once a second while there is any, and before a layout change.
+ */
+export interface SimCrew {
+  readonly type: 'crew';
+  readonly epoch: number;
+  readonly tick: number;
+  readonly tally: readonly CrewTally[];
+}
+
 /** The structural slice of `Worker`, `DedicatedWorkerGlobalScope` and `MessagePort` we use. */
 export interface MessagePortLike {
   postMessage(message: unknown, transfer: ArrayBuffer[]): void;
@@ -186,6 +201,7 @@ const COMMAND_TYPES = new Set([
   'brood',
   'stage',
   'food',
+  'algae',
   'addFish',
   'removeFish',
   'canGrazeAt',
@@ -196,6 +212,7 @@ const EVENT_TYPES = new Set([
   'snapshot',
   'ate',
   'toyNudge',
+  'crew',
   'layout',
   'grazeReach',
   'nestSite',
@@ -239,16 +256,22 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
   let last = 0;
   let backlog = 0;
   let epoch = 0;
+  let crewTick = 0;
 
   const send = (event: SimEvent, transfer: ArrayBuffer[] = []): void => {
     port.postMessage(event, transfer);
   };
 
-  const emitEvents = (w: World): void => {
+  const emitEvents = (w: World, flushCrew = false): void => {
     const events = w.takeAteEvents();
     if (events.length > 0) send({ type: 'ate', epoch, tick: w.tick, events });
     const nudges = w.takeToyNudges();
     if (nudges.length > 0) send({ type: 'toyNudge', epoch, tick: w.tick, nudges });
+    if (flushCrew || w.tick - crewTick >= STEP_HZ) {
+      crewTick = w.tick;
+      const tally = w.takeCrewTally();
+      if (tally.length > 0) send({ type: 'crew', epoch, tick: w.tick, tally });
+    }
   };
 
   const emitSnapshot = (w: World): void => {
@@ -307,7 +330,7 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
     apply: () => void,
   ): void => {
     // Bites and bumps so far belong to the old layout's epoch, so they go out before it changes.
-    emitEvents(w);
+    emitEvents(w, true);
     apply();
     epoch++;
     send({ type: 'layout', epoch, request, fishIds: w.fishIds, stride: SNAPSHOT_STRIDE, change });
@@ -326,6 +349,7 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
         }
         stop();
         world = new World(command.config);
+        crewTick = 0;
         pool.length = 0;
         epoch++;
         send({
@@ -398,6 +422,9 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
         w.setFood(new Float32Array(buffer));
         return;
       }
+      case 'algae':
+        requireWorld(command.type).setAlgae(command.cover);
+        return;
       case 'addFish': {
         const w = requireWorld(command.type);
         const { spawn, at } = command;
@@ -462,6 +489,7 @@ export class SimClient {
   private readonly errorListeners = new Set<(message: string) => void>();
   private readonly ateListeners = new Set<(events: readonly AteEvent[], ate: SimAte) => void>();
   private readonly nudgeListeners = new Set<(nudge: ToyNudge) => void>();
+  private readonly crewListeners = new Set<(tally: readonly CrewTally[], crew: SimCrew) => void>();
   /** The fish order of the newest layout, and the latest positions in it, x, y, z per fish. */
   private fishIds: readonly string[] = [];
   private fishEpoch = -1;
@@ -638,6 +666,14 @@ export class SimClient {
     this.port.postMessage({ type: 'food', buffer } satisfies SimCommand, [buffer]);
   }
 
+  /** The lifecycle's algae cover, 0 to 1; resend after `init` and whenever the lifecycle moves it. */
+  setAlgae(cover: number): void {
+    if (!(Number.isFinite(cover) && cover >= 0 && cover <= 1)) {
+      throw new RangeError(`algae: cover must be within 0 to 1, got ${cover}`);
+    }
+    this.send({ type: 'algae', cover });
+  }
+
   /** Hands a snapshot's buffer back to the worker; the snapshot must not be read afterwards. */
   recycle(snapshot: Snapshot): void {
     const buffer = snapshot.data.buffer;
@@ -662,6 +698,12 @@ export class SimClient {
     return () => this.nudgeListeners.delete(listener);
   }
 
+  /** Algae grazed and settled food scavenged in the current world, for the lifecycle's crew. */
+  onCrew(listener: (tally: readonly CrewTally[], crew: SimCrew) => void): () => void {
+    this.crewListeners.add(listener);
+    return () => this.crewListeners.delete(listener);
+  }
+
   onError(listener: (message: string) => void): () => void {
     this.errorListeners.add(listener);
     return () => this.errorListeners.delete(listener);
@@ -675,6 +717,7 @@ export class SimClient {
     this.errorListeners.clear();
     this.ateListeners.clear();
     this.nudgeListeners.clear();
+    this.crewListeners.clear();
     this.abandoned.clear();
     this.rejectPending('sim: client disposed');
   }
@@ -769,6 +812,10 @@ export class SimClient {
       case 'toyNudge':
         if (this.pendingInit !== null || event.epoch !== this.epoch) return;
         for (const nudge of event.nudges) for (const l of this.nudgeListeners) l(nudge);
+        return;
+      case 'crew':
+        if (this.pendingInit !== null || event.epoch !== this.epoch) return;
+        for (const l of this.crewListeners) l(event.tally, event);
         return;
       case 'layout': {
         const pending = this.pendingLayouts.get(event.request);

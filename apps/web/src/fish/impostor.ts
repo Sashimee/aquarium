@@ -15,7 +15,7 @@ import type { FrameSelection } from './octahedral';
  * - `orientation`: the instance quaternion, to light the baked fish-space normals;
  * - `swim`: as the meshes' (scale, body-wave phase, amplitude scale, turn curvature in model units);
  * - `view`: unit direction from the pivot to the camera in fish space, paling 0..1;
- * - `tint`: rgb multiplier, w unused;
+ * - `tint`: rgb multiplier, youth as the meshes';
  * - `frames`: the blended frames' (i, j) and bilinear weights (fx, fy), see `selectFrames`.
  */
 export const IMPOSTOR_STRIDE = 20;
@@ -41,6 +41,7 @@ export interface ImpostorValues {
   viewZ: number;
   pale: number;
   tint: readonly [number, number, number];
+  youth: number;
   frames: Readonly<FrameSelection>;
 }
 
@@ -76,7 +77,7 @@ export class ImpostorInstanceData {
     a[o + 12] = v.tint[0];
     a[o + 13] = v.tint[1];
     a[o + 14] = v.tint[2];
-    a[o + 15] = 0;
+    a[o + 15] = v.youth;
     a[o + 16] = v.frames.i;
     a[o + 17] = v.frames.j;
     a[o + 18] = v.frames.fx;

@@ -1,5 +1,7 @@
-import type { FishSex } from '@aquarium/shared';
+import type { FishSex, FishStage } from '@aquarium/shared';
+import { lengthByStageM } from './maturity';
 import { hashString } from './roster';
+import { speciesGrowth } from './species';
 import type { SwimModeParams } from './swim';
 
 /** `sex` is the server's stored one; null for demo fish, which have no server record. */
@@ -212,16 +214,27 @@ export function modelFor(profile: FishRenderProfile, fish: SexedFish): FishModel
 }
 
 /**
- * In metres: the fish's size, or else the species' adult length, scaled for its sex. Sizes are on
- * the species' (female) scale, so a guppy male is drawn and simulated smaller than its size.
+ * In metres: the fish's size, or else a length for its stage up to the species' adult length,
+ * scaled for its sex. Sizes are on the species' (female) scale, so a guppy male is drawn and
+ * simulated smaller than its size.
  */
 export function bodyLengthOf(
-  fish: SexedFish & { readonly species: string; readonly lengthM: number | undefined },
+  fish: SexedFish & {
+    readonly species: string;
+    readonly lengthM: number | undefined;
+    readonly stage: FishStage | null;
+  },
   speciesLengthM: number,
 ): number {
   const profile = FISH_RENDER_PROFILES[fish.species];
   const factor = profile === undefined ? 1 : modelFor(profile, fish).lengthFactor;
-  return (fish.lengthM ?? speciesLengthM) * factor;
+  const length = lengthByStageM(
+    fish.lengthM,
+    fish.stage,
+    speciesGrowth(fish.species),
+    speciesLengthM,
+  );
+  return length * factor;
 }
 
 /** The instanced batch that draws a fish: one per species and model. */
