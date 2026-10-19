@@ -126,7 +126,6 @@ jobs:
             args: decor.spec reminders.spec
           - name: photo
             args: photo.spec
-            quarantine: true
           - name: switch-tanks
             args: tank-type-switch.spec toys.spec
           - name: loading
