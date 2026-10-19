@@ -116,7 +116,7 @@
     {
       "id": "pond-weed",
       "assetId": "pond-weed",
-      "center": [0.17, -0.15],
+      "center": [0.1, -0.15],
       "radius": 0.1,
       "count": 16,
       "scale": [0.6, 0.9],
