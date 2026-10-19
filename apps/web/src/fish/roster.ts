@@ -1,4 +1,12 @@
-import type { Biome, DiseaseState, Fish, FishSex, FishStage } from '@aquarium/shared';
+import {
+  personalitySchema,
+  type Biome,
+  type DiseaseState,
+  type Fish,
+  type FishSex,
+  type FishStage,
+  type Personality,
+} from '@aquarium/shared';
 import type { AteEvent, FishSpawn } from '@aquarium/sim';
 import { HUNGER_PER_PORTION } from '@aquarium/sim/lifecycle';
 import type { InteractionEvents } from '../interaction/events';
@@ -27,6 +35,8 @@ export interface RosterFish {
   health: number;
   /** As of the last server snapshot that carried this fish; demo fish are never ill. */
   disease: DiseaseState | null;
+  /** Fixed per fish by the server; undefined for demo fish and for a record that carries none. */
+  readonly personality?: Personality;
   /**
    * The server's hunger as of the last snapshot that carried this fish, less what the server takes
    * off for each bite passed on since; unset for demo fish. A world rebuilt mid-session seeds the
@@ -43,7 +53,11 @@ export interface RosterFish {
 export class TankRoster {
   private readonly fish = new Map<string, RosterFish>();
   private readonly simIdByServer = new Map<string, string>();
-  private loaded: { readonly tankId: string; readonly biome: Biome } | null = null;
+  private loaded: {
+    readonly tankId: string;
+    readonly biome: Biome;
+    readonly recentVisitDays: number | null;
+  } | null = null;
   /** Between a switch's unload and the session's `tank:loaded` or `tank:none`: show nothing. */
   private switching = false;
   private nextId = 0;
@@ -60,6 +74,11 @@ export class TankRoster {
 
   get biome(): Biome | null {
     return this.loaded?.biome ?? null;
+  }
+
+  /** How many of the last days the owner opened the loaded tank; null when it is not known. */
+  get recentVisitDays(): number | null {
+    return this.loaded?.recentVisitDays ?? null;
   }
 
   get size(): number {
@@ -95,9 +114,9 @@ export class TankRoster {
     return this.fish.get(simId)?.serverId ?? undefined;
   }
 
-  load({ tankId, biome, fish }: InteractionEvents['tank:loaded']): void {
+  load({ tankId, biome, fish, recentVisitDays }: InteractionEvents['tank:loaded']): void {
     this.clear();
-    this.loaded = { tankId, biome };
+    this.loaded = { tankId, biome, recentVisitDays: recentVisitDays ?? null };
     this.switching = false;
     for (const f of fish) this.insertSaved(f, f.status === 'dead' ? 'dead' : 'swimming');
     this.revision++;
@@ -258,6 +277,7 @@ export class TankRoster {
   }
 
   private insertSaved(fish: Fish, phase: FishPhase): RosterFish {
+    const personality = personalitySchema.safeParse(fish.personality);
     const entry: RosterFish = {
       simId: this.newSimId(),
       serverId: fish.id,
@@ -271,6 +291,7 @@ export class TankRoster {
       health: fish.status === 'dead' ? 0 : fish.health,
       disease: fish.disease,
       hunger: fish.hunger,
+      ...(personality.success ? { personality: personality.data } : {}),
     };
     this.insert(entry);
     this.simIdByServer.set(fish.id, entry.simId);

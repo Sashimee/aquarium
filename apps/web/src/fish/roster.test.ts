@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { Fish } from '@aquarium/shared';
 import type { FishSpawn } from '@aquarium/sim';
 import { HUNGER_PER_PORTION } from '@aquarium/sim/lifecycle';
 import { FISH_1, FISH_2, FISH_3, TANK_A, TANK_B, fishFixture } from '../sync/fixtures';
@@ -465,6 +466,48 @@ describe('TankRoster', () => {
         { fishId: 'neon-tetra-0', foodId: 1, portion: 0.1 },
       ]);
     });
+  });
+});
+
+describe('personality and visits', () => {
+  it('carries each saved fish personality and the tank visit days', () => {
+    const p = { boldness: 0.9, greed: 0.2, sociability: 0.4 };
+    const roster = new TankRoster(DEMO);
+    roster.load({
+      backgroundId: 'bg-fw-planted-stream',
+      tankId: TANK_A,
+      biome: 'freshwater',
+      size: 'standard',
+      decorLayout: [],
+      decorEdited: false,
+      fish: [fishFixture(FISH_1, { personality: p })],
+      recentVisitDays: 5,
+    });
+    expect(roster.get(simId(roster, FISH_1))?.personality).toEqual(p);
+    expect(roster.recentVisitDays).toBe(5);
+    roster.add({
+      tankId: TANK_A,
+      fish: fishFixture(FISH_2, { personality: { ...p, greed: 1 } }),
+      acclimate: false,
+    });
+    expect(roster.get(simId(roster, FISH_2))?.personality?.greed).toBe(1);
+  });
+
+  it('leaves personality unset for demo fish and drops a missing or malformed one', () => {
+    const roster = loaded([
+      { ...fishFixture(FISH_1), personality: undefined } as unknown as Fish,
+      fishFixture(FISH_2, { personality: { boldness: 7, greed: 0, sociability: 0 } }),
+    ]);
+    expect([...roster.entries()].every((f) => f.personality === undefined)).toBe(true);
+    expect(new TankRoster(DEMO).get('fish-0')?.personality).toBeUndefined();
+  });
+
+  it('knows no visit days without a signal, for demo and for other tanks', () => {
+    expect(new TankRoster(DEMO).recentVisitDays).toBeNull();
+    const roster = loaded();
+    expect(roster.recentVisitDays).toBeNull();
+    roster.unload({ tankId: TANK_A, reason: 'reset' });
+    expect(roster.recentVisitDays).toBeNull();
   });
 });
 
