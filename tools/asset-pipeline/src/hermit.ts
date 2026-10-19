@@ -4,6 +4,7 @@ import {
   boundsOf,
   canonicalVertices,
   connectedComponents,
+  dot,
   loadScan,
   place,
   pointAt,
@@ -47,6 +48,8 @@ export interface HermitRecipe {
   limbCutFraction: number;
   /** Limb pieces reaching less than this fraction of the farthest radius are folded into the stem. */
   minPieceReach: number;
+  /** Walking legs a side shows; welded legs on a side with fewer pieces are split apart by direction from the hip. */
+  legsPerSide: number;
   note: string;
 }
 
@@ -65,6 +68,7 @@ export const HERMIT_RECIPES: HermitRecipe[] = [
     crabZFraction: 0.55,
     limbCutFraction: 0.35,
     minPieceReach: 0.15,
+    legsPerSide: 3,
     note: 'legs and antennae recoloured towards Clibanarius tricolor (blue legs, orange joints and antennae) by eye from the reference description; the scan is Clibanarius longitarsus',
   },
 ];
@@ -96,6 +100,49 @@ interface SegmentOptions {
   crabZFraction: number;
   limbCutFraction: number;
   minPieceReach: number;
+  legsPerSide?: number;
+}
+
+/**
+ * Splits points into `parts` groups by their direction from `hip`, with a farthest-point start and
+ * Lloyd refinement on the unit sphere. Legs fan out from the hip, so welded legs part by direction.
+ */
+export function clusterByDirection(points: Vec3[], hip: Vec3, parts: number): number[] {
+  const dirs = points.map((p) => unit(sub(p, hip)));
+  const centres: Vec3[] = [dirs[0]!];
+  while (centres.length < parts) {
+    let best = 0;
+    let bestGap = -Infinity;
+    dirs.forEach((d, i) => {
+      const gap = -Math.max(...centres.map((c) => dot(c, d)));
+      if (gap > bestGap) {
+        bestGap = gap;
+        best = i;
+      }
+    });
+    centres.push(dirs[best]!);
+  }
+  const label = new Array<number>(dirs.length).fill(0);
+  for (let round = 0; round < 30; round++) {
+    dirs.forEach((d, i) => {
+      let top = -Infinity;
+      centres.forEach((c, k) => {
+        const v = dot(c, d);
+        if (v > top) {
+          top = v;
+          label[i] = k;
+        }
+      });
+    });
+    centres.forEach((_, k) => {
+      const sum: Vec3 = [0, 0, 0];
+      dirs.forEach((d, i) => {
+        if (label[i] === k) for (let a = 0; a < 3; a++) sum[a]! += d[a]!;
+      });
+      if (Math.hypot(...sum) > 0) centres[k] = unit(sum);
+    });
+  }
+  return label;
 }
 
 function cellAt(grid: ReturnType<typeof createGrid>, p: Vec3): [number, number, number] {
@@ -245,12 +292,79 @@ export function segmentCrab(
       for (let a = 0; a < 3; a++) shell[a]! += positions[i * 3 + a]!;
     }
   for (let a = 0; a < 3; a++) shell[a]! /= Math.max(1, shellCount);
+  if (options.legsPerSide !== undefined)
+    splitWeldedLegs({ positions, piece, weight, pieces, radius, hip, shell }, options.legsPerSide);
   return { kind, piece, weight, pieces, hip, shellCentroid: shell };
 }
 
+interface WeldState {
+  positions: Float32Array;
+  piece: Int32Array;
+  weight: Float32Array;
+  pieces: LimbPiece[];
+  radius: Float32Array;
+  hip: Vec3;
+  shell: Vec3;
+}
+
+function splitWeldedLegs(state: WeldState, legsPerSide: number): void {
+  const { positions, piece, weight, pieces, radius, hip, shell } = state;
+  const toCrab = sub(hip, shell);
+  const forward = unit([toCrab[0], 0, toCrab[2]]);
+  const right = unit(cross([0, 1, 0], forward));
+  const sideOf = (c: Vec3): number => (dot(sub(c, hip), right) < 0 ? 0 : 1);
+  for (const side of [0, 1]) {
+    const onSide = pieces
+      .map((p, i) => ({ p, i }))
+      .filter(({ p }) => p.kind === CRAB_KIND.leg && sideOf(p.centroid) === side);
+    const missing = legsPerSide - onSide.length;
+    if (missing <= 0) continue;
+    if (onSide.length === 0)
+      throw new Error(`segmentCrab: no leg piece on side ${side} to split; recheck the recipe`);
+    const welded = onSide.reduce((a, b) => (b.p.vertices > a.p.vertices ? b : a));
+    const members: number[] = [];
+    for (let v = 0; v < piece.length; v++) if (piece[v] === welded.i) members.push(v);
+    const label = clusterByDirection(
+      members.map((v) => pointAt(positions, v)),
+      hip,
+      missing + 1,
+    );
+    const ids = [welded.i];
+    for (let k = 1; k <= missing; k++) {
+      ids.push(pieces.length);
+      pieces.push({ ...welded.p });
+    }
+    for (let k = 0; k <= missing; k++) {
+      const own = members.filter((_, j) => label[j] === k);
+      if (own.length < 50)
+        throw new Error(
+          `segmentCrab: splitting the welded legs left a ${own.length}-vertex leg; recheck legsPerSide`,
+        );
+      let low = Infinity;
+      let high = 0;
+      const sum: Vec3 = [0, 0, 0];
+      for (const v of own) {
+        low = Math.min(low, radius[v]!);
+        high = Math.max(high, radius[v]!);
+        for (let a = 0; a < 3; a++) sum[a]! += positions[v * 3 + a]!;
+      }
+      for (const v of own) {
+        piece[v] = ids[k]!;
+        weight[v] = clamp((radius[v]! - low) / Math.max(high - low, 1e-9), 0, 1);
+      }
+      pieces[ids[k]!] = {
+        kind: CRAB_KIND.leg,
+        vertices: own.length,
+        centroid: sum.map((x) => x / own.length) as Vec3,
+      };
+    }
+  }
+}
+
 /**
- * Walking pairs run front to back, so the two picking pairs are the frontmost legs; long antennae take
- * the 2/3 slot. `lateral` and `ahead` are the piece centroids in the model frame.
+ * A leg's pair is its fore-to-aft rank on its own side (0 the claw, then the walking legs), so a leg
+ * lands in slot `pair * 2 + side` whatever the other side holds; long antennae take the 2/3 slot.
+ * `lateral` is the piece centroid across the body from the hip and `ahead` along the model's +z.
  */
 export function assignLimbIndices(
   pieces: { kind: number; lateral: number; ahead: number }[],
@@ -259,6 +373,7 @@ export function assignLimbIndices(
     .map((p, i) => ({ ...p, i }))
     .filter((p) => p.kind === CRAB_KIND.leg)
     .sort((a, b) => b.ahead - a.ahead);
+  const rankOnSide = [0, 0];
   const index = new Array<number>(pieces.length).fill(-1);
   const taken = new Set<number>();
   const takeFree = (preferred: number): number => {
@@ -267,10 +382,10 @@ export function assignLimbIndices(
     taken.add(candidate);
     return candidate;
   };
-  legs.forEach((leg, rank) => {
+  for (const leg of legs) {
     const side = leg.lateral < 0 ? 0 : 1;
-    index[leg.i] = takeFree(Math.min(rank, 4) * 2 + side);
-  });
+    index[leg.i] = takeFree(Math.min(rankOnSide[side]!++, 4) * 2 + side);
+  }
   const antennae = pieces
     .map((p, i) => ({ ...p, i }))
     .filter((p) => p.kind === CRAB_KIND.antenna)
@@ -372,13 +487,14 @@ export async function buildHermit(recipe: HermitRecipe, ctx: FishContext): Promi
   for (let i = 0; i < part.positions.length; i++) part.positions[i] = part.positions[i]! * scale;
   part.normals.set(vertexNormals(part.positions, part.indices));
 
+  const hipLateral = dot(sub(seg.hip, origin), right) * scale;
   const pieceFrame = seg.pieces.map((p, i) => {
     const members: number[] = [];
     for (let v = 0; v < count; v++) if (seg.piece[v] === i) members.push(v);
     const c: Vec3 = [0, 0, 0];
     for (const v of members)
       for (let a = 0; a < 3; a++) c[a]! += part.positions[v * 3 + a]! / members.length;
-    return { kind: p.kind as number, lateral: c[0], ahead: c[2] };
+    return { kind: p.kind as number, lateral: c[0] - hipLateral, ahead: c[2] };
   });
   const limbIndex = assignLimbIndices(pieceFrame);
 
@@ -472,7 +588,10 @@ export async function buildHermit(recipe: HermitRecipe, ctx: FishContext): Promi
         '_FIN_ID part ids 0 shell, 6 walking leg, 7 antenna, 9 exposed soft body (rigid); _FIN_MASK weight along the limb; _LEG limb index pair * 2 + side, side 0 = -x',
         `re-simplified to ${recipe.maxTriangles} triangles for LOD0 (LOD1 and LOD2 at 40% and 15% of that, simplified with UV seams kept), box-projected into a fresh ${recipe.textureSize} px atlas and the colour re-baked from the scan's vertex colours, so simplification cannot scramble the scan texture`,
         'limb and soft-body colours painted per vertex from the segmentation before the bake; every LOD keeps only its largest connected component, so no antenna fragment floats free',
-        `length is the shell length (${standardLengthM} m) taken from the recipe: no content/species/hermit-crab.json exists yet, and a species file is a separate contract PR`,
+        fromSpecies !== null
+          ? `length is the shell length (${standardLengthM} m) from content/species/hermit-crab.json`
+          : `length is the shell length (${standardLengthM} m) taken from the recipe: no species JSON exists`,
+        `legs welded together in the scan are split by direction from the hip so each of the ${recipe.legsPerSide} legs a side has its own slot, numbered fore to aft per side`,
         recipe.note,
       ],
       crab: {

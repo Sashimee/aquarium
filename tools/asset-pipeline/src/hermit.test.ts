@@ -1,12 +1,19 @@
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { NodeIO } from '@gltf-transform/core';
+import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
+import { MeshoptDecoder } from 'meshoptimizer';
 import { describe, expect, it } from 'vitest';
 import {
   CRAB_KIND,
   HERMIT_RECIPES,
   assignLimbIndices,
+  clusterByDirection,
   crabColour,
   recolourDense,
   segmentCrab,
 } from './hermit.ts';
+import { FIN_ID_ATTRIBUTE, LEG_ATTRIBUTE, SHRIMP_PART_IDS } from './index-schema.ts';
 import type { Vec3 } from './math.ts';
 import type { Dense } from './rebake.ts';
 
@@ -161,13 +168,14 @@ describe('segmentCrab', () => {
 });
 
 describe('assignLimbIndices', () => {
-  it('gives the frontmost legs the lowest pair and alternates sides by lateral sign', () => {
+  it('ranks legs fore to aft on their own side, so a side with fewer legs does not shift the other', () => {
     const index = assignLimbIndices([
       { kind: CRAB_KIND.leg, lateral: -1, ahead: 3 },
       { kind: CRAB_KIND.leg, lateral: 1, ahead: 2.9 },
       { kind: CRAB_KIND.leg, lateral: -1, ahead: 1 },
+      { kind: CRAB_KIND.leg, lateral: -1, ahead: 2 },
     ]);
-    expect(index).toEqual([0, 3, 4]);
+    expect(index).toEqual([0, 1, 4, 2]);
   });
 
   it('keeps indices unique when several legs share a rank and maps antennae to the 2/3 slot', () => {
@@ -253,5 +261,56 @@ describe('HERMIT_RECIPES', () => {
       expect(recipe.maxTriangles).toBeLessThanOrEqual(15000);
       expect(recipe.fallbackLengthM).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('clusterByDirection', () => {
+  it('parts points that fan out from the hip by direction, whatever their distance', () => {
+    const points: Vec3[] = [];
+    for (const [dx, dz] of [
+      [1, 0],
+      [0.7, 0.7],
+      [0, 1],
+    ] as const)
+      for (let r = 1; r <= 10; r++) points.push([dx * r, 0, dz * r]);
+    const label = clusterByDirection(points, [0, 0, 0], 3);
+    expect(new Set(label).size).toBe(3);
+    for (let leg = 0; leg < 3; leg++)
+      expect(new Set(label.slice(leg * 10, leg * 10 + 10)).size).toBe(1);
+  });
+});
+
+describe('the shipped hermit crab', () => {
+  const assets = fileURLToPath(new URL('../../../apps/web/public/assets', import.meta.url));
+
+  it('gives each of its three legs a side its own anatomical slot, front to back', async () => {
+    const io = new NodeIO()
+      .registerExtensions(ALL_EXTENSIONS)
+      .registerDependencies({ 'meshopt.decoder': MeshoptDecoder });
+    const doc = await io.read(join(assets, 'crab', 'hermit-crab', 'lod0.glb'));
+    const slots = new Map<number, { x: number; z: number; count: number }>();
+    for (const mesh of doc.getRoot().listMeshes())
+      for (const prim of mesh.listPrimitives()) {
+        const position = prim.getAttribute('POSITION')!.getArray()!;
+        const part = prim.getAttribute(FIN_ID_ATTRIBUTE)!.getArray()!;
+        const leg = prim.getAttribute(LEG_ATTRIBUTE)!.getArray()!;
+        for (let v = 0; v < part.length; v++) {
+          if (part[v] !== SHRIMP_PART_IDS.leg) continue;
+          const slot = slots.get(leg[v]!) ?? { x: 0, z: 0, count: 0 };
+          slot.x += position[v * 3]!;
+          slot.z += position[v * 3 + 2]!;
+          slot.count++;
+          slots.set(leg[v]!, slot);
+        }
+      }
+    expect([...slots.keys()].sort()).toEqual([0, 1, 2, 3, 4, 5]);
+    for (const slot of slots.values()) expect(slot.count).toBeGreaterThan(200);
+    const mean = (slot: number, axis: 'x' | 'z'): number =>
+      slots.get(slot)![axis] / slots.get(slot)!.count;
+    for (const side of [0, 1]) {
+      expect(mean(side, 'z')).toBeGreaterThan(mean(side + 2, 'z'));
+      expect(mean(side + 2, 'z')).toBeGreaterThan(mean(side + 4, 'z'));
+    }
+    for (const pair of [0, 2, 4]) expect(mean(pair, 'x')).toBeLessThan(mean(pair + 1, 'x'));
   });
 });
