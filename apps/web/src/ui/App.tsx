@@ -6,6 +6,7 @@ import {
   AvatarButton,
   CameraControls,
   ChemistryChip,
+  PearlBalance,
   CollectionButton,
   StatusCard,
   TankButton,
@@ -257,6 +258,7 @@ function Shell() {
           <div className="hud-right">
             <div className="hud-buttons">
               {user && <CollectionButton onPress={() => setBookOpen(true)} />}
+              <PearlBalance open={panel === 'shop'} onPress={() => toggle('shop')} />
               <SoundButton />
               <TankButton open={panel === 'tanks'} onPress={() => toggle('tanks')} />
               <AvatarButton open={panel === 'account'} onPress={() => toggle('account')} />
