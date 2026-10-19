@@ -33,13 +33,13 @@ import {
 import {
   applyCare,
   applyEating,
+  BIOLOAD_CAPACITY_BY_SIZE,
   BREEDING_SHELTER_ASSET_IDS,
   catchUp,
   DEFAULT_WATER_PARAMETERS,
   FEEDING_WINDOW_MINUTES,
   GRACE_PERIOD_MS,
   hasCapacityFor,
-  TANK_BIOLOAD_CAPACITY,
   VACATION_FEEDER_ASSET_ID,
   type BirthRecord,
   type LifecycleFish,
@@ -50,9 +50,11 @@ import { and, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { audit } from './audit.ts';
+import { personalityFromFishId } from './personality.ts';
 import { issueShareToken } from './shareToken.ts';
 import type { Clock } from './clock.ts';
 import { schema, type Database } from './db/index.ts';
+import { countRecentVisitDays, recordVisit } from './visits.ts';
 import { apiError } from './errors.ts';
 import type { Limit, RateLimiter } from './rate-limit.ts';
 import type { SpeciesCatalog } from './species.ts';
@@ -108,14 +110,6 @@ class HttpError extends Error {
     super(body.error.message);
   }
 }
-
-const rollTrait = () => randomInt(0, 1001) / 1000;
-
-const rollPersonality = () => ({
-  boldness: rollTrait(),
-  greed: rollTrait(),
-  sociability: rollTrait(),
-});
 
 const nameNotPublic = () =>
   new HttpError(
@@ -179,6 +173,7 @@ interface Ticked {
   fishRows: FishRow[];
   state: LifecycleState;
   away: AwaySummary | null;
+  nowMs: number;
 }
 
 async function lockAndTick(
@@ -206,6 +201,8 @@ async function lockAndTick(
     fromMs: tank.lastTickAt.getTime(),
     toMs: now,
     biome: tank.biome,
+    litres: TANK_SIZES[tank.size].litres,
+    bioloadCapacity: BIOLOAD_CAPACITY_BY_SIZE[tank.size],
     equipment: equipmentSchema.parse(tank.equipment),
     species: new Map([...deps.species].map(([id, s]) => [id, s.lifecycle])),
     speciesChemistry: new Map([...deps.species].map(([id, s]) => [id, s.chemistry])),
@@ -217,7 +214,7 @@ async function lockAndTick(
     breedingEnvironment: {
       hasCave: hasShelter(tank),
       maxAnimals: TANK_SIZES[tank.size].maxAnimals,
-      bioloadCapacity: TANK_BIOLOAD_CAPACITY,
+      bioloadCapacity: BIOLOAD_CAPACITY_BY_SIZE[tank.size],
       newId: randomUUID,
     },
   });
@@ -231,7 +228,7 @@ async function lockAndTick(
       ),
     );
 
-  if (result.steps === 0) return { tank, fishRows, state: initial, away: null };
+  if (result.steps === 0) return { tank, fishRows, state: initial, away: null, nowMs: now };
 
   const updatedRows = await persistFish(tx, fishRows, result.state);
   const bornRows = await insertNewborns(tx, tank.id, result.births, result.state, deps);
@@ -304,6 +301,7 @@ async function lockAndTick(
     fishRows: [...updatedRows, ...bornRows.values()],
     state: result.state,
     away,
+    nowMs: now,
   };
 }
 
@@ -333,7 +331,7 @@ async function insertNewborns(
       diedAt: fish.diedAtMs === null ? null : new Date(fish.diedAtMs),
       cause: fish.cause,
       lastBroodAt: fish.lastBroodAtMs === null ? null : new Date(fish.lastBroodAtMs),
-      personality: rollPersonality(),
+      personality: personalityFromFishId(b.fishId),
       bornAt: new Date(b.bornAtMs),
       size: fish.size,
       hunger: fish.hunger,
@@ -392,6 +390,7 @@ async function render(
   issuedShareToken: string | null = null,
 ): Promise<Tank> {
   const { tank, away } = ticked;
+  const recentVisitDays = await countRecentVisitDays(tx, tank.id, ticked.nowMs);
   const memorials = await tx
     .select()
     .from(schema.memorials)
@@ -415,6 +414,7 @@ async function render(
     lastTickAt: tank.lastTickAt.toISOString(),
     chemistry: chemistrySchema.parse(tank.chemistry),
     equipment: equipmentSchema.parse(tank.equipment),
+    recentVisitDays,
     fish: fishRows
       .toSorted((a, b) => a.bornAt.getTime() - b.bornAt.getTime() || a.id.localeCompare(b.id))
       .map((f) => ({
@@ -559,6 +559,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
             fish: [],
           },
           away: null,
+          nowMs: clock.now(),
         });
       });
       return reply.code(201).send(created);
@@ -570,7 +571,10 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
     guarded(async (req) => {
       const user = await authorize(req);
       const { tankId } = tankParamsSchema.parse(req.params);
-      return withTank(user, tankId, (tx, ticked) => render(tx, ticked));
+      return withTank(user, tankId, async (tx, ticked) => {
+        await recordVisit(tx, ticked.tank.id, ticked.nowMs);
+        return render(tx, ticked);
+      });
     }),
   );
 
@@ -747,7 +751,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           !hasCapacityFor(
             existing,
             spec.lifecycle.bioload,
-            TANK_BIOLOAD_CAPACITY,
+            BIOLOAD_CAPACITY_BY_SIZE[ticked.tank.size],
             TANK_SIZES[ticked.tank.size].maxAnimals,
           )
         ) {
@@ -759,14 +763,16 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
             ),
           );
         }
+        const id = randomUUID();
         const [row] = await tx
           .insert(schema.fish)
           .values({
+            id,
             tankId,
             species: spec.id,
             name: body.name,
             sex: randomInt(2) === 0 ? 'male' : 'female',
-            personality: rollPersonality(),
+            personality: personalityFromFishId(id),
             bornAt: new Date(clock.now()),
             size: spec.lifecycle.birthSizeM,
           })

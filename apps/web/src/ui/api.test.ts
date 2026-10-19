@@ -182,6 +182,7 @@ describe('api client', () => {
       shared: false,
       shareToken: null,
       equipment: DEFAULT_EQUIPMENT,
+      recentVisitDays: 0,
       fish: [],
       memorials: [],
     };

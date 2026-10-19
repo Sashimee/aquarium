@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef } from 'react';
-import { useAuth, useRedirect, useRoute } from './context';
+import { useAuth, useBridge, usePhotoView, useRedirect, useRoute } from './context';
 import { Dock } from './Dock';
 import {
   AccountPanel,
@@ -11,6 +11,7 @@ import {
 } from './Hud';
 import { LifeStatus } from './LifeStatus';
 import { LoadingScreen } from './LoadingScreen';
+import { PhotoLayer, PhotoTools } from './PhotoControls';
 import { usePanels, type OpenPanel, type Panel } from './panels';
 import { FeedPanel, FeedToast, PlayPanel, useFood } from './PlayControls';
 import { navigate } from './router';
@@ -143,6 +144,8 @@ export function App() {
   const { panel: requested, newTank, dispatch } = usePanels();
   const panel: Panel = home ? requested : 'none';
   const [food, setFood] = useFood();
+  const { interaction } = useBridge();
+  const photoActive = usePhotoView()?.state.active ?? false;
   const shell = useRef<HTMLDivElement>(null);
   const dock = useRef<HTMLDivElement>(null);
   const previous = useRef(route.name);
@@ -166,6 +169,15 @@ export function App() {
     dispatch({ type: 'route-changed', home });
   }, [route.name, home, dispatch]);
 
+  useEffect(() => {
+    if (!home && photoActive) interaction.emit('photo:request', { type: 'exit' });
+  }, [home, photoActive, interaction]);
+
+  const startPhoto = () => {
+    dispatch({ type: 'close' });
+    interaction.emit('photo:request', { type: 'enter' });
+  };
+
   const closable = panel !== 'none' && panel !== 'decor';
   useEffect(() => {
     if (!closable) return;
@@ -183,7 +195,7 @@ export function App() {
   };
 
   return (
-    <div className="shell" ref={shell}>
+    <div className={photoActive ? 'shell photo-on' : 'shell'} ref={shell}>
       <a
         className="skip"
         href="#tank"
@@ -194,55 +206,59 @@ export function App() {
       >
         Skip to the tank
       </a>
-      <header className="hud">
-        <div className="hud-left">
-          <StatusCard open={panel === 'report'} onPress={() => toggle('report')} />
-          <CameraControls />
-        </div>
-        <div className="hud-right">
-          <div className="hud-buttons">
-            <TankButton open={panel === 'tanks'} onPress={() => toggle('tanks')} />
-            <AvatarButton open={panel === 'account'} onPress={() => toggle('account')} />
+      <div id="photo-chrome" className="chrome">
+        <header className="hud">
+          <div className="hud-left">
+            <StatusCard open={panel === 'report'} onPress={() => toggle('report')} />
+            <CameraControls />
           </div>
-          <TankTypeSwitch
-            onCreate={(biome) => {
-              if (!home) navigate('/');
-              dispatch({ type: 'new-tank', biome });
-            }}
-          />
+          <div className="hud-right">
+            <div className="hud-buttons">
+              <TankButton open={panel === 'tanks'} onPress={() => toggle('tanks')} />
+              <AvatarButton open={panel === 'account'} onPress={() => toggle('account')} />
+            </div>
+            <TankTypeSwitch
+              onCreate={(biome) => {
+                if (!home) navigate('/');
+                dispatch({ type: 'new-tank', biome });
+              }}
+            />
+          </div>
+        </header>
+        <div className="toasts">
+          <LifeStatus />
+          <FeedToast />
         </div>
-      </header>
-      <div className="toasts">
-        <LifeStatus />
-        <FeedToast />
-      </div>
-      {isOpen(panel) && (
-        <Sheet
-          key={panel}
-          panel={panel}
-          label={PANEL_TITLE[panel].label}
-          title={PANEL_TITLE[panel].title}
-          closeLabel={panel === 'decor' ? 'Done' : 'Close'}
-          onClose={() => dispatch({ type: 'close' })}
-        >
-          <Suspense
-            fallback={
-              <p className="hint" role="status">
-                Opening.
-              </p>
-            }
+        {isOpen(panel) && (
+          <Sheet
+            key={panel}
+            panel={panel}
+            label={PANEL_TITLE[panel].label}
+            title={PANEL_TITLE[panel].title}
+            closeLabel={panel === 'decor' ? 'Done' : 'Close'}
+            onClose={() => dispatch({ type: 'close' })}
           >
-            <PanelBody panel={panel} newTank={newTank} food={food} onFood={setFood} />
-          </Suspense>
-        </Sheet>
-      )}
-      <LifeDialogs onReview={() => dispatch({ type: 'open', panel: 'care' })} />
-      <div className={home ? 'stage' : 'stage modal'}>
-        <Screen />
+            <Suspense
+              fallback={
+                <p className="hint" role="status">
+                  Opening.
+                </p>
+              }
+            >
+              <PanelBody panel={panel} newTank={newTank} food={food} onFood={setFood} />
+            </Suspense>
+          </Sheet>
+        )}
+        <LifeDialogs onReview={() => dispatch({ type: 'open', panel: 'care' })} />
+        <div className={home ? 'stage' : 'stage modal'}>
+          <Screen />
+        </div>
+        <div className="dock-wrap" ref={dock}>
+          <Dock panel={panel} onPress={toggle} onPhoto={startPhoto} />
+        </div>
+        <PhotoTools />
       </div>
-      <div className="dock-wrap" ref={dock}>
-        <Dock panel={panel} onPress={toggle} />
-      </div>
+      <PhotoLayer />
       {home && <LoadingScreen />}
     </div>
   );

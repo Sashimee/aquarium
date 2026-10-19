@@ -82,6 +82,7 @@ export function tankFixture(overrides: Partial<Tank> = {}): Tank {
     shared: false,
     shareToken: null,
     equipment: DEFAULT_EQUIPMENT,
+    recentVisitDays: 0,
     fish: [],
     memorials: [],
     ...overrides,
