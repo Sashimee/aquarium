@@ -26,3 +26,11 @@ Review with `gh pr view <n>`, `gh pr diff <n>` and `gh pr checks <n>`. Check the
 ## Verdict
 
 Every PR is authored by the same GitHub account you review with, so `--approve` and `--request-changes` are refused. Post `gh pr review <n> --comment --body "<verdict>"` whose first line is exactly `APPROVED` or `CHANGES REQUESTED`, followed by numbered findings with file:line and why. The orchestrator gates merges on that first line. Approve only if there are no correctness or security findings left. Style nits don't block. Report the verdict and the findings.
+
+## Shared machine
+
+Up to six agents share this host and the session scratchpad.
+
+- Put temp files in your own subfolder, `<scratchpad>/<issue-or-PR>/`, and delete only the exact paths you created. Never `rm` with a wildcard outside that subfolder.
+- Stop only processes you started, by their PID. Never `pkill`, `killall` or `pkill -f <pattern>`.
+- Remove the worktrees, containers and `node_modules` you created, and nothing else.

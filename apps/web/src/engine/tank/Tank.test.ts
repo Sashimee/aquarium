@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Box3, Color, Mesh, type MeshBasicNodeMaterial, Texture, Vector3 } from 'three/webgpu';
+import { texture } from 'three/tsl';
+import { BACKGROUND_TIERS } from '@aquarium/shared';
 import { Caustics } from '../water/caustics';
 import { InteriorLight } from '../water/interior';
 import { WaterMedium } from '../water/medium';
@@ -13,7 +15,9 @@ import {
 } from './dimensions';
 import { meanSubstrateHeight } from './substrate';
 import { UNREFLECTED_LAYER } from './surfaceReflection';
-import { Tank } from './Tank';
+import { posterSpan, Tank } from './Tank';
+
+const POSTER_ASPECT = BACKGROUND_TIERS.high[0] / BACKGROUND_TIERS.high[1];
 
 function tank(d: TankDimensions = DEFAULT_TANK): Tank {
   const medium = new WaterMedium(waterBounds(d), { cdom440: 0.05, turbidity: 0.08 });
@@ -24,7 +28,7 @@ function tank(d: TankDimensions = DEFAULT_TANK): Tank {
     new Color(0.13, 0.09, 0.055),
     meanSubstrateHeight(d),
   );
-  return new Tank(d, medium, new Texture(), interior);
+  return new Tank(d, medium, new Texture(), interior, texture(new Texture()));
 }
 
 function boxOf(t: Tank, name: string): Box3 {
@@ -179,6 +183,33 @@ describe('Tank', () => {
       expect(mesh, name).toBe(before.get(name));
       expect(mesh.material, name).toBe(before.get(name)?.material);
     }
+  });
+
+  it.each(tankSizeSchema.options)('crops the poster to cover the %s back pane', (size) => {
+    const d = TANK_DIMENSIONS[size];
+    const [u, v] = posterSpan(d);
+    expect(Math.max(u, v)).toBe(1);
+    expect(Math.min(u, v)).toBeGreaterThan(0);
+    expect((u * POSTER_ASPECT) / v).toBeCloseTo(d.length / d.height, 9);
+  });
+
+  it('refits the poster to the back pane on a resize without touching its material', () => {
+    const t = tank();
+    const material = meshes(t).get('backdrop')?.material as MeshBasicNodeMaterial;
+    const colorNode = material.colorNode;
+    const version = material.version;
+    const { pane, span } = t.poster;
+    expect(pane.value.toArray()).toEqual([DEFAULT_TANK.length, DEFAULT_TANK.height]);
+    expect(span.value.toArray()).toEqual(posterSpan(DEFAULT_TANK));
+
+    const nano = TANK_DIMENSIONS.nano30;
+    expect(posterSpan(nano)).not.toEqual(posterSpan(DEFAULT_TANK));
+    t.resize(nano);
+    expect(t.poster.pane).toBe(pane);
+    expect(pane.value.toArray()).toEqual([nano.length, nano.height]);
+    expect(span.value.toArray()).toEqual(posterSpan(nano));
+    expect(material.colorNode).toBe(colorNode);
+    expect(material.version).toBe(version);
   });
 
   it('does nothing for the size it already has, and rejects a broken one', () => {

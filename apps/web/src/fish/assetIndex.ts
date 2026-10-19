@@ -41,11 +41,11 @@ export interface FishAssetEntry {
   readonly impostor: ImpostorAtlasInfo | null;
 }
 
-function fail(path: string, expected: string): never {
+export function fail(path: string, expected: string): never {
   throw new TypeError(`assets/index.json: ${path} must be ${expected}; re-run the asset pipeline`);
 }
 
-function record(value: unknown, path: string): Record<string, unknown> {
+export function record(value: unknown, path: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) fail(path, 'an object');
   return value as Record<string, unknown>;
 }

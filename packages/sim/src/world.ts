@@ -2,6 +2,7 @@ import type { Collider, FishSex, FishStage, TankSpace } from '@aquarium/shared';
 import { Basin, type TankDimensions } from './basin.ts';
 import { Behaviour, BEHAVIOUR, type Anchor, type Plan, type Stimulus } from './behaviour.ts';
 import { sexCode, StageCode, stageCode, type SimBrood } from './brood.ts';
+import { algaeGrazer, grazeAreaRate, type CrewTally } from './crew.ts';
 import { DecorField, UnionSdf, type Point3 } from './decor.ts';
 import { FEEDING, feedingHeight, gutForHunger } from './feeding.ts';
 import { FishResize } from './fishArrays.ts';
@@ -225,6 +226,7 @@ const MAX_BODY_PUSHES = 8;
 const STATION_MEMO = 8;
 
 const NO_ATE_EVENTS: readonly AteEvent[] = Object.freeze([]);
+const NO_CREW_TALLY: readonly CrewTally[] = Object.freeze([]);
 
 export class World {
   private _count: number;
@@ -233,6 +235,9 @@ export class World {
   readonly basin: Basin;
   readonly species: readonly SimSpecies[];
   tick = 0;
+  private algaeCover = 0;
+  /** Algae m² grazed per fish id since `takeCrewTally`, in first-graze order. */
+  private readonly algaeGrazed = new Map<string, number>();
   /** Steps where the hard SDF constraint had to move a fish; avoidance should keep this rare. */
   contacts = 0;
   /** Fish-steps spent inside a plant (soft contact). */
@@ -705,6 +710,35 @@ export class World {
     this.food.set(buffer, this.tick);
   }
 
+  /**
+   * The share of grazable surface under algae film, 0 to 1, as the lifecycle tracks it. Grazers
+   * clear film only where there is some: at 0 (the default) they graze nothing.
+   */
+  setAlgae(cover: number): void {
+    if (!(Number.isFinite(cover) && cover >= 0 && cover <= 1)) {
+      throw new RangeError(`algae cover must be within 0 to 1, got ${cover}`);
+    }
+    this.algaeCover = cover;
+  }
+
+  /**
+   * Algae each fish grazed and settled food it scavenged since the last call, one entry per fish
+   * that did either, removed fish included, in the order they first did.
+   */
+  takeCrewTally(): readonly CrewTally[] {
+    const settled = this.behaviour.feeding.takeSettled();
+    if (this.algaeGrazed.size === 0 && settled.size === 0) return NO_CREW_TALLY;
+    const out: CrewTally[] = [];
+    for (const [fishId, algaeM2] of this.algaeGrazed) {
+      out.push({ fishId, algaeM2, settledPortions: settled.get(fishId) ?? 0 });
+    }
+    for (const [fishId, settledPortions] of settled) {
+      if (!this.algaeGrazed.has(fishId)) out.push({ fishId, algaeM2: 0, settledPortions });
+    }
+    this.algaeGrazed.clear();
+    return out;
+  }
+
   /** What fish have eaten since the last call, in the order it happened. */
   takeAteEvents(): readonly AteEvent[] {
     const events = this.behaviour.feeding.events;
@@ -1056,7 +1090,38 @@ export class World {
         this.contactCount[i] = (this.contactCount[i] ?? 0) + 1;
       }
     }
+    if (this.algaeCover > 0) this.tallyGrazing();
     this.tick++;
+  }
+
+  private tallyGrazing(): void {
+    const { target, handling } = this.behaviour.feeding;
+    const attached = this.walkers.attached;
+    for (let i = 0; i < this.count; i++) {
+      const state = this.state[i];
+      let grazing: boolean;
+      switch (algaeGrazer(this.speciesOf(i))) {
+        case 'surface':
+          grazing =
+            attached[i] === 1 &&
+            (state === FishState.Pick || state === FishState.Walk) &&
+            (target[i] ?? -1) < 0 &&
+            (handling[i] ?? 0) <= 0;
+          break;
+        case 'glass':
+        case 'rock':
+          grazing = state === FishState.Graze;
+          break;
+        case 'none':
+          grazing = false;
+      }
+      if (!grazing) continue;
+      const id = this.fishIds[i];
+      if (id === undefined) continue;
+      const area =
+        grazeAreaRate(this.bodyLength[i] ?? 0, this.speed[i] ?? 0) * STEP_DT * this.algaeCover;
+      this.algaeGrazed.set(id, (this.algaeGrazed.get(id) ?? 0) + area);
+    }
   }
 
   private steer(i: number): void {

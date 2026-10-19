@@ -1,3 +1,4 @@
+import type { Biome, TankSize } from '@aquarium/shared';
 import {
   AgXToneMapping,
   Color,
@@ -25,6 +26,7 @@ import { showDeviceNotice } from './deviceNotice';
 import { EffectsSlot } from './effectsSlot';
 import { PipelineFailureHandler, usesMaterial, watchPipelineErrors } from './pipelineErrors';
 import { installRoomLighting, DEFAULT_HDRI_URL } from './environment';
+import { ASSET_BASE } from '../scene/assets';
 import { createSharedKtx2, type Ktx2Textures } from './ktx2';
 import { EventBus, type BackendKind, type EngineEvents, type EngineEventBus } from './events';
 import { CullPrewarm } from './cullPrewarm';
@@ -37,7 +39,7 @@ import type { EngineOptions } from './options';
 import { qualityProfile } from './quality/profile';
 import { QualityManager } from './quality/QualityManager';
 import { renderPixelRatio } from './quality/tiers';
-import type { TankSize } from '@aquarium/shared';
+import { TankBackground } from './tank/background';
 import {
   defaultView,
   TANK_DIMENSIONS,
@@ -135,6 +137,8 @@ export class Engine {
   readonly caustics: Caustics;
   readonly interior: InteriorLight;
   readonly tank: Tank;
+  /** The picture behind the back glass; change it with `setBackground`. */
+  readonly background: TankBackground;
   readonly hood = new DirectionalLight(HOOD_COLOR, HOOD_INTENSITY);
   /** Room light reaching the water from outside the hood, for in-scatter. */
   readonly ambientScatter = new Color(0.02, 0.03, 0.034);
@@ -304,7 +308,15 @@ export class Engine {
       substrateAlbedo: this.substrateAlbedo,
       roomBackgroundIntensity,
     };
-    this.tank = new Tank(dimensions, this.medium, roomLighting.texture, this.interior);
+    this.background = new TankBackground(this.ktx2, this.quality.tier, ASSET_BASE);
+    cleanup.add(() => this.background.dispose());
+    this.tank = new Tank(
+      dimensions,
+      this.medium,
+      roomLighting.texture,
+      this.interior,
+      this.background.map,
+    );
     cleanup.add(() => this.tank.dispose());
     this.scene.add(this.tank.group);
     this.scene.fogNode = this.medium.fogNode();
@@ -401,6 +413,26 @@ export class Engine {
   /** Where the scene is seen from this frame; LOD and audio should measure from here. */
   get viewPosition(): Vector3 {
     return this.photo.viewPosition;
+  }
+
+  /**
+   * Shows the tank's background picture at the quality tier's size: `id` if it is one of
+   * `biome`'s, else the biome's default. A failed load is reported on `engine:error` and leaves
+   * the plain backdrop film.
+   */
+  setBackground(biome: Biome, id: string | null): Promise<void> {
+    if (this.disposed) return Promise.resolve();
+    return this.background
+      .show(biome, id)
+      .catch((cause: unknown) => this.reportError('The tank background failed to load', cause));
+  }
+
+  /** Hands the background the scene's parsed `assets/index.json`; until then it shows the film. */
+  useBackgroundIndex(json: unknown): Promise<void> {
+    if (this.disposed) return Promise.resolve();
+    return this.background
+      .useIndex(json)
+      .catch((cause: unknown) => this.reportError('The tank background failed to load', cause));
   }
 
   /** Depth of field follows the focus camera, on tiers that allow it. */
@@ -539,6 +571,13 @@ export class Engine {
     });
     // A tier change can rebuild pipelines without touching a material, e.g. by toggling shadows.
     this.quality.register('cull-prewarm', () => this.cullPrewarm.invalidate());
+    this.quality.register('background', (_, tier) => {
+      this.background
+        .setTier(tier)
+        .catch((cause: unknown) =>
+          this.reportError('The tank background failed to load at the new tier', cause),
+        );
+    });
     this.quality.register('surface-reflection', (s) => {
       const wasOn = this.tank.surfaceReflection;
       this.tank.setSurfaceReflection(s.surfaceReflection);

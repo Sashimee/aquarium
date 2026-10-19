@@ -34,3 +34,11 @@ Model: sonnet — scoped research and bookkeeping, where the judgement calls are
 - Manifest entry per asset: `id, kind, species?, title, author, author_url, source_url, licence, licence_url, checked_at, sha256, polycount, textures, rigged, notes, modifications[], status, files[]?`. `status` is one of the manifest's top-level `status_values` (`downloaded` | `selected-pending-download`); `sha256` is null exactly when pending. Multi-file assets list `files[]` and their `sha256` follows the top-level `rules` recipe.
 - For each MVP species (PLAN §3), rank up to 3 candidates in `docs/assets/catalog.md` with a screenshot or render, polycount, texture quality, anatomical accuracy and licence. Pick one, or mark the species **fallback: procedural loft** with the CC0/CC-BY reference photos to use.
 - Never commit raw files. Commit only the manifest, catalog and credits. The pipeline agent processes the raw files.
+
+## Shared machine
+
+Up to six agents share this host and the session scratchpad.
+
+- Put temp files in your own subfolder, `<scratchpad>/<issue-or-PR>/`, and delete only the exact paths you created. Never `rm` with a wildcard outside that subfolder.
+- Stop only processes you started, by their PID. Never `pkill`, `killall` or `pkill -f <pattern>`.
+- Remove the worktrees, containers and `node_modules` you created, and nothing else.

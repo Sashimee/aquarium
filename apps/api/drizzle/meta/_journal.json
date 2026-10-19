@@ -99,6 +99,34 @@
       "when": 1792404651101,
       "tag": "0013_push_last_used",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1792420408500,
+      "tag": "0014_personality_visits",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1792421226826,
+      "tag": "0015_personality_no_default",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792423349430,
+      "tag": "0016_collection",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792429165045,
+      "tag": "0017_away_replay_events",
+      "breakpoints": true
     }
   ]
 }

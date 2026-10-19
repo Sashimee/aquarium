@@ -3,6 +3,7 @@ import {
   ateBatchRequestSchema,
   backgroundIdSchema,
   careActionSchema,
+  careEventSchema,
   chemistrySchema,
   containsBlockedWord,
   createTankRequestSchema,
@@ -20,6 +21,8 @@ import {
   newTankChemistry,
   TANK_SIZES,
   personalitySchema,
+  replayQuerySchema,
+  replayResponseSchema,
   speciesListSchema,
   tankListSchema,
   tankSchema,
@@ -46,13 +49,29 @@ import {
   type LifecycleState,
 } from '@aquarium/sim/lifecycle';
 import { randomInt, randomUUID } from 'node:crypto';
-import { and, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  getTableColumns,
+  gt,
+  gte,
+  inArray,
+  lt,
+  lte,
+  or,
+  sql,
+} from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { audit } from './audit.ts';
+import { personalityFromFishId } from './personality.ts';
 import { issueShareToken } from './shareToken.ts';
 import type { Clock } from './clock.ts';
 import { schema, type Database } from './db/index.ts';
+import { recordCollection, type CollectionObservation } from './collection.ts';
+import { countRecentVisitDays, recordVisit } from './visits.ts';
 import { apiError } from './errors.ts';
 import type { Limit, RateLimiter } from './rate-limit.ts';
 import type { SpeciesCatalog } from './species.ts';
@@ -62,6 +81,7 @@ export interface CareLimits {
   care: Limit;
   ate: Limit;
   addFish: Limit;
+  replay: Limit;
 }
 
 export const DEFAULT_CARE_LIMITS: CareLimits = {
@@ -69,6 +89,7 @@ export const DEFAULT_CARE_LIMITS: CareLimits = {
   care: { max: 60, windowMs: 10 * 60_000 },
   ate: { max: 30, windowMs: 60_000 },
   addFish: { max: 20, windowMs: 60 * 60_000 },
+  replay: { max: 30, windowMs: 60_000 },
 };
 
 const EVENT_RETENTION_MS = 90 * 86_400_000;
@@ -100,6 +121,27 @@ const atePayloadSchema = z.looseObject({ fishId: idSchema, portion: z.number().p
 const tankParamsSchema = z.strictObject({ tankId: idSchema });
 const fishParamsSchema = z.strictObject({ tankId: idSchema, fishId: idSchema });
 
+const CURSOR_AT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
+
+function encodeReplayCursor(row: { atUs: string; id: string }): string {
+  return Buffer.from(`${row.atUs}|${row.id}`).toString('base64url');
+}
+
+function decodeReplayCursor(raw: string): { atUs: string; id: string } {
+  const parts = Buffer.from(raw, 'base64url').toString().split('|');
+  const [atUs, id] = parts;
+  const parsedId = idSchema.safeParse(id);
+  if (parts.length !== 2 || !atUs || !CURSOR_AT.test(atUs) || !parsedId.success) {
+    throw new HttpError(
+      400,
+      apiError('validation_failed', 'The cursor is not valid. Start again without one.', [
+        { path: ['cursor'], message: 'not a cursor this server issued' },
+      ]),
+    );
+  }
+  return { atUs, id: parsedId.data };
+}
+
 class HttpError extends Error {
   constructor(
     readonly status: number,
@@ -108,14 +150,6 @@ class HttpError extends Error {
     super(body.error.message);
   }
 }
-
-const rollTrait = () => randomInt(0, 1001) / 1000;
-
-const rollPersonality = () => ({
-  boldness: rollTrait(),
-  greed: rollTrait(),
-  sociability: rollTrait(),
-});
 
 const nameNotPublic = () =>
   new HttpError(
@@ -179,6 +213,7 @@ interface Ticked {
   fishRows: FishRow[];
   state: LifecycleState;
   away: AwaySummary | null;
+  nowMs: number;
 }
 
 async function lockAndTick(
@@ -233,12 +268,27 @@ async function lockAndTick(
       ),
     );
 
-  if (result.steps === 0) return { tank, fishRows, state: initial, away: null };
+  if (result.steps === 0) return { tank, fishRows, state: initial, away: null, nowMs: now };
 
   const updatedRows = await persistFish(tx, fishRows, result.state);
   const bornRows = await insertNewborns(tx, tank.id, result.births, result.state, deps);
+  const observed: CollectionObservation[] = [];
+  const nextStage = new Map(result.state.fish.map((f) => [f.id, f]));
+  for (const row of fishRows) {
+    if (row.stage !== 'adult' && nextStage.get(row.id)?.stage === 'adult') {
+      observed.push({ species: row.species, kind: 'raised', atMs: result.advancedToMs });
+    }
+  }
+  for (const b of result.births) {
+    observed.push({ species: b.species, kind: 'bred', atMs: b.bornAtMs });
+    if (nextStage.get(b.fishId)?.stage === 'adult') {
+      observed.push({ species: b.species, kind: 'raised', atMs: result.advancedToMs });
+    }
+  }
+  await recordCollection(tx, user.id, deps.species, observed, new Date(now));
   const byId = new Map([...fishRows, ...bornRows.values()].map((r) => [r.id, r]));
   const away: AwaySummary = {
+    fromAt: tank.lastTickAt.toISOString(),
     elapsedMinutes: result.elapsedMinutes,
     capped: result.capped,
     deaths: result.deaths.map((d) => {
@@ -296,6 +346,26 @@ async function lockAndTick(
       })),
     );
   }
+  const recentTimeline = result.timeline.filter((e) => e.atMs >= now - EVENT_RETENTION_MS);
+  if (recentTimeline.length > 0) {
+    await tx.insert(schema.events).values(
+      recentTimeline.map((e) =>
+        e.kind === 'sick'
+          ? {
+              tankId: tank.id,
+              at: new Date(e.atMs),
+              kind: 'sick' as const,
+              payload: { fishId: e.fishId },
+            }
+          : {
+              tankId: tank.id,
+              at: new Date(e.atMs),
+              kind: 'water_alert' as const,
+              payload: { metric: e.metric, state: e.state },
+            },
+      ),
+    );
+  }
   return {
     tank: {
       ...tank,
@@ -306,6 +376,7 @@ async function lockAndTick(
     fishRows: [...updatedRows, ...bornRows.values()],
     state: result.state,
     away,
+    nowMs: now,
   };
 }
 
@@ -335,7 +406,7 @@ async function insertNewborns(
       diedAt: fish.diedAtMs === null ? null : new Date(fish.diedAtMs),
       cause: fish.cause,
       lastBroodAt: fish.lastBroodAtMs === null ? null : new Date(fish.lastBroodAtMs),
-      personality: rollPersonality(),
+      personality: personalityFromFishId(b.fishId),
       bornAt: new Date(b.bornAtMs),
       size: fish.size,
       hunger: fish.hunger,
@@ -394,6 +465,7 @@ async function render(
   issuedShareToken: string | null = null,
 ): Promise<Tank> {
   const { tank, away } = ticked;
+  const recentVisitDays = await countRecentVisitDays(tx, tank.id, ticked.nowMs);
   const memorials = await tx
     .select()
     .from(schema.memorials)
@@ -417,6 +489,7 @@ async function render(
     lastTickAt: tank.lastTickAt.toISOString(),
     chemistry: chemistrySchema.parse(tank.chemistry),
     equipment: equipmentSchema.parse(tank.equipment),
+    recentVisitDays,
     fish: fishRows
       .toSorted((a, b) => a.bornAt.getTime() - b.bornAt.getTime() || a.id.localeCompare(b.id))
       .map((f) => ({
@@ -561,6 +634,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
             fish: [],
           },
           away: null,
+          nowMs: clock.now(),
         });
       });
       return reply.code(201).send(created);
@@ -572,7 +646,65 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
     guarded(async (req) => {
       const user = await authorize(req);
       const { tankId } = tankParamsSchema.parse(req.params);
-      return withTank(user, tankId, (tx, ticked) => render(tx, ticked));
+      return withTank(user, tankId, async (tx, ticked) => {
+        await recordVisit(tx, ticked.tank.id, ticked.nowMs);
+        return render(tx, ticked);
+      });
+    }),
+  );
+
+  app.get(
+    '/api/tanks/:tankId/replay',
+    guarded(async (req) => {
+      const user = await authorize(req);
+      const { tankId } = tankParamsSchema.parse(req.params);
+      const query = replayQuerySchema.parse(req.query);
+      throttle(user.id, 'replay');
+      const since = new Date(query.since);
+      const cursor = query.cursor ? decodeReplayCursor(query.cursor) : null;
+      return withTank(user, tankId, async (tx, ticked) => {
+        const until = query.until ? new Date(query.until) : new Date(ticked.nowMs);
+        const rows = await tx
+          .select({
+            ...getTableColumns(schema.events),
+            atUs: sql<string>`to_char(${schema.events.at} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+          })
+          .from(schema.events)
+          .where(
+            and(
+              eq(schema.events.tankId, tankId),
+              gt(schema.events.at, since),
+              lte(schema.events.at, until),
+              ...(cursor
+                ? [
+                    or(
+                      sql`${schema.events.at} > ${cursor.atUs}::timestamptz`,
+                      and(
+                        sql`${schema.events.at} = ${cursor.atUs}::timestamptz`,
+                        gt(schema.events.id, cursor.id),
+                      ),
+                    ),
+                  ]
+                : []),
+            ),
+          )
+          .orderBy(asc(schema.events.at), asc(schema.events.id))
+          .limit(query.limit + 1);
+        const page = rows.slice(0, query.limit);
+        const last = page.at(-1);
+        return replayResponseSchema.parse({
+          events: page.map((r) =>
+            careEventSchema.parse({
+              id: r.id,
+              tankId: r.tankId,
+              at: r.at.toISOString(),
+              kind: r.kind,
+              payload: r.payload,
+            }),
+          ),
+          nextCursor: rows.length > query.limit && last ? encodeReplayCursor(last) : null,
+        });
+      });
     }),
   );
 
@@ -761,19 +893,28 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
             ),
           );
         }
+        const id = randomUUID();
         const [row] = await tx
           .insert(schema.fish)
           .values({
+            id,
             tankId,
             species: spec.id,
             name: body.name,
             sex: randomInt(2) === 0 ? 'male' : 'female',
-            personality: rollPersonality(),
+            personality: personalityFromFishId(id),
             bornAt: new Date(clock.now()),
             size: spec.lifecycle.birthSizeM,
           })
           .returning();
         if (!row) throw new Error('fish insert returned no row');
+        await recordCollection(
+          tx,
+          user.id,
+          species,
+          [{ species: spec.id, kind: 'kept', atMs: row.bornAt.getTime() }],
+          row.bornAt,
+        );
         return { tank: await render(tx, { ...ticked, fishRows: [...ticked.fishRows, row] }) };
       });
       return reply.code(201).send(result.tank);

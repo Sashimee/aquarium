@@ -13,7 +13,13 @@ import {
 import { chemistrySchema } from './chemistry.js';
 import { equipmentSchema } from './equipment.js';
 import { QUARANTINE_TANK_SIZE, tankSizeSchema } from './tankSize.js';
-import { diseaseStateSchema, fishStageSchema, personalitySchema } from './fishState.js';
+import { idempotencyKeySchema, purchasableStageSchema } from './economy.js';
+import {
+  diseaseStateSchema,
+  fishStageSchema,
+  personalitySchema,
+  VISIT_WINDOW_DAYS,
+} from './fishState.js';
 
 // Response objects are non-strict so a tab on an older bundle ignores fields added later.
 export const waterSchema = z.object({
@@ -77,6 +83,11 @@ export const memorialSchema = z.object({
 export type Memorial = z.infer<typeof memorialSchema>;
 
 export const awaySummarySchema = z.object({
+  fromAt: timestampSchema
+    .optional()
+    .describe(
+      'where the offline catch-up started: pass it as `since` to the replay route. Read the tank first: the read runs the catch-up and writes the events, so a replay called before it sees nothing of the absence',
+    ),
   elapsedMinutes: z.int().nonnegative(),
   capped: z.boolean(),
   deaths: z.array(
@@ -126,6 +137,14 @@ export const tankSchema = z.object({
   lastTickAt: timestampSchema,
   chemistry: chemistrySchema,
   equipment: equipmentSchema,
+  recentVisitDays: z
+    .number()
+    .int()
+    .min(0)
+    .max(VISIT_WINDOW_DAYS)
+    .describe(
+      'distinct UTC days in the last VISIT_WINDOW_DAYS on which the owner opened this tank',
+    ),
   fish: z.array(fishSchema),
   memorials: z.array(memorialSchema),
   away: awaySummarySchema.optional(),
@@ -160,6 +179,8 @@ export type UpdateTankRequest = z.infer<typeof updateTankRequestSchema>;
 export const addFishRequestSchema = z.strictObject({
   species: slugSchema,
   name: z.string().trim().min(1).max(40),
+  stage: purchasableStageSchema.optional().describe('missing means DEFAULT_PURCHASE_STAGE'),
+  idempotencyKey: idempotencyKeySchema.optional(),
 });
 export type AddFishRequest = z.infer<typeof addFishRequestSchema>;
 

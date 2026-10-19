@@ -72,85 +72,113 @@ export function registerLegalRoutes(deps: LegalDeps): void {
     const [user] = await db.select().from(schema.user).where(eq(schema.user.id, userId));
     if (!user) return unauthenticated(reply);
 
-    const [sessions, accounts, passkeys, tanks, [prefs], subscriptions, reactions, auditRows] =
-      await Promise.all([
-        db
-          .select({
-            id: schema.session.id,
-            createdAt: schema.session.createdAt,
-            expiresAt: schema.session.expiresAt,
-            ipAddress: schema.session.ipAddress,
-            userAgent: schema.session.userAgent,
-          })
-          .from(schema.session)
-          .where(eq(schema.session.userId, userId))
-          .orderBy(asc(schema.session.createdAt)),
-        db
-          .select({
-            id: schema.account.id,
-            providerId: schema.account.providerId,
-            hasPassword: schema.account.password,
-            createdAt: schema.account.createdAt,
-          })
-          .from(schema.account)
-          .where(eq(schema.account.userId, userId))
-          .orderBy(asc(schema.account.createdAt)),
-        db
-          .select({
-            id: schema.passkey.id,
-            name: schema.passkey.name,
-            deviceType: schema.passkey.deviceType,
-            backedUp: schema.passkey.backedUp,
-            transports: schema.passkey.transports,
-            createdAt: schema.passkey.createdAt,
-          })
-          .from(schema.passkey)
-          .where(eq(schema.passkey.userId, userId))
-          .orderBy(asc(schema.passkey.createdAt)),
-        db
-          .select()
-          .from(schema.tanks)
-          .where(eq(schema.tanks.ownerId, userId))
-          .orderBy(asc(schema.tanks.createdAt)),
-        db.select().from(schema.reminderPrefs).where(eq(schema.reminderPrefs.userId, userId)),
-        db
-          .select({
-            id: schema.pushSubscriptions.id,
-            endpoint: schema.pushSubscriptions.endpoint,
-            createdAt: schema.pushSubscriptions.createdAt,
-            lastUsedAt: schema.pushSubscriptions.lastUsedAt,
-          })
-          .from(schema.pushSubscriptions)
-          .where(eq(schema.pushSubscriptions.userId, userId))
-          .orderBy(asc(schema.pushSubscriptions.createdAt)),
-        db
-          .select({
-            tankName: schema.tanks.name,
-            shared: sql<boolean>`${schema.tanks.shareTokenHash} is not null`,
-            kind: schema.tankReactions.kind,
-            createdAt: schema.tankReactions.createdAt,
-          })
-          .from(schema.tankReactions)
-          .innerJoin(schema.tanks, eq(schema.tanks.id, schema.tankReactions.tankId))
-          .where(eq(schema.tankReactions.userId, userId))
-          .orderBy(asc(schema.tankReactions.createdAt)),
-        db
-          .select({
-            at: schema.auditLog.at,
-            action: schema.auditLog.action,
-            detail: schema.auditLog.detail,
-            tankName: schema.tanks.name,
-            visible: sql<boolean>`(${schema.tanks.ownerId} = ${userId} or ${schema.tanks.shareTokenHash} is not null)`,
-          })
-          .from(schema.auditLog)
-          .leftJoin(schema.tanks, eq(schema.tanks.id, schema.auditLog.tankId))
-          .where(eq(schema.auditLog.actorId, userId))
-          .orderBy(asc(schema.auditLog.at)),
-      ]);
+    const [
+      sessions,
+      accounts,
+      passkeys,
+      tanks,
+      [prefs],
+      subscriptions,
+      reactions,
+      auditRows,
+      collectionRows,
+      awardRows,
+    ] = await Promise.all([
+      db
+        .select({
+          id: schema.session.id,
+          createdAt: schema.session.createdAt,
+          expiresAt: schema.session.expiresAt,
+          ipAddress: schema.session.ipAddress,
+          userAgent: schema.session.userAgent,
+        })
+        .from(schema.session)
+        .where(eq(schema.session.userId, userId))
+        .orderBy(asc(schema.session.createdAt)),
+      db
+        .select({
+          id: schema.account.id,
+          providerId: schema.account.providerId,
+          hasPassword: schema.account.password,
+          createdAt: schema.account.createdAt,
+        })
+        .from(schema.account)
+        .where(eq(schema.account.userId, userId))
+        .orderBy(asc(schema.account.createdAt)),
+      db
+        .select({
+          id: schema.passkey.id,
+          name: schema.passkey.name,
+          deviceType: schema.passkey.deviceType,
+          backedUp: schema.passkey.backedUp,
+          transports: schema.passkey.transports,
+          createdAt: schema.passkey.createdAt,
+        })
+        .from(schema.passkey)
+        .where(eq(schema.passkey.userId, userId))
+        .orderBy(asc(schema.passkey.createdAt)),
+      db
+        .select()
+        .from(schema.tanks)
+        .where(eq(schema.tanks.ownerId, userId))
+        .orderBy(asc(schema.tanks.createdAt)),
+      db.select().from(schema.reminderPrefs).where(eq(schema.reminderPrefs.userId, userId)),
+      db
+        .select({
+          id: schema.pushSubscriptions.id,
+          endpoint: schema.pushSubscriptions.endpoint,
+          createdAt: schema.pushSubscriptions.createdAt,
+          lastUsedAt: schema.pushSubscriptions.lastUsedAt,
+        })
+        .from(schema.pushSubscriptions)
+        .where(eq(schema.pushSubscriptions.userId, userId))
+        .orderBy(asc(schema.pushSubscriptions.createdAt)),
+      db
+        .select({
+          tankName: schema.tanks.name,
+          shared: sql<boolean>`${schema.tanks.shareTokenHash} is not null`,
+          kind: schema.tankReactions.kind,
+          createdAt: schema.tankReactions.createdAt,
+        })
+        .from(schema.tankReactions)
+        .innerJoin(schema.tanks, eq(schema.tanks.id, schema.tankReactions.tankId))
+        .where(eq(schema.tankReactions.userId, userId))
+        .orderBy(asc(schema.tankReactions.createdAt)),
+      db
+        .select({
+          at: schema.auditLog.at,
+          action: schema.auditLog.action,
+          detail: schema.auditLog.detail,
+          tankName: schema.tanks.name,
+          visible: sql<boolean>`(${schema.tanks.ownerId} = ${userId} or ${schema.tanks.shareTokenHash} is not null)`,
+        })
+        .from(schema.auditLog)
+        .leftJoin(schema.tanks, eq(schema.tanks.id, schema.auditLog.tankId))
+        .where(eq(schema.auditLog.actorId, userId))
+        .orderBy(asc(schema.auditLog.at)),
+      db
+        .select({
+          species: schema.collectionEntries.species,
+          keptAt: schema.collectionEntries.keptAt,
+          bredAt: schema.collectionEntries.bredAt,
+          raisedAt: schema.collectionEntries.raisedAt,
+        })
+        .from(schema.collectionEntries)
+        .where(eq(schema.collectionEntries.userId, userId))
+        .orderBy(asc(schema.collectionEntries.keptAt)),
+      db
+        .select({
+          achievementId: schema.achievementAwards.achievementId,
+          earnedAt: schema.achievementAwards.earnedAt,
+        })
+        .from(schema.achievementAwards)
+        .where(eq(schema.achievementAwards.userId, userId))
+        .orderBy(asc(schema.achievementAwards.earnedAt)),
+    ]);
 
     const perTank = await Promise.all(
       tanks.map(async (tank) => {
-        const [fish, events, memorials] = await Promise.all([
+        const [fish, events, memorials, visits] = await Promise.all([
           db
             .select()
             .from(schema.fish)
@@ -166,9 +194,20 @@ export function registerLegalRoutes(deps: LegalDeps): void {
             .from(schema.memorials)
             .where(eq(schema.memorials.tankId, tank.id))
             .orderBy(asc(schema.memorials.diedAt)),
+          db
+            .select({ day: schema.tankVisits.day })
+            .from(schema.tankVisits)
+            .where(eq(schema.tankVisits.tankId, tank.id))
+            .orderBy(asc(schema.tankVisits.day)),
         ]);
         const { shareTokenHash, ...rest } = tank;
-        return { tank: { ...rest, shared: shareTokenHash !== null }, fish, events, memorials };
+        return {
+          tank: { ...rest, shared: shareTokenHash !== null },
+          fish,
+          events,
+          memorials,
+          visits,
+        };
       }),
     );
 
@@ -206,6 +245,7 @@ export function registerLegalRoutes(deps: LegalDeps): void {
             ...rest,
             tank: tankName === null || !visible ? null : publicName(tankName),
           })),
+          collection: { entries: collectionRows, achievements: awardRows },
           tanks: perTank,
         }),
       ),

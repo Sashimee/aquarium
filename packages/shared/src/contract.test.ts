@@ -5,6 +5,7 @@ import {
   ateBatchRequestSchema,
   careActionSchema,
   careEventSchema,
+  replayQuerySchema,
   DEFAULT_EQUIPMENT,
   newTankChemistry,
   decorItemSchema,
@@ -180,12 +181,15 @@ describe('tank and fish', () => {
       shared: false,
       shareToken: null,
       equipment: DEFAULT_EQUIPMENT,
+      recentVisitDays: 3,
       fish: [fish],
       memorials: [],
     };
     const parsed = tankSchema.parse(tank);
     expect(parsed.decorLayout[0]?.scale).toBe(1);
     expect(parsed.decorEdited).toBe(true);
+    expect(tankSchema.safeParse({ ...tank, recentVisitDays: 15 }).success).toBe(false);
+    expect(tankSchema.safeParse({ ...tank, recentVisitDays: -1 }).success).toBe(false);
     expect(tankSchema.safeParse({ ...tank, decorEdited: undefined }).success).toBe(false);
     expect(tankSchema.safeParse({ ...tank, backgroundId: 'nope' }).success).toBe(false);
     expect(
@@ -242,6 +246,30 @@ describe('care events', () => {
     expect(ateBatchRequestSchema.safeParse({ reports: [{ ...report, portion: 0 }] }).success).toBe(
       false,
     );
+  });
+
+  it('validates replay events and queries', () => {
+    const base = { id, tankId: id2, at: ts };
+    expect(
+      careEventSchema.safeParse({ ...base, kind: 'sick', payload: { fishId: id } }).success,
+    ).toBe(true);
+    expect(
+      careEventSchema.safeParse({
+        ...base,
+        kind: 'water_alert',
+        payload: { metric: 'ammonia', state: 'high' },
+      }).success,
+    ).toBe(true);
+    expect(
+      careEventSchema.safeParse({
+        ...base,
+        kind: 'water_alert',
+        payload: { metric: 'ph', state: 'high' },
+      }).success,
+    ).toBe(false);
+    expect(replayQuerySchema.parse({ since: ts }).limit).toBe(200);
+    expect(replayQuerySchema.safeParse({ since: ts, limit: '501' }).success).toBe(false);
+    expect(replayQuerySchema.safeParse({}).success).toBe(false);
   });
 
   it('validates logged events', () => {

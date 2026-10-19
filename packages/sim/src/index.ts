@@ -45,6 +45,23 @@ export {
   type CarcassStart,
 } from './carcass.ts';
 export { FEEDING, gutForHunger } from './feeding.ts';
+export {
+  algaeAreaPerHour,
+  algaeGrazer,
+  cleanupSurfaces,
+  CREW,
+  crewCleanup,
+  grazeAreaRate,
+  isScavenger,
+  scavengeSweepPerHour,
+  type AlgaeGrazer,
+  type CleanupInput,
+  type CleanupResult,
+  type CleanupSurfaces,
+  type CrewMember,
+  type CrewShare,
+  type CrewTally,
+} from './crew.ts';
 export { CURIOSITY } from './curiosity.ts';
 export { BallPhase, MirrorPhase, TOYS, type SimToy, type ToyNudge } from './toys.ts';
 export {
@@ -89,6 +106,7 @@ export {
   type SimHostOptions,
   type SimAte,
   type SimClientPort,
+  type SimCrew,
   type SimGrazeReach,
   type SimLayout,
   type SimNestSite,

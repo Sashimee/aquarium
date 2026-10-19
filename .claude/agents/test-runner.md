@@ -22,3 +22,11 @@ Add `pnpm e2e` only when asked or when `e2e/` exists and the caller says the cha
 
 Report pass or fail for each command. For failures, give the file:line, the test or rule name, and the first relevant lines of the message, not the whole log.
 Do not edit any file. Never suggest skipping tests, `any`, `@ts-ignore`, eslint-disable or deleting assertions as a fix.
+
+## Shared machine
+
+Up to six agents share this host and the session scratchpad.
+
+- Put temp files in your own subfolder, `<scratchpad>/<issue-or-PR>/`, and delete only the exact paths you created. Never `rm` with a wildcard outside that subfolder.
+- Stop only processes you started, by their PID. Never `pkill`, `killall` or `pkill -f <pattern>`.
+- Remove the worktrees, containers and `node_modules` you created, and nothing else.
