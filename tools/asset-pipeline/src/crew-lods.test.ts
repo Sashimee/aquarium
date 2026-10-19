@@ -162,28 +162,35 @@ function enclosedBackgroundPixels(prims: ShippedPrimitive[], view: ViewAxis, sea
   return enclosed;
 }
 
-function lipGap(prims: ShippedPrimitive[], length: number): number {
+function lipGapAcrossWidth(prims: ShippedPrimitive[], length: number): number {
   const shell = prims.find((p) => p.material === 'nerite-shell')!;
   const body = prims.find((p) => p.material === 'nerite-body')!;
-  const central = (positions: Float32Array, v: number): boolean =>
-    Math.abs(positions[v * 3]!) < 0.15 * length;
+  const bins = 12;
+  const binOf = (x: number): number => Math.floor(((x / length + 0.5) * bins) / 1);
   let frontZ = -Infinity;
   for (let v = 0; v < shell.positions.length / 3; v++)
     frontZ = Math.max(frontZ, shell.positions[v * 3 + 2]!);
-  let lipUnder = Infinity;
-  let lipZ = 0;
-  for (let v = 0; v < shell.positions.length / 3; v++)
-    if (central(shell.positions, v) && shell.positions[v * 3 + 2]! > frontZ - 0.12 * length) {
-      if (shell.positions[v * 3 + 1]! < lipUnder) {
-        lipUnder = shell.positions[v * 3 + 1]!;
-        lipZ = shell.positions[v * 3 + 2]!;
-      }
+  const lipUnder = new Array<number>(bins).fill(Infinity);
+  const lipZ = new Array<number>(bins).fill(0);
+  for (let v = 0; v < shell.positions.length / 3; v++) {
+    const bin = binOf(shell.positions[v * 3]!);
+    const y = shell.positions[v * 3 + 1]!;
+    if (bin < 0 || bin >= bins || shell.positions[v * 3 + 2]! < frontZ - 0.12 * length) continue;
+    if (y < lipUnder[bin]!) {
+      lipUnder[bin] = y;
+      lipZ[bin] = shell.positions[v * 3 + 2]!;
     }
-  let bodyTop = 0;
-  for (let v = 0; v < body.positions.length / 3; v++)
-    if (central(body.positions, v) && Math.abs(body.positions[v * 3 + 2]! - lipZ) < 0.08 * length)
-      bodyTop = Math.max(bodyTop, body.positions[v * 3 + 1]!);
-  return lipUnder - bodyTop;
+  }
+  const bodyTop = new Array<number>(bins).fill(-Infinity);
+  for (let v = 0; v < body.positions.length / 3; v++) {
+    const bin = binOf(body.positions[v * 3]!);
+    if (bin < 0 || bin >= bins || Math.abs(body.positions[v * 3 + 2]! - lipZ[bin]!) > 0.08 * length)
+      continue;
+    bodyTop[bin] = Math.max(bodyTop[bin]!, body.positions[v * 3 + 1]!);
+  }
+  const gaps = lipUnder.map((y, bin) => y - bodyTop[bin]!).filter(Number.isFinite);
+  console.log('GAPS', gaps.map((g) => (g / length).toFixed(3)).join(' '));
+  return Math.max(...gaps);
 }
 
 const SCANNED = [
@@ -197,7 +204,7 @@ describe('nerite seating', () => {
   for (const level of [0, 1, 2])
     it(`LOD${level} lip rests close to the body instead of perching above it`, async () => {
       const length = 0.02;
-      const gap = lipGap(await readLod('snail/nerite-snail', level), length);
+      const gap = lipGapAcrossWidth(await readLod('snail/nerite-snail', level), length);
       expect(gap).toBeLessThan(0.05 * length);
     });
 });

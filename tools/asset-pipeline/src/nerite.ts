@@ -76,7 +76,7 @@ export const NERITE_RECIPES: NeriteRecipe[] = [
     bodyRatios: [1, 0.6, 0.35],
     textureSize: 2048,
     bakeTriangles: 9000,
-    pitchDegrees: 12,
+    pitchDegrees: 18,
     patches: [
       {
         centre: [0.357, 0.24, 0.385],
@@ -380,7 +380,7 @@ export function buildNeriteBody(footprint: ShellFootprint, length: number): Neri
     for (let k = 0; k < count; k++) uvs.push(0.5, v(k));
   };
   const footH = length * 0.09;
-  const halfWidth = footprint.halfWidth * 0.78;
+  const halfWidth = footprint.halfWidth * 0.92;
   const rear = footprint.rearZ + length * 0.12;
   const front = footprint.frontZ + length * 0.14;
   const centreZ = (rear + front) / 2;
@@ -524,7 +524,7 @@ export interface PlacedShell {
 export function tiltShell(part: Part, length: number, degrees: number): ShellFootprint {
   const positions = part.positions;
   const count = positions.length / 3;
-  const rimY = length * 0.05;
+  const rimY = length * 0.012;
   const lowest = (): number =>
     percentile(
       Array.from({ length: count }, (_, i) => positions[i * 3 + 1]!).sort((a, b) => a - b),
@@ -780,7 +780,7 @@ export async function buildNerite(recipe: NeriteRecipe, ctx: FishContext): Promi
             `retouched the scan texture: ${r.note}, painted over from the surrounding shell colours`,
         ),
         `re-simplified to ${recipe.bakeTriangles} triangles, box-projected into a fresh atlas and the colour re-baked from the scan's vertex colours, ${recipe.textureSize} px KTX2`,
-        `shell pitched ${recipe.pitchDegrees} degrees nose-down so the lip rests on the foot`,
+        `shell pitched ${recipe.pitchDegrees} degrees nose-down and sunk into the foot so the lip edge tucks into the body mass`,
         'foot, mantle, head and two tentacles generated procedurally: lens-section foot with edge colour variation from a small ramp texture, mantle filling under the aperture, head and slender curved tentacles in front of the lip, deterministic',
         'origin moved to the centre of the foot on the ground',
         '_FIN_ID part ids 0 shell, 10 foot, 11 head, 12 tentacle; _FIN_MASK foot ripple weight and tentacle base-to-tip weight',
