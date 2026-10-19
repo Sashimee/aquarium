@@ -28,23 +28,10 @@ const SIZES = Object.keys(TANK_SIZES) as TankSize[];
 const MIN_DEPTH_SHARE = 0.4;
 
 /**
- * Patches whose reach (sway plus half-diagonal) leaves too little room at that size, so they still
- * collapse towards mid-depth. Mean root z bands; tracked in https://github.com/Sashimee/aquarium/issues/819.
+ * Patches that cannot keep `MIN_DEPTH_SHARE` of their authored depth at a size, keyed
+ * `<size>:<patch id>`, with the mean root z band they settle in. Empty while every patch fits.
  */
-const KNOWN_DEPTH_SHORTFALLS: Readonly<Record<string, readonly [number, number]>> = {
-  'standard:stems-back': [-0.09, -0.05],
-  'standard:vallisneria-right': [-0.04, 0.0],
-  'std200:stems-back': [-0.04, 0.0],
-  'std200:stems-mid': [-0.01, 0.03],
-  'std200:vallisneria-right': [-0.02, 0.02],
-  'long300:stems-back': [-0.05, -0.01],
-  'long300:stems-mid': [-0.04, 0.0],
-  'long300:vallisneria-right': [-0.02, 0.02],
-  'nano30:pond-weed': [-0.02, 0.02],
-  'nano30:stems-back': [-0.02, 0.02],
-  'nano30:stems-mid': [-0.01, 0.03],
-  'nano30:vallisneria-right': [-0.02, 0.02],
-};
+const KNOWN_DEPTH_SHORTFALLS: Readonly<Record<string, readonly [number, number]>> = {};
 
 let library: ModelLibrary;
 let catalog: AssetCatalog;
@@ -78,6 +65,23 @@ beforeAll(async () => {
 
 afterAll(() => {
   vi.unstubAllGlobals();
+});
+
+describe('KNOWN_DEPTH_SHORTFALLS', () => {
+  it('only pins patches that exist', () => {
+    for (const key of Object.keys(KNOWN_DEPTH_SHORTFALLS)) {
+      const [size, id] = key.split(':');
+      expect(SIZES, key).toContain(size);
+      const patches = [
+        ...loadPreset('freshwater').plantPatches,
+        ...loadPreset('reef').plantPatches,
+      ];
+      expect(
+        patches.map((p) => p.id),
+        key,
+      ).toContain(id);
+    }
+  });
 });
 
 describe.each(['freshwater', 'reef'] as const)('%s preset at the standard tank', (biome) => {

@@ -144,26 +144,41 @@ const MIME: Record<string, string> = {
   '.json': 'application/json',
 };
 
+export type Resolved = { status: 200; file: string } | { status: 400 | 404 };
+
+export function resolveRequest(
+  roots: Record<string, string>,
+  rawUrl: string | undefined,
+): Resolved {
+  let path: string;
+  try {
+    path = normalize(decodeURIComponent(new URL(rawUrl ?? '/', 'http://localhost').pathname));
+  } catch {
+    return { status: 400 };
+  }
+  const prefix =
+    Object.keys(roots).find((p) => p !== '' && (path === p || path.startsWith(`${p}/`))) ?? '';
+  const root = roots[prefix];
+  if (root === undefined) return { status: 404 };
+  const file = resolve(root, `.${path.slice(prefix.length)}`);
+  if (
+    (file !== root && !file.startsWith(root + sep)) ||
+    !existsSync(file) ||
+    !statSync(file).isFile()
+  ) {
+    return { status: 404 };
+  }
+  return { status: 200, file };
+}
+
 function serve(roots: Record<string, string>): Promise<Server> {
   const server = createServer((req, res) => {
-    const url = new URL(req.url ?? '/', 'http://localhost');
-    const path = normalize(decodeURIComponent(url.pathname));
-    const prefix =
-      Object.keys(roots).find((p) => p !== '' && (path === p || path.startsWith(`${p}/`))) ?? '';
-    const root = roots[prefix];
-    if (root === undefined) {
-      res.writeHead(404).end();
+    const resolved = resolveRequest(roots, req.url);
+    if (resolved.status !== 200 || !('file' in resolved)) {
+      res.writeHead(resolved.status).end();
       return;
     }
-    const file = resolve(root, `.${path.slice(prefix.length)}`);
-    if (
-      (file !== root && !file.startsWith(root + sep)) ||
-      !existsSync(file) ||
-      !statSync(file).isFile()
-    ) {
-      res.writeHead(404).end();
-      return;
-    }
+    const { file } = resolved;
     res.writeHead(200, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream' });
     createReadStream(file).pipe(res);
   });

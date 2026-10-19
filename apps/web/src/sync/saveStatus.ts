@@ -18,7 +18,12 @@ export class SaveStatusMerge {
   private shown: SaveSource | null = null;
 
   constructor(
-    private readonly emit: (status: SaveStatus, message: string | null, source: SaveSource) => void,
+    private readonly emit: (
+      status: SaveStatus,
+      message: string | null,
+      source: SaveSource,
+      reported: { source: SaveSource; status: SaveStatus },
+    ) => void,
   ) {}
 
   reporter(source: SaveSource): (status: SaveStatus, message: string | null) => void {
@@ -37,6 +42,7 @@ export class SaveStatusMerge {
         shown?.[1].status ?? IDLE.status,
         shown?.[1].message ?? IDLE.message,
         shown?.[0] ?? source,
+        { source, status },
       );
     };
   }
