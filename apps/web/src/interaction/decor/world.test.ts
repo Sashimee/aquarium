@@ -177,6 +177,7 @@ describe('SavedDecor', () => {
     bus.emit('tank:loaded', {
       tankId: 't1',
       biome: 'freshwater',
+      size: 'standard',
       fish,
       decorLayout: layout,
       decorEdited: true,
@@ -218,6 +219,7 @@ describe('SavedDecor', () => {
     bus.emit('tank:loaded', {
       tankId: 't1',
       biome: 'freshwater',
+      size: 'standard',
       fish,
       decorLayout: [item('boulder-01', 0.1, 0.1)],
       decorEdited: true,
@@ -235,6 +237,7 @@ describe('SavedDecor', () => {
     bus.emit('tank:loaded', {
       tankId: 't1',
       biome: 'freshwater',
+      size: 'standard',
       fish,
       decorLayout: [item('boulder-01', 0.1, 0.1)],
       decorEdited: true,
@@ -248,6 +251,7 @@ describe('SavedDecor', () => {
     bus.emit('tank:loaded', {
       tankId: 't2',
       biome: 'freshwater',
+      size: 'standard',
       fish,
       decorLayout: [item('boulder-01', -0.2, 0.1)],
       decorEdited: true,
@@ -263,6 +267,7 @@ describe('SavedDecor', () => {
     bus.emit('tank:loaded', {
       tankId: 't1',
       biome: 'freshwater',
+      size: 'standard',
       fish,
       decorLayout: [item('boulder-01', 0.1, 0.1)],
       decorEdited: true,
@@ -280,6 +285,7 @@ describe('SavedDecor', () => {
     bus.emit('tank:loaded', {
       tankId: 't1',
       biome: 'reef',
+      size: 'standard',
       fish,
       decorLayout: [item('boulder-01', 0.1, 0.1)],
       decorEdited: true,
@@ -295,6 +301,7 @@ describe('SavedDecor', () => {
     bus.emit('tank:loaded', {
       tankId: 't1',
       biome: 'freshwater',
+      size: 'standard',
       fish,
       decorLayout: [],
       decorEdited: false,
@@ -316,6 +323,7 @@ describe('SavedDecor', () => {
     bus.emit('tank:loaded', {
       tankId: 't1',
       biome: 'freshwater',
+      size: 'standard',
       fish,
       decorLayout: [],
       decorEdited: false,
@@ -338,6 +346,7 @@ describe('SavedDecor', () => {
     bus.emit('tank:loaded', {
       tankId: 't1',
       biome: 'freshwater',
+      size: 'standard',
       fish,
       decorLayout: [item('boulder-01', 0.1, 0.1)],
       decorEdited: true,
@@ -348,6 +357,7 @@ describe('SavedDecor', () => {
     bus.emit('tank:loaded', {
       tankId: 't2',
       biome: 'reef',
+      size: 'standard',
       fish,
       decorLayout: [],
       decorEdited: false,
@@ -369,6 +379,7 @@ describe('SavedDecor', () => {
     bus.emit('tank:loaded', {
       tankId: 't1',
       biome: 'freshwater',
+      size: 'standard',
       fish,
       decorLayout: [item('boulder-01', 0.1, 0.1)],
       decorEdited: true,

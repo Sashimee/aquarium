@@ -129,6 +129,14 @@ export class BiomeScene<S extends DisposableScene> {
     this.kick();
   }
 
+  /** Builds the current biome again, for a change the biome name does not show, like a tank resize. */
+  rebuild(): void {
+    if (this.stopped) return;
+    this.attempted = null;
+    this.building?.controller.abort(new DOMException('The tank was resized', 'AbortError'));
+    this.kick();
+  }
+
   async settled(): Promise<void> {
     while (this.running) await this.running;
   }

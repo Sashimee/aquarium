@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Collider } from '@aquarium/shared';
 import type { Point3, SimToy } from '@aquarium/sim';
 import type { Engine } from '../engine/Engine';
+import { TANK_DIMENSIONS, type TankDimensions } from '../engine/tank/dimensions';
 import { EventBus, type EngineEvents } from '../engine/events';
 import type { InteractionEvents } from '../interaction/events';
 import type { SceneAnchor } from '../scene/anemone';
@@ -48,6 +49,10 @@ class FakeFishSystem {
   }
   setFood(buffer: Float32Array): void {
     this.food.push(buffer);
+  }
+  tanks: TankDimensions[] = [];
+  setTank(tank: TankDimensions): void {
+    this.tanks.push(tank);
   }
   demoBiomes: string[] = [];
   setDemoBiome(biome: string): void {
@@ -159,6 +164,7 @@ describe('queueTankEvents', () => {
     interaction.emit('tank:loaded', {
       tankId: TANK_A,
       biome: 'freshwater',
+      size: 'standard',
       decorLayout: [],
       decorEdited: false,
       fish: [],
@@ -176,6 +182,7 @@ describe('queueTankEvents', () => {
     interaction.emit('tank:loaded', {
       tankId: TANK_A,
       biome: 'freshwater',
+      size: 'standard',
       decorLayout: [],
       decorEdited: false,
       fish: [],
@@ -221,6 +228,7 @@ describe('startFish', () => {
       interaction.emit('tank:loaded', {
         tankId: TANK_A,
         biome: 'freshwater',
+        size: 'standard',
         decorLayout: [],
         decorEdited: false,
         fish: [fishFixture(FISH_1)],
@@ -243,6 +251,7 @@ describe('startFish', () => {
     interaction.emit('tank:loaded', {
       tankId: TANK_A,
       biome: 'freshwater',
+      size: 'standard',
       decorLayout: [],
       decorEdited: false,
       fish: [fishFixture(FISH_1)],
@@ -290,6 +299,32 @@ describe('startFish', () => {
     expect(fish.demoBiomes).toEqual(['reef', 'freshwater']);
   });
 
+  it('builds the fish in the tank size chosen before they started, then resizes at once', async () => {
+    const fish = new FakeFishSystem();
+    const pending = deferred<FakeFishSystem>();
+    const { handle } = setup(pending.promise);
+    handle.setTank(TANK_DIMENSIONS.nano30);
+    await flush();
+    expect(create.mock.calls.at(-1)?.[1]).toMatchObject({ tank: TANK_DIMENSIONS.nano30 });
+    pending.resolve(fish);
+    await flush();
+    expect(fish.tanks).toEqual([]);
+    handle.setTank(TANK_DIMENSIONS.long300);
+    expect(fish.tanks).toEqual([TANK_DIMENSIONS.long300]);
+  });
+
+  it('resizes a system still loading once it is up, to the last size asked for', async () => {
+    const fish = new FakeFishSystem();
+    const pending = deferred<FakeFishSystem>();
+    const { handle } = setup(pending.promise);
+    await flush();
+    handle.setTank(TANK_DIMENSIONS.nano30);
+    handle.setTank(TANK_DIMENSIONS.long300);
+    pending.resolve(fish);
+    await flush();
+    expect(fish.tanks).toEqual([TANK_DIMENSIONS.long300]);
+  });
+
   it('reports no swimming species until the fish are up, then theirs', async () => {
     const fish = new FakeFishSystem();
     const pending = deferred<FakeFishSystem>();
@@ -324,6 +359,7 @@ describe('startFish', () => {
     interaction.emit('tank:loaded', {
       tankId: TANK_A,
       biome: 'reef',
+      size: 'standard',
       decorLayout: [],
       decorEdited: false,
       fish: [],
@@ -563,6 +599,7 @@ describe('startFish', () => {
       interaction.emit('tank:loaded', {
         tankId: TANK_A,
         biome: 'freshwater',
+        size: 'standard',
         decorLayout: [],
         decorEdited: false,
         fish: [fishFixture(FISH_1)],
@@ -589,6 +626,7 @@ describe('startFish', () => {
     interaction.emit('tank:loaded', {
       tankId: TANK_A,
       biome: 'freshwater',
+      size: 'standard',
       decorLayout: [],
       decorEdited: false,
       fish: [fishFixture(FISH_1)],
@@ -620,6 +658,7 @@ describe('startFish', () => {
       interaction.emit('tank:loaded', {
         tankId: TANK_A,
         biome: 'freshwater',
+        size: 'standard',
         decorLayout: [],
         decorEdited: false,
         fish: [fishFixture(FISH_1)],

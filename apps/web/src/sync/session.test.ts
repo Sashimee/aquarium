@@ -122,6 +122,17 @@ describe('loading and catch-up', () => {
     expect(session.getState().awayByTank).toEqual({});
   });
 
+  it('loads each saved tank with its own size', async () => {
+    const { rec, session } = setup([
+      tankFixture({ id: TANK_A, size: 'nano30' }),
+      tankFixture({ id: TANK_B, size: 'long300' }),
+    ]);
+    await session.setUser(verified);
+    expect(rec.of('tank:loaded')).toMatchObject([{ tankId: TANK_A, size: 'nano30' }]);
+    await session.select(TANK_B);
+    expect(rec.of('tank:loaded').at(-1)).toMatchObject({ tankId: TANK_B, size: 'long300' });
+  });
+
   it('does not nag about a short, uneventful absence', async () => {
     const { session } = setup([
       tankFixture({ away: { elapsedMinutes: 12, capped: false, deaths: [] } }),

@@ -5,6 +5,7 @@ import type {
   DecorLayout,
   Fish,
   FoodType,
+  TankSize,
   Water,
 } from '@aquarium/shared';
 import type { PhotoFilter } from '../engine/photo/grade';
@@ -121,6 +122,7 @@ export interface InteractionEvents {
   'tank:loaded': {
     tankId: string;
     biome: Biome;
+    size: TankSize;
     fish: readonly Fish[];
     decorLayout: DecorLayout;
     /** False: the player never saved a layout, so `decorLayout` is empty and the preset shows. */

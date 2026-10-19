@@ -11,7 +11,14 @@ const DEMO: readonly FishSpawn[] = [
 
 function loaded(fish = [fishFixture(FISH_1), fishFixture(FISH_2)]): TankRoster {
   const roster = new TankRoster(DEMO);
-  roster.load({ tankId: TANK_A, biome: 'freshwater', decorLayout: [], decorEdited: false, fish });
+  roster.load({
+    tankId: TANK_A,
+    biome: 'freshwater',
+    size: 'standard',
+    decorLayout: [],
+    decorEdited: false,
+    fish,
+  });
   return roster;
 }
 
@@ -64,6 +71,7 @@ describe('TankRoster', () => {
     roster.load({
       tankId: TANK_A,
       biome: 'freshwater',
+      size: 'standard',
       decorLayout: [],
       decorEdited: false,
       fish: [fishFixture(FISH_1)],
@@ -94,6 +102,7 @@ describe('TankRoster', () => {
     roster.load({
       tankId: TANK_B,
       biome: 'reef',
+      size: 'standard',
       decorLayout: [],
       decorEdited: false,
       fish: [fishFixture(FISH_3, { tankId: TANK_B })],
@@ -158,6 +167,7 @@ describe('TankRoster', () => {
     roster.load({
       tankId: TANK_B,
       biome: 'reef',
+      size: 'standard',
       decorLayout: [],
       decorEdited: false,
       fish: [fishFixture(FISH_3, { tankId: TANK_B, species: 'ocellaris-clownfish' })],
@@ -280,6 +290,7 @@ describe('TankRoster', () => {
       roster.load({
         tankId: TANK_A,
         biome: 'freshwater',
+        size: 'standard',
         decorLayout: [],
         decorEdited: false,
         fish: [fishFixture(FISH_1, { species: 'betta' })],
@@ -411,6 +422,7 @@ describe('TankRoster', () => {
       roster.load({
         tankId: TANK_B,
         biome: 'freshwater',
+        size: 'standard',
         decorLayout: [],
         decorEdited: false,
         fish: [fishFixture(FISH_3)],

@@ -49,6 +49,7 @@ describe('SceneDecor', () => {
     bus.emit('tank:loaded', {
       tankId: 't1',
       biome: 'reef',
+      size: 'standard',
       fish: [],
       decorLayout: layout,
       decorEdited: true,
@@ -70,6 +71,7 @@ describe('SceneDecor', () => {
     bus.emit('tank:loaded', {
       tankId: 't1',
       biome: 'reef',
+      size: 'standard',
       fish: [],
       decorLayout: layout,
       decorEdited: true,
@@ -95,6 +97,7 @@ describe('SceneDecor', () => {
     bus.emit('tank:loaded', {
       tankId: 't1',
       biome: 'reef',
+      size: 'standard',
       fish: [],
       decorLayout: layout,
       decorEdited: true,
@@ -127,6 +130,7 @@ describe('SceneDecor', () => {
     bus.emit('tank:loaded', {
       tankId: 't1',
       biome: 'reef',
+      size: 'standard',
       fish: [],
       decorLayout: layout,
       decorEdited: true,

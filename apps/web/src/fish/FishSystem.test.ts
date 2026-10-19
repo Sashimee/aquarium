@@ -187,6 +187,7 @@ describe('FishSystem.create', () => {
       payload: {
         tankId: TANK_A,
         biome: 'freshwater',
+        size: 'standard',
         decorLayout: [],
         decorEdited: false,
         fish: [fishFixture(FISH_1)],
@@ -353,6 +354,7 @@ describe('FishSystem dead shrimp', () => {
       payload: {
         tankId: TANK_A,
         biome: 'freshwater',
+        size: 'standard',
         decorLayout: [],
         decorEdited: false,
         fish: climbing === null ? [] : [SHRIMP],
@@ -708,6 +710,7 @@ describe('FishSystem toys and display', () => {
         type: 'tank:loaded',
         payload: {
           tankId: TANK_A,
+          size: 'standard',
           biome,
           decorLayout: [],
           decorEdited: false,

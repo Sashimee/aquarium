@@ -151,6 +151,7 @@ export function publicTankLoaded(tank: PublicTank): InteractionEvents['tank:load
   return {
     tankId: publicTankId(tank),
     biome: tank.biome,
+    size: tank.size,
     fish: tank.fish.map((f) => publicFishAsFish(tank, f)),
     decorLayout: tank.decorLayout,
     decorEdited: tank.decorEdited,

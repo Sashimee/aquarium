@@ -90,6 +90,7 @@ function harness(layout: DecorItem[], biome: 'freshwater' | 'reef' = 'freshwater
       bus.emit('tank:loaded', {
         tankId,
         biome,
+        size: 'standard',
         fish: [],
         decorLayout,
         decorEdited: decorLayout.length > 0,
@@ -177,6 +178,7 @@ describe('DecorMode', () => {
     h.bus.emit('tank:loaded', {
       tankId: 't',
       biome: 'reef',
+      size: 'standard',
       fish: [],
       decorLayout: [],
       decorEdited: false,

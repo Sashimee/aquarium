@@ -67,6 +67,7 @@ function harness(url: Biome, options: { gate?: boolean; failing?: Biome } = {}) 
     interaction.emit('tank:loaded', {
       tankId,
       biome,
+      size: 'standard',
       fish: [],
       decorLayout: [],
       decorEdited: false,
@@ -564,5 +565,53 @@ describe('BiomeScene', () => {
     expect(errors).toEqual([]);
     expect(scenes.scene?.biome).toBe('freshwater');
     await scenes.dispose();
+  });
+});
+
+describe('BiomeScene rebuild', () => {
+  it('builds the same biome again on a resize', async () => {
+    const h = harness('reef');
+    await h.scenes.settled();
+    h.scenes.rebuild();
+    await h.scenes.settled();
+    expect(h.mounted).toEqual(['reef', 'reef']);
+    expect(h.unmounted).toEqual(['reef']);
+    expect(h.built.map((s) => s.disposed)).toEqual([true, false]);
+    expect(shownNames(h.root)).toEqual(['reef']);
+  });
+
+  it('coalesces two resizes in one tick into one rebuild', async () => {
+    const h = harness('reef');
+    await h.scenes.settled();
+    h.scenes.rebuild();
+    h.scenes.rebuild();
+    await h.scenes.settled();
+    expect(h.built).toHaveLength(2);
+    expect(h.mounted).toEqual(['reef', 'reef']);
+  });
+
+  it('abandons a build running for the old size and mounts only the last one', async () => {
+    const h = harness('reef', { gate: true });
+    await vi.waitFor(() => expect(h.gates).toHaveLength(1));
+    h.scenes.rebuild();
+    await vi.waitFor(() => expect(h.gates).toHaveLength(2));
+    expect(h.gates[0]?.signal.aborted).toBe(true);
+    h.scenes.rebuild();
+    await vi.waitFor(() => expect(h.gates).toHaveLength(3));
+    expect(h.gates[1]?.signal.aborted).toBe(true);
+    for (const gate of h.gates) gate.release();
+    await h.scenes.settled();
+    expect(h.mounted).toEqual(['reef']);
+    expect(h.built.filter((s) => !s.disposed)).toHaveLength(1);
+    expect(shownNames(h.root)).toEqual(['reef']);
+  });
+
+  it('does nothing once disposed', async () => {
+    const h = harness('reef');
+    await h.scenes.settled();
+    await h.scenes.dispose();
+    h.scenes.rebuild();
+    await h.scenes.settled();
+    expect(h.built).toHaveLength(1);
   });
 });
