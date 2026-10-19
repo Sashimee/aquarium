@@ -691,7 +691,7 @@ describe('checkAssets', () => {
     const asset = fishAsset();
     const raw = put('fish/tetra/env.hdr', 'RADIANCE');
     const problems = checkAssets(inputFor([{ ...asset, files: [...asset.files, raw] }]));
-    expect(problems.join('\n')).toContain('env.hdr is not a .glb or .ktx2 file');
+    expect(problems.join('\n')).toContain('env.hdr is not a .glb or .ktx2 or .m4a file');
   });
 
   it('fails a fish without a fin mask attribute', () => {
