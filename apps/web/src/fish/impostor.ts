@@ -131,18 +131,18 @@ export async function loadImpostorAtlas(
   root: string,
   info: ImpostorAtlasInfo,
 ): Promise<ImpostorAtlas> {
-  const settled = await Promise.allSettled(
-    [info.albedoFile, info.normalFile].map((file) => ktx2.loadAsync(`${root}${file}`)),
-  );
+  const files = [info.albedoFile, info.normalFile];
+  const settled = await Promise.allSettled(files.map((file) => ktx2.loadAsync(`${root}${file}`)));
   const loaded = settled.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
   const [albedo, normal] = loaded;
   if (loaded.length === 2 && albedo !== undefined && normal !== undefined) {
     return { info, albedo: prepare(albedo), normal: prepare(normal) };
   }
   for (const texture of loaded) texture.dispose();
-  const failure = settled.find((r): r is PromiseRejectedResult => r.status === 'rejected');
-  throw new Error(`fish impostor atlas ${info.albedoFile} or its normal atlas failed to load`, {
-    cause: failure?.reason,
+  const failed = settled.findIndex((r) => r.status === 'rejected');
+  const failure = settled[failed];
+  throw new Error(`fish impostor atlas ${files[failed] ?? info.albedoFile} failed to load`, {
+    cause: failure?.status === 'rejected' ? failure.reason : undefined,
   });
 }
 
