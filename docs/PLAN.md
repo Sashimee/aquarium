@@ -25,7 +25,7 @@ your tanks across devices.
 | Dev access | `devfish.bas.lu` is public, `X-Robots-Tag: noindex` plus a `robots.txt` that disallows everything. |
 | Dokploy | Both apps inside the existing **Bas.lu** project. |
 | Merging | **Repo-local override of the global rule**: the orchestrator squash-merges feature PRs into `dev` once CI is green **and** `code-reviewer` approves. `dev → main` happens **only when Alex asks**. |
-| Concurrency | **6** agents at once by default; more when the tasks are independent (Alex, 2026-10-14, see §9.1). |
+| Concurrency | No cap on concurrent agents (Alex, 2026-10-19, see §9.1). |
 
 ## 2. Architecture
 
@@ -304,7 +304,7 @@ pictures per tank type**. The release (`dev → main`) waits until this section 
 | Tanks per user | Replaces §1's "one of each": a user may own up to 6 display tanks, any mix of biomes and sizes, plus one quarantine tank (nano, not counted in the 6). |
 | Window weather | Simulated from the tank's seed and the local clock. No location, no third-party weather API. |
 | Budgets | §2.7 and the < 150 MB repo asset budget (§3) stay. Backgrounds, audio, new species and biomes stream per preset. If the budget can't hold a new biome, the orchestrator stops and asks Alex before raising it. |
-| Agent concurrency | Alex said on 2026-10-14: "You can run more then 6 agents if you want to". The orchestrator may run more than 6 when tasks are independent (`CLAUDE.md` loop step 4). |
+| Agent concurrency | Alex, 2026-10-19: "remove the maximum agents limit". The orchestrator launches every ready task at once, with no cap (`CLAUDE.md` loop step 4). |
 
 ### 9.2 Architecture notes
 
