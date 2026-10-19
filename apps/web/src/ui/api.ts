@@ -1,8 +1,10 @@
 import {
+  achievementListSchema,
   addFishRequestSchema,
   apiErrorSchema,
   ateBatchRequestSchema,
   careActionSchema,
+  collectionSchema,
   createTankRequestSchema,
   speciesListSchema,
   tankListSchema,
@@ -23,8 +25,10 @@ import {
   signInRequestSchema,
   signUpRequestSchema,
   userSchema,
+  type AchievementList,
   type AteReport,
   type CareAction,
+  type Collection,
   type DecorLayout,
   type Credits,
   type CreateTankRequest,
@@ -177,6 +181,8 @@ export interface ApiClient {
   pushDevices(currentEndpoint?: string | null): Promise<PushDevice[]>;
   removePushDevice(id: string): Promise<RemovePushResult>;
   species(): Promise<SpeciesSummary[]>;
+  collection(): Promise<Collection>;
+  achievements(): Promise<AchievementList>;
   tanks(): Promise<Tank[]>;
   tank(tankId: string): Promise<Tank>;
   createTank(input: CreateTankRequest): Promise<Tank>;
@@ -579,6 +585,16 @@ export function createApiClient(
       const res = await send('/api/species');
       if (!res.ok) throw await toError(res);
       return parsed(res, speciesListSchema);
+    },
+    async collection() {
+      const res = await send('/api/collection');
+      if (!res.ok) throw await toError(res);
+      return parsed(res, collectionSchema);
+    },
+    async achievements() {
+      const res = await send('/api/achievements');
+      if (!res.ok) throw await toError(res);
+      return parsed(res, achievementListSchema);
     },
     async tanks() {
       const res = await send('/api/tanks');

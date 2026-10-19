@@ -1,10 +1,11 @@
-import { lazy, Suspense, useEffect, useLayoutEffect, useRef } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useAuth, useBridge, usePhotoView, useRedirect, useRoute } from './context';
 import { Dock } from './Dock';
 import {
   AccountPanel,
   AvatarButton,
   CameraControls,
+  CollectionButton,
   StatusCard,
   TankButton,
   TankTypeSwitch,
@@ -90,6 +91,8 @@ const PANEL_TITLE: Record<OpenPanel, { label: string; title: string }> = {
   account: { label: 'Account menu', title: 'Account' },
 };
 
+const CollectionBook = lazy(() => import('./CollectionBook'));
+
 const LifeDialogsView = lazy(() => import('./LifeDialogs'));
 
 function LifeDialogs({ onReview }: { onReview(): void }) {
@@ -107,11 +110,13 @@ function PanelBody({
   newTank,
   food,
   onFood,
+  onCollection,
 }: {
   panel: OpenPanel;
   newTank: ReturnType<typeof usePanels>['newTank'];
   food: ReturnType<typeof useFood>[0];
   onFood: ReturnType<typeof useFood>[1];
+  onCollection(): void;
 }) {
   switch (panel) {
     case 'feed':
@@ -129,7 +134,7 @@ function PanelBody({
     case 'report':
       return <TankReportBody />;
     case 'account':
-      return <AccountPanel />;
+      return <AccountPanel onCollection={onCollection} />;
   }
 }
 
@@ -144,6 +149,7 @@ export function App() {
   const { panel: requested, newTank, dispatch } = usePanels();
   const panel: Panel = home ? requested : 'none';
   const [food, setFood] = useFood();
+  const [bookOpen, setBookOpen] = useState(false);
   const { interaction } = useBridge();
   const photoActive = usePhotoView()?.state.active ?? false;
   const shell = useRef<HTMLDivElement>(null);
@@ -214,6 +220,7 @@ export function App() {
           </div>
           <div className="hud-right">
             <div className="hud-buttons">
+              <CollectionButton onPress={() => setBookOpen(true)} />
               <TankButton open={panel === 'tanks'} onPress={() => toggle('tanks')} />
               <AvatarButton open={panel === 'account'} onPress={() => toggle('account')} />
             </div>
@@ -245,9 +252,23 @@ export function App() {
                 </p>
               }
             >
-              <PanelBody panel={panel} newTank={newTank} food={food} onFood={setFood} />
+              <PanelBody
+                panel={panel}
+                newTank={newTank}
+                food={food}
+                onFood={setFood}
+                onCollection={() => {
+                  dispatch({ type: 'close' });
+                  setBookOpen(true);
+                }}
+              />
             </Suspense>
           </Sheet>
+        )}
+        {bookOpen && (
+          <Suspense fallback={null}>
+            <CollectionBook onClose={() => setBookOpen(false)} />
+          </Suspense>
         )}
         <LifeDialogs onReview={() => dispatch({ type: 'open', panel: 'care' })} />
         <div className={home ? 'stage' : 'stage modal'}>
