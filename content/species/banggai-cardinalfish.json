@@ -15,6 +15,7 @@
     "traits": ["shoal"]
   },
   "biome": "reef",
+  "chemistry": { "salinityPpt": [30, 36] },
   "commonName": "Banggai cardinalfish",
   "id": "banggai-cardinalfish",
   "lifecycle": {

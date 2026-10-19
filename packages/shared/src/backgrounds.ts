@@ -38,14 +38,16 @@ export function isBackgroundForBiome(biome: Biome, id: string): id is Background
   return ids?.includes(id) ?? false;
 }
 
-// PLAN 9.2: KTX2, one size per tier, at most 600 KB for the largest.
+// PLAN 9.2: KTX2, one size per tier, at most 600 KB for the largest. Keys are the renderer's
+// quality tiers (apps/web/src/engine/quality/tiers.ts); high and ultra share the largest size.
 export const BACKGROUND_TIERS = {
+  ultra: [2048, 1024],
   high: [2048, 1024],
-  mid: [1024, 512],
+  medium: [1024, 512],
   low: [512, 256],
 } as const;
 export type BackgroundTier = keyof typeof BACKGROUND_TIERS;
-export const BACKGROUND_MAX_BYTES = 600 * 1024;
+export const BACKGROUND_MAX_BYTES = 600 * 1000;
 
 // Licence and credit live in assets/manifest.json; `asset` names the manifest entry.
 export const backgroundEntrySchema = z
@@ -55,7 +57,7 @@ export const backgroundEntrySchema = z
     title: z.string().trim().min(1).max(60),
     file: z
       .string()
-      .regex(/^[a-z0-9][a-z0-9._/-]*\.ktx2$/, 'must be a relative .ktx2 path')
+      .regex(/^[a-z0-9][a-z0-9_-]*(\/[a-z0-9][a-z0-9_-]*)*\.ktx2$/, 'must be a relative .ktx2 path')
       .refine((f) => !f.includes('..'), 'must not climb out of its directory')
       .nullable(),
     asset: slugSchema.nullable(),

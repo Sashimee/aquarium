@@ -27,6 +27,7 @@ import {
 } from './fixtures.ts';
 import { FOOD_STRIDE, FOOD_TYPES, type AteEvent } from './food.ts';
 import { SNAPSHOT_STRIDE, SnapshotField, SnapshotInterpolator, type Snapshot } from './snapshot.ts';
+import type { SimToy, ToyNudge } from './toys.ts';
 import { STEP_HZ, World, type WorldConfig } from './world.ts';
 
 interface Harness {
@@ -65,12 +66,12 @@ function nextError(client: SimClient): Promise<string> {
   });
 }
 
-function flakeGrid(count: number): Float32Array {
+function flakeGrid(count: number, firstId = 1): Float32Array {
   const records = new Float32Array(count * FOOD_STRIDE);
   for (let k = 0; k < count; k++) {
     records.set(
       [
-        k + 1,
+        firstId + k,
         -0.5 + (k % 10) * 0.1,
         0.3,
         -0.1 + Math.floor(k / 10) * 0.1,
@@ -347,6 +348,108 @@ describe('sim worker bridge', () => {
     const expected = new Float32Array(local.count * SNAPSHOT_STRIDE);
     local.writeSnapshot(expected);
     expect(Array.from(remote.data)).toEqual(Array.from(expected));
+  });
+
+  it('applies toys as a local world would and passes on its nudges in order', async () => {
+    const { client } = connect();
+    const config = benchmarkConfig(6);
+    const ready = await client.init(config);
+    const local = new World(config);
+    const back = -REEF_TANK.depth / 2 + 0.004;
+    const toys: SimToy[] = [
+      { kind: 'mirror', position: [0.2, 0.45, back], normal: [0, 0, 1] },
+      { kind: 'ball', position: [0, REEF_TANK.height + 0.012, 0], velocity: [0, 0, 0] },
+    ];
+    const steps = 1800;
+    const received: ToyNudge[] = [];
+    const off = client.onToyNudge((n) => received.push(n));
+    const done = new Promise<Snapshot>((resolve) => {
+      const offSnapshot = client.onSnapshot((snapshot) => {
+        if (snapshot.tick !== steps) return;
+        offSnapshot();
+        resolve(snapshot);
+      });
+    });
+    client.setToys(toys);
+    client.step(steps);
+    const remote = await done;
+    off();
+
+    local.setToys(toys);
+    const expected: ToyNudge[] = [];
+    for (let t = 0; t < steps; t++) {
+      local.step();
+      expected.push(...local.takeToyNudges());
+    }
+    expect(expected.length).toBeGreaterThan(0);
+    expect(received).toEqual(expected);
+    const data = new Float32Array(local.count * SNAPSHOT_STRIDE);
+    local.writeSnapshot(data);
+    expect(Array.from(remote.data)).toEqual(Array.from(data));
+
+    const id = ready.fishIds[ready.fishIds.length - 1] ?? '';
+    const point = client.fishPoint(id);
+    const i = ready.fishIds.length - 1;
+    expect(point).toEqual(
+      [SnapshotField.PosX, SnapshotField.PosY, SnapshotField.PosZ].map(
+        (f) => data[i * SNAPSHOT_STRIDE + f],
+      ),
+    );
+    expect(client.fishPoint('nobody')).toBeNull();
+  });
+
+  it('answers fishPoint only from a snapshot of the current layout', async () => {
+    const { client } = connect();
+    const ready = await client.init(benchmarkConfig(2));
+    const first = ready.fishIds[0] ?? '';
+    expect(client.fishPoint(first)).toBeNull();
+    const snapshot = nextSnapshot(client);
+    client.step(1);
+    await snapshot;
+    expect(client.fishPoint(first)).not.toBeNull();
+    await client.removeFish(first);
+    expect(client.fishPoint(first)).toBeNull();
+    const second = ready.fishIds[1] ?? '';
+    expect(client.fishPoint(second)).toBeNull();
+    const after = nextSnapshot(client);
+    client.step(1);
+    await after;
+    expect(client.fishPoint(first)).toBeNull();
+    expect(client.fishPoint(second)).not.toBeNull();
+  });
+
+  it('reports malformed toys as an error and keeps the world running', async () => {
+    const { client } = connect();
+    await client.init(benchmarkConfig(2));
+    const error = nextError(client);
+    client.setToys([{ kind: 'mirror', position: [0, 0.3, 0], normal: [0, 0, 0] }]);
+    expect(await error).toMatch(/toys/);
+    const snapshot = nextSnapshot(client);
+    client.step(1);
+    expect((await snapshot).tick).toBe(1);
+  });
+
+  it('passes on nudges of the current world only', async () => {
+    const worker = fakeWorker();
+    const client = new SimClient(worker.port);
+    const received: ToyNudge[] = [];
+    client.onToyNudge((n) => received.push(n));
+    const nudge: ToyNudge = { fishId: 'betta-0', toyId: 'ball', toy: 0, ix: 0.01, iz: 0 };
+    const first = client.init(benchmarkConfig(1));
+    worker.ready(1);
+    await first;
+    worker.post({ type: 'toyNudge', epoch: 0, tick: 1, nudges: [nudge] });
+    expect(received).toEqual([]);
+    worker.post({ type: 'toyNudge', epoch: 1, tick: 2, nudges: [nudge, nudge] });
+    expect(received).toEqual([nudge, nudge]);
+    const second = client.init(benchmarkConfig(2));
+    worker.post({ type: 'toyNudge', epoch: 1, tick: 3, nudges: [nudge] });
+    expect(received.length).toBe(2);
+    worker.ready(2);
+    await second;
+    client.dispose();
+    worker.post({ type: 'toyNudge', epoch: 2, tick: 1, nudges: [nudge] });
+    expect(received.length).toBe(2);
   });
 
   it('reports scene commands before init and invalid scene values as errors', async () => {
@@ -637,6 +740,8 @@ describe('sim worker bridge', () => {
     client.setFood(flakeGrid(30));
     client.step(90);
     const layout = await client.removeFish('neon-tetra-0');
+    // A fresh meal, so bites in the new epoch do not hinge on the old one having leftovers.
+    client.setFood(flakeGrid(30, 1000));
     await stepCollecting(client, 30, 120);
 
     const at = seen.findIndex((m) => m.type === 'layout');

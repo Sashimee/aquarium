@@ -10,6 +10,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "icons": "node scripts/generate-icons.mjs",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json"
   },
   "dependencies": {

@@ -338,6 +338,44 @@ Measured from each downloaded `scene.gltf`. Rigged means the glTF has at least o
 
 Effect on the picks: none of the picks flipped. The neon tetra, betta and both guppies ship skeletons (30, 53, 44 and 191 joints) that the pipeline can reuse or replace with a spine rig; the clownfish, both tangs and the angelfish are unrigged static meshes and need the procedural spine rig. The angelfish uses unlit materials, the water plant has no textures, and the brain coral is 8192x8192 and must be downscaled. Blue and yellow tang stay as weak candidates for the auditor to weigh against the loft fallback.
 
+## Tank backgrounds (issue #616, T26)
+
+Checked 2026-10-16. Photographs from Wikimedia Commons; licence read from the file page metadata, and the Commons sha1 matches each download. Picks are in the manifest (`kind: "background"`, with a 2:1 `crop` box); raw files stay in `~/.cache/aquarium-assets/raw/<id>/original.jpg`. Every crop is at least 3618 px wide, so the T27 step can resize to 2048x1024 and encode KTX2. Nothing here is processed or committed as an image.
+
+Poly Haven, ambientCG and Smithsonian have no underwater or aquarium-backdrop photos, and Sketchfab holds models rather than pictures, so every candidate is from Commons. CC BY 2.0, CC BY-SA, public-domain-mark and unclear files were skipped.
+
+### Freshwater
+
+| Slot | Pick | Licence | Source | Caveat |
+|---|---|---|---|---|
+| Planted stream | `bg-fw-planted-stream` | CC0, Royonx | 4724x3543 | Freshwater Elodea canadensis bed streaming over sand, blue-green water. No fish. Crop 4724x2362 at (0,700). |
+| Sunken roots | `bg-fw-root-tangle` | CC BY 3.0, David Perez | 3872x2592 | Alder (Alnus glutinosa) roots trailing red in a clear stream over stones. Dark and contrasty, a close view not a wide tangle. Crop 3872x1936 at (0,400). |
+| Rocky riverbed | `bg-fw-rocky-riverbed` | CC0, WilliamRobertoMiranda (Flickr CC0 confirmed) | 7360x4912 | Rio Doce stones and gravel under shallow clear water with rippled sunlight; warm, soft and slightly hazy. Crop 7360x3680 at (0,600). |
+| Misty planted tank | `bg-fw-misty-lake` | render (T27), CC BY 4.0 via plant credits | n/a | Pending render of a freshwater planted scene, see below. |
+| Deep green plant wall | `bg-fw-plant-wall` | CC0, Adiyazzz | 4032x3024 | Densely planted freshwater aquarium with a few neon-type tetras; no glass or hardware visible. Crop 4032x2016 at (0,400). |
+
+Render spec for `bg-fw-misty-lake` (freshwater subjects only, nothing marine or brackish; T27, asset-pipeline-engineer; manifest `source: "render"`, status `selected-pending-download`, sha256 null until committed): a dense planted tank from the front glass, 2:1, at least 4096x2048, no fish, no text. Plants (CC-BY, credit Nullified and Valery.Li): Java fern and vallisneria from `sketchfab-f34fac65` mid and back, Pond Weed `sketchfab-b34ed521` clumps left and right. Hardscape and substrate (CC0): `polyhaven-dead_quiver_trunk` as a diagonal root left of centre, `polyhaven-boulder_01` and `polyhaven-coast_rocks_05` as 2 to 3 stacked rocks, `polyhaven-clean_pebbles` foreground with `ambientcg-Ground101` blended as sand. Composition: tall plants and driftwood on the outer thirds, an open lower centre, a soft misty blue-green gradient (pale top, darker base), soft top light and no hard shafts. Camera at plant midline height, 35 mm equivalent, shallow depth of field on the far plants. The licence stays CC-BY because the plant models are CC-BY.
+
+The first freshwater picks (eelgrass, mangrove roots, dry shore pebbles, land moss) were dropped on review because they were not freshwater underwater scenes. Mangrove roots (`Tangled Mangrove Roots.jpg`, CC BY 4.0, Vinno Christopan; brackish) are kept as a note for the future mangrove biome (T50). Also seen and not used: `Underwater-photography-pond-plants-1529207.jpg` (CC0, freshwater pond plants with a bright surface strip, a good alternative for the misty slot), the River Sherbourne and Coventry series (CC BY 4.0, murky and watermarked), Aquascape mini, Planted Nano Aquarium and Nature Aquarium Aquascape (CC0, but the tank glass, lights or wall are in frame). The root-tangle and riverbed picks are softer than the reef set, which is the best that Commons offers under an allowed licence.
+
+Runners-up not taken: `Nature Aquarium Aquascape.jpg` (CC0; a glass tank with a visible rim), `Misty lake (Unsplash).jpg` and `Mist over the lake shore (Unsplash).jpg` (CC0 on Commons but re-uploaded from Unsplash, so the CC0 claim is second-hand), `Fallen tree and ferns (Unsplash).jpg` (too dark), `Mangrove Floating roots.jpg` (CC BY 4.0, brown water and a bright sky patch).
+
+### Reef
+
+| Slot | Pick | Licence | Source | Caveat |
+|---|---|---|---|---|
+| Coral reef wall | `bg-reef-coral-wall` | CC BY 4.0, 74papa | 5472x3072 | Good. A few small fish in the frame. |
+| Open blue with light rays | `bg-reef-light-rays` | CC0, Sirrob01 | 3648x2736 | Staghorn reef under bright cyan water with a cloud of small fish and light from the upper right. Soft light fall-off, not distinct shafts. Crop 3648x1824. |
+| Reef slope with fish silhouettes | `bg-reef-fish-slope` | CC BY 4.0, 74papa | 3618x2373 | Smallest source of the set. Anthias are sharp, not silhouettes. |
+| Soft-coral garden | `bg-reef-soft-coral` | CC BY 4.0, AlexeiAVA | 4000x3000 | One sea fan colony, close up. |
+| Dark deep-blue with distant reef | `bg-reef-deep-blue` | CC0, Jstuby | 5184x3888 | Mid blue rather than dark. Darken in the pipeline if wanted. |
+
+Replaced the earlier Brittany sun-starburst pick (dark, no reef). Also seen: `Posidonia oceanica meadow and school of Salema porgy ... Calanque de Sormiou` (CC BY 4.0, marine seagrass, no rays).
+
+Runners-up not taken: `Beneath Sipadan Island.jpeg` (CC0; murky violet-grey), `Caribbean Reef Shark School Tiger Beach Bahamas.jpg` (CC0; the shark is the subject), `Four butterfly fish swim over a coral reef.jpg` (CC BY 4.0; the fish are the subject), `Deep blue cozumel 2018.jpg` (CC0; a diver in frame), the other Ifremer "Ambiance sous-marine" files (a diver in every frame), `Рифы бухты Шарм-Эль-Майя.jpg` (CC0; a close second for the reef wall).
+
+Banding check (2026-10-16): the blue channel of an 800x400 gradient region of the deep-blue, light-rays and coral-wall originals holds a contiguous run of levels (81 of 81, 89 of 90, about 180 of 202), so the banding seen in the contact sheet is the preview PNG palette, not the sources.
+
 ## Sound (issue #649, T59)
 
 Checked 2026-10-16 on each Freesound sound page (licence link read from the page; every pick is CC0, so no attribution is required, though CREDITS.md lists them). Searches were restricted to CC0 and CC-BY on Freesound. Raw files are the Freesound `lq` preview OGGs (lossy, about 60 to 80 kbps; the originals need a login and are better quality, so fetching them is the upgrade path if artefacts are audible after the transcode, the low-pass and the normalisation), kept in `~/.cache/aquarium-assets/raw/freesound-<id>/`. Manifest `kind` is the free string `audio`, so the manifest schema needed no change.

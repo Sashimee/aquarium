@@ -46,6 +46,7 @@ export {
 } from './carcass.ts';
 export { FEEDING, gutForHunger } from './feeding.ts';
 export { CURIOSITY } from './curiosity.ts';
+export { BallPhase, MirrorPhase, TOYS, type SimToy, type ToyNudge } from './toys.ts';
 export { compileCollider, DecorField, UnionSdf, type Point3 } from './decor.ts';
 export { Basin, type TankDimensions } from './basin.ts';
 export { resolvePenetration, TankSdf, type Sdf } from './sdf.ts';
@@ -82,4 +83,5 @@ export {
   type SimGrazeReach,
   type SimLayout,
   type SimReady,
+  type SimToyNudges,
 } from './bridge.ts';

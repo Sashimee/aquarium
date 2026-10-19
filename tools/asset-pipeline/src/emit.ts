@@ -201,7 +201,9 @@ export async function emitAsset(input: EmitInput): Promise<OutputAsset> {
   const dir = `${kind}/${id}`;
   const { files, textures: textureInfo } = await writeTextureEntries(outRoot, dir, built.textures);
 
-  await built.doc.transform(prune());
+  // The web fish loader requires TEXCOORD_0 on every primitive, textured or not.
+  const pruneOptions = { keepAttributes: input.meta.fish !== undefined };
+  await built.doc.transform(prune(pruneOptions));
   const lods: OutputAsset['lods'] = [];
   let impostor: OutputAsset['impostor'];
   for (let level = 0; level < LOD_COUNT; level++) {
@@ -218,7 +220,7 @@ export async function emitAsset(input: EmitInput): Promise<OutputAsset> {
         simplifyPrimitive(prim, { ratio: plan.ratios[level]!, minTriangles: plan.minTriangles });
       }
     for (const mesh of doc.getRoot().listMeshes()) renormaliseMouth(mesh.listPrimitives());
-    await doc.transform(prune());
+    await doc.transform(prune(pruneOptions));
     if (input.meta.fish && level === IMPOSTOR_SOURCE_LOD) {
       const images = new Map(built.textures.map((t) => [t.name, t.source.image]));
       const atlas = bakeAtlas(await meshesFromDocument(doc, images));
