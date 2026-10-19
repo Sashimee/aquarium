@@ -22,8 +22,12 @@
     "hermit-crab": { "juvenile": 40, "adult": 100 }
   },
   "items": {
-    "plant": { "min": 10, "max": 60 },
-    "decor": { "min": 30, "max": 250 },
+    "plant": {
+      "min": 10,
+      "max": 60,
+      "prices": { "sketchfab-b34ed521": 15, "sketchfab-b536fec3": 20, "sketchfab-f34fac65": 45 }
+    },
+    "decor": { "min": 30, "max": 250, "prices": { "polyhaven-lambis_shell": 60 } },
     "background": { "price": 150, "freePerBiome": 1 },
     "equipment": {
       "heater": [50, 150, 400],
@@ -34,7 +38,11 @@
     },
     "consumables": {
       "premiumFood": 5,
-      "premiumMedicine": { "min": 30, "max": 80 },
+      "premiumMedicine": {
+        "min": 30,
+        "max": 80,
+        "prices": { "ich": 40, "fin-rot": 50, "velvet": 60 }
+      },
       "bottledBacteria": 40,
       "testKit": 25
     },
@@ -43,7 +51,7 @@
   },
   "earn": {
     "dailyCare": { "reward": { "min": 30, "max": 50 }, "dailyCap": 50 },
-    "healthyTankStreak": { "perDay": 10, "dailyCap": 30 },
+    "healthyTankStreak": { "perDay": 10, "dailyCap": 15 },
     "achievement": { "reward": { "min": 50, "max": 500 }, "dailyCap": 500 },
     "frySale": { "percentOfJuvenilePrice": 30, "dailyCap": 200 }
   },
