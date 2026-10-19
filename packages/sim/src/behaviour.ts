@@ -2021,11 +2021,7 @@ export class Behaviour {
     if (along < 0.5 * out && lateral >= a.radius) {
       // Beside the rock, the straight line to the mouth cuts through the cave's own wall: the
       // fish comes out past the face on its own side first, then crosses to the mouth.
-      return [
-        ax + ux * out + rx - along * ux,
-        ay + uy * out,
-        az + uz * out + rz - along * uz,
-      ];
+      return [ax + ux * out + rx - along * ux, ay + uy * out, az + uz * out + rz - along * uz];
     }
     return [ax + ux * out, ay + uy * out, az + uz * out];
   }
