@@ -5,6 +5,7 @@ import type { AssetCatalog } from './assets';
 import { anemoneReach } from './anemone';
 import type { CurrentParameters } from './current';
 import { euphylliaReach, generateEuphyllia, parseEuphylliaId } from './euphyllia';
+import { GLASS_SHRINK_FLOOR } from './placement';
 import { SURFACE_MARGIN } from './plants';
 
 const MIN_PLANT_SCALE = 0.05;
@@ -129,7 +130,8 @@ function fitPatch(
     Math.max(MIN_PLANT_SCALE, patch.scale[1] * k),
   ];
   const fitted = { ...patch, scale, radius: patch.radius * k };
-  const reach = reachOf(fitted);
+  const smallest = scale[0] * GLASS_SHRINK_FLOOR;
+  const reach = reachOf({ ...fitted, scale: [smallest, smallest] });
   const limitX = Math.max(0, halfL - reach);
   const limitZ = Math.max(0, halfD - reach);
   const x = (patch.center[0] * dimensions.length) / DEFAULT_TANK.length;

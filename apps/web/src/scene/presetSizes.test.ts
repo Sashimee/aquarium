@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { TANK_SIZES, type TankSize } from '@aquarium/shared';
 import type { WebGPURenderer } from 'three/webgpu';
-import { TANK_DIMENSIONS } from '../engine/tank/dimensions';
+import { DEFAULT_TANK, TANK_DIMENSIONS } from '../engine/tank/dimensions';
 import { createSharedKtx2 } from '../engine/ktx2';
 import { AssetCatalog, ModelLibrary } from './assets';
 import { ColliderField } from './colliders';
@@ -24,6 +24,27 @@ import {
 
 const PUBLIC = join(__dirname, '../../public');
 const SIZES = Object.keys(TANK_SIZES) as TankSize[];
+
+const MIN_DEPTH_SHARE = 0.4;
+
+/**
+ * Patches whose reach (sway plus half-diagonal) leaves too little room at that size, so they still
+ * collapse towards mid-depth. Mean root z bands; tracked in https://github.com/Sashimee/aquarium/issues/819.
+ */
+const KNOWN_DEPTH_SHORTFALLS: Readonly<Record<string, readonly [number, number]>> = {
+  'standard:stems-back': [-0.09, -0.05],
+  'standard:vallisneria-right': [-0.04, 0.0],
+  'std200:stems-back': [-0.04, 0.0],
+  'std200:stems-mid': [-0.01, 0.03],
+  'std200:vallisneria-right': [-0.02, 0.02],
+  'long300:stems-back': [-0.05, -0.01],
+  'long300:stems-mid': [-0.04, 0.0],
+  'long300:vallisneria-right': [-0.02, 0.02],
+  'nano30:pond-weed': [-0.02, 0.02],
+  'nano30:stems-back': [-0.02, 0.02],
+  'nano30:stems-mid': [-0.01, 0.03],
+  'nano30:vallisneria-right': [-0.02, 0.02],
+};
 
 let library: ModelLibrary;
 let catalog: AssetCatalog;
@@ -154,6 +175,55 @@ describe.each(['freshwater', 'reef'] as const)('%s preset at every tank size', (
       warn.mockRestore();
       for (const patch of preset.plantPatches) {
         expect(placed.get(patch.id), patch.id).toBeGreaterThanOrEqual(Math.ceil(patch.count / 2));
+      }
+    });
+
+    it('keeps every patch at its authored depth', async () => {
+      const preset = fitted();
+      const hard = preset.decor
+        .filter((item) => !parseEuphylliaId(item.assetId))
+        .map((item) => ({ item, kind: catalog.get(item.assetId).kind }))
+        .filter(({ kind }) => kind !== 'anemone');
+      const { colliders } = await movableColliders(library, hard, waterTop);
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      // A nano's half-depth is barely wider than one plant's sway, so only half of a patch fits.
+      const keptShare = size === 'nano30' ? 0.5 : 0.75;
+      const roots = new Map<string, { x: number; z: number }[]>();
+      scatterPresetPatches(
+        preset,
+        catalog,
+        new ColliderField(colliders),
+        dimensions,
+        (patch, instances) => roots.set(patch.id, instances),
+      );
+      warn.mockRestore();
+      const authored = loadPreset(biome).plantPatches;
+      for (const patch of preset.plantPatches) {
+        const plants = roots.get(patch.id) ?? [];
+        expect(plants.length, patch.id).toBeGreaterThanOrEqual(Math.ceil(patch.count * keptShare));
+        const meanX = plants.reduce((sum, p) => sum + p.x, 0) / plants.length;
+        const meanZ = plants.reduce((sum, p) => sum + p.z, 0) / plants.length;
+        const wanted = authored.find((a) => a.id === patch.id)?.center ?? [0, 0];
+        const authoredZ = (wanted[1] * dimensions.depth) / DEFAULT_TANK.depth;
+        const slack = Math.max(patch.radius, 0.06);
+        expect(Math.abs(meanX - patch.center[0]), `${patch.id} x`).toBeLessThanOrEqual(slack * 2);
+        if (Math.abs(authoredZ) <= 0.05) continue;
+        const key = `${size}:${patch.id}`;
+        const pinned = KNOWN_DEPTH_SHORTFALLS[key];
+        if (pinned) {
+          expect(
+            meanZ,
+            `${key} was fixed: drop it from KNOWN_DEPTH_SHORTFALLS`,
+          ).toBeGreaterThanOrEqual(pinned[0]);
+          expect(meanZ, key).toBeLessThanOrEqual(pinned[1]);
+          expect(
+            meanZ / authoredZ,
+            `${key} was fixed: drop it from KNOWN_DEPTH_SHORTFALLS`,
+          ).toBeLessThan(MIN_DEPTH_SHARE);
+        } else {
+          expect(Math.sign(meanZ), `${key} side`).toBe(Math.sign(authoredZ));
+          expect(meanZ / authoredZ, `${key} depth share`).toBeGreaterThanOrEqual(MIN_DEPTH_SHARE);
+        }
       }
     });
   });

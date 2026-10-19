@@ -30,4 +30,31 @@ describe('fitPresetToTank', () => {
     expect(z).toBeLessThan(0.1);
     expect(y).toBeCloseTo(substrateHeight(DEFAULT_TANK, x, z), 10);
   });
+
+  it('keeps a back-row patch of swaying plants at its authored depth', () => {
+    const preset: PresetLayout = {
+      id: 'test',
+      name: 'test',
+      biome: 'freshwater',
+      plantPatches: [
+        {
+          id: 'back',
+          assetId: 'weed',
+          center: [0.1, -0.15],
+          radius: 0.1,
+          count: 16,
+          scale: [0.6, 0.9],
+          seed: 1,
+        },
+      ],
+      decor: [],
+    };
+    const swaying = (scale: number) => 0.063 + 0.173 * scale;
+    const std200 = { ...DEFAULT_TANK, length: 1, depth: 0.4 };
+    const [patch] = fitPresetToTank(preset, std200, boundsOf, (p) =>
+      swaying(p.scale[1]),
+    ).plantPatches;
+    expect(patch?.center[1]).toBeLessThan(-0.07);
+    expect(patch?.center[1]).toBeGreaterThanOrEqual((-0.15 * 0.4) / DEFAULT_TANK.depth);
+  });
 });
