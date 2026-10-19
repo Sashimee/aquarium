@@ -100,6 +100,7 @@ export function ReplayPanel(props: ReplayPanelProps) {
               aria-valuetext={`${playback.shown} of ${load.lines.length} events`}
               onChange={(e) => props.onScrub(Number(e.currentTarget.value))}
               onPointerUp={props.onScrubEnd}
+              onPointerCancel={props.onScrubEnd}
               onKeyUp={props.onScrubEnd}
               onBlur={props.onScrubEnd}
             />

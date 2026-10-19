@@ -210,6 +210,21 @@ describe('ReplayController playback', () => {
     expect(loads()).toBe(before + 1);
   });
 
+  it('commits a pending drag when play is pressed, before the first tick', async () => {
+    const { controller, seen, fire } = setup();
+    await settle();
+    controller.previewScrub(1);
+    const before = seen.length;
+    controller.toggle();
+    const loads = seen.slice(before).filter((m) => m.type === 'tank:loaded');
+    expect(loads).toHaveLength(1);
+    const roster = (loads[0]?.payload as { fish: { id: string; status: string }[] }).fish;
+    expect(roster.find((f) => f.id === FISH_2)?.status).toBe('dead');
+    expect(controller.getSnapshot().playback).toMatchObject({ shown: 1, playing: true });
+    fire();
+    expect(controller.getSnapshot().playback.shown).toBe(2);
+  });
+
   it('under reduced motion shows everything at once and never starts a timer', async () => {
     const { controller, timers, seen } = setup({ reducedMotion: true });
     await settle();
