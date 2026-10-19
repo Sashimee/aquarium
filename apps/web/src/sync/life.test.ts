@@ -1,4 +1,5 @@
 import type { SpeciesSummary } from '@aquarium/shared';
+import { BIOLOAD_CAPACITY_BY_SIZE } from '@aquarium/sim/lifecycle';
 import { describe, expect, it } from 'vitest';
 import { FISH_1, FISH_2, TANK_A, fishFixture, speciesFixture, tankFixture } from './fixtures';
 import {
@@ -13,6 +14,8 @@ import {
   shouldShowAway,
   speciesNameMap,
   tankCapacity,
+  tankSizeLabel,
+  TANK_SIZE_ORDER,
   tankReportLines,
   waterReport,
 } from './life';
@@ -198,6 +201,68 @@ describe('shop capacity', () => {
     );
     const tank = tankFixture({ fish: dead });
     expect(canBuy(tank, oscar, species)).toEqual({ ok: true });
+  });
+});
+
+describe('shop capacity per tank size', () => {
+  const unit = (id: string, bioload: number): SpeciesSummary =>
+    speciesFixture({
+      id,
+      lifecycle: { ...speciesFixture().lifecycle, bioload },
+    });
+  const stock = (n: number, speciesId = 'unit') =>
+    Array.from({ length: n }, (_, i) =>
+      fishFixture(`00000000-0000-4000-8000-${String(i).padStart(12, '0')}`, {
+        species: speciesId,
+        name: `Fish ${i}`,
+      }),
+    );
+
+  it.each(TANK_SIZE_ORDER)('%s reports its own bioload capacity', (size) => {
+    expect(tankCapacity(tankFixture({ size }), species).capacity).toBe(
+      BIOLOAD_CAPACITY_BY_SIZE[size],
+    );
+  });
+
+  it.each(TANK_SIZE_ORDER)(
+    '%s accepts a fish that reaches the cap exactly and refuses one over',
+    (size) => {
+      const cap = BIOLOAD_CAPACITY_BY_SIZE[size];
+      const unitFish = unit('unit', 1);
+      const half = unit('half', 0.5);
+      const all = [unitFish, half];
+      const tank = tankFixture({ size, fish: stock(cap - 1) });
+      expect(canBuy(tank, unitFish, all)).toEqual({ ok: true });
+      const full = tankFixture({ size, fish: stock(cap) });
+      expect(canBuy(full, half, all).ok).toBe(false);
+      expect(canBuy(full, unitFish, all).ok).toBe(false);
+      const nearly = tankFixture({ size, fish: stock(cap - 1) });
+      expect(canBuy(nearly, unit('over', 1.01), [...all, unit('over', 1.01)]).ok).toBe(false);
+    },
+  );
+
+  it('applies the nano cap where the standard tank would still have room', () => {
+    const fish = stock(3);
+    expect(
+      canBuy(tankFixture({ size: 'nano30', fish }), unit('unit', 1), [unit('unit', 1)]).ok,
+    ).toBe(false);
+    expect(
+      canBuy(tankFixture({ size: 'standard', fish }), unit('unit', 1), [unit('unit', 1)]),
+    ).toEqual({ ok: true });
+  });
+
+  it('refuses at the animal cap of a nano even when the load fits', () => {
+    const tiny = unit('unit', 0.01);
+    const fish = stock(12);
+    expect(canBuy(tankFixture({ size: 'nano30', fish: fish.slice(0, 11) }), tiny, [tiny]).ok).toBe(
+      true,
+    );
+    expect(canBuy(tankFixture({ size: 'nano30', fish }), tiny, [tiny]).ok).toBe(false);
+  });
+
+  it('labels each size with litres and capacity', () => {
+    expect(tankSizeLabel('nano30')).toBe('Nano, 30 L (up to 12 animals, load 3)');
+    expect(tankSizeLabel('long300')).toContain('300 L');
   });
 });
 
