@@ -8,6 +8,7 @@ import { startPwa } from '../pwa/register';
 import { SessionProvider } from './session';
 import './styles.css';
 import './game.css';
+import './photo.css';
 import './loading.css';
 
 /** Returns a function that unmounts the overlay. */
