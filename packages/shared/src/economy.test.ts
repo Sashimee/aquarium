@@ -2,9 +2,11 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { addFishRequestSchema } from './tank.js';
+import { DECOR_ASSET_IDS } from './decorRules.js';
 import { diseaseKindSchema } from './fishState.js';
 import {
   DEFAULT_PURCHASE_STAGE,
+  decorPrice,
   economySchema,
   idempotencyKeySchema,
   type Economy,
@@ -14,10 +16,7 @@ import {
 
 const content = join(import.meta.dirname, '../../../content');
 const readJson = (path: string): unknown => JSON.parse(readFileSync(join(content, path), 'utf8'));
-const manifestIds = (kind: string): string[] =>
-  (readJson('../assets/manifest.json') as { assets: { id: string; kind: string }[] }).assets
-    .filter((a) => a.kind === kind)
-    .map((a) => a.id);
+const placeableIds = [...new Set(Object.values(DECOR_ASSET_IDS).flatMap((ids) => [...ids]))];
 
 describe('content/economy.json', () => {
   const economy = economySchema.parse(readJson('economy.json'));
@@ -67,21 +66,33 @@ describe('content/economy.json', () => {
     });
   });
 
-  it('resolves a price for every plant, decor asset and premium medicine', () => {
-    for (const id of manifestIds('plant')) {
-      expect(economy.items.plant.prices[id], `plant ${id}`).toBeGreaterThan(0);
+  it('resolves a price for every placeable id and every premium medicine', () => {
+    for (const id of placeableIds) {
+      expect(decorPrice(economy, id), id).toBeGreaterThan(0);
     }
-    for (const id of manifestIds('decor')) {
-      expect(economy.items.decor.prices[id], `decor ${id}`).toBeGreaterThan(0);
+    for (const id of ['euphyllia-hammer-0', 'euphyllia-torch-123456789']) {
+      expect(decorPrice(economy, id), id).toBe(economy.items.euphyllia);
     }
     for (const kind of diseaseKindSchema.options) {
       expect(economy.items.consumables.premiumMedicine.prices[kind], kind).toBeGreaterThan(0);
     }
   });
 
-  it('prices only things that exist', () => {
-    expect(Object.keys(economy.items.plant.prices).sort()).toEqual(manifestIds('plant').sort());
-    expect(Object.keys(economy.items.decor.prices).sort()).toEqual(manifestIds('decor').sort());
+  it('prices no id that cannot be placed and no id twice', () => {
+    const plants = Object.keys(economy.items.plant.prices);
+    const decor = Object.keys(economy.items.decor.prices);
+    expect(new Set([...plants, ...decor]).size).toBe(plants.length + decor.length);
+    expect([...plants, ...decor].sort()).toEqual([...placeableIds].sort());
+  });
+
+  it('leaves the vacation feeder free', () => {
+    expect(decorPrice(economy, 'vacation-feeder')).toBeUndefined();
+  });
+
+  it('rejects a euphyllia price outside the decor range', () => {
+    const bad = fixture();
+    bad.items.euphyllia = bad.items.decor.max + 1;
+    expect(economySchema.safeParse(bad).success).toBe(false);
   });
 
   it('keeps the healthy-tank streak at 15 Pearls a day or less', () => {

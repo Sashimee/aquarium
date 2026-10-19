@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { authIdSchema, idSchema, slugSchema, timestampSchema } from './common.js';
 import { diseaseKindSchema } from './fishState.js';
+import { PROCEDURAL_EUPHYLLIA_ID } from './common.js';
 import { tankSizeSchema } from './tankSize.js';
 
 // Planned tables (T70, PLAN 9.2); this contract ships no DB or routes.
@@ -35,7 +36,11 @@ import { tankSizeSchema } from './tankSize.js';
 //
 // T70 must require stage and idempotencyKey on every paid add-fish and must not charge the
 // DEFAULT_PURCHASE_STAGE silently (an old client that sends no stage gets a 400 asking it to
-// reload). A fish is bought through add-fish only; purchase never takes species:* refs.
+// reload). A fish is bought through add-fish only; purchase rejects species:* refs.
+//
+// Plants and decor are priced by the ids of DECOR_ASSET_IDS (the ids a layout holds), not by
+// manifest ids. The procedural euphyllia-<hammer|torch>-<n> pieces share items.euphyllia; see
+// decorPrice(). The vacation-feeder is free: it is survival care, and basic care is never priced.
 
 export const pearlsSchema = z.int();
 export const priceSchema = z
@@ -71,7 +76,9 @@ export const itemRefSchema = z
   .string()
   .min(1)
   .max(120)
-  .describe('what was bought or earned, e.g. species:neon-tetra:juvenile or pack:pearls-550');
+  .describe(
+    'what was bought or earned, e.g. plant:java-fern or pack:pearls-550; purchase rejects species:* refs',
+  );
 
 export const ledgerEntrySchema = z.strictObject({
   id: idSchema,
@@ -160,8 +167,9 @@ export const economySchema = z
     pearlValueCents: z.number().positive(),
     species: z.record(slugSchema, speciesPriceSchema),
     items: z.strictObject({
-      plant: pricedRange(z.string().min(1)).describe('prices keyed by assets/manifest.json id'),
-      decor: pricedRange(z.string().min(1)).describe('prices keyed by assets/manifest.json id'),
+      plant: pricedRange(z.string().min(1)).describe('prices keyed by DECOR_ASSET_IDS id'),
+      decor: pricedRange(z.string().min(1)).describe('prices keyed by DECOR_ASSET_IDS id'),
+      euphyllia: priceSchema.describe('every procedural euphyllia piece, within the decor range'),
       background: z.strictObject({
         price: priceSchema,
         freePerBiome: z.int().positive(),
@@ -209,6 +217,13 @@ export const economySchema = z
     }),
   })
   .superRefine((e, ctx) => {
+    if (e.items.euphyllia < e.items.decor.min || e.items.euphyllia > e.items.decor.max) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['items', 'euphyllia'],
+        message: 'the euphyllia price lies within the decor range',
+      });
+    }
     let previous = 0;
     e.packs.forEach((pack, i) => {
       const perEuro = pack.pearls / pack.priceCents;
@@ -223,3 +238,8 @@ export const economySchema = z
     });
   });
 export type Economy = z.infer<typeof economySchema>;
+
+export function decorPrice(economy: Economy, assetId: string): number | undefined {
+  if (PROCEDURAL_EUPHYLLIA_ID.test(assetId)) return economy.items.euphyllia;
+  return economy.items.plant.prices[assetId] ?? economy.items.decor.prices[assetId];
+}

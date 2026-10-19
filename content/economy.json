@@ -25,9 +25,35 @@
     "plant": {
       "min": 10,
       "max": 60,
-      "prices": { "sketchfab-b34ed521": 15, "sketchfab-b536fec3": 20, "sketchfab-f34fac65": 45 }
+      "prices": {
+        "java-fern": 25,
+        "pond-weed": 10,
+        "red-tiger-lotus": 40,
+        "staurogyne-repens": 20,
+        "universal-plant": 15,
+        "vallisneria": 20,
+        "water-plant": 15
+      }
     },
-    "decor": { "min": 30, "max": 250, "prices": { "polyhaven-lambis_shell": 60 } },
+    "decor": {
+      "min": 30,
+      "max": 250,
+      "prices": {
+        "boulder-01": 80,
+        "coast-rocks-05": 90,
+        "dead-quiver-trunk": 120,
+        "dead-tree-trunk-02": 150,
+        "driftwood-branch": 70,
+        "reef-arch": 200,
+        "lambis-shell": 60,
+        "acropora-cytherea": 180,
+        "acropora-palmata": 200,
+        "brain-coral": 160,
+        "blue-sea-anemone": 150,
+        "host-anemone": 220
+      }
+    },
+    "euphyllia": 130,
     "background": { "price": 150, "freePerBiome": 1 },
     "equipment": {
       "heater": [50, 150, 400],
