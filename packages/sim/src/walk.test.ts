@@ -38,6 +38,11 @@ function variant(
   };
 }
 
+function flipOf(w: NonNullable<SpeciesInput['locomotion']['walking']>) {
+  if (w.tailFlip === undefined) throw new Error('walker fixture has no tail-flip');
+  return w.tailFlip;
+}
+
 const floorOnly = variant('floor-shrimp', (w) => {
   w.surfaces = ['substrate', 'decor'];
 });
@@ -224,7 +229,7 @@ describe('walkers', { timeout: LONG }, () => {
 
   it('hold their refractory past the freeze that follows a flip', () => {
     const slow = variant('slow-recovery', (w) => {
-      w.tailFlip.refractoryS = 6;
+      flipOf(w).refractoryS = 6;
     });
     const world = new World(showConfig(67, 1, slow));
     for (let t = 0; t < 90; t++) world.step();
@@ -430,14 +435,14 @@ describe('walker species', () => {
     expect(() =>
       toSimSpecies(
         variant('flip', (w) => {
-          w.tailFlip.speedMps = limit * 1.01;
+          flipOf(w).speedMps = limit * 1.01;
         }),
       ),
     ).toThrow(/tail-flip peak .* exceeds maxSpeedMps 0.4/);
     expect(
       toSimSpecies(
         variant('flip', (w) => {
-          w.tailFlip.speedMps = limit;
+          flipOf(w).speedMps = limit;
         }),
       ).walking?.flipPeak,
     ).toBeCloseTo(0.4, 12);

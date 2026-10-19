@@ -1078,13 +1078,25 @@ export class Behaviour {
   private beginStartle(i: number, yaw: number, pitch: number): void {
     if (at(this.refractory, i) > 0 || at(this.startlePhase, i) !== StartlePhase.None) return;
     const sp = this.speciesOf(i);
-    // A walker has no C-bend: its tail-flip is the whole burst.
-    this.startlePhase[i] = sp.walking === null ? StartlePhase.Bend : StartlePhase.Burst;
-    this.startleTimer[i] = sp.walking?.flipDurationS ?? BEHAVIOUR.cBendMaxS;
+    const w = sp.walking;
+    if (w === null) {
+      this.startlePhase[i] = StartlePhase.Bend;
+      this.startleTimer[i] = BEHAVIOUR.cBendMaxS;
+      this.refractory[i] = BEHAVIOUR.refractoryS;
+    } else if (w.escape === 'tail-flip') {
+      // A walker has no C-bend: its tail-flip is the whole burst.
+      this.startlePhase[i] = StartlePhase.Burst;
+      this.startleTimer[i] = w.flipDurationS;
+      this.refractory[i] = w.flipRefractoryS;
+    } else {
+      // Withdrawn into its shell it feels no further tap, so the time inside is the refractory.
+      this.startlePhase[i] = StartlePhase.Flee;
+      this.startleTimer[i] = this.host.rng.range(w.withdrawMinS, w.withdrawMaxS);
+      this.refractory[i] = 0;
+    }
     this.startleElapsed[i] = 0;
     this.escapeYaw[i] = yaw;
     this.escapePitch[i] = pitch;
-    this.refractory[i] = sp.walking?.flipRefractoryS ?? BEHAVIOUR.refractoryS;
     if (sp.tightenWhenStartled) this.tighten[i] = BEHAVIOUR.tightenS;
     this.habituation[i] = at(this.habituation, i) + 1;
     this.startledAt[i] = this.host.tick;
@@ -1504,8 +1516,9 @@ export class Behaviour {
   }
 
   /**
-   * A walker's plan: the tail-flip and the freeze after it, picking food it has found, sheltering
-   * in its cave, and otherwise alternating bouts of walking and of picking at the surface.
+   * A walker's plan: the tail-flip and the freeze after it or the time withdrawn into its shell,
+   * picking food it has found, sheltering in its cave, and otherwise alternating bouts of walking
+   * and of picking at the surface.
    * `Walkers` turns it into steps along the surface.
    */
   private planWalker(i: number, w: SimWalking, plan: Plan, rest: number): void {

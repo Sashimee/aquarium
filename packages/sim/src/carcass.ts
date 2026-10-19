@@ -1,4 +1,4 @@
-import type { Collider, Species } from '@aquarium/shared';
+import { WALKER_SWIMMING_MODES, type Collider, type Species } from '@aquarium/shared';
 import { compileCollider } from './decor.ts';
 import { clamp } from './math.ts';
 
@@ -31,10 +31,11 @@ export type CarcassFate = 'float' | 'sink';
 
 /**
  * A dead fish's swim bladder and decomposition gases bring it up; a decapod has no gas space and
- * its exoskeleton is denser than water, so it goes down.
+ * its exoskeleton is denser than water, and a snail or hermit crab carries a calcite shell, so the
+ * walkers go down.
  */
 export function carcassFate(swimmingMode: Species['locomotion']['swimmingMode']): CarcassFate {
-  return swimmingMode === 'pleopod' ? 'sink' : 'float';
+  return WALKER_SWIMMING_MODES.includes(swimmingMode) ? 'sink' : 'float';
 }
 
 /** Terminal sinking speed (m/s) of a carcass `length` metres long falling broadside. */
