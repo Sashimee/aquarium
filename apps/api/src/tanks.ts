@@ -32,6 +32,7 @@ import {
 import {
   applyCare,
   applyEating,
+  BREEDING_SHELTER_ASSET_IDS,
   catchUp,
   DEFAULT_WATER_PARAMETERS,
   FEEDING_WINDOW_MINUTES,
@@ -39,10 +40,11 @@ import {
   hasCapacityFor,
   TANK_BIOLOAD_CAPACITY,
   VACATION_FEEDER_ASSET_ID,
+  type BirthRecord,
   type LifecycleFish,
   type LifecycleState,
 } from '@aquarium/sim/lifecycle';
-import { randomBytes, randomInt } from 'node:crypto';
+import { randomBytes, randomInt, randomUUID } from 'node:crypto';
 import { and, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -124,6 +126,9 @@ function toLifecycleFish(row: FishRow): LifecycleFish {
     alive: row.status === 'alive',
     diedAtMs: row.diedAt?.getTime() ?? null,
     cause: row.cause,
+    sex: row.sex,
+    stage: row.stage,
+    lastBroodAtMs: row.lastBroodAt?.getTime() ?? null,
   };
 }
 
@@ -145,6 +150,10 @@ function storedBackground(row: TankRow) {
     throw new Error(`tank ${row.id} is in the ${row.biome} biome, which has no backgrounds yet`);
   }
   return DEFAULT_BACKGROUND_ID[row.biome];
+}
+
+function hasShelter(row: TankRow): boolean {
+  return storedLayout(row).some((item) => BREEDING_SHELTER_ASSET_IDS.includes(item.assetId));
 }
 
 function hasVacationFeeder(row: TankRow): boolean {
@@ -185,6 +194,14 @@ async function lockAndTick(
     params: DEFAULT_WATER_PARAMETERS,
     graceEndsAtMs: user.createdAt.getTime() + GRACE_PERIOD_MS,
     vacationFeeder: hasVacationFeeder(tank),
+    breeding: new Map([...deps.species].map(([id, s]) => [id, s.breeding])),
+    breedingEnvironment: {
+      temperatureC: chemistrySchema.parse(tank.chemistry).temperatureC,
+      hasCave: hasShelter(tank),
+      maxAnimals: TANK_SIZES[tank.size].maxAnimals,
+      bioloadCapacity: TANK_BIOLOAD_CAPACITY,
+      newId: randomUUID,
+    },
   });
 
   await tx
@@ -211,11 +228,24 @@ async function lockAndTick(
         diedAt: new Date(d.diedAtMs).toISOString(),
       };
     }),
+    births: [],
   };
 
   if (result.steps === 0) return { tank, fishRows, state: initial, away: null };
 
   const updatedRows = await persistFish(tx, fishRows, result.state);
+  const bornRows = await insertNewborns(tx, tank.id, result.births, result.state, deps);
+  away.births = result.births.map((b) => {
+    const row = bornRows.get(b.fishId);
+    if (!row) throw new Error('lifecycle returned a birth that was not stored');
+    return {
+      fishId: b.fishId,
+      parentId: b.parentId,
+      name: row.name,
+      species: b.species,
+      bornAt: new Date(b.bornAtMs).toISOString(),
+    };
+  });
   const advancedTo = new Date(result.advancedToMs);
   await tx
     .update(schema.tanks)
@@ -232,12 +262,56 @@ async function lockAndTick(
       })),
     );
   }
+  const recentBirths = result.births.filter((b) => b.bornAtMs >= now - EVENT_RETENTION_MS);
+  if (recentBirths.length > 0) {
+    await tx.insert(schema.events).values(
+      recentBirths.map((b) => ({
+        tankId: tank.id,
+        at: new Date(b.bornAtMs),
+        kind: 'born' as const,
+        payload: { fishId: b.fishId, parentId: b.parentId, species: b.species },
+      })),
+    );
+  }
   return {
     tank: { ...tank, water: result.state.water, lastTickAt: advancedTo },
-    fishRows: updatedRows,
+    fishRows: [...updatedRows, ...bornRows.values()],
     state: result.state,
     away,
   };
+}
+
+async function insertNewborns(
+  tx: Tx,
+  tankId: string,
+  births: readonly BirthRecord[],
+  state: LifecycleState,
+  deps: TankRouteDeps,
+): Promise<Map<string, FishRow>> {
+  const out = new Map<string, FishRow>();
+  if (births.length === 0) return out;
+  const byId = new Map(state.fish.map((f) => [f.id, f]));
+  const values = births.map((b) => {
+    const fish = byId.get(b.fishId);
+    const spec = deps.species.get(b.species);
+    if (!fish || !spec)
+      throw new Error('lifecycle returned a birth for an unknown fish or species');
+    return {
+      id: b.fishId,
+      tankId,
+      species: b.species,
+      name: `${spec.commonName} fry`.slice(0, 40),
+      sex: fish.sex,
+      stage: 'fry' as const,
+      personality: rollPersonality(),
+      bornAt: new Date(b.bornAtMs),
+      size: fish.size,
+      hunger: fish.hunger,
+      health: fish.health,
+    };
+  });
+  for (const row of await tx.insert(schema.fish).values(values).returning()) out.set(row.id, row);
+  return out;
 }
 
 async function persistFish(
@@ -257,12 +331,16 @@ async function persistFish(
       status: f.alive ? ('alive' as const) : ('dead' as const),
       diedAt: f.diedAtMs === null ? null : new Date(f.diedAtMs),
       cause: f.cause,
+      stage: f.stage,
+      lastBroodAt: f.lastBroodAtMs === null ? null : new Date(f.lastBroodAtMs),
     };
     const dirty =
       changed.hunger !== row.hunger ||
       changed.health !== row.health ||
       changed.size !== row.size ||
-      changed.status !== row.status;
+      changed.status !== row.status ||
+      changed.stage !== row.stage ||
+      changed.lastBroodAt?.getTime() !== row.lastBroodAt?.getTime();
     if (dirty) await tx.update(schema.fish).set(changed).where(eq(schema.fish.id, row.id));
     out.push(dirty ? { ...row, ...changed } : row);
   }

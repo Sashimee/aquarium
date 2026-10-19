@@ -89,6 +89,17 @@ export const awaySummarySchema = z.object({
       diedAt: timestampSchema,
     }),
   ),
+  births: z
+    .array(
+      z.object({
+        fishId: idSchema,
+        parentId: idSchema,
+        name: z.string(),
+        species: slugSchema,
+        bornAt: timestampSchema,
+      }),
+    )
+    .optional(),
 });
 export type AwaySummary = z.infer<typeof awaySummarySchema>;
 
