@@ -46,7 +46,7 @@ const safeEqual = (x: string, y: string) => {
 };
 
 const sameKeys = (row: { p256dh: string; auth: string }, keys: { p256dh: string; auth: string }) =>
-  safeEqual(row.p256dh, keys.p256dh) && safeEqual(row.auth, keys.auth);
+  [safeEqual(row.p256dh, keys.p256dh), safeEqual(row.auth, keys.auth)].every(Boolean);
 
 const signature = (secret: string, userId: string) =>
   createHmac('sha256', `${secret}:reminder-unsubscribe`).update(userId).digest('base64url');
@@ -484,6 +484,12 @@ export async function sweepReminders(deps: ReminderSweepDeps): Promise<ReminderS
         .update(schema.reminderPrefs)
         .set({ lastSentAt: row.last_sent_at })
         .where(eq(schema.reminderPrefs.userId, row.user_id));
+
+    if (deps.shouldStop?.()) {
+      await release();
+      deps.inflight?.delete(row.user_id);
+      break;
+    }
 
     try {
       if (push && row.push_enabled) {

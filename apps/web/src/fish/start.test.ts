@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Collider } from '@aquarium/shared';
-import type { Point3 } from '@aquarium/sim';
+import type { Point3, SimToy } from '@aquarium/sim';
 import type { Engine } from '../engine/Engine';
 import { EventBus, type EngineEvents } from '../engine/events';
 import type { InteractionEvents } from '../interaction/events';
 import type { SceneAnchor } from '../scene/anemone';
 import type { Collider as SceneCollider } from '../scene/colliders';
 import { FISH_1, FISH_2, TANK_A, fishFixture } from '../sync/fixtures';
-import type { FishBite, FishPoint, PickRay, TankEvent } from './start';
+import type { BallNudge, FishBite, FishPoint, PickRay, TankEvent } from './start';
 
 class FakeFishSystem {
   readonly handled: TankEvent[] = [];
@@ -71,6 +71,21 @@ class FakeFishSystem {
   }
   netTap(ray: PickRay): void {
     this.taps.push(ray);
+  }
+  readonly toys: (readonly SimToy[])[] = [];
+  setToys(toys: readonly SimToy[]): void {
+    this.toys.push(toys);
+  }
+  private nudged: ((nudge: BallNudge) => void) | null = null;
+  onToyNudge(listener: (nudge: BallNudge) => void): () => void {
+    this.nudged = listener;
+    return () => undefined;
+  }
+  nudge(nudge: BallNudge): void {
+    this.nudged?.(nudge);
+  }
+  fishPoint(fishId: string): FishPoint | null {
+    return fishId === FISH_1 ? { x: 1, y: 2, z: 3 } : null;
   }
   synced(): Promise<void> {
     return this.sync;
@@ -404,6 +419,45 @@ describe('startFish', () => {
     await flush();
     fish.bite([{ fishId: FISH_1, foodId: 7, portion: 0.2 }]);
     expect(seen).toEqual([[{ fishId: FISH_1, foodId: 7, portion: 0.2 }]]);
+  });
+
+  it('holds the last toys until the fish are up, then forwards each change', async () => {
+    const fish = new FakeFishSystem();
+    const pending = deferred<FakeFishSystem>();
+    const { handle } = setup(pending.promise);
+    const mirror: SimToy = { kind: 'mirror', position: [0, 0.2, -0.1], normal: [0, 0, 1] };
+    const ball: SimToy = { kind: 'ball', position: [0, 0.4, 0], velocity: [0.01, 0, 0] };
+    handle.sim.setToys([ball]);
+    handle.sim.setToys([mirror]);
+    expect(handle.sim.fishPoint(FISH_1)).toBeNull();
+    pending.resolve(fish);
+    await flush();
+    expect(fish.toys).toEqual([[mirror]]);
+    handle.sim.setToys([]);
+    expect(fish.toys).toEqual([[mirror], []]);
+    expect(handle.sim.fishPoint(FISH_1)).toEqual({ x: 1, y: 2, z: 3 });
+    expect(handle.sim.fishPoint(FISH_2)).toBeNull();
+  });
+
+  it('sends no toys to fish that come up with none set', async () => {
+    const fish = new FakeFishSystem();
+    setup(Promise.resolve(fish));
+    await flush();
+    expect(fish.toys).toEqual([]);
+  });
+
+  it('passes ball nudges to listeners that subscribed before the fish were up, until unsubscribed', async () => {
+    const fish = new FakeFishSystem();
+    const pending = deferred<FakeFishSystem>();
+    const { handle } = setup(pending.promise);
+    const seen: BallNudge[] = [];
+    const off = handle.sim.onToyNudge((nudge) => seen.push(nudge));
+    pending.resolve(fish);
+    await flush();
+    fish.nudge({ toyId: 'ball', ix: 0.02, iz: -0.01 });
+    off();
+    fish.nudge({ toyId: null, ix: 1, iz: 1 });
+    expect(seen).toEqual([{ toyId: 'ball', ix: 0.02, iz: -0.01 }]);
   });
 
   it('drops play calls until the fish are up, then forwards them', async () => {
