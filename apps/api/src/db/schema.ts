@@ -135,6 +135,8 @@ export const eventKindEnum = pgEnum('event_kind', [
   'ate',
   'death',
   'born',
+  'sick',
+  'water_alert',
 ]);
 
 export const tanks = pgTable(

@@ -3,6 +3,7 @@ import {
   ateBatchRequestSchema,
   backgroundIdSchema,
   careActionSchema,
+  careEventSchema,
   chemistrySchema,
   containsBlockedWord,
   createTankRequestSchema,
@@ -20,6 +21,8 @@ import {
   newTankChemistry,
   TANK_SIZES,
   personalitySchema,
+  replayQuerySchema,
+  replayResponseSchema,
   speciesListSchema,
   tankListSchema,
   tankSchema,
@@ -47,7 +50,20 @@ import {
   type LifecycleState,
 } from '@aquarium/sim/lifecycle';
 import { randomInt, randomUUID } from 'node:crypto';
-import { and, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  getTableColumns,
+  gt,
+  gte,
+  inArray,
+  lt,
+  lte,
+  or,
+  sql,
+} from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { audit } from './audit.ts';
@@ -78,6 +94,7 @@ export interface CareLimits {
   addFish: Limit;
   wallet: Limit;
   purchase: Limit;
+  replay: Limit;
 }
 
 export const DEFAULT_CARE_LIMITS: CareLimits = {
@@ -87,6 +104,7 @@ export const DEFAULT_CARE_LIMITS: CareLimits = {
   addFish: { max: 20, windowMs: 60 * 60_000 },
   wallet: { max: 60, windowMs: 60_000 },
   purchase: { max: 60, windowMs: 10 * 60_000 },
+  replay: { max: 30, windowMs: 60_000 },
 };
 
 const EVENT_RETENTION_MS = 90 * 86_400_000;
@@ -118,6 +136,27 @@ const atePayloadSchema = z.looseObject({ fishId: idSchema, portion: z.number().p
 
 const tankParamsSchema = z.strictObject({ tankId: idSchema });
 const fishParamsSchema = z.strictObject({ tankId: idSchema, fishId: idSchema });
+
+const CURSOR_AT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
+
+function encodeReplayCursor(row: { atUs: string; id: string }): string {
+  return Buffer.from(`${row.atUs}|${row.id}`).toString('base64url');
+}
+
+function decodeReplayCursor(raw: string): { atUs: string; id: string } {
+  const parts = Buffer.from(raw, 'base64url').toString().split('|');
+  const [atUs, id] = parts;
+  const parsedId = idSchema.safeParse(id);
+  if (parts.length !== 2 || !atUs || !CURSOR_AT.test(atUs) || !parsedId.success) {
+    throw new HttpError(
+      400,
+      apiError('validation_failed', 'The cursor is not valid. Start again without one.', [
+        { path: ['cursor'], message: 'not a cursor this server issued' },
+      ]),
+    );
+  }
+  return { atUs, id: parsedId.data };
+}
 
 const nameNotPublic = () =>
   new HttpError(
@@ -257,6 +296,7 @@ async function lockAndTick(
   if (observed.length > 0) await claimAchievementRewards(tx, deps.economy, user.id, now);
   const byId = new Map([...fishRows, ...bornRows.values()].map((r) => [r.id, r]));
   const away: AwaySummary = {
+    fromAt: tank.lastTickAt.toISOString(),
     elapsedMinutes: result.elapsedMinutes,
     capped: result.capped,
     deaths: result.deaths.map((d) => {
@@ -312,6 +352,26 @@ async function lockAndTick(
         kind: 'born' as const,
         payload: { fishId: b.fishId, parentId: b.parentId, species: b.species },
       })),
+    );
+  }
+  const recentTimeline = result.timeline.filter((e) => e.atMs >= now - EVENT_RETENTION_MS);
+  if (recentTimeline.length > 0) {
+    await tx.insert(schema.events).values(
+      recentTimeline.map((e) =>
+        e.kind === 'sick'
+          ? {
+              tankId: tank.id,
+              at: new Date(e.atMs),
+              kind: 'sick' as const,
+              payload: { fishId: e.fishId },
+            }
+          : {
+              tankId: tank.id,
+              at: new Date(e.atMs),
+              kind: 'water_alert' as const,
+              payload: { metric: e.metric, state: e.state },
+            },
+      ),
     );
   }
   return {
@@ -671,6 +731,61 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       return withTank(user, tankId, async (tx, ticked) => {
         await recordVisit(tx, ticked.tank.id, ticked.nowMs);
         return render(tx, ticked);
+      });
+    }),
+  );
+
+  app.get(
+    '/api/tanks/:tankId/replay',
+    guarded(async (req) => {
+      const user = await authorize(req);
+      const { tankId } = tankParamsSchema.parse(req.params);
+      const query = replayQuerySchema.parse(req.query);
+      throttle(user.id, 'replay');
+      const since = new Date(query.since);
+      const cursor = query.cursor ? decodeReplayCursor(query.cursor) : null;
+      return withTank(user, tankId, async (tx, ticked) => {
+        const until = query.until ? new Date(query.until) : new Date(ticked.nowMs);
+        const rows = await tx
+          .select({
+            ...getTableColumns(schema.events),
+            atUs: sql<string>`to_char(${schema.events.at} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+          })
+          .from(schema.events)
+          .where(
+            and(
+              eq(schema.events.tankId, tankId),
+              gt(schema.events.at, since),
+              lte(schema.events.at, until),
+              ...(cursor
+                ? [
+                    or(
+                      sql`${schema.events.at} > ${cursor.atUs}::timestamptz`,
+                      and(
+                        sql`${schema.events.at} = ${cursor.atUs}::timestamptz`,
+                        gt(schema.events.id, cursor.id),
+                      ),
+                    ),
+                  ]
+                : []),
+            ),
+          )
+          .orderBy(asc(schema.events.at), asc(schema.events.id))
+          .limit(query.limit + 1);
+        const page = rows.slice(0, query.limit);
+        const last = page.at(-1);
+        return replayResponseSchema.parse({
+          events: page.map((r) =>
+            careEventSchema.parse({
+              id: r.id,
+              tankId: r.tankId,
+              at: r.at.toISOString(),
+              kind: r.kind,
+              payload: r.payload,
+            }),
+          ),
+          nextCursor: rows.length > query.limit && last ? encodeReplayCursor(last) : null,
+        });
       });
     }),
   );

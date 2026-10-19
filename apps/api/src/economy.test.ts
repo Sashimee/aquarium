@@ -1017,7 +1017,7 @@ describe('migration grant', () => {
   });
   afterAll(() => h.close());
 
-  const migration = readFileSync(new URL('../drizzle/0017_economy.sql', import.meta.url), 'utf8');
+  const migration = readFileSync(new URL('../drizzle/0018_economy.sql', import.meta.url), 'utf8');
   const grants = migration
     .split('--> statement-breakpoint')
     .map((s) => s.trim())
