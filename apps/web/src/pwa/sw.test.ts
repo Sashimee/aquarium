@@ -32,6 +32,10 @@ function boot(network: (request: Request) => Promise<Response>) {
   const listeners = new Map<string, Listener>();
   const fetched: string[] = [];
   let preloadEnabled = false;
+  const notifications: { title: string; options: Record<string, unknown> }[] = [];
+  const opened: string[] = [];
+  const focused: string[] = [];
+  let windows: { url: string }[] = [];
   const caches = {
     async open(name: string) {
       if (!stores.has(name)) stores.set(name, new FakeCache());
@@ -48,8 +52,27 @@ function boot(network: (request: Request) => Promise<Response>) {
     location: new URL(`${ORIGIN}/sw.js`),
     addEventListener: (type: string, listener: Listener) => listeners.set(type, listener),
     skipWaiting: async () => undefined,
-    registration: { navigationPreload: { enable: async () => void (preloadEnabled = true) } },
-    clients: { claim: async () => undefined },
+    registration: {
+      navigationPreload: { enable: async () => void (preloadEnabled = true) },
+      showNotification: async (title: string, options: Record<string, unknown>) => {
+        notifications.push({ title, options });
+      },
+    },
+    clients: {
+      claim: async () => undefined,
+      matchAll: async () =>
+        windows.map((w) => ({
+          url: w.url,
+          focus: async () => {
+            focused.push(w.url);
+            return w;
+          },
+        })),
+      openWindow: async (url: string) => {
+        opened.push(url);
+        return null;
+      },
+    },
   };
   runInNewContext(SOURCE, {
     self: scope,
@@ -91,7 +114,31 @@ function boot(network: (request: Request) => Promise<Response>) {
     return answer ? await answer : undefined;
   };
 
-  return { stores, fetched, lifecycle, request, preloadEnabled: () => preloadEnabled };
+  const dispatch = async (type: 'push' | 'notificationclick') => {
+    let pending: Promise<unknown> = Promise.resolve();
+    let closed = false;
+    listeners.get(type)?.({
+      notification: { close: () => void (closed = true) },
+      waitUntil: (p: Promise<unknown>) => {
+        pending = p;
+      },
+    });
+    await pending;
+    return closed;
+  };
+
+  return {
+    stores,
+    fetched,
+    lifecycle,
+    request,
+    dispatch,
+    notifications,
+    opened,
+    focused,
+    setWindows: (next: { url: string }[]) => void (windows = next),
+    preloadEnabled: () => preloadEnabled,
+  };
 }
 
 const online = async (request: Request) => new Response(`net ${new URL(request.url).pathname}`);
@@ -178,6 +225,32 @@ describe('service worker', () => {
     sw.stores.set('aquarium-shell-old', new FakeCache());
     await sw.lifecycle('activate');
     expect([...sw.stores.keys()]).toEqual([`aquarium-shell-${BUILD}`]);
+  });
+});
+
+describe('push reminders', () => {
+  it('shows a fixed reminder without reading any payload', async () => {
+    const sw = boot(online);
+    await sw.dispatch('push');
+    expect(sw.notifications).toHaveLength(1);
+    expect(sw.notifications[0]?.title).toBe('Your fish are hungry');
+    expect(sw.notifications[0]?.options['tag']).toBe('care-reminder');
+  });
+
+  it('focuses an open tab of the app on click and closes the notification', async () => {
+    const sw = boot(online);
+    sw.setWindows([{ url: 'https://elsewhere.test/' }, { url: `${ORIGIN}/settings` }]);
+    expect(await sw.dispatch('notificationclick')).toBe(true);
+    expect(sw.focused).toEqual([`${ORIGIN}/settings`]);
+    expect(sw.opened).toEqual([]);
+  });
+
+  it('opens the tank when no tab of the app is open', async () => {
+    const sw = boot(online);
+    sw.setWindows([{ url: 'https://elsewhere.test/' }]);
+    await sw.dispatch('notificationclick');
+    expect(sw.opened).toEqual(['/']);
+    expect(sw.focused).toEqual([]);
   });
 });
 

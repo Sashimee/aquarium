@@ -83,3 +83,25 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(shell(request));
   }
 });
+
+// The server sends no payload, so nothing about the tank leaves it; the text here is fixed.
+self.addEventListener('push', (event) => {
+  event.waitUntil(
+    self.registration.showNotification('Your fish are hungry', {
+      body: 'It has been a while since the last feeding. Tap to check on your tank.',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      tag: 'care-reminder',
+    }),
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
+      const open = windows.find((client) => new URL(client.url).origin === self.location.origin);
+      return open ? open.focus() : self.clients.openWindow('/');
+    }),
+  );
+});
