@@ -25,6 +25,9 @@ const values: InstanceValues = {
   tint: [0.9, 1, 1.1],
   gills: 0.375,
   mouth: 0.125,
+  ich: 0.25,
+  finRot: 0.5,
+  velvet: 0.75,
 };
 
 describe('FishInstanceData', () => {
@@ -42,6 +45,9 @@ describe('FishInstanceData', () => {
     expect(data.array[o + InstanceSlot.TintB]).toBeCloseTo(1.1, 6);
     expect(data.array[o + InstanceSlot.Gills]).toBe(0.375);
     expect(data.array[o + InstanceSlot.Mouth]).toBe(0.125);
+    expect(data.array[o + InstanceSlot.Ich]).toBe(0.25);
+    expect(data.array[o + InstanceSlot.FinRot]).toBe(0.5);
+    expect(data.array[o + InstanceSlot.Velvet]).toBe(0.75);
   });
 
   it('keeps every slot inside one stride', () => {

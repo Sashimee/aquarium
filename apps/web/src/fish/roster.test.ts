@@ -323,6 +323,24 @@ describe('TankRoster', () => {
       expect(changed).toEqual([entry]);
     });
 
+    it('follows a disease from its onset through its cure', () => {
+      const ich = {
+        kind: 'ich',
+        since: '2026-10-16T08:00:00.000Z',
+        severity: 0.3,
+        treatedUntil: null,
+      } as const;
+      const roster = loaded([fishFixture(FISH_1, { disease: ich })]);
+      const entry = roster.get(simId(roster, FISH_1));
+      expect(entry?.disease).toEqual(ich);
+      const worse = { ...ich, severity: 0.8 };
+      roster.updated({ tankId: TANK_A, fish: [fishFixture(FISH_1, { disease: worse })] });
+      expect(entry?.disease).toEqual(worse);
+      roster.updated({ tankId: TANK_A, fish: [fishFixture(FISH_1, { disease: null })] });
+      expect(entry?.disease).toBeNull();
+      expect(new TankRoster(DEMO).swimming().every((f) => f.disease === null)).toBe(true);
+    });
+
     it('leaves the swimming set alone, so no new world is built', () => {
       const roster = loaded([fishFixture(FISH_1)]);
       const revision = roster.revision;

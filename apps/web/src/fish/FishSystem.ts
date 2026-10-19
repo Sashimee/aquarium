@@ -47,6 +47,7 @@ import {
   type WalkerValues,
 } from './instances';
 import { mouthFade, selectLod, type LodThresholds } from './lod';
+import { writeDiseaseSigns } from './disease';
 import { featuresFor, sameFeatures, waitsForReload } from './features';
 import { FishMaterial, type FishMaterialFeatures } from './material';
 import { commitLodDraw } from './prewarm';
@@ -315,6 +316,9 @@ export class FishSystem {
     tint: [1, 1, 1],
     gills: 0,
     mouth: 0,
+    ich: 0,
+    finRot: 0,
+    velvet: 0,
   };
 
   /**
@@ -1340,6 +1344,7 @@ export class FishSystem {
         swim === null
           ? 0
           : swim.mouthOpening * liveliness * mouthFade(distance, rt.length, this.thresholds);
+      writeDiseaseSigns(rt.fish.disease, motion instanceof WalkState, v);
       lod.instances.write(slot, v);
       const { locomotion } = rt.batch;
       if (motion instanceof WalkState && locomotion.kind === 'walk') {
