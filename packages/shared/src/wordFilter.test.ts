@@ -23,6 +23,11 @@ describe('word filter', () => {
     'fire_retardant',
     'sniggle',
     'mishit',
+    'white_tiger',
+    'white_powder',
+    'sieg_hello',
+    'white_wolf',
+    'power_white',
   ])('lets the innocent word %s through', (word) => {
     expect(containsBlockedWord(word)).toBe(false);
   });

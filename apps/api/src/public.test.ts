@@ -338,7 +338,9 @@ describe('public tank links', () => {
           })
         ).statusCode,
       ).toBe(404);
-      expect((await call(h, owner.cookie, 'PUT', url, { kind: 'heart' })).statusCode).toBe(403);
+      const own = await call(h, owner.cookie, 'PUT', url, { kind: 'heart' });
+      expect(own.statusCode).toBe(403);
+      expect(own.json().error.code).toBe('own_tank');
     });
 
     it('stops counting once the link is revoked', async () => {

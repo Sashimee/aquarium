@@ -22,6 +22,7 @@ import {
 } from './push.ts';
 import {
   releaseInflightClaims,
+  type InflightClaim,
   sweepReminders,
   unsubscribeToken,
   unsubscribeUrl,
@@ -216,7 +217,7 @@ describe('shutdown release', () => {
       keys: KEYS,
     });
     await call(h, a.cookie, 'PUT', '/api/me/reminders', { push: true });
-    const inflight = new Map();
+    const inflight = new Map<string, InflightClaim>();
     void sweepReminders({
       database: h.database,
       mailer: h.mailer,
@@ -263,7 +264,7 @@ describe('shutdown release', () => {
       .update(schema.reminderPrefs)
       .set({ lastSentAt: new Date() })
       .where(eq(schema.reminderPrefs.userId, a.userId));
-    const inflight = new Map();
+    const inflight = new Map<string, InflightClaim>();
     await sweepReminders({
       database: h.database,
       mailer: h.mailer,
@@ -280,7 +281,7 @@ describe('shutdown release', () => {
   it('leaves nothing tracked after a normal sweep', async () => {
     const h = await harness();
     await optedIn(h);
-    const inflight = new Map();
+    const inflight = new Map<string, InflightClaim>();
     const result = await sweepReminders({
       database: h.database,
       mailer: h.mailer,
@@ -363,7 +364,7 @@ describe('mail budget', () => {
     const a = await optedIn(h);
     const mailed = h.outbox.length;
     let stops = 0;
-    const inflight = new Map();
+    const inflight = new Map<string, InflightClaim>();
     const result = await sweepReminders({
       database: h.database,
       mailer: h.mailer,

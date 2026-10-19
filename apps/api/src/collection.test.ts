@@ -119,6 +119,21 @@ describe('collection book and achievements', () => {
     expect(list.achievements.every((a) => a.progress === 0)).toBe(true);
   });
 
+  it('does not leak the id or name of species the user has not kept', async () => {
+    const { cookie } = await signedIn(h);
+    const tank = await createTank(h, cookie);
+    await addFish(h, cookie, tank.id, 'guppy', 'Pip');
+    const book = await readCollection(h, cookie);
+    const locked = book.species.filter((s) => s.entry === null);
+    expect(book.species.find((s) => s.species === 'guppy')?.commonName).toBe('Guppy');
+    expect(locked.length).toBe(book.total - 1);
+    const body = JSON.stringify(locked);
+    for (const id of ['neon-tetra', 'betta', 'Neon Tetra', 'Betta']) {
+      expect(body).not.toContain(id);
+    }
+    expect(new Set(locked.map((s) => s.species)).size).toBe(locked.length);
+  });
+
   it('records a species once however often it is kept, and awards once', async () => {
     const { cookie } = await signedIn(h);
     const tank = await createTank(h, cookie);

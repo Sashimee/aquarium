@@ -150,15 +150,26 @@ export function registerCollectionRoutes(deps: CollectionRouteDeps): void {
     const byId = new Map(loaded.entries.map((e) => [e.species, e]));
     const catalog = [...species.values()];
     const facts = collectionFacts(loaded.entries, catalog);
+    const unlocked = catalog
+      .filter((s) => byId.has(s.id))
+      .toSorted((a, b) => a.commonName.localeCompare(b.commonName))
+      .map((s) => ({
+        species: s.id,
+        commonName: s.commonName,
+        biome: s.biome,
+        entry: byId.get(s.id) ?? null,
+      }));
+    const locked = catalog
+      .filter((s) => !byId.has(s.id))
+      .toSorted((a, b) => a.biome.localeCompare(b.biome) || a.id.localeCompare(b.id))
+      .map((s, index) => ({
+        species: `locked-${index + 1}`,
+        commonName: 'Undiscovered species',
+        biome: s.biome,
+        entry: null,
+      }));
     return collectionSchema.parse({
-      species: catalog
-        .toSorted((a, b) => a.commonName.localeCompare(b.commonName))
-        .map((s) => ({
-          species: s.id,
-          commonName: s.commonName,
-          biome: s.biome,
-          entry: byId.get(s.id) ?? null,
-        })),
+      species: [...unlocked, ...locked],
       kept: facts.kept,
       bred: facts.bred,
       raised: facts.raised,
