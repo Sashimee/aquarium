@@ -267,6 +267,8 @@ export class FishSystem {
   private syncing = false;
   private readonly syncWaiters: (() => void)[] = [];
   private clockS = 0;
+  /** When photo mode froze the fish; the stream is sampled at this instant until they go on. */
+  private pausedAtMs: number | null = null;
   private thresholds: LodThresholds = { midDistance: 1, impostorDistance: 3 };
   private shadows: Readonly<TierSettings> | null = null;
   private features: FishMaterialFeatures | null = null;
@@ -1068,6 +1070,15 @@ export class FishSystem {
     };
   }
 
+  private followPause(nowMs: number): void {
+    const paused = this.engine.photo.simPaused;
+    if (paused === (this.pausedAtMs !== null)) return;
+    this.pausedAtMs = paused ? nowMs : null;
+    if (!this.simReady || this.inWorld === null) return;
+    if (paused) this.sim.stop();
+    else this.sim.start();
+  }
+
   private async reinit(config: TankSpaceWorldConfig): Promise<void> {
     const generation = this.generation;
     const init = initSim({
@@ -1087,6 +1098,9 @@ export class FishSystem {
           this.stream.begin(ready.epoch, ready.fishIds);
         },
       });
+      if (this.pausedAtMs !== null && !this.disposed && generation === this.generation) {
+        this.sim.stop();
+      }
     } catch (cause) {
       if (cause instanceof SimInitTimeout && this.started && !this.disposed) this.replaceWorker();
       throw cause;
@@ -1275,7 +1289,10 @@ export class FishSystem {
     return curlAboveFloor(curl, tail, rt.scale, position, quaternion, floorY);
   }
 
-  private update(deltaS: number, nowMs: number): void {
+  private update(frameDeltaS: number, frameNowMs: number): void {
+    this.followPause(frameNowMs);
+    const deltaS = this.pausedAtMs === null ? frameDeltaS : 0;
+    const nowMs = this.pausedAtMs ?? frameNowMs;
     this.clockS += deltaS;
     const frame = this.stream.sample(nowMs);
     const sceneRevision = this.engine.sceneRevision;
@@ -1289,7 +1306,7 @@ export class FishSystem {
     }
     this.bags.begin();
 
-    const camera = this.engine.camera.position;
+    const camera = this.engine.viewPosition;
     for (const rt of this.runtimes.values()) {
       if (!this.place(rt, deltaS, frame)) {
         rt.shown = false;
