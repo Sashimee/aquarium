@@ -5,6 +5,7 @@ import {
   ateBatchRequestSchema,
   careActionSchema,
   careEventSchema,
+  replayQuerySchema,
   DEFAULT_EQUIPMENT,
   newTankChemistry,
   decorItemSchema,
@@ -245,6 +246,30 @@ describe('care events', () => {
     expect(ateBatchRequestSchema.safeParse({ reports: [{ ...report, portion: 0 }] }).success).toBe(
       false,
     );
+  });
+
+  it('validates replay events and queries', () => {
+    const base = { id, tankId: id2, at: ts };
+    expect(
+      careEventSchema.safeParse({ ...base, kind: 'sick', payload: { fishId: id } }).success,
+    ).toBe(true);
+    expect(
+      careEventSchema.safeParse({
+        ...base,
+        kind: 'water_alert',
+        payload: { metric: 'ammonia', state: 'high' },
+      }).success,
+    ).toBe(true);
+    expect(
+      careEventSchema.safeParse({
+        ...base,
+        kind: 'water_alert',
+        payload: { metric: 'ph', state: 'high' },
+      }).success,
+    ).toBe(false);
+    expect(replayQuerySchema.parse({ since: ts }).limit).toBe(200);
+    expect(replayQuerySchema.safeParse({ since: ts, limit: '501' }).success).toBe(false);
+    expect(replayQuerySchema.safeParse({}).success).toBe(false);
   });
 
   it('validates logged events', () => {

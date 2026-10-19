@@ -18,6 +18,7 @@ import { checkFishName, checkTankName, suggestFishName, suggestTankName } from '
 import type { SessionState, TankSession } from '../sync/session';
 import { useAuth } from './context';
 import { Link } from './screens';
+import { ShareSection } from './ShareSection';
 import { useActiveTank, useSessionState, useOptionalSession, useSpeciesNames } from './session';
 
 const BIOME_LABEL: Record<Biome, string> = {
@@ -101,7 +102,10 @@ export function TanksPanel({ newTankBiome }: { newTankBiome: PlayableBiome | nul
       )}
     >
       {({ session, state, tank }) => (
-        <TankSwitcher session={session} state={state} tank={tank} newTankBiome={newTankBiome} />
+        <>
+          <TankSwitcher session={session} state={state} tank={tank} newTankBiome={newTankBiome} />
+          <ShareSection key={tank.id} session={session} state={state} tank={tank} />
+        </>
       )}
     </Gate>
   );

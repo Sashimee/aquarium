@@ -11,7 +11,7 @@ import {
 import { speciesNameMap, type SpeciesNames } from '../sync/speciesNames';
 import { INITIAL_STATE, type SessionState } from '../sync/state';
 import type { TankSession } from '../sync/session';
-import { useApi, useAuth, useBridge } from './context';
+import { useApi, useAuth, useBridge, useRoute } from './context';
 
 interface SessionContextValue {
   session: TankSession | null;
@@ -58,7 +58,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const { interaction } = useBridge();
   const { user, status } = useAuth();
   const [session, setSession] = useState<TankSession | null>(null);
-  const verified = status !== 'loading' && user?.emailVerified === true;
+  const viewing = useRoute().name === 'public-tank';
+  const verified = !viewing && status !== 'loading' && user?.emailVerified === true;
   const [needed, setNeeded] = useState(false);
   useEffect(() => {
     if (verified) setNeeded(true);
@@ -67,9 +68,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // Visitors without a verified account never get a session, and the fish wait for the session
   // to say whether a saved tank is coming.
   useEffect(() => {
-    if (status === 'loading' || verified || session) return;
+    if (viewing || status === 'loading' || verified || session) return;
     interaction.emit('tank:none', {});
-  }, [status, verified, session, interaction]);
+  }, [viewing, status, verified, session, interaction]);
 
   // Built in an effect so StrictMode's mount, unmount, mount cycle gets a fresh, undisposed session.
   useEffect(() => {

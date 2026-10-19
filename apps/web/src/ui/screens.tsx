@@ -12,26 +12,29 @@ import {
 import { ApiRequestError, ClientValidationError, type FieldErrors } from './api';
 import { useApi, useAuth } from './context';
 import { HapticsSetting } from './HapticsSetting';
+import { SoundSetting } from './SoundSetting';
 import { RemindersSetting } from './RemindersSetting';
 import { deleteErrorMessage, downloadText, rateLimitMessage, safeHref } from './legal';
 import { InstallCard } from '../pwa/InstallCard';
 import { PushSetupError } from '../pwa/push';
-import { navigate } from './router';
+import { currentReturnPath, finishSignIn, navigate, returnState } from './router';
 
 export function Link({
   to,
   children,
   className,
+  state = null,
 }: {
   to: string;
   children: ReactNode;
   className?: string;
+  state?: unknown;
 }) {
   const onClick = (e: MouseEvent<HTMLAnchorElement>) => {
     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)
       return;
     e.preventDefault();
-    navigate(to);
+    navigate(to, false, state);
   };
   return (
     <a href={to} onClick={onClick} className={className}>
@@ -237,6 +240,7 @@ function ResendButton({
 }
 
 export function SignInScreen() {
+  const [returnTo] = useState(currentReturnPath);
   const auth = useAuth();
   const submission = useSubmission();
   const [email, setEmail] = useState('');
@@ -254,7 +258,7 @@ export function SignInScreen() {
     void submission
       .run(() => auth.signIn({ email, password }))
       .then((ok) => {
-        if (ok) navigate('/');
+        if (ok) finishSignIn(returnTo);
       });
   };
 
@@ -290,7 +294,9 @@ export function SignInScreen() {
         disabled={submission.busy}
         onClick={() => {
           setViaPassword(false);
-          void submission.run(() => auth.signInWithPasskey()).then((ok) => ok && navigate('/'));
+          void submission
+            .run(() => auth.signInWithPasskey())
+            .then((ok) => ok && finishSignIn(returnTo));
         }}
       >
         Sign in with a passkey
@@ -307,13 +313,17 @@ export function SignInScreen() {
         <Link to="/forgot-password">Forgot password?</Link>
       </p>
       <p className="alt">
-        New here? <Link to="/sign-up">Create an account</Link>
+        New here?{' '}
+        <Link to="/sign-up" state={returnState(returnTo)}>
+          Create an account
+        </Link>
       </p>
     </Panel>
   );
 }
 
 export function SignUpScreen() {
+  const [returnTo] = useState(currentReturnPath);
   const auth = useAuth();
   const submission = useSubmission();
   const [name, setName] = useState('');
@@ -344,7 +354,9 @@ export function SignUpScreen() {
         </p>
         <ResendButton email={sentTo} justSent />
         <p className="alt">
-          <Link to="/sign-in">Go to sign in</Link>
+          <Link to="/sign-in" state={returnState(returnTo)}>
+            Go to sign in
+          </Link>
         </p>
       </Panel>
     );
@@ -387,7 +399,10 @@ export function SignUpScreen() {
         </button>
       </form>
       <p className="alt">
-        Already have an account? <Link to="/sign-in">Sign in</Link>
+        Already have an account?{' '}
+        <Link to="/sign-in" state={returnState(returnTo)}>
+          Sign in
+        </Link>
       </p>
     </Panel>
   );
@@ -757,6 +772,7 @@ export function SettingsScreen() {
         <FormError message={passkey.error} />
       </section>
       <RemindersSetting />
+      <SoundSetting />
       <HapticsSetting />
       <section aria-labelledby="export-title">
         <h2 id="export-title">Your data</h2>

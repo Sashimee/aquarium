@@ -17,6 +17,7 @@ import { usePanels, type OpenPanel, type Panel } from './panels';
 import { FeedPanel, FeedToast, PlayPanel, useFood } from './PlayControls';
 import { navigate } from './router';
 import { Sheet } from './Sheet';
+import { SoundButton } from './SoundSetting';
 import { useSessionState } from './session';
 import {
   CreditsScreen,
@@ -64,6 +65,8 @@ function Screen() {
       return <CreditsScreen />;
     case 'not-found':
       return <NotFoundScreen />;
+    case 'public-tank':
+      return null;
   }
 }
 
@@ -74,6 +77,9 @@ const ResetPasswordScreen = lazy(() =>
   import('./PasswordReset').then((m) => ({ default: m.ResetPasswordScreen })),
 );
 
+const PublicTankView = lazy(() =>
+  import('./PublicTank').then((m) => ({ default: m.PublicTankView })),
+);
 const DecorBody = lazy(() => import('./DecorPanel'));
 const TankReportBody = lazy(() => import('./TankReport'));
 const TanksPanel = lazy(() => import('./TankPanel').then((m) => ({ default: m.TanksPanel })));
@@ -144,6 +150,33 @@ function isOpen(panel: Panel): panel is OpenPanel {
 
 export function App() {
   useRedirect();
+  const route = useRoute();
+  if (route.name === 'public-tank') return <PublicShell token={route.token} />;
+  return <Shell />;
+}
+
+function PublicShell({ token }: { token: string }) {
+  return (
+    <div className="shell">
+      <a
+        className="skip"
+        href="#tank"
+        onClick={(e) => {
+          e.preventDefault();
+          document.getElementById('tank')?.focus();
+        }}
+      >
+        Skip to the tank
+      </a>
+      <Suspense fallback={null}>
+        <PublicTankView token={token} />
+      </Suspense>
+      <LoadingScreen />
+    </div>
+  );
+}
+
+function Shell() {
   const route = useRoute();
   const home = route.name === 'home';
   const { panel: requested, newTank, dispatch } = usePanels();
@@ -222,6 +255,7 @@ export function App() {
           <div className="hud-right">
             <div className="hud-buttons">
               {user && <CollectionButton onPress={() => setBookOpen(true)} />}
+              <SoundButton />
               <TankButton open={panel === 'tanks'} onPress={() => toggle('tanks')} />
               <AvatarButton open={panel === 'account'} onPress={() => toggle('account')} />
             </div>
