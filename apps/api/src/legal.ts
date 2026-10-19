@@ -9,6 +9,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Auth } from './auth.ts';
 import { schema, type Database } from './db/index.ts';
 import { apiError } from './errors.ts';
+import { publicName } from './public.ts';
 import { lockHandles } from './handle.ts';
 import type { Limit, RateLimiter } from './rate-limit.ts';
 
@@ -71,7 +72,7 @@ export function registerLegalRoutes(deps: LegalDeps): void {
     const [user] = await db.select().from(schema.user).where(eq(schema.user.id, userId));
     if (!user) return unauthenticated(reply);
 
-    const [sessions, accounts, passkeys, tanks] = await Promise.all([
+    const [sessions, accounts, passkeys, tanks, reactions, auditRows] = await Promise.all([
       db
         .select({
           id: schema.session.id,
@@ -110,6 +111,27 @@ export function registerLegalRoutes(deps: LegalDeps): void {
         .from(schema.tanks)
         .where(eq(schema.tanks.ownerId, userId))
         .orderBy(asc(schema.tanks.createdAt)),
+      db
+        .select({
+          tankName: schema.tanks.name,
+          kind: schema.tankReactions.kind,
+          createdAt: schema.tankReactions.createdAt,
+        })
+        .from(schema.tankReactions)
+        .innerJoin(schema.tanks, eq(schema.tanks.id, schema.tankReactions.tankId))
+        .where(eq(schema.tankReactions.userId, userId))
+        .orderBy(asc(schema.tankReactions.createdAt)),
+      db
+        .select({
+          at: schema.auditLog.at,
+          action: schema.auditLog.action,
+          detail: schema.auditLog.detail,
+          tankName: schema.tanks.name,
+        })
+        .from(schema.auditLog)
+        .leftJoin(schema.tanks, eq(schema.tanks.id, schema.auditLog.tankId))
+        .where(eq(schema.auditLog.actorId, userId))
+        .orderBy(asc(schema.auditLog.at)),
     ]);
 
     const perTank = await Promise.all(
@@ -131,7 +153,8 @@ export function registerLegalRoutes(deps: LegalDeps): void {
             .where(eq(schema.memorials.tankId, tank.id))
             .orderBy(asc(schema.memorials.diedAt)),
         ]);
-        return { tank, fish, events, memorials };
+        const { shareTokenHash, ...rest } = tank;
+        return { tank: { ...rest, shared: shareTokenHash !== null }, fish, events, memorials };
       }),
     );
 
@@ -155,6 +178,14 @@ export function registerLegalRoutes(deps: LegalDeps): void {
             hasPassword: hasPassword !== null,
           })),
           passkeys,
+          reactions: reactions.map(({ tankName, ...rest }) => ({
+            ...rest,
+            tank: publicName(tankName),
+          })),
+          auditLog: auditRows.map(({ tankName, ...rest }) => ({
+            ...rest,
+            tank: tankName === null ? null : publicName(tankName),
+          })),
           tanks: perTank,
         }),
       ),

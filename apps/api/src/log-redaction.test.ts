@@ -20,6 +20,12 @@ describe('redactUrl', () => {
     ['/api/auth/some-new/aB3dE5gH7jK9mN1pQ3sT5v', '/api/auth/some-new/[redacted]'],
     ['/api/auth/request-password-reset', '/api/auth/request-password-reset'],
     ['/api/health', '/api/health'],
+    [`/api/public/${'aB3-_'.repeat(8)}abc`, '/api/public/[redacted]'],
+    [`/api/public/${'aB3-_'.repeat(8)}abc/reaction`, '/api/public/[redacted]'],
+    [`/api/public/${'aB3-_'.repeat(8)}abc?x=1`, '/api/public/[redacted]'],
+    [`//api//public//${'aB3-_'.repeat(8)}abc`, '/api/public/[redacted]'],
+    [`/API/Public/${'aB3-_'.repeat(8)}abc`, '/API/Public/[redacted]'],
+    [`/api%2Fpublic%2F${'aB3-_'.repeat(8)}abc`, '/api/public/[redacted]'],
   ])('%s -> %s', (input, expected) => {
     expect(redactUrl(input)).toBe(expected);
   });
@@ -74,6 +80,60 @@ describe('request logging', () => {
     expect(log).toContain('/api/auth/reset-password/[redacted]');
     expect(log).not.toContain(token as string);
     expect(log).not.toContain('bad' + token);
+  });
+
+  it('never writes a share token to the log, on any outcome', async () => {
+    const email = `logs-share-${Date.now()}@bas.lu`;
+    const signUp = await h.app.inject({
+      method: 'POST',
+      url: '/api/auth/sign-up/email',
+      headers: jsonHeaders,
+      payload: {
+        email,
+        password: 'correct horse battery',
+        name: 'Tester',
+        callbackURL: '/verify-email',
+      },
+    });
+    expect(signUp.statusCode).toBe(200);
+    const link = /https?:\/\/\S+verify-email\?\S+/.exec(
+      h.outbox.findLast((m) => m.to === email)?.text ?? '',
+    )?.[0];
+    if (!link) throw new Error('no verification link');
+    const url = new URL(link);
+    const verified = await h.app.inject(url.pathname + url.search);
+    const cookie = verified.cookies.map((c) => `${c.name}=${c.value}`).join('; ');
+    const tank = (
+      await h.app.inject({
+        method: 'POST',
+        url: '/api/tanks',
+        headers: { ...jsonHeaders, cookie },
+        payload: { name: 'Logs', biome: 'freshwater' },
+      })
+    ).json<{ id: string }>();
+    const shared = (
+      await h.app.inject({
+        method: 'POST',
+        url: `/api/tanks/${tank.id}/share`,
+        headers: { ...jsonHeaders, cookie },
+      })
+    ).json<{ shareToken: string }>();
+    const token = shared.shareToken;
+
+    const view = await h.app.inject({ method: 'GET', url: `/api/public/${token}` });
+    expect(view.statusCode).toBe(200);
+    await h.app.inject({
+      method: 'PUT',
+      url: `/api/public/${token}/reaction`,
+      headers: { ...jsonHeaders, cookie },
+      payload: { kind: 'bogus' },
+    });
+    await h.app.inject({ method: 'GET', url: `/api/public/${token}/nope?next=${token}` });
+    await h.app.inject({ method: 'GET', url: `/api/public/${token}x` });
+
+    const log = lines.join('');
+    expect(log).toContain('/api/public/[redacted]');
+    expect(log).not.toContain(token);
   });
 });
 

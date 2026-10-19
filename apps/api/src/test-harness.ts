@@ -13,6 +13,7 @@ import { loadChemistryParameters } from './chemistry.ts';
 import { loadCatalog } from './species.ts';
 import type { LegalLimits } from './legal.ts';
 import type { CareLimits } from './tanks.ts';
+import type { PublicLimits } from './public.ts';
 
 const cheapKey = (password: string, salt: Buffer) =>
   new Promise<Buffer>((resolve, reject) =>
@@ -82,6 +83,7 @@ export interface HarnessOptions {
   careLimits?: CareLimits;
   legalLimits?: LegalLimits;
   handleLimit?: Limit;
+  publicLimits?: PublicLimits;
   testHooks?: boolean;
   mailDelayMs?: number;
   appOrigin?: string;
@@ -210,6 +212,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     ...(opts.careLimits ? { careLimits: opts.careLimits } : {}),
     ...(opts.legalLimits ? { legalLimits: opts.legalLimits } : {}),
     ...(opts.handleLimit ? { handleLimit: opts.handleLimit } : {}),
+    ...(opts.publicLimits ? { publicLimits: opts.publicLimits } : {}),
     logger: opts.logStream !== undefined,
     ...(opts.logStream ? { logStream: opts.logStream } : {}),
   });

@@ -177,6 +177,7 @@ describe('tank and fish', () => {
       chemistry: newTankChemistry('freshwater'),
       size: 'standard',
       quarantine: false,
+      shared: false,
       shareToken: null,
       equipment: DEFAULT_EQUIPMENT,
       fish: [fish],
