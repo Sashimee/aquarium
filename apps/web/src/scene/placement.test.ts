@@ -136,3 +136,29 @@ describe('scaleForRoom', () => {
     expect(scaleForRoom(0.9, 0.01, reach)).toBeCloseTo(0.9 * GLASS_SHRINK_FLOOR, 10);
   });
 });
+
+describe('scatterPatch side glass', () => {
+  const side = { halfLength: 0.5, halfDepth: 1 };
+  const reach = (scale: number) => 0.2 * scale;
+  const at = (x: number): PlantPatch => ({
+    ...patch,
+    center: [x, 0],
+    radius: 0.01,
+    count: 4,
+    scale: [1, 1],
+  });
+
+  it('shrinks to fit the room left at the side wall', () => {
+    for (const p of scatterPatch(at(0.35), flat, open, side, reach)) {
+      expect(p.scale).toBeGreaterThan(0.7);
+      expect(p.scale).toBeLessThan(0.8);
+    }
+  });
+
+  it('stops shrinking at the floor and moves the root instead', () => {
+    for (const p of scatterPatch(at(0.49), flat, open, side, reach)) {
+      expect(p.scale).toBeCloseTo(GLASS_SHRINK_FLOOR, 10);
+      expect(Math.abs(p.x) + reach(p.scale)).toBeLessThanOrEqual(side.halfLength + 1e-9);
+    }
+  });
+});
