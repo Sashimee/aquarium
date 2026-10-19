@@ -41,6 +41,7 @@ export function speciesFixture(overrides: Partial<SpeciesSummary> = {}): Species
     },
     chemistry: speciesChemistrySchema.parse({}),
     breeding: breedingSchema.parse({}),
+    warmWater: false,
     ...overrides,
   };
 }
