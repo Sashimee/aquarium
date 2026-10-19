@@ -3312,7 +3312,7 @@
       "licence": "CC0-1.0",
       "modifications": [
         "shell from the photogrammetry scan: colour-checker cube removed, merged and welded, oriented to +Z forward / +Y up from the crusty aperture side and the dome peak, scaled so its longest edge is the standard length",
-        "holes the scan leaves through the paper-thin lip are cut out with a sphere through every wall layer and capped, and small boundary holes are filled",
+        "tunnels the scan leaves through the paper-thin lip are cut out with small spheres through every wall layer and closed by clipping ears of the cut loop, shortest diagonal first, so the lip sheet stays continuous; small boundary holes are filled",
         "retouched the scan texture: white marker ring on the dome, painted over from the surrounding shell colours",
         "retouched the scan texture: white scar near the rear, painted over from the surrounding shell colours",
         "re-simplified to 9000 triangles, box-projected into a fresh atlas and the colour re-baked from the scan's vertex colours, 2048 px KTX2",
