@@ -231,7 +231,7 @@ export function registerPublicRoutes({
     });
     if (outcome === 'not_found') return notFound(reply);
     if (outcome === 'own') {
-      return reply.code(403).send(apiError('forbidden', 'You cannot react to your own tank.'));
+      return reply.code(403).send(apiError('own_tank', 'You cannot react to your own tank.'));
     }
     return reactionState(outcome, user.id);
   });
