@@ -88,6 +88,7 @@ function harness(layout: DecorItem[], biome: 'freshwater' | 'reef' = 'freshwater
     tick: (ms: number) => (now += ms),
     load: (tankId: string, decorLayout: DecorItem[] = []) =>
       bus.emit('tank:loaded', {
+        backgroundId: 'bg-fw-planted-stream',
         tankId,
         biome,
         size: 'standard',
@@ -176,6 +177,7 @@ describe('DecorMode', () => {
   it('refuses to edit a scene of another biome than the tank', () => {
     const h = harness([], 'freshwater');
     h.bus.emit('tank:loaded', {
+      backgroundId: 'bg-fw-planted-stream',
       tankId: 't',
       biome: 'reef',
       size: 'standard',

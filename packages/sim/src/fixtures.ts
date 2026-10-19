@@ -310,6 +310,74 @@ export const cherryShrimp: SpeciesInput = {
   lifecycle: { diet: ['algae-wafer', 'flakes', 'pellets'] },
 };
 
+/** A zebra nerite: glides on its foot over sand, rock and glass, and never swims. */
+export const neriteSnail: SpeciesInput = {
+  id: 'nerite-snail',
+  behaviour: {
+    territorial: false,
+    preferredZone: 'bottom',
+    depthBand: [0, 1],
+    perceptionRangeM: 0.06,
+    perceptionFovDeg: 360,
+    curiosity: 0.1,
+    boldness: 0.3,
+    traits: ['biofilm-grazer'],
+  },
+  locomotion: {
+    swimmingMode: 'none',
+    gait: 'forage',
+    maxSpeedMps: 0.003,
+    cruiseSpeedMps: 0.002,
+    massKg: 0.0015,
+    maxTurnRateDegPerS: 60,
+    maxPitchDeg: 90,
+    strouhal: 0.3,
+    bodyLengthM: 0.02,
+    walking: {
+      walkSpeedMps: 0.002,
+      strideBodyLengths: 0.1,
+      legPairs: 0,
+      surfaces: ['substrate', 'decor', 'glass'],
+      withdraw: { minS: 10, maxS: 60 },
+    },
+  },
+  lifecycle: { diet: ['algae-wafer', 'pellets'] },
+};
+
+/** A blue-leg hermit crab: walks sand and rock on two leg pairs, carrying its shell. */
+export const hermitCrab: SpeciesInput = {
+  id: 'hermit-crab',
+  behaviour: {
+    territorial: false,
+    preferredZone: 'bottom',
+    depthBand: [0, 1],
+    perceptionRangeM: 0.1,
+    perceptionFovDeg: 360,
+    curiosity: 0.4,
+    boldness: 0.4,
+    traits: ['biofilm-grazer'],
+  },
+  locomotion: {
+    swimmingMode: 'none',
+    gait: 'forage',
+    maxSpeedMps: 0.03,
+    cruiseSpeedMps: 0.01,
+    massKg: 0.003,
+    maxTurnRateDegPerS: 180,
+    maxPitchDeg: 90,
+    strouhal: 0.3,
+    bodyLengthM: 0.03,
+    walking: {
+      walkSpeedMps: 0.01,
+      strideBodyLengths: 0.4,
+      legPairs: 2,
+      surfaces: ['substrate', 'decor'],
+      withdraw: { minS: 15, maxS: 90 },
+    },
+  },
+  lifecycle: { diet: ['pellets', 'algae-wafer', 'flakes'] },
+};
+
 export const ARCHETYPES: readonly SpeciesInput[] = [
   neonTetra,
   angelfish,

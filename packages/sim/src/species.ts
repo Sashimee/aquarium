@@ -1,4 +1,4 @@
-import { traitSchema, type Species } from '@aquarium/shared';
+import { traitSchema, WALKER_SWIMMING_MODES, type Species } from '@aquarium/shared';
 import { BEHAVIOUR } from './behaviour.ts';
 import { FOOD_TYPES } from './food.ts';
 import { DEG } from './math.ts';
@@ -34,11 +34,19 @@ export type HomeKind = 'anemone' | 'cave' | 'station' | 'none';
 export type Gait = SpeciesInput['locomotion']['gait'];
 
 /**
+ * How a walker escapes a startle: a shrimp's tail-flip off the surface, or a snail's or hermit
+ * crab's pulling into its shell where it stands.
+ */
+export type WalkerEscape = 'tail-flip' | 'withdraw';
+
+/**
  * A walking invertebrate's locomotion. Walking is capped at `walkSpeed`, which may not exceed the
  * species' swimming cruise speed; the tail-flip is a half-sine speed pulse whose mean is
- * `flipSpeed` and whose peak, π/2 of that, may not exceed `maxSpeedMps`.
+ * `flipSpeed` and whose peak, π/2 of that, may not exceed `maxSpeedMps`. A walker that withdraws
+ * never leaves its surface of its own accord, and its flip fields are 0.
  */
 export interface SimWalking {
+  readonly escape: WalkerEscape;
   readonly walkSpeed: number;
   readonly strideBodyLengths: number;
   readonly legPairs: number;
@@ -49,6 +57,8 @@ export interface SimWalking {
   readonly flipPeak: number;
   readonly flipDurationS: number;
   readonly flipRefractoryS: number;
+  readonly withdrawMinS: number;
+  readonly withdrawMaxS: number;
   /** Picks biofilm off any surface it stands on, food or not. */
   readonly biofilmGrazer: boolean;
 }
@@ -392,8 +402,10 @@ function parseWalking(
     }
     return null;
   }
-  if (swimmingMode !== 'pleopod') {
-    throw new RangeError(`species "${id}": locomotion.walking needs swimmingMode "pleopod"`);
+  if (!WALKER_SWIMMING_MODES.includes(swimmingMode)) {
+    throw new RangeError(
+      `species "${id}": locomotion.walking needs swimmingMode ${WALKER_SWIMMING_MODES.map((m) => `"${m}"`).join(' or ')}`,
+    );
   }
   for (const t of SWIMMER_TRAITS) {
     if (traits.has(t)) {
@@ -412,16 +424,8 @@ function parseWalking(
       `species "${id}": locomotion.walking.walkSpeedMps ${walkSpeed} exceeds cruiseSpeedMps ${cruiseSpeed}`,
     );
   }
-  const { tailFlip, surfaces } = walking;
-  const flipSpeed = requirePositive(tailFlip.speedMps, 'locomotion.walking.tailFlip.speedMps', id);
-  const flipPeak = flipSpeed * FLIP_PEAK_OVER_MEAN;
-  // Small rounding slack, so a file giving the mean as max·2/π to a few digits still loads.
-  if (flipPeak > maxSpeed * (1 + 1e-6)) {
-    throw new RangeError(
-      `species "${id}": tail-flip peak π/2 × ${flipSpeed} m/s exceeds maxSpeedMps ${maxSpeed}; ` +
-        `tailFlip.speedMps is the mean and may be at most ${(maxSpeed / FLIP_PEAK_OVER_MEAN).toFixed(3)}`,
-    );
-  }
+  const { surfaces } = walking;
+  const escape = parseEscape(id, walking, swimmingMode, maxSpeed);
   if (surfaces.length === 0) {
     throw new RangeError(`species "${id}": locomotion.walking.surfaces must not be empty`);
   }
@@ -436,6 +440,78 @@ function parseWalking(
     substrate: surfaces.includes('substrate'),
     decor: surfaces.includes('decor'),
     glass: surfaces.includes('glass'),
+    ...escape,
+    biofilmGrazer: traits.has('biofilm-grazer'),
+  };
+}
+
+type EscapeParams = Pick<
+  SimWalking,
+  | 'escape'
+  | 'flipSpeed'
+  | 'flipPeak'
+  | 'flipDurationS'
+  | 'flipRefractoryS'
+  | 'withdrawMinS'
+  | 'withdrawMaxS'
+>;
+
+function parseEscape(
+  id: string,
+  walking: NonNullable<SpeciesInput['locomotion']['walking']>,
+  swimmingMode: SpeciesInput['locomotion']['swimmingMode'],
+  maxSpeed: number,
+): EscapeParams {
+  const { tailFlip, withdraw } = walking;
+  if (swimmingMode === 'none') {
+    if (tailFlip !== undefined) {
+      throw new RangeError(
+        `species "${id}": a walker that never swims (swimmingMode "none") cannot tail-flip; drop locomotion.walking.tailFlip`,
+      );
+    }
+    if (withdraw === undefined) {
+      throw new RangeError(
+        `species "${id}": swimmingMode "none" needs locomotion.walking.withdraw, its escape into the shell`,
+      );
+    }
+    const withdrawMinS = requirePositive(withdraw.minS, 'locomotion.walking.withdraw.minS', id);
+    const withdrawMaxS = requirePositive(withdraw.maxS, 'locomotion.walking.withdraw.maxS', id);
+    if (withdrawMinS > withdrawMaxS) {
+      throw new RangeError(
+        `species "${id}": locomotion.walking.withdraw.minS ${withdrawMinS} exceeds maxS ${withdrawMaxS}`,
+      );
+    }
+    return {
+      escape: 'withdraw',
+      flipSpeed: 0,
+      flipPeak: 0,
+      flipDurationS: 0,
+      flipRefractoryS: 0,
+      withdrawMinS,
+      withdrawMaxS,
+    };
+  }
+  if (withdraw !== undefined) {
+    throw new RangeError(
+      `species "${id}": locomotion.walking.withdraw is for walkers that never swim (swimmingMode "none")`,
+    );
+  }
+  if (tailFlip === undefined) {
+    throw new RangeError(
+      `species "${id}": swimmingMode "pleopod" needs locomotion.walking.tailFlip, its escape`,
+    );
+  }
+  const flipSpeed = requirePositive(tailFlip.speedMps, 'locomotion.walking.tailFlip.speedMps', id);
+  const flipPeak = flipSpeed * FLIP_PEAK_OVER_MEAN;
+  // Small rounding slack, so a file giving the mean as max·2/π to a few digits still loads.
+  if (flipPeak > maxSpeed * (1 + 1e-6)) {
+    throw new RangeError(
+      `species "${id}": tail-flip peak π/2 × ${flipSpeed} m/s exceeds maxSpeedMps ${maxSpeed}; ` +
+        `tailFlip.speedMps is the mean and may be at most ${(maxSpeed / FLIP_PEAK_OVER_MEAN).toFixed(3)}`,
+    );
+  }
+  return {
+    escape: 'tail-flip',
     flipSpeed,
     flipPeak: Math.min(flipPeak, maxSpeed),
     flipDurationS: requirePositive(tailFlip.durationS, 'locomotion.walking.tailFlip.durationS', id),
@@ -444,6 +520,7 @@ function parseWalking(
       'locomotion.walking.tailFlip.refractoryS',
       id,
     ),
-    biofilmGrazer: traits.has('biofilm-grazer'),
+    withdrawMinS: 0,
+    withdrawMaxS: 0,
   };
 }

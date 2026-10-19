@@ -65,6 +65,7 @@ function harness(url: Biome, options: { gate?: boolean; failing?: Biome } = {}) 
   });
   const load = (tankId: string, biome: Biome) =>
     interaction.emit('tank:loaded', {
+      backgroundId: 'bg-fw-planted-stream',
       tankId,
       biome,
       size: 'standard',

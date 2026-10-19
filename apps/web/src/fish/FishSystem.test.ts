@@ -14,7 +14,7 @@ import type { Collider } from '@aquarium/shared';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import type { Engine } from '../engine/Engine';
 import { EventBus, type EngineEvents } from '../engine/events';
-import { DEFAULT_TANK, waterBounds } from '../engine/tank/dimensions';
+import { DEFAULT_TANK, TANK_DIMENSIONS, waterBounds } from '../engine/tank/dimensions';
 import type { InteractionEvents } from '../interaction/events';
 import { FISH_1, TANK_A, fishFixture } from '../sync/fixtures';
 import type { FishAssetEntry } from './assetIndex';
@@ -185,6 +185,7 @@ describe('FishSystem.create', () => {
     fish.handle({
       type: 'tank:loaded',
       payload: {
+        backgroundId: 'bg-fw-planted-stream',
         tankId: TANK_A,
         biome: 'freshwater',
         size: 'standard',
@@ -352,6 +353,7 @@ describe('FishSystem dead shrimp', () => {
     fish.handle({
       type: 'tank:loaded',
       payload: {
+        backgroundId: 'bg-fw-planted-stream',
         tankId: TANK_A,
         biome: 'freshwater',
         size: 'standard',
@@ -480,6 +482,38 @@ describe('FishSystem dead shrimp', () => {
     expect(locate(fish).y).toBe(last.y);
     expect(picked(fish, { x: -1, y: last.y, z: last.z }, { x: 1, y: 0, z: 0 })).toBe(true);
     expect(picked(fish, { x: -1, y: start.y, z: start.z }, { x: 1, y: 0, z: 0 })).toBe(false);
+    fish.dispose();
+  });
+
+  it('brings a dead shrimp into the smaller glass when the tank shrinks, and back out again', async () => {
+    const { fish, scene, advance } = await shrimpTank();
+    die(fish);
+    advance(30);
+    const nano = waterBounds(TANK_DIMENSIONS.nano30);
+    const inNano = (p: Vector3): boolean =>
+      p.x >= nano.min.x &&
+      p.x <= nano.max.x &&
+      p.z >= nano.min.z &&
+      p.z <= nano.max.z &&
+      p.y >= nano.min.y &&
+      p.y <= nano.max.y;
+    expect(inNano(drawnPosition(scene))).toBe(false);
+
+    fish.setTank(TANK_DIMENSIONS.nano30);
+    advance(STEP_S);
+    expect(inNano(drawnPosition(scene))).toBe(true);
+    fish.setTank(TANK_DIMENSIONS.nano30);
+    advance(STEP_S);
+    expect(inNano(drawnPosition(scene))).toBe(true);
+
+    fish.setTank(DEFAULT_TANK);
+    advance(30);
+    const standard = waterBounds(DEFAULT_TANK);
+    const back = drawnPosition(scene);
+    expect(back.x).toBeGreaterThanOrEqual(standard.min.x);
+    expect(back.x).toBeLessThanOrEqual(standard.max.x);
+    expect(back.z).toBeGreaterThanOrEqual(standard.min.z);
+    expect(back.z).toBeLessThanOrEqual(standard.max.z);
     fish.dispose();
   });
 
@@ -709,6 +743,7 @@ describe('FishSystem toys and display', () => {
       fish.handle({
         type: 'tank:loaded',
         payload: {
+          backgroundId: 'bg-fw-planted-stream',
           tankId: TANK_A,
           size: 'standard',
           biome,

@@ -828,11 +828,38 @@ describe('World schooling', { timeout: LONG }, () => {
     expect(nnd / samples).toBeLessThan(2);
     expect(localPol / samples).toBeGreaterThan(0.7);
     expect(isolated / samples).toBeLessThan(0.05);
-    expect(clusters / snapshots).toBeLessThanOrEqual(3);
-    // Shoals split and merge (fission-fusion), so the largest group's share swings from seed to
-    // seed: on origin/dev (d4dd476) it averages 0.53 over seeds 1-16 with an SD of 0.06, and 6 of
-    // the 16 fall below 0.5. The four-seed mean has an SE of 0.03; 0.45 sits about three below.
-    expect(largestShare / snapshots).toBeGreaterThanOrEqual(0.45);
+    expect(clusters / snapshots).toBeLessThanOrEqual(1.5);
+    // With balanced neighbours seeds 1-12 average 0.96 (lowest 0.85); plain k-nearest gave 0.52.
+    expect(largestShare / snapshots).toBeGreaterThanOrEqual(0.85);
+  });
+
+  it('keeps most of a school of 16 or 40 tetras in one group (#700)', () => {
+    const link = 4 * toSimSpecies(neonTetra).bodyLength;
+    for (const school of [16, 40]) {
+      const shares: number[] = [];
+      for (const seed of [5, 8]) {
+        const config = benchmarkConfig(seed);
+        const w = new World({
+          ...config,
+          fish: [
+            ...spawnMany('neon-tetra', school),
+            ...config.fish.filter((f) => f.species !== 'neon-tetra'),
+          ],
+        });
+        const tetras: number[] = [];
+        for (let i = 0; i < w.count; i++) if (w.speciesOf(i).id === 'neon-tetra') tetras.push(i);
+        let share = 0;
+        let snapshots = 0;
+        for (let t = 0; t < 6000; t++) {
+          w.step();
+          if (t < 600 || t % 15 !== 0) continue;
+          share += Math.max(...shoalClusters(w, tetras, link)) / school;
+          snapshots++;
+        }
+        shares.push(share / snapshots);
+      }
+      for (const share of shares) expect(share, `${school} tetras`).toBeGreaterThanOrEqual(0.7);
+    }
   });
 });
 

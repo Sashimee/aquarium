@@ -175,6 +175,7 @@ describe('SavedDecor', () => {
     const saved = new SavedDecor(bus, report);
     const layout = [plant, item('boulder-01', 0.1, 0.1)];
     bus.emit('tank:loaded', {
+      backgroundId: 'bg-fw-planted-stream',
       tankId: 't1',
       biome: 'freshwater',
       size: 'standard',
@@ -217,6 +218,7 @@ describe('SavedDecor', () => {
     const saved = new SavedDecor(bus, vi.fn());
     saved.attach(world);
     bus.emit('tank:loaded', {
+      backgroundId: 'bg-fw-planted-stream',
       tankId: 't1',
       biome: 'freshwater',
       size: 'standard',
@@ -235,6 +237,7 @@ describe('SavedDecor', () => {
     const saved = new SavedDecor(bus, vi.fn());
     saved.attach(world);
     bus.emit('tank:loaded', {
+      backgroundId: 'bg-fw-planted-stream',
       tankId: 't1',
       biome: 'freshwater',
       size: 'standard',
@@ -249,6 +252,7 @@ describe('SavedDecor', () => {
     expect(hard).toHaveLength(before);
     expect(saved.tankId).toBeNull();
     bus.emit('tank:loaded', {
+      backgroundId: 'bg-fw-planted-stream',
       tankId: 't2',
       biome: 'freshwater',
       size: 'standard',
@@ -265,6 +269,7 @@ describe('SavedDecor', () => {
     const saved = new SavedDecor(bus, vi.fn());
     saved.attach(world);
     bus.emit('tank:loaded', {
+      backgroundId: 'bg-fw-planted-stream',
       tankId: 't1',
       biome: 'freshwater',
       size: 'standard',
@@ -283,6 +288,7 @@ describe('SavedDecor', () => {
     const saved = new SavedDecor(bus, vi.fn());
     saved.attach(world);
     bus.emit('tank:loaded', {
+      backgroundId: 'bg-fw-planted-stream',
       tankId: 't1',
       biome: 'reef',
       size: 'standard',
@@ -299,6 +305,7 @@ describe('SavedDecor', () => {
     const saved = new SavedDecor(bus, vi.fn());
     saved.attach(world);
     bus.emit('tank:loaded', {
+      backgroundId: 'bg-fw-planted-stream',
       tankId: 't1',
       biome: 'freshwater',
       size: 'standard',
@@ -321,6 +328,7 @@ describe('SavedDecor', () => {
     const saved = new SavedDecor(bus, vi.fn());
     saved.attach(world);
     bus.emit('tank:loaded', {
+      backgroundId: 'bg-fw-planted-stream',
       tankId: 't1',
       biome: 'freshwater',
       size: 'standard',
@@ -344,6 +352,7 @@ describe('SavedDecor', () => {
     const saved = new SavedDecor(bus, vi.fn());
     saved.attach(world);
     bus.emit('tank:loaded', {
+      backgroundId: 'bg-fw-planted-stream',
       tankId: 't1',
       biome: 'freshwater',
       size: 'standard',
@@ -355,6 +364,7 @@ describe('SavedDecor', () => {
     const before = hard.length;
     bus.emit('tank:unloaded', { tankId: 't1', reason: 'switch' });
     bus.emit('tank:loaded', {
+      backgroundId: 'bg-fw-planted-stream',
       tankId: 't2',
       biome: 'reef',
       size: 'standard',
@@ -377,6 +387,7 @@ describe('SavedDecor', () => {
     const saved = new SavedDecor(bus, report);
     saved.attach(new DecorWorld(failing, bus, new FeederLayer()));
     bus.emit('tank:loaded', {
+      backgroundId: 'bg-fw-planted-stream',
       tankId: 't1',
       biome: 'freshwater',
       size: 'standard',

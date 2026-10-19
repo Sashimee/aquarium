@@ -5,7 +5,15 @@ import type { InteractionEvents } from './events';
 import { followTankSize, TankSizeSource } from './tankSize';
 
 function loadedPayload(size: TankSize, tankId = 't1'): InteractionEvents['tank:loaded'] {
-  return { tankId, biome: 'freshwater', size, fish: [], decorLayout: [], decorEdited: false };
+  return {
+    tankId,
+    biome: 'freshwater',
+    size,
+    fish: [],
+    decorLayout: [],
+    decorEdited: false,
+    backgroundId: 'bg-fw-planted-stream',
+  };
 }
 
 function setup(initial: TankSize = 'standard') {

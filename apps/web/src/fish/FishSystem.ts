@@ -31,7 +31,7 @@ import type { Engine } from '../engine/Engine';
 import type { EventBus } from '../engine/events';
 import { releaseAll } from '../engine/lifecycle';
 import type { Tier, TierSettings } from '../engine/quality/tiers';
-import { waterBounds, type TankDimensions } from '../engine/tank/dimensions';
+import { sameTank, waterBounds, type TankDimensions } from '../engine/tank/dimensions';
 import type { InteractionEvents } from '../interaction/events';
 import type { ImpostorAtlasInfo, ShrimpRig } from './assetIndex';
 import { disposeFishModel, FishAssetLoader, type FishModel } from './assets';
@@ -560,10 +560,13 @@ export class FishSystem {
    * nobody swims outside the new glass. Stock and the saved tank stay as they are.
    */
   setTank(tank: TankDimensions): void {
-    if (this.disposed) return;
+    if (this.disposed || sameTank(tank, this.tank)) return;
     this.tank = tank;
     const demo = demoTank(tank, this.seed, this.demoBiome);
     this.box = waterBoxOf(tank, demo);
+    for (const rt of this.runtimes.values()) {
+      if (rt.script !== null) rt.script = this.deadScript(rt);
+    }
     this.spec.setDemo(demo);
     this.spec.setAnchors([]);
     this.roster.setDemo(demo.config.fish);

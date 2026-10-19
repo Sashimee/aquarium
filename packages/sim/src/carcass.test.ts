@@ -58,6 +58,10 @@ describe('carcassFate', () => {
       );
     }
   });
+
+  it('sinks a shelled walker that never swims', () => {
+    expect(carcassFate('none')).toBe('sink');
+  });
 });
 
 describe('sinkingCarcass', () => {

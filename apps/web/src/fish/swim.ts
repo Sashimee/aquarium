@@ -1,11 +1,11 @@
 import type { Species } from '@aquarium/shared';
 
 export type SwimmingMode = Species['locomotion']['swimmingMode'];
-/** Walkers (`pleopod`) have no body wave; their legs, tail and antennae follow `walk.ts`. */
-export type FinnedMode = Exclude<SwimmingMode, 'pleopod'>;
+/** Walkers (`pleopod`, `none`) have no body wave; their legs, tail and antennae follow `walk.ts`. */
+export type FinnedMode = Exclude<SwimmingMode, 'pleopod' | 'none'>;
 
 export function isFinned(mode: SwimmingMode): mode is FinnedMode {
-  return mode !== 'pleopod';
+  return mode !== 'pleopod' && mode !== 'none';
 }
 
 export interface SwimModeParams {

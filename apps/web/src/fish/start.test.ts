@@ -162,6 +162,7 @@ describe('queueTankEvents', () => {
     const interaction = new EventBus<InteractionEvents>();
     const saved = queueTankEvents(interaction);
     interaction.emit('tank:loaded', {
+      backgroundId: 'bg-fw-planted-stream',
       tankId: TANK_A,
       biome: 'freshwater',
       size: 'standard',
@@ -180,6 +181,7 @@ describe('queueTankEvents', () => {
     const interaction = new EventBus<InteractionEvents>();
     const queue = queueTankEvents(interaction);
     interaction.emit('tank:loaded', {
+      backgroundId: 'bg-fw-planted-stream',
       tankId: TANK_A,
       biome: 'freshwater',
       size: 'standard',
@@ -226,6 +228,7 @@ describe('startFish', () => {
     const fish = new FakeFishSystem();
     setup(Promise.resolve(fish), (interaction) => {
       interaction.emit('tank:loaded', {
+        backgroundId: 'bg-fw-planted-stream',
         tankId: TANK_A,
         biome: 'freshwater',
         size: 'standard',
@@ -249,6 +252,7 @@ describe('startFish', () => {
     const pending = deferred<FakeFishSystem>();
     const { interaction } = setup(pending.promise);
     interaction.emit('tank:loaded', {
+      backgroundId: 'bg-fw-planted-stream',
       tankId: TANK_A,
       biome: 'freshwater',
       size: 'standard',
@@ -357,6 +361,7 @@ describe('startFish', () => {
     ];
     handle.setAnchors(first);
     interaction.emit('tank:loaded', {
+      backgroundId: 'bg-fw-planted-stream',
       tankId: TANK_A,
       biome: 'reef',
       size: 'standard',
@@ -597,6 +602,7 @@ describe('startFish', () => {
     fish.sync = loading.promise;
     const { handle } = setup(Promise.resolve(fish), (interaction) => {
       interaction.emit('tank:loaded', {
+        backgroundId: 'bg-fw-planted-stream',
         tankId: TANK_A,
         biome: 'freshwater',
         size: 'standard',
@@ -624,6 +630,7 @@ describe('startFish', () => {
     await flush();
     fish.sync = loading.promise;
     interaction.emit('tank:loaded', {
+      backgroundId: 'bg-fw-planted-stream',
       tankId: TANK_A,
       biome: 'freshwater',
       size: 'standard',
@@ -656,6 +663,7 @@ describe('startFish', () => {
     fish.sync = new Promise(() => undefined);
     const { handle } = setup(Promise.resolve(fish), (interaction) => {
       interaction.emit('tank:loaded', {
+        backgroundId: 'bg-fw-planted-stream',
         tankId: TANK_A,
         biome: 'freshwater',
         size: 'standard',
