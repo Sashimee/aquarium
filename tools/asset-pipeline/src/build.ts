@@ -5,6 +5,8 @@ import { contactSheet, type Atlas } from './impostor.ts';
 import { buildSourceFish, type FishContext } from './fish.ts';
 import { buildAnemone } from './anemone.ts';
 import { SHRIMP_RECIPES, buildShrimp } from './shrimp.ts';
+import { NERITE_RECIPES, buildNerite } from './nerite.ts';
+import { HERMIT_RECIPES, buildHermit } from './hermit.ts';
 import { buildEnvironment, buildHdri, buildSubstrate } from './environment.ts';
 import { LOFT_FISH_RECIPES, buildLoftFish } from './loft-fish.ts';
 import {
@@ -41,6 +43,8 @@ interface Task {
 const KIND_ORDER: OutputAsset['kind'][] = [
   'fish',
   'shrimp',
+  'crab',
+  'snail',
   'anemone',
   'plant',
   'coral',
@@ -63,6 +67,16 @@ function tasks(backgrounds: readonly ManifestAsset[], previews: Map<string, Rgba
       kind: 'shrimp' as const,
       id: recipe.id,
       run: (ctx: FishContext) => buildShrimp(recipe, ctx),
+    })),
+    ...HERMIT_RECIPES.map((recipe) => ({
+      kind: 'crab' as const,
+      id: recipe.id,
+      run: (ctx: FishContext) => buildHermit(recipe, ctx),
+    })),
+    ...NERITE_RECIPES.map((recipe) => ({
+      kind: 'snail' as const,
+      id: recipe.id,
+      run: (ctx: FishContext) => buildNerite(recipe, ctx),
     })),
     { kind: 'anemone' as const, id: 'host-anemone', run: (ctx: FishContext) => buildAnemone(ctx) },
     ...ENVIRONMENT_RECIPES.map((recipe) => ({
@@ -137,8 +151,14 @@ export async function build(options: BuildOptions): Promise<void> {
     }
   }
 
-  await readyCodecs();
   const backgrounds = manifest.assets.filter((a) => a.kind === 'background');
+  const buildable = new Set(tasks(backgrounds, previews).map((t) => `${t.kind}/${t.id}`));
+  for (const key of [...previous.keys()].filter((k) => !buildable.has(k))) {
+    console.log(`index.json: dropping ${key}, it has no build task any more`);
+    previous.delete(key);
+  }
+
+  await readyCodecs();
   const selected = tasks(backgrounds, previews).filter(
     (t) => only.length === 0 || only.includes(t.id),
   );
