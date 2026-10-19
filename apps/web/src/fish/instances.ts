@@ -1,18 +1,20 @@
 import { DynamicDrawUsage, InstancedInterleavedBuffer } from 'three/webgpu';
 
 /**
- * Per-instance swim and look data, interleaved as five vec4s:
+ * Per-instance swim and look data, interleaved as six vec4s:
  * - `orientation`: the instance quaternion (x, y, z, w), needed again by the shadow pass;
  * - `swim`: scale, body-wave phase, amplitude scale, turn curvature in model units;
  * - `look`: fin phase, paling 0..1, seed 0..1, iridescent film thickness (nm);
  * - `tint`: rgb multiplier, gill opening 0..1;
  * - `breath`: mouth opening 0..1, display fin spread 0..1, display gill flare 0..1, unused; walkers
- *   have no mouth or display and leave the block at 0.
+ *   have no mouth or display and leave the block at 0;
+ * - `illness`: ich, fin rot and velvet severities 0..1, unused; walkers catch none of these
+ *   diseases and leave the block at 0.
  * Walkers add two more: `walk` (leg phase 0..1, stride weight, tail curl in radians, pleopod
  * paddling) and `act` (cheliped picking, antenna display, unused, unused).
  */
-export const INSTANCE_STRIDE = 20;
-export const WALKER_INSTANCE_STRIDE = 28;
+export const INSTANCE_STRIDE = 24;
+export const WALKER_INSTANCE_STRIDE = 32;
 export const InstanceSlot = {
   QuatX: 0,
   QuatY: 1,
@@ -33,14 +35,17 @@ export const InstanceSlot = {
   Mouth: 16,
   Display: 17,
   GillFlare: 18,
+  Ich: 20,
+  FinRot: 21,
+  Velvet: 22,
 } as const;
 export const WalkerSlot = {
-  LegPhase: 20,
-  Stride: 21,
-  Curl: 22,
-  Paddle: 23,
-  Pick: 24,
-  Dance: 25,
+  LegPhase: 24,
+  Stride: 25,
+  Curl: 26,
+  Paddle: 27,
+  Pick: 28,
+  Dance: 29,
 } as const;
 
 export interface InstanceValues {
@@ -61,6 +66,9 @@ export interface InstanceValues {
   mouth: number;
   display: number;
   gillFlare: number;
+  ich: number;
+  finRot: number;
+  velvet: number;
 }
 
 export interface WalkerValues {
@@ -110,6 +118,9 @@ export class FishInstanceData {
     a[o + InstanceSlot.Mouth] = v.mouth;
     a[o + InstanceSlot.Display] = v.display;
     a[o + InstanceSlot.GillFlare] = v.gillFlare;
+    a[o + InstanceSlot.Ich] = v.ich;
+    a[o + InstanceSlot.FinRot] = v.finRot;
+    a[o + InstanceSlot.Velvet] = v.velvet;
   }
 
   writeWalker(index: number, v: WalkerValues): void {

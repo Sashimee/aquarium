@@ -1,4 +1,4 @@
-import type { Biome, Fish, FishSex } from '@aquarium/shared';
+import type { Biome, DiseaseState, Fish, FishSex } from '@aquarium/shared';
 import type { AteEvent, FishSpawn } from '@aquarium/sim';
 import { HUNGER_PER_PORTION } from '@aquarium/sim/lifecycle';
 import type { InteractionEvents } from '../interaction/events';
@@ -21,6 +21,8 @@ export interface RosterFish {
   phase: FishPhase;
   /** 0 dead .. 1 healthy, as of the last server snapshot that carried this fish. */
   health: number;
+  /** As of the last server snapshot that carried this fish; demo fish are never ill. */
+  disease: DiseaseState | null;
   /**
    * The server's hunger as of the last snapshot that carried this fish, less what the server takes
    * off for each bite passed on since; unset for demo fish. A world rebuilt mid-session seeds the
@@ -158,13 +160,16 @@ export class TankRoster {
     return entry;
   }
 
-  /** Moves living fish to the server's hunger and health. Never changes the swimming set. */
+  /**
+   * Moves living fish to the server's hunger, health and disease. Never changes the swimming set.
+   */
   updated({ tankId, fish }: InteractionEvents['tank:fish-updated']): RosterFish[] {
     const changed: RosterFish[] = [];
     for (const f of fish) {
       const entry = this.saved(tankId, f.id);
       if (entry === undefined || entry.phase === 'dead' || f.status !== 'alive') continue;
       entry.health = f.health;
+      entry.disease = f.disease;
       entry.hunger = f.hunger;
       changed.push(entry);
     }
@@ -225,6 +230,7 @@ export class TankRoster {
         lengthM: spawn.bodyLengthM,
         phase: 'swimming',
         health: 1,
+        disease: null,
       });
     }
   }
@@ -239,6 +245,7 @@ export class TankRoster {
       lengthM: fish.size,
       phase,
       health: fish.status === 'dead' ? 0 : fish.health,
+      disease: fish.disease,
       hunger: fish.hunger,
     };
     this.insert(entry);

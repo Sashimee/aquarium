@@ -15,16 +15,22 @@ import {
   FishMaterial,
   keepsAuthoredSurface,
 } from './material';
-import { renderProfile } from './profiles';
+import { renderProfile, type FishRenderProfile } from './profiles';
 import { SWIM_MODES } from './swim';
 
 const pleco = renderProfile('bristlenose-pleco');
+const iridescent = renderProfile('neon-tetra');
 
-function fishMaterial(source: MeshStandardMaterial, mouth = false, displays = false): FishMaterial {
+function fishMaterial(
+  source: MeshStandardMaterial,
+  mouth = false,
+  displays = false,
+  profile: FishRenderProfile = pleco,
+): FishMaterial {
   return new FishMaterial({
     source,
-    assetId: 'bristlenose-pleco',
-    profile: pleco,
+    assetId: profile.assetId,
+    profile,
     locomotion: { kind: 'swim', mode: SWIM_MODES.carangiform },
     zMin: -0.05,
     zMax: 0.05,
@@ -204,6 +210,57 @@ describe('FishMaterial mouth', () => {
     shrimp.setFeatures(FEATURES);
     expect(readsSlot(deformed(shrimp), WalkerSlot.LegPhase)).toBe(true);
     expect(readsMouth(deformed(shrimp))).toBe(false);
+  });
+});
+
+describe('FishMaterial disease', () => {
+  const diseaseBlock = InstanceSlot.Ich - (InstanceSlot.Ich % 4);
+  const readsDisease = (node: Node | null): boolean => readsSlot(node, diseaseBlock);
+
+  it('paints the signs on body skin on every tier', () => {
+    for (const features of [
+      FEATURES,
+      { fins: 'cutout', iridescence: false, clearcoat: false, gills: false } as const,
+    ]) {
+      const body = fishMaterial(new MeshStandardMaterial({ name: 'CustomMaterial' }));
+      body.setFeatures(features);
+      expect(readsDisease(body.colorNode)).toBe(true);
+      expect(readsDisease(body.roughnessNode)).toBe(true);
+    }
+  });
+
+  it('cuts rotted fin away in every fin mode', () => {
+    for (const fins of ['cutout', 'coverage', 'stochastic'] as const) {
+      const body = fishMaterial(new MeshStandardMaterial({ transparent: true }));
+      body.setFeatures({ ...FEATURES, fins });
+      const cut = body.alphaToCoverage ? body.opacityNode : body.maskNode;
+      expect(readsDisease(cut)).toBe(true);
+    }
+    const opaque = fishMaterial(new MeshStandardMaterial());
+    opaque.setFeatures({ ...FEATURES, fins: 'cutout' });
+    expect(readsDisease(opaque.maskNode)).toBe(true);
+  });
+
+  it('dulls the gloss and the iridescence under velvet dust', () => {
+    const body = fishMaterial(new MeshStandardMaterial(), false, false, iridescent);
+    body.setFeatures(FEATURES);
+    expect(readsDisease(body.clearcoatNode)).toBe(true);
+    expect(readsDisease(body.iridescenceNode)).toBe(true);
+  });
+
+  it('leaves eyes and walkers as they were', () => {
+    const eye = fishMaterial(new MeshStandardMaterial({ name: 'Eye', roughness: 0.12 }));
+    eye.setFeatures(FEATURES);
+    expect(readsDisease(eye.colorNode)).toBe(false);
+    expect(eye.roughnessNode).toBeNull();
+    expect(eye.maskNode).toBeNull();
+
+    const shrimp = shrimpMaterial();
+    shrimp.setFeatures(FEATURES);
+    for (const node of [shrimp.colorNode, shrimp.opacityNode, shrimp.maskNode]) {
+      expect(readsDisease(node)).toBe(false);
+    }
+    expect(shrimp.roughnessNode).toBeNull();
   });
 });
 
