@@ -1,5 +1,5 @@
 import type { Collider } from '@aquarium/shared';
-import type { Anchor, FishSpawn, SimReady, TankSpaceWorldConfig } from '@aquarium/sim';
+import type { Anchor, FishSpawn, SimReady, SimToy, TankSpaceWorldConfig } from '@aquarium/sim';
 import type { SceneAnchor } from '../scene/anemone';
 import { sceneAnchorsToSim, type DemoTank } from './demoStock';
 import { bodyLengthOf } from './profiles';
@@ -14,6 +14,7 @@ import { allSpeciesInputs, speciesInput } from './species';
 export class SimWorldSpec {
   private simAnchors: readonly Anchor[] = [];
   private simDecor: readonly Collider[] = [];
+  private simToys: readonly SimToy[] = [];
 
   constructor(
     private readonly demo: DemoTank,
@@ -37,6 +38,15 @@ export class SimWorldSpec {
   /** Already in the shared format and tank space; see `SimColliders`. */
   setDecor(colliders: readonly Collider[]): void {
     this.simDecor = colliders;
+  }
+
+  /** Tank space, which the sim shares; a world's config has none, so every new world gets them. */
+  get toys(): readonly SimToy[] {
+    return this.simToys;
+  }
+
+  setToys(toys: readonly SimToy[]): void {
+    this.simToys = toys;
   }
 
   /**
@@ -99,6 +109,7 @@ export interface WorldControls {
   setLight(level: number): void;
   setDecor(colliders: readonly Collider[]): void;
   setAnchors(anchors: readonly Anchor[]): void;
+  setToys(toys: readonly SimToy[]): void;
   start(): void;
 }
 
@@ -112,8 +123,8 @@ export interface WorldStart {
 
 /**
  * Starts the world `init` was asked to build from `config`. Light, colliders and homes that changed
- * while it was starting reached neither the config nor the world, so they follow first. A world
- * dropped before `init` answered is left unstarted.
+ * while it was starting reached neither the config nor the world, so they follow first, with the
+ * toys, which no config carries. A world dropped before `init` answered is left unstarted.
  */
 export async function startWorld(
   sim: WorldControls,
@@ -128,6 +139,7 @@ export async function startWorld(
   const { decor, anchors } = spec.changedSince(config);
   if (decor !== null) sim.setDecor(decor);
   if (anchors !== null) sim.setAnchors(anchors);
+  if (spec.toys.length > 0) sim.setToys(spec.toys);
   hooks.begin(ready);
   sim.start();
 }

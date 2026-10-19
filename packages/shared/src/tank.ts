@@ -25,9 +25,7 @@ export const waterSchema = z.object({
 export type Water = z.infer<typeof waterSchema>;
 
 export const waterParametersSchema = z.strictObject({
-  filterRemovalPerHour: z.number().nonnegative(),
   foodDecayMinutes: z.number().positive(),
-  nitratePerHour: z.number().nonnegative(),
   ammoniaPerPortion: z.number().nonnegative(),
   algaePerHour: z.number().nonnegative(),
 });
@@ -42,6 +40,7 @@ export const causeOfDeathSchema = z.enum([
   'ammonia',
   'nitrite',
   'disease',
+  'water_quality',
   'old_age',
   'unknown',
 ]);
@@ -114,7 +113,10 @@ export const tankSchema = z.object({
   biome: biomeSchema,
   size: tankSizeSchema,
   quarantine: z.boolean().describe('the one nano tank kept apart for new fish and treatment'),
-  shareToken: shareTokenSchema.nullable().describe('null while the tank is private'),
+  shared: z.boolean().describe('whether a public link is active'),
+  shareToken: shareTokenSchema
+    .nullable()
+    .describe('only in the response that enabled or rotated the link, null on every other read'),
   decorLayout: decorLayoutResponseSchema,
   // false: the player never saved a layout, so decorLayout is [] and the client shows the biome preset.
   // true: decorLayout is what the player saved, and [] means they emptied the tank.

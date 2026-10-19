@@ -292,45 +292,54 @@ describe('anchored species', { timeout: LONG }, () => {
   });
 
   it('royal gramma keep to the cave mouth by day and shelter inside at night and when startled', () => {
-    const w = reefTank(spawnMany(royalGramma.id, 1), 8);
     const cave = anchorOf('cave');
     const length = toSimSpecies(royalGramma).bodyLength;
     const leash = cave.radius + BEHAVIOUR.caveLeashBodyLengths * length + length;
-    let close = 0;
-    let day = 0;
-    for (let t = 0; t < 3000; t++) {
-      w.step();
-      if (t < 300) continue;
-      if (distanceTo(w, 0, cave.position) < leash) close++;
-      day++;
-    }
-    expect(close / day).toBeGreaterThan(0.8);
-
-    w.startle({ position: [at(w.position, 0), at(w.position, 1), 0.3], intensity: 1 });
-    let shelteredAfterStartle = false;
-    for (let t = 0; t < 300; t++) {
-      w.step();
-      if (at(w.state, 0) === FishState.Shelter) shelteredAfterStartle = true;
-    }
-    expect(at(w.behaviour.startledAt, 0)).toBeGreaterThanOrEqual(0);
-    expect(shelteredAfterStartle).toBe(true);
-
-    w.setLight(0);
-    let inside = 0;
-    let night = 0;
-    for (let t = 0; t < 9000; t++) {
-      w.step();
-      if (t < 4500) continue;
-      const s = at(w.state, 0);
-      if (
-        (s === FishState.Shelter || s === FishState.Rest) &&
-        distanceTo(w, 0, cave.position) < cave.radius + length
-      ) {
-        inside++;
+    const inCave = (w: World) => distanceTo(w, 0, cave.position) < cave.radius + length;
+    for (let seed = 1; seed <= 6; seed++) {
+      const w = reefTank(spawnMany(royalGramma.id, 1), seed);
+      let close = 0;
+      let day = 0;
+      for (let t = 0; t < 3000; t++) {
+        w.step();
+        if (t < 300) continue;
+        if (distanceTo(w, 0, cave.position) < leash) close++;
+        day++;
       }
-      night++;
+      expect(close / day, `seed ${seed}`).toBeGreaterThan(0.8);
+
+      // A tap a hand's width away startles with a probability below one, so the keeper taps
+      // again each second until the fish responds.
+      let sheltered = false;
+      let reachedAt = -1;
+      for (let t = 0; t < 600; t++) {
+        if (t % 30 === 0 && at(w.behaviour.startledAt, 0) < 0) {
+          const [x, y, z] = [at(w.position, 0), at(w.position, 1), at(w.position, 2)];
+          w.startle({ position: [x, y, z + 0.1], intensity: 1 });
+        }
+        w.step();
+        if (at(w.state, 0) === FishState.Shelter) sheltered = true;
+        if (reachedAt < 0 && at(w.behaviour.startledAt, 0) >= 0 && inCave(w)) reachedAt = w.tick;
+      }
+      const startledAt = at(w.behaviour.startledAt, 0);
+      expect(startledAt, `seed ${seed}`).toBeGreaterThanOrEqual(0);
+      expect(startledAt - 3000, `seed ${seed}`).toBeLessThan(300);
+      expect(sheltered, `seed ${seed}`).toBe(true);
+      expect(reachedAt, `seed ${seed}`).toBeGreaterThanOrEqual(0);
+      expect((reachedAt - startledAt) * STEP_DT, `seed ${seed}`).toBeLessThan(10);
+
+      w.setLight(0);
+      let inside = 0;
+      let night = 0;
+      for (let t = 0; t < 9000; t++) {
+        w.step();
+        if (t < 4500) continue;
+        const s = at(w.state, 0);
+        if ((s === FishState.Shelter || s === FishState.Rest) && inCave(w)) inside++;
+        night++;
+      }
+      expect(inside / night, `seed ${seed}`).toBeGreaterThan(0.6);
     }
-    expect(inside / night).toBeGreaterThan(0.6);
   });
 
   it('yellow tangs graze close to the rock (Montgomery et al. 1989)', () => {

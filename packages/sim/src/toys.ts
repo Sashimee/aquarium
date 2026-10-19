@@ -209,6 +209,8 @@ export class Toys {
   private mirrorNotice: Float64Array;
   private mirrorLatency: Float64Array;
   private _mirrorHabituation: Float64Array;
+  /** 1 from leaving the mirror tired until habituation has recovered to `mirrorRecoverLevel`. */
+  private mirrorTired: Uint8Array;
   private lateralSign: Float64Array;
   private _ballPhase: Uint8Array;
   private ballToy: Int32Array;
@@ -265,6 +267,7 @@ export class Toys {
     this.mirrorNotice = new Float64Array(n);
     this.mirrorLatency = new Float64Array(n).fill(-1);
     this._mirrorHabituation = new Float64Array(n);
+    this.mirrorTired = new Uint8Array(n);
     this.lateralSign = new Float64Array(n).fill(1);
     this._ballPhase = new Uint8Array(n);
     this.ballToy = new Int32Array(n).fill(-1);
@@ -282,6 +285,7 @@ export class Toys {
     this.mirrorNotice = edit.array(this.mirrorNotice);
     this.mirrorLatency = edit.array(this.mirrorLatency, 1, -1);
     this._mirrorHabituation = edit.array(this.mirrorHabituation);
+    this.mirrorTired = edit.array(this.mirrorTired);
     this.lateralSign = edit.array(this.lateralSign, 1, 1);
     this._ballPhase = edit.array(this.ballPhase);
     this.ballToy = edit.array(this.ballToy, 1, -1);
@@ -304,8 +308,10 @@ export class Toys {
         const before = this.mirrors[at(this.mirrorToy, i)];
         const k = before === undefined ? -1 : mirrors.findIndex((m) => m.key === before.key);
         const now = mirrors[k];
-        if (before === undefined || now === undefined || moved(before, now)) {
+        if (before === undefined || now === undefined) {
           this.endMirror(i, 0, -1);
+        } else if (moved(before, now)) {
+          this.endMirror(i, 0, 0);
         } else {
           this.mirrorToy[i] = k;
         }
@@ -352,7 +358,9 @@ export class Toys {
   private updateMirror(i: number, free: boolean, recover: number): void {
     const phase = at(this.mirrorPhase, i);
     if (phase === MirrorPhase.Idle) {
-      this.mirrorHabituation[i] = at(this.mirrorHabituation, i) * recover;
+      const h = at(this.mirrorHabituation, i) * recover;
+      this.mirrorHabituation[i] = h;
+      if (h <= TOYS.mirrorRecoverLevel) this.mirrorTired[i] = 0;
       this.watchMirror(i, free);
       return;
     }
@@ -363,6 +371,7 @@ export class Toys {
       return;
     }
     if (h >= 1) {
+      this.mirrorTired[i] = 1;
       this.endMirror(i, -TOYS.mirrorRetryS, -1);
       return;
     }
@@ -402,9 +411,11 @@ export class Toys {
       return;
     }
     if (!free || at(this.ballPhase, i) !== BallPhase.Idle) return;
-    const k = this.mirrorInView(i);
+    const k = this.mirrorInView(i, at(this.mirrorLatency, i) !== 0);
     if (k < 0) return;
-    if (at(this.mirrorHabituation, i) > TOYS.mirrorRecoverLevel) {
+    // Only a fish that used its interest up stays away until it recovers; one cut short of
+    // that still takes its image for a rival.
+    if (at(this.mirrorTired, i) === 1) {
       this.mirrorNotice[i] = -TOYS.mirrorRetryS;
       return;
     }
@@ -452,7 +463,10 @@ export class Toys {
     this.mirrorTimer[i] = s;
   }
 
-  /** `notice` is where the watch count restarts; `latency` 0 lets the fish re-engage at once. */
+  /**
+   * `notice` is where the watch count restarts; `latency` 0 lets the fish re-engage at once,
+   * whichever way it faces, since it knows where its rival is.
+   */
   private endMirror(i: number, notice: number, latency: number): void {
     this._mirrorPhase[i] = MirrorPhase.Idle;
     this.mirrorToy[i] = -1;
@@ -462,10 +476,10 @@ export class Toys {
 
   /**
    * The first mirror fish `i` can see: the nearest point of its glass within perception range and
-   * view cone, the fish on its reflecting side, and the glass within its leash. A fish glimpsing
-   * movement in it from the side closes in, and there meets its image.
+   * view cone (unless `cone` is false), the fish on its reflecting side, and the glass within its
+   * leash. A fish glimpsing movement in it from the side closes in, and there meets its image.
    */
-  private mirrorInView(i: number): number {
+  private mirrorInView(i: number, cone: boolean): number {
     const sp = this.speciesOf(i);
     const { forward } = this.host;
     const fov = Math.cos(sp.perceptionFov / 2);
@@ -479,7 +493,7 @@ export class Toys {
       const d = Math.hypot(dn, du, dv);
       if (d > sp.perceptionRange) continue;
       if (!this.withinLeash(i, m.x, m.y, m.z)) continue;
-      if (sp.perceptionFov < 2 * Math.PI) {
+      if (cone && sp.perceptionFov < 2 * Math.PI) {
         const dx = -dn * m.nx + du * m.nz;
         const dz = -dn * m.nz - du * m.nx;
         const cos =

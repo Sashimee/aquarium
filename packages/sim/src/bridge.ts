@@ -1,5 +1,6 @@
-import type { Collider } from '@aquarium/shared';
+import type { Collider, FishStage } from '@aquarium/shared';
 import type { Anchor, Stimulus } from './behaviour.ts';
+import type { SimBrood } from './brood.ts';
 import type { Point3 } from './decor.ts';
 import { FOOD_STRIDE, type AteEvent } from './food.ts';
 import { SNAPSHOT_STRIDE, type Snapshot } from './snapshot.ts';
@@ -24,7 +25,8 @@ import {
  *
  * `addFish` and `removeFish` change the running world in place and are answered by a `layout`
  * event carrying the same `request` number, or by an `error` event carrying it. `canGrazeAt`
- * changes nothing and is answered by a `grazeReach` event, or an `error` event, with its `request`.
+ * changes nothing and is answered by a `grazeReach` event, or an `error` event, with its `request`;
+ * `nestSite` likewise by a `nestSite` event.
  */
 export type SimCommand =
   | { readonly type: 'init'; readonly request: number; readonly config: AnyWorldConfig }
@@ -41,6 +43,10 @@ export type SimCommand =
   | { readonly type: 'anchors'; readonly anchors: readonly Anchor[] }
   /** Every toy in the tank, `[]` for none; resend a drifting ball as it moves. See `World.setToys`. */
   | { readonly type: 'toys'; readonly toys: readonly SimToy[] }
+  /** Every clutch being tended and every pregnancy; resend when either changes. See `World.setBrood`. */
+  | { readonly type: 'brood'; readonly brood: SimBrood }
+  /** A fish grew into `stage`; see `World.setStage`. */
+  | { readonly type: 'stage'; readonly id: string; readonly stage: FishStage }
   /** Float32 records of `[id, x, y, z, typeIndex]`; see `World.setFood`. */
   | { readonly type: 'food'; readonly buffer: ArrayBuffer }
   | {
@@ -56,7 +62,9 @@ export type SimCommand =
       readonly request: number;
       readonly species: string;
       readonly position: Point3;
-    };
+    }
+  /** See `World.nestSite`. */
+  | { readonly type: 'nestSite'; readonly request: number; readonly parents: readonly string[] };
 
 export interface SimReady {
   readonly type: 'ready';
@@ -81,7 +89,11 @@ export type SimEvent =
   | SimToyNudges
   | SimLayout
   | SimGrazeReach
-  /** `request` is set when the failed command was an `init`, `addFish`, `removeFish` or `canGrazeAt`. */
+  | SimNestSite
+  /**
+   * `request` is set when the failed command was an `init`, `addFish`, `removeFish`, `canGrazeAt`
+   * or `nestSite`.
+   */
   | { readonly type: 'error'; readonly message: string; readonly request?: number };
 
 /**
@@ -109,6 +121,13 @@ export interface SimGrazeReach {
   readonly type: 'grazeReach';
   readonly request: number;
   readonly reachable: boolean;
+}
+
+/** The answer to the `nestSite` command with the same `request`. */
+export interface SimNestSite {
+  readonly type: 'nestSite';
+  readonly request: number;
+  readonly position: Point3 | null;
 }
 
 /** Bites taken in the steps leading up to the snapshot at `tick`, which follows it. */
@@ -164,10 +183,13 @@ const COMMAND_TYPES = new Set([
   'decor',
   'anchors',
   'toys',
+  'brood',
+  'stage',
   'food',
   'addFish',
   'removeFish',
   'canGrazeAt',
+  'nestSite',
 ]);
 const EVENT_TYPES = new Set([
   'ready',
@@ -176,6 +198,7 @@ const EVENT_TYPES = new Set([
   'toyNudge',
   'layout',
   'grazeReach',
+  'nestSite',
   'error',
 ]);
 
@@ -357,6 +380,12 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
       case 'toys':
         requireWorld(command.type).setToys(command.toys);
         return;
+      case 'brood':
+        requireWorld(command.type).setBrood(command.brood);
+        return;
+      case 'stage':
+        requireWorld(command.type).setStage(command.id, command.stage);
+        return;
       case 'food': {
         const w = requireWorld(command.type);
         const { buffer } = command;
@@ -391,6 +420,11 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
         send({ type: 'grazeReach', request, reachable });
         return;
       }
+      case 'nestSite': {
+        const position = requireWorld(command.type).nestSite(command.parents);
+        send({ type: 'nestSite', request: command.request, position });
+        return;
+      }
     }
   };
 
@@ -415,7 +449,8 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
 }
 
 /**
- * Main-thread side of the bridge. Every request (`init`, `addFish`, `removeFish`, `canGrazeAt`)
+ * Main-thread side of the bridge. Every request (`init`, `addFish`, `removeFish`, `canGrazeAt`,
+ * `nestSite`)
  * returns a promise that settles with the worker's answer or rejects with its error; such an
  * error goes to that caller alone. `onError` listeners get the errors no request is waiting for,
  * and a worker failure (`error` or `messageerror` on the port), which also rejects every request
@@ -444,6 +479,10 @@ export class SimClient {
   private readonly pendingQueries = new Map<
     number,
     { resolve: (reachable: boolean) => void; reject: (error: Error) => void }
+  >();
+  private readonly pendingNests = new Map<
+    number,
+    { resolve: (position: Point3 | null) => void; reject: (error: Error) => void }
   >();
   private nextRequest = 1;
   /**
@@ -509,6 +548,18 @@ export class SimClient {
     });
   }
 
+  /**
+   * Where the fish `parents` would lay their eggs (world frame), or null when nowhere near their
+   * home has room; see `World.nestSite`. Rejects for an unknown fish.
+   */
+  nestSite(parents: readonly string[]): Promise<Point3 | null> {
+    const request = this.nextRequest++;
+    return new Promise((resolve, reject) => {
+      this.pendingNests.set(request, { resolve, reject });
+      this.send({ type: 'nestSite', request, parents: [...parents] });
+    });
+  }
+
   start(): void {
     this.send({ type: 'start' });
   }
@@ -548,6 +599,16 @@ export class SimClient {
   /** Every toy in the tank (world frame), `[]` for none; see `World.setToys`. */
   setToys(toys: readonly SimToy[]): void {
     this.send({ type: 'toys', toys });
+  }
+
+  /** Every clutch being tended and every pregnancy, `{ clutches: [], gravid: [] }` for none. */
+  setBrood(brood: SimBrood): void {
+    this.send({ type: 'brood', brood });
+  }
+
+  /** Fish `id` grew into `stage`; see `World.setStage`. */
+  setStage(id: string, stage: FishStage): void {
+    this.send({ type: 'stage', id, stage });
   }
 
   /**
@@ -623,10 +684,12 @@ export class SimClient {
       ...(this.pendingInit === null ? [] : [this.pendingInit]),
       ...this.pendingLayouts.values(),
       ...this.pendingQueries.values(),
+      ...this.pendingNests.values(),
     ];
     this.pendingInit = null;
     this.pendingLayouts.clear();
     this.pendingQueries.clear();
+    this.pendingNests.clear();
     for (const p of pending) p.reject(new Error(message));
   }
 
@@ -634,6 +697,7 @@ export class SimClient {
     if (this.pendingInit !== null) this.abandoned.add(this.pendingInit.request);
     for (const request of this.pendingLayouts.keys()) this.abandoned.add(request);
     for (const request of this.pendingQueries.keys()) this.abandoned.add(request);
+    for (const request of this.pendingNests.keys()) this.abandoned.add(request);
     this.rejectPending(message);
     for (const l of this.errorListeners) l(message);
   }
@@ -728,6 +792,16 @@ export class SimClient {
         pending.resolve(event.reachable);
         return;
       }
+      case 'nestSite': {
+        const pending = this.pendingNests.get(event.request);
+        if (pending === undefined) {
+          if (this.abandoned.delete(event.request)) return;
+          throw new Error(`sim: nestSite for unknown request ${event.request}`);
+        }
+        this.pendingNests.delete(event.request);
+        pending.resolve(event.position);
+        return;
+      }
       case 'error': {
         // An error naming a request belongs to that request alone; one without a request (the
         // step loop failing, say) goes to the listeners.
@@ -739,9 +813,14 @@ export class SimClient {
             pending = this.pendingInit;
             this.pendingInit = null;
           } else {
-            pending = this.pendingLayouts.get(request) ?? this.pendingQueries.get(request) ?? null;
+            pending =
+              this.pendingLayouts.get(request) ??
+              this.pendingQueries.get(request) ??
+              this.pendingNests.get(request) ??
+              null;
             this.pendingLayouts.delete(request);
             this.pendingQueries.delete(request);
+            this.pendingNests.delete(request);
           }
         }
         if (pending !== null) {

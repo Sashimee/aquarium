@@ -47,6 +47,15 @@ export {
 export { FEEDING, gutForHunger } from './feeding.ts';
 export { CURIOSITY } from './curiosity.ts';
 export { BallPhase, MirrorPhase, TOYS, type SimToy, type ToyNudge } from './toys.ts';
+export {
+  BROOD,
+  NestPhase,
+  SexCode,
+  StageCode,
+  type SimBrood,
+  type SimClutch,
+  type SimGravid,
+} from './brood.ts';
 export { compileCollider, DecorField, UnionSdf, type Point3 } from './decor.ts';
 export { Basin, type TankDimensions } from './basin.ts';
 export { resolvePenetration, TankSdf, type Sdf } from './sdf.ts';
@@ -82,6 +91,7 @@ export {
   type SimClientPort,
   type SimGrazeReach,
   type SimLayout,
+  type SimNestSite,
   type SimReady,
   type SimToyNudges,
 } from './bridge.ts';

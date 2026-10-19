@@ -30,6 +30,22 @@ describe('chemistry v2', () => {
     expect(chemistryParametersSchema.safeParse(readJson('chemistry.json')).error).toBeUndefined();
   });
 
+  it('cites a source for every section of rates', () => {
+    const params = chemistryParametersSchema.parse(readJson('chemistry.json'));
+    const sections = Object.keys(params).filter((k) => k !== 'sources');
+    for (const section of sections) expect(params.sources[section], section).toBeDefined();
+  });
+
+  it('every species states its water needs and where they come from', () => {
+    const dir = join(content, 'species');
+    for (const name of readdirSync(dir).filter((n) => n.endsWith('.json'))) {
+      const raw = JSON.parse(readFileSync(join(dir, name), 'utf8')) as { chemistry?: unknown };
+      const parsed = speciesChemistrySchema.parse(raw.chemistry);
+      expect(raw.chemistry, name).toBeDefined();
+      expect(parsed.sources.length, name).toBeGreaterThan(0);
+    }
+  });
+
   it('rejects an unknown rate and a missing biome target', () => {
     const raw = readJson('chemistry.json') as Record<string, Record<string, unknown>>;
     expect(
