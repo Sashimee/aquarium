@@ -2,8 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { addFishRequestSchema } from './tank.js';
-import { VACATION_FEEDER_ASSET_ID } from '../../sim/lifecycle/params.js';
-import { DECOR_ASSET_IDS } from './decorRules.js';
+import { DECOR_ASSET_IDS, VACATION_FEEDER_ASSET_ID } from './decorRules.js';
 import { diseaseKindSchema } from './fishState.js';
 import {
   DEFAULT_PURCHASE_STAGE,

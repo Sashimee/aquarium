@@ -8,6 +8,9 @@ export const DEFAULT_TANK_METRES = {
   glass: 0.01,
 } as const;
 
+/** The free survival-care piece every tank may hold; it is never priced. */
+export const VACATION_FEEDER_ASSET_ID = 'vacation-feeder';
+
 const ROCKS = ['boulder-01', 'coast-rocks-05'] as const;
 
 /**

@@ -23,7 +23,7 @@ import { personalityFromFishId } from './personality.ts';
 import { hashShareToken } from './shareToken.ts';
 import { DEFAULT_CARE_LIMITS } from './tanks.ts';
 import { pruneExpired } from './maintenance.ts';
-import { APP_ORIGIN, createHarness, type Harness } from './test-harness.ts';
+import { APP_ORIGIN, createHarness, fishPayload, topUp, type Harness } from './test-harness.ts';
 
 const PASSWORD = 'correct horse battery';
 const jsonHeaders = { 'content-type': 'application/json', origin: APP_ORIGIN };
@@ -51,18 +51,25 @@ async function signedIn(h: Harness): Promise<string> {
   return cookie;
 }
 
-function call(
+async function call(
   h: Harness,
   cookie: string,
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
   url: string,
   payload?: unknown,
 ) {
+  let body = payload;
+  if (method === 'POST' && /^\/api\/tanks(\/[^/]+\/fish)?$/.test(url)) {
+    await topUp(h, 50_000);
+    if (url === '/api/tanks' && typeof body === 'object' && body !== null) {
+      body = { idempotencyKey: randomUUID(), ...body };
+    }
+  }
   return h.app.inject({
     method,
     url,
     headers: { ...jsonHeaders, cookie },
-    ...(payload !== undefined ? { payload: payload as object } : {}),
+    ...(body !== undefined ? { payload: body as object } : {}),
   });
 }
 
@@ -78,8 +85,15 @@ async function addFish(
   tankId: string,
   species = 'neon-tetra',
   name = 'Blip',
+  stage: 'juvenile' | 'adult' = 'adult',
 ) {
-  const res = await call(h, cookie, 'POST', `/api/tanks/${tankId}/fish`, { species, name });
+  const res = await call(
+    h,
+    cookie,
+    'POST',
+    `/api/tanks/${tankId}/fish`,
+    fishPayload(species, name, stage),
+  );
   expect(res.statusCode).toBe(201);
   return tankSchema.parse(res.json());
 }
@@ -180,6 +194,15 @@ describe('tanks and fish', () => {
     expect(fresh.backgroundId).toBe(DEFAULT_BACKGROUND_ID.freshwater);
     expect(reef.backgroundId).toBe(DEFAULT_BACKGROUND_ID.reef);
 
+    const locked = await call(h, cookie, 'PATCH', `/api/tanks/${fresh.id}`, {
+      backgroundId: 'bg-fw-misty-lake',
+    });
+    expect(locked.statusCode).toBe(403);
+    const bought = await call(h, cookie, 'POST', '/api/shop/purchase', {
+      idempotencyKey: randomUUID(),
+      itemRef: 'background:bg-fw-misty-lake',
+    });
+    expect(bought.statusCode).toBe(200);
     const set = await call(h, cookie, 'PATCH', `/api/tanks/${fresh.id}`, {
       backgroundId: 'bg-fw-misty-lake',
     });
@@ -268,7 +291,7 @@ describe('tanks and fish', () => {
     for (const [method, url, payload] of [
       ['GET', `/api/tanks/${tank.id}`, undefined],
       ['PATCH', `/api/tanks/${tank.id}`, { name: 'Mine now' }],
-      ['POST', `/api/tanks/${tank.id}/fish`, { species: 'guppy', name: 'x' }],
+      ['POST', `/api/tanks/${tank.id}/fish`, fishPayload('guppy', 'x')],
       ['POST', `/api/tanks/${tank.id}/care`, { type: 'water_change' }],
     ] as const) {
       const res = await call(h, bob, method, url, payload);
@@ -315,24 +338,31 @@ describe('tanks and fish', () => {
   it('adds fish with the species birth size and refuses wrong-biome and unknown species', async () => {
     const cookie = await signedIn(h);
     const tank = await createTank(h, cookie);
-    const withFish = await addFish(h, cookie, tank.id);
+    const withFish = await addFish(h, cookie, tank.id, 'neon-tetra', 'Blip', 'juvenile');
     expect(withFish.fish[0]).toMatchObject({
       species: 'neon-tetra',
       name: 'Blip',
+      stage: 'juvenile',
       status: 'alive',
       hunger: 0,
       health: 1,
       size: 0.012,
     });
-    const reefFish = await call(h, cookie, 'POST', `/api/tanks/${tank.id}/fish`, {
-      species: 'blue-tang',
-      name: 'Dory',
-    });
+    const reefFish = await call(
+      h,
+      cookie,
+      'POST',
+      `/api/tanks/${tank.id}/fish`,
+      fishPayload('blue-tang', 'Dory'),
+    );
     expect(reefFish.statusCode).toBe(400);
-    const unknown = await call(h, cookie, 'POST', `/api/tanks/${tank.id}/fish`, {
-      species: 'kraken',
-      name: 'x',
-    });
+    const unknown = await call(
+      h,
+      cookie,
+      'POST',
+      `/api/tanks/${tank.id}/fish`,
+      fishPayload('kraken', 'x'),
+    );
     expect(unknown.statusCode).toBe(400);
   });
 
@@ -340,10 +370,13 @@ describe('tanks and fish', () => {
     const cookie = await signedIn(h);
     const tank = await createTank(h, cookie);
     for (let i = 0; i < 10; i++) await addFish(h, cookie, tank.id, 'angelfish', `A${i}`);
-    const res = await call(h, cookie, 'POST', `/api/tanks/${tank.id}/fish`, {
-      species: 'angelfish',
-      name: 'Too many',
-    });
+    const res = await call(
+      h,
+      cookie,
+      'POST',
+      `/api/tanks/${tank.id}/fish`,
+      fishPayload('angelfish', 'Too many'),
+    );
     expect(res.statusCode).toBe(409);
     expect(apiErrorSchema.parse(res.json()).error.code).toBe('conflict');
   });
@@ -688,6 +721,8 @@ describe('care actions and feeding validation', () => {
         care: { max: 5, windowMs: 60_000 },
         ate: { max: 4, windowMs: 60_000 },
         addFish: { max: 100, windowMs: 60_000 },
+        wallet: { max: 100, windowMs: 60_000 },
+        purchase: { max: 100, windowMs: 60_000 },
       },
     });
   });
@@ -962,7 +997,11 @@ describe('care actions and feeding validation', () => {
       .update(schema.tanks)
       .set({ water: { ammonia: 0.4, nitrate: 10, algae: 0.6, uneatenFood: 3 } })
       .where(eq(schema.tanks.id, tank.id));
-    const post = (type: string) => call(h, cookie, 'POST', `/api/tanks/${tank.id}/care`, { type });
+    const post = (type: string) =>
+      call(h, cookie, 'POST', `/api/tanks/${tank.id}/care`, {
+        type,
+        ...(type === 'bottled_bacteria' ? { idempotencyKey: randomUUID() } : {}),
+      });
     const wc = tankSchema.parse((await post('water_change')).json());
     expect(wc.water.nitrate).toBeCloseTo(5, 1);
     expect(wc.water.ammonia).toBeCloseTo(0.2, 1);
@@ -975,7 +1014,11 @@ describe('care actions and feeding validation', () => {
 
   it('rinsing the filter in tap water costs bacteria and bottled bacteria add them back', async () => {
     const { cookie, tank } = await setup();
-    const post = (type: string) => call(h, cookie, 'POST', `/api/tanks/${tank.id}/care`, { type });
+    const post = (type: string) =>
+      call(h, cookie, 'POST', `/api/tanks/${tank.id}/care`, {
+        type,
+        ...(type === 'bottled_bacteria' ? { idempotencyKey: randomUUID() } : {}),
+      });
     const rinsed = tankSchema.parse((await post('filter_rinse')).json());
     expect(rinsed.chemistry.bacteria.ammoniaOxidisers).toBeLessThan(0.2);
     expect(rinsed.chemistry.bacteria.nitriteOxidisers).toBeLessThan(0.2);
@@ -1320,10 +1363,13 @@ describe('tank sizes, quarantine and sharing', () => {
       (await create(cookie, { name: 'Nano', biome: 'freshwater', size: 'nano30' })).json(),
     );
     for (let i = 0; i < 12; i++) await addFish(h, cookie, nano.id, 'neon-tetra', `N${i}`);
-    const res = await call(h, cookie, 'POST', `/api/tanks/${nano.id}/fish`, {
-      species: 'neon-tetra',
-      name: 'Thirteen',
-    });
+    const res = await call(
+      h,
+      cookie,
+      'POST',
+      `/api/tanks/${nano.id}/fish`,
+      fishPayload('neon-tetra', 'Thirteen'),
+    );
     expect(res.statusCode).toBe(409);
     expect(apiErrorSchema.parse(res.json()).error.code).toBe('conflict');
   });
@@ -1337,7 +1383,7 @@ describe('tank sizes, quarantine and sharing', () => {
       for (let i = 0; i < angels; i++) await addFish(h, cookie, tank.id, 'angelfish', `A${i}`);
       for (let i = 0; i < neons; i++) await addFish(h, cookie, tank.id, 'neon-tetra', `N${i}`);
       return (species: string) =>
-        call(h, cookie, 'POST', `/api/tanks/${tank.id}/fish`, { species, name: 'Next' });
+        call(h, cookie, 'POST', `/api/tanks/${tank.id}/fish`, fishPayload(species, 'Next'));
     };
 
     it('nano30 holds 3.0 of bioload: exactly full is accepted, one more is refused', async () => {
@@ -1448,10 +1494,13 @@ describe('tank sizes, quarantine and sharing', () => {
     });
     const reread = tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${nano.id}`)).json());
     expect(reread.fish).toHaveLength(14);
-    const blocked = await call(h, cookie, 'POST', `/api/tanks/${nano.id}/fish`, {
-      species: 'neon-tetra',
-      name: 'Nope',
-    });
+    const blocked = await call(
+      h,
+      cookie,
+      'POST',
+      `/api/tanks/${nano.id}/fish`,
+      fishPayload('neon-tetra', 'Nope'),
+    );
     expect(blocked.statusCode).toBe(409);
   });
 

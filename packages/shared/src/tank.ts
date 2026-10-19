@@ -13,7 +13,12 @@ import {
 import { chemistrySchema } from './chemistry.js';
 import { equipmentSchema } from './equipment.js';
 import { QUARANTINE_TANK_SIZE, tankSizeSchema } from './tankSize.js';
-import { idempotencyKeySchema, purchasableStageSchema } from './economy.js';
+import {
+  idempotencyKeySchema,
+  ledgerEntrySchema,
+  purchasableStageSchema,
+  walletSchema,
+} from './economy.js';
 import {
   diseaseStateSchema,
   fishStageSchema,
@@ -152,6 +157,11 @@ export const createTankRequestSchema = z
     biome: playableBiomeSchema,
     size: tankSizeSchema.default('standard'),
     quarantine: z.boolean().default(false),
+    idempotencyKey: idempotencyKeySchema
+      .optional()
+      .describe(
+        'required when the tank costs Pearls: every display tank after the first, any size but standard',
+      ),
   })
   .refine((v) => !v.quarantine || v.size === QUARANTINE_TANK_SIZE, {
     message: 'a quarantine tank is always nano30',
@@ -178,5 +188,12 @@ export const addFishRequestSchema = z.strictObject({
   idempotencyKey: idempotencyKeySchema.optional(),
 });
 export type AddFishRequest = z.infer<typeof addFishRequestSchema>;
+
+export const sellFryResponseSchema = z.strictObject({
+  tank: tankSchema,
+  wallet: walletSchema,
+  entry: ledgerEntrySchema,
+});
+export type SellFryResponse = z.infer<typeof sellFryResponseSchema>;
 
 export const tankListSchema = z.array(tankSchema);

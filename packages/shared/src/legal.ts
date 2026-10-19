@@ -31,6 +31,10 @@ export const dataExportSchema = z.strictObject({
     entries: z.array(exportedRow),
     achievements: z.array(exportedRow),
   }),
+  wallet: z.strictObject({
+    balance: z.int(),
+    ledger: z.array(exportedRow),
+  }),
   tanks: z.array(
     z.strictObject({
       tank: exportedRow,
@@ -99,7 +103,7 @@ export const PRIVACY_CONTROLLER = 'Alexandre Baskewitsch';
 export const PRIVACY_CONTACT = 'fish@bas.lu';
 
 export const PRIVACY_POLICY: PrivacyPolicy = privacyPolicySchema.parse({
-  version: '2026-10-19.3',
+  version: '2026-10-19.4',
   updatedAt: '2026-10-19',
   controller: PRIVACY_CONTROLLER,
   contact: PRIVACY_CONTACT,
@@ -147,6 +151,7 @@ export const PRIVACY_POLICY: PrivacyPolicy = privacyPolicySchema.parse({
         'Sessions: for every signed-in browser, a session record with its creation and expiry time, IP address and browser user-agent, so you can review and revoke sessions. Session records are kept until they expire (30 days after your last activity) and are then deleted by an hourly cleanup, or immediately when you sign out, revoke them or delete your account.',
         'Game data: your tanks, fish, their care history and memorials of fish that have died.',
         'Collection book and achievements: which species you have kept, bred and raised, with the date each was first reached, and the achievements you have earned with their dates. They are kept until you delete your account, even if you delete the tank or fish they came from, and are included in your JSON export.',
+        'Pearls wallet and ledger: your Pearl balance and an append-only ledger of every change to it: the amount, what it was for (a purchase, a reward for care or an achievement, a grant, a refund), the item, the time and a request key that stops a retried request from charging twice. It is kept until you delete your account and is included in your JSON export. Entries for payments with real money, once Pearl packs are on sale, are kept longer than the rest; the retention section explains how.',
         'Tank visits: for each tank you open we store the date (no time of day, IP address or device) on which you opened it, used only so your fish can recognise you when you come back often. It is included in your JSON export and deleted with the tank or your account.',
         'Shared tanks: if you turn on a public link for a tank, anyone who has the link can see that tank read-only without signing in: its name (after a word filter), layout, water and fish. Your email address, display name, handle and account are never shown through the link, and the page is marked noindex. You can revoke or replace the link at any time, which stops the old one working at once.',
         'Reactions: when you react to a shared tank (heart, star or wow) we store which tank, your account and the kind, one reaction per tank. Reaction counts are public; who reacted is not. A shared tank also shows when it was last updated, rounded down to the hour.',
@@ -176,7 +181,8 @@ export const PRIVACY_POLICY: PrivacyPolicy = privacyPolicySchema.parse({
       title: 'How long we keep it',
       paragraphs: [
         'Account and game data are kept until you delete your account. Your collection book and achievements are kept until you delete your account, even after the tanks and fish behind them are gone. Care events older than 90 days are pruned, audit log entries older than 180 days, and tank visit dates older than 14 days.',
-        'Deleting your account removes your user record, sessions, sign-in methods, passkeys, reminder settings and push subscriptions, tanks, fish, care history, tank visit dates, reactions, memorials, collection book and achievements from the database immediately. Backup retention is to be defined before production; until then, deleted data may persist in backups no longer than that period.',
+        'Pearl ledger entries for in-game activity (purchases, rewards and grants) are deleted with your account. Ledger entries for payments made with real money are kept for 10 years, because Luxembourg accounting law requires it (GDPR Art. 17(3)(b) allows keeping data to meet a legal obligation); on deletion the link to your account is removed from them, so they no longer identify you. Unspent Pearls, bought ones included, are lost when you delete your account.',
+        'Deleting your account removes your user record, sessions, sign-in methods, passkeys, reminder settings and push subscriptions, tanks, fish, care history, tank visit dates, reactions, memorials, collection book, achievements, wallet and in-game Pearl ledger from the database immediately. Backup retention is to be defined before production; until then, deleted data may persist in backups no longer than that period.',
       ],
     },
     {

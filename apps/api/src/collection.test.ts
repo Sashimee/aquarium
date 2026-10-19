@@ -10,7 +10,7 @@ import { eq } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { schema } from './db/index.ts';
-import { APP_ORIGIN, createHarness, type Harness } from './test-harness.ts';
+import { APP_ORIGIN, createHarness, fishPayload, type Harness } from './test-harness.ts';
 
 const PASSWORD = 'correct horse battery';
 const jsonHeaders = { 'content-type': 'application/json', origin: APP_ORIGIN };
@@ -69,7 +69,13 @@ async function createTank(h: Harness, cookie: string) {
 }
 
 async function addFish(h: Harness, cookie: string, tankId: string, species: string, name: string) {
-  const res = await call(h, cookie, 'POST', `/api/tanks/${tankId}/fish`, { species, name });
+  const res = await call(
+    h,
+    cookie,
+    'POST',
+    `/api/tanks/${tankId}/fish`,
+    fishPayload(species, name),
+  );
   expect(res.statusCode).toBe(201);
   return tankSchema.parse(res.json());
 }

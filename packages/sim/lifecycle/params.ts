@@ -6,7 +6,7 @@ export const MAX_CATCH_UP_DAYS = 60;
 export const MAX_CATCH_UP_MS = MAX_CATCH_UP_DAYS * 86_400_000;
 export const GRACE_PERIOD_MS = 48 * 3_600_000;
 
-export const VACATION_FEEDER_ASSET_ID = 'vacation-feeder';
+export { VACATION_FEEDER_ASSET_ID } from '@aquarium/shared';
 export const VACATION_HUNGER_FACTOR = 0.5;
 
 /** Fish below this health stop growing; above it, growth resumes. */

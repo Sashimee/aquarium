@@ -9,7 +9,7 @@ import {
 import { diseaseKindSchema } from './fishState.js';
 import { tankSizeSchema } from './tankSize.js';
 
-// Planned tables (T70, PLAN 9.2); this contract ships no DB or routes.
+// Tables and routes live in apps/api (T70, PLAN 9.2).
 //   wallet(user_id PK -> user ON DELETE CASCADE, balance integer): cache of the ledger sum, kept
 //     apart from Better Auth's user table.
 //   ledger(id, user_id -> user ON DELETE SET NULL, delta, reason, source, item_ref, idempotency_key,

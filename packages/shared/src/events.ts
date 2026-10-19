@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { idSchema, slugSchema, timestampSchema } from './common.js';
+import { idempotencyKeySchema } from './economy.js';
 import { causeOfDeathSchema } from './tank.js';
 
 export const foodTypeSchema = z.enum([
@@ -22,7 +23,12 @@ export const waterChangeEventSchema = z.strictObject({ type: z.literal('water_ch
 export const gravelVacuumEventSchema = z.strictObject({ type: z.literal('gravel_vacuum') });
 export const algaeScrapeEventSchema = z.strictObject({ type: z.literal('algae_scrape') });
 
-export const bottledBacteriaEventSchema = z.strictObject({ type: z.literal('bottled_bacteria') });
+export const bottledBacteriaEventSchema = z.strictObject({
+  type: z.literal('bottled_bacteria'),
+  idempotencyKey: idempotencyKeySchema
+    .optional()
+    .describe('required: bottled bacteria cost Pearls'),
+});
 export const filterRinseEventSchema = z.strictObject({ type: z.literal('filter_rinse') });
 
 export const careActionSchema = z.discriminatedUnion('type', [

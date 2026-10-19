@@ -6,13 +6,14 @@ import {
   reactionStateSchema,
   tankSchema,
 } from '@aquarium/shared';
+import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { schema } from './db/index.ts';
 import { pruneExpired } from './maintenance.ts';
 import { hashShareToken } from './shareToken.ts';
-import { APP_ORIGIN, createHarness, type Harness } from './test-harness.ts';
+import { APP_ORIGIN, createHarness, fishPayload, topUp, type Harness } from './test-harness.ts';
 
 const PASSWORD = 'correct horse battery';
 const jsonHeaders = { 'content-type': 'application/json', origin: APP_ORIGIN };
@@ -46,27 +47,30 @@ async function account(h: Harness, verified = true) {
   return { cookie, userId: user.id, email };
 }
 
-const call = (
+async function call(
   h: Harness,
   cookie: string | null,
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   url: string,
   payload?: object,
-) =>
-  h.app.inject({
+) {
+  let body = payload;
+  if (method === 'POST' && /^\/api\/tanks(\/[^/]+\/fish)?$/.test(url)) {
+    await topUp(h, 50_000);
+    if (url === '/api/tanks') body = { idempotencyKey: randomUUID(), ...body };
+  }
+  return h.app.inject({
     method,
     url,
     headers: { ...jsonHeaders, ...(cookie ? { cookie } : {}) },
-    ...(payload ? { payload } : {}),
+    ...(body ? { payload: body } : {}),
   });
+}
 
 async function sharedTank(h: Harness, cookie: string, name = 'Reef corner') {
   const created = await call(h, cookie, 'POST', '/api/tanks', { name, biome: 'freshwater' });
   const tank = tankSchema.parse(created.json());
-  await call(h, cookie, 'POST', `/api/tanks/${tank.id}/fish`, {
-    species: 'neon-tetra',
-    name: 'Blip',
-  });
+  await call(h, cookie, 'POST', `/api/tanks/${tank.id}/fish`, fishPayload('neon-tetra', 'Blip'));
   const shared = tankSchema.parse(
     (await call(h, cookie, 'POST', `/api/tanks/${tank.id}/share`)).json(),
   );
@@ -477,10 +481,13 @@ describe('public link abuse and isolation', () => {
         })
       ).json(),
     );
-    await call(h, owner.cookie, 'POST', `/api/tanks/${other.id}/fish`, {
-      species: 'neon-tetra',
-      name: 'Hidden',
-    });
+    await call(
+      h,
+      owner.cookie,
+      'POST',
+      `/api/tanks/${other.id}/fish`,
+      fishPayload('neon-tetra', 'Hidden'),
+    );
     const res = await call(h, null, 'GET', `/api/public/${token}`);
     expect(res.statusCode).toBe(200);
     expect(res.body).not.toContain('Secret hideout');

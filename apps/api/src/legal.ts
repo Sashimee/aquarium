@@ -83,6 +83,8 @@ export function registerLegalRoutes(deps: LegalDeps): void {
       auditRows,
       collectionRows,
       awardRows,
+      [walletRow],
+      ledgerRows,
     ] = await Promise.all([
       db
         .select({
@@ -174,6 +176,12 @@ export function registerLegalRoutes(deps: LegalDeps): void {
         .from(schema.achievementAwards)
         .where(eq(schema.achievementAwards.userId, userId))
         .orderBy(asc(schema.achievementAwards.earnedAt)),
+      db.select().from(schema.wallet).where(eq(schema.wallet.userId, userId)),
+      db
+        .select()
+        .from(schema.ledger)
+        .where(eq(schema.ledger.userId, userId))
+        .orderBy(asc(schema.ledger.createdAt), asc(schema.ledger.id)),
     ]);
 
     const perTank = await Promise.all(
@@ -246,6 +254,7 @@ export function registerLegalRoutes(deps: LegalDeps): void {
             tank: tankName === null || !visible ? null : publicName(tankName),
           })),
           collection: { entries: collectionRows, achievements: awardRows },
+          wallet: { balance: walletRow?.balance ?? 0, ledger: ledgerRows },
           tanks: perTank,
         }),
       ),
@@ -313,6 +322,9 @@ export function registerLegalRoutes(deps: LegalDeps): void {
             set: { releasedAt: sql`now()` },
           });
       }
+      await tx
+        .delete(schema.ledger)
+        .where(and(eq(schema.ledger.userId, userId), eq(schema.ledger.source, 'game')));
       await tx.delete(schema.user).where(eq(schema.user.id, userId));
     });
 

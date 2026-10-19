@@ -1,4 +1,5 @@
-import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
+import { randomBytes, randomUUID, scrypt, timingSafeEqual } from 'node:crypto';
+import { sql } from 'drizzle-orm';
 import nodemailer from 'nodemailer';
 import pg from 'pg';
 import type { FastifyInstance, InjectOptions, LightMyRequestResponse } from 'fastify';
@@ -10,6 +11,7 @@ import { createClock, type Clock } from './clock.ts';
 import { createMailer, DEFAULT_MAIL_LIMITS, type Mailer, type MailLimits } from './mail.ts';
 import { postgresHitStore, type HitStore } from './rate-limit.ts';
 import { loadChemistryParameters } from './chemistry.ts';
+import { loadEconomy } from './economy.ts';
 import { loadCatalog } from './species.ts';
 import type { LegalLimits } from './legal.ts';
 import type { CareLimits } from './tanks.ts';
@@ -219,6 +221,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     },
     species: loadCatalog(),
     chemistryParams: loadChemistryParameters(),
+    economy: loadEconomy(),
     clock,
     testHooks: opts.testHooks ?? true,
     authSecret: TEST_SECRET,
@@ -305,4 +308,26 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
         throw new AggregateError(failures, 'several harness teardown steps failed');
     },
   };
+}
+
+export function fishPayload(species: string, name: string, stage: 'juvenile' | 'adult' = 'adult') {
+  return { species, name, stage, idempotencyKey: randomUUID() };
+}
+
+// Raises every account that holds less than `amount` Pearls by `amount`, so a test that buys many
+// fish or tanks isn't limited by the starting grant.
+export async function topUp(h: Harness, amount = 100_000): Promise<void> {
+  await h.database.db.execute(sql`
+    with topped as (
+      insert into wallet (user_id, balance)
+      select id, ${amount} from "user"
+      on conflict (user_id) do update set balance = wallet.balance + ${amount}
+        where wallet.balance < ${amount}
+      returning user_id
+    )
+    insert into ledger (user_id, delta, reason, source, item_ref, idempotency_key, created_at)
+    select user_id, ${amount}, 'grant', 'game', 'grant:test-topup',
+      'test-topup-' || gen_random_uuid(), now()
+    from topped
+  `);
 }

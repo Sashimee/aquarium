@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import {
   bigserial,
   boolean,
+  check,
   date,
   doublePrecision,
   index,
@@ -12,6 +13,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
 
@@ -357,4 +359,51 @@ export const achievementAwards = pgTable(
     earnedAt: timestamptz('earned_at').notNull(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.achievementId] })],
+);
+
+export const ledgerReasonEnum = pgEnum('ledger_reason', [
+  'purchase',
+  'earn',
+  'grant',
+  'pack',
+  'subscription',
+  'refund',
+  'clawback',
+  'restore',
+]);
+export const ledgerSourceEnum = pgEnum('ledger_source', ['stripe', 'apple', 'game']);
+
+export const wallet = pgTable('wallet', {
+  userId: text('user_id')
+    .primaryKey()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  balance: integer('balance').notNull().default(0),
+});
+
+// SET NULL, not cascade: real-money rows outlive the account, pseudonymised, for 10 years. Play rows
+// (source 'game') are deleted explicitly before the user row, and ledger_game_has_user turns a
+// forgotten delete into an error instead of an orphan.
+export const ledger = pgTable(
+  'ledger',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id').references(() => user.id, { onDelete: 'set null' }),
+    delta: integer('delta').notNull(),
+    reason: ledgerReasonEnum('reason').notNull(),
+    source: ledgerSourceEnum('source').notNull(),
+    itemRef: text('item_ref'),
+    idempotencyKey: text('idempotency_key').notNull(),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('ledger_payment_key_idx')
+      .on(t.source, t.idempotencyKey)
+      .where(sql`${t.source} <> 'game'`),
+    uniqueIndex('ledger_play_key_idx')
+      .on(t.userId, t.idempotencyKey)
+      .where(sql`${t.source} = 'game'`),
+    index('ledger_user_id_created_at_idx').on(t.userId, t.createdAt),
+    check('ledger_delta_nonzero', sql`${t.delta} <> 0`),
+    check('ledger_game_has_user', sql`${t.source} <> 'game' or ${t.userId} is not null`),
+  ],
 );

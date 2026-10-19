@@ -19,6 +19,11 @@ writeFileSync(
   readFileSync(new URL('../../content/chemistry.json', import.meta.url)),
 );
 
+writeFileSync(
+  new URL('./dist/economy.json', import.meta.url),
+  readFileSync(new URL('../../content/economy.json', import.meta.url)),
+);
+
 const manifest = JSON.parse(
   readFileSync(new URL('../../assets/manifest.json', import.meta.url), 'utf8'),
 );
