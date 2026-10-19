@@ -151,14 +151,14 @@ export async function build(options: BuildOptions): Promise<void> {
     }
   }
 
-  const buildable = new Set(tasks().map((t) => `${t.kind}/${t.id}`));
+  const backgrounds = manifest.assets.filter((a) => a.kind === 'background');
+  const buildable = new Set(tasks(backgrounds, previews).map((t) => `${t.kind}/${t.id}`));
   for (const key of [...previous.keys()].filter((k) => !buildable.has(k))) {
     console.log(`index.json: dropping ${key}, it has no build task any more`);
     previous.delete(key);
   }
 
   await readyCodecs();
-  const backgrounds = manifest.assets.filter((a) => a.kind === 'background');
   const selected = tasks(backgrounds, previews).filter(
     (t) => only.length === 0 || only.includes(t.id),
   );
