@@ -17,6 +17,8 @@ import { budgetProblems, loadBudgetContent, type BudgetInput } from './budgets.t
 import {
   FIN_ID_ATTRIBUTE,
   FIN_MASK_ATTRIBUTE,
+  AUDIO_MAX_FILE_BYTES,
+  AUDIO_MAX_TOTAL_BYTES,
   IMPOSTOR_FILES,
   IMPOSTOR_MAX_BYTES,
   LEG_ATTRIBUTE,
@@ -153,7 +155,7 @@ function effectiveLicenceProblems(
   }
 }
 
-const TEXTURE_ONLY_KINDS: readonly string[] = ['substrate', 'hdri', 'background'];
+const TEXTURE_ONLY_KINDS: readonly string[] = ['substrate', 'hdri', 'audio', 'background'];
 
 function safeDecodeUri(uri: string): string {
   try {
@@ -163,11 +165,13 @@ function safeDecodeUri(uri: string): string {
   }
 }
 
-const SHIPPED_EXTENSIONS: readonly string[] = ['.glb', '.ktx2'];
+const SHIPPED_EXTENSIONS: readonly string[] = ['.glb', '.ktx2', '.m4a'];
 
 function requiredAttributes(kind: OutputAsset['kind']): string[] {
   if (kind === 'fish') return ['TEXCOORD_0', FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE, MOUTH_ATTRIBUTE];
-  if (kind === 'shrimp') return [FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE, LEG_ATTRIBUTE];
+  if (kind === 'shrimp' || kind === 'crab')
+    return [FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE, LEG_ATTRIBUTE];
+  if (kind === 'snail') return [FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE];
   return [];
 }
 
@@ -415,26 +419,119 @@ function impostorProblems(asset: OutputAsset, assetsDir: string, problems: strin
   }
 }
 
+function hasM4aBrand(bytes: Uint8Array): boolean {
+  const text = (from: number, to: number) => String.fromCharCode(...bytes.subarray(from, to));
+  return (
+    bytes.byteLength >= 12 &&
+    text(4, 8) === 'ftyp' &&
+    ['M4A ', 'isom', 'mp42'].includes(text(8, 12))
+  );
+}
+
+function aacProblem(bytes: Uint8Array): string | null {
+  const find = (tag: string, from = 0) => {
+    const needle = [...tag].map((c) => c.charCodeAt(0));
+    for (let i = from; i + needle.length <= bytes.length; i++) {
+      if (needle.every((c, k) => bytes[i + k] === c)) return i;
+    }
+    return -1;
+  };
+  const mp4a = find('mp4a');
+  const esds = mp4a < 0 ? -1 : find('esds', mp4a);
+  if (esds < 0) return 'has no mp4a sample entry with an esds descriptor';
+  let at = esds + 4 + 4;
+  const skipLength = () => {
+    while (((bytes[at] ?? 0) & 0x80) !== 0) at++;
+    at++;
+  };
+  if (bytes[at] !== 0x03) return 'has no ES descriptor';
+  at++;
+  skipLength();
+  at += 3;
+  if (bytes[at] !== 0x04) return 'has no decoder config descriptor';
+  at++;
+  skipLength();
+  if (bytes[at] !== 0x40) return 'is not MPEG-4 audio (object type indication is not 0x40)';
+  at += 13;
+  if (bytes[at] !== 0x05) return 'has no AudioSpecificConfig';
+  at++;
+  skipLength();
+  if ((bytes[at] ?? 0) >> 3 !== 2) return 'is not AAC-LC (audio object type is not 2)';
+  return null;
+}
+
+function audioProblems(asset: OutputAsset, assetsDir: string, problems: string[]): number {
+  const at = `audio ${asset.id}`;
+  const audio = asset.audio;
+  if (!audio) {
+    problems.push(`${at}: index entry has no audio block (role, loop, loudness)`);
+    return 0;
+  }
+  const expected = `audio/${asset.id}/${asset.id}.m4a`;
+  if (audio.file !== expected) problems.push(`${at}: audio file must be ${expected}`);
+  const entry = asset.files.find((f) => f.file === audio.file);
+  if (!entry) {
+    problems.push(`${at}: ${audio.file} is referenced but not in files[]`);
+    return 0;
+  }
+  if (asset.files.length !== 1) problems.push(`${at}: must ship exactly one .m4a file`);
+  if (entry.bytes > AUDIO_MAX_FILE_BYTES) {
+    problems.push(
+      `${at}: ${audio.file} is ${(entry.bytes / 1e6).toFixed(2)} MB, over the ${AUDIO_MAX_FILE_BYTES / 1e6} MB per-sound budget`,
+    );
+  }
+  const path = join(assetsDir, audio.file);
+  if (existsSync(path)) {
+    const bytes = new Uint8Array(readFileSync(path));
+    if (!hasM4aBrand(bytes)) {
+      problems.push(
+        `${at}: ${audio.file} is not an MP4/M4A container (AAC in .m4a per PLAN section 9.1)`,
+      );
+    } else {
+      const codec = aacProblem(bytes);
+      if (codec)
+        problems.push(`${at}: ${audio.file} ${codec} (AAC-LC in .m4a per PLAN section 9.1)`);
+    }
+  }
+  if (Math.abs(audio.frames / audio.sampleRate - audio.durationS) > 0.001) {
+    problems.push(`${at}: durationS ${audio.durationS} does not match frames / sampleRate`);
+  }
+  return entry.bytes;
+}
+
 function shrimpProblems(asset: OutputAsset, repoRoot: string, problems: string[]): void {
-  const at = `shrimp ${asset.id}`;
-  if (!asset.shrimp) {
-    problems.push(`${at}: index entry has no shrimp block (part ids, rig, standard length)`);
+  const at = `${asset.kind} ${asset.id}`;
+  const rig = asset.kind === 'crab' ? asset.crab : asset.shrimp;
+  if (!rig) {
+    problems.push(`${at}: index entry has no ${asset.kind} block (part ids, rig, standard length)`);
     return;
   }
-  for (const render of [asset.shrimp.debugRender, asset.shrimp.debugPartsRender]) {
+  for (const render of [rig.debugRender, rig.debugPartsRender]) {
     if (!existsSync(join(repoRoot, 'tools', 'asset-pipeline', render)))
       problems.push(`${at}: debug render ${render} is missing`);
   }
   const expected = asset.species ? shrimpLength(repoRoot, asset.species) : null;
   if (expected === null) return;
-  if (asset.shrimp.lengthSource !== 'species-json') {
+  if (rig.lengthSource !== 'species-json') {
     problems.push(
-      `${at}: built with lengthSource ${asset.shrimp.lengthSource} but the species JSON has bodyLengthM ${expected.metres} (rebuild with pnpm build:assets)`,
+      `${at}: built with lengthSource ${rig.lengthSource} but the species JSON has bodyLengthM ${expected.metres} (rebuild with pnpm build:assets)`,
     );
-  } else if (Math.abs(asset.shrimp.standardLengthM - expected.metres) > 1e-9) {
+  } else if (Math.abs(rig.standardLengthM - expected.metres) > 1e-9) {
     problems.push(
-      `${at}: standardLengthM ${asset.shrimp.standardLengthM} differs from the species JSON bodyLengthM ${expected.metres} (rebuild with pnpm build:assets)`,
+      `${at}: standardLengthM ${rig.standardLengthM} differs from the species JSON bodyLengthM ${expected.metres} (rebuild with pnpm build:assets)`,
     );
+  }
+}
+
+function snailProblems(asset: OutputAsset, repoRoot: string, problems: string[]): void {
+  const at = `snail ${asset.id}`;
+  if (!asset.snail) {
+    problems.push(`${at}: index entry has no snail block (part ids, standard length)`);
+    return;
+  }
+  for (const render of [asset.snail.debugRender, asset.snail.debugPartsRender]) {
+    if (!existsSync(join(repoRoot, 'tools', 'asset-pipeline', render)))
+      problems.push(`${at}: debug render ${render} is missing`);
   }
 }
 
@@ -445,6 +542,7 @@ export function checkAssets(input: CheckInput): string[] {
   const byId = new Map(manifest.assets.map((a) => [a.id, a]));
 
   const listed = new Map<string, string>();
+  let audioBytes = 0;
   const seenAssets = new Set<string>();
   for (const asset of index.assets) {
     const key = `${asset.kind}/${asset.id}`;
@@ -456,7 +554,9 @@ export function checkAssets(input: CheckInput): string[] {
       fishProblems(asset, repoRoot, problems);
       impostorProblems(asset, assetsDir, problems);
     }
-    if (asset.kind === 'shrimp') shrimpProblems(asset, repoRoot, problems);
+    if (asset.kind === 'shrimp' || asset.kind === 'crab') shrimpProblems(asset, repoRoot, problems);
+    if (asset.kind === 'snail') snailProblems(asset, repoRoot, problems);
+    if (asset.kind === 'audio') audioBytes += audioProblems(asset, assetsDir, problems);
     if (asset.kind === 'background') {
       problems.push(
         ...backgroundFileProblems(asset, (relative) => {
@@ -475,9 +575,12 @@ export function checkAssets(input: CheckInput): string[] {
         problems.push(`file ${file.file} is claimed by both ${previous} and ${key}`);
       }
       listed.set(file.file, key);
+      if (file.file.endsWith('.m4a') && asset.kind !== 'audio') {
+        problems.push(`${key}: ${file.file} is .m4a, which only the audio kind may ship`);
+      }
       if (!SHIPPED_EXTENSIONS.some((extension) => file.file.endsWith(extension))) {
         problems.push(
-          `${key}: ${file.file} is not a ${SHIPPED_EXTENSIONS.join(' or ')} file; PLAN section 3 commits only processed GLB and KTX2`,
+          `${key}: ${file.file} is not a ${SHIPPED_EXTENSIONS.join(' or ')} file; PLAN section 3 and 9.1 commit only processed GLB, KTX2 and M4A`,
         );
       }
       const path = join(assetsDir, file.file);
@@ -517,6 +620,11 @@ export function checkAssets(input: CheckInput): string[] {
   if (total > BUDGET_BYTES) {
     problems.push(
       `asset total ${(total / 1e6).toFixed(1)} MB exceeds the ${BUDGET_BYTES / 1e6} MB budget`,
+    );
+  }
+  if (audioBytes > AUDIO_MAX_TOTAL_BYTES) {
+    problems.push(
+      `audio total ${(audioBytes / 1e6).toFixed(2)} MB exceeds the ${AUDIO_MAX_TOTAL_BYTES / 1e6} MB audio budget`,
     );
   }
   if (index.totalBytes !== assetBytes) {

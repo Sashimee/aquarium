@@ -4,6 +4,7 @@ import {
   apiErrorSchema,
   creditsSchema,
   dataExportSchema,
+  personalitySchema,
   privacyPolicySchema,
   tankSchema,
 } from '@aquarium/shared';
@@ -12,6 +13,7 @@ import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildCredits, loadCredits, UNRECORDED_MODIFICATION } from './credits.ts';
 import { schema } from './db/index.ts';
+import { personalityFromFishId } from './personality.ts';
 import { pruneExpired } from './maintenance.ts';
 import { APP_ORIGIN, createHarness, type Harness } from './test-harness.ts';
 
@@ -198,9 +200,19 @@ describe('privacy and credits', () => {
     expect(bySpecies('banggai-cardinalfish')[0]?.author).toBe('David J. Stang');
     expect(credits.entries.filter((e) => e.licence === 'CC-BY-3.0').length).toBeGreaterThan(0);
     expect(credits.shareAlikeNotice).toMatch(/BY-SA/);
+    const index = JSON.parse(
+      readFileSync(
+        fileURLToPath(new URL('../../web/public/assets/index.json', import.meta.url)),
+        'utf8',
+      ),
+    ) as { assets: { kind: string; sources: string[] }[] };
+    const builtSounds = new Set(
+      index.assets.filter((a) => a.kind === 'audio').flatMap((a) => a.sources),
+    );
     for (const e of credits.entries) {
       expect(e.referenceOnly).toBe(e.kind === 'reference-photo' && e.modifications.length === 0);
-      if (e.kind === 'background') expect(e.modifications.length).toBeGreaterThan(0);
+      if (e.kind === 'background' || (e.kind === 'audio' && builtSounds.has(e.id)))
+        expect(e.modifications.length).toBeGreaterThan(0);
       else if ((e.licence === 'CC0-1.0' && e.kind !== 'reference-photo') || e.referenceOnly)
         expect(e.modifications).toEqual([]);
       else expect(e.modifications.length).toBeGreaterThan(0);
@@ -394,6 +406,8 @@ describe('data export', () => {
       backedUp: true,
     });
 
+    await call(h, alice.cookie, 'GET', `/api/tanks/${tank.id}`);
+
     const res = await call(h, alice.cookie, 'POST', '/api/me/export', {});
     expect(res.statusCode).toBe(200);
     expect(res.headers['cache-control']).toBe('no-store');
@@ -407,8 +421,13 @@ describe('data export', () => {
     expect(data.tanks).toHaveLength(1);
     const [exported] = data.tanks;
     expect(exported?.tank['id']).toBe(tank.id);
+    expect(exported?.tank).toMatchObject({ size: 'standard', quarantine: false });
     expect(exported?.fish).toHaveLength(1);
     expect(exported?.events.length).toBeGreaterThan(0);
+    expect(personalitySchema.parse(exported?.fish[0]?.['personality'])).toEqual(
+      personalityFromFishId(String(exported?.fish[0]?.['id'])),
+    );
+    expect(exported?.visits.length).toBeGreaterThan(0);
 
     const raw = res.body;
     expect(raw).not.toContain(bob.email);

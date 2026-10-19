@@ -16,6 +16,7 @@ import type {
   DecorViewState,
   InteractionEvents,
   LoadState,
+  PhotoView,
   PlayTool,
   SaveStatus,
 } from '../interaction/events';
@@ -80,6 +81,11 @@ export function useDemoBiome(): Biome {
 export function usePlayTool(): PlayTool {
   const { interaction } = useBridge();
   return useLatest(interaction, 'play:tool-changed')?.tool ?? 'tap';
+}
+
+export function usePhotoView(): PhotoView | null {
+  const { interaction } = useBridge();
+  return useLatest(interaction, 'photo:view') ?? null;
 }
 
 export function useDecorState(): DecorViewState | null {

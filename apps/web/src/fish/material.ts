@@ -24,13 +24,18 @@ import {
   floor,
   fract,
   frameId,
+  Fn,
+  fwidth,
+  If,
   instancedDynamicBufferAttribute,
   length,
   log2,
   luminance,
+  materialRoughness,
   max,
   min,
   mix,
+  mx_noise_float,
   normalGeometry,
   normalize,
   normalLocal,
@@ -51,7 +56,12 @@ import {
   vec4,
 } from 'three/tsl';
 import { FIN_ATTRIBUTE, LEG_PART_ID } from './assets';
-import { WALKER_INSTANCE_STRIDE, type FishInstanceData } from './instances';
+import {
+  InstanceSlot,
+  WALKER_INSTANCE_STRIDE,
+  WalkerSlot,
+  type FishInstanceData,
+} from './instances';
 import { idIs, walkerDeformation, type Deformation, type WalkerRig } from './limbs';
 import type { FishRenderProfile } from './profiles';
 import { TAIL_AMPLITUDE_BODY_LENGTHS, type SwimModeParams } from './swim';
@@ -385,6 +395,188 @@ export function finDisplay(input: FinDisplayInput): {
 }
 
 /**
+ * Ich trophonts sit in the epidermis as white cysts 0.5–1 mm across (Matthews 2005), whatever the
+ * size of the fish, so the spots are laid out in rest-pose model metres. Each lattice cell holds at
+ * most one cyst, kept clear of the cell walls; two lattices offset by half a cell hide the grid.
+ */
+const ICH_CELL_M = 0.0016;
+const ICH_RADIUS_M: readonly [number, number] = [0.00025, 0.00045];
+/** A heavy infestation is a dense sprinkle of separate grains, not a white crust. */
+const ICH_MAX_DENSITY = 0.9;
+const ICH_LATTICE_SHIFT = 0.5;
+/** Linear albedo of the cysts: opaque, slightly creamy white. */
+const ICH_WHITE = vec3(0.78, 0.78, 0.73);
+/**
+ * Piscinoodinium trophonts are 12–100 µm, far below a pixel, so velvet reads as a powdery film:
+ * blotches of a few millimetres with a fine grain that only resolves in a close-up. The dust
+ * gathers on the back and the fins first.
+ */
+const VELVET_PATCH_M = 0.004;
+const VELVET_GRAIN_M = 0.00012;
+const VELVET_GRAIN_EDGE = 0.12;
+/**
+ * Even a fish about to die of velvet keeps its pattern visible through the dust, which is why
+ * keepers spot it with a torch at a glancing angle; past this share of the skin it reads as paint.
+ */
+const VELVET_MAX_COVER = 0.55;
+/** Fins dust over a little sooner than the flank, not as a solid sheet. */
+const VELVET_FIN_WEIGHT = 0.8;
+/** Linear albedo of the rusty-gold dust. */
+const VELVET_GOLD = vec3(0.52, 0.37, 0.13);
+const VELVET_ROUGHNESS = 0.85;
+/** The dust film's coverage grows with the path through it, up to this grazing cosine. */
+const VELVET_MIN_COSINE = 0.2;
+/**
+ * Fin rot eats the membrane back from the margin: at full severity this far down the fin mask.
+ * The edge is torn into notches stretched along the fin rays, and the dying tissue just inside
+ * it turns milky, with reddened, blood-streaked membrane behind that.
+ */
+const ROT_DEPTH = 0.6;
+const ROT_RAGGED = 0.22;
+const ROT_NOTCH_M = 0.0025;
+const ROT_FRAY_M = 0.0007;
+/** Notches run along the rays: the noise is this many times coarser along the ray axis. */
+const ROT_RAY_STRETCH = 4;
+/** Width, in fin-mask units, of the band behind the front that the marks' depth measures. */
+const ROT_BAND = 0.25;
+const ROT_NECROTIC = vec3(0.6, 0.58, 0.52);
+const ROT_INFLAMED = vec3(1, 0.42, 0.38);
+
+/**
+ * Expected share of the surface covered by one ich lattice at full density. By Delesse's principle
+ * a plane through randomly placed spheres is covered by their volume fraction: (4π/3)·E[r³]/C³,
+ * with r uniform over the radius range.
+ */
+export function ichLatticeCover(): number {
+  const [a, b] = ICH_RADIUS_M;
+  const meanCube = (b ** 4 - a ** 4) / (4 * (b - a));
+  return ((4 * Math.PI) / 3) * (meanCube / ICH_CELL_M ** 3);
+}
+
+/** Dave Hoskins' hash33, companion to `hash13`. */
+function hash33(cell: Node<'vec3'>): Node<'vec3'> {
+  const p = fract(cell.mul(vec3(0.1031, 0.103, 0.0973))).toVar();
+  const q = p.add(dot(p, p.yxz.add(33.33)));
+  return fract(q.xxy.add(q.yxx).mul(q.zyx));
+}
+
+/**
+ * One lattice of ich cysts. Under a pixel the cysts would shimmer, so they fade into their
+ * expected coverage as the footprint outgrows them.
+ */
+function ichLattice(
+  p: Node<'vec3'>,
+  shift: number,
+  density: Node<'float'>,
+  footprint: Node<'float'>,
+): Node<'float'> {
+  const q = p.div(ICH_CELL_M).add(shift);
+  const cell = floor(q);
+  const rMin = ICH_RADIUS_M[0] / ICH_CELL_M;
+  const rMax = ICH_RADIUS_M[1] / ICH_CELL_M;
+  const centre = hash33(cell.add(shift * 7.1))
+    .mul(1 - 2 * rMax)
+    .add(rMax);
+  const radius = mix(float(rMin), float(rMax), hash13(cell.add(19.19 + shift)));
+  const lit = select(hash13(cell.add(53.7 + shift)).lessThan(density), float(1), float(0));
+  const w = footprint.div(ICH_CELL_M);
+  const d = length(q.sub(cell).sub(centre));
+  const sharp = smoothstep(radius.sub(w), radius.add(w), d).oneMinus().mul(lit);
+  const fade = smoothstep(0.35, 1, w.div((rMin + rMax) / 2));
+  return mix(sharp, density.mul(ichLatticeCover()), fade);
+}
+
+/**
+ * The visible signs of disease as (ich cover, velvet dust cover, fin kept 0..1, depth behind the
+ * fin rot front 0..1 over `ROT_BAND`), from the ich, fin rot and velvet severities, the fin mask
+ * and id, and the membrane weight. A healthy fish branches past every sign, so it costs one
+ * comparison per disease, and its marks are exactly (0, 0, 1, 1), which leaves every blend as it
+ * was. Derivatives are taken before the branches: WGSL allows them only in uniform control flow.
+ */
+const diseaseMarks = Fn(
+  ([signs, finMask, finId, membrane]: [
+    Node<'vec3'>,
+    Node<'float'>,
+    Node<'float'>,
+    Node<'float'>,
+  ]): Node<'vec4'> => {
+    const p = positionGeometry;
+    const footprint = max(max(length(dFdx(p)), length(dFdy(p))), 1e-9).toVar();
+    const maskWidth = max(fwidth(finMask), 1e-4).toVar();
+    const ich = float(0).toVar();
+    const dust = float(0).toVar();
+    const kept = float(1).toVar();
+    const depth = float(1).toVar();
+
+    If(signs.x.greaterThan(0), () => {
+      const density = signs.x.mul(ICH_MAX_DENSITY);
+      const a = ichLattice(p, 0, density, footprint);
+      const b = ichLattice(p, ICH_LATTICE_SHIFT, density, footprint);
+      ich.assign(a.add(b).sub(a.mul(b)));
+    });
+
+    If(signs.y.greaterThan(0).and(membrane.greaterThan(0.5)), () => {
+      const rot = signs.y;
+      const alongZ = idIs(finId, FIN_ID.caudal)
+        .add(idIs(finId, FIN_ID.pectoral))
+        .add(idIs(finId, FIN_ID.pelvic));
+      const stretch = mix(vec3(1, 1 / ROT_RAY_STRETCH, 1), vec3(1, 1, 1 / ROT_RAY_STRETCH), alongZ);
+      const q = p.mul(stretch);
+      const ragged = mx_noise_float(q.div(ROT_NOTCH_M))
+        .mul(0.7)
+        .add(mx_noise_float(q.div(ROT_FRAY_M)).mul(0.3));
+      const front = float(1)
+        .sub(rot.mul(ROT_DEPTH))
+        .add(ragged.mul(smoothstep(0, 0.25, rot).mul(ROT_RAGGED)))
+        .toVar();
+      kept.assign(smoothstep(front.sub(maskWidth), front.add(maskWidth), finMask).oneMinus());
+      depth.assign(clamp(front.sub(finMask).div(ROT_BAND), 0, 1));
+    });
+
+    If(signs.z.greaterThan(0), () => {
+      const dorsal = smoothstep(-0.3, 0.9, normalGeometry.y);
+      const where = max(mix(float(0.35), float(1), dorsal), membrane.mul(VELVET_FIN_WEIGHT));
+      const patch = mx_noise_float(p.div(VELVET_PATCH_M)).mul(0.5).add(0.5);
+      const cover = clamp(
+        signs.z.mul(where).mul(patch.mul(0.9).add(0.55)).mul(VELVET_MAX_COVER),
+        0,
+        VELVET_MAX_COVER,
+      ).toVar();
+      const grain = mx_noise_float(p.div(VELVET_GRAIN_M)).mul(0.5).add(0.5);
+      const edge = VELVET_GRAIN_EDGE;
+      const threshold = float(1 + edge).sub(cover.mul(1 + 2 * edge));
+      const near = smoothstep(threshold.sub(edge), threshold.add(edge), grain);
+      const film = mix(near, cover, smoothstep(0.5, 2, footprint.div(VELVET_GRAIN_M)));
+      const toEye = normalize(cameraPosition.sub(positionWorld));
+      const cosine = max(abs(dot(normalWorld, toEye)), VELVET_MIN_COSINE);
+      dust.assign(float(1).sub(pow(film.oneMinus(), cosine.reciprocal())));
+    });
+
+    return vec4(ich, dust, kept, depth);
+  },
+);
+
+/** `albedo` with the signs in `marks` painted on, for the severities `signs`. */
+function diseasedAlbedo(
+  albedo: Node<'vec3'>,
+  marks: Node<'vec4'>,
+  signs: Node<'vec3'>,
+): Node<'vec3'> {
+  const rot = signs.y;
+  const necrotic = smoothstep(0, 0.35, marks.w)
+    .oneMinus()
+    .mul(min(rot.mul(3), 1))
+    .mul(0.75);
+  const inflamed = smoothstep(0.15, 0.45, marks.w)
+    .mul(smoothstep(0.55, 0.95, marks.w).oneMinus())
+    .mul(smoothstep(0.35, 0.9, rot))
+    .mul(0.6);
+  const rotted = mix(mix(albedo, albedo.mul(ROT_INFLAMED), inflamed), ROT_NECROTIC, necrotic);
+  const spotted = mix(rotted, ICH_WHITE, marks.x);
+  return mix(spotted, VELVET_GOLD, marks.y);
+}
+
+/**
  * Fish skin and fins on top of three's physical model, with the swimming deformation applied in
  * model space before instancing, so every instance shares one mesh.
  */
@@ -422,8 +614,8 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
       }
       const walker = walkerDeformation(locomotion.rig, {
         look: this.instanceVec4(8),
-        walk: this.instanceVec4(20),
-        act: this.instanceVec4(24),
+        walk: this.instanceVec4(WalkerSlot.LegPhase),
+        act: this.instanceVec4(WalkerSlot.Pick),
       });
       this.still = walker;
       this.breathing = walker;
@@ -597,8 +789,19 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
     const grey = vec3(luminance(base).mul(0.8).add(0.06));
     // Paling is chromatophores contracting in the skin, which an eye has none of; greying the
     // pupil would cloud it like a cataract instead.
-    const albedo = (eye ? base : mix(base, grey, pale.mul(0.85))).toVar();
+    const paled = eye ? base : mix(base, grey, pale.mul(0.85));
+    // Shrimp catch none of these diseases, and the cysts and dust sit on skin, not on the cornea.
+    const signs = walker || eye ? null : this.instanceVec4(InstanceSlot.Ich).xyz;
+    const marks =
+      signs === null ? null : diseaseMarks(signs, fin.x, fin.y, membrane).toVar('diseaseMarks');
+    const albedo = (
+      signs !== null && marks !== null ? diseasedAlbedo(paled, marks, signs) : paled
+    ).toVar();
     this.colorNode = albedo;
+    // Dust is matte and hides the mucus gloss and the iridophores under it.
+    const undusted = marks === null ? null : marks.y.oneMinus();
+    this.roughnessNode =
+      marks === null ? null : mix(materialRoughness, float(VELVET_ROUGHNESS), marks.y);
 
     const textureAlpha = sample.a.mul(source.opacity);
     const hasAlpha = source.transparent || source.alphaTest > 0;
@@ -616,18 +819,31 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
     const finAlpha = (walker ? bodyAlpha : textureAlpha).mul(
       float(1).sub(finAmount.mul(profile.finTransmission * (1 - FIN_OPACITY_FLOOR))),
     );
-    const coverage = mix(bodyAlpha, finAlpha, membrane);
+    const membraneCoverage = mix(bodyAlpha, finAlpha, membrane);
+    // Ich cysts are opaque even on a clear fin.
+    const coverage =
+      marks === null
+        ? membraneCoverage
+        : mix(membraneCoverage, max(membraneCoverage, bodyAlpha), marks.x);
+    const kept = marks?.z ?? null;
     this.alphaToCoverage = translucent && features.fins === 'coverage';
     // Every species with see-through membranes needs the dither, or its fins band into
-    // COVERAGE_SAMPLES steps; the body is opaque or cut out, so it is left undithered.
+    // COVERAGE_SAMPLES steps; the body is opaque or cut out, so it is left undithered. Rotted
+    // membrane is cut after the dither, which would otherwise leave a stipple where it was.
+    const dithered = mix(coverage, ditheredCoverage(coverage, seed), membrane);
     this.opacityNode = this.alphaToCoverage
-      ? mix(coverage, ditheredCoverage(coverage, seed), membrane)
+      ? kept === null
+        ? dithered
+        : dithered.mul(kept)
       : null;
     if (translucent && features.fins === 'stochastic') {
-      this.maskNode = screenDoor(coverage, seed);
+      this.maskNode = screenDoor(kept === null ? coverage : coverage.mul(kept), seed);
     } else if (this.alphaToCoverage && hasAlpha && !authoredCutoff) {
       // Coverage fades a membrane out by itself; the skin keeps its hard cut.
       this.maskNode = textureAlpha.greaterThan(membrane.oneMinus().mul(SILHOUETTE_ALPHA));
+    } else if (kept !== null && !this.alphaToCoverage) {
+      const intact = kept.greaterThan(0.5);
+      this.maskNode = silhouette === null ? intact : silhouette.and(intact);
     } else {
       this.maskNode = silhouette;
     }
@@ -645,7 +861,12 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
       this.emissiveNode = null;
     }
 
-    this.clearcoatNode = features.clearcoat ? mix(float(0.6), float(0.2), finAmount) : null;
+    const coat = mix(float(0.6), float(0.2), finAmount);
+    this.clearcoatNode = features.clearcoat
+      ? undusted === null
+        ? coat
+        : coat.mul(undusted)
+      : null;
     this.clearcoat = 0;
 
     if (features.iridescence && profile.iridescence > 0) {
@@ -654,10 +875,11 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
         profile.iridescenceMask === 'blue'
           ? smoothstep(0.02, 0.2, sampleRgb.b.sub(max(sampleRgb.r, sampleRgb.g)))
           : float(1);
-      this.iridescenceNode = where
+      const iridescence = where
         .mul(finAmount.oneMinus())
         .mul(pale.mul(NIGHT_IRIDESCENCE_LOSS).oneMinus())
         .mul(profile.iridescence);
+      this.iridescenceNode = undusted === null ? iridescence : iridescence.mul(undusted);
       this.iridescenceThicknessNode = look.w.mul(pale.mul(NIGHT_PLATELET_SHRINK).oneMinus());
     } else {
       this.iridescenceNode = null;
