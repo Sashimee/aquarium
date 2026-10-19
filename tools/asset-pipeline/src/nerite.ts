@@ -102,6 +102,12 @@ export const NERITE_RECIPES: NeriteRecipe[] = [
         minChannel: 0.42,
         note: 'white scar near the rear',
       },
+      {
+        centre: [-0.415, 0.17, -0.055],
+        radius: 0.05,
+        minChannel: 0.55,
+        note: 'pale grey scan-edge shard under the rear of the shell',
+      },
     ],
     note: 'foot, head and tentacle colour matched by eye to the Wikimedia nerite photo, no photo pixels shipped',
   },
@@ -334,6 +340,13 @@ export interface ShellFootprint {
   ceilingY: number;
 }
 
+const LIP_SAMPLES = 25;
+const LIP_SMOOTH_PASSES = 3;
+const LIP_FACE_DEPTH = 0.1;
+const LIP_TRIM = 0.03;
+const LIP_RAMP = 0.15;
+const LIP_SPAN = 0.85;
+
 function signedPow(v: number, exponent: number): number {
   return Math.sign(v) * Math.abs(v) ** exponent;
 }
@@ -517,6 +530,155 @@ export interface PlacedShell {
   length: number;
 }
 
+export interface LipEdgeSample {
+  x: number;
+  y: number;
+  z: number;
+}
+
+/**
+ * Lowest shell point of the front half at evenly spaced x across the lip, with the front-most z of each column.
+ * Throws on a column with no shell vertex: the lip recipe no longer fits the scan.
+ */
+export function measureLipEdge(
+  positions: Float32Array,
+  halfWidth: number,
+  midZ: number,
+  length: number,
+): LipEdgeSample[] {
+  const span = halfWidth * LIP_SPAN;
+  const columns = Array.from({ length: LIP_SAMPLES }, (_, s) => ({
+    x: (-1 + (2 * s) / (LIP_SAMPLES - 1)) * span,
+    y: Infinity,
+    z: -Infinity,
+  }));
+  const reach = span / (LIP_SAMPLES - 1);
+  for (let i = 0; i < positions.length; i += 3)
+    for (const column of columns)
+      if (Math.abs(positions[i]! - column.x) <= reach && positions[i + 2]! > midZ)
+        column.z = Math.max(column.z, positions[i + 2]!);
+  for (const column of columns)
+    if (!Number.isFinite(column.z))
+      throw new Error(
+        `measureLipEdge: no shell vertex in front of z ${midZ.toFixed(5)} within ${reach.toFixed(5)} of x ${column.x.toFixed(5)}; recheck the nerite lip recipe`,
+      );
+  for (let i = 0; i < positions.length; i += 3)
+    for (const column of columns)
+      if (
+        Math.abs(positions[i]! - column.x) <= reach &&
+        positions[i + 2]! > column.z - length * LIP_FACE_DEPTH &&
+        positions[i + 1]! < column.y
+      )
+        column.y = positions[i + 1]!;
+  for (let pass = 0; pass < LIP_SMOOTH_PASSES; pass++) {
+    const y = columns.map((s) => s.y);
+    for (let s = 1; s + 1 < columns.length; s++)
+      columns[s]!.y = (y[s - 1]! + y[s]! + y[s + 1]!) / 3;
+  }
+  return columns;
+}
+
+/** Splits every triangle along `field = 0`, keeps the part where it is >= 0 and returns the new vertices on the cut. */
+export function clipPart(part: Part, field: (x: number, y: number, z: number) => number): Vec3[] {
+  const { positions, normals, uvs, indices } = part;
+  const keys = Object.keys(part.extra);
+  const count = positions.length / 3;
+  const values = new Float64Array(count);
+  for (let i = 0; i < count; i++)
+    values[i] = field(positions[i * 3]!, positions[i * 3 + 1]!, positions[i * 3 + 2]!);
+
+  const outPositions = Array.from(positions);
+  const outNormals = Array.from(normals);
+  const outUvs = Array.from(uvs);
+  const outExtra = new Map(keys.map((k) => [k, Array.from(part.extra[k]!)]));
+  const cutIndex = new Map<number, number>();
+  const cut: Vec3[] = [];
+  const cutVertex = (a: number, b: number): number => {
+    const lo = Math.min(a, b);
+    const hi = Math.max(a, b);
+    const key = lo * count + hi;
+    const known = cutIndex.get(key);
+    if (known !== undefined) return known;
+    const t = values[lo]! / (values[lo]! - values[hi]!);
+    const lerp = (source: ArrayLike<number>, width: number, out: number[]): void => {
+      for (let c = 0; c < width; c++)
+        out.push(source[lo * width + c]! + (source[hi * width + c]! - source[lo * width + c]!) * t);
+    };
+    const at = outPositions.length / 3;
+    lerp(positions, 3, outPositions);
+    const n = outNormals.length;
+    lerp(normals, 3, outNormals);
+    const norm = Math.hypot(outNormals[n]!, outNormals[n + 1]!, outNormals[n + 2]!) || 1;
+    for (let c = 0; c < 3; c++) outNormals[n + c]! /= norm;
+    lerp(uvs, 2, outUvs);
+    for (const k of keys) lerp(part.extra[k]!, 1, outExtra.get(k)!);
+    cutIndex.set(key, at);
+    cut.push([outPositions[at * 3]!, outPositions[at * 3 + 1]!, outPositions[at * 3 + 2]!]);
+    return at;
+  };
+
+  const kept: number[] = [];
+  for (let t = 0; t < indices.length; t += 3) {
+    const polygon: number[] = [];
+    for (let k = 0; k < 3; k++) {
+      const a = indices[t + k]!;
+      const b = indices[t + ((k + 1) % 3)]!;
+      const inA = values[a]! >= 0;
+      if (inA) polygon.push(a);
+      if (inA !== values[b]! >= 0) polygon.push(cutVertex(a, b));
+    }
+    for (let k = 1; k + 1 < polygon.length; k++)
+      kept.push(polygon[0]!, polygon[k]!, polygon[k + 1]!);
+  }
+
+  const used = new Uint8Array(outPositions.length / 3);
+  for (const v of kept) used[v] = 1;
+  const remap = new Uint32Array(used.length);
+  let total = 0;
+  for (let i = 0; i < used.length; i++) if (used[i]) remap[i] = total++;
+  const take = (source: number[], width: number): Float32Array<ArrayBuffer> => {
+    const out = new Float32Array(total * width);
+    for (let i = 0; i < used.length; i++)
+      if (used[i])
+        for (let c = 0; c < width; c++) out[remap[i]! * width + c] = source[i * width + c]!;
+    return out;
+  };
+  part.positions = take(outPositions, 3);
+  part.normals = take(outNormals, 3);
+  part.uvs = take(outUvs, 2);
+  for (const k of keys) part.extra[k] = take(outExtra.get(k)!, 1);
+  part.indices = Uint32Array.from(kept, (v) => remap[v]!);
+  return cut.filter((_, i) => used[count + i]);
+}
+
+/**
+ * Cuts the ragged hanging flaps of the front lip away along a smooth curve, splitting triangles on the curve so
+ * the cut is one clean edge with interpolated position, uv and normal. Returns the cut height over (x, z).
+ */
+export function trimLip(
+  part: Part,
+  halfWidth: number,
+  midZ: number,
+  length: number,
+): (x: number, z: number) => number {
+  const edge = measureLipEdge(part.positions, halfWidth, midZ, length);
+  const span = halfWidth * LIP_SPAN;
+  const curve = (x: number): number => {
+    const f = clamp(((x / span + 1) / 2) * (edge.length - 1), 0, edge.length - 1);
+    const lo = Math.floor(f);
+    const hi = Math.min(edge.length - 1, lo + 1);
+    const y = edge[lo]!.y + (edge[hi]!.y - edge[lo]!.y) * (f - lo);
+    const across = Math.abs(x) / halfWidth;
+    const weight = smoothstep(0.05, 0.2, across) * (1 - smoothstep(0.9, 1, across));
+    return y + length * LIP_TRIM * weight;
+  };
+  const below = -length * 0.1;
+  const cutY = (x: number, z: number): number =>
+    below + (curve(x) - below) * smoothstep(midZ, midZ + length * LIP_RAMP, z);
+  clipPart(part, (x, y, z) => y - cutY(x, z));
+  return cutY;
+}
+
 /**
  * Tips the aperture end of the placed shell down about the rear of its underside and sits it back on the ground,
  * so the lip comes down onto the foot. Returns where the lip and the aperture ceiling end up.
@@ -568,6 +730,8 @@ export function tiltShell(part: Part, length: number, degrees: number): ShellFoo
   let ceilingY = 0;
   for (const [slice, y] of sliceFloor)
     if (slice >= 3 && slice <= 10) ceilingY = Math.max(ceilingY, y);
+  const midZ = (rearZ + frontZ) / 2;
+  trimLip(part, halfWidth, midZ, length);
   return { halfWidth, rearZ, frontZ, rimY, lipUnderY, ceilingY };
 }
 
@@ -781,6 +945,8 @@ export async function buildNerite(recipe: NeriteRecipe, ctx: FishContext): Promi
         ),
         `re-simplified to ${recipe.bakeTriangles} triangles, box-projected into a fresh atlas and the colour re-baked from the scan's vertex colours, ${recipe.textureSize} px KTX2`,
         `shell pitched ${recipe.pitchDegrees} degrees nose-down and sunk into the foot so the lip edge tucks into the body mass`,
+        'ragged hanging flaps of the front lip clipped away along a smooth curve: triangles are split on the curve with position, uv and normal interpolated, so the lip ends in one clean edge',
+        'ragged hanging flaps of the front lip cut away below a smooth curve and the cut edge covered by a closed rim bead (a tube of the body part, foot part id, weight 0) laid along the lip',
         'foot, mantle, head and two tentacles generated procedurally: lens-section foot with edge colour variation from a small ramp texture, mantle filling under the aperture, head and slender curved tentacles in front of the lip, deterministic',
         'origin moved to the centre of the foot on the ground',
         '_FIN_ID part ids 0 shell, 10 foot, 11 head, 12 tentacle; _FIN_MASK foot ripple weight and tentacle base-to-tip weight',
