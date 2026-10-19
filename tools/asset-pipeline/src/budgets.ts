@@ -105,7 +105,10 @@ function filesToFetch(
   const first = asset.lods[0];
   const last = asset.lods.at(-1);
   const lods =
-    asset.kind === 'fish' || asset.kind === 'shrimp'
+    asset.kind === 'fish' ||
+    asset.kind === 'shrimp' ||
+    asset.kind === 'crab' ||
+    asset.kind === 'snail'
       ? asset.lods
       : first && last
         ? [first, last]
@@ -151,7 +154,10 @@ export function presetDownloadBytes(
   }
   for (const asset of input.index.assets) {
     if (
-      (asset.kind === 'fish' || asset.kind === 'shrimp') &&
+      (asset.kind === 'fish' ||
+        asset.kind === 'shrimp' ||
+        asset.kind === 'crab' ||
+        asset.kind === 'snail') &&
       asset.species &&
       input.speciesBiome.get(asset.species) === preset.biome
     )

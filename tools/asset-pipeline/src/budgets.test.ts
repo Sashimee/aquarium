@@ -104,6 +104,16 @@ describe('presetDownloadBytes', () => {
     expect(presetDownloadBytes(input, input.presets[0]!, 'mobile')).toBe(1000 + 200 + 1700 + 100);
   });
 
+  it('adds every LOD of a crab or snail whose species lives in the preset biome', () => {
+    const crab = { ...textured('crab', 'crab', 100, 400), species: 'tetra' };
+    const snail = { ...textured('snail', 'snail', 100, 400), species: 'tetra' };
+    const reefSnail = { ...textured('reef-snail', 'snail', 100, 400), species: 'tang' };
+    const input = inputOf([hdri(0), textured('rock', 'rock', 0, 0), crab, snail, reefSnail]);
+    expect(presetDownloadBytes(input, input.presets[0]!, 'mobile')).toBe(
+      1000 + 200 + 2 * (1700 + 100),
+    );
+  });
+
   it('counts the impostor atlases of a fish on both budgets', () => {
     const albedo = entry('fish/tetra/impostor_albedo.ktx2', 300);
     const normalDepth = entry('fish/tetra/impostor_normal.ktx2', 700);
