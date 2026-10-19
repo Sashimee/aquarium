@@ -215,19 +215,27 @@ describe('public handle', () => {
 
   it('answers 409 when the account is deleted while the change waits on its row', async () => {
     const { cookie, userId } = await account(h);
-    let deleted!: () => void;
-    let commit!: () => void;
-    const gate = new Promise<void>((resolve) => (commit = resolve));
-    const ready = new Promise<void>((resolve) => (deleted = resolve));
+    let locked!: () => void;
+    let proceed!: () => void;
+    const ready = new Promise<void>((resolve) => (locked = resolve));
+    const gate = new Promise<void>((resolve) => (proceed = resolve));
     const deleting = h.database.db.transaction(async (tx) => {
-      await tx.delete(schema.user).where(eq(schema.user.id, userId));
-      deleted();
+      await tx.select().from(schema.user).where(eq(schema.user.id, userId)).for('update');
+      locked();
       await gate;
+      await tx.delete(schema.user).where(eq(schema.user.id, userId));
     });
     await ready;
     const pending = call(h, cookie, 'PUT', '/api/me/handle', { handle: unique() });
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    commit();
+    for (;;) {
+      const waiting = await h.database.pool.query(
+        `select 1 from pg_stat_activity
+         where wait_event_type = 'Lock' and query ilike '%for update%' and query ilike '%"user"%'`,
+      );
+      if (waiting.rowCount) break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    proceed();
     await deleting;
     expect((await pending).statusCode).toBe(409);
   });
