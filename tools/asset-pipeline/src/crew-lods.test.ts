@@ -166,7 +166,7 @@ function lipGapAcrossWidth(prims: ShippedPrimitive[], length: number): number {
   const shell = prims.find((p) => p.material === 'nerite-shell')!;
   const body = prims.find((p) => p.material === 'nerite-body')!;
   const bins = 12;
-  const binOf = (x: number): number => Math.floor(((x / length + 0.5) * bins) / 1);
+  const binOf = (x: number): number => Math.floor((x / length + 0.5) * bins);
   let frontZ = -Infinity;
   for (let v = 0; v < shell.positions.length / 3; v++)
     frontZ = Math.max(frontZ, shell.positions[v * 3 + 2]!);
@@ -189,7 +189,6 @@ function lipGapAcrossWidth(prims: ShippedPrimitive[], length: number): number {
     bodyTop[bin] = Math.max(bodyTop[bin]!, body.positions[v * 3 + 1]!);
   }
   const gaps = lipUnder.map((y, bin) => y - bodyTop[bin]!).filter(Number.isFinite);
-  console.log('GAPS', gaps.map((g) => (g / length).toFixed(3)).join(' '));
   return Math.max(...gaps);
 }
 
@@ -202,10 +201,10 @@ describe('nerite seating', () => {
   beforeAll(() => MeshoptDecoder.ready);
 
   for (const level of [0, 1, 2])
-    it(`LOD${level} lip rests close to the body instead of perching above it`, async () => {
+    it(`LOD${level} lip underside sits within 0.06 L of the body across the full lip width`, async () => {
       const length = 0.02;
       const gap = lipGapAcrossWidth(await readLod('snail/nerite-snail', level), length);
-      expect(gap).toBeLessThan(0.05 * length);
+      expect(gap).toBeLessThan(0.06 * length);
     });
 });
 

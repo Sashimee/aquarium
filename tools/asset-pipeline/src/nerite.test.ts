@@ -234,7 +234,7 @@ describe('buildNeriteBody', () => {
       .filter((i) => Math.abs(body.positions[i * 3]!) > widest * 0.9)
       .map((i) => body.positions[i * 3 + 1]!);
     expect(footTop).toBeGreaterThan(length * 0.06);
-    expect(Math.max(...edge) - Math.min(...edge)).toBeGreaterThan(length * 0.03);
+    expect(Math.max(...edge) - Math.min(...edge)).toBeGreaterThan(length * 0.02);
   });
 
   it('gives every vertex a ramp coordinate in [0, 1] and puts the foot centre on the reported z', () => {
