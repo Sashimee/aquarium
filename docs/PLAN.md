@@ -24,7 +24,7 @@ your tanks across devices.
 | Devices | **Desktop and mobile**: WebGPU with automatic WebGL2 fallback, and quality tiers chosen by measuring the GPU. **Minimum Safari 16**: the CSP uses `wasm-unsafe-eval`, which Safari 15 and older do not know, so meshopt and the basis transcoder would not compile there. The web build targets `es2022` + `safari16`, and `safari16` is also what keeps three loading on Safari 16.0 to 16.3: it makes the bundler lower class static blocks, which those versions cannot parse. Do not revert it to a bare `es2022`. |
 | Dev access | `devfish.bas.lu` is public, `X-Robots-Tag: noindex` plus a `robots.txt` that disallows everything. |
 | Dokploy | Both apps inside the existing **Bas.lu** project. |
-| Merging | **Repo-local override of the global rule**: the orchestrator squash-merges feature PRs into `dev` once the `check` and `docker` jobs are green **and** `code-reviewer` approves. Full e2e gates `chore/batch-*` branches and runs on every `dev` push (Alex, 2026-10-19). `dev → main` happens **only when Alex asks**. |
+| Merging | **Repo-local override of the global rule**: the orchestrator squash-merges feature PRs into `dev` once the `check` and `docker` jobs are green **and** `code-reviewer` approves. e2e runs only on demand, once before a release, and its failures are fixed in one batch then (Alex, 2026-10-19). `photo.spec` was dropped; photo mode stays covered by unit tests. `dev → main` happens **only when Alex asks**. |
 | Concurrency | At most 8 running agents, reviewers included (Alex, 2026-10-19, see §9.1). |
 
 ## 2. Architecture
@@ -181,7 +181,7 @@ missing from the manifest or carries a licence outside CC0 / CC-BY, except CC-BY
 ## 4. Delivery: tasks, owners, dependencies, waves
 
 Each task becomes a GitHub issue (labels `wave:N`, `agent:<name>`), one branch, one PR into `dev`.
-Branch names are `feat/<issue>-<slug>`. Every PR must pass CI and `code-reviewer` before the
+Branch names are `feat/<issue>-<slug>`. Every PR must pass the `check` and `docker` jobs and `code-reviewer` before the
 orchestrator merges it. A task is *ready* once all of its dependencies are **merged into dev**.
 
 | ID | Task | Agent | Depends on | Wave |
@@ -257,12 +257,15 @@ Dokploy API: `https://dok.seil.pro/api`, header `x-api-key`, token read from
 `.githooks/pre-push` refuses pushes to `main` that aren't fast-forwards from a merged `dev` PR, and
 refuses all force-pushes. Set it up with `git config core.hooksPath .githooks`.
 
-## 6. Quality gates (every PR)
+## 6. Quality gates
 
 `pnpm typecheck` · `pnpm lint` · `pnpm test` (vitest: sim and lifecycle deterministic tests, API
 tests against real Postgres in CI) · `pnpm build` · `pnpm assets:check` (licences and manifest) ·
-Docker image builds · from T19 on: `pnpm e2e` (Playwright, WebGL2 path; WebGPU path run locally
-where a GPU exists).
+Docker image builds. Every PR must pass the `check` and `docker` jobs.
+
+Release gate (on demand, once after all planned work is merged and before the `dev → main` ask):
+`pnpm e2e` (Playwright, WebGL2 path; WebGPU path run locally where a GPU exists), triggered with
+`gh workflow run ci.yml --ref dev`.
 
 ## 7. Risks
 
@@ -307,6 +310,7 @@ done (T68); Alex confirmed on 2026-10-19 that there is no release before that.
 | Window weather | Simulated from the tank's seed and the local clock. No location, no third-party weather API. |
 | Budgets | §2.7 and the < 150 MB repo asset budget (§3) stay. Backgrounds, audio, new species and biomes stream per preset. If the budget can't hold a new biome, the orchestrator stops and asks Alex before raising it. |
 | Agent concurrency | At most 8 running agents, reviewers included (`CLAUDE.md` loop step 4). Alex lifted the cap on 2026-10-19, restored 6 the same day after 21 parallel agents pushed the load average to 110 and filled RAM, then raised it to 8 with agents leaving Playwright e2e to CI. |
+| e2e timing | Playwright no longer runs on PRs, batch branches or `dev` pushes. It runs on demand, once after all planned work is merged and before the `dev → main` ask, and failures are fixed in one batch then. `photo.spec` was deleted; #760 closed (Alex, 2026-10-19). |
 | Juvenile or adult | Alex, 2026-10-19: the shop sells every species as a juvenile or an adult, at two prices. A juvenile is smaller, cheaper, and grows into an adult over the species' `juvenileAfterDays → adultAfterDays` (T33). An adult costs about 2.5× as much and arrives at full size and colour. |
 | Heaters | Alex, 2026-10-19: warm-water species need a heater. Without one, the tank drifts to room temperature (21 °C), and a species whose range starts above that is stressed and can get sick (T37). New tanks come with a basic heater. Existing tanks migrate with one installed so no current fish suffers. The shop warns before a warm species goes into a tank without a heater, but does not block it. |
 | In-game currency | One currency, **Pearls**, earned by playing and bought with real money. Every shop item has a price in Pearls, and the balance is always visible in the HUD. Basic care is never charged and never blocked by the balance: feeding with the standard food, water changes, gravel vacuum, algae scrape and the standard treatment for each disease are free, so no fish dies because the player did not pay, even with a negative balance after a chargeback. Pearls buy fish, plants, decor, equipment upgrades, premium foods, backgrounds and tank slots and sizes. There is no consumable inventory for basic care. No loot boxes and no random paid rewards. Every price lives in `content/economy.json`, so tuning prices is a data change. |

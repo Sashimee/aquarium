@@ -83,8 +83,7 @@ export function reactionProblem(error: unknown): ReactionProblem {
       return { kind: 'sign-in' };
     case 403:
       if (error.code === 'email_not_verified') return { kind: 'verify' };
-      // The API uses one 'forbidden' code for both the own-tank and the cross-origin refusal.
-      return error.code === 'forbidden' && /own tank/i.test(error.message)
+      return error.code === 'own_tank'
         ? { kind: 'own' }
         : { kind: 'failed', message: error.message };
     case 404:
