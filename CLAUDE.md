@@ -31,7 +31,7 @@ pnpm lint
 pnpm test           # vitest, all packages
 pnpm build
 pnpm assets:check   # licence + manifest + size budget
-pnpm e2e            # Playwright (from T19)
+pnpm e2e            # Playwright; CI runs it, agents don't run it locally
 git config core.hooksPath .githooks   # once per clone: guards main
 ```
 
@@ -53,9 +53,10 @@ agents in `.claude/agents/`.
 2. **Bootstrap once.** If T00 isn't done, do it inline: monorepo skeleton, `.githooks/pre-push`, `gh repo create Sashimee/aquarium --private`, push, create `dev`, labels `wave:0..8` and `agent:*`, and one issue per task in `docs/PLAN.md` §4 (body: acceptance criteria, dependencies, owned paths). The very first commit lands on `main`, since a repo needs a root, and everything after it goes through `dev`.
 3. **Land finished work.** For each open PR into `dev`:
    - CI is red → hand it back to the author agent (`SendMessage` if it's still alive, otherwise a new agent of that type with the PR number).
-   - CI is green and there's no review yet → launch `code-reviewer` on it.
-   - Approved and green → `gh pr merge <n> --squash --delete-branch`. Then check the devfish deploy with `curl -sI https://devfish.bas.lu/api/health`.
+   - `check` and `docker` are green and there's no review yet → launch `code-reviewer` on it.
+   - Approved, `check` and `docker` green → `gh pr merge <n> --squash --delete-branch`. Then check the devfish deploy with `curl -sI https://devfish.bas.lu/api/health`.
    - Changes requested → back to the author with the review.
+   - The latest `dev` push has a red e2e job → file a top-priority fix-forward issue and dispatch it before new feature work.
 4. **Dispatch.** Ready tasks are open issues whose dependencies are all merged into `dev`. Launch ready tasks up to **8 running agents at once**, reviewers included (Alex, 2026-10-19, PLAN §9.1). Queue the rest, PRs closest to merge first. Agents don't run Playwright locally; CI runs e2e. Use `Agent` with `subagent_type` = the owner agent, `isolation: "worktree"` and `run_in_background: true`. Send independent launches in **one message**. The prompt gives the issue number, the branch name, the acceptance criteria and the dependencies already merged, and says: "commit, push, open a PR into dev with Closes #N, report the PR number".
 5. **Record.** Rewrite `RESUME.md` (Goal / Status / State / Blockers / Files; done-log capped at 10).
 6. **Pace.** Background agents wake the loop when they finish, so schedule a 1800 s fallback wakeup only.
@@ -64,4 +65,4 @@ agents in `.claude/agents/`.
    - a task has failed 3 times: file an issue, label it `blocked`, keep other work going, and stop only if nothing else is ready;
    - something needs Alex: a credential, a licence question (CC-BY-SA), a budget, or a prod action.
 
-Never claim a task is done without its merged PR and a green CI run. Report failures with the actual output.
+Never claim a task is done without its merged PR with green `check` and `docker` jobs. Report failures with the actual output.
