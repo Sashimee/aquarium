@@ -612,6 +612,7 @@ export class PlayController {
     if (!pick) return;
     const strength = this.intensity.next(this.deps.now());
     this.deps.ripples.add(offsetInto(pick.point, pick.normal, 0.001), pick.normal, strength);
+    this.deps.events.emit('glass:tapped', { intensity: strength });
     if (pick.face === 'top' || pick.face === 'bottom') return;
     this.deps.toSim(pick.point.x, pick.point.y, pick.point.z, this.sim);
     this.deps.startle?.({

@@ -143,6 +143,8 @@ export interface InteractionEvents {
   /** The player settled an edit; the persistence layer saves it. */
   'decor:layout': { tankId: string; layout: DecorLayout };
   'decor:save-state': { status: SaveStatus; message: string | null };
+  /** The player tapped the tank glass; `intensity` is 0.5 for a tap and 1 for knocking. */
+  'glass:tapped': { intensity: number };
   /** Emitted by the fish system when the net tool taps a dead fish. */
   'net:tap': { fishId: string };
 }

@@ -10,6 +10,14 @@
     "traits": []
   },
   "biome": "freshwater",
+  "breeding": {
+    "broodSize": [4, 10],
+    "fryGrowth": { "adultAfterDays": 270, "juvenileAfterDays": 30 },
+    "intervalDays": 14,
+    "minAgeDays": 270,
+    "mode": "substrate-spawner",
+    "temperatureC": [26, 30]
+  },
   "commonName": "Angelfish",
   "id": "angelfish",
   "lifecycle": {

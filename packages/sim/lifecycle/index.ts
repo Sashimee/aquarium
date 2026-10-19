@@ -14,3 +14,12 @@ export {
   type EatingContext,
   type Rejection,
 } from './care.ts';
+export {
+  stageAt,
+  stepBreeding,
+  unitHash,
+  type BirthRecord,
+  type BreedingContext,
+  type BreedingEnvironment,
+  type BreedingTable,
+} from './breeding.ts';

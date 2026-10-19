@@ -20,6 +20,14 @@ export interface HandleRouteDeps {
   currentUser: (req: FastifyRequest) => Promise<SessionUser | null>;
 }
 
+type Tx = Parameters<Parameters<Database['db']['transaction']>[0]>[0];
+
+export async function lockHandles(tx: Tx, handles: string[]): Promise<void> {
+  for (const key of [...new Set(handles)].sort()) {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`handle:${key}`}, 0))`);
+  }
+}
+
 class HandleCoolingDown extends Error {}
 
 const UNIQUE_VIOLATION = '23505';
@@ -76,6 +84,7 @@ export function registerHandleRoutes({
           .where(eq(schema.user.id, user.id))
           .for('update');
         if (held?.handle === handle) return;
+        await lockHandles(tx, [handle, ...(held?.handle ? [held.handle] : [])]);
         const [cooling] = await tx
           .select({ handle: schema.releasedHandles.handle })
           .from(schema.releasedHandles)
@@ -110,7 +119,7 @@ export function registerHandleRoutes({
           .send(
             apiError(
               'conflict',
-              `That handle was released recently. It can be claimed again after ${HANDLE_COOLDOWN_DAYS} days.`,
+              `That handle was released recently, possibly by you. A released handle, including your own previous one, can be claimed again after ${HANDLE_COOLDOWN_DAYS} days.`,
             ),
           );
       }

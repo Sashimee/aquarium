@@ -130,9 +130,14 @@ export function hasMeaningfulAlpha(image: Rgba, threshold = 250): boolean {
   return transparent / (image.data.length / 4) > 0.002;
 }
 
-function cacheKey(image: Rgba, spec: Pick<TextureSpec, 'codec' | 'colorSpace' | 'role'>): string {
+function cacheKey(
+  image: Rgba,
+  spec: Pick<TextureSpec, 'codec' | 'colorSpace' | 'role'>,
+  qualityLevel?: number,
+): string {
   return createHash('sha256')
     .update(ENCODER_VERSION)
+    .update(qualityLevel === undefined ? '' : `|q${qualityLevel}`)
     .update(`${spec.codec}|${spec.colorSpace}|${spec.role}|${image.width}x${image.height}|`)
     .update(spec.role === 'normal' ? NORMAL_ENCODER_VERSION : '')
     .update(image.data)
@@ -245,11 +250,13 @@ export async function encodeHdrKtx2(hdr: Uint8Array): Promise<Uint8Array> {
   }
 }
 
+/** `qualityLevel` (1 to 255) overrides the ETC1S quality of a non-normal texture. */
 export async function encodeKtx2(
   image: Rgba,
   spec: Pick<TextureSpec, 'codec' | 'colorSpace' | 'role'>,
+  qualityLevel?: number,
 ): Promise<Uint8Array> {
-  const path = join(cacheDir(), `${cacheKey(image, spec)}.ktx2`);
+  const path = join(cacheDir(), `${cacheKey(image, spec, qualityLevel)}.ktx2`);
   const cached = readCachedKtx2(path);
   if (cached) return cached;
   const imageDecoder = async () => ({ width: image.width, height: image.height, data: image.data });
@@ -272,7 +279,7 @@ export async function encodeKtx2(
         : await encodeToKTX2(new Uint8Array(1), {
             isUASTC: false,
             isNormalMap: spec.role === 'normal',
-            qualityLevel: spec.role === 'normal' ? 255 : 128,
+            qualityLevel: spec.role === 'normal' ? 255 : (qualityLevel ?? 128),
             compressionLevel: 2,
             isPerceptual: spec.colorSpace === 'srgb',
             isSetKTX2SRGBTransferFunc: spec.colorSpace === 'srgb',

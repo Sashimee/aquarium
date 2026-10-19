@@ -33,6 +33,18 @@ const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 const T0 = Date.UTC(2026, 0, 1);
 const NO_GRACE = T0 - 1;
+const NO_BREEDING = {
+  breeding: new Map(),
+  breedingEnvironment: {
+    temperatureC: 25,
+    hasCave: false,
+    maxAnimals: 60,
+    bioloadCapacity: TANK_BIOLOAD_CAPACITY,
+    newId: () => {
+      throw new Error('no births expected');
+    },
+  },
+};
 const cleanWater: Water = { ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 0 };
 
 function fishOf(id: string, speciesId: string, over: Partial<LifecycleFish> = {}): LifecycleFish {
@@ -48,6 +60,9 @@ function fishOf(id: string, speciesId: string, over: Partial<LifecycleFish> = {}
     alive: true,
     diedAtMs: null,
     cause: null,
+    sex: 'female',
+    stage: 'adult',
+    lastBroodAtMs: null,
     ...over,
   };
 }
@@ -72,6 +87,7 @@ function run(
     },
     graceEndsAtMs: opts.grace ?? NO_GRACE,
     vacationFeeder: opts.feeder ?? false,
+    ...NO_BREEDING,
   });
 }
 
@@ -146,6 +162,7 @@ describe('one visit a day keeps a tank healthy', () => {
         params: DEFAULT_WATER_PARAMETERS,
         graceEndsAtMs: NO_GRACE,
         vacationFeeder: false,
+        ...NO_BREEDING,
       });
       state = r.state;
       now += DAY;
@@ -199,6 +216,7 @@ describe('a tank stocked to capacity at full size under perfect daily care', () 
         params: DEFAULT_WATER_PARAMETERS,
         graceEndsAtMs: NO_GRACE,
         vacationFeeder: false,
+        ...NO_BREEDING,
       });
       expect(r.deaths).toEqual([]);
       state = r.state;
@@ -234,6 +252,7 @@ describe('overfeeding poisons the tank', () => {
         params: DEFAULT_WATER_PARAMETERS,
         graceEndsAtMs: NO_GRACE,
         vacationFeeder: false,
+        ...NO_BREEDING,
       });
       state = r.state;
       now += DAY;
@@ -351,6 +370,7 @@ describe('catch-up resolution and cap', () => {
       params: DEFAULT_WATER_PARAMETERS,
       graceEndsAtMs: NO_GRACE,
       vacationFeeder: false,
+      ...NO_BREEDING,
     });
     expect(back.steps).toBe(0);
     expect(back.state).toBe(state);
@@ -378,6 +398,7 @@ describe('catch-up resolution and cap', () => {
       params: DEFAULT_WATER_PARAMETERS,
       graceEndsAtMs: NO_GRACE,
       vacationFeeder: false,
+      ...NO_BREEDING,
     });
     expect(rest.state).toEqual(whole.state);
   });
