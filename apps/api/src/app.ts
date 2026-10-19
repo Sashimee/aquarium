@@ -4,6 +4,7 @@ import { relative, resolve, sep } from 'node:path';
 import fastifyStatic from '@fastify/static';
 import {
   type ChemistryParameters,
+  type Economy,
   revokeSessionRequestSchema,
   signUpRequestSchema,
   signInRequestSchema,
@@ -27,6 +28,7 @@ import { createClock, type Clock } from './clock.ts';
 import { schema, type Database } from './db/index.ts';
 import { apiError } from './errors.ts';
 import { loadCredits } from './credits.ts';
+import { loadEconomy } from './economy.ts';
 import { DEFAULT_COLLECTION_LIMIT, registerCollectionRoutes } from './collection.ts';
 import { DEFAULT_HANDLE_LIMIT, registerHandleRoutes } from './handle.ts';
 import { DEFAULT_PUBLIC_LIMITS, registerPublicRoutes, type PublicLimits } from './public.ts';
@@ -55,6 +57,7 @@ export interface AppOptions {
   signInThrottle: { store: ResettableHitStore; limit: Limit };
   species: SpeciesCatalog;
   chemistryParams: ChemistryParameters;
+  economy?: Economy;
   clock?: Clock;
   careLimits?: CareLimits;
   legalLimits?: LegalLimits;
@@ -595,6 +598,8 @@ export function buildApp(opts: AppOptions): FastifyInstance {
 
   const limiter = new RateLimiter();
 
+  const economy = opts.economy ?? loadEconomy();
+
   registerLegalRoutes({
     app,
     database,
@@ -620,6 +625,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     database,
     species: opts.species,
     chemistryParams: opts.chemistryParams,
+    economy,
     clock,
     limiter,
     limits: opts.careLimits ?? DEFAULT_CARE_LIMITS,
@@ -630,6 +636,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     app,
     database,
     species: opts.species,
+    economy,
     limiter,
     limit: opts.collectionLimit ?? DEFAULT_COLLECTION_LIMIT,
     now: () => clock.now(),

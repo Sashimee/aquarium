@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
@@ -15,7 +16,7 @@ import { buildCredits, loadCredits, UNRECORDED_MODIFICATION } from './credits.ts
 import { schema } from './db/index.ts';
 import { personalityFromFishId } from './personality.ts';
 import { pruneExpired } from './maintenance.ts';
-import { APP_ORIGIN, createHarness, type Harness } from './test-harness.ts';
+import { APP_ORIGIN, createHarness, fishPayload, topUp, type Harness } from './test-harness.ts';
 
 const PASSWORD = 'correct horse battery';
 const jsonHeaders = { 'content-type': 'application/json', origin: APP_ORIGIN };
@@ -49,20 +50,26 @@ async function account(h: Harness) {
   return { email, cookie, userId: user.id };
 }
 
-const call = (
+async function call(
   h: Harness,
   cookie: string,
   method: 'GET' | 'POST',
   url: string,
   payload?: object,
   headers: Record<string, string> = {},
-) =>
-  h.app.inject({
+) {
+  let body = payload;
+  if (method === 'POST' && /^\/api\/tanks(\/[^/]+\/fish)?$/.test(url)) {
+    await topUp(h, 50_000);
+    if (url === '/api/tanks') body = { idempotencyKey: randomUUID(), ...body };
+  }
+  return h.app.inject({
     method,
     url,
     headers: { ...jsonHeaders, cookie, ...headers },
-    ...(payload ? { payload } : {}),
+    ...(body ? { payload: body } : {}),
   });
+}
 
 async function populate(h: Harness, cookie: string) {
   const created = await call(h, cookie, 'POST', '/api/tanks', {
@@ -70,10 +77,13 @@ async function populate(h: Harness, cookie: string) {
     biome: 'freshwater',
   });
   const tank = tankSchema.parse(created.json());
-  const fish = await call(h, cookie, 'POST', `/api/tanks/${tank.id}/fish`, {
-    species: 'neon-tetra',
-    name: 'Blip',
-  });
+  const fish = await call(
+    h,
+    cookie,
+    'POST',
+    `/api/tanks/${tank.id}/fish`,
+    fishPayload('neon-tetra', 'Blip'),
+  );
   expect(fish.statusCode).toBe(201);
   const care = await call(h, cookie, 'POST', `/api/tanks/${tank.id}/care`, {
     type: 'feed',

@@ -4,10 +4,12 @@ import {
   collectionFacts,
   collectionSchema,
   type CollectionEntry,
+  type Economy,
 } from '@aquarium/shared';
 import { eq, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { schema, type Database } from './db/index.ts';
+import { claimAchievementRewards } from './earn.ts';
 import { apiError } from './errors.ts';
 import type { Limit, RateLimiter } from './rate-limit.ts';
 import type { SpeciesCatalog } from './species.ts';
@@ -102,6 +104,7 @@ export interface CollectionRouteDeps {
   app: FastifyInstance;
   database: Database;
   species: SpeciesCatalog;
+  economy: Economy;
   limiter: RateLimiter;
   limit: Limit;
   now: () => number;
@@ -131,6 +134,7 @@ export function registerCollectionRoutes(deps: CollectionRouteDeps): void {
     const entries = await database.db.transaction(async (tx) => {
       // Backfilled users hold entries from the migration but no awards yet.
       await awardAchievements(tx, user.id, species, new Date(deps.now()));
+      await claimAchievementRewards(tx, deps.economy, user.id, deps.now());
       return loadEntries(tx, user.id);
     });
     const awards = await database.db

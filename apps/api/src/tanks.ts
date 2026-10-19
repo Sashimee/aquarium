@@ -31,6 +31,7 @@ import {
   type AwaySummary,
   type CareAction,
   type ChemistryParameters,
+  type Economy,
   type Tank,
 } from '@aquarium/shared';
 import {
@@ -72,7 +73,17 @@ import type { Clock } from './clock.ts';
 import { schema, type Database } from './db/index.ts';
 import { recordCollection, type CollectionObservation } from './collection.ts';
 import { countRecentVisitDays, recordVisit } from './visits.ts';
-import { apiError } from './errors.ts';
+import {
+  awardDailyCare,
+  awardHealthyStreak,
+  CARE_EARN_KINDS,
+  claimAchievementRewards,
+} from './earn.ts';
+import { registerShopRoutes } from './shop.ts';
+import { backgroundRef, licenseFor } from './items.ts';
+import { legacyKey, legacyStage } from './legacyRequests.ts';
+import { findReplay, lockUserRow, lockWallet, owns, spend } from './wallet.ts';
+import { apiError, HttpError } from './errors.ts';
 import type { Limit, RateLimiter } from './rate-limit.ts';
 import type { SpeciesCatalog } from './species.ts';
 
@@ -81,6 +92,8 @@ export interface CareLimits {
   care: Limit;
   ate: Limit;
   addFish: Limit;
+  wallet: Limit;
+  purchase: Limit;
   replay: Limit;
 }
 
@@ -89,6 +102,8 @@ export const DEFAULT_CARE_LIMITS: CareLimits = {
   care: { max: 60, windowMs: 10 * 60_000 },
   ate: { max: 30, windowMs: 60_000 },
   addFish: { max: 20, windowMs: 60 * 60_000 },
+  wallet: { max: 60, windowMs: 60_000 },
+  purchase: { max: 60, windowMs: 10 * 60_000 },
   replay: { max: 30, windowMs: 60_000 },
 };
 
@@ -108,10 +123,11 @@ export interface TankRouteDeps {
   clock: Clock;
   limiter: RateLimiter;
   limits: CareLimits;
+  economy: Economy;
   currentUser: (req: FastifyRequest) => Promise<SessionUser | null>;
 }
 
-type Tx = Parameters<Parameters<Database['db']['transaction']>[0]>[0];
+export type Tx = Parameters<Parameters<Database['db']['transaction']>[0]>[0];
 type TankRow = typeof schema.tanks.$inferSelect;
 type FishRow = typeof schema.fish.$inferSelect;
 
@@ -140,15 +156,6 @@ function decodeReplayCursor(raw: string): { atUs: string; id: string } {
     );
   }
   return { atUs, id: parsedId.data };
-}
-
-class HttpError extends Error {
-  constructor(
-    readonly status: number,
-    readonly body: ReturnType<typeof apiError>,
-  ) {
-    super(body.error.message);
-  }
 }
 
 const nameNotPublic = () =>
@@ -208,7 +215,7 @@ function hasVacationFeeder(row: TankRow): boolean {
   return storedLayout(row).some((item) => item.assetId === VACATION_FEEDER_ASSET_ID);
 }
 
-interface Ticked {
+export interface Ticked {
   tank: TankRow;
   fishRows: FishRow[];
   state: LifecycleState;
@@ -223,6 +230,7 @@ async function lockAndTick(
   user: SessionUser,
 ): Promise<Ticked> {
   const now = deps.clock.now();
+  await lockUserRow(tx, user.id);
   const [tank] = await tx
     .select()
     .from(schema.tanks)
@@ -286,6 +294,7 @@ async function lockAndTick(
     }
   }
   await recordCollection(tx, user.id, deps.species, observed, new Date(now));
+  if (observed.length > 0) await claimAchievementRewards(tx, deps.economy, user.id, now);
   const byId = new Map([...fishRows, ...bornRows.values()].map((r) => [r.id, r]));
   const away: AwaySummary = {
     fromAt: tank.lastTickAt.toISOString(),
@@ -523,7 +532,7 @@ async function render(
 }
 
 export function registerTankRoutes(deps: TankRouteDeps): void {
-  const { app, database, species, chemistryParams, clock, limiter, limits } = deps;
+  const { app, database, species, chemistryParams, clock, limiter, limits, economy } = deps;
 
   async function authorize(req: FastifyRequest, requireVerified = true): Promise<SessionUser> {
     const user = await deps.currentUser(req);
@@ -566,6 +575,49 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
     return database.db.transaction(async (tx) => fn(tx, await lockAndTick(tx, deps, tankId, user)));
   }
 
+  const buyFirst = (what: string) =>
+    new HttpError(
+      403,
+      apiError('forbidden', `${what} is not unlocked yet. Buy it in the shop first.`),
+    );
+
+  async function requireOwnedBackground(
+    tx: Tx,
+    userId: string,
+    tank: TankRow,
+    backgroundId: string | null | undefined,
+  ): Promise<void> {
+    if (backgroundId === undefined || backgroundId === null) return;
+    if (backgroundId === storedBackground(tank)) return;
+    if (isPlayableBiome(tank.biome) && DEFAULT_BACKGROUND_ID[tank.biome] === backgroundId) return;
+    if (!(await owns(tx, userId, backgroundRef(backgroundId)))) throw buyFirst('That background');
+  }
+
+  // A tank whose layout was never saved shows the biome preset, which the server doesn't know, so
+  // the first save can't be compared against it (issue filed for T71).
+  async function requireOwnedPieces(
+    tx: Tx,
+    userId: string,
+    tank: TankRow,
+    layout: readonly { assetId: string }[],
+  ): Promise<void> {
+    if (tank.decorLayout === null) return;
+    const count = (items: readonly { assetId: string }[]) => {
+      const out = new Map<string, number>();
+      for (const { assetId } of items) out.set(assetId, (out.get(assetId) ?? 0) + 1);
+      return out;
+    };
+    const before = count(storedLayout(tank));
+    const needed = new Set<string>();
+    for (const [assetId, n] of count(layout)) {
+      if (assetId === VACATION_FEEDER_ASSET_ID || n <= (before.get(assetId) ?? 0)) continue;
+      needed.add(licenseFor(economy, assetId).ref);
+    }
+    for (const ref of needed) {
+      if (!(await owns(tx, userId, ref))) throw buyFirst(`The piece "${ref.split(':')[1]}"`);
+    }
+  }
+
   app.get(
     '/api/species',
     guarded(async (req) => {
@@ -596,48 +648,93 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
     guarded(async (req, reply) => {
       const user = await authorize(req);
       const body = createTankRequestSchema.parse(req.body);
-      const created = await database.db.transaction(async (tx) => {
+      const sizeRef = `tank:${body.size}:`;
+      const tankKey = legacyKey(body.idempotencyKey);
+      const outcome = await database.db.transaction(async (tx) => {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`tanks:${user.id}`}))`);
+        const nowMs = clock.now();
+        await lockWallet(tx, economy, user.id, nowMs);
+        const [keyed] = await tx
+          .select({ id: schema.tanks.id, size: schema.tanks.size })
+          .from(schema.tanks)
+          .where(and(eq(schema.tanks.ownerId, user.id), eq(schema.tanks.creationKey, tankKey)));
+        if (keyed) {
+          if (keyed.size !== body.size) {
+            throw new HttpError(
+              409,
+              apiError('conflict', 'This request key was already used for a different tank.'),
+            );
+          }
+          return { existingId: keyed.id };
+        }
+        const replay = await findReplay(tx, user.id, tankKey, sizeRef, (stored, requested) =>
+          stored.startsWith(requested),
+        );
+        if (replay?.entry.itemRef) {
+          return { existingId: replay.entry.itemRef.slice(sizeRef.length) };
+        }
         const owned = await tx
           .select({ quarantine: schema.tanks.quarantine })
           .from(schema.tanks)
           .where(eq(schema.tanks.ownerId, user.id));
         const quarantined = owned.filter((t) => t.quarantine).length;
+        const displayTanks = owned.length - quarantined;
         if (body.quarantine && quarantined >= MAX_QUARANTINE_TANKS) {
           throw new HttpError(409, apiError('conflict', 'You already have a quarantine tank.'));
         }
-        if (!body.quarantine && owned.length - quarantined >= MAX_DISPLAY_TANKS) {
+        if (!body.quarantine && displayTanks >= MAX_DISPLAY_TANKS) {
           throw new HttpError(
             409,
             apiError('conflict', `You can have at most ${MAX_DISPLAY_TANKS} display tanks.`),
           );
         }
+        const slotPrice = displayTanks === 0 ? 0 : (economy.items.tankSlots[displayTanks - 1] ?? 0);
+        const price = body.quarantine ? 0 : slotPrice + (economy.items.tankSizes[body.size] ?? 0);
+        const id = randomUUID();
+        if (price > 0) {
+          const charged = await spend(
+            tx,
+            user.id,
+            { amount: price, itemRef: `${sizeRef}${id}`, key: tankKey, nowMs },
+            (stored, requested) => stored.startsWith(requested),
+          );
+          if (charged.replayed && charged.entry.itemRef) {
+            return { existingId: charged.entry.itemRef.slice(sizeRef.length) };
+          }
+        }
         const [row] = await tx
           .insert(schema.tanks)
           .values({
+            id,
             ownerId: user.id,
+            creationKey: tankKey,
             name: body.name,
             biome: body.biome,
             size: body.size,
             quarantine: body.quarantine,
             chemistry: newTankChemistry(body.biome),
-            lastTickAt: new Date(clock.now()),
+            lastTickAt: new Date(nowMs),
           })
           .returning();
         if (!row) throw new Error('tank insert returned no row');
-        return render(tx, {
-          tank: row,
-          fishRows: [],
-          state: {
-            water: waterSchema.parse(row.water),
-            chemistry: chemistrySchema.parse(row.chemistry),
-            fish: [],
-          },
-          away: null,
-          nowMs: clock.now(),
-        });
+        return {
+          created: await render(tx, {
+            tank: row,
+            fishRows: [],
+            state: {
+              water: waterSchema.parse(row.water),
+              chemistry: chemistrySchema.parse(row.chemistry),
+              fish: [],
+            },
+            away: null,
+            nowMs,
+          }),
+        };
       });
-      return reply.code(201).send(created);
+      if ('existingId' in outcome) {
+        return withTank(user, outcome.existingId, (tx, ticked) => render(tx, ticked));
+      }
+      return reply.code(201).send(outcome.created);
     }),
   );
 
@@ -757,6 +854,10 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
             ),
           );
         }
+        await requireOwnedBackground(tx, user.id, ticked.tank, body.backgroundId);
+        if (body.decorLayout !== undefined) {
+          await requireOwnedPieces(tx, user.id, ticked.tank, body.decorLayout);
+        }
         const [row] = await tx
           .update(schema.tanks)
           .set({
@@ -865,8 +966,24 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           .code(400)
           .send(apiError('validation_failed', `Unknown species "${body.species}".`));
       }
+      const stage = legacyStage(body.stage);
+      const idempotencyKey = legacyKey(body.idempotencyKey);
+      const price = Object.hasOwn(economy.species, spec.id)
+        ? economy.species[spec.id]?.[stage]
+        : undefined;
+      if (price === undefined) {
+        throw new HttpError(
+          400,
+          apiError('validation_failed', `${spec.commonName} is not for sale.`),
+        );
+      }
       throttle(user.id, 'addFish');
+      const itemRef = `species:${spec.id}:${stage}`;
       const result = await withTank(user, tankId, async (tx, ticked) => {
+        const nowMs = clock.now();
+        await lockWallet(tx, economy, user.id, nowMs);
+        const replay = await findReplay(tx, user.id, idempotencyKey, itemRef);
+        if (replay) return { tank: await render(tx, ticked), created: false };
         if (spec.biome !== ticked.tank.biome) {
           throw new HttpError(
             400,
@@ -893,6 +1010,10 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
             ),
           );
         }
+        await spend(tx, user.id, { amount: price, itemRef, key: idempotencyKey, nowMs });
+        const growth = spec.breeding?.fryGrowth;
+        const ageDays =
+          stage === 'adult' ? (growth?.adultAfterDays ?? 0) : (growth?.juvenileAfterDays ?? 0);
         const id = randomUUID();
         const [row] = await tx
           .insert(schema.fish)
@@ -902,9 +1023,10 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
             species: spec.id,
             name: body.name,
             sex: randomInt(2) === 0 ? 'male' : 'female',
+            stage,
             personality: personalityFromFishId(id),
-            bornAt: new Date(clock.now()),
-            size: spec.lifecycle.birthSizeM,
+            bornAt: new Date(nowMs - ageDays * 86_400_000),
+            size: stage === 'adult' ? spec.lifecycle.maxSizeM : spec.lifecycle.birthSizeM,
           })
           .returning();
         if (!row) throw new Error('fish insert returned no row');
@@ -912,12 +1034,16 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           tx,
           user.id,
           species,
-          [{ species: spec.id, kind: 'kept', atMs: row.bornAt.getTime() }],
-          row.bornAt,
+          [{ species: spec.id, kind: 'kept', atMs: nowMs }],
+          new Date(nowMs),
         );
-        return { tank: await render(tx, { ...ticked, fishRows: [...ticked.fishRows, row] }) };
+        await claimAchievementRewards(tx, economy, user.id, nowMs);
+        return {
+          tank: await render(tx, { ...ticked, fishRows: [...ticked.fishRows, row] }),
+          created: true,
+        };
       });
-      return reply.code(201).send(result.tank);
+      return reply.code(result.created ? 201 : 200).send(result.tank);
     }),
   );
 
@@ -956,15 +1082,31 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       const action: CareAction = careActionSchema.parse(req.body);
       throttle(user.id, action.type === 'feed' ? 'feed' : 'care');
       const result = await withTank(user, tankId, async (tx, ticked) => {
+        const nowMs = clock.now();
+        const bacteriaRef = 'consumable:bottled-bacteria';
+        const bacteriaKey =
+          action.type === 'bottled_bacteria' ? legacyKey(action.idempotencyKey) : '';
+        if (action.type === 'bottled_bacteria') {
+          await lockWallet(tx, economy, user.id, nowMs);
+          const replay = await findReplay(tx, user.id, bacteriaKey, bacteriaRef);
+          if (replay) return { tank: await render(tx, ticked) };
+        }
         const applied = applyCare(ticked.state, action, ticked.tank.biome, chemistryParams);
         if (!applied.ok) {
           throw new HttpError(422, apiError('feeding_rejected', applied.reason));
         }
+        if (action.type === 'bottled_bacteria') {
+          await spend(tx, user.id, {
+            amount: economy.items.consumables.bottledBacteria,
+            itemRef: bacteriaRef,
+            key: bacteriaKey,
+            nowMs,
+          });
+        }
         const fishRows = await persistState(tx, ticked.tank, ticked.fishRows, applied.value);
-        const at = new Date(clock.now());
         await tx.insert(schema.events).values({
           tankId,
-          at,
+          at: new Date(nowMs),
           kind: action.type,
           payload: action.type === 'feed' ? { food: action.food, portion: action.portion } : {},
         });
@@ -973,6 +1115,17 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           water: applied.value.water,
           chemistry: applied.value.chemistry,
         };
+        if ((CARE_EARN_KINDS as readonly string[]).includes(action.type)) {
+          await awardDailyCare(tx, economy, user.id, nowMs);
+          await awardHealthyStreak(
+            tx,
+            economy,
+            user.id,
+            tankId,
+            fishRows.map((f) => ({ alive: f.status === 'alive', health: f.health })),
+            nowMs,
+          );
+        }
         return { tank: await render(tx, { ...ticked, tank }, fishRows) };
       });
       return result.tank;
@@ -1060,4 +1213,16 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       return result.tank;
     }),
   );
+
+  registerShopRoutes({
+    app,
+    database,
+    economy,
+    clock,
+    authorize,
+    throttle,
+    guarded,
+    withTank,
+    render: (tx, ticked, fishRows) => render(tx, ticked, fishRows),
+  });
 }

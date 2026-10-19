@@ -127,6 +127,20 @@
       "when": 1792429165045,
       "tag": "0017_away_replay_events",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792430971696,
+      "tag": "0018_economy",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792441227301,
+      "tag": "0019_tank_creation_key",
+      "breakpoints": true
     }
   ]
 }

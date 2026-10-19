@@ -297,6 +297,8 @@ describe('away replay', () => {
         care: { max: 5, windowMs: 60_000 },
         ate: { max: 4, windowMs: 60_000 },
         addFish: { max: 100, windowMs: 60_000 },
+        wallet: { max: 100, windowMs: 60_000 },
+        purchase: { max: 100, windowMs: 60_000 },
         replay: { max: 2, windowMs: 60_000 },
       },
     });

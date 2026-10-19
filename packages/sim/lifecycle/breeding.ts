@@ -59,6 +59,20 @@ export function stageAt(fish: LifecycleFish, b: Breeding, nowMs: number): Lifecy
   return fish.stage;
 }
 
+/**
+ * Species with no `fryGrowth` timeline have no age at which they mature, so a juvenile bought from
+ * the shop becomes an adult once it has grown to this fraction of the species' full size.
+ */
+export const JUVENILE_ADULT_SIZE_FRACTION = 0.8;
+
+export function stageBySize(
+  fish: LifecycleFish,
+  spec: SpeciesLifecycle | undefined,
+): LifecycleFish['stage'] {
+  if (!spec || fish.stage !== 'juvenile') return fish.stage;
+  return fish.size >= spec.maxSizeM * JUVENILE_ADULT_SIZE_FRACTION ? 'adult' : fish.stage;
+}
+
 function conditionsMet(
   fish: LifecycleFish,
   b: Breeding,
@@ -91,7 +105,7 @@ export function stepBreeding(
   const grown = state.fish.map((f) => {
     const b = ctx.breeding.get(f.species);
     if (!f.alive || !b) return f;
-    const stage = stageAt(f, b, nowMs);
+    const stage = b.fryGrowth ? stageAt(f, b, nowMs) : stageBySize(f, ctx.species.get(f.species));
     return stage === f.stage ? f : { ...f, stage };
   });
 
