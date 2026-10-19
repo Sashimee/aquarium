@@ -1,8 +1,9 @@
 import { z } from 'zod';
 
 // Substring matches are for words that do not hide inside innocent ones. Short or ambiguous words
-// are matched as whole tokens, so "Dickens", "therapist" and "nazir" pass. Matching never crosses
-// a separator, so "fish_it" passes; only runs of single letters ("f_u_c_k") are joined.
+// are matched as whole tokens, so "Dickens", "therapist" and "nazir" pass. Matching stays inside a
+// token, so "fish_it" passes; only runs of single letters ("f_u_c_k") are joined, and two
+// neighbouring tokens that together spell a blocked phrase ("white_power") are caught.
 const BLOCKED_SUBSTRINGS = [
   'fuck',
   'shit',

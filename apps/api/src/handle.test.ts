@@ -204,7 +204,7 @@ describe('public handle', () => {
       locked();
       await gate;
     });
-    await ready;
+    await Promise.race([ready, holder]);
     try {
       await run(open);
     } finally {
@@ -212,6 +212,25 @@ describe('public handle', () => {
       await holder;
     }
   }
+
+  it('answers 409 when the account is deleted while the change waits on its row', async () => {
+    const { cookie, userId } = await account(h);
+    let deleted!: () => void;
+    let commit!: () => void;
+    const gate = new Promise<void>((resolve) => (commit = resolve));
+    const ready = new Promise<void>((resolve) => (deleted = resolve));
+    const deleting = h.database.db.transaction(async (tx) => {
+      await tx.delete(schema.user).where(eq(schema.user.id, userId));
+      deleted();
+      await gate;
+    });
+    await ready;
+    const pending = call(h, cookie, 'PUT', '/api/me/handle', { handle: unique() });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    commit();
+    await deleting;
+    expect((await pending).statusCode).toBe(409);
+  });
 
   async function expectBlockedUntilReleased(
     handle: string,
