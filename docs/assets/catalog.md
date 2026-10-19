@@ -303,7 +303,24 @@ The CC-BY hermit crabs (Wermin 319,616 faces fimo-clay magnet, Blaast 25,184, Xf
 
 **Decision: fallback: procedural loft** (for T44, #634)
 
-No Sketchfab model exists under any licence for the species (searches: labroides, cleaner wrasse, bluestreak, Labridae, wrasse; the only hits are other wrasses such as the CC0 ffish.asia scans of *Pseudolabrus*, *Bodianus* and *Choerodon*, which are the wrong shape and 590k to 1.3M faces). Reference photos (in manifest, downloaded): `wm-labroides-jens` (CC BY 4.0, 1571x1066, near-lateral, sharp head) and `wm-labroides-hylton` (CC BY 4.0, 1459x973, true lateral, outline only). Key traits: long slender body, terminal mouth, a black lateral stripe that widens to the tail, white-blue belly, blue and black caudal. The Commons CC0 photo (`georgiasteel`, 881x881) is too small and distant to use. The sharper Commons shots by Diego Delso are CC BY-SA 4.0 and are not used, since the approval for CC BY-SA photos covers other species only.
+No Sketchfab model exists under any licence for the species (searches: labroides, cleaner wrasse, bluestreak, Labridae, wrasse; the only hits are other wrasses such as the CC0 ffish.asia scans of *Pseudolabrus*, *Bodianus* and *Choerodon*, which are the wrong shape and 590k to 1.3M faces). Re-checked 2026-10-19 for T44 (#634): the Sketchfab API still returns no *Labroides* or "cleaner wrasse" model, with or without the downloadable filter (the only hits are non-downloadable: "Fish Doctor", a manta cleaning-station scene). The fallback stands.
+
+| # | Reference photo | Author | Licence | Size | Use |
+|---|---|---|---|---|---|
+| 1 | `wm-labroides-bowie` ([file](https://commons.wikimedia.org/wiki/File:Labroides_dimidiatus_529634787.jpg)) | Mike Bowie | CC BY 4.0 | 2048x1536, fish about 600 px | PICK for the stripe: starts behind the eye, widens to the tail, runs into the lower caudal lobe, pale blue band beneath |
+| 2 | `wm-labroides-jens` | Jens | CC BY 4.0 | 1571x1066 | colour (brownish-grey back, blue-white belly) and slender outline, sharp head |
+| 3 | `wm-labroides-hylton` | Lawrence Hylton | CC BY 4.0 | 1459x973 | true lateral proportions, caudal edges; soft and watermarked, outline only |
+| 4 | `wm-labroides-deacon` ([file](https://commons.wikimedia.org/wiki/File:Labroides_dimidiatus_453390877.jpg)) | Andrew Deacon | CC0 | 2048x1536, fish about 490 px | head shape and terminal mouth; thin blue edge above the stripe |
+
+Key traits: long slender body, terminal mouth, a black lateral stripe that widens to the tail, a blue band along it, white-blue belly, blue and black caudal. The Commons CC0 photo `Labroides_dimidiatus_518666495` (881x881) is too small and distant, and another CC0 one (`455798817`) is a murky distant shot. The sharper Commons shots (Diego Delso and others) are CC BY-SA and not used, since the CC BY-SA approval covers other species only. Many other CC BY 4.0 iNaturalist uploads exist on Commons if more angles are needed.
+
+**Pipeline handoff (asset-pipeline-engineer, T44):** no raw model to process. Build a procedural loft for `cleaner-wrasse`:
+
+1. Body: elongate, laterally compressed fusiform loft, roughly length : depth = 6 : 1, pointed head with a small terminal mouth, small pectoral fins, a long low dorsal and anal fin, rounded caudal (outline from #3 and #2, head from #4).
+2. Texture, painted procedurally in the albedo (no photo pixels are shipped, so no attribution chain is added; credit the photos as references): brownish-grey to pale-blue back, white-blue belly, one black lateral stripe from the snout through the eye that widens toward the tail and enters the lower caudal lobe, with a bright blue band along its lower and rear edge (stripe layout from #1, colours from #2). Caudal: black with a blue edge and a white fringe on the upper and lower edges.
+3. The stripe must stay unmistakable at tank distance (cleaner recognition is a behaviour cue), so keep it at full contrast in the albedo and do not let the roughness or normal maps wash it out.
+4. Rig and clips like the other loft fish (swim cycle plus the quick dance-like wiggle used at a cleaning station, if the behaviour owner asks for it in #634), under the 2048 texture and fish polycount budget.
+5. Add an `assets/manifest.json` entry for the generated model (`kind: model`, `species: cleaner-wrasse`, `rigged: true`, notes naming the reference photo ids) in the pipeline PR.
 
 ## Downloaded-file check (Sketchfab)
 
