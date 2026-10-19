@@ -149,10 +149,11 @@ export function fitPresetToTank(
   boundsOf: BoundsOf,
   patchReach: (patch: PlantPatch) => number,
 ): PresetLayout {
-  if (sameTank(dimensions, DEFAULT_TANK)) return preset;
   return {
     ...preset,
     decor: preset.decor.map((item) => fitItem(item, dimensions, boundsOf)),
-    plantPatches: preset.plantPatches.map((patch) => fitPatch(patch, dimensions, patchReach)),
+    plantPatches: sameTank(dimensions, DEFAULT_TANK)
+      ? preset.plantPatches
+      : preset.plantPatches.map((patch) => fitPatch(patch, dimensions, patchReach)),
   };
 }

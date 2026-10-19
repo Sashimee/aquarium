@@ -9,6 +9,7 @@ import { AssetCatalog, ModelLibrary } from './assets';
 import { ColliderField } from './colliders';
 import { generateEuphyllia, parseEuphylliaId } from './euphyllia';
 import { loadPreset } from './preset';
+import { hullCorners } from '../fish/simColliders';
 import { boundsFromCatalog } from './presetFit';
 import { SURFACE_MARGIN } from './plants';
 import {
@@ -58,6 +59,19 @@ afterAll(() => {
   vi.unstubAllGlobals();
 });
 
+describe.each(['freshwater', 'reef'] as const)('%s preset at the standard tank', (biome) => {
+  it('is only changed where it crossed the glass', () => {
+    const authored = loadPreset(biome);
+    const fitted = fitPresetToCatalog(authored, TANK_DIMENSIONS.standard, catalog);
+    const changed = fitted.decor
+      .map((item, i) => ({ item, was: authored.decor[i] }))
+      .filter(({ item, was }) => JSON.stringify(item) !== JSON.stringify(was))
+      .map(({ item }) => `${item.assetId}:${item.position.join(',')}:${item.scale}`);
+    expect(changed).toMatchSnapshot();
+    expect(fitted.plantPatches).toEqual(authored.plantPatches);
+  });
+});
+
 describe.each(['freshwater', 'reef'] as const)('%s preset at every tank size', (biome) => {
   describe.each(SIZES)('%s', (size) => {
     const dimensions = TANK_DIMENSIONS[size];
@@ -103,7 +117,7 @@ describe.each(['freshwater', 'reef'] as const)('%s preset at every tank size', (
       const innerHalfLength = dimensions.length / 2 - dimensions.glass;
       const innerHalfDepth = dimensions.depth / 2 - dimensions.glass;
       for (const c of colliders) {
-        const ends = c.kind === 'capsule' ? [c.a, c.b] : [c.centre];
+        const ends = c.kind === 'capsule' ? [c.a, c.b] : hullCorners(c.planes);
         const pad = c.kind === 'capsule' ? c.radius : 0;
         for (const [x, y, z] of ends) {
           expect(Math.abs(x) + pad, c.kind).toBeLessThanOrEqual(innerHalfLength);
