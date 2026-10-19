@@ -18,6 +18,7 @@ import { checkFishName, checkTankName, suggestFishName, suggestTankName } from '
 import type { SessionState, TankSession } from '../sync/session';
 import { useAuth } from './context';
 import { Link } from './screens';
+import WaterTest from './WaterTest';
 import { useActiveTank, useSessionState, useOptionalSession, useSpeciesNames } from './session';
 
 const BIOME_LABEL: Record<Biome, string> = {
@@ -130,6 +131,7 @@ function CareSections({ session, state, tank }: Ready) {
   return (
     <>
       <Care session={session} state={state} water={water} />
+      <WaterTest tank={tank} species={state.species} />
       <DeadFish session={session} tank={tank} />
       <Memorial tank={tank} names={names} />
     </>
