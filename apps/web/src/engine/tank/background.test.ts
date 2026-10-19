@@ -1,7 +1,18 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { BACKGROUND_IDS, DEFAULT_BACKGROUND_ID } from '@aquarium/shared';
-import { Mesh, MeshBasicNodeMaterial, PlaneGeometry, Texture } from 'three/webgpu';
+import {
+  DepthTexture,
+  FloatType,
+  HalfFloatType,
+  LinearFilter,
+  Mesh,
+  MeshBasicNodeMaterial,
+  NearestFilter,
+  PlaneGeometry,
+  RGBAIntegerFormat,
+  Texture,
+} from 'three/webgpu';
 import { positionWorld } from 'three/tsl';
 import { describe, expect, it } from 'vitest';
 import assetIndex from '../../../public/assets/index.json';
@@ -10,6 +21,7 @@ import { buildShaders } from '../shaderFixtures';
 import { DEFAULT_TANK } from './dimensions';
 import { Poster } from './Tank';
 import {
+  assertFilterable,
   backgroundFile,
   parseBackgroundFiles,
   pickBackgroundId,
@@ -39,10 +51,11 @@ class FakeLoader implements BackgroundLoader {
   }
 
   /** Answers the oldest unanswered request for `file` with a fresh texture. */
-  land(file: string): Texture {
+  land(file: string, configure: (texture: Texture) => void = () => undefined): Texture {
     const request = this.take(file);
     const texture = new Texture();
     texture.name = file;
+    configure(texture);
     request.done.resolve(texture);
     return texture;
   }
@@ -312,6 +325,29 @@ describe('TankBackground', () => {
     expect(coralGone()).toBe(true);
   });
 
+  it('refuses an unfilterable picture, frees it and falls back to the film', async () => {
+    const { loader, background, film } = setup();
+    const first = background.show('reef', null);
+    await settle();
+    const coralGone = disposed(loader.land(file(CORAL, 'high')));
+    await first;
+
+    const second = background.show('freshwater', null);
+    await settle();
+    const stream = loader.land(file(STREAM, 'high'), (texture) => {
+      texture.minFilter = NearestFilter;
+      texture.magFilter = NearestFilter;
+    });
+    const streamGone = disposed(stream);
+    await expect(second).rejects.toThrow(`/assets/${file(STREAM, 'high')}`);
+    await expect(second).rejects.toMatchObject({
+      cause: { message: expect.stringMatching(/both filters are NearestFilter.*LinearFilter/) },
+    });
+    expect(background.map.value).toBe(film);
+    expect(coralGone()).toBe(true);
+    expect(streamGone()).toBe(true);
+  });
+
   it('keeps the previous tier of the same picture when the new tier fails', async () => {
     const { loader, background } = setup('high');
     const high = await showing(background, loader, CORAL);
@@ -379,6 +415,48 @@ describe('TankBackground', () => {
     expect(lateGone()).toBe(true);
     expect(() => background.show('reef', null)).toThrow(/after dispose/);
     background.dispose();
+  });
+});
+
+describe('assertFilterable', () => {
+  function made(configure: (texture: Texture) => void, base = new Texture()): Texture {
+    configure(base);
+    return base;
+  }
+
+  it('accepts the defaults, one nearest filter, half floats and the film', () => {
+    expect(() => assertFilterable(new Texture(), 'picture')).not.toThrow();
+    const oneNearest = made((t) => {
+      t.magFilter = NearestFilter;
+      t.minFilter = LinearFilter;
+    });
+    expect(() => assertFilterable(oneNearest, 'picture')).not.toThrow();
+    const half = made((t) => (t.type = HalfFloatType));
+    expect(() => assertFilterable(half, 'picture')).not.toThrow();
+    const film = new TankBackground(new FakeLoader(), 'high', ROOT).map.value;
+    expect(() => assertFilterable(film, 'film')).not.toThrow();
+  });
+
+  it('names the texture and the reason for every unfilterable kind', () => {
+    const nearest = made((t) => {
+      t.magFilter = NearestFilter;
+      t.minFilter = NearestFilter;
+    });
+    expect(() => assertFilterable(nearest, 'poster.ktx2')).toThrow(
+      /^poster\.ktx2 is unfilterable \(both filters are NearestFilter\)/,
+    );
+    const float = made((t) => (t.type = FloatType));
+    expect(() => assertFilterable(float, 'picture')).toThrow(/float32-filterable/);
+    const integer = made((t) => (t.format = RGBAIntegerFormat));
+    expect(() => assertFilterable(integer, 'picture')).toThrow(/integer formats/);
+    const depth = made(
+      (t) => {
+        t.minFilter = LinearFilter;
+        t.magFilter = LinearFilter;
+      },
+      new DepthTexture(1, 1),
+    );
+    expect(() => assertFilterable(depth, 'picture')).toThrow(/depth texture/);
   });
 });
 
