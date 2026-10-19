@@ -65,6 +65,11 @@ export const exportedReminderSchema = z.strictObject({
   push: z.boolean(),
   lastSentAt: timestampSchema.nullable(),
   pushSubscriptions: z.array(
-    z.strictObject({ id: idSchema, endpoint: z.string(), createdAt: timestampSchema }),
+    z.strictObject({
+      id: idSchema,
+      endpoint: z.string(),
+      createdAt: timestampSchema,
+      lastUsedAt: timestampSchema.nullable(),
+    }),
   ),
 });

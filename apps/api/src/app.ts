@@ -418,7 +418,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
 
   app.get('/robots.txt', async (_req, reply) => {
     reply.type('text/plain');
-    return indexable ? 'User-agent: *\nDisallow: /t/\nAllow: /\n' : 'User-agent: *\nDisallow: /\n';
+    return indexable ? 'User-agent: *\nAllow: /\n' : 'User-agent: *\nDisallow: /\n';
   });
 
   async function currentSession(req: FastifyRequest) {

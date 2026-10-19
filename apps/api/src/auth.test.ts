@@ -25,9 +25,10 @@ const median = (xs: number[]) => {
 // adjacent pair together, so the median pair gap is bounded relative to the faster median (dividing
 // by the slower would let a faster repeat inflate its own denominator) instead of in absolute
 // milliseconds. The bound is 50%, so the detection floor is half a hash, ~33 ms on a quiet host,
-// while a hash skipped or doubled shows ~1.0 or more. A tighter 25% flaked under load (0.2532, #218)
-// because the median gap of a loaded runner moves by that much without any leak. The bound grows
-// with load: fine for CPU-bound leaks like a hash, looser for I/O-bound ones. A repeat is legitimately ~1-3 ms
+// while a hash skipped or doubled shows ~1.0 or more. A tighter 25% flaked under load (0.2532,
+// #218) because the median gap of a loaded runner moves by that much without any leak. The bound
+// grows with load: fine for CPU-bound leaks like a hash, looser for I/O-bound ones. A repeat is
+// legitimately ~1-3 ms
 // faster (Better Auth's extra inserts for a new address); that skew is accepted.
 const TIMING_SKEW_BOUND = 0.5;
 

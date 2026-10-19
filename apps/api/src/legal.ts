@@ -118,6 +118,7 @@ export function registerLegalRoutes(deps: LegalDeps): void {
             id: schema.pushSubscriptions.id,
             endpoint: schema.pushSubscriptions.endpoint,
             createdAt: schema.pushSubscriptions.createdAt,
+            lastUsedAt: schema.pushSubscriptions.lastUsedAt,
           })
           .from(schema.pushSubscriptions)
           .where(eq(schema.pushSubscriptions.userId, userId))

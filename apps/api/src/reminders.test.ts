@@ -247,6 +247,27 @@ describe('shutdown release', () => {
     expect(row?.lastSentAt).not.toBeNull();
   });
 
+  it('does not track a claim another sweep already holds', async () => {
+    const h = await harness();
+    const a = await optedIn(h);
+    await h.database.db
+      .update(schema.reminderPrefs)
+      .set({ lastSentAt: new Date() })
+      .where(eq(schema.reminderPrefs.userId, a.userId));
+    const inflight = new Map();
+    await sweepReminders({
+      database: h.database,
+      mailer: h.mailer,
+      push: null,
+      appOrigin: APP_ORIGIN,
+      authSecret: TEST_SECRET,
+      dailyCap: 10,
+      inflight,
+    });
+    expect(inflight.size).toBe(0);
+    expect(reminderMails(h, a.email)).toHaveLength(0);
+  });
+
   it('leaves nothing tracked after a normal sweep', async () => {
     const h = await harness();
     await optedIn(h);
@@ -673,6 +694,53 @@ describe('web push', () => {
     expect(listA.devices).toEqual([]);
   });
 
+  it('gives the new owner fresh timestamps on handover', async () => {
+    const { sender } = pushStub();
+    const h = await harness(sender);
+    const a = await account(h);
+    const b = await account(h);
+    const body = { endpoint: ENDPOINT, keys: KEYS };
+    await call(h, a.cookie, 'POST', '/api/me/push-subscriptions', body);
+    const old = new Date('2020-01-01T00:00:00Z');
+    await h.database.db.update(schema.pushSubscriptions).set({ createdAt: old, lastUsedAt: old });
+    await call(h, b.cookie, 'POST', '/api/me/push-subscriptions', body);
+    const [row] = await h.database.db.select().from(schema.pushSubscriptions);
+    expect(row?.userId).toBe(b.userId);
+    expect(row?.lastUsedAt).toBeNull();
+    expect(row?.createdAt.getTime()).toBeGreaterThan(old.getTime());
+    await call(h, b.cookie, 'POST', '/api/me/push-subscriptions', body);
+    const [again] = await h.database.db.select().from(schema.pushSubscriptions);
+    expect(again?.createdAt).toEqual(row?.createdAt);
+  });
+
+  it('still stores the device when it is deleted between the read and the update', async () => {
+    const { sender } = pushStub();
+    const h = await harness(sender);
+    const a = await account(h);
+    const b = await account(h);
+    const body = { endpoint: ENDPOINT, keys: KEYS };
+    await call(h, a.cookie, 'POST', '/api/me/push-subscriptions', body);
+    const conn = await h.database.pool.connect();
+    try {
+      await conn.query('begin');
+      await conn.query('delete from push_subscriptions where endpoint = $1', [ENDPOINT]);
+      const racing = call(h, b.cookie, 'POST', '/api/me/push-subscriptions', body);
+      await vi.waitFor(async () => {
+        const waiting = await h.database.pool.query(
+          "select 1 from pg_stat_activity where wait_event_type = 'Lock' and query ilike '%update \"push_subscriptions\"%'",
+        );
+        expect(waiting.rowCount).toBeGreaterThan(0);
+      });
+      await conn.query('commit');
+      expect((await racing).statusCode).toBe(204);
+    } finally {
+      conn.release();
+    }
+    const rows = await h.database.db.select().from(schema.pushSubscriptions);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ userId: b.userId, endpoint: ENDPOINT });
+  });
+
   it('does not hand over when only one key matches', async () => {
     const { sender } = pushStub();
     const h = await harness(sender);
@@ -879,6 +947,7 @@ describe('export and deletion', () => {
     expect(exported.reminders.lastSentAt).not.toBeNull();
     expect(exported.reminders.pushSubscriptions).toHaveLength(1);
     expect(exported.reminders.pushSubscriptions[0]?.endpoint).toBe(ENDPOINT);
+    expect(exported.reminders.pushSubscriptions[0]?.lastUsedAt).toEqual(expect.any(String));
 
     const del = await call(h, a.cookie, 'POST', '/api/me/delete', { password: PASSWORD });
     expect(del.statusCode).toBeLessThan(300);

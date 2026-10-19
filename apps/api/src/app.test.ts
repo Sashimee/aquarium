@@ -423,8 +423,8 @@ describe('indexing', () => {
     expect((await app.inject('/tank/42')).headers['x-robots-tag']).toBeUndefined();
   });
 
-  it('disallows the viewer in robots.txt and redacts its token from logs', async () => {
-    expect((await withDist(true).inject('/robots.txt')).body).toContain('Disallow: /t/');
+  it('redacts the viewer token from logs and leaves /t/ crawlable so noindex is seen', async () => {
+    expect((await withDist(true).inject('/robots.txt')).body).not.toContain('Disallow');
     expect(redactUrl('/t/abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG')).toBe('/t/[redacted]');
   });
 
@@ -432,7 +432,7 @@ describe('indexing', () => {
     const app = withDist(true);
     const res = await app.inject('/');
     expect(res.headers['x-robots-tag']).toBeUndefined();
-    expect((await app.inject('/robots.txt')).body).not.toMatch(/Disallow: \/\n/);
+    expect((await app.inject('/robots.txt')).body).not.toContain('Disallow');
   });
 });
 
