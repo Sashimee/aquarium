@@ -921,17 +921,30 @@ describe('decor layout', () => {
     vi.useFakeTimers();
     const { api, rec, session } = setup();
     await session.setUser(verified);
-    api.saveBackground.mockReturnValue(new Promise(() => undefined));
-    api.saveDecorLayout.mockResolvedValue(tankFixture({ lastTickAt: '2026-02-01T12:00:00.000Z' }));
+    const fresh = { lastTickAt: '2026-02-01T12:00:00.000Z' };
+    let finishBackground: (tank: ReturnType<typeof tankFixture>) => void = () => undefined;
+    api.saveBackground.mockReturnValue(
+      new Promise((resolve) => {
+        finishBackground = resolve;
+      }),
+    );
+    let finishLayout: (tank: ReturnType<typeof tankFixture>) => void = () => undefined;
+    api.saveDecorLayout.mockReturnValue(
+      new Promise((resolve) => {
+        finishLayout = resolve;
+      }),
+    );
     rec.bus.emit('background:save', { tankId: TANK_A, backgroundId: 'bg-fw-plant-wall' });
-    await vi.advanceTimersByTimeAsync(700);
     rec.bus.emit('decor:layout', { tankId: TANK_A, layout });
     await vi.advanceTimersByTimeAsync(700);
+    expect(rec.of('decor:save-state').at(-1)).toMatchObject({ status: 'saving' });
+    finishBackground(tankFixture(fresh));
+    await vi.advanceTimersByTimeAsync(0);
     expect(api.saveDecorLayout).toHaveBeenCalledTimes(1);
-    expect(rec.of('decor:save-state').at(-1)).toMatchObject({
-      status: 'saving',
-      source: 'background',
-    });
+    expect(rec.of('decor:save-state').at(-1)).toMatchObject({ status: 'saving', source: 'layout' });
+    finishLayout(tankFixture(fresh));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(rec.of('decor:save-state').at(-1)).toMatchObject({ status: 'saved' });
     session.dispose();
   });
 
