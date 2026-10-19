@@ -13,7 +13,12 @@ import {
 import { chemistrySchema } from './chemistry.js';
 import { equipmentSchema } from './equipment.js';
 import { QUARANTINE_TANK_SIZE, tankSizeSchema } from './tankSize.js';
-import { diseaseStateSchema, fishStageSchema, personalitySchema } from './fishState.js';
+import {
+  diseaseStateSchema,
+  fishStageSchema,
+  personalitySchema,
+  VISIT_WINDOW_DAYS,
+} from './fishState.js';
 
 // Response objects are non-strict so a tab on an older bundle ignores fields added later.
 export const waterSchema = z.object({
@@ -126,6 +131,14 @@ export const tankSchema = z.object({
   lastTickAt: timestampSchema,
   chemistry: chemistrySchema,
   equipment: equipmentSchema,
+  recentVisitDays: z
+    .number()
+    .int()
+    .min(0)
+    .max(VISIT_WINDOW_DAYS)
+    .describe(
+      'distinct UTC days in the last VISIT_WINDOW_DAYS on which the owner opened this tank',
+    ),
   fish: z.array(fishSchema),
   memorials: z.array(memorialSchema),
   away: awaySummarySchema.optional(),

@@ -180,12 +180,15 @@ describe('tank and fish', () => {
       shared: false,
       shareToken: null,
       equipment: DEFAULT_EQUIPMENT,
+      recentVisitDays: 3,
       fish: [fish],
       memorials: [],
     };
     const parsed = tankSchema.parse(tank);
     expect(parsed.decorLayout[0]?.scale).toBe(1);
     expect(parsed.decorEdited).toBe(true);
+    expect(tankSchema.safeParse({ ...tank, recentVisitDays: 15 }).success).toBe(false);
+    expect(tankSchema.safeParse({ ...tank, recentVisitDays: -1 }).success).toBe(false);
     expect(tankSchema.safeParse({ ...tank, decorEdited: undefined }).success).toBe(false);
     expect(tankSchema.safeParse({ ...tank, backgroundId: 'nope' }).success).toBe(false);
     expect(
