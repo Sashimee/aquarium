@@ -1,0 +1,1 @@
+ALTER TABLE "tanks" ADD COLUMN "background_id" text;

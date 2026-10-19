@@ -1,12 +1,25 @@
 import {
   addFishRequestSchema,
   ateBatchRequestSchema,
+  backgroundIdSchema,
   careActionSchema,
+  chemistrySchema,
   createTankRequestSchema,
+  DEFAULT_BACKGROUND_ID,
   decorLayoutSchema,
+  diseaseStateSchema,
+  equipmentSchema,
   findDecorProblems,
   idSchema,
+  isBackgroundForBiome,
+  isPlayableBiome,
   legacyTintSeed,
+  MAX_DISPLAY_TANKS,
+  MAX_QUARANTINE_TANKS,
+  newTankChemistry,
+  shareTokenSchema,
+  TANK_SIZES,
+  personalitySchema,
   speciesListSchema,
   tankListSchema,
   tankSchema,
@@ -24,13 +37,12 @@ import {
   FEEDING_WINDOW_MINUTES,
   GRACE_PERIOD_MS,
   hasCapacityFor,
-  MAX_FISH_PER_TANK,
   TANK_BIOLOAD_CAPACITY,
   VACATION_FEEDER_ASSET_ID,
   type LifecycleFish,
   type LifecycleState,
 } from '@aquarium/sim/lifecycle';
-import { randomInt } from 'node:crypto';
+import { randomBytes, randomInt } from 'node:crypto';
 import { and, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -54,7 +66,6 @@ export const DEFAULT_CARE_LIMITS: CareLimits = {
   addFish: { max: 20, windowMs: 60 * 60_000 },
 };
 
-export const MAX_TANKS_PER_USER = 5;
 const EVENT_RETENTION_MS = 90 * 86_400_000;
 
 export interface SessionUser {
@@ -92,6 +103,14 @@ class HttpError extends Error {
   }
 }
 
+const rollTrait = () => randomInt(0, 1001) / 1000;
+
+const rollPersonality = () => ({
+  boldness: rollTrait(),
+  greed: rollTrait(),
+  sociability: rollTrait(),
+});
+
 const notFound = () => new HttpError(404, apiError('not_found', 'Tank not found.'));
 
 function toLifecycleFish(row: FishRow): LifecycleFish {
@@ -110,6 +129,22 @@ function toLifecycleFish(row: FishRow): LifecycleFish {
 
 function storedLayout(row: TankRow) {
   return row.decorLayout === null ? [] : decorLayoutSchema.parse(row.decorLayout);
+}
+
+function storedBackground(row: TankRow) {
+  if (row.backgroundId !== null) {
+    const stored = backgroundIdSchema.safeParse(row.backgroundId);
+    if (!stored.success) {
+      throw new Error(
+        `tank ${row.id} stores unknown background "${row.backgroundId}"; migrate it to NULL`,
+      );
+    }
+    return stored.data;
+  }
+  if (!isPlayableBiome(row.biome)) {
+    throw new Error(`tank ${row.id} is in the ${row.biome} biome, which has no backgrounds yet`);
+  }
+  return DEFAULT_BACKGROUND_ID[row.biome];
 }
 
 function hasVacationFeeder(row: TankRow): boolean {
@@ -250,13 +285,19 @@ async function render(tx: Tx, ticked: Ticked, fishRows = ticked.fishRows): Promi
     id: tank.id,
     name: tank.name,
     biome: tank.biome,
+    size: tank.size,
+    quarantine: tank.quarantine,
+    shareToken: tank.shareToken === null ? null : shareTokenSchema.parse(tank.shareToken),
     decorLayout: storedLayout(tank).map((item) => ({
       ...item,
       tintSeed: item.tintSeed ?? legacyTintSeed(item),
     })),
     decorEdited: tank.decorLayout !== null,
+    backgroundId: storedBackground(tank),
     water: tank.water,
     lastTickAt: tank.lastTickAt.toISOString(),
+    chemistry: chemistrySchema.parse(tank.chemistry),
+    equipment: equipmentSchema.parse(tank.equipment),
     fish: fishRows
       .toSorted((a, b) => a.bornAt.getTime() - b.bornAt.getTime() || a.id.localeCompare(b.id))
       .map((f) => ({
@@ -265,6 +306,9 @@ async function render(tx: Tx, ticked: Ticked, fishRows = ticked.fishRows): Promi
         species: f.species,
         name: f.name,
         sex: f.sex,
+        stage: f.stage,
+        personality: personalitySchema.parse(f.personality),
+        disease: f.disease === null ? null : diseaseStateSchema.parse(f.disease),
         bornAt: f.bornAt.toISOString(),
         size: f.size,
         hunger: f.hunger,
@@ -362,14 +406,18 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       const body = createTankRequestSchema.parse(req.body);
       const created = await database.db.transaction(async (tx) => {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`tanks:${user.id}`}))`);
-        const [{ count } = { count: 0 }] = await tx
-          .select({ count: sql<number>`count(*)::int` })
+        const owned = await tx
+          .select({ quarantine: schema.tanks.quarantine })
           .from(schema.tanks)
           .where(eq(schema.tanks.ownerId, user.id));
-        if (count >= MAX_TANKS_PER_USER) {
+        const quarantined = owned.filter((t) => t.quarantine).length;
+        if (body.quarantine && quarantined >= MAX_QUARANTINE_TANKS) {
+          throw new HttpError(409, apiError('conflict', 'You already have a quarantine tank.'));
+        }
+        if (!body.quarantine && owned.length - quarantined >= MAX_DISPLAY_TANKS) {
           throw new HttpError(
             409,
-            apiError('conflict', `You can have at most ${MAX_TANKS_PER_USER} tanks.`),
+            apiError('conflict', `You can have at most ${MAX_DISPLAY_TANKS} display tanks.`),
           );
         }
         const [row] = await tx
@@ -378,6 +426,9 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
             ownerId: user.id,
             name: body.name,
             biome: body.biome,
+            size: body.size,
+            quarantine: body.quarantine,
+            chemistry: newTankChemistry(body.biome),
             lastTickAt: new Date(clock.now()),
           })
           .returning();
@@ -430,9 +481,24 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
             );
           }
         }
+        if (
+          body.backgroundId !== undefined &&
+          body.backgroundId !== null &&
+          !isBackgroundForBiome(ticked.tank.biome, body.backgroundId)
+        ) {
+          throw new HttpError(
+            400,
+            apiError(
+              'validation_failed',
+              `That background does not belong in a ${ticked.tank.biome} tank.`,
+              [{ path: ['backgroundId'], message: 'not a background for this tank biome' }],
+            ),
+          );
+        }
         const [row] = await tx
           .update(schema.tanks)
           .set({
+            ...(body.backgroundId !== undefined ? { backgroundId: body.backgroundId } : {}),
             ...(body.name !== undefined ? { name: body.name } : {}),
             ...(body.decorLayout !== undefined
               ? {
@@ -444,6 +510,58 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
               : {}),
             updatedAt: new Date(clock.now()),
           })
+          .where(eq(schema.tanks.id, tankId))
+          .returning();
+        return render(tx, { ...ticked, tank: row ?? ticked.tank });
+      });
+    }),
+  );
+
+  app.post(
+    '/api/tanks/:tankId/share',
+    guarded(async (req) => {
+      const user = await authorize(req);
+      const { tankId } = tankParamsSchema.parse(req.params);
+      throttle(user.id, 'care');
+      return withTank(user, tankId, async (tx, ticked) => {
+        if (ticked.tank.shareToken !== null) return render(tx, ticked);
+        const [row] = await tx
+          .update(schema.tanks)
+          .set({ shareToken: randomBytes(32).toString('base64url') })
+          .where(eq(schema.tanks.id, tankId))
+          .returning();
+        return render(tx, { ...ticked, tank: row ?? ticked.tank });
+      });
+    }),
+  );
+
+  app.post(
+    '/api/tanks/:tankId/share/rotate',
+    guarded(async (req) => {
+      const user = await authorize(req);
+      const { tankId } = tankParamsSchema.parse(req.params);
+      throttle(user.id, 'care');
+      return withTank(user, tankId, async (tx, ticked) => {
+        const [row] = await tx
+          .update(schema.tanks)
+          .set({ shareToken: randomBytes(32).toString('base64url') })
+          .where(eq(schema.tanks.id, tankId))
+          .returning();
+        return render(tx, { ...ticked, tank: row ?? ticked.tank });
+      });
+    }),
+  );
+
+  app.delete(
+    '/api/tanks/:tankId/share',
+    guarded(async (req) => {
+      const user = await authorize(req);
+      const { tankId } = tankParamsSchema.parse(req.params);
+      throttle(user.id, 'care');
+      return withTank(user, tankId, async (tx, ticked) => {
+        const [row] = await tx
+          .update(schema.tanks)
+          .set({ shareToken: null })
           .where(eq(schema.tanks.id, tankId))
           .returning();
         return render(tx, { ...ticked, tank: row ?? ticked.tank });
@@ -480,7 +598,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
             existing,
             spec.lifecycle.bioload,
             TANK_BIOLOAD_CAPACITY,
-            MAX_FISH_PER_TANK,
+            TANK_SIZES[ticked.tank.size].maxAnimals,
           )
         ) {
           throw new HttpError(
@@ -498,6 +616,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
             species: spec.id,
             name: body.name,
             sex: randomInt(2) === 0 ? 'male' : 'female',
+            personality: rollPersonality(),
             bornAt: new Date(clock.now()),
             size: spec.lifecycle.birthSizeM,
           })

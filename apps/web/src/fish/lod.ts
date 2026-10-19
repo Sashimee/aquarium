@@ -36,3 +36,19 @@ export function selectLod(
   }
   return Math.min(level, available - 1);
 }
+
+/** LOD levels whose meshes keep enough jaw vertices to move the mouth. */
+export const MOUTH_LODS = 2;
+
+/**
+ * Mouth motion fades out across the mid band and is gone before a fish can switch to lod2, so it
+ * neither pops at the switch nor spikes the few jaw vertices simplification leaves there.
+ */
+export function mouthFade(distance: number, length: number, thresholds: LodThresholds): number {
+  const d = effectiveDistance(distance, length);
+  const start = thresholds.midDistance;
+  const end = thresholds.impostorDistance * (1 - HYSTERESIS);
+  if (!(end > start)) return d < end ? 1 : 0;
+  const t = Math.min(Math.max((d - start) / (end - start), 0), 1);
+  return 1 - t * t * (3 - 2 * t);
+}

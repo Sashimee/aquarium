@@ -1,5 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import {
+  DEFAULT_EQUIPMENT,
+  NEUTRAL_PERSONALITY,
+  personalitySchema,
+  chemistrySchema,
+  equipmentSchema,
+  newTankChemistry,
+} from '@aquarium/shared';
 import { afterAll, describe, expect, it } from 'vitest';
 import { createTestDatabase } from '../test-harness.ts';
 import { connect, runMigrations, type Database } from './index.ts';
@@ -98,6 +106,75 @@ describe('migrations', () => {
       [tankId],
     );
     expect((legacy.rows[0] as { sex: string }).sex).toBe('female');
+  });
+
+  it('backfills existing tanks as cycled, reefs salty, and fish as adults (0008)', async () => {
+    const database = await freshDatabase();
+    const q = (text: string, values: unknown[] = []) => database.pool.query(text, values);
+    const apply = async (file: string) => {
+      const sql = readFileSync(new URL(`../../drizzle/${file}`, import.meta.url), 'utf8');
+      for (const statement of sql.split('--> statement-breakpoint')) await q(statement);
+    };
+    const before = [
+      '0000_init.sql',
+      '0001_mail_limit_hits.sql',
+      '0002_mail_limit_hits_at_idx.sql',
+      '0003_ate_batches.sql',
+      '0004_fish_sex.sql',
+      '0005_decor_layout_nullable.sql',
+      '0006_fish_sex_drop_default.sql',
+      '0007_tank_background.sql',
+    ];
+    for (const file of before) await apply(file);
+    await q(`insert into "user" (id, name, email) values ('u7', 'U', 'u7@bas.lu')`);
+    const insertTank = async (biome: string, name: string) =>
+      (
+        (
+          await q(`insert into tanks (owner_id, biome, name) values ('u7', $1, $2) returning id`, [
+            biome,
+            name,
+          ])
+        ).rows[0] as { id: string }
+      ).id;
+    const freshId = await insertTank('freshwater', 'Old fresh');
+    const reefId = await insertTank('reef', 'Old reef');
+    await q(
+      `insert into fish (tank_id, species, name, size, sex) values ($1, 'neon-tetra', 'F', 0.03, 'male'), ($1, 'neon-tetra', 'G', 0.03, 'female')`,
+      [freshId],
+    );
+
+    await apply('0008_expansion_contract.sql');
+
+    const rows = await q(
+      `select id, chemistry, equipment, size, quarantine, share_token from tanks`,
+    );
+    const byId = new Map(
+      rows.rows.map((r: { id: string }) => [r.id, r as Record<string, unknown>]),
+    );
+    const fresh = byId.get(freshId);
+    const reef = byId.get(reefId);
+    expect(chemistrySchema.parse(fresh?.['chemistry'])).toEqual(newTankChemistry('freshwater'));
+    expect(chemistrySchema.parse(reef?.['chemistry'])).toEqual(newTankChemistry('reef'));
+    for (const tank of [fresh, reef]) {
+      expect(equipmentSchema.parse(tank?.['equipment'])).toEqual(DEFAULT_EQUIPMENT);
+      expect(tank).toMatchObject({ size: 'standard', quarantine: false, share_token: null });
+    }
+    const fish = await q(`select id, stage, personality, disease from fish order by name`);
+    expect(fish.rows.map((r: { stage: string; disease: unknown }) => [r.stage, r.disease])).toEqual(
+      [
+        ['adult', null],
+        ['adult', null],
+      ],
+    );
+    const [a, b] = fish.rows.map((r: { personality: unknown }) =>
+      personalitySchema.parse(r.personality),
+    );
+    expect(a).not.toEqual(NEUTRAL_PERSONALITY);
+    expect(a).not.toEqual(b);
+    const again = await q(
+      `select jsonb_build_object('boldness', round(((('x' || substr(md5("id"::text || 'boldness'), 1, 8))::bit(32)::bigint)::numeric / 4294967295), 3)) as p from fish order by name`,
+    );
+    expect((again.rows[0] as { p: { boldness: number } }).p.boldness).toBe(a?.boldness);
   });
 
   it('turns an empty stored decor layout into NULL and leaves edited ones alone (0005)', async () => {

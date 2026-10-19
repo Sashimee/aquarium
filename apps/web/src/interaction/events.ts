@@ -1,4 +1,12 @@
-import type { CareAction, Collider, DecorLayout, Fish, FoodType, Water } from '@aquarium/shared';
+import type {
+  Biome,
+  CareAction,
+  Collider,
+  DecorLayout,
+  Fish,
+  FoodType,
+  Water,
+} from '@aquarium/shared';
 import type { CameraMode } from './camera';
 
 /** A pinch, not a pile: leftovers poison the tank, so hand-feeding stays small. */
@@ -66,7 +74,7 @@ export interface InteractionEvents {
    */
   'tank:loaded': {
     tankId: string;
-    biome: 'freshwater' | 'reef';
+    biome: Biome;
     fish: readonly Fish[];
     decorLayout: DecorLayout;
     /** False: the player never saved a layout, so `decorLayout` is empty and the preset shows. */
@@ -85,9 +93,9 @@ export interface InteractionEvents {
    */
   'tank:none': Record<string, never>;
   /** The UI asks to show the other biome's demo tank (anonymous visitors, or no saved tank). */
-  'demo:request-biome': { biome: 'freshwater' | 'reef' };
+  'demo:request-biome': { biome: Biome };
   /** The demo tank's biome, sent after each `demo:request-biome` that changed it. */
-  'demo:biome-changed': { biome: 'freshwater' | 'reef' };
+  'demo:biome-changed': { biome: Biome };
   /** A fish joined. `acclimate` means it starts in a floating bag until `tank:fish-released`. */
   'tank:fish-added': { tankId: string; fish: Fish; acclimate: boolean };
   'tank:fish-released': { tankId: string; fishId: string };

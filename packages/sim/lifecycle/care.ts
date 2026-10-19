@@ -8,9 +8,14 @@ import {
 } from './params.ts';
 import type { LifecycleState } from './types.ts';
 
+const FRESHWATER_FOODS: readonly FoodType[] = ['flakes', 'pellets', 'bloodworms', 'algae-wafer'];
+
 const FOODS_BY_BIOME: Record<Biome, readonly FoodType[]> = {
-  freshwater: ['flakes', 'pellets', 'bloodworms', 'algae-wafer'],
+  freshwater: FRESHWATER_FOODS,
   reef: ['flakes', 'pellets', 'brine-shrimp', 'nori', 'algae-wafer'],
+  cichlid: FRESHWATER_FOODS,
+  blackwater: FRESHWATER_FOODS,
+  mangrove: ['flakes', 'pellets', 'brine-shrimp', 'algae-wafer'],
 };
 
 export type Rejection = { ok: false; reason: string };

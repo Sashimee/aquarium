@@ -10,6 +10,7 @@
     "traits": ["anemone-host"]
   },
   "biome": "reef",
+  "chemistry": { "salinityPpt": [30, 36] },
   "commonName": "Ocellaris clownfish",
   "id": "ocellaris-clownfish",
   "lifecycle": {

@@ -48,8 +48,12 @@ export const SnapshotField = {
   Flip: 12,
   /** Walkers: 1 while standing on a surface, 0 while flipping or falling; 0 for swimmers. */
   Attached: 13,
+  /** 0 to 1: fins spread in display (to a rival or a mirror); 0 at rest. */
+  Display: 14,
+  /** 0 to 1: gill covers raised in display; 0 at rest. */
+  GillFlare: 15,
 } as const;
-export const SNAPSHOT_STRIDE = 14;
+export const SNAPSHOT_STRIDE = 16;
 
 export interface Snapshot {
   /**
@@ -121,6 +125,10 @@ export function interpolateSnapshots(
     // A new flip starting between the two snapshots would otherwise rewind through the old one.
     out[o + 12] = flipB >= flip ? flip + (flipB - flip) * t : t < 0.5 ? flip : flipB;
     out[o + 13] = (t < 0.5 ? a[o + 13] : b[o + 13]) ?? 0;
+    for (let f = 14; f < 16; f++) {
+      const av = a[o + f] ?? 0;
+      out[o + f] = av + ((b[o + f] ?? 0) - av) * t;
+    }
   }
 }
 

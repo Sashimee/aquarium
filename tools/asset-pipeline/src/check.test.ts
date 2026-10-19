@@ -261,7 +261,13 @@ describe('checkAssets', () => {
     };
   }
 
-  const FISH_ATTRIBUTES = ['POSITION', FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE, MOUTH_ATTRIBUTE];
+  const FISH_ATTRIBUTES = [
+    'POSITION',
+    'TEXCOORD_0',
+    FIN_MASK_ATTRIBUTE,
+    FIN_ID_ATTRIBUTE,
+    MOUTH_ATTRIBUTE,
+  ];
 
   function fishAsset(
     options: {
@@ -692,6 +698,15 @@ describe('checkAssets', () => {
     const asset = fishAsset({ attributes: ['POSITION', FIN_ID_ATTRIBUTE] });
     expect(checkAssets(inputFor([asset])).join('\n')).toContain(
       `lacks vertex attribute ${FIN_MASK_ATTRIBUTE}`,
+    );
+  });
+
+  it('fails a fish primitive without TEXCOORD_0', () => {
+    const asset = fishAsset({
+      attributes: ['POSITION', FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE, MOUTH_ATTRIBUTE],
+    });
+    expect(checkAssets(inputFor([asset])).join('\n')).toContain(
+      'lacks vertex attribute TEXCOORD_0',
     );
   });
 
