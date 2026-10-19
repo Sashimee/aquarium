@@ -307,7 +307,7 @@ No Sketchfab model exists under any licence for the species (searches: labroides
 
 | # | Reference photo | Author | Licence | Size | Use |
 |---|---|---|---|---|---|
-| 1 | `wm-labroides-bowie` ([file](https://commons.wikimedia.org/wiki/File:Labroides_dimidiatus_529634787.jpg)) | Mike Bowie | CC BY 4.0 | 2048x1536, fish about 600 px | PICK for the stripe: starts behind the eye, widens to the tail, runs into the lower caudal lobe, pale blue band beneath |
+| 1 | `wm-labroides-bowie` ([file](https://commons.wikimedia.org/wiki/File:Labroides_dimidiatus_529634787.jpg)) | Mike Bowie | CC BY 4.0 | 2048x1536, fish about 600 px | PICK for the stripe: runs from the snout through the eye, widens to the tail, runs into the lower caudal lobe, pale blue band beneath |
 | 2 | `wm-labroides-jens` | Jens | CC BY 4.0 | 1571x1066 | colour (brownish-grey back, blue-white belly) and slender outline, sharp head |
 | 3 | `wm-labroides-hylton` | Lawrence Hylton | CC BY 4.0 | 1459x973 | true lateral proportions, caudal edges; soft and watermarked, outline only |
 | 4 | `wm-labroides-deacon` ([file](https://commons.wikimedia.org/wiki/File:Labroides_dimidiatus_453390877.jpg)) | Andrew Deacon | CC0 | 2048x1536, fish about 490 px | head shape and terminal mouth; thin blue edge above the stripe |
@@ -316,7 +316,7 @@ Key traits: long slender body, terminal mouth, a black lateral stripe that widen
 
 **Pipeline handoff (asset-pipeline-engineer, T44):** no raw model to process. Build a procedural loft for `cleaner-wrasse`:
 
-1. Body: elongate, laterally compressed fusiform loft, roughly length : depth = 6 : 1, pointed head with a small terminal mouth, small pectoral fins, a long low dorsal and anal fin, rounded caudal (outline from #3 and #2, head from #4).
+1. Body: elongate, laterally compressed fusiform loft, roughly length : depth = 6 : 1, pointed head with a small terminal mouth, small pectoral fins, a long low dorsal and anal fin, straight-edged to slightly rounded caudal (outline from #3 and #2, head from #4).
 2. Texture, painted procedurally in the albedo (no photo pixels are shipped, so no attribution chain is added; credit the photos as references): brownish-grey to pale-blue back, white-blue belly, one black lateral stripe from the snout through the eye that widens toward the tail and enters the lower caudal lobe, with a bright blue band along its lower and rear edge (stripe layout from #1, colours from #2). Caudal: black with a blue edge and a white fringe on the upper and lower edges.
 3. The stripe must stay unmistakable at tank distance (cleaner recognition is a behaviour cue), so keep it at full contrast in the albedo and do not let the roughness or normal maps wash it out.
 4. Rig and clips like the other loft fish (swim cycle plus the quick dance-like wiggle used at a cleaning station, if the behaviour owner asks for it in #634), under the 2048 texture and fish polycount budget.
