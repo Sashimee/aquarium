@@ -39,6 +39,15 @@ describe('word filter', () => {
     'asshat',
     'big dick',
     'p0rn',
+    'neonazi',
+    'neo_nazi_fan',
+    'n30n4z1',
+    'siegheil',
+    'whitepower',
+    'sieg_heil',
+    'white_power',
+    'Sieg Heil',
+    'nazism',
   ])('blocks %s, including leet and spacing tricks', (word) => {
     expect(containsBlockedWord(word)).toBe(true);
   });

@@ -6,6 +6,7 @@ import { createClock } from '../apps/api/src/clock.ts';
 import { connect, runMigrations } from '../apps/api/src/db/index.ts';
 import { createMailer } from '../apps/api/src/mail.ts';
 import { postgresHitStore } from '../apps/api/src/rate-limit.ts';
+import { loadChemistryParameters } from '../apps/api/src/chemistry.ts';
 import { loadCatalog } from '../apps/api/src/species.ts';
 import { createTestDatabase } from '../apps/api/src/test-harness.ts';
 
@@ -74,6 +75,7 @@ const app = buildApp({
   mailer,
   signInThrottle: { store: postgresHitStore(database, secret), limit: unlimited },
   species: loadCatalog(),
+  chemistryParams: loadChemistryParameters(),
   clock: createClock(),
   testHooks: true,
   logger: false,
