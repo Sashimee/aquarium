@@ -278,6 +278,7 @@ export const pushSubscriptions = pgTable(
     p256dh: text('p256dh').notNull(),
     auth: text('auth').notNull(),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
+    lastUsedAt: timestamptz('last_used_at'),
   },
   (t) => [index('push_subscriptions_user_id_idx').on(t.userId)],
 );

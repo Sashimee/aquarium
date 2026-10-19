@@ -60,7 +60,7 @@ const app = buildApp({
 });
 
 const stopMaintenance = startMaintenance(database);
-const stopReminders = startReminders(
+const reminders = startReminders(
   {
     database,
     mailer,
@@ -79,10 +79,14 @@ const stop = () => {
   shuttingDown = shutdown({
     stopMaintenance: () => {
       stopMaintenance();
-      stopReminders();
+      reminders.stop();
     },
     closeApp: () => app.close(),
     tasks: background,
+    afterDrain: async () => {
+      const released = await reminders.releaseUnsent();
+      if (released > 0) console.error(`shutdown: released ${released} unsent reminder claim(s)`);
+    },
     closeDatabase: () => database.close(),
     budgetMs: SHUTDOWN_BUDGET_MS,
   }).catch((err: unknown) => {
