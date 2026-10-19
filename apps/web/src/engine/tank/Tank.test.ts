@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Color, Mesh, type MeshBasicNodeMaterial, Texture } from 'three/webgpu';
+import { texture } from 'three/tsl';
 import { Caustics } from '../water/caustics';
 import { InteriorLight } from '../water/interior';
 import { WaterMedium } from '../water/medium';
@@ -17,7 +18,7 @@ function tank(): Tank {
     new Color(0.13, 0.09, 0.055),
     meanSubstrateHeight(DEFAULT_TANK),
   );
-  return new Tank(DEFAULT_TANK, medium, new Texture(), interior);
+  return new Tank(DEFAULT_TANK, medium, new Texture(), interior, texture(new Texture()));
 }
 
 function meshes(t: Tank): Map<string, Mesh> {
