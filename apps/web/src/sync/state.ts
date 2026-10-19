@@ -24,6 +24,8 @@ export interface SessionState {
   bagged: readonly BaggedFish[];
   /** A dead fish the player has asked to net and not yet confirmed. */
   pendingNet: string | null;
+  /** Pearls the server reports; null until the first read. */
+  balance: number | null;
   busy: boolean;
   error: string | null;
   notice: string | null;
@@ -39,6 +41,7 @@ export const INITIAL_STATE: SessionState = {
   awayByTank: {},
   bagged: [],
   pendingNet: null,
+  balance: null,
   busy: false,
   error: null,
   notice: null,

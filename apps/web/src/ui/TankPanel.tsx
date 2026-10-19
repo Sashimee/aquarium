@@ -2,7 +2,6 @@ import {
   playableBiomeSchema,
   type Biome,
   type PlayableBiome,
-  type SpeciesSummary,
   type Tank,
   type TankSize,
   DEFAULT_TANK_SIZE,
@@ -10,22 +9,21 @@ import {
 } from '@aquarium/shared';
 import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react';
 import {
-  canBuy,
   deadFish,
   memorialLine,
   TANK_SIZE_ORDER,
-  tankCapacity,
   tankSizeLabel,
   tankSizeShort,
   waterReport,
   type SpeciesNames,
 } from '../sync/life';
-import { checkFishName, checkTankName, suggestFishName, suggestTankName } from '../sync/naming';
+import { checkTankName, suggestTankName } from '../sync/naming';
 import type { SessionState, TankSession } from '../sync/session';
 import { useAuth } from './context';
 import { Link } from './screens';
 import WaterTest from './WaterTest';
 import { ShareSection } from './ShareSection';
+import { ShopSections } from './Shop';
 import { useActiveTank, useSessionState, useOptionalSession, useSpeciesNames } from './session';
 
 const BIOME_LABEL: Record<Biome, string> = {
@@ -123,7 +121,7 @@ export function ShopPanel() {
     <Gate noTank={needTank}>
       {({ session, state, tank }) => (
         <>
-          <Shop session={session} state={state} tank={tank} />
+          <ShopSections session={session} state={state} tank={tank} />
           <Bag session={session} state={state} />
         </>
       )}
@@ -379,81 +377,6 @@ function Care({
         Feed from the dock, a little at a time. Uneaten food rots and poisons the water; the gravel
         vacuum removes it.
       </p>
-    </section>
-  );
-}
-
-function Shop({ session, state, tank }: { session: TankSession; state: SessionState; tank: Tank }) {
-  const id = useId();
-  const cap = tankCapacity(tank, state.species);
-  const offered = state.species.filter((s) => s.biome === tank.biome);
-  const [name, setName] = useState('');
-  const [problem, setProblem] = useState<string | null>(null);
-  const taken = tank.fish.map((f) => f.name);
-  const suggestion = suggestFishName(taken, tank.fish.length);
-
-  useEffect(() => setProblem(null), [name]);
-
-  const buy = (species: SpeciesSummary) => {
-    const checked = checkFishName(name.trim() === '' ? suggestion : name);
-    if (!checked.ok) return setProblem(checked.message);
-    void session.buy(species.id, checked.name).then((ok) => {
-      if (ok) setName('');
-    });
-  };
-
-  return (
-    <section aria-labelledby={`${id}-h`} className="block">
-      <h3 id={`${id}-h`}>Choose a fish</h3>
-      <p>
-        <progress
-          max={cap.capacity}
-          value={Math.min(cap.usedBioload, cap.capacity)}
-          aria-label="Tank load"
-        />{' '}
-        {cap.livingFish} of {cap.maxFish} animals, load {cap.usedBioload.toFixed(1)} of{' '}
-        {cap.capacity}
-      </p>
-      <label htmlFor={`${id}-n`}>Name for the new fish</label>
-      <input
-        id={`${id}-n`}
-        value={name}
-        placeholder={suggestion}
-        maxLength={60}
-        aria-invalid={problem !== null}
-        onChange={(e) => setName(e.target.value)}
-      />
-      {problem && (
-        <p className="field-error" role="alert">
-          {problem}
-        </p>
-      )}
-      <ul className="shop">
-        {offered.map((s) => {
-          const verdict = canBuy(tank, s, state.species);
-          return (
-            <li key={s.id}>
-              <div>
-                <strong>{s.commonName}</strong> <em>{s.scientificName}</em>
-                {!verdict.ok && (
-                  <p id={`${id}-${s.id}`} className="hint">
-                    {verdict.reason}
-                  </p>
-                )}
-              </div>
-              <button
-                type="button"
-                disabled={state.busy || !verdict.ok}
-                aria-describedby={verdict.ok ? undefined : `${id}-${s.id}`}
-                onClick={() => buy(s)}
-              >
-                Add
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-      {offered.length === 0 && <p>No fish are on offer for this kind of tank yet.</p>}
     </section>
   );
 }

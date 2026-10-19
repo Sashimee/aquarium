@@ -681,3 +681,47 @@ progress {
     transition: none;
   }
 }
+
+#ui .pearls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.75rem;
+  padding: 0.3rem 0.85rem;
+  border: 1px solid var(--glass-edge);
+  border-radius: 99rem;
+  background: var(--glass);
+  font-variant-numeric: tabular-nums;
+}
+
+.pearl-dot {
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #fff, #cfd8e8 60%, #8ea0bd);
+}
+
+.price {
+  color: var(--ink-soft);
+}
+
+.shortfall,
+.warning {
+  margin: 0.5rem 0;
+  padding: 0.5rem 0.75rem;
+  border-left: 0.3rem solid var(--fair);
+  border-radius: 0.5rem;
+  background: var(--glass);
+}
+
+.equipment {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.equipment h4 {
+  margin: 0;
+}

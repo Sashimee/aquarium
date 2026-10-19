@@ -34,6 +34,9 @@ function apiMocks() {
     saveDecorLayout: vi.fn(),
     saveBackground: vi.fn(),
     addFish: vi.fn(),
+    wallet: vi.fn().mockResolvedValue({ balance: 500 }),
+    purchase: vi.fn(),
+    saveLight: vi.fn(),
     netFish: vi.fn(),
     care: vi.fn(),
     reportAte: vi.fn(),
@@ -253,7 +256,7 @@ describe('reconciling snapshots', () => {
         fish: [fishFixture(FISH_1), fishFixture(FISH_2, { stage: 'fry', name: 'Dot' })],
       }),
     );
-    expect(await session.buy('neon-tetra', 'Dot')).toBe(true);
+    expect(await session.buy('neon-tetra', 'Dot', 'juvenile')).toBe(true);
     expect(session.getState().bagged.map((b) => b.name)).toEqual(['Dot']);
     expect(session.getState().birth).toBeNull();
   });
@@ -417,7 +420,7 @@ describe('shop and the acclimation bag', () => {
     api.addFish.mockResolvedValue(
       tankFixture({ lastTickAt: '2026-02-01T12:01:00.000Z', fish: [fishFixture(FISH_1), fresh] }),
     );
-    expect(await session.buy('neon-tetra', 'Dot')).toBe(true);
+    expect(await session.buy('neon-tetra', 'Dot', 'juvenile')).toBe(true);
     expect(rec.of('tank:fish-added')).toEqual([{ tankId: TANK_A, fish: fresh, acclimate: true }]);
     expect(session.getState().bagged.map((b) => b.name)).toEqual(['Dot']);
 
@@ -438,7 +441,7 @@ describe('shop and the acclimation bag', () => {
         fish: [fishFixture(FISH_1), fishFixture(FISH_2)],
       }),
     );
-    await session.buy('neon-tetra', 'Dot');
+    await session.buy('neon-tetra', 'Dot', 'juvenile');
     session.releaseNow(FISH_2);
     session.releaseNow(FISH_2);
     await vi.advanceTimersByTimeAsync(ACCLIMATION_SECONDS * 1000);
@@ -449,7 +452,7 @@ describe('shop and the acclimation bag', () => {
     const { api, rec, session } = setup();
     await session.setUser(verified);
     api.addFish.mockRejectedValue(apiError(409, 'conflict'));
-    expect(await session.buy('neon-tetra', 'Dot')).toBe(false);
+    expect(await session.buy('neon-tetra', 'Dot', 'juvenile')).toBe(false);
     expect(session.getState().error).toBe('conflict (409)');
     expect(rec.of('tank:fish-added')).toEqual([]);
   });
@@ -554,7 +557,7 @@ describe('sign-out safety', () => {
     keyof ReturnType<typeof apiMocks>,
   ][] = [
     ['care', (s) => s.careAction({ type: 'gravel_vacuum' }), 'care'],
-    ['buy', (s) => s.buy('neon-tetra', 'Pip'), 'addFish'],
+    ['buy', (s) => s.buy('neon-tetra', 'Pip', 'juvenile'), 'addFish'],
     ['net', (s) => s.net(FISH_1), 'netFish'],
     ['rename', (s) => s.rename('Den'), 'renameTank'],
   ];
@@ -609,6 +612,7 @@ describe('sign-out safety', () => {
       species: vi.fn().mockResolvedValue([speciesFixture()]),
       tanks: vi.fn().mockResolvedValue([tankFixture({ fish: [fishFixture(FISH_1)] }), second]),
       tank: vi.fn().mockResolvedValue({ ...second, lastTickAt: '2026-02-01T12:00:00.000Z' }),
+      wallet: vi.fn().mockResolvedValue({ balance: 500 }),
       reportAte: vi.fn().mockReturnValue(hang),
     };
     const rec = recordBus();
@@ -688,6 +692,7 @@ describe('tank switcher and naming', () => {
         species: vi.fn().mockResolvedValue([speciesFixture()]),
         tanks: vi.fn().mockResolvedValue([tankFixture({ fish: [fishFixture(FISH_1)] }), second]),
         tank: vi.fn().mockResolvedValue(second),
+        wallet: vi.fn().mockResolvedValue({ balance: 500 }),
         reportAte: vi.fn().mockReturnValue(new Promise<never>(() => undefined)),
       };
       const rec = recordBus();
@@ -761,12 +766,14 @@ describe('tank switcher and naming', () => {
       name: 'Den',
       biome: 'freshwater',
       size: 'nano30',
+      idempotencyKey: expect.any(String),
     });
     await session.createTank('Big', 'freshwater');
     expect(api.createTank).toHaveBeenLastCalledWith({
       name: 'Big',
       biome: 'freshwater',
       size: 'standard',
+      idempotencyKey: expect.any(String),
     });
   });
 
@@ -806,6 +813,7 @@ describe('tank switcher and naming', () => {
       species: vi.fn().mockResolvedValue([speciesFixture()]),
       tanks: vi.fn().mockResolvedValue([tankFixture({ fish: [fishFixture(FISH_1)] }), second]),
       tank: vi.fn().mockResolvedValue({ ...second, lastTickAt: '2026-02-01T12:00:00.000Z' }),
+      wallet: vi.fn().mockResolvedValue({ balance: 500 }),
       reportAte: vi.fn().mockRejectedValue(apiError(0, 'network')),
     };
     const rec = recordBus();
@@ -876,6 +884,7 @@ describe('tank switcher and naming', () => {
       species: vi.fn().mockResolvedValue([speciesFixture()]),
       tanks: vi.fn().mockResolvedValue([tankFixture({ fish: [fishFixture(FISH_1)] }), second]),
       tank: vi.fn().mockResolvedValue({ ...second, lastTickAt: '2026-02-01T12:00:00.000Z' }),
+      wallet: vi.fn().mockResolvedValue({ balance: 500 }),
       reportAte: vi.fn().mockRejectedValue(apiError(0, 'network')),
     };
     const rec = recordBus();
@@ -1243,5 +1252,171 @@ describe('public sharing', () => {
     await session.setUser(verified);
     expect(await session.changeSharing('share')).toEqual({ ok: false, token: null });
     expect(api.shareTank).not.toHaveBeenCalled();
+  });
+});
+
+describe('Pearls and the T70 request contract', () => {
+  const boughtTank = () =>
+    tankFixture({
+      lastTickAt: '2026-02-01T12:01:00.000Z',
+      fish: [fishFixture(FISH_1), fishFixture(FISH_2, { name: 'Dot' })],
+    });
+
+  const keyOf = (call: unknown) => (call as { idempotencyKey: string }).idempotencyKey;
+
+  it('reads the balance when the tanks load', async () => {
+    const { api, session } = setup();
+    api.wallet.mockResolvedValue({ balance: 420 });
+    await session.setUser(verified);
+    await vi.waitFor(() => expect(session.getState().balance).toBe(420));
+  });
+
+  it('keeps showing the last balance when a refresh fails', async () => {
+    const { api, session } = setup();
+    api.wallet.mockResolvedValueOnce({ balance: 420 });
+    await session.setUser(verified);
+    await vi.waitFor(() => expect(session.getState().balance).toBe(420));
+    api.wallet.mockRejectedValue(apiError(0, 'network'));
+    await session.refreshWallet();
+    expect(session.getState().balance).toBe(420);
+  });
+
+  it('sends the stage and a key with add-fish', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    api.addFish.mockResolvedValue(boughtTank());
+    await session.buy('neon-tetra', 'Dot', 'adult');
+    expect(api.addFish).toHaveBeenCalledWith(TANK_A, {
+      species: 'neon-tetra',
+      name: 'Dot',
+      stage: 'adult',
+      idempotencyKey: expect.stringMatching(/^[A-Za-z0-9_-]{8,}$/),
+    });
+  });
+
+  it('reuses the key when a purchase is retried after the answer was lost', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    api.addFish
+      .mockRejectedValueOnce(apiError(0, 'timeout'))
+      .mockRejectedValueOnce(apiError(502, 'internal'))
+      .mockResolvedValue(boughtTank());
+    expect(await session.buy('neon-tetra', 'Dot', 'juvenile')).toBe(false);
+    expect(await session.buy('neon-tetra', 'Dot', 'juvenile')).toBe(false);
+    expect(await session.buy('neon-tetra', 'Dot', 'juvenile')).toBe(true);
+    const keys = api.addFish.mock.calls.map((c) => keyOf(c[1]));
+    expect(new Set(keys).size).toBe(1);
+  });
+
+  it('uses a new key once a purchase went through, so buying again is a new purchase', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    api.addFish.mockResolvedValue(boughtTank());
+    await session.buy('neon-tetra', 'Dot', 'juvenile');
+    await session.buy('neon-tetra', 'Dot', 'juvenile');
+    const [first, second] = api.addFish.mock.calls.map((c) => keyOf(c[1]));
+    expect(first).not.toBe(second);
+  });
+
+  it('uses a new key after the server refused, and after the intent changed', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    api.addFish
+      .mockRejectedValueOnce(apiError(402, 'insufficient_pearls'))
+      .mockRejectedValueOnce(apiError(0, 'network'))
+      .mockResolvedValue(boughtTank());
+    await session.buy('neon-tetra', 'Dot', 'adult');
+    await session.buy('neon-tetra', 'Dot', 'adult');
+    await session.buy('neon-tetra', 'Dot', 'juvenile');
+    const keys = api.addFish.mock.calls.map((c) => keyOf(c[1]));
+    expect(new Set(keys).size).toBe(3);
+  });
+
+  it('refreshes the balance after a refusal for too few Pearls', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    api.addFish.mockRejectedValue(apiError(402, 'insufficient_pearls'));
+    api.wallet.mockResolvedValue({ balance: 12 });
+    await session.buy('neon-tetra', 'Dot', 'adult');
+    await vi.waitFor(() => expect(session.getState().balance).toBe(12));
+    expect(session.getState().error).not.toBeNull();
+  });
+
+  it('sends a key with every tank creation and reuses it on a retry', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    api.createTank
+      .mockRejectedValueOnce(apiError(0, 'network'))
+      .mockResolvedValue(tankFixture({ id: TANK_B, name: 'Reef', biome: 'reef' }));
+    await session.createTank('Reef', 'reef', 'standard');
+    await session.createTank('Reef', 'reef', 'standard');
+    const keys = api.createTank.mock.calls.map((c) => keyOf(c[0]));
+    expect(keys[0]).toMatch(/^[A-Za-z0-9_-]{8,}$/);
+    expect(keys[1]).toBe(keys[0]);
+  });
+
+  it('sends a key with bottled bacteria and reuses it on a retry', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    api.care
+      .mockRejectedValueOnce(apiError(0, 'timeout'))
+      .mockResolvedValue(tankFixture({ lastTickAt: '2026-02-01T12:01:00.000Z' }));
+    await session.careAction({ type: 'bottled_bacteria' });
+    await session.careAction({ type: 'bottled_bacteria' });
+    await session.careAction({ type: 'bottled_bacteria' });
+    const keys = api.care.mock.calls.map((c) => keyOf(c[1]));
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[0]);
+  });
+
+  it('never gives free care a key', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    api.care.mockResolvedValue(tankFixture({ lastTickAt: '2026-02-01T12:01:00.000Z' }));
+    await session.careAction({ type: 'water_change' });
+    expect(api.care).toHaveBeenCalledWith(TANK_A, { type: 'water_change' });
+  });
+
+  it('buys equipment, shows the new balance and the upgraded tank', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    api.purchase.mockResolvedValue({ wallet: { balance: 250 }, entry: {}, replayed: false });
+    const upgraded = tankFixture({ lastTickAt: '2026-02-01T12:01:00.000Z' });
+    api.tank.mockResolvedValue({
+      ...upgraded,
+      equipment: { ...upgraded.equipment, filter: { tier: 2 } },
+    });
+    expect(await session.purchase('equipment:filter:2', 'Installed.')).toBe(true);
+    expect(api.purchase).toHaveBeenCalledWith({
+      itemRef: 'equipment:filter:2',
+      tankId: TANK_A,
+      idempotencyKey: expect.any(String),
+    });
+    expect(session.activeTank?.equipment.filter.tier).toBe(2);
+    expect(session.getState().notice).toBe('Installed.');
+  });
+
+  it('reuses the purchase key on a retry', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    api.purchase
+      .mockRejectedValueOnce(apiError(0, 'network'))
+      .mockResolvedValue({ wallet: { balance: 250 }, entry: {}, replayed: true });
+    api.tank.mockResolvedValue(tankFixture({ lastTickAt: '2026-02-01T12:01:00.000Z' }));
+    await session.purchase('equipment:filter:2', 'Installed.');
+    await session.purchase('equipment:filter:2', 'Installed.');
+    const keys = api.purchase.mock.calls.map((c) => keyOf(c[0]));
+    expect(keys[1]).toBe(keys[0]);
+  });
+
+  it('saves the lamp schedule in UTC hours and shows the saved tank', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    const base = tankFixture({ lastTickAt: '2026-02-01T12:01:00.000Z' });
+    const light = { tier: 1, intensity: 0.5, onHour: 22, offHour: 6 };
+    api.saveLight.mockResolvedValue({ ...base, equipment: { ...base.equipment, light } });
+    expect(await session.setLight({ intensity: 0.5, onHour: 22, offHour: 6 })).toBe(true);
+    expect(api.saveLight).toHaveBeenCalledWith(TANK_A, { intensity: 0.5, onHour: 22, offHour: 6 });
+    expect(session.activeTank?.equipment.light).toEqual(light);
   });
 });

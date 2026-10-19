@@ -1,5 +1,7 @@
 import type { Biome, PlayableBiome } from '@aquarium/shared';
 import { useEffect, useState, useSyncExternalStore } from 'react';
+import { BUNDLED_ECONOMY } from '../sync/bundledEconomy';
+import { euroText, pearlText } from '../sync/economy';
 import type { CameraMode } from '../interaction/camera';
 import { chipState, type ChipStatus } from './chemistryChip';
 import { useAuth, useBridge, useCameraMode, useDemoBiome } from './context';
@@ -138,6 +140,30 @@ export function ChemistryChip({ open, onPress }: { open: boolean; onPress(): voi
           ))}
         </span>
       )}
+    </button>
+  );
+}
+
+export function PearlBalance({ open, onPress }: { open: boolean; onPress(): void }) {
+  const { phase, balance } = useSessionState();
+  if (phase !== 'ready') return null;
+  const known = balance !== null;
+  const spoken = known
+    ? `${pearlText(balance)}, about ${euroText(balance, BUNDLED_ECONOMY)}. Open the shop`
+    : 'Pearl balance not loaded yet. Open the shop';
+  return (
+    <button
+      type="button"
+      className="pearls"
+      data-opener="shop"
+      aria-expanded={open}
+      aria-controls={open ? 'panel-shop' : undefined}
+      aria-label={spoken}
+      title={known ? `About ${euroText(balance, BUNDLED_ECONOMY)}` : undefined}
+      onClick={onPress}
+    >
+      <span className="pearl-dot" aria-hidden="true" />
+      <span>{known ? balance.toLocaleString('en') : '...'}</span>
     </button>
   );
 }
