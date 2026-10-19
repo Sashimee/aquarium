@@ -91,8 +91,8 @@ export const PRIVACY_CONTROLLER = 'Alexandre Baskewitsch';
 export const PRIVACY_CONTACT = 'fish@bas.lu';
 
 export const PRIVACY_POLICY: PrivacyPolicy = privacyPolicySchema.parse({
-  version: '2026-10-13',
-  updatedAt: '2026-10-13',
+  version: '2026-10-19',
+  updatedAt: '2026-10-19',
   controller: PRIVACY_CONTROLLER,
   contact: PRIVACY_CONTACT,
   analytics: false,
@@ -138,6 +138,9 @@ export const PRIVACY_POLICY: PrivacyPolicy = privacyPolicySchema.parse({
         'Passkeys you register: credential ID, public key, signature counter, device type, backed-up flag, transports, AAGUID (authenticator model identifier), the label you give it and its creation time. No biometric data ever leaves your device.',
         'Sessions: for every signed-in browser, a session record with its creation and expiry time, IP address and browser user-agent, so you can review and revoke sessions. Session records are kept until they expire (30 days after your last activity) and are then deleted by an hourly cleanup, or immediately when you sign out, revoke them or delete your account.',
         'Game data: your tanks, fish, their care history and memorials of fish that have died.',
+        'Shared tanks: if you turn on a public link for a tank, anyone who has the link can see that tank read-only without signing in: its name (after a word filter), layout, water and fish. Your email address, display name, handle and account are never shown through the link, and the page is marked noindex. You can revoke or replace the link at any time, which stops the old one working at once.',
+        'Reactions: when you react to a shared tank (heart, star or wow) we store which tank, your account and the kind, one reaction per tank. Reaction counts are public; who reacted is not.',
+        'Audit log: turning a link on, replacing or revoking it, and setting or removing a reaction are recorded with the time, your account and the tank, never the link itself. Deleting your account detaches these entries from you.',
         'Email: verification mail is sent from fish@bas.lu through the operator mail relay. Nothing else is mailed to you.',
         "Server logs of this application record the request method and path without query strings, never email addresses, passwords or tokens. The hosting platform's reverse proxy keeps standard access logs (including IP addresses) and the mail relay logs delivery of verification mail (including the recipient address); both are operated by the same operator and kept only as long as needed for security and troubleshooting.",
       ],
@@ -162,7 +165,7 @@ export const PRIVACY_POLICY: PrivacyPolicy = privacyPolicySchema.parse({
       title: 'How long we keep it',
       paragraphs: [
         'Account and game data are kept until you delete your account. Care events older than 90 days are pruned.',
-        'Deleting your account removes your user record, sessions, sign-in methods, passkeys, tanks, fish, care history and memorials from the database immediately. Backup retention is to be defined before production; until then, deleted data may persist in backups no longer than that period.',
+        'Deleting your account removes your user record, sessions, sign-in methods, passkeys, tanks, fish, care history, reactions and memorials from the database immediately. Backup retention is to be defined before production; until then, deleted data may persist in backups no longer than that period.',
       ],
     },
     {

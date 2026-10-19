@@ -388,3 +388,91 @@ describe('public rate limits', () => {
     }
   });
 });
+
+describe('public link abuse and isolation', () => {
+  let h: Harness;
+  beforeAll(async () => {
+    h = await createHarness();
+  });
+  afterAll(() => h.close());
+
+  it('shows nothing of the owner’s other tanks or their fish', async () => {
+    const owner = await account(h);
+    const { token } = await sharedTank(h, owner.cookie, 'Front window');
+    const other = tankSchema.parse(
+      (
+        await call(h, owner.cookie, 'POST', '/api/tanks', {
+          name: 'Secret hideout',
+          biome: 'reef',
+        })
+      ).json(),
+    );
+    await call(h, owner.cookie, 'POST', `/api/tanks/${other.id}/fish`, {
+      species: 'neon-tetra',
+      name: 'Hidden',
+    });
+    const res = await call(h, null, 'GET', `/api/public/${token}`);
+    expect(res.statusCode).toBe(200);
+    expect(res.body).not.toContain('Secret hideout');
+    expect(res.body).not.toContain('Hidden');
+    expect(res.body).not.toContain(other.id);
+    expect(publicTankSchema.parse(res.json()).fish).toHaveLength(1);
+    expect((await call(h, null, 'GET', `/api/public/${other.id}`)).statusCode).toBe(404);
+  });
+
+  it('never counts the same viewer twice, however often they repeat a reaction', async () => {
+    const owner = await account(h);
+    const guest = await account(h);
+    const { token } = await sharedTank(h, owner.cookie);
+    const url = `/api/public/${token}/reaction`;
+    for (let i = 0; i < 5; i++) await call(h, guest.cookie, 'PUT', url, { kind: 'heart' });
+    const rows = await h.database.db.select().from(schema.tankReactions);
+    expect(rows.filter((r) => r.userId === guest.userId)).toHaveLength(1);
+    const state = reactionStateSchema.parse(
+      (await call(h, guest.cookie, 'PUT', url, { kind: 'star' })).json(),
+    );
+    expect(state.reactions).toEqual({ heart: 0, star: 1, wow: 0 });
+  });
+
+  it('rejects a malformed reaction body and a cross-site mutation', async () => {
+    const owner = await account(h);
+    const guest = await account(h);
+    const { token } = await sharedTank(h, owner.cookie);
+    const url = `/api/public/${token}/reaction`;
+    for (const payload of [{}, { kind: ['heart'] }, { kind: null }, { kind: 'HEART' }]) {
+      expect((await call(h, guest.cookie, 'PUT', url, payload)).statusCode).toBe(400);
+    }
+    const crossSite = await h.app.inject({
+      method: 'PUT',
+      url,
+      headers: {
+        'content-type': 'application/json',
+        origin: 'https://evil.example',
+        cookie: guest.cookie,
+      },
+      payload: { kind: 'heart' },
+    });
+    expect(crossSite.statusCode).toBeGreaterThanOrEqual(400);
+    expect(crossSite.statusCode).toBeLessThan(500);
+    const rows = await h.database.db.select().from(schema.tankReactions);
+    expect(rows.filter((r) => r.userId === guest.userId)).toHaveLength(0);
+  });
+
+  it('throttles guessing: misses count against the per-IP read limit', async () => {
+    const limited = await createHarness({
+      publicLimits: {
+        view: { max: 3, windowMs: 60_000 },
+        react: { max: 3, windowMs: 60_000 },
+      },
+    });
+    try {
+      const codes: number[] = [];
+      for (let i = 0; i < 4; i++) {
+        codes.push((await call(limited, null, 'GET', `/api/public/${'A'.repeat(43)}`)).statusCode);
+      }
+      expect(codes).toEqual([404, 404, 404, 429]);
+    } finally {
+      await limited.close();
+    }
+  });
+});

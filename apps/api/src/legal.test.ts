@@ -157,6 +157,9 @@ describe('privacy and credits', () => {
       'reverse proxy',
       'mail relay',
       'Backup',
+      'public link',
+      'Reactions',
+      'Audit log',
     ]) {
       expect(text).toContain(term);
     }
