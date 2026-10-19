@@ -35,21 +35,37 @@ type Triple = readonly [number, number, number];
 
 /** A toy as the sim sees it: a point of interest in its frame. */
 export type SimToy =
-  | { readonly kind: 'mirror'; readonly position: Triple; readonly normal: Triple }
-  | { readonly kind: 'ball'; readonly position: Triple; readonly velocity: Triple };
+  | {
+      readonly kind: 'mirror';
+      readonly id: string;
+      readonly position: Triple;
+      readonly normal: Triple;
+    }
+  | {
+      readonly kind: 'ball';
+      readonly id: string;
+      readonly position: Triple;
+      readonly velocity: Triple;
+    };
 
 type MutableMirrorToy = {
   kind: 'mirror';
+  id: string;
   position: [number, number, number];
   normal: [number, number, number];
 };
 type MutableBallToy = {
   kind: 'ball';
+  id: string;
   position: [number, number, number];
   velocity: [number, number, number];
 };
 
+const MIRROR_TOY_ID = 'mirror';
+const BALL_TOY_ID = 'ball';
+
 export interface ToyNudge {
+  readonly toyId: string | null;
   /** Velocity a fish gave the ball, m/s in the sim's x and z. */
   readonly ix: number;
   readonly iz: number;
@@ -145,11 +161,13 @@ export class PlayController {
   private readonly simToys: (MutableMirrorToy | MutableBallToy)[] = [];
   private readonly mirrorToy: MutableMirrorToy = {
     kind: 'mirror',
+    id: MIRROR_TOY_ID,
     position: [0, 0, 0],
     normal: [0, 0, 0],
   };
   private readonly ballToy: MutableBallToy = {
     kind: 'ball',
+    id: BALL_TOY_ID,
     position: [0, 0, 0],
     velocity: [0, 0, 0],
   };
@@ -172,7 +190,9 @@ export class PlayController {
       }),
       deps.events.on('food:ate', ({ eaten }) => this.publishGame(this.deps.game?.ate(eaten))),
     ];
-    const stopNudge = deps.onToyNudge?.((nudge) => this.ball?.nudge(nudge.ix, nudge.iz));
+    const stopNudge = deps.onToyNudge?.((nudge) => {
+      if (nudge.toyId === BALL_TOY_ID) this.ball?.nudge(nudge.ix, nudge.iz);
+    });
     if (stopNudge) this.stopListening.push(stopNudge);
     this.publishToys();
     this.publishGame(deps.game?.view, true);

@@ -622,10 +622,22 @@ describe('ping-pong ball in the controller', () => {
     const toys = t.setToys.mock.calls.at(-1)?.[0] ?? [];
     expect(toys).toHaveLength(1);
     expect(toys[0]?.kind).toBe('ball');
-    t.nudge({ ix: 0.2, iz: 0 });
+    t.nudge({ toyId: 'ball', ix: 0.2, iz: 0 });
     t.controller.update(0.2);
     const moved = t.setToys.mock.calls.at(-1)?.[0]?.[0];
     expect(moved?.kind === 'ball' && moved.position[0]).toBeGreaterThan(0);
+  });
+
+  it('ignores a nudge addressed to another toy', () => {
+    const t = makeToyController();
+    t.controller.setTool('ball');
+    t.controller.pointerDown(0, 0);
+    t.controller.pointerUp();
+    t.controller.update(1 / 60);
+    t.nudge({ toyId: 'stranger', ix: 0.5, iz: 0 });
+    t.controller.update(0.2);
+    const ball = t.setToys.mock.calls.at(-1)?.[0]?.[0];
+    expect(ball?.kind === 'ball' && Math.abs(ball.position[0])).toBeLessThan(0.01);
   });
 
   it('is removed on request', () => {
@@ -961,7 +973,7 @@ describe('toy sync to the sim', () => {
     t.controller.pointerUp();
     const seen = new Set<unknown>();
     const toyObjects = new Set<unknown>();
-    t.nudge({ ix: 0.3, iz: 0 });
+    t.nudge({ toyId: 'ball', ix: 0.3, iz: 0 });
     for (let i = 0; i < 20; i++) {
       t.controller.update(1 / 60);
       const call = t.setToys.mock.calls.at(-1)?.[0];

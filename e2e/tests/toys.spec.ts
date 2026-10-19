@@ -37,6 +37,50 @@ async function ballAt(page: Page): Promise<{ x: number; z: number } | null> {
   return { x: x ?? NaN, z: z ?? NaN };
 }
 
+/**
+ * The drag runs inside the page: a flick is read from the time between pointer events, and a
+ * software-rendered frame can stretch a driver-side drag from milliseconds to seconds.
+ */
+async function flickAcross(
+  page: Page,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+): Promise<void> {
+  await page.evaluate(
+    ({ from, to }) => {
+      const canvas = document.querySelector('canvas#tank');
+      if (!canvas) throw new Error('the tank canvas is missing');
+      const fire = (type: string, x: number, y: number): void => {
+        canvas.dispatchEvent(
+          new PointerEvent(type, {
+            pointerId: 41,
+            pointerType: 'mouse',
+            isPrimary: true,
+            button: 0,
+            buttons: type === 'pointerup' ? 0 : 1,
+            clientX: x,
+            clientY: y,
+            bubbles: true,
+          }),
+        );
+      };
+      const steps = 6;
+      fire('pointerdown', from.x, from.y);
+      for (let i = 1; i <= steps; i++) {
+        const until = performance.now() + 4;
+        while (performance.now() < until);
+        fire(
+          'pointermove',
+          from.x + ((to.x - from.x) * i) / steps,
+          from.y + ((to.y - from.y) * i) / steps,
+        );
+      }
+      fire('pointerup', to.x, to.y);
+    },
+    { from, to },
+  );
+}
+
 /** A tap on the canvas closes the open sheet, so the panel is reopened to read the toys. */
 const openPlay = (page: Page) => openDock(page, 'Play', 'Play with the fish');
 
@@ -56,6 +100,7 @@ const RIGHT_TANK: readonly [number, number] = [0.3, 0.5];
 test('the mirror, the ping-pong ball and the shy-fish feeding game work from the play panel', async ({
   page,
 }) => {
+  test.slow();
   await registerVerifiedUser(page, 'toys');
   await openTank(page, { e2e: true });
   await createFirstTank(page);
@@ -75,24 +120,21 @@ test('the mirror, the ping-pong ball and the shy-fish feeding game work from the
   await expect(play.getByRole('button', { name: 'Remove ball' })).toBeVisible();
 
   await expect.poll(() => ballAt(page), { message: 'the ball is in the water' }).not.toBeNull();
-  await expect(async () => {
-    const start = await canvasPoint(page, ...LEFT_TANK);
-    const end = await canvasPoint(page, ...RIGHT_TANK);
-    const before = await ballAt(page);
-    await page.mouse.move(start.x, start.y);
-    await page.mouse.down();
-    await page.mouse.move(end.x, end.y, { steps: 6 });
-    const held = await ballAt(page);
-    await page.mouse.up();
-    expect(held?.x, 'the ball follows the finger').toBeGreaterThan((before?.x ?? 0) + 0.02);
-    const released = await ballAt(page);
-    await expect
-      .poll(async () => ((await ballAt(page))?.x ?? 0) - (released?.x ?? 0), {
-        message: 'the flick carries the ball on after the release',
-        timeout: 3000,
-      })
-      .toBeGreaterThan(0.01);
-  }).toPass({ timeout: 30_000 });
+  const before = await ballAt(page);
+  const start = await canvasPoint(page, ...LEFT_TANK);
+  const end = await canvasPoint(page, ...RIGHT_TANK);
+  await flickAcross(page, start, end);
+  await expect
+    .poll(async () => ((await ballAt(page))?.x ?? NaN) - (before?.x ?? 0), {
+      message: 'the ball follows the finger',
+    })
+    .toBeGreaterThan(0.02);
+  const released = await ballAt(page);
+  await expect
+    .poll(async () => ((await ballAt(page))?.x ?? NaN) - (released?.x ?? 0), {
+      message: 'the flick carries the ball on after the release',
+    })
+    .toBeGreaterThan(0.05);
 
   await openPlay(page);
   await play.getByRole('button', { name: 'Remove ball' }).click();
@@ -138,7 +180,7 @@ test('the mirror, the ping-pong ball and the shy-fish feeding game work from the
   await dismissToasts(page);
   await play.getByRole('button', { name: 'Stop round' }).click();
   await expect(play.getByRole('button', { name: 'Start round' })).toBeVisible();
-  await expect(play.getByRole('button', { name: 'Tap glass' })).toHaveAttribute(
+  await expect(play.getByRole('button', { name: 'Mirror' })).toHaveAttribute(
     'aria-pressed',
     'true',
   );
