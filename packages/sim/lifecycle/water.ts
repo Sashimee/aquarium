@@ -1,6 +1,6 @@
 import type { Bacteria, Biome, Chemistry, ChemistryParameters, Water } from '@aquarium/shared';
 import { fishBioload } from './fish.ts';
-import { REFERENCE_TANK_LITRES } from './params.ts';
+import { REFERENCE_TANK_LITRES, VOLUME_CONCENTRATION_EXPONENT } from './params.ts';
 import type { LifecycleFish, SpeciesChemistryTable, SpeciesTable, StepContext } from './types.ts';
 
 export function ammoniaProduction(
@@ -91,11 +91,11 @@ export function stepWater(
   const { water, chemistry } = state;
   const { dtHours, params, chemistryParams: cp } = ctx;
   const { perHour: massPerHour } = ammoniaProduction(fish, ctx.species);
-  const concentration = REFERENCE_TANK_LITRES / ctx.litres;
+  const concentration = (REFERENCE_TANK_LITRES / ctx.litres) ** VOLUME_CONCENTRATION_EXPONENT;
   const perHour = massPerHour * concentration;
 
   const decayed = water.uneatenFood * (1 - Math.exp((-dtHours * 60) / params.foodDecayMinutes));
-  const withFood = water.ammonia + decayed * params.ammoniaPerPortion * concentration;
+  const withFood = water.ammonia + decayed * params.ammoniaPerPortion;
 
   const { ammoniaOxidisers: nh3Bugs, nitriteOxidisers: no2Bugs } = chemistry.bacteria;
   const nh3Rate = cp.bacteria.ammoniaOxidisers.conversionPerHour * nh3Bugs;

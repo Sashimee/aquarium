@@ -1300,7 +1300,7 @@ describe('tank sizes, quarantine and sharing', () => {
     expect(list.find((t) => t.id === nano.id)?.size).toBe('nano30');
   });
 
-  it('dilutes the same stock more in a bigger tank', async () => {
+  it('concentrates the same stock more in a smaller tank, but less than linearly', async () => {
     const cookie = await signedIn(h);
     const small = tankSchema.parse(
       (await create(cookie, { name: 'S', biome: 'freshwater', size: 'nano30' })).json(),
@@ -1309,18 +1309,22 @@ describe('tank sizes, quarantine and sharing', () => {
       (await create(cookie, { name: 'B', biome: 'freshwater', size: 'long300' })).json(),
     );
     for (const t of [small, big]) {
-      await h.database.db
-        .update(schema.tanks)
-        .set({ water: { ...t.water, uneatenFood: 10 } })
-        .where(eq(schema.tanks.id, t.id));
+      await h.database.db.insert(schema.fish).values(
+        Array.from({ length: 12 }, (_, i) => ({
+          tankId: t.id,
+          species: 'neon-tetra',
+          name: `N${i}`,
+          size: 0.03,
+          sex: 'female' as const,
+        })),
+      );
     }
-    await advance(h, 60);
+    await advance(h, 6 * 60);
     const read = async (id: string) =>
       tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${id}`)).json());
     const [a, b] = [await read(small.id), await read(big.id)];
-    expect(a.water.ammonia + a.chemistry.nitrite).toBeGreaterThan(
-      (b.water.ammonia + b.chemistry.nitrite) * 5,
-    );
+    expect(a.water.nitrate).toBeGreaterThan(b.water.nitrate * 2);
+    expect(a.water.nitrate).toBeLessThan(b.water.nitrate * 10);
   });
 
   it('keeps every animal in an over-cap tank and only blocks additions', async () => {

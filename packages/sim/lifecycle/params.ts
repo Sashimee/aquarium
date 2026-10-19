@@ -22,6 +22,13 @@ export const WATER_CHANGE_FRACTION = 0.5;
 
 /** The tank the water and bioload constants are tuned for: the `standard` size. */
 export const REFERENCE_TANK_LITRES = 300;
+/**
+ * Fish waste concentrates as (reference / litres)^exponent, not linearly: the nano stock cap is only 4x
+ * tighter than standard for 10x less water, so 0.6 (4x at 30 L) makes a full nano as concentrated as a full
+ * standard tank. Uneaten food is not scaled: a portion is a fixed player action, and species with an
+ * ammonia tolerance of 0.09 already sit just under the limit from one portion at any size.
+ */
+export const VOLUME_CONCENTRATION_EXPONENT = 0.6;
 export const TANK_BIOLOAD_CAPACITY = 12;
 /** Not linear in litres: a 30 L nano holds 12 small animals (12 neon tetras are 2.4), which a linear 1.2 would forbid. */
 export const BIOLOAD_CAPACITY_BY_SIZE: Readonly<Record<TankSize, number>> = {
