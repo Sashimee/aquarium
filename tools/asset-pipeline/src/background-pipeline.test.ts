@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { BACKGROUND_MAX_BYTES, BACKGROUND_TIERS } from '@aquarium/shared';
 import sharp from 'sharp';
@@ -16,7 +16,13 @@ import {
 } from './backgrounds.ts';
 import { assetIndexSchema, type OutputAsset } from './index-schema.ts';
 import { manifestSchema } from './manifest.ts';
-import { applyDepthOfField, blurSigma, distanceFromDepthByte } from './misty-lake.ts';
+import {
+  applyDepthOfField,
+  blurSigma,
+  distanceFromDepthByte,
+  gradeUnderwater,
+  resolveRequest,
+} from './misty-lake.ts';
 import { encodeKtx2 } from './textures.ts';
 
 const root = join(import.meta.dirname, '../../..');
@@ -246,6 +252,70 @@ function fakeBackground(bytes: number): OutputAsset {
   };
 }
 
+describe('gradeUnderwater', () => {
+  const params = { near: 1.5, far: 14, focus: 3.6 };
+  const size = 8;
+  const flat = (value: number) => new Uint8Array(size * size * 3).fill(value);
+  const depth = (byte: number) => new Uint8Array(size * size).fill(byte);
+  const mean = (image: Uint8Array, channel: number) => {
+    let sum = 0;
+    for (let p = 0; p < size * size; p++) sum += image[p * 3 + channel] ?? 0;
+    return sum / (size * size);
+  };
+
+  it('is deterministic and keeps the input length', () => {
+    const a = gradeUnderwater(flat(180), depth(128), params, size, size);
+    const b = gradeUnderwater(flat(180), depth(128), params, size, size);
+    expect(a).toHaveLength(size * size * 3);
+    expect(Buffer.from(a).equals(Buffer.from(b))).toBe(true);
+  });
+
+  it('absorbs red faster than blue with distance', () => {
+    const far = gradeUnderwater(flat(200), depth(255), params, size, size);
+    const redLoss = 200 - mean(far, 0);
+    const blueLoss = 200 - mean(far, 2);
+    expect(redLoss).toBeGreaterThan(blueLoss);
+    expect(mean(far, 0)).toBeLessThan(mean(far, 2));
+  });
+
+  it('darkens and tints a far pixel more than a near one', () => {
+    const near = gradeUnderwater(flat(200), depth(0), params, size, size);
+    const far = gradeUnderwater(flat(200), depth(255), params, size, size);
+    expect(mean(far, 0)).toBeLessThan(mean(near, 0));
+  });
+
+  it('clamps to the byte range', () => {
+    const white = gradeUnderwater(flat(255), depth(0), params, size, size);
+    const black = gradeUnderwater(flat(0), depth(255), params, size, size);
+    for (const byte of [...white, ...black]) {
+      expect(byte).toBeGreaterThanOrEqual(0);
+      expect(byte).toBeLessThanOrEqual(255);
+    }
+  });
+});
+
+describe('local render server routing', () => {
+  const roots = { '/assets': '/nonexistent-assets', '': '/nonexistent-page' };
+
+  it('answers 400 for a malformed percent escape instead of throwing', () => {
+    expect(resolveRequest(roots, '/%E0%A4%A')).toEqual({ status: 400 });
+    expect(resolveRequest(roots, '/assets/%')).toEqual({ status: 400 });
+  });
+
+  it('answers 404 for a missing file and for a path that climbs out of its root', () => {
+    expect(resolveRequest(roots, '/missing.html')).toEqual({ status: 404 });
+    expect(resolveRequest(roots, '/assets/../../etc/passwd')).toEqual({ status: 404 });
+  });
+
+  it('serves an existing file under its root', () => {
+    const dir = join(root, 'tools', 'asset-pipeline');
+    expect(resolveRequest({ '': dir }, '/package.json')).toEqual({
+      status: 200,
+      file: join(dir, 'package.json'),
+    });
+  });
+});
+
 describe('background checks', () => {
   it('passes an asset inside the size budget', () => {
     expect(backgroundFileProblems(fakeBackground(BACKGROUND_MAX_BYTES), () => null)).toEqual([]);
@@ -311,6 +381,16 @@ describe('committed backgrounds', () => {
       for (const tier of Object.values(built?.background?.tiers ?? {})) {
         expect(tier.bytes, `${tier.file}`).toBeLessThanOrEqual(BACKGROUND_MAX_BYTES);
       }
+    }
+  });
+
+  it('ships ultra as the high file, with no second copy on disk', () => {
+    for (const entry of backgrounds) {
+      const tiers = index.assets.find((a) => a.id === entry.id)?.background?.tiers;
+      expect(tiers?.ultra, entry.id).toEqual(tiers?.high);
+      expect(
+        existsSync(join(root, 'apps/web/public/assets/background', entry.id, 'ultra.ktx2')),
+      ).toBe(false);
     }
   });
 
