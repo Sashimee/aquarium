@@ -42,7 +42,11 @@ export interface MeshRank {
   distance: number;
   /** Drawn as a full mesh; read as last frame's choice, written with this frame's. */
   full: boolean;
+  /** Scratch for `markNearest`'s sort. */
+  rankKey: number;
 }
+
+const byRankKey = (a: MeshRank, b: MeshRank): number => a.rankKey - b.rankKey;
 
 /**
  * Lets only the `limit` nearest fish draw as full meshes. One that already does keeps its place
@@ -51,11 +55,37 @@ export interface MeshRank {
  */
 export function markNearest(items: MeshRank[], limit: number): void {
   if (!(limit >= 0)) throw new RangeError(`lod: mesh limit must be >= 0, got ${limit}`);
-  const key = (item: MeshRank): number => item.distance * (item.full ? 1 - HYSTERESIS : 1);
-  items.sort((a, b) => key(a) - key(b));
-  items.forEach((item, rank) => {
-    item.full = rank < limit;
-  });
+  for (const item of items) item.rankKey = item.distance * (item.full ? 1 - HYSTERESIS : 1);
+  items.sort(byRankKey);
+  let rank = 0;
+  for (const item of items) item.full = rank++ < limit;
+}
+
+/** The level an impostor stands in for. */
+export const IMPOSTOR_LOD = 2;
+
+export interface ImpostorChoice {
+  /** The tier draws impostors at all. */
+  tierImpostors: boolean;
+  /** The species has a built impostor (a ready atlas, a swimming fish); else lod2 stays a mesh. */
+  available: boolean;
+  lod: number;
+  /** Among the tier's nearest fish, as `markNearest` marks them. */
+  full: boolean;
+  /** Its mesh at `lod` casts a shadow on this tier. */
+  castsShadow: boolean;
+}
+
+/**
+ * Whether a fish draws as an impostor instead of its LOD mesh. Past lod2 it always does. Nearer, a
+ * fish outside the nearest few swaps too, unless its mesh casts a shadow: the impostor casts none,
+ * and a shadow vanishing as a fish drops a rank pops, while a tier with fish shadows already pays
+ * for that mesh in its shadow pass.
+ */
+export function drawsAsImpostor(c: Readonly<ImpostorChoice>): boolean {
+  if (!c.tierImpostors || !c.available) return false;
+  if (c.lod >= IMPOSTOR_LOD) return true;
+  return !c.full && !c.castsShadow;
 }
 
 /** LOD levels whose meshes keep enough jaw vertices to move the mouth. */

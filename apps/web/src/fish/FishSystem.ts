@@ -32,7 +32,7 @@ import { releaseAll } from '../engine/lifecycle';
 import type { Tier, TierSettings } from '../engine/quality/tiers';
 import { waterBounds, type TankDimensions } from '../engine/tank/dimensions';
 import type { InteractionEvents } from '../interaction/events';
-import type { ShrimpRig } from './assetIndex';
+import type { ImpostorAtlasInfo, ShrimpRig } from './assetIndex';
 import { disposeFishModel, FishAssetLoader, type FishModel } from './assets';
 import { AcclimationBags } from './bag';
 import { BatchCache } from './batchCache';
@@ -46,7 +46,15 @@ import {
   type InstanceValues,
   type WalkerValues,
 } from './instances';
-import { effectiveDistance, markNearest, mouthFade, selectLod, type LodThresholds } from './lod';
+import {
+  drawsAsImpostor,
+  effectiveDistance,
+  markNearest,
+  mouthFade,
+  selectLod,
+  type ImpostorChoice,
+  type LodThresholds,
+} from './lod';
 import { featuresFor, sameFeatures, waitsForReload } from './features';
 import {
   disposeImpostorAtlas,
@@ -118,6 +126,7 @@ interface LodBatch {
 }
 
 interface ImpostorDraw {
+  readonly info: ImpostorAtlasInfo;
   readonly instances: ImpostorInstanceData;
   readonly matrices: InstancedBufferAttribute;
   readonly meshes: readonly InstancedMesh[];
@@ -185,6 +194,7 @@ interface FishRuntime {
   distance: number;
   /** One of the tier's nearest fish, drawn as a mesh at any LOD short of lod2. */
   full: boolean;
+  rankKey: number;
   /** The pose's liveliness this frame. */
   liveliness: number;
   /** Drawn last frame, at `lastPosition`/`lastQuaternion`. */
@@ -201,8 +211,6 @@ interface FishRuntime {
 
 /** LOD levels near enough for their self-shadowing to read. */
 const SHADOW_LODS = 2;
-/** The level an impostor stands in for. */
-const IMPOSTOR_LOD = 2;
 /** A fish leaving its bag, or held over a rebuilt world, glides into the sim's pose this long. */
 const HANDOVER_S = 1.2;
 /** Below this horizontal share of its forward axis a body is climbing and has no heading. */
@@ -311,6 +319,13 @@ export class FishSystem {
   private impostors: TierSettings['fishImpostors'] = null;
   private readonly ranked: FishRuntime[] = [];
   private readonly draws: (LodBatch | ImpostorDraw)[] = [];
+  private readonly impostorChoice: ImpostorChoice = {
+    tierImpostors: false,
+    available: false,
+    lod: 0,
+    full: true,
+    castsShadow: false,
+  };
   private features: FishMaterialFeatures | null = null;
   private night = 0;
   private light = 1;
@@ -827,7 +842,7 @@ export class FishSystem {
       return { instances, matrices, meshes, materials, count: 0, warmed: false };
     });
     batch.capacity = capacity;
-    batch.impostor = this.buildImpostor(batch, lighting);
+    batch.impostor = this.buildImpostor(batch, lighting, this.features);
     batch.features = this.features;
     this.applyShadows(batch);
   }
@@ -839,7 +854,11 @@ export class FishSystem {
     };
   }
 
-  private buildImpostor(batch: SpeciesBatch, lighting: FishLighting): ImpostorDraw | null {
+  private buildImpostor(
+    batch: SpeciesBatch,
+    lighting: FishLighting,
+    features: FishMaterialFeatures | null,
+  ): ImpostorDraw | null {
     const { model, profile, locomotion, capacity, atlas } = batch;
     if (atlas.kind !== 'ready' || locomotion.kind !== 'swim' || capacity === 0) return null;
     const instances = new ImpostorInstanceData(capacity);
@@ -853,7 +872,7 @@ export class FishSystem {
       instances,
       lighting,
     });
-    if (this.features !== null) material.setFeatures(this.features);
+    if (features !== null) material.setFeatures(features);
     const mesh = new InstancedMesh(impostorStrip(), material, capacity);
     mesh.name = `${model.entry.id}:impostor`;
     mesh.frustumCulled = false;
@@ -864,6 +883,7 @@ export class FishSystem {
     mesh.instanceMatrix.setUsage(DynamicDrawUsage);
     this.group.add(mesh);
     return {
+      info: atlas.atlas.info,
       instances,
       matrices: mesh.instanceMatrix,
       meshes: [mesh],
@@ -890,7 +910,11 @@ export class FishSystem {
           return;
         }
         batch.atlas = { kind: 'ready', atlas };
-        batch.impostor = this.buildImpostor(batch, this.lighting());
+        batch.impostor = this.buildImpostor(
+          batch,
+          this.lighting(),
+          batch.features ?? this.features,
+        );
       },
       (cause: unknown) => {
         if (batch.atlas.kind === 'loading') batch.atlas = { kind: 'failed' };
@@ -1024,6 +1048,7 @@ export class FishSystem {
       cameraDistance: 0,
       distance: 0,
       full: true,
+      rankKey: 0,
       liveliness: 1,
       shown: false,
       lastPosition: new Vector3(),
@@ -1313,7 +1338,7 @@ export class FishSystem {
   }
 
   private setBatchFeatures(batch: SpeciesBatch, features: FishMaterialFeatures): void {
-    for (const lod of [...batch.lods, ...(batch.impostor === null ? [] : [batch.impostor])]) {
+    for (const lod of this.drawsOf(batch)) {
       for (const m of lod.materials) m.setFeatures(features);
       lod.warmed = false;
     }
@@ -1470,15 +1495,25 @@ export class FishSystem {
     }
     this.bags.end();
     if (impostors !== null) markNearest(ranked, impostors.fullMeshes);
+    const castsShadow = (this.shadows?.shadowMapSize ?? 0) > 0;
 
     for (const rt of this.runtimes.values()) {
       if (!rt.shown) continue;
       this.position.copy(rt.lastPosition);
       this.quaternion.copy(rt.lastQuaternion);
       const { impostor } = rt.batch;
-      const asImpostor =
-        impostors !== null && impostor !== null && (rt.lod >= IMPOSTOR_LOD || !rt.full);
-      if (!asImpostor || !this.drawImpostor(rt, impostor, camera)) this.drawMesh(rt);
+      const { motion } = rt;
+      const choice = this.impostorChoice;
+      choice.tierImpostors = impostors !== null;
+      choice.available = impostor !== null && motion instanceof SwimState;
+      choice.lod = rt.lod;
+      choice.full = rt.full;
+      choice.castsShadow = castsShadow && rt.lod < SHADOW_LODS;
+      if (impostor !== null && motion instanceof SwimState && drawsAsImpostor(choice)) {
+        this.drawImpostor(rt, motion, impostor, camera);
+      } else {
+        this.drawMesh(rt);
+      }
     }
 
     for (const batch of this.batches.values()) {
@@ -1494,7 +1529,7 @@ export class FishSystem {
   private drawsOf(batch: SpeciesBatch): readonly (LodBatch | ImpostorDraw)[] {
     const draws = this.draws;
     draws.length = 0;
-    draws.push(...batch.lods);
+    for (const lod of batch.lods) draws.push(lod);
     if (batch.impostor !== null) draws.push(batch.impostor);
     return draws;
   }
@@ -1558,13 +1593,15 @@ export class FishSystem {
     }
   }
 
-  /** False when the fish cannot be drawn as an impostor and needs its mesh instead. */
-  private drawImpostor(rt: FishRuntime, draw: ImpostorDraw, camera: Vector3): boolean {
-    const { atlas } = rt.batch;
-    if (atlas.kind !== 'ready' || !(rt.motion instanceof SwimState)) return false;
-    const { grid, pivot } = atlas.atlas.info;
+  private drawImpostor(
+    rt: FishRuntime,
+    motion: SwimState,
+    draw: ImpostorDraw,
+    camera: Vector3,
+  ): void {
+    const { grid, pivot } = draw.info;
     const slot = this.placeInstance(draw, rt);
-    const { motion, liveliness } = rt;
+    const { liveliness } = rt;
     const view = fishViewDirection(
       camera,
       this.position,
@@ -1593,6 +1630,5 @@ export class FishSystem {
     direction[2] = view.z;
     selectFrames(direction, grid, this.frames);
     draw.instances.write(slot, v);
-    return true;
   }
 }

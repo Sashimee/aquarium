@@ -15,7 +15,7 @@ import type { FrameSelection } from './octahedral';
  * - `orientation`: the instance quaternion, to light the baked fish-space normals;
  * - `swim`: as the meshes' (scale, body-wave phase, amplitude scale, turn curvature in model units);
  * - `view`: unit direction from the pivot to the camera in fish space, paling 0..1;
- * - `tint`: rgb multiplier, unused;
+ * - `tint`: rgb multiplier, w unused;
  * - `frames`: the blended frames' (i, j) and bilinear weights (fx, fy), see `selectFrames`.
  */
 export const IMPOSTOR_STRIDE = 20;
@@ -83,10 +83,14 @@ export class ImpostorInstanceData {
     a[o + 19] = v.frames.fy;
   }
 
-  /** Zero scale and a zero radius on the strip, so a collapsed instance rasterises nothing. */
+  /**
+   * Zero scale, so a collapsed instance rasterises nothing. The view stays a unit vector: the strip's
+   * basis normalises it, and a zero view would put NaN in every vertex of the warm-up draw.
+   */
   collapse(index: number): void {
     const o = this.offset(index);
     this.array.fill(0, o, o + IMPOSTOR_STRIDE);
+    this.array[o + ImpostorSlot.View] = 1;
   }
 
   commit(): void {

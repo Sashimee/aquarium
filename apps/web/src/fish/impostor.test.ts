@@ -43,11 +43,19 @@ describe('ImpostorInstanceData', () => {
     expect(data.array.subarray(0, 2 * IMPOSTOR_STRIDE).every((x) => x === 0)).toBe(true);
   });
 
-  it('collapses a slot to zero scale and radius', () => {
+  it('collapses a slot to zero scale with a finite, unit view direction', () => {
     const data = new ImpostorInstanceData(2);
     data.write(1, values);
     data.collapse(1);
-    expect(data.array.every((x) => x === 0)).toBe(true);
+    const slot = data.array.subarray(IMPOSTOR_STRIDE, 2 * IMPOSTOR_STRIDE);
+    expect(slot[ImpostorSlot.Swim]).toBe(0);
+    expect(Array.from(slot.subarray(ImpostorSlot.View, ImpostorSlot.View + 4))).toEqual([
+      1, 0, 0, 0,
+    ]);
+    expect(Math.hypot(...slot.subarray(ImpostorSlot.View, ImpostorSlot.View + 3))).toBe(1);
+    const rest = Array.from(slot).filter((_, k) => k !== ImpostorSlot.View);
+    expect(rest.every((x) => x === 0)).toBe(true);
+    expect(data.array.subarray(0, IMPOSTOR_STRIDE).every((x) => x === 0)).toBe(true);
   });
 
   it('marks the buffer for upload on commit', () => {

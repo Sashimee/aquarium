@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  drawsAsImpostor,
   effectiveDistance,
+  IMPOSTOR_LOD,
   markNearest,
   MOUTH_LODS,
   mouthFade,
@@ -52,7 +54,7 @@ describe('selectLod', () => {
 
 describe('markNearest', () => {
   const ranks = (...distances: number[]): MeshRank[] =>
-    distances.map((distance) => ({ distance, full: false }));
+    distances.map((distance) => ({ distance, full: false, rankKey: 0 }));
   const fullDistances = (items: MeshRank[]): number[] =>
     items.filter((i) => i.full).map((i) => i.distance);
 
@@ -71,8 +73,8 @@ describe('markNearest', () => {
   });
 
   it('lets a mesh keep its place until a newcomer is clearly nearer', () => {
-    const held = { distance: 1, full: true };
-    const rival = { distance: 0.95, full: false };
+    const held = { distance: 1, full: true, rankKey: 0 };
+    const rival = { distance: 0.95, full: false, rankKey: 0 };
     markNearest([held, rival], 1);
     expect(held.full).toBe(true);
     expect(rival.full).toBe(false);
@@ -91,6 +93,48 @@ describe('markNearest', () => {
 
   it('rejects a negative limit', () => {
     expect(() => markNearest(ranks(1), -1)).toThrow(RangeError);
+  });
+});
+
+describe('drawsAsImpostor', () => {
+  const swimmerOnImpostorTier = {
+    tierImpostors: true,
+    available: true,
+    lod: 0,
+    full: true,
+    castsShadow: false,
+  };
+  const choose = (overrides: Partial<typeof swimmerOnImpostorTier>): boolean =>
+    drawsAsImpostor({ ...swimmerOnImpostorTier, ...overrides });
+
+  it('swaps a fish past the impostor level, shadow or not', () => {
+    expect(choose({ lod: IMPOSTOR_LOD })).toBe(true);
+    expect(choose({ lod: IMPOSTOR_LOD, castsShadow: true })).toBe(true);
+  });
+
+  it('swaps a near fish outside the nearest few at lod0 and lod1', () => {
+    expect(choose({ lod: 0, full: false })).toBe(true);
+    expect(choose({ lod: 1, full: false })).toBe(true);
+  });
+
+  it('keeps one of the nearest few as a mesh', () => {
+    expect(choose({ lod: 0 })).toBe(false);
+    expect(choose({ lod: 1 })).toBe(false);
+  });
+
+  it('keeps a near shadow caster as a mesh, so its shadow does not pop', () => {
+    expect(choose({ lod: 0, full: false, castsShadow: true })).toBe(false);
+    expect(choose({ lod: 1, full: false, castsShadow: true })).toBe(false);
+  });
+
+  it('draws the mesh when the species has no impostor', () => {
+    expect(choose({ available: false, lod: IMPOSTOR_LOD })).toBe(false);
+    expect(choose({ available: false, lod: 0, full: false })).toBe(false);
+  });
+
+  it('never swaps on a tier without impostors', () => {
+    expect(choose({ tierImpostors: false, lod: IMPOSTOR_LOD })).toBe(false);
+    expect(choose({ tierImpostors: false, lod: 0, full: false })).toBe(false);
   });
 });
 
