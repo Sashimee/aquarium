@@ -820,7 +820,7 @@ export class Behaviour {
         this.beginStartle(i, at(this.scheduledYaw, i), at(this.scheduledPitch, i));
       }
     }
-    this.brood.update();
+    this.brood.update(this.rest);
     this.prepareFeeding();
     this.feeding.update();
     this.prepareCuriosity();
@@ -950,8 +950,8 @@ export class Behaviour {
   }
 
   /**
-   * Hard decor moved: any station, group station or swimmer rest spot the decor now covers is
-   * chosen again on the next plan. Walker nooks are rechecked every step by `nookHolds`.
+   * Hard decor moved: any station, group station, swimmer rest spot or hiding spot the decor now
+   * covers is chosen again soon. Walker nooks are rechecked every step by `nookHolds`.
    */
   decorMoved(): void {
     const { count, species } = this.host;
@@ -970,6 +970,7 @@ export class Behaviour {
         this.restSpotSet[i] = 0;
       }
     }
+    this.brood.decorMoved();
   }
 
   private covered(i: number, spots: Float64Array, o: number): boolean {
@@ -1190,7 +1191,7 @@ export class Behaviour {
       return;
     }
     if (this.planShelter(i, sp, plan)) return;
-    if (rest <= 0.5 && this.brood.planTend(i, plan)) return;
+    if (this.brood.planTend(i, plan)) return;
     if (this.brood.hides(i)) {
       this.planHide(i, plan);
       return;

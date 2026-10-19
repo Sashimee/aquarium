@@ -10,9 +10,12 @@ import { FishState } from './snapshot.ts';
 export const BROOD = {
   maxClutches: 16,
 
-  /** Long-run share of time at the clutch: anemonefish fathers and mothers. */
+  /** Long-run share of time at the clutch by day: anemonefish fathers and mothers. */
   nestShareMale: 0.55,
   nestShareFemale: 0.25,
+  /** The same once resting for the night, when both parents tend more. */
+  nestShareMaleNight: 0.7,
+  nestShareFemaleNight: 0.4,
   /** Biparental tenders without a known division of labour share it equally. */
   nestShareEqual: 0.5,
   nestBoutMeanS: 60,
@@ -43,7 +46,7 @@ export const BROOD = {
   /** Rock is taken over sand or glass within this many body lengths farther from home. */
   nestRockPreferenceBodyLengths: 6,
 
-  /** Fast-start and cruising performance lost at full term. */
+  /** Cruising speed lost at full term; the fast start is left alone. */
   gravidSpeedLoss: 0.3,
   /** From this far into pregnancy a female keeps to cover and away from the shoal. */
   gravidCoverTerm: 0.85,
@@ -81,7 +84,10 @@ export function sexCode(sex: FishSex | undefined): number {
   return sex === 'male' ? SexCode.Male : sex === 'female' ? SexCode.Female : SexCode.Unknown;
 }
 
-/** Eggs laid on a surface: `position` lies on rock, sand or glass, as `World.nestSite` gives. */
+/**
+ * Eggs laid on a surface: `position` lies within `BROOD.nestSurfaceM` of rock, sand or glass, as
+ * `World.nestSite` gives. Resend the clutch when the decor under it moves.
+ */
 export interface SimClutch {
   readonly id: string;
   /** The fish that guard and fan the eggs; usually the spawning pair. */
@@ -101,6 +107,7 @@ export interface SimBrood {
 }
 
 export const NestPhase = { None: 0, Away: 1, Fan: 2, Mouth: 3 } as const;
+const NestRole = { Equal: 0, Father: 1, Mother: 2 } as const;
 
 interface Clutch {
   readonly id: string;
@@ -132,7 +139,7 @@ export class Brood {
   private _nestPhase: Uint8Array;
   private nestTimer: Float64Array;
   private boutTimer: Float64Array;
-  private nestShare: Float64Array;
+  private nestRole: Uint8Array;
   private _gravid: Float64Array;
   private _cover: Float64Array;
   private coverTimer: Float64Array;
@@ -179,7 +186,7 @@ export class Brood {
     this._nestPhase = new Uint8Array(n);
     this.nestTimer = new Float64Array(n);
     this.boutTimer = new Float64Array(n);
-    this.nestShare = new Float64Array(n);
+    this.nestRole = new Uint8Array(n);
     this._gravid = new Float64Array(n);
     this._cover = new Float64Array(n * 3);
     this.coverTimer = new Float64Array(n);
@@ -192,7 +199,7 @@ export class Brood {
     this._nestPhase = edit.array(this.nestPhase);
     this.nestTimer = edit.array(this.nestTimer);
     this.boutTimer = edit.array(this.boutTimer);
-    this.nestShare = edit.array(this.nestShare);
+    this.nestRole = edit.array(this.nestRole);
     this._gravid = edit.array(this.gravid);
     this._cover = edit.array(this.cover, 3);
     this.coverTimer = edit.array(this.coverTimer);
@@ -205,8 +212,8 @@ export class Brood {
   /**
    * Replaces the clutches and pregnancies. A parent whose clutch keeps its id carries on its bout;
    * one given a new clutch starts afresh. Throws, changing nothing, on malformed input: an unknown
-   * or repeated fish, a parent of two clutches, a fry or juvenile as parent or mother, a walker,
-   * or a clutch outside the tank.
+   * or repeated fish, a parent of two clutches, a fry or juvenile as parent or mother, a male
+   * mother, a walker, or a clutch outside the tank or off any surface.
    */
   setBrood(brood: SimBrood): void {
     const { clutches, parents, owner, terms } = this.parse(brood);
@@ -225,7 +232,7 @@ export class Brood {
       }
       this.gravid[i] = term;
     }
-    this.nestShare.fill(0);
+    this.nestRole.fill(NestRole.Equal);
     clutches.forEach((_, k) => this.divideCare(k, parents[k] ?? [], owner));
     this.clutches = clutches;
     this.parents = parents;
@@ -287,6 +294,9 @@ export class Brood {
       const ids: string[] = [];
       for (const p of c.parents as readonly unknown[]) {
         const i = this.adult(p, `clutch "${id}" parent`);
+        if (at(owner, i) === k) {
+          throw new RangeError(`brood: fish "${String(p)}" is listed twice in clutch "${id}"`);
+        }
         if (at(owner, i) >= 0) {
           throw new RangeError(`brood: fish "${String(p)}" is a parent of two clutches`);
         }
@@ -294,7 +304,12 @@ export class Brood {
         ids.push(String(p));
       }
       const normal = this.n3;
-      this.host.substrateSdf.sample(x, y, z, normal);
+      const gap = this.host.substrateSdf.sample(x, y, z, normal);
+      if (Math.abs(gap) > BROOD.nestSurfaceM) {
+        throw new RangeError(
+          `brood: clutch "${id}" lies ${gap.toFixed(4)} m off the nearest surface; place it with nestSite`,
+        );
+      }
       clutches.push({ id, x, y, z, nx: at(normal, 0), ny: at(normal, 1), nz: at(normal, 2) });
       parents.push(ids);
     });
@@ -302,6 +317,9 @@ export class Brood {
     inGravid.forEach((g: SimGravid, k) => {
       const i = this.adult(g?.fishId, `gravid ${k}`);
       if (mothers.has(i)) throw new RangeError(`brood: fish "${String(g.fishId)}" is gravid twice`);
+      if (at(this.host.sex, i) === SexCode.Male) {
+        throw new RangeError(`brood: gravid fish "${String(g.fishId)}" is male`);
+      }
       mothers.add(i);
       const term: unknown = g.term;
       if (typeof term !== 'number' || !(term >= 0 && term <= 1)) {
@@ -348,8 +366,8 @@ export class Brood {
   }
 
   /**
-   * Anemonefish fathers do most of the tending; without sexes the pair's larger fish is the
-   * female, as anemonefish change sex from male to female as they grow.
+   * Anemonefish fathers do most of the tending, and both parents more by night; without sexes the
+   * pair's larger fish is the female, as anemonefish change sex from male to female as they grow.
    */
   private divideCare(k: number, ids: readonly string[], owner: Int32Array): void {
     const { fishIds, sex, bodyLength, speciesIndex, species } = this.host;
@@ -363,18 +381,46 @@ export class Brood {
     }
     for (const i of members) {
       const s = at(sex, i);
-      let share: number = BROOD.nestShareEqual;
-      if (anemone && (s === SexCode.Female || i === female)) share = BROOD.nestShareFemale;
-      else if (anemone && (s === SexCode.Male || female >= 0)) share = BROOD.nestShareMale;
-      this.nestShare[i] = share;
+      let role: number = NestRole.Equal;
+      if (anemone && (s === SexCode.Female || i === female)) role = NestRole.Mother;
+      else if (anemone && (s === SexCode.Male || female >= 0)) role = NestRole.Father;
+      this.nestRole[i] = role;
+    }
+  }
+
+  /** Share of time at the eggs for fish `i`, from day to night as `rest` goes from 0 to 1. */
+  nestShare(i: number, rest: number): number {
+    const role = at(this.nestRole, i);
+    if (role === NestRole.Father) {
+      return BROOD.nestShareMale + (BROOD.nestShareMaleNight - BROOD.nestShareMale) * rest;
+    }
+    if (role === NestRole.Mother) {
+      return BROOD.nestShareFemale + (BROOD.nestShareFemaleNight - BROOD.nestShareFemale) * rest;
+    }
+    return BROOD.nestShareEqual;
+  }
+
+  /** Hard decor moved: a hiding spot it now covers is chosen again on the next update. */
+  decorMoved(): void {
+    const { sceneSdf, radius } = this.host;
+    for (let i = 0; i < this.host.count; i++) {
+      if (!this.hides(i)) continue;
+      const o = i * 3;
+      const d = sceneSdf.sample(
+        at(this.cover, o),
+        at(this.cover, o + 1),
+        at(this.cover, o + 2),
+        this.n3,
+      );
+      if (d < at(radius, i)) this.coverTimer[i] = 0;
     }
   }
 
   /** Advances nest bouts and the young's and near-term mothers' hiding spots. */
-  update(): void {
+  update(rest: ArrayLike<number>): void {
     const { rng } = this.host;
     for (let i = 0; i < this.host.count; i++) {
-      if (at(this.clutchOf, i) >= 0) this.advanceNest(i);
+      if (at(this.clutchOf, i) >= 0) this.advanceNest(i, at(rest, i));
       if (this.hides(i)) {
         const left = at(this.coverTimer, i) - DT;
         if (left <= 0) {
@@ -387,9 +433,9 @@ export class Brood {
     }
   }
 
-  private advanceNest(i: number): void {
+  private advanceNest(i: number, rest: number): void {
     const { rng } = this.host;
-    const share = at(this.nestShare, i);
+    const share = this.nestShare(i, rest);
     const jitter = (): number => 1 + BROOD.boutJitter * rng.signed();
     const nestBout = (): number => BROOD.nestBoutMeanS * jitter();
     const awayBout = (): number => ((BROOD.nestBoutMeanS * (1 - share)) / share) * jitter();

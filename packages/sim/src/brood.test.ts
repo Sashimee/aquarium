@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { Collider } from '@aquarium/shared';
 import { BROOD, NestPhase, StageCode, type SimBrood } from './brood.ts';
 import type { Point3 } from './decor.ts';
 import {
@@ -27,13 +28,6 @@ const n3 = new Float64Array(3);
 function at(a: ArrayLike<number>, i: number): number {
   const v = a[i];
   if (v === undefined) throw new RangeError(`index ${i} out of range`);
-  return v;
-}
-
-/** The world keeps each fish's schooling group private; the young's grouping is tested here. */
-function schoolGroup(w: World): Int32Array {
-  const v: unknown = Reflect.get(w, 'schoolGroup');
-  if (!(v instanceof Int32Array)) throw new Error('world has no schoolGroup array');
   return v;
 }
 
@@ -100,7 +94,7 @@ function tendedClutch(seed = 3, sexed = true): { w: World; site: Point3 } {
   return { w, site };
 }
 
-/** Share of `steps` each fish spends within one body length of the eggs (Barbasch et al. 2020). */
+/** Share of `steps` each fish spends with its snout within one body length of the eggs. */
 function nestShares(w: World, site: Point3, steps: number): number[] {
   const near = new Array<number>(w.count).fill(0);
   for (let t = 0; t < steps; t++) {
@@ -174,6 +168,39 @@ describe('clownfish egg tending', { timeout: LONG }, () => {
     expect(tend).toBeGreaterThan(0);
     expect(phases).toEqual(new Set([NestPhase.Away, NestPhase.Fan, NestPhase.Mouth]));
     expect(maxFan).toBeGreaterThan(0.9);
+    expect(worst).toBeGreaterThanOrEqual(-1e-9);
+  });
+
+  it('keeps tending through the night, both parents more than by day', () => {
+    const { w, site } = tendedClutch();
+    w.setLight(0);
+    for (let t = 0; t < seconds(180); t++) w.step();
+    expect(at(w.behaviour.rest, 0)).toBeGreaterThan(0.99);
+    const { brood } = w.behaviour;
+    expect(brood.nestShare(0, 1)).toBeGreaterThan(brood.nestShare(0, 0));
+    expect(brood.nestShare(1, 1)).toBeGreaterThan(brood.nestShare(1, 0));
+    let tend = 0;
+    let worst = Infinity;
+    const steps = seconds(1200);
+    const near = [0, 0];
+    for (let t = 0; t < steps; t++) {
+      w.step();
+      for (let i = 0; i < 2; i++) {
+        if (distance(w, i, site) < (1 + FEEDING_MOUTH) * CLOWN_LENGTH) {
+          near[i] = (near[i] ?? 0) + 1;
+        }
+        if (at(w.state, i) === FishState.Tend) tend++;
+      }
+      worst = Math.min(worst, worstClearance(w));
+    }
+    const [male, female] = near.map((v) => v / steps) as [number, number];
+    // Green & McCormick 2005: fathers tend most late at night; Pacaro et al. 2023: mothers
+    // tend far more at night than by day, fathers still the most.
+    expect(male).toBeGreaterThan(0.55);
+    expect(male).toBeLessThan(0.9);
+    expect(female).toBeGreaterThan(0.2);
+    expect(male).toBeGreaterThan(female);
+    expect(tend).toBeGreaterThan(0);
     expect(worst).toBeGreaterThanOrEqual(-1e-9);
   });
 
@@ -259,10 +286,13 @@ describe('clownfish egg tending', { timeout: LONG }, () => {
       { id: 'f', species: clownfish.id },
       { id: 'fry', species: clownfish.id, stage: 'fry', bodyLengthM: FRY_LENGTH },
       { id: 'shrimp', species: cherryShrimp.id },
+      { id: 'boy', species: clownfish.id, sex: 'male' },
     ]);
     const site = w.nestSite(['m', 'f']);
     if (site === null) throw new Error('no nest site');
     const clutch = { id: 'c', parents: ['m', 'f'], position: site };
+    const midWater: Point3 = [0, 0.3, 0];
+    expect(w.substrateSdf.sample(...midWater, n3)).toBeGreaterThan(0.05);
     w.setBrood({ clutches: [clutch], gravid: [] });
     const before = w.brood();
     const bad: [SimBrood, RegExp][] = [
@@ -271,6 +301,9 @@ describe('clownfish egg tending', { timeout: LONG }, () => {
       [{ clutches: [{ ...clutch, parents: ['fry'] }], gravid: [] }, /not an adult/],
       [{ clutches: [{ ...clutch, parents: ['shrimp'] }], gravid: [] }, /walker/],
       [{ clutches: [clutch, { ...clutch, id: 'd' }], gravid: [] }, /parent of two clutches/],
+      [{ clutches: [{ ...clutch, parents: ['m', 'f', 'm'] }], gravid: [] }, /"m" is listed twice/],
+      [{ clutches: [{ ...clutch, position: midWater }], gravid: [] }, /off the nearest surface/],
+      [{ clutches: [], gravid: [{ fishId: 'boy', term: 0.5 }] }, /is male/],
       [{ clutches: [clutch, clutch], gravid: [] }, /repeats/],
       [{ clutches: [{ ...clutch, position: [5, 0.1, 0] }], gravid: [] }, /outside the tank/],
       [{ clutches: [{ ...clutch, position: [0, Number.NaN, 0] }], gravid: [] }, /finite/],
@@ -385,13 +418,10 @@ describe('livebearer pregnancy and the drop', { timeout: LONG }, () => {
     const ids = dropFry(w, 6);
     const fry = ids.map((id) => w.fishIds.indexOf(id));
     const angel = w.fishIds.indexOf('angel');
-    const adultGroup = at(schoolGroup(w), w.fishIds.indexOf('male-0'));
     for (const i of fry) {
       expect(at(w.behaviour.brood.gravid, i)).toBe(0);
       expect(at(w.stage, i)).toBe(StageCode.Fry);
       expect(w.behaviour.brood.hides(i)).toBe(true);
-      expect(at(schoolGroup(w), i)).not.toBe(adultGroup);
-      expect(at(schoolGroup(w), i)).toBe(at(schoolGroup(w), at(fry, 0)));
     }
     expect(w.behaviour.brood.hides(w.fishIds.indexOf('mother'))).toBe(false);
     let byPlants = 0;
@@ -447,21 +477,50 @@ describe('livebearer pregnancy and the drop', { timeout: LONG }, () => {
     expect(worst).toBeGreaterThanOrEqual(-1e-9);
   });
 
-  it('growing up ends the hiding and brings the young into the adult school', () => {
+  it('a fry whose hiding spot the decor moves over picks a new one', () => {
     const w = guppyTank();
     const [id] = dropFry(w, 1);
     if (id === undefined) throw new Error('no fry dropped');
     const i = w.fishIds.indexOf(id);
-    const adultGroup = at(schoolGroup(w), w.fishIds.indexOf('male-0'));
     for (let t = 0; t < seconds(5); t++) w.step();
-    w.setStage(id, 'juvenile');
-    expect(w.behaviour.brood.hides(i)).toBe(false);
-    expect(w.behaviour.brood.young(i)).toBe(true);
-    expect(at(schoolGroup(w), i)).not.toBe(adultGroup);
-    w.setStage(id, 'adult');
-    expect(w.behaviour.brood.young(i)).toBe(false);
-    expect(at(schoolGroup(w), i)).toBe(adultGroup);
-    expect(() => w.setStage(id, 'egg' as never)).toThrow(/fry, juvenile or adult/);
+    const { cover } = w.behaviour.brood;
+    const spot: Point3 = [at(cover, i * 3), at(cover, i * 3 + 1), at(cover, i * 3 + 2)];
+    const rock: Collider = {
+      id: 'new-rock',
+      hard: true,
+      kind: 'sphere',
+      center: [...spot],
+      radius: 0.02,
+    };
+    w.setDecor([...SHOW_DECOR, rock]);
+    expect(w.sceneSdf.sample(...spot, n3)).toBeLessThan(0);
+    w.step();
+    const moved: Point3 = [at(cover, i * 3), at(cover, i * 3 + 1), at(cover, i * 3 + 2)];
+    expect(moved).not.toEqual(spot);
+    expect(w.sceneSdf.sample(...moved, n3)).toBeGreaterThanOrEqual(at(w.radius, i));
+  });
+
+  it('growing up ends the hiding and brings the young into the adult school', () => {
+    const schooling = (stage: 'juvenile' | 'adult', mates: number): number => {
+      const w = guppyTank(8);
+      const ids = dropFry(w, 1 + mates);
+      for (const id of ids) w.setStage(id, stage);
+      const i = w.fishIds.indexOf(ids[0] ?? '');
+      expect(w.behaviour.brood.hides(i)).toBe(false);
+      expect(w.behaviour.brood.young(i)).toBe(stage === 'juvenile');
+      let schooled = 0;
+      for (let t = 0; t < seconds(60); t++) {
+        w.step();
+        if (at(w.state, i) === FishState.School) schooled++;
+      }
+      return schooled;
+    };
+    expect(schooling('juvenile', 0)).toBe(0);
+    expect(schooling('juvenile', 2)).toBeGreaterThan(0);
+    expect(schooling('adult', 0)).toBeGreaterThan(0);
+    const w = guppyTank();
+    const [id] = dropFry(w, 1);
+    expect(() => w.setStage(id ?? '', 'egg' as never)).toThrow(/fry, juvenile or adult/);
   });
 
   it('is deterministic through pregnancy and the drop', () => {
