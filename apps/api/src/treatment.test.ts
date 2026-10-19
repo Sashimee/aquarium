@@ -12,7 +12,7 @@ import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { schema } from './db/index.ts';
 import { loadEconomy } from './economy.ts';
-import { APP_ORIGIN, createHarness, type Harness } from './test-harness.ts';
+import { APP_ORIGIN, createHarness, topUp, type Harness } from './test-harness.ts';
 
 const PASSWORD = 'correct horse battery';
 const jsonHeaders = { 'content-type': 'application/json', origin: APP_ORIGIN };
@@ -69,8 +69,13 @@ const call = (
 
 const errorCode = (res: LightMyRequestResponse) => apiErrorSchema.parse(res.json()).error.code;
 
-async function sickTank(h: Harness, kind: 'ich' | 'fin-rot' | 'velvet' = 'ich', severity = 0.3) {
-  const who = await account(h);
+async function sickTank(
+  h: Harness,
+  kind: 'ich' | 'fin-rot' | 'velvet' = 'ich',
+  severity = 0.3,
+  owner?: Account,
+) {
+  const who = owner ?? (await account(h));
   const created = await call(h, who, 'POST', '/api/tanks', { name: 'Home', biome: 'freshwater' });
   expect(created.statusCode).toBe(201);
   const tank = tankSchema.parse(created.json());
@@ -215,6 +220,21 @@ describe('treatment', () => {
   });
 
   describe('overdose', () => {
+    it('does not call a dose after a water change an overdose', async () => {
+      const { who, tankId } = await sickTank(h, 'ich', 0.9);
+      await treat(h, who, tankId, { kind: 'ich' });
+      h.clock.advance(12 * HOUR_MS);
+      const care = await call(h, who, 'POST', `/api/tanks/${tankId}/care`, {
+        type: 'water_change',
+      });
+      expect(care.statusCode).toBe(200);
+      const again = treatResponseSchema.parse(
+        (await treat(h, who, tankId, { kind: 'ich' })).json(),
+      );
+      expect(again.overdose).toBe(false);
+      expect(again.tank.medicine?.doses).toBe(1);
+    });
+
     it('flags a second dose, poisons the fish and stops at the limit', async () => {
       const { who, tankId, fishId } = await sickTank(h, 'ich', 0.2);
       const first = treatResponseSchema.parse(
@@ -283,7 +303,7 @@ describe('treatment', () => {
       const body = treatResponseSchema.parse(res.json());
       expect(body.wallet?.balance).toBe(before - price);
       expect(body.entry).toMatchObject({ delta: -price, reason: 'purchase' });
-      expect(body.entry?.itemRef).toBe('consumable:premium-medicine:ich');
+      expect(body.entry?.itemRef).toBe(`consumable:premium-medicine:ich:${tankId}`);
       const until = Date.parse(body.tank.medicine?.until ?? '');
       expect(until - h.clock.now()).toBeCloseTo(courseHours('ich', 'premium') * HOUR_MS, -4);
       expect(await balance(h, who)).toBe(before - price);
@@ -331,6 +351,84 @@ describe('treatment', () => {
       const res = await treat(h, who, tankId, { kind: 'ich', potency: 'premium' });
       expect(res.statusCode).toBe(409);
       expect(await balance(h, who)).toBe(before);
+    });
+  });
+
+  describe('idempotency', () => {
+    it('replays a standard dose retried with the same key instead of overdosing', async () => {
+      const { who, tankId } = await sickTank(h);
+      const body = { kind: 'ich', idempotencyKey: randomUUID() };
+      const first = treatResponseSchema.parse((await treat(h, who, tankId, body)).json());
+      const retry = await treat(h, who, tankId, body);
+      expect(retry.statusCode).toBe(200);
+      const replayed = treatResponseSchema.parse(retry.json());
+      expect(replayed.overdose).toBe(false);
+      expect(replayed.tank.medicine).toEqual(first.tank.medicine);
+      expect(replayed.tank.medicine?.doses).toBe(1);
+    });
+
+    it('lets two parallel standard calls with one key dose once', async () => {
+      const { who, tankId } = await sickTank(h);
+      const body = { kind: 'ich', idempotencyKey: randomUUID() };
+      const [a, b] = await Promise.all([treat(h, who, tankId, body), treat(h, who, tankId, body)]);
+      expect([a.statusCode, b.statusCode]).toEqual([200, 200]);
+      const tank = await getTank(h, who, tankId);
+      expect(tank.medicine?.doses).toBe(1);
+      expect(treatResponseSchema.parse(a.json()).overdose).toBe(false);
+      expect(treatResponseSchema.parse(b.json()).overdose).toBe(false);
+    });
+
+    it('charges once for two parallel premium calls with one key', async () => {
+      const { who, tankId } = await sickTank(h);
+      const before = await balance(h, who);
+      const body = { kind: 'ich', potency: 'premium', idempotencyKey: randomUUID() };
+      const [a, b] = await Promise.all([treat(h, who, tankId, body), treat(h, who, tankId, body)]);
+      expect([a.statusCode, b.statusCode]).toEqual([200, 200]);
+      expect((await getTank(h, who, tankId)).medicine?.doses).toBe(1);
+      expect(await balance(h, who)).toBe(
+        before - (economy.items.consumables.premiumMedicine.prices['ich'] ?? 0),
+      );
+    });
+
+    it('still doses twice when the keys differ', async () => {
+      const { who, tankId } = await sickTank(h);
+      await treat(h, who, tankId, { kind: 'ich', idempotencyKey: randomUUID() });
+      const second = treatResponseSchema.parse(
+        (await treat(h, who, tankId, { kind: 'ich', idempotencyKey: randomUUID() })).json(),
+      );
+      expect(second.overdose).toBe(true);
+    });
+
+    it('replays the original overdose flag on a premium retry', async () => {
+      const { who, tankId } = await sickTank(h);
+      await treat(h, who, tankId, { kind: 'ich' });
+      const body = { kind: 'ich', potency: 'premium', idempotencyKey: randomUUID() };
+      const first = treatResponseSchema.parse((await treat(h, who, tankId, body)).json());
+      expect(first.overdose).toBe(true);
+      const retry = treatResponseSchema.parse((await treat(h, who, tankId, body)).json());
+      expect(retry.overdose).toBe(true);
+    });
+
+    it('refuses a key reused for another potency', async () => {
+      const { who, tankId } = await sickTank(h);
+      const idempotencyKey = randomUUID();
+      await treat(h, who, tankId, { kind: 'ich', idempotencyKey });
+      const res = await treat(h, who, tankId, { kind: 'ich', potency: 'premium', idempotencyKey });
+      expect(res.statusCode).toBe(409);
+    });
+
+    it('refuses a premium key reused on another tank, without charging', async () => {
+      const first = await sickTank(h);
+      await topUp(h);
+      const second = await sickTank(h, 'ich', 0.3, first.who);
+      const idempotencyKey = randomUUID();
+      const body = { kind: 'ich', potency: 'premium', idempotencyKey };
+      expect((await treat(h, first.who, first.tankId, body)).statusCode).toBe(200);
+      const before = await balance(h, first.who);
+      const res = await treat(h, first.who, second.tankId, body);
+      expect(res.statusCode).toBe(409);
+      expect(await balance(h, first.who)).toBe(before);
+      expect((await getTank(h, first.who, second.tankId)).medicine).toBeNull();
     });
   });
 

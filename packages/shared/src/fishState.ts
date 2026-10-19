@@ -34,9 +34,11 @@ export const medicineSchema = z.strictObject({
   potency: medicinePotencySchema,
   doses: z
     .int()
-    .min(1)
+    .min(0)
     .max(MAX_MEDICINE_DOSES)
-    .describe('doses in the water; more than one is an overdose and poisons every fish'),
+    .describe(
+      'doses in the water; more than one is an overdose and poisons every fish, 0 is the residue a water change leaves of a single dose',
+    ),
   until: timestampSchema.describe('when the course ends and the medicine is gone'),
 });
 export type Medicine = z.infer<typeof medicineSchema>;

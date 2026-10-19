@@ -113,9 +113,15 @@ const tank = (
   ...over,
 });
 
-function run(state: LifecycleState, ms: number, from = 0, grace = T0 - 1) {
+function run(
+  state: LifecycleState,
+  ms: number,
+  from = 0,
+  grace = T0 - 1,
+  environment: TankEnvironment = env,
+) {
   return catchUp({
-    ...env,
+    ...environment,
     state,
     fromMs: T0 + from,
     toMs: T0 + from + ms,
@@ -441,6 +447,8 @@ describe('treatment', () => {
     if (!changed.ok) throw new Error(changed.reason);
     const redosed = addDose(changed.value.medicine, 'ich', 'standard', T0 + 2 * DAY);
     if (typeof redosed === 'string') throw new Error(redosed);
+    expect(redosed.overdose).toBe(false);
+    expect(redosed.medicine.doses).toBe(1);
     const after = run({ ...changed.value, medicine: redosed.medicine }, 5 * DAY, 2 * DAY);
     expect(after.state.fish[0]?.disease).toBeNull();
   });
@@ -450,7 +458,7 @@ describe('medicine in the water', () => {
   it('dilutes with a water change: half the time left and one dose fewer', () => {
     const m = medicine({ doses: 3, untilMs: T0 + 10 * HOUR });
     expect(diluteMedicine(m, T0 + 2 * HOUR)).toEqual({ ...m, doses: 2, untilMs: T0 + 6 * HOUR });
-    expect(diluteMedicine(medicine({ doses: 1, untilMs: T0 + 10 * HOUR }), T0)?.doses).toBe(1);
+    expect(diluteMedicine(medicine({ doses: 1, untilMs: T0 + 10 * HOUR }), T0)?.doses).toBe(0);
     expect(diluteMedicine(m, T0 + 11 * HOUR)).toBeNull();
     expect(diluteMedicine(null, T0)).toBeNull();
   });
@@ -553,5 +561,38 @@ describe('catch-up', () => {
     const r = run(tank(school(12), {}, { ammonia: 0.9 }), 6 * DAY);
     const sick = r.timeline.filter((e) => e.kind === 'sick');
     expect(new Set(sick.map((e) => (e.kind === 'sick' ? e.fishId : ''))).size).toBe(sick.length);
+  });
+});
+
+describe('medicine residue and heat', () => {
+  it('lets a dose on top of a diluted single dose stack to one dose, never an overdose', () => {
+    const residue = diluteMedicine(medicine({ doses: 1, untilMs: T0 + 10 * HOUR }), T0);
+    const topped = addDose(residue, 'ich', 'standard', T0 + HOUR);
+    if (typeof topped === 'string') throw new Error(topped);
+    expect(topped).toMatchObject({ overdose: false, medicine: { doses: 1 } });
+  });
+
+  it('still flags a dose on top of two diluted doses', () => {
+    const thinned = diluteMedicine(medicine({ doses: 3, untilMs: T0 + 10 * HOUR }), T0);
+    const topped = addDose(thinned, 'ich', 'standard', T0 + HOUR);
+    if (typeof topped === 'string') throw new Error(topped);
+    expect(topped.overdose).toBe(true);
+  });
+
+  it('cures ich in warm water the fish tolerates, slowly and without medicine', () => {
+    const warm = { ...newTankChemistry('freshwater'), temperatureC: 31 };
+    const heatProof = new Map(speciesChemistry);
+    const chem = speciesChemistry.get('neon-tetra');
+    if (!chem) throw new Error('no chemistry');
+    heatProof.set('neon-tetra', { ...chem, temperatureC: [29, 34] });
+    const state = tank([fishOf('a', { disease: sickWith('ich', 0.5) })], { chemistry: warm });
+    const result = run(state, 12 * DAY, 0, T0 - 1, { ...env, speciesChemistry: heatProof });
+    expect(result.state.fish[0]?.disease).toBeNull();
+  });
+
+  it('heals fin rot through small water wobble below the deadbands', () => {
+    const state = tank([fishOf('a', { disease: sickWith('fin-rot', 0.5) })], {}, { ammonia: 0.01 });
+    const left = run(state, 10 * DAY).state.fish[0]?.disease?.severity ?? 0;
+    expect(left).toBeLessThan(0.5);
   });
 });

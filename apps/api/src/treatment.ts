@@ -1,6 +1,9 @@
 import { idSchema, treatRequestSchema, treatResponseSchema, type Tank } from '@aquarium/shared';
 import { addDose, syncTreatment, type LifecycleState } from '@aquarium/sim/lifecycle';
 import type { ShopContext } from './shop.ts';
+import { eq } from 'drizzle-orm';
+import { schema } from './db/index.ts';
+import { MAX_TREAT_KEYS, storedTreatKeys, type TreatKeys } from './disease.ts';
 import { apiError, HttpError } from './errors.ts';
 import { legacyKey } from './legacyRequests.ts';
 import type { Ticked, Tx } from './tanks.ts';
@@ -24,7 +27,7 @@ export function registerTreatmentRoutes(ctx: TreatmentContext): void {
       const body = treatRequestSchema.parse(req.body);
       throttle(user.id, 'care');
       const premium = body.potency === 'premium';
-      const itemRef = `consumable:premium-medicine:${body.kind}`;
+      const itemRef = `consumable:premium-medicine:${body.kind}:${tankId}`;
       const key = legacyKey(body.idempotencyKey);
 
       return withTank(user, tankId, async (tx, ticked) => {
@@ -37,10 +40,20 @@ export function registerTreatmentRoutes(ctx: TreatmentContext): void {
             entry: charged?.entry ?? null,
           });
 
+        const keys = storedTreatKeys(ticked.tank.treatKeys);
+        const seen = body.idempotencyKey
+          ? keys.find((k) => k.key === body.idempotencyKey)
+          : undefined;
+        if (seen && (seen.kind !== body.kind || seen.potency !== body.potency)) {
+          throw conflict('That idempotency key was used for a different treatment.');
+        }
+
         if (premium) {
           await lockWallet(tx, economy, user.id, nowMs);
           const replay = await findReplay(tx, user.id, key, itemRef);
-          if (replay) return respond(await render(tx, ticked), false, replay);
+          if (replay) return respond(await render(tx, ticked), seen?.overdose ?? false, replay);
+        } else if (seen) {
+          return respond(await render(tx, ticked), seen.overdose, null);
         }
 
         const { state } = ticked;
@@ -64,6 +77,16 @@ export function registerTreatmentRoutes(ctx: TreatmentContext): void {
             throw new Error(`content/economy.json has no premiumMedicine price for ${body.kind}`);
           }
           charged = await spend(tx, user.id, { amount: price, itemRef, key, nowMs });
+        }
+        if (body.idempotencyKey) {
+          const recent: TreatKeys = [
+            ...keys,
+            { key, kind: body.kind, potency: body.potency, overdose: dosed.overdose },
+          ].slice(-MAX_TREAT_KEYS);
+          await tx
+            .update(schema.tanks)
+            .set({ treatKeys: recent })
+            .where(eq(schema.tanks.id, tankId));
         }
         const next: LifecycleState = {
           ...state,

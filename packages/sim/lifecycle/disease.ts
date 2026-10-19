@@ -28,6 +28,9 @@ export const DISEASE_PROFILES: Readonly<Record<DiseaseKind, DiseaseProfile>> = {
   velvet: { progressPerHour: 1 / 72, lossFraction: 0.5, courseHours: 120, selfHealPerHour: 0 },
 };
 
+/** Water at or above this clears ich on its own, slowly, if the fish tolerates the heat. */
+export const ICH_HEAT_C = 30;
+export const ICH_HEAT_CURE_PER_HOUR = 1 / 240;
 export const PREMIUM_COURSE_FACTOR = 0.5;
 /** Medicine clears severity 1 in this share of its course, so a whole course always cures. */
 export const CURE_COURSE_FRACTION = 0.75;
@@ -141,6 +144,8 @@ export interface DiseaseStepInput {
   readonly pressure: OnsetPressure;
   /** Total water stress; in stressed or polluted water the disease progresses faster and fin rot cannot heal. */
   readonly stress: number;
+  /** The water is warm enough for ich to die off and the fish tolerates it (the heat treatment). */
+  readonly heat?: boolean;
 }
 
 export interface DiseaseStep {
@@ -174,11 +179,14 @@ export function stepDisease(fish: LifecycleFish, input: DiseaseStepInput): Disea
   const curePerHour =
     treated > 0 && medicine ? 1 / (CURE_COURSE_FRACTION * courseHours(kind, medicine.potency)) : 0;
   const untreatedHours = dtHours * (1 - treated);
-  const calm = input.stress === 0 && input.pressure.pollution === 0;
+  const calm = input.stress <= STRESS_DEADBAND && input.pressure.pollution <= POLLUTION_DEADBAND;
+  const warmed = kind === 'ich' && input.heat === true;
   const heals = calm && profile.selfHealPerHour > 0;
-  const progress = heals ? 0 : profile.progressPerHour * (1 + input.stress * 0.5) * untreatedHours;
+  const progress =
+    heals || warmed ? 0 : profile.progressPerHour * (1 + input.stress * 0.5) * untreatedHours;
   const heal = heals ? profile.selfHealPerHour * untreatedHours : 0;
-  const next = clamp01(severity + progress - heal - curePerHour * dtHours * treated);
+  const heatCure = warmed ? ICH_HEAT_CURE_PER_HOUR * untreatedHours : 0;
+  const next = clamp01(severity + progress - heal - heatCure - curePerHour * dtHours * treated);
   const lossUnits = severity * profile.lossFraction;
 
   if (next <= 0) return { disease: null, lossUnits, overdoseUnits };
@@ -194,7 +202,11 @@ export function stepDisease(fish: LifecycleFish, input: DiseaseStepInput): Disea
   };
 }
 
-/** What a water change leaves of a course: half the water, so half the time and one dose fewer. */
+/**
+ * What a water change leaves of a course: half the water, so half the time and one dose fewer.
+ * A single dose thins to a residue (0 doses) that still cures but does not stack into an overdose
+ * when the player doses again to finish the course.
+ */
 export function diluteMedicine(
   medicine: ActiveMedicine | null,
   nowMs: number,
@@ -203,7 +215,7 @@ export function diluteMedicine(
   const remaining = (medicine.untilMs - nowMs) * (1 - WATER_CHANGE_FRACTION);
   return {
     ...medicine,
-    doses: Math.max(1, Math.ceil(medicine.doses * (1 - WATER_CHANGE_FRACTION))),
+    doses: Math.max(0, medicine.doses - 1),
     untilMs: nowMs + remaining,
   };
 }

@@ -1,5 +1,5 @@
 {
-  "id": "7f6ad293-af0a-4c23-8a59-2b750cc20c6c",
+  "id": "2c0269b7-3c4c-4401-8b11-9a1ee7e3d4fe",
   "prevId": "000ec48d-c37c-45a3-a2ec-e4776d3e971f",
   "version": "7",
   "dialect": "postgresql",
@@ -1473,6 +1473,13 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false
+        },
+        "treat_keys": {
+          "name": "treat_keys",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
         },
         "decor_layout": {
           "name": "decor_layout",

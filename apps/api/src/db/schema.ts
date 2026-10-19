@@ -156,6 +156,8 @@ export const tanks = pgTable(
     creationKey: text('creation_key'),
     // The medicine in the water: one course at a time (see medicineSchema). null: none.
     medicine: jsonb('medicine'),
+    // Recent treat requests (key, kind, potency, overdose) so a retry replays instead of dosing again.
+    treatKeys: jsonb('treat_keys').notNull().default([]),
     decorLayout: jsonb('decor_layout'),
     // null: the player never chose one, so the biome's default shows.
     backgroundId: text('background_id'),

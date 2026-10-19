@@ -11,7 +11,13 @@ import {
   MAX_TOXICITY_FACTOR,
   VACATION_HUNGER_FACTOR,
 } from './params.ts';
-import { DISEASE_IMMUNE_SPECIES, isNewFish, stepDisease, type KindRates } from './disease.ts';
+import {
+  DISEASE_IMMUNE_SPECIES,
+  ICH_HEAT_C,
+  isNewFish,
+  stepDisease,
+  type KindRates,
+} from './disease.ts';
 import type { ActiveMedicine, LifecycleFish } from './types.ts';
 
 const clamp01 = (v: number): number => Math.min(1, Math.max(0, v));
@@ -111,6 +117,7 @@ export function stepFish(
         grace: input.grace,
         medicine: input.medicine,
         stress,
+        heat: input.chemistry.temperatureC >= ICH_HEAT_C && parts.temperature === 0,
         pressure: {
           temperatureStress: parts.temperature,
           pollution:

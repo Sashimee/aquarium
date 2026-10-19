@@ -1,5 +1,8 @@
+import { z } from 'zod';
 import {
+  diseaseKindSchema,
   diseaseStateSchema,
+  medicinePotencySchema,
   medicineSchema,
   type DiseaseState,
   type Medicine,
@@ -42,3 +45,17 @@ export function wireMedicine(m: ActiveMedicine | null): Medicine | null {
     until: new Date(m.untilMs).toISOString(),
   };
 }
+
+export const MAX_TREAT_KEYS = 8;
+
+const treatKeysSchema = z.array(
+  z.strictObject({
+    key: z.string(),
+    kind: diseaseKindSchema,
+    potency: medicinePotencySchema,
+    overdose: z.boolean(),
+  }),
+);
+export type TreatKeys = z.infer<typeof treatKeysSchema>;
+
+export const storedTreatKeys = (stored: unknown): TreatKeys => treatKeysSchema.parse(stored);
