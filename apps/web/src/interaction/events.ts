@@ -189,7 +189,12 @@ export interface InteractionEvents {
   'decor:colliders': { colliders: readonly Collider[] };
   /** The player settled an edit; the persistence layer saves it. */
   'decor:layout': { tankId: string; layout: DecorLayout };
-  'decor:save-state': { status: SaveStatus; message: string | null; source?: SaveSource };
+  'decor:save-state': {
+    status: SaveStatus;
+    message: string | null;
+    source?: SaveSource;
+    reported?: { source: SaveSource; status: SaveStatus };
+  };
   /** The player tapped the tank glass; `intensity` is 0.5 for a tap and 1 for knocking. */
   'photo:request': PhotoCommand;
   'photo:view': PhotoView;

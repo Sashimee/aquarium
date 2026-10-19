@@ -22,6 +22,7 @@ import {
   DEFAULT_WATER_PARAMETERS,
   GRACE_PERIOD_MS,
   hasCapacityFor,
+  isAnimalCapReached,
   MAX_CATCH_UP_MS,
   REFERENCE_TANK_LITRES,
   STEP_MS,
@@ -633,6 +634,15 @@ describe('feeding validation', () => {
 });
 
 describe('capacity', () => {
+  it('reports the animal cap from living animals only', () => {
+    const dead = { alive: false, maxBioload: 1 };
+    const live = { alive: true, maxBioload: 1 };
+    expect(isAnimalCapReached([live, live, dead], 3)).toBe(false);
+    expect(isAnimalCapReached([live, live, live, dead], 3)).toBe(true);
+    expect(isAnimalCapReached([], 1)).toBe(false);
+    expect(isAnimalCapReached([live], 1)).toBe(true);
+  });
+
   it('limits by bioload and fish count, ignoring the dead', () => {
     const group = [
       { alive: true, maxBioload: 5 },

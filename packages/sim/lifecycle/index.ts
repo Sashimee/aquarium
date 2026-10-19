@@ -15,6 +15,7 @@ export {
   applyCare,
   applyEating,
   hasCapacityFor,
+  isAnimalCapReached,
   type Accepted,
   type CapacityFish,
   type EatReport,

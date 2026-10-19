@@ -10,7 +10,11 @@ import type {
   Water,
 } from '@aquarium/shared';
 import { speciesNameMap, type SpeciesNames } from './speciesNames';
-import { BIOLOAD_CAPACITY_BY_SIZE, hasCapacityFor } from '@aquarium/sim/lifecycle';
+import {
+  BIOLOAD_CAPACITY_BY_SIZE,
+  hasCapacityFor,
+  isAnimalCapReached,
+} from '@aquarium/sim/lifecycle';
 
 export { speciesNameMap, type SpeciesNames } from './speciesNames';
 
@@ -210,9 +214,8 @@ export function canBuy(
   if (hasCapacityFor(existing, candidate.lifecycle.bioload, capacity, maxAnimals)) {
     return { ok: true };
   }
-  const living = existing.filter((f) => f.alive).length;
   const advice = 'Start another tank for more fish.';
-  if (living + 1 > maxAnimals) {
+  if (isAnimalCapReached(existing, maxAnimals)) {
     return {
       ok: false,
       reason: `This tank is full: it holds at most ${maxAnimals} animals. ${advice}`,

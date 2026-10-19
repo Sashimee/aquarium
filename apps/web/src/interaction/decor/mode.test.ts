@@ -164,6 +164,40 @@ describe('DecorMode', () => {
     expect(h.last().problem).toBeNull();
   });
 
+  it('clears the notice when its own save finishes while a background save is running', async () => {
+    const h = harness([], 'freshwater');
+    h.load('t1', [item('driftwood-branch', 0, 0), item('reef-arch', 0.3, 0)]);
+    await settle();
+    h.mode.start();
+    h.bus.emit('decor:save-state', {
+      status: 'saving',
+      message: null,
+      source: 'background',
+      reported: { source: 'background', status: 'saving' },
+    });
+    h.bus.emit('decor:save-state', {
+      status: 'saving',
+      message: null,
+      source: 'background',
+      reported: { source: 'layout', status: 'saved' },
+    });
+    expect(h.last().problem).toBeNull();
+  });
+
+  it('keeps the notice when only a background save finishes', async () => {
+    const h = harness([], 'freshwater');
+    h.load('t1', [item('driftwood-branch', 0, 0), item('reef-arch', 0.3, 0)]);
+    await settle();
+    h.mode.start();
+    h.bus.emit('decor:save-state', {
+      status: 'saved',
+      message: null,
+      source: 'background',
+      reported: { source: 'background', status: 'saved' },
+    });
+    expect(h.last().problem).toMatch(/removed/);
+  });
+
   it('says why a second vacation feeder is refused', () => {
     const h = harness([]);
     h.mode.start();
