@@ -111,6 +111,10 @@ function filesToFetch(
         ? [first, last]
         : [];
   for (const lod of lods) add(lod.file);
+  if (asset.impostor) {
+    add(asset.impostor.albedo.file);
+    add(asset.impostor.normalDepth.file);
+  }
   if (only !== undefined) add(only);
   for (const texture of asset.textures) for (const slot of slots) add(texture.variants[slot].file);
 

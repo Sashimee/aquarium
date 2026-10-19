@@ -23,7 +23,7 @@ Model: sonnet — scoped feature implementation with tests against a defined con
 
 ## Owns
 
-`apps/web/src/interaction/**`, `apps/web/src/ui/**`, `apps/web/src/sync/**`, `e2e/**`.
+`apps/web/src/interaction/**`, `apps/web/src/ui/**`, `apps/web/src/sync/**`, `apps/web/src/pwa/**`, `apps/web/index.html`, `apps/web/public/` outside `assets/`, `apps/web/vite.config.ts`, `e2e/**`.
 
 ## Mandate
 

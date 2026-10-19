@@ -1,15 +1,20 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, posix, relative, sep } from 'node:path';
+import { MeshoptDecoder } from 'meshoptimizer';
 import { speciesLengthM } from './fish.ts';
+import { readKtx2Info } from './textures.ts';
 import { FISH_RECIPES } from './recipes.ts';
 import { shrimpLength } from './shrimp.ts';
 import { budgetProblems, loadBudgetContent, type BudgetInput } from './budgets.ts';
 import {
   FIN_ID_ATTRIBUTE,
   FIN_MASK_ATTRIBUTE,
+  IMPOSTOR_FILES,
+  IMPOSTOR_MAX_BYTES,
   LEG_ATTRIBUTE,
   LOD_COUNT,
+  MOUTH_ATTRIBUTE,
   assetIndexSchema,
   type AssetIndex,
   type OutputAsset,
@@ -26,6 +31,8 @@ import {
   type ManifestAsset,
 } from './manifest.ts';
 
+await MeshoptDecoder.ready;
+
 export const BUDGET_BYTES = 150 * 1000 * 1000;
 
 export interface CheckInput {
@@ -40,6 +47,29 @@ export interface CheckInput {
 export function readGlbJson(buffer: Uint8Array): {
   meshes?: { primitives: { attributes: Record<string, number> }[] }[];
   images?: { uri?: string }[];
+  accessors?: {
+    bufferView?: number;
+    byteOffset?: number;
+    count: number;
+    componentType?: number;
+    normalized?: boolean;
+    type?: string;
+  }[];
+  bufferViews?: {
+    byteStride?: number;
+    byteOffset?: number;
+    byteLength: number;
+    extensions?: {
+      EXT_meshopt_compression?: {
+        byteOffset?: number;
+        byteLength: number;
+        byteStride: number;
+        count: number;
+        mode: string;
+        filter?: string;
+      };
+    };
+  }[];
 } {
   const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
   if (buffer.byteLength < 20 || view.getUint32(0, true) !== 0x46546c67) {
@@ -128,9 +158,88 @@ function safeDecodeUri(uri: string): string {
 const SHIPPED_EXTENSIONS: readonly string[] = ['.glb', '.ktx2'];
 
 function requiredAttributes(kind: OutputAsset['kind']): string[] {
-  if (kind === 'fish') return [FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE];
+  if (kind === 'fish') return ['TEXCOORD_0', FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE, MOUTH_ATTRIBUTE];
   if (kind === 'shrimp') return [FIN_MASK_ATTRIBUTE, FIN_ID_ATTRIBUTE, LEG_ATTRIBUTE];
   return [];
+}
+
+function readGlbBin(buffer: Uint8Array): Uint8Array {
+  const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  const binStart = 20 + view.getUint32(12, true) + 8;
+  if (buffer.byteLength < binStart || view.getUint32(binStart - 4, true) !== 0x004e4942)
+    throw new Error('second GLB chunk is not BIN');
+  return buffer.subarray(binStart, binStart + view.getUint32(binStart - 8, true));
+}
+
+function readFloatAccessor(
+  json: ReturnType<typeof readGlbJson>,
+  bin: Uint8Array,
+  index: number,
+): Float32Array {
+  const accessor = json.accessors?.[index];
+  const view =
+    accessor?.bufferView === undefined ? undefined : json.bufferViews?.[accessor.bufferView];
+  if (!accessor || !view) throw new Error(`accessor ${index} has no buffer view`);
+  if (accessor.componentType !== 5126 || accessor.normalized || accessor.type !== 'SCALAR')
+    throw new Error(
+      `accessor ${index} must be non-normalised float32 SCALAR (got componentType ${accessor.componentType}, normalized ${accessor.normalized ?? false}, type ${accessor.type}); the check reads raw floats`,
+    );
+  if (view.byteStride !== undefined && view.byteStride !== 4)
+    throw new Error(
+      `accessor ${index} has byteStride ${view.byteStride}; the check needs a tightly packed float32 view`,
+    );
+  if (
+    view.extensions?.EXT_meshopt_compression?.byteStride !== undefined &&
+    view.extensions.EXT_meshopt_compression.byteStride !== 4
+  )
+    throw new Error(
+      `accessor ${index} has a meshopt byteStride other than 4; the check needs a tightly packed float32 view`,
+    );
+  const compressed = view.extensions?.EXT_meshopt_compression;
+  let bytes: Uint8Array;
+  if (compressed) {
+    bytes = new Uint8Array(compressed.count * compressed.byteStride);
+    const source = bin.subarray(
+      compressed.byteOffset ?? 0,
+      (compressed.byteOffset ?? 0) + compressed.byteLength,
+    );
+    MeshoptDecoder.decodeGltfBuffer(
+      bytes,
+      compressed.count,
+      compressed.byteStride,
+      source,
+      compressed.mode,
+      compressed.filter ?? 'NONE',
+    );
+  } else {
+    bytes = bin.slice(view.byteOffset ?? 0, (view.byteOffset ?? 0) + view.byteLength);
+  }
+  const start = accessor.byteOffset ?? 0;
+  return new Float32Array(bytes.buffer, bytes.byteOffset + start, accessor.count);
+}
+
+function mouthProblems(
+  json: ReturnType<typeof readGlbJson>,
+  bin: Uint8Array,
+  primitives: { attributes: Record<string, number> }[],
+  at: string,
+  problems: string[],
+): void {
+  let low = Infinity;
+  let high = -Infinity;
+  for (const primitive of primitives) {
+    const index = primitive.attributes[MOUTH_ATTRIBUTE];
+    if (index === undefined) continue;
+    for (const value of readFloatAccessor(json, bin, index)) {
+      low = Math.min(low, value);
+      high = Math.max(high, value);
+    }
+  }
+  if (!Number.isFinite(low) || !Number.isFinite(high)) return;
+  if (low < 0 || high > 1)
+    problems.push(`${at}: ${MOUTH_ATTRIBUTE} range ${low}..${high} is outside 0..1`);
+  else if (high <= 0)
+    problems.push(`${at}: ${MOUTH_ATTRIBUTE} is 0 on every vertex; the mouth mask was not baked`);
 }
 
 function lodProblems(asset: OutputAsset, assetsDir: string, problems: string[]): void {
@@ -152,7 +261,8 @@ function lodProblems(asset: OutputAsset, assetsDir: string, problems: string[]):
       continue;
     }
     try {
-      const json = readGlbJson(readFileSync(path));
+      const bytes = readFileSync(path);
+      const json = readGlbJson(bytes);
       const primitives = (json.meshes ?? []).flatMap((m) => m.primitives);
       if (primitives.length === 0) problems.push(`${at}: ${lod.file} has no mesh primitives`);
       for (const image of json.images ?? []) {
@@ -169,6 +279,8 @@ function lodProblems(asset: OutputAsset, assetsDir: string, problems: string[]):
           problems.push(`${at}: ${lod.file} lacks vertex attribute ${attr}`);
         }
       }
+      if (asset.kind === 'fish')
+        mouthProblems(json, readGlbBin(bytes), primitives, `${at}: ${lod.file}`, problems);
     } catch (error) {
       problems.push(`${at}: ${lod.file} is unreadable: ${(error as Error).message}`);
     }
@@ -210,6 +322,91 @@ function fishProblems(asset: OutputAsset, repoRoot: string, problems: string[]):
   }
 }
 
+const ETC1S_COLOR_MODEL = 163;
+const UASTC_COLOR_MODEL = 166;
+const TRANSFER_LINEAR = 1;
+const TRANSFER_SRGB = 2;
+
+function impostorProblems(asset: OutputAsset, assetsDir: string, problems: string[]): void {
+  const at = `fish ${asset.id}`;
+  const impostor = asset.impostor;
+  if (!impostor) {
+    problems.push(`${at}: index entry has no impostor atlas (rebuild with pnpm build:assets)`);
+    return;
+  }
+  if (impostor.grid * impostor.frameSize !== impostor.atlasSize) {
+    problems.push(
+      `${at}: impostor atlasSize ${impostor.atlasSize} is not grid ${impostor.grid} x frameSize ${impostor.frameSize}`,
+    );
+  }
+  const owned = new Set(asset.files.map((f) => f.file));
+  const atlases = [
+    {
+      slot: 'albedo',
+      entry: impostor.albedo,
+      colorModel: ETC1S_COLOR_MODEL,
+      transfer: TRANSFER_SRGB,
+    },
+    {
+      slot: 'normalDepth',
+      entry: impostor.normalDepth,
+      colorModel: UASTC_COLOR_MODEL,
+      transfer: TRANSFER_LINEAR,
+    },
+  ] as const;
+  for (const { slot, entry, colorModel, transfer } of atlases) {
+    const expected = `${asset.kind}/${asset.id}/${IMPOSTOR_FILES[slot]}`;
+    if (entry.file !== expected) problems.push(`${at}: impostor ${slot} must be ${expected}`);
+    if (!owned.has(entry.file)) {
+      problems.push(`${at}: ${entry.file} is referenced but not in files[]`);
+      continue;
+    }
+    const path = join(assetsDir, entry.file);
+    if (!existsSync(path)) continue;
+    try {
+      const info = readKtx2Info(new Uint8Array(readFileSync(path)));
+      if (info.width !== impostor.atlasSize || info.height !== impostor.atlasSize) {
+        problems.push(
+          `${at}: ${entry.file} is ${info.width}x${info.height}, index says ${impostor.atlasSize}x${impostor.atlasSize}`,
+        );
+      }
+      if (info.colorModel !== colorModel) {
+        problems.push(
+          `${at}: ${entry.file} must be ${colorModel === UASTC_COLOR_MODEL ? 'UASTC' : 'ETC1S'} (colour model ${info.colorModel})`,
+        );
+      }
+      if (info.transfer !== transfer) {
+        problems.push(
+          `${at}: ${entry.file} must use the ${transfer === TRANSFER_SRGB ? 'sRGB' : 'linear'} transfer function`,
+        );
+      }
+    } catch (error) {
+      problems.push(`${at}: ${entry.file} is unreadable: ${(error as Error).message}`);
+    }
+  }
+  const bytes = impostor.albedo.bytes + impostor.normalDepth.bytes;
+  if (bytes > IMPOSTOR_MAX_BYTES) {
+    problems.push(
+      `${at}: impostor atlases are ${(bytes / 1e6).toFixed(2)} MB, over the ${IMPOSTOR_MAX_BYTES / 1e6} MB per-species budget`,
+    );
+  }
+  const { bounds } = asset;
+  if (bounds) {
+    const reach = [0, 1, 2].map((a) =>
+      Math.max(
+        Math.abs((bounds.max[a] ?? 0) - (impostor.pivot[a] ?? 0)),
+        Math.abs((impostor.pivot[a] ?? 0) - (bounds.min[a] ?? 0)),
+      ),
+    );
+    const farthest = Math.hypot(...reach);
+    if (impostor.radius < Math.max(...reach) * 0.95 || impostor.radius > farthest * 1.1) {
+      problems.push(
+        `${at}: impostor radius ${impostor.radius} does not fit the model bounds about pivot [${impostor.pivot.join(', ')}] (rebuild with pnpm build:assets)`,
+      );
+    }
+  }
+}
+
 function shrimpProblems(asset: OutputAsset, repoRoot: string, problems: string[]): void {
   const at = `shrimp ${asset.id}`;
   if (!asset.shrimp) {
@@ -247,7 +444,10 @@ export function checkAssets(input: CheckInput): string[] {
     seenAssets.add(key);
     effectiveLicenceProblems(asset, byId, problems);
     if (!TEXTURE_ONLY_KINDS.includes(asset.kind)) lodProblems(asset, assetsDir, problems);
-    if (asset.kind === 'fish') fishProblems(asset, repoRoot, problems);
+    if (asset.kind === 'fish') {
+      fishProblems(asset, repoRoot, problems);
+      impostorProblems(asset, assetsDir, problems);
+    }
     if (asset.kind === 'shrimp') shrimpProblems(asset, repoRoot, problems);
 
     for (const file of asset.files) {
@@ -276,6 +476,7 @@ export function checkAssets(input: CheckInput): string[] {
     const referenced = [
       ...asset.lods.map((l) => l.file),
       ...asset.textures.flatMap((t) => [t.variants['1k'].file, t.variants['2k'].file]),
+      ...(asset.impostor ? [asset.impostor.albedo.file, asset.impostor.normalDepth.file] : []),
     ];
     const owned = new Set(asset.files.map((f) => f.file));
     for (const file of referenced) {

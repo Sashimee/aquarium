@@ -132,7 +132,8 @@ function overlayAlgae(
         amount.oneMinus().mul(0.8).add(0.35),
         mottle,
       ).mul(amount.mul(0.7).add(0.1));
-      const spots = smoothstep(0.11, 0.06, mx_worley_noise_float(vec3(onPane.mul(45), 2.5), 1, 0))
+      const spots = smoothstep(0.06, 0.11, mx_worley_noise_float(vec3(onPane.mul(45), 2.5), 1, 0))
+        .oneMinus()
         .mul(smoothstep(0.3, 0.8, amount))
         .mul(step(0.35, mottle));
       const cover = saturate(film.add(spots)).mul(below).toVar();

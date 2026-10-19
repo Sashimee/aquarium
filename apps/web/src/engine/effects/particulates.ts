@@ -77,7 +77,7 @@ export function createParticulates(
       .mul(caustics.lightRadiance)
       .mul(phase.mul(inside).mul(BRIGHTNESS / (4 * Math.PI))),
   );
-  const disc = smoothstep(0.5, 0.15, length(uv().sub(0.5)));
+  const disc = smoothstep(0.15, 0.5, length(uv().sub(0.5))).oneMinus();
   material.colorNode = radiance.mul(disc);
 
   const sprite = new Sprite(material);

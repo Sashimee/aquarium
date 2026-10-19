@@ -102,6 +102,13 @@ describe('TierController', () => {
     expect(run(c, 7, 30_000, 30_000).changes[0]).toMatchObject({ to: 'ultra' });
   });
 
+  it('climbs off full-resolution low only when medium would fit', () => {
+    const c = controller('low');
+    // medium costs 0.6 / 0.45 of low: 10.5 ms -> 14 ms > 0.8 x 16.7 ms, so no room.
+    expect(run(c, 10.5, 0, 30_000).changes).toEqual([]);
+    expect(run(c, 9.5, 30_000, 30_000).changes[0]).toMatchObject({ from: 'low', to: 'medium' });
+  });
+
   it('steps up on the frame signal only while frames keep up with the target', () => {
     const c = controller('medium', { signal: 'frame' });
     expect(run(c, 20, 0, 20_000).changes).toEqual([]);

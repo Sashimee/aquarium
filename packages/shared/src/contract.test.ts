@@ -5,6 +5,8 @@ import {
   ateBatchRequestSchema,
   careActionSchema,
   careEventSchema,
+  DEFAULT_EQUIPMENT,
+  newTankChemistry,
   decorItemSchema,
   legacyTintSeed,
   memorialSchema,
@@ -33,6 +35,9 @@ const fish = {
   species: 'neon-tetra',
   name: 'Blip',
   sex: 'female',
+  stage: 'adult',
+  personality: { boldness: 0.5, greed: 0.5, sociability: 0.5 },
+  disease: null,
   bornAt: ts,
   size: 1.2,
   hunger: 0.1,
@@ -166,8 +171,14 @@ describe('tank and fish', () => {
       biome: 'reef',
       decorLayout: [{ assetId: 'rock-1', position: [0, 0, 0] }],
       decorEdited: true,
+      backgroundId: 'bg-reef-coral-wall',
       water: { ammonia: 0, nitrate: 2, algae: 0.1, uneatenFood: 0 },
       lastTickAt: ts,
+      chemistry: newTankChemistry('freshwater'),
+      size: 'standard',
+      quarantine: false,
+      shareToken: null,
+      equipment: DEFAULT_EQUIPMENT,
       fish: [fish],
       memorials: [],
     };
@@ -175,6 +186,7 @@ describe('tank and fish', () => {
     expect(parsed.decorLayout[0]?.scale).toBe(1);
     expect(parsed.decorEdited).toBe(true);
     expect(tankSchema.safeParse({ ...tank, decorEdited: undefined }).success).toBe(false);
+    expect(tankSchema.safeParse({ ...tank, backgroundId: 'nope' }).success).toBe(false);
     expect(
       tankSchema.parse({ ...tank, futureField: 1, fish: [{ ...fish, futureField: 1 }] }),
     ).toEqual(parsed);

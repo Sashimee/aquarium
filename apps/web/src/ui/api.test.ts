@@ -1,4 +1,4 @@
-import type { DecorLayout } from '@aquarium/shared';
+import { DEFAULT_EQUIPMENT, newTankChemistry, type DecorLayout } from '@aquarium/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ApiRequestError,
@@ -173,8 +173,14 @@ describe('api client', () => {
       biome: 'freshwater',
       decorLayout: layout,
       decorEdited: true,
+      backgroundId: 'bg-fw-planted-stream',
       water: { ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 0 },
       lastTickAt: '2026-02-01T00:00:00.000Z',
+      chemistry: newTankChemistry('freshwater'),
+      size: 'standard',
+      quarantine: false,
+      shareToken: null,
+      equipment: DEFAULT_EQUIPMENT,
       fish: [],
       memorials: [],
     };

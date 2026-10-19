@@ -13,6 +13,7 @@ import { gltfKtx2Loader, rewritingKtx2Loader, type Ktx2Textures } from '../engin
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { parseFishAssets, type FishAssetEntry, type ShrimpRig } from './assetIndex';
+import { MOUTH_LODS } from './lod';
 import { curledTip, MAX_TAIL_CURL, type TailRig, type TailTip } from './walk';
 
 /** One draw per material: the merged primitives of a LOD that share it. */
@@ -21,6 +22,8 @@ export interface FishPart {
   readonly source: MeshStandardMaterial;
   /** A walker's hip for each `_leg` index, null where this LOD has no such leg; empty for a fish. */
   readonly legPivots: readonly (Vec3 | null)[];
+  /** The fin attribute of a fish carries the `_mouth` weight as its third component. */
+  readonly mouth: boolean;
 }
 
 export type Vec3 = readonly [number, number, number];
@@ -37,8 +40,8 @@ export interface FishModel {
 }
 
 /**
- * `_fin_mask` and `_fin_id` share one vec2, and a walker's `_leg` makes it a vec3, so the models
- * stay within WebGPU's 8 vertex buffers.
+ * `_fin_mask` and `_fin_id` share one vec2, and a walker's `_leg` or a fish's `_mouth` makes it a
+ * vec3, so the models stay within WebGPU's 8 vertex buffers.
  */
 export const FIN_ATTRIBUTE = 'fin';
 /** `_fin_id` of a shrimp's walking legs and chelipeds. */
@@ -49,6 +52,7 @@ export const ABDOMEN_PART_ID = 9;
 /** Hip vertices sit at the minimum limb weight; the simplified LODs may shift it slightly. */
 const HIP_WEIGHT_SLACK = 0.02;
 const KEPT_ATTRIBUTES = ['position', 'normal', 'uv'] as const;
+const MOUTH_SOURCE = '_mouth';
 
 function toFloat32(attribute: BufferAttribute | InterleavedBufferAttribute): BufferAttribute {
   const { count, itemSize } = attribute;
@@ -60,10 +64,15 @@ function toFloat32(attribute: BufferAttribute | InterleavedBufferAttribute): Buf
 }
 
 /**
- * Bakes the node transform and repacks the fin attributes, with `_leg` when `limbs`; the result is
- * unquantised float32.
+ * Bakes the node transform and repacks the fin attributes, with `_leg` when `limbs`, or else with
+ * `_mouth` when `mouth`, 0 where the mesh has none; the result is unquantised float32.
  */
-export function prepareFishGeometry(mesh: Mesh, label: string, limbs = false): BufferGeometry {
+export function prepareFishGeometry(
+  mesh: Mesh,
+  label: string,
+  limbs = false,
+  mouth = false,
+): BufferGeometry {
   const source = mesh.geometry;
   const mask = source.getAttribute('_fin_mask');
   const id = source.getAttribute('_fin_id');
@@ -80,12 +89,14 @@ export function prepareFishGeometry(mesh: Mesh, label: string, limbs = false): B
     if (attribute === undefined) throw new Error(`${label}: vertex attribute "${name}" missing`);
     geometry.setAttribute(name, toFloat32(attribute));
   }
-  const size = leg === undefined ? 2 : 3;
+  const jaw = !limbs && mouth ? source.getAttribute(MOUTH_SOURCE) : undefined;
+  const size = limbs || mouth ? 3 : 2;
   const fin = new Float32Array(mask.count * size);
   for (let i = 0; i < mask.count; i++) {
     fin[i * size] = mask.getX(i);
     fin[i * size + 1] = Math.round(id.getX(i));
     if (leg !== undefined) fin[i * size + 2] = Math.round(leg.getX(i));
+    if (jaw !== undefined) fin[i * size + 2] = jaw.getX(i);
   }
   geometry.setAttribute(FIN_ATTRIBUTE, new BufferAttribute(fin, size));
   const index = source.getIndex();
@@ -192,15 +203,19 @@ function disposeScene(root: Object3D): void {
   });
 }
 
-/** Groups a LOD's primitives by material and merges each group into one geometry. */
+/**
+ * Groups a LOD's primitives by material and merges each group into one geometry. A fish group
+ * carries the mouth weight when `mouth` and one of its primitives has it.
+ */
 function collectParts(
   root: Object3D,
   label: string,
   shared: Map<string, MeshStandardMaterial>,
   legCount: number,
+  mouth: boolean,
 ): FishPart[] {
   const earlier = new Map(shared);
-  const groups = new Map<MeshStandardMaterial, BufferGeometry[]>();
+  const meshes = new Map<MeshStandardMaterial, Mesh[]>();
   const unused = new Set<MeshStandardMaterial>();
   root.traverse((object) => {
     if (!(object instanceof Mesh)) return;
@@ -208,10 +223,18 @@ function collectParts(
     const material = (own.name !== '' ? earlier.get(own.name) : undefined) ?? own;
     if (material !== own) unused.add(own);
     else if (own.name !== '' && !shared.has(own.name)) shared.set(own.name, own);
-    const list = groups.get(material) ?? [];
-    list.push(prepareFishGeometry(object, label, legCount > 0));
-    groups.set(material, list);
+    const list = meshes.get(material) ?? [];
+    list.push(object);
+    meshes.set(material, list);
   });
+  const limbs = legCount > 0;
+  const groups = new Map<MeshStandardMaterial, { geometries: BufferGeometry[]; mouth: boolean }>();
+  for (const [material, list] of meshes) {
+    const moves =
+      mouth && !limbs && list.some((m) => m.geometry.getAttribute(MOUTH_SOURCE) !== undefined);
+    const geometries = list.map((m) => prepareFishGeometry(m, label, limbs, moves));
+    groups.set(material, { geometries, mouth: moves });
+  }
   const keep = new Set(groups.keys());
   for (const material of unused) {
     for (const texture of textures(material)) {
@@ -220,7 +243,7 @@ function collectParts(
     material.dispose();
   }
   if (groups.size === 0) throw new Error(`${label}: no meshes in the file`);
-  return [...groups].map(([source, geometries]) => {
+  return [...groups].map(([source, { geometries, mouth: moves }]) => {
     const merged = geometries.length === 1 ? geometries[0] : mergeGeometries(geometries, false);
     if (merged === undefined || merged === null) {
       throw new Error(`${label}: primitives sharing "${source.name}" could not be merged`);
@@ -229,7 +252,8 @@ function collectParts(
     return {
       geometry: merged,
       source,
-      legPivots: legCount > 0 ? legPivots(merged, legCount) : [],
+      legPivots: limbs ? legPivots(merged, legCount) : [],
+      mouth: moves,
     };
   });
 }
@@ -288,11 +312,12 @@ export class FishAssetLoader {
     const shared = new Map<string, MeshStandardMaterial>();
     const lods: FishPart[][] = [];
     try {
-      for (const file of entry.lodFiles) {
+      for (const [level, file] of entry.lodFiles.entries()) {
         const gltf = await gltfLoader.loadAsync(`${this.root}${file}`);
         try {
           const legCount = (entry.shrimp?.legPairs ?? 0) * 2;
-          lods.push(collectParts(gltf.scene, `fish ${file}`, shared, legCount));
+          const mouth = level < MOUTH_LODS;
+          lods.push(collectParts(gltf.scene, `fish ${file}`, shared, legCount, mouth));
         } catch (cause) {
           disposeScene(gltf.scene);
           throw cause;

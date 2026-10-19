@@ -37,7 +37,7 @@ export interface TierSettings {
 
 export const TIER_SETTINGS: Readonly<Record<Tier, Readonly<TierSettings>>> = {
   low: {
-    resolutionScale: 0.75,
+    resolutionScale: 1,
     maxPixelRatio: 1,
     shadowMapSize: 0,
     postChain: 'none',
@@ -104,10 +104,13 @@ export const TIER_SETTINGS: Readonly<Record<Tier, Readonly<TierSettings>>> = {
 
 /**
  * Rough GPU cost of each tier relative to `high`, used to extrapolate a measured
- * frame time to the other tiers.
+ * frame time to the other tiers. Low's 0.35 assumed a 0.75 resolution scale; at full scale it
+ * shades 1.78x the pixels, and with roughly 40% of its cost per pixel that makes 0.45, still
+ * clear of medium, which shades as many pixels at DPR 1 and adds shadows, SMAA and procedural
+ * caustics.
  */
 export const TIER_COST: Readonly<Record<Tier, number>> = {
-  low: 0.35,
+  low: 0.45,
   medium: 0.6,
   high: 1,
   ultra: 1.7,

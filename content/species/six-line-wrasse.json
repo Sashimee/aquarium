@@ -10,6 +10,7 @@
     "traits": ["cave-dweller"]
   },
   "biome": "reef",
+  "chemistry": { "salinityPpt": [30, 36] },
   "commonName": "Six-line wrasse",
   "id": "six-line-wrasse",
   "lifecycle": {

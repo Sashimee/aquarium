@@ -187,6 +187,77 @@ export const lifecycleSchema = z
   });
 export type SpeciesLifecycle = z.infer<typeof lifecycleSchema>;
 
+export const breedingModeSchema = z.enum([
+  'livebearer',
+  'egg-scatterer',
+  'substrate-spawner',
+  'mouthbrooder',
+  'none',
+]);
+export type BreedingMode = z.infer<typeof breedingModeSchema>;
+
+const countRange = z
+  .tuple([z.int().positive(), z.int().positive()])
+  .refine(([lo, hi]) => lo <= hi, 'range must be [low, high]');
+
+export const breedingSchema = z
+  .strictObject({
+    mode: breedingModeSchema.default('none'),
+    minAgeDays: positive.optional().describe('age before a fish can breed'),
+    minHealth: unitSchema.optional(),
+    maxHunger: unitSchema.optional(),
+    temperatureC: z
+      .tuple([z.number().min(0).max(45), z.number().min(0).max(45)])
+      .refine(([lo, hi]) => lo <= hi, 'temperatureC must be [low, high]')
+      .optional()
+      .describe('water temperature band that triggers breeding'),
+    needsPair: z.boolean().default(true).describe('needs a living male and female'),
+    needsCave: z.boolean().default(false),
+    intervalDays: positive.optional().describe('minimum days between broods'),
+    broodSize: countRange.optional().describe('fry per brood, [min, max]'),
+    fryGrowth: z
+      .strictObject({
+        juvenileAfterDays: positive,
+        adultAfterDays: positive,
+      })
+      .refine((g) => g.juvenileAfterDays < g.adultAfterDays, {
+        message: 'juvenileAfterDays must be less than adultAfterDays',
+        path: ['juvenileAfterDays'],
+      })
+      .optional(),
+  })
+  .refine(
+    (b) =>
+      b.mode === 'none' ||
+      (b.minAgeDays !== undefined &&
+        b.intervalDays !== undefined &&
+        b.broodSize !== undefined &&
+        b.fryGrowth !== undefined),
+    {
+      message: 'a breeding species needs minAgeDays, intervalDays, broodSize and fryGrowth',
+      path: ['mode'],
+    },
+  );
+export type Breeding = z.infer<typeof breedingSchema>;
+
+export const speciesChemistrySchema = z.strictObject({
+  nitriteTolerance: rate.default(0.5),
+  phRange: z
+    .tuple([z.number().min(0).max(14), z.number().min(0).max(14)])
+    .refine(([lo, hi]) => lo <= hi, 'phRange must be [low, high]')
+    .default([6, 8.5]),
+  khMin: z.number().min(0).max(40).default(0),
+  salinityPpt: z
+    .tuple([z.number().min(0).max(45), z.number().min(0).max(45)])
+    .refine(([lo, hi]) => lo <= hi, 'salinityPpt must be [low, high]')
+    .default([0, 1]),
+  temperatureC: z
+    .tuple([z.number().min(0).max(45), z.number().min(0).max(45)])
+    .refine(([lo, hi]) => lo <= hi, 'temperatureC must be [low, high]')
+    .default([20, 30]),
+});
+export type SpeciesChemistry = z.infer<typeof speciesChemistrySchema>;
+
 export const speciesSchema = z.strictObject({
   id: slugSchema,
   commonName: z.string().min(1),
@@ -196,6 +267,8 @@ export const speciesSchema = z.strictObject({
   locomotion: locomotionSchema,
   render: renderSchema,
   lifecycle: lifecycleSchema,
+  chemistry: speciesChemistrySchema.prefault({}),
+  breeding: breedingSchema.prefault({}),
 });
 export type Species = z.infer<typeof speciesSchema>;
 
@@ -247,6 +320,8 @@ export const speciesSummarySchema = z.strictObject({
   scientificName: z.string().min(1),
   biome: biomeSchema,
   lifecycle: lifecycleSchema,
+  chemistry: speciesChemistrySchema.prefault({}),
+  breeding: breedingSchema.prefault({}),
 });
 export type SpeciesSummary = z.infer<typeof speciesSummarySchema>;
 
