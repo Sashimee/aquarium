@@ -335,6 +335,43 @@
   margin: 0.1rem 0 0;
 }
 
+.fish-cards {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.fish-card h4 {
+  margin: 0;
+}
+
+.fish-card .hint {
+  margin: 0.1rem 0 0;
+}
+
+.traits {
+  margin: 0.4rem 0 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.trait dt {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+.trait dd {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 6rem 1fr;
+  align-items: center;
+  column-gap: 0.5rem;
+}
+
+.trait dd .hint {
+  grid-column: 1 / -1;
+}
+
 .memorial li {
   color: var(--ink-soft);
 }

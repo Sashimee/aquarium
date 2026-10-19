@@ -11,6 +11,7 @@ export { BiomeScene, TankBiome } from './biomeScene';
 export type { SceneAnchor } from './anemone';
 export { CurrentField, sampleCurrent, type CurrentParameters } from './current';
 export { ColliderField, type Collider } from './colliders';
+export * from './room';
 
 const TIER_WAIT_MS = 15_000;
 const BUILD_TIMEOUT_MS = 90_000;

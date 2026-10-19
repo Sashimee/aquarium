@@ -9,8 +9,19 @@ import {
 import {
   Color,
   DataTexture,
+  DepthTexture,
+  FloatType,
+  IntType,
   LinearFilter,
+  NearestFilter,
+  RedIntegerFormat,
+  RGBAIntegerFormat,
+  RGIntegerFormat,
+  RGBIntegerFormat,
+  ShortType,
   SRGBColorSpace,
+  UnsignedIntType,
+  UnsignedShortType,
   type Texture,
   type TextureNode,
 } from 'three/webgpu';
@@ -94,6 +105,57 @@ function filmTexture(): DataTexture {
   film.name = 'backdrop-film';
   film.needsUpdate = true;
   return film;
+}
+
+const INTEGER_FORMATS: readonly number[] = [
+  RedIntegerFormat,
+  RGIntegerFormat,
+  RGBIntegerFormat,
+  RGBAIntegerFormat,
+];
+
+function unfilterableReason(texture: Texture): string | null {
+  if (texture instanceof DepthTexture) return 'it is a depth texture';
+  if (texture.type === IntType || texture.type === UnsignedIntType) {
+    return 'IntType and UnsignedIntType textures cannot be filtered';
+  }
+  if (texture.type === FloatType) return 'FloatType needs the optional float32-filterable feature';
+  if (texture.minFilter === NearestFilter && texture.magFilter === NearestFilter) {
+    return 'both filters are NearestFilter';
+  }
+  if (texture.normalized && (texture.type === ShortType || texture.type === UnsignedShortType)) {
+    return '16-bit normalized formats cannot be filtered';
+  }
+  if (INTEGER_FORMATS.includes(texture.format)) return 'integer formats cannot be filtered';
+  return null;
+}
+
+/**
+ * The poster samples its map with a bias, and three's WGSL builder emits that with a sampler it
+ * never declares for a texture it deems unfilterable, so the pipeline fails and the device is
+ * lost. Shader fixtures only see the texture bound at build time, hence this check on every swap.
+ * Mirrors three 0.186.1 `WGSLNodeBuilder.isUnfilterable`, except multisampling, which no loaded
+ * picture has.
+ */
+export function assertFilterable(texture: Texture, what: string): void {
+  const reason = unfilterableReason(texture);
+  if (reason !== null) {
+    throw new Error(
+      `${what} is unfilterable (${reason}), yet the poster samples it with a bias. Give it ` +
+        'LinearFilter min and mag filters and an 8-bit, half-float or block-compressed format; ' +
+        'not 16-bit normalized, 32-bit float or integer.',
+    );
+  }
+}
+
+function filterableOrDisposed(picture: Texture): Texture {
+  try {
+    assertFilterable(picture, 'The background picture');
+  } catch (cause) {
+    picture.dispose();
+    throw cause;
+  }
+  return picture;
 }
 
 export interface BackgroundLoader {
@@ -207,25 +269,28 @@ export class TankBackground {
     const pending = this.loads.get(file);
     if (pending) return pending;
     const url = `${this.assetRoot}${file}`;
-    const load = this.loader.loadAsync(url).then(
-      (loaded) => {
-        this.loads.delete(file);
-        const id = this.wanted;
-        if (this.wantedFile() !== file || id === null) {
-          loaded.dispose();
-          return;
-        }
-        this.swap({ id, file, texture: loaded });
-      },
-      (cause: unknown) => {
-        this.loads.delete(file);
-        if (this.disposed) return;
-        // Another biome's picture left up is worse than the plain film; the same picture at the
-        // previous tier's size is not.
-        if (this.wantedFile() === file && this.shown?.id !== this.wanted) this.swap(null);
-        throw new Error(`Could not load the tank background ${url}`, { cause });
-      },
-    );
+    const load = this.loader
+      .loadAsync(url)
+      .then(filterableOrDisposed)
+      .then(
+        (loaded) => {
+          this.loads.delete(file);
+          const id = this.wanted;
+          if (this.wantedFile() !== file || id === null) {
+            loaded.dispose();
+            return;
+          }
+          this.swap({ id, file, texture: loaded });
+        },
+        (cause: unknown) => {
+          this.loads.delete(file);
+          if (this.disposed) return;
+          // Another biome's picture left up is worse than the plain film; the same picture at the
+          // previous tier's size is not.
+          if (this.wantedFile() === file && this.shown?.id !== this.wanted) this.swap(null);
+          throw new Error(`Could not load the tank background ${url}`, { cause });
+        },
+      );
     this.loads.set(file, load);
     return load;
   }

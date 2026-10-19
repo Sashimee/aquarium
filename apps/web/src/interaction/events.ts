@@ -134,6 +134,11 @@ export interface InteractionEvents {
     /** False: the player never saved a layout, so `decorLayout` is empty and the preset shows. */
     decorEdited: boolean;
     backgroundId: BackgroundId;
+    /**
+     * Distinct days of the last `VISIT_WINDOW_DAYS` the owner opened the tank. The fish know the
+     * owner from it and come to the glass. Left out for tanks the viewer does not own.
+     */
+    recentVisitDays?: number;
   };
   /** The server's background for the tank changed outside this tab's own choice (another device). */
   'tank:background': { tankId: string; backgroundId: BackgroundId };
@@ -189,7 +194,12 @@ export interface InteractionEvents {
   'decor:colliders': { colliders: readonly Collider[] };
   /** The player settled an edit; the persistence layer saves it. */
   'decor:layout': { tankId: string; layout: DecorLayout };
-  'decor:save-state': { status: SaveStatus; message: string | null; source?: SaveSource };
+  'decor:save-state': {
+    status: SaveStatus;
+    message: string | null;
+    source?: SaveSource;
+    reported?: { source: SaveSource; status: SaveStatus };
+  };
   /** The player tapped the tank glass; `intensity` is 0.5 for a tap and 1 for knocking. */
   'photo:request': PhotoCommand;
   'photo:view': PhotoView;

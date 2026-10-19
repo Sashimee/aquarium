@@ -28,6 +28,12 @@ export function mulberry32(seed: number): () => number {
   };
 }
 
+/**
+ * Horizontal extent of a plant of `scale` from its root, sway included. Without an `axis` it is
+ * the worst case over both; with one, only what lands on that tank axis.
+ */
+export type ReachFn = (scale: number, axis?: 'x' | 'z') => number;
+
 export const MAX_TILT_RAD = 0.1;
 const ROOT_DEPTH = 0.004;
 const ATTEMPTS_PER_PLANT = 40;
@@ -42,11 +48,12 @@ export const GLASS_SHRINK_FLOOR = 0.5;
 export function scaleForRoom(
   drawnScale: number,
   room: number,
-  reach: (scale: number) => number,
+  reach: ReachFn,
+  axis?: 'x' | 'z',
 ): number {
-  if (reach(drawnScale) <= room) return drawnScale;
-  const base = reach(0);
-  const slope = reach(1) - base;
+  if (reach(drawnScale, axis) <= room) return drawnScale;
+  const base = reach(0, axis);
+  const slope = reach(1, axis) - base;
   const fitting = slope > 0 ? (room - base) / slope : drawnScale;
   return Math.min(drawnScale, Math.max(drawnScale * GLASS_SHRINK_FLOOR, fitting));
 }
@@ -70,7 +77,7 @@ export function scatterPatch(
   ground: (x: number, z: number) => number,
   blocked: (x: number, y: number, z: number) => boolean,
   extent: Extent,
-  reach: (scale: number) => number = () => 0,
+  reach: ReachFn = () => 0,
   scaleCeiling: (rootY: number) => number = () => Infinity,
 ): PlantInstance[] {
   const rng = mulberry32(patch.seed);
@@ -91,11 +98,12 @@ export function scatterPatch(
     const tone = 0.88 + 0.2 * rng();
     const wantX = cx + Math.cos(a) * r;
     const wantZ = cz + Math.sin(a) * r;
-    const room = Math.min(extent.halfLength - Math.abs(wantX), extent.halfDepth - Math.abs(wantZ));
-    const fitted = scaleForRoom(drawnScale, room, reach);
-    const margin = reach(fitted);
-    const limitX = Math.max(0, extent.halfLength - margin);
-    const limitZ = Math.max(0, extent.halfDepth - margin);
+    const fitted = Math.min(
+      scaleForRoom(drawnScale, extent.halfLength - Math.abs(wantX), reach, 'x'),
+      scaleForRoom(drawnScale, extent.halfDepth - Math.abs(wantZ), reach, 'z'),
+    );
+    const limitX = Math.max(0, extent.halfLength - reach(fitted, 'x'));
+    const limitZ = Math.max(0, extent.halfDepth - reach(fitted, 'z'));
     const x = Math.min(limitX, Math.max(-limitX, wantX));
     const z = Math.min(limitZ, Math.max(-limitZ, wantZ));
     const y = ground(x, z) - ROOT_DEPTH;

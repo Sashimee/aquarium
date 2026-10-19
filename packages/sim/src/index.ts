@@ -76,6 +76,8 @@ export {
   type CrewTally,
 } from './crew.ts';
 export { CURIOSITY } from './curiosity.ts';
+export { familiarityFromVisits, GREETING, type Visitor } from './greeting.ts';
+export { PERSONALITY } from './personality.ts';
 export { BallPhase, MirrorPhase, TOYS, type SimToy, type ToyNudge } from './toys.ts';
 export {
   BROOD,

@@ -23,6 +23,7 @@ import {
   DEFAULT_WATER_PARAMETERS,
   GRACE_PERIOD_MS,
   hasCapacityFor,
+  isAnimalCapReached,
   lampIsOn,
   MAX_CATCH_UP_MS,
   REFERENCE_TANK_LITRES,
@@ -652,6 +653,15 @@ describe('feeding validation', () => {
 });
 
 describe('capacity', () => {
+  it('reports the animal cap from living animals only', () => {
+    const dead = { alive: false, maxBioload: 1 };
+    const live = { alive: true, maxBioload: 1 };
+    expect(isAnimalCapReached([live, live, dead], 3)).toBe(false);
+    expect(isAnimalCapReached([live, live, live, dead], 3)).toBe(true);
+    expect(isAnimalCapReached([], 1)).toBe(false);
+    expect(isAnimalCapReached([live], 1)).toBe(true);
+  });
+
   it('limits by bioload and fish count, ignoring the dead', () => {
     const group = [
       { alive: true, maxBioload: 5 },
@@ -1260,6 +1270,112 @@ describe('overfeeding by tank size', () => {
       state = r.state;
     }
     expect(state.fish.every((f) => f.alive && f.health === 1)).toBe(true);
+  });
+});
+
+describe('the clean-up crew: nerite snail and hermit crab', () => {
+  const crew = [
+    { id: 'nerite-snail', biome: 'freshwater', count: 6 },
+    { id: 'hermit-crab', biome: 'reef', count: 4 },
+  ] as const;
+
+  function crewTank(
+    id: string,
+    biome: 'freshwater' | 'reef',
+    count: number,
+    water: Partial<Water> = {},
+  ) {
+    const spec = species.get(id);
+    if (!spec) throw new Error(`no species ${id}`);
+    return tank(
+      Array.from({ length: count }, (_, i) => fishOf(`${id}-${i}`, id, { size: spec.maxSizeM })),
+      water,
+      newTankChemistry(biome),
+    );
+  }
+
+  it.each(crew)('$id never breeds', ({ id }) => {
+    const entry = parsedSpecies.find((s) => s.id === id);
+    expect(entry?.breeding?.mode ?? 'none').toBe('none');
+  });
+
+  it.each(crew)(
+    '$id survives 60 days of daily feeding and weekly water changes',
+    ({ id, biome, count }) => {
+      let state = crewTank(id, biome, count);
+      let now = T0;
+      for (let day = 0; day < 60; day++) {
+        state = {
+          ...state,
+          water: { ...state.water, uneatenFood: state.water.uneatenFood + 0.5 },
+          fish: state.fish.map((f) => ({ ...f, hunger: 0 })),
+        };
+        if (day % 7 === 0) {
+          const changed = applyCare(state, { type: 'water_change' }, biome, chemistryParams);
+          if (!changed.ok) throw new Error(changed.reason);
+          state = changed.value;
+        }
+        const r = catchUp({
+          state,
+          fromMs: now,
+          toMs: now + DAY,
+          ...env,
+          biome,
+          graceEndsAtMs: NO_GRACE,
+          vacationFeeder: false,
+          ...NO_BREEDING,
+        });
+        expect(r.deaths).toEqual([]);
+        state = r.state;
+        now += DAY;
+      }
+      expect(state.fish.every((f) => f.alive && f.health === 1)).toBe(true);
+    },
+  );
+
+  it.each(crew)(
+    '$id is unharmed for 3 days without food and starves within 14',
+    ({ id, biome }) => {
+      const state = crewTank(id, biome, 1);
+      const fed3 = only(run(state, 3 * DAY, { env: { biome } }));
+      expect(fed3.alive).toBe(true);
+      expect(fed3.health).toBe(1);
+      const dead = run(state, 14 * DAY, { env: { biome } });
+      expect(only(dead).alive).toBe(false);
+      expect(only(dead).cause).toBe('starvation');
+    },
+  );
+
+  it.each(crew)('$id dies of ammonia when the filter has failed', ({ id, biome, count }) => {
+    const base = crewTank(id, biome, count, { ammonia: 3 });
+    const state = { ...base, chemistry: { ...base.chemistry, bacteria: UNCYCLED } };
+    const r = run(state, 5 * DAY, {
+      env: { biome },
+      equipment: { ...DEFAULT_EQUIPMENT, filter: { tier: 0 } },
+    });
+    expect(r.deaths.map((d) => d.cause)).toContain('ammonia');
+  });
+
+  it.each(crew)('$id is not starved while a vacation feeder runs', ({ id, biome }) => {
+    const r = run(crewTank(id, biome, 1), 10 * DAY, { feeder: true, env: { biome } });
+    expect(only(r).alive).toBe(true);
+  });
+
+  it('catch-up over a mixed crew and fish tank is deterministic and window-split invariant', () => {
+    const state = tank(
+      [
+        fishOf('snail-a', 'nerite-snail'),
+        fishOf('snail-b', 'nerite-snail', { hunger: 0.4 }),
+        fishOf('crab-a', 'hermit-crab'),
+        fishOf('tetra-a', 'neon-tetra'),
+      ],
+      { uneatenFood: 2 },
+    );
+    const whole = run(state, 5 * DAY);
+    expect(run(state, 5 * DAY)).toEqual(whole);
+    const half = run(state, 53 * HOUR);
+    const rest = run(half.state, 5 * DAY, { from: 53 * HOUR });
+    expect(rest.state).toEqual(whole.state);
   });
 });
 

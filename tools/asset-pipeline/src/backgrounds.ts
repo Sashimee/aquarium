@@ -133,8 +133,13 @@ export function ktx2KeyValueKeys(bytes: Uint8Array): string[] {
   return keys;
 }
 
+/** Tiers that ship another tier's file instead of a byte-identical copy of their own. */
+export const BACKGROUND_TIER_ALIAS: Partial<Record<BackgroundTier, BackgroundTier>> = {
+  ultra: 'high',
+};
+
 export function backgroundFile(id: string, tier: BackgroundTier): string {
-  return `${BACKGROUND_KIND}/${id}/${tier}.ktx2`;
+  return `${BACKGROUND_KIND}/${id}/${BACKGROUND_TIER_ALIAS[tier] ?? tier}.ktx2`;
 }
 
 export function backgroundModifications(entry: ManifestAsset, crop: CropBox | null): string[] {
@@ -144,7 +149,7 @@ export function backgroundModifications(entry: ManifestAsset, crop: CropBox | nu
   const stripped = 'all EXIF, XMP, GPS and other metadata removed';
   if (entry.id === MISTY_LAKE_ID) {
     return [
-      'composed and rendered by the Aquarium project from Java fern and vallisneria (Nullified), pond weed (Valery.Li), driftwood, rocks and ground textures (CC0), at 4096x2048 with depth-of-field blur and a water haze',
+      'composed and rendered by the Aquarium project from Java fern and vallisneria (Nullified), pond weed (Valery.Li), driftwood, rocks and ground textures (CC0), at 4096x2048 with depth-of-field blur, then graded underwater (colour absorption, depth haze, god rays, vignette and film grain)',
       resized,
       encoded,
       stripped,
@@ -203,6 +208,7 @@ export async function buildBackground(
     }
   >;
   for (const tier of BACKGROUND_TIER_NAMES) {
+    if (BACKGROUND_TIER_ALIAS[tier]) continue;
     const image = images.tiers[tier];
     const encoded = await encodeWithinBudget(
       (q) => encodeKtx2(image, { codec: 'etc1s', colorSpace: 'srgb', role: 'baseColor' }, q),
@@ -217,6 +223,10 @@ export async function buildBackground(
       qualityLevel: encoded.qualityLevel,
     };
   }
+  for (const tier of BACKGROUND_TIER_NAMES) {
+    const target = BACKGROUND_TIER_ALIAS[tier];
+    if (target) tiers[tier] = tiers[target];
+  }
   const asset: OutputAsset = {
     id: entry.id,
     kind: BACKGROUND_KIND,
@@ -227,7 +237,15 @@ export async function buildBackground(
     lods: [],
     textures: [],
     files,
-    background: { crop: isRender ? null : images.crop, tiers },
+    background: {
+      crop: isRender ? null : images.crop,
+      tiers: {
+        ultra: tiers.ultra,
+        high: tiers.high,
+        medium: tiers.medium,
+        low: tiers.low,
+      },
+    },
   };
   return { asset, preview: images.tiers.low };
 }
@@ -270,7 +288,7 @@ export function syncContentFiles(repoRoot: string, builtIds: ReadonlySet<string>
     let dirty = false;
     for (const entry of entries) {
       if (entry.asset !== null && builtIds.has(entry.asset)) {
-        const file = backgroundFile(entry.id, 'high');
+        const file = backgroundFile(entry.asset, 'high');
         if (entry.file !== file) {
           entry.file = file;
           dirty = true;
@@ -340,7 +358,7 @@ export function backgroundContentProblems(
   const problems: string[] = [];
   for (const entry of entries) {
     if (entry.asset === null) continue;
-    const expected = backgroundFile(entry.id, 'high');
+    const expected = backgroundFile(entry.asset, 'high');
     if (!built.has(entry.asset)) {
       problems.push(
         `content/backgrounds ${entry.id}: asset "${entry.asset}" is not built into index.json`,

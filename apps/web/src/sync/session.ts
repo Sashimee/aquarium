@@ -77,8 +77,8 @@ export class TankSession {
   constructor(private readonly deps: SessionDeps) {
     this.now = deps.now ?? (() => Date.now());
     this.sleep = deps.sleep ?? realSleep;
-    const saveStatus = new SaveStatusMerge((status, message, source) =>
-      deps.interaction.emit('decor:save-state', { status, message, source }),
+    const saveStatus = new SaveStatusMerge((status, message, source, reported) =>
+      deps.interaction.emit('decor:save-state', { status, message, source, reported }),
     );
     this.layoutSaver = new LayoutSaver({
       sleep: this.sleep,
@@ -426,6 +426,7 @@ export class TankSession {
       decorLayout: tank.decorLayout,
       decorEdited: tank.decorEdited,
       backgroundId: tank.backgroundId,
+      recentVisitDays: tank.recentVisitDays,
     });
     this.deps.interaction.emit('tank:water', { tankId, water: tank.water });
     return true;
