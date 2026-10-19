@@ -19,6 +19,7 @@ function render(load: ReplayPanelLoad, shown = 0, playing = false) {
     onSkip: vi.fn(),
     onToggle: vi.fn(),
     onScrub: vi.fn(),
+    onScrubEnd: vi.fn(),
     onSpeed: vi.fn(),
     onRetry: vi.fn(),
   };
@@ -72,6 +73,7 @@ describe('ReplayPanel', () => {
       onSkip: vi.fn(),
       onToggle: vi.fn(),
       onScrub: vi.fn(),
+      onScrubEnd: vi.fn(),
       onSpeed: vi.fn(),
       onRetry: vi.fn(),
     };

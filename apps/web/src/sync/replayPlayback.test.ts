@@ -126,6 +126,13 @@ describe('scrub and end', () => {
     expect(run('simulate', 4, [start, { type: 'scrub', shown: -2 }]).state.shown).toBe(0);
   });
 
+  it('previewing moves the position and pauses without touching the roster', () => {
+    const { state, commands } = run('simulate', 4, [start, { type: 'preview', shown: 3 }]);
+    expect(state).toMatchObject({ shown: 3, playing: false, dirty: true });
+    expect(commands.slice(-1)).toEqual([{ type: 'time-scale', scale: 1 }]);
+    expect(commands.filter((c) => c.type === 'reset-roster')).toHaveLength(1);
+  });
+
   it('skip restores the live tank exactly once, and only if the tank was changed', () => {
     const skipped = run('simulate', 3, [start, tick, { type: 'end' }, { type: 'end' }]);
     expect(skipped.commands.filter((c) => c.type === 'restore')).toHaveLength(1);

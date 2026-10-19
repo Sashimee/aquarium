@@ -54,6 +54,7 @@ export class ReplayController {
   private abort: AbortController | null = null;
   private timer: { handle: unknown; ms: number } | null = null;
   private disposed = false;
+  private scrubPending = false;
 
   constructor(private readonly deps: ReplayControllerDeps) {
     this.tank = deps.tank;
@@ -83,10 +84,25 @@ export class ReplayController {
   }
 
   toggle(): void {
+    this.commitScrub();
     this.dispatch({ type: 'toggle' });
   }
 
+  /** Moves the captions and slider only; the tank follows on `commitScrub`, so a drag rebuilds it once. */
+  previewScrub(shown: number): void {
+    if (this.disposed || this.snapshot.load.status !== 'ready') return;
+    this.scrubPending = true;
+    this.dispatch({ type: 'preview', shown });
+  }
+
+  commitScrub(): void {
+    if (!this.scrubPending) return;
+    this.scrubPending = false;
+    this.dispatch({ type: 'scrub', shown: this.snapshot.playback.shown });
+  }
+
   scrub(shown: number): void {
+    this.scrubPending = false;
     this.dispatch({ type: 'scrub', shown });
   }
 
