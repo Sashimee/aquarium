@@ -77,6 +77,18 @@ describe('SimStream', () => {
     expect(xs(stream, STEP_MS * 2.5)).toEqual({ a: 2.5, b: 3.5, c: 4.5, d: 9.5 });
   });
 
+  it('leaves the render clock where it was, mid-slew, when a fish is added', () => {
+    const { stream } = running();
+    stream.push(snapshot(1, 2, [3, 4, 5]), STEP_MS * 2 - 15);
+    const now = STEP_MS * 2 + 15;
+    const before = xs(stream, now);
+
+    stream.change(2, ['a', 'b', 'c', 'd']);
+    stream.push(snapshot(2, 2, [3, 4, 5, 9]), now);
+    const { a, b, c } = xs(stream, now);
+    expect({ a, b, c }).toEqual(before);
+  });
+
   it('keeps every other fish continuous when one is removed, records shifted down', () => {
     const { stream, now } = running();
     const before = xs(stream, now);

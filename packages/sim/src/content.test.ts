@@ -15,9 +15,11 @@ import {
 } from './fixtures.ts';
 import { TankSdf, type TankDimensions } from './sdf.ts';
 import { toSimSpecies } from './species.ts';
-import { World, type WorldConfig } from './world.ts';
+import { World } from './world.ts';
 
 const LONG = 120_000;
+/** Seeds 4 and 6 gave the most tetra and cleaner-shrimp contacts in a 9-seed sweep (#667). */
+const CONTACT_SEEDS = [4, 6, 11];
 const dir = join(import.meta.dirname, '../../../content/species');
 
 function load(from: string) {
@@ -121,24 +123,29 @@ describe('every shipped species in its decorated tank', { timeout: LONG }, () =>
     const reef = biome === 'reef';
     const tank = reef ? REEF_TANK : SHOW_TANK;
     const decor = reef ? REEF_DECOR : SHOW_DECOR;
-    const config: WorldConfig = {
-      seed: 11,
-      tank,
-      species,
-      decor,
-      anchors: reef ? REEF_ANCHORS : [],
-      fish: spawnMany(s.id, fishCount(s)),
-    };
-    const w = new World(config);
-    const clearance = bruteClearance(w, tank, decor);
     let worst = Infinity;
-    for (let t = 0; t < 10_000; t++) {
-      w.step();
-      for (let i = 0; i < w.count; i++) worst = Math.min(worst, clearance(i));
+    let contacts = 0;
+    let fishSteps = 0;
+    for (const seed of CONTACT_SEEDS) {
+      const w = new World({
+        seed,
+        tank,
+        species,
+        decor,
+        anchors: reef ? REEF_ANCHORS : [],
+        fish: spawnMany(s.id, fishCount(s)),
+      });
+      const clearance = bruteClearance(w, tank, decor);
+      for (let t = 0; t < 10_000; t++) {
+        w.step();
+        for (let i = 0; i < w.count; i++) worst = Math.min(worst, clearance(i));
+      }
+      contacts += w.contacts;
+      fishSteps += w.count * 10_000;
     }
     expect(worst).toBeGreaterThanOrEqual(-1e-9);
     // The hard constraint is a backstop; steering should keep it almost idle.
-    expect(w.contacts / (w.count * 10_000)).toBeLessThan(1e-3);
+    expect(contacts / fishSteps).toBeLessThan(1e-3);
   });
 });
 

@@ -25,9 +25,7 @@ export const waterSchema = z.object({
 export type Water = z.infer<typeof waterSchema>;
 
 export const waterParametersSchema = z.strictObject({
-  filterRemovalPerHour: z.number().nonnegative(),
   foodDecayMinutes: z.number().positive(),
-  nitratePerHour: z.number().nonnegative(),
   ammoniaPerPortion: z.number().nonnegative(),
   algaePerHour: z.number().nonnegative(),
 });
@@ -42,6 +40,7 @@ export const causeOfDeathSchema = z.enum([
   'ammonia',
   'nitrite',
   'disease',
+  'water_quality',
   'old_age',
   'unknown',
 ]);
@@ -89,6 +88,17 @@ export const awaySummarySchema = z.object({
       diedAt: timestampSchema,
     }),
   ),
+  births: z
+    .array(
+      z.object({
+        fishId: idSchema,
+        parentId: idSchema,
+        name: z.string(),
+        species: slugSchema,
+        bornAt: timestampSchema,
+      }),
+    )
+    .optional(),
 });
 export type AwaySummary = z.infer<typeof awaySummarySchema>;
 

@@ -35,7 +35,13 @@ async function buyShrimp(page: Page, commonName: string, fishName: string): Prom
     .getByRole('button', { name: 'Add', exact: true })
     .click();
   await expect(page.locator('.life-status')).toContainText(`${fishName} is in a bag`);
-  await page.getByRole('button', { name: `Release ${fishName} now` }).click();
+  const release = page.getByRole('button', { name: `Release ${fishName} now` });
+  // The bag releases itself after the acclimation, which removes the button; a click delayed past
+  // that point on a loaded runner has nothing left to hit, and the fish is already free.
+  await expect(async () => {
+    if ((await release.count()) === 0) return;
+    await release.click({ timeout: 5_000 });
+  }).toPass({ timeout: FISH_START_MS });
 }
 
 const swimming = async (page: Page): Promise<string[]> => {
