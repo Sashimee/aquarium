@@ -6,6 +6,7 @@ import {
   careActionSchema,
   collectionSchema,
   createTankRequestSchema,
+  errorCodeSchema,
   speciesListSchema,
   tankListSchema,
   tankSchema,
@@ -125,6 +126,8 @@ function validate<T>(schema: Schema<T>, input: unknown): T {
 
 function errorCodeFor(status: number, rawCode: unknown): ErrorCode {
   if (rawCode === 'EMAIL_NOT_VERIFIED') return 'email_not_verified';
+  const known = errorCodeSchema.safeParse(rawCode);
+  if (known.success) return known.data;
   if (status === 401) return 'unauthenticated';
   if (status === 403) return 'forbidden';
   if (status === 404) return 'not_found';
