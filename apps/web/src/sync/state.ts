@@ -8,6 +8,12 @@ export interface BaggedFish {
   releaseAtMs: number;
 }
 
+export interface BirthNotice {
+  tankId: string;
+  fishIds: readonly string[];
+  text: string;
+}
+
 export interface SessionState {
   phase: SessionPhase;
   tanks: readonly Tank[];
@@ -21,6 +27,8 @@ export interface SessionState {
   busy: boolean;
   error: string | null;
   notice: string | null;
+  /** Fry born while the player watches; tapping it focuses the brood. */
+  birth: BirthNotice | null;
 }
 
 export const INITIAL_STATE: SessionState = {
@@ -34,4 +42,5 @@ export const INITIAL_STATE: SessionState = {
   busy: false,
   error: null,
   notice: null,
+  birth: null,
 };

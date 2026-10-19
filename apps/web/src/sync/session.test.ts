@@ -197,6 +197,96 @@ describe('reconciling snapshots', () => {
     expect(rec.of('tank:fish-updated')).toEqual([{ tankId: TANK_A, fish: [sicker] }]);
   });
 
+  it('emits an update when only the stage or size of a fish changed', async () => {
+    const fry = fishFixture(FISH_1, { stage: 'fry', size: 0.01 });
+    const { api, rec, session } = setup([tankFixture({ fish: [fry] })]);
+    await session.setUser(verified);
+    const grown = { ...fry, stage: 'juvenile' as const, size: 0.015 };
+    api.care.mockResolvedValue(
+      tankFixture({ lastTickAt: '2026-02-01T12:10:00.000Z', fish: [grown] }),
+    );
+    await session.careAction({ type: 'water_change' });
+    expect(rec.of('tank:fish-updated')).toEqual([{ tankId: TANK_A, fish: [grown] }]);
+  });
+
+  it('announces newborn fry, and focusing the brood tells the camera and clears the notice', async () => {
+    const { api, rec, session } = setup();
+    await session.setUser(verified);
+    const born = fishFixture(FISH_2, { stage: 'fry', name: 'Tiny' });
+    api.care.mockResolvedValue(
+      tankFixture({
+        lastTickAt: '2026-02-01T12:10:00.000Z',
+        fish: [fishFixture(FISH_1), born],
+      }),
+    );
+    await session.careAction({ type: 'water_change' });
+    expect(session.getState().birth).toEqual({
+      tankId: TANK_A,
+      fishIds: [FISH_2],
+      text: 'A neon tetra fry was born. Say hello to Tiny.',
+    });
+    session.focusBrood();
+    expect(rec.of('camera:focus-fish')).toEqual([{ fishIds: [FISH_2] }]);
+    expect(session.getState().birth).toBeNull();
+    session.focusBrood();
+    expect(rec.of('camera:focus-fish')).toHaveLength(1);
+  });
+
+  it('does not announce a fry the player bought', async () => {
+    vi.useFakeTimers();
+    const { api, session } = setup();
+    await session.setUser(verified);
+    api.addFish.mockResolvedValue(
+      tankFixture({
+        lastTickAt: '2026-02-01T12:01:00.000Z',
+        fish: [fishFixture(FISH_1), fishFixture(FISH_2, { stage: 'fry', name: 'Dot' })],
+      }),
+    );
+    expect(await session.buy('neon-tetra', 'Dot')).toBe(true);
+    expect(session.getState().bagged.map((b) => b.name)).toEqual(['Dot']);
+    expect(session.getState().birth).toBeNull();
+  });
+
+  it('drops the birth notice on a tank switch and does not repeat it on the way back', async () => {
+    const reef = tankFixture({ id: TANK_B, name: 'Reef', biome: 'reef', fish: [] });
+    const { api, session } = setup([tankFixture({ fish: [fishFixture(FISH_1)] }), reef]);
+    await session.setUser(verified);
+    const withFry = tankFixture({
+      lastTickAt: '2026-02-01T12:10:00.000Z',
+      fish: [fishFixture(FISH_1), fishFixture(FISH_2, { stage: 'fry' })],
+    });
+    api.care.mockResolvedValue(withFry);
+    await session.careAction({ type: 'water_change' });
+    expect(session.getState().birth).not.toBeNull();
+
+    api.tank.mockResolvedValueOnce(reef);
+    await session.select(TANK_B);
+    expect(session.getState().activeId).toBe(TANK_B);
+    expect(session.getState().birth).toBeNull();
+
+    api.tank.mockResolvedValueOnce(withFry);
+    await session.select(TANK_A);
+    expect(session.getState().activeId).toBe(TANK_A);
+    expect(session.getState().birth).toBeNull();
+  });
+
+  it('clears the birth notice on dismiss, and a second dismiss changes nothing', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    api.care.mockResolvedValue(
+      tankFixture({
+        lastTickAt: '2026-02-01T12:10:00.000Z',
+        fish: [fishFixture(FISH_1), fishFixture(FISH_2, { stage: 'fry' })],
+      }),
+    );
+    await session.careAction({ type: 'water_change' });
+    expect(session.getState().birth).not.toBeNull();
+    session.dismissBirth();
+    expect(session.getState().birth).toBeNull();
+    session.dismissBirth();
+    expect(session.getState().birth).toBeNull();
+  });
+
   it('emits a death exactly once and a removal when another device nets the fish', async () => {
     const { api, rec, session } = setup();
     await session.setUser(verified);

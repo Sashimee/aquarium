@@ -100,6 +100,8 @@ import {
   SimErrorGate,
   SimInitTimeout,
   SimWorldSpec,
+  stageChanges,
+  staleStages,
   startWorld,
 } from './simWorld';
 import { SimUnavailableError } from '../interaction/simUnavailable';
@@ -544,12 +546,20 @@ export class FishSystem {
         if (fish !== null) this.startDeath(fish);
         break;
       }
-      case 'tank:fish-updated':
-        for (const fish of this.roster.updated(event.payload)) {
+      case 'tank:fish-updated': {
+        const stagesBefore = this.roster.stagesOf(event.payload);
+        const updated = this.roster.updated(event.payload);
+        for (const fish of updated) {
           const rt = this.runtimes.get(fish.simId);
           if (rt !== undefined) rt.youth = youthOfFish(fish);
         }
+        if (this.simReady) {
+          for (const { id, stage } of stageChanges(stagesBefore, updated, this.inWorld)) {
+            this.sim.setStage(id, stage);
+          }
+        }
         break;
+      }
       case 'tank:fish-removed':
         this.roster.removed(event.payload);
         break;
@@ -1295,6 +1305,12 @@ export class FishSystem {
           : this.sim.addFish(spawn, at));
         if (generation !== this.generation) return;
         this.stream.change(layout.epoch, layout.fishIds);
+        for (const { id, stage } of staleStages(
+          [spawn],
+          (simId) => this.roster.get(simId)?.stage,
+        )) {
+          this.sim.setStage(id, stage);
+        }
       }
     } catch (cause) {
       if (this.disposed || generation !== this.generation) return;
@@ -1339,6 +1355,7 @@ export class FishSystem {
       await startWorld(this.sim, this.spec, config, init, {
         current: () => !this.disposed && generation === this.generation,
         light: () => this.light,
+        stage: (simId) => this.roster.get(simId)?.stage,
         begin: (ready) => {
           this.simReady = true;
           this.inWorld = new Set(ready.fishIds);

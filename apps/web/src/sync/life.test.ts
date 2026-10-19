@@ -5,9 +5,11 @@ import {
   canBuy,
   deadFish,
   describeAway,
+  birthSentence,
   formatDuration,
   memorialLine,
   netPrompt,
+  newborns,
   shouldShowAway,
   speciesNameMap,
   tankCapacity,
@@ -234,5 +236,57 @@ describe('water report', () => {
     expect(lines).toContain('1 fish alive: Dot the neon tetra, starving.');
     expect(lines).toContain('Pip has died and can be netted.');
     expect(lines).toContain('Leftover food is building up. Vacuum the gravel.');
+  });
+});
+
+describe('births', () => {
+  const fry = (id: string, over = {}) => fishFixture(id, { stage: 'fry', name: 'Tiny', ...over });
+
+  it('counts only live fry the player did not buy as newborns', () => {
+    const dead = fry(FISH_2, {
+      status: 'dead',
+      diedAt: '2026-02-01T00:00:00.000Z',
+      cause: 'unknown',
+    });
+    const adult = fishFixture('10000000-0000-4000-8000-000000000009');
+    expect(newborns([fry(FISH_1), dead, adult], false).map((f) => f.id)).toEqual([FISH_1]);
+    expect(newborns([fry(FISH_1)], true)).toEqual([]);
+    expect(newborns([], false)).toEqual([]);
+  });
+
+  it('names a single fry and counts a brood', () => {
+    expect(birthSentence([fry(FISH_1)], names)).toBe(
+      'A neon tetra fry was born. Say hello to Tiny.',
+    );
+    expect(birthSentence([fry(FISH_1), fry(FISH_2)], names)).toBe('2 neon tetra fry were born.');
+    expect(birthSentence([fry(FISH_1), fry(FISH_2, { species: 'oscar' })], names)).toBe(
+      '2 fry were born.',
+    );
+  });
+
+  it('refuses an empty brood', () => {
+    expect(() => birthSentence([], names)).toThrow();
+  });
+
+  it('tells births that happened while away and shows the screen for them', () => {
+    const birth = {
+      fishId: FISH_1,
+      parentId: FISH_2,
+      name: 'Tiny',
+      species: 'neon-tetra',
+      bornAt: '2026-02-01T00:00:00.000Z',
+    };
+    const away = {
+      elapsedMinutes: 5,
+      capped: false,
+      deaths: [],
+      births: [birth],
+    };
+    expect(shouldShowAway(away)).toBe(true);
+    expect(describeAway(away, names).lines).toContain('One fry was born.');
+    expect(describeAway({ ...away, births: [birth, birth] }, names).lines).toContain(
+      '2 fry were born.',
+    );
+    expect(shouldShowAway({ ...away, births: [] })).toBe(false);
   });
 });

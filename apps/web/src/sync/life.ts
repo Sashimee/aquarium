@@ -50,7 +50,28 @@ export const MIN_AWAY_MINUTES = 60;
 
 export function shouldShowAway(away: AwaySummary | undefined | null): away is AwaySummary {
   if (!away) return false;
-  return away.deaths.length > 0 || away.elapsedMinutes >= MIN_AWAY_MINUTES;
+  return (
+    away.deaths.length > 0 ||
+    (away.births?.length ?? 0) > 0 ||
+    away.elapsedMinutes >= MIN_AWAY_MINUTES
+  );
+}
+
+/** Live fry the server added that the player did not buy: the brood that was just born. */
+export function newborns(added: readonly Fish[], acclimateNew: boolean): Fish[] {
+  if (acclimateNew) return [];
+  return added.filter((f) => f.status === 'alive' && f.stage === 'fry');
+}
+
+export function birthSentence(brood: readonly Fish[], names: SpeciesNames): string {
+  const first = brood[0];
+  if (!first) throw new Error('birthSentence needs at least one newborn fish');
+  const species = speciesName(names, first.species);
+  if (brood.length === 1) return `A ${species} fry was born. Say hello to ${first.name}.`;
+  const sameSpecies = brood.every((f) => f.species === first.species);
+  return sameSpecies
+    ? `${brood.length} ${species} fry were born.`
+    : `${brood.length} fry were born.`;
 }
 
 export function formatDuration(minutes: number): string {
@@ -78,6 +99,8 @@ export function describeAway(away: AwaySummary, names: SpeciesNames): AwayReport
     sentence: deathSentence(d.name, speciesName(names, d.species), d.cause),
     advice: deathAdvice(d.cause),
   }));
+  const born = away.births?.length ?? 0;
+  if (born > 0) lines.push(born === 1 ? 'One fry was born.' : `${born} fry were born.`);
   if (deaths.length === 0) lines.push('Everyone is still alive.');
   else {
     lines.push(
