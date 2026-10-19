@@ -33,6 +33,13 @@ import { normalizedPathname } from './url.ts';
 import { DEFAULT_LEGAL_LIMITS, registerLegalRoutes, type LegalLimits } from './legal.ts';
 import type { IpAdmission, Mailer } from './mail.ts';
 import { RateLimiter, type Limit, type ResettableHitStore } from './rate-limit.ts';
+import type { PushSender } from './push.ts';
+import {
+  DEFAULT_REMINDER_LIMITS,
+  registerReminderRoutes,
+  UNSUBSCRIBE_PATH,
+  type ReminderLimits,
+} from './reminders.ts';
 import type { SpeciesCatalog } from './species.ts';
 import { DEFAULT_CARE_LIMITS, registerTankRoutes, type CareLimits } from './tanks.ts';
 
@@ -50,6 +57,9 @@ export interface AppOptions {
   clock?: Clock;
   careLimits?: CareLimits;
   legalLimits?: LegalLimits;
+  authSecret: string;
+  push?: PushSender | null;
+  reminderLimits?: ReminderLimits;
   handleLimit?: Limit;
   publicLimits?: PublicLimits;
   testHooks?: boolean;
@@ -223,6 +233,7 @@ function carriesUrlToken(url: string): boolean {
   return (
     TOKEN_PAGES.has(path) ||
     path === `${AUTH_BASE_PATH}/verify-email` ||
+    path === UNSUBSCRIBE_PATH ||
     path.startsWith(PUBLIC_PATH_PREFIX) ||
     TOKEN_PATH_PREFIXES.some((prefix) => path.startsWith(prefix))
   );
@@ -319,6 +330,20 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     }
   });
 
+  // Mail providers post the RFC 8058 one-click body as a form (urlencoded or multipart); the
+  // body is never read, so no other route may accept one.
+  for (const type of ['application/x-www-form-urlencoded', 'multipart/form-data']) {
+    app.addContentTypeParser(type, { parseAs: 'string' }, (req, body, done) => {
+      if (normalizedPathname(req.url) !== UNSUBSCRIBE_PATH) {
+        return done(
+          Object.assign(new Error('Unsupported content type.'), { statusCode: 415 }),
+          undefined,
+        );
+      }
+      done(null, body);
+    });
+  }
+
   app.addHook('onSend', async (req, reply) => {
     applySecurityHeaders(reply);
     if (
@@ -334,6 +359,8 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   app.addHook('onRequest', async (req, reply) => {
     if (SAFE_METHODS.has(req.method) || !normalizedPathname(req.url).startsWith('/api/')) return;
     if (!req.headers.cookie) return;
+    // The confirm page posts under no-referrer, so browsers send Origin: null; the signed token is the credential here.
+    if (normalizedPathname(req.url) === UNSUBSCRIBE_PATH) return;
     const sent = req.headers.origin ?? originOf(req.headers.referer);
     if (sent !== appOrigin) {
       return reply.code(403).send(apiError('forbidden', 'Cross-origin request rejected.'));
@@ -565,6 +592,16 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     limiter: new RateLimiter(),
     limits: opts.legalLimits ?? DEFAULT_LEGAL_LIMITS,
     currentSession,
+  });
+
+  registerReminderRoutes({
+    app,
+    database,
+    push: opts.push ?? null,
+    authSecret: opts.authSecret,
+    limiter,
+    limits: opts.reminderLimits ?? DEFAULT_REMINDER_LIMITS,
+    currentUser: async (req) => (await currentSession(req))?.user ?? null,
   });
 
   registerTankRoutes({

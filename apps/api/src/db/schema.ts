@@ -258,6 +258,30 @@ export const mailLimitHits = pgTable(
   ],
 );
 
+export const reminderPrefs = pgTable('reminder_prefs', {
+  userId: text('user_id')
+    .primaryKey()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  mailEnabled: boolean('mail_enabled').notNull().default(false),
+  pushEnabled: boolean('push_enabled').notNull().default(false),
+  lastSentAt: timestamptz('last_sent_at'),
+});
+
+export const pushSubscriptions = pgTable(
+  'push_subscriptions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    endpoint: text('endpoint').notNull().unique(),
+    p256dh: text('p256dh').notNull(),
+    auth: text('auth').notNull(),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+  },
+  (t) => [index('push_subscriptions_user_id_idx').on(t.userId)],
+);
+
 export const releasedHandles = pgTable('released_handles', {
   handle: text('handle').primaryKey(),
   releasedAt: timestamptz('released_at').notNull().defaultNow(),
