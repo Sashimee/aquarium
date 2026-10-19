@@ -195,6 +195,21 @@ export class SnapshotInterpolator {
     return evicted;
   }
 
+  /**
+   * Swaps the window for the same frames read into a new layout, keeping the clock, so a fish added
+   * or removed doesn't move the others in time. Returns the replaced snapshots for recycling.
+   */
+  relayout(previous: Snapshot | null, latest: Snapshot): Snapshot[] {
+    const old = this.latest;
+    if (old === null || latest.time !== old.time || previous?.time !== this.previous?.time) {
+      throw new RangeError('relayout must carry the frames of the current window');
+    }
+    const replaced = this.previous === null ? [old] : [this.previous, old];
+    this.previous = previous;
+    this.latest = latest;
+    return replaced;
+  }
+
   reset(): void {
     this.previous = null;
     this.latest = null;

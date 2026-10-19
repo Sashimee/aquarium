@@ -225,6 +225,28 @@ describe('SnapshotInterpolator', () => {
     expect(interp.renderTime(5010)).toBeGreaterThan(1 / 30);
   });
 
+  it('relays out the window without touching the clock, and only with the same frames', () => {
+    const interp = new SnapshotInterpolator(1 / 30);
+    const a = snap(0, fish(0, 0, 0, FishState.Cruise));
+    const b = snap(1, fish(1, 0, 0, FishState.Cruise));
+    interp.push(a, 0);
+    interp.push(b, 1000 / 30);
+    interp.push(snap(2, fish(2, 0, 0, FishState.Cruise)), 2000 / 30 - 12);
+    const before = interp.renderTime(80);
+
+    const prev2 = snap(1, fish(1, 0, 0, FishState.Cruise), 2);
+    const latest2 = snap(2, fish(2, 0, 0, FishState.Cruise), 2);
+    expect(() => interp.relayout(prev2, snap(3, fish(3, 0, 0, FishState.Cruise), 2))).toThrow(
+      RangeError,
+    );
+    expect(() => interp.relayout(null, latest2)).toThrow(RangeError);
+    expect(interp.relayout(prev2, latest2)).toHaveLength(2);
+    expect(interp.renderTime(80)).toBe(before);
+    const stale = snap(2, fish(2, 0, 0, FishState.Cruise), 2);
+    expect(interp.push(stale, 90)).toBe(stale);
+    expect(interp.push(snap(3, fish(3, 0, 0, FishState.Cruise), 2), 100)).toBe(prev2);
+  });
+
   it('forgets everything on reset', () => {
     const interp = new SnapshotInterpolator(1 / 30);
     interp.push(snap(5, fish(1, 0, 0, FishState.Cruise)), 0);
