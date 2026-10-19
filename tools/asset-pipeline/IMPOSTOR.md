@@ -34,9 +34,9 @@ the fins.
 The quad is `2 * radius` metres on a side, centred on `pivot`, the same size for every view, so the
 silhouette does not jump between frames. It stays in the plane through the pivot that faces the
 camera, but it is oriented **by the fish's body as the camera sees it**, not by a frame and not by
-`viewBasis(dCamera)`. With `v` (`dCamera` below) = unit vector from the pivot to the camera in fish space (camera
-position through the inverse fish transform, minus pivot, normalised; the `View` instance slot), the
-strip's normal is `v` and its axes are
+`viewBasis(dCamera)`. With `v` (`dCamera` below) = unit vector from the pivot to the camera in fish
+space (camera position through the inverse fish transform, minus pivot, normalised; the `View`
+instance slot), the strip's normal is `v` and its axes are
 
 ```
 along  = normalize(Z - v * dot(v, Z) + 1e-4 * viewBasis(v).right)   // Z = +Z, the fish's long axis
