@@ -1,4 +1,11 @@
-import type { Bacteria, Biome, Chemistry, ChemistryParameters, Water } from '@aquarium/shared';
+import type {
+  Bacteria,
+  Biome,
+  Chemistry,
+  ChemistryParameters,
+  Equipment,
+  Water,
+} from '@aquarium/shared';
 import { fishBioload } from './fish.ts';
 import {
   FOOD_CONCENTRATION_EXPONENT,
@@ -87,6 +94,36 @@ export function heaterSetpoint(
   return target >= low && target <= high ? target : (low + high) / 2;
 }
 
+function atTier(values: readonly number[], tier: number): number {
+  const value = values[tier];
+  if (value === undefined) throw new Error(`lifecycle: no equipment value for tier ${tier}`);
+  return value;
+}
+
+export function lampIsOn(nowMs: number, dtHours: number, onHour: number, offHour: number): boolean {
+  const midMs = nowMs - (dtHours * 3_600_000) / 2;
+  const hour = Math.floor((((midMs % 86_400_000) + 86_400_000) % 86_400_000) / 3_600_000);
+  return onHour < offHour ? hour >= onHour && hour < offHour : hour >= onHour || hour < offHour;
+}
+
+export function algaeMultiplier(
+  equipment: Equipment,
+  cp: ChemistryParameters,
+  nowMs: number,
+  dtHours: number,
+): number {
+  const { light, co2, waveMaker } = equipment;
+  const lit = lampIsOn(nowMs, dtHours, light.onHour, light.offHour);
+  const growth = lit
+    ? atTier(cp.equipment.light.algaeGrowthPerTier, light.tier) * light.intensity
+    : 0;
+  return (
+    growth *
+    atTier(cp.equipment.co2.algaeFactorPerTier, co2.tier) *
+    atTier(cp.equipment.waveMaker.algaeFactorPerTier, waveMaker.tier)
+  );
+}
+
 export function stepWater(
   state: { water: Water; chemistry: Chemistry },
   fish: readonly LifecycleFish[],
@@ -141,6 +178,7 @@ export function stepWater(
   const kh = Math.max(0, chemistry.kh - cp.kh.consumedPerNitrate * nitrateMade);
   const phTarget =
     cp.ph.target[ctx.biome] -
+    atTier(cp.equipment.co2.phDropPerTier, ctx.equipment.co2.tier) -
     (cp.ph.acidificationPerNitrate * nitrate) / Math.max(kh, cp.ph.minBufferKh);
 
   const heater = ctx.equipment.heater.tier;
@@ -154,7 +192,11 @@ export function stepWater(
     water: {
       ammonia,
       nitrate,
-      algae: Math.min(1, water.algae + params.algaePerHour * dtHours),
+      algae: Math.min(
+        1,
+        water.algae +
+          params.algaePerHour * algaeMultiplier(ctx.equipment, cp, ctx.nowMs, dtHours) * dtHours,
+      ),
       uneatenFood: Math.max(0, water.uneatenFood - decayed),
     },
     chemistry: {

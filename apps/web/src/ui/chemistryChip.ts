@@ -114,7 +114,11 @@ export function chipState(
   const verdict =
     status === 'stale' && judged
       ? `${VERDICT.stale}, was ${VERDICT[STATUS_OF[worst]].toLowerCase()}`
-      : VERDICT[status];
+      : status === 'warning' && !allRead
+        ? knownPads.length === 0
+          ? 'Warning, read the pads'
+          : 'Warning, read the other pads'
+        : VERDICT[status];
   const spoken = values
     .map((v) => `${v.label} ${v.text === '?' ? 'not read yet' : v.text}`)
     .join(', ');

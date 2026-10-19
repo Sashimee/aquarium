@@ -601,3 +601,58 @@ describe('api client timeouts', () => {
     });
   });
 });
+
+describe('api.replay', () => {
+  const since = '2026-10-18T10:00:00.000Z';
+
+  it('serialises since, limit, until and cursor and encodes the tank id', async () => {
+    const fetcher = vi.fn().mockResolvedValue(json({ events: [], nextCursor: null }));
+    const api = createApiClient(fetcher);
+    const ctl = new AbortController();
+    await api.replay(
+      'a/b',
+      { since, until: '2026-10-18T12:00:00.000Z', cursor: 'abc_-1', limit: 50 },
+      ctl.signal,
+    );
+    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(url.startsWith('/api/tanks/a%2Fb/replay?')).toBe(true);
+    const params = new URL(url, 'http://x').searchParams;
+    expect(Object.fromEntries(params)).toEqual({
+      since,
+      until: '2026-10-18T12:00:00.000Z',
+      cursor: 'abc_-1',
+      limit: '50',
+    });
+    expect(init.signal?.aborted).toBe(false);
+    ctl.abort();
+    expect(init.signal?.aborted).toBe(true);
+  });
+
+  it('defaults the limit, omits absent params and rejects a bad query before fetching', async () => {
+    const fetcher = vi.fn().mockResolvedValue(json({ events: [], nextCursor: null }));
+    const api = createApiClient(fetcher);
+    await api.replay(TANK_A, { since });
+    const [url] = fetcher.mock.calls[0] as [string];
+    expect(Object.fromEntries(new URL(url, 'http://x').searchParams)).toEqual({
+      since,
+      limit: '200',
+    });
+    fetcher.mockClear();
+    await expect(api.replay(TANK_A, { since: 'yesterday' })).rejects.toBeInstanceOf(
+      ClientValidationError,
+    );
+    await expect(api.replay(TANK_A, { since, cursor: 'no good!' })).rejects.toBeInstanceOf(
+      ClientValidationError,
+    );
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('turns an error response into an ApiRequestError and rejects a malformed body', async () => {
+    const api = createApiClient(
+      vi.fn().mockResolvedValue(json({ error: 'rate_limited', message: 'slow down' }, 429)),
+    );
+    await expect(api.replay(TANK_A, { since })).rejects.toMatchObject({ status: 429 });
+    const odd = createApiClient(vi.fn().mockResolvedValue(json({ events: 'no' })));
+    await expect(odd.replay(TANK_A, { since })).rejects.toBeInstanceOf(ApiRequestError);
+  });
+});

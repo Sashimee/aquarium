@@ -19,7 +19,7 @@ import {
   breedingModeSchema,
   breedingSchema,
   speciesChemistrySchema,
-  speciesSummarySchema,
+  speciesContentSummarySchema,
 } from './species.js';
 
 const content = join(import.meta.dirname, '../../../content');
@@ -109,7 +109,7 @@ describe('species additions', () => {
   const files = readdirSync(join(content, 'species')).filter((f) => f.endsWith('.json'));
 
   it.each(files)('%s parses with a valid breeding and chemistry block', (file) => {
-    const parsed = speciesSummarySchema.loose().parse(readJson(`species/${file}`));
+    const parsed = speciesContentSummarySchema.loose().parse(readJson(`species/${file}`));
     expect(breedingModeSchema.options).toContain(parsed.breeding.mode);
     expect(parsed.chemistry.phRange[0]).toBeLessThan(parsed.chemistry.phRange[1]);
   });
@@ -132,7 +132,9 @@ describe('species additions', () => {
   });
 
   it('gives reef species a saltwater range and freshwater the default', () => {
-    const reef = speciesSummarySchema.loose().parse(readJson('species/ocellaris-clownfish.json'));
+    const reef = speciesContentSummarySchema
+      .loose()
+      .parse(readJson('species/ocellaris-clownfish.json'));
     expect(reef.chemistry.salinityPpt).toEqual([30, 36]);
     expect(speciesChemistrySchema.parse({}).salinityPpt).toEqual([0, 1]);
     expect(speciesChemistrySchema.safeParse({ salinityPpt: [36, 30] }).success).toBe(false);

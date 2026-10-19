@@ -31,6 +31,25 @@ export function mulberry32(seed: number): () => number {
 export const MAX_TILT_RAD = 0.1;
 const ROOT_DEPTH = 0.004;
 const ATTEMPTS_PER_PLANT = 40;
+/** Smallest share of its drawn scale a plant shrinks to, before it is moved to make room instead. */
+export const GLASS_SHRINK_FLOOR = 0.5;
+
+/**
+ * The scale a plant may keep when rooted `room` metres from the nearest glass. Plants shrink first,
+ * down to `GLASS_SHRINK_FLOOR`, so a patch authored near a wall stays there; only the remainder is
+ * handled by moving the root.
+ */
+export function scaleForRoom(
+  drawnScale: number,
+  room: number,
+  reach: (scale: number) => number,
+): number {
+  if (reach(drawnScale) <= room) return drawnScale;
+  const base = reach(0);
+  const slope = reach(1) - base;
+  const fitting = slope > 0 ? (room - base) / slope : drawnScale;
+  return Math.min(drawnScale, Math.max(drawnScale * GLASS_SHRINK_FLOOR, fitting));
+}
 
 /**
  * `reach(scale)` is how far a plant of that scale extends horizontally from its root, including
@@ -39,6 +58,9 @@ const ATTEMPTS_PER_PLANT = 40;
  * Dart-throws `patch.count` plants into a disc, keeping a spacing that shrinks if the disc is too
  * crowded to honour. The result is ordered so that any prefix is also evenly spread, which is how
  * the quality tier thins a patch without moving the survivors.
+ *
+ * A plant too big for the room at its sampled spot shrinks (see `scaleForRoom`) before it is moved,
+ * so patch depth is honoured even where a species' reach is close to the tank's half-depth.
  *
  * `scaleCeiling(rootY)` caps a plant's scale from where it roots, which keeps tall stems under the
  * water line.
@@ -67,13 +89,17 @@ export function scatterPatch(
     const tiltZ = (rng() - 0.5) * 2 * MAX_TILT_RAD;
     const drawnScale = minScale + (maxPatchScale - minScale) * rng();
     const tone = 0.88 + 0.2 * rng();
-    const margin = reach(drawnScale);
+    const wantX = cx + Math.cos(a) * r;
+    const wantZ = cz + Math.sin(a) * r;
+    const room = Math.min(extent.halfLength - Math.abs(wantX), extent.halfDepth - Math.abs(wantZ));
+    const fitted = scaleForRoom(drawnScale, room, reach);
+    const margin = reach(fitted);
     const limitX = Math.max(0, extent.halfLength - margin);
     const limitZ = Math.max(0, extent.halfDepth - margin);
-    const x = Math.min(limitX, Math.max(-limitX, cx + Math.cos(a) * r));
-    const z = Math.min(limitZ, Math.max(-limitZ, cz + Math.sin(a) * r));
+    const x = Math.min(limitX, Math.max(-limitX, wantX));
+    const z = Math.min(limitZ, Math.max(-limitZ, wantZ));
     const y = ground(x, z) - ROOT_DEPTH;
-    const scale = Math.min(drawnScale, scaleCeiling(y));
+    const scale = Math.min(fitted, scaleCeiling(y));
     const crowded = placed.some((p) => Math.hypot(p.x - x, p.z - z) < spacing);
     const rejected = crowded || blocked(x, y, z);
     if (rejected) {

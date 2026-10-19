@@ -5,22 +5,27 @@ import { unitSchema } from './common.js';
 export const MAX_EQUIPMENT_TIER = 3;
 const tierSchema = z.int().min(0).max(MAX_EQUIPMENT_TIER).describe('0 = not installed');
 
-const hourSchema = z.int().min(0).max(23);
+const hourSchema = z.int().min(0).max(23).describe('UTC hour of day');
+
+const lightScheduleShape = {
+  intensity: unitSchema,
+  onHour: hourSchema,
+  offHour: hourSchema,
+};
+const hoursDiffer = (l: { onHour: number; offHour: number }): boolean => l.onHour !== l.offHour;
+const hoursDifferIssue = { message: 'onHour and offHour must differ', path: ['offHour'] };
+
+export const lightScheduleSchema = z
+  .strictObject(lightScheduleShape)
+  .refine(hoursDiffer, hoursDifferIssue);
+export type LightSchedule = z.infer<typeof lightScheduleSchema>;
 
 export const equipmentSchema = z.strictObject({
   filter: z.strictObject({ tier: tierSchema }),
   heater: z.strictObject({ tier: tierSchema }),
   light: z
-    .strictObject({
-      tier: tierSchema,
-      intensity: unitSchema,
-      onHour: hourSchema,
-      offHour: hourSchema,
-    })
-    .refine((l) => l.onHour !== l.offHour, {
-      message: 'onHour and offHour must differ',
-      path: ['offHour'],
-    }),
+    .strictObject({ tier: tierSchema, ...lightScheduleShape })
+    .refine(hoursDiffer, hoursDifferIssue),
   co2: z.strictObject({ tier: tierSchema }).describe('fresh water only'),
   waveMaker: z.strictObject({ tier: tierSchema }).describe('salt and brackish water only'),
 });

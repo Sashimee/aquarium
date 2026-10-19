@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MAX_EQUIPMENT_TIER } from './equipment.js';
 import { biomeSchema, unitSchema, type Biome } from './common.js';
 
 export const bacteriaSchema = z.strictObject({
@@ -41,6 +42,7 @@ export const newTankChemistry = (biome: Biome): Chemistry => ({
 });
 
 const rate = z.number().nonnegative();
+const perTier = z.array(rate).length(MAX_EQUIPMENT_TIER + 1);
 const perBiome = <T extends z.ZodType>(value: T) => z.record(biomeSchema, value);
 
 const colonySchema = z.strictObject({
@@ -105,6 +107,24 @@ export const chemistryParametersSchema = z.strictObject({
       temperatureC: rate,
       salinity: rate.describe('ppt outside the species range'),
       kh: rate.describe('dKH below the species minimum'),
+    }),
+  }),
+  equipment: z.strictObject({
+    light: z.strictObject({
+      algaeGrowthPerTier: perTier.describe(
+        'algae growth multiplier at full intensity while the lamp is on, index = tier; the lamp is dark outside its schedule',
+      ),
+    }),
+    co2: z.strictObject({
+      phDropPerTier: perTier.describe(
+        'pH units the injected CO2 pulls the target down, index = tier',
+      ),
+      algaeFactorPerTier: perTier.describe(
+        'algae growth multiplier from plants growing faster, index = tier',
+      ),
+    }),
+    waveMaker: z.strictObject({
+      algaeFactorPerTier: perTier.describe('algae growth multiplier from flow, index = tier'),
     }),
   }),
   sources: z

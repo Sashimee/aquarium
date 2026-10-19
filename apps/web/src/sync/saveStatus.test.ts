@@ -43,4 +43,31 @@ describe('SaveStatusMerge', () => {
     background('idle', null);
     expect(seen.at(-1)).toMatchObject({ status: 'idle', message: null });
   });
+
+  it('keeps the first failure message when a second saver also errors', () => {
+    const { seen, layout, background } = setup();
+    layout('error', 'layout down');
+    background('error', 'background down');
+    expect(seen.at(-1)).toEqual({ status: 'error', message: 'layout down', source: 'layout' });
+  });
+
+  it('keeps the first failure message when the first saver reports again', () => {
+    const { seen, layout, background } = setup();
+    layout('error', 'first');
+    background('error', 'second');
+    layout('error', 'first again');
+    expect(seen.at(-1)).toEqual({ status: 'error', message: 'first again', source: 'layout' });
+  });
+
+  it('falls back to the remaining failure once the shown one recovers', () => {
+    const { seen, layout, background } = setup();
+    layout('error', 'layout down');
+    background('error', 'background down');
+    layout('saved', null);
+    expect(seen.at(-1)).toEqual({
+      status: 'error',
+      message: 'background down',
+      source: 'background',
+    });
+  });
 });

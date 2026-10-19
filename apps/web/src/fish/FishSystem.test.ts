@@ -826,11 +826,12 @@ describe('FishSystem toys and display', () => {
         return () => undefined;
       };
     }
+    const interaction = new EventBus<InteractionEvents>();
     const start = FishSystem.create(engine, {
       tank: DEFAULT_TANK,
       assetRoot: '/assets/',
       biome: 'freshwater',
-      interaction: new EventBus<InteractionEvents>(),
+      interaction,
       seed: 7,
       signal: new AbortController().signal,
     });
@@ -893,7 +894,17 @@ describe('FishSystem toys and display', () => {
       });
       for (const frame of frames) frame(STEP_S, performance.now());
     };
-    return { fish, engine, worker, load, nextWorld, snapshot, epoch: () => epoch };
+    return {
+      fish,
+      engine,
+      worker,
+      load,
+      nextWorld,
+      snapshot,
+      interaction,
+      frames,
+      epoch: () => epoch,
+    };
   }
 
   it('sends the toys to the running world and again to every new one', async () => {
@@ -1141,5 +1152,67 @@ describe('FishSystem toys and display', () => {
       expect(readsDisplay).toBe(flares);
     }
     fish.dispose();
+  });
+
+  describe('replay fast-forward', () => {
+    const steps = (worker: FakeWorker): number[] =>
+      worker.sent
+        .filter((m) => m.type === 'step')
+        .map((m) => (m as unknown as { steps: number }).steps);
+
+    it('asks the worker for the extra steps the time scale owes, one request at a time', async () => {
+      const { fish, worker, load, nextWorld, snapshot, interaction, frames } = await bettaTank();
+      load();
+      await nextWorld();
+      snapshot(0, 0);
+      interaction.emit('replay:time-scale', { scale: 20 });
+      for (const frame of frames) frame(0.05, performance.now());
+      expect(steps(worker)).toEqual([28]);
+
+      for (const frame of frames) frame(0.05, performance.now());
+      expect(steps(worker)).toEqual([28]);
+
+      snapshot(0, 0);
+      expect(steps(worker)).toHaveLength(2);
+      fish.dispose();
+    });
+
+    it('sends nothing at normal speed', async () => {
+      const { fish, worker, load, nextWorld, snapshot, interaction, frames } = await bettaTank();
+      load();
+      await nextWorld();
+      snapshot(0, 0);
+      interaction.emit('replay:time-scale', { scale: 1 });
+      for (const frame of frames) frame(0.05, performance.now());
+      expect(steps(worker)).toEqual([]);
+      fish.dispose();
+    });
+
+    it('caps the owed steps after a long frame so a slow worker cannot build a backlog', async () => {
+      const { fish, worker, load, nextWorld, snapshot, interaction, frames } = await bettaTank();
+      load();
+      await nextWorld();
+      snapshot(0, 0);
+      interaction.emit('replay:time-scale', { scale: 20 });
+      for (const frame of frames) frame(0.05, performance.now());
+      for (let i = 0; i < 20; i++) for (const frame of frames) frame(1, performance.now());
+      const before = steps(worker).length;
+      snapshot(0, 0);
+      const sent = steps(worker).slice(before);
+      expect(sent).toHaveLength(1);
+      expect(sent[0]).toBeLessThanOrEqual(60);
+      fish.dispose();
+    });
+
+    it('treats a non-finite scale as normal speed instead of throwing in the worker', async () => {
+      const { fish, worker, load, nextWorld, snapshot, interaction, frames } = await bettaTank();
+      load();
+      await nextWorld();
+      snapshot(0, 0);
+      interaction.emit('replay:time-scale', { scale: Number.NaN });
+      for (const frame of frames) frame(0.05, performance.now());
+      expect(steps(worker)).toEqual([]);
+      fish.dispose();
+    });
   });
 });

@@ -1,22 +1,29 @@
+import { useState } from 'react';
 import { describeAway, netPrompt } from '../sync/life';
 import { Dialog } from './Dialog';
+import { ReplayView } from './ReplayView';
 import { useActiveTank, useSessionState, useSpeciesNames, useTankSession } from './session';
 
-/** The server's offline catch-up, shown once per load for the tank that is on screen. */
-export function AwayDialog({ onReview }: { onReview(): void }) {
-  const session = useTankSession();
-  const state = useSessionState();
-  const names = useSpeciesNames();
-  const tank = useActiveTank();
-  const away = tank ? state.awayByTank[tank.id] : undefined;
-  if (!tank || !away) return null;
-
-  const report = describeAway(away, names);
-  const needsNet = tank.fish.some((f) => f.status === 'dead');
-  const close = () => session.dismissAway(tank.id);
+export function AwayBody({
+  tankName,
+  report,
+  canReplay,
+  needsNet,
+  onWatch,
+  onNet,
+  onContinue,
+}: {
+  tankName: string;
+  report: ReturnType<typeof describeAway>;
+  canReplay: boolean;
+  needsNet: boolean;
+  onWatch(): void;
+  onNet(): void;
+  onContinue(): void;
+}) {
   return (
-    <Dialog title={report.title} tone={report.tone} onClose={close}>
-      <p className="hint">{tank.name}</p>
+    <>
+      <p className="hint">{tankName}</p>
       {report.lines.map((line) => (
         <p key={line}>{line}</p>
       ))}
@@ -30,21 +37,61 @@ export function AwayDialog({ onReview }: { onReview(): void }) {
         </ul>
       )}
       <div className="row">
+        {canReplay && (
+          <button type="button" onClick={onWatch}>
+            Watch what happened
+          </button>
+        )}
         {needsNet && (
-          <button
-            type="button"
-            onClick={() => {
-              close();
-              onReview();
-            }}
-          >
+          <button type="button" onClick={onNet}>
             See the fish to net
           </button>
         )}
-        <button type="button" onClick={close}>
+        <button type="button" onClick={onContinue}>
           Continue
         </button>
       </div>
+    </>
+  );
+}
+
+/** The server's offline catch-up, shown once per load for the tank that is on screen. */
+export function AwayDialog({ onReview }: { onReview(): void }) {
+  const session = useTankSession();
+  const state = useSessionState();
+  const names = useSpeciesNames();
+  const tank = useActiveTank();
+  const away = tank ? state.awayByTank[tank.id] : undefined;
+  // Keyed by tank so switching tanks drops a replay that belonged to the previous one.
+  const [replayingTankId, setReplayingTankId] = useState<string | null>(null);
+  if (!tank || !away) return null;
+
+  const close = () => session.dismissAway(tank.id);
+  if (replayingTankId === tank.id && away.fromAt) {
+    return (
+      <ReplayView
+        tank={tank}
+        away={away}
+        since={away.fromAt}
+        onSkip={() => setReplayingTankId(null)}
+      />
+    );
+  }
+  const report = describeAway(away, names);
+  return (
+    <Dialog title={report.title} tone={report.tone} onClose={close}>
+      <AwayBody
+        tankName={tank.name}
+        report={report}
+        canReplay={away.fromAt !== undefined}
+        needsNet={tank.fish.some((f) => f.status === 'dead')}
+        onWatch={() => setReplayingTankId(tank.id)}
+        onNet={() => {
+          close();
+          onReview();
+        }}
+        onContinue={close}
+      />
     </Dialog>
   );
 }

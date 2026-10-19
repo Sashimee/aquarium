@@ -446,6 +446,31 @@ describe('AudioEngine effects and failure', () => {
     expect(t.sources).toHaveLength(before + 1);
   });
 
+  it.each([
+    [
+      'food-plop',
+      (t: ReturnType<typeof setup>) =>
+        t.bus.emit('feed:dropped', { food: 'flakes', portion: 1, particles: 5 }),
+    ],
+    [
+      'net-splash',
+      (t: ReturnType<typeof setup>) =>
+        t.bus.emit('tank:fish-removed', { tankId: 't', fishId: 'f', reason: 'netted' }),
+    ],
+    ['ui-click', (t: ReturnType<typeof setup>) => t.click()],
+  ])('routes %s through the effects bus that quiet mode softens', async (_role, trigger) => {
+    const t = setup();
+    await t.gesture();
+    const effects = at(t.gains, 3);
+    t.engine.setQuiet(true);
+    const before = t.sources.length;
+    trigger(t);
+    expect(t.sources).toHaveLength(before + 1);
+    expect(t.gains.at(-1)?.connections).toContain(effects);
+    expect(effects.gain.target).toBeLessThan(1);
+    expect(at(t.compressors, 0).ratio.target).toBeGreaterThan(1);
+  });
+
   it('does not splash for a fish removed on another device', async () => {
     const t = setup();
     await t.gesture();

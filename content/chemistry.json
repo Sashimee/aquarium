@@ -71,6 +71,11 @@
       "kh": 2
     }
   },
+  "equipment": {
+    "light": { "algaeGrowthPerTier": [0, 2.5, 3.5, 5] },
+    "co2": { "phDropPerTier": [0, 0.5, 1, 1], "algaeFactorPerTier": [1, 0.7, 0.5, 0.5] },
+    "waveMaker": { "algaeFactorPerTier": [1, 0.85, 0.7, 0.7] }
+  },
   "sources": {
     "bacteria": [
       "Hovanec & DeLong 1996, Appl. Environ. Microbiol. 62(8): nitrifier succession in new aquaria takes weeks, so a fishless cycle runs 2 to 6 weeks",
@@ -99,6 +104,10 @@
     "salinity": [
       "Seawater is about 35 ppt; brackish mangrove tanks are kept at about 10 to 20 ppt",
       "Drift stands in for evaporation and top-up"
+    ],
+    "equipment": [
+      "Game abstraction. Algae growth follows light energy: a lamp at the default intensity 0.8 on a 12 h schedule keeps the baseline rate, stronger lamps and longer photoperiods grow more algae, and a dark tank grows none",
+      "Injected CO2 lowers pH and, by feeding plants, leaves algae less to grow on (Wurts & Durborow 1992, SRAC 464 for the CO2-pH link); flow from a wave maker discourages algae settling"
     ],
     "stress": [
       "Game abstraction: out-of-range pH, temperature, salinity and hardness stunt growth and slowly harm fish, far more gently than ammonia or starvation"

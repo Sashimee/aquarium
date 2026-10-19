@@ -3,8 +3,9 @@ import { join } from 'node:path';
 import {
   chemistryParametersSchema,
   DEFAULT_EQUIPMENT,
+  isWarmWater,
   newTankChemistry,
-  speciesSummarySchema,
+  speciesContentSummarySchema,
   TANK_SIZES,
   type Chemistry,
   type Equipment,
@@ -22,6 +23,7 @@ import {
   DEFAULT_WATER_PARAMETERS,
   GRACE_PERIOD_MS,
   hasCapacityFor,
+  lampIsOn,
   MAX_CATCH_UP_MS,
   REFERENCE_TANK_LITRES,
   STEP_MS,
@@ -37,7 +39,9 @@ const speciesDir = join(import.meta.dirname, '../../../content/species');
 const parsedSpecies = readdirSync(speciesDir)
   .filter((name) => name.endsWith('.json'))
   .map((name) =>
-    speciesSummarySchema.loose().parse(JSON.parse(readFileSync(join(speciesDir, name), 'utf8'))),
+    speciesContentSummarySchema
+      .loose()
+      .parse(JSON.parse(readFileSync(join(speciesDir, name), 'utf8'))),
   );
 const species: SpeciesTable = new Map(
   parsedSpecies.map((s) => [s.id, s.lifecycle satisfies SpeciesLifecycle] as const),
@@ -272,9 +276,24 @@ describe('a tank stocked to capacity at full size under perfect daily care', () 
     expect(state.fish.every((f) => f.alive && f.health === 1)).toBe(true);
   });
 
-  const SHRIMP_IDS = new Set(['cherry-shrimp', 'cleaner-shrimp']);
+  // Invertebrates are more ammonia-sensitive than any fish, and the old cap of 12 was a fish cap.
+  const LEAST_TOLERANT_FISH_AMMONIA = 0.1;
+  const belowFishTolerance = (s: (typeof parsedSpecies)[number]) =>
+    s.lifecycle.ammoniaTolerance < LEAST_TOLERANT_FISH_AMMONIA;
+  const walks = (s: (typeof parsedSpecies)[number]) =>
+    typeof s.locomotion === 'object' && s.locomotion !== null && 'walking' in s.locomotion;
+  const nanoCapSpecies = parsedSpecies.filter((s) => !belowFishTolerance(s));
 
-  it.each(parsedSpecies.filter((s) => !SHRIMP_IDS.has(s.id)).map((s) => [s.id, s.biome] as const))(
+  it('excludes only walking invertebrates, the shrimp among them, from the nano cap run', () => {
+    const excluded = parsedSpecies.filter(belowFishTolerance);
+    expect(excluded.map((s) => s.id)).toEqual(
+      expect.arrayContaining(['cherry-shrimp', 'cleaner-shrimp']),
+    );
+    expect(excluded.filter((s) => !walks(s)).map((s) => s.id)).toEqual([]);
+    expect(nanoCapSpecies.length).toBeGreaterThan(0);
+  });
+
+  it.each(nanoCapSpecies.map((s) => [s.id, s.biome] as const))(
     'a nano stocked at the old cap of 12 keeps every %s for 120 days of weekly water changes',
     (id, biome) => {
       const spec = species.get(id);
@@ -1347,5 +1366,144 @@ describe('the clean-up crew: nerite snail and hermit crab', () => {
     const half = run(state, 53 * HOUR);
     const rest = run(half.state, 5 * DAY, { from: 53 * HOUR });
     expect(rest.state).toEqual(whole.state);
+  });
+});
+
+describe('equipment effects', () => {
+  const withEquipment = (patch: Partial<Equipment>): Equipment => ({
+    ...DEFAULT_EQUIPMENT,
+    ...patch,
+  });
+  const algaeAfter = (
+    ms: number,
+    equipment: Equipment,
+    biome: 'freshwater' | 'reef' = 'freshwater',
+  ) => run(tank([]), ms, { equipment, env: { biome } }).state.water.algae;
+
+  it('reads the lamp schedule in UTC, including a window that wraps midnight', () => {
+    const at = (hour: number, minute = 0) => Date.UTC(2026, 0, 1, hour, minute);
+    const step = 1 / 6;
+    expect(lampIsOn(at(8, 10), step, 8, 20)).toBe(true);
+    expect(lampIsOn(at(8, 0), step, 8, 20)).toBe(false);
+    expect(lampIsOn(at(20, 0), step, 8, 20)).toBe(true);
+    expect(lampIsOn(at(20, 10), step, 8, 20)).toBe(false);
+    expect(lampIsOn(at(23), step, 20, 6)).toBe(true);
+    expect(lampIsOn(at(3), step, 20, 6)).toBe(true);
+    expect(lampIsOn(at(12), step, 20, 6)).toBe(false);
+  });
+
+  it('keeps the baseline algae rate with the default lamp', () => {
+    expect(algaeAfter(DAY, DEFAULT_EQUIPMENT)).toBeCloseTo(
+      DEFAULT_WATER_PARAMETERS.algaePerHour * 24,
+      3,
+    );
+  });
+
+  it('grows no algae in the dark and more under a stronger or longer-lit lamp', () => {
+    const lamp = (patch: Partial<Equipment['light']>) =>
+      withEquipment({ light: { ...DEFAULT_EQUIPMENT.light, ...patch } });
+    const dim = algaeAfter(DAY, lamp({ intensity: 0.2 }));
+    const base = algaeAfter(DAY, DEFAULT_EQUIPMENT);
+    const strong = algaeAfter(DAY, lamp({ tier: 3 }));
+    const longDay = algaeAfter(DAY, lamp({ onHour: 6, offHour: 22 }));
+    expect(algaeAfter(DAY, lamp({ intensity: 0 }))).toBe(0);
+    expect(algaeAfter(DAY, lamp({ tier: 0 }))).toBe(0);
+    expect(dim).toBeLessThan(base);
+    expect(strong).toBeGreaterThan(base);
+    expect(longDay).toBeGreaterThan(base);
+  });
+
+  it('lets CO2 and a wave maker slow algae, by tier', () => {
+    const base = algaeAfter(DAY, DEFAULT_EQUIPMENT);
+    const co2 = [1, 2].map((tier) => algaeAfter(DAY, withEquipment({ co2: { tier } })));
+    expect(co2[0]).toBeLessThan(base);
+    expect(co2[1]).toBeLessThan(co2[0] ?? 0);
+    const waves = [1, 2].map((tier) =>
+      algaeAfter(DAY, withEquipment({ waveMaker: { tier } }), 'reef'),
+    );
+    expect(waves[0]).toBeLessThan(base);
+    expect(waves[1]).toBeLessThan(waves[0] ?? 0);
+  });
+
+  it('lowers the pH target with CO2, harder at a higher tier, and stresses a fish that needs harder water', () => {
+    const phAfter = (tier: number) =>
+      run(stocked(), 10 * DAY, { equipment: withEquipment({ co2: { tier } }) }).state.chemistry.ph;
+    const [none, one, two] = [phAfter(0), phAfter(1), phAfter(2)];
+    expect(one).toBeLessThan(none - 0.3);
+    expect(two).toBeLessThan(one - 0.3);
+
+    const start = tank([fishOf('a', 'neon-tetra')]);
+    const healthy = only(run(start, 30 * DAY, { feeder: true })).health;
+    const acid = only(
+      run(start, 30 * DAY, { feeder: true, equipment: withEquipment({ co2: { tier: 2 } }) }),
+    ).health;
+    expect(acid).toBeLessThanOrEqual(healthy);
+  });
+
+  it('gives identical results however a catch-up with a lamp schedule is split', () => {
+    const equipment = withEquipment({
+      light: { tier: 2, intensity: 0.6, onHour: 21, offHour: 5 },
+      co2: { tier: 1 },
+    });
+    const start = tank([fishOf('a', 'neon-tetra')], { uneatenFood: 2 });
+    const whole = run(start, 3 * DAY, { equipment });
+    const half = run(start, 31 * HOUR + 20 * 60_000, { equipment });
+    const rest = catchUp({
+      ...env,
+      equipment,
+      state: half.state,
+      fromMs: half.advancedToMs,
+      toMs: T0 + 3 * DAY,
+      graceEndsAtMs: NO_GRACE,
+      vacationFeeder: false,
+      ...NO_BREEDING,
+    });
+    expect(rest.state).toEqual(whole.state);
+  });
+});
+
+describe('warm-water species and the heater', () => {
+  const roomC = chemistryParams.temperature.roomC;
+  const warm = parsedSpecies.filter((s) => isWarmWater(s.chemistry, roomC));
+  const heaterless = { ...DEFAULT_EQUIPMENT, heater: { tier: 0 } };
+
+  it('flags exactly the species whose comfort range starts above room temperature', () => {
+    const ids = warm.map((s) => s.id);
+    expect(ids).toContain('discus');
+    expect(ids).toContain('betta');
+    expect(ids).not.toContain('neon-tetra');
+    for (const s of parsedSpecies) {
+      expect(isWarmWater(s.chemistry, roomC)).toBe(s.chemistry.temperatureC[0] > roomC);
+    }
+  });
+
+  it('stresses every warm species once an unheated tank cools, and a heater prevents it', () => {
+    for (const s of warm) {
+      const biome = s.biome;
+      const start = {
+        ...tank([fishOf('a', s.id, { health: 0.5 })]),
+        chemistry: newTankChemistry(biome),
+      };
+      const cold = only(run(start, DAY, { feeder: true, equipment: heaterless, env: { biome } }));
+      const heated = only(run(start, DAY, { feeder: true, env: { biome } }));
+      expect(heated.health, s.id).toBeGreaterThan(cold.health);
+    }
+  });
+
+  it('takes longer than a day for a heaterless warm tank to hurt, then keeps hurting', () => {
+    const start = {
+      ...tank([fishOf('a', 'discus')]),
+      chemistry: newTankChemistry('freshwater'),
+    };
+    const day = only(run(start, DAY, { feeder: true, equipment: heaterless }));
+    const week = only(run(start, 7 * DAY, { feeder: true, equipment: heaterless }));
+    expect(week.health).toBeLessThan(day.health);
+    expect(week.health).toBeLessThan(1);
+  });
+
+  it('leaves a neon tetra untouched without a heater', () => {
+    const start = tank([fishOf('a', 'neon-tetra')]);
+    const f = only(run(start, 5 * DAY, { feeder: true, equipment: heaterless }));
+    expect(f.health).toBe(1);
   });
 });

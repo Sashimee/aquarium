@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PlantPatch } from '@aquarium/shared';
-import { mulberry32, scatterPatch } from './placement';
+import { GLASS_SHRINK_FLOOR, mulberry32, scaleForRoom, scatterPatch } from './placement';
 
 const patch: PlantPatch = {
   id: 'p',
@@ -90,5 +90,75 @@ describe('scatterPatch glass clearance', () => {
   it('lets roots reach the wall when no reach is given', () => {
     const plants = scatterPatch(edge, flat, open, extent);
     expect(plants.some((p) => Math.abs(p.z) > extent.halfDepth - 0.05)).toBe(true);
+  });
+});
+
+describe('scatterPatch back row', () => {
+  const half = { halfLength: 0.585, halfDepth: 0.235 };
+  const reach = (scale: number) => 0.063 + 0.173 * scale;
+  const back: PlantPatch = {
+    ...patch,
+    center: [0.1, -0.15],
+    radius: 0.1,
+    count: 16,
+    scale: [0.6, 0.9],
+  };
+
+  it('keeps a patch whose reach is near the half-depth behind mid-depth', () => {
+    const plants = scatterPatch(back, flat, open, half, reach);
+    expect(plants).toHaveLength(16);
+    for (const p of plants) expect(p.z).toBeLessThan(-0.05);
+    const meanZ = plants.reduce((sum, p) => sum + p.z, 0) / plants.length;
+    expect(meanZ).toBeLessThan(-0.09);
+  });
+
+  it('shrinks plants near the glass rather than moving them, never below the floor', () => {
+    const plants = scatterPatch(back, flat, open, half, reach);
+    for (const p of plants) {
+      expect(Math.abs(p.z) + reach(p.scale)).toBeLessThanOrEqual(half.halfDepth + 1e-9);
+      expect(p.scale).toBeGreaterThanOrEqual(0.6 * GLASS_SHRINK_FLOOR - 1e-9);
+    }
+  });
+});
+
+describe('scaleForRoom', () => {
+  const reach = (scale: number) => 0.05 + 0.2 * scale;
+
+  it('keeps the drawn scale when it fits', () => {
+    expect(scaleForRoom(0.8, 0.3, reach)).toBe(0.8);
+  });
+
+  it('shrinks to exactly fill the room', () => {
+    expect(reach(scaleForRoom(0.9, 0.17, reach))).toBeCloseTo(0.17, 10);
+  });
+
+  it('stops at the floor when the room is too small', () => {
+    expect(scaleForRoom(0.9, 0.01, reach)).toBeCloseTo(0.9 * GLASS_SHRINK_FLOOR, 10);
+  });
+});
+
+describe('scatterPatch side glass', () => {
+  const side = { halfLength: 0.5, halfDepth: 1 };
+  const reach = (scale: number) => 0.2 * scale;
+  const at = (x: number): PlantPatch => ({
+    ...patch,
+    center: [x, 0],
+    radius: 0.01,
+    count: 4,
+    scale: [1, 1],
+  });
+
+  it('shrinks to fit the room left at the side wall', () => {
+    for (const p of scatterPatch(at(0.35), flat, open, side, reach)) {
+      expect(p.scale).toBeGreaterThan(0.7);
+      expect(p.scale).toBeLessThan(0.8);
+    }
+  });
+
+  it('stops shrinking at the floor and moves the root instead', () => {
+    for (const p of scatterPatch(at(0.49), flat, open, side, reach)) {
+      expect(p.scale).toBeCloseTo(GLASS_SHRINK_FLOOR, 10);
+      expect(Math.abs(p.x) + reach(p.scale)).toBeLessThanOrEqual(side.halfLength + 1e-9);
+    }
   });
 });
