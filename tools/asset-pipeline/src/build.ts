@@ -17,13 +17,14 @@ import {
   type OutputAsset,
 } from './index-schema.ts';
 import { aggregateSha256, manifestSchema, type ManifestAsset } from './manifest.ts';
+import { AUDIO_RECIPES, buildAudio } from './audio.ts';
 import {
   buildBackground,
   contactSheet as backgroundSheet,
   syncContentFiles,
 } from './backgrounds.ts';
 import type { Rgba } from './textures.ts';
-import { verifyRawSource } from './source.ts';
+import { RAW_ROOT, verifyRawSource } from './source.ts';
 import { ENVIRONMENT_RECIPES, FISH_RECIPES, HDRI_RECIPES, SUBSTRATE_RECIPES } from './recipes.ts';
 
 export interface BuildOptions {
@@ -53,6 +54,7 @@ const KIND_ORDER: OutputAsset['kind'][] = [
   'decor',
   'substrate',
   'hdri',
+  'audio',
   'background',
 ];
 
@@ -98,6 +100,12 @@ function tasks(backgrounds: readonly ManifestAsset[], previews: Map<string, Rgba
       kind: 'fish' as const,
       id: recipe.id,
       run: (ctx: FishContext) => buildLoftFish(recipe, ctx),
+    })),
+    ...AUDIO_RECIPES.map((recipe) => ({
+      kind: 'audio' as const,
+      id: recipe.id,
+      run: (ctx: FishContext) =>
+        Promise.resolve(buildAudio(recipe, ctx, RAW_ROOT, ctx.licenceOf(recipe.source))),
     })),
     ...backgrounds.map((entry) => ({
       kind: 'background' as const,
