@@ -34,3 +34,11 @@ Model: sonnet — scoped, test-driven tooling work against a clear spec.
 - **Procedural-loft fallback:** generate a body from species proportions (cross-sections along the spine) with UVs for the projected reference-photo texture.
 - `pnpm assets:check` fails on: an asset not in the manifest, a licence not CC0/CC-BY, a missing CC-BY credit, a total over 150 MB, or a fish missing its fin mask or LODs. Wire it into CI.
 - The pipeline must be reproducible: same inputs give byte-identical outputs where the tools allow.
+
+## Shared machine
+
+Up to six agents share this host and the session scratchpad.
+
+- Put temp files in your own subfolder, `<scratchpad>/<issue-or-PR>/`, and delete only the exact paths you created. Never `rm` with a wildcard outside that subfolder.
+- Stop only processes you started, by their PID. Never `pkill`, `killall` or `pkill -f <pattern>`.
+- Remove the worktrees, containers and `node_modules` you created, and nothing else.
