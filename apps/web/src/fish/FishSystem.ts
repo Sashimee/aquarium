@@ -152,6 +152,8 @@ interface SpeciesBatch {
   /** Follows `model`. */
   locomotion: BatchLocomotion;
   readonly profile: FishRenderProfile;
+  /** Spreads its fins in display; every territorial species reports display, only these show it. */
+  readonly displays: boolean;
   lods: readonly LodBatch[];
   atlas: AtlasState;
   /** Built with the LODs once the atlas is ready; null without one, and for walkers. */
@@ -863,6 +865,7 @@ export class FishSystem {
       model,
       locomotion,
       profile,
+      displays: input.behaviour.traits.includes('flare-display'),
       lods: [],
       atlas: { kind: 'none' },
       impostor: null,
@@ -876,7 +879,7 @@ export class FishSystem {
     if (needed <= batch.capacity) return;
     this.disposeLods(batch);
     const capacity = capacityFor(needed);
-    const { input, model, profile, locomotion } = batch;
+    const { model, profile, locomotion } = batch;
     const lighting = this.lighting();
     batch.lods = model.lods.map((parts, level) => {
       const walking = locomotion.kind === 'walk';
@@ -908,7 +911,7 @@ export class FishSystem {
           instances,
           lighting,
           mouth: part.mouth,
-          displays: input.behaviour.traits.includes('flare-display'),
+          displays: batch.displays,
         });
         if (this.features !== null) material.setFeatures(this.features);
         const mesh = new InstancedMesh(part.geometry, material, capacity);
@@ -1644,7 +1647,7 @@ export class FishSystem {
       choice.lod = rt.lod;
       choice.full = rt.full;
       choice.castsShadow = castsShadow && rt.lod < SHADOW_LODS;
-      choice.display = Math.max(rt.display, rt.gillFlare);
+      choice.display = rt.batch.displays ? Math.max(rt.display, rt.gillFlare) : 0;
       if (impostor !== null && motion instanceof SwimState && drawsAsImpostor(choice)) {
         this.drawImpostor(rt, motion, impostor, camera);
       } else {

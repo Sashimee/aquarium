@@ -74,7 +74,10 @@ export interface ImpostorChoice {
   full: boolean;
   /** Its mesh at `lod` casts a shadow on this tier. */
   castsShadow: boolean;
-  /** The larger of its fin spread and gill flare in display, 0..1; the atlas has neither. */
+  /**
+   * The larger of its fin spread and gill flare in display, 0..1, which the atlas has neither of;
+   * 0 for a species whose mesh does not show display either.
+   */
   display: number;
 }
 

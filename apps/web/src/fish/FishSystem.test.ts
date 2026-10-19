@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   BoxGeometry,
+  CompressedTexture,
   InstancedMesh,
   Matrix4,
   MeshStandardMaterial,
@@ -13,12 +14,14 @@ import { CARCASS, SNAPSHOT_STRIDE, SnapshotField, type SimToy } from '@aquarium/
 import type { Collider } from '@aquarium/shared';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import type { Engine } from '../engine/Engine';
+import { TIER_SETTINGS, type TierSettings } from '../engine/quality/tiers';
 import { EventBus, type EngineEvents } from '../engine/events';
 import { DEFAULT_TANK, waterBounds } from '../engine/tank/dimensions';
 import type { InteractionEvents } from '../interaction/events';
 import { FISH_1, FISH_2, TANK_A, fishFixture } from '../sync/fixtures';
-import type { FishAssetEntry } from './assetIndex';
+import type { FishAssetEntry, ImpostorAtlasInfo } from './assetIndex';
 import { FishAssetLoader, type FishModel } from './assets';
+import { ImpostorInstanceData } from './impostor';
 import { FishInstanceData, InstanceSlot, type InstanceValues } from './instances';
 import { FishMaterial } from './material';
 import { batchLocomotion, FishSystem } from './FishSystem';
@@ -626,7 +629,7 @@ describe('FishSystem dead shrimp', () => {
 });
 
 /** A betta drawn as one box, enough to place and draw it. */
-function bettaModel(): FishModel {
+function bettaModel(impostor: ImpostorAtlasInfo | null = null): FishModel {
   return {
     entry: {
       id: 'betta',
@@ -638,7 +641,7 @@ function bettaModel(): FishModel {
       lodFiles: [],
       sharperTextures: new Map(),
       shrimp: null,
-      impostor: null,
+      impostor,
     },
     tail: null,
     textureSize: 1024,
@@ -678,8 +681,18 @@ describe('FishSystem toys and display', () => {
   });
 
   /** A saved tank with one betta, its world up; `snapshot` sends one sim step and draws it. */
-  async function bettaTank(shown = BETTA, biome: 'freshwater' | 'reef' = 'freshwater') {
+  async function bettaTank(
+    shown = BETTA,
+    biome: 'freshwater' | 'reef' = 'freshwater',
+    tier: Partial<TierSettings> | null = null,
+  ) {
     const { engine, frames } = fakeEngine();
+    if (tier !== null) {
+      engine.quality.register = (name, apply) => {
+        if (name === 'fish-lod') apply({ ...TIER_SETTINGS.low, ...tier }, 'low');
+        return () => undefined;
+      };
+    }
     const start = FishSystem.create(engine, {
       tank: DEFAULT_TANK,
       assetRoot: '/assets/',
@@ -910,6 +923,53 @@ describe('FishSystem toys and display', () => {
     expect(bettaDisplay()).toBeCloseTo(0.2, 6);
     fish.dispose();
   });
+
+  it.each([
+    ['betta', BETTA, 'freshwater', false],
+    [
+      'royal gramma, whose territorial display the sim reports but no mesh shows',
+      fishFixture(FISH_1, { species: 'royal-gramma', size: 0.06 }),
+      'reef',
+      true,
+    ],
+  ] as const)(
+    'draws a distant %s in display as an impostor only without the flare trait',
+    async (_, shown, biome, far) => {
+      const atlas: ImpostorAtlasInfo = {
+        grid: 8,
+        frameSize: 64,
+        pivot: [0, 0, 0],
+        radius: 0.04,
+        albedoFile: 'atlas-albedo.ktx2',
+        normalFile: 'atlas-normal.ktx2',
+      };
+      vi.mocked(FishAssetLoader.prototype.load).mockResolvedValue(bettaModel(atlas));
+      vi.spyOn(KTX2Loader.prototype, 'loadAsync').mockImplementation(() =>
+        Promise.resolve(new CompressedTexture([], 1, 1)),
+      );
+      const impostorWrites = vi.spyOn(ImpostorInstanceData.prototype, 'write');
+      const meshWrites = vi.spyOn(FishInstanceData.prototype, 'write');
+      const tier = {
+        fishLod: { midDistance: 0.01, impostorDistance: 0.02 },
+        fishImpostors: { fullMeshes: 0 },
+      };
+      const { fish, load, nextWorld, snapshot } = await bettaTank(shown, biome, tier);
+      load();
+      await nextWorld();
+      snapshot(0, 0);
+      await vi.waitFor(() => {
+        snapshot(0, 0);
+        if (impostorWrites.mock.calls.length === 0) throw new Error('no impostor drawn yet');
+      });
+      for (let i = 0; i < 3; i++) snapshot(0.8, 0.6);
+      impostorWrites.mockClear();
+      meshWrites.mockClear();
+      snapshot(0.8, 0.6);
+      expect(impostorWrites.mock.calls.length > 0).toBe(far);
+      expect(meshWrites.mock.calls.length > 0).toBe(!far);
+      fish.dispose();
+    },
+  );
 
   it.each([
     ['betta', BETTA, 'freshwater', true],
