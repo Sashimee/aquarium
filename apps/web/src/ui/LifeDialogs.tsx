@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { describeAway, netPrompt } from '../sync/life';
 import { Dialog } from './Dialog';
+import { ReplayView } from './ReplayView';
 import { useActiveTank, useSessionState, useSpeciesNames, useTankSession } from './session';
 
 /** The server's offline catch-up, shown once per load for the tank that is on screen. */
@@ -9,6 +11,7 @@ export function AwayDialog({ onReview }: { onReview(): void }) {
   const names = useSpeciesNames();
   const tank = useActiveTank();
   const away = tank ? state.awayByTank[tank.id] : undefined;
+  const [replaying, setReplaying] = useState(false);
   if (!tank || !away) return null;
 
   const report = describeAway(away, names);
@@ -29,7 +32,15 @@ export function AwayDialog({ onReview }: { onReview(): void }) {
           ))}
         </ul>
       )}
+      {replaying && away.fromAt && (
+        <ReplayView tank={tank} since={away.fromAt} onSkip={() => setReplaying(false)} />
+      )}
       <div className="row">
+        {!replaying && away.fromAt && (
+          <button type="button" onClick={() => setReplaying(true)}>
+            Watch what happened
+          </button>
+        )}
         {needsNet && (
           <button
             type="button"

@@ -5,6 +5,8 @@ import {
   ateBatchRequestSchema,
   careActionSchema,
   collectionSchema,
+  replayQuerySchema,
+  replayResponseSchema,
   createTankRequestSchema,
   speciesListSchema,
   tankListSchema,
@@ -33,6 +35,7 @@ import {
   type BackgroundId,
   type CareAction,
   type Collection,
+  type ReplayResponse,
   type DecorLayout,
   type Credits,
   type CreateTankRequest,
@@ -199,6 +202,10 @@ export interface ApiClient {
   addFish(tankId: string, input: AddFishRequest): Promise<Tank>;
   netFish(tankId: string, fishId: string): Promise<Tank>;
   care(tankId: string, action: CareAction): Promise<Tank>;
+  replay(
+    tankId: string,
+    query: { since: string; until?: string; cursor?: string; limit?: number },
+  ): Promise<ReplayResponse>;
   reportAte(tankId: string, reports: readonly AteReport[], batchId?: string): Promise<Tank>;
   /** The only call whose response carries the share token, together with `rotateShare`. */
   shareTank(tankId: string): Promise<Tank>;
@@ -648,6 +655,15 @@ export function createApiClient(
       );
       if (!res.ok) throw await toError(res);
       return parsed(res, tankSchema);
+    },
+    async replay(tankId, query) {
+      const checked = validate(replayQuerySchema, query);
+      const params = new URLSearchParams({ since: checked.since, limit: String(checked.limit) });
+      if (checked.until) params.set('until', checked.until);
+      if (checked.cursor) params.set('cursor', checked.cursor);
+      const res = await send(`/api/tanks/${encodeURIComponent(tankId)}/replay?${params}`);
+      if (!res.ok) throw await toError(res);
+      return parsed(res, replayResponseSchema);
     },
     async care(tankId, action) {
       const body = validate(careActionSchema, action);

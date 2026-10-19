@@ -339,6 +339,38 @@
   color: var(--ink-soft);
 }
 
+.replay-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0;
+  display: grid;
+  gap: 0.35rem;
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.replay-list li {
+  padding-left: 0.75rem;
+  border-left: 3px solid var(--ink-soft);
+}
+
+.replay-list li.replay-loss {
+  border-left-color: var(--danger);
+}
+
+.replay-list li.replay-warn {
+  border-left-color: #ffd27f;
+}
+
+.replay-list li.replay-good {
+  border-left-color: #7fd6a4;
+}
+
+.replay input[type='range'] {
+  display: block;
+  width: 100%;
+}
+
 .loss-list li {
   padding-left: 0.75rem;
   border-left: 3px solid var(--danger);

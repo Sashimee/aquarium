@@ -13,7 +13,7 @@ import { hasCapacityFor, TANK_BIOLOAD_CAPACITY } from '@aquarium/sim/lifecycle';
 
 export { speciesNameMap, type SpeciesNames } from './speciesNames';
 
-function speciesName(names: SpeciesNames, id: string): string {
+export function speciesName(names: SpeciesNames, id: string): string {
   return names.get(id)?.toLowerCase() ?? id.replaceAll('-', ' ');
 }
 
