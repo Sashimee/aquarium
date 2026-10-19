@@ -1396,13 +1396,18 @@ describe('tank sizes, quarantine and sharing', () => {
     );
     for (const t of [small, big]) {
       await h.database.db.insert(schema.fish).values(
-        Array.from({ length: 12 }, (_, i) => ({
-          tankId: t.id,
-          species: 'neon-tetra',
-          name: `N${i}`,
-          size: 0.03,
-          sex: 'female' as const,
-        })),
+        Array.from({ length: 12 }, (_, i) => {
+          const id = randomUUID();
+          return {
+            id,
+            tankId: t.id,
+            species: 'neon-tetra',
+            name: `N${i}`,
+            size: 0.03,
+            sex: 'female' as const,
+            personality: personalityFromFishId(id),
+          };
+        }),
       );
     }
     await advance(h, 6 * 60);
