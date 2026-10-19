@@ -79,3 +79,24 @@ export function detectTransitions(
   }
   return { entries, flags: { waterHigh, sick } };
 }
+
+/**
+ * Appends entries up to the cap. A `normal` that closes an alert already in the list is always kept,
+ * so a capped timeline never ends on an alert that appears never to clear.
+ */
+export function appendCapped(
+  timeline: TimelineEntry[],
+  openAlerts: Set<WaterAlertMetric>,
+  entries: readonly TimelineEntry[],
+): void {
+  for (const entry of entries) {
+    const closesRecordedAlert =
+      entry.kind === 'water_alert' && entry.state === 'normal' && openAlerts.has(entry.metric);
+    if (timeline.length >= MAX_TIMELINE_ENTRIES && !closesRecordedAlert) continue;
+    timeline.push(entry);
+    if (entry.kind === 'water_alert') {
+      if (entry.state === 'high') openAlerts.add(entry.metric);
+      else openAlerts.delete(entry.metric);
+    }
+  }
+}

@@ -6,6 +6,7 @@ import {
 } from '@aquarium/shared';
 import type { LightMyRequestResponse } from 'fastify';
 import { randomUUID } from 'node:crypto';
+import { eq, sql } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { schema } from './db/index.ts';
 import { APP_ORIGIN, createHarness, type Harness } from './test-harness.ts';
@@ -34,7 +35,13 @@ async function signedIn(h: Harness): Promise<string> {
   return cookie;
 }
 
-function call(h: Harness, cookie: string, method: 'GET' | 'POST', url: string, payload?: object) {
+function call(
+  h: Harness,
+  cookie: string,
+  method: 'GET' | 'POST' | 'DELETE',
+  url: string,
+  payload?: object,
+) {
   return h.app.inject({
     method,
     url,
@@ -123,6 +130,37 @@ describe('away replay', () => {
     const read = tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${tank.id}`)).json());
     expect(read.away?.capped).toBe(true);
     const since = read.away?.fromAt ?? '';
+    const nowMs = h.clock.now();
+    const everything = parsed(await replay(h, cookie, tank.id, { since }));
+    expect(everything.events.length).toBeGreaterThan(0);
+    for (const e of everything.events) {
+      const atMs = Date.parse(e.at);
+      expect(atMs).toBeGreaterThan(nowMs - 60 * DAY * 60_000);
+      expect(atMs).toBeLessThanOrEqual(nowMs);
+    }
+    const deaths = everything.events.filter((e) => e.kind === 'death');
+    expect(deaths.length).toBeGreaterThan(0);
+    for (const death of deaths) {
+      if (death.kind !== 'death') continue;
+      const [row] = await h.database.db
+        .select()
+        .from(schema.fish)
+        .where(eq(schema.fish.id, death.payload.fishId));
+      expect(row?.diedAt?.toISOString()).toBe(death.at);
+      const away = read.away?.deaths.find((d) => d.fishId === death.payload.fishId);
+      expect(away?.diedAt).toBe(death.at);
+    }
+    const [first] = deaths;
+    if (first?.kind !== 'death') throw new Error('expected a death event');
+    const netted = await call(
+      h,
+      cookie,
+      'DELETE',
+      `/api/tanks/${tank.id}/fish/${first.payload.fishId}`,
+    );
+    expect(netted.statusCode).toBe(200);
+    const after = tankSchema.parse(netted.json());
+    expect(after.memorials.map((m) => m.diedAt)).toEqual([first.at]);
     const seen: string[] = [];
     let cursor: string | undefined;
     let pages = 0;
@@ -167,6 +205,36 @@ describe('away replay', () => {
     expect(second.nextCursor).toBeNull();
   });
 
+  it('pages one event at a time through rows stamped with microseconds', async () => {
+    const cookie = await signedIn(h);
+    const tank = await tankWithFish(h, cookie);
+    const base = new Date(h.clock.now() - 10_000).toISOString();
+    await h.database.db.insert(schema.events).values(
+      [100, 200, 300, 400].map((us) => ({
+        tankId: tank.id,
+        at: sql`${base}::timestamptz + ${us} * interval '1 microsecond'`,
+        kind: 'water_change' as const,
+        payload: {},
+      })),
+    );
+    const since = new Date(Date.parse(base) - 1).toISOString();
+    const all = parsed(await replay(h, cookie, tank.id, { since }));
+    expect(all.events).toHaveLength(4);
+    const seen: string[] = [];
+    let cursor: string | undefined;
+    let pages = 0;
+    do {
+      const body = parsed(
+        await replay(h, cookie, tank.id, { since, limit: '1', ...(cursor ? { cursor } : {}) }),
+      );
+      seen.push(...body.events.map((e) => e.id));
+      cursor = body.nextCursor ?? undefined;
+      pages++;
+    } while (cursor && pages < 10);
+    expect(cursor).toBeUndefined();
+    expect(seen).toEqual(all.events.map((e) => e.id));
+  });
+
   it('treats since as exclusive and until as inclusive', async () => {
     const cookie = await signedIn(h);
     const tank = await tankWithFish(h, cookie);
@@ -209,6 +277,12 @@ describe('away replay', () => {
       { since: LONG_AGO, limit: '501' },
       { since: LONG_AGO, cursor: 'not a cursor!' },
       { since: LONG_AGO, cursor: Buffer.from('nope').toString('base64url') },
+      {
+        since: LONG_AGO,
+        cursor: Buffer.from(
+          '2026-01-01T00:00:00.000000Z|00000000-0000-4000-8000-000000000000|extra',
+        ).toString('base64url'),
+      },
     ]) {
       const res = await replay(h, cookie, tank.id, query);
       expect(res.statusCode, JSON.stringify(query)).toBe(400);

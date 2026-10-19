@@ -43,14 +43,26 @@ import {
   FEEDING_WINDOW_MINUTES,
   GRACE_PERIOD_MS,
   hasCapacityFor,
-  STEP_MS,
   VACATION_FEEDER_ASSET_ID,
   type BirthRecord,
   type LifecycleFish,
   type LifecycleState,
 } from '@aquarium/sim/lifecycle';
 import { randomInt, randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, gt, gte, inArray, lt, lte, or, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  getTableColumns,
+  gt,
+  gte,
+  inArray,
+  lt,
+  lte,
+  or,
+  sql,
+} from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { audit } from './audit.ts';
@@ -109,14 +121,17 @@ const atePayloadSchema = z.looseObject({ fishId: idSchema, portion: z.number().p
 const tankParamsSchema = z.strictObject({ tankId: idSchema });
 const fishParamsSchema = z.strictObject({ tankId: idSchema, fishId: idSchema });
 
-function encodeReplayCursor(row: { at: Date; id: string }): string {
-  return Buffer.from(`${row.at.getTime()}.${row.id}`).toString('base64url');
+const CURSOR_AT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
+
+function encodeReplayCursor(row: { atUs: string; id: string }): string {
+  return Buffer.from(`${row.atUs}|${row.id}`).toString('base64url');
 }
 
-function decodeReplayCursor(raw: string): { at: Date; id: string } {
-  const [ms, id] = Buffer.from(raw, 'base64url').toString().split('.');
+function decodeReplayCursor(raw: string): { atUs: string; id: string } {
+  const parts = Buffer.from(raw, 'base64url').toString().split('|');
+  const [atUs, id] = parts;
   const parsedId = idSchema.safeParse(id);
-  if (!ms || !/^\d{1,15}$/.test(ms) || !parsedId.success) {
+  if (parts.length !== 2 || !atUs || !CURSOR_AT.test(atUs) || !parsedId.success) {
     throw new HttpError(
       400,
       apiError('validation_failed', 'The cursor is not valid. Start again without one.', [
@@ -124,7 +139,7 @@ function decodeReplayCursor(raw: string): { at: Date; id: string } {
       ]),
     );
   }
-  return { at: new Date(Number(ms)), id: parsedId.data };
+  return { atUs, id: parsedId.data };
 }
 
 class HttpError extends Error {
@@ -309,51 +324,42 @@ async function lockAndTick(
       updatedAt: new Date(now),
     })
     .where(eq(schema.tanks.id, tank.id));
-  // A capped catch-up simulates only the first 60 days of a longer absence but moves last-tick to now;
-  // its events are placed in the 60 days before now so retention keeps them and the replay can show them.
-  const shiftMs = result.advancedToMs - (tank.lastTickAt.getTime() + result.steps * STEP_MS);
-  const recentDeaths = result.deaths.filter(
-    (d) => d.diedAtMs + shiftMs >= now - EVENT_RETENTION_MS,
-  );
+  const recentDeaths = result.deaths.filter((d) => d.diedAtMs >= now - EVENT_RETENTION_MS);
   if (recentDeaths.length > 0) {
     await tx.insert(schema.events).values(
       recentDeaths.map((d) => ({
         tankId: tank.id,
-        at: new Date(d.diedAtMs + shiftMs),
+        at: new Date(d.diedAtMs),
         kind: 'death' as const,
         payload: { fishId: d.fishId, cause: d.cause },
       })),
     );
   }
-  const recentBirths = result.births.filter(
-    (b) => b.bornAtMs + shiftMs >= now - EVENT_RETENTION_MS,
-  );
+  const recentBirths = result.births.filter((b) => b.bornAtMs >= now - EVENT_RETENTION_MS);
   if (recentBirths.length > 0) {
     await tx.insert(schema.events).values(
       recentBirths.map((b) => ({
         tankId: tank.id,
-        at: new Date(b.bornAtMs + shiftMs),
+        at: new Date(b.bornAtMs),
         kind: 'born' as const,
         payload: { fishId: b.fishId, parentId: b.parentId, species: b.species },
       })),
     );
   }
-  const recentTimeline = result.timeline.filter(
-    (e) => e.atMs + shiftMs >= now - EVENT_RETENTION_MS,
-  );
+  const recentTimeline = result.timeline.filter((e) => e.atMs >= now - EVENT_RETENTION_MS);
   if (recentTimeline.length > 0) {
     await tx.insert(schema.events).values(
       recentTimeline.map((e) =>
         e.kind === 'sick'
           ? {
               tankId: tank.id,
-              at: new Date(e.atMs + shiftMs),
+              at: new Date(e.atMs),
               kind: 'sick' as const,
               payload: { fishId: e.fishId },
             }
           : {
               tankId: tank.id,
-              at: new Date(e.atMs + shiftMs),
+              at: new Date(e.atMs),
               kind: 'water_alert' as const,
               payload: { metric: e.metric, state: e.state },
             },
@@ -659,7 +665,10 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       return withTank(user, tankId, async (tx, ticked) => {
         const until = query.until ? new Date(query.until) : new Date(ticked.nowMs);
         const rows = await tx
-          .select()
+          .select({
+            ...getTableColumns(schema.events),
+            atUs: sql<string>`to_char(${schema.events.at} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+          })
           .from(schema.events)
           .where(
             and(
@@ -669,8 +678,11 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
               ...(cursor
                 ? [
                     or(
-                      gt(schema.events.at, cursor.at),
-                      and(eq(schema.events.at, cursor.at), gt(schema.events.id, cursor.id)),
+                      sql`${schema.events.at} > ${cursor.atUs}::timestamptz`,
+                      and(
+                        sql`${schema.events.at} = ${cursor.atUs}::timestamptz`,
+                        gt(schema.events.id, cursor.id),
+                      ),
                     ),
                   ]
                 : []),

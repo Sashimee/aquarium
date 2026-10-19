@@ -124,7 +124,9 @@ export const replayCursorSchema = z
   .describe('opaque; pass back the nextCursor of the previous page unchanged');
 
 export const replayQuerySchema = z.strictObject({
-  since: timestampSchema.describe('exclusive lower bound; use away.fromAt from the tank read'),
+  since: timestampSchema.describe(
+    'exclusive lower bound; use away.fromAt from the tank read, which must happen before the replay call because the read is what runs the catch-up and stores the events',
+  ),
   until: timestampSchema.optional().describe('inclusive upper bound, default now'),
   cursor: replayCursorSchema.optional(),
   limit: z.coerce.number().int().min(1).max(REPLAY_MAX_LIMIT).default(REPLAY_DEFAULT_LIMIT),
