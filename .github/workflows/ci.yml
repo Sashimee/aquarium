@@ -129,7 +129,7 @@ jobs:
           - name: ktx2-feed-auth-death
             args: ktx2.spec feed.spec auth.spec death.spec sound.spec
           - name: public-link
-            args: public-link.spec
+            args: public-link.spec test-kit.spec
           - name: tanks-care-reset
             args: tanks.spec care.spec shrimp.spec password-reset.spec password-reset-history.spec collection.spec
     services:
