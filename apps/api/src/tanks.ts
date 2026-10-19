@@ -213,7 +213,11 @@ async function lockAndTick(
       ),
     );
 
-  const byId = new Map(fishRows.map((r) => [r.id, r]));
+  if (result.steps === 0) return { tank, fishRows, state: initial, away: null };
+
+  const updatedRows = await persistFish(tx, fishRows, result.state);
+  const bornRows = await insertNewborns(tx, tank.id, result.births, result.state, deps);
+  const byId = new Map([...fishRows, ...bornRows.values()].map((r) => [r.id, r]));
   const away: AwaySummary = {
     elapsedMinutes: result.elapsedMinutes,
     capped: result.capped,
@@ -228,24 +232,18 @@ async function lockAndTick(
         diedAt: new Date(d.diedAtMs).toISOString(),
       };
     }),
-    births: [],
+    births: result.births.map((b) => {
+      const row = bornRows.get(b.fishId);
+      if (!row) throw new Error('lifecycle returned a birth that was not stored');
+      return {
+        fishId: b.fishId,
+        parentId: b.parentId,
+        name: row.name,
+        species: b.species,
+        bornAt: new Date(b.bornAtMs).toISOString(),
+      };
+    }),
   };
-
-  if (result.steps === 0) return { tank, fishRows, state: initial, away: null };
-
-  const updatedRows = await persistFish(tx, fishRows, result.state);
-  const bornRows = await insertNewborns(tx, tank.id, result.births, result.state, deps);
-  away.births = result.births.map((b) => {
-    const row = bornRows.get(b.fishId);
-    if (!row) throw new Error('lifecycle returned a birth that was not stored');
-    return {
-      fishId: b.fishId,
-      parentId: b.parentId,
-      name: row.name,
-      species: b.species,
-      bornAt: new Date(b.bornAtMs).toISOString(),
-    };
-  });
   const advancedTo = new Date(result.advancedToMs);
   await tx
     .update(schema.tanks)
@@ -302,7 +300,11 @@ async function insertNewborns(
       species: b.species,
       name: `${spec.commonName} fry`.slice(0, 40),
       sex: fish.sex,
-      stage: 'fry' as const,
+      stage: fish.stage,
+      status: fish.alive ? ('alive' as const) : ('dead' as const),
+      diedAt: fish.diedAtMs === null ? null : new Date(fish.diedAtMs),
+      cause: fish.cause,
+      lastBroodAt: fish.lastBroodAtMs === null ? null : new Date(fish.lastBroodAtMs),
       personality: rollPersonality(),
       bornAt: new Date(b.bornAtMs),
       size: fish.size,

@@ -474,6 +474,45 @@ describe('server-authoritative lifecycle', () => {
     expect(again.fish.filter((f) => f.stage === 'fry')).toHaveLength(fry.length);
   });
 
+  it('survives a long catch-up in which fry are born and then starve', async () => {
+    const cookie = await signedIn(h);
+    let found = false;
+    for (let attempt = 0; attempt < 12 && !found; attempt++) {
+      const tank = await createTank(h, cookie);
+      await addFish(h, cookie, tank.id, 'guppy', 'Mum');
+      const withBoth = await addFish(h, cookie, tank.id, 'guppy', 'Dad');
+      const [mum, dad] = withBoth.fish;
+      const grownUp = new Date(h.clock.now() - 400 * DAY * 60_000);
+      await h.database.db
+        .update(schema.fish)
+        .set({ sex: 'female', bornAt: grownUp })
+        .where(eq(schema.fish.id, mum?.id ?? ''));
+      await h.database.db
+        .update(schema.fish)
+        .set({ sex: 'male', bornAt: grownUp })
+        .where(eq(schema.fish.id, dad?.id ?? ''));
+      await advance(h, 25 * 24 * 60);
+
+      const res = await call(h, cookie, 'GET', `/api/tanks/${tank.id}`);
+      expect(res.statusCode).toBe(200);
+      const read = tankSchema.parse(res.json());
+      const births = read.away?.births ?? [];
+      const bornIds = new Set(births.map((b) => b.fishId));
+      const fryDeaths = (read.away?.deaths ?? []).filter((d) => bornIds.has(d.fishId));
+      for (const d of fryDeaths) {
+        expect(read.fish.find((f) => f.id === d.fishId)?.status).toBe('dead');
+      }
+      for (const f of read.fish.filter((x) => bornIds.has(x.id))) {
+        const died = fryDeaths.some((d) => d.fishId === f.id);
+        expect(f.status).toBe(died ? 'dead' : 'alive');
+      }
+      const again = await call(h, cookie, 'GET', `/api/tanks/${tank.id}`);
+      expect(again.statusCode).toBe(200);
+      if (fryDeaths.length > 0) found = true;
+    }
+    expect(found).toBe(true);
+  });
+
   it('gives a new account 48 h of grace, then the fish starve', async () => {
     const cookie = await signedIn(h);
     const tank = await createTank(h, cookie);

@@ -272,4 +272,25 @@ describe('fry growth', () => {
     expect(fry).toHaveLength(result.births.length);
     expect(fry.every((f) => f.stage === 'fry' && f.alive)).toBe(true);
   });
+
+  it('reports deaths only for fish that were in the input or were born', () => {
+    const state = tank([
+      fishOf('f1', 'guppy', { sex: 'female', hunger: 0 }),
+      fishOf('m1', 'guppy', { sex: 'male', hunger: 0 }),
+    ]);
+    const result = catchUp({
+      state,
+      fromMs: T0,
+      toMs: T0 + 40 * DAY,
+      species: lifecycles,
+      params: DEFAULT_WATER_PARAMETERS,
+      graceEndsAtMs: T0,
+      vacationFeeder: false,
+      breeding: breedings,
+      breedingEnvironment: env(),
+    });
+    const known = new Set([...state.fish.map((f) => f.id), ...result.births.map((b) => b.fishId)]);
+    expect(result.deaths.length).toBeGreaterThan(0);
+    expect(result.deaths.every((d) => known.has(d.fishId))).toBe(true);
+  });
 });

@@ -106,7 +106,7 @@ export function stepBreeding(
   let load = living.reduce((sum, f) => sum + maxBioload(f.species), 0);
   const youngCap = Math.floor(environment.maxAnimals * MAX_YOUNG_FRACTION);
 
-  const candidates = grown.toSorted((a, b) => a.id.localeCompare(b.id));
+  const candidates = grown.toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   for (const parent of candidates) {
     const b = ctx.breeding.get(parent.species);
     const spec = ctx.species.get(parent.species);
