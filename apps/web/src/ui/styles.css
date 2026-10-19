@@ -725,3 +725,16 @@ progress {
 .equipment h4 {
   margin: 0;
 }
+
+.pearls-earned {
+  color: var(--good);
+  font-weight: 600;
+}
+
+.confirm {
+  margin: 0.5rem 0;
+  padding: 0.5rem 0.75rem;
+  border-left: 0.3rem solid var(--good);
+  border-radius: 0.5rem;
+  background: var(--glass);
+}

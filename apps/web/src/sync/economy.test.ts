@@ -8,7 +8,9 @@ import {
   priceText,
   shortfallSentence,
   smallestCoveringPack,
+  spendQuestion,
   speciesPrice,
+  tankPrice,
 } from './economy';
 import { speciesFixture, tankFixture } from './fixtures';
 
@@ -129,5 +131,41 @@ describe('heater warning', () => {
 
   it('stays quiet for a species that does not need warmth, heater or not', () => {
     expect(heaterWarning(cold, cool, 21)).toBeNull();
+  });
+});
+
+describe('tankPrice', () => {
+  const display = (n: number) => Array.from({ length: n }, () => ({ quarantine: false }));
+
+  it('makes the first standard tank free', () => {
+    expect(tankPrice(economy, [], 'standard')).toBe(0);
+  });
+
+  it('charges the slot price by how many display tanks exist', () => {
+    expect(tankPrice(economy, display(1), 'standard')).toBe(500);
+    expect(tankPrice(economy, display(2), 'standard')).toBe(1000);
+    expect(tankPrice(economy, display(5), 'standard')).toBe(4000);
+  });
+
+  it('adds the size upgrade to the slot price, also for the free first tank', () => {
+    expect(tankPrice(economy, display(1), 'nano30')).toBe(500 + 300);
+    expect(tankPrice(economy, [], 'long300')).toBe(2500);
+  });
+
+  it('does not count a quarantine tank as a slot', () => {
+    expect(tankPrice(economy, [{ quarantine: true }], 'standard')).toBe(0);
+    expect(tankPrice(economy, [{ quarantine: true }, ...display(1)], 'standard')).toBe(500);
+  });
+});
+
+describe('spendQuestion', () => {
+  it('names the item, the price and what is left afterwards', () => {
+    expect(spendQuestion('Heater tier 2', 150, 500)).toBe(
+      'Buy Heater tier 2 for 150 Pearls? You will have 350 Pearls left.',
+    );
+  });
+
+  it('still asks when the balance is unknown', () => {
+    expect(spendQuestion('a plant', 25, null)).toBe('Buy a plant for 25 Pearls?');
   });
 });

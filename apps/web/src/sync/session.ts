@@ -83,7 +83,7 @@ export class TankSession {
   constructor(private readonly deps: SessionDeps) {
     this.now = deps.now ?? (() => Date.now());
     this.sleep = deps.sleep ?? realSleep;
-    this.keys = new IntentKeys(deps.newKey);
+    this.keys = new IntentKeys(deps.newKey, this.now);
     const saveStatus = new SaveStatusMerge((status, message, source, reported) =>
       deps.interaction.emit('decor:save-state', { status, message, source, reported }),
     );
@@ -203,6 +203,7 @@ export class TankSession {
   async onVisible(): Promise<void> {
     const { phase, activeId } = this.state;
     if (phase !== 'ready' || !activeId) return;
+    await this.refreshWallet();
     if (this.now() - this.lastRefreshMs < (this.deps.refreshAfterMs ?? 10 * 60_000)) return;
     const gen = this.loadId;
     await this.perform(async () => {
@@ -259,10 +260,21 @@ export class TankSession {
     const gen = this.loadId;
     try {
       const wallet = await this.deps.api.wallet();
-      if (gen === this.loadId) this.patch({ balance: wallet.balance });
+      if (gen !== this.loadId) return;
+      const before = this.state.balance;
+      const gained = before !== null && wallet.balance > before ? wallet.balance - before : 0;
+      this.patch({
+        balance: wallet.balance,
+        owned: wallet.owned,
+        ...(gained > 0 ? { earned: (this.state.earned ?? 0) + gained } : {}),
+      });
     } catch (error) {
       if (!(error instanceof ApiRequestError)) throw error;
     }
+  }
+
+  dismissEarned(): void {
+    if (this.state.earned !== null) this.patch({ earned: null });
   }
 
   /**
@@ -271,16 +283,20 @@ export class TankSession {
    */
   private async paid(intent: string, call: (key: string) => Promise<void>): Promise<boolean> {
     const key = this.keys.keyFor(intent);
+    if (this.state.pearlsRefused) this.patch({ pearlsRefused: false });
+    let refused = false;
     const ok = await this.perform(async () => {
       try {
         await call(key);
       } catch (error) {
         if (!outcomeUnknown(error)) this.keys.settle(intent);
+        refused = error instanceof ApiRequestError && error.code === 'insufficient_pearls';
         throw error;
       }
       this.keys.settle(intent);
     });
-    void this.refreshWallet();
+    await this.refreshWallet();
+    if (refused) this.patch({ pearlsRefused: true });
     return ok;
   }
 
@@ -363,7 +379,11 @@ export class TankSession {
       this.deps.interaction.emit('tank:care', { tankId: tank.id, action: sent.type });
       if (sent.type !== 'feed') this.patch({ notice: CARE_DONE[sent.type] });
     };
-    if (action.type !== 'bottled_bacteria') return this.perform(() => run(action));
+    if (action.type !== 'bottled_bacteria') {
+      const ok = await this.perform(() => run(action));
+      await this.refreshWallet();
+      return ok;
+    }
     return this.paid(`bacteria:${tank.id}`, (idempotencyKey) =>
       run({ type: 'bottled_bacteria', idempotencyKey }),
     );
@@ -394,7 +414,10 @@ export class TankSession {
     return this.paid(`buy:${tank.id}:${itemRef}`, async (idempotencyKey) => {
       const bought = await this.deps.api.purchase({ itemRef, idempotencyKey, tankId: tank.id });
       if (gen !== this.loadId) return;
-      this.patch({ balance: bought.wallet.balance });
+      this.patch({
+        balance: bought.wallet.balance,
+        owned: [...new Set([...this.state.owned, itemRef])],
+      });
       const next = await this.deps.api.tank(tank.id);
       if (gen !== this.loadId) return;
       this.apply(next);
@@ -436,13 +459,15 @@ export class TankSession {
     const tank = this.activeTank;
     if (!tank) return false;
     const gen = this.loadId;
-    return this.perform(async () => {
+    const ok = await this.perform(async () => {
       const fish = tank.fish.find((f) => f.id === fishId);
       const next = await this.deps.api.netFish(tank.id, fishId);
       if (gen !== this.loadId) return;
       this.apply(next, { removal: 'netted' });
       this.patch({ notice: fish ? `${fish.name} was netted and added to the memorial.` : null });
     });
+    await this.refreshWallet();
+    return ok;
   }
 
   /** Releases a bagged fish now instead of waiting out the acclimation. */

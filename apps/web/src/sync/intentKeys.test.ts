@@ -18,6 +18,16 @@ describe('IntentKeys', () => {
     expect(keys.keyFor('fish:a')).not.toBe(first);
   });
 
+  it('lets an abandoned intent go after the window, so the same intent later is a new purchase', () => {
+    let at = 0;
+    const keys = new IntentKeys(counter(), () => at, 1000);
+    const first = keys.keyFor('fish:a');
+    at = 999;
+    expect(keys.keyFor('fish:a')).toBe(first);
+    at = 1000;
+    expect(keys.keyFor('fish:a')).not.toBe(first);
+  });
+
   it('forgets everything on clear', () => {
     const keys = new IntentKeys(counter());
     const first = keys.keyFor('x');

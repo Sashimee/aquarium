@@ -26,6 +26,12 @@ export interface SessionState {
   pendingNet: string | null;
   /** Pearls the server reports; null until the first read. */
   balance: number | null;
+  /** Pearls that arrived since the player last looked; shown once, then dismissed. */
+  /** Item refs already bought, as far as the recent ledger shows. */
+  owned: readonly string[];
+  earned: number | null;
+  /** The last paid request was refused for too few Pearls. */
+  pearlsRefused: boolean;
   busy: boolean;
   error: string | null;
   notice: string | null;
@@ -42,6 +48,9 @@ export const INITIAL_STATE: SessionState = {
   bagged: [],
   pendingNet: null,
   balance: null,
+  owned: [],
+  earned: null,
+  pearlsRefused: false,
   busy: false,
   error: null,
   notice: null,

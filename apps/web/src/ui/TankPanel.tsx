@@ -17,6 +17,8 @@ import {
   waterReport,
   type SpeciesNames,
 } from '../sync/life';
+import { BUNDLED_ECONOMY } from '../sync/bundledEconomy';
+import { priceOrFree, priceText, tankPrice } from '../sync/economy';
 import { checkTankName, suggestTankName } from '../sync/naming';
 import type { SessionState, TankSession } from '../sync/session';
 import { useAuth } from './context';
@@ -24,6 +26,7 @@ import { Link } from './screens';
 import WaterTest from './WaterTest';
 import { ShareSection } from './ShareSection';
 import { ShopSections } from './Shop';
+import { useSpend } from './spend';
 import { useActiveTank, useSessionState, useOptionalSession, useSpeciesNames } from './session';
 
 const BIOME_LABEL: Record<Biome, string> = {
@@ -268,14 +271,23 @@ function NewTankForm({
   const taken = state.tanks.map((t) => t.name);
   const [name, setName] = useState(() => suggestTankName(initialBiome, taken));
   const [problem, setProblem] = useState<string | null>(null);
+  const { spend, notice } = useSpend(session, state.balance);
+  const price = tankPrice(BUNDLED_ECONOMY, state.tanks, size);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const checked = checkTankName(name);
     if (!checked.ok) return setProblem(checked.message);
     setProblem(null);
-    void session.createTank(checked.name, biome, size).then((ok) => {
-      if (ok) onDone?.();
+    void spend({
+      label: `the tank ${checked.name}`,
+      price,
+      confirm: true,
+      go: async () => {
+        const ok = await session.createTank(checked.name, biome, size);
+        if (ok) onDone?.();
+        return ok;
+      },
     });
   };
   return (
@@ -304,7 +316,7 @@ function NewTankForm({
       >
         {TANK_SIZE_ORDER.map((s) => (
           <option key={s} value={s}>
-            {tankSizeLabel(s)}
+            {`${tankSizeLabel(s)}${sizeExtra(s)}`}
           </option>
         ))}
       </select>
@@ -316,6 +328,11 @@ function NewTankForm({
         aria-invalid={problem !== null}
         onChange={(e) => setName(e.target.value)}
       />
+      <p className="hint">
+        Price of this tank: {priceOrFree(price, BUNDLED_ECONOMY)}.
+        {state.tanks.length > 0 &&
+          ' It includes the next tank slot and the size, and it is charged once.'}
+      </p>
       <button type="submit" disabled={state.busy}>
         Create tank
       </button>
@@ -324,8 +341,14 @@ function NewTankForm({
           {problem}
         </p>
       )}
+      {notice}
     </form>
   );
+}
+
+function sizeExtra(size: TankSize): string {
+  const extra = BUNDLED_ECONOMY.items.tankSizes[size] ?? 0;
+  return extra === 0 ? '' : `, size upgrade ${priceText(extra, BUNDLED_ECONOMY)}`;
 }
 
 const QUALITY_LABEL = { good: 'Good', fair: 'Fair', poor: 'Poor' } as const;

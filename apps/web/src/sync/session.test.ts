@@ -34,7 +34,7 @@ function apiMocks() {
     saveDecorLayout: vi.fn(),
     saveBackground: vi.fn(),
     addFish: vi.fn(),
-    wallet: vi.fn().mockResolvedValue({ balance: 500 }),
+    wallet: vi.fn().mockResolvedValue({ balance: 500, owned: [] }),
     purchase: vi.fn(),
     saveLight: vi.fn(),
     netFish: vi.fn(),
@@ -612,7 +612,7 @@ describe('sign-out safety', () => {
       species: vi.fn().mockResolvedValue([speciesFixture()]),
       tanks: vi.fn().mockResolvedValue([tankFixture({ fish: [fishFixture(FISH_1)] }), second]),
       tank: vi.fn().mockResolvedValue({ ...second, lastTickAt: '2026-02-01T12:00:00.000Z' }),
-      wallet: vi.fn().mockResolvedValue({ balance: 500 }),
+      wallet: vi.fn().mockResolvedValue({ balance: 500, owned: [] }),
       reportAte: vi.fn().mockReturnValue(hang),
     };
     const rec = recordBus();
@@ -692,7 +692,7 @@ describe('tank switcher and naming', () => {
         species: vi.fn().mockResolvedValue([speciesFixture()]),
         tanks: vi.fn().mockResolvedValue([tankFixture({ fish: [fishFixture(FISH_1)] }), second]),
         tank: vi.fn().mockResolvedValue(second),
-        wallet: vi.fn().mockResolvedValue({ balance: 500 }),
+        wallet: vi.fn().mockResolvedValue({ balance: 500, owned: [] }),
         reportAte: vi.fn().mockReturnValue(new Promise<never>(() => undefined)),
       };
       const rec = recordBus();
@@ -813,7 +813,7 @@ describe('tank switcher and naming', () => {
       species: vi.fn().mockResolvedValue([speciesFixture()]),
       tanks: vi.fn().mockResolvedValue([tankFixture({ fish: [fishFixture(FISH_1)] }), second]),
       tank: vi.fn().mockResolvedValue({ ...second, lastTickAt: '2026-02-01T12:00:00.000Z' }),
-      wallet: vi.fn().mockResolvedValue({ balance: 500 }),
+      wallet: vi.fn().mockResolvedValue({ balance: 500, owned: [] }),
       reportAte: vi.fn().mockRejectedValue(apiError(0, 'network')),
     };
     const rec = recordBus();
@@ -884,7 +884,7 @@ describe('tank switcher and naming', () => {
       species: vi.fn().mockResolvedValue([speciesFixture()]),
       tanks: vi.fn().mockResolvedValue([tankFixture({ fish: [fishFixture(FISH_1)] }), second]),
       tank: vi.fn().mockResolvedValue({ ...second, lastTickAt: '2026-02-01T12:00:00.000Z' }),
-      wallet: vi.fn().mockResolvedValue({ balance: 500 }),
+      wallet: vi.fn().mockResolvedValue({ balance: 500, owned: [] }),
       reportAte: vi.fn().mockRejectedValue(apiError(0, 'network')),
     };
     const rec = recordBus();
@@ -1266,14 +1266,14 @@ describe('Pearls and the T70 request contract', () => {
 
   it('reads the balance when the tanks load', async () => {
     const { api, session } = setup();
-    api.wallet.mockResolvedValue({ balance: 420 });
+    api.wallet.mockResolvedValue({ balance: 420, owned: [] });
     await session.setUser(verified);
     await vi.waitFor(() => expect(session.getState().balance).toBe(420));
   });
 
   it('keeps showing the last balance when a refresh fails', async () => {
     const { api, session } = setup();
-    api.wallet.mockResolvedValueOnce({ balance: 420 });
+    api.wallet.mockResolvedValueOnce({ balance: 420, owned: [] });
     await session.setUser(verified);
     await vi.waitFor(() => expect(session.getState().balance).toBe(420));
     api.wallet.mockRejectedValue(apiError(0, 'network'));
@@ -1336,7 +1336,7 @@ describe('Pearls and the T70 request contract', () => {
     const { api, session } = setup();
     await session.setUser(verified);
     api.addFish.mockRejectedValue(apiError(402, 'insufficient_pearls'));
-    api.wallet.mockResolvedValue({ balance: 12 });
+    api.wallet.mockResolvedValue({ balance: 12, owned: [] });
     await session.buy('neon-tetra', 'Dot', 'adult');
     await vi.waitFor(() => expect(session.getState().balance).toBe(12));
     expect(session.getState().error).not.toBeNull();
@@ -1418,5 +1418,123 @@ describe('Pearls and the T70 request contract', () => {
     expect(await session.setLight({ intensity: 0.5, onHour: 22, offHour: 6 })).toBe(true);
     expect(api.saveLight).toHaveBeenCalledWith(TANK_A, { intensity: 0.5, onHour: 22, offHour: 6 });
     expect(session.activeTank?.equipment.light).toEqual(light);
+  });
+});
+
+describe('a balance that moves on the server', () => {
+  const fresh = () => tankFixture({ lastTickAt: '2026-02-01T12:01:00.000Z' });
+  const wallet = (balance: number, owned: string[] = []) => ({ balance, owned });
+
+  it('re-reads the wallet after free care and reports what was earned', async () => {
+    const { api, session } = setup();
+    api.wallet.mockResolvedValueOnce(wallet(100));
+    await session.setUser(verified);
+    await vi.waitFor(() => expect(session.getState().balance).toBe(100));
+    api.care.mockResolvedValue(fresh());
+    api.wallet.mockResolvedValue(wallet(140));
+    await session.careAction({ type: 'water_change' });
+    expect(session.getState()).toMatchObject({ balance: 140, earned: 40 });
+  });
+
+  it('adds up what is earned until it is dismissed, and never calls a spend an earning', async () => {
+    const { api, session } = setup();
+    api.wallet.mockResolvedValueOnce(wallet(100));
+    await session.setUser(verified);
+    await vi.waitFor(() => expect(session.getState().balance).toBe(100));
+    api.wallet.mockResolvedValueOnce(wallet(130)).mockResolvedValueOnce(wallet(150));
+    await session.refreshWallet();
+    await session.refreshWallet();
+    expect(session.getState().earned).toBe(50);
+    api.wallet.mockResolvedValueOnce(wallet(100));
+    await session.refreshWallet();
+    expect(session.getState().earned).toBe(50);
+    session.dismissEarned();
+    expect(session.getState().earned).toBeNull();
+  });
+
+  it('does not call the first read an earning', async () => {
+    const { api, session } = setup();
+    api.wallet.mockResolvedValue(wallet(500));
+    await session.setUser(verified);
+    await vi.waitFor(() => expect(session.getState().balance).toBe(500));
+    expect(session.getState().earned).toBeNull();
+  });
+
+  it('re-reads the wallet after netting a fish', async () => {
+    const { api, session } = setup([tankFixture({ fish: [deadPip] })]);
+    await session.setUser(verified);
+    await vi.waitFor(() => expect(api.wallet).toHaveBeenCalledTimes(1));
+    api.netFish.mockResolvedValue(fresh());
+    await session.net(FISH_1);
+    expect(api.wallet).toHaveBeenCalledTimes(2);
+  });
+
+  it('re-reads the wallet when the tab comes back, even within the refresh window', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    await vi.waitFor(() => expect(api.wallet).toHaveBeenCalledTimes(1));
+    await session.onVisible();
+    expect(api.wallet).toHaveBeenCalledTimes(2);
+  });
+
+  it('marks a refusal for too few Pearls with the balance the server holds now', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    api.addFish.mockRejectedValue(apiError(402, 'insufficient_pearls'));
+    api.wallet.mockResolvedValue(wallet(12));
+    expect(await session.buy('neon-tetra', 'Dot', 'adult')).toBe(false);
+    expect(session.getState()).toMatchObject({ pearlsRefused: true, balance: 12 });
+  });
+
+  it('clears the refusal at the next paid request', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    api.addFish.mockRejectedValueOnce(apiError(402, 'insufficient_pearls'));
+    await session.buy('neon-tetra', 'Dot', 'adult');
+    api.addFish.mockResolvedValue(fresh());
+    await session.buy('neon-tetra', 'Dot', 'juvenile');
+    expect(session.getState().pearlsRefused).toBe(false);
+  });
+
+  it('remembers what the ledger shows as bought, and adds a purchase at once', async () => {
+    const { api, session } = setup();
+    api.wallet.mockResolvedValue(wallet(500, ['plant:java-fern']));
+    await session.setUser(verified);
+    await vi.waitFor(() => expect(session.getState().owned).toEqual(['plant:java-fern']));
+    api.purchase.mockResolvedValue({ wallet: { balance: 450 }, entry: {}, replayed: false });
+    api.tank.mockResolvedValue(fresh());
+    api.wallet.mockResolvedValue(wallet(450, ['plant:java-fern']));
+    await session.purchase('decor:boulder-01', 'Yours.');
+    expect(session.getState().owned).toContain('plant:java-fern');
+    expect(session.getState().balance).toBe(450);
+  });
+
+  it('gives an intent abandoned after an unknown outcome a new key once the window has passed', async () => {
+    let now = Date.parse('2026-02-01T12:00:00.000Z');
+    const { api, rec } = (() => {
+      const made = apiMocks();
+      made.species.mockResolvedValue([speciesFixture()]);
+      made.tanks.mockResolvedValue([tankFixture()]);
+      return { api: made, rec: recordBus() };
+    })();
+    const session = new TankSession({
+      api: api as unknown as ApiClient,
+      interaction: rec.bus,
+      sleep: async () => undefined,
+      now: () => now,
+    });
+    await session.setUser(verified);
+    api.addFish.mockRejectedValue(apiError(0, 'timeout'));
+    await session.buy('neon-tetra', 'Dot', 'juvenile');
+    now += 60_000;
+    await session.buy('neon-tetra', 'Dot', 'juvenile');
+    now += 11 * 60_000;
+    await session.buy('neon-tetra', 'Dot', 'juvenile');
+    const keys = api.addFish.mock.calls.map(
+      (c) => (c[1] as { idempotencyKey: string }).idempotencyKey,
+    );
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[0]);
+    session.dispose();
   });
 });

@@ -8,23 +8,14 @@ import {
 } from '@aquarium/shared';
 import { useEffect, useId, useState } from 'react';
 import { BUNDLED_CHEMISTRY, BUNDLED_ECONOMY } from '../sync/bundledEconomy';
-import {
-  assessPurchase,
-  euroText,
-  heaterWarning,
-  packText,
-  pearlText,
-  priceText,
-  shortfallSentence,
-  speciesPrice,
-  type Shortfall,
-} from '../sync/economy';
+import { euroText, heaterWarning, priceText, speciesPrice } from '../sync/economy';
 import { chooseEquipment, deviceOffers, equipmentRef, type DeviceOffer } from '../sync/equipment';
-import { checkLamp, hourOptions, lampSummary, localOffsetMinutes } from '../sync/lamp';
+import { checkLamp, clockText, hourOptions, lampSummary, localOffsetMinutes } from '../sync/lamp';
 import { canBuy, tankCapacity } from '../sync/life';
 import { checkFishName, suggestFishName } from '../sync/naming';
 import type { SessionState, TankSession } from '../sync/session';
 import { backgroundOptions } from './backgroundTitles';
+import { useSpend, type SpendRequest } from './spend';
 
 const economy = BUNDLED_ECONOMY;
 
@@ -38,24 +29,6 @@ function Price({ pearls }: { pearls: number }) {
   return <span className="price">{priceText(pearls, economy)}</span>;
 }
 
-export function ShortfallNotice({ short, onDismiss }: { short: Shortfall; onDismiss(): void }) {
-  return (
-    <div className="shortfall" role="status">
-      <p>{shortfallSentence(short)}</p>
-      {short.offer && (
-        <p className="hint">
-          {packText(short.offer.pack)} would leave you {pearlText(short.offer.leftover)}. Pearl
-          packs are not on sale yet, so nothing can be bought here today. Nothing is charged until
-          you choose to buy, and playing earns Pearls too.
-        </p>
-      )}
-      <button type="button" onClick={onDismiss}>
-        Close this note
-      </button>
-    </div>
-  );
-}
-
 const STAGES: readonly { stage: PurchasableStage; label: string }[] = [
   { stage: 'juvenile', label: 'Juvenile' },
   { stage: 'adult', label: 'Adult' },
@@ -67,28 +40,34 @@ function growsUp(species: SpeciesSummary): string | null {
 }
 
 export function ShopSections({ session, state, tank }: ShopProps) {
-  const [short, setShort] = useState<Shortfall | null>(null);
-  const guard = (price: number, go: () => void) => {
-    const verdict = assessPurchase(state.balance, price, economy);
-    if (verdict.kind === 'short') return setShort(verdict);
-    setShort(null);
-    go();
-  };
+  const { spend, notice } = useSpend(session, state.balance);
+  useEffect(() => {
+    void session.refreshWallet();
+    const again = () => {
+      if (document.visibilityState === 'visible') void session.refreshWallet();
+    };
+    window.addEventListener('focus', again);
+    document.addEventListener('visibilitychange', again);
+    return () => {
+      window.removeEventListener('focus', again);
+      document.removeEventListener('visibilitychange', again);
+    };
+  }, [session]);
   return (
     <>
-      {short && <ShortfallNotice short={short} onDismiss={() => setShort(null)} />}
-      <FishShop session={session} state={state} tank={tank} guard={guard} />
-      <EquipmentShop session={session} state={state} tank={tank} guard={guard} />
+      {notice}
+      <FishShop session={session} state={state} tank={tank} spend={spend} />
+      <EquipmentShop session={session} state={state} tank={tank} spend={spend} />
       <LampControl session={session} state={state} tank={tank} />
-      <SuppliesShop session={session} state={state} guard={guard} />
-      <PieceShop session={session} state={state} tank={tank} guard={guard} />
+      <SuppliesShop session={session} state={state} spend={spend} />
+      <PieceShop session={session} state={state} tank={tank} spend={spend} />
     </>
   );
 }
 
-type Guard = (price: number, go: () => void) => void;
+type Spend = (request: SpendRequest) => Promise<void>;
 
-function FishShop({ session, state, tank, guard }: ShopProps & { guard: Guard }) {
+function FishShop({ session, state, tank, spend }: ShopProps & { spend: Spend }) {
   const id = useId();
   const cap = tankCapacity(tank, state.species);
   const offered = state.species.filter((s) => s.biome === tank.biome);
@@ -114,10 +93,15 @@ function FishShop({ session, state, tank, guard }: ShopProps & { guard: Guard })
       return setConfirming(species.id);
     }
     setConfirming(null);
-    guard(price, () => {
-      void session.buy(species.id, checked.name, stage).then((ok) => {
+    void spend({
+      label: species.commonName,
+      price,
+      confirm: false,
+      go: async () => {
+        const ok = await session.buy(species.id, checked.name, stage);
         if (ok) setName('');
-      });
+        return ok;
+      },
     });
   };
 
@@ -260,6 +244,13 @@ function DeviceRow({
               <button
                 type="button"
                 disabled={busy || !choice.ok}
+                aria-label={
+                  t.state === 'available'
+                    ? `Buy ${offer.label} tier ${t.tier} for ${t.price} Pearls, about ${euroText(t.price, economy)}`
+                    : t.state === 'installed'
+                      ? `${offer.label} tier ${t.tier} is installed`
+                      : `${offer.label} tier ${t.tier} is not sold`
+                }
                 aria-describedby={t.state === 'available' && t.skipped === 0 ? undefined : note}
                 onClick={() => onBuy(t.tier)}
               >
@@ -277,14 +268,18 @@ function DeviceRow({
   );
 }
 
-function EquipmentShop({ session, state, tank, guard }: ShopProps & { guard: Guard }) {
+function EquipmentShop({ session, state, tank, spend }: ShopProps & { spend: Spend }) {
   const id = useId();
   const offers = deviceOffers(tank, economy, BUNDLED_CHEMISTRY);
   const buy = (device: DeviceOffer['device'], tier: number) => {
     const choice = chooseEquipment(tank, economy, device, tier);
     if (!choice.ok) return;
-    guard(choice.price, () => {
-      void session.purchase(equipmentRef(device, tier), 'The new equipment is installed.');
+    const offer = offers.find((o) => o.device === device);
+    void spend({
+      label: `${offer?.label ?? device} tier ${tier}`,
+      price: choice.price,
+      confirm: true,
+      go: () => session.purchase(equipmentRef(device, tier), 'The new equipment is installed.'),
     });
   };
   return (
@@ -334,7 +329,9 @@ export function LampControl({ session, state, tank }: ShopProps) {
     <>
       <label htmlFor={`${id}-${suffix}`}>{label}</label>
       <select id={`${id}-${suffix}`} value={value} onChange={(e) => set(Number(e.target.value))}>
-        {!options.some((o) => o.utcHour === value) && <option value={value}>{value}:00 UTC</option>}
+        {!options.some((o) => o.utcHour === value) && (
+          <option value={value}>{clockText(value * 60)} UTC</option>
+        )}
         {options.map((o) => (
           <option key={o.label} value={o.utcHour}>
             {o.label}
@@ -348,7 +345,9 @@ export function LampControl({ session, state, tank }: ShopProps) {
       <h3 id={`${id}-h`}>Lamp schedule</h3>
       <p className="hint">
         Free to change. Algae grows only while the lamp is on, so a shorter or dimmer day means less
-        algae, and a dark tank grows none. Times are in your time zone.
+        algae, and a dark tank grows none. Times are shown in your time zone as it is now. The lamp
+        keeps to whole hours of UTC, so when the clocks change the lamp comes on an hour earlier or
+        later by the clock on your wall.
       </p>
       <div className="inline-form">
         {hourSelect('on', 'Lamp on at', onHour, setOnHour)}
@@ -382,11 +381,11 @@ export function LampControl({ session, state, tank }: ShopProps) {
 function SuppliesShop({
   session,
   state,
-  guard,
+  spend,
 }: {
   session: TankSession;
   state: SessionState;
-  guard: Guard;
+  spend: Spend;
 }) {
   const id = useId();
   const price = economy.items.consumables.bottledBacteria;
@@ -406,7 +405,12 @@ function SuppliesShop({
             type="button"
             disabled={state.busy}
             onClick={() =>
-              guard(price, () => void session.careAction({ type: 'bottled_bacteria' }))
+              void spend({
+                label: 'bottled bacteria',
+                price,
+                confirm: true,
+                go: () => session.careAction({ type: 'bottled_bacteria' }),
+              })
             }
           >
             Add to the filter
@@ -422,7 +426,7 @@ function pieceName(assetId: string): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
-function PieceShop({ session, state, tank, guard }: ShopProps & { guard: Guard }) {
+function PieceShop({ session, state, tank, spend }: ShopProps & { spend: Spend }) {
   const id = useId();
   const pieces = [...DECOR_ASSET_IDS[tank.biome]].flatMap((assetId) => {
     const plant = Object.hasOwn(economy.items.plant.prices, assetId);
@@ -460,18 +464,26 @@ function PieceShop({ session, state, tank, guard }: ShopProps & { guard: Guard }
           <li key={item.ref}>
             <div>
               <strong>{item.label}</strong> <Price pearls={item.price} />
+              {state.owned.includes(item.ref) && <p className="hint">You already own this.</p>}
             </div>
             <button
               type="button"
-              disabled={state.busy}
-              aria-label={`Buy ${item.label} for ${item.price} Pearls, about ${euroText(item.price, economy)}`}
+              disabled={state.busy || state.owned.includes(item.ref)}
+              aria-label={
+                state.owned.includes(item.ref)
+                  ? `${item.label}, already owned`
+                  : `Buy ${item.label} for ${item.price} Pearls, about ${euroText(item.price, economy)}`
+              }
               onClick={() =>
-                guard(item.price, () => {
-                  void session.purchase(item.ref, `${item.label} is yours.`);
+                void spend({
+                  label: item.label,
+                  price: item.price,
+                  confirm: true,
+                  go: () => session.purchase(item.ref, `${item.label} is yours.`),
                 })
               }
             >
-              Buy
+              {state.owned.includes(item.ref) ? 'Owned' : 'Buy'}
             </button>
           </li>
         ))}

@@ -1,4 +1,11 @@
-import type { Economy, Pack, PurchasableStage, SpeciesSummary, Tank } from '@aquarium/shared';
+import type {
+  Economy,
+  Pack,
+  PurchasableStage,
+  SpeciesSummary,
+  Tank,
+  TankSize,
+} from '@aquarium/shared';
 
 export function euroText(pearls: number, economy: Economy): string {
   const cents = Math.round(pearls * economy.pearlValueCents);
@@ -22,6 +29,30 @@ export function speciesPrice(
   return Object.hasOwn(economy.species, speciesId)
     ? economy.species[speciesId]?.[stage]
     : undefined;
+}
+
+/** The server's rule: the first display tank is free, then a slot price plus a size upgrade price. */
+export function tankPrice(
+  economy: Economy,
+  tanks: readonly Pick<Tank, 'quarantine'>[],
+  size: TankSize,
+): number {
+  const display = tanks.filter((t) => !t.quarantine).length;
+  const slot = display === 0 ? 0 : (economy.items.tankSlots[display - 1] ?? 0);
+  return slot + (economy.items.tankSizes[size] ?? 0);
+}
+
+export function priceOrFree(pearls: number, economy: Economy): string {
+  return pearls === 0 ? 'Free' : priceText(pearls, economy);
+}
+
+export function spendQuestion(label: string, price: number, balance: number | null): string {
+  const base = `Buy ${label} for ${pearlText(price)}?`;
+  return balance === null ? base : `${base} You will have ${pearlText(balance - price)} left.`;
+}
+
+export function earnedText(amount: number): string {
+  return `You earned ${pearlText(amount)}.`;
 }
 
 export interface PackOffer {

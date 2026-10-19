@@ -15,13 +15,16 @@ const cp = BUNDLED_CHEMISTRY;
 function withTiers(
   tiers: Partial<Record<'heater' | 'filter' | 'light' | 'co2' | 'waveMaker', number>>,
 ) {
-  const base = tankFixture();
-  const equipment = { ...base.equipment };
-  for (const [device, tier] of Object.entries(tiers)) {
-    const key = device as keyof typeof equipment;
-    equipment[key] = { ...equipment[key], tier } as never;
-  }
-  return tankFixture({ equipment });
+  const base = tankFixture().equipment;
+  return tankFixture({
+    equipment: {
+      heater: { tier: tiers.heater ?? base.heater.tier },
+      filter: { tier: tiers.filter ?? base.filter.tier },
+      light: { ...base.light, tier: tiers.light ?? base.light.tier },
+      co2: { tier: tiers.co2 ?? base.co2.tier },
+      waveMaker: { tier: tiers.waveMaker ?? base.waveMaker.tier },
+    },
+  });
 }
 
 describe('which devices a tank type sells', () => {

@@ -47,7 +47,6 @@ import {
   type LightSchedule,
   type PurchasableStage,
   type PurchaseResponse,
-  type Wallet,
   type SpeciesSummary,
   type Tank,
   type ErrorCode,
@@ -179,6 +178,12 @@ async function toError(res: Response): Promise<ApiRequestError> {
 }
 
 /** The T70 contract: every add-fish names a stage and carries a key, so a retry cannot charge twice. */
+export interface WalletView {
+  balance: number;
+  /** Item refs the ledger shows as bought, so the shop can mark them instead of offering a 409. */
+  owned: readonly string[];
+}
+
 export type AddFishInput = Omit<AddFishRequest, 'stage' | 'idempotencyKey'> & {
   stage: PurchasableStage;
   idempotencyKey: string;
@@ -220,7 +225,7 @@ export interface ApiClient {
   saveDecorLayout(tankId: string, layout: DecorLayout): Promise<Tank>;
   saveBackground(tankId: string, backgroundId: BackgroundId): Promise<Tank>;
   addFish(tankId: string, input: AddFishInput): Promise<Tank>;
-  wallet(): Promise<Wallet>;
+  wallet(): Promise<WalletView>;
   purchase(request: {
     itemRef: string;
     idempotencyKey: string;
@@ -675,7 +680,11 @@ export function createApiClient(
     async wallet() {
       const res = await send('/api/wallet');
       if (!res.ok) throw await toError(res);
-      return (await parsed(res, walletResponseSchema)).wallet;
+      const body = await parsed(res, walletResponseSchema);
+      const owned = body.ledger
+        .filter((e) => e.reason === 'purchase' && e.itemRef !== null)
+        .map((e) => e.itemRef ?? '');
+      return { balance: body.wallet.balance, owned: [...new Set(owned)] };
     },
     async purchase(request) {
       const body = validate(purchaseRequestSchema, request);

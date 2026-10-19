@@ -716,9 +716,28 @@ describe('api client Pearls contract', () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
-  it('reads the balance from the wallet endpoint', async () => {
-    const fetcher = vi.fn().mockResolvedValue(json({ wallet: { balance: 420 }, ledger: [] }));
-    expect(await createApiClient(fetcher).wallet()).toEqual({ balance: 420 });
+  it('reads the balance and the purchased items from the wallet endpoint', async () => {
+    const entry = (delta: number, reason: string, itemRef: string | null, key: string) => ({
+      id: crypto.randomUUID(),
+      userId: 'u1',
+      delta,
+      reason,
+      source: 'game',
+      itemRef,
+      idempotencyKey: key,
+      createdAt: '2026-02-01T12:00:00.000Z',
+    });
+    const ledger = [
+      entry(-25, 'purchase', 'plant:java-fern', 'key-aaaaaaaa'),
+      entry(-25, 'purchase', 'plant:java-fern', 'key-bbbbbbbb'),
+      entry(40, 'earn', 'earn:daily-care', 'key-cccccccc'),
+      entry(500, 'grant', null, 'key-dddddddd'),
+    ];
+    const fetcher = vi.fn().mockResolvedValue(json({ wallet: { balance: 420 }, ledger }));
+    expect(await createApiClient(fetcher).wallet()).toEqual({
+      balance: 420,
+      owned: ['plant:java-fern'],
+    });
     expect(fetcher.mock.calls[0]?.[0]).toBe('/api/wallet');
   });
 
