@@ -56,6 +56,7 @@ import {
   type ImpostorChoice,
   type LodThresholds,
 } from './lod';
+import { writeDiseaseSigns } from './disease';
 import { featuresFor, sameFeatures, waitsForReload } from './features';
 import {
   disposeImpostorAtlas,
@@ -408,6 +409,9 @@ export class FishSystem {
     mouth: 0,
     display: 0,
     gillFlare: 0,
+    ich: 0,
+    finRot: 0,
+    velvet: 0,
   };
 
   /**
@@ -1666,6 +1670,7 @@ export class FishSystem {
         : swim.mouthOpening * liveliness * mouthFade(rt.cameraDistance, rt.length, this.thresholds);
     v.display = swim === null ? 0 : rt.display * liveliness;
     v.gillFlare = swim === null ? 0 : rt.gillFlare * liveliness;
+    writeDiseaseSigns(rt.fish.disease, motion instanceof WalkState, v);
     lod.instances.write(slot, v);
     const { locomotion } = rt.batch;
     if (motion instanceof WalkState && locomotion.kind === 'walk') {

@@ -1,3 +1,4 @@
+import { createECDH } from 'node:crypto';
 import { resolve } from 'node:path';
 import nodemailer from 'nodemailer';
 import { buildApp } from '../apps/api/src/app.ts';
@@ -5,6 +6,7 @@ import { createAuth } from '../apps/api/src/auth.ts';
 import { createClock } from '../apps/api/src/clock.ts';
 import { connect, runMigrations } from '../apps/api/src/db/index.ts';
 import { createMailer } from '../apps/api/src/mail.ts';
+import { createPushSender, parseVapidKeys } from '../apps/api/src/push.ts';
 import { postgresHitStore } from '../apps/api/src/rate-limit.ts';
 import { loadChemistryParameters } from '../apps/api/src/chemistry.ts';
 import { loadCatalog } from '../apps/api/src/species.ts';
@@ -65,7 +67,15 @@ const auth = createAuth({
   },
 });
 
+const ecdh = createECDH('prime256v1');
+ecdh.generateKeys();
+const vapid = parseVapidKeys(
+  ecdh.getPublicKey().toString('base64url'),
+  ecdh.getPrivateKey().toString('base64url'),
+);
+
 const app = buildApp({
+  push: createPushSender(vapid, 'mailto:fish@bas.lu'),
   indexable: false,
   webRoot: resolve(process.cwd(), 'apps/web/dist'),
   appOrigin: origin,
