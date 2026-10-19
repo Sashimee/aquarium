@@ -1,4 +1,4 @@
-import type { Biome, DiseaseState, Fish, FishSex } from '@aquarium/shared';
+import type { Biome, DiseaseState, Fish, FishSex, FishStage } from '@aquarium/shared';
 import type { AteEvent, FishSpawn } from '@aquarium/sim';
 import { HUNGER_PER_PORTION } from '@aquarium/sim/lifecycle';
 import type { InteractionEvents } from '../interaction/events';
@@ -16,8 +16,12 @@ export interface RosterFish {
   readonly species: string;
   /** As stored by the server; null for demo fish, whose sex comes from their key. */
   readonly sex: FishSex | null;
-  /** Undefined means the species' adult length. */
+  /** Undefined means a length for its stage, up to the species' adult length. */
   readonly lengthM: number | undefined;
+  /** As of the last server snapshot that carried this fish; null for demo fish, which are grown. */
+  stage: FishStage | null;
+  /** Epoch milliseconds; NaN for demo fish and for a birth time that does not parse. */
+  bornAtMs: number;
   phase: FishPhase;
   /** 0 dead .. 1 healthy, as of the last server snapshot that carried this fish. */
   health: number;
@@ -161,7 +165,8 @@ export class TankRoster {
   }
 
   /**
-   * Moves living fish to the server's hunger, health and disease. Never changes the swimming set.
+   * Moves living fish to the server's hunger, health, disease and stage. Never changes the swimming
+   * set.
    */
   updated({ tankId, fish }: InteractionEvents['tank:fish-updated']): RosterFish[] {
     const changed: RosterFish[] = [];
@@ -171,6 +176,8 @@ export class TankRoster {
       entry.health = f.health;
       entry.disease = f.disease;
       entry.hunger = f.hunger;
+      entry.stage = f.stage;
+      entry.bornAtMs = Date.parse(f.bornAt);
       changed.push(entry);
     }
     return changed;
@@ -228,6 +235,8 @@ export class TankRoster {
         species: spawn.species,
         sex: null,
         lengthM: spawn.bodyLengthM,
+        stage: null,
+        bornAtMs: Number.NaN,
         phase: 'swimming',
         health: 1,
         disease: null,
@@ -243,6 +252,8 @@ export class TankRoster {
       species: fish.species,
       sex: fish.sex,
       lengthM: fish.size,
+      stage: fish.stage,
+      bornAtMs: Date.parse(fish.bornAt),
       phase,
       health: fish.status === 'dead' ? 0 : fish.health,
       disease: fish.disease,

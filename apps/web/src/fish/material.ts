@@ -176,6 +176,16 @@ export const FIN_OPACITY_FLOOR = 0.2;
  */
 const NIGHT_IRIDESCENCE_LOSS = 0.5;
 const NIGHT_PLATELET_SHRINK = 0.12;
+/**
+ * Newborn fry are nearly transparent: a few melanophores over a glassy, yolk-tinted body, with the
+ * adult chromatophores filling in through the juvenile stage. A fry keeps this much of its
+ * livery's saturation and contrast, over this lift.
+ */
+const FRY_SATURATION = 0.15;
+const FRY_CONTRAST = 0.45;
+const FRY_LIFT: readonly [number, number, number] = [0.3, 0.29, 0.25];
+/** How much of a fry's body the backlit-membrane translucency reaches. */
+const FRY_TRANSLUCENCY = 0.6;
 /** Below this alpha a texel is outside the fin silhouette in every mode. */
 const SILHOUETTE_ALPHA = 0.1;
 /** `antialias: true` gives four MSAA samples on both backends. */
@@ -192,6 +202,20 @@ export const AUTHORED_SURFACE_MATERIAL = 'Eye';
 
 export function keepsAuthoredSurface(source: MeshStandardMaterial): boolean {
   return source.name === AUTHORED_SURFACE_MATERIAL;
+}
+
+/** `base` faded from the adult livery towards a fry's pale, glassy body by `youth` 0..1. */
+export function juvenileLivery(base: Node<'vec3'>, youth: Node<'float'>): Node<'vec3'> {
+  const grey = vec3(luminance(base));
+  const fry = mix(grey, base, FRY_SATURATION)
+    .mul(FRY_CONTRAST)
+    .add(vec3(...FRY_LIFT));
+  return mix(base, fry, youth);
+}
+
+/** The share of the body that glows with backlit translucency: the fins, and a fry all over. */
+export function translucentShare(fins: Node<'float'>, youth: Node<'float'>): Node<'float'> {
+  return max(fins, youth.mul(FRY_TRANSLUCENCY));
 }
 
 /** smoothstep(a, b, x) and its derivative in x. */
@@ -785,7 +809,8 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
     const sample = source.map !== null ? texture(source.map) : vec4(1);
     const authored = sample.rgb.mul(color(source.color));
     const eye = keepsAuthoredSurface(source);
-    const base = eye ? authored : authored.mul(tint);
+    const youth = this.instanceVec4(InstanceSlot.Youth - (InstanceSlot.Youth % 4)).w;
+    const base = eye ? authored : juvenileLivery(authored.mul(tint), youth);
     const grey = vec3(luminance(base).mul(0.8).add(0.06));
     // Paling is chromatophores contracting in the skin, which an eye has none of; greying the
     // pupil would cloud it like a cataract instead.
@@ -848,15 +873,20 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
       this.maskNode = silhouette;
     }
 
-    if (features.fins !== 'cutout' && profile.finTransmission > 0) {
+    // A newborn's whole body is translucent, so every species glows past the cutout tier; an eye
+    // keeps its authored surface.
+    const fryBody = eye ? null : youth;
+    if (features.fins !== 'cutout' && (profile.finTransmission > 0 || fryBody !== null)) {
       const toEye = normalize(cameraPosition.sub(positionWorld));
       const l = lighting.lightDirection;
       const diffuse = abs(dot(normalWorld, l)).mul(0.3);
       const forward = pow(max(dot(toEye, l.negate()), 0), 3).mul(0.7);
+      const fins = finAmount.mul(profile.finTransmission);
+      const share = fryBody === null ? fins : translucentShare(fins, fryBody);
       this.emissiveNode = albedo
         .mul(lighting.light)
         .mul(diffuse.add(forward))
-        .mul(finAmount.mul(profile.finTransmission / Math.PI));
+        .mul(share.mul(1 / Math.PI));
     } else {
       this.emissiveNode = null;
     }
@@ -878,6 +908,7 @@ export class FishMaterial extends MeshPhysicalNodeMaterial {
       const iridescence = where
         .mul(finAmount.oneMinus())
         .mul(pale.mul(NIGHT_IRIDESCENCE_LOSS).oneMinus())
+        .mul(youth.oneMinus())
         .mul(profile.iridescence);
       this.iridescenceNode = undusted === null ? iridescence : iridescence.mul(undusted);
       this.iridescenceThicknessNode = look.w.mul(pale.mul(NIGHT_PLATELET_SHRINK).oneMinus());
