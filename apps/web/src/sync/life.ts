@@ -14,7 +14,7 @@ import { BIOLOAD_CAPACITY_BY_SIZE, hasCapacityFor } from '@aquarium/sim/lifecycl
 
 export { speciesNameMap, type SpeciesNames } from './speciesNames';
 
-function speciesName(names: SpeciesNames, id: string): string {
+export function speciesName(names: SpeciesNames, id: string): string {
   return names.get(id)?.toLowerCase() ?? id.replaceAll('-', ' ');
 }
 
