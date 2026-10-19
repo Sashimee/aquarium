@@ -8,11 +8,22 @@ import type {
   Water,
 } from '@aquarium/shared';
 import type { CameraMode } from './camera';
+import type { GameView } from './play/game';
 
 /** A pinch, not a pile: leftovers poison the tank, so hand-feeding stays small. */
 export const HAND_FEED_PORTION = 0.5;
 
-export type PlayTool = 'tap' | 'feed' | 'laser' | 'wand' | 'net';
+export type PlayTool = 'tap' | 'feed' | 'laser' | 'wand' | 'net' | 'mirror' | 'ball' | 'game';
+
+export type Toy = 'mirror' | 'ball';
+
+export interface GameFishRef {
+  id: string;
+  name: string;
+  species: string;
+  /** The fish's own boldness, 0 to 1; the species figure alone is used without it. */
+  boldness?: number;
+}
 
 export type DecorCommand =
   | { type: 'add'; assetId: string }
@@ -55,6 +66,13 @@ export interface InteractionEvents {
   'camera:follow-unavailable': Record<string, never>;
   'play:request-tool': { tool: PlayTool };
   'play:tool-changed': { tool: PlayTool };
+  /** Which toys are in the tank; the play panel offers to remove them. */
+  'toys:changed': { mirror: boolean; ball: boolean };
+  'toys:remove': { toy: Toy };
+  /** The feeding game's round, for the play panel. */
+  'game:state': { view: GameView };
+  /** `start` takes the live fish of the active tank; the game picks the shy one. */
+  'game:request': { action: 'start'; fish: readonly GameFishRef[] } | { action: 'stop' };
   /** The food chosen in the UI; hand-feed drops this one. */
   'feed:select': { food: FoodType };
   /** The tank scene is built and the play tools work. */
@@ -64,7 +82,7 @@ export interface InteractionEvents {
   'feed:dropped': { food: FoodType; portion: number; particles: number };
   'feed:rejected': { reason: 'rate-limited' | 'tank-full' | 'unreachable'; retryAfterMs: number };
   /** Fish ate food; the persistence layer batches these into ate reports. */
-  'food:ate': { eaten: readonly { fishId: string; portion: number }[] };
+  'food:ate': { eaten: readonly { fishId: string; portion: number; foodId?: number }[] };
   /** Uneaten food dissolved on the substrate. */
   'food:expired': { count: number };
 
@@ -148,6 +166,8 @@ export const STICKY_INTERACTION_EVENTS: readonly (keyof InteractionEvents)[] = [
   'camera:mode-changed',
   'play:tool-changed',
   'play:ready',
+  'toys:changed',
+  'game:state',
   'demo:biome-changed',
   'decor:state',
   'decor:save-state',
