@@ -1242,6 +1242,91 @@ describe('tank sizes, quarantine and sharing', () => {
     expect(apiErrorSchema.parse(res.json()).error.code).toBe('conflict');
   });
 
+  describe('bioload cap by size', () => {
+    const stock = async (size: 'nano30' | 'std200' | 'long300', angels: number, neons: number) => {
+      const cookie = await signedIn(h);
+      const tank = tankSchema.parse(
+        (await create(cookie, { name: size, biome: 'freshwater', size })).json(),
+      );
+      for (let i = 0; i < angels; i++) await addFish(h, cookie, tank.id, 'angelfish', `A${i}`);
+      for (let i = 0; i < neons; i++) await addFish(h, cookie, tank.id, 'neon-tetra', `N${i}`);
+      return (species: string) =>
+        call(h, cookie, 'POST', `/api/tanks/${tank.id}/fish`, { species, name: 'Next' });
+    };
+
+    it('nano30 holds 3.0 of bioload: exactly full is accepted, one more is refused', async () => {
+      const next = await stock('nano30', 2, 3);
+      expect((await next('neon-tetra')).statusCode).toBe(409);
+    });
+
+    it('nano30 accepts the last neon that lands exactly on the cap', async () => {
+      const next = await stock('nano30', 2, 2);
+      expect((await next('neon-tetra')).statusCode).toBe(201);
+    });
+
+    it('nano30 refuses a third angelfish even though it is under the animal cap', async () => {
+      const next = await stock('nano30', 2, 0);
+      expect((await next('angelfish')).statusCode).toBe(409);
+    });
+
+    it('std200 holds 8.0: exactly full is accepted, one more is refused', async () => {
+      const next = await stock('std200', 6, 4);
+      expect((await next('neon-tetra')).statusCode).toBe(409);
+    });
+
+    it('long300 holds 12.0: ten angelfish fill it and a neon is one over', async () => {
+      const next = await stock('long300', 10, 0);
+      expect((await next('neon-tetra')).statusCode).toBe(409);
+    });
+  });
+
+  it('refuses to resize a tank: size is fixed at creation', async () => {
+    const cookie = await signedIn(h);
+    const tank = tankSchema.parse(
+      (await create(cookie, { name: 'Fixed', biome: 'freshwater' })).json(),
+    );
+    const res = await call(h, cookie, 'PATCH', `/api/tanks/${tank.id}`, { size: 'nano30' });
+    expect(res.statusCode).toBe(400);
+    const reread = tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${tank.id}`)).json());
+    expect(reread.size).toBe('standard');
+  });
+
+  it('reports the size on the list and on a single read', async () => {
+    const cookie = await signedIn(h);
+    const nano = tankSchema.parse(
+      (await create(cookie, { name: 'Nano', biome: 'freshwater', size: 'nano30' })).json(),
+    );
+    const list = tankListSchema.parse((await call(h, cookie, 'GET', '/api/tanks')).json());
+    expect(list.find((t) => t.id === nano.id)?.size).toBe('nano30');
+  });
+
+  it('concentrates the same stock more in a smaller tank, but less than linearly', async () => {
+    const cookie = await signedIn(h);
+    const small = tankSchema.parse(
+      (await create(cookie, { name: 'S', biome: 'freshwater', size: 'nano30' })).json(),
+    );
+    const big = tankSchema.parse(
+      (await create(cookie, { name: 'B', biome: 'freshwater', size: 'long300' })).json(),
+    );
+    for (const t of [small, big]) {
+      await h.database.db.insert(schema.fish).values(
+        Array.from({ length: 12 }, (_, i) => ({
+          tankId: t.id,
+          species: 'neon-tetra',
+          name: `N${i}`,
+          size: 0.03,
+          sex: 'female' as const,
+        })),
+      );
+    }
+    await advance(h, 6 * 60);
+    const read = async (id: string) =>
+      tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${id}`)).json());
+    const [a, b] = [await read(small.id), await read(big.id)];
+    expect(a.water.nitrate).toBeGreaterThan(b.water.nitrate * 2);
+    expect(a.water.nitrate).toBeLessThan(b.water.nitrate * 10);
+  });
+
   it('keeps every animal in an over-cap tank and only blocks additions', async () => {
     const cookie = await signedIn(h);
     const nano = tankSchema.parse(
