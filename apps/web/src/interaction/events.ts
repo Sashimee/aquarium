@@ -96,6 +96,8 @@ export interface InteractionEvents {
   'camera:mode-changed': { mode: CameraMode };
   /** Follow was requested but there is no fish to follow. */
   'camera:follow-unavailable': Record<string, never>;
+  /** Focus the camera on the middle of these fish (server ids); the ones not on screen are skipped. */
+  'camera:focus-fish': { fishIds: readonly string[] };
   'play:request-tool': { tool: PlayTool };
   'play:tool-changed': { tool: PlayTool };
   /** Which toys are in the tank; the play panel offers to remove them. */

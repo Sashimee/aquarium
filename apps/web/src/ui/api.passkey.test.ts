@@ -80,3 +80,22 @@ describe('api client passkeys', () => {
     expect(browser.startRegistration).not.toHaveBeenCalled();
   });
 });
+
+describe('api client error codes', () => {
+  it('passes the own_tank code from the envelope through on a reaction', async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValue(json({ error: { code: 'own_tank', message: 'Reworded copy.' } }, 403));
+    await expect(createApiClient(fetcher).setReaction('tok', 'heart')).rejects.toMatchObject({
+      status: 403,
+      code: 'own_tank',
+    });
+  });
+
+  it('keeps a known code from a bare body instead of collapsing it to forbidden', async () => {
+    const fetcher = vi.fn().mockResolvedValue(json({ code: 'own_tank', message: 'x' }, 403));
+    await expect(createApiClient(fetcher).clearReaction('tok')).rejects.toMatchObject({
+      code: 'own_tank',
+    });
+  });
+});

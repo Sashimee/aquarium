@@ -7,7 +7,7 @@ export interface FishDiff {
   removed: Fish[];
   /** Alive before, dead now. */
   died: Fish[];
-  /** Still alive, with a different hunger or health. */
+  /** Still alive, with a different hunger, health, stage or size. */
   updated: Fish[];
 }
 
@@ -21,7 +21,10 @@ export function diffFish(prev: readonly Fish[] | undefined, next: readonly Fish[
     else if (old.status === 'alive' && fish.status === 'dead') diff.died.push(fish);
     else if (
       fish.status === 'alive' &&
-      (old.hunger !== fish.hunger || old.health !== fish.health)
+      (old.hunger !== fish.hunger ||
+        old.health !== fish.health ||
+        old.stage !== fish.stage ||
+        old.size !== fish.size)
     ) {
       diff.updated.push(fish);
     }

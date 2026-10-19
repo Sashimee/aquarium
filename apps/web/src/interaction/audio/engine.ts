@@ -9,6 +9,9 @@ export const ROLE = {
   underwater: 'underwater-ambience',
   bubbles: 'air-bubbles',
   glassTap: 'glass-tap',
+  foodPlop: 'food-plop',
+  netSplash: 'net-splash',
+  uiClick: 'ui-click',
 } as const;
 
 const PRELOAD_ROLES: readonly string[] = Object.values(ROLE);
@@ -23,6 +26,9 @@ const DIVE_HUM = 0.25;
 const BUBBLES = 0.45;
 const QUIET_EFFECTS = 0.4;
 const TAP_BASE = 0.7;
+const PLOP = 0.8;
+const SPLASH = 0.9;
+const CLICK = 0.5;
 
 export interface ParamLike {
   value: number;
@@ -85,6 +91,8 @@ export interface AudioDeps {
   isHidden(): boolean;
   /** Calls back on each visibility change; returns the unsubscribe. */
   onVisibility(listener: () => void): () => void;
+  /** Calls back on each press of a primary overlay button; returns the unsubscribe. */
+  onPrimaryClick(listener: () => void): () => void;
   /** Calls back on each user gesture; returns the unsubscribe. */
   onGesture(listener: () => void): () => void;
   /** Runs work off the gesture's critical path, once the page has had time to render. */
@@ -158,6 +166,7 @@ export class AudioEngine {
   private readonly listeners = new Set<() => void>();
   private offGesture: (() => void) | null = null;
   private offVisibility: (() => void) | null = null;
+  private offClick: (() => void) | null = null;
 
   constructor(private readonly deps: AudioDeps) {
     this.settingsValue = this.read();
@@ -184,14 +193,17 @@ export class AudioEngine {
   start(): () => void {
     if (this.statusValue === 'locked') this.offGesture ??= this.deps.onGesture(() => this.unlock());
     this.offVisibility ??= this.deps.onVisibility(() => this.syncVisibility());
+    this.offClick ??= this.deps.onPrimaryClick(() => this.uiClick());
     return () => this.stop();
   }
 
   stop(): void {
     this.offGesture?.();
     this.offVisibility?.();
+    this.offClick?.();
     this.offGesture = null;
     this.offVisibility = null;
+    this.offClick = null;
     const graph = this.graph;
     if (!graph) return;
     for (const source of this.loops.splice(0)) {
@@ -215,6 +227,10 @@ export class AudioEngine {
     const offs = [
       bus.on('camera:mode-changed', ({ mode }) => this.setDiving(mode === 'dive')),
       bus.on('glass:tapped', ({ intensity }) => this.glassTap(intensity)),
+      bus.on('feed:dropped', () => this.play(ROLE.foodPlop, PLOP)),
+      bus.on('tank:fish-removed', ({ reason }) => {
+        if (reason === 'netted') this.play(ROLE.netSplash, SPLASH);
+      }),
     ];
     return () => {
       for (const off of offs) off();
@@ -268,6 +284,10 @@ export class AudioEngine {
 
   glassTap(intensity: number): boolean {
     return this.play(ROLE.glassTap, TAP_BASE + (1 - TAP_BASE) * clamp01(intensity));
+  }
+
+  uiClick(): boolean {
+    return this.play(ROLE.uiClick, CLICK);
   }
 
   subscribe = (listener: () => void): (() => void) => {
@@ -506,6 +526,16 @@ export function browserAudioDeps(): AudioDeps {
     onVisibility: (listener) => {
       doc?.addEventListener('visibilitychange', listener);
       return () => doc?.removeEventListener('visibilitychange', listener);
+    },
+    onPrimaryClick: (listener) => {
+      const onClick = (event: Event): void => {
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+        const button = target.closest('#ui button.primary');
+        if (button && !(button as HTMLButtonElement).disabled) listener();
+      };
+      doc?.addEventListener('click', onClick, { capture: true });
+      return () => doc?.removeEventListener('click', onClick, { capture: true });
     },
     onGesture: (listener) => {
       const events = ['click', 'keydown', 'touchend', 'pointerup'] as const;

@@ -1,4 +1,4 @@
-import { followAnyFish } from './interaction/follow';
+import { broodTarget, followAnyFish } from './interaction/follow';
 import { depthOfFieldFollowsCamera } from './engine/cameraFocus';
 import type { Engine } from './engine/Engine';
 import { EventBus, type EngineEvents } from './engine/events';
@@ -205,6 +205,14 @@ async function boot(): Promise<void> {
       followAnyFish(liveFish?.sim.anyFish(), (target) => rig.focusOn(target), interaction);
     }
   });
+  const stopFocusFish = interaction.on('camera:focus-fish', ({ fishIds }) => {
+    const sim = liveFish?.sim;
+    followAnyFish(
+      broodTarget(fishIds, (id) => sim?.fishPoint(id)),
+      (target) => rig.focusOn(target),
+      interaction,
+    );
+  });
   const exposePose = new URLSearchParams(window.location.search).has('e2e');
   engine.onFrame((deltaS) => {
     rig.update(deltaS);
@@ -326,6 +334,7 @@ async function boot(): Promise<void> {
     unbindPhotoKeys();
     photo.dispose();
     stopRequests();
+    stopFocusFish();
     fish.stop();
     engine.dispose().catch((cause: unknown) => console.error('Engine dispose failed', cause));
   });
