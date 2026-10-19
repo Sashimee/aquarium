@@ -22,6 +22,7 @@ import {
   STEP_DT,
   type FishPlacement,
   type Point3,
+  type SimToy,
   type SpeciesInput,
   type Stimulus,
   type TankSpaceWorldConfig,
@@ -102,7 +103,7 @@ import {
 } from './simWorld';
 import { SimUnavailableError } from '../interaction/simUnavailable';
 import { speciesInput } from './species';
-import type { FishBite, FishPoint, PickRay, TankEvent } from './start';
+import type { BallNudge, FishBite, FishPoint, PickRay, TankEvent } from './start';
 import { isFinned, SWIM_MODES, SwimState, type SwimModeParams, type SwimmingMode } from './swim';
 import { curlAboveFloor, floorUnderTail, WalkState, type TailRig, type WalkSample } from './walk';
 
@@ -208,12 +209,17 @@ interface FishRuntime {
   readonly fromQuaternion: Quaternion;
   bagSlot: number | null;
   script: Script | null;
+  /** Fin spread and gill-cover flare in display, 0..1, from the sim; closing to 0 off it. */
+  display: number;
+  gillFlare: number;
 }
 
 /** LOD levels near enough for their self-shadowing to read. */
 const SHADOW_LODS = 2;
 /** A fish leaving its bag, or held over a rebuilt world, glides into the sim's pose this long. */
 const HANDOVER_S = 1.2;
+/** Fins spread in display close over the carcass's limp time once the sim lets them go. */
+const DISPLAY_CLOSE_S = CARCASS.limpS;
 /** Below this horizontal share of its forward axis a body is climbing and has no heading. */
 const CLIMBING_FORWARD_XZ = 0.5;
 /** Fingertip slop when netting a small fish, in metres. */
@@ -301,6 +307,13 @@ export class FishSystem {
   private readonly spec: SimWorldSpec;
   private readonly cleanups: (() => void)[] = [];
   private readonly ateListeners = new Set<(events: readonly FishBite[]) => void>();
+  private readonly nudgeListeners = new Set<(nudge: BallNudge) => void>();
+  private readonly nudge: { toyId: string | null; ix: number; iz: number } = {
+    toyId: null,
+    ix: 0,
+    iz: 0,
+  };
+  private readonly point = { x: 0, y: 0, z: 0 };
   /** `asset@size` loads that failed; the batch keeps the model it has and is not retried. */
   private readonly failedRetextures = new Set<string>();
   /** Replaced, with its worker, when the worker stops answering. */
@@ -394,6 +407,8 @@ export class FishSystem {
     tint: [1, 1, 1],
     gills: 0,
     mouth: 0,
+    display: 0,
+    gillFlare: 0,
     ich: 0,
     finRot: 0,
     velvet: 0,
@@ -590,6 +605,41 @@ export class FishSystem {
     if (!this.disposed && this.simReady) this.sim.setFood(buffer);
   }
 
+  /**
+   * Every toy in the tank, in tank space, `[]` for none; kept for later worlds like anchors. A
+   * drifting ball is meant to be sent again every tick.
+   */
+  setToys(toys: readonly SimToy[]): void {
+    if (this.disposed) return;
+    this.spec.setToys(toys);
+    if (this.simReady) this.sim.setToys(toys);
+  }
+
+  /**
+   * Each bump a fish gave the ball, as the velocity change in tank x and z. The nudge is reused for
+   * the next one, so read it before returning.
+   */
+  onToyNudge(listener: (nudge: BallNudge) => void): () => void {
+    this.nudgeListeners.add(listener);
+    return () => this.nudgeListeners.delete(listener);
+  }
+
+  /**
+   * Where the swimming fish with this server id is drawn, in scene space (the same as tank space,
+   * as the fish group sits at the scene origin), or null when it is not on screen. The point is
+   * reused by the next call.
+   */
+  fishPoint(serverId: string): FishPoint | null {
+    const simId = this.roster.simIdOf(serverId);
+    const rt = simId === undefined ? undefined : this.runtimes.get(simId);
+    if (this.disposed || rt === undefined || !rt.shown || rt.fish.phase !== 'swimming') return null;
+    const { point } = this;
+    point.x = rt.lastPosition.x;
+    point.y = rt.lastPosition.y;
+    point.z = rt.lastPosition.z;
+    return point;
+  }
+
   /** Bites by the ids the app knows: server fish ids while a saved tank is shown. */
   onAte(listener: (events: readonly FishBite[]) => void): () => void {
     this.ateListeners.add(listener);
@@ -688,6 +738,7 @@ export class FishSystem {
     this.disposed = true;
     this.lifetime.abort(new Error('fish system disposed'));
     this.ateListeners.clear();
+    this.nudgeListeners.clear();
     for (const resolve of this.syncWaiters.splice(0)) resolve();
     releaseAll(this.cleanups.splice(0), 'FishSystem');
   }
@@ -796,7 +847,7 @@ export class FishSystem {
     if (needed <= batch.capacity) return;
     this.disposeLods(batch);
     const capacity = capacityFor(needed);
-    const { model, profile, locomotion } = batch;
+    const { input, model, profile, locomotion } = batch;
     const lighting = this.lighting();
     batch.lods = model.lods.map((parts, level) => {
       const walking = locomotion.kind === 'walk';
@@ -828,6 +879,7 @@ export class FishSystem {
           instances,
           lighting,
           mouth: part.mouth,
+          displays: input.behaviour.traits.includes('flare-display'),
         });
         if (this.features !== null) material.setFeatures(this.features);
         const mesh = new InstancedMesh(part.geometry, material, capacity);
@@ -1064,6 +1116,8 @@ export class FishSystem {
       fromQuaternion: new Quaternion(),
       bagSlot: null,
       script: null,
+      display: 0,
+      gillFlare: 0,
     };
     if (fish.phase === 'bagged') runtime.bagSlot = this.freeBagSlot();
     if (fish.phase === 'dead') runtime.script = this.deadScript(runtime);
@@ -1301,6 +1355,13 @@ export class FishSystem {
       if (bites.length === 0) return;
       for (const listener of this.ateListeners) listener(bites);
     });
+    sim.onToyNudge(({ toyId, ix, iz }) => {
+      const { nudge } = this;
+      nudge.toyId = toyId;
+      nudge.ix = ix;
+      nudge.iz = iz;
+      for (const listener of this.nudgeListeners) listener(nudge);
+    });
     return sim;
   }
 
@@ -1416,6 +1477,10 @@ export class FishSystem {
         walk.legPhase = frame[o + SnapshotField.LegPhase] ?? 0;
         walk.flip = frame[o + SnapshotField.Flip] ?? 0;
         walk.attached = frame[o + SnapshotField.Attached] ?? 1;
+        // A world restarting at 0 closes the fins over a moment too.
+        const closing = deltaS / DISPLAY_CLOSE_S;
+        rt.display = Math.max(frame[o + SnapshotField.Display] ?? 0, rt.display - closing);
+        rt.gillFlare = Math.max(frame[o + SnapshotField.GillFlare] ?? 0, rt.gillFlare - closing);
         if (rt.handover > 0) {
           const w = smoothstep01(rt.handover / HANDOVER_S);
           this.position.lerp(rt.fromPosition, w);
@@ -1426,6 +1491,9 @@ export class FishSystem {
       }
       if (rt.bagSlot === null) return false;
     }
+    // Off the sim the fins close over a moment, as the carcass goes limp, instead of in one frame.
+    rt.display = Math.max(0, rt.display - deltaS / DISPLAY_CLOSE_S);
+    rt.gillFlare = Math.max(0, rt.gillFlare - deltaS / DISPLAY_CLOSE_S);
     let limpFrom: Quaternion | null = null;
     let limpWeight = 0;
     const { script } = rt;
@@ -1600,6 +1668,8 @@ export class FishSystem {
       swim === null
         ? 0
         : swim.mouthOpening * liveliness * mouthFade(rt.cameraDistance, rt.length, this.thresholds);
+    v.display = swim === null ? 0 : rt.display * liveliness;
+    v.gillFlare = swim === null ? 0 : rt.gillFlare * liveliness;
     writeDiseaseSigns(rt.fish.disease, motion instanceof WalkState, v);
     lod.instances.write(slot, v);
     const { locomotion } = rt.batch;

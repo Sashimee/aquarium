@@ -7,8 +7,9 @@ import {
   Quaternion,
   Scene,
   Vector3,
+  type Node,
 } from 'three/webgpu';
-import { SNAPSHOT_STRIDE } from '@aquarium/sim';
+import { CARCASS, SNAPSHOT_STRIDE, SnapshotField, type SimToy } from '@aquarium/sim';
 import type { Collider } from '@aquarium/shared';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import type { Engine } from '../engine/Engine';
@@ -18,9 +19,11 @@ import type { InteractionEvents } from '../interaction/events';
 import { FISH_1, TANK_A, fishFixture } from '../sync/fixtures';
 import type { FishAssetEntry } from './assetIndex';
 import { FishAssetLoader, type FishModel } from './assets';
+import { FishInstanceData, InstanceSlot, type InstanceValues } from './instances';
+import { FishMaterial } from './material';
 import { batchLocomotion, FishSystem } from './FishSystem';
 import { renderProfile, swimModeFor } from './profiles';
-import type { PickRay } from './start';
+import type { BallNudge, PickRay } from './start';
 import { SWIM_MODES } from './swim';
 import type { TailRig } from './walk';
 import { SimInitTimeout } from './simWorld';
@@ -616,6 +619,282 @@ describe('FishSystem dead shrimp', () => {
     expect(worker.sent.at(-1)?.type).toBe('start');
     advance(2);
     expect(drawnPosition(scene).distanceTo(held)).toBeGreaterThan(0.01);
+    fish.dispose();
+  });
+});
+
+/** A betta drawn as one box, enough to place and draw it. */
+function bettaModel(): FishModel {
+  return {
+    entry: {
+      id: 'betta',
+      kind: 'fish',
+      species: 'betta',
+      min: [-0.006, -0.015, -0.0365],
+      max: [0.006, 0.011, 0.0365],
+      standardLengthM: 0.073,
+      lodFiles: [],
+      sharperTextures: new Map(),
+      shrimp: null,
+      impostor: null,
+    },
+    tail: null,
+    textureSize: 1024,
+    lods: [
+      [
+        {
+          geometry: new BoxGeometry(0.012, 0.026, 0.073),
+          source: new MeshStandardMaterial(),
+          legPivots: [],
+          mouth: false,
+        },
+      ],
+    ],
+  };
+}
+
+describe('FishSystem toys and display', () => {
+  const BETTA = fishFixture(FISH_1, { species: 'betta', size: 0.06 });
+  const STEP_S = 1 / 30;
+  const MIRROR: SimToy = { kind: 'mirror', position: [0, 0.25, -0.2], normal: [0, 0, 1] };
+  const AT = [0.1, 0.22, -0.12] as const;
+
+  beforeEach(() => {
+    FakeWorker.last = null;
+    vi.stubGlobal('Worker', FakeWorker);
+    vi.stubGlobal('fetch', () => Promise.reject(new Error('offline')));
+    vi.spyOn(FishAssetLoader.prototype, 'load').mockImplementation((assetId) =>
+      assetId === 'betta' || assetId === 'royal-gramma'
+        ? Promise.resolve(bettaModel())
+        : Promise.reject(new Error('offline')),
+    );
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  /** A saved tank with one betta, its world up; `snapshot` sends one sim step and draws it. */
+  async function bettaTank(shown = BETTA, biome: 'freshwater' | 'reef' = 'freshwater') {
+    const { engine, frames } = fakeEngine();
+    const start = FishSystem.create(engine, {
+      tank: DEFAULT_TANK,
+      assetRoot: '/assets/',
+      biome: 'freshwater',
+      interaction: new EventBus<InteractionEvents>(),
+      seed: 7,
+      signal: new AbortController().signal,
+    });
+    const worker = await initPosted();
+    let answered = 0;
+    const answer = (): void => {
+      for (const { request, config } of worker.inits().slice(answered)) {
+        worker.emit({
+          type: 'ready',
+          request,
+          epoch: request,
+          fishIds: config.fish.map((f) => f.id),
+          stride: SNAPSHOT_STRIDE,
+          stepHz: 30,
+        });
+      }
+      answered = worker.inits().length;
+    };
+    answer();
+    const fish = await start;
+    const load = (): void =>
+      fish.handle({
+        type: 'tank:loaded',
+        payload: {
+          tankId: TANK_A,
+          biome,
+          decorLayout: [],
+          decorEdited: false,
+          fish: [shown],
+        },
+      });
+    const nextWorld = async (): Promise<void> => {
+      const count = answered + 1;
+      await vi.waitFor(() => {
+        if (worker.inits().length < count) throw new Error('no new world yet');
+      });
+      answer();
+      await fish.synced();
+    };
+    let tick = 0;
+    const snapshot = (display: number, gillFlare: number): void => {
+      const data = new Float32Array(SNAPSHOT_STRIDE);
+      data.set([...AT, 0, 0, 0, 1]);
+      data[SnapshotField.Display] = display;
+      data[SnapshotField.GillFlare] = gillFlare;
+      tick++;
+      worker.emit({
+        type: 'snapshot',
+        epoch: answered,
+        tick,
+        time: tick * STEP_S,
+        buffer: data.buffer,
+      });
+      for (const frame of frames) frame(STEP_S, performance.now());
+    };
+    return { fish, engine, worker, load, nextWorld, snapshot, epoch: () => answered };
+  }
+
+  it('sends the toys to the running world and again to every new one', async () => {
+    const { fish, worker, load, nextWorld } = await bettaTank();
+    fish.setToys([MIRROR]);
+    expect(worker.sent.at(-1)).toEqual({ type: 'toys', toys: [MIRROR] });
+
+    load();
+    await nextWorld();
+    const types = worker.sent.map((m) => m.type);
+    const init = types.lastIndexOf('init');
+    const resent = types.lastIndexOf('toys');
+    expect(resent).toBeGreaterThan(init);
+    expect(resent).toBeLessThan(types.lastIndexOf('start'));
+    expect(worker.sent[resent]).toEqual({ type: 'toys', toys: [MIRROR] });
+
+    fish.setToys([]);
+    expect(worker.sent.at(-1)).toEqual({ type: 'toys', toys: [] });
+    fish.handle({ type: 'tank:unloaded', payload: { tankId: TANK_A, reason: 'switch' } });
+    fish.handle({ type: 'tank:none', payload: {} });
+    await nextWorld();
+    const after = worker.sent.map((m) => m.type);
+    expect(after.lastIndexOf('toys')).toBeLessThan(after.lastIndexOf('init'));
+    fish.dispose();
+  });
+
+  it('passes ball nudges of the current world on as velocity changes', async () => {
+    const { fish, worker, epoch } = await bettaTank();
+    const seen: BallNudge[] = [];
+    const off = fish.onToyNudge((nudge) => seen.push(nudge));
+    const nudge = { fishId: 'sim-1', toyId: 'ball', toy: 0, ix: 0.03, iz: -0.02 };
+    worker.emit({ type: 'toyNudge', epoch: epoch(), tick: 1, nudges: [nudge] });
+    worker.emit({ type: 'toyNudge', epoch: epoch() + 7, tick: 2, nudges: [nudge] });
+    off();
+    worker.emit({ type: 'toyNudge', epoch: epoch(), tick: 3, nudges: [nudge] });
+    expect(seen).toEqual([{ toyId: 'ball', ix: 0.03, iz: -0.02 }]);
+    fish.dispose();
+  });
+
+  it('tells where a shown swimming fish is by its server id', async () => {
+    const { fish, load, nextWorld, snapshot } = await bettaTank();
+    expect(fish.fishPoint(BETTA.id)).toBeNull();
+    load();
+    await nextWorld();
+    snapshot(0, 0);
+    snapshot(0, 0);
+    const at = fish.fishPoint(BETTA.id);
+    expect(at?.x).toBeCloseTo(AT[0], 6);
+    expect(at?.y).toBeCloseTo(AT[1], 6);
+    expect(at?.z).toBeCloseTo(AT[2], 6);
+    expect(fish.fishPoint('nobody')).toBeNull();
+    fish.dispose();
+    expect(fish.fishPoint(BETTA.id)).toBeNull();
+  });
+
+  it("draws the sim's fin spread and gill flare, and lets them go when the fish dies", async () => {
+    const written: InstanceValues[] = [];
+    const write = FishInstanceData.prototype.write;
+    vi.spyOn(FishInstanceData.prototype, 'write').mockImplementation(function (
+      this: FishInstanceData,
+      index,
+      values,
+    ) {
+      written.push({ ...values });
+      write.call(this, index, values);
+    });
+    const { fish, load, nextWorld, snapshot } = await bettaTank();
+    load();
+    await nextWorld();
+    snapshot(0, 0);
+    snapshot(0, 0);
+    expect(written.at(-1)).toMatchObject({ display: 0, gillFlare: 0 });
+    snapshot(0.8, 0.6);
+    snapshot(0.8, 0.6);
+    snapshot(0.8, 0.6);
+    expect(written.at(-1)?.display).toBeCloseTo(0.8, 6);
+    expect(written.at(-1)?.gillFlare).toBeCloseTo(0.6, 6);
+
+    fish.handle({
+      type: 'tank:fish-died',
+      payload: {
+        tankId: TANK_A,
+        fish: { ...BETTA, status: 'dead', diedAt: '2026-10-16T00:00:00.000Z' },
+      },
+    });
+    const closing: number[] = [];
+    for (let i = 0; i < Math.ceil(CARCASS.limpS / STEP_S) + 2; i++) {
+      snapshot(0.8, 0.6);
+      closing.push(written.at(-1)?.display ?? NaN);
+    }
+    expect(closing[0]).toBeGreaterThan(0.5);
+    for (let i = 1; i < closing.length; i++) {
+      expect(closing[i]).toBeLessThanOrEqual(closing[i - 1] ?? NaN);
+    }
+    expect(written.at(-1)).toMatchObject({ display: 0, gillFlare: 0 });
+    fish.dispose();
+  });
+
+  it('closes the fins over a moment when a new world restarts them at 0', async () => {
+    const written: InstanceValues[] = [];
+    const write = FishInstanceData.prototype.write;
+    vi.spyOn(FishInstanceData.prototype, 'write').mockImplementation(function (
+      this: FishInstanceData,
+      index,
+      values,
+    ) {
+      written.push({ ...values });
+      write.call(this, index, values);
+    });
+    const { fish, load, nextWorld, snapshot } = await bettaTank();
+    load();
+    await nextWorld();
+    for (let i = 0; i < 3; i++) snapshot(1, 1);
+    snapshot(0, 0);
+    snapshot(0, 0);
+    const after = written.at(-1)?.display ?? NaN;
+    expect(after).toBeGreaterThan(0.8);
+    expect(after).toBeLessThan(1);
+    fish.dispose();
+  });
+
+  it.each([
+    ['betta', BETTA, 'freshwater', true],
+    [
+      'royal gramma, territorial without the flare trait',
+      fishFixture(FISH_1, { species: 'royal-gramma', size: 0.06 }),
+      'reef',
+      false,
+    ],
+  ] as const)('builds the display deformation for the %s: %s', async (_, shown, biome, flares) => {
+    const { fish, engine, load, nextWorld, snapshot } = await bettaTank(shown, biome);
+    load();
+    await nextWorld();
+    snapshot(0, 0);
+    const materials: FishMaterial[] = [];
+    engine.scene.traverse((object) => {
+      if (object instanceof InstancedMesh && object.material instanceof FishMaterial) {
+        materials.push(object.material);
+      }
+    });
+    expect(materials.length).toBeGreaterThan(0);
+    for (const material of materials) {
+      let readsDisplay = false;
+      material.deformed.position.traverse((n) => {
+        const split = n as Node & { isSplitNode?: boolean; components?: string; node?: Node };
+        const buffer = split.node as (Node & { bufferOffset?: number }) | undefined;
+        if (
+          split.isSplitNode === true &&
+          split.components === 'xyzw'[InstanceSlot.Display % 4] &&
+          buffer?.bufferOffset === InstanceSlot.Display - (InstanceSlot.Display % 4)
+        ) {
+          readsDisplay = true;
+        }
+      });
+      expect(readsDisplay).toBe(flares);
+    }
     fish.dispose();
   });
 });

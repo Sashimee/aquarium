@@ -6,7 +6,8 @@ import { DynamicDrawUsage, InstancedInterleavedBuffer } from 'three/webgpu';
  * - `swim`: scale, body-wave phase, amplitude scale, turn curvature in model units;
  * - `look`: fin phase, paling 0..1, seed 0..1, iridescent film thickness (nm);
  * - `tint`: rgb multiplier, gill opening 0..1;
- * - `breath`: mouth opening 0..1, unused, unused, unused; walkers have no mouth and leave it at 0;
+ * - `breath`: mouth opening 0..1, display fin spread 0..1, display gill flare 0..1, unused; walkers
+ *   have no mouth or display and leave the block at 0;
  * - `illness`: ich, fin rot and velvet severities 0..1, unused; walkers catch none of these
  *   diseases and leave the block at 0.
  * Walkers add two more: `walk` (leg phase 0..1, stride weight, tail curl in radians, pleopod
@@ -32,6 +33,8 @@ export const InstanceSlot = {
   TintB: 14,
   Gills: 15,
   Mouth: 16,
+  Display: 17,
+  GillFlare: 18,
   Ich: 20,
   FinRot: 21,
   Velvet: 22,
@@ -61,6 +64,8 @@ export interface InstanceValues {
   tint: readonly [number, number, number];
   gills: number;
   mouth: number;
+  display: number;
+  gillFlare: number;
   ich: number;
   finRot: number;
   velvet: number;
@@ -111,6 +116,8 @@ export class FishInstanceData {
     a[o + InstanceSlot.TintB] = v.tint[2];
     a[o + InstanceSlot.Gills] = v.gills;
     a[o + InstanceSlot.Mouth] = v.mouth;
+    a[o + InstanceSlot.Display] = v.display;
+    a[o + InstanceSlot.GillFlare] = v.gillFlare;
     a[o + InstanceSlot.Ich] = v.ich;
     a[o + InstanceSlot.FinRot] = v.finRot;
     a[o + InstanceSlot.Velvet] = v.velvet;

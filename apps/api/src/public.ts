@@ -155,6 +155,7 @@ export function registerPublicRoutes({
       decorLayout: (tank.decorLayout === null ? [] : decorLayoutSchema.parse(tank.decorLayout)).map(
         (item) => ({ ...item, tintSeed: item.tintSeed ?? legacyTintSeed(item) }),
       ),
+      decorEdited: tank.decorLayout !== null,
       water: waterSchema.parse(tank.water),
       chemistry: chemistrySchema.parse(tank.chemistry),
       equipment: equipmentSchema.parse(tank.equipment),
