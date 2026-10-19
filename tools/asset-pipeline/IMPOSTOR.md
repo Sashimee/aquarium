@@ -34,14 +34,14 @@ the fins.
 The quad is `2 * radius` metres on a side, centred on `pivot`, the same size for every view, so the
 silhouette does not jump between frames. It stays in the plane through the pivot that faces the
 camera, but it is oriented **by the fish's body as the camera sees it**, not by a frame and not by
-`viewBasis(dCamera)`. With `v` (`dCamera` below) = unit vector from the pivot to the camera in fish space (camera position
-through the inverse fish transform, minus pivot, normalised; the `View` instance slot), the strip's
-normal is `v` and its axes are
+`viewBasis(dCamera)`. With `v` (`dCamera` below) = unit vector from the pivot to the camera in fish space (camera
+position through the inverse fish transform, minus pivot, normalised; the `View` instance slot), the
+strip's normal is `v` and its axes are
 
 ```
 along  = normalize(Z - v * dot(v, Z) + 1e-4 * viewBasis(v).right)   // Z = +Z, the fish's long axis
 across = cross(v, along)
-corner = pivot + radius * (+-1 * along + +-1 * across)               // fish space, then the world transform
+corner = pivot + radius * (+-1 * along + +-1 * across)     // fish space, then the world transform
 ```
 
 `Z - v * dot(v, Z)` is the fish's +Z axis projected into the camera-facing plane. Head-on, `v` is
@@ -50,10 +50,13 @@ normalisation defined; the body has no on-screen axis there and the strip's roll
 
 Roll about `v` is free because the atlas lookup (`framePointUv` below) only needs the strip point `q`
 to lie in the camera-facing plane; it never assumes fish-space up is screen up. Aligning the long axis
-with the body has two effects: every cross-section of the strip sits at one model z, so the swim-wave
-bend applies along the strip as it does on the mesh, and the quad stays tight around a narrow fish.
-The wave bend is applied to the strip's corners, and the atlas lookup uses the undeformed point `q`, so
-the picture rides along with the bend.
+with the body lets the swim-wave bend apply along the strip as it does on the mesh: every
+cross-section of the strip sits at one model z.
+
+The strip is a `PlaneGeometry(2, 2, 8, 1)` (`IMPOSTOR_SEGMENTS = 8` segments along `along`, one across),
+spanning [-1, 1] on both axes and scaled by `radius`, so it is always a `2 * radius` square. The wave
+bend runs on every vertex at that vertex's own model z, so the strip bends segment by segment. The atlas
+lookup uses the undeformed point `q`, so the picture rides along with the bend.
 
 ## Why a full octahedron
 
