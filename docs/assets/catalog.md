@@ -30,6 +30,11 @@ Curated for T05 (#5), checked 2026-10-12. Ranks are by fit for a photorealistic 
 | Fairy cichlid, Neolamprologus brichardi (T48) | no allowed model; CC BY-SA photo approved 2026-10-22 | `wm-brichardi-stang-1zz` (CC BY-SA 4.0) |
 | Peacock cichlid, Aulonocara baenschi (T48) | no allowed model; CC BY-SA photo approved 2026-10-22 | `wm-aulonocara-baenschi-rjcastillo` (CC BY-SA 4.0) |
 | Shell-dweller, Neolamprologus multifasciatus (T48) | no allowed model; CC BY-SA photo approved 2026-10-22 | `wm-multifasciatus-ingebrigtsen-male` (CC BY-SA 3.0) |
+| Cardinal tetra (T49) | no allowed model of the species | `wm-cardinal-vicente` |
+| Rummy-nose tetra (T49) | no allowed model of the species | `wm-rummynose-reiskoffer` (CC BY 3.0) |
+| Apistogramma hongsloi (T49) | no allowed model of the species | `wm-apistogramma-hongsloi-male`, `wm-apistogramma-hongsloi-pair` (CC BY 4.0) |
+| Dwarf pencilfish (T49) | no allowed model of the species | `wm-nannostomus-marginatus-male`, `wm-nannostomus-marginatus-female` |
+| Marbled hatchetfish (T49) | no CC0 or CC-BY photo; SA-only gap | none, see the T49 gaps list |
 | Anemone (host) | no photoreal free model | procedural TSL |
 
 Licence rule for painted loft fish: when the colours are painted by eye from reference photos and no photo pixels are reused, the asset is CC0 with `sources: []` (royal gramma, cleaner wrasse). The photos stay in `assets/manifest.json` and CREDITS.md as reference photos and are named in the recipe note. A photo only becomes a `sources` entry (carrying its licence, attribution and modifications) when its pixels are projected onto the model, as for the bronze corydoras. Either licence is acceptable; CC-BY sources need attribution in both files.
@@ -475,6 +480,78 @@ Adult target lengths (total length, approximate): Pseudotropheus demasoni 7 to 8
 4. Shell (`sketchfab-1bedca25`): decimate to three LODs, 1k KTX2, instance-friendly origin, scale to 3.5 to 5 cm (Neothauma-like). The shell normal map is 11.9 MB at source and must be downscaled.
 5. Substrate: reuse existing sand textures; no new asset.
 6. Backgrounds: render the five slots to the specs above, strip metadata, build the three KTX2 tiers, then add the entries to the manifest with `sha256`, `files[]`, `modifications[]` and status `downloaded`.
+
+## Amazon blackwater (issue #639, T49)
+
+Checked 2026-10-22. Sources searched in order: Smithsonian (no fish models), Sketchfab with the CC0 and CC-BY filters and the downloadable flag, Poly Haven, ambientCG, Wikimedia Commons. Licences were read from the Sketchfab model record and bundled `license.txt`, the Poly Haven and ambientCG asset pages and the Commons file-page metadata. Raw files are in `~/.cache/aquarium-assets/raw/<id>/`. No CC-BY-SA was used: the gaps that only CC-BY-SA photos fill are listed below for Alex.
+
+### Species
+
+| Species | Decision | Pick | Polycount | Notes |
+|---|---|---|---|---|
+| Cardinal tetra (Paracheirodon axelrodi) | fallback: procedural loft | `wm-cardinal-vicente` (CC0, 2168x1535) | n/a | The only allowed photo that is sharp enough; the fish was photographed just after the lights came on, so the belly is pale pink and the red must be painted deeper. The `sketchfab-2fabf5db` neon tetra mesh (already in the manifest) is a candidate body to re-texture with a full red belly. Rejected: `Low-Poly Cardinal Tetra` (trionamccarthy01, CC-BY-4.0, Sketchfab `6906e205`): 380 triangles, no skin, flat colours, not added to the manifest. Not used: `Neon Lodz.jpg` and `Akvarijní rybky.jpg` (CC BY 3.0), the public-domain cardinal photos (not CC0, not on the allow-list). |
+| Rummy-nose tetra (Hemigrammus rhodostomus) | fallback: procedural loft | `wm-rummynose-reiskoffer` (CC BY 3.0, 1600x1145) | n/a | Commons categorises this as Petitella bleheri (false rummy-nose), the fish usually sold as rummy-nose; red head and banded tail are the same. No true H. rhodostomus photo under an allowed licence was found. |
+| Apistogramma hongsloi (dwarf cichlid) | fallback: procedural loft | `wm-apistogramma-hongsloi-male` (CC BY 4.0, 9248x6944), `wm-apistogramma-hongsloi-pair` (CC BY 4.0, 7940x5464) | n/a | Clean male lateral. The pair photo has both fish partly behind plants, so the female texture is painted by eye with it as colour reference. Strong dimorphism (males about 6 to 7 cm, females about 4 cm and yellow): two texture sets. |
+| Dwarf pencilfish (Nannostomus marginatus) | fallback: procedural loft | `wm-nannostomus-marginatus-male`, `wm-nannostomus-marginatus-female` (CC0, D.W.) | n/a | Sharp laterals of both sexes. Two dark stripes, red fin marks on the male. |
+| Black phantom tetra (Hyphessobrycon megalopterus) | model (optional fifth species) | `sketchfab-92b5b5bb` (DenDen, CC-BY-4.0) | 608 triangles | Rigged (13 joints), no animation, flat-colour materials only; the silver-grey body, humeral blotch and red adipose fin must be painted. Weak, but the only allowed rigged characin model for this biome. |
+| Marbled hatchetfish (Carnegiella strigata) | gap: SA-only or non-CC0 public domain | none | n/a | See the gaps list below. Procedural body from the species description if Alex does not approve a photo. |
+
+The PLAN asks for 4 or more species: cardinal, rummy-nose, Apistogramma and dwarf pencilfish are covered (all four are lofts), plus the black phantom model, so five without the hatchetfish. Species ids are proposals; `content/species/*.json` belongs to the later owners.
+
+### Hardscape, driftwood and leaf litter
+
+No allowed model of Indian almond (Terminalia catappa) leaves exists: Sketchfab, Poly Haven and ambientCG hold only generic leaves. Leaf litter is therefore built from CC0 leaf atlases and ground textures, tinted brown in the pipeline.
+
+| Item | Pick | Licence | Notes |
+|---|---|---|---|
+| Driftwood, root tangle | `sketchfab-07422ed7` (HeartOfLines) | CC-BY-4.0 | 23780 triangles, 4096x4096 PNG maps (base, metal-rough, normal): downscale to 2k. |
+| Driftwood, second piece | `sketchfab-mJUa0nux` (jasonwebb) | CC-BY-4.0 | 68260 triangles, one 4096x4096 base colour, no normal map: decimate and bake. |
+| Branches and twigs | `polyhaven-dry_branches_medium_01` | CC0 | 16803 triangles, 2k PBR. |
+| Trunks, reused | `polyhaven-dead_tree_trunk_02`, `polyhaven-dead_quiver_trunk`, `sketchfab-c53807ef` | CC0 and CC-BY-4.0 | Already in the manifest. |
+| Leaf-litter floor | `ambientcg-ScatteredLeaves009`, `polyhaven-dry_decay_leaves` | CC0 | 2k PBR ground textures; tint toward tannin brown. |
+| Leaf cards | `ambientcg-LeafSet015`, `ambientcg-LeafSet030` | CC0 | Atlases with opacity maps; scatter as cards (floating and sunken leaves). |
+| Sand | `ambientcg-Ground101`, `polyhaven-coast_sand_01` | CC0 | Already in the manifest: a pale fine sand under the leaf litter. |
+
+### Backgrounds (render specs, not yet in the manifest)
+
+No allowed underwater blackwater photo was found, so the five slots are renders in the `bg-fw-misty-lake` pattern. They are not in `assets/manifest.json` yet: the committed-backgrounds suite in the asset-pipeline package expects every background entry to be built. The pipeline PR that renders them adds them as `downloaded` entries with `kind: "background"`, `biome: "blackwater"`, `source: "render"` and the slot below.
+
+| Slot | Id | Licence |
+|---|---|---|
+| Leaf-litter floor | `bg-blackwater-leaf-litter` | CC0 |
+| Root tangle | `bg-blackwater-root-tangle` | CC-BY-4.0 (driftwood credit, HeartOfLines) |
+| Driftwood wall | `bg-blackwater-driftwood-wall` | CC-BY-4.0 (driftwood credit, jasonwebb) |
+| Flooded forest | `bg-blackwater-flooded-forest` | CC0 |
+| Open tannin water | `bg-blackwater-open-tannin` | CC0 |
+
+Every render: no EXIF or other metadata, no fish, no text, no people. 2:1, at least 4096x2048, graded underwater by the pipeline (the renderer tints the poster once more with tannin absorption, so keep the grade light), soft light fall-off from the top, no hard sun shafts. Freshwater only.
+
+- `bg-blackwater-leaf-litter`: a low view over a floor covered in `ambientcg-ScatteredLeaves009` and `polyhaven-dry_decay_leaves` with `ambientcg-LeafSet015` and `-LeafSet030` cards at varied scale, a few sunken twigs from `polyhaven-dry_branches_medium_01`, deep amber-brown water above fading to dark.
+- `bg-blackwater-root-tangle`: `sketchfab-07422ed7` as a large branching root left of centre with leaf litter at its base and twigs from `polyhaven-dry_branches_medium_01`; the centre third stays open and dim. Licence is CC-BY-4.0 because of the driftwood credit: `source_url` and `author_url` point to the scan (`https://sketchfab.com/3d-models/driftwood-scan-07422ed79cdd46c88aa5999486403804`, `https://sketchfab.com/HeartOfLines`).
+- `bg-blackwater-driftwood-wall`: `sketchfab-mJUa0nux` stacked and angled to fill the left and right thirds as a wall of wood, leaf litter on the floor. CC-BY-4.0 for the same reason (`https://sketchfab.com/3d-models/driftwood-3d-scan-mJUa0nux6YAp3LqHPWmxHuBgVRr`, `https://sketchfab.com/jasonwebb`).
+- `bg-blackwater-flooded-forest`: several vertical trunks (`polyhaven-dead_tree_trunk_02`, `polyhaven-dead_quiver_trunk`, both CC0) receding into dark brown water with leaf litter and twigs at the base.
+- `bg-blackwater-open-tannin`: open amber-brown water, a faint lighter patch top right, a few distant twigs and leaves low in the frame, the calmest slot for tanks with a lot of foreground decor.
+
+The manifest biome will be `blackwater`. `content/backgrounds/blackwater.json` and the ids in `packages/shared/src/backgrounds.ts` are not added here: `playableBiomeSchema` does not yet include `blackwater`, so the file would fail validation. Add both in the PR that makes the biome playable.
+
+### CC-BY-SA and other gaps for Alex
+
+Nothing in this survey ships as CC-BY-SA. Decisions needed:
+
+- Marbled hatchetfish (Carnegiella strigata): no CC0 or CC-BY photo of any hatchetfish was found. The candidates are public domain, not CC0 (`Machadinha.JPG` and `Machadinha02.JPG` by Rcfernandes, 1600x1200; `Carnegiella strigata2.jpg`, 400x271), or CC BY-SA: `Gasteropelecus sternicla - 9326.jpg` (Amada44, CC BY-SA 3.0, 1587x925), `Gasteropelecus sternicla.JPG` (Neale Monks, CC BY-SA 3.0, 1060x880), `Hal - Gasteropelecus sternicla - 1.jpg` (Emőke Dénes, CC BY-SA 4.0), `Gasteropelecidae Gasteropelecus maculatus 1.2.jpg` (NasserHalaweh, CC BY-SA 4.0, 2147x1610). A CC BY 2.0 maculatus photo is not accepted by the allow-list. Either approve one photo or the hatchetfish is lofted from the description.
+- Cardinal tetra and rummy-nose: a sharper cardinal photo or a true H. rhodostomus photo was not found under an allowed licence. The picks above are adequate and need no decision.
+
+### Handoff to asset-pipeline-engineer
+
+Adult target lengths (total length, approximate): cardinal tetra 4 cm, rummy-nose 4.5 cm, black phantom 4.5 cm, dwarf pencilfish 3.5 cm, Apistogramma hongsloi male 6.5 cm and female 4 cm.
+
+1. Black phantom (`sketchfab-92b5b5bb`): replace the 13-joint skeleton with the pipeline fish rig, orient, scale to 4.5 cm, paint the body (silver-grey, black humeral blotch, red adipose fin), KTX2 at 1k and 2k, LODs. No image textures exist, so the whole texture is new.
+2. Loft four species from the listed photos: cardinal (`wm-cardinal-vicente`, 4 cm; deepen the red belly by eye, optionally re-texture the `sketchfab-2fabf5db` mesh instead), rummy-nose (`wm-rummynose-reiskoffer`, 4.5 cm; credit Donar Reiskoffer, CC BY 3.0), Apistogramma hongsloi in two sexes (`wm-apistogramma-hongsloi-male` at 6.5 cm; the female at 4 cm painted by eye with `wm-apistogramma-hongsloi-pair` as colour reference), dwarf pencilfish in two sexes (`wm-nannostomus-marginatus-male`, `-female`, CC0, 3.5 cm). Crop each photo to the fish first: the Apistogramma files are 9248x6944 and 7940x5464 and the fish is small in frame.
+3. Driftwood (`sketchfab-07422ed7`, `sketchfab-mJUa0nux`): decimate to LOD0 targets of about 10,000 triangles for 07422ed7 and 12,000 for mJUa0nux, then LOD1 at about a quarter, downscale the 4096 maps to 2k and 1k KTX2, bake a normal map for mJUa0nux, origin at the base. Ship as two `driftwood` pieces.
+4. Branches (`polyhaven-dry_branches_medium_01`): 16803 triangles, decimate to about 4,000 for LOD0, bake normals, ship as a twig cluster for the root clutter.
+5. Leaf litter: build a `leaf-litter` ground decal or instanced-card set from `ambientcg-ScatteredLeaves009` and `polyhaven-dry_decay_leaves` (floor tiles) and `ambientcg-LeafSet015` and `-LeafSet030` (leaf cards from the opacity maps), tinted toward tannin brown, 1k KTX2. Leaves must sink and float: provide a flat card mesh with the opacity cutout.
+6. Substrate: reuse existing sand textures, no new asset.
+7. Backgrounds: render the five slots to the specs above, strip metadata, build the three KTX2 tiers, then add the entries to the manifest with `sha256`, `files[]`, `modifications[]` and status `downloaded`.
 
 ## Sound (issue #649, T59)
 
