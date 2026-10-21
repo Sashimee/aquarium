@@ -37,13 +37,13 @@ import { useSpend } from './spend';
 
 const POTENCIES: readonly MedicinePotency[] = ['standard', 'premium'];
 
-export interface Pending {
+interface Pending {
   kind: DiseaseKind;
   potency: MedicinePotency;
   warnings: string[];
 }
 
-export interface Refusal {
+interface Refusal {
   kind: DiseaseKind;
   message: string;
   waterChange: boolean;
@@ -165,7 +165,7 @@ export function DoseConfirmation({
   onConfirm,
   onCancel,
 }: {
-  pending: Pick<Pending, 'kind' | 'potency' | 'warnings'>;
+  pending: Pending;
   balance: number | null;
   onConfirm(): void;
   onCancel(): void;
@@ -189,7 +189,7 @@ export function PendingDoseWarning({
   pending,
   balance,
 }: {
-  pending: Pick<Pending, 'kind' | 'potency' | 'warnings'>;
+  pending: Pending;
   balance: number | null;
 }) {
   const cost = doseSpend(BUNDLED_ECONOMY, pending.kind, pending.potency, true);
