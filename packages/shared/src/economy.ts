@@ -39,8 +39,6 @@ import { tankSizeSchema } from './tankSize.js';
 //                 delta < 0, itemRef names the original pack or subscription row
 //   restore       Pearls returned after a won dispute, source stripe|apple, delta > 0
 //
-// A request without stage is priced as DEFAULT_PURCHASE_STAGE and one without idempotencyKey gets a
-// server-made key, for clients that predate the shop (apps/api/src/legacyRequests.ts, #765).
 // A fish is bought through add-fish only; purchase rejects species:* refs.
 //
 // Plants and decor are priced by the ids of DECOR_ASSET_IDS (the ids a layout holds), not by
@@ -137,9 +135,6 @@ export type PurchaseResponse = z.infer<typeof purchaseResponseSchema>;
 
 export const purchasableStageSchema = z.enum(['juvenile', 'adult']);
 export type PurchasableStage = z.infer<typeof purchasableStageSchema>;
-
-// What add-fish did before the shop had stages: the fish.stage column default.
-export const DEFAULT_PURCHASE_STAGE: PurchasableStage = 'adult';
 
 const range = z
   .strictObject({ min: priceSchema, max: priceSchema })

@@ -38,7 +38,8 @@ export type SimCommand =
   | { readonly type: 'step'; readonly steps: number }
   | { readonly type: 'recycle'; readonly buffer: ArrayBuffer }
   | { readonly type: 'startle'; readonly stimulus: Stimulus }
-  | { readonly type: 'light'; readonly level: number }
+  /** With `settle`, the new level is taken as already adapted to; see `World.settleLight`. */
+  | { readonly type: 'light'; readonly level: number; readonly settle?: boolean }
   /** The wave maker, or null when there is none; see `World.setWaveMaker`. */
   | { readonly type: 'waveMaker'; readonly settings: WaveMakerSettings | null }
   /** A laser dot or fingertip on the glass, or null once it is gone; see `World.setLure`. */
@@ -432,9 +433,16 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
       case 'startle':
         requireWorld(command.type).startle(command.stimulus);
         return;
-      case 'light':
-        requireWorld(command.type).setLight(command.level);
+      case 'light': {
+        const { settle } = command;
+        if (settle !== undefined && typeof settle !== 'boolean') {
+          throw new TypeError(`sim: "light" settle must be a boolean, got ${String(settle)}`);
+        }
+        const w = requireWorld(command.type);
+        w.setLight(command.level);
+        if (settle === true) w.settleLight();
         return;
+      }
       case 'waveMaker':
         requireWorld(command.type).setWaveMaker(command.settings);
         return;
@@ -658,9 +666,12 @@ export class SimClient {
     this.send({ type: 'startle', stimulus });
   }
 
-  /** 0 = lights off (night rest), 1 = full day. */
-  setLight(level: number): void {
-    this.send({ type: 'light', level });
+  /**
+   * 0 = lights off (night rest), 1 = full day. With `settle`, the fish take the new level as
+   * already adapted to and do not startle (a tab coming back after the lamp switched meanwhile).
+   */
+  setLight(level: number, settle?: boolean): void {
+    this.send(settle === undefined ? { type: 'light', level } : { type: 'light', level, settle });
   }
 
   /** Installs, changes or (with null) removes the wave maker; see `waveMakerForTier`. */

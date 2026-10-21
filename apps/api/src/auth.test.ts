@@ -809,6 +809,10 @@ describe('mail abuse limits', () => {
             expect.stringMatching(/^verification mail throttled, retry in \d+s$/),
           ]);
           const unknownRes = await resend(unknown);
+          for (const first of [cooledRes, unknownRes]) {
+            expect(first.delays).toEqual([500]);
+            expect(first.elapsedMs).toBeLessThan(REAL_TIME_CEILING_MS);
+          }
           expect(cooledRes.res.statusCode).toBe(200);
           expect(unknownRes.res.statusCode).toBe(200);
           expect(cooledRes.res.body).toBe(unknownRes.res.body);

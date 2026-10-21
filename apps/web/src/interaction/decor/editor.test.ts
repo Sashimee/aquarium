@@ -277,6 +277,49 @@ describe('colour seed', () => {
   });
 });
 
+describe('unique colour seeds', () => {
+  function addedItem(e: DecorEditor) {
+    const added = e.add('boulder-01');
+    if (!('id' in added)) throw new Error('expected a piece');
+    return must(e.piece(added.id)).item;
+  }
+
+  it('gives a new piece a fresh seed when a saved piece already holds the one its spot hashes to', () => {
+    const probe = addedItem(editor());
+    const saved: Piece = {
+      id: 'p1',
+      item: { ...item('boulder-01', 3, 3), tintSeed: probe.tintSeed },
+    };
+    const e = editor([saved]);
+    const fresh = addedItem(e);
+    expect(fresh.position).toEqual(probe.position);
+    expect(fresh.tintSeed).not.toBe(saved.item.tintSeed);
+    expect(must(e.piece('p1')).item.tintSeed).toBe(probe.tintSeed);
+  });
+
+  it('keeps seeds distinct across repeated adds and after a removal', () => {
+    const e = editor();
+    const a = addedItem(e);
+    const b = addedItem(e);
+    const c = addedItem(e);
+    expect(new Set([a.tintSeed, b.tintSeed, c.tintSeed]).size).toBe(3);
+    const keep = [...e.pieces].map((p) => p.item.tintSeed);
+    e.remove('p1');
+    const d = addedItem(e);
+    expect(keep.slice(1)).not.toContain(d.tintSeed);
+  });
+
+  it('leaves saved seeds, including legacy duplicates, untouched', () => {
+    const e = editor([
+      { id: 'p1', item: { ...item('boulder-01', 0, 0), tintSeed: 5 } },
+      { id: 'p2', item: { ...item('boulder-01', 0.5, 0.5), tintSeed: 5 } },
+    ]);
+    addedItem(e);
+    expect(must(e.piece('p1')).item.tintSeed).toBe(5);
+    expect(must(e.piece('p2')).item.tintSeed).toBe(5);
+  });
+});
+
 describe('plants', () => {
   const plantEditor = (waterTop: number, pieces: Piece[] = []) =>
     new DecorEditor({
