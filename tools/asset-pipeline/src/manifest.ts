@@ -5,7 +5,7 @@ import type { AssetIndex, OutputAsset } from './index-schema.ts';
 export const ALLOWED_LICENCES = ['CC0-1.0', 'CC-BY-3.0', 'CC-BY-4.0'] as const;
 export const SHARE_ALIKE_LICENCES = ['CC-BY-SA-3.0', 'CC-BY-SA-4.0'] as const;
 export const SHARE_ALIKE_KIND = 'reference-photo';
-/** CC-BY-SA is approved for exactly these reference photos (Corydoras aeneus, Gramma loreto, Pterapogon kauderni, firefish, harlequin rasbora, six-line wrasse, bristlenose pleco) and nothing else. */
+/** CC-BY-SA is approved for exactly these reference photos (Corydoras aeneus, Gramma loreto, Pterapogon kauderni, firefish, harlequin rasbora, six-line wrasse, bristlenose pleco, fairy cichlid, peacock cichlid, shell-dweller) and nothing else. */
 export const SHARE_ALIKE_ALLOWLIST: readonly { id: string; species: string; author: string }[] = [
   {
     id: 'wm-cory-aeneus-gabs-01',
@@ -25,6 +25,13 @@ export const SHARE_ALIKE_ALLOWLIST: readonly { id: string; species: string; auth
   { id: 'wm-sixline-delso-63', species: 'six-line-wrasse', author: 'Diego Delso' },
   { id: 'wm-ancistrus-reis', species: 'bristlenose-pleco', author: 'Júlio Reis' },
   { id: 'wm-ancistrus-l144-adolfoi', species: 'bristlenose-pleco', author: 'Corydoras-adolfoi' },
+  { id: 'wm-brichardi-stang-1zz', species: 'neolamprologus-brichardi', author: 'David J. Stang' },
+  { id: 'wm-aulonocara-baenschi-rjcastillo', species: 'aulonocara-baenschi', author: 'Rjcastillo' },
+  {
+    id: 'wm-multifasciatus-ingebrigtsen-male',
+    species: 'neolamprologus-multifasciatus',
+    author: 'Richard A. Ingebrigtsen',
+  },
 ];
 
 const sha256Schema = z.string().regex(/^[0-9a-f]{64}$/, 'must be 64 lowercase hex characters');

@@ -1,4 +1,4 @@
-import { foodTypeSchema, type FoodType } from '@aquarium/shared';
+import { foodTypeSchema, type FoodType, type Plant, type Tank } from '@aquarium/shared';
 import { useEffect, useRef, useState } from 'react';
 import {
   HAND_FEED_PORTION,
@@ -6,6 +6,7 @@ import {
   type InteractionEvents,
   type PlayTool,
 } from '../interaction/events';
+import { plantLabel, trimmablePlants } from '../sync/plantTrim';
 import { useBridge, useLatest, usePlayTool } from './context';
 import { useActiveTank } from './session';
 
@@ -23,6 +24,14 @@ const NET: { tool: PlayTool; label: string; hint: string } = {
   label: 'Net',
   hint: 'Lift out a fish that has died',
 };
+
+const TRIM: { tool: PlayTool; label: string; hint: string } = {
+  tool: 'trim',
+  label: 'Trim',
+  hint: 'Tap a grown plant to cut it back',
+};
+
+const MAX_TRIM_SHORTCUTS = 12;
 
 const FOOD_LABEL: Record<FoodType, string> = {
   flakes: 'Flakes',
@@ -127,12 +136,28 @@ export function FeedPanel({ food, onFood }: { food: FoodType; onFood(food: FoodT
   );
 }
 
+/** The tools on offer: the net once a fish has died, trim once a plant has grown. A tank the viewer does not own has neither. */
+export function playTools(tank: Pick<Tank, 'fish' | 'plants'> | null): readonly (typeof NET)[] {
+  return [
+    ...TOOLS,
+    ...(tank?.fish.some((f) => f.status === 'dead') ? [NET] : []),
+    ...(trimmablePlants(tank).length > 0 ? [TRIM] : []),
+  ];
+}
+
+export function trimShortcuts(tank: Pick<Tank, 'plants'> | null): Plant[] {
+  return trimmablePlants(tank)
+    .sort((a, b) => b.size - a.size)
+    .slice(0, MAX_TRIM_SHORTCUTS);
+}
+
 export function PlayPanel() {
   const { interaction } = useBridge();
   const tool = usePlayTool();
   const tank = useActiveTank();
   const ready = useEngineReadyForPlay();
-  const tools = tank?.fish.some((f) => f.status === 'dead') ? [...TOOLS, NET] : TOOLS;
+  const trimmable = trimShortcuts(tank);
+  const tools = playTools(tank);
   return (
     <>
       <div role="group" aria-label="Play tools" className="tool-grid">
@@ -151,6 +176,29 @@ export function PlayPanel() {
           </button>
         ))}
       </div>
+      {tool === 'trim' && trimmable.length > 0 && (
+        <div role="group" aria-label="Plants that can be trimmed" className="toy-shelf">
+          {trimmable.map((plant) => (
+            <button
+              key={plant.key}
+              type="button"
+              onClick={() =>
+                interaction.emit('plant:picked', {
+                  pick: {
+                    key: plant.key,
+                    size: plant.size,
+                    minSize: plant.minSize,
+                    maxSize: plant.maxSize,
+                    distance: 0,
+                  },
+                })
+              }
+            >
+              {`Trim ${plantLabel(plant.assetId)}, ${Math.round(plant.size * 100)}%`}
+            </button>
+          ))}
+        </div>
+      )}
       <ToyShelf />
       <FeedingGamePanel
         fish={(tank?.fish ?? [])
