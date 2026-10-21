@@ -239,6 +239,27 @@ describe('coral growth and bleaching', () => {
     expect(coralOf(tank, 's31').size).toBeGreaterThan(1.1);
     expect(Date.now() - t0).toBeLessThan(5000);
   });
+
+  it('ticks and saves a full coral layout with the most fragments', async () => {
+    const layout = Array.from({ length: 200 }, (_, i) => layoutItem('brain-coral', 1000 + i));
+    const tankId = await makeTank(h, alice, { layout });
+    const total = 200 + maxFragsPerTank;
+    const frags = Array.from({ length: maxFragsPerTank }, (_, i) => ({
+      ...stored(`s1000.${i + 1}`, 0.5, 0, 'brain-coral'),
+      parentKey: 's1000',
+    }));
+    await setCorals(h, tankId, [
+      { ...stored('s1000', 1, 0, 'brain-coral'), spawned: maxFragsPerTank },
+      ...frags,
+    ]);
+    expect((await wait(h, alice, tankId, 2)).corals).toHaveLength(total);
+    const saved = tankOf(
+      await call(h, alice, 'PATCH', `/api/tanks/${tankId}`, { decorLayout: layout }),
+    );
+    expect(saved.corals).toHaveLength(total);
+    expect((await rowOf(h, tankId)).corals).toHaveLength(total);
+    expect(tankOf(await call(h, alice, 'GET', `/api/tanks/${tankId}`)).corals).toHaveLength(total);
+  });
 });
 
 describe('fragging a coral', () => {

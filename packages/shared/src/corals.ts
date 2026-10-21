@@ -8,7 +8,7 @@ const range = z
   .tuple([z.number(), z.number()])
   .refine(([lo, hi]) => lo < hi, { message: 'a range runs from low to high' });
 
-export const coralFormSchema = z.enum(['sps', 'lps']);
+export const coralFormSchema = z.enum(['sps', 'lps', 'other']);
 export type CoralForm = z.infer<typeof coralFormSchema>;
 
 /** The species a decor asset id belongs to: the procedural euphyllia ids share one entry per kind. */
@@ -23,7 +23,12 @@ export const coralSpeciesSchema = z
     id: z.string().min(1).max(64).describe('the decor asset id, or euphyllia-hammer / -torch'),
     form: coralFormSchema,
     growthPerDay: rate.describe('logistic growth rate per day at full light, flow and health'),
-    minSize: z.number().positive().describe('smallest size multiplier a colony shrinks to'),
+    minSize: z
+      .number()
+      .positive()
+      .describe(
+        'the floor for fragging: a cut never leaves a colony below it, and no fragment starts below it',
+      ),
     maxSize: z.number().positive().describe('the cap growth approaches'),
     fragMinSize: z
       .number()
@@ -127,7 +132,7 @@ export const storedCoralSchema = z.strictObject({
   spawned: z.int().nonnegative(),
 });
 export type StoredCoral = z.infer<typeof storedCoralSchema>;
-export const storedCoralsSchema = z.array(storedCoralSchema).max(200);
+export const storedCoralsSchema = z.array(storedCoralSchema).max(400);
 
 export const coralSchema = z.object({
   key: coralKeySchema.describe(

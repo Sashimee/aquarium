@@ -70,7 +70,7 @@
     },
     {
       "id": "blue-sea-anemone",
-      "form": "sps",
+      "form": "other",
       "growthPerDay": 0.05,
       "minSize": 0.3,
       "maxSize": 2.4,
