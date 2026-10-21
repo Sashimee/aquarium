@@ -207,6 +207,11 @@ describe('weldedNormals', () => {
     expect([...weldedNormals(g)]).toEqual([0, 0, 0, 0, 0, 0]);
   });
 
+  it('treats nearly cancelling normals as cancelled', () => {
+    const g = geometry([0, 0, 0, 0, 0, 0], [0, 1, 0, 0, -0.99999, 0]);
+    expect([...weldedNormals(g)]).toEqual([0, 0, 0, 0, 0, 0]);
+  });
+
   it('is baked onto a swelling coral geometry once, at load', () => {
     const hardscape = new Hardscape('reef', createCoralGlowNode(uniform(0)), uniform(0));
     const g = new BoxGeometry();
@@ -335,6 +340,16 @@ describe('scene wiring', () => {
       }
     },
   );
+
+  it('gives every tentacle vertex, apex included, a non-zero offset', () => {
+    for (const variant of ['hammer', 'torch'] as const) {
+      const mesh = generateEuphyllia(variant, 3, 1);
+      mesh.sway.forEach((sway, i) => {
+        if (sway <= 0.2) return;
+        expect(Math.hypot(...mesh.retract.subarray(i * 3, i * 3 + 3))).toBeGreaterThan(0);
+      });
+    }
+  });
 
   it('is deterministic', () => {
     expect(generateEuphyllia('torch', 9, 2).retract).toEqual(
