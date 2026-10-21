@@ -207,8 +207,8 @@ export type UpdateTankRequest = z.infer<typeof updateTankRequestSchema>;
 export const addFishRequestSchema = z.strictObject({
   species: slugSchema,
   name: z.string().trim().min(1).max(40),
-  stage: purchasableStageSchema.optional().describe('missing means DEFAULT_PURCHASE_STAGE'),
-  idempotencyKey: idempotencyKeySchema.optional(),
+  stage: purchasableStageSchema,
+  idempotencyKey: idempotencyKeySchema,
 });
 export type AddFishRequest = z.infer<typeof addFishRequestSchema>;
 

@@ -144,6 +144,14 @@ describe('clean-up crew in the offline catch-up', () => {
     for (const f of fed.state.fish) expect(f.hunger).toBeGreaterThanOrEqual(0);
   });
 
+  it('cleans a fry-sized crew less than the same crew grown', () => {
+    const grown = tank(snails(10, { size: 0.02 }), { algae: 0.6 });
+    const fry = tank(snails(10, { size: 0.004, stage: 'fry' }), { algae: 0.6 });
+    const span = [LIT_FROM, LIT_FROM + 12 * HOUR] as const;
+    const grazedBy = (start: LifecycleState) => 0.6 - run(start, ...span, true).state.water.algae;
+    expect(grazedBy(fry)).toBeLessThan(grazedBy(grown) * 0.5);
+  });
+
   it('leaves a dead crew member out', () => {
     const dead = member('d', 'nerite-snail', { alive: false, diedAtMs: T0, cause: 'starvation' });
     const start = tank([dead], { algae: 0.6 });

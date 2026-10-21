@@ -13,14 +13,12 @@ export interface TankDimensions {
   substrateBack: number;
 }
 
-/** Waterline and sand bed per size: a shallower bed and a lower freeboard in the 30 cm nano. */
-const FILL: Readonly<
-  Record<TankSize, Pick<TankDimensions, 'freeboard' | 'substrateFront' | 'substrateBack'>>
-> = {
-  nano30: { freeboard: 0.02, substrateFront: 0.02, substrateBack: 0.05 },
-  standard: { freeboard: 0.03, substrateFront: 0.04, substrateBack: 0.1 },
-  std200: { freeboard: 0.03, substrateFront: 0.04, substrateBack: 0.09 },
-  long300: { freeboard: 0.03, substrateFront: 0.035, substrateBack: 0.09 },
+/** Sand bed per size: a shallower bed in the 30 cm nano. The waterline comes from the shared size. */
+const FILL: Readonly<Record<TankSize, Pick<TankDimensions, 'substrateFront' | 'substrateBack'>>> = {
+  nano30: { substrateFront: 0.02, substrateBack: 0.05 },
+  standard: { substrateFront: 0.04, substrateBack: 0.1 },
+  std200: { substrateFront: 0.04, substrateBack: 0.09 },
+  long300: { substrateFront: 0.035, substrateBack: 0.09 },
 };
 
 export const TANK_DIMENSIONS: Readonly<Record<TankSize, Readonly<TankDimensions>>> = {

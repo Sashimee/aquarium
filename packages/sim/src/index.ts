@@ -23,6 +23,7 @@ export {
   type Trait,
 } from './species.ts';
 export { BEHAVIOUR, type Anchor, type Stimulus } from './behaviour.ts';
+export { NIGHT } from './night.ts';
 export {
   FOOD_PARTICLES,
   FOOD_STRIDE,
@@ -113,6 +114,7 @@ export {
 } from './world.ts';
 export {
   createSimHost,
+  POLYP_EPSILON,
   SimClient,
   type MessagePortLike,
   type SimCommand,
@@ -125,6 +127,7 @@ export {
   type SimGrazeReach,
   type SimLayout,
   type SimNestSite,
+  type SimPolyps,
   type SimReady,
   type SimToyNudges,
 } from './bridge.ts';

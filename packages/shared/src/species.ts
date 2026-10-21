@@ -35,6 +35,10 @@ export const traitSchema = z.enum([
 ]);
 export type Trait = z.infer<typeof traitSchema>;
 
+/** When a species is awake: by lamp light, in the dark, or at dawn and dusk. */
+export const activitySchema = z.enum(['diurnal', 'nocturnal', 'crepuscular']);
+export type Activity = z.infer<typeof activitySchema>;
+
 export const behaviourSchema = z.strictObject({
   schooling: z
     .strictObject({
@@ -56,6 +60,7 @@ export const behaviourSchema = z.strictObject({
   curiosity: unitSchema,
   boldness: unitSchema,
   traits: z.array(traitSchema).default([]),
+  activity: activitySchema.optional().describe('when the species is awake; diurnal when left out'),
   airGulp: z.strictObject({ perHour: z.number().positive().max(120) }).optional(),
   grazing: z
     .strictObject({

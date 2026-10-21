@@ -153,7 +153,13 @@ function cleanStep(state: LifecycleState, input: CatchUpInput, nowMs: number): L
   const members: CrewMember[] = [];
   for (const f of state.fish) {
     if (f.alive && crew.species.has(f.species)) {
-      members.push({ id: f.id, species: f.species, alive: true, hunger: f.hunger });
+      members.push({
+        id: f.id,
+        species: f.species,
+        alive: true,
+        bodyLengthM: f.size,
+        hunger: f.hunger,
+      });
     }
   }
   if (members.length === 0) return state;

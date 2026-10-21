@@ -87,6 +87,8 @@ export const shrimpInfoSchema = z.strictObject({
   debugPartsRender: z.string().min(1),
 });
 
+export const crabInfoSchema = shrimpInfoSchema.extend({ origin: z.literal('hip') });
+
 export const snailInfoSchema = z.strictObject({
   standardLengthM: z.number().positive(),
   lengthSource: z.enum(['species-json', 'recipe']),
@@ -206,7 +208,7 @@ export const outputAssetSchema = z.strictObject({
   impostor: impostorSchema.optional(),
   shrimp: shrimpInfoSchema.optional(),
   audio: audioInfoSchema.optional(),
-  crab: shrimpInfoSchema.optional(),
+  crab: crabInfoSchema.optional(),
   snail: snailInfoSchema.optional(),
   background: backgroundInfoSchema.optional(),
 });
