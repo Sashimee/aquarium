@@ -7,7 +7,7 @@ import {
   type Tank,
 } from '@aquarium/shared';
 import { BIOLOAD_CAPACITY_BY_SIZE, hasCapacityFor, syncTreatment } from '@aquarium/sim/lifecycle';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { Clock } from './clock.ts';
@@ -18,7 +18,11 @@ import type { SpeciesCatalog } from './species.ts';
 import type { CareLimits, SessionUser, Ticked, Tx } from './tanks.ts';
 
 const paramsSchema = z.strictObject({ tankId: idSchema, fishId: idSchema });
-const movedPayloadSchema = z.looseObject({ fishId: idSchema, otherTankId: idSchema });
+const movedPayloadSchema = z.looseObject({
+  fishId: idSchema,
+  otherTankId: idSchema,
+  direction: z.enum(['in', 'out']),
+});
 
 const refuse = (status: 400 | 409, message: string, reason?: ConflictReason) =>
   new HttpError(
@@ -66,19 +70,27 @@ export function registerMoveRoutes(ctx: MoveContext): void {
           });
 
         if (body.idempotencyKey) {
-          const [seen] = await tx
-            .select({ payload: schema.events.payload })
+          const seen = await tx
+            .select({ tankId: schema.events.tankId, payload: schema.events.payload })
             .from(schema.events)
             .where(
               and(
-                eq(schema.events.tankId, tankId),
+                inArray(schema.events.tankId, [tankId, body.toTankId]),
                 eq(schema.events.kind, 'fish_moved'),
                 sql`${schema.events.payload}->>'key' = ${body.idempotencyKey}`,
               ),
             );
-          if (seen) {
-            const prior = movedPayloadSchema.parse(seen.payload);
-            if (prior.fishId !== fishId || prior.otherTankId !== body.toTankId) {
+          if (seen.length > 0) {
+            const sameMove = seen.some((e) => {
+              const prior = movedPayloadSchema.parse(e.payload);
+              return (
+                prior.fishId === fishId &&
+                prior.direction === 'out' &&
+                e.tankId === tankId &&
+                prior.otherTankId === body.toTankId
+              );
+            });
+            if (!sameMove) {
               throw refuse(
                 409,
                 'That idempotency key was used for a different move.',
@@ -151,7 +163,12 @@ export function registerMoveRoutes(ctx: MoveContext): void {
             tankId: destination.tank.id,
             at,
             kind: 'fish_moved',
-            payload: { fishId, direction: 'in', otherTankId: source.tank.id },
+            payload: {
+              fishId,
+              direction: 'in',
+              otherTankId: source.tank.id,
+              ...(body.idempotencyKey ? { key: body.idempotencyKey } : {}),
+            },
           },
         ]);
 

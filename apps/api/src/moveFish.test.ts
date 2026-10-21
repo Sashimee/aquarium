@@ -391,6 +391,20 @@ describe('moving a fish between tanks', () => {
       expect(otherTank.statusCode).toBe(409);
       expect((await fishRow(h, two)).tankId).toBe(a);
     });
+
+    it('refuses a key already spent by a move in the other direction', async () => {
+      const who = await account(h);
+      const a = await makeTank(h, who);
+      const q = await makeTank(h, who, { quarantine: true });
+      const fishId = await addFish(h, a);
+      const idempotencyKey = randomUUID();
+      expect((await move(h, who, a, fishId, { toTankId: q, idempotencyKey })).statusCode).toBe(200);
+
+      const back = await move(h, who, q, fishId, { toTankId: a, idempotencyKey });
+      expect(back.statusCode).toBe(409);
+      expect(error(back).reason).toBe('key_reused');
+      expect((await fishRow(h, fishId)).tankId).toBe(q);
+    });
   });
 
   describe('concurrency', () => {
@@ -425,6 +439,36 @@ describe('moving a fish between tanks', () => {
       expect((await getTank(h, who, q)).fish).toHaveLength(12);
       expect((await getTank(h, who, a)).fish).toHaveLength(1);
     });
+
+    it('does not deadlock when the source catch-up claims a reward while the destination is busy', async () => {
+      const grownUp = new Date(h.clock.now() - 400 * 24 * HOUR_MS);
+      for (let round = 0; round < 8; round++) {
+        const who = await account(h);
+        const first = await makeTank(h, who);
+        const second = await makeTank(h, who);
+        const [source, destination] = [first, second].toSorted() as [string, string];
+        const fishId = await addFish(h, source);
+        await h.database.db
+          .update(schema.fish)
+          .set({ stage: 'juvenile', bornAt: grownUp })
+          .where(eq(schema.fish.id, fishId));
+        h.clock.advance(HOUR_MS);
+
+        const results = await Promise.all([
+          move(h, who, source, fishId, { toTankId: destination }),
+          call(h, who, 'POST', `/api/tanks/${destination}/fish`, {
+            species: 'neon-tetra',
+            name: 'Buyer',
+          }),
+          call(h, who, 'POST', `/api/tanks/${destination}/care`, {
+            type: 'bottled_bacteria',
+            idempotencyKey: randomUUID(),
+          }),
+        ]);
+        expect(results.map((r) => r.statusCode)).toEqual([200, 201, 200]);
+        expect((await fishRow(h, fishId)).tankId).toBe(destination);
+      }
+    }, 60_000);
 
     it('survives opposite moves of two fish at once without deadlock or loss', async () => {
       const who = await account(h);

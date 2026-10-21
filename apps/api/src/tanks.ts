@@ -232,13 +232,7 @@ export interface Ticked {
   nowMs: number;
 }
 
-async function lockAndTick(
-  tx: Tx,
-  deps: TankRouteDeps,
-  tankId: string,
-  user: SessionUser,
-): Promise<Ticked> {
-  const now = deps.clock.now();
+async function lockTank(tx: Tx, tankId: string, user: SessionUser): Promise<TankRow> {
   await lockUserRow(tx, user.id);
   const [tank] = await tx
     .select()
@@ -246,7 +240,25 @@ async function lockAndTick(
     .where(and(eq(schema.tanks.id, tankId), eq(schema.tanks.ownerId, user.id)))
     .for('update');
   if (!tank) throw notFound();
+  return tank;
+}
 
+async function lockAndTick(
+  tx: Tx,
+  deps: TankRouteDeps,
+  tankId: string,
+  user: SessionUser,
+): Promise<Ticked> {
+  return tickLocked(tx, deps, await lockTank(tx, tankId, user), user);
+}
+
+async function tickLocked(
+  tx: Tx,
+  deps: TankRouteDeps,
+  tank: TankRow,
+  user: SessionUser,
+): Promise<Ticked> {
+  const now = deps.clock.now();
   const fishRows = await tx.select().from(schema.fish).where(eq(schema.fish.tankId, tank.id));
   const initial: LifecycleState = {
     water: waterSchema.parse(tank.water),
@@ -597,11 +609,16 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
     fn: (tx: Tx, ticked: Ticked[]) => Promise<T>,
   ): Promise<T> {
     return database.db.transaction(async (tx) => {
-      // Tank rows are locked in id order whatever order the caller names them, so two opposite
-      // moves queue instead of deadlocking.
+      // Every tank row is locked, in id order, before any catch-up runs: a catch-up can claim an
+      // achievement reward and take the wallet lock, and the order must stay user, tank, wallet.
+      // Id order also makes two opposite moves wait for each other instead of deadlocking.
+      const locked = new Map<string, TankRow>();
+      for (const id of [...new Set(tankIds)].toSorted()) {
+        locked.set(id, await lockTank(tx, id, user));
+      }
       const byId = new Map<string, Ticked>();
-      for (const id of [...tankIds].toSorted()) {
-        byId.set(id, await lockAndTick(tx, deps, id, user));
+      for (const [id, tank] of locked) {
+        byId.set(id, await tickLocked(tx, deps, tank, user));
       }
       return fn(
         tx,

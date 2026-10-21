@@ -43,8 +43,9 @@ export type TreatResponse = z.infer<typeof treatResponseSchema>;
 // the introduction time it had there.
 // Refusals: 404 unknown fish or a tank that is not the caller's; 400 same tank; 409 with
 // error.reason fish_dead, wrong_biome (the species' biome is not the destination's), tank_full
-// (the destination's animal cap or bioload capacity), key_reused (the key moved another fish or
-// went elsewhere). A retry with the same idempotencyKey replays the first answer with the current
+// (the destination's animal cap or bioload capacity), key_reused (the key, in either tank, moved
+// another fish or went elsewhere). wrong_biome is a 409 here, unlike adding a fish (400): the fish
+// is valid and the refusal depends on the destination tank's state, like tank_full. A retry with the same idempotencyKey replays the first answer with the current
 // state of both tanks. Without a key a retry finds the fish already gone from the source (404).
 // The move is recorded as a fish_moved event in each tank (not part of /replay yet).
 export const moveFishRequestSchema = z.strictObject({
