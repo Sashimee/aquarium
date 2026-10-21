@@ -38,3 +38,10 @@ export async function runSpend(
   wallet.clearMessages();
   return verdict;
 }
+
+export const FISH_CONFIRM_FROM = 100;
+
+/** An adult, or any fish at a price that would sting, is asked about before it is bought. */
+export function fishNeedsConfirm(stage: 'juvenile' | 'adult', price: number): boolean {
+  return stage === 'adult' || price >= FISH_CONFIRM_FROM;
+}
