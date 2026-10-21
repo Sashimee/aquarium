@@ -68,6 +68,14 @@ export function parseRoute(href: string): Route {
   }
 }
 
+/**
+ * Pages that show someone else's tank in the scene. They own the engine bus, so the player's own
+ * session must not load beside them.
+ */
+export function isReadOnlyView(route: Route): boolean {
+  return route.name === 'public-tank' || route.name === 'gallery-tank';
+}
+
 export function routePath(route: Route): string {
   switch (route.name) {
     case 'home':
@@ -166,7 +174,9 @@ export function currentHref(): string {
 export function returnPathFromState(state: unknown): string | null {
   if (typeof state !== 'object' || state === null || !('returnTo' in state)) return null;
   const { returnTo } = state;
-  return typeof returnTo === 'string' && tokenFromPath(returnTo) !== null ? returnTo : null;
+  if (typeof returnTo !== 'string') return null;
+  const name = parseRoute(returnTo).name;
+  return name === 'public-tank' || name === 'gallery' || name === 'gallery-tank' ? returnTo : null;
 }
 
 export function currentReturnPath(): string | null {

@@ -2,6 +2,7 @@ import type { User } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import {
   guardRoute,
+  isReadOnlyView,
   parseRoute,
   carryQuery,
   redirectFor,
@@ -206,6 +207,20 @@ describe('gallery routes', () => {
     expect(parseRoute(`/gallery/${id}`)).toEqual({ name: 'gallery-tank', id });
     expect(routePath({ name: 'gallery' })).toBe('/gallery');
     expect(routePath({ name: 'gallery-tank', id })).toBe(`/gallery/${id}`);
+  });
+
+  it('treats only the shared-tank pages as read-only views, so they get no player session', () => {
+    expect(isReadOnlyView(parseRoute(`/gallery/${id}`))).toBe(true);
+    expect(isReadOnlyView(parseRoute(`/t/${'a'.repeat(43)}`))).toBe(true);
+    expect(isReadOnlyView(parseRoute('/gallery'))).toBe(false);
+    expect(isReadOnlyView(parseRoute('/'))).toBe(false);
+  });
+
+  it('returns to the gallery and a gallery tank after sign-in, but not to other pages', () => {
+    expect(returnPathFromState({ returnTo: '/gallery' })).toBe('/gallery');
+    expect(returnPathFromState({ returnTo: `/gallery/${id}` })).toBe(`/gallery/${id}`);
+    expect(returnPathFromState({ returnTo: '/settings' })).toBeNull();
+    expect(returnPathFromState({ returnTo: '/gallery/nope' })).toBeNull();
   });
 
   it('rejects a tank path that is not an id and is never redirected for anyone', () => {

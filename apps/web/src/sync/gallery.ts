@@ -1,4 +1,10 @@
-import type { GalleryEntry, GalleryResponse, GalleryWinner, Tank } from '@aquarium/shared';
+import {
+  GALLERY_MAX_PAGE_SIZE,
+  type GalleryEntry,
+  type GalleryResponse,
+  type GalleryWinner,
+  type Tank,
+} from '@aquarium/shared';
 import { ApiRequestError } from '../ui/api';
 
 export type GalleryToggle =
@@ -95,6 +101,18 @@ export function entryWithVote(entry: GalleryEntry, myVote: string | null): Galle
   };
 }
 
+/**
+ * Adds a fetched page to what is already shown. Rows the viewer already has keep their state, which
+ * may be newer than the page, and paging a list sorted by votes can repeat a tank.
+ */
+export function mergePage(current: GalleryResponse, page: GalleryResponse): GalleryResponse {
+  const seen = new Set(current.entries.map((e) => e.id));
+  const added = page.entries
+    .filter((e) => !seen.has(e.id))
+    .map((e) => entryWithVote(e, current.myVote));
+  return { ...current, total: page.total, entries: [...current.entries, ...added] };
+}
+
 export function withVote(gallery: GalleryResponse, myVote: string | null): GalleryResponse {
   return { ...gallery, myVote, entries: gallery.entries.map((e) => entryWithVote(e, myVote)) };
 }
@@ -120,6 +138,29 @@ const DAY_FORMAT = new Intl.DateTimeFormat('en', {
 export function weekLabel(weekStart: string, weekEnd: string): string {
   const lastDay = new Date(Date.parse(weekEnd) - 1);
   return `${DAY_FORMAT.format(new Date(weekStart))} to ${DAY_FORMAT.format(lastDay)}`;
+}
+
+const FIND_PAGES = 10;
+
+/**
+ * The API has no per-tank vote lookup, so walk the list until the tank turns up. Gives up after
+ * FIND_PAGES pages to stay inside the view rate limit; the caller then offers the gallery link.
+ */
+export async function findGalleryEntry(
+  fetchPage: (query: { limit: number; offset: number }) => Promise<GalleryResponse>,
+  id: string,
+): Promise<{ entry: GalleryEntry | null; myVote: string | null }> {
+  let offset = 0;
+  for (let page = 0; page < FIND_PAGES; page++) {
+    const result = await fetchPage({ limit: GALLERY_MAX_PAGE_SIZE, offset });
+    const entry = result.entries.find((e) => e.id === id);
+    if (entry) return { entry, myVote: result.myVote };
+    offset += result.entries.length;
+    if (result.entries.length === 0 || offset >= result.total) {
+      return { entry: null, myVote: result.myVote };
+    }
+  }
+  return { entry: null, myVote: null };
 }
 
 export interface Showcase {

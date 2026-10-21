@@ -4,7 +4,9 @@ import { ApiRequestError } from '../ui/api';
 import {
   entryWithVote,
   galleryLoadMessage,
+  findGalleryEntry,
   galleryToggle,
+  mergePage,
   showcase,
   voteLabel,
   voteProblem,
@@ -96,6 +98,55 @@ describe('vote state', () => {
       'Take back your vote for Reef, 3 votes',
     );
     expect(voteLabel(entry(A, { mine: true }))).toBe('Reef, your tank, 0 votes');
+  });
+});
+
+describe('mergePage', () => {
+  it('keeps a vote that landed while the page loaded and drops repeated tanks', () => {
+    const C = '2daf4e30-7f5c-4b90-9c83-4e6fa02b3c59';
+    const current = gallery([entry(A, { votes: 3, voted: true }), entry(B, { votes: 1 })], A);
+    const stale = gallery([entry(A, { votes: 2 }), entry(C, { votes: 1 })]);
+    stale.total = 3;
+    const merged = mergePage(current, stale);
+    expect(merged.entries.map((e) => e.id)).toEqual([A, B, C]);
+    expect(merged.entries[0]).toMatchObject({ votes: 3, voted: true });
+    expect(merged.total).toBe(3);
+    expect(merged.myVote).toBe(A);
+  });
+
+  it('applies the current vote to a new row that the page fetched before it', () => {
+    const C = '2daf4e30-7f5c-4b90-9c83-4e6fa02b3c59';
+    const merged = mergePage(gallery([entry(A)], C), gallery([entry(C, { votes: 1 })]));
+    expect(merged.entries[1]).toMatchObject({ id: C, votes: 2, voted: true });
+  });
+});
+
+describe('findGalleryEntry', () => {
+  const page = (entries: GalleryEntry[], total: number, myVote: string | null = null) => ({
+    ...gallery(entries, myVote),
+    total,
+  });
+
+  it('keeps paging until the tank turns up, however far down it is', async () => {
+    const pages = [page([entry(B)], 2), page([entry(A, { voted: true })], 2, A)];
+    const seen: number[] = [];
+    const found = await findGalleryEntry(async ({ offset }) => {
+      seen.push(offset);
+      return pages.shift() as GalleryResponse;
+    }, A);
+    expect(found.entry?.id).toBe(A);
+    expect(found.myVote).toBe(A);
+    expect(seen).toEqual([0, 1]);
+  });
+
+  it('reports a tank that is not listed and passes load errors on', async () => {
+    const missing = await findGalleryEntry(async () => page([entry(B)], 1, B), A);
+    expect(missing).toEqual({ entry: null, myVote: B });
+    await expect(
+      findGalleryEntry(async () => {
+        throw err(429, 'rate_limited', 5);
+      }, A),
+    ).rejects.toMatchObject({ status: 429 });
   });
 });
 

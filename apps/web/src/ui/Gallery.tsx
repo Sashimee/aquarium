@@ -8,6 +8,7 @@ import {
 import { useCallback, useEffect, useState } from 'react';
 import {
   galleryLoadMessage,
+  mergePage,
   showcase,
   voteLabel,
   voteProblem,
@@ -18,7 +19,9 @@ import {
   withVote,
   type VoteProblem,
 } from '../sync/gallery';
+import type { ReactNode } from 'react';
 import { useApi, useAuth } from './context';
+import { returnState } from './router';
 import { Link, Panel } from './screens';
 
 export function useVoting(onVote: (myVote: string | null) => void): {
@@ -48,14 +51,32 @@ export function useVoting(onVote: (myVote: string | null) => void): {
   return { busy, problem, press };
 }
 
-export function VoteProblemNote({ problem }: { problem: VoteProblem | null }) {
+/** Gallery tanks drive the shared scene, so every way in or out is a full page load. */
+export function PageLink({ to, children }: { to: string; children: ReactNode }) {
+  return <a href={to}>{children}</a>;
+}
+
+export function VoteProblemNote({
+  problem,
+  returnTo,
+}: {
+  problem: VoteProblem | null;
+  returnTo: string;
+}) {
   return (
     <p role="status" className="hint vote-note">
       {problem && voteProblemText(problem)}
       {problem?.kind === 'sign-in' && (
         <>
           {' '}
-          <Link to="/sign-in">Sign in</Link> or <Link to="/sign-up">create an account</Link>.
+          <Link to="/sign-in" state={returnState(returnTo)}>
+            Sign in
+          </Link>{' '}
+          or{' '}
+          <Link to="/sign-up" state={returnState(returnTo)}>
+            create an account
+          </Link>
+          .
         </>
       )}
     </p>
@@ -83,7 +104,7 @@ function Highlight({
     <li className="gallery-highlight">
       <h3>{heading}</h3>
       <p>
-        <Link to={`/gallery/${tank.id}`}>{tank.name}</Link>
+        <PageLink to={`/gallery/${tank.id}`}>{tank.name}</PageLink>
       </p>
       <p className="hint">
         <Summary tank={tank} />. {detail}
@@ -135,7 +156,7 @@ function Showcase({
           <ul>
             {earlier.map((winner) => (
               <li key={winner.weekStart}>
-                <Link to={`/gallery/${winner.id}`}>{winner.name}</Link>{' '}
+                <PageLink to={`/gallery/${winner.id}`}>{winner.name}</PageLink>{' '}
                 <span className="hint">{winnerDetail(winner)}</span>
               </li>
             ))}
@@ -158,7 +179,7 @@ function Entry({
   return (
     <li className="gallery-entry">
       <h3>
-        <Link to={`/gallery/${entry.id}`}>{entry.name}</Link>
+        <PageLink to={`/gallery/${entry.id}`}>{entry.name}</PageLink>
       </h3>
       <p className="hint">
         <Summary tank={entry} />
@@ -220,8 +241,8 @@ export function GalleryScreen() {
     if (!gallery) return;
     setMore(true);
     try {
-      const next = await api.gallery({ limit: GALLERY_PAGE_SIZE, offset: gallery.entries.length });
-      setGallery({ ...next, entries: [...gallery.entries, ...next.entries] });
+      const page = await api.gallery({ limit: GALLERY_PAGE_SIZE, offset: gallery.entries.length });
+      setGallery((now) => (now ? mergePage(now, page) : page));
     } catch (cause) {
       setError(galleryLoadMessage(cause));
     } finally {
@@ -247,7 +268,7 @@ export function GalleryScreen() {
             again to move it, or press your pick to take it back.
           </p>
           <Showcase gallery={gallery} winners={winners} />
-          <VoteProblemNote problem={voting.problem} />
+          <VoteProblemNote problem={voting.problem} returnTo="/gallery" />
           <section aria-labelledby="gallery-all-h">
             <h2 id="gallery-all-h">This week&apos;s tanks</h2>
             {gallery.entries.length === 0 ? (

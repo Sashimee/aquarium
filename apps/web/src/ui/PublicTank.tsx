@@ -18,15 +18,14 @@ import {
 import type { ApiClient } from './api';
 import { useApi, useAuth, useBridge } from './context';
 import { CameraControls } from './Hud';
-import { GALLERY_MAX_PAGE_SIZE, type GalleryEntry } from '@aquarium/shared';
-import { entryWithVote, voteLabel } from '../sync/gallery';
-import { VoteProblemNote, useVoting } from './Gallery';
+import type { GalleryEntry } from '@aquarium/shared';
+import { entryWithVote, findGalleryEntry, galleryLoadMessage, voteLabel } from '../sync/gallery';
+import { PageLink, VoteProblemNote, useVoting } from './Gallery';
 import { leaveToViewerSignIn } from './router';
-import { Link } from './screens';
 
 const GLYPH: Record<ReactionKind, string> = { heart: '♥', star: '★', wow: '!' };
 
-function useNoIndex(title: string | null): void {
+function useNoIndex(title: string | null, kind = 'a shared tank'): void {
   useEffect(() => {
     const robots = document.createElement('meta');
     robots.name = 'robots';
@@ -43,17 +42,14 @@ function useNoIndex(title: string | null): void {
   useEffect(() => {
     if (!title) return;
     const before = document.title;
-    document.title = `${title}, a shared tank`;
+    document.title = `${title}, ${kind}`;
     return () => {
       document.title = before;
     };
-  }, [title]);
+  }, [title, kind]);
 }
 
-function useViewer(
-  key: string,
-  load: (api: ApiClient) => Promise<PublicTank>,
-): {
+function useViewer(load: (api: ApiClient) => Promise<PublicTank>): {
   phase: ViewerPhase;
   setTank(tank: PublicTank): void;
   retry(): void;
@@ -87,7 +83,7 @@ function useViewer(
     return () => {
       cancelled = true;
     };
-  }, [api, interaction, key, load, status, userKey, attempt]);
+  }, [api, interaction, load, status, userKey, attempt]);
 
   useEffect(
     () => () => {
@@ -223,7 +219,7 @@ function Notice({ title, children }: { title: string; children: ReactNode }) {
 
 export function PublicTankView({ token }: { token: string }) {
   const load = useCallback((api: ApiClient) => api.publicTank(token), [token]);
-  const { phase, setTank, retry } = useViewer(token, load);
+  const { phase, setTank, retry } = useViewer(load);
   useNoIndex(phase.kind === 'ready' ? phase.tank.name : null);
 
   switch (phase.kind) {
@@ -279,20 +275,21 @@ function GalleryVote({ id }: { id: string }) {
   const api = useApi();
   const { status, user } = useAuth();
   const userKey = user?.id ?? '';
-  const [state, setState] = useState<{ entry: GalleryEntry | null; myVote: string | null } | null>(
-    null,
-  );
+  const [state, setState] = useState<{
+    entry: GalleryEntry | null;
+    myVote: string | null;
+    error: string | null;
+  } | null>(null);
 
   useEffect(() => {
     if (status === 'loading') return;
     let live = true;
-    api.gallery({ limit: GALLERY_MAX_PAGE_SIZE, offset: 0 }).then(
-      (page) => {
-        if (live)
-          setState({ entry: page.entries.find((e) => e.id === id) ?? null, myVote: page.myVote });
+    findGalleryEntry((query) => api.gallery(query), id).then(
+      ({ entry, myVote }) => {
+        if (live) setState({ entry, myVote, error: null });
       },
-      () => {
-        if (live) setState({ entry: null, myVote: null });
+      (cause: unknown) => {
+        if (live) setState({ entry: null, myVote: null, error: galleryLoadMessage(cause) });
       },
     );
     return () => {
@@ -304,18 +301,19 @@ function GalleryVote({ id }: { id: string }) {
     useCallback(
       (myVote: string | null) =>
         setState((held) =>
-          held?.entry ? { myVote, entry: entryWithVote(held.entry, myVote) } : held,
+          held?.entry ? { ...held, myVote, entry: entryWithVote(held.entry, myVote) } : held,
         ),
-      [id],
+      [],
     ),
   );
 
   if (!state) return null;
-  const { entry, myVote } = state;
+  const { entry, myVote, error } = state;
   if (!entry) {
     return (
-      <p className="hint">
-        <Link to="/gallery">Vote from the gallery</Link>
+      <p className="hint" role={error ? 'alert' : undefined}>
+        {error && `${error} `}
+        <PageLink to="/gallery">Vote from the gallery</PageLink>
       </p>
     );
   }
@@ -334,15 +332,15 @@ function GalleryVote({ id }: { id: string }) {
           {entry.voted ? 'Voted this week' : 'Vote for this tank'}
         </button>
       )}
-      <VoteProblemNote problem={voting.problem} />
+      <VoteProblemNote problem={voting.problem} returnTo={`/gallery/${id}`} />
     </div>
   );
 }
 
 export function GalleryTankView({ id }: { id: string }) {
   const load = useCallback((api: ApiClient) => api.galleryTank(id), [id]);
-  const { phase, retry } = useViewer(`gallery:${id}`, load);
-  useNoIndex(phase.kind === 'ready' ? phase.tank.name : null);
+  const { phase, retry } = useViewer(load);
+  useNoIndex(phase.kind === 'ready' ? phase.tank.name : null, 'a gallery tank');
 
   switch (phase.kind) {
     case 'loading':
@@ -361,9 +359,9 @@ export function GalleryTankView({ id }: { id: string }) {
           <GalleryVote id={id} />
           <CameraControls />
           <Report tank={phase.tank} />
-          <Link className="public-own" to="/gallery">
+          <a className="public-own" href="/gallery">
             Back to the gallery
-          </Link>
+          </a>
         </main>
       );
     case 'missing':
