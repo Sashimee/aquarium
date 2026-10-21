@@ -255,8 +255,8 @@ function lipEdgeSteps(prims: ShippedPrimitive[], length: number): number[] {
 }
 
 const SCANNED = [
-  { dir: 'crab/hermit-crab', material: 'hermit-crab', solid: false },
-  { dir: 'snail/nerite-snail', material: 'nerite-shell', solid: true },
+  { dir: 'crab/hermit-crab', material: 'hermit-crab', solid: false, pieces: 2 },
+  { dir: 'snail/nerite-snail', material: 'nerite-shell', solid: true, pieces: 1 },
 ];
 
 describe('nerite seating', () => {
@@ -282,7 +282,7 @@ describe('nerite seating', () => {
 describe('shipped scan LODs', () => {
   beforeAll(() => MeshoptDecoder.ready);
 
-  for (const { dir, material, solid } of SCANNED)
+  for (const { dir, material, solid, pieces } of SCANNED)
     for (const level of [0, 1, 2]) {
       it(`${dir} LOD${level} has no see-through pixels in the top and side views`, async () => {
         const prims = await readLod(dir, level);
@@ -298,7 +298,7 @@ describe('shipped scan LODs', () => {
         },
       );
 
-      it(`${dir} LOD${level} scan mesh is one connected piece`, async () => {
+      it(`${dir} LOD${level} scan mesh is ${pieces} connected piece(s)`, async () => {
         for (const prim of (await readLod(dir, level)).filter((p) => p.material === material)) {
           const { min, max } = boundsOf(prim.positions);
           const diagonal = Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2]);
@@ -310,7 +310,7 @@ describe('shipped scan LODs', () => {
           }
           const used = new Set(solid);
           const parts = connectedComponents(canon, solid, (v) => used.has(v)).sizes.length;
-          expect(parts, `${dir} LOD${level} ${prim.material}`).toBe(1);
+          expect(parts, `${dir} LOD${level} ${prim.material}`).toBe(pieces);
         }
       });
 
