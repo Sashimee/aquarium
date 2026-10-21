@@ -36,14 +36,14 @@ export function substrateBounds(size: TankSize): PlantBounds {
   return { halfX: length / 2 - glass, halfZ: depth / 2 - glass };
 }
 
-interface PlantTankRow {
+export interface PlantTankRow {
   readonly biome: keyof Presets;
   readonly size: TankSize;
   readonly decorLayout: unknown;
   readonly plants: unknown;
 }
 
-function layoutPlants(tank: PlantTankRow, presets: Presets): LayoutPlant[] {
+export function layoutPlants(tank: PlantTankRow, presets: Presets): LayoutPlant[] {
   const layout =
     tank.decorLayout === null
       ? (presets[tank.biome]?.decor ?? [])

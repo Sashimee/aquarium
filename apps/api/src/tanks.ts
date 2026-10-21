@@ -34,7 +34,9 @@ import {
   type CareAction,
   type ChemistryParameters,
   type Economy,
+  type Coral,
   type Plant,
+  type StoredCoral,
   type StoredPlant,
   type Tank,
 } from '@aquarium/shared';
@@ -52,6 +54,7 @@ import {
   type BirthRecord,
   type LifecycleFish,
   type LifecycleState,
+  type CoralTable,
   type PlantTable,
 } from '@aquarium/sim/lifecycle';
 import { cleanupSurfaces } from '@aquarium/sim';
@@ -89,6 +92,8 @@ import {
 import { registerShopRoutes } from './shop.ts';
 import { registerMoveRoutes } from './moveFish.ts';
 import { registerPlantRoutes } from './plantTrim.ts';
+import { registerCoralRoutes } from './coralFrag.ts';
+import { currentCorals, wireCorals } from './corals.ts';
 import { registerTreatmentRoutes } from './treatment.ts';
 import { backgroundRef, licenseFor } from './items.ts';
 import { currentPlants, substrateBounds, wirePlants } from './plants.ts';
@@ -137,6 +142,7 @@ export interface TankRouteDeps {
   economy: Economy;
   presets: Presets;
   plants: PlantTable;
+  corals: CoralTable;
   currentUser: (req: FastifyRequest) => Promise<SessionUser | null>;
 }
 
@@ -238,6 +244,8 @@ export interface Ticked {
   nowMs: number;
   plants: StoredPlant[];
   plantView: Plant[];
+  corals: StoredCoral[];
+  coralView: Coral[];
 }
 
 async function lockTank(tx: Tx, tankId: string, user: SessionUser): Promise<TankRow> {
@@ -276,6 +284,7 @@ async function tickLocked(
   };
   const dims = TANK_SIZES[tank.size].dimensions;
   const reconciled = currentPlants(tank, deps.presets, deps.plants);
+  const reconciledCorals = currentCorals(tank, deps.presets, deps.corals);
   const result = catchUp({
     state: initial,
     fromMs: tank.lastTickAt.getTime(),
@@ -297,6 +306,7 @@ async function tickLocked(
       }),
     },
     plants: { table: deps.plants, state: reconciled, bounds: substrateBounds(tank.size) },
+    corals: { table: deps.corals, state: reconciledCorals },
     graceEndsAtMs: user.createdAt.getTime() + GRACE_PERIOD_MS,
     vacationFeeder: hasVacationFeeder(tank),
     breeding: new Map([...deps.species].map(([id, s]) => [id, s.breeding])),
@@ -326,6 +336,8 @@ async function tickLocked(
       nowMs: now,
       plants: reconciled,
       plantView: wirePlants(tank, deps.presets, deps.plants, reconciled),
+      corals: reconciledCorals,
+      coralView: wireCorals(tank, deps.presets, deps.corals, reconciledCorals),
     };
   }
 
@@ -382,6 +394,7 @@ async function tickLocked(
       chemistry: result.state.chemistry,
       medicine: wireMedicine(result.state.medicine),
       plants: result.plants,
+      corals: result.corals,
       lastTickAt: advancedTo,
       updatedAt: new Date(now),
     })
@@ -435,6 +448,7 @@ async function tickLocked(
       chemistry: result.state.chemistry,
       medicine: wireMedicine(result.state.medicine),
       plants: result.plants,
+      corals: result.corals,
       lastTickAt: advancedTo,
     },
     fishRows: [...updatedRows, ...bornRows.values()],
@@ -443,6 +457,8 @@ async function tickLocked(
     nowMs: now,
     plants: [...result.plants],
     plantView: wirePlants(tank, deps.presets, deps.plants, result.plants),
+    corals: [...result.corals],
+    coralView: wireCorals(tank, deps.presets, deps.corals, result.corals),
   };
 }
 
@@ -561,6 +577,7 @@ async function render(
     equipment: equipmentSchema.parse(tank.equipment),
     recentVisitDays,
     plants: ticked.plantView,
+    corals: ticked.coralView,
     fish: fishRows
       .toSorted((a, b) => a.bornAt.getTime() - b.bornAt.getTime() || a.id.localeCompare(b.id))
       .map((f) => ({
@@ -808,6 +825,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           .returning();
         if (!row) throw new Error('tank insert returned no row');
         const plants = currentPlants(row, presets, deps.plants);
+        const corals = currentCorals(row, presets, deps.corals);
         return {
           created: await render(tx, {
             tank: row,
@@ -822,6 +840,8 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
             nowMs,
             plants,
             plantView: wirePlants(row, presets, deps.plants, plants),
+            corals,
+            coralView: wireCorals(row, presets, deps.corals, corals),
           }),
         };
       });
@@ -979,12 +999,15 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
         const tank = row ?? ticked.tank;
         if (body.decorLayout === undefined) return render(tx, { ...ticked, tank });
         const plants = currentPlants(tank, presets, deps.plants);
-        await tx.update(schema.tanks).set({ plants }).where(eq(schema.tanks.id, tankId));
+        const corals = currentCorals(tank, presets, deps.corals);
+        await tx.update(schema.tanks).set({ plants, corals }).where(eq(schema.tanks.id, tankId));
         return render(tx, {
           ...ticked,
-          tank: { ...tank, plants },
+          tank: { ...tank, plants, corals },
           plants,
           plantView: wirePlants(tank, presets, deps.plants, plants),
+          corals,
+          coralView: wireCorals(tank, presets, deps.corals, corals),
         });
       });
     }),
@@ -1389,6 +1412,17 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
   registerPlantRoutes({
     app,
     table: deps.plants,
+    presets,
+    authorize,
+    throttle,
+    guarded,
+    withTank,
+    render: (tx, ticked) => render(tx, ticked),
+  });
+
+  registerCoralRoutes({
+    app,
+    table: deps.corals,
     presets,
     authorize,
     throttle,
