@@ -196,4 +196,14 @@ describe('buildShaders sampler guard', () => {
     );
     expect(sites).toEqual(SAMPLER_SITES_WITH_FIXTURE_TESTS);
   });
+
+  // three 0.186.1 `TextureNode.blur()` checks filterability once, against the texture bound when
+  // it is called: a nearest texture then loses the bias with only a warning, and one swapped in
+  // later keeps it and loses its sampler. Neither a fixture nor a swap guard can vouch for that.
+  it('never calls TextureNode.blur(); use .bias() with a guarded texture instead', () => {
+    const callers = sourceFiles(SRC)
+      .filter((file) => /\.blur\s*\(/.test(codeOnly(readFileSync(file, 'utf8'))))
+      .map((file) => relative(SRC, file));
+    expect(callers).toEqual([]);
+  });
 });
