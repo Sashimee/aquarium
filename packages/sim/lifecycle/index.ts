@@ -19,6 +19,7 @@ export {
 export { stepTank } from './step.ts';
 export {
   catchUp,
+  type CatchUpCorals,
   type CatchUpCrew,
   type CatchUpInput,
   type CatchUpPlants,
@@ -26,11 +27,13 @@ export {
 } from './catchup.ts';
 export {
   layoutPlantKeys,
+  obstaclesOf,
   reconcilePlants,
   START_SIZE as PLANT_START_SIZE,
   stepPlants,
   trimPlant,
   type LayoutPlant,
+  type Obstacle,
   type PlantBounds,
   type PlantState,
   type PlantStepContext,
@@ -85,3 +88,14 @@ export {
   type KindRates,
   type OnsetPressure,
 } from './disease.ts';
+export {
+  coralSpecOf,
+  coralStress,
+  fragCoral,
+  reconcileCorals,
+  stepCorals,
+  type CoralState,
+  type CoralStepContext,
+  type CoralTable,
+  type FragResult,
+} from './corals.ts';

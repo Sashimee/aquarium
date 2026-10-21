@@ -25,6 +25,11 @@ writeFileSync(
 );
 
 writeFileSync(
+  new URL('./dist/corals.json', import.meta.url),
+  readFileSync(new URL('../../content/corals.json', import.meta.url)),
+);
+
+writeFileSync(
   new URL('./dist/economy.json', import.meta.url),
   readFileSync(new URL('../../content/economy.json', import.meta.url)),
 );

@@ -42,6 +42,9 @@ const APPROVED_SHARE_ALIKE_AUTHORS = new Map([
   ['harlequin-rasbora', ['Mariusz Dabrowski']],
   ['six-line-wrasse', ['Diego Delso']],
   ['bristlenose-pleco', ['Júlio Reis', 'Corydoras-adolfoi']],
+  ['neolamprologus-brichardi', ['David J. Stang']],
+  ['aulonocara-baenschi', ['Rjcastillo']],
+  ['neolamprologus-multifasciatus', ['Richard A. Ingebrigtsen']],
 ]);
 
 export const SHARE_ALIKE_NOTICE =

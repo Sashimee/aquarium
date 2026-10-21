@@ -8,7 +8,14 @@ import {
 import { crewCleanup, type CleanupSurfaces, type CrewMember } from '../src/crew.ts';
 import type { SimSpecies } from '../src/species.ts';
 import { HUNGER_PER_PORTION, MAX_CATCH_UP_MS, STEP_MINUTES, STEP_MS } from './params.ts';
-import { stepPlants, type PlantBounds, type PlantState, type PlantTable } from './plants.ts';
+import { stepCorals, type CoralState, type CoralTable } from './corals.ts';
+import {
+  stepPlants,
+  type Obstacle,
+  type PlantBounds,
+  type PlantState,
+  type PlantTable,
+} from './plants.ts';
 import { stepTank } from './step.ts';
 import {
   appendCapped,
@@ -34,6 +41,13 @@ export interface CatchUpPlants {
   readonly table: PlantTable;
   readonly state: readonly PlantState[];
   readonly bounds: PlantBounds;
+  readonly obstacles: readonly Obstacle[];
+}
+
+/** The reef's offline model; `state` is already reconciled with the decor layout. */
+export interface CatchUpCorals {
+  readonly table: CoralTable;
+  readonly state: readonly CoralState[];
 }
 
 export interface CatchUpInput extends TankEnvironment {
@@ -46,11 +60,13 @@ export interface CatchUpInput extends TankEnvironment {
   readonly breedingEnvironment: Omit<BreedingEnvironment, 'temperatureC'>;
   readonly crew?: CatchUpCrew;
   readonly plants?: CatchUpPlants;
+  readonly corals?: CatchUpCorals;
 }
 
 export interface CatchUpResult {
   readonly state: LifecycleState;
   readonly plants: readonly PlantState[];
+  readonly corals: readonly CoralState[];
   readonly steps: number;
   readonly elapsedMinutes: number;
   readonly capped: boolean;
@@ -72,6 +88,7 @@ export function catchUp(input: CatchUpInput): CatchUpResult {
 
   let state = input.state;
   let plants: readonly PlantState[] = input.plants?.state ?? [];
+  let corals: readonly CoralState[] = input.corals?.state ?? [];
   const deaths: DeathRecord[] = [];
   const births: BirthRecord[] = [];
   const timeline: TimelineEntry[] = [];
@@ -108,9 +125,18 @@ export function catchUp(input: CatchUpInput): CatchUpResult {
         equipment: input.equipment,
         table: input.plants.table,
         bounds: input.plants.bounds,
+        obstacles: input.plants.obstacles,
       });
       plants = grown.plants;
       cleaned = { ...crewCleaned, water: grown.water };
+    }
+    if (input.corals) {
+      corals = stepCorals(corals, cleaned.chemistry, {
+        nowMs: startMs + STEP_MS,
+        dtHours: STEP_MINUTES / 60,
+        equipment: input.equipment,
+        table: input.corals.table,
+      });
     }
     const bred = stepBreeding(cleaned, {
       nowMs: startMs + STEP_MS,
@@ -136,6 +162,7 @@ export function catchUp(input: CatchUpInput): CatchUpResult {
   return {
     state,
     plants,
+    corals,
     steps,
     elapsedMinutes: Math.round(Math.min(elapsed, MAX_CATCH_UP_MS) / 60_000),
     capped,

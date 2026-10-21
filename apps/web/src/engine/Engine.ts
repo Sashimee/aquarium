@@ -12,7 +12,7 @@ import {
 } from 'three/webgpu';
 import { applyDayLighting, type DayLightingRig, FRESHWATER_FILL_LEVEL } from './dayLighting';
 import {
-  DaylightAnnouncer,
+  DaylightFeed,
   DEFAULT_LAMP_HOURS,
   daylightAt,
   lampPhotoperiod,
@@ -85,7 +85,6 @@ const CAPTURE_EFFECTS_WAIT_MS = 15000;
 const HOOD_COLOR = new Color(1, 0.97, 0.92);
 /** At the water surface; the hood's spread leaves about three quarters of it on average below. */
 const HOOD_INTENSITY = 4;
-const DAYLIGHT_INTERVAL_MS = 1000;
 
 function hasCoarsePointer(): boolean {
   return typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
@@ -160,9 +159,7 @@ export class Engine {
   private size: TankSize;
   private readonly clock: number | null;
   private readonly showStats: boolean;
-  private daylightLevel = 1;
-  private daylightCheckedAt = -Infinity;
-  private readonly daylightAnnouncer = new DaylightAnnouncer();
+  private readonly daylightFeed: DaylightFeed;
   private photoperiod: Photoperiod = lampPhotoperiod(DEFAULT_LAMP_HOURS);
   private readonly dayRig: DayLightingRig;
   private readonly effects = new EffectsSlot(
@@ -252,6 +249,7 @@ export class Engine {
   ) {
     const preference = config.options.backend;
     this.loop = new RenderLoop(renderer, (t) => this.frame(t));
+    this.daylightFeed = new DaylightFeed(() => this.readDaylight(), events);
     deviceLoss.onLost((info) => this.deviceLost(info, preference));
     this.size = config.options.tankSize;
     const dimensions = TANK_DIMENSIONS[this.size];
@@ -360,6 +358,7 @@ export class Engine {
     cleanup.add(() => this.photo.dispose());
 
     this.registerQualityFeatures();
+    cleanup.add(this.daylightFeed.watch(document));
 
     const resizeObserver = new ResizeObserver(() => this.resize());
     cleanup.add(() => resizeObserver.disconnect());
@@ -403,7 +402,7 @@ export class Engine {
 
   set roomBackgroundIntensity(value: number) {
     this.dayRig.roomBackgroundIntensity = value;
-    applyDayLighting(this.dayRig, this.daylightLevel);
+    applyDayLighting(this.dayRig, this.daylightFeed.level);
   }
 
   get disposed(): boolean {
@@ -415,13 +414,13 @@ export class Engine {
    * the sim's UTC clock, or `?clock=` read as a UTC time.
    */
   get daylight(): number {
-    return this.daylightLevel;
+    return this.daylightFeed.level;
   }
 
   /** Runs the visible hood on the tank's lamp schedule, `equipment.light`. */
   setLampSchedule(hours: LampHours): void {
     this.photoperiod = lampPhotoperiod(hours);
-    this.daylightCheckedAt = -Infinity;
+    this.daylightFeed.recheck();
   }
 
   /** Whether frames go through a temporal resolve; `engine:temporal-resolve` tells changes. */
@@ -561,18 +560,13 @@ export class Engine {
     shadowCam.bottom = -halfExtent;
     shadowCam.far = d.height + 2;
     shadowCam.updateProjectionMatrix();
-    applyDayLighting(this.dayRig, this.daylightLevel);
+    applyDayLighting(this.dayRig, this.daylightFeed.level);
   }
 
-  private updateDaylight(nowMs: number): void {
-    if (nowMs - this.daylightCheckedAt < DAYLIGHT_INTERVAL_MS) return;
-    this.daylightCheckedAt = nowMs;
+  /** The hood level now; the room light behind the tank follows on the same read. */
+  private readDaylight(): number {
     this.dayRig.roomDaylight = roomDaylightAt(this.clock ?? minuteOfDay(new Date()));
-    const level = daylightAt(this.clock ?? localMinuteOfDay(Date.now(), 0), this.photoperiod);
-    const change = this.daylightAnnouncer.next(level);
-    if (change === null) return;
-    this.daylightLevel = level;
-    this.events.emit('engine:daylight', change);
+    return daylightAt(this.clock ?? localMinuteOfDay(Date.now(), 0), this.photoperiod);
   }
 
   private registerQualityFeatures(): void {
@@ -611,8 +605,8 @@ export class Engine {
   }
 
   private async warmUp(): Promise<void> {
-    this.updateDaylight(0);
-    applyDayLighting(this.dayRig, this.daylightLevel);
+    this.daylightFeed.frame(0, 0);
+    applyDayLighting(this.dayRig, this.daylightFeed.level);
     await this.renderer.compileAsync(this.scene, this.camera);
     await this.tank.compileSurfaceReflection(this.renderer, this.scene, this.camera);
     this.warmedUp = true;
@@ -679,9 +673,8 @@ export class Engine {
     this.photo.apply();
     for (const callback of this.frameCallbacks) callback(deltaS, nowMs);
     this.photo.apply();
-    this.daylightAnnouncer.frame(frameMs);
-    this.updateDaylight(nowMs);
-    applyDayLighting(this.dayRig, this.daylightLevel);
+    this.daylightFeed.frame(nowMs, frameMs);
+    applyDayLighting(this.dayRig, this.daylightFeed.level);
     if (this.cullPrewarm.begin(nowMs) > 0) this.sceneRevisionValue++;
     try {
       this.draw();

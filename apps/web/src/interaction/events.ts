@@ -6,18 +6,21 @@ import type {
   DecorLayout,
   Fish,
   FoodType,
+  Plant,
   TankSize,
   Water,
 } from '@aquarium/shared';
 import type { PhotoFilter } from '../engine/photo/grade';
 import type { PhotoState } from '../engine/photo/PhotoMode';
+import type { PlantPick } from '../scene/plantGrowth';
 import type { CameraMode } from './camera';
 import type { GameView } from './play/game';
 
 /** A pinch, not a pile: leftovers poison the tank, so hand-feeding stays small. */
 export const HAND_FEED_PORTION = 0.5;
 
-export type PlayTool = 'tap' | 'feed' | 'laser' | 'wand' | 'net' | 'mirror' | 'ball' | 'game';
+export type PlayTool =
+  'tap' | 'feed' | 'laser' | 'wand' | 'net' | 'trim' | 'mirror' | 'ball' | 'game';
 
 export type Toy = 'mirror' | 'ball';
 
@@ -174,6 +177,8 @@ export interface InteractionEvents {
   /** Netted, or removed on another device. */
   'tank:fish-removed': { tankId: string; fishId: string; reason: 'netted' | 'gone' };
   'tank:water': { tankId: string; water: Water };
+  /** The growing plants of the tank, sent after each load and whenever they change. */
+  'tank:plants': { tankId: string; plants: readonly Plant[] };
   /** The tank's wave maker tier, sent after each load and whenever a purchase changes it; 0 is none. */
   'tank:wave-maker': { tankId: string; tier: number };
   /** The tank's lamp hours in UTC, sent after each load and whenever the schedule changes. */
@@ -216,6 +221,8 @@ export interface InteractionEvents {
   'replay:time-scale': { scale: number };
   /** Emitted by the fish system when the net tool taps a dead fish. */
   'net:tap': { fishId: string };
+  /** The trim tool tapped; `pick` is the plant under the ray, or null when none is. */
+  'plant:picked': { pick: PlantPick | null };
 }
 
 export interface LoadState {

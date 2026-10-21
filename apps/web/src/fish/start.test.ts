@@ -1,14 +1,26 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Collider } from '@aquarium/shared';
-import type { Point3, SimToy } from '@aquarium/sim';
+import type { Point3, SimPolyps, SimToy } from '@aquarium/sim';
 import type { Engine } from '../engine/Engine';
 import { TANK_DIMENSIONS, type TankDimensions } from '../engine/tank/dimensions';
 import { EventBus, type EngineEvents } from '../engine/events';
 import type { InteractionEvents } from '../interaction/events';
 import type { SceneAnchor } from '../scene/anemone';
 import type { Collider as SceneCollider } from '../scene/colliders';
+import { PolypSignal } from '../scene/polyps';
 import { FISH_1, FISH_2, TANK_A, fishFixture } from '../sync/fixtures';
 import type { BallNudge, FishBite, FishPoint, PickRay, TankEvent } from './start';
+
+class FakePolypClient {
+  readonly listeners = new Set<(extension: number, event: SimPolyps) => void>();
+  onPolyps(listener: (extension: number, event: SimPolyps) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+  emit(extension: number, epoch: number, tick: number): void {
+    for (const l of this.listeners) l(extension, { type: 'polyps', epoch, tick, extension });
+  }
+}
 
 class FakeFishSystem {
   readonly handled: TankEvent[] = [];
@@ -99,6 +111,29 @@ class FakeFishSystem {
   synced(): Promise<void> {
     return this.sync;
   }
+  client = new FakePolypClient();
+  private clientListener: ((client: FakePolypClient) => void) | null = null;
+  onSimClient(listener: (client: FakePolypClient) => void): () => void {
+    this.clientListener = listener;
+    listener(this.client);
+    return () => (this.clientListener = null);
+  }
+  replaceClient(): FakePolypClient {
+    this.client = new FakePolypClient();
+    this.clientListener?.(this.client);
+    return this.client;
+  }
+  private worldEpoch: number | null = null;
+  private worldListener: ((epoch: number | null) => void) | null = null;
+  onWorld(listener: (epoch: number | null) => void): () => void {
+    this.worldListener = listener;
+    listener(this.worldEpoch);
+    return () => (this.worldListener = null);
+  }
+  world(epoch: number | null): void {
+    this.worldEpoch = epoch;
+    this.worldListener?.(epoch);
+  }
   dispose(): void {
     this.disposed = true;
     if (this.disposeError !== null) throw this.disposeError;
@@ -114,6 +149,7 @@ const { queueTankEvents, startFish } = await import('./start');
 function setup(
   result: Promise<FakeFishSystem>,
   beforeStart: (interaction: EventBus<InteractionEvents>) => void = () => undefined,
+  daylight = 1,
 ) {
   create.mockReturnValueOnce(result);
   const events = new EventBus<EngineEvents>();
@@ -122,7 +158,7 @@ function setup(
   const interaction = new EventBus<InteractionEvents>();
   const tankEvents = queueTankEvents(interaction);
   beforeStart(interaction);
-  const engine = { events } as unknown as Engine;
+  const engine = { events, daylight } as unknown as Engine;
   const handle = startFish(engine, {
     tank: {
       length: 1,
@@ -138,7 +174,7 @@ function setup(
     interaction,
     tankEvents,
   });
-  return { handle, interaction, errors };
+  return { handle, interaction, errors, events };
 }
 
 function deferred<T>(): {
@@ -547,6 +583,74 @@ describe('startFish', () => {
     expect(handle.sim.pickFish(ray)?.()).toEqual({ x: 1, y: 2, z: 3 });
     expect(handle.sim.anyFish()).toBeNull();
     expect(fish.taps).toEqual([ray]);
+  });
+
+  it("drives each mounted scene's polyps from the fish sim, across a replaced worker", async () => {
+    const fish = new FakeFishSystem();
+    const pending = deferred<FakeFishSystem>();
+    const { handle } = setup(pending.promise);
+    const first = new PolypSignal();
+    first.bind(handle.polyps);
+    expect(first.extension).toBe(0);
+    pending.resolve(fish);
+    await flush();
+    fish.client.emit(0.6, 4, 120);
+    expect(first.extension).toBe(0);
+    fish.world(4);
+    fish.client.emit(0.6, 4, 120);
+    expect(first.extension).toBeCloseTo(0.6);
+
+    first.dispose();
+    const rebuilt = new PolypSignal();
+    rebuilt.bind(handle.polyps);
+    expect(rebuilt.extension).toBeCloseTo(0.6);
+    fish.client.emit(0.8, 4, 150);
+    expect(first.extension).toBeCloseTo(0.6);
+    expect(rebuilt.extension).toBeCloseTo(0.8);
+
+    const stuck = fish.client;
+    fish.world(null);
+    const replacement = fish.replaceClient();
+    expect(stuck.listeners.size).toBe(0);
+    fish.world(1);
+    replacement.emit(1, 1, 0);
+    expect(rebuilt.extension).toBe(1);
+
+    handle.stop();
+    expect(replacement.listeners.size).toBe(0);
+    rebuilt.dispose();
+  });
+
+  it('opens the polyps of a tank first shown at night before the fish are up', () => {
+    const { handle } = setup(deferred<FakeFishSystem>().promise, undefined, 0);
+    const signal = new PolypSignal();
+    signal.bind(handle.polyps);
+    expect(signal.extension).toBe(1);
+    handle.stop();
+    signal.dispose();
+  });
+
+  it('gives polyps the darkness, not a stopped world, while no fish world runs', async () => {
+    const fish = new FakeFishSystem();
+    const { handle, events } = setup(Promise.resolve(fish));
+    await flush();
+    events.emit('engine:daylight', { level: 0, settled: false });
+    fish.world(3);
+    fish.client.emit(0.95, 3, 900);
+    fish.world(null);
+
+    const coralOnly = new PolypSignal();
+    coralOnly.bind(handle.polyps);
+    expect(coralOnly.extension).toBe(1);
+    events.emit('engine:daylight', { level: 0.4, settled: false });
+    expect(coralOnly.extension).toBeCloseTo(0.6);
+    events.emit('engine:daylight', { level: 1, settled: false });
+    expect(coralOnly.extension).toBe(0);
+
+    handle.stop();
+    events.emit('engine:daylight', { level: 0, settled: false });
+    expect(coralOnly.extension).toBe(0);
+    coralOnly.dispose();
   });
 
   it('stops listening and disposes the fish on stop', async () => {
