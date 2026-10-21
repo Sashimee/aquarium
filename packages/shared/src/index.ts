@@ -22,3 +22,4 @@ export * from './economy.js';
 export * from './collection.js';
 export * from './treatment.js';
 export * from './seed.js';
+export * from './plants.js';

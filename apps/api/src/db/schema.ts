@@ -162,6 +162,11 @@ export const tanks = pgTable(
     // Recent treat requests (key, kind, potency, overdose) so a retry replays instead of dosing again.
     treatKeys: jsonb('treat_keys').notNull().default([]),
     decorLayout: jsonb('decor_layout'),
+    // Growth state of the layout plants and their offsets (storedPlantsSchema), reconciled with the
+    // layout on every tick.
+    plants: jsonb('plants').notNull().default([]),
+    // Recent trim requests (key, plantKey, size) so a retry replays instead of trimming twice.
+    plantTrimKeys: jsonb('plant_trim_keys').notNull().default([]),
     // null: the player never chose one, so the biome's default shows.
     backgroundId: text('background_id'),
     water: jsonb('water')

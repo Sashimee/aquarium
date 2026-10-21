@@ -38,7 +38,8 @@ export type SimCommand =
   | { readonly type: 'step'; readonly steps: number }
   | { readonly type: 'recycle'; readonly buffer: ArrayBuffer }
   | { readonly type: 'startle'; readonly stimulus: Stimulus }
-  | { readonly type: 'light'; readonly level: number }
+  /** With `settle`, the new level is taken as already adapted to; see `World.settleLight`. */
+  | { readonly type: 'light'; readonly level: number; readonly settle?: boolean }
   /** The wave maker, or null when there is none; see `World.setWaveMaker`. */
   | { readonly type: 'waveMaker'; readonly settings: WaveMakerSettings | null }
   /** A laser dot or fingertip on the glass, or null once it is gone; see `World.setLure`. */
@@ -286,6 +287,7 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
   let epoch = 0;
   let crewTick = 0;
   let polypSent = Number.NaN;
+  let pausedAt: number | null = null;
 
   const send = (event: SimEvent, transfer: ArrayBuffer[] = []): void => {
     port.postMessage(event, transfer);
@@ -318,9 +320,17 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
     send({ type: 'snapshot', epoch, tick: w.tick, time: w.time, buffer }, [buffer]);
   };
 
-  const stop = (): void => {
-    if (timer !== null) clearTimeout(timer);
+  const halt = (): boolean => {
+    if (timer === null) return false;
+    clearTimeout(timer);
     timer = null;
+    return true;
+  };
+
+  // The timer is cleared before the clock is read, so a throwing clock cannot leave a dead
+  // handle behind that turns every later "start" into a no-op.
+  const stop = (): void => {
+    if (halt()) pausedAt = now();
   };
 
   const sendError = (error: unknown, request?: number): void => {
@@ -347,6 +357,7 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
     } catch (error) {
       // A throw here would escape the timer unseen; report it and stay stopped until "start".
       sendError(error);
+      pausedAt = last;
       return;
     }
     timer = setTimeout(loop, Math.max(0, stepMs - backlog));
@@ -381,10 +392,11 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
             `sim: "init" needs a safe integer request, got ${String(command.request)}`,
           );
         }
-        stop();
+        halt();
         world = new World(command.config);
         crewTick = 0;
         polypSent = Number.NaN;
+        pausedAt = null;
         pool.length = 0;
         epoch++;
         send({
@@ -401,8 +413,9 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
       case 'start': {
         if (world === null) throw new Error('sim: "start" before "init"');
         if (timer !== null) return;
-        world.settleLight();
         last = now();
+        world.settleLight(pausedAt === null ? 0 : Math.max(0, last - pausedAt) / 1000);
+        pausedAt = null;
         backlog = 0;
         timer = setTimeout(loop, stepMs);
         return;
@@ -425,9 +438,16 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
       case 'startle':
         requireWorld(command.type).startle(command.stimulus);
         return;
-      case 'light':
-        requireWorld(command.type).setLight(command.level);
+      case 'light': {
+        const { settle } = command;
+        if (settle !== undefined && typeof settle !== 'boolean') {
+          throw new TypeError(`sim: "light" settle must be a boolean, got ${String(settle)}`);
+        }
+        const w = requireWorld(command.type);
+        w.setLight(command.level);
+        if (settle === true) w.settleLight();
         return;
+      }
       case 'waveMaker':
         requireWorld(command.type).setWaveMaker(command.settings);
         return;
@@ -513,7 +533,7 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
 
   return {
     dispose(): void {
-      stop();
+      halt();
       world = null;
       port.removeEventListener('message', listener);
     },
@@ -651,9 +671,12 @@ export class SimClient {
     this.send({ type: 'startle', stimulus });
   }
 
-  /** 0 = lights off (night rest), 1 = full day. */
-  setLight(level: number): void {
-    this.send({ type: 'light', level });
+  /**
+   * 0 = lights off (night rest), 1 = full day. With `settle`, the fish take the new level as
+   * already adapted to and do not startle (a tab coming back after the lamp switched meanwhile).
+   */
+  setLight(level: number, settle?: boolean): void {
+    this.send(settle === undefined ? { type: 'light', level } : { type: 'light', level, settle });
   }
 
   /** Installs, changes or (with null) removes the wave maker; see `waveMakerForTier`. */
