@@ -412,4 +412,24 @@ describe('trimming a plant', () => {
       await limited.close();
     }
   });
+
+  it('does not count retries against the care limit', async () => {
+    const limited = await createHarness({
+      careLimits: { ...DEFAULT_CARE_LIMITS, care: { max: 2, windowMs: 60_000 } },
+    });
+    try {
+      const who = await account(limited);
+      const id = await makeTank(limited, who);
+      const body = { plantKey: 's11', size: 0.6, idempotencyKey: randomUUID() };
+      for (let i = 0; i < 5; i++) {
+        expect((await trim(limited, who, id, body)).statusCode).toBe(200);
+      }
+      const fresh = { plantKey: 's11', size: 0.5, idempotencyKey: randomUUID() };
+      expect((await trim(limited, who, id, fresh)).statusCode).toBe(200);
+      const over = { plantKey: 's11', size: 0.45, idempotencyKey: randomUUID() };
+      expect((await trim(limited, who, id, over)).statusCode).toBe(429);
+    } finally {
+      await limited.close();
+    }
+  });
 });

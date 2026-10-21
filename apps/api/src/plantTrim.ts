@@ -47,7 +47,6 @@ export function registerPlantRoutes(ctx: TrimContext): void {
       const user = await authorize(req);
       const { tankId } = paramsSchema.parse(req.params);
       const body = trimPlantRequestSchema.parse(req.body);
-      throttle(user.id, 'care');
 
       return withTank(user, tankId, async (tx, ticked) => {
         const remembered = trimKeysSchema.parse(ticked.tank.plantTrimKeys);
@@ -58,6 +57,7 @@ export function registerPlantRoutes(ctx: TrimContext): void {
           }
           return render(tx, ticked);
         }
+        throttle(user.id, 'care');
 
         const trimmed = trimPlant(ticked.plants, body.plantKey, body.size, table);
         if (!trimmed.ok) {

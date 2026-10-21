@@ -72,6 +72,11 @@ export const plantContentSchema = z
   .refine((c) => new Set(c.plants.map((p) => p.id)).size === c.plants.length, {
     message: 'duplicate plant id',
     path: ['plants'],
+  })
+  .refine((c) => c.plants.every((p) => c.params.offsetStartSize >= p.minSize), {
+    message:
+      'offsetStartSize must be at least every plant minSize, or a new offset starts below what can be trimmed to',
+    path: ['params', 'offsetStartSize'],
   });
 export type PlantContent = z.infer<typeof plantContentSchema>;
 

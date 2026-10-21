@@ -2,7 +2,7 @@
   "params": {
     "co2GrowthPerTier": [1, 1.3, 1.6, 1.6],
     "algaeSuppressionPerHour": 0.004,
-    "offsetStartSize": 0.35,
+    "offsetStartSize": 0.4,
     "maxOffsetsPerTank": 60,
     "offsetSpacingM": 0.03,
     "edgeMarginM": 0.03,

@@ -187,26 +187,28 @@ export function reconcilePlants(
   const plantLayout = layout.filter((item) => table.species.has(item.assetId));
   const keys = layoutPlantKeys(plantLayout);
   const byKey = new Map(stored.map((p) => [p.key, p]));
+  const keptKeys = new Set<string>();
   const roots = plantLayout.map((item, i): PlantState => {
     const key = keys[i];
     if (key === undefined) throw new Error('plants: layoutPlantKeys lost a key');
     const position: [number, number] = [item.position[0], item.position[2]];
     const kept = byKey.get(key);
-    return kept && kept.assetId === item.assetId && kept.parentKey === null
-      ? { ...kept, position }
-      : {
-          key,
-          assetId: item.assetId,
-          parentKey: null,
-          position,
-          size: START_SIZE,
-          spreadProgress: 0,
-          spawned: 0,
-        };
+    if (kept && kept.assetId === item.assetId && kept.parentKey === null) {
+      keptKeys.add(key);
+      return { ...kept, position };
+    }
+    return {
+      key,
+      assetId: item.assetId,
+      parentKey: null,
+      position,
+      size: START_SIZE,
+      spreadProgress: 0,
+      spawned: 0,
+    };
   });
-  const rootKeys = new Set(keys);
   const offsets = stored.filter(
-    (p) => p.parentKey !== null && rootKeys.has(p.parentKey) && table.species.has(p.assetId),
+    (p) => p.parentKey !== null && keptKeys.has(p.parentKey) && table.species.has(p.assetId),
   );
   return [...roots, ...offsets];
 }

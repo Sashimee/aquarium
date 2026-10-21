@@ -507,4 +507,57 @@ describe('reconcile and trim', () => {
     expect(trimPlant(grown, 's1000', 1.8, table)).toEqual({ ok: false, reason: 'not_grown' });
     expect(trimPlant(grown, 'nope', 0.6, table)).toEqual({ ok: false, reason: 'unknown' });
   });
+
+  const seeded = (assetId: string, tintSeed: number): LayoutPlant[] => [
+    { assetId, position: [0, 0.1, 0], tintSeed },
+  ];
+  const spreading = tank({ nitrate: 100_000 });
+  const lit: Equipment = { ...DEFAULT_EQUIPMENT, light: { ...DEFAULT_EQUIPMENT.light, tier: 3 } };
+  const keysOf = (plants: readonly PlantState[]) => plants.map((p) => p.key);
+
+  it('does not carry the offsets of a replaced plant over, so keys stay unique', () => {
+    const first = reconcilePlants(seeded('vallisneria', 5), [], table);
+    const grown = run(spreading, first, { equipment: lit, days: 40 });
+    expect(grown.plants.some((p) => p.parentKey === 's5')).toBe(true);
+
+    const swapped = reconcilePlants(seeded('staurogyne-repens', 5), grown.plants, table);
+    expect(swapped).toHaveLength(1);
+    expect(swapped[0]).toMatchObject({ key: 's5', assetId: 'staurogyne-repens', size: 1 });
+
+    const regrown = run(spreading, swapped, { equipment: lit, from: T0 + 40 * DAY, days: 40 });
+    expect(
+      regrown.plants.every((p) => p.parentKey === null || p.assetId === 'staurogyne-repens'),
+    ).toBe(true);
+    expect(new Set(keysOf(regrown.plants)).size).toBe(regrown.plants.length);
+  });
+
+  it('keeps unique keys through any sequence of swaps, moves, removals and growth', () => {
+    const assets = ['vallisneria', 'staurogyne-repens', 'java-fern', 'water-plant'];
+    let plants: PlantState[] = [];
+    let from = T0;
+    for (let round = 0; round < 24; round++) {
+      const pick = (n: number) => assets[(round * 7 + n * 3) % assets.length] ?? 'vallisneria';
+      const layout: LayoutPlant[] = [
+        { assetId: pick(0), position: [-0.2 + round * 0.01, 0.1, 0], tintSeed: round % 3 },
+        { assetId: pick(1), position: [0.2, 0.1, 0.05], tintSeed: round % 3 },
+        ...(round % 4 === 0
+          ? []
+          : [{ assetId: pick(2), position: [0, 0.1, -0.1], tintSeed: 2 } as LayoutPlant]),
+      ];
+      plants = reconcilePlants(layout, plants, table);
+      expect(new Set(keysOf(plants)).size).toBe(plants.length);
+      plants = [...run(spreading, plants, { equipment: lit, from, days: 9 }).plants];
+      from += 9 * DAY;
+      expect(new Set(keysOf(plants)).size).toBe(plants.length);
+    }
+  });
+
+  it('starts every offset at no less than its species minimum trim size', () => {
+    for (const spec of content.plants) {
+      expect(content.params.offsetStartSize).toBeGreaterThanOrEqual(spec.minSize);
+    }
+    const grown = run(spreading, plantsOf('vallisneria', 4), { equipment: lit, days: 30 });
+    const offsets = grown.plants.filter((p) => p.parentKey !== null);
+    expect(offsets.length).toBeGreaterThan(0);
+  });
 });
