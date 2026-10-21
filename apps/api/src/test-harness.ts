@@ -19,6 +19,7 @@ import type { CareLimits } from './tanks.ts';
 import type { PushSender } from './push.ts';
 import type { ReminderLimits } from './reminders.ts';
 import type { PublicLimits } from './public.ts';
+import type { GalleryLimits } from './gallery.ts';
 
 const cheapKey = (password: string, salt: Buffer) =>
   new Promise<Buffer>((resolve, reject) =>
@@ -91,6 +92,7 @@ export interface HarnessOptions {
   handleLimit?: Limit;
   collectionLimit?: Limit;
   publicLimits?: PublicLimits;
+  galleryLimits?: GalleryLimits;
   testHooks?: boolean;
   push?: PushSender | null;
   reminderLimits?: ReminderLimits;
@@ -234,6 +236,7 @@ export async function createHarness(opts: HarnessOptions = {}): Promise<Harness>
     ...(opts.handleLimit ? { handleLimit: opts.handleLimit } : {}),
     ...(opts.collectionLimit ? { collectionLimit: opts.collectionLimit } : {}),
     ...(opts.publicLimits ? { publicLimits: opts.publicLimits } : {}),
+    ...(opts.galleryLimits ? { galleryLimits: opts.galleryLimits } : {}),
     logger: opts.logStream !== undefined,
     ...(opts.logStream ? { logStream: opts.logStream } : {}),
   });

@@ -1,6 +1,6 @@
 {
-  "id": "ea8fe288-7d31-4796-953c-472a63d59df7",
-  "prevId": "2c0269b7-3c4c-4401-8b11-9a1ee7e3d4fe",
+  "id": "771b1605-cd06-4327-b01e-42e21700ebfa",
+  "prevId": "659f3d25-94aa-4758-80da-79bbb632842e",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1304,6 +1304,54 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.tank_of_week": {
+      "name": "tank_of_week",
+      "schema": "",
+      "columns": {
+        "week_start": {
+          "name": "week_start",
+          "type": "timestamp with time zone",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "tank_id": {
+          "name": "tank_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "votes": {
+          "name": "votes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "decided_at": {
+          "name": "decided_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "tank_of_week_tank_id_tanks_id_fk": {
+          "name": "tank_of_week_tank_id_tanks_id_fk",
+          "tableFrom": "tank_of_week",
+          "tableTo": "tanks",
+          "columnsFrom": ["tank_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.tank_reactions": {
       "name": "tank_reactions",
       "schema": "",
@@ -1423,6 +1471,105 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.tank_votes": {
+      "name": "tank_votes",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "week_start": {
+          "name": "week_start",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tank_id": {
+          "name": "tank_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "tank_votes_week_tank_idx": {
+          "name": "tank_votes_week_tank_idx",
+          "columns": [
+            {
+              "expression": "week_start",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "tank_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "tank_votes_tank_id_idx": {
+          "name": "tank_votes_tank_id_idx",
+          "columns": [
+            {
+              "expression": "tank_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "tank_votes_user_id_user_id_fk": {
+          "name": "tank_votes_user_id_user_id_fk",
+          "tableFrom": "tank_votes",
+          "tableTo": "user",
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "tank_votes_tank_id_tanks_id_fk": {
+          "name": "tank_votes_tank_id_tanks_id_fk",
+          "tableFrom": "tank_votes",
+          "tableTo": "tanks",
+          "columnsFrom": ["tank_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "tank_votes_user_id_week_start_pk": {
+          "name": "tank_votes_user_id_week_start_pk",
+          "columns": ["user_id", "week_start"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.tanks": {
       "name": "tanks",
       "schema": "",
@@ -1467,6 +1614,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "in_gallery": {
+          "name": "in_gallery",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "name": {
           "name": "name",

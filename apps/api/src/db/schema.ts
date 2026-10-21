@@ -151,6 +151,8 @@ export const tanks = pgTable(
     size: tankSizeEnum('size').notNull().default('standard'),
     quarantine: boolean('quarantine').notNull().default(false),
     shareTokenHash: text('share_token_hash').unique(),
+    // A public link is not a gallery listing: this is a second opt-in, honoured only while the link is on.
+    inGallery: boolean('in_gallery').notNull().default(false),
     name: text('name').notNull(),
     // The client's idempotency key of the request that made the tank. Free tanks leave no ledger
     // row, so this is what lets a retry find the tank it already got.
@@ -340,6 +342,33 @@ export const tankReactions = pgTable(
     index('tank_reactions_user_id_idx').on(t.userId),
   ],
 );
+
+export const tankVotes = pgTable(
+  'tank_votes',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    weekStart: timestamptz('week_start').notNull(),
+    tankId: uuid('tank_id')
+      .notNull()
+      .references(() => tanks.id, { onDelete: 'cascade' }),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.weekStart] }),
+    index('tank_votes_week_tank_idx').on(t.weekStart, t.tankId),
+    index('tank_votes_tank_id_idx').on(t.tankId),
+  ],
+);
+
+export const tankOfWeek = pgTable('tank_of_week', {
+  weekStart: timestamptz('week_start').primaryKey(),
+  // null: the week was settled with no eligible tank, or the winner was deleted. Kept so it is never re-decided.
+  tankId: uuid('tank_id').references(() => tanks.id, { onDelete: 'set null' }),
+  votes: integer('votes').notNull(),
+  decidedAt: timestamptz('decided_at').notNull().defaultNow(),
+});
 
 export const auditLog = pgTable(
   'audit_log',
