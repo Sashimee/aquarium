@@ -16,6 +16,8 @@ import { tankSchema } from './tank.js';
 // used for another kind or potency (or, premium, another tank) is a 409. Only the last 8 keys are
 // remembered: a premium retry older than that is still not charged twice, but its overdose flag
 // reads false. Heat (30 C or more) only helps ich for the few species that tolerate it.
+// Refusals carry a machine-readable error.reason: nothing_to_treat, other_medicine, dose_limit, key_reused.
+// other_medicine and dose_limit are the two that a water change clears.
 // Moving a fish to the quarantine tank is T39's route; treat works in any tank.
 export const treatRequestSchema = z.strictObject({
   kind: diseaseKindSchema,
