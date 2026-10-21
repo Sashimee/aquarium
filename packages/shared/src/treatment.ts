@@ -47,7 +47,7 @@ export type TreatResponse = z.infer<typeof treatResponseSchema>;
 // another fish or went elsewhere). wrong_biome is a 409 here, unlike adding a fish (400): the fish
 // is valid and the refusal depends on the destination tank's state, like tank_full. A retry with the same idempotencyKey replays the first answer with the current
 // state of both tanks. Without a key a retry finds the fish already gone from the source (404).
-// The move is recorded as a fish_moved event in each tank (not part of /replay yet).
+// The move is recorded as a fish_moved event in each tank.
 export const moveFishRequestSchema = z.strictObject({
   toTankId: idSchema,
   idempotencyKey: idempotencyKeySchema.optional(),
