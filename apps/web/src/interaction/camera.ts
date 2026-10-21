@@ -38,6 +38,8 @@ export interface RoomVolume {
 
 const ROOM_MARGIN = 0.1;
 const ARC_ROOM_SAMPLES = 24;
+const ARC_RESET_YAW = 0.3;
+const RETARGET_SNAP = 1e-3;
 const ROOM_SEARCH_STEPS = 64;
 const ROOM_SAFE_PITCH = 0.1;
 
@@ -143,6 +145,7 @@ export class CameraRig {
   private look: Vec3;
   private transitioning = false;
   private arcSign = 0;
+  private arcYaw = 0;
 
   constructor(
     private readonly camera: CameraLike,
@@ -270,7 +273,7 @@ export class CameraRig {
     if (!Number.isFinite(dtSeconds)) return;
     const dt = clamp(dtSeconds, 0, MAX_DT);
     if (this.modeValue === 'focus') this.refreshFocus();
-    const goal = this.goal();
+    let goal = this.goal();
     const rate = this.transitioning ? TRANSITION_RATE : FOLLOW_RATE;
     const alpha = this.reducedMotion ? 1 : 1 - Math.exp(-rate * dt);
     const from = this.eye;
@@ -278,6 +281,10 @@ export class CameraRig {
     if (this.modeValue === 'orbit' && !this.insideGlass(from) && this.insideGlass(this.eye)) {
       this.eye = this.arcAroundGlass(from, goal.eye, alpha);
     }
+    if (this.modeValue === 'orbit' && this.room && !this.roomAllows(this.eye)) {
+      this.eye = this.retarget(from);
+    }
+    goal = this.goal();
     if (length(sub(this.eye, goal.eye)) < SETTLED_EPSILON) this.arcSign = 0;
     this.look = this.chase(this.look, goal.look, alpha);
     if (
@@ -288,6 +295,10 @@ export class CameraRig {
       this.transitioning = false;
     }
     this.apply();
+  }
+
+  get goalPosition(): Readonly<Vec3> {
+    return this.goal().eye;
   }
 
   get position(): Readonly<Vec3> {
@@ -377,7 +388,8 @@ export class CameraRig {
             p.y < lo.y - tol ||
             p.y > hi.y + tol ||
             p.z < lo.z - tol ||
-            p.z > hi.z + tol
+            p.z > hi.z + tol ||
+            !this.roomAllows(p)
           ) {
             return false;
           }
@@ -388,15 +400,16 @@ export class CameraRig {
       if (this.arcSign !== 0 && Math.sign(delta) !== this.arcSign) delta = other(delta);
       if (!stays(delta)) {
         delta = other(delta);
-        if (!stays(delta)) return from;
+        if (!stays(delta)) return this.retarget(from);
       }
     }
     this.arcSign = Math.sign(delta) || 1;
+    this.arcYaw = this.yaw;
     const eye = at(alpha, delta);
-    if (!this.insideGlass(eye)) return this.keepInRoom(eye);
+    if (!this.insideGlass(eye)) return this.acceptStep(from, this.keepInRoom(eye));
     const offset = sub(eye, t);
     const span = length(offset);
-    if (span < 1e-6) return from;
+    if (span < 1e-6) return this.retarget(from);
     const dir = { x: offset.x / span, y: offset.y / span, z: offset.z / span };
     const { min, max } = this.glassBox();
     const reach = distanceToBoxExit(t, dir, min, max) + GLASS_CLEARANCE;
@@ -405,7 +418,40 @@ export class CameraRig {
       y: t.y + dir.y * reach,
       z: t.z + dir.z * reach,
     });
-    return this.insideGlass(pushed) ? from : pushed;
+    return this.acceptStep(from, pushed);
+  }
+
+  private acceptStep(from: Vec3, step: Vec3): Vec3 {
+    if (!this.room) return step;
+    return this.insideGlass(step) || !this.roomAllows(step) ? this.retarget(from) : step;
+  }
+
+  private roomAllows(p: Vec3): boolean {
+    const o = sub(p, this.orbitTarget);
+    const span = length(o);
+    if (span < 1e-9) return false;
+    const { min, max } = this.orbitLimits(
+      Math.atan2(o.x, o.z),
+      Math.asin(clamp(o.y / span, -1, 1)),
+    );
+    return max >= min;
+  }
+
+  /**
+   * The eye cannot make progress toward the goal: make the pose it is at the goal, so the state
+   * stays consistent and any later drag or setOrbit moves it again. An eye that sits somewhere the
+   * room leaves no space for is moved to the nearest orbit pose that has some.
+   */
+  private retarget(from: Vec3): Vec3 {
+    const o = sub(from, this.orbitTarget);
+    const span = length(o);
+    this.distance = span;
+    this.yaw = Math.atan2(o.x, o.z);
+    this.pitch = clamp(Math.asin(clamp(o.y / Math.max(span, 1e-9), -1, 1)), PITCH_MIN, PITCH_MAX);
+    this.clampOrbit();
+    this.arcSign = 0;
+    const goal = this.goal().eye;
+    return length(sub(goal, from)) < RETARGET_SNAP ? from : goal;
   }
 
   /**
@@ -414,7 +460,7 @@ export class CameraRig {
    * the front view until there is.
    */
   private clampOrbit(): void {
-    this.arcSign = 0;
+    if (Math.abs(this.yaw - this.arcYaw) > ARC_RESET_YAW) this.arcSign = 0;
     if (this.room) this.swingIntoRoom();
     const { min, max } = this.orbitLimits(this.yaw, this.pitch);
     this.distance = clamp(this.distance, min, Math.max(min, max));
