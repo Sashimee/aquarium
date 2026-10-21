@@ -393,6 +393,28 @@ describe('api client sharing', () => {
     expect(JSON.parse(init.body as string)).toEqual(request);
   });
 
+  it('posts a trim to the plants route and refuses a size the server would not read', async () => {
+    const refusal = new Response(
+      JSON.stringify({
+        error: { code: 'conflict', message: 'Not grown.', reason: 'plant_not_grown' },
+      }),
+      { status: 409, headers: { 'content-type': 'application/json' } },
+    );
+    const fetcher = vi.fn().mockResolvedValue(refusal);
+    const request = { plantKey: 's7', size: 1, idempotencyKey: 'trim-key-0001' };
+    await expect(createApiClient(fetcher).trimPlant(TANK_A, request)).rejects.toMatchObject({
+      status: 409,
+      reason: 'plant_not_grown',
+    });
+    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`/api/tanks/${TANK_A}/plants/trim`);
+    expect(JSON.parse(init.body as string)).toEqual(request);
+    await expect(
+      createApiClient(fetcher).trimPlant(TANK_A, { ...request, size: -1 }),
+    ).rejects.toBeDefined();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
   it('refuses a public tank response it cannot read', async () => {
     const fetcher = vi.fn().mockResolvedValue(json({ name: 'x' }));
     await expect(createApiClient(fetcher).publicTank(TOKEN)).rejects.toMatchObject({
