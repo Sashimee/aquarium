@@ -55,9 +55,17 @@ describe('decor rules', () => {
   });
 
   it('keeps the malawi and tanganyika decor cichlid-only', () => {
-    for (const id of ['malawi-rock-07', 'rock-pile-cave', 'neothauma-shell']) {
+    for (const id of [
+      'malawi-boulder-03',
+      'malawi-boulder-05',
+      'malawi-rock-07',
+      'rock-pile-stack',
+      'rock-pile-cave',
+      'neothauma-shell',
+    ]) {
       expect(isDecorAssetForBiome('cichlid', id)).toBe(true);
       expect(isDecorAssetForBiome('reef', id)).toBe(false);
+      expect(isDecorAssetForBiome('freshwater', id)).toBe(false);
     }
   });
 
