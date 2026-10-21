@@ -1273,7 +1273,8 @@ export class Behaviour {
         BROOD.guardBodyLengths * length,
         FishState.Station,
       );
-    } else if (sp.gait === 'forage') {
+    } else if (sp.gait === 'forage' && !this.grazesInsteadOfForaging(i, sp, rest)) {
+      this.grazePhase[i] = GrazePhase.None;
       this.planForage(i, sp, plan);
     } else if (sp.grazer === 'glass') {
       this.planGlassGrazer(i, plan);
@@ -2334,6 +2335,16 @@ export class Behaviour {
     // Down after roll r is -up·cos r + left·sin r; solve for down = -n.
     const nDotLeft = nx * Math.cos(yaw) - nz * Math.sin(yaw);
     return Math.atan2(-nDotLeft, ny);
+  }
+
+  /**
+   * A bottom forager that also rasps glass (a bristlenose pleco) sifts for food while it is hungry
+   * and any lies settled, and grazes glass otherwise; resting, it sifts slowly as other foragers
+   * do.
+   */
+  private grazesInsteadOfForaging(i: number, sp: SimSpecies, rest: number): boolean {
+    if (sp.grazer !== 'glass' || rest > 0.5) return false;
+    return !(this.feeding.anySettled && this.feeding.hungry(i));
   }
 
   private planForage(i: number, sp: SimSpecies, plan: Plan): void {
