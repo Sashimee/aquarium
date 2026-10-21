@@ -5,7 +5,9 @@ import {
   type BreedingEnvironment,
   type BreedingTable,
 } from './breeding.ts';
-import { MAX_CATCH_UP_MS, STEP_MINUTES, STEP_MS } from './params.ts';
+import { crewCleanup, type CleanupSurfaces, type CrewMember } from '../src/crew.ts';
+import type { SimSpecies } from '../src/species.ts';
+import { HUNGER_PER_PORTION, MAX_CATCH_UP_MS, STEP_MINUTES, STEP_MS } from './params.ts';
 import { stepTank } from './step.ts';
 import {
   appendCapped,
@@ -14,8 +16,17 @@ import {
   type TimelineEntry,
   type TimelineFlags,
 } from './timeline.ts';
-import { heaterSetpoint } from './water.ts';
+import { heaterSetpoint, lampIsOn } from './water.ts';
 import type { DeathRecord, LifecycleState, TankEnvironment } from './types.ts';
+
+/**
+ * The clean-up crew's offline model. Only species in `species` take part. Live crew tallies from a
+ * running client must not be applied over a span this catch-up covers, or the cleaning counts twice.
+ */
+export interface CatchUpCrew {
+  readonly species: ReadonlyMap<string, SimSpecies>;
+  readonly surfaces: CleanupSurfaces;
+}
 
 export interface CatchUpInput extends TankEnvironment {
   readonly state: LifecycleState;
@@ -25,6 +36,7 @@ export interface CatchUpInput extends TankEnvironment {
   readonly vacationFeeder: boolean;
   readonly breeding: BreedingTable;
   readonly breedingEnvironment: Omit<BreedingEnvironment, 'temperatureC'>;
+  readonly crew?: CatchUpCrew;
 }
 
 export interface CatchUpResult {
@@ -75,13 +87,14 @@ export function catchUp(input: CatchUpInput): CatchUpResult {
       chemistryParams: input.chemistryParams,
       heaterSetpointC: setpoint,
     });
-    const bred = stepBreeding(result.state, {
+    const cleaned = cleanStep(result.state, input, startMs + STEP_MS);
+    const bred = stepBreeding(cleaned, {
       nowMs: startMs + STEP_MS,
       species: input.species,
       breeding: input.breeding,
       environment: {
         ...input.breedingEnvironment,
-        temperatureC: result.state.chemistry.temperatureC,
+        temperatureC: cleaned.chemistry.temperatureC,
       },
     });
     state = bred.state;
@@ -106,5 +119,42 @@ export function catchUp(input: CatchUpInput): CatchUpResult {
     births,
     timeline,
     setpointComputations,
+  };
+}
+
+function cleanStep(state: LifecycleState, input: CatchUpInput, nowMs: number): LifecycleState {
+  const crew = input.crew;
+  if (!crew) return state;
+  const members: CrewMember[] = [];
+  for (const f of state.fish) {
+    if (f.alive && crew.species.has(f.species)) {
+      members.push({ id: f.id, species: f.species, alive: true, hunger: f.hunger });
+    }
+  }
+  if (members.length === 0) return state;
+  const { light } = input.equipment;
+  const cleaned = crewCleanup({
+    crew: members,
+    species: crew.species,
+    algae: state.water.algae,
+    uneatenFood: state.water.uneatenFood,
+    dtHours: STEP_MINUTES / 60,
+    litFraction: lampIsOn(nowMs, STEP_MINUTES / 60, light.onHour, light.offHour) ? 1 : 0,
+    surfaces: crew.surfaces,
+  });
+  const eaten = new Map(cleaned.perFish.map((s) => [s.id, s.food]));
+  return {
+    ...state,
+    water: {
+      ...state.water,
+      algae: Math.max(0, state.water.algae - cleaned.algaeGrazed),
+      uneatenFood: Math.max(0, state.water.uneatenFood - cleaned.foodEaten),
+    },
+    fish: state.fish.map((f) => {
+      const food = eaten.get(f.id);
+      return food === undefined
+        ? f
+        : { ...f, hunger: Math.max(0, f.hunger - food * HUNGER_PER_PORTION) };
+    }),
   };
 }
