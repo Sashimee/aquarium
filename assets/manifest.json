@@ -2365,6 +2365,42 @@
       ]
     },
     {
+      "id": "sketchfab-bce6689d",
+      "kind": "invertebrate",
+      "species": "hermit-crab",
+      "title": "Pagurus bernhardus - Common Hermit Crab",
+      "author": "Chapel_Prints_CO",
+      "author_url": "https://sketchfab.com/McKie_Foundation",
+      "source_url": "https://sketchfab.com/3d-models/bce6689d5b2644488c0ab3fa7bcda5eb",
+      "licence": "CC-BY-4.0",
+      "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+      "checked_at": "2026-10-21",
+      "sha256": "8cf10c712db41d7b6aba94709fc66cf461e861c008d13f74907014ae439a00b1",
+      "polycount": 846345,
+      "textures": "none (untextured, single material); colour comes from a procedural material",
+      "rigged": false,
+      "notes": "Candidate replacement for sketchfab-5ebe7794 (#895), whose scan has no front claw pair. Common hermit crab (Pagurus bernhardus, a cold-water NE Atlantic species, not a reef one) in a whelk-type shell, clean print-style mesh. Verified from the downloaded glTF: 846345 triangles in 9 chunks of at most 65532 vertices, one material, no textures, not rigged (no skins, no animations), CC-BY-4.0 per license.txt and the Sketchfab record (downloadable). Zip sha256 9a8cd3460f7d838d8a27756a6077d70bae271de82123f1ae47544db3a7f2bb36; sha256 is the aggregate over files[]. Units are arbitrary (shell about 2 long, carapace about 0.7 wide); scale so the shell is about 2 cm. Claw check by 3D grid segmentation of the vertices, front is -Y: two distinct chelipeds, left about 4x the volume of the right (normal hermit asymmetry), together the foremost appendages. Below y = -0.75 they are two separate blobs (left x 0.79 to 1.65, right x 1.67 to 1.97) while every walking-leg tip stays above y = -0.69; claw bases join the body near y = -0.45 to -0.5, walking legs root near y = -0.2 to 0.1. Walkers are fused to the body in one component (shell is a second component), so walking needs a rig built by the pipeline. The model has no colour: apply a procedural reef-hermit look (e.g. Clibanarius tricolor, blue legs with red bands) and use a reef-style shell colour. Planned processing, none done yet: merge the chunks, weld duplicate vertices, drop unused attributes; origin at the shell base; decimate to LOD0 25000 triangles, LOD1 and LOD2 simplify further; keep the claw fingers, which are thin, when simplifying.",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "gltf/license.txt",
+          "sha256": "e81b4cc222201595c704dad7f143106b3e681ce16c71404341527f6da5f2003f",
+          "bytes": 804
+        },
+        {
+          "path": "gltf/scene.bin",
+          "sha256": "1f17afe74ff6c892bf223586481927a493bd9f36fbd185a3217c2edd213fd135",
+          "bytes": 32068740
+        },
+        {
+          "path": "gltf/scene.gltf",
+          "sha256": "943d21dfb1e03b1a1dc792ed7f7a29439f6f808d2cbbdb7383587b9059e6ef58",
+          "bytes": 15503
+        }
+      ]
+    },
+    {
       "id": "sketchfab-70b8866a",
       "kind": "invertebrate",
       "species": "nerite-snail",
