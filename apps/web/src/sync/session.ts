@@ -4,8 +4,10 @@ import type {
   PlayableBiome,
   CareAction,
   DecorLayout,
+  DiseaseKind,
   FoodType,
   LightSchedule,
+  MedicinePotency,
   PurchasableStage,
   Tank,
   TankSize,
@@ -30,6 +32,7 @@ import {
 import { SaveStatusMerge } from './saveStatus';
 import { describeSyncError } from './messages';
 import { INITIAL_STATE, type SessionState } from './state';
+import { DISEASE_LABEL } from './treatment';
 import { diffFish, isStaleSnapshot, upsertTank } from './reconcile';
 
 export type { BaggedFish, SessionPhase, SessionState } from './state';
@@ -48,6 +51,13 @@ export interface SessionDeps {
   layoutDebounceMs?: number;
   /** Makes the idempotency key of a new purchase intent; tests inject a counter. */
   newKey?: () => string;
+}
+
+export interface TreatOutcome {
+  ok: boolean;
+  overdose: boolean;
+  /** The server's reason when it refused the dose with a 409. */
+  refusal: string | null;
 }
 
 export interface ShareOutcome {
@@ -333,12 +343,20 @@ export class TankSession {
     name: string,
     biome: PlayableBiome,
     size: TankSize = DEFAULT_TANK_SIZE,
+    quarantine = false,
   ): Promise<boolean> {
     if (this.state.phase !== 'ready') return false;
     const generation = this.loadId;
     const made: { tank?: Tank } = {};
-    const ok = await this.paid(`tank:${biome}:${size}:${name}`, async (idempotencyKey) => {
-      made.tank = await this.deps.api.createTank({ name, biome, size, idempotencyKey });
+    const intent = `tank:${biome}:${size}:${quarantine ? 'q:' : ''}${name}`;
+    const ok = await this.paid(intent, async (idempotencyKey) => {
+      made.tank = await this.deps.api.createTank({
+        name,
+        biome,
+        size,
+        ...(quarantine ? { quarantine } : {}),
+        idempotencyKey,
+      });
     });
     const tank = made.tank;
     if (!ok || !tank) return false;
@@ -416,6 +434,38 @@ export class TankSession {
     return this.paid(`bacteria:${tank.id}`, (idempotencyKey) =>
       run({ type: 'bottled_bacteria', idempotencyKey }),
     );
+  }
+
+  /** Doses the active tank. The key is kept across an unknown outcome, so a retry is never charged twice. */
+  async treat(kind: DiseaseKind, potency: MedicinePotency): Promise<TreatOutcome> {
+    const tank = this.activeTank;
+    const outcome: TreatOutcome = { ok: false, overdose: false, refusal: null };
+    if (!tank) return outcome;
+    const gen = this.loadId;
+    outcome.ok = await this.paid(`treat:${tank.id}:${kind}:${potency}`, async (idempotencyKey) => {
+      let result;
+      try {
+        result = await this.deps.api.treat(tank.id, { kind, potency, idempotencyKey });
+      } catch (error) {
+        if (error instanceof ApiRequestError && error.code === 'conflict') {
+          outcome.refusal = error.message;
+        }
+        throw error;
+      }
+      if (gen !== this.loadId) return;
+      outcome.overdose = result.overdose;
+      if (result.wallet) {
+        this.walletApplied = ++this.walletSeq;
+        this.patch({ balance: result.wallet.balance });
+      }
+      this.apply(result.tank);
+      this.patch({
+        notice: result.overdose
+          ? 'The medicine is in, but the water now holds more than one dose. It poisons your fish until you change the water.'
+          : `The ${DISEASE_LABEL[kind].toLowerCase()} medicine is in the water.`,
+      });
+    });
+    return outcome;
   }
 
   async buy(speciesId: string, name: string, stage: PurchasableStage): Promise<boolean> {

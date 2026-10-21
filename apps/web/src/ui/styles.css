@@ -775,3 +775,19 @@ progress {
   border-radius: 0.5rem;
   background: var(--glass);
 }
+
+.treatment .disease {
+  margin-block: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid currentColor;
+  border-radius: 0.5rem;
+}
+
+.treatment .disease ul {
+  margin: 0.25rem 0;
+  padding-left: 1.25rem;
+}
+
+.symptom {
+  margin: 0.25rem 0;
+}

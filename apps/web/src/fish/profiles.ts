@@ -112,6 +112,14 @@ export const FISH_RENDER_PROFILES: Readonly<Record<string, FishRenderProfile>> =
   },
   'ocellaris-clownfish': { ...DEFAULTS, assetId: 'ocellaris-clownfish', iridescence: 0.1 },
   'royal-gramma': { ...DEFAULTS, assetId: 'royal-gramma', iridescence: 0.2 },
+  'cleaner-wrasse': {
+    ...DEFAULTS,
+    assetId: 'cleaner-wrasse',
+    iridescence: 0.25,
+    roughness: 0.35,
+    finTransmission: 0.5,
+    nightPaling: 0.3,
+  },
   'blue-tang': { ...DEFAULTS, assetId: 'blue-tang', iridescence: 0.2, finTransmission: 0.2 },
   'yellow-tang': { ...DEFAULTS, assetId: 'yellow-tang', iridescence: 0.1, finTransmission: 0.2 },
   // Discus hold the deep, compressed disc nearly rigid and scull with the long dorsal and anal fins.

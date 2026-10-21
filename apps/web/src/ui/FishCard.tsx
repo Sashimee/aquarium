@@ -1,5 +1,6 @@
 import type { Fish } from '@aquarium/shared';
 import { speciesName, type SpeciesNames } from '../sync/life';
+import { DISEASE_LABEL, severityWord, SYMPTOMS } from '../sync/treatment';
 import { personalityOf, traitViews } from '../sync/personality';
 
 export function FishCard({ fish, names }: { fish: Fish; names: SpeciesNames }) {
@@ -9,6 +10,15 @@ export function FishCard({ fish, names }: { fish: Fish; names: SpeciesNames }) {
     <article className="fish-card" aria-label={`${fish.name}, ${species}`}>
       <h4>{fish.name}</h4>
       <p className="hint">{species}</p>
+      {fish.disease && (
+        <p role="status" className="symptom">
+          <strong>{DISEASE_LABEL[fish.disease.kind]}</strong>, {severityWord(fish.disease.severity)}
+          : {SYMPTOMS[fish.disease.kind]}.
+          {fish.disease.treatedUntil !== null &&
+            Date.parse(fish.disease.treatedUntil) > Date.now() &&
+            ' Medicine is working on it.'}
+        </p>
+      )}
       {personality === null ? (
         <p className="hint">Still getting to know {fish.name}.</p>
       ) : (

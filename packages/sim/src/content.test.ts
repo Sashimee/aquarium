@@ -43,6 +43,7 @@ const MVP_ROSTER = [
   ['bronze-corydoras', 'Corydoras aeneus', 'freshwater'],
   ['cherry-shrimp', 'Neocaridina davidi', 'freshwater'],
   ['cleaner-shrimp', 'Lysmata amboinensis', 'reef'],
+  ['cleaner-wrasse', 'Labroides dimidiatus', 'reef'],
   ['discus', 'Symphysodon aequifasciatus', 'freshwater'],
   ['firefish', 'Nemateleotris magnifica', 'reef'],
   ['guppy', 'Poecilia reticulata', 'freshwater'],
