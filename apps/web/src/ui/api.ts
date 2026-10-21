@@ -694,13 +694,11 @@ export function createApiClient(
         if (e.reason === 'purchase') latest.set(e.itemRef, true);
         else if (e.reason === 'refund') latest.set(e.itemRef, false);
       }
-      const fromLedger = [...latest];
-      const owned = body.owned ?? fromLedger.filter(([, bought]) => bought).map(([ref]) => ref);
-      const held = new Set(owned);
+      const held = new Set(body.owned);
       return {
         balance: body.wallet.balance,
-        owned,
-        released: fromLedger
+        owned: body.owned,
+        released: [...latest]
           .filter(([ref, bought]) => !bought && !held.has(ref))
           .map(([ref]) => ref),
       };

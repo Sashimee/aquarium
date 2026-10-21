@@ -733,7 +733,9 @@ describe('api client Pearls contract', () => {
       entry(40, 'earn', 'earn:daily-care', 'key-cccccccc'),
       entry(500, 'grant', null, 'key-dddddddd'),
     ];
-    const fetcher = vi.fn().mockResolvedValue(json({ wallet: { balance: 420 }, ledger }));
+    const fetcher = vi
+      .fn()
+      .mockResolvedValue(json({ wallet: { balance: 420 }, ledger, owned: ['plant:java-fern'] }));
     expect(await createApiClient(fetcher).wallet()).toEqual({
       balance: 420,
       owned: ['plant:java-fern'],
@@ -758,7 +760,9 @@ describe('api client Pearls contract', () => {
       entry(-25, 'purchase', 'plant:java-fern', 'key-bbbbbbbb'),
       entry(-80, 'purchase', 'decor:boulder-01', 'key-cccccccc'),
     ];
-    const fetcher = vi.fn().mockResolvedValue(json({ wallet: { balance: 420 }, ledger }));
+    const fetcher = vi
+      .fn()
+      .mockResolvedValue(json({ wallet: { balance: 420 }, ledger, owned: ['decor:boulder-01'] }));
     expect(await createApiClient(fetcher).wallet()).toMatchObject({
       owned: ['decor:boulder-01'],
       released: ['plant:java-fern'],
@@ -817,6 +821,11 @@ describe('api client Pearls contract', () => {
         owned: [],
         released: [],
       });
+    });
+
+    it('rejects a wallet response without an owned list', async () => {
+      const fetcher = vi.fn().mockResolvedValue(json({ wallet: { balance: 10 }, ledger: [] }));
+      await expect(createApiClient(fetcher).wallet()).rejects.toThrow();
     });
   });
 

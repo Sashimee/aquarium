@@ -296,13 +296,9 @@ export class TankSession {
       this.walletApplied = seq;
       const before = this.state.balance;
       const gained = before !== null && wallet.balance > before ? wallet.balance - before : 0;
-      const released = new Set(wallet.released ?? []);
-      const owned = [...new Set([...this.state.owned, ...wallet.owned])].filter(
-        (ref) => !released.has(ref),
-      );
       this.patch({
         balance: wallet.balance,
-        owned,
+        owned: [...wallet.owned],
         ...(gained > 0 ? { earned: (this.state.earned ?? 0) + gained } : {}),
       });
     } catch (error) {
@@ -506,7 +502,9 @@ export class TankSession {
       this.walletApplied = ++this.walletSeq;
       this.patch({
         balance: bought.wallet.balance,
-        owned: [...new Set([...this.state.owned, itemRef])],
+        ...(ONE_TIME_REF.test(itemRef)
+          ? { owned: [...new Set([...this.state.owned, itemRef])] }
+          : {}),
       });
       const next = await this.deps.api.tank(tank.id);
       if (gen !== this.loadId) return;
@@ -624,6 +622,7 @@ export class TankSession {
       tankId,
       tier: tank.equipment.waveMaker.tier,
     });
+    this.emitLamp(tank);
     return true;
   }
 
@@ -792,6 +791,17 @@ export class TankSession {
         tier: tank.equipment.waveMaker.tier,
       });
     }
+    const lamp = held.equipment.light;
+    if (
+      lamp.onHour !== tank.equipment.light.onHour ||
+      lamp.offHour !== tank.equipment.light.offHour
+    )
+      this.emitLamp(tank);
+  }
+
+  private emitLamp(tank: Tank): void {
+    const { onHour, offHour } = tank.equipment.light;
+    this.deps.interaction.emit('tank:lamp', { tankId: tank.id, onHour, offHour });
   }
 
   private bag(tankId: string, fishId: string, name: string): void {

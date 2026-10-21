@@ -176,6 +176,8 @@ export interface InteractionEvents {
   'tank:water': { tankId: string; water: Water };
   /** The tank's wave maker tier, sent after each load and whenever a purchase changes it; 0 is none. */
   'tank:wave-maker': { tankId: string; tier: number };
+  /** The tank's lamp hours in UTC, sent after each load and whenever the schedule changes. */
+  'tank:lamp': { tankId: string; onHour: number; offHour: number };
   /** The loading screen: from app start, and from each tank switch, until the tank has drawn. */
   'load:state': LoadState;
   /** The failure card was closed; the loading screen stays away until the next load begins. */

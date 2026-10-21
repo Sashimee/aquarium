@@ -2,7 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { boundsOf, canonicalVertices } from './crew-scan.ts';
 import { FIN_ID_ATTRIBUTE, FIN_MASK_ATTRIBUTE, SNAIL_PART_IDS } from './index-schema.ts';
 import { signedVolume } from './loft.ts';
-import { buildNeriteBody, shellFrame, vertexRoughness } from './nerite.ts';
+import {
+  buildNeriteBody,
+  clipPart,
+  measureLipEdge,
+  shellFrame,
+  trimLip,
+  vertexRoughness,
+} from './nerite.ts';
+import type { Part } from './parts.ts';
 
 function random(seed: number): () => number {
   let state = seed;
@@ -234,7 +242,7 @@ describe('buildNeriteBody', () => {
       .filter((i) => Math.abs(body.positions[i * 3]!) > widest * 0.9)
       .map((i) => body.positions[i * 3 + 1]!);
     expect(footTop).toBeGreaterThan(length * 0.06);
-    expect(Math.max(...edge) - Math.min(...edge)).toBeGreaterThan(length * 0.02);
+    expect(Math.max(...edge) - Math.min(...edge)).toBeGreaterThan(length * 0.022);
   });
 
   it('gives every vertex a ramp coordinate in [0, 1] and puts the foot centre on the reported z', () => {
@@ -253,5 +261,151 @@ describe('buildNeriteBody', () => {
   it('is deterministic', () => {
     const again = buildNeriteBody(footprint, length);
     expect(Array.from(again.part.positions)).toEqual(Array.from(body.positions));
+  });
+});
+
+function sheet(nx: number, nz: number): Part {
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const uvs: number[] = [];
+  const mark: number[] = [];
+  for (let j = 0; j <= nz; j++)
+    for (let i = 0; i <= nx; i++) {
+      const x = -1 + (2 * i) / nx;
+      const z = (j / nz) * 2;
+      positions.push(x, 0.01 * Math.sin(3 * x) + 0.2 * (j / nz) * z, z);
+      normals.push(0, 1, 0);
+      uvs.push(i / nx, j / nz);
+      mark.push(x * 10);
+    }
+  const indices: number[] = [];
+  for (let j = 0; j < nz; j++)
+    for (let i = 0; i < nx; i++) {
+      const a = j * (nx + 1) + i;
+      indices.push(a, a + 1, a + nx + 1, a + 1, a + nx + 2, a + nx + 1);
+    }
+  return {
+    positions: Float32Array.from(positions),
+    normals: Float32Array.from(normals),
+    uvs: Float32Array.from(uvs),
+    indices: Uint32Array.from(indices),
+    material: 'test',
+    extra: { mark: Float32Array.from(mark) },
+  };
+}
+
+describe('clipPart', () => {
+  const field = (x: number, y: number): number => y - 0.1 - 0.05 * x;
+
+  it('keeps only the side where the field is >= 0 and puts cut vertices on the zero line', () => {
+    const part = sheet(6, 6);
+    const cut = clipPart(part, (x, y, z) => field(x, y) + 0 * z);
+    expect(cut.length).toBeGreaterThan(0);
+    for (const [x, y] of cut) expect(Math.abs(field(x, y))).toBeLessThan(1e-5);
+    for (let i = 0; i < part.positions.length / 3; i++)
+      expect(field(part.positions[i * 3]!, part.positions[i * 3 + 1]!)).toBeGreaterThan(-1e-5);
+  });
+
+  it('interpolates uv, normal and extra attributes at cut vertices', () => {
+    const part = sheet(6, 6);
+    const original = sheet(6, 6);
+    clipPart(part, (x, y) => field(x, y));
+    const count = part.positions.length / 3;
+    for (let i = 0; i < count; i++) {
+      expect(
+        Math.hypot(part.normals[i * 3]!, part.normals[i * 3 + 1]!, part.normals[i * 3 + 2]!),
+      ).toBeCloseTo(1, 5);
+      expect(part.extra.mark![i]!).toBeCloseTo(part.positions[i * 3]! * 10, 4);
+      expect(part.uvs[i * 2]!).toBeCloseTo((part.positions[i * 3]! + 1) / 2, 4);
+      expect(part.uvs[i * 2 + 1]!).toBeCloseTo(part.positions[i * 3 + 2]! / 2, 4);
+    }
+    expect(count).not.toBe(original.positions.length / 3);
+  });
+
+  it('shares cut vertices so every interior edge is used by two triangles', () => {
+    const part = sheet(6, 6);
+    clipPart(part, (x, y) => field(x, y));
+    const uses = new Map<string, number>();
+    for (let t = 0; t < part.indices.length; t += 3)
+      for (let k = 0; k < 3; k++) {
+        const a = part.indices[t + k]!;
+        const b = part.indices[t + ((k + 1) % 3)]!;
+        const key = a < b ? `${a}-${b}` : `${b}-${a}`;
+        uses.set(key, (uses.get(key) ?? 0) + 1);
+      }
+    expect(Math.max(...uses.values())).toBe(2);
+    const onCut = (index: number): boolean =>
+      Math.abs(field(part.positions[index * 3]!, part.positions[index * 3 + 1]!)) < 1e-5;
+    const sheetBorder = (index: number): boolean => {
+      const x = part.positions[index * 3]!;
+      const z = part.positions[index * 3 + 2]!;
+      return Math.abs(x) > 1 - 1e-5 || z < 1e-5 || z > 2 - 1e-5;
+    };
+    for (const [key, n] of uses) {
+      if (n !== 1) continue;
+      const [a, b] = key.split('-').map(Number) as [number, number];
+      expect(
+        (onCut(a) && onCut(b)) || (sheetBorder(a) && sheetBorder(b)),
+        `edge ${key} is neither on the cut nor on the sheet border`,
+      ).toBe(true);
+    }
+  });
+
+  it('reuses a vertex that lies exactly on the cut and leaves no degenerate triangle', () => {
+    const part = sheet(6, 6);
+    const before = part.positions.length / 3;
+    const cut = clipPart(part, (x) => x);
+    expect(cut).toEqual([]);
+    expect(part.positions.length / 3).toBeLessThan(before);
+    const seen = new Set<string>();
+    for (let i = 0; i < part.positions.length / 3; i++) {
+      const key = Array.from(part.positions.subarray(i * 3, i * 3 + 3)).join(',');
+      expect(seen.has(key)).toBe(false);
+      seen.add(key);
+    }
+    for (let t = 0; t < part.indices.length; t += 3) {
+      const [a, b, c] = [0, 1, 2].map((k) => part.indices[t + k]! * 3) as [number, number, number];
+      const p = part.positions;
+      const ux = p[b]! - p[a]!;
+      const uy = p[b + 1]! - p[a + 1]!;
+      const uz = p[b + 2]! - p[a + 2]!;
+      const vx = p[c]! - p[a]!;
+      const vy = p[c + 1]! - p[a + 1]!;
+      const vz = p[c + 2]! - p[a + 2]!;
+      expect(Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx)).toBeGreaterThan(
+        1e-9,
+      );
+    }
+  });
+
+  it('removes everything when the field is negative everywhere', () => {
+    const part = sheet(3, 3);
+    expect(clipPart(part, () => -1)).toEqual([]);
+    expect(part.indices.length).toBe(0);
+  });
+});
+
+describe('measureLipEdge', () => {
+  it('throws on a column with no shell vertex', () => {
+    const part = sheet(4, 4);
+    expect(() => measureLipEdge(part.positions, 1, 5, 2)).toThrow(/no shell vertex/);
+  });
+
+  it('returns one sample per column with finite height', () => {
+    const part = sheet(80, 20);
+    const edge = measureLipEdge(part.positions, 1, 0.5, 2);
+    expect(edge.length).toBeGreaterThan(2);
+    for (const s of edge) expect(Number.isFinite(s.y)).toBe(true);
+  });
+});
+
+describe('trimLip', () => {
+  it('leaves no shell vertex below the returned cut curve', () => {
+    const part = sheet(120, 120);
+    const cutY = trimLip(part, 1, 0.5, 2);
+    for (let i = 0; i < part.positions.length / 3; i++)
+      expect(
+        part.positions[i * 3 + 1]! - cutY(part.positions[i * 3]!, part.positions[i * 3 + 2]!),
+      ).toBeGreaterThan(-0.002);
   });
 });
