@@ -69,9 +69,19 @@ export function doseSpend(
   };
 }
 
-/** Whatever the panel holds for a tank is shown under that tank only. */
-export function heldFor<T extends { tankId: string }>(held: T | null, tankId: string): T | null {
-  return held !== null && held.tankId === tankId ? held : null;
+export interface HeldDose<P, R> {
+  tankId: string;
+  pending: P | null;
+  refusal: R | null;
+}
+
+export function emptyHeld<P, R>(tankId: string): HeldDose<P, R> {
+  return { tankId, pending: null, refusal: null };
+}
+
+/** Anything held for another tank is dropped for good, so coming back to that tank starts clean. */
+export function reconcileHeld<P, R>(held: HeldDose<P, R>, tankId: string): HeldDose<P, R> {
+  return held.tankId === tankId ? held : emptyHeld(tankId);
 }
 
 /** One line per disease for the shared live region, so a screen reader hears a change once. */

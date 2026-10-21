@@ -1,11 +1,10 @@
 import { REACTION_KINDS, type PublicTank, type ReactionKind } from '@aquarium/shared';
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import {
+  announcePublicTank,
   publicPath,
   MISSING_MESSAGE,
   publicReportLines,
-  publicTankId,
-  publicTankLoaded,
   reactionButtonName,
   reactionProblem,
   reactionProblemText,
@@ -70,9 +69,7 @@ function useViewer(load: (api: ApiClient) => Promise<PublicTank>): {
         if (cancelled) return;
         setPhase({ kind: 'ready', tank });
         if (shown.current !== null) return;
-        shown.current = publicTankId(tank);
-        interaction.emit('tank:loaded', publicTankLoaded(tank));
-        interaction.emit('tank:water', { tankId: shown.current, water: tank.water });
+        shown.current = announcePublicTank(interaction, tank);
       },
       (error: unknown) => {
         if (cancelled) return;
