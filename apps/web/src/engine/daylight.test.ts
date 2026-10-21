@@ -292,6 +292,22 @@ describe('DaylightFeed', () => {
     expect(emitted.at(-1)).toEqual({ level: 1, settled: false });
   });
 
+  it('reads on the first frame after the page shows again, not an interval later', () => {
+    const levels = { now: 1 };
+    const { daylight, emitted } = feed(levels);
+    const page = new FakePage();
+    daylight.watch(page);
+    daylight.frame(0, 0);
+    page.set(true);
+    levels.now = 0;
+    page.set(false);
+    daylight.frame(16, 16);
+    expect(emitted.at(-1)).toEqual({ level: 0, settled: true });
+    levels.now = 1;
+    daylight.frame(32, 16);
+    expect(emitted).toHaveLength(2);
+  });
+
   it('settles from the start when the page is already hidden', () => {
     const levels = { now: 1 };
     const { daylight, emitted } = feed(levels);

@@ -202,7 +202,11 @@ export class DaylightFeed {
 
   /** Follows whether `page` is hidden until the returned stop is called. */
   watch(page: PageVisibility): () => void {
-    const update = (): void => this.announcer.setHidden(page.hidden);
+    // Reading on the first frame back keeps a change made just after showing from passing as unseen.
+    const update = (): void => {
+      this.announcer.setHidden(page.hidden);
+      if (!page.hidden) this.recheck();
+    };
     update();
     page.addEventListener('visibilitychange', update);
     return () => page.removeEventListener('visibilitychange', update);

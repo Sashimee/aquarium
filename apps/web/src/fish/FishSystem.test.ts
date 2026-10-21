@@ -327,6 +327,46 @@ describe('FishSystem.create', () => {
     fish.dispose();
     expect(clients).toHaveLength(2);
   });
+
+  it('tells world listeners the running world, that it stopped, and the next one', async () => {
+    const { engine } = fakeEngine();
+    const start = create(engine);
+    const worker = await initPosted();
+    answerInits(worker);
+    const fish = await start;
+    const worlds: (number | null)[] = [];
+    fish.onWorld((epoch) => worlds.push(epoch));
+    expect(worlds).toEqual([worker.inits()[0]?.request]);
+
+    fish.handle({
+      type: 'tank:loaded',
+      payload: {
+        backgroundId: 'bg-fw-planted-stream',
+        tankId: TANK_A,
+        biome: 'freshwater',
+        size: 'standard',
+        decorLayout: [],
+        decorEdited: false,
+        fish: [fishFixture(FISH_1)],
+      },
+    });
+    expect(worlds.at(-1)).toBeNull();
+    await vi.waitFor(() => {
+      if (worker.inits().length < 2) throw new Error('no second init yet');
+    });
+    answerInits(worker, 1);
+    await fish.synced();
+    expect(worlds.at(-1)).toBe(worker.inits()[1]?.request);
+    expect(worlds.at(-1)).not.toBe(worlds[0]);
+
+    fish.handle({ type: 'tank:unloaded', payload: { tankId: TANK_A, reason: 'switch' } });
+    expect(worlds.at(-1)).toBeNull();
+
+    fish.dispose();
+    const after = worlds.length;
+    fish.handle({ type: 'tank:none', payload: {} });
+    expect(worlds).toHaveLength(after);
+  });
 });
 
 describe('batchLocomotion', () => {

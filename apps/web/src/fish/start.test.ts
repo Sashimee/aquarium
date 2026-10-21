@@ -123,6 +123,17 @@ class FakeFishSystem {
     this.clientListener?.(this.client);
     return this.client;
   }
+  private worldEpoch: number | null = null;
+  private worldListener: ((epoch: number | null) => void) | null = null;
+  onWorld(listener: (epoch: number | null) => void): () => void {
+    this.worldListener = listener;
+    listener(this.worldEpoch);
+    return () => (this.worldListener = null);
+  }
+  world(epoch: number | null): void {
+    this.worldEpoch = epoch;
+    this.worldListener?.(epoch);
+  }
   dispose(): void {
     this.disposed = true;
     if (this.disposeError !== null) throw this.disposeError;
@@ -138,6 +149,7 @@ const { queueTankEvents, startFish } = await import('./start');
 function setup(
   result: Promise<FakeFishSystem>,
   beforeStart: (interaction: EventBus<InteractionEvents>) => void = () => undefined,
+  daylight = 1,
 ) {
   create.mockReturnValueOnce(result);
   const events = new EventBus<EngineEvents>();
@@ -146,7 +158,7 @@ function setup(
   const interaction = new EventBus<InteractionEvents>();
   const tankEvents = queueTankEvents(interaction);
   beforeStart(interaction);
-  const engine = { events } as unknown as Engine;
+  const engine = { events, daylight } as unknown as Engine;
   const handle = startFish(engine, {
     tank: {
       length: 1,
@@ -162,7 +174,7 @@ function setup(
     interaction,
     tankEvents,
   });
-  return { handle, interaction, errors };
+  return { handle, interaction, errors, events };
 }
 
 function deferred<T>(): {
@@ -579,9 +591,12 @@ describe('startFish', () => {
     const { handle } = setup(pending.promise);
     const first = new PolypSignal();
     first.bind(handle.polyps);
+    expect(first.extension).toBe(0);
     pending.resolve(fish);
     await flush();
+    fish.client.emit(0.6, 4, 120);
     expect(first.extension).toBe(0);
+    fish.world(4);
     fish.client.emit(0.6, 4, 120);
     expect(first.extension).toBeCloseTo(0.6);
 
@@ -594,14 +609,48 @@ describe('startFish', () => {
     expect(rebuilt.extension).toBeCloseTo(0.8);
 
     const stuck = fish.client;
+    fish.world(null);
     const replacement = fish.replaceClient();
     expect(stuck.listeners.size).toBe(0);
+    fish.world(1);
     replacement.emit(1, 1, 0);
     expect(rebuilt.extension).toBe(1);
 
     handle.stop();
     expect(replacement.listeners.size).toBe(0);
     rebuilt.dispose();
+  });
+
+  it('opens the polyps of a tank first shown at night before the fish are up', () => {
+    const { handle } = setup(deferred<FakeFishSystem>().promise, undefined, 0);
+    const signal = new PolypSignal();
+    signal.bind(handle.polyps);
+    expect(signal.extension).toBe(1);
+    handle.stop();
+    signal.dispose();
+  });
+
+  it('gives polyps the darkness, not a stopped world, while no fish world runs', async () => {
+    const fish = new FakeFishSystem();
+    const { handle, events } = setup(Promise.resolve(fish));
+    await flush();
+    events.emit('engine:daylight', { level: 0, settled: false });
+    fish.world(3);
+    fish.client.emit(0.95, 3, 900);
+    fish.world(null);
+
+    const coralOnly = new PolypSignal();
+    coralOnly.bind(handle.polyps);
+    expect(coralOnly.extension).toBe(1);
+    events.emit('engine:daylight', { level: 0.4, settled: false });
+    expect(coralOnly.extension).toBeCloseTo(0.6);
+    events.emit('engine:daylight', { level: 1, settled: false });
+    expect(coralOnly.extension).toBe(0);
+
+    handle.stop();
+    events.emit('engine:daylight', { level: 0, settled: false });
+    expect(coralOnly.extension).toBe(0);
+    coralOnly.dispose();
   });
 
   it('stops listening and disposes the fish on stop', async () => {
