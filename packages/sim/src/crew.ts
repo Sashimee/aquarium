@@ -142,8 +142,9 @@ export interface CleanupInput {
   readonly uneatenFood: number;
   readonly dtHours: number;
   /**
-   * Share of the step the tank lamp is on, 0 to 1. The crew rests in the dark and neither grazes
-   * nor feeds, as in the realtime model; pass 1 or 0 from the lifecycle's `lampIsOn`.
+   * Share of the step the tank lamp is on, 0 to 1. Diurnal and crepuscular crew rest in the dark
+   * and nocturnal crew while the lamp is on, neither grazing nor feeding, as in the realtime
+   * model; pass 1 or 0 from the lifecycle's `lampIsOn`.
    */
   readonly litFraction: number;
   readonly surfaces: CleanupSurfaces;
@@ -179,8 +180,9 @@ function requireNonNegative(value: number, field: string): void {
 }
 
 /**
- * What the clean-up crew grazes and scavenges over the lit `litFraction` of `dtHours` with the
- * water otherwise held still; the lifecycle adds algae growth and food decay around it. Algae is cleared as a sweep of the
+ * What the clean-up crew grazes and scavenges over the part of `dtHours` each member is awake
+ * (`litFraction` of it, or the rest for nocturnal species) with the water otherwise held still;
+ * the lifecycle adds algae growth and food decay around it. Algae is cleared as a sweep of the
  * grazable surfaces: each member clears its film area per hour, of which the share `algae` is
  * covered, so cover falls as dA/dt = −A·Σrate/area and never below zero. Settled food is found by
  * the floor area scavengers sweep (dF/dt = −F·Σsweep/floor) and eaten up to the room each gut has
@@ -192,7 +194,6 @@ export function crewCleanup(input: CleanupInput): CleanupResult {
   requireNonNegative(uneatenFood, 'uneatenFood');
   requireNonNegative(dtHours, 'dtHours');
   requireUnit(litFraction, 'litFraction');
-  const activeHours = dtHours * litFraction;
   if (!(surfaces.grazableM2 > 0 && surfaces.floorM2 > 0)) {
     throw new RangeError('crewCleanup: surfaces need a positive grazable and floor area');
   }
@@ -214,8 +215,9 @@ export function crewCleanup(input: CleanupInput): CleanupResult {
       throw new RangeError(`crewCleanup: crew member "${member.id}" needs a positive bodyLengthM`);
     }
     if (member.hunger !== undefined) requireUnit(member.hunger, `hunger of "${member.id}"`);
-    const g = member.alive ? algaeAreaPerHour(sp, length) : 0;
-    const s = member.alive ? scavengeSweepPerHour(sp, length) : 0;
+    const awake = sp.activity === 'nocturnal' ? 1 - litFraction : litFraction;
+    const g = member.alive ? algaeAreaPerHour(sp, length) * awake : 0;
+    const s = member.alive ? scavengeSweepPerHour(sp, length) * awake : 0;
     const gut = member.hunger === undefined ? 0 : gutForHunger(member.hunger);
     graze.push(g);
     sweep.push(s);
@@ -223,8 +225,8 @@ export function crewCleanup(input: CleanupInput): CleanupResult {
     grazeTotal += g;
     sweepTotal += s;
   }
-  const algaeGrazed = algae * (1 - Math.exp((-grazeTotal / surfaces.grazableM2) * activeHours));
-  const found = uneatenFood * (1 - Math.exp((-sweepTotal / surfaces.floorM2) * activeHours));
+  const algaeGrazed = algae * (1 - Math.exp((-grazeTotal / surfaces.grazableM2) * dtHours));
+  const found = uneatenFood * (1 - Math.exp((-sweepTotal / surfaces.floorM2) * dtHours));
   // A full scavenger leaves its share for hungrier ones, as at a real food drop.
   const food = allocate(found, sweep, room);
   const perFish: CrewShare[] = [];

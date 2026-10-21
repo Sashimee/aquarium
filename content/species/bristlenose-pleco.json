@@ -1,5 +1,6 @@
 {
   "behaviour": {
+    "activity": "nocturnal",
     "boldness": 0.3,
     "curiosity": 0.3,
     "depthBand": [0, 0.2],

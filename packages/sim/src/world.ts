@@ -590,6 +590,19 @@ export class World {
     this.behaviour.setLight(level);
   }
 
+  /**
+   * Takes the current light as already adapted to, so a change made while the world was not
+   * stepping (paused) does not startle the fish when it runs again.
+   */
+  settleLight(): void {
+    this.behaviour.lighting.settle();
+  }
+
+  /** How far coral polyps are out, 0 (retracted) to 1 (fully out), following the darkness. */
+  get polypExtension(): number {
+    return this.behaviour.lighting.polypExtension;
+  }
+
   /** Installs, changes or (with null) removes the wave maker. */
   setWaveMaker(settings: WaveMakerSettings | null): void {
     this.currents.set(this.flowBounds(), settings);
