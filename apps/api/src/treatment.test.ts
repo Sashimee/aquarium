@@ -77,7 +77,11 @@ async function sickTank(
   owner?: Account,
 ) {
   const who = owner ?? (await account(h));
-  const created = await call(h, who, 'POST', '/api/tanks', { name: 'Home', biome: 'freshwater' });
+  const created = await call(h, who, 'POST', '/api/tanks', {
+    name: 'Home',
+    biome: 'freshwater',
+    idempotencyKey: randomUUID(),
+  });
   expect(created.statusCode).toBe(201);
   const tank = tankSchema.parse(created.json());
   const bought = await call(h, who, 'POST', `/api/tanks/${tank.id}/fish`, {
@@ -113,7 +117,7 @@ const settleIn = (h: Harness, fishId: string) =>
   h.database.db.update(schema.fish).set({ introducedAt: null }).where(eq(schema.fish.id, fishId));
 
 const treat = (h: Harness, who: Account, tankId: string, body: object) =>
-  call(h, who, 'POST', `/api/tanks/${tankId}/treat`, body);
+  call(h, who, 'POST', `/api/tanks/${tankId}/treat`, { idempotencyKey: randomUUID(), ...body });
 
 const fishOf = (tank: Tank, id: string) => {
   const fish = tank.fish.find((f) => f.id === id);

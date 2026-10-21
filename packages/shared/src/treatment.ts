@@ -23,7 +23,7 @@ import { tankSchema } from './tank.js';
 export const treatRequestSchema = z.strictObject({
   kind: diseaseKindSchema,
   potency: medicinePotencySchema.default('standard'),
-  idempotencyKey: idempotencyKeySchema.optional(),
+  idempotencyKey: idempotencyKeySchema,
 });
 export type TreatRequest = z.input<typeof treatRequestSchema>;
 

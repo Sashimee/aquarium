@@ -25,9 +25,7 @@ export const algaeScrapeEventSchema = z.strictObject({ type: z.literal('algae_sc
 
 export const bottledBacteriaEventSchema = z.strictObject({
   type: z.literal('bottled_bacteria'),
-  idempotencyKey: idempotencyKeySchema
-    .optional()
-    .describe('required: bottled bacteria cost Pearls'),
+  idempotencyKey: idempotencyKeySchema.describe('bottled bacteria cost Pearls'),
 });
 export const filterRinseEventSchema = z.strictObject({ type: z.literal('filter_rinse') });
 

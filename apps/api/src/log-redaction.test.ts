@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { safeError } from './safe-error.ts';
 import { redactUrl } from './app.ts';
@@ -108,7 +109,7 @@ describe('request logging', () => {
         method: 'POST',
         url: '/api/tanks',
         headers: { ...jsonHeaders, cookie },
-        payload: { name: 'Logs', biome: 'freshwater' },
+        payload: { name: 'Logs', biome: 'freshwater', idempotencyKey: randomUUID() },
       })
     ).json<{ id: string }>();
     const shared = (
@@ -241,7 +242,7 @@ describe('database failures do not leak values', () => {
         method: 'POST',
         url: '/api/tanks',
         headers: { ...jsonHeaders, cookie },
-        payload: { name: 'SECRETTANKNAME', biome: 'freshwater' },
+        payload: { name: 'SECRETTANKNAME', biome: 'freshwater', idempotencyKey: randomUUID() },
       });
       expect(res.statusCode).toBe(500);
     } finally {
