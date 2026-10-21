@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { idSchema } from './common.js';
 import { idempotencyKeySchema, ledgerEntrySchema, walletSchema } from './economy.js';
 import { diseaseKindSchema, medicinePotencySchema } from './fishState.js';
 import { tankSchema } from './tank.js';
@@ -18,7 +19,7 @@ import { tankSchema } from './tank.js';
 // reads false. Heat (30 C or more) only helps ich for the few species that tolerate it.
 // Refusals carry a machine-readable error.reason: nothing_to_treat, other_medicine, dose_limit, key_reused.
 // other_medicine and dose_limit are the two that a water change clears.
-// Moving a fish to the quarantine tank is T39's route; treat works in any tank.
+// Moving a fish to the quarantine tank is POST /api/tanks/:tankId/fish/:fishId/move (below); treat works in any tank.
 export const treatRequestSchema = z.strictObject({
   kind: diseaseKindSchema,
   potency: medicinePotencySchema.default('standard'),
@@ -33,3 +34,27 @@ export const treatResponseSchema = z.strictObject({
   entry: ledgerEntrySchema.nullable(),
 });
 export type TreatResponse = z.infer<typeof treatResponseSchema>;
+
+// POST /api/tanks/:tankId/fish/:fishId/move moves a living fish to another tank of the same owner.
+// Both tanks are caught up to now first. The fish keeps its id, name, age, personality, health and
+// disease; the destination's medicine decides whether the disease counts as treated (it is the
+// tank's, not the fish's). A fish counts as newly introduced in the tank it moves to (the new-fish
+// disease window restarts) unless it goes back to the tank it was last moved out of, which restores
+// the introduction time it had there.
+// Refusals: 404 unknown fish or a tank that is not the caller's; 400 same tank; 409 with
+// error.reason fish_dead, wrong_biome (the species' biome is not the destination's), tank_full
+// (the destination's animal cap or bioload capacity), key_reused (the key moved another fish or
+// went elsewhere). A retry with the same idempotencyKey replays the first answer with the current
+// state of both tanks. Without a key a retry finds the fish already gone from the source (404).
+// The move is recorded as a fish_moved event in each tank (not part of /replay yet).
+export const moveFishRequestSchema = z.strictObject({
+  toTankId: idSchema,
+  idempotencyKey: idempotencyKeySchema.optional(),
+});
+export type MoveFishRequest = z.infer<typeof moveFishRequestSchema>;
+
+export const moveFishResponseSchema = z.strictObject({
+  source: tankSchema,
+  destination: tankSchema,
+});
+export type MoveFishResponse = z.infer<typeof moveFishResponseSchema>;

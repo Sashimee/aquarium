@@ -62,6 +62,7 @@ import {
   inArray,
   lt,
   lte,
+  ne,
   or,
   sql,
 } from 'drizzle-orm';
@@ -82,6 +83,7 @@ import {
   claimAchievementRewards,
 } from './earn.ts';
 import { registerShopRoutes } from './shop.ts';
+import { registerMoveRoutes } from './moveFish.ts';
 import { registerTreatmentRoutes } from './treatment.ts';
 import { backgroundRef, licenseFor } from './items.ts';
 import type { Presets } from './presets.ts';
@@ -589,6 +591,29 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
     return database.db.transaction(async (tx) => fn(tx, await lockAndTick(tx, deps, tankId, user)));
   }
 
+  async function withTanks<T>(
+    user: SessionUser,
+    tankIds: readonly string[],
+    fn: (tx: Tx, ticked: Ticked[]) => Promise<T>,
+  ): Promise<T> {
+    return database.db.transaction(async (tx) => {
+      // Tank rows are locked in id order whatever order the caller names them, so two opposite
+      // moves queue instead of deadlocking.
+      const byId = new Map<string, Ticked>();
+      for (const id of [...tankIds].toSorted()) {
+        byId.set(id, await lockAndTick(tx, deps, id, user));
+      }
+      return fn(
+        tx,
+        tankIds.map((id) => {
+          const ticked = byId.get(id);
+          if (!ticked) throw new Error('withTanks lost a tank it locked');
+          return ticked;
+        }),
+      );
+    });
+  }
+
   const buyFirst = (what: string) =>
     new HttpError(
       403,
@@ -784,6 +809,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           .where(
             and(
               eq(schema.events.tankId, tankId),
+              ne(schema.events.kind, 'fish_moved'),
               gt(schema.events.at, since),
               lte(schema.events.at, until),
               ...(cursor
@@ -1246,6 +1272,17 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
     throttle,
     guarded,
     withTank,
+    render: (tx, ticked, fishRows) => render(tx, ticked, fishRows),
+  });
+
+  registerMoveRoutes({
+    app,
+    species,
+    clock,
+    authorize,
+    throttle,
+    guarded,
+    withTanks,
     render: (tx, ticked, fishRows) => render(tx, ticked, fishRows),
   });
 

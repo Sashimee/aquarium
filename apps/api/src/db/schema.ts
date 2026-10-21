@@ -137,6 +137,7 @@ export const eventKindEnum = pgEnum('event_kind', [
   'born',
   'sick',
   'water_alert',
+  'fish_moved',
 ]);
 
 export const tanks = pgTable(
@@ -211,6 +212,10 @@ export const fish = pgTable(
     disease: jsonb('disease'),
     // When the player bought the fish; null for fry born in the tank. Starts the new-fish disease window.
     introducedAt: timestamptz('introduced_at'),
+    // The tank the fish was moved out of, and its introducedAt there, so moving it back restores
+    // the old tank's settled-in state instead of counting it as new.
+    previousTankId: uuid('previous_tank_id'),
+    previousIntroducedAt: timestamptz('previous_introduced_at'),
   },
   (t) => [index('fish_tank_id_idx').on(t.tankId)],
 );
