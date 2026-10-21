@@ -95,7 +95,6 @@ ShareAlike applies to any texture derived from these photos: such derived textur
 - Nemateleotris magnifica Prague 2011 1.jpg by Karelj ([source](https://commons.wikimedia.org/wiki/File:Nemateleotris_magnifica_Prague_2011_1.jpg))
 - Ancistrus sp. -- NOT dolichopterus -- male.jpg by Bernard Ladenthin ([source](https://commons.wikimedia.org/wiki/File:Ancistrus_sp._--_NOT_dolichopterus_--_male.jpg))
 - Labroides dimidiatus 453390877.jpg (`wm-labroides-deacon`) by Andrew Deacon ([source](https://commons.wikimedia.org/wiki/File:Labroides_dimidiatus_453390877.jpg))
-- CC0 ツメナガヨコバサミ Blue-stripped Hermit Crab (`sketchfab-5ebe7794`) by ffishAsia-and-floraZia ([source](https://sketchfab.com/3d-models/5ebe7794183346e998afb97b68021158))
 - CC0 カノコガイ 🐚, Clithon sowerbianus (`sketchfab-70b8866a`) by ffishAsia-and-floraZia ([source](https://sketchfab.com/3d-models/70b8866a910f49a68982888e64a3f900))
 - Red racer nerite, Vittina waigiensis from the Philippines 05.jpg (`wm-nerite-obsidian-05`) by Obsidian Soul ([source](https://commons.wikimedia.org/wiki/File:Red_racer_nerite,_Vittina_waigiensis_from_the_Philippines_05.jpg))
 - Indoor Fish Tank without Bubble strips Ambiance.wav (`freesound-197804`) by 7778 ([source](https://freesound.org/s/197804/))
