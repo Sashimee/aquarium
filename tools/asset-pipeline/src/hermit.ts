@@ -487,19 +487,17 @@ function splitWeldedLegs(state: WeldState, legsPerSide: number): void {
   }
 }
 
+const MAX_CLAW_REACH_RATIO = 1.5;
+
 /**
- * A leg's pair is its fore-to-aft rank on its own side (0 the claw, then the walking legs), so a leg
- * lands in slot `pair * 2 + side` whatever the other side holds; long antennae take the 2/3 slot.
- * `lateral` is the piece centroid across the body from the hip and `ahead` along the model's +z.
+ * Each side's claw is its leg with the shortest root-to-tip `reach` and takes pair 0; the walking legs
+ * follow fore to aft on that side, so a leg lands in slot `pair * 2 + side` whatever the other side
+ * holds. Long antennae take the 2/3 slot. `lateral` is the piece centroid across the body from the hip
+ * and `ahead` along the model's +z.
  */
 export function assignLimbIndices(
-  pieces: { kind: number; lateral: number; ahead: number }[],
+  pieces: { kind: number; lateral: number; ahead: number; reach: number }[],
 ): number[] {
-  const legs = pieces
-    .map((p, i) => ({ ...p, i }))
-    .filter((p) => p.kind === CRAB_KIND.leg)
-    .sort((a, b) => b.ahead - a.ahead);
-  const rankOnSide = [0, 0];
   const index = new Array<number>(pieces.length).fill(-1);
   const taken = new Set<number>();
   const takeFree = (preferred: number): number => {
@@ -508,9 +506,28 @@ export function assignLimbIndices(
     taken.add(candidate);
     return candidate;
   };
-  for (const leg of legs) {
-    const side = leg.lateral < 0 ? 0 : 1;
-    index[leg.i] = takeFree(Math.min(rankOnSide[side]!++, 4) * 2 + side);
+  const clawReach: number[] = [];
+  for (const side of [0, 1]) {
+    const legs = pieces
+      .map((p, i) => ({ ...p, i }))
+      .filter((p) => p.kind === CRAB_KIND.leg && (p.lateral < 0 ? 0 : 1) === side);
+    if (legs.length === 0) continue;
+    const claw = legs.reduce((a, b) => (b.reach < a.reach ? b : a));
+    clawReach.push(claw.reach);
+    index[claw.i] = takeFree(side);
+    legs
+      .filter((p) => p !== claw)
+      .sort((a, b) => b.ahead - a.ahead)
+      .forEach((leg, rank) => {
+        index[leg.i] = takeFree(Math.min(rank + 1, 4) * 2 + side);
+      });
+  }
+  if (clawReach.length === 2) {
+    const ratio = Math.max(...clawReach) / Math.max(Math.min(...clawReach), 1e-9);
+    if (ratio > MAX_CLAW_REACH_RATIO)
+      throw new Error(
+        `assignLimbIndices: the two sides' claws differ in reach by ${ratio.toFixed(2)}x (limit ${MAX_CLAW_REACH_RATIO}x), so one is not a claw; recheck the segmentation recipe`,
+      );
   }
   const antennae = pieces
     .map((p, i) => ({ ...p, i }))
@@ -583,6 +600,27 @@ function partColours(ids: Float32Array, weights: Float32Array): Float32Array {
   return colors;
 }
 
+/** Distance between the mean root (weight under 0.1) and mean tip (weight over 0.9) of a limb piece. */
+export function limbReach(
+  positions: ArrayLike<number>,
+  members: number[],
+  weight: ArrayLike<number>,
+): number {
+  const root: Vec3 = [0, 0, 0];
+  const tip: Vec3 = [0, 0, 0];
+  let roots = 0;
+  let tips = 0;
+  for (const v of members) {
+    const target = weight[v]! < 0.1 ? root : weight[v]! > 0.9 ? tip : null;
+    if (!target) continue;
+    for (let a = 0; a < 3; a++) target[a]! += positions[v * 3 + a]!;
+    if (target === root) roots++;
+    else tips++;
+  }
+  if (roots === 0 || tips === 0) return 0;
+  return Math.hypot(...([0, 1, 2].map((a) => root[a]! / roots - tip[a]! / tips) as Vec3));
+}
+
 export async function buildHermit(recipe: HermitRecipe, ctx: FishContext): Promise<OutputAsset> {
   const fromSpecies = speciesLengthM(ctx.repoRoot, recipe.species);
   const standardLengthM = fromSpecies ?? recipe.fallbackLengthM;
@@ -620,7 +658,12 @@ export async function buildHermit(recipe: HermitRecipe, ctx: FishContext): Promi
     const c: Vec3 = [0, 0, 0];
     for (const v of members)
       for (let a = 0; a < 3; a++) c[a]! += part.positions[v * 3 + a]! / members.length;
-    return { kind: p.kind as number, lateral: c[0] - hipLateral, ahead: c[2] };
+    return {
+      kind: p.kind as number,
+      lateral: c[0] - hipLateral,
+      ahead: c[2],
+      reach: limbReach(part.positions, members, seg.weight),
+    };
   });
   const margin = recipe.minLegLateralFraction * standardLengthM;
   pieceFrame.forEach((p, i) => {
