@@ -51,7 +51,8 @@ export class IdleOrbit {
     const ease = Math.min(1, (this.quiet - IDLE_AFTER_SECONDS) / EASE_IN_SECONDS);
     const { yaw, pitch } = this.rig.orbitAngles;
     if (!this.rig.canOrbitTo(yaw + this.direction * LOOKAHEAD_RADIANS, pitch)) {
-      this.direction = this.direction === 1 ? -1 : 1;
+      const other = this.direction === 1 ? -1 : 1;
+      if (this.rig.canOrbitTo(yaw + other * LOOKAHEAD_RADIANS, pitch)) this.direction = other;
     }
     this.rig.rotateBy(-this.direction * IDLE_YAW_RATE * ease * dtSeconds, 0);
   }

@@ -38,7 +38,9 @@ describe('IdleOrbit on the real rig', () => {
         for (let i = 0; i < 20; i++) rig.update(FRAME);
 
         const startPitch = rig.orbitAngles.pitch;
-        let yaw = rig.orbitAngles.yaw;
+        const startDistance = rig.orbitDistance;
+        const startYaw = rig.orbitAngles.yaw;
+        let yaw = startYaw;
         let travelled = 0;
         let worstStep = 0;
         let minYaw = yaw;
@@ -68,6 +70,11 @@ describe('IdleOrbit on the real rig', () => {
             y < b.waterTop;
           expect(insideGlass).toBe(false);
         }
+        while (Math.abs(rig.orbitAngles.yaw - startYaw) > 1e-9) {
+          const gap = rig.orbitAngles.yaw - startYaw;
+          rig.rotateBy(Math.sign(gap) * Math.min(Math.abs(gap), 0.01), 0);
+        }
+        expect(rig.orbitDistance).toBeCloseTo(startDistance, 9);
         expect(worstStep).toBeLessThanOrEqual(NORMAL_STEP * 2);
         expect(travelled).toBeGreaterThan(300 * IDLE_YAW_RATE * 0.5);
       });

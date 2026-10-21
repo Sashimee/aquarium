@@ -8,8 +8,6 @@ import { NO_TANK_SEED, RoomSeedFeed, tankSeed } from './roomSeed';
 const serverSeed = (id: string): number =>
   createHash('sha256').update(`tank:${id}`).digest().readUInt32BE(0);
 
-const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
-
 function setup() {
   const bus = new EventBus<InteractionEvents>();
   const feed = new RoomSeedFeed(bus);
@@ -42,18 +40,16 @@ describe('RoomSeedFeed', () => {
     const listener = vi.fn();
     feed.subscribe(listener);
     loaded('tank-a');
-    await flush();
-    expect(feed.current()).toBe(serverSeed('tank-a'));
+    await vi.waitFor(() => expect(feed.current()).toBe(serverSeed('tank-a')));
     expect(listener).toHaveBeenCalledOnce();
   });
 
   it('follows a tank switch and returns to the default when there is none', async () => {
     const { feed, loaded, bus } = setup();
     loaded('tank-a');
-    await flush();
+    await vi.waitFor(() => expect(feed.current()).toBe(serverSeed('tank-a')));
     loaded('tank-b');
-    await flush();
-    expect(feed.current()).toBe(serverSeed('tank-b'));
+    await vi.waitFor(() => expect(feed.current()).toBe(serverSeed('tank-b')));
     bus.emit('tank:none', {});
     expect(feed.current()).toBe(NO_TANK_SEED);
   });
@@ -62,22 +58,19 @@ describe('RoomSeedFeed', () => {
     const { feed, loaded } = setup();
     loaded('tank-a');
     loaded('tank-b');
-    await flush();
-    expect(feed.current()).toBe(serverSeed('tank-b'));
+    await vi.waitFor(() => expect(feed.current()).toBe(serverSeed('tank-b')));
   });
 
   it('gives visitors the seed in their tank id', async () => {
     const { feed, loaded } = setup();
     loaded(publicTankId({ seed: 1234567 }));
-    await flush();
-    expect(feed.current()).toBe(1234567);
+    await vi.waitFor(() => expect(feed.current()).toBe(1234567));
   });
 
-  it('stops listening after stop', async () => {
+  it('stops listening after stop', () => {
     const { feed, loaded } = setup();
     feed.stop();
     loaded('tank-a');
-    await flush();
     expect(feed.current()).toBe(NO_TANK_SEED);
   });
 });
