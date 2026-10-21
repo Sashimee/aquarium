@@ -23,7 +23,7 @@ import {
   type PumpRoot,
 } from './current';
 import { decorMatrix } from './hardscape';
-import { polypGain, polypSizeNode } from './polyps';
+import { contractionGain, polypSizeNode } from './polyps';
 
 export const SWAY_ATTRIBUTE = '_sway';
 
@@ -139,9 +139,13 @@ export function swayPositionNode(
 }
 
 /** Tentacles draw in towards the foot as `size` falls, more the nearer their tips. */
-function contractedTentacles(size: Node<'float'>): Node<'vec3'> {
-  const pull = attribute(SWAY_ATTRIBUTE, 'float').mul(size.oneMinus()).oneMinus();
-  return vec3(positionLocal.x.mul(pull), positionLocal.y, positionLocal.z.mul(pull));
+export function contractedTentacles(
+  size: Node<'float'>,
+  position: Node<'vec3'> = positionLocal,
+  sway: Node<'float'> = attribute(SWAY_ATTRIBUTE, 'float'),
+): Node<'vec3'> {
+  const pull = sway.mul(size.oneMinus()).oneMinus();
+  return vec3(position.x.mul(pull), position.y, position.z.mul(pull));
 }
 
 function createAnemoneMaterial(
@@ -206,7 +210,7 @@ export class AnemoneGroup {
           current,
           PUMP_LEAN_HEIGHT * height(entry),
           this.pump,
-          polypSizeNode(polyps, polypGain(entry.id)),
+          polypSizeNode(polyps, contractionGain(entry.id)),
         );
       } catch (error) {
         for (const earlier of this.materials) earlier.dispose();

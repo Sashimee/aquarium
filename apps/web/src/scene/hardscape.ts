@@ -7,18 +7,19 @@ import {
   MeshStandardNodeMaterial,
   Quaternion,
   Vector3,
+  BufferAttribute,
   type BufferGeometry,
   type MeshStandardMaterial,
   type Node,
   type UniformNode,
 } from 'three/webgpu';
 import {
+  attribute,
   diffuseColor,
   dot,
   materialEmissive,
   mix,
   modelScale,
-  normalLocal,
   normalWorld,
   positionLocal,
   saturate,
@@ -90,6 +91,57 @@ export function createCoralGlowNode(level: UniformNode<'float', number>): Node<'
   return materialEmissive.mul(level).mul(tissue).mul(facing);
 }
 
+export const SWELL_NORMAL_ATTRIBUTE = '_swellNormal';
+const WELD_EPSILON = 1e-4;
+
+/**
+ * Per-vertex normals averaged over every vertex sharing a position, so the swell moves a seam's
+ * two sides together instead of opening it. Where the shared normals cancel the vertex stays put.
+ */
+export function weldedNormals(geometry: BufferGeometry): Float32Array {
+  const positions = geometry.getAttribute('position');
+  const normals = geometry.getAttribute('normal');
+  const count = positions.count;
+  const keyOf = (i: number) => `${positions.getX(i)},${positions.getY(i)},${positions.getZ(i)}`;
+  const sums = new Map<string, [number, number, number]>();
+  for (let i = 0; i < count; i++) {
+    const key = keyOf(i);
+    let sum = sums.get(key);
+    if (!sum) {
+      sum = [0, 0, 0];
+      sums.set(key, sum);
+    }
+    sum[0] += normals.getX(i);
+    sum[1] += normals.getY(i);
+    sum[2] += normals.getZ(i);
+  }
+  const out = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    const [x, y, z] = sums.get(keyOf(i)) ?? [0, 0, 0];
+    const length = Math.hypot(x, y, z);
+    if (length < WELD_EPSILON) continue;
+    out[i * 3] = x / length;
+    out[i * 3 + 1] = y / length;
+    out[i * 3 + 2] = z / length;
+  }
+  return out;
+}
+
+/**
+ * Displacement along the welded normal worth `POLYP_SWELL_METRES * gain` in the world: dividing by
+ * the world scale per axis undoes a non-uniform squash, so the top of a flattened coral swells as
+ * much as its sides.
+ */
+export function swelledPosition(
+  extension: Node<'float'>,
+  gain: number,
+  position: Node<'vec3'> = positionLocal,
+  normal: Node<'vec3'> = attribute(SWELL_NORMAL_ATTRIBUTE, 'vec3'),
+  scale: Node<'vec3'> = modelScale,
+): Node<'vec3'> {
+  return position.add(normal.mul(extension.mul(POLYP_SWELL_METRES * gain)).div(scale));
+}
+
 function fluorescentMaterial(
   source: MeshStandardMaterial,
   tint: Color,
@@ -139,7 +191,7 @@ export class Hardscape {
             tint,
             glow,
             this.glowNode,
-            this.swellNode(item),
+            this.swellNode(item, primitive.geometry),
           );
         } else {
           material = primitive.material.clone();
@@ -158,15 +210,19 @@ export class Hardscape {
     }
   }
 
-  /** Tissue swells along the normal as the polyps come out; null for a coral without nocturnal polyps. */
-  private swellNode(item: DecorItem): Node<'vec3'> | null {
+  /** Tissue swells along the welded normal as the polyps come out; null for a coral without nocturnal polyps. */
+  private swellNode(item: DecorItem, geometry: BufferGeometry): Node<'vec3'> | null {
     const gain = polypGain(item.assetId);
     if (gain === 0) return null;
+    if (!geometry.hasAttribute(SWELL_NORMAL_ATTRIBUTE)) {
+      geometry.setAttribute(
+        SWELL_NORMAL_ATTRIBUTE,
+        new BufferAttribute(weldedNormals(geometry), 3),
+      );
+    }
     let node = this.swellNodes.get(gain);
     if (!node) {
-      node = positionLocal.add(
-        normalLocal.mul(this.polyps.mul(POLYP_SWELL_METRES * gain).div(modelScale.x)),
-      );
+      node = swelledPosition(this.polyps, gain);
       this.swellNodes.set(gain, node);
     }
     return node;

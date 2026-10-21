@@ -474,6 +474,15 @@ export function euphylliaGeometry(mesh: EuphylliaMesh): BufferGeometry {
   return geometry;
 }
 
+/** Tentacle vertices slide towards their root as `size` falls; `position + retract` is the root. */
+export function retractedPosition(
+  size: Node<'float'>,
+  position: Node<'vec3'> = positionLocal,
+  retract: Node<'vec3'> = attribute(RETRACT_ATTRIBUTE, 'vec3'),
+): Node<'vec3'> {
+  return position.add(retract.mul(size.oneMinus()));
+}
+
 /** One coral colony: a single mesh whose tentacles stream in the shared current on the GPU. */
 export class EuphylliaGroup {
   readonly object = new Group();
@@ -499,11 +508,7 @@ export class EuphylliaGroup {
       LEAN_SECONDS,
       PUMP_LEAN_HEIGHT * mesh.bounds.max[1],
       this.pump,
-      positionLocal.add(
-        attribute(RETRACT_ATTRIBUTE, 'vec3').mul(
-          polypSizeNode(polyps, EUPHYLLIA_POLYP_GAIN).oneMinus(),
-        ),
-      ),
+      retractedPosition(polypSizeNode(polyps, EUPHYLLIA_POLYP_GAIN)),
     );
     const colony = new Mesh(this.geometry, this.material);
     colony.name = this.object.name;

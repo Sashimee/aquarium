@@ -3,32 +3,43 @@ import type { Node } from 'three/webgpu';
 import type { SimPolyps } from '@aquarium/sim';
 
 /**
- * How much of its size a species' polyps change between day and night (0 = never, 1 = fully
- * retracted by day). Small-polyp stony corals (Acropora, brain coral) feed at night and pull their
- * tissue in under light; Euphyllia keeps its tentacles out for its zooxanthellae but fans them
- * further in the dark; a host anemone stays expanded for its symbionts and its fish.
+ * Night swell of the small-polyp stony corals (0 = never, 1 = full): Acropora and brain coral feed
+ * at night and swell their tissue out of the skeleton, and sit flush by day.
  */
-const POLYP_GAIN: Readonly<Record<string, number>> = {
+const SWELL_GAIN: Readonly<Record<string, number>> = {
   'acropora-cytherea': 1,
   'acropora-palmata': 1,
   'brain-coral': 0.8,
-  'host-anemone': 0.25,
 };
 
-export const EUPHYLLIA_POLYP_GAIN = 0.5;
+/**
+ * Night contraction of the species that stay fully expanded under light for their zooxanthellae
+ * (0 = never, 1 = fully drawn in at night). The authored mesh is the daytime shape, so extension 0
+ * never changes it. Host anemones draw their tentacles in a little after dark; Euphyllia keeps
+ * most of its tentacle length out and only eases back.
+ */
+const CONTRACTION_GAIN: Readonly<Record<string, number>> = {
+  'host-anemone': 0.2,
+};
+
+export const EUPHYLLIA_POLYP_GAIN = 0.15;
 
 export function polypGain(assetId: string): number {
-  return POLYP_GAIN[assetId] ?? 0;
+  return SWELL_GAIN[assetId] ?? 0;
 }
 
-/** Size factor of a polyp with this gain at this extension: 1 fully out, `1 - gain` retracted. */
+export function contractionGain(assetId: string): number {
+  return CONTRACTION_GAIN[assetId] ?? 0;
+}
+
+/** Size factor of a contracting species at this extension: 1 in daylight, `1 - gain` at night. */
 export function polypSize(gain: number, extension: number): number {
-  return 1 - gain * (1 - extension);
+  return 1 - gain * extension;
 }
 
 /** GPU twin of `polypSize`, from the shared extension node. */
 export function polypSizeNode(extension: Node<'float'>, gain: number): Node<'float'> {
-  return extension.oneMinus().mul(-gain).add(1);
+  return extension.mul(-gain).add(1);
 }
 
 export interface PolypSource {
