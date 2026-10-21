@@ -99,10 +99,11 @@ async function boot(): Promise<void> {
   mountUi(uiRoot, { engine: events, interaction });
 
   let modules: Awaited<typeof tank>;
+  let roomModules: Awaited<typeof roomModule>;
   let engine: Engine;
   let assetWatch: AssetWatch;
   try {
-    modules = await awaitTankModules(tank, events);
+    [modules, roomModules] = await Promise.all([awaitTankModules(tank, events), roomModule]);
     tracker.reach('code');
     engine = await modules.Engine.create(container, {
       options: parseEngineOptions(window.location.search),
@@ -149,7 +150,7 @@ async function boot(): Promise<void> {
     },
   });
 
-  const { mountRoom, RoomPreference, browserRoomStorage } = await roomModule;
+  const { mountRoom, RoomPreference, browserRoomStorage } = roomModules;
   const roomPreference = new RoomPreference(browserRoomStorage());
   const room = mountRoom(engine, roomPreference);
   const limitToRoom = (): void => syncRoomLimit(rig, room.backdrop.layout);

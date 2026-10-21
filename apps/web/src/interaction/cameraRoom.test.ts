@@ -96,17 +96,30 @@ describe('CameraRig room limit', () => {
     expect(elevation()).toBeCloseTo(before, 3);
   });
 
-  it('never crosses the tank when a room is picked while viewing from behind', () => {
-    const { rig, cam, d } = roomRig('standard', 'living-room');
-    rig.setRoom(null);
-    rig.setOrbit(Math.PI, 0.1, 2);
-    settle(rig);
-    rig.setRoom(roomRig('standard', 'living-room').room);
-    for (let t = 0; t < 3; t += 1 / 60) {
-      rig.update(1 / 60);
-      expect(outsideGlass(cam.pos, d)).toBe(true);
-    }
-  });
+  it.each([30, 60, 144, 240])(
+    'arrives at the back view after a half-turn jump at %i Hz without entering the glass',
+    (hz) => {
+      for (const size of sizes) {
+        for (const zoom of [1, 0.5]) {
+          const d = TANK_DIMENSIONS[size];
+          const cam = fakeCamera();
+          const rig = new CameraRig(cam, tankBounds(d), {
+            orbitDistance: orbitDistanceFor(framingScale(d)),
+          });
+          settle(rig);
+          rig.zoom(zoom);
+          settle(rig);
+          rig.drag(Math.PI / 0.005, 0);
+          const goalZ = -cam.pos.z;
+          for (let t = 0; t < 10; t += 1 / hz) {
+            rig.update(1 / hz);
+            expect(outsideGlass(cam.pos, d), `${size} ${zoom} ${hz}`).toBe(true);
+          }
+          expect(cam.pos.z, `${size} ${zoom} ${hz}`).toBeLessThan(goalZ / 2);
+        }
+      }
+    },
+  );
 
   it('leaves the front view untouched and allows a wide zoom out', () => {
     const { rig, cam, d } = roomRig('standard', 'office');

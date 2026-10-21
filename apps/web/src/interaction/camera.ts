@@ -271,9 +271,11 @@ export class CameraRig {
     const goal = this.goal();
     const rate = this.transitioning ? TRANSITION_RATE : FOLLOW_RATE;
     const alpha = this.reducedMotion ? 1 : 1 - Math.exp(-rate * dt);
-    const wasOutside = !this.insideGlass(this.eye);
-    this.eye = this.chase(this.eye, goal.eye, alpha);
-    if (this.modeValue === 'orbit' && wasOutside) this.eye = this.slideOutOfGlass(this.eye);
+    const from = this.eye;
+    this.eye = this.chase(from, goal.eye, alpha);
+    if (this.modeValue === 'orbit' && !this.insideGlass(from) && this.insideGlass(this.eye)) {
+      this.eye = this.arcAroundGlass(from, goal.eye, alpha);
+    }
     this.look = this.chase(this.look, goal.look, alpha);
     if (
       this.transitioning &&
@@ -341,19 +343,30 @@ export class CameraRig {
     return p.x > min.x && p.x < max.x && p.y > min.y && p.y < max.y && p.z > min.z && p.z < max.z;
   }
 
-  /** A straight chase across the tank would pass through it; slide along the nearest face instead. */
-  private slideOutOfGlass(eye: Vec3): Vec3 {
+  /** A straight chase across the tank would pass through it; turn about the tank's middle instead. */
+  private arcAroundGlass(from: Vec3, to: Vec3, alpha: number): Vec3 {
+    const t = this.orbitTarget;
+    const a0 = Math.atan2(from.x - t.x, from.z - t.z);
+    const a1 = Math.atan2(to.x - t.x, to.z - t.z);
+    let delta = a1 - a0;
+    delta -= Math.PI * 2 * Math.round(delta / (Math.PI * 2));
+    const angle = a0 + delta * alpha;
+    const r0 = Math.hypot(from.x - t.x, from.z - t.z);
+    const r1 = Math.hypot(to.x - t.x, to.z - t.z);
+    const radius = r0 + (r1 - r0) * alpha;
+    const eye = {
+      x: t.x + Math.sin(angle) * radius,
+      y: from.y + (to.y - from.y) * alpha,
+      z: t.z + Math.cos(angle) * radius,
+    };
     if (!this.insideGlass(eye)) return eye;
+    const offset = sub(eye, t);
+    const span = length(offset);
+    if (span < 1e-6) return eye;
+    const dir = { x: offset.x / span, y: offset.y / span, z: offset.z / span };
     const { min, max } = this.glassBox();
-    const c = GLASS_CLEARANCE;
-    const faces = [
-      { gap: eye.x - min.x, out: { ...eye, x: min.x - c } },
-      { gap: max.x - eye.x, out: { ...eye, x: max.x + c } },
-      { gap: eye.z - min.z, out: { ...eye, z: min.z - c } },
-      { gap: max.z - eye.z, out: { ...eye, z: max.z + c } },
-      { gap: max.y - eye.y, out: { ...eye, y: max.y + c } },
-    ];
-    return faces.reduce((best, f) => (f.gap < best.gap ? f : best)).out;
+    const reach = distanceToBoxExit(t, dir, min, max) + GLASS_CLEARANCE;
+    return { x: t.x + dir.x * reach, y: t.y + dir.y * reach, z: t.z + dir.z * reach };
   }
 
   /**
