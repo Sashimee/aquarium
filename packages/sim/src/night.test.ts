@@ -12,6 +12,7 @@ import {
   neonTetra,
   SHOW_TANK,
   spawnMany,
+  stepTo,
 } from './fixtures.ts';
 import { NIGHT, Night } from './night.ts';
 import { FishState, SnapshotField, SNAPSHOT_STRIDE, type Snapshot } from './snapshot.ts';
@@ -461,6 +462,15 @@ describe('bridge', () => {
     return { client };
   }
 
+  function nextError(client: SimClient): Promise<string> {
+    return new Promise((resolve) => {
+      const off = client.onError((message) => {
+        off();
+        resolve(message);
+      });
+    });
+  }
+
   function nextPolyps(client: SimClient): Promise<number> {
     return new Promise((resolve) => {
       const off = client.onPolyps((extension) => {
@@ -489,19 +499,6 @@ describe('bridge', () => {
     expect(extension).toBeLessThan(1);
     expect(extension).toBeGreaterThan(0.9);
   });
-
-  /** Steps by `steps` and resolves with the snapshot of the world at `tick`. */
-  function stepTo(client: SimClient, steps: number, tick: number): Promise<Snapshot> {
-    const reached = new Promise<Snapshot>((resolve) => {
-      const off = client.onSnapshot((snapshot) => {
-        if (snapshot.tick < tick) return;
-        off();
-        resolve(snapshot);
-      });
-    });
-    client.step(steps);
-    return reached;
-  }
 
   function startled(snapshot: Snapshot): number {
     let n = 0;
@@ -568,5 +565,72 @@ describe('bridge', () => {
     };
     expect(await afterPause(30_000)).toEqual([0, expect.closeTo(after(30), 6)]);
     expect(await afterPause(600_000)).toEqual([0, expect.closeTo(after(600), 6)]);
+  });
+
+  it('eases the polyps from the last good clock reading after the loop halted on a throw', async () => {
+    let calls = 0;
+    let clock = 0;
+    const { client } = connect({
+      now: () => {
+        calls++;
+        if (calls === 2) throw new Error('clock exploded');
+        return clock;
+      },
+    });
+    const seen: number[] = [];
+    client.onPolyps((extension) => seen.push(extension));
+    await client.init({
+      seed: 1,
+      tank: SHOW_TANK,
+      species: SPECIES,
+      fish: spawnMany(neonTetra.id, 2),
+    });
+    const failed = nextError(client);
+    client.start();
+    expect(await failed).toBe('clock exploded');
+    await stepTo(client, 1, 1);
+    clock = 30_000;
+    client.setLight(0);
+    client.start();
+    client.stop();
+    await stepTo(client, 1, 2);
+    const e = 1 - Math.exp(-30 / NIGHT.polypTauS);
+    const step = 1 - Math.exp(-1 / STEP_HZ / NIGHT.polypTauS);
+    expect(seen).toEqual([0, expect.closeTo(e + (1 - e) * step, 6)]);
+  });
+
+  it('starts again after the clock threw inside stop', async () => {
+    let calls = 0;
+    const { client } = connect({
+      now: () => {
+        calls++;
+        if (calls === 2) throw new Error('clock exploded');
+        return performance.now();
+      },
+    });
+    await client.init({
+      seed: 1,
+      tank: SHOW_TANK,
+      species: SPECIES,
+      fish: spawnMany(neonTetra.id, 2),
+    });
+    const failed = nextError(client);
+    client.start();
+    client.stop();
+    expect(await failed).toBe('clock exploded');
+    const ticked = new Promise<number | null>((resolve) => {
+      const timeout = setTimeout(() => {
+        off();
+        resolve(null);
+      }, 1000);
+      const off = client.onSnapshot((snapshot) => {
+        if (snapshot.tick < 1) return;
+        clearTimeout(timeout);
+        off();
+        resolve(snapshot.tick);
+      });
+    });
+    client.start();
+    expect(await ticked).toBeGreaterThanOrEqual(1);
   });
 });

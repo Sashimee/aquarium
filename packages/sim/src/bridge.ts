@@ -320,12 +320,17 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
     send({ type: 'snapshot', epoch, tick: w.tick, time: w.time, buffer }, [buffer]);
   };
 
-  const stop = (): void => {
-    if (timer !== null) {
-      clearTimeout(timer);
-      pausedAt = now();
-    }
+  const halt = (): boolean => {
+    if (timer === null) return false;
+    clearTimeout(timer);
     timer = null;
+    return true;
+  };
+
+  // The timer is cleared before the clock is read, so a throwing clock cannot leave a dead
+  // handle behind that turns every later "start" into a no-op.
+  const stop = (): void => {
+    if (halt()) pausedAt = now();
   };
 
   const sendError = (error: unknown, request?: number): void => {
@@ -387,7 +392,7 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
             `sim: "init" needs a safe integer request, got ${String(command.request)}`,
           );
         }
-        stop();
+        halt();
         world = new World(command.config);
         crewTick = 0;
         polypSent = Number.NaN;
@@ -528,7 +533,7 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
 
   return {
     dispose(): void {
-      stop();
+      halt();
       world = null;
       port.removeEventListener('message', listener);
     },

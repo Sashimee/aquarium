@@ -27,6 +27,7 @@ import {
   REEF_TANK,
   SHOW_TANK,
   spawnMany,
+  stepTo,
   yellowTang,
 } from './fixtures.ts';
 import { FOOD_STRIDE, FOOD_TYPES, type AteEvent } from './food.ts';
@@ -65,19 +66,6 @@ function nextSnapshot(client: SimClient): Promise<Snapshot> {
       resolve(s);
     });
   });
-}
-
-/** Steps by `steps` and resolves with the snapshot of the world at `tick`. */
-function stepTo(client: SimClient, steps: number, tick: number): Promise<Snapshot> {
-  const reached = new Promise<Snapshot>((resolve) => {
-    const off = client.onSnapshot((snapshot) => {
-      if (snapshot.tick < tick) return;
-      off();
-      resolve(snapshot);
-    });
-  });
-  client.step(steps);
-  return reached;
 }
 
 function nextError(client: SimClient): Promise<string> {
