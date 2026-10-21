@@ -7,6 +7,7 @@ import type { FoodStore } from './food.ts';
 import { GREETING, Greeting, type Visitor } from './greeting.ts';
 import { clamp, DEG, wrapAngle } from './math.ts';
 import { selectNearest } from './neighbours.ts';
+import { Night } from './night.ts';
 import { Personalities } from './personality.ts';
 import type { Rng } from './rng.ts';
 import type { Sdf } from './sdf.ts';
@@ -49,8 +50,6 @@ export const BEHAVIOUR = {
   habituationTauS: 120,
   restStartleDamping: 0.5,
 
-  nightLight: 0.25,
-  dayLight: 0.35,
   restTauS: 30,
   restTauJitter: 0.3,
   restSpeedFactor: 0.2,
@@ -340,8 +339,7 @@ export class Behaviour {
   readonly brood: Brood;
   readonly personality: Personalities;
   readonly greeting: Greeting;
-  light = 1;
-  night = false;
+  readonly lighting = new Night();
 
   private readonly host: BehaviourHost;
   private anchors: readonly Anchor[] = [];
@@ -807,11 +805,12 @@ export class Behaviour {
     this.greeting.setVisitor(visitor);
   }
 
+  get light(): number {
+    return this.lighting.light;
+  }
+
   setLight(level: number): void {
-    if (!(level >= 0 && level <= 1)) {
-      throw new RangeError(`light level must be within [0, 1], got ${level}`);
-    }
-    this.light = level;
+    this.lighting.setLight(level);
   }
 
   isStartled(i: number): boolean {
@@ -820,9 +819,7 @@ export class Behaviour {
 
   update(): void {
     const n = this.host.count;
-    if (this.light < BEHAVIOUR.nightLight) this.night = true;
-    else if (this.light > BEHAVIOUR.dayLight) this.night = false;
-    const restTarget = this.night ? 1 : 0;
+    const shock = this.lighting.step();
     const habDecay = Math.exp(-DT / BEHAVIOUR.habituationTauS);
     for (let i = 0; i < n; i++) {
       this.refractory[i] = Math.max(0, at(this.refractory, i) - DT);
@@ -830,9 +827,11 @@ export class Behaviour {
       this._shelterTimer[i] = Math.max(0, at(this._shelterTimer, i) - DT);
       this.habituation[i] = at(this.habituation, i) * habDecay;
       const r = at(this.rest, i);
+      const restTarget = this.lighting.restTarget(this.speciesOf(i).activity);
       this.rest[i] = r + (restTarget - r) * (1 - Math.exp(-DT / at(this.restTau, i)));
     }
     this.updateGroups();
+    if (shock > 0) this.applyLightStartle(shock);
     for (const s of this.stimuli) this.applyStimulus(s);
     this.stimuli.length = 0;
     const tick = this.host.tick;
@@ -876,7 +875,7 @@ export class Behaviour {
         at(this.yieldTimer, i) <= 0 &&
         at(this.gulpPhase, i) === GulpPhase.None &&
         at(this._shelterTimer, i) <= 0 &&
-        at(this.rest, i) <= 0.5
+        (at(this.rest, i) <= 0.5 || this.lighting.restsInLight(this.speciesOf(i).activity))
           ? 1
           : 0;
       if (this.brood.fryLeash(i, leash)) continue;
@@ -1096,6 +1095,27 @@ export class Behaviour {
       yaw = wrapAngle(yaw + BEHAVIOUR.escapeNoiseRad * rng.gaussian());
       const pitch = clamp(Math.atan2(dy, Math.hypot(dx, dz)), -sp.maxPitch, sp.maxPitch) * 0.5;
       this.schedule(i, this.host.tick, yaw, pitch);
+    }
+  }
+
+  /**
+   * A sudden change of the tank light: every swimmer that can see it may C-start, `intensity`
+   * playing the part of a tap's strength at the fish. With no point source each turns away from
+   * its own heading to a random side, so the school scatters, and the relay spreads it on.
+   */
+  private applyLightStartle(intensity: number): void {
+    const { rng, yaw } = this.host;
+    for (let i = 0; i < this.host.count; i++) {
+      const sp = this.speciesOf(i);
+      if (sp.walking !== null || !this.canStartle(i)) continue;
+      const p =
+        intensity *
+        (1 - BEHAVIOUR.boldnessDamping * this.personality.effectiveBoldness(i, sp.boldness)) *
+        this.responsiveness(i);
+      if (rng.next() >= p) continue;
+      const side = rng.next() < 0.5 ? -1 : 1;
+      const turn = rng.range(BEHAVIOUR.escapeOffsetRad, Math.PI);
+      this.schedule(i, this.host.tick, wrapAngle(at(yaw, i) + side * turn), 0);
     }
   }
 
