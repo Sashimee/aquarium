@@ -106,6 +106,8 @@ export const ledgerEntrySchema = z.strictObject({
 });
 export type LedgerEntry = z.infer<typeof ledgerEntrySchema>;
 
+export const ONE_TIME_REF = /^(plant|decor|background):/;
+
 export const walletResponseSchema = z.strictObject({
   wallet: walletSchema,
   ledger: z.array(ledgerEntrySchema),

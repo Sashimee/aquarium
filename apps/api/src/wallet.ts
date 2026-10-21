@@ -1,8 +1,7 @@
-import type { Economy, LedgerEntry } from '@aquarium/shared';
+import { ONE_TIME_REF, type Economy, type LedgerEntry } from '@aquarium/shared';
 import { and, eq, gte, like, lt, sql } from 'drizzle-orm';
 import { schema, type Database } from './db/index.ts';
 import { apiError, HttpError } from './errors.ts';
-import { ONE_TIME_REF } from './items.ts';
 
 type Tx = Parameters<Parameters<Database['db']['transaction']>[0]>[0];
 type LedgerRow = typeof schema.ledger.$inferSelect;

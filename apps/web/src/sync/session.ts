@@ -13,7 +13,7 @@ import type {
   TankSize,
   User,
 } from '@aquarium/shared';
-import { DEFAULT_TANK_SIZE } from '@aquarium/shared';
+import { DEFAULT_TANK_SIZE, ONE_TIME_REF } from '@aquarium/shared';
 import type { EventBus } from '../engine/events';
 import { layoutKey } from '../interaction/decor/key';
 import type { InteractionEvents } from '../interaction/events';
@@ -68,8 +68,6 @@ export interface ShareOutcome {
 const ACTIVE_KEY = 'aquarium.activeTank';
 const LOAD_ATTEMPTS = 4;
 const LEAVE_FLUSH_MS = 3_000;
-
-const ONE_TIME_REF = /^(plant|decor|background):/;
 
 export class TankSession {
   private state: SessionState = INITIAL_STATE;
