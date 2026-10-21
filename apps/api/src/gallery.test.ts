@@ -72,7 +72,7 @@ async function call(
   });
 }
 
-async function newTank(h: Harness, owner: Account, name: string, shared = true) {
+async function newTank(h: Harness, owner: Account, name: string, shared = true, listed = true) {
   const tank = tankSchema.parse(
     (await call(h, owner.cookie, 'POST', '/api/tanks', { name, biome: 'freshwater' })).json(),
   );
@@ -83,7 +83,11 @@ async function newTank(h: Harness, owner: Account, name: string, shared = true) 
     `/api/tanks/${tank.id}/fish`,
     fishPayload('neon-tetra', 'Blip'),
   );
-  if (shared) await call(h, owner.cookie, 'POST', `/api/tanks/${tank.id}/share`);
+  if (shared) {
+    await call(h, owner.cookie, 'POST', `/api/tanks/${tank.id}/share`);
+    if (listed)
+      await call(h, owner.cookie, 'PUT', `/api/tanks/${tank.id}/gallery`, { listed: true });
+  }
   return tank.id;
 }
 
@@ -155,7 +159,7 @@ describe('gallery listing', () => {
     expect((await call(h, null, 'GET', '/api/gallery/not-a-uuid')).statusCode).toBe(400);
   });
 
-  it('drops a tank the moment its link is revoked and brings it back when shared again', async () => {
+  it('drops a tank the moment its link is revoked and does not relist it when shared again', async () => {
     const owner = await account(h);
     const id = await newTank(h, owner, 'Comes and goes');
     expect((await gallery(h)).entries.map((e) => e.id)).toContain(id);
@@ -167,7 +171,7 @@ describe('gallery listing', () => {
     expect((await vote(h, voter, id)).statusCode).toBe(404);
 
     await call(h, owner.cookie, 'POST', `/api/tanks/${id}/share`);
-    expect((await gallery(h)).entries.map((e) => e.id)).toContain(id);
+    expect((await gallery(h)).entries.map((e) => e.id)).not.toContain(id);
   });
 
   it('pages deterministically', async () => {
@@ -191,6 +195,84 @@ describe('gallery listing', () => {
     expect((await gallery(h, owner)).entries.find((e) => e.id === id)?.mine).toBe(true);
     expect((await gallery(h, other)).entries.find((e) => e.id === id)?.mine).toBe(false);
     expect((await gallery(h)).entries.find((e) => e.id === id)?.mine).toBe(false);
+  });
+});
+
+describe('gallery opt-in', () => {
+  let h: Harness;
+  beforeAll(async () => {
+    h = await createHarness();
+  });
+  afterAll(() => h.close());
+
+  const setListed = (owner: Account | null, id: string, listed: boolean) =>
+    call(h, owner?.cookie ?? null, 'PUT', `/api/tanks/${id}/gallery`, { listed });
+
+  it('does not list a tank just because it has a public link', async () => {
+    const owner = await account(h);
+    const id = await newTank(h, owner, 'Friends only', true, false);
+    const created = tankSchema.parse(
+      (await call(h, owner.cookie, 'GET', `/api/tanks/${id}`)).json(),
+    );
+    expect(created).toMatchObject({ shared: true, inGallery: false });
+    expect((await gallery(h)).entries.map((e) => e.id)).not.toContain(id);
+    expect((await call(h, null, 'GET', `/api/gallery/${id}`)).statusCode).toBe(404);
+    expect((await vote(h, await account(h), id)).statusCode).toBe(404);
+  });
+
+  it('lists on request, and unlisting keeps the link', async () => {
+    const owner = await account(h);
+    const id = await newTank(h, owner, 'Opt in', true, false);
+    const on = tankSchema.parse((await setListed(owner, id, true)).json());
+    expect(on.inGallery).toBe(true);
+    expect((await gallery(h)).entries.map((e) => e.id)).toContain(id);
+    const off = tankSchema.parse((await setListed(owner, id, false)).json());
+    expect(off).toMatchObject({ inGallery: false, shared: true });
+    expect((await gallery(h)).entries.map((e) => e.id)).not.toContain(id);
+  });
+
+  it('needs the link, and revoking the link clears the listing for good', async () => {
+    const owner = await account(h);
+    const id = await newTank(h, owner, 'Linkless', false);
+    expect((await setListed(owner, id, true)).statusCode).toBe(409);
+
+    await call(h, owner.cookie, 'POST', `/api/tanks/${id}/share`);
+    await setListed(owner, id, true);
+    await call(h, owner.cookie, 'DELETE', `/api/tanks/${id}/share`);
+    await call(h, owner.cookie, 'POST', `/api/tanks/${id}/share`);
+    const again = tankSchema.parse((await call(h, owner.cookie, 'GET', `/api/tanks/${id}`)).json());
+    expect(again.inGallery).toBe(false);
+    expect((await gallery(h)).entries.map((e) => e.id)).not.toContain(id);
+  });
+
+  it('is owner only and needs a session', async () => {
+    const owner = await account(h);
+    const id = await newTank(h, owner, 'Not yours', true, false);
+    expect((await setListed(null, id, true)).statusCode).toBe(401);
+    expect((await setListed(await account(h), id, true)).statusCode).toBe(404);
+    expect(
+      (await call(h, owner.cookie, 'PUT', `/api/tanks/${id}/gallery`, { listed: 'yes' }))
+        .statusCode,
+    ).toBe(400);
+    expect((await gallery(h)).entries.map((e) => e.id)).not.toContain(id);
+  });
+
+  it('puts the flag in the account export', async () => {
+    const owner = await account(h);
+    const id = await newTank(h, owner, 'Exported flag');
+    const data = dataExportSchema.parse(
+      (await call(h, owner.cookie, 'POST', '/api/me/export', {})).json(),
+    );
+    expect(data.tanks.find((t) => t.tank['id'] === id)?.tank['inGallery']).toBe(true);
+  });
+
+  it('reports no vote for a tank that left the gallery', async () => {
+    const owner = await account(h);
+    const voter = await account(h);
+    const id = await newTank(h, owner, 'Left after vote');
+    await vote(h, voter, id);
+    await setListed(owner, id, false);
+    expect((await gallery(h, voter)).myVote).toBeNull();
   });
 });
 
@@ -423,7 +505,7 @@ describe('winner tie-breaks and opt-out', () => {
     await vote(h, await account(h), left);
     await vote(h, await account(h), left);
     await vote(h, await account(h), stays);
-    await call(h, owner.cookie, 'DELETE', `/api/tanks/${left}/share`);
+    await call(h, owner.cookie, 'PUT', `/api/tanks/${left}/gallery`, { listed: false });
 
     await nextWeek(h);
     expect((await winners(h)).find((w) => w.weekStart === week)).toMatchObject({
@@ -439,8 +521,40 @@ describe('winner tie-breaks and opt-out', () => {
     await vote(h, await account(h), id);
     await nextWeek(h);
     expect((await winners(h)).some((w) => w.weekStart === week)).toBe(true);
-    await call(h, owner.cookie, 'DELETE', `/api/tanks/${id}/share`);
+    await call(h, owner.cookie, 'PUT', `/api/tanks/${id}/gallery`, { listed: false });
     expect((await winners(h)).some((w) => w.weekStart === week)).toBe(false);
+  });
+
+  it('records a week with no eligible tank as no-winner so it is never re-decided', async () => {
+    const owner = await account(h);
+    const id = await newTank(h, owner, 'Gone before settle');
+    const week = galleryWeekStart(h.clock.now());
+    await vote(h, await account(h), id);
+    await call(h, owner.cookie, 'PUT', `/api/tanks/${id}/gallery`, { listed: false });
+    await nextWeek(h);
+    expect((await winners(h)).some((w) => w.weekStart === week)).toBe(false);
+    const [row] = await h.database.db
+      .select()
+      .from(schema.tankOfWeek)
+      .where(eq(schema.tankOfWeek.weekStart, new Date(week)));
+    expect(row).toMatchObject({ tankId: null, votes: 0 });
+
+    await call(h, owner.cookie, 'PUT', `/api/tanks/${id}/gallery`, { listed: true });
+    expect((await winners(h)).some((w) => w.weekStart === week)).toBe(false);
+  });
+
+  it('files a vote cast after the rollover under the new week', async () => {
+    const owner = await account(h);
+    const id = await newTank(h, owner, 'Late vote');
+    const voter = await account(h);
+    await nextWeek(h);
+    const res = voteStateSchema.parse((await vote(h, voter, id)).json());
+    expect(res.weekStart).toBe(galleryWeekStart(h.clock.now()));
+    const [row] = await h.database.db
+      .select()
+      .from(schema.tankVotes)
+      .where(eq(schema.tankVotes.userId, voter.userId));
+    expect(row?.weekStart.toISOString()).toBe(res.weekStart);
   });
 
   it('settles each week once, however often it runs', async () => {

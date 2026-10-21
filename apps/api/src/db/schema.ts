@@ -150,6 +150,8 @@ export const tanks = pgTable(
     size: tankSizeEnum('size').notNull().default('standard'),
     quarantine: boolean('quarantine').notNull().default(false),
     shareTokenHash: text('share_token_hash').unique(),
+    // A public link is not a gallery listing: this is a second opt-in, honoured only while the link is on.
+    inGallery: boolean('in_gallery').notNull().default(false),
     name: text('name').notNull(),
     // The client's idempotency key of the request that made the tank. Free tanks leave no ledger
     // row, so this is what lets a retry find the tank it already got.
@@ -357,9 +359,8 @@ export const tankVotes = pgTable(
 
 export const tankOfWeek = pgTable('tank_of_week', {
   weekStart: timestamptz('week_start').primaryKey(),
-  tankId: uuid('tank_id')
-    .notNull()
-    .references(() => tanks.id, { onDelete: 'cascade' }),
+  // null: the week was settled with no eligible tank, or the winner was deleted. Kept so it is never re-decided.
+  tankId: uuid('tank_id').references(() => tanks.id, { onDelete: 'set null' }),
   votes: integer('votes').notNull(),
   decidedAt: timestamptz('decided_at').notNull().defaultNow(),
 });

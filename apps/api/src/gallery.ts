@@ -47,8 +47,12 @@ const WEEK_MS = 7 * 24 * 3_600_000;
 
 type Executor = Pick<Database['db'], 'select'>;
 
-// A tank is in the gallery exactly while its public link is on: making it private is the opt-out.
-const listed = and(isNotNull(schema.tanks.shareTokenHash), eq(schema.tanks.quarantine, false));
+// The gallery is a second opt-in on top of the public link; revoking the link clears it.
+const listed = and(
+  isNotNull(schema.tanks.shareTokenHash),
+  eq(schema.tanks.inGallery, true),
+  eq(schema.tanks.quarantine, false),
+);
 
 const votesIn = (week: string) =>
   sql<number>`(select count(*)::int from ${schema.tankVotes} v where v.tank_id = ${schema.tanks.id} and v.week_start = ${week}::timestamptz)`;
@@ -61,27 +65,35 @@ const lastVoteIn = (week: string) =>
   sql`(select max(v.created_at) from ${schema.tankVotes} v where v.tank_id = ${schema.tanks.id} and v.week_start = ${week}::timestamptz) asc nulls last`;
 
 /**
- * Settles every finished week (up to the history window) that has votes but no winner yet. A
- * tank that stopped being shared before the week was settled cannot win.
+ * Settles every finished week (up to the history window) that has votes but no row yet. A tank
+ * that left the gallery before the week was settled cannot win; a week with no eligible tank is
+ * recorded with no winner so it is never decided again.
  */
 export async function settleWeeks({ db }: Database, nowMs: number): Promise<number> {
   const current = galleryWeekStart(nowMs);
   const oldest = new Date(Date.parse(current) - GALLERY_WINNER_HISTORY * WEEK_MS).toISOString();
   const result = await db.execute(sql`
     insert into ${schema.tankOfWeek} (week_start, tank_id, votes)
-    select distinct on (week_start) week_start, tank_id, n
+    select pending.week_start, best.tank_id, coalesce(best.n, 0)
     from (
-      select v.week_start, v.tank_id, count(*)::int as n, max(v.created_at) as last_vote
+      select distinct v.week_start
       from ${schema.tankVotes} v
-      join ${schema.tanks} t on t.id = v.tank_id
-      where t.share_token_hash is not null
-        and not t.quarantine
-        and v.week_start < ${current}::timestamptz
+      where v.week_start < ${current}::timestamptz
         and v.week_start >= ${oldest}::timestamptz
         and not exists (select 1 from ${schema.tankOfWeek} w where w.week_start = v.week_start)
-      group by v.week_start, v.tank_id
-    ) tally
-    order by week_start, n desc, last_vote asc, tank_id asc
+    ) pending
+    left join lateral (
+      select v.tank_id, count(*)::int as n
+      from ${schema.tankVotes} v
+      join ${schema.tanks} t on t.id = v.tank_id
+      where v.week_start = pending.week_start
+        and t.share_token_hash is not null
+        and t.in_gallery
+        and not t.quarantine
+      group by v.tank_id
+      order by n desc, max(v.created_at) asc, v.tank_id asc
+      limit 1
+    ) best on true
     on conflict (week_start) do nothing
   `);
   return result.rowCount ?? 0;
@@ -122,10 +134,12 @@ export function registerGalleryRoutes({
     const [row] = await executor
       .select({ tankId: schema.tankVotes.tankId })
       .from(schema.tankVotes)
+      .innerJoin(schema.tanks, eq(schema.tanks.id, schema.tankVotes.tankId))
       .where(
         and(
           eq(schema.tankVotes.userId, userId),
           eq(schema.tankVotes.weekStart, new Date(weekStart)),
+          listed,
         ),
       );
     return row?.tankId ?? null;
@@ -241,9 +255,9 @@ export function registerGalleryRoutes({
     const user = await voter(req, reply);
     if (!user) return reply;
     const { tankId } = voteRequestSchema.parse(req.body);
-    const { weekStart, weekEnd } = weekNow();
-    const at = new Date(now());
     const outcome = await db.transaction(async (tx) => {
+      const { weekStart, weekEnd } = weekNow();
+      const at = new Date(now());
       // FOR SHARE makes a concurrent revoke wait, so a vote never lands on a tank that just went private.
       const [tank] = await tx
         .select({ id: schema.tanks.id, ownerId: schema.tanks.ownerId })
@@ -264,26 +278,26 @@ export function registerGalleryRoutes({
       if (changed.length > 0) {
         await audit(tx, { action: 'vote_set', actorId: user.id, tankId, detail: { weekStart } });
       }
-      return 'ok' as const;
+      return { weekStart, weekEnd };
     });
     if (outcome === 'not_found') return notFound(reply);
     if (outcome === 'own') {
       return reply.code(403).send(apiError('own_tank', 'You cannot vote for your own tank.'));
     }
-    return voteStateSchema.parse({ weekStart, weekEnd, myVote: tankId });
+    return voteStateSchema.parse({ ...outcome, myVote: tankId });
   });
 
   app.delete('/api/gallery/vote', async (req, reply) => {
     const user = await voter(req, reply);
     if (!user) return reply;
-    const { weekStart, weekEnd } = weekNow();
-    await db.transaction(async (tx) => {
+    const { weekStart, weekEnd } = await db.transaction(async (tx) => {
+      const week = weekNow();
       const removed = await tx
         .delete(schema.tankVotes)
         .where(
           and(
             eq(schema.tankVotes.userId, user.id),
-            eq(schema.tankVotes.weekStart, new Date(weekStart)),
+            eq(schema.tankVotes.weekStart, new Date(week.weekStart)),
           ),
         )
         .returning({ tankId: schema.tankVotes.tankId });
@@ -293,9 +307,10 @@ export function registerGalleryRoutes({
           action: 'vote_removed',
           actorId: user.id,
           tankId: gone.tankId,
-          detail: { weekStart },
+          detail: { weekStart: week.weekStart },
         });
       }
+      return week;
     });
     return voteStateSchema.parse({ weekStart, weekEnd, myVote: null });
   });

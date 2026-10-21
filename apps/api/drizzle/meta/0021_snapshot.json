@@ -1,5 +1,5 @@
 {
-  "id": "12823a66-65e9-43db-a22d-35e076205d99",
+  "id": "659f3d25-94aa-4758-80da-79bbb632842e",
   "prevId": "2c0269b7-3c4c-4401-8b11-9a1ee7e3d4fe",
   "version": "7",
   "dialect": "postgresql",
@@ -1306,7 +1306,7 @@
           "name": "tank_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "votes": {
           "name": "votes",
@@ -1330,7 +1330,7 @@
           "tableTo": "tanks",
           "columnsFrom": ["tank_id"],
           "columnsTo": ["id"],
-          "onDelete": "cascade",
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -1602,6 +1602,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "in_gallery": {
+          "name": "in_gallery",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "name": {
           "name": "name",

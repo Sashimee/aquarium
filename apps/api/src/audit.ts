@@ -7,7 +7,9 @@ export type AuditAction =
   | 'reaction_set'
   | 'reaction_removed'
   | 'vote_set'
-  | 'vote_removed';
+  | 'vote_removed'
+  | 'gallery_listed'
+  | 'gallery_unlisted';
 
 type Executor = Pick<Database['db'], 'insert'>;
 

@@ -79,3 +79,6 @@ export const galleryWinnersResponseSchema = z.object({
     .describe('newest week first; tanks no longer shared are left out'),
 });
 export type GalleryWinnersResponse = z.infer<typeof galleryWinnersResponseSchema>;
+
+export const setGalleryRequestSchema = z.strictObject({ listed: z.boolean() });
+export type SetGalleryRequest = z.infer<typeof setGalleryRequestSchema>;
