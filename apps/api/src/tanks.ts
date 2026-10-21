@@ -63,7 +63,6 @@ import {
   inArray,
   lt,
   lte,
-  ne,
   or,
   sql,
 } from 'drizzle-orm';
@@ -828,7 +827,6 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           .where(
             and(
               eq(schema.events.tankId, tankId),
-              ne(schema.events.kind, 'fish_moved'),
               gt(schema.events.at, since),
               lte(schema.events.at, until),
               ...(cursor

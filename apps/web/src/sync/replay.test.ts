@@ -123,6 +123,22 @@ describe('describeEvent', () => {
       tone: 'warn',
     });
   });
+
+  it('describes a fish moved out of and into the tank', () => {
+    const out = ev(5, SINCE, {
+      kind: 'fish_moved',
+      payload: { fishId: FISH_1, direction: 'out', otherTankId: TANK_A },
+    });
+    expect(describeEvent(out, fish, names)).toMatchObject({
+      text: 'Bubbles was moved to another tank.',
+      tone: 'calm',
+    });
+    const into = ev(6, SINCE, {
+      kind: 'fish_moved',
+      payload: { fishId: FISH_2, direction: 'in', otherTankId: TANK_A },
+    });
+    expect(describeEvent(into, fish, names).text).toBe('A fish was moved here from another tank.');
+  });
 });
 
 describe('labels and failures', () => {

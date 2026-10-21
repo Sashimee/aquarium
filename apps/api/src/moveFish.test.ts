@@ -325,7 +325,7 @@ describe('moving a fish between tanks', () => {
       expect((await fishRow(h, fishId)).introducedAt).toBeNull();
     });
 
-    it('logs a fish_moved event in each tank without breaking the replay', async () => {
+    it('logs a fish_moved event in each tank and includes it in the replay', async () => {
       const who = await account(h);
       const a = await makeTank(h, who);
       const q = await makeTank(h, who, { quarantine: true });
@@ -349,7 +349,8 @@ describe('moving a fish between tanks', () => {
         `/api/tanks/${a}/replay?since=${encodeURIComponent(since)}`,
       );
       expect(replay.statusCode).toBe(200);
-      replayResponseSchema.parse(replay.json());
+      const parsed = replayResponseSchema.parse(replay.json());
+      expect(parsed.events.map((e) => e.kind)).toContain('fish_moved');
     });
   });
 
