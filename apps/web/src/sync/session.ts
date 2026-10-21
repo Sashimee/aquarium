@@ -576,6 +576,7 @@ export class TankSession {
       tankId,
       tier: tank.equipment.waveMaker.tier,
     });
+    this.emitLamp(tank);
     return true;
   }
 
@@ -744,6 +745,17 @@ export class TankSession {
         tier: tank.equipment.waveMaker.tier,
       });
     }
+    const lamp = held.equipment.light;
+    if (
+      lamp.onHour !== tank.equipment.light.onHour ||
+      lamp.offHour !== tank.equipment.light.offHour
+    )
+      this.emitLamp(tank);
+  }
+
+  private emitLamp(tank: Tank): void {
+    const { onHour, offHour } = tank.equipment.light;
+    this.deps.interaction.emit('tank:lamp', { tankId: tank.id, onHour, offHour });
   }
 
   private bag(tankId: string, fishId: string, name: string): void {

@@ -1458,6 +1458,46 @@ describe('Pearls and the T70 request contract', () => {
     });
   });
 
+  describe('lamp hours for the hood light', () => {
+    const withLamp = (tank: Tank, onHour: number, offHour: number): Tank => ({
+      ...tank,
+      equipment: { ...tank.equipment, light: { ...tank.equipment.light, onHour, offHour } },
+    });
+
+    it('announces each tank own hours on load and on a switch', async () => {
+      const { rec, session } = setup([
+        withLamp(tankFixture({ id: TANK_A }), 8, 20),
+        withLamp(tankFixture({ id: TANK_B }), 14, 2),
+      ]);
+      const seen: unknown[] = [];
+      rec.bus.on('tank:lamp', (e) => seen.push(e));
+      await session.setUser(verified);
+      await session.select(TANK_B);
+      expect(seen).toEqual([
+        { tankId: TANK_A, onHour: 8, offHour: 20 },
+        { tankId: TANK_B, onHour: 14, offHour: 2 },
+      ]);
+    });
+
+    it('announces a saved schedule and not an unchanged one', async () => {
+      const { api, rec, session } = setup();
+      const seen: unknown[] = [];
+      rec.bus.on('tank:lamp', (e) => seen.push(e));
+      await session.setUser(verified);
+      const base = tankFixture({ lastTickAt: '2026-02-01T12:01:00.000Z' });
+      api.saveLight.mockResolvedValue(withLamp(base, 22, 6));
+      await session.setLight({ intensity: 0.5, onHour: 22, offHour: 6 });
+      api.care.mockResolvedValue(
+        withLamp(tankFixture({ lastTickAt: '2026-02-01T12:02:00.000Z' }), 22, 6),
+      );
+      await session.careAction({ type: 'water_change' });
+      expect(seen).toEqual([
+        { tankId: TANK_A, onHour: 8, offHour: 20 },
+        { tankId: TANK_A, onHour: 22, offHour: 6 },
+      ]);
+    });
+  });
+
   it('reuses the purchase key on a retry', async () => {
     const { api, session } = setup();
     await session.setUser(verified);
