@@ -14,3 +14,18 @@ export function awaitTankModules<T>(
     throw new Error(part === 'room' ? ROOM_LOAD_FAILED : TANK_LOAD_FAILED, { cause });
   });
 }
+
+const settled = <T>(result: PromiseSettledResult<T>): Promise<T> =>
+  result.status === 'fulfilled' ? Promise.resolve(result.value) : Promise.reject(result.reason);
+
+/** Loads both bundles together and reports only the first failure, tank before room. */
+export async function awaitAppModules<T, R>(
+  tank: Promise<T>,
+  room: Promise<R>,
+  events: EventBus<EngineEvents>,
+): Promise<[T, R]> {
+  const [tankResult, roomResult] = await Promise.allSettled([tank, room]);
+  const loadedTank = await awaitTankModules(settled(tankResult), events);
+  const loadedRoom = await awaitTankModules(settled(roomResult), events, 'room');
+  return [loadedTank, loadedRoom];
+}

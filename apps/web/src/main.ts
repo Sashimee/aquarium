@@ -35,7 +35,7 @@ import { mountUi } from './ui/mount';
 import { FeedGate } from './sync/feedGate';
 import { LampFeed } from './sync/lampFeed';
 import { WaveMakerFeed } from './sync/waveMakerFeed';
-import { awaitTankModules } from './tankLoad';
+import { awaitAppModules } from './tankLoad';
 
 function showFatal(container: HTMLElement, message: string): void {
   const box = document.createElement('pre');
@@ -105,10 +105,7 @@ async function boot(): Promise<void> {
   let engine: Engine;
   let assetWatch: AssetWatch;
   try {
-    [modules, roomModules] = await Promise.all([
-      awaitTankModules(tank, events),
-      awaitTankModules(roomModule, events, 'room'),
-    ]);
+    [modules, roomModules] = await awaitAppModules(tank, roomModule, events);
     tracker.reach('code');
     engine = await modules.Engine.create(container, {
       options: parseEngineOptions(window.location.search),

@@ -142,6 +142,7 @@ export class CameraRig {
   private eye: Vec3;
   private look: Vec3;
   private transitioning = false;
+  private arcSign = 0;
 
   constructor(
     private readonly camera: CameraLike,
@@ -277,6 +278,7 @@ export class CameraRig {
     if (this.modeValue === 'orbit' && !this.insideGlass(from) && this.insideGlass(this.eye)) {
       this.eye = this.arcAroundGlass(from, goal.eye, alpha);
     }
+    if (length(sub(this.eye, goal.eye)) < SETTLED_EPSILON) this.arcSign = 0;
     this.look = this.chase(this.look, goal.look, alpha);
     if (
       this.transitioning &&
@@ -365,22 +367,36 @@ export class CameraRig {
     };
     if (this.room) {
       const [lo, hi] = this.roomLimits(this.room);
+      const tol = 1e-9;
       const stays = (d: number): boolean => {
         for (let i = 1; i <= ARC_ROOM_SAMPLES; i++) {
           const p = at(i / ARC_ROOM_SAMPLES, d);
-          if (p.x < lo.x || p.x > hi.x || p.y < lo.y || p.y > hi.y || p.z < lo.z || p.z > hi.z) {
+          if (
+            p.x < lo.x - tol ||
+            p.x > hi.x + tol ||
+            p.y < lo.y - tol ||
+            p.y > hi.y + tol ||
+            p.z < lo.z - tol ||
+            p.z > hi.z + tol
+          ) {
             return false;
           }
         }
         return true;
       };
-      if (!stays(delta)) delta -= Math.sign(delta || 1) * turn;
+      const other = (d: number): number => d - (d < 0 ? -turn : turn);
+      if (this.arcSign !== 0 && Math.sign(delta) !== this.arcSign) delta = other(delta);
+      if (!stays(delta)) {
+        delta = other(delta);
+        if (!stays(delta)) return from;
+      }
     }
+    this.arcSign = Math.sign(delta) || 1;
     const eye = at(alpha, delta);
     if (!this.insideGlass(eye)) return this.keepInRoom(eye);
     const offset = sub(eye, t);
     const span = length(offset);
-    if (span < 1e-6) return to;
+    if (span < 1e-6) return from;
     const dir = { x: offset.x / span, y: offset.y / span, z: offset.z / span };
     const { min, max } = this.glassBox();
     const reach = distanceToBoxExit(t, dir, min, max) + GLASS_CLEARANCE;
@@ -389,7 +405,7 @@ export class CameraRig {
       y: t.y + dir.y * reach,
       z: t.z + dir.z * reach,
     });
-    return this.insideGlass(pushed) ? to : pushed;
+    return this.insideGlass(pushed) ? from : pushed;
   }
 
   /**
@@ -398,6 +414,7 @@ export class CameraRig {
    * the front view until there is.
    */
   private clampOrbit(): void {
+    this.arcSign = 0;
     if (this.room) this.swingIntoRoom();
     const { min, max } = this.orbitLimits(this.yaw, this.pitch);
     this.distance = clamp(this.distance, min, Math.max(min, max));

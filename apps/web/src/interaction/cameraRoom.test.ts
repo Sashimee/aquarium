@@ -148,6 +148,35 @@ describe('CameraRig room limit', () => {
     },
   );
 
+  it.each([30, 60, 144, 240])(
+    'comes to rest in the room after a long sideways drag from the front view at %i Hz',
+    (hz) => {
+      for (const size of sizes) {
+        for (const preset of presets) {
+          for (const dx of [600, -600, 300, -300, 1000]) {
+            const { rig, cam, room, d } = roomRig(size, preset);
+            settle(rig);
+            rig.drag(dx, 0);
+            const frames = Math.round(10 * hz);
+            let last = cam.pos;
+            let moved = 0;
+            for (let i = 0; i < frames; i++) {
+              rig.update(1 / hz);
+              const label = `${size} ${preset} ${dx} ${hz} ${i}`;
+              expect(inRoom(cam.pos, room), label).toBe(true);
+              expect(outsideGlass(cam.pos, d), label).toBe(true);
+              if (i >= frames - hz) {
+                moved += Math.hypot(cam.pos.x - last.x, cam.pos.y - last.y, cam.pos.z - last.z);
+              }
+              last = cam.pos;
+            }
+            expect(moved, `${size} ${preset} ${dx} ${hz}`).toBeLessThan(1e-6);
+          }
+        }
+      }
+    },
+  );
+
   it('leaves the front view untouched and allows a wide zoom out', () => {
     const { rig, cam, d } = roomRig('standard', 'office');
     rig.setOrbit(0, 0.1, 3);
