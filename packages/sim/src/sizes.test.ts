@@ -202,6 +202,83 @@ const ADULT_MAX: Record<string, { model: string; maxSlM: number; maxTlM: number;
   };
 
 /**
+ * Species whose models the asset pipeline builds before their content/species file lands, with the
+ * same sourced maxima. An entry moves to ADULT_MAX in the PR that adds the species file; until then
+ * a built model is checked against the literature TL/SL. Model ids that are not built yet are
+ * planned ones.
+ */
+const AWAITING_CONTENT: Record<
+  string,
+  { model: string; maxSlM: number; maxTlM: number; source: string }
+> = {
+  'altolamprologus-calvus': {
+    model: 'altolamprologus-calvus',
+    maxSlM: 0.135 / 1.231,
+    maxTlM: 0.135,
+    source:
+      'FishBase: 13.5 cm TL (Ref. 5598); no length-length relationship was looked up, so TL = ' +
+      '1.231 SL, the proportion of the lofted model',
+  },
+  'aulonocara-baenschi': {
+    model: 'aulonocara-baenschi',
+    maxSlM: 0.13 / 1.25,
+    maxTlM: 0.13,
+    source:
+      'FishBase: 13 cm TL (Ref. 4975); no length-length relationship was looked up, so TL = 1.25 SL ' +
+      'is an assumption for cichlids',
+  },
+  'labidochromis-caeruleus': {
+    model: 'labidochromis-caeruleus',
+    maxSlM: 0.081,
+    maxTlM: 0.081 * 1.26,
+    source:
+      'FishBase: 8.1 cm SL (Ref. 5653); no length-length relationship was looked up, so TL = 1.26 ' +
+      'SL, the proportion of the lofted model',
+  },
+  'melanochromis-auratus': {
+    model: 'melanochromis-auratus-female',
+    maxSlM: 0.11 / 1.23,
+    maxTlM: 0.11,
+    source:
+      'FishBase: 11 cm TL; no length-length relationship was looked up, so TL = 1.23 SL, the ' +
+      'proportion of the lofted model',
+  },
+  'neolamprologus-brichardi': {
+    model: 'neolamprologus-brichardi',
+    maxSlM: 0.09 / 1.25,
+    maxTlM: 0.09,
+    source:
+      'FishBase: 9 cm TL; no length-length relationship was looked up, so TL = 1.25 SL is an ' +
+      'assumption for cichlids',
+  },
+  'neolamprologus-multifasciatus': {
+    model: 'neolamprologus-multifasciatus',
+    maxSlM: 0.05 / 1.25,
+    maxTlM: 0.05,
+    source:
+      'Cichlidae.com species description: males to 5 cm TL, females rarely over 3.5 cm TL (no ' +
+      'FishBase maximum); TL = 1.25 SL is an assumption for cichlids',
+  },
+  'pseudotropheus-demasoni': {
+    model: 'pseudotropheus-demasoni',
+    maxSlM: 0.063,
+    maxTlM: 0.063 * 1.215,
+    source:
+      'FishBase (as Chindongo demasoni): 6.3 cm SL (Ref. 40900); no length-length relationship was ' +
+      'looked up, so TL = 1.215 SL, the proportion of the model',
+  },
+};
+
+/**
+ * Models males wear instead of the species model, keyed by model with the species they draw
+ * (apps/web/src/fish/profiles.ts sizes them by their profile's length factor).
+ */
+const MALE_MODELS: Readonly<Record<string, string>> = {
+  'guppy-male': 'guppy',
+  'melanochromis-auratus-male': 'melanochromis-auratus',
+};
+
+/**
  * Models whose own TL/SL draws the species outside the tolerance, with the issue that fixes the
  * model and a cap a little above its error when listed. The test asserts the error is still there,
  * so a fixed model forces the entry out, and that it stays under the cap, so it cannot get worse.
@@ -215,17 +292,51 @@ describe('species sizes are standard lengths', () => {
 
   it('documents an adult maximum for every species and every drawn fish model', () => {
     expect([...species.keys()].sort()).toEqual(Object.keys(ADULT_MAX).sort());
-    const drawn = new Set(Object.values(ADULT_MAX).map((a) => a.model));
+    const drawn = new Set(
+      [...Object.values(ADULT_MAX), ...Object.values(AWAITING_CONTENT)].map((a) => a.model),
+    );
     for (const m of models.values()) {
-      if (drawn.has(m.id)) continue;
-      // ADULT_MAX is keyed by species and the guppy's model is guppy-female; the web puts male
-      // guppies in guppy-male at 0.625 of the species length (apps/web/src/fish/profiles.ts).
-      expect(m.id, `fish model "${m.id}" needs an ADULT_MAX entry`).toBe('guppy-male');
+      if (drawn.has(m.id) || MALE_MODELS[m.id] !== undefined) continue;
+      expect.fail(`fish model "${m.id}" needs an ADULT_MAX or AWAITING_CONTENT entry`);
     }
     for (const [id, adult] of Object.entries(ADULT_MAX)) {
       expect(models.get(adult.model)?.species, id).toBe(id);
     }
   });
+
+  it('draws every male model as a documented species', () => {
+    for (const [model, id] of Object.entries(MALE_MODELS)) {
+      expect(
+        ADULT_MAX[id] ?? AWAITING_CONTENT[id],
+        `${model} draws undocumented "${id}"`,
+      ).toBeDefined();
+      const built = models.get(model);
+      if (built !== undefined) expect(built.species, model).toBe(id);
+    }
+  });
+
+  it('keeps a species awaiting content out of ADULT_MAX until its file lands', () => {
+    for (const id of Object.keys(AWAITING_CONTENT)) {
+      expect(species.has(id), `${id} has content: move it from AWAITING_CONTENT to ADULT_MAX`).toBe(
+        false,
+      );
+      expect(ADULT_MAX[id], id).toBeUndefined();
+    }
+  });
+
+  it.each(Object.entries(AWAITING_CONTENT))(
+    '%s: a built model awaiting content has the literature TL/SL',
+    (id, adult) => {
+      expect(adult.maxSlM, adult.source).toBeLessThan(adult.maxTlM);
+      const model = models.get(adult.model);
+      if (model === undefined) return;
+      expect(model.species, adult.model).toBe(id);
+      expect(
+        Math.abs((adult.maxSlM * model.tlOverSl) / adult.maxTlM - 1),
+        adult.source,
+      ).toBeLessThan(TOLERANCE);
+    },
+  );
 
   it.each(Object.entries(ADULT_MAX))('%s: maxSizeM is the literature maximum SL', (id, adult) => {
     const lifecycle = species.get(id)?.lifecycle;
