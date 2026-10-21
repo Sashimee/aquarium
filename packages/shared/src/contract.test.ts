@@ -13,6 +13,7 @@ import {
   memorialSchema,
   waterParametersSchema,
   createTankRequestSchema,
+  treatRequestSchema,
   fishSchema,
   httpUrlSchema,
   presetLayoutSchema,
@@ -179,6 +180,7 @@ describe('tank and fish', () => {
       size: 'standard',
       quarantine: false,
       shared: false,
+      inGallery: false,
       shareToken: null,
       equipment: DEFAULT_EQUIPMENT,
       recentVisitDays: 3,
@@ -206,21 +208,37 @@ describe('tank and fish', () => {
     );
   });
 
-  it('validates tank and fish requests', () => {
-    expect(createTankRequestSchema.safeParse({ name: 'T', biome: 'freshwater' }).success).toBe(
+  it('requires an idempotency key on treat and bottled bacteria', () => {
+    expect(treatRequestSchema.safeParse({ kind: 'ich' }).success).toBe(false);
+    expect(treatRequestSchema.safeParse({ kind: 'ich', idempotencyKey: 'abcdefgh1' }).success).toBe(
       true,
     );
+    expect(careActionSchema.safeParse({ type: 'bottled_bacteria' }).success).toBe(false);
+    expect(
+      careActionSchema.safeParse({ type: 'bottled_bacteria', idempotencyKey: 'abcdefgh1' }).success,
+    ).toBe(true);
+  });
+
+  it('validates tank and fish requests', () => {
+    expect(
+      createTankRequestSchema.safeParse({
+        name: 'T',
+        biome: 'freshwater',
+        idempotencyKey: 'abcdefgh1',
+      }).success,
+    ).toBe(true);
     expect(createTankRequestSchema.safeParse({ name: '', biome: 'freshwater' }).success).toBe(
       false,
     );
     expect(updateTankRequestSchema.safeParse({ name: 'New' }).success).toBe(true);
     expect(updateTankRequestSchema.safeParse({}).success).toBe(false);
-    expect(addFishRequestSchema.safeParse({ species: 'neon-tetra', name: 'Blip' }).success).toBe(
-      true,
-    );
-    expect(addFishRequestSchema.safeParse({ species: 'Neon Tetra', name: 'Blip' }).success).toBe(
-      false,
-    );
+    const buy = { stage: 'adult', idempotencyKey: 'abcdefgh1' };
+    expect(
+      addFishRequestSchema.safeParse({ species: 'neon-tetra', name: 'Blip', ...buy }).success,
+    ).toBe(true);
+    expect(
+      addFishRequestSchema.safeParse({ species: 'Neon Tetra', name: 'Blip', ...buy }).success,
+    ).toBe(false);
   });
 });
 
@@ -266,6 +284,16 @@ describe('care events', () => {
         kind: 'water_alert',
         payload: { metric: 'ph', state: 'high' },
       }).success,
+    ).toBe(false);
+    const moved = {
+      ...base,
+      kind: 'fish_moved',
+      payload: { fishId: id, direction: 'out', otherTankId: id2 },
+    };
+    expect(careEventSchema.safeParse(moved).success).toBe(true);
+    expect(
+      careEventSchema.safeParse({ ...moved, payload: { ...moved.payload, direction: 'up' } })
+        .success,
     ).toBe(false);
     expect(replayQuerySchema.parse({ since: ts }).limit).toBe(200);
     expect(replayQuerySchema.safeParse({ since: ts, limit: '501' }).success).toBe(false);

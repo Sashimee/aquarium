@@ -181,6 +181,7 @@ describe('api client', () => {
       size: 'standard',
       quarantine: false,
       shared: false,
+      inGallery: false,
       shareToken: null,
       equipment: DEFAULT_EQUIPMENT,
       recentVisitDays: 0,
@@ -287,6 +288,57 @@ describe('api client sharing', () => {
     ]);
   });
 
+  it('puts the gallery toggle, validating the body', async () => {
+    const fetcher = vi.fn().mockResolvedValue(json(tankFixture({ shared: true, inGallery: true })));
+    const api = createApiClient(fetcher);
+    expect((await api.setGallery(TANK_A, true)).inGallery).toBe(true);
+    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`/api/tanks/${TANK_A}/gallery`);
+    expect(init).toMatchObject({ method: 'PUT', body: '{"listed":true}' });
+    await expect(api.setGallery(TANK_A, 'yes' as never)).rejects.toBeInstanceOf(
+      ClientValidationError,
+    );
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads the gallery page and sends the vote on the vote route', async () => {
+    const week = { weekStart: '2026-02-02T00:00:00.000Z', weekEnd: '2026-02-09T00:00:00.000Z' };
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(json({ ...week, total: 0, entries: [], myVote: null }))
+      .mockResolvedValueOnce(json({ ...week, myVote: TANK_A }))
+      .mockResolvedValueOnce(json({ ...week, myVote: null }));
+    const api = createApiClient(fetcher);
+    expect((await api.gallery({ limit: 24, offset: 24 })).total).toBe(0);
+    expect((await api.castVote(TANK_A)).myVote).toBe(TANK_A);
+    expect((await api.clearVote()).myVote).toBeNull();
+    const calls = fetcher.mock.calls as [string, RequestInit | undefined][];
+    expect(calls[0]?.[0]).toBe('/api/gallery?limit=24&offset=24');
+    expect(calls[1]?.[0]).toBe('/api/gallery/vote');
+    expect(calls[1]?.[1]).toMatchObject({ method: 'PUT', body: `{"tankId":"${TANK_A}"}` });
+    expect(calls[2]?.[1]).toMatchObject({ method: 'DELETE' });
+  });
+
+  it('turns vote refusals into typed errors and rejects a bad tank id locally', async () => {
+    const reply = (status: number, code: string, headers: Record<string, string> = {}) =>
+      new Response(JSON.stringify({ error: { code, message: 'nope' } }), {
+        status,
+        headers: { 'content-type': 'application/json', ...headers },
+      });
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(reply(429, 'rate_limited', { 'retry-after': '30' }))
+      .mockResolvedValueOnce(reply(403, 'own_tank'));
+    const api = createApiClient(fetcher);
+    await expect(api.castVote(TANK_A)).rejects.toMatchObject({
+      status: 429,
+      retryAfterSeconds: 30,
+    });
+    await expect(api.castVote(TANK_A)).rejects.toMatchObject({ status: 403, code: 'own_tank' });
+    await expect(api.castVote('nope')).rejects.toBeInstanceOf(ClientValidationError);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
   it('sets and clears a reaction on the public path and reads the new state', async () => {
     const fetcher = vi.fn().mockImplementation(async () => json(state));
     const api = createApiClient(fetcher);
@@ -324,6 +376,21 @@ describe('api client sharing', () => {
       retryAfterSeconds: 17,
     });
     await expect(api.setReaction(TOKEN, 'star')).rejects.toMatchObject({ status: 401 });
+  });
+
+  it('carries the conflict reason and posts a move to the fish route', async () => {
+    const refusal = new Response(
+      JSON.stringify({ error: { code: 'conflict', message: 'Full.', reason: 'tank_full' } }),
+      { status: 409, headers: { 'content-type': 'application/json' } },
+    );
+    const fetcher = vi.fn().mockResolvedValue(refusal);
+    const request = { toTankId: TANK_A, idempotencyKey: 'move-key-0001' };
+    await expect(
+      createApiClient(fetcher).moveFish(TANK_A, 'fish-1', request),
+    ).rejects.toMatchObject({ status: 409, reason: 'tank_full' });
+    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`/api/tanks/${TANK_A}/fish/fish-1/move`);
+    expect(JSON.parse(init.body as string)).toEqual(request);
   });
 
   it('refuses a public tank response it cannot read', async () => {
@@ -680,6 +747,7 @@ describe('api client Pearls contract', () => {
   it('refuses bottled bacteria without a key before calling the server', async () => {
     const fetcher = vi.fn();
     const error = await createApiClient(fetcher)
+      // @ts-expect-error the key is required by the contract; this checks schema validation of untyped input
       .care(TANK_A, { type: 'bottled_bacteria' })
       .catch((e) => e);
     expect(error).toBeInstanceOf(ClientValidationError);
@@ -733,16 +801,17 @@ describe('api client Pearls contract', () => {
       entry(40, 'earn', 'earn:daily-care', 'key-cccccccc'),
       entry(500, 'grant', null, 'key-dddddddd'),
     ];
-    const fetcher = vi.fn().mockResolvedValue(json({ wallet: { balance: 420 }, ledger }));
+    const fetcher = vi
+      .fn()
+      .mockResolvedValue(json({ wallet: { balance: 420 }, ledger, owned: ['plant:java-fern'] }));
     expect(await createApiClient(fetcher).wallet()).toEqual({
       balance: 420,
       owned: ['plant:java-fern'],
-      released: [],
     });
     expect(fetcher.mock.calls[0]?.[0]).toBe('/api/wallet');
   });
 
-  it('treats a purchase whose newest entry is a refund as released', async () => {
+  describe('wallet ownership from the server list', () => {
     const entry = (delta: number, reason: string, itemRef: string, key: string) => ({
       id: crypto.randomUUID(),
       userId: 'u1',
@@ -753,15 +822,51 @@ describe('api client Pearls contract', () => {
       idempotencyKey: key,
       createdAt: '2026-02-01T12:00:00.000Z',
     });
-    const ledger = [
-      entry(25, 'refund', 'plant:java-fern', 'key-aaaaaaaa'),
-      entry(-25, 'purchase', 'plant:java-fern', 'key-bbbbbbbb'),
-      entry(-80, 'purchase', 'decor:boulder-01', 'key-cccccccc'),
-    ];
-    const fetcher = vi.fn().mockResolvedValue(json({ wallet: { balance: 420 }, ledger }));
-    expect(await createApiClient(fetcher).wallet()).toMatchObject({
-      owned: ['decor:boulder-01'],
-      released: ['plant:java-fern'],
+
+    it('marks an item bought long before the ledger page as owned', async () => {
+      const ledger = [entry(-5, 'purchase', 'plant:anubias', 'key-aaaaaaaa')];
+      const fetcher = vi
+        .fn()
+        .mockResolvedValue(
+          json({ wallet: { balance: 10 }, ledger, owned: ['decor:boulder-01', 'plant:anubias'] }),
+        );
+      expect(await createApiClient(fetcher).wallet()).toEqual({
+        balance: 10,
+        owned: ['decor:boulder-01', 'plant:anubias'],
+      });
+    });
+
+    it('owns an item refunded and bought again, and not one only refunded', async () => {
+      const ledger = [
+        entry(-25, 'purchase', 'plant:java-fern', 'key-aaaaaaaa'),
+        entry(25, 'refund', 'plant:java-fern', 'key-bbbbbbbb'),
+        entry(80, 'refund', 'decor:boulder-01', 'key-cccccccc'),
+      ];
+      const fetcher = vi
+        .fn()
+        .mockResolvedValue(json({ wallet: { balance: 10 }, ledger, owned: ['plant:java-fern'] }));
+      expect(await createApiClient(fetcher).wallet()).toEqual({
+        balance: 10,
+        owned: ['plant:java-fern'],
+      });
+    });
+
+    it('trusts an empty owned list over a purchase in the ledger page', async () => {
+      const ledger = [entry(-25, 'purchase', 'plant:java-fern', 'key-aaaaaaaa')];
+      const fetcher = vi
+        .fn()
+        .mockResolvedValue(json({ wallet: { balance: 10 }, ledger, owned: [] }));
+      expect(await createApiClient(fetcher).wallet()).toEqual({
+        balance: 10,
+        owned: [],
+      });
+    });
+
+    it('rejects a wallet response without an owned list', async () => {
+      const fetcher = vi.fn().mockResolvedValue(json({ wallet: { balance: 10 }, ledger: [] }));
+      await expect(createApiClient(fetcher).wallet()).rejects.toMatchObject({
+        code: 'unexpected_response',
+      });
     });
   });
 

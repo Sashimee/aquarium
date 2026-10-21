@@ -1,4 +1,12 @@
-import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { useAuth, useBridge, usePhotoView, useRedirect, useRoute } from './context';
 import { Dock } from './Dock';
 import {
@@ -67,7 +75,14 @@ function Screen() {
       return <CreditsScreen />;
     case 'not-found':
       return <NotFoundScreen />;
+    case 'gallery':
+      return (
+        <Suspense fallback={null}>
+          <GalleryScreen />
+        </Suspense>
+      );
     case 'public-tank':
+    case 'gallery-tank':
       return null;
   }
 }
@@ -79,6 +94,10 @@ const ResetPasswordScreen = lazy(() =>
   import('./PasswordReset').then((m) => ({ default: m.ResetPasswordScreen })),
 );
 
+const GalleryTankView = lazy(() =>
+  import('./PublicTank').then((m) => ({ default: m.GalleryTankView })),
+);
+const GalleryScreen = lazy(() => import('./Gallery').then((m) => ({ default: m.GalleryScreen })));
 const PublicTankView = lazy(() =>
   import('./PublicTank').then((m) => ({ default: m.PublicTankView })),
 );
@@ -153,11 +172,16 @@ function isOpen(panel: Panel): panel is OpenPanel {
 export function App() {
   useRedirect();
   const route = useRoute();
-  if (route.name === 'public-tank') return <PublicShell token={route.token} />;
+  if (route.name === 'public-tank') {
+    return <PublicShell view={<PublicTankView token={route.token} />} />;
+  }
+  if (route.name === 'gallery-tank') {
+    return <PublicShell view={<GalleryTankView id={route.id} />} />;
+  }
   return <Shell />;
 }
 
-function PublicShell({ token }: { token: string }) {
+function PublicShell({ view }: { view: ReactNode }) {
   return (
     <div className="shell">
       <a
@@ -170,9 +194,7 @@ function PublicShell({ token }: { token: string }) {
       >
         Skip to the tank
       </a>
-      <Suspense fallback={null}>
-        <PublicTankView token={token} />
-      </Suspense>
+      <Suspense fallback={null}>{view}</Suspense>
       <LoadingScreen />
     </div>
   );

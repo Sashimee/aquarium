@@ -68,6 +68,7 @@ const call = (
   });
 
 const errorCode = (res: LightMyRequestResponse) => apiErrorSchema.parse(res.json()).error.code;
+const errorReason = (res: LightMyRequestResponse) => apiErrorSchema.parse(res.json()).error.reason;
 
 async function sickTank(
   h: Harness,
@@ -76,7 +77,11 @@ async function sickTank(
   owner?: Account,
 ) {
   const who = owner ?? (await account(h));
-  const created = await call(h, who, 'POST', '/api/tanks', { name: 'Home', biome: 'freshwater' });
+  const created = await call(h, who, 'POST', '/api/tanks', {
+    name: 'Home',
+    biome: 'freshwater',
+    idempotencyKey: randomUUID(),
+  });
   expect(created.statusCode).toBe(201);
   const tank = tankSchema.parse(created.json());
   const bought = await call(h, who, 'POST', `/api/tanks/${tank.id}/fish`, {
@@ -105,8 +110,14 @@ async function sickTank(
   return { who, tankId: tank.id, fishId: row.id };
 }
 
+// A fish inside its new-fish window rolls a random fresh ich or velvet every hour, seeded by its random
+// id and the wall-clock time, so after the cure it can catch a different disease and the assertions
+// below flake. Settled fish in clean water have zero onset rate, which makes the outcome deterministic.
+const settleIn = (h: Harness, fishId: string) =>
+  h.database.db.update(schema.fish).set({ introducedAt: null }).where(eq(schema.fish.id, fishId));
+
 const treat = (h: Harness, who: Account, tankId: string, body: object) =>
-  call(h, who, 'POST', `/api/tanks/${tankId}/treat`, body);
+  call(h, who, 'POST', `/api/tanks/${tankId}/treat`, { idempotencyKey: randomUUID(), ...body });
 
 const fishOf = (tank: Tank, id: string) => {
   const fish = tank.fish.find((f) => f.id === id);
@@ -153,6 +164,31 @@ describe('treatment', () => {
         expect((await treat(h, who, tankId, body)).statusCode).toBe(400);
       },
     );
+
+    it.each(['standard', 'premium'] as const)(
+      'rejects %s medicine sent without idempotencyKey and changes nothing',
+      async (potency) => {
+        const { who, tankId } = await sickTank(h);
+        const before = await balance(h, who);
+        const ledgerBefore = await h.database.db
+          .select()
+          .from(schema.ledger)
+          .where(eq(schema.ledger.userId, who.userId));
+        const res = await call(h, who, 'POST', `/api/tanks/${tankId}/treat`, {
+          kind: 'ich',
+          potency,
+        });
+        expect(res.statusCode).toBe(400);
+        expect(JSON.stringify(res.json())).toContain('idempotencyKey');
+        expect(await balance(h, who)).toBe(before);
+        const ledgerAfter = await h.database.db
+          .select()
+          .from(schema.ledger)
+          .where(eq(schema.ledger.userId, who.userId));
+        expect(ledgerAfter).toHaveLength(ledgerBefore.length);
+        expect((await getTank(h, who, tankId)).medicine).toBeNull();
+      },
+    );
   });
 
   describe('standard medicine', () => {
@@ -161,6 +197,8 @@ describe('treatment', () => {
       const res = await treat(h, who, tankId, { kind: 'velvet' });
       expect(res.statusCode).toBe(409);
       expect(errorCode(res)).toBe('conflict');
+      expect(errorReason(res)).toBe('nothing_to_treat');
+      expect(apiErrorSchema.parse(res.json()).error.message).toContain('Velvet');
     });
 
     it('is free, starts the course and marks the sick fish as treated', async () => {
@@ -190,6 +228,7 @@ describe('treatment', () => {
 
     it('cures the fish when the whole course runs', async () => {
       const { who, tankId, fishId } = await sickTank(h, 'ich', 0.4);
+      await settleIn(h, fishId);
       await treat(h, who, tankId, { kind: 'ich' });
       h.clock.advance((courseHours('ich', 'standard') + 1) * HOUR_MS);
       const tank = await getTank(h, who, tankId);
@@ -250,6 +289,7 @@ describe('treatment', () => {
       expect(third.statusCode).toBe(200);
       const fourth = await treat(h, who, tankId, { kind: 'ich' });
       expect(fourth.statusCode).toBe(409);
+      expect(errorReason(fourth)).toBe('dose_limit');
       h.clock.advance(6 * HOUR_MS);
       const fish = fishOf(await getTank(h, who, tankId), fishId);
       expect(fish.health).toBeLessThan(1);
@@ -285,6 +325,7 @@ describe('treatment', () => {
       const res = await treat(h, who, tankId, { kind: 'velvet' });
       expect(res.statusCode).toBe(409);
       expect(errorCode(res)).toBe('conflict');
+      expect(errorReason(res)).toBe('other_medicine');
     });
 
     it('treats another disease after a water change leaves only a residue', async () => {
@@ -454,6 +495,7 @@ describe('treatment', () => {
       await treat(h, who, tankId, { kind: 'ich', idempotencyKey });
       const res = await treat(h, who, tankId, { kind: 'ich', potency: 'premium', idempotencyKey });
       expect(res.statusCode).toBe(409);
+      expect(errorReason(res)).toBe('key_reused');
     });
 
     it('refuses a premium key reused on another tank, without charging', async () => {

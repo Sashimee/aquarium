@@ -25,9 +25,7 @@ export const algaeScrapeEventSchema = z.strictObject({ type: z.literal('algae_sc
 
 export const bottledBacteriaEventSchema = z.strictObject({
   type: z.literal('bottled_bacteria'),
-  idempotencyKey: idempotencyKeySchema
-    .optional()
-    .describe('required: bottled bacteria cost Pearls'),
+  idempotencyKey: idempotencyKeySchema.describe('bottled bacteria cost Pearls'),
 });
 export const filterRinseEventSchema = z.strictObject({ type: z.literal('filter_rinse') });
 
@@ -69,6 +67,7 @@ export const careEventKindSchema = z.enum([
   'born',
   'sick',
   'water_alert',
+  'fish_moved',
 ]);
 
 export const waterAlertMetricSchema = z.enum(['ammonia', 'nitrite', 'algae']);
@@ -117,6 +116,16 @@ export const careEventSchema = z.discriminatedUnion('kind', [
     ...eventBase,
     kind: z.literal('water_alert'),
     payload: z.strictObject({ metric: waterAlertMetricSchema, state: z.enum(['high', 'normal']) }),
+  }),
+  z.strictObject({
+    ...eventBase,
+    kind: z.literal('fish_moved'),
+    payload: z.strictObject({
+      fishId: idSchema,
+      direction: z.enum(['in', 'out']),
+      otherTankId: idSchema,
+      key: idempotencyKeySchema.optional(),
+    }),
   }),
 ]);
 export type CareEvent = z.infer<typeof careEventSchema>;

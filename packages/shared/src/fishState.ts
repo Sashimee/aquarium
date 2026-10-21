@@ -16,6 +16,12 @@ export const NEUTRAL_PERSONALITY: Personality = { boldness: 0.5, greed: 0.5, soc
 export const diseaseKindSchema = z.enum(['ich', 'fin-rot', 'velvet']);
 export type DiseaseKind = z.infer<typeof diseaseKindSchema>;
 
+export const DISEASE_NAMES: Readonly<Record<DiseaseKind, string>> = {
+  ich: 'Ich',
+  'fin-rot': 'Fin rot',
+  velvet: 'Velvet',
+};
+
 export const diseaseStateSchema = z.strictObject({
   kind: diseaseKindSchema,
   since: timestampSchema,

@@ -80,6 +80,7 @@ export function registerLegalRoutes(deps: LegalDeps): void {
       [prefs],
       subscriptions,
       reactions,
+      votes,
       auditRows,
       collectionRows,
       awardRows,
@@ -146,6 +147,17 @@ export function registerLegalRoutes(deps: LegalDeps): void {
         .innerJoin(schema.tanks, eq(schema.tanks.id, schema.tankReactions.tankId))
         .where(eq(schema.tankReactions.userId, userId))
         .orderBy(asc(schema.tankReactions.createdAt)),
+      db
+        .select({
+          weekStart: schema.tankVotes.weekStart,
+          createdAt: schema.tankVotes.createdAt,
+          tankName: schema.tanks.name,
+          shared: sql<boolean>`${schema.tanks.shareTokenHash} is not null`,
+        })
+        .from(schema.tankVotes)
+        .innerJoin(schema.tanks, eq(schema.tanks.id, schema.tankVotes.tankId))
+        .where(eq(schema.tankVotes.userId, userId))
+        .orderBy(asc(schema.tankVotes.weekStart)),
       db
         .select({
           at: schema.auditLog.at,
@@ -246,6 +258,10 @@ export function registerLegalRoutes(deps: LegalDeps): void {
             pushSubscriptions: subscriptions,
           },
           reactions: reactions.map(({ tankName, shared, ...rest }) => ({
+            ...rest,
+            tank: shared ? publicName(tankName) : null,
+          })),
+          galleryVotes: votes.map(({ tankName, shared, ...rest }) => ({
             ...rest,
             tank: shared ? publicName(tankName) : null,
           })),

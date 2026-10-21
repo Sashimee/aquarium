@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { NodeIO } from '@gltf-transform/core';
@@ -7,11 +8,17 @@ import { describe, expect, it } from 'vitest';
 import {
   CRAB_KIND,
   HERMIT_RECIPES,
+  assertClawsOpposite,
   assignLimbIndices,
   clusterByDirection,
   crabColour,
+  groundWalkers,
+  limbEnds,
+  limbReach,
   recolourDense,
   segmentCrab,
+  shellTrailYaw,
+  type LimbFrame,
 } from './hermit.ts';
 import { canonicalVertices } from './crew-scan.ts';
 import {
@@ -112,125 +119,230 @@ function merge(meshes: Mesh[]): { positions: Float32Array; indices: Uint32Array 
 }
 
 const OPTIONS = {
-  voxelFraction: 1 / 60,
-  bodyOpeningFraction: 0.18,
-  thinOpeningFraction: 0.04,
-  crabZFraction: 0.55,
-  limbCutFraction: 0.35,
+  voxelFraction: 1 / 90,
+  trunkOpeningFraction: 0.1,
+  trunkMarginFraction: 0.05,
+  thinOpeningFraction: 0.012,
   minPieceReach: 0.15,
 };
 
 describe('segmentCrab', () => {
-  const scan = merge([
-    sphere([0, 0, -1], 1),
-    tube([0, 0, -0.3], [0, 0, 0.9], 0.3, 36, 24),
-    tube([0.5, 0, 0.5], [1.4, -0.3, 1.6], 0.22),
-    tube([-0.5, 0, 0.5], [-1.4, -0.3, 1.6], 0.22),
-    tube([0, 0.1, 0.9], [0.1, 0.9, 1.8], 0.05, 16, 8),
+  const crab = merge([
+    sphere([0, 0, 0], 1),
+    tube([0.8, 0, 0.3], [2, 0, 1.5], 0.15),
+    tube([-0.8, 0, 0.3], [-2, 0, 1.5], 0.15),
+    tube([0, 0.5, 0.8], [0.1, 1.6, 2.2], 0.02, 16, 8),
   ]);
-  const result = segmentCrab(scan.positions, scan.indices, OPTIONS);
+  const result = segmentCrab(crab.positions, crab.indices, OPTIONS);
 
-  it('keeps the bulky sphere as shell and finds the limbs beyond it', () => {
-    const count = scan.positions.length / 3;
-    for (let i = 0; i < 49 * 64; i++) expect(result.kind[i]).toBe(CRAB_KIND.shell);
-    expect(result.kind.length).toBe(count);
-    const kinds = result.pieces.map((p) => p.kind);
-    expect(kinds.filter((k) => k === CRAB_KIND.leg).length).toBeGreaterThanOrEqual(2);
-    expect(kinds).toContain(CRAB_KIND.antenna);
-  });
-
-  it('puts a leg on each side and the antenna above', () => {
+  it('keeps the bulky body as the trunk and finds a leg each side and the antenna', () => {
+    const sphereVertices = 49 * 64;
+    for (let i = 0; i < sphereVertices; i++) {
+      expect(result.kind[i]).toBe(CRAB_KIND.stem);
+      expect(result.piece[i]).toBe(-1);
+    }
     const legs = result.pieces.filter((p) => p.kind === CRAB_KIND.leg);
-    expect(legs.some((p) => p.centroid[0] > 0.3)).toBe(true);
-    expect(legs.some((p) => p.centroid[0] < -0.3)).toBe(true);
-    const antenna = result.pieces.find((p) => p.kind === CRAB_KIND.antenna)!;
-    expect(antenna.centroid[1]).toBeGreaterThan(0.2);
+    expect(legs).toHaveLength(2);
+    expect(legs.some((p) => p.centroid[0] > 1)).toBe(true);
+    expect(legs.some((p) => p.centroid[0] < -1)).toBe(true);
+    const antennae = result.pieces.filter((p) => p.kind === CRAB_KIND.antenna);
+    expect(antennae).toHaveLength(1);
+    expect(antennae[0]!.centroid[1]).toBeGreaterThan(0.8);
   });
 
-  it('weights limbs from the root to the tip inside [0, 1] and leaves the shell at 0', () => {
+  it('weights each limb 0 at its root to 1 at its tip', () => {
     for (let i = 0; i < result.weight.length; i++) {
       expect(result.weight[i]).toBeGreaterThanOrEqual(0);
       expect(result.weight[i]).toBeLessThanOrEqual(1);
-      if (result.kind[i] === CRAB_KIND.shell) expect(result.piece[i]).toBe(-1);
     }
-    const legTip = result.pieces.findIndex((p) => p.kind === CRAB_KIND.leg);
-    const weights = Array.from(result.piece, (p, i) =>
-      p === legTip ? result.weight[i]! : -1,
-    ).filter((w) => w >= 0);
-    expect(Math.max(...weights)).toBeCloseTo(1, 5);
-    expect(Math.min(...weights)).toBeCloseTo(0, 5);
+    result.pieces.forEach((_, piece) => {
+      const weights = Array.from(result.piece, (p, i) =>
+        p === piece ? result.weight[i]! : -1,
+      ).filter((w) => w >= 0);
+      expect(Math.max(...weights)).toBeCloseTo(1, 5);
+      expect(Math.min(...weights)).toBeCloseTo(0, 5);
+    });
   });
 
-  it('places the hip between the shell and the limbs', () => {
-    expect(result.hip[2]).toBeGreaterThan(result.shellCentroid[2]);
+  it('places the hip inside the trunk', () => {
+    for (const c of result.hip) expect(Math.abs(c)).toBeLessThan(0.3);
   });
 
-  it('fails loudly when no crab touches the shell', () => {
-    const lone = merge([sphere([0, 0, -1], 1), tube([4, 0, 3], [4, 0, 5], 0.3)]);
-    expect(() => segmentCrab(lone.positions, lone.indices, OPTIONS)).toThrow(
-      /does not touch the shell/,
-    );
+  it('fails loudly when no trunk survives the opening', () => {
+    expect(() =>
+      segmentCrab(crab.positions, crab.indices, { ...OPTIONS, trunkOpeningFraction: 2 }),
+    ).toThrow(/no trunk survives/);
   });
 });
 
+describe('limbEnds and limbReach', () => {
+  const positions = [0, 0, 0, 0, 0, 3, 0, 0, 4];
+  it('measures root to tip', () => {
+    expect(limbEnds(positions, [0, 1, 2], [0, 0.5, 1])).toEqual({
+      root: [0, 0, 0],
+      tip: [0, 0, 4],
+    });
+    expect(limbReach(positions, [0, 1, 2], [0, 0.5, 1])).toBeCloseTo(4);
+  });
+
+  it('throws on a piece without root or tip vertices', () => {
+    expect(() => limbReach(positions, [0, 1], [0, 0.5, 1])).toThrow(/limbEnds/);
+    expect(() => limbReach(positions, [1, 2], [0, 0.5, 1])).toThrow(/limbEnds/);
+  });
+});
+
+const leg = (lateral: number, ahead: number, rootAhead: number, reach = 1): LimbFrame => ({
+  kind: CRAB_KIND.leg,
+  lateral,
+  ahead,
+  rootAhead,
+  reach,
+});
+
 describe('assignLimbIndices', () => {
-  it('ranks legs fore to aft on their own side, so a side with fewer legs does not shift the other', () => {
+  it('gives the foremost root on each side pair 0 and ranks the walkers fore to aft on their side', () => {
     const index = assignLimbIndices([
-      { kind: CRAB_KIND.leg, lateral: -1, ahead: 3, reach: 1 },
-      { kind: CRAB_KIND.leg, lateral: 1, ahead: 2.9, reach: 1 },
-      { kind: CRAB_KIND.leg, lateral: -1, ahead: 1, reach: 3 },
-      { kind: CRAB_KIND.leg, lateral: -1, ahead: 2, reach: 3 },
+      leg(-1, 3, 3),
+      leg(1, 3, 3),
+      leg(-1, 1, 0.5),
+      leg(-1, 2, 1),
+      leg(1, 2, 1),
     ]);
-    expect(index).toEqual([0, 1, 4, 2]);
+    expect(index).toEqual([0, 1, 4, 2, 3]);
   });
 
-  it('puts the shortest-reach leg of each side in pair 0 even when it sits behind the walking legs', () => {
+  it('picks the claw per side, so a walking leg may root ahead of the other sides claw', () => {
     const index = assignLimbIndices([
-      { kind: CRAB_KIND.leg, lateral: -1, ahead: 3, reach: 7 },
-      { kind: CRAB_KIND.leg, lateral: -1, ahead: 1, reach: 3 },
-      { kind: CRAB_KIND.leg, lateral: -1, ahead: 2, reach: 7 },
-      { kind: CRAB_KIND.leg, lateral: 1, ahead: 3, reach: 7 },
-      { kind: CRAB_KIND.leg, lateral: 1, ahead: 2, reach: 7 },
-      { kind: CRAB_KIND.leg, lateral: 1, ahead: 1, reach: 3.2 },
+      leg(-0.1, 0.57, 0.42, 0.33),
+      leg(0.3, 0.52, 0.35, 0.33),
+      leg(-0.5, 0.6, 0.38, 0.5),
+      leg(0.5, 0.42, 0.28, 0.5),
     ]);
-    expect(index).toEqual([2, 0, 4, 3, 5, 1]);
+    expect(index).toEqual([0, 1, 2, 3]);
   });
 
-  it('throws when the two sides claws do not look alike', () => {
+  it('allows the real left and right claw asymmetry up to 4:1 and no further', () => {
+    const pair = (right: number): LimbFrame[] => [
+      leg(-1, 3, 3, 1),
+      leg(1, 3, 3, right),
+      leg(-1, 1, 0.5),
+      leg(1, 1, 0.5),
+    ];
+    expect(assignLimbIndices(pair(4))).toEqual([0, 1, 2, 3]);
+    expect(() => assignLimbIndices(pair(4.5))).toThrow(/claws differ/);
+  });
+
+  it('throws when a claw root does not lead the walking legs on its side', () => {
     expect(() =>
-      assignLimbIndices([
-        { kind: CRAB_KIND.leg, lateral: -1, ahead: 2, reach: 3 },
-        { kind: CRAB_KIND.leg, lateral: -1, ahead: 1, reach: 7 },
-        { kind: CRAB_KIND.leg, lateral: 1, ahead: 2, reach: 7 },
-        { kind: CRAB_KIND.leg, lateral: 1, ahead: 1, reach: 8 },
-      ]),
-    ).toThrow(/claws differ/);
+      assignLimbIndices([leg(-1, 3, 1), leg(1, 3, 3), leg(-1, 2, 1), leg(1, 2, 1)]),
+    ).toThrow(/leads the foremost walking leg/);
   });
 
-  it('keeps indices unique when several legs share a rank and maps antennae to the 2/3 slot', () => {
-    const index = assignLimbIndices([
-      { kind: CRAB_KIND.leg, lateral: -1, ahead: 3, reach: 1 },
-      { kind: CRAB_KIND.leg, lateral: -1, ahead: 2, reach: 1 },
-      { kind: CRAB_KIND.antenna, lateral: -0.5, ahead: 4, reach: 1 },
-      { kind: CRAB_KIND.antenna, lateral: 0.5, ahead: 4, reach: 1 },
-    ]);
-    expect(index[0]).not.toBe(index[1]);
-    expect(index.slice(2)).toEqual([2, 3]);
+  it('throws when a side has no leg or there is no walking leg', () => {
+    expect(() => assignLimbIndices([leg(-1, 3, 3), leg(-1, 2, 1)])).toThrow(/no leg piece/);
+    expect(() => assignLimbIndices([leg(-1, 3, 3), leg(1, 3, 3)])).toThrow(/walking leg/);
   });
 
-  it('caps the pair index at four pairs and gives non-limb pieces -1', () => {
-    const legs = Array.from({ length: 7 }, (_, i) => ({
-      kind: CRAB_KIND.leg,
-      lateral: -1,
-      ahead: 7 - i,
-      reach: 1 + i,
-    }));
+  it('keeps indices unique past four pairs, sends antennae to 2/3 and non-limbs to -1', () => {
     const index = assignLimbIndices([
-      ...legs,
-      { kind: CRAB_KIND.stem, lateral: 0, ahead: 0, reach: 0 },
+      leg(-1, 9, 9),
+      leg(-1, 8, 1),
+      leg(-1, 7, 1),
+      leg(-1, 6, 1),
+      leg(-1, 5, 1),
+      leg(-1, 4, 1),
+      leg(1, 9, 9),
+      leg(1, 8, 1),
+      { kind: CRAB_KIND.antenna, lateral: -0.5, ahead: 4, rootAhead: 4, reach: 1 },
+      { kind: CRAB_KIND.antenna, lateral: 0.5, ahead: 4, rootAhead: 4, reach: 1 },
+      { kind: CRAB_KIND.stem, lateral: 0, ahead: 0, rootAhead: 0, reach: 0 },
     ]);
-    expect(new Set(index.slice(0, 7)).size).toBe(7);
-    expect(index[7]).toBe(-1);
+    expect(new Set(index.slice(0, 8)).size).toBe(8);
+    expect(index.slice(8)).toEqual([2, 3, -1]);
+  });
+});
+
+describe('assertClawsOpposite', () => {
+  const legs = [leg(-1, 3, 3), leg(-0.5, 2.5, 2.8), leg(1, 2, 2.6), leg(-1, 1, 1)];
+  const byRoot = [...legs].sort((a, b) => b.rootAhead - a.rootAhead);
+
+  it('accepts one claw on each side, the -x one first', () => {
+    expect(() => assertClawsOpposite([legs[0]!, legs[2]!])).not.toThrow();
+  });
+
+  it('fails the global-order pick, which takes the two foremost roots whatever their side', () => {
+    expect(() => assertClawsOpposite([byRoot[0]!, byRoot[1]!])).toThrow(/not global order/);
+  });
+
+  it('fails a swapped pair and a pair on one side', () => {
+    expect(() => assertClawsOpposite([legs[2]!, legs[0]!])).toThrow(/assertClawsOpposite/);
+    expect(() => assertClawsOpposite([legs[1]!, legs[3]!])).toThrow(/assertClawsOpposite/);
+  });
+
+  it('keeps assignLimbIndices on the per-side pick for the same legs', () => {
+    expect(assignLimbIndices(legs)).toEqual([0, 2, 1, 4]);
+  });
+});
+
+describe('groundWalkers', () => {
+  const standoff = 0.01;
+  const verts = (tipY: number): Float32Array =>
+    Float32Array.from([0, -0.002, 0, 0, -0.005, 0.01, 0, tipY, 0.02]);
+  const kind = [CRAB_KIND.leg, CRAB_KIND.leg, CRAB_KIND.leg];
+  const weight = [0, 0.5, 1];
+
+  it('brings a hovering walking leg tip to the ground and leaves its root alone', () => {
+    const positions = verts(-0.006);
+    groundWalkers(positions, kind, [2, 2, 2], weight, standoff);
+    expect(positions[1]).toBe(Math.fround(-0.002));
+    expect(positions[7]).toBeCloseTo(-standoff, 6);
+    expect(positions[4]!).toBeLessThan(-0.005);
+  });
+
+  it('leaves claws, antennae and a leg already on the ground untouched', () => {
+    const claw = verts(-0.006);
+    groundWalkers(claw, kind, [0, 0, 0], weight, standoff);
+    expect(Array.from(claw)).toEqual(Array.from(verts(-0.006)));
+    const antenna = verts(-0.006);
+    groundWalkers(antenna, [7, 7, 7], [2, 2, 2], weight, standoff);
+    expect(Array.from(antenna)).toEqual(Array.from(verts(-0.006)));
+    const down = verts(-standoff);
+    groundWalkers(down, kind, [3, 3, 3], weight, standoff);
+    expect(Array.from(down)).toEqual(Array.from(verts(-standoff)));
+  });
+
+  it('reaches the ground when the lowest vertex is short of the limb tip', () => {
+    const positions = Float32Array.from([0, -0.002, 0, 0, -0.007, 0.01, 0, -0.004, 0.02]);
+    groundWalkers(positions, kind, [2, 2, 2], [0, 0.6, 1], standoff);
+    expect(Math.min(positions[1]!, positions[4]!, positions[7]!)).toBeCloseTo(-standoff, 4);
+  });
+});
+
+describe('shellTrailYaw', () => {
+  const rotate = (pts: Array<[number, number]>, yaw: number): Array<[number, number]> =>
+    pts.map(([x, z]) => [
+      x * Math.cos(yaw) + z * Math.sin(yaw),
+      -x * Math.sin(yaw) + z * Math.cos(yaw),
+    ]);
+  const lying: Array<[number, number]> = [];
+  for (let i = 0; i <= 30; i++) for (const w of [-4, 0, 4]) lying.push([-i, w]);
+
+  it('turns a shell lying along -x to trail along -z', () => {
+    const turned = rotate(lying, shellTrailYaw(lying, [0, 0]));
+    const xs = turned.map((p) => p[0]);
+    const zs = turned.map((p) => p[1]);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(8, 5);
+    expect(Math.min(...zs)).toBeCloseTo(-30, 5);
+    expect(Math.max(...zs)).toBeCloseTo(0, 5);
+  });
+
+  it('puts the far end behind the pivot whichever way the shell lies', () => {
+    for (const lie of [0.3, 1.9, -2.4, 4.4]) {
+      const pts = rotate(lying, lie);
+      const turned = rotate(pts, shellTrailYaw(pts, [0, 0]));
+      expect(Math.min(...turned.map((p) => p[1]))).toBeCloseTo(-30, 4);
+      expect(Math.max(...turned.map((p) => p[1]))).toBeCloseTo(0, 4);
+    }
   });
 });
 
@@ -291,7 +403,7 @@ describe('HERMIT_RECIPES', () => {
   it('defines a recipe with a positive size budget', () => {
     for (const recipe of HERMIT_RECIPES) {
       expect(recipe.maxTriangles).toBeGreaterThan(0);
-      expect(recipe.maxTriangles).toBeLessThanOrEqual(15000);
+      expect(recipe.maxTriangles).toBeLessThanOrEqual(25000);
       expect(recipe.fallbackLengthM).toBeGreaterThan(0);
     }
   });
@@ -367,33 +479,96 @@ describe('the shipped hermit crab', () => {
     for (const pair of [0, 2, 4]) expect(mean(pair, 'x')).toBeLessThan(mean(pair + 1, 'x'));
   });
 
-  it.each([0, 1, 2])(
-    'LOD%i: slots 0 and 1 are the claws, shorter than every walking leg and alike',
-    async (level) => {
-      const crab = await readCrab(level);
-      const sums = new Map<number, { root: number[]; tip: number[]; r: number; t: number }>();
-      for (let v = 0; v < crab.part.length; v++) {
-        if (!isLeg(crab, v)) continue;
-        const entry = sums.get(crab.leg[v]!) ?? { root: [0, 0, 0], tip: [0, 0, 0], r: 0, t: 0 };
-        const w = crab.weight[v]!;
-        const into = w < 0.1 ? entry.root : w > 0.9 ? entry.tip : null;
-        if (into) {
-          for (let a = 0; a < 3; a++) into[a]! += crab.position[v * 3 + a]!;
-          if (w < 0.1) entry.r++;
-          else entry.t++;
-        }
-        sums.set(crab.leg[v]!, entry);
+  function slotEnds(crab: ShippedLegs): Map<number, { rootZ: number; reach: number }> {
+    const sums = new Map<number, { root: number[]; tip: number[]; r: number; t: number }>();
+    for (let v = 0; v < crab.part.length; v++) {
+      if (!isLeg(crab, v)) continue;
+      const entry = sums.get(crab.leg[v]!) ?? { root: [0, 0, 0], tip: [0, 0, 0], r: 0, t: 0 };
+      const w = crab.weight[v]!;
+      const into = w < 0.1 ? entry.root : w > 0.9 ? entry.tip : null;
+      if (into) {
+        for (let a = 0; a < 3; a++) into[a]! += crab.position[v * 3 + a]!;
+        if (w < 0.1) entry.r++;
+        else entry.t++;
       }
-      const reach = (slot: number): number => {
-        const e = sums.get(slot)!;
-        return Math.hypot(...[0, 1, 2].map((a) => e.root[a]! / e.r - e.tip[a]! / e.t));
-      };
-      for (const claw of [0, 1])
-        for (const walker of [2, 3, 4, 5])
-          expect(reach(claw), `slot ${claw} vs ${walker}`).toBeLessThan(reach(walker));
-      expect(Math.max(reach(0), reach(1)) / Math.min(reach(0), reach(1))).toBeLessThan(1.5);
+      sums.set(crab.leg[v]!, entry);
+    }
+    return new Map(
+      [...sums].map(([slot, e]) => [
+        slot,
+        {
+          rootZ: e.root[2]! / e.r,
+          reach: Math.hypot(...[0, 1, 2].map((a) => e.root[a]! / e.r - e.tip[a]! / e.t)),
+        },
+      ]),
+    );
+  }
+
+  it.each([0, 1, 2])(
+    'LOD%i: slots 0 and 1 are the claws, rooted ahead of the walking legs on their side',
+    async (level) => {
+      const ends = slotEnds(await readCrab(level));
+      for (const side of [0, 1]) {
+        const claw = ends.get(side)!;
+        for (const walker of [side + 2, side + 4])
+          expect(claw.rootZ, `slot ${side} vs ${walker}`).toBeGreaterThan(
+            ends.get(walker)!.rootZ + 0.05 * claw.reach,
+          );
+      }
+      const reaches = [ends.get(0)!.reach, ends.get(1)!.reach];
+      expect(Math.max(...reaches) / Math.min(...reaches)).toBeLessThanOrEqual(4);
     },
   );
+
+  const standoffM = (): number => {
+    const index = JSON.parse(readFileSync(join(assets, 'index.json'), 'utf8')) as {
+      assets: Array<{ id: string; crab?: { standoffM: number } }>;
+    };
+    return index.assets.find((a) => a.id === 'hermit-crab')!.crab!.standoffM;
+  };
+
+  it.each([0, 1, 2])(
+    'LOD%i: every walking leg tip reaches the substrate within 1 mm',
+    async (level) => {
+      const crab = await readCrab(level);
+      const lowest = new Map<number, number>();
+      for (let v = 0; v < crab.part.length; v++)
+        if (isLeg(crab, v) && crab.leg[v]! >= 2)
+          lowest.set(
+            crab.leg[v]!,
+            Math.min(lowest.get(crab.leg[v]!) ?? Infinity, crab.position[v * 3 + 1]!),
+          );
+      expect([...lowest.keys()].sort()).toEqual([2, 3, 4, 5]);
+      for (const [slot, y] of lowest)
+        expect(Math.abs(y + standoffM()), `slot ${slot}`).toBeLessThan(0.001);
+    },
+  );
+
+  it.each([0, 1, 2])('LOD%i: the shell trails along the body axis', async (level) => {
+    const crab = await readCrab(level);
+    const lo = [Infinity, Infinity, Infinity];
+    const hi = [-Infinity, -Infinity, -Infinity];
+    for (let v = 0; v < crab.part.length; v++)
+      if (crab.part[v] === 0)
+        for (let a = 0; a < 3; a++) {
+          lo[a] = Math.min(lo[a]!, crab.position[v * 3 + a]!);
+          hi[a] = Math.max(hi[a]!, crab.position[v * 3 + a]!);
+        }
+    expect(hi[2]! - lo[2]!).toBeGreaterThan(1.5 * (hi[0]! - lo[0]!));
+    expect(lo[2]!).toBeLessThan(-0.015);
+  });
+
+  it('keeps the triangle budgets and a shrinking LOD chain', async () => {
+    const triangles = await Promise.all(
+      [0, 1, 2].map(async (level) => (await readCrab(level)).indices.length / 3),
+    );
+    const [lod0, lod1, lod2] = triangles as [number, number, number];
+    expect(lod0).toBeLessThanOrEqual(HERMIT_RECIPES[0]!.maxTriangles);
+    expect(lod0).toBeGreaterThan(HERMIT_RECIPES[0]!.maxTriangles * 0.9);
+    expect(lod1).toBeLessThan(lod0 * 0.5);
+    expect(lod2).toBeLessThan(lod1 * 0.5);
+    expect(lod2).toBeGreaterThan(1000);
+  });
 
   it.each([0, 1, 2])(
     'LOD%i: every leg slot is one connected piece whose root touches the body',

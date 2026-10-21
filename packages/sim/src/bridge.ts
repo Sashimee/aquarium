@@ -38,7 +38,8 @@ export type SimCommand =
   | { readonly type: 'step'; readonly steps: number }
   | { readonly type: 'recycle'; readonly buffer: ArrayBuffer }
   | { readonly type: 'startle'; readonly stimulus: Stimulus }
-  | { readonly type: 'light'; readonly level: number }
+  /** With `settle`, the new level is taken as already adapted to; see `World.settleLight`. */
+  | { readonly type: 'light'; readonly level: number; readonly settle?: boolean }
   /** The wave maker, or null when there is none; see `World.setWaveMaker`. */
   | { readonly type: 'waveMaker'; readonly settings: WaveMakerSettings | null }
   /** A laser dot or fingertip on the glass, or null once it is gone; see `World.setLure`. */
@@ -99,6 +100,7 @@ export type SimEvent =
   | SimAte
   | SimToyNudges
   | SimCrew
+  | SimPolyps
   | SimLayout
   | SimGrazeReach
   | SimNestSite
@@ -169,6 +171,21 @@ export interface SimCrew {
   readonly tally: readonly CrewTally[];
 }
 
+/**
+ * How far coral polyps are out in the current world, 0 (retracted) to 1 (fully out), as of the
+ * snapshot at `tick`, which follows it. Sent with the first snapshot after `init` and then
+ * whenever it has moved by `POLYP_EPSILON` since the last one sent.
+ */
+export interface SimPolyps {
+  readonly type: 'polyps';
+  readonly epoch: number;
+  readonly tick: number;
+  readonly extension: number;
+}
+
+/** Smallest polyp change worth a message: one step of an 8-bit channel. */
+export const POLYP_EPSILON = 1 / 256;
+
 /** The structural slice of `Worker`, `DedicatedWorkerGlobalScope` and `MessagePort` we use. */
 export interface MessagePortLike {
   postMessage(message: unknown, transfer: ArrayBuffer[]): void;
@@ -224,6 +241,7 @@ const EVENT_TYPES = new Set([
   'ate',
   'toyNudge',
   'crew',
+  'polyps',
   'layout',
   'grazeReach',
   'nestSite',
@@ -268,6 +286,8 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
   let backlog = 0;
   let epoch = 0;
   let crewTick = 0;
+  let polypSent = Number.NaN;
+  let pausedAt: number | null = null;
 
   const send = (event: SimEvent, transfer: ArrayBuffer[] = []): void => {
     port.postMessage(event, transfer);
@@ -283,6 +303,11 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
       const tally = w.takeCrewTally();
       if (tally.length > 0) send({ type: 'crew', epoch, tick: w.tick, tally });
     }
+    const extension = w.polypExtension;
+    if (!(Math.abs(extension - polypSent) < POLYP_EPSILON)) {
+      polypSent = extension;
+      send({ type: 'polyps', epoch, tick: w.tick, extension });
+    }
   };
 
   const emitSnapshot = (w: World): void => {
@@ -295,9 +320,17 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
     send({ type: 'snapshot', epoch, tick: w.tick, time: w.time, buffer }, [buffer]);
   };
 
-  const stop = (): void => {
-    if (timer !== null) clearTimeout(timer);
+  const halt = (): boolean => {
+    if (timer === null) return false;
+    clearTimeout(timer);
     timer = null;
+    return true;
+  };
+
+  // The timer is cleared before the clock is read, so a throwing clock cannot leave a dead
+  // handle behind that turns every later "start" into a no-op.
+  const stop = (): void => {
+    if (halt()) pausedAt = now();
   };
 
   const sendError = (error: unknown, request?: number): void => {
@@ -324,6 +357,7 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
     } catch (error) {
       // A throw here would escape the timer unseen; report it and stay stopped until "start".
       sendError(error);
+      pausedAt = last;
       return;
     }
     timer = setTimeout(loop, Math.max(0, stepMs - backlog));
@@ -358,9 +392,11 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
             `sim: "init" needs a safe integer request, got ${String(command.request)}`,
           );
         }
-        stop();
+        halt();
         world = new World(command.config);
         crewTick = 0;
+        polypSent = Number.NaN;
+        pausedAt = null;
         pool.length = 0;
         epoch++;
         send({
@@ -378,6 +414,8 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
         if (world === null) throw new Error('sim: "start" before "init"');
         if (timer !== null) return;
         last = now();
+        world.settleLight(pausedAt === null ? 0 : Math.max(0, last - pausedAt) / 1000);
+        pausedAt = null;
         backlog = 0;
         timer = setTimeout(loop, stepMs);
         return;
@@ -400,9 +438,16 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
       case 'startle':
         requireWorld(command.type).startle(command.stimulus);
         return;
-      case 'light':
-        requireWorld(command.type).setLight(command.level);
+      case 'light': {
+        const { settle } = command;
+        if (settle !== undefined && typeof settle !== 'boolean') {
+          throw new TypeError(`sim: "light" settle must be a boolean, got ${String(settle)}`);
+        }
+        const w = requireWorld(command.type);
+        w.setLight(command.level);
+        if (settle === true) w.settleLight();
         return;
+      }
       case 'waveMaker':
         requireWorld(command.type).setWaveMaker(command.settings);
         return;
@@ -488,7 +533,7 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
 
   return {
     dispose(): void {
-      stop();
+      halt();
       world = null;
       port.removeEventListener('message', listener);
     },
@@ -510,6 +555,7 @@ export class SimClient {
   private readonly ateListeners = new Set<(events: readonly AteEvent[], ate: SimAte) => void>();
   private readonly nudgeListeners = new Set<(nudge: ToyNudge) => void>();
   private readonly crewListeners = new Set<(tally: readonly CrewTally[], crew: SimCrew) => void>();
+  private readonly polypListeners = new Set<(extension: number, polyps: SimPolyps) => void>();
   /** The fish order of the newest layout, and the latest positions in it, x, y, z per fish. */
   private fishIds: readonly string[] = [];
   private fishEpoch = -1;
@@ -625,9 +671,12 @@ export class SimClient {
     this.send({ type: 'startle', stimulus });
   }
 
-  /** 0 = lights off (night rest), 1 = full day. */
-  setLight(level: number): void {
-    this.send({ type: 'light', level });
+  /**
+   * 0 = lights off (night rest), 1 = full day. With `settle`, the fish take the new level as
+   * already adapted to and do not startle (a tab coming back after the lamp switched meanwhile).
+   */
+  setLight(level: number, settle?: boolean): void {
+    this.send(settle === undefined ? { type: 'light', level } : { type: 'light', level, settle });
   }
 
   /** Installs, changes or (with null) removes the wave maker; see `waveMakerForTier`. */
@@ -739,6 +788,15 @@ export class SimClient {
     return () => this.crewListeners.delete(listener);
   }
 
+  /**
+   * How far coral polyps are out in the current world, 0 to 1, from the tank's darkness: once
+   * right after `init` and then as it moves. Purely a render signal; nothing in the sim reads it.
+   */
+  onPolyps(listener: (extension: number, polyps: SimPolyps) => void): () => void {
+    this.polypListeners.add(listener);
+    return () => this.polypListeners.delete(listener);
+  }
+
   onError(listener: (message: string) => void): () => void {
     this.errorListeners.add(listener);
     return () => this.errorListeners.delete(listener);
@@ -753,6 +811,7 @@ export class SimClient {
     this.ateListeners.clear();
     this.nudgeListeners.clear();
     this.crewListeners.clear();
+    this.polypListeners.clear();
     this.abandoned.clear();
     this.rejectPending('sim: client disposed');
   }
@@ -851,6 +910,10 @@ export class SimClient {
       case 'crew':
         if (this.pendingInit !== null || event.epoch !== this.epoch) return;
         for (const l of this.crewListeners) l(event.tally, event);
+        return;
+      case 'polyps':
+        if (this.pendingInit !== null || event.epoch !== this.epoch) return;
+        for (const l of this.polypListeners) l(event.extension, event);
         return;
       case 'layout': {
         const pending = this.pendingLayouts.get(event.request);

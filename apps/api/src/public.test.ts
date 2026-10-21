@@ -574,7 +574,7 @@ describe('public link abuse and isolation', () => {
       tankId: id,
       at: new Date(Date.now() - 181 * 86_400_000),
     });
-    await pruneExpired(h.database);
+    await pruneExpired(h.database, h.clock);
     const rows = await h.database.db
       .select()
       .from(schema.auditLog)

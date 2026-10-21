@@ -137,6 +137,7 @@ export const eventKindEnum = pgEnum('event_kind', [
   'born',
   'sick',
   'water_alert',
+  'fish_moved',
 ]);
 
 export const tanks = pgTable(
@@ -150,6 +151,8 @@ export const tanks = pgTable(
     size: tankSizeEnum('size').notNull().default('standard'),
     quarantine: boolean('quarantine').notNull().default(false),
     shareTokenHash: text('share_token_hash').unique(),
+    // A public link is not a gallery listing: this is a second opt-in, honoured only while the link is on.
+    inGallery: boolean('in_gallery').notNull().default(false),
     name: text('name').notNull(),
     // The client's idempotency key of the request that made the tank. Free tanks leave no ledger
     // row, so this is what lets a retry find the tank it already got.
@@ -159,6 +162,11 @@ export const tanks = pgTable(
     // Recent treat requests (key, kind, potency, overdose) so a retry replays instead of dosing again.
     treatKeys: jsonb('treat_keys').notNull().default([]),
     decorLayout: jsonb('decor_layout'),
+    // Growth state of the layout plants and their offsets (storedPlantsSchema), reconciled with the
+    // layout on every tick.
+    plants: jsonb('plants').notNull().default([]),
+    // Recent trim requests (key, plantKey, size) so a retry replays instead of trimming twice.
+    plantTrimKeys: jsonb('plant_trim_keys').notNull().default([]),
     // null: the player never chose one, so the biome's default shows.
     backgroundId: text('background_id'),
     water: jsonb('water')
@@ -211,6 +219,10 @@ export const fish = pgTable(
     disease: jsonb('disease'),
     // When the player bought the fish; null for fry born in the tank. Starts the new-fish disease window.
     introducedAt: timestamptz('introduced_at'),
+    // The tank the fish was moved out of, and its introducedAt there, so moving it back restores
+    // the old tank's settled-in state instead of counting it as new.
+    previousTankId: uuid('previous_tank_id'),
+    previousIntroducedAt: timestamptz('previous_introduced_at'),
   },
   (t) => [index('fish_tank_id_idx').on(t.tankId)],
 );
@@ -335,6 +347,33 @@ export const tankReactions = pgTable(
     index('tank_reactions_user_id_idx').on(t.userId),
   ],
 );
+
+export const tankVotes = pgTable(
+  'tank_votes',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    weekStart: timestamptz('week_start').notNull(),
+    tankId: uuid('tank_id')
+      .notNull()
+      .references(() => tanks.id, { onDelete: 'cascade' }),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.weekStart] }),
+    index('tank_votes_week_tank_idx').on(t.weekStart, t.tankId),
+    index('tank_votes_tank_id_idx').on(t.tankId),
+  ],
+);
+
+export const tankOfWeek = pgTable('tank_of_week', {
+  weekStart: timestamptz('week_start').primaryKey(),
+  // null: the week was settled with no eligible tank, or the winner was deleted. Kept so it is never re-decided.
+  tankId: uuid('tank_id').references(() => tanks.id, { onDelete: 'set null' }),
+  votes: integer('votes').notNull(),
+  decidedAt: timestamptz('decided_at').notNull().defaultNow(),
+});
 
 export const auditLog = pgTable(
   'audit_log',

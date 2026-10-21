@@ -442,7 +442,7 @@ describe('checkAssets', () => {
       lods,
       files: lods.map(({ file, bytes, sha256: digest }) => ({ file, bytes, sha256: digest })),
       shrimp: undefined,
-      crab: { ...prawn.shrimp, pleopodPairs: 0 },
+      crab: { ...prawn.shrimp, origin: 'hip', pleopodPairs: 0 },
     };
     expect(checkAssets(inputFor([crab]))).toEqual([]);
     expect(checkAssets(inputFor([{ ...crab, crab: undefined }])).join('\n')).toContain(

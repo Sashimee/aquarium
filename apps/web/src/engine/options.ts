@@ -11,7 +11,10 @@ export interface EngineOptions {
   adaptive: boolean;
   /**
    * Pins the clock to these minutes after midnight: the hood's lamp schedule reads them as UTC and
-   * the room's daylight as local time. Null follows the real time.
+   * the room's daylight as local time. Outside UTC the two disagree with an unpinned page, e.g. at
+   * UTC+2 `?clock=13:00` shows the room's 13:00 local sun but the hood's 13:00 UTC lamp state,
+   * which unpinned would show at 15:00 local. The window's weather holds still while pinned. Null
+   * follows the real time.
    */
   clock: number | null;
   /** Shows the on-device performance readout. */

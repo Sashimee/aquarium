@@ -1,25 +1,20 @@
-import type {
-  DiseaseKind,
-  Economy,
-  Fish,
-  Medicine,
-  MedicinePotency,
-  SpeciesSummary,
-  Tank,
+import {
+  DISEASE_NAMES,
+  type ConflictReason,
+  type DiseaseKind,
+  type Economy,
+  type Fish,
+  type Medicine,
+  type MedicinePotency,
+  type SpeciesSummary,
+  type Tank,
 } from '@aquarium/shared';
-import { addDose, courseHours } from '@aquarium/sim/lifecycle';
+import { addDose, courseHours, ICH_HEAT_C } from '@aquarium/sim/lifecycle';
 import { pearlText } from './economy';
-
-// Mirrors ICH_HEAT_C in packages/sim/lifecycle/disease.ts, which the lifecycle index does not export.
-const ICH_HEAT_C = 30;
 
 export const DISEASE_KINDS: readonly DiseaseKind[] = ['ich', 'fin-rot', 'velvet'];
 
-export const DISEASE_LABEL: Record<DiseaseKind, string> = {
-  ich: 'Ich',
-  'fin-rot': 'Fin rot',
-  velvet: 'Velvet',
-};
+export const DISEASE_LABEL: Readonly<Record<DiseaseKind, string>> = DISEASE_NAMES;
 
 export const SYMPTOMS: Record<DiseaseKind, string> = {
   ich: 'tiny white spots, like grains of salt, on the body and fins',
@@ -56,6 +51,46 @@ export function courseDays(kind: DiseaseKind, potency: MedicinePotency): string 
 
 export function premiumPrice(economy: Economy, kind: DiseaseKind): number | null {
   return economy.items.consumables.premiumMedicine.prices[kind] ?? null;
+}
+
+/** What a dose costs. `confirm` is off once the player has already agreed in a warning dialog. */
+export function doseSpend(
+  economy: Economy,
+  kind: DiseaseKind,
+  potency: MedicinePotency,
+  warned: boolean,
+): { label: string; price: number; confirm: boolean } | null {
+  const price = premiumPrice(economy, kind);
+  if (potency !== 'premium' || price === null) return null;
+  return {
+    label: `premium ${DISEASE_LABEL[kind].toLowerCase()} medicine`,
+    price,
+    confirm: !warned,
+  };
+}
+
+export interface HeldDose<P, R> {
+  tankId: string;
+  pending: P | null;
+  refusal: R | null;
+}
+
+export function emptyHeld<P, R>(tankId: string): HeldDose<P, R> {
+  return { tankId, pending: null, refusal: null };
+}
+
+/** Anything held for another tank is dropped for good, so coming back to that tank starts clean. */
+export function reconcileHeld<P, R>(held: HeldDose<P, R>, tankId: string): HeldDose<P, R> {
+  return held.tankId === tankId ? held : emptyHeld(tankId);
+}
+
+/** One line per disease for the shared live region, so a screen reader hears a change once. */
+export function sickSummary(fish: readonly Fish[]): string {
+  const sick = fish.filter((f) => f.status === 'alive' && f.disease !== null);
+  return DISEASE_KINDS.flatMap((kind) => {
+    const names = sick.filter((f) => f.disease?.kind === kind);
+    return names.length > 0 ? [`${DISEASE_LABEL[kind]}: ${listNames(names)}.`] : [];
+  }).join(' ');
 }
 
 export type Blocked = 'nothing-to-treat' | 'other-medicine' | 'at-limit';
@@ -123,9 +158,9 @@ export function blockedText(reason: Blocked): string {
   }
 }
 
-/** The server words both of its water refusals alike, and a water change cures both. */
-export function wantsWaterChange(message: string): boolean {
-  return /change the water/i.test(message);
+/** Both of the server's water refusals are cured by a water change. */
+export function wantsWaterChange(reason: ConflictReason | null): boolean {
+  return reason === 'other_medicine' || reason === 'dose_limit';
 }
 
 export function doseButtonText(

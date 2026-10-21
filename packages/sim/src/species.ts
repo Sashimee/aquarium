@@ -1,4 +1,10 @@
-import { traitSchema, WALKER_SWIMMING_MODES, type Species } from '@aquarium/shared';
+import {
+  activitySchema,
+  traitSchema,
+  WALKER_SWIMMING_MODES,
+  type Activity,
+  type Species,
+} from '@aquarium/shared';
 import { BEHAVIOUR } from './behaviour.ts';
 import { FOOD_TYPES } from './food.ts';
 import { DEG } from './math.ts';
@@ -100,6 +106,8 @@ export interface SimSpecies {
   readonly territorial: boolean;
   readonly boldness: number;
   readonly curiosity: number;
+  /** When it is awake; a nocturnal fish rests while the lamp is on. */
+  readonly activity: Activity;
   readonly home: HomeKind;
   readonly airGulp: boolean;
   readonly grazer: 'glass' | 'rock' | 'none';
@@ -380,6 +388,7 @@ export function toSimSpecies(input: SpeciesInput): SimSpecies {
     territorial: behaviour.territorial,
     boldness: behaviour.boldness,
     curiosity: behaviour.curiosity,
+    activity: parseActivity(id, behaviour.activity),
     home,
     airGulp: traits.has('air-gulp'),
     grazer: traits.has('glass-grazer') ? 'glass' : traits.has('rock-grazer') ? 'rock' : 'none',
@@ -390,6 +399,16 @@ export function toSimSpecies(input: SpeciesInput): SimSpecies {
     ...parseTraitParams(id, behaviour, traits, loco.gait, home, walking !== null),
     walking,
   };
+}
+
+function parseActivity(id: string, activity: Activity | undefined): Activity {
+  if (activity === undefined) return 'diurnal';
+  if (!activitySchema.options.includes(activity)) {
+    throw new RangeError(
+      `species "${id}": behaviour.activity must be one of ${activitySchema.options.join(', ')}, got ${String(activity)}`,
+    );
+  }
+  return activity;
 }
 
 function parseWalking(

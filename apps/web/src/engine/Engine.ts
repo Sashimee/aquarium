@@ -12,6 +12,7 @@ import {
 } from 'three/webgpu';
 import { applyDayLighting, type DayLightingRig, FRESHWATER_FILL_LEVEL } from './dayLighting';
 import {
+  DaylightAnnouncer,
   DEFAULT_LAMP_HOURS,
   daylightAt,
   lampPhotoperiod,
@@ -85,8 +86,6 @@ const HOOD_COLOR = new Color(1, 0.97, 0.92);
 /** At the water surface; the hood's spread leaves about three quarters of it on average below. */
 const HOOD_INTENSITY = 4;
 const DAYLIGHT_INTERVAL_MS = 1000;
-/** Smallest daylight change worth announcing: about 20 s into a one-hour ramp. */
-const DAYLIGHT_EPSILON = 0.005;
 
 function hasCoarsePointer(): boolean {
   return typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
@@ -163,7 +162,7 @@ export class Engine {
   private readonly showStats: boolean;
   private daylightLevel = 1;
   private daylightCheckedAt = -Infinity;
-  private daylightAnnounced = false;
+  private readonly daylightAnnouncer = new DaylightAnnouncer();
   private photoperiod: Photoperiod = lampPhotoperiod(DEFAULT_LAMP_HOURS);
   private readonly dayRig: DayLightingRig;
   private readonly effects = new EffectsSlot(
@@ -570,10 +569,10 @@ export class Engine {
     this.daylightCheckedAt = nowMs;
     this.dayRig.roomDaylight = roomDaylightAt(this.clock ?? minuteOfDay(new Date()));
     const level = daylightAt(this.clock ?? localMinuteOfDay(Date.now(), 0), this.photoperiod);
-    if (this.daylightAnnounced && Math.abs(level - this.daylightLevel) < DAYLIGHT_EPSILON) return;
-    this.daylightAnnounced = true;
+    const change = this.daylightAnnouncer.next(level);
+    if (change === null) return;
     this.daylightLevel = level;
-    this.events.emit('engine:daylight', { level });
+    this.events.emit('engine:daylight', change);
   }
 
   private registerQualityFeatures(): void {
@@ -680,6 +679,7 @@ export class Engine {
     this.photo.apply();
     for (const callback of this.frameCallbacks) callback(deltaS, nowMs);
     this.photo.apply();
+    this.daylightAnnouncer.frame(frameMs);
     this.updateDaylight(nowMs);
     applyDayLighting(this.dayRig, this.daylightLevel);
     if (this.cullPrewarm.begin(nowMs) > 0) this.sceneRevisionValue++;

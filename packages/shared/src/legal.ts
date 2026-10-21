@@ -26,6 +26,7 @@ export const dataExportSchema = z.strictObject({
   passkeys: z.array(exportedRow),
   reminders: exportedReminderSchema,
   reactions: z.array(exportedRow),
+  galleryVotes: z.array(exportedRow),
   auditLog: z.array(exportedRow),
   collection: z.strictObject({
     entries: z.array(exportedRow),
@@ -103,8 +104,8 @@ export const PRIVACY_CONTROLLER = 'Alexandre Baskewitsch';
 export const PRIVACY_CONTACT = 'fish@bas.lu';
 
 export const PRIVACY_POLICY: PrivacyPolicy = privacyPolicySchema.parse({
-  version: '2026-10-19.4',
-  updatedAt: '2026-10-19',
+  version: '2026-10-21.1',
+  updatedAt: '2026-10-21',
   controller: PRIVACY_CONTROLLER,
   contact: PRIVACY_CONTACT,
   analytics: false,
@@ -153,9 +154,10 @@ export const PRIVACY_POLICY: PrivacyPolicy = privacyPolicySchema.parse({
         'Collection book and achievements: which species you have kept, bred and raised, with the date each was first reached, and the achievements you have earned with their dates. They are kept until you delete your account, even if you delete the tank or fish they came from, and are included in your JSON export.',
         'Pearls wallet and ledger: your Pearl balance and an append-only ledger of every change to it: the amount, what it was for (a purchase, a reward for care or an achievement, a grant, a refund), the item, the time and a request key that stops a retried request from charging twice. It is kept until you delete your account and is included in your JSON export. Entries for payments with real money, once Pearl packs are on sale, are kept longer than the rest; the retention section explains how.',
         'Tank visits: for each tank you open we store the date (no time of day, IP address or device) on which you opened it, used only so your fish can recognise you when you come back often. It is included in your JSON export and deleted with the tank or your account.',
-        'Shared tanks: if you turn on a public link for a tank, anyone who has the link can see that tank read-only without signing in: its name (after a word filter), layout, water and fish. Your email address, display name, handle and account are never shown through the link, and the page is marked noindex. You can revoke or replace the link at any time, which stops the old one working at once.',
+        'Shared tanks: if you turn on a public link for a tank, anyone who has the link can see that tank read-only without signing in: its name (after a word filter), layout, water and fish. Your email address, display name, handle and account are never shown through the link, and the page is marked noindex. You can revoke or replace the link at any time, which stops the old one working at once. A link does not list the tank anywhere: the tank of the week gallery is a second, separate choice, off by default, that you make per tank and can undo at any time. Listing needs the link to be on, and turning the link off also takes the tank out of the gallery. In the gallery, anyone, signed in or not, sees the same read-only view and the tank name (after a word filter), never your account.',
         'Reactions: when you react to a shared tank (heart, star or wow) we store which tank, your account and the kind, one reaction per tank. Reaction counts are public; who reacted is not. A shared tank also shows when it was last updated, rounded down to the hour.',
-        'Audit log: turning a link on, replacing or revoking it, and setting or removing a reaction are recorded with the time, your account and the tank, never the link itself. Entries are deleted after 180 days, and immediately when you delete your account. The same data is included in your JSON export.',
+        'Gallery votes: when you vote in the tank of the week gallery we store the week, the tank and your account, one vote per week. Only totals are public; who voted is not. Votes are included in your JSON export, deleted with your account and with the tank, and deleted after 90 days in any case. The winner of each finished week (the tank, not who voted) is kept until the tank is deleted. It is hidden while the tank is unlisted and shows again if you list the tank again.',
+        'Audit log: turning a link on, replacing or revoking it, listing a tank in or removing it from the gallery, setting or removing a reaction, and setting or removing a gallery vote are recorded with the time, your account and the tank, never the link itself. Entries are deleted after 180 days, and immediately when you delete your account. The same data is included in your JSON export.',
         'Email: verification and password-reset mail is sent from fish@bas.lu through the operator mail relay. Care reminders are mailed only if you turn them on.',
         "Care reminders: both channels are off until you turn them on in your account settings. If you do, we store your choices, the time of the last reminder and, for web push, the push endpoint and encryption keys your browser gives us for each device you enable. At most one reminder per day is sent, only when your fish have not been fed for a while, and it never contains details about your tank. Every reminder email has a one-click unsubscribe link that works without signing in, and you can switch either channel off or remove a device at any time. This data is included in your JSON export. Web push goes through your browser vendor's push service (Google, Mozilla, Apple or Microsoft), which sees the endpoint and that a message was sent.",
         "Server logs of this application record the request method and path without query strings, never email addresses, passwords or tokens. The hosting platform's reverse proxy keeps standard access logs (including IP addresses) and the mail relay logs delivery of the mail we send you (including the recipient address); both are operated by the same operator and kept only as long as needed for security and troubleshooting.",

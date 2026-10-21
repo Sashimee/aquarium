@@ -5,9 +5,17 @@ import {
   ateBatchRequestSchema,
   careActionSchema,
   collectionSchema,
+  galleryQuerySchema,
+  galleryResponseSchema,
+  galleryWinnersResponseSchema,
+  setGalleryRequestSchema,
+  voteRequestSchema,
+  voteStateSchema,
   replayQuerySchema,
   replayResponseSchema,
   createTankRequestSchema,
+  moveFishRequestSchema,
+  moveFishResponseSchema,
   errorCodeSchema,
   speciesListSchema,
   tankListSchema,
@@ -41,6 +49,9 @@ import {
   type BackgroundId,
   type CareAction,
   type Collection,
+  type GalleryResponse,
+  type GalleryWinnersResponse,
+  type VoteState,
   type ReplayResponse,
   type DecorLayout,
   type Credits,
@@ -53,7 +64,10 @@ import {
   type Tank,
   type TreatRequest,
   type TreatResponse,
+  type ConflictReason,
   type ErrorCode,
+  type MoveFishRequest,
+  type MoveFishResponse,
   type PrivacyPolicy,
   type PublicTank,
   type ReactionKind,
@@ -85,6 +99,7 @@ export class ApiRequestError extends Error {
     message: string,
     readonly fields: FieldErrors = {},
     readonly retryAfterSeconds: number | null = null,
+    readonly reason: ConflictReason | null = null,
   ) {
     super(message);
     this.name = 'ApiRequestError';
@@ -162,8 +177,15 @@ async function toError(res: Response): Promise<ApiRequestError> {
   }
   const own = apiErrorSchema.safeParse(body);
   if (own.success) {
-    const { code, message, issues } = own.data.error;
-    return new ApiRequestError(res.status, code, message, issuesToFields(issues ?? []), retryAfter);
+    const { code, message, issues, reason } = own.data.error;
+    return new ApiRequestError(
+      res.status,
+      code,
+      message,
+      issuesToFields(issues ?? []),
+      retryAfter,
+      reason ?? null,
+    );
   }
   const loose = body as { code?: unknown; message?: unknown } | null;
   const message =
@@ -185,8 +207,6 @@ export interface WalletView {
   balance: number;
   /** Item refs the recent ledger shows as bought and not refunded, so the shop can mark them instead of offering a 409. */
   owned: readonly string[];
-  /** Item refs whose latest ledger entry is a refund, so an earlier purchase no longer counts. */
-  released?: readonly string[];
 }
 
 /** The T70 contract: every add-fish names a stage and carries a key, so a retry cannot charge twice. */
@@ -241,6 +261,7 @@ export interface ApiClient {
   netFish(tankId: string, fishId: string): Promise<Tank>;
   care(tankId: string, action: CareAction): Promise<Tank>;
   treat(tankId: string, request: TreatRequest): Promise<TreatResponse>;
+  moveFish(tankId: string, fishId: string, request: MoveFishRequest): Promise<MoveFishResponse>;
   replay(
     tankId: string,
     query: { since: string; until?: string; cursor?: string; limit?: number },
@@ -251,7 +272,13 @@ export interface ApiClient {
   shareTank(tankId: string): Promise<Tank>;
   rotateShare(tankId: string): Promise<Tank>;
   revokeShare(tankId: string): Promise<Tank>;
+  setGallery(tankId: string, listed: boolean): Promise<Tank>;
   publicTank(token: string): Promise<PublicTank>;
+  gallery(query?: { limit?: number; offset?: number }): Promise<GalleryResponse>;
+  galleryWinners(): Promise<GalleryWinnersResponse>;
+  galleryTank(tankId: string): Promise<PublicTank>;
+  castVote(tankId: string): Promise<VoteState>;
+  clearVote(): Promise<VoteState>;
   setReaction(token: string, kind: ReactionKind): Promise<ReactionState>;
   clearReaction(token: string): Promise<ReactionState>;
 }
@@ -688,17 +715,9 @@ export function createApiClient(
       const res = await send('/api/wallet');
       if (!res.ok) throw await toError(res);
       const body = await parsed(res, walletResponseSchema);
-      const latest = new Map<string, boolean>();
-      for (const e of body.ledger) {
-        if (e.itemRef === null || latest.has(e.itemRef)) continue;
-        if (e.reason === 'purchase') latest.set(e.itemRef, true);
-        else if (e.reason === 'refund') latest.set(e.itemRef, false);
-      }
-      const refs = [...latest];
       return {
         balance: body.wallet.balance,
-        owned: refs.filter(([, bought]) => bought).map(([ref]) => ref),
-        released: refs.filter(([, bought]) => !bought).map(([ref]) => ref),
+        owned: body.owned,
       };
     },
     async purchase(request) {
@@ -734,11 +753,6 @@ export function createApiClient(
       return parsed(res, replayResponseSchema);
     },
     async care(tankId, action) {
-      if (action.type === 'bottled_bacteria' && action.idempotencyKey === undefined) {
-        throw new ClientValidationError({
-          idempotencyKey: 'Bottled bacteria cost Pearls and need a request key.',
-        });
-      }
       const body = validate(careActionSchema, action);
       return parsed(await post(`/api/tanks/${encodeURIComponent(tankId)}/care`, body), tankSchema);
     },
@@ -747,6 +761,16 @@ export function createApiClient(
       return parsed(
         await post(`/api/tanks/${encodeURIComponent(tankId)}/treat`, body),
         treatResponseSchema,
+      );
+    },
+    async moveFish(tankId, fishId, request) {
+      const body = validate(moveFishRequestSchema, request);
+      return parsed(
+        await post(
+          `/api/tanks/${encodeURIComponent(tankId)}/fish/${encodeURIComponent(fishId)}/move`,
+          body,
+        ),
+        moveFishResponseSchema,
       );
     },
     async reportAte(tankId, reports, batchId) {
@@ -768,6 +792,51 @@ export function createApiClient(
       });
       if (!res.ok) throw await toError(res);
       return parsed(res, tankSchema);
+    },
+    async setGallery(tankId, listed) {
+      const body = validate(setGalleryRequestSchema, { listed });
+      const res = await send(`/api/tanks/${encodeURIComponent(tankId)}/gallery`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw await toError(res);
+      return parsed(res, tankSchema);
+    },
+    async gallery(query = {}) {
+      const checked = validate(galleryQuerySchema, query);
+      const res = await send(
+        `/api/gallery?${new URLSearchParams(
+          Object.entries(checked).map(([k, v]) => [k, String(v)]),
+        )}`,
+      );
+      if (!res.ok) throw await toError(res);
+      return parsed(res, galleryResponseSchema);
+    },
+    async galleryWinners() {
+      const res = await send('/api/gallery/winners');
+      if (!res.ok) throw await toError(res);
+      return parsed(res, galleryWinnersResponseSchema);
+    },
+    async galleryTank(tankId) {
+      const res = await send(`/api/gallery/${encodeURIComponent(tankId)}`);
+      if (!res.ok) throw await toError(res);
+      return parsed(res, publicTankSchema);
+    },
+    async castVote(tankId) {
+      const body = validate(voteRequestSchema, { tankId });
+      const res = await send('/api/gallery/vote', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw await toError(res);
+      return parsed(res, voteStateSchema);
+    },
+    async clearVote() {
+      const res = await send('/api/gallery/vote', { method: 'DELETE' });
+      if (!res.ok) throw await toError(res);
+      return parsed(res, voteStateSchema);
     },
     async publicTank(token) {
       const res = await send(`/api/public/${encodeURIComponent(token)}`);

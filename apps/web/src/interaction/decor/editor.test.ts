@@ -1,7 +1,7 @@
 import { legacyTintSeed, type Biome } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import { loadPreset } from '../../scene/preset';
-import { DecorEditor } from './editor';
+import { DecorEditor, uniqueSeed } from './editor';
 import { flat, item, LIMITS, must, SPECS, spec } from './fixtures';
 import { footprintOf, overlaps } from './footprint';
 import { numberPieces, splitLayout, type Piece } from './layout';
@@ -274,6 +274,71 @@ describe('colour seed', () => {
     expect(placed.tintSeed).toBe(legacyTintSeed(placed));
     e.nudge(added.id, 0.1, 0);
     expect(must(e.piece(added.id)).item.tintSeed).toBe(placed.tintSeed);
+  });
+});
+
+describe('unique colour seeds', () => {
+  function addedItem(e: DecorEditor) {
+    const added = e.add('boulder-01');
+    if (!('id' in added)) throw new Error('expected a piece');
+    return must(e.piece(added.id)).item;
+  }
+
+  it('gives a new piece a fresh seed when a saved piece already holds the one its spot hashes to', () => {
+    const probe = addedItem(editor());
+    const saved: Piece = {
+      id: 'p1',
+      item: { ...item('boulder-01', 3, 3), tintSeed: probe.tintSeed },
+    };
+    const e = editor([saved]);
+    const fresh = addedItem(e);
+    expect(fresh.position).toEqual(probe.position);
+    expect(fresh.tintSeed).not.toBe(saved.item.tintSeed);
+    expect(must(e.piece('p1')).item.tintSeed).toBe(probe.tintSeed);
+  });
+
+  it('keeps a piece added onto a taken hash distinct from every saved piece', () => {
+    const hash = must(addedItem(editor()).tintSeed);
+    const saved: Piece[] = [0, 1, 2].map((n) => ({
+      id: `p${n + 1}`,
+      item: { ...item('boulder-01', n * 0.4 - 1, -2), tintSeed: (hash + n) >>> 0 },
+    }));
+    const e = editor(saved);
+    const fresh = addedItem(e);
+    expect(fresh.tintSeed).toBe((hash + 3) >>> 0);
+  });
+
+  describe('uniqueSeed', () => {
+    it('returns the hash when it is free', () => {
+      expect(uniqueSeed(7, new Set([8, 9]))).toBe(7);
+    });
+
+    it('takes the next seed when the hash is taken', () => {
+      expect(uniqueSeed(7, new Set([7]))).toBe(8);
+    });
+
+    it('skips a run of consecutive taken seeds', () => {
+      expect(uniqueSeed(7, new Set([7, 8, 9, 10]))).toBe(11);
+    });
+
+    it('does not skip a free seed after a gap', () => {
+      expect(uniqueSeed(7, new Set([7, 9]))).toBe(8);
+    });
+
+    it('wraps from 0xffffffff to 0', () => {
+      expect(uniqueSeed(0xffffffff, new Set([0xffffffff]))).toBe(0);
+      expect(uniqueSeed(0xffffffff, new Set([0xffffffff, 0, 1]))).toBe(2);
+    });
+  });
+
+  it('leaves saved seeds, including legacy duplicates, untouched', () => {
+    const e = editor([
+      { id: 'p1', item: { ...item('boulder-01', 0, 0), tintSeed: 5 } },
+      { id: 'p2', item: { ...item('boulder-01', 0.5, 0.5), tintSeed: 5 } },
+    ]);
+    addedItem(e);
+    expect(must(e.piece('p1')).item.tintSeed).toBe(5);
+    expect(must(e.piece('p2')).item.tintSeed).toBe(5);
   });
 });
 

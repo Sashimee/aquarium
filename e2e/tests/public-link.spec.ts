@@ -34,7 +34,7 @@ const star = (page: Page) => page.getByRole('button', { name: /^Star,/ });
 async function createTank(page: Page): Promise<string> {
   const created = await page.request.post('/api/tanks', {
     ...post,
-    data: { name: 'Pond', biome: 'freshwater' },
+    data: { name: 'Pond', biome: 'freshwater', idempotencyKey: crypto.randomUUID() },
   });
   expect(created.status(), 'create tank').toBe(201);
   const { id } = (await created.json()) as { id: string };

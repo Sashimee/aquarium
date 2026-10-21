@@ -12,6 +12,7 @@ import {
 } from './common.js';
 import { chemistrySchema } from './chemistry.js';
 import { equipmentSchema, lightScheduleSchema } from './equipment.js';
+import { plantSchema } from './plants.js';
 import { QUARANTINE_TANK_SIZE, tankSizeSchema } from './tankSize.js';
 import {
   idempotencyKeySchema,
@@ -131,6 +132,7 @@ export const tankSchema = z.object({
   size: tankSizeSchema,
   quarantine: z.boolean().describe('the one nano tank kept apart for new fish and treatment'),
   shared: z.boolean().describe('whether a public link is active'),
+  inGallery: z.boolean().describe('listed in the tank of the week gallery; needs an active link'),
   shareToken: shareTokenSchema
     .nullable()
     .describe('only in the response that enabled or rotated the link, null on every other read'),
@@ -155,6 +157,12 @@ export const tankSchema = z.object({
     .nullable()
     .optional()
     .describe('the medicine running in this tank, null or absent when there is none'),
+  plants: z
+    .array(plantSchema)
+    .optional()
+    .describe(
+      'growing plants: the layout plants (the preset ones while the layout is unedited) and their offsets',
+    ),
   fish: z.array(fishSchema),
   memorials: z.array(memorialSchema),
   away: awaySummarySchema.optional(),
@@ -167,11 +175,9 @@ export const createTankRequestSchema = z
     biome: playableBiomeSchema,
     size: tankSizeSchema.default('standard'),
     quarantine: z.boolean().default(false),
-    idempotencyKey: idempotencyKeySchema
-      .optional()
-      .describe(
-        'required when the tank costs Pearls: every display tank after the first, any size but standard',
-      ),
+    idempotencyKey: idempotencyKeySchema.describe(
+      'makes a retry replay the first answer; the tank costs Pearls for every display tank after the first and any size but standard',
+    ),
   })
   .refine((v) => !v.quarantine || v.size === QUARANTINE_TANK_SIZE, {
     message: 'a quarantine tank is always nano30',
@@ -199,8 +205,8 @@ export type UpdateTankRequest = z.infer<typeof updateTankRequestSchema>;
 export const addFishRequestSchema = z.strictObject({
   species: slugSchema,
   name: z.string().trim().min(1).max(40),
-  stage: purchasableStageSchema.optional().describe('missing means DEFAULT_PURCHASE_STAGE'),
-  idempotencyKey: idempotencyKeySchema.optional(),
+  stage: purchasableStageSchema,
+  idempotencyKey: idempotencyKeySchema,
 });
 export type AddFishRequest = z.infer<typeof addFishRequestSchema>;
 

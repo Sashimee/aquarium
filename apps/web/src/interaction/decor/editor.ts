@@ -49,6 +49,13 @@ function seeded(item: DecorItem): DecorItem {
   return item.tintSeed === undefined ? { ...item, tintSeed: legacyTintSeed(item) } : item;
 }
 
+/** Plant keys are built from the seed, so a new piece must not share one with any piece in the tank. */
+export function uniqueSeed(hash: number, taken: ReadonlySet<number>): number {
+  let seed = hash;
+  while (taken.has(seed)) seed = (seed + 1) >>> 0;
+  return seed;
+}
+
 function tidy(item: DecorItem): DecorItem {
   return withinServerBounds({
     ...item,
@@ -213,14 +220,14 @@ export class DecorEditor {
     const rest = restHeight(spec, fitted, this.options.ground);
     const dropHeight = this.dropHeightFor(spec, fitted, rest);
     const id = `p${++this.seq}`;
+    const placed = tidy({
+      ...fitted,
+      position: [fitted.position[0], rest + dropHeight, fitted.position[2]],
+    });
+    const taken = new Set(this.list.map((p) => p.item.tintSeed ?? legacyTintSeed(p.item)));
     const piece: Piece = {
       id,
-      item: seeded(
-        tidy({
-          ...fitted,
-          position: [fitted.position[0], rest + dropHeight, fitted.position[2]],
-        }),
-      ),
+      item: { ...placed, tintSeed: uniqueSeed(legacyTintSeed(placed), taken) },
     };
     this.list = [...this.list, piece];
     this.drops.set(id, { body: startDrop(piece.item.position[1]), restY: rest });

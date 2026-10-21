@@ -3,6 +3,7 @@ import type {
   BackgroundId,
   PlayableBiome,
   CareAction,
+  ConflictReason,
   DecorLayout,
   DiseaseKind,
   FoodType,
@@ -13,7 +14,7 @@ import type {
   TankSize,
   User,
 } from '@aquarium/shared';
-import { DEFAULT_TANK_SIZE } from '@aquarium/shared';
+import { DEFAULT_TANK_SIZE, ONE_TIME_REF } from '@aquarium/shared';
 import type { EventBus } from '../engine/events';
 import { layoutKey } from '../interaction/decor/key';
 import type { InteractionEvents } from '../interaction/events';
@@ -31,6 +32,7 @@ import {
 } from './life';
 import { SaveStatusMerge } from './saveStatus';
 import { describeSyncError } from './messages';
+import { moveRefusalText } from './moveFish';
 import { INITIAL_STATE, type SessionState } from './state';
 import { DISEASE_LABEL } from './treatment';
 import { diffFish, isStaleSnapshot, upsertTank } from './reconcile';
@@ -58,6 +60,13 @@ export interface TreatOutcome {
   overdose: boolean;
   /** The server's reason when it refused the dose with a 409. */
   refusal: string | null;
+  /** The server's machine-readable reason for the 409. */
+  reason: ConflictReason | null;
+}
+
+export interface MoveOutcome {
+  ok: boolean;
+  refusal: string | null;
 }
 
 export interface ShareOutcome {
@@ -68,8 +77,6 @@ export interface ShareOutcome {
 const ACTIVE_KEY = 'aquarium.activeTank';
 const LOAD_ATTEMPTS = 4;
 const LEAVE_FLUSH_MS = 3_000;
-
-const ONE_TIME_REF = /^(plant|decor|background):/;
 
 export class TankSession {
   private state: SessionState = INITIAL_STATE;
@@ -298,13 +305,9 @@ export class TankSession {
       this.walletApplied = seq;
       const before = this.state.balance;
       const gained = before !== null && wallet.balance > before ? wallet.balance - before : 0;
-      const released = new Set(wallet.released ?? []);
-      const owned = [...new Set([...this.state.owned, ...wallet.owned])].filter(
-        (ref) => !released.has(ref),
-      );
       this.patch({
         balance: wallet.balance,
-        owned,
+        owned: [...wallet.owned],
         ...(gained > 0 ? { earned: (this.state.earned ?? 0) + gained } : {}),
       });
     } catch (error) {
@@ -411,11 +414,25 @@ export class TankSession {
     return { ok, token };
   }
 
+  async setGalleryListed(listed: boolean): Promise<boolean> {
+    const tank = this.activeTank;
+    if (!tank) return false;
+    const gen = this.loadId;
+    return this.perform(async () => {
+      const next = await this.deps.api.setGallery(tank.id, listed);
+      if (gen !== this.loadId) return;
+      this.apply({ ...next, shareToken: null });
+      this.patch({
+        notice: listed ? 'Your tank is in the gallery.' : 'Your tank is out of the gallery.',
+      });
+    });
+  }
+
   async feed(food: FoodType, portion: number): Promise<boolean> {
     return this.careAction({ type: 'feed', food, portion });
   }
 
-  async careAction(action: CareAction): Promise<boolean> {
+  async careAction(action: CareRequest): Promise<boolean> {
     const tank = this.activeTank;
     if (!tank) return false;
     const gen = this.loadId;
@@ -439,7 +456,7 @@ export class TankSession {
   /** Doses the active tank. The key is kept across an unknown outcome, so a retry is never charged twice. */
   async treat(kind: DiseaseKind, potency: MedicinePotency): Promise<TreatOutcome> {
     const tank = this.activeTank;
-    const outcome: TreatOutcome = { ok: false, overdose: false, refusal: null };
+    const outcome: TreatOutcome = { ok: false, overdose: false, refusal: null, reason: null };
     if (!tank) return outcome;
     const gen = this.loadId;
     outcome.ok = await this.paid(`treat:${tank.id}:${kind}:${potency}`, async (idempotencyKey) => {
@@ -449,6 +466,8 @@ export class TankSession {
       } catch (error) {
         if (error instanceof ApiRequestError && error.code === 'conflict') {
           outcome.refusal = error.message;
+          outcome.reason = error.reason;
+          return;
         }
         throw error;
       }
@@ -465,6 +484,45 @@ export class TankSession {
           : `The ${DISEASE_LABEL[kind].toLowerCase()} medicine is in the water.`,
       });
     });
+    if (outcome.refusal !== null) outcome.ok = false;
+    return outcome;
+  }
+
+  /** Moves a fish out of the active tank. A refusal is handed back as text for the player. */
+  async move(fishId: string, toTankId: string): Promise<MoveOutcome> {
+    const tank = this.activeTank;
+    const outcome: MoveOutcome = { ok: false, refusal: null };
+    const fish = tank?.fish.find((f) => f.id === fishId);
+    const target = this.state.tanks.find((t) => t.id === toTankId);
+    if (!tank || !fish || !target) return outcome;
+    const gen = this.loadId;
+    const intent = `move:${tank.id}:${fishId}:${toTankId}`;
+    const key = this.keys.keyFor(intent);
+    outcome.ok = await this.perform(async () => {
+      let result;
+      try {
+        result = await this.deps.api.moveFish(tank.id, fishId, {
+          toTankId,
+          idempotencyKey: key,
+        });
+      } catch (error) {
+        const refusal = moveRefusalText(error, fish.name, target.name);
+        if (refusal === null) {
+          if (!outcomeUnknown(error)) this.keys.settle(intent);
+          throw error;
+        }
+        outcome.refusal = refusal;
+        if (!outcomeUnknown(error)) this.keys.settle(intent);
+        return;
+      }
+      this.keys.settle(intent);
+      this.keys.settle(`move:${toTankId}:${fishId}:${tank.id}`);
+      if (gen !== this.loadId) return;
+      this.apply(result.source);
+      this.apply(result.destination);
+      this.patch({ notice: `${fish.name} was moved to ${target.name}.` });
+    });
+    if (outcome.refusal !== null) outcome.ok = false;
     return outcome;
   }
 
@@ -508,7 +566,9 @@ export class TankSession {
       this.walletApplied = ++this.walletSeq;
       this.patch({
         balance: bought.wallet.balance,
-        owned: [...new Set([...this.state.owned, itemRef])],
+        ...(ONE_TIME_REF.test(itemRef)
+          ? { owned: [...new Set([...this.state.owned, itemRef])] }
+          : {}),
       });
       const next = await this.deps.api.tank(tank.id);
       if (gen !== this.loadId) return;
@@ -626,6 +686,7 @@ export class TankSession {
       tankId,
       tier: tank.equipment.waveMaker.tier,
     });
+    this.emitLamp(tank);
     return true;
   }
 
@@ -794,6 +855,17 @@ export class TankSession {
         tier: tank.equipment.waveMaker.tier,
       });
     }
+    const lamp = held.equipment.light;
+    if (
+      lamp.onHour !== tank.equipment.light.onHour ||
+      lamp.offHour !== tank.equipment.light.offHour
+    )
+      this.emitLamp(tank);
+  }
+
+  private emitLamp(tank: Tank): void {
+    const { onHour, offHour } = tank.equipment.light;
+    this.deps.interaction.emit('tank:lamp', { tankId: tank.id, onHour, offHour });
   }
 
   private bag(tankId: string, fishId: string, name: string): void {
@@ -834,6 +906,10 @@ class SessionEnded extends Error {}
 function decorKey(edited: boolean, layout: DecorLayout): string {
   return `${edited ? 'edited' : 'preset'}:${layoutKey(layout)}`;
 }
+
+/** A care action as the UI asks for it: the session adds the Pearls request key to bottled bacteria. */
+export type CareRequest =
+  Exclude<CareAction, { type: 'bottled_bacteria' }> | { type: 'bottled_bacteria' };
 
 const CARE_DONE: Record<Exclude<CareAction['type'], 'feed'>, string> = {
   water_change: 'Half the water was changed.',

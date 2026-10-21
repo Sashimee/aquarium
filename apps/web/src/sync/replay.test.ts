@@ -123,6 +123,36 @@ describe('describeEvent', () => {
       tone: 'warn',
     });
   });
+
+  it('describes a fish moved out of and into the tank', () => {
+    const out = ev(5, SINCE, {
+      kind: 'fish_moved',
+      payload: { fishId: FISH_2, direction: 'out', otherTankId: TANK_A },
+    });
+    expect(describeEvent(out, fish, names)).toMatchObject({
+      text: 'A fish was moved to another tank.',
+      tone: 'calm',
+    });
+    const into = ev(6, SINCE, {
+      kind: 'fish_moved',
+      payload: { fishId: FISH_1, direction: 'in', otherTankId: TANK_A },
+    });
+    expect(describeEvent(into, fish, names).text).toBe('Bubbles was moved here from another tank.');
+  });
+
+  it('drops the idempotency key from loaded move events', async () => {
+    const moved = ev(7, SINCE, {
+      kind: 'fish_moved',
+      payload: { fishId: FISH_1, direction: 'out', otherTankId: TANK_A, key: 'secret-key-0001' },
+    });
+    const replay = vi.fn().mockResolvedValue({ events: [moved], nextCursor: null });
+    const tl = await loadTimeline({ replay }, TANK_A, SINCE);
+    expect(tl.events[0]?.payload).toEqual({
+      fishId: FISH_1,
+      direction: 'out',
+      otherTankId: TANK_A,
+    });
+  });
 });
 
 describe('labels and failures', () => {

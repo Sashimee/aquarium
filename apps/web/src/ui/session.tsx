@@ -12,6 +12,7 @@ import { speciesNameMap, type SpeciesNames } from '../sync/speciesNames';
 import { INITIAL_STATE, type SessionState } from '../sync/state';
 import type { TankSession } from '../sync/session';
 import { useApi, useAuth, useBridge, useRoute } from './context';
+import { isReadOnlyView } from './router';
 
 interface SessionContextValue {
   session: TankSession | null;
@@ -58,7 +59,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const { interaction } = useBridge();
   const { user, status } = useAuth();
   const [session, setSession] = useState<TankSession | null>(null);
-  const viewing = useRoute().name === 'public-tank';
+  const viewing = isReadOnlyView(useRoute());
   const verified = !viewing && status !== 'loading' && user?.emailVerified === true;
   const [needed, setNeeded] = useState(false);
   useEffect(() => {

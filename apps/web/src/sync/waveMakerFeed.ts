@@ -1,8 +1,48 @@
+import type { FlowField } from '@aquarium/sim';
+import type { TankDimensions } from '../engine/tank/dimensions';
 import type { EventBus } from '../engine/events';
 import type { InteractionEvents } from '../interaction/events';
 
 export interface WaveMakerSink {
   setWaveMakerTier(tier: number): void;
+}
+
+export interface PumpScene {
+  setWaveMaker(field: FlowField | null, simTimeS: number): void;
+  syncWaveMaker(simTimeS: number): void;
+}
+
+export interface PumpSource {
+  /** The flow field for a tier in the tank now on show; null for no pump. */
+  field(tier: number): FlowField | null;
+  simTimeS(): number;
+}
+
+export interface PumpHost {
+  onFrame(callback: () => void): () => void;
+  readonly tank: { readonly dimensions: TankDimensions };
+}
+
+/**
+ * Mounts the pump on a scene and keeps it on the sim clock every frame, in the tank now on show.
+ * Returns what to call when the scene goes: it stops the frame sync and detaches the scene.
+ */
+export function bindPump(
+  feed: WaveMakerFeed,
+  host: PumpHost,
+  scene: PumpScene,
+  fieldFor: (tier: number, tank: TankDimensions) => FlowField | null,
+  simTimeS: () => number,
+): () => void {
+  feed.attachScene(scene, {
+    field: (tier) => fieldFor(tier, host.tank.dimensions),
+    simTimeS,
+  });
+  const stopFrames = host.onFrame(() => feed.syncScene());
+  return () => {
+    stopFrames();
+    feed.detachScene();
+  };
 }
 
 /**
@@ -13,6 +53,8 @@ export interface WaveMakerSink {
 export class WaveMakerFeed {
   private tier = 0;
   private sink: WaveMakerSink | null = null;
+  private scene: PumpScene | null = null;
+  private source: PumpSource | null = null;
   private activeTankId: string | null = null;
   private readonly unsubscribe: (() => void)[];
 
@@ -41,14 +83,38 @@ export class WaveMakerFeed {
     sink.setWaveMakerTier(this.tier);
   }
 
+  /** Hands the mounted scene the pump held so far; call again after a scene is rebuilt. */
+  attachScene(scene: PumpScene, source: PumpSource): void {
+    this.scene = scene;
+    this.source = source;
+    this.pushToScene();
+  }
+
+  detachScene(): void {
+    this.scene = null;
+    this.source = null;
+  }
+
+  /** Once per frame: the scene's pump follows the sim clock, not the render clock. */
+  syncScene(): void {
+    this.scene?.syncWaveMaker(this.source?.simTimeS() ?? 0);
+  }
+
   stop(): void {
     for (const off of this.unsubscribe) off();
     this.sink = null;
+    this.detachScene();
   }
 
   private set(tier: number): void {
     if (tier === this.tier) return;
     this.tier = tier;
     this.sink?.setWaveMakerTier(tier);
+    this.pushToScene();
+  }
+
+  private pushToScene(): void {
+    if (this.scene === null || this.source === null) return;
+    this.scene.setWaveMaker(this.source.field(this.tier), this.source.simTimeS());
   }
 }

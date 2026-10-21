@@ -31,6 +31,12 @@ export function orderEvents(events: readonly CareEvent[]): CareEvent[] {
   });
 }
 
+function withoutMoveKey(event: CareEvent): CareEvent {
+  if (event.kind !== 'fish_moved') return event;
+  const { fishId, direction, otherTankId } = event.payload;
+  return { ...event, payload: { fishId, direction, otherTankId } };
+}
+
 export async function loadTimeline(
   api: ReplayApi,
   tankId: string,
@@ -53,7 +59,7 @@ export async function loadTimeline(
       },
       options.signal,
     );
-    collected.push(...res.events);
+    collected.push(...res.events.map(withoutMoveKey));
     if (res.nextCursor === null) return { events: orderEvents(collected), truncated: false };
     cursor = res.nextCursor;
   }
@@ -126,6 +132,17 @@ export function describeEvent(event: CareEvent, fish: FishNames, names: SpeciesN
         text: `${fishLabel(fish, event.payload.fishId)} ${CAUSE_TEXT[event.payload.cause]}.`,
         tone: 'loss',
       };
+    case 'fish_moved': {
+      const who = fishLabel(fish, event.payload.fishId);
+      return {
+        ...base,
+        text:
+          event.payload.direction === 'out'
+            ? `${who} was moved to another tank.`
+            : `${who} was moved here from another tank.`,
+        tone: 'calm',
+      };
+    }
     case 'water_alert': {
       const metric = METRIC_TEXT[event.payload.metric];
       return event.payload.state === 'high'

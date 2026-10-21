@@ -101,3 +101,40 @@ export function lampPhotoperiod(hours: LampHours): Photoperiod {
     rampMinutes: Math.min(LAMP_RAMP_MINUTES, length / 2),
   };
 }
+
+/** Smallest daylight change worth announcing: about 20 s into a one-hour ramp. */
+const DAYLIGHT_EPSILON = 0.005;
+/**
+ * Frames stop while the tab is hidden; a gap longer than this means the light may have moved
+ * while nobody, fish included, was watching it change.
+ */
+export const DAYLIGHT_UNSEEN_GAP_MS = 1000;
+
+/**
+ * A new hood level. `settled` marks one that changed unseen (first level, or the first after a
+ * hidden tab or a long stall), which the fish should take as already adapted to, not as a switch.
+ */
+export interface DaylightChange {
+  readonly level: number;
+  readonly settled: boolean;
+}
+
+/** Decides which daylight levels are worth announcing, and which of them arrive settled. */
+export class DaylightAnnouncer {
+  private announced: number | null = null;
+  private unseen = false;
+
+  /** Every frame, with the time since the previous one. */
+  frame(gapMs: number): void {
+    if (gapMs > DAYLIGHT_UNSEEN_GAP_MS) this.unseen = true;
+  }
+
+  next(level: number): DaylightChange | null {
+    const unseen = this.unseen;
+    this.unseen = false;
+    if (this.announced !== null && Math.abs(level - this.announced) < DAYLIGHT_EPSILON) return null;
+    const settled = unseen || this.announced === null;
+    this.announced = level;
+    return { level, settled };
+  }
+}

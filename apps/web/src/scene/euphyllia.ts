@@ -5,15 +5,24 @@ import {
   Group,
   Mesh,
   MeshStandardNodeMaterial,
+  type Node,
 } from 'three/webgpu';
-import { vertexColor } from 'three/tsl';
+import { attribute, positionLocal, vertexColor } from 'three/tsl';
 import { PROCEDURAL_EUPHYLLIA_ID, type DecorItem } from '@aquarium/shared';
 import type { Tier } from '../engine/quality/tiers';
 import { SWAY_ATTRIBUTE, swayPositionNode } from './anemone';
 import type { CapsuleCollider } from './colliders';
-import type { CurrentField, CurrentParameters } from './current';
+import {
+  limitLean,
+  MEANDER_AMPLITUDE,
+  PUMP_LEAN_HEIGHT,
+  type CurrentField,
+  type CurrentParameters,
+  type PumpRoot,
+} from './current';
 import { decorMatrix } from './hardscape';
 import { mulberry32 } from './placement';
+import { EUPHYLLIA_POLYP_GAIN, polypSizeNode } from './polyps';
 
 export type EuphylliaVariant = 'hammer' | 'torch';
 export type EuphylliaDetail = 0 | 1 | 2;
@@ -24,6 +33,8 @@ export interface EuphylliaMesh {
   readonly normals: Float32Array;
   readonly colors: Float32Array;
   readonly sway: Float32Array;
+  /** Per vertex, the offset to the tentacle root; zero off the tentacles. Retracting polyps move along it. */
+  readonly retract: Float32Array;
   readonly indices: Uint32Array;
   readonly bounds: { readonly min: Vec3; readonly max: Vec3 };
   readonly heads: number;
@@ -43,6 +54,7 @@ export const EUPHYLLIA_TRIANGLE_BUDGET: Readonly<Record<EuphylliaDetail, number>
   2: 18000,
 };
 
+export const RETRACT_ATTRIBUTE = '_retract';
 export const WAVE_METRES = 0.0035;
 export const LEAN_SECONDS = 0.5;
 const COLONY_HEIGHT = 0.1;
@@ -113,14 +125,16 @@ class MeshBuilder {
   readonly normals: number[] = [];
   readonly colors: number[] = [];
   readonly sway: number[] = [];
+  readonly retract: number[] = [];
   readonly indices: number[] = [];
 
   get vertexCount(): number {
     return this.positions.length / 3;
   }
 
-  vertex(p: Vec3, n: Vec3, color: Vec3, sway: number): number {
+  vertex(p: Vec3, n: Vec3, color: Vec3, sway: number, root?: Vec3): number {
     this.positions.push(...p);
+    this.retract.push(...(root ? sub(root, p) : ([0, 0, 0] as Vec3)));
     this.normals.push(...n);
     this.colors.push(...color);
     this.sway.push(sway);
@@ -134,6 +148,7 @@ class MeshBuilder {
     sides: number,
     color: (t: number) => Vec3,
     sway: (t: number) => number,
+    root?: Vec3,
   ): void {
     const last = path.length - 1;
     const first = this.vertexCount;
@@ -145,12 +160,12 @@ class MeshBuilder {
       for (let s = 0; s < sides; s++) {
         const a = (s / sides) * Math.PI * 2;
         const n = add(scale(u, Math.cos(a)), scale(v, Math.sin(a)));
-        this.vertex(add(p, scale(n, radii[i] as number)), n, color(t), sway(t));
+        this.vertex(add(p, scale(n, radii[i] as number)), n, color(t), sway(t), root);
       }
     });
     const end = path[last] as Vec3;
     const prev = path[Math.max(0, last - 1)] as Vec3;
-    const apex = this.vertex(end, normalise(sub(end, prev)), color(1), sway(1));
+    const apex = this.vertex(end, normalise(sub(end, prev)), color(1), sway(1), root);
     for (let i = 0; i < last; i++) {
       for (let s = 0; s < sides; s++) {
         const a = first + i * sides + s;
@@ -170,6 +185,7 @@ class MeshBuilder {
     lat: number,
     color: Vec3,
     sway: number,
+    root?: Vec3,
   ): void {
     const first = this.vertexCount;
     for (let i = 0; i <= lat; i++) {
@@ -187,7 +203,7 @@ class MeshBuilder {
           p = add(p, scale(axes[k] as Vec3, (local[k] as number) * (radii[k] as number)));
           n = add(n, scale(axes[k] as Vec3, (local[k] as number) / (radii[k] as number)));
         }
-        this.vertex(p, normalise(n), color, sway);
+        this.vertex(p, normalise(n), color, sway, root);
       }
     }
     for (let i = 0; i < lat; i++) {
@@ -298,6 +314,7 @@ function buildHead(
         sides,
         (t) => lerp3(palette.flesh, palette.tip, t * t),
         (t) => 0.25 + 0.75 * t,
+        root,
       );
       if (hammer) {
         const end = path[segments] as Vec3;
@@ -313,6 +330,7 @@ function buildHead(
           detail === 0 ? 2 : 3,
           palette.tip,
           1,
+          root,
         );
       }
     }
@@ -387,6 +405,7 @@ export function generateEuphyllia(
     normals: Float32Array.from(out.normals),
     colors: Float32Array.from(out.colors),
     sway: Float32Array.from(out.sway),
+    retract: Float32Array.from(out.retract),
     indices: Uint32Array.from(out.indices),
     bounds: { min, max },
     heads: headCount,
@@ -431,8 +450,17 @@ export function euphylliaReach(
   item: DecorItem,
   current: CurrentParameters,
 ): number {
-  const peakFlow = current.speed * (1 + current.gustDepth);
-  return (horizontalRadius(bounds) + WAVE_METRES) * item.scale + peakFlow * LEAN_SECONDS;
+  const peakFlow = Math.hypot(
+    current.speed * (1 + current.gustDepth),
+    current.speed * current.gustDepth * MEANDER_AMPLITUDE,
+  );
+  const room = PUMP_LEAN_HEIGHT * bounds.max[1] * item.scale;
+  const lean = limitLean(
+    (peakFlow + (current.pumpMps ?? 0)) * LEAN_SECONDS,
+    peakFlow * LEAN_SECONDS,
+    room,
+  );
+  return (horizontalRadius(bounds) + WAVE_METRES) * item.scale + lean;
 }
 
 export function euphylliaGeometry(mesh: EuphylliaMesh): BufferGeometry {
@@ -441,8 +469,18 @@ export function euphylliaGeometry(mesh: EuphylliaMesh): BufferGeometry {
   geometry.setAttribute('normal', new BufferAttribute(mesh.normals, 3));
   geometry.setAttribute('color', new BufferAttribute(mesh.colors, 3));
   geometry.setAttribute(SWAY_ATTRIBUTE, new BufferAttribute(mesh.sway, 1));
+  geometry.setAttribute(RETRACT_ATTRIBUTE, new BufferAttribute(mesh.retract, 3));
   geometry.setIndex(new BufferAttribute(mesh.indices, 1));
   return geometry;
+}
+
+/** Tentacle vertices slide towards their root as `size` falls; `position + retract` is the root. */
+export function retractedPosition(
+  size: Node<'float'>,
+  position: Node<'vec3'> = positionLocal,
+  retract: Node<'vec3'> = attribute(RETRACT_ATTRIBUTE, 'vec3'),
+): Node<'vec3'> {
+  return position.add(retract.mul(size.oneMinus()));
 }
 
 /** One coral colony: a single mesh whose tentacles stream in the shared current on the GPU. */
@@ -450,10 +488,12 @@ export class EuphylliaGroup {
   readonly object = new Group();
   private readonly geometry: BufferGeometry;
   private readonly material: MeshStandardNodeMaterial;
+  private readonly pump: PumpRoot;
 
-  constructor(mesh: EuphylliaMesh, item: DecorItem, current: CurrentField) {
+  constructor(mesh: EuphylliaMesh, item: DecorItem, current: CurrentField, polyps: Node<'float'>) {
     this.object.name = `euphyllia:${item.assetId}`;
     this.geometry = euphylliaGeometry(mesh);
+    this.pump = current.pumpRoot(...item.position);
     this.material = new MeshStandardNodeMaterial();
     this.material.name = 'euphyllia-sway';
     this.material.roughness = 0.55;
@@ -461,7 +501,15 @@ export class EuphylliaGroup {
     this.material.side = DoubleSide;
     this.material.colorNode = vertexColor().pow(1.8);
     this.material.emissiveNode = vertexColor().pow(1.8).mul(0.06);
-    this.material.positionNode = swayPositionNode(item, current, WAVE_METRES, LEAN_SECONDS);
+    this.material.positionNode = swayPositionNode(
+      item,
+      current,
+      WAVE_METRES,
+      LEAN_SECONDS,
+      PUMP_LEAN_HEIGHT * mesh.bounds.max[1],
+      this.pump,
+      retractedPosition(polypSizeNode(polyps, EUPHYLLIA_POLYP_GAIN)),
+    );
     const colony = new Mesh(this.geometry, this.material);
     colony.name = this.object.name;
     colony.matrixAutoUpdate = false;
@@ -473,6 +521,7 @@ export class EuphylliaGroup {
   }
 
   dispose(): void {
+    this.pump.dispose();
     this.geometry.dispose();
     this.material.dispose();
     this.object.removeFromParent();

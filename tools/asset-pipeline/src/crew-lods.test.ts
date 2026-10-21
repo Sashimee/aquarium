@@ -5,6 +5,7 @@ import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { MeshoptDecoder } from 'meshoptimizer';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { boundsOf, canonicalVertices, connectedComponents } from './crew-scan.ts';
+import { FIN_ID_ATTRIBUTE } from './index-schema.ts';
 import { uvStretchShare } from './rebake.ts';
 
 const ASSETS = fileURLToPath(new URL('../../../apps/web/public/assets', import.meta.url));
@@ -14,6 +15,7 @@ interface ShippedPrimitive {
   positions: Float32Array<ArrayBuffer>;
   uvs: Float32Array<ArrayBuffer>;
   indices: Uint32Array<ArrayBuffer>;
+  partIds: Float32Array<ArrayBuffer> | null;
 }
 
 async function readLod(dir: string, level: number): Promise<ShippedPrimitive[]> {
@@ -29,6 +31,9 @@ async function readLod(dir: string, level: number): Promise<ShippedPrimitive[]> 
         positions: Float32Array.from(prim.getAttribute('POSITION')!.getArray()!),
         uvs: Float32Array.from(prim.getAttribute('TEXCOORD_0')!.getArray()!),
         indices: Uint32Array.from(prim.getIndices()!.getArray()!),
+        partIds: prim.getAttribute(FIN_ID_ATTRIBUTE)
+          ? Float32Array.from(prim.getAttribute(FIN_ID_ATTRIBUTE)!.getArray()!)
+          : null,
       });
   return out;
 }
@@ -162,7 +167,35 @@ function enclosedBackgroundPixels(prims: ShippedPrimitive[], view: ViewAxis, sea
   return enclosed;
 }
 
-function lipGapAcrossWidth(prims: ShippedPrimitive[], length: number): number {
+/** Highest point of the surface straight above or below (x, z), or -Infinity where there is none. */
+function bodyHeightAt(prim: ShippedPrimitive, x: number, z: number): number {
+  let top = -Infinity;
+  const { positions, indices } = prim;
+  for (let t = 0; t < indices.length; t += 3) {
+    const [a, b, c] = [0, 1, 2].map((k) => indices[t + k]! * 3) as [number, number, number];
+    const area =
+      (positions[b]! - positions[a]!) * (positions[c + 2]! - positions[a + 2]!) -
+      (positions[c]! - positions[a]!) * (positions[b + 2]! - positions[a + 2]!);
+    if (Math.abs(area) < 1e-18) continue;
+    const w0 =
+      ((positions[b]! - x) * (positions[c + 2]! - z) -
+        (positions[c]! - x) * (positions[b + 2]! - z)) /
+      area;
+    const w1 =
+      ((positions[c]! - x) * (positions[a + 2]! - z) -
+        (positions[a]! - x) * (positions[c + 2]! - z)) /
+      area;
+    const w2 = 1 - w0 - w1;
+    if (w0 < 0 || w1 < 0 || w2 < 0) continue;
+    top = Math.max(top, w0 * positions[a + 1]! + w1 * positions[b + 1]! + w2 * positions[c + 1]!);
+  }
+  return top;
+}
+
+function lipGapAcrossWidth(
+  prims: ShippedPrimitive[],
+  length: number,
+): { worst: number; samples: number } {
   const shell = prims.find((p) => p.material === 'nerite-shell')!;
   const body = prims.find((p) => p.material === 'nerite-body')!;
   const bins = 12;
@@ -172,6 +205,7 @@ function lipGapAcrossWidth(prims: ShippedPrimitive[], length: number): number {
     frontZ = Math.max(frontZ, shell.positions[v * 3 + 2]!);
   const lipUnder = new Array<number>(bins).fill(Infinity);
   const lipZ = new Array<number>(bins).fill(0);
+  const lipX = new Array<number>(bins).fill(0);
   for (let v = 0; v < shell.positions.length / 3; v++) {
     const bin = binOf(shell.positions[v * 3]!);
     const y = shell.positions[v * 3 + 1]!;
@@ -179,39 +213,95 @@ function lipGapAcrossWidth(prims: ShippedPrimitive[], length: number): number {
     if (y < lipUnder[bin]!) {
       lipUnder[bin] = y;
       lipZ[bin] = shell.positions[v * 3 + 2]!;
+      lipX[bin] = shell.positions[v * 3]!;
     }
   }
-  const bodyTop = new Array<number>(bins).fill(-Infinity);
-  for (let v = 0; v < body.positions.length / 3; v++) {
-    const bin = binOf(body.positions[v * 3]!);
-    if (bin < 0 || bin >= bins || Math.abs(body.positions[v * 3 + 2]! - lipZ[bin]!) > 0.08 * length)
-      continue;
-    bodyTop[bin] = Math.max(bodyTop[bin]!, body.positions[v * 3 + 1]!);
-  }
-  const gaps = lipUnder.map((y, bin) => y - bodyTop[bin]!).filter(Number.isFinite);
-  return Math.max(...gaps);
+  const bodyTop = lipUnder.map((_, bin) => bodyHeightAt(body, lipX[bin]!, lipZ[bin]!));
+  const gaps = lipUnder.flatMap((y, bin) => (Number.isFinite(y) ? [y - bodyTop[bin]!] : []));
+  return { worst: Math.max(...gaps), samples: gaps.length };
 }
 
-const SCANNED = [
-  { dir: 'crab/hermit-crab', material: 'hermit-crab', solid: false },
-  { dir: 'snail/nerite-snail', material: 'nerite-shell', solid: true },
+function lipEdgeSteps(prims: ShippedPrimitive[], length: number): number[] {
+  const shell = prims.find((p) => p.material === 'nerite-shell')!;
+  const { positions, indices } = shell;
+  let frontZ = -Infinity;
+  let rearZ = Infinity;
+  let halfWidth = 0;
+  for (let v = 0; v < positions.length / 3; v++) {
+    if (positions[v * 3 + 1]! >= 0.1 * length) continue;
+    frontZ = Math.max(frontZ, positions[v * 3 + 2]!);
+    rearZ = Math.min(rearZ, positions[v * 3 + 2]!);
+    halfWidth = Math.max(halfWidth, Math.abs(positions[v * 3]!));
+  }
+  const fullCutZ = (rearZ + frontZ) / 2 + 0.15 * length;
+  const columns = 24;
+  const lowest: number[] = [];
+  for (let c = 0; c < columns; c++) {
+    const x = (-1 + (2 * c) / (columns - 1)) * 0.8 * halfWidth;
+    let low = Infinity;
+    for (let t = 0; t < indices.length; t += 3)
+      for (let k = 0; k < 3; k++) {
+        const a = indices[t + k]!;
+        const b = indices[t + ((k + 1) % 3)]!;
+        const xa = positions[a * 3]!;
+        const xb = positions[b * 3]!;
+        if ((xa - x) * (xb - x) > 0 || xa === xb) continue;
+        const f = (x - xa) / (xb - xa);
+        const z = positions[a * 3 + 2]! + f * (positions[b * 3 + 2]! - positions[a * 3 + 2]!);
+        if (z >= fullCutZ)
+          low = Math.min(
+            low,
+            positions[a * 3 + 1]! + f * (positions[b * 3 + 1]! - positions[a * 3 + 1]!),
+          );
+      }
+    lowest.push(low);
+  }
+  return lowest.slice(1).map((y, i) => Math.abs(y - lowest[i]!));
+}
+
+const SCANNED: Array<{
+  dir: string;
+  material: string;
+  solid: boolean;
+  pieces?: number;
+  partPieces?: Record<string, { pieces: number; isPart: (id: number) => boolean }>;
+}> = [
+  {
+    dir: 'crab/hermit-crab',
+    material: 'hermit-crab',
+    solid: false,
+    partPieces: {
+      shell: { pieces: 1, isPart: (id) => id === 0 },
+      body: { pieces: 1, isPart: (id) => id !== 0 },
+    },
+  },
+  { dir: 'snail/nerite-snail', material: 'nerite-shell', solid: true, pieces: 1 },
 ];
 
 describe('nerite seating', () => {
   beforeAll(() => MeshoptDecoder.ready);
 
   for (const level of [0, 1, 2])
-    it(`LOD${level} lip underside sits within 0.06 L of the body across the full lip width`, async () => {
+    it(`LOD${level} lip underside sits within 0.058 L of the body across the full lip width`, async () => {
       const length = 0.02;
       const gap = lipGapAcrossWidth(await readLod('snail/nerite-snail', level), length);
-      expect(gap).toBeLessThan(0.06 * length);
+      expect(gap.samples).toBeGreaterThan(0);
+      expect(gap.worst).toBeLessThan(0.058 * length);
+    });
+  for (const level of [0, 1, 2])
+    it(`LOD${level} lip edge is smooth across the front width`, async () => {
+      const length = 0.02;
+      const steps = lipEdgeSteps(await readLod('snail/nerite-snail', level), length);
+      expect(steps.length).toBeGreaterThan(20);
+      for (const step of steps) expect(Number.isFinite(step)).toBe(true);
+      expect(Math.max(...steps)).toBeLessThan(0.04 * length);
     });
 });
 
 describe('shipped scan LODs', () => {
   beforeAll(() => MeshoptDecoder.ready);
 
-  for (const { dir, material, solid } of SCANNED)
+  for (const { dir, material, solid, pieces, partPieces } of SCANNED)
     for (const level of [0, 1, 2]) {
       it(`${dir} LOD${level} has no see-through pixels in the top and side views`, async () => {
         const prims = await readLod(dir, level);
@@ -227,7 +317,12 @@ describe('shipped scan LODs', () => {
         },
       );
 
-      it(`${dir} LOD${level} scan mesh is one connected piece`, async () => {
+      const expectation = partPieces
+        ? Object.entries(partPieces)
+            .map(([name, part]) => `${part.pieces} ${name}`)
+            .join(' and ')
+        : `${pieces}`;
+      it(`${dir} LOD${level} scan mesh has ${expectation} connected piece(s)`, async () => {
         for (const prim of (await readLod(dir, level)).filter((p) => p.material === material)) {
           const { min, max } = boundsOf(prim.positions);
           const diagonal = Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2]);
@@ -237,9 +332,23 @@ describe('shipped scan LODs', () => {
             const [a, b, c] = [0, 1, 2].map((k) => canon[prim.indices[t + k]!]!);
             if (a !== b && b !== c && a !== c) solid.push(...prim.indices.subarray(t, t + 3));
           }
-          const used = new Set(solid);
-          const parts = connectedComponents(canon, solid, (v) => used.has(v)).sizes.length;
-          expect(parts, `${dir} LOD${level} ${prim.material}`).toBe(1);
+          const label = `${dir} LOD${level} ${prim.material}`;
+          if (partPieces) {
+            expect(prim.partIds, `${label} needs ${FIN_ID_ATTRIBUTE}`).not.toBeNull();
+            for (const [name, { pieces: want, isPart }] of Object.entries(partPieces)) {
+              const inPart: number[] = [];
+              for (let t = 0; t < solid.length; t += 3)
+                if ([0, 1, 2].every((k) => isPart(prim.partIds![solid[t + k]!]!)))
+                  inPart.push(...solid.slice(t, t + 3));
+              const used = new Set(inPart);
+              const parts = connectedComponents(canon, inPart, (v) => used.has(v)).sizes.length;
+              expect(parts, `${label} ${name}`).toBe(want);
+            }
+          } else {
+            const used = new Set(solid);
+            const parts = connectedComponents(canon, solid, (v) => used.has(v)).sizes.length;
+            expect(parts, label).toBe(pieces);
+          }
         }
       });
 
@@ -249,4 +358,88 @@ describe('shipped scan LODs', () => {
         for (const prim of prims) expect(uvStretchShare(prim)).toBeLessThan(0.01);
       });
     }
+});
+
+/**
+ * Looks at the snail from `azimuth` and `elevation` degrees and counts the background pixels that sit in a pocket:
+ * solid within `reach` of them above and below, and on at least one side. That is the wedge left where a shell wall
+ * ends above the foot; a dome overhanging the open ground has nothing below it and a smooth silhouette has no pocket.
+ * Returns the pocket area as a share of the squared shell length.
+ */
+function pocketArea(
+  prims: ShippedPrimitive[],
+  length: number,
+  azimuth: number,
+  elevation: number,
+): number {
+  const columns = 640;
+  const rows = 360;
+  const pixel = (1.6 * length) / columns;
+  const vTop = 0.75 * length;
+  const a = (azimuth * Math.PI) / 180;
+  const e = (elevation * Math.PI) / 180;
+  const toward = [Math.sin(a) * Math.cos(e), Math.sin(e), Math.cos(a) * Math.cos(e)];
+  const right = [Math.cos(a), 0, -Math.sin(a)];
+  const up = [
+    toward[1]! * right[2]! - toward[2]! * right[1]!,
+    toward[2]! * right[0]! - toward[0]! * right[2]!,
+    toward[0]! * right[1]! - toward[1]! * right[0]!,
+  ];
+  const along = (p: Float32Array, v: number, axis: number[]): number =>
+    p[v * 3]! * axis[0]! + p[v * 3 + 1]! * axis[1]! + p[v * 3 + 2]! * axis[2]!;
+  const solid = new Uint8Array(columns * rows);
+  for (const prim of prims)
+    for (let t = 0; t < prim.indices.length; t += 3) {
+      const corners = [0, 1, 2].map((k) => {
+        const v = prim.indices[t + k]!;
+        return {
+          x: along(prim.positions, v, right) / pixel + columns / 2,
+          y: (vTop - along(prim.positions, v, up)) / pixel,
+        };
+      });
+      const [p, q, r] = corners as [(typeof corners)[0], (typeof corners)[0], (typeof corners)[0]];
+      const area = (q.x - p.x) * (r.y - p.y) - (r.x - p.x) * (q.y - p.y);
+      if (Math.abs(area) < 1e-9) continue;
+      const x0 = Math.max(0, Math.floor(Math.min(p.x, q.x, r.x)));
+      const x1 = Math.min(columns - 1, Math.ceil(Math.max(p.x, q.x, r.x)));
+      const y0 = Math.max(0, Math.floor(Math.min(p.y, q.y, r.y)));
+      const y1 = Math.min(rows - 1, Math.ceil(Math.max(p.y, q.y, r.y)));
+      for (let y = y0; y <= y1; y++)
+        for (let x = x0; x <= x1; x++) {
+          const w0 = ((q.x - x - 0.5) * (r.y - y - 0.5) - (r.x - x - 0.5) * (q.y - y - 0.5)) / area;
+          const w1 = ((r.x - x - 0.5) * (p.y - y - 0.5) - (p.x - x - 0.5) * (r.y - y - 0.5)) / area;
+          const w2 = 1 - w0 - w1;
+          if (w0 < 0 || w1 < 0 || w2 < 0) continue;
+          solid[y * columns + x] = 1;
+        }
+    }
+  const reach = Math.round((0.08 * length) / pixel);
+  const near = (x: number, y: number, dx: number, dy: number): boolean => {
+    for (let k = 1; k <= reach; k++) {
+      const px = x + dx * k;
+      const py = y + dy * k;
+      if (px < 0 || py < 0 || px >= columns || py >= rows) return false;
+      if (solid[py * columns + px]) return true;
+    }
+    return false;
+  };
+  let pockets = 0;
+  for (let y = 0; y < rows; y++)
+    for (let x = 0; x < columns; x++)
+      if (!solid[y * columns + x] && near(x, y, 0, -1) && near(x, y, 0, 1))
+        if (near(x, y, -1, 0) || near(x, y, 1, 0)) pockets++;
+  return (pockets * pixel * pixel) / (length * length);
+}
+
+describe('nerite wedge', () => {
+  beforeAll(() => MeshoptDecoder.ready);
+
+  for (const level of [0, 1, 2])
+    for (const azimuth of [-60, -45, -30, 0, 20, 30, 40, 45, 60])
+      for (const elevation of [0, 6, 12, 20])
+        it(`LOD${level} has no pocket of background under the shell from ${azimuth}/${elevation} degrees`, async () => {
+          const prims = await readLod('snail/nerite-snail', level);
+          const area = pocketArea(prims, 0.02, azimuth, elevation);
+          expect(area).toBeLessThan(0.0045);
+        });
 });

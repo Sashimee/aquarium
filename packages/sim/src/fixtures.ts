@@ -1,8 +1,10 @@
 import { createTankSpace, type Collider, type TankSpace } from '@aquarium/shared';
 import { basinOf, type Basin, type TankDimensions } from './basin.ts';
 import type { Anchor } from './behaviour.ts';
+import type { SimClient } from './bridge.ts';
 import { FOOD_PARTICLES, FOOD_STRIDE, FOOD_TYPES, type AteEvent } from './food.ts';
 import type { Sdf } from './sdf.ts';
+import type { Snapshot } from './snapshot.ts';
 import type { SpeciesInput } from './species.ts';
 import type { FishSpawn, WorldConfig } from './world.ts';
 
@@ -520,6 +522,19 @@ export const SHOW_DECOR: readonly Collider[] = [
 
 export function spawnMany(species: string, count: number, prefix = species): FishSpawn[] {
   return Array.from({ length: count }, (_, i) => ({ id: `${prefix}-${i}`, species }));
+}
+
+/** Steps by `steps` and resolves with the snapshot of the world at `tick`. */
+export function stepTo(client: SimClient, steps: number, tick: number): Promise<Snapshot> {
+  const reached = new Promise<Snapshot>((resolve) => {
+    const off = client.onSnapshot((snapshot) => {
+      if (snapshot.tick < tick) return;
+      off();
+      resolve(snapshot);
+    });
+  });
+  client.step(steps);
+  return reached;
 }
 
 /**

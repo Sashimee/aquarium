@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { schema } from './db/index.ts';
-import { APP_ORIGIN, createHarness, type Harness } from './test-harness.ts';
+import { APP_ORIGIN, createHarness, fishPayload, type Harness } from './test-harness.ts';
 
 const PASSWORD = 'correct horse battery';
 const jsonHeaders = { 'content-type': 'application/json', origin: APP_ORIGIN };
@@ -62,13 +62,17 @@ async function tankWithFish(h: Harness, cookie: string, fishCount = 1) {
   const created = await call(h, cookie, 'POST', '/api/tanks', {
     name: 'Home',
     biome: 'freshwater',
+    idempotencyKey: randomUUID(),
   });
   const tank = tankSchema.parse(created.json());
   for (let i = 0; i < fishCount; i++) {
-    const res = await call(h, cookie, 'POST', `/api/tanks/${tank.id}/fish`, {
-      species: 'neon-tetra',
-      name: `Blip${i}`,
-    });
+    const res = await call(
+      h,
+      cookie,
+      'POST',
+      `/api/tanks/${tank.id}/fish`,
+      fishPayload('neon-tetra', `Blip${i}`),
+    );
     expect(res.statusCode).toBe(201);
   }
   return tank;

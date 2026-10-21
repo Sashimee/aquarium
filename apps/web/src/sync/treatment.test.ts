@@ -3,14 +3,17 @@ import { describe, expect, it } from 'vitest';
 import { BUNDLED_ECONOMY } from './bundledEconomy';
 import { FISH_1, FISH_2, fishFixture, speciesFixture, tankFixture } from './fixtures';
 import {
-  blockedText,
   courseDays,
   doseButtonText,
+  doseSpend,
   heatTolerantSick,
+  emptyHeld,
   medicineLine,
   planDose,
+  reconcileHeld,
   severityWord,
   sickKinds,
+  sickSummary,
   switchWarning,
   wantsWaterChange,
 } from './treatment';
@@ -124,9 +127,11 @@ describe('treatment wording', () => {
   });
 
   it('sends the player to a water change for both water refusals but not for no patient', () => {
-    expect(wantsWaterChange(blockedText('other-medicine'))).toBe(true);
-    expect(wantsWaterChange(blockedText('at-limit'))).toBe(true);
-    expect(wantsWaterChange(blockedText('nothing-to-treat'))).toBe(false);
+    expect(wantsWaterChange('other_medicine')).toBe(true);
+    expect(wantsWaterChange('dose_limit')).toBe(true);
+    expect(wantsWaterChange('nothing_to_treat')).toBe(false);
+    expect(wantsWaterChange('key_reused')).toBe(false);
+    expect(wantsWaterChange(null)).toBe(false);
   });
 });
 
@@ -151,5 +156,48 @@ describe('heat for ich', () => {
     expect(heatTolerantSick(tankFixture({ fish: [ichFish] }), [tetra, betta])).toEqual([]);
     const healthyBetta = fishFixture(FISH_2, { species: 'betta' });
     expect(heatTolerantSick(tankFixture({ fish: [healthyBetta] }), [betta])).toEqual([]);
+  });
+});
+
+describe('doseSpend', () => {
+  it('asks the price once: confirmation is dropped after a warning dialog', () => {
+    expect(doseSpend(BUNDLED_ECONOMY, 'ich', 'premium', false)).toMatchObject({
+      price: 40,
+      confirm: true,
+    });
+    expect(doseSpend(BUNDLED_ECONOMY, 'ich', 'premium', true)).toMatchObject({
+      price: 40,
+      confirm: false,
+    });
+  });
+
+  it('has no spend for the free dose', () => {
+    expect(doseSpend(BUNDLED_ECONOMY, 'ich', 'standard', false)).toBeNull();
+  });
+});
+
+describe('reconcileHeld', () => {
+  const held = { tankId: 'a', pending: { kind: 'ich' }, refusal: { message: 'no' } };
+
+  it('keeps what is held for the tank on screen', () => {
+    expect(reconcileHeld(held, 'a')).toBe(held);
+  });
+
+  it('drops what another tank held, and does not bring it back on returning', () => {
+    const onB = reconcileHeld(held, 'b');
+    expect(onB).toEqual(emptyHeld('b'));
+    expect(reconcileHeld(onB, 'a')).toEqual(emptyHeld('a'));
+  });
+});
+
+describe('sickSummary', () => {
+  it('groups living sick fish by disease and ignores healthy and dead ones', () => {
+    const fish = [
+      fishFixture(FISH_1, { name: 'Pip', disease: disease('ich') }),
+      fishFixture(FISH_2, { name: 'Dot', disease: disease('fin-rot') }),
+      fishFixture(FISH_2, { name: 'Ghost', status: 'dead', disease: disease('velvet') }),
+    ];
+    expect(sickSummary(fish)).toBe('Ich: Pip. Fin rot: Dot.');
+    expect(sickSummary([fishFixture(FISH_1)])).toBe('');
   });
 });

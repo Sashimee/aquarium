@@ -6,24 +6,29 @@ import { World, type WorldConfig } from './world.ts';
 
 // Host load only ever lengthens a step (preemption, a shared core, a cold cache), never shortens
 // it. The sim is deterministic, so every replay of a scenario repeats the same work step for step,
-// and the fastest of a few replays of each step is close to its cost on an idle machine.
-const REPLAYS = 5;
+// and the fastest of several replays of each step is close to its cost on an idle machine. Under
+// load, 9 replays bring the worst of 30 swimming ratios from 1.54 (5 replays) to 1.45.
+const REPLAYS = 9;
 const WARMUP_STEPS = 150;
 const TIMED_STEPS = 300;
 const TEST_TIMEOUT_MS = 120_000;
 
 // A slower machine (a shared CI runner) is still slower on an idle core, so the sim is timed
 // against a fixed reference workload stepped in turn with it, and the gate is on their ratio. The
-// limits are the ratios measured on the desktop the 2 ms / 4 ms-at-4x-throttle budgets were set
-// on (Ryzen 5 7600X, Node 24.20; remeasured on 2026-10-15 at 1.13-1.15 swimming, 1.74-1.80 with
-// 20 shrimp walking and 2.26-2.29 feeding, three runs each), times 1.4 for how differently other
-// CPUs and V8 builds weigh the sim's mix of work against the reference's. That catches roughly a
-// doubling of the sim's cost, not smaller slowdowns: 1.5x only just fails the feeding limit and
-// 1.3x passes. The absolute budgets are gated by `pnpm --filter @aquarium/sim bench`.
-const HEADROOM = 1.4;
-const SWIMMING_LIMIT = 1.14 * HEADROOM;
-const WALKING_LIMIT = 1.8 * HEADROOM;
-const FEEDING_LIMIT = 2.3 * HEADROOM;
+// reference's 60 points stay in L1 while the sim's working set is far larger, so under load the sim
+// slows more than the reference and the fastest replay cannot remove that. The limits are
+// therefore the worst ratio of 30 runs on the budget desktop (Ryzen 5 7600X, Node 24, 2026-10-21)
+// with a full `vitest run` of the repo in parallel and load average 20-32 on 10 cores: swimming
+// 1.25-1.45 (median 1.33), 20 shrimp walking 1.82-2.25 (1.96), feeding 2.44-2.91 (2.67). Times
+// 1.3 for how differently other CPUs and V8 builds weigh the sim's mix of work against the
+// reference's (CI measured 1.61 swimming with 5 replays); 30 more loaded runs peaked at 1.54, 2.34
+// and 3.09. Stepping a second world inside the timed span, a doubled sim cost, failed all 30 loaded
+// runs, at no less than 2.32, 3.51 and 4.79 against limits of 1.89, 2.93 and 3.78. The absolute
+// 2 ms / 4 ms-at-4x-throttle budgets are gated by `pnpm --filter @aquarium/sim bench`.
+const HEADROOM = 1.3;
+const SWIMMING_LIMIT = 1.45 * HEADROOM;
+const WALKING_LIMIT = 2.25 * HEADROOM;
+const FEEDING_LIMIT = 2.91 * HEADROOM;
 const REFERENCE_PASSES = 20;
 // Toys cost a few distance checks per fish; a scan over every fish per fish would double it.
 const TOYS_OVERHEAD_LIMIT = 1.3;

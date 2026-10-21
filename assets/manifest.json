@@ -2319,48 +2319,49 @@
       "status": "downloaded"
     },
     {
-      "id": "sketchfab-5ebe7794",
+      "id": "sketchfab-bce6689d",
       "kind": "invertebrate",
       "species": "hermit-crab",
-      "title": "CC0 ツメナガヨコバサミ Blue-stripped Hermit Crab",
-      "author": "ffishAsia-and-floraZia",
-      "author_url": "https://sketchfab.com/ffishAsia-and-floraZia",
-      "source_url": "https://sketchfab.com/3d-models/5ebe7794183346e998afb97b68021158",
-      "licence": "CC0-1.0",
-      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
-      "checked_at": "2026-10-16",
-      "sha256": "6da31bb5909c20d6599073145f7aeeb91bf012aca8cc5b46ab17aedd2082be32",
-      "polycount": 495292,
-      "textures": "Q12210-1-1_baseColor.jpeg 8192x8192, Material.001_baseColor.jpeg 1024x1024 (colour-checker cube)",
+      "title": "Pagurus bernhardus - Common Hermit Crab",
+      "author": "Chapel_Prints_CO",
+      "author_url": "https://sketchfab.com/McKie_Foundation",
+      "source_url": "https://sketchfab.com/3d-models/bce6689d5b2644488c0ab3fa7bcda5eb",
+      "licence": "CC-BY-4.0",
+      "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+      "checked_at": "2026-10-21",
+      "sha256": "8cf10c712db41d7b6aba94709fc66cf461e861c008d13f74907014ae439a00b1",
+      "polycount": 846345,
+      "textures": "none (untextured, single material); colour comes from a procedural material",
       "rigged": false,
-      "notes": "Photogrammetry scan of a hermit crab (Clibanarius longitarsus, the genus of the usual reef-tank hermit crabs; the common trade species is C. tricolor, the blue-leg hermit, so match its colour with the render engineer rather than this scan's olive legs) in its shell, with the legs and eyestalks intact. Verified from the downloaded glTF: 495292 triangles, not rigged (no skins), CC0-1.0 per license.txt and the Sketchfab record (downloadable). Zip sha256 550b1f09f44d609801b266d02fb75c81e53665301a27070d3d15be793b81a9e2; sha256 is the aggregate over files[]. The scene also contains a 2 cm colour-checker cube (Material.001, 1024x1024) that must be dropped. Units appear to be centimetres (colour-checker cube 2 units, shell about 6). Legs are fused to the body in one mesh, so walking needs a rig built by the pipeline. Planned processing, none done yet: drop the colour-checker cube mesh and its texture; merge meshes, drop unused attributes; origin at the shell base, scale so the shell is about 2 cm long; decimate to LOD0 25000 triangles, LOD1 and LOD2 simplify further; downscale the base colour and re-encode it to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness.",
-      "modifications": [],
+      "notes": "Replaced the earlier hermit crab scan (#895), which had no front claw pair. Common hermit crab (Pagurus bernhardus, a cold-water NE Atlantic species, not a reef one) in a whelk-type shell, clean print-style mesh. Verified from the downloaded glTF: 846345 triangles in 9 chunks of at most 65532 vertices, one material, no textures, not rigged (no skins, no animations), CC-BY-4.0 per license.txt and the Sketchfab record (downloadable). Zip sha256 9a8cd3460f7d838d8a27756a6077d70bae271de82123f1ae47544db3a7f2bb36; sha256 is the aggregate over files[]. Units are arbitrary (shell about 2 long, carapace about 0.7 wide); the build scales the shell to the 3 cm standard length from content/species/hermit-crab.json. Claw check by 3D grid segmentation of the vertices, front is -Y: two distinct chelipeds, left about 4x the volume of the right (normal hermit asymmetry), together the foremost appendages. Below y = -0.75 they are two separate blobs (left x 0.79 to 1.65, right x 1.67 to 1.97) while every walking-leg tip stays above y = -0.69; claw bases join the body near y = -0.45 to -0.5, walking legs root near y = -0.2 to 0.1. Walkers are fused to the body in one component (shell is a second component); the pipeline splits them per leg and drives walking procedurally from per-vertex data, since the scan has no rig. The scan has no colour: the pipeline bakes a procedural reef-hermit look (blue legs and claws with orange joints, orange antennae, banded warm shell) loosely after Clibanarius tricolor, which is the look, not the scanned species (Pagurus bernhardus). The shipped asset is described by the hermit-crab entry in apps/web/public/assets/index.json and tools/asset-pipeline/src/hermit.ts.",
+      "modifications": [
+        "scan: the 9 glTF chunks merged and duplicate vertices welded by position; the unused normals and vertex colours dropped, and the few stray fragments away from the two bodies removed",
+        "segmented into the rigid shell, the exposed soft body and limbs (claws, walking legs, antennae) by a voxel opening of the crab; limb pieces carry a root-to-tip weight and a leg index",
+        "oriented to +Z forward (towards the claws) / +Y up, origin at the area centroid, shifted sideways onto the hip of the crab so the side of a leg is the sign of its x, scaled so the shell longest edge is the standard length",
+        "_FIN_ID part ids 0 shell, 6 walking leg and claw, 7 antenna, 9 exposed soft body (rigid); _FIN_MASK weight along the limb; _LEG limb index pair * 2 + side, side 0 = -x, pair 0 the claws",
+        "re-simplified to 25000 triangles for LOD0 (LOD1 and LOD2 at 40% and 15% of that, simplified with UV seams kept), box-projected into a fresh 2048 px atlas and the colour baked from procedural per-vertex colours",
+        "procedural colour added, since the scan has none: banded and flecked shell, blue legs and claws with orange joints, orange antennae; every LOD keeps the shell and the crab and drops stray fragments",
+        "length is the shell length (0.03 m) from content/species/hermit-crab.json",
+        "the shell is turned about the vertical through where it meets the soft body so it trails behind the crab, and each walking leg is bent down towards the ground, the bend growing from nothing at the leg root to the full gap at the tip, since the scan holds three of four legs clear of the ground",
+        "legs welded together in the scan are split by direction from the hip so each of the 3 legs a side has its own slot, numbered fore to aft per side",
+        "the scan is Pagurus bernhardus, a cold-water species; legs, claws and antennae are painted towards Clibanarius tricolor (blue legs with orange joints, orange antennae) and the shell towards a warm banded reef-snail shell, procedurally and by eye, because the scan has no colour"
+      ],
       "status": "downloaded",
       "files": [
         {
           "path": "gltf/license.txt",
-          "sha256": "e22aaf8b323163d7aa1e886d191f5546764d6ec4771c54b950e6a89901f3ee23",
-          "bytes": 434
+          "sha256": "e81b4cc222201595c704dad7f143106b3e681ce16c71404341527f6da5f2003f",
+          "bytes": 804
         },
         {
           "path": "gltf/scene.bin",
-          "sha256": "acf3bf1be458f37e5e06374d8c13752e0eadf6b41561453de64ef4bdc1347f2a",
-          "bytes": 19055024
+          "sha256": "1f17afe74ff6c892bf223586481927a493bd9f36fbd185a3217c2edd213fd135",
+          "bytes": 32068740
         },
         {
           "path": "gltf/scene.gltf",
-          "sha256": "ead86e56d22f2f08f9cee62d46fd380b4973a30749969b29a505d72d3bc06aae",
-          "bytes": 15405
-        },
-        {
-          "path": "gltf/textures/Material.001_baseColor.jpeg",
-          "sha256": "804db2ac981b05d940be1c568f75914e13631c2191c8973ef3d1cb96612f1511",
-          "bytes": 184018
-        },
-        {
-          "path": "gltf/textures/Q12210-1-1_baseColor.jpeg",
-          "sha256": "e06b1c978a34fcd011e86ba2d763d7519bc41e752358084c4ed52ba6d2186f59",
-          "bytes": 32491664
+          "sha256": "943d21dfb1e03b1a1dc792ed7f7a29439f6f808d2cbbdb7383587b9059e6ef58",
+          "bytes": 15503
         }
       ]
     },

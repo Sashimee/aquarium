@@ -404,6 +404,20 @@ describe('tanks and fish', () => {
     expect(unknown.statusCode).toBe(400);
   });
 
+  it.each(['stage', 'idempotencyKey'])(
+    'rejects add-fish without %s and names it',
+    async (field) => {
+      const cookie = await signedIn(h);
+      const tank = await createTank(h, cookie);
+      const payload = Object.fromEntries(
+        Object.entries(fishPayload('neon-tetra', 'Blip')).filter(([key]) => key !== field),
+      );
+      const res = await call(h, cookie, 'POST', `/api/tanks/${tank.id}/fish`, payload);
+      expect(res.statusCode).toBe(400);
+      expect(JSON.stringify(res.json())).toContain(field);
+    },
+  );
+
   it('enforces the bioload capacity of a tank', async () => {
     const cookie = await signedIn(h);
     const tank = await createTank(h, cookie);
@@ -491,6 +505,28 @@ describe('server-authoritative lifecycle', () => {
     const lagMs = h.clock.now() - (row?.lastTickAt.getTime() ?? 0);
     expect(lagMs).toBeGreaterThanOrEqual(0);
     expect(lagMs).toBeLessThan(10 * 60_000 + 5_000);
+  });
+
+  it('lets the clean-up crew graze algae while the owner is away', async () => {
+    const cookie = await signedIn(h);
+    const withCrew = await createTank(h, cookie);
+    const without = await createTank(h, cookie);
+    for (let i = 0; i < 8; i++) {
+      await addFish(h, cookie, withCrew.id, 'nerite-snail', `Snail ${i}`);
+    }
+    await addFish(h, cookie, without.id, 'neon-tetra');
+    for (const id of [withCrew.id, without.id]) {
+      await h.database.db
+        .update(schema.tanks)
+        .set({ water: { ammonia: 0, nitrate: 0, algae: 0.6, uneatenFood: 3 } })
+        .where(eq(schema.tanks.id, id));
+    }
+    await advance(h, 1 * DAY);
+    const read = async (id: string) =>
+      tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${id}`)).json());
+    const crewed = await read(withCrew.id);
+    const bare = await read(without.id);
+    expect(crewed.water.algae).toBeLessThan(bare.water.algae);
   });
 
   it('breeds a fed pair in range, stores the fry and reports them as away', async () => {
@@ -624,7 +660,7 @@ describe('server-authoritative lifecycle', () => {
       { tankId: tank.id, day: iso(14) },
       { tankId: tank.id, day: iso(40) },
     ]);
-    await pruneExpired(h.database);
+    await pruneExpired(h.database, h.clock);
     const kept = await h.database.db
       .select()
       .from(schema.tankVisits)
@@ -894,7 +930,7 @@ describe('care actions and feeding validation', () => {
         batchId: old,
         createdAt: new Date(Date.now() - 2 * DAY * 60_000),
       });
-      await pruneExpired(h.database);
+      await pruneExpired(h.database, h.clock);
       const stale = await call(h, cookie, 'POST', `/api/tanks/${tank.id}/ate`, {
         batchId: old,
         reports: [
@@ -940,7 +976,7 @@ describe('care actions and feeding validation', () => {
         batchId: old,
         createdAt: new Date(Date.now() - 2 * DAY * 60_000),
       });
-      await pruneExpired(h.database);
+      await pruneExpired(h.database, h.clock);
       const left = await h.database.db
         .select()
         .from(schema.ateBatches)

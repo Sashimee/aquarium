@@ -1,23 +1,30 @@
 import {
   playableBiomeSchema,
   type DiseaseKind,
+  type Fish,
   type MedicinePotency,
   type Tank,
 } from '@aquarium/shared';
 import { useId, useState } from 'react';
+import { movableFish, moveTargets } from '../sync/moveFish';
 import { BUNDLED_ECONOMY } from '../sync/bundledEconomy';
+import { spendQuestion } from '../sync/economy';
 import type { SessionState, TankSession } from '../sync/session';
 import {
   blockedText,
   DISEASE_LABEL,
   doseButtonText,
+  doseSpend,
   heatTolerantSick,
+  emptyHeld,
+  type HeldDose,
   listNames,
   liveMedicine,
   medicineLine,
   OVERDOSE_WARNING,
   planDose,
   premiumPrice,
+  reconcileHeld,
   severityWord,
   sickFish,
   sickKinds,
@@ -42,43 +49,55 @@ interface Refusal {
   waterChange: boolean;
 }
 
+interface FishMoverProps {
+  session: TankSession;
+  state: SessionState;
+  tank: Tank;
+  fish: Fish;
+}
+
 export function Treatment({
   session,
   state,
   tank,
+  initialHeld,
 }: {
   session: TankSession;
   state: SessionState;
   tank: Tank;
+  initialHeld?: HeldDose<Pending, Refusal>;
 }) {
   const id = useId();
   const { spend, notice } = useSpend(session, state.balance);
-  const [pending, setPending] = useState<Pending | null>(null);
-  const [refusal, setRefusal] = useState<Refusal | null>(null);
+  const [stored, setHeld] = useState<HeldDose<Pending, Refusal>>(
+    () => initialHeld ?? emptyHeld(tank.id),
+  );
+  const held = reconcileHeld(stored, tank.id);
+  if (held !== stored) setHeld(held);
+  const { pending, refusal } = held;
+  const setPending = (next: Pending | null) =>
+    setHeld((was) => ({ ...reconcileHeld(was, tank.id), pending: next }));
+  const setRefusal = (next: Refusal | null) =>
+    setHeld((was) => ({ ...reconcileHeld(was, tank.id), refusal: next }));
   const nowMs = Date.now();
   const kinds = sickKinds(tank);
   const medicine = liveMedicine(tank, nowMs);
 
-  const run = (kind: DiseaseKind, potency: MedicinePotency) => {
+  const run = (kind: DiseaseKind, potency: MedicinePotency, warned: boolean) => {
     const go = async () => {
       const outcome = await session.treat(kind, potency);
       if (!outcome.ok && outcome.refusal !== null) {
         setRefusal({
           kind,
           message: outcome.refusal,
-          waterChange: wantsWaterChange(outcome.refusal),
+          waterChange: wantsWaterChange(outcome.reason),
         });
       }
       return outcome.ok;
     };
-    const price = premiumPrice(BUNDLED_ECONOMY, kind);
-    if (potency === 'premium' && price !== null) {
-      void spend({
-        label: `premium ${DISEASE_LABEL[kind].toLowerCase()} medicine`,
-        price,
-        confirm: true,
-        go,
-      });
+    const cost = doseSpend(BUNDLED_ECONOMY, kind, potency, warned);
+    if (cost) {
+      void spend({ ...cost, go });
     } else {
       void go();
     }
@@ -99,7 +118,7 @@ export function Treatment({
       ...(plan.overdose ? [OVERDOSE_WARNING] : []),
     ];
     if (warnings.length > 0) return setPending({ kind, potency, warnings });
-    run(kind, potency);
+    run(kind, potency, false);
   };
 
   return (
@@ -113,6 +132,7 @@ export function Treatment({
           kind={kind}
           tank={tank}
           state={state}
+          session={session}
           refusal={refusal?.kind === kind ? refusal : null}
           onDose={start}
           onWaterChange={async () => {
@@ -124,27 +144,74 @@ export function Treatment({
       {notice}
       {pending && (
         <Dialog title="Before you dose" tone="loss" onClose={() => setPending(null)}>
-          {pending.warnings.map((w) => (
-            <p key={w}>{w}</p>
-          ))}
-          <div className="row">
-            <button
-              type="button"
-              className="primary"
-              onClick={() => {
-                setPending(null);
-                run(pending.kind, pending.potency);
-              }}
-            >
-              Dose anyway
-            </button>
-            <button type="button" onClick={() => setPending(null)}>
-              Keep things as they are
-            </button>
-          </div>
+          <DoseConfirmation
+            pending={pending}
+            balance={state.balance}
+            onConfirm={() => {
+              setPending(null);
+              run(pending.kind, pending.potency, true);
+            }}
+            onCancel={() => setPending(null)}
+          />
         </Dialog>
       )}
     </section>
+  );
+}
+
+export function DoseConfirmation({
+  pending,
+  balance,
+  onConfirm,
+  onCancel,
+}: {
+  pending: Pending;
+  balance: number | null;
+  onConfirm(): void;
+  onCancel(): void;
+}) {
+  return (
+    <>
+      <PendingDoseWarning pending={pending} balance={balance} />
+      <div className="row">
+        <button type="button" className="primary" onClick={onConfirm}>
+          Dose anyway
+        </button>
+        <button type="button" onClick={onCancel}>
+          Keep things as they are
+        </button>
+      </div>
+    </>
+  );
+}
+
+export function PendingDoseWarning({
+  pending,
+  balance,
+}: {
+  pending: Pending;
+  balance: number | null;
+}) {
+  const cost = doseSpend(BUNDLED_ECONOMY, pending.kind, pending.potency, true);
+  return <DoseWarning warnings={pending.warnings} cost={cost} balance={balance} />;
+}
+
+export function DoseWarning({
+  warnings,
+  cost,
+  balance,
+}: {
+  warnings: readonly string[];
+  cost: { label: string; price: number } | null;
+  balance: number | null;
+}) {
+  return (
+    <>
+      {warnings.map((w) => (
+        <p key={w}>{w}</p>
+      ))}
+      {cost && <p>{spendQuestion(cost.label, cost.price, balance)}</p>}
+    </>
   );
 }
 
@@ -152,6 +219,7 @@ function DiseaseCard({
   kind,
   tank,
   state,
+  session,
   refusal,
   onDose,
   onWaterChange,
@@ -159,6 +227,7 @@ function DiseaseCard({
   kind: DiseaseKind;
   tank: Tank;
   state: SessionState;
+  session: TankSession;
   refusal: Refusal | null;
   onDose(kind: DiseaseKind, potency: MedicinePotency): void;
   onWaterChange(): Promise<void>;
@@ -175,6 +244,7 @@ function DiseaseCard({
         {fish.map((f) => (
           <li key={f.id}>
             {f.name}: {severityWord(f.disease?.severity ?? 0)}
+            <FishMover session={session} state={state} tank={tank} fish={f} />
           </li>
         ))}
       </ul>
@@ -212,6 +282,36 @@ function DiseaseCard({
   );
 }
 
+function FishMover({ session, state, tank, fish }: FishMoverProps) {
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const targets = moveTargets(tank, state.tanks);
+  if (targets.length === 0) return null;
+  return (
+    <span className="fish-mover">
+      {targets.map((target) => (
+        <button
+          key={target.id}
+          type="button"
+          disabled={state.busy}
+          onClick={() => {
+            setRefusal(null);
+            void session.move(fish.id, target.id).then((outcome) => {
+              if (!outcome.ok) setRefusal(outcome.refusal);
+            });
+          }}
+        >
+          Move {fish.name} to {target.name}
+        </button>
+      ))}
+      {refusal && (
+        <span role="alert" className="field-error">
+          {refusal}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function HeatNote({ tank, state }: { tank: Tank; state: SessionState }) {
   const tolerant = heatTolerantSick(tank, state.species);
   return (
@@ -242,9 +342,8 @@ export function QuarantineSection({
       <h3 id={`${id}-h`}>Quarantine tank</h3>
       <p className="hint">
         A small tank kept apart, so sick fish can be treated without dosing the whole display tank.
-        It is free and does not count toward your six tanks. Moving a fish into it and back needs a
-        server feature that is not built yet, so for now it is a separate tank you can dose and care
-        for on its own.
+        It is free and does not count toward your six tanks. Move a sick fish in, dose it there, and
+        move it back when it is well.
       </p>
       {quarantine === undefined && (
         <form
@@ -273,7 +372,19 @@ export function QuarantineSection({
         </form>
       )}
       {quarantine !== undefined && quarantine.id === tank.id && (
-        <p role="status">You are looking at the quarantine tank.</p>
+        <>
+          <p role="status">You are looking at the quarantine tank.</p>
+          <ul className="hint">
+            {movableFish(tank)
+              .filter((f) => f.disease === null)
+              .map((f) => (
+                <li key={f.id}>
+                  {f.name}
+                  <FishMover session={session} state={state} tank={tank} fish={f} />
+                </li>
+              ))}
+          </ul>
+        </>
       )}
       {quarantine !== undefined && quarantine.id !== tank.id && (
         <button
