@@ -34,8 +34,11 @@ describe('a refused dose', () => {
     await session.setUser({ emailVerified: true });
     const water = 'Change the water until only a trace is left, then switch.';
     api.treat.mockRejectedValue(new ApiRequestError(409, 'conflict', water));
+    const errors: (string | null)[] = [];
+    session.subscribe(() => errors.push(session.getState().error));
     const outcome = await session.treat('ich', 'standard');
-    expect(outcome.refusal).toBe(water);
+    expect(outcome).toEqual({ ok: false, overdose: false, refusal: water });
+    expect(errors.filter((e) => e !== null)).toEqual([]);
     expect(session.getState().error).toBeNull();
   });
 

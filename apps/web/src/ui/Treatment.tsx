@@ -4,7 +4,7 @@ import {
   type MedicinePotency,
   type Tank,
 } from '@aquarium/shared';
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { BUNDLED_ECONOMY } from '../sync/bundledEconomy';
 import { spendQuestion } from '../sync/economy';
 import type { SessionState, TankSession } from '../sync/session';
@@ -60,6 +60,7 @@ export function Treatment({
   const { spend, notice } = useSpend(session, state.balance);
   const [heldPending, setPending] = useState<Pending | null>(null);
   const [heldRefusal, setRefusal] = useState<Refusal | null>(null);
+  useEffect(() => () => setPending(null), [tank.id]);
   const pending = heldFor(heldPending, tank.id);
   const refusal = heldFor(heldRefusal, tank.id);
   const pendingCost = pending && doseSpend(BUNDLED_ECONOMY, pending.kind, pending.potency, true);
@@ -129,12 +130,7 @@ export function Treatment({
       {notice}
       {pending && (
         <Dialog title="Before you dose" tone="loss" onClose={() => setPending(null)}>
-          {pending.warnings.map((w) => (
-            <p key={w}>{w}</p>
-          ))}
-          {pendingCost && (
-            <p>{spendQuestion(pendingCost.label, pendingCost.price, state.balance)}</p>
-          )}
+          <DoseWarning warnings={pending.warnings} cost={pendingCost} balance={state.balance} />
           <div className="row">
             <button
               type="button"
@@ -153,6 +149,25 @@ export function Treatment({
         </Dialog>
       )}
     </section>
+  );
+}
+
+export function DoseWarning({
+  warnings,
+  cost,
+  balance,
+}: {
+  warnings: readonly string[];
+  cost: { label: string; price: number } | null;
+  balance: number | null;
+}) {
+  return (
+    <>
+      {warnings.map((w) => (
+        <p key={w}>{w}</p>
+      ))}
+      {cost && <p>{spendQuestion(cost.label, cost.price, balance)}</p>}
+    </>
   );
 }
 
