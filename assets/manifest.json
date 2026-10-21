@@ -2342,6 +2342,7 @@
         "re-simplified to 25000 triangles for LOD0 (LOD1 and LOD2 at 40% and 15% of that, simplified with UV seams kept), box-projected into a fresh 2048 px atlas and the colour baked from procedural per-vertex colours",
         "procedural colour added, since the scan has none: banded and flecked shell, blue legs and claws with orange joints, orange antennae; every LOD keeps the shell and the crab and drops stray fragments",
         "length is the shell length (0.03 m) from content/species/hermit-crab.json",
+        "the shell is turned about the vertical through where it meets the soft body so it trails behind the crab, and each walking leg is bent down towards the ground, the bend growing from nothing at the leg root to the full gap at the tip, since the scan holds three of four legs clear of the ground",
         "legs welded together in the scan are split by direction from the hip so each of the 3 legs a side has its own slot, numbered fore to aft per side",
         "the scan is Pagurus bernhardus, a cold-water species; legs, claws and antennae are painted towards Clibanarius tricolor (blue legs with orange joints, orange antennae) and the shell towards a warm banded reef-snail shell, procedurally and by eye, because the scan has no colour"
       ],

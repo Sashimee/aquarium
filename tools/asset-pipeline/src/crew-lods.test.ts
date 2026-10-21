@@ -5,6 +5,7 @@ import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { MeshoptDecoder } from 'meshoptimizer';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { boundsOf, canonicalVertices, connectedComponents } from './crew-scan.ts';
+import { FIN_ID_ATTRIBUTE } from './index-schema.ts';
 import { uvStretchShare } from './rebake.ts';
 
 const ASSETS = fileURLToPath(new URL('../../../apps/web/public/assets', import.meta.url));
@@ -14,6 +15,7 @@ interface ShippedPrimitive {
   positions: Float32Array<ArrayBuffer>;
   uvs: Float32Array<ArrayBuffer>;
   indices: Uint32Array<ArrayBuffer>;
+  partIds: Float32Array<ArrayBuffer> | null;
 }
 
 async function readLod(dir: string, level: number): Promise<ShippedPrimitive[]> {
@@ -29,6 +31,9 @@ async function readLod(dir: string, level: number): Promise<ShippedPrimitive[]> 
         positions: Float32Array.from(prim.getAttribute('POSITION')!.getArray()!),
         uvs: Float32Array.from(prim.getAttribute('TEXCOORD_0')!.getArray()!),
         indices: Uint32Array.from(prim.getIndices()!.getArray()!),
+        partIds: prim.getAttribute(FIN_ID_ATTRIBUTE)
+          ? Float32Array.from(prim.getAttribute(FIN_ID_ATTRIBUTE)!.getArray()!)
+          : null,
       });
   return out;
 }
@@ -259,9 +264,18 @@ const SCANNED: Array<{
   material: string;
   solid: boolean;
   pieces: number;
-  touching?: boolean;
+  partPieces?: Record<string, { pieces: number; isPart: (id: number) => boolean }>;
 }> = [
-  { dir: 'crab/hermit-crab', material: 'hermit-crab', solid: false, pieces: 2, touching: true },
+  {
+    dir: 'crab/hermit-crab',
+    material: 'hermit-crab',
+    solid: false,
+    pieces: 2,
+    partPieces: {
+      shell: { pieces: 1, isPart: (id) => id === 0 },
+      body: { pieces: 1, isPart: (id) => id !== 0 },
+    },
+  },
   { dir: 'snail/nerite-snail', material: 'nerite-shell', solid: true, pieces: 1 },
 ];
 
@@ -288,7 +302,7 @@ describe('nerite seating', () => {
 describe('shipped scan LODs', () => {
   beforeAll(() => MeshoptDecoder.ready);
 
-  for (const { dir, material, solid, pieces, touching } of SCANNED)
+  for (const { dir, material, solid, pieces, partPieces } of SCANNED)
     for (const level of [0, 1, 2]) {
       it(`${dir} LOD${level} has no see-through pixels in the top and side views`, async () => {
         const prims = await readLod(dir, level);
@@ -314,13 +328,23 @@ describe('shipped scan LODs', () => {
             const [a, b, c] = [0, 1, 2].map((k) => canon[prim.indices[t + k]!]!);
             if (a !== b && b !== c && a !== c) solid.push(...prim.indices.subarray(t, t + 3));
           }
-          const used = new Set(solid);
-          const parts = connectedComponents(canon, solid, (v) => used.has(v)).sizes.length;
           const label = `${dir} LOD${level} ${prim.material}`;
-          if (touching) {
-            // the shell rests in the crab's body, so the weld tolerance may join the two bodies
-            expect(parts, label).toBeLessThanOrEqual(pieces);
-          } else expect(parts, label).toBe(pieces);
+          if (partPieces) {
+            expect(prim.partIds, `${label} needs ${FIN_ID_ATTRIBUTE}`).not.toBeNull();
+            for (const [name, { pieces: want, isPart }] of Object.entries(partPieces)) {
+              const inPart: number[] = [];
+              for (let t = 0; t < solid.length; t += 3)
+                if ([0, 1, 2].every((k) => isPart(prim.partIds![solid[t + k]!]!)))
+                  inPart.push(...solid.slice(t, t + 3));
+              const used = new Set(inPart);
+              const parts = connectedComponents(canon, inPart, (v) => used.has(v)).sizes.length;
+              expect(parts, `${label} ${name}`).toBe(want);
+            }
+          } else {
+            const used = new Set(solid);
+            const parts = connectedComponents(canon, solid, (v) => used.has(v)).sizes.length;
+            expect(parts, label).toBe(pieces);
+          }
         }
       });
 
