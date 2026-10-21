@@ -3419,6 +3419,471 @@
       "status": "downloaded"
     },
     {
+      "id": "sketchfab-92b5b5bb",
+      "kind": "fish",
+      "species": "black-phantom-tetra",
+      "title": "Hyphessobrycon megalopterus",
+      "author": "DenDen",
+      "author_url": "https://sketchfab.com/kshb926",
+      "source_url": "https://sketchfab.com/3d-models/hyphessobrycon-megalopterus-92b5b5bbc55d4c5d830dccbfb77fa7ea",
+      "licence": "CC-BY-4.0",
+      "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "7b7cd283337842e1542867017804cd4e433f820617cf810deffa1e8ab27a6b23",
+      "polycount": 608,
+      "textures": "none (flat material colours)",
+      "rigged": true,
+      "notes": "Black phantom tetra, a blackwater-suited characin. Verified from the downloaded glTF: 608 triangles, one skin with 13 joints, no animation, no image textures (flat colours in six materials). The shape is plausible but the flat black colour has no body pattern, and the black phantom's silver-grey body with the black humeral blotch and red adipose fin is not painted; the pipeline must paint it. Zip sha256 636bf9e87fdccef6400e21616db3df4b74b7adceb43a92c86843507912eb98f5; sha256 is the aggregate over files[]. Licence read from the model record and bundled license.txt (CC-BY-4.0).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "gltf/license.txt",
+          "sha256": "e250cb1008aecb0b8fc7ee07084186ef961c2739747d96a023b6718ac8e5beb1",
+          "bytes": 722
+        },
+        {
+          "path": "gltf/scene.bin",
+          "sha256": "c4721ff63f413d7266faec11fbfc5e1ff95bfa0d4a32d7b81daa457828919f5c",
+          "bytes": 68032
+        },
+        {
+          "path": "gltf/scene.gltf",
+          "sha256": "8efab57533aa72784e8cda89ece99a74ec0938fe8fc43fe4d456f4ced36d191a",
+          "bytes": 26426
+        }
+      ]
+    },
+    {
+      "id": "sketchfab-07422ed7",
+      "kind": "driftwood",
+      "title": "Driftwood Scan",
+      "author": "HeartOfLines",
+      "author_url": "https://sketchfab.com/HeartOfLines",
+      "source_url": "https://sketchfab.com/3d-models/driftwood-scan-07422ed79cdd46c88aa5999486403804",
+      "licence": "CC-BY-4.0",
+      "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "8e2dc1acbdcd4675606a162ab004c4ee824a0ba29624528a3f06d52e6ce0fd35",
+      "polycount": 23780,
+      "textures": "baseColor, metallicRoughness, normal PNG 4096x4096",
+      "rigged": false,
+      "notes": "Photogrammetry driftwood piece, 23780 triangles, one material, three 4096x4096 PNG maps (4.2 MB, 2.7 MB, 11.1 MB): downscale to 2048 or less. Branched, weathered root-like shape for the blackwater root tangle. Not rigged. Zip sha256 05c9336829e9ab65d50267eb7e179cf13e360b46a6c34ed5a33a40b270aa0942; sha256 is the aggregate over files[]. Licence read from the model record and bundled license.txt (CC-BY-4.0).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "gltf/license.txt",
+          "sha256": "52eed28e6a15099c1310fac5b0aa951b4978e90f102391bc8e46bef8dec499c0",
+          "bytes": 692
+        },
+        {
+          "path": "gltf/scene.bin",
+          "sha256": "40455d55e9f83f7819c30688f14292b5db2019d428a5c85cfde9a58c42690287",
+          "bytes": 879360
+        },
+        {
+          "path": "gltf/scene.gltf",
+          "sha256": "2e48e76b3f3dcc8cddbc2cb15969634436ed0409879118d0a7c6e8a0a77b70bc",
+          "bytes": 4428
+        },
+        {
+          "path": "gltf/textures/DriftwoodMat_baseColor.png",
+          "sha256": "019a0cdf55076990eb2da343c8de80b9321fc60bb0a1842c13595a8e20b13a63",
+          "bytes": 4219852
+        },
+        {
+          "path": "gltf/textures/DriftwoodMat_metallicRoughness.png",
+          "sha256": "071f07e9d24420541c228ba919be699ab88e43d7d175d33e086f4a32250cf0fc",
+          "bytes": 2736080
+        },
+        {
+          "path": "gltf/textures/DriftwoodMat_normal.png",
+          "sha256": "aabd9c4d7dfea22fde2a0c3f685d63db63030f701abe116bceb7874e644d8b37",
+          "bytes": 11126631
+        }
+      ]
+    },
+    {
+      "id": "sketchfab-mJUa0nux",
+      "kind": "driftwood",
+      "title": "Driftwood 3D scan",
+      "author": "jasonwebb",
+      "author_url": "https://sketchfab.com/jasonwebb",
+      "source_url": "https://sketchfab.com/3d-models/driftwood-3d-scan-mJUa0nux6YAp3LqHPWmxHuBgVRr",
+      "licence": "CC-BY-4.0",
+      "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "8a58dd6a0d79e7b4676976a59e0012328f80b1494f0ad099ca920ee34264cc96",
+      "polycount": 68260,
+      "textures": "baseColor JPEG 4096x4096",
+      "rigged": false,
+      "notes": "Photogrammetry driftwood, 68260 triangles, one 4096x4096 base colour map and a second untextured material (a small base or cap piece). Heavier than sketchfab-07422ed7: decimate. Not rigged, no normal map (bake one). Zip sha256 9177d2aa0e5e0c6a00fe75efb5480da715a6c2e3a2f4017643b7ef17eeb9cf15; sha256 is the aggregate over files[]. Licence read from the model record and bundled license.txt (CC-BY-4.0).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "gltf/license.txt",
+          "sha256": "2087100a5604e87e147b560dc849d39bf956b1aae0034359f8d35a0288f84fbd",
+          "bytes": 682
+        },
+        {
+          "path": "gltf/scene.bin",
+          "sha256": "9d6d246821b48bc1b131f319d0a6d51494e5da10dc7313da9cb83129e2231db9",
+          "bytes": 2077848
+        },
+        {
+          "path": "gltf/scene.gltf",
+          "sha256": "40389bfecc33e457bc2fe1ee5a7a90b752d260faba59d5313eb2553aea5ef860",
+          "bytes": 5041
+        },
+        {
+          "path": "gltf/textures/Texture_0_baseColor.jpeg",
+          "sha256": "6f855165e5ec24b442e298775a39634e2174cd07626b16261d8c5a87d38107e9",
+          "bytes": 4153890
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-dry_branches_medium_01",
+      "kind": "driftwood",
+      "title": "Dry Branches Medium 01",
+      "author": "Rico Cilliers",
+      "author_url": "https://polyhaven.com/a/dry_branches_medium_01",
+      "source_url": "https://polyhaven.com/a/dry_branches_medium_01",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "5ba44f4ae933fdb43e656e5312c8a755c85ceffe3dc3bcc2fbb61e856f1f3012",
+      "polycount": 16803,
+      "textures": "PBR jpg 2048x2048: dry_branches_medium_01_arm_2k.jpg, dry_branches_medium_01_diff_2k.jpg, dry_branches_medium_01_nor_gl_2k.jpg",
+      "rigged": false,
+      "notes": "Bundle of dry branches and twigs (16803 triangles) for fine submerged root and twig clutter among the leaf litter. Licence stated as CC0 on the asset page and https://polyhaven.com/license.",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "dry_branches_medium_01.bin",
+          "sha256": "969da1e8cbb2d8201e7fa0fc0dac5b19ef354b32c3d8c62dd9faa7cb3833d8ca",
+          "bytes": 465172
+        },
+        {
+          "path": "dry_branches_medium_01_2k.gltf",
+          "sha256": "95d29c7dc5cf55b6b06ac0999ffc6773d4929ac3a77d0e9c8e2e2dcfa68894df",
+          "bytes": 5844
+        },
+        {
+          "path": "textures/dry_branches_medium_01_arm_2k.jpg",
+          "sha256": "53cf4afec248f49ccea0a49975ec9ba0a91bae2124adc802fd80568e17019751",
+          "bytes": 2959483
+        },
+        {
+          "path": "textures/dry_branches_medium_01_diff_2k.jpg",
+          "sha256": "dcabdd1c0c4d801f5c0ce6376f42daba2a632a5433ea679d38bf4e44e5b4ead2",
+          "bytes": 2815859
+        },
+        {
+          "path": "textures/dry_branches_medium_01_nor_gl_2k.jpg",
+          "sha256": "62c2352a8b194889cb6a9430e74fff044a6fa0b34c579d8d5be1b3fd539b7f14",
+          "bytes": 4559165
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-dry_decay_leaves",
+      "kind": "substrate",
+      "title": "Dry Decay Leaves",
+      "author": "Amal Kumar",
+      "author_url": "https://polyhaven.com/a/dry_decay_leaves",
+      "source_url": "https://polyhaven.com/a/dry_decay_leaves",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "c1fb0fb3b918b348b031c567c8e7b9d58f1bde9cd5d08a84b731deca50125150",
+      "polycount": null,
+      "textures": "PBR jpg 2048x2048: dry_decay_leaves_arm_2k.jpg, dry_decay_leaves_diff_2k.jpg, dry_decay_leaves_disp_2k.jpg, dry_decay_leaves_nor_gl_2k.jpg",
+      "rigged": false,
+      "notes": "Decayed brown leaf litter with twigs, a ground texture for the blackwater floor. Dry forest-floor colours: tint toward tannin brown in the pipeline. Licence stated as CC0 on the asset page and https://polyhaven.com/license.",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "dry_decay_leaves_arm_2k.jpg",
+          "sha256": "cb2c67afd74d3b955c6eb7b104015272767d10ac963315ea8a20ddbf6e83c0cd",
+          "bytes": 2918224
+        },
+        {
+          "path": "dry_decay_leaves_diff_2k.jpg",
+          "sha256": "4dc7dde86f3db0df3566ca0ae77390000e979db31fbdc861796d2e516e6ad04e",
+          "bytes": 2856071
+        },
+        {
+          "path": "dry_decay_leaves_disp_2k.jpg",
+          "sha256": "cd2461f31eeeb6b360bc9dcdcb745d56b3cb489992c344b7142ef9e672e8ecbb",
+          "bytes": 1191385
+        },
+        {
+          "path": "dry_decay_leaves_nor_gl_2k.jpg",
+          "sha256": "76cbbca571145f9facf93db819cb909282df6bde8b81f82b5708be912611c5e1",
+          "bytes": 3920921
+        }
+      ]
+    },
+    {
+      "id": "ambientcg-ScatteredLeaves009",
+      "kind": "substrate",
+      "title": "Scattered Leaves 009",
+      "author": "ambientCG",
+      "author_url": "https://ambientcg.com/a/ScatteredLeaves009",
+      "source_url": "https://ambientcg.com/a/ScatteredLeaves009",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "91c1b512047e3ef9a6bd2dd14f63b9935a440e4b707bea995e8b20ac00c1d9f0",
+      "polycount": null,
+      "textures": "PBR jpg 2048x2048: AmbientOcclusion, Color, Displacement, NormalGL, Roughness",
+      "rigged": false,
+      "notes": "Leaf-litter ground texture with scattered dry leaves, the main floor cover for the blackwater biome. Licence stated as CC0 on the asset page FAQ and https://docs.ambientcg.com/license/. The raw directory also holds the unlisted .blend/.usdc/.mtlx/.tres/NormalDX/preview files from the zip. sha256 is the aggregate over files[].",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "ScatteredLeaves009_2K-JPG_AmbientOcclusion.jpg",
+          "sha256": "ecf34b88b17a008939e43d383168f8d18658edb63abd2be05803ce63ae70e784",
+          "bytes": 3835135
+        },
+        {
+          "path": "ScatteredLeaves009_2K-JPG_Color.jpg",
+          "sha256": "68cd881f14610be9631fab073a73c7eb3b1bfc659e42f53ec598ca4ed7f4a133",
+          "bytes": 6959852
+        },
+        {
+          "path": "ScatteredLeaves009_2K-JPG_Displacement.jpg",
+          "sha256": "c15b3183154bf0242e984f4631d14a3a455af04e0eda1c801b293cee6dba3944",
+          "bytes": 2851316
+        },
+        {
+          "path": "ScatteredLeaves009_2K-JPG_NormalGL.jpg",
+          "sha256": "d3c28c52f2934b5b3399acc7c8906ef864edddd49d5c4479079e784ddd705ae5",
+          "bytes": 9566714
+        },
+        {
+          "path": "ScatteredLeaves009_2K-JPG_Roughness.jpg",
+          "sha256": "8b33175216d389212c68f156be486374ee7a9642823e393cf3d1a748451d900f",
+          "bytes": 3318828
+        }
+      ]
+    },
+    {
+      "id": "ambientcg-LeafSet015",
+      "kind": "decor",
+      "title": "Leaf Set 015",
+      "author": "ambientCG",
+      "author_url": "https://ambientcg.com/a/LeafSet015",
+      "source_url": "https://ambientcg.com/a/LeafSet015",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "d92d078c9759caffb049952d4eab9505a67f2bf26ab7c46bf72c4abf4a895651",
+      "polycount": null,
+      "textures": "PBR jpg 2048x2048: Color, Displacement, NormalGL, Opacity, Roughness",
+      "rigged": false,
+      "notes": "Leaf atlas with an opacity map (individual leaves on a transparent sheet), to scatter as card meshes for catappa-style floating and sunken leaves. Licence stated as CC0 on the asset page FAQ and https://docs.ambientcg.com/license/. The raw directory also holds the unlisted .blend/.usdc/.mtlx/.tres/NormalDX/preview files from the zip. sha256 is the aggregate over files[].",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "LeafSet015_2K-JPG_Color.jpg",
+          "sha256": "2f33fb87375692685a3f8f29570942db3a2ec1b10bda10a8ffad8431e7781e69",
+          "bytes": 2240662
+        },
+        {
+          "path": "LeafSet015_2K-JPG_Displacement.jpg",
+          "sha256": "9bc5a0130bd443ded352348ac4a34c97d49609ec10fe0f11fbe193ff46258bbf",
+          "bytes": 487237
+        },
+        {
+          "path": "LeafSet015_2K-JPG_NormalGL.jpg",
+          "sha256": "967c3d512d3737df2a351daa167d98efc7601a5a4fe0f098bc256a0ce37c34ef",
+          "bytes": 4449995
+        },
+        {
+          "path": "LeafSet015_2K-JPG_Opacity.jpg",
+          "sha256": "8229630b10d1a1417e683bd094015ea0de58a20cbe0b160b690cd40957282232",
+          "bytes": 158322
+        },
+        {
+          "path": "LeafSet015_2K-JPG_Roughness.jpg",
+          "sha256": "1707d47ad307f7d49d75e9be1f077ea473b03aa1a1a54bc41dafd07f283d65e4",
+          "bytes": 1174349
+        }
+      ]
+    },
+    {
+      "id": "ambientcg-LeafSet030",
+      "kind": "decor",
+      "title": "Leaf Set 030",
+      "author": "ambientCG",
+      "author_url": "https://ambientcg.com/a/LeafSet030",
+      "source_url": "https://ambientcg.com/a/LeafSet030",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "1fcd300f80885c4e298436acce7ed1d40a181d5ef9b1d5df1a2072506caebbef",
+      "polycount": null,
+      "textures": "PBR jpg 2048x2048: Color, Displacement, NormalGL, Opacity, Roughness, Scattering",
+      "rigged": false,
+      "notes": "Second leaf atlas with opacity and scattering maps (broader leaves), to scatter as card meshes. Licence stated as CC0 on the asset page FAQ and https://docs.ambientcg.com/license/. The raw directory also holds the unlisted .blend/.usdc/.mtlx/.tres/NormalDX/preview files from the zip. sha256 is the aggregate over files[].",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "LeafSet030_2K-JPG_Color.jpg",
+          "sha256": "422f6245e36686d6e98bfa43ecfad6fd584bbfae369ee9eb2ee27743fefe8dce",
+          "bytes": 1855459
+        },
+        {
+          "path": "LeafSet030_2K-JPG_Displacement.jpg",
+          "sha256": "891ace7fa3536353d2e97591717472c6905ac5f8343b3b8fe716836d74fd9085",
+          "bytes": 642267
+        },
+        {
+          "path": "LeafSet030_2K-JPG_NormalGL.jpg",
+          "sha256": "d57586e1c132c79af4567cc34bb07843659ebeeeccd1f56733058c864bd080c6",
+          "bytes": 1530879
+        },
+        {
+          "path": "LeafSet030_2K-JPG_Opacity.jpg",
+          "sha256": "4450f507d85a39baa55586528003a3af9a918ece22333c58f46e7ff22ec5c357",
+          "bytes": 378190
+        },
+        {
+          "path": "LeafSet030_2K-JPG_Roughness.jpg",
+          "sha256": "df3f4522c98e67a8cdb036b5d20a5b36071d7ff183ac4dc9ac4bafafc2a5b82b",
+          "bytes": 974655
+        },
+        {
+          "path": "LeafSet030_2K-JPG_Scattering.jpg",
+          "sha256": "bcaca620f8ced76d39e875a914e470eed0f729215e2c3d9f5bed7d6556845c3c",
+          "bytes": 1919541
+        }
+      ]
+    },
+    {
+      "id": "wm-cardinal-vicente",
+      "kind": "reference-photo",
+      "species": "cardinal-tetra",
+      "title": "Waking up - Flickr - Henrique Vicente.jpg",
+      "author": "Henrique Pinto",
+      "author_url": "https://commons.wikimedia.org/wiki/File:Waking_up_-_Flickr_-_Henrique_Vicente.jpg",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Waking_up_-_Flickr_-_Henrique_Vicente.jpg",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "adb698ef4d5c9525a3ad0ce4c80ef404d8cfc1236e449b34a6a66c5e8f0180df",
+      "polycount": null,
+      "textures": "photo 2168x1535",
+      "rigged": false,
+      "notes": "Cardinal tetra (Paracheirodon axelrodi) in an aquarium just after the lights came on, so the red belly is still pale pink. Usable lateral for the blue-green neon stripe and body outline; the red lower half must be painted deeper by eye. Commons categories list Paracheirodon axelrodi and CC-Zero. Credited as 'Henrique Pinto from Recife, Brazil' in the Commons author field (Flickr account Henrique Vicente). Raw file: ~/.cache/aquarium-assets/raw/wm-cardinal-vicente/original.jpg (not committed).",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "wm-rummynose-reiskoffer",
+      "kind": "reference-photo",
+      "species": "rummy-nose-tetra",
+      "title": "20080113 Aquatopia - Rivierenhof (050).jpg",
+      "author": "Donar Reiskoffer",
+      "author_url": "https://commons.wikimedia.org/wiki/File:20080113_Aquatopia_-_Rivierenhof_(050).jpg",
+      "source_url": "https://commons.wikimedia.org/wiki/File:20080113_Aquatopia_-_Rivierenhof_(050).jpg",
+      "licence": "CC-BY-3.0",
+      "licence_url": "https://creativecommons.org/licenses/by/3.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "483f78cb3918bee70f86908d776a3735ccb786becbb15ed1f020a7728c468a22",
+      "polycount": null,
+      "textures": "photo 1600x1145",
+      "rigged": false,
+      "notes": "Commons categories name Petitella bleheri (the false rummy-nose, red head with a black-and-white banded tail), which is the fish usually sold as rummy-nose and shares the red nose and tail banding. The true rummy-nose (Hemigrammus rhodostomus, now generally Petitella rhodostoma since 2020) has a slightly shorter red area; the loft uses this photo for the body, red head and banded caudal. CC BY 3.0 read from the Commons file page metadata. Raw file: ~/.cache/aquarium-assets/raw/wm-rummynose-reiskoffer/original.jpg (not committed).",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "wm-apistogramma-hongsloi-male",
+      "kind": "reference-photo",
+      "species": "apistogramma-hongsloi",
+      "title": "Male of Apistogramma hongsloi.jpg",
+      "author": "SamaelGMO",
+      "author_url": "https://commons.wikimedia.org/wiki/File:Male_of_Apistogramma_hongsloi.jpg",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Male_of_Apistogramma_hongsloi.jpg",
+      "licence": "CC-BY-4.0",
+      "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "9900e89df20fbf03eb9170109b53c3594a7393441c3ebba7e07337f621a0ab20",
+      "polycount": null,
+      "textures": "photo 9248x6944",
+      "rigged": false,
+      "notes": "Male Apistogramma hongsloi, a dwarf cichlid of the Orinoco and Rio Negro blackwaters. Clean lateral of the fish swimming over leaf litter: green-yellow body with a pale belly and orange flank wash, yellow dorsal and caudal. The fish is small in frame, 9248x6944 (10.5 MB): crop and downscale to the fish. Raw file: ~/.cache/aquarium-assets/raw/wm-apistogramma-hongsloi-male/original.jpg (not committed).",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "wm-apistogramma-hongsloi-pair",
+      "kind": "reference-photo",
+      "species": "apistogramma-hongsloi",
+      "title": "Pair of Apistogramma hongsloi.jpg",
+      "author": "SamaelGMO",
+      "author_url": "https://commons.wikimedia.org/wiki/File:Pair_of_Apistogramma_hongsloi.jpg",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Pair_of_Apistogramma_hongsloi.jpg",
+      "licence": "CC-BY-4.0",
+      "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "b4823917e98f5d23994cff09bad1466a599b900ea6700a890fe22542502e83ed",
+      "polycount": null,
+      "textures": "photo 7940x5464",
+      "rigged": false,
+      "notes": "Pair of Apistogramma hongsloi in a planted tank among leaf litter: two fish, one upright and one head-up, both partly behind plants, so neither is a clean lateral. Weak as a texture source; kept as the female colour reference (yellow body, orange flank wash, yellow-orange caudal). 7940x5464 (9.1 MB). Raw file: ~/.cache/aquarium-assets/raw/wm-apistogramma-hongsloi-pair/original.jpg (not committed).",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "wm-nannostomus-marginatus-male",
+      "kind": "reference-photo",
+      "species": "dwarf-pencilfish",
+      "title": "Nannostomus marginatus, adultes Männchen.jpg",
+      "author": "D.W.",
+      "author_url": "https://commons.wikimedia.org/wiki/File:Nannostomus_marginatus,_adultes_M%C3%A4nnchen.jpg",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Nannostomus_marginatus,_adultes_M%C3%A4nnchen.jpg",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "973aa5a655949fd1bb95ccbe5102862eb4711688d7135faa39148fd7fb82e8e4",
+      "polycount": null,
+      "textures": "photo 2843x1578",
+      "rigged": false,
+      "notes": "Adult male dwarf pencilfish (Nannostomus marginatus) in an aquarium, sharp lateral view with the black lateral and lower stripes, silver-gold sheen, red marks on the dorsal, pelvic and anal fins and a clear caudal. The Commons author field gives only 'D.W.' (no user page). CC0 read from the Commons file page metadata. Raw file: ~/.cache/aquarium-assets/raw/wm-nannostomus-marginatus-male/original.jpg (not committed).",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "wm-nannostomus-marginatus-female",
+      "kind": "reference-photo",
+      "species": "dwarf-pencilfish",
+      "title": "Nannostomus marginatus-adultes Weibchen.jpg",
+      "author": "D.W.",
+      "author_url": "https://commons.wikimedia.org/wiki/File:Nannostomus_marginatus-adultes_Weibchen.jpg",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Nannostomus_marginatus-adultes_Weibchen.jpg",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "ed6f33849744822eb3be396eee4fac79249a7ec2a73b9b582c17af41f8887b7f",
+      "polycount": null,
+      "textures": "photo 1892x2345",
+      "rigged": false,
+      "notes": "Adult female dwarf pencilfish (Nannostomus marginatus), same author as the male photo; the female has a fuller body and less red in the fins. The frame is portrait (1892x2345), so the fish is small in frame: crop to it. CC0 read from the Commons file page metadata. Raw file: ~/.cache/aquarium-assets/raw/wm-nannostomus-marginatus-female/original.jpg (not committed).",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
       "id": "sketchfab-c3bc5a29",
       "kind": "fish",
       "species": "barred-mudskipper",
@@ -3525,7 +3990,7 @@
       "polycount": 312662,
       "textures": "Material.001_baseColor.jpeg 1024x1024, Q11389-1all-1_baseColor.jpeg 4096x4096 (baseColor only)",
       "rigged": false,
-      "notes": "Photogrammetry scan of Takifugu snyderi, a Japanese marine and brackish puffer: 312,662 triangles in 6 meshes, no rig. This is NOT Tetraodon biocellatus (figure-8 puffer): the body plan (rounded body, beak mouth, small fins) is right but the pattern is wrong, so use it for geometry only and re-texture from the species description (no allowed figure-8 reference photo yet, see docs/assets/catalog.md). Ranked below the procedural loft for that species. Licence CC0 read from the Sketchfab model record and the bundled license.txt on 2026-10-22; the model is flagged downloadable. Zip sha256 60a427cc5a52b3a2d23fb9805cece134c6d44a7ff6c6fb1f427bb5272f21ff81; sha256 is the aggregate over files[]. Raw files: ~/.cache/aquarium-assets/raw/sketchfab-7cbf59ce/ (not committed). Planned pipeline steps (optional, only if the loft looks worse): remove scan slate, decimate to LOD0 to LOD2, rig spine and caudal joints, re-texture from the figure-8 reference photo, scale to 6 to 7 cm.",
+      "notes": "Photogrammetry scan of Takifugu snyderi, a Japanese marine and brackish puffer: 312,662 triangles in 6 meshes, no rig. This is NOT Tetraodon biocellatus (figure-8 puffer): the body plan (rounded body, beak mouth, small fins) is right but the pattern is wrong, so use it for geometry only and re-texture from the species description (no allowed figure-8 reference photo yet, see docs/assets/catalog.md). Ranked below the procedural loft for that species. Licence CC0 read from the Sketchfab model record and the bundled license.txt on 2026-10-22; the model is flagged downloadable. Zip sha256 60a427cc5a52b3a2d23fb9805cece134c6d44a7ff6c6fb1f427bb5272f21ff81; sha256 is the aggregate over files[]. Raw files: ~/.cache/aquarium-assets/raw/sketchfab-7cbf59ce/ (not committed). Planned pipeline steps (optional, only if the loft looks worse): remove scan slate, decimate to LOD0 to LOD2, rig spine and caudal joints, re-texture from the species description, scale to 6 to 7 cm.",
       "modifications": [],
       "status": "downloaded",
       "files": [

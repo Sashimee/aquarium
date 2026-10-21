@@ -1,0 +1,152 @@
+{
+  "params": {
+    "flowPerWaveMakerTier": [0.3, 0.5, 0.8, 1],
+    "bleachPerHour": 0.03,
+    "recoverPerHour": 0.005,
+    "fragStartSize": 0.3,
+    "fragMaxBleach": 0.3,
+    "fragRadiusM": 0.12,
+    "fragSpacingM": 0.04,
+    "edgeMarginM": 0.03,
+    "maxFragsPerTank": 24,
+    "sources": {
+      "bleaching": [
+        "Glynn 1993, Coral Reefs 12: coral bleaching, ecological perspectives (loss of zooxanthellae after 1 to 2 C above the summer maximum)",
+        "Jokiel & Coles 1990, Coral Reefs 8: response of Hawaiian and other Indo-Pacific reef corals to elevated temperature",
+        "Lesser 1997, Coral Reefs 16: oxidative stress causes coral bleaching during exposure to elevated temperatures; light adds to the damage"
+      ],
+      "growth": [
+        "Chalker & Barnes 1990, Coral Reefs 8: gross photosynthesis and calcification of Acropora cervicornis rise with light and saturate",
+        "Dennison & Barnes 1988, J. Exp. Mar. Biol. Ecol. 115: flow raises the metabolism and growth of corals"
+      ],
+      "chemistry": [
+        "Reef-keeping practice: 7 to 11 dKH, salinity 33 to 36 ppt, pH 8.0 to 8.4, 24 to 28 C"
+      ],
+      "fragging": [
+        "Forsman et al. 2006, Coral Reefs 25: coral gardening from fragments; fragments cut from a grown colony establish and grow on their own"
+      ]
+    }
+  },
+  "corals": [
+    {
+      "id": "acropora-cytherea",
+      "form": "sps",
+      "growthPerDay": 0.06,
+      "minSize": 0.3,
+      "maxSize": 2.5,
+      "fragMinSize": 1.5,
+      "lightDemand": 2,
+      "lightMax": 2.6,
+      "lightMaxSpan": 0.4,
+      "flowDemand": 0.8,
+      "temperatureC": [24, 28],
+      "temperatureSpanC": 2.5,
+      "salinity": [33, 36.5],
+      "salinitySpan": 4,
+      "kh": [7, 10],
+      "khSpan": 3,
+      "ph": [8, 8.5],
+      "phSpan": 0.5
+    },
+    {
+      "id": "acropora-palmata",
+      "form": "sps",
+      "growthPerDay": 0.05,
+      "minSize": 0.3,
+      "maxSize": 2.5,
+      "fragMinSize": 1.5,
+      "lightDemand": 2,
+      "lightMax": 2.6,
+      "lightMaxSpan": 0.4,
+      "flowDemand": 0.8,
+      "temperatureC": [24, 28],
+      "temperatureSpanC": 2.5,
+      "salinity": [33, 36.5],
+      "salinitySpan": 4,
+      "kh": [7, 10],
+      "khSpan": 3,
+      "ph": [8, 8.5],
+      "phSpan": 0.5
+    },
+    {
+      "id": "blue-sea-anemone",
+      "form": "other",
+      "growthPerDay": 0.05,
+      "minSize": 0.3,
+      "maxSize": 2.4,
+      "fragMinSize": 1.5,
+      "lightDemand": 2,
+      "lightMax": 2.6,
+      "lightMaxSpan": 0.4,
+      "flowDemand": 0.8,
+      "temperatureC": [24, 28],
+      "temperatureSpanC": 2.5,
+      "salinity": [33, 36.5],
+      "salinitySpan": 4,
+      "kh": [7, 10],
+      "khSpan": 3,
+      "ph": [8, 8.5],
+      "phSpan": 0.5
+    },
+    {
+      "id": "brain-coral",
+      "form": "lps",
+      "growthPerDay": 0.02,
+      "minSize": 0.3,
+      "maxSize": 1.8,
+      "fragMinSize": 1.4,
+      "lightDemand": 0.9,
+      "lightMax": 2.2,
+      "lightMaxSpan": 0.8,
+      "flowDemand": 0.4,
+      "temperatureC": [23.5, 28.5],
+      "temperatureSpanC": 3,
+      "salinity": [32, 37],
+      "salinitySpan": 5,
+      "kh": [6, 11],
+      "khSpan": 3,
+      "ph": [7.9, 8.5],
+      "phSpan": 0.6
+    },
+    {
+      "id": "euphyllia-hammer",
+      "form": "lps",
+      "growthPerDay": 0.03,
+      "minSize": 0.3,
+      "maxSize": 2,
+      "fragMinSize": 1.4,
+      "lightDemand": 1.2,
+      "lightMax": 2.4,
+      "lightMaxSpan": 0.6,
+      "flowDemand": 0.5,
+      "temperatureC": [23.5, 28.5],
+      "temperatureSpanC": 3,
+      "salinity": [32, 37],
+      "salinitySpan": 5,
+      "kh": [6, 11],
+      "khSpan": 3,
+      "ph": [7.9, 8.5],
+      "phSpan": 0.6
+    },
+    {
+      "id": "euphyllia-torch",
+      "form": "lps",
+      "growthPerDay": 0.03,
+      "minSize": 0.3,
+      "maxSize": 2,
+      "fragMinSize": 1.4,
+      "lightDemand": 1.2,
+      "lightMax": 2.4,
+      "lightMaxSpan": 0.6,
+      "flowDemand": 0.5,
+      "temperatureC": [23.5, 28.5],
+      "temperatureSpanC": 3,
+      "salinity": [32, 37],
+      "salinitySpan": 5,
+      "kh": [6, 11],
+      "khSpan": 3,
+      "ph": [7.9, 8.5],
+      "phSpan": 0.6
+    }
+  ]
+}

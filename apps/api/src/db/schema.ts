@@ -167,6 +167,11 @@ export const tanks = pgTable(
     plants: jsonb('plants').notNull().default([]),
     // Recent trim requests (key, plantKey, size) so a retry replays instead of trimming twice.
     plantTrimKeys: jsonb('plant_trim_keys').notNull().default([]),
+    // State of the layout corals and their fragments (storedCoralsSchema), reconciled with the layout
+    // on every tick.
+    corals: jsonb('corals').notNull().default([]),
+    // Recent frag requests (key, coralKey) so a retry replays instead of cutting twice.
+    coralFragKeys: jsonb('coral_frag_keys').notNull().default([]),
     // null: the player never chose one, so the biome's default shows.
     backgroundId: text('background_id'),
     water: jsonb('water')

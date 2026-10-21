@@ -12,6 +12,7 @@ import {
 } from './common.js';
 import { chemistrySchema } from './chemistry.js';
 import { equipmentSchema, lightScheduleSchema } from './equipment.js';
+import { coralSchema } from './corals.js';
 import { plantSchema } from './plants.js';
 import { QUARANTINE_TANK_SIZE, tankSizeSchema } from './tankSize.js';
 import {
@@ -162,6 +163,12 @@ export const tankSchema = z.object({
     .optional()
     .describe(
       'growing plants: the layout plants (the preset ones while the layout is unedited) and their offsets',
+    ),
+  corals: z
+    .array(coralSchema)
+    .optional()
+    .describe(
+      'reef corals: the layout corals (the preset ones while the layout is unedited) and their fragments, each with a 0..1 bleach level',
     ),
   fish: z.array(fishSchema),
   memorials: z.array(memorialSchema),
