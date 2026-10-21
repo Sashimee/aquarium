@@ -131,6 +131,7 @@ export const tankSchema = z.object({
   size: tankSizeSchema,
   quarantine: z.boolean().describe('the one nano tank kept apart for new fish and treatment'),
   shared: z.boolean().describe('whether a public link is active'),
+  inGallery: z.boolean().describe('listed in the tank of the week gallery; needs an active link'),
   shareToken: shareTokenSchema
     .nullable()
     .describe('only in the response that enabled or rotated the link, null on every other read'),

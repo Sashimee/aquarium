@@ -22,6 +22,7 @@ import {
   newTankChemistry,
   TANK_SIZES,
   personalitySchema,
+  setGalleryRequestSchema,
   replayQuerySchema,
   replayResponseSchema,
   speciesListSchema,
@@ -499,6 +500,7 @@ async function render(
     size: tank.size,
     quarantine: tank.quarantine,
     shared: tank.shareTokenHash !== null,
+    inGallery: tank.inGallery,
     shareToken: issuedShareToken,
     decorLayout: storedLayout(tank).map((item) => ({
       ...item,
@@ -931,6 +933,45 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
     }),
   );
 
+  app.put(
+    '/api/tanks/:tankId/gallery',
+    guarded(async (req) => {
+      const user = await authorize(req);
+      const { tankId } = tankParamsSchema.parse(req.params);
+      const { listed } = setGalleryRequestSchema.parse(req.body);
+      throttle(user.id, 'care');
+      return withTank(user, tankId, async (tx, ticked) => {
+        if (listed && ticked.tank.shareTokenHash === null) {
+          throw new HttpError(
+            409,
+            apiError(
+              'conflict',
+              'Turn on the public link before listing this tank in the gallery.',
+            ),
+          );
+        }
+        if (listed && ticked.tank.quarantine) {
+          throw new HttpError(
+            409,
+            apiError('conflict', 'A quarantine tank cannot be listed in the gallery.'),
+          );
+        }
+        if (ticked.tank.inGallery === listed) return render(tx, ticked);
+        const [row] = await tx
+          .update(schema.tanks)
+          .set({ inGallery: listed })
+          .where(eq(schema.tanks.id, tankId))
+          .returning();
+        await audit(tx, {
+          action: listed ? 'gallery_listed' : 'gallery_unlisted',
+          actorId: user.id,
+          tankId,
+        });
+        return render(tx, { ...ticked, tank: row ?? ticked.tank });
+      });
+    }),
+  );
+
   app.post(
     '/api/tanks/:tankId/share/rotate',
     guarded(async (req) => {
@@ -966,7 +1007,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
         const wasShared = ticked.tank.shareTokenHash !== null;
         const [row] = await tx
           .update(schema.tanks)
-          .set({ shareTokenHash: null })
+          .set({ shareTokenHash: null, inGallery: false })
           .where(eq(schema.tanks.id, tankId))
           .returning();
         if (wasShared) await audit(tx, { action: 'share_revoked', actorId: user.id, tankId });

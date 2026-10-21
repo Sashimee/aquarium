@@ -179,6 +179,7 @@ describe('tank and fish', () => {
       size: 'standard',
       quarantine: false,
       shared: false,
+      inGallery: false,
       shareToken: null,
       equipment: DEFAULT_EQUIPMENT,
       recentVisitDays: 3,
