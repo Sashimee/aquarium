@@ -106,6 +106,12 @@ async function sickTank(
   return { who, tankId: tank.id, fishId: row.id };
 }
 
+// A fish inside its new-fish window rolls a random fresh ich or velvet every hour, seeded by its random
+// id and the wall-clock time, so after the cure it can catch a different disease and the assertions
+// below flake. Settled fish in clean water have zero onset rate, which makes the outcome deterministic.
+const settleIn = (h: Harness, fishId: string) =>
+  h.database.db.update(schema.fish).set({ introducedAt: null }).where(eq(schema.fish.id, fishId));
+
 const treat = (h: Harness, who: Account, tankId: string, body: object) =>
   call(h, who, 'POST', `/api/tanks/${tankId}/treat`, body);
 
@@ -193,6 +199,7 @@ describe('treatment', () => {
 
     it('cures the fish when the whole course runs', async () => {
       const { who, tankId, fishId } = await sickTank(h, 'ich', 0.4);
+      await settleIn(h, fishId);
       await treat(h, who, tankId, { kind: 'ich' });
       h.clock.advance((courseHours('ich', 'standard') + 1) * HOUR_MS);
       const tank = await getTank(h, who, tankId);
