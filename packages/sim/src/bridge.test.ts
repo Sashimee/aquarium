@@ -577,6 +577,25 @@ describe('sim worker bridge', () => {
     await expect(second).rejects.toThrow(/client disposed/);
   });
 
+  it('passes on polyp extensions of the current world only', async () => {
+    const worker = fakeWorker();
+    const client = new SimClient(worker.port);
+    const seen: number[] = [];
+    client.onPolyps((extension) => seen.push(extension));
+    const first = client.init(benchmarkConfig(1));
+    worker.ready(1);
+    await first;
+    worker.post({ type: 'polyps', epoch: 0, tick: 30, extension: 0.25 });
+    expect(seen).toEqual([]);
+    worker.post({ type: 'polyps', epoch: 1, tick: 30, extension: 0.5 });
+    expect(seen).toEqual([0.5]);
+    const second = client.init(benchmarkConfig(2));
+    worker.post({ type: 'polyps', epoch: 1, tick: 60, extension: 0.75 });
+    expect(seen).toEqual([0.5]);
+    client.dispose();
+    await expect(second).rejects.toThrow(/client disposed/);
+  });
+
   it('rejects bad food as a whole, keeps the previous food, and refuses food before init', async () => {
     const { client } = connect();
     const early = nextError(client);

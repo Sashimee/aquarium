@@ -286,6 +286,7 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
   let epoch = 0;
   let crewTick = 0;
   let polypSent = Number.NaN;
+  let pausedAt: number | null = null;
 
   const send = (event: SimEvent, transfer: ArrayBuffer[] = []): void => {
     port.postMessage(event, transfer);
@@ -319,7 +320,10 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
   };
 
   const stop = (): void => {
-    if (timer !== null) clearTimeout(timer);
+    if (timer !== null) {
+      clearTimeout(timer);
+      pausedAt = now();
+    }
     timer = null;
   };
 
@@ -347,6 +351,7 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
     } catch (error) {
       // A throw here would escape the timer unseen; report it and stay stopped until "start".
       sendError(error);
+      pausedAt = last;
       return;
     }
     timer = setTimeout(loop, Math.max(0, stepMs - backlog));
@@ -385,6 +390,7 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
         world = new World(command.config);
         crewTick = 0;
         polypSent = Number.NaN;
+        pausedAt = null;
         pool.length = 0;
         epoch++;
         send({
@@ -401,8 +407,9 @@ export function createSimHost(port: MessagePortLike, options: SimHostOptions = {
       case 'start': {
         if (world === null) throw new Error('sim: "start" before "init"');
         if (timer !== null) return;
-        world.settleLight();
         last = now();
+        world.settleLight(pausedAt === null ? 0 : Math.max(0, last - pausedAt) / 1000);
+        pausedAt = null;
         backlog = 0;
         timer = setTimeout(loop, stepMs);
         return;

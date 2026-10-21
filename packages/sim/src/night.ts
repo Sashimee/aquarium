@@ -29,7 +29,8 @@ const DT = 1 / 30;
  * The tank's light as the fish see it: whether it is night, how strongly a sudden change startles
  * them, and how far coral polyps are out. Light set before the first step, or after `settle`, is
  * taken as already adapted to, so loading a tank or resuming a paused one in the dark startles
- * nothing and finds the polyps where the darkness puts them.
+ * nothing. A loaded tank finds its polyps where the darkness puts them, a resumed one where the
+ * pause spent in the current darkness has moved them.
  */
 export class Night {
   private _light = 1;
@@ -69,11 +70,18 @@ export class Night {
     }
   }
 
-  /** Takes the current light as already adapted to, so it startles nobody. */
-  settle(): void {
+  /**
+   * Takes the current light as already adapted to, so it startles nobody, and eases the polyps as
+   * far as `pausedS` seconds of the current darkness would have.
+   */
+  settle(pausedS = 0): void {
+    if (!(pausedS >= 0)) {
+      throw new RangeError(`paused time must be at least 0 s, got ${pausedS}`);
+    }
     this.adapted = this._light;
     this.armed = false;
     this.rearmed = true;
+    this._polyp += (1 - this._light - this._polyp) * (1 - Math.exp(-pausedS / NIGHT.polypTauS));
   }
 
   /**
