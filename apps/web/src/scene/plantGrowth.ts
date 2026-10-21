@@ -8,17 +8,6 @@ const TONE_MAX = 1.08;
 const MAX_ANCESTORS = 64;
 const MIN_PICK_RADIUS = 0.03;
 
-/** Mirrors `layoutPlantKeys` in the sim: `s<seed>`, then `s<seed>-2`, `-3` for repeats. */
-export function layoutPlantKeys(seeds: readonly number[]): string[] {
-  const seen = new Map<string, number>();
-  return seeds.map((seed) => {
-    const base = `s${seed}`;
-    const n = (seen.get(base) ?? 0) + 1;
-    seen.set(base, n);
-    return n === 1 ? base : `${base}-${n}`;
-  });
-}
-
 export function hashKey(key: string): number {
   let h = 2166136261;
   for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 16777619) >>> 0;
@@ -121,16 +110,21 @@ export interface GrowthContext {
   readonly waterTop: number;
 }
 
-function grownScale(base: number, size: number, height: number, y: number, waterTop: number) {
+/** A root keeps at least its layout scale, which already cleared the water line at its own spot. */
+function rootScale(base: number, size: number, height: number, y: number, waterTop: number) {
   const ceiling = surfaceScaleCeiling(waterTop, height)(y);
   return Math.min(base * size, Math.max(base, ceiling));
+}
+
+function offsetScale(base: number, size: number, height: number, y: number, waterTop: number) {
+  return Math.min(base * size, surfaceScaleCeiling(waterTop, height)(y));
 }
 
 /** The layout item at its grown size; a plant the state does not know about stays as laid out. */
 export function grownItem(ref: LayoutPlantRef, context: GrowthContext): DecorItem {
   const plant = context.plants.get(ref.key);
   if (!plant || plant.parentKey !== null || plant.assetId !== ref.item.assetId) return ref.item;
-  const scale = grownScale(
+  const scale = rootScale(
     ref.item.scale,
     plant.size,
     ref.height,
@@ -159,7 +153,7 @@ function placedOffsets(refs: readonly LayoutPlantRef[], context: GrowthContext):
     if (!ref || ref.item.assetId !== plant.assetId) continue;
     const [x, z] = plant.position;
     const y = context.ground(x, z) - ROOT_DEPTH;
-    const scale = grownScale(ref.item.scale, plant.size, ref.height, y, context.waterTop);
+    const scale = offsetScale(ref.item.scale, plant.size, ref.height, y, context.waterTop);
     placed.push({ plant, ref, x, y, z, scale });
   }
   return placed;

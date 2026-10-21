@@ -8,7 +8,6 @@ import { CurrentField } from './current';
 import { ROOT_DEPTH } from './placement';
 import {
   grownItem,
-  layoutPlantKeys,
   offsetEntries,
   offsetEntry,
   pickablePlants,
@@ -16,7 +15,7 @@ import {
   type GrowthContext,
   type LayoutPlantRef,
 } from './plantGrowth';
-import { PlantGroup } from './plants';
+import { PlantGroup, SURFACE_MARGIN } from './plants';
 import { offsetCapacity } from './TankScene';
 
 const WATER_TOP = 0.5;
@@ -56,12 +55,6 @@ function context(plants: Plant[]): GrowthContext {
     waterTop: WATER_TOP,
   };
 }
-
-describe('layoutPlantKeys', () => {
-  it('numbers repeated seeds like the sim', () => {
-    expect(layoutPlantKeys([7, 8, 7, 7])).toEqual(['s7', 's8', 's7-2', 's7-3']);
-  });
-});
 
 describe('grownItem', () => {
   it('scales a root by its size on top of the layout scale', () => {
@@ -112,6 +105,18 @@ describe('offsetEntries', () => {
     expect(offsetEntries([ref(1)], context([orphan, a, b])).size).toBe(0);
   });
 
+  it('keeps an offset on raised substrate under the water line, with no floor at the root scale', () => {
+    const raised: GrowthContext = {
+      ...context([plant('s1'), plant('s1.1', { parentKey: 's1', position: [1, 0], size: 1 })]),
+      ground: (x) => 0.05 + x * 0.3,
+    };
+    const entry = offsetEntries([ref(1)], raised).get('water-plant')?.[0];
+    expect(entry?.scale).toBeLessThan(1);
+    expect((entry?.y ?? 0) + 0.2 * (entry?.scale ?? 0)).toBeLessThanOrEqual(
+      WATER_TOP - SURFACE_MARGIN + 1e-9,
+    );
+  });
+
   it('drops an offset whose asset differs from its root, as after the layout swapped the plant', () => {
     const swapped = plant('s1.1', { assetId: 'java-fern', parentKey: 's1', position: [0, 0] });
     expect(offsetEntries([ref(1)], context([plant('s1'), swapped])).size).toBe(0);
@@ -155,6 +160,11 @@ describe('pickPlant', () => {
       key: 's2.1',
       size: 0.7,
     });
+  });
+
+  it('does not offer a plant whose asset differs from the layout piece', () => {
+    const swapped = context([plant('s1', { assetId: 'java-fern' })]);
+    expect(pickablePlants([ref(1)], swapped)).toEqual([]);
   });
 
   it('picks nothing in open water', () => {
@@ -231,6 +241,11 @@ describe('PlantGroup growth updates', () => {
     expect(group.visible).toBe(1);
     const gain = Math.abs(group.pumpGain[0] ?? 0) + Math.abs(group.pumpGain[1] ?? 0);
     expect(gain).toBeGreaterThan(1e-3);
+  });
+
+  it('allocates instance colour up front so a group created empty can take instances later', () => {
+    const group = new PlantGroup('water-plant', model, [], pumped(), 8);
+    expect(meshes(group).every((m) => m.instanceColor !== null)).toBe(true);
   });
 
   it('resizes a layout plant in place and keeps the layout signature current', () => {

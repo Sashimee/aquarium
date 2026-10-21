@@ -65,7 +65,6 @@ import {
 } from './plants';
 import {
   grownItem,
-  layoutPlantKeys,
   offsetEntries,
   pickablePlants,
   pickPlant,
@@ -73,6 +72,7 @@ import {
   type LayoutPlantRef,
   type PlantPick,
 } from './plantGrowth';
+import { layoutPlantKeys } from '@aquarium/sim/lifecycle';
 import { createSubstrateMaterial, type SubstrateLayers } from './substrate';
 
 const FALLBACK_PLANT_HEIGHT = 0.2;
@@ -497,15 +497,24 @@ export class TankScene {
     items.forEach(({ item, kind }, index) => {
       if (kind === PLANT_KIND) plants.push({ index, item });
     });
-    const keys = layoutPlantKeys(plants.map(({ item }) => item.tintSeed ?? legacyTintSeed(item)));
-    return plants.map(({ index, item }, i) => {
+    const growing = new Set<string>();
+    for (const plant of this.plantState.values()) growing.add(plant.assetId);
+    const growers = plants.filter(({ item }) => growing.has(item.assetId));
+    const keys = new Map(
+      layoutPlantKeys(
+        growers.map(({ item }) => ({
+          assetId: item.assetId,
+          position: item.position,
+          tintSeed: item.tintSeed ?? legacyTintSeed(item),
+        })),
+      ).map((key, i) => [growers[i]?.index, key]),
+    );
+    return plants.map(({ index, item }) => {
       const bounds = this.library.catalog.get(item.assetId).bounds;
-      const key = keys[i];
-      if (key === undefined) throw new Error('layoutPlantKeys lost a key');
       return {
         index,
         ref: {
-          key,
+          key: keys.get(index) ?? `unkeyed:${index}`,
           item,
           height: bounds?.max[1] ?? FALLBACK_PLANT_HEIGHT,
           halfWidth: Math.max(bounds?.max[0] ?? 0.05, bounds?.max[2] ?? 0.05),
