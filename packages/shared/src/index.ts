@@ -21,3 +21,4 @@ export * from './gallery.js';
 export * from './economy.js';
 export * from './collection.js';
 export * from './treatment.js';
+export * from './seed.js';
