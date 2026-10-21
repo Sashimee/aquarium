@@ -111,5 +111,14 @@
       "coverage": 0.8,
       "spread": null
     }
+  ],
+  "hardscape": [
+    { "id": "boulder-01", "halfX": 0.12163, "halfZ": 0.175 },
+    { "id": "coast-rocks-05", "halfX": 0.2, "halfZ": 0.185588 },
+    { "id": "dead-quiver-trunk", "halfX": 0.038422, "halfZ": 0.03361 },
+    { "id": "dead-tree-trunk-02", "halfX": 0.3, "halfZ": 0.078205 },
+    { "id": "driftwood-branch", "halfX": 0.2, "halfZ": 0.10615 },
+    { "id": "lambis-shell", "halfX": 0.075, "halfZ": 0.040082 },
+    { "id": "reef-arch", "halfX": 0.15, "halfZ": 0.050608 }
   ]
 }

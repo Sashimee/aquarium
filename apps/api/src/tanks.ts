@@ -91,7 +91,14 @@ import { registerMoveRoutes } from './moveFish.ts';
 import { registerPlantRoutes } from './plantTrim.ts';
 import { registerTreatmentRoutes } from './treatment.ts';
 import { backgroundRef, licenseFor } from './items.ts';
-import { currentPlants, substrateBounds, wirePlants } from './plants.ts';
+import {
+  currentPlants,
+  plantObstacles,
+  shownTintSeeds,
+  substrateBounds,
+  uniqueTintSeeds,
+  wirePlants,
+} from './plants.ts';
 import type { Presets } from './presets.ts';
 import { findReplay, lockUserRow, lockWallet, owns, spend } from './wallet.ts';
 import { apiError, HttpError } from './errors.ts';
@@ -296,7 +303,12 @@ async function tickLocked(
         height: dims.height - dims.glass - dims.freeboard,
       }),
     },
-    plants: { table: deps.plants, state: reconciled, bounds: substrateBounds(tank.size) },
+    plants: {
+      table: deps.plants,
+      state: reconciled,
+      bounds: substrateBounds(tank.size),
+      obstacles: plantObstacles(tank, deps.presets, deps.plants),
+    },
     graceEndsAtMs: user.createdAt.getTime() + GRACE_PERIOD_MS,
     vacationFeeder: hasVacationFeeder(tank),
     breeding: new Map([...deps.species].map(([id, s]) => [id, s.breeding])),
@@ -966,10 +978,10 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
               : {}),
             ...(body.decorLayout !== undefined
               ? {
-                  decorLayout: body.decorLayout.map((item) => ({
-                    ...item,
-                    tintSeed: item.tintSeed ?? legacyTintSeed(item),
-                  })),
+                  decorLayout: uniqueTintSeeds(
+                    body.decorLayout,
+                    shownTintSeeds(ticked.tank, presets),
+                  ),
                 }
               : {}),
             updatedAt: new Date(clock.now()),
