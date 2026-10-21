@@ -35,7 +35,7 @@ export function mulberry32(seed: number): () => number {
 export type ReachFn = (scale: number, axis?: 'x' | 'z') => number;
 
 export const MAX_TILT_RAD = 0.1;
-const ROOT_DEPTH = 0.004;
+export const ROOT_DEPTH = 0.004;
 const ATTEMPTS_PER_PLANT = 40;
 /** Smallest share of its drawn scale a plant shrinks to, before it is moved to make room instead. */
 export const GLASS_SHRINK_FLOOR = 0.5;
