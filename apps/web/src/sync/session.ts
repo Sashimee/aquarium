@@ -465,6 +465,7 @@ export class TankSession {
           : `The ${DISEASE_LABEL[kind].toLowerCase()} medicine is in the water.`,
       });
     });
+    if (outcome.refusal !== null) this.patch({ error: null });
     return outcome;
   }
 

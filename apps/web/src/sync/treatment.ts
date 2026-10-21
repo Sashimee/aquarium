@@ -58,6 +58,36 @@ export function premiumPrice(economy: Economy, kind: DiseaseKind): number | null
   return economy.items.consumables.premiumMedicine.prices[kind] ?? null;
 }
 
+/** What a dose costs. `confirm` is off once the player has already agreed in a warning dialog. */
+export function doseSpend(
+  economy: Economy,
+  kind: DiseaseKind,
+  potency: MedicinePotency,
+  warned: boolean,
+): { label: string; price: number; confirm: boolean } | null {
+  const price = premiumPrice(economy, kind);
+  if (potency !== 'premium' || price === null) return null;
+  return {
+    label: `premium ${DISEASE_LABEL[kind].toLowerCase()} medicine`,
+    price,
+    confirm: !warned,
+  };
+}
+
+/** Whatever the panel holds for a tank is shown under that tank only. */
+export function heldFor<T extends { tankId: string }>(held: T | null, tankId: string): T | null {
+  return held !== null && held.tankId === tankId ? held : null;
+}
+
+/** One line per disease for the shared live region, so a screen reader hears a change once. */
+export function sickSummary(fish: readonly Fish[]): string {
+  const sick = fish.filter((f) => f.status === 'alive' && f.disease !== null);
+  return DISEASE_KINDS.flatMap((kind) => {
+    const names = sick.filter((f) => f.disease?.kind === kind);
+    return names.length > 0 ? [`${DISEASE_LABEL[kind]}: ${listNames(names)}.`] : [];
+  }).join(' ');
+}
+
 export type Blocked = 'nothing-to-treat' | 'other-medicine' | 'at-limit';
 
 export type DosePlan =

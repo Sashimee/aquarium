@@ -6,12 +6,15 @@ import {
 } from '@aquarium/shared';
 import { useId, useState } from 'react';
 import { BUNDLED_ECONOMY } from '../sync/bundledEconomy';
+import { spendQuestion } from '../sync/economy';
 import type { SessionState, TankSession } from '../sync/session';
 import {
   blockedText,
   DISEASE_LABEL,
   doseButtonText,
+  doseSpend,
   heatTolerantSick,
+  heldFor,
   listNames,
   liveMedicine,
   medicineLine,
@@ -31,12 +34,14 @@ import { useSpend } from './spend';
 const POTENCIES: readonly MedicinePotency[] = ['standard', 'premium'];
 
 interface Pending {
+  tankId: string;
   kind: DiseaseKind;
   potency: MedicinePotency;
   warnings: string[];
 }
 
 interface Refusal {
+  tankId: string;
   kind: DiseaseKind;
   message: string;
   waterChange: boolean;
@@ -53,17 +58,21 @@ export function Treatment({
 }) {
   const id = useId();
   const { spend, notice } = useSpend(session, state.balance);
-  const [pending, setPending] = useState<Pending | null>(null);
-  const [refusal, setRefusal] = useState<Refusal | null>(null);
+  const [heldPending, setPending] = useState<Pending | null>(null);
+  const [heldRefusal, setRefusal] = useState<Refusal | null>(null);
+  const pending = heldFor(heldPending, tank.id);
+  const refusal = heldFor(heldRefusal, tank.id);
+  const pendingCost = pending && doseSpend(BUNDLED_ECONOMY, pending.kind, pending.potency, true);
   const nowMs = Date.now();
   const kinds = sickKinds(tank);
   const medicine = liveMedicine(tank, nowMs);
 
-  const run = (kind: DiseaseKind, potency: MedicinePotency) => {
+  const run = (kind: DiseaseKind, potency: MedicinePotency, warned: boolean) => {
     const go = async () => {
       const outcome = await session.treat(kind, potency);
       if (!outcome.ok && outcome.refusal !== null) {
         setRefusal({
+          tankId: tank.id,
           kind,
           message: outcome.refusal,
           waterChange: wantsWaterChange(outcome.refusal),
@@ -71,14 +80,9 @@ export function Treatment({
       }
       return outcome.ok;
     };
-    const price = premiumPrice(BUNDLED_ECONOMY, kind);
-    if (potency === 'premium' && price !== null) {
-      void spend({
-        label: `premium ${DISEASE_LABEL[kind].toLowerCase()} medicine`,
-        price,
-        confirm: true,
-        go,
-      });
+    const cost = doseSpend(BUNDLED_ECONOMY, kind, potency, warned);
+    if (cost) {
+      void spend({ ...cost, go });
     } else {
       void go();
     }
@@ -89,6 +93,7 @@ export function Treatment({
     const plan = planDose(tank, kind, potency, Date.now());
     if (plan.kind === 'blocked') {
       return setRefusal({
+        tankId: tank.id,
         kind,
         message: blockedText(plan.reason),
         waterChange: plan.reason !== 'nothing-to-treat',
@@ -98,8 +103,8 @@ export function Treatment({
       ...(plan.replaces ? [switchWarning(plan.replaces, kind)] : []),
       ...(plan.overdose ? [OVERDOSE_WARNING] : []),
     ];
-    if (warnings.length > 0) return setPending({ kind, potency, warnings });
-    run(kind, potency);
+    if (warnings.length > 0) return setPending({ tankId: tank.id, kind, potency, warnings });
+    run(kind, potency, false);
   };
 
   return (
@@ -127,13 +132,16 @@ export function Treatment({
           {pending.warnings.map((w) => (
             <p key={w}>{w}</p>
           ))}
+          {pendingCost && (
+            <p>{spendQuestion(pendingCost.label, pendingCost.price, state.balance)}</p>
+          )}
           <div className="row">
             <button
               type="button"
               className="primary"
               onClick={() => {
                 setPending(null);
-                run(pending.kind, pending.potency);
+                run(pending.kind, pending.potency, true);
               }}
             >
               Dose anyway

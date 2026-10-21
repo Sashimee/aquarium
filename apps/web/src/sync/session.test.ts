@@ -1465,7 +1465,7 @@ describe('Pearls and the T70 request contract', () => {
       equipment: { ...tank.equipment, light: { ...tank.equipment.light, onHour, offHour } },
     });
 
-    it('announces each tank own hours on load and on a switch', async () => {
+    it("announces each tank's own hours on load and on a switch", async () => {
       const { rec, session } = setup([
         withLamp(tankFixture({ id: TANK_A }), 8, 20),
         withLamp(tankFixture({ id: TANK_B }), 14, 2),

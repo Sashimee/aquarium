@@ -89,6 +89,22 @@ describe('FishCards', () => {
     expect(renderToStaticMarkup(createElement(FishCards, { fish: [], names }))).toBe('');
   });
 
+  it('announces sickness through one shared live region, not one per card', () => {
+    const ich = {
+      kind: 'ich' as const,
+      since: '2026-02-01T00:00:00.000Z',
+      severity: 0.5,
+      treatedUntil: null,
+    };
+    const pip = fishFixture(FISH_1, { name: 'Pip', disease: ich });
+    const fish = [pip, fishFixture(FISH_2, { name: 'Dot', disease: ich })];
+    const html = renderToStaticMarkup(createElement(FishCards, { fish, names }));
+    expect(html.match(/role="status"/g)).toHaveLength(1);
+    expect(html).toContain('Ich: Pip and Dot.');
+    expect(card(pip)).not.toContain('role="status"');
+    expect(card(pip)).toContain('tiny white spots');
+  });
+
   it('does not break on a tank mixing legacy and current fish', () => {
     const fish = [legacy('Old'), fishFixture(FISH_2, { name: 'New' })];
     const html = renderToStaticMarkup(createElement(FishCards, { fish, names }));
