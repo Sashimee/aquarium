@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { behaviourSchema, speciesContentSchema, traitSchema } from './species.js';
+import { activitySchema, behaviourSchema, speciesContentSchema, traitSchema } from './species.js';
 
 const dir = join(import.meta.dirname, '../../../content/species');
 const files = readdirSync(dir).filter((f) => f.endsWith('.json'));
@@ -45,6 +45,16 @@ describe('behaviour traits', () => {
       excursion: { meanIntervalS: 20 },
     });
     expect(r.error).toBeUndefined();
+  });
+
+  it('takes an optional activity and rejects an unknown one', () => {
+    expect(behaviourSchema.parse(base.behaviour).activity).toBeUndefined();
+    for (const activity of activitySchema.options) {
+      expect(behaviourSchema.parse({ ...base.behaviour, activity }).activity).toBe(activity);
+    }
+    expect(behaviourSchema.safeParse({ ...base.behaviour, activity: 'nightly' }).success).toBe(
+      false,
+    );
   });
 
   it('rejects out-of-range parameters and unknown keys', () => {
