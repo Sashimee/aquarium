@@ -1818,25 +1818,24 @@ describe('moving a fish', () => {
     await session.setUser(verified);
     const pip = fishFixture(FISH_1, { name: 'Pip' });
     const at = '2026-02-01T12:01:00.000Z';
+    const inHome = (fish: Tank['fish']) => tankFixture({ fish, lastTickAt: at });
+    const inQuarantine = (fish: Tank['fish']) =>
+      tankFixture({ id: TANK_B, name: 'Quarantine', quarantine: true, fish, lastTickAt: at });
+
     api.moveFish.mockRejectedValueOnce(apiError(0, 'network'));
     await session.move(FISH_1, TANK_B);
-    api.moveFish.mockResolvedValueOnce({
-      source: tankFixture({ fish: [], lastTickAt: at }),
-      destination: tankFixture({ id: TANK_B, quarantine: true, fish: [pip], lastTickAt: at }),
-    });
-    await session.move(FISH_1, TANK_B);
-    api.moveFish.mockResolvedValueOnce({
-      source: tankFixture({ id: TANK_B, quarantine: true, fish: [], lastTickAt: at }),
-      destination: tankFixture({ fish: [pip], lastTickAt: at }),
-    });
+
+    api.tank.mockResolvedValueOnce(inQuarantine([pip]));
     await session.select(TANK_B);
+    api.moveFish.mockResolvedValueOnce({ source: inQuarantine([]), destination: inHome([pip]) });
     await session.move(FISH_1, TANK_A);
+
+    api.tank.mockResolvedValueOnce(inHome([pip]));
     await session.select(TANK_A);
-    api.moveFish.mockResolvedValue({
-      source: tankFixture({ fish: [], lastTickAt: at }),
-      destination: tankFixture({ id: TANK_B, quarantine: true, fish: [pip], lastTickAt: at }),
-    });
+    api.moveFish.mockResolvedValueOnce({ source: inHome([]), destination: inQuarantine([pip]) });
     await session.move(FISH_1, TANK_B);
+
+    expect(api.moveFish).toHaveBeenCalledTimes(3);
     const keys = api.moveFish.mock.calls.map((c) => c[2].idempotencyKey);
     expect(keys[2]).not.toBe(keys[0]);
   });
