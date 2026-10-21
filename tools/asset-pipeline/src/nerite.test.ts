@@ -333,9 +333,49 @@ describe('clipPart', () => {
         const key = a < b ? `${a}-${b}` : `${b}-${a}`;
         uses.set(key, (uses.get(key) ?? 0) + 1);
       }
-    const shared = [...uses.values()].filter((n) => n === 2).length;
     expect(Math.max(...uses.values())).toBe(2);
-    expect(shared).toBeGreaterThan([...uses.values()].filter((n) => n === 1).length);
+    const onCut = (index: number): boolean =>
+      Math.abs(field(part.positions[index * 3]!, part.positions[index * 3 + 1]!)) < 1e-5;
+    const sheetBorder = (index: number): boolean => {
+      const x = part.positions[index * 3]!;
+      const z = part.positions[index * 3 + 2]!;
+      return Math.abs(x) > 1 - 1e-5 || z < 1e-5 || z > 2 - 1e-5;
+    };
+    for (const [key, n] of uses) {
+      if (n !== 1) continue;
+      const [a, b] = key.split('-').map(Number) as [number, number];
+      expect(
+        (onCut(a) && onCut(b)) || (sheetBorder(a) && sheetBorder(b)),
+        `edge ${key} is neither on the cut nor on the sheet border`,
+      ).toBe(true);
+    }
+  });
+
+  it('reuses a vertex that lies exactly on the cut and leaves no degenerate triangle', () => {
+    const part = sheet(6, 6);
+    const before = part.positions.length / 3;
+    const cut = clipPart(part, (x) => x);
+    expect(cut).toEqual([]);
+    expect(part.positions.length / 3).toBeLessThan(before);
+    const seen = new Set<string>();
+    for (let i = 0; i < part.positions.length / 3; i++) {
+      const key = Array.from(part.positions.subarray(i * 3, i * 3 + 3)).join(',');
+      expect(seen.has(key)).toBe(false);
+      seen.add(key);
+    }
+    for (let t = 0; t < part.indices.length; t += 3) {
+      const [a, b, c] = [0, 1, 2].map((k) => part.indices[t + k]! * 3) as [number, number, number];
+      const p = part.positions;
+      const ux = p[b]! - p[a]!;
+      const uy = p[b + 1]! - p[a + 1]!;
+      const uz = p[b + 2]! - p[a + 2]!;
+      const vx = p[c]! - p[a]!;
+      const vy = p[c + 1]! - p[a + 1]!;
+      const vz = p[c + 2]! - p[a + 2]!;
+      expect(Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx)).toBeGreaterThan(
+        1e-9,
+      );
+    }
   });
 
   it('removes everything when the field is negative everywhere', () => {

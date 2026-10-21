@@ -195,6 +195,44 @@ function lipGapAcrossWidth(
   return { worst: Math.max(...gaps), samples: gaps.length };
 }
 
+function lipEdgeSteps(prims: ShippedPrimitive[], length: number): number[] {
+  const shell = prims.find((p) => p.material === 'nerite-shell')!;
+  const { positions, indices } = shell;
+  let frontZ = -Infinity;
+  let rearZ = Infinity;
+  let halfWidth = 0;
+  for (let v = 0; v < positions.length / 3; v++) {
+    if (positions[v * 3 + 1]! >= 0.1 * length) continue;
+    frontZ = Math.max(frontZ, positions[v * 3 + 2]!);
+    rearZ = Math.min(rearZ, positions[v * 3 + 2]!);
+    halfWidth = Math.max(halfWidth, Math.abs(positions[v * 3]!));
+  }
+  const fullCutZ = (rearZ + frontZ) / 2 + 0.15 * length;
+  const columns = 24;
+  const lowest: number[] = [];
+  for (let c = 0; c < columns; c++) {
+    const x = (-1 + (2 * c) / (columns - 1)) * 0.8 * halfWidth;
+    let low = Infinity;
+    for (let t = 0; t < indices.length; t += 3)
+      for (let k = 0; k < 3; k++) {
+        const a = indices[t + k]!;
+        const b = indices[t + ((k + 1) % 3)]!;
+        const xa = positions[a * 3]!;
+        const xb = positions[b * 3]!;
+        if ((xa - x) * (xb - x) > 0 || xa === xb) continue;
+        const f = (x - xa) / (xb - xa);
+        const z = positions[a * 3 + 2]! + f * (positions[b * 3 + 2]! - positions[a * 3 + 2]!);
+        if (z >= fullCutZ)
+          low = Math.min(
+            low,
+            positions[a * 3 + 1]! + f * (positions[b * 3 + 1]! - positions[a * 3 + 1]!),
+          );
+      }
+    lowest.push(low);
+  }
+  return lowest.slice(1).map((y, i) => Math.abs(y - lowest[i]!));
+}
+
 const SCANNED = [
   { dir: 'crab/hermit-crab', material: 'hermit-crab', solid: false },
   { dir: 'snail/nerite-snail', material: 'nerite-shell', solid: true },
@@ -209,6 +247,14 @@ describe('nerite seating', () => {
       const gap = lipGapAcrossWidth(await readLod('snail/nerite-snail', level), length);
       expect(gap.samples).toBeGreaterThan(0);
       expect(gap.worst).toBeLessThan(0.058 * length);
+    });
+  for (const level of [0, 1, 2])
+    it(`LOD${level} lip edge is smooth across the front width`, async () => {
+      const length = 0.02;
+      const steps = lipEdgeSteps(await readLod('snail/nerite-snail', level), length);
+      expect(steps.length).toBeGreaterThan(20);
+      for (const step of steps) expect(Number.isFinite(step)).toBe(true);
+      expect(Math.max(...steps)).toBeLessThan(0.04 * length);
     });
 });
 

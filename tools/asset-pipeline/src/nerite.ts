@@ -346,6 +346,7 @@ const LIP_FACE_DEPTH = 0.1;
 const LIP_TRIM = 0.03;
 const LIP_RAMP = 0.15;
 const LIP_SPAN = 0.85;
+const LIP_ENVELOPE = 3;
 
 function signedPow(v: number, exponent: number): number {
   return Math.sign(v) * Math.abs(v) ** exponent;
@@ -459,7 +460,7 @@ export function buildNeriteBody(footprint: ShellFootprint, length: number): Neri
   const mantleBottom = footH * 0.4;
   ellipsoid(
     [0, (mantleTop + mantleBottom) / 2, front - length * 0.3],
-    [halfWidth * 0.55, (mantleTop - mantleBottom) / 2, length * 0.26],
+    [halfWidth * 0.85, (mantleTop - mantleBottom) / 2, length * 0.26],
     SNAIL_PART_IDS.foot,
     0.4,
     0.3,
@@ -537,7 +538,8 @@ export interface LipEdgeSample {
 }
 
 /**
- * Lowest shell point of the front half at evenly spaced x across the lip, with the front-most z of each column.
+ * Upper envelope of the lowest shell points of the front half at evenly spaced x across the lip, so the height follows
+ * the top of the ragged edge and not its hanging tips; also gives the front-most z of each column.
  * Throws on a column with no shell vertex: the lip recipe no longer fits the scan.
  */
 export function measureLipEdge(
@@ -570,6 +572,15 @@ export function measureLipEdge(
         positions[i + 1]! < column.y
       )
         column.y = positions[i + 1]!;
+  const lowest = columns.map((s) => s.y);
+  columns.forEach((column, s) => {
+    for (
+      let k = Math.max(0, s - LIP_ENVELOPE);
+      k <= Math.min(columns.length - 1, s + LIP_ENVELOPE);
+      k++
+    )
+      column.y = Math.max(column.y, lowest[k]!);
+  });
   for (let pass = 0; pass < LIP_SMOOTH_PASSES; pass++) {
     const y = columns.map((s) => s.y);
     for (let s = 1; s + 1 < columns.length; s++)
@@ -578,7 +589,10 @@ export function measureLipEdge(
   return columns;
 }
 
-/** Splits every triangle along `field = 0`, keeps the part where it is >= 0 and returns the new vertices on the cut. */
+/**
+ * Splits every triangle along `field = 0`, keeps the part where it is >= 0 and returns the vertices it created on the
+ * cut. A vertex already exactly on the cut is reused, not duplicated.
+ */
 export function clipPart(part: Part, field: (x: number, y: number, z: number) => number): Vec3[] {
   const { positions, normals, uvs, indices } = part;
   const keys = Object.keys(part.extra);
@@ -599,6 +613,8 @@ export function clipPart(part: Part, field: (x: number, y: number, z: number) =>
     const key = lo * count + hi;
     const known = cutIndex.get(key);
     if (known !== undefined) return known;
+    if (values[lo] === 0) return lo;
+    if (values[hi] === 0) return hi;
     const t = values[lo]! / (values[lo]! - values[hi]!);
     const lerp = (source: ArrayLike<number>, width: number, out: number[]): void => {
       for (let c = 0; c < width; c++)
@@ -625,7 +641,10 @@ export function clipPart(part: Part, field: (x: number, y: number, z: number) =>
       const b = indices[t + ((k + 1) % 3)]!;
       const inA = values[a]! >= 0;
       if (inA) polygon.push(a);
-      if (inA !== values[b]! >= 0) polygon.push(cutVertex(a, b));
+      if (inA !== values[b]! >= 0) {
+        const cutAt = cutVertex(a, b);
+        if (cutAt !== a && cutAt !== b) polygon.push(cutAt);
+      }
     }
     for (let k = 1; k + 1 < polygon.length; k++)
       kept.push(polygon[0]!, polygon[k]!, polygon[k + 1]!);
@@ -717,6 +736,7 @@ export function tiltShell(part: Part, length: number, degrees: number): ShellFoo
       halfWidth = Math.max(halfWidth, Math.abs(positions[i]!));
     }
   const frontZ = max[2];
+  trimLip(part, halfWidth, (rearZ + frontZ) / 2, length);
   let lipUnderY = Infinity;
   const sliceFloor = new Map<number, number>();
   for (let i = 0; i < positions.length; i += 3) {
@@ -730,8 +750,6 @@ export function tiltShell(part: Part, length: number, degrees: number): ShellFoo
   let ceilingY = 0;
   for (const [slice, y] of sliceFloor)
     if (slice >= 3 && slice <= 10) ceilingY = Math.max(ceilingY, y);
-  const midZ = (rearZ + frontZ) / 2;
-  trimLip(part, halfWidth, midZ, length);
   return { halfWidth, rearZ, frontZ, rimY, lipUnderY, ceilingY };
 }
 
@@ -945,8 +963,7 @@ export async function buildNerite(recipe: NeriteRecipe, ctx: FishContext): Promi
         ),
         `re-simplified to ${recipe.bakeTriangles} triangles, box-projected into a fresh atlas and the colour re-baked from the scan's vertex colours, ${recipe.textureSize} px KTX2`,
         `shell pitched ${recipe.pitchDegrees} degrees nose-down and sunk into the foot so the lip edge tucks into the body mass`,
-        'ragged hanging flaps of the front lip clipped away along a smooth curve: triangles are split on the curve with position, uv and normal interpolated, so the lip ends in one clean edge',
-        'ragged hanging flaps of the front lip cut away below a smooth curve and the cut edge covered by a closed rim bead (a tube of the body part, foot part id, weight 0) laid along the lip',
+        'ragged hanging flaps and notches of the front lip clipped away along a smooth curve that follows the top of the ragged edge across the lip width: triangles are split on the curve with position, uv and normal interpolated, so the lip ends in one clean edge',
         'foot, mantle, head and two tentacles generated procedurally: lens-section foot with edge colour variation from a small ramp texture, mantle filling under the aperture, head and slender curved tentacles in front of the lip, deterministic',
         'origin moved to the centre of the foot on the ground',
         '_FIN_ID part ids 0 shell, 10 foot, 11 head, 12 tentacle; _FIN_MASK foot ripple weight and tentacle base-to-tip weight',
