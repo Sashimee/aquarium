@@ -30,7 +30,13 @@ import {
   yellowTang,
 } from './fixtures.ts';
 import { FOOD_STRIDE, FOOD_TYPES, type AteEvent } from './food.ts';
-import { SNAPSHOT_STRIDE, SnapshotField, SnapshotInterpolator, type Snapshot } from './snapshot.ts';
+import {
+  FishState,
+  SNAPSHOT_STRIDE,
+  SnapshotField,
+  SnapshotInterpolator,
+  type Snapshot,
+} from './snapshot.ts';
 import type { SimToy, ToyNudge } from './toys.ts';
 import { STEP_HZ, World, type WorldConfig } from './world.ts';
 
@@ -59,6 +65,19 @@ function nextSnapshot(client: SimClient): Promise<Snapshot> {
       resolve(s);
     });
   });
+}
+
+/** Steps by `steps` and resolves with the snapshot of the world at `tick`. */
+function stepTo(client: SimClient, steps: number, tick: number): Promise<Snapshot> {
+  const reached = new Promise<Snapshot>((resolve) => {
+    const off = client.onSnapshot((snapshot) => {
+      if (snapshot.tick < tick) return;
+      off();
+      resolve(snapshot);
+    });
+  });
+  client.step(steps);
+  return reached;
 }
 
 function nextError(client: SimClient): Promise<string> {
@@ -671,6 +690,66 @@ describe('sim worker bridge', () => {
     const failed = nextError(client);
     client.start();
     expect(await failed).toBe('clock exploded');
+  });
+
+  it('takes a light level sent with settle as adapted to, without restarting the clock', async () => {
+    const startledAfterLightsOut = async (settle?: boolean): Promise<number> => {
+      const { client } = connect();
+      const config = benchmarkConfig(1);
+      await client.init({
+        ...config,
+        species: [neonTetra],
+        fish: spawnMany(neonTetra.id, 20),
+      });
+      await stepTo(client, STEP_HZ, STEP_HZ);
+      client.setLight(0, settle);
+      let most = 0;
+      for (let k = 1; k <= 10; k++) {
+        const snapshot = await stepTo(client, 1, STEP_HZ + k);
+        let n = 0;
+        for (let o = SnapshotField.State; o < snapshot.data.length; o += SNAPSHOT_STRIDE) {
+          if (snapshot.data[o] === FishState.Startle) n++;
+        }
+        most = Math.max(most, n);
+      }
+      return most;
+    };
+    expect(await startledAfterLightsOut()).toBeGreaterThan(5);
+    expect(await startledAfterLightsOut(false)).toBeGreaterThan(5);
+    expect(await startledAfterLightsOut(true)).toBe(0);
+  });
+
+  it('leaves a world halted by a failing clock halted when the light is settled', async () => {
+    let calls = 0;
+    const { client } = connect({
+      now: () => {
+        calls++;
+        if (calls > 1) throw new Error('clock exploded');
+        return 0;
+      },
+    });
+    await client.init(benchmarkConfig(1));
+    const errors: string[] = [];
+    client.onError((m) => errors.push(m));
+    const failed = nextError(client);
+    client.start();
+    await failed;
+    const snapshots: number[] = [];
+    client.onSnapshot((s) => snapshots.push(s.tick));
+    client.setLight(0, true);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(errors).toEqual(['clock exploded']);
+    expect(snapshots).toEqual([]);
+    expect(calls).toBe(2);
+    expect((await stepTo(client, 1, 1)).tick).toBe(1);
+  });
+
+  it('refuses a light settle flag that is not a boolean', async () => {
+    const { client, clientPort } = connect();
+    await client.init(benchmarkConfig(1));
+    const refused = nextError(client);
+    clientPort.postMessage({ type: 'light', level: 0, settle: 'yes' });
+    expect(await refused).toMatch(/"light" settle must be a boolean/);
   });
 
   it('rejects init when the config is invalid', async () => {
