@@ -106,12 +106,13 @@ export const ledgerEntrySchema = z.strictObject({
 });
 export type LedgerEntry = z.infer<typeof ledgerEntrySchema>;
 
+export const ONE_TIME_REF = /^(plant|decor|background):/;
+
 export const walletResponseSchema = z.strictObject({
   wallet: walletSchema,
   ledger: z.array(ledgerEntrySchema),
   owned: z
     .array(itemRefSchema)
-    .optional()
     .describe(
       'every one-time item ref (plant:, decor:, background:) whose latest purchase or refund entry is a purchase, over the whole ledger and not just the returned page; fish, tanks, consumables and equipment tiers are never listed',
     ),

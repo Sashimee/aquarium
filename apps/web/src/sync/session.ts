@@ -13,7 +13,7 @@ import type {
   TankSize,
   User,
 } from '@aquarium/shared';
-import { DEFAULT_TANK_SIZE } from '@aquarium/shared';
+import { DEFAULT_TANK_SIZE, ONE_TIME_REF } from '@aquarium/shared';
 import type { EventBus } from '../engine/events';
 import { layoutKey } from '../interaction/decor/key';
 import type { InteractionEvents } from '../interaction/events';
@@ -68,8 +68,6 @@ export interface ShareOutcome {
 const ACTIVE_KEY = 'aquarium.activeTank';
 const LOAD_ATTEMPTS = 4;
 const LEAVE_FLUSH_MS = 3_000;
-
-const ONE_TIME_REF = /^(plant|decor|background):/;
 
 export class TankSession {
   private state: SessionState = INITIAL_STATE;
@@ -298,13 +296,9 @@ export class TankSession {
       this.walletApplied = seq;
       const before = this.state.balance;
       const gained = before !== null && wallet.balance > before ? wallet.balance - before : 0;
-      const released = new Set(wallet.released ?? []);
-      const owned = [...new Set([...this.state.owned, ...wallet.owned])].filter(
-        (ref) => !released.has(ref),
-      );
       this.patch({
         balance: wallet.balance,
-        owned,
+        owned: [...wallet.owned],
         ...(gained > 0 ? { earned: (this.state.earned ?? 0) + gained } : {}),
       });
     } catch (error) {
@@ -509,7 +503,9 @@ export class TankSession {
       this.walletApplied = ++this.walletSeq;
       this.patch({
         balance: bought.wallet.balance,
-        owned: [...new Set([...this.state.owned, itemRef])],
+        ...(ONE_TIME_REF.test(itemRef)
+          ? { owned: [...new Set([...this.state.owned, itemRef])] }
+          : {}),
       });
       const next = await this.deps.api.tank(tank.id);
       if (gen !== this.loadId) return;
