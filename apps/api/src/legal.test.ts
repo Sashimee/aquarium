@@ -350,6 +350,15 @@ describe('privacy and credits', () => {
       ).not.toThrow();
     });
 
+    it.each([
+      ['neolamprologus-brichardi', 'David J. Stang', 'CC-BY-SA-4.0'],
+      ['aulonocara-baenschi', 'Rjcastillo', 'CC-BY-SA-4.0'],
+      ['neolamprologus-multifasciatus', 'Richard A. Ingebrigtsen', 'CC-BY-SA-3.0'],
+    ])('accepts the approved %s photo and rejects another author', (species, author, licence) => {
+      expect(build({ ...photo, species, author, licence })).not.toThrow();
+      expect(build({ ...photo, species, author: 'Someone Else', licence })).toThrow(/not allowed/);
+    });
+
     it('accepts both approved pleco authors and rejects a third', () => {
       const pleco = { ...photo, species: 'bristlenose-pleco', licence: 'CC-BY-SA-4.0' };
       expect(build({ ...pleco, author: 'Júlio Reis' })).not.toThrow();
