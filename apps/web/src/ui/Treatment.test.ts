@@ -7,7 +7,13 @@ import { speciesNameMap } from '../sync/life';
 import type { TankSession } from '../sync/session';
 import { INITIAL_STATE, type SessionState } from '../sync/state';
 import { FishCard } from './FishCard';
-import { DoseWarning, PendingDoseWarning, QuarantineSection, Treatment } from './Treatment';
+import {
+  DoseConfirmation,
+  DoseWarning,
+  PendingDoseWarning,
+  QuarantineSection,
+  Treatment,
+} from './Treatment';
 
 const ich = {
   kind: 'ich' as const,
@@ -56,6 +62,55 @@ describe('Treatment', () => {
       state({ busy: true }),
     );
     expect(html.match(/disabled=""/g)).toHaveLength(2);
+  });
+});
+
+describe('Treatment held refusal', () => {
+  const sickTank = tankFixture({ fish: [fishFixture(FISH_1, { disease: ich })] });
+  const refusal = {
+    kind: 'ich' as const,
+    message: 'The water is too dirty for medicine.',
+    waterChange: true,
+  };
+  const render = (heldTankId: string) =>
+    renderToStaticMarkup(
+      createElement(Treatment, {
+        session,
+        state: state(),
+        tank: sickTank,
+        initialHeld: { tankId: heldTankId, pending: null, refusal },
+      }),
+    );
+
+  it('shows a refusal held for this tank', () => {
+    expect(render(sickTank.id)).toContain('The water is too dirty for medicine.');
+  });
+
+  it('drops a refusal held for another tank, so coming back to this one starts clean', () => {
+    expect(render('00000000-0000-4000-8000-0000000000bb')).not.toContain(
+      'The water is too dirty for medicine.',
+    );
+  });
+});
+
+describe('DoseConfirmation', () => {
+  it('asks for the Pearl price of a premium dose next to the buttons', () => {
+    const html = renderToStaticMarkup(
+      createElement(DoseConfirmation, {
+        pending: {
+          kind: 'ich',
+          potency: 'premium',
+          warnings: ['The water already holds a dose.'],
+        },
+        balance: 100,
+        onConfirm: () => undefined,
+        onCancel: () => undefined,
+      }),
+    );
+    expect(html).toContain('Buy premium');
+    expect(html).toContain('60 Pearls left');
+    expect(html).toContain('Dose anyway');
+    expect(html).toContain('Keep things as they are');
   });
 });
 
