@@ -1,6 +1,7 @@
+import { DEFAULT_BACKGROUND_ID } from '@aquarium/shared';
 import { lampIsOn } from '@aquarium/sim/lifecycle';
 import { describe, expect, it } from 'vitest';
-import { lampPhotoperiod, type LampHours } from '../engine/daylight';
+import { daylightAt, lampPhotoperiod, type LampHours } from '../engine/daylight';
 import { EventBus } from '../engine/events';
 import type { InteractionEvents } from '../interaction/events';
 import { LampFeed } from './lampFeed';
@@ -10,7 +11,15 @@ function setup() {
   const feed = new LampFeed(bus);
   const seen: LampHours[] = [];
   const loaded = (tankId: string) =>
-    bus.emit('tank:loaded', { tankId } as unknown as InteractionEvents['tank:loaded']);
+    bus.emit('tank:loaded', {
+      tankId,
+      biome: 'freshwater',
+      size: 'nano30',
+      fish: [],
+      decorLayout: [],
+      decorEdited: false,
+      backgroundId: DEFAULT_BACKGROUND_ID.freshwater,
+    });
   return { bus, feed, seen, sink: { setLampSchedule: (h: LampHours) => seen.push(h) }, loaded };
 }
 
@@ -31,9 +40,23 @@ describe('LampFeed', () => {
     expect(seen).toEqual([
       { onHour: 8, offHour: 20 },
       { onHour: 6, offHour: 18 },
-      { onHour: 8, offHour: 20 },
       { onHour: 14, offHour: 2 },
     ]);
+  });
+
+  it('keeps the old hours through a switch instead of flashing the default', () => {
+    const { feed, sink, seen, loaded, bus } = setup();
+    feed.attach(sink);
+    loaded('a');
+    bus.emit('tank:lamp', { tankId: 'a', onHour: 6, offHour: 18 });
+    bus.emit('tank:unloaded', { tankId: 'a', reason: 'switch' });
+    loaded('b');
+    expect(seen).toEqual([
+      { onHour: 8, offHour: 20 },
+      { onHour: 6, offHour: 18 },
+    ]);
+    bus.emit('tank:lamp', { tankId: 'a', onHour: 1, offHour: 2 });
+    expect(seen.at(-1)).toEqual({ onHour: 6, offHour: 18 });
   });
 
   it('follows a schedule change and ignores one for another tank', () => {
@@ -87,7 +110,7 @@ describe('the hood photoperiod for a wrapping schedule', () => {
     ] as const) {
       const p = lampPhotoperiod({ onHour: on, offHour: off });
       for (let hour = 0; hour < 24; hour++) {
-        const lit = (hour * 60 + 30 - p.onAt + 1440) % 1440 < ((off - on + 24) % 24) * 60;
+        const lit = daylightAt(hour * 60 + 30, p) > 0;
         expect(lit).toBe(lampIsOn(Date.UTC(2026, 0, 1, hour, 30), 0, on, off));
       }
     }

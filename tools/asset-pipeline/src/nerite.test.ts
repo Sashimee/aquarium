@@ -134,6 +134,7 @@ describe('buildNeriteBody', () => {
     rimY: 0.002,
     lipUnderY: 0.003,
     ceilingY: 0.006,
+    wallHalfWidthAt: () => 0.0075,
   };
   const built = buildNeriteBody(footprint, length);
   const body = built.part;

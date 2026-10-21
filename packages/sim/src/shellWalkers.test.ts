@@ -115,6 +115,7 @@ describe('snails and hermit crabs as walkers', () => {
       algae: 0.6,
       uneatenFood: 2,
       dtHours: 1,
+      litFraction: 1,
       surfaces: cleanupSurfaces({ width: 0.6, depth: 0.3, height: 0.36 }),
     });
     expect(result.algaeGrazed).toBeGreaterThan(0);

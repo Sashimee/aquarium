@@ -427,6 +427,7 @@ export class FishSystem {
     },
     () => this.wantedBatches(),
   );
+  private latestSimTimeS = 0;
   private readonly stream = new SimStream(STEP_DT, (snapshot) => this.sim.recycle(snapshot));
   private readonly held = new HeldFish();
   private support = new CarcassSupport([]);
@@ -862,6 +863,11 @@ export class FishSystem {
       }
     }
     return best === null ? null : this.follow(best);
+  }
+
+  /** Simulation seconds of the newest snapshot from the sim worker; 0 before the first. */
+  get simTimeS(): number {
+    return this.latestSimTimeS;
   }
 
   swimmingSpecies(): readonly string[] {
@@ -1527,6 +1533,7 @@ export class FishSystem {
     worker.addEventListener('error', this.simErrors.workerFailed);
     sim.onSnapshot((snapshot) => {
       this.stepAwaitingSnapshot = false;
+      this.latestSimTimeS = snapshot.time;
       this.stream.push(snapshot, performance.now());
     });
     sim.onAte((events) => {

@@ -453,6 +453,7 @@ export class TankSession {
         if (error instanceof ApiRequestError && error.code === 'conflict') {
           outcome.refusal = error.message;
           outcome.reason = error.reason;
+          return;
         }
         throw error;
       }
@@ -469,6 +470,7 @@ export class TankSession {
           : `The ${DISEASE_LABEL[kind].toLowerCase()} medicine is in the water.`,
       });
     });
+    if (outcome.refusal !== null) outcome.ok = false;
     return outcome;
   }
 
@@ -490,16 +492,23 @@ export class TankSession {
           idempotencyKey: key,
         });
       } catch (error) {
+        const refusal = moveRefusalText(error, fish.name, target.name);
+        if (refusal === null) {
+          if (!outcomeUnknown(error)) this.keys.settle(intent);
+          throw error;
+        }
+        outcome.refusal = refusal;
         if (!outcomeUnknown(error)) this.keys.settle(intent);
-        outcome.refusal = moveRefusalText(error, fish.name, target.name);
-        throw error;
+        return;
       }
       this.keys.settle(intent);
+      this.keys.settle(`move:${toTankId}:${fishId}:${tank.id}`);
       if (gen !== this.loadId) return;
       this.apply(result.source);
       this.apply(result.destination);
       this.patch({ notice: `${fish.name} was moved to ${target.name}.` });
     });
+    if (outcome.refusal !== null) outcome.ok = false;
     return outcome;
   }
 

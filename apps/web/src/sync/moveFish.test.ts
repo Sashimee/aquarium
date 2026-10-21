@@ -20,6 +20,16 @@ describe('moveTargets', () => {
     expect(moveTargets(quarantine, [display, other, quarantine])).toEqual([display, other]);
   });
 
+  it('skips tanks of the other kind of water', () => {
+    const reef = tankFixture({
+      id: '00000000-0000-4000-8000-0000000000c3',
+      name: 'Reef quarantine',
+      biome: 'reef',
+      quarantine: true,
+    });
+    expect(moveTargets(display, [display, reef, quarantine])).toEqual([quarantine]);
+  });
+
   it('has no target without a quarantine tank', () => {
     expect(moveTargets(display, [display, other])).toEqual([]);
   });

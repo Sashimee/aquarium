@@ -600,7 +600,7 @@ function partColours(ids: Float32Array, weights: Float32Array): Float32Array {
   return colors;
 }
 
-/** Distance between the mean root (weight under 0.1) and mean tip (weight over 0.9) of a limb piece. */
+/** Distance between the mean root (weight under 0.1) and mean tip (weight over 0.9) of a limb piece. Throws when the piece has no root or no tip vertices. */
 export function limbReach(
   positions: ArrayLike<number>,
   members: number[],
@@ -617,7 +617,10 @@ export function limbReach(
     if (target === root) roots++;
     else tips++;
   }
-  if (roots === 0 || tips === 0) return 0;
+  if (roots === 0 || tips === 0)
+    throw new Error(
+      `limbReach: piece of ${members.length} vertices has ${roots} root and ${tips} tip vertices; recheck the segmentation recipe`,
+    );
   return Math.hypot(...([0, 1, 2].map((a) => root[a]! / roots - tip[a]! / tips) as Vec3));
 }
 
@@ -662,7 +665,7 @@ export async function buildHermit(recipe: HermitRecipe, ctx: FishContext): Promi
       kind: p.kind as number,
       lateral: c[0] - hipLateral,
       ahead: c[2],
-      reach: limbReach(part.positions, members, seg.weight),
+      reach: p.kind === CRAB_KIND.leg ? limbReach(part.positions, members, seg.weight) : 0,
     };
   });
   const margin = recipe.minLegLateralFraction * standardLengthM;

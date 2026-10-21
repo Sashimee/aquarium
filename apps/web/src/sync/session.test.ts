@@ -1477,7 +1477,7 @@ describe('Pearls and the T70 request contract', () => {
       equipment: { ...tank.equipment, light: { ...tank.equipment.light, onHour, offHour } },
     });
 
-    it('announces each tank own hours on load and on a switch', async () => {
+    it("announces each tank's own hours on load and on a switch", async () => {
       const { rec, session } = setup([
         withLamp(tankFixture({ id: TANK_A }), 8, 20),
         withLamp(tankFixture({ id: TANK_B }), 14, 2),
@@ -1783,6 +1783,62 @@ describe('moving a fish', () => {
     await session.move(FISH_1, TANK_B);
     const keys = api.moveFish.mock.calls.map((c) => c[2].idempotencyKey);
     expect(keys[1]).not.toBe(keys[0]);
+  });
+
+  it('reports a refusal once, not also as a session error', async () => {
+    const { api, session } = setup([home(), quarantine]);
+    await session.setUser(verified);
+    api.moveFish.mockRejectedValue(refuse(409, 'tank_full'));
+    const errors: (string | null)[] = [];
+    session.subscribe(() => errors.push(session.getState().error));
+    await session.move(FISH_1, TANK_B);
+    expect(errors.filter((e) => e !== null)).toEqual([]);
+    api.moveFish.mockRejectedValue(refuse(429, null, 5));
+    await session.move(FISH_1, TANK_B);
+    expect(errors.filter((e) => e !== null)).toEqual([]);
+  });
+
+  it.each([
+    ['a network error', apiError(0, 'network')],
+    ['a timeout', apiError(0, 'timeout')],
+    ['a 500', apiError(500, 'internal')],
+    ['a 503', apiError(503, 'internal')],
+  ])('keeps the key after %s so the retry replays', async (_name, failure) => {
+    const { api, session } = setup([home(), quarantine]);
+    await session.setUser(verified);
+    api.moveFish.mockRejectedValue(failure);
+    await session.move(FISH_1, TANK_B);
+    await session.move(FISH_1, TANK_B);
+    const keys = api.moveFish.mock.calls.map((c) => c[2].idempotencyKey);
+    expect(keys[1]).toBe(keys[0]);
+  });
+
+  it('does not replay a held key after the fish has been moved back', async () => {
+    const { api, session } = setup([home(), quarantine]);
+    await session.setUser(verified);
+    const pip = fishFixture(FISH_1, { name: 'Pip' });
+    const at = '2026-02-01T12:01:00.000Z';
+    api.moveFish.mockRejectedValueOnce(apiError(0, 'network'));
+    await session.move(FISH_1, TANK_B);
+    api.moveFish.mockResolvedValueOnce({
+      source: tankFixture({ fish: [], lastTickAt: at }),
+      destination: tankFixture({ id: TANK_B, quarantine: true, fish: [pip], lastTickAt: at }),
+    });
+    await session.move(FISH_1, TANK_B);
+    api.moveFish.mockResolvedValueOnce({
+      source: tankFixture({ id: TANK_B, quarantine: true, fish: [], lastTickAt: at }),
+      destination: tankFixture({ fish: [pip], lastTickAt: at }),
+    });
+    await session.select(TANK_B);
+    await session.move(FISH_1, TANK_A);
+    await session.select(TANK_A);
+    api.moveFish.mockResolvedValue({
+      source: tankFixture({ fish: [], lastTickAt: at }),
+      destination: tankFixture({ id: TANK_B, quarantine: true, fish: [pip], lastTickAt: at }),
+    });
+    await session.move(FISH_1, TANK_B);
+    const keys = api.moveFish.mock.calls.map((c) => c[2].idempotencyKey);
+    expect(keys[2]).not.toBe(keys[0]);
   });
 
   it('falls back to the server text for a 409 without a known reason', async () => {

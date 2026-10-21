@@ -380,12 +380,14 @@ export class Feeding {
 
   /**
    * A pursued particle is followed out to a wider range and outside the visual cone; a scavenger
-   * keeps settled food as far as it can smell it.
+   * keeps settled food as far as it can smell it, and a snail or crab lets go of food lifted off
+   * the surface again.
    */
   private keeps(i: number, k: number): boolean {
     const { food, position } = this.host;
     const sp = this.host.species[at(this.host.speciesIndex, i)];
     if (sp === undefined) return false;
+    if (sp.walking?.escape === 'withdraw' && this.settled[k] !== 1) return false;
     const x = at(food.position, k * 3);
     const y = at(food.position, k * 3 + 1);
     const z = at(food.position, k * 3 + 2);
@@ -471,6 +473,7 @@ export class Feeding {
     const cone = sp.perceptionFov >= 2 * Math.PI ? -2 : Math.cos(sp.perceptionFov / 2);
     const motivation = this.motivation(i) * this.personality.appetite(i);
     const walker = sp.walking !== null;
+    const settledOnly = sp.walking?.escape === 'withdraw';
     const surfaceReach = FEEDING.walkerReachBodyLengths * at(this.host.bodyLength, i);
     const found = food.near(px, py, pz, Math.max(range, chemoRange), this.candidates);
     let best = -1;
@@ -481,6 +484,8 @@ export class Feeding {
       if (id === at(this.ignoreId, i) || this.buried[k] === 1) continue;
       if (this.isUnreachable(k)) continue;
       if (walker && at(this.surfaceDist, k) > surfaceReach) continue;
+      // A snail or hermit crab cannot lift off its surface to snatch food sinking past it.
+      if (settledOnly && this.settled[k] !== 1) continue;
       const preference = at(sp.foodPreference, at(food.type, k));
       if (preference <= 0 || food.remaining(k) <= EMPTY) continue;
       const x = at(food.position, k * 3);
