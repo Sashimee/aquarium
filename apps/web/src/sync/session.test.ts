@@ -1,4 +1,4 @@
-import type { ConflictReason, Tank } from '@aquarium/shared';
+import type { ConflictReason, Plant, Tank } from '@aquarium/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiRequestError, type ApiClient } from '../ui/api';
 import {
@@ -40,6 +40,7 @@ function apiMocks() {
     netFish: vi.fn(),
     care: vi.fn(),
     treat: vi.fn(),
+    trimPlant: vi.fn(),
     moveFish: vi.fn(),
     reportAte: vi.fn(),
     shareTank: vi.fn(),
@@ -2051,5 +2052,129 @@ describe('treating a tank', () => {
       expect.objectContaining({ quarantine: true, size: 'nano30' }),
     );
     expect(session.getState().activeId).toBe(TANK_B);
+  });
+});
+
+describe('growing plants', () => {
+  const fern = (over: Partial<Plant> = {}): Plant => ({
+    key: 's7',
+    assetId: 'plant-fern',
+    tintSeed: 7,
+    parentKey: null,
+    position: null,
+    size: 1.6,
+    minSize: 0.4,
+    maxSize: 2.4,
+    ...over,
+  });
+  const planted = (over: Partial<Tank> = {}) =>
+    tankFixture({ plants: [fern()], lastTickAt: '2026-02-01T00:00:00.000Z', ...over });
+  const refuse = (status: number, code: ApiRequestError['code'], reason?: ConflictReason) =>
+    new ApiRequestError(status, code, 'server words', {}, null, reason ?? null);
+
+  it('announces the plants on load and when a returned tank changes them', async () => {
+    const { api, rec, session } = setup([planted()]);
+    await session.setUser(verified);
+    expect(rec.of('tank:plants')).toEqual([{ tankId: TANK_A, plants: [fern()] }]);
+    api.care.mockResolvedValue(planted({ lastTickAt: '2026-02-01T00:05:00.000Z' }));
+    await session.careAction({ type: 'water_change' });
+    expect(rec.of('tank:plants')).toHaveLength(1);
+    api.care.mockResolvedValue(
+      planted({ plants: [fern({ size: 1.9 })], lastTickAt: '2026-02-01T00:10:00.000Z' }),
+    );
+    await session.careAction({ type: 'water_change' });
+    expect(rec.of('tank:plants')).toHaveLength(2);
+    expect(rec.of('tank:plants')[1]).toEqual({ tankId: TANK_A, plants: [fern({ size: 1.9 })] });
+  });
+
+  it('announces an empty list for a tank without growth state', async () => {
+    const { rec, session } = setup([tankFixture()]);
+    await session.setUser(verified);
+    expect(rec.of('tank:plants')).toEqual([{ tankId: TANK_A, plants: [] }]);
+  });
+
+  it('sends the trim with a key, applies the returned tank and announces the new size', async () => {
+    const { api, rec, session } = setup([planted()]);
+    await session.setUser(verified);
+    api.trimPlant.mockResolvedValue(
+      planted({ plants: [fern({ size: 1 })], lastTickAt: '2026-02-01T00:01:00.000Z' }),
+    );
+    const outcome = await session.trimPlant('s7', 1);
+    expect(outcome).toEqual({ ok: true, refusal: null });
+    expect(api.trimPlant).toHaveBeenCalledWith(TANK_A, {
+      plantKey: 's7',
+      size: 1,
+      idempotencyKey: expect.stringMatching(/^[A-Za-z0-9_-]{8,}$/),
+    });
+    expect(session.getState().tanks[0]?.plants?.[0]?.size).toBe(1);
+    expect(rec.of('tank:plants').at(-1)).toEqual({ tankId: TANK_A, plants: [fern({ size: 1 })] });
+    expect(session.getState().notice).toBe('The fern was trimmed.');
+  });
+
+  it.each([
+    [400, 'validation_failed', undefined, /cannot be cut back that far/],
+    [404, 'not_found', undefined, /no longer in this tank/],
+    [409, 'conflict', 'plant_not_grown', /has not grown past that size/],
+    [409, 'conflict', 'key_reused', /clashed with an earlier one/],
+    [429, 'rate_limited', undefined, /Too many trims/],
+  ] as const)('explains a %s %s refusal', async (status, code, reason, text) => {
+    const { api, session } = setup([planted()]);
+    await session.setUser(verified);
+    api.trimPlant.mockRejectedValue(refuse(status, code, reason));
+    const outcome = await session.trimPlant('s7', 1);
+    expect(outcome.ok).toBe(false);
+    expect(outcome.refusal).toMatch(text);
+    expect(session.getState().tanks[0]?.plants?.[0]?.size).toBe(1.6);
+  });
+
+  it('keeps the key after a rate limit or a lost reply and drops it after a refusal', async () => {
+    const { api, session } = setup([planted()]);
+    await session.setUser(verified);
+    api.trimPlant
+      .mockRejectedValueOnce(refuse(429, 'rate_limited'))
+      .mockRejectedValueOnce(apiError(0, 'network'))
+      .mockResolvedValueOnce(
+        planted({ plants: [fern({ size: 1 })], lastTickAt: '2026-02-01T00:01:00.000Z' }),
+      )
+      .mockRejectedValue(refuse(409, 'conflict', 'plant_not_grown'));
+    await session.trimPlant('s7', 1);
+    await session.trimPlant('s7', 1);
+    await session.trimPlant('s7', 1);
+    await session.trimPlant('s7', 0.5);
+    await session.trimPlant('s7', 0.5);
+    const keys = api.trimPlant.mock.calls.map((c) => c[1].idempotencyKey);
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).toBe(keys[0]);
+    expect(keys[4]).not.toBe(keys[3]);
+  });
+
+  it('starts a new key once a trim has worked', async () => {
+    const { api, session } = setup([planted()]);
+    await session.setUser(verified);
+    api.trimPlant.mockResolvedValue(
+      planted({ plants: [fern({ size: 1 })], lastTickAt: '2026-02-01T00:01:00.000Z' }),
+    );
+    await session.trimPlant('s7', 1);
+    await session.trimPlant('s7', 1);
+    const keys = api.trimPlant.mock.calls.map((c) => c[1].idempotencyKey);
+    expect(keys[1]).not.toBe(keys[0]);
+  });
+
+  it('uses another key for another size', async () => {
+    const { api, session } = setup([planted()]);
+    await session.setUser(verified);
+    api.trimPlant.mockRejectedValue(apiError(0, 'network'));
+    await session.trimPlant('s7', 1);
+    await session.trimPlant('s7', 0.8);
+    const keys = api.trimPlant.mock.calls.map((c) => c[1].idempotencyKey);
+    expect(keys[1]).not.toBe(keys[0]);
+  });
+
+  it('does not call the server for a plant the tank does not have, or with no tank', async () => {
+    const { api, session } = setup([tankFixture()]);
+    expect(await session.trimPlant('s7', 1)).toEqual({ ok: false, refusal: null });
+    await session.setUser(verified);
+    expect(await session.trimPlant('s7', 1)).toEqual({ ok: false, refusal: null });
+    expect(api.trimPlant).not.toHaveBeenCalled();
   });
 });

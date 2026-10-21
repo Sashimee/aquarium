@@ -122,6 +122,8 @@ const CollectionBook = lazy(() => import('./CollectionBook'));
 
 const LifeDialogsView = lazy(() => import('./LifeDialogs'));
 
+const TrimDialog = lazy(() => import('./TrimDialog'));
+
 function LifeDialogs({ onReview }: { onReview(): void }) {
   const state = useSessionState();
   if (!state.activeId || (!state.awayByTank[state.activeId] && !state.pendingNet)) return null;
@@ -333,6 +335,9 @@ function Shell() {
           </Suspense>
         )}
         <LifeDialogs onReview={() => dispatch({ type: 'open', panel: 'care' })} />
+        <Suspense fallback={null}>
+          <TrimDialog />
+        </Suspense>
         <div className={home ? 'stage' : 'stage modal'}>
           <Screen />
         </div>
