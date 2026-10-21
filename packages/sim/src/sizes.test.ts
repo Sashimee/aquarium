@@ -216,56 +216,50 @@ const AWAITING_CONTENT: Record<
     maxSlM: 0.135 / 1.231,
     maxTlM: 0.135,
     source:
-      'FishBase: 13.5 cm TL (Ref. 5598); no length-length relationship was looked up, so TL = ' +
+      'FishBase: 13.5 cm TL (Ref. 5598); FishBase has no length-length relationship, so TL = ' +
       '1.231 SL, the proportion of the lofted model',
   },
   'aulonocara-baenschi': {
     model: 'aulonocara-baenschi',
-    maxSlM: 0.13 / 1.25,
+    maxSlM: 0.13 / 1.2725,
     maxTlM: 0.13,
-    source:
-      'FishBase: 13 cm TL (Ref. 4975); no length-length relationship was looked up, so TL = 1.25 SL ' +
-      'is an assumption for cichlids',
+    source: 'FishBase: 13 cm TL (Ref. 4975); TL = 1.2725 SL',
   },
   'labidochromis-caeruleus': {
     model: 'labidochromis-caeruleus',
     maxSlM: 0.081,
-    maxTlM: 0.081 * 1.26,
-    source:
-      'FishBase: 8.1 cm SL (Ref. 5653); no length-length relationship was looked up, so TL = 1.26 ' +
-      'SL, the proportion of the lofted model',
+    maxTlM: 0.081 * 1.2085,
+    source: 'FishBase: 8.1 cm SL (Ref. 5653); TL = 1.2085 SL',
   },
   'melanochromis-auratus': {
     model: 'melanochromis-auratus-female',
     maxSlM: 0.11 / 1.23,
     maxTlM: 0.11,
     source:
-      'FishBase: 11 cm TL; no length-length relationship was looked up, so TL = 1.23 SL, the ' +
-      'proportion of the lofted model',
+      'FishBase: 11 cm TL (Ref. 5663); FishBase has no length-length relationship, so TL = ' +
+      '1.23 SL, the proportion of the lofted model',
   },
   'neolamprologus-brichardi': {
     model: 'neolamprologus-brichardi',
-    maxSlM: 0.09 / 1.25,
+    maxSlM: 0.09 / 1.3199,
     maxTlM: 0.09,
-    source:
-      'FishBase: 9 cm TL; no length-length relationship was looked up, so TL = 1.25 SL is an ' +
-      'assumption for cichlids',
+    source: 'FishBase: 9 cm TL (Ref. 5667); TL = 1.3199 SL',
   },
   'neolamprologus-multifasciatus': {
     model: 'neolamprologus-multifasciatus',
-    maxSlM: 0.05 / 1.25,
-    maxTlM: 0.05,
+    maxSlM: 0.04 / 1.25,
+    maxTlM: 0.04,
     source:
-      'Cichlidae.com species description: males to 5 cm TL, females rarely over 3.5 cm TL (no ' +
-      'FishBase maximum); TL = 1.25 SL is an assumption for cichlids',
+      'FishBase: 4 cm TL (Ref. 5667); FishBase has no length-length relationship, so TL = 1.25 SL ' +
+      'is an assumption for cichlids',
   },
   'pseudotropheus-demasoni': {
     model: 'pseudotropheus-demasoni',
     maxSlM: 0.063,
     maxTlM: 0.063 * 1.215,
     source:
-      'FishBase (as Chindongo demasoni): 6.3 cm SL (Ref. 40900); no length-length relationship was ' +
-      'looked up, so TL = 1.215 SL, the proportion of the model',
+      'FishBase (as Chindongo demasoni): 6.3 cm SL (Ref. 40900); FishBase has no length-length ' +
+      'relationship, so TL = 1.215 SL, the proportion of the lofted model',
   },
 };
 
