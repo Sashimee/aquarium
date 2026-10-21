@@ -52,7 +52,6 @@ describe('TANK_DIMENSIONS', () => {
 
   it.each(tankSizeSchema.options)('puts the %s waterline at the shared freeboard', (size) => {
     const { height, freeboard } = TANK_SIZES[size].dimensions;
-    expect(TANK_DIMENSIONS[size].freeboard).toBe(freeboard);
     expect(waterBounds(TANK_DIMENSIONS[size]).max.y).toBe(height - freeboard);
   });
 

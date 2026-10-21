@@ -26,6 +26,8 @@ const SAMPLER_SITES_WITH_FIXTURE_TESTS: Record<string, number> = {
   'engine/water/caustics.ts': 2,
 };
 
+const TSL_IMPORT = /\b(?:from|import)\s*\(?\s*['"]three\/(?:tsl|webgpu)['"]/;
+
 const TEXTURE_CALL = /(?<![.\w])(?:texture|textureBase|cubeTexture|cubeTextureBase)\s*\(/g;
 
 function biasedPlane(
@@ -124,6 +126,19 @@ function samplerCallSites(text: string): number {
   return chained + biasArgument;
 }
 
+/** Only TSL code is scanned, so a DOM `element.blur()` elsewhere is not read as a texture lookup. */
+function isTslSource(text: string): boolean {
+  return TSL_IMPORT.test(text);
+}
+
+function tslSamplerCallSites(text: string): number {
+  return isTslSource(text) ? samplerCallSites(text) : 0;
+}
+
+function callsTextureBlur(text: string): boolean {
+  return isTslSource(text) && /\.blur\s*\(/.test(codeOnly(text));
+}
+
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
@@ -181,6 +196,19 @@ describe('buildShaders sampler guard', () => {
     expect(samplerCallSites('const half = w / 2; texture(a, b).bias(x)')).toBe(1);
   });
 
+  it('scans only files that import TSL, so DOM blur() is not a lookup', () => {
+    const dom = "const el = document.querySelector('input');\nel?.blur();";
+    const tsl = "import { texture } from 'three/tsl';\nconst n = texture(t).blur(x);";
+    const webgpu =
+      "import {\n  MeshBasicNodeMaterial,\n} from 'three/webgpu';\nm.colorNode = texture(t).blur(x);";
+    expect(tslSamplerCallSites(dom)).toBe(0);
+    expect(callsTextureBlur(dom)).toBe(false);
+    expect(tslSamplerCallSites(tsl)).toBe(1);
+    expect(callsTextureBlur(tsl)).toBe(true);
+    expect(callsTextureBlur(webgpu)).toBe(true);
+    expect(callsTextureBlur("import { Vector3 } from 'three';\ntexture(t).blur(x);")).toBe(false);
+  });
+
   it('covers every biased or gradient lookup with a fixture-built shader', () => {
     const sites = Object.fromEntries(
       sourceFiles(SRC)
@@ -188,7 +216,7 @@ describe('buildShaders sampler guard', () => {
           (file) =>
             [
               relative(SRC, file).split('\\').join('/'),
-              samplerCallSites(readFileSync(file, 'utf8')),
+              tslSamplerCallSites(readFileSync(file, 'utf8')),
             ] as const,
         )
         .filter(([, count]) => count > 0)
@@ -202,7 +230,7 @@ describe('buildShaders sampler guard', () => {
   // later keeps it and loses its sampler. Neither a fixture nor a swap guard can vouch for that.
   it('never calls TextureNode.blur(); use .bias() with a guarded texture instead', () => {
     const callers = sourceFiles(SRC)
-      .filter((file) => /\.blur\s*\(/.test(codeOnly(readFileSync(file, 'utf8'))))
+      .filter((file) => callsTextureBlur(readFileSync(file, 'utf8')))
       .map((file) => relative(SRC, file));
     expect(callers).toEqual([]);
   });
