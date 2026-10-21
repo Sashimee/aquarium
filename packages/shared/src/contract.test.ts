@@ -268,6 +268,16 @@ describe('care events', () => {
         payload: { metric: 'ph', state: 'high' },
       }).success,
     ).toBe(false);
+    const moved = {
+      ...base,
+      kind: 'fish_moved',
+      payload: { fishId: id, direction: 'out', otherTankId: id2 },
+    };
+    expect(careEventSchema.safeParse(moved).success).toBe(true);
+    expect(
+      careEventSchema.safeParse({ ...moved, payload: { ...moved.payload, direction: 'up' } })
+        .success,
+    ).toBe(false);
     expect(replayQuerySchema.parse({ since: ts }).limit).toBe(200);
     expect(replayQuerySchema.safeParse({ since: ts, limit: '501' }).success).toBe(false);
     expect(replayQuerySchema.safeParse({}).success).toBe(false);

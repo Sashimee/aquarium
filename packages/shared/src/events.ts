@@ -69,6 +69,7 @@ export const careEventKindSchema = z.enum([
   'born',
   'sick',
   'water_alert',
+  'fish_moved',
 ]);
 
 export const waterAlertMetricSchema = z.enum(['ammonia', 'nitrite', 'algae']);
@@ -117,6 +118,16 @@ export const careEventSchema = z.discriminatedUnion('kind', [
     ...eventBase,
     kind: z.literal('water_alert'),
     payload: z.strictObject({ metric: waterAlertMetricSchema, state: z.enum(['high', 'normal']) }),
+  }),
+  z.strictObject({
+    ...eventBase,
+    kind: z.literal('fish_moved'),
+    payload: z.strictObject({
+      fishId: idSchema,
+      direction: z.enum(['in', 'out']),
+      otherTankId: idSchema,
+      key: idempotencyKeySchema.optional(),
+    }),
   }),
 ]);
 export type CareEvent = z.infer<typeof careEventSchema>;

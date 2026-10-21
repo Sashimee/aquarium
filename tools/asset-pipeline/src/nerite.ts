@@ -269,6 +269,9 @@ function fan(rings: Rings, ring: number, centre: number, segments: number, flip:
 }
 const FOOT_SEGMENTS = 40;
 const FOOT_ROUNDNESS = 2.2;
+// A squarer cross-section, clamped to the shell's inner width, fills the wedge under the shell's hanging side wall.
+const MANTLE_SQUARENESS = 0.5;
+const MANTLE_WALL_CLEARANCE = 0.92;
 const HEAD_SEGMENTS = 16;
 const HEAD_RINGS = 8;
 const TENTACLE_SIDES = 6;
@@ -338,6 +341,8 @@ export interface ShellFootprint {
   lipUnderY: number;
   /** Height of the roof of the aperture cavity. */
   ceilingY: number;
+  /** Half-width of the shell wall at z, below the aperture roof. */
+  wallHalfWidthAt: (z: number) => number;
 }
 
 const LIP_SAMPLES = 25;
@@ -432,17 +437,28 @@ export function buildNeriteBody(footprint: ShellFootprint, length: number): Neri
 
   const headCentre: Vec3 = [0, footH * 0.72, front - length * 0.12];
   const headRadius: Vec3 = [halfWidth * 0.27, footH * 0.55, length * 0.12];
-  const ellipsoid = (centre: Vec3, radius: Vec3, id: number, weight: number, v: number): void => {
+  const ellipsoid = (
+    centre: Vec3,
+    radius: Vec3,
+    id: number,
+    weight: number,
+    v: number,
+    squareness = 1,
+    limitX?: (z: number) => number,
+  ): void => {
     const ringStarts: number[] = [];
     for (let r = 1; r < HEAD_RINGS; r++) {
       const phi = (r / HEAD_RINGS) * Math.PI;
       const points: Vec3[] = [];
       for (let k = 0; k < HEAD_SEGMENTS; k++) {
         const angle = (k / HEAD_SEGMENTS) * Math.PI * 2;
+        const z = centre[2] + radius[2] * Math.cos(phi);
+        const x = centre[0] + radius[0] * Math.sin(phi) * signedPow(Math.cos(angle), squareness);
+        const reach = limitX ? limitX(z) : Infinity;
         points.push([
-          centre[0] + radius[0] * Math.sin(phi) * Math.cos(angle),
-          centre[1] + radius[1] * Math.sin(phi) * Math.sin(angle),
-          centre[2] + radius[2] * Math.cos(phi),
+          clamp(x, -reach, reach),
+          centre[1] + radius[1] * Math.sin(phi) * signedPow(Math.sin(angle), squareness),
+          z,
         ]);
       }
       ringStarts.push(pushRing(rings, points, id, weight));
@@ -457,14 +473,16 @@ export function buildNeriteBody(footprint: ShellFootprint, length: number): Neri
       stitch(rings, ringStarts[r]!, ringStarts[r + 1]!, HEAD_SEGMENTS);
     fan(rings, ringStarts[ringStarts.length - 1]!, tip, HEAD_SEGMENTS, true);
   };
-  const mantleTop = Math.max(footH * 1.8, footprint.ceilingY - length * 0.03);
+  const mantleTop = Math.max(footH * 1.8, footprint.ceilingY - length * 0.01);
   const mantleBottom = footH * 0.4;
   ellipsoid(
     [0, (mantleTop + mantleBottom) / 2, front - length * 0.3],
-    [halfWidth * 0.85, (mantleTop - mantleBottom) / 2, length * 0.26],
+    [halfWidth * 1.3, (mantleTop - mantleBottom) / 2, length * 0.26],
     SNAIL_PART_IDS.foot,
     0.4,
     0.3,
+    MANTLE_SQUARENESS,
+    (z) => footprint.wallHalfWidthAt(z) * MANTLE_WALL_CLEARANCE,
   );
   ellipsoid(headCentre, headRadius, SNAIL_PART_IDS.head, 0, 0.4);
 
@@ -751,7 +769,24 @@ export function tiltShell(part: Part, length: number, degrees: number): ShellFoo
   let ceilingY = 0;
   for (const [slice, y] of sliceFloor)
     if (slice >= 3 && slice <= 10) ceilingY = Math.max(ceilingY, y);
-  return { halfWidth, rearZ, frontZ, rimY, lipUnderY, ceilingY };
+  const wall = new Map<number, number>();
+  const sliceOf = (z: number): number => Math.round((z - rearZ) / (0.04 * length));
+  for (let i = 0; i < positions.length; i += 3)
+    if (positions[i + 1]! <= ceilingY) {
+      const slice = sliceOf(positions[i + 2]!);
+      wall.set(slice, Math.max(wall.get(slice) ?? 0, Math.abs(positions[i]!)));
+    }
+  const known = [...wall.keys()];
+  const wallHalfWidthAt = (z: number): number => {
+    const at = (z - rearZ) / (0.04 * length);
+    const lo = Math.floor(at);
+    const nearest = (slice: number): number =>
+      wall.get(known.reduce((a, b) => (Math.abs(b - slice) < Math.abs(a - slice) ? b : a)))!;
+    const a = wall.get(lo) ?? nearest(lo);
+    const b = wall.get(lo + 1) ?? nearest(lo + 1);
+    return a + (b - a) * (at - lo);
+  };
+  return { halfWidth, rearZ, frontZ, rimY, lipUnderY, ceilingY, wallHalfWidthAt };
 }
 
 /** Orients, scales and seats the scanned shell: +z forward, +y up, ground at y = 0, origin under the shell's centre. */

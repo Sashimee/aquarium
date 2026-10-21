@@ -7,7 +7,7 @@ import { speciesNameMap } from '../sync/life';
 import type { TankSession } from '../sync/session';
 import { INITIAL_STATE, type SessionState } from '../sync/state';
 import { FishCard } from './FishCard';
-import { QuarantineSection, Treatment } from './Treatment';
+import { DoseWarning, QuarantineSection, Treatment } from './Treatment';
 
 const ich = {
   kind: 'ich' as const,
@@ -97,5 +97,29 @@ describe('QuarantineSection', () => {
     expect(away).toContain('Open Quarantine');
     expect(away).not.toContain('Set up the quarantine tank');
     expect(render([tank, q], q)).toContain('You are looking at the quarantine tank');
+  });
+});
+
+describe('DoseWarning', () => {
+  const warnings = ['The water already holds a dose.'];
+
+  it('shows the warning and, for a premium dose, the price once', () => {
+    const html = renderToStaticMarkup(
+      createElement(DoseWarning, {
+        warnings,
+        cost: { label: 'premium ich medicine', price: 40 },
+        balance: 100,
+      }),
+    );
+    expect(html).toContain('The water already holds a dose.');
+    expect(html).toContain('Buy premium ich medicine for 40 Pearls?');
+    expect(html).toContain('60 Pearls left');
+  });
+
+  it('shows no price for a free dose', () => {
+    const html = renderToStaticMarkup(
+      createElement(DoseWarning, { warnings, cost: null, balance: 100 }),
+    );
+    expect(html).not.toContain('Buy');
   });
 });

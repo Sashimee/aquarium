@@ -126,6 +126,17 @@ export function describeEvent(event: CareEvent, fish: FishNames, names: SpeciesN
         text: `${fishLabel(fish, event.payload.fishId)} ${CAUSE_TEXT[event.payload.cause]}.`,
         tone: 'loss',
       };
+    case 'fish_moved': {
+      const who = fishLabel(fish, event.payload.fishId);
+      return {
+        ...base,
+        text:
+          event.payload.direction === 'out'
+            ? `${who} was moved to another tank.`
+            : `${who} was moved here from another tank.`,
+        tone: 'calm',
+      };
+    }
     case 'water_alert': {
       const metric = METRIC_TEXT[event.payload.metric];
       return event.payload.state === 'high'
