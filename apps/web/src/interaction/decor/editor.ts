@@ -50,8 +50,8 @@ function seeded(item: DecorItem): DecorItem {
 }
 
 /** Plant keys are built from the seed, so a new piece must not share one with any piece in the tank. */
-function uniqueSeed(item: DecorItem, taken: ReadonlySet<number>): number {
-  let seed = legacyTintSeed(item);
+export function uniqueSeed(hash: number, taken: ReadonlySet<number>): number {
+  let seed = hash;
   while (taken.has(seed)) seed = (seed + 1) >>> 0;
   return seed;
 }
@@ -225,7 +225,10 @@ export class DecorEditor {
       position: [fitted.position[0], rest + dropHeight, fitted.position[2]],
     });
     const taken = new Set(this.list.map((p) => p.item.tintSeed ?? legacyTintSeed(p.item)));
-    const piece: Piece = { id, item: { ...placed, tintSeed: uniqueSeed(placed, taken) } };
+    const piece: Piece = {
+      id,
+      item: { ...placed, tintSeed: uniqueSeed(legacyTintSeed(placed), taken) },
+    };
     this.list = [...this.list, piece];
     this.drops.set(id, { body: startDrop(piece.item.position[1]), restY: rest });
     this.selectedId = id;
