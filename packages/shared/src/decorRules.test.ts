@@ -1,7 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { presetLayoutSchema } from './species.js';
-import { decorPositionLimits, findDecorProblems, isDecorAssetForBiome } from './decorRules.js';
+import type { Biome } from './common.js';
+import {
+  DECOR_ASSET_IDS,
+  decorPositionLimits,
+  findDecorProblems,
+  isDecorAssetForBiome,
+} from './decorRules.js';
 
 const read = (path: string): unknown =>
   JSON.parse(readFileSync(new URL(`../../../${path}`, import.meta.url), 'utf8'));
@@ -30,12 +36,11 @@ describe('decor rules', () => {
     'background',
     'audio',
   ]);
+  const BIOMES = Object.keys(DECOR_ASSET_IDS) as Biome[];
   const unclassified = (assets: { id: string; kind: string }[]) =>
     assets
       .filter((a) => !NOT_DECOR.has(a.kind))
-      .filter(
-        (a) => !isDecorAssetForBiome('freshwater', a.id) && !isDecorAssetForBiome('reef', a.id),
-      )
+      .filter((a) => !BIOMES.some((biome) => isDecorAssetForBiome(biome, a.id)))
       .map((a) => a.id);
 
   it('covers every catalog asset a layout can hold in at least one biome', () => {
@@ -47,6 +52,21 @@ describe('decor rules', () => {
 
   it('flags an unclassified asset of a kind it has never seen', () => {
     expect(unclassified([{ id: 'ship-wreck', kind: 'ornament' }])).toEqual(['ship-wreck']);
+  });
+
+  it('keeps the malawi and tanganyika decor cichlid-only', () => {
+    for (const id of [
+      'malawi-boulder-03',
+      'malawi-boulder-05',
+      'malawi-rock-07',
+      'rock-pile-stack',
+      'rock-pile-cave',
+      'neothauma-shell',
+    ]) {
+      expect(isDecorAssetForBiome('cichlid', id)).toBe(true);
+      expect(isDecorAssetForBiome('reef', id)).toBe(false);
+      expect(isDecorAssetForBiome('freshwater', id)).toBe(false);
+    }
   });
 
   it('keeps euphyllia ids reef-only', () => {
