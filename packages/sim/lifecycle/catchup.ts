@@ -8,6 +8,7 @@ import {
 import { crewCleanup, type CleanupSurfaces, type CrewMember } from '../src/crew.ts';
 import type { SimSpecies } from '../src/species.ts';
 import { HUNGER_PER_PORTION, MAX_CATCH_UP_MS, STEP_MINUTES, STEP_MS } from './params.ts';
+import { stepPlants, type PlantBounds, type PlantState, type PlantTable } from './plants.ts';
 import { stepTank } from './step.ts';
 import {
   appendCapped,
@@ -28,6 +29,13 @@ export interface CatchUpCrew {
   readonly surfaces: CleanupSurfaces;
 }
 
+/** The planting's offline model; `state` is already reconciled with the decor layout. */
+export interface CatchUpPlants {
+  readonly table: PlantTable;
+  readonly state: readonly PlantState[];
+  readonly bounds: PlantBounds;
+}
+
 export interface CatchUpInput extends TankEnvironment {
   readonly state: LifecycleState;
   readonly fromMs: number;
@@ -37,10 +45,12 @@ export interface CatchUpInput extends TankEnvironment {
   readonly breeding: BreedingTable;
   readonly breedingEnvironment: Omit<BreedingEnvironment, 'temperatureC'>;
   readonly crew?: CatchUpCrew;
+  readonly plants?: CatchUpPlants;
 }
 
 export interface CatchUpResult {
   readonly state: LifecycleState;
+  readonly plants: readonly PlantState[];
   readonly steps: number;
   readonly elapsedMinutes: number;
   readonly capped: boolean;
@@ -61,6 +71,7 @@ export function catchUp(input: CatchUpInput): CatchUpResult {
   const simFromMs = capped ? toMs - steps * STEP_MS : fromMs;
 
   let state = input.state;
+  let plants: readonly PlantState[] = input.plants?.state ?? [];
   const deaths: DeathRecord[] = [];
   const births: BirthRecord[] = [];
   const timeline: TimelineEntry[] = [];
@@ -87,7 +98,20 @@ export function catchUp(input: CatchUpInput): CatchUpResult {
       chemistryParams: input.chemistryParams,
       heaterSetpointC: setpoint,
     });
-    const cleaned = cleanStep(result.state, input, startMs + STEP_MS);
+    const crewCleaned = cleanStep(result.state, input, startMs + STEP_MS);
+    let cleaned = crewCleaned;
+    if (input.plants) {
+      const grown = stepPlants(plants, crewCleaned.water, {
+        nowMs: startMs + STEP_MS,
+        dtHours: STEP_MINUTES / 60,
+        litres: input.litres,
+        equipment: input.equipment,
+        table: input.plants.table,
+        bounds: input.plants.bounds,
+      });
+      plants = grown.plants;
+      cleaned = { ...crewCleaned, water: grown.water };
+    }
     const bred = stepBreeding(cleaned, {
       nowMs: startMs + STEP_MS,
       species: input.species,
@@ -111,6 +135,7 @@ export function catchUp(input: CatchUpInput): CatchUpResult {
 
   return {
     state,
+    plants,
     steps,
     elapsedMinutes: Math.round(Math.min(elapsed, MAX_CATCH_UP_MS) / 60_000),
     capped,
