@@ -251,3 +251,17 @@ export async function owns(tx: Tx, userId: string, itemRef: string): Promise<boo
     .limit(1);
   return row !== undefined;
 }
+
+export async function ownedRefs(tx: Tx, userId: string): Promise<string[]> {
+  const result = await tx.execute<{ item_ref: string }>(sql`
+    select item_ref from (
+      select distinct on (item_ref) item_ref, reason
+      from ledger
+      where user_id = ${userId} and source = 'game' and reason in ('purchase', 'refund') and item_ref is not null
+      order by item_ref, created_at desc, id desc
+    ) latest
+    where reason = 'purchase'
+    order by item_ref
+  `);
+  return result.rows.map((r) => r.item_ref);
+}

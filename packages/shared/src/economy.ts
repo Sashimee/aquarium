@@ -109,6 +109,12 @@ export type LedgerEntry = z.infer<typeof ledgerEntrySchema>;
 export const walletResponseSchema = z.strictObject({
   wallet: walletSchema,
   ledger: z.array(ledgerEntrySchema),
+  owned: z
+    .array(itemRefSchema)
+    .optional()
+    .describe(
+      'every item ref whose latest purchase or refund entry is a purchase, over the whole ledger and not just the returned page',
+    ),
 });
 export type WalletResponse = z.infer<typeof walletResponseSchema>;
 
