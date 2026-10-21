@@ -198,11 +198,13 @@ describe('walking invertebrates', () => {
       ...tetra,
       behaviour: { ...tetra.behaviour, traits },
     });
-    expect(issuePaths(noWalking(['cleaner']))).toEqual(['behaviour.traits']);
-    expect(issuePaths(noWalking(['biofilm-grazer', 'cleaner']))).toEqual([
-      'behaviour.traits',
-      'behaviour.traits',
-    ]);
+    expect(issuePaths(noWalking(['biofilm-grazer']))).toEqual(['behaviour.traits']);
+    expect(issuePaths(noWalking(['biofilm-grazer', 'shoal']))).toEqual(['behaviour.traits']);
+  });
+
+  it('lets a swimmer be a cleaner', () => {
+    const wrasse = { ...tetra, behaviour: { ...tetra.behaviour, traits: ['cleaner'] } };
+    expect(issuePaths(wrasse)).toEqual([]);
   });
 
   describe('speed bounds', () => {
