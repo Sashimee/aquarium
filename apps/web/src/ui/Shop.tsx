@@ -12,6 +12,7 @@ import { euroText, heaterWarning, priceText, speciesPrice } from '../sync/econom
 import { chooseEquipment, deviceOffers, equipmentRef, type DeviceOffer } from '../sync/equipment';
 import { checkLamp, clockText, hourOptions, lampSummary, localOffsetMinutes } from '../sync/lamp';
 import { canBuy, tankCapacity } from '../sync/life';
+import { fishNeedsConfirm } from '../sync/spending';
 import { checkFishName, suggestFishName } from '../sync/naming';
 import type { SessionState, TankSession } from '../sync/session';
 import { backgroundOptions } from './backgroundTitles';
@@ -43,15 +44,9 @@ export function ShopSections({ session, state, tank }: ShopProps) {
   const { spend, notice } = useSpend(session, state.balance);
   useEffect(() => {
     void session.refreshWallet();
-    const again = () => {
-      if (document.visibilityState === 'visible') void session.refreshWallet();
-    };
+    const again = () => void session.refreshWallet();
     window.addEventListener('focus', again);
-    document.addEventListener('visibilitychange', again);
-    return () => {
-      window.removeEventListener('focus', again);
-      document.removeEventListener('visibilitychange', again);
-    };
+    return () => window.removeEventListener('focus', again);
   }, [session]);
   return (
     <>
@@ -96,7 +91,7 @@ function FishShop({ session, state, tank, spend }: ShopProps & { spend: Spend })
     void spend({
       label: species.commonName,
       price,
-      confirm: false,
+      confirm: fishNeedsConfirm(stage, price),
       go: async () => {
         const ok = await session.buy(species.id, checked.name, stage);
         if (ok) setName('');

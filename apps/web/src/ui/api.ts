@@ -177,13 +177,15 @@ async function toError(res: Response): Promise<ApiRequestError> {
   );
 }
 
-/** The T70 contract: every add-fish names a stage and carries a key, so a retry cannot charge twice. */
 export interface WalletView {
   balance: number;
-  /** Item refs the ledger shows as bought, so the shop can mark them instead of offering a 409. */
+  /** Item refs the recent ledger shows as bought and not refunded, so the shop can mark them instead of offering a 409. */
   owned: readonly string[];
+  /** Item refs whose latest ledger entry is a refund, so an earlier purchase no longer counts. */
+  released?: readonly string[];
 }
 
+/** The T70 contract: every add-fish names a stage and carries a key, so a retry cannot charge twice. */
 export type AddFishInput = Omit<AddFishRequest, 'stage' | 'idempotencyKey'> & {
   stage: PurchasableStage;
   idempotencyKey: string;
@@ -681,10 +683,18 @@ export function createApiClient(
       const res = await send('/api/wallet');
       if (!res.ok) throw await toError(res);
       const body = await parsed(res, walletResponseSchema);
-      const owned = body.ledger
-        .filter((e) => e.reason === 'purchase' && e.itemRef !== null)
-        .map((e) => e.itemRef ?? '');
-      return { balance: body.wallet.balance, owned: [...new Set(owned)] };
+      const latest = new Map<string, boolean>();
+      for (const e of body.ledger) {
+        if (e.itemRef === null || latest.has(e.itemRef)) continue;
+        if (e.reason === 'purchase') latest.set(e.itemRef, true);
+        else if (e.reason === 'refund') latest.set(e.itemRef, false);
+      }
+      const refs = [...latest];
+      return {
+        balance: body.wallet.balance,
+        owned: refs.filter(([, bought]) => bought).map(([ref]) => ref),
+        released: refs.filter(([, bought]) => !bought).map(([ref]) => ref),
+      };
     },
     async purchase(request) {
       const body = validate(purchaseRequestSchema, request);
