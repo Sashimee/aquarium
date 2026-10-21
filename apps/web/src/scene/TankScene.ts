@@ -26,8 +26,8 @@ import {
   type EuphylliaVariant,
 } from './euphyllia';
 import { ColliderField, type CapsuleCollider, type Collider } from './colliders';
-import type { WaveMakerSettings } from '@aquarium/sim';
-import { CurrentField, type CurrentParameters } from './current';
+import type { FlowField } from '@aquarium/sim';
+import { CurrentField, reachCurrent, type CurrentParameters } from './current';
 import { fluorescenceLevel } from './coralStyle';
 import {
   createCoralGlowNode,
@@ -124,17 +124,16 @@ export class TankScene {
   readonly overlay: ColliderOverlay;
   private colliderField: ColliderField;
 
-  /** Drives plant, coral and anemone sway from the same pump the sim's fish feel; null removes it. */
-  setWaveMaker(settings: WaveMakerSettings | null, simTimeS = 0): void {
-    const { length, depth, height, freeboard, glass } = this.engine.tank.dimensions;
-    this.current.setWaveMaker(settings, {
-      minX: -length / 2 + glass,
-      maxX: length / 2 - glass,
-      minZ: -depth / 2 + glass,
-      maxZ: depth / 2 - glass,
-      minY: 0,
-      maxY: height - freeboard,
-    });
+  /**
+   * Sways plants, corals and anemones with the sim's pump. Pass `World.flowField` (null when
+   * there is no pump) so bounds, direction and strength are exactly what the fish feel, and
+   * call `syncWaveMaker` every frame with the snapshot's `time`.
+   */
+  setWaveMaker(field: FlowField | null, simTimeS: number): void {
+    this.current.setWaveMaker(field, simTimeS);
+  }
+
+  syncWaveMaker(simTimeS: number): void {
     this.current.syncWaveMaker(simTimeS);
   }
 
@@ -288,12 +287,17 @@ export class TankScene {
     const anchors: SceneAnchor[] = [];
     anemoneItems.forEach((item, i) => {
       const entry = catalog.get(item.assetId);
-      checkClearOfGlass(entry, item, preset.current ?? DEFAULT_CURRENT, extent);
+      checkClearOfGlass(
+        entry,
+        item,
+        reachCurrent(preset.current ?? DEFAULT_CURRENT, preset.biome),
+        extent,
+      );
       colliders.push(anemoneCollider(entry, item));
       anchors.push(anemoneAnchor(`anemone-${i + 1}`, entry, item));
     });
 
-    const current = preset.current ?? DEFAULT_CURRENT;
+    const current = reachCurrent(preset.current ?? DEFAULT_CURRENT, preset.biome);
     for (const [i, entry] of euphylliaItems.entries()) {
       const fullDetail = generateEuphyllia(entry.variant, entry.seed, 2);
       euphylliaItems[i] = { ...entry, fullDetail };
@@ -720,7 +724,7 @@ export function fitPresetToCatalog(
   dimensions: TankDimensions,
   catalog: Pick<AssetCatalog, 'get'>,
 ): PresetLayout {
-  const current = preset.current ?? DEFAULT_CURRENT;
+  const current = reachCurrent(preset.current ?? DEFAULT_CURRENT, preset.biome);
   return fitPresetToTank(preset, dimensions, boundsFromCatalog(catalog, current), (patch, axis) =>
     plantReach(patch.assetId, catalog.get(patch.assetId).bounds, current)(patch.scale[1], axis),
   );
@@ -742,7 +746,11 @@ export function scatterPresetPatches(
   const soft: CapsuleCollider[] = [];
   for (const patch of preset.plantPatches) {
     const bounds = catalog.get(patch.assetId).bounds;
-    const reach = plantReach(patch.assetId, bounds, preset.current ?? DEFAULT_CURRENT);
+    const reach = plantReach(
+      patch.assetId,
+      bounds,
+      reachCurrent(preset.current ?? DEFAULT_CURRENT, preset.biome),
+    );
     const ceiling = surfaceScaleCeiling(waterTop, bounds?.max[1] ?? FALLBACK_PLANT_HEIGHT);
     const instances = scatterPatch(patch, ground, blocked, extent, reach, ceiling);
     if (instances.length < patch.count) {

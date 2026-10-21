@@ -1,6 +1,7 @@
-import { Vector3, type Node } from 'three/webgpu';
-import { float, sin, uniform, vec3 } from 'three/tsl';
-import { FlowField, type FlowBounds, type WaveMakerSettings } from '@aquarium/sim';
+import { Vector3, type Node, type UniformNode } from 'three/webgpu';
+import { float, max, min, sin, uniform, vec3 } from 'three/tsl';
+import { DEFAULT_EQUIPMENT, equipmentProblems, type Biome } from '@aquarium/shared';
+import { WAVE_MAKER, type FlowField } from '@aquarium/sim';
 
 export interface CurrentParameters {
   /** Unit horizontal flow direction (x, z). */
@@ -10,6 +11,8 @@ export interface CurrentParameters {
   readonly gustPeriodS: number;
   /** 0 is a steady flow, 1 swings the speed between 0 and twice the mean. */
   readonly gustDepth: number;
+  /** Strongest pump the tank may run, m/s: reach and glass checks leave room for it. Default none. */
+  readonly pumpMps?: number;
 }
 
 const TWO_PI = Math.PI * 2;
@@ -64,23 +67,56 @@ export function sampleCurrent(
   out[2] = forward * dz + sideways * dx;
 }
 
+/** How far past its ambient lean, as a fraction of its height, the pump may push a tip. */
+export const PUMP_LEAN_HEIGHT = 0.15;
+/** The strongest pump the sim accepts; reach and glass checks assume it may be switched on. */
+export const PUMP_PEAK_MPS = WAVE_MAKER.maxSpeedMps;
+
+/** The current reach and glass checks use: biomes that may run a wave maker leave room for the strongest one. */
+export function reachCurrent(current: CurrentParameters, biome: Biome): CurrentParameters {
+  const pumpAllowed =
+    equipmentProblems(biome, { ...DEFAULT_EQUIPMENT, waveMaker: { tier: 1 } }).length === 0;
+  return { ...current, pumpMps: pumpAllowed ? PUMP_PEAK_MPS : 0 };
+}
+
 /**
- * The wave maker's push on swaying things at `timeS` as a horizontal velocity (m/s, tank space):
- * zero with no pump, along the pump direction (reversing with an alternating pair) otherwise.
+ * Lean of `shear` metres, soft-capped: linear up to `linear` (the ambient current's peak, so
+ * the pump-free scene is unchanged), then saturating at `linear + room` however hard it blows.
  */
-export function waveMakerPush(
-  field: FlowField | null,
-  timeS: number,
-  out: Float64Array | number[],
-): void {
-  if (field === null) {
-    out[0] = 0;
-    out[1] = 0;
-    return;
+export function limitLean(shear: number, linear: number, room: number): number {
+  const over = Math.max(shear - linear, 0);
+  return Math.min(shear, linear) + (over * room) / (room + over);
+}
+
+/** `limitLean` on a horizontal shear vector, keeping its direction. */
+export function limitLeanNode(shear: Node<'vec3'>, linear: number, room: number): Node<'vec3'> {
+  const length = max(shear.length(), 1e-6);
+  const over = max(length.sub(linear), 0);
+  const limited = min(length, linear).add(over.mul(room).div(over.add(room)));
+  return shear.mul(limited.div(length));
+}
+
+/** A swaying thing's root, with the pump's flow there as a multiple of the pump's amplitude. */
+export interface PumpRoot {
+  readonly gain: UniformNode<'vec3', Vector3>;
+  dispose(): void;
+}
+
+/** A time at which the pump is at its largest output, so dividing by it is safe. */
+function fullStrengthTime(field: FlowField): number {
+  const { periodS, speedMps } = field.settings;
+  let best = 0;
+  let bestAmplitude = 0;
+  for (const quarter of [0, 0.25, 0.5, 0.75]) {
+    const amplitude = Math.abs(field.amplitude(quarter * periodS));
+    if (amplitude > bestAmplitude) {
+      bestAmplitude = amplitude;
+      best = quarter * periodS;
+    }
   }
-  const { direction, speed } = field.sway(timeS);
-  out[0] = direction[0] * speed;
-  out[1] = direction[1] * speed;
+  if (!(speedMps * bestAmplitude > 0))
+    throw new RangeError('the wave maker has no output to sway with');
+  return best;
 }
 
 export class CurrentField {
@@ -90,7 +126,8 @@ export class CurrentField {
   readonly gustDepth = uniform(0.4);
   readonly elapsed = uniform(0);
   readonly flutterElapsed = uniform(0);
-  readonly waveMakerVelocity = uniform(new Vector3(0, 0, 0));
+  /** The pump's signed output in m/s, `speedMps * amplitude(t)`; times a root's gain it is the flow there. */
+  readonly pumpAmplitude = uniform(0);
 
   private params: CurrentParameters = {
     direction: [1, 0],
@@ -101,7 +138,9 @@ export class CurrentField {
   private timeS = 0;
   private waveField: FlowField | null = null;
   private waveTimeS = 0;
-  private readonly push = new Float64Array(2);
+  private gainTimeS = 0;
+  private readonly scratch = new Float64Array(3);
+  private readonly pumpListeners = new Set<() => void>();
 
   get parameters(): CurrentParameters {
     return this.params;
@@ -115,18 +154,65 @@ export class CurrentField {
     return this.waveField;
   }
 
-  /** Null, or a pump at speed 0, restores the ambient filter current alone. */
-  setWaveMaker(settings: WaveMakerSettings | null, bounds: FlowBounds): void {
-    this.waveField =
-      settings === null || settings.speedMps === 0 ? null : new FlowField(bounds, settings);
-    this.waveTimeS = 0;
-    this.applyWaveMaker();
+  /**
+   * The sim's flow field (`World.flowField`, null without a pump), so bounds, direction and
+   * strength are the ones the fish feel. `simTimeS` is the sim snapshot's `time`.
+   */
+  setWaveMaker(field: FlowField | null, simTimeS: number): void {
+    this.waveField = field;
+    this.gainTimeS = field === null ? 0 : fullStrengthTime(field);
+    this.syncWaveMaker(simTimeS);
+    for (const listener of this.pumpListeners) listener();
   }
 
-  /** Aligns the pump's phase with the sim's clock so plants and fish see the same pulse. */
+  /** Call every frame with the sim snapshot's `time`; the render clock never drives the pump. */
   syncWaveMaker(simTimeS: number): void {
-    this.waveTimeS = this.wrapWave(simTimeS);
-    this.applyWaveMaker();
+    this.waveTimeS = simTimeS;
+    const field = this.waveField;
+    this.pumpAmplitude.value =
+      field === null ? 0 : field.settings.speedMps * field.amplitude(simTimeS);
+  }
+
+  /**
+   * The pump's flow at a root as a multiple of `pumpAmplitude`, horizontal (x, z) into `out`.
+   * Read from `FlowField.sample` at the instant the pump is at full strength, so it is the sim's
+   * field, not a copy of it.
+   */
+  pumpGainAt(x: number, y: number, z: number, out: Float64Array | Float32Array | number[]): void {
+    const field = this.waveField;
+    if (field === null) {
+      out[0] = 0;
+      out[1] = 0;
+      return;
+    }
+    const full = field.settings.speedMps * field.amplitude(this.gainTimeS);
+    field.sample(x, y, z, this.gainTimeS, this.scratch);
+    out[0] = (this.scratch[0] ?? 0) / full;
+    out[1] = (this.scratch[2] ?? 0) / full;
+  }
+
+  /** Reruns `listener` whenever the pump is installed, changed or removed; returns its unsubscribe. */
+  onWaveMakerChange(listener: () => void): () => void {
+    this.pumpListeners.add(listener);
+    return () => this.pumpListeners.delete(listener);
+  }
+
+  /** A uniform holding the pump's gain at a root, kept current as the pump changes. */
+  pumpRoot(x: number, y: number, z: number): PumpRoot {
+    const gain = uniform(new Vector3());
+    const at = new Float64Array(2);
+    const refresh = () => {
+      this.pumpGainAt(x, y, z, at);
+      gain.value.set(at[0] ?? 0, 0, at[1] ?? 0);
+    };
+    refresh();
+    const release = this.onWaveMakerChange(refresh);
+    return { gain, dispose: release };
+  }
+
+  /** The pump's horizontal flow in the tank frame at a root with this gain. */
+  pumpVelocity(gain: Node<'vec3'>): Node<'vec3'> {
+    return gain.mul(this.pumpAmplitude);
   }
 
   configure(parameters: CurrentParameters): void {
@@ -147,25 +233,15 @@ export class CurrentField {
     this.timeS = (this.timeS + deltaS) % wrapPeriodS(this.params);
     this.elapsed.value = this.timeS;
     this.flutterElapsed.value = this.timeS % FLUTTER_PERIOD_S;
-    this.waveTimeS = this.wrapWave(this.waveTimeS + deltaS);
-    this.applyWaveMaker();
   }
 
   sample(x: number, y: number, z: number, out: Float64Array | number[]): void {
     sampleCurrent(this.params, x, y, z, this.timeS, out);
-    waveMakerPush(this.waveField, this.waveTimeS, this.push);
-    out[0] = (out[0] ?? 0) + (this.push[0] ?? 0);
-    out[2] = (out[2] ?? 0) + (this.push[1] ?? 0);
-  }
-
-  private wrapWave(timeS: number): number {
-    const period = this.waveField?.settings.periodS;
-    return period === undefined ? 0 : ((timeS % period) + period) % period;
-  }
-
-  private applyWaveMaker(): void {
-    waveMakerPush(this.waveField, this.waveTimeS, this.push);
-    this.waveMakerVelocity.value.set(this.push[0] ?? 0, 0, this.push[1] ?? 0);
+    const field = this.waveField;
+    if (field === null) return;
+    field.sample(x, y, z, this.waveTimeS, this.scratch);
+    out[0] = (out[0] ?? 0) + (this.scratch[0] ?? 0);
+    out[2] = (out[2] ?? 0) + (this.scratch[2] ?? 0);
   }
 
   velocityNode(position: Node<'vec3'>): Node<'vec3'> {
@@ -191,11 +267,10 @@ export class CurrentField {
     const vertical = this.speed
       .mul(VERTICAL_RATIO)
       .mul(sin(w.mul(t).sub(along.mul(VERTICAL_WAVENUMBER))));
-    const pump = this.waveMakerVelocity;
     return vec3(
-      forward.mul(dir.x).sub(sideways.mul(dir.z)).add(pump.x),
+      forward.mul(dir.x).sub(sideways.mul(dir.z)),
       vertical,
-      forward.mul(dir.z).add(sideways.mul(dir.x)).add(pump.z),
+      forward.mul(dir.z).add(sideways.mul(dir.x)),
     );
   }
 }
