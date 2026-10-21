@@ -1,6 +1,7 @@
 import {
   addFishRequestSchema,
   ateBatchRequestSchema,
+  type AteBatchRequest,
   backgroundIdSchema,
   careActionSchema,
   careEventSchema,
@@ -154,8 +155,8 @@ export interface TankRouteDeps {
 }
 
 export type Tx = Parameters<Parameters<Database['db']['transaction']>[0]>[0];
-type TankRow = typeof schema.tanks.$inferSelect;
-type FishRow = typeof schema.fish.$inferSelect;
+export type TankRow = typeof schema.tanks.$inferSelect;
+export type FishRow = typeof schema.fish.$inferSelect;
 
 const feedPayloadSchema = z.looseObject({ portion: z.number().positive() });
 const atePayloadSchema = z.looseObject({ fishId: idSchema, portion: z.number().positive() });
@@ -275,11 +276,11 @@ async function lockAndTick(
   return tickLocked(tx, deps, await lockTank(tx, tankId, user), user);
 }
 
-async function tickLocked(
+export async function tickLocked(
   tx: Tx,
   deps: TankRouteDeps,
   tank: TankRow,
-  user: SessionUser,
+  user: SessionUser | null,
 ): Promise<Ticked> {
   const now = deps.clock.now();
   const fishRows = await tx.select().from(schema.fish).where(eq(schema.fish.tankId, tank.id));
@@ -319,7 +320,7 @@ async function tickLocked(
       obstacles: plantObstacles(tank, deps.presets, deps.plants),
     },
     corals: { table: deps.corals, state: reconciledCorals },
-    graceEndsAtMs: user.createdAt.getTime() + GRACE_PERIOD_MS,
+    graceEndsAtMs: user ? user.createdAt.getTime() + GRACE_PERIOD_MS : 0,
     vacationFeeder: hasVacationFeeder(tank),
     breeding: new Map([...deps.species].map(([id, s]) => [id, s.breeding])),
     breedingEnvironment: {
@@ -368,8 +369,10 @@ async function tickLocked(
       observed.push({ species: b.species, kind: 'raised', atMs: result.advancedToMs });
     }
   }
-  await recordCollection(tx, user.id, deps.species, observed, new Date(now));
-  if (observed.length > 0) await claimAchievementRewards(tx, deps.economy, user.id, now);
+  if (user) {
+    await recordCollection(tx, user.id, deps.species, observed, new Date(now));
+    if (observed.length > 0) await claimAchievementRewards(tx, deps.economy, user.id, now);
+  }
   const byId = new Map([...fishRows, ...bornRows.values()].map((r) => [r.id, r]));
   const away: AwaySummary = {
     fromAt: tank.lastTickAt.toISOString(),
@@ -546,7 +549,12 @@ async function persistFish(
   return out;
 }
 
-async function persistState(tx: Tx, tank: TankRow, fishRows: FishRow[], state: LifecycleState) {
+export async function persistState(
+  tx: Tx,
+  tank: TankRow,
+  fishRows: FishRow[],
+  state: LifecycleState,
+) {
   await tx
     .update(schema.tanks)
     .set({ water: state.water, chemistry: state.chemistry, medicine: wireMedicine(state.medicine) })
@@ -554,7 +562,7 @@ async function persistState(tx: Tx, tank: TankRow, fishRows: FishRow[], state: L
   return persistFish(tx, fishRows, state);
 }
 
-async function render(
+export async function render(
   tx: Tx,
   ticked: Ticked,
   fishRows = ticked.fishRows,
@@ -620,6 +628,82 @@ async function render(
     })),
     ...(away ? { away } : {}),
   });
+}
+
+export type AteOutcome =
+  { replayed: true } | { replayed: false; fishRows: FishRow[]; tank: TankRow };
+
+export async function applyAteBatch(
+  tx: Tx,
+  ticked: Ticked,
+  body: AteBatchRequest,
+  nowMs: number,
+): Promise<AteOutcome> {
+  const tankId = ticked.tank.id;
+  if (body.batchId) {
+    const claimed = await tx
+      .insert(schema.ateBatches)
+      .values({ tankId, batchId: body.batchId })
+      .onConflictDoNothing()
+      .returning({ batchId: schema.ateBatches.batchId });
+    // The replay's payload isn't compared with the original, so a client reusing an id would
+    // drop reports silently; the caller's log is the only trace.
+    if (claimed.length === 0) return { replayed: true };
+  }
+  const windowMs = FEEDING_WINDOW_MINUTES * 60_000;
+  const recent = await tx
+    .select({ kind: schema.events.kind, payload: schema.events.payload })
+    .from(schema.events)
+    .where(
+      and(
+        eq(schema.events.tankId, tankId),
+        inArray(schema.events.kind, ['feed', 'ate']),
+        gte(schema.events.at, new Date(nowMs - windowMs)),
+      ),
+    );
+  let fedInWindow = 0;
+  let eatenInWindow = 0;
+  const eatenByFishInWindow = new Map<string, number>();
+  for (const e of recent) {
+    if (e.kind === 'feed') {
+      fedInWindow += feedPayloadSchema.parse(e.payload).portion;
+    } else {
+      const { fishId, portion } = atePayloadSchema.parse(e.payload);
+      eatenInWindow += portion;
+      eatenByFishInWindow.set(fishId, (eatenByFishInWindow.get(fishId) ?? 0) + portion);
+    }
+  }
+  const reports = body.reports.map((r) => ({
+    fishId: r.fishId,
+    portion: r.portion,
+    atMs: Date.parse(r.at),
+  }));
+  const applied = applyEating(ticked.state, reports, {
+    nowMs,
+    windowMs,
+    fedInWindow,
+    eatenInWindow,
+    eatenByFishInWindow,
+  });
+  if (!applied.ok) {
+    throw new HttpError(422, apiError('feeding_rejected', applied.reason));
+  }
+  const fishRows = await persistState(tx, ticked.tank, ticked.fishRows, applied.value);
+  const perFish = new Map<string, number>();
+  for (const r of reports) perFish.set(r.fishId, (perFish.get(r.fishId) ?? 0) + r.portion);
+  await tx.insert(schema.events).values(
+    [...perFish].map(([fishId, portion]) => ({
+      tankId,
+      at: new Date(nowMs),
+      kind: 'ate' as const,
+      payload: { fishId, portion },
+    })),
+  );
+  return {
+    replayed: false,
+    fishRows,
+    tank: { ...ticked.tank, water: applied.value.water, chemistry: applied.value.chemistry },
+  };
 }
 
 export function registerTankRoutes(deps: TankRouteDeps): void {
@@ -1326,74 +1410,13 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       const body = ateBatchRequestSchema.parse(req.body);
       throttle(user.id, 'ate');
       const result = await withTank(user, tankId, async (tx, ticked) => {
-        if (body.batchId) {
-          const claimed = await tx
-            .insert(schema.ateBatches)
-            .values({ tankId, batchId: body.batchId })
-            .onConflictDoNothing()
-            .returning({ batchId: schema.ateBatches.batchId });
-          if (claimed.length === 0) {
-            // The replay's payload isn't compared with the original, so a client reusing an id would
-            // drop reports silently; this log is the only trace.
-            req.log.debug({ tankId, batchId: body.batchId }, 'ate batch replay ignored');
-            return { tank: await render(tx, ticked) };
-          }
-        }
         const nowMs = clock.now();
-        const windowMs = FEEDING_WINDOW_MINUTES * 60_000;
-        const recent = await tx
-          .select({ kind: schema.events.kind, payload: schema.events.payload })
-          .from(schema.events)
-          .where(
-            and(
-              eq(schema.events.tankId, tankId),
-              inArray(schema.events.kind, ['feed', 'ate']),
-              gte(schema.events.at, new Date(nowMs - windowMs)),
-            ),
-          );
-        let fedInWindow = 0;
-        let eatenInWindow = 0;
-        const eatenByFishInWindow = new Map<string, number>();
-        for (const e of recent) {
-          if (e.kind === 'feed') {
-            fedInWindow += feedPayloadSchema.parse(e.payload).portion;
-          } else {
-            const { fishId, portion } = atePayloadSchema.parse(e.payload);
-            eatenInWindow += portion;
-            eatenByFishInWindow.set(fishId, (eatenByFishInWindow.get(fishId) ?? 0) + portion);
-          }
+        const outcome = await applyAteBatch(tx, ticked, body, nowMs);
+        if (outcome.replayed) {
+          req.log.debug({ tankId, batchId: body.batchId }, 'ate batch replay ignored');
+          return { tank: await render(tx, ticked) };
         }
-        const reports = body.reports.map((r) => ({
-          fishId: r.fishId,
-          portion: r.portion,
-          atMs: Date.parse(r.at),
-        }));
-        const applied = applyEating(ticked.state, reports, {
-          nowMs,
-          windowMs,
-          fedInWindow,
-          eatenInWindow,
-          eatenByFishInWindow,
-        });
-        if (!applied.ok) {
-          throw new HttpError(422, apiError('feeding_rejected', applied.reason));
-        }
-        const fishRows = await persistState(tx, ticked.tank, ticked.fishRows, applied.value);
-        const perFish = new Map<string, number>();
-        for (const r of reports) perFish.set(r.fishId, (perFish.get(r.fishId) ?? 0) + r.portion);
-        await tx.insert(schema.events).values(
-          [...perFish].map(([fishId, portion]) => ({
-            tankId,
-            at: new Date(nowMs),
-            kind: 'ate' as const,
-            payload: { fishId, portion },
-          })),
-        );
-        const tank = {
-          ...ticked.tank,
-          water: applied.value.water,
-          chemistry: applied.value.chemistry,
-        };
+        const { fishRows, tank } = outcome;
         return { tank: await render(tx, { ...ticked, tank }, fishRows) };
       });
       return result.tank;
