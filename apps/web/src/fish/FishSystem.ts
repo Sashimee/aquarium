@@ -30,6 +30,7 @@ import {
   type Stimulus,
   type TankSpaceWorldConfig,
 } from '@aquarium/sim';
+import type { DaylightChange } from '../engine/daylight';
 import type { Engine } from '../engine/Engine';
 import type { EventBus } from '../engine/events';
 import { releaseAll } from '../engine/lifecycle';
@@ -114,6 +115,7 @@ import {
   SimErrorGate,
   SimInitTimeout,
   SimWorldSpec,
+  sendLight,
   stageChanges,
   staleStages,
   startWorld,
@@ -643,10 +645,10 @@ export class FishSystem {
         this.timeScale = Number.isFinite(scale) ? Math.min(Math.max(scale, 1), MAX_TIME_SCALE) : 1;
         this.extraSteps = 0;
       }),
-      engine.events.on('engine:daylight', ({ level }) => this.setDaylight(level)),
+      engine.events.on('engine:daylight', (change) => this.setDaylight(change)),
       engine.events.on('engine:temporal-resolve', () => this.applyFeatures(engine.quality.tier)),
     );
-    this.setDaylight(engine.daylight);
+    this.setDaylight({ level: engine.daylight, settled: true });
   }
 
   /** Applies a saved-tank event; see `InteractionEvents` for the contract. */
@@ -918,10 +920,10 @@ export class FishSystem {
   }
 
   /** Fish pale at night by their species' sensitivity, and the sim lets them rest. */
-  private setDaylight(level: number): void {
-    this.light = level;
-    this.night = 1 - level;
-    if (!this.disposed && this.simReady) this.sim.setLight(level);
+  private setDaylight(change: DaylightChange): void {
+    this.light = change.level;
+    this.night = 1 - change.level;
+    if (!this.disposed && this.simReady) sendLight(this.sim, change);
   }
 
   dispose(): void {

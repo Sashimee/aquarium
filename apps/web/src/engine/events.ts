@@ -1,4 +1,5 @@
 import type { TankSize } from '@aquarium/shared';
+import type { DaylightChange } from './daylight';
 import type { LossRecovery } from './deviceLoss';
 import type { TankDimensions } from './tank/dimensions';
 import type { PhotoState } from './photo/PhotoMode';
@@ -21,8 +22,8 @@ export interface EngineEvents {
   /** The GPU device or WebGL context went away; nothing draws until `recovery` happens. */
   'engine:device-lost': { api: 'WebGPU' | 'WebGL'; message: string; recovery: LossRecovery };
   'engine:stats': EngineStats;
-  /** Hood light level from the photoperiod: 0 night .. 1 day. */
-  'engine:daylight': { level: number };
+  /** Hood light level from the photoperiod: 0 night .. 1 day; see `DaylightChange`. */
+  'engine:daylight': DaylightChange;
   /** Frames started or stopped going through a temporal resolve (TRAA). */
   'engine:temporal-resolve': { on: boolean };
   /** The tank was rebuilt at another size; `litres` is its water volume as drawn. */
