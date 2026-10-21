@@ -1,5 +1,4 @@
 import type { FlowField } from '@aquarium/sim';
-import type { TankDimensions } from '../engine/tank/dimensions';
 import type { EventBus } from '../engine/events';
 import type { InteractionEvents } from '../interaction/events';
 
@@ -16,33 +15,6 @@ export interface PumpSource {
   /** The flow field for a tier in the tank now on show; null for no pump. */
   field(tier: number): FlowField | null;
   simTimeS(): number;
-}
-
-export interface PumpHost {
-  onFrame(callback: () => void): () => void;
-  readonly tank: { readonly dimensions: TankDimensions };
-}
-
-/**
- * Mounts the pump on a scene and keeps it on the sim clock every frame, in the tank now on show.
- * Returns what to call when the scene goes: it stops the frame sync and detaches the scene.
- */
-export function bindPump(
-  feed: WaveMakerFeed,
-  host: PumpHost,
-  scene: PumpScene,
-  fieldFor: (tier: number, tank: TankDimensions) => FlowField | null,
-  simTimeS: () => number,
-): () => void {
-  feed.attachScene(scene, {
-    field: (tier) => fieldFor(tier, host.tank.dimensions),
-    simTimeS,
-  });
-  const stopFrames = host.onFrame(() => feed.syncScene());
-  return () => {
-    stopFrames();
-    feed.detachScene();
-  };
 }
 
 /**

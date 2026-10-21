@@ -806,12 +806,11 @@ describe('api client Pearls contract', () => {
     expect(await createApiClient(fetcher).wallet()).toEqual({
       balance: 420,
       owned: ['plant:java-fern'],
-      released: [],
     });
     expect(fetcher.mock.calls[0]?.[0]).toBe('/api/wallet');
   });
 
-  it('treats a purchase whose newest entry is a refund as released', async () => {
+  it('treats a purchase whose newest entry is a refund as no longer owned', async () => {
     const entry = (delta: number, reason: string, itemRef: string, key: string) => ({
       id: crypto.randomUUID(),
       userId: 'u1',
@@ -832,7 +831,6 @@ describe('api client Pearls contract', () => {
       .mockResolvedValue(json({ wallet: { balance: 420 }, ledger, owned: ['decor:boulder-01'] }));
     expect(await createApiClient(fetcher).wallet()).toMatchObject({
       owned: ['decor:boulder-01'],
-      released: ['plant:java-fern'],
     });
   });
 
@@ -858,11 +856,10 @@ describe('api client Pearls contract', () => {
       expect(await createApiClient(fetcher).wallet()).toEqual({
         balance: 10,
         owned: ['decor:boulder-01', 'plant:anubias'],
-        released: [],
       });
     });
 
-    it('owns an item refunded and bought again, and releases one only refunded', async () => {
+    it('owns an item refunded and bought again, and drops one only refunded', async () => {
       const ledger = [
         entry(-25, 'purchase', 'plant:java-fern', 'key-aaaaaaaa'),
         entry(25, 'refund', 'plant:java-fern', 'key-bbbbbbbb'),
@@ -874,7 +871,6 @@ describe('api client Pearls contract', () => {
       expect(await createApiClient(fetcher).wallet()).toEqual({
         balance: 10,
         owned: ['plant:java-fern'],
-        released: ['decor:boulder-01'],
       });
     });
 
@@ -886,13 +882,15 @@ describe('api client Pearls contract', () => {
       expect(await createApiClient(fetcher).wallet()).toEqual({
         balance: 10,
         owned: [],
-        released: [],
       });
     });
 
     it('rejects a wallet response without an owned list', async () => {
       const fetcher = vi.fn().mockResolvedValue(json({ wallet: { balance: 10 }, ledger: [] }));
-      await expect(createApiClient(fetcher).wallet()).rejects.toThrow();
+      await expect(createApiClient(fetcher).wallet()).rejects.toMatchObject({
+        status: 200,
+        code: 'unexpected_response',
+      });
     });
   });
 

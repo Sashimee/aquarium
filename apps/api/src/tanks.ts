@@ -88,7 +88,7 @@ import { registerMoveRoutes } from './moveFish.ts';
 import { registerTreatmentRoutes } from './treatment.ts';
 import { backgroundRef, licenseFor } from './items.ts';
 import type { Presets } from './presets.ts';
-import { legacyKey, legacyStage } from './legacyRequests.ts';
+import { legacyKey } from './legacyRequests.ts';
 import { findReplay, lockUserRow, lockWallet, owns, spend } from './wallet.ts';
 import { apiError, HttpError } from './errors.ts';
 import type { Limit, RateLimiter } from './rate-limit.ts';
@@ -1079,8 +1079,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           .code(400)
           .send(apiError('validation_failed', `Unknown species "${body.species}".`));
       }
-      const stage = legacyStage(body.stage);
-      const idempotencyKey = legacyKey(body.idempotencyKey);
+      const { stage, idempotencyKey } = body;
       const price = Object.hasOwn(economy.species, spec.id)
         ? economy.species[spec.id]?.[stage]
         : undefined;

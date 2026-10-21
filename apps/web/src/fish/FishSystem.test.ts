@@ -931,25 +931,6 @@ describe('FishSystem toys and display', () => {
     fish.dispose();
   });
 
-  it('takes the sim clock from snapshots of the running world only', async () => {
-    const { fish, worker, load, nextWorld, epoch, snapshot } = await bettaTank();
-    load();
-    await nextWorld();
-    snapshot(0, 0);
-    snapshot(0, 0);
-    const running = fish.simTimeS;
-    expect(running).toBeGreaterThan(0);
-    worker.emit({
-      type: 'snapshot',
-      epoch: epoch() + 7,
-      tick: 1,
-      time: 0.01,
-      buffer: new Float32Array(SNAPSHOT_STRIDE).buffer,
-    });
-    expect(fish.simTimeS).toBe(running);
-    fish.dispose();
-  });
-
   it('passes ball nudges of the current world on as velocity changes', async () => {
     const { fish, worker, epoch } = await bettaTank();
     const seen: BallNudge[] = [];

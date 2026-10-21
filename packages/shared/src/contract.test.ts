@@ -216,12 +216,13 @@ describe('tank and fish', () => {
     );
     expect(updateTankRequestSchema.safeParse({ name: 'New' }).success).toBe(true);
     expect(updateTankRequestSchema.safeParse({}).success).toBe(false);
-    expect(addFishRequestSchema.safeParse({ species: 'neon-tetra', name: 'Blip' }).success).toBe(
-      true,
-    );
-    expect(addFishRequestSchema.safeParse({ species: 'Neon Tetra', name: 'Blip' }).success).toBe(
-      false,
-    );
+    const buy = { stage: 'adult', idempotencyKey: 'abcdefgh1' };
+    expect(
+      addFishRequestSchema.safeParse({ species: 'neon-tetra', name: 'Blip', ...buy }).success,
+    ).toBe(true);
+    expect(
+      addFishRequestSchema.safeParse({ species: 'Neon Tetra', name: 'Blip', ...buy }).success,
+    ).toBe(false);
   });
 });
 

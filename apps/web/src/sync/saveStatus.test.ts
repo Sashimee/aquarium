@@ -3,17 +3,10 @@ import { SaveStatusMerge } from './saveStatus';
 
 function setup() {
   const seen: { status: string; message: string | null; source: string }[] = [];
-  const reports: { source: string; status: string }[] = [];
-  const merge = new SaveStatusMerge((status, message, source, reported) => {
-    seen.push({ status, message, source });
-    reports.push(reported);
-  });
-  return {
-    seen,
-    reports,
-    layout: merge.reporter('layout'),
-    background: merge.reporter('background'),
-  };
+  const merge = new SaveStatusMerge((status, message, source) =>
+    seen.push({ status, message, source }),
+  );
+  return { seen, layout: merge.reporter('layout'), background: merge.reporter('background') };
 }
 
 describe('SaveStatusMerge', () => {
@@ -22,17 +15,6 @@ describe('SaveStatusMerge', () => {
     layout('saving', null);
     layout('saved', null);
     expect(seen.map((s) => s.status)).toEqual(['saving', 'saved']);
-  });
-
-  it('reports which saver spoke and what it said, whatever status is shown', () => {
-    const { seen, reports, layout, background } = setup();
-    layout('error', 'nope');
-    background('saved', null);
-    expect(seen.at(-1)?.status).toBe('error');
-    expect(reports).toEqual([
-      { source: 'layout', status: 'error' },
-      { source: 'background', status: 'saved' },
-    ]);
   });
 
   it('lets an error outlast the other saver succeeding', () => {

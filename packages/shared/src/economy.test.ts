@@ -5,7 +5,6 @@ import { addFishRequestSchema } from './tank.js';
 import { DECOR_ASSET_IDS, VACATION_FEEDER_ASSET_ID } from './decorRules.js';
 import { diseaseKindSchema } from './fishState.js';
 import {
-  DEFAULT_PURCHASE_STAGE,
   decorPrice,
   economySchema,
   idempotencyKeySchema,
@@ -244,11 +243,16 @@ describe('economy contract', () => {
     expect(idempotencyKeySchema.safeParse('server:daily-care-2026-10-19').success).toBe(false);
   });
 
-  it('keeps add-fish backward compatible and takes a stage', () => {
+  it('requires add-fish to name a stage and carry a key', () => {
     const base = { species: 'neon-tetra', name: 'Blip' };
-    expect(addFishRequestSchema.parse(base).stage).toBeUndefined();
-    expect(DEFAULT_PURCHASE_STAGE).toBe('adult');
-    expect(addFishRequestSchema.parse({ ...base, stage: 'juvenile' }).stage).toBe('juvenile');
-    expect(addFishRequestSchema.safeParse({ ...base, stage: 'fry' }).success).toBe(false);
+    const full = { ...base, stage: 'juvenile', idempotencyKey: 'abcdefgh1' };
+    expect(addFishRequestSchema.parse(full).stage).toBe('juvenile');
+    for (const field of ['stage', 'idempotencyKey']) {
+      const rest = Object.fromEntries(Object.entries(full).filter(([key]) => key !== field));
+      const result = addFishRequestSchema.safeParse(rest);
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0]?.path).toEqual([field]);
+    }
+    expect(addFishRequestSchema.safeParse({ ...full, stage: 'fry' }).success).toBe(false);
   });
 });

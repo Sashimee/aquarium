@@ -38,7 +38,7 @@ import { mountUi } from './ui/mount';
 import { FeedGate } from './sync/feedGate';
 import { LampFeed } from './sync/lampFeed';
 import { RoomSeedFeed } from './sync/roomSeed';
-import { bindPump, WaveMakerFeed } from './sync/waveMakerFeed';
+import { WaveMakerFeed } from './sync/waveMakerFeed';
 import { awaitTankModules } from './tankLoad';
 
 function showFatal(container: HTMLElement, message: string): void {
@@ -252,6 +252,7 @@ async function boot(): Promise<void> {
       interaction,
     );
   });
+  engine.onFrame(() => waveMaker.syncScene());
   const exposePose = new URLSearchParams(window.location.search).has('e2e');
   engine.onFrame((deltaS) => {
     idleOrbit.update(deltaS, photo.active || exposePose);
@@ -318,7 +319,6 @@ async function boot(): Promise<void> {
       tracker.finish();
     });
   let sceneBiome: Biome | null = null;
-  let unbindPump = (): void => undefined;
   const showBackground = (state: InteractionEvents['background:state'] | undefined): void => {
     if (!state || state.biome !== sceneBiome) return;
     container.dataset['backgroundId'] = state.backgroundId ?? '';
@@ -335,7 +335,10 @@ async function boot(): Promise<void> {
       container.dataset['sceneBiome'] = scene.biome;
       scene.enableMovablePlants();
       fish.setSceneColliders(scene.colliderList);
-      unbindPump = bindPump(waveMaker, engine, scene, modules.pumpFieldFor, () => fish.simTimeS());
+      waveMaker.attachScene(scene, {
+        field: (tier) => modules.pumpFieldFor(tier, engine.tank.dimensions),
+        simTimeS: () => fish.simTimeS(),
+      });
       play = createPlaySystem(engine, scene, interaction, fish.sim, feedGate);
       playChoices.applyTo(play.controller);
       sceneDecor.mount(scene);
@@ -348,8 +351,7 @@ async function boot(): Promise<void> {
       delete container.dataset['backgroundId'];
       sceneBiome = null;
       sceneDecor.unmount();
-      unbindPump();
-      unbindPump = () => undefined;
+      waveMaker.detachScene();
       play?.dispose();
       play = null;
       fish.setAnchors([]);

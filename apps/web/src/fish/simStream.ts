@@ -92,16 +92,16 @@ export class SimStream {
     this.latest = null;
   }
 
-  /** True when the snapshot joined the stream; false when it was stale and handed back to `recycle`. */
-  push(snapshot: Snapshot, arrivalMs: number): boolean {
+  push(snapshot: Snapshot, arrivalMs: number): void {
     const current = this.current;
     if (current !== null && snapshot.epoch === current.epoch) {
-      return this.accept(snapshot, arrivalMs);
+      this.accept(snapshot, arrivalMs);
+      return;
     }
     const next = this.announced.get(snapshot.epoch);
     if (next === undefined) {
       this.recycle(snapshot);
-      return false;
+      return;
     }
     for (const epoch of this.announced.keys()) {
       if (epoch <= snapshot.epoch) this.announced.delete(epoch);
@@ -126,7 +126,7 @@ export class SimStream {
       this.previous = null;
       this.latest = null;
     }
-    return this.accept(snapshot, arrivalMs);
+    this.accept(snapshot, arrivalMs);
   }
 
   /** The interpolated frame at `nowMs` in the current layout, or null before its first snapshot. */
@@ -135,15 +135,14 @@ export class SimStream {
     return layout !== null && this.interpolator.sample(nowMs, layout.frame) ? layout.frame : null;
   }
 
-  private accept(snapshot: Snapshot, arrivalMs: number): boolean {
+  private accept(snapshot: Snapshot, arrivalMs: number): void {
     const evicted = this.interpolator.push(snapshot, arrivalMs);
     if (evicted === snapshot) {
       this.recycle(snapshot);
-      return false;
+      return;
     }
     this.previous = this.latest;
     this.latest = snapshot;
     if (evicted !== null) this.recycle(evicted);
-    return true;
   }
 }

@@ -6,7 +6,6 @@ import {
   type ReactionKind,
   type Tank,
 } from '@aquarium/shared';
-import type { EventBus } from '../engine/events';
 import type { InteractionEvents } from '../interaction/events';
 import { ApiRequestError } from '../ui/api';
 import { bundledCommonName } from './bundledSpecies';
@@ -157,19 +156,6 @@ export function publicTankLoaded(tank: PublicTank): InteractionEvents['tank:load
     decorEdited: tank.decorEdited,
     backgroundId: tank.backgroundId,
   };
-}
-
-/** The lamp hours are the owner's: `tank:lamp` is how the hood follows a tank other than the viewer's own. */
-export function announcePublicTank(
-  interaction: EventBus<InteractionEvents>,
-  tank: PublicTank,
-): string {
-  const tankId = publicTankId(tank);
-  const { onHour, offHour } = tank.equipment.light;
-  interaction.emit('tank:loaded', publicTankLoaded(tank));
-  interaction.emit('tank:water', { tankId, water: tank.water });
-  interaction.emit('tank:lamp', { tankId, onHour, offHour });
-  return tankId;
 }
 
 export function publicReportLines(tank: PublicTank): string[] {
