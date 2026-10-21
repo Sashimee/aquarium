@@ -28,6 +28,7 @@ import WaterTest from './WaterTest';
 import { ShareSection } from './ShareSection';
 import { ShopSections } from './Shop';
 import { useSpend } from './spend';
+import { QuarantineSection, Treatment } from './Treatment';
 import { useActiveTank, useSessionState, useOptionalSession, useSpeciesNames } from './session';
 
 const BIOME_LABEL: Record<Biome, string> = {
@@ -145,6 +146,8 @@ function CareSections({ session, state, tank }: Ready) {
       <Care session={session} state={state} water={water} />
       <WaterTest tank={tank} species={state.species} />
       <FishCards fish={tank.fish} names={names} />
+      <Treatment session={session} state={state} tank={tank} />
+      <QuarantineSection session={session} state={state} tank={tank} />
       <DeadFish session={session} tank={tank} />
       <Memorial tank={tank} names={names} />
     </>
