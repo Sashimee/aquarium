@@ -3417,6 +3417,581 @@
       "notes": "Shell-dweller (Neolamprologus multifasciatus, Lake Tanganyika), 4272x2848: sharp true lateral of the largest fish, pale tan-brown body with the dense dark vertical bars the species is named for, round-edged fins, large blue-ringed eye. A female and a juvenile are also in frame (use the larger male only). Pick for the loft texture, chosen over NasserHalaweh's Cichlidae Neolamprologus multifasciatus 1.jpg (1342x1007, CC BY-SA 4.0, hard side light and soft focus, not downloaded). The Commons file Neolamprologus multifasciatus 3.jpg by the same author is marked public domain but shows a small pale fish against shells, bleached and small in frame, so it is no use for the texture. ShareAlike: any texture derived from this photo must be released under the same CC BY-SA licence and attributed in CREDITS.md, so keep derived loft textures in a separately attributed asset. Alex approved CC BY-SA for this species' reference photo on 2026-10-22 (extends the #29 and 2026-10-15 decisions; BY-SA only, never NC or ND). Strong size dimorphism: males reach about 5 cm and females only about 3 cm with the same bars, so one texture set at two scales covers both. The author has no Commons user page, so author_url is the file page. Licence read from the Commons file page metadata (CC BY-SA 3.0). Raw file: ~/.cache/aquarium-assets/raw/wm-multifasciatus-ingebrigtsen-male/original.jpg (not committed).",
       "modifications": [],
       "status": "downloaded"
+    },
+    {
+      "id": "sketchfab-c3bc5a29",
+      "kind": "fish",
+      "species": "barred-mudskipper",
+      "title": "CC0 Barred Mudskipper (Periophthalmus argentilineatus)",
+      "author": "ffish.asia / floraZia.com",
+      "author_url": "https://sketchfab.com/ffishAsia-and-floraZia",
+      "source_url": "https://sketchfab.com/3d-models/cc0-barred-mudskipper-c3bc5a298d574c4d8d813751226a6763",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "0e6679cf532fab58709a38a7713c959b86580f6021d36379984665db3c019a02",
+      "polycount": 216740,
+      "textures": "Material.001_baseColor.jpeg 1024x1024, ISG111-W01-1-1_baseColor.jpeg 4096x4096 (baseColor only)",
+      "rigged": false,
+      "notes": "Photogrammetry scan of a barred mudskipper (Periophthalmus argentilineatus) in a rigid, fins-out pose; 216,740 triangles in 5 meshes, no rig, no animation. Anatomically the best brackish-goby candidate (raised eyes, pectoral arms). Mesh is raw scan density and must be decimated hard (LOD0 under about 15k) and the 4096 texture reduced; the 1024 Material.001 texture is a marker slate and should be dropped. Licence CC0 read from the Sketchfab model record and the bundled license.txt on 2026-10-22; the model is flagged downloadable. Zip sha256 6fab290f39cbb0553daaed879262aa93f7b707bcae1954c41607fbb41cc7d902; sha256 is the aggregate over files[]. Raw files: ~/.cache/aquarium-assets/raw/sketchfab-c3bc5a29/ (not committed). Planned pipeline steps: remove the scan slate and base pieces, decimate to LOD0 to LOD2, rig a simple spine plus pectoral and dorsal fin joints (amphibious fish, rests on the substrate), origin at the belly, scale to 10 to 12 cm, KTX2 at 1k to 2k.",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "license.txt",
+          "sha256": "ce2d66afbc78a4a1afb69984251008d8e4538de55dfe9741108c01fec60a38a0",
+          "bytes": 421
+        },
+        {
+          "path": "scene.bin",
+          "sha256": "9c2248e2fb3bb17fe1e881560750ef18b56e74509f9b7b818d667d141e2d7987",
+          "bytes": 9534576
+        },
+        {
+          "path": "scene.gltf",
+          "sha256": "9c990a521ff8656940e76635b0cfaa430f6cfb65798de9ea2c2f7dc2509a078a",
+          "bytes": 10907
+        },
+        {
+          "path": "textures/ISG111-W01-1-1_baseColor.jpeg",
+          "sha256": "d19fe208cc9b10f242772184ad78dc242aaa72a2f52c6cdb70180b9e23dea8d8",
+          "bytes": 8913079
+        },
+        {
+          "path": "textures/Material.001_baseColor.jpeg",
+          "sha256": "804db2ac981b05d940be1c568f75914e13631c2191c8973ef3d1cb96612f1511",
+          "bytes": 184018
+        }
+      ]
+    },
+    {
+      "id": "sketchfab-0fe8a8af",
+      "kind": "fish",
+      "species": "blue-spotted-mudskipper",
+      "title": "CC0 Blue-spotted Mudskipper (Boleophthalmus pectinirostris)",
+      "author": "ffish.asia / floraZia.com",
+      "author_url": "https://sketchfab.com/ffishAsia-and-floraZia",
+      "source_url": "https://sketchfab.com/3d-models/cc0-blue-spotted-mudskipper-0fe8a8af6e184ace84f1002d764a0da6",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "a4f7428488bafcdafc0957acd1b0fb74aae46764c8836a046718a408f246e70f",
+      "polycount": 392134,
+      "textures": "Material.001_baseColor.jpeg 1024x1024, Q11533-1all_baseColor.jpeg 4096x4096 (baseColor only)",
+      "rigged": false,
+      "notes": "Photogrammetry scan of a blue-spotted mudskipper (Boleophthalmus pectinirostris, the Japanese mutsugoro): 392,134 triangles in 7 meshes, no rig. Rigid pose with the dorsal fin raised; the blue spots survive in the 4096 texture. Heavy scan density. Licence CC0 read from the Sketchfab model record and the bundled license.txt on 2026-10-22; the model is flagged downloadable. Zip sha256 00004650981d6784a14e5694935e3397a1131d9c0cb02ef5fff22fed1cd87771; sha256 is the aggregate over files[]. Raw files: ~/.cache/aquarium-assets/raw/sketchfab-0fe8a8af/ (not committed). Planned pipeline steps: remove the scan slate and base pieces, decimate to LOD0 to LOD2, rig spine and pectoral joints, origin at the belly, scale to about 12 to 15 cm, KTX2 at 1k to 2k.",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "license.txt",
+          "sha256": "056e67d02024f058c147954b95a357ac27cd48fad2f7f64c6c9842be2541575a",
+          "bytes": 423
+        },
+        {
+          "path": "scene.bin",
+          "sha256": "69ce90edd53df17271fabde163aef5948180d0d04aed5c18b8090ca22af197db",
+          "bytes": 17096956
+        },
+        {
+          "path": "scene.gltf",
+          "sha256": "fee62b0fa973df10ea0b0df0b998e8f9761350082fbaf8bb918f7789c1b0c09a",
+          "bytes": 14099
+        },
+        {
+          "path": "textures/Material.001_baseColor.jpeg",
+          "sha256": "804db2ac981b05d940be1c568f75914e13631c2191c8973ef3d1cb96612f1511",
+          "bytes": 184018
+        },
+        {
+          "path": "textures/Q11533-1all_baseColor.jpeg",
+          "sha256": "12c64d4a383250bcf0d30b807f490c26e287da772d8443c8be6a319901ff6e63",
+          "bytes": 11329663
+        }
+      ]
+    },
+    {
+      "id": "sketchfab-7cbf59ce",
+      "kind": "fish",
+      "species": "figure-eight-puffer",
+      "title": "CC0 Vermiculated Puffer (Takifugu snyderi)",
+      "author": "ffish.asia / floraZia.com",
+      "author_url": "https://sketchfab.com/ffishAsia-and-floraZia",
+      "source_url": "https://sketchfab.com/3d-models/cc0-vermiculated-puffer-t-snyderi-7cbf59ce656e4bab827d80e0a55a624f",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "c9476222bcfe6a92b0f7f26b3a167d78203c242b71cb2fc11f3e0f9cb9fe3945",
+      "polycount": 312662,
+      "textures": "Material.001_baseColor.jpeg 1024x1024, Q11389-1all-1_baseColor.jpeg 4096x4096 (baseColor only)",
+      "rigged": false,
+      "notes": "Photogrammetry scan of Takifugu snyderi, a Japanese marine and brackish puffer: 312,662 triangles in 6 meshes, no rig. This is NOT Tetraodon biocellatus (figure-8 puffer): the body plan (rounded body, beak mouth, small fins) is right but the pattern is wrong, so use it for geometry only and re-texture from the figure-8 reference photo wm-figure8-geyer. Ranked below the procedural loft for that species. Licence CC0 read from the Sketchfab model record and the bundled license.txt on 2026-10-22; the model is flagged downloadable. Zip sha256 60a427cc5a52b3a2d23fb9805cece134c6d44a7ff6c6fb1f427bb5272f21ff81; sha256 is the aggregate over files[]. Raw files: ~/.cache/aquarium-assets/raw/sketchfab-7cbf59ce/ (not committed). Planned pipeline steps (optional, only if the loft looks worse): remove scan slate, decimate to LOD0 to LOD2, rig spine and caudal joints, re-texture from the figure-8 reference photo, scale to 6 to 7 cm.",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "license.txt",
+          "sha256": "306de2460822c88f28b41e309a809040c3854239719d6154f863a7cb06ee9de1",
+          "bytes": 443
+        },
+        {
+          "path": "scene.bin",
+          "sha256": "6efe7de969d0701e38a3dfbc25878b6e18bedfe611519ca0455ff72055a30568",
+          "bytes": 13133288
+        },
+        {
+          "path": "scene.gltf",
+          "sha256": "66e1a7caa5859d42a59b1de648e8dbd96c2c95badf2faacb72efd62b44eb5f83",
+          "bytes": 12622
+        },
+        {
+          "path": "textures/Material.001_baseColor.jpeg",
+          "sha256": "804db2ac981b05d940be1c568f75914e13631c2191c8973ef3d1cb96612f1511",
+          "bytes": 184018
+        },
+        {
+          "path": "textures/Q11389-1all-1_baseColor.jpeg",
+          "sha256": "c0f4a164e4b0b8b65f5fa12355d40f8939e1d729a124810d73f19e2128dad13f",
+          "bytes": 9820700
+        }
+      ]
+    },
+    {
+      "id": "sketchfab-5658cc51",
+      "kind": "decor",
+      "title": "CC0 Red Mangrove (Rhizophora mucronata) scene",
+      "author": "ffish.asia / floraZia.com",
+      "author_url": "https://sketchfab.com/ffishAsia-and-floraZia",
+      "source_url": "https://sketchfab.com/3d-models/cc0-red-mangrove-rhizophora-mucronata-5658cc5123b14393abbeb65174b0f85a",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "2d900017cc3a608be3240b002d3451d69a70b9804ec1bec6025df29e1fdb74d3",
+      "polycount": 1378644,
+      "textures": "Material0_baseColor.jpeg 8192x8192 (baseColor only)",
+      "rigged": false,
+      "notes": "Photogrammetry scan of a red mangrove (Rhizophora mucronata) sapling with prop roots, trunk and leaves: 1,378,644 triangles in 44 meshes under 48 nodes, one 8192 atlas, no rig. The prop-root and trunk meshes are the primary mangrove root source; node units are scan units (bbox about 749 by 415 by 1000). Far over the per-asset budget as shipped. Licence CC0 read from the Sketchfab model record and the bundled license.txt on 2026-10-22; the model is flagged downloadable. Zip sha256 3b6e48d4cec9a961f97d4f2f86e2db50dde7e33f2519a4389900b359fe743068; sha256 is the aggregate over files[]. Raw files: ~/.cache/aquarium-assets/raw/sketchfab-5658cc51/ (not committed). Planned pipeline steps: split into prop-root clusters, trunk and leaves; decimate each root cluster to under 15k triangles; drop the 8192 atlas to 2k KTX2; origin at the root base; scale to 20 to 40 cm tall; export roots as several instanced props.",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "license.txt",
+          "sha256": "e9c54067ecde8e8d64fb70af210f262eea00d3a80e58c3bf2eeb7f6e88500713",
+          "bytes": 445
+        },
+        {
+          "path": "scene.bin",
+          "sha256": "9074f1b0d453b3c64c2b269f5cea549a8b1b504d964956a923e41118eaa1ee0c",
+          "bytes": 108404336
+        },
+        {
+          "path": "scene.gltf",
+          "sha256": "26af388bba5b713ec96a2c25305f9fd54f7bf03e16a7abafe31ac98a3fb67f40",
+          "bytes": 70521
+        },
+        {
+          "path": "textures/Material0_baseColor.jpeg",
+          "sha256": "367d120f97c5a2b340510fcbb9b13fcd986e8e18fd303d076bc831b63ca5109a",
+          "bytes": 46129875
+        }
+      ]
+    },
+    {
+      "id": "sketchfab-a221abc9",
+      "kind": "decor",
+      "title": "Petrified Mangrove - Beach Debris 4 (Scaniverse)",
+      "author": "JFN (db4)",
+      "author_url": "https://sketchfab.com/db4",
+      "source_url": "https://sketchfab.com/3d-models/petrified-mangrove-beach-debris-4-scaniverse-a221abc90fb345b69aa0886af7711187",
+      "licence": "CC-BY-4.0",
+      "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "2b9941bebec7d098cc5a5878091fe1e1b178f0a99e9e157494b71637d3ec5842",
+      "polycount": 362021,
+      "textures": "main_baseColor.jpeg 8192x8192 (baseColor only)",
+      "rigged": false,
+      "notes": "Phone photogrammetry scan (Scaniverse) of a petrified mangrove stump with aerial roots, Sarawak: 362,021 triangles in 4 meshes, one 8192 texture, no rig. Weathered grey-brown wood, good as sunken hardscape beside the live roots. Heavy as shipped. Licence CC-BY-4.0 and downloadable flag read from the Sketchfab model record and the bundled license.txt on 2026-10-22. Zip sha256 0f65c7d2a7ae469cd7e89fbc1ed26b8d7e0b3e0631b79770d68f7ce8f244dcf6; sha256 is the aggregate over files[]. Raw files: ~/.cache/aquarium-assets/raw/sketchfab-a221abc9/ (not committed). Planned pipeline steps: decimate to LOD0 to LOD2, bake the 8192 texture down to 2k KTX2, origin at the base, scale to 15 to 30 cm, add a normal map baked from the high mesh.",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "license.txt",
+          "sha256": "1cb6819b7677e9980574fa38a92e071d0f8b37ef1db4ad8bd4f36f3532111eba",
+          "bytes": 784
+        },
+        {
+          "path": "scene.bin",
+          "sha256": "d7c70e863544c3f420c3c33827ceeb53f2894914237e4ea2c049fac45a9d3c96",
+          "bytes": 26182484
+        },
+        {
+          "path": "scene.gltf",
+          "sha256": "21420fb07f64c6eff39d8f798608608107be73016b1123172e991a6d30bb545d",
+          "bytes": 20295
+        },
+        {
+          "path": "textures/main_baseColor.jpeg",
+          "sha256": "4ff34e0b681056895c7d60e9dd2f34f87cf2d5b106f4679b5982b674f44a1e14",
+          "bytes": 20908188
+        }
+      ]
+    },
+    {
+      "id": "sketchfab-c32d977c",
+      "kind": "decor",
+      "title": "mangrove tree roots",
+      "author": "lucq22",
+      "author_url": "https://sketchfab.com/lucq22",
+      "source_url": "https://sketchfab.com/3d-models/mangrove-tree-roots-c32d977c14e04e5ebc1fbef9b6111957",
+      "licence": "CC-BY-4.0",
+      "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "501ae87ebeefefc535f5bb4898fec06aad1d18fa6ab556f89e015a10ae8cbd5a",
+      "polycount": 3926,
+      "textures": "lambert1_baseColor.png 2048x2048, lambert1_normal.png 2048x2048",
+      "rigged": false,
+      "notes": "Hand-modelled low-poly mangrove prop roots: 3,926 triangles in one mesh, with a base colour and a normal map. Stylised rather than photoreal, but light enough to instance many times as the arching prop-root thicket; use the scanned roots from sketchfab-5658cc51 for hero pieces. Licence CC-BY-4.0 and downloadable flag read from the Sketchfab model record and the bundled license.txt on 2026-10-22. Zip sha256 ef63d5a864e288877b26ff09374db69f9a722cf0aab95d368bf42417801a1934; sha256 is the aggregate over files[]. Raw files: ~/.cache/aquarium-assets/raw/sketchfab-c32d977c/ (not committed). Planned pipeline steps: origin at the root base, scale to 20 to 35 cm tall, re-encode textures to KTX2 at 1k, recolour to match the red mangrove scan.",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "license.txt",
+          "sha256": "98f8a9d3e4e82b2b60d36ac43c1d19aa7c50bb7341f60775d08e1d46b216aee0",
+          "bytes": 688
+        },
+        {
+          "path": "scene.bin",
+          "sha256": "ace86b4b98e9388f83cea4b46e42af2813a477f970e58216abac34f0745339c5",
+          "bytes": 188520
+        },
+        {
+          "path": "scene.gltf",
+          "sha256": "c265055b910a94b557ac6e200af67dc0f26b1e1901a85ce1e3a0fd912ae67f49",
+          "bytes": 4951
+        },
+        {
+          "path": "textures/lambert1_baseColor.png",
+          "sha256": "8b29041f00f4205d8395bb3a6cdee5d4bfb14650c79d2468d366080f26f21f02",
+          "bytes": 4730057
+        },
+        {
+          "path": "textures/lambert1_normal.png",
+          "sha256": "f8d937687725efeaf49587ad30c00df6e0ac287716c129e6fe88e565faf556d7",
+          "bytes": 8061412
+        }
+      ]
+    },
+    {
+      "id": "sketchfab-2b81ff20",
+      "kind": "decor",
+      "title": "CC0 Red Mangrove (Rhizophora mucronata) propagules and leaves",
+      "author": "ffish.asia / floraZia.com",
+      "author_url": "https://sketchfab.com/ffishAsia-and-floraZia",
+      "source_url": "https://sketchfab.com/3d-models/cc0-red-mangrove-rhizophora-mucronata-2b81ff20364b4b8ea319686746864686",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "487a4481adc4600f5ba99ed10c691b132c4cf94ac1855d00f52a758261fd8639",
+      "polycount": 669262,
+      "textures": "Material.001_baseColor.jpeg 1024x1024, four 4096x4096 baseColor jpegs (propagule and leaf atlases)",
+      "rigged": false,
+      "notes": "Photogrammetry scan of red mangrove propagules (the long cigar-shaped seedlings) and leaves: 669,262 triangles in 12 meshes under 20 nodes, no rig. Not roots; kept as small floating or planted propagule decor and leaf litter. Licence CC0 read from the Sketchfab model record and the bundled license.txt on 2026-10-22; the model is flagged downloadable. Zip sha256 8c7e6b0d6e1a7c852b83f1e75777d3405e1aa3847edbf2901de4033815a1b265; sha256 is the aggregate over files[]. Raw files: ~/.cache/aquarium-assets/raw/sketchfab-2b81ff20/ (not committed). Planned pipeline steps: split propagules from leaves, decimate each to under 3k triangles, atlas the textures to 2k KTX2, scale propagules to 15 to 25 cm.",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "license.txt",
+          "sha256": "72156d23058e3bac4383b7f54d794bb77d36e832dafa8e77b8c0ed3917d278b4",
+          "bytes": 445
+        },
+        {
+          "path": "scene.bin",
+          "sha256": "6f89a428c9e4323ee01e7361d37b1d66e7771896d0696133c6fe85d9950530d5",
+          "bytes": 24796232
+        },
+        {
+          "path": "scene.gltf",
+          "sha256": "4d720fefae9193d2fe26ee476635eb98014f204c3b6c3052a055d7d74e1ac429",
+          "bytes": 23873
+        },
+        {
+          "path": "textures/ISG110-W03-1-1-tane1_baseColor.jpeg",
+          "sha256": "316839130579bcd0194c96abd8028e1ce27e2d72c78f720a01e7aacabc62efd1",
+          "bytes": 3888870
+        },
+        {
+          "path": "textures/ISG110-W03-1-1-tane2_baseColor.jpeg",
+          "sha256": "cc8b9729ab49425b07a2ce1fdb55867433d9725d19aa07f32a8d2ed84119b93f",
+          "bytes": 4341727
+        },
+        {
+          "path": "textures/ISG110-W03-2-1-leaf1_baseColor.jpeg",
+          "sha256": "58158692e712a7955c44b3603af3a4ef5fa13621a3e08d1bee20c768b82a6408",
+          "bytes": 6495900
+        },
+        {
+          "path": "textures/ISG110-W03-2-1-leaf2_baseColor.jpeg",
+          "sha256": "ad0dcb6836ae53e9c72b10b7e53251daeae0f5427abed2ec26e61da59a44708d",
+          "bytes": 6157550
+        },
+        {
+          "path": "textures/Material.001_baseColor.jpeg",
+          "sha256": "804db2ac981b05d940be1c568f75914e13631c2191c8973ef3d1cb96612f1511",
+          "bytes": 184018
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-brown_mud_03",
+      "kind": "substrate",
+      "title": "Brown Mud 03",
+      "author": "Rob Tuytel",
+      "author_url": "https://polyhaven.com/a/brown_mud_03",
+      "source_url": "https://polyhaven.com/a/brown_mud_03",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "baac9d9fb5ee9d2b06a93518273e2bd7fe2e477d37fcdad4a0a8a11ab76e071f",
+      "polycount": null,
+      "textures": "PBR jpg: brown_mud_03_arm_2k.jpg, brown_mud_03_diff_2k.jpg, brown_mud_03_disp_2k.jpg, brown_mud_03_nor_gl_2k.jpg, brown_mud_03_rough_2k.jpg",
+      "rigged": false,
+      "notes": "Wet brown mud with stones and clumps, the mangrove tidal-flat substrate. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-22); md5 of every file matched the Poly Haven files API.",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "brown_mud_03_arm_2k.jpg",
+          "sha256": "29dae9a0c85cb0b91bd8c9b878d184f36363472212bd6a02662f415627f06992",
+          "bytes": 1074767
+        },
+        {
+          "path": "brown_mud_03_diff_2k.jpg",
+          "sha256": "57a87dae26769677578ab53b8829fe9b1e4dfec1ae1726f2942ce99fc73f400b",
+          "bytes": 2133326
+        },
+        {
+          "path": "brown_mud_03_disp_2k.jpg",
+          "sha256": "295bc090d6c436a84fa2e3402f37b8637ea5c6478b71f6fe892d237ab33cd2f4",
+          "bytes": 276662
+        },
+        {
+          "path": "brown_mud_03_nor_gl_2k.jpg",
+          "sha256": "4d9ea1c9321618dbde7bdb2287fae85b646e4bd7b27c294a3475096d30b33880",
+          "bytes": 3728131
+        },
+        {
+          "path": "brown_mud_03_rough_2k.jpg",
+          "sha256": "d4beda6f00e1d0bd431360037569cb7807c38a4f3a5102c256f3c24a4bc0e860",
+          "bytes": 1159072
+        }
+      ]
+    },
+    {
+      "id": "wm-figure8-geyer",
+      "kind": "reference-photo",
+      "species": "figure-eight-puffer",
+      "title": "Tetraodon biocelatus.jpg",
+      "author": "Robin Geyer",
+      "author_url": "https://commons.wikimedia.org/wiki/User:Robin Geyer",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Tetraodon_biocelatus.jpg",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "80a1bc294ee0f5af59914ab95f18f184deb0c7113cc8a18efae01cf3db799901",
+      "polycount": null,
+      "textures": "photo",
+      "rigged": false,
+      "notes": "Figure-8 puffer (Tetraodon biocellatus, 'Palembang-Kugelfisch'), lateral view: yellow-green body, dark figure-8 markings on the back, white belly. 843x444. Licence (Public domain (Commons template PD-self or equivalent, no rights reserved by the author); recorded as CC0-1.0 equivalent) read from the Commons file page metadata on 2026-10-22; the Commons sha1 matches the download. Raw file: ~/.cache/aquarium-assets/raw/wm-figure8-geyer/original.jpg (not committed). Small (843x444) and the only CC0 or CC-BY lateral photo found; no CC0 or CC-BY alternative exists for this species.",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "wm-archerfish-vassil",
+      "kind": "reference-photo",
+      "species": "banded-archerfish",
+      "title": "Toxotes jaculatrix Vivarium Tournai 27122015.jpg",
+      "author": "Vassil",
+      "author_url": "https://commons.wikimedia.org/wiki/User:Vassil",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Toxotes_jaculatrix_Vivarium_Tournai_27122015.jpg",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "7ba476943fc3956d4faaba42f67843fed627d4fcc44301f4cb4ad4f506a54b3c",
+      "polycount": null,
+      "textures": "photo",
+      "rigged": false,
+      "notes": "Banded archerfish (Toxotes jaculatrix) in a vivarium, near-lateral: silver body with five to six dark saddle bars, rear-set dorsal fin. 1539x1196. Licence (Creative Commons Zero) read from the Commons file page metadata on 2026-10-22; the Commons sha1 matches the download. Raw file: ~/.cache/aquarium-assets/raw/wm-archerfish-vassil/original.jpg (not committed).",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "wm-archerfish-pericard",
+      "kind": "reference-photo",
+      "species": "banded-archerfish",
+      "title": "Toxotes jaculatrix 580492570.jpg",
+      "author": "Pierre Pericard",
+      "author_url": "https://www.inaturalist.org/photos/580492570",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Toxotes_jaculatrix_580492570.jpg",
+      "licence": "CC-BY-4.0",
+      "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "093a538138874285040de002bb27b5f0065cd48f8e6050aff089b0936ece6dda",
+      "polycount": null,
+      "textures": "photo",
+      "rigged": false,
+      "notes": "Banded archerfish (Toxotes jaculatrix) photographed in the Philippines, from the iNaturalist observation photo 580492570. 2048x1638. Licence (CC BY 4.0) read from the Commons file page metadata on 2026-10-22; the Commons sha1 matches the download. Raw file: ~/.cache/aquarium-assets/raw/wm-archerfish-pericard/original.jpg (not committed).",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "wm-mono-shetty",
+      "kind": "reference-photo",
+      "species": "silver-mono",
+      "title": "Monodactylus argenteus mangaluru.jpg",
+      "author": "Hariprasad Shetty10",
+      "author_url": "https://commons.wikimedia.org/wiki/User:Hariprasad Shetty10",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Monodactylus_argenteus_mangaluru.jpg",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "612a4d4fe74ab45f9cc5d9e1c39ab1f3fcff0953a681ca80544795ba30be906f",
+      "polycount": null,
+      "textures": "photo",
+      "rigged": false,
+      "notes": "Silver mono (Monodactylus argenteus): diamond-shaped silver body, tall dorsal and anal fins with yellow leading edges. 6048x4032. Licence (Creative Commons Zero) read from the Commons file page metadata on 2026-10-22; the Commons sha1 matches the download. Raw file: ~/.cache/aquarium-assets/raw/wm-mono-shetty/original.jpg (not committed).",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "wm-mono-khauv",
+      "kind": "reference-photo",
+      "species": "silver-mono",
+      "title": "Monodactylus argenteus 173820575.jpg",
+      "author": "Lek Khauv",
+      "author_url": "https://www.inaturalist.org/photos/173820575",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Monodactylus_argenteus_173820575.jpg",
+      "licence": "CC-BY-4.0",
+      "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "59fed9979fec20f83108d523d3ba6b6e78729eda71ce12bbd885822beb0d1599",
+      "polycount": null,
+      "textures": "photo",
+      "rigged": false,
+      "notes": "Silver mono (diamondfish, Monodactylus argenteus), from the iNaturalist observation photo 173820575. 2048x1536. Licence (CC BY 4.0) read from the Commons file page metadata on 2026-10-22; the Commons sha1 matches the download. Raw file: ~/.cache/aquarium-assets/raw/wm-mono-khauv/original.jpg (not committed).",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "wm-bumblebee-lisitsyn-1",
+      "kind": "reference-photo",
+      "species": "bumblebee-goby",
+      "title": "Brachygobius doriae 248579947.jpg",
+      "author": "Павлик Лисицын (Pavlik Lisitsyn)",
+      "author_url": "https://www.inaturalist.org/photos/248579947",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Brachygobius_doriae_248579947.jpg",
+      "licence": "CC-BY-4.0",
+      "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "7e2707db4f90df8dd2de0bc608ea4355989cc5becd5bce7a80f3704951fc9588",
+      "polycount": null,
+      "textures": "photo",
+      "rigged": false,
+      "notes": "Bumblebee goby (Brachygobius doriae): short blunt body with broad black and yellow bands, from the iNaturalist observation photo 248579947. 2048x1152. Licence (CC BY 4.0) read from the Commons file page metadata on 2026-10-22; the Commons sha1 matches the download. Raw file: ~/.cache/aquarium-assets/raw/wm-bumblebee-lisitsyn-1/original.jpg (not committed).",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "wm-bumblebee-lisitsyn-2",
+      "kind": "reference-photo",
+      "species": "bumblebee-goby",
+      "title": "Brachygobius doriae 248579954.jpg",
+      "author": "Павлик Лисицын (Pavlik Lisitsyn)",
+      "author_url": "https://www.inaturalist.org/photos/248579954",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Brachygobius_doriae_248579954.jpg",
+      "licence": "CC-BY-4.0",
+      "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "2c75fc94d7d7e8e8e58a08094741755f7e69723b4ccd956fbdf14a6260cc6999",
+      "polycount": null,
+      "textures": "photo",
+      "rigged": false,
+      "notes": "Bumblebee goby (Brachygobius doriae), second view, from the iNaturalist observation photo 248579954. 2048x1152. Licence (CC BY 4.0) read from the Commons file page metadata on 2026-10-22; the Commons sha1 matches the download. Raw file: ~/.cache/aquarium-assets/raw/wm-bumblebee-lisitsyn-2/original.jpg (not committed).",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "wm-bumblebee-malamut",
+      "kind": "reference-photo",
+      "species": "bumblebee-goby",
+      "title": "Brachygobius xanthozonus.jpg",
+      "author": "Malamut",
+      "author_url": "https://commons.wikimedia.org/wiki/User:Malamut",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Brachygobius_xanthozonus.jpg",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "59084100ff5fad99ece33587988c32972433e44e964acab0ecfa1aad31afd871",
+      "polycount": null,
+      "textures": "photo",
+      "rigged": false,
+      "notes": "Bumblebee goby (Brachygobius xanthozonus, 'Babka Zlota') in an aquarium, lateral view with the black and golden bands clear. 1301x976. Licence (Public domain (Commons template PD-self or equivalent, no rights reserved by the author); recorded as CC0-1.0 equivalent) read from the Commons file page metadata on 2026-10-22; the Commons sha1 matches the download. Raw file: ~/.cache/aquarium-assets/raw/wm-bumblebee-malamut/original.jpg (not committed).",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "wm-chromide-raghu",
+      "kind": "reference-photo",
+      "species": "orange-chromide",
+      "title": "Etroplus Maculatus.JPG",
+      "author": "Raghu.kuttan",
+      "author_url": "https://commons.wikimedia.org/wiki/User:Raghu.kuttan",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Etroplus_Maculatus.JPG",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "43740886155c30be7d6e93e96cc06e254ba3e703a863cbd6360b53a8eea89cad",
+      "polycount": null,
+      "textures": "photo",
+      "rigged": false,
+      "notes": "Orange chromide (Etroplus maculatus) from the Bharathapuzha River, Kerala: yellow-orange oval body with dark spot on the flank and dark dorsal bars. 2304x1536. Licence (Public domain (Commons template PD-self or equivalent, no rights reserved by the author); recorded as CC0-1.0 equivalent) read from the Commons file page metadata on 2026-10-22; the Commons sha1 matches the download. Raw file: ~/.cache/aquarium-assets/raw/wm-chromide-raghu/original.jpg (not committed).",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "wm-mangrove-roots-hillebrand",
+      "kind": "reference-photo",
+      "title": "Close view of red mangrove roots.jpg",
+      "author": "Steve Hillebrand, U.S. Fish and Wildlife Service",
+      "author_url": "https://commons.wikimedia.org/wiki/File:Close_view_of_red_mangrove_roots.jpg",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Close_view_of_red_mangrove_roots.jpg",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "4fef9e187e457b6c9a68059ca90a54137a65dd5f09c418335a868edab394f138",
+      "polycount": null,
+      "textures": "photo",
+      "rigged": false,
+      "notes": "Close view of red mangrove prop roots entering the water. Work of a US Fish and Wildlife Service employee, public domain as a US government work. 3504x2336. Licence (Public domain (Commons template PD-self or equivalent, no rights reserved by the author); recorded as CC0-1.0 equivalent) read from the Commons file page metadata on 2026-10-22; the Commons sha1 matches the download. Raw file: ~/.cache/aquarium-assets/raw/wm-mangrove-roots-hillebrand/original.jpg (not committed). Texture and colour reference for the mangrove roots and the tank background.",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "wm-mangrove-restinga-wilfredor",
+      "kind": "reference-photo",
+      "title": "Mangrove roots in the Laguna de La Restinga.jpg",
+      "author": "Wilfredor",
+      "author_url": "https://commons.wikimedia.org/wiki/User:Wilfredor",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Mangrove_roots_in_the_Laguna_de_La_Restinga.jpg",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "131c249e5f613250c8c4f2a9e75574392d240839b99eba9e10f421bb6c0d8844",
+      "polycount": null,
+      "textures": "photo",
+      "rigged": false,
+      "notes": "Mangrove roots standing in shallow lagoon water, Laguna de La Restinga, Venezuela. 2773x1875. Licence (Creative Commons Zero) read from the Commons file page metadata on 2026-10-22; the Commons sha1 matches the download. Raw file: ~/.cache/aquarium-assets/raw/wm-mangrove-restinga-wilfredor/original.jpg (not committed). Reference for the mangrove-root background render.",
+      "modifications": [],
+      "status": "downloaded"
     }
   ]
 }
