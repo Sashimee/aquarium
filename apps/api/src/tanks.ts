@@ -1126,13 +1126,13 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           apiError('validation_failed', `${spec.commonName} is not for sale.`),
         );
       }
-      throttle(user.id, 'addFish');
       const itemRef = `species:${spec.id}:${stage}`;
       const result = await withTank(user, tankId, async (tx, ticked) => {
         const nowMs = clock.now();
         await lockWallet(tx, economy, user.id, nowMs, true);
         const replay = await findReplay(tx, user.id, idempotencyKey, itemRef);
         if (replay) return { tank: await render(tx, ticked), created: false };
+        throttle(user.id, 'addFish');
         if (spec.biome !== ticked.tank.biome) {
           throw new HttpError(
             400,
@@ -1230,7 +1230,8 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       const user = await authorize(req);
       const { tankId } = tankParamsSchema.parse(req.params);
       const action: CareAction = careActionSchema.parse(req.body);
-      throttle(user.id, action.type === 'feed' ? 'feed' : 'care');
+      if (action.type !== 'bottled_bacteria')
+        throttle(user.id, action.type === 'feed' ? 'feed' : 'care');
       const result = await withTank(user, tankId, async (tx, ticked) => {
         const nowMs = clock.now();
         const bacteriaRef = 'consumable:bottled-bacteria';
@@ -1240,6 +1241,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           await lockWallet(tx, economy, user.id, nowMs, true);
           const replay = await findReplay(tx, user.id, bacteriaKey, bacteriaRef);
           if (replay) return { tank: await render(tx, ticked) };
+          throttle(user.id, 'care');
         }
         const applied = applyCare(ticked.state, action, ticked.tank.biome, chemistryParams, nowMs);
         if (!applied.ok) {

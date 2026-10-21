@@ -10,6 +10,7 @@ import { and, eq } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { schema } from './db/index.ts';
+import { DEFAULT_CARE_LIMITS } from './tanks.ts';
 import { APP_ORIGIN, createHarness, fishPayload, topUp, type Harness } from './test-harness.ts';
 
 const PASSWORD = 'correct horse battery';
@@ -191,12 +192,46 @@ describe('moving a fish between tanks', () => {
     it('rate limits like other care actions', async () => {
       const who = await account(h);
       const a = await makeTank(h, who);
+      const b = await makeTank(h, who);
       const fishId = await addFish(h, a);
       const codes = new Set<number>();
+      let from = a;
+      let to = b;
       for (let i = 0; i < 70; i++) {
-        codes.add((await move(h, who, a, fishId, { toTankId: a })).statusCode);
+        const res = await move(h, who, from, fishId, {
+          toTankId: to,
+          idempotencyKey: randomUUID(),
+        });
+        codes.add(res.statusCode);
+        [from, to] = [to, from];
       }
-      expect(codes).toEqual(new Set([400, 429]));
+      expect(codes.has(429)).toBe(true);
+    });
+  });
+
+  describe('idempotent replay before the rate limit', () => {
+    it('replays a move retried past the care limit instead of answering 429', async () => {
+      const limited = await createHarness({
+        careLimits: { ...DEFAULT_CARE_LIMITS, care: { max: 1, windowMs: 60_000 } },
+      });
+      try {
+        const who = await account(limited);
+        const a = await makeTank(limited, who);
+        const b = await makeTank(limited, who);
+        const fishId = await addFish(limited, a);
+        const body = { toTankId: b, idempotencyKey: randomUUID() };
+        expect((await move(limited, who, a, fishId, body)).statusCode).toBe(200);
+        const retry = await move(limited, who, a, fishId, body);
+        expect(retry.statusCode).toBe(200);
+        expect(moveFishResponseSchema.parse(retry.json()).destination.fish).toHaveLength(1);
+        const fresh = await move(limited, who, b, fishId, {
+          toTankId: a,
+          idempotencyKey: randomUUID(),
+        });
+        expect(fresh.statusCode).toBe(429);
+      } finally {
+        await limited.close();
+      }
     });
   });
 
