@@ -15,6 +15,7 @@ import {
   type DayLightingRig,
 } from './dayLighting';
 import { daylightAt, parseClock } from './daylight';
+import { roomDaylightAt } from './room/timeOfDay';
 import { DEFAULT_TANK, waterBounds } from './tank/dimensions';
 import { meanSubstrateHeight } from './tank/substrate';
 import { Caustics, castingShare, causticContrast } from './water/caustics';
@@ -54,6 +55,7 @@ function rig(fillLevel = FRESHWATER_FILL_LEVEL): DayLightingRig {
     ambientScatter: new Color(0.02, 0.03, 0.034),
     substrateAlbedo,
     roomBackgroundIntensity: 0.45,
+    roomDaylight: 1,
   };
 }
 
@@ -174,9 +176,32 @@ describe('the room backdrop', () => {
     applyDayLighting(r, at('12:00'));
     applyDayLighting(r, at('12:00'));
     expect(r.scene.backgroundIntensity).toBeCloseTo(1.2);
-    applyDayLighting(r, at('02:00'));
+    r.roomDaylight = roomDaylightAt(parseClock('02:00'));
+    applyDayLighting(r, at('12:00'));
     expect(r.scene.backgroundIntensity).toBeGreaterThan(0);
     expect(r.scene.backgroundIntensity).toBeLessThan(0.3);
+  });
+
+  it("follows the room's daylight, not the hood's lamp schedule", () => {
+    const morning = rig();
+    morning.roomDaylight = roomDaylightAt(parseClock('09:00'));
+    applyDayLighting(morning, 0);
+    const evening = rig();
+    evening.roomDaylight = roomDaylightAt(parseClock('23:00'));
+    applyDayLighting(evening, 1);
+    expect(morning.interior.roomLevel.value).toBeGreaterThan(0.8);
+    expect(evening.interior.roomLevel.value).toBeLessThan(0.2);
+    expect(morning.scene.backgroundIntensity).toBeGreaterThan(evening.scene.backgroundIntensity);
+    expect(morning.medium.roomInScatter.value.g).toBeGreaterThan(
+      evening.medium.roomInScatter.value.g,
+    );
+    evening.roomDaylight = 0;
+    applyDayLighting(evening, 1);
+    const night = evening.interior.roomLevel.value;
+    expect(night).toBeGreaterThan(0);
+    evening.roomDaylight = -3;
+    applyDayLighting(evening, 1);
+    expect(evening.interior.roomLevel.value).toBe(night);
   });
 
   it('goes dark when the daytime level is zero', () => {
