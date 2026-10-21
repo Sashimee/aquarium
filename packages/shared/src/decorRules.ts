@@ -42,7 +42,15 @@ export const DECOR_ASSET_IDS: Readonly<Record<Biome, ReadonlySet<string>>> = {
     'blue-sea-anemone',
     'host-anemone',
   ]),
-  cichlid: new Set(),
+  cichlid: new Set([
+    ...ROCKS,
+    'malawi-boulder-03',
+    'malawi-boulder-05',
+    'malawi-rock-07',
+    'rock-pile-stack',
+    'rock-pile-cave',
+    'neothauma-shell',
+  ]),
   blackwater: new Set(),
   mangrove: new Set(),
 };
