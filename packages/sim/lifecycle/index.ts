@@ -17,7 +17,26 @@ export {
   stepWater,
 } from './water.ts';
 export { stepTank } from './step.ts';
-export { catchUp, type CatchUpCrew, type CatchUpInput, type CatchUpResult } from './catchup.ts';
+export {
+  catchUp,
+  type CatchUpCrew,
+  type CatchUpInput,
+  type CatchUpPlants,
+  type CatchUpResult,
+} from './catchup.ts';
+export {
+  layoutPlantKeys,
+  reconcilePlants,
+  START_SIZE as PLANT_START_SIZE,
+  stepPlants,
+  trimPlant,
+  type LayoutPlant,
+  type PlantBounds,
+  type PlantState,
+  type PlantStepContext,
+  type PlantTable,
+  type TrimResult,
+} from './plants.ts';
 export {
   applyCare,
   applyEating,

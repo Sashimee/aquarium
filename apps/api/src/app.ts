@@ -46,6 +46,7 @@ import {
   type ReminderLimits,
 } from './reminders.ts';
 import type { SpeciesCatalog } from './species.ts';
+import { loadPlantTable } from './plants.ts';
 import { DEFAULT_CARE_LIMITS, registerTankRoutes, type CareLimits } from './tanks.ts';
 
 export interface AppOptions {
@@ -648,6 +649,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     chemistryParams: opts.chemistryParams,
     economy,
     presets: opts.presets ?? loadPresets(),
+    plants: loadPlantTable(),
     clock,
     limiter,
     limits: opts.careLimits ?? DEFAULT_CARE_LIMITS,

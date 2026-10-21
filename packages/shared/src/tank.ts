@@ -12,6 +12,7 @@ import {
 } from './common.js';
 import { chemistrySchema } from './chemistry.js';
 import { equipmentSchema, lightScheduleSchema } from './equipment.js';
+import { plantSchema } from './plants.js';
 import { QUARANTINE_TANK_SIZE, tankSizeSchema } from './tankSize.js';
 import {
   idempotencyKeySchema,
@@ -156,6 +157,12 @@ export const tankSchema = z.object({
     .nullable()
     .optional()
     .describe('the medicine running in this tank, null or absent when there is none'),
+  plants: z
+    .array(plantSchema)
+    .optional()
+    .describe(
+      'growing plants: the layout plants (the preset ones while the layout is unedited) and their offsets',
+    ),
   fish: z.array(fishSchema),
   memorials: z.array(memorialSchema),
   away: awaySummarySchema.optional(),
