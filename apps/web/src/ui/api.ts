@@ -34,6 +34,8 @@ import {
   walletResponseSchema,
   purchaseRequestSchema,
   purchaseResponseSchema,
+  treatRequestSchema,
+  treatResponseSchema,
   type AchievementList,
   type AteReport,
   type BackgroundId,
@@ -49,6 +51,8 @@ import {
   type PurchaseResponse,
   type SpeciesSummary,
   type Tank,
+  type TreatRequest,
+  type TreatResponse,
   type ErrorCode,
   type PrivacyPolicy,
   type PublicTank,
@@ -236,6 +240,7 @@ export interface ApiClient {
   saveLight(tankId: string, light: LightSchedule): Promise<Tank>;
   netFish(tankId: string, fishId: string): Promise<Tank>;
   care(tankId: string, action: CareAction): Promise<Tank>;
+  treat(tankId: string, request: TreatRequest): Promise<TreatResponse>;
   replay(
     tankId: string,
     query: { since: string; until?: string; cursor?: string; limit?: number },
@@ -736,6 +741,13 @@ export function createApiClient(
       }
       const body = validate(careActionSchema, action);
       return parsed(await post(`/api/tanks/${encodeURIComponent(tankId)}/care`, body), tankSchema);
+    },
+    async treat(tankId, request) {
+      const body = validate(treatRequestSchema, request);
+      return parsed(
+        await post(`/api/tanks/${encodeURIComponent(tankId)}/treat`, body),
+        treatResponseSchema,
+      );
     },
     async reportAte(tankId, reports, batchId) {
       const body = validate(ateBatchRequestSchema, { reports, ...(batchId ? { batchId } : {}) });
