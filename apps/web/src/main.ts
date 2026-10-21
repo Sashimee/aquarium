@@ -33,6 +33,7 @@ import {
 } from './ui/loadSignals';
 import { mountUi } from './ui/mount';
 import { FeedGate } from './sync/feedGate';
+import { WaveMakerFeed } from './sync/waveMakerFeed';
 import { awaitTankModules } from './tankLoad';
 
 function showFatal(container: HTMLElement, message: string): void {
@@ -65,6 +66,7 @@ async function boot(): Promise<void> {
   const tracker = new LoadTracker(interaction, stallMs === undefined ? {} : { stallMs });
   tracker.begin('boot');
   const tankEvents = queueTankEvents(interaction);
+  const waveMaker = new WaveMakerFeed(interaction);
   const tankSize = new TankSizeSource(interaction);
   const tankBiome = new TankBiome(interaction, parseBiome(window.location.search));
   const switches = watchSwitches(interaction, tracker, tankBiome.fallback);
@@ -115,6 +117,7 @@ async function boot(): Promise<void> {
     const message = cause instanceof Error ? cause.message : String(cause);
     tracker.fail(message);
     switches.stop();
+    waveMaker.stop();
     tankSize.stop();
     tankEvents.stop();
     tankBiome.stop();
@@ -239,6 +242,7 @@ async function boot(): Promise<void> {
   });
 
   liveFish = fish;
+  waveMaker.attach(fish.sim);
   if (exposePose) {
     let shownSpecies: readonly string[] | null = null;
     engine.onFrame(() => {
@@ -333,6 +337,7 @@ async function boot(): Promise<void> {
 
   onPageTeardown(window, () => {
     switches.stop();
+    waveMaker.stop();
     stopResize();
     for (const off of stopRoomLimit) off();
     room.dispose();
