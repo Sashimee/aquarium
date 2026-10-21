@@ -7,6 +7,7 @@ import { loadConfig } from './config.ts';
 import { connect, runMigrations } from './db/index.ts';
 import { createMailer, createSmtpTransport } from './mail.ts';
 import { postgresHitStore } from './rate-limit.ts';
+import { createClock } from './clock.ts';
 import { startMaintenance } from './maintenance.ts';
 import { createPushSender } from './push.ts';
 import { startReminders } from './reminders.ts';
@@ -41,7 +42,9 @@ if (!push) {
   );
 }
 
+const clock = createClock();
 const app = buildApp({
+  clock,
   indexable: config.indexable,
   webRoot: config.webRoot,
   appOrigin: config.appUrl.origin,
@@ -61,7 +64,7 @@ const app = buildApp({
   push,
 });
 
-const stopMaintenance = startMaintenance(database);
+const stopMaintenance = startMaintenance(database, clock);
 const reminders = startReminders(
   {
     database,

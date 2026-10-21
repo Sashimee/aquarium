@@ -10,11 +10,12 @@ import {
   voteStateSchema,
 } from '@aquarium/shared';
 import { randomUUID } from 'node:crypto';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { schema } from './db/index.ts';
 import { settleWeeks } from './gallery.ts';
+import { pruneExpired } from './maintenance.ts';
 import { APP_ORIGIN, createHarness, fishPayload, topUp, type Harness } from './test-harness.ts';
 
 const PASSWORD = 'correct horse battery';
@@ -245,6 +246,34 @@ describe('gallery opt-in', () => {
     expect((await gallery(h)).entries.map((e) => e.id)).not.toContain(id);
   });
 
+  it('refuses to list a quarantine tank', async () => {
+    const owner = await account(h);
+    const id = await newTank(h, owner, 'Sick bay', true, false);
+    await h.database.db
+      .update(schema.tanks)
+      .set({ quarantine: true })
+      .where(eq(schema.tanks.id, id));
+    expect((await setListed(owner, id, true)).statusCode).toBe(409);
+    expect((await gallery(h)).entries.map((e) => e.id)).not.toContain(id);
+  });
+
+  it('audits only real listing changes', async () => {
+    const owner = await account(h);
+    const id = await newTank(h, owner, 'Flip flop', true, false);
+    for (const listed of [true, true, false, false, true]) {
+      expect((await setListed(owner, id, listed)).statusCode).toBe(200);
+    }
+    const rows = await h.database.db
+      .select()
+      .from(schema.auditLog)
+      .where(and(eq(schema.auditLog.tankId, id), eq(schema.auditLog.actorId, owner.userId)));
+    expect(rows.filter((r) => r.action.startsWith('gallery_')).map((r) => r.action)).toEqual([
+      'gallery_listed',
+      'gallery_unlisted',
+      'gallery_listed',
+    ]);
+  });
+
   it('is owner only and needs a session', async () => {
     const owner = await account(h);
     const id = await newTank(h, owner, 'Not yours', true, false);
@@ -374,6 +403,25 @@ describe('voting', () => {
       .from(schema.tankVotes)
       .where(eq(schema.tankVotes.userId, voter.userId));
     expect(rows).toHaveLength(0);
+  });
+
+  it('prunes votes older than 90 days and keeps newer ones', async () => {
+    const owner = await account(h);
+    const old = await account(h);
+    const recent = await account(h);
+    const id = await newTank(h, owner, 'Prune me');
+    const day = 86_400_000;
+    const weekAgo = (days: number) => new Date(Date.now() - days * day);
+    await h.database.db.insert(schema.tankVotes).values([
+      { userId: old.userId, tankId: id, weekStart: weekAgo(91) },
+      { userId: recent.userId, tankId: id, weekStart: weekAgo(89) },
+    ]);
+    await pruneExpired(h.database);
+    const left = await h.database.db
+      .select({ userId: schema.tankVotes.userId })
+      .from(schema.tankVotes)
+      .where(eq(schema.tankVotes.tankId, id));
+    expect(left).toEqual([{ userId: recent.userId }]);
   });
 
   it('includes votes in the account export, hiding private tank names', async () => {
