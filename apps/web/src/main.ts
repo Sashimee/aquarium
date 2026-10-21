@@ -7,6 +7,7 @@ import type { Biome, Collider } from '@aquarium/shared';
 import { colliderDigest } from './fish/simColliders';
 import { queueTankEvents, startFish, type FishHandle } from './fish/start';
 import { CameraRig, orbitDistanceFor, tankBounds } from './interaction/camera';
+import { syncRoomLimit } from './interaction/roomLimit';
 import { BackgroundChoice } from './interaction/background';
 import { bindCameraControls } from './interaction/controls';
 import { SceneDecor } from './interaction/decor/sceneDecor';
@@ -32,6 +33,7 @@ import {
 } from './ui/loadSignals';
 import { mountUi } from './ui/mount';
 import { FeedGate } from './sync/feedGate';
+import { WaveMakerFeed } from './sync/waveMakerFeed';
 import { awaitTankModules } from './tankLoad';
 
 function showFatal(container: HTMLElement, message: string): void {
@@ -64,6 +66,7 @@ async function boot(): Promise<void> {
   const tracker = new LoadTracker(interaction, stallMs === undefined ? {} : { stallMs });
   tracker.begin('boot');
   const tankEvents = queueTankEvents(interaction);
+  const waveMaker = new WaveMakerFeed(interaction);
   const tankSize = new TankSizeSource(interaction);
   const tankBiome = new TankBiome(interaction, parseBiome(window.location.search));
   const switches = watchSwitches(interaction, tracker, tankBiome.fallback);
@@ -114,6 +117,7 @@ async function boot(): Promise<void> {
     const message = cause instanceof Error ? cause.message : String(cause);
     tracker.fail(message);
     switches.stop();
+    waveMaker.stop();
     tankSize.stop();
     tankEvents.stop();
     tankBiome.stop();
@@ -143,6 +147,17 @@ async function boot(): Promise<void> {
       interaction.emit('camera:mode-changed', { mode });
     },
   });
+
+  const { mountRoom, RoomPreference, browserRoomStorage } = await import('./scene/room');
+  const roomPreference = new RoomPreference(browserRoomStorage());
+  const room = mountRoom(engine, roomPreference);
+  const limitToRoom = (): void => syncRoomLimit(rig, room.backdrop.layout);
+  limitToRoom();
+  const stopRoomLimit = [
+    roomPreference.subscribe(limitToRoom),
+    engine.events.on('engine:tank-resized', limitToRoom),
+    engine.events.on('quality:tier-changed', limitToRoom),
+  ];
 
   const stopMotionWatch = watchReducedMotion((reduced) => rig.setReducedMotion(reduced));
   let play: PlaySystem | null = null;
@@ -227,6 +242,7 @@ async function boot(): Promise<void> {
   });
 
   liveFish = fish;
+  waveMaker.attach(fish.sim);
   if (exposePose) {
     let shownSpecies: readonly string[] | null = null;
     engine.onFrame(() => {
@@ -321,7 +337,10 @@ async function boot(): Promise<void> {
 
   onPageTeardown(window, () => {
     switches.stop();
+    waveMaker.stop();
     stopResize();
+    for (const off of stopRoomLimit) off();
+    room.dispose();
     stopTankSize();
     tankSize.stop();
     assetWatch.stop();

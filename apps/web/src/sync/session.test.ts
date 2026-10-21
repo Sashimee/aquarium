@@ -1414,6 +1414,50 @@ describe('Pearls and the T70 request contract', () => {
     expect(session.getState().notice).toBe('Installed.');
   });
 
+  describe('wave maker tier', () => {
+    const withWaveMaker = (tank: Tank, tier: number): Tank => ({
+      ...tank,
+      equipment: { ...tank.equipment, waveMaker: { tier } },
+    });
+    const watch = (rec: ReturnType<typeof setup>['rec']) => {
+      const seen: { tankId: string; tier: number }[] = [];
+      rec.bus.on('tank:wave-maker', (e) => seen.push(e));
+      return seen;
+    };
+
+    it('announces each tank own tier on load and on a switch', async () => {
+      const { rec, session } = setup([
+        withWaveMaker(tankFixture({ id: TANK_A }), 0),
+        withWaveMaker(tankFixture({ id: TANK_B }), 2),
+      ]);
+      const seen = watch(rec);
+      await session.setUser(verified);
+      await session.select(TANK_B);
+      expect(seen).toEqual([
+        { tankId: TANK_A, tier: 0 },
+        { tankId: TANK_B, tier: 2 },
+      ]);
+    });
+
+    it('announces a bought or upgraded wave maker, and only when the tier changes', async () => {
+      const { api, rec, session } = setup();
+      const seen = watch(rec);
+      await session.setUser(verified);
+      api.purchase.mockResolvedValue({ wallet: { balance: 250 }, entry: {}, replayed: false });
+      let minute = 1;
+      const buy = async (tier: number) => {
+        api.tank.mockResolvedValue(
+          withWaveMaker(tankFixture({ lastTickAt: `2026-02-01T12:0${minute++}:00.000Z` }), tier),
+        );
+        await session.purchase(`equipment:waveMaker:${tier}`, 'Installed.');
+      };
+      await buy(1);
+      await buy(1);
+      await buy(3);
+      expect(seen.map((e) => e.tier)).toEqual([0, 1, 3]);
+    });
+  });
+
   it('reuses the purchase key on a retry', async () => {
     const { api, session } = setup();
     await session.setUser(verified);

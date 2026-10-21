@@ -1,5 +1,15 @@
+import { DEFAULT_EQUIPMENT } from '@aquarium/shared';
+import { lampIsOn } from '@aquarium/sim/lifecycle';
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_PHOTOPERIOD, daylightAt, minuteOfDay, parseClock } from './daylight';
+import {
+  DEFAULT_LAMP_HOURS,
+  DEFAULT_PHOTOPERIOD,
+  daylightAt,
+  lampPhotoperiod,
+  localMinuteOfDay,
+  minuteOfDay,
+  parseClock,
+} from './daylight';
 
 const at = (h: number, m = 0): number => h * 60 + m;
 
@@ -67,5 +77,61 @@ describe('parseClock', () => {
 describe('minuteOfDay', () => {
   it('uses local time with seconds as a fraction', () => {
     expect(minuteOfDay(new Date(2026, 9, 13, 14, 30, 30))).toBeCloseTo(at(14, 30.5), 6);
+  });
+});
+
+describe('lampPhotoperiod', () => {
+  const DAY = Date.UTC(2026, 9, 21);
+  const hoodAt = (ms: number, onHour: number, offHour: number) =>
+    daylightAt(localMinuteOfDay(ms, 0), lampPhotoperiod({ onHour, offHour }));
+
+  it('lights the hood exactly while the sim counts the lamp as on, for every schedule', () => {
+    for (let onHour = 0; onHour < 24; onHour++) {
+      for (let offHour = 0; offHour < 24; offHour++) {
+        if (onHour === offHour) continue;
+        for (let minute = 0; minute < 24 * 60; minute += 5) {
+          const ms = DAY + minute * 60_000;
+          const lit = hoodAt(ms, onHour, offHour) > 0;
+          const on = lampIsOn(ms, 0, onHour, offHour);
+          if (minute % 60 === 0) {
+            if (lit) expect(on).toBe(true);
+          } else {
+            expect(lit).toBe(on);
+          }
+        }
+      }
+    }
+  });
+
+  it('follows a schedule across UTC midnight', () => {
+    expect(hoodAt(DAY + 22 * 3_600_000, 14, 2)).toBe(1);
+    expect(hoodAt(DAY + 30 * 60_000, 14, 2)).toBeGreaterThan(0);
+    expect(hoodAt(DAY + 3 * 3_600_000, 14, 2)).toBe(0);
+    expect(hoodAt(DAY + 10 * 3_600_000, 14, 2)).toBe(0);
+  });
+
+  it('reaches full light even when the lamp is on for one hour', () => {
+    expect(hoodAt(DAY + 7.5 * 3_600_000, 7, 8)).toBeCloseTo(1, 9);
+    expect(lampPhotoperiod({ onHour: 7, offHour: 8 }).rampMinutes).toBe(30);
+    expect(lampPhotoperiod({ onHour: 8, offHour: 20 }).rampMinutes).toBe(60);
+  });
+
+  it('defaults to the default tank lamp', () => {
+    expect(DEFAULT_LAMP_HOURS).toEqual({
+      onHour: DEFAULT_EQUIPMENT.light.onHour,
+      offHour: DEFAULT_EQUIPMENT.light.offHour,
+    });
+  });
+
+  it('rejects hours the lamp schedule cannot hold', () => {
+    for (const [onHour, offHour] of [
+      [8, 8],
+      [-1, 8],
+      [8, 24],
+      [7.5, 20],
+      [Number.NaN, 2],
+    ] as const) {
+      expect(() => lampPhotoperiod({ onHour, offHour })).toThrow(RangeError);
+    }
   });
 });

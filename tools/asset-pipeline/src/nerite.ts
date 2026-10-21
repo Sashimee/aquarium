@@ -346,6 +346,7 @@ const LIP_FACE_DEPTH = 0.1;
 const LIP_TRIM = 0.03;
 const LIP_RAMP = 0.15;
 const LIP_SPAN = 0.85;
+// Max-filter radius in columns: a notch up to 2 * LIP_ENVELOPE + 1 = 7 columns wide does not pull the cut down.
 const LIP_ENVELOPE = 3;
 
 function signedPow(v: number, exponent: number): number {

@@ -7,6 +7,7 @@ import {
   type SimClientPort,
   type SimReady,
   type SimToy,
+  waveMakerForTier,
 } from '@aquarium/sim';
 import { HUNGER_PER_PORTION } from '@aquarium/sim/lifecycle';
 import { DEFAULT_TANK } from '../engine/tank/dimensions';
@@ -419,6 +420,7 @@ describe('startWorld', () => {
         setDecor: (decor) => calls.push(['decor', decor]),
         setAnchors: (anchors) => calls.push(['anchors', anchors]),
         setToys: (toys) => calls.push(['toys', toys]),
+        setWaveMaker: (settings) => calls.push(['waveMaker', settings]),
         setVisitor: (visitor) => calls.push(['visitor', visitor]),
         start: () => calls.push(['start']),
       },
@@ -509,6 +511,26 @@ describe('startWorld', () => {
       });
       expect(calls).toEqual([['light', 1], ['toys', [mirror]], ['start']]);
     }
+  });
+
+  it('gives every new world the wave maker, and none when there is none', async () => {
+    const { spec, roster } = setup();
+    const hooks = {
+      current: () => true,
+      light: () => 1,
+      stage: () => undefined,
+      visitDays: () => null,
+      begin: () => undefined,
+    };
+    const settings = waveMakerForTier(2);
+    spec.setWaveMaker(settings);
+    const withOne = recorder();
+    await startWorld(withOne.sim, spec, demoConfig(spec, roster), Promise.resolve(READY), hooks);
+    expect(withOne.calls).toEqual([['light', 1], ['waveMaker', settings], ['start']]);
+    spec.setWaveMaker(null);
+    const without = recorder();
+    await startWorld(without.sim, spec, demoConfig(spec, roster), Promise.resolve(READY), hooks);
+    expect(without.calls).toEqual([['light', 1], ['start']]);
   });
 
   it('sends no toys while there are none', async () => {

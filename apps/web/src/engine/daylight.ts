@@ -1,6 +1,8 @@
+import { DEFAULT_EQUIPMENT, type LightSchedule } from '@aquarium/shared';
+
 const MINUTES_PER_DAY = 24 * 60;
 
-/** When the hood lights are on, in minutes after local midnight. */
+/** When the hood lights are on, in minutes after midnight on the tank's clock. */
 export interface Photoperiod {
   readonly onAt: number;
   readonly offAt: number;
@@ -54,4 +56,48 @@ export function parseClock(value: string): number {
 
 export function minuteOfDay(date: Date): number {
   return date.getHours() * 60 + date.getMinutes() + date.getSeconds() / 60;
+}
+
+/**
+ * Minutes after midnight on the wall clock `utcOffsetMinutes` ahead of UTC, from epoch time alone.
+ * The day is cut at UTC midnight shifted by the offset, as the lamp schedule cuts its UTC hours,
+ * so a daylight-saving change reaches the result only through the offset the caller passes.
+ */
+export function localMinuteOfDay(nowMs: number, utcOffsetMinutes: number): number {
+  if (!Number.isFinite(nowMs) || !Number.isFinite(utcOffsetMinutes)) {
+    throw new RangeError(
+      `localMinuteOfDay: time and offset must be finite, got ${nowMs} and ${utcOffsetMinutes}`,
+    );
+  }
+  return wrapMinutes(nowMs / 60_000 + utcOffsetMinutes);
+}
+
+/** The lamp's on and off hours; the sim reads them as UTC hours (`lampIsOn`). */
+export type LampHours = Pick<LightSchedule, 'onHour' | 'offHour'>;
+
+export const DEFAULT_LAMP_HOURS: LampHours = {
+  onHour: DEFAULT_EQUIPMENT.light.onHour,
+  offHour: DEFAULT_EQUIPMENT.light.offHour,
+};
+
+const LAMP_RAMP_MINUTES = 60;
+
+/**
+ * The visible hood's photoperiod for a lamp schedule. The ramps sit inside the lamp's on hours, so
+ * the hood shows light exactly while the sim counts the lamp as on.
+ */
+export function lampPhotoperiod(hours: LampHours): Photoperiod {
+  const { onHour, offHour } = hours;
+  const valid = (h: number) => Number.isInteger(h) && h >= 0 && h <= 23;
+  if (!valid(onHour) || !valid(offHour) || onHour === offHour) {
+    throw new RangeError(
+      `lampPhotoperiod: need two different whole hours 0..23, got ${onHour} and ${offHour}`,
+    );
+  }
+  const length = wrapMinutes((offHour - onHour) * 60);
+  return {
+    onAt: onHour * 60,
+    offAt: offHour * 60,
+    rampMinutes: Math.min(LAMP_RAMP_MINUTES, length / 2),
+  };
 }

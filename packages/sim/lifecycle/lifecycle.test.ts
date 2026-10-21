@@ -97,6 +97,8 @@ function fishOf(id: string, speciesId: string, over: Partial<LifecycleFish> = {}
     sex: 'female',
     stage: 'adult',
     lastBroodAtMs: null,
+    disease: null,
+    introducedAtMs: null,
     ...over,
   };
 }
@@ -110,6 +112,7 @@ function tank(
     water: { ...cleanWater, ...water },
     chemistry: { ...newTankChemistry('freshwater'), ...chemistry },
     fish,
+    medicine: null,
   };
 }
 
@@ -191,6 +194,7 @@ describe('one visit a day keeps a tank healthy', () => {
         { type: 'feed', food: 'flakes', portion: 3 },
         'freshwater',
         chemistryParams,
+        T0,
       );
       if (!fed.ok) throw new Error(fed.reason);
       const eaten = applyEating(
@@ -258,7 +262,7 @@ describe('a tank stocked to capacity at full size under perfect daily care', () 
         water: { ...state.water, uneatenFood: state.water.uneatenFood + 1 },
         fish: state.fish.map((f) => ({ ...f, hunger: 0 })),
       };
-      const changed = applyCare(state, { type: 'water_change' }, biome, chemistryParams);
+      const changed = applyCare(state, { type: 'water_change' }, biome, chemistryParams, T0);
       if (!changed.ok) throw new Error(changed.reason);
       const r = catchUp({
         state: changed.value,
@@ -303,6 +307,7 @@ describe('a tank stocked to capacity at full size under perfect daily care', () 
       let state: LifecycleState = {
         water: cleanWater,
         chemistry: newTankChemistry(biome),
+        medicine: null,
         fish: Array.from({ length: count }, (_, i) =>
           fishOf(`${id}-${i}`, id, { size: spec.maxSizeM }),
         ),
@@ -315,7 +320,7 @@ describe('a tank stocked to capacity at full size under perfect daily care', () 
           fish: state.fish.map((f) => ({ ...f, hunger: 0 })),
         };
         if (day % 7 === 0) {
-          const changed = applyCare(state, { type: 'water_change' }, biome, chemistryParams);
+          const changed = applyCare(state, { type: 'water_change' }, biome, chemistryParams, T0);
           if (!changed.ok) throw new Error(changed.reason);
           state = changed.value;
         }
@@ -362,6 +367,7 @@ describe('overfeeding poisons the tank', () => {
           { type: 'feed', food: 'flakes', portion: 5 },
           'freshwater',
           chemistryParams,
+          T0,
         );
         if (fed.ok) state = fed.value;
       }
@@ -410,7 +416,7 @@ describe('recovery', () => {
   it('a water change and gravel vacuum bring a poisoned tank back below tolerance', () => {
     let state = tank([fishOf('a', 'neon-tetra')], { ammonia: 0.6, nitrate: 8, uneatenFood: 6 });
     for (const type of ['water_change', 'gravel_vacuum'] as const) {
-      const r = applyCare(state, { type }, 'freshwater', chemistryParams);
+      const r = applyCare(state, { type }, 'freshwater', chemistryParams, T0);
       if (!r.ok) throw new Error(r.reason);
       state = r.value;
     }
@@ -638,16 +644,26 @@ describe('feeding validation', () => {
 
   it('refuses food the biome does not support and food beyond the tank limit', () => {
     expect(
-      applyCare(state, { type: 'feed', food: 'nori', portion: 1 }, 'freshwater', chemistryParams)
-        .ok,
+      applyCare(
+        state,
+        { type: 'feed', food: 'nori', portion: 1 },
+        'freshwater',
+        chemistryParams,
+        T0,
+      ).ok,
     ).toBe(false);
     expect(
-      applyCare(state, { type: 'feed', food: 'nori', portion: 1 }, 'reef', chemistryParams).ok,
+      applyCare(state, { type: 'feed', food: 'nori', portion: 1 }, 'reef', chemistryParams, T0).ok,
     ).toBe(true);
     const full = tank(state.fish as LifecycleFish[], { uneatenFood: 19.5 });
     expect(
-      applyCare(full, { type: 'feed', food: 'flakes', portion: 1 }, 'freshwater', chemistryParams)
-        .ok,
+      applyCare(
+        full,
+        { type: 'feed', food: 'flakes', portion: 1 },
+        'freshwater',
+        chemistryParams,
+        T0,
+      ).ok,
     ).toBe(false);
   });
 });
@@ -754,7 +770,13 @@ describe('nitrogen cycle', () => {
 
   it('bottled bacteria cut the time to recover a crashed filter', () => {
     const crashed = tank(guppies(10), {}, { bacteria: UNCYCLED });
-    const dosed = applyCare(crashed, { type: 'bottled_bacteria' }, 'freshwater', chemistryParams);
+    const dosed = applyCare(
+      crashed,
+      { type: 'bottled_bacteria' },
+      'freshwater',
+      chemistryParams,
+      T0,
+    );
     if (!dosed.ok) throw new Error(dosed.reason);
     expect(dosed.value.chemistry.bacteria.ammoniaOxidisers).toBe(
       chemistryParams.bacteria.bottledBoost,
@@ -772,13 +794,19 @@ describe('nitrogen cycle', () => {
 
   it('bottled bacteria never push a colony past 1', () => {
     const full = tank([fishOf('a', 'neon-tetra')]);
-    const dosed = applyCare(full, { type: 'bottled_bacteria' }, 'freshwater', chemistryParams);
+    const dosed = applyCare(full, { type: 'bottled_bacteria' }, 'freshwater', chemistryParams, T0);
     if (!dosed.ok) throw new Error(dosed.reason);
     expect(dosed.value.chemistry.bacteria).toEqual({ ammoniaOxidisers: 1, nitriteOxidisers: 1 });
   });
 
   it('rinsing the filter in tap water kills most of the colonies and ammonia rises', () => {
-    const rinsed = applyCare(stocked(), { type: 'filter_rinse' }, 'freshwater', chemistryParams);
+    const rinsed = applyCare(
+      stocked(),
+      { type: 'filter_rinse' },
+      'freshwater',
+      chemistryParams,
+      T0,
+    );
     if (!rinsed.ok) throw new Error(rinsed.reason);
     expect(rinsed.value.chemistry.bacteria.ammoniaOxidisers).toBeCloseTo(
       chemistryParams.bacteria.rinseSurvival,
@@ -806,7 +834,7 @@ describe('nitrogen cycle', () => {
 
   it('a water change halves nitrite and moves KH towards the source water', () => {
     const state = tank([fishOf('a', 'neon-tetra')], {}, { nitrite: 1, kh: 2 });
-    const r = applyCare(state, { type: 'water_change' }, 'freshwater', chemistryParams);
+    const r = applyCare(state, { type: 'water_change' }, 'freshwater', chemistryParams, T0);
     if (!r.ok) throw new Error(r.reason);
     expect(r.value.chemistry.nitrite).toBeCloseTo(0.5);
     expect(r.value.chemistry.kh).toBeCloseTo(
@@ -893,7 +921,7 @@ describe('pH, KH, temperature and salinity', () => {
       ...tank([fishOf('a', 'ocellaris-clownfish')]),
       chemistry: { ...newTankChemistry('reef'), kh: 5 },
     };
-    const r = applyCare(reef, { type: 'water_change' }, 'reef', chemistryParams);
+    const r = applyCare(reef, { type: 'water_change' }, 'reef', chemistryParams, T0);
     if (!r.ok) throw new Error(r.reason);
     const { sourceWater, restoredPerWaterChange } = chemistryParams.kh;
     expect(r.value.chemistry.kh).toBeCloseTo(5 + (sourceWater.reef - 5) * restoredPerWaterChange);
@@ -1005,6 +1033,7 @@ describe('every species in every tank size under good care', () => {
       let state: LifecycleState = {
         water: cleanWater,
         chemistry: newTankChemistry(biome),
+        medicine: null,
         fish: Array.from({ length: count }, (_, i) =>
           fishOf(`${id}-${i}`, id, { size: spec.maxSizeM }),
         ),
@@ -1017,7 +1046,7 @@ describe('every species in every tank size under good care', () => {
           fish: state.fish.map((f) => ({ ...f, hunger: 0 })),
         };
         if (day % 7 === 0) {
-          const changed = applyCare(state, { type: 'water_change' }, biome, chemistryParams);
+          const changed = applyCare(state, { type: 'water_change' }, biome, chemistryParams, T0);
           if (!changed.ok) throw new Error(changed.reason);
           state = changed.value;
         }
@@ -1247,6 +1276,7 @@ describe('overfeeding by tank size', () => {
       let state: LifecycleState = {
         water: cleanWater,
         chemistry: newTankChemistry(biome),
+        medicine: null,
         fish: Array.from({ length: nanoStock(spec.bioload) }, (_, i) =>
           fishOf(`${id}-${i}`, id, { size: spec.maxSizeM }),
         ),
@@ -1259,7 +1289,7 @@ describe('overfeeding by tank size', () => {
           fish: state.fish.map((f) => ({ ...f, hunger: 0 })),
         };
         if (day % 7 === 0) {
-          const changed = applyCare(state, { type: 'water_change' }, biome, chemistryParams);
+          const changed = applyCare(state, { type: 'water_change' }, biome, chemistryParams, T0);
           if (!changed.ok) throw new Error(changed.reason);
           state = changed.value;
         }
@@ -1296,7 +1326,13 @@ describe('overfeeding by tank size', () => {
         fish: state.fish.map((f) => ({ ...f, hunger: 0 })),
       };
       if (day % 7 === 0) {
-        const changed = applyCare(state, { type: 'water_change' }, 'freshwater', chemistryParams);
+        const changed = applyCare(
+          state,
+          { type: 'water_change' },
+          'freshwater',
+          chemistryParams,
+          T0,
+        );
         if (!changed.ok) throw new Error(changed.reason);
         state = changed.value;
       }
@@ -1349,7 +1385,7 @@ describe('the clean-up crew: nerite snail and hermit crab', () => {
           fish: state.fish.map((f) => ({ ...f, hunger: 0 })),
         };
         if (day % 7 === 0) {
-          const changed = applyCare(state, { type: 'water_change' }, biome, chemistryParams);
+          const changed = applyCare(state, { type: 'water_change' }, biome, chemistryParams, now);
           if (!changed.ok) throw new Error(changed.reason);
           state = changed.value;
         }

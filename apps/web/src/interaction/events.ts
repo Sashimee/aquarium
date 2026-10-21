@@ -174,6 +174,8 @@ export interface InteractionEvents {
   /** Netted, or removed on another device. */
   'tank:fish-removed': { tankId: string; fishId: string; reason: 'netted' | 'gone' };
   'tank:water': { tankId: string; water: Water };
+  /** The tank's wave maker tier, sent after each load and whenever a purchase changes it; 0 is none. */
+  'tank:wave-maker': { tankId: string; tier: number };
   /** The loading screen: from app start, and from each tank switch, until the tank has drawn. */
   'load:state': LoadState;
   /** The failure card was closed; the loading screen stays away until the next load begins. */
