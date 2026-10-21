@@ -35,8 +35,18 @@ export interface FishModel {
   readonly textureSize: FishTextureSize;
   /** `lods[level]` holds that level's parts; every level reuses lod0's materials where it can. */
   readonly lods: readonly (readonly FishPart[])[];
-  /** A walker's tail-curl rig from lod0; null for a fish. */
+  /** A legged walker's tail-curl rig from lod0; null for a fish or a snail. */
   readonly tail: TailRig | null;
+  /** Where a crab or snail withdraws into its shell, from lod0; null for the others. */
+  readonly shell: ShellRig | null;
+}
+
+/** In model units. */
+export interface ShellRig {
+  /** Centroid of the shell's vertices; the soft parts shrink towards it as the animal withdraws. */
+  readonly centre: Vec3;
+  /** Height of the shell's underside over the surface at rest, which it settles by withdrawn. */
+  readonly drop: number;
 }
 
 /**
@@ -44,6 +54,10 @@ export interface FishModel {
  * vec3, so the models stay within WebGPU's 8 vertex buffers.
  */
 export const FIN_ATTRIBUTE = 'fin';
+/** `_fin_id` of a crab's or snail's shell, which stays rigid; every other part is soft. */
+export const SHELL_PART_ID = 0;
+/** `_fin_id` of a snail's foot; its head and tentacles follow as 11 and 12. */
+export const SNAIL_FOOT_PART_ID = 10;
 /** `_fin_id` of a shrimp's walking legs and chelipeds. */
 export const LEG_PART_ID = 6;
 /** `_fin_id` of a shrimp's pleopods and of its abdomen with the tail fan: the parts that curl. */
@@ -173,6 +187,30 @@ function tailRig(entry: FishAssetEntry, lod0: readonly FishPart[]): TailRig | nu
     throw new Error(`fish ${entry.id}: lod0 has no abdomen to curl; re-run the asset pipeline`);
   }
   return { hinge: entry.shrimp.hinge, tip, bodyLength: entry.standardLengthM };
+}
+
+/** Null for a model that has no shell to withdraw into. */
+export function shellRig(entry: FishAssetEntry, lod0: readonly FishPart[]): ShellRig | null {
+  if ((entry.kind !== 'crab' && entry.kind !== 'snail') || entry.standoff === null) return null;
+  let x = 0;
+  let y = 0;
+  let z = 0;
+  let n = 0;
+  let underside = Infinity;
+  for (const { geometry } of lod0) {
+    const fin = geometry.getAttribute(FIN_ATTRIBUTE);
+    const position = geometry.getAttribute('position');
+    for (let i = 0; i < fin.count; i++) {
+      if (fin.getY(i) !== SHELL_PART_ID) continue;
+      x += position.getX(i);
+      y += position.getY(i);
+      z += position.getZ(i);
+      n += 1;
+      underside = Math.min(underside, position.getY(i));
+    }
+  }
+  if (n === 0) throw new Error(`fish ${entry.id}: lod0 has no shell; re-run the asset pipeline`);
+  return { centre: [x / n, y / n, z / n], drop: Math.max(0, underside + entry.standoff) };
 }
 
 function standardMaterial(material: Material | Material[], label: string): MeshStandardMaterial {
@@ -323,7 +361,8 @@ export class FishAssetLoader {
           throw cause;
         }
       }
-      return { entry, textureSize, lods, tail: tailRig(entry, lods[0] ?? []) };
+      const lod0 = lods[0] ?? [];
+      return { entry, textureSize, lods, tail: tailRig(entry, lod0), shell: shellRig(entry, lod0) };
     } catch (cause) {
       disposeFishModel({ lods });
       throw cause;

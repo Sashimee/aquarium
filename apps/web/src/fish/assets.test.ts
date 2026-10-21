@@ -13,7 +13,7 @@ const PUBLIC = fileURLToPath(new URL('../../public/assets/', import.meta.url));
 const SWIMMERS = [
   ...parseFishAssets(JSON.parse(readFileSync(`${PUBLIC}index.json`, 'utf8'))).values(),
 ]
-  .filter((entry) => entry.shrimp === null)
+  .filter((entry) => entry.kind === 'fish')
   .map((entry) => entry.id);
 
 function serveShippedAssets(): void {
@@ -154,12 +154,60 @@ describe('FishAssetLoader', () => {
     },
   );
 
+  it("finds the hermit crab's leg hips on the side its slot names, and the shell it sits in", async () => {
+    serveShippedAssets();
+    spyTextureLoads();
+    const loader = new FishAssetLoader(new KTX2Loader(), ROOT);
+    const model = await loader.load('hermit-crab');
+    const entry = (await loader.entries()).get('hermit-crab');
+    if (entry?.shrimp == null || entry.standoff === null) throw new Error('hermit-crab: no rig');
+    const [lod0] = model.lods;
+    if (lod0 === undefined) throw new Error('hermit-crab: no LOD0');
+    for (const part of lod0) {
+      expect(part.geometry.getAttribute(FIN_ATTRIBUTE).itemSize).toBe(3);
+      expect(part.legPivots).toHaveLength(entry.shrimp.legPairs * 2);
+      part.legPivots.forEach((hip, leg) => {
+        if (hip === null) return;
+        expect(Math.sign(hip[0]), `leg ${leg} side`).toBe(leg % 2 === 0 ? -1 : 1);
+      });
+    }
+    expect(lod0.some((part) => part.legPivots.some((hip) => hip !== null))).toBe(true);
+    expect(model.tail).not.toBeNull();
+    const { shell } = model;
+    if (shell === null) throw new Error('hermit-crab: no shell rig');
+    expect(shell.centre[1]).toBeGreaterThan(entry.min[1]);
+    expect(shell.centre[1]).toBeLessThan(entry.max[1]);
+    // The shell rests on its underside once the legs fold away, a little above the feet.
+    expect(shell.drop).toBeGreaterThan(0);
+    expect(shell.drop).toBeLessThan(entry.standoff);
+    disposeFishModel(model);
+  });
+
+  it('loads the nerite snail with its foot weights and no legs, its shell already on the sole', async () => {
+    serveShippedAssets();
+    spyTextureLoads();
+    const loader = new FishAssetLoader(new KTX2Loader(), ROOT);
+    const model = await loader.load('nerite-snail');
+    for (const part of model.lods.flat()) {
+      expect(part.geometry.getAttribute(FIN_ATTRIBUTE).itemSize).toBe(2);
+      expect(part.legPivots).toEqual([]);
+      expect(part.mouth).toBe(false);
+    }
+    expect(model.tail).toBeNull();
+    const { shell } = model;
+    if (shell === null) throw new Error('nerite-snail: no shell rig');
+    expect(shell.centre[1]).toBeGreaterThan(0);
+    expect(shell.drop).toBeLessThan(0.0005);
+    disposeFishModel(model);
+  });
+
   it('keeps a fish without hips', async () => {
     serveShippedAssets();
     spyTextureLoads();
     const model = await new FishAssetLoader(new KTX2Loader(), ROOT).load('neon-tetra');
     for (const part of model.lods.flat()) expect(part.legPivots).toEqual([]);
     expect(model.tail).toBeNull();
+    expect(model.shell).toBeNull();
     disposeFishModel(model);
   });
 

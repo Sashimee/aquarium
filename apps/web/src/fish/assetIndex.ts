@@ -1,8 +1,15 @@
-/** A walker's tail-curl axis and extent, in model space; see the index's `customAttributes`. */
+/**
+ * A legged walker's tail-curl axis and extent, in model space; see the index's `customAttributes`.
+ * A crab's index block has the shrimp's shape, its soft body standing in for the abdomen.
+ */
 export interface ShrimpRig {
   /** The abdomen curls about +x through this point. */
   readonly hinge: { readonly y: number; readonly z: number };
   readonly telsonZ: number;
+  /**
+   * Pairs of `_leg` slots the mesh may use, `pair * 2 + side`: the model's limb index range, not
+   * the species' walking pereiopods (`locomotion.walking.legPairs`), which may be fewer.
+   */
   readonly legPairs: number;
 }
 
@@ -22,9 +29,16 @@ export interface ImpostorAtlasInfo {
   readonly normalFile: string;
 }
 
+const KINDS = ['fish', 'shrimp', 'crab', 'snail'] as const;
+export type FishAssetKind = (typeof KINDS)[number];
+
+function isFishKind(kind: unknown): kind is FishAssetKind {
+  return KINDS.some((k) => k === kind);
+}
+
 export interface FishAssetEntry {
   readonly id: string;
-  readonly kind: 'fish' | 'shrimp';
+  readonly kind: FishAssetKind;
   readonly species: string;
   /** Model-space bounds; +Z forward, +Y up, origin at the centre of mass. */
   readonly min: readonly [number, number, number];
@@ -35,8 +49,13 @@ export interface FishAssetEntry {
   readonly lodFiles: readonly string[];
   /** 1k map → its 2k map, for the maps whose 2k variant really is larger; paths as `lodFiles`. */
   readonly sharperTextures: ReadonlyMap<string, string>;
-  /** Null for a fish. */
+  /** Set for a shrimp or a crab; null for a fish or a snail. */
   readonly shrimp: ShrimpRig | null;
+  /**
+   * Height of a walker's model origin over the surface it stands on, in model units: down to the
+   * feet of a shrimp or crab, 0 for a snail, whose origin is on its sole. Null for a fish.
+   */
+  readonly standoff: number | null;
   /** Null where the pipeline baked none, which keeps the lod2 mesh at every distance. */
   readonly impostor: ImpostorAtlasInfo | null;
 }
@@ -158,7 +177,7 @@ export function parseFishAssets(json: unknown): Map<string, FishAssetEntry> {
   assets.forEach((raw: unknown, i) => {
     const asset = record(raw, `assets[${i}]`);
     const kind = asset.kind;
-    if (kind !== 'fish' && kind !== 'shrimp') return;
+    if (!isFishKind(kind)) return;
     const id = string(asset.id, `assets[${i}].id`);
     const at = `assets[${id}]`;
     const bounds = record(asset.bounds, `${at}.bounds`);
@@ -171,6 +190,9 @@ export function parseFishAssets(json: unknown): Map<string, FishAssetEntry> {
       assetPath(record(lod, `${at}.lods[${j}]`).file, `${at}.lods[${j}].file`),
     );
     const body = record(asset[kind], `${at}.${kind}`);
+    const legged = kind === 'shrimp' || kind === 'crab';
+    if (kind === 'snail' && body.origin !== 'foot-centre')
+      fail(`${at}.snail.origin`, '"foot-centre"');
     out.set(id, {
       id,
       kind,
@@ -180,7 +202,12 @@ export function parseFishAssets(json: unknown): Map<string, FishAssetEntry> {
       standardLengthM: positive(body.standardLengthM, `${at}.${kind}.standardLengthM`),
       lodFiles,
       sharperTextures: sharperTextures(asset.textures, `${at}.textures`),
-      shrimp: kind === 'shrimp' ? shrimpRig(body, `${at}.shrimp`) : null,
+      shrimp: legged ? shrimpRig(body, `${at}.${kind}`) : null,
+      standoff: legged
+        ? positive(body.standoffM, `${at}.${kind}.standoffM`)
+        : kind === 'snail'
+          ? 0
+          : null,
       impostor: impostorAtlas(asset.impostor, `${at}.impostor`),
     });
   });

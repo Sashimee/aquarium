@@ -1,3 +1,6 @@
+import { decorPrice, DEFAULT_BACKGROUND_ID, isPlayableBiome } from '@aquarium/shared';
+import { BUNDLED_ECONOMY } from '../sync/bundledEconomy';
+import { priceText } from '../sync/economy';
 import { VACATION_FEEDER_ASSET_ID } from '../interaction/decor/spec';
 import type { DecorCommand } from '../interaction/events';
 import { backgroundOptions } from './backgroundTitles';
@@ -37,6 +40,12 @@ export function BackgroundChooser() {
               onClick={() => interaction.emit('background:choose', { backgroundId: id })}
             >
               {title}
+              {!(isPlayableBiome(shown.biome) && id === DEFAULT_BACKGROUND_ID[shown.biome]) && (
+                <span className="hint">
+                  {' '}
+                  {priceText(BUNDLED_ECONOMY.items.background.price, BUNDLED_ECONOMY)}
+                </span>
+              )}
             </button>
           </li>
         ))}
@@ -89,6 +98,7 @@ export default function DecorPanel() {
         <ul className="decor-palette">
           {state.palette.map((entry) => {
             const blocked = entry.assetId === VACATION_FEEDER_ASSET_ID && state.hasFeeder;
+            const price = decorPrice(BUNDLED_ECONOMY, entry.assetId);
             return (
               <li key={entry.assetId}>
                 <button
@@ -98,6 +108,12 @@ export default function DecorPanel() {
                 >
                   Add {entry.label}
                 </button>
+                {price !== undefined && (
+                  <span className="hint">
+                    {' '}
+                    {priceText(price, BUNDLED_ECONOMY)} once; buy it in the shop.
+                  </span>
+                )}
                 {entry.assetId === VACATION_FEEDER_ASSET_ID && (
                   <span className="hint">
                     {blocked

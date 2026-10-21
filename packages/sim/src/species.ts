@@ -32,6 +32,7 @@ export type Trait = (typeof TRAITS)[number];
 /** Where a fish returns to: a scene anchor, a self-chosen mid-water station, or nowhere. */
 export type HomeKind = 'anemone' | 'cave' | 'station' | 'none';
 export type Gait = SpeciesInput['locomotion']['gait'];
+export type SwimmingMode = SpeciesInput['locomotion']['swimmingMode'];
 
 /**
  * How a walker escapes a startle: a shrimp's tail-flip off the surface, or a snail's or hermit
@@ -80,6 +81,7 @@ const WALKER_TRAITS: readonly Trait[] = ['biofilm-grazer', 'cleaner'];
 export interface SimSpecies {
   readonly id: string;
   readonly gait: Gait;
+  readonly swimmingMode: SwimmingMode;
   readonly bodyLength: number;
   readonly mass: number;
   readonly maxSpeed: number;
@@ -357,6 +359,7 @@ export function toSimSpecies(input: SpeciesInput): SimSpecies {
   return {
     id,
     gait: loco.gait,
+    swimmingMode: loco.swimmingMode,
     bodyLength: requirePositive(loco.bodyLengthM, 'locomotion.bodyLengthM', id),
     mass: requirePositive(loco.massKg, 'locomotion.massKg', id),
     maxSpeed,

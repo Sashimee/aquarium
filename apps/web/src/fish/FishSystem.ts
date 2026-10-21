@@ -20,6 +20,7 @@ import {
   sinkingCarcass,
   SnapshotField,
   STEP_DT,
+  WALK,
   STEP_HZ,
   type FishPlacement,
   type Point3,
@@ -34,8 +35,14 @@ import { releaseAll } from '../engine/lifecycle';
 import type { Tier, TierSettings } from '../engine/quality/tiers';
 import { sameTank, waterBounds, type TankDimensions } from '../engine/tank/dimensions';
 import type { InteractionEvents } from '../interaction/events';
-import type { ImpostorAtlasInfo, ShrimpRig } from './assetIndex';
-import { disposeFishModel, FishAssetLoader, type FishModel } from './assets';
+import type { FishAssetEntry, ImpostorAtlasInfo, ShrimpRig } from './assetIndex';
+import {
+  disposeFishModel,
+  FishAssetLoader,
+  type FishModel,
+  type ShellRig,
+  type Vec3,
+} from './assets';
 import { AcclimationBags } from './bag';
 import { BatchCache } from './batchCache';
 import type { SceneAnchor } from '../scene/anemone';
@@ -68,7 +75,12 @@ import {
   type ImpostorValues,
 } from './impostor';
 import { FishImpostorMaterial } from './impostorMaterial';
-import { FishMaterial, type FishMaterialFeatures, type FishLighting } from './material';
+import {
+  FishMaterial,
+  type FishLighting,
+  type FishMaterialConfig,
+  type FishMaterialFeatures,
+} from './material';
 import { fishViewDirection, selectFrames, type FrameSelection } from './octahedral';
 import { ageDaysAt, maturityOf, youthOf } from './maturity';
 import { commitLodDraw } from './prewarm';
@@ -108,8 +120,19 @@ import {
 import { SimUnavailableError } from '../interaction/simUnavailable';
 import { speciesGrowth, speciesInput } from './species';
 import type { BallNudge, FishBite, FishPoint, PickRay, TankEvent } from './start';
-import { isFinned, SWIM_MODES, SwimState, type SwimModeParams, type SwimmingMode } from './swim';
-import { curlAboveFloor, floorUnderTail, WalkState, type TailRig, type WalkSample } from './walk';
+import { isFinned, SWIM_MODES, SwimState, type SwimModeParams } from './swim';
+import {
+  CRAB_GAIT,
+  curlAboveFloor,
+  floorUnderTail,
+  SHRIMP_GAIT,
+  SNAIL_GAIT,
+  WALK_GAIT,
+  WalkState,
+  type TailRig,
+  type WalkerGait,
+  type WalkSample,
+} from './walk';
 
 export interface FishSystemOptions {
   readonly tank: TankDimensions;
@@ -259,21 +282,111 @@ function sameRest(a: Float64Array, b: Float64Array): boolean {
 
 export type BatchLocomotion =
   | { readonly kind: 'swim'; readonly mode: SwimModeParams }
-  | { readonly kind: 'walk'; readonly shrimp: ShrimpRig; readonly tail: TailRig };
+  | {
+      readonly kind: 'walk';
+      readonly shrimp: ShrimpRig;
+      readonly tail: TailRig;
+      readonly chelipedPairs: number;
+      readonly shell: ShellRig | null;
+      readonly gait: WalkerGait;
+      /** See `walkerLift`. */
+      readonly lift: number;
+    }
+  | {
+      readonly kind: 'glide';
+      readonly shell: ShellRig;
+      readonly gait: WalkerGait;
+      readonly lift: number;
+    };
 
+/**
+ * How far to raise a walker's model origin over the body centre the sim reports, in model units:
+ * the sim holds every walker `WALK.standoffBodyLengths` off its surface, while each model's feet or
+ * sole sit `standoff` below its origin.
+ */
+export function walkerLift(entry: Pick<FishAssetEntry, 'standoff' | 'standardLengthM'>): number {
+  return (entry.standoff ?? 0) - WALK.standoffBodyLengths * entry.standardLengthM;
+}
+
+/**
+ * A finned species swims; a `pleopod` walker needs a shrimp model; one that never swims walks on a
+ * crab model, or glides on a snail model when it has no walking legs. The species' walking pairs
+ * must fit the model's leg slots behind its chelipeds.
+ */
 export function batchLocomotion(
-  model: Pick<FishModel, 'entry' | 'tail'>,
-  swimmingMode: SwimmingMode,
+  model: Pick<FishModel, 'entry' | 'tail' | 'shell'>,
+  locomotion: {
+    readonly swimmingMode: SpeciesInput['locomotion']['swimmingMode'];
+    readonly walking?: { readonly legPairs: number } | undefined;
+  },
   profile: FishRenderProfile,
 ): BatchLocomotion {
+  const { swimmingMode, walking } = locomotion;
   if (isFinned(swimmingMode)) {
     return { kind: 'swim', mode: swimModeFor(SWIM_MODES[swimmingMode], profile) };
   }
-  const { entry, tail } = model;
-  if (entry.shrimp === null || tail === null) {
-    throw new Error(`fish ${entry.id}: a walking species needs a shrimp model`);
+  const { entry, tail, shell } = model;
+  const legPairs = walking?.legPairs ?? 0;
+  const lift = walkerLift(entry);
+  if (swimmingMode === 'pleopod') {
+    if (entry.kind !== 'shrimp' || entry.shrimp === null || tail === null) {
+      throw new Error(`fish ${entry.id}: a pleopod walker needs a shrimp model`);
+    }
+    return {
+      kind: 'walk',
+      shrimp: entry.shrimp,
+      tail,
+      chelipedPairs: WALK_GAIT.chelipedPairs,
+      shell: null,
+      gait: SHRIMP_GAIT,
+      lift,
+    };
   }
-  return { kind: 'walk', shrimp: entry.shrimp, tail };
+  if (legPairs === 0) {
+    if (entry.kind !== 'snail' || shell === null) {
+      throw new Error(`fish ${entry.id}: a walker with no legs needs a snail model`);
+    }
+    return { kind: 'glide', shell, gait: SNAIL_GAIT, lift };
+  }
+  if (entry.kind !== 'crab' || entry.shrimp === null || tail === null || shell === null) {
+    throw new Error(`fish ${entry.id}: a legged walker that never swims needs a crab model`);
+  }
+  const chelipedPairs = WALK_GAIT.crabChelipedPairs;
+  if (chelipedPairs + legPairs > entry.shrimp.legPairs) {
+    throw new Error(
+      `fish ${entry.id}: ${legPairs} walking leg pairs and ${chelipedPairs} cheliped pair do not fit the model's ${entry.shrimp.legPairs} leg slots`,
+    );
+  }
+  return { kind: 'walk', shrimp: entry.shrimp, tail, chelipedPairs, shell, gait: CRAB_GAIT, lift };
+}
+
+function walkerGait(locomotion: BatchLocomotion): WalkerGait {
+  if (locomotion.kind === 'swim') {
+    throw new Error('fish: a swimming batch has no walker gait');
+  }
+  return locomotion.gait;
+}
+
+function materialLocomotion(
+  locomotion: BatchLocomotion,
+  bodyLength: number,
+  legPivots: readonly (Vec3 | null)[],
+): FishMaterialConfig['locomotion'] {
+  if (locomotion.kind === 'swim') return locomotion;
+  if (locomotion.kind === 'glide') {
+    return { kind: 'glide', rig: { bodyLength, shell: locomotion.shell } };
+  }
+  return {
+    kind: 'walk',
+    rig: {
+      bodyLength,
+      hinge: locomotion.shrimp.hinge,
+      telsonZ: locomotion.shrimp.telsonZ,
+      legPivots,
+      chelipedPairs: locomotion.chelipedPairs,
+      shell: locomotion.shell,
+    },
+  };
 }
 
 function smoothstep01(x: number): number {
@@ -382,6 +495,7 @@ export class FishSystem {
   private readonly forward = new Vector3();
   private readonly quat = new Float32Array(4);
   private readonly toCamera = new Vector3();
+  private readonly liftUp = new Vector3();
   private readonly viewDirection: [number, number, number] = [1, 0, 0];
   private readonly frames: FrameSelection = { i: 0, j: 0, fx: 0, fy: 0 };
   private readonly impostorValues: ImpostorValues = {
@@ -419,6 +533,7 @@ export class FishSystem {
     paddle: 0,
     pick: 0,
     dance: 0,
+    withdraw: 0,
   };
   private readonly values: InstanceValues = {
     qx: 0,
@@ -885,7 +1000,7 @@ export class FishSystem {
     try {
       profile = renderProfile(species);
       model = await this.loader.load(modelFor(profile, fish).assetId);
-      locomotion = batchLocomotion(model, input.locomotion.swimmingMode, profile);
+      locomotion = batchLocomotion(model, input.locomotion, profile);
     } catch (cause) {
       this.report(`Fish "${species}" has no visual; it swims and eats unseen`, cause);
       return null;
@@ -912,10 +1027,9 @@ export class FishSystem {
     const { model, profile, locomotion } = batch;
     const lighting = this.lighting();
     batch.lods = model.lods.map((parts, level) => {
-      const walking = locomotion.kind === 'walk';
       const instances = new FishInstanceData(
         capacity,
-        walking ? WALKER_INSTANCE_STRIDE : INSTANCE_STRIDE,
+        locomotion.kind === 'swim' ? INSTANCE_STRIDE : WALKER_INSTANCE_STRIDE,
       );
       const meshes: InstancedMesh[] = [];
       const materials: FishMaterial[] = [];
@@ -924,18 +1038,7 @@ export class FishSystem {
           source: part.source,
           assetId: model.entry.id,
           profile,
-          locomotion:
-            locomotion.kind === 'walk'
-              ? {
-                  kind: 'walk',
-                  rig: {
-                    bodyLength: model.entry.standardLengthM,
-                    hinge: locomotion.shrimp.hinge,
-                    telsonZ: locomotion.shrimp.telsonZ,
-                    legPivots: part.legPivots,
-                  },
-                }
-              : locomotion,
+          locomotion: materialLocomotion(locomotion, model.entry.standardLengthM, part.legPivots),
           zMin: model.entry.min[2],
           zMax: model.entry.max[2],
           instances,
@@ -1094,11 +1197,7 @@ export class FishSystem {
           disposeFishModel(model);
           return;
         }
-        const locomotion = batchLocomotion(
-          model,
-          batch.input.locomotion.swimmingMode,
-          batch.profile,
-        );
+        const locomotion = batchLocomotion(model, batch.input.locomotion, batch.profile);
         const { capacity } = batch;
         this.disposeLods(batch);
         disposeFishModel(batch.model);
@@ -1155,7 +1254,7 @@ export class FishSystem {
             swimModeFor(SWIM_MODES[swimmingMode], profile),
             phaseOffset,
           )
-        : new WalkState(length, phaseOffset),
+        : new WalkState(length, phaseOffset, walkerGait(batch.locomotion)),
       seed,
       tint: [
         brightness * (1 + 0.5 * v * rng.signed()),
@@ -1564,6 +1663,11 @@ export class FishSystem {
           rt.display = display;
           rt.gillFlare = gillFlare;
         }
+        const { locomotion } = rt.batch;
+        if (locomotion.kind !== 'swim' && locomotion.lift !== 0) {
+          this.liftUp.set(0, locomotion.lift * rt.scale, 0).applyQuaternion(this.quaternion);
+          this.position.add(this.liftUp);
+        }
         if (rt.handover > 0) {
           const w = smoothstep01(rt.handover / HANDOVER_S);
           this.position.lerp(rt.fromPosition, w);
@@ -1772,14 +1876,18 @@ export class FishSystem {
     writeDiseaseSigns(rt.fish.disease, motion instanceof WalkState, v);
     lod.instances.write(slot, v);
     const { locomotion } = rt.batch;
-    if (motion instanceof WalkState && locomotion.kind === 'walk') {
+    if (motion instanceof WalkState && locomotion.kind !== 'swim') {
       const w = this.walker;
       w.legPhase = motion.legPhase;
       w.stride = motion.stride * liveliness;
-      w.curl = this.curlAboveFloor(rt, locomotion.tail, motion.curl * liveliness);
+      w.curl =
+        locomotion.kind === 'walk'
+          ? this.curlAboveFloor(rt, locomotion.tail, motion.curl * liveliness)
+          : 0;
       w.paddle = motion.paddle * liveliness;
       w.pick = motion.pick * liveliness;
       w.dance = motion.dance * liveliness;
+      w.withdraw = motion.withdraw * liveliness;
       lod.instances.writeWalker(slot, w);
     }
   }

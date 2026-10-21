@@ -656,3 +656,101 @@ describe('api.replay', () => {
     await expect(odd.replay(TANK_A, { since })).rejects.toBeInstanceOf(ApiRequestError);
   });
 });
+
+describe('api client Pearls contract', () => {
+  const KEY = 'key-0123456789abcdef';
+
+  it('sends the stage and the idempotency key when adding a fish', async () => {
+    const fetcher = vi.fn().mockResolvedValue(json(tankFixture()));
+    await createApiClient(fetcher).addFish(TANK_A, {
+      species: 'neon-tetra',
+      name: 'Dot',
+      stage: 'adult',
+      idempotencyKey: KEY,
+    });
+    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`/api/tanks/${TANK_A}/fish`);
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      species: 'neon-tetra',
+      stage: 'adult',
+      idempotencyKey: KEY,
+    });
+  });
+
+  it('refuses bottled bacteria without a key before calling the server', async () => {
+    const fetcher = vi.fn();
+    const error = await createApiClient(fetcher)
+      .care(TANK_A, { type: 'bottled_bacteria' })
+      .catch((e) => e);
+    expect(error).toBeInstanceOf(ClientValidationError);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('sends bottled bacteria with its key', async () => {
+    const fetcher = vi.fn().mockResolvedValue(json(tankFixture()));
+    await createApiClient(fetcher).care(TANK_A, { type: 'bottled_bacteria', idempotencyKey: KEY });
+    const [, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({
+      type: 'bottled_bacteria',
+      idempotencyKey: KEY,
+    });
+  });
+
+  it('saves the lamp schedule with a PATCH carrying only the light', async () => {
+    const fetcher = vi.fn().mockResolvedValue(json(tankFixture()));
+    await createApiClient(fetcher).saveLight(TANK_A, { intensity: 0.5, onHour: 22, offHour: 6 });
+    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`/api/tanks/${TANK_A}`);
+    expect(init.method).toBe('PATCH');
+    expect(JSON.parse(init.body as string)).toEqual({
+      light: { intensity: 0.5, onHour: 22, offHour: 6 },
+    });
+  });
+
+  it('refuses a lamp schedule whose on and off hours are equal', async () => {
+    const fetcher = vi.fn();
+    const error = await createApiClient(fetcher)
+      .saveLight(TANK_A, { intensity: 0.5, onHour: 7, offHour: 7 })
+      .catch((e) => e);
+    expect(error).toBeInstanceOf(ClientValidationError);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('reads the balance and the purchased items from the wallet endpoint', async () => {
+    const entry = (delta: number, reason: string, itemRef: string | null, key: string) => ({
+      id: crypto.randomUUID(),
+      userId: 'u1',
+      delta,
+      reason,
+      source: 'game',
+      itemRef,
+      idempotencyKey: key,
+      createdAt: '2026-02-01T12:00:00.000Z',
+    });
+    const ledger = [
+      entry(-25, 'purchase', 'plant:java-fern', 'key-aaaaaaaa'),
+      entry(-25, 'purchase', 'plant:java-fern', 'key-bbbbbbbb'),
+      entry(40, 'earn', 'earn:daily-care', 'key-cccccccc'),
+      entry(500, 'grant', null, 'key-dddddddd'),
+    ];
+    const fetcher = vi.fn().mockResolvedValue(json({ wallet: { balance: 420 }, ledger }));
+    expect(await createApiClient(fetcher).wallet()).toEqual({
+      balance: 420,
+      owned: ['plant:java-fern'],
+    });
+    expect(fetcher.mock.calls[0]?.[0]).toBe('/api/wallet');
+  });
+
+  it('surfaces a 402 as a request error with its code', async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValue(
+        json({ error: { code: 'insufficient_pearls', message: 'Not enough.' } }, 402),
+      );
+    const error = await createApiClient(fetcher)
+      .purchase({ itemRef: 'equipment:filter:2', idempotencyKey: KEY, tankId: TANK_A })
+      .catch((e) => e);
+    expect(error).toBeInstanceOf(ApiRequestError);
+    expect(error).toMatchObject({ status: 402, code: 'insufficient_pearls' });
+  });
+});

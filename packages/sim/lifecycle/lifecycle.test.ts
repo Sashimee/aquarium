@@ -1074,6 +1074,44 @@ describe('water volume', () => {
     expect(over.state.chemistry.nitrite).toBeCloseTo(normal.state.chemistry.nitrite, 10);
   });
 
+  describe('above the size cap', () => {
+    const nanoLitres = TANK_SIZES.nano30.litres;
+    const nanoCap = BIOLOAD_CAPACITY_BY_SIZE.nano30;
+    const neon = species.get('neon-tetra');
+    if (!neon) throw new Error('no species neon-tetra');
+    const nitrogenOf = (count: number, litres: number, bioloadCapacity: number) => {
+      const stock = tank(
+        Array.from({ length: count }, (_, i) =>
+          fishOf(`n${i}`, 'neon-tetra', { size: neon.maxSizeM, hunger: 0 }),
+        ),
+      );
+      const r = run(stock, 6 * HOUR, {
+        env: { litres, bioloadCapacity },
+        equipment: { ...DEFAULT_EQUIPMENT, filter: { tier: 0 } },
+      });
+      return r.state.water.ammonia + r.state.chemistry.nitrite;
+    };
+    const fullCount = Math.floor(nanoCap / neon.bioload + 1e-9);
+
+    it('keeps waste flat however far the stock is over the cap of a nano', () => {
+      const atCap = nitrogenOf(fullCount, nanoLitres, nanoCap);
+      expect(atCap).toBeGreaterThan(0);
+      expect(nitrogenOf(fullCount * 2, nanoLitres, nanoCap)).toBeCloseTo(atCap, 6);
+      expect(nitrogenOf(fullCount * 4, nanoLitres, nanoCap)).toBeCloseTo(atCap, 6);
+    });
+
+    it('still lets waste grow with stock below the cap', () => {
+      const half = nitrogenOf(Math.floor(fullCount / 2), nanoLitres, nanoCap);
+      expect(nitrogenOf(fullCount, nanoLitres, nanoCap)).toBeGreaterThan(half * 1.5);
+    });
+
+    it('never drops below the unscaled waste when the cap is far under the stock', () => {
+      const stockCount = 8;
+      const unscaled = nitrogenOf(stockCount, REFERENCE_TANK_LITRES, 100);
+      expect(nitrogenOf(stockCount, nanoLitres, 0.01)).toBeCloseTo(unscaled, 6);
+    });
+  });
+
   it('concentrates the same waste in less water, but less than linearly', () => {
     expect(nitrogen(30)).toBeGreaterThan(nitrogen(300) * 2);
     expect(nitrogen(30)).toBeLessThan(nitrogen(300) * 10);
@@ -1273,6 +1311,112 @@ describe('overfeeding by tank size', () => {
   });
 });
 
+describe('the clean-up crew: nerite snail and hermit crab', () => {
+  const crew = [
+    { id: 'nerite-snail', biome: 'freshwater', count: 6 },
+    { id: 'hermit-crab', biome: 'reef', count: 4 },
+  ] as const;
+
+  function crewTank(
+    id: string,
+    biome: 'freshwater' | 'reef',
+    count: number,
+    water: Partial<Water> = {},
+  ) {
+    const spec = species.get(id);
+    if (!spec) throw new Error(`no species ${id}`);
+    return tank(
+      Array.from({ length: count }, (_, i) => fishOf(`${id}-${i}`, id, { size: spec.maxSizeM })),
+      water,
+      newTankChemistry(biome),
+    );
+  }
+
+  it.each(crew)('$id never breeds', ({ id }) => {
+    const entry = parsedSpecies.find((s) => s.id === id);
+    expect(entry?.breeding?.mode ?? 'none').toBe('none');
+  });
+
+  it.each(crew)(
+    '$id survives 60 days of daily feeding and weekly water changes',
+    ({ id, biome, count }) => {
+      let state = crewTank(id, biome, count);
+      let now = T0;
+      for (let day = 0; day < 60; day++) {
+        state = {
+          ...state,
+          water: { ...state.water, uneatenFood: state.water.uneatenFood + 0.5 },
+          fish: state.fish.map((f) => ({ ...f, hunger: 0 })),
+        };
+        if (day % 7 === 0) {
+          const changed = applyCare(state, { type: 'water_change' }, biome, chemistryParams);
+          if (!changed.ok) throw new Error(changed.reason);
+          state = changed.value;
+        }
+        const r = catchUp({
+          state,
+          fromMs: now,
+          toMs: now + DAY,
+          ...env,
+          biome,
+          graceEndsAtMs: NO_GRACE,
+          vacationFeeder: false,
+          ...NO_BREEDING,
+        });
+        expect(r.deaths).toEqual([]);
+        state = r.state;
+        now += DAY;
+      }
+      expect(state.fish.every((f) => f.alive && f.health === 1)).toBe(true);
+    },
+  );
+
+  it.each(crew)(
+    '$id is unharmed for 3 days without food and starves within 14',
+    ({ id, biome }) => {
+      const state = crewTank(id, biome, 1);
+      const fed3 = only(run(state, 3 * DAY, { env: { biome } }));
+      expect(fed3.alive).toBe(true);
+      expect(fed3.health).toBe(1);
+      const dead = run(state, 14 * DAY, { env: { biome } });
+      expect(only(dead).alive).toBe(false);
+      expect(only(dead).cause).toBe('starvation');
+    },
+  );
+
+  it.each(crew)('$id dies of ammonia when the filter has failed', ({ id, biome, count }) => {
+    const base = crewTank(id, biome, count, { ammonia: 3 });
+    const state = { ...base, chemistry: { ...base.chemistry, bacteria: UNCYCLED } };
+    const r = run(state, 5 * DAY, {
+      env: { biome },
+      equipment: { ...DEFAULT_EQUIPMENT, filter: { tier: 0 } },
+    });
+    expect(r.deaths.map((d) => d.cause)).toContain('ammonia');
+  });
+
+  it.each(crew)('$id is not starved while a vacation feeder runs', ({ id, biome }) => {
+    const r = run(crewTank(id, biome, 1), 10 * DAY, { feeder: true, env: { biome } });
+    expect(only(r).alive).toBe(true);
+  });
+
+  it('catch-up over a mixed crew and fish tank is deterministic and window-split invariant', () => {
+    const state = tank(
+      [
+        fishOf('snail-a', 'nerite-snail'),
+        fishOf('snail-b', 'nerite-snail', { hunger: 0.4 }),
+        fishOf('crab-a', 'hermit-crab'),
+        fishOf('tetra-a', 'neon-tetra'),
+      ],
+      { uneatenFood: 2 },
+    );
+    const whole = run(state, 5 * DAY);
+    expect(run(state, 5 * DAY)).toEqual(whole);
+    const half = run(state, 53 * HOUR);
+    const rest = run(half.state, 5 * DAY, { from: 53 * HOUR });
+    expect(rest.state).toEqual(whole.state);
+  });
+});
+
 describe('equipment effects', () => {
   const withEquipment = (patch: Partial<Equipment>): Equipment => ({
     ...DEFAULT_EQUIPMENT,
@@ -1329,7 +1473,7 @@ describe('equipment effects', () => {
     expect(waves[1]).toBeLessThan(waves[0] ?? 0);
   });
 
-  it('lowers the pH target with CO2, harder at a higher tier, and stresses a fish that needs harder water', () => {
+  it('lowers the pH target with CO2, harder at a higher tier, and never improves the health of a fish that needs harder water', () => {
     const phAfter = (tier: number) =>
       run(stocked(), 10 * DAY, { equipment: withEquipment({ co2: { tier } }) }).state.chemistry.ph;
     const [none, one, two] = [phAfter(0), phAfter(1), phAfter(2)];
@@ -1394,7 +1538,7 @@ describe('warm-water species and the heater', () => {
     }
   });
 
-  it('takes longer than a day for a heaterless warm tank to hurt, then keeps hurting', () => {
+  it('costs a discus in a heaterless warm tank more health over a week than over a day', () => {
     const start = {
       ...tank([fishOf('a', 'discus')]),
       chemistry: newTankChemistry('freshwater'),
