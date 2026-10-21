@@ -205,6 +205,8 @@ export interface BehaviourHost {
   /** Per fish `SexCode`. */
   readonly sex: Uint8Array;
   readonly food: FoodStore;
+  /** 1 per fish seeking a refuge from the wave maker's flow. */
+  readonly flowShelter: Uint8Array;
   /**
    * Whether fish `i`, holding station beside the glass or rock at (x, y, z), has a level disc
    * of its own length clear to turn round in.
@@ -2191,11 +2193,15 @@ export class Behaviour {
     this.bellyToSurface(i, sp, plan);
   }
 
-  /** A cave-dweller hides in its cave at rest and after a startle, whatever its gait. */
+  /**
+   * A cave-dweller hides in its cave at rest, after a startle and in more flow than it can
+   * sustain, whatever its gait.
+   */
   private planShelter(i: number, sp: SimSpecies, plan: Plan): boolean {
     const a = this.anchors[at(this.anchor, i)];
     if (a?.kind !== 'cave') return false;
-    if (at(this.rest, i) <= 0.5 && at(this._shelterTimer, i) <= 0) return false;
+    const calm = at(this.host.flowShelter, i) === 0;
+    if (at(this.rest, i) <= 0.5 && at(this._shelterTimer, i) <= 0 && calm) return false;
     plan.comfort = BEHAVIOUR.shelterComfort;
     const length = at(this.host.bodyLength, i);
     let entryY = a.position[1];
