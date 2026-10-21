@@ -5,7 +5,7 @@ import type { Fish } from '@aquarium/shared';
 import { FISH_1, FISH_2, fishFixture, speciesFixture } from '../sync/fixtures';
 import { speciesNameMap } from '../sync/life';
 import { personalityOf, traitViews } from '../sync/personality';
-import { FishCard, FishCards } from './FishCard';
+import { FISH_CARDS_COLLAPSED, FishCard, FishCards } from './FishCard';
 
 const names = speciesNameMap([speciesFixture()]);
 
@@ -69,6 +69,23 @@ describe('FishCard', () => {
     expect(html.match(/<meter/g)).toHaveLength(3);
   });
 
+  it('names the card from its visible heading and species instead of a duplicate label', () => {
+    const html = card(fishFixture(FISH_1, { name: 'Pearl' }));
+    const labelled = /aria-labelledby="([^"]+) ([^"]+)"/.exec(html);
+    expect(labelled).not.toBeNull();
+    expect(html).toContain(`<h4 id="${labelled?.[1]}">Pearl</h4>`);
+    expect(html).toContain(`id="${labelled?.[2]}"`);
+    expect(html).not.toMatch(/<article[^>]*aria-label=/);
+  });
+
+  it('lets a screen reader hear each trait word once, from the meter', () => {
+    const html = card(
+      fishFixture(FISH_1, { personality: { boldness: 0.9, greed: 0.1, sociability: 0.5 } }),
+    );
+    expect(html).toContain('<strong aria-hidden="true">Bold</strong>');
+    expect(html).toContain('aria-valuetext="Bold"');
+  });
+
   it('says it is still getting to know a fish with no personality data', () => {
     const html = card(legacy('Pearl'));
     expect(html).toContain('Still getting to know Pearl.');
@@ -87,6 +104,25 @@ describe('FishCards', () => {
     expect(html).toContain('Pearl');
     expect(html).not.toContain('Ghost');
     expect(renderToStaticMarkup(createElement(FishCards, { fish: [], names }))).toBe('');
+  });
+
+  it('collapses a large tank to the first cards behind a button that counts them', () => {
+    const many = Array.from({ length: 60 }, (_, i) =>
+      fishFixture(`10000000-0000-4000-8000-${String(i).padStart(12, '0')}`, { name: `Fish${i}` }),
+    );
+    const html = renderToStaticMarkup(createElement(FishCards, { fish: many, names }));
+    expect(html.match(/<article/g)).toHaveLength(FISH_CARDS_COLLAPSED);
+    expect(html).toContain('Show all 60 fish');
+    expect(html).toContain('aria-expanded="false"');
+  });
+
+  it('shows every card and no button while the tank is small', () => {
+    const few = Array.from({ length: FISH_CARDS_COLLAPSED }, (_, i) =>
+      fishFixture(`10000000-0000-4000-8000-${String(i).padStart(12, '0')}`),
+    );
+    const html = renderToStaticMarkup(createElement(FishCards, { fish: few, names }));
+    expect(html.match(/<article/g)).toHaveLength(FISH_CARDS_COLLAPSED);
+    expect(html).not.toContain('<button');
   });
 
   it('announces sickness through one shared live region, not one per card', () => {
