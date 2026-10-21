@@ -32,7 +32,6 @@ export function registerTreatmentRoutes(ctx: TreatmentContext): void {
       const user = await authorize(req);
       const { tankId } = z.strictObject({ tankId: idSchema }).parse(req.params);
       const body = treatRequestSchema.parse(req.body);
-      throttle(user.id, 'care');
       const premium = body.potency === 'premium';
       const itemRef = `consumable:premium-medicine:${body.kind}:${tankId}`;
       const key = body.idempotencyKey;
@@ -62,6 +61,7 @@ export function registerTreatmentRoutes(ctx: TreatmentContext): void {
         } else if (seen) {
           return respond(await render(tx, ticked), seen.overdose, null);
         }
+        throttle(user.id, 'care');
 
         const { state } = ticked;
         if (!state.fish.some((f) => f.alive && f.disease?.kind === body.kind)) {

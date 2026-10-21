@@ -56,7 +56,6 @@ export function registerMoveRoutes(ctx: MoveContext): void {
       const user = await authorize(req);
       const { tankId, fishId } = paramsSchema.parse(req.params);
       const body = moveFishRequestSchema.parse(req.body);
-      throttle(user.id, 'care');
       if (body.toTankId === tankId) {
         throw refuse(400, 'The fish is already in that tank. Pick another tank.');
       }
@@ -101,6 +100,7 @@ export function registerMoveRoutes(ctx: MoveContext): void {
           }
         }
 
+        throttle(user.id, 'care');
         const row = source.fishRows.find((f) => f.id === fishId);
         if (!row) throw new HttpError(404, apiError('not_found', 'Fish not found.'));
         if (row.status !== 'alive') {

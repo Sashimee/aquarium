@@ -96,7 +96,14 @@ import { registerCoralRoutes } from './coralFrag.ts';
 import { currentCorals, wireCorals } from './corals.ts';
 import { registerTreatmentRoutes } from './treatment.ts';
 import { backgroundRef, licenseFor } from './items.ts';
-import { currentPlants, substrateBounds, wirePlants } from './plants.ts';
+import {
+  currentPlants,
+  plantObstacles,
+  shownTintSeeds,
+  substrateBounds,
+  uniqueTintSeeds,
+  wirePlants,
+} from './plants.ts';
 import type { Presets } from './presets.ts';
 import { findReplay, lockUserRow, lockWallet, owns, spend } from './wallet.ts';
 import { apiError, HttpError } from './errors.ts';
@@ -305,7 +312,12 @@ async function tickLocked(
         height: dims.height - dims.glass - dims.freeboard,
       }),
     },
-    plants: { table: deps.plants, state: reconciled, bounds: substrateBounds(tank.size) },
+    plants: {
+      table: deps.plants,
+      state: reconciled,
+      bounds: substrateBounds(tank.size),
+      obstacles: plantObstacles(tank, deps.presets, deps.plants),
+    },
     corals: { table: deps.corals, state: reconciledCorals },
     graceEndsAtMs: user.createdAt.getTime() + GRACE_PERIOD_MS,
     vacationFeeder: hasVacationFeeder(tank),
@@ -986,10 +998,10 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
               : {}),
             ...(body.decorLayout !== undefined
               ? {
-                  decorLayout: body.decorLayout.map((item) => ({
-                    ...item,
-                    tintSeed: item.tintSeed ?? legacyTintSeed(item),
-                  })),
+                  decorLayout: uniqueTintSeeds(
+                    body.decorLayout,
+                    shownTintSeeds(ticked.tank, presets),
+                  ),
                 }
               : {}),
             updatedAt: new Date(clock.now()),
@@ -1148,13 +1160,13 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           apiError('validation_failed', `${spec.commonName} is not for sale.`),
         );
       }
-      throttle(user.id, 'addFish');
       const itemRef = `species:${spec.id}:${stage}`;
       const result = await withTank(user, tankId, async (tx, ticked) => {
         const nowMs = clock.now();
         await lockWallet(tx, economy, user.id, nowMs, true);
         const replay = await findReplay(tx, user.id, idempotencyKey, itemRef);
         if (replay) return { tank: await render(tx, ticked), created: false };
+        throttle(user.id, 'addFish');
         if (spec.biome !== ticked.tank.biome) {
           throw new HttpError(
             400,
@@ -1252,7 +1264,8 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       const user = await authorize(req);
       const { tankId } = tankParamsSchema.parse(req.params);
       const action: CareAction = careActionSchema.parse(req.body);
-      throttle(user.id, action.type === 'feed' ? 'feed' : 'care');
+      if (action.type !== 'bottled_bacteria')
+        throttle(user.id, action.type === 'feed' ? 'feed' : 'care');
       const result = await withTank(user, tankId, async (tx, ticked) => {
         const nowMs = clock.now();
         const bacteriaRef = 'consumable:bottled-bacteria';
@@ -1261,6 +1274,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           await lockWallet(tx, economy, user.id, nowMs, true);
           const replay = await findReplay(tx, user.id, bacteriaKey, bacteriaRef);
           if (replay) return { tank: await render(tx, ticked) };
+          throttle(user.id, 'care');
         }
         const applied = applyCare(ticked.state, action, ticked.tank.biome, chemistryParams, nowMs);
         if (!applied.ok) {

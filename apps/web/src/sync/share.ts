@@ -134,8 +134,14 @@ export function reactionButtonName(kind: ReactionKind, count: number, mine: bool
   return `${REACTION_LABEL[kind]}, ${count} ${noun}${mine ? ', your choice' : ''}`;
 }
 
+const PUBLIC_ID_PREFIX = 'public:';
+
 export function publicTankId(tank: Pick<PublicTank, 'seed'>): string {
-  return `public:${tank.seed.toString(16)}`;
+  return `${PUBLIC_ID_PREFIX}${tank.seed.toString(16)}`;
+}
+
+export function isPublicTankId(tankId: string): boolean {
+  return tankId.startsWith(PUBLIC_ID_PREFIX);
 }
 
 /** Visitors get fish without ids; the stable per-fish seed stands in so the sim keeps them apart. */

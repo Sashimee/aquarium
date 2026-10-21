@@ -5,7 +5,15 @@ import { EventBus, type EngineEvents } from '../engine/events';
 import { STICKY_INTERACTION_EVENTS, type InteractionEvents } from '../interaction/events';
 import type { GameView } from '../interaction/play/game';
 import { UiProviders } from './context';
-import { FeedingGamePanel, gameRequestFor, ToyShelf } from './PlayControls';
+import type { Plant } from '@aquarium/shared';
+import { fishFixture, FISH_1 } from '../sync/fixtures';
+import {
+  FeedingGamePanel,
+  gameRequestFor,
+  playTools,
+  ToyShelf,
+  trimShortcuts,
+} from './PlayControls';
 
 function bridge() {
   return {
@@ -124,5 +132,36 @@ describe('gameRequestFor', () => {
   it('starts a round with the live fish and stops a running one', () => {
     expect(gameRequestFor(false, FISH)).toEqual({ action: 'start', fish: FISH });
     expect(gameRequestFor(true, FISH)).toEqual({ action: 'stop' });
+  });
+});
+
+describe('trim tool', () => {
+  const fern = (key: string, size: number): Plant => ({
+    key,
+    assetId: 'plant-fern',
+    tintSeed: 1,
+    parentKey: null,
+    position: null,
+    size,
+    minSize: 0.4,
+    maxSize: 2,
+  });
+  const names = (tank: Parameters<typeof playTools>[0]) => playTools(tank).map((t) => t.tool);
+
+  it('is offered once a plant has grown and lists the largest first', () => {
+    const tank = { fish: [], plants: [fern('s1', 1.2), fern('s2', 1.9), fern('s3', 0.4)] };
+    expect(names(tank)).toContain('trim');
+    expect(trimShortcuts(tank).map((p) => p.key)).toEqual(['s2', 's1']);
+  });
+
+  it('is left out with no grown plant, no growth state or no tank (a public tank)', () => {
+    expect(names({ fish: [], plants: [fern('s3', 0.4)] })).not.toContain('trim');
+    expect(names({ fish: [] })).not.toContain('trim');
+    expect(names(null)).not.toContain('trim');
+  });
+
+  it('sits next to the net when a fish has died', () => {
+    const dead = fishFixture(FISH_1, { status: 'dead' });
+    expect(names({ fish: [dead], plants: [fern('s1', 1.5)] }).slice(-2)).toEqual(['net', 'trim']);
   });
 });

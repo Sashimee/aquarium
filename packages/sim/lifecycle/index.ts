@@ -27,11 +27,13 @@ export {
 } from './catchup.ts';
 export {
   layoutPlantKeys,
+  obstaclesOf,
   reconcilePlants,
   START_SIZE as PLANT_START_SIZE,
   stepPlants,
   trimPlant,
   type LayoutPlant,
+  type Obstacle,
   type PlantBounds,
   type PlantState,
   type PlantStepContext,

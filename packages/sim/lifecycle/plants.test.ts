@@ -13,6 +13,7 @@ import {
   catchUp,
   DEFAULT_WATER_PARAMETERS,
   PLANT_START_SIZE,
+  obstaclesOf,
   reconcilePlants,
   stepPlants,
   TANK_BIOLOAD_CAPACITY,
@@ -20,6 +21,7 @@ import {
   type CatchUpPlants,
   type LayoutPlant,
   type LifecycleState,
+  type Obstacle,
   type PlantState,
   type PlantTable,
   type TankEnvironment,
@@ -31,6 +33,7 @@ const content = plantContentSchema.parse(
 const table: PlantTable = {
   params: content.params,
   species: new Map(content.plants.map((p) => [p.id, p])),
+  hardscape: new Map(content.hardscape.map((h) => [h.id, h])),
 };
 const bounds = { halfX: 0.59, halfZ: 0.24 };
 const env: TankEnvironment = {
@@ -57,7 +60,7 @@ const layoutOf = (assetId: string, n: number): LayoutPlant[] =>
     tintSeed: 1000 + i,
   }));
 const plantsOf = (assetId: string, n: number): PlantState[] =>
-  reconcilePlants(layoutOf(assetId, n), [], table);
+  reconcilePlants(layoutOf(assetId, n), [], table, bounds);
 
 function tank(water: Partial<Water>): LifecycleState {
   return {
@@ -73,15 +76,22 @@ interface RunOptions {
   from?: number;
   days?: number;
   litres?: number;
+  obstacles?: readonly Obstacle[];
 }
 
 function run(
   state: LifecycleState,
   plants: readonly PlantState[] | null,
-  { equipment = DEFAULT_EQUIPMENT, from = T0, days = 10, litres = 300 }: RunOptions = {},
+  {
+    equipment = DEFAULT_EQUIPMENT,
+    from = T0,
+    days = 10,
+    litres = 300,
+    obstacles = [],
+  }: RunOptions = {},
 ) {
   const withPlants: CatchUpPlants | undefined = plants
-    ? { table, state: plants, bounds }
+    ? { table, state: plants, bounds, obstacles }
     : undefined;
   return catchUp({
     ...env,
@@ -129,6 +139,7 @@ describe('plant growth in the offline catch-up', () => {
       equipment: DEFAULT_EQUIPMENT,
       table,
       bounds,
+      obstacles: [],
     });
     const grown = totalSize(out.plants) - totalSize(start);
     expect(grown).toBeGreaterThan(0);
@@ -137,7 +148,7 @@ describe('plant growth in the offline catch-up', () => {
 
   it('never grows a plant on nitrate that is not there', () => {
     const hungry: PlantTable = {
-      params: table.params,
+      ...table,
       species: new Map(
         [...table.species].map(([id, spec]) => [id, { ...spec, nitratePerSize: 1_000_000 }]),
       ),
@@ -151,6 +162,7 @@ describe('plant growth in the offline catch-up', () => {
       equipment: DEFAULT_EQUIPMENT,
       table: hungry,
       bounds,
+      obstacles: [],
     });
     const grown = totalSize(out.plants) - totalSize(start);
     expect(grown * 1_000_000).toBeLessThanOrEqual(water.nitrate + 1e-9);
@@ -170,6 +182,7 @@ describe('plant growth in the offline catch-up', () => {
           equipment: DEFAULT_EQUIPMENT,
           table,
           bounds,
+          obstacles: [],
         },
       );
       return ((out.plants[0]?.size ?? size) - size) / size;
@@ -345,6 +358,7 @@ describe('plant spread', () => {
       table: { ...table, params: { ...table.params, maxOffsetsPerTank: 3 } },
       state: plantsOf('vallisneria', 4),
       bounds,
+      obstacles: [],
     };
     const result = catchUp({
       ...env,
@@ -404,7 +418,7 @@ describe('catch-up invariants', () => {
   ];
 
   it('gives the same result in two halves as in one whole', () => {
-    const start = reconcilePlants(mixed, [], table);
+    const start = reconcilePlants(mixed, [], table, bounds);
     const whole = run(tank({ nitrate: 200, algae: 0.3 }), start, { equipment: bright, days: 30 });
     const first = run(tank({ nitrate: 200, algae: 0.3 }), start, { equipment: bright, days: 13 });
     const second = run(first.state, first.plants, {
@@ -425,6 +439,7 @@ describe('catch-up invariants', () => {
       })),
       [],
       table,
+      bounds,
     );
     const t0 = performance.now();
     const result = run(tank({ nitrate: 100_000 }), start, { equipment: bright, days: 60 });
@@ -449,6 +464,7 @@ describe('reconcile and trim', () => {
       [{ assetId: 'vallisneria', position: [0.3, 0.1, 0.1], tintSeed: 1000 }],
       grown,
       table,
+      bounds,
     );
     expect(moved[0]).toMatchObject({ key: 's1000', size: 1.7, position: [0.3, 0.1] });
     const added = reconcilePlants(
@@ -458,6 +474,7 @@ describe('reconcile and trim', () => {
       ],
       grown,
       table,
+      bounds,
     );
     expect(added.map((p) => [p.key, p.size])).toEqual([
       ['s1000', 1.7],
@@ -483,6 +500,7 @@ describe('reconcile and trim', () => {
         [{ assetId: 'boulder-01', position: [0, 0, 0], tintSeed: 5 }],
         withOffset,
         table,
+        bounds,
       ),
     ).toEqual([]);
   });
@@ -495,6 +513,7 @@ describe('reconcile and trim', () => {
       ],
       [],
       table,
+      bounds,
     );
     expect(twins.map((p) => p.key)).toEqual(['s4', 's4-2']);
   });
@@ -516,11 +535,11 @@ describe('reconcile and trim', () => {
   const keysOf = (plants: readonly PlantState[]) => plants.map((p) => p.key);
 
   it('does not carry the offsets of a replaced plant over, so keys stay unique', () => {
-    const first = reconcilePlants(seeded('vallisneria', 5), [], table);
+    const first = reconcilePlants(seeded('vallisneria', 5), [], table, bounds);
     const grown = run(spreading, first, { equipment: lit, days: 40 });
     expect(grown.plants.some((p) => p.parentKey === 's5')).toBe(true);
 
-    const swapped = reconcilePlants(seeded('staurogyne-repens', 5), grown.plants, table);
+    const swapped = reconcilePlants(seeded('staurogyne-repens', 5), grown.plants, table, bounds);
     expect(swapped).toHaveLength(1);
     expect(swapped[0]).toMatchObject({ key: 's5', assetId: 'staurogyne-repens', size: 1 });
 
@@ -544,7 +563,7 @@ describe('reconcile and trim', () => {
           ? []
           : [{ assetId: pick(2), position: [0, 0.1, -0.1], tintSeed: 2 } as LayoutPlant]),
       ];
-      plants = reconcilePlants(layout, plants, table);
+      plants = reconcilePlants(layout, plants, table, bounds);
       expect(new Set(keysOf(plants)).size).toBe(plants.length);
       plants = [...run(spreading, plants, { equipment: lit, from, days: 9 }).plants];
       from += 9 * DAY;
@@ -556,8 +575,123 @@ describe('reconcile and trim', () => {
     for (const spec of content.plants) {
       expect(content.params.offsetStartSize).toBeGreaterThanOrEqual(spec.minSize);
     }
-    const grown = run(spreading, plantsOf('vallisneria', 4), { equipment: lit, days: 30 });
-    const offsets = grown.plants.filter((p) => p.parentKey !== null);
-    expect(offsets.length).toBeGreaterThan(0);
+    const spreaders = content.plants.filter((spec) => spec.spread !== null);
+    expect(spreaders.length).toBeGreaterThan(0);
+    for (const spec of spreaders) {
+      let plants = plantsOf(spec.id, 4);
+      const born: PlantState[] = [];
+      for (let hour = 0; hour < 40 * 24; hour++) {
+        const known = new Set(plants.map((p) => p.key));
+        plants = [
+          ...run(spreading, plants, { equipment: lit, from: T0 + hour * HOUR, days: 1 / 24 })
+            .plants,
+        ];
+        born.push(...plants.filter((p) => !known.has(p.key)));
+      }
+      expect(born.length).toBeGreaterThan(0);
+      for (const offset of born) {
+        expect(offset.size).toBeGreaterThanOrEqual(spec.minSize);
+      }
+    }
+  });
+});
+
+describe('offsets and the layout', () => {
+  const lit: Equipment = { ...DEFAULT_EQUIPMENT, light: { ...DEFAULT_EQUIPMENT.light, tier: 3 } };
+  const spreading = tank({ nitrate: 100_000 });
+  const parentAt = (x: number, z: number): LayoutPlant => ({
+    assetId: 'vallisneria',
+    position: [x, 0.1, z],
+    tintSeed: 77,
+  });
+  const offsetAt = (x: number, z: number, n = 1): PlantState => ({
+    key: `s77.${n}`,
+    assetId: 'vallisneria',
+    parentKey: 's77',
+    position: [x, z],
+    size: 0.6,
+    spreadProgress: 0,
+    spawned: 0,
+  });
+  const rock = (x: number, z: number, rotationY = 0, scale = 1): LayoutPlant => ({
+    assetId: 'boulder-01',
+    position: [x, 0, z],
+    rotationY,
+    scale,
+    tintSeed: 5,
+  });
+  const inside = (p: PlantState, o: Obstacle): boolean => {
+    const [x, z] = p.position ?? [Infinity, Infinity];
+    const dx = x - o.x;
+    const dz = z - o.z;
+    const lx = (dx * Math.cos(o.rotationY) - dz * Math.sin(o.rotationY)) / o.scale;
+    const lz = (dx * Math.sin(o.rotationY) + dz * Math.cos(o.rotationY)) / o.scale;
+    return Math.abs(lx) <= o.halfX && Math.abs(lz) <= o.halfZ;
+  };
+
+  it('moves the offsets of a moved parent by the same distance', () => {
+    const stored = [...reconcilePlants([parentAt(0, 0)], [], table, bounds), offsetAt(0.1, 0.05)];
+    const moved = reconcilePlants([parentAt(0.2, -0.1)], stored, table, bounds);
+    const offset = moved.find((p) => p.parentKey === 's77');
+    expect(offset?.position?.[0]).toBeCloseTo(0.3, 9);
+    expect(offset?.position?.[1]).toBeCloseTo(-0.05, 9);
+    expect(offset).toMatchObject({ key: 's77.1', size: 0.6 });
+  });
+
+  it('keeps a moved parent offsets inside the substrate', () => {
+    const stored = [...reconcilePlants([parentAt(0, 0)], [], table, bounds), offsetAt(0.1, 0)];
+    const moved = reconcilePlants([parentAt(0.5, 0)], stored, table, bounds);
+    const limit = bounds.halfX - content.params.edgeMarginM;
+    expect(moved.find((p) => p.parentKey === 's77')?.position?.[0]).toBeCloseTo(limit, 9);
+  });
+
+  it('leaves the offsets of a parent that did not move where they are', () => {
+    const stored = [...reconcilePlants([parentAt(0, 0)], [], table, bounds), offsetAt(0.1, 0.05)];
+    const same = reconcilePlants([parentAt(0, 0)], stored, table, bounds);
+    expect(same).toEqual(stored);
+  });
+
+  it('roots an offset again when a rock is put on it, and keeps it near its parent', () => {
+    const stored = [...reconcilePlants([parentAt(0, 0)], [], table, bounds), offsetAt(0.3, 0)];
+    const layout = [parentAt(0, 0), rock(0.3, 0)];
+    const out = reconcilePlants(layout, stored, table, bounds);
+    const offset = out.find((p) => p.parentKey === 's77');
+    const [obstacle] = obstaclesOf(layout, table);
+    if (!obstacle || !offset) throw new Error('missing obstacle or offset');
+    expect(inside(offset, obstacle)).toBe(false);
+    expect(offset.key).toBe('s77.1');
+    expect(reconcilePlants(layout, stored, table, bounds)).toEqual(out);
+  });
+
+  it('drops an offset that has no clear spot left', () => {
+    const wall = Array.from({ length: 30 }, (_, i) => rock(0, 0, 0, 3 + i * 0.01));
+    const stored = [...reconcilePlants([parentAt(0, 0)], [], table, bounds), offsetAt(0.3, 0)];
+    const out = reconcilePlants([parentAt(0, 0), ...wall], stored, table, bounds);
+    expect(out.map((p) => p.key)).toEqual(['s77']);
+  });
+
+  it('never roots a new offset inside a rock', () => {
+    const layout = [parentAt(0, 0), rock(0.15, 0.05, 0.6, 1)];
+    const [obstacle] = obstaclesOf(layout, table);
+    if (!obstacle) throw new Error('no obstacle');
+    const start = reconcilePlants(layout, [], table, bounds);
+    const free = run(spreading, start, { equipment: lit, days: 60 });
+    const clear = run(spreading, start, { equipment: lit, days: 60, obstacles: [obstacle] });
+    const offsetsOf = (plants: readonly PlantState[]) => plants.filter((p) => p.parentKey);
+    expect(offsetsOf(free.plants).some((p) => inside(p, obstacle))).toBe(true);
+    expect(offsetsOf(clear.plants).length).toBeGreaterThan(2);
+    expect(offsetsOf(clear.plants).some((p) => inside(p, obstacle))).toBe(false);
+  });
+
+  it('starts a re-added plant fresh once its removal has been saved', () => {
+    const grown = [
+      ...reconcilePlants([parentAt(0, 0)], [], table, bounds).map((p) => ({ ...p, size: 1.8 })),
+      offsetAt(0.1, 0),
+    ];
+    const removed = reconcilePlants([], grown, table, bounds);
+    expect(removed).toEqual([]);
+    const readded = reconcilePlants([parentAt(0, 0)], removed, table, bounds);
+    expect(readded).toHaveLength(1);
+    expect(readded[0]).toMatchObject({ key: 's77', size: 1, spawned: 0 });
   });
 });

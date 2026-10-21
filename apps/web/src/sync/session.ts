@@ -34,6 +34,7 @@ import { SaveStatusMerge } from './saveStatus';
 import { describeSyncError } from './messages';
 import { moveRefusalText } from './moveFish';
 import { INITIAL_STATE, type SessionState } from './state';
+import { plantLabel, samePlants, trimRefusalText } from './plantTrim';
 import { DISEASE_LABEL } from './treatment';
 import { diffFish, isStaleSnapshot, upsertTank } from './reconcile';
 
@@ -65,6 +66,11 @@ export interface TreatOutcome {
 }
 
 export interface MoveOutcome {
+  ok: boolean;
+  refusal: string | null;
+}
+
+export interface TrimOutcome {
   ok: boolean;
   refusal: string | null;
 }
@@ -488,6 +494,43 @@ export class TankSession {
     return outcome;
   }
 
+  /**
+   * Cuts one plant of the active tank back to `size`. The key is kept across an unknown outcome, so
+   * pressing again is a retry the server replays instead of trimming twice.
+   */
+  async trimPlant(plantKey: string, size: number): Promise<TrimOutcome> {
+    const tank = this.activeTank;
+    const outcome: TrimOutcome = { ok: false, refusal: null };
+    const plant = tank?.plants?.find((p) => p.key === plantKey);
+    if (!tank || !plant) return outcome;
+    const label = plantLabel(plant.assetId);
+    const gen = this.loadId;
+    const intent = `trim:${tank.id}:${plantKey}:${size}`;
+    const key = this.keys.keyFor(intent);
+    outcome.ok = await this.perform(async () => {
+      let next;
+      try {
+        next = await this.deps.api.trimPlant(tank.id, {
+          plantKey,
+          size,
+          idempotencyKey: key,
+        });
+      } catch (error) {
+        const refusal = trimRefusalText(error, label);
+        if (!outcomeUnknown(error)) this.keys.settle(intent);
+        if (refusal === null) throw error;
+        outcome.refusal = refusal;
+        return;
+      }
+      this.keys.settle(intent);
+      if (gen !== this.loadId) return;
+      this.apply(next);
+      this.patch({ notice: `The ${label} was trimmed.` });
+    });
+    if (outcome.refusal !== null) outcome.ok = false;
+    return outcome;
+  }
+
   /** Moves a fish out of the active tank. A refusal is handed back as text for the player. */
   async move(fishId: string, toTankId: string): Promise<MoveOutcome> {
     const tank = this.activeTank;
@@ -682,6 +725,7 @@ export class TankSession {
       recentVisitDays: tank.recentVisitDays,
     });
     this.deps.interaction.emit('tank:water', { tankId, water: tank.water });
+    this.deps.interaction.emit('tank:plants', { tankId, plants: tank.plants ?? [] });
     this.deps.interaction.emit('tank:wave-maker', {
       tankId,
       tier: tank.equipment.waveMaker.tier,
@@ -849,6 +893,9 @@ export class TankSession {
     }
     if (held.water !== tank.water)
       interaction.emit('tank:water', { tankId: tank.id, water: tank.water });
+    if (!samePlants(held.plants, tank.plants)) {
+      interaction.emit('tank:plants', { tankId: tank.id, plants: tank.plants ?? [] });
+    }
     if (held.equipment.waveMaker.tier !== tank.equipment.waveMaker.tier) {
       interaction.emit('tank:wave-maker', {
         tankId: tank.id,

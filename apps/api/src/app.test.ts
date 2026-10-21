@@ -15,6 +15,7 @@ let plain: Harness;
 let spa: Harness;
 let indexable: Harness;
 let broken: Harness;
+let http: Harness;
 
 beforeAll(async () => {
   dist = mkdtempSync(join(tmpdir(), 'aquarium-dist-'));
@@ -29,19 +30,23 @@ beforeAll(async () => {
   mkdirSync(join(dist, 'assets', 'fish'));
   writeFileSync(join(dist, 'assets', 'fish', 'tetra.glb'), 'glb');
   writeFileSync(join(dist, '.env'), 'SECRET=1');
-  [plain, spa, indexable, broken] = await Promise.all([
+  // Each harness creates a database and runs every migration, so five at once can pass vitest's 10 s hook
+  // default on a loaded machine; the timeout below covers that setup instead of a 5 s per-test one.
+  [plain, spa, indexable, broken, http] = await Promise.all([
     createHarness(),
     createHarness({ webRoot: dist }),
     createHarness({ webRoot: dist, indexable: true }),
     createHarness(),
+    createHarness({ appOrigin: 'http://localhost:3000' }),
   ]);
-});
+}, 60_000);
 
 afterAll(async () => {
   await Promise.all([
     plain.close(),
     spa.close(),
     indexable.close(),
+    http.close(),
     // The 503 test already ended this pool, and -t may skip that test; ending twice rejects.
     (broken.database.pool.ended ? Promise.resolve() : broken.database.pool.end())
       .then(() => broken.app.close())
@@ -246,14 +251,9 @@ describe('security headers', () => {
   });
 
   it('omits HSTS when APP_URL is plain http', async () => {
-    const http = await createHarness({ appOrigin: 'http://localhost:3000' });
-    try {
-      const res = await http.app.inject('/api/health');
-      expect(res.headers['strict-transport-security']).toBeUndefined();
-      expect(res.headers['content-security-policy']).toBeDefined();
-    } finally {
-      await http.close();
-    }
+    const res = await http.app.inject('/api/health');
+    expect(res.headers['strict-transport-security']).toBeUndefined();
+    expect(res.headers['content-security-policy']).toBeDefined();
   });
 });
 

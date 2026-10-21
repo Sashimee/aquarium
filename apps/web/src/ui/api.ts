@@ -44,6 +44,7 @@ import {
   purchaseResponseSchema,
   treatRequestSchema,
   treatResponseSchema,
+  trimPlantRequestSchema,
   type AchievementList,
   type AteReport,
   type BackgroundId,
@@ -63,6 +64,7 @@ import {
   type SpeciesSummary,
   type Tank,
   type TreatRequest,
+  type TrimPlantRequest,
   type TreatResponse,
   type ConflictReason,
   type ErrorCode,
@@ -261,6 +263,7 @@ export interface ApiClient {
   netFish(tankId: string, fishId: string): Promise<Tank>;
   care(tankId: string, action: CareAction): Promise<Tank>;
   treat(tankId: string, request: TreatRequest): Promise<TreatResponse>;
+  trimPlant(tankId: string, request: TrimPlantRequest): Promise<Tank>;
   moveFish(tankId: string, fishId: string, request: MoveFishRequest): Promise<MoveFishResponse>;
   replay(
     tankId: string,
@@ -761,6 +764,13 @@ export function createApiClient(
       return parsed(
         await post(`/api/tanks/${encodeURIComponent(tankId)}/treat`, body),
         treatResponseSchema,
+      );
+    },
+    async trimPlant(tankId, request) {
+      const body = validate(trimPlantRequestSchema, request);
+      return parsed(
+        await post(`/api/tanks/${encodeURIComponent(tankId)}/plants/trim`, body),
+        tankSchema,
       );
     },
     async moveFish(tankId, fishId, request) {

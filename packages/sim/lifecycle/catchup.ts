@@ -9,7 +9,13 @@ import { crewCleanup, type CleanupSurfaces, type CrewMember } from '../src/crew.
 import type { SimSpecies } from '../src/species.ts';
 import { HUNGER_PER_PORTION, MAX_CATCH_UP_MS, STEP_MINUTES, STEP_MS } from './params.ts';
 import { stepCorals, type CoralState, type CoralTable } from './corals.ts';
-import { stepPlants, type PlantBounds, type PlantState, type PlantTable } from './plants.ts';
+import {
+  stepPlants,
+  type Obstacle,
+  type PlantBounds,
+  type PlantState,
+  type PlantTable,
+} from './plants.ts';
 import { stepTank } from './step.ts';
 import {
   appendCapped,
@@ -35,6 +41,7 @@ export interface CatchUpPlants {
   readonly table: PlantTable;
   readonly state: readonly PlantState[];
   readonly bounds: PlantBounds;
+  readonly obstacles: readonly Obstacle[];
 }
 
 /** The reef's offline model; `state` is already reconciled with the decor layout. */
@@ -118,6 +125,7 @@ export function catchUp(input: CatchUpInput): CatchUpResult {
         equipment: input.equipment,
         table: input.plants.table,
         bounds: input.plants.bounds,
+        obstacles: input.plants.obstacles,
       });
       plants = grown.plants;
       cleaned = { ...crewCleaned, water: grown.water };

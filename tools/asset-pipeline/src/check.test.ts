@@ -98,6 +98,14 @@ describe('validateManifest', () => {
       ['wm-sixline-delso-63', 'six-line-wrasse', 'Diego Delso', 'CC-BY-SA-4.0'],
       ['wm-ancistrus-reis', 'bristlenose-pleco', 'Júlio Reis', 'CC-BY-SA-4.0'],
       ['wm-ancistrus-l144-adolfoi', 'bristlenose-pleco', 'Corydoras-adolfoi', 'CC-BY-SA-4.0'],
+      ['wm-brichardi-stang-1zz', 'neolamprologus-brichardi', 'David J. Stang', 'CC-BY-SA-4.0'],
+      ['wm-aulonocara-baenschi-rjcastillo', 'aulonocara-baenschi', 'Rjcastillo', 'CC-BY-SA-4.0'],
+      [
+        'wm-multifasciatus-ingebrigtsen-male',
+        'neolamprologus-multifasciatus',
+        'Richard A. Ingebrigtsen',
+        'CC-BY-SA-3.0',
+      ],
     ])('accepts the roster photo %s', (id, species, author, licence) => {
       const photo = manifestAsset({ id, kind: 'reference-photo', species, author, licence });
       expect(validateManifest(manifestOf(photo), `\`${id}\` ${author}`)).toEqual([]);
