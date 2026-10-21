@@ -122,6 +122,7 @@ export class Feeding {
   /** Each particle's distance to the sand, glass or rock nearest it. */
   private readonly surfaceDist = new Float64Array(MAX_FOOD_PARTICLES);
   private readonly settled = new Uint8Array(MAX_FOOD_PARTICLES);
+  private settledCount = 0;
   private readonly n3 = new Float64Array(3);
   private readonly nbr = new Int32Array(FEEDING.followNeighbours);
   private readonly nbrDist = new Float64Array(FEEDING.followNeighbours);
@@ -154,6 +155,11 @@ export class Feeding {
   /** Per fish x, y, z, radius of the area it will leave home for; radius Infinity for none. */
   get leash(): Float64Array {
     return this._leash;
+  }
+
+  /** Whether any uneaten food the fish can reach has settled on sand, rock or glass. */
+  get anySettled(): boolean {
+    return this.settledCount > 0;
   }
 
   constructor(host: BehaviourHost, personality: Personalities) {
@@ -245,6 +251,7 @@ export class Feeding {
       this.retarget[i] = at(this.retarget, i) - DT;
       this.looked[i] = 0;
     }
+    this.settledCount = 0;
     if (food.count === 0) {
       for (let i = 0; i < n; i++) this.drop(i);
       this.backingOut.fill(0);
@@ -264,6 +271,9 @@ export class Feeding {
       this.surfaceDist[k] = d;
       this.settled[k] =
         d <= FEEDING.settledHeightM && at(food.speed, k) < FEEDING.settledSpeedMps ? 1 : 0;
+      if (this.settled[k] === 1 && this.buried[k] === 0 && food.remaining(k) > EMPTY) {
+        this.settledCount++;
+      }
     }
 
     for (let i = 0; i < n; i++) {
@@ -355,7 +365,8 @@ export class Feeding {
     return (this.host.species[at(this.host.speciesIndex, i)]?.walking ?? null) !== null;
   }
 
-  private hungry(i: number): boolean {
+  /** Whether fish `i` may feed and is not sated. */
+  hungry(i: number): boolean {
     return (
       this.eligible[i] === 1 &&
       this.motivation(i) > FEEDING.satiatedMotivation * this.personality.satiation(i)
