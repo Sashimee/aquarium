@@ -20,6 +20,7 @@ export const CLEANING = {
   inspectMaxS: 25,
   maxQueue: 3,
   giveUpS: 60,
+  approachGiveUpS: 20,
 
   stationStandoffBodyLengths: 1,
   stationRadiusBodyLengths: 0.75,
@@ -31,6 +32,8 @@ export const CLEANING = {
 
   poseGapBodyLengths: 0.25,
   poseArriveBodyLengths: 0.5,
+  /** A small client is close enough within this many cleaner lengths of its spot. */
+  poseArriveCleanerBodyLengths: 0.5,
   poseSpeedFactor: 0.1,
   posePitchRad: 35 * DEG,
   poseDisplay: 0.8,
@@ -238,6 +241,11 @@ export class Cleaning {
       this.dirty = false;
       this.chooseStations();
     }
+    // Scheduling first: a visit ended below draws its next interval, which must not start
+    // running down until the next step, or the minimum interval falls one step short.
+    let anyOpen = false;
+    for (let c = 0; c < n; c++) if (this.isCleaner(c) && at(this._open, c) === 1) anyOpen = true;
+    if (anyOpen) this.schedule();
     for (let c = 0; c < n; c++) {
       if (this.isCleaner(c) && at(this._open, c) === 0) this.close(c);
     }
@@ -248,15 +256,12 @@ export class Cleaning {
         this.end(i, true);
         continue;
       }
-      if (phase === VisitPhase.Queued) {
+      if (phase === VisitPhase.Queued || at(this._arrived, i) === 0) {
         const left = at(this.waitLeft, i) - DT;
         this.waitLeft[i] = left;
         if (left <= 0) this.end(i, true);
       }
     }
-    let anyOpen = false;
-    for (let c = 0; c < n; c++) if (this.isCleaner(c) && at(this._open, c) === 1) anyOpen = true;
-    if (anyOpen) this.schedule();
     for (let c = 0; c < n; c++) {
       if (this.isCleaner(c) && at(this._open, c) === 1) this.serve(c);
     }
@@ -322,10 +327,12 @@ export class Cleaning {
     return best;
   }
 
-  /** Clients at cleaner `c`'s station, the one being served included. */
+  /** Clients waiting at cleaner `c`'s station, not counting the one being served. */
   queueLength(c: number): number {
     let k = 0;
-    for (let j = 0; j < this.host.count; j++) if (at(this._cleanerOf, j) === c) k++;
+    for (let j = 0; j < this.host.count; j++) {
+      if (at(this._cleanerOf, j) === c && at(this._phase, j) === VisitPhase.Queued) k++;
+    }
     return k;
   }
 
@@ -345,6 +352,7 @@ export class Cleaning {
       s = first;
       this._phase[s] = VisitPhase.Posing;
       this._serving[c] = s;
+      this.waitLeft[s] = CLEANING.approachGiveUpS;
       this.inspectLeft[c] = this.host.rng.range(CLEANING.inspectMinS, CLEANING.inspectMaxS);
       this.contact[c] = Contact.None;
     }
@@ -356,7 +364,10 @@ export class Cleaning {
       at(p, 1) - at(this.host.position, s * 3 + 1),
       at(p, 2) - at(this.host.position, s * 3 + 2),
     );
-    const arrive = CLEANING.poseArriveBodyLengths * ls;
+    const arrive = Math.max(
+      CLEANING.poseArriveBodyLengths * ls,
+      CLEANING.poseArriveCleanerBodyLengths * at(this.host.bodyLength, c),
+    );
     if (d < arrive) this._arrived[s] = 1;
     else if (d > 2 * arrive) this._arrived[s] = 0;
     if (at(this._arrived, s) === 0) return;
@@ -407,7 +418,9 @@ export class Cleaning {
     const c = at(this._cleanerOf, i);
     const p = this.p3;
     this.posePoint(i, c, p);
-    const [px, py, pz] = [at(p, 0), at(p, 1), at(p, 2)];
+    const px = at(p, 0);
+    const py = at(p, 1);
+    const pz = at(p, 2);
     const length = at(this.host.bodyLength, i);
     const radius = CLEANING.queueBodyLengths * length;
     const cruise = at(this.host.cruiseSpeed, i);
@@ -431,7 +444,9 @@ export class Cleaning {
     const c = at(this._cleanerOf, i);
     const p = this.p3;
     this.posePoint(i, c, p);
-    const [px, py, pz] = [at(p, 0), at(p, 1), at(p, 2)];
+    const px = at(p, 0);
+    const py = at(p, 1);
+    const pz = at(p, 2);
     const length = at(this.host.bodyLength, i);
     const cruise = at(this.host.cruiseSpeed, i);
     const vmax = at(this.host.maxSpeed, i);
@@ -444,7 +459,7 @@ export class Cleaning {
     if (at(this._arrived, i) === 0) {
       const speed = Math.min(0.6 * vmax, Math.max(cruise, d / 1.5));
       plan.wander *= 0.3;
-      plan.seek(px, py, pz, speed, 0.5);
+      plan.seek(px, py, pz, speed, 0.5, 1.5);
       plan.speedCap = speed * clamp(d / (2 * length), 0.2, 1);
       plan.state = FishState.Station;
       return;
@@ -523,6 +538,12 @@ export class Cleaning {
     plan.pivot = true;
     plan.state = FishState.Clean;
     this.shunBody(c, s, plan);
+    const ls = at(this.host.bodyLength, s);
+    plan.keepOff(
+      s,
+      CLEANING.bodyAxisBodyLengths * ls,
+      BEHAVIOUR.bodyThicknessBodyLengths * (ls + length),
+    );
     if (phase === Contact.Dart) {
       const dart = CLEANING.dartSpeedFraction * vmax;
       plan.continuous = true;
@@ -544,8 +565,8 @@ export class Cleaning {
   }
 
   /**
-   * Keeps the cleaner's centre off the client's body axis, so darting between two points it
-   * swims round the client rather than through it.
+   * Steers the cleaner's centre off the client's body axis, so darting between two points it
+   * swims round the client rather than through it; `Plan.keepOff` makes sure of it.
    */
   private shunBody(c: number, s: number, plan: Plan): void {
     const { position, forward } = this.host;
@@ -652,24 +673,20 @@ export class Cleaning {
     const ux = at(this.stationOut, o);
     const uz = at(this.stationOut, o + 2);
     const need = at(this.host.radius, i) * 0.5;
-    const { sceneSdf } = this.host;
-    for (const [ax, az] of [
-      [ux, uz],
-      [-uz, ux],
-      [uz, -ux],
-    ] as const) {
-      const x = sx + ax * reach;
-      const z = sz + az * reach;
-      if (sceneSdf.sample(x, sy, z, this.n3) >= need) {
-        out[0] = x;
-        out[1] = sy;
-        out[2] = z;
-        return;
-      }
-    }
+    if (this.poseClear(sx + ux * reach, sy, sz + uz * reach, need, out)) return;
+    if (this.poseClear(sx - uz * reach, sy, sz + ux * reach, need, out)) return;
+    if (this.poseClear(sx + uz * reach, sy, sz - ux * reach, need, out)) return;
     out[0] = sx;
     out[1] = sy;
     out[2] = sz;
+  }
+
+  private poseClear(x: number, y: number, z: number, need: number, out: Float64Array): boolean {
+    if (this.host.sceneSdf.sample(x, y, z, this.n3) < need) return false;
+    out[0] = x;
+    out[1] = y;
+    out[2] = z;
+    return true;
   }
 
   private distanceTo(i: number, x: number, y: number, z: number): number {

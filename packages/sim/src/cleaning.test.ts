@@ -1,5 +1,6 @@
 import type { Collider } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
+import { BEHAVIOUR } from './behaviour.ts';
 import { CLEANING, poseOf, VisitPhase } from './cleaning.ts';
 import {
   ARCHETYPES,
@@ -38,6 +39,27 @@ function community(): FishSpawn[] {
     ...spawnMany('royal-gramma', 1),
     ...spawnMany('blue-tang', 2),
   ];
+}
+
+/** The community with a school of neon tetras, small clients half a wrasse long. */
+function mixed(): FishSpawn[] {
+  return [...community(), ...spawnMany('neon-tetra', 6)];
+}
+
+/** How far the wrasse's centre is from client `s`'s spine, as it now lies. */
+function offSpine(w: World, s: number): number {
+  const ls = at(w.bodyLength, s);
+  const y = at(w.yaw, s);
+  const p = at(w.pitch, s);
+  const fx = Math.sin(y) * Math.cos(p);
+  const fy = Math.sin(p);
+  const fz = Math.cos(y) * Math.cos(p);
+  const dx = at(w.position, 0) - at(w.position, s * 3);
+  const dy = at(w.position, 1) - at(w.position, s * 3 + 1);
+  const dz = at(w.position, 2) - at(w.position, s * 3 + 2);
+  const half = CLEANING.bodyAxisBodyLengths * ls;
+  const a = Math.max(-half, Math.min(half, dx * fx + dy * fy + dz * fz));
+  return Math.hypot(dx - a * fx, dy - a * fy, dz - a * fz);
 }
 
 function station(w: World, c: number): [number, number, number] {
@@ -153,26 +175,35 @@ describe('visits', { timeout: LONG }, () => {
     expect(total).toBeLessThan(100);
   });
 
-  it('serves one client at a time, first come first served, with the queue capped', () => {
+  it('serves one client at a time, first come first served, with up to 3 more waiting', () => {
     const w = reef([...spawnMany('cleaner-wrasse', 1), ...spawnMany('yellow-tang', 12)]);
     const c = w.behaviour.cleaning;
+    const joined = new Array<number>(w.count).fill(-1);
     let served = 0;
-    let queued = 0;
+    let fullQueue = 0;
+    let overtaken = 0;
     let previous = -1;
-    const order: number[] = [];
     for (let t = 0; t < seconds(900); t++) {
       w.step();
       const now = posing(w);
       expect(now.length).toBeLessThanOrEqual(1);
-      expect(c.queueLength(0)).toBeLessThanOrEqual(CLEANING.maxQueue);
       const s = at(c.serving, 0);
       expect(s).toBe(now[0] ?? -1);
+      let waiting = 0;
       for (let i = 1; i < w.count; i++) {
-        if (at(c.phase, i) === VisitPhase.Queued) queued++;
+        const phase = at(c.phase, i);
+        if (phase === VisitPhase.None) joined[i] = -1;
+        else if (at(joined, i) < 0) joined[i] = w.tick * w.count + i;
+        if (phase === VisitPhase.Queued) waiting++;
       }
+      expect(c.queueLength(0)).toBe(waiting);
+      expect(waiting).toBeLessThanOrEqual(CLEANING.maxQueue);
+      if (s >= 0 && waiting === CLEANING.maxQueue) fullQueue++;
       if (s >= 0 && s !== previous) {
         served++;
-        order.push(s);
+        for (let i = 1; i < w.count; i++) {
+          if (at(c.phase, i) === VisitPhase.Queued && at(joined, i) < at(joined, s)) overtaken++;
+        }
       }
       previous = s;
       let poses = 0;
@@ -185,7 +216,36 @@ describe('visits', { timeout: LONG }, () => {
       expect(cleans).toBeLessThanOrEqual(1);
     }
     expect(served).toBeGreaterThan(10);
-    expect(queued).toBeGreaterThan(0);
+    expect(overtaken).toBe(0);
+    expect(fullQueue).toBeGreaterThan(0);
+  });
+
+  it('a client gives up after waiting 60 s in the queue, or 20 s failing to reach its spot', () => {
+    const w = reef([...spawnMany('cleaner-wrasse', 1), ...spawnMany('yellow-tang', 12)]);
+    const c = w.behaviour.cleaning;
+    const waited = new Array<number>(w.count).fill(0);
+    const approached = new Array<number>(w.count).fill(0);
+    let gaveUp = 0;
+    let longest = 0;
+    for (let t = 0; t < seconds(900); t++) {
+      w.step();
+      for (let i = 1; i < w.count; i++) {
+        const phase = at(c.phase, i);
+        if (phase === VisitPhase.Queued) {
+          waited[i] = at(waited, i) + 1;
+          longest = Math.max(longest, at(waited, i));
+          continue;
+        }
+        if (phase === VisitPhase.None && at(waited, i) >= seconds(CLEANING.giveUpS) - 1) gaveUp++;
+        waited[i] = 0;
+        approached[i] =
+          phase === VisitPhase.Posing && at(c.arrived, i) === 0 ? at(approached, i) + 1 : 0;
+        expect(at(approached, i)).toBeLessThanOrEqual(seconds(CLEANING.approachGiveUpS) + 1);
+      }
+    }
+    // The tick it joins counts too.
+    expect(longest).toBeLessThanOrEqual(seconds(CLEANING.giveUpS) + 1);
+    expect(gaveUp).toBeGreaterThan(0);
   });
 
   it('poses still beside the station while the wrasse darts about its body', () => {
@@ -236,6 +296,75 @@ describe('visits', { timeout: LONG }, () => {
     const poses = new Set(SPECIES.map((s) => poseOf(s.id)));
     for (const p of poses) expect([-1, 0, 1]).toContain(p);
     expect(poseOf('yellow-tang')).toBe(poseOf('yellow-tang'));
+  });
+});
+
+describe('small clients', { timeout: LONG }, () => {
+  it('neon tetras mixed in never hold the station: clients are served every 5 minutes', () => {
+    let neonsServed = 0;
+    let neonsLost = 0;
+    let othersLost = 0;
+    for (const seed of [1, 2, 3, 4]) {
+      const w = reef(mixed(), seed);
+      const c = w.behaviour.cleaning;
+      const window = seconds(300);
+      const approach = new Array<number>(w.count).fill(0);
+      let previous = -1;
+      let servedInWindow = 0;
+      for (let t = 1; t <= seconds(1800); t++) {
+        w.step();
+        for (let i = 1; i < w.count; i++) {
+          const phase = at(c.phase, i);
+          if (phase === VisitPhase.None && at(approach, i) >= seconds(CLEANING.approachGiveUpS)) {
+            if (w.fishIds[i]?.startsWith('neon-tetra')) neonsLost++;
+            else othersLost++;
+          }
+          approach[i] =
+            phase === VisitPhase.Posing && at(c.arrived, i) === 0 ? at(approach, i) + 1 : 0;
+          expect(at(approach, i)).toBeLessThanOrEqual(seconds(CLEANING.approachGiveUpS) + 1);
+        }
+        const s = at(c.serving, 0);
+        if (s >= 0 && at(c.arrived, s) === 1 && s !== previous) {
+          servedInWindow++;
+          if (w.fishIds[s]?.startsWith('neon-tetra')) neonsServed++;
+          previous = s;
+        }
+        if (s < 0) previous = -1;
+        if (t % window === 0) {
+          expect(servedInWindow, `seed ${seed}, minute ${t / STEP_HZ / 60}`).toBeGreaterThan(0);
+          servedInWindow = 0;
+        }
+      }
+    }
+    expect(neonsServed).toBeGreaterThan(0);
+    expect(neonsLost).toBe(0);
+    // A blue tang, twice the wrasse's length, can find no way to its spot past the rock now and
+    // then; it gives up rather than hold the station.
+    expect(othersLost).toBeGreaterThan(0);
+  });
+
+  it('the wrasse steers round a client body, however small, and never enters it', () => {
+    let cleaning = 0;
+    let pushes = 0;
+    for (const seed of [1, 3, 4]) {
+      const w = reef(mixed(), seed);
+      const c = w.behaviour.cleaning;
+      for (let t = 0; t < seconds(1800); t++) {
+        w.step();
+        const s = at(c.serving, 0);
+        if (s < 0 || at(w.state, 0) !== FishState.Clean) continue;
+        cleaning++;
+        const ls = at(w.bodyLength, s);
+        const lc = at(w.bodyLength, 0);
+        expect(offSpine(w, s), `seed ${seed}, tick ${w.tick}`).toBeGreaterThanOrEqual(
+          BEHAVIOUR.bodyThicknessBodyLengths * (ls + lc) - 1e-9,
+        );
+      }
+      pushes += w.bodyPushes;
+    }
+    expect(cleaning).toBeGreaterThan(seconds(600));
+    // It goes round, not along the body's edge: kept off by force on few of its cleaning steps.
+    expect(pushes / cleaning).toBeLessThan(0.03);
   });
 });
 

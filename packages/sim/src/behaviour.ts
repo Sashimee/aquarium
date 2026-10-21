@@ -258,6 +258,13 @@ export class Plan {
   shunZ = 0;
   shunRadius = 0;
   shunWeight = 0;
+  /**
+   * A fish whose body this one's centre is held off, after it has moved: outside a capsule of
+   * `keepOffRadius` round that fish's spine, `keepOffHalf` either side of its centre; -1 for none.
+   */
+  keepOffFish = -1;
+  keepOffHalf = 0;
+  keepOffRadius = 0;
   /** 0 to 1: how far the fins are spread in display. */
   display = 0;
   /** 0 to 1: how far the gill covers are raised in display. */
@@ -291,6 +298,7 @@ export class Plan {
     this.pivot = false;
     this.homing = false;
     this.shunRadius = 0;
+    this.keepOffFish = -1;
     this.display = 0;
     this.gillFlare = 0;
     this.fan = 0;
@@ -311,6 +319,12 @@ export class Plan {
     this.shunZ = z;
     this.shunRadius = radius;
     this.shunWeight = weight;
+  }
+
+  keepOff(j: number, half: number, radius: number): void {
+    this.keepOffFish = j;
+    this.keepOffHalf = half;
+    this.keepOffRadius = radius;
   }
 }
 
