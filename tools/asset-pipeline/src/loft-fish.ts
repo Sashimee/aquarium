@@ -52,7 +52,7 @@ interface SyntheticSource {
   /** Pixel of the snout and of the end of the peduncle; the standard length spans the distance between them. */
   snoutPixel: [number, number];
   tailPixel: [number, number];
-  /** Reference photos the colours were painted by eye from; credited as sources, no pixels are reused. */
+  /** Reference photos the colours were painted by eye from. Verified to exist but not listed as sources: no pixels are reused, so the asset is CC0. */
   references?: string[];
   paint(tn: number, yn: number): [number, number, number];
 }
@@ -267,7 +267,7 @@ export async function loadTexture(recipe: LoftFishRecipe): Promise<{
   return {
     image: { width: source.width, height: source.height, data },
     project,
-    sources: source.references ?? [],
+    sources: [],
   };
 }
 
@@ -334,14 +334,16 @@ export function paintWrasse(tn: number, yn: number): [number, number, number] {
   const black: [number, number, number] = [0.015, 0.015, 0.03];
   const blue: [number, number, number] = [0.04, 0.45, 1];
   const white: [number, number, number] = [0.9, 0.95, 1];
-  const back: [number, number, number] = [0.42, 0.46, 0.55];
+  const backFront: [number, number, number] = [0.6, 0.55, 0.48];
+  const backRear: [number, number, number] = [0.28, 0.42, 0.8];
+  const back = mix(backFront, backRear, smooth(0.25, 0.85, tn));
 
   if (tn > 1) {
     const edge = Math.max(0, Math.abs(yn) - 0.05);
     let colour = black;
-    colour = mix(colour, blue, smooth(0.012, 0.024, -yn - 0.035) * 0.9);
+    colour = mix(colour, blue, smooth(0.012, 0.024, Math.abs(yn) - 0.035) * 0.9);
     colour = mix(colour, white, smooth(0.012, 0.022, edge));
-    return mix(colour, white, smooth(1.17, 1.19, tn));
+    return colour;
   }
 
   const top = interpolate(WRASSE_TOP, tn);
@@ -366,7 +368,7 @@ export function paintWrasse(tn: number, yn: number): [number, number, number] {
   colour = mix(colour, blue, smooth(bandBottom - soft, bandBottom + soft, h));
   colour = mix(colour, black, smooth(stripeBottom - soft, stripeBottom + soft, h));
   colour = mix(colour, back, smooth(stripeTop - soft, stripeTop + soft, h));
-  const edgeBlue = Math.abs(h - stripeTop - 0.04) < 0.035 ? 0.7 : 0;
+  const edgeBlue = 0.7 * (1 - smooth(0.02, 0.05, Math.abs(h - stripeTop - 0.04)));
   colour = mix(colour, blue, edgeBlue * (1 - smooth(0.9, 1, tn)));
 
   const eyeY = bottom + 0.5 * (top - bottom);
@@ -1024,7 +1026,7 @@ export const LOFT_FISH_RECIPES: LoftFishRecipe[] = [
     species: 'cleaner-wrasse',
     fallbackLengthM: 0.1,
     roughness: 0.3,
-    note: 'Labroides dimidiatus: no model exists, so the body is a procedural loft and the colour map is painted from the species pattern, with the stripe layout taken from the CC-BY photo by Mike Bowie, colours from Jens and proportions from Lawrence Hylton; no photo pixels are reused',
+    note: 'Labroides dimidiatus: no model exists, so the body is a procedural loft and the colour map is painted from the species pattern, with the stripe layout taken from the CC-BY photo by Mike Bowie, colours from Jens and proportions from Lawrence Hylton (reference only: no photo pixels are reused, so the asset is CC0)',
     texture: {
       kind: 'synthetic',
       width: 1280,

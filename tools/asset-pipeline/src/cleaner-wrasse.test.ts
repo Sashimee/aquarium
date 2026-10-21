@@ -9,7 +9,7 @@ import { FIN_ID_ATTRIBUTE, FIN_IDS, FIN_MASK_ATTRIBUTE, assetIndexSchema } from 
 import { LOFT_FISH_RECIPES, paintWrasse } from './loft-fish.ts';
 
 const ASSETS = fileURLToPath(new URL('../../../apps/web/public/assets', import.meta.url));
-const STANDARD_LENGTH_M = 0.1;
+const STANDARD_LENGTH_M = 0.085;
 
 interface Lod {
   positions: Float32Array;
@@ -50,12 +50,18 @@ describe('cleaner wrasse painted colour map', () => {
   });
 
   it('is pale and bluish-white on the belly and blue between the stripe and the belly', () => {
-    const belly = paintWrasse(0.5, -0.073);
+    const belly = paintWrasse(0.5, -0.05);
     expect(luma(belly)).toBeGreaterThan(0.6);
     expect(belly[2]).toBeGreaterThanOrEqual(belly[0]);
     const band = paintWrasse(0.6, -0.03);
     expect(band[2]).toBeGreaterThan(0.7);
     expect(band[2]).toBeGreaterThan(band[0] * 3);
+  });
+
+  it('shades the back from brownish at the front to clearly bluer at the rear', () => {
+    const front = paintWrasse(0.2, 0.068 * 0.95);
+    const rear = paintWrasse(0.85, 0.0467 * 0.95);
+    expect(rear[2] - rear[0]).toBeGreaterThan(front[2] - front[0] + 0.25);
   });
 
   it('widens the stripe toward the tail', () => {
@@ -67,11 +73,15 @@ describe('cleaner wrasse painted colour map', () => {
     expect(blackRows(0.9)).toBeGreaterThan(blackRows(0.2) * 1.3);
   });
 
-  it('paints the caudal black with a blue lower edge and a white fringe', () => {
+  it('runs the caudal black to the margin with a blue edge on both lobes and a white fringe only top and bottom', () => {
     expect(luma(paintWrasse(1.08, 0))).toBeLessThan(0.05);
     const lowerEdge = paintWrasse(1.08, -0.062);
     expect(lowerEdge[2]).toBeGreaterThan(lowerEdge[0] * 2);
-    expect(luma(paintWrasse(1.2, 0))).toBeGreaterThan(0.6);
+    const upperEdge = paintWrasse(1.08, 0.062);
+    expect(upperEdge[2]).toBeGreaterThan(upperEdge[0] * 2);
+    expect(luma(paintWrasse(1.2, 0))).toBeLessThan(0.05);
+    expect(luma(paintWrasse(1.2, 0.075))).toBeGreaterThan(0.6);
+    expect(luma(paintWrasse(1.2, -0.075))).toBeGreaterThan(0.6);
   });
 });
 
@@ -83,7 +93,7 @@ describe('shipped cleaner-wrasse asset', () => {
     lods = await Promise.all([0, 1, 2].map(readLod));
   });
 
-  it('is a slender body scaled to a 10 cm standard length with the caudal behind it', () => {
+  it('is a slender body scaled to an 8.5 cm standard length with the caudal behind it', () => {
     const { positions } = first(lods);
     const lo = [Infinity, Infinity, Infinity];
     const hi = [-Infinity, -Infinity, -Infinity];
@@ -142,18 +152,14 @@ describe('shipped cleaner-wrasse asset', () => {
     expect(need(lod2, 'lod2')).toBeLessThan(need(lod1, 'lod1'));
   });
 
-  it('is registered in the index as a CC-BY procedural loft crediting its reference photos', () => {
+  it('is registered in the index as a CC0 procedural loft with no photo sources', () => {
     const index = assetIndexSchema.parse(
       JSON.parse(readFileSync(join(ASSETS, 'index.json'), 'utf8')),
     );
     const entry = index.assets.find((a) => a.kind === 'fish' && a.id === 'cleaner-wrasse');
     expect(entry?.origin).toBe('procedural-loft');
-    expect(entry?.licence).toBe('CC-BY-4.0');
-    expect(entry?.sources).toEqual([
-      'wm-labroides-bowie',
-      'wm-labroides-jens',
-      'wm-labroides-hylton',
-    ]);
+    expect(entry?.licence).toBe('CC0-1.0');
+    expect(entry?.sources).toEqual([]);
     expect(entry?.fish?.standardLengthM).toBe(STANDARD_LENGTH_M);
     expect(entry?.lods).toHaveLength(3);
   });

@@ -324,6 +324,8 @@ Key traits: long slender body, terminal mouth, a black lateral stripe that widen
 2. Texture, painted procedurally in the albedo (no photo pixels are shipped, so no attribution chain is added; credit the photos as references): brownish-grey to pale-blue back, white-blue belly, one black lateral stripe from the snout through the eye that widens toward the tail and enters the lower caudal lobe, with a bright blue band along its lower and rear edge (stripe layout from #1, colours from #2). Caudal: black with a blue edge and a white fringe on the upper and lower edges.
 3. The stripe must stay unmistakable at tank distance (cleaner recognition is a behaviour cue), so keep it at full contrast in the albedo and do not let the roughness or normal maps wash it out.
 4. Rig and clips like the other loft fish (swim cycle plus the quick dance-like wiggle used at a cleaning station, if the behaviour owner asks for it in #634), under the 2048 texture and fish polycount budget.
+Licence rule for painted loft fish: when the colours are painted by eye from reference photos and no photo pixels are reused, the asset is CC0 with `sources: []` (royal gramma, cleaner wrasse). The photos stay in `assets/manifest.json` and CREDITS.md as reference photos and are named in the recipe note. A photo only becomes a `sources` entry (carrying its licence, attribution and modifications) when its pixels are projected onto the model, as for the bronze corydoras. Either licence is acceptable; CC-BY sources need attribution in both files.
+
 5. Add an `assets/manifest.json` entry for the generated model (`kind: model`, `species: cleaner-wrasse`, `rigged: true`, notes naming the reference photo ids) in the pipeline PR.
 
 ## Downloaded-file check (Sketchfab)
