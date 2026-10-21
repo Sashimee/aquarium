@@ -104,8 +104,8 @@ export const PRIVACY_CONTROLLER = 'Alexandre Baskewitsch';
 export const PRIVACY_CONTACT = 'fish@bas.lu';
 
 export const PRIVACY_POLICY: PrivacyPolicy = privacyPolicySchema.parse({
-  version: '2026-10-19.4',
-  updatedAt: '2026-10-19',
+  version: '2026-10-21.1',
+  updatedAt: '2026-10-21',
   controller: PRIVACY_CONTROLLER,
   contact: PRIVACY_CONTACT,
   analytics: false,

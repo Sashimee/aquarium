@@ -266,7 +266,8 @@ describe('gallery opt-in', () => {
     const rows = await h.database.db
       .select()
       .from(schema.auditLog)
-      .where(and(eq(schema.auditLog.tankId, id), eq(schema.auditLog.actorId, owner.userId)));
+      .where(and(eq(schema.auditLog.tankId, id), eq(schema.auditLog.actorId, owner.userId)))
+      .orderBy(schema.auditLog.id);
     expect(rows.filter((r) => r.action.startsWith('gallery_')).map((r) => r.action)).toEqual([
       'gallery_listed',
       'gallery_unlisted',
@@ -416,7 +417,7 @@ describe('voting', () => {
       { userId: old.userId, tankId: id, weekStart: weekAgo(91) },
       { userId: recent.userId, tankId: id, weekStart: weekAgo(89) },
     ]);
-    await pruneExpired(h.database);
+    await pruneExpired(h.database, h.clock);
     const left = await h.database.db
       .select({ userId: schema.tankVotes.userId })
       .from(schema.tankVotes)
