@@ -1,5 +1,6 @@
 import type { EnvironmentRecipe, HdriRecipe, SubstrateRecipe } from './environment.ts';
 import type { FishRecipe } from './fish.ts';
+import type { RockPileRecipe } from './rock-pile.ts';
 
 export const FISH_RECIPES: FishRecipe[] = [
   {
@@ -135,6 +136,16 @@ export const FISH_RECIPES: FishRecipe[] = [
       'atlas gutter and island outlines replaced by a smooth fill of the colours inside each island, so simplified triangles that cross an island border no longer show a dark crack',
       'orange morph recoloured by luminance to natural brown, with pale cream spots painted in world space so UV stretch cannot enlarge them',
     ],
+  },
+  {
+    id: 'pseudotropheus-demasoni',
+    species: 'pseudotropheus-demasoni',
+    sourceId: 'sketchfab-f7f3faca',
+    axes: { forward: '+z', up: '+y' },
+    skinPose: 'rest',
+    dropMeshes: /^Cube_helper/,
+    keepMaterial: /^Pseudotropheus$/,
+    fallbackLengthM: 0.0625,
   },
 ];
 
@@ -347,6 +358,71 @@ export const ENVIRONMENT_RECIPES: EnvironmentRecipe[] = [
     longestM: 0.4,
     maxTriangles: 15000,
     modifications: ['771k-triangle scan decimated'],
+  },
+  {
+    id: 'malawi-boulder-03',
+    kind: 'rock',
+    sourceId: 'polyhaven-namaqualand_boulder_03',
+    gltf: polyhaven('namaqualand_boulder_03'),
+    longestM: 0.36,
+    maxTriangles: 12000,
+    lod1Fraction: 0.25,
+    modifications: ['121k-triangle scan decimated'],
+  },
+  {
+    id: 'malawi-boulder-05',
+    kind: 'rock',
+    sourceId: 'polyhaven-namaqualand_boulder_05',
+    gltf: polyhaven('namaqualand_boulder_05'),
+    longestM: 0.28,
+    maxTriangles: 8000,
+    lod1Fraction: 0.25,
+    modifications: ['118k-triangle scan decimated'],
+  },
+  {
+    id: 'malawi-rock-07',
+    kind: 'rock',
+    sourceId: 'polyhaven-rock_07',
+    gltf: polyhaven('rock_07'),
+    longestM: 0.16,
+    maxTriangles: 4000,
+    lod1Fraction: 0.25,
+    modifications: ['28k-triangle scan decimated'],
+  },
+  {
+    id: 'neothauma-shell',
+    kind: 'decor',
+    sourceId: 'sketchfab-1bedca25',
+    longestM: 0.045,
+    maxTriangles: 3727,
+    material: { roughness: 0.55 },
+    modifications: ['land-snail shell scan scaled to Neothauma size (4.5 cm)'],
+  },
+];
+
+export const ROCK_PILE_RECIPES: RockPileRecipe[] = [
+  {
+    id: 'rock-pile-stack',
+    placements: [
+      { recipeId: 'malawi-boulder-03', x: 0, z: 0, y: 0, yawDeg: 0, scale: 1 },
+      { recipeId: 'malawi-boulder-05', x: 0.22, z: 0.02, y: -0.01, yawDeg: 20, scale: 1 },
+      { recipeId: 'malawi-rock-07', x: -0.02, z: 0, y: 0.13, yawDeg: 40, scale: 1 },
+    ],
+    modifications: [
+      'arrangement: anchor boulder with a flatter boulder against it and a rock on top',
+    ],
+  },
+  {
+    id: 'rock-pile-cave',
+    placements: [
+      { recipeId: 'malawi-boulder-03', x: -0.12, z: 0, y: 0, yawDeg: 90, scale: 1 },
+      { recipeId: 'malawi-boulder-05', x: 0.1, z: 0.05, y: -0.01, yawDeg: 160, scale: 0.9 },
+      { recipeId: 'malawi-rock-07', x: 0, z: 0.03, y: 0.1, yawDeg: 80, scale: 1.2 },
+      { recipeId: 'malawi-rock-07', x: 0.25, z: -0.1, y: 0, yawDeg: 10, scale: 0.8 },
+    ],
+    modifications: [
+      'arrangement: two boulders with a rock bridging the gap above a cave and one loose rock',
+    ],
   },
 ];
 

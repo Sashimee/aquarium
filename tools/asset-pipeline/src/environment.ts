@@ -48,6 +48,8 @@ export interface EnvironmentRecipe {
   longestM: number;
   /** Triangle budget for LOD0; the source is simplified to it when heavier. */
   maxTriangles: number;
+  /** LOD1 triangle count as a fraction of LOD0, default 0.35; LOD2 is 0.3 of LOD1 when set, else 0.12 of LOD0. */
+  lod1Fraction?: number;
   /** Removes triangles whose centroid lies in the lowest fraction of the height (a museum plinth, a scan base). */
   clipBelowFraction?: number;
   /** With `clipBelowFraction`, scales so `longestM` refers to the uncropped scan, keeping the metric scale the full scan would have had. */
@@ -232,10 +234,10 @@ export function cropForRecipe(
   return { parts: kept, longestM };
 }
 
-export async function buildEnvironment(
+export async function loadEnvironment(
   recipe: EnvironmentRecipe,
-  ctx: FishContext,
-): Promise<OutputAsset> {
+  ctx: Pick<FishContext, 'verifySource'>,
+): Promise<{ parts: Part[]; materials: MaterialDef[] }> {
   ctx.verifySource(recipe.sourceId);
   const doc = await readGltf(recipe.sourceId, recipe.gltf ?? 'gltf/scene.gltf');
   const dropMesh = recipe.dropMeshes;
@@ -270,9 +272,19 @@ export async function buildEnvironment(
   }
   if (materials.length === 0) throw new Error(`${recipe.id}: no material survived`);
 
+  return { parts, materials };
+}
+
+export async function buildEnvironment(
+  recipe: EnvironmentRecipe,
+  ctx: FishContext,
+): Promise<OutputAsset> {
+  const { parts, materials } = await loadEnvironment(recipe, ctx);
   const triangles = parts.reduce((s, p) => s + p.indices.length / 3, 0);
   const lod0 = Math.min(1, recipe.maxTriangles / triangles);
-  const plan: LodPlan = { ratios: [lod0, lod0 * 0.35, lod0 * 0.12], minTriangles: 200 };
+  const lod1 = recipe.lod1Fraction ?? 0.35;
+  const lod2 = recipe.lod1Fraction === undefined ? 0.12 : lod1 * 0.3;
+  const plan: LodPlan = { ratios: [lod0, lod0 * lod1, lod0 * lod2], minTriangles: 200 };
 
   const built = buildDocument(recipe.id, parts, materials);
   return emitAsset({

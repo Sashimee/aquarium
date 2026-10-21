@@ -3032,7 +3032,12 @@
       "textures": "Pseudotropheus_baseColor.png, Pseudotropheus_normal.png",
       "rigged": true,
       "notes": "Pseudotropheus demasoni (Demason's cichlid, Lake Malawi mbuna): the only allowed cichlid model found across Smithsonian, Sketchfab, Poly Haven and Quaternius/Kenney. Rigged glTF with a 64-joint skeleton and one animation, SWIM_CYCLE, plus a stray Cube_helper node to drop. 2174 faces, 1087 vertices (Sketchfab record). Body outline and the vertical dark bars on a pale blue flank are right for the species; the texture is painted rather than photographic, so the pipeline can re-project the flank from a reference photo if it reads flat. 64 joints is far above the fish budget: collapse to the pipeline's spine chain and fin bones. Licence (CC Attribution, downloadable) read from the Sketchfab model record and the bundled license.txt on 2026-10-19. Zip sha256 0d162e2d489387452574bed6178238ef0532521450355d68188654c65c7dcaab; sha256 is the aggregate over files[]. Planned pipeline steps (to be recorded in modifications[] by the pipeline once built): dropped the Cube_helper node, the original skeleton and SWIM_CYCLE, then rebuilt the pipeline's own spine and fin rig; oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length; baked fin mask, fin id and mouth mask vertex attributes; colour and normal maps re-encoded to KTX2 at 1k and 2k.",
-      "modifications": [],
+      "modifications": [
+        "merged meshes, dropped skeleton, animation and unused attributes",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "baked fin mask, fin id and mouth mask vertex attributes",
+        "colour and normal maps re-encoded to KTX2 at 1k and 2k"
+      ],
       "status": "downloaded",
       "files": [
         {
@@ -3077,7 +3082,13 @@
       "textures": "SnailShell_baseColor.jpeg, SnailShell_metallicRoughness.png, SnailShell_normal.png",
       "rigged": false,
       "notes": "Photogrammetry snail shell, used as the shell-dweller decor prop (Neolamprologus multifasciatus style shell bed): one model instanced at varied scale and rotation. 3727 faces, 1864 vertices. The model reads as a land-snail shell, not a Lake Tanganyika Neothauma; at the 3.5 to 5 cm Neothauma scale of a shell bed that difference is not visible. The normal map is 11.9 MB and must be re-encoded. Meshfinder is a Munich 3D-scanning startup that scanned and published the model itself; the CC-BY-4.0 licence and downloadable flag come from the Sketchfab model record and bundled license.txt (read 2026-10-19). Zip sha256 3b6ea3bc1022d376230adf6325e58592c7967b53fedffa69349df6cf5a4dd57c; sha256 is the aggregate over files[]. Planned pipeline steps (to be recorded in modifications[] by the pipeline once built): decimated to LOD0 to LOD2, origin at the shell base, scaled to a 3.5 to 5 cm shell (Neothauma-like); textures re-encoded to KTX2 at 1k; normal map downscaled from its source size.",
-      "modifications": [],
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.045 m",
+        "LOD0 capped at 3727 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "land-snail shell scan scaled to Neothauma size (4.5 cm)"
+      ],
       "status": "downloaded",
       "files": [
         {
@@ -3263,7 +3274,13 @@
       "textures": "photo",
       "rigged": false,
       "notes": "Electric yellow cichlid, 4752x3168, adult in a public aquarium; lateral view. Primary colour reference for the yellow body and the black dorsal edge. Licence (Creative Commons Attribution 3.0) read from the Commons file page metadata on 2026-10-19; the Commons sha1 matches the download. Raw file: ~/.cache/aquarium-assets/raw/wm-labidochromis-chmee2/original.jpg (not committed).",
-      "modifications": [],
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "Labidochromis caeruleus by Chmee2 (CC-BY-3.0), side view projected onto the loft; fins painted as translucent yellow membranes with the black dorsal and anal margins of the species",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
       "status": "downloaded"
     },
     {
@@ -3339,7 +3356,13 @@
       "textures": "photo",
       "rigged": false,
       "notes": "Auratus in an aquarium, 4178x2784. Extra colour reference for the female and juvenile gold. Licence (Creative Commons Attribution 3.0) read from the Commons file page metadata on 2026-10-19; the Commons sha1 matches the download. Raw file: ~/.cache/aquarium-assets/raw/wm-melanochromis-lee-1/original.jpg (not committed).",
-      "modifications": [],
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "Melanochromis auratus female (golden mbuna) by Lee (CC-BY-3.0), side view projected onto the loft; fins painted as translucent membranes",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
       "status": "downloaded"
     },
     {
@@ -3358,7 +3381,143 @@
       "textures": "photo",
       "rigged": false,
       "notes": "Altolamprologus calvus (black calvus, Lake Tanganyika), 4124x2749: laterally compressed body, tall dorsal fin, grey-black with white flecks. Licence (Creative Commons Zero) read from the Commons file page metadata on 2026-10-19; the Commons sha1 matches the download. Raw file: ~/.cache/aquarium-assets/raw/wm-altolamprologus-5snake5/original.jpg (not committed).",
-      "modifications": [],
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "Altolamprologus calvus (black calvus) by 5snake5 (CC0), side view projected onto the loft; fins painted as translucent grey membranes with pale blue margins",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
+      "status": "downloaded"
+    },
+    {
+      "id": "bg-cichlid-malawi-rock-pile",
+      "kind": "background",
+      "biome": "cichlid",
+      "slot": "malawi-rock-pile",
+      "source": "render",
+      "title": "Malawi rock pile (render for the cichlid slot)",
+      "author": "Rico Cilliers, Jenelle van Heerden, Dario Barresi, Rob Tuytel, ambientCG (source models and textures); rendered by the Aquarium project",
+      "author_url": "https://polyhaven.com/",
+      "source_url": "https://polyhaven.com/a/namaqualand_boulder_03",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "078d8dafa228b9ea04c3e4e923449dfd92888c4284b9362c4f28753fe28075ca",
+      "polycount": null,
+      "textures": "render, 4096x2048 (2:1)",
+      "rigged": false,
+      "notes": "Tank background (African cichlid lake, slot malawi-rock-pile), rendered by the asset pipeline on the CPU (tools/asset-pipeline/src/cichlid-render.ts) from the project's own processed rocks, shells and ground textures. Scene: A three-tier granite pile left of centre (polyhaven-namaqualand_boulder_03, polyhaven-namaqualand_boulder_05, polyhaven-rock_07 on top) with rubble on pale sand (polyhaven-coast_sand_04) and an open centre. 2:1, 4096x2048, no fish, no text, no people, freshwater only, light underwater grade, no EXIF or other metadata. Rendered with a software rasteriser and shadow map, then depth-of-field blurred and underwater-graded by the same develop step as the misty-lake render.",
+      "modifications": [
+        "composed and rendered by the Aquarium project from CC0 rocks and ground textures and, for the shell bed, a CC-BY shell model, with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "status": "downloaded"
+    },
+    {
+      "id": "bg-cichlid-rock-wall",
+      "kind": "background",
+      "biome": "cichlid",
+      "slot": "rock-wall",
+      "source": "render",
+      "title": "Granite rock wall (render for the cichlid slot)",
+      "author": "Rico Cilliers, Jenelle van Heerden, Dario Barresi, Rob Tuytel, ambientCG (source models and textures); rendered by the Aquarium project",
+      "author_url": "https://polyhaven.com/",
+      "source_url": "https://polyhaven.com/a/namaqualand_boulder_03",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "e0acfcfe8a99bd0b7508a44d1986da0e746fe5487e8b070535f133ba763241ee",
+      "polycount": null,
+      "textures": "render, 4096x2048 (2:1)",
+      "rigged": false,
+      "notes": "Tank background (African cichlid lake, slot rock-wall), rendered by the asset pipeline on the CPU (tools/asset-pipeline/src/cichlid-render.ts) from the project's own processed rocks, shells and ground textures. Scene: Stacked granite filling the left and right thirds with an open gap between them, on pale sand; polyhaven-namaqualand_boulder_03, _05, polyhaven-rock_07 and polyhaven-boulder_01. 2:1, 4096x2048, no fish, no text, no people, freshwater only, light underwater grade, no EXIF or other metadata. Rendered with a software rasteriser and shadow map, then depth-of-field blurred and underwater-graded by the same develop step as the misty-lake render.",
+      "modifications": [
+        "composed and rendered by the Aquarium project from CC0 rocks and ground textures and, for the shell bed, a CC-BY shell model, with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "status": "downloaded"
+    },
+    {
+      "id": "bg-cichlid-tanganyika-shell-bed",
+      "kind": "background",
+      "biome": "cichlid",
+      "slot": "tanganyika-shell-bed",
+      "source": "render",
+      "title": "Tanganyika shell bed (render for the cichlid slot)",
+      "author": "Meshfinder (shell model); rendered by the Aquarium project",
+      "author_url": "https://sketchfab.com/meshfinder",
+      "source_url": "https://sketchfab.com/3d-models/snail-shell-photogrammetry-1bedca252e4d46d7b92826271a578154",
+      "licence": "CC-BY-4.0",
+      "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "d8dba4397563dce723bfefe183dd58df8d259637df1b6f9b61b2b7d7cbedaaf9",
+      "polycount": null,
+      "textures": "render, 4096x2048 (2:1)",
+      "rigged": false,
+      "notes": "Tank background (African cichlid lake, slot tanganyika-shell-bed), rendered by the asset pipeline on the CPU (tools/asset-pipeline/src/cichlid-render.ts) from the project's own processed rocks, shells and ground textures. Scene: About 48 empty snail shells (sketchfab-1bedca25, CC-BY-4.0, credit Meshfinder) scattered on sand with 3 small rocks (polyhaven-rock_07, polyhaven-namaqualand_boulder_05). 2:1, 4096x2048, no fish, no text, no people, freshwater only, light underwater grade, no EXIF or other metadata. Rendered with a software rasteriser and shadow map, then depth-of-field blurred and underwater-graded by the same develop step as the misty-lake render.",
+      "modifications": [
+        "composed and rendered by the Aquarium project from CC0 rocks and ground textures and, for the shell bed, a CC-BY shell model, with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "status": "downloaded"
+    },
+    {
+      "id": "bg-cichlid-rock-cave",
+      "kind": "background",
+      "biome": "cichlid",
+      "slot": "rock-cave",
+      "source": "render",
+      "title": "Granite rock cave (render for the cichlid slot)",
+      "author": "Rico Cilliers, Jenelle van Heerden, Dario Barresi, Rob Tuytel, ambientCG (source models and textures); rendered by the Aquarium project",
+      "author_url": "https://polyhaven.com/",
+      "source_url": "https://polyhaven.com/a/namaqualand_boulder_03",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "0da700e4886d09c3d88c96f058f96d1dbca2892831248bd066a7215d33e6d709",
+      "polycount": null,
+      "textures": "render, 4096x2048 (2:1)",
+      "rigged": false,
+      "notes": "Tank background (African cichlid lake, slot rock-cave), rendered by the asset pipeline on the CPU (tools/asset-pipeline/src/cichlid-render.ts) from the project's own processed rocks, shells and ground textures. Scene: An arch built from polyhaven-namaqualand_boulder_03 and _05 over a dark gap, lit from the left, on sand. 2:1, 4096x2048, no fish, no text, no people, freshwater only, light underwater grade, no EXIF or other metadata. Rendered with a software rasteriser and shadow map, then depth-of-field blurred and underwater-graded by the same develop step as the misty-lake render.",
+      "modifications": [
+        "composed and rendered by the Aquarium project from CC0 rocks and ground textures and, for the shell bed, a CC-BY shell model, with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "status": "downloaded"
+    },
+    {
+      "id": "bg-cichlid-open-blue",
+      "kind": "background",
+      "biome": "cichlid",
+      "slot": "open-blue",
+      "source": "render",
+      "title": "Open blue water with a distant rock slope (render for the cichlid slot)",
+      "author": "Rico Cilliers, Jenelle van Heerden, Dario Barresi, Rob Tuytel, ambientCG (source models and textures); rendered by the Aquarium project",
+      "author_url": "https://polyhaven.com/",
+      "source_url": "https://polyhaven.com/a/namaqualand_boulder_03",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-22",
+      "sha256": "b8401d5d047fd4ff5a2fe897b5c8c68b79b8ca61a4d52e34ad2fe49b7dc7b89f",
+      "polycount": null,
+      "textures": "render, 4096x2048 (2:1)",
+      "rigged": false,
+      "notes": "Tank background (African cichlid lake, slot open-blue), rendered by the asset pipeline on the CPU (tools/asset-pipeline/src/cichlid-render.ts) from the project's own processed rocks, shells and ground textures. Scene: Mostly open water with a hazy rock slope along the bottom third (polyhaven-namaqualand_boulder_03, _05, polyhaven-rock_07, polyhaven-boulder_01) on sand. 2:1, 4096x2048, no fish, no text, no people, freshwater only, light underwater grade, no EXIF or other metadata. Rendered with a software rasteriser and shadow map, then depth-of-field blurred and underwater-graded by the same develop step as the misty-lake render.",
+      "modifications": [
+        "composed and rendered by the Aquarium project from CC0 rocks and ground textures and, for the shell bed, a CC-BY shell model, with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
       "status": "downloaded"
     }
   ]

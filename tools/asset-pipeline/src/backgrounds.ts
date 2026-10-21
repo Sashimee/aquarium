@@ -11,7 +11,7 @@ import sharp from 'sharp';
 import type { FishContext } from './fish.ts';
 import { writeFileTracked } from './glb.ts';
 import type { OutputAsset } from './index-schema.ts';
-import { MISTY_LAKE_ID, MISTY_LAKE_RENDER } from './misty-lake.ts';
+import { MISTY_LAKE_ID } from './misty-lake.ts';
 import type { ManifestAsset } from './manifest.ts';
 import { RAW_ROOT } from './source.ts';
 import { encodeKtx2, readKtx2Info, type Rgba } from './textures.ts';
@@ -155,6 +155,14 @@ export function backgroundModifications(entry: ManifestAsset, crop: CropBox | nu
       stripped,
     ];
   }
+  if (isRenderEntry(entry)) {
+    return [
+      'composed and rendered by the Aquarium project from CC0 rocks and ground textures and, for the shell bed, a CC-BY shell model, with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)',
+      resized,
+      encoded,
+      stripped,
+    ];
+  }
   if (!crop) throw new Error(`${entry.id}: a photo background needs a crop box in the manifest`);
   return [
     `cropped to the 2:1 box left ${crop.left}, top ${crop.top}, ${crop.width}x${crop.height} px of the original photo`,
@@ -162,6 +170,10 @@ export function backgroundModifications(entry: ManifestAsset, crop: CropBox | nu
     encoded,
     stripped,
   ];
+}
+
+export function isRenderEntry(entry: ManifestAsset): boolean {
+  return (entry as Record<string, unknown>)['source'] === 'render';
 }
 
 function cropOf(entry: ManifestAsset): CropBox | null {
@@ -189,8 +201,8 @@ export async function buildBackground(
   ctx: FishContext,
 ): Promise<BuiltBackground> {
   ctx.verifySource(entry.id);
-  const isRender = entry.id === MISTY_LAKE_ID;
-  const path = isRender ? MISTY_LAKE_RENDER : join(RAW_ROOT, entry.id, 'original.jpg');
+  const isRender = isRenderEntry(entry);
+  const path = join(RAW_ROOT, entry.id, isRender ? 'render.png' : 'original.jpg');
   if (!existsSync(path)) throw new Error(`${entry.id}: ${path} is missing`);
   const crop = isRender ? null : cropOf(entry);
   const images = await deriveTierImages(readFileSync(path), crop);

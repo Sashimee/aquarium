@@ -2,8 +2,170 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; every texture has both files.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Every fish LOD also carries _MOUTH, geometry attribute \"_mouth\", a float in [0, 1] for buccal motion: 1 at the jaw or lower-lip tip (every LOD is renormalised so its highest value is exactly 1), easing to 0 behind the gill line and above the mouth slit; fins, eyes and attachments are 0. Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body, carapace and eyes; 6 walking leg; 7 antenna; 8 pleopod; 9 abdomen, telson and tail fan) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x; antennules 0/1, long antennae 2/3; tail-fan leaves k * 2 + side). Shrimp _fin_mask means: id 0 is 0 (eye stalks included, ignore it); ids 6 and 7 are the weight along the limb, 0 root to 1 tip; id 8 is the pleopod beat weight, 0 root to 1 tip; id 9 is the tail-curl weight clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1) of the rest position. Tail curl rotates ids 8 and 9 about +x through the shrimp.abdomenHinge {y, z} by flex * clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1), computed from the rest position, never from _fin_mask, so the pleopods follow the segment they hang from. Pleopods (id 8) exist only in LOD0 and LOD1 and are removed from LOD2; legs are simplified, so do not assume every _leg index exists at every LOD. Snails use _fin_id (0 shell, 10 foot, 11 head, 12 tentacle) and _fin_mask (foot: 0 at the sole centre to 1 at the mantle edge, for ripple; tentacle: 0 base to 1 tip; shell and head 0). The hermit crab is a crab-kind asset whose walker data sits in its crab block, same fields as a shrimp block; its origin is the hip, the area centroid of the body shifted sideways onto the midline of the crab, so the side of a leg is the sign of its x; its shell is id 0, exposed soft body id 9 (rigid, hinge sits in front of it so it never curls), legs id 6 and antennae id 7 with _leg index pair * 2 + side; pair 0 is the claws and every pair behind it walks, and it has no pleopods. The cherry material is alphaMode BLEND with base colour alpha 0.86: three.js GLTFLoader turns depthWrite off for BLEND, so set depthWrite true on the cherry material and expect some sorting artefacts from the self-overlapping legs and antennae.",
-  "totalBytes": 77895202,
+  "totalBytes": 107642589,
   "assets": [
+    {
+      "id": "altolamprologus-calvus",
+      "kind": "fish",
+      "species": "altolamprologus-calvus",
+      "origin": "procedural-loft",
+      "sources": [
+        "wm-altolamprologus-5snake5"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "Altolamprologus calvus (black calvus) by 5snake5 (CC0), side view projected onto the loft; fins painted as translucent grey membranes with pale blue margins",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
+      "bounds": {
+        "min": [
+          -0.018154,
+          -0.034293,
+          -0.074707
+        ],
+        "max": [
+          0.018154,
+          0.028479,
+          0.048433
+        ]
+      },
+      "lods": [
+        {
+          "file": "fish/altolamprologus-calvus/lod0.glb",
+          "bytes": 44428,
+          "sha256": "943fa80774efe36960f9ba6bb3e60ca4001507dda2f26527a2eac3446690a50e",
+          "triangles": 4320,
+          "vertices": 2379
+        },
+        {
+          "file": "fish/altolamprologus-calvus/lod1.glb",
+          "bytes": 23492,
+          "sha256": "cc9b3cd0763010cde57f3cfcfae820686e3cd3230979624e8c0ff68a6ba5d995",
+          "triangles": 1728,
+          "vertices": 974
+        },
+        {
+          "file": "fish/altolamprologus-calvus/lod2.glb",
+          "bytes": 11764,
+          "sha256": "21b13d654b476c69f99dd4f9a468c3989e716dd18bca41e64fc43fb84c73c303",
+          "triangles": 648,
+          "vertices": 383
+        }
+      ],
+      "textures": [
+        {
+          "name": "altolamprologus-calvus_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "fish/altolamprologus-calvus/textures/altolamprologus-calvus_basecolor_1k.ktx2",
+              "bytes": 103385,
+              "sha256": "456d544421c847de5687cf12e5662f655d3acd1eb57b2e7e1c192aeb2d68d806",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "fish/altolamprologus-calvus/textures/altolamprologus-calvus_basecolor_2k.ktx2",
+              "bytes": 341379,
+              "sha256": "c4f5b1720ba2206d278b613cfbed9bdd3a99dfe379b11fc188e10b70c77f75d9",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "fish/altolamprologus-calvus/impostor_albedo.ktx2",
+          "bytes": 129308,
+          "sha256": "82bbf372c8e8e0e1cb64d6457e66c573ce00510ab9787d8ed4d0f32e2d540aa9"
+        },
+        {
+          "file": "fish/altolamprologus-calvus/impostor_normal.ktx2",
+          "bytes": 337975,
+          "sha256": "db6fea30eb3e59981a7cd1ed8853eebd1123cdc95fe53457cfc0b8cb0523b4ac"
+        },
+        {
+          "file": "fish/altolamprologus-calvus/lod0.glb",
+          "bytes": 44428,
+          "sha256": "943fa80774efe36960f9ba6bb3e60ca4001507dda2f26527a2eac3446690a50e"
+        },
+        {
+          "file": "fish/altolamprologus-calvus/lod1.glb",
+          "bytes": 23492,
+          "sha256": "cc9b3cd0763010cde57f3cfcfae820686e3cd3230979624e8c0ff68a6ba5d995"
+        },
+        {
+          "file": "fish/altolamprologus-calvus/lod2.glb",
+          "bytes": 11764,
+          "sha256": "21b13d654b476c69f99dd4f9a468c3989e716dd18bca41e64fc43fb84c73c303"
+        },
+        {
+          "file": "fish/altolamprologus-calvus/textures/altolamprologus-calvus_basecolor_1k.ktx2",
+          "bytes": 103385,
+          "sha256": "456d544421c847de5687cf12e5662f655d3acd1eb57b2e7e1c192aeb2d68d806"
+        },
+        {
+          "file": "fish/altolamprologus-calvus/textures/altolamprologus-calvus_basecolor_2k.ktx2",
+          "bytes": 341379,
+          "sha256": "c4f5b1720ba2206d278b613cfbed9bdd3a99dfe379b11fc188e10b70c77f75d9"
+        }
+      ],
+      "fish": {
+        "standardLengthM": 0.1,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "finMask": {
+          "maskAttribute": "_FIN_MASK",
+          "idAttribute": "_FIN_ID",
+          "ids": {
+            "caudal": 1,
+            "dorsal": 2,
+            "anal": 3,
+            "pectoral": 4,
+            "pelvic": 5
+          }
+        },
+        "mouthMask": {
+          "attribute": "_MOUTH"
+        },
+        "debugRender": "debug/altolamprologus-calvus.png"
+      },
+      "impostor": {
+        "sourceLod": 1,
+        "layout": "octahedral",
+        "pose": "rest",
+        "grid": 9,
+        "frameSize": 128,
+        "atlasSize": 1152,
+        "pivot": [
+          0,
+          -0.002907,
+          -0.013137
+        ],
+        "radius": 0.066109,
+        "albedo": {
+          "file": "fish/altolamprologus-calvus/impostor_albedo.ktx2",
+          "bytes": 129308,
+          "sha256": "82bbf372c8e8e0e1cb64d6457e66c573ce00510ab9787d8ed4d0f32e2d540aa9",
+          "codec": "etc1s"
+        },
+        "normalDepth": {
+          "file": "fish/altolamprologus-calvus/impostor_normal.ktx2",
+          "bytes": 337975,
+          "sha256": "db6fea30eb3e59981a7cd1ed8853eebd1123cdc95fe53457cfc0b8cb0523b4ac",
+          "codec": "uastc"
+        }
+      }
+    },
     {
       "id": "angelfish",
       "kind": "fish",
@@ -2197,6 +2359,490 @@
       }
     },
     {
+      "id": "labidochromis-caeruleus",
+      "kind": "fish",
+      "species": "labidochromis-caeruleus",
+      "origin": "procedural-loft",
+      "sources": [
+        "wm-labidochromis-chmee2"
+      ],
+      "licence": "CC-BY-3.0",
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "Labidochromis caeruleus by Chmee2 (CC-BY-3.0), side view projected onto the loft; fins painted as translucent yellow membranes with the black dorsal and anal margins of the species",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
+      "bounds": {
+        "min": [
+          -0.021695,
+          -0.020862,
+          -0.056889
+        ],
+        "max": [
+          0.021695,
+          0.017911,
+          0.037605
+        ]
+      },
+      "lods": [
+        {
+          "file": "fish/labidochromis-caeruleus/lod0.glb",
+          "bytes": 44628,
+          "sha256": "e11854753d7a189fb96c1e353f2ae086ef19cf2f411f788a197a2a4e089c1b38",
+          "triangles": 4320,
+          "vertices": 2379
+        },
+        {
+          "file": "fish/labidochromis-caeruleus/lod1.glb",
+          "bytes": 23232,
+          "sha256": "e223720faf66327e4f30139a31eda847cc3d03419f225e10c297e56264de61f7",
+          "triangles": 1728,
+          "vertices": 971
+        },
+        {
+          "file": "fish/labidochromis-caeruleus/lod2.glb",
+          "bytes": 11904,
+          "sha256": "9c1e9cf877186dc31838e9b8a0098da7fe5eed7c70d6902cb4dd80c3d53b3b02",
+          "triangles": 648,
+          "vertices": 387
+        }
+      ],
+      "textures": [
+        {
+          "name": "labidochromis-caeruleus_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "fish/labidochromis-caeruleus/textures/labidochromis-caeruleus_basecolor_1k.ktx2",
+              "bytes": 101092,
+              "sha256": "5d98d6d3bc5844e8b9b8614079256477418c00141d55a29c2271a54dc7766961",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "fish/labidochromis-caeruleus/textures/labidochromis-caeruleus_basecolor_2k.ktx2",
+              "bytes": 333149,
+              "sha256": "793b97143316cd1c02b13532098ee1369f82dfd2a50fcd69eea252f31c689347",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "fish/labidochromis-caeruleus/impostor_albedo.ktx2",
+          "bytes": 128961,
+          "sha256": "c3e921ce3ee419399c5c6f2f0b6895ff7ce33baa07bb644f27690491a2559a3b"
+        },
+        {
+          "file": "fish/labidochromis-caeruleus/impostor_normal.ktx2",
+          "bytes": 339996,
+          "sha256": "dd7a08e8cf703278e81bbdd5794c1c264f64029ce2ecd258746b5471cf0c1333"
+        },
+        {
+          "file": "fish/labidochromis-caeruleus/lod0.glb",
+          "bytes": 44628,
+          "sha256": "e11854753d7a189fb96c1e353f2ae086ef19cf2f411f788a197a2a4e089c1b38"
+        },
+        {
+          "file": "fish/labidochromis-caeruleus/lod1.glb",
+          "bytes": 23232,
+          "sha256": "e223720faf66327e4f30139a31eda847cc3d03419f225e10c297e56264de61f7"
+        },
+        {
+          "file": "fish/labidochromis-caeruleus/lod2.glb",
+          "bytes": 11904,
+          "sha256": "9c1e9cf877186dc31838e9b8a0098da7fe5eed7c70d6902cb4dd80c3d53b3b02"
+        },
+        {
+          "file": "fish/labidochromis-caeruleus/textures/labidochromis-caeruleus_basecolor_1k.ktx2",
+          "bytes": 101092,
+          "sha256": "5d98d6d3bc5844e8b9b8614079256477418c00141d55a29c2271a54dc7766961"
+        },
+        {
+          "file": "fish/labidochromis-caeruleus/textures/labidochromis-caeruleus_basecolor_2k.ktx2",
+          "bytes": 333149,
+          "sha256": "793b97143316cd1c02b13532098ee1369f82dfd2a50fcd69eea252f31c689347"
+        }
+      ],
+      "fish": {
+        "standardLengthM": 0.075,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "finMask": {
+          "maskAttribute": "_FIN_MASK",
+          "idAttribute": "_FIN_ID",
+          "ids": {
+            "caudal": 1,
+            "dorsal": 2,
+            "anal": 3,
+            "pectoral": 4,
+            "pelvic": 5
+          }
+        },
+        "mouthMask": {
+          "attribute": "_MOUTH"
+        },
+        "debugRender": "debug/labidochromis-caeruleus.png"
+      },
+      "impostor": {
+        "sourceLod": 1,
+        "layout": "octahedral",
+        "pose": "rest",
+        "grid": 9,
+        "frameSize": 128,
+        "atlasSize": 1152,
+        "pivot": [
+          0,
+          -0.001476,
+          -0.009642
+        ],
+        "radius": 0.051742,
+        "albedo": {
+          "file": "fish/labidochromis-caeruleus/impostor_albedo.ktx2",
+          "bytes": 128961,
+          "sha256": "c3e921ce3ee419399c5c6f2f0b6895ff7ce33baa07bb644f27690491a2559a3b",
+          "codec": "etc1s"
+        },
+        "normalDepth": {
+          "file": "fish/labidochromis-caeruleus/impostor_normal.ktx2",
+          "bytes": 339996,
+          "sha256": "dd7a08e8cf703278e81bbdd5794c1c264f64029ce2ecd258746b5471cf0c1333",
+          "codec": "uastc"
+        }
+      }
+    },
+    {
+      "id": "melanochromis-auratus-female",
+      "kind": "fish",
+      "species": "melanochromis-auratus",
+      "origin": "procedural-loft",
+      "sources": [
+        "wm-melanochromis-lee-1"
+      ],
+      "licence": "CC-BY-3.0",
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "Melanochromis auratus female (golden mbuna) by Lee (CC-BY-3.0), side view projected onto the loft; fins painted as translucent membranes",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
+      "bounds": {
+        "min": [
+          -0.01462,
+          -0.018578,
+          -0.064069
+        ],
+        "max": [
+          0.01462,
+          0.017406,
+          0.040481
+        ]
+      },
+      "lods": [
+        {
+          "file": "fish/melanochromis-auratus-female/lod0.glb",
+          "bytes": 44088,
+          "sha256": "dc82097a5ceee3ae745caa3e97c293b4ef7ddb4de73215bac3062313de5a57e4",
+          "triangles": 4320,
+          "vertices": 2379
+        },
+        {
+          "file": "fish/melanochromis-auratus-female/lod1.glb",
+          "bytes": 23212,
+          "sha256": "20fa452529e7e88191d51af75dff454aca5b4573463e0eac385176cb5bfdcfa9",
+          "triangles": 1728,
+          "vertices": 966
+        },
+        {
+          "file": "fish/melanochromis-auratus-female/lod2.glb",
+          "bytes": 11796,
+          "sha256": "1d11efbaace20291e25bed7423a7b914704a194532e05b31573d35db44230280",
+          "triangles": 647,
+          "vertices": 379
+        }
+      ],
+      "textures": [
+        {
+          "name": "melanochromis-auratus-female_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "fish/melanochromis-auratus-female/textures/melanochromis-auratus-female_basecolor_1k.ktx2",
+              "bytes": 102718,
+              "sha256": "0078ff6722d46c722075bded34e98e2e3dd44d9d87f3095608b7fbfe1b140615",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "fish/melanochromis-auratus-female/textures/melanochromis-auratus-female_basecolor_2k.ktx2",
+              "bytes": 338280,
+              "sha256": "5a8952c6b80f0d0d129990c29f38e5e41a51af103dbceea15b0e59463f876a1e",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "fish/melanochromis-auratus-female/impostor_albedo.ktx2",
+          "bytes": 118983,
+          "sha256": "e26bbd67b3f062a0254a060befa8f40644a4ccd505ea41693355cfea5e801eb1"
+        },
+        {
+          "file": "fish/melanochromis-auratus-female/impostor_normal.ktx2",
+          "bytes": 302767,
+          "sha256": "14f8e1e12a9d853ff5e0b991536c42a43d4c6cbd968755a1ace2a1b6e32117b6"
+        },
+        {
+          "file": "fish/melanochromis-auratus-female/lod0.glb",
+          "bytes": 44088,
+          "sha256": "dc82097a5ceee3ae745caa3e97c293b4ef7ddb4de73215bac3062313de5a57e4"
+        },
+        {
+          "file": "fish/melanochromis-auratus-female/lod1.glb",
+          "bytes": 23212,
+          "sha256": "20fa452529e7e88191d51af75dff454aca5b4573463e0eac385176cb5bfdcfa9"
+        },
+        {
+          "file": "fish/melanochromis-auratus-female/lod2.glb",
+          "bytes": 11796,
+          "sha256": "1d11efbaace20291e25bed7423a7b914704a194532e05b31573d35db44230280"
+        },
+        {
+          "file": "fish/melanochromis-auratus-female/textures/melanochromis-auratus-female_basecolor_1k.ktx2",
+          "bytes": 102718,
+          "sha256": "0078ff6722d46c722075bded34e98e2e3dd44d9d87f3095608b7fbfe1b140615"
+        },
+        {
+          "file": "fish/melanochromis-auratus-female/textures/melanochromis-auratus-female_basecolor_2k.ktx2",
+          "bytes": 338280,
+          "sha256": "5a8952c6b80f0d0d129990c29f38e5e41a51af103dbceea15b0e59463f876a1e"
+        }
+      ],
+      "fish": {
+        "standardLengthM": 0.085,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "finMask": {
+          "maskAttribute": "_FIN_MASK",
+          "idAttribute": "_FIN_ID",
+          "ids": {
+            "caudal": 1,
+            "dorsal": 2,
+            "anal": 3,
+            "pectoral": 4,
+            "pelvic": 5
+          }
+        },
+        "mouthMask": {
+          "attribute": "_MOUTH"
+        },
+        "debugRender": "debug/melanochromis-auratus-female.png"
+      },
+      "impostor": {
+        "sourceLod": 1,
+        "layout": "octahedral",
+        "pose": "rest",
+        "grid": 9,
+        "frameSize": 128,
+        "atlasSize": 1152,
+        "pivot": [
+          0.00002,
+          -0.000584,
+          -0.011794
+        ],
+        "radius": 0.05666,
+        "albedo": {
+          "file": "fish/melanochromis-auratus-female/impostor_albedo.ktx2",
+          "bytes": 118983,
+          "sha256": "e26bbd67b3f062a0254a060befa8f40644a4ccd505ea41693355cfea5e801eb1",
+          "codec": "etc1s"
+        },
+        "normalDepth": {
+          "file": "fish/melanochromis-auratus-female/impostor_normal.ktx2",
+          "bytes": 302767,
+          "sha256": "14f8e1e12a9d853ff5e0b991536c42a43d4c6cbd968755a1ace2a1b6e32117b6",
+          "codec": "uastc"
+        }
+      }
+    },
+    {
+      "id": "melanochromis-auratus-male",
+      "kind": "fish",
+      "species": "melanochromis-auratus",
+      "origin": "procedural-loft",
+      "sources": [],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "Melanochromis auratus male: no allowed side-view photograph exists, so the colour map is painted from the described pattern (blue-black body, two pale flank stripes) and no photo pixels are reused, so the asset is CC0",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
+      "bounds": {
+        "min": [
+          -0.014547,
+          -0.018486,
+          -0.063458
+        ],
+        "max": [
+          0.014547,
+          0.01734,
+          0.041092
+        ]
+      },
+      "lods": [
+        {
+          "file": "fish/melanochromis-auratus-male/lod0.glb",
+          "bytes": 32996,
+          "sha256": "69c5ada5389a02f1b2953511a7c3b944429d4553ad8b5d07238b11dcc261520a",
+          "triangles": 3144,
+          "vertices": 1700
+        },
+        {
+          "file": "fish/melanochromis-auratus-male/lod1.glb",
+          "bytes": 18092,
+          "sha256": "80a25eaa782b1746b8e64ce79338170a7823ee9ff0c700fc51056362496e9f2a",
+          "triangles": 1258,
+          "vertices": 702
+        },
+        {
+          "file": "fish/melanochromis-auratus-male/lod2.glb",
+          "bytes": 9856,
+          "sha256": "f72254b2b0ed1fb953ea40e43168a4afb6adce35df1053750aece0b76818642b",
+          "triangles": 472,
+          "vertices": 282
+        }
+      ],
+      "textures": [
+        {
+          "name": "melanochromis-auratus-male_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "fish/melanochromis-auratus-male/textures/melanochromis-auratus-male_basecolor_1k.ktx2",
+              "bytes": 13843,
+              "sha256": "bcb26b732a7088d9d76852167cef6fb1a87f5b9a58679ed56a674d3ef59be673",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "fish/melanochromis-auratus-male/textures/melanochromis-auratus-male_basecolor_2k.ktx2",
+              "bytes": 22380,
+              "sha256": "9f4dfa94e9f8a97000b59c8f30f4a52d0722517bdbfcaf3cd7fd80669b650052",
+              "size": 1024,
+              "codec": "etc1s"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "fish/melanochromis-auratus-male/impostor_albedo.ktx2",
+          "bytes": 104572,
+          "sha256": "20503f81a64a3b650ad7cbf24fd905ededd766110ec79f17a39a92012d973a74"
+        },
+        {
+          "file": "fish/melanochromis-auratus-male/impostor_normal.ktx2",
+          "bytes": 297780,
+          "sha256": "cd118508af9839564b7bb980a8c420e4be0f7e65a5e48ac4997795db9b94b82f"
+        },
+        {
+          "file": "fish/melanochromis-auratus-male/lod0.glb",
+          "bytes": 32996,
+          "sha256": "69c5ada5389a02f1b2953511a7c3b944429d4553ad8b5d07238b11dcc261520a"
+        },
+        {
+          "file": "fish/melanochromis-auratus-male/lod1.glb",
+          "bytes": 18092,
+          "sha256": "80a25eaa782b1746b8e64ce79338170a7823ee9ff0c700fc51056362496e9f2a"
+        },
+        {
+          "file": "fish/melanochromis-auratus-male/lod2.glb",
+          "bytes": 9856,
+          "sha256": "f72254b2b0ed1fb953ea40e43168a4afb6adce35df1053750aece0b76818642b"
+        },
+        {
+          "file": "fish/melanochromis-auratus-male/textures/melanochromis-auratus-male_basecolor_1k.ktx2",
+          "bytes": 13843,
+          "sha256": "bcb26b732a7088d9d76852167cef6fb1a87f5b9a58679ed56a674d3ef59be673"
+        },
+        {
+          "file": "fish/melanochromis-auratus-male/textures/melanochromis-auratus-male_basecolor_2k.ktx2",
+          "bytes": 22380,
+          "sha256": "9f4dfa94e9f8a97000b59c8f30f4a52d0722517bdbfcaf3cd7fd80669b650052"
+        }
+      ],
+      "fish": {
+        "standardLengthM": 0.085,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "finMask": {
+          "maskAttribute": "_FIN_MASK",
+          "idAttribute": "_FIN_ID",
+          "ids": {
+            "caudal": 1,
+            "dorsal": 2,
+            "anal": 3,
+            "pectoral": 4,
+            "pelvic": 5
+          }
+        },
+        "mouthMask": {
+          "attribute": "_MOUTH"
+        },
+        "debugRender": "debug/melanochromis-auratus-male.png"
+      },
+      "impostor": {
+        "sourceLod": 1,
+        "layout": "octahedral",
+        "pose": "rest",
+        "grid": 9,
+        "frameSize": 128,
+        "atlasSize": 1152,
+        "pivot": [
+          0,
+          -0.000573,
+          -0.011183
+        ],
+        "radius": 0.056658,
+        "albedo": {
+          "file": "fish/melanochromis-auratus-male/impostor_albedo.ktx2",
+          "bytes": 104572,
+          "sha256": "20503f81a64a3b650ad7cbf24fd905ededd766110ec79f17a39a92012d973a74",
+          "codec": "etc1s"
+        },
+        "normalDepth": {
+          "file": "fish/melanochromis-auratus-male/impostor_normal.ktx2",
+          "bytes": 297780,
+          "sha256": "cd118508af9839564b7bb980a8c420e4be0f7e65a5e48ac4997795db9b94b82f",
+          "codec": "uastc"
+        }
+      }
+    },
+    {
       "id": "neon-tetra",
       "kind": "fish",
       "species": "neon-tetra",
@@ -2576,6 +3222,198 @@
           "file": "fish/ocellaris-clownfish/impostor_normal.ktx2",
           "bytes": 407194,
           "sha256": "2508506fd8a5d062944cbe4e9f72639535656e7c8efd03d85f4c7f49308699c1",
+          "codec": "uastc"
+        }
+      }
+    },
+    {
+      "id": "pseudotropheus-demasoni",
+      "kind": "fish",
+      "species": "pseudotropheus-demasoni",
+      "origin": "model",
+      "sources": [
+        "sketchfab-f7f3faca"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "merged meshes, dropped skeleton, animation and unused attributes",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "baked fin mask, fin id and mouth mask vertex attributes",
+        "colour and normal maps re-encoded to KTX2 at 1k and 2k"
+      ],
+      "bounds": {
+        "min": [
+          -0.011107,
+          -0.019673,
+          -0.048732
+        ],
+        "max": [
+          0.010565,
+          0.016495,
+          0.02722
+        ]
+      },
+      "lods": [
+        {
+          "file": "fish/pseudotropheus-demasoni/lod0.glb",
+          "bytes": 31444,
+          "sha256": "926427089ee84f82d87a43a33399a268cb63c8a3adb757495c6beecc1c1501ae",
+          "triangles": 2162,
+          "vertices": 1199
+        },
+        {
+          "file": "fish/pseudotropheus-demasoni/lod1.glb",
+          "bytes": 16524,
+          "sha256": "d000a011d9aae89e2b3fbfaad78a29bfa70c6cfb27018005a45125e6cbe9d984",
+          "triangles": 862,
+          "vertices": 519
+        },
+        {
+          "file": "fish/pseudotropheus-demasoni/lod2.glb",
+          "bytes": 9352,
+          "sha256": "074d810fff1763706ece531a2c803699bbe414aa02b776b682987037e7f32366",
+          "triangles": 323,
+          "vertices": 210
+        }
+      ],
+      "textures": [
+        {
+          "name": "pseudotropheus-demasoni_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "fish/pseudotropheus-demasoni/textures/pseudotropheus-demasoni_basecolor_1k.ktx2",
+              "bytes": 167159,
+              "sha256": "38bdcc2093b4e0fbea8961c9bd6d2f969478ca852c24308858afd795d3c69d7b",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "fish/pseudotropheus-demasoni/textures/pseudotropheus-demasoni_basecolor_2k.ktx2",
+              "bytes": 646001,
+              "sha256": "9c7c3edb0f71d6219c21777bbcf95539ec1109c4a4fd3b10baf4792ac1f0b861",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        },
+        {
+          "name": "pseudotropheus-demasoni_normal",
+          "role": "normal",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "fish/pseudotropheus-demasoni/textures/pseudotropheus-demasoni_normal_1k.ktx2",
+              "bytes": 34176,
+              "sha256": "6218ea83cafde0a8687b775fc8bd876bb0f0c78f0056ef6b05a62e0e9f5df74e",
+              "size": 512,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "fish/pseudotropheus-demasoni/textures/pseudotropheus-demasoni_normal_2k.ktx2",
+              "bytes": 607713,
+              "sha256": "f058b834b0df900550d546b946b7a3d7be59fab32eb76656145b8c908e38d410",
+              "size": 1024,
+              "codec": "uastc"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "fish/pseudotropheus-demasoni/impostor_albedo.ktx2",
+          "bytes": 139452,
+          "sha256": "c8632065870c2dfcb31b300988268976cc2f03f4b1799f04a0149054e4073362"
+        },
+        {
+          "file": "fish/pseudotropheus-demasoni/impostor_normal.ktx2",
+          "bytes": 404532,
+          "sha256": "348b82780556c9b88f69b3d4853b9d525fe62659be477e89f7d4d66656561f5a"
+        },
+        {
+          "file": "fish/pseudotropheus-demasoni/lod0.glb",
+          "bytes": 31444,
+          "sha256": "926427089ee84f82d87a43a33399a268cb63c8a3adb757495c6beecc1c1501ae"
+        },
+        {
+          "file": "fish/pseudotropheus-demasoni/lod1.glb",
+          "bytes": 16524,
+          "sha256": "d000a011d9aae89e2b3fbfaad78a29bfa70c6cfb27018005a45125e6cbe9d984"
+        },
+        {
+          "file": "fish/pseudotropheus-demasoni/lod2.glb",
+          "bytes": 9352,
+          "sha256": "074d810fff1763706ece531a2c803699bbe414aa02b776b682987037e7f32366"
+        },
+        {
+          "file": "fish/pseudotropheus-demasoni/textures/pseudotropheus-demasoni_basecolor_1k.ktx2",
+          "bytes": 167159,
+          "sha256": "38bdcc2093b4e0fbea8961c9bd6d2f969478ca852c24308858afd795d3c69d7b"
+        },
+        {
+          "file": "fish/pseudotropheus-demasoni/textures/pseudotropheus-demasoni_basecolor_2k.ktx2",
+          "bytes": 646001,
+          "sha256": "9c7c3edb0f71d6219c21777bbcf95539ec1109c4a4fd3b10baf4792ac1f0b861"
+        },
+        {
+          "file": "fish/pseudotropheus-demasoni/textures/pseudotropheus-demasoni_normal_1k.ktx2",
+          "bytes": 34176,
+          "sha256": "6218ea83cafde0a8687b775fc8bd876bb0f0c78f0056ef6b05a62e0e9f5df74e"
+        },
+        {
+          "file": "fish/pseudotropheus-demasoni/textures/pseudotropheus-demasoni_normal_2k.ktx2",
+          "bytes": 607713,
+          "sha256": "f058b834b0df900550d546b946b7a3d7be59fab32eb76656145b8c908e38d410"
+        }
+      ],
+      "fish": {
+        "standardLengthM": 0.0625,
+        "lengthSource": "recipe",
+        "axes": {
+          "forward": "+z",
+          "up": "+y"
+        },
+        "origin": "centre-of-mass",
+        "finMask": {
+          "maskAttribute": "_FIN_MASK",
+          "idAttribute": "_FIN_ID",
+          "ids": {
+            "caudal": 1,
+            "dorsal": 2,
+            "anal": 3,
+            "pectoral": 4,
+            "pelvic": 5
+          }
+        },
+        "mouthMask": {
+          "attribute": "_MOUTH"
+        },
+        "debugRender": "debug/pseudotropheus-demasoni.png"
+      },
+      "impostor": {
+        "sourceLod": 1,
+        "layout": "octahedral",
+        "pose": "rest",
+        "grid": 9,
+        "frameSize": 128,
+        "atlasSize": 1152,
+        "pivot": [
+          -0.000271,
+          -0.001765,
+          -0.010891
+        ],
+        "radius": 0.041506,
+        "albedo": {
+          "file": "fish/pseudotropheus-demasoni/impostor_albedo.ktx2",
+          "bytes": 139452,
+          "sha256": "c8632065870c2dfcb31b300988268976cc2f03f4b1799f04a0149054e4073362",
+          "codec": "etc1s"
+        },
+        "normalDepth": {
+          "file": "fish/pseudotropheus-demasoni/impostor_normal.ktx2",
+          "bytes": 404532,
+          "sha256": "348b82780556c9b88f69b3d4853b9d525fe62659be477e89f7d4d66656561f5a",
           "codec": "uastc"
         }
       }
@@ -5743,6 +6581,402 @@
       ]
     },
     {
+      "id": "malawi-boulder-03",
+      "kind": "rock",
+      "origin": "model",
+      "sources": [
+        "polyhaven-namaqualand_boulder_03"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.36 m",
+        "LOD0 capped at 12000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "121k-triangle scan decimated"
+      ],
+      "bounds": {
+        "min": [
+          -0.141344,
+          0,
+          -0.18
+        ],
+        "max": [
+          0.141344,
+          0.173011,
+          0.18
+        ]
+      },
+      "lods": [
+        {
+          "file": "rock/malawi-boulder-03/lod0.glb",
+          "bytes": 122772,
+          "sha256": "df12670d5a63438846a7f7a1e523db5424b5ec0efac1c222a6a26ba2b212b681",
+          "triangles": 12000,
+          "vertices": 6336
+        },
+        {
+          "file": "rock/malawi-boulder-03/lod1.glb",
+          "bytes": 35296,
+          "sha256": "f193e8e2dbffe3fa4636c70fe8028e8ac074c0fd01e6ff38e854d9e45f37e345",
+          "triangles": 3000,
+          "vertices": 1661
+        },
+        {
+          "file": "rock/malawi-boulder-03/lod2.glb",
+          "bytes": 13676,
+          "sha256": "2cb2ad819f22826ed14121564ca1880fd7bf94ce1a83798b4a25a4f692a9e5cb",
+          "triangles": 900,
+          "vertices": 540
+        }
+      ],
+      "textures": [
+        {
+          "name": "malawi-boulder-03_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "rock/malawi-boulder-03/textures/malawi-boulder-03_basecolor_1k.ktx2",
+              "bytes": 181818,
+              "sha256": "dfe777dd142db968fc5ba978abd1af68f3296b58ac7b2ba9d4279b874891f590",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "rock/malawi-boulder-03/textures/malawi-boulder-03_basecolor_2k.ktx2",
+              "bytes": 662852,
+              "sha256": "62d7747c3b9300578f3ba09aec974686395647e3700ae615873f6fcab4f18d1d",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        },
+        {
+          "name": "malawi-boulder-03_normal",
+          "role": "normal",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "rock/malawi-boulder-03/textures/malawi-boulder-03_normal_1k.ktx2",
+              "bytes": 91641,
+              "sha256": "a50cb6b170ea71fe74cb26fe5659587f60166e1324d8260611ad6b9d3481f80f",
+              "size": 512,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "rock/malawi-boulder-03/textures/malawi-boulder-03_normal_2k.ktx2",
+              "bytes": 1233562,
+              "sha256": "ec416681ff79dae2c3c15651758483240479334048bb48a66da43424c776bd6c",
+              "size": 1024,
+              "codec": "uastc"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "rock/malawi-boulder-03/lod0.glb",
+          "bytes": 122772,
+          "sha256": "df12670d5a63438846a7f7a1e523db5424b5ec0efac1c222a6a26ba2b212b681"
+        },
+        {
+          "file": "rock/malawi-boulder-03/lod1.glb",
+          "bytes": 35296,
+          "sha256": "f193e8e2dbffe3fa4636c70fe8028e8ac074c0fd01e6ff38e854d9e45f37e345"
+        },
+        {
+          "file": "rock/malawi-boulder-03/lod2.glb",
+          "bytes": 13676,
+          "sha256": "2cb2ad819f22826ed14121564ca1880fd7bf94ce1a83798b4a25a4f692a9e5cb"
+        },
+        {
+          "file": "rock/malawi-boulder-03/textures/malawi-boulder-03_basecolor_1k.ktx2",
+          "bytes": 181818,
+          "sha256": "dfe777dd142db968fc5ba978abd1af68f3296b58ac7b2ba9d4279b874891f590"
+        },
+        {
+          "file": "rock/malawi-boulder-03/textures/malawi-boulder-03_basecolor_2k.ktx2",
+          "bytes": 662852,
+          "sha256": "62d7747c3b9300578f3ba09aec974686395647e3700ae615873f6fcab4f18d1d"
+        },
+        {
+          "file": "rock/malawi-boulder-03/textures/malawi-boulder-03_normal_1k.ktx2",
+          "bytes": 91641,
+          "sha256": "a50cb6b170ea71fe74cb26fe5659587f60166e1324d8260611ad6b9d3481f80f"
+        },
+        {
+          "file": "rock/malawi-boulder-03/textures/malawi-boulder-03_normal_2k.ktx2",
+          "bytes": 1233562,
+          "sha256": "ec416681ff79dae2c3c15651758483240479334048bb48a66da43424c776bd6c"
+        }
+      ]
+    },
+    {
+      "id": "malawi-boulder-05",
+      "kind": "rock",
+      "origin": "model",
+      "sources": [
+        "polyhaven-namaqualand_boulder_05"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.28 m",
+        "LOD0 capped at 8000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "118k-triangle scan decimated"
+      ],
+      "bounds": {
+        "min": [
+          -0.14,
+          0,
+          -0.07677
+        ],
+        "max": [
+          0.14,
+          0.110503,
+          0.07677
+        ]
+      },
+      "lods": [
+        {
+          "file": "rock/malawi-boulder-05/lod0.glb",
+          "bytes": 86736,
+          "sha256": "c7e65b2b80a466b9481f72e2b3c81eecf2c5edd2c34e6b386ac1d21a01e74e80",
+          "triangles": 8000,
+          "vertices": 4427
+        },
+        {
+          "file": "rock/malawi-boulder-05/lod1.glb",
+          "bytes": 26352,
+          "sha256": "cf1adf06261d6243a45d96e965e383041c2bf0281b32a5dac3a4555c9022bf05",
+          "triangles": 2000,
+          "vertices": 1195
+        },
+        {
+          "file": "rock/malawi-boulder-05/lod2.glb",
+          "bytes": 11032,
+          "sha256": "7c6881e8597ca87f9c7436c08e0727032fab207d9206990e14c8b7b146ce7379",
+          "triangles": 600,
+          "vertices": 409
+        }
+      ],
+      "textures": [
+        {
+          "name": "malawi-boulder-05_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "rock/malawi-boulder-05/textures/malawi-boulder-05_basecolor_1k.ktx2",
+              "bytes": 180102,
+              "sha256": "c211293e937dff42855aca8b086cb5a42995826b5ea3ac3f31bc3aa76bb1ceca",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "rock/malawi-boulder-05/textures/malawi-boulder-05_basecolor_2k.ktx2",
+              "bytes": 665640,
+              "sha256": "d628c0044bc7eb61028c018d193af1f8e080feb6d022cfe9db2c07f3e7d3743f",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        },
+        {
+          "name": "malawi-boulder-05_normal",
+          "role": "normal",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "rock/malawi-boulder-05/textures/malawi-boulder-05_normal_1k.ktx2",
+              "bytes": 104066,
+              "sha256": "bada4341d21eeee2c11fc47ca86da39931c4cbab14074269de06b135d5e44a7c",
+              "size": 512,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "rock/malawi-boulder-05/textures/malawi-boulder-05_normal_2k.ktx2",
+              "bytes": 1305703,
+              "sha256": "0dd2d675780869e5855687199ae7611f59cb4608053c9b84c651e14df9dbd0ce",
+              "size": 1024,
+              "codec": "uastc"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "rock/malawi-boulder-05/lod0.glb",
+          "bytes": 86736,
+          "sha256": "c7e65b2b80a466b9481f72e2b3c81eecf2c5edd2c34e6b386ac1d21a01e74e80"
+        },
+        {
+          "file": "rock/malawi-boulder-05/lod1.glb",
+          "bytes": 26352,
+          "sha256": "cf1adf06261d6243a45d96e965e383041c2bf0281b32a5dac3a4555c9022bf05"
+        },
+        {
+          "file": "rock/malawi-boulder-05/lod2.glb",
+          "bytes": 11032,
+          "sha256": "7c6881e8597ca87f9c7436c08e0727032fab207d9206990e14c8b7b146ce7379"
+        },
+        {
+          "file": "rock/malawi-boulder-05/textures/malawi-boulder-05_basecolor_1k.ktx2",
+          "bytes": 180102,
+          "sha256": "c211293e937dff42855aca8b086cb5a42995826b5ea3ac3f31bc3aa76bb1ceca"
+        },
+        {
+          "file": "rock/malawi-boulder-05/textures/malawi-boulder-05_basecolor_2k.ktx2",
+          "bytes": 665640,
+          "sha256": "d628c0044bc7eb61028c018d193af1f8e080feb6d022cfe9db2c07f3e7d3743f"
+        },
+        {
+          "file": "rock/malawi-boulder-05/textures/malawi-boulder-05_normal_1k.ktx2",
+          "bytes": 104066,
+          "sha256": "bada4341d21eeee2c11fc47ca86da39931c4cbab14074269de06b135d5e44a7c"
+        },
+        {
+          "file": "rock/malawi-boulder-05/textures/malawi-boulder-05_normal_2k.ktx2",
+          "bytes": 1305703,
+          "sha256": "0dd2d675780869e5855687199ae7611f59cb4608053c9b84c651e14df9dbd0ce"
+        }
+      ]
+    },
+    {
+      "id": "malawi-rock-07",
+      "kind": "rock",
+      "origin": "model",
+      "sources": [
+        "polyhaven-rock_07"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.16 m",
+        "LOD0 capped at 4000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "28k-triangle scan decimated"
+      ],
+      "bounds": {
+        "min": [
+          -0.042184,
+          0,
+          -0.08
+        ],
+        "max": [
+          0.042184,
+          0.071798,
+          0.08
+        ]
+      },
+      "lods": [
+        {
+          "file": "rock/malawi-rock-07/lod0.glb",
+          "bytes": 46336,
+          "sha256": "09cfe8f522a7e1005af01c8933e9638765f0b636c167f100ae8799ad7089788f",
+          "triangles": 4000,
+          "vertices": 2273
+        },
+        {
+          "file": "rock/malawi-rock-07/lod1.glb",
+          "bytes": 15172,
+          "sha256": "d7829593fa0c97a40f0100f3a3b19570803b77d19920ce5e7eee5f122c5ca414",
+          "triangles": 1000,
+          "vertices": 629
+        },
+        {
+          "file": "rock/malawi-rock-07/lod2.glb",
+          "bytes": 7232,
+          "sha256": "7539efc45153b82be81a4e01d99978c5c5ac9c59720f897cfe305f429e3d7d4e",
+          "triangles": 300,
+          "vertices": 221
+        }
+      ],
+      "textures": [
+        {
+          "name": "malawi-rock-07_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "rock/malawi-rock-07/textures/malawi-rock-07_basecolor_1k.ktx2",
+              "bytes": 158174,
+              "sha256": "bfbabf0b9428f9a8bc9a03359bac0b3d1d6ab2bd75a84350b6a07f21eba98225",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "rock/malawi-rock-07/textures/malawi-rock-07_basecolor_2k.ktx2",
+              "bytes": 558122,
+              "sha256": "f192e7b3f6e823a52c4eacf4456efe2f5813675fe19fb99bd368acdad85dd31a",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        },
+        {
+          "name": "malawi-rock-07_normal",
+          "role": "normal",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "rock/malawi-rock-07/textures/malawi-rock-07_normal_1k.ktx2",
+              "bytes": 90350,
+              "sha256": "43edffbf0b989b16132e2ba1ee6cadbbd3152ec460cf63bd4d8141545c339003",
+              "size": 512,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "rock/malawi-rock-07/textures/malawi-rock-07_normal_2k.ktx2",
+              "bytes": 1121013,
+              "sha256": "a8eaf1cb09aa4b500762ace56d51b440dd19faaf168b592d8ba55bdc7bf2093c",
+              "size": 1024,
+              "codec": "uastc"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "rock/malawi-rock-07/lod0.glb",
+          "bytes": 46336,
+          "sha256": "09cfe8f522a7e1005af01c8933e9638765f0b636c167f100ae8799ad7089788f"
+        },
+        {
+          "file": "rock/malawi-rock-07/lod1.glb",
+          "bytes": 15172,
+          "sha256": "d7829593fa0c97a40f0100f3a3b19570803b77d19920ce5e7eee5f122c5ca414"
+        },
+        {
+          "file": "rock/malawi-rock-07/lod2.glb",
+          "bytes": 7232,
+          "sha256": "7539efc45153b82be81a4e01d99978c5c5ac9c59720f897cfe305f429e3d7d4e"
+        },
+        {
+          "file": "rock/malawi-rock-07/textures/malawi-rock-07_basecolor_1k.ktx2",
+          "bytes": 158174,
+          "sha256": "bfbabf0b9428f9a8bc9a03359bac0b3d1d6ab2bd75a84350b6a07f21eba98225"
+        },
+        {
+          "file": "rock/malawi-rock-07/textures/malawi-rock-07_basecolor_2k.ktx2",
+          "bytes": 558122,
+          "sha256": "f192e7b3f6e823a52c4eacf4456efe2f5813675fe19fb99bd368acdad85dd31a"
+        },
+        {
+          "file": "rock/malawi-rock-07/textures/malawi-rock-07_normal_1k.ktx2",
+          "bytes": 90350,
+          "sha256": "43edffbf0b989b16132e2ba1ee6cadbbd3152ec460cf63bd4d8141545c339003"
+        },
+        {
+          "file": "rock/malawi-rock-07/textures/malawi-rock-07_normal_2k.ktx2",
+          "bytes": 1121013,
+          "sha256": "a8eaf1cb09aa4b500762ace56d51b440dd19faaf168b592d8ba55bdc7bf2093c"
+        }
+      ]
+    },
+    {
       "id": "reef-arch",
       "kind": "rock",
       "origin": "model",
@@ -5877,6 +7111,520 @@
       ]
     },
     {
+      "id": "rock-pile-cave",
+      "kind": "rock",
+      "origin": "model",
+      "sources": [
+        "polyhaven-namaqualand_boulder_03",
+        "polyhaven-namaqualand_boulder_05",
+        "polyhaven-rock_07"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "merged meshes, dropped unused attributes",
+        "4 rocks arranged into one pile, base centred on the origin",
+        "LOD0 capped at 28000 triangles, LOD1 at a quarter of that",
+        "arrangement: two boulders with a rock bridging the gap above a cave and one loose rock"
+      ],
+      "bounds": {
+        "min": [
+          -0.296055,
+          0,
+          -0.15344
+        ],
+        "max": [
+          0.296055,
+          0.196158,
+          0.15344
+        ]
+      },
+      "lods": [
+        {
+          "file": "rock/rock-pile-cave/lod0.glb",
+          "bytes": 292440,
+          "sha256": "37189e67b60af50ebd3e7878b72983a84c78167fd9d8329182d091acd677d952",
+          "triangles": 27998,
+          "vertices": 15267
+        },
+        {
+          "file": "rock/rock-pile-cave/lod1.glb",
+          "bytes": 88028,
+          "sha256": "3fa37fa2d02e241223c0ed80550aceda46bce69e2aa860b5ca957524f240fdfb",
+          "triangles": 6998,
+          "vertices": 4110
+        },
+        {
+          "file": "rock/rock-pile-cave/lod2.glb",
+          "bytes": 36296,
+          "sha256": "77129af67db0550f1eb6f6bd88b0cf370f47042129dbd2b3319ee6a292a93dce",
+          "triangles": 2160,
+          "vertices": 1404
+        }
+      ],
+      "textures": [
+        {
+          "name": "rock-pile-cave_boulder-03_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "rock/rock-pile-cave/textures/rock-pile-cave_boulder-03_basecolor_1k.ktx2",
+              "bytes": 181818,
+              "sha256": "dfe777dd142db968fc5ba978abd1af68f3296b58ac7b2ba9d4279b874891f590",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "rock/rock-pile-cave/textures/rock-pile-cave_boulder-03_basecolor_2k.ktx2",
+              "bytes": 662852,
+              "sha256": "62d7747c3b9300578f3ba09aec974686395647e3700ae615873f6fcab4f18d1d",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        },
+        {
+          "name": "rock-pile-cave_boulder-03_normal",
+          "role": "normal",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "rock/rock-pile-cave/textures/rock-pile-cave_boulder-03_normal_1k.ktx2",
+              "bytes": 91641,
+              "sha256": "a50cb6b170ea71fe74cb26fe5659587f60166e1324d8260611ad6b9d3481f80f",
+              "size": 512,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "rock/rock-pile-cave/textures/rock-pile-cave_boulder-03_normal_2k.ktx2",
+              "bytes": 1233562,
+              "sha256": "ec416681ff79dae2c3c15651758483240479334048bb48a66da43424c776bd6c",
+              "size": 1024,
+              "codec": "uastc"
+            }
+          }
+        },
+        {
+          "name": "rock-pile-cave_namaqualand-boulder-05_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "rock/rock-pile-cave/textures/rock-pile-cave_namaqualand-boulder-05_basecolor_1k.ktx2",
+              "bytes": 180102,
+              "sha256": "c211293e937dff42855aca8b086cb5a42995826b5ea3ac3f31bc3aa76bb1ceca",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "rock/rock-pile-cave/textures/rock-pile-cave_namaqualand-boulder-05_basecolor_2k.ktx2",
+              "bytes": 665640,
+              "sha256": "d628c0044bc7eb61028c018d193af1f8e080feb6d022cfe9db2c07f3e7d3743f",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        },
+        {
+          "name": "rock-pile-cave_namaqualand-boulder-05_normal",
+          "role": "normal",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "rock/rock-pile-cave/textures/rock-pile-cave_namaqualand-boulder-05_normal_1k.ktx2",
+              "bytes": 104066,
+              "sha256": "bada4341d21eeee2c11fc47ca86da39931c4cbab14074269de06b135d5e44a7c",
+              "size": 512,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "rock/rock-pile-cave/textures/rock-pile-cave_namaqualand-boulder-05_normal_2k.ktx2",
+              "bytes": 1305703,
+              "sha256": "0dd2d675780869e5855687199ae7611f59cb4608053c9b84c651e14df9dbd0ce",
+              "size": 1024,
+              "codec": "uastc"
+            }
+          }
+        },
+        {
+          "name": "rock-pile-cave_rock-07_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "rock/rock-pile-cave/textures/rock-pile-cave_rock-07_basecolor_1k.ktx2",
+              "bytes": 158174,
+              "sha256": "bfbabf0b9428f9a8bc9a03359bac0b3d1d6ab2bd75a84350b6a07f21eba98225",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "rock/rock-pile-cave/textures/rock-pile-cave_rock-07_basecolor_2k.ktx2",
+              "bytes": 558122,
+              "sha256": "f192e7b3f6e823a52c4eacf4456efe2f5813675fe19fb99bd368acdad85dd31a",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        },
+        {
+          "name": "rock-pile-cave_rock-07_normal",
+          "role": "normal",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "rock/rock-pile-cave/textures/rock-pile-cave_rock-07_normal_1k.ktx2",
+              "bytes": 90350,
+              "sha256": "43edffbf0b989b16132e2ba1ee6cadbbd3152ec460cf63bd4d8141545c339003",
+              "size": 512,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "rock/rock-pile-cave/textures/rock-pile-cave_rock-07_normal_2k.ktx2",
+              "bytes": 1121013,
+              "sha256": "a8eaf1cb09aa4b500762ace56d51b440dd19faaf168b592d8ba55bdc7bf2093c",
+              "size": 1024,
+              "codec": "uastc"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "rock/rock-pile-cave/lod0.glb",
+          "bytes": 292440,
+          "sha256": "37189e67b60af50ebd3e7878b72983a84c78167fd9d8329182d091acd677d952"
+        },
+        {
+          "file": "rock/rock-pile-cave/lod1.glb",
+          "bytes": 88028,
+          "sha256": "3fa37fa2d02e241223c0ed80550aceda46bce69e2aa860b5ca957524f240fdfb"
+        },
+        {
+          "file": "rock/rock-pile-cave/lod2.glb",
+          "bytes": 36296,
+          "sha256": "77129af67db0550f1eb6f6bd88b0cf370f47042129dbd2b3319ee6a292a93dce"
+        },
+        {
+          "file": "rock/rock-pile-cave/textures/rock-pile-cave_boulder-03_basecolor_1k.ktx2",
+          "bytes": 181818,
+          "sha256": "dfe777dd142db968fc5ba978abd1af68f3296b58ac7b2ba9d4279b874891f590"
+        },
+        {
+          "file": "rock/rock-pile-cave/textures/rock-pile-cave_boulder-03_basecolor_2k.ktx2",
+          "bytes": 662852,
+          "sha256": "62d7747c3b9300578f3ba09aec974686395647e3700ae615873f6fcab4f18d1d"
+        },
+        {
+          "file": "rock/rock-pile-cave/textures/rock-pile-cave_boulder-03_normal_1k.ktx2",
+          "bytes": 91641,
+          "sha256": "a50cb6b170ea71fe74cb26fe5659587f60166e1324d8260611ad6b9d3481f80f"
+        },
+        {
+          "file": "rock/rock-pile-cave/textures/rock-pile-cave_boulder-03_normal_2k.ktx2",
+          "bytes": 1233562,
+          "sha256": "ec416681ff79dae2c3c15651758483240479334048bb48a66da43424c776bd6c"
+        },
+        {
+          "file": "rock/rock-pile-cave/textures/rock-pile-cave_namaqualand-boulder-05_basecolor_1k.ktx2",
+          "bytes": 180102,
+          "sha256": "c211293e937dff42855aca8b086cb5a42995826b5ea3ac3f31bc3aa76bb1ceca"
+        },
+        {
+          "file": "rock/rock-pile-cave/textures/rock-pile-cave_namaqualand-boulder-05_basecolor_2k.ktx2",
+          "bytes": 665640,
+          "sha256": "d628c0044bc7eb61028c018d193af1f8e080feb6d022cfe9db2c07f3e7d3743f"
+        },
+        {
+          "file": "rock/rock-pile-cave/textures/rock-pile-cave_namaqualand-boulder-05_normal_1k.ktx2",
+          "bytes": 104066,
+          "sha256": "bada4341d21eeee2c11fc47ca86da39931c4cbab14074269de06b135d5e44a7c"
+        },
+        {
+          "file": "rock/rock-pile-cave/textures/rock-pile-cave_namaqualand-boulder-05_normal_2k.ktx2",
+          "bytes": 1305703,
+          "sha256": "0dd2d675780869e5855687199ae7611f59cb4608053c9b84c651e14df9dbd0ce"
+        },
+        {
+          "file": "rock/rock-pile-cave/textures/rock-pile-cave_rock-07_basecolor_1k.ktx2",
+          "bytes": 158174,
+          "sha256": "bfbabf0b9428f9a8bc9a03359bac0b3d1d6ab2bd75a84350b6a07f21eba98225"
+        },
+        {
+          "file": "rock/rock-pile-cave/textures/rock-pile-cave_rock-07_basecolor_2k.ktx2",
+          "bytes": 558122,
+          "sha256": "f192e7b3f6e823a52c4eacf4456efe2f5813675fe19fb99bd368acdad85dd31a"
+        },
+        {
+          "file": "rock/rock-pile-cave/textures/rock-pile-cave_rock-07_normal_1k.ktx2",
+          "bytes": 90350,
+          "sha256": "43edffbf0b989b16132e2ba1ee6cadbbd3152ec460cf63bd4d8141545c339003"
+        },
+        {
+          "file": "rock/rock-pile-cave/textures/rock-pile-cave_rock-07_normal_2k.ktx2",
+          "bytes": 1121013,
+          "sha256": "a8eaf1cb09aa4b500762ace56d51b440dd19faaf168b592d8ba55bdc7bf2093c"
+        }
+      ]
+    },
+    {
+      "id": "rock-pile-stack",
+      "kind": "rock",
+      "origin": "model",
+      "sources": [
+        "polyhaven-namaqualand_boulder_03",
+        "polyhaven-namaqualand_boulder_05",
+        "polyhaven-rock_07"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "merged meshes, dropped unused attributes",
+        "3 rocks arranged into one pile, base centred on the origin",
+        "LOD0 capped at 24000 triangles, LOD1 at a quarter of that",
+        "arrangement: anchor boulder with a flatter boulder against it and a rock on top"
+      ],
+      "bounds": {
+        "min": [
+          -0.24769,
+          0,
+          -0.18
+        ],
+        "max": [
+          0.24769,
+          0.211798,
+          0.18
+        ]
+      },
+      "lods": [
+        {
+          "file": "rock/rock-pile-stack/lod0.glb",
+          "bytes": 250464,
+          "sha256": "b0da87f6b104a1125329172948a2edc362b28790e5668a755aac232177599d2d",
+          "triangles": 23998,
+          "vertices": 13024
+        },
+        {
+          "file": "rock/rock-pile-stack/lod1.glb",
+          "bytes": 74892,
+          "sha256": "f8c1e9476c91353baf3d44edea2a8a92e6a1037db0edc8fc582392aadec719b5",
+          "triangles": 6000,
+          "vertices": 3497
+        },
+        {
+          "file": "rock/rock-pile-stack/lod2.glb",
+          "bytes": 30688,
+          "sha256": "24884d024878408d8996b982f39298ba493cadb95fe4bed99e1c822280276d53",
+          "triangles": 1840,
+          "vertices": 1193
+        }
+      ],
+      "textures": [
+        {
+          "name": "rock-pile-stack_boulder-03_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "rock/rock-pile-stack/textures/rock-pile-stack_boulder-03_basecolor_1k.ktx2",
+              "bytes": 181818,
+              "sha256": "dfe777dd142db968fc5ba978abd1af68f3296b58ac7b2ba9d4279b874891f590",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "rock/rock-pile-stack/textures/rock-pile-stack_boulder-03_basecolor_2k.ktx2",
+              "bytes": 662852,
+              "sha256": "62d7747c3b9300578f3ba09aec974686395647e3700ae615873f6fcab4f18d1d",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        },
+        {
+          "name": "rock-pile-stack_boulder-03_normal",
+          "role": "normal",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "rock/rock-pile-stack/textures/rock-pile-stack_boulder-03_normal_1k.ktx2",
+              "bytes": 91641,
+              "sha256": "a50cb6b170ea71fe74cb26fe5659587f60166e1324d8260611ad6b9d3481f80f",
+              "size": 512,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "rock/rock-pile-stack/textures/rock-pile-stack_boulder-03_normal_2k.ktx2",
+              "bytes": 1233562,
+              "sha256": "ec416681ff79dae2c3c15651758483240479334048bb48a66da43424c776bd6c",
+              "size": 1024,
+              "codec": "uastc"
+            }
+          }
+        },
+        {
+          "name": "rock-pile-stack_namaqualand-boulder-05_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "rock/rock-pile-stack/textures/rock-pile-stack_namaqualand-boulder-05_basecolor_1k.ktx2",
+              "bytes": 180102,
+              "sha256": "c211293e937dff42855aca8b086cb5a42995826b5ea3ac3f31bc3aa76bb1ceca",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "rock/rock-pile-stack/textures/rock-pile-stack_namaqualand-boulder-05_basecolor_2k.ktx2",
+              "bytes": 665640,
+              "sha256": "d628c0044bc7eb61028c018d193af1f8e080feb6d022cfe9db2c07f3e7d3743f",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        },
+        {
+          "name": "rock-pile-stack_namaqualand-boulder-05_normal",
+          "role": "normal",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "rock/rock-pile-stack/textures/rock-pile-stack_namaqualand-boulder-05_normal_1k.ktx2",
+              "bytes": 104066,
+              "sha256": "bada4341d21eeee2c11fc47ca86da39931c4cbab14074269de06b135d5e44a7c",
+              "size": 512,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "rock/rock-pile-stack/textures/rock-pile-stack_namaqualand-boulder-05_normal_2k.ktx2",
+              "bytes": 1305703,
+              "sha256": "0dd2d675780869e5855687199ae7611f59cb4608053c9b84c651e14df9dbd0ce",
+              "size": 1024,
+              "codec": "uastc"
+            }
+          }
+        },
+        {
+          "name": "rock-pile-stack_rock-07_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "rock/rock-pile-stack/textures/rock-pile-stack_rock-07_basecolor_1k.ktx2",
+              "bytes": 158174,
+              "sha256": "bfbabf0b9428f9a8bc9a03359bac0b3d1d6ab2bd75a84350b6a07f21eba98225",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "rock/rock-pile-stack/textures/rock-pile-stack_rock-07_basecolor_2k.ktx2",
+              "bytes": 558122,
+              "sha256": "f192e7b3f6e823a52c4eacf4456efe2f5813675fe19fb99bd368acdad85dd31a",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        },
+        {
+          "name": "rock-pile-stack_rock-07_normal",
+          "role": "normal",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "rock/rock-pile-stack/textures/rock-pile-stack_rock-07_normal_1k.ktx2",
+              "bytes": 90350,
+              "sha256": "43edffbf0b989b16132e2ba1ee6cadbbd3152ec460cf63bd4d8141545c339003",
+              "size": 512,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "rock/rock-pile-stack/textures/rock-pile-stack_rock-07_normal_2k.ktx2",
+              "bytes": 1121013,
+              "sha256": "a8eaf1cb09aa4b500762ace56d51b440dd19faaf168b592d8ba55bdc7bf2093c",
+              "size": 1024,
+              "codec": "uastc"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "rock/rock-pile-stack/lod0.glb",
+          "bytes": 250464,
+          "sha256": "b0da87f6b104a1125329172948a2edc362b28790e5668a755aac232177599d2d"
+        },
+        {
+          "file": "rock/rock-pile-stack/lod1.glb",
+          "bytes": 74892,
+          "sha256": "f8c1e9476c91353baf3d44edea2a8a92e6a1037db0edc8fc582392aadec719b5"
+        },
+        {
+          "file": "rock/rock-pile-stack/lod2.glb",
+          "bytes": 30688,
+          "sha256": "24884d024878408d8996b982f39298ba493cadb95fe4bed99e1c822280276d53"
+        },
+        {
+          "file": "rock/rock-pile-stack/textures/rock-pile-stack_boulder-03_basecolor_1k.ktx2",
+          "bytes": 181818,
+          "sha256": "dfe777dd142db968fc5ba978abd1af68f3296b58ac7b2ba9d4279b874891f590"
+        },
+        {
+          "file": "rock/rock-pile-stack/textures/rock-pile-stack_boulder-03_basecolor_2k.ktx2",
+          "bytes": 662852,
+          "sha256": "62d7747c3b9300578f3ba09aec974686395647e3700ae615873f6fcab4f18d1d"
+        },
+        {
+          "file": "rock/rock-pile-stack/textures/rock-pile-stack_boulder-03_normal_1k.ktx2",
+          "bytes": 91641,
+          "sha256": "a50cb6b170ea71fe74cb26fe5659587f60166e1324d8260611ad6b9d3481f80f"
+        },
+        {
+          "file": "rock/rock-pile-stack/textures/rock-pile-stack_boulder-03_normal_2k.ktx2",
+          "bytes": 1233562,
+          "sha256": "ec416681ff79dae2c3c15651758483240479334048bb48a66da43424c776bd6c"
+        },
+        {
+          "file": "rock/rock-pile-stack/textures/rock-pile-stack_namaqualand-boulder-05_basecolor_1k.ktx2",
+          "bytes": 180102,
+          "sha256": "c211293e937dff42855aca8b086cb5a42995826b5ea3ac3f31bc3aa76bb1ceca"
+        },
+        {
+          "file": "rock/rock-pile-stack/textures/rock-pile-stack_namaqualand-boulder-05_basecolor_2k.ktx2",
+          "bytes": 665640,
+          "sha256": "d628c0044bc7eb61028c018d193af1f8e080feb6d022cfe9db2c07f3e7d3743f"
+        },
+        {
+          "file": "rock/rock-pile-stack/textures/rock-pile-stack_namaqualand-boulder-05_normal_1k.ktx2",
+          "bytes": 104066,
+          "sha256": "bada4341d21eeee2c11fc47ca86da39931c4cbab14074269de06b135d5e44a7c"
+        },
+        {
+          "file": "rock/rock-pile-stack/textures/rock-pile-stack_namaqualand-boulder-05_normal_2k.ktx2",
+          "bytes": 1305703,
+          "sha256": "0dd2d675780869e5855687199ae7611f59cb4608053c9b84c651e14df9dbd0ce"
+        },
+        {
+          "file": "rock/rock-pile-stack/textures/rock-pile-stack_rock-07_basecolor_1k.ktx2",
+          "bytes": 158174,
+          "sha256": "bfbabf0b9428f9a8bc9a03359bac0b3d1d6ab2bd75a84350b6a07f21eba98225"
+        },
+        {
+          "file": "rock/rock-pile-stack/textures/rock-pile-stack_rock-07_basecolor_2k.ktx2",
+          "bytes": 558122,
+          "sha256": "f192e7b3f6e823a52c4eacf4456efe2f5813675fe19fb99bd368acdad85dd31a"
+        },
+        {
+          "file": "rock/rock-pile-stack/textures/rock-pile-stack_rock-07_normal_1k.ktx2",
+          "bytes": 90350,
+          "sha256": "43edffbf0b989b16132e2ba1ee6cadbbd3152ec460cf63bd4d8141545c339003"
+        },
+        {
+          "file": "rock/rock-pile-stack/textures/rock-pile-stack_rock-07_normal_2k.ktx2",
+          "bytes": 1121013,
+          "sha256": "a8eaf1cb09aa4b500762ace56d51b440dd19faaf168b592d8ba55bdc7bf2093c"
+        }
+      ]
+    },
+    {
       "id": "lambis-shell",
       "kind": "decor",
       "origin": "model",
@@ -6004,6 +7752,138 @@
           "file": "decor/lambis-shell/textures/lambis-shell_normal_2k.ktx2",
           "bytes": 1260469,
           "sha256": "a9a6add897087af5f1f8faee401f836d7d3618308501fd449766f29d8e3d4efa"
+        }
+      ]
+    },
+    {
+      "id": "neothauma-shell",
+      "kind": "decor",
+      "origin": "model",
+      "sources": [
+        "sketchfab-1bedca25"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.045 m",
+        "LOD0 capped at 3727 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "land-snail shell scan scaled to Neothauma size (4.5 cm)"
+      ],
+      "bounds": {
+        "min": [
+          -0.020542,
+          0,
+          -0.0225
+        ],
+        "max": [
+          0.020542,
+          0.03138,
+          0.0225
+        ]
+      },
+      "lods": [
+        {
+          "file": "decor/neothauma-shell/lod0.glb",
+          "bytes": 48048,
+          "sha256": "d616da5644da3e141fcaaef7a1ba83e09eb8858bbf5492722cd372a5d88419c2",
+          "triangles": 3727,
+          "vertices": 2351
+        },
+        {
+          "file": "decor/neothauma-shell/lod1.glb",
+          "bytes": 21148,
+          "sha256": "6d09f102989c9d2603c15ea73a9556b2b27729a47229623a58d0c4ac7d0ed9dc",
+          "triangles": 1304,
+          "vertices": 928
+        },
+        {
+          "file": "decor/neothauma-shell/lod2.glb",
+          "bytes": 10180,
+          "sha256": "07c541984afe9fff89b5d792c9388a583f3acb4ef9315bcd33e578227c840e48",
+          "triangles": 446,
+          "vertices": 365
+        }
+      ],
+      "textures": [
+        {
+          "name": "neothauma-shell_basecolor",
+          "role": "baseColor",
+          "colorSpace": "srgb",
+          "variants": {
+            "1k": {
+              "file": "decor/neothauma-shell/textures/neothauma-shell_basecolor_1k.ktx2",
+              "bytes": 168675,
+              "sha256": "1e5bddefc7d177f383e583525fda226d0f99f072af755d103650e69bf3e9926c",
+              "size": 1024,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "decor/neothauma-shell/textures/neothauma-shell_basecolor_2k.ktx2",
+              "bytes": 579313,
+              "sha256": "926cd72633c51fddd9cc21127c14ba55cd1a97591901b9d686e7c951b5542f6a",
+              "size": 2048,
+              "codec": "etc1s"
+            }
+          }
+        },
+        {
+          "name": "neothauma-shell_normal",
+          "role": "normal",
+          "colorSpace": "linear",
+          "variants": {
+            "1k": {
+              "file": "decor/neothauma-shell/textures/neothauma-shell_normal_1k.ktx2",
+              "bytes": 58625,
+              "sha256": "fa7be9407046b9893ff31b197f805c12e4a4f56916b62bd2c2a5374d970b282a",
+              "size": 512,
+              "codec": "etc1s"
+            },
+            "2k": {
+              "file": "decor/neothauma-shell/textures/neothauma-shell_normal_2k.ktx2",
+              "bytes": 1043162,
+              "sha256": "1a8758649666f2ced93f22fae063407550186d45a2b9c3f55f2ffd2806c3490f",
+              "size": 1024,
+              "codec": "uastc"
+            }
+          }
+        }
+      ],
+      "files": [
+        {
+          "file": "decor/neothauma-shell/lod0.glb",
+          "bytes": 48048,
+          "sha256": "d616da5644da3e141fcaaef7a1ba83e09eb8858bbf5492722cd372a5d88419c2"
+        },
+        {
+          "file": "decor/neothauma-shell/lod1.glb",
+          "bytes": 21148,
+          "sha256": "6d09f102989c9d2603c15ea73a9556b2b27729a47229623a58d0c4ac7d0ed9dc"
+        },
+        {
+          "file": "decor/neothauma-shell/lod2.glb",
+          "bytes": 10180,
+          "sha256": "07c541984afe9fff89b5d792c9388a583f3acb4ef9315bcd33e578227c840e48"
+        },
+        {
+          "file": "decor/neothauma-shell/textures/neothauma-shell_basecolor_1k.ktx2",
+          "bytes": 168675,
+          "sha256": "1e5bddefc7d177f383e583525fda226d0f99f072af755d103650e69bf3e9926c"
+        },
+        {
+          "file": "decor/neothauma-shell/textures/neothauma-shell_basecolor_2k.ktx2",
+          "bytes": 579313,
+          "sha256": "926cd72633c51fddd9cc21127c14ba55cd1a97591901b9d686e7c951b5542f6a"
+        },
+        {
+          "file": "decor/neothauma-shell/textures/neothauma-shell_normal_1k.ktx2",
+          "bytes": 58625,
+          "sha256": "fa7be9407046b9893ff31b197f805c12e4a4f56916b62bd2c2a5374d970b282a"
+        },
+        {
+          "file": "decor/neothauma-shell/textures/neothauma-shell_normal_2k.ktx2",
+          "bytes": 1043162,
+          "sha256": "1a8758649666f2ced93f22fae063407550186d45a2b9c3f55f2ffd2806c3490f"
         }
       ]
     },
@@ -6813,6 +8693,361 @@
         "bitrateKbps": 64,
         "loudnessLufs": -28,
         "file": "audio/underwater-bed/underwater-bed.m4a"
+      }
+    },
+    {
+      "id": "bg-cichlid-malawi-rock-pile",
+      "kind": "background",
+      "origin": "render",
+      "sources": [
+        "bg-cichlid-malawi-rock-pile"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "composed and rendered by the Aquarium project from CC0 rocks and ground textures and, for the shell bed, a CC-BY shell model, with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-cichlid-malawi-rock-pile/high.ktx2",
+          "bytes": 300751,
+          "sha256": "8362d88f7af9418900141a3b81f707396918d843dc53dac855ab8984e208eef2"
+        },
+        {
+          "file": "background/bg-cichlid-malawi-rock-pile/medium.ktx2",
+          "bytes": 93167,
+          "sha256": "813c4b977f631248c27b0c5f13a9c468de5e57136e22003661d62b62aeef8b5b"
+        },
+        {
+          "file": "background/bg-cichlid-malawi-rock-pile/low.ktx2",
+          "bytes": 34392,
+          "sha256": "c3c32717481e71c6f3bab0d9ab2c89a410a869f9ce9f38f4011fe39b805bb492"
+        }
+      ],
+      "background": {
+        "crop": null,
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-cichlid-malawi-rock-pile/high.ktx2",
+            "bytes": 300751,
+            "sha256": "8362d88f7af9418900141a3b81f707396918d843dc53dac855ab8984e208eef2",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-cichlid-malawi-rock-pile/high.ktx2",
+            "bytes": 300751,
+            "sha256": "8362d88f7af9418900141a3b81f707396918d843dc53dac855ab8984e208eef2",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-cichlid-malawi-rock-pile/medium.ktx2",
+            "bytes": 93167,
+            "sha256": "813c4b977f631248c27b0c5f13a9c468de5e57136e22003661d62b62aeef8b5b",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-cichlid-malawi-rock-pile/low.ktx2",
+            "bytes": 34392,
+            "sha256": "c3c32717481e71c6f3bab0d9ab2c89a410a869f9ce9f38f4011fe39b805bb492",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
+      "id": "bg-cichlid-open-blue",
+      "kind": "background",
+      "origin": "render",
+      "sources": [
+        "bg-cichlid-open-blue"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "composed and rendered by the Aquarium project from CC0 rocks and ground textures and, for the shell bed, a CC-BY shell model, with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-cichlid-open-blue/high.ktx2",
+          "bytes": 205336,
+          "sha256": "9259f78bbd8c8a83cc028b38beeda41092fe7c25ef89d1b2bfe05b486e3d5566"
+        },
+        {
+          "file": "background/bg-cichlid-open-blue/medium.ktx2",
+          "bytes": 59717,
+          "sha256": "4cd8d920e1e6cfe458bdb1a33826f11c370744ca26774978b570b7e74a058c6a"
+        },
+        {
+          "file": "background/bg-cichlid-open-blue/low.ktx2",
+          "bytes": 21358,
+          "sha256": "4d070b758b592de90f98fa0ef92b960b8e17da549a4acdbd565870ceff34ff2b"
+        }
+      ],
+      "background": {
+        "crop": null,
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-cichlid-open-blue/high.ktx2",
+            "bytes": 205336,
+            "sha256": "9259f78bbd8c8a83cc028b38beeda41092fe7c25ef89d1b2bfe05b486e3d5566",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-cichlid-open-blue/high.ktx2",
+            "bytes": 205336,
+            "sha256": "9259f78bbd8c8a83cc028b38beeda41092fe7c25ef89d1b2bfe05b486e3d5566",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-cichlid-open-blue/medium.ktx2",
+            "bytes": 59717,
+            "sha256": "4cd8d920e1e6cfe458bdb1a33826f11c370744ca26774978b570b7e74a058c6a",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-cichlid-open-blue/low.ktx2",
+            "bytes": 21358,
+            "sha256": "4d070b758b592de90f98fa0ef92b960b8e17da549a4acdbd565870ceff34ff2b",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
+      "id": "bg-cichlid-rock-cave",
+      "kind": "background",
+      "origin": "render",
+      "sources": [
+        "bg-cichlid-rock-cave"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "composed and rendered by the Aquarium project from CC0 rocks and ground textures and, for the shell bed, a CC-BY shell model, with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-cichlid-rock-cave/high.ktx2",
+          "bytes": 293056,
+          "sha256": "e3e0959c013ef26604ea8239c77c0e63f61d74da4bd01271b5f73183e3cf62aa"
+        },
+        {
+          "file": "background/bg-cichlid-rock-cave/medium.ktx2",
+          "bytes": 89697,
+          "sha256": "10bb2b6e537eebfd2a50ce93fe907354d8cdbc60eb05c0ac59573afb1aaeb0ce"
+        },
+        {
+          "file": "background/bg-cichlid-rock-cave/low.ktx2",
+          "bytes": 32469,
+          "sha256": "541ff9b76fe47ce76ee3579e9d4dccfc081e6b615e5728b71a7e6d14ae3f3b5b"
+        }
+      ],
+      "background": {
+        "crop": null,
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-cichlid-rock-cave/high.ktx2",
+            "bytes": 293056,
+            "sha256": "e3e0959c013ef26604ea8239c77c0e63f61d74da4bd01271b5f73183e3cf62aa",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-cichlid-rock-cave/high.ktx2",
+            "bytes": 293056,
+            "sha256": "e3e0959c013ef26604ea8239c77c0e63f61d74da4bd01271b5f73183e3cf62aa",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-cichlid-rock-cave/medium.ktx2",
+            "bytes": 89697,
+            "sha256": "10bb2b6e537eebfd2a50ce93fe907354d8cdbc60eb05c0ac59573afb1aaeb0ce",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-cichlid-rock-cave/low.ktx2",
+            "bytes": 32469,
+            "sha256": "541ff9b76fe47ce76ee3579e9d4dccfc081e6b615e5728b71a7e6d14ae3f3b5b",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
+      "id": "bg-cichlid-rock-wall",
+      "kind": "background",
+      "origin": "render",
+      "sources": [
+        "bg-cichlid-rock-wall"
+      ],
+      "licence": "CC0-1.0",
+      "modifications": [
+        "composed and rendered by the Aquarium project from CC0 rocks and ground textures and, for the shell bed, a CC-BY shell model, with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-cichlid-rock-wall/high.ktx2",
+          "bytes": 343631,
+          "sha256": "9a743241db2c6a9d8c11e3f53a731bb0603acb7fb2dd7b0c13b90ed4c1d1db65"
+        },
+        {
+          "file": "background/bg-cichlid-rock-wall/medium.ktx2",
+          "bytes": 103972,
+          "sha256": "306b48ed768fe5e03656ab35a4e8f1fad2c4a18990a4ff538c276ac2fc439e22"
+        },
+        {
+          "file": "background/bg-cichlid-rock-wall/low.ktx2",
+          "bytes": 36572,
+          "sha256": "7887ea1719efd7116a9cf98ae92d21907a7fee13480ef313409c903a665f8e46"
+        }
+      ],
+      "background": {
+        "crop": null,
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-cichlid-rock-wall/high.ktx2",
+            "bytes": 343631,
+            "sha256": "9a743241db2c6a9d8c11e3f53a731bb0603acb7fb2dd7b0c13b90ed4c1d1db65",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-cichlid-rock-wall/high.ktx2",
+            "bytes": 343631,
+            "sha256": "9a743241db2c6a9d8c11e3f53a731bb0603acb7fb2dd7b0c13b90ed4c1d1db65",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-cichlid-rock-wall/medium.ktx2",
+            "bytes": 103972,
+            "sha256": "306b48ed768fe5e03656ab35a4e8f1fad2c4a18990a4ff538c276ac2fc439e22",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-cichlid-rock-wall/low.ktx2",
+            "bytes": 36572,
+            "sha256": "7887ea1719efd7116a9cf98ae92d21907a7fee13480ef313409c903a665f8e46",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
+      }
+    },
+    {
+      "id": "bg-cichlid-tanganyika-shell-bed",
+      "kind": "background",
+      "origin": "render",
+      "sources": [
+        "bg-cichlid-tanganyika-shell-bed"
+      ],
+      "licence": "CC-BY-4.0",
+      "modifications": [
+        "composed and rendered by the Aquarium project from CC0 rocks and ground textures and, for the shell bed, a CC-BY shell model, with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
+        "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
+        "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
+        "all EXIF, XMP, GPS and other metadata removed"
+      ],
+      "lods": [],
+      "textures": [],
+      "files": [
+        {
+          "file": "background/bg-cichlid-tanganyika-shell-bed/high.ktx2",
+          "bytes": 380607,
+          "sha256": "aa53f0b14b05f69ec95bddbe2dbd622f75fab280564c4a8a342ffdb8e07526f9"
+        },
+        {
+          "file": "background/bg-cichlid-tanganyika-shell-bed/medium.ktx2",
+          "bytes": 114700,
+          "sha256": "561a513a9340044f465d91be995ff6f0b2b7af3b524f0207f2a6a076c5f6a982"
+        },
+        {
+          "file": "background/bg-cichlid-tanganyika-shell-bed/low.ktx2",
+          "bytes": 39861,
+          "sha256": "4c2791aa3aa0a60f5f00396bb799e7cc3319b49ae60ac9ec4b414de0fdf2690c"
+        }
+      ],
+      "background": {
+        "crop": null,
+        "tiers": {
+          "ultra": {
+            "file": "background/bg-cichlid-tanganyika-shell-bed/high.ktx2",
+            "bytes": 380607,
+            "sha256": "aa53f0b14b05f69ec95bddbe2dbd622f75fab280564c4a8a342ffdb8e07526f9",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "high": {
+            "file": "background/bg-cichlid-tanganyika-shell-bed/high.ktx2",
+            "bytes": 380607,
+            "sha256": "aa53f0b14b05f69ec95bddbe2dbd622f75fab280564c4a8a342ffdb8e07526f9",
+            "width": 2048,
+            "height": 1024,
+            "qualityLevel": 192
+          },
+          "medium": {
+            "file": "background/bg-cichlid-tanganyika-shell-bed/medium.ktx2",
+            "bytes": 114700,
+            "sha256": "561a513a9340044f465d91be995ff6f0b2b7af3b524f0207f2a6a076c5f6a982",
+            "width": 1024,
+            "height": 512,
+            "qualityLevel": 192
+          },
+          "low": {
+            "file": "background/bg-cichlid-tanganyika-shell-bed/low.ktx2",
+            "bytes": 39861,
+            "sha256": "4c2791aa3aa0a60f5f00396bb799e7cc3319b49ae60ac9ec4b414de0fdf2690c",
+            "width": 512,
+            "height": 256,
+            "qualityLevel": 192
+          }
+        }
       }
     },
     {

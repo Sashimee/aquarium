@@ -25,6 +25,7 @@ import { RAW_ROOT } from './source.ts';
 import { cropImage, decodeImage, type Rgba } from './textures.ts';
 import { MOUTH_ATTRIBUTE, FIN_ID_ATTRIBUTE, type OutputAsset } from './index-schema.ts';
 import { bakeMouthMask } from './mouth.ts';
+import { CICHLID_LOFT_RECIPES } from './loft-cichlid-recipes.ts';
 
 interface PhotoSource {
   kind: 'photo';
@@ -374,7 +375,7 @@ export function paintWrasse(tn: number, yn: number): [number, number, number] {
   return colour;
 }
 
-export const LOFT_FISH_RECIPES: LoftFishRecipe[] = [
+const BASE_LOFT_FISH_RECIPES: LoftFishRecipe[] = [
   {
     id: 'bronze-corydoras',
     species: 'bronze-corydoras',
@@ -1085,6 +1086,11 @@ export const LOFT_FISH_RECIPES: LoftFishRecipe[] = [
       caudal: { shape: [0.17, 0.19, 0.2, 0.19, 0.17], spread: 0.035 },
     },
   },
+];
+
+export const LOFT_FISH_RECIPES: LoftFishRecipe[] = [
+  ...BASE_LOFT_FISH_RECIPES,
+  ...CICHLID_LOFT_RECIPES,
 ];
 
 export function loftFishPart(
