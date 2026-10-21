@@ -37,10 +37,9 @@ import {
 import { mountUi } from './ui/mount';
 import { FeedGate } from './sync/feedGate';
 import { LampFeed } from './sync/lampFeed';
+import { RoomSeedFeed } from './sync/roomSeed';
 import { WaveMakerFeed } from './sync/waveMakerFeed';
 import { awaitTankModules } from './tankLoad';
-
-const ROOM_WEATHER_SEED = 0;
 
 function showFatal(container: HTMLElement, message: string): void {
   const box = document.createElement('pre');
@@ -74,6 +73,7 @@ async function boot(): Promise<void> {
   const tankEvents = queueTankEvents(interaction);
   const waveMaker = new WaveMakerFeed(interaction);
   const lamp = new LampFeed(interaction);
+  const roomSeed = new RoomSeedFeed(interaction);
   const tankSize = new TankSizeSource(interaction);
   const tankBiome = new TankBiome(interaction, parseBiome(window.location.search));
   const switches = watchSwitches(interaction, tracker, tankBiome.fallback);
@@ -126,6 +126,7 @@ async function boot(): Promise<void> {
     switches.stop();
     waveMaker.stop();
     lamp.stop();
+    roomSeed.stop();
     tankSize.stop();
     tankEvents.stop();
     tankBiome.stop();
@@ -162,10 +163,11 @@ async function boot(): Promise<void> {
   const roomLight = bindRoomLight({
     preference: roomPreference,
     backdrop: room.backdrop,
-    create: () => {
+    seed: roomSeed,
+    create: (seed) => {
       const environment = engine.scene.environment;
       if (!environment) throw new Error('Room light needs the engine room environment');
-      return new RoomLight({ environment, tier: engine.quality.tier, seed: ROOM_WEATHER_SEED });
+      return new RoomLight({ environment, tier: engine.quality.tier, seed });
     },
     tier: () => engine.quality.tier,
     hood: () => engine.daylight,
@@ -252,7 +254,7 @@ async function boot(): Promise<void> {
   });
   const exposePose = new URLSearchParams(window.location.search).has('e2e');
   engine.onFrame((deltaS) => {
-    idleOrbit.update(deltaS);
+    idleOrbit.update(deltaS, photo.active || exposePose);
     rig.update(deltaS);
     photo.update(deltaS);
     if (!exposePose) return;
@@ -372,6 +374,7 @@ async function boot(): Promise<void> {
     stopResize();
     for (const off of stopRoomLimit) off();
     roomLight.dispose();
+    roomSeed.stop();
     stopIdleInput();
     room.dispose();
     stopTankSize();

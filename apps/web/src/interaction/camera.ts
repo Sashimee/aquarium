@@ -183,6 +183,16 @@ export class CameraRig {
     this.clampOrbit();
   }
 
+  get orbitAngles(): Readonly<{ yaw: number; pitch: number }> {
+    return { yaw: this.yaw, pitch: this.pitch };
+  }
+
+  /** Whether the outside eye has room at this heading, with no swing back toward the front. */
+  canOrbitTo(yaw: number, pitch: number): boolean {
+    const limits = this.orbitLimits(yaw, pitch);
+    return limits.max >= limits.min;
+  }
+
   setOrbit(yaw: number, pitch: number, distance: number): void {
     this.yaw = yaw;
     this.pitch = clamp(pitch, PITCH_MIN, PITCH_MAX);

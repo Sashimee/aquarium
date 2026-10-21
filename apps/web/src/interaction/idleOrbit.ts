@@ -6,17 +6,23 @@ const EASE_IN_SECONDS = 3;
 
 export interface Orbitable {
   readonly mode: CameraMode;
+  readonly orbitAngles: Readonly<{ yaw: number; pitch: number }>;
+  canOrbitTo(yaw: number, pitch: number): boolean;
   rotateBy(yawRadians: number, pitchRadians: number): void;
 }
 
+const LOOKAHEAD_RADIANS = 0.08;
+
 /**
  * The screensaver: after a while without input the outside camera drifts around the tank. It
- * turns the rig through `rotateBy`, so the rig's own glass and room limits still apply. Reduced
- * motion switches it off.
+ * turns the rig through `rotateBy`, so the rig's own glass and room limits still apply, and turns
+ * back before a heading the room has no space for, so it sweeps between the allowed angles
+ * without the rig having to pull it back. Reduced motion switches it off.
  */
 export class IdleOrbit {
   private quiet = 0;
   private reducedMotion = false;
+  private direction: 1 | -1 = 1;
 
   constructor(private readonly rig: Orbitable) {}
 
@@ -34,16 +40,20 @@ export class IdleOrbit {
     this.quiet = 0;
   }
 
-  update(dtSeconds: number): void {
+  update(dtSeconds: number, paused = false): void {
     if (!Number.isFinite(dtSeconds) || dtSeconds <= 0) return;
-    if (this.reducedMotion || this.rig.mode !== 'orbit') {
+    if (paused || this.reducedMotion || this.rig.mode !== 'orbit') {
       this.quiet = 0;
       return;
     }
     this.quiet += dtSeconds;
     if (this.quiet < IDLE_AFTER_SECONDS) return;
     const ease = Math.min(1, (this.quiet - IDLE_AFTER_SECONDS) / EASE_IN_SECONDS);
-    this.rig.rotateBy(-IDLE_YAW_RATE * ease * dtSeconds, 0);
+    const { yaw, pitch } = this.rig.orbitAngles;
+    if (!this.rig.canOrbitTo(yaw + this.direction * LOOKAHEAD_RADIANS, pitch)) {
+      this.direction = this.direction === 1 ? -1 : 1;
+    }
+    this.rig.rotateBy(-this.direction * IDLE_YAW_RATE * ease * dtSeconds, 0);
   }
 }
 

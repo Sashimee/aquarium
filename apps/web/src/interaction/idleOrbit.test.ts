@@ -2,45 +2,86 @@ import { describe, expect, it, vi } from 'vitest';
 import { TANK_DIMENSIONS, framingScale } from '../engine/tank/dimensions';
 import { planRoom } from '../scene/room/layout';
 import { CameraRig, orbitDistanceFor, tankBounds, type CameraMode } from './camera';
-import { IDLE_AFTER_SECONDS, IdleOrbit, bindIdleInput } from './idleOrbit';
+import {
+  IDLE_AFTER_SECONDS,
+  IDLE_YAW_RATE,
+  IdleOrbit,
+  type Orbitable,
+  bindIdleInput,
+} from './idleOrbit';
 import { roomVolume } from './roomLimit';
 
 describe('IdleOrbit on the real rig', () => {
-  it('keeps the eye inside the room and outside the glass through a long drift', () => {
-    const d = TANK_DIMENSIONS.standard;
-    const { shell } = planRoom('living-room', d);
-    const camera = {
-      pos: { x: 0, y: 0, z: 0 },
-      position: {
-        set(x: number, y: number, z: number) {
-          camera.pos = { x, y, z };
-        },
-      },
-      lookAt() {},
-    };
-    const b = tankBounds(d);
-    const rig = new CameraRig(camera, b, { orbitDistance: orbitDistanceFor(framingScale(d)) });
-    rig.setRoom(roomVolume({ shell }));
-    const idle = new IdleOrbit(rig);
-    for (let t = 0; t < IDLE_AFTER_SECONDS + 300; t += 1 / 30) {
-      idle.update(1 / 30);
-      rig.update(1 / 30);
-      const { x, y, z } = camera.pos;
-      expect(x).toBeGreaterThanOrEqual(shell.min[0]);
-      expect(x).toBeLessThanOrEqual(shell.max[0]);
-      expect(y).toBeGreaterThanOrEqual(shell.min[1]);
-      expect(y).toBeLessThanOrEqual(shell.max[1]);
-      expect(z).toBeGreaterThanOrEqual(shell.min[2]);
-      expect(z).toBeLessThanOrEqual(shell.max[2]);
-      const insideGlass =
-        Math.abs(x) < b.halfLength && Math.abs(z) < b.halfDepth && y > b.floor && y < b.waterTop;
-      expect(insideGlass).toBe(false);
+  const sizes = Object.keys(TANK_DIMENSIONS) as (keyof typeof TANK_DIMENSIONS)[];
+  const FRAME = 1 / 30;
+  const NORMAL_STEP = IDLE_YAW_RATE * FRAME;
+
+  for (const size of sizes) {
+    for (const preset of ['living-room', 'office'] as const) {
+      it(`sweeps smoothly inside the ${preset} around a ${size} tank`, () => {
+        const d = TANK_DIMENSIONS[size];
+        const { shell } = planRoom(preset, d);
+        const camera = {
+          pos: { x: 0, y: 0, z: 0 },
+          position: {
+            set(x: number, y: number, z: number) {
+              camera.pos = { x, y, z };
+            },
+          },
+          lookAt() {},
+        };
+        const b = tankBounds(d);
+        const rig = new CameraRig(camera, b, { orbitDistance: orbitDistanceFor(framingScale(d)) });
+        rig.setRoom(roomVolume({ shell }));
+        const idle = new IdleOrbit(rig);
+        for (let t = 0; t < IDLE_AFTER_SECONDS; t += FRAME) idle.update(FRAME);
+        for (let i = 0; i < 20; i++) rig.update(FRAME);
+
+        const startPitch = rig.orbitAngles.pitch;
+        let yaw = rig.orbitAngles.yaw;
+        let travelled = 0;
+        let worstStep = 0;
+        let minYaw = yaw;
+        let maxYaw = yaw;
+        for (let t = 0; t < 300; t += FRAME) {
+          idle.update(FRAME);
+          rig.update(FRAME);
+          const next = rig.orbitAngles;
+          const step = Math.abs(next.yaw - yaw);
+          worstStep = Math.max(worstStep, step);
+          travelled += step;
+          yaw = next.yaw;
+          minYaw = Math.min(minYaw, yaw);
+          maxYaw = Math.max(maxYaw, yaw);
+          expect(next.pitch).toBeCloseTo(startPitch, 6);
+          const { x, y, z } = camera.pos;
+          expect(x).toBeGreaterThanOrEqual(shell.min[0]);
+          expect(x).toBeLessThanOrEqual(shell.max[0]);
+          expect(y).toBeGreaterThanOrEqual(shell.min[1]);
+          expect(y).toBeLessThanOrEqual(shell.max[1]);
+          expect(z).toBeGreaterThanOrEqual(shell.min[2]);
+          expect(z).toBeLessThanOrEqual(shell.max[2]);
+          const insideGlass =
+            Math.abs(x) < b.halfLength &&
+            Math.abs(z) < b.halfDepth &&
+            y > b.floor &&
+            y < b.waterTop;
+          expect(insideGlass).toBe(false);
+        }
+        expect(worstStep).toBeLessThanOrEqual(NORMAL_STEP * 2);
+        expect(travelled).toBeGreaterThan(300 * IDLE_YAW_RATE * 0.5);
+      });
     }
-  });
+  }
 });
 
 function setup(mode: CameraMode = 'orbit') {
-  const rig = { mode, rotateBy: vi.fn() };
+  const rig = {
+    mode,
+    orbitAngles: { yaw: 0, pitch: 0.1 },
+    canOrbitTo: vi.fn<Orbitable['canOrbitTo']>(() => true),
+    rotateBy: vi.fn(),
+  };
   return { rig, idle: new IdleOrbit(rig) };
 }
 
@@ -110,6 +151,27 @@ describe('IdleOrbit', () => {
     idle.update(-1);
     wait(idle, IDLE_AFTER_SECONDS - 1);
     expect(rig.rotateBy).not.toHaveBeenCalled();
+  });
+});
+
+describe('IdleOrbit pausing and turning', () => {
+  it('holds still and restarts the wait while paused', () => {
+    const { rig, idle } = setup();
+    for (let t = 0; t < IDLE_AFTER_SECONDS * 2; t += 0.5) idle.update(0.5, true);
+    expect(rig.rotateBy).not.toHaveBeenCalled();
+    wait(idle, IDLE_AFTER_SECONDS - 1);
+    expect(rig.rotateBy).not.toHaveBeenCalled();
+  });
+
+  it('turns round when the room has no space further on', () => {
+    const { rig, idle } = setup();
+    wait(idle, IDLE_AFTER_SECONDS + 5);
+    const before = Math.sign((rig.rotateBy.mock.lastCall as [number, number])[0]);
+    rig.canOrbitTo.mockImplementation((yaw) => yaw < 0.1);
+    rig.orbitAngles = { yaw: 0.05, pitch: 0.1 };
+    idle.update(0.5);
+    const after = Math.sign((rig.rotateBy.mock.lastCall as [number, number])[0]);
+    expect(after).toBe(-before);
   });
 });
 
