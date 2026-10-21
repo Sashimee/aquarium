@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import {
   chemistrySchema,
   containsBlockedWord,
@@ -9,6 +8,7 @@ import {
   diseaseStateSchema,
   PUBLIC_NAME_FALLBACK,
   publicTankSchema,
+  seedOf,
   reactionStateSchema,
   setReactionRequestSchema,
   shareTokenSchema,
@@ -52,10 +52,6 @@ const paramsSchema = z.object({ token: z.string().max(200) });
 
 const notFound = (reply: FastifyReply) =>
   reply.code(404).send(apiError('not_found', 'This tank is not shared.'));
-
-function seedOf(label: string, id: string): number {
-  return createHash('sha256').update(`${label}:${id}`).digest().readUInt32BE(0);
-}
 
 const HOUR_MS = 3_600_000;
 
