@@ -3,6 +3,7 @@ import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import nodemailer from 'nodemailer';
 import http from 'node:http';
+import { createRequire, syncBuiltinESMExports } from 'node:module';
 import type { AddressInfo } from 'node:net';
 import { createMailer, DEFAULT_MAIL_LIMITS } from './mail.ts';
 import { postgresHitStore } from './rate-limit.ts';
@@ -725,6 +726,40 @@ describe('csrf', () => {
 });
 
 const SHORT_TIMER_MS = 1000;
+const REAL_TIME_CEILING_MS = 1000;
+
+const nodeRequire = createRequire(import.meta.url);
+
+function collapseShortTimers(delays: number[]): () => void {
+  const timers = nodeRequire('node:timers') as typeof import('node:timers');
+  const timersPromises = nodeRequire(
+    'node:timers/promises',
+  ) as typeof import('node:timers/promises');
+  const realGlobal = globalThis.setTimeout;
+  const realTimers = timers.setTimeout;
+  const realPromise = timersPromises.setTimeout;
+  const short = (delay?: number) => delay !== undefined && delay < SHORT_TIMER_MS;
+  const callback = (real: typeof setTimeout) =>
+    ((fn: (...a: unknown[]) => void, delay?: number, ...args: unknown[]) => {
+      if (!short(delay)) return real(fn, delay, ...args);
+      delays.push(delay as number);
+      return real(fn, 0, ...args);
+    }) as typeof setTimeout;
+  globalThis.setTimeout = callback(realGlobal);
+  timers.setTimeout = callback(realTimers);
+  timersPromises.setTimeout = ((delay?: number, value?: unknown, options?: never) => {
+    if (!short(delay)) return realPromise(delay, value, options);
+    delays.push(delay as number);
+    return realPromise(0, value, options);
+  }) as typeof timersPromises.setTimeout;
+  syncBuiltinESMExports();
+  return () => {
+    globalThis.setTimeout = realGlobal;
+    timers.setTimeout = realTimers;
+    timersPromises.setTimeout = realPromise;
+    syncBuiltinESMExports();
+  };
+}
 
 describe('mail abuse limits', () => {
   it('answers a resend inside the cooldown like any other, and still sends nothing', async () => {
@@ -744,21 +779,12 @@ describe('mail abuse limits', () => {
         const mailsBefore = h.outbox.length;
 
         const resend = async (email: string) => {
-          // Better Auth pads the handler with setTimeout(500 - elapsed) measured on Date.now(). Freezing
-          // Date makes the pad exactly 500 and collapsing short timers to immediate makes the test
-          // independent of runner load; the metric is the delay the handler asks for, so a leak shows as
-          // an extra sleep. The driver's connect/query timeouts are >= 3 s and left alone.
+          // Frozen Date makes Better Auth's pad exactly 500; collapsing short timers keeps the run
+          // independent of runner load. Slow work in the handler stays visible as real elapsed time.
           vi.useFakeTimers({ toFake: ['Date'] });
-          const realSetTimeout = globalThis.setTimeout;
-          let ms = 0;
-          const timers = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((
-            fn: () => void,
-            delay?: number,
-          ) => {
-            if (delay === undefined || delay >= SHORT_TIMER_MS) return realSetTimeout(fn, delay);
-            ms += delay;
-            return realSetTimeout(fn, 0);
-          }) as typeof setTimeout);
+          const delays: number[] = [];
+          const restore = collapseShortTimers(delays);
+          const started = performance.now();
           let res: LightMyRequestResponse;
           try {
             res = await h.app.inject({
@@ -768,11 +794,12 @@ describe('mail abuse limits', () => {
               payload: { email, callbackURL: '/verify-email' },
             });
           } finally {
-            timers.mockRestore();
+            restore();
             vi.useRealTimers();
           }
+          const elapsedMs = performance.now() - started;
           await h.settleMail();
-          return { res, ms };
+          return { res, delays, elapsedMs };
         };
         const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
         try {
@@ -789,16 +816,14 @@ describe('mail abuse limits', () => {
           expect(h.outbox.length).toBe(mailsBefore);
           expect(h.outbox.filter((m) => m.to === cooled)).toHaveLength(1);
 
-          const cooledMs: number[] = [];
-          const unknownMs: number[] = [];
           for (let i = 0; i < 5; i++) {
-            cooledMs.push((await resend(cooled)).ms);
-            unknownMs.push((await resend(nextEmail())).ms);
+            const cooledRun = await resend(cooled);
+            const unknownRun = await resend(nextEmail());
+            expect(cooledRun.delays).toEqual([500]);
+            expect(unknownRun.delays).toEqual(cooledRun.delays);
+            expect(cooledRun.elapsedMs).toBeLessThan(REAL_TIME_CEILING_MS);
+            expect(unknownRun.elapsedMs).toBeLessThan(REAL_TIME_CEILING_MS);
           }
-          // Better Auth pads send-verification-email to MINIMUM_MS (500 ms, email-verification.mjs),
-          // which masks small differences, so only a leak beyond the pad is observable here.
-          expect(median(cooledMs)).toBeLessThan(560);
-          expect(median(unknownMs)).toBeLessThan(560);
           expect(h.outbox.length).toBe(mailsBefore);
         } finally {
           spy.mockRestore();
