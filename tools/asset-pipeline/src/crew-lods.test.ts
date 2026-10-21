@@ -254,8 +254,14 @@ function lipEdgeSteps(prims: ShippedPrimitive[], length: number): number[] {
   return lowest.slice(1).map((y, i) => Math.abs(y - lowest[i]!));
 }
 
-const SCANNED = [
-  { dir: 'crab/hermit-crab', material: 'hermit-crab', solid: false, pieces: 2 },
+const SCANNED: Array<{
+  dir: string;
+  material: string;
+  solid: boolean;
+  pieces: number;
+  touching?: boolean;
+}> = [
+  { dir: 'crab/hermit-crab', material: 'hermit-crab', solid: false, pieces: 2, touching: true },
   { dir: 'snail/nerite-snail', material: 'nerite-shell', solid: true, pieces: 1 },
 ];
 
@@ -282,7 +288,7 @@ describe('nerite seating', () => {
 describe('shipped scan LODs', () => {
   beforeAll(() => MeshoptDecoder.ready);
 
-  for (const { dir, material, solid, pieces } of SCANNED)
+  for (const { dir, material, solid, pieces, touching } of SCANNED)
     for (const level of [0, 1, 2]) {
       it(`${dir} LOD${level} has no see-through pixels in the top and side views`, async () => {
         const prims = await readLod(dir, level);
@@ -310,7 +316,11 @@ describe('shipped scan LODs', () => {
           }
           const used = new Set(solid);
           const parts = connectedComponents(canon, solid, (v) => used.has(v)).sizes.length;
-          expect(parts, `${dir} LOD${level} ${prim.material}`).toBe(pieces);
+          const label = `${dir} LOD${level} ${prim.material}`;
+          if (touching) {
+            // the shell rests in the crab's body, so the weld tolerance may join the two bodies
+            expect(parts, label).toBeLessThanOrEqual(pieces);
+          } else expect(parts, label).toBe(pieces);
         }
       });
 

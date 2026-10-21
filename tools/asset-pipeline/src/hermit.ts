@@ -513,6 +513,16 @@ export interface LimbFrame {
   reach: number;
 }
 
+const sideOfLimb = (p: { lateral: number }): number => (p.lateral < 0 ? 0 : 1);
+
+/** Throws unless the claw pair is one leg on each side of the body, claw 0 on side 0 (-x) and claw 1 on side 1. */
+export function assertClawsOpposite(claws: Array<{ lateral: number }>): void {
+  if (claws.length !== 2 || sideOfLimb(claws[0]!) !== 0 || sideOfLimb(claws[1]!) !== 1)
+    throw new Error(
+      `assertClawsOpposite: the claws sit on sides [${claws.map(sideOfLimb).join(', ')}], need one on each of side 0 then side 1; the pick must be per side, not global order`,
+    );
+}
+
 /**
  * The claw pair (the chelipeds) is the leg whose root sits foremost on each side; the pair takes slot 0/1.
  * The walking legs follow fore to aft on their side, so a leg lands in slot `pair * 2 + side` whatever the
@@ -525,12 +535,13 @@ export function assignLimbIndices(pieces: LimbFrame[]): number[] {
     .map((p, i) => ({ ...p, i }))
     .filter((p) => p.kind === CRAB_KIND.leg)
     .sort((a, b) => b.rootAhead - a.rootAhead || a.i - b.i);
-  const sideOf = (p: { lateral: number }): number => (p.lateral < 0 ? 0 : 1);
+  const sideOf = sideOfLimb;
   const claws = [0, 1].map((side) => legs.find((p) => sideOf(p) === side));
   if (claws[0] === undefined || claws[1] === undefined)
     throw new Error(
       'assignLimbIndices: one side of the body has no leg piece, so there is no claw pair; recheck the segmentation recipe',
     );
+  assertClawsOpposite(claws as typeof legs);
   const walkers = legs.filter((p) => p !== claws[0] && p !== claws[1]);
   if (walkers.length === 0)
     throw new Error(
@@ -721,6 +732,103 @@ export function limbReach(
   return Math.hypot(root[0] - tip[0], root[1] - tip[1], root[2] - tip[2]);
 }
 
+/**
+ * Yaw theta, with x' = x cos + z sin and z' = -x sin + z cos about the vertical through `pivot`, that turns the
+ * shell's long horizontal axis to trail along -z with its far end behind the pivot.
+ */
+export function shellTrailYaw(points: Array<[number, number]>, pivot: [number, number]): number {
+  let mx = 0;
+  let mz = 0;
+  for (const [x, z] of points) {
+    mx += x / points.length;
+    mz += z / points.length;
+  }
+  let sxx = 0;
+  let szz = 0;
+  let sxz = 0;
+  for (const [x, z] of points) {
+    sxx += (x - mx) ** 2;
+    szz += (z - mz) ** 2;
+    sxz += (x - mx) * (z - mz);
+  }
+  let axis = 0.5 * Math.atan2(2 * sxz, sxx - szz);
+  const away = (mx - pivot[0]) * Math.cos(axis) + (mz - pivot[1]) * Math.sin(axis);
+  if (away < 0) axis += Math.PI;
+  return axis + Math.PI / 2;
+}
+
+const FIRST_WALKER_SLOT = 2;
+const GROUND_PASSES = 16;
+/** Share of a limb's length, from its root, over which a bend to the ground is spread. */
+const GROUND_ROOT_SHARE = 0.85;
+
+/**
+ * Bends each walking leg down so its lowest vertex reaches `-standoff`, the shift growing from nothing at the
+ * limb root to the full gap at the tip. The scan holds three of four legs 3 to 4 mm clear of the ground.
+ */
+export function groundWalkers(
+  positions: Float32Array,
+  kind: ArrayLike<number>,
+  limb: ArrayLike<number>,
+  weight: ArrayLike<number>,
+  standoff: number,
+): void {
+  const slots = new Set<number>();
+  for (let v = 0; v < kind.length; v++)
+    if (kind[v] === CRAB_KIND.leg && limb[v]! >= FIRST_WALKER_SLOT) slots.add(limb[v]!);
+  for (const slot of slots)
+    for (let pass = 0; pass < GROUND_PASSES; pass++) {
+      let lowest = Infinity;
+      for (let v = 0; v < kind.length; v++)
+        if (kind[v] === CRAB_KIND.leg && limb[v] === slot)
+          lowest = Math.min(lowest, positions[v * 3 + 1]!);
+      const gap = lowest + standoff;
+      if (gap < 1e-7) break;
+      for (let v = 0; v < kind.length; v++)
+        if (kind[v] === CRAB_KIND.leg && limb[v] === slot)
+          positions[v * 3 + 1] =
+            positions[v * 3 + 1]! - gap * Math.min(1, (weight[v]! / GROUND_ROOT_SHARE) ** 1.5);
+    }
+}
+
+const TRAIL_CONTACT_FRACTION = 0.05;
+const TRAIL_SAMPLES = 3000;
+
+/** Yaws the rigid shell about the vertical through where it meets the soft body, so it trails behind the crab. */
+function trailShell(dense: Dense, shell: Uint8Array, stem: Vec3[], contact: number): void {
+  const shellIds: number[] = [];
+  for (let i = 0; i < shell.length; i++) if (shell[i]) shellIds.push(i);
+  if (stem.length === 0 || shellIds.length === 0)
+    throw new Error('hermit: no shell or no soft body to turn the shell against');
+  const strideOf = (n: number): number => Math.max(1, Math.floor(n / TRAIL_SAMPLES));
+  const stemSample = stem.filter((_, k) => k % strideOf(stem.length) === 0);
+  const touching = shellIds
+    .filter((_, k) => k % strideOf(shellIds.length) === 0)
+    .filter((v) => {
+      const p = pointAt(dense.positions, v);
+      return stemSample.some((q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]) < contact);
+    });
+  if (touching.length === 0)
+    throw new Error(
+      'hermit: the shell does not touch the soft body; recheck the segmentation recipe',
+    );
+  const mean = (axis: number): number =>
+    touching.reduce((sum, v) => sum + dense.positions[v * 3 + axis]!, 0) / touching.length;
+  const pivot: [number, number] = [mean(0), mean(2)];
+  const yaw = shellTrailYaw(
+    shellIds.map((v) => [dense.positions[v * 3]!, dense.positions[v * 3 + 2]!]),
+    pivot,
+  );
+  const c = Math.cos(yaw);
+  const s = Math.sin(yaw);
+  for (const v of shellIds) {
+    const x = dense.positions[v * 3]! - pivot[0];
+    const z = dense.positions[v * 3 + 2]! - pivot[1];
+    dense.positions[v * 3] = pivot[0] + x * c + z * s;
+    dense.positions[v * 3 + 2] = pivot[1] - x * s + z * c;
+  }
+}
+
 export interface Bodies {
   dense: Dense;
   /** 1 on the shell's vertices, 0 on the crab's. */
@@ -857,6 +965,14 @@ export async function buildHermit(recipe: HermitRecipe, ctx: FishContext): Promi
     dense.positions[i] = dense.positions[i]! - hipLateral;
   for (let i = 0; i < crab.positions.length; i += 3)
     crab.positions[i] = crab.positions[i]! - hipLateral;
+  trailShell(
+    dense,
+    shell,
+    Array.from(seg.kind.keys())
+      .filter((k) => seg.kind[k] === CRAB_KIND.stem)
+      .map((k) => pointAt(crab.positions, k)),
+    TRAIL_CONTACT_FRACTION * standardLengthM,
+  );
   const pieceFrame = seg.pieces.map((p, i) => {
     const members: number[] = [];
     for (let v = 0; v < crabCount; v++) if (seg.piece[v] === i) members.push(v);
@@ -909,6 +1025,7 @@ export async function buildHermit(recipe: HermitRecipe, ctx: FishContext): Promi
       if (part === CRAB_KIND.leg) standoff = Math.max(standoff, -y);
     }
   });
+  groundWalkers(dense.positions, kind, limb, weights, standoff);
   if (stemCount === 0)
     throw new Error('hermit: no exposed soft body found; recheck the segmentation recipe');
   if (!(stemMinZ > rearZ))
@@ -986,7 +1103,7 @@ export async function buildHermit(recipe: HermitRecipe, ctx: FishContext): Promi
         standardLengthM,
         lengthSource: fromSpecies !== null ? 'species-json' : 'recipe',
         axes: { forward: '+z', up: '+y' },
-        origin: 'centre-of-mass',
+        origin: 'hip',
         standoffM: standoff,
         attributes: { partId: FIN_ID_ATTRIBUTE, weight: FIN_MASK_ATTRIBUTE, limb: LEG_ATTRIBUTE },
         partIds: { ...SHRIMP_PART_IDS },
