@@ -7,6 +7,7 @@ import {
   SnapshotField,
   STEP_HZ,
   type SimHost,
+  type SimHostOptions,
   type Snapshot,
 } from '@aquarium/sim';
 import { DaylightAnnouncer } from '../engine/daylight';
@@ -35,10 +36,10 @@ function snapshot(client: SimClient): Promise<Snapshot> {
 }
 
 /** A demo tank in full daylight that has run long enough for its fish to adapt to it. */
-async function adaptedTank(): Promise<SimClient> {
+async function adaptedTank(options?: SimHostOptions): Promise<SimClient> {
   const channel = new MessageChannel();
   const tank = {
-    host: createSimHost(channel.port1),
+    host: createSimHost(channel.port1, options),
     client: new SimClient(channel.port2),
     channel,
   };
@@ -63,6 +64,12 @@ async function startledOver(client: SimClient, steps: number): Promise<number> {
     }
   }
   return startled.size;
+}
+
+/** Lets queued port messages through, then moves the frozen timers on by `ms`. */
+async function workerTurn(ms: number): Promise<void> {
+  await new Promise((resolve) => setImmediate(resolve));
+  await vi.advanceTimersByTimeAsync(ms);
 }
 
 function lampOnAnnouncer(): DaylightAnnouncer {
@@ -107,5 +114,40 @@ describe('hood light after a hidden tab', { timeout: 30_000 }, () => {
     if (change === null) return;
     sendLight(client, change);
     expect(await startledOver(client, STEP_HZ)).toBe(0);
+  });
+
+  it('leaves a world the host halted after an error halted', async () => {
+    let clockReads = 0;
+    const client = await adaptedTank({
+      now: () => {
+        clockReads++;
+        if (clockReads === 2) throw new Error('clock exploded');
+        return clockReads * 1000;
+      },
+    });
+    const errors: string[] = [];
+    client.onError((message) => errors.push(message));
+    client.start();
+    while (errors.length === 0) await workerTurn(100);
+    const ticks: number[] = [];
+    client.onSnapshot((s) => ticks.push(s.tick));
+
+    const announcer = lampOnAnnouncer();
+    announcer.frame(HIDDEN_MS);
+    const change = announcer.next(0);
+    expect(change?.settled).toBe(true);
+    if (change === null) return;
+    sendLight(client, change);
+    const flushed = snapshot(client);
+    client.step(1);
+    const last = (await flushed).tick;
+    for (let i = 0; i < 10; i++) await workerTurn(100);
+    const after = snapshot(client);
+    client.step(1);
+    expect((await after).tick).toBe(last + 1);
+
+    expect(ticks).toEqual([last, last + 1]);
+    expect(errors).toEqual(['clock exploded']);
+    expect(clockReads).toBe(2);
   });
 });

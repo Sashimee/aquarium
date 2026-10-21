@@ -923,11 +923,7 @@ export class FishSystem {
   private setDaylight(change: DaylightChange): void {
     this.light = change.level;
     this.night = 1 - change.level;
-    if (this.disposed || !this.simReady) return;
-    // A stopped world settles its light when it starts again, and must not start early here.
-    const running = this.inWorld !== null && this.pausedAtMs === null;
-    if (running) sendLight(this.sim, change);
-    else this.sim.setLight(change.level);
+    if (!this.disposed && this.simReady) sendLight(this.sim, change);
   }
 
   dispose(): void {

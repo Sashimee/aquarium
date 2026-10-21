@@ -219,23 +219,16 @@ export async function startWorld(
   sim.start();
 }
 
-/** The part of `SimClient` a hood light change goes through. */
-export interface LightControls {
-  setLight(level: number): void;
-  start(): void;
-  stop(): void;
-}
-
 /**
- * Sends the hood level to a running world. A settled level changed while nobody watched (a hidden
- * tab), so the world restarts: `start` takes the light it has as already adapted to, where a bare
- * jump would read as the lamp switching and startle every fish.
+ * Sends the hood level to the world. A settled level changed while nobody watched (a hidden tab),
+ * so the world takes it as already adapted to, where a bare jump would read as the lamp switching
+ * and startle every fish.
  */
-export function sendLight(sim: LightControls, change: DaylightChange): void {
-  sim.setLight(change.level);
-  if (!change.settled) return;
-  sim.stop();
-  sim.start();
+export function sendLight(
+  sim: { setLight(level: number, settle?: boolean): void },
+  change: DaylightChange,
+): void {
+  sim.setLight(change.level, change.settled);
 }
 
 /** A sim worker that never answered `init`; it is stuck and must be replaced. */
