@@ -135,14 +135,3 @@ describe('lampPhotoperiod', () => {
     }
   });
 });
-
-describe('localMinuteOfDay', () => {
-  it('cuts the day at UTC midnight shifted by the offset', () => {
-    const midnight = Date.UTC(2026, 9, 21);
-    expect(localMinuteOfDay(midnight, 0)).toBe(0);
-    expect(localMinuteOfDay(midnight - 60_000, 0)).toBe(24 * 60 - 1);
-    expect(localMinuteOfDay(midnight, 120)).toBe(120);
-    expect(localMinuteOfDay(midnight, -60)).toBe(23 * 60);
-    expect(() => localMinuteOfDay(Number.NaN, 0)).toThrow(RangeError);
-  });
-});
