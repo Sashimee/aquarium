@@ -3,7 +3,7 @@ import { Basin, type TankDimensions } from './basin.ts';
 import { Behaviour, BEHAVIOUR, type Anchor, type Plan, type Stimulus } from './behaviour.ts';
 import { sexCode, StageCode, stageCode, type SimBrood } from './brood.ts';
 import { algaeGrazer, grazeAreaRate, type CrewTally } from './crew.ts';
-import { DecorField, UnionSdf, type Point3 } from './decor.ts';
+import { DecorField, UnionSdf, type DecorBounds, type Point3 } from './decor.ts';
 import { FEEDING, feedingHeight, gutForHunger } from './feeding.ts';
 import { FishResize } from './fishArrays.ts';
 import type { Visitor } from './greeting.ts';
@@ -571,6 +571,10 @@ export class World {
 
   get decorSdf(): Sdf | null {
     return this.hardDecor.size > 0 ? this.hardDecor : null;
+  }
+
+  get decorBounds(): DecorBounds[] {
+    return this.hardDecor.bounds();
   }
 
   get plantSdf(): Sdf | null {

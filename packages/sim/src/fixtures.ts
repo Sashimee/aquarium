@@ -378,6 +378,36 @@ export const hermitCrab: SpeciesInput = {
   lifecycle: { diet: ['pellets', 'algae-wafer', 'flakes'] },
 };
 
+/**
+ * The cleaner wrasse, from content/species/cleaner-wrasse.json plus the `cleaner` trait; not in
+ * `ARCHETYPES`, so the benchmark is unchanged.
+ */
+export const cleanerWrasse: SpeciesInput = {
+  id: 'cleaner-wrasse',
+  behaviour: {
+    territorial: false,
+    preferredZone: 'mid',
+    depthBand: [0.15, 0.65],
+    perceptionRangeM: 0.5,
+    perceptionFovDeg: 300,
+    curiosity: 0.8,
+    boldness: 0.8,
+    traits: ['cave-dweller', 'cleaner'],
+  },
+  locomotion: {
+    swimmingMode: 'labriform',
+    gait: 'hover',
+    maxSpeedMps: 0.8,
+    cruiseSpeedMps: 0.08,
+    massKg: 0.009,
+    maxTurnRateDegPerS: 400,
+    maxPitchDeg: 45,
+    strouhal: 0.3,
+    bodyLengthM: 0.085,
+  },
+  lifecycle: { diet: ['brine-shrimp', 'bloodworms', 'flakes', 'pellets'] },
+};
+
 export const ARCHETYPES: readonly SpeciesInput[] = [
   neonTetra,
   angelfish,
