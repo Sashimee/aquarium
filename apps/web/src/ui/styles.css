@@ -791,3 +791,11 @@ progress {
 .symptom {
   margin: 0.25rem 0;
 }
+
+.fish-mover {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}

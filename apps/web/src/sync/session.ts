@@ -3,6 +3,7 @@ import type {
   BackgroundId,
   PlayableBiome,
   CareAction,
+  ConflictReason,
   DecorLayout,
   DiseaseKind,
   FoodType,
@@ -31,6 +32,7 @@ import {
 } from './life';
 import { SaveStatusMerge } from './saveStatus';
 import { describeSyncError } from './messages';
+import { moveRefusalText } from './moveFish';
 import { INITIAL_STATE, type SessionState } from './state';
 import { DISEASE_LABEL } from './treatment';
 import { diffFish, isStaleSnapshot, upsertTank } from './reconcile';
@@ -57,6 +59,13 @@ export interface TreatOutcome {
   ok: boolean;
   overdose: boolean;
   /** The server's reason when it refused the dose with a 409. */
+  refusal: string | null;
+  /** The server's machine-readable reason for the 409. */
+  reason: ConflictReason | null;
+}
+
+export interface MoveOutcome {
+  ok: boolean;
   refusal: string | null;
 }
 
@@ -447,7 +456,7 @@ export class TankSession {
   /** Doses the active tank. The key is kept across an unknown outcome, so a retry is never charged twice. */
   async treat(kind: DiseaseKind, potency: MedicinePotency): Promise<TreatOutcome> {
     const tank = this.activeTank;
-    const outcome: TreatOutcome = { ok: false, overdose: false, refusal: null };
+    const outcome: TreatOutcome = { ok: false, overdose: false, refusal: null, reason: null };
     if (!tank) return outcome;
     const gen = this.loadId;
     outcome.ok = await this.paid(`treat:${tank.id}:${kind}:${potency}`, async (idempotencyKey) => {
@@ -457,6 +466,7 @@ export class TankSession {
       } catch (error) {
         if (error instanceof ApiRequestError && error.code === 'conflict') {
           outcome.refusal = error.message;
+          outcome.reason = error.reason;
           return;
         }
         throw error;
@@ -473,6 +483,44 @@ export class TankSession {
           ? 'The medicine is in, but the water now holds more than one dose. It poisons your fish until you change the water.'
           : `The ${DISEASE_LABEL[kind].toLowerCase()} medicine is in the water.`,
       });
+    });
+    if (outcome.refusal !== null) outcome.ok = false;
+    return outcome;
+  }
+
+  /** Moves a fish out of the active tank. A refusal is handed back as text for the player. */
+  async move(fishId: string, toTankId: string): Promise<MoveOutcome> {
+    const tank = this.activeTank;
+    const outcome: MoveOutcome = { ok: false, refusal: null };
+    const fish = tank?.fish.find((f) => f.id === fishId);
+    const target = this.state.tanks.find((t) => t.id === toTankId);
+    if (!tank || !fish || !target) return outcome;
+    const gen = this.loadId;
+    const intent = `move:${tank.id}:${fishId}:${toTankId}`;
+    const key = this.keys.keyFor(intent);
+    outcome.ok = await this.perform(async () => {
+      let result;
+      try {
+        result = await this.deps.api.moveFish(tank.id, fishId, {
+          toTankId,
+          idempotencyKey: key,
+        });
+      } catch (error) {
+        const refusal = moveRefusalText(error, fish.name, target.name);
+        if (refusal === null) {
+          if (!outcomeUnknown(error)) this.keys.settle(intent);
+          throw error;
+        }
+        outcome.refusal = refusal;
+        if (!outcomeUnknown(error)) this.keys.settle(intent);
+        return;
+      }
+      this.keys.settle(intent);
+      this.keys.settle(`move:${toTankId}:${fishId}:${tank.id}`);
+      if (gen !== this.loadId) return;
+      this.apply(result.source);
+      this.apply(result.destination);
+      this.patch({ notice: `${fish.name} was moved to ${target.name}.` });
     });
     if (outcome.refusal !== null) outcome.ok = false;
     return outcome;

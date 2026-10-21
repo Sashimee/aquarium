@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import { BUNDLED_ECONOMY } from './bundledEconomy';
 import { FISH_1, FISH_2, fishFixture, speciesFixture, tankFixture } from './fixtures';
 import {
-  blockedText,
   courseDays,
   doseButtonText,
   doseSpend,
@@ -127,9 +126,11 @@ describe('treatment wording', () => {
   });
 
   it('sends the player to a water change for both water refusals but not for no patient', () => {
-    expect(wantsWaterChange(blockedText('other-medicine'))).toBe(true);
-    expect(wantsWaterChange(blockedText('at-limit'))).toBe(true);
-    expect(wantsWaterChange(blockedText('nothing-to-treat'))).toBe(false);
+    expect(wantsWaterChange('other_medicine')).toBe(true);
+    expect(wantsWaterChange('dose_limit')).toBe(true);
+    expect(wantsWaterChange('nothing_to_treat')).toBe(false);
+    expect(wantsWaterChange('key_reused')).toBe(false);
+    expect(wantsWaterChange(null)).toBe(false);
   });
 });
 

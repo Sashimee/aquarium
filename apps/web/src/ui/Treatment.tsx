@@ -1,10 +1,12 @@
 import {
   playableBiomeSchema,
   type DiseaseKind,
+  type Fish,
   type MedicinePotency,
   type Tank,
 } from '@aquarium/shared';
 import { useEffect, useId, useState } from 'react';
+import { movableFish, moveTargets } from '../sync/moveFish';
 import { BUNDLED_ECONOMY } from '../sync/bundledEconomy';
 import { spendQuestion } from '../sync/economy';
 import type { SessionState, TankSession } from '../sync/session';
@@ -47,6 +49,13 @@ interface Refusal {
   waterChange: boolean;
 }
 
+interface FishMoverProps {
+  session: TankSession;
+  state: SessionState;
+  tank: Tank;
+  fish: Fish;
+}
+
 export function Treatment({
   session,
   state,
@@ -76,7 +85,7 @@ export function Treatment({
           tankId: tank.id,
           kind,
           message: outcome.refusal,
-          waterChange: wantsWaterChange(outcome.refusal),
+          waterChange: wantsWaterChange(outcome.reason),
         });
       }
       return outcome.ok;
@@ -119,6 +128,7 @@ export function Treatment({
           kind={kind}
           tank={tank}
           state={state}
+          session={session}
           refusal={refusal?.kind === kind ? refusal : null}
           onDose={start}
           onWaterChange={async () => {
@@ -175,6 +185,7 @@ function DiseaseCard({
   kind,
   tank,
   state,
+  session,
   refusal,
   onDose,
   onWaterChange,
@@ -182,6 +193,7 @@ function DiseaseCard({
   kind: DiseaseKind;
   tank: Tank;
   state: SessionState;
+  session: TankSession;
   refusal: Refusal | null;
   onDose(kind: DiseaseKind, potency: MedicinePotency): void;
   onWaterChange(): Promise<void>;
@@ -198,6 +210,7 @@ function DiseaseCard({
         {fish.map((f) => (
           <li key={f.id}>
             {f.name}: {severityWord(f.disease?.severity ?? 0)}
+            <FishMover session={session} state={state} tank={tank} fish={f} />
           </li>
         ))}
       </ul>
@@ -235,6 +248,36 @@ function DiseaseCard({
   );
 }
 
+function FishMover({ session, state, tank, fish }: FishMoverProps) {
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const targets = moveTargets(tank, state.tanks);
+  if (targets.length === 0) return null;
+  return (
+    <span className="fish-mover">
+      {targets.map((target) => (
+        <button
+          key={target.id}
+          type="button"
+          disabled={state.busy}
+          onClick={() => {
+            setRefusal(null);
+            void session.move(fish.id, target.id).then((outcome) => {
+              if (!outcome.ok) setRefusal(outcome.refusal);
+            });
+          }}
+        >
+          Move {fish.name} to {target.name}
+        </button>
+      ))}
+      {refusal && (
+        <span role="alert" className="field-error">
+          {refusal}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function HeatNote({ tank, state }: { tank: Tank; state: SessionState }) {
   const tolerant = heatTolerantSick(tank, state.species);
   return (
@@ -265,9 +308,8 @@ export function QuarantineSection({
       <h3 id={`${id}-h`}>Quarantine tank</h3>
       <p className="hint">
         A small tank kept apart, so sick fish can be treated without dosing the whole display tank.
-        It is free and does not count toward your six tanks. Moving a fish into it and back needs a
-        server feature that is not built yet, so for now it is a separate tank you can dose and care
-        for on its own.
+        It is free and does not count toward your six tanks. Move a sick fish in, dose it there, and
+        move it back when it is well.
       </p>
       {quarantine === undefined && (
         <form
@@ -296,7 +338,19 @@ export function QuarantineSection({
         </form>
       )}
       {quarantine !== undefined && quarantine.id === tank.id && (
-        <p role="status">You are looking at the quarantine tank.</p>
+        <>
+          <p role="status">You are looking at the quarantine tank.</p>
+          <ul className="hint">
+            {movableFish(tank)
+              .filter((f) => f.disease === null)
+              .map((f) => (
+                <li key={f.id}>
+                  {f.name}
+                  <FishMover session={session} state={state} tank={tank} fish={f} />
+                </li>
+              ))}
+          </ul>
+        </>
       )}
       {quarantine !== undefined && quarantine.id !== tank.id && (
         <button

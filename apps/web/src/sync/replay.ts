@@ -31,6 +31,12 @@ export function orderEvents(events: readonly CareEvent[]): CareEvent[] {
   });
 }
 
+function withoutMoveKey(event: CareEvent): CareEvent {
+  if (event.kind !== 'fish_moved') return event;
+  const { fishId, direction, otherTankId } = event.payload;
+  return { ...event, payload: { fishId, direction, otherTankId } };
+}
+
 export async function loadTimeline(
   api: ReplayApi,
   tankId: string,
@@ -53,7 +59,7 @@ export async function loadTimeline(
       },
       options.signal,
     );
-    collected.push(...res.events);
+    collected.push(...res.events.map(withoutMoveKey));
     if (res.nextCursor === null) return { events: orderEvents(collected), truncated: false };
     cursor = res.nextCursor;
   }
