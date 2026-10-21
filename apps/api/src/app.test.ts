@@ -446,6 +446,39 @@ describe('indexing', () => {
     expect((await app.inject('/tank/42')).headers['x-robots-tag']).toBeUndefined();
   });
 
+  it('sends noindex on the account pages, for HEAD and with a query string', async () => {
+    const app = withDist(true);
+    const pages = [
+      '/sign-in',
+      '/sign-up',
+      '/forgot-password',
+      '/reset-password',
+      '/verify-email',
+      '/sessions',
+      '/settings',
+    ];
+    for (const page of pages) {
+      for (const url of [page, `${page}/`, `${page}?token=abc&x=1`, page.toUpperCase()]) {
+        for (const method of ['GET', 'HEAD'] as const) {
+          const res = await app.inject({ method, url });
+          expect(res.headers['x-robots-tag'], `${method} ${url}`).toBe(NOINDEX);
+        }
+      }
+    }
+    expect((await app.inject('/sign-in-help')).headers['x-robots-tag']).toBeUndefined();
+    expect((await app.inject('/settings/x')).headers['x-robots-tag']).toBeUndefined();
+  });
+
+  it('sends noindex on HEAD and query-string gallery requests', async () => {
+    const app = withDist(true);
+    for (const url of ['/gallery?page=2', '/gallery/abc?x=1', '/t/abc?x=1']) {
+      for (const method of ['GET', 'HEAD'] as const) {
+        const res = await app.inject({ method, url });
+        expect(res.headers['x-robots-tag'], `${method} ${url}`).toBe(NOINDEX);
+      }
+    }
+  });
+
   it('redacts the viewer token from logs and leaves /t/ crawlable so noindex is seen', async () => {
     expect((await withDist(true).inject('/robots.txt')).body).not.toContain('Disallow');
     expect(redactUrl('/t/abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG')).toBe('/t/[redacted]');
