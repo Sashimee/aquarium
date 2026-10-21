@@ -1,5 +1,6 @@
 import { Vector3, type Node } from 'three/webgpu';
 import { float, sin, uniform, vec3 } from 'three/tsl';
+import { FlowField, type FlowBounds, type WaveMakerSettings } from '@aquarium/sim';
 
 export interface CurrentParameters {
   /** Unit horizontal flow direction (x, z). */
@@ -63,6 +64,25 @@ export function sampleCurrent(
   out[2] = forward * dz + sideways * dx;
 }
 
+/**
+ * The wave maker's push on swaying things at `timeS` as a horizontal velocity (m/s, tank space):
+ * zero with no pump, along the pump direction (reversing with an alternating pair) otherwise.
+ */
+export function waveMakerPush(
+  field: FlowField | null,
+  timeS: number,
+  out: Float64Array | number[],
+): void {
+  if (field === null) {
+    out[0] = 0;
+    out[1] = 0;
+    return;
+  }
+  const { direction, speed } = field.sway(timeS);
+  out[0] = direction[0] * speed;
+  out[1] = direction[1] * speed;
+}
+
 export class CurrentField {
   readonly direction = uniform(new Vector3(1, 0, 0));
   readonly speed = uniform(0.04);
@@ -70,6 +90,7 @@ export class CurrentField {
   readonly gustDepth = uniform(0.4);
   readonly elapsed = uniform(0);
   readonly flutterElapsed = uniform(0);
+  readonly waveMakerVelocity = uniform(new Vector3(0, 0, 0));
 
   private params: CurrentParameters = {
     direction: [1, 0],
@@ -78,6 +99,9 @@ export class CurrentField {
     gustDepth: 0.4,
   };
   private timeS = 0;
+  private waveField: FlowField | null = null;
+  private waveTimeS = 0;
+  private readonly push = new Float64Array(2);
 
   get parameters(): CurrentParameters {
     return this.params;
@@ -85,6 +109,24 @@ export class CurrentField {
 
   get time(): number {
     return this.timeS;
+  }
+
+  get waveMaker(): FlowField | null {
+    return this.waveField;
+  }
+
+  /** Null, or a pump at speed 0, restores the ambient filter current alone. */
+  setWaveMaker(settings: WaveMakerSettings | null, bounds: FlowBounds): void {
+    this.waveField =
+      settings === null || settings.speedMps === 0 ? null : new FlowField(bounds, settings);
+    this.waveTimeS = 0;
+    this.applyWaveMaker();
+  }
+
+  /** Aligns the pump's phase with the sim's clock so plants and fish see the same pulse. */
+  syncWaveMaker(simTimeS: number): void {
+    this.waveTimeS = this.wrapWave(simTimeS);
+    this.applyWaveMaker();
   }
 
   configure(parameters: CurrentParameters): void {
@@ -105,10 +147,25 @@ export class CurrentField {
     this.timeS = (this.timeS + deltaS) % wrapPeriodS(this.params);
     this.elapsed.value = this.timeS;
     this.flutterElapsed.value = this.timeS % FLUTTER_PERIOD_S;
+    this.waveTimeS = this.wrapWave(this.waveTimeS + deltaS);
+    this.applyWaveMaker();
   }
 
   sample(x: number, y: number, z: number, out: Float64Array | number[]): void {
     sampleCurrent(this.params, x, y, z, this.timeS, out);
+    waveMakerPush(this.waveField, this.waveTimeS, this.push);
+    out[0] = (out[0] ?? 0) + (this.push[0] ?? 0);
+    out[2] = (out[2] ?? 0) + (this.push[1] ?? 0);
+  }
+
+  private wrapWave(timeS: number): number {
+    const period = this.waveField?.settings.periodS;
+    return period === undefined ? 0 : ((timeS % period) + period) % period;
+  }
+
+  private applyWaveMaker(): void {
+    waveMakerPush(this.waveField, this.waveTimeS, this.push);
+    this.waveMakerVelocity.value.set(this.push[0] ?? 0, 0, this.push[1] ?? 0);
   }
 
   velocityNode(position: Node<'vec3'>): Node<'vec3'> {
@@ -134,10 +191,11 @@ export class CurrentField {
     const vertical = this.speed
       .mul(VERTICAL_RATIO)
       .mul(sin(w.mul(t).sub(along.mul(VERTICAL_WAVENUMBER))));
+    const pump = this.waveMakerVelocity;
     return vec3(
-      forward.mul(dir.x).sub(sideways.mul(dir.z)),
+      forward.mul(dir.x).sub(sideways.mul(dir.z)).add(pump.x),
       vertical,
-      forward.mul(dir.z).add(sideways.mul(dir.x)),
+      forward.mul(dir.z).add(sideways.mul(dir.x)).add(pump.z),
     );
   }
 }

@@ -26,6 +26,7 @@ import {
   type EuphylliaVariant,
 } from './euphyllia';
 import { ColliderField, type CapsuleCollider, type Collider } from './colliders';
+import type { WaveMakerSettings } from '@aquarium/sim';
 import { CurrentField, type CurrentParameters } from './current';
 import { fluorescenceLevel } from './coralStyle';
 import {
@@ -122,6 +123,20 @@ export class TankScene {
   readonly current = new CurrentField();
   readonly overlay: ColliderOverlay;
   private colliderField: ColliderField;
+
+  /** Drives plant, coral and anemone sway from the same pump the sim's fish feel; null removes it. */
+  setWaveMaker(settings: WaveMakerSettings | null, simTimeS = 0): void {
+    const { length, depth, height, freeboard, glass } = this.engine.tank.dimensions;
+    this.current.setWaveMaker(settings, {
+      minX: -length / 2 + glass,
+      maxX: length / 2 - glass,
+      minZ: -depth / 2 + glass,
+      maxZ: depth / 2 - glass,
+      minY: 0,
+      maxY: height - freeboard,
+    });
+    this.current.syncWaveMaker(simTimeS);
+  }
 
   private readonly fluorescence = uniform(0);
   private readonly coralGlowNode = createCoralGlowNode(this.fluorescence);
