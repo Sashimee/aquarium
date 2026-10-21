@@ -404,6 +404,20 @@ describe('tanks and fish', () => {
     expect(unknown.statusCode).toBe(400);
   });
 
+  it.each(['stage', 'idempotencyKey'])(
+    'rejects add-fish without %s and names it',
+    async (field) => {
+      const cookie = await signedIn(h);
+      const tank = await createTank(h, cookie);
+      const payload = Object.fromEntries(
+        Object.entries(fishPayload('neon-tetra', 'Blip')).filter(([key]) => key !== field),
+      );
+      const res = await call(h, cookie, 'POST', `/api/tanks/${tank.id}/fish`, payload);
+      expect(res.statusCode).toBe(400);
+      expect(JSON.stringify(res.json())).toContain(field);
+    },
+  );
+
   it('enforces the bioload capacity of a tank', async () => {
     const cookie = await signedIn(h);
     const tank = await createTank(h, cookie);

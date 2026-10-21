@@ -876,46 +876,32 @@ describe('requests from a client that predates the shop (#765)', () => {
   });
   afterAll(() => h.close());
 
-  const legacyFish = (who: Account, tankId: string, species = 'angelfish') =>
-    call(h, who, 'POST', `/api/tanks/${tankId}/fish`, { species, name: 'Old' });
-
-  it('prices a fish without a stage as an adult and stores an adult', async () => {
-    const { who, tank } = await primed(h);
-    const before = await balance(h, who);
-    const res = await legacyFish(who, tank.id);
-    expect(res.statusCode).toBe(201);
-    const fish = tankSchema.parse(res.json()).fish.find((f) => f.species === 'angelfish');
-    expect(fish?.stage).toBe('adult');
-    expect(await balance(h, who)).toBe(before - (economy.species['angelfish']?.adult ?? 0));
-    const row = (await ledgerOf(h, who)).findLast((r) => r.reason === 'purchase');
-    expect(row?.itemRef).toBe('species:angelfish:adult');
-    expect(await sumLedger(h, who)).toBe(await balance(h, who));
-  });
-
-  it('honours a stage sent without a key, and a key sent without a stage', async () => {
-    const { who, tank } = await primed(h);
-    const juvenile = await call(h, who, 'POST', `/api/tanks/${tank.id}/fish`, {
+  const legacyFish = (who: Account, tankId: string, extra: Record<string, unknown> = {}) =>
+    call(h, who, 'POST', `/api/tanks/${tankId}/fish`, {
       species: 'angelfish',
       name: 'Old',
-      stage: 'juvenile',
+      ...extra,
     });
-    expect(juvenile.statusCode).toBe(201);
-    const k = key();
-    const body = { species: 'angelfish', name: 'Old', idempotencyKey: k };
-    expect((await call(h, who, 'POST', `/api/tanks/${tank.id}/fish`, body)).statusCode).toBe(201);
-    expect((await call(h, who, 'POST', `/api/tanks/${tank.id}/fish`, body)).statusCode).toBe(200);
-    const refs = (await ledgerOf(h, who))
-      .filter((r) => r.reason === 'purchase')
-      .map((r) => r.itemRef);
-    expect(refs.filter((r) => r === 'species:angelfish:juvenile')).toHaveLength(1);
-    expect(refs.filter((r) => r === 'species:angelfish:adult')).toHaveLength(1);
+
+  it.each([
+    ['stage', { idempotencyKey: key() }],
+    ['idempotencyKey', { stage: 'adult' }],
+  ])('rejects a fish sent without %s and charges nothing', async (field, extra) => {
+    const { who, tank } = await primed(h);
+    const before = await balance(h, who);
+    const ledgerBefore = (await ledgerOf(h, who)).length;
+    const res = await legacyFish(who, tank.id, extra);
+    expect(res.statusCode).toBe(400);
+    expect(JSON.stringify(res.json())).toContain(field);
+    expect(await balance(h, who)).toBe(before);
+    expect(await ledgerOf(h, who)).toHaveLength(ledgerBefore);
   });
 
   it('refuses a fish it cannot pay for with 402 and no trace', async () => {
     const { who, tank } = await primed(h);
     await setBalance(h, who, (economy.species['angelfish']?.adult ?? 0) - 1);
     const before = (await ledgerOf(h, who)).length;
-    const res = await legacyFish(who, tank.id);
+    const res = await legacyFish(who, tank.id, { stage: 'adult', idempotencyKey: key() });
     expect(res.statusCode).toBe(402);
     expect(errorCode(res)).toBe('insufficient_pearls');
     expect(await ledgerOf(h, who)).toHaveLength(before);
