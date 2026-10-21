@@ -2,6 +2,7 @@ import type { Economy, LedgerEntry } from '@aquarium/shared';
 import { and, eq, gte, like, lt, sql } from 'drizzle-orm';
 import { schema, type Database } from './db/index.ts';
 import { apiError, HttpError } from './errors.ts';
+import { ONE_TIME_REF } from './items.ts';
 
 type Tx = Parameters<Parameters<Database['db']['transaction']>[0]>[0];
 type LedgerRow = typeof schema.ledger.$inferSelect;
@@ -252,13 +253,14 @@ export async function owns(tx: Tx, userId: string, itemRef: string): Promise<boo
   return row !== undefined;
 }
 
+// A refund wins a timestamp tie: a refund needs its purchase first, and a rebuy needs a later tick.
 export async function ownedRefs(tx: Tx, userId: string): Promise<string[]> {
   const result = await tx.execute<{ item_ref: string }>(sql`
     select item_ref from (
       select distinct on (item_ref) item_ref, reason
       from ledger
-      where user_id = ${userId} and source = 'game' and reason in ('purchase', 'refund') and item_ref is not null
-      order by item_ref, created_at desc, id desc
+      where user_id = ${userId} and source = 'game' and reason in ('purchase', 'refund') and item_ref ~ ${ONE_TIME_REF.source}
+      order by item_ref, created_at desc, (reason = 'refund') desc, id desc
     ) latest
     where reason = 'purchase'
     order by item_ref

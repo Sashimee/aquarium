@@ -113,7 +113,7 @@ export const walletResponseSchema = z.strictObject({
     .array(itemRefSchema)
     .optional()
     .describe(
-      'every item ref whose latest purchase or refund entry is a purchase, over the whole ledger and not just the returned page',
+      'every one-time item ref (plant:, decor:, background:) whose latest purchase or refund entry is a purchase, over the whole ledger and not just the returned page; fish, tanks, consumables and equipment tiers are never listed',
     ),
 });
 export type WalletResponse = z.infer<typeof walletResponseSchema>;

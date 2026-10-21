@@ -252,6 +252,49 @@ describe('wallet, shop and ledger', () => {
       expect((await walletOf(h, who)).owned).toEqual(['decor:b']);
     });
 
+    it('lists only one-time plant, decor and background refs', async () => {
+      const who = await account(h);
+      await walletOf(h, who);
+      const base = h.clock.now();
+      await insertRows(who, [
+        { itemRef: 'plant:java-fern', reason: 'purchase', at: base - 9000 },
+        { itemRef: 'decor:driftwood', reason: 'purchase', at: base - 9000 },
+        { itemRef: 'background:bg-fw-misty-lake', reason: 'purchase', at: base - 9000 },
+        { itemRef: 'species:neon-tetra:adult', reason: 'purchase', at: base - 9000 },
+        { itemRef: `tank:standard:${randomUUID()}`, reason: 'purchase', at: base - 9000 },
+        { itemRef: 'consumable:bottled-bacteria', reason: 'purchase', at: base - 9000 },
+        { itemRef: 'equipment:heater:2', reason: 'purchase', at: base - 9000 },
+      ]);
+      await h.database.db.insert(schema.ledger).values({
+        userId: who.userId,
+        delta: 10,
+        reason: 'earn',
+        source: 'game',
+        itemRef: 'decor:from-an-earn-row',
+        idempotencyKey: `own-${key()}`,
+        createdAt: new Date(base - 8000),
+      });
+      expect((await walletOf(h, who)).owned).toEqual([
+        'background:bg-fw-misty-lake',
+        'decor:driftwood',
+        'plant:java-fern',
+      ]);
+    });
+
+    it('lets a refund win a timestamp tie, and a later rebuy win after it', async () => {
+      const who = await account(h);
+      await walletOf(h, who);
+      const at = h.clock.now() - 5000;
+      await insertRows(who, [
+        { itemRef: 'decor:tie', reason: 'purchase', at },
+        { itemRef: 'decor:tie', reason: 'refund', at },
+        { itemRef: 'decor:again', reason: 'purchase', at },
+        { itemRef: 'decor:again', reason: 'refund', at },
+        { itemRef: 'decor:again', reason: 'purchase', at: at + 1 },
+      ]);
+      expect((await walletOf(h, who)).owned).toEqual(['decor:again']);
+    });
+
     it("never shows another user's purchases or real-money rows", async () => {
       const mine = await account(h);
       const other = await account(h);
