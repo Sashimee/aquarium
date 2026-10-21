@@ -21,7 +21,7 @@ export const WALKER_SWIMMING_MODES: readonly z.infer<typeof swimmingModeSchema>[
 export const gaitSchema = z.enum(['burst-and-coast', 'cruise', 'hover', 'forage']);
 export const zoneSchema = z.enum(['surface', 'mid', 'bottom']);
 
-// `cleaner` is accepted but drives no behaviour until the cleaner station lands (T24 phase 2b).
+// `cleaner` on a swimmer keeps a cleaning station; on a walker it is accepted but drives nothing yet.
 export const traitSchema = z.enum([
   'shoal',
   'air-gulp',
@@ -333,7 +333,7 @@ const SWIMMER_TRAITS: readonly Trait[] = [
   'anemone-host',
   'flare-display',
 ];
-const WALKER_TRAITS: readonly Trait[] = ['biofilm-grazer', 'cleaner'];
+const WALKER_TRAITS: readonly Trait[] = ['biofilm-grazer'];
 
 export function checkSpeciesRules(
   species: {
