@@ -76,7 +76,7 @@ export type GalleryWinner = z.infer<typeof galleryWinnerSchema>;
 export const galleryWinnersResponseSchema = z.object({
   winners: z
     .array(galleryWinnerSchema)
-    .describe('newest week first; tanks no longer shared are left out'),
+    .describe('newest week first; tanks no longer listed are left out'),
 });
 export type GalleryWinnersResponse = z.infer<typeof galleryWinnersResponseSchema>;
 

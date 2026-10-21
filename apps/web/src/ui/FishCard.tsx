@@ -1,6 +1,6 @@
 import type { Fish } from '@aquarium/shared';
 import { speciesName, type SpeciesNames } from '../sync/life';
-import { DISEASE_LABEL, severityWord, SYMPTOMS } from '../sync/treatment';
+import { DISEASE_LABEL, severityWord, sickSummary, SYMPTOMS } from '../sync/treatment';
 import { personalityOf, traitViews } from '../sync/personality';
 
 export function FishCard({ fish, names }: { fish: Fish; names: SpeciesNames }) {
@@ -11,7 +11,7 @@ export function FishCard({ fish, names }: { fish: Fish; names: SpeciesNames }) {
       <h4>{fish.name}</h4>
       <p className="hint">{species}</p>
       {fish.disease && (
-        <p role="status" className="symptom">
+        <p className="symptom">
           <strong>{DISEASE_LABEL[fish.disease.kind]}</strong>, {severityWord(fish.disease.severity)}
           : {SYMPTOMS[fish.disease.kind]}.
           {fish.disease.treatedUntil !== null &&
@@ -51,6 +51,9 @@ export function FishCards({ fish, names }: { fish: readonly Fish[]; names: Speci
   return (
     <section aria-label="Your fish" className="block">
       <h3>Your fish</h3>
+      <p role="status" className="sr-only">
+        {sickSummary(living)}
+      </p>
       <div className="fish-cards">
         {living.map((f) => (
           <FishCard key={f.id} fish={f} names={names} />

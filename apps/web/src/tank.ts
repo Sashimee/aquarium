@@ -5,3 +5,4 @@ export { DEFAULT_TANK, framingScale } from './engine/tank/dimensions';
 export { FeederLayer } from './interaction/decor/feederLayer';
 export { createPlaySystem } from './interaction/play/system';
 export { mountBiomeScene } from './scene';
+export { pumpFieldFor } from './sync/pumpField';

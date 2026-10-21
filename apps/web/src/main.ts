@@ -252,6 +252,7 @@ async function boot(): Promise<void> {
       interaction,
     );
   });
+  engine.onFrame(() => waveMaker.syncScene());
   const exposePose = new URLSearchParams(window.location.search).has('e2e');
   engine.onFrame((deltaS) => {
     idleOrbit.update(deltaS, photo.active || exposePose);
@@ -334,6 +335,10 @@ async function boot(): Promise<void> {
       container.dataset['sceneBiome'] = scene.biome;
       scene.enableMovablePlants();
       fish.setSceneColliders(scene.colliderList);
+      waveMaker.attachScene(scene, {
+        field: (tier) => modules.pumpFieldFor(tier, engine.tank.dimensions),
+        simTimeS: () => fish.simTimeS(),
+      });
       play = createPlaySystem(engine, scene, interaction, fish.sim, feedGate);
       playChoices.applyTo(play.controller);
       sceneDecor.mount(scene);
@@ -346,6 +351,7 @@ async function boot(): Promise<void> {
       delete container.dataset['backgroundId'];
       sceneBiome = null;
       sceneDecor.unmount();
+      waveMaker.detachScene();
       play?.dispose();
       play = null;
       fish.setAnchors([]);

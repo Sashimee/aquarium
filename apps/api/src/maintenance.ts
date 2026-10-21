@@ -1,6 +1,7 @@
 import { HANDLE_COOLDOWN_DAYS, VISIT_WINDOW_DAYS } from '@aquarium/shared';
 import { lt, sql } from 'drizzle-orm';
 import { schema, type Database } from './db/index.ts';
+import type { Clock } from './clock.ts';
 import { settleWeeks } from './gallery.ts';
 
 const HOUR_MS = 60 * 60_000;
@@ -35,12 +36,12 @@ export async function pruneExpired({ db }: Database): Promise<{ sessions: number
   return { sessions: sessions.length };
 }
 
-export function startMaintenance(database: Database): () => void {
+export function startMaintenance(database: Database, clock: Clock): () => void {
   const report = (err: unknown) => {
     console.error('maintenance failed:', err instanceof Error ? err.message : 'unknown');
   };
   const run = () => {
-    void settleWeeks(database, Date.now()).catch(report);
+    void settleWeeks(database, clock.now()).catch(report);
     void pruneExpired(database).catch(report);
   };
   run();
