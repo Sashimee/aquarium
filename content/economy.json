@@ -12,6 +12,7 @@
     "discus": { "juvenile": 150, "adult": 350 },
     "betta": { "juvenile": 120, "adult": 300 },
     "six-line-wrasse": { "juvenile": 130, "adult": 325 },
+    "cleaner-wrasse": { "juvenile": 120, "adult": 300 },
     "firefish": { "juvenile": 120, "adult": 300 },
     "banggai-cardinalfish": { "juvenile": 140, "adult": 350 },
     "blue-tang": { "juvenile": 200, "adult": 500 },
