@@ -197,6 +197,124 @@ describe('wallet, shop and ledger', () => {
     expect((await walletOf(h, who)).ledger).toHaveLength(1);
   });
 
+  describe('owned refs', () => {
+    const insertRows = (
+      who: Account,
+      rows: { itemRef: string; reason: 'purchase' | 'refund'; at: number }[],
+    ) =>
+      h.database.db.insert(schema.ledger).values(
+        rows.map((r) => ({
+          userId: who.userId,
+          delta: r.reason === 'purchase' ? -1 : 1,
+          reason: r.reason,
+          source: 'game' as const,
+          itemRef: r.itemRef,
+          idempotencyKey: `own-${key()}`,
+          createdAt: new Date(r.at),
+        })),
+      );
+
+    it('is empty for a fresh wallet', async () => {
+      const who = await account(h);
+      expect((await walletOf(h, who)).owned).toEqual([]);
+    });
+
+    it('lists a purchase and keeps old ones beyond the ledger page', async () => {
+      const who = await account(h);
+      await walletOf(h, who);
+      const base = h.clock.now();
+      await insertRows(who, [
+        { itemRef: 'background:bg-fw-misty-lake', reason: 'purchase', at: base - 10_000_000 },
+        ...Array.from({ length: 120 }, (_, i) => ({
+          itemRef: `decor:filler-${i}`,
+          reason: 'purchase' as const,
+          at: base - 5_000_000 + i,
+        })),
+      ]);
+      const wallet = await walletOf(h, who);
+      expect(wallet.ledger).toHaveLength(100);
+      expect(wallet.ledger.some((e) => e.itemRef === 'background:bg-fw-misty-lake')).toBe(false);
+      expect(wallet.owned).toContain('background:bg-fw-misty-lake');
+      expect(wallet.owned).toHaveLength(121);
+    });
+
+    it('drops a ref whose latest entry is a refund and restores a rebuy', async () => {
+      const who = await account(h);
+      await walletOf(h, who);
+      const base = h.clock.now();
+      await insertRows(who, [
+        { itemRef: 'decor:a', reason: 'purchase', at: base - 4000 },
+        { itemRef: 'decor:a', reason: 'refund', at: base - 3000 },
+        { itemRef: 'decor:b', reason: 'purchase', at: base - 4000 },
+        { itemRef: 'decor:b', reason: 'refund', at: base - 3000 },
+        { itemRef: 'decor:b', reason: 'purchase', at: base - 2000 },
+      ]);
+      expect((await walletOf(h, who)).owned).toEqual(['decor:b']);
+    });
+
+    it('lists only one-time plant, decor and background refs', async () => {
+      const who = await account(h);
+      await walletOf(h, who);
+      const base = h.clock.now();
+      await insertRows(who, [
+        { itemRef: 'plant:java-fern', reason: 'purchase', at: base - 9000 },
+        { itemRef: 'decor:driftwood', reason: 'purchase', at: base - 9000 },
+        { itemRef: 'background:bg-fw-misty-lake', reason: 'purchase', at: base - 9000 },
+        { itemRef: 'species:neon-tetra:adult', reason: 'purchase', at: base - 9000 },
+        { itemRef: `tank:standard:${randomUUID()}`, reason: 'purchase', at: base - 9000 },
+        { itemRef: 'consumable:bottled-bacteria', reason: 'purchase', at: base - 9000 },
+        { itemRef: 'equipment:heater:2', reason: 'purchase', at: base - 9000 },
+      ]);
+      await h.database.db.insert(schema.ledger).values({
+        userId: who.userId,
+        delta: 10,
+        reason: 'earn',
+        source: 'game',
+        itemRef: 'decor:from-an-earn-row',
+        idempotencyKey: `own-${key()}`,
+        createdAt: new Date(base - 8000),
+      });
+      expect((await walletOf(h, who)).owned).toEqual([
+        'background:bg-fw-misty-lake',
+        'decor:driftwood',
+        'plant:java-fern',
+      ]);
+    });
+
+    it('lets a refund win a timestamp tie, and a later rebuy win after it', async () => {
+      const who = await account(h);
+      await walletOf(h, who);
+      const at = h.clock.now() - 5000;
+      await insertRows(who, [
+        { itemRef: 'decor:tie', reason: 'purchase', at },
+        { itemRef: 'decor:tie', reason: 'refund', at },
+        { itemRef: 'decor:again', reason: 'purchase', at },
+        { itemRef: 'decor:again', reason: 'refund', at },
+        { itemRef: 'decor:again', reason: 'purchase', at: at + 1 },
+      ]);
+      expect((await walletOf(h, who)).owned).toEqual(['decor:again']);
+    });
+
+    it("never shows another user's purchases or real-money rows", async () => {
+      const mine = await account(h);
+      const other = await account(h);
+      await walletOf(h, mine);
+      await walletOf(h, other);
+      await insertRows(other, [{ itemRef: 'decor:theirs', reason: 'purchase', at: h.clock.now() }]);
+      await h.database.db.insert(schema.ledger).values({
+        userId: mine.userId,
+        delta: 550,
+        reason: 'pack',
+        source: 'stripe',
+        itemRef: 'pack:pearls-550',
+        idempotencyKey: `pack-${key()}`,
+        createdAt: new Date(h.clock.now()),
+      });
+      expect((await walletOf(h, mine)).owned).toEqual([]);
+      expect((await walletOf(h, other)).owned).toEqual(['decor:theirs']);
+    });
+  });
+
   describe('fish', () => {
     it('charges the juvenile and the adult price and stores the matching fish', async () => {
       const who = await account(h);
