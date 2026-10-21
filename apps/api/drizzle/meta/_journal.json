@@ -171,9 +171,16 @@
       "breakpoints": true
     },
     {
+      "idx": 24,
+      "version": "7",
+      "when": 1792622690562,
+      "tag": "0024_coral_growth",
+      "breakpoints": true
+    },
+    {
       "idx": 25,
       "version": "7",
-      "when": 1792625008590,
+      "when": 1792626267243,
       "tag": "0025_gift_offers",
       "breakpoints": true
     }

@@ -7,7 +7,9 @@ import {
   createGiftRequestSchema,
   createGiftResponseSchema,
   declineGiftResponseSchema,
+  containsBlockedWord,
   diseaseStateSchema,
+  type DiseaseKind,
   fishSexSchema,
   fishStageSchema,
   GIFT_MAX_OPEN_RECEIVED,
@@ -63,7 +65,7 @@ const SETTLE_AUDIT = {
 
 const idParams = z.strictObject({ id: idSchema });
 
-const storedFishSchema = z.object({
+export const storedFishSchema = z.object({
   id: idSchema,
   tankId: idSchema,
   species: z.string(),
@@ -118,24 +120,30 @@ export interface GiftContext {
 const isLive = (offer: Pick<OfferRow, 'status'>) =>
   offer.status === 'open' || offer.status === 'countered';
 
+const dueStatus = (offer: Pick<OfferRow, 'toUserId'>) =>
+  offer.toUserId === null ? ('declined' as const) : ('expired' as const);
+
 const isDue = (offer: OfferRow, nowMs: number) =>
   isLive(offer) && (offer.toUserId === null || offer.expiresAt.getTime() <= nowMs);
 
 const snapshotOf = (row: FishRow): StoredFish => storedFishSchema.parse(row);
 
-const giftFishOf = (fish: {
-  id: string;
-  species: string;
-  name: string;
-  sex: StoredFish['sex'];
-  stage: StoredFish['stage'];
-  size: number;
-  health: number;
-  disease: { kind: 'ich' | 'fin-rot' | 'velvet' } | null;
-}): GiftFish => ({
+const giftFishOf = (
+  fish: {
+    id: string;
+    species: string;
+    name: string;
+    sex: StoredFish['sex'];
+    stage: StoredFish['stage'];
+    size: number;
+    health: number;
+    disease: { kind: DiseaseKind } | null;
+  },
+  ownedByViewer: boolean,
+): GiftFish => ({
   id: fish.id,
   species: fish.species,
-  name: fish.name,
+  name: !ownedByViewer && containsBlockedWord(fish.name) ? fish.species : fish.name,
   sex: fish.sex,
   stage: fish.stage,
   size: fish.size,
@@ -190,7 +198,17 @@ export function registerGiftRoutes(ctx: GiftContext): void {
         pledged.set(p.fish.id, { ...p.fish, ownerId: p.ownerId });
       }
     }
-    return rows.map((r) => {
+    const out: GiftOffer[] = [];
+    for (const r of rows) {
+      try {
+        out.push(viewRow(r));
+      } catch (error) {
+        app.log.error({ err: error, offerId: r.id }, 'gift offer could not be rendered, skipped');
+      }
+    }
+    return out;
+
+    function viewRow(r: OfferRow): GiftOffer {
       const role = r.fromUserId === viewerId ? 'sender' : 'recipient';
       const otherId = role === 'sender' ? r.toUserId : r.fromUserId;
       const stored = storedFishSchema.parse(r.fish);
@@ -201,20 +219,24 @@ export function registerGiftRoutes(ctx: GiftContext): void {
         status: r.status,
         role,
         counterpart: otherId ? (handles.get(otherId) ?? null) : null,
-        fish: giftFishOf(stored),
+        fish: giftFishOf(stored, role === 'sender'),
         wantsReturn: r.wantsReturn,
         pledged:
           r.status === 'countered' && available
-            ? giftFishOf({
-                ...pledge,
-                disease: pledge.disease === null ? null : diseaseStateSchema.parse(pledge.disease),
-              })
+            ? giftFishOf(
+                {
+                  ...pledge,
+                  disease:
+                    pledge.disease === null ? null : diseaseStateSchema.parse(pledge.disease),
+                },
+                role === 'recipient',
+              )
             : null,
         createdAt: r.createdAt.toISOString(),
         expiresAt: r.expiresAt.toISOString(),
         settledAt: r.settledAt?.toISOString() ?? null,
       });
-    });
+    }
   }
 
   const viewOf = async (tx: Tx, row: OfferRow, viewerId: string): Promise<GiftOffer> => {
@@ -242,9 +264,28 @@ export function registerGiftRoutes(ctx: GiftContext): void {
     actorId: string | null,
   ): Promise<Ticked['fishRows']> {
     const stored = storedFishSchema.parse(offer.fish);
+    const [synced] = syncTreatment(
+      [
+        toLifecycleFish({
+          ...stored,
+          tankId: home.tank.id,
+          status: 'alive',
+          diedAt: null,
+          cause: null,
+        }),
+      ],
+      home.state.medicine,
+    );
+    // A fish is never lost: the home tank may end over its animal limit if the slot was refilled
+    // while the fish was in escrow, which only blocks adding more.
     const [row] = await tx
       .insert(schema.fish)
-      .values({ ...stored, tankId: home.tank.id, status: 'alive' })
+      .values({
+        ...stored,
+        tankId: home.tank.id,
+        status: 'alive',
+        disease: wireDisease(synced?.disease ?? null),
+      })
       .returning();
     if (!row) throw new Error('returning an escrowed fish inserted nothing');
     await tx
@@ -338,7 +379,7 @@ export function registerGiftRoutes(ctx: GiftContext): void {
       const offer = await lockOffer(tx, offerId);
       const nowMs = clock.now();
       if (!isDue(offer, nowMs)) return false;
-      await settle(tx, offer, home, 'expired', nowMs, null);
+      await settle(tx, offer, home, dueStatus(offer), nowMs, null);
       return true;
     });
   }
@@ -359,14 +400,24 @@ export function registerGiftRoutes(ctx: GiftContext): void {
       )
       .limit(SWEEP_BATCH);
     let settled = 0;
-    for (const { id } of due) if (await sweepOne(id)) settled += 1;
+    for (const { id } of due) {
+      try {
+        if (await sweepOne(id)) settled += 1;
+      } catch (error) {
+        app.log.error({ err: error, offerId: id }, 'gift offer could not be settled, skipped');
+      }
+    }
     return settled;
   }
 
   app.decorate('settleDueGifts', () => settleDue(undefined));
 
-  const expired = () =>
-    refuse(409, 'That offer ran out. The fish went back to its owner.', 'offer_expired');
+  const expired = (offer: Pick<OfferRow, 'toUserId'>) =>
+    offer.toUserId === null
+      ? refuse(409, 'The other player left. The fish went back to its owner.', 'offer_closed')
+      : refuse(409, 'That offer ran out. The fish went back to its owner.', 'offer_expired');
+  const closedToGifts = (message = 'That tank does not take gifts. Turn gifts on for it first.') =>
+    refuse(409, message, 'gifts_closed');
   const closed = () => refuse(409, 'That offer is already settled.', 'offer_closed');
 
   app.post(
@@ -414,6 +465,12 @@ export function registerGiftRoutes(ctx: GiftContext): void {
         if (recipient.id === user.id) {
           throw refuse(400, 'You cannot send a fish to yourself.');
         }
+        const [open] = await tx
+          .select({ id: schema.tanks.id })
+          .from(schema.tanks)
+          .where(and(eq(schema.tanks.ownerId, recipient.id), eq(schema.tanks.acceptsGifts, true)))
+          .limit(1);
+        if (!open) throw closedToGifts('That player is not taking gifts right now.');
         const row = source.fishRows.find((f) => f.id === body.fishId);
         if (!row) throw new HttpError(404, apiError('not_found', 'Fish not found.'));
         if (row.status !== 'alive') {
@@ -600,8 +657,8 @@ export function registerGiftRoutes(ctx: GiftContext): void {
         if (!isLive(offer) || offer.status === 'countered') return { raise: closed() };
         if (isDue(offer, seenAt)) {
           const home = tankOf(ticked, offer.fromTankId);
-          await settle(tx, offer, home, 'expired', nowMs, null);
-          return { raise: expired() };
+          await settle(tx, offer, home, dueStatus(offer), nowMs, null);
+          return { raise: expired(offer) };
         }
 
         throttle(user.id, 'gift');
@@ -620,6 +677,7 @@ export function registerGiftRoutes(ctx: GiftContext): void {
             throw refuse(409, 'A dead fish cannot be traded. Net it instead.', 'fish_dead');
           }
         }
+        if (!dest.tank.acceptsGifts) throw closedToGifts();
         const leaving = pledged && pledged.tankId === dest.tank.id ? pledged.id : null;
         requirePlacement(stored, dest, leaving);
 
@@ -742,15 +800,15 @@ export function registerGiftRoutes(ctx: GiftContext): void {
         if (offer.status !== 'countered') {
           if (isDue(offer, seenAt) && offer.status === 'open') {
             const home = tankOf(ticked, offer.fromTankId);
-            await settle(tx, offer, home, 'expired', nowMs, null);
-            return { raise: expired() };
+            await settle(tx, offer, home, dueStatus(offer), nowMs, null);
+            return { raise: expired(offer) };
           }
           return { raise: closed() };
         }
         if (isDue(offer, seenAt)) {
           const home = tankOf(ticked, offer.fromTankId);
-          await settle(tx, offer, home, 'expired', nowMs, null);
-          return { raise: expired() };
+          await settle(tx, offer, home, dueStatus(offer), nowMs, null);
+          return { raise: expired(offer) };
         }
 
         throttle(user.id, 'gift');
@@ -768,6 +826,7 @@ export function registerGiftRoutes(ctx: GiftContext): void {
             'fish_unavailable',
           );
         }
+        if (!mine.tank.acceptsGifts || !recipientTank.tank.acceptsGifts) throw closedToGifts();
         const stored = storedFishSchema.parse(offer.fish);
         requirePlacement(
           stored,

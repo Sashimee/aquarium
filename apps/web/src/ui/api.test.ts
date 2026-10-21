@@ -182,6 +182,7 @@ describe('api client', () => {
       quarantine: false,
       shared: false,
       inGallery: false,
+      acceptsGifts: false,
       shareToken: null,
       equipment: DEFAULT_EQUIPMENT,
       recentVisitDays: 0,

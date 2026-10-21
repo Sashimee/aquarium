@@ -153,6 +153,7 @@ export const tanks = pgTable(
     shareTokenHash: text('share_token_hash').unique(),
     // A public link is not a gallery listing: this is a second opt-in, honoured only while the link is on.
     inGallery: boolean('in_gallery').notNull().default(false),
+    acceptsGifts: boolean('accepts_gifts').notNull().default(false),
     name: text('name').notNull(),
     // The client's idempotency key of the request that made the tank. Free tanks leave no ledger
     // row, so this is what lets a retry find the tank it already got.
@@ -167,6 +168,11 @@ export const tanks = pgTable(
     plants: jsonb('plants').notNull().default([]),
     // Recent trim requests (key, plantKey, size) so a retry replays instead of trimming twice.
     plantTrimKeys: jsonb('plant_trim_keys').notNull().default([]),
+    // State of the layout corals and their fragments (storedCoralsSchema), reconciled with the layout
+    // on every tick.
+    corals: jsonb('corals').notNull().default([]),
+    // Recent frag requests (key, coralKey) so a retry replays instead of cutting twice.
+    coralFragKeys: jsonb('coral_frag_keys').notNull().default([]),
     // null: the player never chose one, so the biome's default shows.
     backgroundId: text('background_id'),
     water: jsonb('water')

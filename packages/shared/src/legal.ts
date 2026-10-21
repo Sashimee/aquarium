@@ -45,6 +45,11 @@ export const dataExportSchema = z.strictObject({
       visits: z.array(exportedRow),
     }),
   ),
+  giftOffers: z
+    .array(exportedRow)
+    .describe(
+      'offers sent or received, with the escrowed fish. A fish in escrow is in no tank, so this is where it appears in the sender export.',
+    ),
 });
 export type DataExport = z.infer<typeof dataExportSchema>;
 

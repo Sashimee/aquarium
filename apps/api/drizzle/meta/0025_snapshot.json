@@ -1,6 +1,6 @@
 {
-  "id": "eebdb0e0-b865-4bb2-9c99-28d7d3b2c751",
-  "prevId": "ecf45a44-ff68-4d54-9533-aecbaa6dbff1",
+  "id": "cc80526a-dab1-4050-9a3c-7de13d37dbf8",
+  "prevId": "b582c8a1-ab42-493a-a192-c3cc87a091f3",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1837,6 +1837,13 @@
           "notNull": true,
           "default": false
         },
+        "accepts_gifts": {
+          "name": "accepts_gifts",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "name": {
           "name": "name",
           "type": "text",
@@ -1877,6 +1884,20 @@
         },
         "plant_trim_keys": {
           "name": "plant_trim_keys",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "corals": {
+          "name": "corals",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "coral_frag_keys": {
+          "name": "coral_frag_keys",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true,

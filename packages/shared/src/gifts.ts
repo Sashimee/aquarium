@@ -23,7 +23,7 @@ export type GiftRole = z.infer<typeof giftRoleSchema>;
 export const giftFishSchema = z.strictObject({
   id: idSchema,
   species: slugSchema,
-  name: z.string(),
+  name: z.string().describe('the owner name, or the species name when it fails the word filter'),
   sex: fishSexSchema,
   stage: fishStageSchema,
   size: z.number().positive().describe('body length in metres'),
@@ -52,6 +52,14 @@ export const giftOfferSchema = z.strictObject({
 });
 export type GiftOffer = z.infer<typeof giftOfferSchema>;
 
+// Opt-in: gifts are private by default. A tank receives gifted or traded fish only while its
+// acceptsGifts flag is on (PATCH /api/tanks/:id { acceptsGifts }, default false). Receiving is
+// gated; sending is not, because it only moves the sender's own fish. Hence: creating an offer is
+// 409 gifts_closed unless the recipient has at least one opted-in tank, accept is 409 gifts_closed
+// when toTankId is not opted in, and confirm is 409 gifts_closed when the sender's toTankId is not
+// opted in. The flag is checked again at accept and confirm time, so switching it off takes effect
+// for offers already waiting.
+//
 // A gift or trade offer. The sender's fish leaves their tank and is held in escrow until the offer
 // settles. Addressing is by public handle only; an unknown handle is a 404, and no address is ever
 // returned. The offer expires GIFT_OFFER_TTL_HOURS after it is made.
@@ -96,7 +104,7 @@ export const giftArrivalSchema = z
       .describe('0 comfortable, 1 full stress, from the tank chemistry model'),
   })
   .describe(
-    'a fish arriving by gift or trade: introducedAt restarts, so the new-fish disease window applies, and the client shows the acclimation bag while it releases the fish',
+    'a fish arriving by gift or trade: introducedAt restarts, so the new-fish disease window applies, and the client shows the acclimation bag while it releases the fish. The fish keeps no age credit or debt: age is wall-clock and keeps running while it is in escrow.',
   );
 export type GiftArrival = z.infer<typeof giftArrivalSchema>;
 

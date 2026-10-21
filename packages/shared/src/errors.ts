@@ -29,10 +29,14 @@ export const conflictReasonSchema = z
     'wrong_biome',
     'tank_full',
     'plant_not_grown',
+    'coral_not_grown',
+    'coral_bleached',
+    'coral_limit',
     'offer_closed',
     'offer_expired',
     'too_many_offers',
     'fish_unavailable',
+    'gifts_closed',
   ])
   .describe(
     'why a 409 was refused, for clients that branch on it: other_medicine and dose_limit both clear with a water change',

@@ -5,6 +5,7 @@ import {
   cancelGiftResponseSchema,
   confirmGiftResponseSchema,
   createGiftResponseSchema,
+  dataExportSchema,
   declineGiftResponseSchema,
   GIFT_MAX_OPEN_RECEIVED,
   GIFT_MAX_OPEN_SENT,
@@ -12,7 +13,7 @@ import {
   tankSchema,
   type Tank,
 } from '@aquarium/shared';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { schema } from './db/index.ts';
@@ -34,7 +35,7 @@ interface Account {
   email: string;
 }
 
-async function account(h: Harness): Promise<Account> {
+async function account(h: Harness, opts: { verify?: boolean } = {}): Promise<Account> {
   const n = counter++;
   const email = `t63-${Date.now()}-${n}@bas.lu`;
   const signedUp = await h.app.inject({
@@ -43,18 +44,21 @@ async function account(h: Harness): Promise<Account> {
     headers: jsonHeaders,
     payload: { email, password: PASSWORD, name: 'Tester', callbackURL: '/verify-email' },
   });
-  const mail = h.outbox.findLast((m) => m.to === email);
-  const link = /https?:\/\/\S+verify-email\?\S+/.exec(mail?.text ?? '')?.[0];
-  if (!link) throw new Error('no verification link');
-  const url = new URL(link);
-  const cookie = cookieOf(
-    await h.app.inject({
-      method: 'GET',
-      url: url.pathname + url.search,
-      headers: { cookie: cookieOf(signedUp) },
-    }),
-  );
-  if (!cookie) throw new Error('verification did not sign in');
+  let cookie = cookieOf(signedUp);
+  if (opts.verify !== false) {
+    const mail = h.outbox.findLast((m) => m.to === email);
+    const link = /https?:\/\/\S+verify-email\?\S+/.exec(mail?.text ?? '')?.[0];
+    if (!link) throw new Error('no verification link');
+    const url = new URL(link);
+    cookie = cookieOf(
+      await h.app.inject({
+        method: 'GET',
+        url: url.pathname + url.search,
+        headers: { cookie: cookieOf(signedUp) },
+      }),
+    );
+    if (!cookie) throw new Error('verification did not sign in');
+  }
   const handle = `gifter_${Date.now().toString(36)}_${n}`.slice(0, 20);
   const [user] = await h.database.db
     .update(schema.user)
@@ -68,7 +72,7 @@ async function account(h: Harness): Promise<Account> {
 const call = (
   h: Harness,
   who: Account | null,
-  method: 'GET' | 'POST',
+  method: 'GET' | 'POST' | 'PATCH',
   url: string,
   payload?: object,
 ): Promise<LightMyRequestResponse> =>
@@ -84,7 +88,7 @@ const errorOf = (res: LightMyRequestResponse) => apiErrorSchema.parse(res.json()
 async function makeTank(
   h: Harness,
   who: Account,
-  body: { biome?: 'freshwater' | 'reef'; quarantine?: boolean } = {},
+  body: { biome?: 'freshwater' | 'reef'; quarantine?: boolean; gifts?: boolean } = {},
 ): Promise<string> {
   await topUp(h);
   const res = await call(h, who, 'POST', '/api/tanks', {
@@ -94,13 +98,24 @@ async function makeTank(
     ...(body.quarantine ? { quarantine: true, size: 'nano30' } : {}),
   });
   expect(res.statusCode).toBe(201);
-  return tankSchema.parse(res.json()).id;
+  const id = tankSchema.parse(res.json()).id;
+  if (body.gifts !== false) {
+    await h.database.db
+      .update(schema.tanks)
+      .set({ acceptsGifts: true })
+      .where(eq(schema.tanks.id, id));
+  }
+  return id;
 }
 
 async function addFish(
   h: Harness,
   tankId: string,
-  opts: { status?: 'alive' | 'dead'; name?: string } = {},
+  opts: {
+    status?: 'alive' | 'dead';
+    name?: string;
+    disease?: { kind: 'ich'; since: string; severity: number; treatedUntil: string | null };
+  } = {},
 ): Promise<string> {
   const dead = opts.status === 'dead';
   const [row] = await h.database.db
@@ -117,24 +132,43 @@ async function addFish(
       diedAt: dead ? new Date(h.clock.now()) : null,
       cause: dead ? 'old_age' : null,
       introducedAt: new Date(h.clock.now() - 30 * 24 * HOUR_MS),
+      disease: opts.disease ?? null,
     })
     .returning();
   if (!row) throw new Error('fish insert failed');
   return row.id;
 }
 
-const offer = (
+async function ensureOpenTank(h: Harness, who: Account): Promise<void> {
+  const open = await h.database.db
+    .select({ id: schema.tanks.id })
+    .from(schema.tanks)
+    .where(and(eq(schema.tanks.ownerId, who.userId), eq(schema.tanks.acceptsGifts, true)))
+    .limit(1);
+  if (open.length === 0) await makeTank(h, who);
+}
+
+const offer = async (
   h: Harness,
   who: Account,
-  body: { fromTankId: string; fishId: string; to: Account; wantsReturn?: boolean; key?: string },
-) =>
-  call(h, who, 'POST', '/api/gifts', {
+  body: {
+    fromTankId: string;
+    fishId: string;
+    to: Account;
+    wantsReturn?: boolean;
+    key?: string;
+    raw?: boolean;
+  },
+) => {
+  if (!body.raw) await ensureOpenTank(h, body.to);
+  return call(h, who, 'POST', '/api/gifts', {
     fromTankId: body.fromTankId,
     fishId: body.fishId,
     toHandle: body.to.handle,
     ...(body.wantsReturn ? { wantsReturn: true } : {}),
     idempotencyKey: body.key ?? randomUUID(),
   });
+};
 
 const offerId = (res: LightMyRequestResponse): string => {
   expect(res.statusCode, res.body).toBe(201);
@@ -567,7 +601,7 @@ describe('gifting and trading fish', () => {
       expect(await h.app.settleDueGifts()).toBe(0);
     });
 
-    it('lets the sweeper return fish whose recipient account is gone', async () => {
+    it('settles an offer as declined and returns the fish when the recipient deletes their account', async () => {
       const a = await account(h);
       const b = await account(h);
       const tankA = await makeTank(h, a);
@@ -577,9 +611,8 @@ describe('gifting and trading fish', () => {
       const gone = await call(h, b, 'POST', '/api/me/delete', { password: PASSWORD });
       expect(gone.statusCode, gone.body).toBeLessThan(300);
       expect((await offerRow(h, id)).toUserId).toBeNull();
-      expect(await h.app.settleDueGifts()).toBeGreaterThanOrEqual(1);
       expect((await fishRows(h, fishId))[0]?.tankId).toBe(tankA);
-      expect((await offerRow(h, id)).status).toBe('expired');
+      expect((await offerRow(h, id)).status).toBe('declined');
     });
   });
 
@@ -606,7 +639,7 @@ describe('gifting and trading fish', () => {
       expect((await fishRows(h, fishId))[0]?.tankId).toBe(other);
     });
 
-    it('does not age or feed the fish while it waits', async () => {
+    it('hands the fish back with the hunger it had when it left, not fed by the tank', async () => {
       const a = await account(h);
       const b = await account(h);
       const tankA = await makeTank(h, a);
@@ -763,6 +796,270 @@ describe('gifting and trading fish', () => {
       expect(errorOf(res).reason).toBe('offer_expired');
       expect((await fishRows(h, t.mine))[0]?.tankId).toBe(t.tankA);
       expect((await fishRows(h, t.theirs))[0]?.tankId).toBe(t.tankB);
+    });
+
+    async function countered() {
+      const t = await trade();
+      await accept(h, t.b, t.id, { toTankId: t.tankB, returnFishId: t.theirs });
+      return t;
+    }
+
+    const swapped = async (t: Awaited<ReturnType<typeof countered>>, done: boolean) => {
+      expect((await fishRows(h, t.mine))[0]?.tankId).toBe(done ? t.tankB : t.tankA);
+      expect((await fishRows(h, t.theirs))[0]?.tankId).toBe(done ? t.tankA2 : t.tankB);
+    };
+
+    it('swaps once when two confirms race', async () => {
+      const t = await countered();
+      const results = await Promise.all([
+        confirm(h, t.a, t.id, t.tankA2),
+        confirm(h, t.a, t.id, t.tankA2),
+      ]);
+      expect(results.map((r) => r.statusCode).toSorted()).toEqual([200, 409]);
+      const loser = results.find((r) => r.statusCode === 409);
+      expect(loser ? errorOf(loser).reason : null).toBe('offer_closed');
+      await swapped(t, true);
+    });
+
+    it('settles one way when a confirm races a cancel', async () => {
+      const t = await countered();
+      const [conf, can] = await Promise.all([
+        confirm(h, t.a, t.id, t.tankA2),
+        call(h, t.a, 'POST', `/api/gifts/${t.id}/cancel`),
+      ]);
+      expect([conf.statusCode, can.statusCode].toSorted()).toEqual([200, 409]);
+      await swapped(t, conf.statusCode === 200);
+    });
+
+    it('settles one way when a confirm races a decline', async () => {
+      const t = await countered();
+      const [conf, dec] = await Promise.all([
+        confirm(h, t.a, t.id, t.tankA2),
+        call(h, t.b, 'POST', `/api/gifts/${t.id}/decline`),
+      ]);
+      expect([conf.statusCode, dec.statusCode].toSorted()).toEqual([200, 409]);
+      await swapped(t, conf.statusCode === 200);
+    });
+
+    it('answers a clean 409 and returns the escrow when the recipient deleted their account', async () => {
+      const t = await countered();
+      const gone = await call(h, t.b, 'POST', '/api/me/delete', { password: PASSWORD });
+      expect(gone.statusCode, gone.body).toBe(204);
+      const res = await confirm(h, t.a, t.id, t.tankA2);
+      expect(res.statusCode).toBe(409);
+      expect(errorOf(res).reason).toBe('offer_closed');
+      expect((await offerRow(h, t.id)).status).toBe('declined');
+      expect((await fishRows(h, t.mine))[0]?.tankId).toBe(t.tankA);
+    });
+
+    it('shows the sender a pledged fish name through the word filter', async () => {
+      const t = await trade();
+      await h.database.db
+        .update(schema.fish)
+        .set({ name: 'fuck' })
+        .where(eq(schema.fish.id, t.theirs));
+      await accept(h, t.b, t.id, { toTankId: t.tankB, returnFishId: t.theirs });
+      expect((await list(h, t.a)).outgoing[0]?.pledged?.name).toBe('neon-tetra');
+      expect((await list(h, t.b)).incoming[0]?.pledged?.name).toBe('fuck');
+    });
+  });
+
+  describe('opt-in', () => {
+    it('keeps tanks closed to gifts until the owner turns it on', async () => {
+      const a = await account(h);
+      const tank = await makeTank(h, a, { gifts: false });
+      expect((await getTank(h, a, tank)).acceptsGifts).toBe(false);
+      const patched = await call(h, a, 'PATCH', `/api/tanks/${tank}`, { acceptsGifts: true });
+      expect(patched.statusCode, patched.body).toBe(200);
+      expect(tankSchema.parse(patched.json()).acceptsGifts).toBe(true);
+      expect((await getTank(h, a, tank)).acceptsGifts).toBe(true);
+    });
+
+    it('refuses an offer to a player with no open tank', async () => {
+      const a = await account(h);
+      const b = await account(h);
+      const tankA = await makeTank(h, a);
+      await makeTank(h, b, { gifts: false });
+      const fishId = await addFish(h, tankA);
+      const res = await offer(h, a, { fromTankId: tankA, fishId, to: b, raw: true });
+      expect(res.statusCode).toBe(409);
+      expect(errorOf(res).reason).toBe('gifts_closed');
+      expect(await fishRows(h, fishId)).toHaveLength(1);
+    });
+
+    it('refuses to accept into a closed tank and works once it is opened', async () => {
+      const a = await account(h);
+      const b = await account(h);
+      const tankA = await makeTank(h, a);
+      await makeTank(h, b);
+      const closedTank = await makeTank(h, b, { gifts: false });
+      const fishId = await addFish(h, tankA);
+      const id = offerId(await offer(h, a, { fromTankId: tankA, fishId, to: b }));
+
+      const refused = await accept(h, b, id, { toTankId: closedTank });
+      expect(refused.statusCode).toBe(409);
+      expect(errorOf(refused).reason).toBe('gifts_closed');
+      expect((await offerRow(h, id)).status).toBe('open');
+
+      await call(h, b, 'PATCH', `/api/tanks/${closedTank}`, { acceptsGifts: true });
+      expect((await accept(h, b, id, { toTankId: closedTank })).statusCode).toBe(200);
+    });
+
+    it('applies to the sender tank that receives the traded fish at confirm', async () => {
+      const a = await account(h);
+      const b = await account(h);
+      const tankA = await makeTank(h, a);
+      const closedA = await makeTank(h, a, { gifts: false });
+      const tankB = await makeTank(h, b);
+      const mine = await addFish(h, tankA);
+      const theirs = await addFish(h, tankB);
+      const id = offerId(
+        await offer(h, a, { fromTankId: tankA, fishId: mine, to: b, wantsReturn: true }),
+      );
+      await accept(h, b, id, { toTankId: tankB, returnFishId: theirs });
+
+      const refused = await confirm(h, a, id, closedA);
+      expect(refused.statusCode).toBe(409);
+      expect(errorOf(refused).reason).toBe('gifts_closed');
+      expect((await offerRow(h, id)).status).toBe('countered');
+      await call(h, a, 'PATCH', `/api/tanks/${closedA}`, { acceptsGifts: true });
+      expect((await confirm(h, a, id, closedA)).statusCode).toBe(200);
+    });
+
+    it('lets a closed sender tank send, since sending moves only its own fish', async () => {
+      const a = await account(h);
+      const b = await account(h);
+      const closedA = await makeTank(h, a, { gifts: false });
+      await makeTank(h, b);
+      const fishId = await addFish(h, closedA);
+      expect((await offer(h, a, { fromTankId: closedA, fishId, to: b })).statusCode).toBe(201);
+    });
+  });
+
+  describe('names, recipients and the sweep', () => {
+    it('shows another player a blocked fish name as the species, and the owner the real one', async () => {
+      const a = await account(h);
+      const b = await account(h);
+      const tankA = await makeTank(h, a);
+      await makeTank(h, b);
+      const fishId = await addFish(h, tankA, { name: 'fuck' });
+      const res = await offer(h, a, { fromTankId: tankA, fishId, to: b });
+      expect(createGiftResponseSchema.parse(res.json()).offer.fish.name).toBe('fuck');
+      expect((await list(h, a)).outgoing[0]?.fish.name).toBe('fuck');
+      expect((await list(h, b)).incoming[0]?.fish.name).toBe('neon-tetra');
+    });
+
+    it('404s for a recipient whose email is not verified', async () => {
+      const a = await account(h);
+      const b = await account(h, { verify: false });
+      const tankA = await makeTank(h, a);
+      const fishId = await addFish(h, tankA);
+      const res = await offer(h, a, { fromTankId: tankA, fishId, to: b, raw: true });
+      expect(res.statusCode).toBe(404);
+      expect(await fishRows(h, fishId)).toHaveLength(1);
+    });
+
+    it('returns a fish to a tank that filled up meanwhile instead of losing it', async () => {
+      const a = await account(h);
+      const b = await account(h);
+      const small = await makeTank(h, a, { quarantine: true });
+      await makeTank(h, b);
+      for (let i = 0; i < 11; i++) await addFish(h, small);
+      const fishId = await addFish(h, small);
+      const id = offerId(await offer(h, a, { fromTankId: small, fishId, to: b }));
+      await addFish(h, small);
+
+      const res = await call(h, a, 'POST', `/api/gifts/${id}/cancel`);
+      expect(res.statusCode, res.body).toBe(200);
+      expect((await fishRows(h, fishId))[0]?.tankId).toBe(small);
+      expect((await getTank(h, a, small)).fish).toHaveLength(13);
+
+      const other = await account(h);
+      const tankO = await makeTank(h, other);
+      const extra = await addFish(h, tankO);
+      const again = offerId(await offer(h, other, { fromTankId: tankO, fishId: extra, to: a }));
+      const full = await accept(h, a, again, { toTankId: small });
+      expect(errorOf(full).reason).toBe('tank_full');
+    });
+
+    it('re-applies the tank medicine to a returned fish', async () => {
+      const a = await account(h);
+      const b = await account(h);
+      const tankA = await makeTank(h, a);
+      await makeTank(h, b);
+      const fishId = await addFish(h, tankA, {
+        disease: {
+          kind: 'ich',
+          since: new Date(h.clock.now() - HOUR_MS).toISOString(),
+          severity: 0.3,
+          treatedUntil: null,
+        },
+      });
+      const id = offerId(await offer(h, a, { fromTankId: tankA, fishId, to: b }));
+      const until = new Date(h.clock.now() + 2 * HOUR_MS).toISOString();
+      await h.database.db
+        .update(schema.tanks)
+        .set({ medicine: { kind: 'ich', potency: 'standard', doses: 1, until } })
+        .where(eq(schema.tanks.id, tankA));
+
+      expect((await call(h, a, 'POST', `/api/gifts/${id}/cancel`)).statusCode).toBe(200);
+      const [back] = await fishRows(h, fishId);
+      expect(back?.disease).toMatchObject({ kind: 'ich', treatedUntil: until });
+    });
+
+    it('keeps listing and sweeping when one stored offer is unreadable', async () => {
+      const a = await account(h);
+      const b = await account(h);
+      const tankA = await makeTank(h, a);
+      await makeTank(h, b);
+      const bad = await addFish(h, tankA);
+      const good = await addFish(h, tankA);
+      const badId = offerId(await offer(h, a, { fromTankId: tankA, fishId: bad, to: b }));
+      const goodId = offerId(await offer(h, a, { fromTankId: tankA, fishId: good, to: b }));
+      await h.database.db
+        .update(schema.giftOffers)
+        .set({ fish: {} })
+        .where(eq(schema.giftOffers.id, badId));
+
+      const seen = await list(h, b);
+      expect(seen.incoming.map((o) => o.id)).toEqual([goodId]);
+
+      h.clock.advance(73 * HOUR_MS);
+      expect(await h.app.settleDueGifts()).toBeGreaterThanOrEqual(1);
+      expect((await offerRow(h, goodId)).status).toBe('expired');
+      expect((await fishRows(h, good))[0]?.tankId).toBe(tankA);
+      expect((await offerRow(h, badId)).status).toBe('open');
+      await h.database.db.delete(schema.giftOffers).where(eq(schema.giftOffers.id, badId));
+    });
+  });
+
+  describe('data export', () => {
+    it('lists offers sent and received, including the escrowed fish', async () => {
+      const a = await account(h);
+      const b = await account(h);
+      const tankA = await makeTank(h, a);
+      await makeTank(h, b);
+      const fishId = await addFish(h, tankA, { name: 'Goldie' });
+      const id = offerId(await offer(h, a, { fromTankId: tankA, fishId, to: b }));
+
+      const mine = await call(h, a, 'POST', '/api/me/export');
+      expect(mine.statusCode, mine.body).toBe(200);
+      const sent = dataExportSchema.parse(mine.json()).giftOffers;
+      expect(sent).toHaveLength(1);
+      expect(sent[0]).toMatchObject({
+        id,
+        role: 'sender',
+        status: 'open',
+        counterpart: b.handle,
+        fish: { id: fishId, name: 'Goldie', species: 'neon-tetra' },
+      });
+      expect(mine.body).not.toContain(b.email);
+
+      const theirs = await call(h, b, 'POST', '/api/me/export');
+      const received = dataExportSchema.parse(theirs.json()).giftOffers;
+      expect(received[0]).toMatchObject({ id, role: 'recipient', counterpart: a.handle });
+      expect(received[0]?.['fish']).not.toHaveProperty('personality');
+      expect(theirs.body).not.toContain(a.email);
     });
   });
 });

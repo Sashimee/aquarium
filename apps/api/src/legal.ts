@@ -1,14 +1,16 @@
 import {
   PRIVACY_POLICY,
+  containsBlockedWord,
   dataExportSchema,
   deleteAccountRequestSchema,
   type Credits,
 } from '@aquarium/shared';
-import { and, asc, eq, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, or, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Auth } from './auth.ts';
 import { schema, type Database } from './db/index.ts';
 import { apiError } from './errors.ts';
+import { storedFishSchema } from './gifts.ts';
 import { publicName } from './public.ts';
 import { lockHandles } from './handle.ts';
 import type { Limit, RateLimiter } from './rate-limit.ts';
@@ -231,6 +233,51 @@ export function registerLegalRoutes(deps: LegalDeps): void {
       }),
     );
 
+    const offerRows = await db
+      .select()
+      .from(schema.giftOffers)
+      .where(or(eq(schema.giftOffers.fromUserId, userId), eq(schema.giftOffers.toUserId, userId)))
+      .orderBy(asc(schema.giftOffers.createdAt), asc(schema.giftOffers.id));
+    const counterpartIds = offerRows.flatMap((o) => {
+      const other = o.fromUserId === userId ? o.toUserId : o.fromUserId;
+      return other === null ? [] : [other];
+    });
+    const handles = new Map<string, string | null>();
+    if (counterpartIds.length > 0) {
+      for (const u of await db
+        .select({ id: schema.user.id, handle: schema.user.handle })
+        .from(schema.user)
+        .where(inArray(schema.user.id, counterpartIds))) {
+        handles.set(u.id, u.handle);
+      }
+    }
+    const giftOffers = offerRows.map((o) => {
+      const sent = o.fromUserId === userId;
+      const other = sent ? o.toUserId : o.fromUserId;
+      const stored = storedFishSchema.parse(o.fish);
+      return {
+        id: o.id,
+        status: o.status,
+        wantsReturn: o.wantsReturn,
+        pledgedFishId: o.pledgedFishId,
+        createdAt: o.createdAt,
+        expiresAt: o.expiresAt,
+        settledAt: o.settledAt,
+        role: sent ? 'sender' : 'recipient',
+        counterpart: other === null ? null : (handles.get(other) ?? null),
+        fish: sent
+          ? stored
+          : {
+              id: stored.id,
+              species: stored.species,
+              name: containsBlockedWord(stored.name) ? stored.species : stored.name,
+              sex: stored.sex,
+              stage: stored.stage,
+              size: stored.size,
+            },
+      };
+    });
+
     const body = dataExportSchema.parse(
       JSON.parse(
         JSON.stringify({
@@ -272,6 +319,7 @@ export function registerLegalRoutes(deps: LegalDeps): void {
           collection: { entries: collectionRows, achievements: awardRows },
           wallet: { balance: walletRow?.balance ?? 0, ledger: ledgerRows },
           tanks: perTank,
+          giftOffers,
         }),
       ),
     );
@@ -347,6 +395,14 @@ export function registerLegalRoutes(deps: LegalDeps): void {
         .where(and(eq(schema.ledger.userId, userId), eq(schema.ledger.source, 'game')));
       await tx.delete(schema.user).where(eq(schema.user.id, userId));
     });
+
+    // The deleted user's open gift offers lost their recipient; settle them now as declined so the
+    // fish are back with their senders. The sweeper retries anything this misses.
+    try {
+      await app.settleDueGifts();
+    } catch (error) {
+      app.log.error({ err: error }, 'gift offers of a deleted account were not settled');
+    }
 
     const { authCookies } = await auth.$context;
     const expired = (name: string, attributes: Record<string, unknown>) => {
