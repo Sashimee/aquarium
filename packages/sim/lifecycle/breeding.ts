@@ -164,6 +164,8 @@ export function stepBreeding(
         sex: unitHash(`${parent.id}:${nowMs}:sex:${born}`) < 0.5 ? 'male' : 'female',
         stage: 'fry',
         lastBroodAtMs: null,
+        disease: null,
+        introducedAtMs: null,
       });
       births.push({ fishId: id, parentId: parent.id, species: parent.species, bornAtMs: nowMs });
       born++;

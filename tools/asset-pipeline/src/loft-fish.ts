@@ -264,11 +264,7 @@ export async function loadTexture(recipe: LoftFishRecipe): Promise<{
     tailPixel: source.tailPixel,
     crop,
   });
-  return {
-    image: { width: source.width, height: source.height, data },
-    project,
-    sources: [],
-  };
+  return { image: { width: source.width, height: source.height, data }, project, sources: [] };
 }
 
 /** Royal gramma colours painted from the species' known pattern; no photo pixels are reused. */
@@ -1024,7 +1020,7 @@ export const LOFT_FISH_RECIPES: LoftFishRecipe[] = [
   {
     id: 'cleaner-wrasse',
     species: 'cleaner-wrasse',
-    fallbackLengthM: 0.1,
+    fallbackLengthM: 0.085,
     roughness: 0.3,
     note: 'Labroides dimidiatus: no model exists, so the body is a procedural loft and the colour map is painted from the species pattern, with the stripe layout taken from the CC-BY photo by Mike Bowie, colours from Jens and proportions from Lawrence Hylton (reference only: no photo pixels are reused, so the asset is CC0)',
     texture: {

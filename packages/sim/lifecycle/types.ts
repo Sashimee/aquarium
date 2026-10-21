@@ -1,16 +1,32 @@
 import type {
   Biome,
   CauseOfDeath,
+  DiseaseKind,
   Chemistry,
   ChemistryParameters,
   Equipment,
   FishSex,
   FishStage,
+  MedicinePotency,
   SpeciesChemistry,
   SpeciesLifecycle,
   Water,
   WaterParameters,
 } from '@aquarium/shared';
+
+export interface FishDisease {
+  readonly kind: DiseaseKind;
+  readonly sinceMs: number;
+  readonly severity: number;
+  readonly treatedUntilMs: number | null;
+}
+
+export interface ActiveMedicine {
+  readonly kind: DiseaseKind;
+  readonly potency: MedicinePotency;
+  readonly doses: number;
+  readonly untilMs: number;
+}
 
 export interface LifecycleFish {
   readonly id: string;
@@ -25,6 +41,9 @@ export interface LifecycleFish {
   readonly sex: FishSex;
   readonly stage: FishStage;
   readonly lastBroodAtMs: number | null;
+  readonly disease: FishDisease | null;
+  /** When the player bought the fish; null for fry born in the tank. Starts the new-fish disease window. */
+  readonly introducedAtMs: number | null;
 }
 
 export interface LifecycleState {
@@ -32,6 +51,7 @@ export interface LifecycleState {
   readonly water: Water;
   readonly chemistry: Chemistry;
   readonly fish: readonly LifecycleFish[];
+  readonly medicine: ActiveMedicine | null;
 }
 
 export type SpeciesTable = ReadonlyMap<string, SpeciesLifecycle>;

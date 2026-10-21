@@ -21,6 +21,7 @@ import {
 } from './economy.js';
 import {
   diseaseStateSchema,
+  medicineSchema,
   fishStageSchema,
   personalitySchema,
   VISIT_WINDOW_DAYS,
@@ -150,6 +151,10 @@ export const tankSchema = z.object({
     .describe(
       'distinct UTC days in the last VISIT_WINDOW_DAYS on which the owner opened this tank',
     ),
+  medicine: medicineSchema
+    .nullable()
+    .optional()
+    .describe('the medicine running in this tank, null or absent when there is none'),
   fish: z.array(fishSchema),
   memorials: z.array(memorialSchema),
   away: awaySummarySchema.optional(),

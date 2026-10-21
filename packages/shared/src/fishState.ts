@@ -24,4 +24,23 @@ export const diseaseStateSchema = z.strictObject({
 });
 export type DiseaseState = z.infer<typeof diseaseStateSchema>;
 
+export const MAX_MEDICINE_DOSES = 3;
+
+export const medicinePotencySchema = z.enum(['standard', 'premium']);
+export type MedicinePotency = z.infer<typeof medicinePotencySchema>;
+
+export const medicineSchema = z.strictObject({
+  kind: diseaseKindSchema.describe('the disease this medicine acts on'),
+  potency: medicinePotencySchema,
+  doses: z
+    .int()
+    .min(0)
+    .max(MAX_MEDICINE_DOSES)
+    .describe(
+      'doses in the water; more than one is an overdose and poisons every fish, 0 is the residue a water change leaves of a single dose',
+    ),
+  until: timestampSchema.describe('when the course ends and the medicine is gone'),
+});
+export type Medicine = z.infer<typeof medicineSchema>;
+
 export const VISIT_WINDOW_DAYS = 14;
