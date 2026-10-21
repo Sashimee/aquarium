@@ -11,7 +11,13 @@ import { PROCEDURAL_EUPHYLLIA_ID, type DecorItem } from '@aquarium/shared';
 import type { Tier } from '../engine/quality/tiers';
 import { SWAY_ATTRIBUTE, swayPositionNode } from './anemone';
 import type { CapsuleCollider } from './colliders';
-import type { CurrentField, CurrentParameters } from './current';
+import {
+  limitLean,
+  PUMP_LEAN_HEIGHT,
+  type CurrentField,
+  type CurrentParameters,
+  type PumpRoot,
+} from './current';
 import { decorMatrix } from './hardscape';
 import { mulberry32 } from './placement';
 
@@ -432,7 +438,13 @@ export function euphylliaReach(
   current: CurrentParameters,
 ): number {
   const peakFlow = current.speed * (1 + current.gustDepth);
-  return (horizontalRadius(bounds) + WAVE_METRES) * item.scale + peakFlow * LEAN_SECONDS;
+  const room = PUMP_LEAN_HEIGHT * bounds.max[1] * item.scale;
+  const lean = limitLean(
+    (peakFlow + (current.pumpMps ?? 0)) * LEAN_SECONDS,
+    peakFlow * LEAN_SECONDS,
+    room,
+  );
+  return (horizontalRadius(bounds) + WAVE_METRES) * item.scale + lean;
 }
 
 export function euphylliaGeometry(mesh: EuphylliaMesh): BufferGeometry {
@@ -450,10 +462,12 @@ export class EuphylliaGroup {
   readonly object = new Group();
   private readonly geometry: BufferGeometry;
   private readonly material: MeshStandardNodeMaterial;
+  private readonly pump: PumpRoot;
 
   constructor(mesh: EuphylliaMesh, item: DecorItem, current: CurrentField) {
     this.object.name = `euphyllia:${item.assetId}`;
     this.geometry = euphylliaGeometry(mesh);
+    this.pump = current.pumpRoot(...item.position);
     this.material = new MeshStandardNodeMaterial();
     this.material.name = 'euphyllia-sway';
     this.material.roughness = 0.55;
@@ -461,7 +475,14 @@ export class EuphylliaGroup {
     this.material.side = DoubleSide;
     this.material.colorNode = vertexColor().pow(1.8);
     this.material.emissiveNode = vertexColor().pow(1.8).mul(0.06);
-    this.material.positionNode = swayPositionNode(item, current, WAVE_METRES, LEAN_SECONDS);
+    this.material.positionNode = swayPositionNode(
+      item,
+      current,
+      WAVE_METRES,
+      LEAN_SECONDS,
+      PUMP_LEAN_HEIGHT * mesh.bounds.max[1],
+      this.pump,
+    );
     const colony = new Mesh(this.geometry, this.material);
     colony.name = this.object.name;
     colony.matrixAutoUpdate = false;
@@ -473,6 +494,7 @@ export class EuphylliaGroup {
   }
 
   dispose(): void {
+    this.pump.dispose();
     this.geometry.dispose();
     this.material.dispose();
     this.object.removeFromParent();
