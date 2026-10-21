@@ -174,14 +174,14 @@ function parseTraits(id: string, traits: readonly string[]): ReadonlySet<Trait> 
 /**
  * Rejects a trait whose behaviour `Behaviour.planDefault` never reaches on this gait, so that it
  * cannot be ignored silently. The branch order there is: forage gait, then glass grazing, then a
- * home (anchor or station), then free swimming. A `cave-dweller` is not listed: every gait
- * shelters in its cave at rest and after a startle.
+ * home (anchor or station), then free swimming. A forager that grazes glass forages while food
+ * lies settled and grazes otherwise, so `glass-grazer` works on every gait. A `cave-dweller` is
+ * not listed: every gait shelters in its cave at rest and after a startle.
  */
 function requireReachable(id: string, traits: ReadonlySet<Trait>, gait: Gait): void {
   const forager = gait === 'forage';
   const rules: [Trait, boolean, string][] = [
     ['air-gulp', forager, 'gait "forage", the only gait that starts a gulp'],
-    ['glass-grazer', !forager, 'a gait other than "forage", whose bottom foraging comes first'],
     [
       'anemone-host',
       !forager && !traits.has('glass-grazer'),

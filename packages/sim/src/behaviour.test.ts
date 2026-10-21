@@ -581,13 +581,13 @@ describe('behaviour traits', () => {
     }
   });
 
-  it('rejects glass-grazer on a forage gait, whose bottom foraging takes precedence', () => {
-    expect(() => toSimSpecies(withGait(otocinclus, 'forage', ['glass-grazer']))).toThrow(
-      /species "otocinclus": trait "glass-grazer" needs a gait other than "forage"/,
-    );
-    for (const gait of ['burst-and-coast', 'cruise', 'hover'] as const) {
+  it('accepts glass-grazer on every gait, a forager grazing when no food has settled', () => {
+    for (const gait of ['burst-and-coast', 'cruise', 'hover', 'forage'] as const) {
       expect(toSimSpecies(withGait(otocinclus, gait, ['glass-grazer'])).grazer).toBe('glass');
     }
+    expect(
+      toSimSpecies(withGait(bronzeCorydoras, 'forage', ['glass-grazer', 'cave-dweller'])).home,
+    ).toBe('cave');
   });
 
   it('rejects anemone-host on a forager or glass grazer, which would never host', () => {
