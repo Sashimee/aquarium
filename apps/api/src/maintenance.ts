@@ -29,13 +29,18 @@ export async function pruneExpired({ db }: Database, clock: Clock): Promise<{ se
   return { sessions: sessions.length };
 }
 
-export function startMaintenance(database: Database, clock: Clock): () => void {
+export function startMaintenance(
+  database: Database,
+  clock: Clock,
+  settleDueGifts: () => Promise<number>,
+): () => void {
   const report = (err: unknown) => {
     console.error('maintenance failed:', err instanceof Error ? err.message : 'unknown');
   };
   const run = () => {
     void settleWeeks(database, clock.now()).catch(report);
     void pruneExpired(database, clock).catch(report);
+    void settleDueGifts().catch(report);
   };
   run();
   const timer = setInterval(run, HOUR_MS);

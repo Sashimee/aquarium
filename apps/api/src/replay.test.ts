@@ -304,6 +304,7 @@ describe('away replay', () => {
         wallet: { max: 100, windowMs: 60_000 },
         purchase: { max: 100, windowMs: 60_000 },
         replay: { max: 2, windowMs: 60_000 },
+        gift: { max: 100, windowMs: 60_000 },
       },
     });
     const cookie = await signedIn(h);

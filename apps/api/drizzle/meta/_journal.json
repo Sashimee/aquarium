@@ -169,6 +169,13 @@
       "when": 1792618376220,
       "tag": "0023_plant_growth",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792625008590,
+      "tag": "0025_gift_offers",
+      "breakpoints": true
     }
   ]
 }

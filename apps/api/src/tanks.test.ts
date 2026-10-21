@@ -798,6 +798,7 @@ describe('care actions and feeding validation', () => {
         wallet: { max: 100, windowMs: 60_000 },
         purchase: { max: 100, windowMs: 60_000 },
         replay: { max: 100, windowMs: 60_000 },
+        gift: { max: 100, windowMs: 60_000 },
       },
     });
   });
