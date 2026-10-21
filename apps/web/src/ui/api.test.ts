@@ -288,6 +288,57 @@ describe('api client sharing', () => {
     ]);
   });
 
+  it('puts the gallery toggle, validating the body', async () => {
+    const fetcher = vi.fn().mockResolvedValue(json(tankFixture({ shared: true, inGallery: true })));
+    const api = createApiClient(fetcher);
+    expect((await api.setGallery(TANK_A, true)).inGallery).toBe(true);
+    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`/api/tanks/${TANK_A}/gallery`);
+    expect(init).toMatchObject({ method: 'PUT', body: '{"listed":true}' });
+    await expect(api.setGallery(TANK_A, 'yes' as never)).rejects.toBeInstanceOf(
+      ClientValidationError,
+    );
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads the gallery page and sends the vote on the vote route', async () => {
+    const week = { weekStart: '2026-02-02T00:00:00.000Z', weekEnd: '2026-02-09T00:00:00.000Z' };
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(json({ ...week, total: 0, entries: [], myVote: null }))
+      .mockResolvedValueOnce(json({ ...week, myVote: TANK_A }))
+      .mockResolvedValueOnce(json({ ...week, myVote: null }));
+    const api = createApiClient(fetcher);
+    expect((await api.gallery({ limit: 24, offset: 24 })).total).toBe(0);
+    expect((await api.castVote(TANK_A)).myVote).toBe(TANK_A);
+    expect((await api.clearVote()).myVote).toBeNull();
+    const calls = fetcher.mock.calls as [string, RequestInit | undefined][];
+    expect(calls[0]?.[0]).toBe('/api/gallery?limit=24&offset=24');
+    expect(calls[1]?.[0]).toBe('/api/gallery/vote');
+    expect(calls[1]?.[1]).toMatchObject({ method: 'PUT', body: `{"tankId":"${TANK_A}"}` });
+    expect(calls[2]?.[1]).toMatchObject({ method: 'DELETE' });
+  });
+
+  it('turns vote refusals into typed errors and rejects a bad tank id locally', async () => {
+    const reply = (status: number, code: string, headers: Record<string, string> = {}) =>
+      new Response(JSON.stringify({ error: { code, message: 'nope' } }), {
+        status,
+        headers: { 'content-type': 'application/json', ...headers },
+      });
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(reply(429, 'rate_limited', { 'retry-after': '30' }))
+      .mockResolvedValueOnce(reply(403, 'own_tank'));
+    const api = createApiClient(fetcher);
+    await expect(api.castVote(TANK_A)).rejects.toMatchObject({
+      status: 429,
+      retryAfterSeconds: 30,
+    });
+    await expect(api.castVote(TANK_A)).rejects.toMatchObject({ status: 403, code: 'own_tank' });
+    await expect(api.castVote('nope')).rejects.toBeInstanceOf(ClientValidationError);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
   it('sets and clears a reaction on the public path and reads the new state', async () => {
     const fetcher = vi.fn().mockImplementation(async () => json(state));
     const api = createApiClient(fetcher);

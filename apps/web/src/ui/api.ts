@@ -5,6 +5,12 @@ import {
   ateBatchRequestSchema,
   careActionSchema,
   collectionSchema,
+  galleryQuerySchema,
+  galleryResponseSchema,
+  galleryWinnersResponseSchema,
+  setGalleryRequestSchema,
+  voteRequestSchema,
+  voteStateSchema,
   replayQuerySchema,
   replayResponseSchema,
   createTankRequestSchema,
@@ -41,6 +47,9 @@ import {
   type BackgroundId,
   type CareAction,
   type Collection,
+  type GalleryResponse,
+  type GalleryWinnersResponse,
+  type VoteState,
   type ReplayResponse,
   type DecorLayout,
   type Credits,
@@ -251,7 +260,13 @@ export interface ApiClient {
   shareTank(tankId: string): Promise<Tank>;
   rotateShare(tankId: string): Promise<Tank>;
   revokeShare(tankId: string): Promise<Tank>;
+  setGallery(tankId: string, listed: boolean): Promise<Tank>;
   publicTank(token: string): Promise<PublicTank>;
+  gallery(query?: { limit?: number; offset?: number }): Promise<GalleryResponse>;
+  galleryWinners(): Promise<GalleryWinnersResponse>;
+  galleryTank(tankId: string): Promise<PublicTank>;
+  castVote(tankId: string): Promise<VoteState>;
+  clearVote(): Promise<VoteState>;
   setReaction(token: string, kind: ReactionKind): Promise<ReactionState>;
   clearReaction(token: string): Promise<ReactionState>;
 }
@@ -770,6 +785,51 @@ export function createApiClient(
       });
       if (!res.ok) throw await toError(res);
       return parsed(res, tankSchema);
+    },
+    async setGallery(tankId, listed) {
+      const body = validate(setGalleryRequestSchema, { listed });
+      const res = await send(`/api/tanks/${encodeURIComponent(tankId)}/gallery`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw await toError(res);
+      return parsed(res, tankSchema);
+    },
+    async gallery(query = {}) {
+      const checked = validate(galleryQuerySchema, query);
+      const res = await send(
+        `/api/gallery?${new URLSearchParams(
+          Object.entries(checked).map(([k, v]) => [k, String(v)]),
+        )}`,
+      );
+      if (!res.ok) throw await toError(res);
+      return parsed(res, galleryResponseSchema);
+    },
+    async galleryWinners() {
+      const res = await send('/api/gallery/winners');
+      if (!res.ok) throw await toError(res);
+      return parsed(res, galleryWinnersResponseSchema);
+    },
+    async galleryTank(tankId) {
+      const res = await send(`/api/gallery/${encodeURIComponent(tankId)}`);
+      if (!res.ok) throw await toError(res);
+      return parsed(res, publicTankSchema);
+    },
+    async castVote(tankId) {
+      const body = validate(voteRequestSchema, { tankId });
+      const res = await send('/api/gallery/vote', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw await toError(res);
+      return parsed(res, voteStateSchema);
+    },
+    async clearVote() {
+      const res = await send('/api/gallery/vote', { method: 'DELETE' });
+      if (!res.ok) throw await toError(res);
+      return parsed(res, voteStateSchema);
     },
     async publicTank(token) {
       const res = await send(`/api/public/${encodeURIComponent(token)}`);
