@@ -487,6 +487,15 @@ describe('medicine in the water', () => {
     expect(fresh.overdose).toBe(false);
   });
 
+  it('lets another kind replace a residue left by a water change', () => {
+    const residue = diluteMedicine(medicine({ doses: 1 }), T0 + HOUR);
+    const swapped = addDose(residue, 'velvet', 'standard', T0 + 2 * HOUR);
+    if (typeof swapped === 'string') throw new Error(swapped);
+    expect(swapped.medicine.kind).toBe('velvet');
+    expect(swapped.medicine.doses).toBe(1);
+    expect(swapped.overdose).toBe(false);
+  });
+
   it('poisons every fish, sick or not, once there is more than one dose, and says why', () => {
     const calmTank = tank(school(6), { medicine: medicine({ doses: 3, untilMs: T0 + 20 * DAY }) });
     const r = run(calmTank, 20 * DAY);

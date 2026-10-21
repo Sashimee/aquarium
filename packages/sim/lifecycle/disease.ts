@@ -28,7 +28,7 @@ export const DISEASE_PROFILES: Readonly<Record<DiseaseKind, DiseaseProfile>> = {
   velvet: { progressPerHour: 1 / 72, lossFraction: 0.5, courseHours: 120, selfHealPerHour: 0 },
 };
 
-/** Water at or above this clears ich on its own, slowly, if the fish tolerates the heat. */
+/** Water at or above this clears ich slowly, but only for fish that tolerate it (betta, discus). */
 export const ICH_HEAT_C = 30;
 export const ICH_HEAT_CURE_PER_HOUR = 1 / 240;
 export const PREMIUM_COURSE_FACTOR = 0.5;
@@ -233,7 +233,8 @@ export function addDose(
   potency: MedicinePotency,
   nowMs: number,
 ): DoseResult | DoseRefusal {
-  const active = current && current.untilMs > nowMs ? current : null;
+  const live = current && current.untilMs > nowMs ? current : null;
+  const active = live && live.kind !== kind && live.doses === 0 ? null : live;
   if (active && active.kind !== kind) return 'other-medicine';
   if (active && active.doses >= MAX_MEDICINE_DOSES) return 'at-limit';
   const doses = (active?.doses ?? 0) + 1;

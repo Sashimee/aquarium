@@ -286,6 +286,45 @@ describe('treatment', () => {
       expect(res.statusCode).toBe(409);
       expect(errorCode(res)).toBe('conflict');
     });
+
+    it('treats another disease after a water change leaves only a residue', async () => {
+      const { who, tankId } = await sickTank(h, 'ich');
+      const bought = await call(h, who, 'POST', `/api/tanks/${tankId}/fish`, {
+        species: 'neon-tetra',
+        name: 'Second',
+        stage: 'adult',
+        idempotencyKey: randomUUID(),
+      });
+      expect(bought.statusCode).toBe(201);
+      const rows = await h.database.db
+        .select()
+        .from(schema.fish)
+        .where(eq(schema.fish.tankId, tankId));
+      const healthy = rows.find((r) => r.disease === null);
+      if (!healthy) throw new Error('second fish missing');
+      await h.database.db
+        .update(schema.fish)
+        .set({
+          disease: {
+            kind: 'velvet',
+            since: new Date(h.clock.now()).toISOString(),
+            severity: 0.3,
+            treatedUntil: null,
+          },
+        })
+        .where(eq(schema.fish.id, healthy.id));
+      expect((await treat(h, who, tankId, { kind: 'ich' })).statusCode).toBe(200);
+      const care = await call(h, who, 'POST', `/api/tanks/${tankId}/care`, {
+        type: 'water_change',
+      });
+      expect(care.statusCode).toBe(200);
+      const res = await treat(h, who, tankId, { kind: 'velvet' });
+      expect(res.statusCode).toBe(200);
+      const dosed = treatResponseSchema.parse(res.json());
+      expect(dosed.overdose).toBe(false);
+      expect(dosed.tank.medicine?.kind).toBe('velvet');
+      expect(dosed.tank.medicine?.doses).toBe(1);
+    });
   });
 
   describe('premium medicine', () => {

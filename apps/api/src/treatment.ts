@@ -62,7 +62,9 @@ export function registerTreatmentRoutes(ctx: TreatmentContext): void {
         }
         const dosed = addDose(state.medicine, body.kind, body.potency, nowMs);
         if (dosed === 'other-medicine') {
-          throw conflict('Another medicine is in the water. Change the water before you switch.');
+          throw conflict(
+            'A different medicine is still in the water at full strength. Change the water until only a trace is left, then switch.',
+          );
         }
         if (dosed === 'at-limit') {
           throw conflict(
