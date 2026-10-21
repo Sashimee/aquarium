@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { NodeIO } from '@gltf-transform/core';
@@ -7,13 +8,16 @@ import { describe, expect, it } from 'vitest';
 import {
   CRAB_KIND,
   HERMIT_RECIPES,
+  assertClawsOpposite,
   assignLimbIndices,
   clusterByDirection,
   crabColour,
+  groundWalkers,
   limbEnds,
   limbReach,
   recolourDense,
   segmentCrab,
+  shellTrailYaw,
   type LimbFrame,
 } from './hermit.ts';
 import { canonicalVertices } from './crew-scan.ts';
@@ -258,6 +262,90 @@ describe('assignLimbIndices', () => {
   });
 });
 
+describe('assertClawsOpposite', () => {
+  const legs = [leg(-1, 3, 3), leg(-0.5, 2.5, 2.8), leg(1, 2, 2.6), leg(-1, 1, 1)];
+  const byRoot = [...legs].sort((a, b) => b.rootAhead - a.rootAhead);
+
+  it('accepts one claw on each side, the -x one first', () => {
+    expect(() => assertClawsOpposite([legs[0]!, legs[2]!])).not.toThrow();
+  });
+
+  it('fails the global-order pick, which takes the two foremost roots whatever their side', () => {
+    expect(() => assertClawsOpposite([byRoot[0]!, byRoot[1]!])).toThrow(/not global order/);
+  });
+
+  it('fails a swapped pair and a pair on one side', () => {
+    expect(() => assertClawsOpposite([legs[2]!, legs[0]!])).toThrow(/assertClawsOpposite/);
+    expect(() => assertClawsOpposite([legs[1]!, legs[3]!])).toThrow(/assertClawsOpposite/);
+  });
+
+  it('keeps assignLimbIndices on the per-side pick for the same legs', () => {
+    expect(assignLimbIndices(legs)).toEqual([0, 2, 1, 4]);
+  });
+});
+
+describe('groundWalkers', () => {
+  const standoff = 0.01;
+  const verts = (tipY: number): Float32Array =>
+    Float32Array.from([0, -0.002, 0, 0, -0.005, 0.01, 0, tipY, 0.02]);
+  const kind = [CRAB_KIND.leg, CRAB_KIND.leg, CRAB_KIND.leg];
+  const weight = [0, 0.5, 1];
+
+  it('brings a hovering walking leg tip to the ground and leaves its root alone', () => {
+    const positions = verts(-0.006);
+    groundWalkers(positions, kind, [2, 2, 2], weight, standoff);
+    expect(positions[1]).toBe(Math.fround(-0.002));
+    expect(positions[7]).toBeCloseTo(-standoff, 6);
+    expect(positions[4]!).toBeLessThan(-0.005);
+  });
+
+  it('leaves claws, antennae and a leg already on the ground untouched', () => {
+    const claw = verts(-0.006);
+    groundWalkers(claw, kind, [0, 0, 0], weight, standoff);
+    expect(Array.from(claw)).toEqual(Array.from(verts(-0.006)));
+    const antenna = verts(-0.006);
+    groundWalkers(antenna, [7, 7, 7], [2, 2, 2], weight, standoff);
+    expect(Array.from(antenna)).toEqual(Array.from(verts(-0.006)));
+    const down = verts(-standoff);
+    groundWalkers(down, kind, [3, 3, 3], weight, standoff);
+    expect(Array.from(down)).toEqual(Array.from(verts(-standoff)));
+  });
+
+  it('reaches the ground when the lowest vertex is short of the limb tip', () => {
+    const positions = Float32Array.from([0, -0.002, 0, 0, -0.007, 0.01, 0, -0.004, 0.02]);
+    groundWalkers(positions, kind, [2, 2, 2], [0, 0.6, 1], standoff);
+    expect(Math.min(positions[1]!, positions[4]!, positions[7]!)).toBeCloseTo(-standoff, 4);
+  });
+});
+
+describe('shellTrailYaw', () => {
+  const rotate = (pts: Array<[number, number]>, yaw: number): Array<[number, number]> =>
+    pts.map(([x, z]) => [
+      x * Math.cos(yaw) + z * Math.sin(yaw),
+      -x * Math.sin(yaw) + z * Math.cos(yaw),
+    ]);
+  const lying: Array<[number, number]> = [];
+  for (let i = 0; i <= 30; i++) for (const w of [-4, 0, 4]) lying.push([-i, w]);
+
+  it('turns a shell lying along -x to trail along -z', () => {
+    const turned = rotate(lying, shellTrailYaw(lying, [0, 0]));
+    const xs = turned.map((p) => p[0]);
+    const zs = turned.map((p) => p[1]);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(8, 5);
+    expect(Math.min(...zs)).toBeCloseTo(-30, 5);
+    expect(Math.max(...zs)).toBeCloseTo(0, 5);
+  });
+
+  it('puts the far end behind the pivot whichever way the shell lies', () => {
+    for (const lie of [0.3, 1.9, -2.4, 4.4]) {
+      const pts = rotate(lying, lie);
+      const turned = rotate(pts, shellTrailYaw(pts, [0, 0]));
+      expect(Math.min(...turned.map((p) => p[1]))).toBeCloseTo(-30, 4);
+      expect(Math.max(...turned.map((p) => p[1]))).toBeCloseTo(0, 4);
+    }
+  });
+});
+
 describe('crabColour', () => {
   it('colours stems and antennae flat and legs blue with orange joints and a dark tip', () => {
     expect(crabColour(CRAB_KIND.stem, 0.5)).toEqual(crabColour(CRAB_KIND.stem, 0.9));
@@ -431,6 +519,44 @@ describe('the shipped hermit crab', () => {
       expect(Math.max(...reaches) / Math.min(...reaches)).toBeLessThanOrEqual(4);
     },
   );
+
+  const standoffM = (): number => {
+    const index = JSON.parse(readFileSync(join(assets, 'index.json'), 'utf8')) as {
+      assets: Array<{ id: string; crab?: { standoffM: number } }>;
+    };
+    return index.assets.find((a) => a.id === 'hermit-crab')!.crab!.standoffM;
+  };
+
+  it.each([0, 1, 2])(
+    'LOD%i: every walking leg tip reaches the substrate within 1 mm',
+    async (level) => {
+      const crab = await readCrab(level);
+      const lowest = new Map<number, number>();
+      for (let v = 0; v < crab.part.length; v++)
+        if (isLeg(crab, v) && crab.leg[v]! >= 2)
+          lowest.set(
+            crab.leg[v]!,
+            Math.min(lowest.get(crab.leg[v]!) ?? Infinity, crab.position[v * 3 + 1]!),
+          );
+      expect([...lowest.keys()].sort()).toEqual([2, 3, 4, 5]);
+      for (const [slot, y] of lowest)
+        expect(Math.abs(y + standoffM()), `slot ${slot}`).toBeLessThan(0.001);
+    },
+  );
+
+  it.each([0, 1, 2])('LOD%i: the shell trails along the body axis', async (level) => {
+    const crab = await readCrab(level);
+    const lo = [Infinity, Infinity, Infinity];
+    const hi = [-Infinity, -Infinity, -Infinity];
+    for (let v = 0; v < crab.part.length; v++)
+      if (crab.part[v] === 0)
+        for (let a = 0; a < 3; a++) {
+          lo[a] = Math.min(lo[a]!, crab.position[v * 3 + a]!);
+          hi[a] = Math.max(hi[a]!, crab.position[v * 3 + a]!);
+        }
+    expect(hi[2]! - lo[2]!).toBeGreaterThan(1.5 * (hi[0]! - lo[0]!));
+    expect(lo[2]!).toBeLessThan(-0.015);
+  });
 
   it('keeps the triangle budgets and a shrinking LOD chain', async () => {
     const triangles = await Promise.all(
