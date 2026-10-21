@@ -1096,6 +1096,7 @@ export async function buildHermit(recipe: HermitRecipe, ctx: FishContext): Promi
         fromSpecies !== null
           ? `length is the shell length (${standardLengthM} m) from content/species/hermit-crab.json`
           : `length is the shell length (${standardLengthM} m) taken from the recipe: no species JSON exists`,
+        'the shell is turned about the vertical through where it meets the soft body so it trails behind the crab, and each walking leg is bent down towards the ground, the bend growing from nothing at the leg root to the full gap at the tip, since the scan holds three of four legs clear of the ground',
         `legs welded together in the scan are split by direction from the hip so each of the ${recipe.legsPerSide} legs a side has its own slot, numbered fore to aft per side`,
         recipe.note,
       ],
