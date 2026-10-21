@@ -13,6 +13,7 @@ import {
   setReactionRequestSchema,
   shareTokenSchema,
   waterSchema,
+  type PublicTank,
   type ReactionCounts,
 } from '@aquarium/shared';
 import { and, eq, sql } from 'drizzle-orm';
@@ -64,13 +65,20 @@ export function publicName(name: string): string {
   return containsBlockedWord(name) ? PUBLIC_NAME_FALLBACK : name;
 }
 
+export interface PublicRoutes {
+  snapshot: (
+    tank: typeof schema.tanks.$inferSelect,
+    viewerId: string | null,
+  ) => Promise<PublicTank>;
+}
+
 export function registerPublicRoutes({
   app,
   database,
   limiter,
   limits,
   currentUser,
-}: PublicRouteDeps): void {
+}: PublicRouteDeps): PublicRoutes {
   const { db } = database;
 
   // Set in onSend so validation errors and unknown sub-paths carry them too. indexable hosts
@@ -143,9 +151,12 @@ export function registerPublicRoutes({
     const { token } = paramsSchema.parse(req.params);
     const tank = await tankByToken(token);
     if (!tank) return notFound(reply);
+    return snapshot(tank, (await currentUser(req))?.id ?? null);
+  });
+
+  async function snapshot(tank: typeof schema.tanks.$inferSelect, viewerId: string | null) {
     const fish = await db.select().from(schema.fish).where(eq(schema.fish.tankId, tank.id));
-    const viewer = await currentUser(req);
-    const state = await reactionState(tank.id, viewer?.id ?? null);
+    const state = await reactionState(tank.id, viewerId);
     return publicTankSchema.parse({
       name: publicName(tank.name),
       biome: tank.biome,
@@ -180,8 +191,7 @@ export function registerPublicRoutes({
       snapshotAt: hourOf(tank.lastTickAt),
       ...state,
     });
-  });
-
+  }
   async function reactor(req: FastifyRequest, reply: FastifyReply) {
     const user = await currentUser(req);
     if (!user) {
@@ -255,4 +265,6 @@ export function registerPublicRoutes({
     });
     return reactionState(tank.id, user.id);
   });
+
+  return { snapshot };
 }
