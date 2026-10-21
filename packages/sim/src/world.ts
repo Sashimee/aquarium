@@ -592,10 +592,11 @@ export class World {
 
   /**
    * Takes the current light as already adapted to, so a change made while the world was not
-   * stepping (paused) does not startle the fish when it runs again.
+   * stepping (paused) does not startle the fish when it runs again, and eases the polyps as far as
+   * `pausedS` seconds in the current darkness would have.
    */
-  settleLight(): void {
-    this.behaviour.lighting.settle();
+  settleLight(pausedS = 0): void {
+    this.behaviour.lighting.settle(pausedS);
   }
 
   /** How far coral polyps are out, 0 (retracted) to 1 (fully out), following the darkness. */

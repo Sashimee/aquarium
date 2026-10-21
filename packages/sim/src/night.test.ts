@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { speciesContentSchema } from '@aquarium/shared';
 import { afterEach, describe, expect, it } from 'vitest';
 import { lampIsOn } from '../lifecycle/water.ts';
-import { createSimHost, SimClient, type SimHost } from './bridge.ts';
+import { createSimHost, SimClient, type SimHost, type SimHostOptions } from './bridge.ts';
 import { cleanupSurfaces, crewCleanup } from './crew.ts';
 import {
   ARCHETYPES,
@@ -12,8 +12,10 @@ import {
   neonTetra,
   SHOW_TANK,
   spawnMany,
+  stepTo,
 } from './fixtures.ts';
 import { NIGHT, Night } from './night.ts';
+import { FishState, SnapshotField, SNAPSHOT_STRIDE, type Snapshot } from './snapshot.ts';
 import { toSimSpecies, type SpeciesInput } from './species.ts';
 import { STEP_HZ, World, type FishSpawn } from './world.ts';
 
@@ -124,6 +126,25 @@ describe('Night light shock', () => {
     expect(slow).toBe(0);
   });
 
+  it('fires within lightStartleWindowS of arming, while the gap is still growing', () => {
+    // A 3 s linear fade outruns the eye (τ = 1 s), so the gap grows until the fade ends; only the
+    // window makes the startle fire before then.
+    const fadeSteps = 3 * STEP_HZ;
+    const fade = (s: number): number => Math.max(0, 1 - (s + 1) / fadeSteps);
+    let adapted = 1;
+    let armedAt = -1;
+    for (let s = 0; armedAt < 0; s++) {
+      if (Math.abs(fade(s) - adapted) > NIGHT.lightStartleThreshold) armedAt = s;
+      adapted += (fade(s) - adapted) * (1 - Math.exp(-1 / STEP_HZ / NIGHT.lightAdaptTauS));
+    }
+    const fired = shocks(stepped(new Night()), 2 * fadeSteps, fade);
+    expect(fired).toHaveLength(1);
+    const firedAt = fired[0]?.[0] ?? Infinity;
+    expect(firedAt).toBeGreaterThan(armedAt);
+    expect(firedAt).toBeLessThanOrEqual(armedAt + NIGHT.lightStartleWindowS * STEP_HZ + 1);
+    expect(firedAt).toBeLessThan(fadeSteps - STEP_HZ);
+  });
+
   it('fires again for a later switch once the eye has adapted', () => {
     const n = stepped(new Night());
     const fired = shocks(n, 600, (s) => (s === 10 ? 0 : s === 300 ? 1 : null));
@@ -226,6 +247,22 @@ describe('Night polyp extension', () => {
     n.setLight(0.5);
     for (let s = 0; s < 10 * NIGHT.polypTauS * STEP_HZ; s++) n.step();
     expect(n.polypExtension).toBeCloseTo(0.5, 3);
+  });
+
+  it('on settle moves as far as the paused time in the current darkness would have', () => {
+    const settled = (pausedS: number): number => {
+      const n = stepped(new Night());
+      n.setLight(0);
+      n.settle(pausedS);
+      return n.polypExtension;
+    };
+    expect(settled(0)).toBe(0);
+    expect(settled(1)).toBeCloseTo(1 - Math.exp(-1 / NIGHT.polypTauS), 12);
+    expect(settled(NIGHT.polypTauS)).toBeCloseTo(1 - Math.exp(-1), 12);
+    expect(settled(Infinity)).toBe(1);
+    for (const bad of [-1, Number.NaN]) {
+      expect(() => new Night().settle(bad)).toThrow(/paused time/);
+    }
   });
 });
 
@@ -417,12 +454,21 @@ describe('bridge', () => {
     opened.length = 0;
   });
 
-  function connect(): { client: SimClient } {
+  function connect(options?: SimHostOptions): { client: SimClient } {
     const channel = new MessageChannel();
-    const host = createSimHost(channel.port1);
+    const host = createSimHost(channel.port1, options);
     const client = new SimClient(channel.port2);
     opened.push({ host, client, ports: [channel.port1, channel.port2] });
     return { client };
+  }
+
+  function nextError(client: SimClient): Promise<string> {
+    return new Promise((resolve) => {
+      const off = client.onError((message) => {
+        off();
+        resolve(message);
+      });
+    });
   }
 
   function nextPolyps(client: SimClient): Promise<number> {
@@ -452,5 +498,139 @@ describe('bridge', () => {
     const extension = await moved;
     expect(extension).toBeLessThan(1);
     expect(extension).toBeGreaterThan(0.9);
+  });
+
+  function startled(snapshot: Snapshot): number {
+    let n = 0;
+    for (let o = SnapshotField.State; o < snapshot.data.length; o += SNAPSHOT_STRIDE) {
+      if (snapshot.data[o] === FishState.Startle) n++;
+    }
+    return n;
+  }
+
+  // A frozen clock: the host's timer wakes but never finds a step due, so only `step` advances.
+  const frozen = (): SimHostOptions => ({ now: () => 0 });
+
+  it('takes light changed while stopped as adapted to on start', async () => {
+    const lightsOutWhileStopped = async (restart: boolean): Promise<number> => {
+      const { client } = connect(frozen());
+      await client.init({
+        seed: 5,
+        tank: SHOW_TANK,
+        species: SPECIES,
+        fish: spawnMany(neonTetra.id, 20),
+      });
+      await stepTo(client, STEP_HZ, STEP_HZ);
+      client.setLight(0);
+      if (restart) {
+        client.start();
+        client.stop();
+      }
+      let most = 0;
+      for (let k = 0; k < 10; k++) {
+        most = Math.max(most, startled(await stepTo(client, 1, STEP_HZ + 1 + k)));
+      }
+      return most;
+    };
+    expect(await lightsOutWhileStopped(false), 'stepped on without a start').toBeGreaterThan(5);
+    expect(await lightsOutWhileStopped(true)).toBe(0);
+  });
+
+  it('eases the polyps on start by the time the sim was stopped', async () => {
+    const afterPause = async (pausedMs: number): Promise<number[]> => {
+      let clock = 0;
+      const { client } = connect({ now: () => clock });
+      const seen: number[] = [];
+      client.onPolyps((extension) => seen.push(extension));
+      await client.init({
+        seed: 1,
+        tank: SHOW_TANK,
+        species: SPECIES,
+        fish: spawnMany(neonTetra.id, 2),
+      });
+      client.start();
+      client.stop();
+      await stepTo(client, 1, 1);
+      clock = pausedMs;
+      client.setLight(0);
+      client.start();
+      client.stop();
+      await stepTo(client, 1, 2);
+      return seen;
+    };
+    const eased = (s: number): number => 1 - Math.exp(-s / NIGHT.polypTauS);
+    const after = (pausedS: number): number => {
+      const e = eased(pausedS);
+      return e + (1 - e) * eased(1 / STEP_HZ);
+    };
+    expect(await afterPause(30_000)).toEqual([0, expect.closeTo(after(30), 6)]);
+    expect(await afterPause(600_000)).toEqual([0, expect.closeTo(after(600), 6)]);
+  });
+
+  it('eases the polyps from the last good clock reading after the loop halted on a throw', async () => {
+    let calls = 0;
+    let clock = 0;
+    const { client } = connect({
+      now: () => {
+        calls++;
+        if (calls === 2) throw new Error('clock exploded');
+        return clock;
+      },
+    });
+    const seen: number[] = [];
+    client.onPolyps((extension) => seen.push(extension));
+    await client.init({
+      seed: 1,
+      tank: SHOW_TANK,
+      species: SPECIES,
+      fish: spawnMany(neonTetra.id, 2),
+    });
+    const failed = nextError(client);
+    client.start();
+    expect(await failed).toBe('clock exploded');
+    await stepTo(client, 1, 1);
+    clock = 30_000;
+    client.setLight(0);
+    client.start();
+    client.stop();
+    await stepTo(client, 1, 2);
+    const e = 1 - Math.exp(-30 / NIGHT.polypTauS);
+    const step = 1 - Math.exp(-1 / STEP_HZ / NIGHT.polypTauS);
+    expect(seen).toEqual([0, expect.closeTo(e + (1 - e) * step, 6)]);
+  });
+
+  it('starts again after the clock threw inside stop', async () => {
+    let calls = 0;
+    const { client } = connect({
+      now: () => {
+        calls++;
+        if (calls === 2) throw new Error('clock exploded');
+        return performance.now();
+      },
+    });
+    await client.init({
+      seed: 1,
+      tank: SHOW_TANK,
+      species: SPECIES,
+      fish: spawnMany(neonTetra.id, 2),
+    });
+    const failed = nextError(client);
+    client.start();
+    client.stop();
+    expect(await failed).toBe('clock exploded');
+    const ticked = new Promise<number | null>((resolve) => {
+      const timeout = setTimeout(() => {
+        off();
+        resolve(null);
+      }, 1000);
+      const off = client.onSnapshot((snapshot) => {
+        if (snapshot.tick < 1) return;
+        clearTimeout(timeout);
+        off();
+        resolve(snapshot.tick);
+      });
+    });
+    client.start();
+    expect(await ticked).toBeGreaterThanOrEqual(1);
   });
 });
