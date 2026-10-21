@@ -327,6 +327,21 @@ describe('api client sharing', () => {
     await expect(api.setReaction(TOKEN, 'star')).rejects.toMatchObject({ status: 401 });
   });
 
+  it('carries the conflict reason and posts a move to the fish route', async () => {
+    const refusal = new Response(
+      JSON.stringify({ error: { code: 'conflict', message: 'Full.', reason: 'tank_full' } }),
+      { status: 409, headers: { 'content-type': 'application/json' } },
+    );
+    const fetcher = vi.fn().mockResolvedValue(refusal);
+    const request = { toTankId: TANK_A, idempotencyKey: 'move-key-0001' };
+    await expect(
+      createApiClient(fetcher).moveFish(TANK_A, 'fish-1', request),
+    ).rejects.toMatchObject({ status: 409, reason: 'tank_full' });
+    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`/api/tanks/${TANK_A}/fish/fish-1/move`);
+    expect(JSON.parse(init.body as string)).toEqual(request);
+  });
+
   it('refuses a public tank response it cannot read', async () => {
     const fetcher = vi.fn().mockResolvedValue(json({ name: 'x' }));
     await expect(createApiClient(fetcher).publicTank(TOKEN)).rejects.toMatchObject({

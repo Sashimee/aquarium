@@ -8,6 +8,8 @@ import {
   replayQuerySchema,
   replayResponseSchema,
   createTankRequestSchema,
+  moveFishRequestSchema,
+  moveFishResponseSchema,
   errorCodeSchema,
   speciesListSchema,
   tankListSchema,
@@ -53,7 +55,10 @@ import {
   type Tank,
   type TreatRequest,
   type TreatResponse,
+  type ConflictReason,
   type ErrorCode,
+  type MoveFishRequest,
+  type MoveFishResponse,
   type PrivacyPolicy,
   type PublicTank,
   type ReactionKind,
@@ -85,6 +90,7 @@ export class ApiRequestError extends Error {
     message: string,
     readonly fields: FieldErrors = {},
     readonly retryAfterSeconds: number | null = null,
+    readonly reason: ConflictReason | null = null,
   ) {
     super(message);
     this.name = 'ApiRequestError';
@@ -162,8 +168,15 @@ async function toError(res: Response): Promise<ApiRequestError> {
   }
   const own = apiErrorSchema.safeParse(body);
   if (own.success) {
-    const { code, message, issues } = own.data.error;
-    return new ApiRequestError(res.status, code, message, issuesToFields(issues ?? []), retryAfter);
+    const { code, message, issues, reason } = own.data.error;
+    return new ApiRequestError(
+      res.status,
+      code,
+      message,
+      issuesToFields(issues ?? []),
+      retryAfter,
+      reason ?? null,
+    );
   }
   const loose = body as { code?: unknown; message?: unknown } | null;
   const message =
@@ -241,6 +254,7 @@ export interface ApiClient {
   netFish(tankId: string, fishId: string): Promise<Tank>;
   care(tankId: string, action: CareAction): Promise<Tank>;
   treat(tankId: string, request: TreatRequest): Promise<TreatResponse>;
+  moveFish(tankId: string, fishId: string, request: MoveFishRequest): Promise<MoveFishResponse>;
   replay(
     tankId: string,
     query: { since: string; until?: string; cursor?: string; limit?: number },
@@ -749,6 +763,16 @@ export function createApiClient(
       return parsed(
         await post(`/api/tanks/${encodeURIComponent(tankId)}/treat`, body),
         treatResponseSchema,
+      );
+    },
+    async moveFish(tankId, fishId, request) {
+      const body = validate(moveFishRequestSchema, request);
+      return parsed(
+        await post(
+          `/api/tanks/${encodeURIComponent(tankId)}/fish/${encodeURIComponent(fishId)}/move`,
+          body,
+        ),
+        moveFishResponseSchema,
       );
     },
     async reportAte(tankId, reports, batchId) {
