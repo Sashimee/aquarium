@@ -269,6 +269,9 @@ function fan(rings: Rings, ring: number, centre: number, segments: number, flip:
 }
 const FOOT_SEGMENTS = 40;
 const FOOT_ROUNDNESS = 2.2;
+// A squarer cross-section fills the wedge between the shell's side wall, which hangs above the foot, and the mantle.
+const MANTLE_WIDTH = 1.16;
+const MANTLE_SQUARENESS = 0.5;
 const HEAD_SEGMENTS = 16;
 const HEAD_RINGS = 8;
 const TENTACLE_SIDES = 6;
@@ -432,7 +435,14 @@ export function buildNeriteBody(footprint: ShellFootprint, length: number): Neri
 
   const headCentre: Vec3 = [0, footH * 0.72, front - length * 0.12];
   const headRadius: Vec3 = [halfWidth * 0.27, footH * 0.55, length * 0.12];
-  const ellipsoid = (centre: Vec3, radius: Vec3, id: number, weight: number, v: number): void => {
+  const ellipsoid = (
+    centre: Vec3,
+    radius: Vec3,
+    id: number,
+    weight: number,
+    v: number,
+    squareness = 1,
+  ): void => {
     const ringStarts: number[] = [];
     for (let r = 1; r < HEAD_RINGS; r++) {
       const phi = (r / HEAD_RINGS) * Math.PI;
@@ -440,8 +450,8 @@ export function buildNeriteBody(footprint: ShellFootprint, length: number): Neri
       for (let k = 0; k < HEAD_SEGMENTS; k++) {
         const angle = (k / HEAD_SEGMENTS) * Math.PI * 2;
         points.push([
-          centre[0] + radius[0] * Math.sin(phi) * Math.cos(angle),
-          centre[1] + radius[1] * Math.sin(phi) * Math.sin(angle),
+          centre[0] + radius[0] * Math.sin(phi) * signedPow(Math.cos(angle), squareness),
+          centre[1] + radius[1] * Math.sin(phi) * signedPow(Math.sin(angle), squareness),
           centre[2] + radius[2] * Math.cos(phi),
         ]);
       }
@@ -457,14 +467,15 @@ export function buildNeriteBody(footprint: ShellFootprint, length: number): Neri
       stitch(rings, ringStarts[r]!, ringStarts[r + 1]!, HEAD_SEGMENTS);
     fan(rings, ringStarts[ringStarts.length - 1]!, tip, HEAD_SEGMENTS, true);
   };
-  const mantleTop = Math.max(footH * 1.8, footprint.ceilingY - length * 0.03);
+  const mantleTop = Math.max(footH * 1.8, footprint.ceilingY - length * 0.01);
   const mantleBottom = footH * 0.4;
   ellipsoid(
     [0, (mantleTop + mantleBottom) / 2, front - length * 0.3],
-    [halfWidth * 0.85, (mantleTop - mantleBottom) / 2, length * 0.26],
+    [halfWidth * MANTLE_WIDTH, (mantleTop - mantleBottom) / 2, length * 0.26],
     SNAIL_PART_IDS.foot,
     0.4,
     0.3,
+    MANTLE_SQUARENESS,
   );
   ellipsoid(headCentre, headRadius, SNAIL_PART_IDS.head, 0, 0.4);
 
