@@ -100,6 +100,8 @@ export interface FishHandle {
   setTank(tank: TankDimensions): void;
   /** Resolves once the stock handed in so far has joined the sim, or at once while the fish are not up. */
   synced(): Promise<void>;
+  /** Simulation seconds of the newest sim snapshot; 0 until the fish are up. */
+  simTimeS(): number;
   /** The distinct swimming species, sorted; null until the fish are up. */
   swimmingSpecies(): readonly string[] | null;
   /** What the sim collides with; null until the fish are up. */
@@ -316,6 +318,7 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
       ready?.setTank(next);
     },
     synced: () => ready?.synced() ?? Promise.resolve(),
+    simTimeS: () => ready?.simTimeS ?? 0,
     swimmingSpecies: () => ready?.swimmingSpecies() ?? null,
     simColliders: () => (ready === null ? null : colliders.list),
     stop() {

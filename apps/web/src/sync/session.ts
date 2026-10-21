@@ -443,6 +443,7 @@ export class TankSession {
       } catch (error) {
         if (error instanceof ApiRequestError && error.code === 'conflict') {
           outcome.refusal = error.message;
+          return;
         }
         throw error;
       }
@@ -459,6 +460,7 @@ export class TankSession {
           : `The ${DISEASE_LABEL[kind].toLowerCase()} medicine is in the water.`,
       });
     });
+    if (outcome.refusal !== null) outcome.ok = false;
     return outcome;
   }
 
