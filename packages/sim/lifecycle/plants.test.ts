@@ -556,8 +556,23 @@ describe('reconcile and trim', () => {
     for (const spec of content.plants) {
       expect(content.params.offsetStartSize).toBeGreaterThanOrEqual(spec.minSize);
     }
-    const grown = run(spreading, plantsOf('vallisneria', 4), { equipment: lit, days: 30 });
-    const offsets = grown.plants.filter((p) => p.parentKey !== null);
-    expect(offsets.length).toBeGreaterThan(0);
+    const spreaders = content.plants.filter((spec) => spec.spread !== null);
+    expect(spreaders.length).toBeGreaterThan(0);
+    for (const spec of spreaders) {
+      let plants = plantsOf(spec.id, 4);
+      const born: PlantState[] = [];
+      for (let hour = 0; hour < 40 * 24; hour++) {
+        const known = new Set(plants.map((p) => p.key));
+        plants = [
+          ...run(spreading, plants, { equipment: lit, from: T0 + hour * HOUR, days: 1 / 24 })
+            .plants,
+        ];
+        born.push(...plants.filter((p) => !known.has(p.key)));
+      }
+      expect(born.length).toBeGreaterThan(0);
+      for (const offset of born) {
+        expect(offset.size).toBeGreaterThanOrEqual(spec.minSize);
+      }
+    }
   });
 });

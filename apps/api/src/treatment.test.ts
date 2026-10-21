@@ -12,6 +12,7 @@ import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { schema } from './db/index.ts';
 import { loadEconomy } from './economy.ts';
+import { DEFAULT_CARE_LIMITS } from './tanks.ts';
 import { APP_ORIGIN, createHarness, topUp, type Harness } from './test-harness.ts';
 
 const PASSWORD = 'correct horse battery';
@@ -511,6 +512,32 @@ describe('treatment', () => {
       expect(await balance(h, first.who)).toBe(before);
       expect((await getTank(h, first.who, second.tankId)).medicine).toBeNull();
     });
+  });
+
+  describe('idempotent replay before the rate limit', () => {
+    it.each(['standard', 'premium'] as const)(
+      'replays a %s dose retried past the care limit instead of answering 429',
+      async (potency) => {
+        const limited = await createHarness({
+          careLimits: { ...DEFAULT_CARE_LIMITS, care: { max: 1, windowMs: 60_000 } },
+        });
+        try {
+          const { who, tankId } = await sickTank(limited);
+          const body = { kind: 'ich', potency, idempotencyKey: randomUUID() };
+          expect((await treat(limited, who, tankId, body)).statusCode).toBe(200);
+          const retry = await treat(limited, who, tankId, body);
+          expect(retry.statusCode).toBe(200);
+          expect(treatResponseSchema.parse(retry.json()).tank.medicine?.doses).toBe(1);
+          const fresh = await treat(limited, who, tankId, {
+            ...body,
+            idempotencyKey: randomUUID(),
+          });
+          expect(fresh.statusCode).toBe(429);
+        } finally {
+          await limited.close();
+        }
+      },
+    );
   });
 
   describe('time', () => {
