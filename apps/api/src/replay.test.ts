@@ -62,6 +62,7 @@ async function tankWithFish(h: Harness, cookie: string, fishCount = 1) {
   const created = await call(h, cookie, 'POST', '/api/tanks', {
     name: 'Home',
     biome: 'freshwater',
+    idempotencyKey: randomUUID(),
   });
   const tank = tankSchema.parse(created.json());
   for (let i = 0; i < fishCount; i++) {

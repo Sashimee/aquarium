@@ -753,11 +753,6 @@ export function createApiClient(
       return parsed(res, replayResponseSchema);
     },
     async care(tankId, action) {
-      if (action.type === 'bottled_bacteria' && action.idempotencyKey === undefined) {
-        throw new ClientValidationError({
-          idempotencyKey: 'Bottled bacteria cost Pearls and need a request key.',
-        });
-      }
       const body = validate(careActionSchema, action);
       return parsed(await post(`/api/tanks/${encodeURIComponent(tankId)}/care`, body), tankSchema);
     },

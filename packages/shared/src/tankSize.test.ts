@@ -31,7 +31,7 @@ describe('tank sizes', () => {
 });
 
 describe('create tank request', () => {
-  const base = { name: 'Home', biome: 'freshwater' };
+  const base = { name: 'Home', biome: 'freshwater', idempotencyKey: 'abcdefgh1' };
 
   it('defaults to a standard display tank', () => {
     expect(createTankRequestSchema.parse(base)).toMatchObject({
@@ -45,6 +45,12 @@ describe('create tank request', () => {
     expect(
       createTankRequestSchema.safeParse({ ...base, quarantine: true, size: 'nano30' }).success,
     ).toBe(true);
+  });
+
+  it('requires an idempotency key', () => {
+    expect(createTankRequestSchema.safeParse({ name: 'Home', biome: 'freshwater' }).success).toBe(
+      false,
+    );
   });
 
   it('refuses biomes that have no preset yet and unknown sizes', () => {

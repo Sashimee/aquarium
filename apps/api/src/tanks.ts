@@ -93,7 +93,6 @@ import { registerTreatmentRoutes } from './treatment.ts';
 import { backgroundRef, licenseFor } from './items.ts';
 import { currentPlants, substrateBounds, wirePlants } from './plants.ts';
 import type { Presets } from './presets.ts';
-import { legacyKey } from './legacyRequests.ts';
 import { findReplay, lockUserRow, lockWallet, owns, spend } from './wallet.ts';
 import { apiError, HttpError } from './errors.ts';
 import type { Limit, RateLimiter } from './rate-limit.ts';
@@ -740,7 +739,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       const user = await authorize(req);
       const body = createTankRequestSchema.parse(req.body);
       const sizeRef = `tank:${body.size}:`;
-      const tankKey = legacyKey(body.idempotencyKey);
+      const tankKey = body.idempotencyKey;
       const outcome = await database.db.transaction(async (tx) => {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`tanks:${user.id}`}))`);
         const nowMs = clock.now();
@@ -1234,8 +1233,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       const result = await withTank(user, tankId, async (tx, ticked) => {
         const nowMs = clock.now();
         const bacteriaRef = 'consumable:bottled-bacteria';
-        const bacteriaKey =
-          action.type === 'bottled_bacteria' ? legacyKey(action.idempotencyKey) : '';
+        const bacteriaKey = action.type === 'bottled_bacteria' ? action.idempotencyKey : '';
         if (action.type === 'bottled_bacteria') {
           await lockWallet(tx, economy, user.id, nowMs, true);
           const replay = await findReplay(tx, user.id, bacteriaKey, bacteriaRef);

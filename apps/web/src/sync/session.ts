@@ -432,7 +432,7 @@ export class TankSession {
     return this.careAction({ type: 'feed', food, portion });
   }
 
-  async careAction(action: CareAction): Promise<boolean> {
+  async careAction(action: CareRequest): Promise<boolean> {
     const tank = this.activeTank;
     if (!tank) return false;
     const gen = this.loadId;
@@ -906,6 +906,10 @@ class SessionEnded extends Error {}
 function decorKey(edited: boolean, layout: DecorLayout): string {
   return `${edited ? 'edited' : 'preset'}:${layoutKey(layout)}`;
 }
+
+/** A care action as the UI asks for it: the session adds the Pearls request key to bottled bacteria. */
+export type CareRequest =
+  Exclude<CareAction, { type: 'bottled_bacteria' }> | { type: 'bottled_bacteria' };
 
 const CARE_DONE: Record<Exclude<CareAction['type'], 'feed'>, string> = {
   water_change: 'Half the water was changed.',

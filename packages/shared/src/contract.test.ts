@@ -13,6 +13,7 @@ import {
   memorialSchema,
   waterParametersSchema,
   createTankRequestSchema,
+  treatRequestSchema,
   fishSchema,
   httpUrlSchema,
   presetLayoutSchema,
@@ -207,10 +208,25 @@ describe('tank and fish', () => {
     );
   });
 
-  it('validates tank and fish requests', () => {
-    expect(createTankRequestSchema.safeParse({ name: 'T', biome: 'freshwater' }).success).toBe(
+  it('requires an idempotency key on treat and bottled bacteria', () => {
+    expect(treatRequestSchema.safeParse({ kind: 'ich' }).success).toBe(false);
+    expect(treatRequestSchema.safeParse({ kind: 'ich', idempotencyKey: 'abcdefgh1' }).success).toBe(
       true,
     );
+    expect(careActionSchema.safeParse({ type: 'bottled_bacteria' }).success).toBe(false);
+    expect(
+      careActionSchema.safeParse({ type: 'bottled_bacteria', idempotencyKey: 'abcdefgh1' }).success,
+    ).toBe(true);
+  });
+
+  it('validates tank and fish requests', () => {
+    expect(
+      createTankRequestSchema.safeParse({
+        name: 'T',
+        biome: 'freshwater',
+        idempotencyKey: 'abcdefgh1',
+      }).success,
+    ).toBe(true);
     expect(createTankRequestSchema.safeParse({ name: '', biome: 'freshwater' }).success).toBe(
       false,
     );

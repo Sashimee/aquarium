@@ -772,7 +772,7 @@ describe('nitrogen cycle', () => {
     const crashed = tank(guppies(10), {}, { bacteria: UNCYCLED });
     const dosed = applyCare(
       crashed,
-      { type: 'bottled_bacteria' },
+      { type: 'bottled_bacteria', idempotencyKey: 'bacteria-test-key' },
       'freshwater',
       chemistryParams,
       T0,
@@ -794,7 +794,13 @@ describe('nitrogen cycle', () => {
 
   it('bottled bacteria never push a colony past 1', () => {
     const full = tank([fishOf('a', 'neon-tetra')]);
-    const dosed = applyCare(full, { type: 'bottled_bacteria' }, 'freshwater', chemistryParams, T0);
+    const dosed = applyCare(
+      full,
+      { type: 'bottled_bacteria', idempotencyKey: 'bacteria-test-key' },
+      'freshwater',
+      chemistryParams,
+      T0,
+    );
     if (!dosed.ok) throw new Error(dosed.reason);
     expect(dosed.value.chemistry.bacteria).toEqual({ ammoniaOxidisers: 1, nitriteOxidisers: 1 });
   });

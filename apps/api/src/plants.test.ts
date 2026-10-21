@@ -80,7 +80,11 @@ async function makeTank(
 ): Promise<string> {
   await topUp(h);
   await h.database.db.delete(schema.tanks).where(eq(schema.tanks.ownerId, who.userId));
-  const res = await call(h, who, 'POST', '/api/tanks', { name: 'Garden', biome: 'freshwater' });
+  const res = await call(h, who, 'POST', '/api/tanks', {
+    name: 'Garden',
+    biome: 'freshwater',
+    idempotencyKey: randomUUID(),
+  });
   expect(res.statusCode).toBe(201);
   const id = tankSchema.parse(res.json()).id;
   await h.database.db
