@@ -8,8 +8,9 @@ export interface LampSink {
 
 /**
  * Carries the active tank's lamp hours (UTC, as the sim's `lampIsOn` reads them) to the hood light.
- * Created before the engine exists, so `attach` hands over the hours held so far. Leaving a tank
- * or having none returns the hood to the default schedule.
+ * Created before the engine exists, so `attach` hands over the hours held so far. Signing out or
+ * having no tank returns the hood to the default schedule; a tank switch keeps the old hours until
+ * the next tank announces its own, so the hood never shows a default period in between.
  */
 export class LampFeed {
   private hours: LampHours = DEFAULT_LAMP_HOURS;
@@ -21,12 +22,14 @@ export class LampFeed {
     this.unsubscribe = [
       interaction.on('tank:loaded', ({ tankId }) => {
         this.activeTankId = tankId;
-        this.set(DEFAULT_LAMP_HOURS);
       }),
       interaction.on('tank:lamp', ({ tankId, onHour, offHour }) => {
         if (tankId === this.activeTankId) this.set({ onHour, offHour });
       }),
-      interaction.on('tank:unloaded', () => this.reset()),
+      interaction.on('tank:unloaded', ({ reason }) => {
+        if (reason === 'reset') this.reset();
+        else this.activeTankId = null;
+      }),
       interaction.on('tank:none', () => this.reset()),
     ];
   }
