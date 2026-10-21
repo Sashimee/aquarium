@@ -22,6 +22,7 @@ import {
   newTankChemistry,
   TANK_SIZES,
   personalitySchema,
+  setGalleryRequestSchema,
   replayQuerySchema,
   replayResponseSchema,
   speciesListSchema,
@@ -62,6 +63,7 @@ import {
   inArray,
   lt,
   lte,
+  ne,
   or,
   sql,
 } from 'drizzle-orm';
@@ -82,6 +84,7 @@ import {
   claimAchievementRewards,
 } from './earn.ts';
 import { registerShopRoutes } from './shop.ts';
+import { registerMoveRoutes } from './moveFish.ts';
 import { registerTreatmentRoutes } from './treatment.ts';
 import { backgroundRef, licenseFor } from './items.ts';
 import type { Presets } from './presets.ts';
@@ -230,13 +233,7 @@ export interface Ticked {
   nowMs: number;
 }
 
-async function lockAndTick(
-  tx: Tx,
-  deps: TankRouteDeps,
-  tankId: string,
-  user: SessionUser,
-): Promise<Ticked> {
-  const now = deps.clock.now();
+async function lockTank(tx: Tx, tankId: string, user: SessionUser): Promise<TankRow> {
   await lockUserRow(tx, user.id);
   const [tank] = await tx
     .select()
@@ -244,7 +241,25 @@ async function lockAndTick(
     .where(and(eq(schema.tanks.id, tankId), eq(schema.tanks.ownerId, user.id)))
     .for('update');
   if (!tank) throw notFound();
+  return tank;
+}
 
+async function lockAndTick(
+  tx: Tx,
+  deps: TankRouteDeps,
+  tankId: string,
+  user: SessionUser,
+): Promise<Ticked> {
+  return tickLocked(tx, deps, await lockTank(tx, tankId, user), user);
+}
+
+async function tickLocked(
+  tx: Tx,
+  deps: TankRouteDeps,
+  tank: TankRow,
+  user: SessionUser,
+): Promise<Ticked> {
+  const now = deps.clock.now();
   const fishRows = await tx.select().from(schema.fish).where(eq(schema.fish.tankId, tank.id));
   const initial: LifecycleState = {
     water: waterSchema.parse(tank.water),
@@ -499,6 +514,7 @@ async function render(
     size: tank.size,
     quarantine: tank.quarantine,
     shared: tank.shareTokenHash !== null,
+    inGallery: tank.inGallery,
     shareToken: issuedShareToken,
     decorLayout: storedLayout(tank).map((item) => ({
       ...item,
@@ -587,6 +603,34 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
     fn: (tx: Tx, ticked: Ticked) => Promise<T>,
   ): Promise<T> {
     return database.db.transaction(async (tx) => fn(tx, await lockAndTick(tx, deps, tankId, user)));
+  }
+
+  async function withTanks<T>(
+    user: SessionUser,
+    tankIds: readonly string[],
+    fn: (tx: Tx, ticked: Ticked[]) => Promise<T>,
+  ): Promise<T> {
+    return database.db.transaction(async (tx) => {
+      // Every tank row is locked, in id order, before any catch-up runs: a catch-up can claim an
+      // achievement reward and take the wallet lock, and the order must stay user, tank, wallet.
+      // Id order also makes two opposite moves wait for each other instead of deadlocking.
+      const locked = new Map<string, TankRow>();
+      for (const id of [...new Set(tankIds)].toSorted()) {
+        locked.set(id, await lockTank(tx, id, user));
+      }
+      const byId = new Map<string, Ticked>();
+      for (const [id, tank] of locked) {
+        byId.set(id, await tickLocked(tx, deps, tank, user));
+      }
+      return fn(
+        tx,
+        tankIds.map((id) => {
+          const ticked = byId.get(id);
+          if (!ticked) throw new Error('withTanks lost a tank it locked');
+          return ticked;
+        }),
+      );
+    });
   }
 
   const buyFirst = (what: string) =>
@@ -784,6 +828,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           .where(
             and(
               eq(schema.events.tankId, tankId),
+              ne(schema.events.kind, 'fish_moved'),
               gt(schema.events.at, since),
               lte(schema.events.at, until),
               ...(cursor
@@ -931,6 +976,45 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
     }),
   );
 
+  app.put(
+    '/api/tanks/:tankId/gallery',
+    guarded(async (req) => {
+      const user = await authorize(req);
+      const { tankId } = tankParamsSchema.parse(req.params);
+      const { listed } = setGalleryRequestSchema.parse(req.body);
+      throttle(user.id, 'care');
+      return withTank(user, tankId, async (tx, ticked) => {
+        if (listed && ticked.tank.shareTokenHash === null) {
+          throw new HttpError(
+            409,
+            apiError(
+              'conflict',
+              'Turn on the public link before listing this tank in the gallery.',
+            ),
+          );
+        }
+        if (listed && ticked.tank.quarantine) {
+          throw new HttpError(
+            409,
+            apiError('conflict', 'A quarantine tank cannot be listed in the gallery.'),
+          );
+        }
+        if (ticked.tank.inGallery === listed) return render(tx, ticked);
+        const [row] = await tx
+          .update(schema.tanks)
+          .set({ inGallery: listed })
+          .where(eq(schema.tanks.id, tankId))
+          .returning();
+        await audit(tx, {
+          action: listed ? 'gallery_listed' : 'gallery_unlisted',
+          actorId: user.id,
+          tankId,
+        });
+        return render(tx, { ...ticked, tank: row ?? ticked.tank });
+      });
+    }),
+  );
+
   app.post(
     '/api/tanks/:tankId/share/rotate',
     guarded(async (req) => {
@@ -966,7 +1050,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
         const wasShared = ticked.tank.shareTokenHash !== null;
         const [row] = await tx
           .update(schema.tanks)
-          .set({ shareTokenHash: null })
+          .set({ shareTokenHash: null, inGallery: false })
           .where(eq(schema.tanks.id, tankId))
           .returning();
         if (wasShared) await audit(tx, { action: 'share_revoked', actorId: user.id, tankId });
@@ -1246,6 +1330,17 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
     throttle,
     guarded,
     withTank,
+    render: (tx, ticked, fishRows) => render(tx, ticked, fishRows),
+  });
+
+  registerMoveRoutes({
+    app,
+    species,
+    clock,
+    authorize,
+    throttle,
+    guarded,
+    withTanks,
     render: (tx, ticked, fishRows) => render(tx, ticked, fishRows),
   });
 

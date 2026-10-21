@@ -68,6 +68,7 @@ const call = (
   });
 
 const errorCode = (res: LightMyRequestResponse) => apiErrorSchema.parse(res.json()).error.code;
+const errorReason = (res: LightMyRequestResponse) => apiErrorSchema.parse(res.json()).error.reason;
 
 async function sickTank(
   h: Harness,
@@ -161,6 +162,8 @@ describe('treatment', () => {
       const res = await treat(h, who, tankId, { kind: 'velvet' });
       expect(res.statusCode).toBe(409);
       expect(errorCode(res)).toBe('conflict');
+      expect(errorReason(res)).toBe('nothing_to_treat');
+      expect(apiErrorSchema.parse(res.json()).error.message).toContain('Velvet');
     });
 
     it('is free, starts the course and marks the sick fish as treated', async () => {
@@ -250,6 +253,7 @@ describe('treatment', () => {
       expect(third.statusCode).toBe(200);
       const fourth = await treat(h, who, tankId, { kind: 'ich' });
       expect(fourth.statusCode).toBe(409);
+      expect(errorReason(fourth)).toBe('dose_limit');
       h.clock.advance(6 * HOUR_MS);
       const fish = fishOf(await getTank(h, who, tankId), fishId);
       expect(fish.health).toBeLessThan(1);
@@ -285,6 +289,7 @@ describe('treatment', () => {
       const res = await treat(h, who, tankId, { kind: 'velvet' });
       expect(res.statusCode).toBe(409);
       expect(errorCode(res)).toBe('conflict');
+      expect(errorReason(res)).toBe('other_medicine');
     });
 
     it('treats another disease after a water change leaves only a residue', async () => {
@@ -454,6 +459,7 @@ describe('treatment', () => {
       await treat(h, who, tankId, { kind: 'ich', idempotencyKey });
       const res = await treat(h, who, tankId, { kind: 'ich', potency: 'premium', idempotencyKey });
       expect(res.statusCode).toBe(409);
+      expect(errorReason(res)).toBe('key_reused');
     });
 
     it('refuses a premium key reused on another tank, without charging', async () => {

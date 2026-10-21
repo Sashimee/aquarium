@@ -1,6 +1,8 @@
 import { HANDLE_COOLDOWN_DAYS, VISIT_WINDOW_DAYS } from '@aquarium/shared';
 import { lt, sql } from 'drizzle-orm';
 import { schema, type Database } from './db/index.ts';
+import type { Clock } from './clock.ts';
+import { settleWeeks } from './gallery.ts';
 
 const HOUR_MS = 60 * 60_000;
 
@@ -21,6 +23,9 @@ export async function pruneExpired({ db }: Database): Promise<{ sessions: number
     .delete(schema.tankVisits)
     .where(lt(schema.tankVisits.day, sql`current_date - ${VISIT_WINDOW_DAYS - 1}::int`));
   await db
+    .delete(schema.tankVotes)
+    .where(lt(schema.tankVotes.weekStart, sql`now() - interval '90 days'`));
+  await db
     .delete(schema.releasedHandles)
     .where(
       lt(
@@ -31,12 +36,15 @@ export async function pruneExpired({ db }: Database): Promise<{ sessions: number
   return { sessions: sessions.length };
 }
 
-export function startMaintenance(database: Database): () => void {
-  const run = () =>
-    pruneExpired(database).catch((err: unknown) => {
-      console.error('maintenance failed:', err instanceof Error ? err.message : 'unknown');
-    });
-  void run();
+export function startMaintenance(database: Database, clock: Clock): () => void {
+  const report = (err: unknown) => {
+    console.error('maintenance failed:', err instanceof Error ? err.message : 'unknown');
+  };
+  const run = () => {
+    void settleWeeks(database, clock.now()).catch(report);
+    void pruneExpired(database).catch(report);
+  };
+  run();
   const timer = setInterval(run, HOUR_MS);
   timer.unref();
   return () => clearInterval(timer);

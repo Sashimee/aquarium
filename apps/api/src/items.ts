@@ -1,8 +1,6 @@
 import { decorPrice, PROCEDURAL_EUPHYLLIA_ID, type Economy } from '@aquarium/shared';
 
 export const EUPHYLLIA_LICENSE_REF = 'decor:euphyllia';
-// Refs bought once and owned for good; mirrors ONE_TIME_REF in the web session.
-export const ONE_TIME_REF = /^(plant|decor|background):/;
 export const backgroundRef = (id: string) => `background:${id}`;
 
 export interface License {

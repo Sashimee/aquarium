@@ -4,7 +4,9 @@ import {
   Mesh,
   MeshBasicNodeMaterial,
   MeshStandardNodeMaterial,
+  OperatorNode,
   RenderTarget,
+  UniformNode,
   type Node,
 } from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
@@ -226,9 +228,67 @@ describe('RoomLight', () => {
     expect(light.update({ ...NOON, nowMs: NOON.nowMs + 1_000, minute: NOON.minute + 1 / 60 })).toBe(
       first,
     );
-    expect(light.update({ ...NOON, nowMs: NOON.nowMs + 10_000 })).not.toBe(first);
+    const moved = light.update({
+      ...NOON,
+      nowMs: NOON.nowMs + 10_000,
+      minute: NOON.minute + 1 / 6,
+    });
+    expect(moved).not.toBe(first);
+    expect(light.update({ ...NOON, minute: NOON.minute - 1 })).not.toBe(moved);
+  });
+
+  it('holds the light while ?clock= pins the minute and real time runs on', () => {
+    const { light } = lit('high');
     const pinned = light.update(NOON);
-    expect(light.update({ ...NOON, minute: NOON.minute + 1 })).not.toBe(pinned);
+    for (const ms of [10_000, 3_600_000, 4 * 3_600_000]) {
+      expect(light.update({ ...NOON, nowMs: NOON.nowMs + ms })).toBe(pinned);
+    }
+  });
+
+  it('writes each cross-fade copy into the window uniforms that copy reads', () => {
+    const nowMs = NOON.nowMs + 1_290_000;
+    const { light, backdrop } = lit('ultra');
+    light.update({ ...NOON, nowMs });
+    const graph = paneMaterial(backdrop).colorNode;
+    if (!graph) throw new Error('no sky');
+    const expected = windowMotionAt(nowMs, 12, windowMotion());
+
+    const uniformValues = (node: Node): number[] => {
+      const found: number[] = [];
+      node.traverse((child) => {
+        if (child instanceof UniformNode && typeof child.value === 'number')
+          found.push(child.value);
+      });
+      return found;
+    };
+
+    for (const pattern of ['clouds', 'beads'] as const) {
+      const p = expected[pattern];
+      const values = [p.offsetA, p.offsetB, p.layerA, p.layerB, p.gainA, p.gainB];
+      expect(new Set(values).size).toBe(values.length);
+      for (const [gain, own, other] of [
+        [p.gainA, [p.offsetA, p.layerA], [p.offsetB, p.layerB, p.gainB]],
+        [p.gainB, [p.offsetB, p.layerB], [p.offsetA, p.layerA, p.gainA]],
+      ] as const) {
+        const weighted: Node[] = [];
+        graph.traverse((node) => {
+          if (
+            node instanceof OperatorNode &&
+            node.op === '*' &&
+            node.bNode instanceof UniformNode &&
+            node.bNode.value === gain
+          ) {
+            weighted.push(node.aNode);
+          }
+        });
+        expect(weighted.length).toBeGreaterThan(0);
+        for (const copy of weighted) {
+          const read = uniformValues(copy);
+          for (const v of own) expect(read).toContain(v);
+          for (const v of other) expect(read).not.toContain(v);
+        }
+      }
+    }
   });
 });
 

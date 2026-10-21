@@ -1,4 +1,11 @@
-import { idSchema, treatRequestSchema, treatResponseSchema, type Tank } from '@aquarium/shared';
+import {
+  DISEASE_NAMES,
+  idSchema,
+  treatRequestSchema,
+  treatResponseSchema,
+  type ConflictReason,
+  type Tank,
+} from '@aquarium/shared';
 import { addDose, syncTreatment, type LifecycleState } from '@aquarium/sim/lifecycle';
 import type { ShopContext } from './shop.ts';
 import { eq } from 'drizzle-orm';
@@ -10,7 +17,8 @@ import type { Ticked, Tx } from './tanks.ts';
 import { findReplay, lockWallet, spend, type Charged } from './wallet.ts';
 import { z } from 'zod';
 
-const conflict = (message: string) => new HttpError(409, apiError('conflict', message));
+const conflict = (message: string, reason: ConflictReason) =>
+  new HttpError(409, apiError('conflict', message, undefined, reason));
 
 export interface TreatmentContext extends ShopContext {
   persist: (tx: Tx, ticked: Ticked, state: LifecycleState) => Promise<Tank>;
@@ -45,7 +53,7 @@ export function registerTreatmentRoutes(ctx: TreatmentContext): void {
           ? keys.find((k) => k.key === body.idempotencyKey)
           : undefined;
         if (seen && (seen.kind !== body.kind || seen.potency !== body.potency)) {
-          throw conflict('That idempotency key was used for a different treatment.');
+          throw conflict('That idempotency key was used for a different treatment.', 'key_reused');
         }
 
         if (premium) {
@@ -58,17 +66,22 @@ export function registerTreatmentRoutes(ctx: TreatmentContext): void {
 
         const { state } = ticked;
         if (!state.fish.some((f) => f.alive && f.disease?.kind === body.kind)) {
-          throw conflict(`No fish in this tank has ${body.kind}, so there is nothing to treat.`);
+          throw conflict(
+            `No fish in this tank has ${DISEASE_NAMES[body.kind]}, so there is nothing to treat.`,
+            'nothing_to_treat',
+          );
         }
         const dosed = addDose(state.medicine, body.kind, body.potency, nowMs);
         if (dosed === 'other-medicine') {
           throw conflict(
             'A different medicine is still in the water at full strength. Change the water until only a trace is left, then switch.',
+            'other_medicine',
           );
         }
         if (dosed === 'at-limit') {
           throw conflict(
             'The water already holds the most medicine it safely can. Change the water.',
+            'dose_limit',
           );
         }
 

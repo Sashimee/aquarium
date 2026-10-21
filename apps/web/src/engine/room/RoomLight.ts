@@ -101,9 +101,11 @@ const LAYER_COUNT = 61;
  */
 export const RAIN_RATES = [1.25, 1.75] as const;
 const SECONDS_PER_HOUR = 3_600;
-/** The sky and weather change on a minutes timescale; recomputing them this often is plenty. */
-const LIGHT_STEP_MS = 5_000;
-const LIGHT_STEP_MINUTES = LIGHT_STEP_MS / 60_000;
+/**
+ * The sky and weather change on a minutes timescale, so they are recomputed once the clock has
+ * moved this far. Keyed on the minute alone: a pinned `?clock=` holds the sky still, weather too.
+ */
+const LIGHT_STEP_MINUTES = 5 / 60;
 /** Irradiance from the lit tank one metre away, under the full hood and its moonlight channel. */
 const TANK_GLOW_DAY = new Color(1, 0.97, 0.92).multiplyScalar(1.4);
 const TANK_GLOW_NIGHT = new Color(0.04, 0.14, 0.9).multiplyScalar(0.12);
@@ -224,7 +226,6 @@ export class RoomLight {
   private readonly dressed = new Set<MeshStandardNodeMaterial>();
   private stateNow: RoomLightState | null = null;
   private weatherNow: Weather | null = null;
-  private lightAtMs = Number.NaN;
   private lightAtMinute = Number.NaN;
   private readonly motion = windowMotion();
   private disposed = false;
@@ -317,18 +318,11 @@ export class RoomLight {
 
   private lightAt(nowMs: number, minute: number): RoomLightState {
     const current = this.stateNow;
-    if (
-      current &&
-      Math.abs(nowMs - this.lightAtMs) < LIGHT_STEP_MS &&
-      Math.abs(minute - this.lightAtMinute) < LIGHT_STEP_MINUTES
-    ) {
-      return current;
-    }
+    if (current && Math.abs(minute - this.lightAtMinute) < LIGHT_STEP_MINUTES) return current;
     const weather = weatherAt(nowMs, this.seed);
     const state = roomLightAt(minute, weather);
     this.weatherNow = weather;
     this.stateNow = state;
-    this.lightAtMs = nowMs;
     this.lightAtMinute = minute;
     setRgb(this.zenith.value, state.zenith);
     setRgb(this.horizon.value, state.horizon);

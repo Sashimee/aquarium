@@ -32,6 +32,7 @@ import { loadEconomy } from './economy.ts';
 import { loadPresets, type Presets } from './presets.ts';
 import { DEFAULT_COLLECTION_LIMIT, registerCollectionRoutes } from './collection.ts';
 import { DEFAULT_HANDLE_LIMIT, registerHandleRoutes } from './handle.ts';
+import { DEFAULT_GALLERY_LIMITS, registerGalleryRoutes, type GalleryLimits } from './gallery.ts';
 import { DEFAULT_PUBLIC_LIMITS, registerPublicRoutes, type PublicLimits } from './public.ts';
 import { normalizedPathname } from './url.ts';
 import { DEFAULT_LEGAL_LIMITS, registerLegalRoutes, type LegalLimits } from './legal.ts';
@@ -69,6 +70,7 @@ export interface AppOptions {
   handleLimit?: Limit;
   collectionLimit?: Limit;
   publicLimits?: PublicLimits;
+  galleryLimits?: GalleryLimits;
   testHooks?: boolean;
   logger?: boolean;
   logStream?: { write(chunk: string): void };
@@ -654,11 +656,21 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     currentUser: async (req) => (await currentSession(req))?.user ?? null,
   });
 
-  registerPublicRoutes({
+  const publicRoutes = registerPublicRoutes({
     app,
     database,
     limiter,
     limits: opts.publicLimits ?? DEFAULT_PUBLIC_LIMITS,
+    currentUser: async (req) => (await currentSession(req))?.user ?? null,
+  });
+
+  registerGalleryRoutes({
+    app,
+    database,
+    limiter,
+    limits: opts.galleryLimits ?? DEFAULT_GALLERY_LIMITS,
+    now: () => clock.now(),
+    snapshot: publicRoutes.snapshot,
     currentUser: async (req) => (await currentSession(req))?.user ?? null,
   });
 

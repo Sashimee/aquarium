@@ -11,7 +11,16 @@ import { attribute, positionLocal, sin, vec3 } from 'three/tsl';
 import type { DecorItem } from '@aquarium/shared';
 import type { CatalogEntry, LoadedModel } from './assets';
 import type { CapsuleCollider } from './colliders';
-import { wrapPeriodS, type CurrentField, type CurrentParameters } from './current';
+import {
+  limitLean,
+  limitLeanNode,
+  MEANDER_AMPLITUDE,
+  PUMP_LEAN_HEIGHT,
+  wrapPeriodS,
+  type CurrentField,
+  type CurrentParameters,
+  type PumpRoot,
+} from './current';
 import { decorMatrix } from './hardscape';
 
 export const SWAY_ATTRIBUTE = '_sway';
@@ -79,8 +88,17 @@ export function anemoneReach(
   item: DecorItem,
   current: CurrentParameters,
 ): number {
-  const peakFlow = current.speed * (1 + current.gustDepth);
-  return (horizontalRadius(entry) + WAVE_METRES) * item.scale + peakFlow * LEAN_SECONDS;
+  const peakFlow = Math.hypot(
+    current.speed * (1 + current.gustDepth),
+    current.speed * current.gustDepth * MEANDER_AMPLITUDE,
+  );
+  const room = PUMP_LEAN_HEIGHT * height(entry) * item.scale;
+  const lean = limitLean(
+    (peakFlow + (current.pumpMps ?? 0)) * LEAN_SECONDS,
+    peakFlow * LEAN_SECONDS,
+    room,
+  );
+  return (horizontalRadius(entry) + WAVE_METRES) * item.scale + lean;
 }
 
 /** Tentacle streaming shared by every swaying polyp: lean into the current plus a travelling wave, both weighted by the `_sway` attribute. */
@@ -89,6 +107,8 @@ export function swayPositionNode(
   current: CurrentField,
   waveMetres: number,
   leanSeconds: number,
+  pumpRoom: number,
+  pump: PumpRoot,
 ) {
   const sway = attribute(SWAY_ATTRIBUTE, 'float');
   const tip = sway.mul(sway);
@@ -99,14 +119,19 @@ export function swayPositionNode(
     sway.mul(waveMetres),
   );
   const origin = vec3(...item.position);
-  const flow = current.velocityNode(positionLocal.mul(item.scale).add(origin));
+  const flow = current
+    .velocityNode(positionLocal.mul(item.scale).add(origin))
+    .add(current.pumpVelocity(pump.gain));
   const [cos, sinYaw] = [Math.cos(item.rotationY), Math.sin(item.rotationY)];
   const localFlow = vec3(
     flow.x.mul(cos).sub(flow.z.mul(sinYaw)),
     0,
     flow.x.mul(sinYaw).add(flow.z.mul(cos)),
   );
-  const lean = localFlow.mul(tip.mul(leanSeconds / item.scale));
+  const { speed, gustDepth } = current.parameters;
+  const ambientPeak = Math.hypot(speed * (1 + gustDepth), speed * gustDepth * MEANDER_AMPLITUDE);
+  const linear = (ambientPeak * leanSeconds) / item.scale;
+  const lean = limitLeanNode(localFlow.mul(leanSeconds / item.scale), linear, pumpRoom).mul(tip);
   return positionLocal.add(lean).add(wave);
 }
 
@@ -115,6 +140,8 @@ function createAnemoneMaterial(
   geometry: BufferGeometry,
   item: DecorItem,
   current: CurrentField,
+  pumpRoom: number,
+  pump: PumpRoot,
 ): MeshStandardNodeMaterial {
   if (!geometry.getAttribute(SWAY_ATTRIBUTE)) {
     throw new Error(
@@ -131,7 +158,14 @@ function createAnemoneMaterial(
   material.metalness = 0;
   material.side = DoubleSide;
 
-  material.positionNode = swayPositionNode(item, current, WAVE_METRES, LEAN_SECONDS);
+  material.positionNode = swayPositionNode(
+    item,
+    current,
+    WAVE_METRES,
+    LEAN_SECONDS,
+    pumpRoom,
+    pump,
+  );
   return material;
 }
 
@@ -139,16 +173,26 @@ function createAnemoneMaterial(
 export class AnemoneGroup {
   readonly object = new Group();
   private readonly materials: MeshStandardNodeMaterial[] = [];
+  private readonly pump: PumpRoot;
 
   constructor(entry: CatalogEntry, model: LoadedModel, item: DecorItem, current: CurrentField) {
     this.object.name = `anemone:${entry.id}`;
+    this.pump = current.pumpRoot(...item.position);
     const matrix: Matrix4 = decorMatrix(item);
     for (const { geometry, material: source } of model.primitives) {
       let material: MeshStandardNodeMaterial;
       try {
-        material = createAnemoneMaterial(source, geometry, item, current);
+        material = createAnemoneMaterial(
+          source,
+          geometry,
+          item,
+          current,
+          PUMP_LEAN_HEIGHT * height(entry),
+          this.pump,
+        );
       } catch (error) {
         for (const earlier of this.materials) earlier.dispose();
+        this.pump.dispose();
         throw error;
       }
       this.materials.push(material);
@@ -164,6 +208,7 @@ export class AnemoneGroup {
   }
 
   dispose(): void {
+    this.pump.dispose();
     for (const material of this.materials) material.dispose();
     this.object.removeFromParent();
     this.object.clear();

@@ -3,6 +3,7 @@ import {
   DoubleSide,
   Euler,
   Group,
+  InstancedBufferAttribute,
   InstancedMesh,
   Matrix4,
   MeshStandardNodeMaterial,
@@ -11,10 +12,22 @@ import {
   type BufferGeometry,
   type MeshStandardMaterial,
 } from 'three/webgpu';
-import { float, fract, instanceIndex, positionGeometry, positionLocal, sin, vec3 } from 'three/tsl';
+import {
+  float,
+  fract,
+  instanceIndex,
+  instancedBufferAttribute,
+  positionGeometry,
+  positionLocal,
+  sin,
+  vec3,
+} from 'three/tsl';
 import {
   FLUTTER_HZ,
+  limitLean,
+  limitLeanNode,
   normaliseDirection,
+  PUMP_LEAN_HEIGHT,
   MEANDER_AMPLITUDE,
   type CurrentField,
   type CurrentParameters,
@@ -76,9 +89,17 @@ export function maxSway(
   const [dx, dz] = normaliseDirection(current.direction);
   const along = axis === 'x' ? Math.abs(dx) : Math.abs(dz);
   const across = axis === 'x' ? Math.abs(dz) : Math.abs(dx);
-  const flow =
-    axis === undefined ? Math.hypot(forward, sideways) : forward * along + sideways * across;
-  return flow * leanSeconds(assetId, height) + FLUTTER_METRES * 1.6;
+  const pumpMps = current.pumpMps ?? 0;
+  const ambientFlow = Math.hypot(forward, sideways);
+  const seconds = leanSeconds(assetId, height);
+  const lean = limitLean(
+    (ambientFlow + pumpMps) * seconds,
+    ambientFlow * seconds,
+    PUMP_LEAN_HEIGHT * height,
+  );
+  if (axis === undefined) return lean + FLUTTER_METRES * 1.6;
+  const axisFlow = forward * along + sideways * across + pumpMps;
+  return Math.min(axisFlow * seconds, lean) + FLUTTER_METRES * 1.6;
 }
 
 /** Number of entries shown at `density`: those whose thinning rank is below it; layout plants (-1) always show. */
@@ -97,6 +118,7 @@ function createSwayMaterial(
   geometry: BufferGeometry,
   assetId: string,
   current: CurrentField,
+  pumpAttribute: InstancedBufferAttribute,
 ): MeshStandardNodeMaterial {
   geometry.computeBoundingBox();
   const height = Math.max(geometry.boundingBox?.max.y ?? 0.1, 0.02);
@@ -115,7 +137,11 @@ function createSwayMaterial(
 
   const stem = positionGeometry.y.div(height).clamp(0, 1);
   const bend = stem.mul(stem);
-  const flow = current.velocityNode(positionLocal);
+  // Bound per group, not set on the geometry: ModelLibrary shares one geometry between groups.
+  const pump = instancedBufferAttribute<'vec2'>(pumpAttribute, 'vec2');
+  const flow = current
+    .velocityNode(positionLocal)
+    .add(current.pumpVelocity(vec3(pump.x, 0, pump.y)));
   const phase = fract(sin(float(instanceIndex).mul(12.9898)).mul(43758.5453));
   const flutter = sin(
     current.flutterElapsed
@@ -125,7 +151,11 @@ function createSwayMaterial(
   )
     .mul(FLUTTER_METRES)
     .mul(bend);
-  const lean = vec3(flow.x, 0, flow.z).mul(leanSeconds(assetId, height)).mul(bend);
+  const seconds = leanSeconds(assetId, height);
+  const { speed, gustDepth } = current.parameters;
+  const ambientPeak = Math.hypot(speed * (1 + gustDepth), speed * gustDepth * MEANDER_AMPLITUDE);
+  const shear = vec3(flow.x, 0, flow.z).mul(seconds);
+  const lean = limitLeanNode(shear, ambientPeak * seconds, PUMP_LEAN_HEIGHT * height).mul(bend);
   material.positionNode = positionLocal.add(lean).add(vec3(flutter, 0, flutter.mul(0.6)));
   return material;
 }
@@ -158,20 +188,30 @@ export class PlantGroup {
   private readonly sorted: readonly PlantEntry[];
   private readonly meshes: InstancedMesh[] = [];
   private readonly materials: MeshStandardNodeMaterial[] = [];
+  private readonly placed: PlantEntry[];
+  /** Per-instance pump gain (x, z pairs) this group's shaders read. */
+  readonly pumpGain: Float32Array;
+  private readonly pumpAttributes: InstancedBufferAttribute[] = [];
+  private readonly releasePump: () => void;
+  private readonly gainAt = new Float64Array(2);
 
   constructor(
     readonly assetId: string,
     model: LoadedModel,
     entries: readonly PlantEntry[],
-    current: CurrentField,
+    private readonly current: CurrentField,
   ) {
     this.object.name = `plants:${assetId}`;
     const ordered = [...entries].sort((a, b) => a.rank - b.rank);
     this.total = ordered.length;
     this.layoutSignature = JSON.stringify(ordered.filter((e) => e.rank < 0));
     this.sorted = ordered;
+    this.placed = [...ordered];
+    this.pumpGain = new Float32Array(Math.max(1, ordered.length) * 2);
     for (const { geometry, material: source } of model.primitives) {
-      const material = createSwayMaterial(source, geometry, assetId, current);
+      const pumpAttribute = new InstancedBufferAttribute(this.pumpGain, 2);
+      this.pumpAttributes.push(pumpAttribute);
+      const material = createSwayMaterial(source, geometry, assetId, current, pumpAttribute);
       this.materials.push(material);
       const mesh = new InstancedMesh(geometry, material, Math.max(1, ordered.length));
       mesh.name = `${assetId}:${source.name}`;
@@ -182,6 +222,19 @@ export class PlantGroup {
       this.meshes.push(mesh);
       this.object.add(mesh);
     }
+    this.refreshPump();
+    this.releasePump = current.onWaveMakerChange(() => this.refreshPump());
+  }
+
+  private refreshPump(): void {
+    this.placed.forEach((entry, i) => this.writePump(i, entry));
+    for (const attr of this.pumpAttributes) attr.needsUpdate = true;
+  }
+
+  private writePump(index: number, entry: PlantEntry): void {
+    this.current.pumpGainAt(entry.x, entry.y, entry.z, this.gainAt);
+    this.pumpGain[index * 2] = this.gainAt[0] ?? 0;
+    this.pumpGain[index * 2 + 1] = this.gainAt[1] ?? 0;
   }
 
   get visible(): number {
@@ -191,6 +244,9 @@ export class PlantGroup {
   /** Rewrites one instance in place; `index` counts in thinning order, so layout plants come first. */
   setEntry(index: number, entry: PlantEntry): void {
     this.layoutSignature = null;
+    this.placed[index] = entry;
+    this.writePump(index, entry);
+    for (const attr of this.pumpAttributes) attr.needsUpdate = true;
     for (const mesh of this.meshes) writeInstance(mesh, index, entry);
   }
 
@@ -201,6 +257,7 @@ export class PlantGroup {
   }
 
   dispose(): void {
+    this.releasePump();
     for (const mesh of this.meshes) mesh.dispose();
     for (const material of this.materials) material.dispose();
     this.object.removeFromParent();
