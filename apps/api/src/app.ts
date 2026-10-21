@@ -232,14 +232,31 @@ function hasAmbiguousPath(url: string): boolean {
 
 const PUBLIC_PATH_PREFIX = '/api/public/';
 const VIEWER_PATH_PREFIX = '/t/';
+const GALLERY_PAGE_PATH = '/gallery';
 const TOKEN_PATH_PREFIXES = [`${AUTH_BASE_PATH}/reset-password/`, `${AUTH_BASE_PATH}/callback/`];
 // Pages and links whose URL holds a one-time token. The strict-origin-when-cross-origin default
 // would still send the full URL to same-origin subresources (JS, CSS, /api/me) on first load. The
 // policy stays scoped: the CSRF check falls back to Referer and the default suits every other route.
 const TOKEN_PAGES = new Set(['/reset-password', '/verify-email']);
 
-function isViewerPath(url: string): boolean {
-  return normalizedPathname(url).toLowerCase().startsWith(VIEWER_PATH_PREFIX);
+const NOINDEX_ACCOUNT_PAGES = new Set([
+  '/sign-in',
+  '/sign-up',
+  '/forgot-password',
+  '/reset-password',
+  '/verify-email',
+  '/sessions',
+  '/settings',
+]);
+
+function isNoindexPagePath(url: string): boolean {
+  const path = normalizedPathname(url).toLowerCase();
+  return (
+    path.startsWith(VIEWER_PATH_PREFIX) ||
+    path === GALLERY_PAGE_PATH ||
+    path.startsWith(`${GALLERY_PAGE_PATH}/`) ||
+    NOINDEX_ACCOUNT_PAGES.has(path.replace(/\/+$/, ''))
+  );
 }
 
 function carriesUrlToken(url: string): boolean {
@@ -371,7 +388,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
       reply.header('content-security-policy', KTX2_WORKER_CSP);
     }
     if (carriesUrlToken(req.url)) reply.header('referrer-policy', 'no-referrer');
-    if (isViewerPath(req.url)) reply.header('x-robots-tag', 'noindex, nofollow');
+    if (isNoindexPagePath(req.url)) reply.header('x-robots-tag', 'noindex, nofollow');
   });
 
   app.addHook('onRequest', async (req, reply) => {

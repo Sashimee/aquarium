@@ -105,6 +105,7 @@ export interface PumpRoot {
 /** A time at which the pump is at its largest output, so dividing by it is safe. */
 function fullStrengthTime(field: FlowField): number {
   const { periodS, speedMps } = field.settings;
+  if (speedMps === 0) return 0;
   let best = 0;
   let bestAmplitude = 0;
   for (const quarter of [0, 0.25, 0.5, 0.75]) {
@@ -160,7 +161,7 @@ export class CurrentField {
    * from `@aquarium/sim`. `bounds` must match the sim's `World.flowBounds()`, which is private to
    * the worker; take the same minX/maxX/minZ/maxZ/minY/maxY from `Basin.fromTank(tank)` or
    * `Basin.fromSpace(space)` built from the config the worker was given.
-   * `simTimeS` is the sim snapshot's `time`.
+   * `simTimeS` is the sim snapshot's `time`. A pump with `speedMps` 0 is off: it sways nothing and gains 0.
    */
   setWaveMaker(field: FlowField | null, simTimeS: number): void {
     this.waveField = field;
@@ -190,6 +191,11 @@ export class CurrentField {
       return;
     }
     const full = field.settings.speedMps * field.amplitude(this.gainTimeS);
+    if (full === 0) {
+      out[0] = 0;
+      out[1] = 0;
+      return;
+    }
     field.sample(x, y, z, this.gainTimeS, this.scratch);
     out[0] = (this.scratch[0] ?? 0) / full;
     out[1] = (this.scratch[2] ?? 0) / full;

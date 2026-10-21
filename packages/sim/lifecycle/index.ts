@@ -17,7 +17,7 @@ export {
   stepWater,
 } from './water.ts';
 export { stepTank } from './step.ts';
-export { catchUp, type CatchUpInput, type CatchUpResult } from './catchup.ts';
+export { catchUp, type CatchUpCrew, type CatchUpInput, type CatchUpResult } from './catchup.ts';
 export {
   applyCare,
   applyEating,

@@ -9,7 +9,7 @@ import {
   type CrewMember,
   type CrewTally,
 } from './crew.ts';
-import { FOOD_PARTICLES } from './food.ts';
+import { FOOD_PARTICLES, FOOD_TYPES } from './food.ts';
 import { FoodRain, REEF_ANCHORS, REEF_DECOR, REEF_TANK, SHOW_TANK, spawnMany } from './fixtures.ts';
 import { FishState } from './snapshot.ts';
 import { toSimSpecies, type SimSpecies, type SpeciesInput } from './species.ts';
@@ -182,6 +182,42 @@ describe('snails and crabs in a running world', { timeout: LONG }, () => {
       expect(rain.position(id)?.[1] ?? ground, `seed ${seed}`).toBeLessThan(ground + 0.01);
       expect(rain.eaten, `seed ${seed}`).toBeGreaterThan(0);
       expect(total(w.takeCrewTally(), 'settledPortions')).toBeCloseTo(rain.eaten, 12);
+    }
+  });
+
+  it('let go of a pellet that is lifted off the surface after they chose it', () => {
+    for (const seed of [1, 2, 3]) {
+      const { w, mouth } = crabFacingPellet(seed);
+      const ground = w.basin.ground(mouth[0], mouth[2]);
+      const ahead = (w.bodyLength[0] ?? 0) * 3;
+      const px = mouth[0] + (w.forward[0] ?? 0) * ahead;
+      const pz = mouth[2] + (w.forward[2] ?? 0) * ahead;
+      const frame = (x: number, y: number, z: number): Float32Array =>
+        new Float32Array([1, x, y, z, FOOD_TYPES.indexOf('pellets')]);
+      const start = Math.hypot((w.position[0] ?? 0) - px, (w.position[2] ?? 0) - pz);
+      let closing = 0;
+      for (; closing < 30 * 20; closing++) {
+        w.setFood(frame(px, ground + 0.004, pz));
+        w.step();
+        const d = Math.hypot((w.position[0] ?? 0) - px, (w.position[2] ?? 0) - pz);
+        if (d < start * 0.6) break;
+      }
+      expect(closing, `seed ${seed}, never went for the landed pellet`).toBeLessThan(30 * 20);
+      let ate = 0;
+      for (let t = 0; t < 30 * 20; t++) {
+        const length = w.bodyLength[0] ?? 0;
+        w.setFood(
+          frame(
+            (w.position[0] ?? 0) + (w.forward[0] ?? 0) * 0.4 * length,
+            (w.position[1] ?? 0) + 0.012,
+            (w.position[2] ?? 0) + (w.forward[2] ?? 0) * 0.4 * length,
+          ),
+        );
+        w.step();
+        ate += w.takeAteEvents().length;
+      }
+      expect(ate, `seed ${seed}`).toBe(0);
+      expect(w.takeCrewTally()).toEqual([]);
     }
   });
 

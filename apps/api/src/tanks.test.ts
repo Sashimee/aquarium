@@ -493,6 +493,28 @@ describe('server-authoritative lifecycle', () => {
     expect(lagMs).toBeLessThan(10 * 60_000 + 5_000);
   });
 
+  it('lets the clean-up crew graze algae while the owner is away', async () => {
+    const cookie = await signedIn(h);
+    const withCrew = await createTank(h, cookie);
+    const without = await createTank(h, cookie);
+    for (let i = 0; i < 8; i++) {
+      await addFish(h, cookie, withCrew.id, 'nerite-snail', `Snail ${i}`);
+    }
+    await addFish(h, cookie, without.id, 'neon-tetra');
+    for (const id of [withCrew.id, without.id]) {
+      await h.database.db
+        .update(schema.tanks)
+        .set({ water: { ammonia: 0, nitrate: 0, algae: 0.6, uneatenFood: 3 } })
+        .where(eq(schema.tanks.id, id));
+    }
+    await advance(h, 1 * DAY);
+    const read = async (id: string) =>
+      tankSchema.parse((await call(h, cookie, 'GET', `/api/tanks/${id}`)).json());
+    const crewed = await read(withCrew.id);
+    const bare = await read(without.id);
+    expect(crewed.water.algae).toBeLessThan(bare.water.algae);
+  });
+
   it('breeds a fed pair in range, stores the fry and reports them as away', async () => {
     const cookie = await signedIn(h);
     const tank = await createTank(h, cookie);

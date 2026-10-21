@@ -51,6 +51,7 @@ import {
   type LifecycleFish,
   type LifecycleState,
 } from '@aquarium/sim/lifecycle';
+import { cleanupSurfaces } from '@aquarium/sim';
 import { randomInt, randomUUID } from 'node:crypto';
 import {
   and,
@@ -266,6 +267,7 @@ async function tickLocked(
     fish: fishRows.map(toLifecycleFish),
     medicine: simMedicine(tank.medicine),
   };
+  const dims = TANK_SIZES[tank.size].dimensions;
   const result = catchUp({
     state: initial,
     fromMs: tank.lastTickAt.getTime(),
@@ -278,6 +280,14 @@ async function tickLocked(
     speciesChemistry: new Map([...deps.species].map(([id, s]) => [id, s.chemistry])),
     params: DEFAULT_WATER_PARAMETERS,
     chemistryParams: deps.chemistryParams,
+    crew: {
+      species: deps.species.crew,
+      surfaces: cleanupSurfaces({
+        width: dims.length - 2 * dims.glass,
+        depth: dims.depth - 2 * dims.glass,
+        height: dims.height - dims.glass - dims.freeboard,
+      }),
+    },
     graceEndsAtMs: user.createdAt.getTime() + GRACE_PERIOD_MS,
     vacationFeeder: hasVacationFeeder(tank),
     breeding: new Map([...deps.species].map(([id, s]) => [id, s.breeding])),

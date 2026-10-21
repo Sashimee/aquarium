@@ -7,7 +7,7 @@ import { speciesNameMap } from '../sync/life';
 import type { TankSession } from '../sync/session';
 import { INITIAL_STATE, type SessionState } from '../sync/state';
 import { FishCard } from './FishCard';
-import { DoseWarning, QuarantineSection, Treatment } from './Treatment';
+import { DoseWarning, PendingDoseWarning, QuarantineSection, Treatment } from './Treatment';
 
 const ich = {
   kind: 'ich' as const,
@@ -75,6 +75,62 @@ describe('FishCard symptoms', () => {
   });
 });
 
+describe('moving sick fish', () => {
+  const q = tankFixture({
+    id: '00000000-0000-4000-8000-0000000000aa',
+    name: 'Quarantine',
+    quarantine: true,
+  });
+  const sickTank = tankFixture({ fish: [fishFixture(FISH_1, { name: 'Pip', disease: ich })] });
+
+  it('offers to move a sick fish to the quarantine tank', () => {
+    const html = treatment(sickTank, state({ tanks: [sickTank, q] }));
+    expect(html).toContain('Move Pip to Quarantine');
+  });
+
+  it('offers nothing when there is no quarantine tank', () => {
+    expect(treatment(sickTank, state({ tanks: [sickTank] }))).not.toContain('Move Pip');
+  });
+
+  it('offers to move a sick fish back from the quarantine tank to the display tank', () => {
+    const sickInQ = { ...q, fish: [fishFixture(FISH_2, { name: 'Dot', disease: ich })] };
+    expect(treatment(sickInQ, state({ tanks: [sickTank, sickInQ] }))).toContain(
+      'Move Dot to Home tank',
+    );
+  });
+
+  it('lists every living fish in the quarantine tank to move back', () => {
+    const inQ = {
+      ...q,
+      fish: [
+        fishFixture(FISH_2, { name: 'Dot' }),
+        fishFixture(FISH_1, { name: 'Gone', status: 'dead', diedAt: '2026-02-01T00:00:00.000Z' }),
+      ],
+    };
+    const html = renderToStaticMarkup(
+      createElement(QuarantineSection, {
+        session,
+        state: state({ tanks: [sickTank, inQ] }),
+        tank: inQ,
+      }),
+    );
+    expect(html).toContain('Move Dot to Home tank');
+    expect(html).not.toContain('Move Gone');
+  });
+
+  it('leaves a sick fish to its treatment card instead of listing it twice', () => {
+    const sickInQ = { ...q, fish: [fishFixture(FISH_2, { name: 'Dot', disease: ich })] };
+    const html = renderToStaticMarkup(
+      createElement(QuarantineSection, {
+        session,
+        state: state({ tanks: [sickTank, sickInQ] }),
+        tank: sickInQ,
+      }),
+    );
+    expect(html).not.toContain('Move Dot');
+  });
+});
+
 describe('QuarantineSection', () => {
   const render = (tanks: Tank[], tank: Tank) =>
     renderToStaticMarkup(
@@ -121,5 +177,31 @@ describe('DoseWarning', () => {
       createElement(DoseWarning, { warnings, cost: null, balance: 100 }),
     );
     expect(html).not.toContain('Buy');
+  });
+});
+
+describe('PendingDoseWarning', () => {
+  const warnings = ['The water already holds a dose.'];
+
+  it('puts the Pearl price of a premium dose into the confirmation', () => {
+    const html = renderToStaticMarkup(
+      createElement(PendingDoseWarning, {
+        pending: { kind: 'ich', potency: 'premium', warnings },
+        balance: 100,
+      }),
+    );
+    expect(html).toContain('Pearls?');
+    expect(html).toContain('60 Pearls left');
+  });
+
+  it('asks for no price when the confirmed dose is the free one', () => {
+    const html = renderToStaticMarkup(
+      createElement(PendingDoseWarning, {
+        pending: { kind: 'ich', potency: 'standard', warnings },
+        balance: 100,
+      }),
+    );
+    expect(html).toContain('The water already holds a dose.');
+    expect(html).not.toContain('Pearls');
   });
 });

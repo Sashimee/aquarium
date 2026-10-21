@@ -3,14 +3,14 @@ import { describe, expect, it } from 'vitest';
 import { BUNDLED_ECONOMY } from './bundledEconomy';
 import { FISH_1, FISH_2, fishFixture, speciesFixture, tankFixture } from './fixtures';
 import {
-  blockedText,
   courseDays,
   doseButtonText,
   doseSpend,
   heatTolerantSick,
-  heldFor,
+  emptyHeld,
   medicineLine,
   planDose,
+  reconcileHeld,
   severityWord,
   sickKinds,
   sickSummary,
@@ -127,9 +127,11 @@ describe('treatment wording', () => {
   });
 
   it('sends the player to a water change for both water refusals but not for no patient', () => {
-    expect(wantsWaterChange(blockedText('other-medicine'))).toBe(true);
-    expect(wantsWaterChange(blockedText('at-limit'))).toBe(true);
-    expect(wantsWaterChange(blockedText('nothing-to-treat'))).toBe(false);
+    expect(wantsWaterChange('other_medicine')).toBe(true);
+    expect(wantsWaterChange('dose_limit')).toBe(true);
+    expect(wantsWaterChange('nothing_to_treat')).toBe(false);
+    expect(wantsWaterChange('key_reused')).toBe(false);
+    expect(wantsWaterChange(null)).toBe(false);
   });
 });
 
@@ -174,12 +176,17 @@ describe('doseSpend', () => {
   });
 });
 
-describe('heldFor', () => {
-  it('shows a held refusal or warning under its own tank only', () => {
-    const refusal = { tankId: 'a', message: 'no' };
-    expect(heldFor(refusal, 'a')).toBe(refusal);
-    expect(heldFor(refusal, 'b')).toBeNull();
-    expect(heldFor(null, 'a')).toBeNull();
+describe('reconcileHeld', () => {
+  const held = { tankId: 'a', pending: { kind: 'ich' }, refusal: { message: 'no' } };
+
+  it('keeps what is held for the tank on screen', () => {
+    expect(reconcileHeld(held, 'a')).toBe(held);
+  });
+
+  it('drops what another tank held, and does not bring it back on returning', () => {
+    const onB = reconcileHeld(held, 'b');
+    expect(onB).toEqual(emptyHeld('b'));
+    expect(reconcileHeld(onB, 'a')).toEqual(emptyHeld('a'));
   });
 });
 

@@ -17,16 +17,16 @@ function setup() {
 }
 
 describe('tankSeed', () => {
-  it('matches the seed the server derives for an owned tank', async () => {
+  it('matches the seed the server derives for an owned tank', () => {
     for (const id of ['a', '3f2c9a10-77b1-4a55-8d6e-0c2e51a9d0aa', 'tank 🐟']) {
-      expect(await tankSeed(id)).toBe(serverSeed(id));
+      expect(tankSeed(id)).toBe(serverSeed(id));
     }
   });
 
-  it('reads a visitor tank seed from its id', async () => {
+  it('reads a visitor tank seed from its id', () => {
     const seed = 0xdeadbeef;
     const id = publicTankId({ seed });
-    expect(await tankSeed(id)).toBe(seed);
+    expect(tankSeed(id)).toBe(seed);
   });
 });
 
@@ -35,45 +35,48 @@ describe('RoomSeedFeed', () => {
     expect(setup().feed.current()).toBe(NO_TANK_SEED);
   });
 
-  it('takes the seed of the loaded tank and tells subscribers', async () => {
+  it('takes the seed of the loaded tank and tells subscribers', () => {
     const { feed, loaded } = setup();
     const listener = vi.fn();
     feed.subscribe(listener);
     loaded('tank-a');
-    await vi.waitFor(() => expect(feed.current()).toBe(serverSeed('tank-a')));
+    expect(feed.current()).toBe(serverSeed('tank-a'));
     expect(listener).toHaveBeenCalledOnce();
   });
 
-  it('follows a tank switch and returns to the default when there is none', async () => {
+  it('follows a tank switch and returns to the default when there is none', () => {
     const { feed, loaded, bus } = setup();
     loaded('tank-a');
-    await vi.waitFor(() => expect(feed.current()).toBe(serverSeed('tank-a')));
+    expect(feed.current()).toBe(serverSeed('tank-a'));
     loaded('tank-b');
-    await vi.waitFor(() => expect(feed.current()).toBe(serverSeed('tank-b')));
+    expect(feed.current()).toBe(serverSeed('tank-b'));
     bus.emit('tank:none', {});
     expect(feed.current()).toBe(NO_TANK_SEED);
   });
 
-  it('lets the last loaded tank win when seeds resolve late', async () => {
-    const { feed, loaded } = setup();
+  it('drops the seed when the tank is unloaded', () => {
+    const { feed, loaded, bus } = setup();
+    const listener = vi.fn();
     loaded('tank-a');
-    loaded('tank-b');
-    await vi.waitFor(() => expect(feed.current()).toBe(serverSeed('tank-b')));
+    feed.subscribe(listener);
+    bus.emit('tank:unloaded', { tankId: 'tank-a', reason: 'switch' });
+    expect(feed.current()).toBe(NO_TANK_SEED);
+    expect(listener).toHaveBeenCalledOnce();
   });
 
-  it('gives visitors the seed in their tank id', async () => {
+  it('gives visitors the seed in their tank id', () => {
     const { feed, loaded } = setup();
     loaded(publicTankId({ seed: 1234567 }));
-    await vi.waitFor(() => expect(feed.current()).toBe(1234567));
+    expect(feed.current()).toBe(1234567);
   });
 
-  it('stops listening after stop', async () => {
+  it('stops listening after stop', () => {
     const bus = new EventBus<InteractionEvents>();
     const stopped = new RoomSeedFeed(bus);
     const control = new RoomSeedFeed(bus);
     stopped.stop();
     bus.emit('tank:loaded', { tankId: 'tank-a' } as unknown as InteractionEvents['tank:loaded']);
-    await vi.waitFor(() => expect(control.current()).toBe(serverSeed('tank-a')));
+    expect(control.current()).toBe(serverSeed('tank-a'));
     expect(stopped.current()).toBe(NO_TANK_SEED);
   });
 });

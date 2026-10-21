@@ -1,9 +1,18 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { loadChemistryParameters } from './chemistry.ts';
-import { isWarmWater, speciesContentSummarySchema, type SpeciesSummary } from '@aquarium/shared';
+import {
+  isWarmWater,
+  speciesContentSummarySchema,
+  speciesContentSchema,
+  type SpeciesSummary,
+} from '@aquarium/shared';
+import { algaeGrazer, isScavenger, toSimSpecies, type SimSpecies } from '@aquarium/sim';
 
-export type SpeciesCatalog = ReadonlyMap<string, SpeciesSummary>;
+export interface SpeciesCatalog extends ReadonlyMap<string, SpeciesSummary> {
+  /** The species that graze algae or scavenge settled food, in the sim's form. */
+  readonly crew: ReadonlyMap<string, SimSpecies>;
+}
 
 const BUNDLED = import.meta.url.endsWith('/src/species.ts')
   ? null
@@ -15,10 +24,13 @@ const entrySchema = speciesContentSummarySchema.loose();
 
 export function parseCatalog(entries: readonly unknown[], roomC: number): SpeciesCatalog {
   const catalog = new Map<string, SpeciesSummary>();
+  const crew = new Map<string, SimSpecies>();
   for (const entry of entries) {
     const parsed = entrySchema.parse(entry);
     const { id, commonName, scientificName, biome, lifecycle, chemistry, breeding } = parsed;
     if (catalog.has(id)) throw new Error(`Duplicate species id "${id}" in content/species.`);
+    const sim = toSimSpecies(speciesContentSchema.parse(entry));
+    if (algaeGrazer(sim) !== 'none' || isScavenger(sim)) crew.set(id, sim);
     const warmWater = isWarmWater(chemistry, roomC);
     catalog.set(id, {
       id,
@@ -32,7 +44,7 @@ export function parseCatalog(entries: readonly unknown[], roomC: number): Specie
     });
   }
   if (catalog.size === 0) throw new Error('No species found: content/species is empty.');
-  return catalog;
+  return Object.assign(catalog, { crew });
 }
 
 export function loadCatalog(roomC = loadChemistryParameters().temperature.roomC): SpeciesCatalog {
