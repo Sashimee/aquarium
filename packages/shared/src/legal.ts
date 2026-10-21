@@ -26,6 +26,7 @@ export const dataExportSchema = z.strictObject({
   passkeys: z.array(exportedRow),
   reminders: exportedReminderSchema,
   reactions: z.array(exportedRow),
+  galleryVotes: z.array(exportedRow),
   auditLog: z.array(exportedRow),
   collection: z.strictObject({
     entries: z.array(exportedRow),
@@ -155,6 +156,7 @@ export const PRIVACY_POLICY: PrivacyPolicy = privacyPolicySchema.parse({
         'Tank visits: for each tank you open we store the date (no time of day, IP address or device) on which you opened it, used only so your fish can recognise you when you come back often. It is included in your JSON export and deleted with the tank or your account.',
         'Shared tanks: if you turn on a public link for a tank, anyone who has the link can see that tank read-only without signing in: its name (after a word filter), layout, water and fish. Your email address, display name, handle and account are never shown through the link, and the page is marked noindex. You can revoke or replace the link at any time, which stops the old one working at once.',
         'Reactions: when you react to a shared tank (heart, star or wow) we store which tank, your account and the kind, one reaction per tank. Reaction counts are public; who reacted is not. A shared tank also shows when it was last updated, rounded down to the hour.',
+        'Gallery votes: when you vote in the tank of the week gallery we store the week, the tank and your account, one vote per week. Only totals are public; who voted is not. Votes are included in your JSON export and deleted with your account.',
         'Audit log: turning a link on, replacing or revoking it, and setting or removing a reaction are recorded with the time, your account and the tank, never the link itself. Entries are deleted after 180 days, and immediately when you delete your account. The same data is included in your JSON export.',
         'Email: verification and password-reset mail is sent from fish@bas.lu through the operator mail relay. Care reminders are mailed only if you turn them on.',
         "Care reminders: both channels are off until you turn them on in your account settings. If you do, we store your choices, the time of the last reminder and, for web push, the push endpoint and encryption keys your browser gives us for each device you enable. At most one reminder per day is sent, only when your fish have not been fed for a while, and it never contains details about your tank. Every reminder email has a one-click unsubscribe link that works without signing in, and you can switch either channel off or remove a device at any time. This data is included in your JSON export. Web push goes through your browser vendor's push service (Google, Mozilla, Apple or Microsoft), which sees the endpoint and that a message was sent.",

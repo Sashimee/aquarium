@@ -1,7 +1,13 @@
 import { schema, type Database } from './db/index.ts';
 
 export type AuditAction =
-  'share_enabled' | 'share_rotated' | 'share_revoked' | 'reaction_set' | 'reaction_removed';
+  | 'share_enabled'
+  | 'share_rotated'
+  | 'share_revoked'
+  | 'reaction_set'
+  | 'reaction_removed'
+  | 'vote_set'
+  | 'vote_removed';
 
 type Executor = Pick<Database['db'], 'insert'>;
 

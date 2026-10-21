@@ -336,6 +336,34 @@ export const tankReactions = pgTable(
   ],
 );
 
+export const tankVotes = pgTable(
+  'tank_votes',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    weekStart: timestamptz('week_start').notNull(),
+    tankId: uuid('tank_id')
+      .notNull()
+      .references(() => tanks.id, { onDelete: 'cascade' }),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.weekStart] }),
+    index('tank_votes_week_tank_idx').on(t.weekStart, t.tankId),
+    index('tank_votes_tank_id_idx').on(t.tankId),
+  ],
+);
+
+export const tankOfWeek = pgTable('tank_of_week', {
+  weekStart: timestamptz('week_start').primaryKey(),
+  tankId: uuid('tank_id')
+    .notNull()
+    .references(() => tanks.id, { onDelete: 'cascade' }),
+  votes: integer('votes').notNull(),
+  decidedAt: timestamptz('decided_at').notNull().defaultNow(),
+});
+
 export const auditLog = pgTable(
   'audit_log',
   {
