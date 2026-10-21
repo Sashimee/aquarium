@@ -64,14 +64,28 @@ export const plantParametersSchema = z.strictObject({
 });
 export type PlantParameters = z.infer<typeof plantParametersSchema>;
 
+export const hardscapeFootprintSchema = z.strictObject({
+  id: z.string().min(1).max(64).describe('the decor asset id'),
+  halfX: z.number().positive().describe('half the model width at scale 1, in metres'),
+  halfZ: z.number().positive().describe('half the model depth at scale 1, in metres'),
+});
+export type HardscapeFootprint = z.infer<typeof hardscapeFootprintSchema>;
+
 export const plantContentSchema = z
   .strictObject({
     params: plantParametersSchema,
     plants: z.array(plantSpeciesSchema).min(1),
+    hardscape: z
+      .array(hardscapeFootprintSchema)
+      .describe('rocks and wood an offset must not root inside, from the asset bounds'),
   })
   .refine((c) => new Set(c.plants.map((p) => p.id)).size === c.plants.length, {
     message: 'duplicate plant id',
     path: ['plants'],
+  })
+  .refine((c) => new Set(c.hardscape.map((h) => h.id)).size === c.hardscape.length, {
+    message: 'duplicate hardscape id',
+    path: ['hardscape'],
   })
   .refine((c) => c.plants.every((p) => c.params.offsetStartSize >= p.minSize), {
     message:

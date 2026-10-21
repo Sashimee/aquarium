@@ -217,6 +217,118 @@ describe('growing plants', () => {
       expect(o.tintSeed).toBeNull();
     }
   });
+
+  const lit = {
+    filter: { tier: 1 },
+    heater: { tier: 1 },
+    light: { tier: 3, intensity: 1, onHour: 8, offHour: 20 },
+    co2: { tier: 0 },
+    waveMaker: { tier: 0 },
+  };
+
+  it('moves the offsets with their parent when the parent is moved', async () => {
+    const tankId = await makeTank(h, alice, {
+      layout: [layoutItem('vallisneria', 31, -0.3)],
+      nitrate: 1000,
+    });
+    await h.database.db
+      .update(schema.tanks)
+      .set({ equipment: lit })
+      .where(eq(schema.tanks.id, tankId));
+    const grown = await grow(h, alice, tankId, 30);
+    const before = (grown.plants ?? []).filter((p) => p.parentKey === 's31');
+    expect(before.length).toBeGreaterThan(0);
+    const moved = tankOf(
+      await call(h, alice, 'PATCH', `/api/tanks/${tankId}`, {
+        decorLayout: [layoutItem('vallisneria', 31, 0.1)],
+      }),
+    );
+    const after = (moved.plants ?? []).filter((p) => p.parentKey === 's31');
+    expect(after.map((p) => p.key)).toEqual(before.map((p) => p.key));
+    for (const [i, offset] of after.entries()) {
+      expect(offset.position?.[0]).toBeCloseTo((before[i]?.position?.[0] ?? NaN) + 0.4, 9);
+      expect(offset.position?.[1]).toBeCloseTo(before[i]?.position?.[1] ?? NaN, 9);
+    }
+  });
+
+  it('keeps offsets out of a rock', async () => {
+    const rock = { ...layoutItem('boulder-01', 32, 0.12), rotationY: 0.6 };
+    const tankId = await makeTank(h, alice, {
+      layout: [layoutItem('vallisneria', 31, 0), rock],
+      nitrate: 1000,
+    });
+    await h.database.db
+      .update(schema.tanks)
+      .set({ equipment: lit })
+      .where(eq(schema.tanks.id, tankId));
+    const grown = await grow(h, alice, tankId, 60);
+    const offsets = (grown.plants ?? []).filter((p) => p.parentKey !== null);
+    expect(offsets.length).toBeGreaterThan(2);
+    for (const o of offsets) {
+      const [x, z] = o.position ?? [NaN, NaN];
+      const dx = x - 0.12;
+      const lx = dx * Math.cos(0.6) - z * Math.sin(0.6);
+      const lz = dx * Math.sin(0.6) + z * Math.cos(0.6);
+      expect(Math.abs(lx) <= 0.12163 && Math.abs(lz) <= 0.175).toBe(false);
+    }
+  });
+
+  describe('tint seeds on save', () => {
+    const save = (tankId: string, decorLayout: object[]) =>
+      call(h, alice, 'PATCH', `/api/tanks/${tankId}`, { decorLayout });
+    const seedsOf = (tank: Tank) => tank.decorLayout.map((item) => item.tintSeed);
+
+    it('gives a repeated seed a new one instead of rejecting the save', async () => {
+      const tankId = await makeTank(h, alice, {
+        layout: [
+          layoutItem('java-fern', 41),
+          layoutItem('java-fern', 46, 0.2),
+          layoutItem('java-fern', 47, 0.3),
+        ],
+      });
+      const saved = tankOf(
+        await save(tankId, [
+          layoutItem('java-fern', 41),
+          layoutItem('java-fern', 41, 0.2),
+          layoutItem('java-fern', 41, 0.3),
+        ]),
+      );
+      const seeds = seedsOf(saved);
+      expect(seeds[0]).toBe(41);
+      expect(new Set(seeds).size).toBe(3);
+      expect(new Set(saved.plants?.map((p) => p.key)).size).toBe(3);
+    });
+
+    it('keeps the seeds, and the repeats, of a layout that was already saved', async () => {
+      const tankId = await makeTank(h, alice, {
+        layout: [
+          layoutItem('java-fern', 42),
+          layoutItem('java-fern', 42, 0.2),
+          layoutItem('java-fern', 45, 0.3),
+        ],
+      });
+      const saved = tankOf(
+        await save(tankId, [
+          layoutItem('java-fern', 42),
+          layoutItem('java-fern', 42, 0.2),
+          layoutItem('java-fern', 43, 0.3),
+        ]),
+      );
+      expect(seedsOf(saved)).toEqual([42, 42, 43]);
+      expect(saved.plants?.map((p) => p.key)).toEqual(['s42', 's42-2', 's43']);
+    });
+
+    it('is stable: saving the result again changes nothing', async () => {
+      const tankId = await makeTank(h, alice, {
+        layout: [layoutItem('java-fern', 44), layoutItem('java-fern', 48, 0.2)],
+      });
+      const first = tankOf(
+        await save(tankId, [layoutItem('java-fern', 44), layoutItem('java-fern', 44, 0.2)]),
+      );
+      const again = tankOf(await save(tankId, first.decorLayout));
+      expect(seedsOf(again)).toEqual(seedsOf(first));
+    });
+  });
 });
 
 describe('trimming a plant', () => {
