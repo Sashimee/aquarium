@@ -239,12 +239,23 @@ const TOKEN_PATH_PREFIXES = [`${AUTH_BASE_PATH}/reset-password/`, `${AUTH_BASE_P
 // policy stays scoped: the CSRF check falls back to Referer and the default suits every other route.
 const TOKEN_PAGES = new Set(['/reset-password', '/verify-email']);
 
-function isViewerPath(url: string): boolean {
+const NOINDEX_ACCOUNT_PAGES = new Set([
+  '/sign-in',
+  '/sign-up',
+  '/forgot-password',
+  '/reset-password',
+  '/verify-email',
+  '/sessions',
+  '/settings',
+]);
+
+function isNoindexPagePath(url: string): boolean {
   const path = normalizedPathname(url).toLowerCase();
   return (
     path.startsWith(VIEWER_PATH_PREFIX) ||
     path === GALLERY_PAGE_PATH ||
-    path.startsWith(`${GALLERY_PAGE_PATH}/`)
+    path.startsWith(`${GALLERY_PAGE_PATH}/`) ||
+    NOINDEX_ACCOUNT_PAGES.has(path.replace(/\/+$/, ''))
   );
 }
 
@@ -377,7 +388,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
       reply.header('content-security-policy', KTX2_WORKER_CSP);
     }
     if (carriesUrlToken(req.url)) reply.header('referrer-policy', 'no-referrer');
-    if (isViewerPath(req.url)) reply.header('x-robots-tag', 'noindex, nofollow');
+    if (isNoindexPagePath(req.url)) reply.header('x-robots-tag', 'noindex, nofollow');
   });
 
   app.addHook('onRequest', async (req, reply) => {
