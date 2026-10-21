@@ -8,7 +8,7 @@
     "perceptionRangeM": 0.25,
     "preferredZone": "bottom",
     "territorial": false,
-    "traits": ["cave-dweller"]
+    "traits": ["cave-dweller", "glass-grazer"]
   },
   "biome": "freshwater",
   "breeding": {
