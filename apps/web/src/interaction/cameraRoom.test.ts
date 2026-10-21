@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CameraRig, orbitDistanceFor, tankBounds, type CameraLike, type Vec3 } from './camera';
 import { framingScale, TANK_DIMENSIONS } from '../engine/tank/dimensions';
 import { planRoom } from '../scene/room/layout';
+import { roomVolume } from './roomLimit';
 
 type Size = keyof typeof TANK_DIMENSIONS;
 type Preset = 'living-room' | 'office';
@@ -104,5 +105,15 @@ describe('CameraRig room limit', () => {
     rig.setOrbit(Math.PI, 0.1, 3);
     settle(rig);
     expect(cam.pos.z).toBeLessThan(-2);
+  });
+});
+
+describe('roomVolume', () => {
+  it('maps a layout shell to a volume and a missing layout to no limit', () => {
+    expect(roomVolume(null)).toBeNull();
+    const layout = planRoom('office', TANK_DIMENSIONS.standard);
+    const volume = roomVolume(layout);
+    expect(volume?.min.z).toBe(layout.shell.min[2]);
+    expect(volume?.max.y).toBe(layout.shell.max[1]);
   });
 });

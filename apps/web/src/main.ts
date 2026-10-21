@@ -7,6 +7,7 @@ import type { Biome, Collider } from '@aquarium/shared';
 import { colliderDigest } from './fish/simColliders';
 import { queueTankEvents, startFish, type FishHandle } from './fish/start';
 import { CameraRig, orbitDistanceFor, tankBounds } from './interaction/camera';
+import { syncRoomLimit } from './interaction/roomLimit';
 import { BackgroundChoice } from './interaction/background';
 import { bindCameraControls } from './interaction/controls';
 import { SceneDecor } from './interaction/decor/sceneDecor';
@@ -143,6 +144,17 @@ async function boot(): Promise<void> {
       interaction.emit('camera:mode-changed', { mode });
     },
   });
+
+  const { mountRoom, RoomPreference, browserRoomStorage } = await import('./scene/room');
+  const roomPreference = new RoomPreference(browserRoomStorage());
+  const room = mountRoom(engine, roomPreference);
+  const limitToRoom = (): void => syncRoomLimit(rig, room.backdrop.layout);
+  limitToRoom();
+  const stopRoomLimit = [
+    roomPreference.subscribe(limitToRoom),
+    engine.events.on('engine:tank-resized', limitToRoom),
+    engine.events.on('quality:tier-changed', limitToRoom),
+  ];
 
   const stopMotionWatch = watchReducedMotion((reduced) => rig.setReducedMotion(reduced));
   let play: PlaySystem | null = null;
@@ -322,6 +334,8 @@ async function boot(): Promise<void> {
   onPageTeardown(window, () => {
     switches.stop();
     stopResize();
+    for (const off of stopRoomLimit) off();
+    room.dispose();
     stopTankSize();
     tankSize.stop();
     assetWatch.stop();
