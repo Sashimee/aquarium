@@ -11,7 +11,14 @@ import {
   WebGPURenderer,
 } from 'three/webgpu';
 import { applyDayLighting, type DayLightingRig, FRESHWATER_FILL_LEVEL } from './dayLighting';
-import { daylightAt, minuteOfDay } from './daylight';
+import {
+  DEFAULT_LAMP_HOURS,
+  daylightAt,
+  lampPhotoperiod,
+  localMinuteOfDay,
+  type LampHours,
+  type Photoperiod,
+} from './daylight';
 import {
   browserSessionStore,
   type DeviceLossWatch,
@@ -155,6 +162,7 @@ export class Engine {
   private daylightLevel = 1;
   private daylightCheckedAt = -Infinity;
   private daylightAnnounced = false;
+  private photoperiod: Photoperiod = lampPhotoperiod(DEFAULT_LAMP_HOURS);
   private readonly dayRig: DayLightingRig;
   private readonly effects = new EffectsSlot(
     (message, cause) => this.reportError(message, cause),
@@ -400,9 +408,18 @@ export class Engine {
     return this.cleanup.isDisposed;
   }
 
-  /** 0 = hood off (night, moonlight only) .. 1 = full day; follows the local clock or `?clock=`. */
+  /**
+   * 0 = hood off (night, moonlight only) .. 1 = full day. It follows the tank's lamp schedule on
+   * the sim's UTC clock, or `?clock=` read as a UTC time.
+   */
   get daylight(): number {
     return this.daylightLevel;
+  }
+
+  /** Runs the visible hood on the tank's lamp schedule, `equipment.light`. */
+  setLampSchedule(hours: LampHours): void {
+    this.photoperiod = lampPhotoperiod(hours);
+    this.daylightCheckedAt = -Infinity;
   }
 
   /** Whether frames go through a temporal resolve; `engine:temporal-resolve` tells changes. */
@@ -548,7 +565,7 @@ export class Engine {
   private updateDaylight(nowMs: number): void {
     if (nowMs - this.daylightCheckedAt < DAYLIGHT_INTERVAL_MS) return;
     this.daylightCheckedAt = nowMs;
-    const level = daylightAt(this.clock ?? minuteOfDay(new Date()));
+    const level = daylightAt(this.clock ?? localMinuteOfDay(Date.now(), 0), this.photoperiod);
     if (this.daylightAnnounced && Math.abs(level - this.daylightLevel) < DAYLIGHT_EPSILON) return;
     this.daylightAnnounced = true;
     this.daylightLevel = level;

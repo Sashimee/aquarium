@@ -9,7 +9,7 @@ export interface EngineOptions {
   /** Pins the quality tier and disables the probe and adaptation. */
   tier: Tier | null;
   adaptive: boolean;
-  /** Pins the tank clock to these minutes after midnight; null follows the local time. */
+  /** Pins the tank clock to these minutes after UTC midnight; null follows the real time. */
   clock: number | null;
   /** Shows the on-device performance readout. */
   stats: boolean;
