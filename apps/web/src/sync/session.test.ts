@@ -1512,7 +1512,7 @@ describe('Pearls and the T70 request contract', () => {
     await session.setUser(verified);
     await vi.waitFor(() => expect(session.getState().owned).toEqual(['plant:java-fern']));
     api.purchase.mockRejectedValue(apiError(409, 'conflict'));
-    api.wallet.mockResolvedValue({ balance: 500, owned: ['plant:java-fern'] });
+    api.wallet.mockResolvedValue({ balance: 500, owned: ['plant:java-fern'], released: [] });
     await session.purchase('equipment:filter:2', 'Installed.');
     expect(session.getState().owned).toEqual(['plant:java-fern']);
   });
@@ -1704,11 +1704,11 @@ describe('a balance that moves on the server', () => {
     api.wallet.mockResolvedValueOnce(wallet(500, ['plant:java-fern']));
     await session.setUser(verified);
     await vi.waitFor(() => expect(session.getState().owned).toEqual(['plant:java-fern']));
-    api.wallet.mockResolvedValue({ balance: 525, owned: [] });
+    api.wallet.mockResolvedValue({ balance: 525, owned: [], released: ['plant:java-fern'] });
     await session.refreshWallet();
     expect(session.getState().owned).toEqual([]);
     api.purchase.mockRejectedValue(apiError(409, 'conflict'));
-    api.wallet.mockResolvedValue({ balance: 525, owned: ['decor:boulder-01'] });
+    api.wallet.mockResolvedValue({ balance: 525, owned: ['decor:boulder-01'], released: [] });
     await session.purchase('decor:boulder-01', 'Placed.');
     expect(session.getState().owned).toEqual(['decor:boulder-01']);
   });

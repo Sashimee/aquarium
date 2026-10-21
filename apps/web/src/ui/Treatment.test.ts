@@ -7,7 +7,7 @@ import { speciesNameMap } from '../sync/life';
 import type { TankSession } from '../sync/session';
 import { INITIAL_STATE, type SessionState } from '../sync/state';
 import { FishCard } from './FishCard';
-import { DoseWarning, QuarantineSection, Treatment } from './Treatment';
+import { DoseWarning, PendingDoseWarning, QuarantineSection, Treatment } from './Treatment';
 
 const ich = {
   kind: 'ich' as const,
@@ -177,5 +177,31 @@ describe('DoseWarning', () => {
       createElement(DoseWarning, { warnings, cost: null, balance: 100 }),
     );
     expect(html).not.toContain('Buy');
+  });
+});
+
+describe('PendingDoseWarning', () => {
+  const warnings = ['The water already holds a dose.'];
+
+  it('puts the Pearl price of a premium dose into the confirmation', () => {
+    const html = renderToStaticMarkup(
+      createElement(PendingDoseWarning, {
+        pending: { kind: 'ich', potency: 'premium', warnings },
+        balance: 100,
+      }),
+    );
+    expect(html).toContain('Pearls?');
+    expect(html).toContain('60 Pearls left');
+  });
+
+  it('asks for no price when the confirmed dose is the free one', () => {
+    const html = renderToStaticMarkup(
+      createElement(PendingDoseWarning, {
+        pending: { kind: 'ich', potency: 'standard', warnings },
+        balance: 100,
+      }),
+    );
+    expect(html).toContain('The water already holds a dose.');
+    expect(html).not.toContain('Pearls');
   });
 });

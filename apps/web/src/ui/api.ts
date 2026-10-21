@@ -207,6 +207,8 @@ export interface WalletView {
   balance: number;
   /** Item refs the recent ledger shows as bought and not refunded, so the shop can mark them instead of offering a 409. */
   owned: readonly string[];
+  /** Item refs whose latest ledger entry is a refund, so an earlier purchase no longer counts. */
+  released?: readonly string[];
 }
 
 /** The T70 contract: every add-fish names a stage and carries a key, so a retry cannot charge twice. */
@@ -715,7 +717,20 @@ export function createApiClient(
       const res = await send('/api/wallet');
       if (!res.ok) throw await toError(res);
       const body = await parsed(res, walletResponseSchema);
-      return { balance: body.wallet.balance, owned: body.owned };
+      const latest = new Map<string, boolean>();
+      for (const e of body.ledger) {
+        if (e.itemRef === null || latest.has(e.itemRef)) continue;
+        if (e.reason === 'purchase') latest.set(e.itemRef, true);
+        else if (e.reason === 'refund') latest.set(e.itemRef, false);
+      }
+      const held = new Set(body.owned);
+      return {
+        balance: body.wallet.balance,
+        owned: body.owned,
+        released: [...latest]
+          .filter(([ref, bought]) => !bought && !held.has(ref))
+          .map(([ref]) => ref),
+      };
     },
     async purchase(request) {
       const body = validate(purchaseRequestSchema, request);

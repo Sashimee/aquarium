@@ -130,6 +130,14 @@ describe('ReplayDirector', () => {
     }
   });
 
+  it('leaves the visit count out of the rosters it loads, so a replay greets nobody', () => {
+    const { director, seen } = setup(tankFixture({ fish: live, recentVisitDays: 6 }));
+    director.run([{ type: 'reset-roster', shown: 0 }, { type: 'restore' }]);
+    const loads = seen.filter((s) => s.type === 'tank:loaded');
+    expect(loads.length).toBeGreaterThan(0);
+    for (const load of loads) expect(load.payload).not.toHaveProperty('recentVisitDays');
+  });
+
   it('leaves the scene alone once the session has loaded another tank, with no setTank', () => {
     const { director, seen, bus } = setup();
     director.run([{ type: 'reset-roster', shown: 0 }]);

@@ -5,7 +5,7 @@ import {
   type MedicinePotency,
   type Tank,
 } from '@aquarium/shared';
-import { useEffect, useId, useState } from 'react';
+import { useId, useState } from 'react';
 import { movableFish, moveTargets } from '../sync/moveFish';
 import { BUNDLED_ECONOMY } from '../sync/bundledEconomy';
 import { spendQuestion } from '../sync/economy';
@@ -16,13 +16,15 @@ import {
   doseButtonText,
   doseSpend,
   heatTolerantSick,
-  heldFor,
+  emptyHeld,
+  type HeldDose,
   listNames,
   liveMedicine,
   medicineLine,
   OVERDOSE_WARNING,
   planDose,
   premiumPrice,
+  reconcileHeld,
   severityWord,
   sickFish,
   sickKinds,
@@ -67,12 +69,14 @@ export function Treatment({
 }) {
   const id = useId();
   const { spend, notice } = useSpend(session, state.balance);
-  const [heldPending, setPending] = useState<Pending | null>(null);
-  const [heldRefusal, setRefusal] = useState<Refusal | null>(null);
-  useEffect(() => () => setPending(null), [tank.id]);
-  const pending = heldFor(heldPending, tank.id);
-  const refusal = heldFor(heldRefusal, tank.id);
-  const pendingCost = pending && doseSpend(BUNDLED_ECONOMY, pending.kind, pending.potency, true);
+  const [stored, setHeld] = useState<HeldDose<Pending, Refusal>>(() => emptyHeld(tank.id));
+  const held = reconcileHeld(stored, tank.id);
+  if (held !== stored) setHeld(held);
+  const { pending, refusal } = held;
+  const setPending = (next: Pending | null) =>
+    setHeld((was) => ({ ...reconcileHeld(was, tank.id), pending: next }));
+  const setRefusal = (next: Refusal | null) =>
+    setHeld((was) => ({ ...reconcileHeld(was, tank.id), refusal: next }));
   const nowMs = Date.now();
   const kinds = sickKinds(tank);
   const medicine = liveMedicine(tank, nowMs);
@@ -140,7 +144,7 @@ export function Treatment({
       {notice}
       {pending && (
         <Dialog title="Before you dose" tone="loss" onClose={() => setPending(null)}>
-          <DoseWarning warnings={pending.warnings} cost={pendingCost} balance={state.balance} />
+          <PendingDoseWarning pending={pending} balance={state.balance} />
           <div className="row">
             <button
               type="button"
@@ -160,6 +164,17 @@ export function Treatment({
       )}
     </section>
   );
+}
+
+export function PendingDoseWarning({
+  pending,
+  balance,
+}: {
+  pending: Pick<Pending, 'kind' | 'potency' | 'warnings'>;
+  balance: number | null;
+}) {
+  const cost = doseSpend(BUNDLED_ECONOMY, pending.kind, pending.potency, true);
+  return <DoseWarning warnings={pending.warnings} cost={cost} balance={balance} />;
 }
 
 export function DoseWarning({

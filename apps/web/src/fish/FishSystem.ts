@@ -1533,8 +1533,7 @@ export class FishSystem {
     worker.addEventListener('error', this.simErrors.workerFailed);
     sim.onSnapshot((snapshot) => {
       this.stepAwaitingSnapshot = false;
-      this.latestSimTimeS = snapshot.time;
-      this.stream.push(snapshot, performance.now());
+      if (this.stream.push(snapshot, performance.now())) this.latestSimTimeS = snapshot.time;
     });
     sim.onAte((events) => {
       for (const { fishId } of events) {

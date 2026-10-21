@@ -136,8 +136,6 @@ export type PurchaseResponse = z.infer<typeof purchaseResponseSchema>;
 export const purchasableStageSchema = z.enum(['juvenile', 'adult']);
 export type PurchasableStage = z.infer<typeof purchasableStageSchema>;
 
-// What add-fish did before the shop had stages: the fish.stage column default.
-
 const range = z
   .strictObject({ min: priceSchema, max: priceSchema })
   .refine((r) => r.max >= r.min, 'max must not be below min');
