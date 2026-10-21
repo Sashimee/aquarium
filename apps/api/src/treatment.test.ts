@@ -164,6 +164,31 @@ describe('treatment', () => {
         expect((await treat(h, who, tankId, body)).statusCode).toBe(400);
       },
     );
+
+    it.each(['standard', 'premium'] as const)(
+      'rejects %s medicine sent without idempotencyKey and changes nothing',
+      async (potency) => {
+        const { who, tankId } = await sickTank(h);
+        const before = await balance(h, who);
+        const ledgerBefore = await h.database.db
+          .select()
+          .from(schema.ledger)
+          .where(eq(schema.ledger.userId, who.userId));
+        const res = await call(h, who, 'POST', `/api/tanks/${tankId}/treat`, {
+          kind: 'ich',
+          potency,
+        });
+        expect(res.statusCode).toBe(400);
+        expect(JSON.stringify(res.json())).toContain('idempotencyKey');
+        expect(await balance(h, who)).toBe(before);
+        const ledgerAfter = await h.database.db
+          .select()
+          .from(schema.ledger)
+          .where(eq(schema.ledger.userId, who.userId));
+        expect(ledgerAfter).toHaveLength(ledgerBefore.length);
+        expect((await getTank(h, who, tankId)).medicine).toBeNull();
+      },
+    );
   });
 
   describe('standard medicine', () => {
