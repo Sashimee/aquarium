@@ -1,7 +1,7 @@
 import { legacyTintSeed, type Biome } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import { loadPreset } from '../../scene/preset';
-import { DecorEditor } from './editor';
+import { DecorEditor, uniqueSeed } from './editor';
 import { flat, item, LIMITS, must, SPECS, spec } from './fixtures';
 import { footprintOf, overlaps } from './footprint';
 import { numberPieces, splitLayout, type Piece } from './layout';
@@ -297,16 +297,38 @@ describe('unique colour seeds', () => {
     expect(must(e.piece('p1')).item.tintSeed).toBe(probe.tintSeed);
   });
 
-  it('keeps seeds distinct across repeated adds and after a removal', () => {
-    const e = editor();
-    const a = addedItem(e);
-    const b = addedItem(e);
-    const c = addedItem(e);
-    expect(new Set([a.tintSeed, b.tintSeed, c.tintSeed]).size).toBe(3);
-    const keep = [...e.pieces].map((p) => p.item.tintSeed);
-    e.remove('p1');
-    const d = addedItem(e);
-    expect(keep.slice(1)).not.toContain(d.tintSeed);
+  it('keeps a piece added onto a taken hash distinct from every saved piece', () => {
+    const hash = must(addedItem(editor()).tintSeed);
+    const saved: Piece[] = [0, 1, 2].map((n) => ({
+      id: `p${n + 1}`,
+      item: { ...item('boulder-01', n * 0.4 - 1, -2), tintSeed: (hash + n) >>> 0 },
+    }));
+    const e = editor(saved);
+    const fresh = addedItem(e);
+    expect(fresh.tintSeed).toBe((hash + 3) >>> 0);
+  });
+
+  describe('uniqueSeed', () => {
+    it('returns the hash when it is free', () => {
+      expect(uniqueSeed(7, new Set([8, 9]))).toBe(7);
+    });
+
+    it('takes the next seed when the hash is taken', () => {
+      expect(uniqueSeed(7, new Set([7]))).toBe(8);
+    });
+
+    it('skips a run of consecutive taken seeds', () => {
+      expect(uniqueSeed(7, new Set([7, 8, 9, 10]))).toBe(11);
+    });
+
+    it('does not skip a free seed after a gap', () => {
+      expect(uniqueSeed(7, new Set([7, 9]))).toBe(8);
+    });
+
+    it('wraps from 0xffffffff to 0', () => {
+      expect(uniqueSeed(0xffffffff, new Set([0xffffffff]))).toBe(0);
+      expect(uniqueSeed(0xffffffff, new Set([0xffffffff, 0, 1]))).toBe(2);
+    });
   });
 
   it('leaves saved seeds, including legacy duplicates, untouched', () => {
