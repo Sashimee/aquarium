@@ -19,14 +19,14 @@ function setup() {
 describe('tankSeed', () => {
   it('matches the seed the server derives for an owned tank', async () => {
     for (const id of ['a', '3f2c9a10-77b1-4a55-8d6e-0c2e51a9d0aa', 'tank 🐟']) {
-      expect(await tankSeed(id)).toBe(serverSeed(id));
+      expect(tankSeed(id)).toBe(serverSeed(id));
     }
   });
 
   it('reads a visitor tank seed from its id', async () => {
     const seed = 0xdeadbeef;
     const id = publicTankId({ seed });
-    expect(await tankSeed(id)).toBe(seed);
+    expect(tankSeed(id)).toBe(seed);
   });
 });
 
@@ -52,13 +52,6 @@ describe('RoomSeedFeed', () => {
     await vi.waitFor(() => expect(feed.current()).toBe(serverSeed('tank-b')));
     bus.emit('tank:none', {});
     expect(feed.current()).toBe(NO_TANK_SEED);
-  });
-
-  it('lets the last loaded tank win when seeds resolve late', async () => {
-    const { feed, loaded } = setup();
-    loaded('tank-a');
-    loaded('tank-b');
-    await vi.waitFor(() => expect(feed.current()).toBe(serverSeed('tank-b')));
   });
 
   it('gives visitors the seed in their tank id', async () => {

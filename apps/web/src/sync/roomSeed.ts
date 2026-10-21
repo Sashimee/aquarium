@@ -1,18 +1,14 @@
+import { seedOf } from '@aquarium/shared';
 import type { EventBus } from '../engine/events';
 import type { InteractionEvents } from '../interaction/events';
 
 const PUBLIC_TANK = /^public:([0-9a-f]{1,8})$/;
 
-/**
- * The seed the server derives for a tank (`seedOf('tank', id)` in `apps/api/src/public.ts`: the
- * first four bytes of SHA-256 of `tank:<id>`). A visitor's tank id already carries the seed in hex.
- * The API keeps that function private, so `roomSeed.test.ts` pins this one against it.
- */
-export async function tankSeed(tankId: string): Promise<number> {
+/** A visitor's tank id already carries the seed in hex; an owned tank's seed is `seedOf('tank', id)`, as on the server. */
+export function tankSeed(tankId: string): number {
   const visited = PUBLIC_TANK.exec(tankId);
   if (visited?.[1]) return Number.parseInt(visited[1], 16);
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`tank:${tankId}`));
-  return new DataView(digest).getUint32(0);
+  return seedOf('tank', tankId);
 }
 
 export const NO_TANK_SEED = 0;
@@ -23,15 +19,14 @@ export const NO_TANK_SEED = 0;
  */
 export class RoomSeedFeed {
   private seed = NO_TANK_SEED;
-  private latest: string | null = null;
   private readonly listeners = new Set<() => void>();
   private readonly unsubscribe: (() => void)[];
 
   constructor(interaction: EventBus<InteractionEvents>) {
     this.unsubscribe = [
       interaction.on('tank:loaded', ({ tankId }) => this.load(tankId)),
-      interaction.on('tank:unloaded', () => this.set(null, NO_TANK_SEED)),
-      interaction.on('tank:none', () => this.set(null, NO_TANK_SEED)),
+      interaction.on('tank:unloaded', () => this.set(NO_TANK_SEED)),
+      interaction.on('tank:none', () => this.set(NO_TANK_SEED)),
     ];
   }
 
@@ -48,14 +43,10 @@ export class RoomSeedFeed {
   }
 
   private load(tankId: string): void {
-    this.latest = tankId;
-    void tankSeed(tankId).then((seed) => {
-      if (this.latest === tankId) this.set(tankId, seed);
-    });
+    this.set(tankSeed(tankId));
   }
 
-  private set(tankId: string | null, seed: number): void {
-    this.latest = tankId;
+  private set(seed: number): void {
     if (seed === this.seed) return;
     this.seed = seed;
     for (const listener of [...this.listeners]) listener();
