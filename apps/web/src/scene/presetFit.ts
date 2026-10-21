@@ -1,4 +1,9 @@
-import type { DecorItem, PlantPatch, PresetLayout } from '@aquarium/shared';
+import {
+  legacyTintSeed,
+  type DecorItem,
+  type PlantPatch,
+  type PresetLayout,
+} from '@aquarium/shared';
 import { DEFAULT_TANK, sameTank, type TankDimensions } from '../engine/tank/dimensions';
 import { substrateHeight } from '../engine/tank/substrate';
 import type { AssetCatalog } from './assets';
@@ -114,7 +119,12 @@ function fitItem(item: DecorItem, dimensions: TankDimensions, boundsOf: BoundsOf
     y = substrateHeight(dimensions, x, z) + seatOffset * k;
     if (height > 0) scale = Math.min(scale, (waterTop - SURFACE_MARGIN - y) / height);
   }
-  return { ...item, position: [x, y, z], scale: Math.max(scale, MIN_PLANT_SCALE) };
+  return {
+    ...item,
+    tintSeed: item.tintSeed ?? legacyTintSeed(item),
+    position: [x, y, z],
+    scale: Math.max(scale, MIN_PLANT_SCALE),
+  };
 }
 
 function fitPatch(

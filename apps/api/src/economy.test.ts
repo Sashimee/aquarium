@@ -125,7 +125,7 @@ async function createTank(
     name: 'Home',
     biome: 'freshwater',
     ...rest,
-    ...(idempotencyKey !== undefined ? { idempotencyKey } : {}),
+    idempotencyKey: idempotencyKey ?? key(),
   });
 }
 
@@ -909,7 +909,7 @@ describe('requests from a client that predates the shop (#765)', () => {
     expect(read.fish.some((f) => f.species === 'angelfish')).toBe(false);
   });
 
-  it('charges the slot price for a second tank without a key, and 402s on overdraft', async () => {
+  it('charges the slot price for a second tank, and 402s on overdraft', async () => {
     const who = await account(h);
     expect((await createTank(h, who)).statusCode).toBe(201);
     expect(await balance(h, who)).toBe(economy.grants.starting);
@@ -926,7 +926,7 @@ describe('requests from a client that predates the shop (#765)', () => {
     expect(owned).toHaveLength(2);
   });
 
-  it('opens the wallet itself when a keyless paid tank is the first thing an account does', async () => {
+  it('opens the wallet itself when a paid tank is the first thing an account does', async () => {
     const who = await account(h);
     expect((await createTank(h, who)).statusCode).toBe(201);
     expect((await createTank(h, who)).statusCode).toBe(201);
@@ -934,10 +934,13 @@ describe('requests from a client that predates the shop (#765)', () => {
     expect(await balance(h, who)).toBe(economy.grants.starting - slot);
   });
 
-  it('charges bottled bacteria without a key, and 402s on overdraft', async () => {
+  it('charges bottled bacteria, and 402s on overdraft', async () => {
     const { who, tank } = await primed(h);
     const bacteria = () =>
-      call(h, who, 'POST', `/api/tanks/${tank.id}/care`, { type: 'bottled_bacteria' });
+      call(h, who, 'POST', `/api/tanks/${tank.id}/care`, {
+        type: 'bottled_bacteria',
+        idempotencyKey: key(),
+      });
     const price = economy.items.consumables.bottledBacteria;
     await setBalance(h, who, price);
     expect((await bacteria()).statusCode).toBe(200);
@@ -946,6 +949,41 @@ describe('requests from a client that predates the shop (#765)', () => {
     expect(refused.statusCode).toBe(402);
     expect(errorCode(refused)).toBe('insufficient_pearls');
     expect(await balance(h, who)).toBe(0);
+  });
+
+  it('rejects bottled bacteria sent without idempotencyKey and charges nothing', async () => {
+    const { who, tank } = await primed(h);
+    const before = await balance(h, who);
+    const ledgerBefore = (await ledgerOf(h, who)).length;
+    const res = await call(h, who, 'POST', `/api/tanks/${tank.id}/care`, {
+      type: 'bottled_bacteria',
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.stringify(res.json())).toContain('idempotencyKey');
+    expect(await balance(h, who)).toBe(before);
+    expect(await ledgerOf(h, who)).toHaveLength(ledgerBefore);
+    const events = await h.database.db
+      .select()
+      .from(schema.events)
+      .where(and(eq(schema.events.tankId, tank.id), eq(schema.events.kind, 'bottled_bacteria')));
+    expect(events).toHaveLength(0);
+  });
+
+  it('rejects a tank sent without idempotencyKey and creates and charges nothing', async () => {
+    const who = await account(h);
+    expect((await createTank(h, who)).statusCode).toBe(201);
+    const before = await balance(h, who);
+    const ledgerBefore = (await ledgerOf(h, who)).length;
+    const res = await call(h, who, 'POST', '/api/tanks', { name: 'Second', biome: 'freshwater' });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.stringify(res.json())).toContain('idempotencyKey');
+    expect(await balance(h, who)).toBe(before);
+    expect(await ledgerOf(h, who)).toHaveLength(ledgerBefore);
+    const owned = await h.database.db
+      .select()
+      .from(schema.tanks)
+      .where(eq(schema.tanks.ownerId, who.userId));
+    expect(owned).toHaveLength(1);
   });
 });
 

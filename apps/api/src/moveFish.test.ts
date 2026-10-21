@@ -74,6 +74,7 @@ async function makeTank(
   await topUp(h);
   const res = await call(h, who, 'POST', '/api/tanks', {
     name: 'Tank',
+    idempotencyKey: randomUUID(),
     biome: body.biome ?? 'freshwater',
     ...(body.quarantine ? { quarantine: true, size: 'nano30' } : {}),
   });
@@ -281,7 +282,10 @@ describe('moving a fish between tanks', () => {
       const q = await makeTank(h, who, { quarantine: true });
       const fishId = await addFish(h, a, { disease: { kind: 'ich', severity: 0.3 } });
       await addFish(h, q, { disease: { kind: 'ich', severity: 0.2 } });
-      const dosed = await call(h, who, 'POST', `/api/tanks/${q}/treat`, { kind: 'ich' });
+      const dosed = await call(h, who, 'POST', `/api/tanks/${q}/treat`, {
+        kind: 'ich',
+        idempotencyKey: randomUUID(),
+      });
       expect(dosed.statusCode).toBe(200);
       const until = (await getTank(h, who, q)).medicine?.until;
       expect(until).toBeDefined();

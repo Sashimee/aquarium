@@ -175,11 +175,9 @@ export const createTankRequestSchema = z
     biome: playableBiomeSchema,
     size: tankSizeSchema.default('standard'),
     quarantine: z.boolean().default(false),
-    idempotencyKey: idempotencyKeySchema
-      .optional()
-      .describe(
-        'required when the tank costs Pearls: every display tank after the first, any size but standard',
-      ),
+    idempotencyKey: idempotencyKeySchema.describe(
+      'makes a retry replay the first answer; the tank costs Pearls for every display tank after the first and any size but standard',
+    ),
   })
   .refine((v) => !v.quarantine || v.size === QUARANTINE_TANK_SIZE, {
     message: 'a quarantine tank is always nano30',

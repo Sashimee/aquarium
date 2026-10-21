@@ -747,6 +747,7 @@ describe('api client Pearls contract', () => {
   it('refuses bottled bacteria without a key before calling the server', async () => {
     const fetcher = vi.fn();
     const error = await createApiClient(fetcher)
+      // @ts-expect-error the key is required by the contract; this checks schema validation of untyped input
       .care(TANK_A, { type: 'bottled_bacteria' })
       .catch((e) => e);
     expect(error).toBeInstanceOf(ClientValidationError);

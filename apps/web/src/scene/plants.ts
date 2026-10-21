@@ -182,13 +182,15 @@ function writeInstance(mesh: InstancedMesh, index: number, entry: PlantEntry): v
 /** All instances of one plant species, drawn as one InstancedMesh per material. */
 export class PlantGroup {
   readonly object = new Group();
-  readonly total: number;
+  total: number;
   /** The layout plants the instances were built from; null once `setEntry` has moved one. */
   layoutSignature: string | null;
-  private readonly sorted: readonly PlantEntry[];
+  private sorted: readonly PlantEntry[];
   private readonly meshes: InstancedMesh[] = [];
   private readonly materials: MeshStandardNodeMaterial[] = [];
-  private readonly placed: PlantEntry[];
+  private placed: PlantEntry[];
+  /** Instances the meshes were allocated for; `setLive` stays within it. */
+  readonly capacity: number;
   /** Per-instance pump gain (x, z pairs) this group's shaders read. */
   readonly pumpGain: Float32Array;
   private readonly pumpAttributes: InstancedBufferAttribute[] = [];
@@ -197,9 +199,10 @@ export class PlantGroup {
 
   constructor(
     readonly assetId: string,
-    model: LoadedModel,
+    readonly model: LoadedModel,
     entries: readonly PlantEntry[],
     private readonly current: CurrentField,
+    capacity = entries.length,
   ) {
     this.object.name = `plants:${assetId}`;
     const ordered = [...entries].sort((a, b) => a.rank - b.rank);
@@ -207,18 +210,21 @@ export class PlantGroup {
     this.layoutSignature = JSON.stringify(ordered.filter((e) => e.rank < 0));
     this.sorted = ordered;
     this.placed = [...ordered];
-    this.pumpGain = new Float32Array(Math.max(1, ordered.length) * 2);
+    this.capacity = Math.max(1, capacity, ordered.length);
+    this.pumpGain = new Float32Array(this.capacity * 2);
     for (const { geometry, material: source } of model.primitives) {
       const pumpAttribute = new InstancedBufferAttribute(this.pumpGain, 2);
       this.pumpAttributes.push(pumpAttribute);
       const material = createSwayMaterial(source, geometry, assetId, current, pumpAttribute);
       this.materials.push(material);
-      const mesh = new InstancedMesh(geometry, material, Math.max(1, ordered.length));
+      const mesh = new InstancedMesh(geometry, material, this.capacity);
       mesh.name = `${assetId}:${source.name}`;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.frustumCulled = false;
+      mesh.setColorAt(0, colour.setScalar(1));
       ordered.forEach((entry, i) => writeInstance(mesh, i, entry));
+      mesh.count = ordered.length;
       this.meshes.push(mesh);
       this.object.add(mesh);
     }
@@ -239,6 +245,41 @@ export class PlantGroup {
 
   get visible(): number {
     return this.meshes[0]?.count ?? 0;
+  }
+
+  entryAt(index: number): PlantEntry | undefined {
+    return this.placed[index];
+  }
+
+  /**
+   * Resizes one layout plant in place. Unlike `setEntry` it keeps `layoutSignature` current, since
+   * a grown plant is what the layout now asks for, not an edit that has to force a rebuild.
+   */
+  setGrown(index: number, entry: PlantEntry): void {
+    this.placed[index] = entry;
+    this.writePump(index, entry);
+    for (const attr of this.pumpAttributes) attr.needsUpdate = true;
+    for (const mesh of this.meshes) writeInstance(mesh, index, entry);
+    this.layoutSignature = JSON.stringify(this.placed.filter((e) => e.rank < 0));
+  }
+
+  /**
+   * Replaces every instance with `entries` (all shown, whatever their rank) without allocating
+   * new meshes. False when they exceed `capacity`, so the caller builds a larger group.
+   */
+  setLive(entries: readonly PlantEntry[]): boolean {
+    if (entries.length > this.capacity) return false;
+    this.layoutSignature = null;
+    this.sorted = entries.map((e) => (e.rank < 0 ? e : { ...e, rank: -1 }));
+    this.placed = [...this.sorted];
+    this.placed.forEach((entry, i) => {
+      this.writePump(i, entry);
+      for (const mesh of this.meshes) writeInstance(mesh, i, entry);
+    });
+    for (const attr of this.pumpAttributes) attr.needsUpdate = true;
+    for (const mesh of this.meshes) mesh.count = entries.length;
+    this.total = entries.length;
+    return true;
   }
 
   /** Rewrites one instance in place; `index` counts in thinning order, so layout plants come first. */

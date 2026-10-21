@@ -1,5 +1,6 @@
 import { BEHAVIOUR } from './behaviour.ts';
 import { FEEDING, gutForHunger, isScavenger } from './feeding.ts';
+import { FOOD_PARTICLES } from './food.ts';
 import type { SimSpecies } from './species.ts';
 
 export { isScavenger };
@@ -39,6 +40,20 @@ export interface CrewTally {
 }
 
 const mean = (lo: number, hi: number): number => (lo + hi) / 2;
+
+/**
+ * Below the smallest particle there is no settled food left to find, so a forager that also
+ * grazes glass turns to the glass.
+ */
+const SETTLED_FOOD_MIN_PORTIONS = Math.min(...Object.values(FOOD_PARTICLES).map((p) => p.portion));
+
+/**
+ * A bottom forager that grazes glass (a bristlenose pleco) does so only while it is sated or no
+ * food has settled.
+ */
+export function grazesWhenNoFood(sp: SimSpecies): boolean {
+  return sp.walking === null && sp.gait === 'forage' && sp.grazer === 'glass';
+}
 
 /**
  * Film area in m² per hour one crew member clears at full algae cover, averaged over the
@@ -186,7 +201,9 @@ function requireNonNegative(value: number, field: string): void {
  * grazable surfaces: each member clears its film area per hour, of which the share `algae` is
  * covered, so cover falls as dA/dt = −A·Σrate/area and never below zero. Settled food is found by
  * the floor area scavengers sweep (dF/dt = −F·Σsweep/floor) and eaten up to the room each gut has
- * once it has emptied over the step (`FEEDING.gastricEvacuationTauS`). Pure and deterministic.
+ * once it has emptied over the step (`FEEDING.gastricEvacuationTauS`). A hungry forager that also
+ * grazes glass sweeps for food until less than the smallest particle is left and grazes for the
+ * rest of the step; a sated one grazes all of it, as it does live. Pure and deterministic.
  */
 export function crewCleanup(input: CleanupInput): CleanupResult {
   const { crew, species, algae, uneatenFood, dtHours, litFraction, surfaces } = input;
@@ -199,9 +216,11 @@ export function crewCleanup(input: CleanupInput): CleanupResult {
   }
   const graze: number[] = [];
   const sweep: number[] = [];
+  const switches: boolean[] = [];
   const room: number[] = [];
-  let grazeTotal = 0;
-  let sweepTotal = 0;
+  let sweepAll = 0;
+  let sweepSteady = 0;
+  let anySwitch = false;
   const emptied = Math.exp((-dtHours * 3600) / FEEDING.gastricEvacuationTauS);
   for (const member of crew) {
     const sp = species.get(member.species);
@@ -217,27 +236,60 @@ export function crewCleanup(input: CleanupInput): CleanupResult {
     if (member.hunger !== undefined) requireUnit(member.hunger, `hunger of "${member.id}"`);
     const awake = sp.activity === 'nocturnal' ? 1 - litFraction : litFraction;
     const g = member.alive ? algaeAreaPerHour(sp, length) * awake : 0;
-    const s = member.alive ? scavengeSweepPerHour(sp, length) * awake : 0;
     const gut = member.hunger === undefined ? 0 : gutForHunger(member.hunger);
+    const sated =
+      FEEDING.satiationPortions - gut <= FEEDING.satiatedMotivation * FEEDING.satiationPortions;
+    const switcher = grazesWhenNoFood(sp) && g > 0;
+    const switching = switcher && !sated;
+    const s = member.alive && !(switcher && sated) ? scavengeSweepPerHour(sp, length) * awake : 0;
     graze.push(g);
     sweep.push(s);
+    switches.push(switching);
     room.push(s > 0 ? Math.max(0, FEEDING.satiationPortions - gut * emptied) : 0);
-    grazeTotal += g;
-    sweepTotal += s;
+    sweepAll += s;
+    if (!switching) sweepSteady += s;
+    anySwitch ||= switching;
   }
-  const algaeGrazed = algae * (1 - Math.exp((-grazeTotal / surfaces.grazableM2) * dtHours));
-  const found = uneatenFood * (1 - Math.exp((-sweepTotal / surfaces.floorM2) * dtHours));
+  const foodHours = settledFoodHours(uneatenFood, sweepAll, dtHours, surfaces.floorM2, anySwitch);
+  const left = uneatenFood * Math.exp((-sweepAll * foodHours) / surfaces.floorM2);
+  const foundAll = uneatenFood - left;
+  const foundSteady = left * -Math.expm1((-sweepSteady * (dtHours - foodHours)) / surfaces.floorM2);
+  const shares = sweep.map(
+    (s, m) =>
+      (sweepAll > 0 ? (s * foundAll) / sweepAll : 0) +
+      (!switches[m] && sweepSteady > 0 ? (s * foundSteady) / sweepSteady : 0),
+  );
+  const grazed = graze.map((g, m) => g * (switches[m] ? dtHours - foodHours : dtHours));
+  const grazeTotal = grazed.reduce((sum, g) => sum + g, 0);
+  const algaeGrazed = algae * -Math.expm1(-grazeTotal / surfaces.grazableM2);
   // A full scavenger leaves its share for hungrier ones, as at a real food drop.
-  const food = allocate(found, sweep, room);
+  const food = allocate(foundAll + foundSteady, shares, room);
   const perFish: CrewShare[] = [];
   let foodEaten = 0;
   crew.forEach((member, m) => {
-    const a = grazeTotal > 0 ? (algaeGrazed * (graze[m] ?? 0)) / grazeTotal : 0;
+    const a = grazeTotal > 0 ? (algaeGrazed * (grazed[m] ?? 0)) / grazeTotal : 0;
     const f = food[m] ?? 0;
     foodEaten += f;
     if (a > 0 || f > 0) perFish.push({ id: member.id, algae: a, food: f });
   });
   return { algaeGrazed, foodEaten, perFish };
+}
+
+/**
+ * Hours of the step during which at least the smallest particle of settled food is left, with
+ * the whole crew sweeping for it; the whole step when no member turns from food to glass.
+ */
+function settledFoodHours(
+  food: number,
+  sweep: number,
+  dtHours: number,
+  floorM2: number,
+  anySwitch: boolean,
+): number {
+  if (!anySwitch) return dtHours;
+  if (food <= SETTLED_FOOD_MIN_PORTIONS) return 0;
+  if (sweep <= 0) return dtHours;
+  return Math.min(dtHours, (floorM2 * Math.log(food / SETTLED_FOOD_MIN_PORTIONS)) / sweep);
 }
 
 /**
