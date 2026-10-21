@@ -13,6 +13,7 @@ import {
   MAX_UNEATEN_FOOD,
   WATER_CHANGE_FRACTION,
 } from './params.ts';
+import { diluteMedicine, syncTreatment } from './disease.ts';
 import type { LifecycleState } from './types.ts';
 
 const FRESHWATER_FOODS: readonly FoodType[] = ['flakes', 'pellets', 'bloodworms', 'algae-wafer'];
@@ -33,7 +34,15 @@ function accept(
   patch: Partial<Water>,
   chemistry: Chemistry = state.chemistry,
 ): Accepted<LifecycleState> {
-  return { ok: true, value: { ...state, water: { ...state.water, ...patch }, chemistry } };
+  return {
+    ok: true,
+    value: {
+      ...state,
+      water: { ...state.water, ...patch },
+      chemistry,
+      fish: syncTreatment(state.fish, state.medicine),
+    },
+  };
 }
 
 export function applyCare(
@@ -41,6 +50,7 @@ export function applyCare(
   action: CareAction,
   biome: Biome,
   params: ChemistryParameters,
+  nowMs: number,
 ): Accepted<LifecycleState> | Rejection {
   const { water, chemistry } = state;
   switch (action.type) {
@@ -58,7 +68,7 @@ export function applyCare(
     }
     case 'water_change':
       return accept(
-        state,
+        { ...state, medicine: diluteMedicine(state.medicine, nowMs) },
         {
           ammonia: water.ammonia * (1 - WATER_CHANGE_FRACTION),
           nitrate: water.nitrate * (1 - WATER_CHANGE_FRACTION),
@@ -161,6 +171,7 @@ export function applyEating(
   return {
     ok: true,
     value: {
+      medicine: state.medicine,
       chemistry: state.chemistry,
       water: { ...state.water, uneatenFood: Math.max(0, state.water.uneatenFood - total) },
       fish: state.fish.map((f) => {

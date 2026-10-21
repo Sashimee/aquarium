@@ -19,3 +19,4 @@ export * from './reminders.js';
 export * from './social.js';
 export * from './economy.js';
 export * from './collection.js';
+export * from './treatment.js';
