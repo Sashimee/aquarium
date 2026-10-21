@@ -67,10 +67,13 @@ describe('RoomSeedFeed', () => {
     await vi.waitFor(() => expect(feed.current()).toBe(1234567));
   });
 
-  it('stops listening after stop', () => {
-    const { feed, loaded } = setup();
-    feed.stop();
-    loaded('tank-a');
-    expect(feed.current()).toBe(NO_TANK_SEED);
+  it('stops listening after stop', async () => {
+    const bus = new EventBus<InteractionEvents>();
+    const stopped = new RoomSeedFeed(bus);
+    const control = new RoomSeedFeed(bus);
+    stopped.stop();
+    bus.emit('tank:loaded', { tankId: 'tank-a' } as unknown as InteractionEvents['tank:loaded']);
+    await vi.waitFor(() => expect(control.current()).toBe(serverSeed('tank-a')));
+    expect(stopped.current()).toBe(NO_TANK_SEED);
   });
 });

@@ -38,7 +38,7 @@ describe('IdleOrbit on the real rig', () => {
         for (let i = 0; i < 20; i++) rig.update(FRAME);
 
         const startPitch = rig.orbitAngles.pitch;
-        const startDistance = rig.orbitDistance;
+        const startDistance = orbitDistanceFor(framingScale(d));
         const startYaw = rig.orbitAngles.yaw;
         let yaw = startYaw;
         let travelled = 0;
