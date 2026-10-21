@@ -52,6 +52,8 @@ interface SyntheticSource {
   /** Pixel of the snout and of the end of the peduncle; the standard length spans the distance between them. */
   snoutPixel: [number, number];
   tailPixel: [number, number];
+  /** Reference photos the colours were painted by eye from. Verified to exist but not listed as sources: no pixels are reused, so the asset is CC0. */
+  references?: string[];
   paint(tn: number, yn: number): [number, number, number];
 }
 
@@ -289,6 +291,86 @@ function paintGramma(tn: number, yn: number): [number, number, number] {
   if (eye < 0.045) colour = mix([0.02, 0.02, 0.05], [0.7, 0.8, 1], smooth(0.025, 0.045, eye));
   const gill = Math.abs(tn - 0.2 - 0.25 * (0.2 - yn)) < 0.006 && yn < 0.3 && yn > 0.02;
   if (gill) colour = mix(colour, deepViolet, 0.6);
+  return colour;
+}
+
+const WRASSE_TOP: [number, number][] = [
+  [0, 0.017],
+  [0.05, 0.0382],
+  [0.15, 0.0638],
+  [0.3, 0.0765],
+  [0.5, 0.0739],
+  [0.7, 0.0595],
+  [0.85, 0.0467],
+  [1, 0.0357],
+];
+const WRASSE_BOTTOM: [number, number][] = [
+  [0, -0.017],
+  [0.05, -0.034],
+  [0.15, -0.0553],
+  [0.3, -0.068],
+  [0.5, -0.0663],
+  [0.7, -0.0527],
+  [0.85, -0.0408],
+  [1, -0.0306],
+];
+
+function interpolate(keys: [number, number][], t: number): number {
+  const x = Math.min(1, Math.max(0, t));
+  for (let i = 1; i < keys.length; i++) {
+    const [t1, v1] = keys[i] as [number, number];
+    const [t0, v0] = keys[i - 1] as [number, number];
+    if (x <= t1) return v0 + ((v1 - v0) * (x - t0)) / (t1 - t0);
+  }
+  return (keys.at(-1) as [number, number])[1];
+}
+
+/** Bluestreak cleaner wrasse painted from the species' pattern (stripe layout of Bowie, colours of Jens); no photo pixels are reused. */
+export function paintWrasse(tn: number, yn: number): [number, number, number] {
+  const black: [number, number, number] = [0.015, 0.015, 0.03];
+  const blue: [number, number, number] = [0.04, 0.45, 1];
+  const white: [number, number, number] = [0.9, 0.95, 1];
+  const backFront: [number, number, number] = [0.6, 0.55, 0.48];
+  const backRear: [number, number, number] = [0.28, 0.42, 0.8];
+  const back = mix(backFront, backRear, smooth(0.25, 0.85, tn));
+
+  if (tn > 1) {
+    const edge = Math.max(0, Math.abs(yn) - 0.05);
+    let colour = black;
+    colour = mix(colour, blue, smooth(0.012, 0.024, Math.abs(yn) - 0.035) * 0.9);
+    colour = mix(colour, white, smooth(0.012, 0.022, edge));
+    return colour;
+  }
+
+  const top = interpolate(WRASSE_TOP, tn);
+  const bottom = interpolate(WRASSE_BOTTOM, tn);
+  const h = (yn - bottom) / (top - bottom);
+  const rear = smooth(0.3, 1, tn);
+  const stripeTop = 0.66 + 0.16 * rear;
+  const stripeBottom = 0.4 - 0.2 * rear;
+  const bandBottom = stripeBottom - 0.14 - 0.16 * rear;
+  const soft = 0.035;
+
+  if (h > 1) {
+    const out = (yn - top) / 0.06;
+    return mix([0.1, 0.13, 0.24], mix(blue, white, 0.5), smooth(0.35, 0.9, out));
+  }
+  if (h < 0) {
+    const out = (bottom - yn) / 0.05;
+    return mix([0.7, 0.85, 1], white, smooth(0.2, 0.8, out));
+  }
+
+  let colour = mix(white, [0.7, 0.85, 1], smooth(0.1, 0.45, h));
+  colour = mix(colour, blue, smooth(bandBottom - soft, bandBottom + soft, h));
+  colour = mix(colour, black, smooth(stripeBottom - soft, stripeBottom + soft, h));
+  colour = mix(colour, back, smooth(stripeTop - soft, stripeTop + soft, h));
+  const edgeBlue = 0.7 * (1 - smooth(0.02, 0.05, Math.abs(h - stripeTop - 0.04)));
+  colour = mix(colour, blue, edgeBlue * (1 - smooth(0.9, 1, tn)));
+
+  const eyeY = bottom + 0.5 * (top - bottom);
+  const eye = Math.hypot(tn - 0.075, yn - eyeY);
+  if (eye < 0.02) colour = mix(black, [0.78, 0.8, 0.55], smooth(0.011, 0.016, eye));
+  if (eye < 0.011) colour = black;
   return colour;
 }
 
@@ -935,6 +1017,74 @@ export const LOFT_FISH_RECIPES: LoftFishRecipe[] = [
       caudal: { shape: [0.1, 0.18, 0.215, 0.225, 0.215, 0.18, 0.1], spread: 0.05 },
     },
   },
+  {
+    id: 'cleaner-wrasse',
+    species: 'cleaner-wrasse',
+    fallbackLengthM: 0.085,
+    roughness: 0.3,
+    note: 'Labroides dimidiatus: no model exists, so the body is a procedural loft and the colour map is painted from the species pattern, with the stripe layout taken from the CC-BY photo by Mike Bowie, colours from Jens and proportions from Lawrence Hylton (reference only: no photo pixels are reused, so the asset is CC0)',
+    texture: {
+      kind: 'synthetic',
+      width: 1280,
+      height: 512,
+      snoutPixel: [60, 217.6],
+      tailPixel: [1060, 217.6],
+      references: ['wm-labroides-bowie', 'wm-labroides-jens', 'wm-labroides-hylton'],
+      paint: paintWrasse,
+    },
+    spec: {
+      roundness: 2.1,
+      sections: [
+        { t: 0, top: 0.017, bottom: -0.017, halfWidth: 0.012 },
+        { t: 0.05, top: 0.0382, bottom: -0.034, halfWidth: 0.03 },
+        { t: 0.15, top: 0.0638, bottom: -0.0553, halfWidth: 0.045 },
+        { t: 0.3, top: 0.0765, bottom: -0.068, halfWidth: 0.052 },
+        { t: 0.5, top: 0.0739, bottom: -0.0663, halfWidth: 0.05 },
+        { t: 0.7, top: 0.0595, bottom: -0.0527, halfWidth: 0.04 },
+        { t: 0.85, top: 0.0467, bottom: -0.0408, halfWidth: 0.03 },
+        { t: 1, top: 0.0357, bottom: -0.0306, halfWidth: 0.022 },
+      ],
+      fins: [
+        {
+          fin: 'dorsal',
+          from: 0.26,
+          to: 0.94,
+          anchor: 'top',
+          shape: [0.04, 0.05, 0.055, 0.06, 0.06, 0.06, 0.055, 0.045, 0.03],
+          sweep: 0.4,
+        },
+        {
+          fin: 'anal',
+          from: 0.44,
+          to: 0.92,
+          anchor: 'bottom',
+          shape: [0.03, 0.045, 0.05, 0.05, 0.045, 0.03],
+          sweep: 0.4,
+        },
+        {
+          fin: 'pelvic',
+          from: 0.2,
+          to: 0.25,
+          anchor: 'side',
+          flankHeight: 0.05,
+          direction: [0.25, -1],
+          shape: [0.03, 0.06, 0.04],
+          sweep: 0.8,
+        },
+        {
+          fin: 'pectoral',
+          from: 0.18,
+          to: 0.23,
+          anchor: 'side',
+          flankHeight: 0.4,
+          direction: [0.9, -0.3],
+          shape: [0.02, 0.06, 0.05],
+          sweep: 0.5,
+        },
+      ],
+      caudal: { shape: [0.17, 0.19, 0.2, 0.19, 0.17], spread: 0.035 },
+    },
+  },
 ];
 
 export function loftFishPart(
@@ -960,6 +1110,7 @@ export async function buildLoftFish(
   const fromSpecies = speciesLengthM(ctx.repoRoot, recipe.species);
   const standardLengthM = fromSpecies ?? recipe.fallbackLengthM;
   if (recipe.texture.kind === 'photo') ctx.verifySource(recipe.texture.sourceId);
+  else for (const id of recipe.texture.references ?? []) ctx.verifySource(id);
   const { image, project, finUv, finTexture, sources } = await loadTexture(recipe);
   const part = loftFishPart(recipe, standardLengthM, project, finUv, finTexture);
   const translucentFins = finTexture !== undefined;

@@ -23,20 +23,26 @@ export interface DayLightingRig {
   readonly scene: Scene;
   readonly ambientScatter: Color;
   readonly substrateAlbedo: Color;
-  /** The room backdrop's daytime level; the photoperiod scales it down at night. */
+  /** The room backdrop's daytime level; the room's daylight scales it down at night. */
   roomBackgroundIntensity: number;
+  /**
+   * Daylight in the room on the wall clock (`roomDaylightAt`), 0 = night .. 1 = midday. The hood
+   * runs on the lamp schedule instead, so the two are set apart.
+   */
+  roomDaylight: number;
 }
 
 /**
  * The hood colour and intensity are the daytime setting (a preset may change them); `day` (0..1)
- * fades them into the moonlight channel and dims the room around the tank. The room's level is in
- * the environment node, so `scene.environmentIntensity` stays a plain gain.
+ * fades them into the moonlight channel. `rig.roomDaylight` dims the room around the tank. The
+ * room's level is in the environment node, so `scene.environmentIntensity` stays a plain gain.
  */
 export function applyDayLighting(rig: DayLightingRig, day: number): void {
   const { hood, caustics, interior, medium, scene } = rig;
   caustics.setHood(hood.color, hood.intensity, MOONLIGHT, day, rig.substrateAlbedo);
   caustics.lightDirection.value.copy(hood.position).sub(hood.target.position).normalize();
-  const room = ROOM_AT_NIGHT + (1 - ROOM_AT_NIGHT) * day;
+  const outside = Math.min(1, Math.max(0, rig.roomDaylight));
+  const room = ROOM_AT_NIGHT + (1 - ROOM_AT_NIGHT) * outside;
   interior.roomLevel.value = room;
   scene.backgroundIntensity = rig.roomBackgroundIntensity * room;
   medium.hoodInScatter.value.copy(caustics.lightRadiance.value).multiplyScalar(1 / (4 * Math.PI));

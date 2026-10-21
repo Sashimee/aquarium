@@ -1,6 +1,6 @@
 import type { Tank } from '@aquarium/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ApiClient } from '../ui/api';
+import { ApiRequestError, type ApiClient } from '../ui/api';
 import {
   apiError,
   FISH_1,
@@ -39,6 +39,7 @@ function apiMocks() {
     saveLight: vi.fn(),
     netFish: vi.fn(),
     care: vi.fn(),
+    treat: vi.fn(),
     reportAte: vi.fn(),
     shareTank: vi.fn(),
     rotateShare: vi.fn(),
@@ -1414,6 +1415,50 @@ describe('Pearls and the T70 request contract', () => {
     expect(session.getState().notice).toBe('Installed.');
   });
 
+  describe('wave maker tier', () => {
+    const withWaveMaker = (tank: Tank, tier: number): Tank => ({
+      ...tank,
+      equipment: { ...tank.equipment, waveMaker: { tier } },
+    });
+    const watch = (rec: ReturnType<typeof setup>['rec']) => {
+      const seen: { tankId: string; tier: number }[] = [];
+      rec.bus.on('tank:wave-maker', (e) => seen.push(e));
+      return seen;
+    };
+
+    it('announces each tank own tier on load and on a switch', async () => {
+      const { rec, session } = setup([
+        withWaveMaker(tankFixture({ id: TANK_A }), 0),
+        withWaveMaker(tankFixture({ id: TANK_B }), 2),
+      ]);
+      const seen = watch(rec);
+      await session.setUser(verified);
+      await session.select(TANK_B);
+      expect(seen).toEqual([
+        { tankId: TANK_A, tier: 0 },
+        { tankId: TANK_B, tier: 2 },
+      ]);
+    });
+
+    it('announces a bought or upgraded wave maker, and only when the tier changes', async () => {
+      const { api, rec, session } = setup();
+      const seen = watch(rec);
+      await session.setUser(verified);
+      api.purchase.mockResolvedValue({ wallet: { balance: 250 }, entry: {}, replayed: false });
+      let minute = 1;
+      const buy = async (tier: number) => {
+        api.tank.mockResolvedValue(
+          withWaveMaker(tankFixture({ lastTickAt: `2026-02-01T12:0${minute++}:00.000Z` }), tier),
+        );
+        await session.purchase(`equipment:waveMaker:${tier}`, 'Installed.');
+      };
+      await buy(1);
+      await buy(1);
+      await buy(3);
+      expect(seen.map((e) => e.tier)).toEqual([0, 1, 3]);
+    });
+  });
+
   it('reuses the purchase key on a retry', async () => {
     const { api, session } = setup();
     await session.setUser(verified);
@@ -1625,5 +1670,129 @@ describe('a balance that moves on the server', () => {
     expect(keys[1]).toBe(keys[0]);
     expect(keys[2]).toBe(keys[0]);
     session.dispose();
+  });
+});
+
+describe('treating a tank', () => {
+  const sick = fishFixture(FISH_1, {
+    disease: {
+      kind: 'ich',
+      since: '2026-02-01T00:00:00.000Z',
+      severity: 0.4,
+      treatedUntil: null,
+    },
+  });
+  const keyOf = (call: unknown) => (call as { idempotencyKey: string }).idempotencyKey;
+  const dosed = (overrides: Partial<Tank> = {}) =>
+    tankFixture({ fish: [sick], lastTickAt: '2026-02-01T12:01:00.000Z', ...overrides });
+  const sickTank = () => [tankFixture({ fish: [sick] })];
+
+  it('sends the dose with a key, applies the tank and the new balance for premium', async () => {
+    const { api, session } = setup(sickTank());
+    await session.setUser(verified);
+    api.treat.mockResolvedValue({
+      tank: dosed({
+        medicine: {
+          kind: 'ich',
+          potency: 'premium',
+          doses: 1,
+          until: '2026-02-03T12:00:00.000Z',
+        },
+      }),
+      overdose: false,
+      wallet: { balance: 460 },
+      entry: null,
+    });
+    const outcome = await session.treat('ich', 'premium');
+    expect(outcome).toEqual({ ok: true, overdose: false, refusal: null });
+    expect(api.treat).toHaveBeenCalledWith(TANK_A, {
+      kind: 'ich',
+      potency: 'premium',
+      idempotencyKey: expect.stringMatching(/^[A-Za-z0-9_-]{8,}$/),
+    });
+    const state = session.getState();
+    expect(state.tanks[0]?.medicine?.doses).toBe(1);
+    expect(state.notice).toContain('ich medicine is in the water');
+  });
+
+  it('leaves the balance alone for the free standard medicine', async () => {
+    const { api, session } = setup(sickTank());
+    await session.setUser(verified);
+    await vi.waitFor(() => expect(session.getState().balance).toBe(500));
+    api.treat.mockResolvedValue({ tank: dosed(), overdose: false, wallet: null, entry: null });
+    await session.treat('ich', 'standard');
+    expect(session.getState().balance).toBe(500);
+  });
+
+  it('flags an overdose in the notice', async () => {
+    const { api, session } = setup(sickTank());
+    await session.setUser(verified);
+    api.treat.mockResolvedValue({ tank: dosed(), overdose: true, wallet: null, entry: null });
+    const outcome = await session.treat('ich', 'standard');
+    expect(outcome.overdose).toBe(true);
+    expect(session.getState().notice).toContain('more than one dose');
+  });
+
+  it('reuses the key after an unknown outcome, then starts a new one', async () => {
+    const { api, session } = setup(sickTank());
+    await session.setUser(verified);
+    api.treat
+      .mockRejectedValueOnce(apiError(0, 'network'))
+      .mockResolvedValue({ tank: dosed(), overdose: false, wallet: null, entry: null });
+    const first = await session.treat('ich', 'premium');
+    expect(first.ok).toBe(false);
+    expect(first.refusal).toBeNull();
+    expect(session.getState().error).toMatch(/Could not reach the server/);
+    await session.treat('ich', 'premium');
+    await session.treat('ich', 'premium');
+    const keys = api.treat.mock.calls.map((c) => keyOf(c[1]));
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[0]);
+  });
+
+  it('hands back the 409 reason and does not keep the key', async () => {
+    const { api, session } = setup(sickTank());
+    await session.setUser(verified);
+    const water = 'Change the water until only a trace is left, then switch.';
+    api.treat.mockRejectedValue(new ApiRequestError(409, 'conflict', water));
+    const refused = await session.treat('ich', 'standard');
+    expect(refused).toEqual({ ok: false, overdose: false, refusal: water });
+    await session.treat('ich', 'standard');
+    const keys = api.treat.mock.calls.map((c) => keyOf(c[1]));
+    expect(keys[1]).not.toBe(keys[0]);
+  });
+
+  it('starts the shortfall flow when the server refuses for too few Pearls', async () => {
+    const { api, session } = setup(sickTank());
+    await session.setUser(verified);
+    api.treat.mockRejectedValue(apiError(402, 'insufficient_pearls'));
+    api.wallet.mockResolvedValue({ balance: 12, owned: [] });
+    const outcome = await session.treat('ich', 'premium');
+    expect(outcome.ok).toBe(false);
+    expect(session.getState().pearlsRefused).toBe(true);
+    await vi.waitFor(() => expect(session.getState().balance).toBe(12));
+  });
+
+  it('sends nothing when no tank is active', async () => {
+    const { api, session } = setup();
+    expect(await session.treat('ich', 'standard')).toEqual({
+      ok: false,
+      overdose: false,
+      refusal: null,
+    });
+    expect(api.treat).not.toHaveBeenCalled();
+  });
+
+  it('creates a quarantine tank with the nano size and makes it active', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    api.createTank.mockResolvedValue(
+      tankFixture({ id: TANK_B, name: 'Quarantine', quarantine: true, size: 'nano30' }),
+    );
+    await session.createTank('Quarantine', 'freshwater', 'nano30', true);
+    expect(api.createTank).toHaveBeenCalledWith(
+      expect.objectContaining({ quarantine: true, size: 'nano30' }),
+    );
+    expect(session.getState().activeId).toBe(TANK_B);
   });
 });

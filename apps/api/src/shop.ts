@@ -29,6 +29,7 @@ import {
   credit,
   findReplay,
   lockWallet,
+  ownedRefs,
   owns,
   serverKey,
   spend,
@@ -195,6 +196,7 @@ export function registerShopRoutes(ctx: ShopContext): void {
         return walletResponseSchema.parse({
           wallet: { balance: await balanceOf(tx, user.id) },
           ledger: rows.map(toEntry),
+          owned: await ownedRefs(tx, user.id),
         });
       });
     }),

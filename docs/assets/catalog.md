@@ -30,6 +30,8 @@ Curated for T05 (#5), checked 2026-10-12. Ranks are by fit for a photorealistic 
 | Fairy cichlid, Neolamprologus brichardi (T48) | no usable reference photo (gap) | none: the only candidate, `Neolamprologus brichardi femmina.jpg`, is described by its author as N. olivaceus |
 | Anemone (host) | no photoreal free model | procedural TSL |
 
+Licence rule for painted loft fish: when the colours are painted by eye from reference photos and no photo pixels are reused, the asset is CC0 with `sources: []` (royal gramma, cleaner wrasse). The photos stay in `assets/manifest.json` and CREDITS.md as reference photos and are named in the recipe note. A photo only becomes a `sources` entry (carrying its licence, attribution and modifications) when its pixels are projected onto the model, as for the bronze corydoras. Either licence is acceptable; CC-BY sources need attribution in both files.
+
 ## CC-BY-SA (allowed for reference photos only)
 
 Alex approved CC BY-SA for three reference-photo sets (issue #29), used only as fallback references for the procedural loft species: Corydoras aeneus (`wm-cory-aeneus-gabs-01`, `-03`; Gabriel Resende Veiga, CC BY-SA 4.0), Gramma loreto (`wm-gramma-loreto-llez`; H. Zell, CC BY-SA 3.0) and Pterapogon kauderni (`wm-banggai-stang-8zz`, `-10zz`; David J. Stang, CC BY-SA 4.0). ShareAlike applies to any texture derived from them, so the pipeline must keep such textures separately attributed and under the same licence; the CC0 and CC-BY references remain the safer first choice. Full attribution is in `CREDITS.md`. No CC-BY-SA 3D models were selected, and other CC-BY-SA photos (for example further Commons yellow tang shots) remain unused.

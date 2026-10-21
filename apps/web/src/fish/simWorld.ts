@@ -4,6 +4,7 @@ import type {
   FishSpawn,
   SimReady,
   SimToy,
+  WaveMakerSettings,
   TankSpaceWorldConfig,
   Visitor,
 } from '@aquarium/sim';
@@ -22,6 +23,7 @@ export class SimWorldSpec {
   private simAnchors: readonly Anchor[] = [];
   private simDecor: readonly Collider[] = [];
   private simToys: readonly SimToy[] = [];
+  private simWaveMaker: WaveMakerSettings | null = null;
 
   constructor(
     private demo: DemoTank,
@@ -59,6 +61,15 @@ export class SimWorldSpec {
 
   setToys(toys: readonly SimToy[]): void {
     this.simToys = toys;
+  }
+
+  /** The tank's wave maker, or null for none; a world's config has none, so every new world gets it. */
+  get waveMaker(): WaveMakerSettings | null {
+    return this.simWaveMaker;
+  }
+
+  setWaveMaker(settings: WaveMakerSettings | null): void {
+    this.simWaveMaker = settings;
   }
 
   /**
@@ -161,6 +172,7 @@ export interface WorldControls {
   setDecor(colliders: readonly Collider[]): void;
   setAnchors(anchors: readonly Anchor[]): void;
   setToys(toys: readonly SimToy[]): void;
+  setWaveMaker(settings: WaveMakerSettings | null): void;
   setVisitor(visitor: Visitor | null): void;
   start(): void;
 }
@@ -196,6 +208,7 @@ export async function startWorld(
   if (decor !== null) sim.setDecor(decor);
   if (anchors !== null) sim.setAnchors(anchors);
   if (spec.toys.length > 0) sim.setToys(spec.toys);
+  if (spec.waveMaker !== null) sim.setWaveMaker(spec.waveMaker);
   for (const { id, stage } of staleStages(config.fish, (simId) => hooks.stage(simId))) {
     sim.setStage(id, stage);
   }

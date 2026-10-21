@@ -17,6 +17,7 @@ import {
   quatFromYawPitchRoll,
   Rng,
   SimClient,
+  waveMakerForTier,
   sinkingCarcass,
   SnapshotField,
   STEP_DT,
@@ -789,6 +790,14 @@ export class FishSystem {
     if (this.disposed) return;
     this.spec.setToys(toys);
     if (this.simReady) this.sim.setToys(toys);
+  }
+
+  /** The tank's wave maker by equipment tier, 0 for none; kept for later worlds like toys. */
+  setWaveMakerTier(tier: number): void {
+    if (this.disposed) return;
+    const settings = waveMakerForTier(tier);
+    this.spec.setWaveMaker(settings);
+    if (this.simReady) this.sim.setWaveMaker(settings);
   }
 
   /**
