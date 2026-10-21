@@ -81,6 +81,7 @@ import {
 } from './earn.ts';
 import { registerShopRoutes } from './shop.ts';
 import { backgroundRef, licenseFor } from './items.ts';
+import type { Presets } from './presets.ts';
 import { legacyKey, legacyStage } from './legacyRequests.ts';
 import { findReplay, lockUserRow, lockWallet, owns, spend } from './wallet.ts';
 import { apiError, HttpError } from './errors.ts';
@@ -124,6 +125,7 @@ export interface TankRouteDeps {
   limiter: RateLimiter;
   limits: CareLimits;
   economy: Economy;
+  presets: Presets;
   currentUser: (req: FastifyRequest) => Promise<SessionUser | null>;
 }
 
@@ -532,7 +534,8 @@ async function render(
 }
 
 export function registerTankRoutes(deps: TankRouteDeps): void {
-  const { app, database, species, chemistryParams, clock, limiter, limits, economy } = deps;
+  const { app, database, species, chemistryParams, clock, limiter, limits, economy, presets } =
+    deps;
 
   async function authorize(req: FastifyRequest, requireVerified = true): Promise<SessionUser> {
     const user = await deps.currentUser(req);
@@ -593,21 +596,20 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
     if (!(await owns(tx, userId, backgroundRef(backgroundId)))) throw buyFirst('That background');
   }
 
-  // A tank whose layout was never saved shows the biome preset, which the server doesn't know, so
-  // the first save can't be compared against it (issue filed for T71).
   async function requireOwnedPieces(
     tx: Tx,
     userId: string,
     tank: TankRow,
     layout: readonly { assetId: string }[],
   ): Promise<void> {
-    if (tank.decorLayout === null) return;
     const count = (items: readonly { assetId: string }[]) => {
       const out = new Map<string, number>();
       for (const { assetId } of items) out.set(assetId, (out.get(assetId) ?? 0) + 1);
       return out;
     };
-    const before = count(storedLayout(tank));
+    const shown =
+      tank.decorLayout === null ? (presets[tank.biome]?.decor ?? []) : storedLayout(tank);
+    const before = count(shown);
     const needed = new Set<string>();
     for (const [assetId, n] of count(layout)) {
       if (assetId === VACATION_FEEDER_ASSET_ID || n <= (before.get(assetId) ?? 0)) continue;
@@ -854,6 +856,8 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
             ),
           );
         }
+        const equipment =
+          body.light === undefined ? undefined : equipmentSchema.parse(ticked.tank.equipment);
         await requireOwnedBackground(tx, user.id, ticked.tank, body.backgroundId);
         if (body.decorLayout !== undefined) {
           await requireOwnedPieces(tx, user.id, ticked.tank, body.decorLayout);
@@ -863,15 +867,9 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           .set({
             ...(body.backgroundId !== undefined ? { backgroundId: body.backgroundId } : {}),
             ...(body.name !== undefined ? { name: body.name } : {}),
-            ...(body.light !== undefined
+            ...(equipment !== undefined && body.light !== undefined
               ? {
-                  equipment: {
-                    ...equipmentSchema.parse(ticked.tank.equipment),
-                    light: {
-                      tier: equipmentSchema.parse(ticked.tank.equipment).light.tier,
-                      ...body.light,
-                    },
-                  },
+                  equipment: { ...equipment, light: { tier: equipment.light.tier, ...body.light } },
                 }
               : {}),
             ...(body.decorLayout !== undefined
@@ -992,7 +990,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       const itemRef = `species:${spec.id}:${stage}`;
       const result = await withTank(user, tankId, async (tx, ticked) => {
         const nowMs = clock.now();
-        await lockWallet(tx, economy, user.id, nowMs);
+        await lockWallet(tx, economy, user.id, nowMs, true);
         const replay = await findReplay(tx, user.id, idempotencyKey, itemRef);
         if (replay) return { tank: await render(tx, ticked), created: false };
         if (spec.biome !== ticked.tank.biome) {
@@ -1098,7 +1096,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
         const bacteriaKey =
           action.type === 'bottled_bacteria' ? legacyKey(action.idempotencyKey) : '';
         if (action.type === 'bottled_bacteria') {
-          await lockWallet(tx, economy, user.id, nowMs);
+          await lockWallet(tx, economy, user.id, nowMs, true);
           const replay = await findReplay(tx, user.id, bacteriaKey, bacteriaRef);
           if (replay) return { tank: await render(tx, ticked) };
         }

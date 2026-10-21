@@ -40,7 +40,12 @@ async function createTank(page: Page): Promise<string> {
   const { id } = (await created.json()) as { id: string };
   const fish = await page.request.post(`/api/tanks/${id}/fish`, {
     ...post,
-    data: { species: 'betta', name: 'Sprite' },
+    data: {
+      species: 'betta',
+      name: 'Sprite',
+      stage: 'juvenile',
+      idempotencyKey: crypto.randomUUID(),
+    },
   });
   expect(fish.ok(), 'add fish').toBe(true);
   return id;

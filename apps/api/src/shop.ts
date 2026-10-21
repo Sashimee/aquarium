@@ -114,7 +114,7 @@ export function registerShopRoutes(ctx: ShopContext): void {
     item: Item,
   ): Promise<PurchaseResponse> {
     const nowMs = clock.now();
-    await lockWallet(tx, economy, user.id, nowMs);
+    await lockWallet(tx, economy, user.id, nowMs, ticked !== null);
     const replay = await findReplay(tx, user.id, body.idempotencyKey, body.itemRef);
     if (replay) return respond(replay);
 

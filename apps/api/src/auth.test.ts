@@ -20,12 +20,12 @@ const median = (xs: number[]) => {
   return sorted.length % 2 ? (sorted[mid] ?? 0) : ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2;
 };
 
-// Hashing dominates a fresh sign-up (~65 ms), so a repeat that skips it shows a gap of ~0.9 of the
-// fresh time and a second hash ~1.0. Load stretches both halves of an
+// Hashing dominates a fresh sign-up (~25 ms on CI), so a repeat that skips it shows a gap of ~0.9 of
+// the fresh time and a second hash ~1.0. Load stretches both halves of an
 // adjacent pair together, so the median pair gap is bounded relative to the fresh median (the
 // reference path, which a repeat cannot inflate or shrink) instead of in absolute
-// milliseconds. The bound is 50%, so the detection floor is half a hash, ~33 ms on a quiet host,
-// while a hash skipped or doubled shows ~1.0 or more. A tighter 25% flaked under load (0.2532,
+// milliseconds. The bound is 50% of the fresh time, ~12 ms at 25 ms, so a skipped hash is only caught
+// while the hash is more than half of the fresh time; a doubled one shows ~1.0 or more. A tighter 25% flaked under load (0.2532,
 // #218) because the median gap of a loaded runner moves by that much without any leak. The bound
 // grows with load: fine for CPU-bound leaks like a hash, looser for I/O-bound ones. A repeat is
 // legitimately ~1-3 ms faster (Better Auth's extra inserts for a new address); accepted skew.

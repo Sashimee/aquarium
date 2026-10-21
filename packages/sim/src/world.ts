@@ -28,6 +28,13 @@ import {
 } from './species.ts';
 import type { SimToy, ToyNudge } from './toys.ts';
 import { Walkers } from './walk.ts';
+import {
+  Currents,
+  WAVE_MAKER,
+  type FlowBounds,
+  type FlowField,
+  type WaveMakerSettings,
+} from './waveMaker.ts';
 
 export const STEP_HZ = 30;
 export const STEP_DT = 1 / STEP_HZ;
@@ -138,6 +145,8 @@ interface WorldConfigBase {
   readonly anchors?: readonly Anchor[];
   /** Tank light, 0 (dark) to 1 (full day). */
   readonly light?: number;
+  /** The tank's wave maker; none when left out. */
+  readonly waveMaker?: WaveMakerSettings | null;
 }
 
 /**
@@ -289,6 +298,8 @@ export class World {
   readonly behaviour: Behaviour;
   /** Shrimp and other walkers: the surface they stand on, their heading, legs and tail-flips. */
   readonly walkers: Walkers;
+  /** The wave maker's current where each fish is, and how the fish take it. */
+  readonly currents: Currents;
   /** Tank and hard decor: what no fish body may enter. */
   readonly sceneSdf: Sdf;
   readonly substrateSdf: Sdf;
@@ -342,6 +353,8 @@ export class World {
   private readonly probeNormal = new Float64Array(3);
   private readonly previous = new Float64Array(3);
   private readonly turnNormal = new Float64Array(3);
+  private readonly flowScratch = new Float64Array(3);
+  private readonly driftNormal = new Float64Array(3);
 
   get count(): number {
     return this._count;
@@ -543,6 +556,8 @@ export class World {
       return fit;
     });
     this.food = new FoodStore(this.basin);
+    this.currents = new Currents(n);
+    this.currents.set(this.flowBounds(), config.waveMaker ?? null);
     this.behaviour = new Behaviour(this);
     fits.forEach((fit, i) => this.seedFish(i, fit));
     this.behaviour.setAnchors(config.anchors ?? []);
@@ -573,6 +588,26 @@ export class World {
 
   setLight(level: number): void {
     this.behaviour.setLight(level);
+  }
+
+  /** Installs, changes or (with null) removes the wave maker. */
+  setWaveMaker(settings: WaveMakerSettings | null): void {
+    this.currents.set(this.flowBounds(), settings);
+  }
+
+  /** The wave maker's free-stream current, or null without one; sample it at `time`. */
+  get flowField(): FlowField | null {
+    return this.currents.flowField;
+  }
+
+  /** 1 per fish that is seeking a refuge from the wave maker's flow. */
+  get flowShelter(): Uint8Array {
+    return this.currents.shelter;
+  }
+
+  private flowBounds(): FlowBounds {
+    const { minX, maxX, minZ, maxZ, minY, maxY } = this.basin;
+    return { minX, maxX, minZ, maxZ, minY, maxY };
   }
 
   /**
@@ -1099,6 +1134,7 @@ export class World {
     // A loner's group is its own index, so loners after the removed fish need theirs renumbered.
     for (let i = 0; i < n; i++) this.schoolGroup[i] = this.groupOf(i);
     this.walkers.resize(edit);
+    this.currents.resize(edit);
     this.behaviour.resize(edit);
   }
 
@@ -1120,6 +1156,7 @@ export class World {
       this.forward[i * 3 + 2] = Math.cos(y) * cp;
     }
     pairwiseDistanceSq(this.position, n, this.distSq);
+    this.currents.update(this, STEP_DT);
     this.behaviour.update();
     const walker = this.walker;
     for (let i = 0; i < n; i++) if (walker[i] === 0) this.steer(i);
@@ -1315,6 +1352,20 @@ export class World {
     const bandTarget = clamp(py, Math.min(bandLo, bandHi), Math.max(bandLo, bandHi));
     const vyLimit = cruiseBase * STEERING.depthMaxSpeedFraction;
     dy += clamp((bandTarget - py) / STEERING.depthTauS, -vyLimit, vyLimit);
+    const flowing = this.currents.active;
+    const flow = this.flowScratch;
+    if (
+      flowing &&
+      this.currents.shelter[i] === 1 &&
+      !plan.homing &&
+      plan.state !== FishState.Startle &&
+      (this.behaviour.feeding.target[i] ?? -1) < 0 &&
+      this.currents.refuge(this, i, flow)
+    ) {
+      dx += (flow[0] ?? 0) * cruiseBase;
+      dy += (flow[1] ?? 0) * cruiseBase;
+      dz += (flow[2] ?? 0) * cruiseBase;
+    }
 
     const deadEndLeft = Math.max(0, (this.deadEndTimer[i] ?? 0) - dt);
     this.deadEndTimer[i] = deadEndLeft;
@@ -1680,6 +1731,21 @@ export class World {
     }
     this.state[i] = plan.state === FishState.Cruise ? state : plan.state;
 
+    // Everything above is the velocity the fish wants over the ground; it swims that less the
+    // current it can hold against, so a fish with nowhere to go heads upstream (rheotaxis).
+    let holdX = 0;
+    let holdY = 0;
+    let holdZ = 0;
+    if (flowing) {
+      this.currents.counter(this, i, flow);
+      holdX = flow[0] ?? 0;
+      holdY = flow[1] ?? 0;
+      holdZ = flow[2] ?? 0;
+      dx -= holdX;
+      dy -= holdY;
+      dz -= holdZ;
+    }
+
     // Neighbour sets change discretely; a short reaction lag keeps the heading from twitching.
     // An escape is a reflex and skips it.
     const lag =
@@ -1747,7 +1813,8 @@ export class World {
       // Arrival (Reynolds 1999): slow to a stop at the station, and never press on past it
       // toward the food, where the body has no room left to turn.
       const inside = toFood < plan.arrival && fx * (plan.seekX - px) + fz * (plan.seekZ - pz) > 0;
-      const cap = inside ? 0 : toStation / STEERING.standOffBrakeS;
+      const upstream = Math.max(0, -(holdX * fx + holdY * fy + holdZ * fz));
+      const cap = (inside ? 0 : toStation / STEERING.standOffBrakeS) + upstream;
       this.targetSpeed[i] = Math.min(this.targetSpeed[i] ?? 0, cap);
     }
     if (!Number.isNaN(plan.yaw)) this.targetYaw[i] = plan.yaw;
@@ -2149,9 +2216,11 @@ export class World {
     prev[0] = this.position[o] ?? 0;
     prev[1] = this.position[o + 1] ?? 0;
     prev[2] = this.position[o + 2] ?? 0;
-    this.position[o] = (prev[0] ?? 0) + fx * nextV * dt;
-    this.position[o + 1] = (prev[1] ?? 0) + fy * nextV * dt;
-    this.position[o + 2] = (prev[2] ?? 0) + fz * nextV * dt;
+    const drift = this.flowScratch;
+    this.driftOf(i, fx, fy, fz, drift);
+    this.position[o] = (prev[0] ?? 0) + (fx * nextV + (drift[0] ?? 0)) * dt;
+    this.position[o + 1] = (prev[1] ?? 0) + (fy * nextV + (drift[1] ?? 0)) * dt;
+    this.position[o + 2] = (prev[2] ?? 0) + (fz * nextV + (drift[2] ?? 0)) * dt;
     this.speed[i] = nextV;
 
     const nrm = this.normal;
@@ -2357,6 +2426,37 @@ export class World {
   }
 
   /** Clearance of the spine sample nearest a surface, with that surface's normal in `nrm`. */
+  /**
+   * How far the current carries fish `i` this step, into `out`: its local flow, less any push
+   * into a surface the body is about to touch, so the water slides it along glass and rock
+   * rather than pinning it there.
+   */
+  private driftOf(i: number, fx: number, fy: number, fz: number, out: Float64Array): void {
+    const o = i * 3;
+    const flow = this.currents.flow;
+    let vx = flow[o] ?? 0;
+    let vy = flow[o + 1] ?? 0;
+    let vz = flow[o + 2] ?? 0;
+    const reach =
+      Math.hypot(vx, vy, vz) * STEP_DT +
+      WAVE_MAKER.holdfastGapM +
+      (BEHAVIOUR.bodySampleOffsets[0] ?? 0) * (this.bodyLength[i] ?? 0) +
+      (this.thickness[i] ?? 0);
+    if ((vx !== 0 || vy !== 0 || vz !== 0) && (this.currents.room[i] ?? 0) < reach) {
+      const n = this.driftNormal;
+      const gap = this.nearestSurface(i, fx, fy, fz, n);
+      const into = vx * (n[0] ?? 0) + vy * (n[1] ?? 0) + vz * (n[2] ?? 0);
+      if (into < 0 && gap < -into * STEP_DT + WAVE_MAKER.holdfastGapM) {
+        vx -= into * (n[0] ?? 0);
+        vy -= into * (n[1] ?? 0);
+        vz -= into * (n[2] ?? 0);
+      }
+    }
+    out[0] = vx;
+    out[1] = vy;
+    out[2] = vz;
+  }
+
   private nearestSurface(i: number, fx: number, fy: number, fz: number, nrm: Float64Array): number {
     const o = i * 3;
     const length = this.bodyLength[i] ?? 0;

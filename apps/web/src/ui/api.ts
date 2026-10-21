@@ -31,6 +31,9 @@ import {
   signInRequestSchema,
   signUpRequestSchema,
   userSchema,
+  walletResponseSchema,
+  purchaseRequestSchema,
+  purchaseResponseSchema,
   type AchievementList,
   type AteReport,
   type BackgroundId,
@@ -41,6 +44,9 @@ import {
   type Credits,
   type CreateTankRequest,
   type AddFishRequest,
+  type LightSchedule,
+  type PurchasableStage,
+  type PurchaseResponse,
   type SpeciesSummary,
   type Tank,
   type ErrorCode,
@@ -171,6 +177,22 @@ async function toError(res: Response): Promise<ApiRequestError> {
   );
 }
 
+/** The T70 contract: every add-fish names a stage and carries a key, so a retry cannot charge twice. */
+export interface WalletView {
+  balance: number;
+  /** Item refs the ledger shows as bought, so the shop can mark them instead of offering a 409. */
+  owned: readonly string[];
+}
+
+export type AddFishInput = Omit<AddFishRequest, 'stage' | 'idempotencyKey'> & {
+  stage: PurchasableStage;
+  idempotencyKey: string;
+};
+
+export type CreateTankInput = Omit<CreateTankRequest, 'idempotencyKey'> & {
+  idempotencyKey: string;
+};
+
 export interface ApiClient {
   signUp(input: SignUpRequest): Promise<void>;
   signIn(input: SignInRequest): Promise<void>;
@@ -198,11 +220,18 @@ export interface ApiClient {
   achievements(): Promise<AchievementList>;
   tanks(): Promise<Tank[]>;
   tank(tankId: string): Promise<Tank>;
-  createTank(input: CreateTankRequest): Promise<Tank>;
+  createTank(input: CreateTankInput): Promise<Tank>;
   renameTank(tankId: string, name: string): Promise<Tank>;
   saveDecorLayout(tankId: string, layout: DecorLayout): Promise<Tank>;
   saveBackground(tankId: string, backgroundId: BackgroundId): Promise<Tank>;
-  addFish(tankId: string, input: AddFishRequest): Promise<Tank>;
+  addFish(tankId: string, input: AddFishInput): Promise<Tank>;
+  wallet(): Promise<WalletView>;
+  purchase(request: {
+    itemRef: string;
+    idempotencyKey: string;
+    tankId?: string;
+  }): Promise<PurchaseResponse>;
+  saveLight(tankId: string, light: LightSchedule): Promise<Tank>;
   netFish(tankId: string, fishId: string): Promise<Tank>;
   care(tankId: string, action: CareAction): Promise<Tank>;
   replay(
@@ -648,6 +677,23 @@ export function createApiClient(
       const body = validate(updateTankRequestSchema, { backgroundId });
       return parsed(await patch(`/api/tanks/${encodeURIComponent(tankId)}`, body), tankSchema);
     },
+    async wallet() {
+      const res = await send('/api/wallet');
+      if (!res.ok) throw await toError(res);
+      const body = await parsed(res, walletResponseSchema);
+      const owned = body.ledger
+        .filter((e) => e.reason === 'purchase' && e.itemRef !== null)
+        .map((e) => e.itemRef ?? '');
+      return { balance: body.wallet.balance, owned: [...new Set(owned)] };
+    },
+    async purchase(request) {
+      const body = validate(purchaseRequestSchema, request);
+      return parsed(await post('/api/shop/purchase', body), purchaseResponseSchema);
+    },
+    async saveLight(tankId, light) {
+      const body = validate(updateTankRequestSchema, { light });
+      return parsed(await patch(`/api/tanks/${encodeURIComponent(tankId)}`, body), tankSchema);
+    },
     async addFish(tankId, input) {
       const body = validate(addFishRequestSchema, input);
       return parsed(await post(`/api/tanks/${encodeURIComponent(tankId)}/fish`, body), tankSchema);
@@ -673,6 +719,11 @@ export function createApiClient(
       return parsed(res, replayResponseSchema);
     },
     async care(tankId, action) {
+      if (action.type === 'bottled_bacteria' && action.idempotencyKey === undefined) {
+        throw new ClientValidationError({
+          idempotencyKey: 'Bottled bacteria cost Pearls and need a request key.',
+        });
+      }
       const body = validate(careActionSchema, action);
       return parsed(await post(`/api/tanks/${encodeURIComponent(tankId)}/care`, body), tankSchema);
     },

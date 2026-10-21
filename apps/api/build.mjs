@@ -24,6 +24,16 @@ writeFileSync(
   readFileSync(new URL('../../content/economy.json', import.meta.url)),
 );
 
+const presets = Object.fromEntries(
+  ['freshwater', 'reef'].map((biome) => [
+    biome,
+    JSON.parse(
+      readFileSync(new URL(`../../content/presets/${biome}.json`, import.meta.url), 'utf8'),
+    ),
+  ]),
+);
+writeFileSync(new URL('./dist/presets.json', import.meta.url), JSON.stringify(presets));
+
 const manifest = JSON.parse(
   readFileSync(new URL('../../assets/manifest.json', import.meta.url), 'utf8'),
 );
