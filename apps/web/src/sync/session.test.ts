@@ -1459,6 +1459,16 @@ describe('Pearls and the T70 request contract', () => {
     });
   });
 
+  it('leaves owned unchanged when an equipment purchase is refused with a conflict', async () => {
+    const { api, session } = setup();
+    api.wallet.mockResolvedValueOnce({ balance: 500, owned: ['plant:java-fern'] });
+    await session.setUser(verified);
+    await vi.waitFor(() => expect(session.getState().owned).toEqual(['plant:java-fern']));
+    api.purchase.mockRejectedValue(apiError(409, 'conflict'));
+    await session.purchase('equipment:filter:2', 'Installed.');
+    expect(session.getState().owned).toEqual(['plant:java-fern']);
+  });
+
   it('reuses the purchase key on a retry', async () => {
     const { api, session } = setup();
     await session.setUser(verified);
@@ -1570,7 +1580,7 @@ describe('a balance that moves on the server', () => {
     expect(api.wallet).toHaveBeenCalledTimes(2);
   });
 
-  it('replays the same key on a retry even after a wallet read that shows it spent', async () => {
+  it('replays the same key on a retry even after a plain wallet read', async () => {
     const { api, session } = setup();
     await session.setUser(verified);
     api.addFish
@@ -1596,6 +1606,9 @@ describe('a balance that moves on the server', () => {
     await session.setUser(verified);
     await vi.waitFor(() => expect(session.getState().balance).toBe(300));
     land({ balance: 999, owned: [] });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(session.getState().balance).toBe(300);
   });
 
   it('forgets an ownership the ledger shows refunded and marks one the server calls a conflict', async () => {

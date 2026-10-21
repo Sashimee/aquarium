@@ -765,6 +765,61 @@ describe('api client Pearls contract', () => {
     });
   });
 
+  describe('wallet ownership from the server list', () => {
+    const entry = (delta: number, reason: string, itemRef: string, key: string) => ({
+      id: crypto.randomUUID(),
+      userId: 'u1',
+      delta,
+      reason,
+      source: 'game',
+      itemRef,
+      idempotencyKey: key,
+      createdAt: '2026-02-01T12:00:00.000Z',
+    });
+
+    it('marks an item bought long before the ledger page as owned', async () => {
+      const ledger = [entry(-5, 'purchase', 'plant:anubias', 'key-aaaaaaaa')];
+      const fetcher = vi
+        .fn()
+        .mockResolvedValue(
+          json({ wallet: { balance: 10 }, ledger, owned: ['decor:boulder-01', 'plant:anubias'] }),
+        );
+      expect(await createApiClient(fetcher).wallet()).toEqual({
+        balance: 10,
+        owned: ['decor:boulder-01', 'plant:anubias'],
+        released: [],
+      });
+    });
+
+    it('owns an item refunded and bought again, and releases one only refunded', async () => {
+      const ledger = [
+        entry(-25, 'purchase', 'plant:java-fern', 'key-aaaaaaaa'),
+        entry(25, 'refund', 'plant:java-fern', 'key-bbbbbbbb'),
+        entry(80, 'refund', 'decor:boulder-01', 'key-cccccccc'),
+      ];
+      const fetcher = vi
+        .fn()
+        .mockResolvedValue(json({ wallet: { balance: 10 }, ledger, owned: ['plant:java-fern'] }));
+      expect(await createApiClient(fetcher).wallet()).toEqual({
+        balance: 10,
+        owned: ['plant:java-fern'],
+        released: ['decor:boulder-01'],
+      });
+    });
+
+    it('trusts an empty owned list over a purchase in the ledger page', async () => {
+      const ledger = [entry(-25, 'purchase', 'plant:java-fern', 'key-aaaaaaaa')];
+      const fetcher = vi
+        .fn()
+        .mockResolvedValue(json({ wallet: { balance: 10 }, ledger, owned: [] }));
+      expect(await createApiClient(fetcher).wallet()).toEqual({
+        balance: 10,
+        owned: [],
+        released: [],
+      });
+    });
+  });
+
   it('surfaces a 402 as a request error with its code', async () => {
     const fetcher = vi
       .fn()
