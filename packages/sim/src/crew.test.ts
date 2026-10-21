@@ -63,6 +63,7 @@ function input(over: Partial<CleanupInput>): CleanupInput {
     algae: 0.5,
     uneatenFood: 4,
     dtHours: 1 / 6,
+    litFraction: 1,
     surfaces: SURFACES,
     ...over,
   };

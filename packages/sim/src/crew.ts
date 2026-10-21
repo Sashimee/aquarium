@@ -141,6 +141,11 @@ export interface CleanupInput {
   /** Lifecycle uneaten food on the substrate, in feed portions. */
   readonly uneatenFood: number;
   readonly dtHours: number;
+  /**
+   * Share of the step the tank lamp is on, 0 to 1. The crew rests in the dark and neither grazes
+   * nor feeds, as in the realtime model; pass 1 or 0 from the lifecycle's `lampIsOn`.
+   */
+  readonly litFraction: number;
   readonly surfaces: CleanupSurfaces;
 }
 
@@ -174,18 +179,20 @@ function requireNonNegative(value: number, field: string): void {
 }
 
 /**
- * What the clean-up crew grazes and scavenges over `dtHours` with the water otherwise held still;
- * the lifecycle adds algae growth and food decay around it. Algae is cleared as a sweep of the
+ * What the clean-up crew grazes and scavenges over the lit `litFraction` of `dtHours` with the
+ * water otherwise held still; the lifecycle adds algae growth and food decay around it. Algae is cleared as a sweep of the
  * grazable surfaces: each member clears its film area per hour, of which the share `algae` is
  * covered, so cover falls as dA/dt = −A·Σrate/area and never below zero. Settled food is found by
  * the floor area scavengers sweep (dF/dt = −F·Σsweep/floor) and eaten up to the room each gut has
  * once it has emptied over the step (`FEEDING.gastricEvacuationTauS`). Pure and deterministic.
  */
 export function crewCleanup(input: CleanupInput): CleanupResult {
-  const { crew, species, algae, uneatenFood, dtHours, surfaces } = input;
+  const { crew, species, algae, uneatenFood, dtHours, litFraction, surfaces } = input;
   requireUnit(algae, 'algae');
   requireNonNegative(uneatenFood, 'uneatenFood');
   requireNonNegative(dtHours, 'dtHours');
+  requireUnit(litFraction, 'litFraction');
+  const activeHours = dtHours * litFraction;
   if (!(surfaces.grazableM2 > 0 && surfaces.floorM2 > 0)) {
     throw new RangeError('crewCleanup: surfaces need a positive grazable and floor area');
   }
@@ -216,8 +223,8 @@ export function crewCleanup(input: CleanupInput): CleanupResult {
     grazeTotal += g;
     sweepTotal += s;
   }
-  const algaeGrazed = algae * (1 - Math.exp((-grazeTotal / surfaces.grazableM2) * dtHours));
-  const found = uneatenFood * (1 - Math.exp((-sweepTotal / surfaces.floorM2) * dtHours));
+  const algaeGrazed = algae * (1 - Math.exp((-grazeTotal / surfaces.grazableM2) * activeHours));
+  const found = uneatenFood * (1 - Math.exp((-sweepTotal / surfaces.floorM2) * activeHours));
   // A full scavenger leaves its share for hungrier ones, as at a real food drop.
   const food = allocate(found, sweep, room);
   const perFish: CrewShare[] = [];
