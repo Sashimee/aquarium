@@ -6,6 +6,7 @@ import {
   MeshStandardNodeMaterial,
   type BufferGeometry,
   type MeshStandardMaterial,
+  type Node,
 } from 'three/webgpu';
 import { attribute, positionLocal, sin, vec3 } from 'three/tsl';
 import type { DecorItem } from '@aquarium/shared';
@@ -22,6 +23,7 @@ import {
   type PumpRoot,
 } from './current';
 import { decorMatrix } from './hardscape';
+import { contractionGain, polypSizeNode } from './polyps';
 
 export const SWAY_ATTRIBUTE = '_sway';
 
@@ -109,6 +111,7 @@ export function swayPositionNode(
   leanSeconds: number,
   pumpRoom: number,
   pump: PumpRoot,
+  base: Node<'vec3'> = positionLocal,
 ) {
   const sway = attribute(SWAY_ATTRIBUTE, 'float');
   const tip = sway.mul(sway);
@@ -132,7 +135,17 @@ export function swayPositionNode(
   const ambientPeak = Math.hypot(speed * (1 + gustDepth), speed * gustDepth * MEANDER_AMPLITUDE);
   const linear = (ambientPeak * leanSeconds) / item.scale;
   const lean = limitLeanNode(localFlow.mul(leanSeconds / item.scale), linear, pumpRoom).mul(tip);
-  return positionLocal.add(lean).add(wave);
+  return base.add(lean).add(wave);
+}
+
+/** Tentacles draw in towards the foot as `size` falls, more the nearer their tips. */
+export function contractedTentacles(
+  size: Node<'float'>,
+  position: Node<'vec3'> = positionLocal,
+  sway: Node<'float'> = attribute(SWAY_ATTRIBUTE, 'float'),
+): Node<'vec3'> {
+  const pull = sway.mul(size.oneMinus()).oneMinus();
+  return vec3(position.x.mul(pull), position.y, position.z.mul(pull));
 }
 
 function createAnemoneMaterial(
@@ -142,6 +155,7 @@ function createAnemoneMaterial(
   current: CurrentField,
   pumpRoom: number,
   pump: PumpRoot,
+  size: Node<'float'>,
 ): MeshStandardNodeMaterial {
   if (!geometry.getAttribute(SWAY_ATTRIBUTE)) {
     throw new Error(
@@ -165,6 +179,7 @@ function createAnemoneMaterial(
     LEAN_SECONDS,
     pumpRoom,
     pump,
+    contractedTentacles(size),
   );
   return material;
 }
@@ -175,7 +190,13 @@ export class AnemoneGroup {
   private readonly materials: MeshStandardNodeMaterial[] = [];
   private readonly pump: PumpRoot;
 
-  constructor(entry: CatalogEntry, model: LoadedModel, item: DecorItem, current: CurrentField) {
+  constructor(
+    entry: CatalogEntry,
+    model: LoadedModel,
+    item: DecorItem,
+    current: CurrentField,
+    polyps: Node<'float'>,
+  ) {
     this.object.name = `anemone:${entry.id}`;
     this.pump = current.pumpRoot(...item.position);
     const matrix: Matrix4 = decorMatrix(item);
@@ -189,6 +210,7 @@ export class AnemoneGroup {
           current,
           PUMP_LEAN_HEIGHT * height(entry),
           this.pump,
+          polypSizeNode(polyps, contractionGain(entry.id)),
         );
       } catch (error) {
         for (const earlier of this.materials) earlier.dispose();
