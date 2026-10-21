@@ -416,6 +416,22 @@ Checked 2026-10-19. Sources searched in order: Smithsonian (no fish models of th
 
 The PLAN lists 4 or more species. With the four that have references the biome has one model and three lofts. Gaps Alex may want to know about: no Aulonocara (peacock) and no shell-dweller (Neolamprologus multifasciatus) photo or model exists under an allowed licence (everything found was CC BY-SA, CC BY 2.0 or a public-domain mark). Species ids are proposals; `content/species/*.json` belongs to the later owners.
 
+### Re-check 2026-10-22 and CC-BY-SA candidates for Alex
+
+A second Commons search (API metadata) for the three gaps found nothing under CC0 or CC-BY 3.0/4.0. Nothing below is downloaded or in the manifest; each needs an explicit yes from Alex.
+
+| Gap | Commons file | Licence | Why not used |
+|---|---|---|---|
+| Fairy cichlid | `Neolamprologus brichardi in Ouwehands Dierenpark.jpg` (FakirNL, 3735x2755), `Lamprologus brichardi 1zz.jpg` (D. J. Stang), `Neolamprologus brichardi LoroParqueTenerife princess of burundi I` (Bjoertvedt) | CC BY-SA 4.0 | ShareAlike |
+| Fairy cichlid | `Brichardi with fry (4030631484).jpg` (Elma) | CC BY 2.0 | outside the allow-list (3.0/4.0 only) |
+| Fairy cichlid | `142421.jpg` | bare "Public domain", no rationale | unclear |
+| Peacock (Aulonocara) | `Aulonocara 20241123.jpg` and `Aulonocara baenschi 20241123.jpg` (Rjcastillo, 4448 and 3055 px wide) | CC BY-SA 4.0 | ShareAlike; the best candidate if Alex approves |
+| Peacock (Aulonocara) | `Aulonocara sp Hybride - pez de acuario 3.jpg`, `Peacock cichlid (female).jpg` | CC BY 2.0 | outside the allow-list; one is a hybrid |
+| Shell-dweller (N. multifasciatus) | `Neolamprologus multifasciatus male.JPG` (Ingebrigtsen, 4272x2848), `Cichlidae Neolamprologus multifasciatus 1.jpg` (NasserHalaweh) | CC BY-SA 3.0 and 4.0 | ShareAlike |
+| Shell-dweller (N. multifasciatus) | `Neolamprologus multifasciatus 3.jpg` | bare "Public domain" | unclear |
+
+No underwater Lake Malawi or Tanganyika photo exists under an allowed licence (`Taiwanee rif.JPG` is CC BY-SA 3.0, the Tanganyika shots are CC BY-SA 4.0), which confirms the render approach for the backgrounds below.
+
 ### Hardscape and decor
 
 | Item | Pick | Licence | Notes |
