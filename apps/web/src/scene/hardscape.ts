@@ -12,10 +12,22 @@ import {
   type Node,
   type UniformNode,
 } from 'three/webgpu';
-import { diffuseColor, dot, materialEmissive, mix, normalWorld, saturate, vec3 } from 'three/tsl';
+import {
+  diffuseColor,
+  dot,
+  materialEmissive,
+  mix,
+  modelScale,
+  normalLocal,
+  normalWorld,
+  positionLocal,
+  saturate,
+  vec3,
+} from 'three/tsl';
 import { legacyTintSeed, type Biome, type DecorItem } from '@aquarium/shared';
 import type { CatalogEntry, LoadedModel } from './assets';
 import { coralGlow, coralTint, heightScale } from './coralStyle';
+import { polypGain } from './polyps';
 import { fitCapsuleChain, fitHull, transformPoints, type Collider } from './colliders';
 
 export const HARDSCAPE_KINDS: ReadonlySet<string> = new Set([
@@ -64,6 +76,7 @@ export function fitCollider(
 
 const LUMA = vec3(0.2126, 0.7152, 0.0722);
 const UNDERSIDE_GLOW = 0.3;
+const POLYP_SWELL_METRES = 0.0015;
 
 /**
  * Emission graph shared by every fluorescent coral, so the shader builder sees one cache key. The
@@ -82,6 +95,7 @@ function fluorescentMaterial(
   tint: Color,
   glow: Color,
   glowNode: Node<'vec3'>,
+  swell: Node<'vec3'> | null,
 ): MeshStandardNodeMaterial {
   const material = new MeshStandardNodeMaterial();
   // NodeMaterial.copy skips the private-backed accessors (alphaTest), which Material.copy handles.
@@ -91,6 +105,7 @@ function fluorescentMaterial(
   material.emissive.copy(glow);
   material.emissiveIntensity = 1;
   material.emissiveNode = glowNode;
+  if (swell) material.positionNode = swell;
   return material;
 }
 
@@ -98,10 +113,12 @@ export class Hardscape {
   readonly group = new Group();
   private readonly meshesByItem: Mesh[][] = [];
   private readonly tintedMaterials: Material[] = [];
+  private readonly swellNodes = new Map<number, Node<'vec3'>>();
 
   constructor(
     private readonly biome: Biome,
     private readonly glowNode: Node<'vec3'>,
+    private readonly polyps: Node<'float'>,
   ) {
     this.group.name = 'hardscape';
   }
@@ -117,7 +134,13 @@ export class Hardscape {
       if (tint) {
         const glow = coralGlow(this.biome, item.assetId, key);
         if (glow) {
-          material = fluorescentMaterial(primitive.material, tint, glow, this.glowNode);
+          material = fluorescentMaterial(
+            primitive.material,
+            tint,
+            glow,
+            this.glowNode,
+            this.swellNode(item),
+          );
         } else {
           material = primitive.material.clone();
           (material as MeshStandardMaterial).color.multiply(tint);
@@ -133,6 +156,20 @@ export class Hardscape {
       mesh.receiveShadow = true;
       this.group.add(mesh);
     }
+  }
+
+  /** Tissue swells along the normal as the polyps come out; null for a coral without nocturnal polyps. */
+  private swellNode(item: DecorItem): Node<'vec3'> | null {
+    const gain = polypGain(item.assetId);
+    if (gain === 0) return null;
+    let node = this.swellNodes.get(gain);
+    if (!node) {
+      node = positionLocal.add(
+        normalLocal.mul(this.polyps.mul(POLYP_SWELL_METRES * gain).div(modelScale.x)),
+      );
+      this.swellNodes.set(gain, node);
+    }
+    return node;
   }
 
   setItem(index: number, item: DecorItem): void {

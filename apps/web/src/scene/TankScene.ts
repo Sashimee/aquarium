@@ -29,6 +29,7 @@ import { ColliderField, type CapsuleCollider, type Collider } from './colliders'
 import type { FlowField } from '@aquarium/sim';
 import { CurrentField, reachCurrent, type CurrentParameters } from './current';
 import { fluorescenceLevel } from './coralStyle';
+import { PolypSignal } from './polyps';
 import {
   createCoralGlowNode,
   fitCollider,
@@ -140,6 +141,8 @@ export class TankScene {
     this.current.syncWaveMaker(simTimeS);
   }
 
+  /** Coral polyp extension; call `polyps.bind(simClient)` for the active tank's sim. */
+  readonly polyps = new PolypSignal();
   private readonly fluorescence = uniform(0);
   private readonly coralGlowNode = createCoralGlowNode(this.fluorescence);
   private hardscape: Hardscape | null = null;
@@ -399,7 +402,7 @@ export class TankScene {
       await this.queue.settled();
       const key = this.installedKey;
       if (this.disposed || !key) return;
-      const hardscape = new Hardscape(this.preset.biome, this.coralGlowNode);
+      const hardscape = new Hardscape(this.preset.biome, this.coralGlowNode, this.polyps.node);
       let built: BuiltPlants = { groups: [], created: [] };
       try {
         for (const { item, kind } of next) {
@@ -610,7 +613,7 @@ export class TankScene {
     version: number,
     items: readonly { item: DecorItem; kind: string }[],
   ): Promise<boolean | 'layout-changed'> {
-    const hardscape = new Hardscape(this.preset.biome, this.coralGlowNode);
+    const hardscape = new Hardscape(this.preset.biome, this.coralGlowNode, this.polyps.node);
     let built: BuiltPlants = { groups: [], created: [] };
     const anemones: AnemoneGroup[] = [];
     const euphyllias: EuphylliaGroup[] = [];
@@ -629,14 +632,14 @@ export class TankScene {
       for (const item of this.anemoneItems) {
         const entry = this.library.catalog.get(item.assetId);
         const model = await this.library.load(item.assetId, key.hardscapeLod, key.textureSize);
-        anemones.push(new AnemoneGroup(entry, model, item, this.current));
+        anemones.push(new AnemoneGroup(entry, model, item, this.current, this.polyps.node));
       }
       for (const { item, variant, seed, fullDetail } of this.euphylliaItems) {
         const mesh =
           key.euphylliaDetail === 2 && fullDetail
             ? fullDetail
             : generateEuphyllia(variant, seed, key.euphylliaDetail);
-        euphyllias.push(new EuphylliaGroup(mesh, item, this.current));
+        euphyllias.push(new EuphylliaGroup(mesh, item, this.current, this.polyps.node));
       }
     } catch (error) {
       hardscape.dispose();
@@ -707,6 +710,7 @@ export class TankScene {
     this.disposed = true;
     for (const release of this.releases) release();
     this.releases.length = 0;
+    this.polyps.dispose();
     await this.queue.stop();
     this.hardscape?.dispose();
     for (const group of this.plantGroups) group.dispose();

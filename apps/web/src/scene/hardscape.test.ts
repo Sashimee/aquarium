@@ -44,7 +44,7 @@ describe('Hardscape.add', () => {
 
   it('gives reef corals a node material that carries the source properties over', () => {
     const source = sourceMaterial();
-    const hardscape = new Hardscape('reef', glow);
+    const hardscape = new Hardscape('reef', glow, uniform(0));
     hardscape.add(entry, model(source), item('brain-coral', 0));
     const material = materialOf(hardscape, 0);
     if (!(material instanceof MeshStandardNodeMaterial))
@@ -63,7 +63,7 @@ describe('Hardscape.add', () => {
   });
 
   it('shares one emissive graph, so every coral has the same program cache key', () => {
-    const hardscape = new Hardscape('reef', glow);
+    const hardscape = new Hardscape('reef', glow, uniform(0));
     for (let i = 0; i < 6; i++) hardscape.add(entry, model(), item('brain-coral', i));
     const materials = hardscape.group.children.map(
       (child) => (child as Mesh).material as MeshStandardNodeMaterial,
@@ -85,7 +85,7 @@ describe('Hardscape.add', () => {
 
   it('keeps a plain tinted clone in freshwater', () => {
     const source = sourceMaterial();
-    const hardscape = new Hardscape('freshwater', glow);
+    const hardscape = new Hardscape('freshwater', glow, uniform(0));
     hardscape.add(entry, model(source), item('brain-coral', 0));
     const material = materialOf(hardscape, 0);
     expect(material).not.toBeInstanceOf(MeshStandardNodeMaterial);
@@ -95,7 +95,7 @@ describe('Hardscape.add', () => {
 
   it('leaves untinted decor on the shared source material', () => {
     const source = sourceMaterial();
-    const hardscape = new Hardscape('reef', glow);
+    const hardscape = new Hardscape('reef', glow, uniform(0));
     hardscape.add({ ...entry, id: 'rock-a', kind: 'rock' }, model(source), item('rock-a', 0));
     expect(materialOf(hardscape, 0)).toBe(source);
   });
