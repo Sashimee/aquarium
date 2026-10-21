@@ -356,6 +356,9 @@ export function AccountPanel({ onCollection }: { onCollection(): void }) {
           <Link to="/sign-up">Create account</Link>
         </nav>
       )}
+      <nav aria-label="Community" className="account legal">
+        <Link to="/gallery">Tank gallery</Link>
+      </nav>
       <nav aria-label="Legal" className="account legal">
         <Link to="/privacy">Privacy</Link>
         <Link to="/credits">Credits</Link>
