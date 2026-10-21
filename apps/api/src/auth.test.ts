@@ -724,6 +724,8 @@ describe('csrf', () => {
   });
 });
 
+const SHORT_TIMER_MS = 1000;
+
 describe('mail abuse limits', () => {
   it('answers a resend inside the cooldown like any other, and still sends nothing', async () => {
     await withHarness(
@@ -742,14 +744,33 @@ describe('mail abuse limits', () => {
         const mailsBefore = h.outbox.length;
 
         const resend = async (email: string) => {
-          const start = performance.now();
-          const res = await h.app.inject({
-            method: 'POST',
-            url: '/api/auth/send-verification-email',
-            headers: jsonHeaders,
-            payload: { email, callbackURL: '/verify-email' },
-          });
-          const ms = performance.now() - start;
+          // Better Auth pads the handler with setTimeout(500 - elapsed) measured on Date.now(). Freezing
+          // Date makes the pad exactly 500 and collapsing short timers to immediate makes the test
+          // independent of runner load; the metric is the delay the handler asks for, so a leak shows as
+          // an extra sleep. The driver's connect/query timeouts are >= 3 s and left alone.
+          vi.useFakeTimers({ toFake: ['Date'] });
+          const realSetTimeout = globalThis.setTimeout;
+          let ms = 0;
+          const timers = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((
+            fn: () => void,
+            delay?: number,
+          ) => {
+            if (delay === undefined || delay >= SHORT_TIMER_MS) return realSetTimeout(fn, delay);
+            ms += delay;
+            return realSetTimeout(fn, 0);
+          }) as typeof setTimeout);
+          let res: LightMyRequestResponse;
+          try {
+            res = await h.app.inject({
+              method: 'POST',
+              url: '/api/auth/send-verification-email',
+              headers: jsonHeaders,
+              payload: { email, callbackURL: '/verify-email' },
+            });
+          } finally {
+            timers.mockRestore();
+            vi.useRealTimers();
+          }
           await h.settleMail();
           return { res, ms };
         };
