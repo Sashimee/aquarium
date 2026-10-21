@@ -49,6 +49,7 @@ export {
   diluteMedicine,
   DISEASE_IMMUNE_SPECIES,
   DISEASE_PROFILES,
+  ICH_HEAT_C,
   isNewFish,
   NEW_FISH_WINDOW_MS,
   onsetRates,

@@ -63,6 +63,7 @@ import {
   inArray,
   lt,
   lte,
+  ne,
   or,
   sql,
 } from 'drizzle-orm';
@@ -83,6 +84,7 @@ import {
   claimAchievementRewards,
 } from './earn.ts';
 import { registerShopRoutes } from './shop.ts';
+import { registerMoveRoutes } from './moveFish.ts';
 import { registerTreatmentRoutes } from './treatment.ts';
 import { backgroundRef, licenseFor } from './items.ts';
 import type { Presets } from './presets.ts';
@@ -231,13 +233,7 @@ export interface Ticked {
   nowMs: number;
 }
 
-async function lockAndTick(
-  tx: Tx,
-  deps: TankRouteDeps,
-  tankId: string,
-  user: SessionUser,
-): Promise<Ticked> {
-  const now = deps.clock.now();
+async function lockTank(tx: Tx, tankId: string, user: SessionUser): Promise<TankRow> {
   await lockUserRow(tx, user.id);
   const [tank] = await tx
     .select()
@@ -245,7 +241,25 @@ async function lockAndTick(
     .where(and(eq(schema.tanks.id, tankId), eq(schema.tanks.ownerId, user.id)))
     .for('update');
   if (!tank) throw notFound();
+  return tank;
+}
 
+async function lockAndTick(
+  tx: Tx,
+  deps: TankRouteDeps,
+  tankId: string,
+  user: SessionUser,
+): Promise<Ticked> {
+  return tickLocked(tx, deps, await lockTank(tx, tankId, user), user);
+}
+
+async function tickLocked(
+  tx: Tx,
+  deps: TankRouteDeps,
+  tank: TankRow,
+  user: SessionUser,
+): Promise<Ticked> {
+  const now = deps.clock.now();
   const fishRows = await tx.select().from(schema.fish).where(eq(schema.fish.tankId, tank.id));
   const initial: LifecycleState = {
     water: waterSchema.parse(tank.water),
@@ -591,6 +605,34 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
     return database.db.transaction(async (tx) => fn(tx, await lockAndTick(tx, deps, tankId, user)));
   }
 
+  async function withTanks<T>(
+    user: SessionUser,
+    tankIds: readonly string[],
+    fn: (tx: Tx, ticked: Ticked[]) => Promise<T>,
+  ): Promise<T> {
+    return database.db.transaction(async (tx) => {
+      // Every tank row is locked, in id order, before any catch-up runs: a catch-up can claim an
+      // achievement reward and take the wallet lock, and the order must stay user, tank, wallet.
+      // Id order also makes two opposite moves wait for each other instead of deadlocking.
+      const locked = new Map<string, TankRow>();
+      for (const id of [...new Set(tankIds)].toSorted()) {
+        locked.set(id, await lockTank(tx, id, user));
+      }
+      const byId = new Map<string, Ticked>();
+      for (const [id, tank] of locked) {
+        byId.set(id, await tickLocked(tx, deps, tank, user));
+      }
+      return fn(
+        tx,
+        tankIds.map((id) => {
+          const ticked = byId.get(id);
+          if (!ticked) throw new Error('withTanks lost a tank it locked');
+          return ticked;
+        }),
+      );
+    });
+  }
+
   const buyFirst = (what: string) =>
     new HttpError(
       403,
@@ -786,6 +828,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
           .where(
             and(
               eq(schema.events.tankId, tankId),
+              ne(schema.events.kind, 'fish_moved'),
               gt(schema.events.at, since),
               lte(schema.events.at, until),
               ...(cursor
@@ -1287,6 +1330,17 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
     throttle,
     guarded,
     withTank,
+    render: (tx, ticked, fishRows) => render(tx, ticked, fishRows),
+  });
+
+  registerMoveRoutes({
+    app,
+    species,
+    clock,
+    authorize,
+    throttle,
+    guarded,
+    withTanks,
     render: (tx, ticked, fishRows) => render(tx, ticked, fishRows),
   });
 
