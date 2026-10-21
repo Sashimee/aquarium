@@ -15,9 +15,14 @@ import {
   type ReactionProblem,
   type ViewerPhase,
 } from '../sync/share';
+import type { ApiClient } from './api';
 import { useApi, useAuth, useBridge } from './context';
 import { CameraControls } from './Hud';
+import { GALLERY_MAX_PAGE_SIZE, type GalleryEntry } from '@aquarium/shared';
+import { entryWithVote, voteLabel } from '../sync/gallery';
+import { VoteProblemNote, useVoting } from './Gallery';
 import { leaveToViewerSignIn } from './router';
+import { Link } from './screens';
 
 const GLYPH: Record<ReactionKind, string> = { heart: '♥', star: '★', wow: '!' };
 
@@ -45,7 +50,10 @@ function useNoIndex(title: string | null): void {
   }, [title]);
 }
 
-function useViewer(token: string): {
+function useViewer(
+  key: string,
+  load: (api: ApiClient) => Promise<PublicTank>,
+): {
   phase: ViewerPhase;
   setTank(tank: PublicTank): void;
   retry(): void;
@@ -61,7 +69,7 @@ function useViewer(token: string): {
   useEffect(() => {
     if (status === 'loading') return;
     let cancelled = false;
-    api.publicTank(token).then(
+    load(api).then(
       (tank) => {
         if (cancelled) return;
         setPhase({ kind: 'ready', tank });
@@ -79,7 +87,7 @@ function useViewer(token: string): {
     return () => {
       cancelled = true;
     };
-  }, [api, interaction, token, status, userKey, attempt]);
+  }, [api, interaction, key, load, status, userKey, attempt]);
 
   useEffect(
     () => () => {
@@ -214,7 +222,8 @@ function Notice({ title, children }: { title: string; children: ReactNode }) {
 }
 
 export function PublicTankView({ token }: { token: string }) {
-  const { phase, setTank, retry } = useViewer(token);
+  const load = useCallback((api: ApiClient) => api.publicTank(token), [token]);
+  const { phase, setTank, retry } = useViewer(token, load);
   useNoIndex(phase.kind === 'ready' ? phase.tank.name : null);
 
   switch (phase.kind) {
@@ -262,6 +271,118 @@ export function PublicTankView({ token }: { token: string }) {
             Make your own tank
           </a>
         </main>
+      );
+  }
+}
+
+function GalleryVote({ id }: { id: string }) {
+  const api = useApi();
+  const { status, user } = useAuth();
+  const userKey = user?.id ?? '';
+  const [state, setState] = useState<{ entry: GalleryEntry | null; myVote: string | null } | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (status === 'loading') return;
+    let live = true;
+    api.gallery({ limit: GALLERY_MAX_PAGE_SIZE, offset: 0 }).then(
+      (page) => {
+        if (live)
+          setState({ entry: page.entries.find((e) => e.id === id) ?? null, myVote: page.myVote });
+      },
+      () => {
+        if (live) setState({ entry: null, myVote: null });
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [api, id, status, userKey]);
+
+  const voting = useVoting(
+    useCallback(
+      (myVote: string | null) =>
+        setState((held) =>
+          held?.entry ? { myVote, entry: entryWithVote(held.entry, myVote) } : held,
+        ),
+      [id],
+    ),
+  );
+
+  if (!state) return null;
+  const { entry, myVote } = state;
+  if (!entry) {
+    return (
+      <p className="hint">
+        <Link to="/gallery">Vote from the gallery</Link>
+      </p>
+    );
+  }
+  return (
+    <div className="reactions">
+      {entry.mine ? (
+        <p className="hint">This is your tank. You cannot vote for it.</p>
+      ) : (
+        <button
+          type="button"
+          aria-pressed={entry.voted}
+          aria-label={voteLabel(entry)}
+          disabled={voting.busy}
+          onClick={() => void voting.press(id, myVote)}
+        >
+          {entry.voted ? 'Voted this week' : 'Vote for this tank'}
+        </button>
+      )}
+      <VoteProblemNote problem={voting.problem} />
+    </div>
+  );
+}
+
+export function GalleryTankView({ id }: { id: string }) {
+  const load = useCallback((api: ApiClient) => api.galleryTank(id), [id]);
+  const { phase, retry } = useViewer(`gallery:${id}`, load);
+  useNoIndex(phase.kind === 'ready' ? phase.tank.name : null);
+
+  switch (phase.kind) {
+    case 'loading':
+      return (
+        <p className="toast public-loading" role="status">
+          Opening the tank.
+        </p>
+      );
+    case 'ready':
+      return (
+        <main className="public-bar">
+          <div className="public-title">
+            <h1>{phase.tank.name}</h1>
+            <p className="hint">A gallery tank. You can look, not change.</p>
+          </div>
+          <GalleryVote id={id} />
+          <CameraControls />
+          <Report tank={phase.tank} />
+          <Link className="public-own" to="/gallery">
+            Back to the gallery
+          </Link>
+        </main>
+      );
+    case 'missing':
+      return (
+        <Notice title="Tank not found">
+          <p>This tank is not in the gallery any more.</p>
+        </Notice>
+      );
+    case 'throttled':
+    case 'failed':
+      return (
+        <Notice title="This tank could not be opened">
+          <p role="alert">
+            {phase.kind === 'failed' ? phase.message : slowDownMessage(phase.retryAfterSeconds)}
+          </p>
+          <button type="button" onClick={retry}>
+            Try again
+          </button>
+        </Notice>
       );
   }
 }

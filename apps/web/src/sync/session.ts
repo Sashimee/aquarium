@@ -405,6 +405,20 @@ export class TankSession {
     return { ok, token };
   }
 
+  async setGalleryListed(listed: boolean): Promise<boolean> {
+    const tank = this.activeTank;
+    if (!tank) return false;
+    const gen = this.loadId;
+    return this.perform(async () => {
+      const next = await this.deps.api.setGallery(tank.id, listed);
+      if (gen !== this.loadId) return;
+      this.apply({ ...next, shareToken: null });
+      this.patch({
+        notice: listed ? 'Your tank is in the gallery.' : 'Your tank is out of the gallery.',
+      });
+    });
+  }
+
   async feed(food: FoodType, portion: number): Promise<boolean> {
     return this.careAction({ type: 'feed', food, portion });
   }

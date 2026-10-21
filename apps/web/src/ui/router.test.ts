@@ -197,3 +197,21 @@ describe('password reset routes', () => {
     expect(parseRoute(routePath(route))).toEqual(route);
   });
 });
+
+describe('gallery routes', () => {
+  const id = '0b8f2c1e-5d3a-4f7e-9a61-2c4d8e0f1a37';
+
+  it('parses the list and a tank and round-trips both', () => {
+    expect(parseRoute('/gallery/')).toEqual({ name: 'gallery' });
+    expect(parseRoute(`/gallery/${id}`)).toEqual({ name: 'gallery-tank', id });
+    expect(routePath({ name: 'gallery' })).toBe('/gallery');
+    expect(routePath({ name: 'gallery-tank', id })).toBe(`/gallery/${id}`);
+  });
+
+  it('rejects a tank path that is not an id and is never redirected for anyone', () => {
+    expect(parseRoute('/gallery/nope')).toEqual({ name: 'not-found' });
+    expect(parseRoute(`/gallery/${id}/extra`)).toEqual({ name: 'not-found' });
+    expect(redirectFor('/gallery', null)).toBeNull();
+    expect(redirectFor(`/gallery/${id}`, null)).toBeNull();
+  });
+});

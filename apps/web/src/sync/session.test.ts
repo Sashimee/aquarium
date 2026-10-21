@@ -44,6 +44,7 @@ function apiMocks() {
     shareTank: vi.fn(),
     rotateShare: vi.fn(),
     revokeShare: vi.fn(),
+    setGallery: vi.fn(),
   };
 }
 
@@ -1271,6 +1272,51 @@ describe('public sharing', () => {
     await session.setUser(verified);
     expect(await session.changeSharing('share')).toEqual({ ok: false, token: null });
     expect(api.shareTank).not.toHaveBeenCalled();
+  });
+});
+
+describe('gallery listing', () => {
+  it('lists a shared tank and says so', async () => {
+    const { api, session } = setup([tankFixture({ shared: true })]);
+    await session.setUser(verified);
+    api.setGallery.mockResolvedValue(tankFixture({ shared: true, inGallery: true }));
+    expect(await session.setGalleryListed(true)).toBe(true);
+    expect(api.setGallery).toHaveBeenCalledWith(TANK_A, true);
+    expect(session.activeTank?.inGallery).toBe(true);
+    expect(session.getState().notice).toBe('Your tank is in the gallery.');
+  });
+
+  it('takes the tank out again', async () => {
+    const { api, session } = setup([tankFixture({ shared: true, inGallery: true })]);
+    await session.setUser(verified);
+    api.setGallery.mockResolvedValue(tankFixture({ shared: true, inGallery: false }));
+    expect(await session.setGalleryListed(false)).toBe(true);
+    expect(session.activeTank?.inGallery).toBe(false);
+    expect(session.getState().notice).toBe('Your tank is out of the gallery.');
+  });
+
+  it('shows the server reason for a 409 and keeps the tank unlisted', async () => {
+    const { api, session } = setup([tankFixture()]);
+    await session.setUser(verified);
+    api.setGallery.mockRejectedValue(
+      new ApiRequestError(
+        409,
+        'conflict',
+        'Turn on the public link before listing this tank in the gallery.',
+      ),
+    );
+    expect(await session.setGalleryListed(true)).toBe(false);
+    expect(session.activeTank?.inGallery).toBe(false);
+    expect(session.getState().error).toBe(
+      'Turn on the public link before listing this tank in the gallery.',
+    );
+  });
+
+  it('does nothing without an active tank', async () => {
+    const { api, session } = setup([]);
+    await session.setUser(verified);
+    expect(await session.setGalleryListed(true)).toBe(false);
+    expect(api.setGallery).not.toHaveBeenCalled();
   });
 });
 
