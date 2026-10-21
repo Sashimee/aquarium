@@ -445,6 +445,7 @@ export class FishSystem {
   private readonly cleanups: (() => void)[] = [];
   private readonly ateListeners = new Set<(events: readonly FishBite[]) => void>();
   private readonly nudgeListeners = new Set<(nudge: BallNudge) => void>();
+  private readonly simClientListeners = new Set<(client: SimClient) => void>();
   private readonly nudge: { toyId: string | null; ix: number; iz: number } = {
     toyId: null,
     ix: 0,
@@ -834,6 +835,13 @@ export class FishSystem {
     return () => this.ateListeners.delete(listener);
   }
 
+  /** Called with the sim client now and with each one that replaces a stuck worker's. */
+  onSimClient(listener: (client: SimClient) => void): () => void {
+    this.simClientListeners.add(listener);
+    listener(this.sim);
+    return () => this.simClientListeners.delete(listener);
+  }
+
   /** The nearest dead fish along `ray` that the server knows, or null. */
   pickDead(ray: PickRay): string | null {
     let best: string | null = null;
@@ -932,6 +940,7 @@ export class FishSystem {
     this.lifetime.abort(new Error('fish system disposed'));
     this.ateListeners.clear();
     this.nudgeListeners.clear();
+    this.simClientListeners.clear();
     for (const resolve of this.syncWaiters.splice(0)) resolve();
     releaseAll(this.cleanups.splice(0), 'FishSystem');
   }
@@ -1568,6 +1577,7 @@ export class FishSystem {
     this.worker.terminate();
     this.worker = spawnSimWorker();
     this.sim = this.connectSim(this.worker);
+    for (const listener of this.simClientListeners) listener(this.sim);
   }
 
   private applyShadows(batch: SpeciesBatch): void {

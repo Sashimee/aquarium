@@ -104,11 +104,15 @@ export function lampPhotoperiod(hours: LampHours): Photoperiod {
 
 /** Smallest daylight change worth announcing: about 20 s into a one-hour ramp. */
 const DAYLIGHT_EPSILON = 0.005;
+/** How often the hood level is read; a ramp moves less than one announce step in this time. */
+export const DAYLIGHT_INTERVAL_MS = 1000;
 /**
- * Frames stop while the tab is hidden; a gap longer than this means the light may have moved
- * while nobody, fish included, was watching it change.
+ * The fallback for a page that stopped drawing without reporting itself hidden, as a sleeping
+ * laptop may: a frame gap this long means the light may have moved while nobody, fish included,
+ * was watching it change. Long enough that a visible stall, such as a pipeline rebuild, never
+ * counts.
  */
-export const DAYLIGHT_UNSEEN_GAP_MS = 1000;
+export const DAYLIGHT_UNSEEN_GAP_MS = 5000;
 
 /**
  * A new hood level. `settled` marks one that changed unseen (first level, or the first after a
@@ -123,18 +127,84 @@ export interface DaylightChange {
 export class DaylightAnnouncer {
   private announced: number | null = null;
   private unseen = false;
+  private hidden = false;
 
   /** Every frame, with the time since the previous one. */
   frame(gapMs: number): void {
     if (gapMs > DAYLIGHT_UNSEEN_GAP_MS) this.unseen = true;
   }
 
+  /**
+   * Whether the page is hidden. Every change from hiding until the first read once shown again
+   * is settled, even when a hidden page still draws the odd frame.
+   */
+  setHidden(hidden: boolean): void {
+    this.hidden = hidden;
+    if (hidden) this.unseen = true;
+  }
+
   next(level: number): DaylightChange | null {
     const unseen = this.unseen;
-    this.unseen = false;
+    if (!this.hidden) this.unseen = false;
     if (this.announced !== null && Math.abs(level - this.announced) < DAYLIGHT_EPSILON) return null;
     const settled = unseen || this.announced === null;
     this.announced = level;
     return { level, settled };
+  }
+}
+
+/** The page visibility `document` reports. */
+export interface PageVisibility {
+  readonly hidden: boolean;
+  addEventListener(type: 'visibilitychange', listener: () => void): void;
+  removeEventListener(type: 'visibilitychange', listener: () => void): void;
+}
+
+/** The engine's event bus, as far as the hood light needs it. */
+export interface DaylightEvents {
+  emit(type: 'engine:daylight', change: DaylightChange): void;
+}
+
+/**
+ * The frame loop's side of the hood light: reads the level at most once per interval and emits
+ * `engine:daylight` for each change worth announcing, settled when nobody could have watched it.
+ */
+export class DaylightFeed {
+  private readonly announcer = new DaylightAnnouncer();
+  private checkedAt = -Infinity;
+  private current = 1;
+
+  constructor(
+    private readonly read: () => number,
+    private readonly events: DaylightEvents,
+  ) {}
+
+  /** The last announced level, full day before the first. */
+  get level(): number {
+    return this.current;
+  }
+
+  /** Reads the level again on the next frame, as after a lamp schedule change. */
+  recheck(): void {
+    this.checkedAt = -Infinity;
+  }
+
+  /** Every frame, with its time and the time since the previous one. */
+  frame(nowMs: number, gapMs: number): void {
+    this.announcer.frame(gapMs);
+    if (nowMs - this.checkedAt < DAYLIGHT_INTERVAL_MS) return;
+    this.checkedAt = nowMs;
+    const change = this.announcer.next(this.read());
+    if (change === null) return;
+    this.current = change.level;
+    this.events.emit('engine:daylight', change);
+  }
+
+  /** Follows whether `page` is hidden until the returned stop is called. */
+  watch(page: PageVisibility): () => void {
+    const update = (): void => this.announcer.setHidden(page.hidden);
+    update();
+    page.addEventListener('visibilitychange', update);
+    return () => page.removeEventListener('visibilitychange', update);
   }
 }

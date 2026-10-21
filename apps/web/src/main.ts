@@ -332,6 +332,7 @@ async function boot(): Promise<void> {
       showBackground(interaction.peek('background:state'));
       void engine.useBackgroundIndex({ assets: [...scene.catalogEntries()] });
       fish.setAnchors(scene.anchors);
+      scene.polyps.bind(fish.polyps);
       container.dataset['sceneBiome'] = scene.biome;
       scene.enableMovablePlants();
       fish.setSceneColliders(scene.colliderList);
@@ -343,7 +344,8 @@ async function boot(): Promise<void> {
       firstSceneMounted();
       if (import.meta.env.DEV) Object.assign(window, { tankScene: scene });
     },
-    unmounting() {
+    unmounting(scene) {
+      scene.polyps.dispose();
       delete container.dataset['sceneBiome'];
       delete container.dataset['backgroundId'];
       sceneBiome = null;

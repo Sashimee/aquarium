@@ -1,14 +1,26 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Collider } from '@aquarium/shared';
-import type { Point3, SimToy } from '@aquarium/sim';
+import type { Point3, SimPolyps, SimToy } from '@aquarium/sim';
 import type { Engine } from '../engine/Engine';
 import { TANK_DIMENSIONS, type TankDimensions } from '../engine/tank/dimensions';
 import { EventBus, type EngineEvents } from '../engine/events';
 import type { InteractionEvents } from '../interaction/events';
 import type { SceneAnchor } from '../scene/anemone';
 import type { Collider as SceneCollider } from '../scene/colliders';
+import { PolypSignal } from '../scene/polyps';
 import { FISH_1, FISH_2, TANK_A, fishFixture } from '../sync/fixtures';
 import type { BallNudge, FishBite, FishPoint, PickRay, TankEvent } from './start';
+
+class FakePolypClient {
+  readonly listeners = new Set<(extension: number, event: SimPolyps) => void>();
+  onPolyps(listener: (extension: number, event: SimPolyps) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+  emit(extension: number, epoch: number, tick: number): void {
+    for (const l of this.listeners) l(extension, { type: 'polyps', epoch, tick, extension });
+  }
+}
 
 class FakeFishSystem {
   readonly handled: TankEvent[] = [];
@@ -98,6 +110,18 @@ class FakeFishSystem {
   }
   synced(): Promise<void> {
     return this.sync;
+  }
+  client = new FakePolypClient();
+  private clientListener: ((client: FakePolypClient) => void) | null = null;
+  onSimClient(listener: (client: FakePolypClient) => void): () => void {
+    this.clientListener = listener;
+    listener(this.client);
+    return () => (this.clientListener = null);
+  }
+  replaceClient(): FakePolypClient {
+    this.client = new FakePolypClient();
+    this.clientListener?.(this.client);
+    return this.client;
   }
   dispose(): void {
     this.disposed = true;
@@ -547,6 +571,37 @@ describe('startFish', () => {
     expect(handle.sim.pickFish(ray)?.()).toEqual({ x: 1, y: 2, z: 3 });
     expect(handle.sim.anyFish()).toBeNull();
     expect(fish.taps).toEqual([ray]);
+  });
+
+  it("drives each mounted scene's polyps from the fish sim, across a replaced worker", async () => {
+    const fish = new FakeFishSystem();
+    const pending = deferred<FakeFishSystem>();
+    const { handle } = setup(pending.promise);
+    const first = new PolypSignal();
+    first.bind(handle.polyps);
+    pending.resolve(fish);
+    await flush();
+    expect(first.extension).toBe(0);
+    fish.client.emit(0.6, 4, 120);
+    expect(first.extension).toBeCloseTo(0.6);
+
+    first.dispose();
+    const rebuilt = new PolypSignal();
+    rebuilt.bind(handle.polyps);
+    expect(rebuilt.extension).toBeCloseTo(0.6);
+    fish.client.emit(0.8, 4, 150);
+    expect(first.extension).toBeCloseTo(0.6);
+    expect(rebuilt.extension).toBeCloseTo(0.8);
+
+    const stuck = fish.client;
+    const replacement = fish.replaceClient();
+    expect(stuck.listeners.size).toBe(0);
+    replacement.emit(1, 1, 0);
+    expect(rebuilt.extension).toBe(1);
+
+    handle.stop();
+    expect(replacement.listeners.size).toBe(0);
+    rebuilt.dispose();
   });
 
   it('stops listening and disposes the fish on stop', async () => {
