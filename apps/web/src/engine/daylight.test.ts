@@ -1,9 +1,14 @@
 import { DEFAULT_EQUIPMENT } from '@aquarium/shared';
 import { lampIsOn } from '@aquarium/sim/lifecycle';
 import { describe, expect, it } from 'vitest';
+import { EventBus, type EngineEvents } from './events';
 import {
+  DAYLIGHT_INTERVAL_MS,
   DAYLIGHT_UNSEEN_GAP_MS,
   DaylightAnnouncer,
+  DaylightFeed,
+  type DaylightChange,
+  type PageVisibility,
   DEFAULT_LAMP_HOURS,
   DEFAULT_PHOTOPERIOD,
   daylightAt,
@@ -170,5 +175,148 @@ describe('DaylightAnnouncer', () => {
     announcer.frame(60_000);
     expect(announcer.next(1)).toBeNull();
     expect(announcer.next(0)?.settled).toBe(false);
+  });
+
+  it('settles a change made while hidden, even across a gap shorter than the fallback', () => {
+    const announcer = new DaylightAnnouncer();
+    announcer.next(1);
+    announcer.setHidden(true);
+    announcer.frame(200);
+    announcer.setHidden(false);
+    announcer.frame(16);
+    expect(announcer.next(0)).toEqual({ level: 0, settled: true });
+    announcer.frame(16);
+    expect(announcer.next(1)?.settled).toBe(false);
+  });
+
+  it('keeps settling while hidden frames still read the level', () => {
+    const announcer = new DaylightAnnouncer();
+    announcer.next(1);
+    announcer.setHidden(true);
+    expect(announcer.next(0.5)?.settled).toBe(true);
+    expect(announcer.next(0.2)?.settled).toBe(true);
+    announcer.setHidden(false);
+    expect(announcer.next(0)?.settled).toBe(true);
+    expect(announcer.next(1)?.settled).toBe(false);
+  });
+
+  it('does not settle a visible stall shorter than the fallback gap', () => {
+    const announcer = new DaylightAnnouncer();
+    announcer.next(1);
+    announcer.frame(1500);
+    expect(announcer.next(0)?.settled).toBe(false);
+  });
+});
+
+class FakePage implements PageVisibility {
+  hidden = false;
+  private readonly listeners = new Set<() => void>();
+  addEventListener(_type: 'visibilitychange', listener: () => void): void {
+    this.listeners.add(listener);
+  }
+  removeEventListener(_type: 'visibilitychange', listener: () => void): void {
+    this.listeners.delete(listener);
+  }
+  get listening(): number {
+    return this.listeners.size;
+  }
+  set(hidden: boolean): void {
+    this.hidden = hidden;
+    for (const listener of this.listeners) listener();
+  }
+}
+
+describe('DaylightFeed', () => {
+  function feed(levels: { now: number }): { daylight: DaylightFeed; emitted: DaylightChange[] } {
+    const emitted: DaylightChange[] = [];
+    const bus = new EventBus<EngineEvents>();
+    bus.on('engine:daylight', (change) => emitted.push(change));
+    return { daylight: new DaylightFeed(() => levels.now, bus), emitted };
+  }
+
+  it('reads at most once per interval and emits each change, the first one settled', () => {
+    const levels = { now: 1 };
+    const { daylight, emitted } = feed(levels);
+    daylight.frame(0, 0);
+    levels.now = 0;
+    daylight.frame(DAYLIGHT_INTERVAL_MS - 1, 16);
+    expect(daylight.level).toBe(1);
+    daylight.frame(DAYLIGHT_INTERVAL_MS, 16);
+    expect(emitted).toEqual([
+      { level: 1, settled: true },
+      { level: 0, settled: false },
+    ]);
+    expect(daylight.level).toBe(0);
+  });
+
+  it('reads again on the next frame after a recheck', () => {
+    const levels = { now: 1 };
+    const { daylight, emitted } = feed(levels);
+    daylight.frame(0, 0);
+    levels.now = 0.4;
+    daylight.recheck();
+    daylight.frame(16, 16);
+    expect(emitted.at(-1)).toEqual({ level: 0.4, settled: false });
+  });
+
+  it('settles a change made during a frame gap past the fallback, read on the frame after it', () => {
+    const levels = { now: 1 };
+    const { daylight, emitted } = feed(levels);
+    daylight.frame(0, 0);
+    levels.now = 0;
+    const back = DAYLIGHT_UNSEEN_GAP_MS + 1;
+    daylight.frame(back, back);
+    expect(emitted.at(-1)).toEqual({ level: 0, settled: true });
+    levels.now = 1;
+    daylight.frame(back + DAYLIGHT_INTERVAL_MS, 16);
+    expect(emitted.at(-1)).toEqual({ level: 1, settled: false });
+  });
+
+  it('settles a change made while the watched page was hidden, until it stops watching', () => {
+    const levels = { now: 1 };
+    const { daylight, emitted } = feed(levels);
+    const page = new FakePage();
+    const stop = daylight.watch(page);
+    daylight.frame(0, 0);
+    page.set(true);
+    levels.now = 0;
+    page.set(false);
+    daylight.frame(DAYLIGHT_INTERVAL_MS, 16);
+    expect(emitted.at(-1)).toEqual({ level: 0, settled: true });
+
+    stop();
+    expect(page.listening).toBe(0);
+    page.set(true);
+    levels.now = 1;
+    daylight.frame(2 * DAYLIGHT_INTERVAL_MS, 16);
+    expect(emitted.at(-1)).toEqual({ level: 1, settled: false });
+  });
+
+  it('reads on the first frame after the page shows again, not an interval later', () => {
+    const levels = { now: 1 };
+    const { daylight, emitted } = feed(levels);
+    const page = new FakePage();
+    daylight.watch(page);
+    daylight.frame(0, 0);
+    page.set(true);
+    levels.now = 0;
+    page.set(false);
+    daylight.frame(16, 16);
+    expect(emitted.at(-1)).toEqual({ level: 0, settled: true });
+    levels.now = 1;
+    daylight.frame(32, 16);
+    expect(emitted).toHaveLength(2);
+  });
+
+  it('settles from the start when the page is already hidden', () => {
+    const levels = { now: 1 };
+    const { daylight, emitted } = feed(levels);
+    daylight.frame(0, 0);
+    const page = new FakePage();
+    page.hidden = true;
+    daylight.watch(page);
+    levels.now = 0;
+    daylight.frame(DAYLIGHT_INTERVAL_MS, 16);
+    expect(emitted.at(-1)).toEqual({ level: 0, settled: true });
   });
 });

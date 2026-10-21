@@ -14,6 +14,7 @@ import { CARCASS, SNAPSHOT_STRIDE, SnapshotField, WALK, type SimToy } from '@aqu
 import type { Collider } from '@aquarium/shared';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import type { Engine } from '../engine/Engine';
+import { DAYLIGHT_INTERVAL_MS, DAYLIGHT_UNSEEN_GAP_MS, DaylightFeed } from '../engine/daylight';
 import { TIER_SETTINGS, type TierSettings } from '../engine/quality/tiers';
 import { EventBus, type EngineEvents } from '../engine/events';
 import { DEFAULT_TANK, TANK_DIMENSIONS, waterBounds } from '../engine/tank/dimensions';
@@ -207,6 +208,164 @@ describe('FishSystem.create', () => {
     fish.handle({ type: 'tank:none', payload: {} });
     expect(await lastSpecies(3)).toEqual(demo);
     fish.dispose();
+  });
+
+  function answerInits(worker: FakeWorker, from = 0): void {
+    for (const { request, config } of worker.inits().slice(from)) {
+      worker.emit({
+        type: 'ready',
+        request,
+        epoch: request,
+        fishIds: config.fish.map((f) => f.id),
+        stride: 8,
+        stepHz: 30,
+      });
+    }
+  }
+
+  it("hands the frame loop's hood light to the sim, settled only when nobody saw it change", async () => {
+    const { engine } = fakeEngine();
+    const start = create(engine);
+    const worker = await initPosted();
+    answerInits(worker);
+    const fish = await start;
+    const levels = { now: 1 };
+    const daylight = new DaylightFeed(() => levels.now, engine.events);
+    const page = { hidden: false, listener: (): void => undefined };
+    daylight.watch({
+      get hidden() {
+        return page.hidden;
+      },
+      addEventListener: (_type, listener) => (page.listener = listener),
+      removeEventListener: () => undefined,
+    });
+    const startLights = worker.sent.filter((m) => m.type === 'light').length;
+    const lights = (): unknown[] =>
+      worker.sent.filter((m) => m.type === 'light').slice(startLights);
+    let nowMs = 0;
+    const frame = (gapMs: number): void => {
+      nowMs += gapMs;
+      daylight.frame(nowMs, gapMs);
+    };
+
+    frame(0);
+    levels.now = 0;
+    frame(DAYLIGHT_INTERVAL_MS);
+    levels.now = 1;
+    frame(DAYLIGHT_UNSEEN_GAP_MS + 1);
+    levels.now = 0.5;
+    page.hidden = true;
+    page.listener();
+    frame(DAYLIGHT_INTERVAL_MS);
+    page.hidden = false;
+    page.listener();
+    levels.now = 0;
+    frame(DAYLIGHT_INTERVAL_MS);
+    levels.now = 1;
+    frame(DAYLIGHT_INTERVAL_MS);
+
+    expect(lights()).toEqual([
+      { type: 'light', level: 1, settle: true },
+      { type: 'light', level: 0, settle: false },
+      { type: 'light', level: 1, settle: true },
+      { type: 'light', level: 0.5, settle: true },
+      { type: 'light', level: 0, settle: true },
+      { type: 'light', level: 1, settle: false },
+    ]);
+    fish.dispose();
+  });
+
+  it("tells sim client listeners the current client, then a stuck worker's replacement", async () => {
+    const { engine } = fakeEngine();
+    const start = create(engine);
+    const worker = await initPosted();
+    answerInits(worker);
+    const fish = await start;
+    const clients: unknown[] = [];
+    const extensions: number[] = [];
+    const off = fish.onSimClient((client) => {
+      clients.push(client);
+      client.onPolyps((extension) => extensions.push(extension));
+    });
+    expect(clients).toHaveLength(1);
+    worker.emit({ type: 'polyps', epoch: 1, tick: 3, extension: 0.25 });
+    expect(extensions).toEqual([0.25]);
+
+    fish.handle({ type: 'tank:none', payload: {} });
+    fish.handle({
+      type: 'tank:loaded',
+      payload: {
+        backgroundId: 'bg-fw-planted-stream',
+        tankId: TANK_A,
+        biome: 'freshwater',
+        size: 'standard',
+        decorLayout: [],
+        decorEdited: false,
+        fish: [fishFixture(FISH_1)],
+      },
+    });
+    await vi.waitFor(() => {
+      if (worker.inits().length < 2) throw new Error('no second init yet');
+    });
+    await vi.advanceTimersByTimeAsync(15_000);
+    await vi.waitFor(() => {
+      if (clients.length < 2) throw new Error('worker not replaced yet');
+    });
+    const replacement = FakeWorker.last;
+    expect(replacement).not.toBe(worker);
+    expect(clients[1]).not.toBe(clients[0]);
+    if (replacement === null) throw new Error('no replacement worker');
+    await vi.waitFor(() => {
+      if (replacement.inits().length === 0) throw new Error('no init on the replacement yet');
+    });
+    answerInits(replacement);
+    const epoch = replacement.inits()[0]?.request;
+    replacement.emit({ type: 'polyps', epoch, tick: 0, extension: 0.75 });
+    expect(extensions).toEqual([0.25, 0.75]);
+
+    off();
+    fish.dispose();
+    expect(clients).toHaveLength(2);
+  });
+
+  it('tells world listeners the running world, that it stopped, and the next one', async () => {
+    const { engine } = fakeEngine();
+    const start = create(engine);
+    const worker = await initPosted();
+    answerInits(worker);
+    const fish = await start;
+    const worlds: (number | null)[] = [];
+    fish.onWorld((epoch) => worlds.push(epoch));
+    expect(worlds).toEqual([worker.inits()[0]?.request]);
+
+    fish.handle({
+      type: 'tank:loaded',
+      payload: {
+        backgroundId: 'bg-fw-planted-stream',
+        tankId: TANK_A,
+        biome: 'freshwater',
+        size: 'standard',
+        decorLayout: [],
+        decorEdited: false,
+        fish: [fishFixture(FISH_1)],
+      },
+    });
+    expect(worlds.at(-1)).toBeNull();
+    await vi.waitFor(() => {
+      if (worker.inits().length < 2) throw new Error('no second init yet');
+    });
+    answerInits(worker, 1);
+    await fish.synced();
+    expect(worlds.at(-1)).toBe(worker.inits()[1]?.request);
+    expect(worlds.at(-1)).not.toBe(worlds[0]);
+
+    fish.handle({ type: 'tank:unloaded', payload: { tankId: TANK_A, reason: 'switch' } });
+    expect(worlds.at(-1)).toBeNull();
+
+    fish.dispose();
+    const after = worlds.length;
+    fish.handle({ type: 'tank:none', payload: {} });
+    expect(worlds).toHaveLength(after);
   });
 });
 

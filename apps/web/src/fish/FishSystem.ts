@@ -445,6 +445,10 @@ export class FishSystem {
   private readonly cleanups: (() => void)[] = [];
   private readonly ateListeners = new Set<(events: readonly FishBite[]) => void>();
   private readonly nudgeListeners = new Set<(nudge: BallNudge) => void>();
+  private readonly simClientListeners = new Set<(client: SimClient) => void>();
+  private readonly worldListeners = new Set<(epoch: number | null) => void>();
+  /** The running world's epoch at `ready`, or null with no world. */
+  private worldEpoch: number | null = null;
   private readonly nudge: { toyId: string | null; ix: number; iz: number } = {
     toyId: null,
     ix: 0,
@@ -834,6 +838,28 @@ export class FishSystem {
     return () => this.ateListeners.delete(listener);
   }
 
+  /** Called with the sim client now and with each one that replaces a stuck worker's. */
+  onSimClient(listener: (client: SimClient) => void): () => void {
+    this.simClientListeners.add(listener);
+    listener(this.sim);
+    return () => this.simClientListeners.delete(listener);
+  }
+
+  /**
+   * Called with the running world's epoch at `ready` now and whenever a world begins, and with null
+   * now if none runs and whenever one stops. Events from the client before that epoch are stale.
+   */
+  onWorld(listener: (epoch: number | null) => void): () => void {
+    this.worldListeners.add(listener);
+    listener(this.worldEpoch);
+    return () => this.worldListeners.delete(listener);
+  }
+
+  private setWorldEpoch(epoch: number | null): void {
+    this.worldEpoch = epoch;
+    for (const listener of this.worldListeners) listener(epoch);
+  }
+
   /** The nearest dead fish along `ray` that the server knows, or null. */
   pickDead(ray: PickRay): string | null {
     let best: string | null = null;
@@ -932,6 +958,8 @@ export class FishSystem {
     this.lifetime.abort(new Error('fish system disposed'));
     this.ateListeners.clear();
     this.nudgeListeners.clear();
+    this.simClientListeners.clear();
+    this.worldListeners.clear();
     for (const resolve of this.syncWaiters.splice(0)) resolve();
     releaseAll(this.cleanups.splice(0), 'FishSystem');
   }
@@ -1419,6 +1447,7 @@ export class FishSystem {
     this.stream.reset();
     this.held.releaseAll();
     for (const rt of this.runtimes.values()) rt.finsSettling = true;
+    this.setWorldEpoch(null);
   }
 
   /** Every swimming fish on screen waits where it is for the next world. */
@@ -1518,6 +1547,7 @@ export class FishSystem {
           this.simReady = true;
           this.inWorld = new Set(ready.fishIds);
           this.stream.begin(ready.epoch, ready.fishIds);
+          this.setWorldEpoch(ready.epoch);
         },
       });
       if (this.pausedAtMs !== null && !this.disposed && generation === this.generation) {
@@ -1568,6 +1598,7 @@ export class FishSystem {
     this.worker.terminate();
     this.worker = spawnSimWorker();
     this.sim = this.connectSim(this.worker);
+    for (const listener of this.simClientListeners) listener(this.sim);
   }
 
   private applyShadows(batch: SpeciesBatch): void {
