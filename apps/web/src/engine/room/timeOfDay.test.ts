@@ -1,7 +1,14 @@
 import { lampIsOn } from '@aquarium/sim/lifecycle';
 import { describe, expect, it } from 'vitest';
 import { localMinuteOfDay } from '../daylight';
-import { roomLightAt, sunAt, SUNRISE_MINUTE, SUNSET_MINUTE, type Rgb } from './timeOfDay';
+import {
+  roomDaylightAt,
+  roomLightAt,
+  sunAt,
+  SUNRISE_MINUTE,
+  SUNSET_MINUTE,
+  type Rgb,
+} from './timeOfDay';
 import type { Weather } from './weather';
 
 const at = (h: number, m = 0): number => h * 60 + m;
@@ -151,5 +158,26 @@ describe('localMinuteOfDay', () => {
   it('rejects a time or offset that is not a number', () => {
     expect(() => localMinuteOfDay(Number.NaN, 0)).toThrow(RangeError);
     expect(() => localMinuteOfDay(0, Number.POSITIVE_INFINITY)).toThrow(RangeError);
+  });
+});
+
+describe('roomDaylightAt', () => {
+  it('is full at midday, near zero at night and rises through the morning', () => {
+    expect(roomDaylightAt(at(13))).toBe(1);
+    expect(roomDaylightAt(at(0))).toBeLessThan(0.05);
+    let last = roomDaylightAt(at(4));
+    for (let minute = at(4); minute <= at(13); minute += 10) {
+      const level = roomDaylightAt(minute);
+      expect(level).toBeGreaterThanOrEqual(last - 1e-12);
+      last = level;
+    }
+  });
+
+  it('tracks the window sky on the same clock as the sun', () => {
+    for (let minute = 0; minute < 24 * 60; minute += 30) {
+      const { ambient } = roomLightAt(minute);
+      const y = 0.2126 * ambient[0] + 0.7152 * ambient[1] + 0.0722 * ambient[2];
+      expect(roomDaylightAt(minute)).toBeCloseTo(Math.min(1, y), 12);
+    }
   });
 });

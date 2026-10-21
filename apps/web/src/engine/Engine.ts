@@ -16,9 +16,11 @@ import {
   daylightAt,
   lampPhotoperiod,
   localMinuteOfDay,
+  minuteOfDay,
   type LampHours,
   type Photoperiod,
 } from './daylight';
+import { roomDaylightAt } from './room/timeOfDay';
 import {
   browserSessionStore,
   type DeviceLossWatch,
@@ -315,6 +317,7 @@ export class Engine {
       ambientScatter: this.ambientScatter,
       substrateAlbedo: this.substrateAlbedo,
       roomBackgroundIntensity,
+      roomDaylight: 1,
     };
     this.background = new TankBackground(this.ktx2, this.quality.tier, ASSET_BASE);
     cleanup.add(() => this.background.dispose());
@@ -565,6 +568,7 @@ export class Engine {
   private updateDaylight(nowMs: number): void {
     if (nowMs - this.daylightCheckedAt < DAYLIGHT_INTERVAL_MS) return;
     this.daylightCheckedAt = nowMs;
+    this.dayRig.roomDaylight = roomDaylightAt(this.clock ?? minuteOfDay(new Date()));
     const level = daylightAt(this.clock ?? localMinuteOfDay(Date.now(), 0), this.photoperiod);
     if (this.daylightAnnounced && Math.abs(level - this.daylightLevel) < DAYLIGHT_EPSILON) return;
     this.daylightAnnounced = true;

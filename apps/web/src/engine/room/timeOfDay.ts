@@ -171,6 +171,14 @@ function skyKeysAt(elevation: number): Omit<Key, 'elevation'> {
   return last;
 }
 
+/**
+ * Daylight in the room under a clear sky at `minute` after local midnight: 0 = night .. 1 = midday.
+ * It is the luminance of the sky's ambient gain, so it rises and sets with the window's sky.
+ */
+export function roomDaylightAt(minute: number): number {
+  return clamp01(luminance(skyKeysAt(sunAt(minute).elevation).ambient));
+}
+
 const CLEAR: Weather = { state: 'clear', cloud: 0, rain: 0 };
 
 /**

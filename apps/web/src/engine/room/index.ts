@@ -8,6 +8,7 @@ export {
   type RoomLightOptions,
 } from './RoomLight';
 export {
+  roomDaylightAt,
   roomLightAt,
   sunAt,
   SUNRISE_MINUTE,
