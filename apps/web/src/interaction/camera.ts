@@ -37,6 +37,7 @@ export interface RoomVolume {
 }
 
 const ROOM_MARGIN = 0.1;
+const ARC_ROOM_SAMPLES = 24;
 const ROOM_SEARCH_STEPS = 64;
 const ROOM_SAFE_PITCH = 0.1;
 
@@ -348,25 +349,47 @@ export class CameraRig {
     const t = this.orbitTarget;
     const a0 = Math.atan2(from.x - t.x, from.z - t.z);
     const a1 = Math.atan2(to.x - t.x, to.z - t.z);
-    let delta = a1 - a0;
-    delta -= Math.PI * 2 * Math.round(delta / (Math.PI * 2));
-    const angle = a0 + delta * alpha;
     const r0 = Math.hypot(from.x - t.x, from.z - t.z);
     const r1 = Math.hypot(to.x - t.x, to.z - t.z);
-    const radius = r0 + (r1 - r0) * alpha;
-    const eye = {
-      x: t.x + Math.sin(angle) * radius,
-      y: from.y + (to.y - from.y) * alpha,
-      z: t.z + Math.cos(angle) * radius,
+    const turn = Math.PI * 2;
+    let delta = a1 - a0;
+    delta -= turn * Math.round(delta / turn);
+    const at = (fraction: number, d: number): Vec3 => {
+      const angle = a0 + d * fraction;
+      const radius = r0 + (r1 - r0) * fraction;
+      return {
+        x: t.x + Math.sin(angle) * radius,
+        y: from.y + (to.y - from.y) * fraction,
+        z: t.z + Math.cos(angle) * radius,
+      };
     };
-    if (!this.insideGlass(eye)) return eye;
+    if (this.room) {
+      const [lo, hi] = this.roomLimits(this.room);
+      const stays = (d: number): boolean => {
+        for (let i = 1; i <= ARC_ROOM_SAMPLES; i++) {
+          const p = at(i / ARC_ROOM_SAMPLES, d);
+          if (p.x < lo.x || p.x > hi.x || p.y < lo.y || p.y > hi.y || p.z < lo.z || p.z > hi.z) {
+            return false;
+          }
+        }
+        return true;
+      };
+      if (!stays(delta)) delta -= Math.sign(delta || 1) * turn;
+    }
+    const eye = at(alpha, delta);
+    if (!this.insideGlass(eye)) return this.keepInRoom(eye);
     const offset = sub(eye, t);
     const span = length(offset);
-    if (span < 1e-6) return eye;
+    if (span < 1e-6) return to;
     const dir = { x: offset.x / span, y: offset.y / span, z: offset.z / span };
     const { min, max } = this.glassBox();
     const reach = distanceToBoxExit(t, dir, min, max) + GLASS_CLEARANCE;
-    return { x: t.x + dir.x * reach, y: t.y + dir.y * reach, z: t.z + dir.z * reach };
+    const pushed = this.keepInRoom({
+      x: t.x + dir.x * reach,
+      y: t.y + dir.y * reach,
+      z: t.z + dir.z * reach,
+    });
+    return this.insideGlass(pushed) ? to : pushed;
   }
 
   /**

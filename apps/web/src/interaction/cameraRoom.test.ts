@@ -109,13 +109,40 @@ describe('CameraRig room limit', () => {
           settle(rig);
           rig.zoom(zoom);
           settle(rig);
-          rig.drag(Math.PI / 0.005, 0);
+          rig.rotateBy(Math.PI, 0);
           const goalZ = -cam.pos.z;
           for (let t = 0; t < 10; t += 1 / hz) {
             rig.update(1 / hz);
             expect(outsideGlass(cam.pos, d), `${size} ${zoom} ${hz}`).toBe(true);
           }
           expect(cam.pos.z, `${size} ${zoom} ${hz}`).toBeLessThan(goalZ / 2);
+        }
+      }
+    },
+  );
+
+  it.each([30, 60, 144, 240])(
+    'keeps the eye inside the room and out of the glass on every frame of a half turn at %i Hz',
+    (hz) => {
+      for (const size of sizes) {
+        for (const preset of presets) {
+          for (const [from, to] of [
+            [1.8, -1.8],
+            [-1.8, 1.8],
+            [0.3, Math.PI],
+            [Math.PI, 0.3],
+          ] as const) {
+            const { rig, cam, room, d } = roomRig(size, preset);
+            rig.setOrbit(from, 0.1, 1);
+            settle(rig);
+            rig.setOrbit(to, 0.1, 1);
+            for (let t = 0; t < 10; t += 1 / hz) {
+              rig.update(1 / hz);
+              const label = `${size} ${preset} ${from}->${to} ${hz} ${t}`;
+              expect(inRoom(cam.pos, room), label).toBe(true);
+              expect(outsideGlass(cam.pos, d), label).toBe(true);
+            }
+          }
         }
       }
     },

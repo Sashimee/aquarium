@@ -105,7 +105,10 @@ async function boot(): Promise<void> {
   let engine: Engine;
   let assetWatch: AssetWatch;
   try {
-    [modules, roomModules] = await Promise.all([awaitTankModules(tank, events), roomModule]);
+    [modules, roomModules] = await Promise.all([
+      awaitTankModules(tank, events),
+      awaitTankModules(roomModule, events, 'room'),
+    ]);
     tracker.reach('code');
     engine = await modules.Engine.create(container, {
       options: parseEngineOptions(window.location.search),
