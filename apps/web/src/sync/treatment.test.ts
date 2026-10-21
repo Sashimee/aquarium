@@ -7,9 +7,10 @@ import {
   doseButtonText,
   doseSpend,
   heatTolerantSick,
-  heldFor,
+  emptyHeld,
   medicineLine,
   planDose,
+  reconcileHeld,
   severityWord,
   sickKinds,
   sickSummary,
@@ -175,12 +176,17 @@ describe('doseSpend', () => {
   });
 });
 
-describe('heldFor', () => {
-  it('shows a held refusal or warning under its own tank only', () => {
-    const refusal = { tankId: 'a', message: 'no' };
-    expect(heldFor(refusal, 'a')).toBe(refusal);
-    expect(heldFor(refusal, 'b')).toBeNull();
-    expect(heldFor(null, 'a')).toBeNull();
+describe('reconcileHeld', () => {
+  const held = { tankId: 'a', pending: { kind: 'ich' }, refusal: { message: 'no' } };
+
+  it('keeps what is held for the tank on screen', () => {
+    expect(reconcileHeld(held, 'a')).toBe(held);
+  });
+
+  it('drops what another tank held, and does not bring it back on returning', () => {
+    const onB = reconcileHeld(held, 'b');
+    expect(onB).toEqual(emptyHeld('b'));
+    expect(reconcileHeld(onB, 'a')).toEqual(emptyHeld('a'));
   });
 });
 
