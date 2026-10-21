@@ -179,6 +179,14 @@ const ADULT_MAX: Record<string, { model: string; maxSlM: number; maxTlM: number;
       source:
         'Lysmata amboinensis: up to about 5.5 cm; the shrimp standard length is rostrum to telson',
     },
+    'cleaner-wrasse': {
+      model: 'cleaner-wrasse',
+      maxSlM: 0.14 / 1.2,
+      maxTlM: 0.14,
+      source:
+        'FishBase: 14 cm TL (Ref. 55367), commonly about 10 cm TL; no length-length relationship ' +
+        'was looked up, so TL = 1.2 SL, the proportion of the lofted model',
+    },
     'six-line-wrasse': {
       model: 'six-line-wrasse',
       maxSlM: 0.1 / 1.235,
