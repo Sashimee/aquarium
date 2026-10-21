@@ -624,7 +624,7 @@ describe('server-authoritative lifecycle', () => {
       { tankId: tank.id, day: iso(14) },
       { tankId: tank.id, day: iso(40) },
     ]);
-    await pruneExpired(h.database);
+    await pruneExpired(h.database, h.clock);
     const kept = await h.database.db
       .select()
       .from(schema.tankVisits)
@@ -894,7 +894,7 @@ describe('care actions and feeding validation', () => {
         batchId: old,
         createdAt: new Date(Date.now() - 2 * DAY * 60_000),
       });
-      await pruneExpired(h.database);
+      await pruneExpired(h.database, h.clock);
       const stale = await call(h, cookie, 'POST', `/api/tanks/${tank.id}/ate`, {
         batchId: old,
         reports: [
@@ -940,7 +940,7 @@ describe('care actions and feeding validation', () => {
         batchId: old,
         createdAt: new Date(Date.now() - 2 * DAY * 60_000),
       });
-      await pruneExpired(h.database);
+      await pruneExpired(h.database, h.clock);
       const left = await h.database.db
         .select()
         .from(schema.ateBatches)
