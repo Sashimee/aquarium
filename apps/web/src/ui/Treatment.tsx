@@ -37,15 +37,13 @@ import { useSpend } from './spend';
 
 const POTENCIES: readonly MedicinePotency[] = ['standard', 'premium'];
 
-interface Pending {
-  tankId: string;
+export interface Pending {
   kind: DiseaseKind;
   potency: MedicinePotency;
   warnings: string[];
 }
 
-interface Refusal {
-  tankId: string;
+export interface Refusal {
   kind: DiseaseKind;
   message: string;
   waterChange: boolean;
@@ -62,14 +60,18 @@ export function Treatment({
   session,
   state,
   tank,
+  initialHeld,
 }: {
   session: TankSession;
   state: SessionState;
   tank: Tank;
+  initialHeld?: HeldDose<Pending, Refusal>;
 }) {
   const id = useId();
   const { spend, notice } = useSpend(session, state.balance);
-  const [stored, setHeld] = useState<HeldDose<Pending, Refusal>>(() => emptyHeld(tank.id));
+  const [stored, setHeld] = useState<HeldDose<Pending, Refusal>>(
+    () => initialHeld ?? emptyHeld(tank.id),
+  );
   const held = reconcileHeld(stored, tank.id);
   if (held !== stored) setHeld(held);
   const { pending, refusal } = held;
@@ -86,7 +88,6 @@ export function Treatment({
       const outcome = await session.treat(kind, potency);
       if (!outcome.ok && outcome.refusal !== null) {
         setRefusal({
-          tankId: tank.id,
           kind,
           message: outcome.refusal,
           waterChange: wantsWaterChange(outcome.reason),
@@ -107,7 +108,6 @@ export function Treatment({
     const plan = planDose(tank, kind, potency, Date.now());
     if (plan.kind === 'blocked') {
       return setRefusal({
-        tankId: tank.id,
         kind,
         message: blockedText(plan.reason),
         waterChange: plan.reason !== 'nothing-to-treat',
@@ -117,7 +117,7 @@ export function Treatment({
       ...(plan.replaces ? [switchWarning(plan.replaces, kind)] : []),
       ...(plan.overdose ? [OVERDOSE_WARNING] : []),
     ];
-    if (warnings.length > 0) return setPending({ tankId: tank.id, kind, potency, warnings });
+    if (warnings.length > 0) return setPending({ kind, potency, warnings });
     run(kind, potency, false);
   };
 
@@ -144,25 +144,44 @@ export function Treatment({
       {notice}
       {pending && (
         <Dialog title="Before you dose" tone="loss" onClose={() => setPending(null)}>
-          <PendingDoseWarning pending={pending} balance={state.balance} />
-          <div className="row">
-            <button
-              type="button"
-              className="primary"
-              onClick={() => {
-                setPending(null);
-                run(pending.kind, pending.potency, true);
-              }}
-            >
-              Dose anyway
-            </button>
-            <button type="button" onClick={() => setPending(null)}>
-              Keep things as they are
-            </button>
-          </div>
+          <DoseConfirmation
+            pending={pending}
+            balance={state.balance}
+            onConfirm={() => {
+              setPending(null);
+              run(pending.kind, pending.potency, true);
+            }}
+            onCancel={() => setPending(null)}
+          />
         </Dialog>
       )}
     </section>
+  );
+}
+
+export function DoseConfirmation({
+  pending,
+  balance,
+  onConfirm,
+  onCancel,
+}: {
+  pending: Pick<Pending, 'kind' | 'potency' | 'warnings'>;
+  balance: number | null;
+  onConfirm(): void;
+  onCancel(): void;
+}) {
+  return (
+    <>
+      <PendingDoseWarning pending={pending} balance={balance} />
+      <div className="row">
+        <button type="button" className="primary" onClick={onConfirm}>
+          Dose anyway
+        </button>
+        <button type="button" onClick={onCancel}>
+          Keep things as they are
+        </button>
+      </div>
+    </>
   );
 }
 
