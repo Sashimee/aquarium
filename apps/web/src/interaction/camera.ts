@@ -271,7 +271,9 @@ export class CameraRig {
     const goal = this.goal();
     const rate = this.transitioning ? TRANSITION_RATE : FOLLOW_RATE;
     const alpha = this.reducedMotion ? 1 : 1 - Math.exp(-rate * dt);
+    const wasOutside = !this.insideGlass(this.eye);
     this.eye = this.chase(this.eye, goal.eye, alpha);
+    if (this.modeValue === 'orbit' && wasOutside) this.eye = this.slideOutOfGlass(this.eye);
     this.look = this.chase(this.look, goal.look, alpha);
     if (
       this.transitioning &&
@@ -339,6 +341,21 @@ export class CameraRig {
     return p.x > min.x && p.x < max.x && p.y > min.y && p.y < max.y && p.z > min.z && p.z < max.z;
   }
 
+  /** A straight chase across the tank would pass through it; slide along the nearest face instead. */
+  private slideOutOfGlass(eye: Vec3): Vec3 {
+    if (!this.insideGlass(eye)) return eye;
+    const { min, max } = this.glassBox();
+    const c = GLASS_CLEARANCE;
+    const faces = [
+      { gap: eye.x - min.x, out: { ...eye, x: min.x - c } },
+      { gap: max.x - eye.x, out: { ...eye, x: max.x + c } },
+      { gap: eye.z - min.z, out: { ...eye, z: min.z - c } },
+      { gap: max.z - eye.z, out: { ...eye, z: max.z + c } },
+      { gap: max.y - eye.y, out: { ...eye, y: max.y + c } },
+    ];
+    return faces.reduce((best, f) => (f.gap < best.gap ? f : best)).out;
+  }
+
   /**
    * Keeps the orbit eye outside the glass and, when a room is set, inside it. A direction the room
    * leaves no space for (behind a tank that stands close to the back wall) swings round toward
@@ -370,6 +387,13 @@ export class CameraRig {
     };
     if (fits(this.yaw, this.pitch)) return;
     const yaw = Math.atan2(Math.sin(this.yaw), Math.cos(this.yaw));
+    for (let i = 1; i <= ROOM_SEARCH_STEPS; i++) {
+      const y = yaw * (1 - i / ROOM_SEARCH_STEPS);
+      if (fits(y, this.pitch)) {
+        this.yaw = y;
+        return;
+      }
+    }
     for (let i = 1; i <= ROOM_SEARCH_STEPS; i++) {
       const k = 1 - i / ROOM_SEARCH_STEPS;
       const y = yaw * k;

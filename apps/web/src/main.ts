@@ -54,6 +54,7 @@ async function boot(): Promise<void> {
   const container = requireElement('app');
   const uiRoot = requireElement('ui');
   const tank = import('./tank');
+  const roomModule = import('./scene/room');
 
   const events = new EventBus<EngineEvents>(undefined, ['engine:ready']);
   const interaction = new EventBus<InteractionEvents>(undefined, STICKY_INTERACTION_EVENTS);
@@ -148,7 +149,7 @@ async function boot(): Promise<void> {
     },
   });
 
-  const { mountRoom, RoomPreference, browserRoomStorage } = await import('./scene/room');
+  const { mountRoom, RoomPreference, browserRoomStorage } = await roomModule;
   const roomPreference = new RoomPreference(browserRoomStorage());
   const room = mountRoom(engine, roomPreference);
   const limitToRoom = (): void => syncRoomLimit(rig, room.backdrop.layout);

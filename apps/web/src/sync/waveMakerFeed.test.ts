@@ -15,8 +15,8 @@ function setup() {
       fish: [],
       decorLayout: [],
       decorEdited: false,
-      backgroundId: 'reef-blue',
-    } as unknown as InteractionEvents['tank:loaded']);
+      backgroundId: 'bg-reef-deep-blue',
+    });
   return { bus, feed, tiers, sink: { setWaveMakerTier: (t: number) => tiers.push(t) }, loaded };
 }
 

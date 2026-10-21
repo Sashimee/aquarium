@@ -42,6 +42,12 @@ function settle(rig: CameraRig) {
   for (let t = 0; t < 5; t += 1 / 60) rig.update(1 / 60);
 }
 
+const outsideGlass = (p: Vec3, d: { length: number; depth: number; height: number }) =>
+  Math.abs(p.x) >= d.length / 2 - 1e-9 ||
+  Math.abs(p.z) >= d.depth / 2 - 1e-9 ||
+  p.y <= 0 ||
+  p.y >= d.height - 1e-9;
+
 const inRoom = (p: Vec3, room: { min: Vec3; max: Vec3 }) =>
   p.x > room.min.x &&
   p.x < room.max.x &&
@@ -54,15 +60,15 @@ describe('CameraRig room limit', () => {
   it('keeps the eye inside the room at every limit of azimuth, polar angle and distance', () => {
     for (const size of sizes) {
       for (const preset of presets) {
-        const { rig, cam, room } = roomRig(size, preset);
+        const { rig, cam, room, d } = roomRig(size, preset);
         for (let yaw = -Math.PI; yaw <= Math.PI; yaw += Math.PI / 12) {
           for (const pitch of [-0.15, 0.1, 0.7, 1.35]) {
             for (const distance of [0.01, 1.6, 100]) {
               rig.setOrbit(yaw, pitch, distance);
               settle(rig);
-              expect(inRoom(cam.pos, room), `${size} ${preset} ${yaw} ${pitch} ${distance}`).toBe(
-                true,
-              );
+              const label = `${size} ${preset} ${yaw} ${pitch} ${distance}`;
+              expect(inRoom(cam.pos, room), label).toBe(true);
+              expect(outsideGlass(cam.pos, d), label).toBe(true);
             }
           }
         }
@@ -75,11 +81,30 @@ describe('CameraRig room limit', () => {
       const { rig, cam, d } = roomRig(size, 'living-room');
       rig.setOrbit(Math.PI, 0.1, 1);
       settle(rig);
-      const outside =
-        Math.abs(cam.pos.x) >= d.length / 2 ||
-        Math.abs(cam.pos.z) >= d.depth / 2 ||
-        cam.pos.y >= d.height;
-      expect(outside, size).toBe(true);
+      expect(outsideGlass(cam.pos, d), size).toBe(true);
+    }
+  });
+
+  it('keeps the pitch when turning the yaw alone clears the back wall', () => {
+    const { rig, cam, d } = roomRig('standard', 'living-room');
+    const elevation = () => Math.atan2(cam.pos.y - d.height / 2, Math.hypot(cam.pos.x, cam.pos.z));
+    rig.setOrbit(0.4, 0.7, 1);
+    settle(rig);
+    const before = elevation();
+    rig.setOrbit(Math.PI * 0.95, 0.7, 1);
+    settle(rig);
+    expect(elevation()).toBeCloseTo(before, 3);
+  });
+
+  it('never crosses the tank when a room is picked while viewing from behind', () => {
+    const { rig, cam, d } = roomRig('standard', 'living-room');
+    rig.setRoom(null);
+    rig.setOrbit(Math.PI, 0.1, 2);
+    settle(rig);
+    rig.setRoom(roomRig('standard', 'living-room').room);
+    for (let t = 0; t < 3; t += 1 / 60) {
+      rig.update(1 / 60);
+      expect(outsideGlass(cam.pos, d)).toBe(true);
     }
   });
 
