@@ -81,6 +81,10 @@ class FakeFishSystem {
   setToys(toys: readonly SimToy[]): void {
     this.toys.push(toys);
   }
+  readonly waveMakerTiers: number[] = [];
+  setWaveMakerTier(tier: number): void {
+    this.waveMakerTiers.push(tier);
+  }
   private nudged: ((nudge: BallNudge) => void) | null = null;
   onToyNudge(listener: (nudge: BallNudge) => void): () => void {
     this.nudged = listener;
@@ -478,6 +482,26 @@ describe('startFish', () => {
     expect(fish.toys).toEqual([[mirror], []]);
     expect(handle.sim.fishPoint(FISH_1)).toEqual({ x: 1, y: 2, z: 3 });
     expect(handle.sim.fishPoint(FISH_2)).toBeNull();
+  });
+
+  it('holds the last wave maker tier until the fish are up, then forwards each change', async () => {
+    const fish = new FakeFishSystem();
+    const pending = deferred<FakeFishSystem>();
+    const { handle } = setup(pending.promise);
+    handle.sim.setWaveMakerTier(1);
+    handle.sim.setWaveMakerTier(3);
+    pending.resolve(fish);
+    await flush();
+    expect(fish.waveMakerTiers).toEqual([3]);
+    handle.sim.setWaveMakerTier(0);
+    expect(fish.waveMakerTiers).toEqual([3, 0]);
+  });
+
+  it('sends no wave maker to fish that come up without one', async () => {
+    const fish = new FakeFishSystem();
+    setup(Promise.resolve(fish));
+    await flush();
+    expect(fish.waveMakerTiers).toEqual([]);
   });
 
   it('sends no toys to fish that come up with none set', async () => {

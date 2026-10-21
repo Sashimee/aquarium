@@ -1,12 +1,25 @@
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { NodeIO } from '@gltf-transform/core';
+import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
+import { MeshoptDecoder } from 'meshoptimizer';
 import { describe, expect, it } from 'vitest';
 import {
   CRAB_KIND,
   HERMIT_RECIPES,
   assignLimbIndices,
+  clusterByDirection,
   crabColour,
   recolourDense,
   segmentCrab,
 } from './hermit.ts';
+import { canonicalVertices } from './crew-scan.ts';
+import {
+  FIN_ID_ATTRIBUTE,
+  FIN_MASK_ATTRIBUTE,
+  LEG_ATTRIBUTE,
+  SHRIMP_PART_IDS,
+} from './index-schema.ts';
 import type { Vec3 } from './math.ts';
 import type { Dense } from './rebake.ts';
 
@@ -161,21 +174,45 @@ describe('segmentCrab', () => {
 });
 
 describe('assignLimbIndices', () => {
-  it('gives the frontmost legs the lowest pair and alternates sides by lateral sign', () => {
+  it('ranks legs fore to aft on their own side, so a side with fewer legs does not shift the other', () => {
     const index = assignLimbIndices([
-      { kind: CRAB_KIND.leg, lateral: -1, ahead: 3 },
-      { kind: CRAB_KIND.leg, lateral: 1, ahead: 2.9 },
-      { kind: CRAB_KIND.leg, lateral: -1, ahead: 1 },
+      { kind: CRAB_KIND.leg, lateral: -1, ahead: 3, reach: 1 },
+      { kind: CRAB_KIND.leg, lateral: 1, ahead: 2.9, reach: 1 },
+      { kind: CRAB_KIND.leg, lateral: -1, ahead: 1, reach: 3 },
+      { kind: CRAB_KIND.leg, lateral: -1, ahead: 2, reach: 3 },
     ]);
-    expect(index).toEqual([0, 3, 4]);
+    expect(index).toEqual([0, 1, 4, 2]);
+  });
+
+  it('puts the shortest-reach leg of each side in pair 0 even when it sits behind the walking legs', () => {
+    const index = assignLimbIndices([
+      { kind: CRAB_KIND.leg, lateral: -1, ahead: 3, reach: 7 },
+      { kind: CRAB_KIND.leg, lateral: -1, ahead: 1, reach: 3 },
+      { kind: CRAB_KIND.leg, lateral: -1, ahead: 2, reach: 7 },
+      { kind: CRAB_KIND.leg, lateral: 1, ahead: 3, reach: 7 },
+      { kind: CRAB_KIND.leg, lateral: 1, ahead: 2, reach: 7 },
+      { kind: CRAB_KIND.leg, lateral: 1, ahead: 1, reach: 3.2 },
+    ]);
+    expect(index).toEqual([2, 0, 4, 3, 5, 1]);
+  });
+
+  it('throws when the two sides claws do not look alike', () => {
+    expect(() =>
+      assignLimbIndices([
+        { kind: CRAB_KIND.leg, lateral: -1, ahead: 2, reach: 3 },
+        { kind: CRAB_KIND.leg, lateral: -1, ahead: 1, reach: 7 },
+        { kind: CRAB_KIND.leg, lateral: 1, ahead: 2, reach: 7 },
+        { kind: CRAB_KIND.leg, lateral: 1, ahead: 1, reach: 8 },
+      ]),
+    ).toThrow(/claws differ/);
   });
 
   it('keeps indices unique when several legs share a rank and maps antennae to the 2/3 slot', () => {
     const index = assignLimbIndices([
-      { kind: CRAB_KIND.leg, lateral: -1, ahead: 3 },
-      { kind: CRAB_KIND.leg, lateral: -1, ahead: 2 },
-      { kind: CRAB_KIND.antenna, lateral: -0.5, ahead: 4 },
-      { kind: CRAB_KIND.antenna, lateral: 0.5, ahead: 4 },
+      { kind: CRAB_KIND.leg, lateral: -1, ahead: 3, reach: 1 },
+      { kind: CRAB_KIND.leg, lateral: -1, ahead: 2, reach: 1 },
+      { kind: CRAB_KIND.antenna, lateral: -0.5, ahead: 4, reach: 1 },
+      { kind: CRAB_KIND.antenna, lateral: 0.5, ahead: 4, reach: 1 },
     ]);
     expect(index[0]).not.toBe(index[1]);
     expect(index.slice(2)).toEqual([2, 3]);
@@ -186,8 +223,12 @@ describe('assignLimbIndices', () => {
       kind: CRAB_KIND.leg,
       lateral: -1,
       ahead: 7 - i,
+      reach: 1 + i,
     }));
-    const index = assignLimbIndices([...legs, { kind: CRAB_KIND.stem, lateral: 0, ahead: 0 }]);
+    const index = assignLimbIndices([
+      ...legs,
+      { kind: CRAB_KIND.stem, lateral: 0, ahead: 0, reach: 0 },
+    ]);
     expect(new Set(index.slice(0, 7)).size).toBe(7);
     expect(index[7]).toBe(-1);
   });
@@ -254,4 +295,151 @@ describe('HERMIT_RECIPES', () => {
       expect(recipe.fallbackLengthM).toBeGreaterThan(0);
     }
   });
+});
+
+describe('clusterByDirection', () => {
+  it('parts points that fan out from the hip by direction, whatever their distance', () => {
+    const points: Vec3[] = [];
+    for (const [dx, dz] of [
+      [1, 0],
+      [0.7, 0.7],
+      [0, 1],
+    ] as const)
+      for (let r = 1; r <= 10; r++) points.push([dx * r, 0, dz * r]);
+    const label = clusterByDirection(points, [0, 0, 0], 3);
+    expect(new Set(label).size).toBe(3);
+    for (let leg = 0; leg < 3; leg++)
+      expect(new Set(label.slice(leg * 10, leg * 10 + 10)).size).toBe(1);
+  });
+});
+
+describe('the shipped hermit crab', () => {
+  const assets = fileURLToPath(new URL('../../../apps/web/public/assets', import.meta.url));
+
+  interface ShippedLegs {
+    position: ArrayLike<number>;
+    part: ArrayLike<number>;
+    leg: ArrayLike<number>;
+    weight: ArrayLike<number>;
+    indices: ArrayLike<number>;
+  }
+
+  async function readCrab(level: number): Promise<ShippedLegs> {
+    const io = new NodeIO()
+      .registerExtensions(ALL_EXTENSIONS)
+      .registerDependencies({ 'meshopt.decoder': MeshoptDecoder });
+    const doc = await io.read(join(assets, 'crab', 'hermit-crab', `lod${level}.glb`));
+    const prims = doc
+      .getRoot()
+      .listMeshes()
+      .flatMap((mesh) => mesh.listPrimitives());
+    expect(prims).toHaveLength(1);
+    const prim = prims[0]!;
+    return {
+      position: prim.getAttribute('POSITION')!.getArray()!,
+      part: prim.getAttribute(FIN_ID_ATTRIBUTE)!.getArray()!,
+      leg: prim.getAttribute(LEG_ATTRIBUTE)!.getArray()!,
+      weight: prim.getAttribute(FIN_MASK_ATTRIBUTE)!.getArray()!,
+      indices: prim.getIndices()!.getArray()!,
+    };
+  }
+
+  const isLeg = (crab: ShippedLegs, v: number): boolean => crab.part[v] === SHRIMP_PART_IDS.leg;
+
+  it('gives each of its three legs a side its own slot, walking legs front to back', async () => {
+    const crab = await readCrab(0);
+    const slots = new Map<number, { x: number; z: number; count: number }>();
+    for (let v = 0; v < crab.part.length; v++) {
+      if (!isLeg(crab, v)) continue;
+      const slot = slots.get(crab.leg[v]!) ?? { x: 0, z: 0, count: 0 };
+      slot.x += crab.position[v * 3]!;
+      slot.z += crab.position[v * 3 + 2]!;
+      slot.count++;
+      slots.set(crab.leg[v]!, slot);
+    }
+    expect([...slots.keys()].sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4, 5]);
+    for (const slot of slots.values()) expect(slot.count).toBeGreaterThan(200);
+    const mean = (slot: number, axis: 'x' | 'z'): number =>
+      slots.get(slot)![axis] / slots.get(slot)!.count;
+    for (const side of [0, 1]) {
+      expect(mean(side + 2, 'z')).toBeGreaterThan(mean(side + 4, 'z'));
+    }
+    for (const pair of [0, 2, 4]) expect(mean(pair, 'x')).toBeLessThan(mean(pair + 1, 'x'));
+  });
+
+  it.each([0, 1, 2])(
+    'LOD%i: slots 0 and 1 are the claws, shorter than every walking leg and alike',
+    async (level) => {
+      const crab = await readCrab(level);
+      const sums = new Map<number, { root: number[]; tip: number[]; r: number; t: number }>();
+      for (let v = 0; v < crab.part.length; v++) {
+        if (!isLeg(crab, v)) continue;
+        const entry = sums.get(crab.leg[v]!) ?? { root: [0, 0, 0], tip: [0, 0, 0], r: 0, t: 0 };
+        const w = crab.weight[v]!;
+        const into = w < 0.1 ? entry.root : w > 0.9 ? entry.tip : null;
+        if (into) {
+          for (let a = 0; a < 3; a++) into[a]! += crab.position[v * 3 + a]!;
+          if (w < 0.1) entry.r++;
+          else entry.t++;
+        }
+        sums.set(crab.leg[v]!, entry);
+      }
+      const reach = (slot: number): number => {
+        const e = sums.get(slot)!;
+        return Math.hypot(...[0, 1, 2].map((a) => e.root[a]! / e.r - e.tip[a]! / e.t));
+      };
+      for (const claw of [0, 1])
+        for (const walker of [2, 3, 4, 5])
+          expect(reach(claw), `slot ${claw} vs ${walker}`).toBeLessThan(reach(walker));
+      expect(Math.max(reach(0), reach(1)) / Math.min(reach(0), reach(1))).toBeLessThan(1.5);
+    },
+  );
+
+  it.each([0, 1, 2])(
+    'LOD%i: every leg slot is one connected piece whose root touches the body',
+    async (level) => {
+      const crab = await readCrab(level);
+      const canon = canonicalVertices(crab.position, 1e-7);
+      const parent = new Map<number, number>();
+      const find = (a: number): number => {
+        let root = a;
+        while (parent.get(root) !== root) root = parent.get(root)!;
+        return root;
+      };
+      const slotOf = new Map<number, number>();
+      for (let v = 0; v < crab.part.length; v++)
+        if (isLeg(crab, v)) {
+          parent.set(canon[v]!, canon[v]!);
+          slotOf.set(canon[v]!, crab.leg[v]!);
+        }
+      const rooted = new Set<number>();
+      for (let t = 0; t < crab.indices.length; t += 3)
+        for (let k = 0; k < 3; k++) {
+          const a = crab.indices[t + k]!;
+          const b = crab.indices[t + ((k + 1) % 3)]!;
+          if (isLeg(crab, a) && isLeg(crab, b) && crab.leg[a] === crab.leg[b])
+            parent.set(find(canon[a]!), find(canon[b]!));
+          else if (isLeg(crab, a) !== isLeg(crab, b)) {
+            const leg = isLeg(crab, a) ? a : b;
+            const other = leg === a ? b : a;
+            if (crab.part[other] === SHRIMP_PART_IDS.abdomen) rooted.add(canon[leg]!);
+          }
+        }
+      const pieces = new Map<number, Map<number, { size: number; touchesBody: boolean }>>();
+      for (const [node, slot] of slotOf) {
+        const bySlot = pieces.get(slot) ?? new Map();
+        const piece = bySlot.get(find(node)) ?? { size: 0, touchesBody: false };
+        piece.size++;
+        piece.touchesBody ||= rooted.has(node);
+        bySlot.set(find(node), piece);
+        pieces.set(slot, bySlot);
+      }
+      expect([...pieces.keys()].sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4, 5]);
+      for (const [slot, bySlot] of pieces) {
+        const real = [...bySlot.values()].filter((p) => p.size > 5);
+        expect(real, `slot ${slot}`).toHaveLength(1);
+        expect(real[0]!.touchesBody, `slot ${slot} root`).toBe(true);
+      }
+    },
+  );
 });

@@ -31,6 +31,15 @@ export interface CameraOptions {
   onModeChange?: (mode: CameraMode) => void;
 }
 
+export interface RoomVolume {
+  min: Vec3;
+  max: Vec3;
+}
+
+const ROOM_MARGIN = 0.1;
+const ROOM_SEARCH_STEPS = 64;
+const ROOM_SAFE_PITCH = 0.1;
+
 const DIVE_FLOOR_ABOVE_SUBSTRATE = 0.05;
 const STANDARD_ORBIT_DISTANCE = 1.6;
 
@@ -119,6 +128,8 @@ export class CameraRig {
   private pitch = 0.1;
   private distance: number;
 
+  private room: RoomVolume | null = null;
+
   private focusTarget: FocusTarget | null = null;
   private focusLast: Vec3 = { x: 0, y: 0.25, z: 0 };
   private focusDistance = FOCUS_DEFAULT_DISTANCE;
@@ -164,6 +175,12 @@ export class CameraRig {
     this.distance = orbitDistance;
     this.clampOrbit();
     this.divePosition = this.clampDive(this.divePosition);
+  }
+
+  /** Keeps the outside eye within a room's walls, floor and ceiling; null lifts the limit. */
+  setRoom(room: RoomVolume | null): void {
+    this.room = room;
+    this.clampOrbit();
   }
 
   setOrbit(yaw: number, pitch: number, distance: number): void {
@@ -302,7 +319,9 @@ export class CameraRig {
     const o = sphericalOffset(this.yaw, this.pitch, distance);
     const eye = { x: target.x + o.x, y: Math.max(EYE_FLOOR, target.y + o.y), z: target.z + o.z };
     return {
-      eye: this.modeValue === 'focus' && this.insideGlass(target) ? this.clampDive(eye) : eye,
+      eye: this.keepInRoom(
+        this.modeValue === 'focus' && this.insideGlass(target) ? this.clampDive(eye) : eye,
+      ),
       look: target,
     };
   }
@@ -320,13 +339,67 @@ export class CameraRig {
     return p.x > min.x && p.x < max.x && p.y > min.y && p.y < max.y && p.z > min.z && p.z < max.z;
   }
 
-  /** Keeps the orbit eye outside the glass however the view is angled. */
+  /**
+   * Keeps the orbit eye outside the glass and, when a room is set, inside it. A direction the room
+   * leaves no space for (behind a tank that stands close to the back wall) swings round toward
+   * the front view until there is.
+   */
   private clampOrbit(): void {
-    const dir = sphericalOffset(this.yaw, this.pitch, 1);
+    if (this.room) this.swingIntoRoom();
+    const { min, max } = this.orbitLimits(this.yaw, this.pitch);
+    this.distance = clamp(this.distance, min, Math.max(min, max));
+  }
+
+  private orbitLimits(yaw: number, pitch: number): { min: number; max: number } {
+    const dir = sphericalOffset(yaw, pitch, 1);
     const { min, max } = this.glassBox();
     const exit = distanceToBoxExit(this.orbitTarget, dir, min, max);
-    const minDistance = Math.max(ORBIT_MIN_DISTANCE, exit + GLASS_CLEARANCE);
-    this.distance = clamp(this.distance, minDistance, Math.max(minDistance, ORBIT_MAX_DISTANCE));
+    const roomMax = this.room
+      ? distanceToBoxExit(this.orbitTarget, dir, ...this.roomLimits(this.room))
+      : ORBIT_MAX_DISTANCE;
+    return {
+      min: Math.max(ORBIT_MIN_DISTANCE, exit + GLASS_CLEARANCE),
+      max: Math.min(ORBIT_MAX_DISTANCE, roomMax),
+    };
+  }
+
+  private swingIntoRoom(): void {
+    const fits = (yaw: number, pitch: number): boolean => {
+      const l = this.orbitLimits(yaw, pitch);
+      return l.max >= l.min;
+    };
+    if (fits(this.yaw, this.pitch)) return;
+    const yaw = Math.atan2(Math.sin(this.yaw), Math.cos(this.yaw));
+    for (let i = 1; i <= ROOM_SEARCH_STEPS; i++) {
+      const k = 1 - i / ROOM_SEARCH_STEPS;
+      const y = yaw * k;
+      const p = ROOM_SAFE_PITCH + (this.pitch - ROOM_SAFE_PITCH) * k;
+      if (fits(y, p)) {
+        this.yaw = y;
+        this.pitch = p;
+        return;
+      }
+    }
+    this.yaw = 0;
+    this.pitch = ROOM_SAFE_PITCH;
+  }
+
+  private roomLimits(room: RoomVolume): [Vec3, Vec3] {
+    const m = ROOM_MARGIN;
+    return [
+      { x: room.min.x + m, y: room.min.y + m, z: room.min.z + m },
+      { x: room.max.x - m, y: room.max.y - m, z: room.max.z - m },
+    ];
+  }
+
+  private keepInRoom(eye: Vec3): Vec3 {
+    if (!this.room) return eye;
+    const [lo, hi] = this.roomLimits(this.room);
+    return {
+      x: clamp(eye.x, lo.x, hi.x),
+      y: clamp(eye.y, lo.y, hi.y),
+      z: clamp(eye.z, lo.z, hi.z),
+    };
   }
 
   private clampDive(p: Vec3): Vec3 {

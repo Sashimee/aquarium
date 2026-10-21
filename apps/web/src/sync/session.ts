@@ -572,6 +572,10 @@ export class TankSession {
       recentVisitDays: tank.recentVisitDays,
     });
     this.deps.interaction.emit('tank:water', { tankId, water: tank.water });
+    this.deps.interaction.emit('tank:wave-maker', {
+      tankId,
+      tier: tank.equipment.waveMaker.tier,
+    });
     return true;
   }
 
@@ -734,6 +738,12 @@ export class TankSession {
     }
     if (held.water !== tank.water)
       interaction.emit('tank:water', { tankId: tank.id, water: tank.water });
+    if (held.equipment.waveMaker.tier !== tank.equipment.waveMaker.tier) {
+      interaction.emit('tank:wave-maker', {
+        tankId: tank.id,
+        tier: tank.equipment.waveMaker.tier,
+      });
+    }
   }
 
   private bag(tankId: string, fishId: string, name: string): void {

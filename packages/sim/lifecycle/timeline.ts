@@ -43,7 +43,8 @@ export function initialFlags(state: LifecycleState): TimelineFlags {
     if (LEVELS[metric](state) >= ALERT_AT[metric]) waterHigh.add(metric);
   }
   const sick = new Set<string>();
-  for (const f of state.fish) if (f.alive && f.health < SICK_BELOW_HEALTH) sick.add(f.id);
+  for (const f of state.fish)
+    if (f.alive && (f.health < SICK_BELOW_HEALTH || f.disease)) sick.add(f.id);
   return { waterHigh, sick };
 }
 
@@ -70,10 +71,10 @@ export function detectTransitions(
   for (const f of state.fish) {
     if (!f.alive) {
       sick.delete(f.id);
-    } else if (!sick.has(f.id) && f.health < SICK_BELOW_HEALTH) {
+    } else if (!sick.has(f.id) && (f.health < SICK_BELOW_HEALTH || f.disease)) {
       sick.add(f.id);
       entries.push({ kind: 'sick', atMs, fishId: f.id });
-    } else if (sick.has(f.id) && f.health > RECOVERED_ABOVE_HEALTH) {
+    } else if (sick.has(f.id) && !f.disease && f.health > RECOVERED_ABOVE_HEALTH) {
       sick.delete(f.id);
     }
   }

@@ -69,6 +69,8 @@ export interface FishSimBridge {
   netTap(ray: PickRay): void;
   /** Every toy in the tank, in tank space, `[]` for none; the last ones reach the fish once up. */
   setToys(toys: readonly SimToy[]): void;
+  /** The wave maker's equipment tier, 0 for none; the last one reaches the fish once up. */
+  setWaveMakerTier(tier: number): void;
   /** Fish bumping the ball, each nudge reused for the next; returns the unsubscribe. */
   onToyNudge(listener: (nudge: BallNudge) => void): () => void;
   /**
@@ -186,6 +188,7 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
   const ateListeners = new Set<(events: readonly FishBite[]) => void>();
   const nudgeListeners = new Set<(nudge: BallNudge) => void>();
   let toys: readonly SimToy[] = [];
+  let waveMakerTier = 0;
   let ready: FishSystem | null = null;
   let anchors: readonly SceneAnchor[] | null = null;
   let demoBiome = options.biome;
@@ -236,6 +239,7 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
       ready = fish;
       if (tank !== built) fish.setTank(tank);
       if (toys.length > 0) fish.setToys(toys);
+      if (waveMakerTier > 0) fish.setWaveMakerTier(waveMakerTier);
       if (anchors !== null) fish.setAnchors(anchors);
       fish.setColliders(colliders.list);
       if (demoBiome !== options.biome) fish.setDemoBiome(demoBiome);
@@ -278,6 +282,10 @@ export function startFish(engine: Engine, options: StartFishOptions): FishHandle
       setToys(next) {
         toys = next;
         ready?.setToys(next);
+      },
+      setWaveMakerTier(tier) {
+        waveMakerTier = tier;
+        ready?.setWaveMakerTier(tier);
       },
       onToyNudge(listener) {
         nudgeListeners.add(listener);
