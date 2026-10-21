@@ -430,6 +430,22 @@ describe('indexing', () => {
     expect((await app.inject('/tank/42')).headers['x-robots-tag']).toBeUndefined();
   });
 
+  it('sends noindex on the gallery pages even when indexable', async () => {
+    const app = withDist(true);
+    for (const url of [
+      '/gallery',
+      '/gallery/',
+      '/Gallery/0b9f5c1e-6d52-4c1e-8a57-3f0f0b1d2c3a',
+      '/gallery/%61bc',
+    ]) {
+      expect((await app.inject(url)).headers['x-robots-tag'], url).toBe(NOINDEX);
+    }
+    expect((await app.inject('/gallery-of-fish')).headers['x-robots-tag']).toBeUndefined();
+    expect((await app.inject('/t/abc')).headers['x-robots-tag']).toBe(NOINDEX);
+    expect((await app.inject('/')).headers['x-robots-tag']).toBeUndefined();
+    expect((await app.inject('/tank/42')).headers['x-robots-tag']).toBeUndefined();
+  });
+
   it('redacts the viewer token from logs and leaves /t/ crawlable so noindex is seen', async () => {
     expect((await withDist(true).inject('/robots.txt')).body).not.toContain('Disallow');
     expect(redactUrl('/t/abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG')).toBe('/t/[redacted]');

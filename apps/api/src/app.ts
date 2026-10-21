@@ -232,6 +232,7 @@ function hasAmbiguousPath(url: string): boolean {
 
 const PUBLIC_PATH_PREFIX = '/api/public/';
 const VIEWER_PATH_PREFIX = '/t/';
+const GALLERY_PAGE_PATH = '/gallery';
 const TOKEN_PATH_PREFIXES = [`${AUTH_BASE_PATH}/reset-password/`, `${AUTH_BASE_PATH}/callback/`];
 // Pages and links whose URL holds a one-time token. The strict-origin-when-cross-origin default
 // would still send the full URL to same-origin subresources (JS, CSS, /api/me) on first load. The
@@ -239,7 +240,12 @@ const TOKEN_PATH_PREFIXES = [`${AUTH_BASE_PATH}/reset-password/`, `${AUTH_BASE_P
 const TOKEN_PAGES = new Set(['/reset-password', '/verify-email']);
 
 function isViewerPath(url: string): boolean {
-  return normalizedPathname(url).toLowerCase().startsWith(VIEWER_PATH_PREFIX);
+  const path = normalizedPathname(url).toLowerCase();
+  return (
+    path.startsWith(VIEWER_PATH_PREFIX) ||
+    path === GALLERY_PAGE_PATH ||
+    path.startsWith(`${GALLERY_PAGE_PATH}/`)
+  );
 }
 
 function carriesUrlToken(url: string): boolean {
