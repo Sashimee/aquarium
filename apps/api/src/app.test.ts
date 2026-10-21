@@ -467,6 +467,9 @@ describe('indexing', () => {
     }
     expect((await app.inject('/sign-in-help')).headers['x-robots-tag']).toBeUndefined();
     expect((await app.inject('/settings/x')).headers['x-robots-tag']).toBeUndefined();
+    for (const url of ['/privacy', '/credits']) {
+      expect((await app.inject(url)).headers['x-robots-tag'], url).toBeUndefined();
+    }
   });
 
   it('sends noindex on HEAD and query-string gallery requests', async () => {

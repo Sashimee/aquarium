@@ -10,7 +10,7 @@ import { and, eq } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { schema } from './db/index.ts';
-import { APP_ORIGIN, createHarness, topUp, type Harness } from './test-harness.ts';
+import { APP_ORIGIN, createHarness, fishPayload, topUp, type Harness } from './test-harness.ts';
 
 const PASSWORD = 'correct horse battery';
 const jsonHeaders = { 'content-type': 'application/json', origin: APP_ORIGIN };
@@ -457,10 +457,13 @@ describe('moving a fish between tanks', () => {
 
         const results = await Promise.all([
           move(h, who, source, fishId, { toTankId: destination }),
-          call(h, who, 'POST', `/api/tanks/${destination}/fish`, {
-            species: 'neon-tetra',
-            name: 'Buyer',
-          }),
+          call(
+            h,
+            who,
+            'POST',
+            `/api/tanks/${destination}/fish`,
+            fishPayload('neon-tetra', 'Buyer'),
+          ),
           call(h, who, 'POST', `/api/tanks/${destination}/care`, {
             type: 'bottled_bacteria',
             idempotencyKey: randomUUID(),
