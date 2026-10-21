@@ -32,6 +32,7 @@ import {
 } from 'three/tsl';
 import type { RoomLayout } from '../../scene/room/layout';
 import type { Tier } from '../quality/tiers';
+import { crossfade, crossfadeAt, type Crossfade } from './crossfade';
 import { roomLightAt, type Rgb, type RoomLightState } from './timeOfDay';
 import { weatherAt, type Weather } from './weather';
 
@@ -77,16 +78,32 @@ export interface RoomLightInput {
   readonly hood: number;
 }
 
-/** Cloud drift in window widths per second, and the sky's pattern scale across the pane. */
+/** Cloud drift in noise units per second, and the sky's pattern scale across the pane. */
 const CLOUD_DRIFT = 0.004;
 const CLOUD_SCALE = 2.4;
+/**
+ * The noise is not periodic, so clouds and beads each draw two copies cross-faded over these
+ * periods (see `crossfade`): their offsets stay small for f32 and never jump on screen.
+ */
+const CLOUD_PERIOD_S = 2 * 3_600;
+const BEAD_PERIOD_S = 4 * 60;
+/** Bead slide down the pane in pane heights per second. */
+const BEAD_SLIDE = 0.002;
+/**
+ * A copy moves to a fresh slice of noise each time it restarts, so the sky does not repeat every
+ * period. Slices are a few noise cells apart, and copy B sits half way between copy A's.
+ */
+const LAYER_STEP = 3.1;
+const LAYER_COUNT = 61;
 /**
  * Fall rates in streak lengths per second, chosen so an hour holds a whole number of cycles: the
  * rain clock wraps hourly without a jump.
  */
-const RAIN_RATES = [1.25, 1.75] as const;
-const SECONDS_PER_DAY = 86_400;
+export const RAIN_RATES = [1.25, 1.75] as const;
 const SECONDS_PER_HOUR = 3_600;
+/** The sky and weather change on a minutes timescale; recomputing them this often is plenty. */
+const LIGHT_STEP_MS = 5_000;
+const LIGHT_STEP_MINUTES = LIGHT_STEP_MS / 60_000;
 /** Irradiance from the lit tank one metre away, under the full hood and its moonlight channel. */
 const TANK_GLOW_DAY = new Color(1, 0.97, 0.92).multiplyScalar(1.4);
 const TANK_GLOW_NIGHT = new Color(0.04, 0.14, 0.9).multiplyScalar(0.12);
@@ -96,6 +113,96 @@ const SUN_DIAMETER = 0.0093;
 /** The lit tank's glow on the room at one metre, for the hood at `hood` (0..1). */
 export function tankGlow(hood: number, target = new Color()): Color {
   return target.copy(TANK_GLOW_NIGHT).lerp(TANK_GLOW_DAY, Math.min(1, Math.max(0, hood)));
+}
+
+/** One moving pattern as two cross-faded copies: offsets along the motion, noise slices, gains. */
+export interface PatternMotion {
+  offsetA: number;
+  offsetB: number;
+  layerA: number;
+  layerB: number;
+  gainA: number;
+  gainB: number;
+}
+
+export interface WindowMotion {
+  /** Cloud copies; the gains keep the blend's contrast, as the copies are independent noise. */
+  readonly clouds: PatternMotion;
+  /** Bead copies; the gains are plain weights, so beads fade in and out as they slide. */
+  readonly beads: PatternMotion;
+  /** Seconds into the UTC hour: the streaks fall a whole number of times an hour. */
+  rainSeconds: number;
+}
+
+export function windowMotion(): WindowMotion {
+  const pattern = (): PatternMotion => ({
+    offsetA: 0,
+    offsetB: 0,
+    layerA: 0,
+    layerB: 0,
+    gainA: 0,
+    gainB: 1,
+  });
+  return { clouds: pattern(), beads: pattern(), rainSeconds: 0 };
+}
+
+function layerOf(cycle: number): number {
+  return (((cycle % LAYER_COUNT) + LAYER_COUNT) % LAYER_COUNT) * LAYER_STEP;
+}
+
+function patternAt(
+  fade: Crossfade,
+  periodSeconds: number,
+  rate: number,
+  base: number,
+  keepContrast: boolean,
+  out: PatternMotion,
+): void {
+  out.offsetA = fade.phaseA * periodSeconds * rate;
+  out.offsetB = fade.phaseB * periodSeconds * rate;
+  out.layerA = base + layerOf(fade.cycleA);
+  out.layerB = base + layerOf(fade.cycleB) + LAYER_STEP / 2;
+  const a = fade.weightA;
+  const b = 1 - a;
+  const norm = keepContrast ? 1 / Math.hypot(a, b) : 1;
+  out.gainA = a * norm;
+  out.gainB = b * norm;
+}
+
+const fadeScratch = crossfade();
+
+/**
+ * How the window's patterns have moved at epoch time `nowMs` for a tank's `seed`, written into
+ * `out`. Every value is continuous in time wherever its copy's gain is above zero.
+ */
+export function windowMotionAt(nowMs: number, seed: number, out: WindowMotion): WindowMotion {
+  if (!Number.isFinite(nowMs)) {
+    throw new RangeError(`windowMotionAt: time must be finite, got ${nowMs}`);
+  }
+  const seconds = nowMs / 1000;
+  const base = cloudSeedOf(seed);
+  patternAt(
+    crossfadeAt(seconds, CLOUD_PERIOD_S, fadeScratch),
+    CLOUD_PERIOD_S,
+    CLOUD_DRIFT,
+    base,
+    true,
+    out.clouds,
+  );
+  patternAt(
+    crossfadeAt(seconds, BEAD_PERIOD_S, fadeScratch),
+    BEAD_PERIOD_S,
+    BEAD_SLIDE,
+    base,
+    false,
+    out.beads,
+  );
+  out.rainSeconds = ((seconds % SECONDS_PER_HOUR) + SECONDS_PER_HOUR) % SECONDS_PER_HOUR;
+  return out;
+}
+
+function cloudSeedOf(seed: number): number {
+  return (Math.abs(seed) % 997) * 0.37;
 }
 
 function setRgb(target: Color, rgb: Rgb): void {
@@ -117,6 +224,9 @@ export class RoomLight {
   private readonly dressed = new Set<MeshStandardNodeMaterial>();
   private stateNow: RoomLightState | null = null;
   private weatherNow: Weather | null = null;
+  private lightAtMs = Number.NaN;
+  private lightAtMinute = Number.NaN;
+  private readonly motion = windowMotion();
   private disposed = false;
 
   private readonly zenith = uniform(new Color());
@@ -124,10 +234,20 @@ export class RoomLight {
   private readonly cloudColour = uniform(new Color());
   private readonly cloud = uniform(0);
   private readonly rain = uniform(0);
-  private readonly cloudSeconds = uniform(0);
+  private readonly cloudOffsetA = uniform(0);
+  private readonly cloudOffsetB = uniform(0);
+  private readonly cloudLayerA = uniform(0);
+  private readonly cloudLayerB = uniform(0);
+  private readonly cloudGainA = uniform(0);
+  private readonly cloudGainB = uniform(1);
+  private readonly beadOffsetA = uniform(0);
+  private readonly beadOffsetB = uniform(0);
+  private readonly beadLayerA = uniform(0);
+  private readonly beadLayerB = uniform(0);
+  private readonly beadGainA = uniform(0);
+  private readonly beadGainB = uniform(1);
   private readonly rainSeconds = uniform(0);
   private readonly paneAspect = uniform(1);
-  private readonly cloudSeed = uniform(0);
   private readonly ambient = uniform(new Color(1, 1, 1));
   private readonly sunRadiance = uniform(new Color());
   private readonly toSun = uniform(new Vector3(0, 1, 0));
@@ -144,7 +264,6 @@ export class RoomLight {
     this.environment = options.environment;
     this.seed = options.seed;
     this.tier = options.tier;
-    this.cloudSeed.value = (Math.abs(options.seed) % 997) * 0.37;
   }
 
   /** The light last applied, or null before the first `update`. */
@@ -181,24 +300,9 @@ export class RoomLight {
     if (!Number.isFinite(input.hood)) {
       throw new RangeError(`RoomLight: hood level must be finite, got ${input.hood}`);
     }
-    const weather = weatherAt(input.nowMs, this.seed);
-    const state = roomLightAt(input.minute, weather);
-    this.weatherNow = weather;
-    this.stateNow = state;
-
-    setRgb(this.zenith.value, state.zenith);
-    setRgb(this.horizon.value, state.horizon);
-    setRgb(this.cloudColour.value, state.cloudColour);
-    setRgb(this.ambient.value, state.ambient);
-    setRgb(this.sunRadiance.value, state.sunRadiance);
-    this.toSun.value.set(...state.sun.toSun);
-    this.cloud.value = state.cloud;
-    this.rain.value = state.rain;
-    const seconds = input.nowMs / 1000;
-    this.cloudSeconds.value = ((seconds % SECONDS_PER_DAY) + SECONDS_PER_DAY) % SECONDS_PER_DAY;
-    this.rainSeconds.value = ((seconds % SECONDS_PER_HOUR) + SECONDS_PER_HOUR) % SECONDS_PER_HOUR;
+    const state = this.lightAt(input.nowMs, input.minute);
+    this.applyMotion(input.nowMs);
     tankGlow(input.hood, this.glow.value);
-
     this.dress();
     return state;
   }
@@ -209,6 +313,50 @@ export class RoomLight {
     this.undress();
     this.room = null;
     this.disposed = true;
+  }
+
+  private lightAt(nowMs: number, minute: number): RoomLightState {
+    const current = this.stateNow;
+    if (
+      current &&
+      Math.abs(nowMs - this.lightAtMs) < LIGHT_STEP_MS &&
+      Math.abs(minute - this.lightAtMinute) < LIGHT_STEP_MINUTES
+    ) {
+      return current;
+    }
+    const weather = weatherAt(nowMs, this.seed);
+    const state = roomLightAt(minute, weather);
+    this.weatherNow = weather;
+    this.stateNow = state;
+    this.lightAtMs = nowMs;
+    this.lightAtMinute = minute;
+    setRgb(this.zenith.value, state.zenith);
+    setRgb(this.horizon.value, state.horizon);
+    setRgb(this.cloudColour.value, state.cloudColour);
+    setRgb(this.ambient.value, state.ambient);
+    setRgb(this.sunRadiance.value, state.sunRadiance);
+    const [x, y, z] = state.sun.toSun;
+    this.toSun.value.set(x, y, z);
+    this.cloud.value = state.cloud;
+    this.rain.value = state.rain;
+    return state;
+  }
+
+  private applyMotion(nowMs: number): void {
+    const { clouds, beads, rainSeconds } = windowMotionAt(nowMs, this.seed, this.motion);
+    this.cloudOffsetA.value = clouds.offsetA;
+    this.cloudOffsetB.value = clouds.offsetB;
+    this.cloudLayerA.value = clouds.layerA;
+    this.cloudLayerB.value = clouds.layerB;
+    this.cloudGainA.value = clouds.gainA;
+    this.cloudGainB.value = clouds.gainB;
+    this.beadOffsetA.value = beads.offsetA;
+    this.beadOffsetB.value = beads.offsetB;
+    this.beadLayerA.value = beads.layerA;
+    this.beadLayerB.value = beads.layerB;
+    this.beadGainA.value = beads.gainA;
+    this.beadGainB.value = beads.gainB;
+    this.rainSeconds.value = rainSeconds;
   }
 
   private assertLive(call: string): void {
@@ -284,14 +432,12 @@ export class RoomLight {
 
     let cover: Node<'float'> = this.cloud;
     if (cloudOctaves > 0) {
-      const drift = vec2(this.cloudSeconds.mul(CLOUD_DRIFT), 0);
-      const p = across.mul(CLOUD_SCALE).add(drift);
-      const n = mx_fractal_noise_float(
-        vec3(p.x, p.y.mul(1.8), this.cloudSeed),
-        cloudOctaves,
-        2,
-        0.5,
-      )
+      const p = across.mul(CLOUD_SCALE);
+      const copy = (offset: Node<'float'>, layer: Node<'float'>) =>
+        mx_fractal_noise_float(vec3(p.x.add(offset), p.y.mul(1.8), layer), cloudOctaves, 2, 0.5);
+      const n = copy(this.cloudOffsetA, this.cloudLayerA)
+        .mul(this.cloudGainA)
+        .add(copy(this.cloudOffsetB, this.cloudLayerB).mul(this.cloudGainB))
         .mul(0.5)
         .add(0.5);
       const threshold = this.cloud.oneMinus().mul(0.85);
@@ -319,12 +465,15 @@ export class RoomLight {
     }
 
     if (drops) {
-      const slide = vec2(0, this.rainSeconds.mul(0.002));
-      const bead = smoothstep(
-        0.06,
-        0.16,
-        mx_worley_noise_float(vec3(across.add(slide).mul(26), this.cloudSeed), 1, 0),
-      ).oneMinus();
+      const copy = (offset: Node<'float'>, layer: Node<'float'>) =>
+        smoothstep(
+          0.06,
+          0.16,
+          mx_worley_noise_float(vec3(across.add(vec2(0, offset)).mul(26), layer), 1, 0),
+        ).oneMinus();
+      const bead = copy(this.beadOffsetA, this.beadLayerA)
+        .mul(this.beadGainA)
+        .add(copy(this.beadOffsetB, this.beadLayerB).mul(this.beadGainB));
       colour = mix(colour, this.horizon.mul(1.25), bead.mul(this.rain).mul(0.5));
     }
     return colour;

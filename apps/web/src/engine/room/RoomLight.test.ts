@@ -13,7 +13,17 @@ import { TANK_DIMENSIONS } from '../tank/dimensions';
 import { TIERS, type Tier } from '../quality/tiers';
 import { reversedSmoothsteps } from '../reversedSmoothsteps';
 import { buildShaders } from '../shaderFixtures';
-import { ROOM_LIGHT_DETAIL, RoomLight, tankGlow, type RoomLightInput } from './RoomLight';
+import {
+  RAIN_RATES,
+  ROOM_LIGHT_DETAIL,
+  RoomLight,
+  tankGlow,
+  windowMotion,
+  windowMotionAt,
+  type PatternMotion,
+  type RoomLightInput,
+  type WindowMotion,
+} from './RoomLight';
 import { roomLightAt } from './timeOfDay';
 
 const tank = TANK_DIMENSIONS.standard;
@@ -208,5 +218,96 @@ describe('RoomLight', () => {
     );
     const { light } = lit('low');
     expect(() => light.update({ ...NOON, hood: Number.NaN })).toThrow(/hood/);
+  });
+
+  it('reuses the light it computed until the clock moves by a few seconds', () => {
+    const { light } = lit('high');
+    const first = light.update(NOON);
+    expect(light.update({ ...NOON, nowMs: NOON.nowMs + 1_000, minute: NOON.minute + 1 / 60 })).toBe(
+      first,
+    );
+    expect(light.update({ ...NOON, nowMs: NOON.nowMs + 10_000 })).not.toBe(first);
+    const pinned = light.update(NOON);
+    expect(light.update({ ...NOON, minute: NOON.minute + 1 })).not.toBe(pinned);
+  });
+});
+
+describe('windowMotionAt', () => {
+  const STEP_S = 1;
+
+  function copies(motion: WindowMotion, pattern: 'clouds' | 'beads') {
+    const p: PatternMotion = motion[pattern];
+    return [
+      { offset: p.offsetA, layer: p.layerA, gain: p.gainA },
+      { offset: p.offsetB, layer: p.layerB, gain: p.gainB },
+    ];
+  }
+
+  function expectSmooth(fromMs: number, toMs: number) {
+    const before = windowMotion();
+    const after = windowMotion();
+    let restarts = 0;
+    for (let t = fromMs; t < toMs; t += STEP_S * 1000) {
+      windowMotionAt(t, 12, before);
+      windowMotionAt(t + STEP_S * 1000, 12, after);
+      for (const [pattern, period, rate] of [
+        ['clouds', 7_200, 0.004],
+        ['beads', 240, 0.002],
+      ] as const) {
+        const a = copies(before, pattern);
+        const b = copies(after, pattern);
+        for (let i = 0; i < 2; i++) {
+          const x = a[i];
+          const y = b[i];
+          if (!x || !y) throw new Error('two copies');
+          expect(Math.abs(y.gain - x.gain)).toBeLessThan((4 * STEP_S) / period);
+          expect(x.offset).toBeLessThanOrEqual(period * rate);
+          const moved = y.offset - x.offset;
+          if (y.layer === x.layer && Math.abs(moved - rate * STEP_S) < 1e-6) continue;
+          restarts++;
+          expect(Math.max(x.gain, y.gain)).toBeLessThan((4 * STEP_S) / period);
+        }
+      }
+      const fallen = (after.rainSeconds - before.rainSeconds + 3_600) % 3_600;
+      for (const rate of RAIN_RATES) {
+        const slip = ((((fallen - STEP_S) * rate) % 1) + 1) % 1;
+        expect(Math.min(slip, 1 - slip)).toBeLessThan(1e-6);
+      }
+    }
+    return restarts;
+  }
+
+  it('moves without a jump across UTC midnight', () => {
+    const midnight = Date.UTC(2026, 9, 20);
+    expect(expectSmooth(midnight - 3_600_000, midnight + 3_600_000)).toBeGreaterThan(0);
+  });
+
+  it('moves without a jump across the hour, where the rain clock wraps', () => {
+    const hour = Date.UTC(2026, 9, 20, 13);
+    expect(expectSmooth(hour - 600_000, hour + 600_000)).toBeGreaterThan(0);
+  });
+
+  it('wraps the rain clock at the UTC hour and keeps offsets small for f32', () => {
+    const motion = windowMotionAt(Date.UTC(2026, 9, 20, 13, 0, 1), 12, windowMotion());
+    expect(motion.rainSeconds).toBeCloseTo(1, 9);
+    windowMotionAt(Date.UTC(2026, 9, 20, 12, 59, 59), 12, motion);
+    expect(motion.rainSeconds).toBeCloseTo(3_599, 9);
+    for (const t of [0, 1e12, 4e12]) {
+      windowMotionAt(t, 12, motion);
+      for (const v of Object.values(motion.clouds)) expect(Math.abs(v)).toBeLessThan(1_000);
+      for (const v of Object.values(motion.beads)) expect(Math.abs(v)).toBeLessThan(1_000);
+    }
+  });
+
+  it('keeps the cloud contrast through the blend and fades beads plainly', () => {
+    const motion = windowMotion();
+    for (let t = 0; t < 7_200_000; t += 61_000) {
+      windowMotionAt(t, 3, motion);
+      const { clouds, beads } = motion;
+      expect(Math.hypot(clouds.gainA, clouds.gainB)).toBeCloseTo(1, 9);
+      expect(beads.gainA + beads.gainB).toBeCloseTo(1, 9);
+      expect(clouds.layerA).not.toBe(clouds.layerB);
+    }
+    expect(() => windowMotionAt(Number.NaN, 3, motion)).toThrow(RangeError);
   });
 });
