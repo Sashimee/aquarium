@@ -155,8 +155,12 @@ export class CurrentField {
   }
 
   /**
-   * The sim's flow field (`World.flowField`, null without a pump), so bounds, direction and
-   * strength are the ones the fish feel. `simTimeS` is the sim snapshot's `time`.
+   * The pump's flow field. `World` lives in the sim worker, so
+   * the caller builds the `FlowField` (null without a pump) with `new FlowField(bounds, settings)`
+   * from `@aquarium/sim`. `bounds` must match the sim's `World.flowBounds()`, which is private to
+   * the worker; take the same minX/maxX/minZ/maxZ/minY/maxY from `Basin.fromTank(tank)` or
+   * `Basin.fromSpace(space)` built from the config the worker was given.
+   * `simTimeS` is the sim snapshot's `time`.
    */
   setWaveMaker(field: FlowField | null, simTimeS: number): void {
     this.waveField = field;

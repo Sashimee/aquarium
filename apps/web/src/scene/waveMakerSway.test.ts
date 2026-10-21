@@ -25,6 +25,12 @@ const ambient: CurrentParameters = {
 };
 
 const pulse: WaveMakerSettings = { direction: [1, 0], speedMps: 0.2, mode: 'pulse', periodS: 8 };
+const oblique: WaveMakerSettings = {
+  direction: [0.6, 0.8],
+  speedMps: 0.12,
+  mode: 'steady',
+  periodS: 8,
+};
 const alternating: WaveMakerSettings = {
   direction: [0.6, 0.8],
   speedMps: 0.18,
@@ -117,9 +123,9 @@ describe('wave maker sway input', () => {
   });
 
   it('adds the sim field at the toy position to the ambient current', () => {
-    const sim = new FlowField(bounds, steady);
+    const sim = new FlowField(bounds, oblique);
     const plain = current(null);
-    const pumped = current(steady);
+    const pumped = current(oblique);
     const a = [0, 0, 0];
     const b = [0, 0, 0];
     const w = [0, 0, 0];
@@ -127,6 +133,8 @@ describe('wave maker sway input', () => {
       plain.sample(0.1, y, 0.05, a);
       pumped.sample(0.1, y, 0.05, b);
       sim.sample(0.1, y, 0.05, 0, w);
+      expect(Math.abs(w[0] ?? 0)).toBeGreaterThan(1e-4);
+      expect(Math.abs(w[2] ?? 0)).toBeGreaterThan(1e-4);
       expect(b[0]).toBeCloseTo((a[0] ?? 0) + (w[0] ?? 0), 12);
       expect(b[2]).toBeCloseTo((a[2] ?? 0) + (w[2] ?? 0), 12);
     }

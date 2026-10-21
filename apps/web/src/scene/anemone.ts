@@ -14,6 +14,7 @@ import type { CapsuleCollider } from './colliders';
 import {
   limitLean,
   limitLeanNode,
+  MEANDER_AMPLITUDE,
   PUMP_LEAN_HEIGHT,
   wrapPeriodS,
   type CurrentField,
@@ -87,7 +88,10 @@ export function anemoneReach(
   item: DecorItem,
   current: CurrentParameters,
 ): number {
-  const peakFlow = current.speed * (1 + current.gustDepth);
+  const peakFlow = Math.hypot(
+    current.speed * (1 + current.gustDepth),
+    current.speed * current.gustDepth * MEANDER_AMPLITUDE,
+  );
   const room = PUMP_LEAN_HEIGHT * height(entry) * item.scale;
   const lean = limitLean(
     (peakFlow + (current.pumpMps ?? 0)) * LEAN_SECONDS,
@@ -125,7 +129,8 @@ export function swayPositionNode(
     flow.x.mul(sinYaw).add(flow.z.mul(cos)),
   );
   const { speed, gustDepth } = current.parameters;
-  const linear = (speed * (1 + gustDepth) * leanSeconds) / item.scale;
+  const ambientPeak = Math.hypot(speed * (1 + gustDepth), speed * gustDepth * MEANDER_AMPLITUDE);
+  const linear = (ambientPeak * leanSeconds) / item.scale;
   const lean = limitLeanNode(localFlow.mul(leanSeconds / item.scale), linear, pumpRoom).mul(tip);
   return positionLocal.add(lean).add(wave);
 }

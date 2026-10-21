@@ -125,9 +125,12 @@ export class TankScene {
   private colliderField: ColliderField;
 
   /**
-   * Sways plants, corals and anemones with the sim's pump. Pass `World.flowField` (null when
-   * there is no pump) so bounds, direction and strength are exactly what the fish feel, and
-   * call `syncWaveMaker` every frame with the snapshot's `time`.
+   * Sways plants, corals and anemones with the sim's pump. `World` lives in the sim worker, so
+   * the caller builds the `FlowField` (null without a pump) with `new FlowField(bounds, settings)`
+   * from `@aquarium/sim`. `bounds` must match the sim's `World.flowBounds()`, which is private to
+   * the worker; take the same minX/maxX/minZ/maxZ/minY/maxY from `Basin.fromTank(tank)` or
+   * `Basin.fromSpace(space)` built from the config the worker was given.
+   * Call `syncWaveMaker` every frame with the snapshot's `time`.
    */
   setWaveMaker(field: FlowField | null, simTimeS: number): void {
     this.current.setWaveMaker(field, simTimeS);

@@ -13,10 +13,10 @@ import {
   type MeshStandardMaterial,
 } from 'three/webgpu';
 import {
-  attribute,
   float,
   fract,
   instanceIndex,
+  instancedBufferAttribute,
   positionGeometry,
   positionLocal,
   sin,
@@ -38,7 +38,6 @@ import type { PlantInstance } from './placement';
 /** Seconds of current a leaf tip leans into; the bend grows with the square of the height. */
 const SWAY_SECONDS = 1.2;
 const FLUTTER_METRES = 0.004;
-export const PUMP_ATTRIBUTE = '_pump';
 
 /** How much each species yields to the current: carpets and ferns hold still, ribbons stream. */
 const STIFFNESS: Readonly<Record<string, number>> = {
@@ -119,6 +118,7 @@ function createSwayMaterial(
   geometry: BufferGeometry,
   assetId: string,
   current: CurrentField,
+  pumpAttribute: InstancedBufferAttribute,
 ): MeshStandardNodeMaterial {
   geometry.computeBoundingBox();
   const height = Math.max(geometry.boundingBox?.max.y ?? 0.1, 0.02);
@@ -137,7 +137,8 @@ function createSwayMaterial(
 
   const stem = positionGeometry.y.div(height).clamp(0, 1);
   const bend = stem.mul(stem);
-  const pump = attribute(PUMP_ATTRIBUTE, 'vec2');
+  // Bound per group, not set on the geometry: ModelLibrary shares one geometry between groups.
+  const pump = instancedBufferAttribute<'vec2'>(pumpAttribute, 'vec2');
   const flow = current
     .velocityNode(positionLocal)
     .add(current.pumpVelocity(vec3(pump.x, 0, pump.y)));
@@ -188,7 +189,8 @@ export class PlantGroup {
   private readonly meshes: InstancedMesh[] = [];
   private readonly materials: MeshStandardNodeMaterial[] = [];
   private readonly placed: PlantEntry[];
-  private readonly pumpGain: Float32Array;
+  /** Per-instance pump gain (x, z pairs) this group's shaders read. */
+  readonly pumpGain: Float32Array;
   private readonly pumpAttributes: InstancedBufferAttribute[] = [];
   private readonly releasePump: () => void;
   private readonly gainAt = new Float64Array(2);
@@ -207,11 +209,10 @@ export class PlantGroup {
     this.placed = [...ordered];
     this.pumpGain = new Float32Array(Math.max(1, ordered.length) * 2);
     for (const { geometry, material: source } of model.primitives) {
-      const material = createSwayMaterial(source, geometry, assetId, current);
-      this.materials.push(material);
       const pumpAttribute = new InstancedBufferAttribute(this.pumpGain, 2);
-      geometry.setAttribute(PUMP_ATTRIBUTE, pumpAttribute);
       this.pumpAttributes.push(pumpAttribute);
+      const material = createSwayMaterial(source, geometry, assetId, current, pumpAttribute);
+      this.materials.push(material);
       const mesh = new InstancedMesh(geometry, material, Math.max(1, ordered.length));
       mesh.name = `${assetId}:${source.name}`;
       mesh.castShadow = true;
