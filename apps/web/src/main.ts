@@ -33,6 +33,7 @@ import {
 } from './ui/loadSignals';
 import { mountUi } from './ui/mount';
 import { FeedGate } from './sync/feedGate';
+import { LampFeed } from './sync/lampFeed';
 import { WaveMakerFeed } from './sync/waveMakerFeed';
 import { awaitTankModules } from './tankLoad';
 
@@ -68,6 +69,7 @@ async function boot(): Promise<void> {
   tracker.begin('boot');
   const tankEvents = queueTankEvents(interaction);
   const waveMaker = new WaveMakerFeed(interaction);
+  const lamp = new LampFeed(interaction);
   const tankSize = new TankSizeSource(interaction);
   const tankBiome = new TankBiome(interaction, parseBiome(window.location.search));
   const switches = watchSwitches(interaction, tracker, tankBiome.fallback);
@@ -120,6 +122,7 @@ async function boot(): Promise<void> {
     tracker.fail(message);
     switches.stop();
     waveMaker.stop();
+    lamp.stop();
     tankSize.stop();
     tankEvents.stop();
     tankBiome.stop();
@@ -245,6 +248,7 @@ async function boot(): Promise<void> {
 
   liveFish = fish;
   waveMaker.attach(fish.sim);
+  lamp.attach(engine);
   if (exposePose) {
     let shownSpecies: readonly string[] | null = null;
     engine.onFrame(() => {
@@ -340,6 +344,7 @@ async function boot(): Promise<void> {
   onPageTeardown(window, () => {
     switches.stop();
     waveMaker.stop();
+    lamp.stop();
     stopResize();
     for (const off of stopRoomLimit) off();
     room.dispose();
