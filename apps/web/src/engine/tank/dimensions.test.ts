@@ -50,6 +50,11 @@ describe('TANK_DIMENSIONS', () => {
     expect(d).toMatchObject(TANK_SIZES[size].dimensions);
   });
 
+  it.each(tankSizeSchema.options)('puts the %s waterline at the shared freeboard', (size) => {
+    const { height, freeboard } = TANK_SIZES[size].dimensions;
+    expect(waterBounds(TANK_DIMENSIONS[size]).max.y).toBe(height - freeboard);
+  });
+
   it('keeps the standard tank as the default one', () => {
     expect(DEFAULT_TANK).toBe(TANK_DIMENSIONS.standard);
   });
