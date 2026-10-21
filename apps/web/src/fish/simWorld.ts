@@ -8,6 +8,7 @@ import type {
   TankSpaceWorldConfig,
   Visitor,
 } from '@aquarium/sim';
+import type { DaylightChange } from '../engine/daylight';
 import type { SceneAnchor } from '../scene/anemone';
 import { sceneAnchorsToSim, type DemoTank } from './demoStock';
 import { bodyLengthOf } from './profiles';
@@ -216,6 +217,18 @@ export async function startWorld(
   if (visitDays !== null) sim.setVisitor({ recentVisitDays: visitDays });
   hooks.begin(ready);
   sim.start();
+}
+
+/**
+ * Sends the hood level to the world. A settled level changed while nobody watched (a hidden tab),
+ * so the world takes it as already adapted to, where a bare jump would read as the lamp switching
+ * and startle every fish.
+ */
+export function sendLight(
+  sim: { setLight(level: number, settle?: boolean): void },
+  change: DaylightChange,
+): void {
+  sim.setLight(change.level, change.settled);
 }
 
 /** A sim worker that never answered `init`; it is stuck and must be replaced. */

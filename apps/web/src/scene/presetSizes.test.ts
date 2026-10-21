@@ -1,7 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { TANK_SIZES, type TankSize } from '@aquarium/shared';
+import { legacyTintSeed, TANK_SIZES, type DecorItem, type TankSize } from '@aquarium/shared';
+import { layoutPlantKeys } from '@aquarium/sim/lifecycle';
 import type { WebGPURenderer } from 'three/webgpu';
 import { DEFAULT_TANK, TANK_DIMENSIONS } from '../engine/tank/dimensions';
 import { createSharedKtx2 } from '../engine/ktx2';
@@ -90,7 +91,10 @@ describe.each(['freshwater', 'reef'] as const)('%s preset at the standard tank',
     const fitted = fitPresetToCatalog(authored, TANK_DIMENSIONS.standard, catalog);
     const changed = fitted.decor
       .map((item, i) => ({ item, was: authored.decor[i] }))
-      .filter(({ item, was }) => JSON.stringify(item) !== JSON.stringify(was))
+      .filter(
+        ({ item, was }) =>
+          JSON.stringify({ ...item, tintSeed: 0 }) !== JSON.stringify({ ...was, tintSeed: 0 }),
+      )
       .map(({ item }) => `${item.assetId}:${item.position.join(',')}:${item.scale}`);
     expect(changed).toMatchSnapshot();
     expect(fitted.plantPatches).toEqual(authored.plantPatches);
@@ -103,6 +107,24 @@ describe.each(['freshwater', 'reef'] as const)('%s preset at every tank size', (
     const waterTop = dimensions.height - dimensions.freeboard;
     const extent = glassExtent(dimensions);
     const fitted = () => fitPresetToCatalog(loadPreset(biome), dimensions, catalog);
+
+    it('keys the plants the way the server keys the authored preset', () => {
+      const keysOf = (decor: readonly DecorItem[]) =>
+        layoutPlantKeys(
+          decor
+            .filter(
+              (item) =>
+                !parseEuphylliaId(item.assetId) && catalog.get(item.assetId).kind === 'plant',
+            )
+            .map((item) => ({
+              assetId: item.assetId,
+              position: item.position,
+              tintSeed: item.tintSeed ?? legacyTintSeed(item),
+            })),
+        );
+      const authored = loadPreset(biome);
+      expect(keysOf(fitted().decor)).toEqual(keysOf(authored.decor));
+    });
 
     it('keeps every decor item inside the glass and under the waterline', () => {
       const boundsOf = boundsFromCatalog(catalog, loadPreset(biome).current ?? DEFAULT_CURRENT);

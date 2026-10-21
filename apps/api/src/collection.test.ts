@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   achievementListSchema,
   collectionSchema,
@@ -63,7 +64,11 @@ const advance = (h: Harness, minutes: number) =>
   });
 
 async function createTank(h: Harness, cookie: string) {
-  const res = await call(h, cookie, 'POST', '/api/tanks', { name: 'Home', biome: 'freshwater' });
+  const res = await call(h, cookie, 'POST', '/api/tanks', {
+    name: 'Home',
+    biome: 'freshwater',
+    idempotencyKey: randomUUID(),
+  });
   expect(res.statusCode).toBe(201);
   return tankSchema.parse(res.json());
 }

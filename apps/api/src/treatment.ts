@@ -12,7 +12,6 @@ import { eq } from 'drizzle-orm';
 import { schema } from './db/index.ts';
 import { MAX_TREAT_KEYS, storedTreatKeys, type TreatKeys } from './disease.ts';
 import { apiError, HttpError } from './errors.ts';
-import { legacyKey } from './legacyRequests.ts';
 import type { Ticked, Tx } from './tanks.ts';
 import { findReplay, lockWallet, spend, type Charged } from './wallet.ts';
 import { z } from 'zod';
@@ -35,7 +34,7 @@ export function registerTreatmentRoutes(ctx: TreatmentContext): void {
       const body = treatRequestSchema.parse(req.body);
       const premium = body.potency === 'premium';
       const itemRef = `consumable:premium-medicine:${body.kind}:${tankId}`;
-      const key = legacyKey(body.idempotencyKey);
+      const key = body.idempotencyKey;
 
       return withTank(user, tankId, async (tx, ticked) => {
         const nowMs = clock.now();
