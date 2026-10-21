@@ -2,7 +2,7 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; every texture has both files.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Every fish LOD also carries _MOUTH, geometry attribute \"_mouth\", a float in [0, 1] for buccal motion: 1 at the jaw or lower-lip tip (every LOD is renormalised so its highest value is exactly 1), easing to 0 behind the gill line and above the mouth slit; fins, eyes and attachments are 0. Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body, carapace and eyes; 6 walking leg; 7 antenna; 8 pleopod; 9 abdomen, telson and tail fan) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x; antennules 0/1, long antennae 2/3; tail-fan leaves k * 2 + side). Shrimp _fin_mask means: id 0 is 0 (eye stalks included, ignore it); ids 6 and 7 are the weight along the limb, 0 root to 1 tip; id 8 is the pleopod beat weight, 0 root to 1 tip; id 9 is the tail-curl weight clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1) of the rest position. Tail curl rotates ids 8 and 9 about +x through the shrimp.abdomenHinge {y, z} by flex * clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1), computed from the rest position, never from _fin_mask, so the pleopods follow the segment they hang from. Pleopods (id 8) exist only in LOD0 and LOD1 and are removed from LOD2; legs are simplified, so do not assume every _leg index exists at every LOD. Snails use _fin_id (0 shell, 10 foot, 11 head, 12 tentacle) and _fin_mask (foot: 0 at the sole centre to 1 at the mantle edge, for ripple; tentacle: 0 base to 1 tip; shell and head 0). The hermit crab is a crab-kind asset whose walker data sits in its crab block, same fields as a shrimp block; its shell is id 0, exposed soft body id 9 (rigid, hinge sits in front of it so it never curls), legs id 6 and antennae id 7 with _leg index pair * 2 + side; pair 0 is the claws and every pair behind it walks, and it has no pleopods. The cherry material is alphaMode BLEND with base colour alpha 0.86: three.js GLTFLoader turns depthWrite off for BLEND, so set depthWrite true on the cherry material and expect some sorting artefacts from the self-overlapping legs and antennae.",
-  "totalBytes": 77681322,
+  "totalBytes": 77681234,
   "assets": [
     {
       "id": "angelfish",
@@ -3488,12 +3488,12 @@
       ],
       "bounds": {
         "min": [
-          -0.010365,
+          -0.009434,
           0,
           -0.012928
         ],
         "max": [
-          0.010365,
+          0.009772,
           0.012715,
           0.01335
         ]
@@ -3501,22 +3501,22 @@
       "lods": [
         {
           "file": "snail/nerite-snail/lod0.glb",
-          "bytes": 84700,
-          "sha256": "4e7ace507ad898a3de5c1d1f7cb765aca35844e43981d1ccae5b391647447214",
+          "bytes": 84660,
+          "sha256": "36890e4c758af8d5dd31d17f6e1d75de5cb1a38f55b02dc27490f451d8c1edab",
           "triangles": 7224,
           "vertices": 4376
         },
         {
           "file": "snail/nerite-snail/lod1.glb",
-          "bytes": 41412,
-          "sha256": "bb9aba183b3c1b6c21db40d7cd109a46d0a78e892ef96b16794b01e3e04415b8",
+          "bytes": 41352,
+          "sha256": "f226fc6fe5ee2b284411fbf9ba5c572098160ffcc0082248e3ea0eadfe449e3d",
           "triangles": 2934,
           "vertices": 1895
         },
         {
           "file": "snail/nerite-snail/lod2.glb",
-          "bytes": 21712,
-          "sha256": "4b83f386536ea77a7ded7566d5d24309b28a9092300f1d3257dc3b250fa58cf5",
+          "bytes": 21724,
+          "sha256": "33b7084a6943d9d5ad28c406673e0c0369db2c4fb8eeebb9f2373a8d15a279fd",
           "triangles": 1228,
           "vertices": 836
         }
@@ -3568,18 +3568,18 @@
       "files": [
         {
           "file": "snail/nerite-snail/lod0.glb",
-          "bytes": 84700,
-          "sha256": "4e7ace507ad898a3de5c1d1f7cb765aca35844e43981d1ccae5b391647447214"
+          "bytes": 84660,
+          "sha256": "36890e4c758af8d5dd31d17f6e1d75de5cb1a38f55b02dc27490f451d8c1edab"
         },
         {
           "file": "snail/nerite-snail/lod1.glb",
-          "bytes": 41412,
-          "sha256": "bb9aba183b3c1b6c21db40d7cd109a46d0a78e892ef96b16794b01e3e04415b8"
+          "bytes": 41352,
+          "sha256": "f226fc6fe5ee2b284411fbf9ba5c572098160ffcc0082248e3ea0eadfe449e3d"
         },
         {
           "file": "snail/nerite-snail/lod2.glb",
-          "bytes": 21712,
-          "sha256": "4b83f386536ea77a7ded7566d5d24309b28a9092300f1d3257dc3b250fa58cf5"
+          "bytes": 21724,
+          "sha256": "33b7084a6943d9d5ad28c406673e0c0369db2c4fb8eeebb9f2373a8d15a279fd"
         },
         {
           "file": "snail/nerite-snail/textures/nerite-snail_nerite-body_basecolor_1k.ktx2",

@@ -8,9 +8,9 @@ import {
   CRAB_KIND,
   HERMIT_RECIPES,
   assignLimbIndices,
-  limbReach,
   clusterByDirection,
   crabColour,
+  limbReach,
   recolourDense,
   segmentCrab,
 } from './hermit.ts';

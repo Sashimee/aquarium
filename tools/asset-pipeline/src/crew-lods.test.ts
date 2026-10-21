@@ -212,7 +212,7 @@ function lipGapAcrossWidth(
     }
   }
   const bodyTop = lipUnder.map((_, bin) => bodyHeightAt(body, lipX[bin]!, lipZ[bin]!));
-  const gaps = lipUnder.map((y, bin) => y - bodyTop[bin]!).filter(Number.isFinite);
+  const gaps = lipUnder.flatMap((y, bin) => (Number.isFinite(y) ? [y - bodyTop[bin]!] : []));
   return { worst: Math.max(...gaps), samples: gaps.length };
 }
 
@@ -397,8 +397,8 @@ describe('nerite wedge', () => {
   beforeAll(() => MeshoptDecoder.ready);
 
   for (const level of [0, 1, 2])
-    for (const azimuth of [-60, -30, 0, 20, 40, 60])
-      for (const elevation of [0, 12])
+    for (const azimuth of [-60, -45, -30, 0, 20, 30, 40, 45, 60])
+      for (const elevation of [0, 6, 12, 20])
         it(`LOD${level} has no pocket of background under the shell from ${azimuth}/${elevation} degrees`, async () => {
           const prims = await readLod('snail/nerite-snail', level);
           const area = pocketArea(prims, 0.02, azimuth, elevation);
