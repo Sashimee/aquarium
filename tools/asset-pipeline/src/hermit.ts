@@ -617,7 +617,10 @@ export function limbReach(
     if (target === root) roots++;
     else tips++;
   }
-  if (roots === 0 || tips === 0) return 0;
+  if (roots === 0 || tips === 0)
+    throw new Error(
+      `limbReach: piece of ${members.length} vertices has ${roots} root and ${tips} tip vertices; recheck the segmentation recipe`,
+    );
   return Math.hypot(...([0, 1, 2].map((a) => root[a]! / roots - tip[a]! / tips) as Vec3));
 }
 

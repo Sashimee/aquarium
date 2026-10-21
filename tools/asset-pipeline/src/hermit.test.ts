@@ -8,6 +8,7 @@ import {
   CRAB_KIND,
   HERMIT_RECIPES,
   assignLimbIndices,
+  limbReach,
   clusterByDirection,
   crabColour,
   recolourDense,
@@ -170,6 +171,18 @@ describe('segmentCrab', () => {
     expect(() => segmentCrab(lone.positions, lone.indices, OPTIONS)).toThrow(
       /does not touch the shell/,
     );
+  });
+});
+
+describe('limbReach', () => {
+  const positions = [0, 0, 0, 0, 0, 3, 0, 0, 4];
+  it('measures root to tip', () => {
+    expect(limbReach(positions, [0, 1, 2], [0, 0.5, 1])).toBeCloseTo(4);
+  });
+
+  it('throws on a piece without root or tip vertices', () => {
+    expect(() => limbReach(positions, [0, 1], [0, 0.5, 1])).toThrow(/limbReach/);
+    expect(() => limbReach(positions, [1, 2], [0, 0.5, 1])).toThrow(/limbReach/);
   });
 });
 
