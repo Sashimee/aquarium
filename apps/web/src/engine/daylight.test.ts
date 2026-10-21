@@ -2,6 +2,8 @@ import { DEFAULT_EQUIPMENT } from '@aquarium/shared';
 import { lampIsOn } from '@aquarium/sim/lifecycle';
 import { describe, expect, it } from 'vitest';
 import {
+  DAYLIGHT_UNSEEN_GAP_MS,
+  DaylightAnnouncer,
   DEFAULT_LAMP_HOURS,
   DEFAULT_PHOTOPERIOD,
   daylightAt,
@@ -133,5 +135,40 @@ describe('lampPhotoperiod', () => {
     ] as const) {
       expect(() => lampPhotoperiod({ onHour, offHour })).toThrow(RangeError);
     }
+  });
+});
+
+describe('DaylightAnnouncer', () => {
+  it('announces the first level settled and later visible changes unsettled', () => {
+    const announcer = new DaylightAnnouncer();
+    expect(announcer.next(1)).toEqual({ level: 1, settled: true });
+    announcer.frame(16);
+    expect(announcer.next(0)).toEqual({ level: 0, settled: false });
+  });
+
+  it('skips changes too small to announce, measured from the last announced level', () => {
+    const announcer = new DaylightAnnouncer();
+    announcer.next(0.5);
+    expect(announcer.next(0.503)).toBeNull();
+    expect(announcer.next(0.506)).toEqual({ level: 0.506, settled: false });
+  });
+
+  it('settles the first change after a frame gap longer than the limit, and only that one', () => {
+    const announcer = new DaylightAnnouncer();
+    announcer.next(1);
+    announcer.frame(DAYLIGHT_UNSEEN_GAP_MS);
+    expect(announcer.next(0.8)?.settled).toBe(false);
+    announcer.frame(DAYLIGHT_UNSEEN_GAP_MS + 1);
+    expect(announcer.next(0.2)).toEqual({ level: 0.2, settled: true });
+    announcer.frame(16);
+    expect(announcer.next(1)?.settled).toBe(false);
+  });
+
+  it('forgets a gap that brought no change worth announcing', () => {
+    const announcer = new DaylightAnnouncer();
+    announcer.next(1);
+    announcer.frame(60_000);
+    expect(announcer.next(1)).toBeNull();
+    expect(announcer.next(0)?.settled).toBe(false);
   });
 });

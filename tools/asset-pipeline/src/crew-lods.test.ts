@@ -263,14 +263,13 @@ const SCANNED: Array<{
   dir: string;
   material: string;
   solid: boolean;
-  pieces: number;
+  pieces?: number;
   partPieces?: Record<string, { pieces: number; isPart: (id: number) => boolean }>;
 }> = [
   {
     dir: 'crab/hermit-crab',
     material: 'hermit-crab',
     solid: false,
-    pieces: 2,
     partPieces: {
       shell: { pieces: 1, isPart: (id) => id === 0 },
       body: { pieces: 1, isPart: (id) => id !== 0 },
@@ -318,7 +317,12 @@ describe('shipped scan LODs', () => {
         },
       );
 
-      it(`${dir} LOD${level} scan mesh is ${pieces} connected piece(s)`, async () => {
+      const expectation = partPieces
+        ? Object.entries(partPieces)
+            .map(([name, part]) => `${part.pieces} ${name}`)
+            .join(' and ')
+        : `${pieces}`;
+      it(`${dir} LOD${level} scan mesh has ${expectation} connected piece(s)`, async () => {
         for (const prim of (await readLod(dir, level)).filter((p) => p.material === material)) {
           const { min, max } = boundsOf(prim.positions);
           const diagonal = Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2]);

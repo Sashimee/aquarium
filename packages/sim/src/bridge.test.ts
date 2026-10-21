@@ -27,6 +27,7 @@ import {
   REEF_TANK,
   SHOW_TANK,
   spawnMany,
+  stepTo,
   yellowTang,
 } from './fixtures.ts';
 import { FOOD_STRIDE, FOOD_TYPES, type AteEvent } from './food.ts';
@@ -65,19 +66,6 @@ function nextSnapshot(client: SimClient): Promise<Snapshot> {
       resolve(s);
     });
   });
-}
-
-/** Steps by `steps` and resolves with the snapshot of the world at `tick`. */
-function stepTo(client: SimClient, steps: number, tick: number): Promise<Snapshot> {
-  const reached = new Promise<Snapshot>((resolve) => {
-    const off = client.onSnapshot((snapshot) => {
-      if (snapshot.tick < tick) return;
-      off();
-      resolve(snapshot);
-    });
-  });
-  client.step(steps);
-  return reached;
 }
 
 function nextError(client: SimClient): Promise<string> {
@@ -592,6 +580,25 @@ describe('sim worker bridge', () => {
     const second = client.init(benchmarkConfig(2));
     worker.post({ type: 'crew', epoch: 1, tick: 60, tally: [entry] });
     expect(seen).toEqual([entry]);
+    client.dispose();
+    await expect(second).rejects.toThrow(/client disposed/);
+  });
+
+  it('passes on polyp extensions of the current world only', async () => {
+    const worker = fakeWorker();
+    const client = new SimClient(worker.port);
+    const seen: number[] = [];
+    client.onPolyps((extension) => seen.push(extension));
+    const first = client.init(benchmarkConfig(1));
+    worker.ready(1);
+    await first;
+    worker.post({ type: 'polyps', epoch: 0, tick: 30, extension: 0.25 });
+    expect(seen).toEqual([]);
+    worker.post({ type: 'polyps', epoch: 1, tick: 30, extension: 0.5 });
+    expect(seen).toEqual([0.5]);
+    const second = client.init(benchmarkConfig(2));
+    worker.post({ type: 'polyps', epoch: 1, tick: 60, extension: 0.75 });
+    expect(seen).toEqual([0.5]);
     client.dispose();
     await expect(second).rejects.toThrow(/client disposed/);
   });
