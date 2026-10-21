@@ -7,7 +7,12 @@ import {
   savedTanks,
 } from '../support/app.ts';
 
-async function buyFish(page: Page, commonName: string, fishName: string): Promise<void> {
+async function buyFish(
+  page: Page,
+  commonName: string,
+  fishName: string,
+  options: { confirm?: boolean } = {},
+): Promise<void> {
   const shop = await openDock(page, 'Shop', 'Fish shop');
   await page.getByLabel('Name for the new fish').fill(fishName);
   await shop
@@ -15,6 +20,7 @@ async function buyFish(page: Page, commonName: string, fishName: string): Promis
     .filter({ hasText: commonName })
     .getByRole('button', { name: 'Add', exact: true })
     .click();
+  if (options.confirm) await page.getByRole('button', { name: 'Yes, buy it' }).click();
   await expect(page.locator('.life-status')).toContainText(`${fishName} is in a bag`);
   await page.getByRole('button', { name: `Release ${fishName} now` }).click();
 }
@@ -164,7 +170,7 @@ test('the mirror, the ping-pong ball and the shy-fish feeding game work from the
   await expect(play.getByText(/at least two fish/)).toBeVisible();
 
   await buyFish(page, 'Guppy', 'Glint');
-  await buyFish(page, 'Betta', 'Bolt');
+  await buyFish(page, 'Betta', 'Bolt', { confirm: true });
   await openPlay(page);
 
   await dismissToasts(page);

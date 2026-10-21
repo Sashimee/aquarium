@@ -15,6 +15,7 @@ import {
 } from './fixtures.ts';
 import { TankSdf, type TankDimensions } from './sdf.ts';
 import { toSimSpecies } from './species.ts';
+import { WAVE_MAKER } from './waveMaker.ts';
 import { World } from './world.ts';
 
 const LONG = 120_000;
@@ -42,6 +43,7 @@ const MVP_ROSTER = [
   ['bronze-corydoras', 'Corydoras aeneus', 'freshwater'],
   ['cherry-shrimp', 'Neocaridina davidi', 'freshwater'],
   ['cleaner-shrimp', 'Lysmata amboinensis', 'reef'],
+  ['cleaner-wrasse', 'Labroides dimidiatus', 'reef'],
   ['discus', 'Symphysodon aequifasciatus', 'freshwater'],
   ['firefish', 'Nemateleotris magnifica', 'reef'],
   ['guppy', 'Poecilia reticulata', 'freshwater'],
@@ -148,6 +150,44 @@ describe('every shipped species in its decorated tank', { timeout: LONG }, () =>
     expect(worst).toBeGreaterThanOrEqual(-1e-9);
     // The hard constraint is a backstop; steering should keep it almost idle.
     expect(contacts / fishSteps).toBeLessThan(1e-3);
+  });
+});
+
+describe('every shipped species in a full-power wave maker current', { timeout: LONG }, () => {
+  const species = roster.map((r) => r.species);
+
+  it.each(
+    roster.map((r) => ({
+      id: r.species.id,
+      biome: r.species.biome,
+      s: r.species,
+    })),
+  )('is never carried through glass or rock over 10 000 steps: $id', ({ biome, s }) => {
+    const reef = biome === 'reef';
+    const tank = reef ? REEF_TANK : SHOW_TANK;
+    const decor = reef ? REEF_DECOR : SHOW_DECOR;
+    const w = new World({
+      seed: CONTACT_SEEDS[0] ?? 4,
+      tank,
+      species,
+      decor,
+      anchors: reef ? REEF_ANCHORS : [],
+      fish: spawnMany(s.id, fishCount(s)),
+      waveMaker: {
+        direction: [1, 0.3],
+        speedMps: WAVE_MAKER.maxSpeedMps,
+        mode: 'steady',
+        periodS: WAVE_MAKER.pulsePeriodS,
+      },
+    });
+    const clearance = bruteClearance(w, tank, decor);
+    let worst = Infinity;
+    for (let t = 0; t < 10_000; t++) {
+      w.step();
+      for (let i = 0; i < w.count; i++) worst = Math.min(worst, clearance(i));
+    }
+    expect(worst).toBeGreaterThanOrEqual(-1e-9);
+    expect(w.contacts / (w.count * 10_000)).toBeLessThan(1e-3);
   });
 });
 

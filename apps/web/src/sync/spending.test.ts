@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { BUNDLED_ECONOMY } from './bundledEconomy';
-import { affordNow, runSpend, type WalletSource } from './spending';
+import { affordNow, fishNeedsConfirm, runSpend, type WalletSource } from './spending';
 
 const economy = BUNDLED_ECONOMY;
 
@@ -63,5 +63,13 @@ describe('runSpend', () => {
     const { source } = wallet(500);
     expect(await runSpend(source, { price: 150, go: async () => false }, economy)).toBeNull();
     expect(source.clearMessages).not.toHaveBeenCalled();
+  });
+});
+
+describe('fishNeedsConfirm', () => {
+  it('asks for every adult and for juveniles from 100 Pearls', () => {
+    expect(fishNeedsConfirm('adult', 40)).toBe(true);
+    expect(fishNeedsConfirm('juvenile', 99)).toBe(false);
+    expect(fishNeedsConfirm('juvenile', 100)).toBe(true);
   });
 });

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-10-16",
+  "generated_at": "2026-10-19",
   "status_values": ["downloaded", "selected-pending-download"],
   "rules": [
     "sha256 is null if and only if status is selected-pending-download.",
@@ -3031,6 +3031,351 @@
         "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
         "all EXIF, XMP, GPS and other metadata removed"
       ],
+      "status": "downloaded"
+    },
+    {
+      "id": "sketchfab-f7f3faca",
+      "kind": "fish",
+      "species": "pseudotropheus-demasoni",
+      "title": "Pseudotropheus Demasoni fish",
+      "author": "Ra_in_coat",
+      "author_url": "https://sketchfab.com/ra_in_coat",
+      "source_url": "https://sketchfab.com/3d-models/pseudotropheus-demasoni-fish-f7f3facad8514167b410be9d60b4d596",
+      "licence": "CC-BY-4.0",
+      "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+      "checked_at": "2026-10-19",
+      "sha256": "4e7c01a6d84a6bb56926dffcd515477148ea260d554fdd40657c09ff33e3a23e",
+      "polycount": 2174,
+      "textures": "Pseudotropheus_baseColor.png, Pseudotropheus_normal.png",
+      "rigged": true,
+      "notes": "Pseudotropheus demasoni (Demason's cichlid, Lake Malawi mbuna): the only allowed cichlid model found across Smithsonian, Sketchfab, Poly Haven and Quaternius/Kenney. Rigged glTF with a 64-joint skeleton and one animation, SWIM_CYCLE, plus a stray Cube_helper node to drop. 2174 faces, 1087 vertices (Sketchfab record). Body outline and the vertical dark bars on a pale blue flank are right for the species; the texture is painted rather than photographic, so the pipeline can re-project the flank from a reference photo if it reads flat. 64 joints is far above the fish budget: collapse to the pipeline's spine chain and fin bones. Licence (CC Attribution, downloadable) read from the Sketchfab model record and the bundled license.txt on 2026-10-19. Zip sha256 0d162e2d489387452574bed6178238ef0532521450355d68188654c65c7dcaab; sha256 is the aggregate over files[]. Planned pipeline steps (to be recorded in modifications[] by the pipeline once built): dropped the Cube_helper node, the original skeleton and SWIM_CYCLE, then rebuilt the pipeline's own spine and fin rig; oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length; baked fin mask, fin id and mouth mask vertex attributes; colour and normal maps re-encoded to KTX2 at 1k and 2k.",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "gltf/license.txt",
+          "sha256": "266c379d6656dd3c57814b8eeb65d232a346ea7d4da1387de21564ae495e39dc",
+          "bytes": 740
+        },
+        {
+          "path": "gltf/scene.bin",
+          "sha256": "28d2dd54e4df1af224beaaf48891bb453d7d3f0649ac34a23c41e17acc838314",
+          "bytes": 250880
+        },
+        {
+          "path": "gltf/scene.gltf",
+          "sha256": "96d12b03521198824c86b2d7502f3378388cd6e59dd82694d6e67035edc83e98",
+          "bytes": 164252
+        },
+        {
+          "path": "gltf/textures/Pseudotropheus_baseColor.png",
+          "sha256": "669c241236b8029eaa480b769ffcf8b64041ed91c615f1c150e73d5a5447e387",
+          "bytes": 5021389
+        },
+        {
+          "path": "gltf/textures/Pseudotropheus_normal.png",
+          "sha256": "30d716acd8bd3aa5c414f157d8693a4febe103050629a1ff64ef35356314951f",
+          "bytes": 1384619
+        }
+      ]
+    },
+    {
+      "id": "sketchfab-1bedca25",
+      "kind": "decor",
+      "title": "Snail Shell (Photogrammetry)",
+      "author": "Meshfinder",
+      "author_url": "https://sketchfab.com/meshfinder",
+      "source_url": "https://sketchfab.com/3d-models/snail-shell-photogrammetry-1bedca252e4d46d7b92826271a578154",
+      "licence": "CC-BY-4.0",
+      "licence_url": "https://creativecommons.org/licenses/by/4.0/",
+      "checked_at": "2026-10-19",
+      "sha256": "9bc089f2b839f7a05379f86802a35eef362cf4447e756600d519f019793d0914",
+      "polycount": 3727,
+      "textures": "SnailShell_baseColor.jpeg, SnailShell_metallicRoughness.png, SnailShell_normal.png",
+      "rigged": false,
+      "notes": "Photogrammetry snail shell, used as the shell-dweller decor prop (Neolamprologus multifasciatus style shell bed): one model instanced at varied scale and rotation. 3727 faces, 1864 vertices. The model reads as a land-snail shell, not a Lake Tanganyika Neothauma; at the 3.5 to 5 cm Neothauma scale of a shell bed that difference is not visible. The normal map is 11.9 MB and must be re-encoded. Meshfinder is a Munich 3D-scanning startup that scanned and published the model itself; the CC-BY-4.0 licence and downloadable flag come from the Sketchfab model record and bundled license.txt (read 2026-10-19). Zip sha256 3b6ea3bc1022d376230adf6325e58592c7967b53fedffa69349df6cf5a4dd57c; sha256 is the aggregate over files[]. Planned pipeline steps (to be recorded in modifications[] by the pipeline once built): decimated to LOD0 to LOD2, origin at the shell base, scaled to a 3.5 to 5 cm shell (Neothauma-like); textures re-encoded to KTX2 at 1k; normal map downscaled from its source size.",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "gltf/license.txt",
+          "sha256": "1b7bc12c54049a4eb105b557eca5a4a5a0857a951b0f5b036694d57492b0a88f",
+          "bytes": 736
+        },
+        {
+          "path": "gltf/scene.bin",
+          "sha256": "d20b79970193dbb66bcc31206a4b64edf5f1a57831d564f0213994d8d7b8464f",
+          "bytes": 157572
+        },
+        {
+          "path": "gltf/scene.gltf",
+          "sha256": "793fef7e5d18e19fab1603bbad0023c961a6a325e607ca20cfcc6984c8e2cdbb",
+          "bytes": 5046
+        },
+        {
+          "path": "gltf/textures/SnailShell_baseColor.jpeg",
+          "sha256": "00cac885069e6e6c72c0d7f6a369e7ab0828e514b51090197522901852fc0529",
+          "bytes": 3834397
+        },
+        {
+          "path": "gltf/textures/SnailShell_metallicRoughness.png",
+          "sha256": "af5c7c5d965d3abd3c382d8ac6da16737b26229ef840fb4f431b555cad5a9305",
+          "bytes": 2045362
+        },
+        {
+          "path": "gltf/textures/SnailShell_normal.png",
+          "sha256": "2f3f3ce061b826802e7acdf98b803a0e56a935d4ccb00cfcd6cf827138978f4c",
+          "bytes": 11920661
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-namaqualand_boulder_03",
+      "kind": "rock",
+      "title": "Namaqualand Boulder 03",
+      "author": "Jenelle van Heerden, Dario Barresi",
+      "author_url": "https://polyhaven.com/a/namaqualand_boulder_03",
+      "source_url": "https://polyhaven.com/a/namaqualand_boulder_03",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-19",
+      "sha256": "ff7e39fd7418f066f55c9fce530b93e8fcf5b12163bcb9adcdc39c1c55b8eb75",
+      "polycount": 121546,
+      "textures": "PBR jpg: namaqualand_boulder_03_arm_2k.jpg, namaqualand_boulder_03_diff_2k.jpg, namaqualand_boulder_03_nor_gl_2k.jpg",
+      "rigged": false,
+      "notes": "Large rounded granite boulder (about 2.4 x 3.1 x 1.5 m in the source), the anchor rock of the Malawi rock pile. Heavy: 121546 triangles, so decimate for the tank and bake normals. Granite and gneiss rockwork for the African cichlid lake: Malawi mbuna live on rock piles. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-19).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "namaqualand_boulder_03.bin",
+          "sha256": "d24151021ed310fe3207f1b5964bff22b583e77d2617427a88b5dcbc0447a475",
+          "bytes": 1450268
+        },
+        {
+          "path": "namaqualand_boulder_03_2k.gltf",
+          "sha256": "5d135c8e3a74edf7f53ae04d41deed19582ed6ced6d629d5d51e730319ed0dcb",
+          "bytes": 2823
+        },
+        {
+          "path": "textures/namaqualand_boulder_03_arm_2k.jpg",
+          "sha256": "24f443dd1c1da875a3653f0820d02e3140319fe199123765987d166ada3d1ddc",
+          "bytes": 2441884
+        },
+        {
+          "path": "textures/namaqualand_boulder_03_diff_2k.jpg",
+          "sha256": "d7bfae01eed80a6318679f13a8be14253fa0f6338b93f6e2126946f86bea4f82",
+          "bytes": 3341422
+        },
+        {
+          "path": "textures/namaqualand_boulder_03_nor_gl_2k.jpg",
+          "sha256": "e83ccfe677a6c82aadd56d1e5138aa97823a23cde32573dd65dafb321fffeb33",
+          "bytes": 2919390
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-namaqualand_boulder_05",
+      "kind": "rock",
+      "title": "Namaqualand Boulder 05",
+      "author": "Jenelle van Heerden, Dario Barresi",
+      "author_url": "https://polyhaven.com/a/namaqualand_boulder_05",
+      "source_url": "https://polyhaven.com/a/namaqualand_boulder_05",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-19",
+      "sha256": "1861cafd73671fbc551d58a6b841d58bb756c962a61dd5f5b622559c3d5619b0",
+      "polycount": 117622,
+      "textures": "PBR jpg: namaqualand_boulder_05_arm_2k.jpg, namaqualand_boulder_05_diff_2k.jpg, namaqualand_boulder_05_nor_gl_2k.jpg",
+      "rigged": false,
+      "notes": "Medium low boulder (about 1.4 x 0.7 x 0.5 m in the source), for the second tier of the rock pile. 117622 triangles: decimate. Granite and gneiss rockwork for the African cichlid lake: Malawi mbuna live on rock piles. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-19).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "namaqualand_boulder_05.bin",
+          "sha256": "a60ade71de8612c873f9112159ed5d93dcba58979007a0915bc10d551a9ed03c",
+          "bytes": 2015628
+        },
+        {
+          "path": "namaqualand_boulder_05_2k.gltf",
+          "sha256": "d2e1f687c01176703e76b6c6d9ff7a98c868a3c6402c7d97bc17a613e9c64fcc",
+          "bytes": 2872
+        },
+        {
+          "path": "textures/namaqualand_boulder_05_arm_2k.jpg",
+          "sha256": "ee4c689c7e2f33942b2bccd8a231f300236a30eb4b465ccf1bc73c5bd8a2bdff",
+          "bytes": 2657942
+        },
+        {
+          "path": "textures/namaqualand_boulder_05_diff_2k.jpg",
+          "sha256": "2645ed1fb098c26edd1e578cf21168f35ae99dfb91125cc0984bb48290741cd1",
+          "bytes": 3222354
+        },
+        {
+          "path": "textures/namaqualand_boulder_05_nor_gl_2k.jpg",
+          "sha256": "c06189c42343caf3985cda8e123423414e6f7f777c46363c6a39e8164158cf2e",
+          "bytes": 4038861
+        }
+      ]
+    },
+    {
+      "id": "polyhaven-rock_07",
+      "kind": "rock",
+      "title": "Rock 07",
+      "author": "Jenelle van Heerden",
+      "author_url": "https://polyhaven.com/a/rock_07",
+      "source_url": "https://polyhaven.com/a/rock_07",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-19",
+      "sha256": "030801915a2b2abadf8701b85c4cc119d41691a60fd023cea40497dbc904d07b",
+      "polycount": 27830,
+      "textures": "PBR jpg: rock_07_arm_2k.jpg, rock_07_diff_2k.jpg, rock_07_nor_gl_2k.jpg",
+      "rigged": false,
+      "notes": "Small angular rock (about 0.17 x 0.32 x 0.14 m in the source) for the top tier and loose rubble at the base. 27830 triangles. Granite and gneiss rockwork for the African cichlid lake: Malawi mbuna live on rock piles. Licence stated as CC0 on the asset page and https://polyhaven.com/license (read 2026-10-19).",
+      "modifications": [],
+      "status": "downloaded",
+      "files": [
+        {
+          "path": "rock_07.bin",
+          "sha256": "e4a532a6d6cf4a08c288f501b790f32cba0528136a29959ce774c3cd39369e7e",
+          "bytes": 468936
+        },
+        {
+          "path": "rock_07_2k.gltf",
+          "sha256": "b0ff2386f1225784707df0a07b8bfb0e35e220a42b89a2be5e9e6ac035aa2a85",
+          "bytes": 2979
+        },
+        {
+          "path": "textures/rock_07_arm_2k.jpg",
+          "sha256": "d083f995ad460c53f436b335493e66d08d911df67a3106293a62521f49131fa6",
+          "bytes": 829879
+        },
+        {
+          "path": "textures/rock_07_diff_2k.jpg",
+          "sha256": "f83d8439faccbda1c74a37421ef9bada9719eff790db000d87ba34c21bce6f72",
+          "bytes": 2227207
+        },
+        {
+          "path": "textures/rock_07_nor_gl_2k.jpg",
+          "sha256": "9d5c4dc97891ceb04861ae1194caad64b99b0b486e59572d84537e4e0df4183f",
+          "bytes": 2781907
+        }
+      ]
+    },
+    {
+      "id": "wm-labidochromis-chmee2",
+      "kind": "reference-photo",
+      "species": "labidochromis-caeruleus",
+      "title": "Labidochromis caeruleus in Botanic garden in Teplice.JPG",
+      "author": "Chmee2",
+      "author_url": "https://commons.wikimedia.org/wiki/User:Chmee2",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Labidochromis_caeruleus_in_Botanic_garden_in_Teplice.JPG",
+      "licence": "CC-BY-3.0",
+      "licence_url": "https://creativecommons.org/licenses/by/3.0/",
+      "checked_at": "2026-10-19",
+      "sha256": "a0d2a27643d3496b31ee0a444077104824b153a61c01eb0acd2d9d06baa651a5",
+      "polycount": null,
+      "textures": "photo",
+      "rigged": false,
+      "notes": "Electric yellow cichlid, 4752x3168, adult in a public aquarium; lateral view. Primary colour reference for the yellow body and the black dorsal edge. Licence (Creative Commons Attribution 3.0) read from the Commons file page metadata on 2026-10-19; the Commons sha1 matches the download. Raw file: ~/.cache/aquarium-assets/raw/wm-labidochromis-chmee2/original.jpg (not committed).",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "wm-labidochromis-severni",
+      "kind": "reference-photo",
+      "species": "labidochromis-caeruleus",
+      "title": "Female Labidochromis caeruleus light.jpg",
+      "author": "BRKOSLAV SEVERNÍ",
+      "author_url": "https://commons.wikimedia.org/wiki/User:Bookworm_9",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Female_Labidochromis_caeruleus_light.jpg",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-19",
+      "sha256": "ef04efecd3ca58c10cf9630f1fad3f7cabd0c57690e9b8fad31fed3fdb5c9a51",
+      "polycount": null,
+      "textures": "photo",
+      "rigged": false,
+      "notes": "Female electric yellow cichlid, 4128x3096, pale form. Second view, for the female colour variant. Licence (Creative Commons Zero) read from the Commons file page metadata on 2026-10-19; the Commons sha1 matches the download. Raw file: ~/.cache/aquarium-assets/raw/wm-labidochromis-severni/original.jpg (not committed). The Commons account was renamed from BRKOSLAV SEVERNÍ to Bookworm 9 on 2025-10-24; the file page's own-work and CC0 statement is the uploader's.",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "wm-melanochromis-5snake5-female",
+      "kind": "reference-photo",
+      "species": "melanochromis-auratus",
+      "title": "Melanochromis auratus - Türkisgoldbarsch ♀.jpg",
+      "author": "5snake5",
+      "author_url": "https://commons.wikimedia.org/wiki/User:5snake5",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Melanochromis_auratus_-_T%C3%BCrkisgoldbarsch_%E2%99%80.jpg",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-19",
+      "sha256": "306c6cb27f25682d50f23fcf47053a03a198773ab2e4432cec6cb7c8a878210a",
+      "polycount": null,
+      "textures": "photo",
+      "rigged": false,
+      "notes": "Female auratus (golden mbuna), 3368x2301: yellow-gold with two dark lateral stripes. Licence (Creative Commons Zero) read from the Commons file page metadata on 2026-10-19; the Commons sha1 matches the download. Raw file: ~/.cache/aquarium-assets/raw/wm-melanochromis-5snake5-female/original.jpg (not committed).",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "wm-melanochromis-5snake5-male",
+      "kind": "reference-photo",
+      "species": "melanochromis-auratus",
+      "title": "Melanochromis auratus - Türkisgoldbarsch - ♂.jpg",
+      "author": "5snake5",
+      "author_url": "https://commons.wikimedia.org/wiki/User:5snake5",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Melanochromis_auratus_-_T%C3%BCrkisgoldbarsch_-_%E2%99%82.jpg",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-19",
+      "sha256": "39871b180ca8bc8e872ad4fa0911f1aa1c5e5c3b05100214b0a16182d237f058",
+      "polycount": null,
+      "textures": "photo",
+      "rigged": false,
+      "notes": "Male auratus, 5011x3386: dark blue-black body with pale stripes, the sexual dimorphism the species is known for. Licence (Creative Commons Zero) read from the Commons file page metadata on 2026-10-19; the Commons sha1 matches the download. Raw file: ~/.cache/aquarium-assets/raw/wm-melanochromis-5snake5-male/original.jpg (not committed).",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "wm-melanochromis-lee-1",
+      "kind": "reference-photo",
+      "species": "melanochromis-auratus",
+      "title": "非洲鳳凰 Melanochromis auratus - panoramio.jpg",
+      "author": "lienyuan lee",
+      "author_url": "https://web.archive.org/web/20161031100205/http://www.panoramio.com/user/6452510?with_photo_id=126271751",
+      "source_url": "https://commons.wikimedia.org/wiki/File:%E9%9D%9E%E6%B4%B2%E9%B3%B3%E5%87%B0_Melanochromis_auratus_-_panoramio.jpg",
+      "licence": "CC-BY-3.0",
+      "licence_url": "https://creativecommons.org/licenses/by/3.0/",
+      "checked_at": "2026-10-19",
+      "sha256": "8c2699a5ea94abd909caa89880d5fceaef859284647693c98f5bc86a413ba496",
+      "polycount": null,
+      "textures": "photo",
+      "rigged": false,
+      "notes": "Auratus in an aquarium, 4178x2784. Extra colour reference for the female and juvenile gold. Licence (Creative Commons Attribution 3.0) read from the Commons file page metadata on 2026-10-19; the Commons sha1 matches the download. Raw file: ~/.cache/aquarium-assets/raw/wm-melanochromis-lee-1/original.jpg (not committed).",
+      "modifications": [],
+      "status": "downloaded"
+    },
+    {
+      "id": "wm-altolamprologus-5snake5",
+      "kind": "reference-photo",
+      "species": "altolamprologus-calvus",
+      "title": "Altolamprologus calvus - Perlhuhn-Buntbarsch.jpg",
+      "author": "5snake5",
+      "author_url": "https://commons.wikimedia.org/wiki/User:5snake5",
+      "source_url": "https://commons.wikimedia.org/wiki/File:Altolamprologus_calvus_-_Perlhuhn-Buntbarsch.jpg",
+      "licence": "CC0-1.0",
+      "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "checked_at": "2026-10-19",
+      "sha256": "1ee2f680894a1a56540a5b5c7602f3f1251f4980dd36bb6da42bb771d5fc347c",
+      "polycount": null,
+      "textures": "photo",
+      "rigged": false,
+      "notes": "Altolamprologus calvus (black calvus, Lake Tanganyika), 4124x2749: laterally compressed body, tall dorsal fin, grey-black with white flecks. Licence (Creative Commons Zero) read from the Commons file page metadata on 2026-10-19; the Commons sha1 matches the download. Raw file: ~/.cache/aquarium-assets/raw/wm-altolamprologus-5snake5/original.jpg (not committed).",
+      "modifications": [],
       "status": "downloaded"
     }
   ]

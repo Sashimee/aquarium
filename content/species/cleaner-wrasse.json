@@ -1,0 +1,52 @@
+{
+  "behaviour": {
+    "boldness": 0.8,
+    "curiosity": 0.8,
+    "depthBand": [0.15, 0.65],
+    "perceptionFovDeg": 300,
+    "perceptionRangeM": 0.5,
+    "preferredZone": "mid",
+    "territorial": false,
+    "traits": ["cave-dweller"]
+  },
+  "biome": "reef",
+  "chemistry": {
+    "khMin": 5,
+    "nitriteTolerance": 0.2,
+    "phRange": [8, 8.4],
+    "salinityPpt": [30, 36],
+    "sources": [
+      "FishBase (fishbase.se) species summary",
+      "Reef2Reef husbandry ranges for captive marine animals"
+    ],
+    "temperatureC": [24, 27]
+  },
+  "commonName": "Bluestreak cleaner wrasse",
+  "id": "cleaner-wrasse",
+  "lifecycle": {
+    "ammoniaPerBioloadPerHour": 0.001,
+    "ammoniaTolerance": 0.1,
+    "bioload": 0.6,
+    "birthSizeM": 0.04,
+    "diet": ["brine-shrimp", "bloodworms", "flakes", "pellets"],
+    "growthPerDay": 0.00006,
+    "healthLossPerHourStarving": 0.01,
+    "healthRecoveryPerHour": 0.004,
+    "hungerPerHour": 0.0085,
+    "lifespanDays": 1460,
+    "maxSizeM": 0.117,
+    "starvationHungerThreshold": 0.75
+  },
+  "locomotion": {
+    "bodyLengthM": 0.085,
+    "cruiseSpeedMps": 0.08,
+    "gait": "hover",
+    "massKg": 0.009,
+    "maxPitchDeg": 45,
+    "maxSpeedMps": 0.8,
+    "maxTurnRateDegPerS": 400,
+    "strouhal": 0.3,
+    "swimmingMode": "labriform"
+  },
+  "scientificName": "Labroides dimidiatus"
+}
