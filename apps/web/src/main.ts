@@ -8,6 +8,9 @@ import { colliderDigest } from './fish/simColliders';
 import { queueTankEvents, startFish, type FishHandle } from './fish/start';
 import { CameraRig, orbitDistanceFor, tankBounds } from './interaction/camera';
 import { syncRoomLimit } from './interaction/roomLimit';
+import { roomPreference } from './interaction/roomPreference';
+import { bindRoomLight } from './interaction/roomLight';
+import { IdleOrbit, bindIdleInput } from './interaction/idleOrbit';
 import { BackgroundChoice } from './interaction/background';
 import { bindCameraControls } from './interaction/controls';
 import { SceneDecor } from './interaction/decor/sceneDecor';
@@ -34,6 +37,7 @@ import {
 import { mountUi } from './ui/mount';
 import { FeedGate } from './sync/feedGate';
 import { LampFeed } from './sync/lampFeed';
+import { RoomSeedFeed } from './sync/roomSeed';
 import { WaveMakerFeed } from './sync/waveMakerFeed';
 import { awaitTankModules } from './tankLoad';
 
@@ -69,6 +73,7 @@ async function boot(): Promise<void> {
   const tankEvents = queueTankEvents(interaction);
   const waveMaker = new WaveMakerFeed(interaction);
   const lamp = new LampFeed(interaction);
+  const roomSeed = new RoomSeedFeed(interaction);
   const tankSize = new TankSizeSource(interaction);
   const tankBiome = new TankBiome(interaction, parseBiome(window.location.search));
   const switches = watchSwitches(interaction, tracker, tankBiome.fallback);
@@ -121,6 +126,7 @@ async function boot(): Promise<void> {
     switches.stop();
     waveMaker.stop();
     lamp.stop();
+    roomSeed.stop();
     tankSize.stop();
     tankEvents.stop();
     tankBiome.stop();
@@ -151,18 +157,39 @@ async function boot(): Promise<void> {
     },
   });
 
-  const { mountRoom, RoomPreference, browserRoomStorage } = await import('./scene/room');
-  const roomPreference = new RoomPreference(browserRoomStorage());
+  const { mountRoom } = await import('./scene/room');
   const room = mountRoom(engine, roomPreference);
+  const { RoomLight } = await import('./engine/room');
+  const roomLight = bindRoomLight({
+    preference: roomPreference,
+    backdrop: room.backdrop,
+    seed: roomSeed,
+    create: (seed) => {
+      const environment = engine.scene.environment;
+      if (!environment) throw new Error('Room light needs the engine room environment');
+      return new RoomLight({ environment, tier: engine.quality.tier, seed });
+    },
+    tier: () => engine.quality.tier,
+    hood: () => engine.daylight,
+    clock: parseEngineOptions(window.location.search).clock,
+    now: () => Date.now(),
+    onFrame: (callback) => engine.onFrame(callback),
+  });
   const limitToRoom = (): void => syncRoomLimit(rig, room.backdrop.layout);
   limitToRoom();
   const stopRoomLimit = [
     roomPreference.subscribe(limitToRoom),
     engine.events.on('engine:tank-resized', limitToRoom),
     engine.events.on('quality:tier-changed', limitToRoom),
+    engine.events.on('quality:tier-changed', ({ to }) => roomLight.setTier(to)),
   ];
 
-  const stopMotionWatch = watchReducedMotion((reduced) => rig.setReducedMotion(reduced));
+  const idleOrbit = new IdleOrbit(rig);
+  const stopMotionWatch = watchReducedMotion((reduced) => {
+    rig.setReducedMotion(reduced);
+    idleOrbit.setReducedMotion(reduced);
+  });
+  const stopIdleInput = bindIdleInput(window, idleOrbit);
   let play: PlaySystem | null = null;
   const photo = new PhotoController({
     port: engine.photo,
@@ -228,6 +255,7 @@ async function boot(): Promise<void> {
   engine.onFrame(() => waveMaker.syncScene());
   const exposePose = new URLSearchParams(window.location.search).has('e2e');
   engine.onFrame((deltaS) => {
+    idleOrbit.update(deltaS, photo.active || exposePose);
     rig.update(deltaS);
     photo.update(deltaS);
     if (!exposePose) return;
@@ -351,6 +379,9 @@ async function boot(): Promise<void> {
     lamp.stop();
     stopResize();
     for (const off of stopRoomLimit) off();
+    roomLight.dispose();
+    roomSeed.stop();
+    stopIdleInput();
     room.dispose();
     stopTankSize();
     tankSize.stop();

@@ -127,6 +127,7 @@ export class CameraRig {
   private yaw = 0;
   private pitch = 0.1;
   private distance: number;
+  private wantedDistance: number;
 
   private room: RoomVolume | null = null;
 
@@ -148,7 +149,8 @@ export class CameraRig {
     private readonly options: CameraOptions = {},
   ) {
     this.reducedMotion = options.reducedMotion ?? false;
-    this.distance = options.orbitDistance ?? STANDARD_ORBIT_DISTANCE;
+    this.wantedDistance = options.orbitDistance ?? STANDARD_ORBIT_DISTANCE;
+    this.distance = this.wantedDistance;
     this.orbitTarget = { x: 0, y: bounds.height / 2, z: 0 };
     this.focusLast = { ...this.orbitTarget };
     const goal = this.goal();
@@ -172,7 +174,7 @@ export class CameraRig {
   setBounds(bounds: TankBounds, orbitDistance: number): void {
     this.bounds = bounds;
     this.orbitTarget = { x: 0, y: bounds.height / 2, z: 0 };
-    this.distance = orbitDistance;
+    this.wantedDistance = orbitDistance;
     this.clampOrbit();
     this.divePosition = this.clampDive(this.divePosition);
   }
@@ -183,10 +185,24 @@ export class CameraRig {
     this.clampOrbit();
   }
 
+  get orbitDistance(): number {
+    return this.distance;
+  }
+
+  get orbitAngles(): Readonly<{ yaw: number; pitch: number }> {
+    return { yaw: this.yaw, pitch: this.pitch };
+  }
+
+  /** Whether the outside eye has room at this heading, with no swing back toward the front. */
+  canOrbitTo(yaw: number, pitch: number): boolean {
+    const limits = this.orbitLimits(yaw, pitch);
+    return limits.max >= limits.min;
+  }
+
   setOrbit(yaw: number, pitch: number, distance: number): void {
     this.yaw = yaw;
     this.pitch = clamp(pitch, PITCH_MIN, PITCH_MAX);
-    this.distance = distance;
+    this.wantedDistance = distance;
     this.clampOrbit();
   }
 
@@ -259,7 +275,7 @@ export class CameraRig {
         FOCUS_MAX_DISTANCE,
       );
     } else {
-      this.distance *= factor;
+      this.wantedDistance = this.distance * factor;
       this.clampOrbit();
     }
   }
@@ -347,7 +363,7 @@ export class CameraRig {
   private clampOrbit(): void {
     if (this.room) this.swingIntoRoom();
     const { min, max } = this.orbitLimits(this.yaw, this.pitch);
-    this.distance = clamp(this.distance, min, Math.max(min, max));
+    this.distance = clamp(this.wantedDistance, min, Math.max(min, max));
   }
 
   private orbitLimits(yaw: number, pitch: number): { min: number; max: number } {
