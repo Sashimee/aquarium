@@ -8,6 +8,7 @@ import {
   euphylliaReach,
   euphylliaTriangles,
   generateEuphyllia,
+  LEAN_SECONDS,
   parseEuphylliaId,
   type EuphylliaDetail,
   type EuphylliaMesh,
@@ -140,6 +141,17 @@ describe('euphyllia placement data', () => {
     expect(euphylliaReach(mesh.bounds, item, brisk)).toBeGreaterThan(
       euphylliaReach(mesh.bounds, item, calm),
     );
+  });
+});
+
+describe('euphyllia meander reach', () => {
+  it('adds the sideways meander to the ambient lean', () => {
+    const tall: EuphylliaMesh['bounds'] = { min: [-0.1, 0, -0.1], max: [0.1, 10, 0.1] };
+    const still = { direction: [1, 0] as const, speed: 0, gustPeriodS: 8, gustDepth: 0 };
+    const gusty = { ...still, speed: 0.05, gustDepth: 0.5 };
+    const flowOnly = gusty.speed * (1 + gusty.gustDepth) * LEAN_SECONDS;
+    const extra = euphylliaReach(tall, item, gusty) - euphylliaReach(tall, item, still);
+    expect(extra).toBeGreaterThan(flowOnly * item.scale - 1e-9 + 1e-6);
   });
 });
 

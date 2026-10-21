@@ -1,4 +1,4 @@
-import { BoxGeometry, MeshStandardMaterial } from 'three/webgpu';
+import { BoxGeometry, BufferAttribute, MeshStandardMaterial } from 'three/webgpu';
 import { describe, expect, it, vi } from 'vitest';
 import { FlowField, type FlowBounds, type WaveMakerSettings } from '@aquarium/sim';
 import type { LoadedModel } from './assets';
@@ -89,5 +89,40 @@ describe('PlantGroup pump gain', () => {
     expect(Math.abs(group.pumpGain[0] ?? 0) + Math.abs(group.pumpGain[1] ?? 0)).toBeGreaterThan(
       1e-3,
     );
+  });
+
+  it('flags the pump attribute for upload when an entry moves or the pump changes', () => {
+    const uploads: Float32Array[] = [];
+    const setter = Object.getOwnPropertyDescriptor(BufferAttribute.prototype, 'needsUpdate')?.set;
+    if (!setter) throw new Error('BufferAttribute.needsUpdate has no setter to observe');
+    const spy = vi
+      .spyOn(BufferAttribute.prototype, 'needsUpdate', 'set')
+      .mockImplementation(function (this: BufferAttribute, value: boolean) {
+        uploads.push(this.array as Float32Array);
+        setter.call(this, value);
+      });
+    try {
+      const current = new CurrentField();
+      const group = new PlantGroup('java-fern', modelOf(), [plant(0.2, 0.1)], current);
+      const flagged = () => uploads.filter((array) => array === group.pumpGain).length;
+
+      const afterBuild = flagged();
+      current.setWaveMaker(new FlowField(bounds, pump), 0);
+      const afterPump = flagged();
+      expect(afterPump).toBeGreaterThan(afterBuild);
+      group.setEntry(0, plant(0.3, 0.1));
+      expect(flagged()).toBeGreaterThan(afterPump);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('stops following the pump once disposed', () => {
+    const current = new CurrentField();
+    const group = new PlantGroup('java-fern', modelOf(), [plant(0.2, 0.1)], current);
+    group.dispose();
+    current.setWaveMaker(new FlowField(bounds, pump), 0);
+    expect(group.pumpGain[0]).toBe(0);
+    expect(group.pumpGain[1]).toBe(0);
   });
 });

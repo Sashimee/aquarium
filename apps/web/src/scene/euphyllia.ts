@@ -13,6 +13,7 @@ import { SWAY_ATTRIBUTE, swayPositionNode } from './anemone';
 import type { CapsuleCollider } from './colliders';
 import {
   limitLean,
+  MEANDER_AMPLITUDE,
   PUMP_LEAN_HEIGHT,
   type CurrentField,
   type CurrentParameters,
@@ -437,7 +438,10 @@ export function euphylliaReach(
   item: DecorItem,
   current: CurrentParameters,
 ): number {
-  const peakFlow = current.speed * (1 + current.gustDepth);
+  const peakFlow = Math.hypot(
+    current.speed * (1 + current.gustDepth),
+    current.speed * current.gustDepth * MEANDER_AMPLITUDE,
+  );
   const room = PUMP_LEAN_HEIGHT * bounds.max[1] * item.scale;
   const lean = limitLean(
     (peakFlow + (current.pumpMps ?? 0)) * LEAN_SECONDS,

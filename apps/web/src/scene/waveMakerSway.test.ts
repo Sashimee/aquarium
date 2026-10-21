@@ -155,9 +155,16 @@ describe('wave maker sway input', () => {
     expect(root.gain.value.z).toBe(before);
   });
 
-  it('refuses a pump with no output rather than dividing by it', () => {
+  it('treats a pump with speed 0 as off', () => {
     const silent = new FlowField(bounds, { ...steady, speedMps: 0 });
-    expect(() => current(null).setWaveMaker(silent, 0)).toThrow(RangeError);
+    const f = current(null);
+    const root = f.pumpRoot(0, 0.1, 0);
+    expect(() => f.setWaveMaker(silent, 0)).not.toThrow();
+    expect(f.pumpAmplitude.value).toBe(0);
+    expect(root.gain.value.toArray()).toEqual([0, 0, 0]);
+    const out = [1, 1];
+    f.pumpGainAt(0, 0.1, 0, out);
+    expect(out).toEqual([0, 0]);
   });
 });
 
