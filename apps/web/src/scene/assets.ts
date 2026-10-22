@@ -255,9 +255,8 @@ export class ModelLibrary {
           throw error;
         });
       this.cache.set(key, pending);
-      const owned = pending;
-      owned.catch(() => {
-        if (this.cache.get(key) === owned) this.cache.delete(key);
+      pending.catch(() => {
+        if (this.cache.get(key) === pending) this.cache.delete(key);
       });
     }
     return pending;
