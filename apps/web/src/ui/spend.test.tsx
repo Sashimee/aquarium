@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act } from 'react';
+import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PaymentsState } from '@aquarium/shared';
@@ -10,7 +10,7 @@ import type { TankSession } from '../sync/session';
 const api = { paymentsState: vi.fn(), paymentsPacks: vi.fn() };
 vi.mock('./context', () => ({ useApi: () => api }));
 
-const { OpenShopContext, PEARL_PACKS_ID, useSpend } = await import('./spend');
+const { ShowPacksContext, PEARL_PACKS_ID, useShowPacks, useSpend } = await import('./spend');
 
 const session = {
   getState: () => ({ balance: 10, pearlsRefused: false }),
@@ -64,9 +64,9 @@ describe('the not enough Pearls note', () => {
   const shortOfPearls = async () => {
     await act(async () => {
       root.render(
-        <OpenShopContext.Provider value={openShop}>
+        <ShowPacksContext.Provider value={openShop}>
           <Probe />
-        </OpenShopContext.Provider>,
+        </ShowPacksContext.Provider>,
       );
     });
     await act(async () => {
@@ -122,10 +122,24 @@ describe('the not enough Pearls note', () => {
     return { section, heading };
   };
 
-  it('scrolls to and focuses the packs once the lazy Shop panel has mounted them', async () => {
+  it('focuses the packs from a shell that outlives the note the Shop replaces', async () => {
     enable();
-    await shortOfPearls();
+    function Shell() {
+      const [shop, setShop] = useState(false);
+      const showPacks = useShowPacks(() => setShop(true));
+      return (
+        <ShowPacksContext.Provider value={showPacks}>
+          {shop ? null : <Probe />}
+        </ShowPacksContext.Provider>
+      );
+    }
+    await act(async () => root.render(<Shell />));
+    await act(async () => {
+      container.querySelector('#buy')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    for (let i = 0; i < 5; i += 1) await act(async () => {});
     await followLink();
+    expect(container.querySelector('#buy')).toBeNull();
     await frames(3);
     const { section, heading } = mountSection();
     await frames(2);
@@ -134,10 +148,15 @@ describe('the not enough Pearls note', () => {
     section.remove();
   });
 
-  it('stops waiting for the packs when the note goes away', async () => {
-    enable();
-    await shortOfPearls();
-    await followLink();
+  it('stops waiting for the packs when the shell goes away', async () => {
+    function Shell() {
+      const showPacks = useShowPacks(() => undefined);
+      return <button type="button" id="go" onClick={showPacks} />;
+    }
+    await act(async () => root.render(<Shell />));
+    await act(async () => {
+      container.querySelector('#go')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
     act(() => root.unmount());
     root = createRoot(container);
     const { section, heading } = mountSection();
@@ -146,14 +165,33 @@ describe('the not enough Pearls note', () => {
     section.remove();
   });
 
-  it('asks once whether payments are on, however many notes follow', async () => {
+  it('asks once whether payments are on, even after the note is closed and another follows', async () => {
     enable();
     await shortOfPearls();
+    const buyAgain = async () => {
+      await act(async () => {
+        container.querySelector('#buy')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      for (let i = 0; i < 5; i += 1) await act(async () => {});
+    };
+    const close = [...container.querySelectorAll('button')].find((b) =>
+      /Close this note/.test(b.textContent ?? ''),
+    );
     await act(async () => {
-      container.querySelector('#buy')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      close?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    for (let i = 0; i < 5; i += 1) await act(async () => {});
+    expect(container.querySelector('a')).toBeNull();
+    await buyAgain();
+    expect(container.querySelector(`a[href="#${PEARL_PACKS_ID}"]`)).not.toBeNull();
     expect(api.paymentsState).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows neither packs line when the payments check fails, and still explains the shortfall', async () => {
+    api.paymentsState.mockRejectedValue(new Error('offline'));
+    await shortOfPearls();
+    expect(container.textContent).toContain('short');
+    expect(container.querySelector('a')).toBeNull();
+    expect(container.textContent).not.toContain('Pearl packs are not available');
   });
 
   it('says calmly that packs are unavailable when payments are off', async () => {

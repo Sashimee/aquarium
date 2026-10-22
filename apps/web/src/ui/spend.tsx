@@ -1,4 +1,12 @@
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { BUNDLED_ECONOMY } from '../sync/bundledEconomy';
 import {
   packText,
@@ -14,11 +22,34 @@ import { useApi } from './context';
 
 export const PEARL_PACKS_ID = 'pearl-packs';
 
-/** The app's one way to open the Shop panel, so a note outside it can point the player there. */
-export const OpenShopContext = createContext<(() => void) | null>(null);
+/**
+ * Opens the Shop and brings its Pearl packs into view. Provided by the shell, which outlives the
+ * panel that shows the note, so the focus is not lost when opening the Shop unmounts that panel.
+ */
+export const ShowPacksContext = createContext<(() => void) | null>(null);
 
 // The Shop panel is a lazy chunk; its first frames may not have the section yet.
 const PACKS_WAIT_FRAMES = 120;
+
+export function useShowPacks(openShop: () => void): () => void {
+  const frame = useRef(0);
+  useEffect(() => () => cancelAnimationFrame(frame.current), []);
+  return useCallback(() => {
+    cancelAnimationFrame(frame.current);
+    openShop();
+    let tries = 0;
+    const reach = () => {
+      const section = document.getElementById(PEARL_PACKS_ID);
+      if (!section && tries++ < PACKS_WAIT_FRAMES) {
+        frame.current = requestAnimationFrame(reach);
+        return;
+      }
+      section?.scrollIntoView?.({ block: 'start' });
+      section?.querySelector<HTMLElement>('h3')?.focus();
+    };
+    frame.current = requestAnimationFrame(reach);
+  }, [openShop]);
+}
 
 type Availability = 'unknown' | 'on' | 'off';
 
@@ -47,7 +78,7 @@ export function useSpend(session: TankSession, balance: number | null): Spender 
   const [availability, setAvailability] = useState<Availability>('unknown');
   const confirmRef = useRef<HTMLButtonElement>(null);
   const api = useApi();
-  const openShop = useContext(OpenShopContext);
+  const showPacks = useContext(ShowPacksContext);
 
   const offered = Boolean(short?.offer);
   useEffect(() => {
@@ -61,25 +92,6 @@ export function useSpend(session: TankSession, balance: number | null): Spender 
       current = false;
     };
   }, [offered, availability, api]);
-
-  const frame = useRef(0);
-  useEffect(() => () => cancelAnimationFrame(frame.current), []);
-
-  const showPacks = () => {
-    cancelAnimationFrame(frame.current);
-    openShop?.();
-    let tries = 0;
-    const reach = () => {
-      const section = document.getElementById(PEARL_PACKS_ID);
-      if (!section && tries++ < PACKS_WAIT_FRAMES) {
-        frame.current = requestAnimationFrame(reach);
-        return;
-      }
-      section?.scrollIntoView?.({ block: 'start' });
-      section?.querySelector<HTMLElement>('h3')?.focus();
-    };
-    frame.current = requestAnimationFrame(reach);
-  };
 
   useEffect(() => {
     if (short && balance !== null && balance >= short.price) setShort(null);
@@ -122,7 +134,7 @@ export function useSpend(session: TankSession, balance: number | null): Spender 
                 href={`#${PEARL_PACKS_ID}`}
                 onClick={(e) => {
                   e.preventDefault();
-                  showPacks();
+                  showPacks?.();
                 }}
               >
                 See the Pearl packs

@@ -33,7 +33,7 @@ import { navigate } from './router';
 import { Sheet } from './Sheet';
 import { SoundButton } from './SoundSetting';
 import { useSessionState } from './session';
-import { OpenShopContext } from './spend';
+import { ShowPacksContext, useShowPacks } from './spend';
 import { useShopAfterCheckout } from './useShopAfterCheckout';
 import {
   CreditsScreen,
@@ -312,6 +312,8 @@ function Shell() {
 
   const openShop = useCallback(() => dispatch({ type: 'open', panel: 'shop' }), [dispatch]);
 
+  const showPacks = useShowPacks(openShop);
+
   useShopAfterCheckout(home, openShop, status === 'ready' && !user);
 
   const startPhoto = () => {
@@ -336,7 +338,7 @@ function Shell() {
   };
 
   return (
-    <OpenShopContext.Provider value={openShop}>
+    <ShowPacksContext.Provider value={showPacks}>
       <div className={photoActive ? 'shell photo-on' : 'shell'} ref={shell}>
         <a
           className="skip"
@@ -435,6 +437,6 @@ function Shell() {
         <PhotoLayer />
         {home && <LoadingScreen />}
       </div>
-    </OpenShopContext.Provider>
+    </ShowPacksContext.Provider>
   );
 }
