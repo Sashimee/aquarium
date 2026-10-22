@@ -34,11 +34,25 @@ function clampedSize(coral: Coral): number {
   return Math.min(coral.maxSize, Math.max(coral.minSize, coral.size));
 }
 
-/** The item at the colony's grown size. A coral keeps the placed scale at size 1. */
-export function grownCoralItem(item: DecorItem, coral: Coral | undefined): DecorItem {
+/** Largest scale an item can take where it stands; the glass and the surface are the limit. */
+export type ScaleCap = (item: DecorItem) => number;
+
+/**
+ * The item at the colony's grown size, held to `cap` so it never crosses the glass or the
+ * waterline. A colony the layout already placed at its limit keeps its placed scale, and shrinks
+ * freely when fragged.
+ */
+export function grownCoralItem(
+  item: DecorItem,
+  coral: Coral | undefined,
+  cap: ScaleCap = () => Infinity,
+): DecorItem {
   if (!coral) return item;
   const size = clampedSize(coral);
-  return size === 1 ? item : { ...item, scale: item.scale * size };
+  if (size === 1) return item;
+  const wanted = item.scale * size;
+  const scale = size < 1 ? wanted : Math.min(wanted, Math.max(item.scale, cap(item)));
+  return scale === item.scale ? item : { ...item, scale };
 }
 
 export interface PlacedFragment {
@@ -68,6 +82,7 @@ export function placeFragments(
   slots: readonly CoralSlot[],
   corals: readonly Coral[],
   ground: (x: number, z: number) => number,
+  cap: ScaleCap = () => Infinity,
 ): PlacedFragment[] {
   const matched = matchLayoutCorals(slots, corals);
   const indexByKey = new Map([...matched].map(([index, coral]) => [coral.key, index]));
@@ -79,16 +94,13 @@ export function placeFragments(
     const root = rootIndex === null ? undefined : slots[rootIndex];
     if (rootIndex === null || !root || root.assetId !== coral.assetId) continue;
     const [x, z] = coral.position;
-    placed.push({
-      coral,
-      rootIndex,
-      item: {
-        ...root.item,
-        position: [x, ground(x, z), z],
-        rotationY: mulberry32(hashKey(coral.key))() * Math.PI * 2,
-        scale: root.item.scale * clampedSize(coral),
-      },
-    });
+    const standing: DecorItem = {
+      ...root.item,
+      position: [x, ground(x, z), z],
+      rotationY: mulberry32(hashKey(coral.key))() * Math.PI * 2,
+    };
+    const scale = Math.min(root.item.scale * clampedSize(coral), cap(standing));
+    placed.push({ coral, rootIndex, item: { ...standing, scale } });
   }
   return placed;
 }

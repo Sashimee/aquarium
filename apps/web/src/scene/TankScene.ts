@@ -46,7 +46,7 @@ import {
   HARDSCAPE_KINDS,
   PLANT_KIND,
 } from './hardscape';
-import { boundsFromCatalog, fitPresetToTank } from './presetFit';
+import { boundsFromCatalog, fitPresetToTank, maxScaleAt, type FitModel } from './presetFit';
 import { applyBiomeLighting } from './lighting';
 import type { SceneOptions } from './options';
 import { ColliderOverlay } from './overlay';
@@ -80,6 +80,7 @@ import {
   matchLayoutCorals,
   placeFragments,
   type CoralSlot,
+  type ScaleCap,
   type PlacedFragment,
 } from './coralGrowth';
 import { createSubstrateMaterial, type SubstrateLayers } from './substrate';
@@ -109,6 +110,8 @@ interface SubstrateInstall {
   readonly textures: readonly Texture[];
   readonly textureSize: 1024 | 2048;
 }
+
+type CoralOrigin = { readonly hard: number } | { readonly euphyllia: number };
 
 interface EuphylliaItem {
   readonly item: DecorItem;
@@ -188,6 +191,7 @@ export class TankScene {
   private fragLayout = '';
   private fragRun = 0;
   private coralFit = '';
+  private readonly fitModels = new Map<string, FitModel | null>();
   private coralFitRun = 0;
   private installedKey: VisualKey | null = null;
   private readonly queue: RebuildQueue<VisualKey>;
@@ -596,67 +600,112 @@ export class TankScene {
     this.syncCorals();
   }
 
-  private coralSlots(): { slots: CoralSlot[]; hardIndex: Map<number, number> } {
+  /**
+   * The corals of the layout in the order the server numbers repeated tint seeds: the preset's own
+   * order, with edited pieces taking the place of the preset piece before them and any extra after.
+   */
+  private coralLayout(items: readonly { item: DecorItem; kind: string }[]): {
+    slots: CoralSlot[];
+    origins: CoralOrigin[];
+  } {
+    const hard = items.flatMap(({ kind }, index) => (kind === 'coral' ? [index] : []));
     const slots: CoralSlot[] = [];
-    const hardIndex = new Map<number, number>();
-    this.hardItems.forEach(({ item, kind }, index) => {
-      if (kind !== 'coral') return;
-      hardIndex.set(slots.length, index);
-      slots.push({ assetId: item.assetId, item });
-    });
-    for (const { item } of this.euphylliaItems) slots.push({ assetId: item.assetId, item });
-    return { slots, hardIndex };
+    const origins: CoralOrigin[] = [];
+    let nextHard = 0;
+    let nextEuphyllia = 0;
+    const takeHard = () => {
+      const index = hard[nextHard++];
+      const entry = index === undefined ? undefined : items[index];
+      if (index === undefined || !entry) return;
+      slots.push({ assetId: entry.item.assetId, item: entry.item });
+      origins.push({ hard: index });
+    };
+    for (const decor of this.preset.decor) {
+      if (parseEuphylliaId(decor.assetId)) {
+        const euphyllia = this.euphylliaItems[nextEuphyllia];
+        if (!euphyllia) continue;
+        slots.push({ assetId: euphyllia.item.assetId, item: euphyllia.item });
+        origins.push({ euphyllia: nextEuphyllia++ });
+      } else if (this.library.catalog.get(decor.assetId).kind === 'coral') {
+        takeHard();
+      }
+    }
+    while (nextHard < hard.length) takeHard();
+    return { slots, origins };
   }
+
+  private fitModel(assetId: string): FitModel | null {
+    if (!this.fitModels.has(assetId)) {
+      const current = reachCurrent(this.preset.current ?? DEFAULT_CURRENT, this.preset.biome);
+      this.fitModels.set(assetId, boundsFromCatalog(this.library.catalog, current)(assetId));
+    }
+    return this.fitModels.get(assetId) ?? null;
+  }
+
+  private readonly coralCap: ScaleCap = (item) =>
+    maxScaleAt(item, this.engine.tank.dimensions, this.fitModel(item.assetId));
 
   private withGrownCorals(
     items: readonly { item: DecorItem; kind: string }[],
   ): { item: DecorItem; kind: string }[] {
-    const indexes: number[] = [];
-    const slots: CoralSlot[] = [];
-    items.forEach(({ item, kind }, i) => {
-      if (kind !== 'coral') return;
-      indexes.push(i);
-      slots.push({ assetId: item.assetId, item });
-    });
+    const { slots, origins } = this.coralLayout(items);
     const matched = matchLayoutCorals(slots, this.coralState);
-    return items.map((h, i) => {
-      const slot = indexes.indexOf(i);
-      return slot < 0 ? h : { ...h, item: grownCoralItem(h.item, matched.get(slot)) };
+    const grown = items.map((h) => h);
+    origins.forEach((origin, s) => {
+      if (!('hard' in origin)) return;
+      const entry = items[origin.hard];
+      if (!entry) return;
+      grown[origin.hard] = {
+        ...entry,
+        item: grownCoralItem(entry.item, matched.get(s), this.coralCap),
+      };
     });
+    return grown;
   }
 
   private syncCorals(): void {
     if (this.disposed) return;
-    const { slots, hardIndex } = this.coralSlots();
+    const { slots, origins } = this.coralLayout(this.hardItems);
     const matched = matchLayoutCorals(slots, this.coralState);
     slots.forEach((slot, s) => {
+      const origin = origins[s];
       const coral = matched.get(s);
-      const grown = grownCoralItem(slot.item, coral);
+      const grown = grownCoralItem(slot.item, coral, this.coralCap);
       const bleach = coral?.bleach ?? 0;
-      const hard = hardIndex.get(s);
-      if (hard !== undefined) {
-        const target = locateMovable(this.hardItems, hard);
+      if (origin && 'hard' in origin) {
+        const target = locateMovable(this.hardItems, origin.hard);
         if (target?.kind !== 'hardscape') return;
         this.hardscape?.setItem(target.index, grown);
         this.hardscape?.setBleach(target.index, bleach);
-        return;
+      } else if (origin) {
+        const group = this.euphyllias[origin.euphyllia];
+        group?.setItem(grown);
+        group?.setBleach(bleach);
       }
-      const group = this.euphyllias[s - hardIndex.size];
-      group?.setItem(grown);
-      group?.setBleach(bleach);
     });
-    void this.refitCoralColliders(slots, matched, hardIndex);
-    void this.syncFragments(slots);
+    this.report(this.refitCoralColliders(slots, origins, matched), 'colliders');
+    this.report(this.syncFragments(slots), 'fragments');
+  }
+
+  private report(work: Promise<void>, what: string): void {
+    work.catch((cause: unknown) =>
+      this.engine.events.emit('engine:error', {
+        message: `Could not update the coral ${what}`,
+        cause,
+      }),
+    );
   }
 
   private async refitCoralColliders(
     slots: readonly CoralSlot[],
+    origins: readonly CoralOrigin[],
     matched: ReadonlyMap<number, Coral>,
-    hardIndex: ReadonlyMap<number, number>,
   ): Promise<void> {
-    const fit = slots.map((slot, s) => grownCoralItem(slot.item, matched.get(s)).scale).join(',');
+    const grownItems = slots.map((slot, s) =>
+      grownCoralItem(slot.item, matched.get(s), this.coralCap),
+    );
+    const fit = grownItems.map((grown) => grown.scale).join(',');
     if (fit === this.coralFit) return;
-    this.coralFit = fit;
     const run = ++this.coralFitRun;
     const version = this.layoutVersion;
     const movable = await movableColliders(
@@ -669,22 +718,27 @@ export class TankScene {
     this.replaceMovableColliders(movable.colliders);
     const first = this.colliderData.length - this.euphylliaItems.length;
     const colliders = [...this.colliderData];
-    this.euphylliaItems.forEach(({ fullDetail }, i) => {
-      const slot = slots[hardIndex.size + i];
-      if (!fullDetail || !slot) return;
-      colliders[first + i] = euphylliaCollider(
-        fullDetail.bounds,
-        grownCoralItem(slot.item, matched.get(hardIndex.size + i)),
-      );
+    origins.forEach((origin, s) => {
+      const grown = grownItems[s];
+      if (!('euphyllia' in origin) || !grown) return;
+      const detail = this.euphylliaItems[origin.euphyllia]?.fullDetail;
+      if (detail) colliders[first + origin.euphyllia] = euphylliaCollider(detail.bounds, grown);
     });
     this.colliderData = colliders;
     this.colliderField = new ColliderField(this.colliderData);
     this.overlay.setColliders(this.colliderData);
+    this.coralFit = fit;
+    this.syncGrowth();
   }
 
   private async syncFragments(slots: readonly CoralSlot[]): Promise<void> {
     const key = this.installedKey;
-    const placed = placeFragments(slots, this.coralState, (x, z) => this.groundHeight(x, z));
+    const placed = placeFragments(
+      slots,
+      this.coralState,
+      (x, z) => this.groundHeight(x, z),
+      this.coralCap,
+    );
     const layout = placed
       .map((f) => `${f.coral.key}:${f.coral.assetId}:${f.item.position.join(',')}`)
       .join('|');

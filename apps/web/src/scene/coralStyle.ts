@@ -90,11 +90,11 @@ export function fluorescenceLevel(excitation: number): number {
 export const clamp01 = (x: number): number => Math.min(1, Math.max(0, x));
 
 /**
- * Bleached tissue has lost its zooxanthellae, leaving the white skeleton showing through. The
- * colour multiplies a dull scan map, so the white target sits above 1 to brighten it; it is
- * applied only to the live colour and never to a healthy coral.
+ * Bleached tissue has lost its zooxanthellae, so the live tint goes and the scan's own pale
+ * skeleton tone shows. The multiplier only ever moves toward 1, so albedo never exceeds the
+ * scan's; the fluorescent glow fades with the tissue.
  */
-const BLEACHED_WHITE: Rgb = [1.9, 1.9, 1.8];
+const BLEACHED_WHITE: Rgb = [1, 1, 1];
 
 export function bleachedColor(live: Color, bleach: number): Color {
   const t = clamp01(bleach);

@@ -86,10 +86,14 @@ describe('bleachedColor', () => {
     expect(bleachedColor(live, 0).equals(live)).toBe(true);
   });
 
-  it('reaches a chalky near-white, brighter than any live tint, when fully bleached', () => {
-    const white = bleachedColor(live, 1);
-    expect(white.r).toBeGreaterThan(1.7);
-    expect(Math.abs(white.r - white.g)).toBeLessThan(0.15);
+  it('drops the live tint when fully bleached and never brightens past the scan', () => {
+    for (const bleach of [0, 0.25, 0.5, 0.75, 1]) {
+      const c = bleachedColor(live, bleach);
+      expect(Math.max(c.r, c.g, c.b)).toBeLessThanOrEqual(1);
+    }
+    const spread = (c: Color) => Math.max(c.r, c.g, c.b) - Math.min(c.r, c.g, c.b);
+    expect(spread(bleachedColor(live, 1))).toBeCloseTo(0, 6);
+    expect(spread(bleachedColor(live, 0.5))).toBeLessThan(spread(live));
   });
 
   it('moves monotonically toward white', () => {
