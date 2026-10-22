@@ -4,6 +4,17 @@ import type { Sdf } from './sdf.ts';
 
 export type Point3 = readonly [number, number, number];
 
+/** The bounds of one hard decor collider. */
+export interface DecorBounds {
+  readonly id: string;
+  readonly minX: number;
+  readonly minY: number;
+  readonly minZ: number;
+  readonly maxX: number;
+  readonly maxY: number;
+  readonly maxZ: number;
+}
+
 interface Primitive {
   readonly id: string;
   readonly minX: number;
@@ -357,6 +368,24 @@ export class DecorField implements Sdf {
   /** Beyond this distance from every collider `sample` reports exactly this, with an up normal. */
   get reach(): number {
     return this.reachM;
+  }
+
+  /** Every collider's id and axis-aligned bounds, sorted by id. */
+  bounds(): DecorBounds[] {
+    const out: DecorBounds[] = [];
+    for (const p of this.slots) {
+      if (p === null) continue;
+      out.push({
+        id: p.id,
+        minX: p.minX,
+        minY: p.minY,
+        minZ: p.minZ,
+        maxX: p.maxX,
+        maxY: p.maxY,
+        maxZ: p.maxZ,
+      });
+    }
+    return out.sort((x, y) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
   }
 
   /** Collider entries summed over the grid cells: the work queries walk, which a wider reach raises. */

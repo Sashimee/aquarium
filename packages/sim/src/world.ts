@@ -3,7 +3,7 @@ import { Basin, type TankDimensions } from './basin.ts';
 import { Behaviour, BEHAVIOUR, type Anchor, type Plan, type Stimulus } from './behaviour.ts';
 import { sexCode, StageCode, stageCode, type SimBrood } from './brood.ts';
 import { algaeGrazer, grazeAreaRate, type CrewTally } from './crew.ts';
-import { DecorField, UnionSdf, type Point3 } from './decor.ts';
+import { DecorField, UnionSdf, type DecorBounds, type Point3 } from './decor.ts';
 import { FEEDING, feedingHeight, gutForHunger } from './feeding.ts';
 import { FishResize } from './fishArrays.ts';
 import type { Visitor } from './greeting.ts';
@@ -265,6 +265,8 @@ export class World {
   plantContacts = 0;
   /** Stand-off spots tested for room to face the food from; the bearing search behind them is cached. */
   stationChecks = 0;
+  /** Steps where a fish had to be moved off another's body (`Plan.keepOff`); steering keeps this rare. */
+  bodyPushes = 0;
   /** Fish-steps spent rising in place before crossing to a stand-off station over the top of a rock. */
   climbs = 0;
 
@@ -571,6 +573,10 @@ export class World {
 
   get decorSdf(): Sdf | null {
     return this.hardDecor.size > 0 ? this.hardDecor : null;
+  }
+
+  get decorBounds(): DecorBounds[] {
+    return this.hardDecor.bounds();
   }
 
   get plantSdf(): Sdf | null {
@@ -1186,8 +1192,57 @@ export class World {
         this.contactCount[i] = (this.contactCount[i] ?? 0) + 1;
       }
     }
+    for (let i = 0; i < n; i++) {
+      const plan = this.behaviour.plans[i];
+      if (plan !== undefined && plan.keepOffFish >= 0) this.keepOff(i, plan);
+    }
     if (this.algaeCover > 0) this.tallyGrazing();
     this.tick++;
+  }
+
+  /**
+   * Moves fish `i`'s centre out of the capsule round the spine of the fish its plan keeps off,
+   * once every fish has moved, unless that would put its body into glass or rock.
+   */
+  private keepOff(i: number, plan: Plan): void {
+    const j = plan.keepOffFish;
+    const o = i * 3;
+    const q = j * 3;
+    const cp = Math.cos(this.pitch[j] ?? 0);
+    const fx = Math.sin(this.yaw[j] ?? 0) * cp;
+    const fy = Math.sin(this.pitch[j] ?? 0);
+    const fz = Math.cos(this.yaw[j] ?? 0) * cp;
+    const px = this.position[o] ?? 0;
+    const py = this.position[o + 1] ?? 0;
+    const pz = this.position[o + 2] ?? 0;
+    const ex = px - (this.position[q] ?? 0);
+    const ey = py - (this.position[q + 1] ?? 0);
+    const ez = pz - (this.position[q + 2] ?? 0);
+    const along = clamp(ex * fx + ey * fy + ez * fz, -plan.keepOffHalf, plan.keepOffHalf);
+    let rx = ex - along * fx;
+    let ry = ey - along * fy;
+    let rz = ez - along * fz;
+    let d = Math.hypot(rx, ry, rz);
+    const r = plan.keepOffRadius;
+    if (d >= r) return;
+    if (d < 1e-9) {
+      // Dead on the spine: out over the back, square to the spine.
+      rx = -fy * fx;
+      ry = 1 - fy * fy;
+      rz = -fy * fz;
+      d = Math.hypot(rx, ry, rz);
+    }
+    const push = (r - d) / d;
+    this.position[o] = px + rx * push;
+    this.position[o + 1] = py + ry * push;
+    this.position[o + 2] = pz + rz * push;
+    if (this.bodyClearance(i) >= -PENETRATION_EPSILON) {
+      this.bodyPushes++;
+      return;
+    }
+    this.position[o] = px;
+    this.position[o + 1] = py;
+    this.position[o + 2] = pz;
   }
 
   private tallyGrazing(): void {

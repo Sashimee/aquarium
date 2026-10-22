@@ -1,6 +1,7 @@
 import type { Basin } from './basin.ts';
+import { Cleaning } from './cleaning.ts';
 import { CURIOSITY, Curiosity } from './curiosity.ts';
-import type { Point3 } from './decor.ts';
+import type { DecorBounds, Point3 } from './decor.ts';
 import { FEEDING, Feeding, feedingHeight } from './feeding.ts';
 import type { FishResize } from './fishArrays.ts';
 import type { FoodStore } from './food.ts';
@@ -197,6 +198,8 @@ export interface BehaviourHost {
   readonly substrateSdf: Sdf;
   /** Hard decor alone, or null when the tank is bare. */
   readonly decorSdf: Sdf | null;
+  /** The bounds of every hard decor collider, sorted by id. */
+  readonly decorBounds: readonly DecorBounds[];
   /** Plants and other soft decor, or null when there are none. */
   readonly plantSdf: Sdf | null;
   /** Per fish `StageCode`. */
@@ -255,6 +258,13 @@ export class Plan {
   shunZ = 0;
   shunRadius = 0;
   shunWeight = 0;
+  /**
+   * A fish whose body this one's centre is held off, after it has moved: outside a capsule of
+   * `keepOffRadius` round that fish's spine, `keepOffHalf` either side of its centre; -1 for none.
+   */
+  keepOffFish = -1;
+  keepOffHalf = 0;
+  keepOffRadius = 0;
   /** 0 to 1: how far the fins are spread in display. */
   display = 0;
   /** 0 to 1: how far the gill covers are raised in display. */
@@ -288,6 +298,7 @@ export class Plan {
     this.pivot = false;
     this.homing = false;
     this.shunRadius = 0;
+    this.keepOffFish = -1;
     this.display = 0;
     this.gillFlare = 0;
     this.fan = 0;
@@ -308,6 +319,12 @@ export class Plan {
     this.shunZ = z;
     this.shunRadius = radius;
     this.shunWeight = weight;
+  }
+
+  keepOff(j: number, half: number, radius: number): void {
+    this.keepOffFish = j;
+    this.keepOffHalf = half;
+    this.keepOffRadius = radius;
   }
 }
 
@@ -339,6 +356,7 @@ export class Behaviour {
   readonly brood: Brood;
   readonly personality: Personalities;
   readonly greeting: Greeting;
+  readonly cleaning: Cleaning;
   readonly lighting = new Night();
 
   private readonly host: BehaviourHost;
@@ -468,6 +486,7 @@ export class Behaviour {
     this.toys = new Toys(host, this.personality);
     this.brood = new Brood(host);
     this.greeting = new Greeting(host);
+    this.cleaning = new Cleaning(host);
     this.startlePhase = new Uint8Array(n);
     this.startleTimer = new Float64Array(n);
     this.startleElapsed = new Float64Array(n);
@@ -593,6 +612,7 @@ export class Behaviour {
     this.brood.resize(edit);
     this.personality.resize(edit);
     this.greeting.resize(edit);
+    this.cleaning.resize(edit);
     if (edit.removed < 0) return;
     for (let i = 0; i < this.territoryTarget.length; i++) {
       const j = edit.index(at(this.territoryTarget, i));
@@ -848,6 +868,8 @@ export class Behaviour {
     this.curiosity.update(this.feeding);
     this.toys.update(this.curiosity.follow);
     this.greeting.update(this.greetBoldness, this.greetHunger);
+    this.prepareCleaning();
+    this.cleaning.update();
     const ease = 1 - Math.exp(-DT / TOYS.displayTauS);
     for (let i = 0; i < n; i++) {
       this.plan(i);
@@ -934,6 +956,33 @@ export class Behaviour {
     }
   }
 
+  /**
+   * Who may visit a cleaner this step, and which cleaners are free to clean: a fish with
+   * anything else on its mind (danger, food, a rival, a clutch, a toy, its owner, rest) neither
+   * visits nor cleans.
+   */
+  private prepareCleaning(): void {
+    const f = this.feeding;
+    const { eligible, open } = this.cleaning;
+    for (let i = 0; i < this.host.count; i++) {
+      const sp = this.speciesOf(i);
+      const free =
+        sp.walking === null &&
+        at(f.eligible, i) === 1 &&
+        at(f.target, i) < 0 &&
+        at(f.follow, i) < 0 &&
+        at(f.handling, i) <= 0 &&
+        at(this.territoryPhase, i) === TerritoryPhase.Idle &&
+        !this.brood.busy(i) &&
+        !this.toys.engaged(i) &&
+        at(this.curiosity.follow, i) === 0 &&
+        at(this.greeting.active, i) === 0 &&
+        at(this.host.flowShelter, i) === 0;
+      eligible[i] = free && !sp.cleaner ? 1 : 0;
+      open[i] = free && sp.cleaner ? 1 : 0;
+    }
+  }
+
   private speciesOf(i: number): SimSpecies {
     const s = this.host.species[at(this.host.speciesIndex, i)];
     if (s === undefined) throw new RangeError(`no fish at index ${i}`);
@@ -994,6 +1043,7 @@ export class Behaviour {
       }
     }
     this.brood.decorMoved();
+    this.cleaning.decorMoved();
   }
 
   private covered(i: number, spots: Float64Array, o: number): boolean {
@@ -1240,7 +1290,7 @@ export class Behaviour {
       return;
     }
     if (this.planFeed(i, sp, plan)) return;
-    if (sp.territorial) this.updateTerritory(i, sp);
+    if (sp.territorial && !this.cleaning.visiting(i)) this.updateTerritory(i, sp);
     if (at(this.territoryPhase, i) !== TerritoryPhase.Idle) {
       this.planTerritory(i, sp, plan);
       return;
@@ -1259,6 +1309,7 @@ export class Behaviour {
     if (this.toys.planBall(i, sp, plan)) return;
     if (this.planLure(i, sp, plan)) return;
     if (this.planGreet(i, sp, plan)) return;
+    if (this.cleaning.plan(i, sp, plan)) return;
     if (this.planSpot(i, sp, plan)) return;
     const guard = at(this.anchor, i) < 0 ? this.brood.guard(i) : null;
     if (guard !== null) {
@@ -1937,7 +1988,7 @@ export class Behaviour {
     let best = -1;
     let bestD = r;
     for (let j = 0; j < count; j++) {
-      if (j === i) continue;
+      if (j === i || this.cleaning.tolerated(j)) continue;
       if (at(speciesIndex, j) === own) {
         // A mate sharing the anemone or cave is a partner, not a rival.
         if (home >= 0 && at(this.anchor, j) === home) continue;

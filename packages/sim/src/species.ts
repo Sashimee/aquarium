@@ -82,7 +82,7 @@ const SWIMMER_TRAITS: readonly Trait[] = [
   'anemone-host',
   'flare-display',
 ];
-const WALKER_TRAITS: readonly Trait[] = ['biofilm-grazer', 'cleaner'];
+const WALKER_TRAITS: readonly Trait[] = ['biofilm-grazer'];
 
 export interface SimSpecies {
   readonly id: string;
@@ -112,6 +112,8 @@ export interface SimSpecies {
   readonly airGulp: boolean;
   readonly grazer: 'glass' | 'rock' | 'none';
   readonly flare: boolean;
+  /** A cleaner fish holding a cleaning station (`cleaning.ts`); walkers that clean are not. */
+  readonly cleaner: boolean;
   /** Turns its belly towards the nearest surface when close to it (cave ceilings, glass). */
   readonly bellyToSurface: boolean;
   /** Preference weight per `FOOD_TYPES` index, 1 for the first diet entry and 0 off the diet. */
@@ -392,6 +394,7 @@ export function toSimSpecies(input: SpeciesInput): SimSpecies {
     airGulp: traits.has('air-gulp'),
     grazer: traits.has('glass-grazer') ? 'glass' : traits.has('rock-grazer') ? 'rock' : 'none',
     flare: traits.has('flare-display'),
+    cleaner: traits.has('cleaner') && walking === null,
     bellyToSurface: traits.has('glass-grazer') || traits.has('cave-dweller'),
     foodPreference: parseDiet(id, input.lifecycle.diet),
     ...parseTraitParams(id, behaviour, traits, loco.gait, home, walking !== null),
