@@ -266,8 +266,7 @@ describe('moving a fish between tanks', () => {
       const standard = await makeTank(h, who, { biome: 'mangrove' });
       const fishId = await addFish(h, long, { species: 'silver-mono' });
       const res = await move(h, who, long, fishId, { toTankId: standard });
-      expect(res.statusCode).toBe(400);
-      expect(error(res).code).toBe('validation_failed');
+      expect(res.statusCode).toBe(409);
       expect(error(res).message).toContain('150 cm');
       expect((await fishRow(h, fishId)).tankId).toBe(long);
       const events = await h.database.db
@@ -275,6 +274,16 @@ describe('moving a fish between tanks', () => {
         .from(schema.events)
         .where(eq(schema.events.kind, 'fish_moved'));
       expect(events.filter((e) => e.tankId === long || e.tankId === standard)).toHaveLength(0);
+    });
+
+    it('lets a silver mono into the quarantine tank, which is always short', async () => {
+      const who = await account(h);
+      const long = await makeTank(h, who, { biome: 'mangrove', size: 'long300' });
+      const quarantine = await makeTank(h, who, { biome: 'mangrove', quarantine: true });
+      const fishId = await addFish(h, long, { species: 'silver-mono' });
+      const res = await move(h, who, long, fishId, { toTankId: quarantine });
+      expect(res.statusCode, res.body).toBe(200);
+      expect((await fishRow(h, fishId)).tankId).toBe(quarantine);
     });
 
     it('will not move a fish into a full tank', async () => {

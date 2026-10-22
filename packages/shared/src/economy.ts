@@ -264,13 +264,15 @@ export type Economy = z.infer<typeof economySchema>;
 export function tankLengthRefusal(
   economy: Economy,
   speciesId: string,
-  size: TankSize,
+  tank: { size: TankSize; quarantine: boolean },
   commonName: string,
 ): string | undefined {
+  if (tank.quarantine) return undefined;
   const minLength = Object.hasOwn(economy.species, speciesId)
     ? economy.species[speciesId]?.minTankLengthM
     : undefined;
-  if (minLength === undefined || TANK_SIZES[size].dimensions.length >= minLength) return undefined;
+  if (minLength === undefined || TANK_SIZES[tank.size].dimensions.length >= minLength)
+    return undefined;
   return `${commonName} needs a tank at least ${Math.round(minLength * 100)} cm long.`;
 }
 

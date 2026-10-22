@@ -4,8 +4,8 @@ import {
   moveFishResponseSchema,
   tankLengthRefusal,
   TANK_SIZES,
-  type Economy,
   type ConflictReason,
+  type Economy,
   type Tank,
 } from '@aquarium/shared';
 import { BIOLOAD_CAPACITY_BY_SIZE, hasCapacityFor, syncTreatment } from '@aquarium/sim/lifecycle';
@@ -118,13 +118,8 @@ export function registerMoveRoutes(ctx: MoveContext): void {
             'wrong_biome',
           );
         }
-        const tooShort = tankLengthRefusal(
-          economy,
-          spec.id,
-          destination.tank.size,
-          spec.commonName,
-        );
-        if (tooShort) throw refuse(400, tooShort);
+        const tooShort = tankLengthRefusal(economy, spec.id, destination.tank, spec.commonName);
+        if (tooShort) throw refuse(409, tooShort);
         const existing = destination.fishRows.map((f) => ({
           alive: f.status === 'alive',
           maxBioload: species.get(f.species)?.lifecycle.bioload ?? 0,

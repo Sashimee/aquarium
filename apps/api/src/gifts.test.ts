@@ -567,7 +567,7 @@ describe('gifting and trading fish', () => {
       const monoId = await addFish(h, longA, { species: 'silver-mono' });
       const monoOffer = offerId(await offer(h, a, { fromTankId: longA, fishId: monoId, to: b }));
       const short = await accept(h, b, monoOffer, { toTankId: standardB });
-      expect(short.statusCode).toBe(400);
+      expect(short.statusCode).toBe(409);
       expect(errorOf(short).message).toContain('150 cm');
       expect((await offerRow(h, monoOffer)).status).toBe('open');
       expect(await fishRows(h, monoId)).toHaveLength(0);
@@ -892,7 +892,7 @@ describe('gifting and trading fish', () => {
       expect(late.statusCode).toBe(409);
     });
 
-    it('refuses a swap into a tank of the wrong biome without moving either fish', async () => {
+    it('refuses a swap into a tank of the wrong biome or too short for a silver mono, moving neither fish', async () => {
       const t = await trade();
       const reef = await makeTank(h, t.a, { biome: 'reef' });
       await accept(h, t.b, t.id, { toTankId: t.tankB, returnFishId: t.theirs });
@@ -902,6 +902,25 @@ describe('gifting and trading fish', () => {
       expect(await fishRows(h, t.mine)).toHaveLength(0);
       expect((await fishRows(h, t.theirs))[0]?.tankId).toBe(t.tankB);
       expect((await offerRow(h, t.id)).status).toBe('countered');
+
+      const longA = await makeTank(h, t.a, { biome: 'mangrove', size: 'long300' });
+      const standardA = await makeTank(h, t.a, { biome: 'mangrove' });
+      const longB = await makeTank(h, t.b, { biome: 'mangrove', size: 'long300' });
+      const mine = await addFish(h, longA, { species: 'silver-mono' });
+      const theirs = await addFish(h, longB, { species: 'silver-mono' });
+      const id = offerId(
+        await offer(h, t.a, { fromTankId: longA, fishId: mine, to: t.b, wantsReturn: true }),
+      );
+      await accept(h, t.b, id, { toTankId: longB, returnFishId: theirs });
+
+      const short = await confirm(h, t.a, id, standardA);
+      expect(short.statusCode).toBe(409);
+      expect(errorOf(short).message).toContain('150 cm');
+      expect(await fishRows(h, mine)).toHaveLength(0);
+      expect((await fishRows(h, theirs))[0]?.tankId).toBe(longB);
+      expect((await offerRow(h, id)).status).toBe('countered');
+
+      expect((await confirm(h, t.a, id, longA)).statusCode).toBe(200);
     });
 
     it('expires a countered trade and leaves the pledged fish where it is', async () => {

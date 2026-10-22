@@ -21,6 +21,7 @@ import {
   MAX_DISPLAY_TANKS,
   MAX_QUARANTINE_TANKS,
   newTankChemistry,
+  tankLengthRefusal,
   TANK_SIZES,
   personalitySchema,
   setGalleryRequestSchema,
@@ -35,7 +36,6 @@ import {
   type CareAction,
   type ChemistryParameters,
   type Economy,
-  tankLengthRefusal,
   type Coral,
   type Plant,
   type StoredCoral,
@@ -1316,7 +1316,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
             apiError('validation_failed', `${spec.commonName} needs a ${spec.biome} tank.`),
           );
         }
-        const tooShort = tankLengthRefusal(economy, spec.id, ticked.tank.size, spec.commonName);
+        const tooShort = tankLengthRefusal(economy, spec.id, ticked.tank, spec.commonName);
         if (tooShort) throw new HttpError(400, apiError('validation_failed', tooShort));
         const existing = ticked.fishRows.map((f) => ({
           alive: f.status === 'alive',

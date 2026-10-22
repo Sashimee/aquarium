@@ -20,6 +20,7 @@ import {
   giftOfferSchema,
   idSchema,
   personalitySchema,
+  tankLengthRefusal,
   TANK_SIZES,
   type ChemistryParameters,
   type ConflictReason,
@@ -27,7 +28,6 @@ import {
   type GiftFish,
   type Economy,
   type GiftOffer,
-  tankLengthRefusal,
   type Tank,
 } from '@aquarium/shared';
 import {
@@ -320,8 +320,8 @@ export function registerGiftRoutes(ctx: GiftContext): void {
         'wrong_biome',
       );
     }
-    const tooShort = tankLengthRefusal(economy, spec.id, dest.tank.size, spec.commonName);
-    if (tooShort) throw refuse(400, tooShort);
+    const tooShort = tankLengthRefusal(economy, spec.id, dest.tank, spec.commonName);
+    if (tooShort) throw refuse(409, tooShort);
     const existing = dest.fishRows
       .filter((f) => f.id !== leavingFishId)
       .map((f) => ({

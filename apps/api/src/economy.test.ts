@@ -453,6 +453,13 @@ describe('wallet, shop and ledger', () => {
         (await createTank(h, who, { biome: 'mangrove', size: 'long300' })).json(),
       );
       expect((await buyFish(h, who, long.id, 'silver-mono', 'juvenile')).statusCode).toBe(201);
+
+      const quarantine = tankSchema.parse(
+        (await createTank(h, who, { biome: 'mangrove', size: 'nano30', quarantine: true })).json(),
+      );
+      expect((await buyFish(h, who, quarantine.id, 'silver-mono', 'juvenile')).statusCode).toBe(
+        201,
+      );
     });
 
     it('grows a bought juvenile of a species with no fry timeline into an adult', async () => {
