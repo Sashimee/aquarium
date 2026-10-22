@@ -9,6 +9,7 @@ import {
 import { useEffect, useId, useState } from 'react';
 import { BUNDLED_CHEMISTRY, BUNDLED_ECONOMY } from '../sync/bundledEconomy';
 import { euroText, heaterWarning, priceText, speciesPrice } from '../sync/economy';
+import { equipmentNote } from '../sync/blackwater';
 import { chooseEquipment, deviceOffers, equipmentRef, type DeviceOffer } from '../sync/equipment';
 import { checkLamp, clockText, hourOptions, lampSummary, localOffsetMinutes } from '../sync/lamp';
 import { canBuy, tankCapacity } from '../sync/life';
@@ -280,6 +281,7 @@ function EquipmentShop({ session, state, tank, spend }: ShopProps & { spend: Spe
   return (
     <section aria-labelledby={`${id}-h`} className="block">
       <h3 id={`${id}-h`}>Equipment</h3>
+      {equipmentNote(tank.biome) && <p className="hint">{equipmentNote(tank.biome)}</p>}
       <ul className="equipment">
         {offers.map((o) => (
           <DeviceRow
