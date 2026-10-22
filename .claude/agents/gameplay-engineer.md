@@ -44,3 +44,10 @@ Up to eight agents share this host and the session scratchpad.
 - Put temp files in your own subfolder, `<scratchpad>/<issue-or-PR>/`, and delete only the exact paths you created. Never `rm` with a wildcard outside that subfolder.
 - Stop only processes you started, by their PID. Never `pkill`, `killall` or `pkill -f <pattern>`.
 - Remove the worktrees, containers and `node_modules` you created, and nothing else.
+
+## DOM tests (apps/web)
+
+- Web vitest runs `src/**/*.test.{ts,tsx}` in `node` by default. A test that needs `document` or mounts React with effects starts with `// @vitest-environment happy-dom` as its first line.
+- Mount with `createRoot` from `react-dom/client` inside `act(...)` and set `globalThis.IS_REACT_ACT_ENVIRONMENT = true`. `renderToStaticMarkup` is fine for pure markup but never runs effects.
+- Wrap in `UiProviders` with a bridge of two `EventBus`es, as in `apps/web/src/ui/shellWithoutSession.test.tsx`. Stub `fetch` with `vi.stubGlobal`, and fail the test on any `console.error`.
+- A new always-mounted or lazy component gets a render test with no session loaded.
