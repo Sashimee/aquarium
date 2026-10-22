@@ -3871,7 +3871,15 @@
       "textures": "none (flat material colours)",
       "rigged": true,
       "notes": "Black phantom tetra, a blackwater-suited characin. Verified from the downloaded glTF: 608 triangles, one skin with 13 joints, no animation, no image textures (flat colours in six materials). The shape is plausible but the flat black colour has no body pattern, and the black phantom's silver-grey body with the black humeral blotch and red adipose fin is not painted; the pipeline must paint it. Zip sha256 636bf9e87fdccef6400e21616db3df4b74b7adceb43a92c86843507912eb98f5; sha256 is the aggregate over files[]. Licence read from the model record and bundled license.txt (CC-BY-4.0).",
-      "modifications": [],
+      "modifications": [
+        "merged meshes, dropped skeleton, animation and unused attributes",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "baked fin mask, fin id and mouth mask vertex attributes",
+        "painted colour map encoded to KTX2",
+        "source is flat-coloured: UVs projected from the side and the colour map painted from the species pattern (black humeral blotch, black dorsal, reddish pelvic and anal fins)",
+        "dropped two detached fragments (a floating chin sliver and a stray tail-base shard)",
+        "source drawn upside down and about twice as deep as the species: flipped, and body scaled to 60% width and 45% depth before the fins are classified"
+      ],
       "status": "downloaded",
       "files": [
         {

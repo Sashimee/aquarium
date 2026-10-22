@@ -14,8 +14,8 @@ export default tseslint.config(
   },
   {
     files: [
-      'tools/asset-pipeline/src/{anemone,audio-dsp,bristles,tentacles,crew-scan,hermit,nerite,crew-debug,dense-edit,rebake,scan-bake,glossy-eyes,emit,environment,fins,finish,fish,geometry,impostor,loft,lod,math,mouth,parts,raster,rgbe,shrimp,source,voxel}.ts',
-      'tools/asset-pipeline/src/{audio-dsp,bristles,budgets,crew-lods,scan-bake,crew-scan,emit-lods,hermit,nerite,glossy-eyes,finish,geometry,impostor,mouth,octahedral,raster,rgbe,shrimp}.test.ts',
+      'tools/asset-pipeline/src/{anemone,audio-dsp,bristles,tentacles,crew-scan,hermit,nerite,crew-debug,dense-edit,rebake,scan-bake,glossy-eyes,emit,environment,fins,finish,fish,geometry,impostor,loft,lod,math,mouth,parts,raster,rgbe,scan-paint,shrimp,source,voxel}.ts',
+      'tools/asset-pipeline/src/{audio-dsp,bristles,budgets,crew-lods,scan-bake,crew-scan,emit-lods,hermit,nerite,glossy-eyes,finish,geometry,impostor,mouth,octahedral,raster,rgbe,scan-paint,shrimp}.test.ts',
     ],
     rules: { '@typescript-eslint/no-non-null-assertion': 'off' },
   },
