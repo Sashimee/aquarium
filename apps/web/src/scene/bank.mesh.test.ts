@@ -8,6 +8,8 @@ import { TANK_DIMENSIONS } from '../engine/tank/dimensions';
 import catalogIndex from '../../public/assets/index.json';
 import { AssetCatalog, ModelLibrary } from './assets';
 import { decorMatrix } from './hardscape';
+import { isPerch } from './bank';
+import { mudBankBounds } from './mudBank';
 import { fitPresetToTank, type BoundsOf } from './presetFit';
 import { loadPreset } from './preset';
 
@@ -17,6 +19,7 @@ const PARALLEL = 1e-9;
 let library: ModelLibrary;
 
 const boundsOf: BoundsOf = (assetId) => {
+  if (assetId === 'mud-bank') return { bounds: mudBankBounds(), swayReach: null };
   const bounds = catalogIndex.assets.find((a) => a.id === assetId)?.bounds;
   return bounds ? { bounds, swayReach: null } : null;
 };
@@ -127,28 +130,61 @@ function edgesPierce(from: readonly Tri[], into: readonly Tri[]): number {
   return hits;
 }
 
+type Detail = 'collision' | 'render';
+
+async function geometriesOf(assetId: string, detail: Detail): Promise<readonly BufferGeometry[]> {
+  if (detail === 'collision') return library.collisionGeometry(assetId);
+  const model = await library.load(assetId, 0, 1024);
+  return model.primitives.map((p) => p.geometry);
+}
+
 /** Edge-through-triangle crossings between two placed meshes; any triangle intersection has at least one. */
-async function crossings(a: DecorItem, b: DecorItem): Promise<number> {
-  const meshA = triangles(await library.collisionGeometry(a.assetId), decorMatrix(a));
-  const meshB = triangles(await library.collisionGeometry(b.assetId), decorMatrix(b));
+async function crossings(a: DecorItem, b: DecorItem, detail: Detail): Promise<number> {
+  const meshA = triangles(await geometriesOf(a.assetId, detail), decorMatrix(a));
+  const meshB = triangles(await geometriesOf(b.assetId, detail), decorMatrix(b));
   return edgesPierce(meshA, meshB) + edgesPierce(meshB, meshA);
 }
 
 describe('the mangrove perch against the driftwood branch', () => {
+  const authored = loadPreset('mangrove').decor;
+  const perchIndex = authored.findIndex((i) => i.assetId === 'mangrove-stump' && isPerch(i));
+  const branchIndex = authored.findIndex((i) => i.assetId === 'driftwood-branch');
+
+  it('authors a stump perch and a branch', () => {
+    expect(perchIndex).toBeGreaterThanOrEqual(0);
+    expect(branchIndex).toBeGreaterThanOrEqual(0);
+  });
+
+  describe.each(['collision', 'render'] satisfies Detail[])('%s mesh', (detail) => {
+    it.each(['standard', 'std200', 'long300'] satisfies TankSize[])(
+      '%s: the trunk does not pass through the branch',
+      async (size) => {
+        const d = TANK_DIMENSIONS[size];
+        const fitted = fitPresetToTank(loadPreset('mangrove'), size, d, boundsOf, () => 0);
+        const perch = fitted.decor[perchIndex];
+        const branch = fitted.decor[branchIndex];
+        if (!perch || !branch) throw new Error('fitted preset lost the perch or the branch');
+        expect(
+          await crossings(perch, branch, detail),
+          `${size}: ${perch.position} vs ${branch.position}`,
+        ).toBe(0);
+      },
+      60_000,
+    );
+  });
+});
+
+describe('mangrove propagules against the driftwood branch', () => {
   it.each(['standard', 'std200', 'long300'] satisfies TankSize[])(
-    '%s: the trunk mesh does not pass through the branch mesh',
+    '%s: no propagule pierces the branch render mesh',
     async (size) => {
       const d = TANK_DIMENSIONS[size];
       const fitted = fitPresetToTank(loadPreset('mangrove'), size, d, boundsOf, () => 0);
-      const perch = fitted.decor.reduce((a, b) =>
-        a.position[1] + 0.28 * a.scale > b.position[1] + 0.28 * b.scale ? a : b,
-      );
       const branch = fitted.decor.find((i) => i.assetId === 'driftwood-branch');
       if (!branch) throw new Error('mangrove preset has no driftwood branch');
-      expect(
-        await crossings(perch, branch),
-        `${size}: ${perch.position} vs ${branch.position}`,
-      ).toBe(0);
+      for (const item of fitted.decor.filter((i) => i.assetId === 'mangrove-propagule')) {
+        expect(await crossings(item, branch, 'render'), `${size}: ${item.position}`).toBe(0);
+      }
     },
     60_000,
   );

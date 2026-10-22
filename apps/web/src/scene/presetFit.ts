@@ -20,6 +20,7 @@ import {
 } from './bank';
 import type { CurrentParameters } from './current';
 import { euphylliaReach, generateEuphyllia, parseEuphylliaId } from './euphyllia';
+import { isMudBankId, mudBankBounds } from './mudBank';
 import { GLASS_SHRINK_FLOOR } from './placement';
 import { SURFACE_MARGIN } from './plants';
 
@@ -51,6 +52,7 @@ export function boundsFromCatalog(
       const { bounds } = generateEuphyllia(procedural.variant, procedural.seed, 2);
       return { bounds, swayReach: (item) => euphylliaReach(bounds, item, current) };
     }
+    if (isMudBankId(assetId)) return { bounds: mudBankBounds(), swayReach: null };
     const entry = catalog.get(assetId);
     if (!entry.bounds) return null;
     return {

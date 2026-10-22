@@ -7,6 +7,7 @@ import {
   decorPositionLimits,
   findDecorProblems,
   isDecorAssetForBiome,
+  MUD_BANK_ASSET_ID,
 } from './decorRules.js';
 
 const read = (path: string): unknown =>
@@ -89,6 +90,14 @@ describe('decor rules', () => {
   it('keeps euphyllia ids reef-only', () => {
     expect(isDecorAssetForBiome('reef', 'euphyllia-hammer-12')).toBe(true);
     expect(isDecorAssetForBiome('freshwater', 'euphyllia-hammer-12')).toBe(false);
+  });
+
+  it('keeps the mud bank mangrove-only and out of the shop', () => {
+    expect(isDecorAssetForBiome('mangrove', MUD_BANK_ASSET_ID)).toBe(true);
+    for (const biome of ['freshwater', 'reef', 'cichlid', 'blackwater'] as const) {
+      expect(isDecorAssetForBiome(biome, MUD_BANK_ASSET_ID), biome).toBe(false);
+    }
+    expect(DECOR_ASSET_IDS.mangrove.has(MUD_BANK_ASSET_ID)).toBe(false);
   });
 
   it('bounds the default tank interior', () => {
