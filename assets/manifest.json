@@ -3747,7 +3747,7 @@
       "rigged": false,
       "notes": "Tank background (brackish mangrove, slot tidal-flat). Scene: a low, wide view across a polyhaven-brown_mud_03 mud flat with polyhaven-coast_sand_04 patches, propagules from sketchfab-2b81ff20 standing on it, small roots from sketchfab-5658cc51 at the far edge, and a clear gradient up into green-brown water. The calmest slot, for tanks with a lot of foreground decor. 2:1, 4096x2048, no fish, no text, no people, no marine or coral content, light underwater grade, no EXIF or other metadata. Rendered with the asset pipeline's software rasteriser and shadow map (tools/asset-pipeline/src/water-render.ts), then depth-of-field blurred and underwater-graded by the same develop step as the misty-lake render, with a murky green-brown brackish palette.",
       "modifications": [
-        "composed and rendered by the Aquarium project from a CC0 red mangrove scan, CC0 rocks and CC0 mud and sand textures with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
+        "composed and rendered by the Aquarium project from a CC0 red mangrove scan, a CC0 propagule scan and CC0 mud and sand textures with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
         "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
         "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
         "all EXIF, XMP, GPS and other metadata removed"
@@ -3773,7 +3773,7 @@
       "rigged": false,
       "notes": "Tank background (brackish mangrove, slot open-water). Scene: open green-brown water with a distant silhouette of roots along the bottom third (nine small instances of sketchfab-5658cc51 under heavy depth haze), the upper two thirds smoothly graded, light fall-off from the top and polyhaven-brown_mud_03 mud at the base. 2:1, 4096x2048, no fish, no text, no people, no marine or coral content, light underwater grade, no EXIF or other metadata. Rendered with the asset pipeline's software rasteriser and shadow map (tools/asset-pipeline/src/water-render.ts), then depth-of-field blurred and underwater-graded by the same develop step as the misty-lake render, with a murky green-brown brackish palette.",
       "modifications": [
-        "composed and rendered by the Aquarium project from a CC0 red mangrove scan, CC0 rocks and CC0 mud and sand textures with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
+        "composed and rendered by the Aquarium project from a CC0 red mangrove scan and a CC0 mud texture with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
         "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
         "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
         "all EXIF, XMP, GPS and other metadata removed"

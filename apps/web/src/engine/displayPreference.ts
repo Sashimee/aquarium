@@ -1,3 +1,5 @@
+import { isTouchFirst } from './quality/profile';
+
 export const DISPLAY_STORAGE_KEY = 'aquarium.display';
 
 export const FRAME_RATE_CHOICES = ['capped', 'display'] as const;
@@ -117,16 +119,20 @@ export function displayLimits(defaults: DisplayLimits, choice: DisplayChoice): D
 /** One choice for the whole page: a settings screen writes it, the engine reads it. */
 export const displayPreference = new DisplayPreference(browserDisplayStorage());
 
-let coarse: boolean | undefined;
+let touchFirst: boolean | undefined;
 
-/** Read once, so the engine and the settings screen agree for the whole session. */
-export function hasCoarsePointer(): boolean {
-  coarse ??= typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
-  return coarse;
+/** Read once, so the engine and the UI agree for the whole session. */
+export function isTouchFirstDevice(): boolean {
+  touchFirst ??= isTouchFirst({
+    coarsePointer: typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches,
+    platform: typeof navigator === 'undefined' ? '' : navigator.platform,
+    maxTouchPoints: typeof navigator === 'undefined' ? 0 : navigator.maxTouchPoints,
+  });
+  return touchFirst;
 }
 
-export function resetCoarsePointerForTests(): void {
-  coarse = undefined;
+export function resetTouchFirstForTests(): void {
+  touchFirst = undefined;
 }
 
 /** What `?fps=` and `?dpr=` force, ignoring values the engine would reject. */

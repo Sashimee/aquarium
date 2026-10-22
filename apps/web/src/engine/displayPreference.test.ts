@@ -5,9 +5,9 @@ import {
   DisplayPreference,
   type DisplayStorage,
   displayLimits,
-  hasCoarsePointer,
+  isTouchFirstDevice,
   parseDisplayChoice,
-  resetCoarsePointerForTests,
+  resetTouchFirstForTests,
   urlDisplayOverrides,
 } from './displayPreference';
 import { DESKTOP_PROFILE, MOBILE_PROFILE } from './quality/profile';
@@ -149,22 +149,32 @@ describe('urlDisplayOverrides', () => {
   });
 });
 
-describe('hasCoarsePointer', () => {
+describe('isTouchFirstDevice', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
-    resetCoarsePointerForTests();
+    resetTouchFirstForTests();
   });
 
   it('is read once and then stays the same for the session', () => {
-    resetCoarsePointerForTests();
+    resetTouchFirstForTests();
     const media = vi.fn(() => ({ matches: true }));
     vi.stubGlobal('matchMedia', media);
-    expect(hasCoarsePointer()).toBe(true);
+    expect(isTouchFirstDevice()).toBe(true);
     vi.stubGlobal(
       'matchMedia',
       vi.fn(() => ({ matches: false })),
     );
-    expect(hasCoarsePointer()).toBe(true);
+    expect(isTouchFirstDevice()).toBe(true);
     expect(media).toHaveBeenCalledTimes(1);
+  });
+
+  it('counts a MacIntel with touch points as touch first, like an iPad with a trackpad', () => {
+    resetTouchFirstForTests();
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches: false })),
+    );
+    vi.stubGlobal('navigator', { platform: 'MacIntel', maxTouchPoints: 5 });
+    expect(isTouchFirstDevice()).toBe(true);
   });
 });

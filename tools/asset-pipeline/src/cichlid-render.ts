@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { mulberry32 } from './anemone.ts';
-import { loadEnvironment } from './environment.ts';
+import { loadEnvironment, sceneBaseColor } from './environment.ts';
 import type { FishContext } from './fish.ts';
 import { developRender, type DepthParams } from './misty-lake.ts';
 import type { MaterialDef } from './parts.ts';
@@ -43,7 +43,7 @@ interface Library {
   sand: MipTexture;
 }
 
-const FALLBACK_GREY: MipTexture = buildMips({
+const GREY_TEXEL: MipTexture = buildMips({
   width: 1,
   height: 1,
   data: Uint8Array.from([128, 128, 128, 255]),
@@ -62,7 +62,8 @@ async function loadMeshes(
     const material = byName.get(part.material);
     let texture = textures.get(part.material);
     if (!texture) {
-      texture = material?.baseColor ? buildMips(material.baseColor.image) : FALLBACK_GREY;
+      const baseColor = sceneBaseColor(material, part.material, recipe.id);
+      texture = baseColor ? buildMips(baseColor.image) : GREY_TEXEL;
       textures.set(part.material, texture);
     }
     const factor = material?.baseColorFactor ?? [1, 1, 1, 1];

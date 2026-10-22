@@ -163,5 +163,38 @@ describe('GiftNotice', () => {
       await act(async () => root.render(care()));
       expect(container.querySelector('[role="status"]')?.textContent).toBe('');
     });
+
+    it('keeps the notice of a send when another gift form is opened meanwhile', async () => {
+      let release: () => void = () => undefined;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const base = globalThis.fetch;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+          if (String(input).includes('/api/gifts') && init?.method === 'POST') await gate;
+          return base(input, init);
+        }),
+      );
+      const other = fishFixture('00000000-0000-4000-8000-0000000000f2', { name: 'Dot' });
+      const two = (
+        <UiProviders bridge={bridgeValue}>
+          <GiftFishButton session={session} tank={tank} fish={fish} />
+          <GiftFishButton session={session} tank={tank} fish={other} />
+          <GiftNotice session={session} />
+        </UiProviders>
+      );
+      await act(async () => root.render(two));
+      await send();
+      const toggles = [...container.querySelectorAll('button')].filter((b) =>
+        b.textContent?.startsWith('Gift or trade'),
+      );
+      await act(async () => toggles[1]?.click());
+      await act(async () => release());
+      expect(container.querySelector('[role="status"]')?.textContent).toContain(
+        'Pip is on its way',
+      );
+    });
   });
 });

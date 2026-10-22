@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import {
   displayPreference as shared,
-  hasCoarsePointer,
+  isTouchFirstDevice,
   urlDisplayOverrides,
   type DisplayChoice,
   type DisplayPreference,
@@ -10,7 +10,7 @@ import {
 /** Phones and tablets already draw every frame at full resolution, so the toggles do nothing there. */
 export function DisplaySetting({
   preference = shared,
-  coarsePointer = hasCoarsePointer(),
+  coarsePointer = isTouchFirstDevice(),
   overrides = urlDisplayOverrides(window.location.search),
 }: {
   preference?: DisplayPreference;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_CONTROLLER_CONFIG } from './controller';
-import { DESKTOP_PROFILE, MOBILE_PROFILE, qualityProfile } from './profile';
+import { DESKTOP_PROFILE, isTouchFirst, MOBILE_PROFILE, qualityProfile } from './profile';
 import { renderPixelRatio, TIER_SETTINGS, TIERS, tierIndex } from './tiers';
 
 describe('qualityProfile', () => {
@@ -15,7 +15,7 @@ describe('qualityProfile', () => {
       frameCapFps: 60,
       pixelRatioCeiling: 1.5,
       maxTextureSize: 2048,
-      textureBudgetMiB: { low: 44, medium: 44, high: 112, ultra: 112 },
+      textureBudgetMiB: { low: 58, medium: 58, high: 156, ultra: 156 },
     });
   });
 
@@ -42,6 +42,33 @@ describe('qualityProfile', () => {
   it('steps a phone down exactly when it falls under 30 fps', () => {
     const downAtMs = MOBILE_PROFILE.targetMs * DEFAULT_CONTROLLER_CONFIG.downRatio;
     expect(downAtMs).toBeCloseTo(1000 / 30, 6);
+  });
+});
+
+describe('isTouchFirst', () => {
+  it('takes a device whose primary pointer is a finger', () => {
+    expect(isTouchFirst({ coarsePointer: true, platform: 'iPhone', maxTouchPoints: 5 })).toBe(true);
+    expect(isTouchFirst({ coarsePointer: true, platform: 'Linux armv8l', maxTouchPoints: 5 })).toBe(
+      true,
+    );
+  });
+
+  it('takes an iPad driven by a trackpad, which reports a fine pointer as a Mac', () => {
+    expect(isTouchFirst({ coarsePointer: false, platform: 'MacIntel', maxTouchPoints: 5 })).toBe(
+      true,
+    );
+  });
+
+  it('leaves a Mac, a desktop and a Windows touch laptop on the desktop profile', () => {
+    expect(isTouchFirst({ coarsePointer: false, platform: 'MacIntel', maxTouchPoints: 0 })).toBe(
+      false,
+    );
+    expect(isTouchFirst({ coarsePointer: false, platform: 'Win32', maxTouchPoints: 0 })).toBe(
+      false,
+    );
+    expect(isTouchFirst({ coarsePointer: false, platform: 'Win32', maxTouchPoints: 10 })).toBe(
+      false,
+    );
   });
 });
 

@@ -222,6 +222,10 @@ export async function writeTextureEntries(
     });
     const written = {} as Record<Tier, WrittenFile & { size: number; codec: TextureCodec }>;
     for (const tier of ['1k', '2k'] as const) {
+      if (tier === '2k' && variants['2k'].size <= variants['1k'].size) {
+        written['2k'] = written['1k'];
+        continue;
+      }
       const file = entry.shared
         ? sharedFile(entry.shared, tier, variants[tier].bytes)
         : writeFileTracked(

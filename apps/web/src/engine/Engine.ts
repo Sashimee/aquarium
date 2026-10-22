@@ -35,7 +35,7 @@ import { showDeviceNotice } from './deviceNotice';
 import {
   displayLimits,
   displayPreference,
-  hasCoarsePointer,
+  isTouchFirstDevice,
   type DisplayChoice,
   type DisplayLimits,
   type DisplayPreference,
@@ -264,7 +264,7 @@ export class Engine {
     this.clock = config.options.clock;
     this.showStats = config.options.stats;
     this.gpuTiming = renderer.hasFeature('timestamp-query');
-    const profile = qualityProfile(hasCoarsePointer());
+    const profile = qualityProfile(isTouchFirstDevice());
     const display = config.display ?? displayPreference;
     const chosenDisplay = (): DisplayChoice => ({
       frameRate: config.options.frameRate ?? display.snapshot().frameRate,

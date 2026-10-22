@@ -124,6 +124,8 @@ export const TIER_COST: Readonly<Record<Tier, number>> = {
   low: 0.45,
   medium: 0.6,
   high: 1,
+  // TODO(render-engineer): 1.7 predates ultra's trimmed shadows and half-res shafts (#1033), so it
+  // overstates ultra; set it from measured high/ultra GPU times on real hardware (#1056).
   ultra: 1.7,
 };
 

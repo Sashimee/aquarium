@@ -4,8 +4,10 @@ import { dirname, join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   BUDGET_BYTES,
+  borrowedTextureProblems,
   checkAssets,
   duplicateTextureProblems,
+  intraAssetDuplicateTextureProblems,
   loadCheckInput,
   type CheckInput,
 } from './check.ts';
@@ -944,6 +946,66 @@ describe('duplicateTextureProblems', () => {
         asset('b', [['rock/b/lod0.glb', 'c'.repeat(64)]]),
       ]),
     ).toEqual([]);
+  });
+});
+
+describe('borrowedTextureProblems', () => {
+  const variant = (file: string) => ({ file, bytes: 1, sha256: 'a'.repeat(64) });
+  function owner(sources: string[]): OutputAsset {
+    return {
+      id: 'owner',
+      kind: 'rock',
+      sources,
+      files: [{ file: 'rock/owner/textures/t_1k.ktx2', bytes: 1, sha256: 'a'.repeat(64) }],
+      textures: [],
+    } as unknown as OutputAsset;
+  }
+  function borrower(sources: string[]): OutputAsset {
+    const shared = variant('rock/owner/textures/t_1k.ktx2');
+    return {
+      id: 'borrower',
+      kind: 'rock',
+      sources,
+      files: [],
+      textures: [{ variants: { '1k': shared, '2k': shared } }],
+    } as unknown as OutputAsset;
+  }
+
+  it('fails a borrower that does not list the owner source', () => {
+    const problems = borrowedTextureProblems([owner(['cc-by-sa-rock']), borrower(['cc0-rock'])]);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('cc-by-sa-rock');
+  });
+
+  it('accepts a borrower whose sources include the owner sources', () => {
+    expect(borrowedTextureProblems([owner(['rock']), borrower(['other', 'rock'])])).toEqual([]);
+  });
+});
+
+describe('intraAssetDuplicateTextureProblems', () => {
+  const texture = (small: string, large: string, sameSha: boolean) => ({
+    variants: {
+      '1k': { file: small, sha256: 'a'.repeat(64) },
+      '2k': { file: large, sha256: (sameSha ? 'a' : 'b').repeat(64) },
+    },
+  });
+
+  it('flags a 2k file that duplicates the 1k bytes', () => {
+    const asset = {
+      id: 'x',
+      kind: 'decor',
+      textures: [texture('t_1k.ktx2', 't_2k.ktx2', true)],
+    } as unknown as OutputAsset;
+    expect(intraAssetDuplicateTextureProblems([asset])).toHaveLength(1);
+  });
+
+  it('accepts an aliased 2k and a genuinely larger one', () => {
+    const asset = {
+      id: 'x',
+      kind: 'decor',
+      textures: [texture('t_1k.ktx2', 't_1k.ktx2', true), texture('n_1k.ktx2', 'n_2k.ktx2', false)],
+    } as unknown as OutputAsset;
+    expect(intraAssetDuplicateTextureProblems([asset])).toEqual([]);
   });
 });
 
