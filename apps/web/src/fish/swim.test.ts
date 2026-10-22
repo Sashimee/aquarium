@@ -444,6 +444,27 @@ describe('cleaning station motion', () => {
     expect(state.jab).toBe(0);
   });
 
+  it('opens the jaws in step with the jab at any frame rate', () => {
+    for (const frameS of [1 / 30, 1 / 60, 1 / 144]) {
+      const state = wrasse(2.5);
+      let pecks = 0;
+      let before = state.sincePeck;
+      for (let i = 0; i * frameS < 3; i++) {
+        state.advance(frameS, sample(FishState.Clean, 0));
+        if (state.sincePeck < before) {
+          pecks++;
+          expect(state.sincePeck, `peck overshoot at ${frameS}`).toBeGreaterThan(0);
+        }
+        before = state.sincePeck;
+        expect(biteGape(state.sinceBite), `jaw vs jab at ${frameS}, frame ${i}`).toBeCloseTo(
+          state.jab / PECK_JAB_BODY_LENGTHS,
+          9,
+        );
+      }
+      expect(pecks).toBeGreaterThanOrEqual(6);
+    }
+  });
+
   it('does not peck while darting between contacts or outside Clean', () => {
     const darting = wrasse();
     expect(peckTimes(darting, 2, PECK_HOLD_BODY_LENGTHS_PER_S * length * 2)).toEqual([]);
