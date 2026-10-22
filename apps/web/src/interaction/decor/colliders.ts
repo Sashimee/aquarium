@@ -49,7 +49,14 @@ export function collidersFor(
   const cy = f.yMin + height / 2;
   const colliderId = `${COLLIDER_PREFIX}${id}`;
   if (spec.kind === 'plant') return plantCollider(colliderId, spec, item, up);
-  if (hasShelterParts(spec.assetId)) return shelterColliders(colliderId, item);
+  if (hasShelterParts(spec.assetId)) {
+    if (up !== UPRIGHT && (up[0] !== 0 || up[1] !== 1 || up[2] !== 0)) {
+      throw new Error(
+        `"${spec.assetId}" is a shelter and can only stand upright, got up ${up.join(',')}`,
+      );
+    }
+    return shelterColliders(colliderId, item);
+  }
   if (spec.kind === 'driftwood') {
     const upright = height / 2 > Math.max(f.hx, f.hz);
     if (upright) {

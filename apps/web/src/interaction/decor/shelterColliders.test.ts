@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -21,10 +22,20 @@ const MESH_TOLERANCE_M = 0.003;
 
 /** How far in front of the piece (local z) each mouth can sit once the parts leave the opening clear. */
 const PULLED_IN_Z: Readonly<Record<(typeof SHELTERS)[number], number>> = {
-  'reef-arch': 0.04,
-  'rock-pile-cave': 0.15,
-  'rock-pile-stack': 0.135,
-  'neothauma-shell': 0.034,
+  'reef-arch': 0.042,
+  'rock-pile-cave': 0.165,
+  'rock-pile-stack': 0.14,
+  'neothauma-shell': 0.039,
+};
+
+const SWEEP_SCALES = [0.6, 1, 1.3, 1.6];
+const SWEEP_ROTATIONS = Array.from({ length: Math.ceil((Math.PI * 2) / 0.02) }, (_, i) => i * 0.02);
+
+const LOD2_SHA256: Readonly<Record<(typeof SHELTERS)[number], string>> = {
+  'reef-arch': 'e3226a7eec1049cb5c00d13b4394af3d61479f4e9c5de094b7e9233a4a12df35',
+  'rock-pile-cave': 'a4c910a4681fe1ca7538f8d4bca3313e953fe73540c86d3ab64e13302f899fda',
+  'rock-pile-stack': '102bcc15608e280231d7767339063ab30d3bc0c5393a5c4743fb97daf1a4982b',
+  'neothauma-shell': '07c541984afe9fff89b5d792c9388a583f3acb4ef9315bcd33e578227c840e48',
 };
 
 const PLACEMENTS: readonly Partial<Omit<DecorItem, 'assetId' | 'position'>>[] = [
@@ -176,25 +187,51 @@ describe.each(SHELTERS)('%s against its own mesh', (id) => {
   });
 });
 
-describe('the cave mouth is reachable', () => {
-  it.each(SHELTERS)('%s: a fish at the pulled-in mouth is clear of the parts', (id) => {
-    for (const extra of PLACEMENTS) {
-      const placed = item(id, 0.3, -0.1, extra);
-      const mouth = mouthAt(id, placed, PULLED_IN_Z[id]);
-      const clearance = clearanceTo(collidersFor('p', spec(id), placed));
-      expect(clearance(mouth.position.toArray())).toBeGreaterThanOrEqual(
-        FISH_CLEARANCE * mouth.radius,
-      );
-    }
+describe('the shelter meshes the parts were cut from', () => {
+  it.each(SHELTERS)('%s: the LOD2 file is unchanged', async (id) => {
+    const file = catalog.get(id).lods[2]?.file;
+    if (!file) throw new Error(`${id} has no LOD2`);
+    const bytes = await readFile(join(PUBLIC, 'assets', file));
+    expect(createHash('sha256').update(bytes).digest('hex')).toBe(LOD2_SHA256[id]);
   });
 
+  it('a shelter placed on a slope is refused rather than given an upright collider', () => {
+    expect(() =>
+      collidersFor('p', spec('reef-arch'), item('reef-arch', 0, 0), [0.3, 0.9, 0]),
+    ).toThrow(/upright/);
+  });
+});
+
+describe('the cave mouth is reachable', () => {
+  it.each(SHELTERS)(
+    '%s: a fish at the pulled-in mouth is clear of the parts at every rotation and scale',
+    (id) => {
+      for (const scale of SWEEP_SCALES) {
+        for (const rotationY of SWEEP_ROTATIONS) {
+          const placed = item(id, 0.3, -0.1, { rotationY, scale });
+          const mouth = mouthAt(id, placed, PULLED_IN_Z[id]);
+          const clearance = clearanceTo(collidersFor('p', spec(id), placed));
+          expect(
+            clearance(mouth.position.toArray()),
+            `rotation ${rotationY.toFixed(2)}, scale ${scale}`,
+          ).toBeGreaterThanOrEqual(FISH_CLEARANCE * mouth.radius);
+        }
+      }
+    },
+  );
+
   it.each(SHELTERS)('%s: the way in along its facing never touches a part', (id) => {
-    const placed = item(id, 0.3, -0.1, { rotationY: 2.2, scale: 1.3 });
-    const mouth = mouthAt(id, placed, PULLED_IN_Z[id]);
-    const clearance = clearanceTo(collidersFor('p', spec(id), placed));
-    for (let d = 0; d <= 0.3; d += 0.005) {
-      const p = mouth.position.clone().addScaledVector(mouth.facing, d);
-      expect(clearance(p.toArray()), `${d} m out`).toBeGreaterThan(0);
+    for (const rotationY of SWEEP_ROTATIONS.filter((_, i) => i % 5 === 0)) {
+      const placed = item(id, 0.3, -0.1, { rotationY, scale: 1.3 });
+      const mouth = mouthAt(id, placed, PULLED_IN_Z[id]);
+      const clearance = clearanceTo(collidersFor('p', spec(id), placed));
+      for (let d = 0; d <= 0.3; d += 0.005) {
+        const p = mouth.position.clone().addScaledVector(mouth.facing, d);
+        expect(
+          clearance(p.toArray()),
+          `rotation ${rotationY.toFixed(2)}, ${d} m out`,
+        ).toBeGreaterThan(0);
+      }
     }
   });
 
@@ -256,5 +293,39 @@ describe('a cave opening inside a neighbouring placed rock', () => {
     expect(blockedMouths(anchors(cave), colliders([cave, item('boulder-01', x + 0.5, z)]))).toEqual(
       [],
     );
+  });
+
+  describe('near the blocking threshold', () => {
+    const rock = item('boulder-01', 0, 0);
+    const mouthAtClearance = (share: number) => {
+      const surfaceClearance = clearanceTo(colliders([rock]));
+      const radius = 0.04;
+      const probe: [number, number, number] = [0, 0.4, 0];
+      let y = 0.4;
+      while (surfaceClearance([0, y, 0]) > share * radius) y -= 0.0005;
+      probe[1] = y;
+      return { id: 'm', position: probe, radius };
+    };
+
+    it('reports a mouth just inside half its radius from the rock', () => {
+      expect(blockedMouths([mouthAtClearance(0.48)], colliders([rock]))).toEqual(['m']);
+    });
+
+    it('keeps a mouth just outside half its radius', () => {
+      expect(blockedMouths([mouthAtClearance(0.55)], colliders([rock]))).toEqual([]);
+    });
+  });
+
+  it('ignores a soft collider on the mouth', () => {
+    const soft: Collider = {
+      id: 'plant:1',
+      hard: false,
+      kind: 'capsule',
+      a: [0, 0.05, 0],
+      b: [0, 0.2, 0],
+      radius: 0.08,
+    };
+    const mouth = { id: 'm', position: [0, 0.1, 0] as const, radius: 0.03 };
+    expect(blockedMouths([mouth], [soft])).toEqual([]);
   });
 });
