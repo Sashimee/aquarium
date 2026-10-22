@@ -6,14 +6,14 @@ import {
   type ConflictReason,
   type Tank,
 } from '@aquarium/shared';
-import { fragCoral, type CoralTable } from '@aquarium/sim/lifecycle';
+import { fragCoral, type CoralTable, type PlantTable } from '@aquarium/sim/lifecycle';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { wireCorals } from './corals.ts';
 import { schema } from './db/index.ts';
 import { apiError, HttpError } from './errors.ts';
-import { substrateBounds } from './plants.ts';
+import { plantObstacles, substrateBounds } from './plants.ts';
 import type { Presets } from './presets.ts';
 import type { CareLimits, SessionUser, Ticked, Tx } from './tanks.ts';
 
@@ -25,6 +25,7 @@ const conflict = (message: string, reason: ConflictReason) =>
 export interface FragContext {
   app: FastifyInstance;
   table: CoralTable;
+  plants: PlantTable;
   presets: Presets;
   authorize: (req: FastifyRequest, requireVerified?: boolean) => Promise<SessionUser>;
   throttle: (userId: string, bucket: keyof CareLimits) => void;
@@ -40,7 +41,7 @@ export interface FragContext {
 }
 
 export function registerCoralRoutes(ctx: FragContext): void {
-  const { app, table, presets, authorize, throttle, guarded, withTank, render } = ctx;
+  const { app, table, plants, presets, authorize, throttle, guarded, withTank, render } = ctx;
 
   app.post(
     '/api/tanks/:tankId/corals/frag',
@@ -65,6 +66,7 @@ export function registerCoralRoutes(ctx: FragContext): void {
           body.coralKey,
           table,
           substrateBounds(ticked.tank.size),
+          plantObstacles(ticked.tank, presets, plants),
         );
         if (!cut.ok) {
           switch (cut.reason) {
@@ -79,6 +81,11 @@ export function registerCoralRoutes(ctx: FragContext): void {
               throw conflict(
                 'The coral is too bleached to fragment. Fix the water and let it recover first.',
                 'coral_bleached',
+              );
+            case 'no_room':
+              throw conflict(
+                'There is no clear spot beside the colony for a fragment. Move the rock or wood and try again.',
+                'coral_no_room',
               );
             case 'limit':
               throw conflict('The tank already holds as many fragments as it can.', 'coral_limit');

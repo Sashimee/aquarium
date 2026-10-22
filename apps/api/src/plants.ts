@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
   decorLayoutSchema,
+  fitPresetItem,
   legacyTintSeed,
   plantContentSchema,
   storedPlantsSchema,
@@ -53,7 +54,7 @@ export interface PlantTankRow {
 export function layoutPlants(tank: PlantTankRow, presets: Presets): LayoutPlant[] {
   const layout =
     tank.decorLayout === null
-      ? (presets[tank.biome]?.decor ?? [])
+      ? (presets[tank.biome]?.decor ?? []).map((item) => fitPresetItem(item, tank.size))
       : decorLayoutSchema.parse(tank.decorLayout);
   return layout.map((item) => ({
     assetId: item.assetId,

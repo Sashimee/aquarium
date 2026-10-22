@@ -1531,6 +1531,7 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
   registerCoralRoutes({
     app,
     table: deps.corals,
+    plants: deps.plants,
     presets,
     authorize,
     throttle,

@@ -23,8 +23,10 @@ import {
   type CoralTable,
   type LayoutPlant,
   type LifecycleState,
+  type Obstacle,
   type TankEnvironment,
 } from './index.ts';
+import { blocked } from './plants.ts';
 
 const content = coralContentSchema.parse(
   JSON.parse(readFileSync(join(import.meta.dirname, '../../../content/corals.json'), 'utf8')),
@@ -421,6 +423,44 @@ describe('fragging', () => {
     const [x, z] = cut.corals[1]?.position ?? [Infinity, Infinity];
     expect(Math.abs(x)).toBeLessThanOrEqual(bounds.halfX - content.params.edgeMarginM + 1e-9);
     expect(Math.abs(z)).toBeLessThanOrEqual(bounds.halfZ - content.params.edgeMarginM + 1e-9);
+  });
+
+  describe('around rock and wood', () => {
+    const rock = (x: number, z: number, half: number): Obstacle => ({
+      x,
+      z,
+      rotationY: 0,
+      scale: 1,
+      halfX: half,
+      halfZ: half,
+    });
+    const colony = grown('brain-coral', 2);
+
+    it('never roots a fragment inside an obstacle', () => {
+      const rocks = [rock(0.07, 0, 0.09), rock(-0.05, 0.08, 0.05)];
+      for (let spawned = 0; spawned < 12; spawned++) {
+        const start = colony.map((c) => ({ ...c, spawned }));
+        const cut = fragCoral(start, 's2000', table, bounds, rocks);
+        if (!cut.ok) throw new Error(cut.reason);
+        const [x, z] = cut.corals[1]?.position ?? [0, 0];
+        expect(blocked(x, z, rocks, 0)).toBe(false);
+      }
+    });
+
+    it('moves a fragment that would have landed in rock', () => {
+      const free = fragCoral(colony, 's2000', table, bounds);
+      if (!free.ok) throw new Error(free.reason);
+      const [fx, fz] = free.corals[1]?.position ?? [0, 0];
+      const rocks = [rock(fx, fz, 0.02)];
+      const moved = fragCoral(colony, 's2000', table, bounds, rocks);
+      if (!moved.ok) throw new Error(moved.reason);
+      expect(moved.corals[1]?.position).not.toEqual([fx, fz]);
+    });
+
+    it('refuses when rock covers everything within reach', () => {
+      const cut = fragCoral(colony, 's2000', table, bounds, [rock(0, 0, 0.5)]);
+      expect(cut).toEqual({ ok: false, reason: 'no_room' });
+    });
   });
 
   it('lets a fragment grow on its own', () => {
