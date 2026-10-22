@@ -74,6 +74,7 @@ export class TierController {
   private readonly upHold = new Map<Tier, number>();
   private readonly blockedUntil = new Map<Tier, number>();
   private pausedUntil = Number.NEGATIVE_INFINITY;
+  private heldAtPause: { overMs: number | null; underMs: number | null } | null = null;
 
   constructor(initial: Tier, config: ControllerConfig) {
     if (!(config.targetMs > 0)) throw new RangeError('TierController: targetMs must be > 0');
@@ -114,20 +115,27 @@ export class TierController {
   }
 
   /**
-   * A load or pipeline compile is stalling frames now: they say nothing about the tier, so the
-   * window restarts and samples are ignored for a cooldown, as after a change.
+   * A load or pipeline compile is stalling frames now: they say nothing about the tier, so samples
+   * are ignored for a cooldown. The window keeps the samples taken before, and the holds resume
+   * where they stood, so periodic stalls cannot keep an overloaded device from stepping down.
    */
   pause(nowMs: number): void {
-    this.window.length = 0;
-    this.overSince = null;
-    this.underSince = null;
-    this.pausedUntil = nowMs + this.config.cooldownMs;
+    if (nowMs >= this.pausedUntil) {
+      this.heldAtPause = {
+        overMs: this.overSince === null ? null : nowMs - this.overSince,
+        underMs: this.underSince === null ? null : nowMs - this.underSince,
+      };
+      this.overSince = null;
+      this.underSince = null;
+    }
+    this.pausedUntil = Math.max(this.pausedUntil, nowMs + this.config.cooldownMs);
   }
 
   sample(ms: number, nowMs: number): TierChange | null {
     const c = this.config;
     if (!Number.isFinite(ms) || ms <= 0 || ms > c.ignoreAboveMs) return null;
     if (nowMs - this.lastChangeAt < c.cooldownMs || nowMs < this.pausedUntil) return null;
+    this.resumeHolds(nowMs);
 
     this.window.push(ms);
     if (this.window.length > c.windowSize) this.window.shift();
@@ -156,6 +164,14 @@ export class TierController {
 
     this.underSince = null;
     return null;
+  }
+
+  private resumeHolds(nowMs: number): void {
+    const held = this.heldAtPause;
+    if (held === null) return;
+    this.heldAtPause = null;
+    this.overSince = held.overMs === null ? null : nowMs - held.overMs;
+    this.underSince = held.underMs === null ? null : nowMs - held.underMs;
   }
 
   private hasHeadroomFor(next: Tier, meanMs: number): boolean {
@@ -205,6 +221,7 @@ export class TierController {
     this.window.length = 0;
     this.overSince = null;
     this.underSince = null;
+    this.heldAtPause = null;
     this.lastChangeAt = nowMs;
   }
 
