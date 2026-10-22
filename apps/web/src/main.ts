@@ -2,6 +2,7 @@ import { broodTarget, followAnyFish } from './interaction/follow';
 import { depthOfFieldFollowsCamera } from './engine/cameraFocus';
 import type { Engine } from './engine/Engine';
 import { EventBus, type EngineEvents } from './engine/events';
+import { roomMinute } from './engine/daylight';
 import { parseEngineOptions } from './engine/options';
 import type { Biome, Collider } from '@aquarium/shared';
 import { colliderDigest } from './fish/simColliders';
@@ -185,7 +186,7 @@ async function boot(): Promise<void> {
     },
     tier: () => engine.quality.tier,
     hood: () => engine.daylight,
-    clock: parseEngineOptions(window.location.search).clock,
+    clock: roomMinute(parseEngineOptions(window.location.search).clock),
     now: () => Date.now(),
     onFrame: (callback) => engine.onFrame(callback),
   });

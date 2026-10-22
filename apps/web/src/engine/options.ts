@@ -1,5 +1,5 @@
 import { DEFAULT_TANK_SIZE, tankSizeSchema, type TankSize } from '@aquarium/shared';
-import { parseClock } from './daylight';
+import { parseClock, type ClockSetting } from './daylight';
 import {
   FRAME_RATE_CHOICES,
   PIXEL_RATIO_CHOICES,
@@ -23,7 +23,7 @@ export interface EngineOptions {
    * which unpinned would show at 15:00 local. The window's weather holds still while pinned. Null
    * follows the real time.
    */
-  clock: number | null;
+  clock: ClockSetting;
   /** Shows the on-device performance readout. */
   stats: boolean;
   /** The tank size drawn until a saved tank brings its own: the demo tank's. */

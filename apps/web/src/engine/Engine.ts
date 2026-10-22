@@ -18,6 +18,10 @@ import {
 } from './dayLighting';
 import {
   ClockPin,
+  assertClockSetting,
+  hoodMinute,
+  roomMinute,
+  type ClockSetting,
   DaylightFeed,
   DEFAULT_LAMP_SCHEDULE,
   daylightAt,
@@ -469,11 +473,13 @@ export class Engine {
   }
 
   /**
-   * Pins the tank to `minutes` after midnight, read like `?clock=`, or `null` to follow local time
-   * again. The light fades to the new level rather than cutting.
+   * Pins the tank to minutes after midnight, read like `?clock=`, to the middle of the lamp's on
+   * (`'day'`) or off (`'night'`) period, or to `null` for local time again. The light fades to
+   * the new level rather than cutting.
    */
-  setClock(minutes: number | null): void {
-    if (this.clockPin.set(minutes, performance.now())) this.daylightFeed.recheck();
+  setClock(setting: ClockSetting): void {
+    assertClockSetting(setting);
+    if (this.clockPin.set(setting, performance.now())) this.daylightFeed.recheck();
   }
 
   /** Runs the visible hood on the tank's lamp schedule and strength, `equipment.light`. */
@@ -616,11 +622,13 @@ export class Engine {
 
   /** The hood level now; the room light behind the tank follows on the same read. */
   private readDaylight(): number {
-    const clock = this.clockPin.clock;
+    const setting = this.clockPin.clock;
+    const hoodAt = hoodMinute(setting, this.photoperiod);
+    const roomAt = roomMinute(setting);
     const { hood, room } = this.clockPin.blend(
       {
-        hood: daylightAt(clock ?? localMinuteOfDay(Date.now(), 0), this.photoperiod),
-        room: roomDaylightAt(clock ?? minuteOfDay(new Date())),
+        hood: daylightAt(hoodAt ?? localMinuteOfDay(Date.now(), 0), this.photoperiod),
+        room: roomDaylightAt(roomAt ?? minuteOfDay(new Date())),
       },
       performance.now(),
     );
