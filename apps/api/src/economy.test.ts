@@ -809,6 +809,22 @@ describe('wallet, shop and ledger', () => {
       expect(errorCode(two)).toBe('validation_failed');
     });
 
+    it('rejects a mud bank scaled outside its range', async () => {
+      const who = await account(h);
+      const tank = tankSchema.parse((await createTank(h, who, { biome: 'mangrove' })).json());
+      const bank = presets.mangrove?.decor.find((item) => item.assetId === 'mud-bank');
+      if (!bank) throw new Error('mangrove preset has no mud bank');
+      const save = (scale: number) =>
+        call(h, who, 'PATCH', `/api/tanks/${tank.id}`, { decorLayout: [{ ...bank, scale }] });
+
+      expect((await save(2.5)).statusCode).toBe(200);
+      for (const scale of [0.1, 10]) {
+        const res = await save(scale);
+        expect(res.statusCode, `${scale}`).toBe(400);
+        expect(errorCode(res)).toBe('validation_failed');
+      }
+    });
+
     it('shares one licence between every procedural euphyllia piece', async () => {
       const who = await account(h);
       const reef = await freeTank(h, who, 'reef');

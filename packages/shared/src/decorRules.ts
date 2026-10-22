@@ -13,6 +13,8 @@ export const VACATION_FEEDER_ASSET_ID = 'vacation-feeder';
 
 /** The mangrove tank's procedural mud bank: part of the preset, never sold, so not in `DECOR_ASSET_IDS`. */
 export const MUD_BANK_ASSET_ID = 'mud-bank';
+/** The scale range a saved mud bank may take; the preset's is 1.3. */
+export const MUD_BANK_SCALE = { min: 0.5, max: 2.5 } as const;
 
 const ROCKS = ['boulder-01', 'coast-rocks-05'] as const;
 
@@ -94,7 +96,7 @@ export function decorPositionLimits(tank: typeof DEFAULT_TANK_METRES = DEFAULT_T
 
 export interface DecorProblem {
   readonly index: number;
-  readonly field: 'assetId' | 'position';
+  readonly field: 'assetId' | 'position' | 'scale';
   readonly message: string;
 }
 
@@ -107,11 +109,24 @@ export function findDecorProblems(
   const limits = decorPositionLimits();
   const problems: DecorProblem[] = [];
   let feeders = 0;
+  let banks = 0;
   layout.forEach((item, index) => {
     if (item.assetId === feederAssetId) {
       feeders += 1;
       if (feeders > 1) {
         problems.push({ index, field: 'assetId', message: 'A tank holds one vacation feeder.' });
+      }
+    } else if (item.assetId === MUD_BANK_ASSET_ID && biome === 'mangrove') {
+      banks += 1;
+      if (banks > 1) {
+        problems.push({ index, field: 'assetId', message: 'A tank holds one mud bank.' });
+      }
+      if (item.scale < MUD_BANK_SCALE.min || item.scale > MUD_BANK_SCALE.max) {
+        problems.push({
+          index,
+          field: 'scale',
+          message: `A mud bank's scale must be between ${MUD_BANK_SCALE.min} and ${MUD_BANK_SCALE.max}.`,
+        });
       }
     } else if (!isDecorAssetForBiome(biome, item.assetId)) {
       problems.push({
