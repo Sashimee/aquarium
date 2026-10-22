@@ -34,6 +34,7 @@ export function createReauthenticator({ db }: Database, auth: Auth) {
         (await ctx.password.verify({ hash: credential.password, password }));
       return valid ? 'ok' : 'wrong_password';
     }
+    // Wall clock on purpose: better-auth stamps the session with the real time, not the injected one.
     return Date.now() - subject.session.createdAt.getTime() > FRESH_SESSION_MS
       ? 'stale_session'
       : 'ok';

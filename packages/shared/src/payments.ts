@@ -52,6 +52,20 @@ export const packsResponseSchema = z.strictObject({
 });
 export type PacksResponse = z.infer<typeof packsResponseSchema>;
 
+export const orderStatusSchema = z.enum(['pending', 'paid', 'failed', 'refunded']);
+export type OrderStatus = z.infer<typeof orderStatusSchema>;
+
+export const orderParamsSchema = z.strictObject({
+  sessionId: z
+    .string()
+    .regex(/^cs_[A-Za-z0-9_]{1,200}$/)
+    .describe('the Checkout Session id Stripe puts in the success URL as session_id'),
+});
+export type OrderParams = z.infer<typeof orderParamsSchema>;
+
+export const orderStatusResponseSchema = z.strictObject({ status: orderStatusSchema });
+export type OrderStatusResponse = z.infer<typeof orderStatusResponseSchema>;
+
 export const adultConfirmationRequestSchema = z.discriminatedUnion('confirmed', [
   z.strictObject({
     confirmed: z.literal(true),

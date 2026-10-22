@@ -9,6 +9,7 @@ import { APP_ORIGIN, type Harness } from '../test-harness.ts';
 import {
   createStripeProvider,
   type PaymentProvider,
+  type ProviderCheckoutSession,
   type ProviderSubscription,
 } from './provider.ts';
 
@@ -75,6 +76,7 @@ export interface PaymentsKit {
   webhookSecret: string;
   // What Stripe would answer for a subscription right now; stripe-mock is stateless.
   subscriptions: Map<string, ProviderSubscription>;
+  sessions: Map<string, ProviderCheckoutSession>;
   // Provider-side effects the app asked for, as `cancel:<id>` and `refund:<invoice>`.
   effects: string[];
   failEffects: boolean;
@@ -97,6 +99,7 @@ export function paymentsKit(wrap?: (real: PaymentProvider) => PaymentProvider): 
     real: stripe,
     webhookSecret,
     subscriptions: new Map<string, ProviderSubscription>(),
+    sessions: new Map<string, ProviderCheckoutSession>(),
     effects: [] as string[],
     failEffects: false,
   };
@@ -104,6 +107,7 @@ export function paymentsKit(wrap?: (real: PaymentProvider) => PaymentProvider): 
     ...stripe,
     retrieveSubscription: async (id) =>
       kit.subscriptions.get(id) ?? { status: 'active', cancelAtPeriodEnd: false },
+    retrieveCheckoutSession: async (id) => kit.sessions.get(id) ?? null,
     cancelSubscriptionNow: async (id) => {
       kit.effects.push(`cancel:${id}`);
       if (kit.failEffects) throw new Error('provider down');

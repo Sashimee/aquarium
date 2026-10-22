@@ -653,6 +653,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     limits: opts.legalLimits ?? DEFAULT_LEGAL_LIMITS,
     currentSession,
     payments: opts.payments ?? null,
+    clock,
   });
 
   const reauthenticate = createReauthenticator(database, auth);
