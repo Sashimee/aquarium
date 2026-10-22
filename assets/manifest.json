@@ -3469,7 +3469,13 @@
       "textures": "baseColor, metallicRoughness, normal PNG 4096x4096",
       "rigged": false,
       "notes": "Photogrammetry driftwood piece, 23780 triangles, one material, three 4096x4096 PNG maps (4.2 MB, 2.7 MB, 11.1 MB): downscale to 2048 or less. Branched, weathered root-like shape for the blackwater root tangle. Not rigged. Zip sha256 05c9336829e9ab65d50267eb7e179cf13e360b46a6c34ed5a33a40b270aa0942; sha256 is the aggregate over files[]. Licence read from the model record and bundled license.txt (CC-BY-4.0).",
-      "modifications": [],
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.45 m",
+        "LOD0 capped at 10000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "23.8k-triangle scan decimated, 4096 px textures downscaled"
+      ],
       "status": "downloaded",
       "files": [
         {
@@ -3519,7 +3525,13 @@
       "textures": "baseColor JPEG 4096x4096",
       "rigged": false,
       "notes": "Photogrammetry driftwood, 68260 triangles, one 4096x4096 base colour map and a second untextured material (a small base or cap piece). Heavier than sketchfab-07422ed7: decimate. Not rigged, no normal map (bake one). Zip sha256 9177d2aa0e5e0c6a00fe75efb5480da715a6c2e3a2f4017643b7ef17eeb9cf15; sha256 is the aggregate over files[]. Licence read from the model record and bundled license.txt (CC-BY-4.0).",
-      "modifications": [],
+      "modifications": [
+        "merged meshes, dropped unused attributes, skeleton and animation",
+        "origin at the centre of the base, scaled so the longest edge is 0.5 m",
+        "LOD0 capped at 12000 triangles, LOD1 and LOD2 simplified further",
+        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
+        "68k-triangle scan decimated, 4096 px base colour downscaled, no normal map"
+      ],
       "status": "downloaded",
       "files": [
         {
@@ -3823,7 +3835,13 @@
       "textures": "photo 9248x6944",
       "rigged": false,
       "notes": "Male Apistogramma hongsloi, a dwarf cichlid of the Orinoco and Rio Negro blackwaters: Clean lateral of the fish swimming over leaf litter: green-yellow body with a pale belly and orange flank wash, yellow dorsal and caudal. The fish is small in frame, 9248x6944 (10.5 MB): crop and downscale to the fish. Raw file: ~/.cache/aquarium-assets/raw/wm-apistogramma-hongsloi-male/original.jpg (not committed).",
-      "modifications": [],
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "Male Apistogramma hongsloi by SamaelGMO (CC-BY-4.0), side view projected onto the loft; fins painted as translucent membranes",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
       "status": "downloaded"
     },
     {
@@ -3861,7 +3879,13 @@
       "textures": "photo 2843x1578",
       "rigged": false,
       "notes": "Adult male dwarf pencilfish (Nannostomus marginatus) in an aquarium, sharp lateral view with the black lateral and lower stripes, silver-gold sheen, red marks on the dorsal, pelvic and anal fins and a clear caudal. The Commons author field gives only 'D.W.' (no user page). CC0 read from the Commons file page metadata. Raw file: ~/.cache/aquarium-assets/raw/wm-nannostomus-marginatus-male/original.jpg (not committed).",
-      "modifications": [],
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "Male Nannostomus marginatus by D.W. (CC0), side view projected onto the loft with the photographed body fitted to the species proportions",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
       "status": "downloaded"
     },
     {
@@ -3880,7 +3904,13 @@
       "textures": "photo 1892x2345",
       "rigged": false,
       "notes": "Adult female dwarf pencilfish (Nannostomus marginatus), same author as the male photo; the female has a fuller body and less red in the fins. The frame is portrait (1892x2345), so the fish is small in frame: crop to it. CC0 read from the Commons file page metadata. Raw file: ~/.cache/aquarium-assets/raw/wm-nannostomus-marginatus-female/original.jpg (not committed).",
-      "modifications": [],
+      "modifications": [
+        "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
+        "fin mask and fin id vertex attributes generated analytically",
+        "oriented to +Z forward / +Y up, origin at body centre of mass, scaled to standard length",
+        "Female Nannostomus marginatus by D.W. (CC0), side view projected onto the loft with the photographed body fitted to the species proportions",
+        "colour map re-encoded to KTX2 at 1k and 2k"
+      ],
       "status": "downloaded"
     }
   ]

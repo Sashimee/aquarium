@@ -20,6 +20,8 @@ export interface FinPaint {
   leadingRay?: number;
   /** Take the root colour from the photographed body at the end of the peduncle, so the fin continues the skin. */
   rootFromPhoto?: boolean;
+  /** Crosswise colour bands from `from` to `to` along the fin, base 0 to tip 1, such as a rummy-nose's barred caudal. */
+  bands?: { from: number; to: number; colour: Rgb; opacity: number }[];
   seed?: number;
 }
 
@@ -32,6 +34,7 @@ const RAY_SHADE = 0.5;
 const TIP_FADE_START = 0.9;
 const TIP_FADE_STRENGTH = 0.7;
 const SIDE_FADE = 0.1;
+const BAND_EDGE = 0.02;
 
 function smooth(edge0: number, edge1: number, x: number): number {
   const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
@@ -69,6 +72,13 @@ export function finTexel(paint: FinPaint, u: number, v: number): [number, number
 
   const membrane = paint.opacity.root + (paint.opacity.tip - paint.opacity.root) * smooth(0, 1, v);
   let alpha = membrane + (1 - membrane) * ray * RAY_OPACITY;
+  for (const band of paint.bands ?? []) {
+    const inside =
+      smooth(band.from - BAND_EDGE, band.from + BAND_EDGE, v) *
+      (1 - smooth(band.to - BAND_EDGE, band.to + BAND_EDGE, v));
+    colour = mix(colour, band.colour, inside);
+    alpha += (band.opacity - alpha) * inside;
+  }
   alpha *= 1 - smooth(TIP_FADE_START, 1, v) * TIP_FADE_STRENGTH;
   alpha *= smooth(0, SIDE_FADE, u) * smooth(0, SIDE_FADE, 1 - u);
 
