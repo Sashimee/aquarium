@@ -13,9 +13,11 @@ import {
 } from '@aquarium/shared';
 import type { Engine } from '../engine/Engine';
 import type { TankDimensions } from '../engine/tank/dimensions';
+import { WATER_INSET } from '../engine/tank/dimensions';
 import type { Tier, TierSettings } from '../engine/quality/tiers';
 import { substrateHeight } from '../engine/tank/substrate';
 import { abortError } from './abortable';
+import { caveAnchors } from './caves';
 import { AssetCatalog, ModelLibrary, type CatalogEntry, type ModelLod } from './assets';
 import {
   AnemoneGroup,
@@ -203,6 +205,7 @@ export class TankScene {
   private substrate: SubstrateInstall | null = null;
   private readonly placeholderSubstrate: Material | Material[];
   private disposed = false;
+  private readonly anchorListeners = new Set<(anchors: readonly SceneAnchor[]) => void>();
   private readonly presetMovable: readonly { item: DecorItem; kind: string }[];
   private movablePlants = false;
   private plantSlots = new Map<number, number>();
@@ -475,6 +478,8 @@ export class TankScene {
         this.engine.scene.add(group.object);
       }
       this.syncGrowth();
+      const anchors = this.anchors;
+      for (const listener of this.anchorListeners) listener(anchors);
       await this.evictUnused();
       return;
     }
@@ -868,7 +873,24 @@ export class TankScene {
 
   /** Where species with a home (clownfish and their anemone) are drawn to. */
   get anchors(): readonly SceneAnchor[] {
-    return this.anchorData;
+    const d = this.engine.tank.dimensions;
+    const reach = {
+      halfX: d.length / 2 - d.glass - WATER_INSET,
+      halfZ: d.depth / 2 - d.glass - WATER_INSET,
+    };
+    return [
+      ...this.anchorData,
+      ...caveAnchors(
+        this.hardItems.map(({ item }) => item),
+        reach,
+      ),
+    ];
+  }
+
+  /** Called with the anchors after a layout change moves, adds or removes shelter decor. */
+  onAnchorsChanged(listener: (anchors: readonly SceneAnchor[]) => void): () => void {
+    this.anchorListeners.add(listener);
+    return () => this.anchorListeners.delete(listener);
   }
 
   get plantCount(): number {

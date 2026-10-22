@@ -114,13 +114,16 @@ describe('modelFor', () => {
     }
   });
 
-  // Males run from well under the female (guppy, 0.625) to a third longer (peacock, 1.33);
-  // anything past twice her length is a typo, not dimorphism.
-  it('gives every male model a length factor in (0, 2]', () => {
+  it('gives every male model the length factor its built model was scaled by', () => {
+    const models = parseFishAssets(shippedIndex);
     for (const [id, profile] of Object.entries(FISH_RENDER_PROFILES)) {
       if (profile.male === null) continue;
       expect(profile.male.lengthFactor, id).toBeGreaterThan(0);
-      expect(profile.male.lengthFactor, id).toBeLessThanOrEqual(2);
+      const female = models.get(profile.assetId)?.standardLengthM;
+      const male = models.get(profile.male.assetId)?.standardLengthM;
+      expect(female, id).toBeDefined();
+      expect(male, id).toBeDefined();
+      expect((male ?? 0) / (female ?? 1), id).toBeCloseTo(profile.male.lengthFactor, 3);
     }
   });
 

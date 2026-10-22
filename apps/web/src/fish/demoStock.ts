@@ -17,9 +17,16 @@ import {
 } from '@aquarium/sim';
 import altolamprologusCalvusContent from '../../../../content/species/altolamprologus-calvus.json';
 import angelfishContent from '../../../../content/species/angelfish.json';
+import apistogrammaHongsloiContent from '../../../../content/species/apistogramma-hongsloi.json';
+import bandedArcherfishContent from '../../../../content/species/banded-archerfish.json';
 import banggaiCardinalfishContent from '../../../../content/species/banggai-cardinalfish.json';
+import barredMudskipperContent from '../../../../content/species/barred-mudskipper.json';
 import bettaContent from '../../../../content/species/betta.json';
+import blueSpottedMudskipperContent from '../../../../content/species/blue-spotted-mudskipper.json';
 import bronzeCorydorasContent from '../../../../content/species/bronze-corydoras.json';
+import bumblebeeGobyContent from '../../../../content/species/bumblebee-goby.json';
+import cardinalTetraContent from '../../../../content/species/cardinal-tetra.json';
+import dwarfPencilfishContent from '../../../../content/species/dwarf-pencilfish.json';
 import guppyContent from '../../../../content/species/guppy.json';
 import labidochromisCaeruleusContent from '../../../../content/species/labidochromis-caeruleus.json';
 import melanochromisAuratusContent from '../../../../content/species/melanochromis-auratus.json';
@@ -27,8 +34,10 @@ import neolamprologusBrichardiContent from '../../../../content/species/neolampr
 import neolamprologusMultifasciatusContent from '../../../../content/species/neolamprologus-multifasciatus.json';
 import neonTetraContent from '../../../../content/species/neon-tetra.json';
 import ocellarisClownfishContent from '../../../../content/species/ocellaris-clownfish.json';
+import orangeChromideContent from '../../../../content/species/orange-chromide.json';
 import pseudotropheusDemasoniContent from '../../../../content/species/pseudotropheus-demasoni.json';
 import royalGrammaContent from '../../../../content/species/royal-gramma.json';
+import rummyNoseTetraContent from '../../../../content/species/rummy-nose-tetra.json';
 import yellowTangContent from '../../../../content/species/yellow-tang.json';
 import type { TankDimensions } from '../engine/tank/dimensions';
 import { WATER_INSET } from '../engine/tank/dimensions';
@@ -81,10 +90,14 @@ export function demoStock(
 /**
  * Guppies are about half male: each fish's sex, and with it its model, comes from its key.
  * The reef has one clownfish pair for its one host anemone, a yellow rather than a blue tang
- * (a blue tang outgrows a 120 cm tank), and as many banggai as content's smallest group.
+ * (a blue tang outgrows a 120 cm tank), and as many banggai as content's smallest group. The
+ * mangrove leaves out the silver mono, which also outgrows 120 cm, and keeps one of each
+ * territorial mudskipper.
  * The cichlid lake mixes Malawi mbuna on the rock piles with Tanganyika lamprologines, as its
  * preset mixes rock piles and a shell bed: mbuna several to a species, which spreads their
  * aggression (Konings 2007), and one calvus, a solitary stalker.
+ * Blackwater is a Rio Negro community: two tetra schools, a pencilfish shoal and one dwarf cichlid
+ * pair, 28 fish against the mobile tier's 30.
  */
 export const DEMO_STOCKS: Readonly<Record<PlayableBiome, DemoStock>> = {
   freshwater: demoStock(
@@ -113,8 +126,36 @@ export const DEMO_STOCKS: Readonly<Record<PlayableBiome, DemoStock>> = {
       'altolamprologus-calvus': 1,
     },
   ),
-  blackwater: demoStock([], {}),
-  mangrove: demoStock([], {}),
+  blackwater: demoStock(
+    [
+      cardinalTetraContent,
+      rummyNoseTetraContent,
+      dwarfPencilfishContent,
+      apistogrammaHongsloiContent,
+    ],
+    {
+      'cardinal-tetra': 10,
+      'rummy-nose-tetra': 10,
+      'dwarf-pencilfish': 6,
+      'apistogramma-hongsloi': 2,
+    },
+  ),
+  mangrove: demoStock(
+    [
+      bandedArcherfishContent,
+      orangeChromideContent,
+      bumblebeeGobyContent,
+      blueSpottedMudskipperContent,
+      barredMudskipperContent,
+    ],
+    {
+      'banded-archerfish': 4,
+      'orange-chromide': 8,
+      'bumblebee-goby': 3,
+      'blue-spotted-mudskipper': 1,
+      'barred-mudskipper': 1,
+    },
+  ),
 };
 
 const LENGTH_SPREAD = 0.08;
@@ -177,6 +218,7 @@ export function sceneAnchorsToSim(anchors: readonly SceneAnchor[], demo: DemoTan
       kind: a.kind,
       position: [x, Math.min(Math.max(y, ground + radius), top - radius), z],
       radius,
+      ...(a.facing && { facing: a.facing }),
     };
   });
 }

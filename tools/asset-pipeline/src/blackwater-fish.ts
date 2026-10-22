@@ -542,6 +542,7 @@ export const BLACKWATER_FISH_RECIPES: LoftFishRecipe[] = [
     id: 'apistogramma-hongsloi-male',
     species: 'apistogramma-hongsloi',
     fallbackLengthM: 0.05,
+    lengthFactor: 0.05 / 0.03,
     roughness: 0.4,
     note: 'Male Apistogramma hongsloi by SamaelGMO (CC-BY-4.0), side view projected onto the loft; fins painted as translucent membranes',
     texture: {

@@ -262,6 +262,83 @@ const ADULT_MAX: Record<string, { model: string; maxSlM: number; maxTlM: number;
       maxTlM: 0.2,
       source: 'FishBase: 20 cm TL (Ref. 9710); TL = 1.163 SL',
     },
+    'banded-archerfish': {
+      model: 'banded-archerfish',
+      maxSlM: 0.3 * 0.8595,
+      maxTlM: 0.3,
+      source: 'FishBase (Toxotes jaculatrix): 30 cm TL (Ref. 4833); SL = 0.8595 TL',
+    },
+    'barred-mudskipper': {
+      model: 'barred-mudskipper',
+      maxSlM: 0.19 * 0.8241,
+      maxTlM: 0.19,
+      source: 'FishBase (Periophthalmus argentilineatus): 19 cm TL (Ref. 4756); SL = 0.8241 TL',
+    },
+    'blue-spotted-mudskipper': {
+      model: 'blue-spotted-mudskipper',
+      maxSlM: 0.22 / 1.1773,
+      maxTlM: 0.22,
+      source:
+        'FishBase (Boleophthalmus pectinirostris): female 22 cm, male 17.5 cm TL (Ref. 125930); the ' +
+        'female length type is blank, so it is read as TL like the male; TL = 1.1773 SL',
+    },
+    'bumblebee-goby': {
+      model: 'bumblebee-goby',
+      maxSlM: 0.042 / 1.2338,
+      maxTlM: 0.042,
+      source:
+        'FishBase (Brachygobius doriae, the species of the reference photos): 4.2 cm TL (Ref. 7050); ' +
+        'TL = 1.2338 SL',
+    },
+    'orange-chromide': {
+      model: 'orange-chromide',
+      maxSlM: 0.095 / 1.2321,
+      maxTlM: 0.095,
+      source: 'FishBase (as Pseudetroplus maculatus): 9.5 cm TL (Ref. 115177); TL = 1.2321 SL',
+    },
+    'silver-mono': {
+      model: 'silver-mono',
+      maxSlM: 0.27,
+      maxTlM: 0.27 * 1.3455,
+      source:
+        'FishBase (Monodactylus argenteus): 27 cm SL (Ref. 44894); TL = 1.3455 SL, from two fish of ' +
+        '9.1 to 11.8 cm TL (FishBase also lists an older photo estimate, SL = 0.8131 TL)',
+    },
+    'apistogramma-hongsloi': {
+      model: 'apistogramma-hongsloi',
+      maxSlM: 0.034,
+      maxTlM: 0.034 * 1.231,
+      source:
+        'Female model. FishBase: 3.4 cm SL is the male/unsexed maximum (Ref. 36377, the original ' +
+        'description), used here for the smaller female because it matches the catalog 4 cm TL ' +
+        'female and Seriously Fish (females 40-45 mm); the 5.0 cm female field in FishBase has no ' +
+        'length type and is not used. FishBase has no length-length relationship, so TL = 1.231 SL, ' +
+        'the proportion of the lofted model. The male model is sized in MALE_MODEL_SIZES.',
+    },
+    'cardinal-tetra': {
+      model: 'cardinal-tetra',
+      maxSlM: 0.04 / 1.1708,
+      maxTlM: 0.04,
+      source:
+        'FishBase: 2.51 cm SL (Ref. 38376) is the wild-caught record; the larger aquarium adult is ' +
+        'used instead: Seriously Fish, 35 mm SL, about 4.1 cm TL, rounded to the catalog 4 cm TL; ' +
+        'TL = 1.1708 SL (FishBase, Paracheirodon axelrodi)',
+    },
+    'dwarf-pencilfish': {
+      model: 'dwarf-pencilfish',
+      maxSlM: 0.035 / 1.2,
+      maxTlM: 0.035,
+      source:
+        'FishBase: 3.5 cm TL (Ref. 37104, Nannostomus marginatus); FishBase has no length-length relationship, ' +
+        'so TL = 1.2 SL, the proportion of the lofted model',
+    },
+    'rummy-nose-tetra': {
+      model: 'rummy-nose-tetra',
+      maxSlM: 0.036,
+      maxTlM: 0.036 * 1.2506,
+      source:
+        'FishBase: 3.6 cm SL (Ref. 38376, Petitella bleheri, the species sold as rummy-nose); TL = 1.2506 SL',
+    },
   };
 
 /**
@@ -274,29 +351,6 @@ const AWAITING_CONTENT: Record<
   string,
   { model: string; maxSlM: number; maxTlM: number; source: string }
 > = {
-  'apistogramma-hongsloi': {
-    model: 'apistogramma-hongsloi',
-    maxSlM: 0.034,
-    maxTlM: 0.034 * 1.231,
-    source:
-      'Female model. FishBase: 3.4 cm SL is the male/unsexed maximum (Ref. 36377, the original ' +
-      'description), used here for the smaller female because it matches the catalog 4 cm TL ' +
-      'female and Seriously Fish (females 40-45 mm); the 5.0 cm female field in FishBase has no ' +
-      'length type and is not used. FishBase has no length-length relationship, so TL = 1.231 SL, ' +
-      'the proportion of the lofted model. The male model is sized in MALE_MODEL_SIZES.',
-  },
-  'banded-archerfish': {
-    model: 'banded-archerfish',
-    maxSlM: 0.3 * 0.8595,
-    maxTlM: 0.3,
-    source: 'FishBase (Toxotes jaculatrix): 30 cm TL (Ref. 4833); SL = 0.8595 TL',
-  },
-  'barred-mudskipper': {
-    model: 'barred-mudskipper',
-    maxSlM: 0.19 * 0.8241,
-    maxTlM: 0.19,
-    source: 'FishBase (Periophthalmus argentilineatus): 19 cm TL (Ref. 4756); SL = 0.8241 TL',
-  },
   'black-phantom-tetra': {
     model: 'black-phantom-tetra',
     maxSlM: 0.036,
@@ -307,39 +361,6 @@ const AWAITING_CONTENT: Record<
       'length-length relationship was checked, so TL = 1.25 SL, a typical characin proportion ' +
       'with a forked caudal; it is an assumption, not a literature value.',
   },
-  'blue-spotted-mudskipper': {
-    model: 'blue-spotted-mudskipper',
-    maxSlM: 0.22 / 1.1773,
-    maxTlM: 0.22,
-    source:
-      'FishBase (Boleophthalmus pectinirostris): female 22 cm, male 17.5 cm TL (Ref. 125930); the ' +
-      'female length type is blank, so it is read as TL like the male; TL = 1.1773 SL',
-  },
-  'bumblebee-goby': {
-    model: 'bumblebee-goby',
-    maxSlM: 0.042 / 1.2338,
-    maxTlM: 0.042,
-    source:
-      'FishBase (Brachygobius doriae, the species of the reference photos): 4.2 cm TL (Ref. 7050); ' +
-      'TL = 1.2338 SL',
-  },
-  'cardinal-tetra': {
-    model: 'cardinal-tetra',
-    maxSlM: 0.04 / 1.1708,
-    maxTlM: 0.04,
-    source:
-      'FishBase: 2.51 cm SL (Ref. 38376) is the wild-caught record; the larger aquarium adult is ' +
-      'used instead: Seriously Fish, 35 mm SL, about 4.1 cm TL, rounded to the catalog 4 cm TL; ' +
-      'TL = 1.1708 SL (FishBase, Paracheirodon axelrodi)',
-  },
-  'dwarf-pencilfish': {
-    model: 'dwarf-pencilfish',
-    maxSlM: 0.035 / 1.2,
-    maxTlM: 0.035,
-    source:
-      'FishBase: 3.5 cm TL (Ref. 37104, Nannostomus marginatus); FishBase has no length-length relationship, ' +
-      'so TL = 1.2 SL, the proportion of the lofted model',
-  },
   'figure-8-puffer': {
     model: 'figure-8-puffer',
     maxSlM: 0.08 / 1.21,
@@ -348,27 +369,6 @@ const AWAITING_CONTENT: Record<
       'FishBase (as Dichotomyctere ocellatus, of which Tetraodon biocellatus is a junior synonym): ' +
       '8 cm TL (Ref. 12693); FishBase has no length-length relationship, so TL = 1.21 SL, the ' +
       'proportion of the lofted model',
-  },
-  'orange-chromide': {
-    model: 'orange-chromide',
-    maxSlM: 0.095 / 1.2321,
-    maxTlM: 0.095,
-    source: 'FishBase (as Pseudetroplus maculatus): 9.5 cm TL (Ref. 115177); TL = 1.2321 SL',
-  },
-  'rummy-nose-tetra': {
-    model: 'rummy-nose-tetra',
-    maxSlM: 0.036,
-    maxTlM: 0.036 * 1.2506,
-    source:
-      'FishBase: 3.6 cm SL (Ref. 38376, Petitella bleheri, the species sold as rummy-nose); TL = 1.2506 SL',
-  },
-  'silver-mono': {
-    model: 'silver-mono',
-    maxSlM: 0.27,
-    maxTlM: 0.27 * 1.3455,
-    source:
-      'FishBase (Monodactylus argenteus): 27 cm SL (Ref. 44894); TL = 1.3455 SL, from two fish of ' +
-      '9.1 to 11.8 cm TL (FishBase also lists an older photo estimate, SL = 0.8131 TL)',
   },
 };
 

@@ -205,6 +205,25 @@ export const FISH_RENDER_PROFILES: Readonly<Record<string, FishRenderProfile>> =
     nightPaling: 0.1,
     tintVariation: 0.08,
   },
+  'banded-archerfish': { ...DEFAULTS, assetId: 'banded-archerfish', iridescence: 0.3 },
+  'silver-mono': { ...DEFAULTS, assetId: 'silver-mono', iridescence: 0.6, roughness: 0.3 },
+  'orange-chromide': { ...DEFAULTS, assetId: 'orange-chromide', iridescence: 0.2 },
+  'bumblebee-goby': { ...DEFAULTS, assetId: 'bumblebee-goby', iridescence: 0.05 },
+  // Mudskippers have a thick, mucus-covered skin built for air, without a guanine sheen.
+  'barred-mudskipper': {
+    ...DEFAULTS,
+    assetId: 'barred-mudskipper',
+    iridescence: 0,
+    roughness: 0.5,
+    nightPaling: 0.2,
+  },
+  'blue-spotted-mudskipper': {
+    ...DEFAULTS,
+    assetId: 'blue-spotted-mudskipper',
+    iridescence: 0,
+    roughness: 0.5,
+    nightPaling: 0.2,
+  },
   'pseudotropheus-demasoni': {
     ...DEFAULTS,
     assetId: 'pseudotropheus-demasoni',
@@ -251,6 +270,45 @@ export const FISH_RENDER_PROFILES: Readonly<Record<string, FishRenderProfile>> =
     iridescence: 0.3,
     iridescenceMask: 'blue',
     finTransmission: 0.4,
+  },
+  // The cardinal's stripe is the same iridophore reflector as the neon's, and pales at night too.
+  'cardinal-tetra': {
+    ...DEFAULTS,
+    assetId: 'cardinal-tetra',
+    iridescence: 1,
+    iridescenceMask: 'blue',
+    filmThicknessNm: [300, 380],
+    roughness: 0.3,
+    finTransmission: 0.7,
+    nightPaling: 0.85,
+    tintVariation: 0.05,
+  },
+  'rummy-nose-tetra': {
+    ...DEFAULTS,
+    assetId: 'rummy-nose-tetra',
+    iridescence: 0.35,
+    roughness: 0.35,
+    finTransmission: 0.65,
+    nightPaling: 0.6,
+  },
+  'dwarf-pencilfish': {
+    ...DEFAULTS,
+    assetId: 'dwarf-pencilfish',
+    male: { assetId: 'dwarf-pencilfish-male', lengthFactor: 1 },
+    iridescence: 0.2,
+    finTransmission: 0.6,
+    nightPaling: 0.5,
+  },
+  // Apistogramma males grow about two thirds longer than females (7 cm TL in FishBase vs about
+  // 4 cm TL for females in SeriouslyFish).
+  'apistogramma-hongsloi': {
+    ...DEFAULTS,
+    assetId: 'apistogramma-hongsloi',
+    male: { assetId: 'apistogramma-hongsloi-male', lengthFactor: 0.05 / 0.03 },
+    iridescence: 0.3,
+    finTransmission: 0.45,
+    nightPaling: 0.4,
+    tintVariation: 0.12,
   },
 };
 
