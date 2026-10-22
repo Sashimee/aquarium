@@ -10,15 +10,21 @@ export function newIdempotencyKey(): string {
  * finished intent, whether it worked or was refused, lets the key go: the next press is a new intent.
  */
 export class IntentKeys {
-  private readonly keys = new Map<string, string>();
+  private readonly keys = new Map<string, { key: string; issuedAt: number }>();
 
-  constructor(private readonly make: () => string = newIdempotencyKey) {}
+  /** With `ttlMs`, a key held longer than that is dropped, for intents that are safe to repeat once. */
+  constructor(
+    private readonly make: () => string = newIdempotencyKey,
+    private readonly ttlMs: number = Infinity,
+    private readonly now: () => number = Date.now,
+  ) {}
 
   keyFor(intent: string): string {
+    const now = this.now();
     const held = this.keys.get(intent);
-    if (held !== undefined) return held;
+    if (held !== undefined && now - held.issuedAt < this.ttlMs) return held.key;
     const key = this.make();
-    this.keys.set(intent, key);
+    this.keys.set(intent, { key, issuedAt: now });
     return key;
   }
 

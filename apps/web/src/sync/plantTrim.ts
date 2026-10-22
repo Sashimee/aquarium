@@ -1,4 +1,7 @@
 import type { Plant, Tank } from '@aquarium/shared';
+import type { EventBus } from '../engine/events';
+import type { InteractionEvents } from '../interaction/events';
+import type { TrimOutcome } from './session';
 import { ApiRequestError } from '../ui/api';
 
 const PER_UNIT = 100;
@@ -90,4 +93,23 @@ export function trimRefusalText(error: unknown, label: string): string | null {
     default:
       return error.message;
   }
+}
+
+/** Follows the plant the player picked; a tank load drops it, since keys can repeat between tanks. */
+export function followTrimTarget(
+  interaction: EventBus<InteractionEvents>,
+  set: (key: string | null) => void,
+): () => void {
+  const offPicked = interaction.on('plant:picked', ({ pick }) => set(pick?.key ?? null));
+  const offLoaded = interaction.on('tank:loaded', () => set(null));
+  return () => {
+    offPicked();
+    offLoaded();
+  };
+}
+
+/** What the dialog shows after a trim: null means it worked and the dialog closes. */
+export function trimRefusalShown(outcome: TrimOutcome, sessionError: string | null): string | null {
+  if (outcome.ok) return null;
+  return outcome.refusal ?? sessionError ?? 'The trim did not go through. Try again.';
 }
