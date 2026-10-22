@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { Coral, DecorItem } from '@aquarium/shared';
 import { euphylliaId } from './euphyllia';
-import { grownCoralItem, matchLayoutCorals, placeFragments, type CoralSlot } from './coralGrowth';
+import {
+  grownCoralItem,
+  matchLayoutCorals,
+  placeFragments,
+  type CoralSlot,
+  type ScaleCap,
+} from './coralGrowth';
 
 const item = (tintSeed: number, x = 0, scale = 1): DecorItem => ({
   assetId: 'acropora-cytherea',
@@ -28,6 +34,8 @@ const coral = (key: string, over: Partial<Coral> = {}): Coral => ({
 });
 
 const flat = () => 0.04;
+const capOf = (scale: number, sways: boolean): ScaleCap =>
+  Object.assign(() => scale, { sways: () => sways });
 
 describe('matchLayoutCorals', () => {
   it('matches nothing when the tank has no coral state', () => {
@@ -97,35 +105,45 @@ describe('placeFragments', () => {
   const swayFrag = { ...frag, assetId: hammer };
 
   it('holds a rigid fragment to a zero cap', () => {
-    const [placed] = placeFragments([slot(item(5, 0, 0.8))], [root, frag], flat, () => 0);
+    const [placed] = placeFragments([slot(item(5, 0, 0.8))], [root, frag], flat, capOf(0, false));
     expect(placed?.item.scale).toBe(0);
   });
 
   it('floors a swaying fragment at a quarter of the root scale when the cap is zero', () => {
-    const [placed] = placeFragments([slot(sway(5, 0.8))], [swayRoot, swayFrag], flat, () => 0);
+    const [placed] = placeFragments(
+      [slot(sway(5, 0.8))],
+      [swayRoot, swayFrag],
+      flat,
+      capOf(0, true),
+    );
     expect(placed?.item.scale).toBeCloseTo(0.2);
   });
 
   it('floors a non-euphyllia coral the cap says sways', () => {
-    const cap = Object.assign(() => 0, { sways: () => true });
+    const cap = capOf(0, true);
     const [placed] = placeFragments([slot(item(5, 0, 0.8))], [root, frag], flat, cap);
     expect(placed?.item.scale).toBeCloseTo(0.2);
   });
 
   it('holds a euphyllia fragment to the cap when the cap says it is rigid', () => {
-    const cap = Object.assign(() => 0, { sways: () => false });
+    const cap = capOf(0, false);
     const [placed] = placeFragments([slot(sway(5, 0.8))], [swayRoot, swayFrag], flat, cap);
     expect(placed?.item.scale).toBe(0);
   });
 
   it('lets a cap above the floor win for a swaying fragment', () => {
-    const [placed] = placeFragments([slot(sway(5, 0.8))], [swayRoot, swayFrag], flat, () => 0.22);
+    const [placed] = placeFragments(
+      [slot(sway(5, 0.8))],
+      [swayRoot, swayFrag],
+      flat,
+      capOf(0.22, true),
+    );
     expect(placed?.item.scale).toBeCloseTo(0.22);
   });
 
   it('never floors a swaying fragment above the size it wants', () => {
     const small = { ...swayFrag, minSize: 0.05, size: 0.05 };
-    const [placed] = placeFragments([slot(sway(5, 0.8))], [swayRoot, small], flat, () => 0);
+    const [placed] = placeFragments([slot(sway(5, 0.8))], [swayRoot, small], flat, capOf(0, true));
     expect(placed?.item.scale).toBeCloseTo(0.04);
   });
 

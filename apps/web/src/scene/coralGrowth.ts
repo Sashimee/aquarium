@@ -15,6 +15,8 @@ import { boundsFromCatalog, maxScaleAt, type FitModel } from './presetFit';
 const MAX_ANCESTORS = 64;
 const MIN_FRAGMENT_SCALE_FRACTION = 0.25;
 
+const UNBOUNDED_CAP: ScaleCap = Object.assign(() => Infinity, { sways: () => false });
+
 export interface CoralSlot {
   readonly assetId: string;
   readonly item: DecorItem;
@@ -51,8 +53,8 @@ function clampedSize(coral: Coral): number {
  */
 export interface ScaleCap {
   (item: DecorItem): number;
-  /** Whether the item sways in the current. A cap that omits it treats only euphyllia as swaying. */
-  readonly sways?: (item: DecorItem) => boolean;
+  /** Whether the item sways in the current, which floors its fragments above the cap. */
+  readonly sways: (item: DecorItem) => boolean;
 }
 
 /**
@@ -63,7 +65,7 @@ export interface ScaleCap {
 export function grownCoralItem(
   item: DecorItem,
   coral: Coral | undefined,
-  cap: ScaleCap = () => Infinity,
+  cap: ScaleCap = UNBOUNDED_CAP,
 ): DecorItem {
   if (!coral) return item;
   const size = clampedSize(coral);
@@ -100,7 +102,7 @@ export function placeFragments(
   slots: readonly CoralSlot[],
   corals: readonly Coral[],
   ground: (x: number, z: number) => number,
-  cap: ScaleCap = () => Infinity,
+  cap: ScaleCap = UNBOUNDED_CAP,
 ): PlacedFragment[] {
   const matched = matchLayoutCorals(slots, corals);
   const indexByKey = new Map([...matched].map(([index, coral]) => [coral.key, index]));
@@ -119,7 +121,7 @@ export function placeFragments(
     };
     const wanted = root.item.scale * clampedSize(coral);
     const capped = Math.min(wanted, cap(standing));
-    const sways = cap.sways?.(standing) ?? parseEuphylliaId(root.assetId) !== null;
+    const sways = cap.sways(standing);
     const scale = sways
       ? Math.max(capped, Math.min(wanted, root.item.scale * MIN_FRAGMENT_SCALE_FRACTION))
       : capped;

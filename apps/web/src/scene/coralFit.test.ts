@@ -79,7 +79,10 @@ function extentOf(item: DecorItem) {
   };
 }
 
-const cap = (item: DecorItem) => maxScaleAt(item, dimensions, modelOf(item.assetId));
+const cap = Object.assign(
+  (item: DecorItem) => maxScaleAt(item, dimensions, modelOf(item.assetId)),
+  { sways: (item: DecorItem) => modelOf(item.assetId)?.swayReach != null },
+);
 
 describe('the default reef at full growth', () => {
   it('has the corals the review measured', () => {

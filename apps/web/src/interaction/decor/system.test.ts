@@ -12,7 +12,7 @@ import { createDecorSystem } from './system';
 import type { DecorScenePort } from './world';
 
 const scene: DecorScenePort & { readonly coralCap: ScaleCap } = {
-  coralCap: () => Infinity,
+  coralCap: Object.assign(() => Infinity, { sways: () => false }),
   biome: 'reef',
   presetHardDecor: [],
   fixedDecor: [],
