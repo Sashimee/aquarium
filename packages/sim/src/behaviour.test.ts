@@ -320,7 +320,7 @@ describe('anchored species', { timeout: LONG }, () => {
     const base = { id: 'a', kind: 'anemone', position: [0, 0.1, 0], radius: 0.05 };
     expect(() => w.setAnchors([forged({ ...base, id: 3 })])).toThrow(/non-empty string/);
     expect(() => w.setAnchors([forged({ ...base, kind: 'reef' })])).toThrow(
-      /anchor "a": kind must be "anemone" or "cave"/,
+      /anchor "a": kind must be "anemone", "cave" or "bank"/,
     );
     expect(() => w.setAnchors([forged({ ...base, position: 'here' })])).toThrow(
       /anchor "a": position must be an \[x, y, z\] array/,

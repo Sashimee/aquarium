@@ -740,6 +740,7 @@ export class World {
       this.stationEpoch++;
       this.freeTrappedBodies();
       this.behaviour.decorMoved();
+      this.applyPoses();
     }
     return rebuilt;
   }
@@ -777,6 +778,7 @@ export class World {
 
   setAnchors(anchors: readonly Anchor[]): void {
     this.behaviour.setAnchors(anchors);
+    this.applyPoses();
   }
 
   /**
@@ -823,9 +825,13 @@ export class World {
     return events.length === 0 ? NO_ATE_EVENTS : events.splice(0);
   }
 
-  /** Smallest distance from fish `i`'s spine chain to the tank or hard decor, minus its thickness. */
+  /**
+   * Smallest distance from fish `i`'s spine chain to the tank or hard decor, minus its thickness.
+   * The water surface counts only for a fish in the water: one on a bank is out of it.
+   */
   bodyClearance(i: number): number {
-    return this.spineClearance(i, this.sceneSdf);
+    const emersed = this.behaviour.banks.emersed(i);
+    return this.spineClearance(i, emersed ? this.substrateSdf : this.sceneSdf);
   }
 
   private spineClearance(i: number, field: Sdf): number {
@@ -1179,10 +1185,11 @@ export class World {
     this.currents.update(this, STEP_DT);
     this.behaviour.update();
     const walker = this.walker;
-    for (let i = 0; i < n; i++) if (walker[i] === 0) this.steer(i);
+    const posed = this.behaviour.banks.posed;
+    for (let i = 0; i < n; i++) if (walker[i] === 0 && posed[i] === 0) this.steer(i);
     for (let i = 0; i < n; i++) {
       if (walker[i] === 0) {
-        this.integrate(i);
+        if (posed[i] === 0) this.integrate(i);
         continue;
       }
       const plan = this.behaviour.plans[i];
@@ -1192,6 +1199,7 @@ export class World {
         this.contactCount[i] = (this.contactCount[i] ?? 0) + 1;
       }
     }
+    this.applyPoses();
     for (let i = 0; i < n; i++) {
       const plan = this.behaviour.plans[i];
       if (plan !== undefined && plan.keepOffFish >= 0) this.keepOff(i, plan);
@@ -2075,6 +2083,46 @@ export class World {
   /** The tightest arc fish `i` turns on while swimming, before it brakes to pivot. */
   cruiseTurnRadius(i: number): number {
     return STEERING.minTurnRadiusBodyLengths * (this.bodyLength[i] ?? 0);
+  }
+
+  waterSpotNear(i: number, x: number, y: number, z: number): Point3 | null {
+    const spot = this.freeSpotNear(this.radius[i] ?? 0, {
+      position: [x, y, z],
+      heading: this.yaw[i] ?? 0,
+    });
+    return spot === null ? null : [spot.x, spot.y, spot.z];
+  }
+
+  /** Copies the poses the bank module set (`Banks.posed`) over the fish it placed. */
+  private applyPoses(): void {
+    const { posed, pose } = this.behaviour.banks;
+    for (let i = 0; i < this.count; i++) {
+      if (posed[i] !== 1) continue;
+      const p = i * 6;
+      const o = i * 3;
+      this.position[o] = pose[p] ?? 0;
+      this.position[o + 1] = pose[p + 1] ?? 0;
+      this.position[o + 2] = pose[p + 2] ?? 0;
+      const yaw = pose[p + 3] ?? 0;
+      const pitch = pose[p + 4] ?? 0;
+      const speed = pose[p + 5] ?? 0;
+      this.yaw[i] = yaw;
+      this.pitch[i] = pitch;
+      this.roll[i] = 0;
+      this.speed[i] = speed;
+      this.yawRate[i] = 0;
+      this.pitchRate[i] = 0;
+      this.thrust[i] = 0;
+      this.targetYaw[i] = yaw;
+      this.targetPitch[i] = pitch;
+      this.targetSpeed[i] = speed;
+      this.reverseLeft[i] = 0;
+      this.detourTimer[i] = 0;
+      this.wedged[i] = 0;
+      this.coasting[i] = 0;
+      this.scrapeAnchor.set(this.position.subarray(o, o + 3), o);
+      this.state[i] = FishState.Emerse;
+    }
   }
 
   /**

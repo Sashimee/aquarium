@@ -10,7 +10,7 @@
     "perceptionRangeM": 0.35,
     "preferredZone": "bottom",
     "territorial": true,
-    "traits": ["air-gulp"]
+    "traits": ["air-gulp", "amphibious"]
   },
   "biome": "mangrove",
   "breeding": {
