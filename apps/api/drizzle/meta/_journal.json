@@ -229,8 +229,8 @@
     {
       "idx": 32,
       "version": "7",
-      "when": 1792711186035,
-      "tag": "0032_receipt_pending",
+      "when": 1792712490943,
+      "tag": "0032_receipt_retry_adult_withdrawn",
       "breakpoints": true
     }
   ]

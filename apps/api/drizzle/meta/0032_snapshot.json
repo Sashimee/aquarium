@@ -1,5 +1,5 @@
 {
-  "id": "0aae359f-d5e1-4e3d-af68-1c757cc8f073",
+  "id": "e4f51b76-cfbb-4a7b-b7fa-6293198b34b5",
   "prevId": "0d49ac8b-4e97-4fab-8545-f5bcf0663ee2",
   "version": "7",
   "dialect": "postgresql",
@@ -110,8 +110,12 @@
           "name": "account_user_id_user_id_fk",
           "tableFrom": "account",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -151,8 +155,12 @@
           "name": "achievement_awards_user_id_user_id_fk",
           "tableFrom": "achievement_awards",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -160,7 +168,10 @@
       "compositePrimaryKeys": {
         "achievement_awards_user_id_achievement_id_pk": {
           "name": "achievement_awards_user_id_achievement_id_pk",
-          "columns": ["user_id", "achievement_id"]
+          "columns": [
+            "user_id",
+            "achievement_id"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -184,6 +195,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "withdrawn_at": {
+          "name": "withdrawn_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},
@@ -192,8 +209,12 @@
           "name": "adult_confirmations_user_id_user_id_fk",
           "tableFrom": "adult_confirmations",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -250,8 +271,12 @@
           "name": "ate_batches_tank_id_tanks_id_fk",
           "tableFrom": "ate_batches",
           "tableTo": "tanks",
-          "columnsFrom": ["tank_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "tank_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -259,7 +284,10 @@
       "compositePrimaryKeys": {
         "ate_batches_tank_id_batch_id_pk": {
           "name": "ate_batches_tank_id_batch_id_pk",
-          "columns": ["tank_id", "batch_id"]
+          "columns": [
+            "tank_id",
+            "batch_id"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -338,8 +366,12 @@
           "name": "audit_log_actor_id_user_id_fk",
           "tableFrom": "audit_log",
           "tableTo": "user",
-          "columnsFrom": ["actor_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "actor_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -347,8 +379,12 @@
           "name": "audit_log_tank_id_tanks_id_fk",
           "tableFrom": "audit_log",
           "tableTo": "tanks",
-          "columnsFrom": ["tank_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "tank_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -450,8 +486,12 @@
           "name": "club_subscriptions_user_id_user_id_fk",
           "tableFrom": "club_subscriptions",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -503,8 +543,12 @@
           "name": "collection_entries_user_id_user_id_fk",
           "tableFrom": "collection_entries",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -512,7 +556,10 @@
       "compositePrimaryKeys": {
         "collection_entries_user_id_species_pk": {
           "name": "collection_entries_user_id_species_pk",
-          "columns": ["user_id", "species"]
+          "columns": [
+            "user_id",
+            "species"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -605,8 +652,12 @@
           "name": "community_feeds_user_id_user_id_fk",
           "tableFrom": "community_feeds",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -641,8 +692,12 @@
           "name": "community_tank_tank_id_tanks_id_fk",
           "tableFrom": "community_tank",
           "tableTo": "tanks",
-          "columnsFrom": ["tank_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "tank_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "restrict",
           "onUpdate": "no action"
         }
@@ -652,7 +707,9 @@
         "community_tank_tank_id_unique": {
           "name": "community_tank_tank_id_unique",
           "nullsNotDistinct": false,
-          "columns": ["tank_id"]
+          "columns": [
+            "tank_id"
+          ]
         }
       },
       "policies": {},
@@ -731,8 +788,12 @@
           "name": "events_tank_id_tanks_id_fk",
           "tableFrom": "events",
           "tableTo": "tanks",
-          "columnsFrom": ["tank_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "tank_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -894,8 +955,12 @@
           "name": "fish_tank_id_tanks_id_fk",
           "tableFrom": "fish",
           "tableTo": "tanks",
-          "columnsFrom": ["tank_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "tank_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1091,8 +1156,12 @@
           "name": "gift_offers_from_user_id_user_id_fk",
           "tableFrom": "gift_offers",
           "tableTo": "user",
-          "columnsFrom": ["from_user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "from_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1100,8 +1169,12 @@
           "name": "gift_offers_to_user_id_user_id_fk",
           "tableFrom": "gift_offers",
           "tableTo": "user",
-          "columnsFrom": ["to_user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "to_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -1109,8 +1182,12 @@
           "name": "gift_offers_from_tank_id_tanks_id_fk",
           "tableFrom": "gift_offers",
           "tableTo": "tanks",
-          "columnsFrom": ["from_tank_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "from_tank_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1250,8 +1327,12 @@
           "name": "ledger_user_id_user_id_fk",
           "tableFrom": "ledger",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1411,8 +1492,12 @@
           "name": "memorials_tank_id_tanks_id_fk",
           "tableFrom": "memorials",
           "tableTo": "tanks",
-          "columnsFrom": ["tank_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "tank_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1532,8 +1617,12 @@
           "name": "passkey_user_id_user_id_fk",
           "tableFrom": "passkey",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1622,6 +1711,19 @@
           "notNull": true,
           "default": false
         },
+        "receipt_attempts": {
+          "name": "receipt_attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "receipt_next_try_at": {
+          "name": "receipt_next_try_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -1668,8 +1770,12 @@
           "name": "payment_charges_user_id_user_id_fk",
           "tableFrom": "payment_charges",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1734,8 +1840,12 @@
           "name": "payment_disputes_charge_id_payment_charges_id_fk",
           "tableFrom": "payment_disputes",
           "tableTo": "payment_charges",
-          "columnsFrom": ["charge_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "charge_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1813,8 +1923,12 @@
           "name": "payment_refunds_charge_id_payment_charges_id_fk",
           "tableFrom": "payment_refunds",
           "tableTo": "payment_charges",
-          "columnsFrom": ["charge_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "charge_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1896,8 +2010,12 @@
           "name": "push_subscriptions_user_id_user_id_fk",
           "tableFrom": "push_subscriptions",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1907,7 +2025,9 @@
         "push_subscriptions_endpoint_unique": {
           "name": "push_subscriptions_endpoint_unique",
           "nullsNotDistinct": false,
-          "columns": ["endpoint"]
+          "columns": [
+            "endpoint"
+          ]
         }
       },
       "policies": {},
@@ -1977,8 +2097,12 @@
           "name": "reminder_prefs_user_id_user_id_fk",
           "tableFrom": "reminder_prefs",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2065,8 +2189,12 @@
           "name": "session_user_id_user_id_fk",
           "tableFrom": "session",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2076,7 +2204,9 @@
         "session_token_unique": {
           "name": "session_token_unique",
           "nullsNotDistinct": false,
-          "columns": ["token"]
+          "columns": [
+            "token"
+          ]
         }
       },
       "policies": {},
@@ -2119,8 +2249,12 @@
           "name": "tank_of_week_tank_id_tanks_id_fk",
           "tableFrom": "tank_of_week",
           "tableTo": "tanks",
-          "columnsFrom": ["tank_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "tank_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -2184,8 +2318,12 @@
           "name": "tank_reactions_tank_id_tanks_id_fk",
           "tableFrom": "tank_reactions",
           "tableTo": "tanks",
-          "columnsFrom": ["tank_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "tank_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2193,8 +2331,12 @@
           "name": "tank_reactions_user_id_user_id_fk",
           "tableFrom": "tank_reactions",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2202,7 +2344,10 @@
       "compositePrimaryKeys": {
         "tank_reactions_tank_id_user_id_pk": {
           "name": "tank_reactions_tank_id_user_id_pk",
-          "columns": ["tank_id", "user_id"]
+          "columns": [
+            "tank_id",
+            "user_id"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -2233,8 +2378,12 @@
           "name": "tank_visits_tank_id_tanks_id_fk",
           "tableFrom": "tank_visits",
           "tableTo": "tanks",
-          "columnsFrom": ["tank_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "tank_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2242,7 +2391,10 @@
       "compositePrimaryKeys": {
         "tank_visits_tank_id_day_pk": {
           "name": "tank_visits_tank_id_day_pk",
-          "columns": ["tank_id", "day"]
+          "columns": [
+            "tank_id",
+            "day"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -2323,8 +2475,12 @@
           "name": "tank_votes_user_id_user_id_fk",
           "tableFrom": "tank_votes",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2332,8 +2488,12 @@
           "name": "tank_votes_tank_id_tanks_id_fk",
           "tableFrom": "tank_votes",
           "tableTo": "tanks",
-          "columnsFrom": ["tank_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "tank_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2341,7 +2501,10 @@
       "compositePrimaryKeys": {
         "tank_votes_user_id_week_start_pk": {
           "name": "tank_votes_user_id_week_start_pk",
-          "columns": ["user_id", "week_start"]
+          "columns": [
+            "user_id",
+            "week_start"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -2567,8 +2730,12 @@
           "name": "tanks_owner_id_user_id_fk",
           "tableFrom": "tanks",
           "tableTo": "user",
-          "columnsFrom": ["owner_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "owner_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2578,7 +2745,9 @@
         "tanks_share_token_hash_unique": {
           "name": "tanks_share_token_hash_unique",
           "nullsNotDistinct": false,
-          "columns": ["share_token_hash"]
+          "columns": [
+            "share_token_hash"
+          ]
         }
       },
       "policies": {},
@@ -2648,12 +2817,16 @@
         "user_email_unique": {
           "name": "user_email_unique",
           "nullsNotDistinct": false,
-          "columns": ["email"]
+          "columns": [
+            "email"
+          ]
         },
         "user_handle_unique": {
           "name": "user_handle_unique",
           "nullsNotDistinct": false,
-          "columns": ["handle"]
+          "columns": [
+            "handle"
+          ]
         }
       },
       "policies": {},
@@ -2751,8 +2924,12 @@
           "name": "wallet_user_id_user_id_fk",
           "tableFrom": "wallet",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2768,7 +2945,13 @@
     "public.biome": {
       "name": "biome",
       "schema": "public",
-      "values": ["freshwater", "reef", "cichlid", "blackwater", "mangrove"]
+      "values": [
+        "freshwater",
+        "reef",
+        "cichlid",
+        "blackwater",
+        "mangrove"
+      ]
     },
     "public.cause_of_death": {
       "name": "cause_of_death",
@@ -2807,22 +2990,39 @@
     "public.fish_sex": {
       "name": "fish_sex",
       "schema": "public",
-      "values": ["male", "female"]
+      "values": [
+        "male",
+        "female"
+      ]
     },
     "public.fish_stage": {
       "name": "fish_stage",
       "schema": "public",
-      "values": ["fry", "juvenile", "adult"]
+      "values": [
+        "fry",
+        "juvenile",
+        "adult"
+      ]
     },
     "public.fish_status": {
       "name": "fish_status",
       "schema": "public",
-      "values": ["alive", "dead"]
+      "values": [
+        "alive",
+        "dead"
+      ]
     },
     "public.gift_status": {
       "name": "gift_status",
       "schema": "public",
-      "values": ["open", "countered", "accepted", "declined", "cancelled", "expired"]
+      "values": [
+        "open",
+        "countered",
+        "accepted",
+        "declined",
+        "cancelled",
+        "expired"
+      ]
     },
     "public.ledger_reason": {
       "name": "ledger_reason",
@@ -2841,27 +3041,46 @@
     "public.ledger_source": {
       "name": "ledger_source",
       "schema": "public",
-      "values": ["stripe", "apple", "game"]
+      "values": [
+        "stripe",
+        "apple",
+        "game"
+      ]
     },
     "public.payment_charge_kind": {
       "name": "payment_charge_kind",
       "schema": "public",
-      "values": ["pack", "invoice"]
+      "values": [
+        "pack",
+        "invoice"
+      ]
     },
     "public.payment_dispute_state": {
       "name": "payment_dispute_state",
       "schema": "public",
-      "values": ["lost", "won"]
+      "values": [
+        "lost",
+        "won"
+      ]
     },
     "public.reaction_kind": {
       "name": "reaction_kind",
       "schema": "public",
-      "values": ["heart", "star", "wow"]
+      "values": [
+        "heart",
+        "star",
+        "wow"
+      ]
     },
     "public.tank_size": {
       "name": "tank_size",
       "schema": "public",
-      "values": ["nano30", "standard", "std200", "long300"]
+      "values": [
+        "nano30",
+        "standard",
+        "std200",
+        "long300"
+      ]
     }
   },
   "schemas": {},

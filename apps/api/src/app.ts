@@ -649,7 +649,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     database,
     auth,
     credits: loadCredits(),
-    limiter: new RateLimiter(),
+    limiter,
     limits: opts.legalLimits ?? DEFAULT_LEGAL_LIMITS,
     currentSession,
     payments: opts.payments ?? null,

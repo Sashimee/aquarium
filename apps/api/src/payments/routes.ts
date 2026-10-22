@@ -8,7 +8,7 @@ import {
   type Economy,
   type PaymentsState,
 } from '@aquarium/shared';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Clock } from '../clock.ts';
 import { schema, type Database } from '../db/index.ts';
@@ -22,6 +22,7 @@ import { receiptOf, settleEvent, type Receipt } from './settle.ts';
 declare module 'fastify' {
   interface FastifyInstance {
     retryPendingReceipts: () => Promise<number>;
+    receiptsIdle: () => Promise<void>;
   }
 }
 
@@ -86,8 +87,8 @@ export function registerPaymentRoutes(deps: PaymentsDeps): void {
     return user;
   }
 
-  function throttle(userId: string, bucket: keyof PaymentsLimits): void {
-    const wait = limiter.consume(`payments:${bucket}:${userId}`, limits[bucket]);
+  function throttle(userId: string, bucket: keyof PaymentsLimits, key?: string): void {
+    const wait = limiter.consume(key ?? `payments:${bucket}:${userId}`, limits[bucket]);
     if (wait > 0) {
       throw new HttpError(
         429,
@@ -116,7 +117,12 @@ export function registerPaymentRoutes(deps: PaymentsDeps): void {
     const [row] = await db
       .select({ userId: schema.adultConfirmations.userId })
       .from(schema.adultConfirmations)
-      .where(eq(schema.adultConfirmations.userId, userId));
+      .where(
+        and(
+          eq(schema.adultConfirmations.userId, userId),
+          isNull(schema.adultConfirmations.withdrawnAt),
+        ),
+      );
     return row !== undefined;
   }
 
@@ -181,7 +187,8 @@ export function registerPaymentRoutes(deps: PaymentsDeps): void {
     guarded(async (req) => {
       const user = await authorize(req, false);
       const body = adultConfirmationRequestSchema.parse(req.body);
-      throttle(user.id, body.confirmed ? 'adultConfirmation' : 'settings');
+      if (body.confirmed) throttle(user.id, 'adultConfirmation', `reauth:${user.id}`);
+      else throttle(user.id, 'settings');
       if (body.confirmed) {
         const proof = await deps.reauthenticate(req, body.password);
         if (proof === 'wrong_password') {
@@ -199,11 +206,21 @@ export function registerPaymentRoutes(deps: PaymentsDeps): void {
         await db
           .insert(schema.adultConfirmations)
           .values({ userId: user.id, confirmedAt: new Date(clock.now()) })
-          .onConflictDoNothing();
+          .onConflictDoUpdate({
+            target: schema.adultConfirmations.userId,
+            set: { confirmedAt: new Date(clock.now()), withdrawnAt: null },
+            setWhere: sql`${schema.adultConfirmations.withdrawnAt} is not null`,
+          });
       } else {
         await db
-          .delete(schema.adultConfirmations)
-          .where(eq(schema.adultConfirmations.userId, user.id));
+          .update(schema.adultConfirmations)
+          .set({ withdrawnAt: new Date(clock.now()) })
+          .where(
+            and(
+              eq(schema.adultConfirmations.userId, user.id),
+              isNull(schema.adultConfirmations.withdrawnAt),
+            ),
+          );
       }
       return state(user.id);
     }),
@@ -323,49 +340,142 @@ export function registerPaymentRoutes(deps: PaymentsDeps): void {
     }
   }
 
-  async function sendReceipt(receipt: Receipt): Promise<boolean> {
+  const RETRY_BATCH = 20;
+  const MAX_RECEIPT_ATTEMPTS = 8;
+  const RECEIPT_LEASE_MS = 5 * 60_000;
+  const RECEIPT_BACKOFF_MS = 5 * 60_000;
+  const RECEIPT_BACKOFF_MAX_MS = 6 * 3_600_000;
+
+  type ChargeRow = typeof schema.paymentCharges.$inferSelect;
+
+  // Taking the lease is the claim: a sibling webhook or the hourly job that looks while a send is
+  // in flight finds the row leased and skips it, and a crash mid-send is retried once the lease ends.
+  async function claimReceipt(chargeId: string): Promise<ChargeRow | null> {
+    const now = clock.now();
+    const [row] = await db
+      .update(schema.paymentCharges)
+      .set({ receiptNextTryAt: new Date(now + RECEIPT_LEASE_MS) })
+      .where(
+        and(
+          eq(schema.paymentCharges.id, chargeId),
+          eq(schema.paymentCharges.receiptPending, true),
+          lt(schema.paymentCharges.receiptAttempts, MAX_RECEIPT_ATTEMPTS),
+          or(
+            isNull(schema.paymentCharges.receiptNextTryAt),
+            lte(schema.paymentCharges.receiptNextTryAt, new Date(now)),
+          ),
+        ),
+      )
+      .returning();
+    return row ?? null;
+  }
+
+  async function releaseReceipt(chargeId: string): Promise<void> {
+    await db
+      .update(schema.paymentCharges)
+      .set({ receiptPending: false })
+      .where(eq(schema.paymentCharges.id, chargeId));
+  }
+
+  async function deferReceipt(charge: ChargeRow): Promise<void> {
+    const attempts = charge.receiptAttempts + 1;
+    const backoff = Math.min(
+      RECEIPT_BACKOFF_MAX_MS,
+      RECEIPT_BACKOFF_MS * 2 ** charge.receiptAttempts,
+    );
+    await db
+      .update(schema.paymentCharges)
+      .set({ receiptAttempts: attempts, receiptNextTryAt: new Date(clock.now() + backoff) })
+      .where(eq(schema.paymentCharges.id, charge.id));
+    if (attempts >= MAX_RECEIPT_ATTEMPTS) {
+      app.log.error({ chargeId: charge.id }, 'receipt mail abandoned after repeated failures');
+    }
+  }
+
+  // The mail error text can carry the recipient's address (an SMTP "user@x: rejected" reply), so
+  // only its classification is logged.
+  function describeMailError(err: unknown): Record<string, string> {
+    if (err instanceof Error) {
+      const code = (err as { code?: unknown }).code;
+      return { errorName: err.name, ...(typeof code === 'string' ? { errorCode: code } : {}) };
+    }
+    return { errorName: 'unknown' };
+  }
+
+  async function deliverReceipt(charge: ChargeRow, receipt: Receipt): Promise<boolean> {
     const [row] = await db
       .select({ email: schema.user.email })
       .from(schema.user)
       .where(eq(schema.user.id, receipt.userId));
-    if (!row) return false;
+    if (!row) {
+      await releaseReceipt(charge.id);
+      return false;
+    }
     try {
       await deps.mailer.sendReceipt(row.email, receipt);
     } catch (err) {
-      app.log.warn({ err }, 'receipt mail not sent, it stays queued for a retry');
+      app.log.warn(describeMailError(err), 'receipt mail not sent, it stays queued for a retry');
+      await deferReceipt(charge);
       return false;
     }
-    await db
-      .update(schema.paymentCharges)
-      .set({ receiptPending: false })
-      .where(eq(schema.paymentCharges.id, receipt.chargeId));
+    await releaseReceipt(charge.id);
     return true;
   }
 
-  const RETRY_BATCH = 20;
+  async function sendReceipt(receipt: Receipt): Promise<boolean> {
+    const charge = await claimReceipt(receipt.chargeId);
+    return charge ? deliverReceipt(charge, receipt) : false;
+  }
 
   async function retryPendingReceipts(): Promise<number> {
+    const now = new Date(clock.now());
     const pending = await db
-      .select()
+      .select({ id: schema.paymentCharges.id })
       .from(schema.paymentCharges)
-      .where(eq(schema.paymentCharges.receiptPending, true))
+      .where(
+        and(
+          eq(schema.paymentCharges.receiptPending, true),
+          lt(schema.paymentCharges.receiptAttempts, MAX_RECEIPT_ATTEMPTS),
+          or(
+            isNull(schema.paymentCharges.receiptNextTryAt),
+            lte(schema.paymentCharges.receiptNextTryAt, now),
+          ),
+        ),
+      )
       .orderBy(schema.paymentCharges.createdAt)
       .limit(RETRY_BATCH);
     let sent = 0;
-    for (const charge of pending) {
+    for (const { id } of pending) {
+      const charge = await claimReceipt(id);
+      if (!charge) continue;
       const receipt = receiptOf(economy, charge);
       if (!receipt) {
-        await db
-          .update(schema.paymentCharges)
-          .set({ receiptPending: false })
-          .where(eq(schema.paymentCharges.id, charge.id));
+        await releaseReceipt(id);
         continue;
       }
-      if (await sendReceipt(receipt)) sent += 1;
+      if (await deliverReceipt(charge, receipt)) sent += 1;
     }
     return sent;
   }
   app.decorate('retryPendingReceipts', retryPendingReceipts);
+
+  // The webhook answers as soon as the event is settled; mail goes out behind it so a slow or
+  // dead relay cannot make Stripe time out and redeliver.
+  const background = new Set<Promise<unknown>>();
+  function inBackground(work: () => Promise<unknown>, failure: string): void {
+    const task: Promise<unknown> = work()
+      .catch((err: unknown) => {
+        app.log.warn(describeMailError(err), failure);
+      })
+      .finally(() => background.delete(task));
+    background.add(task);
+  }
+  app.decorate('receiptsIdle', async () => {
+    while (background.size > 0) await Promise.all([...background]);
+  });
+  app.addHook('onClose', async () => {
+    await Promise.all([...background]);
+  });
 
   void app.register(async (scope) => {
     scope.removeAllContentTypeParsers();
@@ -414,10 +524,10 @@ export function registerPaymentRoutes(deps: PaymentsDeps): void {
         );
         throw err;
       }
-      if (receipt) await sendReceipt(receipt);
-      await retryPendingReceipts().catch((err: unknown) => {
-        app.log.warn({ err }, 'queued receipts could not be retried');
-      });
+      inBackground(async () => {
+        if (receipt) await sendReceipt(receipt);
+        await retryPendingReceipts();
+      }, 'receipt mail could not be processed');
       return reply.code(200).send({ received: true });
     });
   });

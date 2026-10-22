@@ -5,7 +5,7 @@ import {
   deleteAccountRequestSchema,
   type Credits,
 } from '@aquarium/shared';
-import { and, asc, eq, inArray, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Auth } from './auth.ts';
 import { schema, type Database } from './db/index.ts';
@@ -210,48 +210,64 @@ export function registerLegalRoutes(deps: LegalDeps): void {
         .orderBy(asc(schema.ledger.createdAt), asc(schema.ledger.id)),
     ]);
 
-    const [adultRow] = await db
-      .select({ confirmedAt: schema.adultConfirmations.confirmedAt })
-      .from(schema.adultConfirmations)
-      .where(eq(schema.adultConfirmations.userId, userId));
-    const chargeRows = await db
-      .select({
-        id: schema.paymentCharges.id,
-        kind: schema.paymentCharges.kind,
-        amountCents: schema.paymentCharges.amountCents,
-        packId: schema.paymentCharges.packId,
-        packPearls: schema.paymentCharges.packPearls,
-        subscriptionId: schema.paymentCharges.subscriptionId,
-        periodStart: schema.paymentCharges.periodStart,
-        periodEnd: schema.paymentCharges.periodEnd,
-        consentAt: schema.paymentCharges.consentAt,
-        createdAt: schema.paymentCharges.createdAt,
-      })
-      .from(schema.paymentCharges)
-      .where(eq(schema.paymentCharges.userId, userId))
-      .orderBy(asc(schema.paymentCharges.createdAt), asc(schema.paymentCharges.id));
-    const chargeIds = chargeRows.map((c) => c.id);
-    const refundRows =
-      chargeIds.length === 0
-        ? []
-        : await db
-            .select()
-            .from(schema.paymentRefunds)
-            .where(inArray(schema.paymentRefunds.chargeId, chargeIds))
-            .orderBy(asc(schema.paymentRefunds.createdAt), asc(schema.paymentRefunds.refundId));
-    const disputeRows =
-      chargeIds.length === 0
-        ? []
-        : await db
-            .select()
-            .from(schema.paymentDisputes)
-            .where(inArray(schema.paymentDisputes.chargeId, chargeIds))
-            .orderBy(asc(schema.paymentDisputes.updatedAt), asc(schema.paymentDisputes.disputeId));
-    const clubRows = await db
-      .select()
-      .from(schema.clubSubscriptions)
-      .where(eq(schema.clubSubscriptions.userId, userId))
-      .orderBy(asc(schema.clubSubscriptions.createdAt), asc(schema.clubSubscriptions.id));
+    // One snapshot for all payment tables, so a refund landing mid-export cannot show up without
+    // its charge.
+    const { adultRow, chargeRows, refundRows, disputeRows, clubRows } = await db.transaction(
+      async (tx) => {
+        const [adultRow] = await tx
+          .select({ confirmedAt: schema.adultConfirmations.confirmedAt })
+          .from(schema.adultConfirmations)
+          .where(
+            and(
+              eq(schema.adultConfirmations.userId, userId),
+              isNull(schema.adultConfirmations.withdrawnAt),
+            ),
+          );
+        const chargeRows = await tx
+          .select({
+            id: schema.paymentCharges.id,
+            kind: schema.paymentCharges.kind,
+            amountCents: schema.paymentCharges.amountCents,
+            packId: schema.paymentCharges.packId,
+            packPearls: schema.paymentCharges.packPearls,
+            subscriptionId: schema.paymentCharges.subscriptionId,
+            periodStart: schema.paymentCharges.periodStart,
+            periodEnd: schema.paymentCharges.periodEnd,
+            consentAt: schema.paymentCharges.consentAt,
+            createdAt: schema.paymentCharges.createdAt,
+          })
+          .from(schema.paymentCharges)
+          .where(eq(schema.paymentCharges.userId, userId))
+          .orderBy(asc(schema.paymentCharges.createdAt), asc(schema.paymentCharges.id));
+        const chargeIds = chargeRows.map((c) => c.id);
+        const refundRows =
+          chargeIds.length === 0
+            ? []
+            : await tx
+                .select()
+                .from(schema.paymentRefunds)
+                .where(inArray(schema.paymentRefunds.chargeId, chargeIds))
+                .orderBy(asc(schema.paymentRefunds.createdAt), asc(schema.paymentRefunds.refundId));
+        const disputeRows =
+          chargeIds.length === 0
+            ? []
+            : await tx
+                .select()
+                .from(schema.paymentDisputes)
+                .where(inArray(schema.paymentDisputes.chargeId, chargeIds))
+                .orderBy(
+                  asc(schema.paymentDisputes.updatedAt),
+                  asc(schema.paymentDisputes.disputeId),
+                );
+        const clubRows = await tx
+          .select()
+          .from(schema.clubSubscriptions)
+          .where(eq(schema.clubSubscriptions.userId, userId))
+          .orderBy(asc(schema.clubSubscriptions.createdAt), asc(schema.clubSubscriptions.id));
+        return { adultRow, chargeRows, refundRows, disputeRows, clubRows };
+      },
+      { isolationLevel: 'repeatable read', accessMode: 'read only' },
+    );
 
     const perTank = await Promise.all(
       tanks.map(async (tank) => {
@@ -409,7 +425,7 @@ export function registerLegalRoutes(deps: LegalDeps): void {
     const { password } = deleteAccountRequestSchema.parse(req.body);
     const userId = current.user.id;
 
-    const wait = limiter.consume(`delete:${userId}`, limits.deleteAttempt);
+    const wait = limiter.consume(`reauth:${userId}`, limits.deleteAttempt);
     if (wait > 0) return tooMany(reply, wait);
 
     const proof = await reauthenticate(current, password);

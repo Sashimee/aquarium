@@ -151,12 +151,14 @@ export async function deliver(
   event: object,
 ): Promise<LightMyRequestResponse> {
   const payload = JSON.stringify(event);
-  return h.app.inject({
+  const res = await h.app.inject({
     method: 'POST',
     url: '/api/payments/webhook',
     headers: { 'content-type': 'application/json', 'stripe-signature': sign(kit, payload) },
     payload,
   });
+  await h.app.receiptsIdle();
+  return res;
 }
 
 export async function deliverOk(h: Harness, kit: PaymentsKit, event: object): Promise<void> {

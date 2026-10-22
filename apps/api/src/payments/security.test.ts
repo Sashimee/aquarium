@@ -23,6 +23,7 @@ import {
   refundObject,
   seconds,
   sessionObject,
+  sign,
   subscriptionObject,
   type Account,
   type PaymentsKit,
@@ -118,6 +119,41 @@ describe('adult confirmation', () => {
     expect(paymentsStateSchema.parse(off.json()).adultConfirmed).toBe(false);
   });
 
+  it('keeps a withdrawal timestamp instead of deleting the record, and clears it on re-confirming', async () => {
+    const who = await account(h);
+    const row = async () =>
+      (
+        await h.database.db
+          .select()
+          .from(schema.adultConfirmations)
+          .where(eq(schema.adultConfirmations.userId, who.userId))
+      )[0];
+    await confirm(who, { confirmed: true, password: PASSWORD });
+    expect((await row())?.withdrawnAt).toBeNull();
+    await confirm(who, { confirmed: false });
+    expect((await row())?.withdrawnAt).not.toBeNull();
+    const state = await call(h, who, 'GET', '/api/payments/state');
+    expect(paymentsStateSchema.parse(state.json()).adultConfirmed).toBe(false);
+    await confirm(who, { confirmed: true, password: PASSWORD });
+    expect((await row())?.withdrawnAt).toBeNull();
+    expect(
+      paymentsStateSchema.parse((await call(h, who, 'GET', '/api/payments/state')).json())
+        .adultConfirmed,
+    ).toBe(true);
+  });
+
+  it('shares one guess budget with account deletion', async () => {
+    const who = await account(h);
+    for (let i = 0; i < 3; i++) await confirm(who, { confirmed: true, password: 'wrong guess' });
+    const codes: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      codes.push(
+        (await call(h, who, 'POST', '/api/me/delete', { password: 'wrong guess' })).statusCode,
+      );
+    }
+    expect(codes).toEqual([403, 403, 429]);
+  });
+
   it('throttles wrong guesses', async () => {
     const who = await account(h);
     const codes: number[] = [];
@@ -150,6 +186,7 @@ describe('receipts', () => {
     expect((await chargeOf(ids.session))?.receiptPending).toBe(true);
     expect(packMails(who)).toHaveLength(0);
 
+    h.clock.advance(6 * 60_000);
     await buy(await account(h));
     expect(packMails(who)).toHaveLength(1);
     expect(packMails(who)[0]?.text).toContain('immediate delivery');
@@ -161,11 +198,124 @@ describe('receipts', () => {
     const ids = await withFailingReceipts(new Error('relay down'), () => subscribe(who));
     expect((await chargeOf(ids.invoice))?.receiptPending).toBe(true);
 
+    h.clock.advance(6 * 60_000);
     expect(await h.app.retryPendingReceipts()).toBeGreaterThanOrEqual(1);
     expect(subscriptionMails(who)).toHaveLength(1);
     await h.app.retryPendingReceipts();
     expect(subscriptionMails(who)).toHaveLength(1);
     expect((await chargeOf(ids.invoice))?.receiptPending).toBe(false);
+  });
+});
+
+describe('receipt delivery', () => {
+  it('logs only the error class, never the address an SMTP reply names', async () => {
+    const who = await account(h);
+    const rejection = Object.assign(
+      new Error(`Recipient command failed: 550 5.1.1 <${who.email}>: Recipient address rejected`),
+      { code: 'EENVELOPE' },
+    );
+    lines.length = 0;
+    await withFailingReceipts(rejection, () => buy(who));
+    const logged = lines.join('');
+    expect(logged).toContain('receipt mail not sent');
+    expect(logged).toContain('EENVELOPE');
+    expect(logged).not.toContain(who.email);
+    expect(logged).not.toContain('Recipient address rejected');
+  });
+
+  it('sends one mail when several webhooks and the periodic job race for the same receipt', async () => {
+    const who = await account(h);
+    const ids = await withFailingReceipts(new Error('relay down'), () => buy(who));
+    h.clock.advance(6 * 60_000);
+
+    const original = h.mailer.sendReceipt;
+    h.mailer.sendReceipt = async (...args) => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      return original(...args);
+    };
+    try {
+      await Promise.all([
+        h.app.retryPendingReceipts(),
+        h.app.retryPendingReceipts(),
+        h.app.retryPendingReceipts(),
+        buy(await account(h)),
+      ]);
+    } finally {
+      h.mailer.sendReceipt = original;
+    }
+    expect(packMails(who)).toHaveLength(1);
+    expect((await chargeOf(ids.session))?.receiptPending).toBe(false);
+  });
+
+  it('answers the webhook before the mail is sent', async () => {
+    const who = await account(h);
+    const ids = newIds();
+    const original = h.mailer.sendReceipt;
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    h.mailer.sendReceipt = async (...args) => {
+      await gate;
+      return original(...args);
+    };
+    try {
+      const payload = JSON.stringify(
+        buildEvent(h, 'checkout.session.completed', sessionObject(who, 'pearls-550', ids)),
+      );
+      const res = await h.app.inject({
+        method: 'POST',
+        url: '/api/payments/webhook',
+        headers: { 'content-type': 'application/json', 'stripe-signature': sign(kit, payload) },
+        payload,
+      });
+      expect(res.statusCode).toBe(200);
+      expect(packMails(who)).toHaveLength(0);
+      release();
+      await h.app.receiptsIdle();
+    } finally {
+      release();
+      h.mailer.sendReceipt = original;
+    }
+    expect(packMails(who)).toHaveLength(1);
+  });
+
+  it('backs off after a failure and stops after the attempt cap', async () => {
+    const who = await account(h);
+    const ids = await withFailingReceipts(new Error('relay down'), () => buy(who));
+    expect((await chargeOf(ids.session))?.receiptAttempts).toBe(1);
+
+    await h.app.retryPendingReceipts();
+    expect((await chargeOf(ids.session))?.receiptAttempts).toBe(1);
+
+    await withFailingReceipts(new Error('relay down'), async () => {
+      for (let i = 0; i < 12; i++) {
+        h.clock.advance(7 * 3_600_000);
+        await h.app.retryPendingReceipts();
+      }
+    });
+    const row = await chargeOf(ids.session);
+    expect(row?.receiptAttempts).toBe(8);
+
+    h.clock.advance(7 * 3_600_000);
+    await h.app.retryPendingReceipts();
+    expect(packMails(who)).toHaveLength(0);
+  });
+
+  it('does not let abandoned receipts hide newer ones', async () => {
+    const dead = await account(h);
+    const deadIds = await withFailingReceipts(new Error('permanent'), () => buy(dead));
+    await h.database.db
+      .update(schema.paymentCharges)
+      .set({ receiptAttempts: 8 })
+      .where(eq(schema.paymentCharges.id, deadIds.session));
+    const fresh = await account(h);
+    const freshIds = await withFailingReceipts(new Error('relay down'), () => buy(fresh));
+    h.clock.advance(6 * 60_000);
+    await h.app.retryPendingReceipts();
+    expect(packMails(fresh)).toHaveLength(1);
+    expect((await chargeOf(freshIds.session))?.receiptPending).toBe(false);
+    expect(packMails(dead)).toHaveLength(0);
   });
 });
 

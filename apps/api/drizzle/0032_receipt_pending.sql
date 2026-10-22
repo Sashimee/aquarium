@@ -1,1 +1,0 @@
-ALTER TABLE "payment_charges" ADD COLUMN "receipt_pending" boolean DEFAULT false NOT NULL;
