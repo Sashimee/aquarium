@@ -208,10 +208,11 @@ describe("the reef preset's leaning torch euphyllia", () => {
   const ux = (b[0] - a[0]) / drift;
   const uz = (b[2] - a[2]) / drift;
   const SEEDS = [1, 2, 3];
-  // The plant push acts through the fish's acceleration limit, so it shows after about a second;
-  // much later the two runs' paths diverge for reasons of their own.
-  const STEPS = STEP_HZ;
-  // About two thirds of the smallest gap measured over SEEDS (0.75 mm).
+  // The plant push acts through the fish's acceleration limit, so it shows after about a second.
+  // The gap stops growing after about 1.2 s because the two runs' paths drift apart: seed 2's
+  // peaks at 36 steps and is negative by 50 (1.7 s).
+  const STEPS = (STEP_HZ * 6) / 5;
+  // A bit over half the smallest gap measured over SEEDS (0.90, 2.93, 2.13 mm).
   const MIN_PUSH = 0.0005;
 
   function startAt(decor: readonly Collider[], [x, y, z]: Vec3, seed: number): World {
