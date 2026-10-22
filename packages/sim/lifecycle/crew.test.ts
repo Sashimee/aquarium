@@ -9,7 +9,7 @@ import {
   type Water,
 } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
-import { cleanupSurfaces } from '../src/crew.ts';
+import { cleanupSurfaces, SETTLED_FOOD_MIN_PORTIONS } from '../src/crew.ts';
 import { toSimSpecies, type SimSpecies } from '../src/species.ts';
 import {
   applyCare,
@@ -247,6 +247,31 @@ describe('clean-up crew in the offline catch-up', () => {
 
       const stillThere = feed(feed(tank(plecos(1), {}), 'flakes', T0), 'bloodworms', T0);
       expect(stillThere.water.uneatenFoodTypes).toEqual(['flakes', 'bloodworms']);
+    });
+
+    it('restarts the record at the level where crewCleanup stops looking for settled food', () => {
+      const feedBloodworms = (uneatenFood: number) => {
+        const fed = applyCare(
+          tank(plecos(1), { uneatenFood, uneatenFoodTypes: ['flakes'] }),
+          { type: 'feed', food: 'bloodworms', portion: 1 },
+          'freshwater',
+          env.chemistryParams,
+          T0,
+        );
+        if (!fed.ok) throw new Error(fed.reason);
+        return fed.value.water.uneatenFoodTypes;
+      };
+      const algaeAfterCleanup = (uneatenFood: number) =>
+        run(
+          tank(plecos(2), { algae: 0.6, uneatenFood, uneatenFoodTypes: ['pellets'] }),
+          DARK_FROM,
+          DARK_FROM + 2 * HOUR,
+          true,
+        ).state.water.algae;
+      const above = SETTLED_FOOD_MIN_PORTIONS * 1.01;
+      expect(feedBloodworms(SETTLED_FOOD_MIN_PORTIONS)).toEqual(['bloodworms']);
+      expect(feedBloodworms(above)).toEqual(['flakes', 'bloodworms']);
+      expect(algaeAfterCleanup(SETTLED_FOOD_MIN_PORTIONS)).toBeLessThan(0.6);
     });
 
     it('keeps treating food as any type on a tank that has no record of it', () => {
