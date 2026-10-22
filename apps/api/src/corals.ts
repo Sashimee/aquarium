@@ -96,23 +96,36 @@ export async function rehomeRawFrags(
     );
   let moved = 0;
   let failed = 0;
+  let skipped = 0;
   for (const { id } of candidates) {
     try {
-      moved += await rehomeTank(db, id, presets, table);
+      const result = await rehomeTank(db, id, presets, table);
+      if (result === 'skipped') skipped++;
+      else moved += result;
     } catch (err) {
       failed++;
       console.error(
         `re-homing coral fragments failed for tank ${id}:`,
         err instanceof Error ? err.name : 'unknown',
+        sqlState(err) ?? 'no-sqlstate',
       );
     }
   }
-  return { moved, failed };
+  return { moved, failed, skipped };
 }
 
 export interface RehomeReport {
   readonly moved: number;
   readonly failed: number;
+  readonly skipped: number;
+}
+
+function sqlState(err: unknown): string | undefined {
+  for (let e = err, depth = 0; e instanceof Error && depth < 4; e = e.cause, depth++) {
+    const code = (e as { code?: unknown }).code;
+    if (typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code)) return code;
+  }
+  return undefined;
 }
 
 async function rehomeTank(
@@ -120,37 +133,36 @@ async function rehomeTank(
   id: string,
   presets: Presets,
   table: CoralTable,
-): Promise<number> {
+): Promise<number | 'skipped'> {
   return db.transaction(async (tx) => {
     await tx.execute(sql`set local lock_timeout = '2s'`);
-    {
-      const [tank] = await tx
-        .select()
-        .from(schema.tanks)
-        .where(and(eq(schema.tanks.id, id), isNull(schema.tanks.decorLayout)))
-        .for('update', { skipLocked: true });
-      const authored = tank ? presets[tank.biome]?.decor : undefined;
-      if (!tank || !authored) return 0;
-      const corals = authored.filter((item) => table.species.has(coralSpeciesId(item.assetId)));
-      const keys = layoutPlantKeys(
-        corals.map((item) => ({ ...item, tintSeed: item.tintSeed ?? legacyTintSeed(item) })),
-      );
-      const roots = new Map<string, RootMove>();
-      corals.forEach((item, i) => {
-        const key = keys[i];
-        if (key === undefined) return;
-        const fitted = fitPresetItem(item, tank.size);
-        roots.set(key, {
-          from: [item.position[0], item.position[2]],
-          to: [fitted.position[0], fitted.position[2]],
-        });
+    const [tank] = await tx
+      .select()
+      .from(schema.tanks)
+      .where(and(eq(schema.tanks.id, id), isNull(schema.tanks.decorLayout)))
+      .for('update', { skipLocked: true });
+    const authored = tank ? presets[tank.biome]?.decor : undefined;
+    if (!tank) return 'skipped';
+    if (!authored) return 0;
+    const corals = authored.filter((item) => table.species.has(coralSpeciesId(item.assetId)));
+    const keys = layoutPlantKeys(
+      corals.map((item) => ({ ...item, tintSeed: item.tintSeed ?? legacyTintSeed(item) })),
+    );
+    const roots = new Map<string, RootMove>();
+    corals.forEach((item, i) => {
+      const key = keys[i];
+      if (key === undefined) return;
+      const fitted = fitPresetItem(item, tank.size);
+      roots.set(key, {
+        from: [item.position[0], item.position[2]],
+        to: [fitted.position[0], fitted.position[2]],
       });
-      const stored = storedCoralsSchema.parse(tank.corals);
-      const next = rehomeFrags(stored, roots, table, substrateBounds(tank.size));
-      const changed = next.filter((c, i) => c !== stored[i]).length;
-      if (changed === 0) return 0;
-      await tx.update(schema.tanks).set({ corals: next }).where(eq(schema.tanks.id, id));
-      return changed;
-    }
+    });
+    const stored = storedCoralsSchema.parse(tank.corals);
+    const next = rehomeFrags(stored, roots, table, substrateBounds(tank.size));
+    const changed = next.filter((c, i) => c !== stored[i]).length;
+    if (changed === 0) return 0;
+    await tx.update(schema.tanks).set({ corals: next }).where(eq(schema.tanks.id, id));
+    return changed;
   });
 }
