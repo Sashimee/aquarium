@@ -81,6 +81,17 @@ const ADULT_MAX: Record<string, { model: string; maxSlM: number; maxTlM: number;
         'FishBase: 13.5 cm TL (Ref. 5598); FishBase has no length-length relationship, so TL = ' +
         '1.231 SL, the proportion of the lofted model',
     },
+    'aulonocara-baenschi': {
+      model: 'aulonocara-baenschi-female',
+      maxSlM: (0.13 * 0.75) / 1.2725,
+      maxTlM: 0.13 * 0.75,
+      source:
+        'Female model. FishBase v25.04 has no female maximum (LengthFemale is empty), only 13 cm TL ' +
+        'male/unsexed (Ref. 4975). Seriously Fish gives males 120 mm SL and females 90 mm SL, so the ' +
+        "female is taken as 0.75 of the FishBase male: 9.75 cm TL. TL = 1.2725 SL is FishBase's " +
+        'length-length relationship measured on a male picture; applying it to the female is an ' +
+        'assumption. The male model is sized in MALE_MODEL_SIZES.',
+    },
     'labidochromis-caeruleus': {
       model: 'labidochromis-caeruleus',
       maxSlM: 0.081,
@@ -340,17 +351,6 @@ const AWAITING_CONTENT: Record<
   string,
   { model: string; maxSlM: number; maxTlM: number; source: string }
 > = {
-  'aulonocara-baenschi': {
-    model: 'aulonocara-baenschi-female',
-    maxSlM: (0.13 * 0.75) / 1.2725,
-    maxTlM: 0.13 * 0.75,
-    source:
-      'Female model. FishBase v25.04 has no female maximum (LengthFemale is empty), only 13 cm TL ' +
-      'male/unsexed (Ref. 4975). Seriously Fish gives males 120 mm SL and females 90 mm SL, so the ' +
-      "female is taken as 0.75 of the FishBase male: 9.75 cm TL. TL = 1.2725 SL is FishBase's " +
-      'length-length relationship measured on a male picture; applying it to the female is an ' +
-      'assumption. The male model is sized in MALE_MODEL_SIZES.',
-  },
   'black-phantom-tetra': {
     model: 'black-phantom-tetra',
     maxSlM: 0.036,
@@ -399,11 +399,12 @@ const MALE_MODEL_SIZES: Readonly<
       '55-60 mm. 5 cm SL x 1.231 draws 6.2 cm TL',
   },
   'aulonocara-baenschi': {
-    standardLengthM: 0.1,
+    standardLengthM: 0.1019,
     maxTlM: 0.13,
     source:
       'FishBase: 13 cm TL male/unsexed (Ref. 4975); TL = 1.2725 SL, measured on a male picture. ' +
-      '10 cm SL x 1.27 draws 12.7 cm TL',
+      'Built at 1.33 x the 7.66 cm SL female (Seriously Fish: males 120 mm SL, females 90 mm SL): ' +
+      '10.19 cm SL x 1.27 draws 13.0 cm TL',
   },
 };
 

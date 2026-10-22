@@ -2,7 +2,7 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; a texture whose 2k tier would equal its 1k tier lists the same file for both, so the 2k URL may resolve to the 1k file.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Every fish LOD also carries _MOUTH, geometry attribute \"_mouth\", a float in [0, 1] for buccal motion: 1 at the jaw or lower-lip tip (every LOD is renormalised so its highest value is exactly 1), easing to 0 behind the gill line and above the mouth slit; fins, eyes and attachments are 0. Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body, carapace and eyes; 6 walking leg; 7 antenna; 8 pleopod; 9 abdomen, telson and tail fan) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x; antennules 0/1, long antennae 2/3; tail-fan leaves k * 2 + side). Shrimp _fin_mask means: id 0 is 0 (eye stalks included, ignore it); ids 6 and 7 are the weight along the limb, 0 root to 1 tip; id 8 is the pleopod beat weight, 0 root to 1 tip; id 9 is the tail-curl weight clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1) of the rest position. Tail curl rotates ids 8 and 9 about +x through the shrimp.abdomenHinge {y, z} by flex * clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1), computed from the rest position, never from _fin_mask, so the pleopods follow the segment they hang from. Pleopods (id 8) exist only in LOD0 and LOD1 and are removed from LOD2; legs are simplified, so do not assume every _leg index exists at every LOD. Snails use _fin_id (0 shell, 10 foot, 11 head, 12 tentacle) and _fin_mask (foot: 0 at the sole centre to 1 at the mantle edge, for ripple; tentacle: 0 base to 1 tip; shell and head 0). The hermit crab is a crab-kind asset whose walker data sits in its crab block, same fields as a shrimp block; its origin is the hip, the area centroid of the body shifted sideways onto the midline of the crab, so the side of a leg is the sign of its x; its shell is id 0, exposed soft body id 9 (rigid, hinge sits in front of it so it never curls), legs id 6 and antennae id 7 with _leg index pair * 2 + side; pair 0 is the claws and every pair behind it walks, and it has no pleopods. The cherry material is alphaMode BLEND with base colour alpha 0.86: three.js GLTFLoader turns depthWrite off for BLEND, so set depthWrite true on the cherry material and expect some sorting artefacts from the self-overlapping legs and antennae.",
-  "totalBytes": 126020014,
+  "totalBytes": 126016626,
   "assets": [
     {
       "id": "altolamprologus-calvus",
@@ -663,37 +663,37 @@
       ],
       "bounds": {
         "min": [
-          -0.019068,
-          -0.034858,
-          -0.076779
+          -0.019426,
+          -0.035513,
+          -0.078221
         ],
         "max": [
-          0.019068,
-          0.025721,
-          0.050221
+          0.019426,
+          0.026204,
+          0.051164
         ]
       },
       "lods": [
         {
           "file": "fish/aulonocara-baenschi/lod0.glb",
-          "bytes": 44332,
-          "sha256": "b04f9deeb5d56e61826762612da132531c15e5d6865c8a1524b57a50db8647b5",
+          "bytes": 44348,
+          "sha256": "c9c02d1a94d085f5e457d10137cb08eb8234c48f05e319f7eac756d95d6d0ec1",
           "triangles": 4320,
           "vertices": 2379
         },
         {
           "file": "fish/aulonocara-baenschi/lod1.glb",
-          "bytes": 23052,
-          "sha256": "9490463cd351e33bccd38e19ff3a2adff607b9c497eff253ce9d82671191d2e6",
-          "triangles": 1728,
-          "vertices": 956
+          "bytes": 22996,
+          "sha256": "ff5ef7039847d0164222295e516af60110804cee53ee2da1ffb56be836f6f778",
+          "triangles": 1727,
+          "vertices": 958
         },
         {
           "file": "fish/aulonocara-baenschi/lod2.glb",
-          "bytes": 11684,
-          "sha256": "3ed5bfabcd9436d9ed1f5928125a6e9d28285fc839802c9652dc3c2ae1b2d13c",
-          "triangles": 647,
-          "vertices": 375
+          "bytes": 11668,
+          "sha256": "9826ca3742291b563379c10602d0e559f41cfbc5913817a0e31fd486c8297db3",
+          "triangles": 648,
+          "vertices": 374
         }
       ],
       "textures": [
@@ -722,28 +722,28 @@
       "files": [
         {
           "file": "fish/aulonocara-baenschi/impostor_albedo.ktx2",
-          "bytes": 130826,
-          "sha256": "29ae12351f5ff4b448c945487fd41f889dd0939d6c4eb697530a0ef73e7f043e"
+          "bytes": 131301,
+          "sha256": "bbf79a924a240a79551b12a5469cdebdbae4d5914bace06226ca0c71141c5b93"
         },
         {
           "file": "fish/aulonocara-baenschi/impostor_normal.ktx2",
-          "bytes": 352636,
-          "sha256": "4abf4e4189e2c46acdaaffe4e62d25662dd338bce473c181c1bcb10320c9ed57"
+          "bytes": 348245,
+          "sha256": "ee8752b1b47a3e7349a1bf21561ac30cbe9e45b1963d528d3776e26c1973d8c1"
         },
         {
           "file": "fish/aulonocara-baenschi/lod0.glb",
-          "bytes": 44332,
-          "sha256": "b04f9deeb5d56e61826762612da132531c15e5d6865c8a1524b57a50db8647b5"
+          "bytes": 44348,
+          "sha256": "c9c02d1a94d085f5e457d10137cb08eb8234c48f05e319f7eac756d95d6d0ec1"
         },
         {
           "file": "fish/aulonocara-baenschi/lod1.glb",
-          "bytes": 23052,
-          "sha256": "9490463cd351e33bccd38e19ff3a2adff607b9c497eff253ce9d82671191d2e6"
+          "bytes": 22996,
+          "sha256": "ff5ef7039847d0164222295e516af60110804cee53ee2da1ffb56be836f6f778"
         },
         {
           "file": "fish/aulonocara-baenschi/lod2.glb",
-          "bytes": 11684,
-          "sha256": "3ed5bfabcd9436d9ed1f5928125a6e9d28285fc839802c9652dc3c2ae1b2d13c"
+          "bytes": 11668,
+          "sha256": "9826ca3742291b563379c10602d0e559f41cfbc5913817a0e31fd486c8297db3"
         },
         {
           "file": "fish/aulonocara-baenschi/textures/aulonocara-baenschi_basecolor_1k.ktx2",
@@ -752,8 +752,8 @@
         }
       ],
       "fish": {
-        "standardLengthM": 0.1,
-        "lengthSource": "recipe",
+        "standardLengthM": 0.10187800000000001,
+        "lengthSource": "species-json",
         "axes": {
           "forward": "+z",
           "up": "+y"
@@ -783,21 +783,21 @@
         "frameSize": 128,
         "atlasSize": 1152,
         "pivot": [
-          -0.000009,
-          -0.004568,
-          -0.013279
+          0,
+          -0.004654,
+          -0.013529
         ],
-        "radius": 0.070719,
+        "radius": 0.072047,
         "albedo": {
           "file": "fish/aulonocara-baenschi/impostor_albedo.ktx2",
-          "bytes": 130826,
-          "sha256": "29ae12351f5ff4b448c945487fd41f889dd0939d6c4eb697530a0ef73e7f043e",
+          "bytes": 131301,
+          "sha256": "bbf79a924a240a79551b12a5469cdebdbae4d5914bace06226ca0c71141c5b93",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/aulonocara-baenschi/impostor_normal.ktx2",
-          "bytes": 352636,
-          "sha256": "4abf4e4189e2c46acdaaffe4e62d25662dd338bce473c181c1bcb10320c9ed57",
+          "bytes": 348245,
+          "sha256": "ee8752b1b47a3e7349a1bf21561ac30cbe9e45b1963d528d3776e26c1973d8c1",
           "codec": "uastc"
         }
       }
@@ -818,37 +818,37 @@
       ],
       "bounds": {
         "min": [
-          -0.01461,
-          -0.026708,
-          -0.058829
+          -0.014606,
+          -0.026701,
+          -0.058813
         ],
         "max": [
-          0.01461,
-          0.019708,
-          0.038479
+          0.014606,
+          0.019702,
+          0.038469
         ]
       },
       "lods": [
         {
           "file": "fish/aulonocara-baenschi-female/lod0.glb",
-          "bytes": 42584,
-          "sha256": "66d7f7b5891e6d0da57602adcaeafe51c3931f2649995b4c6f458ff8d8ecf550",
+          "bytes": 42592,
+          "sha256": "d49c39140a1ce19b5f85ca71a274d9b885cda7350cab0f082af80d07e091f3fe",
           "triangles": 4320,
           "vertices": 2379
         },
         {
           "file": "fish/aulonocara-baenschi-female/lod1.glb",
-          "bytes": 22924,
-          "sha256": "05fba2de2210a8eca6f9e6f96c888704a78012b0884a8acf3bfa351ae91620d3",
-          "triangles": 1728,
-          "vertices": 956
+          "bytes": 23036,
+          "sha256": "eb4514d7a4f01ac2e9719eb93e4fe51635e56f4e18ac2239d0fee2fa4b089b85",
+          "triangles": 1727,
+          "vertices": 954
         },
         {
           "file": "fish/aulonocara-baenschi-female/lod2.glb",
-          "bytes": 11812,
-          "sha256": "4c557f40b35e8abaa8cae0abe79557a8325581811ec8feb6b4b0e99e204ecbe5",
-          "triangles": 648,
-          "vertices": 375
+          "bytes": 11796,
+          "sha256": "601acdd174595f6357c77c9b43c564e126f6a5d3de894d923129815dc6e691df",
+          "triangles": 647,
+          "vertices": 374
         }
       ],
       "textures": [
@@ -877,28 +877,28 @@
       "files": [
         {
           "file": "fish/aulonocara-baenschi-female/impostor_albedo.ktx2",
-          "bytes": 116255,
-          "sha256": "b044c012bfa787f39c2b7b28fcdae2dfccb8a0a1817b1287f9696c2f2e5fc9da"
+          "bytes": 116365,
+          "sha256": "2cf53ab01444fe8681e69f849d2177a9de96276d5e1e8909b7cb4bca25eab611"
         },
         {
           "file": "fish/aulonocara-baenschi-female/impostor_normal.ktx2",
-          "bytes": 347603,
-          "sha256": "c839ce24d2ecd02c1ca455be0041b06e48631f9fc25396c201ad63a039ee885e"
+          "bytes": 347973,
+          "sha256": "c3e53daaa5c4a659219ae601eb664ad339c66c75795813d4cc3c9d4d5fdd8d02"
         },
         {
           "file": "fish/aulonocara-baenschi-female/lod0.glb",
-          "bytes": 42584,
-          "sha256": "66d7f7b5891e6d0da57602adcaeafe51c3931f2649995b4c6f458ff8d8ecf550"
+          "bytes": 42592,
+          "sha256": "d49c39140a1ce19b5f85ca71a274d9b885cda7350cab0f082af80d07e091f3fe"
         },
         {
           "file": "fish/aulonocara-baenschi-female/lod1.glb",
-          "bytes": 22924,
-          "sha256": "05fba2de2210a8eca6f9e6f96c888704a78012b0884a8acf3bfa351ae91620d3"
+          "bytes": 23036,
+          "sha256": "eb4514d7a4f01ac2e9719eb93e4fe51635e56f4e18ac2239d0fee2fa4b089b85"
         },
         {
           "file": "fish/aulonocara-baenschi-female/lod2.glb",
-          "bytes": 11812,
-          "sha256": "4c557f40b35e8abaa8cae0abe79557a8325581811ec8feb6b4b0e99e204ecbe5"
+          "bytes": 11796,
+          "sha256": "601acdd174595f6357c77c9b43c564e126f6a5d3de894d923129815dc6e691df"
         },
         {
           "file": "fish/aulonocara-baenschi-female/textures/aulonocara-baenschi-female_basecolor_1k.ktx2",
@@ -907,8 +907,8 @@
         }
       ],
       "fish": {
-        "standardLengthM": 0.07662082514734775,
-        "lengthSource": "recipe",
+        "standardLengthM": 0.0766,
+        "lengthSource": "species-json",
         "axes": {
           "forward": "+z",
           "up": "+y"
@@ -939,20 +939,20 @@
         "atlasSize": 1152,
         "pivot": [
           0,
-          -0.0035,
-          -0.010175
+          -0.003499,
+          -0.010172
         ],
-        "radius": 0.054185,
+        "radius": 0.054171,
         "albedo": {
           "file": "fish/aulonocara-baenschi-female/impostor_albedo.ktx2",
-          "bytes": 116255,
-          "sha256": "b044c012bfa787f39c2b7b28fcdae2dfccb8a0a1817b1287f9696c2f2e5fc9da",
+          "bytes": 116365,
+          "sha256": "2cf53ab01444fe8681e69f849d2177a9de96276d5e1e8909b7cb4bca25eab611",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/aulonocara-baenschi-female/impostor_normal.ktx2",
-          "bytes": 347603,
-          "sha256": "c839ce24d2ecd02c1ca455be0041b06e48631f9fc25396c201ad63a039ee885e",
+          "bytes": 347973,
+          "sha256": "c3e53daaa5c4a659219ae601eb664ad339c66c75795813d4cc3c9d4d5fdd8d02",
           "codec": "uastc"
         }
       }

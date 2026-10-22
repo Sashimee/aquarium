@@ -75,6 +75,7 @@ const MVP_ROSTER = [
 
 const CICHLID_ROSTER = [
   ['altolamprologus-calvus', 'Altolamprologus calvus', 'cichlid'],
+  ['aulonocara-baenschi', 'Aulonocara baenschi', 'cichlid'],
   ['labidochromis-caeruleus', 'Labidochromis caeruleus', 'cichlid'],
   ['melanochromis-auratus', 'Melanochromis auratus', 'cichlid'],
   ['neolamprologus-brichardi', 'Neolamprologus brichardi', 'cichlid'],

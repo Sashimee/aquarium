@@ -126,6 +126,12 @@ describe('modelFor', () => {
       expect((male ?? 0) / (female ?? 1), id).toBeCloseTo(profile.male.lengthFactor, 3);
     }
   });
+
+  it('draws a male peacock a third longer than a female of the same size', () => {
+    const male = { ...MALE, species: 'aulonocara-baenschi', lengthM: 0.06 };
+    expect(bodyLengthOf(male, 0.0766)).toBeCloseTo(0.0798);
+    expect(bodyLengthOf({ ...male, ...FEMALE }, 0.0766)).toBe(0.06);
+  });
 });
 
 describe('bodyLengthOf', () => {

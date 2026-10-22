@@ -1,0 +1,64 @@
+{
+  "behaviour": {
+    "boldness": 0.5,
+    "curiosity": 0.6,
+    "depthBand": [0.05, 0.45],
+    "perceptionFovDeg": 300,
+    "perceptionRangeM": 0.5,
+    "preferredZone": "bottom",
+    "territorial": true,
+    "traits": []
+  },
+  "biome": "cichlid",
+  "breeding": {
+    "broodSize": [15, 40],
+    "fryGrowth": {
+      "adultAfterDays": 300,
+      "juvenileAfterDays": 30
+    },
+    "intervalDays": 35,
+    "minAgeDays": 300,
+    "mode": "mouthbrooder",
+    "temperatureC": [25, 28]
+  },
+  "chemistry": {
+    "khMin": 6,
+    "nitriteTolerance": 0.3,
+    "phRange": [7.5, 8.6],
+    "salinityPpt": [0, 1],
+    "sources": [
+      "FishBase (fishbase.se) species summary",
+      "SeriouslyFish species profile (seriouslyfish.com): 25-29 C, pH 7.5-9.0",
+      "Konings 2007, Malawi Cichlids in their Natural Habitat, 4th ed. (Lake Malawi water: pH 7.7-8.6, 24-29 C)"
+    ],
+    "temperatureC": [25, 29]
+  },
+  "commonName": "Yellow regal peacock",
+  "id": "aulonocara-baenschi",
+  "lifecycle": {
+    "ammoniaPerBioloadPerHour": 0.001,
+    "ammoniaTolerance": 0.15,
+    "bioload": 0.9,
+    "birthSizeM": 0.011,
+    "diet": ["pellets", "bloodworms", "brine-shrimp", "flakes"],
+    "growthPerDay": 0.00016,
+    "healthLossPerHourStarving": 0.008,
+    "healthRecoveryPerHour": 0.004,
+    "hungerPerHour": 0.0065,
+    "lifespanDays": 3650,
+    "maxSizeM": 0.0766,
+    "starvationHungerThreshold": 0.75
+  },
+  "locomotion": {
+    "bodyLengthM": 0.0766,
+    "cruiseSpeedMps": 0.08,
+    "gait": "cruise",
+    "massKg": 0.014,
+    "maxPitchDeg": 40,
+    "maxSpeedMps": 0.7,
+    "maxTurnRateDegPerS": 320,
+    "strouhal": 0.3,
+    "swimmingMode": "subcarangiform"
+  },
+  "scientificName": "Aulonocara baenschi"
+}

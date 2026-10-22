@@ -33,6 +33,7 @@
     "neolamprologus-brichardi": { "juvenile": 50, "adult": 125 },
     "neolamprologus-multifasciatus": { "juvenile": 40, "adult": 100 },
     "altolamprologus-calvus": { "juvenile": 160, "adult": 400 },
+    "aulonocara-baenschi": { "juvenile": 70, "adult": 175 },
     "cardinal-tetra": { "juvenile": 20, "adult": 50 },
     "rummy-nose-tetra": { "juvenile": 25, "adult": 60 },
     "dwarf-pencilfish": { "juvenile": 25, "adult": 60 },

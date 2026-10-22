@@ -435,6 +435,7 @@ export class Behaviour {
   private _gillFlare: Float64Array;
 
   private readonly n3 = new Float64Array(3);
+  private readonly spot = new Float64Array(3);
   private readonly greetBoldness = (i: number): number =>
     this.personality.effectiveBoldness(i, this.speciesOf(i).boldness);
   private readonly greetHunger = (i: number): number => this.feeding.motivation(i);
@@ -2651,7 +2652,10 @@ export class Behaviour {
         this.grazeYaw[i] = at(this.host.yaw, i);
       } else if (left <= 0) {
         this.grazePhase[i] = GrazePhase.None;
-      } else if (d > length && !this.clearPath(px, py, pz, gx, gy, gz, grazeStandoff(length))) {
+      } else if (
+        d > length &&
+        !lineClear(this.host.sceneSdf, px, py, pz, gx, gy, gz, grazeStandoff(length), this.n3)
+      ) {
         // Swept against the rock (by the wave maker, or a rival), the fish gives the spot up
         // rather than grinding round to it.
         this.grazePhase[i] = GrazePhase.None;
@@ -2681,59 +2685,31 @@ export class Behaviour {
 
   /** Projects a few random nearby points onto hard decor and keeps the closest standoff spot. */
   private pickGrazeSpot(i: number): boolean {
-    const { rng, decorSdf, substrateSdf, sceneSdf, basin } = this.host;
-    const field = decorSdf ?? substrateSdf;
-    const n3 = this.n3;
+    const { rng, decorSdf, substrateSdf, sceneSdf, basin, position, forward, bodyLength } =
+      this.host;
     const o = i * 3;
-    const px = at(this.host.position, o);
-    const py = at(this.host.position, o + 1);
-    const pz = at(this.host.position, o + 2);
-    const length = at(this.host.bodyLength, i);
-    const thickness = BEHAVIOUR.bodyThicknessBodyLengths * length;
-    const standoff = grazeStandoff(length);
-    const fx = at(this.host.forward, o);
-    const fz = at(this.host.forward, o + 2);
+    const probe: GrazeProbe = {
+      field: decorSdf ?? substrateSdf,
+      scene: sceneSdf,
+      maxY: basin.maxY,
+      x: at(position, o),
+      y: at(position, o + 1),
+      z: at(position, o + 2),
+      fx: at(forward, o),
+      fz: at(forward, o + 2),
+      length: at(bodyLength, i),
+    };
+    const spot = this.spot;
     let best = Infinity;
     for (let c = 0; c < 4; c++) {
-      let x = px + rng.signed() * 0.3;
-      let y = clamp(py + rng.signed() * 0.15, basin.minY, basin.maxY);
-      let z = pz + rng.signed() * 0.3;
-      let d = Infinity;
-      for (let k = 0; k < 8; k++) {
-        d = field.sample(x, y, z, n3);
-        x -= at(n3, 0) * d;
-        y -= at(n3, 1) * d;
-        z -= at(n3, 2) * d;
-        if (Math.abs(d) < 1e-4) break;
-      }
-      if (Math.abs(d) > 1e-3) continue;
-      field.sample(x, y, z, n3);
-      const nx = at(n3, 0);
-      const ny = at(n3, 1);
-      const nz = at(n3, 2);
-      // Only a face the fish is already swimming toward; grazing the far side means a U-turn.
-      if (nx * fx + nz * fz > 0.3) continue;
-      // A face turned away from the fish (the underside of a log it is above) is reached only by
-      // swimming round the decor; a straight approach grinds the body along it the whole way.
-      if ((px - x) * nx + (py - y) * ny + (pz - z) * nz <= 0) continue;
-      const gx = x + nx * standoff;
-      const gy = y + ny * standoff;
-      const gz = z + nz * standoff;
-      if (sceneSdf.sample(gx, gy, gz, n3) < thickness * 1.2) continue;
-      // The body trails back from the rock along its normal; a spot hemmed in by glass or a
-      // second rock behind leaves no room to back off and turn away after the bout.
-      const back = standoff + BEHAVIOUR.grazeBackRoomBodyLengths * length;
-      if (
-        sceneSdf.sample(x + nx * back, y + ny * back, z + nz * back, n3) <
-        BEHAVIOUR.grazeBackRoomBodyLengths * length
-      ) {
-        continue;
-      }
-      if (gy > basin.maxY - 2 * length) continue;
-      if (!this.clearPath(px, py, pz, gx, gy, gz, standoff)) continue;
-      const dist = Math.hypot(gx - px, gy - py, gz - pz);
-      // Doubling back to a spot behind costs a U-turn; a forager picks what lies ahead.
-      if ((gx - px) * fx + (gz - pz) * fz < 0) continue;
+      const x = probe.x + rng.signed() * 0.3;
+      const y = clamp(probe.y + rng.signed() * 0.15, basin.minY, basin.maxY);
+      const z = probe.z + rng.signed() * 0.3;
+      if (!grazeSpotFor(probe, x, y, z, spot, this.n3)) continue;
+      const gx = at(spot, 0);
+      const gy = at(spot, 1);
+      const gz = at(spot, 2);
+      const dist = Math.hypot(gx - probe.x, gy - probe.y, gz - probe.z);
       if (dist < best) {
         best = dist;
         this.grazeTarget[o] = gx;
@@ -2747,11 +2723,14 @@ export class Behaviour {
   /**
    * Whether fish `j` is in plain view of fish `i`, with no rock between them. Rock that breaks
    * the line of sight is what keeps rock-dwelling cichlids from chasing every neighbour
-   * (Konings 2007); charging round it would only grind the body along the rock.
+   * (Konings 2007); charging round it would only grind the body along it. Glass, sand and the
+   * water surface hide nothing, so two fish skimming the floor still see each other.
    */
   private inSight(i: number, j: number): boolean {
-    const { position, bodyLength } = this.host;
-    return this.clearPath(
+    const { position, bodyLength, decorSdf } = this.host;
+    if (decorSdf === null) return true;
+    return lineClear(
+      decorSdf,
       at(position, i * 3),
       at(position, i * 3 + 1),
       at(position, i * 3 + 2),
@@ -2759,30 +2738,103 @@ export class Behaviour {
       at(position, j * 3 + 1),
       at(position, j * 3 + 2),
       BEHAVIOUR.bodyThicknessBodyLengths * at(bodyLength, i),
+      this.n3,
     );
   }
+}
 
-  /** Whether a body `thickness` thick swims the straight line between two points clear of decor. */
-  private clearPath(
-    ax: number,
-    ay: number,
-    az: number,
-    bx: number,
-    by: number,
-    bz: number,
-    thickness: number,
-  ): boolean {
-    const { sceneSdf } = this.host;
-    for (let k = 1; k < BEHAVIOUR.grazePathSamples; k++) {
-      const t = k / BEHAVIOUR.grazePathSamples;
-      const room = sceneSdf.sample(
-        ax + (bx - ax) * t,
-        ay + (by - ay) * t,
-        az + (bz - az) * t,
-        this.n3,
-      );
-      if (room < thickness) return false;
-    }
-    return true;
+/** Whether a body `thickness` thick swims the straight line between two points clear of `sdf`. */
+export function lineClear(
+  sdf: Sdf,
+  ax: number,
+  ay: number,
+  az: number,
+  bx: number,
+  by: number,
+  bz: number,
+  thickness: number,
+  n3: Float64Array,
+): boolean {
+  for (let k = 1; k < BEHAVIOUR.grazePathSamples; k++) {
+    const t = k / BEHAVIOUR.grazePathSamples;
+    const room = sdf.sample(ax + (bx - ax) * t, ay + (by - ay) * t, az + (bz - az) * t, n3);
+    if (room < thickness) return false;
   }
+  return true;
+}
+
+/** A rock grazer looking for a spot: where it is, which way it heads and what it can graze. */
+export interface GrazeProbe {
+  /** The surfaces it grazes: hard decor, or the floor and glass of a bare tank. */
+  readonly field: Sdf;
+  /** Everything it must swim clear of. */
+  readonly scene: Sdf;
+  /** The water surface. */
+  readonly maxY: number;
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  /** Horizontal heading. */
+  readonly fx: number;
+  readonly fz: number;
+  readonly length: number;
+}
+
+/**
+ * Projects the point (x, y, z) onto the grazed surface and writes the stand-off point the fish
+ * would peck from to `out`. False when the fish cannot graze there from where it is.
+ */
+export function grazeSpotFor(
+  probe: GrazeProbe,
+  x: number,
+  y: number,
+  z: number,
+  out: Float64Array,
+  n3: Float64Array,
+): boolean {
+  const { field, scene, length } = probe;
+  const px = probe.x;
+  const py = probe.y;
+  const pz = probe.z;
+  const thickness = BEHAVIOUR.bodyThicknessBodyLengths * length;
+  const standoff = grazeStandoff(length);
+  let d = Infinity;
+  for (let k = 0; k < 8; k++) {
+    d = field.sample(x, y, z, n3);
+    x -= at(n3, 0) * d;
+    y -= at(n3, 1) * d;
+    z -= at(n3, 2) * d;
+    if (Math.abs(d) < 1e-4) break;
+  }
+  if (Math.abs(d) > 1e-3) return false;
+  field.sample(x, y, z, n3);
+  const nx = at(n3, 0);
+  const ny = at(n3, 1);
+  const nz = at(n3, 2);
+  // Only a face the fish is already swimming toward; grazing the far side means a U-turn.
+  if (nx * probe.fx + nz * probe.fz > 0.3) return false;
+  // A face turned away from the fish (the underside of a log it is above) is reached only by
+  // swimming round the decor; a straight approach grinds the body along it the whole way.
+  if ((px - x) * nx + (py - y) * ny + (pz - z) * nz <= 0) return false;
+  const gx = x + nx * standoff;
+  const gy = y + ny * standoff;
+  const gz = z + nz * standoff;
+  if (scene.sample(gx, gy, gz, n3) < thickness * 1.2) return false;
+  // The body trails back from the rock along its normal; a spot hemmed in by glass or a
+  // second rock behind leaves no room to back off and turn away after the bout.
+  const back = standoff + BEHAVIOUR.grazeBackRoomBodyLengths * length;
+  if (
+    scene.sample(x + nx * back, y + ny * back, z + nz * back, n3) <
+    BEHAVIOUR.grazeBackRoomBodyLengths * length
+  ) {
+    return false;
+  }
+  if (gy > probe.maxY - 2 * length) return false;
+  if (!lineClear(scene, px, py, pz, gx, gy, gz, standoff, n3)) return false;
+  // Doubling back to a spot behind costs a U-turn; a forager picks what lies ahead.
+  if ((gx - px) * probe.fx + (gz - pz) * probe.fz < 0) return false;
+  out[0] = gx;
+  out[1] = gy;
+  out[2] = gz;
+  return true;
 }
