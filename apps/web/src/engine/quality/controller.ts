@@ -1,5 +1,5 @@
 import type { TimingSignal } from './probe';
-import { TIER_COST, tierAt, tierIndex, type Tier } from './tiers';
+import { TIER_COST, TIER_GPU_SHARE, tierAt, tierIndex, type Tier } from './tiers';
 
 export interface ControllerConfig {
   targetMs: number;
@@ -7,9 +7,15 @@ export interface ControllerConfig {
   refreshMs: number;
   signal: TimingSignal;
   windowSize: number;
-  /** Step down when the rolling mean exceeds `targetMs * downRatio`. */
+  /**
+   * Step down when the rolling mean exceeds `targetMs * downRatio`; on the GPU signal, times the
+   * current tier's `TIER_GPU_SHARE`.
+   */
   downRatio: number;
-  /** GPU signal: step up when the next tier's predicted cost fits in `targetMs * upFitRatio`. */
+  /**
+   * GPU signal: step up when the next tier's predicted cost fits in `targetMs * upFitRatio` times
+   * that tier's `TIER_GPU_SHARE`.
+   */
   upFitRatio: number;
   /** Frame signal: step up when the rolling mean stays within `refreshMs * frameUpRatio`. */
   frameUpRatio: number;
@@ -99,7 +105,7 @@ export class TierController {
 
     const meanMs = this.window.reduce((sum, v) => sum + v, 0) / this.window.length;
 
-    if (meanMs > c.targetMs * c.downRatio) {
+    if (meanMs > c.targetMs * c.downRatio * this.share(this.current)) {
       this.underSince = null;
       this.overSince ??= nowMs;
       if (nowMs - this.overSince >= c.downHoldMs && this.current !== c.minTier) {
@@ -126,9 +132,13 @@ export class TierController {
     const c = this.config;
     if (c.signal === 'gpu') {
       const predicted = (meanMs * TIER_COST[next]) / TIER_COST[this.current];
-      return predicted <= c.targetMs * c.upFitRatio;
+      return predicted <= c.targetMs * c.upFitRatio * this.share(next);
     }
     return meanMs <= c.refreshMs * c.frameUpRatio;
+  }
+
+  private share(tier: Tier): number {
+    return this.config.signal === 'gpu' ? TIER_GPU_SHARE[tier] : 1;
   }
 
   private nextUp(): Tier | null {

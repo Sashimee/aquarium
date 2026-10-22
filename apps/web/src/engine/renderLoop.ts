@@ -9,6 +9,7 @@ export interface LoopRenderer {
 export class RenderLoop {
   private halted = false;
   private running = false;
+  private hidden = false;
 
   constructor(
     private readonly renderer: LoopRenderer,
@@ -24,8 +25,20 @@ export class RenderLoop {
     if (this.halted) return false;
     if (this.running) return true;
     this.running = true;
-    void this.renderer.setAnimationLoop(this.frame);
+    if (!this.hidden) void this.renderer.setAnimationLoop(this.frame);
     return true;
+  }
+
+  /**
+   * A hidden page draws nothing until it is shown again. Browsers mostly stop animation frames in
+   * a hidden tab already, but not every embedding does, and three keeps its own loop ticking.
+   */
+  setHidden(hidden: boolean): void {
+    if (hidden === this.hidden) return;
+    this.hidden = hidden;
+    if (this.running && !this.halted) {
+      void this.renderer.setAnimationLoop(hidden ? null : this.frame);
+    }
   }
 
   stop(): void {

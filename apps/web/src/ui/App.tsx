@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { useAuth, useBridge, usePhotoView, useRedirect, useRoute } from './context';
 import { Dock } from './Dock';
+import { ErrorBoundary } from './ErrorBoundary';
 import {
   AccountPanel,
   AvatarButton,
@@ -21,6 +22,7 @@ import {
   TankTypeSwitch,
 } from './Hud';
 import { BirthStatus, LifeStatus } from './LifeStatus';
+import { panelLoaders } from './panelLoaders';
 import { LoadingScreen } from './LoadingScreen';
 import { PhotoLayer, PhotoTools } from './PhotoControls';
 import { usePanels, type OpenPanel, type Panel } from './panels';
@@ -103,7 +105,7 @@ const GalleryScreen = lazy(() => import('./Gallery').then((m) => ({ default: m.G
 const PublicTankView = lazy(() =>
   import('./PublicTank').then((m) => ({ default: m.PublicTankView })),
 );
-const DecorBody = lazy(() => import('./DecorPanel'));
+const DecorBody = lazy(() => panelLoaders.decor());
 const TankReportBody = lazy(() => import('./TankReport'));
 const TanksPanel = lazy(() => import('./TankPanel').then((m) => ({ default: m.TanksPanel })));
 const ShopPanel = lazy(() => import('./TankPanel').then((m) => ({ default: m.ShopPanel })));
@@ -120,11 +122,11 @@ const PANEL_TITLE: Record<OpenPanel, { label: string; title: string }> = {
   account: { label: 'Account menu', title: 'Account' },
 };
 
-const CollectionBook = lazy(() => import('./CollectionBook'));
+const CollectionBook = lazy(() => panelLoaders.book());
 
 const LifeDialogsView = lazy(() => import('./LifeDialogs'));
 
-const TrimDialog = lazy(() => import('./TrimDialog'));
+const TrimDialog = lazy(() => panelLoaders.trim());
 
 function LifeDialogs({ onReview }: { onReview(): void }) {
   const state = useSessionState();
@@ -185,7 +187,11 @@ export function App() {
   if (route.name === 'gallery-tank') {
     return <PublicShell view={<GalleryTankView id={route.id} />} />;
   }
-  return <Shell />;
+  return (
+    <ErrorBoundary what="the aquarium" scope="app">
+      <Shell />
+    </ErrorBoundary>
+  );
 }
 
 function PublicShell({ view }: { view: ReactNode }) {
@@ -201,7 +207,9 @@ function PublicShell({ view }: { view: ReactNode }) {
       >
         Skip to the tank
       </a>
-      <Suspense fallback={null}>{view}</Suspense>
+      <ErrorBoundary what="this page" scope="app">
+        <Suspense fallback={null}>{view}</Suspense>
+      </ErrorBoundary>
       <LoadingScreen />
     </div>
   );
@@ -314,35 +322,45 @@ function Shell() {
             closeLabel={panel === 'decor' ? 'Done' : 'Close'}
             onClose={() => dispatch({ type: 'close' })}
           >
-            <Suspense
-              fallback={
-                <p className="hint" role="status">
-                  Opening.
-                </p>
-              }
-            >
-              <PanelBody
-                panel={panel}
-                newTank={newTank}
-                food={food}
-                onFood={setFood}
-                onCollection={() => {
-                  dispatch({ type: 'close' });
-                  setBookOpen(true);
-                }}
-              />
-            </Suspense>
+            <ErrorBoundary what={`the ${PANEL_TITLE[panel].title} panel`} scope="panel">
+              <Suspense
+                fallback={
+                  <p className="hint" role="status">
+                    Opening.
+                  </p>
+                }
+              >
+                <PanelBody
+                  panel={panel}
+                  newTank={newTank}
+                  food={food}
+                  onFood={setFood}
+                  onCollection={() => {
+                    dispatch({ type: 'close' });
+                    setBookOpen(true);
+                  }}
+                />
+              </Suspense>
+            </ErrorBoundary>
           </Sheet>
         )}
         {bookOpen && (
-          <Suspense fallback={null}>
-            <CollectionBook onClose={() => setBookOpen(false)} />
-          </Suspense>
+          <ErrorBoundary
+            what="the collection book"
+            scope="app"
+            onDismiss={() => setBookOpen(false)}
+          >
+            <Suspense fallback={null}>
+              <CollectionBook onClose={() => setBookOpen(false)} />
+            </Suspense>
+          </ErrorBoundary>
         )}
         <LifeDialogs onReview={() => dispatch({ type: 'open', panel: 'care' })} />
-        <Suspense fallback={null}>
-          <TrimDialog />
-        </Suspense>
+        <ErrorBoundary what="the trim tool" scope="app" onDismiss={() => undefined}>
+          <Suspense fallback={null}>
+            <TrimDialog />
+          </Suspense>
+        </ErrorBoundary>
         <div className={home ? 'stage' : 'stage modal'}>
           <Screen />
         </div>
