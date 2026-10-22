@@ -31,9 +31,9 @@ const SHAFT_PATTERN_SCALE = 0.45;
 /** Henyey-Greenstein asymmetry for the shafts: forward scattering, so they glow towards the light. */
 const PHASE_G = 0.6;
 /**
- * Relative depth gap at which a low-resolution shaft texel counts half as much as one on the same
- * surface. A fish 1 cm off a plant 50 cm away is a 2% gap; fish against the back glass are 20% or
- * more, so their texels barely bleed onto each other.
+ * Inverse-depth gap `|1 − here/tapDepth|` at which a low-resolution shaft texel counts half as much as
+ * one on the same surface. A fish 1 cm off a plant 50 cm away is a 2% gap; fish against the back
+ * glass are 20% or more, so their texels barely bleed onto each other.
  */
 export const DEPTH_TOLERANCE = 0.01;
 
