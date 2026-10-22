@@ -10,7 +10,14 @@ import {
   Vector3,
   type Node,
 } from 'three/webgpu';
-import { CARCASS, SNAPSHOT_STRIDE, SnapshotField, WALK, type SimToy } from '@aquarium/sim';
+import {
+  CARCASS,
+  FishState,
+  SNAPSHOT_STRIDE,
+  SnapshotField,
+  WALK,
+  type SimToy,
+} from '@aquarium/sim';
 import type { Collider } from '@aquarium/shared';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import type { Engine } from '../engine/Engine';
@@ -28,7 +35,7 @@ import { FishMaterial } from './material';
 import { batchLocomotion, FishSystem, walkerLift } from './FishSystem';
 import { renderProfile, swimModeFor } from './profiles';
 import type { BallNudge, PickRay } from './start';
-import { SWIM_MODES } from './swim';
+import { PECK_JAB_BODY_LENGTHS, SWIM_MODES } from './swim';
 import { CRAB_GAIT, SHRIMP_GAIT, SNAIL_GAIT, type TailRig } from './walk';
 import { SimInitTimeout } from './simWorld';
 
@@ -1035,11 +1042,17 @@ describe('FishSystem toys and display', () => {
       await fish.synced();
     };
     let tick = 0;
-    const snapshot = (display: number, gillFlare: number, count = 1): void => {
+    const snapshot = (
+      display: number,
+      gillFlare: number,
+      count = 1,
+      state: FishState = FishState.Cruise,
+    ): void => {
       const data = new Float32Array(SNAPSHOT_STRIDE * count);
       for (let i = 0; i < count; i++) {
         const o = i * SNAPSHOT_STRIDE;
         data.set([...AT, 0, 0, 0, 1], o);
+        data[o + SnapshotField.State] = state;
         data[o + SnapshotField.Display] = display;
         data[o + SnapshotField.GillFlare] = gillFlare;
       }
@@ -1244,6 +1257,55 @@ describe('FishSystem toys and display', () => {
     snapshot(0.2, 0.2, 2);
     snapshot(0.2, 0.2, 2);
     expect(bettaDisplay()).toBeCloseTo(0.2, 6);
+    fish.dispose();
+  });
+
+  it('keeps a fish held mid-peck where it was rather than creeping along the jab', async () => {
+    const { fish, engine, worker, load, nextWorld, snapshot, frames } = await bettaTank();
+    load();
+    await nextWorld();
+    const drawnZ = (): number => {
+      let mesh: InstancedMesh | null = null;
+      engine.scene.traverse((o) => {
+        if (mesh === null && o instanceof InstancedMesh && o.name.endsWith(':lod0')) mesh = o;
+      });
+      if (mesh === null) throw new Error('no betta mesh in the scene');
+      const matrix = new Matrix4();
+      (mesh as InstancedMesh).getMatrixAt(0, matrix);
+      return new Vector3().setFromMatrixPosition(matrix).z;
+    };
+    let jab = 0;
+    for (let i = 0; i < 30 && jab < 1e-4; i++) {
+      snapshot(0, 0, 1, FishState.Clean);
+      jab = drawnZ() - AT[2];
+    }
+    expect(jab).toBeGreaterThan(1e-4);
+
+    const inits = worker.inits().length;
+    fish.handle({
+      type: 'tank:fish-added',
+      payload: {
+        tankId: TANK_A,
+        fish: fishFixture(FISH_2, { species: 'royal-gramma', size: 0.06 }),
+        acclimate: false,
+      },
+    });
+    const request = await vi.waitFor(() => {
+      const add = worker.sent.find((m) => m.type === 'addFish');
+      if (add === undefined || !('request' in add)) throw new Error('no addFish yet');
+      return add.request;
+    });
+    worker.emit({ type: 'error', request, message: 'no room' });
+    await vi.waitFor(() => {
+      if (worker.inits().length === inits) throw new Error('the world was not rebuilt yet');
+    });
+    const held: number[] = [];
+    for (let i = 0; i < 144; i++) {
+      for (const frame of frames) frame(1 / 144, performance.now());
+      held.push(drawnZ() - AT[2]);
+    }
+    expect(Math.max(...held)).toBeLessThanOrEqual(PECK_JAB_BODY_LENGTHS * 0.06 + 1e-6);
+    expect(held.at(-1)).toBeCloseTo(0, 6);
     fish.dispose();
   });
 

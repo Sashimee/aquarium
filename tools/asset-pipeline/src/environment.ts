@@ -250,13 +250,22 @@ export function cropForRecipe(
   return { parts: kept, longestM };
 }
 
+export function sceneMaterial(
+  materials: ReadonlyMap<string, MaterialDef>,
+  partMaterial: string,
+  owner: string,
+): MaterialDef {
+  const material = materials.get(partMaterial);
+  if (!material)
+    throw new Error(`${owner}: part material "${partMaterial}" is not in the loaded materials`);
+  return material;
+}
+
 export function sceneBaseColor(
-  material: MaterialDef | undefined,
+  material: MaterialDef,
   partMaterial: string,
   owner: string,
 ): TextureSource | undefined {
-  if (!material)
-    throw new Error(`${owner}: part material "${partMaterial}" is not in the loaded materials`);
   if (!material.baseColor) {
     console.warn(
       `${owner}: material "${partMaterial}" has no base colour texture; rendering it mid-grey times its factor`,

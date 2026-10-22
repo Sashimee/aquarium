@@ -108,7 +108,7 @@ console.log(
   `smoke stages: ${timings.join(', ')}; total ${((Date.now() - startedAt) / 1000).toFixed(1)}s`,
 );
 
-const closeTimeoutMs = 10_000;
+const closeTimeoutMs = 3_000;
 const closeStartedAt = Date.now();
 const closeSteps = [];
 async function timedClose(name, close) {
@@ -129,7 +129,7 @@ try {
     closeTimedOut,
   ]);
   if (outcome === 'timeout') {
-    console.warn(`smoke: browser still open after ${closeTimeoutMs} ms, exiting anyway`);
+    console.log(`smoke: browser still open after ${closeTimeoutMs} ms, exiting anyway`);
   }
 } catch (error) {
   record('browser.close', error instanceof Error ? error.message : String(error));

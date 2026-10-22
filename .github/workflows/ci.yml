@@ -103,7 +103,13 @@ jobs:
       - run: pnpm build
       - name: Read the Playwright version
         id: playwright-version
-        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+        run: |
+          version=$(pnpm exec playwright --version | awk '{print $2}')
+          if [ -z "$version" ]; then
+            echo "could not read the Playwright version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v4
         id: playwright-cache
         with:
