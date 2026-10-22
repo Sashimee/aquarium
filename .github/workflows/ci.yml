@@ -75,7 +75,8 @@ jobs:
 
   smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
+    container: mcr.microsoft.com/playwright:v1.63.0-noble
     services:
       postgres:
         image: postgres:18
@@ -91,7 +92,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgres://aquarium:aquarium@localhost:5432/aquarium_test
+      DATABASE_URL: postgres://aquarium:aquarium@postgres:5432/aquarium_test
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -100,26 +101,15 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+        timeout-minutes: 12
       - run: pnpm build
-      - name: Read the Playwright version
-        id: playwright-version
+        timeout-minutes: 12
+      - name: Container image matches the locked Playwright version
         run: |
           version=$(pnpm exec playwright --version | awk '{print $2}')
-          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "could not read a semver Playwright version, got '$version'" >&2
-            exit 1
-          fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v4
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
-      - if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install --with-deps chromium
-      - if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps chromium
+          test "$version" = "1.63.0" || { echo "::error::Playwright is $version but the smoke container image is v1.63.0; update container: in ci.yml"; exit 1; }
       - name: Start the e2e server on the built web app
+        timeout-minutes: 3
         run: |
           node e2e/build-server.mjs
           node --enable-source-maps apps/api/dist/e2e-server.js > server.log 2>&1 &
@@ -129,6 +119,7 @@ jobs:
           done
           curl -fsS http://localhost:4317/api/health || { cat server.log; exit 1; }
       - name: Load the app signed out and signed in, failing on runtime errors
+        timeout-minutes: 6
         run: pnpm smoke
       - name: Server log
         if: ${{ failure() }}
