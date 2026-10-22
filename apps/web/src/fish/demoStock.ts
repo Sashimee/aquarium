@@ -15,6 +15,7 @@ import {
   type SpeciesInput,
   type TankSpaceWorldConfig,
 } from '@aquarium/sim';
+import altolamprologusCalvusContent from '../../../../content/species/altolamprologus-calvus.json';
 import angelfishContent from '../../../../content/species/angelfish.json';
 import apistogrammaHongsloiContent from '../../../../content/species/apistogramma-hongsloi.json';
 import banggaiCardinalfishContent from '../../../../content/species/banggai-cardinalfish.json';
@@ -23,8 +24,13 @@ import bronzeCorydorasContent from '../../../../content/species/bronze-corydoras
 import cardinalTetraContent from '../../../../content/species/cardinal-tetra.json';
 import dwarfPencilfishContent from '../../../../content/species/dwarf-pencilfish.json';
 import guppyContent from '../../../../content/species/guppy.json';
+import labidochromisCaeruleusContent from '../../../../content/species/labidochromis-caeruleus.json';
+import melanochromisAuratusContent from '../../../../content/species/melanochromis-auratus.json';
+import neolamprologusBrichardiContent from '../../../../content/species/neolamprologus-brichardi.json';
+import neolamprologusMultifasciatusContent from '../../../../content/species/neolamprologus-multifasciatus.json';
 import neonTetraContent from '../../../../content/species/neon-tetra.json';
 import ocellarisClownfishContent from '../../../../content/species/ocellaris-clownfish.json';
+import pseudotropheusDemasoniContent from '../../../../content/species/pseudotropheus-demasoni.json';
 import royalGrammaContent from '../../../../content/species/royal-gramma.json';
 import rummyNoseTetraContent from '../../../../content/species/rummy-nose-tetra.json';
 import yellowTangContent from '../../../../content/species/yellow-tang.json';
@@ -80,6 +86,9 @@ export function demoStock(
  * Guppies are about half male: each fish's sex, and with it its model, comes from its key.
  * The reef has one clownfish pair for its one host anemone, a yellow rather than a blue tang
  * (a blue tang outgrows a 120 cm tank), and as many banggai as content's smallest group.
+ * The cichlid lake mixes Malawi mbuna on the rock piles with Tanganyika lamprologines, as its
+ * preset mixes rock piles and a shell bed: mbuna several to a species, which spreads their
+ * aggression (Konings 2007), and one calvus, a solitary stalker.
  * Blackwater is a Rio Negro community: two tetra schools, a pencilfish shoal and one dwarf cichlid
  * pair, 28 fish against the mobile tier's 30.
  */
@@ -92,7 +101,24 @@ export const DEMO_STOCKS: Readonly<Record<PlayableBiome, DemoStock>> = {
     [ocellarisClownfishContent, yellowTangContent, royalGrammaContent, banggaiCardinalfishContent],
     { 'ocellaris-clownfish': 2, 'yellow-tang': 1, 'royal-gramma': 1, 'banggai-cardinalfish': 1 },
   ),
-  cichlid: demoStock([], {}),
+  cichlid: demoStock(
+    [
+      pseudotropheusDemasoniContent,
+      labidochromisCaeruleusContent,
+      melanochromisAuratusContent,
+      neolamprologusBrichardiContent,
+      neolamprologusMultifasciatusContent,
+      altolamprologusCalvusContent,
+    ],
+    {
+      'pseudotropheus-demasoni': 4,
+      'labidochromis-caeruleus': 3,
+      'melanochromis-auratus': 2,
+      'neolamprologus-brichardi': 2,
+      'neolamprologus-multifasciatus': 4,
+      'altolamprologus-calvus': 1,
+    },
+  ),
   blackwater: demoStock(
     [
       cardinalTetraContent,

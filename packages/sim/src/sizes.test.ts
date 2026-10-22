@@ -73,6 +73,50 @@ function fishModels(): Map<string, FishModel> {
  */
 const ADULT_MAX: Record<string, { model: string; maxSlM: number; maxTlM: number; source: string }> =
   {
+    'altolamprologus-calvus': {
+      model: 'altolamprologus-calvus',
+      maxSlM: 0.135 / 1.231,
+      maxTlM: 0.135,
+      source:
+        'FishBase: 13.5 cm TL (Ref. 5598); FishBase has no length-length relationship, so TL = ' +
+        '1.231 SL, the proportion of the lofted model',
+    },
+    'labidochromis-caeruleus': {
+      model: 'labidochromis-caeruleus',
+      maxSlM: 0.081,
+      maxTlM: 0.081 * 1.2085,
+      source: 'FishBase: 8.1 cm SL (Ref. 5653); TL = 1.2085 SL',
+    },
+    'melanochromis-auratus': {
+      model: 'melanochromis-auratus-female',
+      maxSlM: 0.11 / 1.23,
+      maxTlM: 0.11,
+      source:
+        'FishBase: 11 cm TL (Ref. 5663); FishBase has no length-length relationship, so TL = ' +
+        '1.23 SL, the proportion of the lofted model',
+    },
+    'neolamprologus-brichardi': {
+      model: 'neolamprologus-brichardi',
+      maxSlM: 0.09 / 1.3199,
+      maxTlM: 0.09,
+      source: 'FishBase: 9 cm TL (Ref. 5667); TL = 1.3199 SL',
+    },
+    'neolamprologus-multifasciatus': {
+      model: 'neolamprologus-multifasciatus',
+      maxSlM: 0.04 / 1.25,
+      maxTlM: 0.04,
+      source:
+        'FishBase: 4 cm TL (Ref. 5667); FishBase has no length-length relationship, so TL = 1.25 SL ' +
+        'is an assumption for cichlids',
+    },
+    'pseudotropheus-demasoni': {
+      model: 'pseudotropheus-demasoni',
+      maxSlM: 0.063,
+      maxTlM: 0.063 * 1.215,
+      source:
+        'FishBase (as Chindongo demasoni): 6.3 cm SL (Ref. 40900); FishBase has no length-length ' +
+        'relationship, so TL = 1.215 SL, the proportion of the lofted model',
+    },
     angelfish: {
       model: 'angelfish',
       maxSlM: 0.15 / 1.304,
@@ -254,14 +298,6 @@ const AWAITING_CONTENT: Record<
   string,
   { model: string; maxSlM: number; maxTlM: number; source: string }
 > = {
-  'altolamprologus-calvus': {
-    model: 'altolamprologus-calvus',
-    maxSlM: 0.135 / 1.231,
-    maxTlM: 0.135,
-    source:
-      'FishBase: 13.5 cm TL (Ref. 5598); FishBase has no length-length relationship, so TL = ' +
-      '1.231 SL, the proportion of the lofted model',
-  },
   'aulonocara-baenschi': {
     model: 'aulonocara-baenschi-female',
     maxSlM: (0.13 * 0.75) / 1.2725,
@@ -320,47 +356,11 @@ const AWAITING_CONTENT: Record<
       '8 cm TL (Ref. 12693); FishBase has no length-length relationship, so TL = 1.21 SL, the ' +
       'proportion of the lofted model',
   },
-  'labidochromis-caeruleus': {
-    model: 'labidochromis-caeruleus',
-    maxSlM: 0.081,
-    maxTlM: 0.081 * 1.2085,
-    source: 'FishBase: 8.1 cm SL (Ref. 5653); TL = 1.2085 SL',
-  },
-  'melanochromis-auratus': {
-    model: 'melanochromis-auratus-female',
-    maxSlM: 0.11 / 1.23,
-    maxTlM: 0.11,
-    source:
-      'FishBase: 11 cm TL (Ref. 5663); FishBase has no length-length relationship, so TL = ' +
-      '1.23 SL, the proportion of the lofted model',
-  },
-  'neolamprologus-brichardi': {
-    model: 'neolamprologus-brichardi',
-    maxSlM: 0.09 / 1.3199,
-    maxTlM: 0.09,
-    source: 'FishBase: 9 cm TL (Ref. 5667); TL = 1.3199 SL',
-  },
-  'neolamprologus-multifasciatus': {
-    model: 'neolamprologus-multifasciatus',
-    maxSlM: 0.04 / 1.25,
-    maxTlM: 0.04,
-    source:
-      'FishBase: 4 cm TL (Ref. 5667); FishBase has no length-length relationship, so TL = 1.25 SL ' +
-      'is an assumption for cichlids',
-  },
   'orange-chromide': {
     model: 'orange-chromide',
     maxSlM: 0.095 / 1.2321,
     maxTlM: 0.095,
     source: 'FishBase (as Pseudetroplus maculatus): 9.5 cm TL (Ref. 115177); TL = 1.2321 SL',
-  },
-  'pseudotropheus-demasoni': {
-    model: 'pseudotropheus-demasoni',
-    maxSlM: 0.063,
-    maxTlM: 0.063 * 1.215,
-    source:
-      'FishBase (as Chindongo demasoni): 6.3 cm SL (Ref. 40900); FishBase has no length-length ' +
-      'relationship, so TL = 1.215 SL, the proportion of the lofted model',
   },
   'silver-mono': {
     model: 'silver-mono',

@@ -17,8 +17,8 @@ export const playableBiomeSchema = z.enum([
 ]);
 export type PlayableBiome = z.infer<typeof playableBiomeSchema>;
 
-// Biomes a new tank can be created in. Cichlid and mangrove join when their species content ships (T48, T50 behaviour steps).
-export const creatableBiomeSchema = z.enum(['freshwater', 'reef', 'blackwater']);
+// Biomes a new tank can be created in. Mangrove joins when its species content ships (T50 behaviour step).
+export const creatableBiomeSchema = z.enum(['freshwater', 'reef', 'cichlid', 'blackwater']);
 export type CreatableBiome = z.infer<typeof creatableBiomeSchema>;
 
 export const isPlayableBiome = (biome: Biome): biome is PlayableBiome =>

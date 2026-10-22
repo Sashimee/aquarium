@@ -18,11 +18,13 @@ import { DEMO_STOCKS, demoStock, demoTank, sceneAnchorsToSim } from './demoStock
 import bettaContent from '../../../../content/species/betta.json';
 import neonTetraContent from '../../../../content/species/neon-tetra.json';
 
-// The cichlid and mangrove stocks arrive with their species content (T48, T50).
-const BIOMES = playableBiomeSchema.options.filter((b) => b !== 'cichlid' && b !== 'mangrove');
+// The mangrove stock arrives with its species content (T50).
+const BIOMES = playableBiomeSchema.options.filter((b) => b !== 'mangrove');
 const SCHOOLERS: Partial<Record<PlayableBiome, readonly string[]>> = {
   freshwater: ['neon-tetra', 'bronze-corydoras'],
   reef: ['banggai-cardinalfish'],
+  // Rift lake cichlids hold territories on rock and shell; none of them schools.
+  cichlid: [],
   blackwater: ['cardinal-tetra', 'rummy-nose-tetra', 'dwarf-pencilfish'],
 };
 // PLAN §2.7: the mobile tier draws at most 30 fish per tank, and the demo runs on mobile too.
@@ -138,10 +140,10 @@ describe.each(BIOMES)('demoTank(%s)', (biome) => {
       const { schooling } = speciesSchema.partial({ render: true }).parse(raw).behaviour;
       return schooling === undefined ? [] : [{ id: species.id, minGroup: schooling.minGroup }];
     });
-    expect(SCHOOLERS[biome], biome).toBeDefined();
-    expect(schooling.map((s) => s.id)).toEqual(
-      expect.arrayContaining([...(SCHOOLERS[biome] ?? [])]),
-    );
+    const expected = SCHOOLERS[biome];
+    expect(expected, biome).toBeDefined();
+    expect(schooling.map((s) => s.id)).toEqual(expect.arrayContaining([...(expected ?? [])]));
+    if (expected?.length === 0) expect(schooling).toEqual([]);
     const spawned = demoTank(DEFAULT_TANK, 1, biome).config.fish;
     for (const { id, minGroup } of schooling) {
       expect(stock.counts[id] ?? 0, id).toBeGreaterThanOrEqual(minGroup);
