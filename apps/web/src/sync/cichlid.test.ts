@@ -114,6 +114,20 @@ describe('lakeWaterNotes', () => {
     expect(note?.text).not.toContain('hardness');
   });
 
+  it('offers no water change for a near-the-bottom pH while CO2 runs', () => {
+    const base = lakeTank(['pseudotropheus-demasoni']);
+    const low = Math.max(
+      ...all.filter((s) => s.id === 'pseudotropheus-demasoni').map((s) => s.chemistry.phRange[0]),
+    );
+    const readings = { kh: 10, ph: Number((low + 0.1).toFixed(1)) };
+    expect(lakeWaterNotes(base, all, readings)[0]).toMatchObject({
+      level: 'watch',
+      fix: 'water-change',
+    });
+    const tank = { ...base, equipment: { ...base.equipment, co2: { tier: 1 } } };
+    expect(lakeWaterNotes(tank, all, readings)[0]).toMatchObject({ level: 'watch', fix: 'no-fix' });
+  });
+
   it('says the ranges clash when no pH suits every species', () => {
     const tank = lakeTank(['pseudotropheus-demasoni', 'aulonocara-baenschi']);
     const lowFish = speciesFixture({ ...demasoni, chemistry: chemistry(6, [7, 7.5]) });
