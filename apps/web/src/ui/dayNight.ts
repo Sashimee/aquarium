@@ -1,6 +1,12 @@
-import { parseClock, type ClockSetting } from '../engine/daylight';
+import {
+  DEFAULT_LAMP_SCHEDULE,
+  daylightAt,
+  lampPhotoperiod,
+  parseClock,
+  type ClockSetting,
+  type LampSchedule,
+} from '../engine/daylight';
 import { parseEngineOptions, type EngineOptions } from '../engine/options';
-import { roomDaylightAt } from '../engine/room/timeOfDay';
 
 export type DayNightMode = 'auto' | 'day' | 'night';
 
@@ -53,7 +59,10 @@ export function writeMode(
   }
 }
 
-/** A valid `?clock=` pins the page and beats the saved choice; an invalid one is ignored. */
+/**
+ * A valid `?clock=` pins the page and beats the saved choice; an invalid one is ignored. The
+ * label follows the lamp, since that is the light the tank shows, not the sky behind it.
+ */
 function urlClock(search: string): number | null {
   const param = new URLSearchParams(search).get('clock');
   if (param === null) return null;
@@ -67,10 +76,11 @@ function urlClock(search: string): number | null {
 export function initialMode(
   search: string,
   store: () => Storage | null = browserStorage,
+  lamp: LampSchedule = DEFAULT_LAMP_SCHEDULE,
 ): DayNightMode {
   const pinned = urlClock(search);
   if (pinned === null) return readMode(store);
-  return roomDaylightAt(pinned) >= 0.5 ? 'day' : 'night';
+  return daylightAt(pinned, lampPhotoperiod(lamp)) >= 0.5 ? 'day' : 'night';
 }
 
 /** The engine options for this URL: its own `?clock=` if it has one, else the saved mode. Throws on a bad param. */

@@ -1,6 +1,5 @@
 import type { RoomLight, LitRoom } from '../engine/room';
 import type { Tier } from '../engine/quality/tiers';
-import { minuteOfDay } from '../engine/daylight';
 import type { RoomChoice } from '../scene/room/layout';
 
 export interface RoomLightBinding {
@@ -17,8 +16,8 @@ export interface RoomLightBinding {
   };
   tier(): Tier;
   hood(): number;
-  /** Pinned `?clock=` in minutes after midnight, or null for the wall clock. */
-  clock(): number | null;
+  /** The minute of day the sky is read at, already eased after a clock change. */
+  clock(): number;
   now(): number;
   onFrame(callback: () => void): () => void;
 }
@@ -66,7 +65,7 @@ export function bindRoomLight(binding: RoomLightBinding): RoomLightHandle {
     const nowMs = binding.now();
     light.update({
       nowMs,
-      minute: binding.clock() ?? minuteOfDay(new Date(nowMs)),
+      minute: binding.clock(),
       hood: binding.hood(),
     });
   });

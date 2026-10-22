@@ -4,7 +4,7 @@ import { BUNDLED_ECONOMY } from '../sync/bundledEconomy';
 import { earnedText, euroText, pearlText } from '../sync/economy';
 import type { CameraMode } from '../interaction/camera';
 import { chipState, type ChipStatus } from './chemistryChip';
-import { useAuth, useBridge, useCameraMode, useDemoBiome } from './context';
+import { useAuth, useBridge, useCameraMode, useDemoBiome, useLatest } from './context';
 import { clockFor, initialMode, nextMode, writeMode, type DayNightMode } from './dayNight';
 import { getDip, subscribeDips } from './dipStore';
 import {
@@ -306,7 +306,9 @@ const DAY_NIGHT_LABEL: Record<DayNightMode, string> = {
 
 export function DayNightButton() {
   const { interaction } = useBridge();
-  const [mode, setMode] = useState<DayNightMode>(() => initialMode(window.location.search));
+  const lamp = useLatest(interaction, 'lamp:schedule');
+  const [pressed, setPressed] = useState<DayNightMode | null>(null);
+  const mode = pressed ?? initialMode(window.location.search, undefined, lamp);
   const [announced, setAnnounced] = useState('');
   const next = nextMode(mode);
   const Icon = DAY_NIGHT_ICON[mode];
@@ -319,7 +321,7 @@ export function DayNightButton() {
         aria-label={`Lighting: ${DAY_NIGHT_LABEL[mode]}. Switch to ${DAY_NIGHT_LABEL[next]}`}
         title={`Lighting: ${DAY_NIGHT_LABEL[mode]}`}
         onClick={() => {
-          setMode(next);
+          setPressed(next);
           setAnnounced(`Lighting set to ${DAY_NIGHT_LABEL[next]}`);
           writeMode(next);
           interaction.emit('clock:request', { clock: clockFor(next) });

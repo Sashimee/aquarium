@@ -379,6 +379,40 @@ describe('ClockPin', () => {
   });
 });
 
+describe('ClockPin room minute', () => {
+  it('shows the target at once until a clock change', () => {
+    const pin = new ClockPin(null);
+    expect(pin.blendMinute(10 * 60, 0)).toBe(10 * 60);
+  });
+
+  it('runs the sun forward from the shown minute to the new one over the ease', () => {
+    const pin = new ClockPin(null);
+    pin.blendMinute(13 * 60, 0);
+    pin.set('night', 1000);
+    expect(pin.blendMinute(0, 1000)).toBeCloseTo(13 * 60);
+    expect(pin.blendMinute(0, 1000 + CLOCK_EASE_MS / 2)).toBeCloseTo(18.5 * 60);
+    expect(pin.blendMinute(0, 1000 + CLOCK_EASE_MS)).toBe(0);
+  });
+
+  it('wraps past midnight on the way', () => {
+    const pin = new ClockPin(null);
+    pin.blendMinute(23 * 60, 0);
+    pin.set(0, 0);
+    expect(pin.blendMinute(0, CLOCK_EASE_MS / 2)).toBeCloseTo(23.5 * 60);
+  });
+
+  it('moves in step with the tank light', () => {
+    const pin = new ClockPin(null);
+    pin.blend({ hood: 1, room: 1 }, 0);
+    pin.blendMinute(0, 0);
+    pin.set(12 * 60, 0);
+    const levels = pin.blend({ hood: 0, room: 0 }, CLOCK_EASE_MS / 4);
+    const minute = pin.blendMinute(12 * 60, CLOCK_EASE_MS / 4);
+    const k = 1 - levels.hood;
+    expect(minute).toBeCloseTo(12 * 60 * k);
+  });
+});
+
 describe('ClockPin against the fish eye', () => {
   it('fades day to night slowly enough that no fish is startled', () => {
     const pin = new ClockPin(null);

@@ -624,6 +624,12 @@ export class Engine {
     applyDayLighting(this.dayRig, this.daylightFeed.level);
   }
 
+  /** The minute the room's sky and sun are read at, easing after a clock change like the hood. */
+  roomClockMinute(): number {
+    const target = roomMinute(this.clockPin.clock) ?? minuteOfDay(new Date());
+    return this.clockPin.blendMinute(target, performance.now());
+  }
+
   /** The hood level now; the room light behind the tank follows on the same read. */
   private readDaylight(): number {
     const setting = this.clockPin.clock;
