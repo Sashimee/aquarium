@@ -13,6 +13,7 @@ import {
   type TankDimensions,
   waterBounds,
 } from './dimensions';
+import { buildShaders, type ShaderBackend } from '../shaderFixtures';
 import { meanSubstrateHeight } from './substrate';
 import { UNREFLECTED_LAYER } from './surfaceReflection';
 import { posterSpan, Tank } from './Tank';
@@ -87,6 +88,29 @@ describe('Tank', () => {
     expect(material.outputNode).not.toBe(mirrored);
     expect(material.version).toBeGreaterThan(version);
   });
+
+  it.each(['webgpu', 'webgl'] as const)(
+    'builds the glass, the backdrop and both undersides for %s',
+    (backend: ShaderBackend) => {
+      const t = tank();
+      const byName = meshes(t);
+      const built = (name: string): string => {
+        const mesh = byName.get(name);
+        if (mesh === undefined) throw new Error(`no mesh named ${name}`);
+        return buildShaders(mesh, backend).fragment;
+      };
+      for (const name of ['glass-faces', 'backdrop', 'water-surface-underside']) {
+        expect(built(name).length, name).toBeGreaterThan(0);
+      }
+      const traced = built('water-surface-underside');
+      t.setSurfaceReflection(0.5);
+      const mirrored = built('water-surface-underside');
+      expect(mirrored).not.toBe(traced);
+      // Each of the five taps reads the pass's colour and its depth.
+      const lookups = mirrored.match(/\btexture(?:Load|Sample\w*)?\s*\(/g) ?? [];
+      expect(lookups.length).toBeGreaterThanOrEqual(10);
+    },
+  );
 
   it('rebuilds the glass, water and stand for a new size and moves its water box in place', () => {
     const t = tank();

@@ -72,6 +72,11 @@ export class InteriorLight {
     this.fillShare = share;
   }
 
+  /** Unit vector towards the hood. */
+  get hoodDirection(): Node<'vec3'> {
+    return this.caustics.lightDirection;
+  }
+
   /** Call once per frame, after the hood and water uniforms are set. */
   update(): void {
     const depth = this.medium.boxMax.value.y - this.sandHeight;

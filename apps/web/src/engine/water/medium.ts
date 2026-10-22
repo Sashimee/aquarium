@@ -227,13 +227,27 @@ export class WaterMedium {
 
   /** Distance from `origin` inside the water box to where a ray along `dir` leaves it. */
   exitDistance(origin: Node<'vec3'>, dir: Node<'vec3'>): Node<'float'> {
+    return this.exit(origin, dir).distance;
+  }
+
+  /**
+   * Where a ray from `origin` inside the water box along `dir` leaves it: the distance, and the
+   * outward normal of the face it leaves through.
+   */
+  exit(origin: Node<'vec3'>, dir: Node<'vec3'>): { distance: Node<'float'>; normal: Node<'vec3'> } {
     const ahead = step(vec3(0), dir).toVar();
     const wall = mix(this.boxMin, this.boxMax, ahead);
     const t = wall
       .sub(origin)
       .mul(ahead.mul(2).sub(1))
-      .div(max(abs(dir), 1e-6));
-    return max(min(min(t.x, t.y), t.z), 0);
+      .div(max(abs(dir), 1e-6))
+      .toVar();
+    const nearest = min(min(t.x, t.y), t.z).toVar();
+    const onX = step(t.x, nearest);
+    const onY = step(t.y, nearest).mul(onX.oneMinus());
+    const onZ = onX.oneMinus().mul(onY.oneMinus());
+    const normal = vec3(onX, onY, onZ).mul(ahead.mul(2).sub(1));
+    return { distance: max(nearest, 0), normal };
   }
 
   /** Length of the camera ray through the whole box, for fragments on its far faces. */

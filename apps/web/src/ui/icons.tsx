@@ -87,6 +87,13 @@ export const SunIcon = () => (
   </Icon>
 );
 
+export const AutoLightIcon = () => (
+  <Icon>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3 2" />
+  </Icon>
+);
+
 export const MoonIcon = () => (
   <Icon>
     <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z" />
