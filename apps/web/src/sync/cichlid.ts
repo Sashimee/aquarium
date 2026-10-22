@@ -1,6 +1,7 @@
-import { speciesSchema, type DecorItem, type SpeciesSummary, type Tank } from '@aquarium/shared';
+import type { DecorItem, SpeciesSummary, Tank } from '@aquarium/shared';
 import { loadPreset } from '../scene/preset';
 import { BUNDLED_CHEMISTRY } from './bundledEconomy';
+import { isBundledTerritorial } from './bundledSpecies';
 import { livingFish } from './life';
 
 export type DriftLevel = 'watch' | 'caution' | 'danger';
@@ -9,7 +10,7 @@ export interface DriftNote {
   metric: 'kh' | 'ph';
   level: DriftLevel;
   text: string;
-  fix: 'water-change' | 'needs-buffer' | null;
+  fix: 'water-change' | 'no-fix' | null;
 }
 
 export interface LakeReadings {
@@ -25,7 +26,7 @@ const level = (deviation: number, full: number): DriftLevel =>
 
 /**
  * Hardness and pH against what the fish in the tank need. A water change only pulls KH toward the
- * source water, so when the tank is already at or above that, no chore can raise it: `needs-buffer`.
+ * source water, so when the tank is already at or above that, no chore can raise it: `no-fix`.
  */
 export function lakeWaterNotes(
   tank: Tank,
@@ -42,16 +43,16 @@ export function lakeWaterNotes(
   const khNeed = Math.max(...kinds.map((s) => s.chemistry.khMin));
   const { kh, ph } = readings;
   if (kh !== undefined && khNeed > 0) {
-    const fix = kh < sourceKh ? 'water-change' : 'needs-buffer';
+    const fix = kh < sourceKh ? 'water-change' : 'no-fix';
     const how =
       fix === 'water-change'
         ? 'A water change brings it back toward the tap water.'
-        : 'Your tap water is no harder than this, so a water change will not lift it. A buffer is what the tank needs.';
+        : 'Your tap water is no harder than this, so a water change will not lift it. The tank needs the hardness raised.';
     if (kh < khNeed) {
       notes.push({
         metric: 'kh',
         level: level(khNeed - kh, fullStressDeviation.kh),
-        text: `Hardness is ${kh} dKH. Your fish want at least ${khNeed}. Soft water stunts rift lake cichlids and slowly harms them. ${how}`,
+        text: `Hardness is ${kh} dKH. Your fish want at least ${khNeed}. Soft water slowly harms them. ${how}`,
         fix,
       });
     } else if (kh < khNeed + WATCH_MARGIN_KH) {
@@ -67,12 +68,22 @@ export function lakeWaterNotes(
   if (ph !== undefined) {
     const low = Math.max(...kinds.map((s) => s.chemistry.phRange[0]));
     const high = Math.min(...kinds.map((s) => s.chemistry.phRange[1]));
-    if (ph < low) {
+    if (low > high) {
+      notes.push({
+        metric: 'ph',
+        level: 'caution',
+        text: `pH is ${ph}. The fish in this tank need pH ranges that do not overlap (${low} and up for some, ${high} and down for others), so no pH suits all of them.`,
+        fix: null,
+      });
+    } else if (ph < low) {
+      const co2 = tank.equipment.co2.tier > 0;
       notes.push({
         metric: 'ph',
         level: level(low - ph, fullStressDeviation.ph),
-        text: `pH is ${ph}, below the ${low} your fish need. Lake water is hard and alkaline; soft water lets the pH slide down. Restore the hardness first.`,
-        fix: kh !== undefined && kh >= sourceKh ? 'needs-buffer' : 'water-change',
+        text: co2
+          ? `pH is ${ph}, below the ${low} your fish need. The CO2 system is pulling the pH down, and a water change will not undo that.`
+          : `pH is ${ph}, below the ${low} your fish need. Nitrate from waste turns the water acidic; a water change takes it out.`,
+        fix: co2 ? 'no-fix' : 'water-change',
       });
     } else if (ph > high) {
       notes.push({
@@ -93,14 +104,14 @@ export function lakeWaterNotes(
   return notes;
 }
 
-const SHELTER_ASSETS: ReadonlySet<string> = new Set([
+export const SHELTER_ASSET_IDS: ReadonlySet<string> = new Set([
   'reef-arch',
   'rock-pile-cave',
   'rock-pile-stack',
   'neothauma-shell',
 ]);
 
-export const isShelterAsset = (assetId: string): boolean => SHELTER_ASSETS.has(assetId);
+export const isShelterAsset = (assetId: string): boolean => SHELTER_ASSET_IDS.has(assetId);
 
 export function shelterCount(tank: Pick<Tank, 'biome' | 'decorEdited' | 'decorLayout'>): number {
   const items: readonly DecorItem[] = tank.decorEdited
@@ -109,18 +120,7 @@ export function shelterCount(tank: Pick<Tank, 'biome' | 'decorEdited' | 'decorLa
   return items.filter((i) => isShelterAsset(i.assetId)).length;
 }
 
-const files = import.meta.glob<unknown>('../../../../content/species/*.json', {
-  eager: true,
-  import: 'default',
-});
-
-const TERRITORIAL = new Set<string>();
-for (const raw of Object.values(files)) {
-  const parsed = speciesSchema.partial({ render: true }).parse(raw);
-  if (parsed.behaviour.territorial) TERRITORIAL.add(parsed.id);
-}
-
-export const isTerritorial = (speciesId: string): boolean => TERRITORIAL.has(speciesId);
+export const isTerritorial = isBundledTerritorial;
 
 const claimsHome = (s: SpeciesSummary): boolean => isTerritorial(s.id) || s.breeding.needsCave;
 
@@ -137,7 +137,11 @@ export function territoryWarning(
   const shelters = shelterCount(tank);
 
   if (claimsHome(candidate) && holders.length + 1 > shelters) {
-    return `${candidate.commonName} claims a hiding place of its own, and this tank has ${shelters} for ${holders.length} fish that already do. With too few, the territorial fish fight over them and the losers get chased and stressed. Add rocks, caves or shells in decorate mode first, or add it anyway.`;
+    const have =
+      holders.length === 0
+        ? `this tank has ${shelters}`
+        : `this tank has ${shelters} for ${holders.length} fish that already do`;
+    return `${candidate.commonName} claims a hiding place of its own, and ${have}. With too few, the territorial fish fight over them and the losers get chased and stressed. Add rocks, caves or shells in decorate mode first, or add it anyway.`;
   }
   if (
     isTerritorial(candidate.id) &&

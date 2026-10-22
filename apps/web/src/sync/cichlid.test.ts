@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { CAVE_MOUTHS } from '../scene/caves';
 import { FISH_1, fishFixture, speciesFixture, tankFixture } from './fixtures';
 import {
+  SHELTER_ASSET_IDS,
   isShelterAsset,
   isTerritorial,
   lakeWaterNotes,
@@ -88,17 +89,37 @@ describe('lakeWaterNotes', () => {
     expect(lakeWaterNotes(tank, all, { kh: 7.5 })).toEqual([]);
   });
 
-  it('asks for a buffer when the tank is already as hard as the source water', () => {
+  it('has no fix when the tank is already as hard as the source water', () => {
     const tank = lakeTank(['pseudotropheus-demasoni']);
     const hardFish = speciesFixture({ ...demasoni, chemistry: chemistry(12, [7.5, 8.6]) });
     const [note] = lakeWaterNotes(tank, [hardFish], { kh: 10 });
-    expect(note).toMatchObject({ metric: 'kh', fix: 'needs-buffer' });
+    expect(note).toMatchObject({ metric: 'kh', fix: 'no-fix' });
+    expect(note?.text).not.toMatch(/buffer/i);
   });
 
-  it('warns on low pH and points at hardness', () => {
+  it('blames nitrate for low pH without CO2 and offers a water change', () => {
     const tank = lakeTank(['pseudotropheus-demasoni']);
-    const [note] = lakeWaterNotes(tank, all, { kh: 8, ph: 7 });
+    const [note] = lakeWaterNotes(tank, all, { kh: 10, ph: 7 });
     expect(note).toMatchObject({ metric: 'ph', level: 'caution', fix: 'water-change' });
+    expect(note?.text).toContain('Nitrate');
+  });
+
+  it('blames the CO2 system for low pH even when hardness is fine', () => {
+    const base = lakeTank(['pseudotropheus-demasoni']);
+    const tank = { ...base, equipment: { ...base.equipment, co2: { tier: 1 } } };
+    const [note] = lakeWaterNotes(tank, all, { kh: 10, ph: 7.2 });
+    expect(note).toMatchObject({ metric: 'ph', fix: 'no-fix' });
+    expect(note?.text).toContain('CO2');
+    expect(note?.text).not.toContain('hardness');
+  });
+
+  it('says the ranges clash when no pH suits every species', () => {
+    const tank = lakeTank(['pseudotropheus-demasoni', 'aulonocara-baenschi']);
+    const lowFish = speciesFixture({ ...demasoni, chemistry: chemistry(6, [7, 7.5]) });
+    const highFish = speciesFixture({ ...peacock, chemistry: chemistry(6, [8, 8.8]) });
+    const [note] = lakeWaterNotes(tank, [lowFish, highFish], { ph: 7.8 });
+    expect(note).toMatchObject({ metric: 'ph', fix: null });
+    expect(note?.text).toContain('do not overlap');
   });
 
   it('uses the narrowest pH window across species', () => {
@@ -117,7 +138,9 @@ describe('lakeWaterNotes', () => {
 
 describe('shelters', () => {
   it('keeps the asset list in step with the scene', () => {
-    for (const id of Object.keys(CAVE_MOUTHS)) expect(isShelterAsset(id)).toBe(true);
+    const mouths = Object.keys(CAVE_MOUTHS);
+    for (const id of mouths) expect(isShelterAsset(id)).toBe(true);
+    expect(SHELTER_ASSET_IDS).toEqual(new Set(mouths));
     expect(isShelterAsset('malawi-boulder-03')).toBe(false);
   });
 
@@ -150,7 +173,9 @@ describe('territoryWarning', () => {
   });
 
   it('warns when a territorial fish has no hiding place left', () => {
-    expect(territoryWarning(bare([]), demasoni, all)).toContain('0 for 0');
+    const text = territoryWarning(bare([]), demasoni, all);
+    expect(text).toContain('this tank has 0.');
+    expect(text).not.toContain('for 0 fish');
   });
 
   it('counts the residents that already claim a shelter', () => {

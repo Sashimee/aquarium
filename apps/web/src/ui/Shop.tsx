@@ -75,8 +75,12 @@ function FishShop({ session, state, tank, spend }: ShopProps & { spend: Spend })
   const suggestion = suggestFishName(taken, tank.fish.length);
 
   const warningFor = (s: SpeciesSummary) =>
-    heaterWarning(tank, s, BUNDLED_CHEMISTRY.temperature.roomC) ??
-    territoryWarning(tank, s, state.species);
+    [
+      heaterWarning(tank, s, BUNDLED_CHEMISTRY.temperature.roomC),
+      territoryWarning(tank, s, state.species),
+    ]
+      .filter((w) => w !== null)
+      .join(' ') || null;
 
   useEffect(() => setProblem(null), [name]);
   useEffect(() => setConfirming(null), [stage, tank.id, tank.equipment.heater.tier]);

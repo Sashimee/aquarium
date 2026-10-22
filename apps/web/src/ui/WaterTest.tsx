@@ -158,33 +158,40 @@ function LakeWater({
   tank: Tank;
   species: readonly SpeciesSummary[];
   dip: Dip;
-  onWaterChange: (() => void) | undefined;
+  onWaterChange: (() => unknown) | undefined;
 }) {
+  const [pending, setPending] = useState(false);
+  const change = () => {
+    if (!onWaterChange) return;
+    setPending(true);
+    void Promise.resolve(onWaterChange()).finally(() => setPending(false));
+  };
   const known = (id: 'kh' | 'ph') => {
     const reading = dip.strip[id];
     if (!reading || !(dip.revealed || dip.guesses[id] !== undefined)) return undefined;
-    return Math.round(reading.value * 10) / 10;
+    return PADS[id].steps[reading.stepIndex]?.value;
   };
   const notes = lakeWaterNotes(tank, species, { kh: known('kh'), ph: known('ph') });
   if (notes.length === 0) return null;
   const canChange = onWaterChange !== undefined && notes.some((n) => n.fix === 'water-change');
   return (
     <div className="lake-notes" data-testid="lake-notes">
-      <ul>
-        {notes.map((n) => (
-          <li
-            key={n.metric}
-            className={n.level === 'watch' ? 'hint' : 'warning'}
-            data-level={n.level}
-            data-metric={n.metric}
-            role={n.level === 'watch' ? undefined : 'alert'}
-          >
-            {n.text}
-          </li>
-        ))}
-      </ul>
+      <div role="status">
+        <ul>
+          {notes.map((n) => (
+            <li
+              key={n.metric}
+              className={n.level === 'watch' ? 'hint' : 'warning'}
+              data-level={n.level}
+              data-metric={n.metric}
+            >
+              {n.text}
+            </li>
+          ))}
+        </ul>
+      </div>
       {canChange && (
-        <button type="button" data-action="lake-water-change" onClick={onWaterChange}>
+        <button type="button" data-action="lake-water-change" disabled={pending} onClick={change}>
           Change half the water
         </button>
       )}
@@ -199,7 +206,7 @@ export default function WaterTest({
 }: {
   tank: Tank;
   species: readonly SpeciesSummary[];
-  onWaterChange?: () => void;
+  onWaterChange?: () => unknown;
 }) {
   const id = useId();
   const [dip, setDip] = useState<Dip | null>(() => getDip(tank.id));

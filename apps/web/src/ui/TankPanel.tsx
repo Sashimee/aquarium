@@ -153,7 +153,7 @@ function CareSections({ session, state, tank }: Ready) {
       <WaterTest
         tank={tank}
         species={state.species}
-        onWaterChange={() => void session.careAction({ type: 'water_change' })}
+        onWaterChange={() => session.careAction({ type: 'water_change' })}
       />
       <CoralSection interaction={interaction} session={session} state={state} tank={tank} />
       <GiftNotice session={session} />
