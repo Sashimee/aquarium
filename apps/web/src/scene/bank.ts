@@ -39,15 +39,13 @@ export const BANK_CLEARANCE = 0.01;
 
 /** How far under the rim a perch's highest point stays. */
 export const BANK_RIM_MARGIN = 0.01;
-/** A bank-asset item authored at least this large is the preset's perch, not ordinary wood. */
-export const PERCH_MIN_SCALE = 1.3;
 /** A perch is not shrunk with the tank; it grows up to this much past its authored scale to reach the rim. */
 export const PERCH_GROWTH = 1.25;
 /** A perch fitted smaller than this is too slight to stand clear of the water; it is ordinary wood. */
 export const PERCH_MIN_FIT = 1;
 
 export function isPerch(item: DecorItem): boolean {
-  return item.assetId in BANK_TOPS && item.scale >= PERCH_MIN_SCALE;
+  return item.perch === true && item.assetId in BANK_TOPS;
 }
 
 export function bankAnchor(id: string, item: DecorItem): SceneBank {

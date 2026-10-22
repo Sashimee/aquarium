@@ -19,7 +19,8 @@
       "assetId": "mangrove-stump",
       "position": [0.06, 0.09, -0.09],
       "rotationY": 0.3,
-      "scale": 1.4
+      "scale": 1.4,
+      "perch": true
     },
     {
       "assetId": "mangrove-prop-roots",
@@ -97,7 +98,8 @@
       "assetId": "mud-bank",
       "position": [0.34, 0.0955, -0.06],
       "rotationY": 0,
-      "scale": 1.3
+      "scale": 1.3,
+      "perch": true
     }
   ],
   "plantPatches": [],

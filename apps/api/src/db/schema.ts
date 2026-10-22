@@ -138,6 +138,9 @@ export const eventKindEnum = pgEnum('event_kind', [
   'sick',
   'water_alert',
   'fish_moved',
+  'salt_dose',
+  'buffer_dose',
+  'add_botanicals',
 ]);
 
 export const tanks = pgTable(
@@ -176,7 +179,7 @@ export const tanks = pgTable(
     backgroundId: text('background_id'),
     water: jsonb('water')
       .notNull()
-      .default(sql`'{"ammonia":0,"nitrate":0,"algae":0,"uneatenFood":0}'::jsonb`),
+      .default(sql`'{"ammonia":0,"nitrate":0,"algae":0,"uneatenFood":0,"tannin":0}'::jsonb`),
     lastTickAt: timestamptz('last_tick_at').notNull().defaultNow(),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
     updatedAt: timestamptz('updated_at').notNull().defaultNow(),

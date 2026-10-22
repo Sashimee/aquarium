@@ -31,7 +31,7 @@ const fish = (id: string, over: Partial<LifecycleFish> = {}): LifecycleFish => (
 });
 
 const tank = (ammonia: number, fishList: LifecycleFish[] = []): LifecycleState => ({
-  water: { ammonia, nitrate: 0, algae: 0, uneatenFood: 0 },
+  water: { ammonia, nitrate: 0, algae: 0, tannin: 0, uneatenFood: 0 },
   chemistry: newTankChemistry('freshwater'),
   fish: fishList,
   medicine: null,

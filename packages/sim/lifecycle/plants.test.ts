@@ -64,7 +64,7 @@ const plantsOf = (assetId: string, n: number): PlantState[] =>
 
 function tank(water: Partial<Water>): LifecycleState {
   return {
-    water: { ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 0, ...water },
+    water: { ammonia: 0, nitrate: 0, algae: 0, tannin: 0, uneatenFood: 0, ...water },
     chemistry: newTankChemistry('freshwater'),
     fish: [],
     medicine: null,
@@ -131,7 +131,7 @@ describe('plant growth in the offline catch-up', () => {
 
   it('takes up exactly the nitrate the growth is worth', () => {
     const start = plantsOf('universal-plant', 2);
-    const water: Water = { ammonia: 0, nitrate: 30, algae: 0, uneatenFood: 0 };
+    const water: Water = { ammonia: 0, nitrate: 30, algae: 0, tannin: 0, uneatenFood: 0 };
     const out = stepPlants(start, water, {
       nowMs: T0 + 12 * HOUR,
       dtHours: 1,
@@ -154,7 +154,7 @@ describe('plant growth in the offline catch-up', () => {
       ),
     };
     const start = plantsOf('universal-plant', 1);
-    const water: Water = { ammonia: 0, nitrate: 2, algae: 0, uneatenFood: 0 };
+    const water: Water = { ammonia: 0, nitrate: 2, algae: 0, tannin: 0, uneatenFood: 0 };
     const out = stepPlants(start, water, {
       nowMs: T0 + 12 * HOUR,
       dtHours: 1,
@@ -174,7 +174,7 @@ describe('plant growth in the offline catch-up', () => {
       const start = plantsOf('universal-plant', 1).map((p) => ({ ...p, size }));
       const out = stepPlants(
         start,
-        { ammonia: 0, nitrate: 1000, algae: 0, uneatenFood: 0 },
+        { ammonia: 0, nitrate: 1000, algae: 0, tannin: 0, uneatenFood: 0 },
         {
           nowMs: T0 + 12 * HOUR,
           dtHours: 1 / 6,

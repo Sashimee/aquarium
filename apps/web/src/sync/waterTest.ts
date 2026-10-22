@@ -1,4 +1,5 @@
 import type { Biome, SpeciesSummary, Tank } from '@aquarium/shared';
+import { SALT_BIOMES } from './salinityCare';
 import { livingFish, waterReport, type WaterQuality } from './life';
 
 export type PadId = 'ph' | 'ammonia' | 'nitrite' | 'nitrate' | 'kh' | 'salinity';
@@ -118,7 +119,6 @@ export const PADS: Readonly<Record<PadId, PadSpec>> = {
 };
 
 const BASE_PADS: readonly PadId[] = ['ph', 'ammonia', 'nitrite', 'nitrate', 'kh'];
-const SALT_BIOMES: ReadonlySet<Biome> = new Set<Biome>(['reef', 'mangrove']);
 
 export const padsFor = (biome: Biome): readonly PadId[] =>
   SALT_BIOMES.has(biome) ? [...BASE_PADS, 'salinity'] : BASE_PADS;

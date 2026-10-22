@@ -33,7 +33,7 @@ export const NEW_TANK_CHEMISTRY_BY_BIOME: Readonly<Record<Biome, Chemistry>> = {
     salinity: 0,
     bacteria: SEEDED_FILTER,
   },
-  mangrove: { nitrite: 0, ph: 8, kh: 8, temperatureC: 26, salinity: 15, bacteria: SEEDED_FILTER },
+  mangrove: { nitrite: 0, ph: 8, kh: 8, temperatureC: 26, salinity: 10, bacteria: SEEDED_FILTER },
 };
 
 export const newTankChemistry = (biome: Biome): Chemistry => ({
@@ -84,10 +84,31 @@ export const chemistryParametersSchema = z.strictObject({
   salinity: z.strictObject({
     target: perBiome(z.number().min(0).max(45)),
     driftPerHour: rate.describe('fraction of the gap to the target closed per hour'),
+    restoredPerWaterChange: unitSchema.describe(
+      'fraction of the gap to the biome target closed by a water change',
+    ),
+    saltDoseFraction: unitSchema.describe(
+      'fraction of the gap to the biome salt-mix level closed by one salt dose',
+    ),
+  }),
+  tannin: z.strictObject({
+    perDose: unitSchema.describe('tannin added by one batch of botanicals'),
+    ceiling: perBiome(unitSchema).describe(
+      'tannin botanicals will not raise the tank past; 0 refuses botanicals in that biome',
+    ),
+    decayPerHour: rate.describe('fraction of the tannin lost per hour'),
+    restoredPerWaterChange: unitSchema.describe('fraction of the tannin removed by a water change'),
+    phPullPerDose: rate.describe('pH points one batch of botanicals pulls down at once'),
+    phFloor: z.number().min(0).max(14).describe('botanicals never pull the pH below this'),
+    phDropAtFull: rate.describe('pH points the buffered target drops at full tannin'),
   }),
   kh: z.strictObject({
     consumedPerNitrate: rate,
     restoredPerWaterChange: unitSchema.describe('fraction of the gap to the source water closed'),
+    bufferDoseKh: rate.describe('dKH added by one buffer dose'),
+    bufferCeiling: perBiome(z.number().min(0).max(40)).describe(
+      'dKH a buffer dose will not raise the tank past; 0 refuses buffering in that biome',
+    ),
     sourceWater: perBiome(z.number().min(0).max(40)).describe(
       'dKH of the water a change adds: tap for fresh biomes, salt mix for marine and brackish',
     ),
