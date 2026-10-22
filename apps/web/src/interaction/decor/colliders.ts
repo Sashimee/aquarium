@@ -1,5 +1,6 @@
 import type { Collider, DecorItem } from '@aquarium/shared';
 import { footprintOf } from './footprint';
+import { hasShelterParts, shelterColliders } from './shelterColliders';
 import type { DecorSpec } from './spec';
 
 export const COLLIDER_PREFIX = 'decor:';
@@ -34,7 +35,8 @@ function plantCollider(colliderId: string, spec: DecorSpec, item: DecorItem, up:
 
 /**
  * Sim collision proxies for one placed piece, in tank space. Long thin driftwood becomes a
- * capsule so fish can swim under a raised end; everything else is a rounded box.
+ * capsule so fish can swim under a raised end; shelters are convex parts that keep their opening
+ * clear; everything else is a rounded box.
  */
 export function collidersFor(
   id: string,
@@ -47,6 +49,15 @@ export function collidersFor(
   const cy = f.yMin + height / 2;
   const colliderId = `${COLLIDER_PREFIX}${id}`;
   if (spec.kind === 'plant') return plantCollider(colliderId, spec, item, up);
+  if (hasShelterParts(spec.assetId)) {
+    if (up !== UPRIGHT && (up[0] !== 0 || up[1] !== 1 || up[2] !== 0)) {
+      console.warn(
+        `"${spec.assetId}" is a shelter and can only stand upright, got up ${up.join(',')}; leaving it out of the sim colliders`,
+      );
+      return [];
+    }
+    return shelterColliders(colliderId, item);
+  }
   if (spec.kind === 'driftwood') {
     const upright = height / 2 > Math.max(f.hx, f.hz);
     if (upright) {

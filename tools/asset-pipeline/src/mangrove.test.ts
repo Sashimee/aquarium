@@ -10,7 +10,6 @@ import {
   paintArcherfish,
   paintBumblebeeGoby,
   paintChromide,
-  paintFigure8Puffer,
   paintMono,
 } from './mangrove.ts';
 import { ENVIRONMENT_RECIPES, FISH_RECIPES, SUBSTRATE_RECIPES } from './recipes.ts';
@@ -27,7 +26,6 @@ function shipped(id: string): OutputAsset {
 const PAINTERS = {
   'banded-archerfish': paintArcherfish,
   'silver-mono': paintMono,
-  'figure-8-puffer': paintFigure8Puffer,
   'bumblebee-goby': paintBumblebeeGoby,
   'orange-chromide': paintChromide,
 };
@@ -86,7 +84,7 @@ describe('mangrove recipes', () => {
     const noReferences = MANGROVE_LOFT_RECIPES.filter(
       (r) => r.texture.kind === 'synthetic' && !r.texture.references?.length,
     ).map((r) => r.id);
-    expect(noReferences.sort()).toEqual(['figure-8-puffer', 'orange-chromide']);
+    expect(noReferences.sort()).toEqual(['orange-chromide']);
   });
 
   it('never references the parked public-domain photos', () => {

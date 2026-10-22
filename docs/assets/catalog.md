@@ -599,11 +599,13 @@ Checked 2026-10-22. Sources searched in order: Smithsonian (no brackish fish mod
 |---|---|---|---|---|
 | Barred mudskipper (Periophthalmus argentilineatus) | model | `sketchfab-c3bc5a29` (ffish.asia / floraZia.com, CC0) | 216,740 triangles | Photogrammetry scan, rigid, one 4096 texture. Best anatomy of the brackish set (raised eyes, pectoral arms). Needs heavy decimation and a rig. |
 | Blue-spotted mudskipper (Boleophthalmus pectinirostris) | model | `sketchfab-0fe8a8af` (ffish.asia / floraZia.com, CC0) | 392,134 triangles | Photogrammetry scan, rigid, one 4096 texture, blue spots intact. Second mudskipper species so the biome has a grazing pair of goby shapes. |
-| Figure-8 puffer (Tetraodon biocellatus) | fallback: procedural loft | no CC0 or CC-BY photo; `PD-user-de` candidate pending Alex's licence decision (see Gaps below) | n/a | Lofted from the species description until a photo is allowed. The scan `sketchfab-7cbf59ce` (CC0, 312,662 triangles) is Takifugu snyderi, a marine puffer with the wrong pattern, so it is a geometry reference only. |
+| Figure-8 puffer (Dichotomyctere ocellatus, formerly Tetraodon biocellatus), **moved to the freshwater roster, kept here for its catalog history; not part of the mangrove set** | fallback: procedural loft; **not a mangrove species, belongs to the freshwater roster** (decision for #1220, 2026-10-22) | no CC0 or CC-BY photo; `PD-user-de` candidate pending Alex's licence decision (see Gaps below) | n/a | Lofted from the species description until a photo is allowed. The scan `sketchfab-7cbf59ce` (CC0, 312,662 triangles) is Takifugu snyderi, a marine puffer with the wrong pattern, so it is a geometry reference only. |
 | Banded archerfish (Toxotes jaculatrix) | fallback: procedural loft | `wm-archerfish-vassil` (CC0), `wm-archerfish-pericard` (CC-BY-4.0, Pierre Pericard) | n/a | Silver body with five to six dark saddle bars and a rear-set dorsal. No model found. |
 | Silver mono (Monodactylus argenteus) | fallback: procedural loft | `wm-mono-shetty` (CC0), `wm-mono-khauv` (CC-BY-4.0, Lek Khauv) | n/a | Diamond-shaped silver disc, tall dorsal and anal fins. A third photo (`Monodactylus argenteus 1.jpg`, Karelj, public domain) was found and not downloaded. |
 | Bumblebee goby (Brachygobius sp.) | fallback: procedural loft | `wm-bumblebee-lisitsyn-1`, `-2` (CC-BY-4.0, Pavlik Lisitsyn, B. doriae) | n/a | Tiny (about 3 to 4 cm), broad black and yellow bands. The Frank M. Greco photo (CC BY 3.0, 640x449) is too small and was not downloaded. |
 | Orange chromide (Etroplus maculatus) | fallback: procedural loft | no CC0 or CC-BY photo; `PD-self` candidate pending Alex's licence decision (see Gaps below) | n/a | Lofted from the species description (orange spots, flank blotch, dark dorsal bars) until a photo is allowed. The only CC BY 3.0 photo found (Manojk) shows dead fish in a fish-market crate and was rejected. |
+
+Figure-8 puffer biome (#1220): FishBase (https://www.fishbase.se/summary/Dichotomyctere-ocellatus.html, read 2026-10-22) lists it as freshwater, "Not a brackish water species", pH 6.5 to 7.5, 22 to 26 C. Seriously Fish (https://www.seriouslyfish.com/species/dichotomyctere-ocellatus/, read 2026-10-22) says it is often treated as true freshwater, lives in freshwater to brackish rivers and coasts, and does better with a little marine salt at about SG 1.005 (roughly 7 ppt) in captivity. The mangrove tank runs at 15 ppt, pH 8 (`packages/shared/src/chemistry.ts`), above the top of that range, so the species is not marked brackish and the model leaves the mangrove set. Its home is the freshwater biome (pH 7, 0 ppt; blackwater at pH 6 is below its range). The loft model is unchanged and stays in the catalog as the pick for this species.
 
 Ranking per species, best first. Mudskippers: `sketchfab-c3bc5a29`, `sketchfab-0fe8a8af` (they are different species, so each is the pick for its own species; only these two were found under CC0 or CC-BY). Figure-8 puffer: loft from the species description, or re-textured `sketchfab-7cbf59ce`; no allowed photo yet. Archerfish: `wm-archerfish-vassil` over `wm-archerfish-pericard` (CC0 beats attribution). Mono: `wm-mono-shetty` (6048x4032, CC0) over `wm-mono-khauv`. Bumblebee goby: `wm-bumblebee-lisitsyn-1` over `-2`. Chromide: no allowed photo yet.
 
@@ -620,7 +622,7 @@ Four Commons files are public domain, not CC0 or CC-BY, and the repo allows only
 
 The previous revision recorded these four as `CC0-1.0`; that was wrong, since Commons tags them as public domain and none carries a CC0 deed.
 
-The PLAN asks for 4 or more species. The biome has seven: two models and five lofts. The "model" picks are scans of high triangle count, so the pipeline cost is decimation, not modelling.
+The PLAN asks for 4 or more species. The biome has six: two models and four lofts (the figure-8 puffer moved to the freshwater roster). The "model" picks are scans of high triangle count, so the pipeline cost is decimation, not modelling.
 
 ### Hardscape, roots and decor
 
@@ -636,6 +638,19 @@ The PLAN asks for 4 or more species. The biome has seven: two models and five lo
 | Root and mud colour reference | `wm-mangrove-restinga-wilfredor` | CC0 | Photo for matching the render grade and the root tint, not placed in a tank. |
 
 No allowed underwater mangrove photo with a clean frame exists; every CC0, CC-BY and public-domain mangrove photo found is shot above the waterline or has people or boats in frame. The roots in the reference photo are used as a colour and shape reference only.
+
+### Emergent mud bank (issue #1259)
+
+Checked 2026-10-22. Sketchfab (CC0 and CC-BY, downloadable) was searched for mud bank, mudflat, river bank and swamp bank; Poly Haven and ambientCG have only flat textures, no bank models.
+
+| Candidate | Licence | Verdict |
+|---|---|---|
+| `River Bank` (telziel, uid a4f6b184, 16,845 triangles) | CC-BY-4.0 | A mossy cliff chunk (thumbnail check) with a green algae skin and a vertical face, not a wet mud slope. Rejected. |
+| `Estuary Bank` (emcderm, uid 3cd1c470, 837,090 triangles) | CC-BY-4.0 | A scan of stones lining a river bank. Rejected: rock, not mud, and far too heavy. |
+| `Soil Bank` (mr.himumz, uid ac464d5e) | CC-BY-4.0 | A scanned clay bottle despite the name. Rejected. |
+| `Tidal tree, seacoast, shore, mud flat` (Metazeon) | CC-BY-4.0 | About 960k triangles of landscape scan with a tree; unusable at tank scale. Rejected. |
+
+Decision: **build the bank procedurally** from the existing CC0 `polyhaven-brown_mud_03` (already in the manifest, tidal-mud substrate, 2k PBR with displacement). A broad bank needs a controlled shape (flat top, gentle slope, honest radius), which a scan will not give, and no allowed scan matches. No new manifest entry and no new credit are needed.
 
 ### Backgrounds (render specs, not yet in the manifest)
 
@@ -670,8 +685,8 @@ Re-searched Commons for underwater or waterline mangrove photos (CC0 and CC-BY 3
 Adult target lengths (total length, approximate): barred mudskipper 10 to 12 cm, blue-spotted mudskipper 12 to 15 cm, figure-8 puffer 6 to 7 cm, banded archerfish 15 to 20 cm in a home tank, silver mono 15 to 20 cm, bumblebee goby 3 to 4 cm, orange chromide 8 to 10 cm.
 
 1. Mudskippers (`sketchfab-c3bc5a29`, `sketchfab-0fe8a8af`): remove the scan slate (the 1024 `Material.001` texture) and base pieces, decimate to LOD0 under about 15k triangles, LOD1 and LOD2 below that, rig spine plus pectoral and dorsal fin joints (they rest on the substrate and mud, so the idle pose is propped on the pectorals), origin at the belly, 1k to 2k KTX2.
-2. Loft five species from the listed photos: figure-8 puffer (no allowed photo; paint the figure-8 markings from the species description unless Alex approves `wm-figure8-geyer`, see Gaps), banded archerfish (`wm-archerfish-vassil`, `-pericard`), silver mono (`wm-mono-shetty`, `-khauv`), bumblebee goby (`wm-bumblebee-lisitsyn-1`, `-2`), orange chromide (no allowed photo; species description unless Alex approves `wm-chromide-raghu`, see Gaps). CC-BY credits (Pericard, Khauv, Lisitsyn) must stay in CREDITS.md. No sexual dimorphism is built in; the chromide and bumblebee goby are near-monomorphic.
-3. Optional: `sketchfab-7cbf59ce` as the puffer geometry only, if the loft reads worse; it is Takifugu snyderi, so re-texture it from the species description (or from `wm-figure8-geyer` if Alex approves it).
+2. Loft four species from the listed photos for the mangrove set: banded archerfish (`wm-archerfish-vassil`, `-pericard`), silver mono (`wm-mono-shetty`, `-khauv`), bumblebee goby (`wm-bumblebee-lisitsyn-1`, `-2`), orange chromide (no allowed photo; species description unless Alex approves `wm-chromide-raghu`, see Gaps). The figure-8 puffer is no longer in this set: it ships in the freshwater roster as a loft (paint the figure-8 markings from the species description unless Alex approves `wm-figure8-geyer`, see Gaps). CC-BY credits (Pericard, Khauv, Lisitsyn) must stay in CREDITS.md. No sexual dimorphism is built in; the chromide and bumblebee goby are near-monomorphic.
+3. Optional (freshwater roster): `sketchfab-7cbf59ce` as the puffer geometry only, if the loft reads worse; it is Takifugu snyderi, so re-texture it from the species description (or from `wm-figure8-geyer` if Alex approves it).
 4. Roots: split `sketchfab-5658cc51` into prop-root clusters (each under about 15k triangles, three to four clusters), trunk and leaves; 8192 atlas to 2k KTX2; origin at the root base; scale to 20 to 40 cm tall. `sketchfab-c32d977c` instances at 20 to 35 cm with its textures at 1k; `sketchfab-a221abc9` decimated to under about 20k triangles, 8192 texture to 2k, 15 to 30 cm. `sketchfab-2b81ff20`: split propagules from leaves, each under 3k triangles, 15 to 25 cm propagules.
 5. Substrate: `polyhaven-brown_mud_03` is the mud substrate; reuse existing sand and rocks.
 6. Backgrounds: render the five slots to the specs above, strip metadata, build the three KTX2 tiers, then add the entries to the manifest with `sha256`, `files[]`, `modifications[]` and status `downloaded`.

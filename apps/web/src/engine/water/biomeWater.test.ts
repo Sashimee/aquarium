@@ -1,10 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { biomeSchema, TANK_SIZES, type Biome } from '@aquarium/shared';
-import { Box3, Color, Mesh, MeshBasicNodeMaterial, PlaneGeometry, Vector3 } from 'three/webgpu';
-import { float, vec4 } from 'three/tsl';
+import {
+  Box3,
+  Color,
+  Mesh,
+  MeshBasicNodeMaterial,
+  PlaneGeometry,
+  Texture,
+  Vector3,
+  type Node,
+} from 'three/webgpu';
+import { float, normalWorld, positionWorld, vec4 } from 'three/tsl';
 import { buildShaders, evaluate, type ShaderBackend } from '../shaderFixtures';
 import { applyBiomeWater, BIOME_WATER } from './biomeWater';
 import { Caustics } from './caustics';
+import { InteriorLight } from './interior';
 import { spectralAbsorption, WaterMedium, type WaterQuality } from './medium';
 
 const BIOMES: readonly Biome[] = biomeSchema.options;
@@ -70,6 +80,19 @@ describe('BIOME_WATER for the new biomes', () => {
       expect(water.turbidity).toBeGreaterThan(0);
       expect(() => medium(water)).not.toThrow();
     }
+  });
+
+  it('holds every biome water read-only at runtime, not only by type', () => {
+    expect(Object.isFrozen(BIOME_WATER)).toBe(true);
+    for (const biome of BIOMES) expect(Object.isFrozen(BIOME_WATER[biome])).toBe(true);
+    const table = BIOME_WATER as Record<Biome, WaterQuality>;
+    expect(() => {
+      table.blackwater.cdom440 = 0;
+    }).toThrow(TypeError);
+    expect(() => {
+      table.reef = { cdom440: 1, turbidity: 1 };
+    }).toThrow(TypeError);
+    expect(BIOME_WATER.blackwater.cdom440).toBe(2.5);
   });
 
   it('makes the cichlid lake clearer than the planted tank and blue-green', () => {
@@ -177,24 +200,52 @@ describe('applyBiomeWater', () => {
 });
 
 describe('biome water on both backends', () => {
-  function fogShader(water: WaterMedium, backend: ShaderBackend): string {
+  type WaterShader = (water: WaterMedium, backend: ShaderBackend) => string;
+
+  const fragmentOf = (output: Node<'vec4'>, backend: ShaderBackend): string => {
     const material = new MeshBasicNodeMaterial();
-    material.outputNode = water.applyPremultiplied(vec4(0.5, 0.5, 0.5, 1));
+    material.outputNode = output;
     return buildShaders(new Mesh(new PlaneGeometry(), material), backend).fragment;
-  }
+  };
+
+  const fogShader: WaterShader = (water, backend) =>
+    fragmentOf(water.applyPremultiplied(vec4(0.5, 0.5, 0.5, 1)), backend);
+
+  const causticShader: WaterShader = (water, backend) =>
+    fragmentOf(vec4(new Caustics(water).lightColorNode(), 1), backend);
+
+  const interiorShader: WaterShader = (water, backend) => {
+    const interior = new InteriorLight(
+      water,
+      new Caustics(water),
+      new Texture(),
+      new Color(0.5, 0.5, 0.5),
+      0.05,
+    );
+    interior.update();
+    return fragmentOf(vec4(interior.ambientAt(positionWorld, normalWorld), 1), backend);
+  };
+
+  const SHADERS: Readonly<Record<string, WaterShader>> = {
+    'water fog': fogShader,
+    caustics: causticShader,
+    'interior light': interiorShader,
+  };
 
   // The biome is uniforms only: one pipeline serves every biome, so a tank switch compiles nothing
   // and the frame cost of every tier is the one it had.
   for (const backend of ['webgpu', 'webgl'] as const) {
-    it(`builds one identical ${backend} water shader for every biome`, () => {
-      const water = medium();
-      const shaders = BIOMES.map((biome) => {
-        applyBiomeWater(water, biome);
-        return fogShader(water, backend);
+    for (const [name, shaderOf] of Object.entries(SHADERS)) {
+      it(`builds one identical ${backend} ${name} shader for every biome`, () => {
+        const water = medium();
+        const shaders = BIOMES.map((biome) => {
+          applyBiomeWater(water, biome);
+          return shaderOf(water, backend);
+        });
+        expect(shaders[0]?.length).toBeGreaterThan(0);
+        for (const shader of shaders) expect(shader).toBe(shaders[0]);
       });
-      expect(shaders[0]?.length).toBeGreaterThan(0);
-      for (const shader of shaders) expect(shader).toBe(shaders[0]);
-    });
+    }
   }
 
   it('builds the WebGL 2 fallback in GLSL with the exponential absorption', () => {

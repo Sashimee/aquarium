@@ -236,3 +236,151 @@ describe('the blackwater CO2 migration on tanks that already have CO2', () => {
     expect(await ledgerSum('bw1')).toBe(2000);
   });
 });
+
+describe('the blackwater CO2 sweep migration', () => {
+  let testDb: Awaited<ReturnType<typeof createTestDatabase>>;
+  let database: Database;
+  let oldDir: string;
+  const tankId = (n: number) => `00000000-0000-4000-8000-00000000020${n}`;
+  const withCo2 = (tier: number) => JSON.stringify({ ...DEFAULT_EQUIPMENT, co2: { tier } });
+  const one = async <T>(text: string, params: unknown[] = []) =>
+    (await database.pool.query(text, params)).rows[0] as T;
+
+  beforeAll(async () => {
+    testDb = await createTestDatabase();
+    database = connect(testDb.url);
+    oldDir = migrationsUpTo(27);
+    await migrate(drizzle(database.pool), { migrationsFolder: oldDir });
+    await database.pool.query(
+      `insert into "user" (id, name, email) values
+        ('sw1', 'Two tanks', 'sw1@bas.lu'), ('sw2', 'No wallet', 'sw2@bas.lu'), ('sw3', 'Swept before', 'sw3@bas.lu')`,
+    );
+    await database.pool.query(
+      `insert into wallet (user_id, balance) values ('sw1', 500), ('sw3', 50)`,
+    );
+    await database.pool.query(
+      `insert into tanks (id, owner_id, biome, name, equipment) values
+        ($1, 'sw1', 'blackwater', 'Tier two', $5),
+        ($2, 'sw1', 'blackwater', 'Tier one', $6),
+        ($3, 'sw2', 'blackwater', 'Walletless', $6),
+        ($4, 'sw1', 'freshwater', 'Planted', $5),
+        ('00000000-0000-4000-8000-000000000209', 'sw3', 'blackwater', 'Clean', $7)`,
+      [tankId(1), tankId(2), tankId(3), tankId(4), withCo2(2), withCo2(1), withCo2(0)],
+    );
+    await runMigrations(database);
+  });
+
+  afterAll(async () => {
+    await database.close();
+    await testDb.drop();
+    rmSync(oldDir, { recursive: true, force: true });
+  });
+
+  const tiers = async () => {
+    const { rows } = await database.pool.query<{ name: string; equipment: unknown }>(
+      'select name, equipment from tanks order by name',
+    );
+    return Object.fromEntries(
+      rows.map((r) => [r.name, equipmentSchema.parse(r.equipment).co2.tier]),
+    );
+  };
+
+  it('zeroes blackwater CO2 and leaves other biomes alone', async () => {
+    expect(await tiers()).toEqual({
+      'Tier two': 0,
+      'Tier one': 0,
+      Walletless: 0,
+      Planted: 2,
+      Clean: 0,
+    });
+  });
+
+  it('refunds a user with two blackwater tanks once per tank, in step with the ledger', async () => {
+    const wallet = await one<{ balance: number }>(
+      `select balance from wallet where user_id = 'sw1'`,
+    );
+    expect(wallet.balance).toBe(500 + 700 + 300);
+    const { rows } = await database.pool.query<{ delta: number; idempotency_key: string }>(
+      `select delta, idempotency_key from ledger where user_id = 'sw1' order by delta`,
+    );
+    expect(rows).toEqual([
+      { delta: 300, idempotency_key: `server:co2-sweep-${tankId(2)}` },
+      { delta: 700, idempotency_key: `server:co2-sweep-${tankId(1)}` },
+    ]);
+  });
+
+  it('creates no wallet row for a user without one, so the starting grant stays possible', async () => {
+    const { rows } = await database.pool.query(`select 1 from wallet where user_id = 'sw2'`);
+    expect(rows).toHaveLength(0);
+    const ledger = await database.pool.query(`select 1 from ledger where user_id = 'sw2'`);
+    expect(ledger.rows).toHaveLength(0);
+  });
+
+  it('leaves a user with no CO2 on blackwater untouched', async () => {
+    const wallet = await one<{ balance: number }>(
+      `select balance from wallet where user_id = 'sw3'`,
+    );
+    expect(wallet.balance).toBe(50);
+  });
+
+  it('is idempotent: running the migrations again, and the file again, refunds nothing more', async () => {
+    await runMigrations(database);
+    const sql = readFileSync(join(DRIZZLE, '0028_blackwater_co2_sweep.sql'), 'utf8');
+    const client = await database.pool.connect();
+    try {
+      await client.query('begin');
+      for (const statement of sql.split('--> statement-breakpoint')) await client.query(statement);
+      await client.query('commit');
+    } finally {
+      client.release();
+    }
+    const wallet = await one<{ balance: number }>(
+      `select balance from wallet where user_id = 'sw1'`,
+    );
+    expect(wallet.balance).toBe(1500);
+  });
+
+  it('never refunds the same tank twice, even if CO2 reappears on it', async () => {
+    await database.pool.query(`update tanks set equipment = $1 where id = $2`, [
+      withCo2(1),
+      tankId(2),
+    ]);
+    const sql = readFileSync(join(DRIZZLE, '0028_blackwater_co2_sweep.sql'), 'utf8');
+    const client = await database.pool.connect();
+    try {
+      await client.query('begin');
+      for (const statement of sql.split('--> statement-breakpoint')) await client.query(statement);
+      await client.query('commit');
+    } finally {
+      client.release();
+    }
+    const wallet = await one<{ balance: number }>(
+      `select balance from wallet where user_id = 'sw1'`,
+    );
+    expect(wallet.balance).toBe(1500);
+    expect((await tiers())['Tier one']).toBe(0);
+  });
+});
+
+describe('the migration journal', () => {
+  const { entries } = JSON.parse(readFileSync(join(DRIZZLE, 'meta/_journal.json'), 'utf8')) as {
+    entries: { idx: number; when: number; tag: string }[];
+  };
+
+  it('has strictly increasing timestamps, because drizzle skips any migration older than the last applied', () => {
+    let previous = -Infinity;
+    for (const entry of entries) {
+      expect(entry.when, entry.tag).toBeGreaterThan(previous);
+      previous = entry.when;
+    }
+  });
+
+  it('has no timestamp in the future, which would make later migrations silently skip', () => {
+    const now = Date.now();
+    for (const entry of entries) expect(entry.when, entry.tag).toBeLessThanOrEqual(now);
+  });
+
+  it('numbers entries consecutively', () => {
+    expect(entries.map((e) => e.idx)).toEqual(entries.map((_, i) => i));
+  });
+});

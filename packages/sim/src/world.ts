@@ -1644,11 +1644,13 @@ export class World {
       let ny = (nh[1] ?? 0) * aHere + (np[1] ?? 0) * aProbe;
       let nz = (nh[2] ?? 0) * aHere + (np[2] ?? 0) * aProbe;
       // With the floor or surface masked out, an overhang pushes a fish into the very surface it
-      // is hugging (a cory nosing under driftwood); only a sideways escape is possible there.
-      if (
-        (!plan.floor && ny < 0 && py - ground < clearance) ||
-        (!plan.surface && ny > 0 && top - py < clearance)
-      ) {
+      // is hugging (a cory nosing under driftwood); only a sideways escape is possible there. Nor
+      // may its depth band lift it into the overhang just above: pressed between wood and sand,
+      // no turn has room for its body and it grinds there (#1257).
+      if (!plan.floor && ny < 0 && py - ground < clearance) {
+        ny = 0;
+        if (dy > 0) dy *= 1 - aHere;
+      } else if (!plan.surface && ny > 0 && top - py < clearance) {
         ny = 0;
       }
       const nl = Math.hypot(nx, ny, nz);
