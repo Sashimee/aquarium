@@ -280,7 +280,7 @@ importers:
         specifier: 0.186.0
         version: 0.186.0
       happy-dom:
-        specifier: ^21.0.4
+        specifier: 21.0.4
         version: 21.0.4
       vite:
         specifier: 8.3.4

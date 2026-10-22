@@ -68,10 +68,13 @@ describe('always-mounted UI without a tank session', () => {
   });
 
   it('mounts the app shell for a signed-out visitor without throwing', async () => {
+    const ui = bridge();
+    const noTank = vi.fn();
+    ui.interaction.on('tank:none', noTank);
     await act(async () => {
       root.render(
         <StrictMode>
-          <UiProviders bridge={bridge()}>
+          <UiProviders bridge={ui}>
             <SessionProvider>
               <App />
             </SessionProvider>
@@ -80,6 +83,9 @@ describe('always-mounted UI without a tank session', () => {
       );
     });
     await settle();
+    const requested = vi.mocked(fetch).mock.calls.map(([input]) => String(input));
+    expect(requested.some((url) => url.endsWith('/api/me'))).toBe(true);
+    expect(noTank).toHaveBeenCalled();
     expect(container.querySelector('.shell')).not.toBeNull();
     expect(errors).toEqual([]);
   });
