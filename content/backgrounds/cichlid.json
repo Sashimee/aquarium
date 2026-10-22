@@ -1,0 +1,37 @@
+[
+  {
+    "id": "bg-cichlid-malawi-rock-pile",
+    "biome": "cichlid",
+    "title": "Malawi rock pile",
+    "file": "background/bg-cichlid-malawi-rock-pile/high.ktx2",
+    "asset": "bg-cichlid-malawi-rock-pile"
+  },
+  {
+    "id": "bg-cichlid-rock-wall",
+    "biome": "cichlid",
+    "title": "Rock wall",
+    "file": "background/bg-cichlid-rock-wall/high.ktx2",
+    "asset": "bg-cichlid-rock-wall"
+  },
+  {
+    "id": "bg-cichlid-tanganyika-shell-bed",
+    "biome": "cichlid",
+    "title": "Tanganyika shell bed",
+    "file": "background/bg-cichlid-tanganyika-shell-bed/high.ktx2",
+    "asset": "bg-cichlid-tanganyika-shell-bed"
+  },
+  {
+    "id": "bg-cichlid-rock-cave",
+    "biome": "cichlid",
+    "title": "Rock cave",
+    "file": "background/bg-cichlid-rock-cave/high.ktx2",
+    "asset": "bg-cichlid-rock-cave"
+  },
+  {
+    "id": "bg-cichlid-open-blue",
+    "biome": "cichlid",
+    "title": "Open blue water",
+    "file": "background/bg-cichlid-open-blue/high.ktx2",
+    "asset": "bg-cichlid-open-blue"
+  }
+]

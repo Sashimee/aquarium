@@ -1,4 +1,4 @@
-import type { PlayableBiome } from '@aquarium/shared';
+import type { CreatableBiome } from '@aquarium/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useBridge, useDecorState } from './context';
 
@@ -19,13 +19,13 @@ export type Panel = 'none' | OpenPanel;
 export interface PanelState {
   panel: Panel;
   /** The kind of tank the player asked to start from the type switch; shown in the tanks panel. */
-  newTank: PlayableBiome | null;
+  newTank: CreatableBiome | null;
 }
 
 export type PanelAction =
   | { type: 'toggle'; panel: OpenPanel }
   | { type: 'open'; panel: OpenPanel }
-  | { type: 'new-tank'; biome: PlayableBiome }
+  | { type: 'new-tank'; biome: CreatableBiome }
   | { type: 'close' }
   | { type: 'decor-changed'; active: boolean }
   | { type: 'route-changed'; home: boolean };

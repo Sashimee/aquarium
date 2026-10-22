@@ -1,5 +1,5 @@
 import {
-  playableBiomeSchema,
+  creatableBiomeSchema,
   type DiseaseKind,
   type Fish,
   type MedicinePotency,
@@ -333,7 +333,7 @@ export function QuarantineSection({
   tank: Tank;
 }) {
   const id = useId();
-  const [biome, setBiome] = useState<(typeof playableBiomeSchema.options)[number]>(
+  const [biome, setBiome] = useState<(typeof creatableBiomeSchema.options)[number]>(
     tank.biome === 'reef' ? 'reef' : 'freshwater',
   );
   const quarantine = state.tanks.find((t) => t.quarantine);
@@ -357,9 +357,9 @@ export function QuarantineSection({
           <select
             id={`${id}-b`}
             value={biome}
-            onChange={(e) => setBiome(playableBiomeSchema.parse(e.target.value))}
+            onChange={(e) => setBiome(creatableBiomeSchema.parse(e.target.value))}
           >
-            {playableBiomeSchema.options.map((b) => (
+            {creatableBiomeSchema.options.map((b) => (
               <option key={b} value={b}>
                 {b[0]?.toUpperCase()}
                 {b.slice(1)}

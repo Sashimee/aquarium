@@ -35,6 +35,18 @@ function solid(width: number, height: number, rgb: [number, number, number]): Rg
 }
 
 describe('finTexel', () => {
+  it('paints an opaque colour band across the fin between its bounds only', () => {
+    const banded = {
+      ...paint,
+      bands: [{ from: 0.3, to: 0.5, colour: [0, 0, 0] as [number, number, number], opacity: 1 }],
+    };
+    const inside = finTexel(banded, 0.5, 0.4);
+    expect(inside[3]).toBeCloseTo(1, 1);
+    expect(inside[0]).toBeLessThan(5);
+    expect(finTexel(banded, 0.5, 0.15)[0]).toBeGreaterThan(50);
+    expect(finTexel(banded, 0.5, 0.7)[0]).toBeGreaterThan(50);
+  });
+
   it('lets the membrane between rays be more transparent than the rays', () => {
     const onRay = finTexel(paint, 0.5 / paint.rays + 1 / paint.rays, 0.3)[3];
     const between = finTexel(paint, 1 / paint.rays, 0.3)[3];

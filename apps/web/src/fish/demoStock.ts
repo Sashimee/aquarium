@@ -86,6 +86,7 @@ export const DEMO_STOCKS: Readonly<Record<PlayableBiome, DemoStock>> = {
     [ocellarisClownfishContent, yellowTangContent, royalGrammaContent, banggaiCardinalfishContent],
     { 'ocellaris-clownfish': 2, 'yellow-tang': 1, 'royal-gramma': 1, 'banggai-cardinalfish': 1 },
   ),
+  cichlid: demoStock([], {}),
 };
 
 const LENGTH_SPREAD = 0.08;

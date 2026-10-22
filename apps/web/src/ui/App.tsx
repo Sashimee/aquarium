@@ -83,6 +83,7 @@ function Screen() {
       );
     case 'public-tank':
     case 'gallery-tank':
+    case 'community':
       return null;
   }
 }
@@ -97,6 +98,7 @@ const ResetPasswordScreen = lazy(() =>
 const GalleryTankView = lazy(() =>
   import('./PublicTank').then((m) => ({ default: m.GalleryTankView })),
 );
+const CommunityView = lazy(() => import('./Community').then((m) => ({ default: m.CommunityView })));
 const GalleryScreen = lazy(() => import('./Gallery').then((m) => ({ default: m.GalleryScreen })));
 const PublicTankView = lazy(() =>
   import('./PublicTank').then((m) => ({ default: m.PublicTankView })),
@@ -176,6 +178,9 @@ export function App() {
   const route = useRoute();
   if (route.name === 'public-tank') {
     return <PublicShell view={<PublicTankView token={route.token} />} />;
+  }
+  if (route.name === 'community') {
+    return <PublicShell view={<CommunityView />} />;
   }
   if (route.name === 'gallery-tank') {
     return <PublicShell view={<GalleryTankView id={route.id} />} />;

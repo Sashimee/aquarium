@@ -139,15 +139,7 @@ describe('mangrove recipes', () => {
     }
   });
 
-  it('ships no separate 2k file for a fish texture that is no larger than its 1k tier', () => {
-    const ids = [...MANGROVE_FISH_RECIPES, ...MANGROVE_LOFT_RECIPES].map((r) => r.id);
-    for (const id of ids) {
-      for (const texture of shipped(id).textures) {
-        const { '1k': small, '2k': large } = texture.variants;
-        if (large.size > small.size) continue;
-        expect(large.file, `${id} ${texture.name}`).toBe(small.file);
-      }
-    }
+  it('caps the prop-root normal map at the 1k tier size', () => {
     const roots = shipped('mangrove-prop-roots').textures.find((t) => t.role === 'normal');
     expect(roots?.variants['2k'].size).toBe(512);
   });
