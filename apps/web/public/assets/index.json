@@ -13382,7 +13382,7 @@
       ],
       "licence": "CC0-1.0",
       "modifications": [
-        "composed and rendered by the Aquarium project from a CC0 red mangrove scan, CC0 rocks and CC0 mud and sand textures with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
+        "composed and rendered by the Aquarium project from a CC0 red mangrove scan and a CC0 mud texture with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
         "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
         "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
         "all EXIF, XMP, GPS and other metadata removed"
@@ -13666,7 +13666,7 @@
       ],
       "licence": "CC0-1.0",
       "modifications": [
-        "composed and rendered by the Aquarium project from a CC0 red mangrove scan, CC0 rocks and CC0 mud and sand textures with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
+        "composed and rendered by the Aquarium project from a CC0 red mangrove scan, a CC0 propagule scan and CC0 mud and sand textures with a software rasteriser at 4096x2048, then depth-of-field blurred and graded underwater (colour absorption, depth haze, god rays, vignette and film grain)",
         "resized to 2048x1024, 1024x512 and 512x256 with a Lanczos filter, one file per quality tier",
         "re-encoded as KTX2 (Basis ETC1S, sRGB, with mipmaps)",
         "all EXIF, XMP, GPS and other metadata removed"
