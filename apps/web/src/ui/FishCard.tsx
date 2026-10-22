@@ -1,10 +1,18 @@
 import type { Fish } from '@aquarium/shared';
-import { useId, useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { speciesName, type SpeciesNames } from '../sync/life';
 import { DISEASE_LABEL, severityWord, sickSummary, SYMPTOMS } from '../sync/treatment';
 import { personalityOf, traitViews } from '../sync/personality';
 
-export function FishCard({ fish, names }: { fish: Fish; names: SpeciesNames }) {
+export function FishCard({
+  fish,
+  names,
+  actions,
+}: {
+  fish: Fish;
+  names: SpeciesNames;
+  actions?: ReactNode;
+}) {
   const personality = personalityOf(fish);
   const species = speciesName(names, fish.species);
   const id = useId();
@@ -45,13 +53,22 @@ export function FishCard({ fish, names }: { fish: Fish; names: SpeciesNames }) {
           ))}
         </dl>
       )}
+      {actions}
     </article>
   );
 }
 
 export const FISH_CARDS_COLLAPSED = 8;
 
-export function FishCards({ fish, names }: { fish: readonly Fish[]; names: SpeciesNames }) {
+export function FishCards({
+  fish,
+  names,
+  actions,
+}: {
+  fish: readonly Fish[];
+  names: SpeciesNames;
+  actions?(fish: Fish): ReactNode;
+}) {
   const [expanded, setExpanded] = useState(false);
   const living = fish.filter((f) => f.status === 'alive');
   if (living.length === 0) return null;
@@ -65,7 +82,7 @@ export function FishCards({ fish, names }: { fish: readonly Fish[]; names: Speci
       </p>
       <div className="fish-cards">
         {shown.map((f) => (
-          <FishCard key={f.id} fish={f} names={names} />
+          <FishCard key={f.id} fish={f} names={names} actions={actions?.(f)} />
         ))}
       </div>
       {living.length > FISH_CARDS_COLLAPSED && (

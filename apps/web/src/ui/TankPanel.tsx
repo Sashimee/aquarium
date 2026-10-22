@@ -23,6 +23,7 @@ import { checkTankName, suggestTankName } from '../sync/naming';
 import type { SessionState, TankSession } from '../sync/session';
 import { useAuth } from './context';
 import { FishCards } from './FishCard';
+import { AcceptsGiftsToggle, GiftFishButton, GiftOffers } from './Gifts';
 import { Link } from './screens';
 import WaterTest from './WaterTest';
 import { ShareSection } from './ShareSection';
@@ -114,6 +115,9 @@ export function TanksPanel({ newTankBiome }: { newTankBiome: CreatableBiome | nu
       {({ session, state, tank }) => (
         <>
           <TankSwitcher session={session} state={state} tank={tank} newTankBiome={newTankBiome} />
+          <AcceptsGiftsToggle key={tank.id} session={session} state={state} tank={tank} />
+          <GiftOffers session={session} state={state} />
+          <Bag session={session} state={state} />
           <ShareSection key={tank.id} session={session} state={state} tank={tank} />
         </>
       )}
@@ -145,7 +149,11 @@ function CareSections({ session, state, tank }: Ready) {
     <>
       <Care session={session} state={state} water={water} />
       <WaterTest tank={tank} species={state.species} />
-      <FishCards fish={tank.fish} names={names} />
+      <FishCards
+        fish={tank.fish}
+        names={names}
+        actions={(fish) => <GiftFishButton session={session} tank={tank} fish={fish} />}
+      />
       <Treatment session={session} state={state} tank={tank} />
       <QuarantineSection session={session} state={state} tank={tank} />
       <DeadFish session={session} tank={tank} />
