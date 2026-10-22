@@ -45,8 +45,9 @@ import {
   type DisplayLimits,
   type DisplayPreference,
 } from './displayPreference';
-import { EffectsSlot } from './effectsSlot';
+import { EffectsRecovery, EffectsSlot } from './effectsSlot';
 import { PipelineFailureHandler, usesMaterial, watchPipelineErrors } from './pipelineErrors';
+import { resizeShadowMap } from './shadowMapSize';
 import { installRoomLighting, DEFAULT_HDRI_URL } from './environment';
 import { ASSET_BASE } from '../scene/assets';
 import { createSharedKtx2, type Ktx2Textures } from './ktx2';
@@ -177,7 +178,21 @@ export class Engine {
   private readonly effects = new EffectsSlot(
     (message, cause) => this.reportError(message, cause),
     (on) => this.events.emit('engine:temporal-resolve', { on }),
+    (cause) => {
+      if (!this.disposed) this.effectsRecovery.dropped(cause);
+    },
   );
+  private readonly effectsRecovery = new EffectsRecovery(
+    () => {
+      if (!this.disposed) this.effectsLoad = this.loadEffects();
+    },
+    (run, delayMs) => {
+      const timer = window.setTimeout(run, delayMs);
+      return () => window.clearTimeout(timer);
+    },
+  );
+  private unregisterEffectsTemporal: (() => void) | null = null;
+  private effectsCleanupAdded = false;
   private readonly frameCallbacks = new Set<FrameCallback>();
   private lastFrameAt: number | null = null;
   private readonly cullPrewarm = new CullPrewarm(this.scene);
@@ -265,6 +280,7 @@ export class Engine {
     this.loop = new RenderLoop(renderer, (t) => this.frame(t));
     this.daylightFeed = new DaylightFeed(() => this.readDaylight(), events);
     deviceLoss.onLost((info) => this.deviceLost(info, preference));
+    cleanup.add(() => this.effectsRecovery.dispose());
     this.size = config.options.tankSize;
     const dimensions = TANK_DIMENSIONS[this.size];
     this.clock = config.options.clock;
@@ -599,7 +615,7 @@ export class Engine {
     this.quality.register('pixel-ratio', (s) => this.applyPixelRatio(s));
     this.quality.register('shadows', (s) => {
       this.hood.castShadow = s.shadowMapSize > 0;
-      if (s.shadowMapSize > 0) this.hood.shadow.mapSize.set(s.shadowMapSize, s.shadowMapSize);
+      if (s.shadowMapSize > 0) resizeShadowMap(this.hood.shadow, s.shadowMapSize);
     });
     this.quality.register('caustics', (s) => {
       // The context node's version is in every pipeline's cache key, so this rebuilds them all.
@@ -649,8 +665,16 @@ export class Engine {
       const effects = new Effects(this, postPipelineFactory(this.renderer), () =>
         this.effects.refresh(),
       );
+      this.unregisterEffectsTemporal?.();
+      this.unregisterEffectsTemporal = null;
       this.effects.attach(effects);
-      this.cleanup.add(() => this.effects.dispose());
+      if (!this.effectsCleanupAdded) {
+        this.effectsCleanupAdded = true;
+        this.cleanup.add(() => {
+          this.unregisterEffectsTemporal?.();
+          this.effects.dispose();
+        });
+      }
       // Right behind the effects' own feature, so the features registered later (the fish
       // materials) see the new tier's temporal resolve when its nodes are already loaded. A tier
       // whose nodes still have to load swaps its pipeline later; the refresh passed to `Effects`
@@ -658,7 +682,9 @@ export class Engine {
       // never draw a temporal frame without velocity. The fish register only once
       // `Engine.create` resolves, which awaits this load unless it stalls; effects that attach
       // after the fish take that same announced path on every tier change.
-      this.cleanup.add(this.quality.register('effects-temporal', () => this.effects.refresh()));
+      this.unregisterEffectsTemporal = this.quality.register('effects-temporal', () =>
+        this.effects.refresh(),
+      );
       // The first frames already carry the starting tier's look instead of popping into it.
       await effects.ready();
     } catch (cause) {
@@ -706,7 +732,11 @@ export class Engine {
     this.photo.apply();
     this.daylightFeed.frame(nowMs, frameMs);
     applyDayLighting(this.dayRig, this.daylightFeed.level);
-    if (this.cullPrewarm.begin(nowMs) > 0) this.sceneRevisionValue++;
+    if (this.cullPrewarm.begin(nowMs) > 0) {
+      this.sceneRevisionValue++;
+      // Unculled first draws build pipelines, so this frame's timing is a compile stall.
+      this.quality.stall(nowMs);
+    }
     try {
       this.draw();
     } finally {

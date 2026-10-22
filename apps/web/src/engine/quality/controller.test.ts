@@ -178,7 +178,7 @@ describe('TierController', () => {
   });
 
   it('doubles the hold for a tier that failed during probation', () => {
-    const c = controller('medium', { minTier: 'medium' });
+    const c = controller('medium', { minTier: 'medium', reentryHoldMs: 0 });
     const base = c.upHoldFor('high');
     let { changes, end } = run(c, 4, 0, 10_000);
     expect(changes[0]).toMatchObject({ to: 'high' });
@@ -213,6 +213,38 @@ describe('TierController', () => {
     run(c, 30, end, 6000);
     expect(c.tier).toBe('medium');
     expect(c.upHoldFor('high')).toBe(DEFAULT_CONTROLLER_CONFIG.upHoldMs);
+  });
+
+  it('does not re-enter a tier it just left before the re-entry hold runs out', () => {
+    const c = controller('high', { signal: 'frame', reentryHoldMs: 60_000 });
+    const { changes, end } = run(c, 30, 0, 5000);
+    expect(changes.map((ch) => ch.to)).toEqual(['medium']);
+    const leftAt = changes[0]?.at ?? 0;
+    // Medium keeps up at once, which alone would climb back after the 8 s up hold.
+    const back = run(c, TARGET, end, 90_000).changes[0];
+    expect(back).toMatchObject({ from: 'medium', to: 'high', reason: 'headroom' });
+    expect((back?.at ?? 0) - leftAt).toBeGreaterThanOrEqual(60_000);
+  });
+
+  it('holds every tier from holdBelow() up, but not the ones beneath it', () => {
+    const c = controller('low', { reentryHoldMs: 0 });
+    c.holdBelow('high', 60_000);
+    const { changes } = run(c, 2, 0, 59_000);
+    expect(changes.map((ch) => ch.to)).toEqual(['medium']);
+    expect(run(c, 2, 59_000, 20_000).changes[0]).toMatchObject({ from: 'medium', to: 'high' });
+  });
+
+  it('ignores the samples around a stall reported by pause()', () => {
+    const c = controller('high', { cooldownMs: 3000 });
+    let { end } = run(c, 10, 0, 1000);
+    // Compile stalls under ignoreAboveMs would read as over budget for the down hold.
+    for (let i = 0; i < 6; i++) {
+      c.pause(end);
+      ({ end } = run(c, 120, end, 500));
+    }
+    const { changes } = run(c, 10, end, 10_000);
+    expect(changes).toEqual([]);
+    expect(c.tier).toBe('high');
   });
 
   it('reset() applies a manual tier and restarts measurement', () => {

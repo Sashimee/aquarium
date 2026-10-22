@@ -246,9 +246,9 @@ export type ReportFailure = (message: string, cause: unknown) => void;
  * builds may still fail, except a scene material, which is reported if it fails without them too.
  * A material already reported is broken without the effects' help, so it never drops them.
  *
- * Dropped effects are never re-attached, so under a temporal resolve (ultra) one broken scene
- * material costs the post effects for the session: only the plain render tells it from a
- * velocity-only failure. On WebGPU that test can misfire: failures arrive asynchronously, labelled
+ * The engine rebuilds dropped effects only after a transient failure, so under a temporal resolve
+ * (ultra) one broken scene material costs the post effects for the session: only the plain render
+ * tells it from a velocity-only failure. On WebGPU that test can misfire: failures arrive asynchronously, labelled
  * by material alone, so a late one from the earlier velocity build reads as the plain one failing.
  */
 export class PipelineFailureHandler {
@@ -297,7 +297,14 @@ export class PipelineFailureHandler {
     if (!this.dropping) {
       this.dropping = true;
       // WebGL reports from inside the draw; tearing the post chain down mid-render is not safe.
-      queueMicrotask(() => this.effects.fail(cause));
+      queueMicrotask(() => {
+        try {
+          this.effects.fail(cause);
+        } finally {
+          // Effects attached again later are answered for afresh.
+          this.dropping = false;
+        }
+      });
     }
     return true;
   }
