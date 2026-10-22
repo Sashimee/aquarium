@@ -199,6 +199,8 @@ export const economySchema = z
         premiumFood: priceSchema,
         premiumMedicine: pricedRange(diseaseKindSchema).describe('prices keyed by disease kind'),
         bottledBacteria: priceSchema,
+        bufferDose: priceSchema,
+        botanicals: priceSchema,
         testKit: priceSchema,
       }),
       tankSlots: z.array(priceSchema).length(5).describe('extra tanks 2 to 6, in order'),

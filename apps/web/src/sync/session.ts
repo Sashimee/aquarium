@@ -1049,4 +1049,7 @@ const CARE_DONE: Record<Exclude<CareAction['type'], 'feed'>, string> = {
   algae_scrape: 'The glass is clear.',
   bottled_bacteria: 'Beneficial bacteria were added to the filter.',
   filter_rinse: 'The filter was rinsed. Its bacteria took a hit.',
+  salt_dose: 'Salt mix was dissolved into the water.',
+  buffer_dose: 'Buffer was dissolved into the water.',
+  add_botanicals: 'Botanicals were added to the water.',
 };
