@@ -22,6 +22,7 @@ export type Route =
   | { name: 'privacy' }
   | { name: 'credits' }
   | { name: 'gallery' }
+  | { name: 'community' }
   | { name: 'gallery-tank'; id: string }
   | { name: 'public-tank'; token: string }
   | { name: 'not-found' };
@@ -53,6 +54,8 @@ export function parseRoute(href: string): Route {
       return { name: 'credits' };
     case '/gallery':
       return { name: 'gallery' };
+    case '/community':
+      return { name: 'community' };
     case '/forgot-password':
       return { name: 'forgot-password' };
     case '/reset-password':
@@ -73,7 +76,9 @@ export function parseRoute(href: string): Route {
  * session must not load beside them.
  */
 export function isReadOnlyView(route: Route): boolean {
-  return route.name === 'public-tank' || route.name === 'gallery-tank';
+  return (
+    route.name === 'public-tank' || route.name === 'gallery-tank' || route.name === 'community'
+  );
 }
 
 export function routePath(route: Route): string {
@@ -176,7 +181,12 @@ export function returnPathFromState(state: unknown): string | null {
   const { returnTo } = state;
   if (typeof returnTo !== 'string') return null;
   const name = parseRoute(returnTo).name;
-  return name === 'public-tank' || name === 'gallery' || name === 'gallery-tank' ? returnTo : null;
+  return name === 'public-tank' ||
+    name === 'gallery' ||
+    name === 'gallery-tank' ||
+    name === 'community'
+    ? returnTo
+    : null;
 }
 
 export function currentReturnPath(): string | null {

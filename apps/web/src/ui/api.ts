@@ -22,6 +22,9 @@ import {
   tankSchema,
   updateTankRequestSchema,
   creditsSchema,
+  communityFeedRequestSchema,
+  communityFeedResponseSchema,
+  communityStateSchema,
   dataExportSchema,
   privacyPolicySchema,
   publicTankSchema,
@@ -50,6 +53,9 @@ import {
   type BackgroundId,
   type CareAction,
   type Collection,
+  type CommunityFeedRequest,
+  type CommunityFeedResponse,
+  type CommunityState,
   type GalleryResponse,
   type GalleryWinnersResponse,
   type VoteState,
@@ -284,6 +290,9 @@ export interface ApiClient {
   clearVote(): Promise<VoteState>;
   setReaction(token: string, kind: ReactionKind): Promise<ReactionState>;
   clearReaction(token: string): Promise<ReactionState>;
+  community(): Promise<CommunityState>;
+  communityFeed(request: CommunityFeedRequest): Promise<CommunityFeedResponse>;
+  communityAte(reports: readonly AteReport[], batchId?: string): Promise<CommunityState>;
 }
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
@@ -847,6 +856,19 @@ export function createApiClient(
       const res = await send('/api/gallery/vote', { method: 'DELETE' });
       if (!res.ok) throw await toError(res);
       return parsed(res, voteStateSchema);
+    },
+    async community() {
+      const res = await send('/api/community');
+      if (!res.ok) throw await toError(res);
+      return parsed(res, communityStateSchema);
+    },
+    async communityFeed(request) {
+      const body = validate(communityFeedRequestSchema, request);
+      return parsed(await post('/api/community/feed', body), communityFeedResponseSchema);
+    },
+    async communityAte(reports, batchId) {
+      const body = validate(ateBatchRequestSchema, { reports, ...(batchId ? { batchId } : {}) });
+      return parsed(await post('/api/community/ate', body), communityStateSchema);
     },
     async publicTank(token) {
       const res = await send(`/api/public/${encodeURIComponent(token)}`);
