@@ -14,6 +14,11 @@ export function hashKey(key: string): number {
   return h;
 }
 
+/** A drawn offset with the key of the state plant it stands for. */
+export interface OffsetEntry extends PlantEntry {
+  readonly key: string;
+}
+
 /** Yaw, tilt and tone of an offset, a pure function of its key so reloads and catch-up agree. */
 export function offsetEntry(
   key: string,
@@ -21,9 +26,10 @@ export function offsetEntry(
   y: number,
   z: number,
   scale: number,
-): PlantEntry {
+): OffsetEntry {
   const random = mulberry32(hashKey(key));
   return {
+    key,
     x,
     y,
     z,
@@ -166,8 +172,8 @@ function placedOffsets(refs: readonly LayoutPlantRef[], context: GrowthContext):
 export function offsetEntries(
   refs: readonly LayoutPlantRef[],
   context: GrowthContext,
-): Map<string, PlantEntry[]> {
-  const byAsset = new Map<string, PlantEntry[]>();
+): Map<string, OffsetEntry[]> {
+  const byAsset = new Map<string, OffsetEntry[]>();
   for (const { plant, x, y, z, scale } of placedOffsets(refs, context)) {
     const list = byAsset.get(plant.assetId) ?? [];
     list.push(offsetEntry(plant.key, x, y, z, scale));
