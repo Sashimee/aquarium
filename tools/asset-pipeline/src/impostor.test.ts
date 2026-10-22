@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bakeAtlas, boundingSphere, type BakeMesh } from './impostor.ts';
+import { bakeAtlas, boundingSphere, impostorFrameSize, type BakeMesh } from './impostor.ts';
 import { cellDirection, decodeViewNormal, viewBasis } from './octahedral.ts';
 
 const GRID = 5;
@@ -144,5 +144,20 @@ describe('bakeAtlas albedo encoding', () => {
     const atlas = bakeAtlas([mesh], GRID, FRAME);
     const [r] = pixel(atlas.albedo.data, { i: 2, j: 4 }, 3, FRAME - 4);
     expect(Math.abs(r! - 188)).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('impostorFrameSize', () => {
+  it('gives small fish 64 px frames and large fish 128 px frames', () => {
+    expect(impostorFrameSize(0.0436)).toBe(64);
+    expect(impostorFrameSize(0.0457)).toBe(64);
+    expect(impostorFrameSize(0.1)).toBe(128);
+    expect(impostorFrameSize(1.5)).toBe(128);
+  });
+
+  it('is what bakeAtlas uses when no frame size is given', () => {
+    const atlas = bakeAtlas([triangle(0)], GRID);
+    expect(atlas.frameSize).toBe(impostorFrameSize(atlas.radius));
+    expect(atlas.albedo.width).toBe(GRID * atlas.frameSize);
   });
 });

@@ -1,6 +1,7 @@
 import {
   GIFT_OFFER_TTL_HOURS,
   handleFormatSchema,
+  tankLengthRefusal,
   type Fish,
   type GiftArrival,
   type GiftFish,
@@ -12,6 +13,7 @@ import {
 } from '@aquarium/shared';
 import { ApiRequestError, type ApiClient } from '../ui/api';
 import { IntentKeys, outcomeUnknown } from './intentKeys';
+import { BUNDLED_ECONOMY } from './bundledEconomy';
 import { canBuy, speciesName, type SpeciesNames } from './life';
 import { describeSyncError } from './messages';
 
@@ -176,6 +178,10 @@ export function destinations(
     if (summary && summary.biome !== tank.biome) {
       return { tank, usable: false, note: `${summary.commonName} needs a ${summary.biome} tank.` };
     }
+    const tooShort = summary
+      ? tankLengthRefusal(BUNDLED_ECONOMY, summary.id, tank, summary.commonName)
+      : undefined;
+    if (tooShort !== undefined) return { tank, usable: false, note: tooShort };
     const verdict = summary ? canBuy(tank, summary, species) : { ok: true as const };
     return { tank, usable: true, note: verdict.ok ? null : verdict.reason };
   });

@@ -171,6 +171,35 @@ const fishParamsSchema = z.strictObject({ tankId: idSchema, fishId: idSchema });
 
 const CURSOR_AT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
 
+function pricedConsumable(
+  action: CareAction,
+  economy: Economy,
+): { ref: string; key: string; amount: number } | null {
+  const { consumables } = economy.items;
+  switch (action.type) {
+    case 'bottled_bacteria':
+      return {
+        ref: 'consumable:bottled-bacteria',
+        key: action.idempotencyKey,
+        amount: consumables.bottledBacteria,
+      };
+    case 'buffer_dose':
+      return {
+        ref: 'consumable:buffer-dose',
+        key: action.idempotencyKey,
+        amount: consumables.bufferDose,
+      };
+    case 'add_botanicals':
+      return {
+        ref: 'consumable:botanicals',
+        key: action.idempotencyKey,
+        amount: consumables.botanicals,
+      };
+    default:
+      return null;
+  }
+}
+
 function encodeReplayCursor(row: { atUs: string; id: string }): string {
   return Buffer.from(`${row.atUs}|${row.id}`).toString('base64url');
 }
@@ -1409,15 +1438,14 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
       const user = await authorize(req);
       const { tankId } = tankParamsSchema.parse(req.params);
       const action: CareAction = careActionSchema.parse(req.body);
-      if (action.type !== 'bottled_bacteria')
+      if (!pricedConsumable(action, economy))
         throttle(user.id, action.type === 'feed' ? 'feed' : 'care');
       const result = await withTank(user, tankId, async (tx, ticked) => {
         const nowMs = clock.now();
-        const bacteriaRef = 'consumable:bottled-bacteria';
-        const bacteriaKey = action.type === 'bottled_bacteria' ? action.idempotencyKey : '';
-        if (action.type === 'bottled_bacteria') {
+        const priced = pricedConsumable(action, economy);
+        if (priced) {
           await lockWallet(tx, economy, user.id, nowMs, true);
-          const replay = await findReplay(tx, user.id, bacteriaKey, bacteriaRef);
+          const replay = await findReplay(tx, user.id, priced.key, priced.ref);
           if (replay) return { tank: await render(tx, ticked) };
           throttle(user.id, 'care');
         }
@@ -1425,11 +1453,11 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
         if (!applied.ok) {
           throw new HttpError(422, apiError('feeding_rejected', applied.reason));
         }
-        if (action.type === 'bottled_bacteria') {
+        if (priced) {
           await spend(tx, user.id, {
-            amount: economy.items.consumables.bottledBacteria,
-            itemRef: bacteriaRef,
-            key: bacteriaKey,
+            amount: priced.amount,
+            itemRef: priced.ref,
+            key: priced.key,
             nowMs,
           });
         }

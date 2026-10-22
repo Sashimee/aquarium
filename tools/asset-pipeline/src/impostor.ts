@@ -12,7 +12,13 @@ import { encodeKtx2, resizeImage, type Rgba } from './textures.ts';
 
 export const IMPOSTOR_SOURCE_LOD = 1;
 export const IMPOSTOR_GRID = 9;
-export const IMPOSTOR_FRAME_SIZE = 128;
+const SMALL_FRAME_SIZE = 64;
+const LARGE_FRAME_SIZE = 128;
+/**
+ * Atlas texels per metre of fish a frame needs: a low-tier screen shows roughly 700 px per metre
+ * at the 1.6 m distance where impostors start, so a small fish gains nothing from 128 px frames.
+ */
+const IMPOSTOR_TEXELS_PER_METRE = 700;
 const SUPERSAMPLE = 4;
 const BLEED_PASSES = 4;
 const TEXTURE_MAX_DIM = 512;
@@ -365,12 +371,19 @@ function averageColour(frame: Frame): Vec3 {
   return n === 0 ? sum : [sum[0] / n, sum[1] / n, sum[2] / n];
 }
 
+export function impostorFrameSize(radius: number): number {
+  return 2 * radius * IMPOSTOR_TEXELS_PER_METRE <= SMALL_FRAME_SIZE
+    ? SMALL_FRAME_SIZE
+    : LARGE_FRAME_SIZE;
+}
+
 export function bakeAtlas(
   meshes: BakeMesh[],
   grid = IMPOSTOR_GRID,
-  frameSize = IMPOSTOR_FRAME_SIZE,
+  requestedFrameSize?: number,
 ): Atlas {
   const { pivot, radius } = boundingSphere(meshes);
+  const frameSize = requestedFrameSize ?? impostorFrameSize(radius);
   const size = grid * frameSize;
   const albedo: Rgba = { width: size, height: size, data: new Uint8Array(size * size * 4) };
   const normalDepth: Rgba = { width: size, height: size, data: new Uint8Array(size * size * 4) };

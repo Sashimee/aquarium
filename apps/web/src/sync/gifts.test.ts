@@ -223,6 +223,25 @@ describe('destinations', () => {
     expect(result[2]?.note).toContain('freshwater');
   });
 
+  it('refuses a tank too short for the species, but not a quarantine tank', () => {
+    const mono = speciesFixture({ id: 'silver-mono', commonName: 'Silver mono' });
+    const standard = tankFixture({ acceptsGifts: true, size: 'standard' });
+    const long = tankFixture({ id: TANK_B, acceptsGifts: true, size: 'long300' });
+    const quarantine = tankFixture({
+      id: '00000000-0000-4000-8000-0000000000d2',
+      acceptsGifts: true,
+      size: 'standard',
+      quarantine: true,
+    });
+    const result = destinations(
+      [standard, long, quarantine],
+      giftFish({ species: 'silver-mono' }),
+      [mono],
+    );
+    expect(result.map((d) => d.usable)).toEqual([false, true, true]);
+    expect(result[0]?.note).toContain('150 cm');
+  });
+
   it('warns about a full tank but keeps it usable', () => {
     const crowd = Array.from({ length: 40 }, (_, i) =>
       fishFixture(`10000000-0000-4000-8000-0000000001${String(i).padStart(2, '0')}`),

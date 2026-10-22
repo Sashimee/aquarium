@@ -17,9 +17,11 @@ import {
   waterReport,
   type SpeciesNames,
 } from '../sync/life';
-import { BUNDLED_ECONOMY } from '../sync/bundledEconomy';
+import { BUNDLED_CHEMISTRY, BUNDLED_ECONOMY } from '../sync/bundledEconomy';
+import { doseButtonId, doseOptions } from '../sync/doses';
 import { priceOrFree, priceText, tankPrice } from '../sync/economy';
 import { checkTankName, suggestTankName } from '../sync/naming';
+import { salinityNotice, type SalinityNotice } from '../sync/salinityCare';
 import type { SessionState, TankSession } from '../sync/session';
 import { useAuth, useBridge } from './context';
 import { CoralSection } from './Corals';
@@ -149,8 +151,18 @@ function CareSections({ session, state, tank }: Ready) {
   const water = waterReport(tank.water, tank, state.species);
   return (
     <>
-      <Care session={session} state={state} water={water} />
-      <WaterTest tank={tank} species={state.species} />
+      <Care
+        session={session}
+        state={state}
+        tank={tank}
+        water={water}
+        salinity={salinityNotice(tank, state.species)}
+      />
+      <WaterTest
+        tank={tank}
+        species={state.species}
+        onWaterChange={() => session.careAction({ type: 'water_change' })}
+      />
       <CoralSection interaction={interaction} session={session} state={state} tank={tank} />
       <GiftNotice session={session} />
       <FishCards
@@ -373,13 +385,20 @@ const QUALITY_LABEL = { good: 'Good', fair: 'Fair', poor: 'Poor' } as const;
 function Care({
   session,
   state,
+  tank,
   water,
+  salinity,
 }: {
   session: TankSession;
   state: SessionState;
+  tank: Tank;
   water: ReturnType<typeof waterReport>;
+  salinity: SalinityNotice | null;
 }) {
   const id = useId();
+  const { spend, notice } = useSpend(session, state.balance);
+  const doses = doseOptions(tank, BUNDLED_CHEMISTRY, BUNDLED_ECONOMY);
+  const saltDose = doses.find((d) => d.type === 'salt_dose');
   return (
     <section aria-labelledby={`${id}-h`} className="block">
       <h3 id={`${id}-h`}>Water and chores</h3>
@@ -389,6 +408,22 @@ function Care({
         <li>Algae: {QUALITY_LABEL[water.algae]}</li>
         <li>Leftover food: {QUALITY_LABEL[water.leftoverFood]}</li>
       </ul>
+      {salinity && (
+        <p className={salinity.severity === 'danger' ? 'field-error' : 'hint'} role="status">
+          {salinity.text}
+          {saltDose && salinity.direction === 'low' && (
+            <>
+              {' '}
+              <button
+                type="button"
+                onClick={() => document.getElementById(doseButtonId('salt_dose'))?.focus()}
+              >
+                Go to {saltDose.label.toLowerCase()}
+              </button>
+            </>
+          )}
+        </p>
+      )}
       <div className="care-actions">
         <button
           type="button"
@@ -413,6 +448,36 @@ function Care({
           Scrape the glass
         </button>
       </div>
+      {doses.length > 0 && (
+        <ul className="shop" aria-label="Water doses">
+          {doses.map((dose) => (
+            <li key={dose.type}>
+              <div>
+                <strong>{dose.label}</strong>{' '}
+                <span className="price">{priceOrFree(dose.price, BUNDLED_ECONOMY)}</span>
+                <p className="hint">{dose.disabledReason ?? dose.hint}</p>
+              </div>
+              <button
+                type="button"
+                id={doseButtonId(dose.type)}
+                data-action={dose.type}
+                disabled={state.busy || dose.disabledReason !== null}
+                onClick={() =>
+                  void spend({
+                    label: dose.label.toLowerCase(),
+                    price: dose.price,
+                    confirm: true,
+                    go: () => session.careAction({ type: dose.type }),
+                  })
+                }
+              >
+                {dose.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {notice}
       <p className="hint">
         Feed from the dock, a little at a time. Uneaten food rots and poisons the water; the gravel
         vacuum removes it.

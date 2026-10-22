@@ -1,4 +1,5 @@
-import { TANK_SIZES } from '@aquarium/shared';
+import { tankLengthRefusal, TANK_SIZES, type Economy } from '@aquarium/shared';
+import { BUNDLED_ECONOMY } from './bundledEconomy';
 import type {
   AwaySummary,
   CauseOfDeath,
@@ -9,7 +10,9 @@ import type {
   TankSize,
   Water,
 } from '@aquarium/shared';
+import { blackwaterReportLines } from './blackwater';
 import { speciesNameMap, type SpeciesNames } from './speciesNames';
+import { salinityNotice } from './salinityCare';
 import {
   BIOLOAD_CAPACITY_BY_SIZE,
   hasCapacityFor,
@@ -200,10 +203,13 @@ export function canBuy(
   tank: Tank,
   candidate: SpeciesSummary,
   all: readonly SpeciesSummary[],
+  economy: Economy = BUNDLED_ECONOMY,
 ): ShopVerdict {
   if (candidate.biome !== tank.biome) {
     return { ok: false, reason: `${candidate.commonName} needs a ${candidate.biome} tank.` };
   }
+  const tooShort = tankLengthRefusal(economy, candidate.id, tank, candidate.commonName);
+  if (tooShort !== undefined) return { ok: false, reason: tooShort };
   const bioload = new Map(all.map((s) => [s.id, s.lifecycle.bioload]));
   const existing = tank.fish.map((f) => ({
     alive: f.status === 'alive',
@@ -296,5 +302,8 @@ export function tankReportLines(tank: Tank, species: readonly SpeciesSummary[]):
     `Water: ammonia ${water.ammonia}, nitrate ${water.nitrate}, algae ${water.algae}, leftover food ${water.leftoverFood}.`,
   );
   if (water.needsVacuum) lines.push('Leftover food is building up. Vacuum the gravel.');
+  lines.push(...blackwaterReportLines(tank, species));
+  const salinity = salinityNotice(tank, species);
+  if (salinity) lines.push(salinity.text);
   return lines;
 }

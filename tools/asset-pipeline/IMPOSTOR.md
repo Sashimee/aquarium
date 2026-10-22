@@ -63,7 +63,10 @@ lookup uses the undeformed point `q`, so the picture rides along with the bend.
 Fish are seen from below as often as from above: a camera at mid-tank looks up at everything in the
 top half, and fish pitch while climbing and diving. A hemi-octahedron would need a second lookup for
 those views. Cost of the full sphere: half the frames show the underside. At 9 x 9 frames of 128 px
-the pair is about 0.5 MB per species.
+the pair is about 0.5 MB per species. Fish with a `radius` up to 0.0457 m (about 700 px per metre of
+fish, the screen density at the 1.6 m low-tier impostor distance) use 64 px frames, about 0.2 MB, because
+low and medium fetch every impostor and the freshwater preset budget has no room otherwise (#1290).
+`frameSize` is per species in `index.json`; the shader reads it.
 
 Odd grid: `grid = 9` makes +Y, -Y, the four horizontal axes (side, head-on, tail-on) exact frames,
 so the most common view of a fish, side-on, is a single frame with no blending. An even grid would

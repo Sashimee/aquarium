@@ -102,6 +102,8 @@
         "prices": { "ich": 40, "fin-rot": 50, "velvet": 60 }
       },
       "bottledBacteria": 40,
+      "bufferDose": 30,
+      "botanicals": 15,
       "testKit": 25
     },
     "tankSlots": [500, 1000, 1500, 2500, 4000],

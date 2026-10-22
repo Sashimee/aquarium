@@ -458,14 +458,25 @@ export class TankSession {
       this.deps.interaction.emit('tank:care', { tankId: tank.id, action: sent.type });
       if (sent.type !== 'feed') this.patch({ notice: CARE_DONE[sent.type] });
     };
-    if (action.type !== 'bottled_bacteria') {
-      const ok = await this.perform(() => run(action));
-      await this.refreshWallet({ afterWrite: true });
-      return ok;
+    switch (action.type) {
+      case 'bottled_bacteria':
+        return this.paid(`bacteria:${tank.id}`, (idempotencyKey) =>
+          run({ type: 'bottled_bacteria', idempotencyKey }),
+        );
+      case 'buffer_dose':
+        return this.paid(`buffer:${tank.id}`, (idempotencyKey) =>
+          run({ type: 'buffer_dose', idempotencyKey }),
+        );
+      case 'add_botanicals':
+        return this.paid(`botanicals:${tank.id}`, (idempotencyKey) =>
+          run({ type: 'add_botanicals', idempotencyKey }),
+        );
+      default: {
+        const ok = await this.perform(() => run(action));
+        await this.refreshWallet({ afterWrite: true });
+        return ok;
+      }
     }
-    return this.paid(`bacteria:${tank.id}`, (idempotencyKey) =>
-      run({ type: 'bottled_bacteria', idempotencyKey }),
-    );
   }
 
   /** Doses the active tank. The key is kept across an unknown outcome, so a retry is never charged twice. */
@@ -1039,9 +1050,10 @@ function decorKey(edited: boolean, layout: DecorLayout): string {
   return `${edited ? 'edited' : 'preset'}:${layoutKey(layout)}`;
 }
 
-/** A care action as the UI asks for it: the session adds the Pearls request key to bottled bacteria. */
-export type CareRequest =
-  Exclude<CareAction, { type: 'bottled_bacteria' }> | { type: 'bottled_bacteria' };
+export type PaidCareType = 'bottled_bacteria' | 'buffer_dose' | 'add_botanicals';
+
+/** A care action as the UI asks for it: the session adds the Pearls request key to the paid ones. */
+export type CareRequest = Exclude<CareAction, { type: PaidCareType }> | { type: PaidCareType };
 
 const CARE_DONE: Record<Exclude<CareAction['type'], 'feed'>, string> = {
   water_change: 'Half the water was changed.',
@@ -1049,4 +1061,7 @@ const CARE_DONE: Record<Exclude<CareAction['type'], 'feed'>, string> = {
   algae_scrape: 'The glass is clear.',
   bottled_bacteria: 'Beneficial bacteria were added to the filter.',
   filter_rinse: 'The filter was rinsed. Its bacteria took a hit.',
+  salt_dose: 'Salt mix was dissolved into the water.',
+  buffer_dose: 'Buffer was dissolved into the water.',
+  add_botanicals: 'Botanicals were added to the water.',
 };

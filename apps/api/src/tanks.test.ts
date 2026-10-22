@@ -210,7 +210,7 @@ describe('tanks and fish', () => {
     const cookie = await signedIn(h);
     const tank = await createTank(h, cookie);
     expect(tank).toMatchObject({ name: 'Home', biome: 'freshwater', fish: [], memorials: [] });
-    expect(tank.water).toEqual({ ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 0 });
+    expect(tank.water).toEqual({ ammonia: 0, nitrate: 0, algae: 0, tannin: 0, uneatenFood: 0 });
 
     const list = tankListSchema.parse((await call(h, cookie, 'GET', '/api/tanks')).json());
     expect(list.map((t) => t.id)).toEqual([tank.id]);

@@ -1,3 +1,4 @@
+import { Banks } from './bank.ts';
 import type { Basin } from './basin.ts';
 import { Cleaning } from './cleaning.ts';
 import { CURIOSITY, Curiosity } from './curiosity.ts';
@@ -158,11 +159,17 @@ export const BEHAVIOUR = {
   bodySampleOffsets: [0.38, 0.19, 0, -0.19, -0.38],
 } as const;
 
-/** A scene point a species is drawn to: an anemone for clownfish, a cave for royal gramma. */
+/**
+ * A scene point a species is drawn to: an anemone for clownfish, a cave for royal gramma, an
+ * emergent bank for mudskippers.
+ */
 export interface Anchor {
   readonly id: string;
-  readonly kind: 'anemone' | 'cave';
-  /** A point in free water: the anemone's centre or the cave's interior. */
+  readonly kind: 'anemone' | 'cave' | 'bank';
+  /**
+   * The anemone's centre or the cave's interior, in free water; for a bank, the cling point at its
+   * top, above the water.
+   */
   readonly position: Point3;
   readonly radius: number;
   /** Outward direction of a cave mouth. */
@@ -217,6 +224,8 @@ export interface BehaviourHost {
   canTurnAt(i: number, x: number, y: number, z: number): boolean;
   /** The tightest arc fish `i` turns on while swimming, before it brakes to pivot. */
   cruiseTurnRadius(i: number): number;
+  /** The free spot in the water nearest (x, y, z) with room for fish `i`, or null if none. */
+  waterSpotNear(i: number, x: number, y: number, z: number): Point3 | null;
 }
 
 /** One fish's intent for this step, consumed by steering and integration. */
@@ -363,6 +372,7 @@ export class Behaviour {
   readonly personality: Personalities;
   readonly greeting: Greeting;
   readonly cleaning: Cleaning;
+  readonly banks: Banks;
   readonly lighting = new Night();
 
   private readonly host: BehaviourHost;
@@ -494,6 +504,7 @@ export class Behaviour {
     this.brood = new Brood(host);
     this.greeting = new Greeting(host);
     this.cleaning = new Cleaning(host);
+    this.banks = new Banks(host);
     this.startlePhase = new Uint8Array(n);
     this.startleTimer = new Float64Array(n);
     this.startleElapsed = new Float64Array(n);
@@ -620,6 +631,7 @@ export class Behaviour {
     this.personality.resize(edit);
     this.greeting.resize(edit);
     this.cleaning.resize(edit);
+    this.banks.resize(edit);
     if (edit.removed < 0) return;
     for (let i = 0; i < this.territoryTarget.length; i++) {
       const j = edit.index(at(this.territoryTarget, i));
@@ -723,9 +735,9 @@ export class Behaviour {
       }
       if (ids.has(a.id)) throw new Error(`anchor ids must be unique, "${a.id}" repeats`);
       ids.add(a.id);
-      if (a.kind !== 'anemone' && a.kind !== 'cave') {
+      if (a.kind !== 'anemone' && a.kind !== 'cave' && a.kind !== 'bank') {
         throw new RangeError(
-          `anchor "${a.id}": kind must be "anemone" or "cave", got ${String(a.kind)}`,
+          `anchor "${a.id}": kind must be "anemone", "cave" or "bank", got ${String(a.kind)}`,
         );
       }
       if (!Array.isArray(a.position) || a.position.length !== 3) {
@@ -740,19 +752,26 @@ export class Behaviour {
         }
       }
       const [x, y, z] = a.position;
-      const inside =
-        x > basin.minX &&
-        x < basin.maxX &&
-        z > basin.minZ &&
-        z < basin.maxZ &&
-        y > basin.ground(x, z) &&
-        y < basin.maxY;
-      if (!inside) throw new RangeError(`anchor "${a.id}" lies outside the tank`);
+      const inPlan = x > basin.minX && x < basin.maxX && z > basin.minZ && z < basin.maxZ;
+      if (a.kind === 'bank') {
+        if (!(inPlan && Number.isFinite(y))) {
+          throw new RangeError(`bank "${a.id}" lies outside the tank`);
+        }
+        if (!(y > basin.maxY)) {
+          throw new RangeError(
+            `bank "${a.id}" at height ${y} is not above the water (${basin.maxY}); a bank is an emergent surface`,
+          );
+        }
+      } else if (!(inPlan && y > basin.ground(x, z) && y < basin.maxY)) {
+        throw new RangeError(`anchor "${a.id}" lies outside the tank`);
+      }
       if (!(Number.isFinite(a.radius) && a.radius > 0)) {
         throw new RangeError(`anchor "${a.id}": radius must be positive, got ${a.radius}`);
       }
     }
-    this.anchors = anchors;
+    this.banks.setBanks(anchors.filter((a) => a.kind === 'bank'));
+    const homes = anchors.filter((a) => a.kind !== 'bank');
+    this.anchors = homes;
     this.anchor.fill(-1);
     // A swimmer's rest station does not depend on the anchors, so only walkers choose again.
     for (let i = 0; i < this.host.count; i++) {
@@ -767,7 +786,7 @@ export class Behaviour {
         this.anchor[i] = this.walkerCave(i);
         continue;
       }
-      const matching = anchors.flatMap((a, k) => (a.kind === kind ? [k] : []));
+      const matching = homes.flatMap((a, k) => (a.kind === kind ? [k] : []));
       if (matching.length === 0) continue;
       const k = ordinal.get(sp.id) ?? 0;
       ordinal.set(sp.id, k + 1);
@@ -877,6 +896,7 @@ export class Behaviour {
     this.greeting.update(this.greetBoldness, this.greetHunger);
     this.prepareCleaning();
     this.cleaning.update();
+    this.banks.update();
     const ease = 1 - Math.exp(-DT / TOYS.displayTauS);
     for (let i = 0; i < n; i++) {
       this.plan(i);
@@ -904,6 +924,7 @@ export class Behaviour {
         at(this.yieldTimer, i) <= 0 &&
         at(this.gulpPhase, i) === GulpPhase.None &&
         at(this._shelterTimer, i) <= 0 &&
+        !this.banks.emersed(i) &&
         (at(this.rest, i) <= 0.5 || this.lighting.restsInLight(this.speciesOf(i).activity))
           ? 1
           : 0;
@@ -1051,6 +1072,7 @@ export class Behaviour {
     }
     this.brood.decorMoved();
     this.cleaning.decorMoved();
+    this.banks.decorMoved();
   }
 
   private covered(i: number, spots: Float64Array, o: number): boolean {
@@ -1288,6 +1310,10 @@ export class Behaviour {
         BEHAVIOUR.cruiseSpeedFloor * at(this.host.cruiseSpeed, i) * plan.cruiseScale;
     }
 
+    if (this.banks.planEmersed(i, plan, at(this.startlePhase, i) !== StartlePhase.None)) {
+      this.startlePhase[i] = StartlePhase.None;
+      return;
+    }
     if (at(this.startlePhase, i) !== StartlePhase.None) {
       this.planStartle(i, sp, plan);
       return;
@@ -1318,6 +1344,7 @@ export class Behaviour {
     if (this.planGreet(i, sp, plan)) return;
     if (this.cleaning.plan(i, sp, plan)) return;
     if (this.planSpot(i, sp, plan)) return;
+    if (this.banks.planApproach(i, sp, plan, rest)) return;
     const guard = at(this.anchor, i) < 0 ? this.brood.guard(i) : null;
     if (guard !== null) {
       const [gx, gy, gz] = guard;
