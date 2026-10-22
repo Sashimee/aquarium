@@ -781,8 +781,11 @@ export class FishSystem {
    */
   setColliders(colliders: readonly Collider[]): void {
     if (this.disposed) return;
-    this.spec.setDecor(colliders);
-    if (this.simReady) this.sim.setDecor(colliders);
+    const anchors = this.spec.setDecor(colliders);
+    if (this.simReady) {
+      this.sim.setDecor(colliders);
+      if (anchors !== null) this.sim.setAnchors(anchors);
+    }
     this.support = new CarcassSupport(colliders);
     this.resettleCarcasses();
   }

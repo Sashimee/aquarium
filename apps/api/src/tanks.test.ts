@@ -1,5 +1,7 @@
 import {
   apiErrorSchema,
+  biomeSchema,
+  creatableBiomeSchema,
   decorLayoutSchema,
   DEFAULT_EQUIPMENT,
   personalitySchema,
@@ -1420,6 +1422,9 @@ describe('tank sizes, quarantine and sharing', () => {
       { name: 'Q', biome: 'freshwater', quarantine: true },
       { name: 'Q', biome: 'freshwater', size: 'huge' },
       { name: 'Q', biome: 'tundra' },
+      ...biomeSchema.options
+        .filter((biome) => !creatableBiomeSchema.safeParse(biome).success)
+        .map((biome) => ({ name: 'Q', biome })),
     ]) {
       expect((await create(cookie, body)).statusCode).toBe(400);
     }
