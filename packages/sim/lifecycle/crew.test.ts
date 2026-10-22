@@ -88,7 +88,7 @@ function member(id: string, species: string, over: Partial<LifecycleFish> = {}):
 
 function tank(fish: LifecycleFish[], water: Partial<Water>): LifecycleState {
   return {
-    water: { ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 0, ...water },
+    water: { ammonia: 0, nitrate: 0, algae: 0, tannin: 0, uneatenFood: 0, ...water },
     chemistry: newTankChemistry('freshwater'),
     fish,
     medicine: null,

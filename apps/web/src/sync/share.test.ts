@@ -54,7 +54,7 @@ const tank = (overrides: Partial<PublicTank> = {}): PublicTank => ({
   backgroundId: 'bg-fw-planted-stream',
   decorLayout: [],
   decorEdited: false,
-  water: { ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 0 },
+  water: { ammonia: 0, nitrate: 0, algae: 0, tannin: 0, uneatenFood: 0 },
   chemistry: newTankChemistry('freshwater'),
   equipment: DEFAULT_EQUIPMENT,
   fish: [fish()],

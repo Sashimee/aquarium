@@ -35,9 +35,26 @@
     "acidificationPerNitrate": 0.002,
     "minBufferKh": 1
   },
+  "tannin": {
+    "perDose": 0.25,
+    "ceiling": { "freshwater": 0.4, "reef": 0, "cichlid": 0, "blackwater": 1, "mangrove": 0 },
+    "decayPerHour": 0.004,
+    "restoredPerWaterChange": 0.5,
+    "phPullPerDose": 0.2,
+    "phFloor": 5.5,
+    "phDropAtFull": 0.3
+  },
   "kh": {
     "consumedPerNitrate": 0.01,
     "restoredPerWaterChange": 0.5,
+    "bufferDoseKh": 2,
+    "bufferCeiling": {
+      "freshwater": 10,
+      "reef": 0,
+      "cichlid": 16,
+      "blackwater": 0,
+      "mangrove": 12
+    },
     "sourceWater": { "freshwater": 6, "reef": 8, "cichlid": 10, "blackwater": 1, "mangrove": 8 }
   },
   "temperature": {
@@ -61,7 +78,9 @@
       "blackwater": 0,
       "mangrove": 10
     },
-    "driftPerHour": 0.01
+    "driftPerHour": 0.01,
+    "restoredPerWaterChange": 0.5,
+    "saltDoseFraction": 0.25
   },
   "stress": {
     "healthLossFraction": 0.1,
@@ -99,7 +118,12 @@
     ],
     "kh": [
       "Wurts & Durborow 1992, SRAC 464: nitrification consumes about 7 mg alkalinity as CaCO3 per mg ammonia-N",
-      "sourceWater is a typical mains-water carbonate hardness for fresh biomes and a typical salt-mix hardness for marine and brackish ones"
+      "sourceWater is a typical mains-water carbonate hardness for fresh biomes and a typical salt-mix hardness for marine and brackish ones",
+      "Game abstraction: a buffer dose (sodium bicarbonate or crushed coral in the hobby) adds bufferDoseKh up to bufferCeiling; Rift Lake cichlids are kept at about 10 to 16 dKH, blackwater must stay soft, and reef hardness is held by the salt mix"
+    ],
+    "tannin": [
+      "Game abstraction: botanicals (leaf litter, alder cones) release humic acids that darken water and slightly lower pH, as in Amazonian blackwater (Küchler, Miekeley & Forsberg 2000); tannin fades through bacterial breakdown over days to weeks and is removed in proportion by a water change",
+      "phFloor 5.5 is the lowest pH the strictest blackwater species in the game (phRange 5 to 7) tolerates with margin; ceilings are 0 where tannin makes no sense (marine, brackish and Rift Lake cichlid water)"
     ],
     "temperature": [
       "Newton's law of cooling toward room temperature; a thermostat heater holds the setpoint that suits the stocked fish (their shared comfort range, else the biome target), and one tier is strong enough to reach 31 C in a 21 C room; every tier reaches the same setpoint, but a higher tier closes the gap faster while warming up (game abstraction)",

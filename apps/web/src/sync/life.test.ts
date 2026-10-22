@@ -176,6 +176,32 @@ describe('shop capacity', () => {
     expect(canBuy(tankFixture(), tetra, species)).toEqual({ ok: true });
   });
 
+  describe('tank length gate', () => {
+    const mono = speciesFixture({ id: 'silver-mono', commonName: 'Silver mono' });
+    const all = [mono];
+
+    it('refuses a tank shorter than the minimum', () => {
+      expect(canBuy(tankFixture({ size: 'standard' }), mono, all)).toEqual({
+        ok: false,
+        reason: 'Silver mono needs a tank at least 150 cm long.',
+      });
+    });
+
+    it('allows a tank exactly at the minimum', () => {
+      expect(canBuy(tankFixture({ size: 'long300' }), mono, all)).toEqual({ ok: true });
+    });
+
+    it('exempts quarantine tanks', () => {
+      expect(canBuy(tankFixture({ size: 'standard', quarantine: true }), mono, all)).toEqual({
+        ok: true,
+      });
+    });
+
+    it('leaves ungated species alone', () => {
+      expect(canBuy(tankFixture({ size: 'standard' }), tetra, species)).toEqual({ ok: true });
+    });
+  });
+
   it('refuses the wrong biome with a plain reason', () => {
     const verdict = canBuy(tankFixture(), clown, species);
     expect(verdict).toEqual({ ok: false, reason: 'Clownfish needs a reef tank.' });
@@ -285,22 +311,27 @@ describe('water report', () => {
 
   it('rates ammonia against the strictest living fish', () => {
     expect(
-      waterReport({ ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 0 }, tank, species).ammonia,
+      waterReport({ ammonia: 0, nitrate: 0, algae: 0, tannin: 0, uneatenFood: 0 }, tank, species)
+        .ammonia,
     ).toBe('good');
     expect(
-      waterReport({ ammonia: 0.1, nitrate: 0, algae: 0, uneatenFood: 0 }, tank, species).ammonia,
+      waterReport({ ammonia: 0.1, nitrate: 0, algae: 0, tannin: 0, uneatenFood: 0 }, tank, species)
+        .ammonia,
     ).toBe('fair');
     expect(
-      waterReport({ ammonia: 0.2, nitrate: 0, algae: 0, uneatenFood: 0 }, tank, species).ammonia,
+      waterReport({ ammonia: 0.2, nitrate: 0, algae: 0, tannin: 0, uneatenFood: 0 }, tank, species)
+        .ammonia,
     ).toBe('poor');
   });
 
   it('asks for the gravel vacuum once leftovers pile up', () => {
     expect(
-      waterReport({ ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 2 }, tank, species).needsVacuum,
+      waterReport({ ammonia: 0, nitrate: 0, algae: 0, tannin: 0, uneatenFood: 2 }, tank, species)
+        .needsVacuum,
     ).toBe(false);
     expect(
-      waterReport({ ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 3 }, tank, species).needsVacuum,
+      waterReport({ ammonia: 0, nitrate: 0, algae: 0, tannin: 0, uneatenFood: 3 }, tank, species)
+        .needsVacuum,
     ).toBe(true);
   });
 
@@ -308,7 +339,7 @@ describe('water report', () => {
     const lines = tankReportLines(
       tankFixture({
         fish: [fishFixture(FISH_2, { name: 'Dot', hunger: 0.8 }), deadTetra],
-        water: { ammonia: 0, nitrate: 0, algae: 0, uneatenFood: 5 },
+        water: { ammonia: 0, nitrate: 0, algae: 0, tannin: 0, uneatenFood: 5 },
       }),
       species,
     );

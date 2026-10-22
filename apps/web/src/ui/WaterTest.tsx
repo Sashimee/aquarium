@@ -93,7 +93,7 @@ function Pad({
   );
 }
 
-function PhAdvice({
+export function PhAdvice({
   tank,
   species,
   dip,

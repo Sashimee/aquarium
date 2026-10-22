@@ -128,7 +128,9 @@ describe('content/economy.json', () => {
       expect(text).not.toContain(free);
     }
     expect(Object.keys(economy.items.consumables).sort()).toEqual([
+      'botanicals',
       'bottledBacteria',
+      'bufferDose',
       'premiumFood',
       'premiumMedicine',
       'testKit',

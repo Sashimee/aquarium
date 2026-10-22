@@ -63,7 +63,7 @@ describe('blackwaterPhGuidance', () => {
     expect(blackwaterPhGuidance(apistoTank, species, 6.4)?.standing).toBe('near-edge');
   });
 
-  it('recommends a water change when pH is too high, never CO2', () => {
+  it('says a high pH settles on its own and never suggests CO2', () => {
     const g = blackwaterPhGuidance(apistoTank, species, 7.2);
     expect(g?.standing).toBe('too-high');
     expect(g?.text).toMatch(/drifts back toward pH 6 on its own/);
