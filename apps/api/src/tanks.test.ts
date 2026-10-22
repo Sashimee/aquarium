@@ -148,6 +148,7 @@ describe('tanks and fish', () => {
     const tank = await createTank(h, cookie);
     expect(tank.chemistry).toEqual(newTankChemistry('freshwater'));
     expect(tank.equipment).toEqual(DEFAULT_EQUIPMENT);
+    expect(tank.co2OwnedTier).toBe(0);
     const stocked = await addFish(h, cookie, tank.id);
     expect(stocked.fish[0]).toMatchObject({
       stage: 'adult',

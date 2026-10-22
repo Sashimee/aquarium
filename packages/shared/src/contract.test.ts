@@ -183,6 +183,7 @@ describe('tank and fish', () => {
       shared: false,
       inGallery: false,
       acceptsGifts: false,
+      co2OwnedTier: 0,
       shareToken: null,
       equipment: DEFAULT_EQUIPMENT,
       recentVisitDays: 3,
