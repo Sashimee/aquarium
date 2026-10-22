@@ -161,7 +161,15 @@ const pricedRange = (keys: z.ZodType<string>) =>
     );
 
 const speciesPriceSchema = z
-  .strictObject({ juvenile: priceSchema, adult: priceSchema })
+  .strictObject({
+    juvenile: priceSchema,
+    adult: priceSchema,
+    minTankLengthM: z
+      .number()
+      .positive()
+      .optional()
+      .describe('shortest tank, outer length in metres, the fish is sold for'),
+  })
   .refine((p) => p.adult > p.juvenile, 'an adult costs more than a juvenile');
 
 const dailyCap = z.int().positive();

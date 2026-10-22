@@ -1315,6 +1315,16 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
             apiError('validation_failed', `${spec.commonName} needs a ${spec.biome} tank.`),
           );
         }
+        const minLength = economy.species[spec.id]?.minTankLengthM;
+        if (minLength !== undefined && TANK_SIZES[ticked.tank.size].dimensions.length < minLength) {
+          throw new HttpError(
+            400,
+            apiError(
+              'validation_failed',
+              `${spec.commonName} needs a tank at least ${minLength * 100} cm long.`,
+            ),
+          );
+        }
         const existing = ticked.fishRows.map((f) => ({
           alive: f.status === 'alive',
           maxBioload: species.get(f.species)?.lifecycle.bioload ?? 0,

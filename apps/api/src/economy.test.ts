@@ -119,7 +119,7 @@ async function createTank(
   h: Harness,
   who: Account,
   extra: {
-    biome?: 'freshwater' | 'reef' | 'blackwater';
+    biome?: 'freshwater' | 'reef' | 'blackwater' | 'mangrove';
     size?: string;
     quarantine?: boolean;
     key?: string;
@@ -437,6 +437,22 @@ describe('wallet, shop and ledger', () => {
       const before = await balance(h, who);
       expect((await buyFish(h, who, tank.id, 'blue-tang', 'adult')).statusCode).toBe(400);
       expect(await balance(h, who)).toBe(before);
+    });
+
+    it('sells the silver mono only for a tank at least 150 cm long', async () => {
+      const who = await account(h);
+      await setBalance(h, who, 10_000);
+      const standard = tankSchema.parse((await createTank(h, who, { biome: 'mangrove' })).json());
+      const before = await balance(h, who);
+      const refused = await buyFish(h, who, standard.id, 'silver-mono', 'juvenile');
+      expect(refused.statusCode).toBe(400);
+      expect(errorCode(refused)).toBe('validation_failed');
+      expect(await balance(h, who)).toBe(before);
+
+      const long = tankSchema.parse(
+        (await createTank(h, who, { biome: 'mangrove', size: 'long300' })).json(),
+      );
+      expect((await buyFish(h, who, long.id, 'silver-mono', 'juvenile')).statusCode).toBe(201);
     });
 
     it('grows a bought juvenile of a species with no fry timeline into an adult', async () => {
