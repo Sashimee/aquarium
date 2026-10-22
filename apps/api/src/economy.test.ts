@@ -791,6 +791,24 @@ describe('wallet, shop and ledger', () => {
       expect((await save()).statusCode).toBe(200);
     });
 
+    it('saves the unpriced mud bank over an old mangrove layout, and holds it to one', async () => {
+      const who = await account(h);
+      const tank = tankSchema.parse((await createTank(h, who, { biome: 'mangrove' })).json());
+      const preset = presets.mangrove;
+      if (!preset) throw new Error('mangrove preset missing');
+      const bank = preset.decor.find((item) => item.assetId === 'mud-bank');
+      if (!bank) throw new Error('mangrove preset has no mud bank');
+      const rest = preset.decor.filter((item) => item.assetId !== 'mud-bank');
+      const save = (layout: object[]) =>
+        call(h, who, 'PATCH', `/api/tanks/${tank.id}`, { decorLayout: layout });
+
+      expect((await save(rest)).statusCode).toBe(200);
+      expect((await save(preset.decor)).statusCode).toBe(200);
+      const two = await save([...preset.decor, bank]);
+      expect(two.statusCode).toBe(400);
+      expect(errorCode(two)).toBe('validation_failed');
+    });
+
     it('shares one licence between every procedural euphyllia piece', async () => {
       const who = await account(h);
       const reef = await freeTank(h, who, 'reef');

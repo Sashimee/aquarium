@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { PROCEDURAL_EUPHYLLIA_ID } from '@aquarium/shared';
+import { MUD_BANK_ASSET_ID, PROCEDURAL_EUPHYLLIA_ID } from '@aquarium/shared';
 import type { AssetIndex, OutputAsset } from './index-schema.ts';
 
 /** PLAN section 2.7: initial download. */
@@ -16,7 +16,8 @@ export type BudgetGroup = keyof typeof TIER_BUDGETS;
 export const CODE_RESERVE_BYTES = 1.5 * 1000 * 1000;
 
 /** Generated at runtime, no files. */
-export const PROCEDURAL_ASSET_ID = PROCEDURAL_EUPHYLLIA_ID;
+export const isProceduralAssetId = (id: string): boolean =>
+  PROCEDURAL_EUPHYLLIA_ID.test(id) || id === MUD_BANK_ASSET_ID;
 
 /** The environment map `Engine` fetches on every tier, as `hdri/<id>/<file>` under the asset base. */
 export interface HdriRef {
@@ -152,7 +153,7 @@ export function presetDownloadBytes(
   for (const id of preset.assetIds) {
     const asset = byKey.get(id);
     if (!asset) {
-      if (PROCEDURAL_ASSET_ID.test(id)) continue;
+      if (isProceduralAssetId(id)) continue;
       throw new Error(`preset ${preset.id} uses unknown asset "${id}" that is not in index.json`);
     }
     assets.push(asset);

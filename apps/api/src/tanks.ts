@@ -20,6 +20,7 @@ import {
   medicineSchema,
   MAX_DISPLAY_TANKS,
   MAX_QUARANTINE_TANKS,
+  MUD_BANK_ASSET_ID,
   newTankChemistry,
   tankLengthRefusal,
   TANK_SIZES,
@@ -900,7 +901,13 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
     const before = count(shown);
     const needed = new Set<string>();
     for (const [assetId, n] of count(layout)) {
-      if (assetId === VACATION_FEEDER_ASSET_ID || n <= (before.get(assetId) ?? 0)) continue;
+      if (
+        assetId === VACATION_FEEDER_ASSET_ID ||
+        assetId === MUD_BANK_ASSET_ID ||
+        n <= (before.get(assetId) ?? 0)
+      ) {
+        continue;
+      }
       needed.add(licenseFor(economy, assetId).ref);
     }
     for (const ref of needed) {
@@ -1123,6 +1130,18 @@ export function registerTankRoutes(deps: TankRouteDeps): void {
             body.decorLayout,
             VACATION_FEEDER_ASSET_ID,
           );
+          let banks = 0;
+          body.decorLayout.forEach((item, index) => {
+            if (item.assetId !== MUD_BANK_ASSET_ID) return;
+            banks += 1;
+            if (banks > 1) {
+              problems.push({
+                index,
+                field: 'assetId',
+                message: 'A tank holds one mud bank.',
+              });
+            }
+          });
           if (problems.length > 0) {
             throw new HttpError(
               400,

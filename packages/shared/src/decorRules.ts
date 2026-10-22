@@ -11,6 +11,9 @@ export const DEFAULT_TANK_METRES = {
 /** The free survival-care piece every tank may hold; it is never priced. */
 export const VACATION_FEEDER_ASSET_ID = 'vacation-feeder';
 
+/** The mangrove tank's procedural mud bank: part of the preset, never sold, so not in `DECOR_ASSET_IDS`. */
+export const MUD_BANK_ASSET_ID = 'mud-bank';
+
 const ROCKS = ['boulder-01', 'coast-rocks-05'] as const;
 
 /**
@@ -71,7 +74,8 @@ export const DECOR_ASSET_IDS: Readonly<Record<Biome, ReadonlySet<string>>> = {
 export function isDecorAssetForBiome(biome: Biome, assetId: string): boolean {
   return (
     DECOR_ASSET_IDS[biome].has(assetId) ||
-    (biome === 'reef' && PROCEDURAL_EUPHYLLIA_ID.test(assetId))
+    (biome === 'reef' && PROCEDURAL_EUPHYLLIA_ID.test(assetId)) ||
+    (biome === 'mangrove' && assetId === MUD_BANK_ASSET_ID)
   );
 }
 
