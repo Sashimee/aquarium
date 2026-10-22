@@ -722,6 +722,53 @@
   pointer-events: auto;
 }
 
+.community-bar .community-connection:not(:empty),
+.community-panel,
+.community-happenings {
+  background: var(--glass);
+  border: 1px solid var(--glass-edge);
+  border-radius: 0.8rem;
+  padding: 0.35rem 0.75rem;
+  pointer-events: auto;
+}
+
+.community-bar .community-connection {
+  margin: 0;
+}
+
+.community-bar .community-connection:empty {
+  display: none;
+}
+
+.community-panel,
+.community-happenings {
+  flex: 1 1 100%;
+  max-width: 28rem;
+}
+
+.community-happenings h2 {
+  margin: 0.25rem 0;
+  font-size: 1rem;
+}
+
+.community-happenings ol {
+  margin: 0;
+  padding-left: 1.2rem;
+  max-height: 9rem;
+  overflow-y: auto;
+}
+
+.community-viewers:empty {
+  display: none;
+}
+
+@media (min-width: 721px) {
+  .community-panel,
+  .community-happenings {
+    flex: 0 1 auto;
+  }
+}
+
 .public-loading {
   position: absolute;
   top: 1rem;

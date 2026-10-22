@@ -55,6 +55,8 @@ interface SyntheticSource {
   tailPixel: [number, number];
   /** Reference photos the colours were painted by eye from. Verified to exist but not listed as sources: no pixels are reused, so the asset is CC0. */
   references?: string[];
+  /** Painted, translucent, ray-textured fins; needs `spec.membrane`. Roots cannot sample a photo here. */
+  finPalette?: FinPalette;
   paint(tn: number, yn: number): [number, number, number];
 }
 
@@ -68,7 +70,7 @@ export interface LoftFishRecipe {
   note: string;
 }
 
-function mix(
+export function mix(
   a: [number, number, number],
   b: [number, number, number],
   t: number,
@@ -76,7 +78,7 @@ function mix(
   return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 }
 
-function smooth(edge0: number, edge1: number, x: number): number {
+export function smooth(edge0: number, edge1: number, x: number): number {
   const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
   return t * t * (3 - 2 * t);
 }
@@ -257,7 +259,7 @@ export async function loadTexture(recipe: LoftFishRecipe): Promise<{
       data[o + 3] = 255;
     }
   const crop = { left: 0, top: 0, width: source.width, height: source.height };
-  const project = sideProjection({
+  const projectBody = sideProjection({
     standardLengthM: length,
     snoutY,
     tailY,
@@ -265,7 +267,24 @@ export async function loadTexture(recipe: LoftFishRecipe): Promise<{
     tailPixel: source.tailPixel,
     crop,
   });
-  return { image: { width: source.width, height: source.height, data }, project, sources: [] };
+  const body: Rgba = { width: source.width, height: source.height, data };
+  if (!source.finPalette) return { image: body, project: projectBody, sources: [] };
+  if (!spec.membrane) throw new Error(`${recipe.id}: a fin palette needs spec.membrane`);
+  const palette = source.finPalette;
+  for (const paint of Object.values(palette))
+    if (paint.rootFromPhoto)
+      throw new Error(`${recipe.id}: a synthetic texture has no photo to take fin roots from`);
+  const { image, finTexture, bodyVMax } = appendFinAtlas(body, palette);
+  const project: Projection = (behind, y) => {
+    const [u, v] = projectBody(behind, y);
+    return [u, Math.min(1, Math.max(0, v)) * bodyVMax];
+  };
+  return {
+    image,
+    project,
+    sources: [],
+    finTexture,
+  };
 }
 
 /** Royal gramma colours painted from the species' known pattern; no photo pixels are reused. */
