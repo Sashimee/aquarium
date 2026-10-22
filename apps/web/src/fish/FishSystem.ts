@@ -123,7 +123,7 @@ import {
 import { SimUnavailableError } from '../interaction/simUnavailable';
 import { speciesGrowth, speciesInput } from './species';
 import type { BallNudge, FishBite, FishPoint, PickRay, TankEvent } from './start';
-import { isFinned, SWIM_MODES, SwimState, type SwimModeParams } from './swim';
+import { isFinned, SWIM_MODES, SwimState, type SwimModeParams, type SwimSample } from './swim';
 import {
   CRAB_GAIT,
   curlAboveFloor,
@@ -504,6 +504,7 @@ export class FishSystem {
   private readonly quat = new Float32Array(4);
   private readonly toCamera = new Vector3();
   private readonly liftUp = new Vector3();
+  private readonly jabAhead = new Vector3();
   private readonly viewDirection: [number, number, number] = [1, 0, 0];
   private readonly frames: FrameSelection = { i: 0, j: 0, fx: 0, fy: 0 };
   private readonly impostorValues: ImpostorValues = {
@@ -527,6 +528,7 @@ export class FishSystem {
     velvet: 0,
   };
   private readonly pose = createPose();
+  private readonly swimSample: SwimSample = { speed: 0, yawRate: 0, thrust: 1, state: -1 };
   private readonly walkSample: WalkSample = {
     speed: 0,
     state: -1,
@@ -1653,7 +1655,9 @@ export class FishSystem {
     const { fish } = rt;
     pose.thrust = 1;
     const walk = this.walkSample;
+    const swim = this.swimSample;
     walk.state = -1;
+    swim.state = -1;
     walk.legPhase = rt.motion instanceof WalkState ? rt.motion.legPhase : 0;
     walk.flip = 0;
     walk.attached = 1;
@@ -1697,6 +1701,7 @@ export class FishSystem {
         pose.liveliness = 1;
         pose.thrust = frame[o + SnapshotField.Thrust] ?? 1;
         walk.state = frame[o + SnapshotField.State] ?? -1;
+        swim.state = walk.state;
         walk.legPhase = frame[o + SnapshotField.LegPhase] ?? 0;
         walk.flip = frame[o + SnapshotField.Flip] ?? 0;
         walk.attached = frame[o + SnapshotField.Attached] ?? 1;
@@ -1818,7 +1823,11 @@ export class FishSystem {
         this.walkSample.speed = this.pose.speed;
         motion.advance(deltaS * liveliness, this.walkSample);
       } else {
-        motion.advance(deltaS * liveliness, this.pose);
+        const swim = this.swimSample;
+        swim.speed = this.pose.speed;
+        swim.yawRate = this.pose.yawRate;
+        swim.thrust = this.pose.thrust;
+        motion.advance(deltaS * liveliness, swim);
       }
       rt.lastPosition.copy(this.position);
       rt.lastQuaternion.copy(this.quaternion);
@@ -1841,6 +1850,12 @@ export class FishSystem {
       this.quaternion.copy(rt.lastQuaternion);
       const { impostor } = rt.batch;
       const { motion } = rt;
+      // Only the drawn pose takes the peck's jab: a held fish restarts from `lastPosition` every
+      // frame and would otherwise creep forward by the jab again and again.
+      if (motion instanceof SwimState && motion.jab > 0) {
+        this.jabAhead.set(0, 0, motion.jab * rt.length).applyQuaternion(this.quaternion);
+        this.position.add(this.jabAhead);
+      }
       const choice = this.impostorChoice;
       choice.tierImpostors = impostors !== null;
       choice.available = impostor !== null && motion instanceof SwimState;

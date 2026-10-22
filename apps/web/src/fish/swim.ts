@@ -1,4 +1,5 @@
 import type { Species } from '@aquarium/shared';
+import { FishState } from '@aquarium/sim';
 
 export type SwimmingMode = Species['locomotion']['swimmingMode'];
 /** Walkers (`pleopod`, `none`) have no body wave; their legs, tail and antennae follow `walk.ts`. */
@@ -115,6 +116,28 @@ export const BREATH_GAPE = 0.3;
  */
 export const BITE_OPEN_S = 0.05;
 export const BITE_CLOSE_S = 0.2;
+/**
+ * Share of the hover undulation a client stills while posing at a cleaning station: posing fish
+ * hang nearly motionless, fins spread, to invite inspection (Côté, Arnal & Reynolds 1998, J Fish
+ * Biol 53:256). The amount and its settling time are visual estimates.
+ */
+export const POSE_STILLNESS = 0.75;
+const POSE_SETTLE_S = 0.4;
+/**
+ * A cleaner in `Clean` slower than this is holding at a contact point rather than darting to one
+ * (the sim holds at 0.1 x cruise, about 0.1 L/s for the cleaner wrasse, and darts at 0.25 x max).
+ */
+export const PECK_HOLD_BODY_LENGTHS_PER_S = 0.25;
+/**
+ * While holding, the cleaner snaps its jaws at the client's skin with a forward jerk of the head.
+ * Pecks come this often, so a 0.3-1.2 s hold shows one to four; the rate, the first peck's delay
+ * and the jab length are visual estimates.
+ */
+export const PECK_MIN_INTERVAL_S = 0.25;
+export const PECK_MAX_INTERVAL_S = 0.5;
+export const PECK_FIRST_S = 0.08;
+export const PECK_JAB_BODY_LENGTHS = 0.06;
+const GOLDEN_FRACTION = 0.618033988749895;
 const EXERTION_SETTLE_S = 2.5;
 const DRIVE_RISE_S = 0.03;
 const TAU = Math.PI * 2;
@@ -166,6 +189,8 @@ export interface SwimSample {
   yawRate: number;
   /** Caudal thrust as a fraction of the maximum, 0 while coasting; 1 for scripted poses. */
   thrust: number;
+  /** The sim's `FishState`; -1 for a fish the sim does not move. */
+  state: number;
 }
 
 /** A feeding bite's gape `t` seconds after it starts: 0 shut .. 1 wide open. */
@@ -202,6 +227,12 @@ export class SwimState {
   ventilationPhase: number;
   /** Seconds since the last feeding bite started. */
   sinceBite = Infinity;
+  /** 0 swimming .. 1 holding its cleaning pose, eased. */
+  stillness = 0;
+  /** Seconds since the last cleaning peck started. */
+  sincePeck = Infinity;
+  private peckDue = PECK_FIRST_S;
+  private peckJitter: number;
 
   constructor(
     readonly length: number,
@@ -213,6 +244,7 @@ export class SwimState {
     this.phase = phaseOffset % TAU;
     this.finPhase = (phaseOffset * 1.618) % TAU;
     this.ventilationPhase = (phaseOffset * 2.414) % TAU;
+    this.peckJitter = (((phaseOffset * GOLDEN_FRACTION) % 1) + 1) % 1;
   }
 
   /** Gill covers 0 closed .. 1 fully flared. */
@@ -229,6 +261,11 @@ export class SwimState {
     return breath + (1 - breath) * biteGape(this.sinceBite);
   }
 
+  /** How far, in body lengths, a cleaning peck has jerked the head forward: 0 at rest. */
+  get jab(): number {
+    return PECK_JAB_BODY_LENGTHS * biteGape(this.sincePeck);
+  }
+
   /** Starts a feeding gape, picking up from the gape of a bite still under way. */
   bite(): void {
     this.sinceBite = openingTime(biteGape(this.sinceBite));
@@ -241,7 +278,10 @@ export class SwimState {
     const powered = sample.thrust > COAST_THRUST;
     const tau = powered ? DRIVE_RISE_S : 1 / (COAST_DECAY_PER_PERIOD * this.frequency);
     this.drive += ((powered ? 1 : 0) - this.drive) * (1 - Math.exp(-dt / tau));
-    this.amplitude = amplitudeScale(sample.speed, length, this.drive);
+    const posing = sample.state === FishState.Pose ? 1 : 0;
+    this.stillness += (posing - this.stillness) * (1 - Math.exp(-dt / POSE_SETTLE_S));
+    this.amplitude =
+      amplitudeScale(sample.speed, length, this.drive) * (1 - POSE_STILLNESS * this.stillness);
     this.phase = (this.phase + TAU * this.frequency * dt) % TAU;
     const finHz = Math.max(this.frequency, this.mode.pectoralIdleHz);
     this.finPhase = (this.finPhase + TAU * finHz * dt) % TAU;
@@ -250,8 +290,26 @@ export class SwimState {
       RESTING_VENTILATION_HZ + (EXERTED_VENTILATION_HZ - RESTING_VENTILATION_HZ) * this.exertion;
     this.ventilationPhase = (this.ventilationPhase + TAU * ventilationHz * dt) % TAU;
     this.sinceBite += dt;
+    this.advancePecks(dt, sample);
     const target = turnCurvature(sample.yawRate, sample.speed, length);
     const k = 1 - Math.exp(-dt / BEND_SMOOTHING_S);
     this.curvature += (target - this.curvature) * k;
+  }
+
+  private advancePecks(dt: number, sample: SwimSample): void {
+    this.sincePeck += dt;
+    const holding =
+      sample.state === FishState.Clean && sample.speed < PECK_HOLD_BODY_LENGTHS_PER_S * this.length;
+    if (!holding) {
+      this.peckDue = PECK_FIRST_S;
+      return;
+    }
+    this.peckDue -= dt;
+    if (this.peckDue > 0) return;
+    this.sincePeck = -this.peckDue;
+    this.bite();
+    this.peckJitter = (this.peckJitter + GOLDEN_FRACTION) % 1;
+    this.peckDue +=
+      PECK_MIN_INTERVAL_S + (PECK_MAX_INTERVAL_S - PECK_MIN_INTERVAL_S) * this.peckJitter;
   }
 }
