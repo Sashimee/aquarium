@@ -80,6 +80,14 @@ export const DEFAULT_LAMP_HOURS: LampHours = {
   offHour: DEFAULT_EQUIPMENT.light.offHour,
 };
 
+/** The lamp's hours and its strength setting, 0..1, as the Shop sets them. */
+export type LampSchedule = Pick<LightSchedule, 'intensity' | 'onHour' | 'offHour'>;
+
+export const DEFAULT_LAMP_SCHEDULE: LampSchedule = {
+  ...DEFAULT_LAMP_HOURS,
+  intensity: DEFAULT_EQUIPMENT.light.intensity,
+};
+
 const LAMP_RAMP_MINUTES = 60;
 
 /**

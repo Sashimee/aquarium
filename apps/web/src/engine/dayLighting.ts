@@ -14,6 +14,23 @@ const ROOM_AT_NIGHT = 0.15;
  */
 export const FRESHWATER_FILL_LEVEL = 0.28;
 
+/**
+ * The hood's light at the lamp's lowest and highest strength setting. The scale is in stops, as a
+ * dimmer is seen: two stops down still lights the tank clearly over the moonlight, and half a stop
+ * up stays within what AgX at exposure 1 rolls off on white sand. The default setting, 0.8, lands
+ * on exactly 1, the level the scene is tuned at.
+ */
+export const LAMP_GAIN_MIN = 0.25;
+export const LAMP_GAIN_MAX = Math.SQRT2;
+
+/** The hood's light relative to the tuned level for a lamp strength setting, 0..1. */
+export function lampGain(intensity: number): number {
+  if (!(intensity >= 0 && intensity <= 1)) {
+    throw new RangeError(`lampGain: lamp intensity must be within 0..1, got ${intensity}`);
+  }
+  return LAMP_GAIN_MIN * (LAMP_GAIN_MAX / LAMP_GAIN_MIN) ** intensity;
+}
+
 /** What the photoperiod drives: uniforms and plain numbers only, so no shader is rebuilt. */
 export interface DayLightingRig {
   readonly hood: DirectionalLight;
@@ -30,16 +47,18 @@ export interface DayLightingRig {
    * runs on the lamp schedule instead, so the two are set apart.
    */
   roomDaylight: number;
+  /** The lamp's strength setting as a gain on the hood's main channel (`lampGain`). */
+  lampGain: number;
 }
 
 /**
  * The hood colour and intensity are the daytime setting (a preset may change them); `day` (0..1)
- * fades them into the moonlight channel. `rig.roomDaylight` dims the room around the tank. The
+ * fades them into the moonlight channel, and `rig.lampGain` scales the main channel only. `rig.roomDaylight` dims the room around the tank. The
  * room's level is in the environment node, so `scene.environmentIntensity` stays a plain gain.
  */
 export function applyDayLighting(rig: DayLightingRig, day: number): void {
   const { hood, caustics, interior, medium, scene } = rig;
-  caustics.setHood(hood.color, hood.intensity, MOONLIGHT, day, rig.substrateAlbedo);
+  caustics.setHood(hood.color, hood.intensity * rig.lampGain, MOONLIGHT, day, rig.substrateAlbedo);
   caustics.lightDirection.value.copy(hood.position).sub(hood.target.position).normalize();
   const outside = Math.min(1, Math.max(0, rig.roomDaylight));
   const room = ROOM_AT_NIGHT + (1 - ROOM_AT_NIGHT) * outside;
