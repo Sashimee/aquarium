@@ -152,6 +152,9 @@ const RENDER_INPUTS: Record<string, string> = {
     'mangrove prop roots (lucq22, CC-BY-4.0) with a CC0 red mangrove scan and a CC0 mud texture',
   'bg-mangrove-petrified-stump':
     'a petrified mangrove stump scan (JFN / db4, CC-BY-4.0) and mangrove prop roots (lucq22, CC-BY-4.0) with CC0 rocks and a CC0 mud texture',
+  'bg-mangrove-tidal-flat':
+    'a CC0 red mangrove scan, a CC0 propagule scan and CC0 mud and sand textures',
+  'bg-mangrove-open-water': 'a CC0 red mangrove scan and a CC0 mud texture',
 };
 
 const RENDER_INPUTS_BY_BIOME: Record<string, string> = {

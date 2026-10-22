@@ -53,7 +53,7 @@ import { FrameCap } from './framePacing';
 import { RenderLoop } from './renderLoop';
 import { buildOrRelease, DisposeStack, settlesWithin } from './lifecycle';
 import type { EngineOptions } from './options';
-import { qualityProfile } from './quality/profile';
+import { isTouchFirst, qualityProfile } from './quality/profile';
 import { QualityManager } from './quality/QualityManager';
 import { renderPixelRatio, type TierSettings } from './quality/tiers';
 import { TankBackground } from './tank/background';
@@ -96,7 +96,11 @@ const HOOD_COLOR = new Color(1, 0.97, 0.92);
 const HOOD_INTENSITY = 4;
 
 function hasCoarsePointer(): boolean {
-  return typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+  return isTouchFirst({
+    coarsePointer: typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches,
+    platform: navigator.platform,
+    maxTouchPoints: navigator.maxTouchPoints,
+  });
 }
 
 /** The part of the renderer the start-up path needs, so failures can be tested without a GPU. */

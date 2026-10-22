@@ -1,12 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { CLEAR_WATER, gradeUnderwater } from './misty-lake.ts';
 import { manifestSchema } from './manifest.ts';
+import { sceneBaseColor } from './environment.ts';
+import { buildMips, type SceneMesh } from './soft-render.ts';
 import {
   BLACKWATER_BACKGROUND_IDS,
   MANGROVE_BACKGROUND_IDS,
   WATER_BACKGROUND_IDS,
+  renderWaterScene,
+  type Library,
 } from './water-render.ts';
 
 const REPO = join(import.meta.dirname, '..', '..', '..');
@@ -50,6 +54,74 @@ describe('water backgrounds', () => {
   it('render distinct images', () => {
     const hashes = WATER_BACKGROUND_IDS.map((id) => byId.get(id)?.sha256);
     expect(new Set(hashes).size).toBe(WATER_BACKGROUND_IDS.length);
+  });
+});
+
+function fixtureLibrary(): Library {
+  const texture = buildMips({ width: 2, height: 2, data: new Uint8Array(16).fill(200) });
+  const blob = (seed: number): SceneMesh => {
+    const h = 0.4 + seed * 0.05;
+    return {
+      positions: Float32Array.from([-h, 0, 0, h, 0, 0, h, 2 * h, 0, -h, 2 * h, 0]),
+      normals: Float32Array.from([0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1]),
+      uvs: Float32Array.from([0, 0, 1, 0, 1, 1, 0, 1]),
+      indices: Uint32Array.from([0, 1, 2, 0, 2, 3]),
+      texture,
+      castsShadow: true,
+    };
+  };
+  const names = [
+    'scanA',
+    'scanB',
+    'twigs',
+    'trunk02',
+    'quiver',
+    'propRoots',
+    'stump',
+    'propagule',
+    'rock',
+    'rootScan',
+  ] as const;
+  const models = Object.fromEntries(names.map((n, i) => [n, [blob(i)]])) as Library['models'];
+  return { models, litter: texture, mud: texture, mudSand: texture };
+}
+
+describe('water scene renders', () => {
+  it('draw geometry and differ from each other', () => {
+    const library = fixtureLibrary();
+    const images = WATER_BACKGROUND_IDS.map((id) => {
+      const { rgb, depth } = renderWaterScene(id, library, 48, 64);
+      expect(
+        depth.some((d) => d < 20),
+        id,
+      ).toBe(true);
+      return Buffer.from(rgb).toString('base64');
+    });
+    expect(new Set(images).size).toBe(WATER_BACKGROUND_IDS.length);
+  });
+});
+
+describe('sceneBaseColor', () => {
+  it('throws when the part material is unknown', () => {
+    expect(() => sceneBaseColor(undefined, 'bark', 'rock')).toThrow(/bark.*not in the loaded/);
+  });
+
+  it('warns when a material has no base colour texture', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const material = {
+      name: 'bark',
+      baseColorFactor: [1, 1, 1, 1],
+      roughness: 1,
+      metallic: 0,
+      alphaMode: 'OPAQUE',
+      doubleSided: false,
+      normalScale: 1,
+    } as const;
+    expect(
+      sceneBaseColor({ ...material, baseColorFactor: [1, 1, 1, 1] }, 'bark', 'rock'),
+    ).toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('bark'));
+    warn.mockRestore();
   });
 });
 

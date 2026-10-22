@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import sharp, { type OverlayOptions } from 'sharp';
 import { mulberry32 } from './anemone.ts';
-import { loadEnvironment, type EnvironmentRecipe } from './environment.ts';
+import { loadEnvironment, sceneBaseColor, type EnvironmentRecipe } from './environment.ts';
 import type { FishContext } from './fish.ts';
 import { developRender, type DepthParams, type WaterPalette } from './misty-lake.ts';
 import { MANGROVE_ENVIRONMENT_RECIPES } from './mangrove.ts';
@@ -14,12 +14,19 @@ import {
   renderScene,
   type Instance,
   type MipTexture,
+  type Rendered,
   type SceneCamera,
   type SceneMesh,
   type SceneSpec,
 } from './soft-render.ts';
 import { RAW_ROOT } from './source.ts';
 import { decodeImage, resizeImage, type Rgba } from './textures.ts';
+
+const GREY_TEXEL: MipTexture = buildMips({
+  width: 1,
+  height: 1,
+  data: Uint8Array.from([128, 128, 128, 255]),
+});
 
 export const WATER_WIDTH = 4096;
 export const BLACKWATER_BACKGROUND_IDS = [
@@ -101,18 +108,12 @@ const CLIPPED_SCANS: Record<
 
 type ModelName = keyof typeof MODEL_RECIPES;
 
-interface Library {
+export interface Library {
   models: Record<ModelName, SceneMesh[]>;
   litter: MipTexture;
   mud: MipTexture;
   mudSand: MipTexture;
 }
-
-const FALLBACK_GREY: MipTexture = buildMips({
-  width: 1,
-  height: 1,
-  data: Uint8Array.from([128, 128, 128, 255]),
-});
 
 const TEXTURE_PX = 2048;
 
@@ -128,9 +129,8 @@ async function loadMeshes(
     const material = byName.get(part.material);
     let texture = textures.get(part.material);
     if (!texture) {
-      texture = material?.baseColor
-        ? buildMips(await resizeImage(material.baseColor.image, TEXTURE_PX))
-        : FALLBACK_GREY;
+      const baseColor = sceneBaseColor(material, part.material, recipe.id);
+      texture = baseColor ? buildMips(await resizeImage(baseColor.image, TEXTURE_PX)) : GREY_TEXEL;
       textures.set(part.material, texture);
     }
     const factor = material?.baseColorFactor ?? [1, 1, 1, 1];
@@ -440,7 +440,7 @@ const SCENES: Record<WaterBackgroundId, SceneBuilder> = {
                   flank.z - layer * 0.35 + (rng() - 0.5) * 0.2,
                 ],
                 rng() * 360,
-                (5.5 + rng() * 1.5) * 1,
+                5.5 + rng() * 1.5,
                 TANNIN_WOOD,
               ),
             );
@@ -670,6 +670,27 @@ const SCENES: Record<WaterBackgroundId, SceneBuilder> = {
   },
 };
 
+export function renderWaterScene(
+  id: WaterBackgroundId,
+  library: Library,
+  width: number,
+  shadowSize = 4096,
+): Rendered {
+  const scene = SCENES[id];
+  return renderScene(
+    {
+      width,
+      height: width / 2,
+      camera: scene.camera,
+      lighting: scene.lighting,
+      instances: scene.instances(library, scene.camera),
+      empty: scene.empty,
+      far: DEPTH.far,
+    },
+    shadowSize,
+  );
+}
+
 export async function renderWaterBackground(
   id: WaterBackgroundId,
   ctx: Pick<FishContext, 'verifySource'>,
@@ -680,15 +701,7 @@ export async function renderWaterBackground(
   const height = width / 2;
   const scene = SCENES[id];
   const library = lib ?? (await loadLibrary(ctx));
-  const { rgb, depth } = renderScene({
-    width,
-    height,
-    camera: scene.camera,
-    lighting: scene.lighting,
-    instances: scene.instances(library, scene.camera),
-    empty: scene.empty,
-    far: DEPTH.far,
-  });
+  const { rgb, depth } = renderWaterScene(id, library, width);
   const depthRed = new Uint8Array(depth.length);
   for (let i = 0; i < depth.length; i++) {
     const t = ((depth[i] ?? 0) - DEPTH.near) / (DEPTH.far - DEPTH.near);
