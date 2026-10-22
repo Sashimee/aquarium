@@ -261,6 +261,15 @@ const AWAITING_CONTENT: Record<
     maxTlM: 0.19,
     source: 'FishBase (Periophthalmus argentilineatus): 19 cm TL (Ref. 4756); SL = 0.8241 TL',
   },
+  'black-phantom-tetra': {
+    model: 'black-phantom-tetra',
+    maxSlM: 0.036,
+    maxTlM: 0.036 * 1.25,
+    source:
+      'Seriously Fish (Megalamphodus megalopterus): 30-36 mm standard length. No FishBase ' +
+      'length-length relationship was checked, so TL = 1.25 SL, a typical characin proportion ' +
+      'with a forked caudal; it is an assumption, not a literature value.',
+  },
   'blue-spotted-mudskipper': {
     model: 'blue-spotted-mudskipper',
     maxSlM: 0.22 / 1.1773,
