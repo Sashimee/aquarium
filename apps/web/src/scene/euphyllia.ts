@@ -10,6 +10,7 @@ import {
 } from 'three/webgpu';
 import { attribute, float, mix, vec3, positionLocal, uniform, vertexColor } from 'three/tsl';
 import { PROCEDURAL_EUPHYLLIA_ID, type DecorItem } from '@aquarium/shared';
+import { BLEACHED_SKELETON_ALBEDO } from '../engine/coralBleach';
 import type { Tier } from '../engine/quality/tiers';
 import { SWAY_ATTRIBUTE, swayPositionNode } from './anemone';
 import type { CapsuleCollider } from './colliders';
@@ -58,7 +59,6 @@ export const EUPHYLLIA_TRIANGLE_BUDGET: Readonly<Record<EuphylliaDetail, number>
 export const RETRACT_ATTRIBUTE = '_retract';
 export const WAVE_METRES = 0.0035;
 export const LEAN_SECONDS = 0.5;
-const BLEACHED_COLONY = 0.85;
 const COLONY_HEIGHT = 0.1;
 
 export function euphylliaId(variant: EuphylliaVariant, seed: number): string {
@@ -541,7 +541,7 @@ export class EuphylliaGroup {
     this.material.metalness = 0;
     this.material.side = DoubleSide;
     const live = vertexColor().pow(1.8);
-    this.material.colorNode = mix(live, vec3(BLEACHED_COLONY), this.bleach);
+    this.material.colorNode = mix(live, vec3(BLEACHED_SKELETON_ALBEDO), this.bleach);
     this.material.emissiveNode = live.mul(0.06).mul(float(1).sub(this.bleach));
     this.material.positionNode = swayPositionNode(
       item,

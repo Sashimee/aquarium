@@ -6,6 +6,7 @@ import type {
   DecorLayout,
   Fish,
   FoodType,
+  Coral,
   Plant,
   TankSize,
   Water,
@@ -182,6 +183,8 @@ export interface InteractionEvents {
   'tank:water': { tankId: string; water: Water };
   /** The growing plants of the tank, sent after each load and whenever they change. */
   'tank:plants': { tankId: string; plants: readonly Plant[] };
+  /** The reef corals of the tank with their size and bleaching, sent after each load and whenever they change. */
+  'tank:corals': { tankId: string; corals: readonly Coral[] };
   /** The tank's wave maker tier, sent after each load and whenever a purchase changes it; 0 is none. */
   'tank:wave-maker': { tankId: string; tier: number };
   /**

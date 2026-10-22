@@ -293,6 +293,37 @@ function samplerKey(json: GlbDocument['json'], textureIndex: number): string {
   return `wrapS=${wrapS} wrapT=${wrapT} mag=${sampler?.magFilter ?? GL_LINEAR} min=${sampler?.minFilter ?? GL_LINEAR_MIPMAP_LINEAR}`;
 }
 
+function conflictingPairs<T extends { derived: boolean }>(
+  list: readonly T[],
+  keyOf: (use: T) => string,
+): [T, T][] {
+  const groups = new Map<string, T[]>();
+  for (const use of list) {
+    const group = groups.get(keyOf(use)) ?? [];
+    group.push(use);
+    groups.set(keyOf(use), group);
+  }
+  const all = [...groups.values()];
+  const pairs: [T, T][] = [];
+  for (let i = 0; i < all.length; i++) {
+    for (let j = i + 1; j < all.length; j++) {
+      const pair = firstDirectPair(all[i] ?? [], all[j] ?? []);
+      if (pair) pairs.push(pair);
+    }
+  }
+  return pairs;
+}
+
+function firstDirectPair<T extends { derived: boolean }>(
+  left: readonly T[],
+  right: readonly T[],
+): [T, T] | undefined {
+  for (const a of left) {
+    for (const b of right) if (!(a.derived && b.derived)) return [a, b];
+  }
+  return undefined;
+}
+
 export function sharedKtx2Problems(glbs: readonly GlbDocument[]): string[] {
   interface Use {
     file: string;
@@ -327,20 +358,15 @@ export function sharedKtx2Problems(glbs: readonly GlbDocument[]): string[] {
   }
   const problems: string[] = [];
   for (const [uri, list] of [...uses].sort(([a], [b]) => (a < b ? -1 : 1))) {
-    const [first, ...rest] = list;
-    if (first === undefined) continue;
-    for (const other of rest) {
-      if (first.derived && other.derived) continue;
-      if (other.colour !== first.colour) {
-        problems.push(
-          `${uri} is read as ${first.colour} by ${first.file} but as ${other.colour} by ${other.file}; the web loader caches one texture per URL, so give each colour role its own file`,
-        );
-      }
-      if (other.sampler !== first.sampler) {
-        problems.push(
-          `${uri} has sampler (${first.sampler}) in ${first.file} but (${other.sampler}) in ${other.file}; the web loader caches one texture per URL, so make the samplers match`,
-        );
-      }
+    for (const [first, other] of conflictingPairs(list, (use) => use.colour)) {
+      problems.push(
+        `${uri} is read as ${first.colour} by ${first.file} but as ${other.colour} by ${other.file}; the web loader caches one texture per URL, so give each colour role its own file`,
+      );
+    }
+    for (const [first, other] of conflictingPairs(list, (use) => use.sampler)) {
+      problems.push(
+        `${uri} has sampler (${first.sampler}) in ${first.file} but (${other.sampler}) in ${other.file}; the web loader caches one texture per URL, so make the samplers match`,
+      );
     }
   }
   return [...new Set(problems)];

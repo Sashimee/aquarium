@@ -1,4 +1,4 @@
-import type { ConflictReason, Plant, Tank } from '@aquarium/shared';
+import type { ConflictReason, Coral, Plant, Tank } from '@aquarium/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiRequestError, type ApiClient } from '../ui/api';
 import {
@@ -42,6 +42,7 @@ function apiMocks() {
     care: vi.fn(),
     treat: vi.fn(),
     trimPlant: vi.fn(),
+    fragCoral: vi.fn(),
     moveFish: vi.fn(),
     reportAte: vi.fn(),
     shareTank: vi.fn(),
@@ -2243,6 +2244,144 @@ describe('growing plants', () => {
     await session.setUser(verified);
     expect(await session.trimPlant('s7', 1)).toEqual({ ok: false, refusal: null });
     expect(api.trimPlant).not.toHaveBeenCalled();
+  });
+});
+
+describe('reef corals', () => {
+  const table = (over: Partial<Coral> = {}): Coral => ({
+    key: 's3',
+    assetId: 'acropora-cytherea',
+    tintSeed: 3,
+    parentKey: null,
+    position: null,
+    size: 1.6,
+    minSize: 0.4,
+    maxSize: 2,
+    fragMinSize: 1.5,
+    bleach: 0,
+    ...over,
+  });
+  const reef = (over: Partial<Tank> = {}) =>
+    tankFixture({
+      biome: 'reef',
+      corals: [table()],
+      lastTickAt: '2026-02-01T00:00:00.000Z',
+      ...over,
+    });
+  const refuse = (status: number, code: ApiRequestError['code'], reason?: string) =>
+    new ApiRequestError(
+      status,
+      code,
+      'server words',
+      {},
+      null,
+      (reason ?? null) as ConflictReason | null,
+    );
+
+  it('announces the corals on load and only when a returned tank changes them', async () => {
+    const { api, rec, session } = setup([reef()]);
+    await session.setUser(verified);
+    expect(rec.of('tank:corals')).toEqual([{ tankId: TANK_A, corals: [table()] }]);
+    api.care.mockResolvedValue(reef({ lastTickAt: '2026-02-01T00:05:00.000Z' }));
+    await session.careAction({ type: 'water_change' });
+    expect(rec.of('tank:corals')).toHaveLength(1);
+    api.care.mockResolvedValue(
+      reef({ corals: [table({ size: 1.8, bleach: 0.2 })], lastTickAt: '2026-02-01T00:10:00.000Z' }),
+    );
+    await session.careAction({ type: 'water_change' });
+    expect(rec.of('tank:corals').at(-1)).toEqual({
+      tankId: TANK_A,
+      corals: [table({ size: 1.8, bleach: 0.2 })],
+    });
+  });
+
+  it('announces an empty list for a tank without coral state', async () => {
+    const { rec, session } = setup([tankFixture()]);
+    await session.setUser(verified);
+    expect(rec.of('tank:corals')).toEqual([{ tankId: TANK_A, corals: [] }]);
+  });
+
+  it('cuts a fragment with a key, applies the tank and announces the new fragment', async () => {
+    const { api, rec, session } = setup([reef()]);
+    await session.setUser(verified);
+    const frag = table({
+      key: 's3.1',
+      parentKey: 's3',
+      position: [0.1, 0.05],
+      size: 0.3,
+      fragMinSize: 1.5,
+    });
+    api.fragCoral.mockResolvedValue(
+      reef({
+        corals: [table({ size: 1.3 }), frag],
+        lastTickAt: '2026-02-01T00:01:00.000Z',
+      }),
+    );
+    const outcome = await session.fragCoral('s3');
+    expect(outcome).toEqual({ ok: true, refusal: null });
+    expect(api.fragCoral).toHaveBeenCalledWith(TANK_A, {
+      coralKey: 's3',
+      idempotencyKey: expect.stringMatching(/^[A-Za-z0-9_-]{8,}$/),
+    });
+    expect(rec.of('tank:corals').at(-1)).toEqual({
+      tankId: TANK_A,
+      corals: [table({ size: 1.3 }), frag],
+    });
+    expect(session.getState().notice).toBe('A fragment was cut from the acropora cytherea.');
+  });
+
+  it.each([
+    [404, 'not_found', undefined, /no longer in this tank/],
+    [409, 'conflict', 'coral_not_grown', /not grown enough/],
+    [409, 'conflict', 'coral_bleached', /too bleached/],
+    [409, 'conflict', 'coral_limit', /as many fragments/],
+    [409, 'conflict', 'coral_no_room', /no room on the substrate/],
+    [409, 'conflict', 'key_reused', /clashed with an earlier one/],
+    [409, 'conflict', undefined, /server words/],
+    [429, 'rate_limited', undefined, /Too many cuts/],
+  ] as const)('explains a %s %s %s refusal', async (status, code, reason, text) => {
+    const { api, session } = setup([reef()]);
+    await session.setUser(verified);
+    api.fragCoral.mockRejectedValue(refuse(status, code, reason));
+    api.tank.mockResolvedValue(reef({ lastTickAt: '2026-02-01T00:05:00.000Z' }));
+    const outcome = await session.fragCoral('s3');
+    expect(outcome.ok).toBe(false);
+    expect(outcome.refusal).toMatch(text);
+  });
+
+  it('refreshes the tank after a 409 so the picker sees the real size', async () => {
+    const { api, session } = setup([reef()]);
+    await session.setUser(verified);
+    api.fragCoral.mockRejectedValue(refuse(409, 'conflict', 'coral_not_grown'));
+    api.tank.mockResolvedValue(
+      reef({ corals: [table({ size: 1.2 })], lastTickAt: '2026-02-01T00:05:00.000Z' }),
+    );
+    await session.fragCoral('s3');
+    expect(session.getState().tanks[0]?.corals?.[0]?.size).toBe(1.2);
+  });
+
+  it('keeps the key after a lost reply and drops it after a refusal', async () => {
+    const { api, session } = setup([reef()]);
+    await session.setUser(verified);
+    api.fragCoral
+      .mockRejectedValueOnce(apiError(0, 'network'))
+      .mockRejectedValueOnce(refuse(409, 'conflict', 'coral_limit'))
+      .mockRejectedValue(refuse(409, 'conflict', 'coral_limit'));
+    api.tank.mockResolvedValue(reef({ lastTickAt: '2026-02-01T00:05:00.000Z' }));
+    await session.fragCoral('s3');
+    await session.fragCoral('s3');
+    await session.fragCoral('s3');
+    const keys = api.fragCoral.mock.calls.map((c) => c[1].idempotencyKey);
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[1]);
+  });
+
+  it('does not call the server for a coral the tank does not have', async () => {
+    const { api, session } = setup([tankFixture()]);
+    expect(await session.fragCoral('s3')).toEqual({ ok: false, refusal: null });
+    await session.setUser(verified);
+    expect(await session.fragCoral('s3')).toEqual({ ok: false, refusal: null });
+    expect(api.fragCoral).not.toHaveBeenCalled();
   });
 });
 
