@@ -4,13 +4,15 @@ import type { Engine } from '../../engine/Engine';
 import { EventBus } from '../../engine/events';
 import { TANK_DIMENSIONS } from '../../engine/tank/dimensions';
 import type { CatalogEntry } from '../../scene/assets';
+import type { ScaleCap } from '../../scene/coralGrowth';
 import type { InteractionEvents } from '../events';
 import { FeederLayer } from './feederLayer';
 import { flat } from './fixtures';
 import { createDecorSystem } from './system';
 import type { DecorScenePort } from './world';
 
-const scene: DecorScenePort = {
+const scene: DecorScenePort & { readonly coralCap: ScaleCap } = {
+  coralCap: () => Infinity,
   biome: 'reef',
   presetHardDecor: [],
   fixedDecor: [],
