@@ -1,4 +1,4 @@
-import { BACKGROUND_IDS } from '@aquarium/shared';
+import { BACKGROUND_IDS, type Biome } from '@aquarium/shared';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -26,8 +26,15 @@ describe('backgroundOptions', () => {
     expect(options[0]?.title).toBe('Coral wall');
   });
 
+  it('titles every blackwater and mangrove background', () => {
+    expect(backgroundOptions('blackwater').map((o) => o.id)).toEqual([
+      ...BACKGROUND_IDS.blackwater,
+    ]);
+    expect(backgroundOptions('mangrove').map((o) => o.id)).toEqual([...BACKGROUND_IDS.mangrove]);
+  });
+
   it('is empty for a biome without backgrounds', () => {
-    expect(backgroundOptions('blackwater')).toEqual([]);
+    expect(backgroundOptions('atlantis' as Biome)).toEqual([]);
   });
 });
 
@@ -37,7 +44,7 @@ describe('BackgroundChooser', () => {
   });
 
   it('renders nothing for a biome without backgrounds', () => {
-    expect(render({ tankId: null, biome: 'blackwater', backgroundId: null })).toBe('');
+    expect(render({ tankId: null, biome: 'atlantis' as Biome, backgroundId: null })).toBe('');
   });
 
   it('offers every background as a button and marks the shown one pressed', () => {

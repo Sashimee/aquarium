@@ -88,6 +88,7 @@ type StoredFish = z.infer<typeof storedFishSchema>;
 declare module 'fastify' {
   interface FastifyInstance {
     settleDueGifts: () => Promise<number>;
+    settleGiftOffers: (ids: readonly string[]) => Promise<number>;
   }
 }
 
@@ -399,8 +400,12 @@ export function registerGiftRoutes(ctx: GiftContext): void {
         ),
       )
       .limit(SWEEP_BATCH);
+    return settleEach(due.map((o) => o.id));
+  }
+
+  async function settleEach(ids: readonly string[]): Promise<number> {
     let settled = 0;
-    for (const { id } of due) {
+    for (const id of ids) {
       try {
         if (await sweepOne(id)) settled += 1;
       } catch (error) {
@@ -411,6 +416,7 @@ export function registerGiftRoutes(ctx: GiftContext): void {
   }
 
   app.decorate('settleDueGifts', () => settleDue(undefined));
+  app.decorate('settleGiftOffers', (ids: readonly string[]) => settleEach(ids));
 
   const expired = (offer: Pick<OfferRow, 'toUserId'>) =>
     offer.toUserId === null
@@ -595,7 +601,23 @@ export function registerGiftRoutes(ctx: GiftContext): void {
     return found;
   };
 
+  const recipientLeft = () =>
+    refuse(409, 'The other player left, so this offer is closed.', 'offer_closed');
+
   type Outcome<T> = { done: T } | { raise: HttpError };
+
+  async function recipientVanished(
+    error: unknown,
+    recipientId: string | null,
+    senderId: string,
+  ): Promise<boolean> {
+    if (!(error instanceof HttpError) || error.status !== 401 || !recipientId) return false;
+    const present = await database.db
+      .select({ id: schema.user.id })
+      .from(schema.user)
+      .where(inArray(schema.user.id, [recipientId, senderId]));
+    return present.some((u) => u.id === senderId) && !present.some((u) => u.id === recipientId);
+  }
 
   app.post(
     '/api/gifts/:id/accept',
@@ -755,7 +777,10 @@ export function registerGiftRoutes(ctx: GiftContext): void {
         pre.recipientTankId &&
         pre.pledgedFishId
       ) {
-        const recipient = await loadUser(database.db, pre.toUserId);
+        const recipient = await loadUser(database.db, pre.toUserId).catch((error: unknown) => {
+          if (error instanceof HttpError && error.status === 404) throw recipientLeft();
+          throw error;
+        });
         targets.push({ user: recipient, tankId: pre.recipientTankId });
         const [where] = await database.db
           .select({ tankId: schema.fish.tankId, ownerId: schema.tanks.ownerId })
@@ -767,112 +792,129 @@ export function registerGiftRoutes(ctx: GiftContext): void {
         }
       }
 
-      const outcome = await withTanksOf(targets, async (tx, ticked): Promise<Outcome<unknown>> => {
-        const offer = await lockOffer(tx, id);
-        const nowMs = clock.now();
-        const mine = tankOf(ticked, body.toTankId);
+      let outcome: Outcome<unknown>;
+      try {
+        outcome = await withTanksOf(targets, async (tx, ticked): Promise<Outcome<unknown>> => {
+          const offer = await lockOffer(tx, id);
+          const nowMs = clock.now();
+          const mine = tankOf(ticked, body.toTankId);
 
-        if (offer.confirmKey === body.idempotencyKey && offer.status === 'accepted') {
-          const pledgedId = offer.pledgedFishId;
-          const here = mine.fishRows.find((f) => f.id === pledgedId);
-          if (!here) {
+          if (offer.confirmKey === body.idempotencyKey && offer.status === 'accepted') {
+            const pledgedId = offer.pledgedFishId;
+            const here = mine.fishRows.find((f) => f.id === pledgedId);
+            if (!here) {
+              return {
+                raise: refuse(
+                  409,
+                  'That idempotency key was used for a different confirm.',
+                  'key_reused',
+                ),
+              };
+            }
             return {
-              raise: refuse(
-                409,
-                'That idempotency key was used for a different confirm.',
-                'key_reused',
-              ),
+              done: confirmGiftResponseSchema.parse({
+                offer: await viewOf(tx, offer, user.id),
+                tank: await render(tx, mine),
+                arrival: {
+                  fishId: here.id,
+                  tankId: mine.tank.id,
+                  stress: stressIn(here.species, mine),
+                },
+              }),
             };
           }
-          return {
-            done: confirmGiftResponseSchema.parse({
-              offer: await viewOf(tx, offer, user.id),
-              tank: await render(tx, mine),
-              arrival: {
-                fishId: here.id,
-                tankId: mine.tank.id,
-                stress: stressIn(here.species, mine),
-              },
-            }),
-          };
-        }
 
-        if (offer.status !== 'countered') {
-          if (isDue(offer, seenAt) && offer.status === 'open') {
+          if (offer.status !== 'countered') {
+            if (isDue(offer, seenAt) && offer.status === 'open') {
+              const home = tankOf(ticked, offer.fromTankId);
+              await settle(tx, offer, home, dueStatus(offer), nowMs, null);
+              return { raise: expired(offer) };
+            }
+            return { raise: closed() };
+          }
+          if (isDue(offer, seenAt)) {
             const home = tankOf(ticked, offer.fromTankId);
             await settle(tx, offer, home, dueStatus(offer), nowMs, null);
             return { raise: expired(offer) };
           }
-          return { raise: closed() };
-        }
-        if (isDue(offer, seenAt)) {
-          const home = tankOf(ticked, offer.fromTankId);
-          await settle(tx, offer, home, dueStatus(offer), nowMs, null);
-          return { raise: expired(offer) };
-        }
 
-        throttle(user.id, 'gift');
-        const recipientTank = offer.recipientTankId
-          ? tankOf(ticked, offer.recipientTankId)
-          : undefined;
-        const pledgedRow = ticked
-          .filter((t) => t.tank.ownerId === offer.toUserId)
-          .flatMap((t) => t.fishRows)
-          .find((f) => f.id === offer.pledgedFishId);
-        if (!recipientTank || !pledgedRow || pledgedRow.status !== 'alive') {
-          throw refuse(
-            409,
-            'The fish offered in return is no longer available. Cancel the offer or wait for another.',
-            'fish_unavailable',
+          throttle(user.id, 'gift');
+          if (offer.recipientTankId && !ticked.some((t) => t.tank.id === offer.recipientTankId)) {
+            throw refuse(
+              409,
+              'The offer changed while you were confirming. Reload it and try again.',
+              'offer_changed',
+            );
+          }
+          const recipientTank = offer.recipientTankId
+            ? tankOf(ticked, offer.recipientTankId)
+            : undefined;
+          const pledgedRow = ticked
+            .filter((t) => t.tank.ownerId === offer.toUserId)
+            .flatMap((t) => t.fishRows)
+            .find((f) => f.id === offer.pledgedFishId);
+          if (!recipientTank || !pledgedRow || pledgedRow.status !== 'alive') {
+            throw refuse(
+              409,
+              'The fish offered in return is no longer available. Cancel the offer or wait for another.',
+              'fish_unavailable',
+            );
+          }
+          if (!mine.tank.acceptsGifts || !recipientTank.tank.acceptsGifts) throw closedToGifts();
+          const stored = storedFishSchema.parse(offer.fish);
+          requirePlacement(
+            stored,
+            recipientTank,
+            pledgedRow.tankId === recipientTank.tank.id ? pledgedRow.id : null,
           );
-        }
-        if (!mine.tank.acceptsGifts || !recipientTank.tank.acceptsGifts) throw closedToGifts();
-        const stored = storedFishSchema.parse(offer.fish);
-        requirePlacement(
-          stored,
-          recipientTank,
-          pledgedRow.tankId === recipientTank.tank.id ? pledgedRow.id : null,
-        );
-        requirePlacement(pledgedRow, mine, null);
+          requirePlacement(pledgedRow, mine, null);
 
-        await arrive(tx, stored, recipientTank, nowMs);
-        const pledgedSim = tankOf(ticked, pledgedRow.tankId).state.fish.find(
-          (f) => f.id === pledgedRow.id,
-        );
-        if (!pledgedSim) throw new Error('lifecycle state lost a fish the database still has');
-        const [synced] = syncTreatment([pledgedSim], mine.state.medicine);
-        const moved = {
-          tankId: mine.tank.id,
-          disease: wireDisease(synced?.disease ?? null),
-          introducedAt: new Date(nowMs),
-          previousTankId: null,
-          previousIntroducedAt: null,
-        };
-        await tx.update(schema.fish).set(moved).where(eq(schema.fish.id, pledgedRow.id));
-        const [updated] = await tx
-          .update(schema.giftOffers)
-          .set({ status: 'accepted', confirmKey: body.idempotencyKey, settledAt: new Date(nowMs) })
-          .where(eq(schema.giftOffers.id, offer.id))
-          .returning();
-        if (!updated) throw new Error('offer vanished inside its own transaction');
-        await audit(tx, {
-          action: 'gift_accepted',
-          actorId: user.id,
-          tankId: mine.tank.id,
-          detail: { offerId: offer.id },
+          await arrive(tx, stored, recipientTank, nowMs);
+          const pledgedSim = tankOf(ticked, pledgedRow.tankId).state.fish.find(
+            (f) => f.id === pledgedRow.id,
+          );
+          if (!pledgedSim) throw new Error('lifecycle state lost a fish the database still has');
+          const [synced] = syncTreatment([pledgedSim], mine.state.medicine);
+          const moved = {
+            tankId: mine.tank.id,
+            disease: wireDisease(synced?.disease ?? null),
+            introducedAt: new Date(nowMs),
+            previousTankId: null,
+            previousIntroducedAt: null,
+          };
+          await tx.update(schema.fish).set(moved).where(eq(schema.fish.id, pledgedRow.id));
+          const [updated] = await tx
+            .update(schema.giftOffers)
+            .set({
+              status: 'accepted',
+              confirmKey: body.idempotencyKey,
+              settledAt: new Date(nowMs),
+            })
+            .where(eq(schema.giftOffers.id, offer.id))
+            .returning();
+          if (!updated) throw new Error('offer vanished inside its own transaction');
+          await audit(tx, {
+            action: 'gift_accepted',
+            actorId: user.id,
+            tankId: mine.tank.id,
+            detail: { offerId: offer.id },
+          });
+          return {
+            done: confirmGiftResponseSchema.parse({
+              offer: await viewOf(tx, updated, user.id),
+              tank: await render(tx, mine, [...mine.fishRows, { ...pledgedRow, ...moved }]),
+              arrival: {
+                fishId: pledgedRow.id,
+                tankId: mine.tank.id,
+                stress: stressIn(pledgedRow.species, mine),
+              },
+            }),
+          };
         });
-        return {
-          done: confirmGiftResponseSchema.parse({
-            offer: await viewOf(tx, updated, user.id),
-            tank: await render(tx, mine, [...mine.fishRows, { ...pledgedRow, ...moved }]),
-            arrival: {
-              fishId: pledgedRow.id,
-              tankId: mine.tank.id,
-              stress: stressIn(pledgedRow.species, mine),
-            },
-          }),
-        };
-      });
+      } catch (error) {
+        if (!(await recipientVanished(error, pre.toUserId, user.id))) throw error;
+        throw recipientLeft();
+      }
       if ('raise' in outcome) throw outcome.raise;
       return outcome.done;
     }),

@@ -1,0 +1,37 @@
+[
+  {
+    "id": "bg-mangrove-prop-root-thicket",
+    "biome": "mangrove",
+    "title": "Prop root thicket",
+    "file": "background/bg-mangrove-prop-root-thicket/high.ktx2",
+    "asset": "bg-mangrove-prop-root-thicket"
+  },
+  {
+    "id": "bg-mangrove-red-roots",
+    "biome": "mangrove",
+    "title": "Red roots",
+    "file": "background/bg-mangrove-red-roots/high.ktx2",
+    "asset": "bg-mangrove-red-roots"
+  },
+  {
+    "id": "bg-mangrove-petrified-stump",
+    "biome": "mangrove",
+    "title": "Petrified stump",
+    "file": "background/bg-mangrove-petrified-stump/high.ktx2",
+    "asset": "bg-mangrove-petrified-stump"
+  },
+  {
+    "id": "bg-mangrove-tidal-flat",
+    "biome": "mangrove",
+    "title": "Tidal flat",
+    "file": "background/bg-mangrove-tidal-flat/high.ktx2",
+    "asset": "bg-mangrove-tidal-flat"
+  },
+  {
+    "id": "bg-mangrove-open-water",
+    "biome": "mangrove",
+    "title": "Open water",
+    "file": "background/bg-mangrove-open-water/high.ktx2",
+    "asset": "bg-mangrove-open-water"
+  }
+]
