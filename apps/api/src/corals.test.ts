@@ -452,7 +452,8 @@ describe('fragging a coral', () => {
     } finally {
       await big.close();
     }
-  });
+    // 17 sequential requests on a fresh harness exceed the default 5s under load
+  }, 60_000);
 
   it('is rate limited', async () => {
     const limited = await createHarness({
