@@ -539,18 +539,23 @@ describe('ModelLibrary shared model textures', () => {
         releases.push(() => result.then(resolve, reject));
       });
     });
-    const first = library.load(MEMBER, 0, 1024);
-    const disposing = library.dispose();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    const second = library.load(MEMBER, 0, 1024);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    releases[0]?.();
-    await first;
-    await disposing;
+    try {
+      const first = library.load(MEMBER, 0, 1024);
+      const disposing = library.dispose();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const second = library.load(MEMBER, 0, 1024);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(releases).toHaveLength(2);
+      releases[0]?.();
+      await first;
+      await disposing;
 
-    expect(library.load(MEMBER, 0, 1024)).toBe(second);
-    releases.forEach((release) => release());
-    await second;
+      expect(library.load(MEMBER, 0, 1024)).toBe(second);
+      releases.forEach((release) => release());
+      await second;
+    } finally {
+      releases.forEach((release) => release());
+    }
   });
 
   const raceCases = [
