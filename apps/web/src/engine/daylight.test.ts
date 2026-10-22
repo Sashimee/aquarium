@@ -395,6 +395,29 @@ describe('ClockPin room minute', () => {
     expect(pin.blendMinute(0, 1000 + CLOCK_EASE_MS)).toBe(0);
   });
 
+  it('keeps the direction chosen at the start when a live target creeps past 12 h away', () => {
+    const pin = new ClockPin(13 * 60);
+    pin.blendMinute(13 * 60, 0);
+    pin.set(null, 1000);
+    pin.blendMinute(60, 1000);
+    const quarter = pin.blendMinute(60 + 10 / 60, 1000 + CLOCK_EASE_MS / 4);
+    expect(quarter).toBeGreaterThan(13 * 60);
+    expect(quarter).toBeLessThan(18 * 60);
+    expect(pin.blendMinute(60 + 20 / 60, 1000 + CLOCK_EASE_MS)).toBeCloseTo(60 + 20 / 60);
+  });
+
+  it('chooses the direction afresh for the next fade', () => {
+    const pin = new ClockPin(13 * 60);
+    pin.blendMinute(13 * 60, 0);
+    pin.set(null, 0);
+    pin.blendMinute(60, 0);
+    pin.blendMinute(60, CLOCK_EASE_MS);
+    pin.set(13 * 60, 2 * CLOCK_EASE_MS);
+    const mid = pin.blendMinute(13 * 60, 2 * CLOCK_EASE_MS + CLOCK_EASE_MS / 2);
+    expect(mid).toBeGreaterThan(0);
+    expect(mid).toBeLessThan(13 * 60);
+  });
+
   it('wraps past midnight on the way', () => {
     const pin = new ClockPin(null);
     pin.blendMinute(23 * 60, 0);

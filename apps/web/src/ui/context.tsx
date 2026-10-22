@@ -51,6 +51,10 @@ export function useApi(): ApiClient {
   return api;
 }
 
+export function useOptionalApi(): ApiClient | null {
+  return useContext(ApiContext);
+}
+
 export function useLatest<Events extends object, K extends keyof Events>(
   bus: EventBus<Events>,
   type: K,
