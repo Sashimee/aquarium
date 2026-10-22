@@ -187,8 +187,8 @@ export class PlayController {
       deps.events.on('feed:select', ({ food }) => {
         this.selectedFood = food;
       }),
-      deps.events.on('feed:request', ({ food, portion }) => {
-        this.selectedFood = food;
+      deps.events.on('feed:request', ({ food, portion, keepSelection }) => {
+        if (!keepSelection) this.selectedFood = food;
         this.feed(food, portion, null);
       }),
       deps.events.on('toys:remove', ({ toy }) => this.removeToy(toy)),

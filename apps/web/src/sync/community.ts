@@ -244,6 +244,8 @@ interface Echo {
   food: FoodType;
   portion: number;
   until: number;
+  /** The food of this feed is already in the water, whichever of the stream frame and the reply came first. */
+  dropped: boolean;
 }
 
 /** The client side of the shared tank: one live stream, the player's quota, and feeding with retry-safe keys. */
@@ -295,6 +297,8 @@ export class CommunityController {
     if (problem && secondsLeft(problem.retryAt, this.now()) > 0) return;
     const intent = `${food}:${portion}`;
     this.patch({ feeding: true, problem: null, notice: null });
+    const echo: Echo = { food, portion, until: this.now() + ECHO_WINDOW_MS, dropped: false };
+    this.echoes.push(echo);
     try {
       const response = await this.deps.api.communityFeed({
         food,
@@ -303,15 +307,20 @@ export class CommunityController {
       });
       this.keys.settle(intent);
       if (this.lifetime.signal.aborted) return;
-      this.echoes.push({ food, portion, until: this.now() + ECHO_WINDOW_MS });
       this.applyState(response.state);
       this.patch({
         notice: response.replayed
           ? 'That feeding had already gone through.'
           : 'Fed. Watch them come up.',
       });
-      this.deps.onDrop?.(food, portion);
+      if (response.replayed || echo.dropped) {
+        this.forgetEcho(echo);
+      } else {
+        echo.dropped = true;
+        this.deps.onDrop?.(food, portion);
+      }
     } catch (error) {
+      this.forgetEcho(echo);
       if (this.lifetime.signal.aborted) return;
       if (!outcomeUnknown(error)) this.keys.settle(intent);
       this.patch({ problem: feedProblem(error, this.now()) });
@@ -441,9 +450,7 @@ export class CommunityController {
         const event = communityEventSchema.safeParse(payload);
         if (!event.success || event.data.type !== frame.event) return this.ignored(frame.event);
         this.addLine(event.data);
-        if (event.data.type === 'feed' && !this.takeEcho(event.data)) {
-          this.deps.onDrop?.(event.data.food, event.data.portion);
-        }
+        if (event.data.type === 'feed') this.dropFromStream(event.data);
         return false;
       }
       default:
@@ -456,15 +463,23 @@ export class CommunityController {
     return false;
   }
 
-  private takeEcho(event: Extract<CommunityEvent, { type: 'feed' }>): boolean {
+  /** The server sends the stream frame before the reply, so an own feed is matched against the pending echo, not a finished one. */
+  private dropFromStream(event: Extract<CommunityEvent, { type: 'feed' }>): void {
     const now = this.now();
     this.echoes = this.echoes.filter((e) => e.until > now);
-    const at = this.echoes.findIndex(
+    const echo = this.echoes.find(
       (e) => e.food === event.food && Math.abs(e.portion - event.portion) < PORTION_EPSILON,
     );
-    if (at === -1) return false;
-    this.echoes.splice(at, 1);
-    return true;
+    if (echo?.dropped) {
+      this.forgetEcho(echo);
+      return;
+    }
+    if (echo) echo.dropped = true;
+    this.deps.onDrop?.(event.food, event.portion);
+  }
+
+  private forgetEcho(echo: Echo): void {
+    this.echoes = this.echoes.filter((e) => e !== echo);
   }
 
   private addLine(event: CommunityEvent): void {
@@ -473,6 +488,7 @@ export class CommunityController {
   }
 
   private applyState(incoming: CommunityStreamState | CommunityState): void {
+    if (this.lifetime.signal.aborted) return;
     const held = this.state.tank;
     const fresh = !isStaleSnapshot(held ?? undefined, incoming.tank);
     if (fresh) this.deps.onTank?.(held, incoming.tank);

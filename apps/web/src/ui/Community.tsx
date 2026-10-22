@@ -43,7 +43,8 @@ function useCommunity(): { controller: CommunityController | null; state: Commun
         applyTankToScene(interaction, held, next);
         shownId = next.id;
       },
-      onDrop: (food, portion) => interaction.emit('feed:request', { food, portion }),
+      onDrop: (food, portion) =>
+        interaction.emit('feed:request', { food, portion, keepSelection: true }),
     });
     const offAte = interaction.on('food:ate', ({ eaten }) => created.reportAte(eaten));
     created.start();
@@ -55,6 +56,13 @@ function useCommunity(): { controller: CommunityController | null; state: Commun
       if (shownId !== null) interaction.emit('tank:unloaded', { tankId: shownId, reason: 'reset' });
     };
   }, [api, interaction, status, userKey]);
+
+  useEffect(() => {
+    const before = interaction.peek('play:tool-changed')?.tool;
+    if (before !== 'feed') return;
+    interaction.emit('play:request-tool', { tool: 'tap' });
+    return () => interaction.emit('play:request-tool', { tool: 'feed' });
+  }, [interaction]);
 
   const state = useSyncExternalStore(
     controller ? controller.subscribe : noopSubscribe,
@@ -199,6 +207,7 @@ function FeedBox({
           ? `${state.problem.text}${wait > 0 ? ` Try again in ${waitText(wait)}.` : ''}`
           : state.notice}
       </p>
+      {state.problem?.needs === 'sign-in' && <SignInPrompt />}
       {state.problem?.needs === 'verify' && (
         <p className="hint">Check your inbox for the verification link.</p>
       )}

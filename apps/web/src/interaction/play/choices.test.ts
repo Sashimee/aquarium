@@ -76,7 +76,7 @@ describe('PlayChoices', () => {
   it('keeps the defaults when nothing was chosen', () => {
     const events = new EventBus<InteractionEvents>();
     const choices = new PlayChoices(events);
-    const controller = controllerOn(events);
+    const controller = controllerOn(events, new FeedGate({ cooldownMs: 0 }));
     const dropped = vi.fn();
     events.on('feed:dropped', dropped);
     choices.applyTo(controller);
@@ -118,5 +118,26 @@ describe('PlayChoices', () => {
     const next = controllerOn(events);
     choices.applyTo(next);
     expect(next.tool).toBe('laser');
+  });
+});
+
+describe('feed requests that keep the selection', () => {
+  it("do not change the player's chosen food in the controller or the remembered choice", () => {
+    const events = new EventBus<InteractionEvents>();
+    const choices = new PlayChoices(events);
+    const controller = controllerOn(events, new FeedGate({ cooldownMs: 0 }));
+    const dropped: string[] = [];
+    events.on('feed:dropped', ({ food }) => dropped.push(food));
+    events.emit('feed:select', { food: 'pellets' });
+    events.emit('feed:request', { food: 'flakes', portion: 0.25, keepSelection: true });
+    expect(dropped).toEqual(['flakes']);
+    controller.setTool('feed');
+    controller.tap(0, 0);
+    expect(dropped.at(-1)).toBe('pellets');
+    const selected: string[] = [];
+    events.on('feed:select', ({ food }) => selected.push(food));
+    choices.applyTo({ setTool: () => undefined });
+    expect(selected).toEqual(['pellets']);
+    choices.stop();
   });
 });

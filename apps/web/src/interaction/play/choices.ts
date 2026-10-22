@@ -27,8 +27,8 @@ export class PlayChoices {
       interaction.on('feed:select', ({ food }) => {
         this.food = food;
       }),
-      interaction.on('feed:request', ({ food }) => {
-        this.food = food;
+      interaction.on('feed:request', ({ food, keepSelection }) => {
+        if (!keepSelection) this.food = food;
       }),
     ];
   }

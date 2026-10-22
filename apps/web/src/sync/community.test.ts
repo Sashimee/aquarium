@@ -303,6 +303,58 @@ describe('live feed and scene', () => {
     controller.dispose();
   });
 
+  it('drops an own feed once when the stream frame arrives before the reply', async () => {
+    let reply: (v: { state: CommunityState; replayed: boolean }) => void = () => undefined;
+    const communityFeed = vi.fn(
+      () => new Promise<{ state: CommunityState; replayed: boolean }>((r) => (reply = r)),
+    );
+    const { controller, streams, drops } = setup({}, { communityFeed });
+    controller.start();
+    await settle();
+    const pending = controller.feed('flakes', 0.5);
+    streams.last.options.onFrame({ event: 'feed', data: JSON.stringify(feedEvent('mossy', 0.5)) });
+    expect(drops).toEqual([['flakes', 0.5]]);
+    reply({ state: stateOf(), replayed: false });
+    await pending;
+    expect(drops).toHaveLength(1);
+    streams.last.options.onFrame({ event: 'feed', data: JSON.stringify(feedEvent('misty', 0.5)) });
+    expect(drops).toHaveLength(2);
+    controller.dispose();
+  });
+
+  it('leaves no echo behind for a replayed or refused feed', async () => {
+    const communityFeed = vi
+      .fn()
+      .mockResolvedValueOnce({ state: stateOf(), replayed: true })
+      .mockRejectedValueOnce(apiError(422, 'feeding_rejected'));
+    const { controller, streams, drops } = setup({}, { communityFeed });
+    controller.start();
+    await settle();
+    await controller.feed('flakes', 0.5);
+    await controller.feed('flakes', 0.5);
+    expect(drops).toHaveLength(0);
+    streams.last.options.onFrame({ event: 'feed', data: JSON.stringify(feedEvent('misty', 0.5)) });
+    expect(drops).toEqual([['flakes', 0.5]]);
+    controller.dispose();
+  });
+
+  it('ignores the reply of an ate report that lands after dispose', async () => {
+    let reply: (v: CommunityState) => void = () => undefined;
+    const communityAte = vi.fn(() => new Promise<CommunityState>((r) => (reply = r)));
+    const onTank = vi.fn();
+    const { controller } = setup({ onTank, ateOptions: { intervalMs: 1_000 } }, { communityAte });
+    controller.start();
+    await settle();
+    controller.reportAte([{ fishId: FISH_1, portion: 0.1 }]);
+    await vi.advanceTimersByTimeAsync(1_500);
+    expect(communityAte).toHaveBeenCalled();
+    controller.dispose();
+    onTank.mockClear();
+    reply(stateOf({ tank: tankFixture({ lastTickAt: '2026-02-02T00:00:00.000Z' }) }));
+    await settle();
+    expect(onTank).not.toHaveBeenCalled();
+  });
+
   it('refuses an older snapshot than the one held', async () => {
     const onTank = vi.fn();
     const { controller, streams } = setup({ onTank });
@@ -440,7 +492,7 @@ describe('feeding', () => {
     const [first, second] = communityFeed.mock.calls.map(([r]) => r.idempotencyKey);
     expect(second).toBe(first);
     expect(controller.getState().notice).toBe('That feeding had already gone through.');
-    expect(drops).toHaveLength(1);
+    expect(drops).toHaveLength(0);
 
     await controller.feed('flakes', 0.5);
     expect(communityFeed.mock.calls[2]?.[0].idempotencyKey).not.toBe(first);
