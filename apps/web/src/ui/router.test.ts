@@ -230,3 +230,12 @@ describe('gallery routes', () => {
     expect(redirectFor(`/gallery/${id}`, null)).toBeNull();
   });
 });
+
+describe('community route', () => {
+  it('parses, builds and counts as a read-only view', () => {
+    expect(parseRoute('/community/')).toEqual({ name: 'community' });
+    expect(routePath({ name: 'community' })).toBe('/community');
+    expect(isReadOnlyView({ name: 'community' })).toBe(true);
+    expect(returnPathFromState({ returnTo: '/community' })).toBe('/community');
+  });
+});
