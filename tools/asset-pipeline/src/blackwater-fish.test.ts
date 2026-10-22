@@ -69,7 +69,7 @@ describe('blackwater lofts', () => {
     },
   );
 
-  it.each(BLACKWATER_FISH_RECIPES.map((r) => r.id))(
+  it.each(BLACKWATER_FISH_RECIPES.filter((r) => r.texture.kind !== 'photo').map((r) => r.id))(
     '%s gets translucent painted fins from its own atlas',
     async (id) => {
       const recipe = BLACKWATER_FISH_RECIPES.find((r) => r.id === id);
@@ -79,6 +79,20 @@ describe('blackwater lofts', () => {
       expect(texture.image.height).toBeGreaterThan(0);
     },
     60_000,
+  );
+
+  it.each(BLACKWATER_FISH_RECIPES.filter((r) => r.texture.kind === 'photo').map((r) => r.id))(
+    '%s paints translucent fins from a palette over a membrane loft',
+    (id) => {
+      const recipe = BLACKWATER_FISH_RECIPES.find((r) => r.id === id);
+      if (!recipe || recipe.texture.kind !== 'photo') throw new Error(id);
+      const { texture, spec } = recipe;
+      expect(spec.membrane).toBe(true);
+      expect(texture.finPalette).toBeDefined();
+      expect(texture.crop.width).toBeGreaterThan(0);
+      expect(texture.crop.height).toBeGreaterThan(0);
+      expect(texture.tailPixel[0]).toBeGreaterThan(texture.snoutPixel[0]);
+    },
   );
 });
 

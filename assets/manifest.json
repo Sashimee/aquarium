@@ -3650,8 +3650,8 @@
         "merged meshes, dropped unused attributes, skeleton and animation",
         "origin at the centre of the base, scaled so the longest edge is 0.45 m",
         "LOD0 capped at 10000 triangles, LOD1 and LOD2 simplified further",
-        "textures downscaled and re-encoded to KTX2 at 1k and 2k, PBR metallic-roughness with constant roughness",
-        "23.8k-triangle scan decimated, 4096 px textures downscaled"
+        "textures capped at 1024 px (normal 512 px) and re-encoded to KTX2",
+        "23.8k-triangle scan decimated, 4096 px textures downscaled to 1024 px (normal 512 px) so the 2k tier carries no more detail than the 1k tier"
       ],
       "status": "downloaded",
       "files": [
@@ -4011,7 +4011,7 @@
       "polycount": null,
       "textures": "photo 9248x6944",
       "rigged": false,
-      "notes": "Male Apistogramma hongsloi, a dwarf cichlid of the Orinoco and Rio Negro blackwaters: Clean lateral of the fish swimming over leaf litter: green-yellow body with a pale belly and orange flank wash, yellow dorsal and caudal. The fish is small in frame, 9248x6944 (10.5 MB): crop and downscale to the fish. Raw file: ~/.cache/aquarium-assets/raw/wm-apistogramma-hongsloi-male/original.jpg (not committed).",
+      "notes": "Male Apistogramma hongsloi, a dwarf cichlid of the Orinoco and Rio Negro blackwaters. Clean lateral of the fish swimming over leaf litter: green-yellow body with a pale belly and orange flank wash, yellow dorsal and caudal. The fish is small in frame, 9248x6944 (10.5 MB): crop and downscale to the fish. Raw file: ~/.cache/aquarium-assets/raw/wm-apistogramma-hongsloi-male/original.jpg (not committed).",
       "modifications": [
         "procedural loft: elliptical cross-sections along the spine from species proportions, fins as ruled membranes",
         "fin mask and fin id vertex attributes generated analytically",

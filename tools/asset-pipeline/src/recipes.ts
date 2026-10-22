@@ -347,7 +347,10 @@ export const ENVIRONMENT_RECIPES: EnvironmentRecipe[] = [
     sourceId: 'sketchfab-07422ed7',
     longestM: 0.45,
     maxTriangles: 10000,
-    modifications: ['23.8k-triangle scan decimated, 4096 px textures downscaled'],
+    maxTexturePx: 1024,
+    modifications: [
+      '23.8k-triangle scan decimated, 4096 px textures downscaled to 1024 px (normal 512 px) so the 2k tier carries no more detail than the 1k tier',
+    ],
   },
   {
     id: 'driftwood-scan-b',
