@@ -230,9 +230,16 @@ async function holdingLock(
     await gate.opened;
     await then(tx);
   });
-  const pid = await held.opened;
+  const pid = await Promise.race([
+    held.opened,
+    done.then(() => {
+      throw new Error('the lock transaction ended before the lock was held');
+    }),
+  ]);
   return {
     async whenBlocked() {
+      let waited = false;
+      let waitError: unknown;
       try {
         const deadline = Date.now() + 10_000;
         for (;;) {
@@ -243,10 +250,21 @@ async function holdingLock(
           if (Date.now() > deadline) throw new Error('the request never blocked on the held lock');
           await new Promise((resolve) => setTimeout(resolve, 10));
         }
-      } finally {
-        gate.open();
+        waited = true;
+      } catch (error) {
+        waitError = error;
       }
-      await done;
+      gate.open();
+      if (waited) {
+        await done;
+        return;
+      }
+      await done.catch(() => undefined);
+      throw waitError;
+    },
+    async release() {
+      gate.open();
+      await done.catch(() => undefined);
     },
   };
 }
@@ -954,9 +972,14 @@ describe('gifting and trading fish', () => {
             .where(eq(schema.giftOffers.id, id));
         },
       );
-      const pending = confirm(h, a, id, tankA2);
-      await counter.whenBlocked();
-      const res = await pending;
+      let res;
+      try {
+        const pending = confirm(h, a, id, tankA2);
+        await counter.whenBlocked();
+        res = await pending;
+      } finally {
+        await counter.release();
+      }
       expect(res.statusCode, res.body).toBe(409);
       expect(errorOf(res).reason).toBe('offer_changed');
       expect((await offerRow(h, id)).status).toBe('countered');
@@ -976,9 +999,14 @@ describe('gifting and trading fish', () => {
           await tx.delete(schema.user).where(eq(schema.user.id, t.b.userId));
         },
       );
-      const pending = confirm(h, t.a, t.id, t.tankA2);
-      await deletion.whenBlocked();
-      const res = await pending;
+      let res;
+      try {
+        const pending = confirm(h, t.a, t.id, t.tankA2);
+        await deletion.whenBlocked();
+        res = await pending;
+      } finally {
+        await deletion.release();
+      }
       expect(res.statusCode, res.body).toBe(409);
       expect(errorOf(res).reason).toBe('offer_closed');
     });

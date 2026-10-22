@@ -13,6 +13,7 @@ import {
   type CatalogEntry,
   collapseDotSegments,
 } from '../../scene/assets';
+import { euphylliaId, parseEuphylliaId } from '../../scene/euphyllia';
 import { loadPreset } from '../../scene/preset';
 import { DESKTOP_PROFILE, MOBILE_PROFILE, type QualityProfile } from './profile';
 import { QualityManager } from './QualityManager';
@@ -50,20 +51,25 @@ function ktx2Layout(bytes: Uint8Array, label: string): Ktx2Layout {
 }
 
 /**
- * Bytes the GPU holds once KTX2Loader has transcoded the file, mips included. ETC1S without alpha
- * becomes ETC1/BC1 (8 bytes per 4x4 block); ETC1S with alpha and UASTC become ETC2, ASTC 4x4,
- * BC3 or BC7 (16 bytes per block). `rgba8` is the fallback for a device with no compressed format.
+ * What KTX2Loader transcodes Basis to. `etc`: a phone, which has ETC2 or ASTC, so ETC1S without
+ * alpha becomes ETC1 at 8 bytes per 4x4 block and everything else takes 16. `bc`: a desktop
+ * without ETC2 (Windows and Linux), where the loader ranks BC7 above BC1 for ETC1S too, so every
+ * block takes 16 bytes. `rgba8`: a device with no compressed format at all.
  */
-function decodedBytes(layout: Ktx2Layout, decode: 'compressed' | 'rgba8', label: string): number {
+type DecodeTarget = 'etc' | 'bc' | 'rgba8';
+
+/** Bytes the GPU holds once KTX2Loader has transcoded the file, mips included. */
+function decodedBytes(layout: Ktx2Layout, target: DecodeTarget, label: string): number {
   let blockBytes: number;
-  if (layout.colorModel === KHR_DF_MODEL_ETC1S) blockBytes = layout.samples > 1 ? 16 : 8;
+  if (layout.colorModel === KHR_DF_MODEL_ETC1S)
+    blockBytes = target === 'etc' && layout.samples === 1 ? 8 : 16;
   else if (layout.colorModel === KHR_DF_MODEL_UASTC) blockBytes = 16;
   else throw new Error(`${label}: colour model ${layout.colorModel} is not a Basis texture`);
   let total = 0;
   for (let level = 0; level < layout.levels; level++) {
     const w = Math.max(1, layout.width >> level);
     const h = Math.max(1, layout.height >> level);
-    total += decode === 'rgba8' ? w * h * 4 : Math.ceil(w / 4) * Math.ceil(h / 4) * blockBytes;
+    total += target === 'rgba8' ? w * h * 4 : Math.ceil(w / 4) * Math.ceil(h / 4) * blockBytes;
   }
   return total * layout.faces;
 }
@@ -104,20 +110,39 @@ interface TextureUse {
 }
 
 /**
+ * The preset ids that load a model from the catalog. Procedural euphyllia is built in code and
+ * holds no textures; any other id the catalog lacks is a broken preset, not one to skip.
+ */
+function catalogModels(owner: string, assetIds: readonly string[]): Set<string> {
+  const models = new Set<string>();
+  for (const assetId of assetIds) {
+    if (parseEuphylliaId(assetId)) continue;
+    if (!catalog.has(assetId))
+      throw new Error(`${owner} uses ${assetId}, which is not in the catalog`);
+    models.add(assetId);
+  }
+  return models;
+}
+
+/**
  * Every texture the demo tank of `biome` holds at `tier`. A scene model is counted with the maps of
  * all its LODs, since a tier change loads the new LOD before freeing the old. Impostor atlases are
  * counted on every tier: they load the first time a tier wants them and stay, and phones start on
  * medium, which does. The room HDRI is left out: it is freed once drawn into the PMREM.
  */
-function demoTextures(biome: PlayableBiome, tier: Tier, size: 1024 | 2048): TextureUse[] {
+function demoTextures(
+  biome: PlayableBiome,
+  tier: Tier,
+  size: 1024 | 2048,
+  target: DecodeTarget,
+): TextureUse[] {
   const preset = loadPreset(biome);
   const uses: TextureUse[] = [];
-  const models = new Set([
+  const models = catalogModels(biome, [
     ...preset.decor.map((d) => d.assetId),
     ...preset.plantPatches.map((p) => p.assetId),
   ]);
   for (const assetId of models) {
-    if (!catalog.has(assetId)) continue;
     const maps = new Set<string>();
     for (const { file } of catalog.get(assetId).lods) {
       for (const uri of glbImageUris(file)) {
@@ -151,7 +176,7 @@ function demoTextures(biome: PlayableBiome, tier: Tier, size: 1024 | 2048): Text
   }
   const largestBackdrop = BACKGROUND_IDS[biome]
     .map((id) => backgroundFile(backgrounds, id, tier))
-    .map((file) => ({ file, bytes: decodedBytes(layoutOf(file), 'compressed', file) }))
+    .map((file) => ({ file, bytes: decodedBytes(layoutOf(file), target, file) }))
     .sort((a, b) => b.bytes - a.bytes)[0];
   if (largestBackdrop) uses.push({ owner: 'background', file: largestBackdrop.file });
   return uses;
@@ -167,8 +192,8 @@ function layoutOf(file: string): Ktx2Layout {
   return layout;
 }
 
-function mib(uses: readonly TextureUse[], decode: 'compressed' | 'rgba8' = 'compressed'): number {
-  const bytes = uses.reduce((sum, u) => sum + decodedBytes(layoutOf(u.file), decode, u.file), 0);
+function mib(uses: readonly TextureUse[], target: DecodeTarget): number {
+  const bytes = uses.reduce((sum, u) => sum + decodedBytes(layoutOf(u.file), target, u.file), 0);
   return bytes / MIB;
 }
 
@@ -193,9 +218,15 @@ describe('decodedBytes', () => {
   });
 
   it('counts 4x4 blocks over every mip level', () => {
-    expect(decodedBytes(layout(KHR_DF_MODEL_ETC1S, 1), 'compressed', 'rgb')).toBe(5 * 8);
-    expect(decodedBytes(layout(KHR_DF_MODEL_ETC1S, 2), 'compressed', 'rgba')).toBe(5 * 16);
-    expect(decodedBytes(layout(KHR_DF_MODEL_UASTC, 1), 'compressed', 'uastc')).toBe(5 * 16);
+    expect(decodedBytes(layout(KHR_DF_MODEL_ETC1S, 1), 'etc', 'rgb')).toBe(5 * 8);
+    expect(decodedBytes(layout(KHR_DF_MODEL_ETC1S, 2), 'etc', 'rgba')).toBe(5 * 16);
+    expect(decodedBytes(layout(KHR_DF_MODEL_UASTC, 1), 'etc', 'uastc')).toBe(5 * 16);
+  });
+
+  it('counts 16 bytes a block for ETC1S on a desktop that transcodes it to BC7', () => {
+    expect(decodedBytes(layout(KHR_DF_MODEL_ETC1S, 1), 'bc', 'rgb')).toBe(5 * 16);
+    expect(decodedBytes(layout(KHR_DF_MODEL_ETC1S, 2), 'bc', 'rgba')).toBe(5 * 16);
+    expect(decodedBytes(layout(KHR_DF_MODEL_UASTC, 1), 'bc', 'uastc')).toBe(5 * 16);
   });
 
   it('counts four bytes a texel when nothing is transcoded to a compressed format', () => {
@@ -204,11 +235,11 @@ describe('decodedBytes', () => {
 
   it('rounds a level smaller than a block up to one block', () => {
     const tiny = { ...layout(KHR_DF_MODEL_UASTC, 1), width: 2, height: 1, levels: 2 };
-    expect(decodedBytes(tiny, 'compressed', 'tiny')).toBe(2 * 16);
+    expect(decodedBytes(tiny, 'etc', 'tiny')).toBe(2 * 16);
   });
 
   it('rejects a texture that is not Basis', () => {
-    expect(() => decodedBytes(layout(167, 1), 'compressed', 'hdri.ktx2')).toThrow(/hdri\.ktx2/);
+    expect(() => decodedBytes(layout(167, 1), 'bc', 'hdri.ktx2')).toThrow(/hdri\.ktx2/);
   });
 
   it('reads the layout of a shipped KTX2 file', () => {
@@ -218,20 +249,31 @@ describe('decodedBytes', () => {
   });
 });
 
+describe('catalogModels', () => {
+  it('passes procedural euphyllia over and keeps catalog models', () => {
+    const models = catalogModels('test', [euphylliaId('hammer', 3), 'boulder-01', 'boulder-01']);
+    expect([...models]).toEqual(['boulder-01']);
+  });
+
+  it('fails on an id the catalog does not have', () => {
+    expect(() => catalogModels('test', ['no-such-rock'])).toThrow(/no-such-rock/);
+  });
+});
+
 describe('texture memory budget of the demo tanks', () => {
   it.each(BIOMES)('finds the %s demo textures in the shipped assets', (biome) => {
-    const uses = demoTextures(biome, 'medium', 1024);
+    const uses = demoTextures(biome, 'medium', 1024, 'bc');
     expect(uses.length).toBeGreaterThan(0);
     expect(uses.some((u) => u.owner === 'background')).toBe(true);
   });
 
-  for (const [name, profile] of [
-    ['phone', MOBILE_PROFILE],
-    ['desktop', DESKTOP_PROFILE],
+  for (const [name, profile, target] of [
+    ['phone', MOBILE_PROFILE, 'etc'],
+    ['desktop', DESKTOP_PROFILE, 'bc'],
   ] as const) {
     for (const tier of TIERS) {
       it.each(BIOMES)(`keeps the %s demo on a ${name} at ${tier} within budget`, (biome) => {
-        const used = mib(demoTextures(biome, tier, textureSizeOn(profile, tier)));
+        const used = mib(demoTextures(biome, tier, textureSizeOn(profile, tier), target), target);
         expect(used).toBeLessThanOrEqual(profile.textureBudgetMiB[tier]);
       });
     }
@@ -239,8 +281,8 @@ describe('texture memory budget of the demo tanks', () => {
 
   it('never gives a phone 2k maps, which nearly treble the freshwater demo', () => {
     for (const tier of TIERS) expect(textureSizeOn(MOBILE_PROFILE, tier)).toBe(1024);
-    const phone = mib(demoTextures('freshwater', 'high', 1024));
-    const desktop = mib(demoTextures('freshwater', 'high', 2048));
+    const phone = mib(demoTextures('freshwater', 'high', 1024, 'etc'), 'etc');
+    const desktop = mib(demoTextures('freshwater', 'high', 2048, 'etc'), 'etc');
     expect(desktop).toBeGreaterThan(2 * phone);
     expect(desktop).toBeGreaterThan(MOBILE_PROFILE.textureBudgetMiB.high);
   });

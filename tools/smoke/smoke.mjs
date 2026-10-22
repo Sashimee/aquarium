@@ -37,7 +37,8 @@ function watch(page) {
   page.on('console', (msg) => {
     if (msg.type() !== 'error') return;
     // Chromium logs the expected 401 from /api/me while signed out; nothing else is exempt.
-    const at = msg.location().url ? new URL(msg.location().url) : null;
+    const url = msg.location().url;
+    const at = url && URL.canParse(url) ? new URL(url) : null;
     const signedOutMe =
       stage === 'signed out' &&
       /status of 401/.test(msg.text()) &&
@@ -107,11 +108,37 @@ console.log(
   `smoke stages: ${timings.join(', ')}; total ${((Date.now() - startedAt) / 1000).toFixed(1)}s`,
 );
 
+const closeTimeoutMs = 3_000;
+const closeStartedAt = Date.now();
+const closeSteps = [];
+async function timedClose(name, close) {
+  const startedAt = Date.now();
+  await close();
+  closeSteps.push(`${name} ${((Date.now() - startedAt) / 1000).toFixed(1)}s`);
+}
+
+let closeTimer;
+const closeTimedOut = new Promise((resolve) => {
+  closeTimer = setTimeout(() => resolve('timeout'), closeTimeoutMs);
+});
 try {
-  await browser.close();
+  const outcome = await Promise.race([
+    timedClose('context', () => context.close()).then(() =>
+      timedClose('browser', () => browser.close()),
+    ),
+    closeTimedOut,
+  ]);
+  if (outcome === 'timeout') {
+    console.log(`smoke: browser still open after ${closeTimeoutMs} ms, exiting anyway`);
+  }
 } catch (error) {
   record('browser.close', error instanceof Error ? error.message : String(error));
+} finally {
+  clearTimeout(closeTimer);
 }
+console.log(
+  `smoke close ${((Date.now() - closeStartedAt) / 1000).toFixed(1)}s (${closeSteps.join(', ') || 'no step finished'})`,
+);
 
 if (problems.length > 0) {
   console.error(`smoke found ${problems.length} problem(s):`);
@@ -119,3 +146,4 @@ if (problems.length > 0) {
   process.exit(1);
 }
 console.log('smoke passed: no page errors, console errors or 5xx responses');
+process.exit(0);

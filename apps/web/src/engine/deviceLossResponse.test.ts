@@ -93,8 +93,8 @@ describe('respondToDeviceLoss', () => {
 
     const box = notice();
     expect(box?.textContent).toContain(LOST_NOTICE);
-    expect(box?.style.position).toBe('fixed');
-    expect(Number(box?.style.zIndex)).toBeGreaterThan(20);
+    expect(box?.parentElement?.style.position).toBe('fixed');
+    expect(Number(box?.parentElement?.style.zIndex)).toBeGreaterThan(20);
     expect(location.reload).not.toHaveBeenCalled();
 
     const button = box?.querySelector('button');

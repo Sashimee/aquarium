@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { CLEAR_WATER, gradeUnderwater } from './misty-lake.ts';
 import { manifestSchema } from './manifest.ts';
-import { sceneBaseColor } from './environment.ts';
+import { sceneBaseColor, sceneMaterial } from './environment.ts';
+import type { MaterialDef } from './parts.ts';
 import { buildMips, type SceneMesh } from './soft-render.ts';
 import {
   BLACKWATER_BACKGROUND_IDS,
@@ -87,28 +88,51 @@ function fixtureLibrary(): Library {
 }
 
 describe('water scene renders', () => {
-  it('draw geometry and differ from each other', () => {
+  it('draw their models: removing the models changes the picture', () => {
     const library = fixtureLibrary();
-    const images = WATER_BACKGROUND_IDS.map((id) => {
-      const { rgb, depth } = renderWaterScene(id, library, 48, 64);
+    const bare: Library = {
+      ...library,
+      models: {
+        scanA: [],
+        scanB: [],
+        twigs: [],
+        trunk02: [],
+        quiver: [],
+        propRoots: [],
+        stump: [],
+        propagule: [],
+        rock: [],
+        rootScan: [],
+      },
+    };
+    for (const id of WATER_BACKGROUND_IDS) {
+      const withModels = renderWaterScene(id, library, 48, 64);
+      const withoutModels = renderWaterScene(id, bare, 48, 64);
+      expect(Buffer.from(withModels.rgb).equals(Buffer.from(withoutModels.rgb)), id).toBe(false);
       expect(
-        depth.some((d) => d < 20),
+        withModels.depth.some((d, i) => d < (withoutModels.depth[i] ?? Infinity) - 1e-3),
         id,
       ).toBe(true);
-      return Buffer.from(rgb).toString('base64');
-    });
+    }
+  });
+
+  it('differ from each other', () => {
+    const library = fixtureLibrary();
+    const images = WATER_BACKGROUND_IDS.map((id) =>
+      Buffer.from(renderWaterScene(id, library, 48, 64).rgb).toString('base64'),
+    );
     expect(new Set(images).size).toBe(WATER_BACKGROUND_IDS.length);
   });
 });
 
 describe('sceneBaseColor', () => {
   it('throws when the part material is unknown', () => {
-    expect(() => sceneBaseColor(undefined, 'bark', 'rock')).toThrow(/bark.*not in the loaded/);
+    expect(() => sceneMaterial(new Map(), 'bark', 'rock')).toThrow(/bark.*not in the loaded/);
   });
 
   it('warns when a material has no base colour texture', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const material = {
+    const material: MaterialDef = {
       name: 'bark',
       baseColorFactor: [1, 1, 1, 1],
       roughness: 1,
@@ -116,10 +140,8 @@ describe('sceneBaseColor', () => {
       alphaMode: 'OPAQUE',
       doubleSided: false,
       normalScale: 1,
-    } as const;
-    expect(
-      sceneBaseColor({ ...material, baseColorFactor: [1, 1, 1, 1] }, 'bark', 'rock'),
-    ).toBeUndefined();
+    };
+    expect(sceneBaseColor(material, 'bark', 'rock')).toBeUndefined();
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('bark'));
     warn.mockRestore();
   });

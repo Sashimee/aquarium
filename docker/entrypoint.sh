@@ -14,6 +14,11 @@ case "$retention_days" in
     exit 1
     ;;
 esac
+retention_days="$(printf '%s' "$retention_days" | sed 's/^0*\(.\)/\1/')"
+if [ "$retention_days" -lt 1 ]; then
+  echo "ASSET_RETENTION_DAYS must be at least 1, got '$ASSET_RETENTION_DAYS' (0 would delete the build just copied in)" >&2
+  exit 1
+fi
 
 if mountpoint -q "$assets"; then
   find "$current" -type f | while IFS= read -r src; do
@@ -23,8 +28,9 @@ if mountpoint -q "$assets"; then
     if cmp -s "$src" "$dest" 2>/dev/null; then
       touch "$dest"
     else
-      tmp="$dest.tmp.$$"
+      tmp="$(mktemp "$(dirname "$dest")/.tmp.XXXXXX")"
       cp "$src" "$tmp"
+      chmod 644 "$tmp"
       mv -f "$tmp" "$dest"
     fi
     case "$rel" in

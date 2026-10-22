@@ -2,7 +2,12 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import sharp, { type OverlayOptions } from 'sharp';
 import { mulberry32 } from './anemone.ts';
-import { loadEnvironment, sceneBaseColor, type EnvironmentRecipe } from './environment.ts';
+import {
+  loadEnvironment,
+  sceneBaseColor,
+  sceneMaterial,
+  type EnvironmentRecipe,
+} from './environment.ts';
 import type { FishContext } from './fish.ts';
 import { developRender, type DepthParams, type WaterPalette } from './misty-lake.ts';
 import { MANGROVE_ENVIRONMENT_RECIPES } from './mangrove.ts';
@@ -10,6 +15,7 @@ import type { MaterialDef } from './parts.ts';
 import { ENVIRONMENT_RECIPES } from './recipes.ts';
 import {
   buildMips,
+  GREY_TEXEL,
   groundMesh,
   renderScene,
   type Instance,
@@ -21,12 +27,6 @@ import {
 } from './soft-render.ts';
 import { RAW_ROOT } from './source.ts';
 import { decodeImage, resizeImage, type Rgba } from './textures.ts';
-
-const GREY_TEXEL: MipTexture = buildMips({
-  width: 1,
-  height: 1,
-  data: Uint8Array.from([128, 128, 128, 255]),
-});
 
 export const WATER_WIDTH = 4096;
 export const BLACKWATER_BACKGROUND_IDS = [
@@ -126,14 +126,14 @@ async function loadMeshes(
   const textures = new Map<string, MipTexture>();
   const out: SceneMesh[] = [];
   for (const part of parts) {
-    const material = byName.get(part.material);
+    const material = sceneMaterial(byName, part.material, recipe.id);
     let texture = textures.get(part.material);
     if (!texture) {
       const baseColor = sceneBaseColor(material, part.material, recipe.id);
       texture = baseColor ? buildMips(await resizeImage(baseColor.image, TEXTURE_PX)) : GREY_TEXEL;
       textures.set(part.material, texture);
     }
-    const factor = material?.baseColorFactor ?? [1, 1, 1, 1];
+    const factor = material.baseColorFactor;
     out.push({
       positions: part.positions,
       normals: part.normals,
