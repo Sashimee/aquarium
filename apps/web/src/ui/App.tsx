@@ -175,34 +175,51 @@ function isOpen(panel: Panel): panel is OpenPanel {
   return panel !== 'none';
 }
 
-export function GuardedTrimDialog() {
-  const { interaction } = useBridge();
-  const [dismissed, setDismissed] = useState(false);
-  const [tapped, setTapped] = useState(false);
+const TRIM_HINT_MS = 4500;
 
-  useEffect(() => {
-    if (!dismissed) return undefined;
-    return interaction.on('plant:picked', ({ pick }) => setTapped(pick !== null));
-  }, [dismissed, interaction]);
-
-  if (dismissed) {
-    return tapped ? (
-      <p role="status" className="hint">
-        The trim tool did not load. Reload the page to trim plants.
-      </p>
-    ) : null;
-  }
+export function GuardedTrimDialog({
+  dismissed,
+  onDismiss,
+}: {
+  dismissed: boolean;
+  onDismiss(): void;
+}) {
+  if (dismissed) return null;
   return (
-    <ErrorBoundary
-      what="the trim tool"
-      scope="app"
-      dismissible
-      onDismiss={() => setDismissed(true)}
-    >
+    <ErrorBoundary what="the trim tool" scope="app" dismissible onDismiss={onDismiss}>
       <Suspense fallback={null}>
         <TrimDialog />
       </Suspense>
     </ErrorBoundary>
+  );
+}
+
+export function TrimUnavailableToast({ active }: { active: boolean }) {
+  const { interaction } = useBridge();
+  const [shown, setShown] = useState(false);
+
+  useEffect(() => {
+    if (!active) return undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const off = interaction.on('plant:picked', ({ pick }) => {
+      clearTimeout(timer);
+      if (pick === null) return;
+      setShown(true);
+      timer = setTimeout(() => setShown(false), TRIM_HINT_MS);
+    });
+    return () => {
+      off();
+      clearTimeout(timer);
+      setShown(false);
+    };
+  }, [active, interaction]);
+
+  return (
+    <div role="status" aria-live="polite" className="toast-live">
+      {shown && (
+        <p className="toast">The trim tool did not load. Reload the page to trim plants.</p>
+      )}
+    </div>
   );
 }
 
@@ -253,6 +270,7 @@ function Shell() {
   const panel: Panel = home ? requested : 'none';
   const [food, setFood] = useFood();
   const [bookOpen, setBookOpen] = useState(false);
+  const [trimDismissed, setTrimDismissed] = useState(false);
   const { user } = useAuth();
   const { interaction } = useBridge();
   const photoActive = usePhotoView()?.state.active ?? false;
@@ -343,6 +361,7 @@ function Shell() {
           <LifeStatus />
           <BirthStatus />
           <FeedToast />
+          <TrimUnavailableToast active={trimDismissed} />
         </div>
         {isOpen(panel) && (
           <Sheet
@@ -388,7 +407,7 @@ function Shell() {
           </ErrorBoundary>
         )}
         <LifeDialogs onReview={() => dispatch({ type: 'open', panel: 'care' })} />
-        <GuardedTrimDialog />
+        <GuardedTrimDialog dismissed={trimDismissed} onDismiss={() => setTrimDismissed(true)} />
         <div className={home ? 'stage' : 'stage modal'}>
           <Screen />
         </div>

@@ -114,8 +114,12 @@ describe('a trim tool chunk that fails to load', () => {
     await act(async () =>
       ui.interaction.emit('plant:picked', { pick: { key: 's1' } as PlantPick }),
     );
-    expect(container.querySelector('p.hint[role="status"]')?.textContent).toContain(
+    expect(container.querySelector('.toasts .toast')?.textContent).toContain(
       'trim tool did not load',
     );
-  });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 4600));
+    });
+    expect(container.textContent).not.toContain('trim tool did not load');
+  }, 15_000);
 });
