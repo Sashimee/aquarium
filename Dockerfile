@@ -5,7 +5,8 @@ WORKDIR /repo
 
 FROM base AS build
 COPY package.json ./
-RUN for i in 1 2 3 4 5; do pnpm --version && exit 0; echo "pnpm binary fetch failed (attempt $i), retrying" >&2; sleep $((i * 5)); done; exit 1
+# corepack gives no stable error text to tell network failures from a bad packageManager, so every failure is retried
+RUN for i in 1 2 3 4 5; do pnpm --version && exit 0; [ $i -lt 5 ] || break; echo "pnpm binary fetch failed (attempt $i), retrying" >&2; sleep $((i * 5)); done; echo "pnpm binary fetch failed after 5 attempts" >&2; exit 1
 COPY pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm fetch
 COPY . .
