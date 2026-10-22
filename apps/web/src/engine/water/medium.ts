@@ -225,11 +225,6 @@ export class WaterMedium {
     return this.segment(target, false).path;
   }
 
-  /** Distance from `origin` inside the water box to where a ray along `dir` leaves it. */
-  exitDistance(origin: Node<'vec3'>, dir: Node<'vec3'>): Node<'float'> {
-    return this.exit(origin, dir).distance;
-  }
-
   /**
    * Where a ray from `origin` inside the water box along `dir` leaves it: the distance, and the
    * outward normal of the face it leaves through.
@@ -253,6 +248,16 @@ export class WaterMedium {
   /** Length of the camera ray through the whole box, for fragments on its far faces. */
   pathThroughBox(): Node<'float'> {
     return this.segment(positionWorld, true).path;
+  }
+
+  /**
+   * What the water between the camera and `target` does to the light from it: the transmittance,
+   * and the light scattered in on the way. Both are neutral for a target beyond the box.
+   */
+  fogTowardsCamera(target: Node<'vec3'>): { transmittance: Node<'vec3'>; inScatter: Node<'vec3'> } {
+    const { path, depth } = this.segment(target, false);
+    const transmittance = this.transmittance(path).toVar();
+    return { transmittance, inScatter: this.inScatter(transmittance, depth) };
   }
 
   /** Scene fog node: attenuates and in-scatters the material output of anything in the water. */
