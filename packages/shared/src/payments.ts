@@ -52,7 +52,20 @@ export const packsResponseSchema = z.strictObject({
 });
 export type PacksResponse = z.infer<typeof packsResponseSchema>;
 
-export const adultConfirmationRequestSchema = z.strictObject({ confirmed: z.boolean() });
+export const adultConfirmationRequestSchema = z.discriminatedUnion('confirmed', [
+  z.strictObject({
+    confirmed: z.literal(true),
+    password: z
+      .string()
+      .min(1)
+      .max(128)
+      .optional()
+      .describe(
+        'the current password, as for account deletion; accounts without one (passkey only) instead need a sign-in within the last 5 minutes',
+      ),
+  }),
+  z.strictObject({ confirmed: z.literal(false) }),
+]);
 export type AdultConfirmationRequest = z.infer<typeof adultConfirmationRequestSchema>;
 
 export const subscriptionStatusSchema = z.enum([

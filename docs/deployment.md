@@ -28,7 +28,7 @@ neither. Without them `/api/health` reports `payments: disabled` and the payment
 is `https://<host>/api/payments/webhook`, subscribed to `checkout.session.completed`,
 `checkout.session.async_payment_succeeded`, `invoice.paid`, `invoice_payment.paid`,
 `customer.subscription.created`/`updated`/`deleted`, `refund.created`/`updated`, and
-`charge.dispute.closed`/`updated`/`funds_reinstated`. Test keys go on the devfish app only.
+`charge.dispute.closed`/`updated`/`funds_reinstated`. Test keys go on the devfish app only: a live key (`sk_live_`/`rk_live_`) is refused at boot unless `PAYMENTS_LIVE=1` is set, which belongs on the production app only and only once Alex has approved live payments.
 
 Care reminders (T52): `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` (base64url, set both or neither) turn on web push;
 without them the server logs `web push is off` once at start and mail reminders keep working. `VAPID_SUBJECT`

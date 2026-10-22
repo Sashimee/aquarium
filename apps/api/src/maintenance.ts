@@ -34,6 +34,7 @@ export function startMaintenance(
   database: Database,
   clock: Clock,
   settleDueGifts: () => Promise<number>,
+  retryReceipts: () => Promise<number>,
 ): () => void {
   const report = (err: unknown) => {
     console.error('maintenance failed:', err instanceof Error ? err.message : 'unknown');
@@ -42,6 +43,7 @@ export function startMaintenance(
     void settleWeeks(database, clock.now()).catch(report);
     void pruneExpired(database, clock).catch(report);
     void settleDueGifts().catch(report);
+    void retryReceipts().catch(report);
   };
   run();
   const timer = setInterval(run, HOUR_MS);

@@ -576,6 +576,7 @@ export const paymentCharges = pgTable(
     periodStart: timestamptz('period_start'),
     periodEnd: timestamptz('period_end'),
     consentAt: timestamptz('consent_at'),
+    receiptPending: boolean('receipt_pending').notNull().default(false),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
   },
   (t) => [

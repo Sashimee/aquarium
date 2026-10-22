@@ -281,12 +281,7 @@ export function createMailer(
     throw new MailThrottledError(retryAfterSeconds);
   };
 
-  const admit = async (flow: 'verify' | 'reset' | 'reminder' | 'receipt', to: string) => {
-    if (flow === 'receipt') {
-      const capped = await consume(`receipt:recipient:${recipientKey(to)}`, limits.perRecipient);
-      if (capped > 0) throw new MailThrottledError(capped);
-      return;
-    }
+  const admit = async (flow: 'verify' | 'reset' | 'reminder', to: string) => {
     // The cap may have freed since consumeIp skipped the IP charge; sending now would be unmetered per IP.
     const admission = admissions.getStore();
     if (admission && admission.mailBlockedFor > 0) {
@@ -344,8 +339,9 @@ export function createMailer(
         textEncoding: 'base64',
       });
     },
+    // A receipt follows a payment Stripe confirmed, so it is the proof of the consent the buyer gave
+    // and is never throttled: a refused one would leave that proof undelivered.
     async sendReceipt(to, receipt) {
-      await admit('receipt', to);
       await transport.sendMail({
         from,
         to,

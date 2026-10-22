@@ -31,6 +31,7 @@ const envSchema = z.object({
   VAPID_SUBJECT: z.string().optional(),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  PAYMENTS_LIVE: z.string().optional(),
   REMINDER_DAILY_CAP: z.coerce.number().int().min(0).max(100_000).default(500),
 });
 
@@ -96,6 +97,11 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
   }
   if (secretKey && !/^(sk|rk)_(test|live)_[A-Za-z0-9_]+$/.test(secretKey)) {
     throw new Error('STRIPE_SECRET_KEY must be a Stripe secret key (sk_test_... or sk_live_...).');
+  }
+  if (secretKey.includes('_live_') && e.PAYMENTS_LIVE !== '1') {
+    throw new Error(
+      'STRIPE_SECRET_KEY is a live key, which takes real money. Use a test key, or set PAYMENTS_LIVE=1 on the production app only, once Alex has approved live payments.',
+    );
   }
   if (webhookSecret && !/^whsec_[A-Za-z0-9_]+$/.test(webhookSecret)) {
     throw new Error('STRIPE_WEBHOOK_SECRET must be a Stripe signing secret (whsec_...).');

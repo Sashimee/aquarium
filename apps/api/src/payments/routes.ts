@@ -14,20 +14,29 @@ import type { Clock } from '../clock.ts';
 import { schema, type Database } from '../db/index.ts';
 import { apiError, HttpError } from '../errors.ts';
 import type { Mailer } from '../mail.ts';
+import type { Reauthentication } from '../reauth.ts';
 import type { Limit, RateLimiter } from '../rate-limit.ts';
 import { describeProviderError, WebhookSignatureError, type PaymentProvider } from './provider.ts';
-import { settleEvent, type Receipt } from './settle.ts';
+import { receiptOf, settleEvent, type Receipt } from './settle.ts';
+
+declare module 'fastify' {
+  interface FastifyInstance {
+    retryPendingReceipts: () => Promise<number>;
+  }
+}
 
 export interface PaymentsLimits {
   checkout: Limit;
   cancel: Limit;
   settings: Limit;
+  adultConfirmation: Limit;
 }
 
 export const DEFAULT_PAYMENTS_LIMITS: PaymentsLimits = {
   checkout: { max: 10, windowMs: 60 * 60_000 },
   cancel: { max: 10, windowMs: 60 * 60_000 },
   settings: { max: 30, windowMs: 60_000 },
+  adultConfirmation: { max: 5, windowMs: 15 * 60_000 },
 };
 
 export interface PaymentUser {
@@ -47,6 +56,7 @@ export interface PaymentsDeps {
   appOrigin: string;
   provider: PaymentProvider | null;
   currentUser: (req: FastifyRequest) => Promise<PaymentUser | null>;
+  reauthenticate: (req: FastifyRequest, password: string | undefined) => Promise<Reauthentication>;
 }
 
 const REVIVABLE = ['active', 'past_due', 'unpaid', 'trialing'];
@@ -170,9 +180,22 @@ export function registerPaymentRoutes(deps: PaymentsDeps): void {
     '/api/payments/adult-confirmation',
     guarded(async (req) => {
       const user = await authorize(req, false);
-      const { confirmed } = adultConfirmationRequestSchema.parse(req.body);
-      throttle(user.id, 'settings');
-      if (confirmed) {
+      const body = adultConfirmationRequestSchema.parse(req.body);
+      throttle(user.id, body.confirmed ? 'adultConfirmation' : 'settings');
+      if (body.confirmed) {
+        const proof = await deps.reauthenticate(req, body.password);
+        if (proof === 'wrong_password') {
+          throw new HttpError(
+            403,
+            apiError('forbidden', 'Password confirmation is required and must be correct.'),
+          );
+        }
+        if (proof === 'stale_session') {
+          throw new HttpError(
+            403,
+            apiError('forbidden', 'Sign in again with your passkey, then retry within 5 minutes.'),
+          );
+        }
         await db
           .insert(schema.adultConfirmations)
           .values({ userId: user.id, confirmedAt: new Date(clock.now()) })
@@ -300,18 +323,49 @@ export function registerPaymentRoutes(deps: PaymentsDeps): void {
     }
   }
 
-  async function sendReceipt(receipt: Receipt): Promise<void> {
+  async function sendReceipt(receipt: Receipt): Promise<boolean> {
     const [row] = await db
       .select({ email: schema.user.email })
       .from(schema.user)
       .where(eq(schema.user.id, receipt.userId));
-    if (!row) return;
+    if (!row) return false;
     try {
       await deps.mailer.sendReceipt(row.email, receipt);
     } catch (err) {
-      app.log.warn({ err: err instanceof Error ? err.name : 'unknown' }, 'receipt mail not sent');
+      app.log.warn({ err }, 'receipt mail not sent, it stays queued for a retry');
+      return false;
     }
+    await db
+      .update(schema.paymentCharges)
+      .set({ receiptPending: false })
+      .where(eq(schema.paymentCharges.id, receipt.chargeId));
+    return true;
   }
+
+  const RETRY_BATCH = 20;
+
+  async function retryPendingReceipts(): Promise<number> {
+    const pending = await db
+      .select()
+      .from(schema.paymentCharges)
+      .where(eq(schema.paymentCharges.receiptPending, true))
+      .orderBy(schema.paymentCharges.createdAt)
+      .limit(RETRY_BATCH);
+    let sent = 0;
+    for (const charge of pending) {
+      const receipt = receiptOf(economy, charge);
+      if (!receipt) {
+        await db
+          .update(schema.paymentCharges)
+          .set({ receiptPending: false })
+          .where(eq(schema.paymentCharges.id, charge.id));
+        continue;
+      }
+      if (await sendReceipt(receipt)) sent += 1;
+    }
+    return sent;
+  }
+  app.decorate('retryPendingReceipts', retryPendingReceipts);
 
   void app.register(async (scope) => {
     scope.removeAllContentTypeParsers();
@@ -350,12 +404,20 @@ export function registerPaymentRoutes(deps: PaymentsDeps): void {
         );
       } catch (err) {
         app.log.error(
-          { eventId: event.id, eventType: event.type, ...describeProviderError(err) },
-          err instanceof Error ? err.message : 'payment event could not be settled',
+          {
+            eventId: event.id,
+            eventType: event.type,
+            ...describeProviderError(err),
+            err,
+          },
+          'payment event could not be settled',
         );
         throw err;
       }
       if (receipt) await sendReceipt(receipt);
+      await retryPendingReceipts().catch((err: unknown) => {
+        app.log.warn({ err }, 'queued receipts could not be retried');
+      });
       return reply.code(200).send({ received: true });
     });
   });

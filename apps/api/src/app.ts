@@ -1,3 +1,4 @@
+import { createReauthenticator } from './reauth.ts';
 import { safeError } from './safe-error.ts';
 import { existsSync } from 'node:fs';
 import { relative, resolve, sep } from 'node:path';
@@ -654,6 +655,8 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     payments: opts.payments ?? null,
   });
 
+  const reauthenticate = createReauthenticator(database, auth);
+
   registerPaymentRoutes({
     app,
     database,
@@ -665,6 +668,10 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     appOrigin,
     provider: opts.payments ?? null,
     currentUser: async (req) => (await currentSession(req))?.user ?? null,
+    reauthenticate: async (req, password) => {
+      const current = await currentSession(req);
+      return current ? reauthenticate(current, password) : 'stale_session';
+    },
   });
 
   registerReminderRoutes({
