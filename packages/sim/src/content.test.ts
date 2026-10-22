@@ -230,6 +230,61 @@ describe('barred mudskippers foraging round the show-tank driftwood', { timeout:
   });
 });
 
+describe('a cory due a breath under the show-tank driftwood', { timeout: LONG }, () => {
+  const base = byId('bronze-corydoras');
+  // Far above the content cap, so the breath falls due within a step or two of the start.
+  const cory = { ...base, behaviour: { ...base.behaviour, airGulp: { perHour: 3600 } } };
+  const wood = SHOW_DECOR.find((c) => c.id === 'driftwood');
+  if (!wood) throw new Error('SHOW_DECOR lost its driftwood');
+  const log = compileCollider(wood);
+  /** A 3.5 s dash up from the sand, plus a slide of a few body lengths out from under the log. */
+  const BREATH_WITHIN_S = 12;
+  const starts = [
+    [-0.27, -0.08],
+    [-0.24, -0.06],
+  ].flatMap(([x, z]) =>
+    [0, 90, 180, -90].flatMap((yawDeg) =>
+      [1, 2, 3].map((seed) => ({ x: x ?? 0, z: z ?? 0, yawDeg, seed })),
+    ),
+  );
+
+  it.each(starts)(
+    'slides out and reaches the surface (#1283): x $x z $z heading $yawDeg seed $seed',
+    ({ x, z, yawDeg, seed }) => {
+      const y = 0.012;
+      const n = new Float64Array(3);
+      let overhead = Infinity;
+      for (let k = 1; k <= 20; k++)
+        overhead = Math.min(overhead, log.sample(x, y + k * 0.004, z, n));
+      expect(overhead).toBeLessThan(0);
+
+      const w = new World({
+        seed,
+        tank: SHOW_TANK,
+        species: [cory],
+        decor: SHOW_DECOR,
+        fish: spawnMany(cory.id, 1),
+      });
+      w.position.set([x, y, z]);
+      w.yaw[0] = (yawDeg * Math.PI) / 180;
+      w.pitch[0] = 0;
+      const wait = w.behaviour.gulpWait;
+      let before = 0;
+      let breathS = Infinity;
+      for (let t = 1; t <= 30 * 2 * BREATH_WITHIN_S; t++) {
+        w.step();
+        const now = wait[0] ?? 0;
+        if (now === 0 && before > 0) {
+          breathS = t / 30;
+          break;
+        }
+        before = now;
+      }
+      expect(breathS).toBeLessThan(BREATH_WITHIN_S);
+    },
+  );
+});
+
 describe('every shipped species in a full-power wave maker current', { timeout: LONG }, () => {
   const species = roster.map((r) => r.species);
 

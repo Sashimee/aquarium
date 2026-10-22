@@ -98,6 +98,8 @@ export const BEHAVIOUR = {
   gulpLandBodyLengths: 1.5,
   gulpPathSamples: 5,
   gulpPathClearBodyLengths: 0.5,
+  gulpSlideRings: 3,
+  gulpSlideDirections: 8,
   gulpOverdueS: 30,
   gulpClimbReachBodyLengths: 1,
   gulpClimbStandoffBodyLengths: 0.5,
@@ -2475,9 +2477,12 @@ export class Behaviour {
       if (rng.next() < p) this.gulpDue[i] = 1;
       // Kramer 1983: an air-breather puts off a costly trip to the surface, so a breath waits
       // for open water it can hold against rather than sweeping the fish into glass or rock.
-      if (at(this.gulpDue, i) === 1 && this.gulpPathOpen(i, length)) {
-        this.startGulp(i, plan, GulpPhase.Ascend);
-        return;
+      if (at(this.gulpDue, i) === 1) {
+        if (this.gulpPathOpen(i, length)) {
+          this.startGulp(i, plan, GulpPhase.Ascend);
+          return;
+        }
+        if (this.planSlideOut(i, plan, length)) return;
       }
     }
     if (rest > 0.5) {
@@ -2520,18 +2525,60 @@ export class Behaviour {
    */
   private gulpPathOpen(i: number, length: number): boolean {
     const top = this.gulpTop(length);
-    const { decorSdf, position } = this.host;
+    const { position } = this.host;
     const x = at(position, i * 3);
     const y = at(position, i * 3 + 1);
     const z = at(position, i * 3 + 2);
-    if (decorSdf !== null) {
-      const clear = BEHAVIOUR.gulpPathClearBodyLengths * length;
-      const last = BEHAVIOUR.gulpPathSamples - 1;
-      for (let k = 0; k <= last; k++) {
-        if (decorSdf.sample(x, y + ((top - y) * k) / last, z, this.n3) < clear) return false;
+    if (!this.clearAbove(x, y, z, top, length)) return false;
+    return this.host.holdsColumn(i, x, y, z, top, WAVE_MAKER.sustainedFraction);
+  }
+
+  /** Whether the water from `y` straight up to `top` is clear of rock and wood. */
+  private clearAbove(x: number, y: number, z: number, top: number, length: number): boolean {
+    const { decorSdf } = this.host;
+    if (decorSdf === null) return true;
+    const clear = BEHAVIOUR.gulpPathClearBodyLengths * length;
+    const last = BEHAVIOUR.gulpPathSamples - 1;
+    for (let k = 0; k <= last; k++) {
+      if (decorSdf.sample(x, y + ((top - y) * k) / last, z, this.n3) < clear) return false;
+    }
+    return true;
+  }
+
+  /**
+   * A fish due a breath under an overhang slides out level to the nearest open water before it
+   * rises: steering will not lift a fish into wood just above it, so rising in place only hovers.
+   * False when the water above is open, or nothing within `gulpSlideRings` body lengths is.
+   */
+  private planSlideOut(i: number, plan: Plan, length: number): boolean {
+    const { basin, decorSdf, position } = this.host;
+    if (decorSdf === null) return false;
+    const px = at(position, i * 3);
+    const py = at(position, i * 3 + 1);
+    const pz = at(position, i * 3 + 2);
+    const top = this.gulpTop(length);
+    if (this.clearAbove(px, py, pz, top, length)) return false;
+    const margin = BEHAVIOUR.gulpClimbStandoffBodyLengths * length;
+    const room = BEHAVIOUR.bodyThicknessBodyLengths * length;
+    const lift = BEHAVIOUR.forageBandHighBodyLengths * length;
+    const n = BEHAVIOUR.gulpSlideDirections;
+    for (let ring = 1; ring <= BEHAVIOUR.gulpSlideRings; ring++) {
+      for (let k = 0; k < n; k++) {
+        const a = (2 * Math.PI * k) / n;
+        const x = clamp(px + Math.sin(a) * ring * length, basin.minX + margin, basin.maxX - margin);
+        const z = clamp(pz + Math.cos(a) * ring * length, basin.minZ + margin, basin.maxZ - margin);
+        const y = Math.max(py, basin.ground(x, z) + lift);
+        if (decorSdf.sample(x, y, z, this.n3) < room) continue;
+        if (!this.clearAbove(x, y, z, top, length)) continue;
+        if (!this.host.holdsColumn(i, x, y, z, top, WAVE_MAKER.sustainedFraction)) continue;
+        plan.seek(x, y, z, at(this.host.cruiseSpeed, i), 0.6);
+        plan.wander = 0;
+        plan.cohesion = 0;
+        plan.align = 0;
+        return true;
       }
     }
-    return this.host.holdsColumn(i, x, y, z, top, WAVE_MAKER.sustainedFraction);
+    return false;
   }
 
   /**
@@ -2540,8 +2587,12 @@ export class Behaviour {
    */
   private planOverdueGulp(i: number, plan: Plan): boolean {
     if (at(this.gulpDue, i) !== 1 || at(this.gulpWait, i) < BEHAVIOUR.gulpOverdueS) return false;
-    const open = this.gulpPathOpen(i, at(this.host.bodyLength, i));
-    this.startGulp(i, plan, open ? GulpPhase.Ascend : GulpPhase.Climb);
+    const length = at(this.host.bodyLength, i);
+    if (this.gulpPathOpen(i, length)) {
+      this.startGulp(i, plan, GulpPhase.Ascend);
+      return true;
+    }
+    if (!this.planSlideOut(i, plan, length)) this.startGulp(i, plan, GulpPhase.Climb);
     return true;
   }
 
@@ -2687,16 +2738,27 @@ export class Behaviour {
     if (near && at(this.climbing, i) === 0) {
       const ahead =
         at(this.host.forward, i * 3) * alongX + at(this.host.forward, i * 3 + 2) * alongZ;
-      this.climbing[i] = ahead < 0 ? 2 : 1;
+      const y = Math.min(at(position, i * 3 + 1), top);
+      const side = this.slantSide(gx, y, gz, alongX, length, top, ahead);
+      this.climbing[i] = (side === 0 ? ahead : side) < 0 ? 2 : 1;
     }
     const latched = at(this.climbing, i);
     if (latched === 0) {
       plan.seek(gx, this.climbStart(gx, gz, length), gz, speed, 0.6);
       return;
     }
-    plan.comfort = BEHAVIOUR.minComfort;
-    // Climbing head-on to the glass would put the nose into it, so it slants up along the pane,
-    // keeping the side it chose: re-picking it as the current swings the fish turns it on the glass.
+    // Hugging the pane must not mean hugging rock or wood beside it.
+    const { decorSdf } = this.host;
+    const py = at(position, i * 3 + 1);
+    if (
+      decorSdf === null ||
+      decorSdf.sample(px, py, pz, this.n3) > BEHAVIOUR.gulpPathClearBodyLengths * length
+    ) {
+      plan.comfort = BEHAVIOUR.minComfort;
+    }
+    // Climbing head-on to the glass would put the nose into it, so it slants up along the pane on
+    // the side clear of decor, keeping the side it chose: re-picking it as the current swings the
+    // fish turns it on the glass.
     const slant = (latched === 2 ? -1 : 1) * BEHAVIOUR.gulpClimbSlantBodyLengths * length;
     plan.seek(
       alongX === 1 ? insetClamp(gx + slant, basin.minX, basin.maxX, corner) : gx,
@@ -2717,15 +2779,31 @@ export class Behaviour {
   }
 
   private climbClear(x: number, z: number, length: number, top: number): boolean {
-    const { decorSdf } = this.host;
-    if (decorSdf === null) return true;
-    const clear = BEHAVIOUR.gulpPathClearBodyLengths * length;
-    const y0 = this.climbStart(x, z, length);
-    const last = BEHAVIOUR.gulpPathSamples - 1;
-    for (let k = 0; k <= last; k++) {
-      if (decorSdf.sample(x, y0 + ((top - y0) * k) / last, z, this.n3) < clear) return false;
+    return this.clearAbove(x, this.climbStart(x, z, length), z, top, length);
+  }
+
+  /**
+   * The way along the pane at `x`, `z` a climber at height `y` slants up, preferring the way it
+   * faces: 1 or -1, or 0 if decor blocks both.
+   */
+  private slantSide(
+    x: number,
+    y: number,
+    z: number,
+    alongX: number,
+    length: number,
+    top: number,
+    ahead: number,
+  ): number {
+    const { basin } = this.host;
+    const corner = BEHAVIOUR.gulpClimbCornerBodyLengths * length;
+    const slant = BEHAVIOUR.gulpClimbSlantBodyLengths * length;
+    for (const side of ahead < 0 ? [-1, 1] : [1, -1]) {
+      const sx = alongX === 1 ? insetClamp(x + side * slant, basin.minX, basin.maxX, corner) : x;
+      const sz = alongX === 1 ? z : insetClamp(z + side * slant, basin.minZ, basin.maxZ, corner);
+      if (this.clearAbove(sx, y, sz, top, length)) return side;
     }
-    return true;
+    return 0;
   }
 
   /**

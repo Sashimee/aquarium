@@ -93,7 +93,7 @@ export const STEERING = {
   plantSlowdown: 0.3,
   spawnAttempts: 200,
   tiltClearanceThickness: 1.5,
-  liftOffPitchRad: 10 * DEG,
+  liftOffPitchRad: 5 * DEG,
   detourS: 1.5,
   minTurnRadiusBodyLengths: 0.4,
   pivotTurnRateRadPerS: 1,
@@ -1645,8 +1645,11 @@ export class World {
       let nz = (nh[2] ?? 0) * aHere + (np[2] ?? 0) * aProbe;
       // With the floor or surface masked out, an overhang pushes a fish into the very surface it
       // is hugging (a cory nosing under driftwood); only a sideways escape is possible there. Nor
-      // may its depth band lift it into the overhang just above: pressed between wood and sand,
-      // no turn has room for its body and it grinds there (#1257).
+      // may anything lift it into the overhang just above: every upward wish, from its depth band,
+      // a seek or a dash for air alike, fades as the wood nears, since pressed between wood and
+      // sand no turn has room for its body and it grinds there (#1257). So a fish under an
+      // overhang cannot rise in place at all; an air-breather due a breath slides out from under
+      // it first (`planSlideOut` in behaviour.ts, #1283).
       if (!plan.floor && ny < 0 && py - ground < clearance) {
         ny = 0;
         if (dy > 0) dy *= 1 - aHere;
