@@ -74,6 +74,7 @@ export const DEFAULT_COMMUNITY_CONFIG: CommunityConfig = {
 };
 
 const COMMUNITY_TANK_NAME = 'Community Tank';
+const COMMUNITY_MEMORIAL_LIMIT = 10;
 
 const SEED_AGE_MS = 7 * 86_400_000;
 const EPSILON = 1e-9;
@@ -367,19 +368,22 @@ export function registerCommunityRoutes({ tank: deps, config }: CommunityRouteDe
       );
       if (cleared.length > 0) {
         await tx.insert(schema.memorials).values(
-          cleared.flatMap((f) =>
-            f.diedAt && f.cause
-              ? [
-                  {
-                    tankId: tank.id,
-                    fishName: f.name,
-                    species: f.species,
-                    bornAt: f.bornAt,
-                    diedAt: f.diedAt,
-                    cause: f.cause,
-                  },
-                ]
-              : [],
+          cleared.map((f) => ({
+            tankId: tank.id,
+            fishName: f.name,
+            species: f.species,
+            bornAt: f.bornAt,
+            diedAt: f.diedAt ?? new Date(nowMs),
+            cause: f.cause ?? 'unknown',
+          })),
+        );
+        await tx.delete(schema.memorials).where(
+          and(
+            eq(schema.memorials.tankId, tank.id),
+            sql`${schema.memorials.id} not in (
+              select id from memorials where tank_id = ${tank.id}
+              order by died_at desc, id limit ${COMMUNITY_MEMORIAL_LIMIT}
+            )`,
           ),
         );
         await tx.delete(schema.fish).where(
@@ -396,27 +400,27 @@ export function registerCommunityRoutes({ tank: deps, config }: CommunityRouteDe
       const alive = fishRows.filter((f) => f.status === 'alive');
       if (alive.length < COMMUNITY_UPKEEP.restockBelowAlive) {
         if (!safeForStarterStock(state)) await changeWater();
-      }
-      if (alive.length < COMMUNITY_UPKEEP.restockBelowAlive && safeForStarterStock(state)) {
-        const wanted = COMMUNITY_STARTER_STOCK.map((stock) => ({
-          ...stock,
-          count: stock.count - alive.filter((f) => f.species === stock.species).length,
-          first:
-            Math.max(
-              0,
-              ...fishRows
-                .filter((f) => f.species === stock.species)
-                .map((f) => Number(f.name.slice(stock.label.length + 1)) || 0),
-            ) + 1,
-        })).filter((stock) => stock.count > 0);
-        const added = wanted.length
-          ? await tx
-              .insert(schema.fish)
-              .values(stockRows(tank.id, nowMs, wanted))
-              .returning()
-          : [];
-        fishRows = [...fishRows, ...added];
-        changed ||= added.length > 0;
+        if (safeForStarterStock(state)) {
+          const wanted = COMMUNITY_STARTER_STOCK.map((stock) => ({
+            ...stock,
+            count: stock.count - alive.filter((f) => f.species === stock.species).length,
+            first:
+              Math.max(
+                0,
+                ...fishRows
+                  .filter((f) => f.species === stock.species)
+                  .map((f) => Number(f.name.slice(stock.label.length + 1)) || 0),
+              ) + 1,
+          })).filter((stock) => stock.count > 0);
+          const added = wanted.length
+            ? await tx
+                .insert(schema.fish)
+                .values(stockRows(tank.id, nowMs, wanted))
+                .returning()
+            : [];
+          fishRows = [...fishRows, ...added];
+          changed ||= added.length > 0;
+        }
       }
 
       return { value: null, ticked: { ...ticked, tank }, fishRows, changed };

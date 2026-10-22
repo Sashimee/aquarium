@@ -914,7 +914,10 @@ describe('community tank', () => {
         await gate;
       });
       await holding;
-      await pause(150);
+      await waitFor(
+        () => blockedBackends(harness),
+        (n) => n > 0,
+      );
       let closed = false;
       const closing = harness.app.close().then(() => {
         closed = true;
@@ -925,6 +928,101 @@ describe('community tank', () => {
       await lock;
       await closing;
       expect(closed).toBe(true);
+    });
+
+    const blockedBackends = async (harness: Harness) =>
+      (
+        await harness.database.db.execute(
+          sql`select 1 from pg_stat_activity where cardinality(pg_blocking_pids(pid)) > 0`,
+        )
+      ).rows.length;
+
+    it('keeps only the newest memorials of the community tank', async () => {
+      const harness = await start({ community: { upkeepMs: 40 } });
+      await getState(harness);
+      await killSome(harness, totalStock, longDead);
+      await waitFor(fishOf(harness), (f) => f.every((x) => x.status === 'alive'));
+      const memorials = await harness.database.db.select().from(schema.memorials);
+      expect(totalStock).toBeGreaterThan(10);
+      expect(memorials).toHaveLength(10);
+      const state = communityStateSchema.parse((await getState(harness)).json());
+      expect(state.tank.memorials).toHaveLength(10);
+    });
+
+    it('clears a long-dead fish whose cause was never recorded', async () => {
+      const harness = await start({ community: { upkeepMs: 40 } });
+      await getState(harness);
+      const fish = await fishOf(harness)();
+      for (const f of fish.slice(0, 2)) {
+        await harness.database.db
+          .update(schema.fish)
+          .set({
+            status: 'dead',
+            diedAt: new Date(harness.clock.now() - longDead * HOUR),
+            cause: null,
+            health: 0,
+          })
+          .where(eq(schema.fish.id, f.id));
+      }
+      await waitFor(fishOf(harness), (f) => f.every((x) => x.status === 'alive'));
+      const memorials = await harness.database.db.select().from(schema.memorials);
+      expect(memorials.map((m) => m.cause)).toEqual(['unknown', 'unknown']);
+    });
+
+    it('frees the guard after a failed run so the next one goes ahead', async () => {
+      const lines: string[] = [];
+      const harness = await start({
+        community: { upkeepMs: 40 },
+        logStream: { write: (chunk) => void lines.push(chunk) },
+      });
+      await getState(harness);
+      const id = await communityTankId(harness);
+      await harness.database.db
+        .update(schema.tanks)
+        .set({ water: { broken: true } })
+        .where(eq(schema.tanks.id, id));
+      await waitFor(
+        async () => lines.filter((l) => l.includes('community upkeep failed')).length,
+        (n) => n >= 2,
+      );
+      await setAmmonia(harness, 0);
+      await killSome(harness, 1, longDead);
+      await waitFor(fishOf(harness), (f) => f.every((x) => x.status === 'alive'));
+    });
+
+    it('does not start a second run while one is blocked', async () => {
+      const harness = await start({ community: { upkeepMs: 40 } });
+      await getState(harness);
+      const id = await communityTankId(harness);
+      let release: () => void = () => undefined;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let held: () => void = () => undefined;
+      const holding = new Promise<void>((resolve) => {
+        held = resolve;
+      });
+      const lock = harness.database.db.transaction(async (tx) => {
+        await tx.execute(sql`select 1 from tanks where id = ${id} for update`);
+        held();
+        await gate;
+      });
+      await holding;
+      await waitFor(
+        () => blockedBackends(harness),
+        (n) => n > 0,
+      );
+      const real = harness.database.db.transaction.bind(harness.database.db);
+      let started = 0;
+      harness.database.db.transaction = ((fn: never, config?: unknown) => {
+        started += 1;
+        return real(fn, config as never);
+      }) as typeof harness.database.db.transaction;
+      await pause(250);
+      harness.database.db.transaction = real as typeof harness.database.db.transaction;
+      release();
+      await lock;
+      expect(started).toBe(0);
     });
 
     it('leaves the water of a fresh tank alone', async () => {
