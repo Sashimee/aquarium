@@ -50,6 +50,7 @@ describe('figure-8 puffer', { timeout: LONG }, () => {
   });
 
   it('hovers slowly, keeps a station and holds the lower water column', () => {
+    expect(PUFFER.behaviour.preferredZone).toBe('bottom');
     const sp = toSimSpecies(PUFFER);
     expect(sp.home).toBe('station');
     const w = tank(spawnMany(PUFFER.id, 1));
