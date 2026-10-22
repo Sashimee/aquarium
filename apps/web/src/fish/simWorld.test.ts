@@ -250,6 +250,62 @@ describe('SimWorldSpec', () => {
     expect(world.fishIds).toEqual([roster.simIdOf(FISH_1), 'tang']);
   });
 
+  describe('a cave whose mouth the decor blocks', () => {
+    const CAVE: SceneAnchor = {
+      id: 'cave-1',
+      kind: 'cave',
+      position: [-0.1, 0.12, 0.05],
+      radius: 0.03,
+      facing: [0, 0, 1],
+    };
+    const onMouth = (x: number): Collider => ({
+      id: 'decor:boulder.0',
+      kind: 'sphere',
+      hard: true,
+      center: [x, 0.12, 0.05],
+      radius: 0.04,
+    });
+    const ids = (anchors: readonly { id: string }[] | null | undefined) =>
+      anchors?.map((a) => a.id);
+
+    it('is left out of the homes until the rock is moved off it', () => {
+      const { spec, roster } = setup();
+      spec.setAnchors([ANEMONE, CAVE]);
+      expect(ids(spec.config(roster.swimming())?.anchors)).toEqual(['anemone-1', 'cave-1']);
+
+      expect(ids(spec.setDecor([ROCK, onMouth(-0.1)]))).toEqual(['anemone-1']);
+      expect(ids(spec.config(roster.swimming())?.anchors)).toEqual(['anemone-1']);
+
+      expect(ids(spec.setDecor([ROCK, onMouth(0.2)]))).toEqual(['anemone-1', 'cave-1']);
+      expect(ids(spec.config(roster.swimming())?.anchors)).toEqual(['anemone-1', 'cave-1']);
+    });
+
+    it('is checked against the latest decor when the scene moves its caves', () => {
+      const { spec } = setup();
+      spec.setDecor([onMouth(0.2)]);
+      expect(ids(spec.setAnchors([CAVE]))).toEqual(['cave-1']);
+      expect(ids(spec.setAnchors([{ ...CAVE, position: [0.2, 0.12, 0.05] }]))).toEqual([]);
+    });
+
+    it('keeps the homes, so fish keep their caves, while decor moves without blocking one', () => {
+      const { spec } = setup();
+      const homes = spec.setAnchors([ANEMONE, CAVE]);
+      expect(spec.setDecor([ROCK])).toBeNull();
+      expect(spec.setDecor([{ ...ROCK, center: [0.25, 0.15, 0] }])).toBeNull();
+      expect(spec.anchors).toBe(homes);
+
+      spec.setDecor([onMouth(-0.1)]);
+      expect(spec.setDecor([onMouth(-0.1), ROCK])).toBeNull();
+    });
+
+    it('is not blocked by a soft plant over its mouth', () => {
+      const { spec } = setup();
+      spec.setAnchors([CAVE]);
+      expect(spec.setDecor([{ ...onMouth(-0.1), hard: false }])).toBeNull();
+      expect(ids(spec.anchors)).toEqual(['cave-1']);
+    });
+  });
+
   it('names the colliders and homes that changed while a world was starting', () => {
     const { spec, roster } = setup();
     spec.setDecor([ROCK]);
