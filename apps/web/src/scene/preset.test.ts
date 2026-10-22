@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_TANK } from '../engine/tank/dimensions';
 import { substrateHeight } from '../engine/tank/substrate';
 import type { CatalogEntry } from './assets';
-import { BANK_TOPS } from './bank';
+import { BANK_RIM_MARGIN, isPerch } from './bank';
 import { loadPreset, parsePreset } from './preset';
 import catalog from '../../public/assets/index.json';
 import { generateEuphyllia, parseEuphylliaId } from './euphyllia';
@@ -357,7 +357,7 @@ describe.each(['blackwater', 'mangrove'] as const)('%s preset', (biome) => {
       }
       expect(Math.abs(item.position[0]) + reachX * item.scale, item.assetId).toBeLessThan(halfL);
       expect(Math.abs(item.position[2]) + reachZ * item.scale, item.assetId).toBeLessThan(halfD);
-      const ceiling = item.assetId in BANK_TOPS ? DEFAULT_TANK.height : waterTop - 0.02;
+      const ceiling = isPerch(item) ? DEFAULT_TANK.height - BANK_RIM_MARGIN : waterTop - 0.02;
       expect(item.position[1] + y1 * item.scale, item.assetId).toBeLessThan(ceiling);
     }
   });

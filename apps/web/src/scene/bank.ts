@@ -22,9 +22,26 @@ interface BankTop {
   readonly radius: number;
 }
 
+/**
+ * The scanned stump leans: its tip, 27 to 28 cm high, stands about 6 cm off the base centre and is
+ * 3 to 4 cm wide, while the centre is only 17 cm high. The point is just under the tip.
+ */
 export const BANK_TOPS: Readonly<Record<string, BankTop>> = {
-  'mangrove-stump': { position: [0, 0.28, 0], radius: 0.05 },
+  'mangrove-stump': { position: [0.005, 0.27, 0.065], radius: 0.015 },
 };
+
+/** How far under the rim a perch's highest point stays. */
+export const BANK_RIM_MARGIN = 0.01;
+/** A bank-asset item authored at least this large is the preset's perch, not ordinary wood. */
+export const PERCH_MIN_SCALE = 1.3;
+/** A perch is not shrunk with the tank; it grows up to this much past its authored scale to reach the rim. */
+export const PERCH_GROWTH = 1.25;
+/** A perch fitted smaller than this is too slight to stand clear of the water; it is ordinary wood. */
+export const PERCH_MIN_FIT = 1;
+
+export function isPerch(item: DecorItem): boolean {
+  return item.assetId in BANK_TOPS && item.scale >= PERCH_MIN_SCALE;
+}
 
 export function bankAnchor(id: string, item: DecorItem): SceneBank {
   const top = BANK_TOPS[item.assetId];

@@ -10,6 +10,7 @@ import { DEFAULT_TANK, type TankDimensions } from '../engine/tank/dimensions';
 import { substrateHeight } from '../engine/tank/substrate';
 import type { AssetCatalog } from './assets';
 import { anemoneReach } from './anemone';
+import { BANK_RIM_MARGIN, isPerch, PERCH_GROWTH, PERCH_MIN_FIT } from './bank';
 import type { CurrentParameters } from './current';
 import { euphylliaReach, generateEuphyllia, parseEuphylliaId } from './euphyllia';
 import { GLASS_SHRINK_FLOOR } from './placement';
@@ -94,7 +95,8 @@ export function maxScaleAt(
     const slope = reachAt(axis, 1) - base;
     return slope > 0 ? (room - base) / slope : Infinity;
   };
-  const surface = height > 0 ? (waterTop - SURFACE_MARGIN - item.position[1]) / height : Infinity;
+  const ceiling = isPerch(item) ? dimensions.height - BANK_RIM_MARGIN : waterTop - SURFACE_MARGIN;
+  const surface = height > 0 ? (ceiling - item.position[1]) / height : Infinity;
   return Math.max(
     0,
     Math.min(
@@ -110,6 +112,7 @@ function fitItem(
   size: TankSize,
   dimensions: TankDimensions,
   boundsOf: BoundsOf,
+  perch = isPerch(item),
 ): DecorItem {
   const stretched = fitPresetItem(item, size);
   const { scale: k } = presetFit(size);
@@ -122,12 +125,13 @@ function fitItem(
   const seatOffset =
     item.position[1] - substrateHeight(DEFAULT_TANK, item.position[0], item.position[2]);
   let y = substrateHeight(dimensions, x, z) + seatOffset * k;
-  let scale = stretched.scale;
+  let scale = perch ? item.scale * PERCH_GROWTH : stretched.scale;
+  const ceiling = perch ? dimensions.height - BANK_RIM_MARGIN : waterTop - SURFACE_MARGIN;
 
   const model = boundsOf(item.assetId);
   if (model) {
     const height = model.bounds.max[1] ?? 0;
-    if (height > 0) scale = Math.min(scale, (waterTop - SURFACE_MARGIN - y) / height);
+    if (height > 0) scale = Math.min(scale, (ceiling - y) / height);
     const footprint = rotatedReach(model.bounds, item.rotationY);
     let reachX = (s: number) => footprint.x * s;
     let reachZ = (s: number) => footprint.z * s;
@@ -149,8 +153,9 @@ function fitItem(
     x = Math.max(-limitX, Math.min(limitX, x));
     z = Math.max(-limitZ, Math.min(limitZ, z));
     y = substrateHeight(dimensions, x, z) + seatOffset * k;
-    if (height > 0) scale = Math.min(scale, (waterTop - SURFACE_MARGIN - y) / height);
+    if (height > 0) scale = Math.min(scale, (ceiling - y) / height);
   }
+  if (perch && scale < PERCH_MIN_FIT) return fitItem(item, size, dimensions, boundsOf, false);
   return {
     ...stretched,
     position: [x, y, z],
