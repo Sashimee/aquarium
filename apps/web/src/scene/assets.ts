@@ -165,16 +165,31 @@ class SkipKTX2Loader extends KTX2Loader {
   }
 }
 
+/** A model texture shared by every model that references its resolved URL, so it uploads once. */
+interface SharedTexture {
+  readonly url: string;
+  readonly texture: Promise<CompressedTexture>;
+  users: number;
+}
+
+/** The shared textures one model load holds; closed once the load failed and gave them back. */
+interface TextureHold {
+  readonly entries: Set<SharedTexture>;
+  closed: boolean;
+}
+
 /** One GLTF + KTX2 + meshopt pipeline, caching every (asset, lod, texture size) it loads. */
 export class ModelLibrary {
   private readonly ktx2: KTX2Loader;
-  private readonly gltf = new GLTFLoader();
   private readonly geometryGltf = new GLTFLoader().setKTX2Loader(new SkipKTX2Loader());
   private readonly cache = new Map<string, Promise<LoadedModel>>();
   private readonly finished = new Map<string, LoadedModel>();
   private readonly collision = new Map<string, Promise<readonly BufferGeometry[]>>();
   private textureSize: 1024 | 2048 = 1024;
   private readonly textures: Texture[] = [];
+  private readonly sharedTextures = new Map<string, SharedTexture>();
+  private readonly sharedTextureObjects = new WeakSet<Texture>();
+  private readonly holds = new WeakMap<LoadedModel, TextureHold>();
   private inflight = 0;
   private idleWaiters: (() => void)[] = [];
 
@@ -186,8 +201,6 @@ export class ModelLibrary {
     this.ktx2 = rewritingKtx2Loader(ktx2, (url) =>
       catalog.materialTextureUrl(url, this.textureSize),
     );
-    this.gltf.setKTX2Loader(this.ktx2);
-    this.gltf.setMeshoptDecoder(MeshoptDecoder);
     this.geometryGltf.setMeshoptDecoder(MeshoptDecoder);
   }
 
@@ -208,8 +221,9 @@ export class ModelLibrary {
     const key = `${file}@${textureSize}`;
     let pending = this.cache.get(key);
     if (!pending) {
+      const hold: TextureHold = { entries: new Set(), closed: false };
       pending = this.enter(textureSize)
-        .then(() => this.gltf.loadAsync(`${ASSET_BASE}${file}`))
+        .then(() => this.modelLoader(hold).loadAsync(`${ASSET_BASE}${file}`))
         .finally(() => this.leave())
         .then((gltf) => {
           gltf.scene.updateMatrixWorld(true);
@@ -224,13 +238,69 @@ export class ModelLibrary {
           });
           if (primitives.length === 0) throw new Error(`${file} contains no meshes`);
           const model = { primitives };
+          this.holds.set(model, hold);
           if (this.cache.get(key) === pending) this.finished.set(key, model);
           return model;
+        })
+        .catch((error: unknown) => {
+          hold.closed = true;
+          this.releaseShared(hold.entries);
+          throw error;
         });
       this.cache.set(key, pending);
       pending.catch(() => this.cache.delete(key));
     }
     return pending;
+  }
+
+  /**
+   * A GLTFLoader per model load, because the KTX2 loader it uses records which shared textures
+   * that model holds. GLTFLoader only dedupes textures within one file, and the WebGPU backend
+   * uploads per Texture object, so a map two GLBs borrow is shared here by its resolved URL.
+   */
+  private modelLoader(hold: TextureHold): GLTFLoader {
+    const load: KTX2Loader['load'] = (url, onLoad, _onProgress, onError) => {
+      if (hold.closed) {
+        onError?.(new Error(`${url}: the model that requested it already failed to load`));
+        return;
+      }
+      const resolved = collapseDotSegments(this.catalog.materialTextureUrl(url, this.textureSize));
+      let entry = this.sharedTextures.get(resolved);
+      if (!entry) {
+        const texture = this.ktx2.loadAsync(resolved).then((loaded) => {
+          this.sharedTextureObjects.add(loaded);
+          return loaded;
+        });
+        const created: SharedTexture = { url: resolved, texture, users: 0 };
+        texture.catch(() => {
+          if (this.sharedTextures.get(resolved) === created) this.sharedTextures.delete(resolved);
+        });
+        this.sharedTextures.set(resolved, created);
+        entry = created;
+      }
+      if (!hold.entries.has(entry)) {
+        hold.entries.add(entry);
+        entry.users++;
+      }
+      if (onError) entry.texture.then(onLoad, onError);
+      else void entry.texture.then(onLoad);
+    };
+    const ktx2 = new Proxy(this.ktx2, {
+      get: (target, key, receiver) => (key === 'load' ? load : Reflect.get(target, key, receiver)),
+    });
+    return new GLTFLoader().setKTX2Loader(ktx2).setMeshoptDecoder(MeshoptDecoder);
+  }
+
+  private releaseShared(entries: Iterable<SharedTexture>): void {
+    for (const entry of entries) {
+      if (--entry.users > 0) continue;
+      if (this.sharedTextures.get(entry.url) === entry) this.sharedTextures.delete(entry.url);
+      entry.texture.then(
+        (texture) => texture.dispose(),
+        // A failed load was already reported to every model that requested it.
+        () => undefined,
+      );
+    }
   }
 
   /** Geometry of the cheapest LOD, so every client fits identical colliders whatever its tier. Fetches no textures. */
@@ -315,7 +385,10 @@ export class ModelLibrary {
     const settled = await Promise.allSettled(stale.map(([, pending]) => pending));
     const resources = new Set<Texture | Material | BufferGeometry>();
     for (const result of settled) {
-      if (result.status === 'fulfilled') collectResources(result.value, resources);
+      if (result.status !== 'fulfilled') continue;
+      this.collectOwned(result.value, resources);
+      const hold = this.holds.get(result.value);
+      if (hold) this.releaseShared(hold.entries);
     }
     for (const resource of resources) resource.dispose();
     await this.pruneCollision(keep);
@@ -345,9 +418,14 @@ export class ModelLibrary {
     const models = await Promise.allSettled(this.cache.values());
     const seen = new Set<Texture | Material | BufferGeometry>();
     for (const result of models) {
-      if (result.status === 'fulfilled') collectResources(result.value, seen);
+      if (result.status === 'fulfilled') this.collectOwned(result.value, seen);
     }
     for (const item of seen) item.dispose();
+    const shared = [...this.sharedTextures.values()];
+    this.sharedTextures.clear();
+    for (const result of await Promise.allSettled(shared.map((entry) => entry.texture))) {
+      if (result.status === 'fulfilled') result.value.dispose();
+    }
     for (const texture of this.textures) texture.dispose();
     this.textures.length = 0;
     this.cache.clear();
@@ -358,12 +436,15 @@ export class ModelLibrary {
     }
     this.collision.clear();
   }
-}
 
-function collectResources(model: LoadedModel, out: Set<Texture | Material | BufferGeometry>): void {
-  for (const { geometry, material } of model.primitives) {
-    out.add(geometry);
-    out.add(material);
-    for (const value of Object.values(material)) if (value instanceof Texture) out.add(value);
+  /** The model's own geometry, materials and textures; shared textures are freed by reference count. */
+  private collectOwned(model: LoadedModel, out: Set<Texture | Material | BufferGeometry>): void {
+    for (const { geometry, material } of model.primitives) {
+      out.add(geometry);
+      out.add(material);
+      for (const value of Object.values(material)) {
+        if (value instanceof Texture && !this.sharedTextureObjects.has(value)) out.add(value);
+      }
+    }
   }
 }
