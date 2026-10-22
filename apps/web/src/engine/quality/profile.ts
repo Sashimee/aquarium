@@ -18,7 +18,8 @@ export interface QualityProfile {
   /**
    * Decoded GPU bytes, in MiB, that the textures of a demo tank may take at each tier: model,
    * substrate, fish and impostor maps plus the backdrop, mips included, once KTX2 is transcoded to
-   * a block-compressed format. `textureBudget.test.ts` holds every preset to it.
+   * the device class's worst block-compressed format: ETC2 on a phone, BC7 on a desktop, where
+   * ETC1S takes twice the bytes. `textureBudget.test.ts` holds every preset to it.
    */
   textureBudgetMiB: Readonly<Record<Tier, number>>;
 }
@@ -39,7 +40,7 @@ export const DESKTOP_PROFILE: Readonly<QualityProfile> = {
   frameCapFps: 60,
   pixelRatioCeiling: 1.5,
   maxTextureSize: 2048,
-  textureBudgetMiB: { low: 44, medium: 44, high: 112, ultra: 112 },
+  textureBudgetMiB: { low: 58, medium: 58, high: 156, ultra: 156 },
 };
 
 /**
@@ -68,6 +69,22 @@ export const MOBILE_PROFILE: Readonly<QualityProfile> = {
   maxTextureSize: 1024,
   textureBudgetMiB: { low: 44, medium: 44, high: 48, ultra: 48 },
 };
+
+export interface PointerEnvironment {
+  /** `(pointer: coarse)`: the primary pointer is a finger. */
+  readonly coarsePointer: boolean;
+  readonly platform: string;
+  readonly maxTouchPoints: number;
+}
+
+/**
+ * An iPad with a trackpad or mouse reports a fine primary pointer, but it has an iPad's memory.
+ * iPadOS calls itself MacIntel, and no Mac has a touch screen. `any-pointer: coarse` or touch points
+ * alone would also take in Windows touch laptops, which have a desktop GPU.
+ */
+export function isTouchFirst(env: PointerEnvironment): boolean {
+  return env.coarsePointer || (env.platform === 'MacIntel' && env.maxTouchPoints > 1);
+}
 
 export function qualityProfile(coarsePointer: boolean): Readonly<QualityProfile> {
   return coarsePointer ? MOBILE_PROFILE : DESKTOP_PROFILE;

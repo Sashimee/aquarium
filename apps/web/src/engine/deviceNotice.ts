@@ -3,6 +3,32 @@ export interface NoticeAction {
   run(): void;
 }
 
+const STACK_CLASS = 'engine-notices';
+
+/** Notices share one column so a WebGL 2 notice and a later loss notice stack, not overlap. */
+function noticeStack(parent: HTMLElement): HTMLElement {
+  const existing = parent.querySelector<HTMLElement>(`:scope > .${STACK_CLASS}`);
+  if (existing) return existing;
+  const stack = document.createElement('div');
+  stack.className = STACK_CLASS;
+  Object.assign(stack.style, {
+    position: 'fixed',
+    top: 'max(0.75rem, env(safe-area-inset-top))',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    // Above the loading screen (20): a phone can lose its device while the tank's textures upload.
+    zIndex: '30',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '0.5rem',
+    width: 'min(30rem, calc(100% - 1.5rem))',
+    pointerEvents: 'none',
+  } satisfies Partial<CSSStyleDeclaration>);
+  parent.appendChild(stack);
+  return stack;
+}
+
 /**
  * A banner about the graphics device, above the UI overlay. The engine shows it itself because the
  * overlay may be what failed to draw; the action defaults to dismissing it.
@@ -16,16 +42,11 @@ export function showDeviceNotice(
   box.className = 'engine-notice';
   box.setAttribute('role', 'alert');
   Object.assign(box.style, {
-    position: 'fixed',
-    top: 'max(0.75rem, env(safe-area-inset-top))',
-    left: '50%',
-    transform: 'translateX(-50%)',
-    // Above the loading screen (20): a phone can lose its device while the tank's textures upload.
-    zIndex: '30',
     display: 'flex',
     alignItems: 'center',
     gap: '0.75rem',
-    maxWidth: 'min(30rem, calc(100% - 1.5rem))',
+    maxWidth: '100%',
+    pointerEvents: 'auto',
     padding: '0.5rem 0.5rem 0.5rem 1rem',
     borderRadius: '1rem',
     background: 'var(--glass-strong, rgba(10, 20, 32, 0.9))',
@@ -51,12 +72,16 @@ export function showDeviceNotice(
     cursor: 'pointer',
   } satisfies Partial<CSSStyleDeclaration>);
 
-  const remove = () => box.remove();
+  const stack = noticeStack(parent);
+  const remove = () => {
+    box.remove();
+    if (stack.childElementCount === 0) stack.remove();
+  };
   button.addEventListener('click', () => {
     remove();
     action?.run();
   });
   box.append(text, button);
-  parent.appendChild(box);
+  stack.appendChild(box);
   return remove;
 }
