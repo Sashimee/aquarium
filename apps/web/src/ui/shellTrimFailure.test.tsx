@@ -44,6 +44,7 @@ describe('a trim tool chunk that fails to load', () => {
     act(() => root.unmount());
     container.remove();
     sessionStorage.clear();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -108,6 +109,7 @@ describe('a trim tool chunk that fails to load', () => {
     expect(container.querySelector('.crash-app')).toBeNull();
     expect(container.textContent).not.toContain('trim tool did not load');
 
+    vi.useFakeTimers();
     await act(async () => ui.interaction.emit('plant:picked', { pick: null }));
     expect(container.textContent).not.toContain('trim tool did not load');
 
@@ -118,8 +120,20 @@ describe('a trim tool chunk that fails to load', () => {
       'trim tool did not load',
     );
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 4600));
+      vi.advanceTimersByTime(4499);
+    });
+    expect(container.textContent).toContain('trim tool did not load');
+    await act(async () => {
+      vi.advanceTimersByTime(1);
     });
     expect(container.textContent).not.toContain('trim tool did not load');
-  }, 15_000);
+
+    await act(async () =>
+      ui.interaction.emit('plant:picked', { pick: { key: 's1' } as PlantPick }),
+    );
+    expect(container.textContent).toContain('trim tool did not load');
+    await act(async () => ui.interaction.emit('plant:picked', { pick: null }));
+    expect(container.textContent).not.toContain('trim tool did not load');
+    vi.useRealTimers();
+  });
 });

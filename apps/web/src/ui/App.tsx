@@ -203,7 +203,10 @@ export function TrimUnavailableToast({ active }: { active: boolean }) {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const off = interaction.on('plant:picked', ({ pick }) => {
       clearTimeout(timer);
-      if (pick === null) return;
+      if (pick === null) {
+        setShown(false);
+        return;
+      }
       setShown(true);
       timer = setTimeout(() => setShown(false), TRIM_HINT_MS);
     });
