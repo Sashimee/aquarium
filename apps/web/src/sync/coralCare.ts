@@ -4,7 +4,7 @@ import { ApiRequestError } from '../ui/api';
 export const DEFAULT_MAX_BLEACH = 0.3;
 
 export function coralLabel(assetId: string): string {
-  const name = assetId
+  const name = coralSpeciesId(assetId)
     .replace(/^coral[-_]/, '')
     .replace(/[-_]+/g, ' ')
     .trim();

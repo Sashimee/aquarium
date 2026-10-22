@@ -565,7 +565,7 @@ export class TankSession {
         if (!outcomeUnknown(error)) this.trimKeys.settle(intent);
         if (refusal === null) throw error;
         outcome.refusal = refusal;
-        if (error instanceof ApiRequestError && error.status === 409) {
+        if (error instanceof ApiRequestError && (error.status === 409 || error.status === 404)) {
           await this.resyncTank(tank.id, gen);
         }
         return;
@@ -742,7 +742,10 @@ export class TankSession {
       const next = await this.deps.api.tank(tankId);
       if (gen === this.loadId) this.apply(next);
     } catch (error) {
-      console.warn('could not refresh the tank after a refused trim; the next sync will', error);
+      console.warn(
+        'could not refresh the tank after a refused trim or cut; the next sync will',
+        error,
+      );
     }
   }
 
