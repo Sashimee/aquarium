@@ -8,9 +8,11 @@ import { App } from './App';
 import { UiProviders, type UiBridge } from './context';
 import { SessionProvider } from './session';
 
-vi.mock('./DecorPanel', () => {
-  throw new Error('Failed to fetch dynamically imported module');
-});
+vi.mock('./DecorPanel', () => ({
+  get default(): never {
+    throw new Error('Failed to fetch dynamically imported module');
+  },
+}));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -27,7 +29,12 @@ describe('a decorate panel that fails to load', () => {
   let root: Root;
   const errors: unknown[][] = [];
 
+  const reload = vi.fn();
+
   beforeEach(() => {
+    reload.mockClear();
+    sessionStorage.clear();
+    vi.spyOn(window.location, 'reload').mockImplementation(reload);
     container = document.createElement('div');
     document.body.append(container);
     root = createRoot(container);
@@ -48,7 +55,7 @@ describe('a decorate panel that fails to load', () => {
     vi.restoreAllMocks();
   });
 
-  it('keeps the menus, says what went wrong and still offers a way out', async () => {
+  async function openDecorate() {
     const ui: UiBridge = {
       engine: new EventBus<EngineEvents>(undefined, ['engine:ready']),
       interaction: new EventBus<InteractionEvents>(undefined, STICKY_INTERACTION_EVENTS),
@@ -70,6 +77,19 @@ describe('a decorate panel that fails to load', () => {
     );
     await act(async () => decorate?.click());
     await settle();
+  }
+
+  it('reloads once for the new build and keeps the menus meanwhile', async () => {
+    await openDecorate();
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('.hud')).not.toBeNull();
+    expect(container.querySelector('.sheet-decor')?.textContent).toContain('Reloading');
+  });
+
+  it('keeps the menus, says what went wrong and offers a way out after a recent reload', async () => {
+    sessionStorage.setItem('aquarium:stale-chunk-reload', String(Date.now()));
+    await openDecorate();
+    expect(reload).not.toHaveBeenCalled();
 
     expect(container.querySelector('.hud')).not.toBeNull();
     expect(container.querySelector('.dock')).not.toBeNull();

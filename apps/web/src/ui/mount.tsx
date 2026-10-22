@@ -7,6 +7,7 @@ import { App } from './App';
 import { UiProviders, type UiBridge } from './context';
 import { startPwa } from '../pwa/register';
 import { SessionProvider } from './session';
+import { watchStalePreloads } from './staleBuild';
 import './styles.css';
 import './game.css';
 import './photo.css';
@@ -19,6 +20,7 @@ export function mountUi(container: HTMLElement, bridge: UiBridge): () => void {
   const stopAudioBus = audio.attach(bridge.interaction);
   const stopAudio = audio.start();
   startPwa();
+  const stopStale = watchStalePreloads();
   const root = createRoot(container);
   root.render(
     <StrictMode>
@@ -34,6 +36,7 @@ export function mountUi(container: HTMLElement, bridge: UiBridge): () => void {
     stopAudioBus();
     stopAudio();
     stopMotion();
+    stopStale();
     root.unmount();
   };
 }
