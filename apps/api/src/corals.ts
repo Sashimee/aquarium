@@ -77,29 +77,60 @@ export function wireCorals(
 /**
  * Fragments cut before the fitted-coordinates fix were stored in raw preset coordinates. Moves them
  * by their colony's fit shift; safe to run on every start, since a moved fragment is out of the
- * reach that marks one as raw.
+ * reach that marks one as raw. Best effort: a tank that fails or is locked is skipped, never fatal.
  */
 export async function rehomeRawFrags(
   { db }: Database,
   presets: Presets,
   table: CoralTable,
-): Promise<number> {
+): Promise<RehomeReport> {
   const candidates = await db
     .select({ id: schema.tanks.id })
     .from(schema.tanks)
     .where(
-      and(isNull(schema.tanks.decorLayout), sql`jsonb_array_length(${schema.tanks.corals}) > 0`),
+      and(
+        eq(schema.tanks.biome, 'reef'),
+        isNull(schema.tanks.decorLayout),
+        sql`jsonb_path_exists(${schema.tanks.corals}, '$[*] ? (@.parentKey.type() == "string")')`,
+      ),
     );
   let moved = 0;
+  let failed = 0;
   for (const { id } of candidates) {
-    await db.transaction(async (tx) => {
+    try {
+      moved += await rehomeTank(db, id, presets, table);
+    } catch (err) {
+      failed++;
+      console.error(
+        `re-homing coral fragments failed for tank ${id}:`,
+        err instanceof Error ? err.name : 'unknown',
+      );
+    }
+  }
+  return { moved, failed };
+}
+
+export interface RehomeReport {
+  readonly moved: number;
+  readonly failed: number;
+}
+
+async function rehomeTank(
+  db: Database['db'],
+  id: string,
+  presets: Presets,
+  table: CoralTable,
+): Promise<number> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`set local lock_timeout = '2s'`);
+    {
       const [tank] = await tx
         .select()
         .from(schema.tanks)
         .where(and(eq(schema.tanks.id, id), isNull(schema.tanks.decorLayout)))
-        .for('update');
+        .for('update', { skipLocked: true });
       const authored = tank ? presets[tank.biome]?.decor : undefined;
-      if (!tank || !authored) return;
+      if (!tank || !authored) return 0;
       const corals = authored.filter((item) => table.species.has(coralSpeciesId(item.assetId)));
       const keys = layoutPlantKeys(
         corals.map((item) => ({ ...item, tintSeed: item.tintSeed ?? legacyTintSeed(item) })),
@@ -117,10 +148,9 @@ export async function rehomeRawFrags(
       const stored = storedCoralsSchema.parse(tank.corals);
       const next = rehomeFrags(stored, roots, table, substrateBounds(tank.size));
       const changed = next.filter((c, i) => c !== stored[i]).length;
-      if (changed === 0) return;
+      if (changed === 0) return 0;
       await tx.update(schema.tanks).set({ corals: next }).where(eq(schema.tanks.id, id));
-      moved += changed;
-    });
-  }
-  return moved;
+      return changed;
+    }
+  });
 }

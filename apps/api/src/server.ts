@@ -23,9 +23,9 @@ const config = loadConfig(process.env);
 
 const database = connect(config.databaseUrl);
 await runMigrations(database);
-console.log(
-  `re-homed ${await rehomeRawFrags(database, loadPresets(), loadCoralTable())} coral fragments`,
-);
+// TODO(owner): remove this call once devfish has run it, before dev -> main (#1132).
+const rehomed = await rehomeRawFrags(database, loadPresets(), loadCoralTable());
+console.log(`re-homed ${rehomed.moved} coral fragments, ${rehomed.failed} tanks failed`);
 
 const mailer = createMailer(
   createSmtpTransport(config.smtp.host, config.smtp.port),
