@@ -451,6 +451,20 @@ describe('PipelineFailureHandler', () => {
     expect(reports).toHaveLength(1);
   });
 
+  it('drops effects attached again after a drop when they fail in turn', async () => {
+    const { effects, reports, handler } = setup();
+    handler.handle(failure(null, 'submit used a destroyed texture'));
+    await settle();
+    effects.active = true;
+    handler.handle(failure(null, 'post link failed'));
+    await settle();
+    expect(effects.failures).toEqual([
+      new Error('submit used a destroyed texture'),
+      new Error('post link failed'),
+    ]);
+    expect(reports).toEqual([]);
+  });
+
   it('reports a compute failure once by its message', () => {
     const { effects, reports, handler } = setup();
     const compute: PipelineFailure = { kind: 'compute', materialId: null, message: 'bad' };

@@ -26,6 +26,11 @@ export interface ControllerConfig {
   cooldownMs: number;
   /** A step down this soon after stepping up doubles the hold needed to retry that tier. */
   probationMs: number;
+  /**
+   * A tier just stepped down from may not be re-entered for this long, so a device whose timings
+   * sit near a threshold settles instead of rebuilding its pipelines back and forth.
+   */
+  reentryHoldMs: number;
   /** Larger samples are hitches (tab switch, GC, shader compile) and are dropped. */
   ignoreAboveMs: number;
   minTier: Tier;
@@ -45,6 +50,7 @@ export const DEFAULT_CONTROLLER_CONFIG: Omit<
   maxUpHoldMs: 120_000,
   cooldownMs: 3000,
   probationMs: 20_000,
+  reentryHoldMs: 60_000,
   ignoreAboveMs: 250,
   minTier: 'low',
   maxTier: 'ultra',
@@ -66,6 +72,8 @@ export class TierController {
   private lastChangeAt = Number.NEGATIVE_INFINITY;
   private lastUpgrade: { tier: Tier; at: number } | null = null;
   private readonly upHold = new Map<Tier, number>();
+  private readonly blockedUntil = new Map<Tier, number>();
+  private pausedUntil = Number.NEGATIVE_INFINITY;
 
   constructor(initial: Tier, config: ControllerConfig) {
     if (!(config.targetMs > 0)) throw new RangeError('TierController: targetMs must be > 0');
@@ -94,10 +102,32 @@ export class TierController {
     this.lastUpgrade = null;
   }
 
+  /** Keeps the controller from stepping up into `tier` or above it before `untilMs`. */
+  holdBelow(tier: Tier, untilMs: number): void {
+    for (let i = tierIndex(tier); i <= tierIndex(this.config.maxTier); i++) {
+      const held = tierAt(i);
+      this.blockedUntil.set(
+        held,
+        Math.max(this.blockedUntil.get(held) ?? Number.NEGATIVE_INFINITY, untilMs),
+      );
+    }
+  }
+
+  /**
+   * A load or pipeline compile is stalling frames now: they say nothing about the tier, so the
+   * window restarts and samples are ignored for a cooldown, as after a change.
+   */
+  pause(nowMs: number): void {
+    this.window.length = 0;
+    this.overSince = null;
+    this.underSince = null;
+    this.pausedUntil = nowMs + this.config.cooldownMs;
+  }
+
   sample(ms: number, nowMs: number): TierChange | null {
     const c = this.config;
     if (!Number.isFinite(ms) || ms <= 0 || ms > c.ignoreAboveMs) return null;
-    if (nowMs - this.lastChangeAt < c.cooldownMs) return null;
+    if (nowMs - this.lastChangeAt < c.cooldownMs || nowMs < this.pausedUntil) return null;
 
     this.window.push(ms);
     if (this.window.length > c.windowSize) this.window.shift();
@@ -115,7 +145,7 @@ export class TierController {
     }
 
     this.overSince = null;
-    const next = this.nextUp();
+    const next = this.nextUp(nowMs);
     if (next !== null && this.hasHeadroomFor(next, meanMs)) {
       this.underSince ??= nowMs;
       if (nowMs - this.underSince >= this.upHoldFor(next)) {
@@ -141,9 +171,10 @@ export class TierController {
     return this.config.signal === 'gpu' ? TIER_GPU_SHARE[tier] : 1;
   }
 
-  private nextUp(): Tier | null {
+  private nextUp(nowMs: number): Tier | null {
     if (this.current === this.config.maxTier) return null;
-    return tierAt(tierIndex(this.current) + 1);
+    const next = tierAt(tierIndex(this.current) + 1);
+    return nowMs < (this.blockedUntil.get(next) ?? Number.NEGATIVE_INFINITY) ? null : next;
   }
 
   private stepDown(meanMs: number, nowMs: number): TierChange {
@@ -156,6 +187,7 @@ export class TierController {
       this.upHold.set(from, Math.min(this.upHoldFor(from) * 2, this.config.maxUpHoldMs));
     }
     this.lastUpgrade = null;
+    this.holdBelow(from, nowMs + this.config.reentryHoldMs);
     this.current = tierAt(tierIndex(from) - 1);
     this.restartWindow(nowMs);
     return { from, to: this.current, reason: 'over-budget', meanMs };

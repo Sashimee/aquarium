@@ -30,6 +30,31 @@ function feed(q: QualityManager, frameMs: number, gpuMs: number | null, from: nu
   return t;
 }
 
+/** Feeds frames as long as `frameAt(i)` says from `from` until `to`, returning the end time. */
+function feedTrace(
+  q: QualityManager,
+  frameAt: (i: number) => { frameMs: number; gpuMs: number | null },
+  from: number,
+  to: number,
+) {
+  let t = from;
+  for (let i = 0; t <= to; i++) {
+    const { frameMs, gpuMs } = frameAt(i);
+    t += frameMs;
+    q.sample(frameMs, gpuMs, t);
+  }
+  return t;
+}
+
+/** Three frames in five stall for pipeline compiles; the others run at the display rate. */
+function compiling(i: number) {
+  return i % 5 < 3 ? { frameMs: 120, gpuMs: null } : { frameMs: TARGET, gpuMs: null };
+}
+
+function steady() {
+  return { frameMs: TARGET, gpuMs: null };
+}
+
 describe('QualityManager', () => {
   it('applies the current tier to a feature on registration', () => {
     const { applied } = setup();
@@ -444,5 +469,73 @@ describe('QualityManager', () => {
     const { quality } = setup();
     quality.start(0);
     expect(() => quality.start(1)).toThrow(/already started/);
+  });
+
+  it('keeps high through the compile stalls after the content arrives, with no thrash', () => {
+    const { quality, announced } = setup({ awaitContent: true, gpuTiming: false });
+    quality.start(0);
+    let t = feed(quality, TARGET, null, 0, 2400);
+    quality.contentReady(t);
+    t = feedTrace(quality, compiling, t, t + 4000);
+    feedTrace(quality, steady, t, t + 120_000);
+    expect(quality.probing).toBe(false);
+    expect(quality.tier).toBe('high');
+    expect(announced).toEqual([{ from: null, to: 'high', reason: 'probe' }]);
+  });
+
+  it('decides from the frames between the stalls once the probe has run for maxProbeMs', () => {
+    const { quality, announced } = setup({ gpuTiming: false, maxProbeMs: 6000 });
+    quality.start(0);
+    const t = feedTrace(quality, compiling, 0, 5000);
+    expect(quality.probing).toBe(true);
+    feedTrace(quality, compiling, t, 9000);
+    expect(quality.probing).toBe(false);
+    expect(quality.tier).toBe('high');
+    expect(announced).toEqual([{ from: null, to: 'high', reason: 'probe' }]);
+  });
+
+  it('restarts the probe when told of a stall, until maxProbeMs', () => {
+    const { quality } = setup({ maxProbeMs: 4000 });
+    quality.start(0);
+    let t = feed(quality, TARGET, 14, 0, 2000);
+    quality.stall(t);
+    t = feed(quality, TARGET, 14, t, 2400);
+    expect(quality.probing).toBe(true);
+    t = feed(quality, TARGET, 14, t, 4100);
+    expect(quality.probing).toBe(true);
+    quality.stall(t);
+    feed(quality, TARGET, 14, t, 4500);
+    expect(quality.probing).toBe(false);
+    expect(quality.tier).toBe('medium');
+  });
+
+  it('does not let the controller step down on stalls it was told of', () => {
+    const { quality, announced } = setup({ gpuTiming: false });
+    quality.start(0);
+    let t = feed(quality, TARGET, null, 0, 2400);
+    for (let i = 0; i < 10; i++) {
+      quality.stall(t);
+      t = feed(quality, 60, null, t, t + 1000);
+    }
+    feed(quality, TARGET, null, t, t + 10_000);
+    expect(announced).toEqual([{ from: null, to: 'high', reason: 'probe' }]);
+  });
+
+  it('does not climb back into the tiers the content probe dropped from for a long hold', () => {
+    const { quality, announced } = setup({ awaitContent: true, gpuTiming: false });
+    quality.start(0);
+    let t = feed(quality, TARGET, null, 0, 2400);
+    quality.contentReady(t);
+    t = feed(quality, 3 * TARGET, null, t, t + 2400);
+    expect(quality.tier).toBe('low');
+    const droppedAt = t;
+    t = feed(quality, TARGET, null, t, t + 55_000);
+    expect(quality.tier).toBe('low');
+    feed(quality, TARGET, null, t, droppedAt + 120_000);
+    expect(announced.slice(1)).toEqual([
+      { from: 'high', to: 'low', reason: 'probe' },
+      { from: 'low', to: 'medium', reason: 'headroom' },
+      { from: 'medium', to: 'high', reason: 'headroom' },
+    ]);
   });
 });
