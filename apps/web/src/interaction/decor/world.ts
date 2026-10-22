@@ -1,8 +1,7 @@
 import type { Biome, Collider, Coral, DecorItem, DecorLayout } from '@aquarium/shared';
-import type { TankDimensions } from '../../engine/tank/dimensions';
 import type { EventBus } from '../../engine/events';
 import type { CatalogEntry } from '../../scene/assets';
-import type { CurrentParameters } from '../../scene/current';
+import type { ScaleCap } from '../../scene/coralGrowth';
 import type { InteractionEvents } from '../events';
 import type { FeederLayer } from './feederLayer';
 import { collidersFor } from './colliders';
@@ -40,8 +39,7 @@ type CoralBounds = {
 
 /** What the world needs to size grown corals the way the scene draws them. */
 export interface CoralEnv {
-  dimensions(): TankDimensions;
-  current(): CurrentParameters;
+  cap(): ScaleCap;
   /** Model-space bounds of a procedural coral, whose asset ids are not in the catalog. */
   proceduralBounds(assetId: string): CoralBounds | null;
 }
@@ -189,8 +187,7 @@ export class DecorWorld {
       fixed: this.unmanaged,
       specs: this.specs,
       corals: this.corals,
-      dimensions: env.dimensions(),
-      current: env.current(),
+      cap: env.cap(),
       ground: (x, z) => this.scene.groundHeight(x, z),
       boundsOf: (assetId) => this.catalogBounds.get(assetId) ?? env.proceduralBounds(assetId),
     });

@@ -1,20 +1,18 @@
 import type { Collider, Coral, DecorItem } from '@aquarium/shared';
-import type { TankDimensions } from '../../engine/tank/dimensions';
 import {
   grownCoralItem,
+  grownEuphylliaCapsule,
   matchLayoutCorals,
   placeFragments,
   type CoralSlot,
   type ScaleCap,
 } from '../../scene/coralGrowth';
-import type { CurrentParameters } from '../../scene/current';
-import { euphylliaCollider, euphylliaReach, parseEuphylliaId } from '../../scene/euphyllia';
-import { maxScaleAt } from '../../scene/presetFit';
+import { parseEuphylliaId, type EuphylliaCapsule, type EuphylliaMesh } from '../../scene/euphyllia';
 import { collidersFor } from './colliders';
 import type { Piece } from './layout';
 import type { DecorSpec } from './spec';
 
-type CoralBounds = Parameters<typeof euphylliaCollider>[0];
+type CoralBounds = EuphylliaMesh['bounds'];
 
 export interface CoralColliderInput {
   readonly pieces: readonly Piece[];
@@ -22,9 +20,8 @@ export interface CoralColliderInput {
   readonly fixed: readonly DecorItem[];
   readonly specs: ReadonlyMap<string, DecorSpec>;
   readonly corals: readonly Coral[];
-  readonly dimensions: TankDimensions;
-  /** The current the scene sways the euphyllia in, so growth is capped by their reach. */
-  readonly current: CurrentParameters;
+  /** The scene's own cap, so growth stops where the scene stops drawing it. */
+  readonly cap: ScaleCap;
   readonly ground: (x: number, z: number) => number;
   /** Model-space bounds of a coral asset at scale 1, or null when unknown. */
   readonly boundsOf: (assetId: string) => CoralBounds | null;
@@ -39,9 +36,15 @@ export interface GrownCorals {
 
 type Origin = { readonly piece: number } | { readonly fixed: number };
 
-function softCapsule(id: string, item: DecorItem, bounds: CoralBounds): Collider {
-  const { kind, a, b, radius } = euphylliaCollider(bounds, item);
-  return { id, kind, hard: false, a: [...a], b: [...b], radius };
+function softCapsule(id: string, { centre, radius, height, lean }: EuphylliaCapsule): Collider {
+  return {
+    id,
+    kind: 'capsule',
+    hard: false,
+    a: [centre[0] - lean[0] / 2, centre[1] - height / 2, centre[2] - lean[1] / 2],
+    b: [centre[0] + lean[0] / 2, centre[1] + height / 2, centre[2] + lean[1] / 2],
+    radius,
+  };
 }
 
 /**
@@ -51,7 +54,7 @@ function softCapsule(id: string, item: DecorItem, bounds: CoralBounds): Collider
  * surface limit the scene draws it with.
  */
 export function growCorals(input: CoralColliderInput): GrownCorals {
-  const { pieces, fixed, specs, corals, dimensions, current, ground, boundsOf } = input;
+  const { pieces, fixed, specs, corals, cap, ground, boundsOf } = input;
   if (corals.length === 0) return { pieces, extra: [] };
 
   const slots: CoralSlot[] = [];
@@ -67,15 +70,6 @@ export function growCorals(input: CoralColliderInput): GrownCorals {
     origins.push({ piece: i });
   });
 
-  const cap: ScaleCap = (item) => {
-    const bounds = boundsOf(item.assetId);
-    if (!bounds) return maxScaleAt(item, dimensions, null);
-    const swaying = parseEuphylliaId(item.assetId) !== null;
-    return maxScaleAt(item, dimensions, {
-      bounds,
-      swayReach: swaying ? (grown) => euphylliaReach(bounds, grown, current) : null,
-    });
-  };
   const matched = matchLayoutCorals(slots, corals);
   const grownPieces = [...pieces];
   const extra: Collider[] = [];
@@ -91,7 +85,12 @@ export function growCorals(input: CoralColliderInput): GrownCorals {
     }
     const bounds = boundsOf(slot.assetId);
     if (grown.scale !== slot.item.scale && bounds) {
-      extra.push(softCapsule(`decor:coral:${coral.key}`, grown, bounds));
+      extra.push(
+        softCapsule(
+          `decor:coral:${coral.key}`,
+          grownEuphylliaCapsule(bounds, slot.item, coral, cap),
+        ),
+      );
     }
   });
 
@@ -102,7 +101,13 @@ export function growCorals(input: CoralColliderInput): GrownCorals {
       continue;
     }
     const bounds = parseEuphylliaId(item.assetId) ? boundsOf(item.assetId) : null;
-    if (bounds) extra.push(softCapsule(`decor:coral:${coral.key}`, item, bounds));
+    if (bounds)
+      extra.push(
+        softCapsule(
+          `decor:coral:${coral.key}`,
+          grownEuphylliaCapsule(bounds, item, undefined, cap),
+        ),
+      );
   }
   return { pieces: grownPieces, extra };
 }

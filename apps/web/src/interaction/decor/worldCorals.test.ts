@@ -3,12 +3,16 @@ import { describe, expect, it } from 'vitest';
 import catalog from '../../../public/assets/index.json';
 import { TANK_DIMENSIONS } from '../../engine/tank/dimensions';
 import { EventBus } from '../../engine/events';
-import type { CatalogEntry } from '../../scene/assets';
+import { AssetCatalog, type CatalogEntry } from '../../scene/assets';
+import { coralScaleCap } from '../../scene/coralGrowth';
 import type { InteractionEvents } from '../events';
 import { FeederLayer } from './feederLayer';
 import { flat, item, must } from './fixtures';
 import { DecorWorld, type DecorScenePort } from './world';
 
+const sceneCatalog = new AssetCatalog(
+  catalog.assets as ConstructorParameters<typeof AssetCatalog>[0],
+);
 const CURRENT = { direction: [1, 0] as const, speed: 0.04, gustPeriodS: 9, gustDepth: 0.4 };
 
 const preset: DecorItem[] = [
@@ -50,9 +54,8 @@ function setup(withEnv = true) {
     new FeederLayer(),
     withEnv
       ? {
-          dimensions: () => TANK_DIMENSIONS.standard,
+          cap: () => coralScaleCap(sceneCatalog, TANK_DIMENSIONS.standard, CURRENT),
           proceduralBounds: () => null,
-          current: () => CURRENT,
         }
       : undefined,
   );

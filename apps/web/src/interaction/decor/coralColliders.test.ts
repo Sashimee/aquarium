@@ -2,6 +2,12 @@ import type { Collider, Coral } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import { TANK_DIMENSIONS } from '../../engine/tank/dimensions';
 import catalog from '../../../public/assets/index.json';
+import { AssetCatalog } from '../../scene/assets';
+import { coralScaleCap, grownCoralItem, grownEuphylliaCapsule } from '../../scene/coralGrowth';
+import { reachCurrent, type CurrentParameters } from '../../scene/current';
+import { generateEuphyllia } from '../../scene/euphyllia';
+import { loadPreset } from '../../scene/preset';
+import { DEFAULT_CURRENT } from '../../scene/TankScene';
 import { growCorals, type CoralColliderInput } from './coralColliders';
 import { collidersFor } from './colliders';
 import { flat, item, must, SPECS, spec } from './fixtures';
@@ -30,10 +36,12 @@ const CALM = {
   gustDepth: 0.4,
 };
 const EUPHYLLIA = 'euphyllia-hammer-12';
-const euphylliaBounds: { min: [number, number, number]; max: [number, number, number] } = {
-  min: [-0.06, 0, -0.06],
-  max: [0.06, 0.1, 0.06],
-};
+const euphylliaBounds = generateEuphyllia('hammer', 12, 2).bounds;
+const sceneCatalog = new AssetCatalog(
+  catalog.assets as ConstructorParameters<typeof AssetCatalog>[0],
+);
+const capIn = (current: CurrentParameters) =>
+  coralScaleCap(sceneCatalog, TANK_DIMENSIONS.standard, current);
 
 const coral = (over: Partial<Coral> = {}): Coral => ({
   key: 's7',
@@ -55,8 +63,7 @@ function input(over: Partial<CoralColliderInput> = {}): CoralColliderInput {
     fixed: [],
     specs: SPECS,
     corals: [],
-    dimensions: TANK_DIMENSIONS.standard,
-    current: CALM,
+    cap: capIn(CALM),
     ground: flat,
     boundsOf: (id) => (id === EUPHYLLIA ? euphylliaBounds : (bounds.get(id) ?? null)),
     ...over,
@@ -114,13 +121,13 @@ describe('growCorals', () => {
 
   it('holds a euphyllia further from the glass in a stronger current', () => {
     const near = item(EUPHYLLIA, 0.3, 0, { tintSeed: 7 });
-    const scaleIn = (current: CoralColliderInput['current']): number => {
+    const scaleIn = (current: CurrentParameters): number => {
       const { extra } = growCorals(
         input({
           pieces: [],
           fixed: [near],
           corals: [coral({ assetId: EUPHYLLIA, size: 3 })],
-          current,
+          cap: capIn(current),
         }),
       );
       const capsule = must(extra.find((c) => c.id === 'decor:coral:s7'));
@@ -189,5 +196,40 @@ describe('growCorals', () => {
     const capsule = must(grown.extra.find((c) => c.id === 'decor:coral:s4'));
     expect(capsule.kind).toBe('capsule');
     expect(capsule.hard).toBe(false);
+  });
+
+  it('is the capsule the scene builds for a near-glass euphyllia, lean included', () => {
+    const dimensions = TANK_DIMENSIONS.standard;
+    const mesh = generateEuphyllia('hammer', 3, 2);
+    const nearGlass = item(
+      'euphyllia-hammer-3',
+      dimensions.length / 2 - dimensions.glass - 0.25,
+      0,
+      {
+        tintSeed: 3,
+      },
+    );
+    const colony = coral({ key: 's3', assetId: nearGlass.assetId, tintSeed: 3, size: 2.5 });
+    const reef = reachCurrent(loadPreset('reef').current ?? DEFAULT_CURRENT, 'reef');
+    const cap = capIn(reef);
+    const { extra } = growCorals(
+      input({
+        pieces: [],
+        fixed: [{ ...nearGlass, rotationY: 0.4 }],
+        corals: [colony],
+        cap,
+        boundsOf: () => mesh.bounds,
+      }),
+    );
+    const collider = must(extra.find((c) => c.id === 'decor:coral:s3'));
+    if (collider.kind !== 'capsule') throw new Error('expected a capsule');
+    const scene = grownEuphylliaCapsule(mesh.bounds, { ...nearGlass, rotationY: 0.4 }, colony, cap);
+    expect(collider.radius).toBe(scene.radius);
+    expect(collider.a[0]).toBeCloseTo(scene.centre[0] - scene.lean[0] / 2);
+    expect(collider.a[2]).toBeCloseTo(scene.centre[2] - scene.lean[1] / 2);
+    expect(collider.b[0]).toBeCloseTo(scene.centre[0] + scene.lean[0] / 2);
+    expect(collider.b[2]).toBeCloseTo(scene.centre[2] + scene.lean[1] / 2);
+    expect(collider.b[1]).toBeCloseTo(scene.centre[1] + scene.height / 2);
+    expect(grownCoralItem(nearGlass, colony, cap).scale).toBeLessThan(2.5);
   });
 });
