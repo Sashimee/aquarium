@@ -106,6 +106,18 @@ describe('placeFragments', () => {
     expect(placed?.item.scale).toBeCloseTo(0.2);
   });
 
+  it('floors a non-euphyllia coral the cap says sways', () => {
+    const cap = Object.assign(() => 0, { sways: () => true });
+    const [placed] = placeFragments([slot(item(5, 0, 0.8))], [root, frag], flat, cap);
+    expect(placed?.item.scale).toBeCloseTo(0.2);
+  });
+
+  it('holds a euphyllia fragment to the cap when the cap says it is rigid', () => {
+    const cap = Object.assign(() => 0, { sways: () => false });
+    const [placed] = placeFragments([slot(sway(5, 0.8))], [swayRoot, swayFrag], flat, cap);
+    expect(placed?.item.scale).toBe(0);
+  });
+
   it('lets a cap above the floor win for a swaying fragment', () => {
     const [placed] = placeFragments([slot(sway(5, 0.8))], [swayRoot, swayFrag], flat, () => 0.22);
     expect(placed?.item.scale).toBeCloseTo(0.22);
