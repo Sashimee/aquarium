@@ -125,9 +125,31 @@ describe('effect text', () => {
     expect(effectText('co2', 2, cp)).toMatch(/Lowers the pH by 1 /);
   });
 
-  it('is honest that a stronger heater changes nothing the fish can feel', () => {
+  it('says a stronger heater warms a cold tank faster but settles on the same temperature', () => {
     expect(effectText('heater', 1, cp)).toContain('31');
-    expect(effectText('heater', 3, cp)).toMatch(/adds headroom and nothing else/);
+    expect(effectText('heater', 2, cp)).toMatch(/2 times as fast as tier 1.*same temperature/);
+    expect(effectText('heater', 3, cp)).toMatch(/3 times as fast as tier 1.*same temperature/);
+    expect(effectText('heater', 3, cp)).not.toMatch(/nothing else/);
+  });
+
+  it('falls back to the headroom sentence when the warm-up rate gives no speed-up', () => {
+    const withRate = (rate: number, drift = cp.temperature.driftPerHour) => ({
+      ...cp,
+      temperature: { ...cp.temperature, driftPerHour: drift, heaterWarmupRatePerHourPerTier: rate },
+    });
+    expect(effectText('heater', 3, withRate(0))).toMatch(/adds headroom and nothing else/);
+    expect(effectText('heater', 2, withRate(0.1, 0.2))).toMatch(/adds headroom and nothing else/);
+    const flat = effectText('heater', 2, withRate(0, 0));
+    expect(flat).toMatch(/adds headroom and nothing else/);
+    expect(flat).not.toMatch(/NaN/);
+  });
+
+  it('weighs the speed-up against drift, not just the tier number', () => {
+    const tuned = {
+      ...cp,
+      temperature: { ...cp.temperature, driftPerHour: 0.15, heaterWarmupRatePerHourPerTier: 0.1 },
+    };
+    expect(effectText('heater', 2, tuned)).toMatch(/1\.33 times as fast as tier 1/);
   });
 
   it('gives the filter media share of a full colony, capped at all of it', () => {

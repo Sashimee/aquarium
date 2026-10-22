@@ -29,13 +29,23 @@ function atTier(values: readonly number[], tier: number): number {
 
 const times = (n: number): string => `${Number(n.toFixed(2))} times`;
 
+function heaterWarmupSpeedup(tier: number, cp: ChemistryParameters): number {
+  const { driftPerHour, heaterWarmupRatePerHourPerTier: rate } = cp.temperature;
+  return Math.max(driftPerHour, rate * tier) / Math.max(driftPerHour, rate);
+}
+
 /** What a tier does in the water model, worded from the same numbers the server steps with. */
 export function effectText(device: Device, tier: number, cp: ChemistryParameters): string {
   switch (device) {
-    case 'heater':
-      return tier === 1
-        ? `Warms the tank to the temperature its fish like. One heater already reaches 31 °C in a ${cp.temperature.roomC} °C room.`
+    case 'heater': {
+      if (tier === 1) {
+        return `Warms the tank to the temperature its fish like. One heater already reaches 31 °C in a ${cp.temperature.roomC} °C room.`;
+      }
+      const speedup = Number(heaterWarmupSpeedup(tier, cp).toFixed(2));
+      return speedup > 1
+        ? `Warms a cold tank ${times(speedup)} as fast as tier 1 does, then settles on the same temperature.`
         : 'Same temperatures as tier 1: the heat the fish want is already within reach, so this adds headroom and nothing else.';
+    }
     case 'filter': {
       const share = Math.round(Math.min(1, tier * cp.bacteria.mediaCapacityPerFilterTier) * 100);
       return `Its media hosts up to ${share}% of the bacteria a full tank can use, which clear ammonia and nitrite.`;
