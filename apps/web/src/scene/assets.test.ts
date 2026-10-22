@@ -526,63 +526,41 @@ describe('ModelLibrary shared model textures', () => {
     return fail;
   }
 
-  it('keeps a newer model cache entry when an older load of the same key fails', async () => {
-    const fail = failFirstGltfLoad();
-    const first = library.load(MEMBER, 0, 1024);
-    const firstResult = first.catch((error: unknown) => error);
-    const retaining = library.retainOnly(new Set());
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    const second = library.load(MEMBER, 0, 1024);
-    fail();
-    expect(await firstResult).toBeInstanceOf(Error);
-    await retaining;
+  const raceCases = [
+    ['model', 'retainOnly', '', (l: ModelLibrary) => l.load(MEMBER, 0, 1024)],
+    ['collision', 'retainOnly', '', (l: ModelLibrary) => l.collisionGeometry(MEMBER)],
+    [
+      'model',
+      'dispose',
+      ' (until the disposed library frees the newer load)',
+      (l: ModelLibrary) => l.load(MEMBER, 0, 1024),
+    ],
+    [
+      'collision',
+      'dispose',
+      ' (until the disposed library frees the newer load)',
+      (l: ModelLibrary) => l.collisionGeometry(MEMBER),
+    ],
+  ] as const;
 
-    expect(library.load(MEMBER, 0, 1024)).toBe(second);
-    await second;
-  });
+  it.each(raceCases)(
+    'keeps a newer %s cache entry when %s evicts an older load that then fails%s',
+    async (_cache, eviction, _scope, request) => {
+      const fail = failFirstGltfLoad();
+      const first = request(library);
+      const firstResult = first.catch((error: unknown) => error);
+      const evicting =
+        eviction === 'retainOnly' ? library.retainOnly(new Set()) : library.dispose();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const second = request(library);
+      fail();
+      expect(await firstResult).toBeInstanceOf(Error);
+      await evicting;
 
-  it('keeps a newer collision entry when an older load of the same asset fails', async () => {
-    const fail = failFirstGltfLoad();
-    const first = library.collisionGeometry(MEMBER);
-    const firstResult = first.catch((error: unknown) => error);
-    const retaining = library.retainOnly(new Set());
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    const second = library.collisionGeometry(MEMBER);
-    fail();
-    expect(await firstResult).toBeInstanceOf(Error);
-    await retaining;
-
-    expect(library.collisionGeometry(MEMBER)).toBe(second);
-    await second;
-  });
-
-  it('keeps a newer model cache entry when dispose evicts an older load that then fails', async () => {
-    const fail = failFirstGltfLoad();
-    const first = library.load(MEMBER, 0, 1024);
-    const firstResult = first.catch((error: unknown) => error);
-    const disposing = library.dispose();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    const second = library.load(MEMBER, 0, 1024);
-    fail();
-    expect(await firstResult).toBeInstanceOf(Error);
-    await disposing;
-
-    expect(library.load(MEMBER, 0, 1024)).toBe(second);
-    await second;
-  });
-
-  it('keeps a newer collision entry when dispose evicts an older load that then fails', async () => {
-    const fail = failFirstGltfLoad();
-    const first = library.collisionGeometry(MEMBER);
-    const firstResult = first.catch((error: unknown) => error);
-    const disposing = library.dispose();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    const second = library.collisionGeometry(MEMBER);
-    fail();
-    expect(await firstResult).toBeInstanceOf(Error);
-    await disposing;
-
-    expect(library.collisionGeometry(MEMBER)).toBe(second);
-    await second;
-  });
+      // After dispose the library stays disposed, so `second` is freed and evicted once it
+      // finishes; this checks the entry only up to that point.
+      expect(request(library)).toBe(second);
+      await second;
+    },
+  );
 });
