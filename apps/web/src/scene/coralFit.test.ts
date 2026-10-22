@@ -55,7 +55,7 @@ const isCoral = (item: DecorItem) =>
   parseEuphylliaId(item.assetId) !== null || catalog.get(item.assetId).kind === 'coral';
 
 function reefCorals(): DecorItem[] {
-  const fitted = fitPresetToCatalog(loadPreset('reef'), dimensions, catalog);
+  const fitted = fitPresetToCatalog(loadPreset('reef'), 'standard', dimensions, catalog);
   return fitted.decor.filter((item) => isCoral(item));
 }
 
@@ -162,7 +162,7 @@ describe('maxScaleAt', () => {
   });
 
   it('agrees with the fit: a fitted preset item sits at or under its cap', () => {
-    const fitted = fitPresetToTank(loadPreset('reef'), dimensions, modelOf, () => 0);
+    const fitted = fitPresetToTank(loadPreset('reef'), 'standard', dimensions, modelOf, () => 0);
     for (const item of fitted.decor.filter((i) => isCoral(i))) {
       expect(cap(item)).toBeGreaterThanOrEqual(item.scale - 1e-6);
     }

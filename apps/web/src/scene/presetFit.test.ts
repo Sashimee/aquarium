@@ -25,7 +25,7 @@ describe('fitPresetToTank', () => {
         },
       ],
     };
-    const [item] = fitPresetToTank(preset, DEFAULT_TANK, boundsOf, () => 0).decor;
+    const [item] = fitPresetToTank(preset, 'standard', DEFAULT_TANK, boundsOf, () => 0).decor;
     const [x, y, z] = item?.position ?? [0, 0, 0];
     expect(z).toBeLessThan(0.1);
     expect(y).toBeCloseTo(substrateHeight(DEFAULT_TANK, x, z), 10);
@@ -51,7 +51,7 @@ describe('fitPresetToTank', () => {
     };
     const swaying = (scale: number) => 0.063 + 0.173 * scale;
     const std200 = { ...DEFAULT_TANK, length: 1, depth: 0.4 };
-    const [patch] = fitPresetToTank(preset, std200, boundsOf, (p) =>
+    const [patch] = fitPresetToTank(preset, 'std200', std200, boundsOf, (p) =>
       swaying(p.scale[1]),
     ).plantPatches;
     expect(patch?.center[1]).toBeLessThan(-0.07);

@@ -9,6 +9,7 @@ import {
   type Plant,
   type PlantPatch,
   type PresetLayout,
+  type TankSize,
 } from '@aquarium/shared';
 import type { Engine } from '../engine/Engine';
 import type { TankDimensions } from '../engine/tank/dimensions';
@@ -282,7 +283,7 @@ export class TankScene {
     const settings = engine.quality.settings;
     const tier = engine.quality.tier;
     const dimensions = engine.tank.dimensions;
-    const preset = fitPresetToCatalog(authored, dimensions, catalog);
+    const preset = fitPresetToCatalog(authored, engine.tankSize, dimensions, catalog);
 
     const hardItems: { item: DecorItem; kind: string }[] = [];
     const layoutPlants: DecorItem[] = [];
@@ -1118,12 +1119,18 @@ export class TankScene {
 
 export function fitPresetToCatalog(
   preset: PresetLayout,
+  size: TankSize,
   dimensions: TankDimensions,
   catalog: Pick<AssetCatalog, 'get'>,
 ): PresetLayout {
   const current = reachCurrent(preset.current ?? DEFAULT_CURRENT, preset.biome);
-  return fitPresetToTank(preset, dimensions, boundsFromCatalog(catalog, current), (patch, axis) =>
-    plantReach(patch.assetId, catalog.get(patch.assetId).bounds, current)(patch.scale[1], axis),
+  return fitPresetToTank(
+    preset,
+    size,
+    dimensions,
+    boundsFromCatalog(catalog, current),
+    (patch, axis) =>
+      plantReach(patch.assetId, catalog.get(patch.assetId).bounds, current)(patch.scale[1], axis),
   );
 }
 
