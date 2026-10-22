@@ -1,5 +1,6 @@
 import {
   Box3,
+  DepthTexture,
   Frustum,
   HalfFloatType,
   Matrix4,
@@ -17,7 +18,19 @@ import {
   type Object3D,
   type Scene,
 } from 'three/webgpu';
-import { mrt, output, screenUV, texture } from 'three/tsl';
+import {
+  float,
+  getViewPosition,
+  max,
+  mrt,
+  output,
+  screenUV,
+  texture,
+  uniform,
+  vec2,
+  vec3,
+  vec4,
+} from 'three/tsl';
 
 /** Objects on this layer are drawn by the scene camera but left out of the surface reflection. */
 export const UNREFLECTED_LAYER = 1;
@@ -33,6 +46,51 @@ const _viewProjection = new Matrix4();
 const _frustum = new Frustum();
 const _size = new Vector2();
 const _centre = new Vector3();
+
+/**
+ * What the pass sees within this many metres of the water box is still the tank: the glass and
+ * the backdrop just behind the back pane.
+ */
+export const TANK_TOLERANCE = 0.02;
+/** Past the tolerance the pass's view fades to the traced mirror over this many metres. */
+export const COVERAGE_FALLOFF = 0.05;
+/** The mirror is averaged over a centre tap and four diagonal ones this many texels out. */
+const SOFT_EDGE_TEXELS = 1.5;
+const TAPS: readonly (readonly [number, number])[] = [
+  [0, 0],
+  [1, 1],
+  [-1, 1],
+  [1, -1],
+  [-1, -1],
+];
+
+/**
+ * How much of what the pass shows at world point `p` is the tank: 1 in the water box and within
+ * `TANK_TOLERANCE` of it, falling linearly to 0 over `COVERAGE_FALLOFF` beyond. Past it the pass
+ * looked out through a pane that it does not draw, where the real ray would reflect again.
+ */
+export function tankCoverage(
+  p: Node<'vec3'>,
+  boxMin: Node<'vec3'>,
+  boxMax: Node<'vec3'>,
+): Node<'float'> {
+  const outside = max(max(boxMin.sub(p), p.sub(boxMax)), 0).toVar();
+  const distance = outside.x.add(outside.y).add(outside.z);
+  return max(max(distance.sub(TANK_TOLERANCE), 0).div(COVERAGE_FALLOFF).oneMinus(), 0);
+}
+
+/**
+ * The mirror from `taps` samples whose colours, each weighted by its coverage, sum to `colour`
+ * and whose coverages sum to `covered`: the uncovered share is made up by `fallback`.
+ */
+export function blendCoverage(
+  colour: Node<'vec3'>,
+  covered: Node<'float'>,
+  fallback: Node<'vec3'>,
+  taps: number,
+): Node<'vec3'> {
+  return colour.div(taps).add(fallback.mul(covered.div(taps).oneMinus()));
+}
 
 /** The part of the renderer the pass uses. */
 export interface ReflectionRenderer {
@@ -106,8 +164,16 @@ export function mirrorCamera(
  * the surface, into a target the size of the drawing buffer times `resolutionScale`.
  */
 export class SurfaceReflection {
-  private readonly target = new RenderTarget(1, 1, { type: HalfFloatType });
+  private readonly depth = new DepthTexture(1, 1);
+  private readonly target = new RenderTarget(1, 1, {
+    type: HalfFloatType,
+    depthTexture: this.depth,
+  });
   private readonly camera = new PerspectiveCamera();
+  private readonly projectionInverse = uniform(new Matrix4());
+  private readonly cameraWorld = uniform(new Matrix4());
+  /** The diagonal tap offset in target UV. */
+  private readonly tapOffset = uniform(new Vector2());
   /**
    * Materials that pass the temporal resolve's velocity through carry a velocity-only MRT, which
    * writes no colour into a plain target: naming the colour output keeps theirs.
@@ -135,9 +201,30 @@ export class SurfaceReflection {
     this.scale = scale;
   }
 
-  /** The reflected radiance at the fragment's screen position moved by `offset` in UV. */
-  sample(offset: Node<'vec2'>): Node<'vec4'> {
-    return texture(this.target.texture, screenUV.flipX().add(offset));
+  /**
+   * The reflected radiance at the fragment's screen position moved by `offset` in UV. Where the
+   * pass saw out of the water box (`boxMin`..`boxMax`) the real ray would have been reflected
+   * again by the pane, so `fallback` stands in, blended over a few texels so the seam is soft.
+   */
+  mirror(
+    offset: Node<'vec2'>,
+    fallback: Node<'vec3'>,
+    boxMin: Node<'vec3'>,
+    boxMax: Node<'vec3'>,
+  ): Node<'vec3'> {
+    const centre = screenUV.flipX().add(offset).toVar();
+    let colour: Node<'vec3'> = vec3(0);
+    let covered: Node<'float'> = float(0);
+    for (const [dx, dy] of TAPS) {
+      const uv = centre.add(this.tapOffset.mul(vec2(dx, dy))).toVar();
+      const depth = texture(this.depth, uv).x;
+      const view = getViewPosition(uv, depth, this.projectionInverse);
+      const world = this.cameraWorld.mul(vec4(view, 1)).xyz;
+      const coverage = tankCoverage(world, boxMin, boxMax).toVar();
+      colour = colour.add(texture(this.target.texture, uv).rgb.mul(coverage));
+      covered = covered.add(coverage);
+    }
+    return blendCoverage(colour, covered, fallback, TAPS.length);
   }
 
   /**
@@ -154,11 +241,13 @@ export class SurfaceReflection {
     if (!_frustum.intersectsBox(this.surface)) return false;
 
     renderer.getDrawingBufferSize(_size);
-    this.target.setSize(
-      Math.max(1, Math.round(_size.x * this.scale)),
-      Math.max(1, Math.round(_size.y * this.scale)),
-    );
+    const width = Math.max(1, Math.round(_size.x * this.scale));
+    const height = Math.max(1, Math.round(_size.y * this.scale));
+    this.target.setSize(width, height);
+    this.tapOffset.value.set(SOFT_EDGE_TEXELS / width, SOFT_EDGE_TEXELS / height);
     mirrorCamera(camera, this.surface.max.y, this.camera, renderer.coordinateSystem);
+    this.projectionInverse.value.copy(this.camera.projectionMatrixInverse);
+    this.cameraWorld.value.copy(this.camera.matrixWorld);
     this.inPass(renderer, camera, () => renderer.render(scene, this.camera));
     return true;
   }

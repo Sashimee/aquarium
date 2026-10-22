@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Box3, Vector3 } from 'three/webgpu';
+import { uniform } from 'three/tsl';
+import { evaluate } from '../shaderFixtures';
 import { spectralAbsorption, WaterMedium } from './medium';
 
 describe('spectralAbsorption', () => {
@@ -42,5 +44,25 @@ describe('WaterMedium', () => {
     medium.setQuality({ cdom440: 0, turbidity: 0.05 });
     expect(medium.getQuality()).toEqual({ cdom440: 0, turbidity: 0.05 });
     expect(medium.absorption.value.toArray()).toEqual(spectralAbsorption(0));
+  });
+});
+
+describe('WaterMedium.exit', () => {
+  const medium = new WaterMedium(new Box3(new Vector3(-0.5, 0, -0.2), new Vector3(0.5, 0.4, 0.2)), {
+    cdom440: 0,
+    turbidity: 0.1,
+  });
+
+  it.each([
+    ['the right pane', [0.2, 0.2, 0], [1, 0.1, 0], 0.3, [1, 0, 0]],
+    ['the left pane', [0.2, 0.2, 0], [-1, 0.1, 0.1], 0.7, [-1, 0, 0]],
+    ['the surface', [0, 0.3, 0], [0.1, 1, -0.1], 0.1, [0, 1, 0]],
+    ['the floor', [0, 0.3, 0], [0.2, -1, 0.2], 0.3, [0, -1, 0]],
+    ['the back pane', [0, 0.2, 0.1], [0.05, -0.05, -1], 0.3, [0, 0, -1]],
+    ['the front pane', [0, 0.2, 0.1], [0, 0, 1], 0.1, [0, 0, 1]],
+  ] as const)('finds the ray leaving through %s', (_name, origin, dir, distance, normal) => {
+    const exit = medium.exit(uniform(new Vector3(...origin)), uniform(new Vector3(...dir)));
+    expect(evaluate(exit.distance)[0]).toBeCloseTo(distance, 9);
+    expect(evaluate(exit.normal).map((c) => c + 0)).toEqual(normal);
   });
 });
