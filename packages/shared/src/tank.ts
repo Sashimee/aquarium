@@ -21,6 +21,7 @@ import {
   purchasableStageSchema,
   walletSchema,
 } from './economy.js';
+import { foodTypeSchema } from './food.js';
 import {
   diseaseStateSchema,
   medicineSchema,
@@ -35,6 +36,10 @@ export const waterSchema = z.object({
   nitrate: z.number().nonnegative(),
   algae: unitSchema,
   uneatenFood: z.number().nonnegative().describe('portions of food on the substrate or drifting'),
+  uneatenFoodTypes: z
+    .array(foodTypeSchema)
+    .optional()
+    .describe('foods in the uneaten total; absent on tanks that predate it, meaning any'),
 });
 export type Water = z.infer<typeof waterSchema>;
 

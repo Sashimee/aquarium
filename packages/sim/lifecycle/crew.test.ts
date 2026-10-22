@@ -5,12 +5,14 @@ import {
   DEFAULT_EQUIPMENT,
   newTankChemistry,
   speciesContentSchema,
+  type FoodType,
   type Water,
 } from '@aquarium/shared';
 import { describe, expect, it } from 'vitest';
 import { cleanupSurfaces } from '../src/crew.ts';
 import { toSimSpecies, type SimSpecies } from '../src/species.ts';
 import {
+  applyCare,
   catchUp,
   DEFAULT_WATER_PARAMETERS,
   STEP_MS,
@@ -22,7 +24,7 @@ import {
 } from './index.ts';
 
 const speciesDir = join(import.meta.dirname, '../../../content/species');
-const contents = ['nerite-snail', 'hermit-crab'].map((id) =>
+const contents = ['nerite-snail', 'hermit-crab', 'bristlenose-pleco'].map((id) =>
   speciesContentSchema.parse(JSON.parse(readFileSync(join(speciesDir, `${id}.json`), 'utf8'))),
 );
 const crewSpecies: ReadonlyMap<string, SimSpecies> = new Map(
@@ -181,5 +183,84 @@ describe('clean-up crew in the offline catch-up', () => {
     const rest = run(half.state, half.advancedToMs, LIT_FROM + 24 * HOUR, true);
     expect(rest.state.water).toEqual(whole.state.water);
     expect(rest.state.fish).toEqual(whole.state.fish);
+  });
+
+  describe('food types', () => {
+    const plecos = (n: number) =>
+      Array.from({ length: n }, (_, i) =>
+        member(`p${i}`, 'bristlenose-pleco', { hunger: 0.9, size: 0.1 }),
+      );
+
+    it('leaves food off the diet to a hungry pleco, which grazes the span instead', () => {
+      const withFood = (types?: FoodType[]) =>
+        tank(plecos(2), {
+          algae: 0.6,
+          uneatenFood: 3,
+          ...(types ? { uneatenFoodTypes: types } : {}),
+        });
+      const anyFood = run(withFood(), DARK_FROM, DARK_FROM + 2 * HOUR, true);
+      const offDiet = run(withFood(['bloodworms']), DARK_FROM, DARK_FROM + 2 * HOUR, true);
+      const onDiet = run(withFood(['pellets']), DARK_FROM, DARK_FROM + 2 * HOUR, true);
+      expect(offDiet.state.water.uneatenFood).toBeGreaterThan(anyFood.state.water.uneatenFood);
+      expect(offDiet.state.water.algae).toBeLessThan(anyFood.state.water.algae);
+      expect(onDiet.state.water.uneatenFood).toBe(anyFood.state.water.uneatenFood);
+    });
+
+    it('records each fed type once and forgets them on a gravel vacuum', () => {
+      const params = env.chemistryParams;
+      let state = tank(plecos(1), {});
+      for (const food of ['bloodworms', 'flakes', 'bloodworms'] as const) {
+        const fed = applyCare(state, { type: 'feed', food, portion: 1 }, 'freshwater', params, T0);
+        if (!fed.ok) throw new Error(fed.reason);
+        state = fed.value;
+      }
+      expect(state.water.uneatenFood).toBe(3);
+      expect(state.water.uneatenFoodTypes).toEqual(['bloodworms', 'flakes']);
+
+      const vacuumed = applyCare(state, { type: 'gravel_vacuum' }, 'freshwater', params, T0);
+      if (!vacuumed.ok) throw new Error(vacuumed.reason);
+      expect(vacuumed.value.water.uneatenFood).toBe(0);
+      expect(vacuumed.value.water.uneatenFoodTypes).toEqual([]);
+    });
+
+    it('starts a fresh record once earlier food has decayed below a particle', () => {
+      const params = env.chemistryParams;
+      const feed = (state: LifecycleState, food: FoodType, nowMs: number) => {
+        const fed = applyCare(
+          state,
+          { type: 'feed', food, portion: 1 },
+          'freshwater',
+          params,
+          nowMs,
+        );
+        if (!fed.ok) throw new Error(fed.reason);
+        return fed.value;
+      };
+      const flaked = feed(tank(plecos(1), {}), 'flakes', T0);
+      const later = run(flaked, T0, T0 + DAY, false);
+      expect(later.state.water.uneatenFood).toBeGreaterThan(0);
+      const bloodworms = feed(later.state, 'bloodworms', T0 + DAY);
+      expect(bloodworms.water.uneatenFoodTypes).toEqual(['bloodworms']);
+
+      const legacy = feed(tank(plecos(1), { uneatenFood: 1e-4 }), 'bloodworms', T0);
+      expect(legacy.water.uneatenFoodTypes).toEqual(['bloodworms']);
+
+      const stillThere = feed(feed(tank(plecos(1), {}), 'flakes', T0), 'bloodworms', T0);
+      expect(stillThere.water.uneatenFoodTypes).toEqual(['flakes', 'bloodworms']);
+    });
+
+    it('keeps treating food as any type on a tank that has no record of it', () => {
+      const params = env.chemistryParams;
+      const legacy = tank(plecos(1), { uneatenFood: 2 });
+      const fed = applyCare(
+        legacy,
+        { type: 'feed', food: 'bloodworms', portion: 1 },
+        'freshwater',
+        params,
+        T0,
+      );
+      if (!fed.ok) throw new Error(fed.reason);
+      expect(fed.value.water.uneatenFoodTypes).toBeUndefined();
+    });
   });
 });
