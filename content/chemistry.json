@@ -50,7 +50,8 @@
     },
     "roomC": 21,
     "driftPerHour": 0.15,
-    "heaterWarmingPerHourPerTier": 1.5
+    "heaterWarmingPerHourPerTier": 1.5,
+    "heaterWarmupRatePerHourPerTier": 0.15
   },
   "salinity": {
     "target": {
@@ -98,7 +99,7 @@
       "sourceWater is a typical mains-water carbonate hardness for fresh biomes and a typical salt-mix hardness for marine and brackish ones"
     ],
     "temperature": [
-      "Newton's law of cooling toward room temperature; a thermostat heater holds the setpoint that suits the stocked fish (their shared comfort range, else the biome target), and one tier is strong enough to reach 31 C in a 21 C room",
+      "Newton's law of cooling toward room temperature; a thermostat heater holds the setpoint that suits the stocked fish (their shared comfort range, else the biome target), and one tier is strong enough to reach 31 C in a 21 C room; every tier reaches the same setpoint, but a higher tier closes the gap faster while warming up (game abstraction)",
       "Biome targets are typical hobby values (reef 24 to 27 C)"
     ],
     "salinity": [

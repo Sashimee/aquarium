@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  biomeSchema,
   chemistryParametersSchema,
   DEFAULT_EQUIPMENT,
   isWarmWater,
@@ -930,21 +931,89 @@ describe('pH, KH, temperature and salinity', () => {
     expect(t).toBeCloseTo(27, 1);
   });
 
-  it.each(Object.entries(chemistryParams.temperature.target))(
+  it.each(biomeSchema.options)(
     'the default tier 1 heater warms an empty %s tank from room temperature to its target',
-    (biome, target) => {
+    (biome) => {
       const state = {
         ...tank([]),
         chemistry: {
-          ...newTankChemistry('freshwater'),
+          ...newTankChemistry(biome),
           temperatureC: chemistryParams.temperature.roomC,
         },
       };
-      const t = run(state, 3 * DAY, { env: { biome: biome as Biome } }).state.chemistry
-        .temperatureC;
-      expect(t).toBeCloseTo(target, 1);
+      const t = run(state, 3 * DAY, { env: { biome } }).state.chemistry.temperatureC;
+      expect(t).toBeCloseTo(chemistryParams.temperature.target[biome], 1);
     },
   );
+
+  describe('heater tiers', () => {
+    const { roomC } = chemistryParams.temperature;
+    const coldTank = (biome: Biome) => ({
+      ...tank([]),
+      chemistry: { ...newTankChemistry(biome), temperatureC: roomC },
+    });
+    const after = (tier: number, ms: number, biome: Biome = 'freshwater') =>
+      run(coldTank(biome), ms, {
+        env: { biome },
+        equipment: { ...DEFAULT_EQUIPMENT, heater: { tier } },
+      }).state.chemistry.temperatureC;
+
+    it('a higher tier warms a cold tank faster', () => {
+      const one = after(1, 6 * HOUR);
+      const two = after(2, 6 * HOUR);
+      const three = after(3, 6 * HOUR);
+      expect(two).toBeGreaterThan(one);
+      expect(three).toBeGreaterThan(two);
+    });
+
+    it('tier 1 follows the plain drift curve toward the setpoint', () => {
+      const { target, driftPerHour } = chemistryParams.temperature;
+      const goal = target.freshwater;
+      for (const hours of [1, 3, 6, 12, 24]) {
+        const expected = goal - (goal - roomC) * Math.exp(-driftPerHour * hours);
+        expect(after(1, hours * HOUR)).toBeCloseTo(expected, 6);
+      }
+    });
+
+    it('every tier settles on the setpoint and never rises past it', () => {
+      const goal = chemistryParams.temperature.target.freshwater;
+      for (const tier of [1, 2, 3]) {
+        for (const hours of [1, 2, 4, 8, 16, 24, 48]) {
+          expect(after(tier, hours * HOUR)).toBeLessThanOrEqual(goal);
+        }
+        expect(after(tier, 5 * DAY)).toBeCloseTo(goal, 1);
+      }
+    });
+
+    it('an overheated tank cools at the same rate whatever the tier', () => {
+      const hot = {
+        ...tank([]),
+        chemistry: { ...newTankChemistry('freshwater'), temperatureC: 35 },
+      };
+      const cooled = (tier: number, hours: number) =>
+        run(hot, hours * HOUR, { equipment: { ...DEFAULT_EQUIPMENT, heater: { tier } } }).state
+          .chemistry.temperatureC;
+      for (const hours of [1, 4, 12]) {
+        expect(cooled(3, hours)).toBe(cooled(1, hours));
+        expect(cooled(1, hours)).toBeLessThan(35);
+      }
+    });
+
+    it('a higher tier reaches the hottest biome target sooner', () => {
+      const target = chemistryParams.temperature.target.blackwater;
+      expect(target - after(3, 8 * HOUR, 'blackwater')).toBeLessThan(
+        target - after(1, 8 * HOUR, 'blackwater'),
+      );
+    });
+
+    it('warming up is deterministic across window splits', () => {
+      const equipment = { ...DEFAULT_EQUIPMENT, heater: { tier: 3 } };
+      const whole = run(coldTank('freshwater'), 12 * HOUR, { equipment }).state;
+      const half = run(coldTank('freshwater'), 6 * HOUR, { equipment }).state;
+      const rest = run(half, 12 * HOUR, { equipment, from: 6 * HOUR }).state;
+      expect(rest.chemistry.temperatureC).toBe(whole.chemistry.temperatureC);
+    });
+  });
 
   it('a water change pulls KH towards the biome source water, not one global value', () => {
     const reef = {
