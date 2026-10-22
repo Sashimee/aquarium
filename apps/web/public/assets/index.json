@@ -2,7 +2,7 @@
   "version": 1,
   "textureVariants": "GLBs reference the 1k KTX2 files by relative uri. Quality tiers that want 2k rewrite \"_1k.ktx2\" to \"_2k.ktx2\" in a LoadingManager URL modifier; a texture whose 2k tier would equal its 1k tier lists the same file for both, so the 2k URL may resolve to the 1k file.",
   "customAttributes": "three.js GLTFLoader lower-cases custom attributes: _FIN_MASK is geometry attribute \"_fin_mask\" (0 rigid body, 1 fin tip) and _FIN_ID is \"_fin_id\" (0 body, 1 caudal, 2 dorsal, 3 anal, 4 pectoral, 5 pelvic). Every fish LOD also carries _MOUTH, geometry attribute \"_mouth\", a float in [0, 1] for buccal motion: 1 at the jaw or lower-lip tip (every LOD is renormalised so its highest value is exactly 1), easing to 0 behind the gill line and above the mouth slit; fins, eyes and attachments are 0. Anemone tentacle sway is \"_sway\" (0 base, 1 tip). Shrimp reuse _fin_id (0 body, carapace and eyes; 6 walking leg; 7 antenna; 8 pleopod; 9 abdomen, telson and tail fan) and add \"_leg\" (limb index: pair * 2 + side, side 0 = -x; antennules 0/1, long antennae 2/3; tail-fan leaves k * 2 + side). Shrimp _fin_mask means: id 0 is 0 (eye stalks included, ignore it); ids 6 and 7 are the weight along the limb, 0 root to 1 tip; id 8 is the pleopod beat weight, 0 root to 1 tip; id 9 is the tail-curl weight clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1) of the rest position. Tail curl rotates ids 8 and 9 about +x through the shrimp.abdomenHinge {y, z} by flex * clamp((hingeZ - z) / (hingeZ - telsonZ), 0, 1), computed from the rest position, never from _fin_mask, so the pleopods follow the segment they hang from. Pleopods (id 8) exist only in LOD0 and LOD1 and are removed from LOD2; legs are simplified, so do not assume every _leg index exists at every LOD. Snails use _fin_id (0 shell, 10 foot, 11 head, 12 tentacle) and _fin_mask (foot: 0 at the sole centre to 1 at the mantle edge, for ripple; tentacle: 0 base to 1 tip; shell and head 0). The hermit crab is a crab-kind asset whose walker data sits in its crab block, same fields as a shrimp block; its origin is the hip, the area centroid of the body shifted sideways onto the midline of the crab, so the side of a leg is the sign of its x; its shell is id 0, exposed soft body id 9 (rigid, hinge sits in front of it so it never curls), legs id 6 and antennae id 7 with _leg index pair * 2 + side; pair 0 is the claws and every pair behind it walks, and it has no pleopods. The cherry material is alphaMode BLEND with base colour alpha 0.86: three.js GLTFLoader turns depthWrite off for BLEND, so set depthWrite true on the cherry material and expect some sorting artefacts from the self-overlapping legs and antennae.",
-  "totalBytes": 119828553,
+  "totalBytes": 119827072,
   "assets": [
     {
       "id": "altolamprologus-calvus",
@@ -3542,37 +3542,37 @@
       ],
       "bounds": {
         "min": [
-          -0.015214,
-          -0.012813,
-          -0.043409
+          -0.01383,
+          -0.011648,
+          -0.039463
         ],
         "max": [
-          0.015214,
-          0.014247,
-          0.023141
+          0.01383,
+          0.012952,
+          0.021037
         ]
       },
       "lods": [
         {
           "file": "fish/figure-8-puffer/lod0.glb",
-          "bytes": 36644,
-          "sha256": "23edabd37aa1bc9cbfaad4d72a41aa578899b7e11d2128564cd8daea09bbfac3",
+          "bytes": 36616,
+          "sha256": "b75c5e8f9d8c74eb44e79a6d40bdefd759fc3de80d8f6daa485e5e655b45d800",
           "triangles": 3744,
           "vertices": 2029
         },
         {
           "file": "fish/figure-8-puffer/lod1.glb",
-          "bytes": 19760,
-          "sha256": "072354ca9eb2c7a09fad00f430fdd462791c9675a964b5bcc0b342e136710496",
+          "bytes": 19724,
+          "sha256": "0205a85ebd3a8b59bffcbabc345a9e61fb3f612286b606fe1d41fbdbd3bcbec4",
           "triangles": 1498,
-          "vertices": 800
+          "vertices": 801
         },
         {
           "file": "fish/figure-8-puffer/lod2.glb",
-          "bytes": 10320,
-          "sha256": "308c6717f42fcd3609ceed7a3bb77eb83f9599ad9ef1691e2ad21f4813656ccd",
+          "bytes": 10380,
+          "sha256": "a6ee7e7c0fcc8cd500217666dfec510a95cdf068f541cb847ebb556fbd76f38d",
           "triangles": 562,
-          "vertices": 311
+          "vertices": 310
         }
       ],
       "textures": [
@@ -3601,28 +3601,28 @@
       "files": [
         {
           "file": "fish/figure-8-puffer/impostor_albedo.ktx2",
-          "bytes": 55815,
-          "sha256": "6ddecde54fc714e82f6603deeed3079b05434be41eb37155a840b01716caaec7"
+          "bytes": 55583,
+          "sha256": "03bf45ccdd6257da568faf552ffee5477f3d56167bfbb196dedd6e89c8e077cf"
         },
         {
           "file": "fish/figure-8-puffer/impostor_normal.ktx2",
-          "bytes": 145383,
-          "sha256": "516d0a0a25e5521be9329a131dd3b987e886b9d6af7109c918866992b0aea955"
+          "bytes": 144138,
+          "sha256": "eba60e1cdbe554fc60cc8baad257ca4c5b93db6bd57d5140cfca4f3598b38e08"
         },
         {
           "file": "fish/figure-8-puffer/lod0.glb",
-          "bytes": 36644,
-          "sha256": "23edabd37aa1bc9cbfaad4d72a41aa578899b7e11d2128564cd8daea09bbfac3"
+          "bytes": 36616,
+          "sha256": "b75c5e8f9d8c74eb44e79a6d40bdefd759fc3de80d8f6daa485e5e655b45d800"
         },
         {
           "file": "fish/figure-8-puffer/lod1.glb",
-          "bytes": 19760,
-          "sha256": "072354ca9eb2c7a09fad00f430fdd462791c9675a964b5bcc0b342e136710496"
+          "bytes": 19724,
+          "sha256": "0205a85ebd3a8b59bffcbabc345a9e61fb3f612286b606fe1d41fbdbd3bcbec4"
         },
         {
           "file": "fish/figure-8-puffer/lod2.glb",
-          "bytes": 10320,
-          "sha256": "308c6717f42fcd3609ceed7a3bb77eb83f9599ad9ef1691e2ad21f4813656ccd"
+          "bytes": 10380,
+          "sha256": "a6ee7e7c0fcc8cd500217666dfec510a95cdf068f541cb847ebb556fbd76f38d"
         },
         {
           "file": "fish/figure-8-puffer/textures/figure-8-puffer_basecolor_1k.ktx2",
@@ -3631,8 +3631,8 @@
         }
       ],
       "fish": {
-        "standardLengthM": 0.055,
-        "lengthSource": "recipe",
+        "standardLengthM": 0.05,
+        "lengthSource": "species-json",
         "axes": {
           "forward": "+z",
           "up": "+y"
@@ -3662,21 +3662,21 @@
         "frameSize": 64,
         "atlasSize": 576,
         "pivot": [
-          0.000009,
-          0.000721,
-          -0.010134
+          0,
+          0.000652,
+          -0.009213
         ],
-        "radius": 0.036,
+        "radius": 0.03274,
         "albedo": {
           "file": "fish/figure-8-puffer/impostor_albedo.ktx2",
-          "bytes": 55815,
-          "sha256": "6ddecde54fc714e82f6603deeed3079b05434be41eb37155a840b01716caaec7",
+          "bytes": 55583,
+          "sha256": "03bf45ccdd6257da568faf552ffee5477f3d56167bfbb196dedd6e89c8e077cf",
           "codec": "etc1s"
         },
         "normalDepth": {
           "file": "fish/figure-8-puffer/impostor_normal.ktx2",
-          "bytes": 145383,
-          "sha256": "516d0a0a25e5521be9329a131dd3b987e886b9d6af7109c918866992b0aea955",
+          "bytes": 144138,
+          "sha256": "eba60e1cdbe554fc60cc8baad257ca4c5b93db6bd57d5140cfca4f3598b38e08",
           "codec": "uastc"
         }
       }
