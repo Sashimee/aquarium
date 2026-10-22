@@ -484,7 +484,7 @@ describe('personality and visits', () => {
       recentVisitDays: 5,
     });
     expect(roster.get(simId(roster, FISH_1))?.personality).toEqual(p);
-    expect(roster.recentVisitDays).toBe(5);
+    expect(roster.takeVisitDays()).toBe(5);
     roster.add({
       tankId: TANK_A,
       fish: fishFixture(FISH_2, { personality: { ...p, greed: 1 } }),
@@ -503,11 +503,36 @@ describe('personality and visits', () => {
   });
 
   it('knows no visit days without a signal, for demo and for other tanks', () => {
-    expect(new TankRoster(DEMO).recentVisitDays).toBeNull();
+    expect(new TankRoster(DEMO).takeVisitDays()).toBeNull();
     const roster = loaded();
-    expect(roster.recentVisitDays).toBeNull();
+    expect(roster.takeVisitDays()).toBeNull();
     roster.unload({ tankId: TANK_A, reason: 'reset' });
-    expect(roster.recentVisitDays).toBeNull();
+    expect(roster.takeVisitDays()).toBeNull();
+  });
+
+  it('hands the visit days out once per tank:loaded, then null until the next load', () => {
+    const roster = new TankRoster(DEMO);
+    expect(roster.takeVisitDays()).toBeNull();
+    const load = (recentVisitDays: number): void =>
+      roster.load({
+        backgroundId: 'bg-fw-planted-stream',
+        tankId: TANK_A,
+        biome: 'freshwater',
+        size: 'standard',
+        decorLayout: [],
+        decorEdited: false,
+        fish: [fishFixture(FISH_1)],
+        recentVisitDays,
+      });
+    load(0);
+    expect(roster.takeVisitDays()).toBe(0);
+    roster.add({ tankId: TANK_A, fish: fishFixture(FISH_2), acclimate: false });
+    expect(roster.takeVisitDays()).toBeNull();
+    load(4);
+    expect(roster.takeVisitDays()).toBe(4);
+    expect(roster.takeVisitDays()).toBeNull();
+    roster.unload({ tankId: TANK_A, reason: 'switch' });
+    expect(roster.takeVisitDays()).toBeNull();
   });
 });
 

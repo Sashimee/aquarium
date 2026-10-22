@@ -335,6 +335,91 @@ describe('FishSystem.create', () => {
     expect(clients).toHaveLength(2);
   });
 
+  it('greets the owner once per tank:loaded, not again when the world is rebuilt', async () => {
+    const { engine } = fakeEngine();
+    const start = create(engine);
+    const worker = await initPosted();
+    answerInits(worker);
+    const fish = await start;
+    const visitors = (): unknown[] => worker.sent.filter((m) => m.type === 'visitor');
+    const nextWorld = async (count: number): Promise<void> => {
+      await vi.waitFor(() => {
+        if (worker.inits().length < count) throw new Error('no new world yet');
+      });
+      answerInits(worker, count - 1);
+      await fish.synced();
+    };
+    const load = (recentVisitDays: number): void =>
+      fish.handle({
+        type: 'tank:loaded',
+        payload: {
+          backgroundId: 'bg-fw-planted-stream',
+          tankId: TANK_A,
+          biome: 'freshwater',
+          size: 'standard',
+          decorLayout: [],
+          decorEdited: false,
+          fish: [fishFixture(FISH_1)],
+          recentVisitDays,
+        },
+      });
+
+    load(3);
+    await nextWorld(2);
+    expect(visitors()).toEqual([{ type: 'visitor', visitor: { recentVisitDays: 3 } }]);
+
+    fish.setTank(TANK_DIMENSIONS.nano30);
+    await nextWorld(3);
+    expect(worker.inits()).toHaveLength(3);
+    expect(visitors()).toHaveLength(1);
+
+    load(4);
+    await nextWorld(4);
+    expect(visitors()).toEqual([
+      { type: 'visitor', visitor: { recentVisitDays: 3 } },
+      { type: 'visitor', visitor: { recentVisitDays: 4 } },
+    ]);
+    fish.dispose();
+  });
+
+  it('greets once when a resize drops the loaded world before its init answers', async () => {
+    const { engine } = fakeEngine();
+    const start = create(engine);
+    const worker = await initPosted();
+    answerInits(worker);
+    const fish = await start;
+    const initsAtLeast = (count: number): Promise<void> =>
+      vi.waitFor(() => {
+        if (worker.inits().length < count) throw new Error('no new world yet');
+      });
+
+    fish.handle({
+      type: 'tank:loaded',
+      payload: {
+        backgroundId: 'bg-fw-planted-stream',
+        tankId: TANK_A,
+        biome: 'freshwater',
+        size: 'standard',
+        decorLayout: [],
+        decorEdited: false,
+        fish: [fishFixture(FISH_1)],
+        recentVisitDays: 5,
+      },
+    });
+    await initsAtLeast(2);
+    fish.setTank(TANK_DIMENSIONS.nano30);
+    answerInits(worker, 1);
+    await initsAtLeast(3);
+    answerInits(worker, 2);
+    await fish.synced();
+
+    expect(worker.inits()).toHaveLength(3);
+    expect(worker.sent.filter((m) => m.type === 'visitor')).toEqual([
+      { type: 'visitor', visitor: { recentVisitDays: 5 } },
+    ]);
+    fish.dispose();
+  });
+
   it('tells world listeners the running world, that it stopped, and the next one', async () => {
     const { engine } = fakeEngine();
     const start = create(engine);
