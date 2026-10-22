@@ -12,6 +12,8 @@ describe('qualityProfile', () => {
       probeTier: 'high',
       maxTier: 'ultra',
       gpuTiming: true,
+      maxTextureSize: 2048,
+      textureBudgetMiB: { low: 44, medium: 44, high: 112, ultra: 112 },
     });
   });
 
@@ -20,6 +22,10 @@ describe('qualityProfile', () => {
     expect(mobile).toBe(MOBILE_PROFILE);
     expect(mobile.probeTier).toBe('medium');
     expect(mobile.maxTier).toBe('high');
+  });
+
+  it('keeps touch devices on 1k textures whatever the tier', () => {
+    expect(MOBILE_PROFILE.maxTextureSize).toBe(1024);
   });
 
   it('adapts touch devices on frame time only', () => {

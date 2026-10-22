@@ -20,7 +20,8 @@ export function showDeviceNotice(
     top: 'max(0.75rem, env(safe-area-inset-top))',
     left: '50%',
     transform: 'translateX(-50%)',
-    zIndex: '6',
+    // Above the loading screen (20): a phone can lose its device while the tank's textures upload.
+    zIndex: '30',
     display: 'flex',
     alignItems: 'center',
     gap: '0.75rem',
