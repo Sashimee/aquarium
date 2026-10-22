@@ -7,9 +7,7 @@ import type { DecorMode } from './mode';
 import type { FeederLayer } from './feederLayer';
 import { DecorWorld, type DecorScenePort } from './world';
 import type { CoralFeed } from '../../sync/coralFeed';
-import { reachCurrent, type CurrentParameters } from '../../scene/current';
-import { DEFAULT_CURRENT } from '../../scene/TankScene';
-import { loadPreset } from '../../scene/preset';
+import type { ScaleCap } from '../../scene/coralGrowth';
 import { generateEuphyllia, parseEuphylliaId } from '../../scene/euphyllia';
 
 export interface DecorSystem {
@@ -25,7 +23,7 @@ export interface DecorSystem {
 /** The saved layouts are shown from the start; the editor itself is fetched when decorating is first asked for. */
 export function createDecorSystem(
   engine: Engine,
-  scene: DecorScenePort,
+  scene: DecorScenePort & { readonly coralCap: ScaleCap },
   interaction: EventBus<InteractionEvents>,
   initial: SavedTank | null,
   feeders: FeederLayer,
@@ -37,14 +35,9 @@ export function createDecorSystem(
     initial,
   );
   let disposed = false;
-  let reach: CurrentParameters | null = null;
   const euphylliaBounds = new Map<string, ReturnType<typeof generateEuphyllia>['bounds']>();
   const world = new DecorWorld(scene, interaction, feeders, {
-    dimensions: () => engine.tank.dimensions,
-    current: () => {
-      reach ??= reachCurrent(loadPreset(scene.biome).current ?? DEFAULT_CURRENT, scene.biome);
-      return reach;
-    },
+    cap: () => scene.coralCap,
     proceduralBounds(assetId) {
       const held = euphylliaBounds.get(assetId);
       if (held) return held;
@@ -57,6 +50,9 @@ export function createDecorSystem(
   });
   engine.scene.add(feeders.group);
   saved.attach(world);
+  const stopTaps = interaction.on('play:tapped', ({ ray }) => {
+    interaction.emit('coral:picked', { key: world.coralAt(ray)?.key ?? null });
+  });
   const detachCorals = corals?.attach({ setCorals: (state) => world.setCorals(state) });
 
   let reduced = false;
@@ -106,6 +102,7 @@ export function createDecorSystem(
     dispose() {
       disposed = true;
       stopRequests();
+      stopTaps();
       detachCorals?.();
       stopMotion();
       mode?.dispose();

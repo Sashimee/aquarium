@@ -14,7 +14,7 @@ import type {
 import type { PhotoFilter } from '../engine/photo/grade';
 import type { PhotoState } from '../engine/photo/PhotoMode';
 import type { PlantPick } from '../scene/plantGrowth';
-import type { CameraMode } from './camera';
+import type { CameraMode, Vec3 } from './camera';
 import type { GameView } from './play/game';
 
 /** A pinch, not a pile: leftovers poison the tank, so hand-feeding stays small. */
@@ -232,6 +232,10 @@ export interface InteractionEvents {
   'net:tap': { fishId: string };
   /** The trim tool tapped; `pick` is the plant under the ray, or null when none is. */
   'plant:picked': { pick: PlantPick | null };
+  /** A tap reached the tank while the play layer owned taps (not decorating, not in photo mode). */
+  'play:tapped': { ray: { origin: Vec3; dir: Vec3 } };
+  /** The coral under a tap in the tank, by its state key, or null when the tap hit none. */
+  'coral:picked': { key: string | null };
 }
 
 export interface LoadState {

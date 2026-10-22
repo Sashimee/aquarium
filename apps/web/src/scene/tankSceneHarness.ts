@@ -55,6 +55,7 @@ export function fakeEngine() {
       getQuality: () => water,
       setQuality: (quality: typeof water) => (water = quality),
     },
+    tankSize: 'standard',
     tank: { dimensions: DEFAULT_TANK, substrate: { material: placeholder } },
     quality: {
       tier: 'medium',

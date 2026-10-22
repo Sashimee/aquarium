@@ -3,12 +3,16 @@ import { describe, expect, it } from 'vitest';
 import catalog from '../../../public/assets/index.json';
 import { TANK_DIMENSIONS } from '../../engine/tank/dimensions';
 import { EventBus } from '../../engine/events';
-import type { CatalogEntry } from '../../scene/assets';
+import { AssetCatalog, type CatalogEntry } from '../../scene/assets';
+import { coralScaleCap } from '../../scene/coralGrowth';
 import type { InteractionEvents } from '../events';
 import { FeederLayer } from './feederLayer';
 import { flat, item, must } from './fixtures';
 import { DecorWorld, type DecorScenePort } from './world';
 
+const sceneCatalog = new AssetCatalog(
+  catalog.assets as ConstructorParameters<typeof AssetCatalog>[0],
+);
 const CURRENT = { direction: [1, 0] as const, speed: 0.04, gustPeriodS: 9, gustDepth: 0.4 };
 
 const preset: DecorItem[] = [
@@ -50,9 +54,8 @@ function setup(withEnv = true) {
     new FeederLayer(),
     withEnv
       ? {
-          dimensions: () => TANK_DIMENSIONS.standard,
+          cap: () => coralScaleCap(sceneCatalog, TANK_DIMENSIONS.standard, CURRENT),
           proceduralBounds: () => null,
-          current: () => CURRENT,
         }
       : undefined,
   );
@@ -112,5 +115,46 @@ describe('DecorWorld coral colliders', () => {
     const { world, emitted } = setup(false);
     world.setCorals([coral({ size: 1.8 })]);
     expect(emitted.at(-1)?.map((c) => c.id)).toEqual(['decor:p1', 'decor:p2']);
+  });
+
+  describe('coralAt', () => {
+    const through = (x: number, y: number) => ({
+      origin: { x, y, z: 1.6 },
+      dir: { x: 0, y: 0, z: -1 },
+    });
+
+    it('finds the colony a ray runs into and no other', () => {
+      const { world } = setup();
+      world.setCorals([coral()]);
+      expect(world.coralAt(through(0.1, 0.1))?.key).toBe('s7');
+      expect(world.coralAt(through(0.5, 0.1))).toBeNull();
+    });
+
+    it('follows the colony as it grows', () => {
+      const { world } = setup();
+      world.setCorals([coral({ size: 1 })]);
+      const beside = through(0.1 + 0.2, 0.1);
+      expect(world.coralAt(beside)).toBeNull();
+      world.setCorals([coral({ size: 2 })]);
+      expect(world.coralAt(beside)?.key).toBe('s7');
+    });
+
+    it('picks a fragment on its own, not its colony', () => {
+      const { world } = setup();
+      world.setCorals([
+        coral({ size: 1.5 }),
+        coral({ key: 's7.1', parentKey: 's7', position: [0.45, 0.1], size: 0.5 }),
+      ]);
+      expect(world.coralAt(through(0.46, 0.09))?.key).toBe('s7.1');
+      expect(world.coralAt(through(0.1, 0.1))?.key).toBe('s7');
+    });
+
+    it('finds nothing without coral state or without a tank to size growth by', () => {
+      const { world } = setup();
+      expect(world.coralAt(through(0.1, 0.1))).toBeNull();
+      const bare = setup(false);
+      bare.world.setCorals([coral()]);
+      expect(bare.world.coralAt(through(0.1, 0.1))).toBeNull();
+    });
   });
 });

@@ -195,7 +195,7 @@ describe('grown euphyllia capsule near the glass', () => {
     bleach: 0,
   };
 
-  it('is the capsule of the collider the scene builds from the shared cap', () => {
+  it('gives a capsule matching the collider built from the same shared cap', () => {
     const cap = coralScaleCap(catalog, dimensions, current());
     const capsule = grownEuphylliaCapsule(mesh.bounds, nearGlass, grownColony, cap);
     const collider = euphylliaCollider(mesh.bounds, grownCoralItem(nearGlass, grownColony, cap));
