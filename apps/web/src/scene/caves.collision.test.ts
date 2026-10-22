@@ -13,6 +13,7 @@ import { compileCollider, FishState, World } from '@aquarium/sim';
 import { createSharedKtx2 } from '../engine/ktx2';
 import { DEFAULT_TANK, TANK_DIMENSIONS } from '../engine/tank/dimensions';
 import { demoTank, sceneAnchorsToSim } from '../fish/demoStock';
+import { SimWorldSpec } from '../fish/simWorld';
 import { AssetCatalog, ModelLibrary } from './assets';
 import { caveAnchors } from './caves';
 import { sceneCollidersToSim } from '../fish/simColliders';
@@ -110,6 +111,8 @@ async function expectMouthsClear(biome: Biome, layer: Layer, decor: readonly Dec
 
 describe.each(LAYERS)('cave anchors against the %s fish meet', (layer) => {
   describe.each(SHELTERED)('%s', (biome) => {
+    // The facing probe is a fixed 0.015 m, which lands in a neighbouring rock on the smaller fitted
+    // layouts, so it only runs on the authored one; see #1321.
     it('has room for a fish at every anchor and a clear way out along its facing', async () => {
       const decor = loadPreset(biome).decor;
       await expectMouthsClear(biome, layer, decor);
@@ -158,4 +161,20 @@ describe.each(LAYERS)('a royal gramma on the reef preset with %s', (layer) => {
     expect(sheltered).toBeGreaterThan(0);
     expect(contacts / fishSteps).toBeLessThan(CONTACTS_PER_FISH_STEP);
   }, 120_000);
+});
+
+describe('the sim at boot', () => {
+  it.each(SHELTERED)(
+    '%s: the scene hulls block no cave, so the anchors are sent once',
+    async (biome) => {
+      const decor = loadPreset(biome).decor;
+      const caves = caveAnchors(decor);
+      const hulls = await hardColliders(biome, 'scene hulls');
+      const spec = new SimWorldSpec(demoTank(DEFAULT_TANK, 1, biome), 1);
+      const sent = spec.setAnchors(caves);
+      expect(sent.filter((a) => a.kind === 'cave')).toHaveLength(caves.length);
+      expect(spec.setDecor(hulls)).toBeNull();
+      expect(spec.anchors).toBe(sent);
+    },
+  );
 });

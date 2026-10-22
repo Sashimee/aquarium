@@ -45,6 +45,7 @@ import type { FlowField } from '@aquarium/sim';
 import { CurrentField, reachCurrent, type CurrentParameters } from './current';
 import { fluorescenceLevel } from './coralStyle';
 import { PolypSignal } from './polyps';
+import { hasShelterParts } from './shelterParts';
 import {
   createCoralGlowNode,
   fitCollider,
@@ -1287,7 +1288,10 @@ export async function movableColliders(
         colliders.push(capsule);
       }
     } else {
-      colliders.push(...fitCollider(kind, await library.collisionGeometry(item.assetId), item));
+      const geometry = hasShelterParts(item.assetId)
+        ? []
+        : await library.collisionGeometry(item.assetId);
+      colliders.push(...fitCollider(kind, geometry, item));
     }
   }
   return { colliders, plantSlots };
