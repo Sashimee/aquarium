@@ -171,7 +171,8 @@ export type Coral = z.infer<typeof coralSchema>;
 // so the colony is judged at its size and bleaching now, not what the client last saw.
 // Refusals: 404 unknown tank (or another user's) or coral; 409 reason coral_not_grown when the
 // colony is below its fragMinSize; 409 reason coral_bleached when it is too bleached to cut;
-// 409 reason coral_limit when the tank holds the most fragments it may; 409 reason key_reused when
+// 409 reason coral_limit when the tank holds the most fragments it may; 409 reason coral_no_room
+// when no spot within reach of the colony is clear of rock and wood; 409 reason key_reused when
 // the idempotency key was used for another coral. A retry with the same key replays: it returns the
 // current tank and cuts nothing again. The server remembers the last 16 keys per tank.
 export const fragCoralRequestSchema = z.strictObject({

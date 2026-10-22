@@ -271,7 +271,6 @@ const SRGB_SLOTS = new Set([
   'emissiveTexture',
   'sheenColorTexture',
   'specularColorTexture',
-  'diffuseTexture',
 ]);
 
 function textureSlots(value: unknown, slot: string, out: [number, string][]): void {
@@ -287,7 +286,7 @@ function samplerKey(json: GlbDocument['json'], textureIndex: number): string {
   const sampler = texture?.sampler === undefined ? undefined : json.samplers?.[texture.sampler];
   const wrapS = sampler?.wrapS ?? 10497;
   const wrapT = sampler?.wrapT ?? 10497;
-  return `wrapS=${wrapS} wrapT=${wrapT} mag=${sampler?.magFilter ?? 'default'} min=${sampler?.minFilter ?? 'default'}`;
+  return `wrapS=${wrapS} wrapT=${wrapT} mag=${sampler?.magFilter ?? 9729} min=${sampler?.minFilter ?? 9987}`;
 }
 
 export function sharedKtx2Problems(glbs: readonly GlbDocument[]): string[] {
@@ -306,13 +305,16 @@ export function sharedKtx2Problems(glbs: readonly GlbDocument[]): string[] {
       const uri = source === undefined ? undefined : json.images?.[source]?.uri;
       if (uri === undefined || !uri.endsWith('.ktx2')) continue;
       const target = posix.join(posix.dirname(file), safeDecodeUri(uri));
-      const list = uses.get(target) ?? [];
-      list.push({
+      const use: Use = {
         file,
         sampler: samplerKey(json, textureIndex),
         colour: SRGB_SLOTS.has(slot) ? 'sRGB' : 'linear',
-      });
-      uses.set(target, list);
+      };
+      for (const key of new Set([target, target.replace(/_1k\.ktx2$/, '_2k.ktx2')])) {
+        const list = uses.get(key) ?? [];
+        list.push(use);
+        uses.set(key, list);
+      }
     }
   }
   const problems: string[] = [];
@@ -324,7 +326,8 @@ export function sharedKtx2Problems(glbs: readonly GlbDocument[]): string[] {
         problems.push(
           `${uri} is read as ${first.colour} by ${first.file} but as ${other.colour} by ${other.file}; the web loader caches one texture per URL, so give each colour role its own file`,
         );
-      } else if (other.sampler !== first.sampler) {
+      }
+      if (other.sampler !== first.sampler) {
         problems.push(
           `${uri} has sampler (${first.sampler}) in ${first.file} but (${other.sampler}) in ${other.file}; the web loader caches one texture per URL, so make the samplers match`,
         );

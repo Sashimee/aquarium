@@ -73,7 +73,12 @@ export function obstaclesOf(layout: readonly LayoutPlant[], table: PlantTable): 
   });
 }
 
-function blocked(x: number, z: number, obstacles: readonly Obstacle[], paddingM: number): boolean {
+export function blocked(
+  x: number,
+  z: number,
+  obstacles: readonly Obstacle[],
+  paddingM: number,
+): boolean {
   return obstacles.some((o) => {
     const dx = x - o.x;
     const dz = z - o.z;

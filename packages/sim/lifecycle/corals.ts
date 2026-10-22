@@ -7,7 +7,14 @@ import {
   type StoredCoral,
 } from '@aquarium/shared';
 import { unitHash } from './breeding.ts';
-import { layoutPlantKeys, START_SIZE, type LayoutPlant, type PlantBounds } from './plants.ts';
+import {
+  blocked,
+  layoutPlantKeys,
+  START_SIZE,
+  type LayoutPlant,
+  type Obstacle,
+  type PlantBounds,
+} from './plants.ts';
 import { lampIsOn } from './water.ts';
 
 export type CoralState = StoredCoral;
@@ -24,7 +31,7 @@ export interface CoralStepContext {
   readonly table: CoralTable;
 }
 
-const PLACEMENT_ATTEMPTS = 8;
+const PLACEMENT_ATTEMPTS = 16;
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 
@@ -171,33 +178,36 @@ function fragPosition(
   corals: readonly CoralState[],
   table: CoralTable,
   bounds: PlantBounds,
-): [number, number] {
+  obstacles: readonly Obstacle[],
+): [number, number] | null {
   const { params } = table;
   if (!parent.position) throw new Error(`corals: "${parent.key}" has no position to cut beside`);
   const [px, pz] = parent.position;
   const limitX = Math.max(0, bounds.halfX - params.edgeMarginM);
   const limitZ = Math.max(0, bounds.halfZ - params.edgeMarginM);
   const occupied = corals.flatMap((o) => (o.position ? [o.position] : []));
-  let candidate: [number, number] = [px, pz];
+  let fallback: [number, number] | null = null;
   for (let attempt = 0; attempt < PLACEMENT_ATTEMPTS; attempt++) {
     const seed = `${fragKey}:${attempt}`;
     const angle = unitHash(`${seed}:a`) * 2 * Math.PI;
     const reach = params.fragRadiusM * (0.4 + 0.6 * unitHash(`${seed}:r`));
-    candidate = [
+    const candidate: [number, number] = [
       clamp(px + Math.cos(angle) * reach, -limitX, limitX),
       clamp(pz + Math.sin(angle) * reach, -limitZ, limitZ),
     ];
     const [cx, cz] = candidate;
+    if (blocked(cx, cz, obstacles, 0)) continue;
+    fallback = candidate;
     if (occupied.every(([x, z]) => Math.hypot(x - cx, z - cz) >= params.fragSpacingM)) break;
   }
-  return candidate;
+  return fallback;
 }
 
 export type FragResult =
   | { readonly ok: true; readonly corals: CoralState[]; readonly fragKey: string }
   | {
       readonly ok: false;
-      readonly reason: 'unknown' | 'not_grown' | 'bleached' | 'limit';
+      readonly reason: 'unknown' | 'not_grown' | 'bleached' | 'limit' | 'no_room';
     };
 
 /** The fragment is cut from the colony's mass: the colony loses what the fragment starts with. */
@@ -206,6 +216,7 @@ export function fragCoral(
   key: string,
   table: CoralTable,
   bounds: PlantBounds,
+  obstacles: readonly Obstacle[] = [],
 ): FragResult {
   const parent = corals.find((c) => c.key === key);
   if (!parent) return { ok: false, reason: 'unknown' };
@@ -219,11 +230,13 @@ export function fragCoral(
   const root = rootOf(corals, parent);
   const spawned = root.spawned + 1;
   const fragKey = `${root.key}.${spawned}`;
+  const position = fragPosition(parent, fragKey, corals, table, bounds, obstacles);
+  if (!position) return { ok: false, reason: 'no_room' };
   const frag: CoralState = {
     key: fragKey,
     assetId: parent.assetId,
     parentKey: parent.key,
-    position: fragPosition(parent, fragKey, corals, table, bounds),
+    position,
     size: params.fragStartSize,
     bleach: 0,
     spawned: 0,
