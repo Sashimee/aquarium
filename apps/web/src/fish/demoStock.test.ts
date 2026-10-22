@@ -18,11 +18,11 @@ import { DEMO_STOCKS, demoStock, demoTank, sceneAnchorsToSim } from './demoStock
 import bettaContent from '../../../../content/species/betta.json';
 import neonTetraContent from '../../../../content/species/neon-tetra.json';
 
-// The mangrove stock arrives with its species content (T50).
-const BIOMES = playableBiomeSchema.options.filter((b) => b !== 'mangrove');
-const SCHOOLERS: Partial<Record<PlayableBiome, readonly string[]>> = {
-  freshwater: ['neon-tetra', 'bronze-corydoras'],
+const BIOMES = playableBiomeSchema.options;
+const SHOALS: Readonly<Record<PlayableBiome, readonly string[]>> = {
+  freshwater: ['neon-tetra', 'bronze-corydoras', 'guppy'],
   reef: ['banggai-cardinalfish'],
+  mangrove: ['banded-archerfish', 'orange-chromide'],
   // Rift lake cichlids hold territories on rock and shell; none of them schools.
   cichlid: [],
   blackwater: ['cardinal-tetra', 'rummy-nose-tetra', 'dwarf-pencilfish'],
@@ -140,10 +140,7 @@ describe.each(BIOMES)('demoTank(%s)', (biome) => {
       const { schooling } = speciesSchema.partial({ render: true }).parse(raw).behaviour;
       return schooling === undefined ? [] : [{ id: species.id, minGroup: schooling.minGroup }];
     });
-    const expected = SCHOOLERS[biome];
-    expect(expected, biome).toBeDefined();
-    expect(schooling.map((s) => s.id)).toEqual(expect.arrayContaining([...(expected ?? [])]));
-    if (expected?.length === 0) expect(schooling).toEqual([]);
+    expect(schooling.map((s) => s.id).sort()).toEqual([...SHOALS[biome]].sort());
     const spawned = demoTank(DEFAULT_TANK, 1, biome).config.fish;
     for (const { id, minGroup } of schooling) {
       expect(stock.counts[id] ?? 0, id).toBeGreaterThanOrEqual(minGroup);
@@ -194,6 +191,40 @@ describe('reef stock', () => {
     expect((counts['yellow-tang'] ?? 0) + (counts['blue-tang'] ?? 0)).toBeGreaterThanOrEqual(1);
     expect(counts['royal-gramma']).toBeGreaterThanOrEqual(1);
     expect(counts['banggai-cardinalfish']).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('mangrove stock', () => {
+  it('leaves out the silver mono, which outgrows a 120 cm tank', () => {
+    expect(DEMO_STOCKS.mangrove.species.map((s) => s.id)).not.toContain('silver-mono');
+  });
+
+  it('keeps archerfish under the surface and gobies and mudskippers on the mud', () => {
+    const demo = demoTank(DEFAULT_TANK, 9, 'mangrove');
+    const world = new World(demo.config);
+    const { space } = demo.config;
+    const top = tankWaterTop(space);
+    const heights = new Map<string, number[]>();
+    for (let step = 0; step < 6000; step++) {
+      world.step();
+      if (step < 900 || step % 10 !== 0) continue;
+      demo.config.fish.forEach((f, i) => {
+        const x = world.position[i * 3] ?? 0;
+        const z = world.position[i * 3 + 2] ?? 0;
+        const ground = sampleFloor(space, x, z);
+        const h = ((world.position[i * 3 + 1] ?? 0) - ground) / (top - ground);
+        heights.set(f.species, [...(heights.get(f.species) ?? []), h]);
+      });
+    }
+    const median = (id: string): number => {
+      const hs = [...(heights.get(id) ?? [])].sort((a, b) => a - b);
+      if (hs.length === 0) throw new Error(`no ${id} in the mangrove demo`);
+      return hs[Math.floor(hs.length / 2)] ?? Number.NaN;
+    };
+    expect(median('banded-archerfish')).toBeGreaterThan(0.6);
+    expect(median('bumblebee-goby')).toBeLessThan(0.2);
+    expect(median('barred-mudskipper')).toBeLessThan(0.2);
+    expect(median('blue-spotted-mudskipper')).toBeLessThan(0.2);
   });
 });
 
@@ -264,6 +295,17 @@ describe('sceneAnchorsToSim', () => {
     expect(sceneAnchorsToSim([scene], demo)).toEqual([
       { id: 'a', kind: 'anemone', position: [0.1, 0.25, -0.05], radius: 0.04 },
     ]);
+  });
+
+  it('carries a cave mouth facing through to the sim', () => {
+    const cave: SceneAnchor = {
+      id: 'c',
+      kind: 'cave',
+      position: [0.1, 0.25, 0],
+      radius: 0.03,
+      facing: [0, 0, 1],
+    };
+    expect(sceneAnchorsToSim([cave], demo)[0]?.facing).toEqual([0, 0, 1]);
   });
 
   it('lifts an anchor sunk into the sand until its sphere clears it', () => {

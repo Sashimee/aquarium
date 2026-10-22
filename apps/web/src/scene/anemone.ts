@@ -44,6 +44,8 @@ export interface SceneAnchor {
   readonly kind: 'anemone' | 'cave';
   readonly position: readonly [number, number, number];
   readonly radius: number;
+  /** Outward direction of a cave mouth. */
+  readonly facing?: readonly [number, number, number];
 }
 
 function spread(entry: CatalogEntry): number {

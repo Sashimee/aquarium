@@ -334,6 +334,7 @@ async function boot(): Promise<void> {
   let sceneBiome: Biome | null = null;
   let unbindPump = (): void => undefined;
   let detachCorals = (): void => undefined;
+  let detachAnchors = (): void => undefined;
   let detachPlants = (): void => undefined;
   const showBackground = (state: InteractionEvents['background:state'] | undefined): void => {
     if (!state || state.biome !== sceneBiome) return;
@@ -348,6 +349,7 @@ async function boot(): Promise<void> {
       showBackground(interaction.peek('background:state'));
       void engine.useBackgroundIndex({ assets: [...scene.catalogEntries()] });
       fish.setAnchors(scene.anchors);
+      detachAnchors = scene.onAnchorsChanged((anchors) => fish.setAnchors(anchors));
       scene.polyps.bind(fish.polyps);
       container.dataset['sceneBiome'] = scene.biome;
       scene.enableMovablePlants();
@@ -368,6 +370,8 @@ async function boot(): Promise<void> {
       detachPlants = () => undefined;
       detachCorals();
       detachCorals = () => undefined;
+      detachAnchors();
+      detachAnchors = () => undefined;
       delete container.dataset['sceneBiome'];
       delete container.dataset['backgroundId'];
       sceneBiome = null;

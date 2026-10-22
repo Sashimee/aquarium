@@ -1,0 +1,69 @@
+{
+  "behaviour": {
+    "boldness": 0.5,
+    "curiosity": 0.5,
+    "depthBand": [0.15, 0.6],
+    "perceptionFovDeg": 300,
+    "perceptionRangeM": 0.4,
+    "preferredZone": "mid",
+    "schooling": {
+      "minGroup": 8,
+      "tightenWhenStartled": false,
+      "topologicalNeighbours": 5
+    },
+    "territorial": false,
+    "traits": ["shoal"]
+  },
+  "biome": "mangrove",
+  "breeding": {
+    "broodSize": [3, 8],
+    "fryGrowth": {
+      "adultAfterDays": 240,
+      "juvenileAfterDays": 30
+    },
+    "intervalDays": 30,
+    "minAgeDays": 240,
+    "mode": "substrate-spawner",
+    "temperatureC": [25, 28]
+  },
+  "chemistry": {
+    "khMin": 4,
+    "nitriteTolerance": 0.4,
+    "phRange": [7, 8.5],
+    "salinityPpt": [0, 25],
+    "sources": [
+      "FishBase (fishbase.se) species summary: freshwater and brackish lagoons and estuaries, pH 8.0 to 9.0 (Ref. 1672)",
+      "SeriouslyFish species profile (seriouslyfish.com): 20 to 28 C, pH 7.0 to 8.5, euryhaline, mostly brackish estuaries and coastal lagoons",
+      "The salinity ceiling of 25 ppt is hobby brackish practice, not a measured tolerance"
+    ],
+    "temperatureC": [20, 28]
+  },
+  "commonName": "Orange chromide",
+  "id": "orange-chromide",
+  "lifecycle": {
+    "ammoniaPerBioloadPerHour": 0.001,
+    "ammoniaTolerance": 0.25,
+    "bioload": 0.5,
+    "birthSizeM": 0.02,
+    "diet": ["bloodworms", "brine-shrimp", "flakes", "algae-wafer", "pellets"],
+    "growthPerDay": 0.0002,
+    "healthLossPerHourStarving": 0.0078,
+    "healthRecoveryPerHour": 0.004,
+    "hungerPerHour": 0.0068,
+    "lifespanDays": 1825,
+    "maxSizeM": 0.0771,
+    "starvationHungerThreshold": 0.75
+  },
+  "locomotion": {
+    "bodyLengthM": 0.06,
+    "cruiseSpeedMps": 0.05,
+    "gait": "hover",
+    "massKg": 0.0046,
+    "maxPitchDeg": 30,
+    "maxSpeedMps": 0.6,
+    "maxTurnRateDegPerS": 300,
+    "strouhal": 0.3,
+    "swimmingMode": "labriform"
+  },
+  "scientificName": "Pseudetroplus maculatus"
+}

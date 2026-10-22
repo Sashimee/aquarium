@@ -1,0 +1,61 @@
+{
+  "behaviour": {
+    "boldness": 0.5,
+    "curiosity": 0.7,
+    "depthBand": [0.75, 0.97],
+    "perceptionFovDeg": 300,
+    "perceptionRangeM": 1,
+    "preferredZone": "surface",
+    "schooling": {
+      "minGroup": 4,
+      "tightenWhenStartled": false,
+      "topologicalNeighbours": 4
+    },
+    "territorial": false,
+    "traits": ["shoal"]
+  },
+  "biome": "mangrove",
+  "breeding": {
+    "mode": "none"
+  },
+  "chemistry": {
+    "khMin": 4,
+    "nitriteTolerance": 0.4,
+    "phRange": [7, 8.5],
+    "salinityPpt": [2, 30],
+    "sources": [
+      "FishBase (fishbase.se) species summary: freshwater and brackish, 25 to 30 C (Ref. 1672)",
+      "SeriouslyFish species profile (seriouslyfish.com): pH 7.0 to 8.0, upper end preferred; hard water; brackish mangrove swamps and estuaries",
+      "Salinity and the pH ceiling are hobby brackish practice, not a measured tolerance"
+    ],
+    "temperatureC": [25, 30]
+  },
+  "commonName": "Banded archerfish",
+  "id": "banded-archerfish",
+  "lifecycle": {
+    "ammoniaPerBioloadPerHour": 0.001,
+    "ammoniaTolerance": 0.25,
+    "bioload": 2.5,
+    "birthSizeM": 0.04,
+    "diet": ["pellets", "bloodworms", "brine-shrimp", "flakes"],
+    "growthPerDay": 0.0005,
+    "healthLossPerHourStarving": 0.0078,
+    "healthRecoveryPerHour": 0.004,
+    "hungerPerHour": 0.0058,
+    "lifespanDays": 3650,
+    "maxSizeM": 0.258,
+    "starvationHungerThreshold": 0.75
+  },
+  "locomotion": {
+    "bodyLengthM": 0.12,
+    "cruiseSpeedMps": 0.12,
+    "gait": "cruise",
+    "massKg": 0.045,
+    "maxPitchDeg": 35,
+    "maxSpeedMps": 1.2,
+    "maxTurnRateDegPerS": 360,
+    "strouhal": 0.3,
+    "swimmingMode": "subcarangiform"
+  },
+  "scientificName": "Toxotes jaculatrix"
+}

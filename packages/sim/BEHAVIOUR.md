@@ -415,7 +415,29 @@ client holding its pose at the station, `Clean` (20) for the wrasse darting to a
 | Cleaning pose       | State `Pose` (19): a client holding still at a station, pitched head-down or head-up, fins spread and gill covers out through `Display` and `GillFlare`. | Côté, Arnal & Reynolds 1998.                                             | `FishState.Pose`          |
 | Cleaning            | State `Clean` (20): the wrasse darting to and picking at a client.                                                                                       | Grutter 1994.                                                            | `FishState.Clean`         |
 
+## Mangrove species
+
+Brackish mangrove fish are built from the existing gaits and traits; no new sim code. Water
+chemistry, salinity included, is in each content file's `chemistry.sources`.
+
+| Species and behaviour               | What the content does                                                                    | Source                                                                                                                                 | Parameter                                                                                    |
+| ----------------------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Banded archerfish, surface shoal    | Holds just under the surface in a loose shoal, the station it hunts from                 | Schuster et al. 2006 (Curr Biol 16:378, groups hunt and learn by watching); FishBase _Toxotes jaculatrix_ (Ref. 1672)                  | `depthBand [0.75, 0.97]`, `preferredZone surface`, `schooling.minGroup 4`, `traits [shoal]`  |
+| Banded archerfish, fast turn        | Turns hard toward food, the C-start-like predictive start                                | Wöhl & Schuster 2007 (J Exp Biol 210:311)                                                                                              | `maxTurnRateDegPerS 360`, `maxSpeedMps 1.2`                                                  |
+| Banded archerfish, curiosity        | Comes to the glass and watches the viewer                                                | Newport et al. 2016 (Sci Rep 6:27523, archerfish discriminate human faces)                                                             | `curiosity 0.7`, `perceptionRangeM 1`                                                        |
+| Barred mudskipper, burrow territory | Forages on the bottom and chases rivals off its patch                                    | Clayton 1993 (Oceanogr Mar Biol Annu Rev 31:507, territorial burrow holders)                                                           | `territorial`, `gait forage`, `depthBand [0, 0.12]`                                          |
+| Barred mudskipper, air breathing    | Rises to gulp air, standing in for emersion the tank has no mud bank for                 | Clayton 1993 (bimodal air breathers); no submerged surfacing rate published, so the rate is an estimate at twice the corydoras default | `airGulp.perHour 12`                                                                         |
+| Mudskippers, weak swimmers          | Slow cruise and a low top speed: skipping on mud, not swimming, is their fast locomotion | Harris 1960 (Proc Zool Soc Lond 134:107, mudskipper locomotion)                                                                        | `maxSpeedMps 0.4`, `cruiseSpeedMps 0.04` / `0.05`                                            |
+| Blue-spotted mudskipper, grazer     | As the barred mudskipper, with algae first in its diet for a diatom grazer               | Clayton 1993 (_Boleophthalmus_ grazes benthic diatoms); FishBase _B. pectinirostris_ (Ref. 2060)                                       | `diet [algae-wafer, …]`, `airGulp.perHour 12`                                                |
+| Bumblebee goby, perch and hop       | Sits on the bottom near cover, hops short distances and defends a small patch            | SeriouslyFish _Brachygobius doriae_ profile (territorial, bottom dwelling); FishBase (Ref. 1672)                                       | `territorial`, `gait forage`, `boldness 0.3`, `cruiseSpeedMps 0.03`                          |
+| Orange chromide, cichlid shoal      | Shoals in mid-water and sculls with the pectorals like the other cichlids here           | Ward & Wyman 1977 (Environ Biol Fishes 2:137, _Etroplus_ shoal outside breeding, pair as substrate spawners)                           | `schooling.minGroup 8`, `gait hover`, `swimmingMode labriform`, `breeding substrate-spawner` |
+| Silver mono, schooling              | Tight mid-water school that closes up when startled                                      | FishBase _Monodactylus argenteus_ (Ref. 1672, forms schools in estuaries and mangrove creeks)                                          | `schooling.minGroup 5`, `topologicalNeighbours 6`, `tightenWhenStartled`                     |
+
 ## Not yet modelled
+
+Archerfish do not spit at prey above the water and mudskippers never leave it: the tank has no
+emergent mud bank or overhanging insects. Bumblebee gobies do not breed, since there is no cave
+anchor in the mangrove preset for the male to guard.
 
 Clownfish tend at the same rate through development, though both parents tend more as the eggs
 mature (Green & McCormick 2005; Pacaro et al. 2023), and the night-only vigorous fanning, vigorous

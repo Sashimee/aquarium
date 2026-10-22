@@ -1414,15 +1414,18 @@ describe('tank sizes, quarantine and sharing', () => {
     }
   });
 
-  it('refuses a non-nano quarantine tank, an unknown size and an unplayable biome', async () => {
+  it('refuses a bad quarantine, size or biome and creates a mangrove tank', async () => {
     const cookie = await signedIn(h);
     for (const body of [
       { name: 'Q', biome: 'freshwater', quarantine: true },
       { name: 'Q', biome: 'freshwater', size: 'huge' },
-      { name: 'Q', biome: 'mangrove' },
+      { name: 'Q', biome: 'tundra' },
     ]) {
       expect((await create(cookie, body)).statusCode).toBe(400);
     }
+    const res = await create(cookie, { name: 'Roots', biome: 'mangrove' });
+    expect(res.statusCode).toBe(201);
+    expect(tankSchema.parse(res.json()).biome).toBe('mangrove');
   });
 
   it('does not count the quarantine tank towards the six', async () => {
