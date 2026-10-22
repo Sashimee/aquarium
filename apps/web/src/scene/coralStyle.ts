@@ -88,19 +88,3 @@ export function fluorescenceLevel(excitation: number): number {
 }
 
 export const clamp01 = (x: number): number => Math.min(1, Math.max(0, x));
-
-/**
- * Bleached tissue has lost its zooxanthellae, so the live tint goes and the scan's own pale
- * skeleton tone shows. The multiplier only ever moves toward 1, so albedo never exceeds the
- * scan's; the fluorescent glow fades with the tissue.
- */
-const BLEACHED_WHITE: Rgb = [1, 1, 1];
-
-export function bleachedColor(live: Color, bleach: number): Color {
-  const t = clamp01(bleach);
-  return new Color(
-    live.r + (BLEACHED_WHITE[0] - live.r) * t,
-    live.g + (BLEACHED_WHITE[1] - live.g) * t,
-    live.b + (BLEACHED_WHITE[2] - live.b) * t,
-  );
-}
