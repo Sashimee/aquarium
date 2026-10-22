@@ -16,6 +16,7 @@ import {
   type PadReading,
   type SuitKey,
 } from '../sync/waterTest';
+import { lakeWaterNotes } from '../sync/cichlid';
 import { getDip, putDip, type Dip } from './dipStore';
 
 const SUIT_KEY: Partial<Record<PadId, SuitKey>> = { ph: 'ph', kh: 'kh', salinity: 'salinity' };
@@ -148,12 +149,57 @@ function Readings({
   );
 }
 
-export default function WaterTest({
+function LakeWater({
   tank,
   species,
+  dip,
+  onWaterChange,
 }: {
   tank: Tank;
   species: readonly SpeciesSummary[];
+  dip: Dip;
+  onWaterChange: (() => void) | undefined;
+}) {
+  const known = (id: 'kh' | 'ph') => {
+    const reading = dip.strip[id];
+    if (!reading || !(dip.revealed || dip.guesses[id] !== undefined)) return undefined;
+    return Math.round(reading.value * 10) / 10;
+  };
+  const notes = lakeWaterNotes(tank, species, { kh: known('kh'), ph: known('ph') });
+  if (notes.length === 0) return null;
+  const canChange = onWaterChange !== undefined && notes.some((n) => n.fix === 'water-change');
+  return (
+    <div className="lake-notes" data-testid="lake-notes">
+      <ul>
+        {notes.map((n) => (
+          <li
+            key={n.metric}
+            className={n.level === 'watch' ? 'hint' : 'warning'}
+            data-level={n.level}
+            data-metric={n.metric}
+            role={n.level === 'watch' ? undefined : 'alert'}
+          >
+            {n.text}
+          </li>
+        ))}
+      </ul>
+      {canChange && (
+        <button type="button" data-action="lake-water-change" onClick={onWaterChange}>
+          Change half the water
+        </button>
+      )}
+    </div>
+  );
+}
+
+export default function WaterTest({
+  tank,
+  species,
+  onWaterChange,
+}: {
+  tank: Tank;
+  species: readonly SpeciesSummary[];
+  onWaterChange?: () => void;
 }) {
   const id = useId();
   const [dip, setDip] = useState<Dip | null>(() => getDip(tank.id));
@@ -200,6 +246,9 @@ export default function WaterTest({
       {dip && (
         <>
           <Readings tank={tank} species={species} dip={dip} now={now} />
+          {tank.biome === 'cichlid' && (
+            <LakeWater tank={tank} species={species} dip={dip} onWaterChange={onWaterChange} />
+          )}
           {!dip.revealed && (
             <button type="button" onClick={() => store({ ...dip, revealed: true })}>
               Show all readings
