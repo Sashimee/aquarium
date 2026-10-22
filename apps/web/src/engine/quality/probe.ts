@@ -1,4 +1,12 @@
-import { TIER_COST, TIERS, tierIndex, type Tier } from './tiers';
+import {
+  frameTimedMaxTier,
+  lowerTier,
+  TIER_COST,
+  TIER_GPU_SHARE,
+  TIERS,
+  tierIndex,
+  type Tier,
+} from './tiers';
 
 export type TimingSignal = 'gpu' | 'frame';
 
@@ -45,28 +53,28 @@ export function gpuTimeSpansFrames(gpuMs: number, frameMs: number): boolean {
   return frameMs > 0 && gpuMs > frameMs * GPU_SPAN_TOLERANCE;
 }
 
+/** With `gpuShare`, a tier's budget is only its `TIER_GPU_SHARE` of `budgetMs`. */
 function highestTierWithin(
   medianMs: number,
   probeTier: Tier,
   budgetMs: number,
   maxTier: Tier,
+  gpuShare: boolean,
 ): Tier | null {
   for (const tier of TIERS.slice(0, tierIndex(maxTier) + 1).reverse()) {
-    if ((medianMs * TIER_COST[tier]) / TIER_COST[probeTier] <= budgetMs) return tier;
+    const budget = gpuShare ? budgetMs * TIER_GPU_SHARE[tier] : budgetMs;
+    if ((medianMs * TIER_COST[tier]) / TIER_COST[probeTier] <= budget) return tier;
   }
   return null;
-}
-
-function lowerOf(a: Tier, b: Tier): Tier {
-  return tierIndex(a) <= tierIndex(b) ? a : b;
 }
 
 /**
  * Picks the starting tier from the start-up timing probe.
  *
- * GPU timestamps measure real work, so they are extrapolated to every tier. A frame
- * interval is clamped by vsync and cannot reveal headroom, so a device that keeps up at
- * the probe tier starts there and the adaptive controller climbs further if it can.
+ * GPU timestamps measure real work, so they are extrapolated to every tier, each held to its
+ * `TIER_GPU_SHARE` of the budget. A frame interval is clamped by vsync and cannot reveal headroom,
+ * so a device that keeps up at the probe tier starts there and the adaptive controller climbs
+ * further if it can, never into a tier that needs measured GPU headroom.
  */
 export function selectInitialTier(input: ProbeInput): ProbeResult {
   const { samples, signal, targetMs } = input;
@@ -78,27 +86,28 @@ export function selectInitialTier(input: ProbeInput): ProbeResult {
   const medianMs = median(samples);
 
   if (medianMs === null) {
-    return { tier: lowerOf('medium', maxTier), medianMs, reason: 'no timing samples during probe' };
+    return {
+      tier: lowerTier('medium', maxTier),
+      medianMs,
+      reason: 'no timing samples during probe',
+    };
   }
 
   if (signal === 'gpu') {
-    const tier = highestTierWithin(medianMs, probeTier, targetMs * gpuHeadroom, maxTier) ?? 'low';
+    const tier =
+      highestTierWithin(medianMs, probeTier, targetMs * gpuHeadroom, maxTier, true) ?? 'low';
     return { tier, medianMs, reason: `gpu ${medianMs.toFixed(2)} ms at ${probeTier}` };
   }
 
+  const frameMax = lowerTier(probeTier, frameTimedMaxTier(maxTier));
   if (medianMs <= refreshMs * frameTolerance) {
     return {
-      tier: lowerOf(probeTier, maxTier),
+      tier: frameMax,
       medianMs,
       reason: `frame ${medianMs.toFixed(2)} ms keeps up`,
     };
   }
   const tier =
-    highestTierWithin(
-      medianMs,
-      probeTier,
-      targetMs * frameTolerance,
-      lowerOf(probeTier, maxTier),
-    ) ?? 'low';
+    highestTierWithin(medianMs, probeTier, targetMs * frameTolerance, frameMax, false) ?? 'low';
   return { tier, medianMs, reason: `frame ${medianMs.toFixed(2)} ms at ${probeTier}` };
 }

@@ -2,6 +2,8 @@ import type { EngineEventBus } from '../events';
 import { DEFAULT_CONTROLLER_CONFIG, TierController } from './controller';
 import { gpuTimeSpansFrames, median, selectInitialTier, type TimingSignal } from './probe';
 import {
+  frameTimedMaxTier,
+  lowerTier,
   TIER_SETTINGS,
   tierIndex,
   type Tier,
@@ -197,6 +199,7 @@ export class QualityManager {
     const signal: TimingSignal = this.trustsGpu(phase) ? 'gpu' : 'frame';
     this.signal = signal;
     const measured = this.current;
+    const maxTier = signal === 'gpu' ? this.maxTier : frameTimedMaxTier(this.maxTier);
     const result = selectInitialTier({
       samples: signal === 'gpu' ? phase.gpu : phase.frame,
       signal,
@@ -204,7 +207,7 @@ export class QualityManager {
       targetMs: this.options.targetMs,
       refreshMs: this.refreshMs,
       // The empty tank runs faster than the furnished one will, so it may only lower the tier.
-      maxTier: phase.content ? this.maxTier : measured,
+      maxTier: phase.content ? maxTier : lowerTier(measured, maxTier),
     });
     if (!phase.content) {
       this.settle(result.tier);
@@ -218,7 +221,7 @@ export class QualityManager {
         ...DEFAULT_CONTROLLER_CONFIG,
         targetMs: this.options.targetMs,
         refreshMs: this.refreshMs,
-        maxTier: this.maxTier,
+        maxTier,
         signal,
       });
       this.controller.reset(result.tier, nowMs);
