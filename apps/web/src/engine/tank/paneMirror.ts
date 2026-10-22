@@ -117,10 +117,14 @@ type FrameTarget = RenderTarget | CanvasTarget;
 
 /**
  * The copy of the frame the glass samples. Each target the scene is drawn into gets its own
- * full-size copy, freed with that target or else with the mirror.
+ * full-size copy, freed when that target is disposed (which three also does when it resizes one)
+ * or else with the mirror. The targets are held weakly, so one dropped without `dispose()` is not
+ * kept alive here, and its copy is freed once it is collected.
  */
 export class FrameCopy extends ViewportTextureNode {
-  private readonly copies = new Map<FrameTarget, () => void>();
+  private readonly copies = new WeakMap<FrameTarget, () => void>();
+  private readonly held = new Set<WeakRef<FrameTarget>>();
+  private readonly orphans = new FinalizationRegistry<Texture>((texture) => texture.dispose());
 
   override getTextureForReference(reference: FrameTarget | null = null): Texture {
     const texture = super.getTextureForReference(reference);
@@ -140,24 +144,39 @@ export class FrameCopy extends ViewportTextureNode {
   }
 
   get copyCount(): number {
-    return this.copies.size;
+    this.forgetCollected();
+    return this.held.size;
   }
 
   override dispose(): void {
-    for (const release of [...this.copies.values()]) release();
+    for (const ref of [...this.held]) {
+      const target = ref.deref();
+      if (target !== undefined) this.copies.get(target)?.();
+    }
+    this.held.clear();
     this.value.dispose();
     super.dispose();
   }
 
   private keep(reference: FrameTarget, texture: Texture): void {
     if (this.copies.has(reference)) return;
+    this.forgetCollected();
+    const ref = new WeakRef(reference);
     const release = (): void => {
       unwatch();
       texture.dispose();
       this.copies.delete(reference);
+      this.held.delete(ref);
+      this.orphans.unregister(ref);
     };
     const unwatch = watchDispose(reference, release);
     this.copies.set(reference, release);
+    this.held.add(ref);
+    this.orphans.register(reference, texture, ref);
+  }
+
+  private forgetCollected(): void {
+    for (const ref of this.held) if (ref.deref() === undefined) this.held.delete(ref);
   }
 }
 

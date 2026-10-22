@@ -134,10 +134,15 @@ export interface ImpostorChoice {
 /** Below this the sim's easing display has faded to nothing visible, if not yet to 0. */
 const DISPLAY_SHOWN = 0.01;
 
+/** Whether a fish's display (see `ImpostorChoice.display`) is still visible. */
+export function inDisplay(display: number): boolean {
+  return display > DISPLAY_SHOWN;
+}
+
 /**
  * Whether a fish draws as an impostor instead of its LOD mesh. Past lod2 it does. Nearer, a
  * fish outside the nearest few swaps too, unless its mesh casts a shadow: the impostor casts none,
- * and a shadow vanishing as a fish drops a rank pops. That one draws its lod2 mesh instead
+ * and a shadow vanishing as a fish drops a rank pops. That one draws a coarser mesh instead
  * (`meshLod`), which casts on a tier that caps its meshes.
  *
  * A fish in display keeps its mesh at any distance. The atlas is baked with the fins at rest, and a
@@ -146,19 +151,22 @@ const DISPLAY_SHOWN = 0.01;
  * not pop.
  */
 export function drawsAsImpostor(c: Readonly<ImpostorChoice>): boolean {
-  if (!c.tierImpostors || !c.available || c.display > DISPLAY_SHOWN) return false;
+  if (!c.tierImpostors || !c.available || inDisplay(c.display)) return false;
   if (c.lod >= IMPOSTOR_LOD) return true;
   return !c.full && !c.castsShadow;
 }
 
 /**
- * The mesh a fish draws when it draws one: its distance level among the tier's nearest few, and
- * at least lod2 outside them, so the cap holds for a species without an impostor and for a shadow
- * caster that keeps its mesh.
+ * The mesh a fish draws when it draws one: its distance level among the tier's nearest few (`full`,
+ * which a fish in display counts as, since its mesh is what shows the display), and one level
+ * coarser outside them, down to lod2, so the cap holds for a species without an impostor and for
+ * a shadow caster that keeps its mesh. A near fish crossing the cap's edge then steps lod0 to lod1,
+ * about 2.5 times fewer triangles, rather than lod0 to lod2, about 6.5 times.
  */
 export function meshLod(lod: number, full: boolean, levels: number): number {
   if (!(levels >= 1)) throw new RangeError(`lod: need at least one level, got ${levels}`);
-  return full ? lod : Math.max(lod, Math.min(IMPOSTOR_LOD, levels - 1));
+  const level = full ? lod : Math.min(lod + 1, Math.max(lod, IMPOSTOR_LOD));
+  return Math.min(level, levels - 1);
 }
 
 /** The impostor bake's frame sizes and texels per metre (tools/asset-pipeline/src/impostor.ts). */
@@ -168,7 +176,7 @@ const IMPOSTOR_TEXELS_PER_METRE = 700;
 
 /**
  * The framing the impostor bake would give a model of this bounding radius, which ranks an animal
- * without an atlas, a walker or a fish whose atlas is still loading, against those with one.
+ * the pipeline baked no atlas for, such as a walker, against those with one.
  */
 export function bakeFraming(radius: number): AtlasFraming {
   if (!(radius > 0)) throw new RangeError(`lod: bounding radius must be > 0, got ${radius}`);
@@ -177,6 +185,30 @@ export function bakeFraming(radius: number): AtlasFraming {
       ? SMALL_FRAME_SIZE
       : LARGE_FRAME_SIZE;
   return { frameSize, radius };
+}
+
+export interface FramedModel {
+  readonly min: readonly [number, number, number];
+  readonly max: readonly [number, number, number];
+  readonly impostor: AtlasFraming | null;
+}
+
+const standInFramings = new WeakMap<FramedModel, AtlasFraming>();
+
+/**
+ * The framing a model ranks by: its baked atlas's as the asset index lists it, so a fish ranks the
+ * same before its atlas arrives as after, and otherwise `bakeFraming` of half its bounds' diagonal.
+ */
+export function modelFraming(model: FramedModel): AtlasFraming {
+  if (model.impostor !== null) return model.impostor;
+  let framing = standInFramings.get(model);
+  if (framing === undefined) {
+    const [x0, y0, z0] = model.min;
+    const [x1, y1, z1] = model.max;
+    framing = bakeFraming(Math.hypot(x1 - x0, y1 - y0, z1 - z0) / 2);
+    standInFramings.set(model, framing);
+  }
+  return framing;
 }
 
 /** LOD levels whose meshes keep enough jaw vertices to move the mouth. */
