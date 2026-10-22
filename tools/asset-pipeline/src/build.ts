@@ -31,7 +31,14 @@ import {
 } from './backgrounds.ts';
 import type { Rgba } from './textures.ts';
 import { RAW_ROOT, verifyRawSource } from './source.ts';
-import { ENVIRONMENT_RECIPES, FISH_RECIPES, HDRI_RECIPES, SUBSTRATE_RECIPES } from './recipes.ts';
+import {
+  ENVIRONMENT_RECIPES,
+  FISH_RECIPES,
+  HDRI_RECIPES,
+  ROCK_PILE_RECIPES,
+  SUBSTRATE_RECIPES,
+} from './recipes.ts';
+import { buildRockPile } from './rock-pile.ts';
 
 export interface BuildOptions {
   repoRoot: string;
@@ -96,6 +103,12 @@ function tasks(backgrounds: readonly ManifestAsset[], previews: Map<string, Rgba
       kind: recipe.kind,
       id: recipe.id,
       run: (ctx: FishContext) => buildEnvironment(recipe, ctx),
+    })),
+    ...ROCK_PILE_RECIPES.map((recipe) => ({
+      kind: 'rock' as const,
+      id: recipe.id,
+      run: (ctx: FishContext) =>
+        buildRockPile(recipe, new Map(ENVIRONMENT_RECIPES.map((r) => [r.id, r])), ctx),
     })),
     ...MANGROVE_ENVIRONMENT_RECIPES.map((recipe) => ({
       kind: recipe.kind,
