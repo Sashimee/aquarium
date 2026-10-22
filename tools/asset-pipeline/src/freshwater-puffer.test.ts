@@ -7,7 +7,19 @@ import {
   MANGROVE_LOFT_RECIPES,
   MANGROVE_SUBSTRATE_RECIPES,
 } from './mangrove.ts';
-import { ENVIRONMENT_RECIPES, FISH_RECIPES, SUBSTRATE_RECIPES } from './recipes.ts';
+import {
+  ENVIRONMENT_RECIPES,
+  FISH_RECIPES,
+  HDRI_RECIPES,
+  ROCK_PILE_RECIPES,
+  SUBSTRATE_RECIPES,
+} from './recipes.ts';
+import { AUDIO_RECIPES } from './audio.ts';
+import { BLACKWATER_FISH_RECIPES } from './blackwater-fish.ts';
+import { HERMIT_RECIPES } from './hermit.ts';
+import { LEAF_CARD_RECIPES } from './leaf-card.ts';
+import { NERITE_RECIPES } from './nerite.ts';
+import { SHRIMP_RECIPES } from './shrimp.ts';
 
 describe('freshwater puffer', () => {
   it('builds only the figure-8 puffer, and the mangrove set no longer claims it', () => {
@@ -33,6 +45,14 @@ describe('freshwater puffer', () => {
     const others = new Set([
       ...FISH_RECIPES.map((r) => r.id),
       ...LOFT_FISH_RECIPES.map((r) => r.id),
+      ...BLACKWATER_FISH_RECIPES.map((r) => r.id),
+      ...SHRIMP_RECIPES.map((r) => r.id),
+      ...HERMIT_RECIPES.map((r) => r.id),
+      ...NERITE_RECIPES.map((r) => r.id),
+      ...LEAF_CARD_RECIPES.map((r) => r.id),
+      ...ROCK_PILE_RECIPES.map((r) => r.id),
+      ...HDRI_RECIPES.map((r) => r.id),
+      ...AUDIO_RECIPES.map((r) => r.id),
       ...ENVIRONMENT_RECIPES.map((r) => r.id),
       ...SUBSTRATE_RECIPES.map((r) => r.id),
       ...MANGROVE_FISH_RECIPES.map((r) => r.id),
@@ -64,6 +84,7 @@ describe('freshwater puffer', () => {
       r.texture.kind === 'synthetic' ? (r.texture.references ?? []) : [],
     );
     expect(used).not.toContain('wm-figure8-geyer');
+    expect(used).toEqual([]);
   });
 
   it('gives the puffer a standard length in the sourced range', () => {
