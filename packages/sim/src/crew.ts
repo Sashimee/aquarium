@@ -1,6 +1,7 @@
+import type { FoodType } from '@aquarium/shared';
 import { BEHAVIOUR } from './behaviour.ts';
 import { FEEDING, gutForHunger, isScavenger } from './feeding.ts';
-import { FOOD_PARTICLES } from './food.ts';
+import { FOOD_PARTICLES, FOOD_TYPES } from './food.ts';
 import type { SimSpecies } from './species.ts';
 
 export { isScavenger };
@@ -155,6 +156,12 @@ export interface CleanupInput {
   readonly algae: number;
   /** Lifecycle uneaten food on the substrate, in feed portions. */
   readonly uneatenFood: number;
+  /**
+   * Food types the uneaten food is made of. A crew member whose diet has none of them neither
+   * looks for it nor leaves the glass for it, as in the realtime model; one that eats any of them
+   * may find all of it, since the lifecycle keeps one total. Every type when missing.
+   */
+  readonly uneatenFoodTypes?: readonly FoodType[];
   readonly dtHours: number;
   /**
    * Share of the step the tank lamp is on, 0 to 1. Diurnal and crepuscular crew rest in the dark
@@ -201,12 +208,14 @@ function requireNonNegative(value: number, field: string): void {
  * grazable surfaces: each member clears its film area per hour, of which the share `algae` is
  * covered, so cover falls as dA/dt = −A·Σrate/area and never below zero. Settled food is found by
  * the floor area scavengers sweep (dF/dt = −F·Σsweep/floor) and eaten up to the room each gut has
- * once it has emptied over the step (`FEEDING.gastricEvacuationTauS`). A hungry forager that also
- * grazes glass sweeps for food until less than the smallest particle is left and grazes for the
- * rest of the step; a sated one grazes all of it, as it does live. Pure and deterministic.
+ * once it has emptied over the step (`FEEDING.gastricEvacuationTauS`); a member whose diet has
+ * none of `uneatenFoodTypes` does not look for it. A hungry forager that also grazes glass sweeps
+ * for food it eats until less than the smallest particle is left and grazes for the rest of the
+ * step; a sated one grazes all of it, as it does live. Pure and deterministic.
  */
 export function crewCleanup(input: CleanupInput): CleanupResult {
   const { crew, species, algae, uneatenFood, dtHours, litFraction, surfaces } = input;
+  const foodTypes = foodTypeIndices(input.uneatenFoodTypes);
   requireUnit(algae, 'algae');
   requireNonNegative(uneatenFood, 'uneatenFood');
   requireNonNegative(dtHours, 'dtHours');
@@ -239,9 +248,11 @@ export function crewCleanup(input: CleanupInput): CleanupResult {
     const gut = member.hunger === undefined ? 0 : gutForHunger(member.hunger);
     const sated =
       FEEDING.satiationPortions - gut <= FEEDING.satiatedMotivation * FEEDING.satiationPortions;
+    const eats = foodTypes.some((t) => (sp.foodPreference[t] ?? 0) > 0);
     const switcher = grazesWhenNoFood(sp) && g > 0;
-    const switching = switcher && !sated;
-    const s = member.alive && !(switcher && sated) ? scavengeSweepPerHour(sp, length) * awake : 0;
+    const switching = switcher && !sated && eats;
+    const s =
+      member.alive && eats && !(switcher && sated) ? scavengeSweepPerHour(sp, length) * awake : 0;
     graze.push(g);
     sweep.push(s);
     switches.push(switching);
@@ -273,6 +284,19 @@ export function crewCleanup(input: CleanupInput): CleanupResult {
     if (a > 0 || f > 0) perFish.push({ id: member.id, algae: a, food: f });
   });
   return { algaeGrazed, foodEaten, perFish };
+}
+
+function foodTypeIndices(types: readonly FoodType[] | undefined): number[] {
+  if (types === undefined) return FOOD_TYPES.map((_, t) => t);
+  return types.map((type) => {
+    const t = FOOD_TYPES.indexOf(type);
+    if (t < 0) {
+      throw new RangeError(
+        `crewCleanup: unknown food type "${String(type)}" in uneatenFoodTypes; known foods are ${FOOD_TYPES.join(', ')}`,
+      );
+    }
+    return t;
+  });
 }
 
 /**
