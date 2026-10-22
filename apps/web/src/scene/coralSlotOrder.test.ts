@@ -134,19 +134,34 @@ describe('euphyllia capsule', () => {
 
   it('grows with the colony', () => {
     const placed = euphylliaCapsule(mesh.bounds, item);
-    const grown = grownEuphylliaCapsule(mesh.bounds, item, coral(2), () => Infinity);
+    const grown = grownEuphylliaCapsule(
+      mesh.bounds,
+      item,
+      coral(2),
+      Object.assign(() => Infinity, { sways: () => false }),
+    );
     expect(grown.radius).toBeCloseTo(placed.radius * 2);
     expect(grown.height).toBeCloseTo(placed.height * 2, 6);
     expect(Math.hypot(...grown.lean)).toBeCloseTo(Math.hypot(...placed.lean) * 2, 6);
   });
 
   it('is held to the scale cap and unchanged without coral state', () => {
-    expect(grownEuphylliaCapsule(mesh.bounds, item, coral(2), () => 1.25).radius).toBeCloseTo(
-      euphylliaCapsule(mesh.bounds, { ...item, scale: 1.25 }).radius,
-    );
-    expect(grownEuphylliaCapsule(mesh.bounds, item, undefined, () => 1.25)).toEqual(
-      euphylliaCapsule(mesh.bounds, item),
-    );
+    expect(
+      grownEuphylliaCapsule(
+        mesh.bounds,
+        item,
+        coral(2),
+        Object.assign(() => 1.25, { sways: () => false }),
+      ).radius,
+    ).toBeCloseTo(euphylliaCapsule(mesh.bounds, { ...item, scale: 1.25 }).radius);
+    expect(
+      grownEuphylliaCapsule(
+        mesh.bounds,
+        item,
+        undefined,
+        Object.assign(() => 1.25, { sways: () => false }),
+      ),
+    ).toEqual(euphylliaCapsule(mesh.bounds, item));
   });
 
   it('leans by the mesh offset, turned with the item', () => {
@@ -217,13 +232,13 @@ describe('grown euphyllia capsule near the glass', () => {
 
   it('flags a euphyllia as swaying and a hard coral as rigid', () => {
     const cap = coralScaleCap(catalog, dimensions, current());
-    expect(cap.sways?.(nearGlass)).toBe(true);
-    expect(cap.sways?.({ ...nearGlass, assetId: 'brain-coral' })).toBe(false);
+    expect(cap.sways(nearGlass)).toBe(true);
+    expect(cap.sways({ ...nearGlass, assetId: 'brain-coral' })).toBe(false);
   });
 
   it('floors a euphyllia fragment at the glass with the real cap, and a hard coral not', () => {
     const cap = coralScaleCap(catalog, dimensions, current());
-    const [x, z] = [dimensions.length / 2 - dimensions.glass - 0.03, 0.05];
+    const [x, z] = [dimensions.length / 2 - dimensions.glass - 0.005, 0.05];
     const fragment = (assetId: string): Coral => ({
       ...grownColony,
       assetId,
@@ -248,6 +263,7 @@ describe('grown euphyllia capsule near the glass', () => {
     expect(sway.capAt).toBeLessThan(0.25 * nearGlass.scale);
     expect(sway.placed?.item.scale).toBeCloseTo(0.25 * nearGlass.scale);
     const rigid = place('brain-coral');
-    expect(rigid.placed?.item.scale).toBeLessThanOrEqual(rigid.capAt + 1e-9);
+    expect(rigid.capAt).toBeLessThan(0.25 * nearGlass.scale);
+    expect(rigid.placed?.item.scale).toBeCloseTo(rigid.capAt);
   });
 });
