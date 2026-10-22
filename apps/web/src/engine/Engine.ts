@@ -52,13 +52,14 @@ import {
 } from './displayPreference';
 import { EffectsRecovery, EffectsSlot } from './effectsSlot';
 import { PipelineFailureHandler, usesMaterial, watchPipelineErrors } from './pipelineErrors';
-import { resizeShadowMap } from './shadowMapSize';
 import { installRoomLighting, DEFAULT_HDRI_URL } from './environment';
 import { ASSET_BASE } from '../scene/assets';
 import { createSharedKtx2, type Ktx2Textures } from './ktx2';
 import { EventBus, type BackendKind, type EngineEvents, type EngineEventBus } from './events';
 import { CullPrewarm } from './cullPrewarm';
 import { ReflectedShadow } from './reflectedShadow';
+import { TierShadow } from './tierShadow';
+import { MaterialRebuild } from './materialRebuild';
 import { deviceTextureLimit } from './photo/capture';
 import { PhotoMode } from './photo/PhotoMode';
 import { FrameCap } from './framePacing';
@@ -201,10 +202,12 @@ export class Engine {
   private readonly frameCallbacks = new Set<FrameCallback>();
   private lastFrameAt: number | null = null;
   private readonly cullPrewarm = new CullPrewarm(this.scene);
+  private readonly materialRebuild = new MaterialRebuild();
   private sceneRevisionValue = 0;
   /** Later tier changes warm what they turn on themselves. */
   private warmedUp = false;
   private readonly reflectedShadow = new ReflectedShadow();
+  private readonly hoodShadow = new TierShadow(this.hood);
   private readonly loop: RenderLoop;
   private readonly frameCap: FrameCap;
   private displayLimits: DisplayLimits;
@@ -321,6 +324,7 @@ export class Engine {
       this.effects,
       (id) => usesMaterial(this.scene, id),
       (message, cause) => this.reportError(message, cause),
+      () => this.materialRebuild.request(),
     );
     cleanup.add(watchPipelineErrors(renderer, (failure) => pipelineFailures.handle(failure)));
 
@@ -638,10 +642,7 @@ export class Engine {
 
   private registerQualityFeatures(): void {
     this.quality.register('pixel-ratio', (s) => this.applyPixelRatio(s));
-    this.quality.register('shadows', (s) => {
-      this.hood.castShadow = s.shadowMapSize > 0;
-      if (s.shadowMapSize > 0) resizeShadowMap(this.hood.shadow, s.shadowMapSize);
-    });
+    this.quality.register('shadows', (s) => this.hoodShadow.apply(s.shadowMapSize));
     this.quality.register('caustics', (s) => {
       // The context node's version is in every pipeline's cache key, so this rebuilds them all.
       if (this.caustics.setMethod(s.causticMethod, s.causticLayers)) {
@@ -758,6 +759,7 @@ export class Engine {
     if (this.clockPin.easing) this.daylightFeed.recheck();
     this.daylightFeed.frame(nowMs, frameMs);
     applyDayLighting(this.dayRig, this.daylightFeed.level);
+    if (this.materialRebuild.flush(this.scene) > 0) this.cullPrewarm.invalidate();
     if (this.cullPrewarm.begin(nowMs) > 0) {
       this.sceneRevisionValue++;
       // Unculled first draws build pipelines, so this frame's timing is a compile stall.

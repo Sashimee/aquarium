@@ -118,9 +118,10 @@ export class TierController {
    * A load or pipeline compile is stalling frames now: they say nothing about the tier, so samples
    * are ignored for a cooldown. The window keeps the samples taken before, and the holds resume
    * where they stood, so periodic stalls cannot keep an overloaded device from stepping down.
+   * Holds saved by an earlier pause that no sample has resumed yet are kept as they are.
    */
   pause(nowMs: number): void {
-    if (nowMs >= this.pausedUntil) {
+    if (this.heldAtPause === null) {
       this.heldAtPause = {
         overMs: this.overSince === null ? null : nowMs - this.overSince,
         underMs: this.underSince === null ? null : nowMs - this.underSince,

@@ -22,7 +22,6 @@ import {
   type Material,
   type Node,
   type PerspectiveCamera,
-  type PMREMNode,
   type Scene,
   type Texture,
   type TextureNode,
@@ -164,8 +163,6 @@ const BACKING_ALBEDO = new Color(0.012, 0.012, 0.012);
 const POSTER_ASPECT = BACKGROUND_TIERS.high[0] / BACKGROUND_TIERS.high[1];
 /** Mip bias that softens the picture a little, as if seen out of focus past the fish. */
 const POSTER_DEFOCUS = 0.75;
-/** Irradiance of the hood's beam on the backdrop relative to the surface: it only grazes it. */
-const BACKDROP_GRAZE = 0.35;
 /** Mirrored rays leaving the water this close to the back face end on the backdrop. */
 const BACKDROP_TOLERANCE = 0.02;
 const BACKDROP_GAP = 0.0005;
@@ -176,11 +173,12 @@ const FORWARD = vec3(0, 0, 1);
  * Hood irradiance at `depth` below the surface, as a fraction `share` of what reaches a level
  * surface there (the medium's hood in-scatter is the hood's light over 4π sr).
  */
-function hoodIrradiance(medium: WaterMedium, depth: Node<'float'>, share: number): Node<'vec3'> {
-  return medium
-    .lightAtDepth(depth)
-    .mul(medium.hoodInScatter)
-    .mul(4 * share);
+function hoodIrradiance(
+  medium: WaterMedium,
+  depth: Node<'float'>,
+  share: Node<'float'>,
+): Node<'vec3'> {
+  return medium.lightAtDepth(depth).mul(medium.hoodInScatter).mul(share.mul(4));
 }
 
 /** Linear albedo of the backdrop at a world point on or just off the back pane. */
@@ -225,8 +223,9 @@ export class Poster {
 }
 
 /**
- * Radiance of the inside of the backdrop at `p` on the back face of the water: grazed by the
- * hood, and lit by the light bouncing around the tank.
+ * Radiance of the inside of the backdrop at `p` on the back face of the water: lit by the hood at
+ * the cosine its beam makes with the upright picture, as a leaf facing the front is, and by the
+ * light bouncing around the tank.
  */
 function backdropRadiance(
   medium: WaterMedium,
@@ -235,7 +234,8 @@ function backdropRadiance(
   albedo: BackdropAlbedo,
 ): Node<'vec3'> {
   const inside = medium.clampInside(p);
-  const hood = hoodIrradiance(medium, medium.boxMax.y.sub(p.y), BACKDROP_GRAZE);
+  const graze = max(dot(interior.hoodDirection, FORWARD), 0);
+  const hood = hoodIrradiance(medium, medium.boxMax.y.sub(p.y), graze);
   return hood.add(interior.ambientAt(inside, FORWARD)).mul(albedo(p));
 }
 
@@ -249,35 +249,85 @@ function mirroredSubstrate(
   p: Node<'vec3'>,
 ): Node<'vec3'> {
   const inside = medium.clampInside(p);
-  const hood = hoodIrradiance(medium, medium.boxMax.y.sub(medium.boxMin.y), 1);
+  const hood = hoodIrradiance(medium, medium.boxMax.y.sub(medium.boxMin.y), float(1));
   return hood.add(interior.ambientAt(inside, UP)).mul(interior.substrateAlbedo);
+}
+
+interface RaySegment {
+  across: Node<'vec3'>;
+  exitPoint: Node<'vec3'>;
+  normal: Node<'vec3'>;
+  /** 1 where the ray ends on the backdrop or the floor rather than leaving through a pane. */
+  inTank: Node<'float'>;
+  inTankRadiance: Node<'vec3'>;
+  /** Adds the in-scatter along the segment to the radiance at its end. */
+  seen(beyond: Node<'vec3'>): Node<'vec3'>;
+}
+
+/**
+ * The ray from `origin` in the water along `dir` to where it leaves the water box, and what it
+ * ends on there if that is the backdrop or a level patch of substrate on the floor.
+ */
+function traceSegment(
+  medium: WaterMedium,
+  interior: InteriorLight,
+  origin: Node<'vec3'>,
+  dir: Node<'vec3'>,
+  backdrop: BackdropAlbedo,
+): RaySegment {
+  const exit = medium.exit(origin, dir);
+  const distance = exit.distance.toVar();
+  const across = medium.transmittance(distance).toVar();
+  const exitPoint = origin.add(dir.mul(distance)).toVar();
+  const onBackdrop = step(exitPoint.z, medium.boxMin.z.add(BACKDROP_TOLERANCE));
+  const onFloor = step(exitPoint.y, medium.boxMin.y.add(BACKDROP_TOLERANCE));
+  const inTankRadiance = mix(
+    backdropRadiance(medium, interior, exitPoint, backdrop),
+    mirroredSubstrate(medium, interior, exitPoint),
+    onFloor,
+  );
+  const midDepth = medium.boxMax.y.sub(origin.y.add(exitPoint.y).mul(0.5));
+  return {
+    across,
+    exitPoint,
+    normal: exit.normal.toVar(),
+    inTank: max(onBackdrop, onFloor),
+    inTankRadiance,
+    seen: (beyond) => medium.inScatter(across, midDepth).add(beyond.mul(across)),
+  };
 }
 
 /**
  * Radiance reaching the fragment, a point in the water, along `dir` from where that ray leaves the
- * water box: the backdrop, a level patch of substrate on the floor, or the room seen through the
- * glass (`room`), dimmed and in-scattered over the way. No object in the water is drawn.
+ * water box: the backdrop, a level patch of substrate on the floor, or, through a pane or the
+ * surface, the room (`sky`) refracted out, by the Fresnel transmittance. What that boundary
+ * reflects, all of it past the critical angle, is traced once more inside the tank, and where that
+ * leaves again the long path's haze stands in. No object in the water is drawn.
  */
 function waterAlongRay(
   medium: WaterMedium,
   interior: InteriorLight,
   dir: Node<'vec3'>,
-  room: PMREMNode,
+  sky: Texture,
   backdrop: BackdropAlbedo,
 ): Node<'vec3'> {
-  const exitDistance = medium.exitDistance(positionWorld, dir).toVar();
-  const across = medium.transmittance(exitDistance).toVar();
-  const exitPoint = positionWorld.add(dir.mul(exitDistance)).toVar();
-  const onBackdrop = step(exitPoint.z, medium.boxMin.z.add(BACKDROP_TOLERANCE));
-  const onFloor = step(exitPoint.y, medium.boxMin.y.add(BACKDROP_TOLERANCE));
-  const inTank = mix(
-    backdropRadiance(medium, interior, exitPoint, backdrop),
-    mirroredSubstrate(medium, interior, exitPoint),
-    onFloor,
+  const first = traceSegment(medium, interior, positionWorld, dir, backdrop);
+  const reflectance = fresnelDielectric(abs(dot(dir, first.normal)), WATER_IOR / AIR_IOR).toVar();
+  // Past the critical angle refract() returns zero; the nudge keeps the lookup direction defined.
+  const out = refract(dir, first.normal.negate(), WATER_IOR / AIR_IOR).add(first.normal.mul(1e-4));
+  const room = pmremTexture(sky, out, float(SURFACE_ROUGHNESS)).mul(backgroundIntensity);
+  const bounced = reflect(dir, first.normal);
+  const second = traceSegment(
+    medium,
+    interior,
+    medium.clampInside(first.exitPoint),
+    bounced,
+    backdrop,
   );
-  const beyond = mix(room.mul(backgroundIntensity), inTank, max(onBackdrop, onFloor));
-  const midDepth = medium.boxMax.y.sub(positionWorld.y.add(exitPoint.y).mul(0.5));
-  return medium.inScatter(across, midDepth).add(beyond.mul(across));
+  const haze = medium.inScatter(vec3(0), medium.boxMax.y.sub(second.exitPoint.y));
+  const reflected = second.seen(mix(haze, second.inTankRadiance, second.inTank));
+  const leaving = mix(room, reflected, reflectance);
+  return first.seen(mix(leaving, first.inTankRadiance, first.inTank));
 }
 
 /**
@@ -307,8 +357,7 @@ function createGlassFaceMaterial(
   const cosWater = abs(dot(inWater, normalWorldGeometry));
   const reflectance = fresnelDielectric(cosWater, WATER_IOR / AIR_IOR).toVar();
   const mirrored = reflect(inWater, normalWorldGeometry).toVar();
-  const skyNode = pmremTexture(sky, mirrored, float(SURFACE_ROUGHNESS));
-  const mirroredScene = waterAlongRay(medium, interior, mirrored, skyNode, backdrop);
+  const mirroredScene = waterAlongRay(medium, interior, mirrored, sky, backdrop);
   const inner = vec4(mirroredScene.mul(reflectance), reflectance);
   const pane = mix(output, inner, towardsWater);
   material.outputNode = medium.applyPremultiplied(overlayAlgae(pane, algae, medium));
@@ -373,6 +422,8 @@ interface SurfaceUnderside {
   material: MeshBasicNodeMaterial;
   /** The rippled surface normal, in world space. */
   normal: Node<'vec3'>;
+  /** The mirror traced to the walls and floor in the shader. */
+  traced: Node<'vec3'>;
   /** The output with `mirror` as what total internal reflection shows, else the traced walls. */
   output(mirror?: Node<'vec3'>): Node<'vec4'>;
 }
@@ -403,12 +454,11 @@ function createSurfaceUnderside(
   const bounced = reflect(view, normal);
   // A ripple can tip a grazing ray back up; it still has to go down into the water.
   const mirrored = normalize(vec3(bounced.x, min(bounced.y, -1e-3), bounced.z)).toVar();
-  const mirroredSky = pmremTexture(sky, mirrored, float(SURFACE_ROUGHNESS));
-  const traced = waterAlongRay(medium, interior, mirrored, mirroredSky, backdrop);
+  const traced = waterAlongRay(medium, interior, mirrored, sky, backdrop).toVar();
   const output = (mirror: Node<'vec3'> = traced): Node<'vec4'> =>
     medium.applyPremultiplied(vec4(mix(room, mirror, reflectance), 1));
   material.outputNode = output();
-  return { material, normal, output };
+  return { material, normal, traced, output };
 }
 
 /**
@@ -497,6 +547,7 @@ export class Tank {
   private readonly reflection: SurfaceReflection;
   private readonly underside: SurfaceUnderside;
   private readonly undersideMesh: Mesh;
+  private readonly medium: WaterMedium;
   /** The background picture; `resize` refits it to the new back pane. */
   readonly poster: Poster;
 
@@ -512,6 +563,7 @@ export class Tank {
     background: TextureNode,
   ) {
     validateTank(dimensions);
+    this.medium = medium;
     this.size = { ...dimensions };
     this.poster = new Poster(background, dimensions);
     this.group.name = 'tank';
@@ -581,9 +633,10 @@ export class Tank {
     const wasEnabled = this.reflection.enabled;
     this.reflection.setResolutionScale(resolutionScale);
     if (this.reflection.enabled === wasEnabled) return;
-    const { material, output, normal } = this.underside;
+    const { material, output, normal, traced } = this.underside;
+    const { boxMin, boxMax } = this.medium;
     material.outputNode = this.reflection.enabled
-      ? output(this.reflection.sample(normal.xz.mul(RIPPLE_MIRROR_SHIFT)).rgb)
+      ? output(this.reflection.mirror(normal.xz.mul(RIPPLE_MIRROR_SHIFT), traced, boxMin, boxMax))
       : output();
     material.needsUpdate = true;
   }

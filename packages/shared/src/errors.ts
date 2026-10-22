@@ -12,6 +12,8 @@ export const errorCodeSchema = z.enum([
   'rate_limited',
   'email_not_verified',
   'insufficient_pearls',
+  'payments_disabled',
+  'adult_confirmation_required',
   'feeding_rejected',
   'quota_exceeded',
   'payload_too_large',

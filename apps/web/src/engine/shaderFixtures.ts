@@ -2,6 +2,7 @@ import {
   Color,
   ConstNode,
   ConvertNode,
+  JoinNode,
   MathNode,
   OperatorNode,
   PerspectiveCamera,
@@ -142,6 +143,7 @@ export function evaluate(node: Node): number[] {
     throw new Error(`evaluate: unsupported ${node.type} value`);
   }
   if (node instanceof VarNode || node instanceof ConvertNode) return evaluate(node.node);
+  if (node instanceof JoinNode) return node.nodes.flatMap((part) => evaluate(part));
   if (node instanceof SplitNode) {
     const v = evaluate(node.node);
     return [...node.components].map((c) => v['xyzw'.indexOf(c)] ?? Number.NaN);
@@ -165,11 +167,22 @@ export function evaluate(node: Node): number[] {
     if (node.method === MathNode.NEGATE) return a.map((x) => -x);
     if (node.method === MathNode.ABS) return a.map(Math.abs);
     if (node.method === MathNode.ONE_MINUS) return a.map((x) => 1 - x);
+    if (node.method === MathNode.SQRT) return a.map(Math.sqrt);
     if (node.bNode === null) throw new Error(`evaluate: unsupported math ${node.method}`);
     const b = evaluate(node.bNode);
     if (node.method === MathNode.MAX) return zip(a, b, Math.max);
     if (node.method === MathNode.MIN) return zip(a, b, Math.min);
     if (node.method === MathNode.POW) return zip(a, b, Math.pow);
+    // GLSL step(edge, x): 0 where x < edge.
+    if (node.method === MathNode.STEP) return zip(a, b, (edge, x) => (x < edge ? 0 : 1));
+    if (node.method === MathNode.MIX && node.cNode !== null) {
+      const t = evaluate(node.cNode);
+      return zip(
+        zip(a, t, (x, s) => x * (1 - s)),
+        zip(b, t, (y, s) => y * s),
+        (x, y) => x + y,
+      );
+    }
     throw new Error(`evaluate: unsupported math ${node.method}`);
   }
   throw new Error(`evaluate: unsupported node ${node.type}`);
