@@ -84,12 +84,12 @@ export function devicesForBiome(biome: Biome): Device[] {
 
 export type TierState = 'installed' | 'better-installed' | 'owned' | 'available';
 
-type EquipmentTank = Pick<Tank, 'biome' | 'equipment'> & Partial<Pick<Tank, 'co2OwnedTier'>>;
+type EquipmentTank = Pick<Tank, 'biome' | 'equipment' | 'co2OwnedTier'>;
 
 /** The server refuses a purchase at or below this: the best tier installed or, for CO2, ever bought. */
 function ownedBaseline(tank: EquipmentTank, device: Device): number {
   const running = tank.equipment[device].tier;
-  return device === 'co2' ? Math.max(running, tank.co2OwnedTier ?? 0) : running;
+  return device === 'co2' ? Math.max(running, tank.co2OwnedTier) : running;
 }
 
 export interface TierOffer {

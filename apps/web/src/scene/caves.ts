@@ -1,6 +1,7 @@
 import { Vector3 } from 'three/webgpu';
 import type { DecorItem } from '@aquarium/shared';
 import type { SceneAnchor } from './anemone';
+import { WATER_INSET, type TankDimensions } from '../engine/tank/dimensions';
 import { decorMatrix } from './hardscape';
 
 /** A shelter's mouth in the asset's own frame (origin at the base centre, metres at scale 1). */
@@ -47,6 +48,13 @@ export function caveAnchor(id: string, item: DecorItem): SceneAnchor {
 export interface WaterReach {
   readonly halfX: number;
   readonly halfZ: number;
+}
+
+export function waterReach(d: Pick<TankDimensions, 'length' | 'depth' | 'glass'>): WaterReach {
+  return {
+    halfX: d.length / 2 - d.glass - WATER_INSET,
+    halfZ: d.depth / 2 - d.glass - WATER_INSET,
+  };
 }
 
 /**
