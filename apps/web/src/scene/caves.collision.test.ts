@@ -88,28 +88,25 @@ function clearanceTo(colliders: readonly Collider[]) {
 // Not run against the scene's own single hull per piece: it fills the cave, and the decor layer
 // replaces it on mount. The sim does not reject an anchor inside a collider, so the mouths are
 // only judged against the layer that stays.
-describe.each(['decor boxes'] as const)(
-  'cave anchors against the %s fish actually meet',
-  (layer) => {
-    it.each(SHELTERED)(
-      '%s: every anchor is outside every collider, with room for a fish',
-      async (b) => {
-        const clearance = clearanceTo(await hardColliders(b, layer));
-        const anchors = caveAnchors(loadPreset(b).decor);
-        expect(anchors.length).toBeGreaterThan(0);
-        for (const a of anchors) {
-          const [x, y, z] = a.position;
-          const [fx = 0, , fz = 0] = a.facing ?? [];
-          expect(clearance(x, y, z), a.id).toBeGreaterThanOrEqual(0.9 * a.radius);
-          expect(
-            clearance(x + fx * 0.015, y, z + fz * 0.015),
-            `${a.id} out along facing`,
-          ).toBeGreaterThan(0);
-        }
-      },
-    );
-  },
-);
+describe('cave anchors against the decor layer colliders fish actually meet', () => {
+  it.each(SHELTERED)(
+    '%s: every anchor is outside every collider, with room for a fish',
+    async (b) => {
+      const clearance = clearanceTo(await hardColliders(b, 'decor boxes'));
+      const anchors = caveAnchors(loadPreset(b).decor);
+      expect(anchors.length).toBeGreaterThan(0);
+      for (const a of anchors) {
+        const [x, y, z] = a.position;
+        const [fx = 0, , fz = 0] = a.facing ?? [];
+        expect(clearance(x, y, z), a.id).toBeGreaterThanOrEqual(0.9 * a.radius);
+        expect(
+          clearance(x + fx * 0.015, y, z + fz * 0.015),
+          `${a.id} out along facing`,
+        ).toBeGreaterThan(0);
+      }
+    },
+  );
+});
 
 describe.each(LAYERS)('a royal gramma on the reef preset with %s', (layer) => {
   it('reaches Shelter at night within the contact budget', async () => {

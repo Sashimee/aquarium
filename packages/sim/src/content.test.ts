@@ -197,6 +197,38 @@ describe('every shipped species in its decorated tank', { timeout: LONG }, () =>
   });
 });
 
+describe('barred mudskippers foraging round the show-tank driftwood', { timeout: LONG }, () => {
+  it('do not rise under the log and grind between wood and sand (#1257)', () => {
+    const mud = byId('barred-mudskipper');
+    const wood = SHOW_DECOR.find((c) => c.id === 'driftwood');
+    if (!wood) throw new Error('SHOW_DECOR lost its driftwood');
+    const log = compileCollider(wood);
+    const n = new Float64Array(3);
+    // Seed 7 pinned a fish in the crevice under the log's low end for 186 contacts there.
+    const w = new World({
+      seed: 7,
+      tank: SHOW_TANK,
+      species: [mud],
+      decor: SHOW_DECOR,
+      fish: spawnMany(mud.id, 6),
+    });
+    const seen = new Uint32Array(w.count);
+    let atLog = 0;
+    for (let t = 0; t < 10_000; t++) {
+      w.step();
+      for (let i = 0; i < w.count; i++) {
+        const c = w.contactCount[i] ?? 0;
+        if (c === seen[i]) continue;
+        seen[i] = c;
+        const o = i * 3;
+        const p = w.position;
+        if (log.sample(p[o] ?? 0, p[o + 1] ?? 0, p[o + 2] ?? 0, n) < 0.03) atLog++;
+      }
+    }
+    expect(atLog).toBeLessThan(30);
+  });
+});
+
 describe('every shipped species in a full-power wave maker current', { timeout: LONG }, () => {
   const species = roster.map((r) => r.species);
 
