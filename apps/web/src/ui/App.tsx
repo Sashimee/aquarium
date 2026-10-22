@@ -122,11 +122,11 @@ const PANEL_TITLE: Record<OpenPanel, { label: string; title: string }> = {
   account: { label: 'Account menu', title: 'Account' },
 };
 
-const CollectionBook = lazy(() => import('./CollectionBook'));
+const CollectionBook = lazy(() => panelLoaders.book());
 
 const LifeDialogsView = lazy(() => import('./LifeDialogs'));
 
-const TrimDialog = lazy(() => import('./TrimDialog'));
+const TrimDialog = lazy(() => panelLoaders.trim());
 
 function LifeDialogs({ onReview }: { onReview(): void }) {
   const state = useSessionState();
@@ -345,14 +345,18 @@ function Shell() {
           </Sheet>
         )}
         {bookOpen && (
-          <ErrorBoundary what="the collection book" scope="app">
+          <ErrorBoundary
+            what="the collection book"
+            scope="app"
+            onDismiss={() => setBookOpen(false)}
+          >
             <Suspense fallback={null}>
               <CollectionBook onClose={() => setBookOpen(false)} />
             </Suspense>
           </ErrorBoundary>
         )}
         <LifeDialogs onReview={() => dispatch({ type: 'open', panel: 'care' })} />
-        <ErrorBoundary what="the trim tool" scope="app">
+        <ErrorBoundary what="the trim tool" scope="app" onDismiss={() => undefined}>
           <Suspense fallback={null}>
             <TrimDialog />
           </Suspense>

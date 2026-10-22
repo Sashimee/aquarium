@@ -8,6 +8,7 @@ import { App } from './App';
 import { UiProviders, type UiBridge } from './context';
 import { panelLoaders } from './panelLoaders';
 import { SessionProvider } from './session';
+import { resetReloadStartedForTests } from './staleBuild';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -28,6 +29,7 @@ describe('a decorate panel that fails to load', () => {
 
   beforeEach(() => {
     reload.mockClear();
+    resetReloadStartedForTests();
     vi.spyOn(panelLoaders, 'decor').mockRejectedValue(
       new Error('Failed to fetch dynamically imported module: /assets/DecorPanel-old.js'),
     );
@@ -85,7 +87,7 @@ describe('a decorate panel that fails to load', () => {
   });
 
   it('keeps the menus, says what went wrong and offers a way out after a recent reload', async () => {
-    sessionStorage.setItem('aquarium:stale-chunk-reload', String(Date.now() - 30_000));
+    sessionStorage.setItem('aquarium:stale-chunk-reload', String(Date.now() - 1_000));
     await openDecorate();
     expect(reload).not.toHaveBeenCalled();
 

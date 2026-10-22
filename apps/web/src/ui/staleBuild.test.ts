@@ -2,7 +2,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   isChunkLoadError,
-  isReloadingForNewBuild,
+  reloadHasStarted,
+  resetReloadStartedForTests,
   reloadForNewBuild,
   watchStalePreloads,
   type ReloadDeps,
@@ -71,23 +72,15 @@ describe('reloadForNewBuild', () => {
   });
 });
 
-describe('isReloadingForNewBuild', () => {
-  it('is true just after a reload was started and false later or without storage', () => {
-    expect(isReloadingForNewBuild(deps({ 'aquarium:stale-chunk-reload': '999000' }).value)).toBe(
-      true,
-    );
-    expect(isReloadingForNewBuild(deps({ 'aquarium:stale-chunk-reload': '900000' }).value)).toBe(
-      false,
-    );
-    expect(isReloadingForNewBuild(deps().value)).toBe(false);
-    const blocked: ReloadDeps = {
-      storage: () => {
-        throw new Error('denied');
-      },
-      now: () => 1,
-      reload: vi.fn(),
-    };
-    expect(isReloadingForNewBuild(blocked)).toBe(false);
+describe('reloadHasStarted', () => {
+  it('is false until a reload is started, then true', () => {
+    resetReloadStartedForTests();
+    expect(reloadHasStarted()).toBe(false);
+    reloadForNewBuild(deps({ 'aquarium:stale-chunk-reload': '999000' }).value);
+    expect(reloadHasStarted()).toBe(false);
+    reloadForNewBuild(deps().value);
+    expect(reloadHasStarted()).toBe(true);
+    resetReloadStartedForTests();
   });
 });
 
