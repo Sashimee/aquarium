@@ -124,26 +124,7 @@
       "scale": 0.6
     }
   ],
-  "plantPatches": [
-    {
-      "id": "fern-left",
-      "assetId": "java-fern",
-      "center": [-0.32, -0.04],
-      "radius": 0.1,
-      "count": 5,
-      "scale": [0.5, 0.8],
-      "seed": 501
-    },
-    {
-      "id": "fern-right",
-      "assetId": "java-fern",
-      "center": [0.1, -0.13],
-      "radius": 0.08,
-      "count": 4,
-      "scale": [0.5, 0.8],
-      "seed": 502
-    }
-  ],
+  "plantPatches": [],
   "current": {
     "direction": [1, 0.08],
     "speed": 0.03,
