@@ -4,8 +4,6 @@ import { loadEconomy } from './economy.ts';
 import { createBackgroundTasks, shutdown } from './background.ts';
 import { createAuth } from './auth.ts';
 import { loadConfig } from './config.ts';
-import { loadCoralTable, rehomeRawFrags } from './corals.ts';
-import { loadPresets } from './presets.ts';
 import { connect, runMigrations } from './db/index.ts';
 import { createMailer, createSmtpTransport } from './mail.ts';
 import { postgresHitStore } from './rate-limit.ts';
@@ -23,11 +21,6 @@ const config = loadConfig(process.env);
 
 const database = connect(config.databaseUrl);
 await runMigrations(database);
-// TODO(owner): remove this call once devfish has run it, before dev -> main (#1132).
-const rehomed = await rehomeRawFrags(database, loadPresets(), loadCoralTable());
-console.log(
-  `re-homed ${rehomed.moved} coral fragments, ${rehomed.failed} tanks failed, ${rehomed.skipped} skipped`,
-);
 
 const mailer = createMailer(
   createSmtpTransport(config.smtp.host, config.smtp.port),
