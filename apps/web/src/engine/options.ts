@@ -1,5 +1,13 @@
 import { DEFAULT_TANK_SIZE, tankSizeSchema, type TankSize } from '@aquarium/shared';
 import { parseClock } from './daylight';
+import {
+  FRAME_RATE_CHOICES,
+  isFrameRateChoice,
+  isPixelRatioChoice,
+  PIXEL_RATIO_CHOICES,
+  type FrameRateChoice,
+  type PixelRatioChoice,
+} from './displayPreference';
 import { isTier, TIERS, type Tier } from './quality/tiers';
 
 export type BackendPreference = 'auto' | 'webgpu' | 'webgl';
@@ -21,6 +29,10 @@ export interface EngineOptions {
   stats: boolean;
   /** The tank size drawn until a saved tank brings its own: the demo tank's. */
   tankSize: TankSize;
+  /** Overrides the saved frame rate choice for this page; null follows it. */
+  frameRate: FrameRateChoice | null;
+  /** Overrides the saved pixel ratio choice for this page; null follows it. */
+  pixelRatio: PixelRatioChoice | null;
 }
 
 const BACKENDS: readonly BackendPreference[] = ['auto', 'webgpu', 'webgl'];
@@ -30,8 +42,8 @@ function isBackend(value: string): value is BackendPreference {
 }
 
 /**
- * Reads `?backend=`, `?tier=`, `?adaptive=`, `?clock=`, `?stats=` and `?size=` from a URL query
- * string.
+ * Reads `?backend=`, `?tier=`, `?adaptive=`, `?clock=`, `?stats=`, `?size=`, `?fps=` and `?dpr=`
+ * from a URL query string.
  */
 export function parseEngineOptions(search: string): EngineOptions {
   const params = new URLSearchParams(search);
@@ -65,6 +77,16 @@ export function parseEngineOptions(search: string): EngineOptions {
     throw new Error(`Unknown ?size=${sizeParam}; use one of ${tankSizeSchema.options.join(', ')}`);
   }
 
+  const frameRate = params.get('fps');
+  if (frameRate !== null && !isFrameRateChoice(frameRate)) {
+    throw new Error(`Unknown ?fps=${frameRate}; use one of ${FRAME_RATE_CHOICES.join(', ')}`);
+  }
+
+  const pixelRatio = params.get('dpr');
+  if (pixelRatio !== null && !isPixelRatioChoice(pixelRatio)) {
+    throw new Error(`Unknown ?dpr=${pixelRatio}; use one of ${PIXEL_RATIO_CHOICES.join(', ')}`);
+  }
+
   const tier = tierParam ?? null;
   return {
     backend,
@@ -73,5 +95,7 @@ export function parseEngineOptions(search: string): EngineOptions {
     clock,
     stats: statsParam === '1',
     tankSize: size?.data ?? DEFAULT_TANK_SIZE,
+    frameRate,
+    pixelRatio,
   };
 }

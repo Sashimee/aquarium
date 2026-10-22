@@ -35,9 +35,11 @@ describe('selectInitialTier', () => {
         probeTier: 'high',
         targetMs: TARGET,
       }).tier;
-    // Budget 0.8 x 16.67 = 13.33 ms; tier costs relative to high: 0.45, 0.6, 1, 1.7.
-    expect(pick(5)).toBe('ultra');
-    expect(pick(7.84)).toBe('ultra');
+    // Budget 0.8 x 16.67 = 13.33 ms, half of it for ultra; tier costs relative to high: 0.45,
+    // 0.6, 1, 1.7.
+    expect(pick(3)).toBe('ultra');
+    expect(pick(3.92)).toBe('ultra');
+    expect(pick(4)).toBe('high');
     expect(pick(8)).toBe('high');
     expect(pick(13.3)).toBe('high');
     expect(pick(14)).toBe('medium');
@@ -47,12 +49,30 @@ describe('selectInitialTier', () => {
 
   it('is robust to outliers in the probe window', () => {
     const r = selectInitialTier({
-      samples: [5, 5, 5, 5, 240, 5, 5],
+      samples: [3, 3, 3, 3, 240, 3, 3],
       signal: 'gpu',
       probeTier: 'high',
       targetMs: TARGET,
     });
     expect(r.tier).toBe('ultra');
+  });
+
+  it('starts ultra only when it leaves half the gpu idle', () => {
+    const pick = (ms: number) =>
+      selectInitialTier({ samples: [ms], signal: 'gpu', probeTier: 'ultra', targetMs: TARGET })
+        .tier;
+    expect(pick(6.6)).toBe('ultra');
+    expect(pick(6.8)).toBe('high');
+  });
+
+  it('never starts ultra from frame intervals, which cannot show gpu headroom', () => {
+    const r = selectInitialTier({
+      samples: Array(60).fill(TARGET),
+      signal: 'frame',
+      probeTier: 'ultra',
+      targetMs: TARGET,
+    });
+    expect(r.tier).toBe('high');
   });
 
   it('keeps the probe tier when vsync-bound frames keep up, without guessing higher', () => {
