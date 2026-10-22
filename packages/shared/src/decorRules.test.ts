@@ -69,6 +69,15 @@ describe('decor rules', () => {
     }
   });
 
+  it('keeps the mangrove stump, prop roots and propagule out of other biomes', () => {
+    for (const id of ['mangrove-stump', 'mangrove-prop-roots', 'mangrove-propagule']) {
+      expect(isDecorAssetForBiome('mangrove', id)).toBe(true);
+      expect(isDecorAssetForBiome('freshwater', id)).toBe(false);
+      expect(isDecorAssetForBiome('reef', id)).toBe(false);
+      expect(isDecorAssetForBiome('blackwater', id)).toBe(false);
+    }
+  });
+
   it('keeps euphyllia ids reef-only', () => {
     expect(isDecorAssetForBiome('reef', 'euphyllia-hammer-12')).toBe(true);
     expect(isDecorAssetForBiome('freshwater', 'euphyllia-hammer-12')).toBe(false);

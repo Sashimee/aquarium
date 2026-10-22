@@ -52,7 +52,13 @@ export const DECOR_ASSET_IDS: Readonly<Record<Biome, ReadonlySet<string>>> = {
     'neothauma-shell',
   ]),
   blackwater: new Set(),
-  mangrove: new Set(),
+  mangrove: new Set([
+    ...ROCKS,
+    'driftwood-branch',
+    'mangrove-stump',
+    'mangrove-prop-roots',
+    'mangrove-propagule',
+  ]),
 };
 
 export function isDecorAssetForBiome(biome: Biome, assetId: string): boolean {

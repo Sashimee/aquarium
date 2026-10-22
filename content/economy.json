@@ -57,7 +57,10 @@
         "acropora-palmata": 200,
         "brain-coral": 160,
         "blue-sea-anemone": 150,
-        "host-anemone": 220
+        "host-anemone": 220,
+        "mangrove-stump": 120,
+        "mangrove-prop-roots": 140,
+        "mangrove-propagule": 45
       }
     },
     "euphyllia": 130,
