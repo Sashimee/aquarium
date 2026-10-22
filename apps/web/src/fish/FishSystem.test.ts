@@ -382,6 +382,44 @@ describe('FishSystem.create', () => {
     fish.dispose();
   });
 
+  it('greets once when a resize drops the loaded world before its init answers', async () => {
+    const { engine } = fakeEngine();
+    const start = create(engine);
+    const worker = await initPosted();
+    answerInits(worker);
+    const fish = await start;
+    const initsAtLeast = (count: number): Promise<void> =>
+      vi.waitFor(() => {
+        if (worker.inits().length < count) throw new Error('no new world yet');
+      });
+
+    fish.handle({
+      type: 'tank:loaded',
+      payload: {
+        backgroundId: 'bg-fw-planted-stream',
+        tankId: TANK_A,
+        biome: 'freshwater',
+        size: 'standard',
+        decorLayout: [],
+        decorEdited: false,
+        fish: [fishFixture(FISH_1)],
+        recentVisitDays: 5,
+      },
+    });
+    await initsAtLeast(2);
+    fish.setTank(TANK_DIMENSIONS.nano30);
+    answerInits(worker, 1);
+    await initsAtLeast(3);
+    answerInits(worker, 2);
+    await fish.synced();
+
+    expect(worker.inits()).toHaveLength(3);
+    expect(worker.sent.filter((m) => m.type === 'visitor')).toEqual([
+      { type: 'visitor', visitor: { recentVisitDays: 5 } },
+    ]);
+    fish.dispose();
+  });
+
   it('tells world listeners the running world, that it stopped, and the next one', async () => {
     const { engine } = fakeEngine();
     const start = create(engine);

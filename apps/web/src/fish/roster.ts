@@ -77,14 +77,11 @@ export class TankRoster {
     return this.loaded?.biome ?? null;
   }
 
-  /** How many of the last days the owner opened the loaded tank; null when it is not known. */
-  get recentVisitDays(): number | null {
-    return this.loaded?.recentVisitDays ?? null;
-  }
-
   /**
-   * The visit days, once per `tank:loaded`: a world rebuilt for the same visit (a resize, a
-   * replaced worker, the first fish added) gets null, or the fish would greet the owner again.
+   * How many of the last days the owner opened the loaded tank, once per `tank:loaded`; null when
+   * it is not known or already taken. A world rebuilt for the same visit (a resize, a replaced
+   * worker, the first fish added) gets null, or the fish would greet the owner again. The greeting
+   * goes with the world that took it: one torn down during the 1 to 7 s greeting delay greets no one.
    */
   takeVisitDays(): number | null {
     if (this.loaded === null || this.loaded.visitHandedOut) return null;
