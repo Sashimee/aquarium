@@ -187,15 +187,17 @@ describe('the shelter meshes the parts were cut from', () => {
     expect(createHash('sha256').update(bytes).digest('hex')).toBe(LOD2_SHA256[id]);
   });
 
-  it('a tilted shelter is warned about and skipped, not thrown on, so the rest of the tank keeps its colliders', () => {
+  it('a tilted shelter keeps a solid box and warns once', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     try {
-      const tilted = collidersFor('p', spec('reef-arch'), item('reef-arch', 0, 0), [0.3, 0.9, 0]);
-      expect(tilted).toEqual([]);
+      const tilt = [0.3, 0.9, 0] as const;
+      const tilted = collidersFor('tilt-once', spec('reef-arch'), item('reef-arch', 0, 0), tilt);
+      expect(tilted).toHaveLength(1);
+      expect(tilted[0]).toMatchObject({ kind: 'box', hard: true });
+      collidersFor('tilt-once', spec('reef-arch'), item('reef-arch', 0, 0), tilt);
+      expect(warn).toHaveBeenCalledTimes(1);
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('reef-arch'));
-      expect(collidersFor('q', spec('reef-arch'), item('reef-arch', 0, 0)).length).toBeGreaterThan(
-        0,
-      );
+      expect(collidersFor('q', spec('reef-arch'), item('reef-arch', 0, 0))[0]?.kind).toBe('hull');
     } finally {
       warn.mockRestore();
     }
