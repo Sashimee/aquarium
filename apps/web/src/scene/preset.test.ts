@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_TANK } from '../engine/tank/dimensions';
 import { substrateHeight } from '../engine/tank/substrate';
 import type { CatalogEntry } from './assets';
+import { BANK_TOPS } from './bank';
 import { loadPreset, parsePreset } from './preset';
 import catalog from '../../public/assets/index.json';
 import { generateEuphyllia, parseEuphylliaId } from './euphyllia';
@@ -335,6 +336,7 @@ describe.each(['blackwater', 'mangrove'] as const)('%s preset', (biome) => {
   it('keeps every footprint and every top inside the tank', () => {
     const halfL = DEFAULT_TANK.length / 2 - DEFAULT_TANK.glass;
     const halfD = DEFAULT_TANK.depth / 2 - DEFAULT_TANK.glass;
+    const waterTop = DEFAULT_TANK.height - DEFAULT_TANK.freeboard;
     for (const item of preset.decor) {
       const bounds = entries.get(item.assetId)?.bounds;
       if (!bounds) throw new Error(`${item.assetId} has no bounds`);
@@ -355,9 +357,8 @@ describe.each(['blackwater', 'mangrove'] as const)('%s preset', (biome) => {
       }
       expect(Math.abs(item.position[0]) + reachX * item.scale, item.assetId).toBeLessThan(halfL);
       expect(Math.abs(item.position[2]) + reachZ * item.scale, item.assetId).toBeLessThan(halfD);
-      expect(item.position[1] + y1 * item.scale, item.assetId).toBeLessThan(
-        DEFAULT_TANK.height - DEFAULT_TANK.freeboard - 0.02,
-      );
+      const ceiling = item.assetId in BANK_TOPS ? DEFAULT_TANK.height : waterTop - 0.02;
+      expect(item.position[1] + y1 * item.scale, item.assetId).toBeLessThan(ceiling);
     }
   });
 });

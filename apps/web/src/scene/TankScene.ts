@@ -17,6 +17,7 @@ import { WATER_INSET } from '../engine/tank/dimensions';
 import type { Tier, TierSettings } from '../engine/quality/tiers';
 import { substrateHeight } from '../engine/tank/substrate';
 import { abortError } from './abortable';
+import { bankAnchors, type SceneBank } from './bank';
 import { caveAnchors } from './caves';
 import { AssetCatalog, ModelLibrary, type CatalogEntry, type ModelLod } from './assets';
 import {
@@ -885,6 +886,19 @@ export class TankScene {
         reach,
       ),
     ];
+  }
+
+  /** Dry perches above the water for amphibious fish, kept apart from `anchors` until the sim reads them. */
+  get banks(): readonly SceneBank[] {
+    const d = this.engine.tank.dimensions;
+    return bankAnchors(
+      this.hardItems.map(({ item }) => item),
+      d.height - d.freeboard,
+      {
+        halfX: d.length / 2 - d.glass - WATER_INSET,
+        halfZ: d.depth / 2 - d.glass - WATER_INSET,
+      },
+    );
   }
 
   /** Called with the anchors after a layout change moves, adds or removes shelter decor. */

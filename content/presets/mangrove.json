@@ -17,9 +17,9 @@
     },
     {
       "assetId": "mangrove-stump",
-      "position": [0.36, 0.09, -0.12],
+      "position": [0.42, 0.095, -0.06],
       "rotationY": 2.0,
-      "scale": 1.0
+      "scale": 1.4
     },
     {
       "assetId": "mangrove-prop-roots",
