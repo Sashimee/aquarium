@@ -90,12 +90,14 @@ export function loadBudgetContent(
 function filesToFetch(
   asset: OutputAsset,
   slots: readonly ('1k' | '2k')[],
+  shipped: ReadonlyMap<string, number>,
   only?: string,
 ): Map<string, number> {
   const sizeOf = new Map(asset.files.map((f) => [f.file, f.bytes]));
   const wanted = new Map<string, number>();
   const add = (file: string): void => {
-    const bytes = sizeOf.get(file);
+    // Rock piles borrow their member rocks' textures by relative URI (#966).
+    const bytes = sizeOf.get(file) ?? shipped.get(file);
     if (bytes === undefined)
       throw new Error(`${asset.kind}/${asset.id}: ${file} is not in files[]`);
     wanted.set(file, bytes);
@@ -135,6 +137,9 @@ export function presetDownloadBytes(
 ): number {
   const slots = group === 'desktop' ? (['1k', '2k'] as const) : (['1k'] as const);
   const byKey = new Map(input.index.assets.map((a) => [a.id, a]));
+  const shipped = new Map(
+    input.index.assets.flatMap((a) => a.files.map((f) => [f.file, f.bytes] as const)),
+  );
   const assets: OutputAsset[] = [];
   const hdri = byKey.get(input.hdri.id);
   if (!hdri || hdri.kind !== 'hdri')
@@ -143,7 +148,7 @@ export function presetDownloadBytes(
     );
   if (!hdri.files.some((f) => f.file === input.hdri.file))
     throw new Error(`HDRI file ${input.hdri.file} is not in index.json ${hdri.id}.files`);
-  const fetched = new Map<string, number>(filesToFetch(hdri, slots, input.hdri.file));
+  const fetched = new Map<string, number>(filesToFetch(hdri, slots, shipped, input.hdri.file));
   for (const id of preset.assetIds) {
     const asset = byKey.get(id);
     if (!asset) {
@@ -164,7 +169,7 @@ export function presetDownloadBytes(
       assets.push(asset);
   }
   for (const asset of assets)
-    for (const [file, bytes] of filesToFetch(asset, slots)) fetched.set(file, bytes);
+    for (const [file, bytes] of filesToFetch(asset, slots, shipped)) fetched.set(file, bytes);
   return [...fetched.values()].reduce((sum, bytes) => sum + bytes, 0);
 }
 
