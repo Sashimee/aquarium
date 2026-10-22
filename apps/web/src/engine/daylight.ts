@@ -38,6 +38,61 @@ export function daylightAt(minuteOfDay: number, period: Photoperiod = DEFAULT_PH
   return smoothstep(sinceOn / ramp) * smoothstep((length - sinceOn) / ramp);
 }
 
+/** How long a switch between a pinned and the live clock takes to fade the lights. */
+export const CLOCK_EASE_MS = 3000;
+
+/** The hood and room light levels, 0 = night .. 1 = midday. */
+export interface LightLevels {
+  readonly hood: number;
+  readonly room: number;
+}
+
+/**
+ * The clock the tank is pinned to, `null` following local time. Changing it fades the light from
+ * what was last shown to what the new clock gives, rather than cutting.
+ */
+export class ClockPin {
+  private from: LightLevels | null = null;
+  private startedAt = 0;
+  private shown: LightLevels = { hood: 1, room: 1 };
+
+  constructor(private pinned: number | null) {}
+
+  get clock(): number | null {
+    return this.pinned;
+  }
+
+  /** Whether a fade is still running, so the level wants reading every frame. */
+  get easing(): boolean {
+    return this.from !== null;
+  }
+
+  /** Returns whether the clock changed. */
+  set(clock: number | null, nowMs: number): boolean {
+    if (clock === this.pinned) return false;
+    this.pinned = clock;
+    this.from = this.shown;
+    this.startedAt = nowMs;
+    return true;
+  }
+
+  blend(target: LightLevels, nowMs: number): LightLevels {
+    const from = this.from;
+    const t = (nowMs - this.startedAt) / CLOCK_EASE_MS;
+    if (from === null || !(t < 1)) {
+      this.from = null;
+      this.shown = target;
+    } else {
+      const k = smoothstep(t);
+      this.shown = {
+        hood: from.hood + (target.hood - from.hood) * k,
+        room: from.room + (target.room - from.room) * k,
+      };
+    }
+    return this.shown;
+  }
+}
+
 /**
  * Reads `?clock=HH:MM`, `?clock=day` or `?clock=night` into minutes after midnight, so a page can
  * be pinned to a time of day.

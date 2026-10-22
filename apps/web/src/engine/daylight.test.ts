@@ -3,6 +3,8 @@ import { lampIsOn } from '@aquarium/sim/lifecycle';
 import { describe, expect, it } from 'vitest';
 import { EventBus, type EngineEvents } from './events';
 import {
+  CLOCK_EASE_MS,
+  ClockPin,
   DAYLIGHT_INTERVAL_MS,
   DAYLIGHT_UNSEEN_GAP_MS,
   DaylightAnnouncer,
@@ -318,5 +320,57 @@ describe('DaylightFeed', () => {
     levels.now = 0;
     daylight.frame(DAYLIGHT_INTERVAL_MS, 16);
     expect(emitted.at(-1)).toEqual({ level: 0, settled: true });
+  });
+});
+
+describe('ClockPin', () => {
+  const day = { hood: 1, room: 1 };
+  const night = { hood: 0, room: 0 };
+
+  it('shows the target at once on the first read', () => {
+    const pin = new ClockPin(null);
+    expect(pin.blend(night, 0)).toEqual(night);
+    expect(pin.easing).toBe(false);
+  });
+
+  it('fades from the shown level to a newly pinned clock instead of cutting', () => {
+    const pin = new ClockPin(null);
+    pin.blend(day, 0);
+    expect(pin.set(0, 1000)).toBe(true);
+    expect(pin.clock).toBe(0);
+    expect(pin.easing).toBe(true);
+    expect(pin.blend(night, 1000)).toEqual(day);
+    const mid = pin.blend(night, 1000 + CLOCK_EASE_MS / 2);
+    expect(mid.hood).toBeCloseTo(0.5);
+    expect(mid.room).toBeCloseTo(0.5);
+    expect(pin.easing).toBe(true);
+    expect(pin.blend(night, 1000 + CLOCK_EASE_MS)).toEqual(night);
+    expect(pin.easing).toBe(false);
+  });
+
+  it('fades back up when returning to the live clock', () => {
+    const pin = new ClockPin(0);
+    pin.blend(night, 0);
+    pin.set(null, 500);
+    const quarter = pin.blend(day, 500 + CLOCK_EASE_MS / 4);
+    expect(quarter.hood).toBeGreaterThan(0);
+    expect(quarter.hood).toBeLessThan(0.5);
+    expect(pin.blend(day, 500 + CLOCK_EASE_MS)).toEqual(day);
+  });
+
+  it('restarts from the partly faded level when switched mid-fade', () => {
+    const pin = new ClockPin(null);
+    pin.blend(day, 0);
+    pin.set(0, 0);
+    const partway = pin.blend(night, CLOCK_EASE_MS / 2);
+    pin.set(13 * 60, CLOCK_EASE_MS / 2);
+    expect(pin.blend(day, CLOCK_EASE_MS / 2)).toEqual(partway);
+  });
+
+  it('ignores setting the clock it already has', () => {
+    const pin = new ClockPin(0);
+    pin.blend(night, 0);
+    expect(pin.set(0, 10)).toBe(false);
+    expect(pin.easing).toBe(false);
   });
 });
