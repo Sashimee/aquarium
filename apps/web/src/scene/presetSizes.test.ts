@@ -35,6 +35,8 @@ const SIZES = Object.keys(TANK_SIZES) as TankSize[];
 const MIN_DEPTH_SHARE = 0.4;
 const GLASS_NUDGE_TOLERANCE = 0.06;
 const MIN_NUDGED_SCALE_SHARE = 0.95;
+// Equal to the measured maxima (reef 2/4/5/5 by size, freshwater 1) with no headroom: tripping it
+// means a new item is being pushed off the glass, so move it inwards rather than raising the cap.
 const MAX_NUDGED_ITEMS = { freshwater: 1, reef: 5 } as const;
 
 /**

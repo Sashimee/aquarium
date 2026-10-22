@@ -6,7 +6,7 @@ export interface RoutedDecor {
   readonly hardItems: { item: DecorItem; kind: string }[];
   readonly layoutPlants: DecorItem[];
   readonly anemoneItems: DecorItem[];
-  readonly euphylliaItems: { item: DecorItem; variant: EuphylliaVariant; seed: number }[];
+  readonly euphylliaItems: readonly { item: DecorItem; variant: EuphylliaVariant; seed: number }[];
 }
 
 /** Sorts a preset's decor into the groups the scene builds, in preset order within each group. */
@@ -14,16 +14,17 @@ export function routeDecor(
   decor: readonly DecorItem[],
   kindOf: (assetId: string) => string,
 ): RoutedDecor {
+  const euphylliaItems: RoutedDecor['euphylliaItems'][number][] = [];
   const routed: RoutedDecor = {
     hardItems: [],
     layoutPlants: [],
     anemoneItems: [],
-    euphylliaItems: [],
+    euphylliaItems,
   };
   for (const item of decor) {
     const procedural = parseEuphylliaId(item.assetId);
     if (procedural) {
-      routed.euphylliaItems.push({ item, ...procedural });
+      euphylliaItems.push({ item, ...procedural });
       continue;
     }
     const kind = kindOf(item.assetId);

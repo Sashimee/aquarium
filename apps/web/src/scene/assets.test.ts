@@ -526,6 +526,38 @@ describe('ModelLibrary shared model textures', () => {
     return fail;
   }
 
+  it('keeps a newer model cache entry when an older load finishes after dispose', async () => {
+    const original = GLTFLoader.prototype.loadAsync;
+    const releases: (() => void)[] = [];
+    vi.spyOn(GLTFLoader.prototype, 'loadAsync').mockImplementation(function (
+      this: GLTFLoader,
+      url,
+      onProgress,
+    ) {
+      const result = original.call(this, url, onProgress);
+      return new Promise<Awaited<typeof result>>((resolve, reject) => {
+        releases.push(() => result.then(resolve, reject));
+      });
+    });
+    try {
+      const first = library.load(MEMBER, 0, 1024);
+      const disposing = library.dispose();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const second = library.load(MEMBER, 0, 1024);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(releases).toHaveLength(2);
+      releases[0]?.();
+      await first;
+      await disposing;
+
+      expect(library.load(MEMBER, 0, 1024)).toBe(second);
+      releases.forEach((release) => release());
+      await second;
+    } finally {
+      releases.forEach((release) => release());
+    }
+  });
+
   const raceCases = [
     ['model', 'retainOnly', '', (l: ModelLibrary) => l.load(MEMBER, 0, 1024)],
     ['collision', 'retainOnly', '', (l: ModelLibrary) => l.collisionGeometry(MEMBER)],
@@ -557,8 +589,6 @@ describe('ModelLibrary shared model textures', () => {
       expect(await firstResult).toBeInstanceOf(Error);
       await evicting;
 
-      // After dispose the library stays disposed, so `second` is freed and evicted once it
-      // finishes; this checks the entry only up to that point.
       expect(request(library)).toBe(second);
       await second;
     },

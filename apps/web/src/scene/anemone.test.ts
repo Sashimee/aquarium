@@ -46,6 +46,11 @@ describe('anemone hosting data', () => {
     expect(anemoneReach(entry, item, calm)).toBeGreaterThan(0.15 * item.scale);
   });
 
+  it('stays finite at scale 0 with no pump and no gust', () => {
+    const still = { direction: [1, 0] as const, speed: 0, gustPeriodS: 8, gustDepth: 0 };
+    expect(anemoneReach(entry, { ...item, scale: 0 }, still)).toBe(0);
+  });
+
   it('counts a rotated corner in its reach', () => {
     const square: CatalogEntry = {
       ...entry,
