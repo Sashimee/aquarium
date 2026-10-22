@@ -17,8 +17,10 @@ import { DEMO_STOCKS, demoStock, demoTank, sceneAnchorsToSim } from './demoStock
 import bettaContent from '../../../../content/species/betta.json';
 import neonTetraContent from '../../../../content/species/neon-tetra.json';
 
-// The cichlid stock arrives with its species content (T48 behaviour step).
-const BIOMES = playableBiomeSchema.options.filter((b) => b !== 'cichlid');
+// The cichlid, blackwater and mangrove stocks arrive with their species content (T48-T50).
+const BIOMES = playableBiomeSchema.options.filter(
+  (b) => b !== 'cichlid' && b !== 'blackwater' && b !== 'mangrove',
+);
 // PLAN §2.7: the mobile tier draws at most 30 fish per tank, and the demo runs on mobile too.
 const MOBILE_FISH_BUDGET = 30;
 
