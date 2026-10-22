@@ -640,22 +640,28 @@ describe('fragging a coral', () => {
       expect(await rehomeRawFrags(h.database, presets, coralTable)).toEqual({
         moved: 0,
         failed: 0,
+        skipped: 0,
       });
       expect(await positions(tankId)).toEqual(after);
     });
 
     it('skips a malformed tank and still re-homes the others', async () => {
-      const bad = await makeTank(h, mallory, { layout: null, size });
-      await setCorals(h, bad, [
-        { key: 's1', assetId: 'brain-coral', parentKey: 's0', size: 'big' },
-      ]);
       const { tankId, fragKeys } = await rawTank();
       const before = await positions(tankId);
       const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      let bad: string | undefined;
       try {
+        bad = await makeTank(h, mallory, { layout: null, size });
+        await setCorals(h, bad, [
+          { key: 's1', assetId: 'brain-coral', parentKey: 's0', size: 'big' },
+        ]);
         const report = await rehomeRawFrags(h.database, presets, coralTable);
         expect(report.failed).toBe(1);
-        expect(errors).toHaveBeenCalledWith(expect.stringContaining(bad), expect.any(String));
+        expect(errors).toHaveBeenCalledWith(
+          expect.stringContaining(bad),
+          expect.any(String),
+          'no-sqlstate',
+        );
         const after = await positions(tankId);
         const movedKeys = fragKeys.filter((k) => before.get(k)?.join() !== after.get(k)?.join());
         expect(report.moved).toBe(movedKeys.length);
@@ -663,8 +669,32 @@ describe('fragging a coral', () => {
         expect((await rowOf(h, bad)).corals).toMatchObject([{ key: 's1', size: 'big' }]);
       } finally {
         errors.mockRestore();
-        await h.database.db.delete(schema.tanks).where(eq(schema.tanks.id, bad));
+        if (bad) await h.database.db.delete(schema.tanks).where(eq(schema.tanks.id, bad));
       }
+    });
+
+    it('counts a tank locked by another writer as skipped, not moved', async () => {
+      const { tankId } = await rawTank();
+      const before = await positions(tankId);
+      let release!: () => void;
+      let locked!: () => void;
+      const held = new Promise<void>((resolve) => (release = resolve));
+      const lockTaken = new Promise<void>((resolve) => (locked = resolve));
+      const holder = h.database.db.transaction(async (tx) => {
+        await tx.select().from(schema.tanks).where(eq(schema.tanks.id, tankId)).for('update');
+        locked();
+        await held;
+      });
+      try {
+        await lockTaken;
+        const report = await rehomeRawFrags(h.database, presets, coralTable);
+        expect(report).toMatchObject({ moved: 0, failed: 0 });
+        expect(report.skipped).toBeGreaterThanOrEqual(1);
+      } finally {
+        release();
+        await holder;
+      }
+      expect(await positions(tankId)).toEqual(before);
     });
 
     it('leaves a custom layout alone', async () => {
