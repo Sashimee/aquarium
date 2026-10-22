@@ -890,6 +890,7 @@ describe('community tank', () => {
         spy.mockRestore();
       }
     });
+
     it('waits for an upkeep run in flight before the app closes', async () => {
       const harness = await start({ community: { upkeepMs: 40 } });
       await getState(harness);
@@ -925,7 +926,12 @@ describe('community tank', () => {
         held((await tx.execute(sql`select pg_backend_pid() as pid`)).rows[0]?.['pid']);
         await gate;
       });
-      const pid = await holding;
+      const pid = await Promise.race([
+        holding,
+        lock.then(() => {
+          throw new Error('the lock transaction ended before the lock was held');
+        }),
+      ]);
       return {
         release: async () => {
           release();
