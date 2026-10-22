@@ -53,10 +53,13 @@ describe('create tank request', () => {
     );
   });
 
+  it('accepts a brackish mangrove tank', () => {
+    expect(createTankRequestSchema.parse({ ...base, biome: 'mangrove' }).biome).toBe('mangrove');
+  });
+
   it('refuses biomes that have no preset yet and unknown sizes', () => {
     expect(createTankRequestSchema.safeParse({ ...base, biome: 'cichlid' }).success).toBe(false);
     expect(createTankRequestSchema.safeParse({ ...base, biome: 'blackwater' }).success).toBe(false);
-    expect(createTankRequestSchema.safeParse({ ...base, biome: 'mangrove' }).success).toBe(false);
     expect(createTankRequestSchema.safeParse({ ...base, size: 'huge' }).success).toBe(false);
   });
 });
