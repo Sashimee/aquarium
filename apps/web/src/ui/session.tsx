@@ -37,8 +37,10 @@ export function useTankSession(): TankSession {
 
 export function useSessionState(): SessionState {
   const { session, loading } = useContext(SessionContext);
-  const getState = session ? session.getState : () => (loading ? LOADING_STATE : INITIAL_STATE);
-  return useSyncExternalStore(session ? session.subscribe : noopSubscribe, getState, getState);
+  return useSyncExternalStore(
+    session ? session.subscribe : noopSubscribe,
+    session ? session.getState : () => (loading ? LOADING_STATE : INITIAL_STATE),
+  );
 }
 
 export function useActiveTank(): Tank | null {
