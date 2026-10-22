@@ -671,6 +671,25 @@ export class TankSession {
     return ok;
   }
 
+  async setAcceptsGifts(tankId: string, acceptsGifts: boolean): Promise<boolean> {
+    const gen = this.loadId;
+    return this.perform(async () => {
+      const next = await this.deps.api.setAcceptsGifts(tankId, acceptsGifts);
+      if (gen !== this.loadId) return;
+      this.apply(next);
+      this.patch({
+        notice: acceptsGifts
+          ? `${next.name} now accepts gifted and traded fish.`
+          : `${next.name} no longer accepts gifted fish.`,
+      });
+    });
+  }
+
+  /** A tank the gift calls changed; an arriving fish goes through the acclimation bag. */
+  applyGiftTank(tank: Tank, arrived: boolean): void {
+    this.apply(tank, { acclimateNew: arrived });
+  }
+
   /** Releases a bagged fish now instead of waiting out the acclimation. */
   releaseNow(fishId: string): void {
     this.release(fishId);

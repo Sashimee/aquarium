@@ -2228,3 +2228,53 @@ describe('growing plants', () => {
     expect(api.trimPlant).not.toHaveBeenCalled();
   });
 });
+
+describe('gifts', () => {
+  it('turns acceptsGifts on for a tank and tells the player', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    const setAcceptsGifts = vi
+      .fn()
+      .mockResolvedValue(
+        tankFixture({ acceptsGifts: true, lastTickAt: '2026-02-01T12:01:00.000Z' }),
+      );
+    Object.assign(api, { setAcceptsGifts });
+    expect(await session.setAcceptsGifts(TANK_A, true)).toBe(true);
+    expect(setAcceptsGifts).toHaveBeenCalledWith(TANK_A, true);
+    expect(session.getState().tanks[0]?.acceptsGifts).toBe(true);
+    expect(session.getState().notice).toContain('now accepts gifted and traded fish');
+  });
+
+  it('keeps the flag and shows the error when the server refuses', async () => {
+    const { api, session } = setup();
+    await session.setUser(verified);
+    Object.assign(api, { setAcceptsGifts: vi.fn().mockRejectedValue(apiError(500, 'internal')) });
+    expect(await session.setAcceptsGifts(TANK_A, true)).toBe(false);
+    expect(session.getState().tanks[0]?.acceptsGifts).toBe(false);
+    expect(session.getState().error).not.toBeNull();
+  });
+
+  it('puts a gifted fish in the acclimation bag', async () => {
+    const { rec, session } = setup();
+    await session.setUser(verified);
+    const arrived = fishFixture(FISH_2, { name: 'Dot' });
+    session.applyGiftTank(
+      tankFixture({ lastTickAt: '2026-02-01T12:01:00.000Z', fish: [fishFixture(FISH_1), arrived] }),
+      true,
+    );
+    expect(rec.of('tank:fish-added')).toEqual([{ tankId: TANK_A, fish: arrived, acclimate: true }]);
+    expect(session.getState().bagged.map((b) => b.name)).toEqual(['Dot']);
+  });
+
+  it('does not bag a fish that returns from a cancelled offer', async () => {
+    const { rec, session } = setup([tankFixture({ fish: [] })]);
+    await session.setUser(verified);
+    const back = fishFixture(FISH_3, { name: 'Back' });
+    session.applyGiftTank(
+      tankFixture({ lastTickAt: '2026-02-01T12:03:00.000Z', fish: [back] }),
+      false,
+    );
+    expect(rec.of('tank:fish-added')).toEqual([{ tankId: TANK_A, fish: back, acclimate: false }]);
+    expect(session.getState().bagged).toEqual([]);
+  });
+});
