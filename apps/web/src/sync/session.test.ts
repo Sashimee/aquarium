@@ -15,6 +15,7 @@ import {
   TANK_C,
 } from './fixtures';
 import { ACCLIMATION_SECONDS } from './life';
+import { trimRefusalShown } from './plantTrim';
 import { TankSession } from './session';
 
 const deadPip = fishFixture(FISH_1, {
@@ -2146,6 +2147,55 @@ describe('growing plants', () => {
     expect(keys[1]).toBe(keys[0]);
     expect(keys[2]).toBe(keys[0]);
     expect(keys[4]).not.toBe(keys[3]);
+  });
+
+  it('expires a held trim key after ten minutes so a lost reply is not replayed forever', async () => {
+    const api = apiMocks();
+    api.species.mockResolvedValue([speciesFixture()]);
+    api.tanks.mockResolvedValue([planted()]);
+    let now = Date.parse('2026-02-01T12:00:00.000Z');
+    const session = new TankSession({
+      api: api as unknown as ApiClient,
+      interaction: recordBus().bus,
+      sleep: async () => undefined,
+      now: () => now,
+    });
+    await session.setUser(verified);
+    api.trimPlant.mockRejectedValue(apiError(0, 'network'));
+    await session.trimPlant('s7', 1);
+    now += 60_000;
+    await session.trimPlant('s7', 1);
+    now += 11 * 60_000;
+    await session.trimPlant('s7', 1);
+    const keys = api.trimPlant.mock.calls.map((c) => c[1].idempotencyKey);
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[0]);
+  });
+
+  it('refreshes the tank after a plant_not_grown refusal so the dialog sees the real size', async () => {
+    const { api, session } = setup([planted()]);
+    await session.setUser(verified);
+    api.trimPlant.mockRejectedValue(refuse(409, 'conflict', 'plant_not_grown'));
+    api.tank.mockResolvedValue(
+      planted({ plants: [fern({ size: 1.2 })], lastTickAt: '2026-02-01T00:05:00.000Z' }),
+    );
+    const outcome = await session.trimPlant('s7', 1.5);
+    expect(outcome.ok).toBe(false);
+    expect(outcome.refusal).toMatch(/has not grown past that size/);
+    expect(session.getState().tanks[0]?.plants?.[0]?.size).toBe(1.2);
+  });
+
+  it('closes the dialog on success and shows the refusal otherwise', async () => {
+    const { api, session } = setup([planted()]);
+    await session.setUser(verified);
+    api.trimPlant.mockRejectedValueOnce(refuse(404, 'not_found'));
+    const refused = await session.trimPlant('s7', 1);
+    expect(trimRefusalShown(refused, session.getState().error)).toMatch(/no longer in this tank/);
+    api.trimPlant.mockResolvedValue(
+      planted({ plants: [fern({ size: 1 })], lastTickAt: '2026-02-01T00:01:00.000Z' }),
+    );
+    const worked = await session.trimPlant('s7', 1);
+    expect(trimRefusalShown(worked, session.getState().error)).toBeNull();
   });
 
   it('starts a new key once a trim has worked', async () => {
