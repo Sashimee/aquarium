@@ -76,6 +76,7 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    container: mcr.microsoft.com/playwright:v1.63.0-noble
     services:
       postgres:
         image: postgres:18
@@ -91,7 +92,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgres://aquarium:aquarium@localhost:5432/aquarium_test
+      DATABASE_URL: postgres://aquarium:aquarium@postgres:5432/aquarium_test
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -103,24 +104,10 @@ jobs:
         timeout-minutes: 12
       - run: pnpm build
         timeout-minutes: 12
-      - name: Read the Playwright version
-        id: playwright-version
+      - name: Container image matches the locked Playwright version
         run: |
           version=$(pnpm exec playwright --version | awk '{print $2}')
-          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "could not read a semver Playwright version, got '$version'" >&2
-            exit 1
-          fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v4
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
-      - if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install --with-deps chromium
-      - if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps chromium
+          test "$version" = "1.63.0" || { echo "::error::Playwright is $version but the smoke container image is v1.63.0; update container: in ci.yml"; exit 1; }
       - name: Start the e2e server on the built web app
         timeout-minutes: 3
         run: |
