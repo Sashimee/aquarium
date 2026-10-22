@@ -171,10 +171,10 @@ export function announcePublicTank(
   tank: PublicTank,
 ): string {
   const tankId = publicTankId(tank);
-  const { onHour, offHour } = tank.equipment.light;
+  const { intensity, onHour, offHour } = tank.equipment.light;
   interaction.emit('tank:loaded', publicTankLoaded(tank));
   interaction.emit('tank:water', { tankId, water: tank.water });
-  interaction.emit('tank:lamp', { tankId, onHour, offHour });
+  interaction.emit('tank:lamp', { tankId, intensity, onHour, offHour });
   return tankId;
 }
 

@@ -1,7 +1,7 @@
 import { DEFAULT_BACKGROUND_ID } from '@aquarium/shared';
 import { lampIsOn } from '@aquarium/sim/lifecycle';
 import { describe, expect, it } from 'vitest';
-import { daylightAt, lampPhotoperiod, type LampHours } from '../engine/daylight';
+import { daylightAt, lampPhotoperiod, type LampSchedule } from '../engine/daylight';
 import { EventBus } from '../engine/events';
 import type { InteractionEvents } from '../interaction/events';
 import { LampFeed } from './lampFeed';
@@ -9,7 +9,7 @@ import { LampFeed } from './lampFeed';
 function setup() {
   const bus = new EventBus<InteractionEvents>();
   const feed = new LampFeed(bus);
-  const seen: LampHours[] = [];
+  const seen: LampSchedule[] = [];
   const loaded = (tankId: string) =>
     bus.emit('tank:loaded', {
       tankId,
@@ -20,27 +20,27 @@ function setup() {
       decorEdited: false,
       backgroundId: DEFAULT_BACKGROUND_ID.freshwater,
     });
-  return { bus, feed, seen, sink: { setLampSchedule: (h: LampHours) => seen.push(h) }, loaded };
+  return { bus, feed, seen, sink: { setLampSchedule: (h: LampSchedule) => seen.push(h) }, loaded };
 }
 
 describe('LampFeed', () => {
   it('starts on the default schedule', () => {
     const { feed, sink, seen } = setup();
     feed.attach(sink);
-    expect(seen).toEqual([{ onHour: 8, offHour: 20 }]);
+    expect(seen).toEqual([{ intensity: 0.8, onHour: 8, offHour: 20 }]);
   });
 
   it('follows the loaded tank and a tank switch', () => {
     const { feed, sink, seen, loaded, bus } = setup();
     feed.attach(sink);
     loaded('a');
-    bus.emit('tank:lamp', { tankId: 'a', onHour: 6, offHour: 18 });
+    bus.emit('tank:lamp', { tankId: 'a', intensity: 0.8, onHour: 6, offHour: 18 });
     loaded('b');
-    bus.emit('tank:lamp', { tankId: 'b', onHour: 14, offHour: 2 });
+    bus.emit('tank:lamp', { tankId: 'b', intensity: 0.8, onHour: 14, offHour: 2 });
     expect(seen).toEqual([
-      { onHour: 8, offHour: 20 },
-      { onHour: 6, offHour: 18 },
-      { onHour: 14, offHour: 2 },
+      { intensity: 0.8, onHour: 8, offHour: 20 },
+      { intensity: 0.8, onHour: 6, offHour: 18 },
+      { intensity: 0.8, onHour: 14, offHour: 2 },
     ]);
   });
 
@@ -48,48 +48,63 @@ describe('LampFeed', () => {
     const { feed, sink, seen, loaded, bus } = setup();
     feed.attach(sink);
     loaded('a');
-    bus.emit('tank:lamp', { tankId: 'a', onHour: 6, offHour: 18 });
+    bus.emit('tank:lamp', { tankId: 'a', intensity: 0.8, onHour: 6, offHour: 18 });
     bus.emit('tank:unloaded', { tankId: 'a', reason: 'switch' });
     loaded('b');
     expect(seen).toEqual([
-      { onHour: 8, offHour: 20 },
-      { onHour: 6, offHour: 18 },
+      { intensity: 0.8, onHour: 8, offHour: 20 },
+      { intensity: 0.8, onHour: 6, offHour: 18 },
     ]);
-    bus.emit('tank:lamp', { tankId: 'a', onHour: 1, offHour: 2 });
-    expect(seen.at(-1)).toEqual({ onHour: 6, offHour: 18 });
+    bus.emit('tank:lamp', { tankId: 'a', intensity: 0.8, onHour: 1, offHour: 2 });
+    expect(seen.at(-1)).toEqual({ intensity: 0.8, onHour: 6, offHour: 18 });
   });
 
   it('follows a schedule change and ignores one for another tank', () => {
     const { feed, sink, seen, loaded, bus } = setup();
     feed.attach(sink);
     loaded('a');
-    bus.emit('tank:lamp', { tankId: 'a', onHour: 9, offHour: 21 });
-    bus.emit('tank:lamp', { tankId: 'other', onHour: 1, offHour: 2 });
+    bus.emit('tank:lamp', { tankId: 'a', intensity: 0.8, onHour: 9, offHour: 21 });
+    bus.emit('tank:lamp', { tankId: 'other', intensity: 0.8, onHour: 1, offHour: 2 });
     expect(seen).toEqual([
-      { onHour: 8, offHour: 20 },
-      { onHour: 9, offHour: 21 },
+      { intensity: 0.8, onHour: 8, offHour: 20 },
+      { intensity: 0.8, onHour: 9, offHour: 21 },
     ]);
   });
 
   it('holds the hours of a tank loaded before the engine is up', () => {
     const { feed, sink, seen, loaded, bus } = setup();
     loaded('a');
-    bus.emit('tank:lamp', { tankId: 'a', onHour: 14, offHour: 2 });
+    bus.emit('tank:lamp', { tankId: 'a', intensity: 0.8, onHour: 14, offHour: 2 });
     feed.attach(sink);
-    expect(seen).toEqual([{ onHour: 14, offHour: 2 }]);
+    expect(seen).toEqual([{ intensity: 0.8, onHour: 14, offHour: 2 }]);
   });
 
   it('returns to the default on sign-out and with no tank', () => {
     const { feed, sink, seen, loaded, bus } = setup();
     feed.attach(sink);
     loaded('a');
-    bus.emit('tank:lamp', { tankId: 'a', onHour: 14, offHour: 2 });
+    bus.emit('tank:lamp', { tankId: 'a', intensity: 0.8, onHour: 14, offHour: 2 });
     bus.emit('tank:unloaded', { tankId: 'a', reason: 'reset' });
-    expect(seen.at(-1)).toEqual({ onHour: 8, offHour: 20 });
+    expect(seen.at(-1)).toEqual({ intensity: 0.8, onHour: 8, offHour: 20 });
     loaded('a');
-    bus.emit('tank:lamp', { tankId: 'a', onHour: 14, offHour: 2 });
+    bus.emit('tank:lamp', { tankId: 'a', intensity: 0.8, onHour: 14, offHour: 2 });
     bus.emit('tank:none', {});
-    expect(seen.at(-1)).toEqual({ onHour: 8, offHour: 20 });
+    expect(seen.at(-1)).toEqual({ intensity: 0.8, onHour: 8, offHour: 20 });
+  });
+
+  it('passes a strength change on with the hours unchanged', () => {
+    const { feed, sink, seen, loaded, bus } = setup();
+    feed.attach(sink);
+    loaded('a');
+    bus.emit('tank:lamp', { tankId: 'a', intensity: 0.8, onHour: 8, offHour: 20 });
+    bus.emit('tank:lamp', { tankId: 'a', intensity: 0.3, onHour: 8, offHour: 20 });
+    bus.emit('tank:lamp', { tankId: 'a', intensity: 0.3, onHour: 8, offHour: 20 });
+    expect(seen).toEqual([
+      { intensity: 0.8, onHour: 8, offHour: 20 },
+      { intensity: 0.3, onHour: 8, offHour: 20 },
+    ]);
+    bus.emit('tank:none', {});
+    expect(seen.at(-1)).toEqual({ intensity: 0.8, onHour: 8, offHour: 20 });
   });
 
   it('stops listening after stop', () => {

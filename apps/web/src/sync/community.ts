@@ -218,6 +218,7 @@ export function applyTankToScene(bus: SceneBus, held: Tank | null, next: Tank): 
     bus.emit('tank:wave-maker', { tankId: next.id, tier: next.equipment.waveMaker.tier });
     bus.emit('tank:lamp', {
       tankId: next.id,
+      intensity: next.equipment.light.intensity,
       onHour: next.equipment.light.onHour,
       offHour: next.equipment.light.offHour,
     });

@@ -10,15 +10,20 @@ import {
   type Vector3,
   WebGPURenderer,
 } from 'three/webgpu';
-import { applyDayLighting, type DayLightingRig, FRESHWATER_FILL_LEVEL } from './dayLighting';
+import {
+  applyDayLighting,
+  type DayLightingRig,
+  FRESHWATER_FILL_LEVEL,
+  lampGain,
+} from './dayLighting';
 import {
   DaylightFeed,
-  DEFAULT_LAMP_HOURS,
+  DEFAULT_LAMP_SCHEDULE,
   daylightAt,
   lampPhotoperiod,
   localMinuteOfDay,
   minuteOfDay,
-  type LampHours,
+  type LampSchedule,
   type Photoperiod,
 } from './daylight';
 import { roomDaylightAt } from './room/timeOfDay';
@@ -166,7 +171,7 @@ export class Engine {
   private readonly clock: number | null;
   private readonly showStats: boolean;
   private readonly daylightFeed: DaylightFeed;
-  private photoperiod: Photoperiod = lampPhotoperiod(DEFAULT_LAMP_HOURS);
+  private photoperiod: Photoperiod = lampPhotoperiod(DEFAULT_LAMP_SCHEDULE);
   private readonly dayRig: DayLightingRig;
   private readonly effects = new EffectsSlot(
     (message, cause) => this.reportError(message, cause),
@@ -338,6 +343,7 @@ export class Engine {
       substrateAlbedo: this.substrateAlbedo,
       roomBackgroundIntensity,
       roomDaylight: 1,
+      lampGain: lampGain(DEFAULT_LAMP_SCHEDULE.intensity),
     };
     this.background = new TankBackground(this.ktx2, this.quality.tier, ASSET_BASE);
     cleanup.add(() => this.background.dispose());
@@ -444,9 +450,10 @@ export class Engine {
     return this.daylightFeed.level;
   }
 
-  /** Runs the visible hood on the tank's lamp schedule, `equipment.light`. */
-  setLampSchedule(hours: LampHours): void {
-    this.photoperiod = lampPhotoperiod(hours);
+  /** Runs the visible hood on the tank's lamp schedule and strength, `equipment.light`. */
+  setLampSchedule(schedule: LampSchedule): void {
+    this.photoperiod = lampPhotoperiod(schedule);
+    this.dayRig.lampGain = lampGain(schedule.intensity);
     this.daylightFeed.recheck();
   }
 
