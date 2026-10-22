@@ -31,6 +31,7 @@ pnpm lint
 pnpm test           # vitest, all packages
 pnpm build
 pnpm assets:check   # licence + manifest + size budget
+pnpm smoke          # headless load of / and the tank; needs the built web app and an e2e server (the CI `smoke` job)
 pnpm e2e            # Playwright; run on demand in CI before a release, never by agents
 git config core.hooksPath .githooks   # once per clone: guards main
 ```

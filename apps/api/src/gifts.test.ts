@@ -13,7 +13,7 @@ import {
   tankSchema,
   type Tank,
 } from '@aquarium/shared';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql, type SQL } from 'drizzle-orm';
 import type { LightMyRequestResponse } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { schema } from './db/index.ts';
@@ -213,6 +213,51 @@ const offerRow = async (h: Harness, id: string) => {
   if (!row) throw new Error('offer missing');
   return row;
 };
+
+async function holdingLock(
+  h: Harness,
+  lock: SQL,
+  then: (
+    tx: Parameters<Parameters<Harness['database']['db']['transaction']>[0]>[0],
+  ) => Promise<void>,
+) {
+  const held = latch<unknown>();
+  const gate = latch();
+  const done = h.database.db.transaction(async (tx) => {
+    await tx.execute(lock);
+    const pid = (await tx.execute(sql`select pg_backend_pid() as pid`)).rows[0]?.['pid'];
+    held.open(pid);
+    await gate.opened;
+    await then(tx);
+  });
+  const pid = await held.opened;
+  return {
+    async whenBlocked() {
+      try {
+        const deadline = Date.now() + 10_000;
+        for (;;) {
+          const blocked = await h.database.db.execute(
+            sql`select 1 from pg_stat_activity where ${pid} = any(pg_blocking_pids(pid))`,
+          );
+          if (blocked.rows.length > 0) break;
+          if (Date.now() > deadline) throw new Error('the request never blocked on the held lock');
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+      } finally {
+        gate.open();
+      }
+      await done;
+    },
+  };
+}
+
+function latch<T = void>() {
+  let open: (value: T) => void = () => undefined;
+  const opened = new Promise<T>((resolve) => {
+    open = resolve;
+  });
+  return { open, opened };
+}
 
 describe('gifting and trading fish', () => {
   let h: Harness;
@@ -614,6 +659,41 @@ describe('gifting and trading fish', () => {
       expect((await fishRows(h, fishId))[0]?.tankId).toBe(tankA);
       expect((await offerRow(h, id)).status).toBe('declined');
     });
+
+    it('settles the deleted recipient offers even when due offers elsewhere fill the sweep batch', async () => {
+      const a = await account(h);
+      const b = await account(h);
+      const tankA = await makeTank(h, a);
+      await makeTank(h, b);
+      const past = new Date(h.clock.now() - HOUR_MS);
+      const flooderId = randomUUID();
+      await h.database.db.insert(schema.user).values({
+        id: flooderId,
+        name: 'Flooder',
+        email: `flooder-${flooderId}@bas.lu`,
+        emailVerified: true,
+      });
+      await h.database.db.insert(schema.giftOffers).values(
+        Array.from({ length: 105 }, () => ({
+          fromUserId: flooderId,
+          toUserId: flooderId,
+          fromTankId: tankA,
+          fish: {},
+          creationKey: randomUUID(),
+          expiresAt: past,
+        })),
+      );
+      try {
+        const fishId = await addFish(h, tankA);
+        const id = offerId(await offer(h, a, { fromTankId: tankA, fishId, to: b }));
+        const gone = await call(h, b, 'POST', '/api/me/delete', { password: PASSWORD });
+        expect(gone.statusCode, gone.body).toBe(204);
+        expect((await offerRow(h, id)).status).toBe('declined');
+        expect((await fishRows(h, fishId))[0]?.tankId).toBe(tankA);
+      } finally {
+        await h.database.db.delete(schema.user).where(eq(schema.user.id, flooderId));
+      }
+    });
   });
 
   describe('escrow', () => {
@@ -852,6 +932,57 @@ describe('gifting and trading fish', () => {
       expect((await fishRows(h, t.mine))[0]?.tankId).toBe(t.tankA);
     });
 
+    it('answers a clean 409 when a recipient counter lands between the confirm pre-read and its lock', async () => {
+      const a = await account(h);
+      const b = await account(h);
+      const tankA = await makeTank(h, a);
+      const tankA2 = await makeTank(h, a);
+      const tankB = await makeTank(h, b);
+      const mine = await addFish(h, tankA, { name: 'Mine' });
+      const theirs = await addFish(h, tankB, { name: 'Theirs' });
+      const id = offerId(
+        await offer(h, a, { fromTankId: tankA, fishId: mine, to: b, wantsReturn: true }),
+      );
+
+      const counter = await holdingLock(
+        h,
+        sql`select 1 from gift_offers where id = ${id} for update`,
+        async (tx) => {
+          await tx
+            .update(schema.giftOffers)
+            .set({ status: 'countered', recipientTankId: tankB, pledgedFishId: theirs })
+            .where(eq(schema.giftOffers.id, id));
+        },
+      );
+      const pending = confirm(h, a, id, tankA2);
+      await counter.whenBlocked();
+      const res = await pending;
+      expect(res.statusCode, res.body).toBe(409);
+      expect(errorOf(res).reason).toBe('offer_changed');
+      expect((await offerRow(h, id)).status).toBe('countered');
+      expect(await fishRows(h, mine)).toHaveLength(0);
+      expect((await fishRows(h, theirs))[0]?.tankId).toBe(tankB);
+
+      expect((await confirm(h, a, id, tankA2)).statusCode).toBe(200);
+    });
+
+    it('tells the sender the offer closed when the recipient is deleted while the confirm waits', async () => {
+      const t = await countered();
+      const deletion = await holdingLock(
+        h,
+        sql`select 1 from "user" where id = ${t.b.userId} for update`,
+        async (tx) => {
+          await tx.delete(schema.ledger).where(eq(schema.ledger.userId, t.b.userId));
+          await tx.delete(schema.user).where(eq(schema.user.id, t.b.userId));
+        },
+      );
+      const pending = confirm(h, t.a, t.id, t.tankA2);
+      await deletion.whenBlocked();
+      const res = await pending;
+      expect(res.statusCode, res.body).toBe(409);
+      expect(errorOf(res).reason).toBe('offer_closed');
+    });
+
     it('shows the sender a pledged fish name through the word filter', async () => {
       const t = await trade();
       await h.database.db
@@ -1070,32 +1201,43 @@ describe('gifting and trading fish', () => {
   });
 
   describe('data export', () => {
-    it('lists offers sent and received, including the escrowed fish', async () => {
+    it('lists offers sent and received, including the escrowed fish, and leaves out an unreadable one', async () => {
       const a = await account(h);
       const b = await account(h);
       const tankA = await makeTank(h, a);
       await makeTank(h, b);
       const fishId = await addFish(h, tankA, { name: 'Goldie' });
       const id = offerId(await offer(h, a, { fromTankId: tankA, fishId, to: b }));
+      const brokenFish = await addFish(h, tankA);
+      const brokenId = offerId(await offer(h, a, { fromTankId: tankA, fishId: brokenFish, to: b }));
+      await h.database.db
+        .update(schema.giftOffers)
+        .set({ fish: {} })
+        .where(eq(schema.giftOffers.id, brokenId));
 
-      const mine = await call(h, a, 'POST', '/api/me/export');
-      expect(mine.statusCode, mine.body).toBe(200);
-      const sent = dataExportSchema.parse(mine.json()).giftOffers;
-      expect(sent).toHaveLength(1);
-      expect(sent[0]).toMatchObject({
-        id,
-        role: 'sender',
-        status: 'open',
-        counterpart: b.handle,
-        fish: { id: fishId, name: 'Goldie', species: 'neon-tetra' },
-      });
-      expect(mine.body).not.toContain(b.email);
+      try {
+        const mine = await call(h, a, 'POST', '/api/me/export');
+        expect(mine.statusCode, mine.body).toBe(200);
+        const sent = dataExportSchema.parse(mine.json()).giftOffers;
+        expect(sent).toHaveLength(1);
+        expect(sent[0]).toMatchObject({
+          id,
+          role: 'sender',
+          status: 'open',
+          counterpart: b.handle,
+          fish: { id: fishId, name: 'Goldie', species: 'neon-tetra' },
+        });
+        expect(mine.body).not.toContain(b.email);
 
-      const theirs = await call(h, b, 'POST', '/api/me/export');
-      const received = dataExportSchema.parse(theirs.json()).giftOffers;
-      expect(received[0]).toMatchObject({ id, role: 'recipient', counterpart: a.handle });
-      expect(received[0]?.['fish']).not.toHaveProperty('personality');
-      expect(theirs.body).not.toContain(a.email);
+        const theirs = await call(h, b, 'POST', '/api/me/export');
+        const received = dataExportSchema.parse(theirs.json()).giftOffers;
+        expect(received[0]).toMatchObject({ id, role: 'recipient', counterpart: a.handle });
+        expect(received[0]?.['fish']).not.toHaveProperty('personality');
+        expect(theirs.body).not.toContain(a.email);
+        expect(received).toHaveLength(1);
+      } finally {
+        await h.database.db.delete(schema.giftOffers).where(eq(schema.giftOffers.id, brokenId));
+      }
     });
   });
 });

@@ -308,3 +308,74 @@ describe('cichlid preset', () => {
     }
   });
 });
+
+describe.each(['blackwater', 'mangrove'] as const)('%s preset', (biome) => {
+  const preset = loadPreset(biome);
+  const entries = new Map(catalog.assets.map((a) => [a.id, a]));
+
+  it('uses only decor the biome allows and shipped substrates', () => {
+    expect(preset.biome).toBe(biome);
+    expect(kinds.get(preset.substrate?.assetId ?? '')).toBe('substrate');
+    expect(kinds.get(preset.substrate?.accentAssetId ?? '')).toBe('substrate');
+    for (const item of preset.decor) {
+      expect(isDecorAssetForBiome(biome, item.assetId), item.assetId).toBe(true);
+    }
+    for (const patch of preset.plantPatches) {
+      expect(kinds.get(patch.assetId), patch.assetId).toBe('plant');
+    }
+  });
+
+  it('seats wood, rock and roots on the substrate', () => {
+    for (const item of preset.decor) {
+      const ground = substrateHeight(DEFAULT_TANK, item.position[0], item.position[2]);
+      expect(Math.abs(item.position[1] - ground), item.assetId).toBeLessThan(0.03);
+    }
+  });
+
+  it('keeps every footprint and every top inside the tank', () => {
+    const halfL = DEFAULT_TANK.length / 2 - DEFAULT_TANK.glass;
+    const halfD = DEFAULT_TANK.depth / 2 - DEFAULT_TANK.glass;
+    for (const item of preset.decor) {
+      const bounds = entries.get(item.assetId)?.bounds;
+      if (!bounds) throw new Error(`${item.assetId} has no bounds`);
+      const [x0 = 0, , z0 = 0] = bounds.min;
+      const [x1 = 0, y1 = 0, z1 = 0] = bounds.max;
+      const cos = Math.cos(item.rotationY);
+      const sin = Math.sin(item.rotationY);
+      let reachX = 0;
+      let reachZ = 0;
+      for (const [x, z] of [
+        [x0, z0],
+        [x0, z1],
+        [x1, z0],
+        [x1, z1],
+      ] as const) {
+        reachX = Math.max(reachX, Math.abs(x * cos + z * sin));
+        reachZ = Math.max(reachZ, Math.abs(-x * sin + z * cos));
+      }
+      expect(Math.abs(item.position[0]) + reachX * item.scale, item.assetId).toBeLessThan(halfL);
+      expect(Math.abs(item.position[2]) + reachZ * item.scale, item.assetId).toBeLessThan(halfD);
+      expect(item.position[1] + y1 * item.scale, item.assetId).toBeLessThan(
+        DEFAULT_TANK.height - 0.05,
+      );
+    }
+  });
+});
+
+describe('blackwater and mangrove composition', () => {
+  it('blackwater is wood and leaf litter with no rock', () => {
+    const ids = loadPreset('blackwater').decor.map((d) => d.assetId);
+    expect(ids.filter((id) => kinds.get(id) === 'driftwood').length).toBeGreaterThanOrEqual(4);
+    expect(ids.filter((id) => id === 'oak-leaf-card').length).toBeGreaterThanOrEqual(8);
+    expect(ids.some((id) => kinds.get(id) === 'rock')).toBe(false);
+  });
+
+  it('mangrove is prop roots and stumps on mud, with propagules', () => {
+    const preset = loadPreset('mangrove');
+    const ids = preset.decor.map((d) => d.assetId);
+    expect(preset.substrate?.assetId).toBe('brown-mud-03');
+    expect(ids.filter((id) => id === 'mangrove-prop-roots').length).toBeGreaterThanOrEqual(5);
+    expect(ids.filter((id) => id === 'mangrove-stump')).toHaveLength(2);
+    expect(ids).toContain('mangrove-propagule');
+  });
+});

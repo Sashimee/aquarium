@@ -8,10 +8,16 @@ export const biomeSchema = z.enum(['freshwater', 'reef', 'cichlid', 'blackwater'
 export type Biome = z.infer<typeof biomeSchema>;
 
 // Biomes a player can start a tank in. A biome joins when its preset, species and backgrounds ship.
-export const playableBiomeSchema = z.enum(['freshwater', 'reef', 'cichlid']);
+export const playableBiomeSchema = z.enum([
+  'freshwater',
+  'reef',
+  'cichlid',
+  'blackwater',
+  'mangrove',
+]);
 export type PlayableBiome = z.infer<typeof playableBiomeSchema>;
 
-// Biomes a new tank can be created in. Cichlid joins when its species content ships (T48 behaviour step).
+// Biomes a new tank can be created in. Cichlid, blackwater and mangrove join when their species content ships (T48-T50 behaviour steps).
 export const creatableBiomeSchema = z.enum(['freshwater', 'reef']);
 export type CreatableBiome = z.infer<typeof creatableBiomeSchema>;
 

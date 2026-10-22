@@ -27,10 +27,9 @@ import {
   type DeviceLossWatch,
   type DeviceLostInfo,
   type LossSource,
-  recoveryFor,
+  respondToDeviceLoss,
   sessionBackend,
   watchDeviceLoss,
-  webglFallbackUrl,
 } from './deviceLoss';
 import { showDeviceNotice } from './deviceNotice';
 import {
@@ -291,6 +290,7 @@ export class Engine {
       refreshMs: profile.refreshMs,
       probeTier: profile.probeTier,
       maxTier: profile.maxTier,
+      maxTextureSize: profile.maxTextureSize,
       awaitContent: true,
     });
     const pipelineFailures = new PipelineFailureHandler(
@@ -538,24 +538,15 @@ export class Engine {
    */
   private deviceLost(info: DeviceLostInfo, preference: EngineOptions['backend']): void {
     if (this.disposed) return;
-    this.loop.halt();
-    const recovery = recoveryFor(info.api, preference);
-    this.events.emit('engine:device-lost', { api: info.api, message: info.message, recovery });
-    this.reportError(`The ${info.api} device was lost: ${info.message}`, info);
-    if (recovery === 'webgl') {
-      const here = window.location.href;
-      const next = webglFallbackUrl(here, browserSessionStore());
-      if (next === here) window.location.reload();
-      else window.location.replace(next);
-      return;
-    }
-    this.cleanup.add(
-      showDeviceNotice(
-        document.body,
-        'The graphics device stopped responding, so the tank cannot be drawn. Reload to try again.',
-        { label: 'Reload', run: () => window.location.reload() },
-      ),
-    );
+    const removeNotice = respondToDeviceLoss(info, preference, {
+      halt: () => this.loop.halt(),
+      announce: (event) => this.events.emit('engine:device-lost', event),
+      report: (message, cause) => this.reportError(message, cause),
+      location: window.location,
+      store: browserSessionStore(),
+      notify: (message, action) => showDeviceNotice(document.body, message, action),
+    });
+    if (removeNotice !== null) this.cleanup.add(removeNotice);
   }
 
   private setupHood(): void {

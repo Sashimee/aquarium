@@ -1,17 +1,10 @@
 import { z } from 'zod';
 import { idSchema, slugSchema, timestampSchema } from './common.js';
 import { idempotencyKeySchema } from './economy.js';
+import { foodTypeSchema, type FoodType } from './food.js';
 import { causeOfDeathSchema } from './tank.js';
 
-export const foodTypeSchema = z.enum([
-  'flakes',
-  'pellets',
-  'bloodworms',
-  'brine-shrimp',
-  'nori',
-  'algae-wafer',
-]);
-export type FoodType = z.infer<typeof foodTypeSchema>;
+export { foodTypeSchema, type FoodType };
 
 export const feedEventSchema = z.strictObject({
   type: z.literal('feed'),
