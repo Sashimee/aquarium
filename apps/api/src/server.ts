@@ -4,6 +4,8 @@ import { loadEconomy } from './economy.ts';
 import { createBackgroundTasks, shutdown } from './background.ts';
 import { createAuth } from './auth.ts';
 import { loadConfig } from './config.ts';
+import { loadCoralTable, rehomeRawFrags } from './corals.ts';
+import { loadPresets } from './presets.ts';
 import { connect, runMigrations } from './db/index.ts';
 import { createMailer, createSmtpTransport } from './mail.ts';
 import { postgresHitStore } from './rate-limit.ts';
@@ -21,6 +23,9 @@ const config = loadConfig(process.env);
 
 const database = connect(config.databaseUrl);
 await runMigrations(database);
+console.log(
+  `re-homed ${await rehomeRawFrags(database, loadPresets(), loadCoralTable())} coral fragments`,
+);
 
 const mailer = createMailer(
   createSmtpTransport(config.smtp.host, config.smtp.port),
